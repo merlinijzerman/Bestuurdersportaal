@@ -22,9 +22,16 @@ export default async function DashboardLayout({
     .eq("id", user.id)
     .single();
 
-  const fondsNaam =
-    (profiel?.fondsen as { naam: string } | null)?.naam ||
-    process.env.NEXT_PUBLIC_FONDS_NAAM;
+  // Supabase kan `fondsen` als array of als enkel object teruggeven,
+  // afhankelijk van de relatie en versie van @supabase/supabase-js.
+  // Robuust: behandel beide gevallen.
+  const fondsenRel = profiel?.fondsen as
+    | { naam: string }
+    | { naam: string }[]
+    | null
+    | undefined;
+  const fondsenObj = Array.isArray(fondsenRel) ? fondsenRel[0] : fondsenRel;
+  const fondsNaam = fondsenObj?.naam || process.env.NEXT_PUBLIC_FONDS_NAAM;
 
   return (
     <div className="flex min-h-screen">
