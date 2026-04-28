@@ -7,6 +7,7 @@ const navItems = [
   { href: "/", label: "Dashboard", icon: "🏠", section: "Overzicht" },
   { href: "/ai", label: "AI Assistent", icon: "🤖", section: "Kennisbase", badge: "AI" },
   { href: "/bibliotheek", label: "Documentbibliotheek", icon: "📚", section: "Kennisbase" },
+  { href: "/vergaderingen", label: "Vergaderingen", icon: "📅", section: "Bestuur" },
   { href: "/notulen", label: "Besluiten & Notulen", icon: "📋", section: "Bestuur" },
   { href: "/governance", label: "Governance Log", icon: "🔍", section: "Bestuur" },
 ];
