@@ -2,6 +2,8 @@
 import { useState, useRef, useEffect } from "react";
 import { createClient } from "@/lib/supabase";
 
+type Modus = "documenten" | "combineren" | "algemeen";
+
 interface Bron {
   document_id: string;
   titel: string;
@@ -15,6 +17,7 @@ interface Bericht {
   rol: "gebruiker" | "ai";
   tekst: string;
   bronnen?: Bron[];
+  modus?: Modus;
 }
 
 const BRONKLEUR: Record<string, string> = {
@@ -33,23 +36,42 @@ const BRONTEKST: Record<string, string> = {
   Extern: "text-amber-700",
 };
 
+const MODI: { value: Modus; label: string; help: string }[] = [
+  {
+    value: "documenten",
+    label: "Onze documenten",
+    help: "Strikt op interne bronnen — antwoord met expliciete citaten",
+  },
+  {
+    value: "combineren",
+    label: "Slim combineren",
+    help: "Gebruikt interne bronnen waar beschikbaar, vult aan met algemene kennis",
+  },
+  {
+    value: "algemeen",
+    label: "Algemene vraag",
+    help: "Open AI-assistent — gebruikt Claude's algemene kennis, geen interne bronnen",
+  },
+];
+
 const VOORGESTELDE_VRAGEN = [
   "Wat zijn de deskundigheidseisen voor bestuurders?",
   "Hoe wordt een tegenstrijdig belang gemeld?",
-  "Wat zijn de regels voor het beleggingsbeleid?",
-  "Wat is het ESG-beleid van het fonds?",
+  "Wat zijn de hoofdpunten van de Wet toekomst pensioenen?",
+  "Wat is het verschil tussen SPR en FPR onder de Wtp?",
 ];
 
 export default function AiPage() {
   const [berichten, setBerichten] = useState<Bericht[]>([
     {
       rol: "ai",
-      tekst: `Goedemorgen! Ik ben uw AI-assistent voor het bestuurdersportaal.\n\nIk beantwoord vragen op basis van de documenten in uw bibliotheek (DNB-leidraden, AFM-kaders, Pensioenfederatie-richtlijnen en fondsspecifieke documenten). Elk antwoord bevat traceerbare bronverwijzingen.\n\nUpload eerst documenten via de Documentbibliotheek, dan kan ik ze doorzoeken.`,
+      tekst: `Goedemorgen! Ik ben uw AI-assistent voor het bestuurdersportaal.\n\nU kunt hierboven kiezen hoe ik antwoord:\n• Onze documenten — strikt op interne bronnen\n• Slim combineren — interne bronnen + algemene kennis (aanbevolen)\n• Algemene vraag — open AI-assistent zonder beperking tot interne bibliotheek\n\nElke vraag wordt gelogd in de Governance Log inclusief de gebruikte modus.`,
     },
   ]);
   const [invoer, setInvoer] = useState("");
   const [laden, setLaden] = useState(false);
   const [fondsId, setFondsId] = useState<string>("");
+  const [modus, setModus] = useState<Modus>("combineren");
   const bottomRef = useRef<HTMLDivElement>(null);
   const supabase = createClient();
 
@@ -82,7 +104,7 @@ export default function AiPage() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ vraag: tekst, fonds_id: fondsId }),
+        body: JSON.stringify({ vraag: tekst, fonds_id: fondsId, modus }),
       });
       const data = await res.json();
 
@@ -92,6 +114,7 @@ export default function AiPage() {
           rol: "ai",
           tekst: data.antwoord || data.error || "Er is een fout opgetreden.",
           bronnen: data.bronnen,
+          modus: data.modus || modus,
         },
       ]);
     } catch {
@@ -114,6 +137,40 @@ export default function AiPage() {
         </span>
       </div>
 
+      {/* Modus-bar */}
+      <div className="bg-white border-b border-gray-200 px-7 py-2.5 flex items-center gap-3 flex-wrap">
+        <span className="text-xs text-gray-500 font-semibold uppercase tracking-wide">
+          Bronnen
+        </span>
+        <div className="flex gap-0.5 bg-gray-100 rounded-lg p-1">
+          {MODI.map((m) => (
+            <button
+              key={m.value}
+              onClick={() => setModus(m.value)}
+              title={m.help}
+              className={`px-3 py-1.5 text-xs rounded-md transition-all ${
+                modus === m.value
+                  ? "bg-white text-[#0F2744] font-semibold shadow-sm"
+                  : "text-gray-600 hover:text-[#0F2744]"
+              }`}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+        {modus === "algemeen" && (
+          <span className="text-xs text-amber-700 inline-flex items-center gap-1">
+            <span>⚠️</span>
+            <span>Antwoord wordt niet beperkt tot interne bronnen — verifieer voor besluitvorming</span>
+          </span>
+        )}
+        {modus === "combineren" && (
+          <span className="text-xs text-gray-500">
+            Combineert interne documenten met algemene kennis
+          </span>
+        )}
+      </div>
+
       {/* Chat */}
       <div className="flex-1 overflow-y-auto p-6 space-y-5">
         {berichten.map((b, i) => (
@@ -124,6 +181,12 @@ export default function AiPage() {
               </div>
             )}
             <div className={b.rol === "gebruiker" ? "max-w-[75%]" : "flex-1"}>
+              {b.rol === "ai" && b.modus && b.modus !== "documenten" && (
+                <div className="mb-2">
+                  <ModusBadge modus={b.modus} />
+                </div>
+              )}
+
               <div
                 className={
                   b.rol === "gebruiker"
@@ -235,4 +298,24 @@ export default function AiPage() {
       </div>
     </div>
   );
+}
+
+function ModusBadge({ modus }: { modus: Modus }) {
+  if (modus === "algemeen") {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-[11px] bg-amber-50 border border-amber-200 text-amber-800 px-2 py-0.5 rounded-md">
+        <span>⚠️</span>
+        <span>Algemene kennis — geen interne bronnen</span>
+      </span>
+    );
+  }
+  if (modus === "combineren") {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-[11px] bg-blue-50 border border-blue-200 text-blue-800 px-2 py-0.5 rounded-md">
+        <span>🔀</span>
+        <span>Interne bronnen + algemene kennis</span>
+      </span>
+    );
+  }
+  return null;
 }

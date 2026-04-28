@@ -91,9 +91,13 @@ create table if not exists public.governance_log (
   vraag           text not null,
   antwoord        text,
   bronnen         jsonb default '[]',  -- [{document_id, titel, pagina, paragraaf}]
+  modus           text check (modus in ('documenten','combineren','algemeen')) default 'documenten',
   model           text default 'claude-sonnet-4-5',
   aangemaakt      timestamptz default now()
 );
+
+-- Migratie voor bestaande installaties (idempotent)
+alter table public.governance_log add column if not exists modus text default 'documenten';
 
 create index if not exists idx_log_fonds on public.governance_log(fonds_id);
 create index if not exists idx_log_gebruiker on public.governance_log(gebruiker_id);
