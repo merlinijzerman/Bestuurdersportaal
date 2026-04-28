@@ -61,11 +61,19 @@ const VOORGESTELDE_VRAGEN = [
   "Wat is het verschil tussen SPR en FPR onder de Wtp?",
 ];
 
+function dagdeelGroet() {
+  const u = new Date().getHours();
+  if (u < 6) return "Goedenacht";
+  if (u < 12) return "Goedemorgen";
+  if (u < 18) return "Goedemiddag";
+  return "Goedenavond";
+}
+
 export default function AiPage() {
   const [berichten, setBerichten] = useState<Bericht[]>([
     {
       rol: "ai",
-      tekst: `Goedemorgen! Ik ben uw AI-assistent voor het bestuurdersportaal.\n\nU kunt hierboven kiezen hoe ik antwoord:\n• Onze documenten — strikt op interne bronnen\n• Slim combineren — interne bronnen + algemene kennis (aanbevolen)\n• Algemene vraag — open AI-assistent zonder beperking tot interne bibliotheek\n\nElke vraag wordt gelogd in de Governance Log inclusief de gebruikte modus.`,
+      tekst: `Welkom terug. Ik ben uw AI-assistent voor het bestuurdersportaal.\n\nU kunt hierboven kiezen hoe ik antwoord:\n• Onze documenten — strikt op interne bronnen\n• Slim combineren — interne bronnen + algemene kennis (aanbevolen)\n• Algemene vraag — open AI-assistent zonder beperking tot de bibliotheek\n\nElke vraag wordt gelogd in de Governance Log, inclusief de gebruikte modus.`,
     },
   ]);
   const [invoer, setInvoer] = useState("");
@@ -80,10 +88,27 @@ export default function AiPage() {
       if (user) {
         const { data } = await supabase
           .from("profielen")
-          .select("fonds_id")
+          .select("fonds_id, naam, fondsen(naam)")
           .eq("id", user.id)
           .single();
         if (data?.fonds_id) setFondsId(data.fonds_id);
+
+        const voornaam = (data?.naam as string | null)?.split(" ")[0] || "";
+        const fondsenRel = data?.fondsen as
+          | { naam: string }
+          | { naam: string }[]
+          | null
+          | undefined;
+        const fondsenObj = Array.isArray(fondsenRel) ? fondsenRel[0] : fondsenRel;
+        const fondsnaam =
+          fondsenObj?.naam || "uw fonds";
+
+        const groet = dagdeelGroet();
+        const personalTekst = voornaam
+          ? `${groet} ${voornaam}, fijn u te zien.\n\nIk help u graag met vragen rondom ${fondsnaam}. Hierboven kiest u hoe ik antwoord: strikt op onze documenten, slim gecombineerd met algemene kennis, of als open AI-assistent.\n\nElke vraag wordt vastgelegd in de Governance Log, inclusief de gekozen modus.`
+          : `${groet}. Ik help u graag met vragen rondom ${fondsnaam}.\n\nU kunt hierboven kiezen hoe ik antwoord: strikt op onze documenten, slim gecombineerd, of als open AI-assistent.\n\nElke vraag wordt vastgelegd in de Governance Log.`;
+
+        setBerichten([{ rol: "ai", tekst: personalTekst }]);
       }
     });
   }, []);
