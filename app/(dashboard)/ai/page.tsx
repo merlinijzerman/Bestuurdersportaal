@@ -123,13 +123,25 @@ export default function AiPage() {
     setInvoer("");
     setLaden(true);
 
-    setBerichten((prev) => [...prev, { rol: "gebruiker", tekst }]);
+    // Voeg de nieuwe vraag toe en stuur de complete geschiedenis mee.
+    const nieuw: Bericht = { rol: "gebruiker", tekst };
+    const conversatie = [...berichten, nieuw];
+    setBerichten(conversatie);
+
+    // Bouw de messages-array voor de API. We slaan het eerste bericht over
+    // als dat de welkomst-AI-tekst is (puur UI, geen onderdeel van het gesprek).
+    const messages = conversatie
+      .filter((b, i) => !(i === 0 && b.rol === "ai"))
+      .map((b) => ({
+        role: b.rol === "gebruiker" ? ("user" as const) : ("assistant" as const),
+        content: b.tekst,
+      }));
 
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ vraag: tekst, fonds_id: fondsId, modus }),
+        body: JSON.stringify({ messages, fonds_id: fondsId, modus }),
       });
       const data = await res.json();
 
@@ -152,6 +164,15 @@ export default function AiPage() {
     }
   }
 
+  function startNieuwGesprek() {
+    if (laden) return;
+    if (berichten.length > 1 && !confirm("Huidig gesprek wissen?")) return;
+    // Behoud de huidige (gepersonaliseerde) welkomstboodschap als die er al is.
+    const welkomst = berichten[0];
+    setBerichten(welkomst && welkomst.rol === "ai" ? [welkomst] : []);
+    setInvoer("");
+  }
+
   return (
     <div className="flex flex-col h-screen">
       {/* Topbar */}
@@ -160,6 +181,13 @@ export default function AiPage() {
         <span className="ml-3 bg-green-100 text-green-700 text-xs font-semibold px-2.5 py-1 rounded-full">
           ● Governance logging actief
         </span>
+        <button
+          onClick={startNieuwGesprek}
+          disabled={laden || berichten.length <= 1}
+          className="ml-auto text-xs text-gray-500 hover:text-[#0F2744] border border-gray-200 px-3 py-1.5 rounded-lg hover:border-[#C9A84C] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          + Nieuw gesprek
+        </button>
       </div>
 
       {/* Modus-bar */}

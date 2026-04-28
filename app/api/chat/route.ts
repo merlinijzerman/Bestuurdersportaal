@@ -84,22 +84,51 @@ ${TOON_BLOK}`;
 // ============================================================
 //  POST handler
 // ============================================================
+
+interface ChatBericht {
+  role: "user" | "assistant";
+  content: string;
+}
+
+const HISTORY_LIMIT = 12; // laatste N berichten meenemen
+
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as {
+      // nieuw: volledige conversatiegeschiedenis
+      messages?: ChatBericht[];
+      // backwards-compat: één losse vraag
       vraag?: string;
       fonds_id?: string;
       modus?: Modus;
     };
-    const { vraag, fonds_id } = body;
+    const { fonds_id } = body;
     const modus: Modus = body.modus || "documenten";
 
-    if (!vraag || !fonds_id) {
+    // Bouw geschiedenis-array. Backwards compat: als alleen `vraag` wordt
+    // meegestuurd, behandelen we dat als one-shot conversatie.
+    const messages: ChatBericht[] =
+      body.messages && Array.isArray(body.messages) && body.messages.length > 0
+        ? body.messages
+        : body.vraag
+        ? [{ role: "user", content: body.vraag }]
+        : [];
+
+    if (messages.length === 0 || !fonds_id) {
       return NextResponse.json(
-        { error: "Vraag en fonds_id zijn verplicht" },
+        { error: "messages of vraag, plus fonds_id zijn verplicht" },
         { status: 400 }
       );
     }
+
+    const laatste = messages[messages.length - 1];
+    if (laatste.role !== "user" || !laatste.content?.trim()) {
+      return NextResponse.json(
+        { error: "Het laatste bericht moet een vraag van de gebruiker zijn" },
+        { status: 400 }
+      );
+    }
+    const vraag = laatste.content.trim();
 
     // Authenticatie
     const supabase = await createServerSupabase();
@@ -172,12 +201,21 @@ export async function POST(req: NextRequest) {
           : `Er zijn geen relevante documenten gevonden voor deze vraag.\n\nVRAAG: ${vraag}\n\nGeef aan dat er geen relevante bronnen zijn gevonden en stel voor welk type document zou kunnen helpen.`;
     }
 
+    // Bouw de uiteindelijke messages-array voor Claude.
+    // We knippen de geschiedenis op het maximum en vervangen de laatste
+    // user-message door dezelfde vraag mét de zojuist opgehaalde RAG-context.
+    const recente = messages.slice(-HISTORY_LIMIT);
+    const claudeBerichten = recente
+      .slice(0, -1)
+      .map((b) => ({ role: b.role, content: b.content }));
+    claudeBerichten.push({ role: "user" as const, content: gebruikersPrompt });
+
     // Roep Claude aan
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-5",
       max_tokens: 1500,
       system: systeemPrompt,
-      messages: [{ role: "user", content: gebruikersPrompt }],
+      messages: claudeBerichten,
     });
 
     const antwoord =
