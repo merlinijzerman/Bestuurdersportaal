@@ -4,7 +4,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
 
 const navItems = [
-  { href: "/", label: "Dashboard", icon: "🏠", section: "Overzicht" },
+  { href: "/", label: "Home", icon: "🏠", section: "Overzicht" },
+  { href: "/dashboard", label: "Stuurinformatie", icon: "📊", section: "Overzicht" },
   { href: "/ai", label: "AI Assistent", icon: "🤖", section: "Kennisbase", badge: "AI" },
   { href: "/bibliotheek", label: "Documentbibliotheek", icon: "📚", section: "Kennisbase" },
   { href: "/vergaderingen", label: "Vergaderingen", icon: "📅", section: "Bestuur" },
