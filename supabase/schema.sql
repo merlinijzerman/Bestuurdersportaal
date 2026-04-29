@@ -310,3 +310,175 @@ create policy "fonds risico log" on public.risico_log
         fonds_id = (select fonds_id from public.profielen where id = auth.uid())
     )
   );
+
+-- ── 12. Procedures (workflow & case management) ─────────────
+create table if not exists public.procedures (
+  id              uuid primary key default uuid_generate_v4(),
+  fonds_id        uuid not null references public.fondsen(id) on delete cascade,
+  template_code   text not null,
+  titel           text not null,
+  beschrijving    text,
+  status          text not null check (status in (
+                    'in_uitvoering','wacht_op_besluit','afgerond'
+                  )) default 'in_uitvoering',
+  gestart_op      timestamptz default now(),
+  gestart_door    uuid references auth.users(id) on delete set null,
+  deadline        date,
+  afgerond_op     timestamptz
+);
+
+create index if not exists idx_procedures_fonds on public.procedures(fonds_id, gestart_op desc);
+create index if not exists idx_procedures_status on public.procedures(fonds_id, status);
+
+create table if not exists public.procedure_eigenaars (
+  procedure_id    uuid not null references public.procedures(id) on delete cascade,
+  gebruiker_id    uuid references auth.users(id) on delete cascade,
+  gebruiker_naam  text not null,
+  toegevoegd_op   timestamptz default now(),
+  primary key (procedure_id, gebruiker_naam)
+);
+
+create index if not exists idx_eigenaars_proc on public.procedure_eigenaars(procedure_id);
+
+create table if not exists public.procedure_stappen (
+  id                uuid primary key default uuid_generate_v4(),
+  procedure_id      uuid not null references public.procedures(id) on delete cascade,
+  volgorde          int not null,
+  naam              text not null,
+  beschrijving      text,
+  vereist_besluit   boolean default false,
+  geschatte_dagen   int,
+  status            text not null check (status in ('open','actief','afgerond')) default 'open',
+  eigenaar_naam     text,
+  deadline          date,
+  voltooid_op       timestamptz,
+  voltooid_door     uuid references auth.users(id) on delete set null
+);
+
+create index if not exists idx_stappen_proc on public.procedure_stappen(procedure_id, volgorde);
+
+create table if not exists public.procedure_checklist (
+  id                  uuid primary key default uuid_generate_v4(),
+  stap_id             uuid not null references public.procedure_stappen(id) on delete cascade,
+  volgorde            int not null,
+  label               text not null,
+  bewijs_vereist      boolean default false,
+  voldaan             boolean default false,
+  voldaan_op          timestamptz,
+  voldaan_door        uuid references auth.users(id) on delete set null,
+  voldaan_door_naam   text,
+  opmerking           text
+);
+
+create index if not exists idx_checklist_stap on public.procedure_checklist(stap_id, volgorde);
+
+create table if not exists public.procedure_bewijs (
+  id                    uuid primary key default uuid_generate_v4(),
+  stap_id               uuid not null references public.procedure_stappen(id) on delete cascade,
+  document_id           uuid references public.documenten(id) on delete set null,
+  titel                 text not null,
+  beschrijving          text,
+  toegevoegd_op         timestamptz default now(),
+  toegevoegd_door       uuid references auth.users(id) on delete set null,
+  toegevoegd_door_naam  text
+);
+
+create index if not exists idx_bewijs_stap on public.procedure_bewijs(stap_id, toegevoegd_op desc);
+
+create table if not exists public.procedure_besluiten (
+  id                    uuid primary key default uuid_generate_v4(),
+  procedure_id          uuid not null references public.procedures(id) on delete cascade,
+  stap_id               uuid references public.procedure_stappen(id) on delete set null,
+  vergadering_id        uuid references public.vergaderingen(id) on delete set null,
+  agendapunt_id         uuid references public.agendapunten(id) on delete set null,
+  formulering           text not null,
+  motivering            text,
+  datum                 date not null,
+  vastgelegd_door       uuid references auth.users(id) on delete set null,
+  vastgelegd_door_naam  text,
+  vastgelegd_op         timestamptz default now()
+);
+
+create index if not exists idx_besluiten_proc on public.procedure_besluiten(procedure_id, datum desc);
+
+create table if not exists public.procedure_log (
+  id            uuid primary key default uuid_generate_v4(),
+  procedure_id  uuid not null references public.procedures(id) on delete cascade,
+  event_type    text not null,
+  actor_id      uuid references auth.users(id) on delete set null,
+  actor_naam    text,
+  payload       jsonb default '{}',
+  tijdstip      timestamptz default now()
+);
+
+create index if not exists idx_proc_log_proc on public.procedure_log(procedure_id, tijdstip desc);
+
+alter table public.procedures enable row level security;
+alter table public.procedure_eigenaars enable row level security;
+alter table public.procedure_stappen enable row level security;
+alter table public.procedure_checklist enable row level security;
+alter table public.procedure_bewijs enable row level security;
+alter table public.procedure_besluiten enable row level security;
+alter table public.procedure_log enable row level security;
+
+drop policy if exists "fonds procedures" on public.procedures;
+create policy "fonds procedures" on public.procedures
+  for all using (
+    fonds_id = (select fonds_id from public.profielen where id = auth.uid())
+  );
+
+drop policy if exists "fonds proc eigenaars" on public.procedure_eigenaars;
+create policy "fonds proc eigenaars" on public.procedure_eigenaars
+  for all using (
+    procedure_id in (
+      select id from public.procedures where
+        fonds_id = (select fonds_id from public.profielen where id = auth.uid())
+    )
+  );
+
+drop policy if exists "fonds proc stappen" on public.procedure_stappen;
+create policy "fonds proc stappen" on public.procedure_stappen
+  for all using (
+    procedure_id in (
+      select id from public.procedures where
+        fonds_id = (select fonds_id from public.profielen where id = auth.uid())
+    )
+  );
+
+drop policy if exists "fonds proc checklist" on public.procedure_checklist;
+create policy "fonds proc checklist" on public.procedure_checklist
+  for all using (
+    stap_id in (
+      select s.id from public.procedure_stappen s
+      join public.procedures p on p.id = s.procedure_id
+      where p.fonds_id = (select fonds_id from public.profielen where id = auth.uid())
+    )
+  );
+
+drop policy if exists "fonds proc bewijs" on public.procedure_bewijs;
+create policy "fonds proc bewijs" on public.procedure_bewijs
+  for all using (
+    stap_id in (
+      select s.id from public.procedure_stappen s
+      join public.procedures p on p.id = s.procedure_id
+      where p.fonds_id = (select fonds_id from public.profielen where id = auth.uid())
+    )
+  );
+
+drop policy if exists "fonds proc besluiten" on public.procedure_besluiten;
+create policy "fonds proc besluiten" on public.procedure_besluiten
+  for all using (
+    procedure_id in (
+      select id from public.procedures where
+        fonds_id = (select fonds_id from public.profielen where id = auth.uid())
+    )
+  );
+
+drop policy if exists "fonds proc log" on public.procedure_log;
+create policy "fonds proc log" on public.procedure_log
+  for all using (
+    procedure_id in (
+      select id from public.procedures where
+        fonds_id = (select fonds_id from public.profielen where id = auth.uid())
+    )
+  );
