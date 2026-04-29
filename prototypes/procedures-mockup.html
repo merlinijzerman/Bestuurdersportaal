@@ -1,0 +1,955 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Procedures — Bestuurdersportaal mockup</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          navy: { DEFAULT: '#0F2744', 700: '#1a3858', 800: '#0F2744', 900: '#0a1c34' },
+          gold: { DEFAULT: '#C9A84C', 600: '#b89539', 700: '#a37f29' },
+        },
+        fontFamily: {
+          sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        },
+      }
+    }
+  }
+</script>
+<style>
+  body { font-family: Inter, system-ui, -apple-system, sans-serif; }
+  [hidden] { display: none !important; }
+  .step-rail-line { background: linear-gradient(to bottom, #C9A84C 0%, #C9A84C 50%, #e5e7eb 50%, #e5e7eb 100%); }
+  /* Custom scrollbar */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+</style>
+</head>
+<body class="bg-gray-50 text-gray-900 antialiased">
+
+<div class="min-h-screen flex">
+
+  <!-- ───── Sidebar ───── -->
+  <aside class="w-64 bg-navy text-white flex flex-col flex-shrink-0">
+    <div class="px-6 py-6 border-b border-white/10">
+      <div class="text-[11px] uppercase tracking-widest text-gold/80">Bestuurdersportaal</div>
+      <div class="text-base font-semibold mt-1 leading-tight">Stichting Pensioenfonds<br/>Horizon</div>
+    </div>
+    <nav class="flex-1 py-4 text-sm">
+      <a href="#" class="flex items-center gap-3 px-6 py-2.5 text-white/70 hover:text-white hover:bg-white/5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 12l9-9 9 9M5 10v10h14V10"/></svg>
+        Home
+      </a>
+      <a href="#" class="flex items-center gap-3 px-6 py-2.5 text-white/70 hover:text-white hover:bg-white/5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 13h4v8H3zm7-10h4v18h-4zm7 6h4v12h-4z"/></svg>
+        Stuurinformatie
+      </a>
+      <a href="#" class="flex items-center gap-3 px-6 py-2.5 text-white/70 hover:text-white hover:bg-white/5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.4 8.4 0 01-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.4 8.4 0 013.8-.9h.5a8.5 8.5 0 018 8v.5z"/></svg>
+        AI Assistent
+      </a>
+      <a href="#" class="flex items-center gap-3 px-6 py-2.5 text-white/70 hover:text-white hover:bg-white/5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+        Vergaderingen
+      </a>
+      <a href="#" class="flex items-center gap-3 px-6 py-2.5 text-white/70 hover:text-white hover:bg-white/5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 016.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+        Bibliotheek
+      </a>
+      <a href="#procedures" data-route="procedures" class="flex items-center gap-3 px-6 py-2.5 bg-white/10 text-white border-l-2 border-gold">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 11h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.5L19 9.5V18a2 2 0 01-2 2z"/></svg>
+        Procedures
+        <span class="ml-auto text-[10px] bg-gold text-navy font-semibold px-1.5 py-0.5 rounded">5</span>
+      </a>
+      <a href="#" class="flex items-center gap-3 px-6 py-2.5 text-white/70 hover:text-white hover:bg-white/5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        Governance log
+      </a>
+      <a href="#" class="flex items-center gap-3 px-6 py-2.5 text-white/70 hover:text-white hover:bg-white/5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+        Notulen
+      </a>
+    </nav>
+    <div class="p-4 border-t border-white/10 flex items-center gap-3">
+      <div class="w-8 h-8 rounded-full bg-gold text-navy flex items-center justify-center text-xs font-semibold">MI</div>
+      <div class="text-xs leading-tight">
+        <div class="font-medium">Merlin Ijzerman</div>
+        <div class="text-white/60">Bestuurder</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ───── Main ───── -->
+  <main class="flex-1 flex flex-col min-w-0">
+    <header class="bg-white border-b border-gray-200 px-8 py-4 flex items-center justify-between">
+      <nav class="text-sm text-gray-500" id="breadcrumb">
+        <a href="#procedures" class="hover:text-navy">Procedures</a>
+      </nav>
+      <div class="flex items-center gap-3 text-sm text-gray-500">
+        <span class="text-xs">Demo / mockup</span>
+      </div>
+    </header>
+
+    <div class="flex-1 overflow-auto">
+
+      <!-- ═══════════════════════════════════════ -->
+      <!-- SCHERM 1: CASUSSEN LIJST                -->
+      <!-- ═══════════════════════════════════════ -->
+      <section id="screen-procedures" class="px-8 py-8 max-w-7xl mx-auto w-full">
+        <div class="flex items-start justify-between mb-2">
+          <div>
+            <h1 class="text-2xl font-semibold text-navy">Procedures</h1>
+            <p class="text-sm text-gray-600 mt-1">Lopende processen, beleidswijzigingen, reviews en incidenten van het fonds.</p>
+          </div>
+          <a href="#nieuwe-procedure" class="bg-navy text-white text-sm font-medium px-4 py-2.5 rounded-lg hover:bg-navy-700 inline-flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+            Nieuwe procedure
+          </a>
+        </div>
+
+        <!-- Filters -->
+        <div class="mt-6 flex items-center gap-2 border-b border-gray-200">
+          <button class="px-4 py-2.5 text-sm font-medium text-navy border-b-2 border-gold -mb-px">Lopend <span class="text-xs text-gray-500 ml-1">5</span></button>
+          <button class="px-4 py-2.5 text-sm font-medium text-gray-500 hover:text-navy">Wacht op besluit <span class="text-xs ml-1">2</span></button>
+          <button class="px-4 py-2.5 text-sm font-medium text-gray-500 hover:text-navy">Afgerond <span class="text-xs ml-1">8</span></button>
+          <button class="px-4 py-2.5 text-sm font-medium text-gray-500 hover:text-navy">Alle <span class="text-xs ml-1">15</span></button>
+          <div class="ml-auto flex items-center gap-2 pb-2">
+            <a href="#templates" class="text-sm text-gray-600 hover:text-navy">Procestemplates beheren →</a>
+          </div>
+        </div>
+
+        <!-- Lijst -->
+        <div class="mt-6 space-y-3">
+
+          <!-- Procedure 1 -->
+          <a href="#procedure-1" class="block bg-white border border-gray-200 rounded-xl p-5 hover:border-gold hover:shadow-sm transition">
+            <div class="flex items-start gap-4">
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="text-[11px] font-medium uppercase tracking-wide text-purple-700 bg-purple-50 px-2 py-0.5 rounded">Beleidswijziging</span>
+                  <span class="text-[11px] font-medium uppercase tracking-wide text-blue-700 bg-blue-50 px-2 py-0.5 rounded">In uitvoering</span>
+                </div>
+                <h3 class="text-base font-semibold text-navy">Aanpassing strategisch beleggingsplan 2026</h3>
+                <p class="text-sm text-gray-600 mt-1">Voorgestelde verhoging van het aandelenpercentage in de overrendementsportefeuille van 55% naar 62%.</p>
+                <div class="flex items-center gap-4 mt-3 text-xs text-gray-500">
+                  <span>Stap 3 van 6 — Bestuursoverleg</span>
+                  <span>·</span>
+                  <span>Deadline: <span class="text-amber-700 font-medium">26 apr 2026</span></span>
+                  <span>·</span>
+                  <span>Gestart 12 mrt 2026</span>
+                </div>
+              </div>
+              <div class="flex flex-col items-end gap-2">
+                <div class="flex -space-x-2">
+                  <div class="w-7 h-7 rounded-full bg-purple-200 text-purple-900 text-[11px] flex items-center justify-center font-medium border-2 border-white">MI</div>
+                  <div class="w-7 h-7 rounded-full bg-emerald-200 text-emerald-900 text-[11px] flex items-center justify-center font-medium border-2 border-white">AV</div>
+                </div>
+                <div class="w-32 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div class="h-full bg-gold" style="width: 50%"></div>
+                </div>
+              </div>
+            </div>
+          </a>
+
+          <!-- Procedure 2 -->
+          <a href="#procedure-2" class="block bg-white border border-gray-200 rounded-xl p-5 hover:border-gold hover:shadow-sm transition">
+            <div class="flex items-start gap-4">
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="text-[11px] font-medium uppercase tracking-wide text-teal-700 bg-teal-50 px-2 py-0.5 rounded">Uitbestedingsreview</span>
+                  <span class="text-[11px] font-medium uppercase tracking-wide text-blue-700 bg-blue-50 px-2 py-0.5 rounded">In uitvoering</span>
+                </div>
+                <h3 class="text-base font-semibold text-navy">Jaarlijkse uitbestedingsreview AZL 2026</h3>
+                <p class="text-sm text-gray-600 mt-1">Periodieke beoordeling van de pensioenadministratie-dienstverlening, SLA-rapportage en KPI-naleving.</p>
+                <div class="flex items-center gap-4 mt-3 text-xs text-gray-500">
+                  <span>Stap 2 van 5 — KPI-rapportage opvragen</span>
+                  <span>·</span>
+                  <span>Deadline: 15 jun 2026</span>
+                  <span>·</span>
+                  <span>Gestart 1 apr 2026</span>
+                </div>
+              </div>
+              <div class="flex flex-col items-end gap-2">
+                <div class="flex -space-x-2">
+                  <div class="w-7 h-7 rounded-full bg-rose-200 text-rose-900 text-[11px] flex items-center justify-center font-medium border-2 border-white">JK</div>
+                </div>
+                <div class="w-32 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div class="h-full bg-gold" style="width: 30%"></div>
+                </div>
+              </div>
+            </div>
+          </a>
+
+          <!-- Procedure 3 -->
+          <a href="#procedure-1" class="block bg-white border border-gray-200 rounded-xl p-5 hover:border-gold hover:shadow-sm transition">
+            <div class="flex items-start gap-4">
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="text-[11px] font-medium uppercase tracking-wide text-red-700 bg-red-50 px-2 py-0.5 rounded">Incident DNB</span>
+                  <span class="text-[11px] font-medium uppercase tracking-wide text-amber-700 bg-amber-50 px-2 py-0.5 rounded">Wacht op besluit</span>
+                </div>
+                <h3 class="text-base font-semibold text-navy">Vertraging premie-incasso werkgevers februari 2026</h3>
+                <p class="text-sm text-gray-600 mt-1">Door storing bij betaaldienstverlener vertraagde verwerking van premie-betalingen. Triage en eventuele DNB-melding.</p>
+                <div class="flex items-center gap-4 mt-3 text-xs text-gray-500">
+                  <span>Stap 4 van 6 — Interne analyse</span>
+                  <span>·</span>
+                  <span class="text-red-700 font-medium">DNB-meldtermijn over 2 werkdagen</span>
+                </div>
+              </div>
+              <div class="flex flex-col items-end gap-2">
+                <div class="flex -space-x-2">
+                  <div class="w-7 h-7 rounded-full bg-blue-200 text-blue-900 text-[11px] flex items-center justify-center font-medium border-2 border-white">PV</div>
+                  <div class="w-7 h-7 rounded-full bg-purple-200 text-purple-900 text-[11px] flex items-center justify-center font-medium border-2 border-white">MI</div>
+                </div>
+                <div class="w-32 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div class="h-full bg-gold" style="width: 67%"></div>
+                </div>
+              </div>
+            </div>
+          </a>
+
+          <!-- Procedure 4 -->
+          <a href="#procedure-1" class="block bg-white border border-gray-200 rounded-xl p-5 hover:border-gold hover:shadow-sm transition opacity-90">
+            <div class="flex items-start gap-4">
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="text-[11px] font-medium uppercase tracking-wide text-purple-700 bg-purple-50 px-2 py-0.5 rounded">Beleidswijziging</span>
+                  <span class="text-[11px] font-medium uppercase tracking-wide text-gray-700 bg-gray-100 px-2 py-0.5 rounded">Niet gestart</span>
+                </div>
+                <h3 class="text-base font-semibold text-navy">Herziening risicobereidheid 2026</h3>
+                <p class="text-sm text-gray-600 mt-1">Driejaarlijkse herijking van het risicokader, in nauwe afstemming met de beleggingsadviescommissie.</p>
+                <div class="flex items-center gap-4 mt-3 text-xs text-gray-500">
+                  <span>Klaar om te starten</span>
+                  <span>·</span>
+                  <span>Geplande start: mei 2026</span>
+                </div>
+              </div>
+              <div class="flex flex-col items-end gap-2">
+                <div class="flex -space-x-2">
+                  <div class="w-7 h-7 rounded-full bg-emerald-200 text-emerald-900 text-[11px] flex items-center justify-center font-medium border-2 border-white">AV</div>
+                </div>
+                <div class="w-32 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div class="h-full bg-gray-300" style="width: 0%"></div>
+                </div>
+              </div>
+            </div>
+          </a>
+
+          <!-- Procedure 5 -->
+          <a href="#procedure-1" class="block bg-white border border-gray-200 rounded-xl p-5 hover:border-gold hover:shadow-sm transition">
+            <div class="flex items-start gap-4">
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="text-[11px] font-medium uppercase tracking-wide text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded">Jaarcyclus</span>
+                  <span class="text-[11px] font-medium uppercase tracking-wide text-blue-700 bg-blue-50 px-2 py-0.5 rounded">In uitvoering</span>
+                </div>
+                <h3 class="text-base font-semibold text-navy">ABTN-actualisatie 2026</h3>
+                <p class="text-sm text-gray-600 mt-1">Jaarlijkse actualisatie van de actuariële en bedrijfstechnische nota. Deadline conform Pensioenwet.</p>
+                <div class="flex items-center gap-4 mt-3 text-xs text-gray-500">
+                  <span>Stap 1 van 4 — Inventarisatie wijzigingen</span>
+                  <span>·</span>
+                  <span>Deadline: 31 dec 2026</span>
+                </div>
+              </div>
+              <div class="flex flex-col items-end gap-2">
+                <div class="flex -space-x-2">
+                  <div class="w-7 h-7 rounded-full bg-rose-200 text-rose-900 text-[11px] flex items-center justify-center font-medium border-2 border-white">JK</div>
+                  <div class="w-7 h-7 rounded-full bg-blue-200 text-blue-900 text-[11px] flex items-center justify-center font-medium border-2 border-white">PV</div>
+                </div>
+                <div class="w-32 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div class="h-full bg-gold" style="width: 12%"></div>
+                </div>
+              </div>
+            </div>
+          </a>
+
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════ -->
+      <!-- SCHERM 2: CASUS DETAIL                  -->
+      <!-- ═══════════════════════════════════════ -->
+      <section id="screen-procedure-1" hidden class="px-8 py-8 max-w-7xl mx-auto w-full">
+
+        <!-- Header -->
+        <div class="mb-6">
+          <a href="#procedures" class="text-sm text-gray-500 hover:text-navy inline-flex items-center gap-1">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+            Terug naar procedures
+          </a>
+          <div class="flex items-start justify-between mt-3 gap-6">
+            <div class="flex-1">
+              <div class="flex items-center gap-2 mb-2">
+                <span class="text-[11px] font-medium uppercase tracking-wide text-purple-700 bg-purple-50 px-2 py-0.5 rounded">Beleidswijziging</span>
+                <span class="text-[11px] font-medium uppercase tracking-wide text-blue-700 bg-blue-50 px-2 py-0.5 rounded">In uitvoering</span>
+              </div>
+              <h1 class="text-2xl font-semibold text-navy">Aanpassing strategisch beleggingsplan 2026</h1>
+              <p class="text-sm text-gray-600 mt-1.5 max-w-3xl">Voorgestelde verhoging van het aandelenpercentage in de overrendementsportefeuille van 55% naar 62% in lijn met de geactualiseerde risicobereidheid en lange-termijn rendementsverwachtingen.</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button class="px-3 py-2 text-sm border border-gray-200 rounded-lg hover:border-navy text-gray-700">Eigenaars beheren</button>
+              <button class="px-3 py-2 text-sm border border-gray-200 rounded-lg hover:border-navy text-gray-700">Pauzeren</button>
+            </div>
+          </div>
+
+          <!-- Procedure-meta strook -->
+          <div class="grid grid-cols-4 gap-4 mt-6 bg-white border border-gray-200 rounded-xl p-5">
+            <div>
+              <div class="text-xs uppercase tracking-wide text-gray-500 font-medium">Co-eigenaars</div>
+              <div class="flex items-center gap-2 mt-2">
+                <div class="flex -space-x-2">
+                  <div class="w-8 h-8 rounded-full bg-purple-200 text-purple-900 text-xs flex items-center justify-center font-medium border-2 border-white">MI</div>
+                  <div class="w-8 h-8 rounded-full bg-emerald-200 text-emerald-900 text-xs flex items-center justify-center font-medium border-2 border-white">AV</div>
+                </div>
+                <span class="text-sm text-gray-700">Merlin, Anna</span>
+              </div>
+            </div>
+            <div>
+              <div class="text-xs uppercase tracking-wide text-gray-500 font-medium">Voortgang</div>
+              <div class="text-sm text-gray-900 mt-2 font-medium">Stap 3 van 6</div>
+              <div class="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden mt-1.5">
+                <div class="h-full bg-gold" style="width: 50%"></div>
+              </div>
+            </div>
+            <div>
+              <div class="text-xs uppercase tracking-wide text-gray-500 font-medium">Deadline huidige stap</div>
+              <div class="text-sm text-amber-700 font-medium mt-2">26 apr 2026</div>
+              <div class="text-xs text-gray-500">Nog 9 dagen</div>
+            </div>
+            <div>
+              <div class="text-xs uppercase tracking-wide text-gray-500 font-medium">Gestart op</div>
+              <div class="text-sm text-gray-900 font-medium mt-2">12 mrt 2026</div>
+              <div class="text-xs text-gray-500">Door Merlin Ijzerman</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2-kolommen detail -->
+        <div class="grid grid-cols-12 gap-6">
+
+          <!-- Stappen-rail (links) -->
+          <div class="col-span-4">
+            <div class="bg-white border border-gray-200 rounded-xl p-5 sticky top-4">
+              <div class="text-xs uppercase tracking-wide text-gray-500 font-semibold mb-4">Procesfasen</div>
+              <ol class="space-y-1 relative">
+
+                <!-- Stap 1 — afgerond -->
+                <li class="relative pl-9 py-2.5">
+                  <div class="absolute left-0 top-3 w-6 h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center text-xs font-bold">✓</div>
+                  <div class="absolute left-3 top-9 bottom-0 w-px bg-gold"></div>
+                  <div class="text-sm font-medium text-gray-900">Voorstel opstellen</div>
+                  <div class="text-xs text-gray-500 mt-0.5">Afgerond 14 mrt</div>
+                </li>
+
+                <!-- Stap 2 — afgerond -->
+                <li class="relative pl-9 py-2.5">
+                  <div class="absolute left-0 top-3 w-6 h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center text-xs font-bold">✓</div>
+                  <div class="absolute left-3 top-9 bottom-0 w-px bg-gold"></div>
+                  <div class="text-sm font-medium text-gray-900">Impactanalyse</div>
+                  <div class="text-xs text-gray-500 mt-0.5">Afgerond 5 apr</div>
+                </li>
+
+                <!-- Stap 3 — actief -->
+                <li class="relative pl-9 py-2.5 bg-amber-50/40 -mx-3 px-3 rounded-lg">
+                  <div class="absolute left-3 top-3 w-6 h-6 rounded-full bg-gold border-2 border-gold text-navy flex items-center justify-center text-xs font-bold ring-4 ring-amber-100">3</div>
+                  <div class="absolute left-6 top-9 bottom-0 w-px bg-gray-200"></div>
+                  <div class="text-sm font-semibold text-navy ml-6">Bestuursoverleg</div>
+                  <div class="text-xs text-amber-700 font-medium mt-0.5 ml-6">Actief — deadline 26 apr</div>
+                </li>
+
+                <!-- Stap 4 — wachtend -->
+                <li class="relative pl-9 py-2.5">
+                  <div class="absolute left-0 top-3 w-6 h-6 rounded-full bg-gray-100 border-2 border-gray-300 text-gray-500 flex items-center justify-center text-xs font-medium">4</div>
+                  <div class="absolute left-3 top-9 bottom-0 w-px bg-gray-200"></div>
+                  <div class="text-sm font-medium text-gray-500">Bestuursbesluit</div>
+                  <div class="text-xs text-gray-400 mt-0.5">Vereist formeel besluit</div>
+                </li>
+
+                <!-- Stap 5 -->
+                <li class="relative pl-9 py-2.5">
+                  <div class="absolute left-0 top-3 w-6 h-6 rounded-full bg-gray-100 border-2 border-gray-300 text-gray-500 flex items-center justify-center text-xs font-medium">5</div>
+                  <div class="absolute left-3 top-9 bottom-0 w-px bg-gray-200"></div>
+                  <div class="text-sm font-medium text-gray-500">Implementatie</div>
+                  <div class="text-xs text-gray-400 mt-0.5">Geschat 4 weken</div>
+                </li>
+
+                <!-- Stap 6 -->
+                <li class="relative pl-9 py-2.5">
+                  <div class="absolute left-0 top-3 w-6 h-6 rounded-full bg-gray-100 border-2 border-gray-300 text-gray-500 flex items-center justify-center text-xs font-medium">6</div>
+                  <div class="text-sm font-medium text-gray-500">Evaluatie</div>
+                  <div class="text-xs text-gray-400 mt-0.5">Na 6 maanden</div>
+                </li>
+
+              </ol>
+            </div>
+          </div>
+
+          <!-- Stap-detail (rechts) -->
+          <div class="col-span-8 space-y-6">
+
+            <!-- Actieve stap -->
+            <div class="bg-white border border-gray-200 rounded-xl p-6">
+              <div class="flex items-start justify-between gap-4">
+                <div>
+                  <div class="text-xs uppercase tracking-wide text-amber-700 font-semibold">Actieve stap</div>
+                  <h2 class="text-lg font-semibold text-navy mt-1">3 — Bestuursoverleg</h2>
+                  <p class="text-sm text-gray-600 mt-1.5 max-w-2xl">Bespreek het beleidsvoorstel in een bestuursvergadering, verzamel inbreng van de beleggingsadviescommissie en de risk-commissie, en leg overwegingen schriftelijk vast. Deze stap mondt uit in een formeel besluit (volgende stap).</p>
+                </div>
+                <div class="text-right text-xs text-gray-500 flex-shrink-0">
+                  <div class="text-amber-700 font-medium">Deadline 26 apr</div>
+                  <div class="mt-1">Toegewezen aan Anna de Vries</div>
+                </div>
+              </div>
+
+              <!-- Checklist -->
+              <div class="mt-6">
+                <div class="text-xs uppercase tracking-wide text-gray-500 font-semibold mb-3">Checklist</div>
+                <div class="space-y-2">
+                  <label class="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+                    <input type="checkbox" checked class="mt-0.5 accent-gold w-4 h-4 rounded">
+                    <div class="flex-1">
+                      <div class="text-sm text-gray-900 line-through text-gray-500">Vergadering ingepland waarin voorstel wordt besproken</div>
+                      <div class="text-xs text-gray-500 mt-0.5">→ <a href="#" class="text-navy underline">Bestuursvergadering 23 apr 2026</a> · afgevinkt door Merlin op 14 apr</div>
+                    </div>
+                  </label>
+                  <label class="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+                    <input type="checkbox" checked class="mt-0.5 accent-gold w-4 h-4 rounded">
+                    <div class="flex-1">
+                      <div class="text-sm text-gray-900 line-through text-gray-500">Voorstel als agendapunt toegevoegd</div>
+                      <div class="text-xs text-gray-500 mt-0.5">→ Categorie <span class="font-medium">Oordeelsvorming</span> · afgevinkt door Anna op 14 apr</div>
+                    </div>
+                  </label>
+                  <label class="flex items-start gap-3 p-3 bg-white border border-gray-200 rounded-lg">
+                    <input type="checkbox" class="mt-0.5 accent-gold w-4 h-4 rounded">
+                    <div class="flex-1">
+                      <div class="text-sm text-gray-900">Inbreng commissies ontvangen</div>
+                      <div class="text-xs text-gray-500 mt-0.5">2 van 3 commissies hebben inbreng aangeleverd · audit-commissie wachtend</div>
+                    </div>
+                    <span class="text-[11px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded font-medium">Bewijs vereist</span>
+                  </label>
+                  <label class="flex items-start gap-3 p-3 bg-white border border-gray-200 rounded-lg">
+                    <input type="checkbox" class="mt-0.5 accent-gold w-4 h-4 rounded">
+                    <div class="flex-1">
+                      <div class="text-sm text-gray-900">Overwegingen schriftelijk vastgelegd</div>
+                      <div class="text-xs text-gray-500 mt-0.5">Korte notitie waarin de gewogen alternatieven en argumenten zijn samengebracht</div>
+                    </div>
+                    <span class="text-[11px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded font-medium">Bewijs vereist</span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Bewijsstukken -->
+              <div class="mt-6">
+                <div class="flex items-center justify-between mb-3">
+                  <div class="text-xs uppercase tracking-wide text-gray-500 font-semibold">Bewijsstukken</div>
+                  <button class="text-xs text-navy hover:underline">+ Toevoegen</button>
+                </div>
+                <div class="space-y-2">
+                  <div class="flex items-center gap-3 p-3 border border-gray-200 rounded-lg">
+                    <div class="w-9 h-10 bg-red-50 text-red-700 rounded flex items-center justify-center text-[10px] font-bold">PDF</div>
+                    <div class="flex-1 min-w-0">
+                      <div class="text-sm font-medium text-gray-900 truncate">Beleidsvoorstel beleggingsplan v3.pdf</div>
+                      <div class="text-xs text-gray-500">Toegevoegd door Anna de Vries · 12 apr 2026 · 14 pagina's</div>
+                    </div>
+                    <a href="#" class="text-xs text-navy hover:underline">Openen</a>
+                  </div>
+                  <div class="flex items-center gap-3 p-3 border border-gray-200 rounded-lg">
+                    <div class="w-9 h-10 bg-red-50 text-red-700 rounded flex items-center justify-center text-[10px] font-bold">PDF</div>
+                    <div class="flex-1 min-w-0">
+                      <div class="text-sm font-medium text-gray-900 truncate">Inbreng beleggingsadviescommissie.pdf</div>
+                      <div class="text-xs text-gray-500">Toegevoegd door Merlin Ijzerman · 16 apr 2026 · 4 pagina's</div>
+                    </div>
+                    <a href="#" class="text-xs text-navy hover:underline">Openen</a>
+                  </div>
+                  <div class="flex items-center gap-3 p-3 border border-gray-200 rounded-lg">
+                    <div class="w-9 h-10 bg-red-50 text-red-700 rounded flex items-center justify-center text-[10px] font-bold">PDF</div>
+                    <div class="flex-1 min-w-0">
+                      <div class="text-sm font-medium text-gray-900 truncate">Inbreng risk-commissie.pdf</div>
+                      <div class="text-xs text-gray-500">Toegevoegd door Merlin Ijzerman · 17 apr 2026 · 3 pagina's</div>
+                    </div>
+                    <a href="#" class="text-xs text-navy hover:underline">Openen</a>
+                  </div>
+                  <div class="border-2 border-dashed border-gray-200 rounded-lg p-4 text-center text-sm text-gray-500 hover:border-gold cursor-pointer">
+                    Sleep een bestand hier of <span class="text-navy underline">selecteer uit bibliotheek</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Acties -->
+              <div class="mt-6 pt-5 border-t border-gray-100 flex items-center justify-between gap-3">
+                <div class="text-xs text-gray-500">2 van 4 checklist-items voldaan · 2 bewijsstukken nog vereist</div>
+                <div class="flex gap-2">
+                  <button class="px-3 py-2 text-sm border border-gray-200 rounded-lg hover:border-navy text-gray-700">Toewijzen</button>
+                  <button disabled class="px-4 py-2 text-sm bg-gray-200 text-gray-500 rounded-lg cursor-not-allowed">Stap voltooien</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- AI-suggestie -->
+            <div class="bg-gradient-to-br from-amber-50 to-white border border-amber-200 rounded-xl p-5">
+              <div class="flex items-start gap-3">
+                <div class="w-8 h-8 rounded-lg bg-gold text-navy flex items-center justify-center flex-shrink-0">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9.663 17h4.673M12 3v1M3.34 7l.7.7M20.66 7l-.7.7M21 12h-1M4 12H3M12 21v-1M7 17l-2 4M17 17l2 4M9 17h6c1.1 0 2-.9 2-2 0-2-.5-3-1.5-4S15 9.5 15 8a3 3 0 10-6 0c0 1.5-.5 2-1.5 3S6 13 6 15c0 1.1.9 2 2 2z"/></svg>
+                </div>
+                <div class="flex-1">
+                  <div class="text-xs uppercase tracking-wide text-amber-700 font-semibold">AI-suggestie</div>
+                  <p class="text-sm text-gray-800 mt-1">Op basis van de twee inbreng-documenten en het impactrapport heb ik een conceptformulering van de overwegingen opgesteld. <a href="#" class="text-navy underline font-medium">Bekijk concept</a> om in te vullen onder "Overwegingen schriftelijk vastgelegd".</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Audit log -->
+            <div class="bg-white border border-gray-200 rounded-xl p-6">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="text-sm font-semibold text-navy">Audit-trail</h3>
+                <span class="text-xs text-gray-500">Append-only · 14 events</span>
+              </div>
+              <ol class="space-y-3 text-sm">
+                <li class="flex gap-3">
+                  <div class="w-2 h-2 rounded-full bg-gray-300 mt-1.5 flex-shrink-0"></div>
+                  <div class="flex-1">
+                    <div class="text-gray-900"><span class="font-medium">Merlin Ijzerman</span> heeft bewijsstuk <span class="text-navy">Inbreng risk-commissie.pdf</span> toegevoegd</div>
+                    <div class="text-xs text-gray-500">17 apr 2026 · 11:42</div>
+                  </div>
+                </li>
+                <li class="flex gap-3">
+                  <div class="w-2 h-2 rounded-full bg-gray-300 mt-1.5 flex-shrink-0"></div>
+                  <div class="flex-1">
+                    <div class="text-gray-900"><span class="font-medium">Merlin Ijzerman</span> heeft bewijsstuk <span class="text-navy">Inbreng beleggingsadviescommissie.pdf</span> toegevoegd</div>
+                    <div class="text-xs text-gray-500">16 apr 2026 · 09:08</div>
+                  </div>
+                </li>
+                <li class="flex gap-3">
+                  <div class="w-2 h-2 rounded-full bg-emerald-400 mt-1.5 flex-shrink-0"></div>
+                  <div class="flex-1">
+                    <div class="text-gray-900"><span class="font-medium">Anna de Vries</span> heeft checklistitem <span class="text-navy">Voorstel als agendapunt toegevoegd</span> afgevinkt</div>
+                    <div class="text-xs text-gray-500">14 apr 2026 · 16:33</div>
+                  </div>
+                </li>
+                <li class="flex gap-3">
+                  <div class="w-2 h-2 rounded-full bg-emerald-400 mt-1.5 flex-shrink-0"></div>
+                  <div class="flex-1">
+                    <div class="text-gray-900"><span class="font-medium">Merlin Ijzerman</span> heeft checklistitem <span class="text-navy">Vergadering ingepland</span> afgevinkt</div>
+                    <div class="text-xs text-gray-500">14 apr 2026 · 14:21</div>
+                  </div>
+                </li>
+                <li class="flex gap-3">
+                  <div class="w-2 h-2 rounded-full bg-blue-400 mt-1.5 flex-shrink-0"></div>
+                  <div class="flex-1">
+                    <div class="text-gray-900">Stap <span class="text-navy">Bestuursoverleg</span> gestart, toegewezen aan Anna de Vries</div>
+                    <div class="text-xs text-gray-500">14 apr 2026 · 14:20</div>
+                  </div>
+                </li>
+                <li class="flex gap-3">
+                  <div class="w-2 h-2 rounded-full bg-emerald-500 mt-1.5 flex-shrink-0"></div>
+                  <div class="flex-1">
+                    <div class="text-gray-900">Stap <span class="text-navy">Impactanalyse</span> voltooid door Merlin Ijzerman</div>
+                    <div class="text-xs text-gray-500">5 apr 2026 · 17:09</div>
+                  </div>
+                </li>
+                <li class="flex gap-3">
+                  <div class="w-2 h-2 rounded-full bg-gray-300 mt-1.5 flex-shrink-0"></div>
+                  <div class="flex-1">
+                    <div class="text-gray-900"><span class="font-medium">Merlin Ijzerman</span> heeft co-eigenaar <span class="text-navy">Anna de Vries</span> toegevoegd</div>
+                    <div class="text-xs text-gray-500">12 mrt 2026 · 09:22</div>
+                  </div>
+                </li>
+                <li class="flex gap-3">
+                  <div class="w-2 h-2 rounded-full bg-gray-400 mt-1.5 flex-shrink-0"></div>
+                  <div class="flex-1">
+                    <div class="text-gray-900">Procedure aangemaakt op basis van template <span class="text-navy">Beleidswijziging</span></div>
+                    <div class="text-xs text-gray-500">12 mrt 2026 · 09:21 · door Merlin Ijzerman</div>
+                  </div>
+                </li>
+                <li>
+                  <button class="text-xs text-navy hover:underline ml-5">Toon 6 oudere events</button>
+                </li>
+              </ol>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════ -->
+      <!-- SCHERM 3: CASUS DETAIL — Uitbestedingsreview (compact) -->
+      <!-- ═══════════════════════════════════════ -->
+      <section id="screen-procedure-2" hidden class="px-8 py-8 max-w-7xl mx-auto w-full">
+        <a href="#procedures" class="text-sm text-gray-500 hover:text-navy inline-flex items-center gap-1 mb-3">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+          Terug naar procedures
+        </a>
+        <div class="bg-white border border-gray-200 rounded-xl p-12 text-center">
+          <div class="inline-flex w-12 h-12 rounded-full bg-teal-50 text-teal-700 items-center justify-center mb-4">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 11h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.5L19 9.5V18a2 2 0 01-2 2z"/></svg>
+          </div>
+          <h2 class="text-lg font-semibold text-navy">Uitbestedingsreview AZL — detailpagina</h2>
+          <p class="text-sm text-gray-600 mt-2 max-w-md mx-auto">In de mockup is de detailweergave volledig uitgewerkt voor de Beleidswijziging-procedure. <a href="#procedure-1" class="text-navy underline">Open die als referentie →</a></p>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════ -->
+      <!-- SCHERM 4: NIEUWE CASUS                  -->
+      <!-- ═══════════════════════════════════════ -->
+      <section id="screen-nieuwe-procedure" hidden class="px-8 py-8 max-w-5xl mx-auto w-full">
+        <a href="#procedures" class="text-sm text-gray-500 hover:text-navy inline-flex items-center gap-1">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+          Terug naar procedures
+        </a>
+        <h1 class="text-2xl font-semibold text-navy mt-3">Start een nieuwe procedure</h1>
+        <p class="text-sm text-gray-600 mt-1">Kies een procestemplate. De stappen, checklists en bewijsvereisten worden automatisch op basis van de template ingericht.</p>
+
+        <div class="mt-8 grid grid-cols-2 gap-4">
+
+          <a href="#" class="bg-white border border-gray-200 rounded-xl p-6 hover:border-navy hover:shadow-sm cursor-pointer">
+            <div class="flex items-start gap-4">
+              <div class="w-11 h-11 rounded-lg bg-purple-50 text-purple-700 flex items-center justify-center flex-shrink-0">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></svg>
+              </div>
+              <div class="flex-1">
+                <h3 class="font-semibold text-navy">Beleidswijziging</h3>
+                <p class="text-sm text-gray-600 mt-1">Voorstel → impactanalyse → bestuursoverleg → besluit → implementatie → evaluatie.</p>
+                <div class="text-xs text-gray-500 mt-3">6 stappen · doorlooptijd ~3 maanden</div>
+              </div>
+            </div>
+          </a>
+
+          <a href="#" class="bg-white border border-gray-200 rounded-xl p-6 hover:border-navy hover:shadow-sm cursor-pointer">
+            <div class="flex items-start gap-4">
+              <div class="w-11 h-11 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center flex-shrink-0">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 11h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.5L19 9.5V18a2 2 0 01-2 2z"/></svg>
+              </div>
+              <div class="flex-1">
+                <h3 class="font-semibold text-navy">Uitbestedingsreview</h3>
+                <p class="text-sm text-gray-600 mt-1">KPI-rapportage → SLA-check → due-diligence → review-overleg → bevindingen → vervolgactie.</p>
+                <div class="text-xs text-gray-500 mt-3">5 stappen · jaarlijks per uitvoerder</div>
+              </div>
+            </div>
+          </a>
+
+          <a href="#" class="bg-white border border-red-200 rounded-xl p-6 hover:border-red-400 hover:shadow-sm cursor-pointer relative">
+            <div class="absolute top-3 right-3 text-[10px] uppercase tracking-wide bg-red-50 text-red-700 px-2 py-0.5 rounded font-semibold">Tijdkritisch</div>
+            <div class="flex items-start gap-4">
+              <div class="w-11 h-11 rounded-lg bg-red-50 text-red-700 flex items-center justify-center flex-shrink-0">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 9v2m0 4h.01M5.07 19h13.86a2 2 0 001.74-3L13.74 4a2 2 0 00-3.48 0L3.34 16a2 2 0 001.74 3z"/></svg>
+              </div>
+              <div class="flex-1">
+                <h3 class="font-semibold text-navy">Incident-meldplicht DNB</h3>
+                <p class="text-sm text-gray-600 mt-1">Incident → triage → DNB-melding (binnen termijn) → analyse → herstel → afsluiting met lessons learned.</p>
+                <div class="text-xs text-gray-500 mt-3">6 stappen · wettelijke deadlines</div>
+              </div>
+            </div>
+          </a>
+
+          <a href="#" class="bg-white border border-gray-200 rounded-xl p-6 hover:border-navy hover:shadow-sm cursor-pointer">
+            <div class="flex items-start gap-4">
+              <div class="w-11 h-11 rounded-lg bg-indigo-50 text-indigo-700 flex items-center justify-center flex-shrink-0">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+              </div>
+              <div class="flex-1">
+                <h3 class="font-semibold text-navy">Jaarcyclus 2026 (bulkstart)</h3>
+                <p class="text-sm text-gray-600 mt-1">Maakt in één klap de standaard-cases aan: ABTN-actualisatie, beleggingsplan, risicobereidheid, audit, zelfevaluatie.</p>
+                <div class="text-xs text-gray-500 mt-3">5 cases · met voorgeplande deadlines</div>
+              </div>
+            </div>
+          </a>
+
+        </div>
+
+        <div class="mt-8 text-center">
+          <a href="#templates" class="text-sm text-gray-600 hover:text-navy">Of beheer en maak procestemplates →</a>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════ -->
+      <!-- SCHERM 5: TEMPLATES                     -->
+      <!-- ═══════════════════════════════════════ -->
+      <section id="screen-templates" hidden class="px-8 py-8 max-w-7xl mx-auto w-full">
+        <a href="#procedures" class="text-sm text-gray-500 hover:text-navy inline-flex items-center gap-1">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+          Terug naar procedures
+        </a>
+        <div class="flex items-start justify-between mt-3">
+          <div>
+            <h1 class="text-2xl font-semibold text-navy">Procestemplates</h1>
+            <p class="text-sm text-gray-600 mt-1">Standaard procesflows met stappen, checklists en bewijsvereisten. Beheerders kunnen templates aanmaken en wijzigen.</p>
+          </div>
+          <button class="bg-navy text-white text-sm font-medium px-4 py-2.5 rounded-lg hover:bg-navy-700 inline-flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+            Nieuwe template
+          </button>
+        </div>
+
+        <div class="mt-6 bg-white border border-gray-200 rounded-xl divide-y divide-gray-100">
+          <a href="#template-1" class="flex items-center gap-4 p-5 hover:bg-gray-50">
+            <div class="w-10 h-10 rounded-lg bg-purple-50 text-purple-700 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2">
+                <h3 class="text-sm font-semibold text-navy">Beleidswijziging</h3>
+                <span class="text-[11px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded font-medium">Gepubliceerd</span>
+              </div>
+              <p class="text-sm text-gray-600 mt-0.5">6 stappen · 14 checklist-items · 2 lopende procedures</p>
+            </div>
+            <span class="text-xs text-gray-500">Bijgewerkt 11 mrt</span>
+            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>
+          </a>
+          <a href="#template-1" class="flex items-center gap-4 p-5 hover:bg-gray-50">
+            <div class="w-10 h-10 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 11h6m-6 4h6"/></svg>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2">
+                <h3 class="text-sm font-semibold text-navy">Uitbestedingsreview</h3>
+                <span class="text-[11px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded font-medium">Gepubliceerd</span>
+              </div>
+              <p class="text-sm text-gray-600 mt-0.5">5 stappen · 11 checklist-items · 1 lopende procedure</p>
+            </div>
+            <span class="text-xs text-gray-500">Bijgewerkt 22 jan</span>
+            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>
+          </a>
+          <a href="#template-1" class="flex items-center gap-4 p-5 hover:bg-gray-50">
+            <div class="w-10 h-10 rounded-lg bg-red-50 text-red-700 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 9v2m0 4h.01M5.07 19h13.86a2 2 0 001.74-3L13.74 4a2 2 0 00-3.48 0L3.34 16a2 2 0 001.74 3z"/></svg>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2">
+                <h3 class="text-sm font-semibold text-navy">Incident-meldplicht DNB</h3>
+                <span class="text-[11px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded font-medium">Gepubliceerd</span>
+              </div>
+              <p class="text-sm text-gray-600 mt-0.5">6 stappen · 18 checklist-items · 1 lopende procedure</p>
+            </div>
+            <span class="text-xs text-gray-500">Bijgewerkt 8 feb</span>
+            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>
+          </a>
+          <a href="#template-1" class="flex items-center gap-4 p-5 hover:bg-gray-50">
+            <div class="w-10 h-10 rounded-lg bg-indigo-50 text-indigo-700 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2">
+                <h3 class="text-sm font-semibold text-navy">Jaarcyclus (collectie)</h3>
+                <span class="text-[11px] bg-amber-50 text-amber-700 px-2 py-0.5 rounded font-medium">Concept</span>
+              </div>
+              <p class="text-sm text-gray-600 mt-0.5">Bulkstart van 5 standaard-templates · nog niet gepubliceerd</p>
+            </div>
+            <span class="text-xs text-gray-500">Bijgewerkt 17 apr</span>
+            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>
+          </a>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════ -->
+      <!-- SCHERM 6: TEMPLATE-EDITOR               -->
+      <!-- ═══════════════════════════════════════ -->
+      <section id="screen-template-1" hidden class="px-8 py-8 max-w-7xl mx-auto w-full">
+        <a href="#templates" class="text-sm text-gray-500 hover:text-navy inline-flex items-center gap-1">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+          Terug naar templates
+        </a>
+
+        <div class="flex items-start justify-between mt-3 gap-6">
+          <div class="flex-1">
+            <div class="flex items-center gap-2 mb-2">
+              <span class="text-[11px] font-medium uppercase tracking-wide text-purple-700 bg-purple-50 px-2 py-0.5 rounded">Beleidswijziging</span>
+              <span class="text-[11px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded font-medium">Gepubliceerd · v3</span>
+            </div>
+            <h1 class="text-2xl font-semibold text-navy">Template: Beleidswijziging</h1>
+            <p class="text-sm text-gray-600 mt-1 max-w-3xl">Standaard processtructuur voor wijzigingen in beleid die een bestuursbesluit vereisen. Aanpassingen op deze template worden niet doorgevoerd op lopende procedures — die behouden hun snapshot.</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button class="px-3 py-2 text-sm border border-gray-200 rounded-lg hover:border-navy text-gray-700">Dupliceren</button>
+            <button class="px-3 py-2 text-sm bg-navy text-white rounded-lg hover:bg-navy-700">Wijzigingen publiceren</button>
+          </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="mt-6 flex items-center gap-2 border-b border-gray-200">
+          <button class="px-4 py-2.5 text-sm font-medium text-navy border-b-2 border-gold -mb-px">Stappen & checklist</button>
+          <button class="px-4 py-2.5 text-sm font-medium text-gray-500 hover:text-navy">Algemeen</button>
+          <button class="px-4 py-2.5 text-sm font-medium text-gray-500 hover:text-navy">Bewijs-soorten</button>
+          <button class="px-4 py-2.5 text-sm font-medium text-gray-500 hover:text-navy">Versiehistorie</button>
+        </div>
+
+        <!-- Stappen-editor -->
+        <div class="mt-6 space-y-3">
+
+          <div class="bg-white border border-gray-200 rounded-xl p-5">
+            <div class="flex items-start gap-4">
+              <div class="text-gray-400 cursor-grab pt-1">⋮⋮</div>
+              <div class="w-7 h-7 rounded-full bg-emerald-500 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">1</div>
+              <div class="flex-1">
+                <div class="flex items-center gap-3">
+                  <input class="text-sm font-semibold text-navy bg-transparent border-b border-transparent hover:border-gray-200 focus:border-gold outline-none" value="Voorstel opstellen" />
+                  <span class="text-[11px] text-gray-500 bg-gray-100 px-2 py-0.5 rounded">5 dagen</span>
+                </div>
+                <textarea rows="2" class="mt-2 text-sm text-gray-600 w-full bg-transparent border border-transparent hover:border-gray-200 focus:border-gold rounded p-2 outline-none resize-none">Stel een conceptvoorstel op met aanleiding, alternatieven, gevraagd besluit en verwachte impact.</textarea>
+                <details class="mt-2">
+                  <summary class="text-xs text-navy cursor-pointer font-medium">3 checklist-items</summary>
+                  <ul class="mt-2 space-y-1.5 ml-2 text-xs">
+                    <li class="flex items-center gap-2 text-gray-700">
+                      <span class="text-gray-400">·</span> Aanleiding en context beschreven
+                      <span class="ml-auto text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded text-[10px] font-medium">Bewijs vereist</span>
+                    </li>
+                    <li class="flex items-center gap-2 text-gray-700">
+                      <span class="text-gray-400">·</span> Alternatieven gewogen
+                    </li>
+                    <li class="flex items-center gap-2 text-gray-700">
+                      <span class="text-gray-400">·</span> Gevraagd besluit expliciet geformuleerd
+                      <span class="ml-auto text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded text-[10px] font-medium">Bewijs vereist</span>
+                    </li>
+                  </ul>
+                  <button class="text-xs text-navy hover:underline mt-2 ml-2">+ Item toevoegen</button>
+                </details>
+              </div>
+              <button class="text-xs text-gray-400 hover:text-red-600">verwijderen</button>
+            </div>
+          </div>
+
+          <div class="bg-white border border-gray-200 rounded-xl p-5">
+            <div class="flex items-start gap-4">
+              <div class="text-gray-400 cursor-grab pt-1">⋮⋮</div>
+              <div class="w-7 h-7 rounded-full bg-gray-100 border border-gray-300 text-gray-700 flex items-center justify-center text-xs font-bold flex-shrink-0">2</div>
+              <div class="flex-1">
+                <div class="flex items-center gap-3">
+                  <input class="text-sm font-semibold text-navy bg-transparent border-b border-transparent hover:border-gray-200 focus:border-gold outline-none" value="Impactanalyse" />
+                  <span class="text-[11px] text-gray-500 bg-gray-100 px-2 py-0.5 rounded">10 dagen</span>
+                </div>
+                <textarea rows="2" class="mt-2 text-sm text-gray-600 w-full bg-transparent border border-transparent hover:border-gray-200 focus:border-gold rounded p-2 outline-none resize-none">Financiële, juridische en communicatie-impact in kaart, inclusief risicobeoordeling.</textarea>
+                <details class="mt-2">
+                  <summary class="text-xs text-navy cursor-pointer font-medium">4 checklist-items</summary>
+                </details>
+              </div>
+              <button class="text-xs text-gray-400 hover:text-red-600">verwijderen</button>
+            </div>
+          </div>
+
+          <div class="bg-white border border-amber-300 ring-1 ring-amber-100 rounded-xl p-5">
+            <div class="flex items-start gap-4">
+              <div class="text-gray-400 cursor-grab pt-1">⋮⋮</div>
+              <div class="w-7 h-7 rounded-full bg-amber-100 border border-amber-400 text-amber-900 flex items-center justify-center text-xs font-bold flex-shrink-0">3</div>
+              <div class="flex-1">
+                <div class="flex items-center gap-3">
+                  <input class="text-sm font-semibold text-navy bg-transparent border-b border-transparent hover:border-gray-200 focus:border-gold outline-none" value="Bestuursoverleg" />
+                  <span class="text-[11px] text-gray-500 bg-gray-100 px-2 py-0.5 rounded">14 dagen</span>
+                  <span class="text-[11px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded font-medium">Bewerkt</span>
+                </div>
+                <textarea rows="2" class="mt-2 text-sm text-gray-600 w-full bg-transparent border border-transparent hover:border-gray-200 focus:border-gold rounded p-2 outline-none resize-none">Bespreek het beleidsvoorstel in een bestuursvergadering, verzamel inbreng commissies, leg overwegingen vast.</textarea>
+                <details open class="mt-2">
+                  <summary class="text-xs text-navy cursor-pointer font-medium">4 checklist-items</summary>
+                  <ul class="mt-2 space-y-1.5 ml-2 text-xs">
+                    <li class="flex items-center gap-2 text-gray-700">
+                      <span class="text-gray-400">·</span> Vergadering ingepland waarin voorstel wordt besproken
+                    </li>
+                    <li class="flex items-center gap-2 text-gray-700">
+                      <span class="text-gray-400">·</span> Voorstel als agendapunt toegevoegd
+                    </li>
+                    <li class="flex items-center gap-2 text-gray-700">
+                      <span class="text-gray-400">·</span> Inbreng commissies ontvangen
+                      <span class="ml-auto text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded text-[10px] font-medium">Bewijs vereist</span>
+                    </li>
+                    <li class="flex items-center gap-2 text-gray-700">
+                      <span class="text-gray-400">·</span> Overwegingen schriftelijk vastgelegd
+                      <span class="ml-auto text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded text-[10px] font-medium">Bewijs vereist</span>
+                    </li>
+                  </ul>
+                  <button class="text-xs text-navy hover:underline mt-2 ml-2">+ Item toevoegen</button>
+                </details>
+              </div>
+              <button class="text-xs text-gray-400 hover:text-red-600">verwijderen</button>
+            </div>
+          </div>
+
+          <div class="bg-white border border-gray-200 rounded-xl p-5 opacity-95">
+            <div class="flex items-start gap-4">
+              <div class="text-gray-400 cursor-grab pt-1">⋮⋮</div>
+              <div class="w-7 h-7 rounded-full bg-gray-100 border border-gray-300 text-gray-700 flex items-center justify-center text-xs font-bold flex-shrink-0">4</div>
+              <div class="flex-1">
+                <div class="flex items-center gap-3">
+                  <input class="text-sm font-semibold text-navy bg-transparent border-b border-transparent hover:border-gray-200 focus:border-gold outline-none" value="Bestuursbesluit" />
+                  <span class="text-[11px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded font-medium">Vereist besluit</span>
+                </div>
+                <textarea rows="1" class="mt-2 text-sm text-gray-600 w-full bg-transparent border border-transparent hover:border-gray-200 focus:border-gold rounded p-2 outline-none resize-none">Formele besluitvastlegging met motivering en stemverhouding.</textarea>
+              </div>
+              <button class="text-xs text-gray-400 hover:text-red-600">verwijderen</button>
+            </div>
+          </div>
+
+          <div class="bg-white border border-gray-200 rounded-xl p-5 opacity-95">
+            <div class="flex items-start gap-4">
+              <div class="text-gray-400 cursor-grab pt-1">⋮⋮</div>
+              <div class="w-7 h-7 rounded-full bg-gray-100 border border-gray-300 text-gray-700 flex items-center justify-center text-xs font-bold flex-shrink-0">5</div>
+              <div class="flex-1">
+                <div class="flex items-center gap-3">
+                  <input class="text-sm font-semibold text-navy bg-transparent border-b border-transparent hover:border-gray-200 focus:border-gold outline-none" value="Implementatie" />
+                  <span class="text-[11px] text-gray-500 bg-gray-100 px-2 py-0.5 rounded">28 dagen</span>
+                </div>
+                <textarea rows="1" class="mt-2 text-sm text-gray-600 w-full bg-transparent border border-transparent hover:border-gray-200 focus:border-gold rounded p-2 outline-none resize-none">Operationele uitvoering van het besluit door uitvoerder en/of vermogensbeheerder.</textarea>
+              </div>
+              <button class="text-xs text-gray-400 hover:text-red-600">verwijderen</button>
+            </div>
+          </div>
+
+          <div class="bg-white border border-gray-200 rounded-xl p-5 opacity-95">
+            <div class="flex items-start gap-4">
+              <div class="text-gray-400 cursor-grab pt-1">⋮⋮</div>
+              <div class="w-7 h-7 rounded-full bg-gray-100 border border-gray-300 text-gray-700 flex items-center justify-center text-xs font-bold flex-shrink-0">6</div>
+              <div class="flex-1">
+                <div class="flex items-center gap-3">
+                  <input class="text-sm font-semibold text-navy bg-transparent border-b border-transparent hover:border-gray-200 focus:border-gold outline-none" value="Evaluatie" />
+                  <span class="text-[11px] text-gray-500 bg-gray-100 px-2 py-0.5 rounded">na 6 maanden</span>
+                </div>
+                <textarea rows="1" class="mt-2 text-sm text-gray-600 w-full bg-transparent border border-transparent hover:border-gray-200 focus:border-gold rounded p-2 outline-none resize-none">Korte terugblik na zes maanden: heeft de wijziging het beoogde effect gehad?</textarea>
+              </div>
+              <button class="text-xs text-gray-400 hover:text-red-600">verwijderen</button>
+            </div>
+          </div>
+
+          <button class="w-full border-2 border-dashed border-gray-200 hover:border-gold hover:bg-amber-50/30 rounded-xl py-4 text-sm text-gray-500 hover:text-navy font-medium">
+            + Stap toevoegen
+          </button>
+        </div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<script>
+  function route() {
+    let hash = (location.hash || '#procedures').slice(1);
+    document.querySelectorAll('section[id^="screen-"]').forEach(el => el.hidden = true);
+    const target = document.getElementById('screen-' + hash);
+    if (target) {
+      target.hidden = false;
+    } else {
+      document.getElementById('screen-procedures').hidden = false;
+      hash = 'procedures';
+    }
+
+    // Breadcrumb
+    const crumb = document.getElementById('breadcrumb');
+    const labels = {
+      'procedures': '<a href="#procedures" class="hover:text-navy">Procedures</a>',
+      'procedure-1': '<a href="#procedures" class="hover:text-navy">Procedures</a> <span class="mx-2 text-gray-300">/</span> <span class="text-navy font-medium">Aanpassing strategisch beleggingsplan 2026</span>',
+      'procedure-2': '<a href="#procedures" class="hover:text-navy">Procedures</a> <span class="mx-2 text-gray-300">/</span> <span class="text-navy font-medium">Uitbestedingsreview AZL 2026</span>',
+      'nieuwe-procedure': '<a href="#procedures" class="hover:text-navy">Procedures</a> <span class="mx-2 text-gray-300">/</span> <span class="text-navy font-medium">Nieuwe procedure</span>',
+      'templates': '<a href="#procedures" class="hover:text-navy">Procedures</a> <span class="mx-2 text-gray-300">/</span> <span class="text-navy font-medium">Procestemplates</span>',
+      'template-1': '<a href="#procedures" class="hover:text-navy">Procedures</a> <span class="mx-2 text-gray-300">/</span> <a href="#templates" class="hover:text-navy">Procestemplates</a> <span class="mx-2 text-gray-300">/</span> <span class="text-navy font-medium">Beleidswijziging</span>',
+    };
+    crumb.innerHTML = labels[hash] || labels['procedures'];
+
+    window.scrollTo(0, 0);
+  }
+  window.addEventListener('hashchange', route);
+  route();
+</script>
+
+</body>
+</html>

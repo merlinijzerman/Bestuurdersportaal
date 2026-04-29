@@ -10,6 +10,7 @@ const navItems = [
   { href: "/bibliotheek", label: "Documentbibliotheek", icon: "📚", section: "Kennisbase" },
   { href: "/vergaderingen", label: "Vergaderingen", icon: "📅", section: "Bestuur" },
   { href: "/notulen", label: "Besluiten & Notulen", icon: "📋", section: "Bestuur" },
+  { href: "/risicomatrix", label: "Risicomatrix", icon: "🛡️", section: "Bestuur" },
   { href: "/governance", label: "Governance Log", icon: "🔍", section: "Bestuur" },
 ];
 

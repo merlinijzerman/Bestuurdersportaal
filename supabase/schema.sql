@@ -224,3 +224,89 @@ create policy "eigen inbreng wijzigen" on public.agendapunt_inbreng
 
 create policy "eigen inbreng verwijderen" on public.agendapunt_inbreng
   for delete using (gebruiker_id = auth.uid());
+
+-- ── 11. Risicomatrix ────────────────────────────────────────
+create table if not exists public.risicos (
+  id                  uuid primary key default uuid_generate_v4(),
+  fonds_id            uuid not null references public.fondsen(id) on delete cascade,
+  categorie           text not null check (categorie in (
+                        'financieel_actuarieel',
+                        'governance_organisatie',
+                        'operationeel_datakwaliteit',
+                        'informatie_communicatie'
+                      )),
+  titel               text not null,
+  toelichting         text,
+  kans                int not null check (kans between 1 and 5),
+  impact              int not null check (impact between 1 and 5),
+  niveau              text not null check (niveau in ('laag','middel','hoog')) default 'middel',
+  niveau_handmatig    boolean default false,
+  type_risico         text not null check (type_risico in ('structureel','tijdelijk')) default 'structureel',
+  status              text not null check (status in ('actief','gesloten')) default 'actief',
+  eigenaar_id         uuid references auth.users(id) on delete set null,
+  eigenaar_naam       text,
+  volgende_beoordeling date,
+  aangemaakt          timestamptz default now(),
+  aangemaakt_door     uuid references auth.users(id) on delete set null,
+  gesloten_op         timestamptz,
+  gesloten_door       uuid references auth.users(id) on delete set null,
+  sluit_motivering    text
+);
+
+create index if not exists idx_risicos_fonds on public.risicos(fonds_id, status, aangemaakt desc);
+create index if not exists idx_risicos_categorie on public.risicos(fonds_id, categorie);
+
+create table if not exists public.risico_maatregelen (
+  id                uuid primary key default uuid_generate_v4(),
+  risico_id         uuid not null references public.risicos(id) on delete cascade,
+  beschrijving      text not null,
+  status            text not null check (status in ('open','in_voorbereiding','genomen')) default 'open',
+  verantwoordelijke text,
+  procedure_id      uuid,
+  volgorde          int default 0,
+  aangemaakt        timestamptz default now(),
+  aangemaakt_door   uuid references auth.users(id) on delete set null,
+  bijgewerkt_op     timestamptz default now()
+);
+
+create index if not exists idx_maatregelen_risico on public.risico_maatregelen(risico_id, volgorde);
+
+create table if not exists public.risico_log (
+  id          uuid primary key default uuid_generate_v4(),
+  risico_id   uuid not null references public.risicos(id) on delete cascade,
+  event_type  text not null,
+  actor_id    uuid references auth.users(id) on delete set null,
+  actor_naam  text,
+  payload     jsonb default '{}',
+  tijdstip    timestamptz default now()
+);
+
+create index if not exists idx_risico_log_risico on public.risico_log(risico_id, tijdstip desc);
+
+alter table public.risicos enable row level security;
+alter table public.risico_maatregelen enable row level security;
+alter table public.risico_log enable row level security;
+
+drop policy if exists "fonds risicos" on public.risicos;
+create policy "fonds risicos" on public.risicos
+  for all using (
+    fonds_id = (select fonds_id from public.profielen where id = auth.uid())
+  );
+
+drop policy if exists "fonds maatregelen" on public.risico_maatregelen;
+create policy "fonds maatregelen" on public.risico_maatregelen
+  for all using (
+    risico_id in (
+      select id from public.risicos where
+        fonds_id = (select fonds_id from public.profielen where id = auth.uid())
+    )
+  );
+
+drop policy if exists "fonds risico log" on public.risico_log;
+create policy "fonds risico log" on public.risico_log
+  for all using (
+    risico_id in (
+      select id from public.risicos where
+        fonds_id = (select fonds_id from public.profielen where id = auth.uid())
+    )
+  );

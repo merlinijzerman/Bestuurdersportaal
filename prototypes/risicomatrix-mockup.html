@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Risicomatrix — Bestuurdersportaal mockup</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          navy: { DEFAULT: '#0F2744', 700: '#1a3858', 800: '#0F2744', 900: '#0a1c34' },
+          gold: { DEFAULT: '#C9A84C', 600: '#b89539', 700: '#a37f29' },
+        },
+        fontFamily: {
+          sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        },
+      }
+    }
+  }
+</script>
+<style>
+  body { font-family: Inter, system-ui, -apple-system, sans-serif; }
+  [hidden] { display: none !important; }
+  .matrix-cell { transition: transform 0.1s ease; }
+  .matrix-cell:hover { transform: scale(1.02); z-index: 10; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+  .risk-dot { transition: all 0.15s ease; }
+  .risk-dot:hover { transform: scale(1.15); }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+</style>
+</head>
+<body class="bg-gray-50 text-gray-900 antialiased">
+
+<div class="min-h-screen flex">
+
+  <!-- ───── Sidebar ───── -->
+  <aside class="w-64 bg-navy text-white flex flex-col flex-shrink-0">
+    <div class="px-6 py-6 border-b border-white/10">
+      <div class="text-[11px] uppercase tracking-widest text-gold/80">Bestuurdersportaal</div>
+      <div class="text-base font-semibold mt-1 leading-tight">Stichting Pensioenfonds<br/>Horizon</div>
+    </div>
+    <nav class="flex-1 py-4 text-sm">
+      <a href="#" class="flex items-center gap-3 px-6 py-2.5 text-white/70 hover:text-white hover:bg-white/5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 12l9-9 9 9M5 10v10h14V10"/></svg>
+        Home
+      </a>
+      <a href="#" class="flex items-center gap-3 px-6 py-2.5 text-white/70 hover:text-white hover:bg-white/5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 13h4v8H3zm7-10h4v18h-4zm7 6h4v12h-4z"/></svg>
+        Stuurinformatie
+      </a>
+      <a href="#" class="flex items-center gap-3 px-6 py-2.5 text-white/70 hover:text-white hover:bg-white/5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.4 8.4 0 01-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.4 8.4 0 013.8-.9h.5a8.5 8.5 0 018 8v.5z"/></svg>
+        AI Assistent
+      </a>
+      <a href="#" class="flex items-center gap-3 px-6 py-2.5 text-white/70 hover:text-white hover:bg-white/5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+        Vergaderingen
+      </a>
+      <a href="#" class="flex items-center gap-3 px-6 py-2.5 text-white/70 hover:text-white hover:bg-white/5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 016.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+        Bibliotheek
+      </a>
+      <a href="#" class="flex items-center gap-3 px-6 py-2.5 text-white/70 hover:text-white hover:bg-white/5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 11h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.5L19 9.5V18a2 2 0 01-2 2z"/></svg>
+        Procedures
+        <span class="ml-auto text-[10px] bg-white/10 text-white/80 font-medium px-1.5 py-0.5 rounded">5</span>
+      </a>
+      <a href="#risicomatrix" data-route="risicomatrix" class="flex items-center gap-3 px-6 py-2.5 bg-white/10 text-white border-l-2 border-gold">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg>
+        Risicomatrix
+        <span class="ml-auto text-[10px] bg-gold text-navy font-semibold px-1.5 py-0.5 rounded">13</span>
+      </a>
+      <a href="#" class="flex items-center gap-3 px-6 py-2.5 text-white/70 hover:text-white hover:bg-white/5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        Governance log
+      </a>
+      <a href="#" class="flex items-center gap-3 px-6 py-2.5 text-white/70 hover:text-white hover:bg-white/5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>
+        Notulen
+      </a>
+    </nav>
+    <div class="p-4 border-t border-white/10 flex items-center gap-3">
+      <div class="w-8 h-8 rounded-full bg-gold text-navy flex items-center justify-center text-xs font-semibold">MI</div>
+      <div class="text-xs leading-tight">
+        <div class="font-medium">Merlin Ijzerman</div>
+        <div class="text-white/60">Bestuurder</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ───── Main ───── -->
+  <main class="flex-1 flex flex-col min-w-0">
+    <header class="bg-white border-b border-gray-200 px-8 py-4 flex items-center justify-between">
+      <nav class="text-sm text-gray-500" id="breadcrumb">
+        <a href="#risicomatrix" class="hover:text-navy">Risicomatrix</a>
+      </nav>
+      <div class="text-xs text-gray-500">Demo / mockup</div>
+    </header>
+
+    <div class="flex-1 overflow-auto">
+
+      <!-- ═══════════════════════════════════════ -->
+      <!-- SCHERM 1: RISICOMATRIX OVERZICHT        -->
+      <!-- ═══════════════════════════════════════ -->
+      <section id="screen-risicomatrix" class="px-8 py-8 max-w-7xl mx-auto w-full">
+
+        <div class="flex items-start justify-between mb-2">
+          <div>
+            <h1 class="text-2xl font-semibold text-navy">Risicomatrix</h1>
+            <p class="text-sm text-gray-600 mt-1">Actueel inzicht in de risico's van het fonds. Onderverdeeld in vier categorieën, gerangschikt op Kans × Impact.</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <a href="#gesloten" class="px-3 py-2.5 text-sm border border-gray-200 rounded-lg hover:border-navy text-gray-700">Archief gesloten risico's</a>
+            <a href="#nieuw-risico" class="bg-navy text-white text-sm font-medium px-4 py-2.5 rounded-lg hover:bg-navy-700 inline-flex items-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+              Nieuw risico
+            </a>
+          </div>
+        </div>
+
+        <!-- Filterbalk -->
+        <div class="mt-6 flex items-center flex-wrap gap-2 border-b border-gray-200 pb-4">
+          <span class="text-xs uppercase tracking-wide text-gray-500 font-semibold mr-2">Categorie</span>
+          <button class="px-3 py-1.5 text-xs font-medium rounded-full border border-navy bg-navy text-white">Alle</button>
+          <button class="px-3 py-1.5 text-xs font-medium rounded-full border border-gray-200 hover:border-navy text-gray-700">Financieel & actuarieel <span class="text-[10px] text-gray-400 ml-1">4</span></button>
+          <button class="px-3 py-1.5 text-xs font-medium rounded-full border border-gray-200 hover:border-navy text-gray-700">Governance & Organisatie <span class="text-[10px] text-gray-400 ml-1">3</span></button>
+          <button class="px-3 py-1.5 text-xs font-medium rounded-full border border-gray-200 hover:border-navy text-gray-700">Operationeel & datakwaliteit <span class="text-[10px] text-gray-400 ml-1">3</span></button>
+          <button class="px-3 py-1.5 text-xs font-medium rounded-full border border-gray-200 hover:border-navy text-gray-700">Informatie & communicatie <span class="text-[10px] text-gray-400 ml-1">3</span></button>
+        </div>
+
+        <!-- Hoofdblok: matrix + legenda -->
+        <div class="mt-6 grid grid-cols-12 gap-6">
+
+          <!-- Heatmap-matrix (links) -->
+          <div class="col-span-8 bg-white border border-gray-200 rounded-xl p-6">
+            <div class="flex items-center justify-between mb-4">
+              <div>
+                <h2 class="text-sm font-semibold text-navy">Kans × Impact heatmap</h2>
+                <p class="text-xs text-gray-500 mt-0.5">Klik een risico-pil aan voor details.</p>
+              </div>
+              <div class="text-xs text-gray-500">13 actieve risico's</div>
+            </div>
+
+            <!-- Matrix grid -->
+            <div class="relative">
+              <!-- Y-as label -->
+              <div class="absolute -left-8 top-1/2 -translate-y-1/2 -rotate-90 text-[10px] uppercase tracking-widest text-gray-400 font-semibold whitespace-nowrap">Impact →</div>
+
+              <div class="grid grid-cols-[80px_repeat(5,1fr)] gap-1.5">
+                <!-- Header rij -->
+                <div></div>
+                <div class="text-[10px] uppercase tracking-wide text-gray-400 text-center pb-1">K1<br/><span class="font-normal text-[9px] tracking-normal normal-case">Zeer laag</span></div>
+                <div class="text-[10px] uppercase tracking-wide text-gray-400 text-center pb-1">K2<br/><span class="font-normal text-[9px] tracking-normal normal-case">Laag</span></div>
+                <div class="text-[10px] uppercase tracking-wide text-gray-400 text-center pb-1">K3<br/><span class="font-normal text-[9px] tracking-normal normal-case">Gemiddeld</span></div>
+                <div class="text-[10px] uppercase tracking-wide text-gray-400 text-center pb-1">K4<br/><span class="font-normal text-[9px] tracking-normal normal-case">Hoog</span></div>
+                <div class="text-[10px] uppercase tracking-wide text-gray-400 text-center pb-1">K5<br/><span class="font-normal text-[9px] tracking-normal normal-case">Zeer hoog</span></div>
+
+                <!-- Rij I5 (impact zeer hoog, sum 6-10) -->
+                <div class="text-[10px] uppercase tracking-wide text-gray-500 text-right pr-2 self-center font-semibold">I5</div>
+                <div class="matrix-cell bg-amber-50 border border-amber-100 rounded h-20 p-1.5"></div>
+                <div class="matrix-cell bg-amber-50 border border-amber-100 rounded h-20 p-1.5">
+                  <a href="#risico-1" class="risk-dot block bg-amber-200 hover:bg-amber-300 text-amber-900 text-[10px] font-medium px-1.5 py-1 rounded leading-tight">DNB-rapportage te laat</a>
+                </div>
+                <div class="matrix-cell bg-red-50 border border-red-100 rounded h-20 p-1.5">
+                  <a href="#risico-1" class="risk-dot block bg-red-200 hover:bg-red-300 text-red-900 text-[10px] font-medium px-1.5 py-1 rounded leading-tight">Cyber-incident</a>
+                </div>
+                <div class="matrix-cell bg-red-50 border border-red-100 rounded h-20 p-1.5">
+                  <a href="#risico-1" class="risk-dot block bg-red-200 hover:bg-red-300 text-red-900 text-[10px] font-medium px-1.5 py-1 rounded leading-tight">Renterisico</a>
+                </div>
+                <div class="matrix-cell bg-red-50 border border-red-100 rounded h-20 p-1.5"></div>
+
+                <!-- Rij I4 -->
+                <div class="text-[10px] uppercase tracking-wide text-gray-500 text-right pr-2 self-center font-semibold">I4</div>
+                <div class="matrix-cell bg-emerald-50 border border-emerald-100 rounded h-20 p-1.5"></div>
+                <div class="matrix-cell bg-amber-50 border border-amber-100 rounded h-20 p-1.5">
+                  <a href="#risico-1" class="risk-dot block bg-amber-200 hover:bg-amber-300 text-amber-900 text-[10px] font-medium px-1.5 py-1 rounded leading-tight">Belangenverstrengeling</a>
+                </div>
+                <div class="matrix-cell bg-amber-50 border border-amber-100 rounded h-20 p-1.5">
+                  <a href="#risico-1" class="risk-dot block bg-amber-200 hover:bg-amber-300 text-amber-900 text-[10px] font-medium px-1.5 py-1 rounded leading-tight">Pensioenadm. data-fouten</a>
+                </div>
+                <div class="matrix-cell bg-red-50 border border-red-100 rounded h-20 p-1.5">
+                  <a href="#risico-1" class="risk-dot block bg-red-200 hover:bg-red-300 text-red-900 text-[10px] font-medium px-1.5 py-1 rounded leading-tight">Wtp-implementatie</a>
+                </div>
+                <div class="matrix-cell bg-red-50 border border-red-100 rounded h-20 p-1.5"></div>
+
+                <!-- Rij I3 -->
+                <div class="text-[10px] uppercase tracking-wide text-gray-500 text-right pr-2 self-center font-semibold">I3</div>
+                <div class="matrix-cell bg-emerald-50 border border-emerald-100 rounded h-20 p-1.5"></div>
+                <div class="matrix-cell bg-amber-50 border border-amber-100 rounded h-20 p-1.5">
+                  <a href="#risico-1" class="risk-dot block bg-amber-200 hover:bg-amber-300 text-amber-900 text-[10px] font-medium px-1.5 py-1 rounded leading-tight">Krimprisico bestand</a>
+                </div>
+                <div class="matrix-cell bg-amber-50 border border-amber-100 rounded h-20 p-1.5">
+                  <div class="space-y-1">
+                    <a href="#risico-1" class="risk-dot block bg-amber-200 hover:bg-amber-300 text-amber-900 text-[10px] font-medium px-1.5 py-1 rounded leading-tight truncate">Bestuurlijke continuïteit</a>
+                    <a href="#risico-1" class="risk-dot block bg-amber-200 hover:bg-amber-300 text-amber-900 text-[10px] font-medium px-1.5 py-1 rounded leading-tight truncate">Onduidelijke deelnemerscom.</a>
+                  </div>
+                </div>
+                <div class="matrix-cell bg-amber-50 border border-amber-100 rounded h-20 p-1.5">
+                  <a href="#risico-1" class="risk-dot block bg-amber-200 hover:bg-amber-300 text-amber-900 text-[10px] font-medium px-1.5 py-1 rounded leading-tight">Rendementsrisico vermbh.</a>
+                </div>
+                <div class="matrix-cell bg-amber-50 border border-amber-100 rounded h-20 p-1.5">
+                  <a href="#risico-1" class="risk-dot block bg-amber-200 hover:bg-amber-300 text-amber-900 text-[10px] font-medium px-1.5 py-1 rounded leading-tight">Inflatierisico</a>
+                </div>
+
+                <!-- Rij I2 -->
+                <div class="text-[10px] uppercase tracking-wide text-gray-500 text-right pr-2 self-center font-semibold">I2</div>
+                <div class="matrix-cell bg-emerald-50 border border-emerald-100 rounded h-20 p-1.5"></div>
+                <div class="matrix-cell bg-emerald-50 border border-emerald-100 rounded h-20 p-1.5">
+                  <a href="#risico-1" class="risk-dot block bg-emerald-200 hover:bg-emerald-300 text-emerald-900 text-[10px] font-medium px-1.5 py-1 rounded leading-tight">Klachten buiten termijn</a>
+                </div>
+                <div class="matrix-cell bg-amber-50 border border-amber-100 rounded h-20 p-1.5">
+                  <a href="#risico-1" class="risk-dot block bg-amber-200 hover:bg-amber-300 text-amber-900 text-[10px] font-medium px-1.5 py-1 rounded leading-tight">Premie-incasso vertraging</a>
+                </div>
+                <div class="matrix-cell bg-amber-50 border border-amber-100 rounded h-20 p-1.5"></div>
+                <div class="matrix-cell bg-amber-50 border border-amber-100 rounded h-20 p-1.5"></div>
+
+                <!-- Rij I1 -->
+                <div class="text-[10px] uppercase tracking-wide text-gray-500 text-right pr-2 self-center font-semibold">I1</div>
+                <div class="matrix-cell bg-emerald-50 border border-emerald-100 rounded h-20 p-1.5"></div>
+                <div class="matrix-cell bg-emerald-50 border border-emerald-100 rounded h-20 p-1.5"></div>
+                <div class="matrix-cell bg-emerald-50 border border-emerald-100 rounded h-20 p-1.5"></div>
+                <div class="matrix-cell bg-emerald-50 border border-emerald-100 rounded h-20 p-1.5"></div>
+                <div class="matrix-cell bg-amber-50 border border-amber-100 rounded h-20 p-1.5"></div>
+              </div>
+
+              <div class="text-center text-[10px] uppercase tracking-widest text-gray-400 font-semibold mt-3">Kans →</div>
+            </div>
+          </div>
+
+          <!-- Legenda + samenvatting (rechts) -->
+          <div class="col-span-4 space-y-4">
+
+            <div class="bg-white border border-gray-200 rounded-xl p-5">
+              <h3 class="text-xs uppercase tracking-wide text-gray-500 font-semibold mb-3">Legenda risiconiveau</h3>
+              <div class="space-y-3">
+                <div class="flex items-start gap-3">
+                  <div class="w-4 h-4 rounded bg-red-500 mt-0.5 flex-shrink-0"></div>
+                  <div>
+                    <div class="text-sm font-semibold text-red-700">Hoog</div>
+                    <div class="text-xs text-gray-600 leading-relaxed">Direct bestuurlijk aandachtspunt. Risico vereist actieve beheersing en periodieke rapportage.</div>
+                  </div>
+                </div>
+                <div class="flex items-start gap-3">
+                  <div class="w-4 h-4 rounded bg-amber-500 mt-0.5 flex-shrink-0"></div>
+                  <div>
+                    <div class="text-sm font-semibold text-amber-700">Middel</div>
+                    <div class="text-xs text-gray-600 leading-relaxed">Structureel monitoren. Beheersmaatregelen aanwezig, opvolging in reguliere risicocyclus.</div>
+                  </div>
+                </div>
+                <div class="flex items-start gap-3">
+                  <div class="w-4 h-4 rounded bg-emerald-500 mt-0.5 flex-shrink-0"></div>
+                  <div>
+                    <div class="text-sm font-semibold text-emerald-700">Laag</div>
+                    <div class="text-xs text-gray-600 leading-relaxed">Basismaatregelen volstaan. Periodieke check, geen actieve beheersing nodig.</div>
+                  </div>
+                </div>
+              </div>
+
+              <hr class="my-4 border-gray-100"/>
+
+              <h3 class="text-xs uppercase tracking-wide text-gray-500 font-semibold mb-3">Type risico</h3>
+              <div class="space-y-2 text-xs">
+                <div class="flex items-center gap-2">
+                  <span class="inline-block w-2 h-2 rounded-full bg-navy"></span>
+                  <span class="text-gray-700"><span class="font-semibold">Structureel</span> — inherent aan de bedrijfsvoering</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="inline-block w-2 h-2 rounded-full bg-gold"></span>
+                  <span class="text-gray-700"><span class="font-semibold">Tijdelijk</span> — gebonden aan een gebeurtenis of project</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Telling per niveau -->
+            <div class="bg-white border border-gray-200 rounded-xl p-5">
+              <h3 class="text-xs uppercase tracking-wide text-gray-500 font-semibold mb-3">Verdeling</h3>
+              <div class="space-y-2.5">
+                <div class="flex items-center gap-3">
+                  <div class="w-2 h-2 rounded-full bg-red-500"></div>
+                  <div class="flex-1 text-sm text-gray-700">Hoog</div>
+                  <div class="text-sm font-semibold text-navy">4</div>
+                </div>
+                <div class="flex items-center gap-3">
+                  <div class="w-2 h-2 rounded-full bg-amber-500"></div>
+                  <div class="flex-1 text-sm text-gray-700">Middel</div>
+                  <div class="text-sm font-semibold text-navy">7</div>
+                </div>
+                <div class="flex items-center gap-3">
+                  <div class="w-2 h-2 rounded-full bg-emerald-500"></div>
+                  <div class="flex-1 text-sm text-gray-700">Laag</div>
+                  <div class="text-sm font-semibold text-navy">2</div>
+                </div>
+                <hr class="my-1 border-gray-100"/>
+                <div class="flex items-center gap-3 text-xs text-gray-500">
+                  <span class="flex-1">Tijdelijk</span>
+                  <span>3 van 13</span>
+                </div>
+                <div class="flex items-center gap-3 text-xs text-gray-500">
+                  <span class="flex-1">Structureel</span>
+                  <span>10 van 13</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Lijst per categorie -->
+        <div class="mt-8 space-y-6">
+
+          <!-- Categorie 1 -->
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <h2 class="text-sm font-semibold text-navy uppercase tracking-wide">Financieel & actuarieel</h2>
+              <span class="text-xs text-gray-500">4 risico's</span>
+            </div>
+            <div class="bg-white border border-gray-200 rounded-xl divide-y divide-gray-100">
+              <a href="#risico-1" class="flex items-center gap-4 p-4 hover:bg-gray-50">
+                <span class="w-2.5 h-2.5 rounded-full bg-red-500 flex-shrink-0"></span>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="text-sm font-medium text-navy">Renterisico</span>
+                    <span class="text-[10px] uppercase tracking-wide text-navy bg-blue-50 px-1.5 py-0.5 rounded">Structureel</span>
+                  </div>
+                  <p class="text-xs text-gray-600 mt-0.5">Verlaging dekkingsgraad door rentedaling, bovenop bestaande rentehedge.</p>
+                </div>
+                <div class="text-xs text-gray-500">K4 · I5</div>
+                <span class="text-[11px] font-semibold text-red-700 bg-red-50 px-2 py-0.5 rounded">Hoog</span>
+              </a>
+              <div class="flex items-center gap-4 p-4 hover:bg-gray-50">
+                <span class="w-2.5 h-2.5 rounded-full bg-amber-500 flex-shrink-0"></span>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="text-sm font-medium text-navy">Inflatierisico</span>
+                    <span class="text-[10px] uppercase tracking-wide text-navy bg-blue-50 px-1.5 py-0.5 rounded">Structureel</span>
+                  </div>
+                  <p class="text-xs text-gray-600 mt-0.5">Koopkrachtverlies pensioenuitkeringen door aanhoudende inflatie.</p>
+                </div>
+                <div class="text-xs text-gray-500">K4 · I3</div>
+                <span class="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">Middel</span>
+              </div>
+              <div class="flex items-center gap-4 p-4 hover:bg-gray-50">
+                <span class="w-2.5 h-2.5 rounded-full bg-amber-500 flex-shrink-0"></span>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="text-sm font-medium text-navy">Rendementsrisico vermogensbeheerder</span>
+                    <span class="text-[10px] uppercase tracking-wide text-navy bg-blue-50 px-1.5 py-0.5 rounded">Structureel</span>
+                  </div>
+                  <p class="text-xs text-gray-600 mt-0.5">Onderprestatie portefeuille t.o.v. benchmark over meerdere kwartalen.</p>
+                </div>
+                <div class="text-xs text-gray-500">K3 · I3</div>
+                <span class="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">Middel</span>
+              </div>
+              <div class="flex items-center gap-4 p-4 hover:bg-gray-50">
+                <span class="w-2.5 h-2.5 rounded-full bg-amber-500 flex-shrink-0"></span>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="text-sm font-medium text-navy">Krimprisico deelnemersbestand</span>
+                    <span class="text-[10px] uppercase tracking-wide text-navy bg-blue-50 px-1.5 py-0.5 rounded">Structureel</span>
+                  </div>
+                  <p class="text-xs text-gray-600 mt-0.5">Afnemende premie-inkomsten bij krimp van het werknemersbestand.</p>
+                </div>
+                <div class="text-xs text-gray-500">K2 · I3</div>
+                <span class="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">Middel</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Categorie 2 -->
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <h2 class="text-sm font-semibold text-navy uppercase tracking-wide">Governance & Organisatie</h2>
+              <span class="text-xs text-gray-500">3 risico's</span>
+            </div>
+            <div class="bg-white border border-gray-200 rounded-xl divide-y divide-gray-100">
+              <div class="flex items-center gap-4 p-4 hover:bg-gray-50">
+                <span class="w-2.5 h-2.5 rounded-full bg-red-500 flex-shrink-0"></span>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="text-sm font-medium text-navy">Wtp-implementatie complex</span>
+                    <span class="text-[10px] uppercase tracking-wide text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded">Tijdelijk</span>
+                  </div>
+                  <p class="text-xs text-gray-600 mt-0.5">Complexiteit invaren naar persoonlijk pensioenvermogen, deadline 2027.</p>
+                </div>
+                <div class="text-xs text-gray-500">K4 · I4</div>
+                <span class="text-[11px] font-semibold text-red-700 bg-red-50 px-2 py-0.5 rounded">Hoog</span>
+              </div>
+              <div class="flex items-center gap-4 p-4 hover:bg-gray-50">
+                <span class="w-2.5 h-2.5 rounded-full bg-amber-500 flex-shrink-0"></span>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="text-sm font-medium text-navy">Bestuurlijke continuïteit</span>
+                    <span class="text-[10px] uppercase tracking-wide text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded">Tijdelijk</span>
+                  </div>
+                  <p class="text-xs text-gray-600 mt-0.5">Twee aflopende termijnen in 2026, opvolgers nog niet geworven.</p>
+                </div>
+                <div class="text-xs text-gray-500">K3 · I3</div>
+                <span class="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">Middel</span>
+              </div>
+              <div class="flex items-center gap-4 p-4 hover:bg-gray-50">
+                <span class="w-2.5 h-2.5 rounded-full bg-amber-500 flex-shrink-0"></span>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="text-sm font-medium text-navy">Belangenverstrengeling</span>
+                    <span class="text-[10px] uppercase tracking-wide text-navy bg-blue-50 px-1.5 py-0.5 rounded">Structureel</span>
+                  </div>
+                  <p class="text-xs text-gray-600 mt-0.5">Onvoldoende afscherming bij meervoudige bestuurlijke functies.</p>
+                </div>
+                <div class="text-xs text-gray-500">K2 · I4</div>
+                <span class="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">Middel</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Categorie 3 -->
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <h2 class="text-sm font-semibold text-navy uppercase tracking-wide">Operationeel & datakwaliteit</h2>
+              <span class="text-xs text-gray-500">3 risico's</span>
+            </div>
+            <div class="bg-white border border-gray-200 rounded-xl divide-y divide-gray-100">
+              <div class="flex items-center gap-4 p-4 hover:bg-gray-50">
+                <span class="w-2.5 h-2.5 rounded-full bg-red-500 flex-shrink-0"></span>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="text-sm font-medium text-navy">Cyber-incident</span>
+                    <span class="text-[10px] uppercase tracking-wide text-navy bg-blue-50 px-1.5 py-0.5 rounded">Structureel</span>
+                  </div>
+                  <p class="text-xs text-gray-600 mt-0.5">Datalek of ransomware bij uitvoerder of vermogensbeheerder met deelnemersgevolgen.</p>
+                </div>
+                <div class="text-xs text-gray-500">K3 · I5</div>
+                <span class="text-[11px] font-semibold text-red-700 bg-red-50 px-2 py-0.5 rounded">Hoog</span>
+              </div>
+              <div class="flex items-center gap-4 p-4 hover:bg-gray-50">
+                <span class="w-2.5 h-2.5 rounded-full bg-amber-500 flex-shrink-0"></span>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="text-sm font-medium text-navy">Pensioenadministratie data-fouten</span>
+                    <span class="text-[10px] uppercase tracking-wide text-navy bg-blue-50 px-1.5 py-0.5 rounded">Structureel</span>
+                  </div>
+                  <p class="text-xs text-gray-600 mt-0.5">Onjuiste pensioenaanspraken door datafouten in administratiesysteem.</p>
+                </div>
+                <div class="text-xs text-gray-500">K3 · I4</div>
+                <span class="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">Middel</span>
+              </div>
+              <div class="flex items-center gap-4 p-4 hover:bg-gray-50">
+                <span class="w-2.5 h-2.5 rounded-full bg-amber-500 flex-shrink-0"></span>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="text-sm font-medium text-navy">Premie-incasso vertraging</span>
+                    <span class="text-[10px] uppercase tracking-wide text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded">Tijdelijk</span>
+                  </div>
+                  <p class="text-xs text-gray-600 mt-0.5">Februari-incasso vertraagd door storing betaaldienstverlener — gekoppeld aan procedure incident-DNB.</p>
+                </div>
+                <div class="text-xs text-gray-500">K3 · I2</div>
+                <span class="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">Middel</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Categorie 4 -->
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <h2 class="text-sm font-semibold text-navy uppercase tracking-wide">Informatie & communicatie</h2>
+              <span class="text-xs text-gray-500">3 risico's</span>
+            </div>
+            <div class="bg-white border border-gray-200 rounded-xl divide-y divide-gray-100">
+              <div class="flex items-center gap-4 p-4 hover:bg-gray-50">
+                <span class="w-2.5 h-2.5 rounded-full bg-red-500 flex-shrink-0"></span>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="text-sm font-medium text-navy">DNB-rapportage te laat</span>
+                    <span class="text-[10px] uppercase tracking-wide text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded">Tijdelijk</span>
+                  </div>
+                  <p class="text-xs text-gray-600 mt-0.5">Risico op te late kwartaalrapportage door verouderd aanleverproces.</p>
+                </div>
+                <div class="text-xs text-gray-500">K2 · I5</div>
+                <span class="text-[11px] font-semibold text-red-700 bg-red-50 px-2 py-0.5 rounded">Hoog</span>
+              </div>
+              <div class="flex items-center gap-4 p-4 hover:bg-gray-50">
+                <span class="w-2.5 h-2.5 rounded-full bg-amber-500 flex-shrink-0"></span>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="text-sm font-medium text-navy">Onduidelijke deelnemerscommunicatie</span>
+                    <span class="text-[10px] uppercase tracking-wide text-navy bg-blue-50 px-1.5 py-0.5 rounded">Structureel</span>
+                  </div>
+                  <p class="text-xs text-gray-600 mt-0.5">Pensioenoverzicht en webcommunicatie scoren wisselend in begrijpelijkheid.</p>
+                </div>
+                <div class="text-xs text-gray-500">K3 · I3</div>
+                <span class="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">Middel</span>
+              </div>
+              <div class="flex items-center gap-4 p-4 hover:bg-gray-50">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 flex-shrink-0"></span>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="text-sm font-medium text-navy">Klachtenafhandeling buiten termijn</span>
+                    <span class="text-[10px] uppercase tracking-wide text-navy bg-blue-50 px-1.5 py-0.5 rounded">Structureel</span>
+                  </div>
+                  <p class="text-xs text-gray-600 mt-0.5">Sporadisch overschrijden van zes-wekentermijn voor klachtenafhandeling.</p>
+                </div>
+                <div class="text-xs text-gray-500">K2 · I2</div>
+                <span class="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">Laag</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════ -->
+      <!-- SCHERM 2: RISICO DETAIL                 -->
+      <!-- ═══════════════════════════════════════ -->
+      <section id="screen-risico-1" hidden class="px-8 py-8 max-w-7xl mx-auto w-full">
+        <a href="#risicomatrix" class="text-sm text-gray-500 hover:text-navy inline-flex items-center gap-1">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+          Terug naar matrix
+        </a>
+
+        <!-- Header -->
+        <div class="flex items-start justify-between mt-3 gap-6">
+          <div class="flex-1">
+            <div class="flex items-center gap-2 mb-2">
+              <span class="text-[11px] font-medium uppercase tracking-wide text-blue-700 bg-blue-50 px-2 py-0.5 rounded">Financieel & actuarieel</span>
+              <span class="text-[11px] font-semibold uppercase tracking-wide text-red-700 bg-red-50 px-2 py-0.5 rounded">Hoog</span>
+              <span class="text-[11px] uppercase tracking-wide text-navy bg-navy/5 px-2 py-0.5 rounded">Structureel</span>
+              <span class="text-[11px] uppercase tracking-wide text-gray-600 bg-gray-100 px-2 py-0.5 rounded">Actief</span>
+            </div>
+            <h1 class="text-2xl font-semibold text-navy">Renterisico</h1>
+            <p class="text-sm text-gray-600 mt-1.5 max-w-3xl">Verlaging van de financieringsgraad door dalende rente, mits niet volledig afgedekt door bestaande rentehedge. Effect groter bij langere looptijd verplichtingen.</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button class="px-3 py-2 text-sm border border-gray-200 rounded-lg hover:border-navy text-gray-700">Bewerken</button>
+            <button class="px-3 py-2 text-sm border border-gray-200 rounded-lg hover:border-red-400 text-red-600">Sluiten</button>
+          </div>
+        </div>
+
+        <!-- Kans/Impact/Niveau strook -->
+        <div class="grid grid-cols-3 gap-4 mt-6">
+          <div class="bg-white border border-gray-200 rounded-xl p-5">
+            <div class="text-xs uppercase tracking-wide text-gray-500 font-semibold">Kans</div>
+            <div class="flex items-baseline gap-2 mt-2">
+              <div class="text-2xl font-semibold text-navy">4</div>
+              <div class="text-sm text-gray-600">— Hoog</div>
+            </div>
+            <div class="flex gap-1 mt-2">
+              <div class="h-1.5 flex-1 rounded-full bg-navy"></div>
+              <div class="h-1.5 flex-1 rounded-full bg-navy"></div>
+              <div class="h-1.5 flex-1 rounded-full bg-navy"></div>
+              <div class="h-1.5 flex-1 rounded-full bg-navy"></div>
+              <div class="h-1.5 flex-1 rounded-full bg-gray-200"></div>
+            </div>
+          </div>
+          <div class="bg-white border border-gray-200 rounded-xl p-5">
+            <div class="text-xs uppercase tracking-wide text-gray-500 font-semibold">Impact</div>
+            <div class="flex items-baseline gap-2 mt-2">
+              <div class="text-2xl font-semibold text-navy">5</div>
+              <div class="text-sm text-gray-600">— Zeer hoog</div>
+            </div>
+            <div class="flex gap-1 mt-2">
+              <div class="h-1.5 flex-1 rounded-full bg-navy"></div>
+              <div class="h-1.5 flex-1 rounded-full bg-navy"></div>
+              <div class="h-1.5 flex-1 rounded-full bg-navy"></div>
+              <div class="h-1.5 flex-1 rounded-full bg-navy"></div>
+              <div class="h-1.5 flex-1 rounded-full bg-navy"></div>
+            </div>
+          </div>
+          <div class="bg-white border-2 border-red-200 rounded-xl p-5 bg-gradient-to-br from-red-50/50 to-white">
+            <div class="text-xs uppercase tracking-wide text-red-700 font-semibold">Risiconiveau</div>
+            <div class="flex items-baseline gap-2 mt-2">
+              <div class="text-2xl font-semibold text-red-700">Hoog</div>
+              <div class="text-sm text-gray-600">(K×I = 20)</div>
+            </div>
+            <div class="text-xs text-gray-600 mt-2">Direct bestuurlijk aandachtspunt. Maandelijkse rapportage in stuurinformatie.</div>
+          </div>
+        </div>
+
+        <!-- Body grid -->
+        <div class="grid grid-cols-12 gap-6 mt-6">
+
+          <!-- Linker kolom -->
+          <div class="col-span-8 space-y-6">
+
+            <!-- Toelichting -->
+            <div class="bg-white border border-gray-200 rounded-xl p-6">
+              <h3 class="text-sm font-semibold text-navy mb-3">Nadere toelichting</h3>
+              <div class="prose prose-sm max-w-none text-gray-700 space-y-3">
+                <p>Het rentenrisico vormt voor het fonds het grootste financieel risico. Bij een rentedaling van 100 bp neemt de contante waarde van de pensioenverplichtingen sterker toe dan de waarde van de obligatieportefeuille, ondanks de bestaande rentehedge van 60%.</p>
+                <p>De gevoeligheid is in 2025 herijkt na de overgang naar Wtp. De duration van de verplichtingen ligt rond de 18 jaar; van de afdekkingsportefeuille rond de 15 jaar. Een mismatch van 3 jaar in een portefeuille van €4,2 miljard betekent dat 1% rentedaling ruwweg €126 miljoen verlaging financieringsgraad-kapitaal oplevert.</p>
+                <p>Bestuurlijke aandachtspunten: timing van eventuele verhoging hedge-ratio, kosten van renteswap-vernieuwing, en wisselwerking met de overrendementsportefeuille (aandelenexposure).</p>
+              </div>
+            </div>
+
+            <!-- Maatregelen -->
+            <div class="bg-white border border-gray-200 rounded-xl p-6">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="text-sm font-semibold text-navy">Getroffen maatregelen</h3>
+                <button class="text-xs text-navy hover:underline">+ Maatregel toevoegen</button>
+              </div>
+              <div class="space-y-3">
+                <div class="flex items-start gap-3 p-3 border border-emerald-200 bg-emerald-50/30 rounded-lg">
+                  <span class="text-emerald-600 mt-0.5">✓</span>
+                  <div class="flex-1">
+                    <div class="text-sm font-medium text-gray-900">Rentehedge 60% via swaps en lange-looptijd staatsobligaties</div>
+                    <div class="text-xs text-gray-600 mt-1">Genomen door Beleggingsadviescommissie · 14 jan 2025 · evaluatie elk kwartaal</div>
+                  </div>
+                  <span class="text-[10px] uppercase tracking-wide bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded">Genomen</span>
+                </div>
+
+                <div class="flex items-start gap-3 p-3 border border-emerald-200 bg-emerald-50/30 rounded-lg">
+                  <span class="text-emerald-600 mt-0.5">✓</span>
+                  <div class="flex-1">
+                    <div class="text-sm font-medium text-gray-900">Maandelijkse stresstest dekkingsgraad bij −100 bp en −200 bp</div>
+                    <div class="text-xs text-gray-600 mt-1">Door uitvoerder · sinds januari 2026 in maandrapportage</div>
+                  </div>
+                  <span class="text-[10px] uppercase tracking-wide bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded">Genomen</span>
+                </div>
+
+                <div class="flex items-start gap-3 p-3 border border-amber-200 bg-amber-50/30 rounded-lg">
+                  <span class="text-amber-600 mt-0.5">○</span>
+                  <div class="flex-1">
+                    <div class="text-sm font-medium text-gray-900">Heroverweging hedge-ratio naar 70% — bestuursvoorstel</div>
+                    <div class="text-xs text-gray-600 mt-1">Verantwoordelijke: Anna de Vries · gepland Q3 2026 · gekoppeld aan procedure <a href="#" class="text-navy underline">Aanpassing strategisch beleggingsplan 2026</a></div>
+                  </div>
+                  <span class="text-[10px] uppercase tracking-wide bg-amber-100 text-amber-800 px-2 py-0.5 rounded">In voorbereiding</span>
+                </div>
+
+                <div class="flex items-start gap-3 p-3 border border-gray-200 rounded-lg">
+                  <span class="text-gray-400 mt-0.5">○</span>
+                  <div class="flex-1">
+                    <div class="text-sm font-medium text-gray-900">Scenario-analyse renteomgeving 2027–2030</div>
+                    <div class="text-xs text-gray-600 mt-1">Verantwoordelijke: Pieter Verhoeven · planning ALM-studie najaar 2026</div>
+                  </div>
+                  <span class="text-[10px] uppercase tracking-wide bg-gray-100 text-gray-700 px-2 py-0.5 rounded">Open</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Logboek -->
+            <div class="bg-white border border-gray-200 rounded-xl p-6">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="text-sm font-semibold text-navy">Logboek</h3>
+                <span class="text-xs text-gray-500">Append-only · 9 events</span>
+              </div>
+              <ol class="space-y-3 text-sm">
+                <li class="flex gap-3">
+                  <div class="w-2 h-2 rounded-full bg-amber-400 mt-1.5 flex-shrink-0"></div>
+                  <div class="flex-1">
+                    <div class="text-gray-900">Risiconiveau verhoogd van <span class="font-semibold">Middel</span> naar <span class="font-semibold text-red-700">Hoog</span> na rentedaling 35bp in maart</div>
+                    <div class="text-xs text-gray-500 mt-0.5">3 apr 2026 · door Anna de Vries · motivering: stresstest -100bp toont krappe financieringsgraad</div>
+                  </div>
+                </li>
+                <li class="flex gap-3">
+                  <div class="w-2 h-2 rounded-full bg-emerald-400 mt-1.5 flex-shrink-0"></div>
+                  <div class="flex-1">
+                    <div class="text-gray-900">Maatregel <span class="font-medium">Maandelijkse stresstest</span> opgenomen als genomen</div>
+                    <div class="text-xs text-gray-500 mt-0.5">28 jan 2026 · door Merlin Ijzerman</div>
+                  </div>
+                </li>
+                <li class="flex gap-3">
+                  <div class="w-2 h-2 rounded-full bg-blue-400 mt-1.5 flex-shrink-0"></div>
+                  <div class="flex-1">
+                    <div class="text-gray-900">Maatregel <span class="font-medium">Heroverweging hedge-ratio naar 70%</span> toegevoegd</div>
+                    <div class="text-xs text-gray-500 mt-0.5">15 jan 2026 · door Anna de Vries · gekoppeld aan Beleidswijziging-procedure</div>
+                  </div>
+                </li>
+                <li class="flex gap-3">
+                  <div class="w-2 h-2 rounded-full bg-gray-300 mt-1.5 flex-shrink-0"></div>
+                  <div class="flex-1">
+                    <div class="text-gray-900">Bestuurlijke risicobeoordeling jaarcyclus 2026 — risiconiveau bepaald op <span class="font-semibold">Middel</span></div>
+                    <div class="text-xs text-gray-500 mt-0.5">10 jan 2026 · door bestuur</div>
+                  </div>
+                </li>
+                <li class="flex gap-3">
+                  <div class="w-2 h-2 rounded-full bg-gray-400 mt-1.5 flex-shrink-0"></div>
+                  <div class="flex-1">
+                    <div class="text-gray-900">Risico aangemaakt en geclassificeerd als <span class="font-medium">Financieel & actuarieel — Structureel</span></div>
+                    <div class="text-xs text-gray-500 mt-0.5">22 sep 2024 · door Pieter Verhoeven · bij start risicoraamwerk</div>
+                  </div>
+                </li>
+                <li>
+                  <button class="text-xs text-navy hover:underline ml-5">Toon 4 oudere events</button>
+                </li>
+              </ol>
+            </div>
+          </div>
+
+          <!-- Rechter kolom -->
+          <div class="col-span-4 space-y-4">
+
+            <div class="bg-white border border-gray-200 rounded-xl p-5">
+              <h3 class="text-xs uppercase tracking-wide text-gray-500 font-semibold mb-3">Eigenschappen</h3>
+              <dl class="space-y-3 text-sm">
+                <div>
+                  <dt class="text-xs text-gray-500">Eigenaar</dt>
+                  <dd class="text-gray-900 mt-0.5">Anna de Vries <span class="text-xs text-gray-500">— Risk Officer</span></dd>
+                </div>
+                <div>
+                  <dt class="text-xs text-gray-500">Aangemaakt</dt>
+                  <dd class="text-gray-900 mt-0.5">22 sep 2024</dd>
+                </div>
+                <div>
+                  <dt class="text-xs text-gray-500">Laatst herzien</dt>
+                  <dd class="text-gray-900 mt-0.5">3 apr 2026</dd>
+                </div>
+                <div>
+                  <dt class="text-xs text-gray-500">Volgende beoordeling</dt>
+                  <dd class="text-gray-900 mt-0.5">3 jul 2026</dd>
+                </div>
+                <div>
+                  <dt class="text-xs text-gray-500">Type</dt>
+                  <dd class="text-gray-900 mt-0.5">Structureel</dd>
+                </div>
+              </dl>
+            </div>
+
+            <div class="bg-white border border-gray-200 rounded-xl p-5">
+              <h3 class="text-xs uppercase tracking-wide text-gray-500 font-semibold mb-3">Verbonden zaken</h3>
+              <div class="space-y-2 text-sm">
+                <a href="#" class="block text-navy hover:underline">→ Procedure Aanpassing strategisch beleggingsplan 2026</a>
+                <a href="#" class="block text-navy hover:underline">→ Document ALM-studie 2025</a>
+                <a href="#" class="block text-navy hover:underline">→ Stuurinformatie Wtp-balans</a>
+                <a href="#" class="block text-navy hover:underline">→ Vergadering 23 apr 2026 — agendapunt 4</a>
+              </div>
+            </div>
+
+            <!-- AI-suggestie -->
+            <div class="bg-gradient-to-br from-amber-50 to-white border border-amber-200 rounded-xl p-5">
+              <div class="flex items-start gap-3">
+                <div class="w-8 h-8 rounded-lg bg-gold text-navy flex items-center justify-center flex-shrink-0">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 3v1M3.34 7l.7.7M20.66 7l-.7.7M21 12h-1M4 12H3M9 17h6c1.1 0 2-.9 2-2 0-2-.5-3-1.5-4S15 9.5 15 8a3 3 0 10-6 0c0 1.5-.5 2-1.5 3S6 13 6 15c0 1.1.9 2 2 2z"/></svg>
+                </div>
+                <div class="flex-1">
+                  <div class="text-xs uppercase tracking-wide text-amber-700 font-semibold">AI-observatie</div>
+                  <p class="text-sm text-gray-800 mt-1">Renterisico is in de afgelopen 12 maanden tweemaal van niveau gewijzigd. <a href="#" class="text-navy underline font-medium">Bekijk historische niveau-analyse →</a></p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════ -->
+      <!-- SCHERM 3: NIEUW RISICO                  -->
+      <!-- ═══════════════════════════════════════ -->
+      <section id="screen-nieuw-risico" hidden class="px-8 py-8 max-w-3xl mx-auto w-full">
+        <a href="#risicomatrix" class="text-sm text-gray-500 hover:text-navy inline-flex items-center gap-1">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+          Terug naar matrix
+        </a>
+        <h1 class="text-2xl font-semibold text-navy mt-3">Nieuw risico vastleggen</h1>
+        <p class="text-sm text-gray-600 mt-1">Geef een titel, kies een categorie, en bepaal kans en impact. Het risiconiveau wordt automatisch afgeleid; je kunt het handmatig aanpassen indien nodig.</p>
+
+        <form class="mt-6 bg-white border border-gray-200 rounded-xl p-6 space-y-5">
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1.5">Titel</label>
+            <input type="text" placeholder="bv. Concentratierisico vastgoedportefeuille" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-gold outline-none">
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1.5">Categorie</label>
+            <div class="grid grid-cols-2 gap-2">
+              <label class="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2.5 cursor-pointer hover:border-navy">
+                <input type="radio" name="cat" class="accent-gold">
+                <span class="text-sm">Financieel & actuarieel</span>
+              </label>
+              <label class="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2.5 cursor-pointer hover:border-navy">
+                <input type="radio" name="cat" class="accent-gold">
+                <span class="text-sm">Governance & Organisatie</span>
+              </label>
+              <label class="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2.5 cursor-pointer hover:border-navy">
+                <input type="radio" name="cat" class="accent-gold">
+                <span class="text-sm">Operationeel & datakwaliteit</span>
+              </label>
+              <label class="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2.5 cursor-pointer hover:border-navy">
+                <input type="radio" name="cat" class="accent-gold">
+                <span class="text-sm">Informatie & communicatie</span>
+              </label>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1.5">Toelichting</label>
+            <textarea rows="4" placeholder="Beschrijf het risico, oorzaken en mogelijke gevolgen." class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-gold outline-none resize-none"></textarea>
+          </div>
+
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1.5">Kans</label>
+              <div class="flex gap-1">
+                <button type="button" class="flex-1 py-2 text-xs border border-gray-200 rounded hover:border-navy">1</button>
+                <button type="button" class="flex-1 py-2 text-xs border border-gray-200 rounded hover:border-navy">2</button>
+                <button type="button" class="flex-1 py-2 text-xs border-2 border-navy bg-navy text-white rounded font-semibold">3</button>
+                <button type="button" class="flex-1 py-2 text-xs border border-gray-200 rounded hover:border-navy">4</button>
+                <button type="button" class="flex-1 py-2 text-xs border border-gray-200 rounded hover:border-navy">5</button>
+              </div>
+              <div class="text-xs text-gray-500 mt-1.5">Gemiddeld — kans op optreden binnen 12 maanden ~25-50%</div>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1.5">Impact</label>
+              <div class="flex gap-1">
+                <button type="button" class="flex-1 py-2 text-xs border border-gray-200 rounded hover:border-navy">1</button>
+                <button type="button" class="flex-1 py-2 text-xs border border-gray-200 rounded hover:border-navy">2</button>
+                <button type="button" class="flex-1 py-2 text-xs border border-gray-200 rounded hover:border-navy">3</button>
+                <button type="button" class="flex-1 py-2 text-xs border-2 border-navy bg-navy text-white rounded font-semibold">4</button>
+                <button type="button" class="flex-1 py-2 text-xs border border-gray-200 rounded hover:border-navy">5</button>
+              </div>
+              <div class="text-xs text-gray-500 mt-1.5">Hoog — substantieel effect op financieringsgraad of reputatie</div>
+            </div>
+          </div>
+
+          <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center gap-3">
+            <div class="w-3 h-3 rounded-full bg-amber-500"></div>
+            <div class="text-sm">
+              <span class="text-gray-700">Afgeleid risiconiveau:</span>
+              <span class="font-semibold text-amber-700 ml-1">Middel</span>
+              <span class="text-xs text-gray-500 ml-2">(K3 × I4 = 12)</span>
+            </div>
+            <button type="button" class="ml-auto text-xs text-navy hover:underline">Handmatig overschrijven</button>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1.5">Type</label>
+            <div class="flex gap-2">
+              <label class="flex-1 flex items-center gap-2 border-2 border-navy bg-navy/5 rounded-lg px-3 py-2.5 cursor-pointer">
+                <input type="radio" name="type" class="accent-gold" checked>
+                <div>
+                  <div class="text-sm font-medium">Structureel</div>
+                  <div class="text-xs text-gray-500">Inherent aan bedrijfsvoering</div>
+                </div>
+              </label>
+              <label class="flex-1 flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2.5 cursor-pointer hover:border-navy">
+                <input type="radio" name="type" class="accent-gold">
+                <div>
+                  <div class="text-sm font-medium">Tijdelijk</div>
+                  <div class="text-xs text-gray-500">Gebonden aan project of gebeurtenis</div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <div class="flex justify-end gap-2 pt-3 border-t border-gray-100">
+            <a href="#risicomatrix" class="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:border-navy text-gray-700">Annuleren</a>
+            <button type="button" class="px-4 py-2 text-sm bg-navy text-white rounded-lg hover:bg-navy-700">Risico vastleggen</button>
+          </div>
+        </form>
+      </section>
+
+      <!-- ═══════════════════════════════════════ -->
+      <!-- SCHERM 4: GESLOTEN RISICO'S             -->
+      <!-- ═══════════════════════════════════════ -->
+      <section id="screen-gesloten" hidden class="px-8 py-8 max-w-7xl mx-auto w-full">
+        <a href="#risicomatrix" class="text-sm text-gray-500 hover:text-navy inline-flex items-center gap-1">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+          Terug naar matrix
+        </a>
+        <div class="flex items-start justify-between mt-3">
+          <div>
+            <h1 class="text-2xl font-semibold text-navy">Archief gesloten risico's</h1>
+            <p class="text-sm text-gray-600 mt-1">Volledig reproduceerbaar: elk gesloten risico bewaart de toelichting, alle maatregelen en het complete logboek zoals op moment van sluiting.</p>
+          </div>
+          <div class="text-xs text-gray-500">Toont 6 gesloten risico's</div>
+        </div>
+
+        <div class="mt-6 bg-white border border-gray-200 rounded-xl divide-y divide-gray-100">
+          <div class="grid grid-cols-12 gap-4 p-4 text-xs uppercase tracking-wide text-gray-500 font-semibold border-b border-gray-100">
+            <div class="col-span-5">Titel</div>
+            <div class="col-span-2">Categorie</div>
+            <div class="col-span-2">Niveau bij sluiting</div>
+            <div class="col-span-2">Gesloten op</div>
+            <div class="col-span-1"></div>
+          </div>
+
+          <a href="#risico-1" class="grid grid-cols-12 gap-4 p-4 items-center hover:bg-gray-50 text-sm">
+            <div class="col-span-5">
+              <div class="font-medium text-navy">Migratie-incident pensioenadministratie 2025</div>
+              <div class="text-xs text-gray-500 mt-0.5">Storing tijdens overgang naar nieuwe administratie-omgeving (12 dagen vertraging)</div>
+            </div>
+            <div class="col-span-2 text-xs text-gray-700">Operationeel & datakwaliteit</div>
+            <div class="col-span-2"><span class="text-[11px] font-semibold text-red-700 bg-red-50 px-2 py-0.5 rounded">Hoog</span></div>
+            <div class="col-span-2 text-xs text-gray-700">12 mrt 2026</div>
+            <div class="col-span-1 text-xs text-navy">Openen →</div>
+          </a>
+
+          <a href="#risico-1" class="grid grid-cols-12 gap-4 p-4 items-center hover:bg-gray-50 text-sm">
+            <div class="col-span-5">
+              <div class="font-medium text-navy">Voorzitter-vacature 2025</div>
+              <div class="text-xs text-gray-500 mt-0.5">Periode tussen aftreden vorige voorzitter en aantreden nieuwe (4 maanden)</div>
+            </div>
+            <div class="col-span-2 text-xs text-gray-700">Governance & Organisatie</div>
+            <div class="col-span-2"><span class="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">Middel</span></div>
+            <div class="col-span-2 text-xs text-gray-700">5 feb 2026</div>
+            <div class="col-span-1 text-xs text-navy">Openen →</div>
+          </a>
+
+          <a href="#risico-1" class="grid grid-cols-12 gap-4 p-4 items-center hover:bg-gray-50 text-sm">
+            <div class="col-span-5">
+              <div class="font-medium text-navy">Compliance-bevinding inrichting beloningsbeleid</div>
+              <div class="text-xs text-gray-500 mt-0.5">DNB-rapportage met bevinding over registratie variabele beloning bestuurders</div>
+            </div>
+            <div class="col-span-2 text-xs text-gray-700">Governance & Organisatie</div>
+            <div class="col-span-2"><span class="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">Middel</span></div>
+            <div class="col-span-2 text-xs text-gray-700">14 jan 2026</div>
+            <div class="col-span-1 text-xs text-navy">Openen →</div>
+          </a>
+
+          <a href="#risico-1" class="grid grid-cols-12 gap-4 p-4 items-center hover:bg-gray-50 text-sm">
+            <div class="col-span-5">
+              <div class="font-medium text-navy">Concentratierisico mid-cap aandelen 2024</div>
+              <div class="text-xs text-gray-500 mt-0.5">Te grote weging in twee specifieke posities — tactisch afgebouwd</div>
+            </div>
+            <div class="col-span-2 text-xs text-gray-700">Financieel & actuarieel</div>
+            <div class="col-span-2"><span class="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">Middel</span></div>
+            <div class="col-span-2 text-xs text-gray-700">22 nov 2025</div>
+            <div class="col-span-1 text-xs text-navy">Openen →</div>
+          </a>
+
+          <a href="#risico-1" class="grid grid-cols-12 gap-4 p-4 items-center hover:bg-gray-50 text-sm">
+            <div class="col-span-5">
+              <div class="font-medium text-navy">Privacy-bevinding deelnemersportaal 2025</div>
+              <div class="text-xs text-gray-500 mt-0.5">Onnodig brede dataverwerking bij oude inloggegevens-flow</div>
+            </div>
+            <div class="col-span-2 text-xs text-gray-700">Informatie & communicatie</div>
+            <div class="col-span-2"><span class="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">Middel</span></div>
+            <div class="col-span-2 text-xs text-gray-700">3 sep 2025</div>
+            <div class="col-span-1 text-xs text-navy">Openen →</div>
+          </a>
+
+          <a href="#risico-1" class="grid grid-cols-12 gap-4 p-4 items-center hover:bg-gray-50 text-sm">
+            <div class="col-span-5">
+              <div class="font-medium text-navy">Continuïteit-risico ALM-leverancier 2024</div>
+              <div class="text-xs text-gray-500 mt-0.5">Eenzijdige afhankelijkheid van één ALM-modelleur — backup-contract afgesloten</div>
+            </div>
+            <div class="col-span-2 text-xs text-gray-700">Operationeel & datakwaliteit</div>
+            <div class="col-span-2"><span class="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">Laag</span></div>
+            <div class="col-span-2 text-xs text-gray-700">17 jun 2024</div>
+            <div class="col-span-1 text-xs text-navy">Openen →</div>
+          </a>
+        </div>
+
+        <div class="mt-4 text-xs text-gray-500 italic">Gesloten risico's blijven onbeperkt raadpleegbaar voor reconstructie. Status, niveau, toelichting, maatregelen en logboek zijn bevroren op de sluitingsdatum.</div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<script>
+  function route() {
+    let hash = (location.hash || '#risicomatrix').slice(1);
+    document.querySelectorAll('section[id^="screen-"]').forEach(el => el.hidden = true);
+    const target = document.getElementById('screen-' + hash);
+    if (target) {
+      target.hidden = false;
+    } else {
+      document.getElementById('screen-risicomatrix').hidden = false;
+      hash = 'risicomatrix';
+    }
+
+    const crumb = document.getElementById('breadcrumb');
+    const labels = {
+      'risicomatrix': '<a href="#risicomatrix" class="hover:text-navy">Risicomatrix</a>',
+      'risico-1': '<a href="#risicomatrix" class="hover:text-navy">Risicomatrix</a> <span class="mx-2 text-gray-300">/</span> <span class="text-navy font-medium">Renterisico</span>',
+      'nieuw-risico': '<a href="#risicomatrix" class="hover:text-navy">Risicomatrix</a> <span class="mx-2 text-gray-300">/</span> <span class="text-navy font-medium">Nieuw risico</span>',
+      'gesloten': '<a href="#risicomatrix" class="hover:text-navy">Risicomatrix</a> <span class="mx-2 text-gray-300">/</span> <span class="text-navy font-medium">Archief</span>',
+    };
+    crumb.innerHTML = labels[hash] || labels['risicomatrix'];
+
+    window.scrollTo(0, 0);
+  }
+  window.addEventListener('hashchange', route);
+  route();
+</script>
+
+</body>
+</html>
