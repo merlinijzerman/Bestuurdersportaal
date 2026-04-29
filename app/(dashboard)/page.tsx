@@ -91,6 +91,14 @@ interface InbrengItem {
   agendapunt_id: string;
 }
 
+interface OpenStap {
+  id: string;
+  naam: string;
+  deadline: string | null;
+  procedure_id: string;
+  procedure_titel: string;
+}
+
 export default async function HomePage() {
   const supabase = await createServerSupabase();
   const {
@@ -184,6 +192,53 @@ export default async function HomePage() {
 
   const heeftActiviteit = vragen.length > 0 || inbreng.length > 0 || docs.length > 0;
 
+  // Mijn open procedure-stappen (waar ik co-eigenaar ben)
+  const eigenaarFilters = await Promise.all([
+    supabase
+      .from("procedure_eigenaars")
+      .select("procedure_id")
+      .eq("gebruiker_id", user.id),
+    profiel?.naam
+      ? supabase
+          .from("procedure_eigenaars")
+          .select("procedure_id")
+          .eq("gebruiker_naam", profiel.naam)
+      : Promise.resolve({ data: [] as { procedure_id: string }[] }),
+  ]);
+  const mijnProcedureIds = new Set<string>();
+  for (const res of eigenaarFilters) {
+    for (const rij of (res.data || []) as { procedure_id: string }[]) {
+      mijnProcedureIds.add(rij.procedure_id);
+    }
+  }
+
+  let openStappen: OpenStap[] = [];
+  if (mijnProcedureIds.size > 0) {
+    const { data: stappenRaw } = await supabase
+      .from("procedure_stappen")
+      .select("id, naam, deadline, procedure_id, procedures(titel)")
+      .eq("status", "actief")
+      .in("procedure_id", Array.from(mijnProcedureIds))
+      .order("deadline", { ascending: true, nullsFirst: false })
+      .limit(5);
+    for (const s of (stappenRaw || []) as Array<{
+      id: string;
+      naam: string;
+      deadline: string | null;
+      procedure_id: string;
+      procedures: { titel: string } | { titel: string }[] | null;
+    }>) {
+      const procRel = Array.isArray(s.procedures) ? s.procedures[0] : s.procedures;
+      openStappen.push({
+        id: s.id,
+        naam: s.naam,
+        deadline: s.deadline,
+        procedure_id: s.procedure_id,
+        procedure_titel: procRel?.titel ?? "Procedure",
+      });
+    }
+  }
+
   return (
     <div className="p-7 space-y-5">
       {/* Persoonlijke welkomst */}
@@ -248,6 +303,69 @@ export default async function HomePage() {
           extraKleur="text-gray-500"
         />
       </div>
+
+      {/* Mijn open procedure-stappen */}
+      {openStappen.length > 0 && (
+        <div className="bg-white border border-gray-200 rounded-xl p-5">
+          <div className="flex items-center justify-between mb-3">
+            <div className="font-semibold text-[#0F2744] text-sm">
+              Uw open procedure-stappen
+            </div>
+            <Link
+              href="/procedures"
+              className="text-xs text-[#0F2744] hover:text-[#C9A84C]"
+            >
+              Alle procedures →
+            </Link>
+          </div>
+          <div className="space-y-2">
+            {openStappen.map((s) => {
+              const dagen = s.deadline
+                ? Math.ceil(
+                    (new Date(s.deadline).getTime() - Date.now()) / 86400000
+                  )
+                : null;
+              const dringend = dagen !== null && dagen <= 7;
+              return (
+                <Link
+                  key={s.id}
+                  href={`/procedures/${s.procedure_id}`}
+                  className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:border-[#C9A84C]"
+                >
+                  <span
+                    className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                      dringend ? "bg-amber-400" : "bg-[#C9A84C]"
+                    }`}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-[#0F2744] truncate">
+                      {s.naam}
+                    </div>
+                    <div className="text-xs text-gray-500 truncate">
+                      {s.procedure_titel}
+                    </div>
+                  </div>
+                  {s.deadline && (
+                    <div
+                      className={`text-xs flex-shrink-0 ${
+                        dringend ? "text-amber-700 font-medium" : "text-gray-500"
+                      }`}
+                    >
+                      {dagen !== null && dagen < 0
+                        ? `${Math.abs(dagen)} dgn over`
+                        : dagen !== null && dagen === 0
+                          ? "Vandaag"
+                          : dagen !== null
+                            ? `Nog ${dagen} dgn`
+                            : ""}
+                    </div>
+                  )}
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Voor u open + Mijn activiteit */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">

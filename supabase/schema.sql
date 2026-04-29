@@ -413,6 +413,11 @@ create table if not exists public.procedure_log (
 
 create index if not exists idx_proc_log_proc on public.procedure_log(procedure_id, tijdstip desc);
 
+-- Procedures iteratie 2: koppeling agendapunt ↔ procedure-stap
+alter table public.agendapunten
+  add column if not exists procedure_stap_id uuid references public.procedure_stappen(id) on delete set null;
+create index if not exists idx_agendapunten_procstap on public.agendapunten(procedure_stap_id);
+
 alter table public.procedures enable row level security;
 alter table public.procedure_eigenaars enable row level security;
 alter table public.procedure_stappen enable row level security;

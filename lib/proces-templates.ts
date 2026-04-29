@@ -28,6 +28,249 @@ export interface ProcessTemplate {
 
 export const TEMPLATES: ProcessTemplate[] = [
   {
+    code: "uitbestedingsreview",
+    naam: "Uitbestedingsreview",
+    korte_omschrijving:
+      "Periodieke beoordeling van een uitvoerder of vermogensbeheerder: KPI's → SLA → DD → review → bevindingen.",
+    geschat_aantal_dagen: 60,
+    stappen: [
+      {
+        volgorde: 1,
+        naam: "KPI-rapportage opvragen",
+        beschrijving:
+          "Vraag de leverancier om de meest recente KPI- en SLA-rapportage en eventuele incidentlogboeken.",
+        vereist_besluit: false,
+        geschatte_dagen: 7,
+        checklist: [
+          {
+            volgorde: 1,
+            label: "Schriftelijk verzoek aan leverancier verstuurd",
+            bewijs_vereist: false,
+          },
+          {
+            volgorde: 2,
+            label: "Rapportage ontvangen en compleet",
+            bewijs_vereist: true,
+          },
+        ],
+      },
+      {
+        volgorde: 2,
+        naam: "SLA-check",
+        beschrijving:
+          "Vergelijk de feitelijke prestaties met de SLA-afspraken; markeer over- en onderprestaties.",
+        vereist_besluit: false,
+        geschatte_dagen: 7,
+        checklist: [
+          {
+            volgorde: 1,
+            label: "Per KPI scoring vastgelegd (groen/oranje/rood)",
+            bewijs_vereist: true,
+          },
+          {
+            volgorde: 2,
+            label: "Afwijkingen voorzien van toelichting van leverancier",
+            bewijs_vereist: false,
+          },
+        ],
+      },
+      {
+        volgorde: 3,
+        naam: "Due diligence-vragenlijst",
+        beschrijving:
+          "Doorloop de standaard DD-vragenlijst (governance, IT-security, business continuity, financiële stabiliteit).",
+        vereist_besluit: false,
+        geschatte_dagen: 14,
+        checklist: [
+          {
+            volgorde: 1,
+            label: "DD-vragenlijst volledig ingevuld door leverancier",
+            bewijs_vereist: true,
+          },
+          {
+            volgorde: 2,
+            label: "Materiële wijzigingen sinds vorige review benoemd",
+            bewijs_vereist: false,
+          },
+        ],
+      },
+      {
+        volgorde: 4,
+        naam: "Review-overleg",
+        beschrijving:
+          "Face-to-face overleg met de leverancier waarin bevindingen worden besproken en vragen geadresseerd.",
+        vereist_besluit: false,
+        geschatte_dagen: 14,
+        checklist: [
+          {
+            volgorde: 1,
+            label: "Overleg ingepland en gehouden",
+            bewijs_vereist: false,
+          },
+          {
+            volgorde: 2,
+            label: "Verslag van overleg vastgelegd",
+            bewijs_vereist: true,
+          },
+        ],
+      },
+      {
+        volgorde: 5,
+        naam: "Bevindingen en vervolgactie",
+        beschrijving:
+          "Bestuurlijk besluit over continuering, contractuele aanpassing of heroverweging van de uitbesteding.",
+        vereist_besluit: true,
+        geschatte_dagen: 18,
+        checklist: [
+          {
+            volgorde: 1,
+            label: "Bevindingenrapport afgerond",
+            bewijs_vereist: true,
+          },
+          {
+            volgorde: 2,
+            label: "Vervolgactie geformuleerd (continueren / aanpassen / heroverweging)",
+            bewijs_vereist: true,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    code: "incident_dnb",
+    naam: "Incident-meldplicht DNB",
+    korte_omschrijving:
+      "Tijdkritisch traject bij een incident met mogelijke meldplicht — triage, melding binnen termijn, analyse, herstel.",
+    geschat_aantal_dagen: 45,
+    stappen: [
+      {
+        volgorde: 1,
+        naam: "Incident geconstateerd en geregistreerd",
+        beschrijving:
+          "Eerste vastlegging van wat er is gebeurd, wanneer, en welke deelnemers/processen geraakt zijn.",
+        vereist_besluit: false,
+        geschatte_dagen: 1,
+        checklist: [
+          {
+            volgorde: 1,
+            label: "Incidentbeschrijving compleet (wat / wanneer / waar / impact)",
+            bewijs_vereist: true,
+          },
+          {
+            volgorde: 2,
+            label: "Risk officer geïnformeerd",
+            bewijs_vereist: false,
+          },
+        ],
+      },
+      {
+        volgorde: 2,
+        naam: "Triage meldplicht",
+        beschrijving:
+          "Bepaal of het incident onder de DNB-meldplicht valt. Tijdkritisch: meeste meldplichten lopen binnen 24-72 uur.",
+        vereist_besluit: true,
+        geschatte_dagen: 1,
+        checklist: [
+          {
+            volgorde: 1,
+            label: "Toetsing tegen meldplicht-criteria uitgevoerd",
+            bewijs_vereist: true,
+          },
+          {
+            volgorde: 2,
+            label: "Conclusie meldplicht ja/nee gemotiveerd",
+            bewijs_vereist: true,
+          },
+        ],
+      },
+      {
+        volgorde: 3,
+        naam: "Melding bij DNB",
+        beschrijving:
+          "Indien meldplichtig: melding doen via DNB-portaal binnen wettelijke termijn. Bevestiging van DNB bewaren.",
+        vereist_besluit: false,
+        geschatte_dagen: 1,
+        checklist: [
+          {
+            volgorde: 1,
+            label: "Melding ingediend bij DNB",
+            bewijs_vereist: true,
+          },
+          {
+            volgorde: 2,
+            label: "Bevestiging van DNB ontvangen en gearchiveerd",
+            bewijs_vereist: true,
+          },
+        ],
+      },
+      {
+        volgorde: 4,
+        naam: "Interne analyse (root cause)",
+        beschrijving:
+          "Onderzoek de onderliggende oorzaak. Betrek uitvoerder en/of vermogensbeheerder waar relevant.",
+        vereist_besluit: false,
+        geschatte_dagen: 14,
+        checklist: [
+          {
+            volgorde: 1,
+            label: "Root cause-analyse uitgevoerd",
+            bewijs_vereist: true,
+          },
+          {
+            volgorde: 2,
+            label: "Impact op deelnemers gekwantificeerd",
+            bewijs_vereist: true,
+          },
+        ],
+      },
+      {
+        volgorde: 5,
+        naam: "Herstelmaatregelen",
+        beschrijving:
+          "Implementeer korte- en lange-termijn herstelmaatregelen die voorkomen dat het incident zich herhaalt.",
+        vereist_besluit: false,
+        geschatte_dagen: 21,
+        checklist: [
+          {
+            volgorde: 1,
+            label: "Korte-termijn maatregelen geïmplementeerd",
+            bewijs_vereist: true,
+          },
+          {
+            volgorde: 2,
+            label: "Lange-termijn maatregelen vastgesteld of in uitvoering",
+            bewijs_vereist: true,
+          },
+        ],
+      },
+      {
+        volgorde: 6,
+        naam: "Lessons learned en afsluiting",
+        beschrijving:
+          "Vastleggen wat dit incident heeft geleerd voor toekomstige risicobeheersing. Evt. melding van afsluiting bij DNB.",
+        vereist_besluit: false,
+        geschatte_dagen: 7,
+        checklist: [
+          {
+            volgorde: 1,
+            label: "Lessons learned schriftelijk vastgelegd",
+            bewijs_vereist: true,
+          },
+          {
+            volgorde: 2,
+            label: "Risico-update doorgevoerd in risicomatrix",
+            bewijs_vereist: false,
+          },
+          {
+            volgorde: 3,
+            label: "Afsluiting gemeld bij DNB (indien van toepassing)",
+            bewijs_vereist: false,
+          },
+        ],
+      },
+    ],
+  },
+  {
     code: "beleidswijziging",
     naam: "Beleidswijziging",
     korte_omschrijving:

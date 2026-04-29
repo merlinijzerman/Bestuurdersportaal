@@ -63,6 +63,22 @@ export interface Besluit {
   vastgelegd_door_naam: string | null;
 }
 
+export interface KomendeVergadering {
+  id: string;
+  titel: string;
+  datum: string;
+  locatie: string | null;
+}
+
+export interface GekoppeldAgendapunt {
+  id: string;
+  titel: string;
+  procedure_stap_id: string;
+  vergadering_id: string;
+  vergadering_titel: string;
+  vergadering_datum: string;
+}
+
 interface LogEvent {
   id: string;
   event_type: string;
@@ -135,27 +151,40 @@ export default async function ProcedureDetailPage({
   if (!procRaw) notFound();
   const procedure = procRaw as ProcedureDetail;
 
-  const [stappenRes, eigenarenRes, logRes, besluitenRes] = await Promise.all([
-    supabase
-      .from("procedure_stappen")
-      .select("*")
-      .eq("procedure_id", id)
-      .order("volgorde", { ascending: true }),
-    supabase
-      .from("procedure_eigenaars")
-      .select("gebruiker_naam")
-      .eq("procedure_id", id),
-    supabase
-      .from("procedure_log")
-      .select("id, event_type, actor_naam, payload, tijdstip")
-      .eq("procedure_id", id)
-      .order("tijdstip", { ascending: false }),
-    supabase
-      .from("procedure_besluiten")
-      .select("*")
-      .eq("procedure_id", id)
-      .order("datum", { ascending: false }),
-  ]);
+  const { data: profiel } = await supabase
+    .from("profielen")
+    .select("fonds_id")
+    .eq("id", user.id)
+    .single();
+
+  const [stappenRes, eigenarenRes, logRes, besluitenRes, vergaderingenRes] =
+    await Promise.all([
+      supabase
+        .from("procedure_stappen")
+        .select("*")
+        .eq("procedure_id", id)
+        .order("volgorde", { ascending: true }),
+      supabase
+        .from("procedure_eigenaars")
+        .select("gebruiker_naam")
+        .eq("procedure_id", id),
+      supabase
+        .from("procedure_log")
+        .select("id, event_type, actor_naam, payload, tijdstip")
+        .eq("procedure_id", id)
+        .order("tijdstip", { ascending: false }),
+      supabase
+        .from("procedure_besluiten")
+        .select("*")
+        .eq("procedure_id", id)
+        .order("datum", { ascending: false }),
+      supabase
+        .from("vergaderingen")
+        .select("id, titel, datum, locatie")
+        .eq("fonds_id", profiel?.fonds_id || "")
+        .gte("datum", new Date().toISOString())
+        .order("datum", { ascending: true }),
+    ]);
 
   const stappen = (stappenRes.data || []) as Stap[];
   const eigenaren = (eigenarenRes.data || []).map(
@@ -163,6 +192,8 @@ export default async function ProcedureDetailPage({
   );
   const log = (logRes.data || []) as LogEvent[];
   const besluiten = (besluitenRes.data || []) as Besluit[];
+  const komendeVergaderingen = (vergaderingenRes.data ||
+    []) as KomendeVergadering[];
 
   // Checklist en bewijs voor alle stappen ophalen (één call elk)
   const stapIds = stappen.map((s) => s.id);
@@ -184,6 +215,37 @@ export default async function ProcedureDetailPage({
   ]);
   const checklist = (checklistRes.data || []) as ChecklistItem[];
   const bewijs = (bewijsRes.data || []) as Bewijs[];
+
+  // Gekoppelde agendapunten ophalen (per stap), met vergadering-info erbij
+  const gekoppeldeAgendapunten: GekoppeldAgendapunt[] = [];
+  if (stapIds.length > 0) {
+    const { data: koppelingen } = await supabase
+      .from("agendapunten")
+      .select("id, titel, procedure_stap_id, vergadering_id, vergaderingen(titel, datum)")
+      .in("procedure_stap_id", stapIds);
+    for (const a of (koppelingen || []) as Array<{
+      id: string;
+      titel: string;
+      procedure_stap_id: string;
+      vergadering_id: string;
+      vergaderingen:
+        | { titel: string; datum: string }
+        | { titel: string; datum: string }[]
+        | null;
+    }>) {
+      const v = Array.isArray(a.vergaderingen)
+        ? a.vergaderingen[0]
+        : a.vergaderingen;
+      gekoppeldeAgendapunten.push({
+        id: a.id,
+        titel: a.titel,
+        procedure_stap_id: a.procedure_stap_id,
+        vergadering_id: a.vergadering_id,
+        vergadering_titel: v?.titel ?? "Vergadering",
+        vergadering_datum: v?.datum ?? "",
+      });
+    }
+  }
 
   const actieveStap = stappen.find((s) => s.status === "actief");
   const afgerondAantal = stappen.filter((s) => s.status === "afgerond").length;
@@ -417,6 +479,10 @@ export default async function ProcedureDetailPage({
               besluit={
                 besluiten.find((b) => b.stap_id === actieveStap.id) ?? null
               }
+              komendeVergaderingen={komendeVergaderingen}
+              gekoppeldeAgendapunten={gekoppeldeAgendapunten.filter(
+                (a) => a.procedure_stap_id === actieveStap.id
+              )}
             />
           ) : procedure.status === "afgerond" ? (
             <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-5">

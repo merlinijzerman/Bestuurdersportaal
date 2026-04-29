@@ -1,12 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type {
   Stap,
   ChecklistItem,
   Bewijs,
   Besluit,
+  KomendeVergadering,
+  GekoppeldAgendapunt,
 } from "../[id]/page";
 
 interface Props {
@@ -15,6 +18,8 @@ interface Props {
   checklist: ChecklistItem[];
   bewijs: Bewijs[];
   besluit: Besluit | null;
+  komendeVergaderingen: KomendeVergadering[];
+  gekoppeldeAgendapunten: GekoppeldAgendapunt[];
 }
 
 function formatDatumKort(d: string) {
@@ -31,6 +36,8 @@ export default function ActieveStapPaneel({
   checklist: initieelChecklist,
   bewijs: initieelBewijs,
   besluit,
+  komendeVergaderingen,
+  gekoppeldeAgendapunten,
 }: Props) {
   const router = useRouter();
   const [checklist, setChecklist] = useState<ChecklistItem[]>(initieelChecklist);
@@ -44,6 +51,9 @@ export default function ActieveStapPaneel({
   const [besluitDatum, setBesluitDatum] = useState(
     new Date().toISOString().slice(0, 10)
   );
+  const [vergaderingForm, setVergaderingForm] = useState(false);
+  const [vergaderingKeuze, setVergaderingKeuze] = useState<string>("");
+  const [conceptHint, setConceptHint] = useState<string | null>(null);
   const [bezig, setBezig] = useState<string | null>(null);
   const [fout, setFout] = useState<string | null>(null);
 
@@ -161,6 +171,74 @@ export default function ActieveStapPaneel({
     }
   }
 
+  async function vergaderingKoppelen(e: React.FormEvent) {
+    e.preventDefault();
+    setFout(null);
+    if (!vergaderingKeuze) {
+      setFout("Kies een vergadering.");
+      return;
+    }
+    setBezig("vergadering");
+    try {
+      const res = await fetch(
+        `/api/procedures/${procedureId}/stappen/${stap.id}/agendapunt`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ vergadering_id: vergaderingKeuze }),
+        }
+      );
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Koppelen mislukt");
+      }
+      setVergaderingKeuze("");
+      setVergaderingForm(false);
+      router.refresh();
+    } catch (err: unknown) {
+      setFout(err instanceof Error ? err.message : "Koppelen mislukt");
+    } finally {
+      setBezig(null);
+    }
+  }
+
+  async function besluitConceptOphalen() {
+    setFout(null);
+    setConceptHint(null);
+    setBezig("concept");
+    try {
+      const res = await fetch(
+        `/api/procedures/${procedureId}/stappen/${stap.id}/besluit-concept`,
+        { method: "POST" }
+      );
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Concept ophalen mislukt");
+      }
+      const data = (await res.json()) as {
+        formulering: string;
+        motivering: string;
+        onvoldoende_context: boolean;
+      };
+      if (data.onvoldoende_context) {
+        setConceptHint(
+          "De AI vond te weinig context om een gefundeerd concept op te stellen — vul eerst de checklist en bewijsstukken aan."
+        );
+      } else {
+        setBesluitForm(true);
+        setBesluitFormulering(data.formulering);
+        setBesluitMotivering(data.motivering);
+        setConceptHint(
+          "AI-concept ingevuld — review en pas aan voor je vastlegt."
+        );
+      }
+    } catch (err: unknown) {
+      setFout(err instanceof Error ? err.message : "Concept ophalen mislukt");
+    } finally {
+      setBezig(null);
+    }
+  }
+
   async function stapVoltooien() {
     setFout(null);
     setBezig("voltooien");
@@ -261,6 +339,111 @@ export default function ActieveStapPaneel({
         )}
       </div>
 
+      {/* Vergaderingen */}
+      <div className="mt-6">
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-xs uppercase tracking-wide text-gray-500 font-semibold">
+            Vergaderingen
+          </div>
+          {!vergaderingForm && komendeVergaderingen.length > 0 && (
+            <button
+              onClick={() => setVergaderingForm(true)}
+              className="text-xs text-[#0F2744] hover:underline"
+            >
+              + Voeg toe aan vergadering
+            </button>
+          )}
+        </div>
+
+        {gekoppeldeAgendapunten.length === 0 && !vergaderingForm && (
+          <div className="text-sm text-gray-400 italic">
+            Deze stap staat (nog) niet op een vergader-agenda.
+          </div>
+        )}
+
+        {gekoppeldeAgendapunten.length > 0 && (
+          <div className="space-y-2 mb-3">
+            {gekoppeldeAgendapunten.map((a) => (
+              <Link
+                key={a.id}
+                href={`/vergaderingen/${a.vergadering_id}`}
+                className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:border-[#C9A84C]"
+              >
+                <div className="w-9 h-10 bg-blue-50 text-blue-700 rounded flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+                  AGENDA
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-gray-900 truncate">
+                    {a.titel}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-0.5">
+                    {a.vergadering_titel}
+                    {a.vergadering_datum
+                      ? ` · ${formatDatumKort(a.vergadering_datum)}`
+                      : ""}
+                  </div>
+                </div>
+                <span className="text-xs text-[#0F2744] hover:underline">
+                  Open →
+                </span>
+              </Link>
+            ))}
+          </div>
+        )}
+
+        {vergaderingForm && (
+          <form
+            onSubmit={vergaderingKoppelen}
+            className="p-3 border border-gray-200 rounded-lg bg-gray-50 space-y-2"
+          >
+            <select
+              value={vergaderingKeuze}
+              onChange={(e) => setVergaderingKeuze(e.target.value)}
+              className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm focus:border-[#C9A84C] outline-none bg-white"
+            >
+              <option value="">— Kies een komende vergadering —</option>
+              {komendeVergaderingen.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.titel} — {formatDatumKort(v.datum)}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500">
+              Er wordt automatisch een agendapunt aangemaakt met de stap-titel
+              als onderwerp en categorie {stap.vereist_besluit ? "Besluitvorming" : "Oordeelsvorming"}.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setVergaderingForm(false);
+                  setVergaderingKeuze("");
+                }}
+                className="text-xs px-3 py-1.5 border border-gray-200 rounded hover:border-[#0F2744]"
+              >
+                Annuleren
+              </button>
+              <button
+                type="submit"
+                disabled={bezig === "vergadering"}
+                className="text-xs px-3 py-1.5 bg-[#0F2744] text-white rounded hover:bg-[#1a3858] disabled:opacity-50"
+              >
+                {bezig === "vergadering" ? "Bezig…" : "Koppelen"}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {komendeVergaderingen.length === 0 && (
+          <p className="text-xs text-gray-500 mt-1">
+            Geen komende vergaderingen om aan te koppelen.{" "}
+            <Link href="/vergaderingen" className="text-[#0F2744] underline">
+              Plan eerst een vergadering →
+            </Link>
+          </p>
+        )}
+      </div>
+
       {/* Bewijs */}
       <div className="mt-6">
         <div className="flex items-center justify-between mb-3">
@@ -356,15 +539,32 @@ export default function ActieveStapPaneel({
             <div className="text-xs uppercase tracking-wide text-gray-500 font-semibold">
               Besluit
             </div>
-            {!besluit && !besluitForm && (
-              <button
-                onClick={() => setBesluitForm(true)}
-                className="text-xs text-[#0F2744] hover:underline"
-              >
-                + Besluit vastleggen
-              </button>
+            {!besluit && (
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={besluitConceptOphalen}
+                  disabled={bezig === "concept"}
+                  className="text-xs text-[#C9A84C] hover:underline disabled:opacity-50 inline-flex items-center gap-1"
+                  title="Laat Claude een conceptformulering opstellen op basis van bewijs en eerdere stappen"
+                >
+                  {bezig === "concept" ? "Concept aan het schrijven…" : "↗ Concept met AI"}
+                </button>
+                {!besluitForm && (
+                  <button
+                    onClick={() => setBesluitForm(true)}
+                    className="text-xs text-[#0F2744] hover:underline"
+                  >
+                    + Besluit vastleggen
+                  </button>
+                )}
+              </div>
             )}
           </div>
+          {conceptHint && (
+            <div className="mb-3 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              {conceptHint}
+            </div>
+          )}
           {besluit ? (
             <div className="border border-emerald-200 bg-emerald-50/30 rounded-lg p-3">
               <div className="text-sm text-gray-900 font-medium">
