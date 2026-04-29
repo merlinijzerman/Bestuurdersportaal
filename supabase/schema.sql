@@ -17,7 +17,7 @@ create table if not exists public.fondsen (
 
 -- Voeg een standaard fonds in
 insert into public.fondsen (naam, slug) values
-  ('Pensioenfonds Metaal & Techniek', 'pmt')
+  ('Stichting Pensioenfonds Horizon', 'horizon')
 on conflict (slug) do nothing;
 
 -- ── 2. Gebruikers-profielen ────────────────────────────────
@@ -124,7 +124,7 @@ create table if not exists public.agendapunten (
   volgorde          int not null default 0,
   titel             text not null,
   beschrijving      text,
-  categorie         text check (categorie in ('beeldvorming','discussie','besluitvorming','informatie')) default 'informatie',
+  categorie         text check (categorie in ('beeldvorming','oordeelsvorming','besluitvorming','informatie')) default 'informatie',
   tijdsduur_minuten int,
   verantwoordelijke text,
   aangemaakt        timestamptz default now()

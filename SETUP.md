@@ -56,7 +56,7 @@
 NEXT_PUBLIC_SUPABASE_URL=https://jouw-project-id.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGci...  (de anon sleutel van Supabase)
 ANTHROPIC_API_KEY=sk-ant-...               (jouw Anthropic sleutel)
-NEXT_PUBLIC_FONDS_NAAM=Pensioenfonds Metaal & Techniek
+NEXT_PUBLIC_FONDS_NAAM=Stichting Pensioenfonds Horizon
 ```
 
 ---

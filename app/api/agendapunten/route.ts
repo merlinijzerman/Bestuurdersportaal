@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase-server";
 
-const TOEGESTANE_CATEGORIEEN = ["beeldvorming", "discussie", "besluitvorming", "informatie"];
+const TOEGESTANE_CATEGORIEEN = ["beeldvorming", "oordeelsvorming", "besluitvorming", "informatie"];
 
 export async function POST(req: NextRequest) {
   try {

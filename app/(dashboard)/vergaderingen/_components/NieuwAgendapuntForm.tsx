@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 
 const CATEGORIEEN: { value: string; label: string }[] = [
   { value: "beeldvorming", label: "Beeldvorming" },
-  { value: "discussie", label: "Discussie" },
+  { value: "oordeelsvorming", label: "Oordeelsvorming" },
   { value: "besluitvorming", label: "Besluitvorming" },
   { value: "informatie", label: "Informatie" },
 ];

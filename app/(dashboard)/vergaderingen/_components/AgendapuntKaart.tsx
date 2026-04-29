@@ -24,7 +24,7 @@ export interface Agendapunt {
   volgorde: number;
   titel: string;
   beschrijving: string | null;
-  categorie: "beeldvorming" | "discussie" | "besluitvorming" | "informatie";
+  categorie: "beeldvorming" | "oordeelsvorming" | "besluitvorming" | "informatie";
   tijdsduur_minuten: number | null;
   verantwoordelijke: string | null;
   stukken: Stuk[];
@@ -33,7 +33,7 @@ export interface Agendapunt {
 
 const CATEGORIE_BADGE: Record<Agendapunt["categorie"], { bg: string; text: string; label: string }> = {
   beeldvorming: { bg: "bg-amber-50", text: "text-amber-800", label: "Beeldvorming" },
-  discussie: { bg: "bg-purple-50", text: "text-purple-800", label: "Discussie" },
+  oordeelsvorming: { bg: "bg-purple-50", text: "text-purple-800", label: "Oordeelsvorming" },
   besluitvorming: { bg: "bg-blue-50", text: "text-blue-800", label: "Besluitvorming" },
   informatie: { bg: "bg-gray-100", text: "text-gray-700", label: "Informatie" },
 };
