@@ -7,6 +7,7 @@ import AgendapuntKaart, {
   type Stuk,
   type Inbreng,
 } from "../_components/AgendapuntKaart";
+import type { Voorbereiding } from "../_components/VoorbereidingsBlok";
 
 interface Vergadering {
   id: string;
@@ -66,7 +67,11 @@ export default async function VergaderingDetailPage({
 
   const agendapuntIds = (agendapuntenRaw || []).map((a: { id: string }) => a.id);
 
-  const [{ data: stukkenRaw }, { data: inbrengRaw }] = await Promise.all([
+  const [
+    { data: stukkenRaw },
+    { data: inbrengRaw },
+    { data: voorbereidingenRaw },
+  ] = await Promise.all([
     agendapuntIds.length > 0
       ? supabase
           .from("documenten")
@@ -80,10 +85,18 @@ export default async function VergaderingDetailPage({
           .in("agendapunt_id", agendapuntIds)
           .order("aangemaakt", { ascending: true })
       : Promise.resolve({ data: [] }),
+    agendapuntIds.length > 0
+      ? supabase
+          .from("voorbereidingen")
+          .select("*")
+          .eq("gebruiker_id", user.id)
+          .in("agendapunt_id", agendapuntIds)
+      : Promise.resolve({ data: [] }),
   ]);
 
   const stukken = (stukkenRaw || []) as (Stuk & { agendapunt_id: string })[];
   const inbreng = (inbrengRaw || []) as (Inbreng & { agendapunt_id: string })[];
+  const voorbereidingen = (voorbereidingenRaw || []) as Voorbereiding[];
 
   const agendapunten: Agendapunt[] = (agendapuntenRaw || []).map(
     (a: Omit<Agendapunt, "stukken" | "inbreng">) => ({
@@ -150,6 +163,9 @@ export default async function VergaderingDetailPage({
               nummer={idx + 1}
               punt={a}
               huidigeGebruikerId={user.id}
+              voorbereiding={
+                voorbereidingen.find((v) => v.agendapunt_id === a.id) || null
+              }
             />
           ))}
         </div>

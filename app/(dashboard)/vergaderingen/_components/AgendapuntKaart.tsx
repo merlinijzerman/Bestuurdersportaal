@@ -1,6 +1,9 @@
 "use client";
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
+import VoorbereidingsBlok, {
+  type Voorbereiding,
+} from "./VoorbereidingsBlok";
 
 export interface Stuk {
   id: string;
@@ -101,10 +104,12 @@ export default function AgendapuntKaart({
   nummer,
   punt,
   huidigeGebruikerId,
+  voorbereiding,
 }: {
   nummer: number;
   punt: Agendapunt;
   huidigeGebruikerId: string;
+  voorbereiding: Voorbereiding | null;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(true);
@@ -245,6 +250,17 @@ export default function AgendapuntKaart({
               {uploadFout && <div className="text-xs text-red-600">{uploadFout}</div>}
             </div>
           </div>
+
+          {/* Mijn voorbereiding (privé) */}
+          <VoorbereidingsBlok
+            agendapuntId={punt.id}
+            initieel={voorbereiding}
+            onVulInbreng={(tekst) =>
+              setInbrengTekst(
+                inbrengTekst ? `${inbrengTekst}\n\n${tekst}` : tekst
+              )
+            }
+          />
 
           {/* Inbreng */}
           <div>
