@@ -1,0 +1,1426 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Klantbeeld — Bestuurdersportaal mockup</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          navy: { DEFAULT: '#0F2744', 700: '#1a3858', 800: '#0F2744', 900: '#0a1c34' },
+          gold: { DEFAULT: '#C9A84C', 600: '#b89539', 700: '#a37f29' },
+        },
+        fontFamily: {
+          sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        },
+      }
+    }
+  }
+</script>
+<style>
+  body { font-family: Inter, system-ui, -apple-system, sans-serif; }
+  [hidden] { display: none !important; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+  .tab-active { color: #0F2744; border-bottom-color: #C9A84C; font-weight: 600; }
+  .subtab-active { background: #0F2744; color: #fff; }
+  .pill { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 500; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 2px; display: inline-block; margin-right: 6px; vertical-align: middle; }
+  .cohort-col { transition: opacity 0.1s ease; }
+  .cohort-col:hover { opacity: 0.85; }
+  .cohort-col.selected rect.bar-stand { stroke: #0F2744; stroke-width: 1.5; }
+  input[type="range"] { accent-color: #0F2744; }
+</style>
+</head>
+<body class="bg-gray-50 text-gray-900 antialiased">
+
+<div class="min-h-screen flex">
+
+  <!-- ───── Sidebar ───── -->
+  <aside class="w-64 bg-navy text-white flex flex-col flex-shrink-0">
+    <div class="px-6 py-6 border-b border-white/10">
+      <div class="text-[11px] uppercase tracking-widest text-gold/80">Bestuurdersportaal</div>
+      <div class="text-base font-semibold mt-1 leading-tight">Stichting Pensioenfonds<br/>Horizon</div>
+    </div>
+    <nav class="flex-1 py-4 text-sm">
+      <a href="#" class="flex items-center gap-3 px-6 py-2.5 text-white/70 hover:text-white hover:bg-white/5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 12l9-9 9 9M5 10v10h14V10"/></svg>
+        Home
+      </a>
+      <a href="#" class="flex items-center gap-3 px-6 py-2.5 text-white/70 hover:text-white hover:bg-white/5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 13h4v8H3zm7-10h4v18h-4zm7 6h4v12h-4z"/></svg>
+        Stuurinformatie
+      </a>
+      <a href="#" class="flex items-center gap-3 px-6 py-2.5 text-white/70 hover:text-white hover:bg-white/5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.4 8.4 0 01-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.4 8.4 0 013.8-.9h.5a8.5 8.5 0 018 8v.5z"/></svg>
+        AI Assistent
+      </a>
+      <a href="#" class="flex items-center gap-3 px-6 py-2.5 text-white/70 hover:text-white hover:bg-white/5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+        Vergaderingen
+      </a>
+      <a href="#" class="flex items-center gap-3 px-6 py-2.5 text-white/70 hover:text-white hover:bg-white/5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 016.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+        Bibliotheek
+      </a>
+      <a href="#" class="flex items-center gap-3 px-6 py-2.5 text-white/70 hover:text-white hover:bg-white/5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 11h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.5L19 9.5V18a2 2 0 01-2 2z"/></svg>
+        Procedures
+      </a>
+      <a href="#" class="flex items-center gap-3 px-6 py-2.5 text-white/70 hover:text-white hover:bg-white/5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg>
+        Risicomatrix
+      </a>
+      <a href="#ontwikkeling" data-route="klantbeeld" class="flex items-center gap-3 px-6 py-2.5 bg-white/10 text-white border-l-2 border-gold">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2M16 3.13a4 4 0 010 7.75M21 21v-2a4 4 0 00-3-3.85"/></svg>
+        Klantbeeld
+        <span class="ml-auto text-[10px] bg-gold text-navy font-semibold px-1.5 py-0.5 rounded">Nieuw</span>
+      </a>
+      <a href="#" class="flex items-center gap-3 px-6 py-2.5 text-white/70 hover:text-white hover:bg-white/5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        Governance log
+      </a>
+      <a href="#" class="flex items-center gap-3 px-6 py-2.5 text-white/70 hover:text-white hover:bg-white/5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>
+        Notulen
+      </a>
+    </nav>
+    <div class="p-4 border-t border-white/10 flex items-center gap-3">
+      <div class="w-8 h-8 rounded-full bg-gold text-navy flex items-center justify-center text-xs font-semibold">MI</div>
+      <div class="text-xs leading-tight">
+        <div class="font-medium">Merlin Ijzerman</div>
+        <div class="text-white/60">Bestuurder</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ───── Main ───── -->
+  <main class="flex-1 flex flex-col min-w-0">
+    <header class="bg-white border-b border-gray-200 px-8 py-4 flex items-center justify-between">
+      <nav class="text-sm text-gray-500" id="breadcrumb">
+        <a href="#ontwikkeling" class="hover:text-navy">Klantbeeld</a>
+      </nav>
+      <div class="text-xs text-gray-500">Demo / mockup · alle cijfers zijn fictief</div>
+    </header>
+
+    <!-- Page header met hoofdtabs Deelnemers / Werkgevers -->
+    <div class="bg-white border-b border-gray-200 px-8 pt-6">
+      <div class="max-w-7xl mx-auto w-full">
+        <h1 class="text-2xl font-semibold text-navy">Klantbeeld</h1>
+        <p class="text-sm text-gray-600 mt-1 max-w-3xl">Inzicht in hoe het fonds zijn klanten — deelnemers en werkgevers — bedient. Voor deelnemers ligt de focus op de ontwikkeling van het persoonlijk pensioenvermogen onder Wtp; voor werkgevers op aansluiting, premie-afdracht en service-niveau.</p>
+
+        <!-- Hoofdtabs -->
+        <div class="flex gap-6 mt-6 border-b border-gray-200 -mb-px" id="hoofdtabs">
+          <a href="#ontwikkeling" data-tab="deelnemers" class="px-1 pb-3 border-b-2 border-transparent text-sm text-gray-600 hover:text-navy">
+            Deelnemers
+            <span class="ml-1 text-[11px] text-gray-400 font-normal">52.140</span>
+          </a>
+          <a href="#werkgevers" data-tab="werkgevers" class="px-1 pb-3 border-b-2 border-transparent text-sm text-gray-600 hover:text-navy">
+            Werkgevers
+            <span class="ml-1 text-[11px] text-gray-400 font-normal">387</span>
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex-1 overflow-auto" id="content-area">
+
+      <!-- ═══════════════════════════════════════ -->
+      <!-- DEELNEMERS — sub-tabs                   -->
+      <!-- ═══════════════════════════════════════ -->
+      <div id="deelnemers-shell" class="px-8 py-6 max-w-7xl mx-auto w-full">
+
+        <!-- Sub-tabs voor Deelnemers -->
+        <div class="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit text-sm" id="subtabs">
+          <a href="#ontwikkeling" data-subtab="ontwikkeling" class="px-4 py-2 rounded-md text-gray-700 hover:text-navy">Maand-ontwikkeling</a>
+          <a href="#cohorten" data-subtab="cohorten" class="px-4 py-2 rounded-md text-gray-700 hover:text-navy">Cohorten naast elkaar</a>
+        </div>
+
+        <!-- ─── Sub-tab 1: Maand-ontwikkeling ─── -->
+        <section id="screen-ontwikkeling" class="mt-6">
+
+          <!-- Cohortkiezer -->
+          <div class="bg-white rounded-xl border border-gray-200 p-6 mb-6">
+            <div class="flex items-start justify-between gap-6">
+              <div class="flex-1">
+                <div class="text-xs uppercase tracking-wider text-gray-500 mb-1">Geselecteerd cohort</div>
+                <div class="flex items-baseline gap-2">
+                  <span class="text-3xl font-semibold text-navy" id="cohort-label">45-jarigen</span>
+                  <span class="text-sm text-gray-500">geboren rond <span id="cohort-geboortejaar">1981</span></span>
+                </div>
+                <div class="mt-3 flex items-center gap-3">
+                  <input type="range" min="18" max="68" value="45" id="cohort-slider" class="flex-1 max-w-md" />
+                  <div class="flex gap-1 text-xs">
+                    <button class="preset-cohort px-2 py-1 rounded bg-gray-100 hover:bg-gray-200" data-age="25">25</button>
+                    <button class="preset-cohort px-2 py-1 rounded bg-gray-100 hover:bg-gray-200" data-age="35">35</button>
+                    <button class="preset-cohort px-2 py-1 rounded bg-gray-100 hover:bg-gray-200" data-age="45">45</button>
+                    <button class="preset-cohort px-2 py-1 rounded bg-gray-100 hover:bg-gray-200" data-age="55">55</button>
+                    <button class="preset-cohort px-2 py-1 rounded bg-gray-100 hover:bg-gray-200" data-age="65">65</button>
+                  </div>
+                </div>
+              </div>
+              <div class="grid grid-cols-3 gap-x-6 gap-y-3 text-sm flex-shrink-0">
+                <div>
+                  <div class="text-xs text-gray-500">Aantal deelnemers</div>
+                  <div class="font-semibold text-navy" id="m-aantal">—</div>
+                </div>
+                <div>
+                  <div class="text-xs text-gray-500">Mix actief / slapend / uitkerend</div>
+                  <div class="font-semibold text-navy" id="m-mix">—</div>
+                </div>
+                <div>
+                  <div class="text-xs text-gray-500">Gemiddeld vermogen nu</div>
+                  <div class="font-semibold text-navy" id="m-vermogen">—</div>
+                </div>
+                <div>
+                  <div class="text-xs text-gray-500">Lifecycle-mix bescherming/over</div>
+                  <div class="font-semibold text-navy" id="m-mix-life">—</div>
+                </div>
+                <div>
+                  <div class="text-xs text-gray-500">Maandelijkse premie</div>
+                  <div class="font-semibold text-navy" id="m-premie">—</div>
+                </div>
+                <div>
+                  <div class="text-xs text-gray-500">Tot. groei sinds invaren</div>
+                  <div class="font-semibold text-navy" id="m-groei">—</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Hoofdgrafiek: trajectory + decompositie -->
+          <div class="bg-white rounded-xl border border-gray-200 p-6 mb-6">
+            <div class="flex items-start justify-between mb-4">
+              <div>
+                <h2 class="text-lg font-semibold text-navy">Ontwikkeling persoonlijk pensioenvermogen — laatste 24 maanden</h2>
+                <p class="text-sm text-gray-600 mt-1">Boven: vermogen-traject (€). Onder: bouwstenen per maand. Klik een maand om de waterval te bekijken.</p>
+              </div>
+              <div class="text-xs text-gray-500 text-right">
+                <div>mei 2024 — apr 2026</div>
+                <div class="mt-0.5">Inclusief invaar-moment 1 jan 2026</div>
+              </div>
+            </div>
+
+            <div id="chart-trajectory"></div>
+            <div id="chart-monthly-delta" class="mt-2"></div>
+
+            <!-- Legenda -->
+            <div class="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-xs text-gray-700">
+              <span><span class="legend-dot" style="background:#94a3b8"></span>Begin-saldo / invaarkapitaal</span>
+              <span><span class="legend-dot" style="background:#16a34a"></span>Premie-instroom</span>
+              <span><span class="legend-dot" style="background:#06b6d4"></span>Toevoegingen (overdracht in / FVP)</span>
+              <span><span class="legend-dot" style="background:#ef4444"></span>Onttrekkingen (overdracht uit)</span>
+              <span><span class="legend-dot" style="background:#0ea5e9"></span>Kasrendement</span>
+              <span><span class="legend-dot" style="background:#C9A84C"></span>Beschermingsrendement RTS</span>
+              <span><span class="legend-dot" style="background:#7c3aed"></span>Overrendement</span>
+              <span><span class="legend-dot" style="background:#14b8a6"></span>Beschermingsrendement micro-langleven</span>
+            </div>
+          </div>
+
+          <!-- Drie panelen onder elkaar -->
+          <div class="grid grid-cols-3 gap-6">
+            <!-- Maand-detail (waterval) -->
+            <div class="col-span-2 bg-white rounded-xl border border-gray-200 p-6">
+              <div class="flex items-baseline justify-between">
+                <h3 class="text-sm font-semibold text-navy uppercase tracking-wider">Maand-detail</h3>
+                <div class="text-xs text-gray-500" id="waterval-maand-label">apr 2026</div>
+              </div>
+              <div id="chart-waterval" class="mt-4"></div>
+            </div>
+
+            <!-- Wat valt op -->
+            <div class="bg-white rounded-xl border border-gray-200 p-6">
+              <h3 class="text-sm font-semibold text-navy uppercase tracking-wider mb-3">Wat valt op</h3>
+              <div id="observaties" class="space-y-3 text-sm text-gray-700"></div>
+            </div>
+          </div>
+
+        </section>
+
+        <!-- ─── Sub-tab 2: Cohorten naast elkaar ─── -->
+        <section id="screen-cohorten" class="mt-6" hidden>
+
+          <div class="bg-white rounded-xl border border-gray-200 p-6 mb-6">
+            <div class="flex items-start justify-between mb-4">
+              <div>
+                <h2 class="text-lg font-semibold text-navy">Cohorten naast elkaar — 18 t/m 68 jaar</h2>
+                <p class="text-sm text-gray-600 mt-1">Huidig gemiddeld vermogen per leeftijdscohort, met spreidingsbanden en de verwachte stand (neutraal scenario) als gele referentiepunt. Afwijking versus verwacht stuurt de kleur: <span class="text-emerald-700">groen ≤2,5%</span>, <span class="text-amber-700">amber 2,5–5%</span>, <span class="text-red-700">rood >5%</span>. Projectie naar pensioenleeftijd en pure afwijkings-views komen in een latere iteratie.</p>
+              </div>
+            </div>
+
+            <div id="chart-cohorten"></div>
+
+            <div class="mt-3 flex flex-wrap gap-x-6 gap-y-2 text-xs text-gray-700">
+              <span><span class="legend-dot" style="background:#0F2744"></span>Huidig vermogen (gem.)</span>
+              <span><span class="legend-dot" style="background:#cbd5e1; height: 2px; width: 14px;"></span>Spreiding p10 — p90</span>
+              <span><span class="legend-dot" style="background:#C9A84C; border-radius: 50%;"></span>Verwachte stand bij neutraal scenario</span>
+              <span class="text-gray-400">·</span>
+              <span class="text-emerald-700">Op koers (≤2,5%)</span>
+              <span class="text-amber-700">Aandacht (2,5–5%)</span>
+              <span class="text-red-700">Achter (>5%)</span>
+            </div>
+          </div>
+
+          <!-- Tabel met details per cohort -->
+          <div class="bg-white rounded-xl border border-gray-200">
+            <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+              <h3 class="text-sm font-semibold text-navy">Cohorten met aandacht</h3>
+              <div class="text-xs text-gray-500">Cohorten met afwijking >5% versus doelpensioen</div>
+            </div>
+            <div class="divide-y divide-gray-100" id="cohorten-tabel">
+              <!-- Auto-gegenereerd -->
+            </div>
+          </div>
+
+        </section>
+
+      </div>
+
+      <!-- ═══════════════════════════════════════ -->
+      <!-- WERKGEVERS — totalen-dashboard          -->
+      <!-- ═══════════════════════════════════════ -->
+      <div id="werkgevers-shell" class="px-8 py-6 max-w-7xl mx-auto w-full" hidden>
+
+        <!-- KPI-strook -->
+        <div class="grid grid-cols-4 gap-4 mb-6">
+          <div class="bg-white rounded-xl border border-gray-200 p-5">
+            <div class="text-xs uppercase tracking-wider text-gray-500">Aangesloten werkgevers</div>
+            <div class="mt-1 flex items-baseline gap-2">
+              <span class="text-2xl font-semibold text-navy" id="kpi-werkgevers">—</span>
+              <span class="text-xs text-emerald-700" id="kpi-werkgevers-trend">—</span>
+            </div>
+            <div class="text-[11px] text-gray-500 mt-1">12-maands mutatie</div>
+          </div>
+          <div class="bg-white rounded-xl border border-gray-200 p-5">
+            <div class="text-xs uppercase tracking-wider text-gray-500">Actieve werknemers</div>
+            <div class="mt-1 flex items-baseline gap-2">
+              <span class="text-2xl font-semibold text-navy" id="kpi-werknemers">—</span>
+              <span class="text-xs text-emerald-700" id="kpi-werknemers-trend">—</span>
+            </div>
+            <div class="text-[11px] text-gray-500 mt-1">via aangesloten werkgevers</div>
+          </div>
+          <div class="bg-white rounded-xl border border-gray-200 p-5">
+            <div class="text-xs uppercase tracking-wider text-gray-500">Gem. pensioengevend salaris</div>
+            <div class="mt-1 flex items-baseline gap-2">
+              <span class="text-2xl font-semibold text-navy" id="kpi-salaris">—</span>
+              <span class="text-xs text-emerald-700" id="kpi-salaris-trend">—</span>
+            </div>
+            <div class="text-[11px] text-gray-500 mt-1">12-maands ontwikkeling (CAO)</div>
+          </div>
+          <div class="bg-white rounded-xl border border-gray-200 p-5">
+            <div class="text-xs uppercase tracking-wider text-gray-500">Totale premie / mnd</div>
+            <div class="mt-1 flex items-baseline gap-2">
+              <span class="text-2xl font-semibold text-navy" id="kpi-premie">—</span>
+              <span class="text-xs text-emerald-700" id="kpi-premie-trend">—</span>
+            </div>
+            <div class="text-[11px] text-gray-500 mt-1">werkgevers- + werknemersdeel</div>
+          </div>
+        </div>
+
+        <!-- Drie trend-grafieken -->
+        <div class="grid grid-cols-3 gap-4 mb-6">
+          <div class="bg-white rounded-xl border border-gray-200 p-5">
+            <div class="flex items-baseline justify-between mb-3">
+              <h3 class="text-sm font-semibold text-navy uppercase tracking-wider">Pensioengrondslag totaal</h3>
+              <span class="text-[11px] text-gray-500">€/maand</span>
+            </div>
+            <div id="chart-pg"></div>
+            <div class="mt-2 text-xs text-gray-600 leading-snug" id="chart-pg-onderschrift">—</div>
+          </div>
+          <div class="bg-white rounded-xl border border-gray-200 p-5">
+            <div class="flex items-baseline justify-between mb-3">
+              <h3 class="text-sm font-semibold text-navy uppercase tracking-wider">Premie totaal</h3>
+              <span class="text-[11px] text-gray-500">werkgever / werknemer</span>
+            </div>
+            <div id="chart-premie"></div>
+            <div class="mt-2 flex gap-3 text-xs text-gray-700">
+              <span><span class="legend-dot" style="background:#0F2744"></span>Werkgeversdeel (2/3)</span>
+              <span><span class="legend-dot" style="background:#C9A84C"></span>Werknemersdeel (1/3)</span>
+            </div>
+          </div>
+          <div class="bg-white rounded-xl border border-gray-200 p-5">
+            <div class="flex items-baseline justify-between mb-3">
+              <h3 class="text-sm font-semibold text-navy uppercase tracking-wider">Gem. salarisontwikkeling</h3>
+              <span class="text-[11px] text-gray-500">indexcijfer (mei '24 = 100)</span>
+            </div>
+            <div id="chart-salaris"></div>
+            <div class="mt-2 text-xs text-gray-600 leading-snug" id="chart-salaris-onderschrift">—</div>
+          </div>
+        </div>
+
+        <!-- Werkgever-grootte segmentatie -->
+        <div class="bg-white rounded-xl border border-gray-200 p-6 mb-6">
+          <div class="flex items-start justify-between mb-4">
+            <div>
+              <h2 class="text-lg font-semibold text-navy">Werkgever-grootte — concentratie</h2>
+              <p class="text-sm text-gray-600 mt-1 max-w-3xl">Verdeling van aangesloten werkgevers over drie groottesegmenten. Bestuurlijk relevant: hoeveel premie-instroom is afhankelijk van een klein aantal grote werkgevers? Een hoog aandeel premie bij weinig werkgevers betekent concentratierisico.</p>
+            </div>
+          </div>
+
+          <div id="segmentatie-tabel" class="space-y-4"></div>
+        </div>
+
+        <!-- Premie-inning-discipline -->
+        <div class="bg-white rounded-xl border border-gray-200 p-6">
+          <div class="flex items-start justify-between mb-4">
+            <div>
+              <h2 class="text-lg font-semibold text-navy">Premie-inning-discipline</h2>
+              <p class="text-sm text-gray-600 mt-1">Aandeel van premie-afdrachten dat op tijd, te laat of in achterstand binnenkomt — per maand. KPI voor service-niveau van de uitvoerder. Norm op-tijd: ≥90%.</p>
+            </div>
+          </div>
+
+          <!-- Per-maand stacked 100% bars -->
+          <div id="chart-inning"></div>
+          <div class="mt-2 mb-5 flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-700">
+            <span><span class="legend-dot" style="background:#10b981"></span>Op tijd (≤14 dagen)</span>
+            <span><span class="legend-dot" style="background:#f59e0b"></span>Te laat (14–30 dagen)</span>
+            <span><span class="legend-dot" style="background:#ef4444"></span>Achterstand (>30 dagen / dispuut)</span>
+            <span class="text-gray-400">·</span>
+            <span><span class="legend-dot" style="background:#0F2744; height: 2px; width: 14px;"></span>Norm op-tijd 90%</span>
+          </div>
+
+          <!-- 12-maands gemiddelde aggregaat -->
+          <div class="border-t border-gray-100 pt-4">
+            <div class="flex items-baseline justify-between mb-2">
+              <h3 class="text-sm font-semibold text-navy uppercase tracking-wider">12-maands gemiddelde</h3>
+              <span class="text-[11px] text-gray-500">mei 2025 — apr 2026</span>
+            </div>
+            <div id="inning-strook" class="mb-3"></div>
+            <div id="inning-detail" class="grid grid-cols-3 gap-4 text-sm"></div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════════
+   1. DEMO-DATA GENERATIE
+   ═══════════════════════════════════════════════════════════════════════ */
+
+// Vaste pseudo-random voor reproduceerbaarheid
+function mulberry32(seed) {
+  return function() {
+    let t = seed += 0x6D2B79F5;
+    t = Math.imul(t ^ t >>> 15, t | 1);
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  }
+}
+
+// 24 maanden — markt-scenario (mei 2024 t/m apr 2026)
+// Invaar-moment is 1 jan 2026 (maand 21 in deze reeks). We modelleren periode VANAF invaar
+// als de actieve Wtp-fase, en de 20 maanden ervoor als pre-Wtp aanloop met dummy-data.
+// Voor het prototype: alle 24 maanden tonen we als "post-invaar" om de Wtp-mechaniek te
+// kunnen demonstreren — in productie zou de invaarstreep zichtbaar in de grafiek staan.
+const MAANDLABELS = [
+  '2024-05','2024-06','2024-07','2024-08','2024-09','2024-10','2024-11','2024-12',
+  '2025-01','2025-02','2025-03','2025-04','2025-05','2025-06','2025-07','2025-08',
+  '2025-09','2025-10','2025-11','2025-12','2026-01','2026-02','2026-03','2026-04'
+];
+const MAANDLABEL_KORT = MAANDLABELS.map(s => {
+  const [j,m] = s.split('-');
+  const namen = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
+  return namen[parseInt(m)-1] + " '" + j.slice(2);
+});
+
+// Markt-scenario per maand. Cijfers in % per maand.
+// kas: gemiddelde geldmarktrente (gelijk voor alle cohorten)
+// renteMutatie: verandering lange rente (bps), bepaalt teken beschermingsrendement RTS
+// aandelen: aandelenrendement (drijft overrendement, gewogen met cohort-weight)
+// langleven: micro-langleven shock
+const MARKT = [
+  { kas: 0.30, renteMut: -10, aandelen:  1.20, langleven:  0.02 },
+  { kas: 0.30, renteMut:  15, aandelen: -0.85, langleven:  0.00 },
+  { kas: 0.31, renteMut:  -5, aandelen:  2.10, langleven: -0.01 },
+  { kas: 0.31, renteMut:  -8, aandelen: -1.40, langleven:  0.01 },
+  { kas: 0.30, renteMut:  20, aandelen:  0.40, langleven:  0.00 },
+  { kas: 0.29, renteMut:  -3, aandelen:  1.55, langleven:  0.03 },
+  { kas: 0.28, renteMut: -12, aandelen:  0.95, langleven: -0.02 },
+  { kas: 0.27, renteMut:  -6, aandelen:  1.80, langleven:  0.01 },
+  { kas: 0.26, renteMut:  25, aandelen: -2.20, langleven:  0.00 }, // jan 2025: rente-spike
+  { kas: 0.26, renteMut:   8, aandelen: -0.65, langleven:  0.00 },
+  { kas: 0.25, renteMut:  -5, aandelen:  1.10, langleven:  0.02 },
+  { kas: 0.25, renteMut: -15, aandelen:  2.45, langleven:  0.01 },
+  { kas: 0.25, renteMut:  -8, aandelen:  0.85, langleven: -0.01 },
+  { kas: 0.24, renteMut:   3, aandelen:  1.35, langleven:  0.00 },
+  { kas: 0.24, renteMut:  10, aandelen: -0.95, langleven:  0.02 },
+  { kas: 0.23, renteMut: -22, aandelen:  3.10, langleven:  0.01 }, // aug 2025: rentedaling
+  { kas: 0.23, renteMut:  -7, aandelen:  0.60, langleven:  0.00 },
+  { kas: 0.23, renteMut:   5, aandelen: -1.85, langleven: -0.02 },
+  { kas: 0.22, renteMut: -10, aandelen:  1.95, langleven:  0.01 },
+  { kas: 0.22, renteMut:  -3, aandelen:  0.45, langleven:  0.00 },
+  { kas: 0.22, renteMut: -18, aandelen:  2.80, langleven:  0.02 }, // jan 2026: invaar + gunstig
+  { kas: 0.21, renteMut:  12, aandelen: -1.40, langleven:  0.00 },
+  { kas: 0.21, renteMut:  -5, aandelen:  1.65, langleven:  0.01 },
+  { kas: 0.21, renteMut:   8, aandelen: -0.55, langleven:  0.00 }
+];
+
+// Cohort-config per leeftijd (18 t/m 68)
+function cohortConfig(age) {
+  // Lifecycle: jonge cohorten 100% overrendement, oude 80% bescherming
+  const t = Math.max(0, Math.min(1, (age - 18) / 50));
+  const overWeight = 1 - t * 0.80;        // 1.00 → 0.20
+  const beschermWeight = 1 - overWeight;  // 0.00 → 0.80
+  // Duration van bescherming: hoger bij oudere cohorten (langer LDI-overlay)
+  const duration = 8 + t * 12; // 8 → 20
+
+  // Populatie-distributie: peak rond 45-55
+  const popPeak = age < 25 ? 600
+                : age < 35 ? 950
+                : age < 45 ? 1350
+                : age < 55 ? 1450
+                : age < 60 ? 1300
+                : age < 65 ? 950
+                : 700;
+  const aantal = popPeak + Math.round(mulberry32(age*7+1)() * 200 - 100);
+
+  // Mix actief/slapend/uitkerend
+  let actiefP, slapendP, uitkerendP;
+  if (age < 22) { actiefP = 0.85; slapendP = 0.15; uitkerendP = 0; }
+  else if (age < 60) {
+    const slapend = 0.20 + (age - 22) * 0.005;
+    actiefP = 1 - slapend; slapendP = slapend; uitkerendP = 0;
+  } else if (age < 67) {
+    const transitieFrac = (age - 60) / 7;
+    actiefP = (1 - transitieFrac) * 0.65; slapendP = 0.35; uitkerendP = transitieFrac * 0.65 + (1-transitieFrac) * 0;
+  } else {
+    actiefP = 0; slapendP = 0.05; uitkerendP = 0.95;
+  }
+
+  // Salaris-/premie-aanname
+  const startWerkLeeftijd = 25;
+  const dienstjaren = Math.max(0, Math.min(age - startWerkLeeftijd, 42));
+  const salaris = 30000 + Math.min(age - startWerkLeeftijd, 30) * 1400;
+  const maandPremie = age >= 67 ? 0 : Math.round(salaris * 0.30 * 0.20 / 12); // ~150-300/mnd
+  // Voor uitkerende fractie: drawdown
+  const maandUitkering = age >= 65 ? Math.round(salaris * 0.65 / 12) : 0;
+
+  // Invaar-kapitaal (1 jan 2026)
+  const invaarBasis = dienstjaren * 5500 + Math.max(0, age - 25) * 2200;
+  const invaarKapitaal = age < 22 ? Math.round(invaarBasis * 0.5) : Math.round(invaarBasis);
+
+  // Per-cohort uitvoeringskwaliteit op overrendement: simuleert verschil in
+  // implementatie-effectiviteit (timing, kosten, hedge-precisie). Tussen 0.78 en 1.22.
+  // Wordt alleen in werkelijke reeks toegepast, niet in neutrale verwachting.
+  const uitvoeringMult = 0.78 + mulberry32(age * 23 + 11)() * 0.44;
+
+  // Doelkapitaal — twee waarden:
+  //   doelOp67 = einddoel op pensioenleeftijd (€350K basis, geschaald met salaris)
+  //   doelNu   = wat het saldo NU zou moeten zijn als het cohort op koers is naar dat doel
+  //              (= doelOp67 minus toekomstige premie-inleg, gedisconteerd met 4% reëel)
+  const salarisFactor = Math.max(0.7, Math.min(1.4, salaris / 55000));
+  const doelOp67 = Math.round(350000 * salarisFactor);
+  let doelNu;
+  if (age >= 67) {
+    // Drawdown sinds 67: ca €18K/jaar consumptie netto van groei
+    doelNu = Math.round(doelOp67 - (age - 67) * 18000);
+  } else {
+    const jarenTot67 = 67 - age;
+    const verwachtePremieInleg = maandPremie * 12 * jarenTot67 * 1.10;
+    doelNu = Math.round((doelOp67 - verwachtePremieInleg) / Math.pow(1.04, jarenTot67));
+  }
+
+  return {
+    age, overWeight, beschermWeight, duration, uitvoeringMult,
+    aantal, actiefP, slapendP, uitkerendP,
+    salaris, maandPremie, maandUitkering,
+    invaarKapitaal,
+    doelKapitaal: Math.max(doelNu, 3000),  // backwards-compat: doel-NU
+    doelOp67,
+    cashflows: genereerCashflows(age)
+  };
+}
+
+// Neutraal scenario voor "verwachte" reeks: gemiddelde markt zonder pieken/dips.
+// Wordt gebruikt om doelNu te berekenen — dat is "wat het cohort had moeten halen".
+const VERWACHT_MARKT = Array(24).fill(null).map(() => ({
+  kas: 0.25,         // 3% / jaar
+  renteMut: 0,       // geen rentemutaties
+  aandelen: 0.65,    // ~8% / jaar
+  langleven: 0.005
+}));
+
+// Cashflow-restposten per cohort: waardeoverdracht in (toevoeging) en uit (onttrekking).
+// Deterministisch per leeftijd. Bedragen zijn cohort-gemiddelden — dus iemand individueel
+// die een waardeoverdracht doet drijft het cohort-gemiddelde een beetje omhoog/omlaag.
+function genereerCashflows(age) {
+  const seed = mulberry32(age * 47 + 13);
+  const events = []; // { idx, toevoeging, onttrekking }
+  // 1-3 cashflow-events per cohort over 24 maanden (minder bij ouderen)
+  const nEvents = age >= 65 ? 0 + Math.floor(seed()*2) : 1 + Math.floor(seed()*3);
+  const gebruikteIndices = new Set();
+  for (let k = 0; k < nEvents; k++) {
+    let idx; let attempts = 0;
+    do { idx = Math.floor(seed() * 24); attempts++; } while (gebruikteIndices.has(idx) && attempts < 10);
+    gebruikteIndices.add(idx);
+    // Jongere cohorten: vaker toevoeging (overdracht binnen, FVP). Ouderen: meestal onttrekking.
+    const isToevoeging = seed() < (age < 45 ? 0.62 : age < 60 ? 0.45 : 0.30);
+    // Bedrag per cohort-gemiddeld: één deelnemer in het cohort doet de overdracht,
+    // gespreid over de hele cohort-populatie levert dat een gemiddelde van €60-€400 op.
+    const bedrag = Math.round(60 + seed() * 380);
+    events.push({
+      idx,
+      toevoeging: isToevoeging ? bedrag : 0,
+      onttrekking: !isToevoeging ? bedrag : 0
+    });
+  }
+  return events;
+}
+
+// Bereken maandreeks voor een cohort
+function maandReeks(cohort, scenarioOverride) {
+  const scenario = scenarioOverride || MARKT;
+  // Cohort-specifieke uitvoering alleen toepassen op werkelijk scenario, niet op neutraal verwacht
+  const uitvoering = scenarioOverride ? 1.0 : (cohort.uitvoeringMult || 1.0);
+  // Cashflows alleen op werkelijke reeks, niet op neutrale verwachting
+  const cashflowMap = {};
+  if (!scenarioOverride) {
+    (cohort.cashflows || []).forEach(e => {
+      cashflowMap[e.idx] = { toev: (cashflowMap[e.idx]?.toev || 0) + e.toevoeging,
+                             ontt: (cashflowMap[e.idx]?.ontt || 0) + e.onttrekking };
+    });
+  }
+  const reeks = [];
+  let saldo = cohort.invaarKapitaal;
+
+  // Voor de demo simuleren we 24 maanden volgens Wtp-mechaniek
+  for (let i = 0; i < 24; i++) {
+    const m = scenario[i];
+    const begin = saldo;
+
+    // Effectieve premie (gewogen voor actief-fractie)
+    const premie = cohort.maandPremie * cohort.actiefP;
+    // Cashflow-restposten
+    const toevoeging = cashflowMap[i]?.toev || 0;
+    const onttrekking = cashflowMap[i]?.ontt || 0;
+
+    // Rendementen (% omgezet naar bedragen op begin-saldo)
+    const kas = begin * (m.kas / 100);
+    // Beschermingsrendement RTS: -duration × renteMut(bps→%) × beschermWeight
+    const beschermRTS = begin * (-cohort.duration * (m.renteMut / 10000)) * cohort.beschermWeight;
+    // Overrendement: aandelen × overWeight, minus kas-component (overrendement is excess), keer uitvoering
+    const overRend = begin * ((m.aandelen / 100) - (m.kas / 100)) * cohort.overWeight * uitvoering;
+    // Micro-langleven
+    const langleven = begin * (m.langleven / 100);
+
+    const eind = begin + premie + toevoeging - onttrekking + kas + beschermRTS + overRend + langleven;
+
+    reeks.push({
+      idx: i,
+      maand: MAANDLABELS[i],
+      maandKort: MAANDLABEL_KORT[i],
+      begin, premie, toevoeging, onttrekking, kas, beschermRTS, overRend, langleven, eind
+    });
+    saldo = eind;
+  }
+  return reeks;
+}
+
+// Spreiding rond gemiddeld vermogen (p10/p50/p90) — afgeleid van dienstjaren-spread
+function spreiding(cohort, eindSaldo) {
+  const sigma = cohort.age < 30 ? 0.45 : cohort.age < 50 ? 0.35 : 0.28;
+  return {
+    p10: Math.round(eindSaldo * (1 - sigma)),
+    p50: Math.round(eindSaldo),
+    p90: Math.round(eindSaldo * (1 + sigma * 1.1))
+  };
+}
+
+// Genereer alle cohorten
+const COHORTEN = [];
+for (let age = 18; age <= 68; age++) {
+  const c = cohortConfig(age);
+  c.reeks = maandReeks(c);
+  c.eindSaldo = c.reeks[c.reeks.length - 1].eind;
+  c.spreiding = spreiding(c, c.eindSaldo);
+  // Verwachte reeks (neutrale markt) → doel-nu = wat het cohort had moeten halen na 24 maanden
+  const verwachteReeks = maandReeks(c, VERWACHT_MARKT);
+  c.doelKapitaal = Math.round(verwachteReeks[verwachteReeks.length - 1].eind);
+  // Projectie naar pensioen-leeftijd (eenvoudig: 4% per jaar reëel + premies met salarisgroei)
+  const jarenTot67 = Math.max(0, 67 - age);
+  c.projectie = Math.round(c.eindSaldo * Math.pow(1.04, jarenTot67) + c.maandPremie * 12 * jarenTot67 * 1.10);
+  // Afwijking: huidig versus verwacht — toont 24-maands prestatie vs neutrale verwachting.
+  c.afwijking = (c.eindSaldo - c.doelKapitaal) / c.doelKapitaal;
+  COHORTEN.push(c);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   2. UTILITIES
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const fmtEur = (v) => {
+  const sign = v < 0 ? '−' : '';
+  const a = Math.abs(Math.round(v));
+  if (a >= 1e6) return sign + '€' + (a/1e6).toFixed(2).replace('.',',') + ' mln';
+  if (a >= 1e3) return sign + '€' + a.toLocaleString('nl-NL');
+  return sign + '€' + a;
+};
+const fmtEurShort = (v) => {
+  const sign = v < 0 ? '−' : '';
+  const a = Math.abs(Math.round(v));
+  if (a >= 1e6) return sign + '€' + (a/1e6).toFixed(1).replace('.',',') + 'M';
+  if (a >= 1e3) return sign + '€' + (a/1e3).toFixed(0) + 'k';
+  return sign + '€' + a;
+};
+const fmtPct = (p, dec=1) => (p*100).toFixed(dec).replace('.',',') + '%';
+const fmtPctSigned = (p, dec=1) => (p>=0?'+':'') + fmtPct(p, dec);
+
+/* ═══════════════════════════════════════════════════════════════════════
+   3. RENDER: TAB 1 — MAAND-ONTWIKKELING
+   ═══════════════════════════════════════════════════════════════════════ */
+
+let huidigeAge = 45;
+let huidigeWatervalMaand = 23; // laatste maand
+
+function renderOntwikkeling() {
+  const c = COHORTEN.find(x => x.age === huidigeAge);
+
+  // Stats blok
+  document.getElementById('cohort-label').textContent = c.age + '-jarigen';
+  document.getElementById('cohort-geboortejaar').textContent = (2026 - c.age);
+  document.getElementById('m-aantal').textContent = c.aantal.toLocaleString('nl-NL');
+  document.getElementById('m-mix').textContent =
+    Math.round(c.actiefP*100) + '% / ' +
+    Math.round(c.slapendP*100) + '% / ' +
+    Math.round(c.uitkerendP*100) + '%';
+  document.getElementById('m-vermogen').textContent = fmtEur(c.eindSaldo);
+  document.getElementById('m-mix-life').textContent =
+    Math.round(c.beschermWeight*100) + '% / ' + Math.round(c.overWeight*100) + '%';
+  document.getElementById('m-premie').textContent =
+    c.maandPremie === 0 ? '— (geen actieven)'
+    : fmtEur(c.maandPremie) + ' / mnd';
+  const groei = (c.eindSaldo - c.invaarKapitaal) / c.invaarKapitaal;
+  document.getElementById('m-groei').textContent = fmtPctSigned(groei) + ' (' + fmtEur(c.eindSaldo - c.invaarKapitaal) + ')';
+
+  renderTrajectory(c);
+  renderMonthlyDelta(c);
+  renderWaterval(c, huidigeWatervalMaand);
+  renderObservaties(c);
+}
+
+function renderTrajectory(c) {
+  const w = 1100, h = 220;
+  const pad = { l: 70, r: 30, t: 15, b: 25 };
+  const innerW = w - pad.l - pad.r;
+  const innerH = h - pad.t - pad.b;
+  const reeks = c.reeks;
+
+  const values = reeks.map(r => r.eind);
+  const minV = Math.min(c.invaarKapitaal, ...values) * 0.95;
+  const maxV = Math.max(c.invaarKapitaal, ...values) * 1.05;
+  const xS = i => pad.l + (i / (reeks.length - 1)) * innerW;
+  const yS = v => pad.t + (1 - (v - minV) / (maxV - minV)) * innerH;
+
+  // Y-grid (4 lijnen)
+  const yTicks = [];
+  for (let k = 0; k <= 4; k++) {
+    const v = minV + (maxV - minV) * (k/4);
+    yTicks.push({ v, y: yS(v) });
+  }
+
+  // Lijn-pad
+  const linePath = reeks.map((r, i) => `${i===0?'M':'L'} ${xS(i)} ${yS(r.eind)}`).join(' ');
+  // Area-pad (onder lijn)
+  const areaPath = linePath + ` L ${xS(reeks.length-1)} ${yS(minV)} L ${xS(0)} ${yS(minV)} Z`;
+
+  // Invaar-kapitaal als referentie-lijn
+  const invaarY = yS(c.invaarKapitaal);
+
+  let svg = `<svg viewBox="0 0 ${w} ${h}" class="w-full" style="max-height:220px;">`;
+
+  // Grid
+  yTicks.forEach(t => {
+    svg += `<line x1="${pad.l}" y1="${t.y}" x2="${w-pad.r}" y2="${t.y}" stroke="#f1f5f9" stroke-width="1"/>`;
+    svg += `<text x="${pad.l-8}" y="${t.y+4}" text-anchor="end" font-size="10" fill="#94a3b8">${fmtEurShort(t.v)}</text>`;
+  });
+
+  // X-labels (elke 3 maanden)
+  reeks.forEach((r, i) => {
+    if (i % 3 === 0 || i === reeks.length-1) {
+      svg += `<text x="${xS(i)}" y="${h-8}" text-anchor="middle" font-size="10" fill="#94a3b8">${r.maandKort}</text>`;
+    }
+  });
+
+  // Invaar-referentie-lijn
+  svg += `<line x1="${pad.l}" y1="${invaarY}" x2="${w-pad.r}" y2="${invaarY}" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3 3"/>`;
+  svg += `<text x="${w-pad.r-4}" y="${invaarY-4}" text-anchor="end" font-size="10" fill="#64748b">invaar-kapitaal · ${fmtEurShort(c.invaarKapitaal)}</text>`;
+
+  // Area + line
+  svg += `<path d="${areaPath}" fill="#0F2744" fill-opacity="0.06"/>`;
+  svg += `<path d="${linePath}" fill="none" stroke="#0F2744" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>`;
+
+  // Punten
+  reeks.forEach((r, i) => {
+    const r1 = i === huidigeWatervalMaand ? 5 : 3;
+    const fill = i === huidigeWatervalMaand ? '#C9A84C' : '#0F2744';
+    svg += `<circle cx="${xS(i)}" cy="${yS(r.eind)}" r="${r1}" fill="${fill}" data-maand-idx="${i}" class="traj-dot" style="cursor:pointer;"/>`;
+  });
+
+  // Eind-label
+  const last = reeks[reeks.length-1];
+  svg += `<text x="${xS(reeks.length-1) + 8}" y="${yS(last.eind)+4}" font-size="11" fill="#0F2744" font-weight="600">${fmtEur(last.eind)}</text>`;
+
+  svg += `</svg>`;
+  document.getElementById('chart-trajectory').innerHTML = svg;
+
+  // Click handlers
+  document.querySelectorAll('.traj-dot').forEach(el => {
+    el.addEventListener('click', () => {
+      huidigeWatervalMaand = parseInt(el.dataset.maandIdx);
+      renderTrajectory(c);
+      renderMonthlyDelta(c);
+      renderWaterval(c, huidigeWatervalMaand);
+    });
+  });
+}
+
+function renderMonthlyDelta(c) {
+  const w = 1100, h = 160;
+  const pad = { l: 70, r: 30, t: 10, b: 25 };
+  const innerW = w - pad.l - pad.r;
+  const innerH = h - pad.t - pad.b;
+  const reeks = c.reeks;
+
+  // Per maand: positieve componenten boven 0, negatieve onder 0
+  const components = [
+    { key: 'premie',      kleur: '#16a34a', label: 'Premie',           sign: +1 },
+    { key: 'toevoeging',  kleur: '#06b6d4', label: 'Toevoegingen',     sign: +1 },
+    { key: 'kas',         kleur: '#0ea5e9', label: 'Kasrendement',     sign: +1 },
+    { key: 'beschermRTS', kleur: '#C9A84C', label: 'Bescherming RTS',  sign: +1 },
+    { key: 'overRend',    kleur: '#7c3aed', label: 'Overrendement',    sign: +1 },
+    { key: 'langleven',   kleur: '#14b8a6', label: 'Micro-langleven',  sign: +1 },
+    { key: 'onttrekking', kleur: '#ef4444', label: 'Onttrekkingen',    sign: -1 }
+  ];
+  // Bepaal y-schaal: max +/- van som-positief en som-negatief
+  let maxPos = 0, maxNeg = 0;
+  reeks.forEach(r => {
+    let pos = 0, neg = 0;
+    components.forEach(comp => {
+      const v = r[comp.key] * comp.sign;
+      if (v > 0) pos += v; else neg += v;
+    });
+    if (pos > maxPos) maxPos = pos;
+    if (neg < maxNeg) maxNeg = neg;
+  });
+  const range = Math.max(maxPos, -maxNeg) * 1.15;
+  const yS = v => pad.t + innerH/2 - (v / range) * (innerH/2);
+
+  const barW = innerW / reeks.length * 0.7;
+  const xS = i => pad.l + (i + 0.5) * (innerW / reeks.length);
+
+  let svg = `<svg viewBox="0 0 ${w} ${h}" class="w-full" style="max-height:160px;">`;
+
+  // Mid-lijn
+  svg += `<line x1="${pad.l}" y1="${yS(0)}" x2="${w-pad.r}" y2="${yS(0)}" stroke="#cbd5e1" stroke-width="1"/>`;
+
+  // Y-labels
+  [-range, -range/2, range/2, range].forEach(v => {
+    svg += `<text x="${pad.l-8}" y="${yS(v)+4}" text-anchor="end" font-size="9" fill="#94a3b8">${fmtEurShort(v)}</text>`;
+  });
+
+  // Bars
+  reeks.forEach((r, i) => {
+    let posOffset = 0, negOffset = 0;
+    components.forEach(comp => {
+      const v = r[comp.key] * comp.sign;
+      if (v > 0) {
+        const yTop = yS(posOffset + v);
+        const yBot = yS(posOffset);
+        svg += `<rect x="${xS(i) - barW/2}" y="${yTop}" width="${barW}" height="${yBot - yTop}" fill="${comp.kleur}"/>`;
+        posOffset += v;
+      } else if (v < 0) {
+        const yTop = yS(negOffset);
+        const yBot = yS(negOffset + v);
+        svg += `<rect x="${xS(i) - barW/2}" y="${yTop}" width="${barW}" height="${yBot - yTop}" fill="${comp.kleur}"/>`;
+        negOffset += v;
+      }
+    });
+    // Highlight selected
+    if (i === huidigeWatervalMaand) {
+      svg += `<rect x="${xS(i) - barW/2 - 2}" y="${pad.t}" width="${barW + 4}" height="${innerH}" fill="none" stroke="#C9A84C" stroke-width="1.5" rx="2"/>`;
+    }
+  });
+
+  svg += `</svg>`;
+  document.getElementById('chart-monthly-delta').innerHTML = svg;
+}
+
+function renderWaterval(c, maandIdx) {
+  const r = c.reeks[maandIdx];
+  document.getElementById('waterval-maand-label').textContent = r.maandKort.replace("'","20") ;
+
+  const stappen = [
+    { label: 'Begin-saldo', v: r.begin, type: 'base' },
+    { label: 'Premie',                v: r.premie,      type: 'add' },
+    { label: 'Toevoegingen',          v: r.toevoeging,  type: 'add' },
+    { label: 'Onttrekkingen',         v: -r.onttrekking, type: 'sub' },
+    { label: 'Kasrendement',          v: r.kas,         type: r.kas >= 0 ? 'add' : 'sub' },
+    { label: 'Bescherming RTS',       v: r.beschermRTS, type: r.beschermRTS >= 0 ? 'add' : 'sub' },
+    { label: 'Overrendement',         v: r.overRend,    type: r.overRend >= 0 ? 'add' : 'sub' },
+    { label: 'Bescherming langleven', v: r.langleven,   type: r.langleven >= 0 ? 'add' : 'sub' },
+    { label: 'Eind-saldo', v: r.eind, type: 'total' }
+  ].filter(s => s.label === 'Begin-saldo' || s.label === 'Eind-saldo' || Math.abs(s.v) > 0.5);
+
+  // Bouw als horizontale balken — relatief tot begin-saldo
+  const max = Math.max(r.begin, r.eind);
+  const min = Math.min(0, ...stappen.map(s => s.type === 'sub' ? s.v : 0));
+
+  const html = stappen.map(s => {
+    if (s.type === 'base' || s.type === 'total') {
+      const pct = (s.v / max) * 100;
+      return `
+        <div class="flex items-center gap-3">
+          <div class="w-40 text-xs text-gray-700 font-medium">${s.label}</div>
+          <div class="flex-1 relative h-7 bg-gray-100 rounded overflow-hidden">
+            <div class="absolute left-0 top-0 bottom-0 ${s.type==='total'?'bg-navy':'bg-gray-400'}" style="width:${pct}%"></div>
+            <div class="absolute inset-0 flex items-center px-2 text-xs ${s.type==='total'?'text-white font-semibold':'text-white'}">${fmtEur(s.v)}</div>
+          </div>
+        </div>
+      `;
+    } else {
+      const isSub = s.type === 'sub';
+      const pct = (Math.abs(s.v) / max) * 100;
+      const kleur = isSub ? 'bg-red-500' : 'bg-emerald-500';
+      const teken = isSub ? '−' : '+';
+      return `
+        <div class="flex items-center gap-3">
+          <div class="w-40 text-xs text-gray-700">${s.label}</div>
+          <div class="flex-1 relative h-5 bg-gray-50 rounded overflow-hidden">
+            <div class="absolute left-0 top-0 bottom-0 ${kleur} opacity-80" style="width:${pct}%"></div>
+            <div class="absolute inset-0 flex items-center px-2 text-xs text-gray-800 font-medium">${teken} ${fmtEur(Math.abs(s.v))}</div>
+          </div>
+        </div>
+      `;
+    }
+  }).join('');
+
+  document.getElementById('chart-waterval').innerHTML = `<div class="space-y-2">${html}</div>`;
+}
+
+function renderObservaties(c) {
+  const r = c.reeks;
+  const obs = [];
+
+  // Sterkste maand bescherming RTS
+  const maxRTS = r.reduce((a,b) => Math.abs(b.beschermRTS) > Math.abs(a.beschermRTS) ? b : a);
+  if (Math.abs(maxRTS.beschermRTS) > c.invaarKapitaal * 0.005) {
+    obs.push({
+      kleur: 'bg-amber-50 border-amber-200',
+      titel: `Bescherming RTS sterk in ${maxRTS.maandKort.replace("'","20")}`,
+      tekst: `${fmtEurShort(maxRTS.beschermRTS)} bijdrage door ${maxRTS.beschermRTS > 0 ? 'rentedaling' : 'rentestijging'}. Bij ${Math.round(c.beschermWeight*100)}% beschermingsallocatie en duration ${c.duration.toFixed(1)} jaar voert dit op.`
+    });
+  }
+
+  // Sterkste positieve overrendement
+  const maxOver = r.reduce((a,b) => b.overRend > a.overRend ? b : a);
+  if (maxOver.overRend > c.invaarKapitaal * 0.01) {
+    obs.push({
+      kleur: 'bg-emerald-50 border-emerald-200',
+      titel: `Overrendement piek in ${maxOver.maandKort.replace("'","20")}`,
+      tekst: `${fmtEurShort(maxOver.overRend)} extra rendement bovenop kas. Geldt voor ${Math.round(c.overWeight*100)}% van het vermogen.`
+    });
+  }
+
+  // Slechtste overrendement
+  const minOver = r.reduce((a,b) => b.overRend < a.overRend ? b : a);
+  if (minOver.overRend < -c.invaarKapitaal * 0.01) {
+    obs.push({
+      kleur: 'bg-red-50 border-red-200',
+      titel: `Overrendement-dip in ${minOver.maandKort.replace("'","20")}`,
+      tekst: `${fmtEurShort(minOver.overRend)} verlies. Voor jonge cohorten met hoge over-allocatie raakt dit het hardst.`
+    });
+  }
+
+  // Premie-aandeel vs rendement
+  const totPremie = r.reduce((s, x) => s + x.premie, 0);
+  const totRend = r.reduce((s, x) => s + x.kas + x.beschermRTS + x.overRend + x.langleven, 0);
+  obs.push({
+    kleur: 'bg-gray-50 border-gray-200',
+    titel: `Bouwbron: ${totRend > totPremie ? 'rendement dominant' : totPremie > 0 ? 'premie dominant' : 'alleen rendement'}`,
+    tekst: `24-maands totaal: premie ${fmtEurShort(totPremie)}, rendement netto ${fmtEurShort(totRend)}. ` +
+           (c.age >= 67 ? 'Gepensioneerd: geen actieven meer in dit cohort, vrijwel alleen rendement.'
+            : `Voor dit cohort weegt ${totRend > totPremie ? 'het rendement' : 'de premie'} zwaarder in de groei.`)
+  });
+
+  document.getElementById('observaties').innerHTML = obs.map(o => `
+    <div class="border-l-2 ${o.kleur} pl-3 py-1">
+      <div class="font-medium text-navy">${o.titel}</div>
+      <div class="text-xs text-gray-600 mt-0.5 leading-snug">${o.tekst}</div>
+    </div>
+  `).join('');
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   4. RENDER: TAB 2 — COHORTEN NAAST ELKAAR
+   ═══════════════════════════════════════════════════════════════════════ */
+
+function renderCohortenChart() {
+  const w = 1100, h = 360;
+  const pad = { l: 60, r: 20, t: 30, b: 50 };
+  const innerW = w - pad.l - pad.r;
+  const innerH = h - pad.t - pad.b;
+  const colW = innerW / COHORTEN.length * 0.78;
+
+  let svg = `<svg viewBox="0 0 ${w} ${h}" class="w-full" style="max-height:380px;">`;
+
+  // Bars met spreiding-banden — huidig vermogen-view
+  const maxV = Math.max(...COHORTEN.map(c => Math.max(c.spreiding.p90, c.doelKapitaal, c.eindSaldo))) * 1.05;
+  const yS = v => pad.t + innerH - (v / maxV) * innerH;
+
+  // Y-grid
+  [0, maxV*0.25, maxV*0.5, maxV*0.75, maxV].forEach(t => {
+    svg += `<line x1="${pad.l}" y1="${yS(t)}" x2="${w-pad.r}" y2="${yS(t)}" stroke="#f1f5f9" stroke-width="1"/>`;
+    svg += `<text x="${pad.l-8}" y="${yS(t)+4}" text-anchor="end" font-size="9" fill="#94a3b8">${fmtEurShort(t)}</text>`;
+  });
+
+  COHORTEN.forEach((c, i) => {
+    const x = pad.l + (i + 0.5) * (innerW / COHORTEN.length);
+    const absDev = Math.abs(c.afwijking);
+    const kleur = absDev <= 0.025 ? '#0F2744' : absDev <= 0.05 ? '#b45309' : '#b91c1c';
+
+    // Spreidingsband
+    svg += `<line x1="${x}" y1="${yS(c.spreiding.p10)}" x2="${x}" y2="${yS(c.spreiding.p90)}" stroke="#cbd5e1" stroke-width="${colW*0.4}" stroke-linecap="round" opacity="0.6"/>`;
+    // Bar
+    svg += `<rect class="bar-stand" x="${x - colW/2}" y="${yS(c.eindSaldo)}" width="${colW}" height="${yS(0) - yS(c.eindSaldo)}" fill="${kleur}" class="cohort-col" data-age="${c.age}"/>`;
+    // Verwachte stand-marker
+    svg += `<circle cx="${x}" cy="${yS(c.doelKapitaal)}" r="3" fill="#C9A84C" stroke="white" stroke-width="1"/>`;
+  });
+
+  // X-labels
+  [18, 25, 35, 45, 55, 65, 68].forEach(age => {
+    const i = age - 18;
+    const x = pad.l + (i + 0.5) * (innerW / COHORTEN.length);
+    svg += `<text x="${x}" y="${h-25}" text-anchor="middle" font-size="10" fill="#475569">${age}</text>`;
+  });
+  svg += `<text x="${pad.l + innerW/2}" y="${h-8}" text-anchor="middle" font-size="11" fill="#64748b">Leeftijd</text>`;
+  svg += `<text x="${20}" y="${pad.t-12}" font-size="11" fill="#64748b">Huidig gemiddeld vermogen + verwachte stand (neutraal scenario)</text>`;
+
+  svg += `</svg>`;
+  document.getElementById('chart-cohorten').innerHTML = svg;
+
+  // Tabel met aandacht-cohorten
+  const aandacht = COHORTEN.filter(c => Math.abs(c.afwijking) > 0.025).sort((a,b) => Math.abs(b.afwijking) - Math.abs(a.afwijking));
+  const tabelHtml = aandacht.map(c => {
+    const absDev = Math.abs(c.afwijking);
+    const kleur = absDev <= 0.05 ? 'amber' : 'red';
+    const richting = c.afwijking >= 0 ? 'voor' : 'achter';
+    return `
+      <a href="#ontwikkeling" data-jump-age="${c.age}" class="grid grid-cols-12 gap-4 px-6 py-3 items-center hover:bg-gray-50 text-sm cohort-jump">
+        <div class="col-span-3">
+          <div class="font-medium text-navy">${c.age}-jarigen</div>
+          <div class="text-xs text-gray-500">${c.aantal.toLocaleString('nl-NL')} deelnemers</div>
+        </div>
+        <div class="col-span-3 text-xs text-gray-600">${Math.round(c.actiefP*100)}% actief / ${Math.round(c.slapendP*100)}% slapend / ${Math.round(c.uitkerendP*100)}% uitkerend</div>
+        <div class="col-span-2 text-sm">${fmtEur(c.eindSaldo)}<div class="text-xs text-gray-500">huidig</div></div>
+        <div class="col-span-2 text-sm">${fmtEur(c.doelKapitaal)}<div class="text-xs text-gray-500">verwacht</div></div>
+        <div class="col-span-2"><span class="pill bg-${kleur}-50 text-${kleur}-700">${richting} ${fmtPct(absDev,0)}</span></div>
+      </a>
+    `;
+  }).join('');
+  document.getElementById('cohorten-tabel').innerHTML = tabelHtml || `<div class="px-6 py-8 text-center text-sm text-gray-500">Geen cohorten met afwijking >2,5% — alle cohorten op koers.</div>`;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   5. WERKGEVERS — totalen-dashboard
+   ═══════════════════════════════════════════════════════════════════════ */
+
+// Werkgevers-totalen per maand. Cijfers afgeleid van actieve deelnemerspopulatie
+// uit COHORTEN, met realistische premiepercentages en CAO-ontwikkeling.
+const FRANCHISE = 16500;          // AOW-staffel franchise
+const PREMIEPCT_PG = 0.30;        // 30% van pensioengrondslag
+const WG_DEEL = 2/3;              // werkgeversdeel
+const WN_DEEL = 1/3;              // werknemersdeel
+
+function berekenWerkgeversReeks() {
+  // Aantal actieve werknemers totaal (uit COHORTEN, alleen actief-fractie van leeftijden 18-66)
+  const actiefTotaal = COHORTEN.reduce((s, c) => s + Math.round(c.aantal * c.actiefP), 0);
+  const gemSalaris0 = 48500;       // mei 2024 startpunt
+  const cao = [                    // procentuele CAO-mutaties per maand (kleine drift + grotere stappen)
+    0.001,0.001,0.000,0.001,0.001,0.020,0.001,0.001,0.001,0.001,0.001,0.001,
+    0.001,0.001,0.000,0.001,0.001,0.020,0.001,0.001,0.001,0.025,0.001,0.001
+  ];
+
+  const reeks = [];
+  let salaris = gemSalaris0;
+  let werkgevers0 = 372;
+  for (let i = 0; i < 24; i++) {
+    salaris = salaris * (1 + cao[i]);
+    // werkgever-aantal stijgt licht (netto +1 à 2 per maand met wat ruis)
+    const werkgevers = Math.round(werkgevers0 + i * 0.6 + (mulberry32(i * 7 + 1)() * 4 - 2));
+    // werknemer-aantal beweegt licht mee met conjunctuur
+    const werknemers = Math.round(actiefTotaal * (0.985 + (mulberry32(i * 11 + 5)() * 0.03)));
+    const pgPerWerknemer = salaris - FRANCHISE;
+    const pgTotaalJaar = werknemers * pgPerWerknemer;
+    const pgTotaalMaand = pgTotaalJaar / 12;
+    const premieTotaalMaand = pgTotaalMaand * PREMIEPCT_PG;
+    reeks.push({
+      idx: i,
+      maand: MAANDLABELS[i],
+      maandKort: MAANDLABEL_KORT[i],
+      werkgevers,
+      werknemers,
+      gemSalaris: Math.round(salaris),
+      pgPerWerknemer: Math.round(pgPerWerknemer),
+      pgTotaalJaar: Math.round(pgTotaalJaar),
+      pgTotaalMaand: Math.round(pgTotaalMaand),
+      premieTotaal: Math.round(premieTotaalMaand),
+      premieWg: Math.round(premieTotaalMaand * WG_DEEL),
+      premieWn: Math.round(premieTotaalMaand * WN_DEEL)
+    });
+  }
+  return reeks;
+}
+
+const WERKGEVERS_REEKS = berekenWerkgeversReeks();
+
+// Werkgever-grootte-segmentatie — vaste verdeling, realistisch voor 387 werkgevers
+const WG_SEGMENTEN = (() => {
+  const totaalWerkgevers = WERKGEVERS_REEKS[WERKGEVERS_REEKS.length-1].werkgevers;
+  const totaalWerknemers = WERKGEVERS_REEKS[WERKGEVERS_REEKS.length-1].werknemers;
+  const totaalPremie = WERKGEVERS_REEKS[WERKGEVERS_REEKS.length-1].premieTotaal;
+  return [
+    { naam: 'Klein',  toelichting: '1–25 werknemers', werkgeversAandeel: 0.66, werknemersAandeel: 0.18, premieAandeel: 0.16, kleur: '#94a3b8' },
+    { naam: 'Midden', toelichting: '25–200 werknemers', werkgeversAandeel: 0.27, werknemersAandeel: 0.38, premieAandeel: 0.39, kleur: '#0ea5e9' },
+    { naam: 'Groot',  toelichting: '> 200 werknemers',  werkgeversAandeel: 0.07, werknemersAandeel: 0.44, premieAandeel: 0.45, kleur: '#0F2744' },
+  ].map(s => ({
+    ...s,
+    werkgeversAantal: Math.round(s.werkgeversAandeel * totaalWerkgevers),
+    werknemersAantal: Math.round(s.werknemersAandeel * totaalWerknemers),
+    premieAantal: Math.round(s.premieAandeel * totaalPremie)
+  }));
+})();
+
+// Premie-inning per maand: 24-maands reeks met % op-tijd / te-laat / achterstand.
+// Random walk rond 92% op-tijd, met enkele opzettelijke uitschieters voor demo-verhaal.
+const INNING_REEKS = (() => {
+  const reeks = [];
+  let opTijd = 0.93;
+  for (let i = 0; i < 24; i++) {
+    const seed = mulberry32(i * 19 + 7);
+    // Random walk met mean reversion naar 92%
+    opTijd = Math.max(0.85, Math.min(0.97, opTijd + (seed() - 0.5) * 0.04 - (opTijd - 0.92) * 0.30));
+    // Twee opzettelijke dips voor demo: jul 2025 en feb 2026
+    if (i === 14) opTijd = 0.873;       // jul '25 — een grote werkgever te laat
+    if (i === 21) opTijd = 0.881;       // feb '26 — herstel-fase na nieuwjaar
+    const restpct = 1 - opTijd;
+    const teLaatRatio = 0.72 + seed() * 0.18;
+    const teLaat = restpct * teLaatRatio;
+    const achterstand = Math.max(0.005, restpct - teLaat);
+    reeks.push({
+      idx: i,
+      maand: MAANDLABELS[i],
+      maandKort: MAANDLABEL_KORT[i],
+      opTijd, teLaat, achterstand
+    });
+  }
+  return reeks;
+})();
+
+// 12-maands gemiddelde voor de aggregaat-strook
+const INNING = (() => {
+  const last12 = INNING_REEKS.slice(-12);
+  return {
+    opTijd:      last12.reduce((s,r) => s + r.opTijd, 0) / 12,
+    teLaat:      last12.reduce((s,r) => s + r.teLaat, 0) / 12,
+    achterstand: last12.reduce((s,r) => s + r.achterstand, 0) / 12
+  };
+})();
+
+function renderWerkgevers() {
+  const last = WERKGEVERS_REEKS[WERKGEVERS_REEKS.length - 1];
+  const first12 = WERKGEVERS_REEKS[WERKGEVERS_REEKS.length - 13]; // 12 maanden geleden
+
+  // KPI-strook
+  document.getElementById('kpi-werkgevers').textContent = last.werkgevers.toLocaleString('nl-NL');
+  document.getElementById('kpi-werkgevers-trend').textContent = (last.werkgevers - first12.werkgevers >= 0 ? '+' : '') + (last.werkgevers - first12.werkgevers).toString();
+  document.getElementById('kpi-werknemers').textContent = last.werknemers.toLocaleString('nl-NL');
+  const wnDelta = last.werknemers - first12.werknemers;
+  document.getElementById('kpi-werknemers-trend').textContent = (wnDelta >= 0 ? '+' : '') + wnDelta.toLocaleString('nl-NL');
+  document.getElementById('kpi-werknemers-trend').className = 'text-xs ' + (wnDelta >= 0 ? 'text-emerald-700' : 'text-red-700');
+  document.getElementById('kpi-salaris').textContent = fmtEur(last.gemSalaris);
+  const salarisGroei = (last.gemSalaris - first12.gemSalaris) / first12.gemSalaris;
+  document.getElementById('kpi-salaris-trend').textContent = fmtPctSigned(salarisGroei, 1);
+  document.getElementById('kpi-premie').textContent = fmtEurShort(last.premieTotaal);
+  const premieGroei = (last.premieTotaal - first12.premieTotaal) / first12.premieTotaal;
+  document.getElementById('kpi-premie-trend').textContent = fmtPctSigned(premieGroei, 1);
+
+  // Pensioengrondslag-grafiek
+  renderTrendlijn('chart-pg', WERKGEVERS_REEKS.map(r => r.pgTotaalMaand), '#0F2744', fmtEurShort);
+  document.getElementById('chart-pg-onderschrift').innerHTML =
+    `Stand mei 2024: <strong>${fmtEurShort(WERKGEVERS_REEKS[0].pgTotaalMaand)}</strong>/mnd · nu: <strong>${fmtEurShort(last.pgTotaalMaand)}</strong>/mnd. Groei volgt salarisontwikkeling en netto in/uit-stroom werknemers.`;
+
+  // Premie-grafiek (gestapeld werkgever/werknemer)
+  renderPremieStaaf('chart-premie', WERKGEVERS_REEKS);
+
+  // Salaris-indexcijfer
+  const startSal = WERKGEVERS_REEKS[0].gemSalaris;
+  const indexReeks = WERKGEVERS_REEKS.map(r => (r.gemSalaris / startSal) * 100);
+  renderTrendlijn('chart-salaris', indexReeks, '#7c3aed', v => v.toFixed(1).replace('.',','));
+  document.getElementById('chart-salaris-onderschrift').innerHTML =
+    `Cumulatieve CAO-stijging over 24 maanden: <strong>${((indexReeks[indexReeks.length-1] - 100)).toFixed(1).replace('.',',')}%</strong>. Twee zichtbare CAO-stappen (oktober '24 en oktober '25). Indicator voor sectorale loonontwikkeling.`;
+
+  // Segmentatie
+  document.getElementById('segmentatie-tabel').innerHTML = WG_SEGMENTEN.map(s => `
+    <div>
+      <div class="flex items-baseline justify-between text-sm mb-1.5">
+        <span class="font-medium text-navy">${s.naam} <span class="text-xs text-gray-500 font-normal">· ${s.toelichting}</span></span>
+        <span class="text-xs text-gray-600">${s.werkgeversAantal} werkgevers · ${s.werknemersAantal.toLocaleString('nl-NL')} werknemers · ${fmtEurShort(s.premieAantal)} premie/mnd</span>
+      </div>
+      <div class="grid grid-cols-3 gap-3">
+        <div>
+          <div class="text-[11px] text-gray-500 mb-1">${Math.round(s.werkgeversAandeel*100)}% van werkgevers</div>
+          <div class="h-2 rounded bg-gray-100 overflow-hidden"><div class="h-full" style="width:${s.werkgeversAandeel*100}%; background:${s.kleur}"></div></div>
+        </div>
+        <div>
+          <div class="text-[11px] text-gray-500 mb-1">${Math.round(s.werknemersAandeel*100)}% van werknemers</div>
+          <div class="h-2 rounded bg-gray-100 overflow-hidden"><div class="h-full" style="width:${s.werknemersAandeel*100}%; background:${s.kleur}"></div></div>
+        </div>
+        <div>
+          <div class="text-[11px] text-gray-500 mb-1">${Math.round(s.premieAandeel*100)}% van premie</div>
+          <div class="h-2 rounded bg-gray-100 overflow-hidden"><div class="h-full" style="width:${s.premieAandeel*100}%; background:${s.kleur}"></div></div>
+        </div>
+      </div>
+    </div>
+  `).join('');
+
+  // Per-maand inning-chart
+  renderInningPerMaand('chart-inning');
+
+  // 12-maands gemiddelde-strook
+  const innStrook = `
+    <div class="flex h-8 rounded-lg overflow-hidden">
+      <div class="bg-emerald-500 flex items-center justify-center text-xs text-white font-medium" style="width:${INNING.opTijd*100}%">
+        ${(INNING.opTijd*100).toFixed(1).replace('.',',')}%
+      </div>
+      <div class="bg-amber-500 flex items-center justify-center text-xs text-white font-medium" style="width:${INNING.teLaat*100}%">
+        ${(INNING.teLaat*100).toFixed(1).replace('.',',')}%
+      </div>
+      <div class="bg-red-500 flex items-center justify-center text-xs text-white font-medium" style="width:${INNING.achterstand*100}%">
+        ${(INNING.achterstand*100).toFixed(1).replace('.',',')}%
+      </div>
+    </div>
+  `;
+  document.getElementById('inning-strook').innerHTML = innStrook;
+
+  // Aantal maanden onder norm in laatste 12
+  const last12 = INNING_REEKS.slice(-12);
+  const onderNorm = last12.filter(r => r.opTijd < 0.90).length;
+  const onderNormLabels = last12.filter(r => r.opTijd < 0.90).map(r => r.maandKort).join(', ');
+
+  document.getElementById('inning-detail').innerHTML = `
+    <div class="border-l-2 border-emerald-500 pl-3">
+      <div class="text-xs uppercase tracking-wider text-gray-500">Op tijd</div>
+      <div class="font-semibold text-navy">${(INNING.opTijd*100).toFixed(1).replace('.',',')}%</div>
+      <div class="text-xs text-gray-600 mt-0.5">Premie binnen 14 dagen. Norm ≥90% — ${onderNorm === 0 ? 'alle 12 maanden boven norm.' : onderNorm + ' van 12 maanden onder norm (' + onderNormLabels + ').'}</div>
+    </div>
+    <div class="border-l-2 border-amber-500 pl-3">
+      <div class="text-xs uppercase tracking-wider text-gray-500">Te laat</div>
+      <div class="font-semibold text-navy">${(INNING.teLaat*100).toFixed(1).replace('.',',')}%</div>
+      <div class="text-xs text-gray-600 mt-0.5">Tussen 14 en 30 dagen. Geen escalatie nodig, wel monitoren.</div>
+    </div>
+    <div class="border-l-2 border-red-500 pl-3">
+      <div class="text-xs uppercase tracking-wider text-gray-500">Achterstand</div>
+      <div class="font-semibold text-navy">${(INNING.achterstand*100).toFixed(1).replace('.',',')}%</div>
+      <div class="text-xs text-gray-600 mt-0.5">>30 dagen of dispuut. Per geval een procedure inning-handhaving.</div>
+    </div>
+  `;
+}
+
+// Hulpfunctie: simpele lijngrafiek
+function renderTrendlijn(elId, values, kleur, fmt) {
+  const w = 320, h = 120;
+  const pad = { l: 38, r: 8, t: 8, b: 22 };
+  const innerW = w - pad.l - pad.r;
+  const innerH = h - pad.t - pad.b;
+  const min = Math.min(...values) * 0.98;
+  const max = Math.max(...values) * 1.02;
+  const xS = i => pad.l + (i / (values.length - 1)) * innerW;
+  const yS = v => pad.t + (1 - (v - min) / (max - min)) * innerH;
+  let svg = `<svg viewBox="0 0 ${w} ${h}" class="w-full" style="max-height:120px;">`;
+  // Grid
+  [min, (min+max)/2, max].forEach(t => {
+    svg += `<line x1="${pad.l}" y1="${yS(t)}" x2="${w-pad.r}" y2="${yS(t)}" stroke="#f1f5f9"/>`;
+    svg += `<text x="${pad.l-4}" y="${yS(t)+3}" text-anchor="end" font-size="9" fill="#94a3b8">${fmt(t)}</text>`;
+  });
+  // X-labels (3 punten: begin, midden, eind)
+  [0, Math.floor(values.length/2), values.length-1].forEach(i => {
+    svg += `<text x="${xS(i)}" y="${h-6}" text-anchor="middle" font-size="9" fill="#94a3b8">${MAANDLABEL_KORT[i]}</text>`;
+  });
+  // Area
+  const linePath = values.map((v, i) => `${i===0?'M':'L'} ${xS(i)} ${yS(v)}`).join(' ');
+  const areaPath = linePath + ` L ${xS(values.length-1)} ${yS(min)} L ${xS(0)} ${yS(min)} Z`;
+  svg += `<path d="${areaPath}" fill="${kleur}" fill-opacity="0.08"/>`;
+  svg += `<path d="${linePath}" fill="none" stroke="${kleur}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
+  // End-marker
+  svg += `<circle cx="${xS(values.length-1)}" cy="${yS(values[values.length-1])}" r="3" fill="${kleur}"/>`;
+  svg += `</svg>`;
+  document.getElementById(elId).innerHTML = svg;
+}
+
+// Per-maand stacked 100% bars voor premie-inning
+function renderInningPerMaand(elId) {
+  const w = 1100, h = 220;
+  const pad = { l: 50, r: 30, t: 18, b: 28 };
+  const innerW = w - pad.l - pad.r;
+  const innerH = h - pad.t - pad.b;
+  const reeks = INNING_REEKS;
+  const xS = i => pad.l + (i + 0.5) * (innerW / reeks.length);
+  const yS = pct => pad.t + (1 - pct) * innerH;
+  const barW = innerW / reeks.length * 0.78;
+  let svg = `<svg viewBox="0 0 ${w} ${h}" class="w-full" style="max-height:220px;">`;
+  // Y-grid (0%, 50%, 90%, 100%) — 90% is norm
+  [0.0, 0.5, 0.9, 1.0].forEach(p => {
+    const isNorm = p === 0.9;
+    svg += `<line x1="${pad.l}" y1="${yS(p)}" x2="${w-pad.r}" y2="${yS(p)}" stroke="${isNorm ? '#0F2744' : '#f1f5f9'}" stroke-width="${isNorm ? 1.2 : 1}" stroke-dasharray="${isNorm ? '4 3' : ''}"/>`;
+    svg += `<text x="${pad.l-8}" y="${yS(p)+3}" text-anchor="end" font-size="10" fill="${isNorm ? '#0F2744' : '#94a3b8'}" font-weight="${isNorm ? '600' : '400'}">${(p*100).toFixed(0)}%</text>`;
+  });
+  svg += `<text x="${w-pad.r+4}" y="${yS(0.9)+3}" font-size="10" fill="#0F2744" font-weight="600">norm</text>`;
+  // Bars
+  reeks.forEach((r, i) => {
+    const x0 = xS(i) - barW/2;
+    // Op tijd (groen, vanaf 0 omhoog)
+    const yTopOp = yS(r.opTijd);
+    svg += `<rect x="${x0}" y="${yTopOp}" width="${barW}" height="${yS(0) - yTopOp}" fill="#10b981"/>`;
+    // Te laat (amber, op top van op-tijd)
+    const yTopLaat = yS(r.opTijd + r.teLaat);
+    svg += `<rect x="${x0}" y="${yTopLaat}" width="${barW}" height="${yTopOp - yTopLaat}" fill="#f59e0b"/>`;
+    // Achterstand (rood, op top van te-laat)
+    const yTopAch = yS(1.0);
+    svg += `<rect x="${x0}" y="${yTopAch}" width="${barW}" height="${yTopLaat - yTopAch}" fill="#ef4444"/>`;
+    // Markering bij maand onder norm
+    if (r.opTijd < 0.90) {
+      svg += `<text x="${xS(i)}" y="${yTopOp - 4}" text-anchor="middle" font-size="9" fill="#b91c1c" font-weight="600">${(r.opTijd*100).toFixed(1).replace('.',',')}%</text>`;
+    }
+  });
+  // X-labels
+  reeks.forEach((r, i) => {
+    if (i % 3 === 0 || i === reeks.length-1) {
+      svg += `<text x="${xS(i)}" y="${h-10}" text-anchor="middle" font-size="9" fill="#94a3b8">${r.maandKort}</text>`;
+    }
+  });
+  svg += `</svg>`;
+  document.getElementById(elId).innerHTML = svg;
+}
+
+// Hulpfunctie: gestapeld staaf (premie wg/wn)
+function renderPremieStaaf(elId, reeks) {
+  const w = 320, h = 120;
+  const pad = { l: 38, r: 8, t: 8, b: 22 };
+  const innerW = w - pad.l - pad.r;
+  const innerH = h - pad.t - pad.b;
+  const max = Math.max(...reeks.map(r => r.premieTotaal)) * 1.05;
+  const xS = i => pad.l + (i + 0.5) * (innerW / reeks.length);
+  const yS = v => pad.t + (1 - v / max) * innerH;
+  const barW = innerW / reeks.length * 0.78;
+  let svg = `<svg viewBox="0 0 ${w} ${h}" class="w-full" style="max-height:120px;">`;
+  // Grid
+  [0, max/2, max].forEach(t => {
+    svg += `<line x1="${pad.l}" y1="${yS(t)}" x2="${w-pad.r}" y2="${yS(t)}" stroke="#f1f5f9"/>`;
+    svg += `<text x="${pad.l-4}" y="${yS(t)+3}" text-anchor="end" font-size="9" fill="#94a3b8">${fmtEurShort(t)}</text>`;
+  });
+  // X-labels
+  [0, Math.floor(reeks.length/2), reeks.length-1].forEach(i => {
+    svg += `<text x="${xS(i)}" y="${h-6}" text-anchor="middle" font-size="9" fill="#94a3b8">${MAANDLABEL_KORT[i]}</text>`;
+  });
+  // Bars
+  reeks.forEach((r, i) => {
+    const yWg = yS(r.premieWg);
+    const yTotaal = yS(r.premieTotaal);
+    svg += `<rect x="${xS(i) - barW/2}" y="${yWg}" width="${barW}" height="${yS(0) - yWg}" fill="#0F2744"/>`;
+    svg += `<rect x="${xS(i) - barW/2}" y="${yTotaal}" width="${barW}" height="${yWg - yTotaal}" fill="#C9A84C"/>`;
+  });
+  svg += `</svg>`;
+  document.getElementById(elId).innerHTML = svg;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   6. ROUTING + EVENT BINDINGS
+   ═══════════════════════════════════════════════════════════════════════ */
+
+function route() {
+  const hash = (location.hash || '#ontwikkeling').slice(1).split('/')[0];
+
+  // Hoofd-tabs (Deelnemers vs Werkgevers)
+  const isWerkgevers = hash === 'werkgevers';
+  document.getElementById('deelnemers-shell').hidden = isWerkgevers;
+  document.getElementById('werkgevers-shell').hidden = !isWerkgevers;
+
+  document.querySelectorAll('#hoofdtabs a').forEach(el => {
+    el.classList.remove('tab-active');
+    if ((el.dataset.tab === 'werkgevers' && isWerkgevers) ||
+        (el.dataset.tab === 'deelnemers' && !isWerkgevers)) {
+      el.classList.add('tab-active');
+    }
+  });
+
+  if (!isWerkgevers) {
+    // Sub-tabs (Deelnemers)
+    const validSub = ['ontwikkeling','cohorten'];
+    const sub = validSub.includes(hash) ? hash : 'ontwikkeling';
+    document.querySelectorAll('section[id^="screen-"]').forEach(s => s.hidden = true);
+    const target = document.getElementById('screen-' + sub);
+    if (target) target.hidden = false;
+
+    document.querySelectorAll('#subtabs a').forEach(el => {
+      el.classList.remove('subtab-active');
+      if (el.dataset.subtab === sub) el.classList.add('subtab-active');
+    });
+
+    // Render content
+    if (sub === 'ontwikkeling') renderOntwikkeling();
+    if (sub === 'cohorten') renderCohortenChart();
+  } else {
+    renderWerkgevers();
+  }
+
+  // Breadcrumb
+  const crumb = document.getElementById('breadcrumb');
+  const labels = {
+    'ontwikkeling': '<a href="#ontwikkeling" class="hover:text-navy">Klantbeeld</a> <span class="mx-2 text-gray-300">/</span> <span>Deelnemers</span> <span class="mx-2 text-gray-300">/</span> <span class="text-navy font-medium">Maand-ontwikkeling</span>',
+    'cohorten': '<a href="#ontwikkeling" class="hover:text-navy">Klantbeeld</a> <span class="mx-2 text-gray-300">/</span> <span>Deelnemers</span> <span class="mx-2 text-gray-300">/</span> <span class="text-navy font-medium">Cohorten naast elkaar</span>',
+    'werkgevers': '<a href="#ontwikkeling" class="hover:text-navy">Klantbeeld</a> <span class="mx-2 text-gray-300">/</span> <span class="text-navy font-medium">Werkgevers</span>'
+  };
+  crumb.innerHTML = labels[hash] || labels['ontwikkeling'];
+
+  window.scrollTo(0, 0);
+}
+
+// Cohort-slider
+document.getElementById('cohort-slider').addEventListener('input', (e) => {
+  huidigeAge = parseInt(e.target.value);
+  huidigeWatervalMaand = 23;
+  renderOntwikkeling();
+});
+document.querySelectorAll('.preset-cohort').forEach(b => b.addEventListener('click', () => {
+  huidigeAge = parseInt(b.dataset.age);
+  huidigeWatervalMaand = 23;
+  document.getElementById('cohort-slider').value = huidigeAge;
+  renderOntwikkeling();
+}));
+
+// Cohort-tabel: spring naar ontwikkeling-tab met dat cohort
+document.addEventListener('click', (e) => {
+  const a = e.target.closest('.cohort-jump');
+  if (a) {
+    e.preventDefault();
+    huidigeAge = parseInt(a.dataset.jumpAge);
+    document.getElementById('cohort-slider').value = huidigeAge;
+    huidigeWatervalMaand = 23;
+    location.hash = '#ontwikkeling';
+  }
+});
+
+window.addEventListener('hashchange', route);
+route();
+</script>
+
+</body>
+</html>

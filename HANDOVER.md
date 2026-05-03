@@ -6,7 +6,7 @@
 
 ## Wat dit project is
 
-Een MVP-portaal voor bestuurders van Nederlandse pensioenfondsen, gebouwd voor Merlin Ijzerman. De kern is een AI-assistent die vragen beantwoordt op basis van fonds-documenten met traceerbare bronvermeldingen, omringd door modules voor Wtp-stuurinformatie, documentbibliotheek, vergaderingen-voorbereiding, een **risicomatrix** met heatmap en logboek per risico, **procedures** voor workflow & case management van beleidswijzigingen en besluittrajecten, governance-logging en (placeholder) notulen.
+Een MVP-portaal voor bestuurders van Nederlandse pensioenfondsen, gebouwd voor Merlin Ijzerman. De kern is een AI-assistent die vragen beantwoordt op basis van fonds-documenten met traceerbare bronvermeldingen, omringd door modules voor Wtp-stuurinformatie, documentbibliotheek, vergaderingen-voorbereiding, een **risicomatrix** met heatmap en logboek per risico, **procedures** voor workflow & case management van beleidswijzigingen en besluittrajecten, een **klantbeeld**-module voor cohort-ontwikkeling van persoonlijke pensioenvermogens en werkgevers-totalen, governance-logging en (placeholder) notulen.
 
 Het is opgezet als demo/MVP — alle stuurinformatiecijfers zijn realistische dummy-data, niet gekoppeld aan een echt fonds. Het demo-fonds heet **Stichting Pensioenfonds Horizon** (slug `horizon`). Het Wtp-perspectief is leidend (financieringsgraad, niet dekkingsgraad; persoonlijke pensioenvermogens per cohort; solidariteitsreserve).
 
@@ -78,13 +78,22 @@ mvp/
 │   │   ├── notulen/page.tsx        # /notulen — placeholder
 │   │   ├── vergaderingen/
 │   │   │   ├── page.tsx            # lijst van komende/afgelopen
-│   │   │   ├── [id]/page.tsx       # detail met agenda + inbreng + stukken
-│   │   │   └── _components/        # client components: forms, kaarten
+│   │   │   ├── [id]/page.tsx       # detail met agenda + voorbereiding + inbreng + stukken
+│   │   │   └── _components/        # AgendapuntKaart, NieuweVergaderingForm, NieuwAgendapuntForm,
+│   │   │                           # VoorbereidingsBlok (privé AI-voorbereiding per agendapunt)
 │   │   ├── procedures/             # workflow & case management
 │   │   │   ├── page.tsx            # lijst met voortgangsbalken
 │   │   │   ├── nieuw/page.tsx      # template-picker + form
 │   │   │   ├── [id]/page.tsx       # detail met step-rail, checklist, bewijs, log
 │   │   │   └── _components/        # NieuweProcedureForm, ActieveStapPaneel
+│   │   ├── klantbeeld/             # Wtp-cohort-ontwikkeling + werkgevers-totalen
+│   │   │   ├── page.tsx            # redirect → /klantbeeld/deelnemers
+│   │   │   ├── _components/        # KlantbeeldHeader, SubTabs (HoofdTabs + DeelnemersSubTabs)
+│   │   │   ├── deelnemers/
+│   │   │   │   ├── page.tsx        # Maand-ontwikkeling (cohortkiezer + traject + waterval)
+│   │   │   │   ├── _components/    # MaandOntwikkelingClient (slider/waterval interactief)
+│   │   │   │   └── cohorten/page.tsx # Cohorten naast elkaar (51 cohorten, p10-p90 + verwacht-marker)
+│   │   │   └── werkgevers/page.tsx # KPI's, PG/premie/salaris-trend, segmentatie, premie-inning
 │   │   └── risicomatrix/           # risk register
 │   │       ├── page.tsx            # heatmap + lijst per categorie
 │   │       ├── nieuw/page.tsx      # form voor nieuw risico
@@ -95,15 +104,22 @@ mvp/
 │   │   ├── chat/route.ts           # AI-chat (drie modi, multi-turn, RAG)
 │   │   ├── documents/upload/route.ts # PDF upload + chunking + AI-samenvatting
 │   │   ├── vergaderingen/route.ts
-│   │   ├── agendapunten/route.ts
+│   │   ├── agendapunten/
+│   │   │   ├── route.ts            # POST nieuw agendapunt
+│   │   │   └── [id]/voorbereiding/
+│   │   │       ├── route.ts        # POST: genereer/regenereer AI-voorbereiding (snel/grondig)
+│   │   │       └── notities/route.ts # PATCH: eigen notities opslaan
 │   │   ├── inbreng/[id]/route.ts
-│   │   ├── procedures/             # 5 routes voor procedure-flows
+│   │   ├── procedures/             # 7 routes voor procedure-flows
 │   │   │   ├── route.ts            # POST: create from template (snapshot)
 │   │   │   └── [id]/
-│   │   │       ├── stappen/[stapId]/route.ts    # PATCH: status + auto-activeer volgende
-│   │   │       ├── checklist/[itemId]/route.ts  # PATCH: toggle voldaan
-│   │   │       ├── bewijs/route.ts              # POST: bewijsstuk
-│   │   │       └── besluiten/route.ts           # POST: formele besluitvastlegging
+│   │   │       ├── stappen/[stapId]/
+│   │   │       │   ├── route.ts                    # PATCH: status + auto-activeer volgende
+│   │   │       │   ├── agendapunt/route.ts         # POST: koppel stap aan vergadering (it.2)
+│   │   │       │   └── besluit-concept/route.ts    # POST: AI-concept formulering (it.2)
+│   │   │       ├── checklist/[itemId]/route.ts     # PATCH: toggle voldaan
+│   │   │       ├── bewijs/route.ts                 # POST: bewijsstuk
+│   │   │       └── besluiten/route.ts              # POST: formele besluitvastlegging
 │   │   └── risicos/                # 4 routes voor risico-CRUD
 │   │       ├── route.ts            # POST: create
 │   │       └── [id]/
@@ -122,7 +138,10 @@ mvp/
 │   ├── supabase-server.ts          # server-side client (SSR cookies)
 │   ├── rag.ts                      # zoekRelevanteChunks, maakContext, maakChunks
 │   ├── proces-templates.ts         # hardcoded procestemplates (Beleidswijziging)
-│   └── risico-config.ts            # categorieën + niveau-afleiding K+I
+│   ├── risico-config.ts            # categorieën + niveau-afleiding K+I
+│   └── klantbeeld-data.ts          # demo-data Klantbeeld: 51 cohorten met Wtp-mechaniek
+│                                   # (premie + cashflow-restposten + 4 rendementscomponenten)
+│                                   # + werkgevers-totalen, segmentatie en inning-reeks
 ├── prototypes/                     # klikbare HTML-mockups (single file, Tailwind via CDN)
 │   ├── procedures-mockup.html
 │   └── risicomatrix-mockup.html
@@ -171,7 +190,7 @@ Het volledige schema staat in `mvp/supabase/schema.sql` (idempotent, kan opnieuw
 ## Modules en wat ze doen
 
 ### Persoonlijke homepage (`/`)
-Welkomststrook met dagdeel-groet, naam, rol, fondsnaam en eerstvolgende vergadering. Compacte 4-tile KPI-strook (financieringsgraad, solidariteitsreserve, vermogen, rendement YTD). "Uw open procedure-stappen"-widget toont actieve stappen waar je co-eigenaar bent, met deadline-indicatie. "Voor u open"-widget toont aantal agendapunten waar je nog geen inbreng plaatste. "Uw recente activiteit" toont laatste 3 AI-vragen, inbrengen en uploads.
+Welkomststrook met dagdeel-groet, naam, rol, fondsnaam en eerstvolgende vergadering. Compacte 4-tile KPI-strook (financieringsgraad, solidariteitsreserve, vermogen, rendement YTD). **"Uw open procedure-stappen"**-widget toont actieve procedure-stappen waar je co-eigenaar bent, met deadline-indicatie (amber-stip bij ≤7 dagen, anders gold). **"Voor u open"**-widget toont aantal agendapunten waar je nog geen inbreng plaatste. **"Uw recente activiteit"** toont laatste 3 AI-vragen, inbrengen en uploads.
 
 ### Wtp-stuurinformatie (`/dashboard`)
 Vier KPI-tegels, 24-maands trendgrafiek financieringsgraad (inline SVG), gedetailleerde Wtp-balans (activa: bescherming/overrendement/liquide; passiva: persoonlijke pensioenvermogens per cohort + solidariteitsreserve + compensatiedepot + operationele reserve), deelnemers-status-blok, signaleringen, openstaande acties. Alle cijfers zijn demo-data hardcoded in de page.
@@ -186,7 +205,17 @@ PDF-upload via formulier. Bij upload: `pdf-parse` extraheert tekst, `lib/rag.ts 
 Lijst-view scheidt komend en afgelopen. Detail-view toont meeting-header, stats, agendapunten als uitklapbare kaarten met categorie-badge (BOB-model: kleur per categorie). Per agendapunt: documentupload (triggert ook AI-samenvatting per stuk, neutraal en beschrijvend), persoonlijke voorbereidingsblok met AI-ondersteunde kritische analyse (privé, alleen voor jou — niet hetzelfde als de samenvatting per stuk), en inbreng-formulier voor andere bestuursleden. De voorbereiding pakt context uit het agendapunt zelf, gekoppelde stukken, RAG over de bibliotheek, actieve risicomatrix-risico's en lopende procedures. Output: 2-4 relevante lenzen, "wat ontbreekt", drie kritische vergadervragen.
 
 ### Procedures (`/procedures`)
-Workflow & case management: lopende processen voor beleidswijzigingen, uitbestedingsreviews, incidenten en besluittrajecten. Lijstpagina toont per procedure een voortgangsbalk, eigenaars-avatars en deadline. Detailpagina heeft een vertical step-rail die afgeronde / actieve / open stappen visueel onderscheidt, plus een interactief "actieve stap"-paneel met checklist-items (afvinkbaar, met `bewijs_vereist`-flag), gekoppelde vergader-agendapunten, bewijsstukken (toevoegen via form), en — voor stappen die het vereisen — een formeel besluit-formulier (formulering + motivering + datum) met optionele AI-concept-knop die automatisch een conceptformulering opstelt op basis van bewijs en eerdere stappen. Validatie bij stap-voltooien: alle checklist voldaan, bewijs aanwezig waar vereist, en besluit vastgelegd waar vereist. Bij voltooien wordt de volgende stap automatisch geactiveerd; bij de laatste stap wordt de procedure op `afgerond` gezet. Onderaan de pagina staat een append-only audit-trail van alle events. Drie templates beschikbaar: **Beleidswijziging** (6 stappen), **Uitbestedingsreview** (5 stappen), **Incident-meldplicht DNB** (6 stappen, tijdkritisch). Templates zijn hardcoded in `lib/proces-templates.ts` met snapshot-pattern bij start.
+Workflow & case management: lopende processen voor beleidswijzigingen, uitbestedingsreviews, incidenten en besluittrajecten. Lijstpagina toont per procedure een voortgangsbalk, eigenaars-avatars en deadline. Detailpagina heeft een vertical step-rail die afgeronde / actieve / open stappen visueel onderscheidt, plus een interactief **"actieve stap"-paneel** met:
+
+- **Checklist-items** (afvinkbaar, met `bewijs_vereist`-flag)
+- **Vergaderingen** — knop *Voeg toe aan vergadering* die in één klik een agendapunt aanmaakt in een gekozen komende vergadering (categorie automatisch *Oordeelsvorming* of *Besluitvorming*); gekoppelde agendapunten zijn klikbaar zichtbaar
+- **Bewijsstukken** (toevoegen via form: titel + beschrijving)
+- **Besluit** — voor stappen die het vereisen, een formulering + motivering + datum-form, met optionele *↗ Concept met AI*-knop die automatisch een conceptformulering opstelt op basis van bewijs en eerdere stappen
+
+Validatie bij stap-voltooien: alle checklist voldaan, bewijs aanwezig waar vereist, en besluit vastgelegd waar vereist. Bij voltooien wordt de volgende stap automatisch geactiveerd; bij de laatste stap wordt de procedure op `afgerond` gezet. Onderaan de pagina staat een append-only audit-trail van alle events. Drie templates beschikbaar: **Beleidswijziging** (6 stappen), **Uitbestedingsreview** (5 stappen), **Incident-meldplicht DNB** (6 stappen, tijdkritisch). Templates zijn hardcoded in `lib/proces-templates.ts` met snapshot-pattern bij start.
+
+### Klantbeeld (`/klantbeeld`)
+Twee perspectieven op de klant van het fonds. **Deelnemers** (default tab) heeft twee sub-views: *Maand-ontwikkeling* met cohortkiezer (slider 18–68 + presets), 24-maands trajectory-grafiek van het persoonlijk pensioenvermogen, een gestapelde maand-delta-bar met alle bouwstenen (premie, toevoegingen, kasrendement, beschermingsrendement RTS, overrendement, micro-langleven, onttrekkingen) en een klikbare waterval per maand met automatische "wat valt op"-observaties. *Cohorten naast elkaar* toont alle 51 leeftijdscohorten als bars met spreidingsbanden p10–p90 en een gele marker voor de verwachte stand bij neutraal scenario, met aandacht-tabel die naar de detail-view linkt via `?cohort=` query-parameter. **Werkgevers** toont vier KPI-tegels (aangesloten werkgevers, actieve werknemers, gem. salaris, totale maandpremie), drie 24-maands trends (totale pensioengrondslag, premie wg/wn-gestapeld, salarisindexcijfer met CAO-stappen), werkgever-grootte-segmentatie (klein/midden/groot met aandeel werkgevers/werknemers/premie — toont concentratierisico van grote werkgevers), en premie-inning-discipline als 24-maands stacked 100% bar-chart met norm-lijn 90% plus 12-maands aggregaat-strook met detail per kleur. Alle data is deterministisch dummy uit `lib/klantbeeld-data.ts`.
 
 ### Risicomatrix (`/risicomatrix`)
 Risicoraamwerk met 5×5 Kans×Impact-heatmap. Vier categorieën: Financieel & actuarieel, Governance & Organisatie, Operationeel & datakwaliteit, Informatie & communicatie. Per risico: titel, toelichting, kans (1-5), impact (1-5), risiconiveau (laag/middel/hoog — afgeleid uit K+I, handmatig overschrijfbaar), type (structureel/tijdelijk), status (actief/gesloten), eigenaar (vrije tekst), beheersmaatregelen met status (open/in_voorbereiding/genomen), en append-only logboek. Heatmap toont risico-pills in cellen, kleur volgt zone (groen/amber/rood). Lijst per categorie onder de heatmap. Detailpagina heeft K/I/niveau-strook, toelichting, maatregelen-blok (toevoegen + status-wijzigen) en logboek. Sluiten gaat met verplichte motivering — gesloten risico's verhuizen naar `/risicomatrix/archief` en blijven volledig reproduceerbaar.
@@ -228,8 +257,29 @@ Een stap kan pas op `afgerond` als (1) alle checklist-items voldaan zijn, (2) er
 ### Risicomatrix: niveau-afleiding K+I
 Niveau wordt afgeleid uit `kans + impact`: som 2-4 = laag (groen), 5-7 = middel (oranje), 8-10 = hoog (rood). De afgeleide waarde kan handmatig overschreven worden via een `niveau_handmatig` boolean flag — bestuurlijk gevoel kan soms zwaarder wegen dan de formule. De UI toont in dat geval "handmatig overschreven" als hint.
 
+### Klantbeeld: Wtp-mechaniek volledig in TypeScript, geen Supabase-tabellen
+De cohort-mechaniek (begin + premie + toevoegingen − onttrekkingen + 4 rendementscomponenten = eind) staat volledig in `lib/klantbeeld-data.ts` en wordt deterministisch gegenereerd op elke server-render. Geen Supabase-tabel — dezelfde keuze als bij het Wtp-dashboard, vanuit het patroon "alle stuurinformatiecijfers zijn realistische dummy-data". Voor productie komt er een data-koppeling (handmatig invoer / Excel-upload / API uitvoerder), maar die hoort bij iteratie 2. Reconstructie sluit op €0,00 voor alle 51 cohorten — zie `MaandRij` interface en `maandReeks()`-functie. De cashflow-restposten *toevoegingen* (waardeoverdracht in / FVP-aanvulling) en *onttrekkingen* (waardeoverdracht uit) zijn cohort-gemiddelden van individuele events, deterministisch gegenereerd via `genereerCashflows(age)`.
+
+### Klantbeeld: afwijking versus verwachte stand, niet versus doelpensioen
+De kleurcodering op cohort-niveau (groen ≤2,5%, amber ≤5%, rood >5%) vergelijkt het huidige saldo met een "verwachte stand" die met dezelfde mechaniek wordt gerekend maar met een neutraal markt-scenario (`VERWACHT_MARKT`). Dat geeft het bestuur een 24-maands prestatie-signaal in plaats van een lange-termijn pensioenbelofte-vergelijking. Het lange-termijn-doel (`doelOp67`) staat ook in de data maar wordt nog niet als hoofdvergelijking gebruikt — komt in een latere iteratie als het bestuurlijk verhaal vraagt om "halen we de pensioenbelofte". Per cohort zit een `uitvoeringMult` op overrendement die operationele uitvoeringskwaliteit modelleert (timing, kostenmarge, hedge-precisie) — alleen op het werkelijke scenario, niet op verwachting, waardoor cohorten natuurlijk uit elkaar bewegen.
+
+### Klantbeeld: server component met client-eiland voor interactiviteit
+De Maand-ontwikkeling-view heeft cohort-slider + maand-klik-waterval die client-side state nodig hebben. Patroon: server component (`page.tsx`) leest de hele dataset uit `lib/klantbeeld-data.ts` en geeft `cohorten` als prop door aan `MaandOntwikkelingClient`-component met `"use client"`. SVG-grafieken (trajectory, monthly delta) zijn allemaal in de client component gedefinieerd zodat ze responsief op state-changes reageren. De Cohorten- en Werkgevers-pagina's zijn pure server components — geen interactiviteit, alleen statische SVG-renders.
+
 ### Append-only audit-logs
 Beide nieuwe modules (Procedures en Risicomatrix) hebben een eigen `*_log`-tabel met event-types als enum-string en payload als jsonb. Geen triggers — elke API-route schrijft expliciet naar het log na de mutatie. Deze opzet is eenvoudig te lezen en te debuggen, en houdt het log scheidbaar van de `governance_log` (die specifiek voor AI-vragen is).
+
+### Voorbereiding versus samenvatting — twee verschillende AI-functies
+Op een agendapunt zitten twee AI-functionaliteiten die nadrukkelijk *niet* hetzelfde zijn. Per gekoppeld stuk maakt `app/api/documents/upload/route.ts` automatisch een **samenvatting** in vaste structuur (aanleiding/hoofdpunten/gevraagd besluit/aandachtspunten) — neutraal en beschrijvend, voor iedereen zichtbaar in `documenten.samenvatting_ai`. Op het agendapunt-niveau kan een bestuurder een **voorbereiding** genereren via `VoorbereidingsBlok` — kritisch en provocatief, persoonlijk en privé. Het is belangrijk dat de UI dat onderscheid duidelijk maakt; anders denkt de bestuurder "samenvatting heb ik al" en blijft de provocatieve hulp ongebruikt.
+
+### Voorbereiding: AI kiest 2-4 lenzen, geen kunstmatige completeness
+De systeem-prompt voor `/api/agendapunten/[id]/voorbereiding` instrueert Claude om uit het lenzenraamwerk (5 stakeholdergroepen, 3 principes uitvoerbaarheid/financierbaarheid/uitlegbaarheid, 4 bestuurlijke uitgangspunten) alleen de 2-4 te kiezen die *echt van toepassing zijn op dit stuk*. De AI mag expliciet zeggen *"werkgevers spelen hier geen rol"* — pretentie van compleetheid is wat we vermijden. De output is bewust kort (~400 woorden voor snel, ~700 voor grondig) zodat het in een paar minuten te scannen is.
+
+### Voorbereiding: privé per gebruiker, RLS op gebruiker_id
+Voorbereidingen zijn persoonlijk: alleen jij ziet je eigen output en notities. RLS-policy `eigen voorbereiding` filtert strikt op `gebruiker_id = auth.uid()`. De inbreng-functie blijft het gedeelde kanaal: de "↓ Gebruik dit als startpunt voor mijn inbreng"-knop kopieert naar de inbreng-textarea zodat de bestuurder zelf kiest welk deel van zijn voorbereiding hij met collega's deelt.
+
+### Voorbereiding: twee snelheden voor context-omvang
+*Snel* leest het agendapunt + gekoppelde stukken + lichte RAG over de bibliotheek (top 4 chunks). *Grondig* breidt dat uit naar diepere RAG (top 10 chunks) plus alle actieve risicomatrix-risico's plus alle lopende procedures als context. Bestuurder begint default met snel; een knop *↗ Verdiep* regenereert met grondig. Eigen notities blijven bewaard tussen genereer-acties.
 
 ---
 
@@ -293,30 +343,39 @@ Browsers cachen CSS/JS-bundles agressief. Na een Vercel-redeploy kan een hard re
 - **AI-samenvatting van vergaderstukken is synchroon.** Upload duurt ~5-10 sec voor de Claude-call. Bij grote PDFs (50+ pagina's) kan oplopen naar 15-20 sec.
 - **Procedures: drie templates, geen in-app editor.** Beleidswijziging, Uitbestedingsreview, Incident-meldplicht DNB zijn beschikbaar (hardcoded in `lib/proces-templates.ts`). Een nieuwe template toevoegen vereist een code-deploy. In-app editor is een latere iteratie.
 - **Procedures: bewijs is alleen titel + beschrijving, geen file-upload.** Voor v1/v2 leg je vast dát er bewijs is; later koppelen aan documentbibliotheek of directe upload.
+- **Voorbereiding: geen "Sparringpartner" doorpraat-modus.** Eenmalige gestructureerde voorbereiding plus eigen notities is wat er nu is. Een interactieve socratische dialoog waar Claude doorvraagt op basis van wat je antwoordt, is bewust uitgesteld naar iteratie 2.
+- **Voorbereiding: geen "Bereid alles voor"-bulkknop.** Per agendapunt afzonderlijk genereren. Voor een vergadering met 8 punten is dat 8 klikken — werkbaar, maar bulk-actie zou prettig zijn.
+- **Voorbereiding: geen AI-bronvermelding-validatie.** De AI verwijst naar bronnen met `[Bron N]`-notatie zoals de chat dat doet, maar er is geen post-hoc check of de bewering klopt. Hallucinatie-risico bestaat — bestuurder moet kritisch kijken naar wat de AI als feit presenteert (zoals altijd).
+- **Voorbereiding: één voorbereiding per (agendapunt, gebruiker).** Hergenereren overschrijft de vorige AI-output (eigen notities blijven bewaard). Geen versiehistorie van AI-output.
 - **Risicomatrix: K/I/niveau/titel niet bewerkbaar na aanmaken.** Wijzigen kan alleen via sluiten + opnieuw aanmaken. In iteratie 2 een edit-form met motiveringsveld dat naar log schrijft.
 - **Risicomatrix: maatregel-procedure-koppeling niet in UI.** Kolom `risico_maatregelen.procedure_id` bestaat maar wordt niet gevuld door de UI.
 - **Geen versioning van vergaderstukken.** Nieuwe upload = nieuwe rij. Oude blijft staan zonder "verouderd"-label.
 - **Notulen-pagina is een placeholder.** Wachten op koppeling met afgeronde vergaderingen.
 - **Geen e-mail notificaties.** Bestuurders moeten zelf inloggen om te zien dat er iets is.
-- **Demo-data overal.** Alle Wtp-cijfers zijn fictief. Voor productie moet er een data-koppeling komen — handmatige invoer per maand, Excel-upload, of API naar uitvoerder.
+- **Demo-data overal.** Alle Wtp-cijfers zijn fictief. Voor productie moet er een data-koppeling komen — handmatige invoer per maand, Excel-upload, of API naar uitvoerder. Geldt ook voor `lib/klantbeeld-data.ts` (cohorten + werkgevers + inning).
+- **Klantbeeld: geen werkgevers-individu-zicht.** Bewust geweerd uit v1 — alleen totalen, segmentatie en aggregate inning-discipline. Concentratierisico is zichtbaar via de grootte-segmentatie maar niet doorklikbaar naar een specifieke werkgever. In iteratie 2: aansluit-historie per werkgever, top-10 grootste afdragers, individuele inning-status.
+- **Klantbeeld: geen projectie-naar-67-view en geen pure afwijkings-bars.** Op de cohorten-pagina staat alleen de huidig-vermogen-view; projectie en afwijkings-views zijn bewust uitgesteld naar iteratie 2 om de v1 leesbaar te houden.
+- **Klantbeeld: Voorbeelddeelnemer-view ontbreekt.** Een ge-anonimiseerde "wat ziet de deelnemer in Mijn Pensioen vs. wat ziet het bestuur"-vergelijking was gepland voor v1 maar bewust uitgesteld — communicatie-toets-feature komt in iteratie 2 als de basis-views zijn gevalideerd.
+- **Klantbeeld: cohort-noise is uniform-deterministisch.** Geen seizoenspatronen in cashflow-events (waardeoverdrachten clusteren in werkelijkheid rond eind kalenderjaar of CAO-momenten), geen sectorale onderverdeling.
 - **Model-string `claude-sonnet-4-5`.** Werkt nog, maar nieuwere modellen (4-6) zijn beschikbaar. Update kan in `app/api/chat/route.ts` en `app/api/documents/upload/route.ts`.
 
 ---
 
 ## Logische volgende stappen (in volgorde van impact/waarde)
 
-1. **Prompt caching toevoegen** in `app/api/chat/route.ts`. System prompt als array met `cache_control: { type: "ephemeral" }`. ~30 minuten werk, 60-80% besparing op herhaalde vragen.
+1. **Prompt caching toevoegen** in `app/api/chat/route.ts` (en de andere AI-routes: `documents/upload`, `procedures/[id]/stappen/[stapId]/besluit-concept`, `agendapunten/[id]/voorbereiding`). System prompt als array met `cache_control: { type: "ephemeral" }`. ~30 minuten werk per route, 60-80% besparing op herhaalde calls.
 2. **Echte data koppelen** aan het Wtp-dashboard. Eerste optie: handmatig invoerformulier voor de beheerder, kwartaal-cijfers. Tweede optie: Excel-upload van uitvoerderrapport.
-3. **Procedures iteratie 3** — file-upload bij bewijsstukken (direct of via documentbibliotheek-picker), in-app template-editor zodat beheerders zonder code-deploy nieuwe templates kunnen toevoegen, eigenaars-FK naar `auth.users` zodat tagging/notifications mogelijk worden, edit-functie voor titel/beschrijving/deadline na aanmaken (met motivering naar log).
-4. **Risicomatrix iteratie 2** — bewerken van K/I/niveau/titel/toelichting met motiveringsveld dat naar log schrijft, eigenaar-FK naar `auth.users`, volgende-beoordeling-datum invulbaar, koppeling maatregel ↔ procedure.
-5. **Conversatiepersistentie** in de AI-chat — `gesprekken` tabel, mogelijkheid om eerdere gesprekken terug te halen.
-6. **Sliding window samenvatting** voor lange gesprekken (>10 turns).
-7. **Notulen-module afmaken** — koppelen aan afgeronde vergaderingen, mogelijkheid om besluiten/actiepunten te markeren.
-8. **Generieke `verantwoordelijke_id` schemamigratie** voor agendapunten/procedures/risicos.
-9. **Rolspecifieke homepage-varianten** — voorzitter ziet andere accenten dan beleggingscommissielid.
-10. **Web search tool integratie** voor de AI-assistent — Anthropic `web_search` met whitelist (DNB, AFM, Pensioenfederatie, rijksoverheid).
-11. **Versioning van vergaderstukken** met "verouderd"-label.
-12. **E-mail notificaties** bij nieuwe vergadering, nieuwe inbreng op eigen agendapunt, of stap-deadline die nadert.
+3. **Voorbereiding iteratie 2** — Sparringpartner-modus die ónder een gegenereerde voorbereiding een interactieve chat opent met de hele context al gevuld (procedure-context, bewijs, eigen notities). "Bereid alles voor"-bulkknop op de vergadering-detail-pagina die voor alle agendapunten in één keer een voorbereiding genereert (paar minuten in achtergrond, dan staat het klaar). Optionele "deel met bestuur"-toggle per voorbereiding voor wie collectief wil voorbereiden.
+4. **Procedures iteratie 3** — file-upload bij bewijsstukken (direct of via documentbibliotheek-picker), in-app template-editor zodat beheerders zonder code-deploy nieuwe templates kunnen toevoegen, eigenaars-FK naar `auth.users` zodat tagging/notifications mogelijk worden, edit-functie voor titel/beschrijving/deadline na aanmaken (met motivering naar log).
+5. **Risicomatrix iteratie 2** — bewerken van K/I/niveau/titel/toelichting met motiveringsveld dat naar log schrijft, eigenaar-FK naar `auth.users`, volgende-beoordeling-datum invulbaar, koppeling maatregel ↔ procedure.
+6. **Conversatiepersistentie** in de AI-chat — `gesprekken` tabel, mogelijkheid om eerdere gesprekken terug te halen.
+7. **Sliding window samenvatting** voor lange gesprekken (>10 turns).
+8. **Notulen-module afmaken** — koppelen aan afgeronde vergaderingen, mogelijkheid om besluiten/actiepunten te markeren.
+9. **Generieke `verantwoordelijke_id` schemamigratie** voor agendapunten/procedures/risicos.
+10. **Rolspecifieke homepage-varianten** — voorzitter ziet andere accenten dan beleggingscommissielid.
+11. **Web search tool integratie** voor de AI-assistent — Anthropic `web_search` met whitelist (DNB, AFM, Pensioenfederatie, rijksoverheid).
+12. **Versioning van vergaderstukken** met "verouderd"-label.
+13. **E-mail notificaties** bij nieuwe vergadering, nieuwe inbreng op eigen agendapunt, of stap-deadline die nadert.
 
 ---
 
@@ -324,19 +383,31 @@ Browsers cachen CSS/JS-bundles agressief. Na een Vercel-redeploy kan een hard re
 
 Voorbeelden van openingen die snel productief maken:
 
-- *"Lees HANDOVER.md voor context. Ik wil prompt caching implementeren in de AI-chat."*
-- *"Lees HANDOVER.md. Ik wil een tweede procestemplate toevoegen — Uitbestedingsreview."*
-- *"Lees HANDOVER.md. Ik wil dat een risico aan een lopende procedure gekoppeld kan worden."*
-- *"Lees HANDOVER.md. Ik heb een bug op /procedures/[id]: [beschrijving]."*
+- *"Lees HANDOVER.md voor context. Ik wil prompt caching implementeren in alle AI-routes."*
+- *"Lees HANDOVER.md. Ik wil de Sparringpartner-modus voor voorbereidingen bouwen — interactief doorpraten op basis van een gegenereerde voorbereiding."*
+- *"Lees HANDOVER.md. Ik wil een 'Bereid alles voor'-knop op een vergadering — voor alle agendapunten tegelijk."*
+- *"Lees HANDOVER.md. Ik wil bewerken van risico's na aanmaken (Risicomatrix iteratie 2)."*
+- *"Lees HANDOVER.md. Ik heb een bug op [pad]: [beschrijving]."*
 
 In nieuwe sessies hoef je niet de geschiedenis van keuzes uit te leggen — die staan hier. Beschrijf wat je wilt veranderen en de nieuwe Claude-sessie kan via `Read` direct in de juiste files duiken.
 
-Patroon dat goed werkt voor nieuwe modules: eerst klikbaar HTML-prototype maken (zie `prototypes/`), reviewen, dan iteratie 1 als werkende code (schemamigratie + paar pagina's + API-routes). Iteratie 2 op basis van gebruik. De prototypes zijn statische HTML met Tailwind via CDN en hash-routing — geen backend nodig om door te klikken.
+**Patroon dat goed werkt voor nieuwe modules:** eerst klikbaar HTML-prototype maken (zie `prototypes/`), reviewen, dan iteratie 1 als werkende code (schemamigratie + paar pagina's + API-routes). Iteratie 2 op basis van gebruik. De prototypes zijn statische HTML met Tailwind via CDN en hash-routing — geen backend nodig om door te klikken.
+
+**Patroon voor AI-features:** systeem-prompt schrijven als één duidelijke string in de top van de route-file, output in JSON-formaat met fall-back parsing voor ```` ```json ```` wrappers, RLS-context expliciet meegeven (`fonds_id`, `gebruiker_id`), bronnen apart bijhouden in `bronnen_meta` zodat de UI ze kan tonen. Voorbeelden: `app/api/agendapunten/[id]/voorbereiding/route.ts` en `app/api/procedures/[id]/stappen/[stapId]/besluit-concept/route.ts` — die twee delen hetzelfde patroon en zijn een goede referentie.
+
+**Bij elke release de checklist:**
+1. TypeScript-check `./node_modules/.bin/tsc --noEmit --skipLibCheck` moet exit 0
+2. Schema-migratie `supabase/migrations/<datum>_<naam>.sql` schrijven én ook in `supabase/schema.sql` documenteren
+3. Migratie eerst draaien in Supabase (vóór code-deploy, anders crashen inserts)
+4. HANDOVER.md release-historie bijwerken
+5. Commit + push via GitHub Desktop, Vercel deployt automatisch
+6. Browser hard refresh als styling weg lijkt (Cmd+Shift+R)
 
 ---
 
 ## Release-historie
 
+- **2 mei 2026** — **Klantbeeld iteratie 1**. Nieuwe module met twee perspectieven: deelnemers (Maand-ontwikkeling per cohort + Cohorten naast elkaar) en werkgevers (KPI's, drie 24-maands trends voor PG/premie/salaris, werkgever-grootte-segmentatie en premie-inning-discipline per maand met norm-lijn). Onderliggende data komt uit `lib/klantbeeld-data.ts` met deterministische dummy-data: 51 leeftijdscohorten (18–68) met volledige Wtp-mechaniek (begin + premie + toevoegingen − onttrekkingen + kasrendement + beschermingsrendement RTS + overrendement + micro-langleven = eind), reconstructie sluit op €0,00. Cashflow-restposten *toevoegingen* (waardeoverdracht in / FVP) en *onttrekkingen* (waardeoverdracht uit) zijn meegenomen. Werkgevers-totalen afgeleid uit cohort-data: 387 aangesloten werkgevers, 36.500 actieve werknemers, ~€33M maandpremie, met realistische CAO-stappen in de 24-maands historie. Pagina's: `/klantbeeld` (redirect), `/klantbeeld/deelnemers` (default sub-tab Maand-ontwikkeling), `/klantbeeld/deelnemers/cohorten`, `/klantbeeld/werkgevers`. Nieuwe sidebar-entry "Klantbeeld" onder sectie Overzicht. Geen Supabase-migratie — dezelfde keuze als bij Wtp-dashboard, alle data komt uit lib. Prototype: `prototypes/klantbeeld-mockup.html`.
 - **29 april 2026** — **AI-voorbereiding op agendapunten**. Nieuwe persoonlijke (privé) voorbereidingsfunctie geïntegreerd in het vergaderingen-onderdeel: per agendapunt kan een bestuurder een AI-ondersteunde voorbereiding genereren die niet samenvat, maar scherper denkt — kritische vragen, blinde vlekken en perspectieven. Twee snelheden: *snel* (alleen gekoppelde stukken + lichte RAG over bibliotheek) en *grondig* (volledige RAG + actieve risicomatrix-risico's + lopende procedures als context). Output volgt vaste JSON-structuur: 2-4 lenzen (uit BOB-model + stakeholders + uitvoerbaarheid/financierbaarheid/uitlegbaarheid), "wat staat er níet"-blok, drie kritische vergadervragen, en een ééns-zin-samenvatting. Per lens een eigen-notitie-veldje (alleen voor jou zichtbaar). "↓ Gebruik dit als startpunt voor mijn inbreng"-knop kopieert eigen notities + vragen naar de inbreng-textarea. Bronvermelding zichtbaar (documenten / risico's / procedures). Nieuwe tabel `voorbereidingen` met RLS op `gebruiker_id`. API-routes: `POST /api/agendapunten/[id]/voorbereiding` (genereer/regenereer) en `PATCH /api/agendapunten/[id]/voorbereiding/notities` (notities opslaan). Migratie: `supabase/migrations/2026_04_29_voorbereidingen.sql`.
 - **29 april 2026** — **Procedures iteratie 2**. Twee extra hardcoded templates: **Uitbestedingsreview** (5 stappen) en **Incident-meldplicht DNB** (6 stappen, met tijdkritische triage). Koppeling **procedure-stap ↔ agendapunt**: nieuwe kolom `agendapunten.procedure_stap_id` (migratie `2026_04_29_procedures_iteratie2.sql`), op de detail-pagina van een procedure kun je een actieve stap met één klik in een komende vergadering plaatsen — er wordt automatisch een agendapunt aangemaakt met categorie *Oordeelsvorming* (of *Besluitvorming* bij stappen die een besluit vereisen) en een back-reference. **AI-besluit-concept**: nieuwe API-route `/api/procedures/[id]/stappen/[stapId]/besluit-concept` die op basis van procedure-context, eerdere stappen, checklist en bewijsstukken een conceptformulering + motivering opstelt via Claude. Knop "Concept met AI" naast het besluit-form vult automatisch de invoervelden in voor review. **"Uw open procedure-stappen"-widget** op de homepage toont actieve stappen waar je co-eigenaar bent, met deadline-indicatie (dringend bij ≤7 dagen).
 - **29 april 2026** — **Procedures iteratie 1 — werkende implementatie**. Zeven Supabase-tabellen, drie pagina's onder `/procedures` (lijst, detail met step-rail + actief-stap-paneel + log, nieuw-form), vijf API-routes, hardcoded Beleidswijziging-template (6 stappen, 18 checklist-items), snapshot-pattern bij start, validatie bij voltooien (checklist + bewijs + besluit). Migratie: `supabase/migrations/2026_04_29_procedures.sql`. Demo-seed: één lopende procedure in stap 3.
@@ -347,4 +418,18 @@ Patroon dat goed werkt voor nieuwe modules: eerst klikbaar HTML-prototype maken 
 
 ---
 
-*Laatst bijgewerkt: 29 april 2026 — na release AI-voorbereiding op agendapunten.*
+## Migratie-bestanden in volgorde
+
+Voor een schone Supabase-setup vanaf nul, draai `mvp/supabase/schema.sql` in zijn geheel. Voor een bestaande database die al de eerste-release-tabellen heeft, draai per release het bijbehorende migratie-bestand (idempotent — alle gebruiken `if not exists` en `add column if not exists`):
+
+1. `2026_04_29_horizon_oordeelsvorming.sql` — fondsnaam-rename + categorie-rename
+2. `2026_04_29_risicomatrix.sql` — risico-tabellen + RLS + demo-seed
+3. `2026_04_29_procedures.sql` — procedure-tabellen + RLS + demo-seed (één lopende Beleidswijziging-procedure)
+4. `2026_04_29_procedures_iteratie2.sql` — `agendapunten.procedure_stap_id` koppeling
+5. `2026_04_29_voorbereidingen.sql` — `voorbereidingen`-tabel + RLS
+
+Migraties zijn klein en geïsoleerd — geen schema-rollbacks nodig zolang je de volgorde aanhoudt.
+
+---
+
+*Laatst bijgewerkt: 2 mei 2026 — na release Klantbeeld iteratie 1.*

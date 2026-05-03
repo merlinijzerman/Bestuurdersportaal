@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase";
 const navItems = [
   { href: "/", label: "Home", icon: "🏠", section: "Overzicht" },
   { href: "/dashboard", label: "Stuurinformatie", icon: "📊", section: "Overzicht" },
+  { href: "/klantbeeld", label: "Klantbeeld", icon: "👥", section: "Overzicht" },
   { href: "/ai", label: "AI Assistent", icon: "🤖", section: "Kennisbase", badge: "AI" },
   { href: "/bibliotheek", label: "Documentbibliotheek", icon: "📚", section: "Kennisbase" },
   { href: "/vergaderingen", label: "Vergaderingen", icon: "📅", section: "Bestuur" },
@@ -80,7 +81,11 @@ export default function Sidebar({ gebruikerNaam, gebruikerRol, fondsNaam }: Side
         {navItems.map((item) => {
           const showSection = item.section !== huidigSection;
           if (showSection) huidigSection = item.section;
-          const actief = pathname === item.href;
+          // Klantbeeld heeft sub-routes (/deelnemers, /werkgevers, …), dus matchen we de prefix
+          const actief =
+            item.href === "/klantbeeld"
+              ? pathname.startsWith("/klantbeeld")
+              : pathname === item.href;
 
           return (
             <div key={item.href}>
