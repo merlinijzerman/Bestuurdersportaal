@@ -95,10 +95,12 @@ export async function POST(
     }
 
     // Gekoppelde stukken (uit documenten met deze agendapunt_id)
+    // Gedeactiveerde documenten worden uitgesloten als context.
     const { data: stukken } = await supabase
       .from("documenten")
       .select("id, titel, bron, samenvatting_ai")
-      .eq("agendapunt_id", id);
+      .eq("agendapunt_id", id)
+      .eq("actief", true);
 
     // RAG over bibliotheek
     const ragQuery = `${agendapunt.titel} ${agendapunt.beschrijving ?? ""}`.trim();

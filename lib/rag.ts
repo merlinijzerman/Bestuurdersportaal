@@ -51,10 +51,12 @@ export async function zoekRelevanteChunks(
   `;
 
   // Poging 1: full-text search met plain type (plainto_tsquery — meest robuust)
+  // Inactieve documenten worden uitgesloten via filter op de joined-relatie.
   if (zoekterm.length > 0) {
     const { data, error } = await supabase
       .from("document_chunks")
       .select(selectQuery)
+      .eq("documenten.actief", true)
       .textSearch("zoek_vector", zoekterm, { type: "plain", config: "dutch" })
       .limit(maxResults);
 
@@ -66,6 +68,7 @@ export async function zoekRelevanteChunks(
     const { data: data2, error: error2 } = await supabase
       .from("document_chunks")
       .select(selectQuery)
+      .eq("documenten.actief", true)
       .textSearch("zoek_vector", zoekterm, { type: "plain" })
       .limit(maxResults);
 
@@ -81,6 +84,7 @@ export async function zoekRelevanteChunks(
     const { data: data3 } = await supabase
       .from("document_chunks")
       .select(selectQuery)
+      .eq("documenten.actief", true)
       .ilike("tekst", `%${hoofdwoord}%`)
       .limit(maxResults);
 

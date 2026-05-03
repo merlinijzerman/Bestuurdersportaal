@@ -127,7 +127,7 @@ export default function MaandOntwikkelingClient({ cohorten, initialAge = 45 }: P
         <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-xs text-gray-700">
           <Legend kleur="#94a3b8" label="Begin-saldo / invaarkapitaal" />
           <Legend kleur="#16a34a" label="Premie-instroom" />
-          <Legend kleur="#06b6d4" label="Toevoegingen (overdracht in / FVP)" />
+          <Legend kleur="#06b6d4" label="Toevoegingen (overdracht in)" />
           <Legend kleur="#ef4444" label="Onttrekkingen (overdracht uit)" />
           <Legend kleur="#0ea5e9" label="Kasrendement" />
           <Legend kleur="#C9A84C" label="Beschermingsrendement RTS" />
