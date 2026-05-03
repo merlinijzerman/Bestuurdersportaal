@@ -1,31 +1,49 @@
-import Link from "next/link";
-import { COHORTEN, fmtEur, fmtEurShort, fmtPct } from "@/lib/klantbeeld-data";
+import { COHORTEN, fmtEur, fmtEurShort } from "@/lib/klantbeeld-data";
 import { KlantbeeldHeader } from "../../_components/KlantbeeldHeader";
 import { DeelnemersSubTabs } from "../../_components/SubTabs";
 
 const W = 1100;
-const H = 360;
-const PAD = { l: 60, r: 20, t: 30, b: 50 };
+const H = 380;
+const PAD = { l: 70, r: 20, t: 30, b: 50 };
 
 export default function CohortenPage() {
   const innerW = W - PAD.l - PAD.r;
   const innerH = H - PAD.t - PAD.b;
   const colW = (innerW / COHORTEN.length) * 0.78;
 
-  const maxV =
-    Math.max(...COHORTEN.map((c) => Math.max(c.spreiding.p90, c.doelKapitaal, c.eindSaldo))) * 1.05;
+  // Totale vermogen per cohort = aantal deelnemers × gemiddeld eind-saldo
+  const totaalPerCohort = COHORTEN.map((c) => ({
+    age: c.age,
+    aantal: c.aantal,
+    gemiddeld: c.eindSaldo,
+    totaal: c.aantal * c.eindSaldo,
+  }));
+
+  const totaalFonds = totaalPerCohort.reduce((s, c) => s + c.totaal, 0);
+  const topCohort = totaalPerCohort.reduce((a, b) => (b.totaal > a.totaal ? b : a));
+  const totaalDeelnemers = totaalPerCohort.reduce((s, c) => s + c.aantal, 0);
+  const gemPerDeelnemer = totaalFonds / totaalDeelnemers;
+
+  const maxV = Math.max(...totaalPerCohort.map((c) => c.totaal)) * 1.05;
   const yS = (v: number) => PAD.t + innerH - (v / maxV) * innerH;
   const yTicks = [0, maxV * 0.25, maxV * 0.5, maxV * 0.75, maxV];
-
-  const aandacht = COHORTEN
-    .filter((c) => Math.abs(c.afwijking) > 0.025)
-    .sort((a, b) => Math.abs(b.afwijking) - Math.abs(a.afwijking));
 
   return (
     <div className="p-7">
       <KlantbeeldHeader />
       <div className="space-y-6">
         <DeelnemersSubTabs />
+
+        {/* KPI-strook */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <Kpi label="Totaal fondsvermogen" value={fmtEur(totaalFonds)} sub={`${totaalDeelnemers.toLocaleString("nl-NL")} deelnemers`} />
+          <Kpi
+            label="Top-cohort"
+            value={`${topCohort.age} jr`}
+            sub={`${fmtEurShort(topCohort.totaal)} totaal · ${topCohort.aantal.toLocaleString("nl-NL")} deelnemers`}
+          />
+          <Kpi label="Gem. per deelnemer" value={fmtEur(gemPerDeelnemer)} sub="over alle cohorten" />
+        </div>
 
         {/* Hoofdvisual */}
         <div className="bg-white rounded-xl border border-gray-200 p-6">
@@ -34,12 +52,9 @@ export default function CohortenPage() {
               Cohorten naast elkaar — 18 t/m 68 jaar
             </h2>
             <p className="text-sm text-gray-600 mt-1 max-w-3xl">
-              Huidig gemiddeld vermogen per leeftijdscohort, met spreidingsbanden en de verwachte stand
-              (neutraal scenario) als gele referentiepunt. Afwijking versus verwacht stuurt de kleur:{" "}
-              <span className="text-emerald-700">groen ≤2,5%</span>,{" "}
-              <span className="text-amber-700">amber 2,5–5%</span>,{" "}
-              <span className="text-red-700">rood &gt;5%</span>. Projectie naar pensioenleeftijd en
-              pure afwijkings-views komen in een latere iteratie.
+              Totaal pensioenvermogen per leeftijdscohort: aantal deelnemers ×
+              gemiddeld persoonlijk vermogen. Toont waar het fondsvermogen geconcentreerd is
+              over de leeftijdsverdeling.
             </p>
           </div>
 
@@ -52,39 +67,17 @@ export default function CohortenPage() {
                 </text>
               </g>
             ))}
-            {COHORTEN.map((c, i) => {
+            {totaalPerCohort.map((c, i) => {
               const x = PAD.l + (i + 0.5) * (innerW / COHORTEN.length);
-              const absDev = Math.abs(c.afwijking);
-              const kleur =
-                absDev <= 0.025 ? "#0F2744" : absDev <= 0.05 ? "#b45309" : "#b91c1c";
               return (
-                <g key={c.age}>
-                  <line
-                    x1={x}
-                    y1={yS(c.spreiding.p10)}
-                    x2={x}
-                    y2={yS(c.spreiding.p90)}
-                    stroke="#cbd5e1"
-                    strokeWidth={colW * 0.4}
-                    strokeLinecap="round"
-                    opacity={0.6}
-                  />
-                  <rect
-                    x={x - colW / 2}
-                    y={yS(c.eindSaldo)}
-                    width={colW}
-                    height={yS(0) - yS(c.eindSaldo)}
-                    fill={kleur}
-                  />
-                  <circle
-                    cx={x}
-                    cy={yS(c.doelKapitaal)}
-                    r={3}
-                    fill="#C9A84C"
-                    stroke="white"
-                    strokeWidth={1}
-                  />
-                </g>
+                <rect
+                  key={c.age}
+                  x={x - colW / 2}
+                  y={yS(c.totaal)}
+                  width={colW}
+                  height={yS(0) - yS(c.totaal)}
+                  fill="#0F2744"
+                />
               );
             })}
             {[18, 25, 35, 45, 55, 65, 68].map((age) => {
@@ -106,93 +99,21 @@ export default function CohortenPage() {
               Leeftijd
             </text>
             <text x={20} y={PAD.t - 12} fontSize={11} fill="#64748b">
-              Huidig gemiddeld vermogen + verwachte stand (neutraal scenario)
+              Totaal pensioenvermogen per cohort (€)
             </text>
           </svg>
-
-          <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2 text-xs text-gray-700">
-            <Legend kleur="#0F2744" label="Huidig vermogen (gem.)" />
-            <Legend kleur="#cbd5e1" label="Spreiding p10 — p90" />
-            <Legend kleur="#C9A84C" label="Verwachte stand bij neutraal scenario" rond />
-            <span className="text-gray-400">·</span>
-            <span className="text-emerald-700">Op koers (≤2,5%)</span>
-            <span className="text-amber-700">Aandacht (2,5–5%)</span>
-            <span className="text-red-700">Achter (&gt;5%)</span>
-          </div>
-        </div>
-
-        {/* Aandacht-tabel */}
-        <div className="bg-white rounded-xl border border-gray-200">
-          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-[#0F2744]">Cohorten met aandacht</h3>
-            <div className="text-xs text-gray-500">Cohorten met afwijking &gt;2,5% versus verwachte stand</div>
-          </div>
-          {aandacht.length === 0 ? (
-            <div className="px-6 py-8 text-center text-sm text-gray-500">
-              Geen cohorten met afwijking &gt;2,5% — alle cohorten op koers.
-            </div>
-          ) : (
-            <div className="divide-y divide-gray-100">
-              {aandacht.map((c) => {
-                const absDev = Math.abs(c.afwijking);
-                const tintBg = absDev <= 0.05 ? "bg-amber-50" : "bg-red-50";
-                const tintText = absDev <= 0.05 ? "text-amber-700" : "text-red-700";
-                const richting = c.afwijking >= 0 ? "voor" : "achter";
-                return (
-                  <Link
-                    key={c.age}
-                    href={`/klantbeeld/deelnemers?cohort=${c.age}`}
-                    className="grid grid-cols-12 gap-4 px-6 py-3 items-center hover:bg-gray-50 text-sm"
-                  >
-                    <div className="col-span-3">
-                      <div className="font-medium text-[#0F2744]">{c.age}-jarigen</div>
-                      <div className="text-xs text-gray-500">
-                        {c.aantal.toLocaleString("nl-NL")} deelnemers
-                      </div>
-                    </div>
-                    <div className="col-span-3 text-xs text-gray-600">
-                      {Math.round(c.actiefP * 100)}% actief / {Math.round(c.slapendP * 100)}%
-                      slapend / {Math.round(c.uitkerendP * 100)}% uitkerend
-                    </div>
-                    <div className="col-span-2 text-sm">
-                      {fmtEur(c.eindSaldo)}
-                      <div className="text-xs text-gray-500">huidig</div>
-                    </div>
-                    <div className="col-span-2 text-sm">
-                      {fmtEur(c.doelKapitaal)}
-                      <div className="text-xs text-gray-500">verwacht</div>
-                    </div>
-                    <div className="col-span-2">
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${tintBg} ${tintText}`}
-                      >
-                        {richting} {fmtPct(absDev, 0)}
-                      </span>
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
-          )}
         </div>
       </div>
     </div>
   );
 }
 
-function Legend({ kleur, label, rond }: { kleur: string; label: string; rond?: boolean }) {
+function Kpi({ label, value, sub }: { label: string; value: string; sub: string }) {
   return (
-    <span className="inline-flex items-center">
-      <span
-        className="inline-block mr-1.5"
-        style={{
-          width: 10,
-          height: 10,
-          background: kleur,
-          borderRadius: rond ? "50%" : 2,
-        }}
-      />
-      {label}
-    </span>
+    <div className="bg-white rounded-xl border border-gray-200 p-5">
+      <div className="text-xs uppercase tracking-wider text-gray-500">{label}</div>
+      <div className="text-2xl font-semibold text-[#0F2744] mt-1">{value}</div>
+      <div className="text-[11px] text-gray-500 mt-1">{sub}</div>
+    </div>
   );
 }
