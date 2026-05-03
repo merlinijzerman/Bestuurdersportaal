@@ -12,6 +12,7 @@ export interface DocumentChunk {
     titel: string;
     bron: string;
     bibliotheek: string;
+    opslag_pad: string | null;
   };
 }
 
@@ -22,6 +23,7 @@ export interface BronVerwijzing {
   pagina: number | null;
   paragraaf: string | null;
   fragment: string;
+  heeft_origineel: boolean;
 }
 
 // Zoek relevante chunks met Postgres full-text search + ILIKE fallback
@@ -47,7 +49,7 @@ export async function zoekRelevanteChunks(
     pagina,
     paragraaf,
     chunk_index,
-    documenten!inner(titel, bron, bibliotheek)
+    documenten!inner(titel, bron, bibliotheek, opslag_pad)
   `;
 
   // Poging 1: full-text search met plain type (plainto_tsquery — meest robuust)
@@ -132,6 +134,7 @@ export function maakContext(chunks: DocumentChunk[]): {
       pagina: chunk.pagina,
       paragraaf: chunk.paragraaf,
       fragment: chunk.tekst.substring(0, 150) + "...",
+      heeft_origineel: !!doc.opslag_pad,
     });
   });
 

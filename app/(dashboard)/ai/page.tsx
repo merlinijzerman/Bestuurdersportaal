@@ -11,6 +11,7 @@ interface Bron {
   pagina: number | null;
   paragraaf: string | null;
   fragment: string;
+  heeft_origineel: boolean;
 }
 
 interface Bericht {
@@ -35,6 +36,20 @@ const BRONTEKST: Record<string, string> = {
   Intern: "text-amber-700",
   Extern: "text-amber-700",
 };
+
+const BRON_NUMMER_KLEUR: Record<string, string> = {
+  DNB: "bg-red-600 text-white",
+  AFM: "bg-blue-600 text-white",
+  Pensioenfederatie: "bg-green-600 text-white",
+  Intern: "bg-amber-600 text-white",
+  Extern: "bg-amber-600 text-white",
+};
+
+// Regex pakt alle inline-markeringen in één keer:
+// - [Bron 1], [Bron 12]
+// - [Algemene kennis], [algemene kennis]
+// - [Volgens wetgeving], [volgens wetgeving]
+const MARKER_REGEX = /(\[Bron \d+\]|\[Algemene kennis\]|\[Volgens wetgeving\])/gi;
 
 const MODI: { value: Modus; label: string; help: string }[] = [
   {
@@ -80,8 +95,25 @@ export default function AiPage() {
   const [laden, setLaden] = useState(false);
   const [fondsId, setFondsId] = useState<string>("");
   const [modus, setModus] = useState<Modus>("combineren");
+  const [highlight, setHighlight] = useState<{
+    berichtIdx: number;
+    bronIdx: number;
+  } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const highlightTimer = useRef<number | null>(null);
   const supabase = createClient();
+
+  function scrollNaarBron(berichtIdx: number, bronIdx: number) {
+    const el = document.getElementById(`bron-${berichtIdx}-${bronIdx}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    setHighlight({ berichtIdx, bronIdx });
+    if (highlightTimer.current) window.clearTimeout(highlightTimer.current);
+    highlightTimer.current = window.setTimeout(() => {
+      setHighlight(null);
+      highlightTimer.current = null;
+    }, 2000);
+  }
 
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
@@ -247,41 +279,32 @@ export default function AiPage() {
                     : "bg-gray-50 border border-gray-200 px-4 py-3 rounded-2xl rounded-tl-sm text-sm leading-relaxed text-gray-800"
                 }
               >
-                {b.tekst.split("\n").map((regel, j) => (
-                  <p key={j} className={j > 0 ? "mt-1.5" : ""}>{regel}</p>
-                ))}
+                {b.rol === "ai"
+                  ? renderAntwoord(b.tekst, b.bronnen, i, highlight, scrollNaarBron)
+                  : b.tekst.split("\n").map((regel, j) => (
+                      <p key={j} className={j > 0 ? "mt-1.5" : ""}>
+                        {regel}
+                      </p>
+                    ))}
               </div>
 
               {/* Bronverwijzingen */}
               {b.bronnen && b.bronnen.length > 0 && (
                 <div className="mt-3">
                   <div className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">
-                    📌 Bronverwijzingen ({b.bronnen.length})
+                    📌 Bronverwijzingen ({b.bronnen.length}) · klik om in nieuw tabblad te openen
                   </div>
                   <div className="space-y-2">
                     {b.bronnen.map((bron, j) => (
-                      <div
+                      <Bronkaart
                         key={j}
-                        className={`flex items-start gap-2.5 p-2.5 rounded-lg border text-xs ${BRONKLEUR[bron.bron] || "bg-gray-50 border-gray-200"}`}
-                      >
-                        <span className="text-base">📋</span>
-                        <div className="flex-1 min-w-0">
-                          <div className={`font-bold ${BRONTEKST[bron.bron] || "text-gray-700"}`}>
-                            {bron.bron} — {bron.titel}
-                          </div>
-                          {(bron.paragraaf || bron.pagina) && (
-                            <div className="text-gray-500 mt-0.5 italic">
-                              📍{" "}
-                              {[bron.paragraaf, bron.pagina && `pag. ${bron.pagina}`]
-                                .filter(Boolean)
-                                .join(", ")}
-                            </div>
-                          )}
-                          <div className="text-gray-500 mt-1 leading-relaxed">
-                            „{bron.fragment}"
-                          </div>
-                        </div>
-                      </div>
+                        idx={j}
+                        bron={bron}
+                        idVoorScroll={`bron-${i}-${j}`}
+                        gehighlight={
+                          highlight?.berichtIdx === i && highlight?.bronIdx === j
+                        }
+                      />
                     ))}
                   </div>
                 </div>
@@ -349,6 +372,193 @@ export default function AiPage() {
           ➤
         </button>
       </div>
+    </div>
+  );
+}
+
+// ============================================================
+//  Renderen van AI-antwoord met inline pills voor [Bron N],
+//  [Algemene kennis] en [Volgens wetgeving]
+// ============================================================
+function renderAntwoord(
+  tekst: string,
+  bronnen: Bron[] | undefined,
+  berichtIdx: number,
+  highlight: { berichtIdx: number; bronIdx: number } | null,
+  onBronKlik: (berichtIdx: number, bronIdx: number) => void,
+) {
+  const regels = tekst.split("\n");
+  return regels.map((regel, j) => (
+    <p key={j} className={j > 0 ? "mt-1.5" : ""}>
+      {parseInline(regel, bronnen, berichtIdx, highlight, onBronKlik)}
+    </p>
+  ));
+}
+
+function parseInline(
+  regel: string,
+  bronnen: Bron[] | undefined,
+  berichtIdx: number,
+  highlight: { berichtIdx: number; bronIdx: number } | null,
+  onBronKlik: (berichtIdx: number, bronIdx: number) => void,
+) {
+  if (!regel) return null;
+  // Reset regex state per call (g-flag is stateful op het Regexp-object)
+  const regex = new RegExp(MARKER_REGEX.source, "gi");
+  const delen = regel.split(regex);
+  return delen.map((deel, i) => {
+    if (!deel) return null;
+
+    const bronMatch = deel.match(/^\[Bron (\d+)\]$/i);
+    if (bronMatch && bronnen) {
+      const bronIdx = parseInt(bronMatch[1], 10) - 1;
+      const bron = bronnen[bronIdx];
+      if (bron) {
+        return (
+          <BronPill
+            key={i}
+            nummer={bronIdx + 1}
+            bron={bron}
+            gehighlight={
+              highlight?.berichtIdx === berichtIdx &&
+              highlight?.bronIdx === bronIdx
+            }
+            onClick={() => onBronKlik(berichtIdx, bronIdx)}
+          />
+        );
+      }
+    }
+    if (/^\[algemene kennis\]$/i.test(deel)) {
+      return <KennisPill key={i} label="Algemene kennis" />;
+    }
+    if (/^\[volgens wetgeving\]$/i.test(deel)) {
+      return <KennisPill key={i} label="Volgens wetgeving" />;
+    }
+    return <span key={i}>{deel}</span>;
+  });
+}
+
+function BronPill({
+  nummer,
+  bron,
+  gehighlight,
+  onClick,
+}: {
+  nummer: number;
+  bron: Bron;
+  gehighlight: boolean;
+  onClick: () => void;
+}) {
+  const locatie = [bron.paragraaf, bron.pagina && `pag. ${bron.pagina}`]
+    .filter(Boolean)
+    .join(", ");
+  const tooltip =
+    `${bron.bron} — ${bron.titel}` +
+    (locatie ? ` (${locatie})` : "") +
+    `\n\n„${bron.fragment}"` +
+    `\n\nKlik om de bronvermelding hieronder te openen.`;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={tooltip}
+      className={`relative -top-[1px] inline-flex items-center justify-center align-baseline mx-0.5 min-w-[20px] h-[18px] px-1.5 rounded-md text-[10px] font-bold leading-none transition-colors cursor-pointer ${
+        gehighlight
+          ? "bg-[#0F2744] text-white"
+          : "bg-[#C9A84C]/20 text-[#0F2744] hover:bg-[#C9A84C]/45 hover:shadow-sm"
+      }`}
+    >
+      {nummer}
+    </button>
+  );
+}
+
+function KennisPill({ label }: { label: string }) {
+  return (
+    <span
+      className="relative -top-[1px] inline-flex items-center align-baseline mx-0.5 px-1.5 h-[18px] rounded-md text-[10px] font-semibold leading-none bg-gray-200 text-gray-600"
+      title="Niet uit een intern document — algemene kennis of wetgeving"
+    >
+      {label}
+    </span>
+  );
+}
+
+function Bronkaart({
+  idx,
+  bron,
+  idVoorScroll,
+  gehighlight,
+}: {
+  idx: number;
+  bron: Bron;
+  idVoorScroll: string;
+  gehighlight: boolean;
+}) {
+  const locatie = [bron.paragraaf, bron.pagina && `pag. ${bron.pagina}`]
+    .filter(Boolean)
+    .join(", ");
+
+  const inhoud = (
+    <>
+      <span
+        className={`flex-shrink-0 w-7 h-7 rounded-md text-[11px] font-bold flex items-center justify-center ${
+          BRON_NUMMER_KLEUR[bron.bron] || "bg-gray-700 text-white"
+        }`}
+      >
+        {idx + 1}
+      </span>
+      <div className="flex-1 min-w-0">
+        <div
+          className={`font-bold ${BRONTEKST[bron.bron] || "text-gray-700"}`}
+        >
+          {bron.bron} — {bron.titel}
+        </div>
+        {locatie && (
+          <div className="text-gray-500 mt-0.5 italic">📍 {locatie}</div>
+        )}
+        <div className="text-gray-500 mt-1 leading-relaxed">
+          „{bron.fragment}"
+        </div>
+        {!bron.heeft_origineel && (
+          <div className="text-gray-400 mt-1 text-[11px] italic">
+            Origineel niet beschikbaar — alleen tekst voor de AI-assistent
+          </div>
+        )}
+      </div>
+      {bron.heeft_origineel && (
+        <span className="flex-shrink-0 text-gray-400 group-hover:text-[#0F2744] transition-colors text-sm leading-none mt-1">
+          ↗
+        </span>
+      )}
+    </>
+  );
+
+  const baseKlasse = `flex items-start gap-2.5 p-2.5 rounded-lg border text-xs transition-all ${
+    BRONKLEUR[bron.bron] || "bg-gray-50 border-gray-200"
+  } ${
+    gehighlight
+      ? "ring-2 ring-[#C9A84C] ring-offset-1 shadow-md scale-[1.01]"
+      : ""
+  }`;
+
+  if (bron.heeft_origineel) {
+    return (
+      <a
+        id={idVoorScroll}
+        href={`/api/documents/${bron.document_id}/bestand`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`group ${baseKlasse} hover:border-[#C9A84C] hover:shadow-sm cursor-pointer scroll-mt-24`}
+        title="Origineel openen in nieuw tabblad"
+      >
+        {inhoud}
+      </a>
+    );
+  }
+  return (
+    <div id={idVoorScroll} className={`${baseKlasse} scroll-mt-24`}>
+      {inhoud}
     </div>
   );
 }

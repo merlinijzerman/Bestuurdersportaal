@@ -55,8 +55,11 @@ const SP_DOCUMENTEN_REGELS = `U beantwoordt vragen UITSLUITEND op basis van de a
 
 REGELS VAN INHOUD:
 - Gebruik alleen informatie die in de bronnen staat. Verzin niets, ook geen plausibel klinkende invulling.
-- Verwijs naar bronnen met [Bron X] notatie; weef die natuurlijk in de tekst, niet als opsomming.
-- Wees concreet over paragraaf- en paginanummers waar beschikbaar.
+- Verwijs naar bronnen met de notatie [Bron N], waarbij N het getal is van het bron-label uit de aangeleverde context.
+- Plaats de marker bij élke feitelijke claim, niet alleen één keer per alinea — een bestuurder moet bij iedere uitspraak kunnen zien waar die op steunt.
+- Schrijf elke verwijzing als een afzonderlijke marker: [Bron 1][Bron 2] in plaats van [Bron 1, 2] of [Bron 1 en 2]. Dat geldt ook bij meerdere bronnen achter dezelfde claim.
+- Plaats de marker direct ná de claim, vóór de leesteken-pauze. Dus: "Bestuurders moeten jaarlijks een deskundigheidstoets doorlopen [Bron 1]." en niet "[Bron 1] Bestuurders moeten...".
+- Wees concreet over paragraaf- en paginanummers waar beschikbaar — die staan tussen haakjes bij elk bron-label.
 - Als de bronnen het antwoord niet (volledig) bevatten, zeg dat eerlijk in een natuurlijke zin — niet als sjabloon. Een suggestie wat voor document zou helpen mag, maar dwing dat niet af.`;
 
 const SP_ALGEMEEN_REGELS = `U beantwoordt vragen op basis van uw algemene kennis over Nederlandse pensioenwetgeving, pensioenadministratie, governance, beleggen, risico-management en de Wet toekomst pensioenen (Wtp).
@@ -70,9 +73,12 @@ REGELS VAN INHOUD:
 const SP_COMBINEREN_REGELS = `U beantwoordt vragen primair op basis van de aangeleverde interne bronnen, en vult aan met uw algemene kennis waar dat de vraag beter beantwoordt.
 
 REGELS VAN INHOUD:
-- Gebruik de interne bronnen waar mogelijk — markeer met [Bron X].
+- Gebruik de interne bronnen waar mogelijk — markeer met [Bron N], waarbij N exact overeenkomt met het bron-label uit de context.
+- Plaats een marker bij élke feitelijke claim, ook als dezelfde bron in een eerdere zin al genoemd is.
+- Schrijf elke verwijzing als een afzonderlijke marker: [Bron 1][Bron 2] in plaats van [Bron 1, 2] of [Bron 1 en 2].
+- Plaats de marker direct ná de claim, vóór de leesteken-pauze.
 - Vul aan met algemene kennis waar de bronnen geen antwoord geven — markeer met [Algemene kennis].
-- Maak altijd glashelder welke informatie waarvandaan komt, maar weef de markeringen natuurlijk in de tekst.
+- Maak altijd glashelder welke informatie waarvandaan komt; weef de markeringen natuurlijk in de tekst.
 - Verzin geen specifieke feiten over dit fonds; alleen wat in de bronnen staat.
 - Bij algemene kennis: noem de bron-instantie (DNB, AFM, Pensioenfederatie, rijksoverheid).`;
 
