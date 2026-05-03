@@ -172,7 +172,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* KPI tegels */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <div className="text-xs text-gray-500">Financieringsgraad</div>
           <div className="text-2xl font-bold text-[#0F2744] mt-1">
@@ -182,6 +182,26 @@ export default async function DashboardPage() {
             +{KPI.financieringsgraad.deltaPP} pp t.o.v. Q4
           </div>
         </div>
+        {(() => {
+          const aanpassingPct = (KPI.financieringsgraad.huidig - 100) / 5;
+          const teken = aanpassingPct >= 0 ? "+" : "−";
+          const absStr = Math.abs(aanpassingPct).toFixed(1).replace(".", ",");
+          const kleur = aanpassingPct >= 0 ? "text-green-600" : "text-red-600";
+          return (
+            <div className="bg-white rounded-xl border border-gray-200 p-4">
+              <div className="text-xs text-gray-500">
+                Jaarlijkse aanpassing uitkeringen
+              </div>
+              <div className={`text-2xl font-bold mt-1 ${kleur}`}>
+                {teken}
+                {absStr}%
+              </div>
+              <div className="text-xs text-gray-500 mt-1">
+                indicatie volgend jaar · 1/5 × (FG − 100%)
+              </div>
+            </div>
+          );
+        })()}
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <div className="text-xs text-gray-500">Solidariteitsreserve</div>
           <div className="text-2xl font-bold text-[#0F2744] mt-1">
