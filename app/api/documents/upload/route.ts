@@ -161,18 +161,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: melding }, { status: 400 });
     }
 
-    // Diagnostiek: log een waarschuwing als de extractie er verdacht uitziet.
-    // Voor PDF's is >5% "lange woorden" een sterke indicatie dat de spatie-
-    // detectie heeft gefaald op dit specifieke document. Niet blokkerend —
-    // we slaan het document gewoon op, maar je kunt dit in de Vercel-logs
-    // gebruiken om probleem-PDF's op te sporen.
+    // Diagnostiek: log waarschuwingen als de extractie er verdacht uitziet.
+    // Twee signalen voor PDF's:
+    //  - >5% "lange woorden" wijst op gefaalde spatie-detectie
+    //  - resterende hyphen-fragmenten wijzen op gemiste woordafbrekingen
+    // Niet blokkerend — we slaan het document gewoon op, maar je kunt dit
+    // in de Vercel-logs gebruiken om probleem-PDF's op te sporen.
     if (bestandstype === "pdf") {
       const diag = diagnoseerExtractie(extractie.tekst);
       if (diag.percentageVerdacht > 5 && diag.langeWoorden >= 3) {
         console.warn(
-          `[PDF-extractie] Verdacht resultaat voor "${bestand.name}": ` +
-            `${diag.langeWoorden} van ${diag.totaalWoorden} woorden zijn >30 chars ` +
-            `(${diag.percentageVerdacht.toFixed(1)}%). Voorbeelden: ${diag.voorbeelden.join(", ")}`
+          `[PDF-extractie] Verdachte lange woorden voor "${bestand.name}": ` +
+            `${diag.langeWoorden} van ${diag.totaalWoorden} woorden >30 chars ` +
+            `(${diag.percentageVerdacht.toFixed(1)}%). Voorbeelden: ${diag.voorbeeldenLangeWoorden.join(", ")}`
+        );
+      }
+      if (diag.hyphenFragmenten >= 3) {
+        console.warn(
+          `[PDF-extractie] Gemiste woordafbrekingen voor "${bestand.name}": ` +
+            `${diag.hyphenFragmenten} hyphen-fragmenten gevonden. ` +
+            `Voorbeelden: ${diag.voorbeeldenHyphenFragmenten.join(", ")}`
         );
       }
     }
