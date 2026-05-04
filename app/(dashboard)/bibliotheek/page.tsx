@@ -7,6 +7,7 @@ interface Document {
   bron: string;
   bibliotheek: string;
   bestandsnaam: string | null;
+  bestandstype: "pdf" | "docx" | "xlsx" | null;
   paginas: number | null;
   geindexeerd: boolean;
   aangemaakt: string;
@@ -15,6 +16,18 @@ interface Document {
   gedeactiveerd_op: string | null;
   deactivatie_reden: string | null;
 }
+
+const TYPE_LABEL: Record<NonNullable<Document["bestandstype"]>, string> = {
+  pdf: "PDF",
+  docx: "Word",
+  xlsx: "Excel",
+};
+
+const TYPE_KLEUR: Record<NonNullable<Document["bestandstype"]>, string> = {
+  pdf: "bg-red-50 text-red-700",
+  docx: "bg-blue-50 text-blue-700",
+  xlsx: "bg-emerald-50 text-emerald-700",
+};
 
 const BRONNEN = ["DNB", "AFM", "Pensioenfederatie", "Intern", "Extern"];
 const BRONKLEUR: Record<string, string> = {
@@ -208,7 +221,7 @@ export default function BibliotheekPage() {
           <div className="text-4xl mb-3">📂</div>
           <h3 className="font-semibold text-gray-700 mb-1">Geen documenten</h3>
           <p className="text-sm text-gray-400">
-            Upload een PDF om te beginnen. De AI-assistent kan dan uw vragen beantwoorden.
+            Upload een PDF, Word- of Excel-bestand om te beginnen. De AI-assistent kan dan uw vragen beantwoorden.
           </p>
         </div>
       ) : (
@@ -235,7 +248,7 @@ export default function BibliotheekPage() {
                       target="_blank"
                       rel="noopener noreferrer"
                       className="font-semibold text-[#0F2744] text-sm truncate hover:text-[#C9A84C] transition-colors block"
-                      title="PDF openen in nieuw tabblad"
+                      title="Origineel openen of downloaden"
                     >
                       {doc.titel}
                     </a>
@@ -256,7 +269,19 @@ export default function BibliotheekPage() {
                     >
                       {doc.bron}
                     </span>
-                    {doc.paginas && <span>{doc.paginas} pag.</span>}
+                    {doc.bestandstype && (
+                      <span
+                        className={`px-2 py-0.5 rounded-full font-semibold ${TYPE_KLEUR[doc.bestandstype]}`}
+                      >
+                        {TYPE_LABEL[doc.bestandstype]}
+                      </span>
+                    )}
+                    {doc.paginas && (
+                      <span>
+                        {doc.paginas}{" "}
+                        {doc.bestandstype === "xlsx" ? "tabbladen" : "pag."}
+                      </span>
+                    )}
                     <span>
                       {new Date(doc.aangemaakt).toLocaleDateString("nl-NL")}
                     </span>
@@ -410,15 +435,19 @@ export default function BibliotheekPage() {
             <form onSubmit={handleUpload} className="space-y-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">
-                  PDF-bestand
+                  Bestand
                 </label>
                 <input
                   ref={bestandRef}
                   type="file"
-                  accept=".pdf"
+                  accept=".pdf,.docx,.xlsx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                   required
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
                 />
+                <p className="text-[11px] text-gray-500 mt-1">
+                  PDF, Word (.docx) of Excel (.xlsx). Gescande PDF&apos;s eerst
+                  doorzoekbaar maken via Acrobat/Preview.
+                </p>
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Titel</label>

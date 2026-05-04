@@ -1,9 +1,13 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // pdf-parse moet als externe Node-package geladen worden in server components,
-  // anders crasht de build. In Next.js 15+ heet deze optie `serverExternalPackages`.
-  serverExternalPackages: ["pdf-parse"],
+  // Document-extractie packages moeten als externe Node-packages geladen worden in
+  // server components, anders crasht de build. In Next.js 15+ heet deze optie
+  // `serverExternalPackages`.
+  // - unpdf: PDF-tekstextractie (modern pdfjs onder de motorkap, Vercel-vriendelijk)
+  // - mammoth: Word (.docx) tekstextractie
+  // - xlsx: Excel (.xlsx) parsing
+  serverExternalPackages: ["unpdf", "mammoth", "xlsx"],
 };
 
 export default nextConfig;

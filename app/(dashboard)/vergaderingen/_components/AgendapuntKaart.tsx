@@ -9,10 +9,17 @@ export interface Stuk {
   id: string;
   titel: string;
   bestandsnaam: string | null;
+  bestandstype: "pdf" | "docx" | "xlsx" | null;
   paginas: number | null;
   samenvatting_ai: string | null;
   samengevat_op: string | null;
 }
+
+const STUK_BADGE: Record<NonNullable<Stuk["bestandstype"]>, { label: string; kleur: string }> = {
+  pdf: { label: "PDF", kleur: "text-red-700" },
+  docx: { label: "DOCX", kleur: "text-blue-700" },
+  xlsx: { label: "XLSX", kleur: "text-emerald-700" },
+};
 
 export interface Inbreng {
   id: string;
@@ -165,7 +172,7 @@ export default function AgendapuntKaart({
       const formData = new FormData();
       formData.append("bestand", file);
       formData.append("agendapunt_id", punt.id);
-      formData.append("titel", file.name.replace(/\.pdf$/i, ""));
+      formData.append("titel", file.name.replace(/\.(pdf|docx|xlsx)$/i, ""));
       const res = await fetch("/api/documents/upload", {
         method: "POST",
         body: formData,
@@ -235,7 +242,7 @@ export default function AgendapuntKaart({
                 <input
                   ref={fileRef}
                   type="file"
-                  accept=".pdf,application/pdf"
+                  accept=".pdf,.docx,.xlsx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                   className="hidden"
                   disabled={uploadBezig}
                   onChange={(e) => {
@@ -245,7 +252,7 @@ export default function AgendapuntKaart({
                 />
                 {uploadBezig
                   ? "Bezig met uploaden en samenvatten..."
-                  : "+ PDF toevoegen (AI-samenvatting volgt automatisch)"}
+                  : "+ Stuk toevoegen — PDF, Word of Excel (AI-samenvatting volgt automatisch)"}
               </label>
               {uploadFout && <div className="text-xs text-red-600">{uploadFout}</div>}
             </div>
@@ -340,6 +347,8 @@ export default function AgendapuntKaart({
 function StukKaart({ stuk }: { stuk: Stuk }) {
   const [open, setOpen] = useState(false);
   const samenvatting = parseSamenvatting(stuk.samenvatting_ai);
+  const badge = STUK_BADGE[stuk.bestandstype ?? "pdf"];
+  const eenheid = stuk.bestandstype === "xlsx" ? "tabbladen" : "pagina's";
 
   return (
     <div className="bg-gray-50 rounded-lg border border-gray-200">
@@ -347,13 +356,15 @@ function StukKaart({ stuk }: { stuk: Stuk }) {
         onClick={() => setOpen(!open)}
         className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-100 transition-colors rounded-lg"
       >
-        <span className="w-9 h-9 bg-white border border-gray-200 rounded-md inline-flex items-center justify-center text-[10px] font-semibold text-red-700 flex-shrink-0">
-          PDF
+        <span
+          className={`w-9 h-9 bg-white border border-gray-200 rounded-md inline-flex items-center justify-center text-[10px] font-semibold flex-shrink-0 ${badge.kleur}`}
+        >
+          {badge.label}
         </span>
         <div className="flex-1 min-w-0">
           <div className="text-sm font-medium text-[#0F2744] truncate">{stuk.titel}</div>
           <div className="text-[11px] text-gray-500 mt-0.5">
-            {stuk.paginas ? `${stuk.paginas} pagina's` : "PDF"}
+            {stuk.paginas ? `${stuk.paginas} ${eenheid}` : badge.label}
             {stuk.samenvatting_ai ? " · AI-samenvatting beschikbaar" : " · samenvatting wordt nog gegenereerd"}
           </div>
         </div>

@@ -75,7 +75,7 @@ export default async function VergaderingDetailPage({
     agendapuntIds.length > 0
       ? supabase
           .from("documenten")
-          .select("id, titel, bestandsnaam, paginas, samenvatting_ai, samengevat_op, agendapunt_id")
+          .select("id, titel, bestandsnaam, bestandstype, paginas, samenvatting_ai, samengevat_op, agendapunt_id")
           .in("agendapunt_id", agendapuntIds)
       : Promise.resolve({ data: [] }),
     agendapuntIds.length > 0

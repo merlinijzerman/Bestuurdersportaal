@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase-server";
+import {
+  CONTENT_TYPE_PER_BESTANDSTYPE,
+  type Bestandstype,
+} from "@/lib/document-extractie";
 
 // GET /api/documents/[id]/bestand
-// Streamt het originele PDF inline. RLS op documenten zorgt al voor
-// toegangscontrole; we voegen alleen het inzage-logregeltje toe.
+// Streamt het originele bestand inline (PDF) of als download (Word/Excel).
+// RLS op documenten zorgt al voor toegangscontrole; we voegen alleen het
+// inzage-logregeltje toe.
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -20,7 +25,7 @@ export async function GET(
 
   const { data: document, error: docError } = await supabase
     .from("documenten")
-    .select("id, titel, fonds_id, opslag_pad, bestandsnaam, actief")
+    .select("id, titel, fonds_id, opslag_pad, bestandsnaam, bestandstype, actief")
     .eq("id", id)
     .single();
 
@@ -45,9 +50,9 @@ export async function GET(
     .download(document.opslag_pad);
 
   if (storageError || !bestand) {
-    console.error("Fout bij ophalen PDF:", storageError);
+    console.error("Fout bij ophalen bestand:", storageError);
     return NextResponse.json(
-      { error: "Kon het PDF-bestand niet ophalen." },
+      { error: "Kon het bestand niet ophalen." },
       { status: 500 }
     );
   }
@@ -68,14 +73,24 @@ export async function GET(
     actie: "inzage",
   });
 
+  // Bepaal content-type en disposition op basis van bestandstype.
+  // Bij ontbrekend type (oude records) vallen we terug op PDF voor backwards
+  // compatibility met al opgeslagen bestanden.
+  const bestandstype = (document.bestandstype as Bestandstype) || "pdf";
+  const contentType = CONTENT_TYPE_PER_BESTANDSTYPE[bestandstype];
+  // PDF kan inline in de browser worden getoond; Word/Excel forceren we als download
+  // omdat browsers die toch niet kunnen renderen.
+  const disposition = bestandstype === "pdf" ? "inline" : "attachment";
+  const filename =
+    document.bestandsnaam || `${document.titel}.${bestandstype}`;
+
   const arrayBuffer = await bestand.arrayBuffer();
-  const filename = document.bestandsnaam || `${document.titel}.pdf`;
 
   return new NextResponse(arrayBuffer, {
     status: 200,
     headers: {
-      "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="${encodeURIComponent(filename)}"`,
+      "Content-Type": contentType,
+      "Content-Disposition": `${disposition}; filename="${encodeURIComponent(filename)}"`,
       "Cache-Control": "private, max-age=0, no-store",
     },
   });
