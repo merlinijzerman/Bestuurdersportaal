@@ -8,11 +8,7 @@ import {
 import ActieveStapPaneel from "../_components/ActieveStapPaneel";
 import DecisionObjectHeader from "../_components/DecisionObjectHeader";
 import ClassificatiePanel from "../_components/ClassificatiePanel";
-import AannamesPaneel from "../_components/AannamesPaneel";
-import RisicosPaneel from "../_components/RisicosPaneel";
-import DissentPaneel from "../_components/DissentPaneel";
-import VoorwaardenPaneel from "../_components/VoorwaardenPaneel";
-import ActiesPaneel from "../_components/ActiesPaneel";
+import OnderbouwingsPaneel from "../_components/OnderbouwingsPaneel";
 import StatusOvergangPaneel from "../_components/StatusOvergangPaneel";
 import UitklapbaarPaneel from "../_components/UitklapbaarPaneel";
 import DossierStatusStrip from "../_components/DossierStatusStrip";
@@ -670,161 +666,20 @@ export default async function ProcedureDetailPage({
               <ClassificatiePanel decision={dossier.decision} />
             </UitklapbaarPaneel>
 
-            <UitklapbaarPaneel
-              titel="Aannames"
-              count={
-                dossier.assumptions.filter((a) => a.status !== "verwijderd").length
-              }
-              status={
-                (() => {
-                  const actief = dossier.assumptions.filter(
-                    (a) => a.status !== "verwijderd"
-                  );
-                  if (actief.length === 0) return "neutraal";
-                  return actief.every((a) =>
-                    ["gevalideerd", "gewijzigd"].includes(a.status)
-                  )
-                    ? "voldoet"
-                    : "aandacht";
-                })()
-              }
-              samenvatting={(() => {
-                const actief = dossier.assumptions.filter(
-                  (a) => a.status !== "verwijderd"
-                );
-                const gevalideerd = actief.filter((a) =>
-                  ["gevalideerd", "gewijzigd"].includes(a.status)
-                ).length;
-                const concept = actief.filter((a) => a.status === "concept").length;
-                if (actief.length === 0) return "Nog niet vastgelegd";
-                return `${gevalideerd} gevalideerd, ${concept} in concept`;
-              })()}
-            >
-              <AannamesPaneel
-                decisionId={dossier.decision.id}
-                assumptions={dossier.assumptions}
-              />
-            </UitklapbaarPaneel>
-
-            <UitklapbaarPaneel
-              titel="Risico's"
-              count={dossier.risks.length}
-              status={
-                dossier.risks.length === 0
-                  ? "aandacht"
-                  : dossier.risks.every((r) => r.status !== "open")
-                    ? "voldoet"
-                    : "aandacht"
-              }
-              samenvatting={(() => {
-                if (dossier.risks.length === 0) return "Nog niet vastgelegd";
-                const open = dossier.risks.filter((r) => r.status === "open").length;
-                const gemit = dossier.risks.filter(
-                  (r) => r.status === "gemitigeerd"
-                ).length;
-                const acc = dossier.risks.filter(
-                  (r) => r.status === "geaccepteerd"
-                ).length;
-                return `${open} open, ${gemit} gemitigeerd, ${acc} geaccepteerd`;
-              })()}
-            >
-              <RisicosPaneel
-                decisionId={dossier.decision.id}
-                risks={dossier.risks}
-              />
-            </UitklapbaarPaneel>
-
-            <UitklapbaarPaneel
-              titel="Voorwaarden"
-              count={dossier.conditions.length}
-              status={
-                dossier.conditions.length === 0
-                  ? "neutraal"
-                  : dossier.conditions.some((c) => c.status === "overschreden")
-                    ? "aandacht"
-                    : dossier.conditions.every((c) => c.status === "vervuld")
-                      ? "voldoet"
-                      : "neutraal"
-              }
-              samenvatting={(() => {
-                if (dossier.conditions.length === 0) return "Geen voorwaarden";
-                const open = dossier.conditions.filter(
-                  (c) => c.status === "open"
-                ).length;
-                const vervuld = dossier.conditions.filter(
-                  (c) => c.status === "vervuld"
-                ).length;
-                return `${open} open, ${vervuld} vervuld`;
-              })()}
-            >
-              <VoorwaardenPaneel
-                decisionId={dossier.decision.id}
-                conditions={dossier.conditions}
-              />
-            </UitklapbaarPaneel>
-
-            <UitklapbaarPaneel
-              titel="Acties"
-              count={dossier.actions.length}
-              status={
-                dossier.actions.length === 0
-                  ? "neutraal"
-                  : dossier.actions.some((a) => a.status === "escalatie")
-                    ? "aandacht"
-                    : dossier.actions.every((a) => a.status === "afgerond")
-                      ? "voldoet"
-                      : "neutraal"
-              }
-              samenvatting={(() => {
-                if (dossier.actions.length === 0) return "Geen acties";
-                const open = dossier.actions.filter(
-                  (a) => a.status === "open" || a.status === "in_behandeling"
-                ).length;
-                const afgerond = dossier.actions.filter(
-                  (a) => a.status === "afgerond"
-                ).length;
-                return `${open} open, ${afgerond} afgerond`;
-              })()}
-            >
-              <ActiesPaneel
-                decisionId={dossier.decision.id}
-                actions={dossier.actions}
-                conditions={dossier.conditions}
-              />
-            </UitklapbaarPaneel>
-
-            <UitklapbaarPaneel
-              titel="Dissent"
-              count={dossier.dissent.length}
-              status={
-                dossier.dissent.length === 0
-                  ? "neutraal"
-                  : dossier.dissent.some(
-                        (d) =>
-                          ["formele_dissent", "minderheidsnotitie"].includes(
-                            d.zichtbaarheid
-                          ) && !d.formeel_vastgesteld
-                      )
-                    ? "aandacht"
-                    : "voldoet"
-              }
-              samenvatting={(() => {
-                if (dossier.dissent.length === 0) return "Geen dissent";
-                const formeel = dossier.dissent.filter(
-                  (d) => d.formeel_vastgesteld
-                ).length;
-                return `${dossier.dissent.length} notitie${
-                  dossier.dissent.length === 1 ? "" : "s"
-                }, ${formeel} formeel vastgesteld`;
-              })()}
-            >
-              <DissentPaneel
-                decisionId={dossier.decision.id}
-                dissents={dossier.dissent}
-                currentUserId={user.id}
-                currentUserIsPrivileged={currentUserIsPrivileged}
-              />
-            </UitklapbaarPaneel>
+            {/* MVP-2A: vijf uitklapbaren (Aannames, Risico's, Voorwaarden,
+                Acties, Dissent) zijn samengevoegd tot één OnderbouwingsPaneel
+                met tabs. Statusovergang en Audit-trail blijven uitklapbaar
+                want die zijn semantisch geen onderbouwing. */}
+            <OnderbouwingsPaneel
+              decisionId={dossier.decision.id}
+              assumptions={dossier.assumptions}
+              risks={dossier.risks}
+              conditions={dossier.conditions}
+              actions={dossier.actions}
+              dissents={dossier.dissent}
+              currentUserId={user.id}
+              currentUserIsPrivileged={currentUserIsPrivileged}
+            />
 
             <UitklapbaarPaneel
               titel="Statusovergang"

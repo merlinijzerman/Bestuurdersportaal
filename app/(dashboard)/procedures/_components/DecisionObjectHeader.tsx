@@ -1,7 +1,13 @@
-// Server-component: Decision Object-header bovenaan de procedure-detail
-// pagina. Toont besluitcode, titel-banner, status-badge en classificatie-
-// pills. Geeft een korte indicatie als het dossier zojuist via auto-
-// upgrade is aangemaakt.
+// Client-component: Decision Object-header bovenaan de procedure-detail
+// pagina. Toont besluitcode, titel-banner, klikbare status-pill en
+// classificatie-pills. Klik op de status-pill scrolt naar het
+// statusovergang-paneel onderaan de pagina en geeft kort een gold-puls
+// als visuele bevestiging.
+//
+// MVP-2A: status-pill omgezet van statische <span> naar klikbare
+// <button>. Functionaliteit verder ongewijzigd.
+
+"use client";
 
 import {
   type DecisionObject,
@@ -41,6 +47,22 @@ const RISICO_KLEUREN: Record<string, string> = {
   hoog: "bg-rose-50 text-rose-800 border-rose-200",
 };
 
+// Scrolt naar de StatusOvergangPaneel-anker en geeft een korte
+// gold-puls om de gebruiker visueel te bevestigen dat we daar zijn
+// beland. De anker-id "status-overgang" is gezet op de
+// UitklapbaarPaneel-wrapper rond StatusOvergangPaneel in page.tsx.
+function scrollNaarStatusOvergang() {
+  if (typeof window === "undefined") return;
+  const el = document.getElementById("status-overgang");
+  if (!el) return;
+  el.scrollIntoView({ behavior: "smooth", block: "start" });
+  el.classList.remove("status-puls");
+  // Force reflow zodat de animatie opnieuw start als er al een puls liep.
+  void el.offsetWidth;
+  el.classList.add("status-puls");
+  window.setTimeout(() => el.classList.remove("status-puls"), 1700);
+}
+
 export default function DecisionObjectHeader({ decision, autoUpgraded }: Props) {
   const statusKlasse =
     STATUS_KLEUREN[decision.status] ?? "bg-gray-100 text-gray-700";
@@ -54,11 +76,18 @@ export default function DecisionObjectHeader({ decision, autoUpgraded }: Props) 
           <div className="flex items-center gap-2 flex-wrap text-[11px] font-medium uppercase tracking-wide">
             <span className="text-[#C9A84C]">{decision.besluit_code}</span>
             <span className="text-white/40">·</span>
-            <span
-              className={`px-2 py-0.5 rounded ${statusKlasse} text-[11px] font-medium normal-case`}
+            <button
+              type="button"
+              onClick={scrollNaarStatusOvergang}
+              className={`px-2 py-0.5 rounded ${statusKlasse} text-[11px] font-medium normal-case hover:brightness-110 hover:ring-2 hover:ring-[#C9A84C]/40 transition cursor-pointer`}
+              title="Klik om naar statusovergang te gaan"
+              aria-label={`Status: ${DECISION_STATUS_LABEL[decision.status]} — klik voor statusovergang`}
             >
               {DECISION_STATUS_LABEL[decision.status]}
-            </span>
+              <span className="ml-1 text-[9px] opacity-70" aria-hidden>
+                ▾
+              </span>
+            </button>
             <span className="text-white/40">·</span>
             <span className="text-white/70">Decision Object</span>
           </div>
