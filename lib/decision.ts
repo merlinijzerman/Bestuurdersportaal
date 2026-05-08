@@ -14,7 +14,9 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  type ActionItem,
   type AIInteraction,
+  type AIValidatieDomein,
   type Assumption,
   type AuditSnapshotMeta,
   type DecisionCondition,
@@ -169,7 +171,10 @@ export async function ensureDecisionForProcedure(
     actorNaam = profiel?.naam ?? null;
   }
 
-  await supabase.from("governance_events").insert({
+  // Issue 3 uit de review: expliciet error-checken op de governance-event
+  // insert. Zonder log-rij is de auto-upgrade niet traceerbaar — dat is
+  // voor een audit-systeem onacceptabel, dus we gooien een error door.
+  const { error: eventFout } = await supabase.from("governance_events").insert({
     decision_id: nieuw.id,
     event_type: "decision_object_auto_created",
     actor_id: user?.id ?? null,
@@ -183,6 +188,15 @@ export async function ensureDecisionForProcedure(
       reden: "auto_upgrade_bij_eerste_opening",
     },
   });
+  if (eventFout) {
+    console.error(
+      "Auto-upgrade: governance_event 'decision_object_auto_created' niet geschreven:",
+      eventFout
+    );
+    throw new Error(
+      `Auto-upgrade-event niet gelogd: ${eventFout.message}. Decision Object ${nieuw.id} bestaat wel maar mist audit-rij.`
+    );
+  }
 
   return { decision_id: nieuw.id, auto_upgraded: true };
 }
@@ -382,6 +396,9 @@ interface ProcedureRequirementRow {
   triggert_bij_risiconiveau: string[] | null;
   triggert_bij_mandaatgevoelig: boolean | null;
   triggert_bij_toezichtgevoelig: boolean | null;
+  // Phase 1C-uitbreiding: vervangt label-regex (zie review-issues 4 + 5)
+  vereist_validatie_domein: AIValidatieDomein | null;
+  min_aantal: number;
 }
 
 interface ProcedureBewijsRow {
@@ -475,25 +492,17 @@ async function buildEvidenceLijst(
         break;
       }
       case "ai_validation": {
-        // Binnen de readiness-check is dit nog niet gedifferentieerd op
-        // validatie_domein; voor evidence-display willen we dat wel,
-        // dus we proberen eerst een match op het label (bijv. "risk-").
-        const labelLower = req.label.toLowerCase();
-        const labelDomein =
-          labelLower.includes("risk")
-            ? "risk"
-            : labelLower.includes("compliance")
-              ? "compliance"
-              : labelLower.includes("beleggingen")
-                ? "beleggingen"
-                : labelLower.includes("governance")
-                  ? "governance"
-                  : null;
+        // Phase 1C-fix (review-issue 4): domein komt uit de kolom
+        // `vereist_validatie_domein` in plaats van string-match op label.
+        // Null = geen domein-eis; elke gevalideerde AI-output telt dan.
+        const vereistDomein = req.vereist_validatie_domein;
         const match = ctx.aiOutputs.find((ai) => {
           if (!["gevalideerd", "aangepast"].includes(ai.validatiestatus)) {
             return false;
           }
-          if (labelDomein && ai.validatie_domein !== labelDomein) return false;
+          if (vereistDomein && ai.validatie_domein !== vereistDomein) {
+            return false;
+          }
           return true;
         });
         if (match) {
@@ -507,11 +516,12 @@ async function buildEvidenceLijst(
         break;
       }
       case "assumption": {
+        // Phase 1C-fix (review-issue 5): drempel komt uit de kolom
+        // `min_aantal` in plaats van regex op het label.
         const gevalideerd = ctx.assumptions.filter((a) =>
           ["gevalideerd", "gewijzigd"].includes(a.status)
         );
-        // Voor labels die expliciet "≥ 3" eisen, vereisen we drie of meer.
-        const drempel = /≥\s*3|>=\s*3|drie|3 /.test(req.label) ? 3 : 1;
+        const drempel = req.min_aantal ?? 1;
         if (gevalideerd.length >= drempel) {
           vervuld = true;
           bron = "assumption";
@@ -714,8 +724,6 @@ export function eersteOntbrekendeReadiness(
   return null;
 }
 
-// ── ActionItem alias om `import { ActionItem }` consistent te houden ──
-// (Het type wordt in decision-view.ts gedefinieerd; hier alleen
-//  herexport zodat consumers één plek hebben.)
-import type { ActionItem } from "./decision-view";
+// `ActionItem` wordt gere-exporteerd zodat consumers van dit bestand
+// één import-pad hebben (issue 1 van de review).
 export type { ActionItem };

@@ -6,6 +6,14 @@ import {
   PROCEDURE_STATUS_LABEL,
 } from "@/lib/proces-templates";
 import ActieveStapPaneel from "../_components/ActieveStapPaneel";
+import DecisionObjectHeader from "../_components/DecisionObjectHeader";
+import ClassificatiePanel from "../_components/ClassificatiePanel";
+import ReadinessLadder from "../_components/ReadinessLadder";
+import StapRequirementsPaneel from "../_components/StapRequirementsPaneel";
+import {
+  buildDecisionDossierView,
+  ensureDecisionForProcedure,
+} from "@/lib/decision";
 
 interface ProcedureDetail {
   id: string;
@@ -251,6 +259,24 @@ export default async function ProcedureDetailPage({
   const afgerondAantal = stappen.filter((s) => s.status === "afgerond").length;
   const totaalStappen = stappen.length;
 
+  // Decision Object — lazy auto-upgrade voor procedures zonder dossier.
+  // Faalt deze stap (RLS / DB-fout), dan tonen we het dossier-blok niet
+  // maar blijft de rest van de pagina werken.
+  let dossier:
+    | Awaited<ReturnType<typeof buildDecisionDossierView>>
+    | null = null;
+  try {
+    const { decision_id, auto_upgraded } = await ensureDecisionForProcedure(
+      supabase,
+      id
+    );
+    dossier = await buildDecisionDossierView(supabase, decision_id, {
+      autoUpgraded: auto_upgraded,
+    });
+  } catch (e) {
+    console.error("Dossier laden mislukt:", e);
+  }
+
   return (
     <div className="p-7 space-y-6">
       <Link
@@ -259,6 +285,15 @@ export default async function ProcedureDetailPage({
       >
         ← Terug naar procedures
       </Link>
+
+      {/* Decision Object — boven de procedure-header zodat het dossier
+          duidelijk leidend is en de procedure secundair (workflow). */}
+      {dossier && (
+        <DecisionObjectHeader
+          decision={dossier.decision}
+          autoUpgraded={dossier.auto_upgraded}
+        />
+      )}
 
       {/* Header */}
       <div>
@@ -385,6 +420,15 @@ export default async function ProcedureDetailPage({
         </div>
       </div>
 
+      {/* Decision Object — classificatie + readiness-ladder.
+          Twee kolommen op desktop, gestapeld op mobile. */}
+      {dossier && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <ClassificatiePanel decision={dossier.decision} />
+          <ReadinessLadder readiness={dossier.readiness} />
+        </div>
+      )}
+
       {/* Body */}
       <div className="grid grid-cols-12 gap-5">
         {/* Step rail */}
@@ -471,19 +515,40 @@ export default async function ProcedureDetailPage({
         {/* Active step + log */}
         <div className="col-span-12 lg:col-span-8 space-y-5">
           {actieveStap ? (
-            <ActieveStapPaneel
-              procedureId={procedure.id}
-              stap={actieveStap}
-              checklist={checklist.filter((c) => c.stap_id === actieveStap.id)}
-              bewijs={bewijs.filter((b) => b.stap_id === actieveStap.id)}
-              besluit={
-                besluiten.find((b) => b.stap_id === actieveStap.id) ?? null
-              }
-              komendeVergaderingen={komendeVergaderingen}
-              gekoppeldeAgendapunten={gekoppeldeAgendapunten.filter(
-                (a) => a.procedure_stap_id === actieveStap.id
+            <>
+              <ActieveStapPaneel
+                procedureId={procedure.id}
+                stap={actieveStap}
+                checklist={checklist.filter(
+                  (c) => c.stap_id === actieveStap.id
+                )}
+                bewijs={bewijs.filter((b) => b.stap_id === actieveStap.id)}
+                besluit={
+                  besluiten.find((b) => b.stap_id === actieveStap.id) ?? null
+                }
+                komendeVergaderingen={komendeVergaderingen}
+                gekoppeldeAgendapunten={gekoppeldeAgendapunten.filter(
+                  (a) => a.procedure_stap_id === actieveStap.id
+                )}
+              />
+              {dossier && (
+                <StapRequirementsPaneel
+                  decisionId={dossier.decision.id}
+                  step={{
+                    id: actieveStap.id,
+                    procedure_id: actieveStap.procedure_id,
+                    volgorde: actieveStap.volgorde,
+                    naam: actieveStap.naam,
+                    beschrijving: actieveStap.beschrijving,
+                    vereist_besluit: actieveStap.vereist_besluit,
+                    geschatte_dagen: actieveStap.geschatte_dagen,
+                    status: actieveStap.status,
+                  }}
+                  evidence={dossier.evidence}
+                  aiOutputs={dossier.aiOutputs}
+                />
               )}
-            />
+            </>
           ) : procedure.status === "afgerond" ? (
             <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-5">
               <div className="text-sm font-semibold text-emerald-800">
