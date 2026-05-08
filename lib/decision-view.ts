@@ -460,6 +460,72 @@ export const RISICONIVEAU_LABEL: Record<Risiconiveau, string> = {
   hoog: "Hoog",
 };
 
+export const ASSUMPTION_TYPE_LABEL: Record<AssumptionType, string> = {
+  macro: "Macro-economisch",
+  beleggingsinhoudelijk: "Beleggingsinhoudelijk",
+  risico: "Risico",
+  kosten: "Kosten",
+  governance: "Governance",
+  overig: "Overig",
+};
+
+export const ASSUMPTION_STATUS_LABEL: Record<AssumptionStatus, string> = {
+  concept: "Concept",
+  gevalideerd: "Gevalideerd",
+  gewijzigd: "Gewijzigd",
+  verwijderd: "Verwijderd",
+};
+
+export const RISK_CATEGORIE_LABEL: Record<RiskCategorie, string> = {
+  financieel: "Financieel",
+  operationeel: "Operationeel",
+  juridisch: "Juridisch",
+  reputatie: "Reputatie",
+  liquiditeit: "Liquiditeit",
+  compliance: "Compliance",
+  overig: "Overig",
+};
+
+export const RISK_STATUS_LABEL: Record<RiskStatus, string> = {
+  open: "Open",
+  gemitigeerd: "Gemitigeerd",
+  geaccepteerd: "Geaccepteerd",
+};
+
+export const DISSENT_ZICHTBAARHEID_LABEL: Record<DissentZichtbaarheid, string> = {
+  prive: "Privé",
+  gedeelde_zorg: "Gedeelde zorg",
+  formele_dissent: "Formele dissent",
+  minderheidsnotitie: "Minderheidsnotitie",
+};
+
+/** Korte uitleg per zichtbaarheidsniveau, voor tooltip / hint in de UI. */
+export const DISSENT_ZICHTBAARHEID_HINT: Record<DissentZichtbaarheid, string> = {
+  prive: "Alleen voor jezelf — niet zichtbaar voor anderen.",
+  gedeelde_zorg:
+    "Zichtbaar voor voorzitter en beheerder. Nog geen formele vastlegging in het dossier.",
+  formele_dissent:
+    "Zichtbaar voor alle bestuurders binnen het fonds. Onderdeel van het auditdossier.",
+  minderheidsnotitie:
+    "Zichtbaar voor alle bestuurders. Bewust gemarkeerd als minderheidsnotitie bij het besluit.",
+};
+
+export const CONDITION_STATUS_LABEL: Record<ConditionStatus, string> = {
+  open: "Open",
+  op_schema: "Op schema",
+  afwijking: "Afwijking",
+  vervuld: "Vervuld",
+  overschreden: "Overschreden",
+};
+
+export const ACTION_STATUS_LABEL: Record<ActionStatus, string> = {
+  open: "Open",
+  in_behandeling: "In behandeling",
+  afgerond: "Afgerond",
+  vervallen: "Vervallen",
+  escalatie: "Escalatie",
+};
+
 // ── Status-mapping legacy → nieuw (auto-upgrade) ───────────────────────
 
 /**

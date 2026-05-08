@@ -20,6 +20,7 @@ export async function POST(
       titel?: string;
       beschrijving?: string | null;
       document_id?: string | null;
+      documenttype?: string | null; // 1D-4: tag voor readiness-match
     };
     const stapId = body.stap_id;
     const titel = body.titel?.trim();
@@ -56,6 +57,7 @@ export async function POST(
         document_id: body.document_id || null,
         titel,
         beschrijving: body.beschrijving || null,
+        documenttype: body.documenttype?.trim() || null,
         toegevoegd_door: user.id,
         toegevoegd_door_naam: profiel?.naam || null,
       })

@@ -407,6 +407,9 @@ interface ProcedureBewijsRow {
   document_id: string | null;
   titel: string | null;
   beschrijving: string | null;
+  // 1D-4: tag die overeenkomt met procedure_requirements.documenttype.
+  // Vervangt titel-string-matching voor de readiness-check op documenten.
+  documenttype: string | null;
 }
 
 async function buildEvidenceLijst(
@@ -426,7 +429,7 @@ async function buildEvidenceLijst(
   if (stapIds.length > 0) {
     const { data: bewijsRows } = await supabase
       .from("procedure_bewijs")
-      .select("id, stap_id, document_id, titel, beschrijving")
+      .select("id, stap_id, document_id, titel, beschrijving, documenttype")
       .in("stap_id", stapIds);
     for (const b of (bewijsRows ?? []) as ProcedureBewijsRow[]) {
       const lijst = bewijsByStap.get(b.stap_id) ?? [];
@@ -477,8 +480,12 @@ async function buildEvidenceLijst(
       case "document": {
         const stap = stapByVolgorde.get(req.stap_volgorde);
         const bewijzen = stap ? bewijsByStap.get(stap.id) ?? [] : [];
+        // 1D-4: primair matchen op de documenttype-kolom; fallback op
+        // titel-string-match voor bewijsstukken die vóór 1D-4 zijn
+        // toegevoegd zonder expliciete tag.
         const match = bewijzen.find((b) => {
           if (!req.documenttype) return true;
+          if (b.documenttype === req.documenttype) return true;
           return (b.titel ?? "")
             .toLowerCase()
             .includes(req.documenttype.toLowerCase());

@@ -22,6 +22,7 @@ export async function POST(
       datum?: string;
       vergadering_id?: string | null;
       agendapunt_id?: string | null;
+      verworpen_alternatieven?: string[]; // 1D-3
     };
     const formulering = body.formulering?.trim();
     const datum = body.datum;
@@ -38,10 +39,10 @@ export async function POST(
       );
     }
 
-    // Verifieer procedure
+    // Verifieer procedure + haal evt. decision_id op voor backref.
     const { data: proc } = await supabase
       .from("procedures")
-      .select("id")
+      .select("id, decision_id")
       .eq("id", id)
       .single();
     if (!proc) {
@@ -57,16 +58,25 @@ export async function POST(
       .eq("id", user.id)
       .single();
 
+    // Verworpen alternatieven: filter lege strings + trim.
+    const alternatieven = Array.isArray(body.verworpen_alternatieven)
+      ? body.verworpen_alternatieven
+          .map((a) => (typeof a === "string" ? a.trim() : ""))
+          .filter((a) => a.length > 0)
+      : [];
+
     const { data: besluit, error } = await supabase
       .from("procedure_besluiten")
       .insert({
         procedure_id: id,
+        decision_id: proc.decision_id ?? null,
         stap_id: body.stap_id || null,
         vergadering_id: body.vergadering_id || null,
         agendapunt_id: body.agendapunt_id || null,
         formulering,
         motivering: body.motivering || null,
         datum,
+        verworpen_alternatieven: alternatieven,
         vastgelegd_door: user.id,
         vastgelegd_door_naam: profiel?.naam || null,
       })
@@ -87,6 +97,27 @@ export async function POST(
       actor_naam: profiel?.naam || null,
       payload: { formulering, datum },
     });
+
+    // 1D-3: ook in governance_events loggen op Decision Object niveau,
+    // zodat het auditdossier de besluit-vastlegging meeneemt. We
+    // includeren de formulering bewust omdat het besluit zelf
+    // openbaar moet zijn binnen het dossier (anders dan dissent).
+    if (proc.decision_id) {
+      await supabase.from("governance_events").insert({
+        decision_id: proc.decision_id,
+        event_type: "besluit_vastgelegd",
+        actor_id: user.id,
+        actor_naam: profiel?.naam || null,
+        object_type: "besluit",
+        object_id: besluit.id,
+        nieuwe_waarde: {
+          formulering,
+          datum,
+          verworpen_alternatieven: alternatieven,
+          stap_id: body.stap_id || null,
+        },
+      });
+    }
 
     return NextResponse.json({ besluit });
   } catch (e) {

@@ -11,6 +11,7 @@ import type {
   KomendeVergadering,
   GekoppeldAgendapunt,
 } from "../[id]/page";
+import VereistenStrook from "./VereistenStrook";
 
 interface Props {
   procedureId: string;
@@ -20,6 +21,9 @@ interface Props {
   besluit: Besluit | null;
   komendeVergaderingen: KomendeVergadering[];
   gekoppeldeAgendapunten: GekoppeldAgendapunt[];
+  /** 1D-4: documenttype-opties voor de bewijs-tag, afgeleid uit de
+      requirements voor deze stap. Leeg array → vrij invoeren. */
+  documentRequirements?: { documenttype: string; label: string }[];
 }
 
 function formatDatumKort(d: string) {
@@ -38,6 +42,7 @@ export default function ActieveStapPaneel({
   besluit,
   komendeVergaderingen,
   gekoppeldeAgendapunten,
+  documentRequirements = [],
 }: Props) {
   const router = useRouter();
   const [checklist, setChecklist] = useState<ChecklistItem[]>(initieelChecklist);
@@ -45,9 +50,15 @@ export default function ActieveStapPaneel({
   const [bewijsForm, setBewijsForm] = useState(false);
   const [bewijsTitel, setBewijsTitel] = useState("");
   const [bewijsBeschrijving, setBewijsBeschrijving] = useState("");
+  // 1D-4: file-upload + documenttype-tag op het bewijsformulier.
+  const [bewijsBestand, setBewijsBestand] = useState<File | null>(null);
+  const [bewijsDocumenttype, setBewijsDocumenttype] = useState("");
   const [besluitForm, setBesluitForm] = useState(false);
   const [besluitFormulering, setBesluitFormulering] = useState("");
   const [besluitMotivering, setBesluitMotivering] = useState("");
+  // Eén textarea, één alternatief per regel — bij vastleggen splitsen
+  // we op `\n` en filteren we lege regels eruit.
+  const [besluitAlternatieven, setBesluitAlternatieven] = useState("");
   const [besluitDatum, setBesluitDatum] = useState(
     new Date().toISOString().slice(0, 10)
   );
@@ -112,6 +123,32 @@ export default function ActieveStapPaneel({
     }
     setBezig("bewijs");
     try {
+      // 1D-4: als er een bestand is gekozen, upload het eerst via de
+      // documenten-pipeline. Dat zorgt dat het stuk meteen indexeerbaar
+      // (RAG) is in de fonds-bibliotheek én via Storage inzichtbaar.
+      // De `bron='Intern'` markeert het als interne bron; de kolom
+      // `bestandstype` wordt automatisch afgeleid.
+      let documentId: string | null = null;
+      if (bewijsBestand) {
+        const fd = new FormData();
+        fd.append("bestand", bewijsBestand);
+        fd.append("bibliotheek", "fonds");
+        fd.append("bron", "Intern");
+        fd.append("titel", titel);
+        const upRes = await fetch("/api/documents/upload", {
+          method: "POST",
+          body: fd,
+        });
+        if (!upRes.ok) {
+          const upErr = await upRes.json().catch(() => ({}));
+          throw new Error(
+            upErr.error || "Upload van bewijsbestand mislukt"
+          );
+        }
+        const upJson = await upRes.json();
+        documentId = upJson.document?.id ?? upJson.id ?? null;
+      }
+
       const res = await fetch(`/api/procedures/${procedureId}/bewijs`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -119,6 +156,8 @@ export default function ActieveStapPaneel({
           stap_id: stap.id,
           titel,
           beschrijving: bewijsBeschrijving.trim() || null,
+          document_id: documentId,
+          documenttype: bewijsDocumenttype.trim() || null,
         }),
       });
       if (!res.ok) {
@@ -129,6 +168,8 @@ export default function ActieveStapPaneel({
       setBewijs([data.bewijs as Bewijs, ...bewijs]);
       setBewijsTitel("");
       setBewijsBeschrijving("");
+      setBewijsBestand(null);
+      setBewijsDocumenttype("");
       setBewijsForm(false);
       router.refresh();
     } catch (err: unknown) {
@@ -148,6 +189,10 @@ export default function ActieveStapPaneel({
     }
     setBezig("besluit");
     try {
+      const verworpen = besluitAlternatieven
+        .split("\n")
+        .map((s) => s.trim())
+        .filter(Boolean);
       const res = await fetch(`/api/procedures/${procedureId}/besluiten`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -156,6 +201,7 @@ export default function ActieveStapPaneel({
           formulering,
           motivering: besluitMotivering.trim() || null,
           datum: besluitDatum,
+          verworpen_alternatieven: verworpen,
         }),
       });
       if (!res.ok) {
@@ -163,6 +209,7 @@ export default function ActieveStapPaneel({
         throw new Error(data.error || "Vastleggen mislukt");
       }
       setBesluitForm(false);
+      setBesluitAlternatieven("");
       router.refresh();
     } catch (err: unknown) {
       setFout(err instanceof Error ? err.message : "Vastleggen mislukt");
@@ -477,6 +524,53 @@ export default function ActieveStapPaneel({
               placeholder="Korte beschrijving (optioneel)"
               className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm focus:border-[#C9A84C] outline-none resize-none"
             />
+            {/* 1D-4: documenttype-tag uit de stap-requirements.
+                Als er documenttypes in deze stap zijn, presenteren we
+                ze als dropdown — anders een vrij tekstveld. */}
+            {documentRequirements.length > 0 ? (
+              <select
+                value={bewijsDocumenttype}
+                onChange={(e) => setBewijsDocumenttype(e.target.value)}
+                className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm bg-white focus:border-[#C9A84C] outline-none"
+              >
+                <option value="">— kies documenttype (optioneel) —</option>
+                {documentRequirements.map((d) => (
+                  <option key={d.documenttype} value={d.documenttype}>
+                    {d.label} ({d.documenttype})
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="text"
+                value={bewijsDocumenttype}
+                onChange={(e) => setBewijsDocumenttype(e.target.value)}
+                placeholder="Documenttype-tag (optioneel, bv. ALM_analyse)"
+                className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm focus:border-[#C9A84C] outline-none"
+              />
+            )}
+            {/* 1D-4: file-upload — optioneel. Wordt vóór de bewijs-rij
+                via /api/documents/upload geïndexeerd in de
+                documentbibliotheek (bron='Intern', bibliotheek='fonds')
+                zodat het stuk doorzoekbaar wordt en het bewijs een
+                document_id krijgt. */}
+            <div>
+              <label className="block text-[11px] uppercase tracking-wide text-gray-500 font-semibold mb-1">
+                Bestand (optioneel — PDF, Word of Excel)
+              </label>
+              <input
+                type="file"
+                accept=".pdf,.docx,.xlsx"
+                onChange={(e) => setBewijsBestand(e.target.files?.[0] ?? null)}
+                className="block w-full text-xs text-gray-700 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-[#0F2744] file:text-white file:text-xs hover:file:bg-[#1a3858]"
+              />
+              {bewijsBestand && (
+                <p className="text-[11px] text-gray-600 mt-1">
+                  Geselecteerd: <span className="font-medium">{bewijsBestand.name}</span>
+                  {" — "}wordt geüpload naar de documentbibliotheek bij vastleggen.
+                </p>
+              )}
+            </div>
             <div className="flex justify-end gap-2">
               <button
                 type="button"
@@ -605,6 +699,13 @@ export default function ActieveStapPaneel({
                 placeholder="Motivering (optioneel)"
                 className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm focus:border-[#C9A84C] outline-none resize-none"
               />
+              <textarea
+                rows={3}
+                value={besluitAlternatieven}
+                onChange={(e) => setBesluitAlternatieven(e.target.value)}
+                placeholder="Verworpen alternatieven (één per regel, optioneel)&#10;Bv.:&#10;Alternatief 1: hedge-ratio op 80% → afgewezen ivm kosten&#10;Alternatief 2: bandbreedte 60-70% → afgewezen ivm complexiteit"
+                className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm focus:border-[#C9A84C] outline-none resize-none"
+              />
               <input
                 type="date"
                 value={besluitDatum}
@@ -642,29 +743,60 @@ export default function ActieveStapPaneel({
         </div>
       )}
 
-      {/* Voltooien */}
-      <div className="mt-6 pt-5 border-t border-gray-100 flex items-center justify-between gap-3 flex-wrap">
-        <div className="text-xs text-gray-500">
-          {voldaanCount} van {totaalCount} checklist-items voldaan
-          {bewijsVereist > 0 && !heeftBewijs && " · Bewijsstukken vereist"}
-          {stap.vereist_besluit && !besluit && " · Besluit nog niet vastgelegd"}
-        </div>
-        <button
-          onClick={stapVoltooien}
-          disabled={!kanVoltooien || bezig === "voltooien"}
-          className={`px-4 py-2 text-sm rounded-lg font-medium ${
-            kanVoltooien
-              ? "bg-[#0F2744] text-white hover:bg-[#1a3858]"
-              : "bg-gray-200 text-gray-500 cursor-not-allowed"
-          }`}
-          title={
-            !kanVoltooien
-              ? "Voltooi eerst checklist, bewijs en besluit"
-              : undefined
+      {/* Voltooien — vereisten-strook (1D-4) maakt blokkers expliciet
+          conform het overkoepelende ontwerpprincipe. */}
+      <div className="mt-6 pt-5 border-t border-gray-100">
+        <VereistenStrook
+          titel="Vereisten voor stap-voltooien"
+          vereisten={[
+            {
+              label: `${voldaanCount} van ${totaalCount} checklist-items voldaan`,
+              voldaan: allesVoldaan,
+              hint: !allesVoldaan
+                ? `Nog ${totaalCount - voldaanCount} item${totaalCount - voldaanCount === 1 ? "" : "s"} af te vinken`
+                : null,
+            },
+            ...(bewijsVereist > 0
+              ? [
+                  {
+                    label: heeftBewijs
+                      ? `${bewijs.length} bewijsstuk${bewijs.length === 1 ? "" : "ken"} toegevoegd`
+                      : "Bewijsstuk vereist",
+                    voldaan: heeftBewijs,
+                    hint: !heeftBewijs
+                      ? `${bewijsVereist} checklist-item${bewijsVereist === 1 ? "" : "s"} vraagt om bewijs`
+                      : null,
+                  },
+                ]
+              : []),
+            ...(stap.vereist_besluit
+              ? [
+                  {
+                    label: besluit ? "Besluit vastgelegd" : "Besluit ontbreekt",
+                    voldaan: besluit !== null,
+                    hint: !besluit
+                      ? "Formuleer + motiveer het besluit hierboven"
+                      : null,
+                  },
+                ]
+              : []),
+          ]}
+          actie={
+            <div className="flex items-center justify-end gap-3">
+              <button
+                onClick={stapVoltooien}
+                disabled={!kanVoltooien || bezig === "voltooien"}
+                className={`px-4 py-2 text-sm rounded-lg font-medium ${
+                  kanVoltooien
+                    ? "bg-[#0F2744] text-white hover:bg-[#1a3858]"
+                    : "bg-gray-200 text-gray-500 cursor-not-allowed"
+                }`}
+              >
+                {bezig === "voltooien" ? "Bezig…" : "Stap voltooien"}
+              </button>
+            </div>
           }
-        >
-          {bezig === "voltooien" ? "Bezig…" : "Stap voltooien"}
-        </button>
+        />
       </div>
     </div>
   );

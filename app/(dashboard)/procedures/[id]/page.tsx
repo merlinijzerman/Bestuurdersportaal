@@ -10,6 +10,12 @@ import DecisionObjectHeader from "../_components/DecisionObjectHeader";
 import ClassificatiePanel from "../_components/ClassificatiePanel";
 import ReadinessLadder from "../_components/ReadinessLadder";
 import StapRequirementsPaneel from "../_components/StapRequirementsPaneel";
+import AannamesPaneel from "../_components/AannamesPaneel";
+import RisicosPaneel from "../_components/RisicosPaneel";
+import DissentPaneel from "../_components/DissentPaneel";
+import VoorwaardenPaneel from "../_components/VoorwaardenPaneel";
+import ActiesPaneel from "../_components/ActiesPaneel";
+import StatusOvergangPaneel from "../_components/StatusOvergangPaneel";
 import {
   buildDecisionDossierView,
   ensureDecisionForProcedure,
@@ -69,6 +75,7 @@ export interface Besluit {
   motivering: string | null;
   datum: string;
   vastgelegd_door_naam: string | null;
+  verworpen_alternatieven: string[] | null;
 }
 
 export interface KomendeVergadering {
@@ -161,9 +168,11 @@ export default async function ProcedureDetailPage({
 
   const { data: profiel } = await supabase
     .from("profielen")
-    .select("fonds_id")
+    .select("fonds_id, rol")
     .eq("id", user.id)
     .single();
+  const currentUserIsPrivileged =
+    profiel?.rol === "voorzitter" || profiel?.rol === "beheerder";
 
   const [stappenRes, eigenarenRes, logRes, besluitenRes, vergaderingenRes] =
     await Promise.all([
@@ -429,6 +438,65 @@ export default async function ProcedureDetailPage({
         </div>
       )}
 
+      {/* Decision Object — status-overgang (1D-3).
+          Gebruikt readiness uit het dossier als gate; voorzitter/
+          beheerder kan met override-motivering een ontbrekende
+          readiness overrulen (gelogd als 'override_<readiness>'). */}
+      {dossier && (
+        <StatusOvergangPaneel
+          decision={dossier.decision}
+          readiness={dossier.readiness}
+          currentUserIsPrivileged={currentUserIsPrivileged}
+        />
+      )}
+
+      {/* Decision Object — aannames + risico's (1D-1).
+          Onder de classificatie/readiness omdat ze de onderbouwing
+          vormen die door de readiness-check wordt geëvalueerd. */}
+      {dossier && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <AannamesPaneel
+            decisionId={dossier.decision.id}
+            assumptions={dossier.assumptions}
+          />
+          <RisicosPaneel
+            decisionId={dossier.decision.id}
+            risks={dossier.risks}
+          />
+        </div>
+      )}
+
+      {/* Decision Object — voorwaarden + acties (1D-2).
+          Voorwaarden komen primair uit voorwaardelijke besluiten;
+          acties zijn de operationele opvolging. Naast elkaar omdat
+          acties optioneel een voorwaarde bewaken. */}
+      {dossier && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <VoorwaardenPaneel
+            decisionId={dossier.decision.id}
+            conditions={dossier.conditions}
+          />
+          <ActiesPaneel
+            decisionId={dossier.decision.id}
+            actions={dossier.actions}
+            conditions={dossier.conditions}
+          />
+        </div>
+      )}
+
+      {/* Decision Object — dissent (1D-2).
+          Volle breedte omdat zichtbaarheidsniveaus en argumentatie
+          ruimte vragen. RLS heeft al gefilterd op rol; in de UI tonen
+          we wat de gebruiker mag zien. */}
+      {dossier && (
+        <DissentPaneel
+          decisionId={dossier.decision.id}
+          dissents={dossier.dissent}
+          currentUserId={user.id}
+          currentUserIsPrivileged={currentUserIsPrivileged}
+        />
+      )}
+
       {/* Body */}
       <div className="grid grid-cols-12 gap-5">
         {/* Step rail */}
@@ -530,6 +598,28 @@ export default async function ProcedureDetailPage({
                 gekoppeldeAgendapunten={gekoppeldeAgendapunten.filter(
                   (a) => a.procedure_stap_id === actieveStap.id
                 )}
+                documentRequirements={
+                  // 1D-4: documenttype-opties voor de bewijs-tag —
+                  // gederiveerd uit de procedure_requirements voor
+                  // deze stap_volgorde, gededupliceerd op documenttype.
+                  dossier
+                    ? Array.from(
+                        new Map(
+                          dossier.evidence
+                            .filter(
+                              (e) =>
+                                e.requirement_type === "document" &&
+                                e.stap_volgorde === actieveStap.volgorde &&
+                                e.documenttype !== null
+                            )
+                            .map((e) => [
+                              e.documenttype as string,
+                              { documenttype: e.documenttype as string, label: e.label },
+                            ])
+                        ).values()
+                      )
+                    : []
+                }
               />
               {dossier && (
                 <StapRequirementsPaneel
@@ -589,6 +679,19 @@ export default async function ProcedureDetailPage({
                         {b.motivering}
                       </p>
                     )}
+                    {b.verworpen_alternatieven &&
+                      b.verworpen_alternatieven.length > 0 && (
+                        <div className="text-xs text-gray-700 mt-2 border-l-2 border-amber-200 pl-3">
+                          <span className="text-[10px] uppercase tracking-wide text-amber-700 font-semibold block mb-0.5">
+                            Verworpen alternatieven
+                          </span>
+                          <ul className="list-disc pl-4 space-y-0.5">
+                            {b.verworpen_alternatieven.map((a, idx) => (
+                              <li key={idx}>{a}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                     <div className="text-xs text-gray-500 mt-2">
                       {formatDatum(b.datum)}
                       {b.vastgelegd_door_naam
