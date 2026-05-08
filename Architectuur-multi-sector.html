@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Architectuurplaat — Multi-sector platform</title>
+<style>
+  :root {
+    --navy: #0F2744;
+    --goud: #C9A84C;
+    --tekst: #1F2937;
+    --tekst-mut: #6B7280;
+    --tekst-licht: #9CA3AF;
+    --rand: #E5E7EB;
+    --rand-licht: #F3F4F6;
+    --bg: #FAFAF8;
+    --kaart: #FFFFFF;
+    --core: #0F6E56;
+    --core-bg: #E1F5EE;
+    --sector: #534AB7;
+    --sector-bg: #EEEDFE;
+    --ai: #4F46E5;
+    --ai-bg: #F4F3FE;
+    --infra: #5F5E5A;
+    --infra-bg: #F1EFE8;
+    --shadow: 0 1px 3px rgba(15, 39, 68, 0.06), 0 1px 2px rgba(15, 39, 68, 0.04);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--tekst);
+    line-height: 1.7;
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page { max-width: 980px; margin: 0 auto; padding: 56px 32px; }
+
+  /* Header */
+  .header {
+    text-align: center;
+    padding: 32px 0 40px;
+    border-bottom: 1px solid var(--rand);
+    margin-bottom: 40px;
+  }
+  .eyebrow {
+    font-size: 13px; color: var(--goud);
+    text-transform: uppercase; letter-spacing: 0.12em; font-weight: 600;
+    margin-bottom: 14px;
+  }
+  h1 {
+    font-size: 36px; font-weight: 700; color: var(--navy);
+    line-height: 1.15; margin: 0 0 16px; letter-spacing: -0.02em;
+  }
+  .subtitle {
+    font-size: 17px; color: var(--tekst-mut); max-width: 640px; margin: 0 auto;
+    line-height: 1.55;
+  }
+
+  .intro { max-width: 720px; margin: 0 auto 32px; font-size: 15px; color: var(--tekst); line-height: 1.65; }
+  .intro p { margin: 0 0 12px; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 10px; margin-bottom: 16px; max-width: 720px; margin-left: auto; margin-right: auto; }
+  .tab {
+    flex: 1; padding: 12px 16px;
+    background: var(--kaart);
+    border: 1px solid var(--rand);
+    border-radius: 10px;
+    cursor: pointer; font-size: 14px;
+    text-align: center; color: var(--tekst-mut);
+    font-weight: 500;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+    font-family: inherit;
+  }
+  .tab.active {
+    background: var(--navy); color: white; border-color: var(--navy);
+  }
+  .tab:hover:not(.active) {
+    background: var(--rand-licht); color: var(--navy);
+  }
+
+  /* Legend pills */
+  .legend {
+    text-align: center; font-size: 12px; color: var(--tekst-mut);
+    margin-bottom: 24px;
+  }
+  .pill {
+    display: inline-block; padding: 4px 12px; border-radius: 999px;
+    margin: 0 4px; font-weight: 600; font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .pill-sector { background: var(--sector-bg); color: var(--sector); }
+  .pill-gedeeld { background: var(--core-bg); color: var(--core); }
+
+  /* Architecture container */
+  .architectuur {
+    background: var(--kaart);
+    border: 1px solid var(--rand);
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: var(--shadow);
+  }
+
+  .laag {
+    border-radius: 12px;
+    padding: 18px 20px;
+    margin-bottom: 4px;
+  }
+  .laag-sector { background: var(--sector-bg); }
+  .laag-gi { background: var(--ai-bg); border: 1px solid #DBD8FA; }
+  .laag-core { background: var(--core-bg); }
+  .laag-infra { background: var(--infra-bg); }
+
+  .laag-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-bottom: 12px; gap: 12px; flex-wrap: wrap;
+  }
+  .laag-titel {
+    font-size: 12px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.08em;
+  }
+  .laag-sector .laag-titel { color: var(--sector); }
+  .laag-gi .laag-titel { color: var(--ai); }
+  .laag-core .laag-titel { color: var(--core); }
+  .laag-infra .laag-titel { color: var(--infra); }
+  .laag-naam {
+    font-size: 15px; font-weight: 600; color: var(--navy);
+    margin-top: 2px;
+  }
+  .laag-sub { font-size: 12px; color: var(--tekst-mut); }
+
+  .kaarten {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 8px;
+  }
+  .kaarten-2 { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .kaart {
+    background: var(--kaart);
+    border-radius: 8px;
+    padding: 12px 14px;
+    min-width: 0;
+  }
+  .kaart-titel {
+    font-weight: 600; color: var(--navy); font-size: 13px;
+    margin-bottom: 3px;
+  }
+  .kaart-sub {
+    color: var(--tekst-mut); font-size: 12px; line-height: 1.45;
+  }
+
+  .gi-kaart-eyebrow {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--ai); font-weight: 700; margin-bottom: 6px;
+  }
+  .gi-kaart-titel {
+    font-weight: 700; color: var(--navy); font-size: 15px;
+    margin-bottom: 4px;
+  }
+  .gi-kaart-sub {
+    color: var(--tekst-mut); font-size: 12px; line-height: 1.5;
+    margin-bottom: 8px;
+  }
+  .gi-context {
+    font-size: 12px; color: var(--ai); font-style: italic;
+    padding-top: 8px; border-top: 1px solid rgba(79, 70, 229, 0.15);
+  }
+
+  .gi-feature-bar {
+    background: var(--kaart);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-top: 12px;
+  }
+  .gi-feature-label {
+    font-weight: 700; color: var(--sector);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    font-size: 10px; margin-bottom: 3px;
+  }
+  .gi-feature-naam {
+    color: var(--navy); font-weight: 700; font-size: 14px;
+  }
+
+  .pijl {
+    text-align: center; color: var(--tekst-licht); font-size: 11px;
+    padding: 6px 0;
+  }
+
+  /* Toelichting onder de plaat */
+  .toelichting {
+    margin-top: 40px;
+    background: var(--kaart);
+    border: 1px solid var(--rand);
+    border-radius: 12px;
+    padding: 28px 32px;
+    box-shadow: var(--shadow);
+  }
+  .toelichting h2 {
+    font-size: 20px; font-weight: 700; color: var(--navy);
+    margin: 0 0 12px;
+  }
+  .toelichting p { margin: 0 0 12px; font-size: 14px; line-height: 1.65; color: var(--tekst); }
+  .toelichting strong { color: var(--navy); font-weight: 600; }
+
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin: 16px 0;
+  }
+  .punt {
+    border-left: 3px solid var(--goud);
+    padding-left: 14px;
+  }
+  .punt-titel {
+    font-size: 13px; font-weight: 700; color: var(--navy);
+    margin-bottom: 4px;
+  }
+  .punt-tekst { font-size: 13px; color: var(--tekst); line-height: 1.55; }
+
+  /* Footer */
+  footer {
+    border-top: 1px solid var(--rand);
+    padding: 32px 0 0;
+    margin-top: 64px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--tekst-licht);
+  }
+
+  @media (max-width: 700px) {
+    .page { padding: 32px 20px; }
+    .grid-2 { grid-template-columns: 1fr; }
+    .kaarten-2 { grid-template-columns: 1fr; }
+    .laag-head { flex-direction: column; align-items: flex-start; }
+  }
+
+  @media print {
+    .page { max-width: none; padding: 24px; }
+    .architectuur { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+<header class="header">
+  <div class="eyebrow">Architectuurplaat</div>
+  <h1>Multi-sector platform</h1>
+  <p class="subtitle">Vier lagen, drie sectoren, één codebase. Klik op een sector om te zien wat er in de bovenste laag verandert — alle andere lagen blijven identiek.</p>
+</header>
+
+<div class="intro">
+  <p>De plaat hieronder laat in één oogopslag zien hoe het bestuurdersportaal is opgebouwd voor schaalbaarheid over meerdere sectoren. De drie onderliggende lagen — Governance Intelligence, core platform en fundament — vormen samen één codebase die voor elke aangesloten organisatie identiek is. Alleen het sector pack bovenin verandert per sector.</p>
+  <p>De <em>Sector-specifieke GI-toepassing</em> verbindt de algemene AI-capabilities (Institutional Memory en Regulatory Guardrail) met de jargon, regelgeving en aandachtsgebieden van de actieve sector. Datzelfde patroon werkt later voor zorginstellingen, onderwijs, vermogensbeheer of goede doelen.</p>
+</div>
+
+<div class="tabs" role="tablist">
+  <button class="tab active" data-sector="pensioen" role="tab" aria-selected="true">Pensioenfondsen</button>
+  <button class="tab" data-sector="verzekeraars" role="tab" aria-selected="false">Verzekeraars</button>
+  <button class="tab" data-sector="corporaties" role="tab" aria-selected="false">Woningcorporaties</button>
+</div>
+
+<div class="legend">
+  <span class="pill pill-sector">verandert per sector</span>
+  <span class="pill pill-gedeeld">gedeeld over alle sectoren</span>
+</div>
+
+<div class="architectuur">
+
+  <div class="laag laag-sector">
+    <div class="laag-head">
+      <div>
+        <div class="laag-titel">Sector pack</div>
+        <div class="laag-naam">Wat per sector wordt geconfigureerd</div>
+      </div>
+      <span class="laag-sub">5 onderdelen</span>
+    </div>
+    <div class="kaarten" id="sector-pack">
+      <div class="kaart"><div class="kaart-titel">Wtp-dashboard</div><div class="kaart-sub">FG, solidariteitsreserve, cohorten</div></div>
+      <div class="kaart"><div class="kaart-titel">12 templates</div><div class="kaart-sub">Invaarbesluit, ABTN, ALM, beheerder</div></div>
+      <div class="kaart"><div class="kaart-titel">GI-context</div><div class="kaart-sub">Wtp-jargon, ABTN-kader</div></div>
+      <div class="kaart"><div class="kaart-titel">Bron-categorieën</div><div class="kaart-sub">DNB · AFM · Pensioenfederatie</div></div>
+      <div class="kaart"><div class="kaart-titel">Risicocategorieën</div><div class="kaart-sub">Financieel · Governance · Operationeel · Informatie</div></div>
+    </div>
+    <div class="gi-feature-bar">
+      <div class="gi-feature-label">Sector-specifieke GI-toepassing</div>
+      <div class="gi-feature-naam" id="gi-feature-naam">Evenwichtigheidsmonitor</div>
+    </div>
+  </div>
+
+  <div class="pijl">↑ instantieert op ↑</div>
+
+  <div class="laag laag-gi">
+    <div class="laag-head">
+      <div>
+        <div class="laag-titel">Governance Intelligence</div>
+        <div class="laag-naam">Twee AI-toepassingen, gedeelde infrastructuur</div>
+      </div>
+      <span class="laag-sub">2 capabilities</span>
+    </div>
+    <div class="kaarten kaarten-2">
+      <div class="kaart">
+        <div class="gi-kaart-eyebrow">Toepassing A</div>
+        <div class="gi-kaart-titel">Institutional Memory</div>
+        <div class="gi-kaart-sub">Het volledige archief van besluitvorming, doorzoekbaar met bron-citaten en historische context.</div>
+        <div class="gi-context" id="gi-im-voorbeeld">"Wat hebben we in 2021 over hersteltermijnen besloten?"</div>
+      </div>
+      <div class="kaart">
+        <div class="gi-kaart-eyebrow">Toepassing B</div>
+        <div class="gi-kaart-titel">Regulatory Guardrail</div>
+        <div class="gi-kaart-sub">Continue spiegel op vigerende regelgeving, signaleert afwijkingen en compliance-risico's.</div>
+        <div class="gi-context" id="gi-rg-voorbeeld">Markeert afwijkingen van het Wtp-transitieplan</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="pijl">↑ draait op ↑</div>
+
+  <div class="laag laag-core">
+    <div class="laag-head">
+      <div>
+        <div class="laag-titel">Core platform</div>
+        <div class="laag-naam">Eén codebase voor iedere sector</div>
+      </div>
+      <span class="laag-sub">8 modules</span>
+    </div>
+    <div class="kaarten">
+      <div class="kaart"><div class="kaart-titel">Documentbibliotheek</div><div class="kaart-sub">PDF/Word/Excel · FTS-RAG</div></div>
+      <div class="kaart"><div class="kaart-titel">Vergaderingen</div><div class="kaart-sub">Agenda · stukken · inbreng</div></div>
+      <div class="kaart"><div class="kaart-titel">AI-assistent</div><div class="kaart-sub">3 modi · bronvermelding</div></div>
+      <div class="kaart"><div class="kaart-titel">AI-voorbereiding</div><div class="kaart-sub">Per agendapunt · privé</div></div>
+      <div class="kaart"><div class="kaart-titel">Procedure-engine</div><div class="kaart-sub">Templates · bewijs · besluit</div></div>
+      <div class="kaart"><div class="kaart-titel">Risicomatrix</div><div class="kaart-sub">5×5 heatmap · log</div></div>
+      <div class="kaart"><div class="kaart-titel">Notulen</div><div class="kaart-sub">Smart transcripts</div></div>
+      <div class="kaart"><div class="kaart-titel">Audit-export</div><div class="kaart-sub">Eén klik · toezichthouder-dossier</div></div>
+    </div>
+  </div>
+
+  <div class="pijl">↑ draait op ↑</div>
+
+  <div class="laag laag-infra">
+    <div class="laag-head">
+      <div>
+        <div class="laag-titel">Fundament</div>
+        <div class="laag-naam">Multi-tenant infrastructuur</div>
+      </div>
+      <span class="laag-sub">5 lagen</span>
+    </div>
+    <div class="kaarten">
+      <div class="kaart"><div class="kaart-titel">Identity</div><div class="kaart-sub">SSO · SAML · rolbeheer</div></div>
+      <div class="kaart"><div class="kaart-titel">Toegangsbeheer</div><div class="kaart-sub">RLS per organisatie</div></div>
+      <div class="kaart"><div class="kaart-titel">Versleutelde opslag</div><div class="kaart-sub">Documenten · log</div></div>
+      <div class="kaart"><div class="kaart-titel">Multi-tenant DB</div><div class="kaart-sub">Postgres · tsvector</div></div>
+      <div class="kaart"><div class="kaart-titel">Compliance</div><div class="kaart-sub">ISO 27001 · SOC 2</div></div>
+    </div>
+  </div>
+
+</div>
+
+<section class="toelichting">
+  <h2>Hoe je de plaat leest</h2>
+  <p>De pijlen lezen van onder naar boven: <strong>fundament</strong> draagt het <strong>core platform</strong>, het core platform draait <strong>Governance Intelligence</strong>, en het sector pack bovenaan <strong>instantieert</strong> de gedeelde lagen met sector-specifieke configuratie. Een verbetering aan een lager-gelegen laag profiteert iedere sector tegelijkertijd.</p>
+
+  <div class="grid-2">
+    <div class="punt">
+      <div class="punt-titel">Wat verandert per sector</div>
+      <div class="punt-tekst">Vijf onderdelen in het sector pack: dashboard-module, procedure-templates (12-16 per sector), GI-context (jargon en regelgeving), bron-categorieën, en risicocategorieën. De sector-specifieke GI-toepassing — Evenwichtigheidsmonitor, Solvency &amp; Risk Co-pilot, of Drempelwaarde-Bewaker — leeft op deze laag.</div>
+    </div>
+    <div class="punt">
+      <div class="punt-titel">Wat hetzelfde blijft</div>
+      <div class="punt-tekst">Vijftien onderdelen verdeeld over Governance Intelligence (2 capabilities), core platform (8 modules) en fundament (5 lagen). Voor iedere sector identiek qua functionaliteit; alleen de inhoud die ze tonen of doorzoeken verandert mee met de sector pack-configuratie.</div>
+    </div>
+    <div class="punt">
+      <div class="punt-titel">Hoe een nieuwe sector erbij komt</div>
+      <div class="punt-tekst">Door een nieuwe sector pack te configureren — een dashboard-module bouwen, templates schrijven, GI-context invullen, regulator-namen en risicocategorieën aanpassen. Doorlooptijd circa twee maanden voor een bekwaam team plus domeinexpert-validatie.</div>
+    </div>
+    <div class="punt">
+      <div class="punt-titel">Waar de meeste IP-waarde zit</div>
+      <div class="punt-tekst">In de Governance Intelligence-laag en de procedure-engine. De combinatie van Institutional Memory met sector-specifieke compliance-context maakt de propositie fundamenteel anders dan generieke board-tools, en is moeilijker in te halen voor concurrenten zonder vergelijkbare domeinpartner-relaties.</div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  Bestuurdersportaal — Architectuurplaat multi-sector · Mei 2026
+</footer>
+
+</div>
+
+<script>
+const data = {
+  pensioen: {
+    pack: [
+      { t: "Wtp-dashboard", s: "FG, solidariteitsreserve, cohorten" },
+      { t: "12 templates", s: "Invaarbesluit, ABTN, ALM, beheerder" },
+      { t: "GI-context", s: "Wtp-jargon, ABTN-kader" },
+      { t: "Bron-categorieën", s: "DNB · AFM · Pensioenfederatie" },
+      { t: "Risicocategorieën", s: "Financieel · Governance · Operationeel · Informatie" },
+    ],
+    feature: "Evenwichtigheidsmonitor",
+    imVoorbeeld: '"Wat hebben we in 2021 over hersteltermijnen besloten?"',
+    rgVoorbeeld: "Markeert afwijkingen van het Wtp-transitieplan",
+  },
+  verzekeraars: {
+    pack: [
+      { t: "Solvency II-dashboard", s: "SCR, MCR, Own Funds, ratio's" },
+      { t: "14 templates", s: "ORSA, POG, herverzekering, claims" },
+      { t: "GI-context", s: "Solvency II, IDD, claims-management" },
+      { t: "Bron-categorieën", s: "DNB · AFM · Verbond v. Verzekeraars" },
+      { t: "Risicocategorieën", s: "Financieel · Verzekeringstechnisch · Compliance · Operationeel" },
+    ],
+    feature: "Solvency & Risk Co-pilot",
+    imVoorbeeld: '"Welke incidenten van afgelopen jaar raken onze SCR-projectie?"',
+    rgVoorbeeld: "Houdt nieuwe DNB Good Practices naast lopende procedures",
+  },
+  corporaties: {
+    pack: [
+      { t: "Corporatie-dashboard", s: "ICR, DSCR, marktwaarde, voorraad" },
+      { t: "16 templates", s: "Investering, WSW, SVB, visitatie" },
+      { t: "GI-context", s: "Woningwet, prestatieafspraken, treasury" },
+      { t: "Bron-categorieën", s: "Aw · WSW · Aedes" },
+      { t: "Risicocategorieën", s: "Treasury · Vastgoed · Governance · Reputatie" },
+    ],
+    feature: "Drempelwaarde-Bewaker",
+    imVoorbeeld: '"Welke RvC-besluiten gingen voorheen over deze drempelwaarde?"',
+    rgVoorbeeld: "Signaleert afwijking van prestatieafspraken met gemeente",
+  },
+};
+
+function selecteer(key) {
+  const d = data[key];
+  document.querySelectorAll(".tab").forEach((t) => {
+    const actief = t.dataset.sector === key;
+    t.classList.toggle("active", actief);
+    t.setAttribute("aria-selected", actief ? "true" : "false");
+  });
+  document.getElementById("sector-pack").innerHTML = d.pack
+    .map(
+      (c) =>
+        `<div class="kaart"><div class="kaart-titel">${c.t}</div><div class="kaart-sub">${c.s}</div></div>`
+    )
+    .join("");
+  document.getElementById("gi-feature-naam").textContent = d.feature;
+  document.getElementById("gi-im-voorbeeld").textContent = d.imVoorbeeld;
+  document.getElementById("gi-rg-voorbeeld").textContent = d.rgVoorbeeld;
+}
+
+document.querySelectorAll(".tab").forEach((t) => {
+  t.addEventListener("click", () => selecteer(t.dataset.sector));
+});
+</script>
+
+</body>
+</html>

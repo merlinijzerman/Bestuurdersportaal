@@ -271,6 +271,210 @@ export const TEMPLATES: ProcessTemplate[] = [
     ],
   },
   {
+    code: "beleidswijziging_beleggingsbeleid",
+    naam: "Beleidswijziging beleggingsbeleid",
+    korte_omschrijving:
+      "Procedure-led beleidswijziging beleggingsbeleid met Decision Object: concept → onderbouwing → validatie → bestuursoverleg → besluit → implementatie & evaluatie.",
+    geschat_aantal_dagen: 110,
+    stappen: [
+      {
+        volgorde: 1,
+        naam: "Concept & aanleiding",
+        beschrijving:
+          "Bepaal de centrale besluitvraag, scope en classificatie van het dossier. Hier staat het Decision Object als concept geformuleerd; de classificatie (complexiteit, risiconiveau, mandaat-/toezichtgevoelig, beleidsafwijking, AI-risicoklasse) bepaalt welke vereisten in volgende stappen activeren.",
+        vereist_besluit: false,
+        geschatte_dagen: 5,
+        checklist: [
+          {
+            volgorde: 1,
+            label: "Aanleiding en context beschreven",
+            bewijs_vereist: false,
+          },
+          {
+            volgorde: 2,
+            label: "Besluitvraag concreet geformuleerd",
+            bewijs_vereist: false,
+          },
+          {
+            volgorde: 3,
+            label: "Classificatie (zes dimensies) ingevuld",
+            bewijs_vereist: false,
+          },
+          {
+            volgorde: 4,
+            label: "Bevoegd governance-orgaan bepaald",
+            bewijs_vereist: false,
+          },
+        ],
+      },
+      {
+        volgorde: 2,
+        naam: "Onderbouwing",
+        beschrijving:
+          "Verzamel onderbouwende documentatie: ALM-analyse, risicoanalyse, eventueel liquiditeitsanalyse bij hoog risico. Identificeer kernaannames en laat een AI-samenvatting van de onderbouwing valideren.",
+        vereist_besluit: false,
+        geschatte_dagen: 15,
+        checklist: [
+          {
+            volgorde: 1,
+            label: "ALM-analyse beschikbaar",
+            bewijs_vereist: true,
+          },
+          {
+            volgorde: 2,
+            label: "Risicoanalyse beschikbaar",
+            bewijs_vereist: true,
+          },
+          {
+            volgorde: 3,
+            label: "Liquiditeitsanalyse bij hoog risico",
+            bewijs_vereist: false,
+          },
+          {
+            volgorde: 4,
+            label: "Kernaannames geïdentificeerd en gevalideerd",
+            bewijs_vereist: false,
+          },
+          {
+            volgorde: 5,
+            label: "AI-samenvatting gevalideerd",
+            bewijs_vereist: false,
+          },
+        ],
+      },
+      {
+        volgorde: 3,
+        naam: "Validatie & risk review",
+        beschrijving:
+          "Risk- en compliance-review uitvoeren op de onderbouwing. Bij mandaatgevoelige besluiten een expliciete mandaatcheck. AI-output op risk- en compliance-domein wordt gevalideerd door voorzitter of beheerder.",
+        vereist_besluit: false,
+        geschatte_dagen: 10,
+        checklist: [
+          {
+            volgorde: 1,
+            label: "Risk review uitgevoerd en vastgelegd",
+            bewijs_vereist: true,
+          },
+          {
+            volgorde: 2,
+            label: "Compliance review uitgevoerd",
+            bewijs_vereist: true,
+          },
+          {
+            volgorde: 3,
+            label: "Mandaatcheck (indien mandaatgevoelig)",
+            bewijs_vereist: false,
+          },
+          {
+            volgorde: 4,
+            label: "Risico's geregistreerd in Decision Object",
+            bewijs_vereist: false,
+          },
+        ],
+      },
+      {
+        volgorde: 4,
+        naam: "Bestuursoverleg & agendering",
+        beschrijving:
+          "Plaats het dossier op de bestuursagenda. Verzamel inbreng van commissies en bestuursleden, leg discussiepunten en alternatieven vast. Dossier moet bespreekrijp zijn voor agendering.",
+        vereist_besluit: false,
+        geschatte_dagen: 14,
+        checklist: [
+          {
+            volgorde: 1,
+            label: "Vergadering ingepland en agendapunt aangemaakt",
+            bewijs_vereist: false,
+          },
+          {
+            volgorde: 2,
+            label: "Inbreng commissies ontvangen",
+            bewijs_vereist: false,
+          },
+          {
+            volgorde: 3,
+            label: "Alternatieven en opties vastgelegd",
+            bewijs_vereist: true,
+          },
+          {
+            volgorde: 4,
+            label: "Discussiepunten geformuleerd",
+            bewijs_vereist: false,
+          },
+        ],
+      },
+      {
+        volgorde: 5,
+        naam: "Besluitvorming",
+        beschrijving:
+          "Formele besluitvastlegging met motivering, stemverhouding, dissent en eventuele voorwaarden bij een voorwaardelijk besluit. Dossier moet besluitrijp zijn; dissent moet zijn behandeld.",
+        vereist_besluit: true,
+        geschatte_dagen: 5,
+        checklist: [
+          {
+            volgorde: 1,
+            label: "Besluit geformuleerd in concrete termen",
+            bewijs_vereist: true,
+          },
+          {
+            volgorde: 2,
+            label: "Motivering vastgelegd voor audittrail",
+            bewijs_vereist: true,
+          },
+          {
+            volgorde: 3,
+            label: "Stemverhouding genoteerd",
+            bewijs_vereist: false,
+          },
+          {
+            volgorde: 4,
+            label: "Dissent verwerkt (verworpen of formeel vastgesteld)",
+            bewijs_vereist: false,
+          },
+          {
+            volgorde: 5,
+            label: "Voorwaarden vastgelegd (bij voorwaardelijk besluit)",
+            bewijs_vereist: false,
+          },
+        ],
+      },
+      {
+        volgorde: 6,
+        naam: "Implementatie & evaluatie",
+        beschrijving:
+          "Operationele uitvoering door uitvoerder/vermogensbeheerder, plus inrichting van KPI's en evaluatiemoment. Voor evaluatierijp moet ten minste één KPI gedefinieerd zijn en een evaluatiedatum gepland.",
+        vereist_besluit: false,
+        geschatte_dagen: 60,
+        checklist: [
+          {
+            volgorde: 1,
+            label: "Opdracht aan uitvoerder/vermogensbeheerder verstuurd",
+            bewijs_vereist: true,
+          },
+          {
+            volgorde: 2,
+            label: "Bevestiging implementatie ontvangen",
+            bewijs_vereist: true,
+          },
+          {
+            volgorde: 3,
+            label: "KPI's gedefinieerd in voorwaarden",
+            bewijs_vereist: false,
+          },
+          {
+            volgorde: 4,
+            label: "Evaluatiemoment gepland",
+            bewijs_vereist: false,
+          },
+          {
+            volgorde: 5,
+            label: "Effect-meting uitgevoerd op evaluatiedatum",
+            bewijs_vereist: true,
+          },
+        ],
+      },
+    ],
+  },
+  {
     code: "beleidswijziging",
     naam: "Beleidswijziging",
     korte_omschrijving:

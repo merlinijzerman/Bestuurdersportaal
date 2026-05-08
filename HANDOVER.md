@@ -398,15 +398,125 @@ Browsers cachen CSS/JS-bundles agressief. Na een Vercel-redeploy kan een hard re
 
 ---
 
+## Strategische verkenning multi-sector platform
+
+Tijdens een commerciële verkenning in mei 2026 is in kaart gebracht hoe het portaal zou kunnen schalen voorbij pensioenfondsen — naar verzekeraars, woningcorporaties en op termijn andere sectoren met vergelijkbare governance-structuur. Niets hiervan is gebouwd; deze sectie bewaart het denkkader voor latere besluitvorming.
+
+### Conceptueel kader
+
+Het portaal wordt opgesplitst in drie verticale lagen, met een aparte AI-laag ertussen:
+
+1. **Sector pack** (verschilt per sector) — dashboard-module, procedure-templates, GI-context, bron-categorieën, risicocategorieën
+2. **Governance Intelligence** (gedeelde infrastructuur, sector-context) — twee AI-toepassingen: **Institutional Memory** (archief van besluitvorming, doorzoekbaar met bron-citaten) en **Regulatory Guardrail** (continue spiegel op vigerende regelgeving)
+3. **Core platform** (één codebase voor iedere sector) — documentbibliotheek, vergaderingen, AI-assistent, AI-voorbereiding, procedure-engine, risicomatrix, notulen, audit-export
+4. **Fundament** (multi-tenant infrastructuur) — identity/SSO, RLS, versleutelde opslag, multi-tenant DB, compliance (ISO 27001 / SOC 2)
+
+De positionering is "**Besturingssysteem voor verantwoordelijkheid**" — niet een board-tool die documenten toont, maar een platform dat besturen sneller de juiste vragen laat stellen, eerder blind spots laat herkennen, en besluiten met betere onderbouwing laat motiveren.
+
+### Drie sectoren — markt en GI-toepassing
+
+| Sector | Markt NL | Gem. contract | ARR-potentieel | Sector-specifieke GI-toepassing |
+|--------|----------|---------------|----------------|--------------------------------|
+| Pensioenfondsen | ~150 | €25k | €2-4M | **Evenwichtigheidsmonitor** — markeert in stukken waar aannames afwijken van het Wtp-transitieplan |
+| Verzekeraars | ~150 | €35k | €3-5M | **Solvency & Risk Co-pilot** — kruist incidentenlogs met SCR-projectie, markeert nieuwe DNB Good Practices |
+| Woningcorporaties | ~270 | €15k | €2-4M | **Drempelwaarde-Bewaker** — controleert mandaten, signaleert afwijking van prestatieafspraken met gemeente |
+
+Totaal Nederlandse markt voor deze drie sectoren: ~570 organisaties, ARR-potentieel €7-13M.
+
+### Schaalbaar voorbij deze drie sectoren
+
+Het patroon werkt voor iedere sector met bestuurlijke governance + regulator + procedure-load. Logische uitbreidingen: zorginstellingen (IGJ/NZa), onderwijsinstellingen (Inspectie), vermogensbeheerders (AFM), goede doelen (CBF), sportbonden (NOC*NSF), UMC's, ZBO's, brancheverenigingen. Discipline is hier essentieel: niet 4 sectoren tegelijk aanvallen, maar één sector goed winnen voordat de volgende start.
+
+### Kwaliteitswaarborging — drie principes
+
+Voor elke AI-functie in het portaal, niet optioneel:
+
+1. **Verifieerbaarheid** — geen bewering zonder citatie; deeplinks naar bron-notulen of beleidsstukken; hallucinaties uitgesloten doordat AI alleen vanuit beschikbaar bronmateriaal mag spreken
+2. **Human-in-the-loop** — AI signaleert, vat samen, spiegelt en adviseert, maar besluit nooit; geen automatische acties op kritische besluitmomenten
+3. **Data-soevereiniteit** — EU-hosting, klantdata wordt nooit gebruikt voor training publieke modellen, archief blijft eigendom van organisatie
+
+**Belangrijkste reframings** (na kritische review): het portaal verlaagt **niet** de hoofdelijke aansprakelijkheid van bestuurders — die blijft persoonlijk en wettelijk verankerd. Het verhoogt de **kwaliteit van de onderbouwing**. AI is geen "onafhankelijke toetssteen" maar een **spiegelfunctie**. "Dual-Engine AI" framing vermijden — dit zijn twee AI-toepassingen op één infrastructuur, niet twee fysieke engines.
+
+### Strategische pijlers (commerciële winst)
+
+1. **Snel uitrolbaar in nieuwe sectoren** — circa twee maanden per sector in plaats van zes
+2. **Differentiatie van generieke board-tools** (iBabs, Diligent) — sector-specifieke configuratie i.p.v. one-size-fits-all
+3. **Marginale ontwikkelkosten dalen per sector** — verbetering aan core profiteert iedere sector tegelijkertijd
+4. **Template-bibliotheek als content-moat** — sector-specifieke procedures gecureerd door domeinexperts
+5. **Sector-brede benchmarks (roadmap)** — geanonimiseerde patronen over de sector heen, waardevol vanaf circa 30-50 klanten per sector, vraagt juridisch kader voor anonimisering
+
+### Compliance-by-Design Workflow
+
+Vijf-staps cyclus die de propositie concreet maakt voor sales:
+
+| Fase | Traditioneel | Met Governance Intelligence |
+|------|--------------|---------------------------|
+| Creatie | Stukken op basis van vorig jaar | Drafting op vigerende sector-templates |
+| Validatie | Handmatige check op kaders | Automatische signalering drempelwaarden |
+| Review | Honderden pagina's PDF | Executive summaries per rol |
+| Vergadering | Notulen leggen <em>wat</em> vast | Smart transcripts leggen ook <em>waarom</em> vast |
+| Verantwoording | Wekenlang dossier zoeken | Eén klik: volledig dossier gereproduceerd |
+
+### Deliverables in de workspace
+
+Drie bestanden in de projectmap als referentiemateriaal:
+
+- **`Procedures-per-sector.docx`** — 30 pagina's A4 met 8 procedures per sector (24 totaal) uitgewerkt met trigger, frequentie, eigenaar, doorlooptijd, regelgeving, stappen met checklist en bewijs/besluit-vereisten, plus aandachtspunten. Direct bruikbaar als seed-data voor de procedure-templates-tabel als de engine wordt uitgebouwd.
+- **`Sector-pack-architectuur.html`** — technische uitwerking met SQL-migrations, code-voorbeelden en file-by-file changes. Voor developer-context als de implementatie ooit start.
+- **`Sector-pack-concept.html`** — strategisch concept-document (niet-technisch) met overlap-analyse, GI-toelichting, sector-scenario's, kwaliteitswaarborging en strategische opbrengst. Voor gesprekken met bestuurders, partners, investeerders.
+- **`Architectuur-multi-sector.html`** — interactieve architectuurplaat (vier lagen, drie sector-tabs), laat in één oogopslag zien wat per sector verandert en wat gedeeld blijft.
+
+### Status van de verkenning
+
+Niets hiervan is gebouwd. De huidige codebase blijft pensioen-only met hardgecodeerde Wtp-dashboards en pensioen-specifieke prompts. De technische migratie naar sector packs zou starten met de hernoeming van `fondsen` naar `organisaties`, een nieuwe `sectoren`-config-tabel en het verplaatsen van `lib/proces-templates.ts` naar de database. Voor de volledige fasering zie het architectuur-document.
+
+Belangrijkste open vragen voor latere sessies: (1) eerste betaalde pilot binnenhalen in pensioen voordat sector-uitbreiding start, (2) keuze tussen bootstrap-route en seed-funding, (3) ISO 27001-traject starten als enterprise-sales serieus wordt.
+
+---
+
+## Decision Object — proceduremodule MVP-1 (in uitvoering)
+
+In mei 2026 is een grote doorontwikkeling van de proceduremodule gestart: het verschuiven van *workflow & case management* (Plateau 1) naar *procedure-led governance* met een centraal **Decision Object** als ruggengraat (Plateau 2). De inhoudelijke spec staat in twee bijlagen die Merlin heeft aangeleverd: `Inrichting module procedure - aangescherpt.docx` (functionele specificatie, 06-05-2026) en `GOS_Compleet_Operating_Model_Architectuur_Roadmap.pdf` (operating model + plateau-roadmap). Beide zijn input voor het ontwerpdocument hieronder.
+
+### Status (per 8 mei 2026)
+
+- **Fase 0 — ontwerpdocument**: klaar in twee revisierondes. Zie [`PROCEDURE-MVP1-ONTWERP.md`](./PROCEDURE-MVP1-ONTWERP.md) — versie 2.1 met revisielog. Bevat datamodel, statusmodel, readiness-niveaus, fasering 1A/1B/1C/1D/1E, RLS-strategie en demo-vragen voor 1B.
+- **Fase 1A — schema-migratie**: klaar en gedraaid op live Supabase (project `aebwiufuegsiwhwpdrfb`) op 7 mei 2026. Migratie: [`supabase/migrations/2026_05_07_decision_object.sql`](./supabase/migrations/2026_05_07_decision_object.sql). Rollback (alleen als nodig): [`2026_05_07_decision_object_ROLLBACK.sql`](./supabase/migrations/2026_05_07_decision_object_ROLLBACK.sql). Pre-flight + post-flight + rookproef in transactie zijn allemaal groen.
+- **Fase 1B — template-seed + auto-upgrade + types + dossier-API**: code klaar op 8 mei 2026, `tsc --noEmit` groen. Nieuwe template `beleidswijziging_beleggingsbeleid` (6 stappen) in [`lib/proces-templates.ts`](./lib/proces-templates.ts), bijbehorende `procedure_requirements`-seed in [`supabase/migrations/2026_05_08_phase_1b_template_requirements.sql`](./supabase/migrations/2026_05_08_phase_1b_template_requirements.sql) — **nog draaien in Supabase Dashboard → SQL Editor** voordat de UI in 1C deze template gebruikt. Auto-upgrade-helper en evidence-synthese in [`lib/decision.ts`](./lib/decision.ts) (`ensureDecisionForProcedure`, `buildDecisionDossierView`, `buildEvidenceLijst`, `filterDissentOpRol`). TypeScript-types als frontend-contract in [`lib/decision-view.ts`](./lib/decision-view.ts) (`DecisionDossierView` met alle subtypes, plus `mapLegacyStatus` voor de auto-upgrade-mapping). Dossier-API: [`GET /api/procedures/[id]/dossier`](./app/api/procedures/[id]/dossier/route.ts) (lazy auto-upgrade — maakt Decision Object aan als nog niet aanwezig en logt `decision_object_auto_created` event) en [`GET /api/decisions/[id]/dossier`](./app/api/decisions/[id]/dossier/route.ts) (direct via decision_id). Volgende: SQL-seed draaien in Supabase + tussentijdse demo (sectie 7.3 van ontwerpdoc) vóór 1C.
+- **Fase 1C — UI**: nog te doen, na demo van 1B met eindgebruiker (zie sectie 7.3 van het ontwerpdoc).
+- **Fase 1D — besluitregistratie + dissent + aannames + risico's**: nog te doen.
+- **Fase 1E — auditdossier-export (HTML/JSON)**: nog te doen.
+
+### Wat er nu structureel in de database staat (post-1A)
+
+Elf nieuwe tabellen, elk met RLS via `fonds_id`-koppeling: `decision_objects` (centraal besluitdossier met multi-dimensionele classificatie: `complexiteit`, `risiconiveau`, `mandaatgevoelig`, `toezichtgevoelig`, `beleidsafwijking`, `ai_risicoklasse`), `decision_assumptions`, `decision_risks`, `decision_dissent` (met `zichtbaarheid`-gradaties privé/gedeelde_zorg/formele_dissent/minderheidsnotitie), `decision_conditions`, `decision_actions`, `decision_evaluations`, `decision_ai_interactions` (met `validatie_domein` voor RLS, plus `gebruikt_in_dossier`/`gebruik_context`/`verworpen_reden` voor de auditvraag *welke AI-output heeft besluit beïnvloed?*), `procedure_requirements` (generiek met `requirement_type`-enum: document/field/assumption/risk/ai_validation/approval/mandate_check/kpi/evaluation/dissent_review), `governance_events` (append-only via triggers, sha256 hash per event), `decision_audit_snapshots` (auto-gevuld bij overgang naar `besloten`/`voorwaardelijk_besloten`/`in_evaluatie`/`afgesloten`).
+
+Tien nieuwe Postgres-functies: `fn_decision_code` (auto `BSL-2026-NNNN`), `fn_decision_touch`, `fn_decision_status_check` (whitelist van toegestane overgangen, 14 statussen conform spec §23.1), `fn_decision_snapshot` (snapshot bij besluitvorming), `fn_govevent_immutable` + `fn_govevent_hash`, `fn_snapshot_immutable`, `fn_build_decision_dossier(decision_id)` (view-builder, single source of truth voor live API én snapshot), `fn_decision_readiness_check(decision_id, target)` (zes targets: onderbouwing_compleet/reviewrijp/bespreekrijp/besluitrijp/verantwoordingsrijp/evaluatierijp), `fn_decision_readiness_overview(decision_id)`. Negen actieve triggers. Eén partial unique index `idx_dobj_one_primary` op `decision_objects(procedure_id) where is_primary_decision = true` — geeft 1:1-gedrag voor MVP zonder dat 1:n later een datamigratie vergt.
+
+Bestaande tabellen onaangetast; alleen kolom `procedures.decision_id` toegevoegd als handige FK. Geen bestaande proceduredata getroffen (waren toch 0 rijen op het moment van migreren).
+
+### Belangrijke ontwerpkeuzes (voor context bij 1B en verder)
+
+- **Procedure leidend, documenten zijn bewijsstukken** — verschuiving van document-portaal naar governance-platform.
+- **AI gecontroleerd binnen procedurestappen** — geen losse chatbot maar contextueel; elke output krijgt validatiestatus en bronverwijzing; `decision_ai_interactions.validatie_domein` bepaalt welke rol mag valideren.
+- **Readiness als ladder, niet binair** — een dossier kan reviewrijp zijn maar nog niet besluitrijp; doorzetten naar volgende status alleen mogelijk bij bijbehorende readiness, of via expliciete override door voorzitter/beheerder (gelogd als `governance_event`).
+- **Audit snapshot bij besluitvorming** — bevriest de dossierstand op het moment van besluit zodat reproduceerbaarheid niet afhangt van later wijzigende metadata. Snapshots zelf zijn append-only.
+- **Bestaande proceduretabellen blijven werken** — backwards compatible. Auto-upgrade van legacy-procedures naar Decision Object gebeurt in lib-code (Fase 1B), niet in migratie.
+
+---
+
 ## Voor de volgende sessie
 
 Voorbeelden van openingen die snel productief maken:
 
-- *"Lees HANDOVER.md voor context. Ik wil prompt caching implementeren in alle AI-routes."*
+- *"Lees HANDOVER.md en PROCEDURE-MVP1-ONTWERP.md. Ga verder met Fase 1C: Decision Object header op procedure-detailpagina + classificatie-panel (6 dimensies) + readiness-ladder + per-stap-requirements view + AI-samenvatting binnen stap met validatie-actie."*
+- *"Lees HANDOVER.md. Voer de demo-toetsing van 1B uit (zeven vragen in sectie 7.3 van het ontwerpdoc) — schrijf eerst een korte demo-flow op basis van de dossier-API en de auto-upgrade van de bestaande beleidswijziging-procedure."*
+- *"Lees HANDOVER.md. Ik wil prompt caching implementeren in alle AI-routes."*
 - *"Lees HANDOVER.md. Ik wil de Sparringpartner-modus voor voorbereidingen bouwen — interactief doorpraten op basis van een gegenereerde voorbereiding."*
 - *"Lees HANDOVER.md. Ik wil een 'Bereid alles voor'-knop op een vergadering — voor alle agendapunten tegelijk."*
 - *"Lees HANDOVER.md. Ik wil bewerken van risico's na aanmaken (Risicomatrix iteratie 2)."*
 - *"Lees HANDOVER.md. Ik heb een bug op [pad]: [beschrijving]."*
+- *"Lees HANDOVER.md. Ik wil de eerste fase van de multi-sector migratie starten — sector-tabel + organisaties-rename. Zie de strategische verkenning."*
 
 In nieuwe sessies hoef je niet de geschiedenis van keuzes uit te leggen — die staan hier. Beschrijf wat je wilt veranderen en de nieuwe Claude-sessie kan via `Read` direct in de juiste files duiken.
 
@@ -426,6 +536,8 @@ In nieuwe sessies hoef je niet de geschiedenis van keuzes uit te leggen — die 
 
 ## Release-historie
 
+- **8 mei 2026** — **Decision Object MVP-1B — template-seed + auto-upgrade + dossier-API + types**. Tweede van vijf subfases. Vier deliverables uit sectie 7.2 van `PROCEDURE-MVP1-ONTWERP.md` (rev. 2.1) zijn nu klaar als code; SQL-seed wacht op handmatig draaien in Supabase. **(1) Template-seed**: nieuwe template `beleidswijziging_beleggingsbeleid` (6 stappen — Concept & aanleiding / Onderbouwing / Validatie & risk review / Bestuursoverleg & agendering / Besluitvorming / Implementatie & evaluatie) toegevoegd aan `lib/proces-templates.ts`, plus 16 bijbehorende `procedure_requirements`-rijen in `supabase/migrations/2026_05_08_phase_1b_template_requirements.sql`. Conditionele activatie via classificatie-dimensies werkt zoals beschreven in sectie 4.9: liquiditeitsanalyse alleen bij `risiconiveau=hoog`, mandaatcheck alleen bij `mandaatgevoelig=true`, ≥3 kernaannames bij complex/hoog (gesplitst in twee rijen conform OR-pattern). Idempotent via `delete + insert` in een transactie. Migratie nog níet gedraaid op live Supabase; dat wacht op de tussentijdse demo. **(2) Auto-upgrade**: `lib/decision.ts` met `ensureDecisionForProcedure(supabase, procedureId)` dat lazy een Decision Object aanmaakt voor procedures zonder gekoppelde `decision_id`. Statusmapping legacy → nieuw via `mapLegacyStatus`: `in_uitvoering` → `in_onderbouwing`, `wacht_op_besluit` → `in_review`, `afgerond` → `afgesloten` (de status-trigger werkt alleen op UPDATE, dus directe INSERT in deze eindstand mag). Placeholder-besluitvraag "Aanvullen na auto-upgrade — formuleer hier de centrale besluitvraag" maakt zichtbaar dat de bestuurder dit veld moet invullen. Auto-upgrade logt een `decision_object_auto_created` event in `governance_events` met legacy- en nieuwe status in de payload. **(3) Frontend-types**: `lib/decision-view.ts` definieert `DecisionDossierView` met alle subtypes (DecisionObject, ProcedureSummary, ProcedureStep, ReadinessOverview, EvidenceItem, Assumption, RiskItem, AIInteraction, DissentItem, DecisionCondition, ActionItem, Evaluation, GovernanceEvent, AuditSnapshotMeta, Scenario), single source of truth voor zowel de API-response als de UI in 1C. Status-/risiconiveau-/complexiteit-labels staan klaar voor weergave. **(4) Dossier-API**: twee routes — `GET /api/procedures/[id]/dossier` (met lazy auto-upgrade) en `GET /api/decisions/[id]/dossier` (direct). Beide bouwen het complete `DecisionDossierView` op door (a) `fn_decision_readiness_overview` aan te roepen voor alle zes readiness-niveaus, (b) per `procedure_requirements`-rij te beoordelen of de requirement vervuld is via `buildEvidenceLijst` (document-match via stap+titel, AI-validatie met domein-detectie via label, drempel-3 voor "≥ 3 kernaannames", etc.), (c) dissent te filteren op zichtbaarheid × rol als defense-in-depth bovenop RLS, en (d) snapshots-meta op te halen zonder payload (die alleen via auditdossier-export in 1E vrijkomt). De API geeft `auto_upgraded: true` mee zodat de UI in 1C een banner kan tonen. Geen schema-wijzigingen behalve de seed-migratie. `tsc --noEmit --skipLibCheck` groen. Volgende stap: SQL-seed draaien in Supabase Dashboard, daarna tussentijdse demo (zeven toetsvragen in sectie 7.3 van het ontwerpdoc) met de bestuurssecretaris vóórdat de UI van 1C wordt gebouwd.
+- **7 mei 2026** — **Decision Object MVP-1A — schema-fundament voor proceduremodule v2**. Eerste van vijf subfases (1A t/m 1E) in de doorontwikkeling van de proceduremodule van Plateau 1 (workflow & case management) naar Plateau 2 (procedure-led governance) conform de aangeleverde GOS-spec (`Inrichting module procedure - aangescherpt.docx`, 06-05-2026). Migratie voegt elf nieuwe tabellen toe: `decision_objects` als centraal besluitdossier (met multi-dimensionele classificatie: complexiteit/risiconiveau/mandaatgevoelig/toezichtgevoelig/beleidsafwijking/ai_risicoklasse, plus uitgebreid statusmodel met 14 statussen en getriggerde whitelisting van overgangen), `decision_assumptions`, `decision_risks`, `decision_dissent` (met zichtbaarheidsgradaties privé/gedeelde_zorg/formele_dissent/minderheidsnotitie en strenge RLS), `decision_conditions`, `decision_actions`, `decision_evaluations`, `decision_ai_interactions` (met `validatie_domein` voor RLS-policy + audit-velden gebruikt_in_dossier/gebruik_context/verworpen_reden), generieke `procedure_requirements` (vervangt het te documentgerichte evidence-model met requirement_type-enum over 10 types), append-only `governance_events` met sha256 hash per event, en `decision_audit_snapshots` (auto-gevuld bij overgang naar besloten/voorwaardelijk_besloten/in_evaluatie/afgesloten via trigger). Tien nieuwe Postgres-functies waaronder `fn_build_decision_dossier(decision_id)` als single source of truth voor live API én snapshot, `fn_decision_readiness_check(decision_id, target)` met zes readiness-niveaus (onderbouwing_compleet/reviewrijp/bespreekrijp/besluitrijp/verantwoordingsrijp/evaluatierijp), en `fn_decision_status_check` die ongeldige statusovergangen blokkeert. Decision Object is voorbereid op 1:n (partial unique index op `is_primary_decision`) zonder dat MVP-1 last heeft van die toleratie. Backwards compatible: bestaande `procedures`-tabellen onveranderd, alleen kolom `procedures.decision_id` toegevoegd als FK. Auto-upgrade van bestaande procedures naar Decision Object volgt in 1B (lib-code, geen schema-wijziging). Ontwerpdocument: `PROCEDURE-MVP1-ONTWERP.md` (v2.1, na twee externe reviewrondes). Migratie: `supabase/migrations/2026_05_07_decision_object.sql`. Rollback: `2026_05_07_decision_object_ROLLBACK.sql`. Live gedraaid op project `aebwiufuegsiwhwpdrfb`; rookproef in transactie groen.
 - **4 mei 2026** — **PDF-extractie hotfix: woordafbreking + soft hyphens**. Tijdens testen bleek een InDesign-document (`Code Pensioenfondsen 2024.pdf`) nog steeds slecht doorzoekbaar omdat 65 woorden aan einde regel waren afgebroken met een streepje (`vertegen-\nwoordigt`, `pensioen-\nfonds`, `belangen-\nafwegingen`) — typische typografische opmaak die de tokenizer als losse fragmenten zag. `voegTekstItemsSamen` in `lib/document-extractie.ts` plakt deze nu correct samen: bij een regel-break wordt gecontroleerd of de regel eindigt op `letter-` en de volgende regel begint met een kleine letter; zo ja, dan koppelteken weg en woorden samenvoegen zonder newline. Daarnaast worden soft hyphens (U+00AD) defensief gestript in `schoonTekst`. Diagnostiek uitgebreid met `hyphenFragmenten`-teller en aparte log-warning. Geen schemamigratie. Verificatie: extractie van het probleem-PDF gaat van 65 hyphen-fragmenten naar 0, alle samengestelde woorden worden weer gevonden (bijv. `pensioenfonds` 116x).
 - **4 mei 2026** — **Multi-format documentupload + grondig verbeterde PDF-extractie**. De bibliotheek en agendapunt-uploaders accepteren nu naast PDF ook **Word (.docx)** en **Excel (.xlsx)**. Per type een dedicated extractor in nieuw bestand `lib/document-extractie.ts`: PDF via `unpdf` (vervangt `pdf-parse`), DOCX via `mammoth.extractRawText`, XLSX via `xlsx` (SheetJS) — Excel-tabbladen worden omgezet naar markdown-tabellen met `## Tabblad: <naam>` als kop, pipes en interne newlines ge-escaped. Inzage-route (`GET /api/documents/[id]/bestand`) serveert origineel met juiste content-type per type (PDF inline, Word/Excel als download). UI toont kleine type-badge per rij in de bibliotheek (PDF rood, Word blauw, Excel groen) en gebruikt "tabbladen" i.p.v. "pagina's" voor Excel. Migratie: nieuwe kolom `documenten.bestandstype` (check-constraint op pdf/docx/xlsx, default `'pdf'` voor bestaande records). **PDF-extractie fundamenteel verbeterd**: de oude `pdf-parse` plakte text-items klakkeloos achter elkaar zonder spaties (PDF's emiteren woorden vaak als losse positionele items zonder echte spatie-karakters ertussen) — resultaat was `"Decommissieheefteenadviesuitgebracht"`, funest voor full-text search. Vervangen door `unpdf` (modern pdfjs onder de motorkap) met eigen `voegTekstItemsSamen`-functie die per text-item naar X/Y-coördinaten kijkt en op basis van X-gap een spatie invoegt, op basis van Y-verandering een line- of paragraaf-break. **Chunker als drie-traps cascade** in `lib/rag.ts`: paragraaf → zin (`. `, `? `, `! ` gevolgd door hoofdletter) → woordgrenzen — voorkomt afkappen midden in een woord of zin. **Diagnostiek-helper** `diagnoseerExtractie` waarschuwt in de Vercel-logs zodra >5% van de woorden in een PDF langer is dan 30 chars — vroege signalering van probleem-PDF's zonder de upload te blokkeren. **OCR voor gescande PDF's bewust niet ingebouwd** vanwege Vercel function-timeouts, read-only filesystem, en grote function-size door tesseract.js + canvas-binaries. Gescande PDF's worden geweigerd met instructie naar Acrobat/Preview. Migratie: `supabase/migrations/2026_05_03_documenten_bestandstype.sql`.
 - **3 mei 2026** — **Bronvermelding explicieter in AI-chat**. De `[Bron N]`-markers in een AI-antwoord zijn niet langer platte tekst maar klikbare gouden pills die hetzelfde nummer dragen als de bronkaart eronder. Klik → de bijbehorende kaart krijgt een korte goud-randpuls en scrollt in beeld; hover → tooltip met titel, paragraaf/pagina en het fragment. Bronkaart heeft links nu een gekleurde nummer-pill die matcht met de bronlabel-kleur (DNB rood, AFM blauw, etc.) en is zelf een klikbare link die het origineel via `/api/documents/[id]/bestand` in een nieuw tabblad opent. Voor documenten zonder `opslag_pad` wordt de kaart niet-klikbaar (geen cursor-pointer, geen ↗) en toont een subtiele "Origineel niet beschikbaar"-hint. Voor visuele consistentie zijn ook `[Algemene kennis]` en `[Volgens wetgeving]` als grijze (niet-klikbare) pill-markers gerenderd. Systeem-prompt in `app/api/chat/route.ts` aangescherpt: Claude moet markers altijd als afzonderlijke `[Bron N]` schrijven (niet `[Bron 1, 2]`), bij élke feitelijke claim, en direct ná de claim. `BronVerwijzing` in `lib/rag.ts` heeft nieuw veld `heeft_origineel: boolean` zodat de UI vooraf weet of de PDF-link kan. Geen schemamigratie nodig — het is een afgeleid veld op basis van `documenten.opslag_pad`.
@@ -455,9 +567,11 @@ Voor een schone Supabase-setup vanaf nul, draai `mvp/supabase/schema.sql` in zij
 5. `2026_04_29_voorbereidingen.sql` — `voorbereidingen`-tabel + RLS
 6. `2026_05_03_documenten_inzage_deactivatie.sql` — `documenten.opslag_pad`, deactivatie-velden, `document_inzage`-tabel + Storage-bucket
 7. `2026_05_03_documenten_bestandstype.sql` — `documenten.bestandstype` kolom met check-constraint (pdf/docx/xlsx)
+8. `2026_05_07_decision_object.sql` — Decision Object MVP-1A: 11 nieuwe tabellen, 10 functies, 9 triggers, 13 RLS-policies. Vereist `pgcrypto` (Supabase heeft die default aan). Rollback beschikbaar in `2026_05_07_decision_object_ROLLBACK.sql` — alléén gebruiken als je echt terug moet (drop alle Decision Object-tabellen en data).
+9. `2026_05_08_phase_1b_template_requirements.sql` — Decision Object MVP-1B template-seed: 16 `procedure_requirements`-rijen voor template `beleidswijziging_beleggingsbeleid` (6 stappen). Idempotent via `delete + insert` in een transactie. Geen tabel-wijzigingen.
 
 Migraties zijn klein en geïsoleerd — geen schema-rollbacks nodig zolang je de volgorde aanhoudt.
 
 ---
 
-*Laatst bijgewerkt: 4 mei 2026 — na hotfix voor woordafbreking en soft hyphens in PDF-extractie (InDesign-documenten worden nu volledig correct uitgelezen).*
+*Laatst bijgewerkt: 8 mei 2026 — Decision Object MVP-1B code klaar (template-seed + auto-upgrade-helper + frontend-types + dossier-API). `lib/decision.ts`, `lib/decision-view.ts`, `app/api/procedures/[id]/dossier/route.ts`, `app/api/decisions/[id]/dossier/route.ts`, en uitgebreide `lib/proces-templates.ts`. SQL-seed `supabase/migrations/2026_05_08_phase_1b_template_requirements.sql` nog te draaien in Supabase. Volgende stap: tussentijdse demo (sectie 7.3 ontwerpdoc), daarna Fase 1C UI.*
