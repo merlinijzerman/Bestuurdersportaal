@@ -18,9 +18,12 @@ import {
   type ActionItem,
   type Assumption,
   type AuditSnapshotMeta,
+  type BesluitItem,
+  type BewijsItem,
   type DecisionDossierView,
   type DissentItem,
   type GovernanceEvent,
+  type ProcedureStep,
   ACTION_STATUS_LABEL,
   ASSUMPTION_STATUS_LABEL,
   ASSUMPTION_TYPE_LABEL,
@@ -184,6 +187,75 @@ function renderProcedure(view: DecisionDossierView): string {
     <thead><tr><th>Volgorde</th><th>Naam</th><th>Status</th><th>Vereist besluit</th></tr></thead>
     <tbody>${stappenRijen}</tbody>
   </table>
+</section>`;
+}
+
+function renderBewijs(items: BewijsItem[], steps: ProcedureStep[]): string {
+  if (items.length === 0) {
+    return `<section><h3>Bewijsstukken</h3><p class="leeg">Geen bewijsstukken vastgelegd.</p></section>`;
+  }
+  // Groeperen per stap voor leesbaarheid; binnen een stap nieuwste boven.
+  const groepen = new Map<string, BewijsItem[]>();
+  for (const b of items) {
+    const lijst = groepen.get(b.stap_id) ?? [];
+    lijst.push(b);
+    groepen.set(b.stap_id, lijst);
+  }
+  const stappenGesorteerd = steps.slice().sort((a, b) => a.volgorde - b.volgorde);
+  const blokken = stappenGesorteerd
+    .map((s) => {
+      const lijst = groepen.get(s.id) ?? [];
+      if (lijst.length === 0) return "";
+      const rijen = lijst
+        .map(
+          (b) => `
+          <tr>
+            <td><pre>${esc(b.titel)}</pre></td>
+            <td>${b.documenttype ? esc(b.documenttype) : "—"}</td>
+            <td><pre>${esc(b.beschrijving ?? "—")}</pre></td>
+            <td>${esc(b.toegevoegd_door_naam ?? "—")}</td>
+            <td>${esc(fmtDatumTijd(b.toegevoegd_op))}</td>
+            <td>${b.document_id ? `<code>${esc(b.document_id.slice(0, 8))}…</code>` : "—"}</td>
+          </tr>`
+        )
+        .join("");
+      return `
+      <div class="bewijs-blok">
+        <h4 class="bewijs-stap-titel">Stap ${s.volgorde} — ${esc(s.naam)}</h4>
+        <table class="lijst">
+          <thead>
+            <tr>
+              <th>Titel</th>
+              <th>Documenttype</th>
+              <th>Beschrijving</th>
+              <th>Toegevoegd door</th>
+              <th>Toegevoegd op</th>
+              <th>Document-ref</th>
+            </tr>
+          </thead>
+          <tbody>${rijen}</tbody>
+        </table>
+      </div>`;
+    })
+    .filter(Boolean)
+    .join("");
+  // Eventueel bewijs zonder bekende stap (zou niet mogen, maar defensief).
+  const bekendeStapIds = new Set(steps.map((s) => s.id));
+  const wezen = items.filter((b) => !bekendeStapIds.has(b.stap_id));
+  const wezenBlok =
+    wezen.length > 0
+      ? `<div class="bewijs-blok"><h4 class="bewijs-stap-titel">Bewijs zonder bekende stap-koppeling</h4><table class="lijst"><thead><tr><th>Titel</th><th>Documenttype</th><th>Beschrijving</th><th>Toegevoegd door</th><th>Toegevoegd op</th></tr></thead><tbody>${wezen
+          .map(
+            (b) => `<tr><td><pre>${esc(b.titel)}</pre></td><td>${b.documenttype ? esc(b.documenttype) : "—"}</td><td><pre>${esc(b.beschrijving ?? "—")}</pre></td><td>${esc(b.toegevoegd_door_naam ?? "—")}</td><td>${esc(fmtDatumTijd(b.toegevoegd_op))}</td></tr>`
+          )
+          .join("")}</tbody></table></div>`
+      : "";
+  return `
+<section>
+  <h3>Bewijsstukken</h3>
+  <p class="hint">${items.length} bewijsstuk${items.length === 1 ? "" : "ken"} totaal, gegroepeerd per procedure-stap. Document-ref verwijst naar de FK in <code>documenten</code> en is via de bibliotheek inzichtbaar voor wie toegang heeft.</p>
+  ${blokken}
+  ${wezenBlok}
 </section>`;
 }
 
@@ -357,6 +429,45 @@ function renderAIInteracties(items: DecisionDossierView["aiOutputs"]): string {
 </section>`;
 }
 
+function renderBesluiten(
+  items: BesluitItem[],
+  steps: ProcedureStep[]
+): string {
+  if (items.length === 0) {
+    return `<section><h3>Vastgelegde besluiten</h3><p class="leeg">Nog geen besluiten vastgelegd.</p></section>`;
+  }
+  const stapNaam = new Map<string, string>();
+  for (const s of steps) stapNaam.set(s.id, `Stap ${s.volgorde} — ${s.naam}`);
+  const blokken = items
+    .map((b) => {
+      const alternatievenLijst =
+        b.verworpen_alternatieven && b.verworpen_alternatieven.length > 0
+          ? `<div class="alternatieven"><strong>Verworpen alternatieven:</strong><ul>${b.verworpen_alternatieven.map((a) => `<li><pre>${esc(a)}</pre></li>`).join("")}</ul></div>`
+          : "";
+      const stapInfo = b.stap_id
+        ? stapNaam.get(b.stap_id) ?? `Stap-id ${b.stap_id.slice(0, 8)}`
+        : "Niet aan stap gekoppeld";
+      return `
+      <div class="besluit-blok">
+        <div class="besluit-header">
+          <span class="badge">${esc(stapInfo)}</span>
+          <span class="datum">${esc(fmtDatum(b.datum))}</span>
+          ${b.vastgelegd_door_naam ? `<span class="auteur">${esc(b.vastgelegd_door_naam)}</span>` : ""}
+        </div>
+        <div class="besluit-formulering"><pre>${esc(b.formulering)}</pre></div>
+        ${b.motivering ? `<div class="kv"><div class="k">Motivering</div><div class="v"><pre>${esc(b.motivering)}</pre></div></div>` : ""}
+        ${alternatievenLijst}
+      </div>`;
+    })
+    .join("");
+  return `
+<section>
+  <h3>Vastgelegde besluiten</h3>
+  <p class="hint">${items.length} besluit${items.length === 1 ? "" : "en"}, met motivering en expliciet verworpen alternatieven. Volgorde: nieuwste boven.</p>
+  ${blokken}
+</section>`;
+}
+
 function renderEvaluaties(items: DecisionDossierView["evaluations"]): string {
   if (items.length === 0) {
     return "";
@@ -517,7 +628,16 @@ export function renderAuditdossierHtml(
     .prompt, .output { font-size: 10pt; margin: 3pt 0; }
     .bronnen { font-size: 9.5pt; margin-top: 3pt; }
     .bronnen ul { margin: 1pt 0; padding-left: 16pt; }
-    .besluit-blok { border: 1px solid #d1d5db; padding: 4pt 8pt; margin-bottom: 4pt; background: #fafafa; }
+    .besluit-blok { border-left: 3pt solid #0F2744; padding: 4pt 10pt; margin-bottom: 6pt; background: #f8fafc; page-break-inside: avoid; }
+    .besluit-header { font-size: 9pt; color: #4b5563; margin-bottom: 3pt; }
+    .besluit-header .badge { display: inline-block; padding: 1pt 4pt; background: #fff; border: 1px solid #d1d5db; border-radius: 2pt; margin-right: 4pt; font-size: 8.5pt; }
+    .besluit-header .datum { color: #6b7280; margin-right: 6pt; }
+    .besluit-header .auteur { font-weight: 600; color: #374151; }
+    .besluit-formulering { font-weight: 600; font-size: 11pt; color: #0F2744; margin: 3pt 0; }
+    .besluit-formulering pre { font-weight: 600; }
+    .bewijs-blok { margin-bottom: 4mm; page-break-inside: avoid; }
+    .bewijs-stap-titel { font-size: 10.5pt; margin: 3pt 0 2pt 0; color: #0F2744; font-weight: 600; }
+    .bewijs-blok .lijst { font-size: 9.5pt; }
     .alternatieven { font-size: 9.5pt; color: #4b5563; margin-top: 4pt; }
     .alternatieven ul { margin: 1pt 0; padding-left: 16pt; }
     code { font-family: "Menlo", "Courier New", monospace; font-size: 9pt; background: #f3f4f6; padding: 0 2pt; border-radius: 1pt; }
@@ -532,12 +652,14 @@ export function renderAuditdossierHtml(
   ${renderBesluitvraagScope(view)}
   ${renderClassificatie(view)}
   ${renderProcedure(view)}
+  ${renderBewijs(view.bewijs ?? [], view.steps)}
   ${renderAannames(view.assumptions)}
   ${renderRisicos(view.risks)}
   ${renderVoorwaarden(view.conditions)}
   ${renderActies(view.actions)}
   ${renderDissent(view.dissent)}
   ${renderAIInteracties(view.aiOutputs)}
+  ${renderBesluiten(view.besluiten ?? [], view.steps)}
   ${renderEvaluaties(view.evaluations)}
   ${renderSnapshots(view.snapshots)}
   ${renderEvents(view.events)}

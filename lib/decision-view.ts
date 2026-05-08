@@ -383,6 +383,46 @@ export interface AuditSnapshotMeta {
   aangemaakt_op: string;
 }
 
+/**
+ * Vastgelegd besluit uit `procedure_besluiten`. Voor het auditdossier
+ * is dit het hart: welk besluit is genomen, met welke motivering, op
+ * welke datum, en welke alternatieven zijn expliciet verworpen.
+ */
+export interface BesluitItem {
+  id: string;
+  procedure_id: string;
+  stap_id: string | null;
+  decision_id: string | null;
+  formulering: string;
+  motivering: string | null;
+  datum: string;
+  vastgelegd_door_naam: string | null;
+  /** 1D-3: lijst van expliciet overwogen en verworpen alternatieven. */
+  verworpen_alternatieven: string[] | null;
+  vergadering_id: string | null;
+  agendapunt_id: string | null;
+}
+
+/**
+ * Bewijsstuk gekoppeld aan een procedure-stap. Komt direct uit
+ * `procedure_bewijs`. Voor het auditdossier is dit een eerste-orde-
+ * vraag: welke onderbouwing is toegevoegd, door wie, wanneer, en
+ * (sinds 1D-4) van welk documenttype.
+ */
+export interface BewijsItem {
+  id: string;
+  stap_id: string;
+  /** Optionele FK naar `documenten.id`. Als gezet, kan het origineel
+      bestand bekeken worden via `/api/documents/[id]/bestand`. */
+  document_id: string | null;
+  titel: string;
+  beschrijving: string | null;
+  /** 1D-4: tag die overeenkomt met procedure_requirements.documenttype. */
+  documenttype: string | null;
+  toegevoegd_op: string;
+  toegevoegd_door_naam: string | null;
+}
+
 // ── Hoofd-view ─────────────────────────────────────────────────────────
 
 export interface DecisionDossierView {
@@ -392,6 +432,12 @@ export interface DecisionDossierView {
   steps: ProcedureStep[];
   readiness: ReadinessOverview;
   evidence: EvidenceItem[];
+  /** Alle bewijsstukken (procedure_bewijs) gekoppeld aan stappen
+      van deze procedure, gesorteerd op stap_volgorde dan
+      toegevoegd_op. Onderdeel van het auditdossier. */
+  bewijs: BewijsItem[];
+  /** Vastgelegde besluiten met motivering en verworpen alternatieven. */
+  besluiten: BesluitItem[];
   assumptions: Assumption[];
   risks: RiskItem[];
   scenarios: Scenario[];

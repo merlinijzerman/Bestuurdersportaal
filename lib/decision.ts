@@ -19,6 +19,8 @@ import {
   type AIValidatieDomein,
   type Assumption,
   type AuditSnapshotMeta,
+  type BesluitItem,
+  type BewijsItem,
   type DecisionCondition,
   type DecisionDossierView,
   type DecisionObject,
@@ -346,6 +348,44 @@ export async function buildDecisionDossierView(
     (dissentRows ?? []) as DissentItem[]
   );
 
+  // 8. Bewijsstukken voor alle stappen ophalen — eerste-orde data
+  // voor het auditdossier. Sortering: stap_volgorde-volgorde
+  // (afgeleid via map) en daarbinnen toegevoegd_op aflopend zodat
+  // het meest recente bovenaan staat.
+  const stapIds = steps.map((s) => s.id);
+  let bewijs: BewijsItem[] = [];
+  if (stapIds.length > 0) {
+    const { data: bewijsRows } = await supabase
+      .from("procedure_bewijs")
+      .select(
+        "id, stap_id, document_id, titel, beschrijving, documenttype, toegevoegd_op, toegevoegd_door_naam"
+      )
+      .in("stap_id", stapIds)
+      .order("toegevoegd_op", { ascending: false });
+    const stapVolgorde = new Map<string, number>();
+    for (const s of steps) stapVolgorde.set(s.id, s.volgorde);
+    bewijs = ((bewijsRows ?? []) as BewijsItem[]).slice().sort((a, b) => {
+      const va = stapVolgorde.get(a.stap_id) ?? 0;
+      const vb = stapVolgorde.get(b.stap_id) ?? 0;
+      if (va !== vb) return va - vb;
+      // Nieuwste eerst binnen dezelfde stap.
+      return (b.toegevoegd_op ?? "").localeCompare(a.toegevoegd_op ?? "");
+    });
+  }
+
+  // 9. Vastgelegde besluiten ophalen — kern van het auditdossier.
+  // Filteren op procedure_id (1:1 procedure↔decision in MVP-1) +
+  // backward compat met oudere besluiten die nog geen decision_id
+  // hebben. Sortering: nieuwste-eerst.
+  const { data: besluitenRows } = await supabase
+    .from("procedure_besluiten")
+    .select(
+      "id, procedure_id, stap_id, decision_id, formulering, motivering, datum, vastgelegd_door_naam, verworpen_alternatieven, vergadering_id, agendapunt_id"
+    )
+    .eq("procedure_id", procedure.id)
+    .order("datum", { ascending: false });
+  const besluiten = (besluitenRows ?? []) as BesluitItem[];
+
   return {
     decision,
     procedure,
@@ -353,6 +393,8 @@ export async function buildDecisionDossierView(
     steps,
     readiness,
     evidence,
+    bewijs,
+    besluiten,
     assumptions: (assumptionRows ?? []) as Assumption[],
     risks: (riskRows ?? []) as RiskItem[],
     scenarios: [] as Scenario[], // MVP-1: leeg, voorbereid op MVP-2

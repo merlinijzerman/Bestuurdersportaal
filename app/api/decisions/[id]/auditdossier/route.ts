@@ -116,6 +116,11 @@ export async function GET(
       view.events = view.events ?? [];
       view.snapshots = (view.snapshots ?? []) as AuditSnapshotMeta[];
       view.steps = view.steps ?? [];
+      // Bewijs en besluiten zijn sinds deze release onderdeel van
+      // de view; oudere snapshots hebben deze velden niet — render-
+      // functies verwachten een array.
+      view.bewijs = view.bewijs ?? [];
+      view.besluiten = view.besluiten ?? [];
     } else {
       // Live actuele toestand.
       view = await buildDecisionDossierView(supabase, decisionId, {
