@@ -21,6 +21,13 @@ import {
   ensureDecisionForProcedure,
 } from "@/lib/decision";
 
+// Forceer dynamische rendering: deze page leest live data uit Supabase
+// (decision-state, readiness, evidence) en mag absoluut niet door de
+// Next.js full-route cache lopen — anders blijven readiness-ladder en
+// andere panelen op stale waarden hangen na mutaties via router.refresh().
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 interface ProcedureDetail {
   id: string;
   fonds_id: string;
