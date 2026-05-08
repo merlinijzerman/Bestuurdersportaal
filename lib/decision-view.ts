@@ -547,3 +547,39 @@ export function mapLegacyStatus(legacy: ProcedureStatus): DecisionStatus {
       return "in_onderbouwing";
   }
 }
+
+/**
+ * Omgekeerde mapping: 14-status Decision Object → 3-status legacy
+ * `procedures.status`. Wordt aangeroepen na een statusovergang op
+ * het Decision Object zodat het procedure-overzicht (/procedures)
+ * een consistente status toont.
+ *
+ * Mapping:
+ *   • afgewezen / geannuleerd / afgesloten            → 'afgerond'
+ *   • in_review / geagendeerd / in_bespreking         → 'wacht_op_besluit'
+ *   • alle overige (concept, in_onderbouwing,
+ *     in_validatie, besloten, voorwaardelijk_besloten,
+ *     in_uitvoering, in_evaluatie, aangehouden,
+ *     geescaleerd, teruggezet, heropend)               → 'in_uitvoering'
+ *
+ * Voor 'besloten' en 'voorwaardelijk_besloten' kiezen we bewust
+ * 'in_uitvoering' (legacy) i.p.v. 'wacht_op_besluit', omdat de
+ * legacy-semantiek van 'wacht_op_besluit' is "klaar voor
+ * bestuursbespreking", niet "besluit genomen".
+ */
+export function mapDecisionToProcedureStatus(
+  status: DecisionStatus
+): ProcedureStatus {
+  switch (status) {
+    case "afgewezen":
+    case "geannuleerd":
+    case "afgesloten":
+      return "afgerond";
+    case "in_review":
+    case "geagendeerd":
+    case "in_bespreking":
+      return "wacht_op_besluit";
+    default:
+      return "in_uitvoering";
+  }
+}

@@ -31,10 +31,11 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase-server";
-import type {
-  DecisionStatus,
-  ReadinessTarget,
-  ReadinessResult,
+import {
+  mapDecisionToProcedureStatus,
+  type DecisionStatus,
+  type ReadinessTarget,
+  type ReadinessResult,
 } from "@/lib/decision-view";
 
 const ALLE_STATUSSEN: DecisionStatus[] = [
@@ -76,6 +77,7 @@ interface Body {
 
 interface DecisionRowMin {
   id: string;
+  procedure_id: string;
   status: DecisionStatus;
   complexiteit: "routine" | "complicated" | "complex";
   risiconiveau: "laag" | "middel" | "hoog";
@@ -107,7 +109,7 @@ export async function POST(
     // 1. Decision laden (RLS bewaakt fonds-isolatie).
     const { data: decRow, error: leesFout } = await supabase
       .from("decision_objects")
-      .select("id, status, complexiteit, risiconiveau")
+      .select("id, procedure_id, status, complexiteit, risiconiveau")
       .eq("id", decisionId)
       .maybeSingle();
     if (leesFout || !decRow) {
@@ -246,10 +248,33 @@ export async function POST(
       nieuwe_waarde: { status: target },
     });
 
+    // 6. Sync naar `procedures.status` zodat het overzicht (/procedures)
+    // consistent blijft. Bij eindstatussen (afgewezen/geannuleerd/
+    // afgesloten) zetten we óók `afgerond_op` zodat het bestaande
+    // "Procedure is afgerond"-blok op de detailpagina werkt.
+    const legacyStatus = mapDecisionToProcedureStatus(target);
+    const procUpdate: Record<string, unknown> = { status: legacyStatus };
+    if (legacyStatus === "afgerond") {
+      procUpdate.afgerond_op = new Date().toISOString();
+    }
+    const { error: procFout } = await supabase
+      .from("procedures")
+      .update(procUpdate)
+      .eq("id", decision.procedure_id);
+    if (procFout) {
+      // Niet fataal — de Decision Object-update is gelukt; we loggen
+      // een waarschuwing zodat we het in de Vercel-logs zien.
+      console.warn(
+        `procedures.status sync mislukt voor procedure ${decision.procedure_id}:`,
+        procFout
+      );
+    }
+
     return NextResponse.json({
       decision: bijgewerkt,
       gewijzigd: true,
       via_override: overrides.length > 0,
+      procedure_status: legacyStatus,
     });
   } catch (e) {
     console.error("Fout in POST /api/decisions/[id]/status:", e);
