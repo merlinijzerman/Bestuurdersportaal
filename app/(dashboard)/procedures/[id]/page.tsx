@@ -9,13 +9,14 @@ import ActieveStapPaneel from "../_components/ActieveStapPaneel";
 import DecisionObjectHeader from "../_components/DecisionObjectHeader";
 import ClassificatiePanel from "../_components/ClassificatiePanel";
 import ReadinessLadder from "../_components/ReadinessLadder";
-import StapRequirementsPaneel from "../_components/StapRequirementsPaneel";
 import AannamesPaneel from "../_components/AannamesPaneel";
 import RisicosPaneel from "../_components/RisicosPaneel";
 import DissentPaneel from "../_components/DissentPaneel";
 import VoorwaardenPaneel from "../_components/VoorwaardenPaneel";
 import ActiesPaneel from "../_components/ActiesPaneel";
 import StatusOvergangPaneel from "../_components/StatusOvergangPaneel";
+import UitklapbaarPaneel from "../_components/UitklapbaarPaneel";
+import DossierStatusStrip from "../_components/DossierStatusStrip";
 import {
   buildDecisionDossierView,
   ensureDecisionForProcedure,
@@ -311,6 +312,18 @@ export default async function ProcedureDetailPage({
         />
       )}
 
+      {/* Compacte dossier-status-strip onder de banner: huidige status,
+          eerstvolgende readiness-horde, en een knop naar het uitklapbare
+          status-overgang-paneel onderin. Voorkomt dat de gebruiker eerst
+          het hele dossier moet doorscrollen om te weten waar het staat. */}
+      {dossier && (
+        <DossierStatusStrip
+          decision={dossier.decision}
+          readiness={dossier.readiness}
+          statusOvergangAnker="status-overgang"
+        />
+      )}
+
       {/* Header */}
       <div>
         <div className="flex items-center gap-2 mb-2 flex-wrap">
@@ -436,74 +449,6 @@ export default async function ProcedureDetailPage({
         </div>
       </div>
 
-      {/* Decision Object — classificatie + readiness-ladder.
-          Twee kolommen op desktop, gestapeld op mobile. */}
-      {dossier && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          <ClassificatiePanel decision={dossier.decision} />
-          <ReadinessLadder readiness={dossier.readiness} />
-        </div>
-      )}
-
-      {/* Decision Object — status-overgang (1D-3).
-          Gebruikt readiness uit het dossier als gate; voorzitter/
-          beheerder kan met override-motivering een ontbrekende
-          readiness overrulen (gelogd als 'override_<readiness>'). */}
-      {dossier && (
-        <StatusOvergangPaneel
-          decision={dossier.decision}
-          readiness={dossier.readiness}
-          currentUserIsPrivileged={currentUserIsPrivileged}
-        />
-      )}
-
-      {/* Decision Object — aannames + risico's (1D-1).
-          Onder de classificatie/readiness omdat ze de onderbouwing
-          vormen die door de readiness-check wordt geëvalueerd. */}
-      {dossier && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          <AannamesPaneel
-            decisionId={dossier.decision.id}
-            assumptions={dossier.assumptions}
-          />
-          <RisicosPaneel
-            decisionId={dossier.decision.id}
-            risks={dossier.risks}
-          />
-        </div>
-      )}
-
-      {/* Decision Object — voorwaarden + acties (1D-2).
-          Voorwaarden komen primair uit voorwaardelijke besluiten;
-          acties zijn de operationele opvolging. Naast elkaar omdat
-          acties optioneel een voorwaarde bewaken. */}
-      {dossier && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          <VoorwaardenPaneel
-            decisionId={dossier.decision.id}
-            conditions={dossier.conditions}
-          />
-          <ActiesPaneel
-            decisionId={dossier.decision.id}
-            actions={dossier.actions}
-            conditions={dossier.conditions}
-          />
-        </div>
-      )}
-
-      {/* Decision Object — dissent (1D-2).
-          Volle breedte omdat zichtbaarheidsniveaus en argumentatie
-          ruimte vragen. RLS heeft al gefilterd op rol; in de UI tonen
-          we wat de gebruiker mag zien. */}
-      {dossier && (
-        <DissentPaneel
-          decisionId={dossier.decision.id}
-          dissents={dossier.dissent}
-          currentUserId={user.id}
-          currentUserIsPrivileged={currentUserIsPrivileged}
-        />
-      )}
-
       {/* Body */}
       <div className="grid grid-cols-12 gap-5">
         {/* Step rail */}
@@ -590,62 +535,43 @@ export default async function ProcedureDetailPage({
         {/* Active step + log */}
         <div className="col-span-12 lg:col-span-8 space-y-5">
           {actieveStap ? (
-            <>
-              <ActieveStapPaneel
-                procedureId={procedure.id}
-                stap={actieveStap}
-                checklist={checklist.filter(
-                  (c) => c.stap_id === actieveStap.id
-                )}
-                bewijs={bewijs.filter((b) => b.stap_id === actieveStap.id)}
-                besluit={
-                  besluiten.find((b) => b.stap_id === actieveStap.id) ?? null
-                }
-                komendeVergaderingen={komendeVergaderingen}
-                gekoppeldeAgendapunten={gekoppeldeAgendapunten.filter(
-                  (a) => a.procedure_stap_id === actieveStap.id
-                )}
-                documentRequirements={
-                  // 1D-4: documenttype-opties voor de bewijs-tag —
-                  // gederiveerd uit de procedure_requirements voor
-                  // deze stap_volgorde, gededupliceerd op documenttype.
-                  dossier
-                    ? Array.from(
-                        new Map(
-                          dossier.evidence
-                            .filter(
-                              (e) =>
-                                e.requirement_type === "document" &&
-                                e.stap_volgorde === actieveStap.volgorde &&
-                                e.documenttype !== null
-                            )
-                            .map((e) => [
-                              e.documenttype as string,
-                              { documenttype: e.documenttype as string, label: e.label },
-                            ])
-                        ).values()
-                      )
-                    : []
-                }
-              />
-              {dossier && (
-                <StapRequirementsPaneel
-                  decisionId={dossier.decision.id}
-                  step={{
-                    id: actieveStap.id,
-                    procedure_id: actieveStap.procedure_id,
-                    volgorde: actieveStap.volgorde,
-                    naam: actieveStap.naam,
-                    beschrijving: actieveStap.beschrijving,
-                    vereist_besluit: actieveStap.vereist_besluit,
-                    geschatte_dagen: actieveStap.geschatte_dagen,
-                    status: actieveStap.status,
-                  }}
-                  evidence={dossier.evidence}
-                  aiOutputs={dossier.aiOutputs}
-                />
+            <ActieveStapPaneel
+              procedureId={procedure.id}
+              stap={actieveStap}
+              checklist={checklist.filter(
+                (c) => c.stap_id === actieveStap.id
               )}
-            </>
+              bewijs={bewijs.filter((b) => b.stap_id === actieveStap.id)}
+              besluit={
+                besluiten.find((b) => b.stap_id === actieveStap.id) ?? null
+              }
+              komendeVergaderingen={komendeVergaderingen}
+              gekoppeldeAgendapunten={gekoppeldeAgendapunten.filter(
+                (a) => a.procedure_stap_id === actieveStap.id
+              )}
+              documentRequirements={
+                // 1D-4: documenttype-opties voor de bewijs-tag —
+                // gederiveerd uit de procedure_requirements voor
+                // deze stap_volgorde, gededupliceerd op documenttype.
+                dossier
+                  ? Array.from(
+                      new Map(
+                        dossier.evidence
+                          .filter(
+                            (e) =>
+                              e.requirement_type === "document" &&
+                              e.stap_volgorde === actieveStap.volgorde &&
+                              e.documenttype !== null
+                          )
+                          .map((e) => [
+                            e.documenttype as string,
+                            { documenttype: e.documenttype as string, label: e.label },
+                          ])
+                      ).values()
+                    )
+                  : []
+              }
+            />
           ) : procedure.status === "afgerond" ? (
             <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-5">
               <div className="text-sm font-semibold text-emerald-800">
@@ -754,6 +680,225 @@ export default async function ProcedureDetailPage({
           </div>
         </div>
       </div>
+
+      {/* Dossier — uitklapbare panelen (status-overgang default open).
+          Onder de body-grid omdat de actieve stap de primaire focus
+          heeft; deze blokken zijn voor reflectie en bijwerken van het
+          besluitdossier. Klik op een paneel-header om uit te klappen. */}
+      {dossier && (
+        <div>
+          <h2 className="text-xs uppercase tracking-wide text-gray-500 font-semibold mb-3">
+            Dossier
+          </h2>
+          <div className="space-y-2">
+            <UitklapbaarPaneel
+              titel="Classificatie & onderbouwing"
+              status={
+                dossier.events.some(
+                  (e) => e.event_type === "classificatie_bevestigd"
+                )
+                  ? "voldoet"
+                  : "aandacht"
+              }
+              samenvatting={
+                dossier.events.some(
+                  (e) => e.event_type === "classificatie_bevestigd"
+                )
+                  ? "Bevestigd"
+                  : "Nog niet bevestigd"
+              }
+            >
+              <ClassificatiePanel decision={dossier.decision} />
+            </UitklapbaarPaneel>
+
+            <UitklapbaarPaneel
+              titel="Readiness-ladder"
+              count={
+                Object.values(dossier.readiness).filter((r) => r.voldoet).length
+              }
+              status={
+                Object.values(dossier.readiness).every((r) => r.voldoet)
+                  ? "voldoet"
+                  : "aandacht"
+              }
+              samenvatting={`${
+                Object.values(dossier.readiness).filter((r) => r.voldoet).length
+              } van 6 niveaus voldoen`}
+            >
+              <ReadinessLadder readiness={dossier.readiness} />
+            </UitklapbaarPaneel>
+
+            <UitklapbaarPaneel
+              titel="Aannames"
+              count={
+                dossier.assumptions.filter((a) => a.status !== "verwijderd").length
+              }
+              status={
+                (() => {
+                  const actief = dossier.assumptions.filter(
+                    (a) => a.status !== "verwijderd"
+                  );
+                  if (actief.length === 0) return "neutraal";
+                  return actief.every((a) =>
+                    ["gevalideerd", "gewijzigd"].includes(a.status)
+                  )
+                    ? "voldoet"
+                    : "aandacht";
+                })()
+              }
+              samenvatting={(() => {
+                const actief = dossier.assumptions.filter(
+                  (a) => a.status !== "verwijderd"
+                );
+                const gevalideerd = actief.filter((a) =>
+                  ["gevalideerd", "gewijzigd"].includes(a.status)
+                ).length;
+                const concept = actief.filter((a) => a.status === "concept").length;
+                if (actief.length === 0) return "Nog niet vastgelegd";
+                return `${gevalideerd} gevalideerd, ${concept} in concept`;
+              })()}
+            >
+              <AannamesPaneel
+                decisionId={dossier.decision.id}
+                assumptions={dossier.assumptions}
+              />
+            </UitklapbaarPaneel>
+
+            <UitklapbaarPaneel
+              titel="Risico's"
+              count={dossier.risks.length}
+              status={
+                dossier.risks.length === 0
+                  ? "aandacht"
+                  : dossier.risks.every((r) => r.status !== "open")
+                    ? "voldoet"
+                    : "aandacht"
+              }
+              samenvatting={(() => {
+                if (dossier.risks.length === 0) return "Nog niet vastgelegd";
+                const open = dossier.risks.filter((r) => r.status === "open").length;
+                const gemit = dossier.risks.filter(
+                  (r) => r.status === "gemitigeerd"
+                ).length;
+                const acc = dossier.risks.filter(
+                  (r) => r.status === "geaccepteerd"
+                ).length;
+                return `${open} open, ${gemit} gemitigeerd, ${acc} geaccepteerd`;
+              })()}
+            >
+              <RisicosPaneel
+                decisionId={dossier.decision.id}
+                risks={dossier.risks}
+              />
+            </UitklapbaarPaneel>
+
+            <UitklapbaarPaneel
+              titel="Voorwaarden"
+              count={dossier.conditions.length}
+              status={
+                dossier.conditions.length === 0
+                  ? "neutraal"
+                  : dossier.conditions.some((c) => c.status === "overschreden")
+                    ? "aandacht"
+                    : dossier.conditions.every((c) => c.status === "vervuld")
+                      ? "voldoet"
+                      : "neutraal"
+              }
+              samenvatting={(() => {
+                if (dossier.conditions.length === 0) return "Geen voorwaarden";
+                const open = dossier.conditions.filter(
+                  (c) => c.status === "open"
+                ).length;
+                const vervuld = dossier.conditions.filter(
+                  (c) => c.status === "vervuld"
+                ).length;
+                return `${open} open, ${vervuld} vervuld`;
+              })()}
+            >
+              <VoorwaardenPaneel
+                decisionId={dossier.decision.id}
+                conditions={dossier.conditions}
+              />
+            </UitklapbaarPaneel>
+
+            <UitklapbaarPaneel
+              titel="Acties"
+              count={dossier.actions.length}
+              status={
+                dossier.actions.length === 0
+                  ? "neutraal"
+                  : dossier.actions.some((a) => a.status === "escalatie")
+                    ? "aandacht"
+                    : dossier.actions.every((a) => a.status === "afgerond")
+                      ? "voldoet"
+                      : "neutraal"
+              }
+              samenvatting={(() => {
+                if (dossier.actions.length === 0) return "Geen acties";
+                const open = dossier.actions.filter(
+                  (a) => a.status === "open" || a.status === "in_behandeling"
+                ).length;
+                const afgerond = dossier.actions.filter(
+                  (a) => a.status === "afgerond"
+                ).length;
+                return `${open} open, ${afgerond} afgerond`;
+              })()}
+            >
+              <ActiesPaneel
+                decisionId={dossier.decision.id}
+                actions={dossier.actions}
+                conditions={dossier.conditions}
+              />
+            </UitklapbaarPaneel>
+
+            <UitklapbaarPaneel
+              titel="Dissent"
+              count={dossier.dissent.length}
+              status={
+                dossier.dissent.length === 0
+                  ? "neutraal"
+                  : dossier.dissent.some(
+                        (d) =>
+                          ["formele_dissent", "minderheidsnotitie"].includes(
+                            d.zichtbaarheid
+                          ) && !d.formeel_vastgesteld
+                      )
+                    ? "aandacht"
+                    : "voldoet"
+              }
+              samenvatting={(() => {
+                if (dossier.dissent.length === 0) return "Geen dissent";
+                const formeel = dossier.dissent.filter(
+                  (d) => d.formeel_vastgesteld
+                ).length;
+                return `${dossier.dissent.length} notitie${
+                  dossier.dissent.length === 1 ? "" : "s"
+                }, ${formeel} formeel vastgesteld`;
+              })()}
+            >
+              <DissentPaneel
+                decisionId={dossier.decision.id}
+                dissents={dossier.dissent}
+                currentUserId={user.id}
+                currentUserIsPrivileged={currentUserIsPrivileged}
+              />
+            </UitklapbaarPaneel>
+
+            <UitklapbaarPaneel
+              titel="Statusovergang"
+              ankerId="status-overgang"
+              defaultOpen
+              samenvatting="Door naar volgende fase, met readiness-check + override"
+            >
+              <StatusOvergangPaneel
+                decision={dossier.decision}
+                readiness={dossier.readiness}
+                currentUserIsPrivileged={currentUserIsPrivileged}
+              />
+            </UitklapbaarPaneel>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
