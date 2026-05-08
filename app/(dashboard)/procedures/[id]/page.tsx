@@ -8,7 +8,6 @@ import {
 import ActieveStapPaneel from "../_components/ActieveStapPaneel";
 import DecisionObjectHeader from "../_components/DecisionObjectHeader";
 import ClassificatiePanel from "../_components/ClassificatiePanel";
-import ReadinessLadder from "../_components/ReadinessLadder";
 import AannamesPaneel from "../_components/AannamesPaneel";
 import RisicosPaneel from "../_components/RisicosPaneel";
 import DissentPaneel from "../_components/DissentPaneel";
@@ -321,6 +320,7 @@ export default async function ProcedureDetailPage({
           decision={dossier.decision}
           readiness={dossier.readiness}
           statusOvergangAnker="status-overgang"
+          heeftSnapshot={dossier.snapshots.length > 0}
         />
       )}
 
@@ -709,23 +709,6 @@ export default async function ProcedureDetailPage({
               }
             >
               <ClassificatiePanel decision={dossier.decision} />
-            </UitklapbaarPaneel>
-
-            <UitklapbaarPaneel
-              titel="Readiness-ladder"
-              count={
-                Object.values(dossier.readiness).filter((r) => r.voldoet).length
-              }
-              status={
-                Object.values(dossier.readiness).every((r) => r.voldoet)
-                  ? "voldoet"
-                  : "aandacht"
-              }
-              samenvatting={`${
-                Object.values(dossier.readiness).filter((r) => r.voldoet).length
-              } van 6 niveaus voldoen`}
-            >
-              <ReadinessLadder readiness={dossier.readiness} />
             </UitklapbaarPaneel>
 
             <UitklapbaarPaneel

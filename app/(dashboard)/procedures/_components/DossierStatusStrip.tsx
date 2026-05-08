@@ -13,12 +13,16 @@ import {
   READINESS_LABEL,
   READINESS_VOLGORDE,
 } from "@/lib/decision-view";
+import AuditExportKnop from "./AuditExportKnop";
 
 interface Props {
   decision: DecisionObject;
   readiness: ReadinessOverview;
   /** Anker-id van het status-overgang-paneel, voor de scroll-knop. */
   statusOvergangAnker?: string;
+  /** Of er minstens één audit-snapshot is — bepaalt of de
+      'snapshot besluitmoment'-optie in het exportmenu zichtbaar is. */
+  heeftSnapshot?: boolean;
 }
 
 function statusKleur(status: DecisionObject["status"]): string {
@@ -48,6 +52,7 @@ export default function DossierStatusStrip({
   decision,
   readiness,
   statusOvergangAnker = "status-overgang",
+  heeftSnapshot = true,
 }: Props) {
   // Eerste readiness-target waaraan nog niet wordt voldaan.
   const eersteOnvolledig: ReadinessTarget | undefined =
@@ -93,12 +98,18 @@ export default function DossierStatusStrip({
           </span>
         )}
       </div>
-      <a
-        href={`#${statusOvergangAnker}`}
-        className="text-xs font-medium text-white bg-[#0F2744] hover:bg-[#1a3a5e] px-3 py-1.5 rounded-md whitespace-nowrap"
-      >
-        Statusovergang →
-      </a>
+      <div className="flex items-center gap-2">
+        <AuditExportKnop
+          decisionId={decision.id}
+          heeftSnapshot={heeftSnapshot}
+        />
+        <a
+          href={`#${statusOvergangAnker}`}
+          className="text-xs font-medium text-white bg-[#0F2744] hover:bg-[#1a3a5e] px-3 py-1.5 rounded-md whitespace-nowrap"
+        >
+          Statusovergang →
+        </a>
+      </div>
     </div>
   );
 }
