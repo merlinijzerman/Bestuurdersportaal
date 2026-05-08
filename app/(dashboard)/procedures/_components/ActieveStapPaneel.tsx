@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type {
@@ -47,6 +47,18 @@ export default function ActieveStapPaneel({
   const router = useRouter();
   const [checklist, setChecklist] = useState<ChecklistItem[]>(initieelChecklist);
   const [bewijs, setBewijs] = useState<Bewijs[]>(initieelBewijs);
+
+  // Bug-fix: zonder deze sync blijft de lokale state hangen als
+  // `router.refresh()` nieuwe props levert. Gevolg was dat een gefaalde
+  // optimistische update visueel als afgevinkt bleef staan terwijl de
+  // DB nog op voldaan=false stond — wat de stap-voltooien-validatie
+  // achteraf liet falen met "Niet alle checklist-items zijn voldaan".
+  useEffect(() => {
+    setChecklist(initieelChecklist);
+  }, [initieelChecklist]);
+  useEffect(() => {
+    setBewijs(initieelBewijs);
+  }, [initieelBewijs]);
   const [bewijsForm, setBewijsForm] = useState(false);
   const [bewijsTitel, setBewijsTitel] = useState("");
   const [bewijsBeschrijving, setBewijsBeschrijving] = useState("");
