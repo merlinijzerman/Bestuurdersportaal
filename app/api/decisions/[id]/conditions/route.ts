@@ -98,8 +98,9 @@ export async function POST(
       .select()
       .single();
     if (insertFout || !nieuw) {
+      console.error("Voorwaarde aanmaken fout:", insertFout);
       return NextResponse.json(
-        { error: insertFout?.message ?? "Voorwaarde aanmaken mislukt" },
+        { error: "Voorwaarde aanmaken mislukt" },
         { status: 500 }
       );
     }

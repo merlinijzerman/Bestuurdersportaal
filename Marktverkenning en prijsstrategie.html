@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Marktverkenning en prijsstrategie — Bestuursplatform pensioenfondsen</title>
+<style>
+  :root{
+    --navy:#0F2744; --navy-2:#17395f; --gold:#C9A84C; --ink:#1F2937; --muted:#6B7280;
+    --line:#E5E7EB; --bg:#FAFAF8; --card:#FFFFFF; --soft:#F3F6F8;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink);line-height:1.6;-webkit-font-smoothing:antialiased}
+  .page{max-width:980px;margin:0 auto;padding:56px 28px 64px}
+
+  /* Hero / cover */
+  .hero{background:linear-gradient(135deg,var(--navy),var(--navy-2));color:white;border-radius:28px;padding:64px 56px;box-shadow:0 18px 45px rgba(15,39,68,.18);position:relative;overflow:hidden}
+  .hero:after{content:"";position:absolute;right:-120px;top:-120px;width:320px;height:320px;border-radius:50%;background:rgba(201,168,76,.18)}
+  .hero:before{content:"";position:absolute;left:-100px;bottom:-100px;width:260px;height:260px;border-radius:50%;background:rgba(255,255,255,.04)}
+  .eyebrow{color:var(--gold);text-transform:uppercase;letter-spacing:.14em;font-size:13px;font-weight:700;margin-bottom:18px;position:relative;z-index:2}
+  .hero h1{margin:0 0 18px;font-size:42px;line-height:1.1;letter-spacing:-.03em;max-width:780px;position:relative;z-index:2}
+  .hero .subtitle{font-size:18px;color:#E5E7EB;max-width:760px;margin:0;position:relative;z-index:2;font-style:italic}
+  .hero .meta{margin-top:28px;display:flex;gap:24px;flex-wrap:wrap;position:relative;z-index:2;color:#CBD5E1;font-size:14px}
+  .hero .meta b{color:white;font-weight:600}
+
+  /* Section / typography */
+  .section{margin-top:48px}
+  .section-tag{display:inline-block;background:rgba(201,168,76,.12);color:#8a6f25;padding:6px 14px;border-radius:999px;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:14px}
+  h2{color:var(--navy);font-size:28px;margin:0 0 16px;letter-spacing:-.02em;line-height:1.2}
+  h3{color:var(--navy);font-size:19px;margin:24px 0 10px;letter-spacing:-.01em}
+  h4{color:var(--navy);font-size:16px;margin:18px 0 8px}
+  p{margin:0 0 14px;color:var(--ink)}
+  strong{color:var(--navy)}
+  em{color:var(--ink)}
+  ul,ol{margin:6px 0 14px;padding-left:22px}
+  li{margin:6px 0}
+
+  /* Statement (key quote) */
+  .statement{margin:24px 0;padding:24px 28px;background:var(--card);border-left:5px solid var(--gold);border-radius:18px;box-shadow:0 8px 26px rgba(15,39,68,.08);font-size:19px;color:var(--navy);font-weight:650;line-height:1.5}
+  .statement small{display:block;font-weight:400;font-style:italic;color:var(--ink);font-size:15px;margin-top:8px}
+
+  /* Body content blocks */
+  .block{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:30px 32px;box-shadow:0 4px 18px rgba(15,39,68,.05);margin-top:22px}
+
+  /* Tables */
+  .tablewrap{margin:18px 0;overflow-x:auto;border:1px solid var(--line);border-radius:18px;background:white;box-shadow:0 4px 16px rgba(15,39,68,.05)}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  thead th{background:var(--navy);color:white;text-align:left;padding:12px 16px;font-weight:600;letter-spacing:.01em}
+  tbody td{padding:12px 16px;border-top:1px solid var(--line);vertical-align:top;color:var(--ink)}
+  tbody tr:nth-child(even) td{background:var(--soft)}
+  td b, td strong{color:var(--navy)}
+  th.right, td.right{text-align:right}
+  .pricecell{font-weight:600;color:var(--navy);white-space:nowrap}
+
+  /* Highlight box for big example */
+  .calc{background:#FFF8E1;border:1px solid #F2D889;border-radius:18px;padding:20px 24px;margin:18px 0;font-size:16px;color:var(--navy)}
+  .calc .formula{font-family:"SF Mono",Menlo,Consolas,monospace;font-size:18px;font-weight:600;padding:8px 0}
+
+  /* TOC */
+  .toc{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:26px 30px;margin-top:28px;box-shadow:0 4px 16px rgba(15,39,68,.05)}
+  .toc h3{margin:0 0 14px}
+  .toc ol{margin:0;padding-left:22px}
+  .toc li{margin:6px 0}
+  .toc a{color:var(--navy);text-decoration:none;border-bottom:1px dotted var(--muted)}
+  .toc a:hover{color:var(--gold)}
+
+  /* Pull-quote */
+  .pull{margin:20px 0;padding:18px 22px;background:var(--soft);border-left:4px solid var(--gold);border-radius:12px;color:var(--navy);font-size:15px;font-style:italic}
+
+  /* CTA / key takeaway */
+  .takeaway{margin-top:48px;background:#FFF8E1;border:1px solid #F2D889;border-radius:24px;padding:30px 34px}
+  .takeaway h2{margin-top:0;color:var(--navy)}
+
+  /* Card grid */
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:18px 0}
+  .pcard{background:white;border:1px solid var(--line);border-radius:18px;padding:22px;box-shadow:0 4px 16px rgba(15,39,68,.05)}
+  .pcard h3{margin:0 0 8px;font-size:16px}
+  .pcard .price{color:var(--gold);font-weight:700;font-size:14px;letter-spacing:.05em;margin-bottom:8px;text-transform:uppercase}
+  .pcard p{margin:0;font-size:14px;color:var(--ink)}
+
+  /* Footer */
+  .footer{margin-top:48px;text-align:center;color:var(--muted);font-size:13px;padding-top:24px;border-top:1px solid var(--line)}
+
+  /* Sources */
+  .sources{font-size:13px;line-height:1.6}
+  .sources h3{margin-top:18px;color:var(--navy);font-size:15px}
+  .sources ul{padding-left:18px;margin:6px 0 12px}
+  .sources li{margin:3px 0;color:var(--muted)}
+  .sources a{color:var(--navy);text-decoration:none;border-bottom:1px dotted var(--muted);word-break:break-word}
+  .sources a:hover{color:var(--gold)}
+
+  /* Responsive */
+  @media(max-width:760px){
+    .hero{padding:40px 28px}
+    .hero h1{font-size:30px}
+    .hero .subtitle{font-size:16px}
+    .grid3{grid-template-columns:1fr}
+    .statement{font-size:17px;padding:20px 22px}
+    .block{padding:24px}
+    h2{font-size:23px}
+  }
+  @media print{
+    @page{size:A4;margin:14mm}
+    body{background:white}
+    .page{padding:0;max-width:none}
+    .hero{break-after:page}
+    .toc{break-after:page}
+    h1,h2,h3,h4{break-after:avoid;page-break-after:avoid}
+    .section{break-inside:avoid-page;page-break-inside:avoid}
+    .block,.calc,.takeaway,.pcard,.tablewrap{box-shadow:none;break-inside:avoid;page-break-inside:avoid}
+    table,tr,td,th{page-break-inside:avoid;break-inside:avoid}
+  }
+</style>
+</head>
+<body>
+  <main class="page">
+
+    <!-- COVER -->
+    <section class="hero">
+      <div class="eyebrow">Marktverkenning &amp; Prijsstrategie</div>
+      <h1>Markt en prijsvorming voor het Bestuursplatform pensioenfondsen</h1>
+      <p class="subtitle">Geïntegreerde analyse — Nederlandse pensioensector met EU-benchmarks, concurrentielandschap en commerciële positionering.</p>
+      <div class="meta">
+        <span><b>Auteurs:</b> Robert Timmer &amp; Merlin IJzerman</span>
+        <span><b>Versie:</b> Mei 2026</span>
+      </div>
+    </section>
+
+    <!-- TOC -->
+    <nav class="toc" aria-label="Inhoudsopgave">
+      <h3>Inhoudsopgave</h3>
+      <ol>
+        <li><a href="#samenvatting">Samenvatting</a></li>
+        <li><a href="#markt">Marktomvang Nederland</a></li>
+        <li><a href="#context">Marktcontext en katalysators</a></li>
+        <li><a href="#categorie">Waarom dit geen "iets slimmere board portal" is</a></li>
+        <li><a href="#concurrentie">Concurrentielandschap</a></li>
+        <li><a href="#internationaal">Internationale prijsbenchmarks</a></li>
+        <li><a href="#prijs">Prijsstrategie</a></li>
+        <li><a href="#proposities">Drie commerciële proposities</a></li>
+        <li><a href="#tam">TAM / SAM / SOM</a></li>
+        <li><a href="#personas">Buyer personas</a></li>
+        <li><a href="#investering">Van MVP naar productie — investerings­behoefte</a></li>
+        <li><a href="#risicos">Risico's en aandachtspunten</a></li>
+        <li><a href="#aanbevelingen">Aanbevelingen</a></li>
+        <li><a href="#bronnen">Bronnen</a></li>
+      </ol>
+    </nav>
+
+    <!-- 1. Samenvatting -->
+    <section class="section" id="samenvatting">
+      <span class="section-tag">01 · Samenvatting</span>
+      <h2>Samenvatting</h2>
+
+      <div class="statement">
+        Positioneer het bestuursplatform niet als "een iets slimmere board portal", maar als een Governance Operating System voor complexe, risicovolle bestuursbesluiten — dat dossiers procedureel compleet maakt, bestuurlijke afwegingen expliciteert en besluitvorming aantoonbaar uitlegbaar en reproduceerbaar maakt.
+      </div>
+
+      <div class="block">
+        <p>Op basis van DNB-cijfers Q1 2026 telt de Nederlandse pensioensector <strong>138 pensioenfondsen</strong> met een gezamenlijk belegd vermogen van <strong>circa €1.624 miljard per 31 maart 2026</strong>. Per dezelfde peildatum zijn 30 fondsen ingevaren naar het nieuwe stelsel; <strong>€1.082 miljard</strong> is nog niet-ingevaren en DNB verwacht in 2026 nog ruim dertig invaarmeldingen. De Wtp-transitie en het verzwarende DNB-toezicht creëren een uniek window waarin governance-infrastructuur niet "nice to have" maar wettelijk gestuurd is.</p>
+        <p>Twee onafhankelijke analyses (op basis van consultancy-spend, op basis van directe boardportal-benchmarks) komen op vrijwel dezelfde prijsrange uit: <strong>€25.000–€120.000+ ARR per fonds</strong>, met een sweet spot rond <strong>€45.000 ARR voor de Professional-tier</strong> en een vaste vloer: <strong>niet onder €25.000 ARR positioneren</strong> om niet onbedoeld als iBabs-alternatief gepercipieerd te worden. Implementatie wordt in de eerste commerciële fase niet forfaitair geprijsd, maar op basis van vooraf geraamde consultancy-inzet met nacalculatie; voor Professional indicatief 14–22 consultancydagen.</p>
+        <p>De Total Addressable Market in NL-pensioen bedraagt <strong>€6–7 miljoen ARR</strong>, de Serviceable Addressable Market <strong>€2,5–4,0 miljoen ARR</strong>; bij verbreding naar verzekeraars, PPI's, asset managers, woningcorporaties en zorginstellingen schaalt dat aanzienlijk.</p>
+        <p>Belangrijkste strategische keuzes voor de pitch: vervang "het verdienmodel wordt in de pilot ontwikkeld" door een transparante prijsstructuur, verkoop niet alleen Wtp maar de structurele governance-noodzaak die er na ligt, en houd in pilots de licentieprijs vast met flexibiliteit op implementatie of looptijd.</p>
+      </div>
+    </section>
+
+    <!-- 2. Marktomvang -->
+    <section class="section" id="markt">
+      <span class="section-tag">02 · Markt NL</span>
+      <h2>Marktomvang Nederland</h2>
+
+      <div class="block">
+        <h3>Aantallen en structuur (DNB, 1 januari 2026)</h3>
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr><th>Type</th><th>Aantal</th><th>Karakteristiek</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Bedrijfstakpensioenfondsen (bpf)</td><td class="pricecell">~45</td><td>Sector-breed, vaak grote fondsen</td></tr>
+              <tr><td>Ondernemingspensioenfondsen (opf)</td><td class="pricecell">~85</td><td>Onderneming-gebonden, dalend door consolidatie</td></tr>
+              <tr><td>Algemene pensioenfondsen (APF)</td><td class="pricecell">7</td><td>Multi-fonds, eigen kringen</td></tr>
+              <tr><td>Beroepspensioenfondsen</td><td class="pricecell">enkele</td><td>Medisch specialisten, notarissen, etc.</td></tr>
+              <tr><td><strong>Totaal</strong></td><td class="pricecell"><strong>138</strong></td><td>Krimpt verder door consolidatie</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Het aantal fondsen daalt structureel. Realistische verwachting: krimp naar circa 120 fondsen binnen 5 jaar. Maar de gemiddelde fondsomvang stijgt — en daarmee het gemiddelde tier-prijspunt.</p>
+
+        <h3>Wtp-transitie status (DNB, 31 maart 2026)</h3>
+        <p>Per Q1 2026 zijn 30 pensioenfondsen ingevaren. Er resteert <strong>€1.082 miljard</strong> pensioenvermogen bij fondsen die nog niet zijn ingevaren. DNB verwacht in 2026 nog ruim dertig invaarmeldingen. Resterende fondsen volgen in 2027 en uiterlijk 1 januari 2028. Elke transitie betekent onomkeerbare besluiten over invaren, transitieplan en beleggingsbeleid, met DNB-toets en latere navolgbaarheid — exact de use case waar het platform op gepositioneerd is.</p>
+
+        <h3>Segmentatie naar fondsomvang</h3>
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr><th>Segment</th><th>AUM-range</th><th>Aantal</th><th>Bestuursbureau</th><th>Kansrijkheid</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><strong>Enterprise</strong></td><td>&gt; €10 mld</td><td>20–30</td><td>Eigen afdeling, 10+ FTE</td><td>Zeer hoog</td></tr>
+              <tr><td><strong>Standard</strong></td><td>€1 – 10 mld</td><td>40–60</td><td>Middelgrote staf, 3–8 FTE</td><td>Hoog</td></tr>
+              <tr><td><strong>Compact</strong></td><td>€100 mln – €1 mld</td><td>40–60</td><td>Beperkte staf, 1–3 FTE</td><td>Selectief</td></tr>
+              <tr><td>Mini</td><td>&lt; €100 mln</td><td>dalend</td><td>Eén manager + extern</td><td>Laag, veelal in transitie</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Realistische focus: Enterprise + Standard (~60–80 fondsen) plus geselecteerde Compact-fondsen. Mini-fondsen niet individueel, wel via APF-route.</p>
+      </div>
+    </section>
+
+    <!-- 3. Marktcontext -->
+    <section class="section" id="context">
+      <span class="section-tag">03 · Context</span>
+      <h2>Marktcontext en katalysators</h2>
+      <div class="block">
+        <p><strong>Wtp-transitie 2025–2028 als katalysator, niet als kernmarkt.</strong> De Wtp creëert urgentie en zichtbaarheid, maar het zou strategisch onverstandig zijn het platform als "Wtp-transitietool" te verkopen — dat maakt de markt tijdelijk. Beter is de positionering: "voor alle complexe bestuursbesluiten waarbij aantoonbaarheid, rolzuiverheid en besluitkwaliteit cruciaal zijn". Binnen pensioenfondsen blijven na de Wtp-piek structureel relevante processen bestaan: wijziging beleggingsbeleid, risicohouding, uitbestedingsbesluiten, contractkeuzes, premiestelling, indexatie- en aanpassingsbeleid, herstelmaatregelen, evaluatie van sleutelfunctie-inbreng, majeure IT- of datakwaliteitsbesluiten.</p>
+        <p><strong>Intensiverend DNB-toezicht.</strong> DNB benadrukt in publicaties expliciet: complete besluitvorming, aantoonbare onderbouwing van evenwichtigheid, audit trail, plausibiliteitscontrole van modellen, en opvolging van bevindingen na invaren. De audit-trail die het platform produceert sluit één-op-één aan op deze norm.</p>
+        <p><strong>AI-druk in bestuurskamers.</strong> Bestuurders en bestuursbureaus gebruiken al ChatGPT, Claude, Gemini en Copilot in de voorbereiding van besluiten. Diligent lanceerde in 2026 zelfs een "AI Board Member"-concept als digitale adviseur — wat juridische en governancevragen oproept die voor gereguleerde instellingen extra zwaar wegen. Het promotieonderzoek van Robert Timmer documenteert dit als het Governance Vacuum: invloed zonder verantwoording. Jullie positionering — AI als gecontroleerde ondersteuning, niet als quasi-bestuurder — is inhoudelijk sterker voor pensioenfondsen dan de generieke AI-features van de board-portalconcurrentie.</p>
+      </div>
+    </section>
+
+    <!-- 4. Geen board portal -->
+    <section class="section" id="categorie">
+      <span class="section-tag">04 · Categorie</span>
+      <h2>Waarom dit geen "iets slimmere board portal" is</h2>
+      <div class="block">
+        <p>Stel: een board portal vraagt €15 per gebruiker per maand. Een fonds met 30 betrokkenen betaalt dan:</p>
+        <div class="calc">
+          <div class="formula">30 × €15 × 12 = <strong>€5.400 per jaar</strong></div>
+        </div>
+        <p>Op dat prijspunt is geen ruimte voor implementatie, support, productontwikkeling, enterprise-security, sectorspecifieke templates, een complexe salescyclus van 9–18 maanden, en een beperkte Nederlandse markt. Bovendien communiceert die prijs onbedoeld: "wij zijn een iBabs-alternatief". Dat is niet de positie die jullie willen innemen.</p>
+        <h3>De waarde zit niet in inlogs, maar in</h3>
+        <ul>
+          <li>vermeden herstelwerk en kortere review- en afstemmingscycli;</li>
+          <li>lagere kans op bestuurlijke missers met latere consequenties bij DNB-toets;</li>
+          <li>betere dossiervorming voor toezicht, intern toezicht, VO en deelnemers;</li>
+          <li>minder afhankelijkheid van individuele secretaris- of adviseurkennis;</li>
+          <li>structurele beheersing van AI-gebruik in een sector waar dat ongereguleerd is;</li>
+          <li>overdraagbaarheid van besluitvorming bij personeelswissel.</li>
+        </ul>
+        <p>Eén complexe governancekwestie of DNB-bevinding kost intern al snel vele tientallen uren van bestuursbureau, actuaris, risicomanagement, compliance, externe adviseurs en bestuurders. <strong>€30.000–€60.000 per jaar voor structurele beheersing is in die context geen luxe.</strong></p>
+        <div class="pull">De juiste mentale categorisering is niet "board portal", maar <strong>board portal + governance workflow + decision intelligence + compliance-by-design</strong>. Of korter: een Governance Operating System voor bestuurlijke besluitvorming.</div>
+      </div>
+    </section>
+
+    <!-- 5. Concurrentielandschap -->
+    <section class="section" id="concurrentie">
+      <span class="section-tag">05 · Concurrentie</span>
+      <h2>Concurrentielandschap</h2>
+      <div class="block">
+        <p>Het platform concurreert niet in één duidelijke categorie. Vier lagen in de markt, met heldere prijsankers:</p>
+
+        <h3>Laag 1 · Vergaderportalen</h3>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Aanbieder</th><th>Publiek prijsanker</th></tr></thead>
+            <tbody>
+              <tr><td>iBabs</td><td class="pricecell">€12 per gebruiker per maand · training €995 eenmalig</td></tr>
+              <tr><td>Azeus Convene</td><td class="pricecell">$420/user/jaar (klein) tot $180/user/jaar (&gt;100 users)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Functie: agenda's, stukkenbundels, annotaties, notulen, stemmen. <strong>Geen besluitarchitectuur, geen audit-trail voor verantwoording, geen pensioen-context.</strong></p>
+
+        <h3>Laag 2 · Board management</h3>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Aanbieder</th><th>Publiek prijsanker</th></tr></thead>
+            <tbody>
+              <tr><td>Diligent Boards</td><td class="pricecell">£700 per licentie/jaar (UK G-Cloud) · globaal $10K–$50K+</td></tr>
+              <tr><td>OnBoard</td><td class="pricecell">$1.000–$5.000 per user/jaar · voorbeeld $8.000 voor 8 directors</td></tr>
+              <tr><td>Admincontrol</td><td class="pricecell">£1.000–£17.500 per licentie/jaar</td></tr>
+              <tr><td>Board Intelligence</td><td class="pricecell">£7.700 per instantie/jaar</td></tr>
+              <tr><td>BoardEffect</td><td class="pricecell">Vanaf $7.500/jaar voor tot 250 users</td></tr>
+              <tr><td>Nasdaq Boardvantage</td><td class="pricecell">Custom quote, mid-/large enterprise</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Functie: governanceproces rond bestuursvergaderingen, met workflow en besluitregistratie. <strong>Niet ontworpen voor pensioengovernance, geen Wtp-context, geen DNB-audit-trail, geen 8-fase besluitarchitectuur.</strong></p>
+
+        <h3>Laag 3 · AI board support</h3>
+        <p>Diligent ("Smart Prep Insights", "Smart Minutes", "AI Board Member"), OnBoard AI en vergelijkbare. Functie: samenvatten, vragen-voorbereiding, eerste conceptnotulen. <strong>Generatieve assistentie, geen governance-laag op AI-gebruik zelf.</strong> Wordt snel commodity.</p>
+
+        <h3>Laag 4 · Besluitvormings-GOS — uw positie</h3>
+        <p>Er zijn in Nederland voor zover bekend geen zuivere één-op-één aanbieders met deze combinatie van sectorspecifieke besluitarchitectuur, besluitrijpheidsmeting, traceerbare bestuurlijke afweging en AI-governance. De feitelijke concurrentie komt vooral uit board portals (die zich verbreden richting workflow en AI), intern ingerichte SharePoint- of Confluence-oplossingen, en consultancygedreven governance-trajecten zonder permanente infrastructuur. Wat het platform onderscheidt:</p>
+        <ul>
+          <li>procedurele volledigheidscontrole vooraf, niet documentdeling achteraf;</li>
+          <li>besluitrijpheidsmeting voordat een dossier de agenda haalt;</li>
+          <li>besluitdossiers die over meerdere bronnen heen worden gevormd;</li>
+          <li>controleerbaar AI-brongebruik en governance-logging;</li>
+          <li>besluitafwegingen die later reconstrueerbaar zijn;</li>
+          <li>sectorspecifieke procedures (Wtp-context, DNB-norm, leidraden).</li>
+        </ul>
+
+        <h3>GRC-platforms en pensioen-administratie</h3>
+        <p><strong>GRC</strong>: ServiceNow GRC (vanaf $5K, vaak $20K+), OneTrust GRC (minimum $10K, baseline $50K+), Diligent GRC-suite. Documenteert rules en controls, niet besluitvorming. Complementair, geen substituut.</p>
+        <p><strong>Pensioen-administratie</strong>: Capita, WTW Asset Liability Suite, Procentia, Sagitec/Neospin, Lumera. Operationele data, geen bestuurlijke besluitarchitectuur. Complementair.</p>
+
+        <h3>Pensioen-consultancy als werkelijke prijsanker</h3>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Aanbieder</th><th>Tarief</th></tr></thead>
+            <tbody>
+              <tr><td>Aon, Mercer, KPMG, PwC, EY</td><td class="pricecell">Senior partner €2.000–€3.500/dag</td></tr>
+              <tr><td>Onafhankelijke senior consultants</td><td class="pricecell">€1.500–€2.500/dag</td></tr>
+              <tr><td>Junior actuariële consultants</td><td class="pricecell">€46/uur (~€368/dag)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Een Wtp-transitieproject bij een middelgroot fonds kost typisch <strong>€300.000–€800.000</strong> aan consultancy plus interne uren. Een governance-review of DNB-deugdelijkheidsonderzoek kost €100.000–€250.000. Het platform vervangt geen consultancy, maar maakt de besluitarchitectuur en audit-trail structureel — wat het volume aan ad-hoc consultancy-inzet verlaagt.</p>
+        <div class="pull">De waardepropositie is daarmee <strong>niet "goedkoper dan consultancy", maar "structureel + minder afhankelijk van seriële consultancy"</strong>.</div>
+      </div>
+    </section>
+
+    <!-- 6. Internationale prijsbenchmarks -->
+    <section class="section" id="internationaal">
+      <span class="section-tag">06 · Benchmarks</span>
+      <h2>Internationale prijsbenchmarks</h2>
+      <div class="block">
+        <p>Internationale markten worden in deze fase niet als uitbreidingsdoel meegenomen — zie §12 voor het bewuste keuzepad richting sectorale verbreding binnen Nederland. De volgende referentiepunten zijn relevant om Nederlandse prijsvorming te kalibreren:</p>
+        <p><strong>Verenigd Koninkrijk.</strong> Trustees van DB-pensioenregelingen onder The Pensions Regulator, ~5.000 trust-based schemes waarvan ~150 grote DB-schemes. Volwassener trustee-services-economie dan NL. Board-portals als OnBoard zitten op £8.000–£25.000/jaar; volledig outsourced trustee secretariat kost £100.000+. <strong>NL heeft zwaardere governance-druk dan UK</strong> (intensiever DNB-toezicht, expliciete Wtp-eisen), waardoor hogere prijspunten in NL verdedigbaar zijn.</p>
+        <p><strong>Duitsland.</strong> Pensionskassen en Versorgungswerke onder BaFin. Governance-tools beduidend minder volwassen; veel Excel- en SharePoint-gebruik. Lagere prijsbandbreedte dan NL door conservatievere inkoopcultuur.</p>
+        <p><strong>België.</strong> Eind 2024 telde België 148 IORP's naar Belgisch recht onder toezicht van de FSMA, met "fitness"-eisen voor bestuurders die nauw aansluiten op de Nederlandse norm. Kleinere fondsen, beperkte governance-software-volwassenheid. Prijspunten naar verwachting 70–80% van NL.</p>
+        <div class="pull">Nederland heeft qua governance-druk de zwaarste regulering in Europa — dat ondersteunt de Nederlandse prijspositie aan de hogere kant van de board-portal-bandbreedte. Internationaal expanderen vraagt om aanzienlijke lokalisatie-investeringen en levert lagere prijspunten op; verbreding naar andere Nederlandse sectoren is in deze fase een efficiënter groeipad.</div>
+      </div>
+    </section>
+
+    <!-- 7. Prijsstrategie -->
+    <section class="section" id="prijs">
+      <span class="section-tag">07 · Prijsstrategie</span>
+      <h2>Prijsstrategie</h2>
+
+      <div class="block">
+        <h3>Kernuitgangspunten</h3>
+        <ol>
+          <li><strong>Service, geen dienst.</strong> Recurring licentie als hoofdomzet, niet uurtjes.</li>
+          <li><strong>Minimum viable contract value: €25.000 ARR.</strong> Daaronder wordt het product onterecht in de iBabs-categorie geplaatst.</li>
+          <li><strong>AUM als primaire segmentatie, bestuurlijke scope als modifier.</strong> AUM is eenvoudig te communiceren; binnen een tier bepaalt scope (aantal besluitprocedures, commissies, integratie-omvang) de exacte prijs.</li>
+          <li><strong>Implementatie separaat, primair op consultancy-basis.</strong> In de eerste commerciële fase wordt implementatie niet als vaste forfaitaire fee geprijsd, maar op basis van een vooraf geraamde consultancy-inzet met nacalculatie. De inspanning verschilt per fonds en hangt af van het aantal besluitprocedures, de procesvolwassenheid en de gewenste begeleiding. Naarmate de aanpak standaardiseert kunnen vaste implementatiepakketten worden ontwikkeld.</li>
+          <li><strong>Consultancy-laag begrensd op 10–20% van de omzet.</strong> Anders draait het bedrijfsmodel terug naar dienst-uren.</li>
+          <li><strong>Prijsanker uit consultancy, niet uit board-portals.</strong> Een fonds dat €300K betaalt voor Wtp-advies ziet €45K/jaar voor structurele besluitarchitectuur als rationeel.</li>
+          <li><strong>Certificering en assurance zijn onderdeel van de productkostprijs.</strong> Het platform richt zich op gereguleerde instellingen. Investeringen in informatiebeveiliging (ISO 27001), aantoonbare leveranciersbeheersing, DORA-ready documentatie, AVG-dossier, pen-testing en business-continuity zijn geen optionele overhead, maar randvoorwaardelijk voor markttoegang. Deze kosten worden primair terugverdiend via de licentieprijs; klantspecifieke compliance- en auditverzoeken worden afzonderlijk geprijsd.</li>
+        </ol>
+
+        <h3>Vierlagen-prijsmodel</h3>
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr><th>Tier</th><th>Doelgroep</th><th>Jaarlijkse licentie</th><th>Indicatieve implementatie-inspanning</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><strong>Pilot</strong></td><td>Eerste 3–5 design-partners</td><td>—</td><td class="pricecell">€15.000 vast · incl. ±8 consultancydagen · meerwerk op nacalculatie · deels verrekenbaar</td></tr>
+              <tr><td><strong>Core</strong></td><td>Kleinere/middelgrote fondsen, eerste inzet</td><td class="pricecell">€27.500/jaar</td><td class="pricecell">8–12 consultancydagen</td></tr>
+              <tr><td><strong>Professional</strong> ← <em>sweet spot</em></td><td>Middelgrote tot grote fondsen, meerdere processen</td><td class="pricecell">€45.000/jaar</td><td class="pricecell">14–22 consultancydagen</td></tr>
+              <tr><td><strong>Enterprise</strong></td><td>Grote BPF'en, APF-koepels, complex governance­profiel</td><td class="pricecell">vanaf €85.000/jaar</td><td class="pricecell">25–50+ consultancydagen</td></tr>
+              <tr><td><strong>APF-kring</strong></td><td>Per kring binnen een APF (gereduceerd)</td><td class="pricecell">€15.000–€30.000/kring</td><td class="pricecell">bundel-onboarding, raming op maat</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><strong>Belangrijkste commerciële inzet: Professional als hoofdaanbod (€45.000 ARR).</strong> De implementatie-inspanning bij Professional vertaalt zich indicatief naar <strong>€25.000–€45.000 aan consultancy</strong> (14–22 dagen × blended tarief), maar wordt vooraf geraamd en op nacalculatie afgerekend. Core dient als instap voor het Compact-segment om snel referenties te genereren in jaar 1; Enterprise voor de top van de markt en multi-procedure inzet; APF-kring als versneller (één APF-deal opent 5–10 kringen).</p>
+
+        <h3>Wat zit waarin</h3>
+        <div class="grid3">
+          <div class="pcard"><div class="price">Core · €27.500/jr</div><h3>Eén proces, basis</h3><p>Besluitdossier­structuur, één procedure-template, readiness-ladder, document­vereisten, rolverdeling, basis-AI, governance logging, dossierexport, standaard dashboards.</p></div>
+          <div class="pcard"><div class="price">Professional · €45.000/jr</div><h3>Meerdere processen, sectorspecifiek</h3><p>Sector-specifieke templates, advanced readiness-controls, signalering ontbrekende onderbouwing, AI met bronkeuze en logging, besluitregistratie met dissent, managementinfo, document-integraties.</p></div>
+          <div class="pcard"><div class="price">Enterprise · vanaf €85.000/jr</div><h3>Multi-procedure, enterprise</h3><p>Multi-committee, meerdere besluit­bibliotheken, DMS/SharePoint-integratie, SSO en enterprise security, API's, maatwerk dashboards, configuratie- en governance­reviews.</p></div>
+        </div>
+
+        <h3>Add-ons</h3>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Add-on</th><th>Indicatie</th></tr></thead>
+            <tbody>
+              <tr><td>Extra besluitprocedure-template</td><td class="pricecell">€5.000–€10.000 eenmalig</td></tr>
+              <tr><td>Extra domein/committee</td><td class="pricecell">€7.500–€15.000/jaar</td></tr>
+              <tr><td>Advanced AI Governance Pack</td><td class="pricecell">€10.000–€20.000/jaar</td></tr>
+              <tr><td>Jaarlijkse governance review</td><td class="pricecell">€7.500–€15.000</td></tr>
+              <tr><td>Maatwerk-integratie</td><td class="pricecell">offerte, vanaf €10.000</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Consultancy-laag (optioneel, max 10–20% omzet)</h3>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Type</th><th>Tarief</th></tr></thead>
+            <tbody>
+              <tr><td>Governance-coaching</td><td class="pricecell">€1.500–€2.000/dag</td></tr>
+              <tr><td>Configuratie / proces-design</td><td class="pricecell">€1.500–€1.800/dag</td></tr>
+              <tr><td>Strategische sparring</td><td class="pricecell">€2.000–€2.500/dag</td></tr>
+              <tr><td>Training (groep, bestuur + bureau)</td><td class="pricecell">€3.500–€5.000/dag</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Pilot-strategie</h3>
+        <p>Design-partner-condities voor de eerste 3–5 partners:</p>
+        <ol>
+          <li><strong>Pilot €15.000 voor 3–4 maanden</strong> — één concrete besluitprocedure (bijv. wijziging beleggingsbeleid), inclusief inrichting, begeleiding, feedbacksessies en evaluatie. Bij omzetting naar jaarcontract is <strong>€7.500 verrekenbaar</strong>.</li>
+          <li><strong>Bij omzetting naar Professional:</strong> jaar 1 tegen 25–40% korting op de licentie (€27.500–€33.750), mits meerjaren­commitment van 3 jaar tegen volledig tarief vanaf jaar 2.</li>
+          <li><strong>Erkenning als design-partner:</strong> de pilot-partner krijgt zichtbaarheid als referentiecase (in onderlinge afstemming), gerichte invloed op de product-roadmap, en licentiekorting bij uitbreiding naar aanvullende processen of dossiertypen. Een financiële referral-vergoeding richting pensioenfondsen zelf wordt nadrukkelijk niet toegepast vanwege integriteits- en procurement-overwegingen; voor commerciële intermediairs (consultancy­partners, sectornetwerken) kan een afzonderlijk referral­programma worden ontwikkeld.</li>
+        </ol>
+        <div class="pull">De licentieprijs zelf staat vast. Onderhandel in pilots op duration, implementatie of consultancy — niet op de jaarlijkse licentie. Dat beschermt de eindwaarde van de portfolio.</div>
+
+        <h3>Implementatie en procesinrichting</h3>
+        <p>Anders dan bij generieke board portals is de implementatie van het bestuursplatform geen louter technische onboarding, maar een combinatie van <strong>configuratie, procesmodellering en governance-inrichting</strong>. De benodigde inspanning verschilt per fonds en is afhankelijk van het aantal besluitprocedures, de mate van bestaande procesvolwassenheid en de gewenste begeleidingsintensiteit.</p>
+        <p>Daarom wordt implementatie in de eerste commerciële fase niet als vaste forfaitaire fee geprijsd, maar op basis van een vooraf geraamde consultancy-inzet met nacalculatie. Iedere implementatie volgt vier stappen:</p>
+        <ol>
+          <li><strong>Betaalde scope-notitie en urenraming</strong> (€1.500–€2.500 voor halve dag intake plus implementatieplan). De klant ontvangt een professioneel implementatieplan dat ook intern bruikbaar is voor goedkeuring.</li>
+          <li><strong>Implementation Foundation</strong> (€7.500 vast). Kick-off, configuratiebasis, eerste rollenstructuur, één werksessie. Dient als commerciële instap met een duidelijk vast prijspunt.</li>
+          <li><strong>Verdere inrichting op consultancybasis.</strong> Procesmodellering, templates, governance-workshops, training en maatwerk­configuratie. Geraamde inzet conform tier-bandbreedte.</li>
+          <li><strong>Voortgangssignalering bij 75% urenverbruik.</strong> Tussentijdse rapportage en eventuele herijking van scope.</li>
+        </ol>
+        <p><strong>Dagtarieven</strong> (blended in deze fase): <strong>€1.800–€2.000 per consultancydag</strong> voor de standaardmix van configuratie en procesdesign; <strong>€2.250–€2.750 per dag</strong> voor expliciet senior of strategisch werk. De blended-tariefkeuze houdt offertes leesbaar voor de klant zonder marge-impact van betekenis.</p>
+        <p><strong>Migratiepad naar vaste pakketten.</strong> Naarmate het product en de implementatieaanpak verder standaardiseren — typisch na de eerste drie tot vijf implementaties — worden vaste implementatiepakketten ontwikkeld per tier. Tot die tijd is T&amp;M het verstandigste model: het houdt scope-creep beheersbaar, voorkomt onderschatting van procesmodellering, en sluit aan op het idioom dat pensioenfondsen kennen uit actuariële, juridische en compliance-dienstverlening.</p>
+
+        <h3>Certificering &amp; compliance als prijsfactor</h3>
+        <p>Het bestuursplatform wordt ontwikkeld voor pensioenfondsen en andere gereguleerde instellingen. Daarmee ligt de lat voor informatiebeveiliging, leveranciersbeheersing en aantoonbare controle structureel hoger dan bij generieke SaaS-oplossingen. Dit verklaart en verdedigt de prijspositionering — het zijn geen optionele certificaten, maar randvoorwaarden voor markttoegang.</p>
+
+        <h4>Certificeringsroadmap</h4>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Standaard</th><th>Status</th><th>Rationale</th></tr></thead>
+            <tbody>
+              <tr><td><strong>ISO 27001</strong></td><td>In voorbereiding (certificering in 2026)</td><td>Zwaarwegende hygiënefactor bij vendor assessments; zonder aantoonbaar volwassen ISMS wordt acceptatie bij professionele pensioenfondsen aanzienlijk lastiger</td></tr>
+              <tr><td><strong>DORA-ready vendor pack</strong></td><td>Vanaf de start meegeleverd</td><td>SLA's, audit- en toegangsrechten, exit- en continuïteitsregeling, subverwerkers, incidentmanagement — contractuele tafelinzet, geen apart certificaat</td></tr>
+              <tr><td><strong>AVG/GDPR-dossier</strong></td><td>Standaard onderdeel</td><td>Verwerkersovereenkomst, DPIA-ondersteuning, register van verwerkingsactiviteiten, data residency-bewijs</td></tr>
+              <tr><td><strong>Jaarlijkse externe pen-test</strong></td><td>Standaard onderdeel</td><td>In de praktijk vaak gevraagd in security- en vendor assessments; bij grotere gereguleerde klanten naar verwachting standaardonderdeel van het assurancepakket</td></tr>
+              <tr><td><strong>Business continuity / DRP</strong></td><td>Standaard onderdeel</td><td>Aantoonbare RTO/RPO, periodieke uitwijktests, evidence van Plan B</td></tr>
+              <tr><td><strong>SOC 2 Type II</strong></td><td>Fase 2 (na 5–10 klanten of bij enterprise/internationale vraag)</td><td>Relevant bij verzekeraars, asset managers, internationale klanten</td></tr>
+              <tr><td><strong>ISAE 3402</strong></td><td>Nader te toetsen bij APF- of enterprise-routes</td><td>Alleen relevant indien klanten assurance verlangen over beheersmaatregelen die voor hun eigen control framework materieel zijn</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p><strong>Indicatieve jaarlijkse kosten</strong> (na initieel jaar): ISO 27001 surveillance €5.000–€10.000, externe pen-test €15.000–€30.000, plus circa 0,5 FTE interne ISMS-tijd. SOC 2 Type II (later) €30.000–€60.000. Totaal: <strong>€30.000–€50.000/jaar</strong> aan harde compliance- en assurance-kosten, exclusief interne tijd. Bij twintig betalende klanten op gemiddeld €40.000 ARR is dat 4–6% van de omzet — beheersbaar, maar het ondersteunt de €25.000 ARR-vloer hard: onder dat punt verbrandt compliance je marge.</p>
+        <p><em>Deze bedragen zijn indicatief en dienen in de businesscase te worden gevalideerd op basis van concrete offertes (ISO-certificeerder, pen-testpartij, ISMS-ondersteuning, SOC 2-auditor) en de gekozen scope van het assuranceprogramma.</em></p>
+
+        <h4>Doorbelasting</h4>
+        <p>Algemene certificeringskosten worden verwerkt in de <strong>terugkerende licentieprijs</strong> en niet als losse certificeringsbijdrage doorbelast. Klantspecifieke uitbreidingen worden afzonderlijk geprijsd:</p>
+        <ul>
+          <li>Standaard security- en compliance pack: inbegrepen in licentie</li>
+          <li>Uitgebreide klantvragenlijsten / vendor assessments: eerste basisniveau inbegrepen, meerwerk op consultancybasis</li>
+          <li>Klantspecifieke auditondersteuning: €1.500–€2.000 per dag</li>
+          <li>Aanvullende security- of compliance-eisen buiten roadmap: offerte</li>
+          <li>Versnelde extra certificering op verzoek van klant: onderdeel commerciële deal of meerjarige commitment</li>
+        </ul>
+        <div class="pull">Deze structuur voorkomt dat compliance-kosten als overhead-doorberekening overkomen, en versterkt de propositie: "de prijsstelling weerspiegelt dat wij het platform ontwikkelen voor gereguleerde instellingen, inclusief aantoonbare informatiebeveiliging, leveranciersbeheersing en een professioneel assuranceprogramma."</div>
+      </div>
+    </section>
+
+    <!-- 8. Proposities -->
+    <section class="section" id="proposities">
+      <span class="section-tag">08 · Proposities</span>
+      <h2>Drie commerciële proposities</h2>
+      <div class="block">
+        <p>Eén product, drie verhaalvarianten afhankelijk van wie tegenover je zit.</p>
+
+        <div class="grid3">
+          <div class="pcard">
+            <div class="price">Propositie 1</div>
+            <h3>Besluitkwaliteit aantoonbaar op orde</h3>
+            <p><strong>Kernbelofte:</strong> Geen besluit naar tafel zonder aantoonbaar compleet en navolgbaar dossier.</p>
+            <p>Sterk voor bestuursbureaus, secretarissen, risk en compliance. Prijsgevoeligheid laag — raakt direct governance-risico.</p>
+          </div>
+          <div class="pcard">
+            <div class="price">Propositie 2</div>
+            <h3>Van documenten­stroom naar besluitvorming</h3>
+            <p><strong>Kernbelofte:</strong> Niet nóg een documentenportaal, maar een systeem dat het besluitproces zelf beheerst.</p>
+            <p>Onderscheidend tegenover iBabs, Diligent, OnBoard. Prijsgevoeligheid middel — vereist heldere uitleg.</p>
+          </div>
+          <div class="pcard">
+            <div class="price">Propositie 3</div>
+            <h3>AI-proof governance</h3>
+            <p><strong>Kernbelofte:</strong> Gebruik AI in bestuurlijke besluitvorming, maar gecontroleerd, traceerbaar en uitlegbaar.</p>
+            <p>Relevant nu AI-board-tools zichtbaar oprukken. Prijsgevoeligheid laag bij innovatieve organisaties.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 9. TAM/SAM/SOM -->
+    <section class="section" id="tam">
+      <span class="section-tag">09 · TAM · SAM · SOM</span>
+      <h2>TAM / SAM / SOM</h2>
+      <div class="block">
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Niveau</th><th>Berekening</th><th>Omvang ARR</th></tr></thead>
+            <tbody>
+              <tr><td><strong>TAM</strong> — Total Addressable Market</td><td>138 fondsen + ~30 APF-kringen · gem. €40.000</td><td class="pricecell">€6–7 mln</td></tr>
+              <tr><td><strong>SAM</strong> — Serviceable Addressable Market</td><td>Enterprise + Standard + 50% Compact + APF · gem. €40–50K · 60–80 fondsen</td><td class="pricecell">€2,5–4,0 mln</td></tr>
+              <tr><td><strong>SOM</strong> — Serviceable Obtainable (5 jaar)</td><td>20–30 fondsen · 25–40% penetratie primaire doelgroep <br/>(conservatief: 10–15 klanten · 15–25%)</td><td class="pricecell">€0,8–1,2 mln <br/>(conservatief €0,45–0,75 mln)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><strong>Plus implementatieomzet en consultancy (~30% bovenop ARR in jaar 1–3).</strong></p>
+        <p><strong>Bredere markt — verticale uitbreiding.</strong> Bij doorgroei naar verzekeraars, PPI's, asset managers, woningcorporaties, zorginstellingen en grote ondernemingen met zwaar governanceprofiel wordt de adresseerbare markt aanzienlijk groter. Conservatieve schatting: x3–x5 op de NL-pensioen-TAM, mits de propositie sector-specifiek wordt verbreed.</p>
+        <p><strong>Belangrijke kanttekening.</strong> Het aantal fondsen daalt door consolidatie, maar de gemiddelde fondsomvang stijgt — en daarmee het gemiddelde tier-prijspunt. De netto-TAM blijft daardoor stabiel of stijgt licht.</p>
+      </div>
+    </section>
+
+    <!-- 10. Personas -->
+    <section class="section" id="personas">
+      <span class="section-tag">10 · Buyers</span>
+      <h2>Buyer personas</h2>
+      <div class="block">
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr><th>Rol</th><th>Wat ze willen</th><th>Prijsgevoeligheid</th><th>Boodschap</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><strong>Directeur bestuursbureau</strong></td><td>Continuïteit, geen DNB-bevindingen, overdraagbaarheid</td><td>Laag</td><td>Propositie 1 — Besluitkwaliteit</td></tr>
+              <tr><td><strong>Bestuurssecretaris</strong></td><td>Minder ad-hoc consultancy, betere voorbereiding, archivering</td><td>Middel</td><td>Propositie 2 — Documentenstroom → besluitvorming</td></tr>
+              <tr><td><strong>Risk / compliance</strong></td><td>Audit-trail, navolgbaarheid, AI-governance</td><td>Laag</td><td>Propositie 3 — AI-proof governance</td></tr>
+              <tr><td><strong>CIO / COO (groot fonds)</strong></td><td>Integratie, security, schaalbaarheid</td><td>Middel</td><td>Enterprise-feature-discussie</td></tr>
+              <tr><td><strong>Bestuursvoorzitter</strong></td><td>Reputatie, beheerste besluitvorming</td><td>Laag</td><td>Strategische sparring, geen feature-discussie</td></tr>
+              <tr><td><strong>Voorzitter intern toezicht / VO</strong></td><td>Aantoonbare governance, deelnemersbelang</td><td>Laag (beïnvloeder)</td><td>Propositie 1 + uitlegbaarheid</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 11. Van MVP naar productie -->
+    <section class="section" id="investering">
+      <span class="section-tag">11 · Investering</span>
+      <h2>Van MVP naar productie — investerings­behoefte</h2>
+      <div class="block">
+        <h3>Uitgangspunt</h3>
+        <p>De huidige MVP is een functioneel rijke Next.js-applicatie met een werkende Anthropic-RAG, Supabase-backend met Postgres en Row Level Security, deployment via Vercel in EU-Frankfurt, en circa tien werkende modules. Architectureel is dit een prima fundament. Maar voor verkoop aan pensioenfondsen — een sector waar elke leverancier door een vendor assessment moet — zit er nog een aanzienlijke productionalisering tussen.</p>
+        <p>Onderstaande schatting is een ballpark op basis van de zichtbare stack en vergelijkbare trajecten van MVP naar enterprise-SaaS voor gereguleerde markt. <strong>Zonder hands-on code-audit kan het hoge of lage uiteinde van de range gelden</strong>; een eerste investering in een externe architectuur- en security-audit (spoor 1 hieronder) is de manier om de bandbreedte smaller te maken.</p>
+
+        <h3>Zes parallelle sporen</h3>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Spoor</th><th>Scope</th><th>Indicatieve kosten</th><th>Doorlooptijd</th></tr></thead>
+            <tbody>
+              <tr><td><strong>1 · Architectuur- en security-audit</strong></td><td>Externe code-, security- en architectuurreview; DPIA- en AVG-mapping; gap-report met prioritized backlog</td><td class="pricecell">€15.000–€30.000</td><td>2–3 weken</td></tr>
+              <tr><td><strong>2 · Foundation hardening</strong></td><td>SSO/SAML, MFA, fine-grained RBAC; multi-tenant isolation met per-fonds-encryptiesleutels (BYOK); infrastructure audit logging; secrets management; CI/CD met security-gates; eventueel hostingmigratie</td><td class="pricecell">€70.000–€115.000</td><td>3–4 maanden</td></tr>
+              <tr><td><strong>3 · Code quality en test automation</strong></td><td>Refactoring, unit/integration/e2e-tests (Vitest, Playwright), load testing (k6), SAST/DAST in CI, codebase-documentatie</td><td class="pricecell">€80.000–€130.000</td><td>2–3 maanden</td></tr>
+              <tr><td><strong>4 · Operationele productiefuncties</strong></td><td>Monitoring + alerting, gestructureerd logging met retention, backup en DR met geteste herstelplannen, customer/tenant admin, support tooling met audit</td><td class="pricecell">€50.000–€85.000</td><td>2–3 maanden</td></tr>
+              <tr><td><strong>5 · AI/RAG production-grade</strong></td><td>Vector DB productie-setup, tamper-evident governance logging, source verification, model versioning, bias-detection-laag, prompt-injection protection</td><td class="pricecell">€35.000–€60.000</td><td>1–2 maanden</td></tr>
+              <tr><td><strong>6 · Compliance en certificering</strong></td><td>ISO 27001 ISMS-implementatie en externe certificering, DORA-ready vendor pack, AVG-dossier, BCP en DR-testing, externe pen-test, compliance-consultant</td><td class="pricecell">€100.000–€170.000</td><td>4–6 maanden</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Sporen 2 t/m 5 lopen voor een groot deel parallel; spoor 6 begint kort na spoor 1 en loopt door tot na certificering. De totale doorlooptijd is daarom korter dan de som van de fasen.</p>
+
+        <h3>Drie scenario's</h3>
+        <p>De zes sporen hierboven beschrijven de volledige upgrade-categorieën. De onderstaande scenario's bepalen welke breedte en diepte je per spoor invult — niet elk spoor wordt in elk scenario volledig doorlopen.</p>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Scenario</th><th>Totaalinvestering</th><th>Doorlooptijd</th><th>Resultaat</th></tr></thead>
+            <tbody>
+              <tr><td><strong>Pilot-ready</strong></td><td class="pricecell">€50.000–€125.000</td><td>3–5 mnd</td><td>Direct logisch uit de huidige handover: bestaande MVP opwerken tot veilige pilot-omgeving voor een design-partner. ISO 27001-traject staat aantoonbaar in voorbereiding, kritische security-hardening, eerste externe pen-test, basis governance logging.</td></tr>
+              <tr><td><strong>Commercial V1</strong> ← <em>beste centrale businesscase</em></td><td class="pricecell">€150.000–€300.000</td><td>6–9 mnd</td><td>Productieklaar voor brede commerciële uitrol: ISO 27001-gecertificeerd, DORA-ready vendor pack, multi-tenancy met per-fonds-isolatie, test-automation op kritieke flows, audit-ready governance logging, productie-monitoring.</td></tr>
+              <tr><td><strong>Enterprise-grade</strong></td><td class="pricecell">€300.000–€550.000</td><td>9–15 mnd</td><td>Ambitieus maar verdedigbaar voor grotere fondsen en verzekeraars: SOC 2 Type II-traject, volledige multi-tenancy met BYOK, uitgebreide test coverage, integraties (SSO, DMS, identity providers), 24/7 monitoring en geteste DR.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Voor een interne begroting of investor-pitch hanteer <strong>Commercial V1 als centrale businesscase</strong>: midpoint <strong>€200.000–€225.000</strong>, bandbreedte €150.000–€300.000, doorlooptijd 6–9 maanden. Pilot-ready (€50K–€125K) is de minimale variant om binnen 3–5 maanden bij een eerste design-partner aan tafel te kunnen; Enterprise-grade (€300K–€550K) is het pad bij doorgroei naar grotere fondsen en verzekeraars.</p>
+
+        <h3>Structureel terugkerende tech-OpEx</h3>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Post</th><th>Indicatie per jaar</th></tr></thead>
+            <tbody>
+              <tr><td>Hosting en infrastructuur</td><td class="pricecell">€30.000–€60.000</td></tr>
+              <tr><td>ISO 27001 surveillance audits</td><td class="pricecell">€5.000–€10.000</td></tr>
+              <tr><td>Externe pen-test (jaarlijks)</td><td class="pricecell">€15.000–€30.000</td></tr>
+              <tr><td>Monitoring, tooling, vector DB-licenties</td><td class="pricecell">€15.000–€30.000</td></tr>
+              <tr><td><strong>Totaal structureel</strong></td><td class="pricecell"><strong>€65.000–€130.000/jaar</strong></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Bemensingsopties</h3>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Optie</th><th>Karakteristiek</th><th>Kosten-impact</th></tr></thead>
+            <tbody>
+              <tr><td><strong>Volledig freelance</strong></td><td>Snel op te starten, geen lange-termijn-commitment, breed expert-pool</td><td>+30–50% versus gemengd team</td></tr>
+              <tr><td><strong>Gemengd</strong> (1 lead-developer FTE + freelancers)</td><td>Sweet spot voor pre-seed/seed-fase; lead waarborgt continuïteit, freelance flexibiliteit</td><td>Basisscenario</td></tr>
+              <tr><td><strong>Volledig in dienst</strong></td><td>1 senior fullstack + 1 DevOps/security in dienst (~€220–€300K/jaar all-in), plus consultants</td><td>Goedkoopste op termijn; risicovoller als pilot uitloopt</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Voor de eerste 12 maanden is <strong>gemengd team</strong> doorgaans het verstandigste. Eén lead-developer in dienst waarborgt continuïteit en kennisopbouw; freelance-specialisten op security, DevOps en test-automation worden gericht ingehuurd voor de tijd dat ze nodig zijn.</p>
+
+        <h3>Wat dit betekent voor cashflow</h3>
+        <p>Belangrijk: <strong>de pilot kan starten zodra Pilot-ready (€50K–€125K) is gerealiseerd</strong> — dat is binnen 3–5 maanden haalbaar. Een design-partner accepteert in de praktijk een product dat zichtbaar onderweg is naar ISO 27001 (mits het traject aantoonbaar loopt en er een redelijke planning is). Eerste pilot-omzet (€15.000) en de overgang naar jaarcontracten (€27.500–€45.000 ARR per fonds) kunnen daardoor al vroeg in jaar 1 lopen. De stap naar Commercial V1 (€150K–€300K) hoeft niet in zijn geheel voorgefinancierd te worden — een aanzienlijk deel kan uit early ARR worden gedekt, mits het commerciële tempo voldoende is. Enterprise-grade volgt pas wanneer schaal en klantvraag dat rechtvaardigen.</p>
+
+        <h3>Belangrijke kanttekeningen</h3>
+        <ul>
+          <li><strong>AI-tooling versnelt spoor 3.</strong> Een senior engineer met Claude Code of vergelijkbare AI-assisted development haalt typisch 15–25% productiviteitswinst op refactoring en testopbouw.</li>
+          <li><strong>Bezuinig niet op spoor 5.</strong> Productionalisering van de AI/RAG-laag is precies de kern van de waardepropositie. Bezuiniging op governance-logging-infrastructuur of bias-detection is een directe afzwakking van de pitch en daarmee van de €45K ARR-prijspositie.</li>
+          <li><strong>Code-audit eerst.</strong> Bij een goede MVP-architectuur blijft 70–80% van de bestaande code overeind; bij significante technische schuld zakt dat naar 50–60% en moet je het bovenste van de range hanteren. Spoor 1 (€15K–€30K) is geen overhead — het is de manier om de overige investering precies te begroten.</li>
+          <li><strong>Vercel- en Supabase-enterprise-tiers</strong> kunnen een deel van de hosting- en infra-gap dichten zonder volledige migratie. Dat scheelt vermoedelijk €20.000–€30.000 in spoor 2.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 12. Risico's -->
+    <section class="section" id="risicos">
+      <span class="section-tag">12 · Risico's</span>
+      <h2>Risico's en aandachtspunten</h2>
+      <div class="block">
+        <p><strong>Prijserosie door tier-grenzen.</strong> Fondsen aan de onderkant van een tier zullen druk uitoefenen om naar Core te zakken. AUM-grenzen contractueel vastleggen, geen tier-onderhandeling.</p>
+        <p><strong>Vendor lock-in zorgen.</strong> Bij governance-kritische infrastructuur extra zwaar. Mitigatie: data-portabiliteit in standaardformaten, broncode-escrow, transparante uittredingsclausules. Niet adresseren verlaagt close-rate substantieel.</p>
+        <p><strong>Lange salescycli (9–18 maanden).</strong> Eerste contracten kosten cashflow voordat ARR opbouwt. Core-tier als snellere instap in jaar 1; Professional als opschalingspad in jaar 2.</p>
+        <p><strong>APF-strategie als versneller.</strong> Eén APF-deal opent toegang tot meerdere kringen. Strategisch zwaarder wegen dan een individueel groot fonds bij gelijke effort.</p>
+        <p><strong>Consolidatie van de markt.</strong> Fondsen die net getekend hebben kunnen later fuseren. Meeneembaarheid bij fusie contractueel regelen.</p>
+        <p><strong>Wanneer is deze prijsstelling NIET haalbaar.</strong> Alleen als de MVP in de praktijk <em>niet</em> aantoonbaar levert op procedurele volledigheid, besluitrijpheidsmeting, traceerbare bestuurlijke afweging, dossierexport en governance-logging. Als het in perceptie blijft hangen op "documenten + AI-samenvatting" wordt €45.000 te ambitieus en zit de eerste fase op €15.000–€25.000 ARR.</p>
+        <p><strong>Certificerings- en assurancekosten drukken vroege marge.</strong> Markttoegang tot pensioenfondsen vereist aantoonbare informatiebeveiliging en professionele leveranciersbeheersing — ISO 27001 (in voorbereiding), jaarlijkse externe pen-tests, DORA-ready vendor pack, AVG-dossier, business-continuity-bewijs. Initiële ISO 27001-certificering kost typisch €15.000–€25.000, surveillance daarna €5.000–€10.000/jaar; pen-testing €15.000–€30.000/jaar; SOC 2 Type II in fase 2 €30.000–€60.000. Deze investeringen ontstaan vóórdat de ARR-schaal volledig is opgebouwd. Mitigatie: certificeringen faseren, licentieprijzen hierop afstemmen (€25.000 ARR-vloer hard houden), klantspecifieke auditlast apart doorbelasten en certificeringsinvesteringen koppelen aan grotere meerjarige contracten.</p>
+        <p><strong>Implementatie-risico bij T&amp;M-model.</strong> Hoewel time-and-materials beter past in de vroege fase, verschuift het wel een deel van het scope-onzekerheidsrisico naar de klant. Mitigatie: vooraf een professionele scope-notitie en urenraming, vaste Implementation Foundation (€7.500) als instap, tussentijdse signalering bij 75% verbruik, en transparante voortgangsrapportage per fase.</p>
+        <p><strong>DNB-houding.</strong> Geen expliciet standpunt over AI-governance-platforms. Een proactieve dialoog over de audit-trail-architectuur kan zowel risico beperken als een marketingvoordeel opleveren.</p>
+      </div>
+    </section>
+
+    <!-- 13. Aanbevelingen -->
+    <section class="section" id="aanbevelingen">
+      <span class="section-tag">13 · Aanbevelingen</span>
+      <h2>Aanbevelingen</h2>
+      <div class="block">
+        <ol>
+          <li><strong>Herzie de pitch op prijs én positionering.</strong> Vervang "het verdienmodel wordt in de pilot ontwikkeld" door een transparante prijslijst. Verschuif positionering naar Governance Operating System voor complexe bestuurlijke besluitvorming.</li>
+          <li><strong>Verkoop niet Wtp, verkoop structurele governance.</strong> Wtp is de katalysator die het gesprek opent; de productpositionering moet expliciet de doorlopende besluitprocessen omvatten.</li>
+          <li><strong>Lead met Professional (€45K ARR), niet met Core.</strong> Core is een instap; de commerciële boodschap neemt Professional als referentiepunt om de prijsperceptie boven de board-portal-bandbreedte vast te zetten. Implementatie separaat op basis van geraamde consultancy-inzet (Professional indicatief 14–22 dagen).</li>
+          <li><strong>Houd €25K ARR als ondergrens vast.</strong> Geen contract beneden dit punt — onder dit niveau ondermijn je de categorie-positie.</li>
+          <li><strong>APF-channelstrategie expliciet als groeipad.</strong> Eén APF-deal opent 5–10 kringen.</li>
+          <li><strong>Vroegtijdige verkennende dialoog met toezichts- en sectorprofessionals</strong> over claimvorming rond auditability, AI-governance en besluitdossiervorming. Pragmatischer dan formele DNB-validatie zoeken (die kan een toezichthouder per definitie niet afgeven), en levert tegelijk peer-review op de architectuur.</li>
+          <li><strong>Sequencing: 2026 NL-pensioenfondsen, 2027–2028 sectorale verbreding.</strong> Verbreden naar andere Nederlandse sectoren met vergelijkbaar governance-profiel — verzekeraars, PPI's, asset managers, woningcorporaties, zorginstellingen en grote ondernemingen met zwaar bestuurlijk besluitvormingsprofiel. Internationale uitbreiding wordt in deze fase bewust niet nagestreefd: lokalisatiekosten zijn hoog en prijspunten lager dan NL. Internationale benchmarks (§6) dienen alleen ter kalibratie van Nederlandse prijsvorming.</li>
+          <li><strong>Ontwikkel een referentieprogramma voor design-partners</strong> — niet als directe financiële vergoeding aan pensioenfondsen (vanwege integriteits- en procurement-gevoeligheid), maar via zichtbaarheid in sectorcases, co-developmentvoordelen op de product-roadmap, en licentiekorting bij uitbreiding. Voor commerciële intermediairs kan een apart referral­programma met financiële vergoeding worden opgezet.</li>
+          <li><strong>Drie verkoopgesprekken voor drie buyer types.</strong> Niet één pitch voor iedereen.</li>
+        </ol>
+      </div>
+
+      <div class="takeaway">
+        <h2>Eindadvies</h2>
+        <p><strong>Een Governance Operating System voor complexe bestuurlijke besluitvorming.</strong> Niet bedoeld om vergaderstukken te verspreiden, maar om te borgen dat besluiten goed voorbereid, goed onderbouwd, uitlegbaar en reproduceerbaar tot stand komen.</p>
+        <p style="margin-top:14px"><strong>Beachhead:</strong> Nederlandse pensioenfondsen · <strong>Hoofdpropositie:</strong> Professional-pakket · <strong>Richtprijs:</strong> €45.000/jaar · implementatie op consultancybasis, indicatief 14–22 dagen · <strong>Pilot:</strong> €15.000 · <strong>Minimum viable contract value:</strong> €25.000 ARR.</p>
+      </div>
+    </section>
+
+    <!-- Bronnen -->
+    <section class="section sources" id="bronnen">
+      <span class="section-tag">Bronnen</span>
+      <h2>Bronnen</h2>
+      <div class="block sources">
+        <h3>Marktstructuur Nederland en DNB</h3>
+        <ul>
+          <li><a href="https://www.dnb.nl/algemeen-nieuws/nieuws-2026/pensioentransitie-en-dekkingsgraad-pensioenfondsen-1e-kwartaal/" target="_blank" rel="noopener">DNB — Pensioentransitie en dekkingsgraad pensioenfondsen 1e kwartaal 2026</a></li>
+          <li><a href="https://www.dnb.nl/voor-de-sector/open-boek-toezicht/sectoren/pensioenfondsen/verzamelpagina-transitie-wet-toekomst-pensioenen/besluitvorming-en-invaren/qa-complete-besluitvorming-pensioenfondsen/" target="_blank" rel="noopener">DNB — Q&amp;A Complete besluitvorming pensioenfondsen</a></li>
+          <li><a href="https://www.dnb.nl/statistieken/dashboards/pensioenfondsen/" target="_blank" rel="noopener">DNB — Pensioenfondsen dashboard</a></li>
+          <li><a href="https://www.dnb.nl/openbaar-register/register-van-pensioenfondsen/" target="_blank" rel="noopener">DNB — Register van pensioenfondsen</a></li>
+          <li><a href="https://www.dnb.nl/media/rdolo2sg/84405-2500263-dnb-jaarverslag-2025_compleet_web.pdf" target="_blank" rel="noopener">DNB — Jaarverslag 2025</a></li>
+          <li><a href="https://www.dnb.nl/nieuws-voor-de-sector/toezicht-2025/q4/transitienieuws-derde-kwartaal-2025-voortgang-transitie-en-aandachtspunten-voor-fondsen" target="_blank" rel="noopener">DNB — TRANSITIENIEUWS Q3 2025</a></li>
+          <li><a href="https://www.afm.nl/nl-nl/sector/actueel/2026/mrt/tb-compliancerapport" target="_blank" rel="noopener">AFM — Compliancerapport verkenning 2026</a></li>
+          <li><a href="https://www.pensioenfederatie.nl/paginas/nl/openbaar/themas/governance" target="_blank" rel="noopener">Pensioenfederatie — Governance</a></li>
+          <li><a href="https://pensioenpro.nl/bekijk-hier-het-overzicht-van-de-pensioentransitie/" target="_blank" rel="noopener">Pensioen Pro — Wtp-transitie overzicht</a></li>
+          <li><a href="https://exelerating.com/en/insights/list-dutch-pension-funds/" target="_blank" rel="noopener">Exelerating — Lijst Nederlandse pensioenfondsen 2025</a></li>
+          <li><a href="https://www.rijksoverheid.nl/actueel/nieuws/2025/07/02/11-miljoen-deelnemers-binnen-een-half-jaar-over-op-nieuwe-pensioenstelsel" target="_blank" rel="noopener">Rijksoverheid — 11 miljoen deelnemers overgang Wtp</a></li>
+          <li><a href="https://www.pwc.nl/nl/actueel-en-publicaties/diensten-en-sectoren/pensioenen/governance-van-pensioenfondsen-in-het-nieuwe-stelsel.html" target="_blank" rel="noopener">PwC — Governance van pensioenfondsen in het nieuwe stelsel</a></li>
+        </ul>
+
+        <h3>Board-portals (prijsankers)</h3>
+        <ul>
+          <li><a href="https://www.ibabs.com/en/board-portal/" target="_blank" rel="noopener">iBabs — Board Portal</a></li>
+          <li><a href="https://www.diligent.com/resources/blog/board-portal" target="_blank" rel="noopener">Diligent — Board Portal pricing context</a></li>
+          <li><a href="https://www.diligent.com/features/boards/boards-ai" target="_blank" rel="noopener">Diligent — AI for Boards</a></li>
+          <li><a href="https://www.vendr.com/marketplace/diligent" target="_blank" rel="noopener">Vendr — Diligent Software Pricing</a></li>
+          <li><a href="https://www.itqlick.com/diligent-boards/pricing" target="_blank" rel="noopener">ITQlick — Diligent Boards Pricing</a></li>
+          <li><a href="https://www.themightyboards.com/diligent-boards-pricing/" target="_blank" rel="noopener">The Mighty Boards — Diligent Boards Plans</a></li>
+          <li><a href="https://aprioboardportal.com/board-portal-pricing-comparison-2026/" target="_blank" rel="noopener">Aprio — Board Portal Pricing Comparison 2026</a></li>
+          <li><a href="https://board-room.org/pricing/" target="_blank" rel="noopener">Board-room.org — Board Portal Pricing 2026</a></li>
+          <li><a href="https://www.onboardmeetings.com/board-portal/pricing/" target="_blank" rel="noopener">OnBoard — Board Portal Pricing</a></li>
+          <li><a href="https://www.boardeffect.com/request-pricing/" target="_blank" rel="noopener">BoardEffect — Request Pricing</a></li>
+          <li><a href="https://www.ft.com/content/082192c1-a888-4000-8796-020c83a2b4f3" target="_blank" rel="noopener">Financial Times — Should your board appoint a bot?</a></li>
+        </ul>
+
+        <h3>GRC-platforms</h3>
+        <ul>
+          <li><a href="https://www.onetrust.com/pricing/" target="_blank" rel="noopener">OneTrust — Pricing and Packaging</a></li>
+          <li><a href="https://www.servicenow.com/lpgp/pricing-grc.html" target="_blank" rel="noopener">ServiceNow — GRC Pricing</a></li>
+          <li><a href="https://www.selecthub.com/p/grc-software-tools/onetrust-grc/" target="_blank" rel="noopener">SelectHub — OneTrust GRC Reviews</a></li>
+        </ul>
+
+        <h3>Internationale benchmarks</h3>
+        <ul>
+          <li><a href="https://www.thepensionsregulator.gov.uk/en/trustees" target="_blank" rel="noopener">The Pensions Regulator UK — Trustees</a></li>
+          <li><a href="https://www.mercer.com/en-gb/solutions/pensions/defined-benefit-pension-schemes/pension-trustee-consulting/" target="_blank" rel="noopener">Mercer UK — Pension Trustee Consulting</a></li>
+          <li><a href="https://www.onboardmeetings.com/resources/pension-governance/" target="_blank" rel="noopener">OnBoard — Pension Governance UK</a></li>
+          <li><a href="https://cms.law/en/int/expert-guides/cms-expert-guide-to-pensions/belgium" target="_blank" rel="noopener">CMS — Pensions in Belgium</a></li>
+          <li><a href="https://www.oecd.org/finance/private-pensions/41013956.pdf" target="_blank" rel="noopener">OECD — Pension Fund Governance (PDF)</a></li>
+        </ul>
+
+        <h3>Consultancy-tarieven</h3>
+        <ul>
+          <li><a href="https://www.aon.com/nl-nl/capabilities/pensions-and-retirement/pension-strategy-and-advice-for-pension-funds" target="_blank" rel="noopener">Aon — Pensioenstrategie en -advies voor pensioenfondsen</a></li>
+          <li><a href="https://www.consultancy.nl/diensten/sector/pensioen" target="_blank" rel="noopener">Consultancy.nl — Pensioen consultancy diensten</a></li>
+          <li><a href="https://www.erieri.com/salary/job/consultant-actuarial/netherlands" target="_blank" rel="noopener">ERI — Consultant Actuarial Salary Netherlands</a></li>
+          <li><a href="https://www.europeanpensions.net/ep/Dutch-pension-providers-advance-toward-full-Wtp-transition.php" target="_blank" rel="noopener">European Pensions — Dutch Wtp transition</a></li>
+        </ul>
+      </div>
+    </section>
+
+    <div class="footer">Bestuursplatform pensioenfondsen — Marktverkenning &amp; Prijsstrategie · Robert Timmer &amp; Merlin IJzerman · Mei 2026</div>
+
+  </main>
+</body>
+</html>

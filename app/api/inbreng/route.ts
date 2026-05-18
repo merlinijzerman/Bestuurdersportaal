@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
 
     if (error) {
       console.error("Inbreng toevoegen fout:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ error: "Inbreng toevoegen mislukt" }, { status: 500 });
     }
 
     return NextResponse.json({ inbreng: data });

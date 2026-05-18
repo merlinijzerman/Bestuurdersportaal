@@ -77,7 +77,7 @@ export async function PATCH(
     if (error || !maatregel) {
       console.error("Maatregel wijzigen fout:", error);
       return NextResponse.json(
-        { error: error?.message || "Wijzigen mislukt" },
+        { error: "Wijzigen mislukt" },
         { status: 500 }
       );
     }

@@ -94,7 +94,7 @@ export async function POST(
     if (error || !agendapunt) {
       console.error("Agendapunt aanmaken fout:", error);
       return NextResponse.json(
-        { error: error?.message || "Aanmaken mislukt" },
+        { error: "Aanmaken mislukt" },
         { status: 500 }
       );
     }

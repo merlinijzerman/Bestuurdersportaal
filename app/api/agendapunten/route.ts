@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
 
     if (error) {
       console.error("Agendapunt aanmaken fout:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ error: "Agendapunt aanmaken mislukt" }, { status: 500 });
     }
 
     return NextResponse.json({ agendapunt: data });

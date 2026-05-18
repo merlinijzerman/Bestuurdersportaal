@@ -146,8 +146,9 @@ export async function POST(
       .single();
 
     if (insertFout || !nieuw) {
+      console.error("Dissent vastleggen fout:", insertFout);
       return NextResponse.json(
-        { error: insertFout?.message ?? "Dissent vastleggen mislukt" },
+        { error: "Dissent vastleggen mislukt" },
         { status: 500 }
       );
     }

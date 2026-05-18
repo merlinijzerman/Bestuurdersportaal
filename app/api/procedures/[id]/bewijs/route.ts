@@ -65,8 +65,9 @@ export async function POST(
       .single();
 
     if (error || !bewijs) {
+      console.error("Bewijs toevoegen fout:", error);
       return NextResponse.json(
-        { error: error?.message || "Toevoegen mislukt" },
+        { error: "Toevoegen mislukt" },
         { status: 500 }
       );
     }

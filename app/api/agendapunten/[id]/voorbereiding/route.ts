@@ -287,7 +287,8 @@ export async function POST(
         .select()
         .single();
       if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        console.error("Voorbereiding update fout:", error);
+        return NextResponse.json({ error: "Voorbereiding bijwerken mislukt" }, { status: 500 });
       }
       voorbereiding = updated;
     } else {
@@ -304,7 +305,8 @@ export async function POST(
         .select()
         .single();
       if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        console.error("Voorbereiding aanmaken fout:", error);
+        return NextResponse.json({ error: "Voorbereiding aanmaken mislukt" }, { status: 500 });
       }
       voorbereiding = ingevoegd;
     }

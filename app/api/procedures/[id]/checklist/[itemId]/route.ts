@@ -70,7 +70,8 @@ export async function PATCH(
       .update(updates)
       .eq("id", itemId);
     if (updateFout) {
-      return NextResponse.json({ error: updateFout.message }, { status: 500 });
+      console.error("Checklist-item update fout:", updateFout);
+      return NextResponse.json({ error: "Update mislukt" }, { status: 500 });
     }
 
     if (body.voldaan !== item.voldaan) {

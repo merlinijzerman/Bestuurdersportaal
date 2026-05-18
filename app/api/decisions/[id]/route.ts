@@ -188,8 +188,9 @@ export async function PATCH(
         .select()
         .single();
       if (updateFout || !na) {
+        console.error("Decision update fout:", updateFout);
         return NextResponse.json(
-          { error: updateFout?.message ?? "Update mislukt" },
+          { error: "Update mislukt" },
           { status: 500 }
         );
       }

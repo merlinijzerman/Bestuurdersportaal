@@ -98,8 +98,9 @@ export async function PATCH(
         })
         .eq("id", stapId);
       if (updateFout) {
+        console.error("Stap voltooien fout:", updateFout);
         return NextResponse.json(
-          { error: updateFout.message },
+          { error: "Stap voltooien mislukt" },
           { status: 500 }
         );
       }
@@ -154,7 +155,8 @@ export async function PATCH(
       .update({ status: "actief" })
       .eq("id", stapId);
     if (updateFout) {
-      return NextResponse.json({ error: updateFout.message }, { status: 500 });
+      console.error("Stap activeren fout:", updateFout);
+      return NextResponse.json({ error: "Stap activeren mislukt" }, { status: 500 });
     }
     await supabase.from("procedure_log").insert({
       procedure_id: id,

@@ -188,8 +188,9 @@ export async function PATCH(
       .select()
       .single();
     if (updFout || !bijgewerkt) {
+      console.error("Dissent wijzigen fout:", updFout);
       return NextResponse.json(
-        { error: updFout?.message ?? "Update mislukt" },
+        { error: "Update mislukt" },
         { status: 500 }
       );
     }
@@ -309,7 +310,8 @@ export async function DELETE(
       .delete()
       .eq("id", did);
     if (delFout) {
-      return NextResponse.json({ error: delFout.message }, { status: 500 });
+      console.error("Dissent verwijderen fout:", delFout);
+      return NextResponse.json({ error: "Verwijderen mislukt" }, { status: 500 });
     }
 
     return NextResponse.json({ verwijderd: true });

@@ -148,7 +148,8 @@ export async function POST(
         { p_decision_id: decisionId, p_target: t }
       );
       if (error) {
-        throw new Error(`Readiness-check faalde: ${error.message}`);
+        console.error("Readiness-check Postgres-fout:", error);
+        throw new Error("Readiness-check faalde");
       }
       return data as ReadinessResult;
     }
@@ -206,14 +207,13 @@ export async function POST(
       .single();
     if (updFout || !bijgewerkt) {
       // Trigger-fout van fn_decision_status_check is hier de meest
-      // waarschijnlijke oorzaak. We geven de DB-melding letterlijk
-      // door zodat de frontend hem kan tonen.
+      // waarschijnlijke oorzaak. Eerder gaven we de DB-melding letterlijk
+      // door, maar dat kan schema-details lekken (kolomnamen, constraint-
+      // namen). Vanaf WP6 (Route A) tonen we alleen de generieke fallback;
+      // de oorzaak wordt server-side gelogd voor traceerbaarheid.
+      console.error("Decision status-overgang fout:", updFout);
       return NextResponse.json(
-        {
-          error:
-            updFout?.message ??
-            "Statusovergang mislukt. Mogelijk is deze overgang niet toegestaan.",
-        },
+        { error: "Statusovergang mislukt. Mogelijk is deze overgang niet toegestaan." },
         { status: 400 }
       );
     }

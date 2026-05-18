@@ -119,8 +119,9 @@ export async function PATCH(
       .select()
       .single();
     if (updFout || !bijgewerkt) {
+      console.error("Voorwaarde wijzigen fout:", updFout);
       return NextResponse.json(
-        { error: updFout?.message ?? "Update mislukt" },
+        { error: "Update mislukt" },
         { status: 500 }
       );
     }

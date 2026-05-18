@@ -123,8 +123,9 @@ export async function POST(
       .single();
 
     if (insertFout || !nieuw) {
+      console.error("Aanname aanmaken fout:", insertFout);
       return NextResponse.json(
-        { error: insertFout?.message ?? "Aanname aanmaken mislukt" },
+        { error: "Aanname aanmaken mislukt" },
         { status: 500 }
       );
     }

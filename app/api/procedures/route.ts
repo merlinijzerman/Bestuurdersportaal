@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
     if (procFout || !procedure) {
       console.error("Procedure aanmaken fout:", procFout);
       return NextResponse.json(
-        { error: procFout?.message || "Aanmaken mislukt" },
+        { error: "Aanmaken mislukt" },
         { status: 500 }
       );
     }

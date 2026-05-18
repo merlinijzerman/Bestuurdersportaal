@@ -84,8 +84,9 @@ export async function POST(
       .single();
 
     if (error || !besluit) {
+      console.error("Besluit vastleggen fout:", error);
       return NextResponse.json(
-        { error: error?.message || "Vastleggen mislukt" },
+        { error: "Vastleggen mislukt" },
         { status: 500 }
       );
     }

@@ -38,7 +38,7 @@ export async function PATCH(
 
     if (error) {
       console.error("Notities-update fout:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ error: "Notities opslaan mislukt" }, { status: 500 });
     }
     if (!voorbereiding) {
       return NextResponse.json(

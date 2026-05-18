@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Bestuursplatform pensioenfondsen — Pitch</title>
+<style>
+  :root{
+    --navy:#0F2744; --navy-2:#17395f; --gold:#C9A84C; --ink:#1F2937; --muted:#6B7280;
+    --line:#E5E7EB; --bg:#FAFAF8; --card:#FFFFFF; --soft:#F3F6F8; --soft-2:#EEF2F6;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink);line-height:1.6;-webkit-font-smoothing:antialiased}
+  .page{max-width:980px;margin:0 auto;padding:56px 28px 64px}
+
+  /* Hero / cover */
+  .hero{background:linear-gradient(135deg,var(--navy),var(--navy-2));color:white;border-radius:28px;padding:64px 56px;box-shadow:0 18px 45px rgba(15,39,68,.18);position:relative;overflow:hidden}
+  .hero:after{content:"";position:absolute;right:-120px;top:-120px;width:320px;height:320px;border-radius:50%;background:rgba(201,168,76,.18)}
+  .hero:before{content:"";position:absolute;left:-100px;bottom:-100px;width:260px;height:260px;border-radius:50%;background:rgba(255,255,255,.04)}
+  .eyebrow{color:var(--gold);text-transform:uppercase;letter-spacing:.14em;font-size:13px;font-weight:700;margin-bottom:18px;position:relative;z-index:2}
+  .hero h1{margin:0 0 18px;font-size:46px;line-height:1.05;letter-spacing:-.03em;max-width:760px;position:relative;z-index:2}
+  .hero .subtitle{font-size:20px;color:#E5E7EB;max-width:720px;margin:0;position:relative;z-index:2;font-style:italic}
+  .hero .meta{margin-top:30px;display:flex;gap:24px;flex-wrap:wrap;position:relative;z-index:2;color:#CBD5E1;font-size:14px}
+  .hero .meta span{display:inline-flex;align-items:center;gap:8px}
+  .hero .meta b{color:white;font-weight:600}
+
+  /* Statement */
+  .statement{margin:36px 0;padding:28px 32px;background:var(--card);border-left:5px solid var(--gold);border-radius:18px;box-shadow:0 8px 26px rgba(15,39,68,.08);font-size:22px;color:var(--navy);font-weight:650}
+
+  /* Section / typography */
+  .section{margin-top:48px}
+  .section-tag{display:inline-block;background:rgba(201,168,76,.12);color:#8a6f25;padding:6px 14px;border-radius:999px;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:14px}
+  h2{color:var(--navy);font-size:30px;margin:0 0 16px;letter-spacing:-.02em;line-height:1.2}
+  h3{color:var(--navy);font-size:20px;margin:24px 0 10px;letter-spacing:-.01em}
+  h4{color:var(--navy);font-size:17px;margin:18px 0 8px}
+  p{margin:0 0 14px;color:var(--ink)}
+  p.lead{font-size:18px;color:var(--navy)}
+  strong{color:var(--navy)}
+  em{color:var(--ink)}
+
+  /* Cards */
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin:22px 0}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:24px;box-shadow:0 4px 16px rgba(15,39,68,.05)}
+  .card h3{color:var(--navy);margin:0 0 14px;font-size:18px}
+  .card p{margin:0;color:var(--muted);font-size:15px;line-height:1.5}
+
+  /* Two-column split */
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:18px}
+  .list{background:var(--soft);border-radius:20px;padding:24px 26px}
+  .list h3{margin:0 0 12px;color:var(--navy)}
+  ul{margin:0;padding-left:20px}
+  li{margin:7px 0}
+
+  /* Why / Flow */
+  .why{background:white;border-radius:24px;border:1px solid var(--line);padding:32px;box-shadow:0 4px 16px rgba(15,39,68,.05)}
+  .flow{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
+  .step{background:white;border:1px solid var(--line);border-radius:999px;padding:10px 15px;color:var(--navy);font-weight:650;font-size:14px;box-shadow:0 2px 6px rgba(15,39,68,.04)}
+
+  /* Body content blocks (whitepaper) */
+  .block{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:32px 34px;box-shadow:0 4px 18px rgba(15,39,68,.05);margin-top:22px}
+  .block ul{margin:14px 0 0;padding-left:0;list-style:none}
+  .block ul li{position:relative;padding:10px 0 10px 30px;border-bottom:1px dashed var(--line)}
+  .block ul li:last-child{border-bottom:none}
+  .block ul li:before{content:"";position:absolute;left:6px;top:18px;width:10px;height:10px;border-radius:50%;background:var(--gold)}
+  .block ul li b{color:var(--navy)}
+
+  /* Figure */
+  figure{margin:24px 0 0;padding:0;text-align:center}
+  figure img{max-width:100%;height:auto;border-radius:14px;border:1px solid var(--line);box-shadow:0 6px 22px rgba(15,39,68,.08)}
+  figcaption{margin-top:10px;font-size:13px;color:var(--muted);font-style:italic}
+
+  /* MVP image quartet */
+  .quartet{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:18px}
+  .quartet figure{margin:0}
+
+  /* Tables */
+  .tablewrap{margin-top:18px;overflow-x:auto;border:1px solid var(--line);border-radius:18px;background:white;box-shadow:0 4px 16px rgba(15,39,68,.05)}
+  table{width:100%;border-collapse:collapse;font-size:15px}
+  thead th{background:var(--navy);color:white;text-align:left;padding:14px 18px;font-weight:600;letter-spacing:.01em}
+  tbody td{padding:14px 18px;border-top:1px solid var(--line);vertical-align:top;color:var(--ink)}
+  tbody tr:nth-child(even) td{background:var(--soft)}
+
+  /* Achtergrond two-column */
+  .twocol{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:18px}
+  .twocol .panel{background:white;border:1px solid var(--line);border-radius:18px;padding:24px 26px;box-shadow:0 4px 14px rgba(15,39,68,.05)}
+  .twocol .panel h3{margin:0 0 8px;color:var(--navy)}
+  .twocol .panel p{margin:0;color:var(--ink)}
+
+  /* Contacts */
+  .contacts{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:18px}
+  .contact{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:24px;box-shadow:0 4px 14px rgba(15,39,68,.05)}
+  .contact h3{margin:0 0 4px;color:var(--navy)}
+  .contact .role{color:var(--gold);font-style:italic;margin:0 0 12px;font-size:14px}
+  .contact .lines{font-size:14px;color:var(--ink);line-height:1.7;word-break:break-word}
+  .contact a{color:var(--navy);text-decoration:none;border-bottom:1px dotted var(--muted)}
+
+  /* Appendix screens */
+  .screen{margin-top:30px;padding-top:24px;border-top:1px solid var(--line)}
+  .screen h3{display:flex;align-items:baseline;gap:12px}
+  .screen h3 .num{color:var(--gold);font-weight:700}
+  .screen figure{margin-top:14px}
+
+  /* CTA */
+  .cta{margin-top:48px;background:#FFF8E1;border:1px solid #F2D889;border-radius:24px;padding:34px;text-align:center}
+  .cta h2{margin-bottom:8px}
+  .cta p{margin:0 auto;max-width:680px;font-size:18px;color:var(--navy)}
+
+  /* Section divider */
+  .divider{margin:64px 0 24px;display:flex;align-items:center;gap:18px}
+  .divider .line{flex:1;height:1px;background:var(--line)}
+  .divider .label{color:var(--gold);text-transform:uppercase;letter-spacing:.18em;font-size:12px;font-weight:700}
+
+  /* TOC */
+  .toc{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:26px 30px;margin-top:28px;box-shadow:0 4px 16px rgba(15,39,68,.05)}
+  .toc h3{margin:0 0 14px}
+  .toc ol{margin:0;padding-left:22px}
+  .toc li{margin:6px 0}
+  .toc a{color:var(--navy);text-decoration:none;border-bottom:1px dotted var(--muted)}
+  .toc a:hover{color:var(--gold)}
+  .toc .part{font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:var(--gold);font-weight:700;margin:18px 0 6px}
+  .toc .part:first-child{margin-top:0}
+
+  /* Footer */
+  .footer{margin-top:48px;text-align:center;color:var(--muted);font-size:14px;padding-top:24px;border-top:1px solid var(--line)}
+
+  /* Responsive */
+  @media(max-width:760px){
+    .hero{padding:40px 28px}
+    .hero h1{font-size:34px}
+    .hero .subtitle{font-size:17px}
+    .grid,.split,.quartet,.twocol,.contacts{grid-template-columns:1fr}
+    .statement{font-size:19px;padding:22px 24px}
+    .block{padding:24px}
+    h2{font-size:24px}
+  }
+  @media print{
+    @page{size:A4;margin:14mm}
+    body{background:white}
+    .page{padding:0;max-width:none}
+    .hero{break-after:page}
+    .toc{break-after:page}
+    .hero,.card,.statement,.why,.cta,.block,.contact,.twocol .panel,.tablewrap{box-shadow:none}
+    /* keep headings attached to following content */
+    h1,h2,h3,h4{break-after:avoid;page-break-after:avoid}
+    .section-tag{break-after:avoid;page-break-after:avoid}
+    /* avoid splitting key blocks */
+    .section{break-inside:avoid-page;page-break-inside:avoid}
+    .block{break-inside:avoid-page;page-break-inside:avoid}
+    .card,.list,.contact,.twocol .panel{break-inside:avoid;page-break-inside:avoid}
+    .screen{break-inside:avoid;page-break-inside:avoid}
+    figure{break-inside:avoid;page-break-inside:avoid}
+    table,tr,td,th{page-break-inside:avoid;break-inside:avoid}
+    /* dividers open a fresh page for each Deel */
+    .divider{break-before:page;margin-top:0}
+  }
+</style>
+</head>
+<body>
+  <main class="page">
+
+    <!-- COVER -->
+    <section class="hero">
+      <div class="eyebrow">Pitch · Bestuursplatform pensioenfondsen</div>
+      <h1>Bestuursplatform pensioenfondsen</h1>
+      <p class="subtitle">Kwaliteit van besluitvorming borgen onder toenemende complexiteit, tijdsdruk en toezicht.</p>
+      <div class="meta">
+        <span><b>Auteurs:</b> Robert Timmer &amp; Merlin IJzerman</span>
+        <span><b>Verankering:</b> Nyenrode Business University, 2026</span>
+      </div>
+    </section>
+
+    <!-- TABLE OF CONTENTS -->
+    <nav class="toc" aria-label="Inhoudsopgave">
+      <h3>Inhoudsopgave</h3>
+      <div class="part">Deel I · Managementsamenvatting</div>
+      <ol>
+        <li><a href="#visie">Betere besluitvorming in het tijdperk van AI</a></li>
+        <li><a href="#druk-platform">De druk op besturen &amp; wat het platform biedt</a></li>
+        <li><a href="#lifecycle">Van voorbereiding naar lerende governance</a></li>
+        <li><a href="#doelgroepen">Voor bestuurders, bestuursbureaus, toezicht &amp; audit</a></li>
+      </ol>
+      <div class="part">Deel II · Het bestuursplatform in detail</div>
+      <ol start="5">
+        <li><a href="#probleem">Het probleem: besluitvorming onder druk, verantwoordelijkheid bij het bestuur</a></li>
+        <li><a href="#oplossing">De oplossing: wat het platform doet voor het bestuur</a></li>
+        <li><a href="#rollen">Voor bestuur én bestuursbureau: twee rollen in één systeem</a></li>
+        <li><a href="#horizon">Waar we staan en waar we naartoe groeien</a></li>
+        <li><a href="#mvp">MVP in beeld</a></li>
+        <li><a href="#governance-vragen">Hoe de lastige governance-vragen zijn opgelost</a></li>
+        <li><a href="#vraag">Wat we vragen: een pilotpartner</a></li>
+        <li><a href="#onderbouwing">Van onderzoek naar platform — de onderbouwing</a></li>
+        <li><a href="#achtergrond">Achtergrond</a></li>
+        <li><a href="#contact">Contact</a></li>
+        <li><a href="#bijlage">Bijlage — MVP in beeld (tien schermen)</a></li>
+      </ol>
+    </nav>
+
+    <!-- ============================================== -->
+    <!-- DEEL I — MANAGEMENT­SAMENVATTING (PREVIEW)   -->
+    <!-- ============================================== -->
+
+    <div class="divider"><span class="line"></span><span class="label">Deel I · Managementsamenvatting</span><span class="line"></span></div>
+
+    <!-- Visie -->
+    <section class="hero" id="visie" style="margin-top:8px">
+      <div class="eyebrow">Bestuursplatform pensioenfondsen</div>
+      <h1>Betere besluitvorming in het tijdperk van AI</h1>
+      <p class="subtitle">Een platform dat besturen helpt om complexe besluiten grondiger voor te bereiden, sterker te onderbouwen, helderder uit te leggen en reproduceerbaar te maken.</p>
+    </section>
+
+    <div class="statement">Wij bouwen geen traditioneel bestuurdersportaal. Wij bouwen een besturingssysteem voor bestuurlijke verantwoordelijkheid.</div>
+
+    <section class="grid">
+      <div class="card"><h3>Besluit centraal</h3><p>Niet documenten of vergaderingen, maar het besluit zelf vormt het hart van het platform.</p></div>
+      <div class="card"><h3>AI onder governance</h3><p>AI ondersteunt met bronnen, logging en uitlegbaarheid — het bestuur beslist altijd.</p></div>
+      <div class="card"><h3>Volledige traceability</h3><p>Jaren later blijft zichtbaar waarom, waarop en onder welke aannames een besluit is genomen.</p></div>
+    </section>
+
+    <section class="section split" id="druk-platform">
+      <div class="list"><h3>De druk op besturen neemt toe</h3>
+        <ul>
+          <li>Meer regelgeving en toezicht</li>
+          <li>Grotere informatiebelasting</li>
+          <li>Complexere strategische keuzes</li>
+          <li>Onzichtbaar gebruik van AI</li>
+          <li>Hogere eisen aan uitlegbaarheid</li>
+        </ul>
+      </div>
+      <div class="list"><h3>Het platform biedt</h3>
+        <ul>
+          <li>Gestructureerde besluitvorming</li>
+          <li>Intelligente governanceprocedures</li>
+          <li>AI-voorbereiding met bronverwijzing</li>
+          <li>Audit-ready besluitdossiers</li>
+          <li>Evaluatie en institutioneel leren</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="section why" id="lifecycle">
+      <h2>Van voorbereiding naar lerende governance</h2>
+      <p>Het bestuursplatform pensioenfondsen ondersteunt de volledige lifecycle van besluitvorming — van eerste signaal tot evaluatie achteraf.</p>
+      <div class="flow">
+        <span class="step">Voorbereiden</span>
+        <span class="step">Afwegen</span>
+        <span class="step">Besluiten</span>
+        <span class="step">Vastleggen</span>
+        <span class="step">Uitvoeren</span>
+        <span class="step">Evalueren</span>
+        <span class="step">Leren</span>
+      </div>
+    </section>
+
+    <section class="section grid" id="doelgroepen">
+      <div class="card"><h3>Voor bestuurders</h3><p>Meer overzicht, betere voorbereiding en betere grip op complexe besluitvorming.</p></div>
+      <div class="card"><h3>Voor bestuursbureaus</h3><p>Consistente processen, betere dossiervorming en minder handmatig coördinatiewerk.</p></div>
+      <div class="card"><h3>Voor toezicht &amp; audit</h3><p>Herleidbaar AI-gebruik, reproduceerbare besluitvorming en aantoonbare governance.</p></div>
+    </section>
+
+    <!-- CTA als afsluiter van de managementsamenvatting -->
+    <section class="cta" id="slot">
+      <h2>De vraag is niet óf AI governance raakt.</h2>
+      <p>De vraag is hoe organisaties bestuurlijke verantwoordelijkheid behouden wanneer AI, informatie-overload en toezichtdruk samenkomen.</p>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- DEEL II — HET BESTUURSPLATFORM IN DETAIL      -->
+    <!-- ============================================== -->
+
+    <div class="divider"><span class="line"></span><span class="label">Deel II · Het bestuursplatform in detail</span><span class="line"></span></div>
+
+    <!-- 1. Het probleem -->
+    <section class="section" id="probleem">
+      <span class="section-tag">01 · Probleem</span>
+      <h2>Het probleem: besluitvorming onder druk, verantwoordelijkheid bij het bestuur</h2>
+      <div class="block">
+        <p>Strategische besluiten bepalen de koers van het fonds, maar het voortbrengingsproces van besluiten blijft kwetsbaar. Cognitieve biases, groepsdenken en onvolledige informatie zijn na decennia management-onderzoek nog altijd niet opgelost. Onderzoek laat zien dat slechts één op de vijf organisaties goed is in besluitvorming, gedefinieerd als tijdig, verdedigbaar onder toetsing, en houdbaar tegen latere feiten. De verantwoordelijkheid daarvoor ligt onverkort bij het bestuur.</p>
+        <p>De Wtp-transitie zet die kwetsbaarheid maximaal onder druk. Besluiten over invaren, het transitieplan en het beleggingsbeleid zijn grotendeels onomkeerbaar, technisch complex en gebonden aan strakke deadlines, terwijl het toezicht intensiveert en elke afweging achteraf navolgbaar moet zijn. De informatielast groeit, de tijd is schaars, en de eis &ldquo;waarom, op basis waarvan?&rdquo; wordt steeds explicieter.</p>
+        <p><strong>AI verergert dit probleem in plaats van het op te lossen.</strong> Bestuurders en bestuursbureaus gebruiken ChatGPT, Claude, Gemini en Copilot al in de voorbereiding, zonder bronverwijzing, zonder rolafbakening, zonder vastlegging en zonder expliciete governance. Het besluit wordt beïnvloed, maar die invloed is niet zichtbaar, niet herleidbaar en niet bestuurlijk verantwoord. Het onderzoek van Robert Timmer (Nyenrode, 2026), zestien interviews met bestuurders en executives, dertien gedocumenteerde paradoxen, noemt dit het Governance Vacuum: organisaties beheersen data en techniek formeel, maar laten juist de dynamiek die het besluit beïnvloedt ongereguleerd.</p>
+        <p>Het kernprobleem is dus niet techniek of informatie. Het is het ontbreken van een beslisarchitectuur die menselijk oordeel en AI-ondersteuning structureel verbindt, zodat het bestuur zijn verantwoordelijkheid kan dragen in plaats van die ongemerkt te zien verschuiven.</p>
+      </div>
+    </section>
+
+    <!-- 2. De oplossing -->
+    <section class="section" id="oplossing">
+      <span class="section-tag">02 · Oplossing</span>
+      <h2>De oplossing: wat het platform doet voor het bestuur</h2>
+      <div class="block">
+        <p>Het platform vertaalt de academische principes naar bestuurlijke praktijk. Het verkoopt geen AI, het borgt dat AI-gebruik beheerst wordt en de kwaliteit van besluiten omhoog gaat. Concreet:</p>
+        <ul>
+          <li><b>Aantoonbaar besluitproces.</b> Elk besluit doorloopt een gestructureerd 8-fase proces, van signaaldetectie tot toetsing, met vastgelegde overwegingen, alternatieven en risico&rsquo;s.</li>
+          <li><b>AI als tegenspraak, niet als bevestiging.</b> Verplichte bronverwijzing in elke AI-output, plus debiasing-by-design: het platform verbreedt perspectieven en daagt aannames uit in plaats van ze te bevestigen.</li>
+          <li><b>Herleidbare audit-trail.</b> Elke AI-bijdrage is gekoppeld aan het dossier en blijft jaren later reproduceerbaar, met rol- en bronregistratie op het moment van besluit.</li>
+          <li><b>Mens beslist, altijd.</b> De agent adviseert en bereidt voor; de bestuurder besluit. Human-in-the-loop is een governance-eis, geen instelling.</li>
+        </ul>
+        <figure>
+          <img src="images/image5.png" alt="AI-assistent met governance-logging en bronkeuze" />
+          <figcaption>MVP · AI-assistent met governance-logging en bronkeuze (zie bijlage voor groot formaat)</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <!-- 3. Voor bestuur en bestuursbureau -->
+    <section class="section" id="rollen">
+      <span class="section-tag">03 · Rollen</span>
+      <h2>Voor bestuur én bestuursbureau: twee rollen in één systeem</h2>
+      <div class="block">
+        <p>Governance raakt beide rollen, dus het platform bedient beide. Het <strong>bestuursbureau</strong> is proceseigenaar: het organiseert de besluitvorming, bewaakt de dossiers en is de contracterende partij namens het fonds. Het <strong>bestuur</strong> is begunstigde en blijft eindverantwoordelijk: het platform versterkt de bestuurlijke disciplines, reflectie, tegenspraak, consistentie, verantwoording, zonder die verantwoordelijkheid over te nemen.</p>
+      </div>
+    </section>
+
+    <!-- 4. Horizon -->
+    <section class="section" id="horizon">
+      <span class="section-tag">04 · Horizon</span>
+      <h2>Waar we staan en waar we naartoe groeien</h2>
+      <div class="block">
+        <p>Vandaag is er een werkend MVP waarmee bestuur en bestuursbureau kunnen testen en experimenteren. De stip aan de horizon: volledige ondersteuning van het bestuurlijke werk, waarbij AI ook bij complexe vraagstukken een betrouwbare sparringpartner is. Die ontwikkeling vraagt om co-creatie met fondspartners.</p>
+        <figure>
+          <img src="images/image1.png" alt="Horizon 1 werkend MVP, Horizon 2 verbreden, Horizon 3 volledige bestuursondersteuning" />
+          <figcaption>Horizon 1 werkend MVP, Horizon 2 verbreden, Horizon 3 volledige bestuursondersteuning</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <!-- 5. MVP in beeld -->
+    <section class="section" id="mvp">
+      <span class="section-tag">05 · MVP</span>
+      <h2>MVP in beeld</h2>
+      <div class="block">
+        <p>Op dit moment staat een werkend bestuursplatform met stuurinformatie, een AI-assistent met governance-logging, een vergaderomgeving met scheiding tussen persoonlijke voorbereiding en formele besluitvorming, en een (door AI raadpleegbaar) archief van documenten. Het eerste volledig werkende dossiertype is de wijziging van het beleggingsbeleid, als terugkerend proces, zodat de use case niet verdampt na een eenmalige transitie.</p>
+        <div class="quartet">
+          <figure>
+            <img src="images/image6.png" alt="Home — persoonlijk dashboard en open procedure-stappen" />
+            <figcaption>Home — persoonlijk dashboard en open procedure-stappen</figcaption>
+          </figure>
+          <figure>
+            <img src="images/image2.png" alt="Stuurinformatie — financieringsgraad en balans Wtp-regeling" />
+            <figcaption>Stuurinformatie — financieringsgraad en balans Wtp-regeling</figcaption>
+          </figure>
+          <figure>
+            <img src="images/image3.png" alt="Vergaderdossier — privé-voorbereiding en AI-lens met open vragen" />
+            <figcaption>Vergaderdossier — privé-voorbereiding en AI-lens met open vragen</figcaption>
+          </figure>
+          <figure>
+            <img src="images/image4.png" alt="Risicomatrix — kans × impact" />
+            <figcaption>Risicomatrix — kans × impact</figcaption>
+          </figure>
+        </div>
+        <p style="margin-top:18px;color:var(--muted);font-style:italic;text-align:center">Alle tien schermen staan op groot formaat in de bijlage.</p>
+      </div>
+    </section>
+
+    <!-- 6. Governance-vragen -->
+    <section class="section" id="governance-vragen">
+      <span class="section-tag">06 · Governance by design</span>
+      <h2>Hoe de lastige governance-vragen zijn opgelost</h2>
+      <div class="block">
+        <p>Een governance-platform mag zelf geen nieuwe governance-risico&rsquo;s introduceren. Drie ontwerpkeuzes:</p>
+        <ul>
+          <li><b>Privé-notities: privé om te denken, transparant om te besluiten.</b> Bestuurders hebben een persoonlijke werkruimte voor voorbereiding. Zodra een notitie de formele besluitvorming ingaat, wordt die zichtbaar en onderdeel van het dossier. Zo ontstaat geen onzichtbare AI-invloed, precies het probleem dat het platform oplost.</li>
+          <li><b>Rol-differentiatie raakt de taak, niet de macht.</b> De agent past zich aan de taak aan, een voorzitter bereidt de agenda voor, een bestuurslid krijgt de proces-context. Iedereen heeft toegang tot dezelfde feiten, hetzelfde dossier en dezelfde audit-trail. Geen informatie-asymmetrie, geen spanning met collegiaal bestuur.</li>
+          <li><b>Toetsbaarheid:</b> De audit-trail is ontworpen om aan te sluiten bij de toetsbaarheidseisen die DNB stelt aan navolgbaarheid en informatiebeveiliging (DNB Good Practice Information Security). Het platform produceert het bewijs; de toezichthouder beoordeelt.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 7. Wat we vragen -->
+    <section class="section" id="vraag">
+      <span class="section-tag">07 · Pilot</span>
+      <h2>Wat we vragen: een pilotpartner</h2>
+      <div class="block">
+        <p>We zoeken één bestuursbureau dat samen met ons de cyclus van het wijzigen van het beleggingsbeleid (of een ander proces naar keuze) volledig wil uitwerken in het platform. De pilot loopt op consultancy basis vanuit co-creatie: het bestuursbureau brengt domein- en proceskennis in, wij brengen decennialange pensioenervaring, de technologie en de governance-thesis.</p>
+        <p><strong>Het verdienmodel wordt in de pilot ontwikkeld.</strong> Co-creatie betekent co-creatie: ook de prijsstructuur ontstaat uit de samenwerking. De eerste partner krijgt invloed op het eindproduct én een kick-back-regeling, een vergoeding bij latere afname van het product door nieuwe fondsen die via de pilot worden aangebracht. Vroege betrokkenheid wordt zo beloond.</p>
+      </div>
+    </section>
+
+    <!-- 8. Van onderzoek naar platform -->
+    <section class="section" id="onderbouwing">
+      <span class="section-tag">08 · Onderbouwing</span>
+      <h2>Van onderzoek naar platform — de onderbouwing</h2>
+      <div class="block">
+        <p>Het platform is geen losse verzameling features. Elk onderdeel operationaliseert een ontwerpprincipe uit het promotieonderzoek. Vier voorbeelden van de koppeling tussen empirische bevinding en platformkeuze:</p>
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Bevinding uit het onderzoek</th>
+                <th>Hoe het platform dit borgt</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Het Governance Vacuum: AI-invloed op besluiten blijft ongereguleerd, terwijl data en techniek wel formeel zijn belegd.</td>
+                <td>AI-gebruik wordt onderdeel van de formele besluitvorming, met rolafbakening, vastlegging en koppeling aan het dossier.</td>
+              </tr>
+              <tr>
+                <td>De Sovereignty-Dependency-paradox: het menselijk oordeel is leidend, maar leunt steeds meer op AI voor informatie en analyse.</td>
+                <td>Human-in-the-loop als harde processtap: de agent adviseert en bereidt voor, de bestuurder besluit en bevestigt.</td>
+              </tr>
+              <tr>
+                <td>De Broad-to-Narrow-paradox: AI wordt ingezet voor bredere perspectieven, maar bevestigt in de praktijk vaak bestaande voorkeuren.</td>
+                <td>Debiasing-by-design: verplichte bronverwijzing, expliciete alternatieven en het uitdagen van aannames in elke AI-output.</td>
+              </tr>
+              <tr>
+                <td>Verificatie is een accountability-mechanisme, geen werkvoorkeur, zonder verificatie wordt verantwoordelijkheid nominaal.</td>
+                <td>Het 8-fase besluitvormingsproces bouwt expliciete reflectie- en toetsmomenten in, met een herleidbare audit-trail.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p style="margin-top:14px;color:var(--muted);font-style:italic">Het onderzoek documenteert dertien paradoxen en zestien ontwerpprincipes; bovenstaande tabel toont een selectie.</p>
+      </div>
+    </section>
+
+    <!-- 9. Achtergrond -->
+    <section class="section" id="achtergrond">
+      <span class="section-tag">09 · Achtergrond</span>
+      <h2>Achtergrond</h2>
+      <div class="twocol">
+        <div class="panel">
+          <h3>Technologie</h3>
+          <p>EU-soevereine architectuur. Elk fonds heeft een strikt gescheiden eigen database en eigen encryptiesleutels. Publieke kennis (wet- en regelgeving, leidraden) wordt gedeeld; fondsdata blijft single-tenant. Geen training op fondsdata — standaard hygiëne, vanzelfsprekend.</p>
+        </div>
+        <div class="panel">
+          <h3>Academische verankering</h3>
+          <p>Gebaseerd op het promotieonderzoek &ldquo;Bestuurlijke Besluitvorming in het Tijdperk van AI&rdquo; (Nyenrode Business University, 2026), begeleid door prof. dr. Henry Robben en prof. dr. Theo Kocken. Geen generieke GRC-tool, maar de directe operationalisering van empirisch onderbouwde principes.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Contact -->
+    <section class="section" id="contact">
+      <span class="section-tag">10 · Contact</span>
+      <h2>Contact</h2>
+      <div class="contacts">
+        <div class="contact">
+          <h3>Robert Timmer</h3>
+          <p class="role">&ldquo;Bestuurlijke Besluitvorming in het Tijdperk van AI&rdquo;</p>
+          <div class="lines">
+            <a href="mailto:robert.timmer@the-paradox.com">robert.timmer@the-paradox.com</a><br/>
+            +31 6 45548651<br/>
+            <a href="https://www.linkedin.com/in/roberttimmer/" target="_blank" rel="noopener">linkedin.com/in/roberttimmer/</a>
+          </div>
+        </div>
+        <div class="contact">
+          <h3>Merlin IJzerman</h3>
+          <p class="role">&ldquo;Waar governance en innovatie elkaar versterken&rdquo;</p>
+          <div class="lines">
+            <a href="mailto:merlinijzerman@gmail.com">merlinijzerman@gmail.com</a><br/>
+            +31 6 13987897<br/>
+            <a href="https://www.linkedin.com/in/merlin-ijzerman-19183a2a/" target="_blank" rel="noopener">linkedin.com/in/merlin-ijzerman-19183a2a/</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Bijlage — MVP in beeld -->
+    <section class="section" id="bijlage">
+      <span class="section-tag">11 · Bijlage</span>
+      <h2>Bijlage — MVP in beeld</h2>
+      <div class="block">
+        <p style="font-style:italic;color:var(--muted)">Tien schermen uit het werkende bestuursplatform (demo-omgeving, Stichting Pensioenfonds Horizon).</p>
+
+        <div class="screen">
+          <h3><span class="num">1.</span> Home — het persoonlijke startpunt</h3>
+          <p>Toont kerncijfers, toont procedure-stappen voor deze bestuurder, komende vergadering en recente AI-vragen in één overzicht.</p>
+          <figure>
+            <img src="images/image9.png" alt="Kerncijfers, open procedure-stappen voor deze bestuurder, komende vergadering en recente AI-vragen in één overzicht." />
+            <figcaption>Kerncijfers, open procedure-stappen voor deze bestuurder, komende vergadering en recente AI-vragen in één overzicht.</figcaption>
+          </figure>
+        </div>
+
+        <div class="screen">
+          <h3><span class="num">2.</span> Stuurinformatie — financieel inzicht</h3>
+          <p>Financieringsgraad over 24 maanden, balans onder de Wtp-regeling en kerncijfers, met duiding voor bestuurlijke sturing.</p>
+          <figure>
+            <img src="images/image12.png" alt="Financieringsgraad over 24 maanden, balans onder de Wtp-regeling en kerncijfers, met duiding voor bestuurlijke sturing." />
+            <figcaption>Financieringsgraad over 24 maanden, balans onder de Wtp-regeling en kerncijfers, met duiding voor bestuurlijke sturing.</figcaption>
+          </figure>
+        </div>
+
+        <div class="screen">
+          <h3><span class="num">3.</span> Klantbeeld — werkgevers</h3>
+          <p>Inzicht in aangesloten werkgevers, premie-instroom en concentratierisico.</p>
+          <figure>
+            <img src="images/image13.png" alt="Inzicht in aangesloten werkgevers, premie-instroom en concentratierisico — bestuurlijk relevant, niet operationeel." />
+            <figcaption>Inzicht in aangesloten werkgevers, premie-instroom en concentratierisico — bestuurlijk relevant, niet operationeel.</figcaption>
+          </figure>
+        </div>
+
+        <div class="screen">
+          <h3><span class="num">4.</span> Klantbeeld — deelnemers en cohorten</h3>
+          <p>Pensioenvermogen per leeftijdscohort: waar het fondsvermogen geconcentreerd is over de leeftijdsverdeling.</p>
+          <figure>
+            <img src="images/image14.png" alt="Pensioenvermogen per leeftijdscohort: waar het fondsvermogen geconcentreerd is over de leeftijdsverdeling." />
+            <figcaption>Pensioenvermogen per leeftijdscohort: waar het fondsvermogen geconcentreerd is over de leeftijdsverdeling.</figcaption>
+          </figure>
+        </div>
+
+        <div class="screen">
+          <h3><span class="num">5.</span> AI-assistent — met governance-logging</h3>
+          <p>Elke vraag wordt vastgelegd in de Governance Log, inclusief de gekozen bronmodus: strikt op eigen documenten, slim gecombineerd, of als open assistent.</p>
+          <figure>
+            <img src="images/image15.png" alt="Elke vraag wordt vastgelegd in de Governance Log, inclusief de gekozen bronmodus: strikt op eigen documenten, slim gecombineerd, of als open assistent." />
+            <figcaption>Elke vraag wordt vastgelegd in de Governance Log, inclusief de gekozen bronmodus: strikt op eigen documenten, slim gecombineerd, of als open assistent.</figcaption>
+          </figure>
+        </div>
+
+        <div class="screen">
+          <h3><span class="num">6.</span> Documentbibliotheek — de kennisbasis (RAG)</h3>
+          <p>Strikt gescheiden generieke kennis (DNB / AFM / Pensioenfederatie) en fondsspecifieke documenten, met indexeringsstatus.</p>
+          <figure>
+            <img src="images/image11.png" alt="Strikt gescheiden generieke kennis (DNB / AFM / Pensioenfederatie) en fondsspecifieke documenten, met indexeringsstatus." />
+            <figcaption>Strikt gescheiden generieke kennis (DNB / AFM / Pensioenfederatie) en fondsspecifieke documenten, met indexeringsstatus.</figcaption>
+          </figure>
+        </div>
+
+        <div class="screen">
+          <h3><span class="num">7.</span> Vergaderingen — planning en voorbereiding</h3>
+          <p>Komende bestuursvergaderingen met toegang tot het vergaderdossier met voorbereidende stukken.</p>
+          <figure>
+            <img src="images/image8.png" alt="Komende bestuursvergaderingen met voorbereidingsstatus; toegang tot de formele besluitomgeving." />
+            <figcaption>Komende bestuursvergaderingen met voorbereidingsstatus; toegang tot de formele besluitomgeving.</figcaption>
+          </figure>
+        </div>
+
+        <div class="screen">
+          <h3><span class="num">8.</span> Vergaderdossier — privé-voorbereiding en AI-lens</h3>
+          <p>Scheiding tussen privé-voorbereiding en formele besluitvorming. De AI-lens stelt kritische open vragen, onderstaand over de aansluiting van het beleggingsvoorstel op de Wtp-transitie.</p>
+          <figure>
+            <img src="images/image16.png" alt="Scheiding tussen privé-voorbereiding en formele besluitvorming. De AI-lens stelt kritische open vragen — hier over de aansluiting van het beleggingsvoorstel op de Wtp-transitie." />
+            <figcaption>Scheiding tussen privé-voorbereiding en formele besluitvorming. De AI-lens stelt kritische open vragen — hier over de aansluiting van het beleggingsvoorstel op de Wtp-transitie.</figcaption>
+          </figure>
+        </div>
+
+        <div class="screen">
+          <h3><span class="num">9.</span> Procedures — lopende besluittrajecten</h3>
+          <p>Beleidswijzigingen en besluittrajecten met hun positie in het gestructureerde proces stappenmodel (stap X van 6).</p>
+          <figure>
+            <img src="images/image7.png" alt="Beleidswijzigingen en besluittrajecten met hun positie in het gestructureerde processtappenmodel (stap X van 6)." />
+            <figcaption>Beleidswijzigingen en besluittrajecten met hun positie in het gestructureerde processtappenmodel (stap X van 6).</figcaption>
+          </figure>
+        </div>
+
+        <div class="screen">
+          <h3><span class="num">10.</span> Risicomatrix — kans × impact</h3>
+          <p>Actuele risico&rsquo;s gerangschikt op kans en impact, onderverdeeld in vier categorieën.</p>
+          <figure>
+            <img src="images/image10.png" alt="Actuele risico's gerangschikt op kans en impact, onderverdeeld in vier categorieën — inclusief het Wtp-implementatierisico." />
+            <figcaption>Actuele risico&rsquo;s gerangschikt op kans en impact, onderverdeeld in vier categorie&euml;n — inclusief het Wtp-implementatierisico.</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer">Bestuursplatform pensioenfondsen — waar governance, besluitkwaliteit en AI samenkomen.</div>
+
+  </main>
+</body>
+</html>

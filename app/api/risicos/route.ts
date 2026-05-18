@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
     if (error || !risico) {
       console.error("Risico aanmaken fout:", error);
       return NextResponse.json(
-        { error: error?.message || "Aanmaken mislukt" },
+        { error: "Aanmaken mislukt" },
         { status: 500 }
       );
     }

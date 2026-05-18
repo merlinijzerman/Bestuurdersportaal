@@ -128,8 +128,9 @@ export async function PATCH(
       .select()
       .single();
     if (updateFout || !na) {
+      console.error("AI-interactie wijzigen fout:", updateFout);
       return NextResponse.json(
-        { error: updateFout?.message ?? "Update mislukt" },
+        { error: "Update mislukt" },
         { status: 500 }
       );
     }

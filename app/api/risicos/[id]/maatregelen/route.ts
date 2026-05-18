@@ -59,7 +59,7 @@ export async function POST(
     if (error || !maatregel) {
       console.error("Maatregel toevoegen fout:", error);
       return NextResponse.json(
-        { error: error?.message || "Toevoegen mislukt" },
+        { error: "Toevoegen mislukt" },
         { status: 500 }
       );
     }

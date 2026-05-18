@@ -131,8 +131,9 @@ export async function POST(
       .single();
 
     if (insertFout || !nieuw) {
+      console.error("Decision-risk aanmaken fout:", insertFout);
       return NextResponse.json(
-        { error: insertFout?.message ?? "Risico aanmaken mislukt" },
+        { error: "Risico aanmaken mislukt" },
         { status: 500 }
       );
     }

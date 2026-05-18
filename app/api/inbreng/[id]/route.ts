@@ -35,7 +35,8 @@ export async function DELETE(
 
     const { error } = await supabase.from("agendapunt_inbreng").delete().eq("id", id);
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      console.error("Inbreng verwijderen fout:", error);
+      return NextResponse.json({ error: "Inbreng verwijderen mislukt" }, { status: 500 });
     }
 
     return NextResponse.json({ ok: true });

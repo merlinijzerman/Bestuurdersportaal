@@ -106,8 +106,9 @@ export async function POST(
       .select()
       .single();
     if (insertFout || !nieuw) {
+      console.error("Actie aanmaken fout:", insertFout);
       return NextResponse.json(
-        { error: insertFout?.message ?? "Actie aanmaken mislukt" },
+        { error: "Actie aanmaken mislukt" },
         { status: 500 }
       );
     }

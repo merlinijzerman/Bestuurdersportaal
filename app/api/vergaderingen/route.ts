@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
 
     if (error) {
       console.error("Vergadering aanmaken fout:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ error: "Vergadering aanmaken mislukt" }, { status: 500 });
     }
 
     return NextResponse.json({ vergadering: data });

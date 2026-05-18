@@ -45,7 +45,7 @@ export async function POST(
     if (error || !risico) {
       console.error("Risico sluiten fout:", error);
       return NextResponse.json(
-        { error: error?.message || "Sluiten mislukt" },
+        { error: "Sluiten mislukt" },
         { status: 500 }
       );
     }
