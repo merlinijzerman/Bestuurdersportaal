@@ -12,6 +12,7 @@ import type {
   GekoppeldAgendapunt,
 } from "../[id]/page";
 import VereistenStrook from "./VereistenStrook";
+import BibliotheekPicker from "./BibliotheekPicker";
 
 interface Props {
   procedureId: string;
@@ -65,6 +66,11 @@ export default function ActieveStapPaneel({
   // 1D-4: file-upload + documenttype-tag op het bewijsformulier.
   const [bewijsBestand, setBewijsBestand] = useState<File | null>(null);
   const [bewijsDocumenttype, setBewijsDocumenttype] = useState("");
+  // 3-D: bibliotheek-picker — kiezen uit bestaande documenten i.p.v. uploaden.
+  // Houdt de uploadflow ongewijzigd; deze state is exclusief actief.
+  const [bewijsBibliotheekId, setBewijsBibliotheekId] = useState<string | null>(null);
+  const [bewijsBibliotheekTitel, setBewijsBibliotheekTitel] = useState<string>("");
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [besluitForm, setBesluitForm] = useState(false);
   const [besluitFormulering, setBesluitFormulering] = useState("");
   const [besluitMotivering, setBesluitMotivering] = useState("");
@@ -135,13 +141,15 @@ export default function ActieveStapPaneel({
     }
     setBezig("bewijs");
     try {
-      // 1D-4: als er een bestand is gekozen, upload het eerst via de
-      // documenten-pipeline. Dat zorgt dat het stuk meteen indexeerbaar
-      // (RAG) is in de fonds-bibliotheek én via Storage inzichtbaar.
-      // De `bron='Intern'` markeert het als interne bron; de kolom
-      // `bestandstype` wordt automatisch afgeleid.
-      let documentId: string | null = null;
-      if (bewijsBestand) {
+      // 3-D: drie bronnen voor `document_id`:
+      //   1. Gekozen uit bibliotheek (bewijsBibliotheekId) — geen upload
+      //   2. Nieuw bestand geüpload (bewijsBestand) — upload + index
+      //   3. Geen koppeling — bewijs blijft titel-only
+      // 1D-4: in geval (2) komt het stuk meteen in de fonds-bibliotheek
+      // terecht via /api/documents/upload (bron='Intern'), met
+      // bestandstype automatisch afgeleid.
+      let documentId: string | null = bewijsBibliotheekId;
+      if (!documentId && bewijsBestand) {
         const fd = new FormData();
         fd.append("bestand", bewijsBestand);
         fd.append("bibliotheek", "fonds");
@@ -182,6 +190,8 @@ export default function ActieveStapPaneel({
       setBewijsBeschrijving("");
       setBewijsBestand(null);
       setBewijsDocumenttype("");
+      setBewijsBibliotheekId(null);
+      setBewijsBibliotheekTitel("");
       setBewijsForm(false);
       router.refresh();
     } catch (err: unknown) {
@@ -561,26 +571,61 @@ export default function ActieveStapPaneel({
                 className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm focus:border-[#C9A84C] outline-none"
               />
             )}
-            {/* 1D-4: file-upload — optioneel. Wordt vóór de bewijs-rij
-                via /api/documents/upload geïndexeerd in de
-                documentbibliotheek (bron='Intern', bibliotheek='fonds')
-                zodat het stuk doorzoekbaar wordt en het bewijs een
-                document_id krijgt. */}
+            {/* 1D-4 + 3-D: bewijs-bron — drie opties:
+                1. Kies bestaand document uit bibliotheek (3-D, geen duplicaat)
+                2. Upload nieuw bestand (1D-4, landt ook in bibliotheek)
+                3. Alleen titel + beschrijving (geen document gekoppeld)
+                Opties (1) en (2) sluiten elkaar uit — de eerstgekozen wint. */}
             <div>
               <label className="block text-[11px] uppercase tracking-wide text-gray-500 font-semibold mb-1">
-                Bestand (optioneel — PDF, Word of Excel)
+                Document koppelen (optioneel)
               </label>
-              <input
-                type="file"
-                accept=".pdf,.docx,.xlsx"
-                onChange={(e) => setBewijsBestand(e.target.files?.[0] ?? null)}
-                className="block w-full text-xs text-gray-700 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-[#0F2744] file:text-white file:text-xs hover:file:bg-[#1a3858]"
-              />
-              {bewijsBestand && (
-                <p className="text-[11px] text-gray-600 mt-1">
-                  Geselecteerd: <span className="font-medium">{bewijsBestand.name}</span>
-                  {" — "}wordt geüpload naar de documentbibliotheek bij vastleggen.
-                </p>
+              {bewijsBibliotheekId ? (
+                <div className="flex items-center justify-between gap-3 p-2.5 bg-amber-50/50 border border-amber-200 rounded">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] text-amber-700 uppercase tracking-wide font-semibold">
+                      Gekozen uit bibliotheek
+                    </p>
+                    <p className="text-sm text-[#0F2744] truncate">
+                      {bewijsBibliotheekTitel}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBewijsBibliotheekId(null);
+                      setBewijsBibliotheekTitel("");
+                    }}
+                    className="text-xs text-rose-700 hover:underline whitespace-nowrap"
+                  >
+                    Loskoppelen
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2 mb-2">
+                    <button
+                      type="button"
+                      onClick={() => setPickerOpen(true)}
+                      className="text-xs px-3 py-1.5 border border-gray-200 rounded hover:border-[#C9A84C] text-[#0F2744]"
+                    >
+                      Kies uit bibliotheek →
+                    </button>
+                    <span className="text-[11px] text-gray-400">of upload nieuw bestand:</span>
+                  </div>
+                  <input
+                    type="file"
+                    accept=".pdf,.docx,.xlsx"
+                    onChange={(e) => setBewijsBestand(e.target.files?.[0] ?? null)}
+                    className="block w-full text-xs text-gray-700 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-[#0F2744] file:text-white file:text-xs hover:file:bg-[#1a3858]"
+                  />
+                  {bewijsBestand && (
+                    <p className="text-[11px] text-gray-600 mt-1">
+                      Geselecteerd: <span className="font-medium">{bewijsBestand.name}</span>
+                      {" — "}wordt geüpload naar de documentbibliotheek bij vastleggen.
+                    </p>
+                  )}
+                </>
               )}
             </div>
             <div className="flex justify-end gap-2">
@@ -810,6 +855,26 @@ export default function ActieveStapPaneel({
           }
         />
       </div>
+
+      {/* 3-D: Bibliotheek-picker modal — overlays op de hele pagina,
+          sluit zichzelf bij selectie of klik buiten. */}
+      {pickerOpen && (
+        <BibliotheekPicker
+          onSelect={(id, titel) => {
+            setBewijsBibliotheekId(id);
+            setBewijsBibliotheekTitel(titel);
+            // Als een nieuw bestand was gekozen, laat dat vallen — de
+            // bibliotheekkeuze wint (de UI in het form maakt dat ook duidelijk).
+            setBewijsBestand(null);
+            // Als de bewijs-titel nog leeg is, vul 'm alvast met de
+            // documenttitel — gebruiker kan 'm desgewenst nog wijzigen.
+            if (!bewijsTitel.trim()) {
+              setBewijsTitel(titel);
+            }
+          }}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
     </div>
   );
 }

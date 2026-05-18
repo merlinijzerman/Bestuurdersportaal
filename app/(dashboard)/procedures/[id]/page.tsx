@@ -12,6 +12,7 @@ import OnderbouwingsPaneel from "../_components/OnderbouwingsPaneel";
 import StatusOvergangPaneel from "../_components/StatusOvergangPaneel";
 import UitklapbaarPaneel from "../_components/UitklapbaarPaneel";
 import DossierStatusStrip from "../_components/DossierStatusStrip";
+import ProcedureMetadataEdit from "../_components/ProcedureMetadataEdit";
 import {
   buildDecisionDossierView,
   ensureDecisionForProcedure,
@@ -338,9 +339,18 @@ export default async function ProcedureDetailPage({
             {PROCEDURE_STATUS_LABEL[procedure.status] || procedure.status}
           </span>
         </div>
-        <h1 className="text-[#0F2744] text-2xl font-semibold">
-          {procedure.titel}
-        </h1>
+        <div className="flex items-start justify-between gap-3">
+          <h1 className="text-[#0F2744] text-2xl font-semibold">
+            {procedure.titel}
+          </h1>
+          <ProcedureMetadataEdit
+            procedureId={procedure.id}
+            titel={procedure.titel}
+            beschrijving={procedure.beschrijving}
+            deadline={procedure.deadline}
+            status={procedure.status}
+          />
+        </div>
         {procedure.beschrijving && (
           <p className="text-sm text-gray-600 mt-1.5 max-w-3xl whitespace-pre-line">
             {procedure.beschrijving}

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase-server";
+import { notifyUser } from "@/lib/notifications";
 
 export async function POST(req: NextRequest) {
   try {
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest) {
 
     const { data: profiel } = await supabase
       .from("profielen")
-      .select("naam")
+      .select("naam, fonds_id")
       .eq("id", user.id)
       .single();
 
@@ -44,6 +45,47 @@ export async function POST(req: NextRequest) {
     if (error) {
       console.error("Inbreng toevoegen fout:", error);
       return NextResponse.json({ error: "Inbreng toevoegen mislukt" }, { status: 500 });
+    }
+
+    // ── Iteratie 3-A: notificatie naar de vergadering-organisator ──
+    // Bewust niet aan álle bestuursleden geüpdaten — dat zou de homepage
+    // overspoelen bij een drukke vergadering. De organisator is degene
+    // die zicht houdt op de voorbereiding van de vergadering en
+    // baat heeft bij signaal "iemand heeft input geleverd".
+    if (profiel?.fonds_id) {
+      const { data: agendapunt } = await supabase
+        .from("agendapunten")
+        .select("titel, vergadering_id, vergaderingen(aangemaakt_door)")
+        .eq("id", agendapunt_id)
+        .maybeSingle();
+
+      const vergRel = agendapunt?.vergaderingen as
+        | { aangemaakt_door: string | null }
+        | { aangemaakt_door: string | null }[]
+        | null
+        | undefined;
+      const vergObj = Array.isArray(vergRel) ? vergRel[0] : vergRel;
+      const organisatorId = vergObj?.aangemaakt_door ?? null;
+
+      if (organisatorId && agendapunt?.titel && agendapunt.vergadering_id) {
+        await notifyUser(
+          supabase,
+          "inbreng_geplaatst",
+          organisatorId,
+          profiel.fonds_id,
+          {
+            type: "inbreng_geplaatst",
+            agendapunt_titel: agendapunt.titel,
+            actor_naam: profiel.naam || user.email || "Een collega",
+            vergadering_id: agendapunt.vergadering_id,
+          },
+          {
+            gerelateerd_aan_type: "agendapunt",
+            gerelateerd_aan_id: agendapunt_id,
+            actor_naam: profiel.naam || null,
+          }
+        );
+      }
     }
 
     return NextResponse.json({ inbreng: data });

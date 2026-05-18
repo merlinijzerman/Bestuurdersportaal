@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase-server";
+import { notifyUser } from "@/lib/notifications";
 
 export async function PATCH(
   req: NextRequest,
@@ -144,6 +145,33 @@ export async function PATCH(
             afgerond_op: new Date().toISOString(),
           })
           .eq("id", id);
+
+        // ── Iteratie 3-A: notificatie naar de procedure-starter ──
+        // De gestart_door krijgt een melding dat zijn procedure klaar is —
+        // handig als hij niet zelf de laatste stap voltooide.
+        const { data: proc } = await supabase
+          .from("procedures")
+          .select("titel, gestart_door, fonds_id")
+          .eq("id", id)
+          .maybeSingle();
+        if (proc?.gestart_door && proc.fonds_id) {
+          await notifyUser(
+            supabase,
+            "procedure_afgerond",
+            proc.gestart_door,
+            proc.fonds_id,
+            {
+              type: "procedure_afgerond",
+              procedure_titel: proc.titel ?? "Procedure",
+              afgerond_door_naam: profiel?.naam || user.email || "Een collega",
+            },
+            {
+              gerelateerd_aan_type: "procedure",
+              gerelateerd_aan_id: id,
+              actor_naam: profiel?.naam || null,
+            }
+          );
+        }
       }
 
       return NextResponse.json({ ok: true });

@@ -76,6 +76,80 @@ export default function RisicosPaneel({ decisionId, risks }: Props) {
   const [mitigatie, setMitigatie] = useState("");
   const [residual, setResidual] = useState("");
 
+  // ── Inline-edit-state (Iteratie 3-C) ─────────────────────────
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editBeschrijving, setEditBeschrijving] = useState("");
+  const [editCategorie, setEditCategorie] = useState<RiskCategorie | "">("");
+  const [editImpact, setEditImpact] = useState<Ki | "">("");
+  const [editKans, setEditKans] = useState<Ki | "">("");
+  const [editEigenaar, setEditEigenaar] = useState("");
+  const [editMitigatie, setEditMitigatie] = useState("");
+  const [editResidual, setEditResidual] = useState("");
+
+  function startBewerken(r: RiskItem) {
+    setEditId(r.id);
+    setEditBeschrijving(r.beschrijving);
+    setEditCategorie(r.categorie ?? "");
+    setEditImpact((r.impact as Ki | null) ?? "");
+    setEditKans((r.kans as Ki | null) ?? "");
+    setEditEigenaar(r.eigenaar_naam ?? "");
+    setEditMitigatie(r.mitigatie ?? "");
+    setEditResidual(r.residual_risk ?? "");
+    setFout(null);
+  }
+
+  function annuleerBewerken() {
+    setEditId(null);
+    setFout(null);
+  }
+
+  async function bewaarBewerken(r: RiskItem) {
+    if (!editBeschrijving.trim()) {
+      setFout("Beschrijving is verplicht");
+      return;
+    }
+    setBezig(r.id);
+    setFout(null);
+    try {
+      const payload: Record<string, unknown> = {};
+      const nieuw = editBeschrijving.trim();
+      if (nieuw !== r.beschrijving) payload.beschrijving = nieuw;
+      const nieuweCat = editCategorie || null;
+      if (nieuweCat !== (r.categorie ?? null)) payload.categorie = nieuweCat;
+      const nieuwImpact: number | null = editImpact === "" ? null : editImpact;
+      if (nieuwImpact !== (r.impact ?? null)) payload.impact = nieuwImpact;
+      const nieuwKans: number | null = editKans === "" ? null : editKans;
+      if (nieuwKans !== (r.kans ?? null)) payload.kans = nieuwKans;
+      const nieuwEigenaar: string | null = editEigenaar.trim() || null;
+      if (nieuwEigenaar !== (r.eigenaar_naam ?? null))
+        payload.eigenaar_naam = nieuwEigenaar;
+      const nieuwMitig: string | null = editMitigatie.trim() || null;
+      if (nieuwMitig !== (r.mitigatie ?? null)) payload.mitigatie = nieuwMitig;
+      const nieuwResid: string | null = editResidual.trim() || null;
+      if (nieuwResid !== (r.residual_risk ?? null))
+        payload.residual_risk = nieuwResid;
+
+      if (Object.keys(payload).length === 0) {
+        annuleerBewerken();
+        return;
+      }
+
+      const res = await fetch(`/api/decisions/${decisionId}/risks/${r.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Wijzigen mislukt");
+      annuleerBewerken();
+      router.refresh();
+    } catch (e) {
+      setFout(e instanceof Error ? e.message : "Onbekende fout");
+    } finally {
+      setBezig(null);
+    }
+  }
+
   async function nieuw() {
     if (!beschrijving.trim()) {
       setFout("Beschrijving is verplicht");
@@ -301,9 +375,131 @@ export default function RisicosPaneel({ decisionId, risks }: Props) {
           {risks.map((r) => (
             <li
               key={r.id}
-              className="border border-gray-200 rounded-lg p-3 bg-white"
+              className={`border rounded-lg p-3 ${
+                editId === r.id
+                  ? "border-[#C9A84C] bg-amber-50/30"
+                  : "border-gray-200 bg-white"
+              }`}
             >
-              <div className="flex items-start gap-3">
+              {editId === r.id ? (
+                // ── Inline edit-form ───────────────────────────
+                <div className="space-y-3">
+                  <Veldgroep label="Beschrijving *">
+                    <textarea
+                      value={editBeschrijving}
+                      onChange={(e) => setEditBeschrijving(e.target.value)}
+                      rows={2}
+                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+                    />
+                  </Veldgroep>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <Veldgroep label="Categorie">
+                      <select
+                        value={editCategorie}
+                        onChange={(e) =>
+                          setEditCategorie(e.target.value as RiskCategorie | "")
+                        }
+                        className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 bg-white"
+                      >
+                        <option value="">— niet ingevuld —</option>
+                        {CATEGORIEEN.map((c) => (
+                          <option key={c} value={c}>
+                            {RISK_CATEGORIE_LABEL[c]}
+                          </option>
+                        ))}
+                      </select>
+                    </Veldgroep>
+                    <Veldgroep label="Impact (1-5)">
+                      <select
+                        value={editImpact}
+                        onChange={(e) =>
+                          setEditImpact(
+                            e.target.value === ""
+                              ? ""
+                              : (Number(e.target.value) as Ki)
+                          )
+                        }
+                        className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 bg-white"
+                      >
+                        <option value="">—</option>
+                        {KI_OPTIES.map((n) => (
+                          <option key={n} value={n}>
+                            {n}
+                          </option>
+                        ))}
+                      </select>
+                    </Veldgroep>
+                    <Veldgroep label="Kans (1-5)">
+                      <select
+                        value={editKans}
+                        onChange={(e) =>
+                          setEditKans(
+                            e.target.value === ""
+                              ? ""
+                              : (Number(e.target.value) as Ki)
+                          )
+                        }
+                        className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 bg-white"
+                      >
+                        <option value="">—</option>
+                        {KI_OPTIES.map((n) => (
+                          <option key={n} value={n}>
+                            {n}
+                          </option>
+                        ))}
+                      </select>
+                    </Veldgroep>
+                  </div>
+                  <Veldgroep label="Eigenaar (optioneel)">
+                    <input
+                      type="text"
+                      value={editEigenaar}
+                      onChange={(e) => setEditEigenaar(e.target.value)}
+                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+                    />
+                  </Veldgroep>
+                  <Veldgroep label="Mitigatie (optioneel)">
+                    <textarea
+                      value={editMitigatie}
+                      onChange={(e) => setEditMitigatie(e.target.value)}
+                      rows={2}
+                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+                    />
+                  </Veldgroep>
+                  <Veldgroep label="Restrisico / rationale (optioneel)">
+                    <textarea
+                      value={editResidual}
+                      onChange={(e) => setEditResidual(e.target.value)}
+                      rows={2}
+                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+                    />
+                  </Veldgroep>
+                  {fout && (
+                    <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-md px-3 py-2">
+                      {fout}
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => bewaarBewerken(r)}
+                      disabled={bezig === r.id}
+                      className="bg-[#0F2744] text-white text-sm px-4 py-2 rounded-md hover:bg-[#1a3a5e] disabled:opacity-50"
+                    >
+                      {bezig === r.id ? "Bezig…" : "Bewaar"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={annuleerBewerken}
+                      disabled={bezig === r.id}
+                      className="text-sm text-gray-600 hover:text-gray-900 px-3 py-2"
+                    >
+                      Annuleer
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="text-sm text-gray-900 whitespace-pre-line">
                     {r.beschrijving}
@@ -385,8 +581,18 @@ export default function RisicosPaneel({ decisionId, risks }: Props) {
                       Heropen
                     </button>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => startBewerken(r)}
+                    disabled={bezig === r.id}
+                    className="text-[11px] text-[#0F2744] hover:underline disabled:opacity-50 mt-1"
+                    title="Risico bewerken"
+                  >
+                    Bewerk
+                  </button>
                 </div>
               </div>
+              )}
             </li>
           ))}
         </ul>

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase-server";
+import { notifyUser } from "@/lib/notifications";
 
 export async function POST(
   req: NextRequest,
@@ -39,10 +40,10 @@ export async function POST(
       );
     }
 
-    // Verifieer procedure + haal evt. decision_id op voor backref.
+    // Verifieer procedure + haal evt. decision_id + gestart_door op voor backref.
     const { data: proc } = await supabase
       .from("procedures")
-      .select("id, decision_id")
+      .select("id, decision_id, gestart_door, titel, fonds_id")
       .eq("id", id)
       .single();
     if (!proc) {
@@ -118,6 +119,32 @@ export async function POST(
           stap_id: body.stap_id || null,
         },
       });
+    }
+
+    // ── Iteratie 3-A: notificatie naar de procedure-eigenaar ──
+    // Als degene die de procedure startte iemand anders is dan
+    // degene die het besluit vastlegt, krijgt hij/zij een melding —
+    // "iemand heeft het besluit op uw procedure geregistreerd".
+    if (proc.gestart_door && proc.fonds_id) {
+      const preview =
+        formulering.length > 120 ? formulering.slice(0, 120) + "…" : formulering;
+      await notifyUser(
+        supabase,
+        "besluit_geregistreerd",
+        proc.gestart_door,
+        proc.fonds_id,
+        {
+          type: "besluit_geregistreerd",
+          procedure_titel: proc.titel ?? "Procedure",
+          besluit_formulering_preview: preview,
+          actor_naam: profiel?.naam || user.email || "Een collega",
+        },
+        {
+          gerelateerd_aan_type: "procedure",
+          gerelateerd_aan_id: id,
+          actor_naam: profiel?.naam || null,
+        }
+      );
     }
 
     return NextResponse.json({ besluit });

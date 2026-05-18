@@ -510,3 +510,52 @@ create policy "fonds proc log" on public.procedure_log
         fonds_id = (select fonds_id from public.profielen where id = auth.uid())
     )
   );
+
+-- ============================================================
+--  Notificaties (Iteratie 3-A, 2026-05-18)
+--  In-app notificaties per gebruiker. Geen e-mail.
+-- ============================================================
+
+create table if not exists public.notificaties (
+  id                    uuid primary key default uuid_generate_v4(),
+  ontvanger_id          uuid not null references auth.users(id) on delete cascade,
+  fonds_id              uuid not null references public.fondsen(id) on delete cascade,
+  type                  text not null check (type in (
+                          'inbreng_geplaatst',
+                          'ai_validatie_wacht',
+                          'procedure_afgerond',
+                          'besluit_geregistreerd',
+                          'dissent_formeel_vastgelegd'
+                        )),
+  payload               jsonb not null default '{}',
+  gerelateerd_aan_type  text,
+  gerelateerd_aan_id    uuid,
+  actor_id              uuid references auth.users(id) on delete set null,
+  actor_naam            text,
+  aangemaakt            timestamptz default now(),
+  gelezen_op            timestamptz
+);
+
+create index if not exists idx_notif_ontvanger_aangemaakt
+  on public.notificaties(ontvanger_id, aangemaakt desc);
+create index if not exists idx_notif_ongelezen
+  on public.notificaties(ontvanger_id, aangemaakt desc)
+  where gelezen_op is null;
+create index if not exists idx_notif_idempotent
+  on public.notificaties(ontvanger_id, type, gerelateerd_aan_id, aangemaakt desc);
+
+alter table public.notificaties enable row level security;
+
+drop policy if exists "eigen notificaties select" on public.notificaties;
+create policy "eigen notificaties select" on public.notificaties
+  for select using (ontvanger_id = auth.uid());
+
+drop policy if exists "eigen notificaties update" on public.notificaties;
+create policy "eigen notificaties update" on public.notificaties
+  for update using (ontvanger_id = auth.uid());
+
+drop policy if exists "notificaties insert eigen fonds" on public.notificaties;
+create policy "notificaties insert eigen fonds" on public.notificaties
+  for insert with check (
+    fonds_id = (select fonds_id from public.profielen where id = auth.uid())
+  );

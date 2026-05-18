@@ -87,6 +87,74 @@ export default function AannamesPaneel({ decisionId, assumptions }: Props) {
   const [onzekerheid, setOnzekerheid] = useState<Risiconiveau | "">("");
   const [evaluatie, setEvaluatie] = useState("");
 
+  // ── Inline-edit-state (Iteratie 3-C) ────────────────────────────
+  // We houden één rij tegelijk in edit-mode. Klik op pen-icoon →
+  // velden worden ingeladen in editTekst/editType/etc.; bij Bewaar
+  // wordt een PATCH naar /api/decisions/[id]/assumptions/[aid] gedaan.
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editTekst, setEditTekst] = useState("");
+  const [editType, setEditType] = useState<AssumptionType>("overig");
+  const [editOnzekerheid, setEditOnzekerheid] = useState<Risiconiveau | "">("");
+  const [editEvaluatie, setEditEvaluatie] = useState("");
+
+  function startBewerken(a: Assumption) {
+    setEditId(a.id);
+    setEditTekst(a.tekst);
+    setEditType(a.type);
+    setEditOnzekerheid(a.onzekerheid ?? "");
+    setEditEvaluatie(a.evaluatiecriterium ?? "");
+    setFout(null);
+  }
+
+  function annuleerBewerken() {
+    setEditId(null);
+    setFout(null);
+  }
+
+  async function bewaarBewerken(a: Assumption) {
+    if (!editTekst.trim()) {
+      setFout("Tekst is verplicht");
+      return;
+    }
+    setBezig(a.id);
+    setFout(null);
+    try {
+      // Alleen velden meesturen die echt veranderd zijn. Houdt
+      // log-events schoon (de PATCH-route logt per veld).
+      const payload: Record<string, unknown> = {};
+      const nieuweTekst = editTekst.trim();
+      if (nieuweTekst !== a.tekst) payload.tekst = nieuweTekst;
+      if (editType !== a.type) payload.type = editType;
+      const nieuweOnz: Risiconiveau | null = editOnzekerheid || null;
+      if (nieuweOnz !== (a.onzekerheid ?? null)) payload.onzekerheid = nieuweOnz;
+      const nieuweEval: string | null = editEvaluatie.trim() || null;
+      if (nieuweEval !== (a.evaluatiecriterium ?? null))
+        payload.evaluatiecriterium = nieuweEval;
+
+      if (Object.keys(payload).length === 0) {
+        annuleerBewerken();
+        return;
+      }
+
+      const res = await fetch(
+        `/api/decisions/${decisionId}/assumptions/${a.id}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        }
+      );
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Wijzigen mislukt");
+      annuleerBewerken();
+      router.refresh();
+    } catch (e) {
+      setFout(e instanceof Error ? e.message : "Onbekende fout");
+    } finally {
+      setBezig(null);
+    }
+  }
+
   const zichtbaar = assumptions.filter(
     (a) => toonVerwijderde || a.status !== "verwijderd"
   );
@@ -287,10 +355,90 @@ export default function AannamesPaneel({ decisionId, assumptions }: Props) {
               className={`border rounded-lg p-3 ${
                 a.status === "verwijderd"
                   ? "border-gray-200 bg-gray-50/50"
-                  : "border-gray-200 bg-white"
+                  : editId === a.id
+                    ? "border-[#C9A84C] bg-amber-50/30"
+                    : "border-gray-200 bg-white"
               }`}
             >
-              <div className="flex items-start gap-3">
+              {editId === a.id ? (
+                // ── Inline edit-form ─────────────────────────────────
+                <div className="space-y-3">
+                  <Veldgroep label="Aanname *">
+                    <textarea
+                      value={editTekst}
+                      onChange={(e) => setEditTekst(e.target.value)}
+                      rows={2}
+                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+                    />
+                  </Veldgroep>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <Veldgroep label="Type">
+                      <select
+                        value={editType}
+                        onChange={(e) =>
+                          setEditType(e.target.value as AssumptionType)
+                        }
+                        className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 bg-white"
+                      >
+                        {TYPES.map((t) => (
+                          <option key={t} value={t}>
+                            {ASSUMPTION_TYPE_LABEL[t]}
+                          </option>
+                        ))}
+                      </select>
+                    </Veldgroep>
+                    <Veldgroep label="Onzekerheid">
+                      <select
+                        value={editOnzekerheid}
+                        onChange={(e) =>
+                          setEditOnzekerheid(e.target.value as Risiconiveau | "")
+                        }
+                        className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 bg-white"
+                      >
+                        <option value="">— niet ingevuld —</option>
+                        {ONZEKERHEID.map((o) => (
+                          <option key={o} value={o}>
+                            {RISICONIVEAU_LABEL[o]}
+                          </option>
+                        ))}
+                      </select>
+                    </Veldgroep>
+                  </div>
+                  <Veldgroep label="Evaluatiecriterium (optioneel)">
+                    <input
+                      type="text"
+                      value={editEvaluatie}
+                      onChange={(e) => setEditEvaluatie(e.target.value)}
+                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+                    />
+                  </Veldgroep>
+                  {fout && (
+                    <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-md px-3 py-2">
+                      {fout}
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => bewaarBewerken(a)}
+                      disabled={bezig === a.id}
+                      className="bg-[#0F2744] text-white text-sm px-4 py-2 rounded-md hover:bg-[#1a3a5e] disabled:opacity-50"
+                    >
+                      {bezig === a.id ? "Bezig…" : "Bewaar"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={annuleerBewerken}
+                      disabled={bezig === a.id}
+                      className="text-sm text-gray-600 hover:text-gray-900 px-3 py-2"
+                    >
+                      Annuleer
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                // ── Read-only weergave ───────────────────────────────
+                <div className="flex items-start gap-3">
                 <div className="flex-1 min-w-0">
                   <div
                     className={`text-sm ${
@@ -358,17 +506,29 @@ export default function AannamesPaneel({ decisionId, assumptions }: Props) {
                       Herstellen
                     </button>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={() => verwijder(a)}
-                      disabled={bezig === a.id}
-                      className="text-xs text-rose-700 hover:underline disabled:opacity-50"
-                    >
-                      Verwijder
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => startBewerken(a)}
+                        disabled={bezig === a.id}
+                        className="text-xs text-[#0F2744] hover:underline disabled:opacity-50"
+                        title="Aanname bewerken"
+                      >
+                        Bewerk
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => verwijder(a)}
+                        disabled={bezig === a.id}
+                        className="text-xs text-rose-700 hover:underline disabled:opacity-50"
+                      >
+                        Verwijder
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
+              )}
             </li>
           ))}
         </ul>

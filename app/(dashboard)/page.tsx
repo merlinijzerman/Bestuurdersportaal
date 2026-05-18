@@ -1,5 +1,7 @@
 import { createServerSupabase } from "@/lib/supabase-server";
 import Link from "next/link";
+import NotificatiesBlok from "./_components/NotificatiesBlok";
+import type { NotificatieType } from "@/lib/notifications";
 
 // ============================================================
 //  Demo-KPI's — zelfde cijfers als de Stuurinformatiepagina,
@@ -91,6 +93,16 @@ interface InbrengItem {
   agendapunt_id: string;
 }
 
+interface NotifRow {
+  id: string;
+  type: NotificatieType;
+  payload: Record<string, unknown>;
+  gerelateerd_aan_type: string | null;
+  gerelateerd_aan_id: string | null;
+  aangemaakt: string;
+  gelezen_op: string | null;
+}
+
 interface OpenStap {
   id: string;
   naam: string;
@@ -163,34 +175,56 @@ export default async function HomePage() {
     }
   }
 
-  // Mijn recente activiteit
-  const [{ data: recenteVragen }, { data: recenteInbreng }, { data: recenteDocs }] =
-    await Promise.all([
-      supabase
-        .from("governance_log")
-        .select("id, vraag, aangemaakt")
-        .eq("gebruiker_id", user.id)
-        .order("aangemaakt", { ascending: false })
-        .limit(3),
-      supabase
-        .from("agendapunt_inbreng")
-        .select("id, tekst, aangemaakt, agendapunt_id")
-        .eq("gebruiker_id", user.id)
-        .order("aangemaakt", { ascending: false })
-        .limit(3),
-      supabase
-        .from("documenten")
-        .select("id, titel, aangemaakt")
-        .eq("opgeslagen_door", user.id)
-        .order("aangemaakt", { ascending: false })
-        .limit(3),
-    ]);
+  // Mijn recente activiteit + meldingen (iteratie 3-A)
+  // We laden alle 4 streams parallel zodat de homepage zo snel mogelijk
+  // rendert. Notificaties worden gecombineerd: ongelezen eerst, daarna
+  // recent gelezen — top 5 totaal om het blok compact te houden.
+  const [
+    { data: recenteVragen },
+    { data: recenteInbreng },
+    { data: recenteDocs },
+    { data: recenteNotificaties },
+  ] = await Promise.all([
+    supabase
+      .from("governance_log")
+      .select("id, vraag, aangemaakt")
+      .eq("gebruiker_id", user.id)
+      .order("aangemaakt", { ascending: false })
+      .limit(3),
+    supabase
+      .from("agendapunt_inbreng")
+      .select("id, tekst, aangemaakt, agendapunt_id")
+      .eq("gebruiker_id", user.id)
+      .order("aangemaakt", { ascending: false })
+      .limit(3),
+    supabase
+      .from("documenten")
+      .select("id, titel, aangemaakt")
+      .eq("opgeslagen_door", user.id)
+      .order("aangemaakt", { ascending: false })
+      .limit(3),
+    // Notificaties: ongelezen + recent gelezen, totaal max 5 in homepage-blok.
+    // De volledige paginatie loopt via /api/notificaties.
+    supabase
+      .from("notificaties")
+      .select(
+        "id, type, payload, gerelateerd_aan_type, gerelateerd_aan_id, aangemaakt, gelezen_op"
+      )
+      .order("gelezen_op", { ascending: true, nullsFirst: true }) // ongelezen eerst
+      .order("aangemaakt", { ascending: false })
+      .limit(5),
+  ]);
 
   const vragen = (recenteVragen || []) as LogItem[];
   const inbreng = (recenteInbreng || []) as InbrengItem[];
   const docs = (recenteDocs || []) as DocItem[];
+  const notificaties = (recenteNotificaties || []) as NotifRow[];
 
-  const heeftActiviteit = vragen.length > 0 || inbreng.length > 0 || docs.length > 0;
+  const heeftActiviteit =
+    vragen.length > 0 ||
+    inbreng.length > 0 ||
+    docs.length > 0 ||
+    notificaties.length > 0;
 
   // Mijn open procedure-stappen (waar ik co-eigenaar ben)
   const eigenaarFilters = await Promise.all([
@@ -451,10 +485,13 @@ export default async function HomePage() {
           </div>
           {!heeftActiviteit ? (
             <div className="text-sm text-gray-500">
-              Hier verschijnen uw laatste vragen, inbreng en uploads zodra u ze gebruikt.
+              Hier verschijnen uw meldingen, laatste vragen, inbreng en uploads zodra u ze ontvangt of gebruikt.
             </div>
           ) : (
             <div className="space-y-4">
+              {notificaties.length > 0 && (
+                <NotificatiesBlok initieelNotificaties={notificaties} />
+              )}
               {vragen.length > 0 && (
                 <RecentBlok titel="AI-vragen">
                   {vragen.map((v) => (

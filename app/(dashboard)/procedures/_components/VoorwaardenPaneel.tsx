@@ -65,6 +65,86 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
   const [deadline, setDeadline] = useState("");
   const [trigger, setTrigger] = useState("");
 
+  // ── Inline-edit-state (Iteratie 3-C) ─────────────────────────
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editVoorwaarde, setEditVoorwaarde] = useState("");
+  const [editEigenaar, setEditEigenaar] = useState("");
+  const [editKpi, setEditKpi] = useState("");
+  const [editDrempel, setEditDrempel] = useState("");
+  const [editMonitor, setEditMonitor] = useState("");
+  const [editDeadline, setEditDeadline] = useState("");
+  const [editTrigger, setEditTrigger] = useState("");
+
+  function startBewerken(c: DecisionCondition) {
+    setEditId(c.id);
+    setEditVoorwaarde(c.voorwaarde);
+    setEditEigenaar(c.eigenaar_naam ?? "");
+    setEditKpi(c.kpi ?? "");
+    setEditDrempel(c.drempelwaarde ?? "");
+    setEditMonitor(c.monitorfrequentie ?? "");
+    setEditDeadline(c.deadline ?? "");
+    setEditTrigger(c.heroverwegingstrigger ?? "");
+    setFout(null);
+  }
+
+  function annuleerBewerken() {
+    setEditId(null);
+    setFout(null);
+  }
+
+  async function bewaarBewerken(c: DecisionCondition) {
+    if (!editVoorwaarde.trim()) {
+      setFout("Voorwaarde is verplicht");
+      return;
+    }
+    setBezig(c.id);
+    setFout(null);
+    try {
+      const payload: Record<string, unknown> = {};
+      const nieuw = editVoorwaarde.trim();
+      if (nieuw !== c.voorwaarde) payload.voorwaarde = nieuw;
+      const nieuweEig: string | null = editEigenaar.trim() || null;
+      if (nieuweEig !== (c.eigenaar_naam ?? null))
+        payload.eigenaar_naam = nieuweEig;
+      const nieuweKpi: string | null = editKpi.trim() || null;
+      if (nieuweKpi !== (c.kpi ?? null)) payload.kpi = nieuweKpi;
+      const nieuweDr: string | null = editDrempel.trim() || null;
+      if (nieuweDr !== (c.drempelwaarde ?? null))
+        payload.drempelwaarde = nieuweDr;
+      const nieuweMon: string | null = editMonitor.trim() || null;
+      if (nieuweMon !== (c.monitorfrequentie ?? null))
+        payload.monitorfrequentie = nieuweMon;
+      const nieuweDeadline: string | null = editDeadline || null;
+      if (nieuweDeadline !== (c.deadline ?? null))
+        payload.deadline = nieuweDeadline;
+      const nieuweTrig: string | null = editTrigger.trim() || null;
+      if (nieuweTrig !== (c.heroverwegingstrigger ?? null))
+        payload.heroverwegingstrigger = nieuweTrig;
+
+      if (Object.keys(payload).length === 0) {
+        annuleerBewerken();
+        return;
+      }
+
+      const res = await fetch(
+        `/api/decisions/${decisionId}/conditions/${c.id}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        }
+      );
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Wijzigen mislukt");
+      annuleerBewerken();
+      router.refresh();
+    } catch (e) {
+      setFout(e instanceof Error ? e.message : "Onbekende fout");
+    } finally {
+      setBezig(null);
+    }
+  }
+
   async function nieuw() {
     if (!voorwaarde.trim()) {
       setFout("Voorwaarde is verplicht");
@@ -263,9 +343,99 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
           {conditions.map((c) => (
             <li
               key={c.id}
-              className="border border-gray-200 rounded-lg p-3 bg-white"
+              className={`border rounded-lg p-3 ${
+                editId === c.id
+                  ? "border-[#C9A84C] bg-amber-50/30"
+                  : "border-gray-200 bg-white"
+              }`}
             >
-              <div className="flex items-start gap-3">
+              {editId === c.id ? (
+                // ── Inline edit-form ───────────────────────────
+                <div className="space-y-3">
+                  <Veldgroep label="Voorwaarde *">
+                    <textarea
+                      value={editVoorwaarde}
+                      onChange={(e) => setEditVoorwaarde(e.target.value)}
+                      rows={2}
+                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+                    />
+                  </Veldgroep>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <Veldgroep label="KPI">
+                      <input
+                        type="text"
+                        value={editKpi}
+                        onChange={(e) => setEditKpi(e.target.value)}
+                        className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+                      />
+                    </Veldgroep>
+                    <Veldgroep label="Drempelwaarde">
+                      <input
+                        type="text"
+                        value={editDrempel}
+                        onChange={(e) => setEditDrempel(e.target.value)}
+                        className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+                      />
+                    </Veldgroep>
+                    <Veldgroep label="Monitorfrequentie">
+                      <input
+                        type="text"
+                        value={editMonitor}
+                        onChange={(e) => setEditMonitor(e.target.value)}
+                        className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+                      />
+                    </Veldgroep>
+                    <Veldgroep label="Deadline">
+                      <input
+                        type="date"
+                        value={editDeadline}
+                        onChange={(e) => setEditDeadline(e.target.value)}
+                        className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+                      />
+                    </Veldgroep>
+                  </div>
+                  <Veldgroep label="Eigenaar">
+                    <input
+                      type="text"
+                      value={editEigenaar}
+                      onChange={(e) => setEditEigenaar(e.target.value)}
+                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+                    />
+                  </Veldgroep>
+                  <Veldgroep label="Heroverwegingstrigger">
+                    <input
+                      type="text"
+                      value={editTrigger}
+                      onChange={(e) => setEditTrigger(e.target.value)}
+                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+                    />
+                  </Veldgroep>
+                  {fout && (
+                    <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-md px-3 py-2">
+                      {fout}
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => bewaarBewerken(c)}
+                      disabled={bezig === c.id}
+                      className="bg-[#0F2744] text-white text-sm px-4 py-2 rounded-md hover:bg-[#1a3a5e] disabled:opacity-50"
+                    >
+                      {bezig === c.id ? "Bezig…" : "Bewaar"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={annuleerBewerken}
+                      disabled={bezig === c.id}
+                      className="text-sm text-gray-600 hover:text-gray-900 px-3 py-2"
+                    >
+                      Annuleer
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="text-sm text-gray-900 whitespace-pre-line">
                     {c.voorwaarde}
@@ -333,8 +503,18 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
                       Overschreden
                     </button>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => startBewerken(c)}
+                    disabled={bezig === c.id}
+                    className="text-[11px] text-[#0F2744] hover:underline disabled:opacity-50"
+                    title="Voorwaarde bewerken"
+                  >
+                    Bewerk
+                  </button>
                 </div>
               </div>
+              )}
             </li>
           ))}
         </ul>

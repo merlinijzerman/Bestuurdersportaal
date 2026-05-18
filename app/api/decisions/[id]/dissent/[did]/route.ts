@@ -19,6 +19,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase-server";
+import { notifyUser } from "@/lib/notifications";
 
 const ZICHTBAARHEID = [
   "prive",
@@ -236,6 +237,44 @@ export async function PATCH(
           zichtbaarheid: bijgewerkt.zichtbaarheid,
         },
       });
+
+      // ── Iteratie 3-A: notificatie naar de procedure-starter ──
+      // Een formeel-vastgestelde dissent is een zwaarwegend signaal
+      // voor de procedure-eigenaar — die moet weten dat een
+      // minderheidsstandpunt is geformaliseerd op zijn besluit.
+      // (Inhoud van de dissent staat bewust niet in de payload —
+      // zichtbaarheid blijft via RLS in tact.)
+      const { data: decision } = await supabase
+        .from("decision_objects")
+        .select("besluit_code, titel, procedure_id, fonds_id")
+        .eq("id", decisionId)
+        .maybeSingle();
+      if (decision?.procedure_id && decision.fonds_id) {
+        const { data: proc } = await supabase
+          .from("procedures")
+          .select("gestart_door")
+          .eq("id", decision.procedure_id)
+          .maybeSingle();
+        if (proc?.gestart_door) {
+          await notifyUser(
+            supabase,
+            "dissent_formeel_vastgelegd",
+            proc.gestart_door,
+            decision.fonds_id,
+            {
+              type: "dissent_formeel_vastgelegd",
+              besluit_code: decision.besluit_code ?? "",
+              besluit_titel: decision.titel ?? "Besluit",
+              actor_naam: actorNaam || "Voorzitter/beheerder",
+            },
+            {
+              gerelateerd_aan_type: "decision",
+              gerelateerd_aan_id: decisionId,
+              actor_naam: actorNaam,
+            }
+          );
+        }
+      }
     }
 
     return NextResponse.json({ dissent: bijgewerkt, gewijzigd: true });
