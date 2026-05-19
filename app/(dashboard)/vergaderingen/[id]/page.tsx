@@ -7,7 +7,12 @@ import AgendapuntKaart, {
   type Stuk,
   type Inbreng,
 } from "../_components/AgendapuntKaart";
+import type { KomendeVergadering } from "../_components/AgendapuntEditModal";
 import type { Voorbereiding } from "../_components/VoorbereidingsBlok";
+
+// Page-cache uitschakelen — agendapunt-mutaties moeten direct zichtbaar zijn
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 interface Vergadering {
   id: string;
@@ -37,16 +42,28 @@ function formatDatum(d: string) {
 
 export default async function VergaderingDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ verwijderd?: string }>;
 }) {
   const { id } = await params;
+  const { verwijderd } = await searchParams;
+  const toonVerwijderde = verwijderd === "1";
+
   const supabase = await createServerSupabase();
 
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return null;
+
+  const { data: profielRaw } = await supabase
+    .from("profielen")
+    .select("rol")
+    .eq("id", user.id)
+    .single();
+  const huidigeRol = (profielRaw as { rol?: string } | null)?.rol ?? null;
 
   const { data: vergadering } = await supabase
     .from("vergaderingen")
@@ -59,11 +76,26 @@ export default async function VergaderingDetailPage({
   }
   const v = vergadering as Vergadering;
 
-  const { data: agendapuntenRaw } = await supabase
+  // Komende vergaderingen binnen hetzelfde fonds (exclusief huidige) voor verplaatsen-dropdown
+  const { data: komendeRaw } = await supabase
+    .from("vergaderingen")
+    .select("id, titel, datum")
+    .eq("fonds_id", v.fonds_id)
+    .gt("datum", new Date().toISOString())
+    .neq("id", v.id)
+    .order("datum", { ascending: true });
+  const komendeVergaderingen = (komendeRaw || []) as KomendeVergadering[];
+
+  // Agendapunten: standaard alleen niet-verwijderde; toggle via ?verwijderd=1
+  let agendaQuery = supabase
     .from("agendapunten")
     .select("*")
     .eq("vergadering_id", id)
     .order("volgorde", { ascending: true });
+  if (!toonVerwijderde) {
+    agendaQuery = agendaQuery.is("verwijderd_op", null);
+  }
+  const { data: agendapuntenRaw } = await agendaQuery;
 
   const agendapuntIds = (agendapuntenRaw || []).map((a: { id: string }) => a.id);
 
@@ -106,6 +138,27 @@ export default async function VergaderingDetailPage({
     })
   );
 
+  // Voor de volgorde-pijltjes: bepaal per actieve kaart wat vorige/volgende is.
+  // We berekenen dit op basis van de niet-verwijderde subset, in volgorde.
+  const actieveAgendapunten = agendapunten.filter((a) => !a.verwijderd_op);
+  const pijltjesData = new Map<string, {
+    kanOmhoog: boolean;
+    kanOmlaag: boolean;
+    vorigeVolgorde: number | null;
+    volgendeVolgorde: number | null;
+  }>();
+  for (let i = 0; i < actieveAgendapunten.length; i++) {
+    const punt = actieveAgendapunten[i];
+    const vorige = actieveAgendapunten[i - 1];
+    const volgende = actieveAgendapunten[i + 1];
+    pijltjesData.set(punt.id, {
+      kanOmhoog: !!vorige,
+      kanOmlaag: !!volgende,
+      vorigeVolgorde: vorige ? vorige.volgorde : null,
+      volgendeVolgorde: volgende ? volgende.volgorde : null,
+    });
+  }
+
   const totaalStukken = stukken.length;
   const totaalSamengevat = stukken.filter((s) => s.samenvatting_ai).length;
   const totaalInbreng = inbreng.length;
@@ -146,28 +199,47 @@ export default async function VergaderingDetailPage({
         </div>
       </div>
 
-      <div className="flex items-center justify-between">
-        <h2 className="text-[#0F2744] font-semibold text-sm">Agenda</h2>
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-3">
+          <h2 className="text-[#0F2744] font-semibold text-sm">Agenda</h2>
+          <Link
+            href={`/vergaderingen/${v.id}${toonVerwijderde ? "" : "?verwijderd=1"}`}
+            className="text-[11px] text-gray-500 hover:text-[#0F2744]"
+          >
+            {toonVerwijderde ? "← Verberg verwijderde" : "Toon verwijderde"}
+          </Link>
+        </div>
         <NieuwAgendapuntForm vergaderingId={v.id} />
       </div>
 
       {agendapunten.length === 0 ? (
         <div className="bg-white border border-dashed border-gray-300 rounded-xl p-8 text-center text-sm text-gray-500">
-          Nog geen agendapunten. Voeg er hierboven één toe om te beginnen.
+          {toonVerwijderde
+            ? "Geen verwijderde agendapunten op deze vergadering."
+            : "Nog geen agendapunten. Voeg er hierboven één toe om te beginnen."}
         </div>
       ) : (
         <div className="space-y-3">
-          {agendapunten.map((a, idx) => (
-            <AgendapuntKaart
-              key={a.id}
-              nummer={idx + 1}
-              punt={a}
-              huidigeGebruikerId={user.id}
-              voorbereiding={
-                voorbereidingen.find((v) => v.agendapunt_id === a.id) || null
-              }
-            />
-          ))}
+          {agendapunten.map((a, idx) => {
+            const p = pijltjesData.get(a.id);
+            return (
+              <AgendapuntKaart
+                key={a.id}
+                nummer={idx + 1}
+                punt={a}
+                huidigeGebruikerId={user.id}
+                huidigeRol={huidigeRol}
+                voorbereiding={
+                  voorbereidingen.find((v) => v.agendapunt_id === a.id) || null
+                }
+                komendeVergaderingen={komendeVergaderingen}
+                kanOmhoog={p?.kanOmhoog ?? false}
+                kanOmlaag={p?.kanOmlaag ?? false}
+                vorigeVolgorde={p?.vorigeVolgorde ?? null}
+                volgendeVolgorde={p?.volgendeVolgorde ?? null}
+              />
+            );
+          })}
         </div>
       )}
     </div>

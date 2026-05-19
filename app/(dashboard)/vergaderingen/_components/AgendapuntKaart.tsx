@@ -4,6 +4,9 @@ import { useRouter } from "next/navigation";
 import VoorbereidingsBlok, {
   type Voorbereiding,
 } from "./VoorbereidingsBlok";
+import AgendapuntEditModal, {
+  type KomendeVergadering,
+} from "./AgendapuntEditModal";
 
 export interface Stuk {
   id: string;
@@ -32,12 +35,17 @@ export interface Inbreng {
 
 export interface Agendapunt {
   id: string;
+  vergadering_id: string;
   volgorde: number;
   titel: string;
   beschrijving: string | null;
   categorie: "beeldvorming" | "oordeelsvorming" | "besluitvorming" | "informatie";
   tijdsduur_minuten: number | null;
   verantwoordelijke: string | null;
+  aangemaakt_door: string | null;
+  verwijderd_op: string | null;
+  verwijderd_door: string | null;
+  verwijder_reden: string | null;
   stukken: Stuk[];
   inbreng: Inbreng[];
 }
@@ -112,12 +120,24 @@ export default function AgendapuntKaart({
   nummer,
   punt,
   huidigeGebruikerId,
+  huidigeRol,
   voorbereiding,
+  komendeVergaderingen,
+  kanOmhoog,
+  kanOmlaag,
+  vorigeVolgorde,
+  volgendeVolgorde,
 }: {
   nummer: number;
   punt: Agendapunt;
   huidigeGebruikerId: string;
+  huidigeRol: string | null;
   voorbereiding: Voorbereiding | null;
+  komendeVergaderingen: KomendeVergadering[];
+  kanOmhoog: boolean;
+  kanOmlaag: boolean;
+  vorigeVolgorde: number | null;
+  volgendeVolgorde: number | null;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(true);
@@ -125,9 +145,39 @@ export default function AgendapuntKaart({
   const [inbrengBezig, setInbrengBezig] = useState(false);
   const [uploadBezig, setUploadBezig] = useState(false);
   const [uploadFout, setUploadFout] = useState<string | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [volgordeBezig, setVolgordeBezig] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const badge = CATEGORIE_BADGE[punt.categorie];
+  const isEigenaar = punt.aangemaakt_door === huidigeGebruikerId;
+  const isPrivileged = huidigeRol === "voorzitter" || huidigeRol === "beheerder";
+  const magBewerken = isEigenaar || isPrivileged;
+  const isVerwijderd = !!punt.verwijderd_op;
+  const aantalBijdragers = punt.inbreng.length; // voorbereidingen tellen ook mee, maar die zijn privé per gebruiker — server-side wordt het echte aantal getoetst
+
+  async function verschuif(richting: "omhoog" | "omlaag") {
+    const target = richting === "omhoog" ? vorigeVolgorde : volgendeVolgorde;
+    if (target === null || volgordeBezig) return;
+    setVolgordeBezig(true);
+    try {
+      const res = await fetch(`/api/agendapunten/${punt.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ volgorde: target }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        alert(data.error || "Verschuiven mislukt");
+        return;
+      }
+      router.refresh();
+    } catch {
+      alert("Verbindingsfout");
+    } finally {
+      setVolgordeBezig(false);
+    }
+  }
 
   async function plaatsInbreng() {
     if (!inbrengTekst.trim() || inbrengBezig) return;
@@ -193,18 +243,31 @@ export default function AgendapuntKaart({
   }
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl">
-      <button
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-start gap-3 p-4 text-left hover:bg-gray-50 transition-colors rounded-xl"
-      >
+    <div
+      id={`agendapunt-${punt.id}`}
+      className={`bg-white border rounded-xl ${
+        isVerwijderd ? "border-red-200 bg-red-50/30" : "border-gray-200"
+      }`}
+    >
+      <div className="w-full flex items-start gap-3 p-4">
         <span className="text-xs text-gray-400 tabular-nums w-5 pt-1">{nummer}.</span>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className={`text-xs font-medium px-2 py-0.5 rounded-md ${badge.bg} ${badge.text}`}>
               {badge.label}
             </span>
-            <span className="text-sm font-semibold text-[#0F2744]">{punt.titel}</span>
+            <span
+              className={`text-sm font-semibold ${
+                isVerwijderd ? "text-gray-500 line-through" : "text-[#0F2744]"
+              }`}
+            >
+              {punt.titel}
+            </span>
+            {isVerwijderd && (
+              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-red-100 text-red-700">
+                Verwijderd
+              </span>
+            )}
           </div>
           <div className="text-xs text-gray-500 mt-1">
             {[
@@ -216,11 +279,73 @@ export default function AgendapuntKaart({
               .filter(Boolean)
               .join(" · ")}
           </div>
+          {isVerwijderd && punt.verwijder_reden && (
+            <div className="text-[11px] text-red-700 mt-1 italic">
+              Reden: {punt.verwijder_reden}
+            </div>
+          )}
         </div>
-        <span className="text-gray-400 text-sm pt-1">{open ? "▾" : "▸"}</span>
-      </button>
 
-      {open && (
+        {/* Pijltjes + edit-knop (alleen voor wie mag bewerken, en alleen op actieve punten) */}
+        {magBewerken && !isVerwijderd && (
+          <div className="flex items-center gap-0.5 pt-1">
+            <button
+              onClick={() => verschuif("omhoog")}
+              disabled={!kanOmhoog || volgordeBezig}
+              className="text-gray-400 hover:text-[#0F2744] disabled:opacity-30 text-xs px-1.5 py-1"
+              title="Omhoog verplaatsen"
+              aria-label="Omhoog verplaatsen"
+            >
+              ▲
+            </button>
+            <button
+              onClick={() => verschuif("omlaag")}
+              disabled={!kanOmlaag || volgordeBezig}
+              className="text-gray-400 hover:text-[#0F2744] disabled:opacity-30 text-xs px-1.5 py-1"
+              title="Omlaag verplaatsen"
+              aria-label="Omlaag verplaatsen"
+            >
+              ▼
+            </button>
+            <button
+              onClick={() => setEditOpen(true)}
+              className="text-gray-400 hover:text-[#0F2744] text-sm px-2 py-1"
+              title="Bewerken"
+              aria-label="Bewerken"
+            >
+              ✎
+            </button>
+          </div>
+        )}
+
+        <button
+          onClick={() => setOpen(!open)}
+          className="text-gray-400 text-sm pt-1 px-1.5"
+          aria-label={open ? "Inklappen" : "Uitklappen"}
+        >
+          {open ? "▾" : "▸"}
+        </button>
+      </div>
+
+      {editOpen && (
+        <AgendapuntEditModal
+          open={editOpen}
+          onClose={() => setEditOpen(false)}
+          punt={{
+            id: punt.id,
+            vergadering_id: punt.vergadering_id,
+            titel: punt.titel,
+            beschrijving: punt.beschrijving,
+            categorie: punt.categorie,
+            tijdsduur_minuten: punt.tijdsduur_minuten,
+            verantwoordelijke: punt.verantwoordelijke,
+          }}
+          aantalBijdragers={aantalBijdragers}
+          komendeVergaderingen={komendeVergaderingen}
+        />
+      )}
+
+      {open && !isVerwijderd && (
         <div className="px-4 pb-4 pl-12 space-y-4 border-t border-gray-100 pt-4">
           {punt.beschrijving && (
             <p className="text-sm text-gray-700 leading-relaxed">{punt.beschrijving}</p>

@@ -62,6 +62,7 @@ export async function POST(req: NextRequest) {
         tijdsduur_minuten: tijdsduur_minuten || null,
         verantwoordelijke: verantwoordelijke || null,
         volgorde,
+        aangemaakt_door: user.id,
       })
       .select()
       .single();

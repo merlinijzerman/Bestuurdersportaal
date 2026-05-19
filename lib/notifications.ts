@@ -40,7 +40,11 @@ export type NotificatieType =
   | "ai_validatie_wacht"
   | "procedure_afgerond"
   | "besluit_geregistreerd"
-  | "dissent_formeel_vastgelegd";
+  | "dissent_formeel_vastgelegd"
+  // Tranche 1 Vergader-basics (2026-05-18)
+  | "agendapunt_gewijzigd"
+  | "agendapunt_verplaatst"
+  | "agendapunt_verwijderd";
 
 export type GerelateerdAanType =
   | "agendapunt"
@@ -59,7 +63,11 @@ export type NotificatiePayload =
   | { type: "ai_validatie_wacht"; output_type: string; validatie_domein: string; procedure_titel?: string }
   | { type: "procedure_afgerond"; procedure_titel: string; afgerond_door_naam: string }
   | { type: "besluit_geregistreerd"; procedure_titel: string; besluit_formulering_preview: string; actor_naam: string }
-  | { type: "dissent_formeel_vastgelegd"; besluit_code: string; besluit_titel: string; actor_naam: string };
+  | { type: "dissent_formeel_vastgelegd"; besluit_code: string; besluit_titel: string; actor_naam: string }
+  // Tranche 1 Vergader-basics
+  | { type: "agendapunt_gewijzigd"; agendapunt_titel: string; velden: string[]; motivering: string; actor_naam: string; vergadering_id: string }
+  | { type: "agendapunt_verplaatst"; agendapunt_titel: string; oude_vergadering_id: string; nieuwe_vergadering_id: string; motivering: string; actor_naam: string; vergadering_id: string }
+  | { type: "agendapunt_verwijderd"; agendapunt_titel: string; motivering: string; actor_naam: string; vergadering_id: string };
 
 type NotifyOpts = {
   /** Type van het gerelateerde object voor deeplink. */
@@ -212,6 +220,12 @@ export function vormNotificatieZin(
       return `Besluit op uw procedure "${payload.procedure_titel ?? "?"}" is geregistreerd door ${payload.actor_naam ?? "een collega"}`;
     case "dissent_formeel_vastgelegd":
       return `Dissent formeel vastgelegd op besluit ${payload.besluit_code ?? ""}: ${payload.besluit_titel ?? "?"}`;
+    case "agendapunt_gewijzigd":
+      return `${payload.actor_naam ?? "Iemand"} wijzigde agendapunt "${payload.agendapunt_titel ?? "?"}"`;
+    case "agendapunt_verplaatst":
+      return `Agendapunt "${payload.agendapunt_titel ?? "?"}" is verplaatst door ${payload.actor_naam ?? "een collega"}`;
+    case "agendapunt_verwijderd":
+      return `Agendapunt "${payload.agendapunt_titel ?? "?"}" is verwijderd door ${payload.actor_naam ?? "een collega"}`;
     default:
       return "Nieuwe notificatie";
   }
@@ -266,7 +280,67 @@ export function notificatieIcoon(type: NotificatieType): string {
       return "📋";
     case "dissent_formeel_vastgelegd":
       return "⚠";
+    case "agendapunt_gewijzigd":
+      return "✎";
+    case "agendapunt_verplaatst":
+      return "↔";
+    case "agendapunt_verwijderd":
+      return "🗑";
     default:
       return "•";
+  }
+}
+
+/**
+ * Haalt alle "bijdragers" van een agendapunt op (gebruikers met inbreng
+ * en/of een voorbereiding) en stuurt elk van hen een notificatie.
+ *
+ * Bedoeld voor PATCH/DELETE/herstel van een agendapunt — die handelingen
+ * raken het werk van iedereen die er al iets op heeft gezet. De self-notify-
+ * en idempotentie-checks in `notifyUser` voorkomen dat de actor zichzelf
+ * notificeert of dat dubbele notificaties ontstaan binnen 5 minuten.
+ *
+ * Soft-fail: een fout bij ophalen of inserten blokkeert de primaire actie
+ * niet.
+ */
+export async function notifyAgendapuntBijdragers(
+  supabase: SupabaseClient,
+  agendapuntId: string,
+  fondsId: string,
+  type: "agendapunt_gewijzigd" | "agendapunt_verplaatst" | "agendapunt_verwijderd",
+  payload: NotificatiePayload,
+  opts: NotifyOpts = {}
+): Promise<void> {
+  try {
+    const [{ data: inbrengen }, { data: voorbereidingen }] = await Promise.all([
+      supabase
+        .from("agendapunt_inbreng")
+        .select("gebruiker_id")
+        .eq("agendapunt_id", agendapuntId),
+      supabase
+        .from("voorbereidingen")
+        .select("gebruiker_id")
+        .eq("agendapunt_id", agendapuntId),
+    ]);
+
+    const idsSet = new Set<string>();
+    for (const r of (inbrengen as { gebruiker_id: string | null }[] | null) ?? []) {
+      if (r.gebruiker_id) idsSet.add(r.gebruiker_id);
+    }
+    for (const r of (voorbereidingen as { gebruiker_id: string | null }[] | null) ?? []) {
+      if (r.gebruiker_id) idsSet.add(r.gebruiker_id);
+    }
+
+    if (idsSet.size === 0) {
+      return; // Geen bijdragers — niets te doen.
+    }
+
+    await Promise.all(
+      Array.from(idsSet).map((ontvangerId) =>
+        notifyUser(supabase, type, ontvangerId, fondsId, payload, opts)
+      )
+    );
+  } catch (e) {
+    console.error(`[notifyAgendapuntBijdragers:${type}] Onverwachte fout:`, e);
   }
 }
