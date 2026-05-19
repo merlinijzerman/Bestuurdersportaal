@@ -13,6 +13,7 @@ export interface Stuk {
   paginas: number | null;
   samenvatting_ai: string | null;
   samengevat_op: string | null;
+  opslag_pad: string | null;
 }
 
 const STUK_BADGE: Record<NonNullable<Stuk["bestandstype"]>, { label: string; kleur: string }> = {
@@ -349,27 +350,49 @@ function StukKaart({ stuk }: { stuk: Stuk }) {
   const samenvatting = parseSamenvatting(stuk.samenvatting_ai);
   const badge = STUK_BADGE[stuk.bestandstype ?? "pdf"];
   const eenheid = stuk.bestandstype === "xlsx" ? "tabbladen" : "pagina's";
+  const kanInzien = !!stuk.opslag_pad;
 
   return (
     <div className="bg-gray-50 rounded-lg border border-gray-200">
-      <button
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-100 transition-colors rounded-lg"
-      >
+      <div className="w-full flex items-center gap-3 p-3 hover:bg-gray-100 transition-colors rounded-lg">
         <span
           className={`w-9 h-9 bg-white border border-gray-200 rounded-md inline-flex items-center justify-center text-[10px] font-semibold flex-shrink-0 ${badge.kleur}`}
         >
           {badge.label}
         </span>
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-medium text-[#0F2744] truncate">{stuk.titel}</div>
+          {kanInzien ? (
+            <a
+              href={`/api/documents/${stuk.id}/bestand`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm font-medium text-[#0F2744] truncate hover:text-[#C9A84C] transition-colors block"
+              title="Origineel openen of downloaden"
+            >
+              {stuk.titel}
+            </a>
+          ) : (
+            <div
+              className="text-sm font-medium text-[#0F2744] truncate"
+              title="Origineel niet beschikbaar — geüpload vóór mei 2026"
+            >
+              {stuk.titel}
+            </div>
+          )}
           <div className="text-[11px] text-gray-500 mt-0.5">
             {stuk.paginas ? `${stuk.paginas} ${eenheid}` : badge.label}
             {stuk.samenvatting_ai ? " · AI-samenvatting beschikbaar" : " · samenvatting wordt nog gegenereerd"}
+            {!kanInzien ? " · origineel niet beschikbaar" : ""}
           </div>
         </div>
-        <span className="text-gray-400 text-xs">{open ? "▾" : "▸"}</span>
-      </button>
+        <button
+          onClick={() => setOpen(!open)}
+          className="text-gray-400 text-xs px-2 py-1 hover:text-[#0F2744]"
+          aria-label={open ? "Samenvatting inklappen" : "Samenvatting uitklappen"}
+        >
+          {open ? "▾" : "▸"}
+        </button>
+      </div>
 
       {open && (
         <div className="px-3 pb-3">

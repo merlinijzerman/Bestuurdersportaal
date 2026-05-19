@@ -28,6 +28,7 @@ export interface Voorbereiding {
   diepte: "snel" | "grondig";
   ai_output: VoorbereidingAIOutput;
   eigen_notities: Record<string, string>;
+  vrije_notities: string | null;
   bronnen_meta: BronnenMeta;
   gegenereerd_op: string;
   bijgewerkt_op: string;
@@ -65,12 +66,18 @@ export default function VoorbereidingsBlok({
   const [notities, setNotities] = useState<Record<string, string>>(
     initieel?.eigen_notities || {}
   );
+  const [vrijeNotities, setVrijeNotities] = useState<string>(
+    initieel?.vrije_notities || ""
+  );
   const [notitiesGewijzigd, setNotitiesGewijzigd] = useState(false);
+  const [inbrengDialoogOpen, setInbrengDialoogOpen] = useState(false);
+  const [neemVrijeNotitiesMee, setNeemVrijeNotitiesMee] = useState(true);
 
   useEffect(() => {
     if (initieel) {
       setVoorbereiding(initieel);
       setNotities(initieel.eigen_notities || {});
+      setVrijeNotities(initieel.vrije_notities || "");
       setNotitiesGewijzigd(false);
     }
   }, [initieel]);
@@ -94,6 +101,7 @@ export default function VoorbereidingsBlok({
       const data = await res.json();
       setVoorbereiding(data.voorbereiding as Voorbereiding);
       setNotities((data.voorbereiding.eigen_notities || {}) as Record<string, string>);
+      setVrijeNotities((data.voorbereiding.vrije_notities || "") as string);
       setNotitiesGewijzigd(false);
       router.refresh();
     } catch (err: unknown) {
@@ -112,7 +120,10 @@ export default function VoorbereidingsBlok({
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ eigen_notities: notities }),
+          body: JSON.stringify({
+            eigen_notities: notities,
+            vrije_notities: vrijeNotities,
+          }),
         }
       );
       if (!res.ok) {
@@ -129,11 +140,15 @@ export default function VoorbereidingsBlok({
     }
   }
 
-  function vulInbreng() {
-    if (!voorbereiding || !onVulInbreng) return;
+  function bouwInbrengTekst(includeVrij: boolean): string {
+    if (!voorbereiding) return "";
     const ai = voorbereiding.ai_output;
     const stukken: string[] = [];
-    // Eerst eigen notities (geordend per lens), dan vergadervragen
+    // 1. Vrije notities bovenaan (indien aanwezig en gewenst)
+    if (includeVrij && vrijeNotities && vrijeNotities.trim()) {
+      stukken.push(vrijeNotities.trim());
+    }
+    // 2. Eigen notities per lens
     if (ai.lenzen) {
       for (const lens of ai.lenzen) {
         const notitie = notities[slug(lens.naam)];
@@ -142,25 +157,64 @@ export default function VoorbereidingsBlok({
         }
       }
     }
+    // 3. AI-vergadervragen
     if (ai.vergadervragen && ai.vergadervragen.length > 0) {
       stukken.push(
         `Vragen die ik graag in de vergadering wil stellen:\n${ai.vergadervragen.map((v, i) => `${i + 1}. ${v}`).join("\n")}`
       );
     }
-    if (stukken.length === 0) {
-      // Niets om over te nemen — geef hint
+    return stukken.join("\n\n");
+  }
+
+  function vulInbreng() {
+    if (!voorbereiding || !onVulInbreng) return;
+    const heeftVrij = !!vrijeNotities && vrijeNotities.trim().length > 0;
+    if (heeftVrij) {
+      // Bevestigingsdialoog tonen — voorkomt dat ruwe of vertrouwelijke
+      // vrije notities ongewild in de gedeelde inbreng belanden.
+      setNeemVrijeNotitiesMee(true);
+      setInbrengDialoogOpen(true);
+      return;
+    }
+    // Geen vrije notities — direct doorgeven
+    const tekst = bouwInbrengTekst(false);
+    if (!tekst) {
       onVulInbreng(
         "(Tip: voeg eigen notities of de AI-vergadervragen toe aan deze inbreng.)"
       );
       return;
     }
-    onVulInbreng(stukken.join("\n\n"));
+    onVulInbreng(tekst);
   }
 
-  // Geen voorbereiding nog — toon CTA
-  if (!voorbereiding) {
+  function bevestigVulInbreng() {
+    if (!onVulInbreng) return;
+    const tekst = bouwInbrengTekst(neemVrijeNotitiesMee);
+    if (!tekst) {
+      onVulInbreng(
+        "(Tip: voeg eigen notities of de AI-vergadervragen toe aan deze inbreng.)"
+      );
+    } else {
+      onVulInbreng(tekst);
+    }
+    setInbrengDialoogOpen(false);
+  }
+
+  // Detecteer of er werkelijk een gegenereerde AI-voorbereiding bestaat.
+  // Een voorbereidings-rij kan ook bestaan met alleen vrije notities (ai_output = {}).
+  const heeftAI = !!(
+    voorbereiding &&
+    (
+      (voorbereiding.ai_output?.lenzen && voorbereiding.ai_output.lenzen.length > 0) ||
+      (voorbereiding.ai_output?.vergadervragen && voorbereiding.ai_output.vergadervragen.length > 0) ||
+      !!voorbereiding.ai_output?.samenvatting
+    )
+  );
+
+  // Geen AI-voorbereiding (gegenereerd) — toon CTA + vrij notitieveld (privé)
+  if (!heeftAI) {
     return (
-      <div className="bg-amber-50/40 border border-amber-200 rounded-lg p-4">
+      <div className="bg-amber-50/40 border border-amber-200 rounded-lg p-4 space-y-3">
         <div className="flex items-start gap-3">
           <span className="text-base">🔒</span>
           <div className="flex-1">
@@ -195,6 +249,37 @@ export default function VoorbereidingsBlok({
             </div>
             {fout && <div className="text-xs text-red-700 mt-2">{fout}</div>}
           </div>
+        </div>
+
+        {/* Vrij notitieveld — beschikbaar ook zonder AI-voorbereiding */}
+        <div className="bg-white border border-amber-200 rounded-lg p-3">
+          <div className="text-xs font-semibold text-[#0F2744] uppercase tracking-wide mb-2">
+            Mijn aantekeningen
+            <span className="text-[10px] text-gray-400 font-normal ml-2 normal-case tracking-normal">
+              privé · niet zichtbaar voor anderen
+            </span>
+          </div>
+          <textarea
+            rows={3}
+            value={vrijeNotities}
+            onChange={(e) => {
+              setVrijeNotities(e.target.value);
+              setNotitiesGewijzigd(true);
+            }}
+            placeholder="Eigen aantekeningen bij dit agendapunt…"
+            className="w-full text-sm border border-gray-200 rounded px-3 py-2 focus:border-[#C9A84C] outline-none resize-none bg-gray-50"
+          />
+          {notitiesGewijzigd && (
+            <div className="mt-2 flex items-center justify-end">
+              <button
+                onClick={notitiesOpslaan}
+                disabled={bezig === "notities"}
+                className="text-xs text-[#0F2744] font-medium hover:underline disabled:opacity-50"
+              >
+                {bezig === "notities" ? "Opslaan…" : "Aantekeningen opslaan"}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -245,6 +330,26 @@ export default function VoorbereidingsBlok({
             ↻ Vernieuwen
           </button>
         </div>
+      </div>
+
+      {/* Vrij notitieveld — los van AI-lenzen, voor losse aantekeningen */}
+      <div className="bg-white border border-amber-200 rounded-lg p-3">
+        <div className="text-xs font-semibold text-[#0F2744] uppercase tracking-wide mb-2">
+          Mijn aantekeningen
+          <span className="text-[10px] text-gray-400 font-normal ml-2 normal-case tracking-normal">
+            privé · los van AI-output
+          </span>
+        </div>
+        <textarea
+          rows={3}
+          value={vrijeNotities}
+          onChange={(e) => {
+            setVrijeNotities(e.target.value);
+            setNotitiesGewijzigd(true);
+          }}
+          placeholder="Eigen aantekeningen bij dit agendapunt…"
+          className="w-full text-sm border border-gray-200 rounded px-3 py-2 focus:border-[#C9A84C] outline-none resize-none bg-gray-50"
+        />
       </div>
 
       {/* Samenvatting (één zin) */}
@@ -409,6 +514,46 @@ export default function VoorbereidingsBlok({
       {fout && (
         <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
           {fout}
+        </div>
+      )}
+
+      {/* Bevestigingsdialoog vóór vullen van inbreng — voorkomt dat ruwe of
+          vertrouwelijke vrije notities ongewild in de gedeelde inbreng belanden. */}
+      {inbrengDialoogOpen && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-5 space-y-4">
+            <div className="text-sm font-semibold text-[#0F2744]">
+              Vrije notities meenemen in inbreng?
+            </div>
+            <p className="text-xs text-gray-700 leading-relaxed">
+              Uw vrije notities worden opgenomen in de concept-inbreng. U kunt deze
+              nog bewerken voordat u deelt — maar controleer of de inhoud geschikt
+              is voor uw mede-bestuursleden.
+            </p>
+            <label className="flex items-center gap-2 text-sm text-gray-800">
+              <input
+                type="checkbox"
+                checked={neemVrijeNotitiesMee}
+                onChange={(e) => setNeemVrijeNotitiesMee(e.target.checked)}
+                className="rounded"
+              />
+              Vrije notities meenemen
+            </label>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                onClick={() => setInbrengDialoogOpen(false)}
+                className="text-xs text-gray-600 hover:text-[#0F2744] px-3 py-1.5"
+              >
+                Annuleren
+              </button>
+              <button
+                onClick={bevestigVulInbreng}
+                className="bg-[#0F2744] text-white text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-[#1a3858]"
+              >
+                Gebruik in inbreng
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
