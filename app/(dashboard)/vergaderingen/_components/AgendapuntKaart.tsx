@@ -179,6 +179,27 @@ export default function AgendapuntKaart({
     }
   }
 
+  async function herstel() {
+    if (volgordeBezig) return;
+    if (!confirm("Dit agendapunt terugzetten op de agenda?")) return;
+    setVolgordeBezig(true);
+    try {
+      const res = await fetch(`/api/agendapunten/${punt.id}/herstellen`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        alert(data.error || "Herstellen mislukt");
+        return;
+      }
+      router.refresh();
+    } catch {
+      alert("Verbindingsfout");
+    } finally {
+      setVolgordeBezig(false);
+    }
+  }
+
   async function plaatsInbreng() {
     if (!inbrengTekst.trim() || inbrengBezig) return;
     setInbrengBezig(true);
@@ -285,6 +306,18 @@ export default function AgendapuntKaart({
             </div>
           )}
         </div>
+
+        {/* Herstel-knop op verwijderde rijen (alleen voorzitter/beheerder) */}
+        {isVerwijderd && isPrivileged && (
+          <button
+            onClick={herstel}
+            disabled={volgordeBezig}
+            className="text-xs text-emerald-700 hover:text-emerald-900 px-2 py-1 disabled:opacity-50"
+            title="Agendapunt herstellen"
+          >
+            ↶ Herstellen
+          </button>
+        )}
 
         {/* Pijltjes + edit-knop (alleen voor wie mag bewerken, en alleen op actieve punten) */}
         {magBewerken && !isVerwijderd && (
