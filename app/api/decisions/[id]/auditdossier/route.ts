@@ -165,6 +165,8 @@ export async function GET(
       // functies verwachten een array.
       view.bewijs = view.bewijs ?? [];
       view.besluiten = view.besluiten ?? [];
+      // Stemverslagen sinds tranche 2; oudere snapshots missen dit veld.
+      view.stemverslagen = view.stemverslagen ?? [];
     } else {
       // Live actuele toestand.
       view = await buildDecisionDossierView(supabase, decisionId, {

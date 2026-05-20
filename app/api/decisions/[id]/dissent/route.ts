@@ -44,6 +44,7 @@ interface CreateBody {
   gekoppeld_risico_id?: string | null;
   gekoppeld_aanname_id?: string | null;
   gekoppeld_voorwaarde_id?: string | null;
+  stemming_id?: string | null; // optionele koppeling naar een tegen-stem
 }
 
 export async function POST(
@@ -141,6 +142,7 @@ export async function POST(
         gekoppeld_risico_id: body.gekoppeld_risico_id ?? null,
         gekoppeld_aanname_id: body.gekoppeld_aanname_id ?? null,
         gekoppeld_voorwaarde_id: body.gekoppeld_voorwaarde_id ?? null,
+        stemming_id: body.stemming_id ?? null,
       })
       .select()
       .single();

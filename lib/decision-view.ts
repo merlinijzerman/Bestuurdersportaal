@@ -483,6 +483,18 @@ export interface BewijsItem {
 
 // ── Hoofd-view ─────────────────────────────────────────────────────────
 
+/** Samenvatting van een stemverslag voor het auditdossier. */
+export interface StemverslagSummary {
+  id: string;
+  vraag: string;
+  status: "open" | "gesloten" | "ingetrokken";
+  alternatieven: { code: string; label: string }[];
+  uitslag: unknown | null; // Uitslag-shape uit lib/stemming; hier als opaque jsonb
+  ingetrokken_reden: string | null;
+  geopend_op: string;
+  gesloten_op: string | null;
+}
+
 export interface DecisionDossierView {
   decision: DecisionObject;
   procedure: ProcedureSummary;
@@ -490,6 +502,8 @@ export interface DecisionDossierView {
   steps: ProcedureStep[];
   readiness: ReadinessOverview;
   evidence: EvidenceItem[];
+  /** Stemverslagen (gesloten/ingetrokken) gekoppeld aan dit besluit. */
+  stemverslagen: StemverslagSummary[];
   /** Alle bewijsstukken (procedure_bewijs) gekoppeld aan stappen
       van deze procedure, gesorteerd op stap_volgorde dan
       toegevoegd_op. Onderdeel van het auditdossier. */

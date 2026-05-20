@@ -9,6 +9,11 @@ import AgendapuntKaart, {
 } from "../_components/AgendapuntKaart";
 import type { KomendeVergadering } from "../_components/AgendapuntEditModal";
 import type { Voorbereiding } from "../_components/VoorbereidingsBlok";
+import type {
+  StemmingData,
+  StemData,
+  Bestuurslid,
+} from "../_components/StemrondeBlok";
 
 // Page-cache uitschakelen — agendapunt-mutaties moeten direct zichtbaar zijn
 export const dynamic = "force-dynamic";
@@ -103,6 +108,8 @@ export default async function VergaderingDetailPage({
     { data: stukkenRaw },
     { data: inbrengRaw },
     { data: voorbereidingenRaw },
+    { data: stemmingenRaw },
+    { data: bestuursledenRaw },
   ] = await Promise.all([
     agendapuntIds.length > 0
       ? supabase
@@ -124,11 +131,82 @@ export default async function VergaderingDetailPage({
           .eq("gebruiker_id", user.id)
           .in("agendapunt_id", agendapuntIds)
       : Promise.resolve({ data: [] }),
+    agendapuntIds.length > 0
+      ? supabase
+          .from("stemmingen")
+          .select("*")
+          .in("agendapunt_id", agendapuntIds)
+          .order("geopend_op", { ascending: false })
+      : Promise.resolve({ data: [] }),
+    supabase
+      .from("profielen")
+      .select("id, naam")
+      .eq("fonds_id", v.fonds_id)
+      .in("rol", ["bestuurder", "voorzitter"]),
   ]);
 
   const stukken = (stukkenRaw || []) as (Stuk & { agendapunt_id: string })[];
   const inbreng = (inbrengRaw || []) as (Inbreng & { agendapunt_id: string })[];
   const voorbereidingen = (voorbereidingenRaw || []) as Voorbereiding[];
+
+  // ── Stemmingen: kies per agendapunt de relevante stemming (open eerst,
+  //    anders meest recente) en haal stemmen op voor open stemmingen. ──
+  type StemmingRow = StemmingData & { agendapunt_id: string };
+  const alleStemmingen = (stemmingenRaw || []) as StemmingRow[];
+  const bestuursleden = (bestuursledenRaw || []) as Bestuurslid[];
+  const totaalBestuursleden = bestuursleden.length;
+  const naamMap = new Map<string, string | null>(
+    bestuursleden.map((b) => [b.id, b.naam])
+  );
+
+  // Per agendapunt: open stemming heeft prioriteit, anders meest recente.
+  const stemmingPerAgendapunt = new Map<string, StemmingRow>();
+  for (const s of alleStemmingen) {
+    const huidige = stemmingPerAgendapunt.get(s.agendapunt_id);
+    if (!huidige) {
+      stemmingPerAgendapunt.set(s.agendapunt_id, s);
+    } else if (s.status === "open" && huidige.status !== "open") {
+      stemmingPerAgendapunt.set(s.agendapunt_id, s);
+    }
+  }
+
+  // Stemmen ophalen voor de open stemmingen (voor live-totalen + eigen stem).
+  const openStemmingIds = Array.from(stemmingPerAgendapunt.values())
+    .filter((s) => s.status === "open")
+    .map((s) => s.id);
+  const stemmenPerStemming = new Map<string, StemData[]>();
+  if (openStemmingIds.length > 0) {
+    const { data: stemmenRaw } = await supabase
+      .from("stem_uitbrengingen")
+      .select(
+        "id, stemming_id, stemgerechtigde_id, uitgebracht_door, keuze, motivering, is_volmacht, volmacht_toelichting"
+      )
+      .in("stemming_id", openStemmingIds);
+    for (const r of (stemmenRaw || []) as {
+      id: string;
+      stemming_id: string;
+      stemgerechtigde_id: string;
+      uitgebracht_door: string;
+      keuze: string;
+      motivering: string | null;
+      is_volmacht: boolean;
+      volmacht_toelichting: string | null;
+    }[]) {
+      const lijst = stemmenPerStemming.get(r.stemming_id) ?? [];
+      lijst.push({
+        id: r.id,
+        stemgerechtigde_id: r.stemgerechtigde_id,
+        stemgerechtigde_naam: naamMap.get(r.stemgerechtigde_id) ?? null,
+        uitgebracht_door: r.uitgebracht_door,
+        uitgebracht_door_naam: naamMap.get(r.uitgebracht_door) ?? null,
+        keuze: r.keuze,
+        motivering: r.motivering,
+        is_volmacht: r.is_volmacht,
+        volmacht_toelichting: r.volmacht_toelichting,
+      });
+      stemmenPerStemming.set(r.stemming_id, lijst);
+    }
+  }
 
   const agendapunten: Agendapunt[] = (agendapuntenRaw || []).map(
     (a: Omit<Agendapunt, "stukken" | "inbreng">) => ({
@@ -222,6 +300,10 @@ export default async function VergaderingDetailPage({
         <div className="space-y-3">
           {agendapunten.map((a, idx) => {
             const p = pijltjesData.get(a.id);
+            const stemmingRow = stemmingPerAgendapunt.get(a.id) ?? null;
+            const stemmenVoorPunt = stemmingRow
+              ? stemmenPerStemming.get(stemmingRow.id) ?? []
+              : [];
             return (
               <AgendapuntKaart
                 key={a.id}
@@ -237,6 +319,10 @@ export default async function VergaderingDetailPage({
                 kanOmlaag={p?.kanOmlaag ?? false}
                 vorigeVolgorde={p?.vorigeVolgorde ?? null}
                 volgendeVolgorde={p?.volgendeVolgorde ?? null}
+                stemming={stemmingRow}
+                stemmen={stemmenVoorPunt}
+                bestuursleden={bestuursleden}
+                totaalBestuursleden={totaalBestuursleden}
               />
             );
           })}

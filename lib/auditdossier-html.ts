@@ -24,6 +24,7 @@ import {
   type DissentItem,
   type GovernanceEvent,
   type ProcedureStep,
+  type StemverslagSummary,
   ACTION_STATUS_LABEL,
   ASSUMPTION_STATUS_LABEL,
   ASSUMPTION_TYPE_LABEL,
@@ -468,6 +469,90 @@ function renderBesluiten(
 </section>`;
 }
 
+interface UitslagShape {
+  totalen?: Record<string, number>;
+  totaal_stemmen?: number;
+  totaal_bestuursleden?: number;
+  quorum_status?: string;
+  meerderheid_status?: string;
+  winnend_alternatief?: string | null;
+  per_stemgerechtigde?: {
+    naam: string | null;
+    keuze: string;
+    motivering: string | null;
+    is_volmacht: boolean;
+    uitgebracht_door_naam: string | null;
+  }[];
+}
+
+function renderStemverslagen(items: StemverslagSummary[]): string {
+  if (items.length === 0) {
+    return "";
+  }
+  const blokken = items
+    .map((s) => {
+      const alt = (s.alternatieven ?? []) as { code: string; label: string }[];
+      const labelVan = (code: string) =>
+        alt.find((a) => a.code === code)?.label ?? code;
+
+      if (s.status === "ingetrokken") {
+        return `
+        <div class="besluit-blok">
+          <div class="besluit-header">
+            <span class="badge">Ingetrokken</span>
+            <span class="datum">${esc(fmtDatumTijd(s.gesloten_op))}</span>
+          </div>
+          <div class="besluit-formulering"><pre>${esc(s.vraag)}</pre></div>
+          ${s.ingetrokken_reden ? `<div class="kv"><div class="k">Reden</div><div class="v"><pre>${esc(s.ingetrokken_reden)}</pre></div></div>` : ""}
+        </div>`;
+      }
+
+      const u = (s.uitslag ?? {}) as UitslagShape;
+      const winnaar = u.winnend_alternatief
+        ? labelVan(u.winnend_alternatief)
+        : "geen eenduidige uitslag";
+      const totalenRijen = Object.entries(u.totalen ?? {})
+        .map(([code, n]) => `<li>${esc(labelVan(code))}: ${n}</li>`)
+        .join("");
+      const perPersoon = (u.per_stemgerechtigde ?? [])
+        .map(
+          (p) =>
+            `<tr>
+              <td>${esc(p.naam ?? "Onbekend")}${p.is_volmacht ? ` <em>(volmacht via ${esc(p.uitgebracht_door_naam ?? "?")})</em>` : ""}</td>
+              <td>${esc(labelVan(p.keuze))}</td>
+              <td><pre>${esc(p.motivering ?? "—")}</pre></td>
+            </tr>`
+        )
+        .join("");
+
+      return `
+      <div class="besluit-blok">
+        <div class="besluit-header">
+          <span class="badge">Gesloten</span>
+          <span class="datum">${esc(fmtDatumTijd(s.gesloten_op))}</span>
+        </div>
+        <div class="besluit-formulering"><pre>${esc(s.vraag)}</pre></div>
+        <div class="kv"><div class="k">Uitslag</div><div class="v"><strong>${esc(winnaar)}</strong></div></div>
+        <div class="alternatieven"><strong>Totalen:</strong><ul>${totalenRijen}</ul></div>
+        <div class="kv"><div class="k">Quorum</div><div class="v">${esc(u.quorum_status ?? "niet ingesteld")}</div></div>
+        <div class="kv"><div class="k">Meerderheid</div><div class="v">${esc(u.meerderheid_status ?? "niet ingesteld")}</div></div>
+        ${
+          perPersoon
+            ? `<table><thead><tr><th>Bestuurslid</th><th>Keuze</th><th>Motivering</th></tr></thead><tbody>${perPersoon}</tbody></table>`
+            : ""
+        }
+      </div>`;
+    })
+    .join("");
+
+  return `
+<section>
+  <h3>Stemverslagen</h3>
+  <p class="hint">${items.length} stemverslag${items.length === 1 ? "" : "en"} (gesloten of ingetrokken). Het systeem rapporteert de ingevoerde quorum- en meerderheidstoets; formele rechtsgeldigheid wordt niet zelfstandig vastgesteld.</p>
+  ${blokken}
+</section>`;
+}
+
 function renderEvaluaties(items: DecisionDossierView["evaluations"]): string {
   if (items.length === 0) {
     return "";
@@ -660,6 +745,7 @@ export function renderAuditdossierHtml(
   ${renderDissent(view.dissent)}
   ${renderAIInteracties(view.aiOutputs)}
   ${renderBesluiten(view.besluiten ?? [], view.steps)}
+  ${renderStemverslagen(view.stemverslagen ?? [])}
   ${renderEvaluaties(view.evaluations)}
   ${renderSnapshots(view.snapshots)}
   ${renderEvents(view.events)}

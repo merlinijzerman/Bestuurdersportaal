@@ -36,6 +36,7 @@ import {
   type RequirementType,
   type RiskItem,
   type Scenario,
+  type StemverslagSummary,
   mapLegacyStatus,
 } from "./decision-view";
 
@@ -386,6 +387,19 @@ export async function buildDecisionDossierView(
     .order("datum", { ascending: false });
   const besluiten = (besluitenRows ?? []) as BesluitItem[];
 
+  // 10. Stemverslagen — gesloten/ingetrokken stemmingen gekoppeld aan dit
+  // besluit. Open stemmingen horen niet in het auditdossier (§7.6); ze
+  // hebben geen vastliggende uitslag.
+  const { data: stemmingenRows } = await supabase
+    .from("stemmingen")
+    .select(
+      "id, vraag, status, alternatieven, uitslag, ingetrokken_reden, geopend_op, gesloten_op"
+    )
+    .eq("decision_id", decisionId)
+    .in("status", ["gesloten", "ingetrokken"])
+    .order("geopend_op", { ascending: false });
+  const stemverslagen = (stemmingenRows ?? []) as StemverslagSummary[];
+
   return {
     decision,
     procedure,
@@ -393,6 +407,7 @@ export async function buildDecisionDossierView(
     steps,
     readiness,
     evidence,
+    stemverslagen,
     bewijs,
     besluiten,
     assumptions: (assumptionRows ?? []) as Assumption[],

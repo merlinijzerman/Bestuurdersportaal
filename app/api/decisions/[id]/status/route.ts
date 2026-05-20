@@ -198,6 +198,29 @@ export async function POST(
       }
     }
 
+    // 3b. Guard: geen overgang naar (voorwaardelijk) besloten met een open
+    //     gekoppelde stemming. Het besluit zou anders losraken van het
+    //     stemproces (zie VERGADERINGEN-V2-ONTWERP.md §7.6).
+    if (target === "besloten" || target === "voorwaardelijk_besloten") {
+      const { data: openStemming } = await supabase
+        .from("stemmingen")
+        .select("id, vraag")
+        .eq("decision_id", decisionId)
+        .eq("status", "open")
+        .limit(1)
+        .maybeSingle();
+      if (openStemming) {
+        return NextResponse.json(
+          {
+            error:
+              "Er staat nog een open stemronde gekoppeld aan dit besluit. Sluit of trek die eerst in voordat u het besluit registreert.",
+            open_stemming_id: (openStemming as { id: string }).id,
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     // 4. Update uitvoeren — DB-trigger valideert de transitie zelf.
     const { data: bijgewerkt, error: updFout } = await supabase
       .from("decision_objects")

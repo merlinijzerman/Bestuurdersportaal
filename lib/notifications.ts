@@ -44,7 +44,12 @@ export type NotificatieType =
   // Tranche 1 Vergader-basics (2026-05-18)
   | "agendapunt_gewijzigd"
   | "agendapunt_verplaatst"
-  | "agendapunt_verwijderd";
+  | "agendapunt_verwijderd"
+  // Tranche 2 Stemmingen (2026-05-20)
+  | "stemronde_geopend"
+  | "volmachtstem_uitgebracht"
+  | "stemronde_gesloten"
+  | "stemronde_ingetrokken";
 
 export type GerelateerdAanType =
   | "agendapunt"
@@ -67,7 +72,12 @@ export type NotificatiePayload =
   // Tranche 1 Vergader-basics
   | { type: "agendapunt_gewijzigd"; agendapunt_titel: string; velden: string[]; motivering: string; actor_naam: string; vergadering_id: string }
   | { type: "agendapunt_verplaatst"; agendapunt_titel: string; oude_vergadering_id: string; nieuwe_vergadering_id: string; motivering: string; actor_naam: string; vergadering_id: string }
-  | { type: "agendapunt_verwijderd"; agendapunt_titel: string; motivering: string; actor_naam: string; vergadering_id: string };
+  | { type: "agendapunt_verwijderd"; agendapunt_titel: string; motivering: string; actor_naam: string; vergadering_id: string }
+  // Tranche 2 Stemmingen
+  | { type: "stemronde_geopend"; agendapunt_titel: string; vraag: string; actor_naam: string; vergadering_id: string }
+  | { type: "volmachtstem_uitgebracht"; agendapunt_titel: string; vraag: string; uitgebracht_door_naam: string; keuze: string; volmacht_toelichting: string | null; vergadering_id: string }
+  | { type: "stemronde_gesloten"; agendapunt_titel: string; winnend_alternatief: string | null; uitslag_samenvatting: string; quorum_status: string; meerderheid_status: string; vergadering_id: string }
+  | { type: "stemronde_ingetrokken"; agendapunt_titel: string; ingetrokken_reden: string; actor_naam: string; vergadering_id: string };
 
 type NotifyOpts = {
   /** Type van het gerelateerde object voor deeplink. */
@@ -226,6 +236,14 @@ export function vormNotificatieZin(
       return `Agendapunt "${payload.agendapunt_titel ?? "?"}" is verplaatst door ${payload.actor_naam ?? "een collega"}`;
     case "agendapunt_verwijderd":
       return `Agendapunt "${payload.agendapunt_titel ?? "?"}" is verwijderd door ${payload.actor_naam ?? "een collega"}`;
+    case "stemronde_geopend":
+      return `${payload.actor_naam ?? "Iemand"} opende een stemronde op "${payload.agendapunt_titel ?? "?"}"`;
+    case "volmachtstem_uitgebracht":
+      return `${payload.uitgebracht_door_naam ?? "Iemand"} bracht namens u een stem uit ("${payload.keuze ?? "?"}") op "${payload.agendapunt_titel ?? "?"}"`;
+    case "stemronde_gesloten":
+      return `Stemronde op "${payload.agendapunt_titel ?? "?"}" is gesloten — uitslag: ${payload.uitslag_samenvatting ?? "?"}`;
+    case "stemronde_ingetrokken":
+      return `Stemronde op "${payload.agendapunt_titel ?? "?"}" is ingetrokken: ${payload.ingetrokken_reden ?? "?"}`;
     default:
       return "Nieuwe notificatie";
   }
@@ -286,6 +304,14 @@ export function notificatieIcoon(type: NotificatieType): string {
       return "↔";
     case "agendapunt_verwijderd":
       return "🗑";
+    case "stemronde_geopend":
+      return "🗳";
+    case "volmachtstem_uitgebracht":
+      return "🤝";
+    case "stemronde_gesloten":
+      return "✅";
+    case "stemronde_ingetrokken":
+      return "↩";
     default:
       return "•";
   }

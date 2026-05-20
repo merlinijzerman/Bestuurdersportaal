@@ -7,6 +7,11 @@ import VoorbereidingsBlok, {
 import AgendapuntEditModal, {
   type KomendeVergadering,
 } from "./AgendapuntEditModal";
+import StemrondeBlok, {
+  type StemmingData,
+  type StemData,
+  type Bestuurslid,
+} from "./StemrondeBlok";
 
 export interface Stuk {
   id: string;
@@ -46,6 +51,7 @@ export interface Agendapunt {
   verwijderd_op: string | null;
   verwijderd_door: string | null;
   verwijder_reden: string | null;
+  procedure_stap_id: string | null;
   stukken: Stuk[];
   inbreng: Inbreng[];
 }
@@ -127,6 +133,10 @@ export default function AgendapuntKaart({
   kanOmlaag,
   vorigeVolgorde,
   volgendeVolgorde,
+  stemming,
+  stemmen,
+  bestuursleden,
+  totaalBestuursleden,
 }: {
   nummer: number;
   punt: Agendapunt;
@@ -138,6 +148,10 @@ export default function AgendapuntKaart({
   kanOmlaag: boolean;
   vorigeVolgorde: number | null;
   volgendeVolgorde: number | null;
+  stemming: StemmingData | null;
+  stemmen: StemData[];
+  bestuursleden: Bestuurslid[];
+  totaalBestuursleden: number;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(true);
@@ -154,6 +168,7 @@ export default function AgendapuntKaart({
   const isPrivileged = huidigeRol === "voorzitter" || huidigeRol === "beheerder";
   const magBewerken = isEigenaar || isPrivileged;
   const isVerwijderd = !!punt.verwijderd_op;
+  const magStemmingStarten = isPrivileged || isEigenaar;
   const aantalBijdragers = punt.inbreng.length; // voorbereidingen tellen ook mee, maar die zijn privé per gebruiker — server-side wordt het echte aantal getoetst
 
   async function verschuif(richting: "omhoog" | "omlaag") {
@@ -382,6 +397,25 @@ export default function AgendapuntKaart({
         <div className="px-4 pb-4 pl-12 space-y-4 border-t border-gray-100 pt-4">
           {punt.beschrijving && (
             <p className="text-sm text-gray-700 leading-relaxed">{punt.beschrijving}</p>
+          )}
+
+          {/* Stemronde — alleen bij besluitvorming */}
+          {punt.categorie === "besluitvorming" && (
+            <StemrondeBlok
+              agendapuntId={punt.id}
+              decisionGekoppeld={!!punt.procedure_stap_id}
+              besluitvraagDefault={punt.titel}
+              stemming={stemming}
+              stemmen={stemmen}
+              huidigeGebruikerId={huidigeGebruikerId}
+              magStarten={magStemmingStarten}
+              magSluiten={
+                isPrivileged ||
+                stemming?.geopend_door === huidigeGebruikerId
+              }
+              bestuursleden={bestuursleden}
+              totaalBestuursleden={totaalBestuursleden}
+            />
           )}
 
           {/* Stukken */}
