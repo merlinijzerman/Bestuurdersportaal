@@ -338,6 +338,64 @@ export interface AIBron {
   fragment?: string | null;
 }
 
+/**
+ * Type-guard voor één bron-element. Gebruikt door
+ * `validateAIBronnenPayload()` en bedoeld als import voor toekomstige
+ * insert-routes op `decision_ai_interactions`. De DB-CHECK
+ * `chk_bronnen_array` garandeert het type op rij-niveau; deze helper
+ * garandeert het element-schema op API-niveau.
+ */
+export function isAIBron(x: unknown): x is AIBron {
+  if (typeof x !== "object" || x === null) return false;
+  const o = x as Record<string, unknown>;
+  if (o.document_id !== undefined && typeof o.document_id !== "string") return false;
+  if (o.titel !== undefined && typeof o.titel !== "string") return false;
+  if (
+    o.paragraaf !== undefined &&
+    o.paragraaf !== null &&
+    typeof o.paragraaf !== "string"
+  )
+    return false;
+  if (
+    o.fragment !== undefined &&
+    o.fragment !== null &&
+    typeof o.fragment !== "string"
+  )
+    return false;
+  return true;
+}
+
+/**
+ * Valideert dat een onbekende waarde een array van geldige AIBron-elementen
+ * is. Retourneert ofwel de waarde als getypeerde `AIBron[]`, of een
+ * foutboodschap voor de API-response. Bedoeld voor inzet in een
+ * toekomstige `POST /api/decisions/[id]/ai-interactions`-route.
+ *
+ * @example
+ *   const { ok, value, error } = validateAIBronnenPayload(body.bronnen);
+ *   if (!ok) return NextResponse.json({ error }, { status: 400 });
+ *   await supabase.from("decision_ai_interactions").insert({ ..., bronnen: value });
+ */
+export function validateAIBronnenPayload(
+  input: unknown
+): { ok: true; value: AIBron[] } | { ok: false; error: string } {
+  if (input === undefined || input === null) {
+    return { ok: true, value: [] };
+  }
+  if (!Array.isArray(input)) {
+    return { ok: false, error: "Veld 'bronnen' moet een array zijn." };
+  }
+  for (let i = 0; i < input.length; i++) {
+    if (!isAIBron(input[i])) {
+      return {
+        ok: false,
+        error: `Element bronnen[${i}] voldoet niet aan het AIBron-schema (document_id?/titel?/paragraaf?/fragment?, alle strings).`,
+      };
+    }
+  }
+  return { ok: true, value: input as AIBron[] };
+}
+
 export interface AIInteraction {
   id: string;
   decision_id: string;

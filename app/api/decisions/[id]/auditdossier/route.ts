@@ -5,19 +5,29 @@
 // Query-params:
 //   ?versie=actueel          (default) — live DecisionDossierView via
 //                                       buildDecisionDossierView (RLS).
-//   ?versie=besluitmoment    — meest recente decision_audit_snapshots
-//                              payload, zoals bevroren bij overgang naar
-//                              besloten/voorwaardelijk_besloten/
-//                              in_evaluatie/afgesloten.
+//   ?versie=besluitmoment    — snapshot uit decision_audit_snapshots.
+//                              Default: de **meest recente** snapshot,
+//                              ongeacht trigger-status. Bij een
+//                              heropen-cyclus (afgesloten → heropend →
+//                              opnieuw afgesloten) is dat de laatste
+//                              afsluit-snapshot, niet de eerste.
+//   ?trigger=besloten|voorwaardelijk_besloten|in_evaluatie|afgesloten
+//                            — alléén relevant bij versie=besluitmoment.
+//                              Selecteert de meest recente snapshot
+//                              van die specifieke trigger-status.
+//                              Onmisbaar voor reconstructie in een
+//                              heropen-cyclus waar meerdere snapshots
+//                              van dezelfde status bestaan: de eerste
+//                              "besloten"-snapshot vs. een latere.
 //   ?formaat=html            (default) — print-vriendelijke HTML in
 //                                        nieuw tabblad.
 //   ?formaat=json            — DecisionDossierView als JSON, geschikt
 //                              voor machine-consumption / archief.
 //
 // Logging: elke export wordt vastgelegd als governance_event
-// 'auditdossier_geexporteerd' met versie + formaat in de payload, zodat
-// in het audit-spoor te traceren is wie wanneer een dossier-export
-// heeft opgevraagd.
+// 'auditdossier_geexporteerd' met versie + trigger + formaat in de
+// payload, zodat in het audit-spoor te traceren is wie wanneer welke
+// dossier-export heeft opgevraagd.
 
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase-server";
@@ -30,6 +40,18 @@ import type {
 
 type Versie = "actueel" | "besluitmoment";
 type Formaat = "html" | "json";
+type TriggerStatus =
+  | "besloten"
+  | "voorwaardelijk_besloten"
+  | "in_evaluatie"
+  | "afgesloten";
+
+const TOEGESTANE_TRIGGERS: TriggerStatus[] = [
+  "besloten",
+  "voorwaardelijk_besloten",
+  "in_evaluatie",
+  "afgesloten",
+];
 
 interface SnapshotRow {
   id: string;
@@ -58,9 +80,25 @@ export async function GET(
     const url = new URL(req.url);
     const versieRaw = (url.searchParams.get("versie") ?? "actueel").toLowerCase();
     const formaatRaw = (url.searchParams.get("formaat") ?? "html").toLowerCase();
+    const triggerRaw = (url.searchParams.get("trigger") ?? "").toLowerCase();
     const versie: Versie =
       versieRaw === "besluitmoment" ? "besluitmoment" : "actueel";
     const formaat: Formaat = formaatRaw === "json" ? "json" : "html";
+    const trigger: TriggerStatus | null =
+      triggerRaw && TOEGESTANE_TRIGGERS.includes(triggerRaw as TriggerStatus)
+        ? (triggerRaw as TriggerStatus)
+        : null;
+
+    // trigger is alleen zinvol bij versie=besluitmoment
+    if (trigger && versie !== "besluitmoment") {
+      return NextResponse.json(
+        {
+          error:
+            "Parameter ?trigger= werkt alleen samen met ?versie=besluitmoment.",
+        },
+        { status: 400 }
+      );
+    }
 
     // RLS: bestaan + toegang.
     const { data: decision } = await supabase
@@ -79,19 +117,25 @@ export async function GET(
     let snapshotMeta: { hash: string; aangemaakt_op: string } | null = null;
 
     if (versie === "besluitmoment") {
-      // Meest recente snapshot ophalen.
-      const { data: snapRow } = await supabase
+      // Snapshot ophalen — als ?trigger= is meegegeven, filter daarop;
+      // anders meest recente ongeacht trigger-status.
+      let snapQuery = supabase
         .from("decision_audit_snapshots")
         .select("id, decision_id, trigger_status, hash, aangemaakt_op, snapshot")
         .eq("decision_id", decisionId)
         .order("aangemaakt_op", { ascending: false })
-        .limit(1)
-        .maybeSingle<SnapshotRow>();
+        .limit(1);
+      if (trigger) {
+        snapQuery = snapQuery.eq("trigger_status", trigger);
+      }
+      const { data: snapRow } = await snapQuery.maybeSingle<SnapshotRow>();
       if (!snapRow) {
+        const triggerHint = trigger
+          ? ` van trigger-status "${trigger}"`
+          : "";
         return NextResponse.json(
           {
-            error:
-              "Geen audit-snapshot beschikbaar voor dit besluit. Snapshots ontstaan automatisch bij overgang naar besloten / voorwaardelijk_besloten / in_evaluatie / afgesloten.",
+            error: `Geen audit-snapshot${triggerHint} beschikbaar voor dit besluit. Snapshots ontstaan automatisch bij overgang naar besloten / voorwaardelijk_besloten / in_evaluatie / afgesloten.`,
           },
           { status: 404 }
         );
@@ -146,13 +190,14 @@ export async function GET(
       actor_naam: aanvragerNaam,
       object_type: "decision_object",
       object_id: decisionId,
-      nieuwe_waarde: { versie, formaat },
+      nieuwe_waarde: { versie, formaat, trigger: trigger ?? null },
     });
 
     // Bestandsnaam voor download — veilig (geen spaces of speciale tekens).
     const veiligeNaam = decision.besluit_code.replace(/[^a-zA-Z0-9_-]/g, "_");
     const datumStempel = new Date().toISOString().slice(0, 10);
-    const baseFilename = `auditdossier_${veiligeNaam}_${versie}_${datumStempel}`;
+    const triggerSuffix = trigger ? `_${trigger}` : "";
+    const baseFilename = `auditdossier_${veiligeNaam}_${versie}${triggerSuffix}_${datumStempel}`;
 
     if (formaat === "json") {
       return new NextResponse(JSON.stringify(view, null, 2), {
