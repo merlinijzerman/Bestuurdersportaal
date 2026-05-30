@@ -1,6 +1,6 @@
 # RAG-verbetering — ontwerp
 
-> Status: **Fase 1a in implementatie** (2026-05-30). Fase 1b/2/3 zijn ontworpen maar nog niet gebouwd.
+> Status: **Fase 1a + 1b opgeleverd** (2026-05-30). Fase 2/3 zijn ontworpen maar nog niet gebouwd.
 > Bron van waarheid blijft de code + migraties; dit document beschrijft *wat en waarom*.
 
 ## Aanleiding
@@ -39,9 +39,15 @@ De bestaande fallback-cascade (FTS zonder Dutch-config → ILIKE) blijft als van
 
 **Grounding.** De strikte modus (`SP_DOCUMENTEN_REGELS`) baseert antwoorden al uitsluitend op gevonden bronnen; dit is geverifieerd, niet herschreven (de toon-systeemprompt blijft ongemoeid).
 
-### Fase 1b — pagina-/paragraaf-metadata (volgende iteratie)
+### Fase 1b — pagina-/paragraaf-metadata (opgeleverd 2026-05-30)
 
-Bewust losgekoppeld: chunks een correct paginanummer geven vereist dat de pagina-grenzen door `extractTekstUitPdf` → `maakChunks` heen worden geregen (nu worden pagina's samengevoegd vóór het chunken). **PDF-first** — DOCX heeft geen pagina's, XLSX heeft tabbladen. Bestaande documenten hebben `pagina = null` tot her-indexering; haakt aan het geplande her-extract-endpoint (HANDOVER vervolgstap 15).
+Twee delen, beide gebouwd.
+
+**Deel 1 — pagina-bewuste extractie + chunking.** `extractTekst` (`lib/document-extractie.ts`) geeft nu naast de platte `tekst` ook `segmenten: TekstSegment[]` terug: voor PDF één segment per pagina (`pagina = paginanummer`), voor DOCX één segment (`pagina = null`), voor XLSX één segment per tabblad (`paragraaf = "Tabblad: <naam>"`). De nieuwe pure functie `maakChunksUitSegmenten` (`lib/chunking.ts`) chunkt per segment en tagt elke chunk met `pagina`/`paragraaf`; een chunk loopt nooit over een segmentgrens. De upload-route slaat die velden nu op i.p.v. `null`. De chunk-helpers zijn uit `lib/rag.ts` verplaatst naar het Supabase-vrije `lib/chunking.ts` (en daar opnieuw geëxporteerd), zodat ze zuiver te sanity-testen zijn.
+
+**Deel 2 — her-extract endpoint.** `POST /api/documents/[id]/her-extract` haalt het origineel uit Storage, draait `extractTekst` opnieuw, vervangt de chunks en zet `geindexeerd`/`paginas` bij. Alleen voor documenten met `opslag_pad`. Server-side beperkt tot voorzitter/beheerder; tenant-isolatie en chunk-delete/-insert lopen via RLS (`fonds chunks`). Hiermee profiteren bestaande documenten van de pagina-metadata zonder opnieuw te uploaden.
+
+Bewust nog niet in 1b: detectie van "§3.2"/"Art. 12"-koppen — dat is structuur-chunking en hoort bij Fase 2.
 
 ### Fase 2 — structurele chunking + chunk-metadata
 

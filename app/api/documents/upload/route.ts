@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createServerSupabase } from "@/lib/supabase-server";
-import { maakChunks } from "@/lib/rag";
+import { maakChunksUitSegmenten } from "@/lib/rag";
 import {
   bepaalBestandstype,
   CONTENT_TYPE_PER_BESTANDSTYPE,
@@ -236,14 +236,15 @@ export async function POST(req: NextRequest) {
         .eq("id", document.id);
     }
 
-    // Maak chunks voor RAG
-    const chunks = maakChunks(extractie.tekst);
+    // Maak chunks voor RAG — pagina-/sectie-bewust, zodat de bronvermelding
+    // "pag. X" / "Tabblad: Y" klopt (zie RAG-VERBETERING-ONTWERP.md Fase 1b).
+    const chunks = maakChunksUitSegmenten(extractie.segmenten);
     const chunkRecords = chunks.map((chunk, index) => ({
       document_id: document.id,
       chunk_index: index,
-      tekst: chunk,
-      pagina: null,
-      paragraaf: null,
+      tekst: chunk.tekst,
+      pagina: chunk.pagina,
+      paragraaf: chunk.paragraaf,
     }));
 
     const batchGrootte = 50;

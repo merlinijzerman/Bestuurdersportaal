@@ -48,6 +48,7 @@ export default function BibliotheekPage() {
   const [deactiveerDoc, setDeactiveerDoc] = useState<Document | null>(null);
   const [deactiveerReden, setDeactiveerReden] = useState("");
   const [actieBezig, setActieBezig] = useState(false);
+  const [herindexId, setHerindexId] = useState<string | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploaden, setUploaden] = useState(false);
   const [uploadBericht, setUploadBericht] = useState("");
@@ -133,6 +134,25 @@ export default function BibliotheekPage() {
       alert(data?.error || "Reactiveren is niet gelukt.");
       return;
     }
+    haalDocumenten();
+  }
+
+  // Her-indexeren: haalt het origineel opnieuw door de extractie-pipeline en
+  // vervangt de chunks (o.a. om pagina-/sectie-metadata toe te voegen aan
+  // documenten van vóór die feature). Server beperkt dit tot voorzitter/beheerder.
+  async function herindexeer(doc: Document) {
+    setHerindexId(doc.id);
+    setUploadBericht("");
+    const res = await fetch(`/api/documents/${doc.id}/her-extract`, {
+      method: "POST",
+    });
+    const data = await res.json().catch(() => ({}));
+    setHerindexId(null);
+    if (!res.ok) {
+      alert(data?.error || "Her-indexeren is niet gelukt.");
+      return;
+    }
+    setUploadBericht(`✅ ${data.bericht || "Document opnieuw geïndexeerd."}`);
     haalDocumenten();
   }
 
@@ -342,6 +362,21 @@ export default function BibliotheekPage() {
                           >
                             Bekijken
                           </a>
+                        )}
+                        {kanInzien && !inactief && (
+                          <button
+                            onClick={() => {
+                              herindexeer(doc);
+                              setOpenMenuId(null);
+                            }}
+                            disabled={herindexId === doc.id}
+                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                            title="Origineel opnieuw door de extractie-pipeline halen (voorzitter/beheerder)"
+                          >
+                            {herindexId === doc.id
+                              ? "Bezig met her-indexeren..."
+                              : "Her-indexeren"}
+                          </button>
                         )}
                         {!inactief ? (
                           <button
