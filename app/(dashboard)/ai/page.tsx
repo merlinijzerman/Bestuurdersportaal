@@ -543,14 +543,24 @@ function Bronkaart({
   }`;
 
   if (bron.heeft_origineel) {
+    // Spring direct naar de pagina als we die weten. De #page=N-fragment wordt
+    // gehonoreerd door de ingebouwde PDF-viewers van Chrome/Edge/Firefox; voor
+    // Word/Excel (download) wordt de fragment genegeerd — geen kwaad.
+    const href = bron.pagina
+      ? `/api/documents/${bron.document_id}/bestand#page=${bron.pagina}`
+      : `/api/documents/${bron.document_id}/bestand`;
     return (
       <a
         id={idVoorScroll}
-        href={`/api/documents/${bron.document_id}/bestand`}
+        href={href}
         target="_blank"
         rel="noopener noreferrer"
         className={`group ${baseKlasse} hover:border-[#C9A84C] hover:shadow-sm cursor-pointer scroll-mt-24`}
-        title="Origineel openen in nieuw tabblad"
+        title={
+          bron.pagina
+            ? `Origineel openen op pagina ${bron.pagina} (nieuw tabblad)`
+            : "Origineel openen in nieuw tabblad"
+        }
       >
         {inhoud}
       </a>
