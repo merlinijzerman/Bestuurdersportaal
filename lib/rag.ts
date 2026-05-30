@@ -1,5 +1,9 @@
 // RAG pipeline: zoek relevante document chunks voor een vraag
 import { createServerSupabase } from "./supabase-server";
+import { selecteerChunks } from "./rag-select";
+
+// Pure selectie-helper opnieuw exporteren zodat bestaande imports werken.
+export { selecteerChunks } from "./rag-select";
 
 export interface DocumentChunk {
   id: string;
@@ -8,12 +12,40 @@ export interface DocumentChunk {
   pagina: number | null;
   paragraaf: string | null;
   chunk_index: number;
+  // Relevantie-score uit ts_rank_cd; null bij fallback-zoekpaden zonder ranking.
+  rang?: number | null;
   documenten: {
     titel: string;
     bron: string;
     bibliotheek: string;
     opslag_pad: string | null;
   };
+}
+
+// Diagnostiek per retrieval: wat is opgehaald en wat is uiteindelijk
+// geselecteerd voor de prompt. Wordt insert-only weggeschreven in
+// governance_log.retrieval_meta — geen wijziging aan append-only-garanties.
+export interface RetrievalMeta {
+  methode: "fts_dutch_ranked" | "fts_plain" | "ilike" | "geen";
+  opgehaald: number;
+  geselecteerd: number;
+  chunks: { id: string; document_id: string; rang: number | null }[];
+}
+
+// Platte rij zoals public.zoek_chunks(...) die teruggeeft (zie migratie
+// 2026_05_30_rag_ranking.sql). Wordt naar DocumentChunk gemapt.
+interface ZoekChunkRij {
+  id: string;
+  document_id: string;
+  tekst: string;
+  pagina: number | null;
+  paragraaf: string | null;
+  chunk_index: number;
+  titel: string;
+  bron: string;
+  bibliotheek: string;
+  opslag_pad: string | null;
+  rang: number;
 }
 
 export interface BronVerwijzing {
@@ -26,15 +58,75 @@ export interface BronVerwijzing {
   heeft_origineel: boolean;
 }
 
-// Zoek relevante chunks met Postgres full-text search + ILIKE fallback
-export async function zoekRelevanteChunks(
-  vraag: string,
-  fondsId: string,
-  maxResults = 6
-): Promise<DocumentChunk[]> {
-  const supabase = await createServerSupabase();
+// Map een platte RPC-rij naar het DocumentChunk-shape met geneste documenten.
+function rijNaarChunk(r: ZoekChunkRij): DocumentChunk {
+  return {
+    id: r.id,
+    document_id: r.document_id,
+    tekst: r.tekst,
+    pagina: r.pagina,
+    paragraaf: r.paragraaf,
+    chunk_index: r.chunk_index,
+    rang: r.rang,
+    documenten: {
+      titel: r.titel,
+      bron: r.bron,
+      bibliotheek: r.bibliotheek,
+      opslag_pad: r.opslag_pad,
+    },
+  };
+}
 
-  // Schoon de zoekterm op — eenvoudige spatie-gescheiden woorden voor plainto_tsquery
+function bouwMeta(
+  methode: RetrievalMeta["methode"],
+  opgehaald: number,
+  geselecteerd: DocumentChunk[]
+): RetrievalMeta {
+  return {
+    methode,
+    opgehaald,
+    geselecteerd: geselecteerd.length,
+    chunks: geselecteerd.map((c) => ({
+      id: c.id,
+      document_id: c.document_id,
+      rang: c.rang ?? null,
+    })),
+  };
+}
+
+// Zoek relevante chunks mét retrieval-diagnostiek.
+//
+// Strategie:
+//   1. RPC zoek_chunks — Dutch FTS met relevantie-sortering (ts_rank_cd),
+//      over-fetch (~3× of min. 20) zodat de selectie iets te kiezen heeft.
+//   2. Fallback: FTS zonder Dutch-config (niet-Nederlandse documenten).
+//   3. Laatste redmiddel: ILIKE op het langste trefwoord.
+// Tenant-isolatie loopt overal via RLS (de RPC is SECURITY INVOKER).
+export async function zoekRelevanteChunksMetMeta(
+  vraag: string,
+  _fondsId: string,
+  maxResults = 8
+): Promise<{ chunks: DocumentChunk[]; meta: RetrievalMeta }> {
+  const supabase = await createServerSupabase();
+  const overFetch = Math.max(maxResults * 3, 20);
+  const maxPerDoc = Math.max(3, Math.ceil(maxResults / 2));
+
+  // Poging 1: gerangschikte RPC (Dutch FTS + ts_rank_cd).
+  const { data, error } = await supabase.rpc("zoek_chunks", {
+    p_query: vraag,
+    p_limit: overFetch,
+  });
+
+  if (!error && Array.isArray(data) && data.length > 0) {
+    const gerangschikt = (data as ZoekChunkRij[]).map(rijNaarChunk);
+    const geselecteerd = selecteerChunks(gerangschikt, maxResults, maxPerDoc);
+    return {
+      chunks: geselecteerd,
+      meta: bouwMeta("fts_dutch_ranked", gerangschikt.length, geselecteerd),
+    };
+  }
+
+  // Fallback-cascade (ongerangschikt) — vangnet als de RPC niets oplevert.
   const zoekterm = vraag
     .replace(/[?!.,;:()'"/\\]/g, " ")
     .trim()
@@ -52,34 +144,26 @@ export async function zoekRelevanteChunks(
     documenten!inner(titel, bron, bibliotheek, opslag_pad)
   `;
 
-  // Poging 1: full-text search met plain type (plainto_tsquery — meest robuust)
-  // Inactieve documenten worden uitgesloten via filter op de joined-relatie.
   if (zoekterm.length > 0) {
-    const { data, error } = await supabase
-      .from("document_chunks")
-      .select(selectQuery)
-      .eq("documenten.actief", true)
-      .textSearch("zoek_vector", zoekterm, { type: "plain", config: "dutch" })
-      .limit(maxResults);
-
-    if (!error && data && data.length > 0) {
-      return data as unknown as DocumentChunk[];
-    }
-
-    // Poging 2: probeer zonder Dutch config (voor niet-Nederlandse documenten)
+    // Poging 2: FTS zonder Dutch-config.
     const { data: data2, error: error2 } = await supabase
       .from("document_chunks")
       .select(selectQuery)
       .eq("documenten.actief", true)
       .textSearch("zoek_vector", zoekterm, { type: "plain" })
-      .limit(maxResults);
+      .limit(overFetch);
 
     if (!error2 && data2 && data2.length > 0) {
-      return data2 as unknown as DocumentChunk[];
+      const gevonden = data2 as unknown as DocumentChunk[];
+      const geselecteerd = selecteerChunks(gevonden, maxResults, maxPerDoc);
+      return {
+        chunks: geselecteerd,
+        meta: bouwMeta("fts_plain", gevonden.length, geselecteerd),
+      };
     }
   }
 
-  // Poging 3: ILIKE fallback op het belangrijkste trefwoord
+  // Poging 3: ILIKE op het langste trefwoord.
   const trefwoorden = zoekterm.split(" ").filter((w) => w.length > 3);
   if (trefwoorden.length > 0) {
     const hoofdwoord = trefwoorden.sort((a, b) => b.length - a.length)[0];
@@ -88,14 +172,29 @@ export async function zoekRelevanteChunks(
       .select(selectQuery)
       .eq("documenten.actief", true)
       .ilike("tekst", `%${hoofdwoord}%`)
-      .limit(maxResults);
+      .limit(overFetch);
 
     if (data3 && data3.length > 0) {
-      return data3 as unknown as DocumentChunk[];
+      const gevonden = data3 as unknown as DocumentChunk[];
+      const geselecteerd = selecteerChunks(gevonden, maxResults, maxPerDoc);
+      return {
+        chunks: geselecteerd,
+        meta: bouwMeta("ilike", gevonden.length, geselecteerd),
+      };
     }
   }
 
-  return [];
+  return { chunks: [], meta: bouwMeta("geen", 0, []) };
+}
+
+// Backwards-compatibele wrapper: geeft alleen de chunks terug.
+export async function zoekRelevanteChunks(
+  vraag: string,
+  fondsId: string,
+  maxResults = 8
+): Promise<DocumentChunk[]> {
+  const { chunks } = await zoekRelevanteChunksMetMeta(vraag, fondsId, maxResults);
+  return chunks;
 }
 
 // Maak een gestructureerde context-string voor Claude

@@ -82,6 +82,33 @@ create table if not exists public.document_chunks (
 create index if not exists idx_chunks_zoek on public.document_chunks using gin(zoek_vector);
 create index if not exists idx_chunks_document on public.document_chunks(document_id);
 
+-- RAG-retrieval met relevantie-sortering (ts_rank_cd). supabase-js .textSearch()
+-- kan niet ORDER BY ts_rank_cd(...), daarom gebeurt het ranken hier in de DB.
+-- SECURITY INVOKER: RLS op document_chunks/documenten dwingt tenant-isolatie af.
+-- Zie migratie 2026_05_30_rag_ranking.sql.
+create or replace function public.zoek_chunks(
+  p_query text,
+  p_limit int default 20
+)
+returns table (
+  id uuid, document_id uuid, tekst text, pagina int, paragraaf text,
+  chunk_index int, titel text, bron text, bibliotheek text,
+  opslag_pad text, rang real
+)
+language sql stable security invoker
+set search_path = public, pg_temp
+as $$
+  select c.id, c.document_id, c.tekst, c.pagina, c.paragraaf, c.chunk_index,
+         d.titel, d.bron, d.bibliotheek, d.opslag_pad,
+         ts_rank_cd(c.zoek_vector, q.query) as rang
+    from public.document_chunks c
+    join public.documenten d on d.id = c.document_id
+   cross join websearch_to_tsquery('dutch', p_query) as q(query)
+   where d.actief = true and c.zoek_vector @@ q.query
+   order by rang desc, c.chunk_index asc
+   limit greatest(p_limit, 1);
+$$;
+
 -- ── 5. Governance log ──────────────────────────────────────
 create table if not exists public.governance_log (
   id              uuid primary key default uuid_generate_v4(),
@@ -93,11 +120,13 @@ create table if not exists public.governance_log (
   bronnen         jsonb default '[]',  -- [{document_id, titel, pagina, paragraaf}]
   modus           text check (modus in ('documenten','combineren','algemeen')) default 'documenten',
   model           text default 'claude-sonnet-4-5',
+  retrieval_meta  jsonb,  -- RAG-diagnostiek: {methode, opgehaald, geselecteerd, chunks:[{id,document_id,rang}]}
   aangemaakt      timestamptz default now()
 );
 
 -- Migratie voor bestaande installaties (idempotent)
 alter table public.governance_log add column if not exists modus text default 'documenten';
+alter table public.governance_log add column if not exists retrieval_meta jsonb;
 
 create index if not exists idx_log_fonds on public.governance_log(fonds_id);
 create index if not exists idx_log_gebruiker on public.governance_log(gebruiker_id);

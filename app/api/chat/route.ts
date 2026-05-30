@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createServerSupabase } from "@/lib/supabase-server";
-import { zoekRelevanteChunks, maakContext, type DocumentChunk, type BronVerwijzing } from "@/lib/rag";
+import { zoekRelevanteChunksMetMeta, maakContext, type DocumentChunk, type BronVerwijzing, type RetrievalMeta } from "@/lib/rag";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -198,9 +198,12 @@ export async function POST(req: NextRequest) {
     let chunks: DocumentChunk[] = [];
     let bronnen: BronVerwijzing[] = [];
     let contextTekst = "";
+    let retrievalMeta: RetrievalMeta | null = null;
 
     if (modus === "documenten" || modus === "combineren") {
-      chunks = await zoekRelevanteChunks(vraag, fonds_id);
+      const res = await zoekRelevanteChunksMetMeta(vraag, fonds_id);
+      chunks = res.chunks;
+      retrievalMeta = res.meta;
       const ctx = maakContext(chunks);
       contextTekst = ctx.contextTekst;
       bronnen = ctx.bronnen;
@@ -248,7 +251,8 @@ export async function POST(req: NextRequest) {
     const antwoord =
       response.content[0].type === "text" ? response.content[0].text : "";
 
-    // Sla op in governance log (incl. modus)
+    // Sla op in governance log (incl. modus + retrieval-diagnostiek).
+    // retrieval_meta is insert-only: append-only-discipline blijft intact.
     await supabase.from("governance_log").insert({
       gebruiker_id: user.id,
       gebruiker_naam: profiel?.naam || user.email,
@@ -258,6 +262,7 @@ export async function POST(req: NextRequest) {
       bronnen,
       modus,
       model: "claude-sonnet-4-5",
+      retrieval_meta: retrievalMeta,
     });
 
     return NextResponse.json({
