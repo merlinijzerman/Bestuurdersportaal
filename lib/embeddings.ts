@@ -17,7 +17,11 @@ export const EMBED_PROVIDER = "mistral";
 export const EMBED_MODEL = "mistral-embed";
 export const EMBED_DIMS = 1024;
 
-const MAX_BATCH = 100; // teksten per API-call
+// Mistral-limieten per embeddings-verzoek: max 128 items én max ~16.384 tokens.
+// We batchen op beide: een ruim item-maximum én een conservatief tekenbudget
+// (~4 tekens/token → 24.000 tekens ≈ ~6.000 tokens, veilig onder de limiet).
+const MAX_BATCH_ITEMS = 64;
+const MAX_BATCH_CHARS = 24000;
 const MAX_RETRIES = 3;
 
 function slaap(ms: number): Promise<void> {
@@ -55,12 +59,25 @@ async function embedBatch(teksten: string[]): Promise<number[][]> {
   throw new Error("Mistral embeddings: max retries overschreden");
 }
 
-// Embed een willekeurig aantal teksten; splitst automatisch in batches.
-// Gebruikt bij ingest (chunk-teksten) en backfill.
+// Embed een willekeurig aantal teksten; splitst automatisch in batches die
+// binnen Mistral's item- én tokenlimiet per verzoek blijven. Een enkele zeer
+// lange tekst gaat alleen in zijn eigen batch (chunks zijn normaal ~800 tekens,
+// ruim onder de per-document-limiet). Gebruikt bij ingest en backfill.
 export async function embedTeksten(teksten: string[]): Promise<number[][]> {
   const resultaat: number[][] = [];
-  for (let i = 0; i < teksten.length; i += MAX_BATCH) {
-    const batch = teksten.slice(i, i + MAX_BATCH);
+  let i = 0;
+  while (i < teksten.length) {
+    const batch: string[] = [];
+    let chars = 0;
+    while (
+      i < teksten.length &&
+      batch.length < MAX_BATCH_ITEMS &&
+      (batch.length === 0 || chars + teksten[i].length <= MAX_BATCH_CHARS)
+    ) {
+      chars += teksten[i].length;
+      batch.push(teksten[i]);
+      i++;
+    }
     resultaat.push(...(await embedBatch(batch)));
   }
   return resultaat;
