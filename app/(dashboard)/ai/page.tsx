@@ -110,7 +110,10 @@ export default function AiPage() {
     berichtIdx: number;
     bronIdx: number;
   } | null>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  // Index van het bericht waar na het versturen van een vraag naartoe moet
+  // worden gescrold (begin van de vraag bovenaan), i.p.v. mee te schuiven naar
+  // de onderkant/bronnen tijdens het streamen.
+  const scrollDoel = useRef<number | null>(null);
   const highlightTimer = useRef<number | null>(null);
   // Persistentie (Fase B2): id van het huidige opgeslagen gesprek en de
   // ingelogde gebruiker. Refs i.p.v. state — wijziging hoeft geen re-render.
@@ -278,7 +281,15 @@ export default function AiPage() {
   }, []);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    // Scroll alleen wanneer er een nieuw doel is gezet (na het versturen van een
+    // vraag) — niet bij elk gestreamd token. Daardoor blijft de weergave aan het
+    // begin van het antwoord staan in plaats van mee te schieten naar onderen.
+    if (scrollDoel.current != null) {
+      document
+        .getElementById(`bericht-${scrollDoel.current}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      scrollDoel.current = null;
+    }
   }, [berichten]);
 
   async function stuurBericht(vraag?: string) {
@@ -291,6 +302,9 @@ export default function AiPage() {
     const nieuw: Bericht = { rol: "gebruiker", tekst };
     const conversatie = [...berichten, nieuw];
     setBerichten(conversatie);
+    // Scroll het zojuist gestelde bericht naar boven, zodat het antwoord eronder
+    // vanaf het begin in beeld komt te staan.
+    scrollDoel.current = conversatie.length - 1;
 
     // Bouw de messages-array voor de API. We slaan het eerste bericht over
     // als dat de welkomst-AI-tekst is (puur UI, geen onderdeel van het gesprek).
@@ -568,7 +582,7 @@ export default function AiPage() {
       {/* Chat */}
       <div className="flex-1 overflow-y-auto p-6 space-y-5">
         {berichten.map((b, i) => (
-          <div key={i} className={b.rol === "gebruiker" ? "flex justify-end" : "flex gap-3"}>
+          <div key={i} id={`bericht-${i}`} className={b.rol === "gebruiker" ? "flex justify-end" : "flex gap-3"}>
             {b.rol === "ai" && (
               // eslint-disable-next-line @next/next/no-img-element
               <img src="/ai-assistent.png" alt="AI" className="w-8 h-8 object-contain flex-shrink-0 mt-0.5" />
@@ -634,7 +648,6 @@ export default function AiPage() {
             </div>
           </div>
         )}
-        <div ref={bottomRef} />
       </div>
 
       {/* Voorgestelde vragen */}
