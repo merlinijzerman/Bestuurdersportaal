@@ -785,9 +785,9 @@ function parseInline(
     if (!deel) return null;
 
     const bronMatch = deel.match(/^\[Bron (\d+)\]$/i);
-    if (bronMatch && bronnen) {
+    if (bronMatch) {
       const bronIdx = parseInt(bronMatch[1], 10) - 1;
-      const bron = bronnen[bronIdx];
+      const bron = bronnen?.[bronIdx];
       if (bron) {
         return (
           <BronPill
@@ -802,6 +802,9 @@ function parseInline(
           />
         );
       }
+      // Bronvermelding-validatie: een citatie die niet aan een aangeleverde
+      // bron te koppelen is, wordt zichtbaar gemarkeerd i.p.v. stil getoond.
+      return <OngeldigeBronPill key={i} nummer={bronIdx + 1} />;
     }
     if (/^\[algemene kennis\]$/i.test(deel)) {
       return <KennisPill key={i} label="Algemene kennis" />;
@@ -880,6 +883,20 @@ function KennisPill({ label }: { label: string }) {
       title="Niet uit een intern document — algemene kennis of wetgeving"
     >
       {label}
+    </span>
+  );
+}
+
+// Bronvermelding-validatie: een [Bron N] die niet aan een aangeleverde bron kan
+// worden gekoppeld. Zichtbaar gemarkeerd zodat de bestuurder een mogelijk
+// onjuiste/gehallucineerde verwijzing herkent en kan verifiëren.
+function OngeldigeBronPill({ nummer }: { nummer: number }) {
+  return (
+    <span
+      className="relative -top-[1px] inline-flex items-center gap-0.5 align-baseline mx-0.5 px-1.5 h-[18px] rounded-md text-[10px] font-semibold leading-none bg-amber-100 text-amber-700 border border-amber-300"
+      title="Deze bronverwijzing kon niet aan een aangeleverde bron worden gekoppeld. Controleer dit; mogelijk een onjuiste of niet-onderbouwde verwijzing."
+    >
+      ⚠ Bron {nummer}?
     </span>
   );
 }

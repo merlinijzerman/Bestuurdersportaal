@@ -35,6 +35,9 @@ export interface RetrievalMeta {
   // optioneel zodat bestaande aanroepers ongemoeid blijven.
   zoekvraag?: string;
   gereformuleerd?: boolean;
+  // Bronvermelding-validatie: aantal [Bron N]-citaties in het antwoord en
+  // hoeveel daarvan niet naar een aangeleverde bron verwijzen (dangling).
+  citaties?: { totaal: number; ongeldig: number };
 }
 
 // Platte rij zoals public.zoek_chunks(...) die teruggeeft (zie migratie

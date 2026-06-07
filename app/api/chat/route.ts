@@ -331,6 +331,23 @@ export async function POST(req: NextRequest) {
 
           await claudeStream.finalMessage();
 
+          // Bronvermelding-validatie: tel [Bron N]-citaties en hoeveel daarvan
+          // buiten het bereik van de aangeleverde bronnen vallen (dangling).
+          // Audit-signaal: zo is in de log zichtbaar wanneer het model een
+          // niet-bestaande bron aanhaalde.
+          if (retrievalMeta) {
+            const citatieMatches = volledig.match(/\[Bron (\d+)\]/gi) || [];
+            let ongeldig = 0;
+            for (const m of citatieMatches) {
+              const n = parseInt(/\d+/.exec(m)![0], 10);
+              if (n < 1 || n > bronnen.length) ongeldig++;
+            }
+            retrievalMeta = {
+              ...retrievalMeta,
+              citaties: { totaal: citatieMatches.length, ongeldig },
+            };
+          }
+
           // Loggen ná voltooiing, met het volledige antwoord.
           await supabase.from("governance_log").insert({
             gebruiker_id: user.id,
