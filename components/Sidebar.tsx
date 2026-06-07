@@ -7,7 +7,7 @@ const navItems = [
   { href: "/", label: "Home", icon: "🏠", section: "Overzicht" },
   { href: "/dashboard", label: "Stuurinformatie", icon: "📊", section: "Overzicht" },
   { href: "/klantbeeld", label: "Klantbeeld", icon: "👥", section: "Overzicht" },
-  { href: "/ai", label: "AI Assistent", icon: "🤖", section: "Kennisbase", badge: "AI" },
+  { href: "/ai", label: "AI Assistent", icon: "🤖", iconSrc: "/ai-assistent.png", section: "Kennisbase", badge: "AI" },
   { href: "/bibliotheek", label: "Documentbibliotheek", icon: "📚", section: "Kennisbase" },
   { href: "/vergaderingen", label: "Vergaderingen", icon: "📅", section: "Bestuur" },
   { href: "/notulen", label: "Besluiten & Notulen", icon: "📋", section: "Bestuur" },
@@ -102,7 +102,17 @@ export default function Sidebar({ gebruikerNaam, gebruikerRol, fondsNaam }: Side
                     : "text-white/65 border-transparent hover:bg-white/7 hover:text-white"
                 }`}
               >
-                <span className="text-base w-5 text-center">{item.icon}</span>
+                {item.iconSrc ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={item.iconSrc}
+                    alt=""
+                    aria-hidden="true"
+                    className="w-5 h-5 object-contain"
+                  />
+                ) : (
+                  <span className="text-base w-5 text-center">{item.icon}</span>
+                )}
                 <span className="flex-1">{item.label}</span>
                 {item.badge && (
                   <span className="bg-[#C9A84C] text-[#0F2744] text-xs font-bold px-2 py-0.5 rounded-full">
