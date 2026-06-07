@@ -54,9 +54,17 @@ export async function POST(_req: NextRequest) {
     try {
       vectoren = await embedTeksten(chunks.map((c) => c.tekst as string));
     } catch (embedError) {
+      const detail =
+        embedError instanceof Error ? embedError.message : String(embedError);
       console.error("Backfill: embedding-API fout:", embedError);
+      // Diagnostische details (alleen voor voorzitter/beheerder): de exacte
+      // foutreden en of de sleutel überhaupt in de runtime aanwezig is.
       return NextResponse.json(
-        { error: "Embedding-API fout — probeer opnieuw." },
+        {
+          error: "Embedding-API fout — probeer opnieuw.",
+          detail,
+          sleutel_aanwezig: !!process.env.MISTRAL_API_KEY,
+        },
         { status: 502 }
       );
     }
