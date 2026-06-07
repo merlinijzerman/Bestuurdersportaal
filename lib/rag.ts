@@ -1,6 +1,11 @@
 // RAG pipeline: zoek relevante document chunks voor een vraag
 import { createServerSupabase } from "./supabase-server";
 import { selecteerChunks } from "./rag-select";
+import { embedTekst, naarVectorLiteral } from "./embeddings";
+
+// Feature-flag (Fase C): hybride retrieval staat alleen aan als HYBRID_SEARCH
+// expliciet "on" is. Default uit → niets verandert aan het zoekgedrag.
+const HYBRID_ENABLED = process.env.HYBRID_SEARCH === "on";
 
 // Pure selectie-helper opnieuw exporteren zodat bestaande imports werken.
 export { selecteerChunks } from "./rag-select";
@@ -26,10 +31,14 @@ export interface DocumentChunk {
 // geselecteerd voor de prompt. Wordt insert-only weggeschreven in
 // governance_log.retrieval_meta — geen wijziging aan append-only-garanties.
 export interface RetrievalMeta {
-  methode: "fts_dutch_ranked" | "fts_plain" | "ilike" | "geen";
+  methode: "hybride_rrf" | "fts_dutch_ranked" | "fts_plain" | "ilike" | "geen";
   opgehaald: number;
   geselecteerd: number;
   chunks: { id: string; document_id: string; rang: number | null }[];
+  // Hybride retrieval (Fase C). Of de query-embedding lukte en, bij terugval op
+  // FTS, waarom — zodat een stille terugval zichtbaar is in het auditspoor.
+  embedding_query_success?: boolean;
+  fallback_reason?: string;
   // History-aware reformulatie (Fase B1). De vraag waarop daadwerkelijk is
   // gezocht, en of die afwijkt van de oorspronkelijke gebruikersvraag. Beide
   // optioneel zodat bestaande aanroepers ongemoeid blijven.
@@ -102,7 +111,69 @@ function bouwMeta(
   };
 }
 
-// Zoek relevante chunks mét retrieval-diagnostiek.
+// Hoofdingang: kiest tussen hybride retrieval (Fase C, achter de flag) en de
+// bestaande FTS-route. Hybride embedt de vraag, roept de RRF-RPC aan en valt
+// veilig terug op FTS als de embedding of de RPC faalt. De terugval wordt in de
+// meta vastgelegd (embedding_query_success / fallback_reason) zodat een stille
+// terugval zichtbaar is in het auditspoor. Tenant-isolatie loopt overal via RLS.
+export async function zoekRelevanteChunksMetMeta(
+  vraag: string,
+  _fondsId: string,
+  maxResults = 8
+): Promise<{ chunks: DocumentChunk[]; meta: RetrievalMeta }> {
+  if (!HYBRID_ENABLED) {
+    return zoekViaFTS(vraag, maxResults);
+  }
+
+  const supabase = await createServerSupabase();
+  const overFetch = Math.max(maxResults * 3, 20);
+  const maxPerDoc = Math.max(3, Math.ceil(maxResults / 2));
+
+  // Embed de (al door B1 geherformuleerde) vraag. Faalt dat → FTS-fallback.
+  let vector: number[];
+  try {
+    vector = await embedTekst(vraag);
+  } catch (e) {
+    console.error("Hybride: query-embedding mislukt, terugval op FTS:", e);
+    const r = await zoekViaFTS(vraag, maxResults);
+    return {
+      chunks: r.chunks,
+      meta: { ...r.meta, embedding_query_success: false, fallback_reason: "embedding_error" },
+    };
+  }
+
+  // RRF-RPC: FTS + vector versmolten (SECURITY INVOKER → RLS blijft gelden).
+  const { data, error } = await supabase.rpc("zoek_chunks_hybride", {
+    p_query: vraag,
+    p_embedding: naarVectorLiteral(vector),
+    p_limit: overFetch,
+  });
+
+  if (!error && Array.isArray(data) && data.length > 0) {
+    const gerangschikt = (data as ZoekChunkRij[]).map(rijNaarChunk);
+    const geselecteerd = selecteerChunks(gerangschikt, maxResults, maxPerDoc);
+    return {
+      chunks: geselecteerd,
+      meta: {
+        ...bouwMeta("hybride_rrf", gerangschikt.length, geselecteerd),
+        embedding_query_success: true,
+      },
+    };
+  }
+
+  // RPC faalde of leeg → terugval op FTS (embedding lukte wél).
+  const r = await zoekViaFTS(vraag, maxResults);
+  return {
+    chunks: r.chunks,
+    meta: {
+      ...r.meta,
+      embedding_query_success: true,
+      fallback_reason: error ? "rpc_error" : "geen_hybride_treffers",
+    },
+  };
+}
+
+// Bestaande FTS-route mét retrieval-diagnostiek (fundament en fallback).
 //
 // Strategie:
 //   1. RPC zoek_chunks — Dutch FTS met relevantie-sortering (ts_rank_cd),
@@ -110,9 +181,8 @@ function bouwMeta(
 //   2. Fallback: FTS zonder Dutch-config (niet-Nederlandse documenten).
 //   3. Laatste redmiddel: ILIKE op het langste trefwoord.
 // Tenant-isolatie loopt overal via RLS (de RPC is SECURITY INVOKER).
-export async function zoekRelevanteChunksMetMeta(
+async function zoekViaFTS(
   vraag: string,
-  _fondsId: string,
   maxResults = 8
 ): Promise<{ chunks: DocumentChunk[]; meta: RetrievalMeta }> {
   const supabase = await createServerSupabase();
