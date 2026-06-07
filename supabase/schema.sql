@@ -132,6 +132,26 @@ create index if not exists idx_log_fonds on public.governance_log(fonds_id);
 create index if not exists idx_log_gebruiker on public.governance_log(gebruiker_id);
 create index if not exists idx_log_tijd on public.governance_log(aangemaakt desc);
 
+-- ── 5b. Persistente AI-gesprekken (Fase B2) ─────────────────
+-- Gebruikersgerichte opslag zodat een gesprek een refresh overleeft. Bewust
+-- losgekoppeld van governance_log (dat blijft het append-only auditspoor).
+-- Zie migratie 2026_06_07_gesprekken.sql. Berichten als jsonb-array; alleen de
+-- auteur heeft toegang (RLS); soft-delete via gearchiveerd.
+create table if not exists public.gesprekken (
+  id            uuid primary key default uuid_generate_v4(),
+  gebruiker_id  uuid not null references auth.users(id) on delete cascade,
+  fonds_id      uuid references public.fondsen(id) on delete cascade,
+  titel         text,
+  berichten     jsonb not null default '[]',  -- [{rol, tekst, bronnen?, modus?}]
+  gearchiveerd  boolean not null default false,
+  aangemaakt    timestamptz default now(),
+  bijgewerkt    timestamptz default now()
+);
+
+create index if not exists idx_gesprek_gebruiker
+  on public.gesprekken(gebruiker_id, bijgewerkt desc)
+  where gearchiveerd = false;
+
 -- ── 6. Vergaderingen ────────────────────────────────────────
 create table if not exists public.vergaderingen (
   id              uuid primary key default uuid_generate_v4(),
@@ -212,6 +232,19 @@ create policy "fonds chunks" on public.document_chunks
 create policy "fonds log" on public.governance_log
   for all using (
     fonds_id = (select fonds_id from public.profielen where id = auth.uid())
+  );
+
+-- Gesprekken: alleen de auteur, binnen het eigen fonds (using + with check)
+alter table public.gesprekken enable row level security;
+create policy "eigen gesprekken" on public.gesprekken
+  for all
+  using (
+    gebruiker_id = auth.uid()
+    and fonds_id = (select fonds_id from public.profielen where id = auth.uid())
+  )
+  with check (
+    gebruiker_id = auth.uid()
+    and fonds_id = (select fonds_id from public.profielen where id = auth.uid())
   );
 
 -- Fondsen: iedereen mag lezen

@@ -104,7 +104,39 @@ export default function AiPage() {
   } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const highlightTimer = useRef<number | null>(null);
+  // Persistentie (Fase B2): id van het huidige opgeslagen gesprek en de
+  // ingelogde gebruiker. Refs i.p.v. state — wijziging hoeft geen re-render.
+  const gesprekId = useRef<string | null>(null);
+  const userIdRef = useRef<string | null>(null);
   const supabase = createClient();
+
+  // Slaat het gesprek best-effort op. Faalt veilig: een mislukte opslag mag de
+  // chat nooit verstoren. governance_log (auditspoor) staat hier los van.
+  async function bewaarGesprek(finale: Bericht[]) {
+    try {
+      const uid = userIdRef.current;
+      if (!uid || !fondsId || finale.length === 0) return;
+      const eersteVraag =
+        finale.find((b) => b.rol === "gebruiker")?.tekst || "Gesprek";
+      const titel = eersteVraag.slice(0, 80);
+
+      if (gesprekId.current) {
+        await supabase
+          .from("gesprekken")
+          .update({ berichten: finale, bijgewerkt: new Date().toISOString() })
+          .eq("id", gesprekId.current);
+      } else {
+        const { data } = await supabase
+          .from("gesprekken")
+          .insert({ gebruiker_id: uid, fonds_id: fondsId, titel, berichten: finale })
+          .select("id")
+          .single();
+        if (data?.id) gesprekId.current = data.id as string;
+      }
+    } catch (e) {
+      console.error("Gesprek opslaan mislukt:", e);
+    }
+  }
 
   function scrollNaarBron(berichtIdx: number, bronIdx: number) {
     const el = document.getElementById(`bron-${berichtIdx}-${bronIdx}`);
@@ -121,6 +153,7 @@ export default function AiPage() {
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (user) {
+        userIdRef.current = user.id;
         const { data } = await supabase
           .from("profielen")
           .select("fonds_id, naam, fondsen(naam)")
@@ -143,7 +176,33 @@ export default function AiPage() {
           ? `${groet} ${voornaam}, fijn u te zien.\n\nIk help u graag met vragen rondom ${fondsnaam}. Hierboven kiest u hoe ik antwoord: strikt op onze documenten, slim gecombineerd met algemene kennis, of als open AI-assistent.\n\nElke vraag wordt vastgelegd in de Governance Log, inclusief de gekozen modus.`
           : `${groet}. Ik help u graag met vragen rondom ${fondsnaam}.\n\nU kunt hierboven kiezen hoe ik antwoord: strikt op onze documenten, slim gecombineerd, of als open AI-assistent.\n\nElke vraag wordt vastgelegd in de Governance Log.`;
 
-        setBerichten([{ rol: "ai", tekst: personalTekst }]);
+        // Auto-restore (Fase B2): haal het meest recente, niet-gearchiveerde
+        // gesprek terug. RLS beperkt dit al tot de eigen gesprekken; de extra
+        // gebruiker_id-filter maakt de query expliciet.
+        let hersteld = false;
+        try {
+          const { data: laatste } = await supabase
+            .from("gesprekken")
+            .select("id, berichten")
+            .eq("gebruiker_id", user.id)
+            .eq("gearchiveerd", false)
+            .order("bijgewerkt", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          const opgeslagen = laatste?.berichten as Bericht[] | undefined;
+          if (laatste?.id && Array.isArray(opgeslagen) && opgeslagen.length > 0) {
+            gesprekId.current = laatste.id as string;
+            setBerichten(opgeslagen);
+            hersteld = true;
+          }
+        } catch (e) {
+          console.error("Gesprek herstellen mislukt:", e);
+        }
+
+        if (!hersteld) {
+          setBerichten([{ rol: "ai", tekst: personalTekst }]);
+        }
       }
     });
   }, []);
@@ -276,6 +335,13 @@ export default function AiPage() {
           ...prev,
           { rol: "ai", tekst: "Er is geen antwoord ontvangen. Probeer het opnieuw." },
         ]);
+      } else if (volledig.trim()) {
+        // Persisteer het gesprek (Fase B2) na een geslaagd antwoord.
+        const finale: Bericht[] = [
+          ...conversatie,
+          { rol: "ai", tekst: volledig, bronnen: bronnenData, modus: modusData },
+        ];
+        await bewaarGesprek(finale);
       }
     } catch {
       setBerichten((prev) => [
@@ -288,9 +354,24 @@ export default function AiPage() {
     }
   }
 
-  function startNieuwGesprek() {
+  async function startNieuwGesprek() {
     if (laden) return;
     if (berichten.length > 1 && !confirm("Huidig gesprek wissen?")) return;
+
+    // Soft-delete (Fase B2): het lopende gesprek wordt gearchiveerd, niet hard
+    // verwijderd — governance_log blijft volledig intact. Best-effort.
+    if (gesprekId.current) {
+      try {
+        await supabase
+          .from("gesprekken")
+          .update({ gearchiveerd: true })
+          .eq("id", gesprekId.current);
+      } catch (e) {
+        console.error("Gesprek archiveren mislukt:", e);
+      }
+      gesprekId.current = null;
+    }
+
     // Behoud de huidige (gepersonaliseerde) welkomstboodschap als die er al is.
     const welkomst = berichten[0];
     setBerichten(welkomst && welkomst.rol === "ai" ? [welkomst] : []);
