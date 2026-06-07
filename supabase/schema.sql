@@ -152,6 +152,18 @@ create index if not exists idx_gesprek_gebruiker
   on public.gesprekken(gebruiker_id, bijgewerkt desc)
   where gearchiveerd = false;
 
+-- ── 5c. Fase C fundament: vector-embeddings (additief) ──────
+-- Semantische vector-search náást FTS. Zie migratie
+-- 2026_06_07_fase_c_embeddings.sql en het Fase C-ontwerp. Mistral mistral-embed
+-- → 1024 dim. Puur additief; FTS-route blijft intact.
+create extension if not exists vector;
+alter table public.document_chunks
+  add column if not exists embedding vector(1024);
+alter table public.document_chunks
+  add column if not exists embedding_model text;
+create index if not exists idx_chunks_embedding
+  on public.document_chunks using hnsw (embedding vector_cosine_ops);
+
 -- ── 6. Vergaderingen ────────────────────────────────────────
 create table if not exists public.vergaderingen (
   id              uuid primary key default uuid_generate_v4(),

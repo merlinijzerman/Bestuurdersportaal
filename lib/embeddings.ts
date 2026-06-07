@@ -1,0 +1,79 @@
+// ============================================================
+//  lib/embeddings.ts — Mistral embeddings (RAG Fase C, fundament).
+//
+//  Server-side only: gebruikt MISTRAL_API_KEY uit de omgeving (NOOIT met
+//  NEXT_PUBLIC_-prefix — de sleutel mag niet naar de browser). Dunne wrapper
+//  zonder externe SDK, zodat de provider verwisselbaar blijft.
+//
+//  Model: `mistral-embed` → 1024 dimensies, exact passend op de kolom
+//  document_chunks.embedding vector(1024). Geen dimensiereductie nodig.
+// ============================================================
+
+const EMBED_URL = "https://api.mistral.ai/v1/embeddings";
+
+// Centrale config — wisselen van model/dim vergt een volledige re-embed, dus
+// nooit verspreid hardcoderen. `embedding_model` wordt bij elke chunk vastgelegd.
+export const EMBED_PROVIDER = "mistral";
+export const EMBED_MODEL = "mistral-embed";
+export const EMBED_DIMS = 1024;
+
+const MAX_BATCH = 100; // teksten per API-call
+const MAX_RETRIES = 3;
+
+function slaap(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Embed één batch (≤ MAX_BATCH teksten), met retry/backoff op rate limits (429)
+// en tijdelijke serverfouten (5xx). Andere fouten falen direct.
+async function embedBatch(teksten: string[]): Promise<number[][]> {
+  const key = process.env.MISTRAL_API_KEY;
+  if (!key) throw new Error("MISTRAL_API_KEY ontbreekt in de omgeving");
+
+  for (let poging = 0; poging <= MAX_RETRIES; poging++) {
+    const res = await fetch(EMBED_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${key}`,
+      },
+      body: JSON.stringify({ model: EMBED_MODEL, input: teksten }),
+    });
+
+    if (res.ok) {
+      const data = (await res.json()) as { data: { embedding: number[] }[] };
+      return data.data.map((d) => d.embedding);
+    }
+
+    const tijdelijk = res.status === 429 || res.status >= 500;
+    if (tijdelijk && poging < MAX_RETRIES) {
+      await slaap(500 * 2 ** poging); // 0,5s → 1s → 2s
+      continue;
+    }
+    throw new Error(`Mistral embeddings ${res.status}`);
+  }
+  throw new Error("Mistral embeddings: max retries overschreden");
+}
+
+// Embed een willekeurig aantal teksten; splitst automatisch in batches.
+// Gebruikt bij ingest (chunk-teksten) en backfill.
+export async function embedTeksten(teksten: string[]): Promise<number[][]> {
+  const resultaat: number[][] = [];
+  for (let i = 0; i < teksten.length; i += MAX_BATCH) {
+    const batch = teksten.slice(i, i + MAX_BATCH);
+    resultaat.push(...(await embedBatch(batch)));
+  }
+  return resultaat;
+}
+
+// Eén tekst embedden (bijv. een zoekvraag bij retrieval).
+export async function embedTekst(tekst: string): Promise<number[]> {
+  const [vector] = await embedTeksten([tekst]);
+  return vector;
+}
+
+// pgvector verwacht via supabase-js een vector-literal als string ('[1,2,3]'),
+// zowel bij insert/update als bij RPC-parameters.
+export function naarVectorLiteral(vector: number[]): string {
+  return JSON.stringify(vector);
+}
