@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createServerSupabase } from "@/lib/supabase-server";
 import { maakChunksUitSegmenten } from "@/lib/rag";
+import { embedTeksten, naarVectorLiteral, EMBED_MODEL } from "@/lib/embeddings";
 import {
   bepaalBestandstype,
   CONTENT_TYPE_PER_BESTANDSTYPE,
@@ -239,13 +240,39 @@ export async function POST(req: NextRequest) {
     // Maak chunks voor RAG — pagina-/sectie-bewust, zodat de bronvermelding
     // "pag. X" / "Tabblad: Y" klopt (zie RAG-VERBETERING-ONTWERP.md Fase 1b).
     const chunks = maakChunksUitSegmenten(extractie.segmenten);
-    const chunkRecords = chunks.map((chunk, index) => ({
+    const chunkRecords: {
+      document_id: string;
+      chunk_index: number;
+      tekst: string;
+      pagina: number | null;
+      paragraaf: string | null;
+      embedding?: string;
+      embedding_model?: string;
+    }[] = chunks.map((chunk, index) => ({
       document_id: document.id,
       chunk_index: index,
       tekst: chunk.tekst,
       pagina: chunk.pagina,
       paragraaf: chunk.paragraaf,
     }));
+
+    // Fase C: embeddings genereren voor semantische search. Best-effort —
+    // faalt de embedding-API, dan slaan we de chunks zonder vector op en
+    // blijven ze via FTS vindbaar (graceful degradation).
+    try {
+      const vectoren = await embedTeksten(chunks.map((c) => c.tekst));
+      if (vectoren.length === chunkRecords.length) {
+        chunkRecords.forEach((rec, i) => {
+          rec.embedding = naarVectorLiteral(vectoren[i]);
+          rec.embedding_model = EMBED_MODEL;
+        });
+      }
+    } catch (embedError) {
+      console.error(
+        "Embeddings genereren bij upload mislukt — chunks zonder vector opgeslagen:",
+        embedError
+      );
+    }
 
     const batchGrootte = 50;
     for (let i = 0; i < chunkRecords.length; i += batchGrootte) {
