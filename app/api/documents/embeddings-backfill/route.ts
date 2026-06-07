@@ -60,6 +60,8 @@ export async function POST(_req: NextRequest) {
 
     let verwerkt = 0;
     let overgeslagen = 0;
+    let geenRij = 0; // update zonder fout maar 0 rijen geraakt (stille RLS-blok)
+    let eersteFout: string | null = null;
 
     for (const c of leeg) {
       await supabase
@@ -70,11 +72,17 @@ export async function POST(_req: NextRequest) {
     }
 
     async function bewaar(id: string, vector: number[]) {
-      const { error: upErr } = await supabase
+      const { data, error: upErr } = await supabase
         .from("document_chunks")
         .update({ embedding: naarVectorLiteral(vector), embedding_model: EMBED_MODEL })
-        .eq("id", id);
-      if (!upErr) verwerkt++;
+        .eq("id", id)
+        .select("id");
+      if (upErr) {
+        if (!eersteFout) eersteFout = upErr.message;
+        return;
+      }
+      if (data && data.length > 0) verwerkt++;
+      else geenRij++;
     }
 
     // Probeer de batch in één keer; lukt dat niet (één dwarsliggende chunk laat
@@ -113,6 +121,8 @@ export async function POST(_req: NextRequest) {
     return NextResponse.json({
       verwerkt,
       overgeslagen,
+      geenRij,
+      eersteFout,
       resterend,
       klaar: resterend === 0,
     });
