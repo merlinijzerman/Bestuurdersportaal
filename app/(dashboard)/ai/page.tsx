@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, type ReactNode } from "react";
 import { createClient } from "@/lib/supabase";
 
 type Modus = "documenten" | "combineren" | "algemeen";
@@ -19,6 +19,14 @@ interface Bericht {
   tekst: string;
   bronnen?: Bron[];
   modus?: Modus;
+}
+
+// Eén item in het gesprekken-overzicht (Fase B2-volledig).
+interface GesprekItem {
+  id: string;
+  titel: string | null;
+  bijgewerkt: string;
+  berichten: Bericht[];
 }
 
 const BRONKLEUR: Record<string, string> = {
@@ -108,7 +116,62 @@ export default function AiPage() {
   // ingelogde gebruiker. Refs i.p.v. state — wijziging hoeft geen re-render.
   const gesprekId = useRef<string | null>(null);
   const userIdRef = useRef<string | null>(null);
+  // Gepersonaliseerde welkomstboodschap, zodat "nieuw gesprek" altijd een
+  // schone start toont (ook nadat een eerder gesprek is geopend).
+  const welkomstRef = useRef<Bericht | null>(null);
+  // Gesprekken-overzicht (Fase B2-volledig).
+  const [gesprekken, setGesprekken] = useState<GesprekItem[]>([]);
+  const [historieOpen, setHistorieOpen] = useState(false);
   const supabase = createClient();
+
+  // Haalt de eigen, niet-gearchiveerde gesprekken op voor het overzicht.
+  // RLS beperkt dit al tot de eigen gesprekken; de gebruiker_id-filter maakt het
+  // expliciet. Best-effort.
+  async function laadGesprekken() {
+    try {
+      const uid = userIdRef.current;
+      if (!uid) return;
+      const { data } = await supabase
+        .from("gesprekken")
+        .select("id, titel, bijgewerkt, berichten")
+        .eq("gebruiker_id", uid)
+        .eq("gearchiveerd", false)
+        .order("bijgewerkt", { ascending: false })
+        .limit(50);
+      if (Array.isArray(data)) setGesprekken(data as GesprekItem[]);
+    } catch (e) {
+      console.error("Gesprekken laden mislukt:", e);
+    }
+  }
+
+  // Opent een bestaand gesprek in de chat.
+  function openGesprek(item: GesprekItem) {
+    if (laden) return;
+    gesprekId.current = item.id;
+    setBerichten(
+      Array.isArray(item.berichten) && item.berichten.length > 0
+        ? item.berichten
+        : welkomstRef.current
+        ? [welkomstRef.current]
+        : []
+    );
+    setHistorieOpen(false);
+  }
+
+  // Archiveert een gesprek (soft-delete). governance_log blijft intact. Als het
+  // huidige gesprek wordt gearchiveerd, start een schone weergave.
+  async function archiveerGesprek(id: string) {
+    try {
+      await supabase.from("gesprekken").update({ gearchiveerd: true }).eq("id", id);
+    } catch (e) {
+      console.error("Gesprek archiveren mislukt:", e);
+    }
+    if (gesprekId.current === id) {
+      gesprekId.current = null;
+      setBerichten(welkomstRef.current ? [welkomstRef.current] : []);
+    }
+    laadGesprekken();
+  }
 
   // Slaat het gesprek best-effort op. Faalt veilig: een mislukte opslag mag de
   // chat nooit verstoren. governance_log (auditspoor) staat hier los van.
@@ -133,6 +196,8 @@ export default function AiPage() {
           .single();
         if (data?.id) gesprekId.current = data.id as string;
       }
+      // Ververs het overzicht zodat nieuwe/bijgewerkte gesprekken bovenaan komen.
+      laadGesprekken();
     } catch (e) {
       console.error("Gesprek opslaan mislukt:", e);
     }
@@ -176,6 +241,8 @@ export default function AiPage() {
           ? `${groet} ${voornaam}, fijn u te zien.\n\nIk help u graag met vragen rondom ${fondsnaam}. Hierboven kiest u hoe ik antwoord: strikt op onze documenten, slim gecombineerd met algemene kennis, of als open AI-assistent.\n\nElke vraag wordt vastgelegd in de Governance Log, inclusief de gekozen modus.`
           : `${groet}. Ik help u graag met vragen rondom ${fondsnaam}.\n\nU kunt hierboven kiezen hoe ik antwoord: strikt op onze documenten, slim gecombineerd, of als open AI-assistent.\n\nElke vraag wordt vastgelegd in de Governance Log.`;
 
+        welkomstRef.current = { rol: "ai", tekst: personalTekst };
+
         // Auto-restore (Fase B2): haal het meest recente, niet-gearchiveerde
         // gesprek terug. RLS beperkt dit al tot de eigen gesprekken; de extra
         // gebruiker_id-filter maakt de query expliciet.
@@ -203,6 +270,9 @@ export default function AiPage() {
         if (!hersteld) {
           setBerichten([{ rol: "ai", tekst: personalTekst }]);
         }
+
+        // Vul het gesprekken-overzicht.
+        laadGesprekken();
       }
     });
   }, []);
@@ -354,32 +424,92 @@ export default function AiPage() {
     }
   }
 
-  async function startNieuwGesprek() {
+  function startNieuwGesprek() {
     if (laden) return;
-    if (berichten.length > 1 && !confirm("Huidig gesprek wissen?")) return;
-
-    // Soft-delete (Fase B2): het lopende gesprek wordt gearchiveerd, niet hard
-    // verwijderd — governance_log blijft volledig intact. Best-effort.
-    if (gesprekId.current) {
-      try {
-        await supabase
-          .from("gesprekken")
-          .update({ gearchiveerd: true })
-          .eq("id", gesprekId.current);
-      } catch (e) {
-        console.error("Gesprek archiveren mislukt:", e);
-      }
-      gesprekId.current = null;
-    }
-
-    // Behoud de huidige (gepersonaliseerde) welkomstboodschap als die er al is.
-    const welkomst = berichten[0];
-    setBerichten(welkomst && welkomst.rol === "ai" ? [welkomst] : []);
+    // Met het gesprekken-overzicht hoeft "nieuw" niets te wissen: het lopende
+    // gesprek blijft gewoon in de lijst staan. We starten enkel een schone chat.
+    gesprekId.current = null;
+    setBerichten(welkomstRef.current ? [welkomstRef.current] : []);
     setInvoer("");
+    setHistorieOpen(false);
   }
 
   return (
     <div className="flex flex-col h-screen">
+      {/* Gesprekken-overzicht (drawer) */}
+      {historieOpen && (
+        <div className="fixed inset-0 z-40" role="dialog" aria-modal="true">
+          <div
+            className="absolute inset-0 bg-black/30"
+            onClick={() => setHistorieOpen(false)}
+          />
+          <div className="absolute top-0 left-0 h-full w-80 max-w-[85vw] bg-white shadow-xl flex flex-col">
+            <div className="px-5 h-14 flex items-center justify-between border-b border-gray-200">
+              <span className="font-bold text-[#0F2744]">Gesprekken</span>
+              <button
+                onClick={() => setHistorieOpen(false)}
+                className="text-gray-400 hover:text-[#0F2744] text-lg leading-none"
+                aria-label="Sluiten"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-3 space-y-1">
+              {gesprekken.length === 0 ? (
+                <p className="text-sm text-gray-400 px-2 py-4">
+                  Nog geen opgeslagen gesprekken.
+                </p>
+              ) : (
+                gesprekken.map((g) => (
+                  <div
+                    key={g.id}
+                    className={`group flex items-center gap-2 rounded-lg px-3 py-2 cursor-pointer transition-colors ${
+                      g.id === gesprekId.current
+                        ? "bg-[#C9A84C]/15"
+                        : "hover:bg-gray-100"
+                    }`}
+                    onClick={() => openGesprek(g)}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm text-[#0F2744] truncate">
+                        {g.titel || "Gesprek"}
+                      </div>
+                      <div className="text-xs text-gray-400">
+                        {new Date(g.bijgewerkt).toLocaleString("nl-NL", {
+                          day: "numeric",
+                          month: "short",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </div>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm("Dit gesprek archiveren?")) archiveerGesprek(g.id);
+                      }}
+                      title="Archiveren"
+                      className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-600 text-sm transition-opacity flex-shrink-0"
+                      aria-label="Archiveren"
+                    >
+                      🗑
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="border-t border-gray-200 p-3">
+              <button
+                onClick={startNieuwGesprek}
+                className="w-full text-sm text-[#0F2744] border border-gray-200 rounded-lg px-3 py-2 hover:border-[#C9A84C] transition-colors"
+              >
+                + Nieuw gesprek
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Topbar */}
       <div className="bg-white border-b border-gray-200 px-7 h-14 flex items-center">
         <span className="font-bold text-[#0F2744]">AI Assistent</span>
@@ -387,9 +517,15 @@ export default function AiPage() {
           ● Governance logging actief
         </span>
         <button
+          onClick={() => setHistorieOpen(true)}
+          className="ml-auto text-xs text-gray-500 hover:text-[#0F2744] border border-gray-200 px-3 py-1.5 rounded-lg hover:border-[#C9A84C] transition-colors"
+        >
+          🕑 Gesprekken{gesprekken.length > 0 ? ` (${gesprekken.length})` : ""}
+        </button>
+        <button
           onClick={startNieuwGesprek}
           disabled={laden || berichten.length <= 1}
-          className="ml-auto text-xs text-gray-500 hover:text-[#0F2744] border border-gray-200 px-3 py-1.5 rounded-lg hover:border-[#C9A84C] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          className="text-xs text-gray-500 hover:text-[#0F2744] border border-gray-200 px-3 py-1.5 rounded-lg hover:border-[#C9A84C] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           + Nieuw gesprek
         </button>
@@ -551,6 +687,13 @@ export default function AiPage() {
 //  Renderen van AI-antwoord met inline pills voor [Bron N],
 //  [Algemene kennis] en [Volgens wetgeving]
 // ============================================================
+// Rendert het AI-antwoord met lichte Markdown-ondersteuning. Blok-niveau:
+// koppen (#..), opsommingen (- / *) en genummerde lijsten (1.), en alinea's.
+// Inline-opmaak (vet/cursief/code) en de citatiemarkers ([Bron N], [Algemene
+// kennis], [Volgens wetgeving]) lopen via parseInline. Bewust een eigen, kleine
+// renderer i.p.v. een externe library: geen extra dependency, volledige controle
+// over de bron-pills, en bestand tegen half-gestreamde (nog niet gesloten)
+// markdown tijdens het streamen.
 function renderAntwoord(
   tekst: string,
   bronnen: Bron[] | undefined,
@@ -559,11 +702,72 @@ function renderAntwoord(
   onBronKlik: (berichtIdx: number, bronIdx: number) => void,
 ) {
   const regels = tekst.split("\n");
-  return regels.map((regel, j) => (
-    <p key={j} className={j > 0 ? "mt-1.5" : ""}>
-      {parseInline(regel, bronnen, berichtIdx, highlight, onBronKlik)}
-    </p>
-  ));
+  const blokken: ReactNode[] = [];
+  let lijstType: "ul" | "ol" | null = null;
+  let lijstItems: string[] = [];
+  let sleutel = 0;
+
+  const inline = (s: string) =>
+    parseInline(s, bronnen, berichtIdx, highlight, onBronKlik);
+
+  const sluitLijst = () => {
+    if (!lijstType) return;
+    const items = lijstItems.map((it, k) => (
+      <li key={k}>{inline(it)}</li>
+    ));
+    blokken.push(
+      lijstType === "ul" ? (
+        <ul key={sleutel++} className="list-disc pl-5 my-1.5 space-y-0.5">
+          {items}
+        </ul>
+      ) : (
+        <ol key={sleutel++} className="list-decimal pl-5 my-1.5 space-y-0.5">
+          {items}
+        </ol>
+      )
+    );
+    lijstType = null;
+    lijstItems = [];
+  };
+
+  for (const regel of regels) {
+    const ul = regel.match(/^\s*[-*]\s+(.*)$/);
+    const ol = regel.match(/^\s*\d+\.\s+(.*)$/);
+    const kop = regel.match(/^(#{1,6})\s+(.*)$/);
+
+    if (ul) {
+      if (lijstType !== "ul") sluitLijst();
+      lijstType = "ul";
+      lijstItems.push(ul[1]);
+      continue;
+    }
+    if (ol) {
+      if (lijstType !== "ol") sluitLijst();
+      lijstType = "ol";
+      lijstItems.push(ol[1]);
+      continue;
+    }
+
+    sluitLijst();
+
+    if (kop) {
+      blokken.push(
+        <p key={sleutel++} className="font-bold text-[#0F2744] mt-2 mb-1">
+          {inline(kop[2])}
+        </p>
+      );
+      continue;
+    }
+    if (!regel.trim()) continue; // lege regel = alinea-scheiding (spacing via mt)
+
+    blokken.push(
+      <p key={sleutel++} className={blokken.length > 0 ? "mt-1.5" : ""}>
+        {inline(regel)}
+      </p>
+    );
+  }
+  sluitLijst();
+  return blokken;
 }
 
 function parseInline(
@@ -605,7 +809,32 @@ function parseInline(
     if (/^\[volgens wetgeving\]$/i.test(deel)) {
       return <KennisPill key={i} label="Volgens wetgeving" />;
     }
-    return <span key={i}>{deel}</span>;
+    // Geen marker → verwerk inline-markdown (vet/cursief/code).
+    return <span key={i}>{parseMarkdownInline(deel)}</span>;
+  });
+}
+
+// Inline-markdown voor een tekstsegment zonder citatiemarkers. Subset: **vet**,
+// *cursief* / _cursief_, `code`. Vet wordt vóór cursief gematcht zodat ** niet
+// per ongeluk als twee losse * wordt gelezen.
+function parseMarkdownInline(tekst: string): ReactNode[] {
+  const regex = /(\*\*[^*]+\*\*|`[^`]+`|\*[^*\s][^*]*\*|_[^_\s][^_]*_)/g;
+  return tekst.split(regex).map((stuk, i) => {
+    if (!stuk) return null;
+    if (/^\*\*[^*]+\*\*$/.test(stuk)) {
+      return <strong key={i}>{stuk.slice(2, -2)}</strong>;
+    }
+    if (/^`[^`]+`$/.test(stuk)) {
+      return (
+        <code key={i} className="bg-gray-100 rounded px-1 py-0.5 text-[0.85em]">
+          {stuk.slice(1, -1)}
+        </code>
+      );
+    }
+    if (/^\*[^*]+\*$/.test(stuk) || /^_[^_]+_$/.test(stuk)) {
+      return <em key={i}>{stuk.slice(1, -1)}</em>;
+    }
+    return stuk;
   });
 }
 
