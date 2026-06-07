@@ -7,6 +7,14 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
 });
 
+// Centrale model- en budget-instellingen. Eén plek zodat chat-call én
+// governance_log altijd dezelfde waarde gebruiken (auditability).
+// LET OP: verifieer dat deze modelstring beschikbaar is in het Anthropic-account
+// vóór deploy.
+const AI_MODEL = "claude-sonnet-4-6";
+const MAX_TOKENS = 3200;
+const CHUNK_BUDGET = 10;
+
 type Modus = "documenten" | "combineren" | "algemeen";
 
 // ============================================================
@@ -98,14 +106,39 @@ interface BestuurderContext {
   fondsnaam: string;
 }
 
-function bouwSysteemPrompt(regels: string, ctx: BestuurderContext): string {
-  return `Je bent de AI-assistent in het bestuurdersportaal van ${ctx.fondsnaam}, een Nederlands pensioenfonds.
-
-JE SPREEKT NU MET: ${ctx.volledigeNaam} (${ctx.rolLabel}). U mag de voornaam "${ctx.voornaam}" gebruiken in uw antwoord — sporadisch, alleen waar het natuurlijk past.
-
-${regels}
+// Het statische deel van de systeemprompt (regels per modus + toon) is identiek
+// over gebruikers heen en kan dus gecachet worden. Het dynamische deel (naam,
+// rol, fondsnaam) verschilt per gebruiker en blijft ongecachet.
+function bouwStatischeInstructies(regels: string): string {
+  return `${regels}
 
 ${TOON_BLOK}`;
+}
+
+function bouwDynamischeContext(ctx: BestuurderContext): string {
+  return `Je bent de AI-assistent in het bestuurdersportaal van ${ctx.fondsnaam}, een Nederlands pensioenfonds.
+
+JE SPREEKT NU MET: ${ctx.volledigeNaam} (${ctx.rolLabel}). U mag de voornaam "${ctx.voornaam}" gebruiken in uw antwoord — sporadisch, alleen waar het natuurlijk past.`;
+}
+
+// Bouwt de system-parameter als content-blokken: het statische blok eerst met
+// een cache-breakpoint (ephemeral), gevolgd door het kleine dynamische blok.
+// Zo wordt de zware, herhaalde instructie-tekst hergebruikt uit de cache.
+function bouwSysteemBlokken(
+  regels: string,
+  ctx: BestuurderContext
+): Anthropic.Messages.TextBlockParam[] {
+  return [
+    {
+      type: "text",
+      text: bouwStatischeInstructies(regels),
+      cache_control: { type: "ephemeral" },
+    },
+    {
+      type: "text",
+      text: bouwDynamischeContext(ctx),
+    },
+  ];
 }
 
 // ============================================================
@@ -201,7 +234,7 @@ export async function POST(req: NextRequest) {
     let retrievalMeta: RetrievalMeta | null = null;
 
     if (modus === "documenten" || modus === "combineren") {
-      const res = await zoekRelevanteChunksMetMeta(vraag, fonds_id);
+      const res = await zoekRelevanteChunksMetMeta(vraag, fonds_id, CHUNK_BUDGET);
       chunks = res.chunks;
       retrievalMeta = res.meta;
       const ctx = maakContext(chunks);
@@ -210,21 +243,21 @@ export async function POST(req: NextRequest) {
     }
 
     // Bouw prompt op basis van modus, met persoonlijke context
-    let systeemPrompt: string;
+    let systeemBlokken: Anthropic.Messages.TextBlockParam[];
     let gebruikersPrompt: string;
 
     if (modus === "algemeen") {
-      systeemPrompt = bouwSysteemPrompt(SP_ALGEMEEN_REGELS, ctxBestuurder);
+      systeemBlokken = bouwSysteemBlokken(SP_ALGEMEEN_REGELS, ctxBestuurder);
       gebruikersPrompt = `VRAAG: ${vraag}`;
     } else if (modus === "combineren") {
-      systeemPrompt = bouwSysteemPrompt(SP_COMBINEREN_REGELS, ctxBestuurder);
+      systeemBlokken = bouwSysteemBlokken(SP_COMBINEREN_REGELS, ctxBestuurder);
       gebruikersPrompt =
         chunks.length > 0
           ? `BESCHIKBARE INTERNE BRONNEN:\n\n${contextTekst}\n\n---\n\nVRAAG: ${vraag}`
           : `Er zijn geen interne documenten gevonden die direct relevant zijn voor deze vraag.\n\nVRAAG: ${vraag}\n\nGebruik je algemene kennis om de vraag zo goed mogelijk te beantwoorden, en markeer claims met [Algemene kennis]. Sluit af met een opmerking dat er geen interne bronnen zijn gevonden.`;
     } else {
       // documenten (strikte modus)
-      systeemPrompt = bouwSysteemPrompt(SP_DOCUMENTEN_REGELS, ctxBestuurder);
+      systeemBlokken = bouwSysteemBlokken(SP_DOCUMENTEN_REGELS, ctxBestuurder);
       gebruikersPrompt =
         chunks.length > 0
           ? `BESCHIKBARE BRONNEN:\n\n${contextTekst}\n\n---\n\nVRAAG: ${vraag}`
@@ -240,36 +273,71 @@ export async function POST(req: NextRequest) {
       .map((b) => ({ role: b.role, content: b.content }));
     claudeBerichten.push({ role: "user" as const, content: gebruikersPrompt });
 
-    // Roep Claude aan
-    const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-5",
-      max_tokens: 2500,
-      system: systeemPrompt,
-      messages: claudeBerichten,
+    // Stream het antwoord via Server-Sent Events.
+    // Protocol (één JSON-object per `data:`-regel):
+    //   { type: "meta",  bronnen, modus, chunks_gevonden }  — als eerste
+    //   { type: "delta", text }                              — per token
+    //   { type: "done" }                                     — na het loggen
+    //   { type: "error", error }                             — bij een fout
+    // De governance_log-insert gebeurt PAS na het voltooien van de stream, met
+    // het volledige antwoord. Append-only blijft intact: enkel een insert, geen
+    // UPDATE/DELETE. Een afgebroken stream logt geen half antwoord als definitief.
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const send = (obj: unknown) =>
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
+
+        try {
+          send({ type: "meta", bronnen, modus, chunks_gevonden: chunks.length });
+
+          let volledig = "";
+          const claudeStream = anthropic.messages.stream({
+            model: AI_MODEL,
+            max_tokens: MAX_TOKENS,
+            system: systeemBlokken,
+            messages: claudeBerichten,
+          });
+
+          claudeStream.on("text", (delta) => {
+            volledig += delta;
+            send({ type: "delta", text: delta });
+          });
+
+          await claudeStream.finalMessage();
+
+          // Loggen ná voltooiing, met het volledige antwoord.
+          await supabase.from("governance_log").insert({
+            gebruiker_id: user.id,
+            gebruiker_naam: profiel?.naam || user.email,
+            fonds_id,
+            vraag,
+            antwoord: volledig,
+            bronnen,
+            modus,
+            model: AI_MODEL,
+            retrieval_meta: retrievalMeta,
+          });
+
+          send({ type: "done" });
+        } catch (streamFout) {
+          console.error("Chat stream fout:", streamFout);
+          send({
+            type: "error",
+            error: "Er is een fout opgetreden bij het verwerken van uw vraag.",
+          });
+        } finally {
+          controller.close();
+        }
+      },
     });
 
-    const antwoord =
-      response.content[0].type === "text" ? response.content[0].text : "";
-
-    // Sla op in governance log (incl. modus + retrieval-diagnostiek).
-    // retrieval_meta is insert-only: append-only-discipline blijft intact.
-    await supabase.from("governance_log").insert({
-      gebruiker_id: user.id,
-      gebruiker_naam: profiel?.naam || user.email,
-      fonds_id,
-      vraag,
-      antwoord,
-      bronnen,
-      modus,
-      model: "claude-sonnet-4-5",
-      retrieval_meta: retrievalMeta,
-    });
-
-    return NextResponse.json({
-      antwoord,
-      bronnen,
-      modus,
-      chunks_gevonden: chunks.length,
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+      },
     });
   } catch (error) {
     console.error("Chat API fout:", error);

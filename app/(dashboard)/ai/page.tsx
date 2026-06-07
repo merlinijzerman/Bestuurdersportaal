@@ -93,6 +93,9 @@ export default function AiPage() {
   ]);
   const [invoer, setInvoer] = useState("");
   const [laden, setLaden] = useState(false);
+  // True zodra de eerste tokens van een antwoord binnenstromen — gebruikt om de
+  // typ-indicator te verbergen zodra de tekst zelf begint te verschijnen.
+  const [antwoordGestart, setAntwoordGestart] = useState(false);
   const [fondsId, setFondsId] = useState<string>("");
   const [modus, setModus] = useState<Modus>("combineren");
   const [highlight, setHighlight] = useState<{
@@ -169,23 +172,111 @@ export default function AiPage() {
         content: b.tekst,
       }));
 
+    setAntwoordGestart(false);
+
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages, fonds_id: fondsId, modus }),
       });
-      const data = await res.json();
 
-      setBerichten((prev) => [
-        ...prev,
-        {
-          rol: "ai",
-          tekst: data.antwoord || data.error || "Er is een fout opgetreden.",
-          bronnen: data.bronnen,
-          modus: data.modus || modus,
-        },
-      ]);
+      // Fouten (400/401/500) komen als JSON terug, niet als stream.
+      if (!res.ok || !res.body) {
+        const fout = await res.json().catch(() => null);
+        setBerichten((prev) => [
+          ...prev,
+          { rol: "ai", tekst: fout?.error || "Er is een fout opgetreden." },
+        ]);
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let aiToegevoegd = false;
+      let volledig = "";
+      let bronnenData: Bron[] | undefined;
+      let modusData: Modus = modus;
+
+      // Werkt het laatste (AI-)bericht bij, of voegt het toe als het nog niet
+      // bestaat. Bronnen worden meegegeven zodra die binnen zijn.
+      const schrijfAi = () => {
+        setBerichten((prev) => {
+          if (!aiToegevoegd) return prev; // veiligheid
+          const kopie = [...prev];
+          kopie[kopie.length - 1] = {
+            rol: "ai",
+            tekst: volledig,
+            bronnen: bronnenData,
+            modus: modusData,
+          };
+          return kopie;
+        });
+      };
+
+      const verwerkEvent = (raw: string) => {
+        const regel = raw.replace(/^data: ?/, "").trim();
+        if (!regel) return;
+        let evt: {
+          type: string;
+          text?: string;
+          bronnen?: Bron[];
+          modus?: Modus;
+          error?: string;
+        };
+        try {
+          evt = JSON.parse(regel);
+        } catch {
+          return;
+        }
+
+        if (evt.type === "meta") {
+          bronnenData = evt.bronnen;
+          modusData = evt.modus || modus;
+        } else if (evt.type === "delta") {
+          volledig += evt.text || "";
+          if (!aiToegevoegd) {
+            aiToegevoegd = true;
+            setAntwoordGestart(true);
+            setBerichten((prev) => [
+              ...prev,
+              { rol: "ai", tekst: volledig, bronnen: bronnenData, modus: modusData },
+            ]);
+          } else {
+            schrijfAi();
+          }
+        } else if (evt.type === "done") {
+          schrijfAi();
+        } else if (evt.type === "error") {
+          if (!aiToegevoegd) {
+            setBerichten((prev) => [
+              ...prev,
+              { rol: "ai", tekst: evt.error || "Er is een fout opgetreden." },
+            ]);
+            aiToegevoegd = true;
+          }
+        }
+      };
+
+      // Lees de SSE-stream; events zijn gescheiden door een lege regel.
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const delen = buffer.split("\n\n");
+        buffer = delen.pop() || "";
+        for (const deel of delen) verwerkEvent(deel);
+      }
+      if (buffer.trim()) verwerkEvent(buffer);
+
+      // Vangnet: stream eindigde zonder enige tekst.
+      if (!aiToegevoegd) {
+        setBerichten((prev) => [
+          ...prev,
+          { rol: "ai", tekst: "Er is geen antwoord ontvangen. Probeer het opnieuw." },
+        ]);
+      }
     } catch {
       setBerichten((prev) => [
         ...prev,
@@ -193,6 +284,7 @@ export default function AiPage() {
       ]);
     } finally {
       setLaden(false);
+      setAntwoordGestart(false);
     }
   }
 
@@ -312,7 +404,7 @@ export default function AiPage() {
           </div>
         ))}
 
-        {laden && (
+        {laden && !antwoordGestart && (
           <div className="flex gap-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/ai-assistent.png" alt="AI" className="w-8 h-8 object-contain flex-shrink-0" />
