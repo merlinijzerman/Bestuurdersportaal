@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createServerSupabase } from "@/lib/supabase-server";
 import { zoekRelevanteChunksMetMeta, maakContext, type DocumentChunk, type BronVerwijzing, type RetrievalMeta } from "@/lib/rag";
+import { heeftReformulatieNodig, reformuleerVraag } from "@/lib/query-reformulatie";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -14,6 +15,8 @@ const anthropic = new Anthropic({
 const AI_MODEL = "claude-sonnet-4-6";
 const MAX_TOKENS = 3200;
 const CHUNK_BUDGET = 10;
+// Snel, goedkoop model voor de history-aware query-reformulatie (Fase B1).
+const REWRITE_MODEL = "claude-haiku-4-5-20251001";
 
 type Modus = "documenten" | "combineren" | "algemeen";
 
@@ -234,9 +237,31 @@ export async function POST(req: NextRequest) {
     let retrievalMeta: RetrievalMeta | null = null;
 
     if (modus === "documenten" || modus === "combineren") {
-      const res = await zoekRelevanteChunksMetMeta(vraag, fonds_id, CHUNK_BUDGET);
+      // History-aware reformulatie (Fase B1): bij een vervolgvraag die op
+      // eerdere context leunt, herschrijven we de vraag tot een zelfstandige
+      // zoekvraag vóór de retrieval. De originele vraag blijft ongemoeid in de
+      // prompt en in de governance_log; de herschreven zoekvraag wordt enkel
+      // gebruikt om te zoeken en wordt vastgelegd in retrieval_meta.
+      const priorBeurten = messages.slice(0, -1);
+      let zoekVraag = vraag;
+      let gereformuleerd = false;
+
+      if (heeftReformulatieNodig(vraag, priorBeurten.length > 0)) {
+        const herschreven = await reformuleerVraag(
+          anthropic,
+          priorBeurten,
+          vraag,
+          REWRITE_MODEL
+        );
+        if (herschreven.trim() && herschreven.trim() !== vraag.trim()) {
+          zoekVraag = herschreven.trim();
+          gereformuleerd = true;
+        }
+      }
+
+      const res = await zoekRelevanteChunksMetMeta(zoekVraag, fonds_id, CHUNK_BUDGET);
       chunks = res.chunks;
-      retrievalMeta = res.meta;
+      retrievalMeta = { ...res.meta, zoekvraag: zoekVraag, gereformuleerd };
       const ctx = maakContext(chunks);
       contextTekst = ctx.contextTekst;
       bronnen = ctx.bronnen;

@@ -30,6 +30,11 @@ export interface RetrievalMeta {
   opgehaald: number;
   geselecteerd: number;
   chunks: { id: string; document_id: string; rang: number | null }[];
+  // History-aware reformulatie (Fase B1). De vraag waarop daadwerkelijk is
+  // gezocht, en of die afwijkt van de oorspronkelijke gebruikersvraag. Beide
+  // optioneel zodat bestaande aanroepers ongemoeid blijven.
+  zoekvraag?: string;
+  gereformuleerd?: boolean;
 }
 
 // Platte rij zoals public.zoek_chunks(...) die teruggeeft (zie migratie
