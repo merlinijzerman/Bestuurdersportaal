@@ -14,7 +14,9 @@ import { embedTeksten, embedTekst, naarVectorLiteral, EMBED_MODEL } from "@/lib/
 //  embeddings worden enkel gevuld; de hybride zoekroute staat los hiervan.
 // ============================================================
 
-const BATCH = 200;
+// Klein gehouden zodat één aanroep ruim binnen de Vercel-functietimeout blijft
+// (embeddings + losse updates per chunk). De client roept herhaaldelijk aan.
+const BATCH = 25;
 
 export async function POST(_req: NextRequest) {
   try {
