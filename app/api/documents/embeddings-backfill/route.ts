@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase-server";
-import { embedTeksten, naarVectorLiteral, EMBED_MODEL } from "@/lib/embeddings";
+import { embedTeksten, embedTekst, naarVectorLiteral, EMBED_MODEL } from "@/lib/embeddings";
 
 // ============================================================
 //  POST /api/documents/embeddings-backfill
@@ -35,11 +35,14 @@ export async function POST(_req: NextRequest) {
       return NextResponse.json({ error: "Onvoldoende rechten" }, { status: 403 });
     }
 
-    // Eén batch chunks zonder embedding (RLS: eigen fonds + generiek).
+    // Eén batch nog-niet-verwerkte chunks. "Verwerkt" = heeft een embedding OF
+    // is bewust overgeslagen (embedding_model gezet, embedding null). Zo blijft
+    // een probleemchunk de backfill niet eindeloos blokkeren.
     const { data: chunks, error } = await supabase
       .from("document_chunks")
       .select("id, tekst")
       .is("embedding", null)
+      .is("embedding_model", null)
       .limit(BATCH);
 
     if (error) {
@@ -50,45 +53,69 @@ export async function POST(_req: NextRequest) {
       return NextResponse.json({ verwerkt: 0, resterend: 0, klaar: true });
     }
 
-    let vectoren: number[][];
-    try {
-      vectoren = await embedTeksten(chunks.map((c) => c.tekst as string));
-    } catch (embedError) {
-      const detail =
-        embedError instanceof Error ? embedError.message : String(embedError);
-      console.error("Backfill: embedding-API fout:", embedError);
-      // Diagnostische details (alleen voor voorzitter/beheerder): de exacte
-      // foutreden en of de sleutel überhaupt in de runtime aanwezig is.
-      return NextResponse.json(
-        {
-          error: "Embedding-API fout — probeer opnieuw.",
-          detail,
-          sleutel_aanwezig: !!process.env.MISTRAL_API_KEY,
-        },
-        { status: 502 }
-      );
-    }
+    // Lege/whitespace-chunks kunnen niet ge-embed worden (Mistral 400). Markeer
+    // ze als overgeslagen zodat ze niet opnieuw worden opgehaald.
+    const leeg = chunks.filter((c) => !c.tekst || !(c.tekst as string).trim());
+    const teEmbedden = chunks.filter((c) => c.tekst && (c.tekst as string).trim());
 
     let verwerkt = 0;
-    for (let i = 0; i < chunks.length; i++) {
+    let overgeslagen = 0;
+
+    for (const c of leeg) {
+      await supabase
+        .from("document_chunks")
+        .update({ embedding_model: "overgeslagen" })
+        .eq("id", c.id);
+      overgeslagen++;
+    }
+
+    async function bewaar(id: string, vector: number[]) {
       const { error: upErr } = await supabase
         .from("document_chunks")
-        .update({
-          embedding: naarVectorLiteral(vectoren[i]),
-          embedding_model: EMBED_MODEL,
-        })
-        .eq("id", chunks[i].id);
+        .update({ embedding: naarVectorLiteral(vector), embedding_model: EMBED_MODEL })
+        .eq("id", id);
       if (!upErr) verwerkt++;
     }
 
-    // Hoeveel chunks resteren er nog zonder embedding?
+    // Probeer de batch in één keer; lukt dat niet (één dwarsliggende chunk laat
+    // de hele batch falen), val dan terug op chunk-voor-chunk zodat de goede wél
+    // worden verwerkt en alleen de echte probleemgevallen worden overgeslagen.
+    try {
+      const vectoren = await embedTeksten(teEmbedden.map((c) => c.tekst as string));
+      for (let i = 0; i < teEmbedden.length; i++) {
+        await bewaar(teEmbedden[i].id as string, vectoren[i]);
+      }
+    } catch (batchFout) {
+      console.error("Backfill: batch mislukt, val terug op per chunk:", batchFout);
+      for (const c of teEmbedden) {
+        try {
+          const vector = await embedTekst(c.tekst as string);
+          await bewaar(c.id as string, vector);
+        } catch (chunkFout) {
+          console.error(`Backfill: chunk ${c.id} overgeslagen:`, chunkFout);
+          await supabase
+            .from("document_chunks")
+            .update({ embedding_model: "overgeslagen" })
+            .eq("id", c.id);
+          overgeslagen++;
+        }
+      }
+    }
+
+    // Hoeveel chunks resteren er nog (niet verwerkt én niet overgeslagen)?
     const { count } = await supabase
       .from("document_chunks")
       .select("id", { count: "exact", head: true })
-      .is("embedding", null);
+      .is("embedding", null)
+      .is("embedding_model", null);
 
     const resterend = count ?? 0;
-    return NextResponse.json({ verwerkt, resterend, klaar: resterend === 0 });
+    return NextResponse.json({
+      verwerkt,
+      overgeslagen,
+      resterend,
+      klaar: resterend === 0,
+    });
   } catch (e) {
     console.error("Backfill fout:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
