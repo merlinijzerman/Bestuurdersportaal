@@ -261,10 +261,8 @@ export default function AiPage() {
         {berichten.map((b, i) => (
           <div key={i} className={b.rol === "gebruiker" ? "flex justify-end" : "flex gap-3"}>
             {b.rol === "ai" && (
-              <div className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center flex-shrink-0 mt-0.5 overflow-hidden">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/ai-assistent.png" alt="AI" className="w-6 h-6 object-contain" />
-              </div>
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src="/ai-assistent.png" alt="AI" className="w-8 h-8 object-contain flex-shrink-0 mt-0.5" />
             )}
             <div className={b.rol === "gebruiker" ? "max-w-[75%]" : "flex-1"}>
               {b.rol === "ai" && b.modus && b.modus !== "documenten" && (
@@ -316,10 +314,8 @@ export default function AiPage() {
 
         {laden && (
           <div className="flex gap-3">
-            <div className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center flex-shrink-0 overflow-hidden">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/ai-assistent.png" alt="AI" className="w-6 h-6 object-contain" />
-            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/ai-assistent.png" alt="AI" className="w-8 h-8 object-contain flex-shrink-0" />
             <div className="bg-gray-50 border border-gray-200 px-4 py-3 rounded-2xl rounded-tl-sm">
               <div className="flex gap-1.5 items-center">
                 <span className="typing-dot"></span>
