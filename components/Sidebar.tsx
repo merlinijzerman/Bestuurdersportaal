@@ -49,7 +49,7 @@ export default function Sidebar({ gebruikerNaam, gebruikerRol, fondsNaam }: Side
   let huidigSection = "";
 
   return (
-    <nav className="w-64 min-h-screen bg-[#0F2744] flex flex-col fixed top-0 left-0 z-50">
+    <nav className="w-64 h-screen bg-[#0F2744] flex flex-col fixed top-0 left-0 z-50">
       {/* Logo */}
       <div className="px-5 py-6 border-b border-white/10">
         <div className="w-10 h-10 bg-[#C9A84C] rounded-xl flex items-center justify-center font-black text-lg text-[#0F2744] mb-3">
