@@ -452,7 +452,7 @@ export default function AiPage() {
     <div className="flex flex-col h-screen">
       {/* Gesprekken-overzicht (drawer) */}
       {historieOpen && (
-        <div className="fixed inset-0 z-40" role="dialog" aria-modal="true">
+        <div className="fixed inset-0 z-[60]" role="dialog" aria-modal="true">
           <div
             className="absolute inset-0 bg-black/30"
             onClick={() => setHistorieOpen(false)}
