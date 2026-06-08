@@ -106,6 +106,9 @@ export default function AiPage() {
   const [antwoordGestart, setAntwoordGestart] = useState(false);
   const [fondsId, setFondsId] = useState<string>("");
   const [modus, setModus] = useState<Modus>("combineren");
+  // Hybride-schakelaar (alleen zichtbaar/bewerkbaar voor voorzitter/beheerder).
+  const [hybrideAan, setHybrideAan] = useState(false);
+  const [magBeheren, setMagBeheren] = useState(false);
   const [highlight, setHighlight] = useState<{
     berichtIdx: number;
     bronIdx: number;
@@ -224,10 +227,22 @@ export default function AiPage() {
         userIdRef.current = user.id;
         const { data } = await supabase
           .from("profielen")
-          .select("fonds_id, naam, fondsen(naam)")
+          .select("fonds_id, naam, rol, fondsen(naam)")
           .eq("id", user.id)
           .single();
         if (data?.fonds_id) setFondsId(data.fonds_id);
+
+        // Hybride-instelling + beheerrecht ophalen.
+        try {
+          const res = await fetch("/api/instellingen");
+          if (res.ok) {
+            const inst = await res.json();
+            setHybrideAan(!!inst.hybride_zoeken);
+            setMagBeheren(!!inst.mag_beheren);
+          }
+        } catch {
+          /* niet kritisch */
+        }
 
         const voornaam = (data?.naam as string | null)?.split(" ")[0] || "";
         const fondsenRel = data?.fondsen as
@@ -438,6 +453,22 @@ export default function AiPage() {
     }
   }
 
+  async function toggleHybride() {
+    if (!magBeheren) return;
+    const nieuw = !hybrideAan;
+    setHybrideAan(nieuw); // optimistisch
+    try {
+      const res = await fetch("/api/instellingen", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hybride_zoeken: nieuw }),
+      });
+      if (!res.ok) setHybrideAan(!nieuw); // terugdraaien bij fout
+    } catch {
+      setHybrideAan(!nieuw);
+    }
+  }
+
   function startNieuwGesprek() {
     if (laden) return;
     // Met het gesprekken-overzicht hoeft "nieuw" niets te wissen: het lopende
@@ -576,6 +607,27 @@ export default function AiPage() {
           <span className="text-xs text-gray-500">
             Combineert interne documenten met algemene kennis
           </span>
+        )}
+
+        {magBeheren && (
+          <button
+            onClick={toggleHybride}
+            title="Hybride zoeken (semantisch + trefwoord) aan/uit — alleen voor beheer"
+            className="ml-auto inline-flex items-center gap-2 text-xs text-gray-600 border border-gray-200 px-3 py-1.5 rounded-lg hover:border-[#C9A84C] transition-colors"
+          >
+            <span
+              className={`inline-block w-7 h-4 rounded-full relative transition-colors ${
+                hybrideAan ? "bg-green-500" : "bg-gray-300"
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${
+                  hybrideAan ? "left-3.5" : "left-0.5"
+                }`}
+              />
+            </span>
+            Hybride zoeken: {hybrideAan ? "aan" : "uit"}
+          </button>
         )}
       </div>
 

@@ -304,6 +304,16 @@ export async function POST(req: NextRequest) {
     let retrievalMeta: RetrievalMeta | null = null;
 
     if (modus === "documenten" || modus === "combineren") {
+      // Hybride-schakelaar: per-fonds instelling uit het portaal is leidend;
+      // valt terug op de env-default HYBRID_SEARCH als er nog niets is gezet.
+      let hybrideAan = process.env.HYBRID_SEARCH === "on";
+      const { data: inst } = await supabase
+        .from("fonds_instellingen")
+        .select("hybride_zoeken")
+        .eq("fonds_id", fonds_id)
+        .maybeSingle();
+      if (inst) hybrideAan = inst.hybride_zoeken;
+
       // History-aware reformulatie (Fase B1): bij een vervolgvraag die op
       // eerdere context leunt, herschrijven we de vraag tot een zelfstandige
       // zoekvraag vóór de retrieval. De originele vraag blijft ongemoeid in de
@@ -326,7 +336,7 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      const res = await zoekRelevanteChunksMetMeta(zoekVraag, fonds_id, CHUNK_BUDGET);
+      const res = await zoekRelevanteChunksMetMeta(zoekVraag, fonds_id, CHUNK_BUDGET, hybrideAan);
       chunks = res.chunks;
       retrievalMeta = { ...res.meta, zoekvraag: zoekVraag, gereformuleerd };
       const ctx = maakContext(chunks);

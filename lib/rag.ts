@@ -119,9 +119,13 @@ function bouwMeta(
 export async function zoekRelevanteChunksMetMeta(
   vraag: string,
   _fondsId: string,
-  maxResults = 8
+  maxResults = 8,
+  hybrideAan?: boolean
 ): Promise<{ chunks: DocumentChunk[]; meta: RetrievalMeta }> {
-  if (!HYBRID_ENABLED) {
+  // Per-aanroep instelling (uit het portaal) is leidend; valt terug op de
+  // env-default HYBRID_SEARCH als er geen waarde is meegegeven.
+  const hybride = hybrideAan ?? HYBRID_ENABLED;
+  if (!hybride) {
     return zoekViaFTS(vraag, maxResults);
   }
 
