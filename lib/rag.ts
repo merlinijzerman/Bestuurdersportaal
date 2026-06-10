@@ -47,13 +47,19 @@ export interface RetrievalMeta {
   // Bronvermelding-validatie: aantal [Bron N]-citaties in het antwoord en
   // hoeveel daarvan niet naar een aangeleverde bron verwijzen (dangling).
   citaties?: { totaal: number; ongeldig: number };
-  // Document-scope (increment 1). Aanwezig zodra een vraag tot één/enkele
-  // document(en) is beperkt; legt voor de audit vast waarop gescoopt is.
+  // Document-scope (increment 1/2). Aanwezig zodra een vraag tot één/enkele
+  // document(en) is beperkt; legt voor de audit vast waarop gescoopt is en welke
+  // retrievalstrategie is gekozen.
   scope?: {
     document_ids: string[];
     titels: string[];
-    strategie: "targeted";
+    strategie: "targeted" | "full_document" | "map_reduce";
     algemene_kennis: boolean;
+    // Increment 2: bij dekkingsbrede strategieën — hoeveel chunks verwerkt en
+    // (bij map-reduce) in hoeveel batches; afgekapt = dekking gedeeltelijk.
+    verwerkte_chunks?: number;
+    batches?: number;
+    afgekapt?: boolean;
   };
 }
 
@@ -347,6 +353,35 @@ export function maakContext(chunks: DocumentChunk[]): {
     contextTekst: contextDelen.join("\n\n---\n\n"),
     bronnen,
   };
+}
+
+// Haalt ALLE chunks van de gescopete document(en) op, geordend op document en
+// chunk-index — voor de dekkingsbrede strategieën van increment 2 (full-document
+// en map-reduce). Géén ranking: bij een samenvatting/beoordeling wil je het
+// volledige document, niet de top-N. RLS blijft leidend (anon-client); de
+// scope-filter (`.in("document_id", …)`) is een AND bovenop de fonds-isolatie.
+export async function haalDocumentChunks(
+  documentIds: string[]
+): Promise<DocumentChunk[]> {
+  if (documentIds.length === 0) return [];
+  const supabase = await createServerSupabase();
+  const { data, error } = await supabase
+    .from("document_chunks")
+    .select(
+      `id, document_id, tekst, pagina, paragraaf, chunk_index,
+       documenten!inner(titel, bron, bibliotheek, opslag_pad)`
+    )
+    .in("document_id", documentIds)
+    .eq("documenten.actief", true)
+    .order("document_id", { ascending: true })
+    .order("chunk_index", { ascending: true })
+    .limit(5000); // veiligheidsplafond tegen extreem grote documenten
+
+  if (error || !data) {
+    console.error("haalDocumentChunks fout:", error);
+    return [];
+  }
+  return data as unknown as DocumentChunk[];
 }
 
 // Chunk-helpers leven in lib/chunking.ts (Supabase-vrij, zuiver testbaar).

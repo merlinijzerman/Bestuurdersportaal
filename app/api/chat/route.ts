@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createServerSupabase } from "@/lib/supabase-server";
-import { zoekRelevanteChunksMetMeta, maakContext, type DocumentChunk, type BronVerwijzing, type RetrievalMeta } from "@/lib/rag";
+import { zoekRelevanteChunksMetMeta, maakContext, haalDocumentChunks, type DocumentChunk, type BronVerwijzing, type RetrievalMeta } from "@/lib/rag";
 import { heeftReformulatieNodig, reformuleerVraag } from "@/lib/query-reformulatie";
 import { controleerLimiet, LIMIETEN } from "@/lib/rate-limit";
 import { rateLimited } from "@/lib/api-errors";
 import { valideerScope, type ScopeDocumentRij } from "@/lib/document-scope";
+import { bepaalVraagtype, schatTokens, kiesStrategie, maakBatches, type Strategie } from "@/lib/vraagtype";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -20,6 +21,20 @@ const MAX_TOKENS = 3200;
 const CHUNK_BUDGET = 10;
 // Snel, goedkoop model voor de history-aware query-reformulatie (Fase B1).
 const REWRITE_MODEL = "claude-haiku-4-5-20251001";
+
+// ── Document-scope increment 2: dekkingsbrede strategieën ──────────────────
+// Drempel full-document vs. map-reduce, in geschatte tokens (≈ tekens/4). Onder
+// de drempel past de volledige documenttekst in één prompt (accuraat, één call);
+// erboven verwerken we in batches (map-reduce). Conservatief gekozen: ruim
+// binnen het contextvenster, met plek voor systeemprompt + antwoord. Eén knop.
+const VOLLEDIG_DOC_TOKEN_DREMPEL = 48000;
+// Tokenbudget per map-batch en harde bovengrens op het aantal batches
+// (kostenbewaking — voorkomt kostenrunaway bij extreem grote documenten).
+const MAP_BATCH_TOKENS = 16000;
+const MAX_BATCHES = 12;
+// Goedkoop/snel model voor de extractieve map-stap; het sterke AI_MODEL doet de
+// reduce-stap (kwaliteit van het eindantwoord).
+const MAP_MODEL = "claude-haiku-4-5-20251001";
 
 // Feature-flag: bestuurlijke antwoordstijl (antwoordstatus + adaptieve
 // lichte/volledige structuur). Default uit → huidige gesprekspartner-stijl.
@@ -120,6 +135,36 @@ REGELS VAN INHOUD:
 - Schrijf elke verwijzing als een afzonderlijke marker: [Bron 1][Bron 2] in plaats van [Bron 1, 2].
 - Wees concreet over paragraaf- en paginanummers waar die bij het bron-label staan.
 - Vraagt de gebruiker naar andere documenten of bredere context, meld dan dat deze vraag is beperkt tot het gekozen document en vraag of de scope verbreed moet worden — zoek niet stilletjes breder.`;
+
+// Dekkingsbrede vraag (samenvatten, beoordelen, risico's/besluiten benoemen),
+// strict op het document. Het VOLLEDIGE document is aangeleverd (full-document)
+// of als deelanalyses (map-reduce), dus baseer het antwoord op het hele stuk.
+const SP_DOCUMENT_SCOPE_BREED_REGELS = `U beantwoordt deze vraag UITSLUITEND op basis van het hieronder aangeleverde document. Dit is een dekkingsbrede vraag, dus baseer uw antwoord op het VOLLEDIGE document, niet op losse fragmenten.
+
+REGELS VAN INHOUD:
+- Gebruik alleen informatie uit het aangeleverde document. Verzin niets en vul niets aan uit andere documenten, eerdere onderwerpen in dit gesprek of uw algemene kennis.
+- Verwijs naar vindplaatsen met paginanummers in lopende tekst, bijvoorbeeld "(pag. 12)". Gebruik GEEN [Bron N]-notatie.
+- Staat iets niet in het document, zeg dat dan expliciet in plaats van te gokken.
+- Wees concreet en bestuurlijk bruikbaar; structureer waar de vraag erom vraagt (bijvoorbeeld risico's, gevraagde besluiten of aandachtspunten als opsomming).`;
+
+// Opt-in algemene kennis (§6): drie expliciet gescheiden delen via ###-koppen,
+// zodat de UI ze als secties rendert. Strict-document blijft de default; dit
+// blok wordt alleen gebruikt als de gebruiker algemene kennis bewust aanzet.
+const SP_DOCUMENT_SCOPE_ALG_REGELS = `U beantwoordt deze vraag primair op basis van het aangeleverde document, en mag aanvullend uw algemene kennis gebruiken. Scheid uw antwoord ALTIJD in drie delen met exact deze koppen (Markdown ###):
+
+### Uit dit document blijkt
+Wat het document zelf zegt, met paginaverwijzingen "(pag. X)". Uitsluitend wat er echt staat — niets verzinnen.
+
+### Aanvullende algemene duiding
+Context of duiding uit uw algemene kennis, herkenbaar als NIET uit dit document. Markeer claims met [Algemene kennis]. Laat dit deel weg als het niets toevoegt.
+
+### Niet in dit document aangetroffen
+Wat de gebruiker vroeg maar het document niet bevat. Laat dit deel weg als alles is afgedekt.
+
+Vermeng de delen nooit en presenteer algemene kennis nooit als documentinhoud.`;
+
+// Systeemprompt voor de extractieve map-stap (map-reduce). Goedkoop model.
+const SP_MAP_EXTRACTIE = `U bent een analist die voor een specifieke vraag de relevante punten uit één deel van een document extraheert. Geef beknopt en feitelijk de passages/feiten die voor de vraag relevant zijn, elk met paginanummer indien beschikbaar. Verzin niets en voeg geen algemene kennis toe. Is er in dit deel niets relevant voor de vraag, antwoord dan exact met het woord: GEEN.`;
 
 // ============================================================
 //  Bestuurlijke antwoordstijl (achter BESTUURLIJKE_STIJL-vlag)
@@ -242,6 +287,34 @@ interface ChatBericht {
 }
 
 const HISTORY_LIMIT = 12; // laatste N berichten meenemen
+
+// Locatie-prefix voor een chunk in de volledige documenttekst, bv. "[3.2, pag. 12] ".
+function locatieLabel(c: DocumentChunk): string {
+  const loc = [c.paragraaf, c.pagina ? `pag. ${c.pagina}` : null]
+    .filter(Boolean)
+    .join(", ");
+  return loc ? `[${loc}] ` : "";
+}
+
+// Bouwt één bronkaart per gescoopt document (i.p.v. per chunk). Voor de brede
+// strategieën verwijst het antwoord tekstueel naar pagina's; de UI toont het
+// document als bron met een link naar het origineel.
+function documentBronnen(chunks: DocumentChunk[]): BronVerwijzing[] {
+  const perDoc = new Map<string, BronVerwijzing>();
+  for (const c of chunks) {
+    if (perDoc.has(c.document_id)) continue;
+    perDoc.set(c.document_id, {
+      document_id: c.document_id,
+      titel: c.documenten.titel,
+      bron: c.documenten.bron,
+      pagina: null,
+      paragraaf: null,
+      fragment: "",
+      heeft_origineel: !!c.documenten.opslag_pad,
+    });
+  }
+  return [...perDoc.values()];
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -375,14 +448,45 @@ export async function POST(req: NextRequest) {
 
     const scopeActief = !!scopeDocumentIds && scopeDocumentIds.length > 0;
 
-    // RAG-zoeken: voor de bibliotheek-modi, of altijd bij een actieve scope
-    // (die forceert strict-document gedrag, ongeacht de gekozen modus).
+    // ── Strategiekeuze (increment 2) bij actieve scope ──────────────────────
+    // Specifieke vraag → targeted retrieval (increment 1). Dekkingsbrede vraag →
+    // full-document (klein doc) of map-reduce (groot doc). Opt-in algemene kennis
+    // staat hier los van: het bepaalt alleen of het eindantwoord strict blijft of
+    // de drie-deling krijgt. Vraagtype op de ORIGINELE vraag (niet de zoekvraag).
+    const algemeneKennis =
+      scopeActief && body.document_scope?.algemene_kennis === true;
+    let scopeStrategie: Strategie = "targeted";
+    let breedChunks: DocumentChunk[] = [];
+    let breedBatches: DocumentChunk[][] = [];
+    let breedAfgekapt = false;
+
+    if (scopeActief) {
+      if (bepaalVraagtype(vraag) === "breed") {
+        breedChunks = await haalDocumentChunks(scopeDocumentIds!);
+        const totaalTekst = breedChunks.map((c) => c.tekst).join("\n\n");
+        scopeStrategie = kiesStrategie(
+          "breed",
+          schatTokens(totaalTekst),
+          VOLLEDIG_DOC_TOKEN_DREMPEL
+        );
+        if (scopeStrategie === "map_reduce") {
+          const r = maakBatches(breedChunks, MAP_BATCH_TOKENS, MAX_BATCHES);
+          breedBatches = r.batches;
+          breedAfgekapt = r.afgekapt;
+        }
+      }
+    }
+    const breedActief = scopeActief && scopeStrategie !== "targeted";
+
+    // RAG-zoeken: voor de bibliotheek-modi, of bij een actieve scope met een
+    // SPECIFIEKE vraag (targeted). Brede scope-vragen halen hieronder hun chunks
+    // via haalDocumentChunks (volledige dekking i.p.v. top-N).
     let chunks: DocumentChunk[] = [];
     let bronnen: BronVerwijzing[] = [];
     let contextTekst = "";
     let retrievalMeta: RetrievalMeta | null = null;
 
-    if (scopeActief || modus === "documenten" || modus === "combineren") {
+    if (!breedActief && (scopeActief || modus === "documenten" || modus === "combineren")) {
       // Hybride-schakelaar: per-fonds instelling uit het portaal is leidend;
       // valt terug op de env-default HYBRID_SEARCH als er nog niets is gezet.
       let hybrideAan = process.env.HYBRID_SEARCH === "on";
@@ -430,7 +534,7 @@ export async function POST(req: NextRequest) {
           document_ids: scopeDocumentIds!,
           titels: scopeTitels,
           strategie: "targeted",
-          algemene_kennis: false, // increment 1: strict, opt-in is increment 2
+          algemene_kennis: algemeneKennis,
         };
       }
       const ctx = maakContext(chunks);
@@ -438,21 +542,66 @@ export async function POST(req: NextRequest) {
       bronnen = ctx.bronnen;
     }
 
+    // Dekkingsbrede scope (increment 2): volledige documentdekking. Bronnen op
+    // documentniveau (paginaverwijzingen in de tekst i.p.v. [Bron N]-pills); bij
+    // full-document bouwen we de context hier, bij map-reduce in de stream.
+    if (breedActief) {
+      chunks = breedChunks;
+      bronnen = documentBronnen(breedChunks);
+      if (scopeStrategie === "full_document") {
+        contextTekst = breedChunks
+          .map((c) => `${locatieLabel(c)}${c.tekst}`)
+          .join("\n\n");
+      }
+      retrievalMeta = {
+        methode: "geen",
+        opgehaald: breedChunks.length,
+        geselecteerd: breedChunks.length,
+        chunks: [],
+        scope: {
+          document_ids: scopeDocumentIds!,
+          titels: scopeTitels,
+          strategie: scopeStrategie,
+          algemene_kennis: algemeneKennis,
+          verwerkte_chunks: breedChunks.length,
+          batches: scopeStrategie === "map_reduce" ? breedBatches.length : undefined,
+          afgekapt: scopeStrategie === "map_reduce" ? breedAfgekapt : undefined,
+        },
+      };
+    }
+
     // Bouw prompt op basis van modus, met persoonlijke context
     let systeemBlokken: Anthropic.Messages.TextBlockParam[];
     let gebruikersPrompt: string;
 
     if (scopeActief) {
-      // Strict-document gedrag overschrijft de gekozen modus (increment 1).
+      // Strict-document gedrag overschrijft de gekozen modus. De regels hangen af
+      // van opt-in algemene kennis (drie-deling) en van breed vs. specifiek.
       const titelLabel =
         scopeTitels.length === 1
           ? `«${scopeTitels[0]}»`
           : scopeTitels.map((t) => `«${t}»`).join(", ");
-      systeemBlokken = bouwSysteemBlokken(SP_DOCUMENT_SCOPE_REGELS, ctxBestuurder);
-      gebruikersPrompt =
-        chunks.length > 0
-          ? `BESCHIKBARE FRAGMENTEN UIT HET DOCUMENT ${titelLabel}:\n\n${contextTekst}\n\n---\n\nVRAAG: ${vraag}\n\nBeantwoord de vraag uitsluitend op basis van bovenstaande fragmenten. Staat het antwoord er niet in, zeg dan letterlijk: "Dit is niet in dit document aangetroffen."`
-          : `In het document ${titelLabel} zijn geen passages gevonden die op deze vraag aansluiten.\n\nVRAAG: ${vraag}\n\nAls het antwoord niet in dit document staat, antwoord dan letterlijk: "Dit is niet in dit document aangetroffen." Verzin geen antwoord en vul niet aan uit andere bronnen of algemene kennis.`;
+      const scopeRegels = algemeneKennis
+        ? SP_DOCUMENT_SCOPE_ALG_REGELS
+        : breedActief
+        ? SP_DOCUMENT_SCOPE_BREED_REGELS
+        : SP_DOCUMENT_SCOPE_REGELS;
+      systeemBlokken = bouwSysteemBlokken(scopeRegels, ctxBestuurder);
+
+      if (scopeStrategie === "map_reduce") {
+        // De gebruikersprompt voor map-reduce wordt in de stream opgebouwd uit de
+        // map-deelanalyses; hier een placeholder (wordt daar vervangen).
+        gebruikersPrompt = "";
+      } else if (breedActief) {
+        // full-document: volledige documenttekst in de prompt.
+        gebruikersPrompt = `VOLLEDIGE INHOUD VAN HET DOCUMENT ${titelLabel}:\n\n${contextTekst}\n\n---\n\nVRAAG: ${vraag}`;
+      } else {
+        // targeted (increment 1): top-N fragmenten.
+        gebruikersPrompt =
+          chunks.length > 0
+            ? `BESCHIKBARE FRAGMENTEN UIT HET DOCUMENT ${titelLabel}:\n\n${contextTekst}\n\n---\n\nVRAAG: ${vraag}\n\nBeantwoord de vraag uitsluitend op basis van bovenstaande fragmenten. Staat het antwoord er niet in, zeg dan letterlijk: "Dit is niet in dit document aangetroffen."`
+            : `In het document ${titelLabel} zijn geen passages gevonden die op deze vraag aansluiten.\n\nVRAAG: ${vraag}\n\nAls het antwoord niet in dit document staat, antwoord dan letterlijk: "Dit is niet in dit document aangetroffen." Verzin geen antwoord en vul niet aan uit andere bronnen of algemene kennis.`;
+      }
     } else if (modus === "algemeen") {
       systeemBlokken = bouwSysteemBlokken(SP_ALGEMEEN_REGELS, ctxBestuurder);
       gebruikersPrompt = `VRAAG: ${vraag}`;
@@ -507,16 +656,68 @@ export async function POST(req: NextRequest) {
             modus: effectieveModus,
             chunks_gevonden: chunks.length,
             scope: scopeActief
-              ? { document_ids: scopeDocumentIds, titels: scopeTitels }
+              ? {
+                  document_ids: scopeDocumentIds,
+                  titels: scopeTitels,
+                  strategie: scopeStrategie,
+                }
               : null,
           });
+
+          // Map-reduce (increment 2): verwerk het document in batches (map, met
+          // het goedkope model) en bouw daaruit de reduce-prompt. De maps zijn
+          // niet-streambaar → we sturen progress-events; de reduce-stap streamt
+          // wél token-voor-token. De interne calls vallen binnen deze ene
+          // gebruikersactie en raken de WP2-rate-limit dus niet (die is bovenaan
+          // de route al één keer geteld).
+          let streamMessages = claudeBerichten;
+          if (scopeStrategie === "map_reduce") {
+            const titelLabel = scopeTitels[0] ? `«${scopeTitels[0]}»` : "het document";
+            const deelanalyses: string[] = [];
+            for (let i = 0; i < breedBatches.length; i++) {
+              send({
+                type: "progress",
+                fase: "analyse",
+                batch: i + 1,
+                totaal: breedBatches.length,
+              });
+              const batchTekst = breedBatches[i]
+                .map((c) => `${locatieLabel(c)}${c.tekst}`)
+                .join("\n\n");
+              const mapResp = await anthropic.messages.create({
+                model: MAP_MODEL,
+                max_tokens: 1200,
+                system: SP_MAP_EXTRACTIE,
+                messages: [
+                  {
+                    role: "user",
+                    content: `VRAAG: ${vraag}\n\nDOCUMENTDEEL ${i + 1}/${breedBatches.length} uit ${titelLabel}:\n\n${batchTekst}`,
+                  },
+                ],
+              });
+              const mapTekst =
+                mapResp.content[0]?.type === "text" ? mapResp.content[0].text.trim() : "";
+              if (mapTekst && !/^geen$/i.test(mapTekst)) {
+                deelanalyses.push(`— Deel ${i + 1}:\n${mapTekst}`);
+              }
+            }
+
+            const dekkingNoot = breedAfgekapt
+              ? "\n\nLET OP: het document was te groot om volledig te verwerken; alleen de eerste delen zijn meegenomen. Meld in het antwoord dat de dekking gedeeltelijk is."
+              : "";
+            const reducePrompt = `DEELANALYSES VAN HET DOCUMENT ${titelLabel} (${breedBatches.length} delen):\n\n${
+              deelanalyses.join("\n\n") || "(geen relevante passages aangetroffen in het document)"
+            }\n\n---\n\nVRAAG: ${vraag}\n\nStel op basis van bovenstaande deelanalyses één samenhangend antwoord op het document op. Gebruik paginaverwijzingen "(pag. X)" waar die in de deelanalyses staan.${dekkingNoot}`;
+
+            streamMessages = [{ role: "user" as const, content: reducePrompt }];
+          }
 
           let volledig = "";
           const claudeStream = anthropic.messages.stream({
             model: AI_MODEL,
             max_tokens: BESTUURLIJKE_STIJL ? MAX_TOKENS_BESTUURLIJK : MAX_TOKENS,
             system: systeemBlokken,
-            messages: claudeBerichten,
+            messages: streamMessages,
           });
 
           claudeStream.on("text", (delta) => {

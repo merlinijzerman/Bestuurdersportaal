@@ -26,6 +26,8 @@ interface Bericht {
 interface DocumentScope {
   document_ids: string[];
   titels: string[];
+  // Opt-in algemene kennis (increment 2). Default uit = strict-document.
+  algemene_kennis?: boolean;
 }
 
 // Eén suggestie in de @-mention-typeahead.
@@ -57,7 +59,8 @@ function leesScope(ruw: unknown): DocumentScope | null {
   const titels = Array.isArray(o.titels)
     ? o.titels.filter((x): x is string => typeof x === "string")
     : [];
-  return { document_ids: ids, titels };
+  const ak = (ruw as { algemene_kennis?: unknown }).algemene_kennis === true;
+  return { document_ids: ids, titels, algemene_kennis: ak };
 }
 
 const BRONKLEUR: Record<string, string> = {
@@ -165,6 +168,12 @@ export default function AiPage() {
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionQuery, setMentionQuery] = useState("");
   const [mentionSuggesties, setMentionSuggesties] = useState<DocSuggestie[]>([]);
+  // Voortgang bij map-reduce (increment 2): {batch, totaal} tijdens de analyse-
+  // fase; null zodra het antwoord begint te streamen.
+  const [analyseVoortgang, setAnalyseVoortgang] = useState<{
+    batch: number;
+    totaal: number;
+  } | null>(null);
   const supabase = createClient();
 
   // Haalt de eigen, niet-gearchiveerde gesprekken op voor het overzicht.
@@ -235,6 +244,7 @@ export default function AiPage() {
             type: "single",
             document_ids: documentScope.document_ids,
             titels: documentScope.titels,
+            algemene_kennis: documentScope.algemene_kennis === true,
             gezet_op: new Date().toISOString(),
           }
         : null;
@@ -427,7 +437,10 @@ export default function AiPage() {
           fonds_id: fondsId,
           modus,
           document_scope: documentScope
-            ? { document_ids: documentScope.document_ids }
+            ? {
+                document_ids: documentScope.document_ids,
+                algemene_kennis: documentScope.algemene_kennis === true,
+              }
             : undefined,
         }),
       });
@@ -475,6 +488,9 @@ export default function AiPage() {
           bronnen?: Bron[];
           modus?: Modus;
           error?: string;
+          fase?: string;
+          batch?: number;
+          totaal?: number;
         };
         try {
           evt = JSON.parse(regel);
@@ -485,10 +501,16 @@ export default function AiPage() {
         if (evt.type === "meta") {
           bronnenData = evt.bronnen;
           modusData = evt.modus || modus;
+        } else if (evt.type === "progress") {
+          // Map-reduce analyse-fase: toon voortgang i.p.v. de tikkende cursor.
+          if (typeof evt.batch === "number" && typeof evt.totaal === "number") {
+            setAnalyseVoortgang({ batch: evt.batch, totaal: evt.totaal });
+          }
         } else if (evt.type === "delta") {
           volledig += evt.text || "";
           if (!aiToegevoegd) {
             aiToegevoegd = true;
+            setAnalyseVoortgang(null); // analyse klaar, antwoord begint
             setAntwoordGestart(true);
             setBerichten((prev) => [
               ...prev,
@@ -543,6 +565,7 @@ export default function AiPage() {
     } finally {
       setLaden(false);
       setAntwoordGestart(false);
+      setAnalyseVoortgang(null);
     }
   }
 
@@ -842,11 +865,18 @@ export default function AiPage() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/ai-assistent.png" alt="AI" className="w-8 h-8 object-contain flex-shrink-0" />
             <div className="bg-gray-50 border border-gray-200 px-4 py-3 rounded-2xl rounded-tl-sm">
-              <div className="flex gap-1.5 items-center">
-                <span className="typing-dot"></span>
-                <span className="typing-dot"></span>
-                <span className="typing-dot"></span>
-              </div>
+              {analyseVoortgang ? (
+                <div className="text-sm text-gray-600">
+                  Document wordt geanalyseerd… (deel {analyseVoortgang.batch} van{" "}
+                  {analyseVoortgang.totaal})
+                </div>
+              ) : (
+                <div className="flex gap-1.5 items-center">
+                  <span className="typing-dot"></span>
+                  <span className="typing-dot"></span>
+                  <span className="typing-dot"></span>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -903,9 +933,9 @@ export default function AiPage() {
           </div>
         )}
 
-        {/* Scope-chip: "Je vraagt nu over: «titel»" met wis-knop */}
+        {/* Scope-chip: "Je vraagt nu over: «titel»" + wis-knop + algemene-kennis-toggle */}
         {documentScope && (
-          <div className="mb-2 flex items-center gap-2">
+          <div className="mb-2 flex items-center gap-3 flex-wrap">
             <span className="inline-flex items-center gap-2 max-w-full bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded-full pl-3 pr-2 py-1">
               <span className="truncate">
                 Je vraagt nu over: «{documentScope.titels[0] || "dit document"}»
@@ -922,6 +952,24 @@ export default function AiPage() {
                 ✕
               </button>
             </span>
+            <label
+              className="inline-flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer"
+              title="Standaard antwoordt de AI strikt uit dit document. Aan: ook algemene kennis, in drie gescheiden delen."
+            >
+              <input
+                type="checkbox"
+                checked={documentScope.algemene_kennis === true}
+                onChange={(e) =>
+                  setDocumentScope(
+                    documentScope
+                      ? { ...documentScope, algemene_kennis: e.target.checked }
+                      : null
+                  )
+                }
+                className="accent-[#C9A84C]"
+              />
+              Ook algemene kennis gebruiken
+            </label>
           </div>
         )}
 
