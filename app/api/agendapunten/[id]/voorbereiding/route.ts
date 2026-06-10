@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createServerSupabase } from "@/lib/supabase-server";
 import { zoekRelevanteChunks, maakContext } from "@/lib/rag";
+import { controleerLimiet, LIMIETEN } from "@/lib/rate-limit";
+import { rateLimited } from "@/lib/api-errors";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -60,6 +62,10 @@ export async function POST(
     if (!user) {
       return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
     }
+
+    // Rate limiting (WP2): vóór de RAG-/Anthropic-call.
+    const limiet = await controleerLimiet(supabase, LIMIETEN.voorbereiding);
+    if (!limiet.toegestaan) return rateLimited("agendapunten.voorbereiding", limiet.resetAt);
 
     const body = (await req.json().catch(() => ({}))) as {
       diepte?: "snel" | "grondig";

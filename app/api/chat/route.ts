@@ -3,6 +3,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { createServerSupabase } from "@/lib/supabase-server";
 import { zoekRelevanteChunksMetMeta, maakContext, type DocumentChunk, type BronVerwijzing, type RetrievalMeta } from "@/lib/rag";
 import { heeftReformulatieNodig, reformuleerVraag } from "@/lib/query-reformulatie";
+import { controleerLimiet, LIMIETEN } from "@/lib/rate-limit";
+import { rateLimited } from "@/lib/api-errors";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -269,6 +271,11 @@ export async function POST(req: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
     }
+
+    // Rate limiting (WP2): vóór RAG/Anthropic, zodat een loop geen kosten maakt.
+    // Moet vóór de SSE-stream gebeuren — een 429 is een gewone JSON-response.
+    const limiet = await controleerLimiet(supabase, LIMIETEN.chat);
+    if (!limiet.toegestaan) return rateLimited("chat.POST", limiet.resetAt);
 
     // Profiel + fondsnaam ophalen voor persoonlijke context
     const { data: profiel } = await supabase

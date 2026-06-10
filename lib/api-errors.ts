@@ -103,3 +103,40 @@ export function badRequest(label: string, userMessage: string, status: number = 
   console.warn(`[${label}] 400 ${userMessage}`);
   return NextResponse.json({ error: userMessage }, { status });
 }
+
+/**
+ * HTTP 429-response voor rate limiting (Route A WP2).
+ *
+ * Gesanitiseerde, leesbare Nederlandse melding mét een concrete hint wanneer het
+ * weer mag, plus een `Retry-After`-header (seconden) zodat clients netjes kunnen
+ * terugschakelen. Geen Supabase-/teller-details in de response.
+ *
+ * @param label   Routelabel voor server-log (bv. "chat.POST").
+ * @param resetAt Moment waarop er weer ruimte komt; mag null zijn (onbekend).
+ */
+export function rateLimited(label: string, resetAt: Date | null): NextResponse {
+  const nu = Date.now();
+  const secondenTotReset =
+    resetAt && resetAt.getTime() > nu
+      ? Math.ceil((resetAt.getTime() - nu) / 1000)
+      : 60;
+
+  const hint = formatteerResetHint(secondenTotReset);
+  const userMessage = `U heeft te veel verzoeken achter elkaar gedaan. Probeer het ${hint} opnieuw.`;
+
+  console.warn(`[${label}] 429 rate limited — reset over ~${secondenTotReset}s`);
+
+  return NextResponse.json(
+    { error: userMessage },
+    { status: 429, headers: { "Retry-After": String(secondenTotReset) } }
+  );
+}
+
+/** Maakt een korte NL-tijdshint ("over circa 3 minuten") van een aantal seconden. */
+function formatteerResetHint(seconden: number): string {
+  if (seconden <= 90) {
+    return `over circa ${Math.max(1, Math.round(seconden / 10) * 10)} seconden`;
+  }
+  const minuten = Math.ceil(seconden / 60);
+  return `over circa ${minuten} ${minuten === 1 ? "minuut" : "minuten"}`;
+}

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createServerSupabase } from "@/lib/supabase-server";
+import { controleerLimiet, LIMIETEN } from "@/lib/rate-limit";
+import { rateLimited } from "@/lib/api-errors";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -38,6 +40,10 @@ export async function POST(
     if (!user) {
       return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
     }
+
+    // Rate limiting (WP2): vóór de Anthropic-call.
+    const limiet = await controleerLimiet(supabase, LIMIETEN.besluit_concept);
+    if (!limiet.toegestaan) return rateLimited("procedures.besluit-concept", limiet.resetAt);
 
     // Verifieer stap + procedure (RLS doet de fonds-check)
     const { data: stap } = await supabase

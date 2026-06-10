@@ -13,7 +13,7 @@ Dit document logt per werkpakket wat is uitgevoerd, welke afwijkingen er waren t
 | # | Werkpakket | Status | Datum | Afwijking |
 |---|---|---|---|---|
 | WP1 | Security headers in `next.config.ts` | ✅ Klaar | 18-05-2026 | Geen — CSP-allowlist alleen Vercel-default URL (gebruikersvoorkeur) |
-| WP2 | Rate limiting via Upstash Redis | ⏳ Wacht | — | Geblokkeerd op Upstash-account |
+| WP2 | Rate limiting in-stack (Postgres) | ✅ Klaar | 10-06-2026 | In-stack i.p.v. Upstash (decisions/0005); teller op auth.uid(); AI-routes 30/uur |
 | WP3 | File upload hardening (size + magic-byte) | ⏳ Pending | — | — |
 | WP4 | Prompt-injection-bescherming | ⏳ Pending | — | — |
 | WP5 | CSRF Origin-check (middleware.ts) | ⏳ Pending | — | — |
@@ -98,6 +98,48 @@ app/api/vergaderingen/route.ts
 
 ---
 
+## WP2 — Rate limiting in-stack (Postgres) — ✅ klaar 10-06-2026
+
+**Afwijking t.o.v. plan**: het oorspronkelijke WP2-plan gebruikte Upstash Redis + `@upstash/ratelimit`. Conform `decisions/0005` (geen nieuwe sub-verwerker voor MVP) is dit vervangen door een **in-stack sliding-window-teller in Supabase Postgres**. Geen Upstash, geen Vercel KV, geen nieuwe env-vars.
+
+**Geleverd**:
+
+- **Migratie `supabase/migrations/2026_06_10_rate_limiting.sql`** (idempotent, migratie-eerst-dan-deploy):
+  - Tabel `rate_limit_events` (gebruiker_id, endpoint, tijdstip) — één rij per request-event (sliding-window-log).
+  - `security definer`-functie `fn_rate_limit_check(p_endpoint, p_limiet, p_venster)` die atomair telt-binnen-venster, verlopen events snoeit (tabel blijft klein) én beslist. Retourneert `{toegestaan, resterend, reset_at}`.
+- **`lib/rate-limit.ts`**: helper `controleerLimiet(supabase, sleutel)` + centrale `LIMIETEN`-config (één plek voor tuning). Fail-open bij DB-fout (een rate-limiter mag de app niet platleggen).
+- **`lib/api-errors.ts`**: nieuwe `rateLimited(label, resetAt)` → HTTP 429 met gesanitiseerde NL-melding, reset-hint en `Retry-After`-header.
+- **Toegepast op vier endpoints** (direct ná de auth-check, vóór RAG/Anthropic/extractie):
+  - `app/api/chat/route.ts` — 20 / 5 min (vóór de SSE-stream, zodat de 429 een gewone JSON-response is)
+  - `app/api/documents/upload/route.ts` — 10 / uur
+  - `app/api/agendapunten/[id]/voorbereiding/route.ts` — 30 / uur
+  - `app/api/procedures/[id]/stappen/[stapId]/besluit-concept/route.ts` — 30 / uur
+- **`lib/rate-limit.sanity.ts`**: pure referentie-implementatie van het sliding-window-algoritme + 6 asserts (venster/limiet/resterend/reset/prune). Groen via `npx tsx`.
+
+**Belangrijke ontwerpkeuzes (bevestigd met gebruiker 10-06-2026)**:
+
+1. **Teller op `auth.uid()`, niet op een meegegeven `p_gebruiker_id`.** De werkopdracht noemde een `p_gebruiker_id`-parameter; die is bewust weggelaten. Reden: met de anon-key zou een client een vreemd gebruiker-id kunnen meesturen om de eigen check te ontwijken. Door intern op `auth.uid()` te sleutelen is de limiet niet te spoofen.
+2. **RLS deny-all + `revoke`.** De teller-tabel heeft RLS aan zónder policies en ingetrokken directe rechten. De `security definer`-functie is het enige schrijf-/leespad — een gebruiker kan zijn eigen teller niet lezen, verwijderen of resetten.
+3. **AI-routes op 30/uur** (voorbereiding + besluit-concept), conform de WP2-tabel in het plan ("AI-voorbereiding/besluit-concept routes — 30 req/uur").
+4. **Loginroute buiten scope.** App-level limiting op `auth.uid()` werkt alleen voor geauthenticeerde requests; de loginroute heeft nog geen gebruiker. Supabase Auth heeft eigen brute-force-bescherming. Een IP/e-mail-teller zou een ongeauthenticeerde schrijfroute naar de tabel vergen (extra aanvalsoppervlak) — niet meegenomen.
+5. **Per-IP-limiet (Vercel Firewall) niet meegenomen** — optioneel, later (buiten scope per werkopdracht).
+
+**Bewust geaccepteerde schuld** (conform decisions/0005):
+- Eén DB-round-trip per rate-check (verwaarloosbaar bij MVP-volume).
+- Lichte over-telling mogelijk onder gelijktijdige requests (geen advisory lock); aanvaardbaar voor MVP, optioneel te harden bij opschaling.
+- **Fail-open**: bij DB-storing valt de limiet weg (beschikbaarheid boven handhaving).
+
+**Kosten-backstop (handmatig, geen code)**: stel een **spend-limiet op de Anthropic API-key** in via de Anthropic Console als extra grendel tegen kosten-runaway. Te zetten door gebruiker.
+
+**Verificatie**:
+- `npx tsx lib/rate-limit.sanity.ts` — 6/6 groen.
+- `./node_modules/.bin/tsc --noEmit --skipLibCheck` exit 0.
+- DB-sanity (na migratie draaien): `select fn_rate_limit_check('chat',3,'1 minute')` 4× → 4e geeft `toegestaan=false`.
+- RLS-bewijs (na deploy): directe `select`/`delete` op `rate_limit_events` met anon-key geeft 0 rijen / wordt geweigerd.
+- Handmatige smoke: 21 chat-calls < 5 min → 21e is 429 met `Retry-After`.
+
+---
+
 ## WP7 — Sentry monitoring — 🅿️ uitgesteld
 
 **Beslissing 18-05-2026**: gebruiker heeft WP7 uitgesteld omdat het Sentry-account nog niet bestaat. Voorbereiding is wel gedaan:
@@ -125,7 +167,8 @@ app/api/vergaderingen/route.ts
 
 | Wat | Voor | Status |
 |---|---|---|
-| Upstash Redis-account + `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` | WP2 | Niet gestart |
+| ~~Upstash Redis-account~~ | ~~WP2~~ | Vervallen — WP2 in-stack opgelost (decisions/0005) |
+| Anthropic spend-limiet instellen (Console) — kosten-backstop | WP2 | Handmatige actie gebruiker |
 | Sentry-account + `SENTRY_DSN` + `SENTRY_AUTH_TOKEN` (EU-residency) | WP7 | Uitgesteld |
 | Productie-URL bevestigen (Vercel-default of custom domain) | WP1 ✅, WP5 toekomst | Bevestigd: Vercel-default |
 

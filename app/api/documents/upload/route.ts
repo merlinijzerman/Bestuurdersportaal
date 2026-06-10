@@ -10,6 +10,8 @@ import {
   extractTekst,
   ONDERSTEUNDE_TYPES,
 } from "@/lib/document-extractie";
+import { controleerLimiet, LIMIETEN } from "@/lib/rate-limit";
+import { rateLimited } from "@/lib/api-errors";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -92,6 +94,10 @@ export async function POST(req: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
     }
+
+    // Rate limiting (WP2): vóór het inlezen/extraheren van het bestand.
+    const limiet = await controleerLimiet(supabase, LIMIETEN.upload);
+    if (!limiet.toegestaan) return rateLimited("documents.upload", limiet.resetAt);
 
     const { data: profiel } = await supabase
       .from("profielen")

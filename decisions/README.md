@@ -29,3 +29,4 @@ Triviale of puur uitvoerende wijzigingen horen in de release-historie van `HANDO
 | [0002](./0002-generieke-proceduremodule-definitie-als-data.md) | Generieke proceduremodule: definitie als data, bouwblok-engine uitgesteld | Geaccepteerd (richting) | 2026-05-22 |
 | [0003](./0003-subagent-werkwijze.md) | Laag-A-subagents als ontwikkel-werkwijze (review + ontwerpborging) | Geaccepteerd | 2026-05-22 |
 | [0004](./0004-werkverdeling-plannen-vs-uitvoeren.md) | Werkverdeling: plannen in Cowork, uitvoeren in Claude Code | Geaccepteerd | 2026-05-22 |
+| [0005](./0005-rate-limiting-en-monitoring-in-stack-mvp.md) | Rate limiting (Postgres) en monitoring (Supabase/Vercel) in-stack voor MVP; geen Upstash/Sentry | Geaccepteerd | 2026-06-07 |

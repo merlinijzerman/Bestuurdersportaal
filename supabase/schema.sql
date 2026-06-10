@@ -633,3 +633,73 @@ create policy "notificaties insert eigen fonds" on public.notificaties
   for insert with check (
     fonds_id = (select fonds_id from public.profielen where id = auth.uid())
   );
+
+-- ── Rate limiting (Security Route A — WP2) ──────────────────
+-- Bron van waarheid: supabase/migrations/2026_06_10_rate_limiting.sql.
+-- Sliding-window-teller in Postgres (geen Upstash, conform decisions/0005).
+-- Niet-omzeilbaar: RLS staat aan ZONDER policies (deny-all) + directe rechten
+-- ingetrokken; de security-definer-functie is het enige schrijf-/leespad en
+-- sleutelt op auth.uid(), zodat een gebruiker zijn eigen teller niet kan
+-- resetten of een vreemd gebruiker-id kan meesturen.
+create table if not exists public.rate_limit_events (
+  id            uuid primary key default uuid_generate_v4(),
+  gebruiker_id  uuid not null references auth.users(id) on delete cascade,
+  endpoint      text not null,
+  tijdstip      timestamptz not null default now()
+);
+
+create index if not exists idx_rate_limit_lookup
+  on public.rate_limit_events (gebruiker_id, endpoint, tijdstip desc);
+
+alter table public.rate_limit_events enable row level security;
+revoke all on public.rate_limit_events from anon, authenticated;
+
+create or replace function public.fn_rate_limit_check(
+  p_endpoint text,
+  p_limiet   int,
+  p_venster  interval
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid     uuid := auth.uid();
+  v_aantal  int;
+  v_oudste  timestamptz;
+  v_reset   timestamptz;
+begin
+  if v_uid is null then
+    raise exception 'rate limit check vereist een geauthenticeerde gebruiker'
+      using errcode = '28000';
+  end if;
+
+  delete from public.rate_limit_events
+   where gebruiker_id = v_uid
+     and endpoint = p_endpoint
+     and tijdstip < now() - p_venster;
+
+  select count(*), min(tijdstip)
+    into v_aantal, v_oudste
+    from public.rate_limit_events
+   where gebruiker_id = v_uid
+     and endpoint = p_endpoint;
+
+  if v_aantal >= p_limiet then
+    v_reset := coalesce(v_oudste, now()) + p_venster;
+    return jsonb_build_object('toegestaan', false, 'resterend', 0, 'reset_at', v_reset);
+  end if;
+
+  insert into public.rate_limit_events (gebruiker_id, endpoint)
+  values (v_uid, p_endpoint);
+
+  v_reset := coalesce(v_oudste, now()) + p_venster;
+  return jsonb_build_object(
+    'toegestaan', true, 'resterend', p_limiet - v_aantal - 1, 'reset_at', v_reset
+  );
+end;
+$$;
+
+revoke all on function public.fn_rate_limit_check(text, int, interval) from public, anon;
+grant execute on function public.fn_rate_limit_check(text, int, interval) to authenticated;
