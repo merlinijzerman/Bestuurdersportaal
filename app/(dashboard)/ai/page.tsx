@@ -21,12 +21,43 @@ interface Bericht {
   modus?: Modus;
 }
 
+// Actieve documentscope (increment 1). titels op moment van zetten, zodat de
+// chip en de gesprekshistorie het stuk herkenbaar tonen.
+interface DocumentScope {
+  document_ids: string[];
+  titels: string[];
+}
+
+// Eén suggestie in de @-mention-typeahead.
+interface DocSuggestie {
+  id: string;
+  titel: string;
+  bron: string;
+  bestandstype: string | null;
+  aangemaakt: string | null;
+}
+
 // Eén item in het gesprekken-overzicht (Fase B2-volledig).
 interface GesprekItem {
   id: string;
   titel: string | null;
   bijgewerkt: string;
   berichten: Bericht[];
+  document_scope?: unknown;
+}
+
+// Leest de jsonb-scope uit een gesprek terug naar de UI-vorm (of null).
+function leesScope(ruw: unknown): DocumentScope | null {
+  if (!ruw || typeof ruw !== "object") return null;
+  const o = ruw as { document_ids?: unknown; titels?: unknown };
+  const ids = Array.isArray(o.document_ids)
+    ? o.document_ids.filter((x): x is string => typeof x === "string")
+    : [];
+  if (ids.length === 0) return null;
+  const titels = Array.isArray(o.titels)
+    ? o.titels.filter((x): x is string => typeof x === "string")
+    : [];
+  return { document_ids: ids, titels };
 }
 
 const BRONKLEUR: Record<string, string> = {
@@ -128,6 +159,12 @@ export default function AiPage() {
   // Gesprekken-overzicht (Fase B2-volledig).
   const [gesprekken, setGesprekken] = useState<GesprekItem[]>([]);
   const [historieOpen, setHistorieOpen] = useState(false);
+  // Document-scope (increment 1): beperkt de vraag tot één specifiek stuk.
+  const [documentScope, setDocumentScope] = useState<DocumentScope | null>(null);
+  // @-mention-typeahead op documenttitels.
+  const [mentionOpen, setMentionOpen] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState("");
+  const [mentionSuggesties, setMentionSuggesties] = useState<DocSuggestie[]>([]);
   const supabase = createClient();
 
   // Haalt de eigen, niet-gearchiveerde gesprekken op voor het overzicht.
@@ -139,7 +176,7 @@ export default function AiPage() {
       if (!uid) return;
       const { data } = await supabase
         .from("gesprekken")
-        .select("id, titel, bijgewerkt, berichten")
+        .select("id, titel, bijgewerkt, berichten, document_scope")
         .eq("gebruiker_id", uid)
         .eq("gearchiveerd", false)
         .order("bijgewerkt", { ascending: false })
@@ -150,7 +187,8 @@ export default function AiPage() {
     }
   }
 
-  // Opent een bestaand gesprek in de chat.
+  // Opent een bestaand gesprek in de chat — inclusief de opgeslagen scope (§8),
+  // zodat een hervat gesprek herkenbaar "over «titel»" blijft.
   function openGesprek(item: GesprekItem) {
     if (laden) return;
     gesprekId.current = item.id;
@@ -161,6 +199,7 @@ export default function AiPage() {
         ? [welkomstRef.current]
         : []
     );
+    setDocumentScope(leesScope(item.document_scope));
     setHistorieOpen(false);
   }
 
@@ -175,6 +214,7 @@ export default function AiPage() {
     if (gesprekId.current === id) {
       gesprekId.current = null;
       setBerichten(welkomstRef.current ? [welkomstRef.current] : []);
+      setDocumentScope(null);
     }
     laadGesprekken();
   }
@@ -189,15 +229,35 @@ export default function AiPage() {
         finale.find((b) => b.rol === "gebruiker")?.tekst || "Gesprek";
       const titel = eersteVraag.slice(0, 80);
 
+      // Scope meeschrijven als jsonb {type, document_ids, titels, gezet_op}.
+      const scopePayload = documentScope
+        ? {
+            type: "single",
+            document_ids: documentScope.document_ids,
+            titels: documentScope.titels,
+            gezet_op: new Date().toISOString(),
+          }
+        : null;
+
       if (gesprekId.current) {
         await supabase
           .from("gesprekken")
-          .update({ berichten: finale, bijgewerkt: new Date().toISOString() })
+          .update({
+            berichten: finale,
+            document_scope: scopePayload,
+            bijgewerkt: new Date().toISOString(),
+          })
           .eq("id", gesprekId.current);
       } else {
         const { data } = await supabase
           .from("gesprekken")
-          .insert({ gebruiker_id: uid, fonds_id: fondsId, titel, berichten: finale })
+          .insert({
+            gebruiker_id: uid,
+            fonds_id: fondsId,
+            titel,
+            berichten: finale,
+            document_scope: scopePayload,
+          })
           .select("id")
           .single();
         if (data?.id) gesprekId.current = data.id as string;
@@ -268,7 +328,7 @@ export default function AiPage() {
         try {
           const { data: laatste } = await supabase
             .from("gesprekken")
-            .select("id, berichten")
+            .select("id, berichten, document_scope")
             .eq("gebruiker_id", user.id)
             .eq("gearchiveerd", false)
             .order("bijgewerkt", { ascending: false })
@@ -279,6 +339,7 @@ export default function AiPage() {
           if (laatste?.id && Array.isArray(opgeslagen) && opgeslagen.length > 0) {
             gesprekId.current = laatste.id as string;
             setBerichten(opgeslagen);
+            setDocumentScope(leesScope(laatste.document_scope));
             hersteld = true;
           }
         } catch (e) {
@@ -287,6 +348,31 @@ export default function AiPage() {
 
         if (!hersteld) {
           setBerichten([{ rol: "ai", tekst: personalTekst }]);
+        }
+
+        // Instappunt-knop "Vraag de AI over dit stuk": /ai?doc=<id> opent de chat
+        // met scope op dat document. We zetten de scope expliciet (validatie volgt
+        // server-side bij de eerste vraag). Een nieuw gesprek starten zodat de
+        // scope niet over een bestaand gesprek heen valt.
+        try {
+          const docParam = new URLSearchParams(window.location.search).get("doc");
+          if (docParam) {
+            const { data: d } = await supabase
+              .from("documenten")
+              .select("id, titel, actief")
+              .eq("id", docParam)
+              .maybeSingle();
+            if (d?.id && d.actief !== false) {
+              gesprekId.current = null;
+              setBerichten([{ rol: "ai", tekst: personalTekst }]);
+              setDocumentScope({
+                document_ids: [d.id as string],
+                titels: [(d.titel as string) || "dit document"],
+              });
+            }
+          }
+        } catch (e) {
+          console.error("Scope uit ?doc= zetten mislukt:", e);
         }
 
         // Vul het gesprekken-overzicht.
@@ -336,7 +422,14 @@ export default function AiPage() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages, fonds_id: fondsId, modus }),
+        body: JSON.stringify({
+          messages,
+          fonds_id: fondsId,
+          modus,
+          document_scope: documentScope
+            ? { document_ids: documentScope.document_ids }
+            : undefined,
+        }),
       });
 
       // Fouten (400/401/500) komen als JSON terug, niet als stream.
@@ -476,8 +569,65 @@ export default function AiPage() {
     gesprekId.current = null;
     setBerichten(welkomstRef.current ? [welkomstRef.current] : []);
     setInvoer("");
+    setDocumentScope(null);
+    sluitMention();
     setHistorieOpen(false);
   }
+
+  // ── @-mention-typeahead op documenttitels ──────────────────────────────────
+  // Detecteert een `@…`-fragment aan het eind van de invoer en opent een
+  // typeahead. RLS beperkt de zoekresultaten tot het eigen fonds (+ generiek).
+  function verwerkInvoer(waarde: string) {
+    setInvoer(waarde);
+    const m = waarde.match(/@([^\s@]*)$/);
+    if (m) {
+      setMentionOpen(true);
+      setMentionQuery(m[1]);
+    } else {
+      sluitMention();
+    }
+  }
+
+  function sluitMention() {
+    setMentionOpen(false);
+    setMentionQuery("");
+    setMentionSuggesties([]);
+  }
+
+  // Selectie zet de scope (single → vervangt een bestaande scope) en verwijdert
+  // het @-fragment uit de invoer. Selectie is altijd expliciet (§4).
+  function kiesDocument(s: DocSuggestie) {
+    setDocumentScope({ document_ids: [s.id], titels: [s.titel] });
+    setInvoer((huidig) => huidig.replace(/@([^\s@]*)$/, "").trimEnd());
+    sluitMention();
+  }
+
+  // Zoek documenten zodra het @-fragment wijzigt (ILIKE op titel, eigen fonds).
+  useEffect(() => {
+    if (!mentionOpen) return;
+    let geannuleerd = false;
+    const timer = window.setTimeout(async () => {
+      try {
+        let q = supabase
+          .from("documenten")
+          .select("id, titel, bron, bestandstype, aangemaakt")
+          .eq("actief", true)
+          .order("aangemaakt", { ascending: false })
+          .limit(8);
+        if (mentionQuery.trim()) q = q.ilike("titel", `%${mentionQuery.trim()}%`);
+        const { data } = await q;
+        if (!geannuleerd && Array.isArray(data)) {
+          setMentionSuggesties(data as DocSuggestie[]);
+        }
+      } catch (e) {
+        console.error("Documenten zoeken (mention) mislukt:", e);
+      }
+    }, 150);
+    return () => {
+      geannuleerd = true;
+      window.clearTimeout(timer);
+    };
+  }, [mentionOpen, mentionQuery]);
 
   return (
     <div className="flex flex-col h-screen">
@@ -721,28 +871,92 @@ export default function AiPage() {
       )}
 
       {/* Invoerbalk */}
-      <div className="bg-white border-t border-gray-200 p-4 flex gap-3">
-        <textarea
-          value={invoer}
-          onChange={(e) => setInvoer(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              stuurBericht();
+      <div className="bg-white border-t border-gray-200 p-4 relative">
+        {/* @-mention-typeahead */}
+        {mentionOpen && (
+          <div className="absolute bottom-full left-4 right-4 mb-2 max-h-64 overflow-y-auto bg-white border border-gray-200 rounded-xl shadow-lg z-20">
+            <div className="px-3 py-2 text-xs text-gray-500 border-b border-gray-100">
+              Kies een document om uw vraag tot dat stuk te beperken
+            </div>
+            {mentionSuggesties.length === 0 ? (
+              <div className="px-3 py-3 text-sm text-gray-500">
+                Geen document met deze titel gevonden.
+              </div>
+            ) : (
+              mentionSuggesties.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => kiesDocument(s)}
+                  className="w-full text-left px-3 py-2 hover:bg-amber-50 border-b border-gray-50 last:border-0"
+                >
+                  <div className="text-sm font-medium text-[#0F2744] truncate">{s.titel}</div>
+                  <div className="text-xs text-gray-500">
+                    {s.bron}
+                    {s.bestandstype ? ` · ${s.bestandstype.toUpperCase()}` : ""}
+                    {s.aangemaakt
+                      ? ` · ${new Date(s.aangemaakt).toLocaleDateString("nl-NL")}`
+                      : ""}
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        )}
+
+        {/* Scope-chip: "Je vraagt nu over: «titel»" met wis-knop */}
+        {documentScope && (
+          <div className="mb-2 flex items-center gap-2">
+            <span className="inline-flex items-center gap-2 max-w-full bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded-full pl-3 pr-2 py-1">
+              <span className="truncate">
+                Je vraagt nu over: «{documentScope.titels[0] || "dit document"}»
+                {documentScope.document_ids.length > 1
+                  ? ` +${documentScope.document_ids.length - 1}`
+                  : ""}
+              </span>
+              <button
+                onClick={() => setDocumentScope(null)}
+                className="shrink-0 w-4 h-4 rounded-full bg-amber-200 hover:bg-amber-300 text-amber-800 flex items-center justify-center"
+                aria-label="Documentscope wissen"
+                title="Scope wissen — weer de hele bibliotheek bevragen"
+              >
+                ✕
+              </button>
+            </span>
+          </div>
+        )}
+
+        <div className="flex gap-3">
+          <textarea
+            value={invoer}
+            onChange={(e) => verwerkInvoer(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape" && mentionOpen) {
+                sluitMention();
+                return;
+              }
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                if (mentionOpen) return; // Enter binnen de typeahead niet versturen
+                stuurBericht();
+              }
+            }}
+            placeholder={
+              documentScope
+                ? "Stel een vraag over dit document... (@ om te wisselen)"
+                : "Stel een vraag... (@ om een specifiek document te kiezen)"
             }
-          }}
-          placeholder="Stel een vraag aan de AI-assistent... (Enter om te sturen)"
-          className="flex-1 border border-gray-200 rounded-xl px-3 py-2.5 text-sm resize-none outline-none focus:border-[#C9A84C] bg-gray-50"
-          rows={2}
-          disabled={laden}
-        />
-        <button
-          onClick={() => stuurBericht()}
-          disabled={laden || !invoer.trim()}
-          className="w-11 h-11 bg-[#0F2744] rounded-xl flex items-center justify-center text-white hover:bg-[#C9A84C] hover:text-[#0F2744] disabled:opacity-40 disabled:cursor-not-allowed transition-colors self-end"
-        >
-          ➤
-        </button>
+            className="flex-1 border border-gray-200 rounded-xl px-3 py-2.5 text-sm resize-none outline-none focus:border-[#C9A84C] bg-gray-50"
+            rows={2}
+            disabled={laden}
+          />
+          <button
+            onClick={() => stuurBericht()}
+            disabled={laden || !invoer.trim()}
+            className="w-11 h-11 bg-[#0F2744] rounded-xl flex items-center justify-center text-white hover:bg-[#C9A84C] hover:text-[#0F2744] disabled:opacity-40 disabled:cursor-not-allowed transition-colors self-end"
+          >
+            ➤
+          </button>
+        </div>
       </div>
     </div>
   );

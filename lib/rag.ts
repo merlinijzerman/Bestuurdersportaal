@@ -47,6 +47,14 @@ export interface RetrievalMeta {
   // Bronvermelding-validatie: aantal [Bron N]-citaties in het antwoord en
   // hoeveel daarvan niet naar een aangeleverde bron verwijzen (dangling).
   citaties?: { totaal: number; ongeldig: number };
+  // Document-scope (increment 1). Aanwezig zodra een vraag tot één/enkele
+  // document(en) is beperkt; legt voor de audit vast waarop gescoopt is.
+  scope?: {
+    document_ids: string[];
+    titels: string[];
+    strategie: "targeted";
+    algemene_kennis: boolean;
+  };
 }
 
 // Platte rij zoals public.zoek_chunks(...) die teruggeeft (zie migratie
@@ -120,13 +128,19 @@ export async function zoekRelevanteChunksMetMeta(
   vraag: string,
   _fondsId: string,
   maxResults = 8,
-  hybrideAan?: boolean
+  hybrideAan?: boolean,
+  documentIds?: string[]
 ): Promise<{ chunks: DocumentChunk[]; meta: RetrievalMeta }> {
+  // Documentscope (increment 1): null = hele bibliotheek. Wordt vóór ranking in
+  // de RPC's toegepast. Onafhankelijk van de (mogelijk geherformuleerde) vraag,
+  // zodat reformulatie de scope nooit kan wijzigen.
+  const scope = documentIds && documentIds.length > 0 ? documentIds : null;
+
   // Per-aanroep instelling (uit het portaal) is leidend; valt terug op de
   // env-default HYBRID_SEARCH als er geen waarde is meegegeven.
   const hybride = hybrideAan ?? HYBRID_ENABLED;
   if (!hybride) {
-    return zoekViaFTS(vraag, maxResults);
+    return zoekViaFTS(vraag, maxResults, scope);
   }
 
   const supabase = await createServerSupabase();
@@ -139,7 +153,7 @@ export async function zoekRelevanteChunksMetMeta(
     vector = await embedTekst(vraag);
   } catch (e) {
     console.error("Hybride: query-embedding mislukt, terugval op FTS:", e);
-    const r = await zoekViaFTS(vraag, maxResults);
+    const r = await zoekViaFTS(vraag, maxResults, scope);
     return {
       chunks: r.chunks,
       meta: { ...r.meta, embedding_query_success: false, fallback_reason: "embedding_error" },
@@ -147,10 +161,12 @@ export async function zoekRelevanteChunksMetMeta(
   }
 
   // RRF-RPC: FTS + vector versmolten (SECURITY INVOKER → RLS blijft gelden).
+  // p_document_ids = scope vóór de fusion (null = hele bibliotheek).
   const { data, error } = await supabase.rpc("zoek_chunks_hybride", {
     p_query: vraag,
     p_embedding: naarVectorLiteral(vector),
     p_limit: overFetch,
+    p_document_ids: scope,
   });
 
   if (!error && Array.isArray(data) && data.length > 0) {
@@ -166,7 +182,7 @@ export async function zoekRelevanteChunksMetMeta(
   }
 
   // RPC faalde of leeg → terugval op FTS (embedding lukte wél).
-  const r = await zoekViaFTS(vraag, maxResults);
+  const r = await zoekViaFTS(vraag, maxResults, scope);
   return {
     chunks: r.chunks,
     meta: {
@@ -187,16 +203,19 @@ export async function zoekRelevanteChunksMetMeta(
 // Tenant-isolatie loopt overal via RLS (de RPC is SECURITY INVOKER).
 async function zoekViaFTS(
   vraag: string,
-  maxResults = 8
+  maxResults = 8,
+  scope: string[] | null = null
 ): Promise<{ chunks: DocumentChunk[]; meta: RetrievalMeta }> {
   const supabase = await createServerSupabase();
   const overFetch = Math.max(maxResults * 3, 20);
   const maxPerDoc = Math.max(3, Math.ceil(maxResults / 2));
 
   // Poging 1: gerangschikte RPC (Dutch FTS + ts_rank_cd).
+  // p_document_ids = scope vóór ranking (null = hele bibliotheek).
   const { data, error } = await supabase.rpc("zoek_chunks", {
     p_query: vraag,
     p_limit: overFetch,
+    p_document_ids: scope,
   });
 
   if (!error && Array.isArray(data) && data.length > 0) {
@@ -227,13 +246,16 @@ async function zoekViaFTS(
   `;
 
   if (zoekterm.length > 0) {
-    // Poging 2: FTS zonder Dutch-config.
-    const { data: data2, error: error2 } = await supabase
+    // Poging 2: FTS zonder Dutch-config. Scope ook hier toepassen, anders zou
+    // het vangnet buiten het gescopete document kunnen lekken.
+    let q2 = supabase
       .from("document_chunks")
       .select(selectQuery)
       .eq("documenten.actief", true)
       .textSearch("zoek_vector", zoekterm, { type: "plain" })
       .limit(overFetch);
+    if (scope) q2 = q2.in("document_id", scope);
+    const { data: data2, error: error2 } = await q2;
 
     if (!error2 && data2 && data2.length > 0) {
       const gevonden = data2 as unknown as DocumentChunk[];
@@ -249,12 +271,14 @@ async function zoekViaFTS(
   const trefwoorden = zoekterm.split(" ").filter((w) => w.length > 3);
   if (trefwoorden.length > 0) {
     const hoofdwoord = trefwoorden.sort((a, b) => b.length - a.length)[0];
-    const { data: data3 } = await supabase
+    let q3 = supabase
       .from("document_chunks")
       .select(selectQuery)
       .eq("documenten.actief", true)
       .ilike("tekst", `%${hoofdwoord}%`)
       .limit(overFetch);
+    if (scope) q3 = q3.in("document_id", scope);
+    const { data: data3 } = await q3;
 
     if (data3 && data3.length > 0) {
       const gevonden = data3 as unknown as DocumentChunk[];

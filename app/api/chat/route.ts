@@ -5,6 +5,7 @@ import { zoekRelevanteChunksMetMeta, maakContext, type DocumentChunk, type BronV
 import { heeftReformulatieNodig, reformuleerVraag } from "@/lib/query-reformulatie";
 import { controleerLimiet, LIMIETEN } from "@/lib/rate-limit";
 import { rateLimited } from "@/lib/api-errors";
+import { valideerScope, type ScopeDocumentRij } from "@/lib/document-scope";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -101,6 +102,24 @@ REGELS VAN INHOUD:
 - Maak altijd glashelder welke informatie waarvandaan komt; weef de markeringen natuurlijk in de tekst.
 - Verzin geen specifieke feiten over dit fonds; alleen wat in de bronnen staat.
 - Bij algemene kennis: noem de bron-instantie (DNB, AFM, Pensioenfederatie, rijksoverheid).`;
+
+// ============================================================
+//  Document-scope (increment 1) — strict-document gedrag
+// ============================================================
+// Bij een actieve documentscope antwoordt de AI UITSLUITEND op basis van het/de
+// aangeleverde document(en). De retrieval levert fysiek alleen chunks uit dat
+// document (scope vóór ranking in de RPC); deze prompt borgt de tweede laag:
+// geen aanvulling uit andere documenten, eerdere context of algemene kennis, en
+// een expliciete "niet aangetroffen"-melding als het antwoord er niet in staat.
+const SP_DOCUMENT_SCOPE_REGELS = `U beantwoordt deze vraag UITSLUITEND op basis van het/de hieronder aangeleverde document(en). Dit is een bewust afgebakende vraag over één specifiek stuk.
+
+REGELS VAN INHOUD:
+- Gebruik alleen informatie die in de aangeleverde fragmenten staat. Verzin niets en vul niets aan — niet uit andere documenten, niet uit eerdere onderwerpen in dit gesprek, en niet uit uw algemene kennis.
+- Staat het antwoord (geheel of deels) niet in dit document, zeg dat dan expliciet en letterlijk: "Dit is niet in dit document aangetroffen." Doe geen gok en geef geen algemene duiding als vervanging.
+- Verwijs naar bronnen met de notatie [Bron N], waarbij N het getal is van het bron-label uit de aangeleverde context. Plaats een marker bij élke feitelijke claim.
+- Schrijf elke verwijzing als een afzonderlijke marker: [Bron 1][Bron 2] in plaats van [Bron 1, 2].
+- Wees concreet over paragraaf- en paginanummers waar die bij het bron-label staan.
+- Vraagt de gebruiker naar andere documenten of bredere context, meld dan dat deze vraag is beperkt tot het gekozen document en vraag of de scope verbreed moet worden — zoek niet stilletjes breder.`;
 
 // ============================================================
 //  Bestuurlijke antwoordstijl (achter BESTUURLIJKE_STIJL-vlag)
@@ -233,6 +252,9 @@ export async function POST(req: NextRequest) {
       vraag?: string;
       fonds_id?: string;
       modus?: Modus;
+      // Document-scope (increment 1): beperk de vraag tot één/enkele document(en).
+      // `algemene_kennis` is increment 2 — in increment 1 forceren we strict.
+      document_scope?: { document_ids?: string[]; algemene_kennis?: boolean };
     };
     const { fonds_id } = body;
     const modus: Modus = body.modus || "documenten";
@@ -304,13 +326,63 @@ export async function POST(req: NextRequest) {
       fondsnaam,
     };
 
-    // RAG-zoeken alleen voor modi waar we dat nodig hebben
+    // ── Document-scope (increment 1): server-side validatie vóór retrieval ──
+    // De client mag document_id's meesturen, maar de server valideert altijd
+    // (§7): bestaat, actief, toegang (RLS), geïndexeerd. Faalt een check, dan een
+    // concrete melding — nooit een stille terugval naar de hele bibliotheek.
+    const gevraagdeScopeIds = (body.document_scope?.document_ids ?? []).filter(
+      (id) => typeof id === "string" && id.length > 0
+    );
+    let scopeDocumentIds: string[] | undefined;
+    let scopeTitels: string[] = [];
+
+    if (gevraagdeScopeIds.length > 0) {
+      // Documentrijen ophalen — RLS beperkt tot eigen fonds (+ generiek). Een
+      // vreemd-fonds-id valt buiten deze set en wordt door valideerScope afgewezen.
+      const { data: docRows } = await supabase
+        .from("documenten")
+        .select("id, titel, bron, actief, geindexeerd, gepubliceerd, aangemaakt")
+        .in("id", gevraagdeScopeIds);
+
+      // Chunk-presentie per document (is het doorzoekbaar gemaakt?).
+      const { data: chunkRows } = await supabase
+        .from("document_chunks")
+        .select("document_id")
+        .in("document_id", gevraagdeScopeIds)
+        .limit(2000);
+      const metChunks = new Set(
+        (chunkRows ?? []).map((r) => r.document_id as string)
+      );
+
+      const gevonden: ScopeDocumentRij[] = (docRows ?? []).map((d) => ({
+        id: d.id as string,
+        titel: (d.titel as string) ?? "(zonder titel)",
+        bron: (d.bron as string) ?? "",
+        actief: d.actief !== false,
+        geindexeerd: d.geindexeerd === true,
+        gepubliceerd: (d.gepubliceerd as string | null) ?? null,
+        aangemaakt: (d.aangemaakt as string | null) ?? null,
+        heeft_chunks: metChunks.has(d.id as string),
+      }));
+
+      const validatie = valideerScope(gevraagdeScopeIds, gevonden);
+      if (!validatie.ok) {
+        return NextResponse.json({ error: validatie.melding }, { status: 400 });
+      }
+      scopeDocumentIds = validatie.documenten.map((d) => d.id);
+      scopeTitels = validatie.documenten.map((d) => d.titel);
+    }
+
+    const scopeActief = !!scopeDocumentIds && scopeDocumentIds.length > 0;
+
+    // RAG-zoeken: voor de bibliotheek-modi, of altijd bij een actieve scope
+    // (die forceert strict-document gedrag, ongeacht de gekozen modus).
     let chunks: DocumentChunk[] = [];
     let bronnen: BronVerwijzing[] = [];
     let contextTekst = "";
     let retrievalMeta: RetrievalMeta | null = null;
 
-    if (modus === "documenten" || modus === "combineren") {
+    if (scopeActief || modus === "documenten" || modus === "combineren") {
       // Hybride-schakelaar: per-fonds instelling uit het portaal is leidend;
       // valt terug op de env-default HYBRID_SEARCH als er nog niets is gezet.
       let hybrideAan = process.env.HYBRID_SEARCH === "on";
@@ -343,9 +415,24 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      const res = await zoekRelevanteChunksMetMeta(zoekVraag, fonds_id, CHUNK_BUDGET, hybrideAan);
+      const res = await zoekRelevanteChunksMetMeta(
+        zoekVraag,
+        fonds_id,
+        CHUNK_BUDGET,
+        hybrideAan,
+        scopeDocumentIds
+      );
       chunks = res.chunks;
       retrievalMeta = { ...res.meta, zoekvraag: zoekVraag, gereformuleerd };
+      // Auditspoor (§9): leg de scope vast waarop deze vraag is beperkt.
+      if (scopeActief) {
+        retrievalMeta.scope = {
+          document_ids: scopeDocumentIds!,
+          titels: scopeTitels,
+          strategie: "targeted",
+          algemene_kennis: false, // increment 1: strict, opt-in is increment 2
+        };
+      }
       const ctx = maakContext(chunks);
       contextTekst = ctx.contextTekst;
       bronnen = ctx.bronnen;
@@ -355,7 +442,18 @@ export async function POST(req: NextRequest) {
     let systeemBlokken: Anthropic.Messages.TextBlockParam[];
     let gebruikersPrompt: string;
 
-    if (modus === "algemeen") {
+    if (scopeActief) {
+      // Strict-document gedrag overschrijft de gekozen modus (increment 1).
+      const titelLabel =
+        scopeTitels.length === 1
+          ? `«${scopeTitels[0]}»`
+          : scopeTitels.map((t) => `«${t}»`).join(", ");
+      systeemBlokken = bouwSysteemBlokken(SP_DOCUMENT_SCOPE_REGELS, ctxBestuurder);
+      gebruikersPrompt =
+        chunks.length > 0
+          ? `BESCHIKBARE FRAGMENTEN UIT HET DOCUMENT ${titelLabel}:\n\n${contextTekst}\n\n---\n\nVRAAG: ${vraag}\n\nBeantwoord de vraag uitsluitend op basis van bovenstaande fragmenten. Staat het antwoord er niet in, zeg dan letterlijk: "Dit is niet in dit document aangetroffen."`
+          : `In het document ${titelLabel} zijn geen passages gevonden die op deze vraag aansluiten.\n\nVRAAG: ${vraag}\n\nAls het antwoord niet in dit document staat, antwoord dan letterlijk: "Dit is niet in dit document aangetroffen." Verzin geen antwoord en vul niet aan uit andere bronnen of algemene kennis.`;
+    } else if (modus === "algemeen") {
       systeemBlokken = bouwSysteemBlokken(SP_ALGEMEEN_REGELS, ctxBestuurder);
       gebruikersPrompt = `VRAAG: ${vraag}`;
     } else if (modus === "combineren") {
@@ -372,6 +470,11 @@ export async function POST(req: NextRequest) {
           ? `BESCHIKBARE BRONNEN:\n\n${contextTekst}\n\n---\n\nVRAAG: ${vraag}`
           : `Er zijn geen relevante documenten gevonden voor deze vraag.\n\nVRAAG: ${vraag}\n\nGeef aan dat er geen relevante bronnen zijn gevonden en stel voor welk type document zou kunnen helpen.`;
     }
+
+    // Bij een actieve scope is het gedrag strict-document, ongeacht de gekozen
+    // modus. Voor de UI-meta en het auditspoor loggen we dat als 'documenten'
+    // (strikt op interne bronnen); de scopedetails staan in retrieval_meta.
+    const effectieveModus: Modus = scopeActief ? "documenten" : modus;
 
     // Bouw de uiteindelijke messages-array voor Claude.
     // We knippen de geschiedenis op het maximum en vervangen de laatste
@@ -398,7 +501,15 @@ export async function POST(req: NextRequest) {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
 
         try {
-          send({ type: "meta", bronnen, modus, chunks_gevonden: chunks.length });
+          send({
+            type: "meta",
+            bronnen,
+            modus: effectieveModus,
+            chunks_gevonden: chunks.length,
+            scope: scopeActief
+              ? { document_ids: scopeDocumentIds, titels: scopeTitels }
+              : null,
+          });
 
           let volledig = "";
           const claudeStream = anthropic.messages.stream({
@@ -440,7 +551,7 @@ export async function POST(req: NextRequest) {
             vraag,
             antwoord: volledig,
             bronnen,
-            modus,
+            modus: effectieveModus,
             model: AI_MODEL,
             retrieval_meta: retrievalMeta,
           });

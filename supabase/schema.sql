@@ -86,9 +86,14 @@ create index if not exists idx_chunks_document on public.document_chunks(documen
 -- kan niet ORDER BY ts_rank_cd(...), daarom gebeurt het ranken hier in de DB.
 -- SECURITY INVOKER: RLS op document_chunks/documenten dwingt tenant-isolatie af.
 -- Zie migratie 2026_05_30_rag_ranking.sql.
+-- Optionele documentscope (p_document_ids; null = hele bibliotheek), toegepast
+-- VÓÓR ranking. Zie migratie 2026_06_10_document_scope.sql. De zustertfunctie
+-- public.zoek_chunks_hybride (FTS+vector via RRF) heeft dezelfde scope-param in
+-- beide armen — staat niet in dit documentatiebestand, zie die migratie.
 create or replace function public.zoek_chunks(
   p_query text,
-  p_limit int default 20
+  p_limit int default 20,
+  p_document_ids uuid[] default null
 )
 returns table (
   id uuid, document_id uuid, tekst text, pagina int, paragraaf text,
@@ -105,6 +110,7 @@ as $$
     join public.documenten d on d.id = c.document_id
    cross join websearch_to_tsquery('dutch', p_query) as q(query)
    where d.actief = true and c.zoek_vector @@ q.query
+     and (p_document_ids is null or c.document_id = any(p_document_ids))
    order by rang desc, c.chunk_index asc
    limit greatest(p_limit, 1);
 $$;
@@ -144,9 +150,14 @@ create table if not exists public.gesprekken (
   titel         text,
   berichten     jsonb not null default '[]',  -- [{rol, tekst, bronnen?, modus?}]
   gearchiveerd  boolean not null default false,
+  -- Actieve documentscope (increment 1): {type, document_ids[], titels[], gezet_op}.
+  -- NULL = hele bibliotheek. Zie migratie 2026_06_10_document_scope.sql.
+  document_scope jsonb,
   aangemaakt    timestamptz default now(),
   bijgewerkt    timestamptz default now()
 );
+
+alter table public.gesprekken add column if not exists document_scope jsonb;
 
 create index if not exists idx_gesprek_gebruiker
   on public.gesprekken(gebruiker_id, bijgewerkt desc)

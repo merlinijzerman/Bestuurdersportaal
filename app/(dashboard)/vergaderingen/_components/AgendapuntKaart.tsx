@@ -577,6 +577,13 @@ function StukKaart({ stuk }: { stuk: Stuk }) {
             {!kanInzien ? " · origineel niet beschikbaar" : ""}
           </div>
         </div>
+        <a
+          href={`/ai?doc=${stuk.id}`}
+          className="text-[11px] font-medium text-[#0F2744] px-2 py-1 rounded hover:bg-amber-50 whitespace-nowrap flex-shrink-0"
+          title="Open de AI-assistent met de vraag beperkt tot dit stuk"
+        >
+          Vraag de AI
+        </a>
         <button
           onClick={() => setOpen(!open)}
           className="text-gray-400 text-xs px-2 py-1 hover:text-[#0F2744]"

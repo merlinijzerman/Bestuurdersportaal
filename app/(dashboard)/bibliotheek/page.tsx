@@ -352,6 +352,16 @@ export default function BibliotheekPage() {
                         onClick={() => setOpenMenuId(null)}
                       />
                       <div className="absolute right-0 top-9 z-20 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[180px]">
+                        {!inactief && doc.geindexeerd && (
+                          <a
+                            href={`/ai?doc=${doc.id}`}
+                            onClick={() => setOpenMenuId(null)}
+                            className="block px-4 py-2 text-sm font-medium text-[#0F2744] hover:bg-amber-50"
+                            title="Open de AI-assistent met de vraag beperkt tot dit document"
+                          >
+                            Vraag de AI over dit stuk
+                          </a>
+                        )}
                         {kanInzien && !inactief && (
                           <a
                             href={`/api/documents/${doc.id}/bestand`}
