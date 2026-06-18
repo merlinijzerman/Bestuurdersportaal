@@ -15,6 +15,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase-server";
+import { requireCapability } from "@/lib/capabilities";
 import {
   DOSSIER_STATUSSEN,
   PERIODE_TYPES,
@@ -88,6 +89,16 @@ export async function PATCH(
     } = await supabase.auth.getUser();
     if (!user) {
       return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+    }
+
+    // Beheeractie: dossierstatus/periode wijzigen vereist de capability
+    // `dossiers.manage` (TO §5). Server-side leidend; UI-zichtbaarheid is
+    // cosmetisch. RLS borgt daarnaast tenant-isolatie per fonds_id.
+    if (!(await requireCapability(user.id, "dossiers.manage"))) {
+      return NextResponse.json(
+        { error: "Geen rechten om dit dossier te beheren" },
+        { status: 403 }
+      );
     }
 
     const body = (await req.json()) as PatchBody;

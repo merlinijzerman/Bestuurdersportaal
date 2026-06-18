@@ -30,3 +30,6 @@ Triviale of puur uitvoerende wijzigingen horen in de release-historie van `HANDO
 | [0003](./0003-subagent-werkwijze.md) | Laag-A-subagents als ontwikkel-werkwijze (review + ontwerpborging) | Geaccepteerd | 2026-05-22 |
 | [0004](./0004-werkverdeling-plannen-vs-uitvoeren.md) | Werkverdeling: plannen in Cowork, uitvoeren in Claude Code | Geaccepteerd | 2026-05-22 |
 | [0005](./0005-rate-limiting-en-monitoring-in-stack-mvp.md) | Rate limiting (Postgres) en monitoring (Supabase/Vercel) in-stack voor MVP; geen Upstash/Sentry | Geaccepteerd | 2026-06-07 |
+| [0006](./0006-doorontwikkeling-v2-beslispunten-B1-B10.md) | Doorontwikkeling v2: beslispunten B1–B11, O1 multi-fonds, O2 dossierstatus-mapping | Geaccepteerd | 2026-06-18 |
+| [0007](./0007-fondsconsistentie-composite-fk-vs-trigger.md) | Fondsconsistentie op koppeltabellen: composite-FK standaard, trigger waar nodig | Geaccepteerd | 2026-06-18 |
+| [0008](./0008-documentkoppeling-vooruitgetrokken-naar-increment-b.md) | Documentkoppeling vooruitgetrokken naar Increment B: primaire kolom + trigger nu, join-tabel later | Geaccepteerd | 2026-06-18 |

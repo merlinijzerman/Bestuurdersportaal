@@ -49,4 +49,16 @@ test("alle drie de bekende rollen staan in de mapping", () => {
   }
 });
 
+test("beheerder heeft dossiers.manage", () => {
+  assert.equal(rolHeeftCapability("beheerder", "dossiers.manage"), true);
+});
+
+test("voorzitter heeft dossiers.manage", () => {
+  assert.equal(rolHeeftCapability("voorzitter", "dossiers.manage"), true);
+});
+
+test("bestuurder heeft GEEN dossiers.manage", () => {
+  assert.equal(rolHeeftCapability("bestuurder", "dossiers.manage"), false);
+});
+
 console.log(`\n${n} sanity-tests geslaagd.`);

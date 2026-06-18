@@ -15,12 +15,15 @@
 import { createServerSupabase } from "@/lib/supabase-server";
 
 /** Bekende capabilities. Groeit per increment (C/F voegen toe) zonder RLS-herontwerp. */
-export type Capability = "catalog.manage";
+export type Capability = "catalog.manage" | "dossiers.manage";
 
-/** Rol → toegekende capabilities. Bron-van-waarheid voor autorisatie in v2. */
+/** Rol → toegekende capabilities. Bron-van-waarheid voor autorisatie in v2.
+ *  `dossiers.manage` (TO §5: secretariaat/governance/admin) dekt het handmatig
+ *  beheren van dossierstatus/periode; toegekend aan beheerder + voorzitter,
+ *  conform de bestaande privileged-rolconventie (voorzitter/beheerder). */
 export const ROL_CAPABILITIES: Record<string, Capability[]> = {
-  beheerder: ["catalog.manage"],
-  voorzitter: [],
+  beheerder: ["catalog.manage", "dossiers.manage"],
+  voorzitter: ["dossiers.manage"],
   bestuurder: [],
 };
 
