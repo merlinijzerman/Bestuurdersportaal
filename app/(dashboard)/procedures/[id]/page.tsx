@@ -1,10 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createServerSupabase } from "@/lib/supabase-server";
+import { templateLabel } from "@/lib/proces-templates";
 import {
-  templateLabel,
-  PROCEDURE_STATUS_LABEL,
-} from "@/lib/proces-templates";
+  DOSSIER_STATUS_LABEL,
+  dossierStatusKleur,
+  PERIODE_TYPE_LABEL,
+  type DossierStatus,
+  type PeriodeType,
+} from "@/lib/dossier";
+import DossierTijdlijn from "../_components/DossierTijdlijn";
 import ActieveStapPaneel from "../_components/ActieveStapPaneel";
 import DecisionObjectHeader from "../_components/DecisionObjectHeader";
 import ClassificatiePanel from "../_components/ClassificatiePanel";
@@ -31,10 +36,14 @@ interface ProcedureDetail {
   template_code: string;
   titel: string;
   beschrijving: string | null;
-  status: "in_uitvoering" | "wacht_op_besluit" | "afgerond";
+  status: string;
   gestart_op: string;
   deadline: string | null;
   afgerond_op: string | null;
+  periode_type: PeriodeType | null;
+  periode_start: string | null;
+  periode_eind: string | null;
+  periode_jaar: number | null;
 }
 
 export interface Stap {
@@ -237,6 +246,37 @@ export default async function ProcedureDetailPage({
   const checklist = (checklistRes.data || []) as ChecklistItem[];
   const bewijs = (bewijsRes.data || []) as Bewijs[];
 
+  // Effectieve dossierstatus (afgeleid uit primair Decision Object, of
+  // fallback op procedures.status) + dossierbreed gekoppelde documenten.
+  const [statusViewRes, dossierDocsRes] = await Promise.all([
+    supabase
+      .from("vw_dossier_status")
+      .select("dossierstatus, sublabel, afgeleid_van_decision")
+      .eq("procedure_id", id)
+      .maybeSingle(),
+    supabase
+      .from("documenten")
+      .select("id, titel")
+      .eq("procesinstantie_id", id),
+  ]);
+  const statusView = statusViewRes.data as {
+    dossierstatus: DossierStatus | null;
+    sublabel: string | null;
+    afgeleid_van_decision: boolean;
+  } | null;
+  const dossierstatus: DossierStatus | null =
+    statusView?.dossierstatus ?? (procedure.status as DossierStatus);
+  const dossierSublabel = statusView?.sublabel ?? null;
+  const dossierDocumenten = (dossierDocsRes.data || []) as {
+    id: string;
+    titel: string;
+  }[];
+  const periodeLabel = procedure.periode_type
+    ? `${PERIODE_TYPE_LABEL[procedure.periode_type]}${
+        procedure.periode_jaar ? ` ${procedure.periode_jaar}` : ""
+      }`
+    : null;
+
   // Gekoppelde agendapunten ophalen (per stap), met vergadering-info erbij
   const gekoppeldeAgendapunten: GekoppeldAgendapunt[] = [];
   if (stapIds.length > 0) {
@@ -328,16 +368,28 @@ export default async function ProcedureDetailPage({
             {templateLabel(procedure.template_code)}
           </span>
           <span
-            className={`text-[11px] font-medium uppercase tracking-wide px-2 py-0.5 rounded ${
-              procedure.status === "afgerond"
-                ? "bg-gray-100 text-gray-700"
-                : procedure.status === "wacht_op_besluit"
-                  ? "bg-amber-50 text-amber-800"
-                  : "bg-blue-50 text-blue-700"
-            }`}
+            className={`text-[11px] font-medium uppercase tracking-wide border px-2 py-0.5 rounded ${dossierStatusKleur(
+              dossierstatus
+            )}`}
           >
-            {PROCEDURE_STATUS_LABEL[procedure.status] || procedure.status}
+            {(dossierstatus && DOSSIER_STATUS_LABEL[dossierstatus]) ||
+              procedure.status}
           </span>
+          {dossierSublabel && (
+            <span className="text-[11px] font-medium uppercase tracking-wide border border-amber-200 bg-amber-50 text-amber-800 px-2 py-0.5 rounded">
+              {dossierSublabel}
+            </span>
+          )}
+          {periodeLabel && (
+            <span className="text-[11px] font-medium uppercase tracking-wide border border-slate-200 bg-slate-50 text-slate-700 px-2 py-0.5 rounded">
+              {periodeLabel}
+            </span>
+          )}
+          {statusView?.afgeleid_van_decision && (
+            <span className="text-[11px] text-gray-400">
+              afgeleid uit Decision Object
+            </span>
+          )}
         </div>
         <div className="flex items-start justify-between gap-3">
           <h1 className="text-[#0F2744] text-2xl font-semibold">
@@ -454,6 +506,23 @@ export default async function ProcedureDetailPage({
           </div>
         </div>
       </div>
+
+      {/* Dossier-tijdlijn: zes generieke fases met stappen + gekoppelde
+          documenten onder de juiste fase (acceptatiecriterium 2). */}
+      <DossierTijdlijn
+        stappen={stappen.map((s) => ({
+          id: s.id,
+          volgorde: s.volgorde,
+          naam: s.naam,
+          status: s.status,
+        }))}
+        bewijs={bewijs.map((b) => ({
+          id: b.id,
+          stap_id: b.stap_id,
+          titel: b.titel,
+        }))}
+        dossierDocumenten={dossierDocumenten}
+      />
 
       {/* Body */}
       <div className="grid grid-cols-12 gap-5">

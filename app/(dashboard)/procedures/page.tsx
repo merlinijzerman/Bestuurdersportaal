@@ -1,15 +1,29 @@
 import Link from "next/link";
 import { createServerSupabase } from "@/lib/supabase-server";
-import { templateLabel, PROCEDURE_STATUS_LABEL } from "@/lib/proces-templates";
+import { templateLabel } from "@/lib/proces-templates";
+import {
+  DOSSIER_STATUS_LABEL,
+  dossierStatusKleur,
+  PERIODE_TYPE_LABEL,
+  type DossierStatus,
+  type PeriodeType,
+} from "@/lib/dossier";
 
 interface ProcedureRij {
   id: string;
   template_code: string;
   titel: string;
   beschrijving: string | null;
-  status: "in_uitvoering" | "wacht_op_besluit" | "afgerond";
+  status: string;
   gestart_op: string;
   deadline: string | null;
+  periode_type: PeriodeType | null;
+  periode_jaar: number | null;
+}
+
+interface DossierStatusInfo {
+  dossierstatus: DossierStatus | null;
+  sublabel: string | null;
 }
 
 interface StapTeller {
@@ -19,12 +33,6 @@ interface StapTeller {
   actief_naam: string | null;
   actief_volgorde: number | null;
 }
-
-const STATUS_PILL: Record<string, { bg: string; text: string }> = {
-  in_uitvoering: { bg: "bg-blue-50", text: "text-blue-700" },
-  wacht_op_besluit: { bg: "bg-amber-50", text: "text-amber-800" },
-  afgerond: { bg: "bg-gray-100", text: "text-gray-600" },
-};
 
 function formatDatum(d: string) {
   return new Date(d).toLocaleDateString("nl-NL", {
@@ -49,11 +57,37 @@ export default async function ProceduresPage() {
 
   const { data: procedures } = await supabase
     .from("procedures")
-    .select("id, template_code, titel, beschrijving, status, gestart_op, deadline")
+    .select(
+      "id, template_code, titel, beschrijving, status, gestart_op, deadline, periode_type, periode_jaar"
+    )
     .eq("fonds_id", profiel?.fonds_id || "")
     .order("gestart_op", { ascending: false });
 
   const lijst = (procedures || []) as ProcedureRij[];
+
+  // Effectieve dossierstatus + sublabel uit de view (afgeleid uit het
+  // primaire Decision Object, fallback op procedures.status). Dit is de
+  // bron-van-waarheid voor de weergave — voorkomt tegenstrijdige status.
+  const statusPerProc = new Map<string, DossierStatusInfo>();
+  if (lijst.length > 0) {
+    const { data: statusRijen } = await supabase
+      .from("vw_dossier_status")
+      .select("procedure_id, dossierstatus, sublabel")
+      .in(
+        "procedure_id",
+        lijst.map((p) => p.id)
+      );
+    for (const r of (statusRijen || []) as Array<
+      { procedure_id: string } & DossierStatusInfo
+    >) {
+      statusPerProc.set(r.procedure_id, {
+        dossierstatus: r.dossierstatus,
+        sublabel: r.sublabel,
+      });
+    }
+  }
+  const effectieveStatus = (id: string): DossierStatus | null =>
+    statusPerProc.get(id)?.dossierstatus ?? null;
 
   // Voortgang per procedure ophalen (totaal + afgerond + naam actieve stap)
   const stappenPerProc = new Map<string, StapTeller>();
@@ -103,8 +137,14 @@ export default async function ProceduresPage() {
     }
   }
 
-  const lopend = lijst.filter((p) => p.status !== "afgerond");
-  const afgerond = lijst.filter((p) => p.status === "afgerond");
+  // Afgeronde/gearchiveerde dossiers vallen onder "afgerond"; de rest is
+  // lopend (incl. ter_besluitvorming, in_implementatie, heropend, gepland).
+  const isAfgerond = (p: ProcedureRij) => {
+    const s = effectieveStatus(p.id) ?? p.status;
+    return s === "afgerond" || s === "gearchiveerd";
+  };
+  const lopend = lijst.filter((p) => !isAfgerond(p));
+  const afgerond = lijst.filter((p) => isAfgerond(p));
 
   return (
     <div className="p-7 space-y-6">
@@ -137,6 +177,7 @@ export default async function ProceduresPage() {
               <ProcedureKaart
                 key={p.id}
                 p={p}
+                statusInfo={statusPerProc.get(p.id)}
                 teller={stappenPerProc.get(p.id)}
                 eigenaren={eigenarenPerProc.get(p.id) ?? []}
               />
@@ -155,6 +196,7 @@ export default async function ProceduresPage() {
               <ProcedureKaart
                 key={p.id}
                 p={p}
+                statusInfo={statusPerProc.get(p.id)}
                 teller={stappenPerProc.get(p.id)}
                 eigenaren={eigenarenPerProc.get(p.id) ?? []}
                 variant="afgerond"
@@ -169,16 +211,27 @@ export default async function ProceduresPage() {
 
 function ProcedureKaart({
   p,
+  statusInfo,
   teller,
   eigenaren,
   variant,
 }: {
   p: ProcedureRij;
+  statusInfo?: DossierStatusInfo;
   teller?: StapTeller;
   eigenaren: string[];
   variant?: "afgerond";
 }) {
-  const pillKleur = STATUS_PILL[p.status] || STATUS_PILL.in_uitvoering;
+  const dossierstatus =
+    statusInfo?.dossierstatus ?? (p.status as DossierStatus);
+  const statusLabel =
+    DOSSIER_STATUS_LABEL[dossierstatus] || p.status;
+  const sublabel = statusInfo?.sublabel ?? null;
+  const periodeLabel = p.periode_type
+    ? `${PERIODE_TYPE_LABEL[p.periode_type]}${
+        p.periode_jaar ? ` ${p.periode_jaar}` : ""
+      }`
+    : null;
   const voortgang =
     teller && teller.totaal > 0 ? (teller.afgerond / teller.totaal) * 100 : 0;
   return (
@@ -195,10 +248,22 @@ function ProcedureKaart({
               {templateLabel(p.template_code)}
             </span>
             <span
-              className={`text-[10px] font-medium uppercase tracking-wide px-2 py-0.5 rounded ${pillKleur.bg} ${pillKleur.text}`}
+              className={`text-[10px] font-medium uppercase tracking-wide border px-2 py-0.5 rounded ${dossierStatusKleur(
+                dossierstatus
+              )}`}
             >
-              {PROCEDURE_STATUS_LABEL[p.status] || p.status}
+              {statusLabel}
             </span>
+            {sublabel && (
+              <span className="text-[10px] font-medium uppercase tracking-wide px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200">
+                {sublabel}
+              </span>
+            )}
+            {periodeLabel && (
+              <span className="text-[10px] font-medium uppercase tracking-wide px-2 py-0.5 rounded bg-slate-50 text-slate-700 border border-slate-200">
+                {periodeLabel}
+              </span>
+            )}
           </div>
           <div className="font-semibold text-[#0F2744] text-sm">{p.titel}</div>
           {p.beschrijving && (

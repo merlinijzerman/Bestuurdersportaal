@@ -28,7 +28,6 @@ import {
   type Evaluation,
   type EvidenceItem,
   type GovernanceEvent,
-  type ProcedureStatus,
   type ProcedureStep,
   type ProcedureSummary,
   type ReadinessOverview,
@@ -102,8 +101,9 @@ export async function ensureDecisionForProcedure(
     return { decision_id: bestaand.id, auto_upgraded: false };
   }
 
-  // 3. Nieuwe Decision Object aanmaken met legacy-mapping.
-  const legacyStatus = (procedure.status ?? "in_uitvoering") as ProcedureStatus;
+  // 3. Nieuwe Decision Object aanmaken met legacy-mapping. mapLegacyStatus
+  // accepteert zowel de oude 3-statuswaarden als de 8 dossierstatussen.
+  const legacyStatus = procedure.status ?? "lopend";
   const nieuweStatus = mapLegacyStatus(legacyStatus);
 
   // Eigenaarsnaam ophalen voor weergave (RLS staat dit toe binnen fonds).

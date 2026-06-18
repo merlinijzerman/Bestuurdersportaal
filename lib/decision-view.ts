@@ -11,6 +11,11 @@
 //   • Enums worden als string-literals getypeerd zodat de UI exhaustive
 //     match kan doen zonder runtime-checks.
 
+// Type-only import (geen runtime-koppeling): de dossierstatus-set leeft
+// canoniek in lib/dossier.ts. dossier.ts importeert hier alleen het
+// DecisionStatus-type terug — beide zijn type-only, dus geen cycle at runtime.
+import type { DossierStatus } from "./dossier";
+
 // ── Status-modellen ───────────────────────────────────────────────────
 
 export type DecisionStatus =
@@ -86,7 +91,7 @@ export interface ProcedureSummary {
   template_code: string;
   titel: string;
   beschrijving: string | null;
-  status: ProcedureStatus;
+  status: DossierStatus;
   gestart_op: string;
   gestart_door: string | null;
   deadline: string | null;
@@ -653,13 +658,22 @@ export const ACTION_STATUS_LABEL: Record<ActionStatus, string> = {
  * de status-trigger zouden moeten omzeilen — bij een INSERT geldt de
  * trigger niet, dus deze waarden zijn aanmaakbaar zonder workarounds.
  */
-export function mapLegacyStatus(legacy: ProcedureStatus): DecisionStatus {
+export function mapLegacyStatus(legacy: string): DecisionStatus {
   switch (legacy) {
+    // oude 3-statuswaarden (pre-Increment B)
     case "in_uitvoering":
       return "in_onderbouwing";
     case "wacht_op_besluit":
       return "in_review";
     case "afgerond":
+      return "afgesloten";
+    // nieuwe dossierstatussen (Increment B)
+    case "lopend":
+    case "gepland":
+      return "in_onderbouwing";
+    case "ter_besluitvorming":
+      return "in_review";
+    case "gearchiveerd":
       return "afgesloten";
     default:
       return "in_onderbouwing";
@@ -667,37 +681,46 @@ export function mapLegacyStatus(legacy: ProcedureStatus): DecisionStatus {
 }
 
 /**
- * Omgekeerde mapping: 14-status Decision Object → 3-status legacy
- * `procedures.status`. Wordt aangeroepen na een statusovergang op
- * het Decision Object zodat het procedure-overzicht (/procedures)
- * een consistente status toont.
+ * Omgekeerde mapping: 17-status Decision Object → 8-status dossierstatus
+ * (`procedures.status`). Wordt aangeroepen na een statusovergang op het
+ * Decision Object zodat de gecachte `procedures.status` consistent blijft
+ * met de afgeleide dossierstatus (TO §3.2). Sinds Increment B is
+ * `vw_dossier_status` de bron-van-waarheid voor weergave wanneer er een
+ * primair Decision Object is; deze sync houdt de kolom non-tegenstrijdig.
  *
- * Mapping:
- *   • afgewezen / geannuleerd / afgesloten            → 'afgerond'
- *   • in_review / geagendeerd / in_bespreking         → 'wacht_op_besluit'
- *   • alle overige (concept, in_onderbouwing,
- *     in_validatie, besloten, voorwaardelijk_besloten,
- *     in_uitvoering, in_evaluatie, aangehouden,
- *     geescaleerd, teruggezet, heropend)               → 'in_uitvoering'
- *
- * Voor 'besloten' en 'voorwaardelijk_besloten' kiezen we bewust
- * 'in_uitvoering' (legacy) i.p.v. 'wacht_op_besluit', omdat de
- * legacy-semantiek van 'wacht_op_besluit' is "klaar voor
- * bestuursbespreking", niet "besluit genomen".
+ * Deze mapping MOET gelijk zijn aan de `dossierstatus`-kolom van de
+ * SQL-functie `fn_dossierstatus_van_decision` (zie lib/dossier.ts en de
+ * migratie 2026_06_18_dossier_procesinstantie). Sublabel is hier niet
+ * relevant — alleen de status wordt naar de kolom gesynct.
  */
 export function mapDecisionToProcedureStatus(
   status: DecisionStatus
-): ProcedureStatus {
+): DossierStatus {
   switch (status) {
-    case "afgewezen":
-    case "geannuleerd":
-    case "afgesloten":
-      return "afgerond";
+    case "concept":
+    case "in_onderbouwing":
+    case "in_validatie":
     case "in_review":
+    case "teruggezet":
+    case "geescaleerd":
+    case "aangehouden":
+      return "lopend";
     case "geagendeerd":
     case "in_bespreking":
-      return "wacht_op_besluit";
+      return "ter_besluitvorming";
+    case "besloten":
+    case "voorwaardelijk_besloten":
+      return "besloten";
+    case "in_uitvoering":
+    case "in_evaluatie":
+      return "in_implementatie";
+    case "afgesloten":
+    case "afgewezen":
+    case "geannuleerd":
+      return "afgerond";
+    case "heropend":
+      return "heropend";
     default:
-      return "in_uitvoering";
+      return "lopend";
   }
 }

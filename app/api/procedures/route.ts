@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
         titel,
         beschrijving: body.beschrijving || null,
         deadline: body.deadline || null,
-        status: "in_uitvoering",
+        status: "lopend",
         gestart_door: user.id,
       })
       .select()

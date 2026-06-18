@@ -61,7 +61,11 @@ create table if not exists public.documenten (
   gepubliceerd  date,
   geindexeerd   boolean default false,
   opgeslagen_door uuid references auth.users(id),
-  aangemaakt    timestamptz default now()
+  aangemaakt    timestamptz default now(),
+  -- Primaire procesinstantie-koppeling (Increment B). Fondsconsistentie
+  -- (document-fonds = procesinstantie-fonds) via trigger; generieke docs
+  -- (fonds_id NULL) kunnen daardoor niet aan een fonds-dossier koppelen.
+  procesinstantie_id uuid references public.procedures(id) on delete set null
 );
 
 -- ── 4. Document chunks (voor zoeken) ──────────────────────
@@ -397,6 +401,10 @@ create policy "fonds risico log" on public.risico_log
   );
 
 -- ── 12. Procedures (workflow & case management) ─────────────
+-- Procedure = procesinstantie (UI: "dossier"). Status verbreed naar de 8
+-- dossierstatussen (Increment B, migratie 2026_06_18_dossier_procesinstantie).
+-- De EFFECTIEVE dossierstatus wordt afgeleid via view vw_dossier_status uit
+-- het primaire Decision Object; procedures.status is de handmatige fallback.
 create table if not exists public.procedures (
   id              uuid primary key default uuid_generate_v4(),
   fonds_id        uuid not null references public.fondsen(id) on delete cascade,
@@ -404,13 +412,28 @@ create table if not exists public.procedures (
   titel           text not null,
   beschrijving    text,
   status          text not null check (status in (
-                    'in_uitvoering','wacht_op_besluit','afgerond'
-                  )) default 'in_uitvoering',
+                    'gepland','lopend','ter_besluitvorming','besloten',
+                    'in_implementatie','afgerond','heropend','gearchiveerd'
+                  )) default 'lopend',
   gestart_op      timestamptz default now(),
   gestart_door    uuid references auth.users(id) on delete set null,
   deadline        date,
-  afgerond_op     timestamptz
+  afgerond_op     timestamptz,
+  -- procesmodel-koppeling (Increment A) + periode-velden (Increment B, nullable)
+  procesmodel_id  uuid references public.procesmodellen(id),
+  periode_type    text check (periode_type in (
+                    'jaar','kwartaal','maand','projectperiode',
+                    'ad_hoc','doorlopend','versiegedreven'
+                  )),
+  periode_start   date,
+  periode_eind    date,
+  periode_jaar    int
 );
+
+-- View: effectieve dossierstatus + sublabel (security_invoker; RLS van
+-- procedures + decision_objects leidend). Mapping in
+-- fn_dossierstatus_van_decision (TO §3.2). Zie migratie 2026_06_18_dossier.
+-- create view public.vw_dossier_status with (security_invoker = true) as ...
 
 create index if not exists idx_procedures_fonds on public.procedures(fonds_id, gestart_op desc);
 create index if not exists idx_procedures_status on public.procedures(fonds_id, status);
