@@ -714,3 +714,113 @@ $$;
 
 revoke all on function public.fn_rate_limit_check(text, int, interval) from public, anon;
 grant execute on function public.fn_rate_limit_check(text, int, interval) to authenticated;
+
+-- ============================================================
+--  Increment A — Procescatalogus + organen (2026_06_18)
+--  Documentatie; de migratie is authoritatief. Fondsconsistentie op
+--  join-tabellen = composite-FK (besluit 0007): elke fonds-gebonden parent
+--  draagt unique (fonds_id, id); join-tabellen dragen fonds_id NOT NULL + twee
+--  composite-FK's. gremia/expertises/kritische_focusgebieden met fonds_id NULL
+--  zijn globale templates (lezen mag iedereen voor import; koppelen kan niet).
+-- ============================================================
+
+create table if not exists public.procesmodellen (
+  id                        uuid primary key default uuid_generate_v4(),
+  fonds_id                  uuid not null references public.fondsen(id) on delete cascade,
+  generiek_procestype       text not null,
+  naam                      text not null,
+  domein                    text,
+  omschrijving              text,
+  frequentie                text check (frequentie in
+                              ('jaarlijks','kwartaal','maandelijks','ad_hoc','projectmatig','doorlopend')),
+  verwachte_documenttypen   text[] default '{}',
+  synoniemen                text[] default '{}',
+  default_tijdlijnfases     text[] default '{}',
+  default_bronstatus_regels jsonb default '{}',
+  actief                    boolean not null default true,
+  aangemaakt                timestamptz default now(),
+  bijgewerkt                timestamptz default now(),
+  unique (fonds_id, id)
+);
+
+create table if not exists public.gremia (
+  id                uuid primary key default uuid_generate_v4(),
+  fonds_id          uuid references public.fondsen(id) on delete cascade,
+  naam              text not null,
+  type              text check (type in ('besluitvormend','adviserend','toezichthoudend','uitvoerend')),
+  omschrijving      text,
+  actief            boolean not null default true,
+  sort_order        int default 0,
+  is_template       boolean generated always as (fonds_id is null) stored,
+  gekopieerd_van_id uuid references public.gremia(id),
+  aangemaakt        timestamptz default now(),
+  bijgewerkt        timestamptz default now(),
+  unique (fonds_id, id)
+);
+
+create table if not exists public.expertises (
+  id                uuid primary key default uuid_generate_v4(),
+  fonds_id          uuid references public.fondsen(id) on delete cascade,
+  naam              text not null,
+  omschrijving      text,
+  actief            boolean not null default true,
+  sort_order        int default 0,
+  gekopieerd_van_id uuid references public.expertises(id),
+  aangemaakt        timestamptz default now(),
+  bijgewerkt        timestamptz default now(),
+  unique (fonds_id, id)
+);
+
+create table if not exists public.kritische_focusgebieden (
+  id                uuid primary key default uuid_generate_v4(),
+  fonds_id          uuid references public.fondsen(id) on delete cascade,
+  naam              text not null,
+  omschrijving      text,
+  actief            boolean not null default true,
+  sort_order        int default 0,
+  gekopieerd_van_id uuid references public.kritische_focusgebieden(id),
+  aangemaakt        timestamptz default now(),
+  bijgewerkt        timestamptz default now(),
+  unique (fonds_id, id)
+);
+
+-- Join-tabellen (fonds_id NOT NULL + dubbele composite-FK)
+create table if not exists public.procesmodel_gremia (
+  id uuid primary key default uuid_generate_v4(),
+  fonds_id uuid not null, procesmodel_id uuid not null, gremium_id uuid not null,
+  aangemaakt timestamptz default now(),
+  aangemaakt_door uuid references auth.users(id) on delete set null,
+  unique (procesmodel_id, gremium_id),
+  foreign key (fonds_id, procesmodel_id) references public.procesmodellen (fonds_id, id) on delete cascade,
+  foreign key (fonds_id, gremium_id)     references public.gremia (fonds_id, id) on delete cascade
+);
+create table if not exists public.procesmodel_expertises (
+  id uuid primary key default uuid_generate_v4(),
+  fonds_id uuid not null, procesmodel_id uuid not null, expertise_id uuid not null,
+  aangemaakt timestamptz default now(),
+  aangemaakt_door uuid references auth.users(id) on delete set null,
+  unique (procesmodel_id, expertise_id),
+  foreign key (fonds_id, procesmodel_id) references public.procesmodellen (fonds_id, id) on delete cascade,
+  foreign key (fonds_id, expertise_id)   references public.expertises (fonds_id, id) on delete cascade
+);
+create table if not exists public.procesmodel_focusgebieden (
+  id uuid primary key default uuid_generate_v4(),
+  fonds_id uuid not null, procesmodel_id uuid not null, focusgebied_id uuid not null,
+  aangemaakt timestamptz default now(),
+  aangemaakt_door uuid references auth.users(id) on delete set null,
+  unique (procesmodel_id, focusgebied_id),
+  foreign key (fonds_id, procesmodel_id) references public.procesmodellen (fonds_id, id) on delete cascade,
+  foreign key (fonds_id, focusgebied_id) references public.kritische_focusgebieden (fonds_id, id) on delete cascade
+);
+
+-- procedures.procesmodel_id: nullable koppeling naar gekozen DB-procesmodel.
+alter table public.procedures add column if not exists procesmodel_id uuid references public.procesmodellen(id);
+
+-- Append-only koppellog
+create table if not exists public.catalogus_log (
+  id uuid primary key default uuid_generate_v4(),
+  fonds_id uuid not null references public.fondsen(id) on delete cascade,
+  entiteit text not null, entiteit_id uuid, event_type text not null,
+  actor_id uuid references auth.users(id) on delete set null,
+  payload jsonb default '{}', tijdstip timestamptz default now()
+);

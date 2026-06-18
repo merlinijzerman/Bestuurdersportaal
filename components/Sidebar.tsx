@@ -3,7 +3,17 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
 
-const navItems = [
+type NavItem = {
+  href: string;
+  label: string;
+  icon: string;
+  section: string;
+  iconSrc?: string;
+  badge?: string;
+  rolVereist?: string;
+};
+
+const navItems: NavItem[] = [
   { href: "/", label: "Home", icon: "🏠", section: "Overzicht" },
   { href: "/dashboard", label: "Stuurinformatie", icon: "📊", section: "Overzicht" },
   { href: "/klantbeeld", label: "Klantbeeld", icon: "👥", section: "Overzicht" },
@@ -14,6 +24,7 @@ const navItems = [
   { href: "/procedures", label: "Procedures", icon: "📂", section: "Bestuur" },
   { href: "/risicomatrix", label: "Risicomatrix", icon: "🛡️", section: "Bestuur" },
   { href: "/governance", label: "Governance Log", icon: "🔍", section: "Bestuur" },
+  { href: "/beheer", label: "Catalogus & organen", icon: "⚙️", section: "Beheer", rolVereist: "beheerder" },
 ];
 
 interface SidebarProps {
@@ -78,7 +89,9 @@ export default function Sidebar({ gebruikerNaam, gebruikerRol, fondsNaam }: Side
 
       {/* Navigatie */}
       <div className="flex-1 py-3 overflow-y-auto">
-        {navItems.map((item) => {
+        {navItems
+          .filter((item) => !item.rolVereist || item.rolVereist === gebruikerRol)
+          .map((item) => {
           const showSection = item.section !== huidigSection;
           if (showSection) huidigSection = item.section;
           // Klantbeeld heeft sub-routes (/deelnemers, /werkgevers, …), dus matchen we de prefix
