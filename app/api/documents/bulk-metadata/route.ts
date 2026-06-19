@@ -135,12 +135,13 @@ export async function POST(req: NextRequest) {
           .update(update)
           .eq("id", document.id);
         if (updFout) {
+          console.error("Bulk metadata-update fout:", document.id, updFout);
           resultaten.push({
             document_id: document.id,
             ok: false,
             aantal_wijzigingen: 0,
             rag_impact: false,
-            fouten: [updFout.message],
+            fouten: ["Bijwerken mislukt"],
           });
           continue;
         }
@@ -177,7 +178,7 @@ export async function POST(req: NextRequest) {
       if (logFout) {
         console.error("Bulk metadata-log fout:", logFout);
         return NextResponse.json(
-          { error: "Wijzigingen toegepast maar auditlog faalde: " + logFout.message },
+          { error: "Wijzigingen toegepast maar auditlog faalde" },
           { status: 500 }
         );
       }

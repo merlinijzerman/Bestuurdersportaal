@@ -102,6 +102,36 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Huidige queue-rij + documentcontext (titel/fonds) ophalen — voor de
+    // re-decision-guard en voor een volledig auditrecord.
+    const { data: queueRij } = await supabase
+      .from("document_metadata_review_queue")
+      .select("status")
+      .eq("document_id", body.document_id)
+      .maybeSingle();
+    if (!queueRij) {
+      return NextResponse.json(
+        { error: "Geen review-item gevonden voor dit document" },
+        { status: 404 }
+      );
+    }
+    // Re-decision-guard: een reeds genomen beslissing niet stil overschrijven.
+    if (
+      (body.actie === "gecontroleerd" || body.actie === "afgewezen") &&
+      (queueRij.status === "gecontroleerd" || queueRij.status === "afgewezen")
+    ) {
+      return NextResponse.json(
+        { error: `Dit item is al beoordeeld (${queueRij.status}).` },
+        { status: 409 }
+      );
+    }
+
+    const { data: doc } = await supabase
+      .from("documenten")
+      .select("titel, fonds_id, metadata_review_status")
+      .eq("id", body.document_id)
+      .maybeSingle();
+
     const nu = new Date().toISOString();
     const queueUpdate: Record<string, unknown> = {
       status: body.actie,
@@ -122,7 +152,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Spiegelt de review-status op het document zodat het label "nog niet
-    // verrijkt" verdwijnt zodra gecontroleerd/afgewezen.
+    // verrijkt" verdwijnt zodra gecontroleerd/afgewezen, en legt de beoordeling
+    // append-only vast in document_metadata_log (auditbare bestuurshandeling).
     if (body.actie === "gecontroleerd" || body.actie === "afgewezen") {
       await supabase
         .from("documenten")
@@ -133,6 +164,35 @@ export async function POST(req: NextRequest) {
           metadata_gecontroleerd_op: nu,
         })
         .eq("id", body.document_id);
+
+      const { data: profiel } = await supabase
+        .from("profielen")
+        .select("naam")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      const { error: logFout } = await supabase
+        .from("document_metadata_log")
+        .insert({
+          document_id: body.document_id,
+          document_titel_snapshot: doc?.titel ?? null,
+          fonds_id: doc?.fonds_id ?? null,
+          gewijzigd_door: user.id,
+          gewijzigd_door_naam: profiel?.naam ?? null,
+          veld_naam: "metadata_review_status",
+          oude_waarde: doc?.metadata_review_status ?? null,
+          nieuwe_waarde: body.actie,
+          wijzig_reden: body.opmerking?.trim() || null,
+          wijzig_type: "metadata",
+          rag_impact: false,
+        });
+      if (logFout) {
+        console.error("Review-audit-log fout:", logFout);
+        return NextResponse.json(
+          { error: "Beoordeling toegepast maar auditlog faalde" },
+          { status: 500 }
+        );
+      }
     }
 
     return NextResponse.json({ success: true, actie: body.actie });

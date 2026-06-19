@@ -30,6 +30,13 @@ De werkopdracht voor Increment C laat vier uitvoeringskeuzes expliciet open ("be
 - **Audit/reproduceerbaarheid:** elke metadatawijziging → één append-only record per veld met sha256-hash; reden verplicht bij governance-kritieke velden en bij de redenplichtige status-/bronstatusovergangen.
 - **Bewust geaccepteerde schuld:** (a) TO §4 noemt Nederlandse routes — wijkt af van de as-built (Engels); bij te werken bij de volgende ontwerp-update. (b) De `/beheer`-pagina is gegate op rol `beheerder`, terwijl `voorzitter` server-side wél `metadata.review` heeft maar de hub-UI nog niet bereikt — losse UI-gate-verruiming als opvolging.
 
+## Fast-follow na pre-merge subagent-reviews (19 juni 2026)
+
+De vier subagents (`supabase-rls-reviewer`, `audit-evidence-reviewer`, `code-reviewer`, `ontwerp-sync-reviewer`) zijn ná de C-deploy gedraaid. Bevindingen en afhandeling:
+
+- **Gedicht in fix-deploy 19 juni** (zie HANDOVER): review-beoordeling wordt nu append-only gelogd (`markeer_gecontroleerd` + queue-POST); `markeer_gecontroleerd` is capability-gated op `metadata.review`; geen rauwe DB-foutdetails meer naar de client; contextregel 3b (agendapunt hoort bij vergadering) DB-afgedwongen via trigger `fn_document_agendapunt_vergadering_check` (migratie `2026_06_19_…`); queue re-decision-guard; koppeling-DELETE logt alleen bij echte verwijdering; koppeling-logs dragen titel-snapshot + actornaam.
+- **Bewust geaccepteerde schuld / resterende fast-follow** (niet blokkerend, later op te pakken): (1) **atomiciteit** tussen documentmutatie en logregel — nu twee losse statements; robuuste oplossing = DB-trigger-gebaseerde audit op `documenten` (vergt herontwerp van per-veld reden/rag_impact). (2) **Hash** in `document_metadata_log` dekt actor + fonds nog niet (geërfd van `governance_events`). (3) Geen CHECK op `wijzig_type`/`veld_naam`. (4) Bronstatus-transities alleen server-side geborgd (geen DB-trigger zoals bij documentstatus). (5) `vereistVervangenDoor` alleen in de planner, niet als DB-guard. (6) `/beheer`-review-tab toont voor alle rollen (POST blijft 403-gated); `<a>` i.p.v. `next/link`. Deze punten staan in de HANDOVER-release-entry van 19 juni als opvolglijst.
+
 ## Referenties
 
 - `mvp/lib/document-status-transities.ts` (+ `.sanity.ts`), `mvp/lib/document-metadata.ts`, `mvp/lib/document-metadata-service.ts`, `mvp/lib/capabilities.ts`.

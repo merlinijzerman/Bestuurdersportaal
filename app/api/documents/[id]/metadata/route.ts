@@ -118,7 +118,21 @@ export async function PATCH(
       return NextResponse.json({ error: "Document niet gevonden" }, { status: 404 });
     }
 
-    const { naam, caps } = await leesCapabilities(supabase, user.id);
+    const { rol, naam, caps } = await leesCapabilities(supabase, user.id);
+
+    // Het afronden van een review (markeer_gecontroleerd) is een eigen
+    // beheeractie en vereist de capability metadata.review — net als de queue-
+    // route. Server-side leidend; voorkomt dat documents.metadata.update alleen
+    // al een review kan afsluiten.
+    if (
+      body.markeer_gecontroleerd &&
+      !rolHeeftCapability(rol, "metadata.review")
+    ) {
+      return NextResponse.json(
+        { error: "Geen rechten om een review af te ronden (metadata.review)" },
+        { status: 403 }
+      );
+    }
 
     const huidig: HuidigDocument = {
       status: document.status,
@@ -178,36 +192,49 @@ export async function PATCH(
         .eq("id", id);
       if (updFout) {
         console.error("Metadata-update fout:", updFout);
-        return NextResponse.json(
-          { error: "Update mislukt: " + updFout.message },
-          { status: 500 }
-        );
+        return NextResponse.json({ error: "Bijwerken mislukt" }, { status: 500 });
       }
     }
 
-    // ── Append-only auditlog: één record per gewijzigd veld ──
-    if (plan.wijzigingen.length > 0) {
-      const reden = body.reden?.trim() || null;
-      const logRijen = plan.wijzigingen.map((w) => ({
-        document_id: id,
-        document_titel_snapshot: document.titel,
-        fonds_id: document.fonds_id,
-        gewijzigd_door: user.id,
-        gewijzigd_door_naam: naam,
-        veld_naam: w.veld,
-        oude_waarde: w.oude_waarde,
-        nieuwe_waarde: w.nieuwe_waarde,
-        wijzig_reden: reden, // de reden uit het verzoek geldt voor alle wijzigingen erin
-        wijzig_type: w.wijzig_type,
-        rag_impact: w.rag_impact,
-      }));
+    // ── Append-only auditlog: één record per gewijzigd veld + review-beoordeling ──
+    const reden = body.reden?.trim() || null;
+    const basis = {
+      document_id: id,
+      document_titel_snapshot: document.titel,
+      fonds_id: document.fonds_id,
+      gewijzigd_door: user.id,
+      gewijzigd_door_naam: naam,
+    };
+    const logRijen: Record<string, unknown>[] = plan.wijzigingen.map((w) => ({
+      ...basis,
+      veld_naam: w.veld,
+      oude_waarde: w.oude_waarde,
+      nieuwe_waarde: w.nieuwe_waarde,
+      wijzig_reden: reden, // de reden uit het verzoek geldt voor alle wijzigingen erin
+      wijzig_type: w.wijzig_type,
+      rag_impact: w.rag_impact,
+    }));
+    // Review-afronding is óók een auditbare bestuurshandeling — log haar als
+    // expliciet record, ook als er geen andere veldwijziging is.
+    if (body.markeer_gecontroleerd) {
+      logRijen.push({
+        ...basis,
+        veld_naam: "metadata_review_status",
+        oude_waarde: document.metadata_review_status,
+        nieuwe_waarde: "gecontroleerd",
+        wijzig_reden: reden,
+        wijzig_type: "metadata",
+        rag_impact: false,
+      });
+    }
+    if (logRijen.length > 0) {
       const { error: logFout } = await supabase
         .from("document_metadata_log")
         .insert(logRijen);
       if (logFout) {
         console.error("Metadata-log fout:", logFout);
         return NextResponse.json(
-          { error: "Wijziging toegepast maar auditlog faalde: " + logFout.message },
+          { error: "Wijziging toegepast maar auditlog faalde" },
           { status: 500 }
         );
       }

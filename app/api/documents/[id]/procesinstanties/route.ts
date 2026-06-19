@@ -74,7 +74,7 @@ export async function POST(
 
     const { data: document } = await supabase
       .from("documenten")
-      .select("id, fonds_id")
+      .select("id, fonds_id, titel")
       .eq("id", id)
       .maybeSingle();
     if (!document) {
@@ -94,15 +94,32 @@ export async function POST(
       aangemaakt_door: user.id,
     });
     if (error) {
-      // DB-triggers geven leesbare excepties (secundair = primair, fonds, etc.)
-      return NextResponse.json({ error: error.message }, { status: 422 });
+      console.error("Koppeling-insert fout:", error);
+      // P0001 = bewuste, leesbare plpgsql-trigger-melding (secundair = primair,
+      // fondsconsistentie, generiek). Andere codes: generieke melding, geen
+      // interne DB-details lekken.
+      const melding =
+        error.code === "23505"
+          ? "Deze secundaire koppeling bestaat al."
+          : error.code === "P0001"
+          ? error.message
+          : "Koppelen mislukt — controleer of de koppeling geldig is (zelfde fonds, niet gelijk aan de primaire procesinstantie).";
+      return NextResponse.json({ error: melding }, { status: 422 });
     }
+
+    const { data: profiel } = await supabase
+      .from("profielen")
+      .select("naam")
+      .eq("id", user.id)
+      .maybeSingle();
 
     // Auditspoor (append-only).
     await supabase.from("document_metadata_log").insert({
       document_id: id,
+      document_titel_snapshot: document.titel,
       fonds_id: document.fonds_id,
       gewijzigd_door: user.id,
+      gewijzigd_door_naam: profiel?.naam ?? null,
       veld_naam: "secundaire_procesinstantie",
       oude_waarde: null,
       nieuwe_waarde: body.procesinstantie_id,
@@ -145,23 +162,41 @@ export async function DELETE(
 
     const { data: document } = await supabase
       .from("documenten")
-      .select("fonds_id")
+      .select("fonds_id, titel")
       .eq("id", id)
       .maybeSingle();
 
-    const { error } = await supabase
+    // .select() geeft de daadwerkelijk verwijderde rijen terug → log alleen
+    // bij een echte ontkoppeling (geen spook-auditrecords bij 0 matches).
+    const { data: verwijderd, error } = await supabase
       .from("document_procesinstanties")
       .delete()
       .eq("document_id", id)
-      .eq("procesinstantie_id", body.procesinstantie_id);
+      .eq("procesinstantie_id", body.procesinstantie_id)
+      .select("id");
     if (error) {
+      console.error("Ontkoppelen fout:", error);
       return NextResponse.json({ error: "Ontkoppelen mislukt" }, { status: 500 });
     }
+    if (!verwijderd || verwijderd.length === 0) {
+      return NextResponse.json(
+        { error: "Geen bestaande secundaire koppeling gevonden om te verwijderen." },
+        { status: 404 }
+      );
+    }
+
+    const { data: profiel } = await supabase
+      .from("profielen")
+      .select("naam")
+      .eq("id", user.id)
+      .maybeSingle();
 
     await supabase.from("document_metadata_log").insert({
       document_id: id,
+      document_titel_snapshot: document?.titel ?? null,
       fonds_id: document?.fonds_id ?? null,
       gewijzigd_door: user.id,
+      gewijzigd_door_naam: profiel?.naam ?? null,
       veld_naam: "secundaire_procesinstantie",
       oude_waarde: body.procesinstantie_id,
       nieuwe_waarde: null,

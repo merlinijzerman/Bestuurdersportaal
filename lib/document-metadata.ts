@@ -123,8 +123,9 @@ export interface ContextInvoer {
  * achteraf.
  *
  * Structurele presentieregels (FO §6 punten 1–4). De regel "agendapunt hoort
- * bij die vergadering" vereist een DB-lookup en wordt server-/DB-side
- * afgedwongen (trigger), niet hier.
+ * bij die vergadering" vereist een DB-lookup en wordt DB-side afgedwongen door
+ * de trigger `fn_document_agendapunt_vergadering_check` (migratie
+ * 2026_06_19_documenten_agendapunt_vergadering_trigger.sql), niet hier.
  */
 export function valideerContext(invoer: ContextInvoer): string[] {
   const blokkers: string[] = [];
