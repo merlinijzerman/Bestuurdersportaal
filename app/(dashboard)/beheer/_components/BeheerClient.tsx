@@ -204,7 +204,34 @@ type ReviewItem = {
   } | null;
 };
 
-const REVIEW_STREAMS = [{ key: "metadata", label: "Metadata" }] as const;
+// Increment E — classificatievoorstel-item (stream=classificatie).
+type ClassificatieItem = {
+  id: string;
+  document_id: string;
+  voorgestelde_procesinstantie_id: string | null;
+  voorgesteld_documenttype: string | null;
+  confidence: string;
+  bron: string;
+  status: string;
+  toelichting: string | null;
+  toegepast_op: string | null;
+  teruggedraaid_op: string | null;
+  aangemaakt: string;
+  documenten: {
+    id: string;
+    titel: string;
+    documenttype: string | null;
+    status: string | null;
+    documentdatum: string | null;
+    procesinstantie_id: string | null;
+  } | null;
+};
+
+const REVIEW_STREAMS = [
+  { key: "metadata", label: "Metadata" },
+  { key: "classificatie", label: "Procesclassificatie" },
+] as const;
+type ReviewStream = (typeof REVIEW_STREAMS)[number]["key"];
 
 const REDEN_LABEL: Record<string, string> = {
   backfill: "Backfill (nog niet verrijkt)",
@@ -213,9 +240,17 @@ const REDEN_LABEL: Record<string, string> = {
   handmatig: "Handmatig toegevoegd",
 };
 
+const CONFIDENCE_BADGE: Record<string, string> = {
+  hoog: "bg-emerald-100 text-emerald-800",
+  middel: "bg-amber-100 text-amber-800",
+  laag: "bg-gray-100 text-gray-700",
+  geen_match: "bg-gray-100 text-gray-500",
+};
+
 function ReviewHub() {
-  const [stream] = useState<"metadata">("metadata");
+  const [stream, setStream] = useState<ReviewStream>("metadata");
   const [items, setItems] = useState<ReviewItem[]>([]);
+  const [classItems, setClassItems] = useState<ClassificatieItem[]>([]);
   const [tellingen, setTellingen] = useState<Record<string, number>>({});
   const [statusFilter, setStatusFilter] = useState<string>("open");
   const [laden, setLaden] = useState(true);
@@ -229,7 +264,13 @@ function ReviewHub() {
       const params = new URLSearchParams({ stream });
       if (statusFilter) params.set("status", statusFilter);
       const data = await jsonFetch(`/api/metadata-review/queue?${params}`);
-      setItems(data.items ?? []);
+      if (stream === "classificatie") {
+        setClassItems(data.items ?? []);
+        setItems([]);
+      } else {
+        setItems(data.items ?? []);
+        setClassItems([]);
+      }
       setTellingen(data.tellingen ?? {});
     } catch (err) {
       setFout(err instanceof Error ? err.message : "Laden mislukt");
@@ -242,7 +283,13 @@ function ReviewHub() {
     laad();
   }, [laad]);
 
-  async function beoordeel(documentId: string, actie: string) {
+  // Stream wisselen: zet een passend default statusfilter.
+  function kiesStream(s: ReviewStream) {
+    setStream(s);
+    setStatusFilter("open");
+  }
+
+  async function beoordeelMetadata(documentId: string, actie: string) {
     setBezig(documentId);
     try {
       await jsonFetch("/api/metadata-review/queue", {
@@ -257,23 +304,67 @@ function ReviewHub() {
     }
   }
 
+  // Classificatie-acties lopen via de classificatie-specifieke routes.
+  async function classificatieActie(
+    voorstelId: string,
+    pad: "beoordeel" | "terugdraai",
+    body: Record<string, unknown>
+  ) {
+    setBezig(voorstelId);
+    setFout(null);
+    try {
+      await jsonFetch(`/api/classificatie/${voorstelId}/${pad}`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      await laad();
+    } catch (err) {
+      setFout(err instanceof Error ? err.message : "Bijwerken mislukt");
+    } finally {
+      setBezig(null);
+    }
+  }
+
+  const statusOpties =
+    stream === "classificatie"
+      ? [
+          ["open", "Open"],
+          ["auto_toegepast", "Auto-gekoppeld"],
+          ["bevestigd", "Bevestigd"],
+          ["afgewezen", "Afgewezen"],
+          ["teruggedraaid", "Teruggedraaid"],
+          ["", "Alle"],
+        ]
+      : [
+          ["open", "Open"],
+          ["in_behandeling", "In behandeling"],
+          ["gecontroleerd", "Gecontroleerd"],
+          ["afgewezen", "Afgewezen"],
+          ["", "Alle"],
+        ];
+
   return (
     <div>
-      {/* Stream-tabs (E voegt 'classificatie' toe) */}
+      {/* Stream-tabs: metadata (C) + procesclassificatie (E), één hub */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex gap-1">
           {REVIEW_STREAMS.map((s) => (
-            <span
+            <button
               key={s.key}
-              className="rounded-full bg-[#0F2744] text-white px-3 py-1 text-xs font-semibold"
+              onClick={() => kiesStream(s.key)}
+              className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                stream === s.key
+                  ? "bg-[#0F2744] text-white"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
             >
               {s.label}
-              {tellingen.open ? (
+              {stream === s.key && tellingen.open ? (
                 <span className="ml-1.5 rounded-full bg-[#C9A84C] text-[#0F2744] px-1.5">
                   {tellingen.open}
                 </span>
               ) : null}
-            </span>
+            </button>
           ))}
         </div>
         <select
@@ -281,18 +372,18 @@ function ReviewHub() {
           onChange={(e) => setStatusFilter(e.target.value)}
           className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
         >
-          <option value="open">Open</option>
-          <option value="in_behandeling">In behandeling</option>
-          <option value="gecontroleerd">Gecontroleerd</option>
-          <option value="afgewezen">Afgewezen</option>
-          <option value="">Alle</option>
+          {statusOpties.map(([v, l]) => (
+            <option key={v} value={v}>
+              {l}
+            </option>
+          ))}
         </select>
       </div>
 
       <p className="text-sm text-gray-500 mb-4">
-        Documenten die nog niet zijn verrijkt of een onzekere status hebben.
-        Open het document in de bibliotheek om de metadata te corrigeren; markeer
-        het hier als gecontroleerd zodra de metadata klopt.
+        {stream === "classificatie"
+          ? "AI-procesclassificatie. Bij hoge zekerheid is het document automatisch gekoppeld (terugdraaibaar); bij middelmatige zekerheid bevestig je het voorstel. Expliciet gekoppelde documenten worden nooit omgehangen."
+          : "Documenten die nog niet zijn verrijkt of een onzekere status hebben. Open het document in de bibliotheek om de metadata te corrigeren; markeer het hier als gecontroleerd zodra de metadata klopt."}
       </p>
 
       {fout && (
@@ -303,6 +394,78 @@ function ReviewHub() {
 
       {laden ? (
         <div className="text-gray-400 text-sm">Laden…</div>
+      ) : stream === "classificatie" ? (
+        classItems.length === 0 ? (
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+            Geen classificatievoorstellen in deze status.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {classItems.map((it) => (
+              <div
+                key={it.id}
+                className="rounded-xl border border-gray-200 bg-white p-4 flex items-center gap-3"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-[#0F2744] truncate">
+                      {it.documenten?.titel ?? "(document verwijderd)"}
+                    </span>
+                    <span
+                      className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                        CONFIDENCE_BADGE[it.confidence] ?? "bg-gray-100 text-gray-700"
+                      }`}
+                    >
+                      {it.confidence}
+                    </span>
+                    {it.status === "auto_toegepast" && (
+                      <span className="shrink-0 rounded-full bg-[#0F2744] text-white px-2 py-0.5 text-[11px] font-semibold">
+                        auto-gekoppeld
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    bron: {it.bron}
+                    {it.documenten?.documenttype ? ` · ${it.documenten.documenttype}` : ""}
+                    {it.toelichting ? ` · ${it.toelichting}` : ""}
+                  </div>
+                </div>
+
+                {it.status === "open" && (
+                  <>
+                    <button
+                      onClick={() =>
+                        classificatieActie(it.id, "beoordeel", { actie: "bevestigen" })
+                      }
+                      disabled={bezig === it.id}
+                      className="shrink-0 rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                    >
+                      Bevestigen
+                    </button>
+                    <button
+                      onClick={() =>
+                        classificatieActie(it.id, "beoordeel", { actie: "afwijzen" })
+                      }
+                      disabled={bezig === it.id}
+                      className="shrink-0 rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      Afwijzen
+                    </button>
+                  </>
+                )}
+                {it.status === "auto_toegepast" && (
+                  <button
+                    onClick={() => classificatieActie(it.id, "terugdraai", {})}
+                    disabled={bezig === it.id}
+                    className="shrink-0 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+                  >
+                    Terugdraaien
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )
       ) : items.length === 0 ? (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
           Niets te beoordelen in deze stream — de queue is leeg.
@@ -332,7 +495,7 @@ function ReviewHub() {
               </a>
               {it.status !== "gecontroleerd" && (
                 <button
-                  onClick={() => beoordeel(it.document_id, "gecontroleerd")}
+                  onClick={() => beoordeelMetadata(it.document_id, "gecontroleerd")}
                   disabled={bezig === it.document_id}
                   className="shrink-0 rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
                 >
@@ -341,7 +504,7 @@ function ReviewHub() {
               )}
               {it.status === "open" && (
                 <button
-                  onClick={() => beoordeel(it.document_id, "afgewezen")}
+                  onClick={() => beoordeelMetadata(it.document_id, "afgewezen")}
                   disabled={bezig === it.document_id}
                   className="shrink-0 rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                 >

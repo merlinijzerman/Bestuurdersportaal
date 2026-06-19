@@ -22,7 +22,9 @@ export type Capability =
   | "documents.metadata.update"
   | "documents.status.change"
   | "documents.bronstatus.change"
-  | "metadata.review";
+  | "metadata.review"
+  // Increment E — AI-procesclassificatie beoordelen/terugdraaien (TO §5).
+  | "classification.review";
 
 /** Rol → toegekende capabilities. Bron-van-waarheid voor autorisatie in v2.
  *  `dossiers.manage` (TO §5: secretariaat/governance/admin) dekt het handmatig
@@ -41,6 +43,7 @@ export const ROL_CAPABILITIES: Record<string, Capability[]> = {
     "documents.status.change",
     "documents.bronstatus.change",
     "metadata.review",
+    "classification.review",
   ],
   voorzitter: [
     "dossiers.manage",
@@ -48,6 +51,7 @@ export const ROL_CAPABILITIES: Record<string, Capability[]> = {
     "documents.status.change",
     "documents.bronstatus.change",
     "metadata.review",
+    "classification.review",
   ],
   bestuurder: [],
 };

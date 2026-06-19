@@ -19,7 +19,7 @@ import { requireCapability } from "@/lib/capabilities";
 
 export const dynamic = "force-dynamic";
 
-const GELDIGE_STREAMS = ["metadata"] as const; // E voegt 'classificatie' toe
+const GELDIGE_STREAMS = ["metadata", "classificatie"] as const; // E voegt 'classificatie' toe
 const GELDIGE_ACTIES = ["in_behandeling", "gecontroleerd", "afgewezen"] as const;
 
 export async function GET(req: NextRequest) {
@@ -38,6 +38,37 @@ export async function GET(req: NextRequest) {
         { error: `Onbekende stream: ${stream}` },
         { status: 400 }
       );
+    }
+
+    // stream=classificatie → AI-procesclassificatievoorstellen (Increment E).
+    // Zelfde "Te beoordelen"-hub, ander datamodel + eigen statusovergangen; de
+    // schrijfacties lopen via /api/classificatie/[id]/beoordeel|terugdraai.
+    if (stream === "classificatie") {
+      let cq = supabase
+        .from("classificatie_voorstellen")
+        .select(
+          "id, document_id, voorgestelde_procesinstantie_id, voorgesteld_documenttype, " +
+            "confidence, bron, status, toelichting, toegepast_op, teruggedraaid_op, aangemaakt, " +
+            "documenten(id, titel, bibliotheek, bron, context, documenttype, status, bronstatus, documentdatum, procesinstantie_id)"
+        )
+        .order("aangemaakt", { ascending: true });
+      if (status) cq = cq.eq("status", status);
+
+      const { data: cItems, error: cErr } = await cq;
+      if (cErr) {
+        console.error("Classificatie-queue ophalen fout:", cErr);
+        return NextResponse.json({ error: "Ophalen mislukt" }, { status: 500 });
+      }
+
+      const { data: cAlle } = await supabase
+        .from("classificatie_voorstellen")
+        .select("status");
+      const cTellingen = (cAlle ?? []).reduce<Record<string, number>>((acc, r) => {
+        acc[r.status] = (acc[r.status] ?? 0) + 1;
+        return acc;
+      }, {});
+
+      return NextResponse.json({ stream, items: cItems ?? [], tellingen: cTellingen });
     }
 
     // stream=metadata → document_metadata_review_queue join documenten.

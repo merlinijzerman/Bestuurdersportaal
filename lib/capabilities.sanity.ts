@@ -82,4 +82,14 @@ test("bestuurder draagt GEEN enkele C-capability (server-side gating)", () => {
   }
 });
 
+// ── Increment E — classification.review ────────────────────────────────
+test("beheerder + voorzitter dragen classification.review", () => {
+  assert.equal(rolHeeftCapability("beheerder", "classification.review"), true);
+  assert.equal(rolHeeftCapability("voorzitter", "classification.review"), true);
+});
+
+test("bestuurder draagt GEEN classification.review", () => {
+  assert.equal(rolHeeftCapability("bestuurder", "classification.review"), false);
+});
+
 console.log(`\n${n} sanity-tests geslaagd.`);

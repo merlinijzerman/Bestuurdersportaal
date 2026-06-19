@@ -34,3 +34,4 @@ Triviale of puur uitvoerende wijzigingen horen in de release-historie van `HANDO
 | [0007](./0007-fondsconsistentie-composite-fk-vs-trigger.md) | Fondsconsistentie op koppeltabellen: composite-FK standaard, trigger waar nodig | Geaccepteerd | 2026-06-18 |
 | [0008](./0008-documentkoppeling-vooruitgetrokken-naar-increment-b.md) | Documentkoppeling vooruitgetrokken naar Increment B: primaire kolom + trigger nu, join-tabel later | Geaccepteerd | 2026-06-18 |
 | [0009](./0009-increment-c-keuzes.md) | Increment C: Engelse routes, simpele capability-set, herindexering log-only, transitievalidatie | Geaccepteerd | 2026-06-18 |
+| [0010](./0010-increment-e-keuzes.md) | Increment E: B/C-verificatie eerst, refresh via DB-trigger, gedeelde queue-hub + aparte classificatie-acties, conservatieve confidence-drempels | Geaccepteerd | 2026-06-19 |

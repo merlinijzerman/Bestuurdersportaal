@@ -143,6 +143,11 @@ create table if not exists public.document_metadata_review_queue (
 );
 
 -- ── 4. Document chunks (voor zoeken) ──────────────────────
+-- Increment E (migratie 2026_06_19e_indexering_classificatie.sql, authoritatief)
+-- voegt gedenormaliseerde proces-/status-/geldigheidsvelden toe zodat Increment G
+-- goedkoop kan filteren vóór retrieval. E SLAAT alleen op (de hybride zoek-RPC
+-- blijft ongewijzigd); G filtert. Sync via DB-triggers (fn_chunk_denorm):
+-- BEFORE INSERT op document_chunks + AFTER UPDATE op documenten. Geen re-embed.
 create table if not exists public.document_chunks (
   id            uuid primary key default uuid_generate_v4(),
   document_id   uuid references public.documenten(id) on delete cascade,
@@ -153,7 +158,38 @@ create table if not exists public.document_chunks (
   zoek_vector   tsvector generated always as (
     to_tsvector('dutch', tekst)
   ) stored,
-  aangemaakt    timestamptz default now()
+  aangemaakt    timestamptz default now(),
+  -- embedding/embedding_model worden additief toegevoegd bij ── 5c (Fase C).
+  -- Increment E — denorm uit documenten + primaire procesinstantie (nullable):
+  procesmodel_id     uuid references public.procesmodellen(id) on delete set null,
+  procesinstantie_id uuid references public.procedures(id)     on delete set null,
+  vergadering_id     uuid references public.vergaderingen(id)  on delete set null,
+  agendapunt_id      uuid references public.agendapunten(id)   on delete set null,
+  documenttype       text,
+  documentstatus     text,
+  documentdatum      date,
+  periode            text,                  -- jaar van de procesinstantie of documentdatum
+  bronstatus         text,
+  geldig_vanaf       date,
+  geldig_tot         date
+);
+
+-- Increment E — nieuw: AI-procesclassificatievoorstellen + auto-koppeling (B5).
+-- Volledige definitie/RLS/indexen in 2026_06_19e_indexering_classificatie.sql.
+create table if not exists public.classificatie_voorstellen (
+  id uuid primary key default uuid_generate_v4(),
+  document_id uuid not null references public.documenten(id) on delete cascade,
+  fonds_id uuid not null references public.fondsen(id) on delete cascade,
+  voorgestelde_procesinstantie_id uuid references public.procedures(id) on delete set null,
+  voorgesteld_documenttype text,
+  confidence text not null check (confidence in ('hoog','middel','laag','geen_match')),
+  bron text not null check (bron in ('titel','inhoud','periode','synoniem')),
+  status text not null default 'open'
+    check (status in ('open','bevestigd','afgewezen','auto_toegepast','teruggedraaid')),
+  toelichting text,
+  toegepast_op timestamptz, teruggedraaid_op timestamptz,
+  beoordeeld_door uuid references auth.users(id) on delete set null,
+  aangemaakt timestamptz default now()
 );
 
 -- Index voor full-text zoeken
