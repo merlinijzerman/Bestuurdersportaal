@@ -15,15 +15,40 @@
 import { createServerSupabase } from "@/lib/supabase-server";
 
 /** Bekende capabilities. Groeit per increment (C/F voegen toe) zonder RLS-herontwerp. */
-export type Capability = "catalog.manage" | "dossiers.manage";
+export type Capability =
+  | "catalog.manage"
+  | "dossiers.manage"
+  // Increment C — documentstatus/bronstatus/metadata-beheer (FO §6/§7, TO §5).
+  | "documents.metadata.update"
+  | "documents.status.change"
+  | "documents.bronstatus.change"
+  | "metadata.review";
 
 /** Rol → toegekende capabilities. Bron-van-waarheid voor autorisatie in v2.
  *  `dossiers.manage` (TO §5: secretariaat/governance/admin) dekt het handmatig
  *  beheren van dossierstatus/periode; toegekend aan beheerder + voorzitter,
- *  conform de bestaande privileged-rolconventie (voorzitter/beheerder). */
+ *  conform de bestaande privileged-rolconventie (voorzitter/beheerder).
+ *
+ *  De document-/metadata-capabilities (C) volgen dezelfde conventie: "secretariaat"
+ *  is een FUNCTIONELE rol, geen autorisatierol — de privileged autorisatierollen
+ *  beheerder + voorzitter dragen ze. De TO §5 fijnmazige split
+ *  (`…update.own_before_final` / `…update.all`) is bewust uitgesteld (werkopdracht C). */
 export const ROL_CAPABILITIES: Record<string, Capability[]> = {
-  beheerder: ["catalog.manage", "dossiers.manage"],
-  voorzitter: ["dossiers.manage"],
+  beheerder: [
+    "catalog.manage",
+    "dossiers.manage",
+    "documents.metadata.update",
+    "documents.status.change",
+    "documents.bronstatus.change",
+    "metadata.review",
+  ],
+  voorzitter: [
+    "dossiers.manage",
+    "documents.metadata.update",
+    "documents.status.change",
+    "documents.bronstatus.change",
+    "metadata.review",
+  ],
   bestuurder: [],
 };
 

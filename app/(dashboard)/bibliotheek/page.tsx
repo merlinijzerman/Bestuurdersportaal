@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
+import DocumentMetadataModal from "@/components/DocumentMetadataModal";
 
 interface Document {
   id: string;
@@ -15,6 +16,11 @@ interface Document {
   opslag_pad: string | null;
   gedeactiveerd_op: string | null;
   deactivatie_reden: string | null;
+  // Increment C — metadata/statusmodel
+  documenttype: string | null;
+  status: string | null;
+  bronstatus: string | null;
+  metadata_review_status: string | null;
 }
 
 const TYPE_LABEL: Record<NonNullable<Document["bestandstype"]>, string> = {
@@ -49,6 +55,7 @@ export default function BibliotheekPage() {
   const [deactiveerReden, setDeactiveerReden] = useState("");
   const [actieBezig, setActieBezig] = useState(false);
   const [herindexId, setHerindexId] = useState<string | null>(null);
+  const [metadataDocId, setMetadataDocId] = useState<string | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploaden, setUploaden] = useState(false);
   const [uploadBericht, setUploadBericht] = useState("");
@@ -167,6 +174,11 @@ export default function BibliotheekPage() {
     (d) => d.bibliotheek === actieveTab && !d.actief
   ).length;
 
+  // Increment C — documenten die nog niet zijn verrijkt (review-queue).
+  const aantalTeVerrijken = documenten.filter(
+    (d) => d.bibliotheek === actieveTab && d.metadata_review_status === "te_controleren"
+  ).length;
+
   return (
     <div className="p-7">
       <div className="flex items-start justify-between mb-6">
@@ -187,6 +199,23 @@ export default function BibliotheekPage() {
       {uploadBericht && (
         <div className="mb-4 bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-sm text-green-800">
           {uploadBericht}
+        </div>
+      )}
+
+      {/* Increment C — review-banner: nog niet verrijkte documenten */}
+      {aantalTeVerrijken > 0 && (
+        <div className="mb-4 flex items-center justify-between gap-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+          <div className="text-sm text-amber-800">
+            <span className="font-semibold">{aantalTeVerrijken}</span>{" "}
+            {aantalTeVerrijken === 1 ? "document is" : "documenten zijn"} nog niet
+            verrijkt (status/bronstatus/context ontbreken of zijn onzeker).
+          </div>
+          <a
+            href="/beheer"
+            className="shrink-0 rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-700"
+          >
+            Naar review →
+          </a>
         </div>
       )}
 
@@ -310,6 +339,16 @@ export default function BibliotheekPage() {
                         ✓ Geïndexeerd
                       </span>
                     )}
+                    {doc.status && !inactief && (
+                      <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-semibold">
+                        {doc.status}
+                      </span>
+                    )}
+                    {doc.metadata_review_status === "te_controleren" && !inactief && (
+                      <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-semibold">
+                        Nog niet verrijkt
+                      </span>
+                    )}
                     {inactief && (
                       <span
                         className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-semibold"
@@ -352,6 +391,18 @@ export default function BibliotheekPage() {
                         onClick={() => setOpenMenuId(null)}
                       />
                       <div className="absolute right-0 top-9 z-20 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[180px]">
+                        {!inactief && (
+                          <button
+                            onClick={() => {
+                              setMetadataDocId(doc.id);
+                              setOpenMenuId(null);
+                            }}
+                            className="w-full text-left px-4 py-2 text-sm font-medium text-[#0F2744] hover:bg-amber-50"
+                            title="Status, bronstatus, context en datums bewerken (geen herupload)"
+                          >
+                            Metadata bewerken
+                          </button>
+                        )}
                         {!inactief && doc.geindexeerd && (
                           <a
                             href={`/ai?doc=${doc.id}`}
@@ -462,6 +513,15 @@ export default function BibliotheekPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Metadata-bewerkmodal (Increment C) */}
+      {metadataDocId && (
+        <DocumentMetadataModal
+          documentId={metadataDocId}
+          onClose={() => setMetadataDocId(null)}
+          onSaved={haalDocumenten}
+        />
       )}
 
       {/* Upload modal */}

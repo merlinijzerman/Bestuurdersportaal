@@ -61,4 +61,25 @@ test("bestuurder heeft GEEN dossiers.manage", () => {
   assert.equal(rolHeeftCapability("bestuurder", "dossiers.manage"), false);
 });
 
+// ── Increment C — document-/metadata-capabilities ──────────────────────
+const C_CAPS = [
+  "documents.metadata.update",
+  "documents.status.change",
+  "documents.bronstatus.change",
+  "metadata.review",
+] as const;
+
+test("beheerder + voorzitter dragen alle C-capabilities", () => {
+  for (const cap of C_CAPS) {
+    assert.equal(rolHeeftCapability("beheerder", cap), true, `beheerder ${cap}`);
+    assert.equal(rolHeeftCapability("voorzitter", cap), true, `voorzitter ${cap}`);
+  }
+});
+
+test("bestuurder draagt GEEN enkele C-capability (server-side gating)", () => {
+  for (const cap of C_CAPS) {
+    assert.equal(rolHeeftCapability("bestuurder", cap), false, `bestuurder ${cap}`);
+  }
+});
+
 console.log(`\n${n} sanity-tests geslaagd.`);

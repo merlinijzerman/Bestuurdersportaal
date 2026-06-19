@@ -42,7 +42,7 @@ async function jsonFetch(url: string, init?: RequestInit) {
 }
 
 export default function BeheerClient() {
-  const [tab, setTab] = useState<"catalogus" | "organen">("catalogus");
+  const [tab, setTab] = useState<"catalogus" | "organen" | "review">("catalogus");
   const [procesmodellen, setProcesmodellen] = useState<Procesmodel[]>([]);
   const [gremia, setGremia] = useState<Organ[]>([]);
   const [expertises, setExpertises] = useState<Organ[]>([]);
@@ -132,7 +132,7 @@ export default function BeheerClient() {
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-gray-200 mb-6">
-        {(["catalogus", "organen"] as const).map((t) => (
+        {(["catalogus", "organen", "review"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -142,7 +142,11 @@ export default function BeheerClient() {
                 : "border-transparent text-gray-500 hover:text-gray-700"
             }`}
           >
-            {t === "catalogus" ? "Procescatalogus" : "Organen"}
+            {t === "catalogus"
+              ? "Procescatalogus"
+              : t === "organen"
+              ? "Organen"
+              : "Te beoordelen"}
           </button>
         ))}
       </div>
@@ -152,7 +156,9 @@ export default function BeheerClient() {
           {fout}
         </div>
       )}
-      {laden ? (
+      {tab === "review" ? (
+        <ReviewHub />
+      ) : laden ? (
         <div className="text-gray-400 text-sm">Laden…</div>
       ) : tab === "catalogus" ? (
         <CatalogusTab
@@ -169,6 +175,182 @@ export default function BeheerClient() {
           focus={focus}
           onWijzig={laadAlles}
         />
+      )}
+    </div>
+  );
+}
+
+// ── Generieke "Te beoordelen"-hub ───────────────────────────────────────────
+// stream=metadata (increment C). Increment E hangt hier een tweede stream
+// (AI-procesclassificatie) naast i.p.v. een tweede scherm.
+type ReviewItem = {
+  id: string;
+  document_id: string;
+  reden: string;
+  status: string;
+  aangemaakt: string;
+  opmerking: string | null;
+  documenten: {
+    id: string;
+    titel: string;
+    bibliotheek: string;
+    bron: string;
+    context: string | null;
+    documenttype: string | null;
+    status: string | null;
+    bronstatus: string | null;
+    documentdatum: string | null;
+    metadata_review_status: string | null;
+  } | null;
+};
+
+const REVIEW_STREAMS = [{ key: "metadata", label: "Metadata" }] as const;
+
+const REDEN_LABEL: Record<string, string> = {
+  backfill: "Backfill (nog niet verrijkt)",
+  ontbrekende_metadata: "Ontbrekende metadata",
+  onzekere_status: "Onzekere status",
+  handmatig: "Handmatig toegevoegd",
+};
+
+function ReviewHub() {
+  const [stream] = useState<"metadata">("metadata");
+  const [items, setItems] = useState<ReviewItem[]>([]);
+  const [tellingen, setTellingen] = useState<Record<string, number>>({});
+  const [statusFilter, setStatusFilter] = useState<string>("open");
+  const [laden, setLaden] = useState(true);
+  const [fout, setFout] = useState<string | null>(null);
+  const [bezig, setBezig] = useState<string | null>(null);
+
+  const laad = useCallback(async () => {
+    setLaden(true);
+    setFout(null);
+    try {
+      const params = new URLSearchParams({ stream });
+      if (statusFilter) params.set("status", statusFilter);
+      const data = await jsonFetch(`/api/metadata-review/queue?${params}`);
+      setItems(data.items ?? []);
+      setTellingen(data.tellingen ?? {});
+    } catch (err) {
+      setFout(err instanceof Error ? err.message : "Laden mislukt");
+    } finally {
+      setLaden(false);
+    }
+  }, [stream, statusFilter]);
+
+  useEffect(() => {
+    laad();
+  }, [laad]);
+
+  async function beoordeel(documentId: string, actie: string) {
+    setBezig(documentId);
+    try {
+      await jsonFetch("/api/metadata-review/queue", {
+        method: "POST",
+        body: JSON.stringify({ document_id: documentId, actie }),
+      });
+      await laad();
+    } catch (err) {
+      setFout(err instanceof Error ? err.message : "Bijwerken mislukt");
+    } finally {
+      setBezig(null);
+    }
+  }
+
+  return (
+    <div>
+      {/* Stream-tabs (E voegt 'classificatie' toe) */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex gap-1">
+          {REVIEW_STREAMS.map((s) => (
+            <span
+              key={s.key}
+              className="rounded-full bg-[#0F2744] text-white px-3 py-1 text-xs font-semibold"
+            >
+              {s.label}
+              {tellingen.open ? (
+                <span className="ml-1.5 rounded-full bg-[#C9A84C] text-[#0F2744] px-1.5">
+                  {tellingen.open}
+                </span>
+              ) : null}
+            </span>
+          ))}
+        </div>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+        >
+          <option value="open">Open</option>
+          <option value="in_behandeling">In behandeling</option>
+          <option value="gecontroleerd">Gecontroleerd</option>
+          <option value="afgewezen">Afgewezen</option>
+          <option value="">Alle</option>
+        </select>
+      </div>
+
+      <p className="text-sm text-gray-500 mb-4">
+        Documenten die nog niet zijn verrijkt of een onzekere status hebben.
+        Open het document in de bibliotheek om de metadata te corrigeren; markeer
+        het hier als gecontroleerd zodra de metadata klopt.
+      </p>
+
+      {fout && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 mb-4">
+          {fout}
+        </div>
+      )}
+
+      {laden ? (
+        <div className="text-gray-400 text-sm">Laden…</div>
+      ) : items.length === 0 ? (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+          Niets te beoordelen in deze stream — de queue is leeg.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {items.map((it) => (
+            <div
+              key={it.id}
+              className="rounded-xl border border-gray-200 bg-white p-4 flex items-center gap-3"
+            >
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold text-[#0F2744] truncate">
+                  {it.documenten?.titel ?? "(document verwijderd)"}
+                </div>
+                <div className="text-xs text-gray-500">
+                  {REDEN_LABEL[it.reden] ?? it.reden}
+                  {it.documenten?.documenttype ? ` · ${it.documenten.documenttype}` : ""}
+                  {it.documenten?.status ? ` · ${it.documenten.status}` : " · geen status"}
+                </div>
+              </div>
+              <a
+                href="/bibliotheek"
+                className="shrink-0 rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+              >
+                Naar bibliotheek
+              </a>
+              {it.status !== "gecontroleerd" && (
+                <button
+                  onClick={() => beoordeel(it.document_id, "gecontroleerd")}
+                  disabled={bezig === it.document_id}
+                  className="shrink-0 rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  Gecontroleerd
+                </button>
+              )}
+              {it.status === "open" && (
+                <button
+                  onClick={() => beoordeel(it.document_id, "afgewezen")}
+                  disabled={bezig === it.document_id}
+                  className="shrink-0 rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Afwijzen
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );

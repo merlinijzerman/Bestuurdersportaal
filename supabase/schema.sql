@@ -65,7 +65,81 @@ create table if not exists public.documenten (
   -- Primaire procesinstantie-koppeling (Increment B). Fondsconsistentie
   -- (document-fonds = procesinstantie-fonds) via trigger; generieke docs
   -- (fonds_id NULL) kunnen daardoor niet aan een fonds-dossier koppelen.
-  procesinstantie_id uuid references public.procedures(id) on delete set null
+  procesinstantie_id uuid references public.procedures(id) on delete set null,
+  -- Increment C — statusmodel (3 lagen) + metadata. Migratie
+  -- 2026_06_18_documentstatus_metadata.sql is authoritatief; dit is documentatie.
+  -- Laag 1 = actief (boven); laag 2 = status; laag 3 = bronstatus.
+  context        text not null default 'algemeen'
+                   check (context in ('dossier','vergadering','algemeen')),
+  vergadering_id uuid references public.vergaderingen(id) on delete set null,
+  documenttype   text check (documenttype in (
+                   'beleid','besluit','besluitdocument','besluitregistratie',
+                   'bestuursvoorstel','notulen','advies','memo','analyse','bijlage','overig')),
+  status         text check (status in (
+                   'concept','ter_bespreking','ter_besluitvorming','vastgesteld',
+                   'van_kracht','vervangen','alleen_historisch','gearchiveerd')),
+  -- bronstatus NULL ≡ "actief" tijdens de overgang (Increment C backfill);
+  -- strikte filtering komt in Increment G.
+  bronstatus     text check (bronstatus in (
+                   'actief','historisch','uitgesloten','actief_na_vaststelling')),
+  documentdatum  date,
+  geldig_vanaf   date,
+  geldig_tot     date,
+  vervangt_document_id       uuid references public.documenten(id) on delete set null,
+  vervangen_door_document_id uuid references public.documenten(id) on delete set null,
+  metadata_te_controleren    boolean not null default false,
+  metadata_review_status     text not null default 'niet_nodig'
+                   check (metadata_review_status in ('niet_nodig','te_controleren','gecontroleerd','afgewezen')),
+  metadata_gecontroleerd_door uuid references auth.users(id) on delete set null,
+  metadata_gecontroleerd_op   timestamptz,
+  -- Contextvalidatie (CHECK): dossier→procesinstantie_id, vergadering→vergadering_id,
+  -- agendapunt→vergadering. Statusovergangen + secundaire koppelingen via triggers.
+  constraint documenten_context_dossier_check
+    check (context <> 'dossier' or procesinstantie_id is not null),
+  constraint documenten_context_vergadering_check
+    check (context <> 'vergadering' or vergadering_id is not null),
+  constraint documenten_agendapunt_vergadering_check
+    check (agendapunt_id is null or vergadering_id is not null)
+);
+
+-- Increment C — secundaire dossierkoppelingen, append-only metadata-auditlog en
+-- metadata-review-queue. Volledige definitie + triggers/RLS in migratie
+-- 2026_06_18_documentstatus_metadata.sql (authoritatief).
+create table if not exists public.document_procesinstanties (
+  id uuid primary key default uuid_generate_v4(),
+  fonds_id uuid not null references public.fondsen(id) on delete cascade,
+  document_id uuid not null references public.documenten(id) on delete cascade,
+  procesinstantie_id uuid not null references public.procedures(id) on delete cascade,
+  aangemaakt_door uuid references auth.users(id) on delete set null,
+  aangemaakt timestamptz default now(),
+  unique (document_id, procesinstantie_id)
+);
+
+create table if not exists public.document_metadata_log (
+  id uuid primary key default uuid_generate_v4(),
+  document_id uuid references public.documenten(id) on delete set null,
+  document_titel_snapshot text,
+  fonds_id uuid references public.fondsen(id) on delete set null,
+  gewijzigd_door uuid references auth.users(id) on delete set null,
+  gewijzigd_door_naam text,
+  gewijzigd_op timestamptz default now(),
+  veld_naam text not null,
+  oude_waarde text, nieuwe_waarde text,
+  wijzig_reden text, wijzig_type text,
+  rag_impact boolean default false,
+  hash text, tijdstip timestamptz default now()
+);
+
+create table if not exists public.document_metadata_review_queue (
+  id uuid primary key default uuid_generate_v4(),
+  fonds_id uuid not null references public.fondsen(id) on delete cascade,
+  document_id uuid not null references public.documenten(id) on delete cascade,
+  reden text not null check (reden in ('backfill','ontbrekende_metadata','onzekere_status','handmatig')),
+  status text not null default 'open' check (status in ('open','in_behandeling','gecontroleerd','afgewezen')),
+  aangemaakt timestamptz default now(),
+  beoordeeld_door uuid references auth.users(id) on delete set null,
+  beoordeeld_op timestamptz, opmerking text,
+  unique (document_id)
 );
 
 -- ── 4. Document chunks (voor zoeken) ──────────────────────
