@@ -87,6 +87,13 @@ create table if not exists public.documenten (
   geldig_tot     date,
   vervangt_document_id       uuid references public.documenten(id) on delete set null,
   vervangen_door_document_id uuid references public.documenten(id) on delete set null,
+  -- Increment C+/B13 — bronsoort-metadata voor generieke documenten (migratie
+  -- 2026_06_20e, authoritatief). 'bibliotheek' IS de bronsoort (B12); deze 3 zijn
+  -- aanvullende beschrijvende velden, beheerd op het platform-pad (P1/B14).
+  bronorganisatie text,
+  extern_url      text,
+  normgewicht     text check (normgewicht is null or normgewicht in
+                   ('bindend','toezichtverwachting','sector_guidance','informatief','onbekend')),
   metadata_te_controleren    boolean not null default false,
   metadata_review_status     text not null default 'niet_nodig'
                    check (metadata_review_status in ('niet_nodig','te_controleren','gecontroleerd','afgewezen')),
@@ -193,6 +200,15 @@ create table if not exists public.document_chunks (
   bronstatus         text,
   geldig_vanaf       date,
   geldig_tot         date,
+  -- Increment C+/B13 — bronsoort-denorm (migratie 2026_06_20e, authoritatief),
+  -- vooruitgetrokken uit G via dezelfde fn_chunk_denorm. geldig_tot (boven)
+  -- dekt de generiek-geldigheid al; deze 4 zijn de aanvullende bronsoort-velden.
+  -- Index idx_chunks_bronsoort en de fn_chunk_denorm*-functies/triggers leven in
+  -- de migratie (niet hier gespiegeld; schema.sql mag op dat punt achterlopen).
+  bibliotheek     text,
+  bronorganisatie text,
+  normgewicht     text,
+  extern_url      text,
   -- Increment D — markeert een segmentchunk (vs. whole-document-chunk = null).
   -- Volledige definitie in 2026_06_20d_notulen_segmenten.sql.
   notulen_segment_id uuid references public.notulen_segmenten(id) on delete cascade
@@ -372,22 +388,47 @@ alter table public.governance_log enable row level security;
 create policy "eigen profiel" on public.profielen
   for all using (auth.uid() = id);
 
--- Documenten: alleen eigen fonds zien
-create policy "fonds documenten" on public.documenten
-  for all using (
+-- Documenten (Increment C+/B13, migratie 2026_06_20e authoritatief): RLS-split per
+-- command. SELECT gedeeld (eigen fonds OF generiek); INSERT/UPDATE alleen eigen
+-- fonds ÉN bibliotheek='fonds'; DELETE alleen eigen fonds. Tenants zijn read-only
+-- op generiek; generiek-curatie loopt interim via service-role (omzeilt RLS).
+create policy "documenten select" on public.documenten
+  for select using (
     fonds_id = (select fonds_id from public.profielen where id = auth.uid())
-    or bibliotheek = 'generiek'
-  );
+    or bibliotheek = 'generiek');
 
--- Chunks: volgt documenten
-create policy "fonds chunks" on public.document_chunks
+create policy "documenten insert eigen fonds" on public.documenten
+  for insert with check (
+    fonds_id = (select fonds_id from public.profielen where id = auth.uid())
+    and bibliotheek = 'fonds');
+
+create policy "documenten update eigen fonds" on public.documenten
+  for update using (
+    fonds_id = (select fonds_id from public.profielen where id = auth.uid())
+  ) with check (
+    fonds_id = (select fonds_id from public.profielen where id = auth.uid())
+    and bibliotheek = 'fonds');
+
+create policy "documenten delete eigen fonds" on public.documenten
+  for delete using (
+    fonds_id = (select fonds_id from public.profielen where id = auth.uid()));
+
+-- Chunks: SELECT gedeeld (incl. generiek), schrijven alleen eigen fondsdocs.
+create policy "chunks select" on public.document_chunks
+  for select using (
+    document_id in (select id from public.documenten where
+      fonds_id = (select fonds_id from public.profielen where id = auth.uid())
+      or bibliotheek = 'generiek'));
+
+create policy "chunks write eigen fonds" on public.document_chunks
   for all using (
-    document_id in (
-      select id from public.documenten where
-        fonds_id = (select fonds_id from public.profielen where id = auth.uid())
-        or bibliotheek = 'generiek'
-    )
-  );
+    document_id in (select id from public.documenten where
+      fonds_id = (select fonds_id from public.profielen where id = auth.uid())
+      and bibliotheek = 'fonds')
+  ) with check (
+    document_id in (select id from public.documenten where
+      fonds_id = (select fonds_id from public.profielen where id = auth.uid())
+      and bibliotheek = 'fonds'));
 
 -- Governance log: alleen eigen fonds
 create policy "fonds log" on public.governance_log

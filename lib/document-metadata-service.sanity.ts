@@ -40,6 +40,9 @@ function doc(overrides: Partial<HuidigDocument> = {}): HuidigDocument {
     geldig_tot: null,
     vervangt_document_id: null,
     vervangen_door_document_id: null,
+    bronorganisatie: null,
+    extern_url: null,
+    normgewicht: null,
     ...overrides,
   };
 }
@@ -58,6 +61,20 @@ test("geldige metadatawijziging zonder reden is ok (1 auditrecord)", () => {
   assert.equal(plan.wijzigingen.length, 1);
   assert.equal(plan.wijzigingen[0].veld, "documenttype");
   assert.equal(plan.ragImpact, true); // documenttype is RAG-impactveld
+});
+
+test("normgewicht buiten de enum wordt geweigerd (C+/B13)", () => {
+  const plan = bouwMetadataPlan(doc(), { normgewicht: "zwaarwegend" }, ALLE_CAPS);
+  assert.equal(plan.ok, false);
+  assert.ok(plan.fouten.some((f) => f.includes("Ongeldig normgewicht")));
+});
+
+test("geldig normgewicht wordt geaccepteerd (beschrijvend, geen RAG-impact)", () => {
+  const plan = bouwMetadataPlan(doc(), { normgewicht: "bindend" }, ALLE_CAPS);
+  assert.equal(plan.ok, true);
+  assert.equal(plan.wijzigingen.length, 1);
+  assert.equal(plan.wijzigingen[0].veld, "normgewicht");
+  assert.equal(plan.wijzigingen[0].rag_impact, false);
 });
 
 test("ongeldige statusovergang (sprong) wordt geweigerd", () => {

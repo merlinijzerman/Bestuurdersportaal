@@ -27,7 +27,7 @@ import {
 export const dynamic = "force-dynamic";
 
 const SELECT =
-  "id, titel, fonds_id, context, procesinstantie_id, vergadering_id, agendapunt_id, documenttype, status, bronstatus, documentdatum, geldig_vanaf, geldig_tot, vervangt_document_id, vervangen_door_document_id";
+  "id, titel, fonds_id, context, procesinstantie_id, vergadering_id, agendapunt_id, documenttype, status, bronstatus, documentdatum, geldig_vanaf, geldig_tot, vervangt_document_id, vervangen_door_document_id, bronorganisatie, extern_url, normgewicht";
 
 interface DocResultaat {
   document_id: string;
@@ -100,6 +100,9 @@ export async function POST(req: NextRequest) {
         geldig_tot: document.geldig_tot,
         vervangt_document_id: document.vervangt_document_id,
         vervangen_door_document_id: document.vervangen_door_document_id,
+        bronorganisatie: document.bronorganisatie,
+        extern_url: document.extern_url,
+        normgewicht: document.normgewicht,
       };
       const plan = bouwMetadataPlan(huidig, wijziging, caps);
 

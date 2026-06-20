@@ -164,7 +164,12 @@ export type MetadataVeld =
   | "geldig_vanaf"
   | "geldig_tot"
   | "vervangt_document_id"
-  | "vervangen_door_document_id";
+  | "vervangen_door_document_id"
+  // Increment C+/B13 — beschrijvende bronsoort-velden (alleen generiek; beheerd
+  // op het platform-pad). Geen RAG-impact en niet governance-kritiek.
+  | "bronorganisatie"
+  | "extern_url"
+  | "normgewicht";
 
 /**
  * Velden die de RAG-uitkomst beïnvloeden → herindexering nodig + RAG-impact
@@ -217,4 +222,7 @@ export const METADATA_VELD_LABEL: Record<MetadataVeld, string> = {
   geldig_tot: "Geldig tot",
   vervangt_document_id: "Vervangt document",
   vervangen_door_document_id: "Vervangen door document",
+  bronorganisatie: "Bronorganisatie",
+  extern_url: "Externe URL",
+  normgewicht: "Normgewicht",
 };

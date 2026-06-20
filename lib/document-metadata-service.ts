@@ -33,6 +33,7 @@ import {
   type Documenttype,
   type MetadataVeld,
 } from "./document-metadata";
+import { isGeldigNormgewicht, NORMGEWICHTEN, isVeiligeUrl } from "./bronsoort";
 
 /** Huidige, relevante documentstaat (uit de DB gelezen). */
 export interface HuidigDocument {
@@ -48,6 +49,9 @@ export interface HuidigDocument {
   geldig_tot: string | null;
   vervangt_document_id: string | null;
   vervangen_door_document_id: string | null;
+  bronorganisatie: string | null;
+  extern_url: string | null;
+  normgewicht: string | null;
 }
 
 /** Wijzigingsverzoek: een partial van de bewerkbare velden + één reden die op
@@ -65,6 +69,11 @@ export interface MetadataVerzoek {
   geldig_tot?: string | null;
   vervangt_document_id?: string | null;
   vervangen_door_document_id?: string | null;
+  // Increment C+/B13 — beschrijvende bronsoort-velden (platform-pad; tenants
+  // worden door RLS geblokkeerd op generieke documenten).
+  bronorganisatie?: string | null;
+  extern_url?: string | null;
+  normgewicht?: string | null;
   reden?: string;
 }
 
@@ -243,6 +252,9 @@ export function bouwMetadataPlan(
     "geldig_tot",
     "vervangt_document_id",
     "vervangen_door_document_id",
+    "bronorganisatie",
+    "extern_url",
+    "normgewicht",
   ];
 
   for (const veld of overige) {
@@ -255,6 +267,19 @@ export function bouwMetadataPlan(
       fouten.push("Geen rechten om metadata te wijzigen (documents.metadata.update).");
       // verdere velden niet apart blijven melden
       break;
+    }
+    // Enum-validatie normgewicht (DB-CHECK is de backstop; toon de fout vooraf).
+    if (veld === "normgewicht" && nieuw !== null && !isGeldigNormgewicht(nieuw)) {
+      fouten.push(
+        `Ongeldig normgewicht: ${nieuw}. Toegestaan: ${NORMGEWICHTEN.join(", ")}.`
+      );
+      continue;
+    }
+    // extern_url: alleen http(s) opslaan — weert javascript:/data:-schema's die
+    // bij het renderen als klikbare link tot XSS kunnen leiden.
+    if (veld === "extern_url" && nieuw !== null && !isVeiligeUrl(nieuw)) {
+      fouten.push("Ongeldige externe URL: alleen http(s)-adressen zijn toegestaan.");
+      continue;
     }
     if (isGovernanceKritiekVeld(veld) && !reden) {
       fouten.push(

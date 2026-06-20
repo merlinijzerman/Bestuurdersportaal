@@ -25,6 +25,7 @@ import {
   type DocumentStatus,
   type Bronstatus,
 } from "@/lib/document-status-transities";
+import { bronkaartLabels, normgewichtLabel, isVeiligeUrl } from "@/lib/bronsoort";
 
 interface MetadataDoc {
   id: string;
@@ -40,6 +41,11 @@ interface MetadataDoc {
   geldig_vanaf: string | null;
   geldig_tot: string | null;
   metadata_review_status: string | null;
+  // Increment C+/B13 — bronsoort. Generiek = platform-gecureerd, read-only voor tenants.
+  bibliotheek: string | null;
+  bronorganisatie: string | null;
+  extern_url: string | null;
+  normgewicht: string | null;
 }
 
 interface PlanWijziging {
@@ -169,6 +175,12 @@ export default function DocumentMetadataModal({
     ? [doc.status, ...vervolgstatussen]
     : (Object.keys(DOCUMENT_STATUS_LABEL) as DocumentStatus[]);
 
+  // B13: generieke (platform-gecureerde) documenten zijn read-only voor tenants.
+  // RLS blokkeert schrijven hoe dan ook; deze gate maakt dat in de UI expliciet
+  // (UX-principe "maak blokkers vooraf zichtbaar") i.p.v. een fout ná opslaan.
+  const isGeneriek = doc?.bibliotheek === "generiek";
+  const labels = doc ? bronkaartLabels(doc) : null;
+
   return (
     <div className="fixed inset-0 bg-[#0F2744]/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl p-7 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
@@ -192,6 +204,45 @@ export default function DocumentMetadataModal({
 
         {laden ? (
           <div className="text-gray-400 text-sm py-6">Laden…</div>
+        ) : isGeneriek && doc ? (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700 border border-indigo-200">
+                {labels?.bronsoortLabel ?? "Generiek / extern kader"}
+              </span>
+              {labels?.vervallen && (
+                <span className="inline-flex items-center rounded-full bg-red-50 px-3 py-1 text-xs font-semibold text-red-700 border border-red-200">
+                  {labels.vervallenLabel}
+                </span>
+              )}
+            </div>
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-600">
+              Dit is een platform-gecureerd generiek document. Het is{" "}
+              <span className="font-semibold">alleen-lezen</span> voor fondsen; de
+              metadata wordt centraal beheerd.
+            </div>
+            <dl className="grid grid-cols-2 gap-3 text-sm">
+              <LeesVeld label="Bronorganisatie" waarde={doc.bronorganisatie} />
+              <LeesVeld label="Normgewicht" waarde={normgewichtLabel(doc.normgewicht)} />
+              <LeesVeld label="Documentdatum" waarde={doc.documentdatum} />
+              <LeesVeld label="Geldig tot" waarde={doc.geldig_tot} />
+              <div className="col-span-2">
+                <LeesVeld
+                  label="Externe URL"
+                  waarde={doc.extern_url}
+                  isUrl={isVeiligeUrl(doc.extern_url)}
+                />
+              </div>
+            </dl>
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={onClose}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+              >
+                Sluiten
+              </button>
+            </div>
+          </div>
         ) : (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
@@ -360,6 +411,40 @@ function Veld({ label, children }: { label: string; children: React.ReactNode })
         {label}
       </label>
       {children}
+    </div>
+  );
+}
+
+function LeesVeld({
+  label,
+  waarde,
+  isUrl,
+}: {
+  label: string;
+  waarde: string | null | undefined;
+  isUrl?: boolean;
+}) {
+  return (
+    <div>
+      <dt className="text-xs font-semibold text-gray-600 mb-1">{label}</dt>
+      <dd className="text-sm text-gray-800 break-words">
+        {waarde ? (
+          isUrl ? (
+            <a
+              href={waarde}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 underline"
+            >
+              {waarde}
+            </a>
+          ) : (
+            waarde
+          )
+        ) : (
+          <span className="text-gray-400">—</span>
+        )}
+      </dd>
     </div>
   );
 }

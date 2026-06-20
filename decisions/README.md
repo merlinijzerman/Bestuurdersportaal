@@ -36,3 +36,4 @@ Triviale of puur uitvoerende wijzigingen horen in de release-historie van `HANDO
 | [0009](./0009-increment-c-keuzes.md) | Increment C: Engelse routes, simpele capability-set, herindexering log-only, transitievalidatie | Geaccepteerd | 2026-06-18 |
 | [0010](./0010-increment-e-keuzes.md) | Increment E: B/C-verificatie eerst, refresh via DB-trigger, gedeelde queue-hub + aparte classificatie-acties, conservatieve confidence-drempels | Geaccepteerd | 2026-06-19 |
 | [0011](./0011-increment-d-keuzes.md) | Increment D: NL-routes, segmentchunks vervangen whole-document-chunks (transactioneel/RPC), audit in document_metadata_log, regelgebaseerde segmentatie, COALESCE-fix op de E-trigger | Geaccepteerd | 2026-06-20 |
+| [0012](./0012-bronsoort-denorm-vooruitgetrokken-naar-cplus-b13.md) | Bronsoort-denorm (bibliotheek + C+/B13-velden) vooruitgetrokken naar Increment C+/B13 i.p.v. G, zodat fn_chunk_denorm maar één keer wordt aangeraakt | Geaccepteerd | 2026-06-20 |

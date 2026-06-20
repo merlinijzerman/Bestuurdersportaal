@@ -27,7 +27,7 @@ import { valideerContext } from "@/lib/document-metadata";
 export const dynamic = "force-dynamic";
 
 const METADATA_SELECT =
-  "id, titel, fonds_id, actief, opgeslagen_door, context, procesinstantie_id, vergadering_id, agendapunt_id, documenttype, status, bronstatus, documentdatum, geldig_vanaf, geldig_tot, vervangt_document_id, vervangen_door_document_id, metadata_te_controleren, metadata_review_status, metadata_gecontroleerd_door, metadata_gecontroleerd_op";
+  "id, titel, fonds_id, actief, opgeslagen_door, context, procesinstantie_id, vergadering_id, agendapunt_id, documenttype, status, bronstatus, documentdatum, geldig_vanaf, geldig_tot, vervangt_document_id, vervangen_door_document_id, metadata_te_controleren, metadata_review_status, metadata_gecontroleerd_door, metadata_gecontroleerd_op, bibliotheek, bronorganisatie, extern_url, normgewicht";
 
 async function leesCapabilities(
   supabase: Awaited<ReturnType<typeof createServerSupabase>>,
@@ -147,6 +147,9 @@ export async function PATCH(
       geldig_tot: document.geldig_tot,
       vervangt_document_id: document.vervangt_document_id,
       vervangen_door_document_id: document.vervangen_door_document_id,
+      bronorganisatie: document.bronorganisatie,
+      extern_url: document.extern_url,
+      normgewicht: document.normgewicht,
     };
 
     const plan = bouwMetadataPlan(huidig, body, caps);

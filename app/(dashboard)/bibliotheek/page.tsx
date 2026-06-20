@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import DocumentMetadataModal from "@/components/DocumentMetadataModal";
+import { bronkaartLabels } from "@/lib/bronsoort";
 
 interface Document {
   id: string;
@@ -21,6 +22,11 @@ interface Document {
   status: string | null;
   bronstatus: string | null;
   metadata_review_status: string | null;
+  // Increment C+/B13 — bronsoort (generiek = platform-gecureerd, read-only)
+  bronorganisatie: string | null;
+  extern_url: string | null;
+  normgewicht: string | null;
+  geldig_tot: string | null;
 }
 
 const TYPE_LABEL: Record<NonNullable<Document["bestandstype"]>, string> = {
@@ -64,7 +70,7 @@ export default function BibliotheekPage() {
   const [uploadForm, setUploadForm] = useState({
     titel: "",
     bron: "DNB",
-    bibliotheek: "generiek",
+    bibliotheek: "fonds",
   });
 
   useEffect(() => {
@@ -103,7 +109,7 @@ export default function BibliotheekPage() {
       setUploadBericht(`✅ ${data.bericht}`);
       haalDocumenten();
       setUploadOpen(false);
-      setUploadForm({ titel: "", bron: "DNB", bibliotheek: "generiek" });
+      setUploadForm({ titel: "", bron: "DNB", bibliotheek: "fonds" });
     } else {
       setUploadBericht(`❌ ${data.error}`);
     }
@@ -278,6 +284,8 @@ export default function BibliotheekPage() {
           {gefilterd.map((doc) => {
             const inactief = !doc.actief;
             const kanInzien = !!doc.opslag_pad;
+            const isGeneriek = doc.bibliotheek === "generiek";
+            const labels = bronkaartLabels(doc);
             return (
               <div
                 key={doc.id}
@@ -323,6 +331,16 @@ export default function BibliotheekPage() {
                         className={`px-2 py-0.5 rounded-full font-semibold ${TYPE_KLEUR[doc.bestandstype]}`}
                       >
                         {TYPE_LABEL[doc.bestandstype]}
+                      </span>
+                    )}
+                    {isGeneriek && (
+                      <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-semibold border border-indigo-200">
+                        {labels.bronsoortLabel}
+                      </span>
+                    )}
+                    {isGeneriek && labels.vervallen && (
+                      <span className="px-2 py-0.5 rounded-full bg-red-50 text-red-700 font-semibold border border-red-200">
+                        {labels.vervallenLabel}
                       </span>
                     )}
                     {doc.paginas && (
@@ -398,9 +416,13 @@ export default function BibliotheekPage() {
                               setOpenMenuId(null);
                             }}
                             className="w-full text-left px-4 py-2 text-sm font-medium text-[#0F2744] hover:bg-amber-50"
-                            title="Status, bronstatus, context en datums bewerken (geen herupload)"
+                            title={
+                              isGeneriek
+                                ? "Generiek document — metadata is alleen-lezen (centraal beheerd)"
+                                : "Status, bronstatus, context en datums bewerken (geen herupload)"
+                            }
                           >
-                            Metadata bewerken
+                            {isGeneriek ? "Metadata bekijken" : "Metadata bewerken"}
                           </button>
                         )}
                         {!inactief && doc.geindexeerd && (
@@ -424,7 +446,10 @@ export default function BibliotheekPage() {
                             Bekijken
                           </a>
                         )}
-                        {kanInzien && !inactief && (
+                        {/* B13: schrijfacties (her-indexeren/deactiveren) zijn
+                            voor generieke documenten verborgen — tenants zijn
+                            read-only op generiek; RLS blokkeert ze hoe dan ook. */}
+                        {kanInzien && !inactief && !isGeneriek && (
                           <button
                             onClick={() => {
                               herindexeer(doc);
@@ -439,28 +464,29 @@ export default function BibliotheekPage() {
                               : "Her-indexeren"}
                           </button>
                         )}
-                        {!inactief ? (
-                          <button
-                            onClick={() => {
-                              setDeactiveerDoc(doc);
-                              setOpenMenuId(null);
-                            }}
-                            className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50"
-                          >
-                            Deactiveren
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => {
-                              reactiveer(doc);
-                              setOpenMenuId(null);
-                            }}
-                            disabled={actieBezig}
-                            className="w-full text-left px-4 py-2 text-sm text-green-700 hover:bg-green-50 disabled:opacity-50"
-                          >
-                            Reactiveren
-                          </button>
-                        )}
+                        {!isGeneriek &&
+                          (!inactief ? (
+                            <button
+                              onClick={() => {
+                                setDeactiveerDoc(doc);
+                                setOpenMenuId(null);
+                              }}
+                              className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                            >
+                              Deactiveren
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                reactiveer(doc);
+                                setOpenMenuId(null);
+                              }}
+                              disabled={actieBezig}
+                              className="w-full text-left px-4 py-2 text-sm text-green-700 hover:bg-green-50 disabled:opacity-50"
+                            >
+                              Reactiveren
+                            </button>
+                          ))}
                       </div>
                     </>
                   )}
@@ -565,31 +591,24 @@ export default function BibliotheekPage() {
                   required
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Bron</label>
-                  <select
-                    value={uploadForm.bron}
-                    onChange={(e) => setUploadForm({ ...uploadForm, bron: e.target.value })}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none"
-                  >
-                    {BRONNEN.map((b) => (
-                      <option key={b} value={b}>{b}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Bibliotheek</label>
-                  <select
-                    value={uploadForm.bibliotheek}
-                    onChange={(e) => setUploadForm({ ...uploadForm, bibliotheek: e.target.value })}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none"
-                  >
-                    <option value="generiek">Generiek</option>
-                    <option value="fonds">Fonds</option>
-                  </select>
-                </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Bron</label>
+                <select
+                  value={uploadForm.bron}
+                  onChange={(e) => setUploadForm({ ...uploadForm, bron: e.target.value })}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none"
+                >
+                  {BRONNEN.map((b) => (
+                    <option key={b} value={b}>{b}</option>
+                  ))}
+                </select>
               </div>
+              {/* B13: tenants uploaden uitsluitend naar de fondsbibliotheek.
+                  Generieke (platform-gecureerde) documenten worden centraal beheerd. */}
+              <p className="text-[11px] text-gray-500 -mt-1">
+                Dit document wordt opgeslagen in de <span className="font-semibold">fondsbibliotheek</span>.
+                Generieke (DNB/AFM/PF) documenten worden centraal beheerd en zijn alleen-lezen.
+              </p>
               {uploadBericht && (
                 <div className="text-sm text-red-600">{uploadBericht}</div>
               )}

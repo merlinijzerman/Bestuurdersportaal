@@ -26,7 +26,12 @@ export type Capability =
   // Increment E — AI-procesclassificatie beoordelen/terugdraaien (TO §5).
   | "classification.review"
   // Increment D — notulensegmenten voorstellen/bevestigen/corrigeren (FO §8, TO §2.5).
-  | "notulen.segment.confirm";
+  | "notulen.segment.confirm"
+  // Increment C+/B13 — generieke (platform-gecureerde) bibliotheek beheren.
+  // GERESERVEERD voor de B14-platformrol (Increment P1); bewust aan GEEN
+  // tenant-rol toegekend. Tenants zijn read-only op generiek (RLS + uploadweigering);
+  // interim-curatie loopt via service-role. Pas mappen zodra de platform-surface bestaat.
+  | "generic.library.manage";
 
 /** Rol → toegekende capabilities. Bron-van-waarheid voor autorisatie in v2.
  *  `dossiers.manage` (TO §5: secretariaat/governance/admin) dekt het handmatig

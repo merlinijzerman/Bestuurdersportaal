@@ -123,6 +123,21 @@ export async function POST(req: NextRequest) {
       titel = titel || (bestand?.name ? stripExtensie(bestand.name) : "Vergaderstuk");
     }
 
+    // B13: generieke (platform-gecureerde) documenten mogen NIET via de tenant-
+    // uploadroute worden aangemaakt. Tenants zijn read-only op generiek; curatie
+    // loopt interim via service-role/seed (Increment P1 levert de platform-UI).
+    // Default = 'fonds'. Server-side leidend; RLS is de tweede verdedigingslinie.
+    if (bibliotheek === "generiek") {
+      return NextResponse.json(
+        {
+          error:
+            "Generieke (platform-gecureerde) documenten kunnen niet door fondsen worden geüpload. Upload dit als fondsdocument.",
+        },
+        { status: 403 }
+      );
+    }
+    bibliotheek = bibliotheek || "fonds";
+
     if (!bestand || !bibliotheek || !bron || !titel) {
       return NextResponse.json(
         { error: "Verplichte velden ontbreken: bestand, bibliotheek, bron, titel" },
@@ -195,7 +210,9 @@ export async function POST(req: NextRequest) {
     const { data: document, error: docError } = await supabase
       .from("documenten")
       .insert({
-        fonds_id: bibliotheek === "generiek" ? null : profiel.fonds_id,
+        // B13: deze tenant-route levert uitsluitend fondsdocumenten (generiek is
+        // hierboven met 403 geweigerd), dus altijd het eigen fonds_id.
+        fonds_id: profiel.fonds_id,
         bibliotheek,
         bron,
         titel,
@@ -218,12 +235,10 @@ export async function POST(req: NextRequest) {
     }
 
     // Origineel-bestand opslaan in Supabase Storage (bucket "documenten").
-    // Pad-conventie: <fonds_uuid>/<document_uuid>.<bestandstype>  voor fonds-bibliotheek,
-    //                generiek/<document_uuid>.<bestandstype>      voor generieke bibliotheek.
-    const opslagPad =
-      bibliotheek === "generiek"
-        ? `generiek/${document.id}.${bestandstype}`
-        : `${profiel.fonds_id}/${document.id}.${bestandstype}`;
+    // Pad-conventie: <fonds_uuid>/<document_uuid>.<bestandstype>. B13: deze route
+    // schrijft alleen naar het eigen fonds-pad; het generiek/-pad is voor tenants
+    // read-only (storage-policy 2026_06_20e) en wordt via service-role gecureerd.
+    const opslagPad = `${profiel.fonds_id}/${document.id}.${bestandstype}`;
 
     const { error: storageError } = await supabase.storage
       .from("documenten")
