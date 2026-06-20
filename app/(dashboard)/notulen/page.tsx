@@ -1,6 +1,11 @@
 import { createServerSupabase } from "@/lib/supabase-server";
 import Link from "next/link";
 
+export const dynamic = "force-dynamic";
+
+// Increment D — notulenmodule: notulendocumenten per fonds, met segmentstatus.
+// Bevestigde segmenten zijn de agendapuntbron voor de AI; concept-notulen tonen
+// expliciet dat ze nog niet vastgesteld zijn (UX-principe "blokkers vooraf").
 export default async function NotulenPage() {
   const supabase = await createServerSupabase();
   const {
@@ -13,45 +18,57 @@ export default async function NotulenPage() {
     .eq("id", user!.id)
     .single();
 
-  // Haal fondsspecifieke documenten op die notulen of besluiten zijn
+  // Notulendocumenten van het fonds + hun vergadering.
   const { data: documenten } = await supabase
     .from("documenten")
-    .select("*")
-    .eq("bibliotheek", "fonds")
+    .select("id, titel, status, documentdatum, aangemaakt, vergadering_id, vergaderingen(titel, datum)")
+    .eq("documenttype", "notulen")
     .eq("fonds_id", profiel?.fonds_id || "")
-    .order("aangemaakt", { ascending: false });
+    .order("documentdatum", { ascending: false, nullsFirst: false });
+
+  const docIds = (documenten ?? []).map((d) => d.id);
+
+  // Segmentstatus per document (één query, in JS geaggregeerd).
+  const segPerDoc = new Map<string, { totaal: number; bevestigd: number }>();
+  if (docIds.length > 0) {
+    const { data: segmenten } = await supabase
+      .from("notulen_segmenten")
+      .select("document_id, bevestigd")
+      .in("document_id", docIds);
+    for (const s of segmenten ?? []) {
+      const e = segPerDoc.get(s.document_id) ?? { totaal: 0, bevestigd: 0 };
+      e.totaal += 1;
+      if (s.bevestigd) e.bevestigd += 1;
+      segPerDoc.set(s.document_id, e);
+    }
+  }
 
   return (
     <div className="p-7">
       <div className="flex items-start justify-between mb-6">
         <div>
-          <h1 className="text-xl font-black text-[#0F2744]">Besluiten &amp; Notulen</h1>
+          <h1 className="text-xl font-black text-[#0F2744]">Notulen</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Historisch archief van bestuursvergaderingen en officiële besluiten
+            Geüploade notulen worden per agendapunt benutbaar zodra de secretaris de
+            voorgestelde segmenten bevestigt. Alleen bevestigde segmenten van
+            vastgestelde notulen gebruikt de AI als agendapuntbron.
           </p>
         </div>
         <Link
           href="/bibliotheek"
           className="bg-[#0F2744] text-white font-semibold px-4 py-2 rounded-lg text-sm hover:bg-[#1A3A5C] transition-colors"
         >
-          + Document toevoegen
+          + Notulen uploaden
         </Link>
-      </div>
-
-      <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-6 text-sm text-amber-800">
-        <span>💡</span>
-        <div>
-          Upload notulen en besluiten via de <strong>Documentbibliotheek</strong> (bibliotheek:{" "}
-          <em>Fonds</em>). De AI-assistent kan ze dan direct doorzoeken en citeren.
-        </div>
       </div>
 
       {!documenten || documenten.length === 0 ? (
         <div className="text-center py-16">
           <div className="text-4xl mb-3">📋</div>
-          <h3 className="font-semibold text-gray-700 mb-2">Nog geen fondsspecifieke documenten</h3>
+          <h3 className="font-semibold text-gray-700 mb-2">Nog geen notulen</h3>
           <p className="text-sm text-gray-400 mb-4">
-            Upload notulen en besluiten als PDF via de Documentbibliotheek.
+            Upload notulen als PDF via de Documentbibliotheek (documenttype:{" "}
+            <em>notulen</em>) en koppel ze aan een vergadering.
           </p>
           <Link
             href="/bibliotheek"
@@ -63,32 +80,61 @@ export default async function NotulenPage() {
       ) : (
         <div className="space-y-3">
           {documenten.map((doc) => {
-            const datum = new Date(doc.aangemaakt);
+            const verg = (doc as unknown as {
+              vergaderingen: { titel: string; datum: string } | null;
+            }).vergaderingen;
+            const seg = segPerDoc.get(doc.id) ?? { totaal: 0, bevestigd: 0 };
+            const vastgesteld = doc.status === "vastgesteld";
+            const datum = doc.documentdatum
+              ? new Date(doc.documentdatum)
+              : new Date(doc.aangemaakt);
             return (
-              <div
+              <Link
                 key={doc.id}
-                className="bg-white border border-gray-200 rounded-xl p-4 flex gap-4 items-start hover:border-[#C9A84C] transition-colors cursor-pointer"
+                href={`/notulen/${doc.id}`}
+                className="block bg-white border border-gray-200 rounded-xl p-4 hover:border-[#C9A84C] transition-colors"
               >
-                <div className="bg-[#0F2744] text-white rounded-xl p-3 text-center min-w-[52px] flex-shrink-0">
-                  <div className="text-xs font-bold uppercase opacity-70">
-                    {datum.toLocaleString("nl-NL", { month: "short" })}
+                <div className="flex gap-4 items-start">
+                  <div className="bg-[#0F2744] text-white rounded-xl p-3 text-center min-w-[52px] flex-shrink-0">
+                    <div className="text-xs font-bold uppercase opacity-70">
+                      {datum.toLocaleString("nl-NL", { month: "short" })}
+                    </div>
+                    <div className="text-xl font-black leading-none">{datum.getDate()}</div>
+                    <div className="text-xs opacity-60">{datum.getFullYear()}</div>
                   </div>
-                  <div className="text-xl font-black leading-none">{datum.getDate()}</div>
-                  <div className="text-xs opacity-60">{datum.getFullYear()}</div>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-bold text-[#0F2744] text-sm">{doc.titel}</div>
-                  <div className="text-xs text-gray-400 mt-1 flex gap-3">
-                    <span className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-semibold">
-                      {doc.bron}
-                    </span>
-                    {doc.paginas && <span>{doc.paginas} pagina's</span>}
-                    {doc.geindexeerd && (
-                      <span className="text-green-600 font-semibold">✓ Doorzoekbaar via AI</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold text-[#0F2744] text-sm">{doc.titel}</div>
+                    {verg && (
+                      <div className="text-xs text-gray-500 mt-0.5">
+                        Vergadering: {verg.titel}
+                      </div>
                     )}
+                    <div className="text-xs text-gray-400 mt-2 flex flex-wrap gap-2 items-center">
+                      <span
+                        className={`px-2 py-0.5 rounded-full font-semibold ${
+                          vastgesteld
+                            ? "bg-green-100 text-green-700"
+                            : "bg-amber-100 text-amber-700"
+                        }`}
+                      >
+                        {vastgesteld ? "Vastgesteld" : `Concept (${doc.status ?? "—"})`}
+                      </span>
+                      {seg.totaal === 0 ? (
+                        <span className="text-gray-400">Nog niet gesegmenteerd</span>
+                      ) : (
+                        <span className="text-gray-500">
+                          {seg.bevestigd} van {seg.totaal} segment(en) bevestigd
+                        </span>
+                      )}
+                      {seg.bevestigd > 0 && (
+                        <span className="text-green-600 font-semibold">
+                          ✓ {seg.bevestigd} agendapuntbron(nen) actief
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
+              </Link>
             );
           })}
         </div>

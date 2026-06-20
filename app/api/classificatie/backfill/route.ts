@@ -62,7 +62,8 @@ export async function POST(_req: NextRequest) {
     // dezelfde documenten blijft herverwerken (patroon embeddings-backfill).
     const { data: bestaandeVoorstellen } = await supabase
       .from("classificatie_voorstellen")
-      .select("document_id");
+      .select("document_id")
+      .eq("fonds_id", fondsId);
     const reedsVoorgesteld = new Set(
       (bestaandeVoorstellen ?? []).map((v) => v.document_id as string)
     );
@@ -74,9 +75,17 @@ export async function POST(_req: NextRequest) {
       .eq("fonds_id", fondsId)
       .is("procesinstantie_id", null)
       .order("aangemaakt", { ascending: true });
+    // UUID's tussen quotes zodat de PostgREST-filter robuust is (de waarden
+    // komen uit de DB; quoten dekt elk onverwacht teken af). NB: bij zeer grote
+    // fondsen groeit deze lijst — bewust geaccepteerde MVP-schuld (zie HANDOVER),
+    // robuuste oplossing = anti-join in een RPC of cursor-paginatie.
     const reedsArr = [...reedsVoorgesteld];
     if (reedsArr.length > 0) {
-      docQuery = docQuery.not("id", "in", `(${reedsArr.join(",")})`);
+      docQuery = docQuery.not(
+        "id",
+        "in",
+        `(${reedsArr.map((id) => `"${id}"`).join(",")})`
+      );
     }
     const { data: docs, error: docErr } = await docQuery.limit(BATCH);
     if (docErr) {
@@ -123,6 +132,10 @@ export async function POST(_req: NextRequest) {
       // geen_match → marker-rij zodat dit document niet eindeloos herverwerkt
       // wordt. Status 'afgewezen' (systeem, beoordeeld_door null); de
       // review-queue toont alleen status='open', dus dit vervuilt die niet.
+      // Bewust GEEN document_metadata_log-regel: een geen_match muteert niets
+      // (geen koppeling, rag_impact nihil) en is append-traceerbaar via de
+      // voorstel-historie zelf — een logregel per onclassificeerbaar document
+      // zou het audit­log onnodig opblazen.
       if (voorstel.confidence === "geen_match") {
         const { error: gmErr } = await supabase
           .from("classificatie_voorstellen")
@@ -184,7 +197,7 @@ export async function POST(_req: NextRequest) {
           }
           continue;
         }
-        await logClassificatieKoppeling(supabase, {
+        const { error: logErr } = await logClassificatieKoppeling(supabase, {
           documentId: doc.id as string,
           documentTitel: (doc.titel as string) ?? null,
           fondsId,
@@ -196,6 +209,23 @@ export async function POST(_req: NextRequest) {
           reden: bouwClassificatieReden(voorstel.confidence, voorstel.bron, voorstel.toelichting),
           ragImpact: true,
         });
+        // Guardrail: een auto-koppeling MOET herleidbaar zijn. Faalt de auditlog,
+        // draai de koppeling + het voorstel terug zodat er geen ongelogde
+        // AI-handeling blijft staan (telt niet als autoGekoppeld).
+        if (logErr) {
+          if (!eersteFout) eersteFout = logErr;
+          await supabase
+            .from("documenten")
+            .update({ procesinstantie_id: null })
+            .eq("id", doc.id);
+          if (ingevoegd?.id) {
+            await supabase
+              .from("classificatie_voorstellen")
+              .update({ status: "open", toegepast_op: null })
+              .eq("id", ingevoegd.id);
+          }
+          continue;
+        }
         autoGekoppeld++;
       }
     }
@@ -210,7 +240,8 @@ export async function POST(_req: NextRequest) {
       .is("procesinstantie_id", null);
     const { data: voorstelDocs } = await supabase
       .from("classificatie_voorstellen")
-      .select("document_id");
+      .select("document_id")
+      .eq("fonds_id", fondsId);
     const metVoorstel = new Set(
       (voorstelDocs ?? []).map((v) => v.document_id as string)
     );

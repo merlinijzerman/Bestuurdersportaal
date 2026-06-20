@@ -92,4 +92,14 @@ test("bestuurder draagt GEEN classification.review", () => {
   assert.equal(rolHeeftCapability("bestuurder", "classification.review"), false);
 });
 
+// ── Increment D — notulen.segment.confirm ──────────────────────────────
+test("beheerder + voorzitter dragen notulen.segment.confirm", () => {
+  assert.equal(rolHeeftCapability("beheerder", "notulen.segment.confirm"), true);
+  assert.equal(rolHeeftCapability("voorzitter", "notulen.segment.confirm"), true);
+});
+
+test("bestuurder draagt GEEN notulen.segment.confirm (server-side gating)", () => {
+  assert.equal(rolHeeftCapability("bestuurder", "notulen.segment.confirm"), false);
+});
+
 console.log(`\n${n} sanity-tests geslaagd.`);

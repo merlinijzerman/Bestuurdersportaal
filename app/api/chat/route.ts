@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createServerSupabase } from "@/lib/supabase-server";
-import { zoekRelevanteChunksMetMeta, maakContext, haalDocumentChunks, type DocumentChunk, type BronVerwijzing, type RetrievalMeta } from "@/lib/rag";
+import { zoekRelevanteChunksMetMeta, maakContext, haalDocumentChunks, verrijkNotulenChunks, type DocumentChunk, type BronVerwijzing, type RetrievalMeta } from "@/lib/rag";
 import { heeftReformulatieNodig, reformuleerVraag } from "@/lib/query-reformulatie";
 import { controleerLimiet, LIMIETEN } from "@/lib/rate-limit";
 import { rateLimited } from "@/lib/api-errors";
@@ -537,6 +537,9 @@ export async function POST(req: NextRequest) {
           algemene_kennis: algemeneKennis,
         };
       }
+      // Increment D — verrijk notulensegment-chunks met vergadering/agendapunt
+      // zodat de bronvermelding "Vastgestelde notulen …, agendapunt N — …" klopt.
+      chunks = await verrijkNotulenChunks(chunks);
       const ctx = maakContext(chunks);
       contextTekst = ctx.contextTekst;
       bronnen = ctx.bronnen;

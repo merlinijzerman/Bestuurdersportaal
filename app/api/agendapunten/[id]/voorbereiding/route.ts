@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createServerSupabase } from "@/lib/supabase-server";
-import { zoekRelevanteChunks, maakContext } from "@/lib/rag";
+import { zoekRelevanteChunks, maakContext, verrijkNotulenChunks } from "@/lib/rag";
 import { controleerLimiet, LIMIETEN } from "@/lib/rate-limit";
 import { rateLimited } from "@/lib/api-errors";
 
@@ -111,7 +111,9 @@ export async function POST(
     // RAG over bibliotheek
     const ragQuery = `${agendapunt.titel} ${agendapunt.beschrijving ?? ""}`.trim();
     const ragMax = diepte === "grondig" ? 10 : 4;
-    const chunks = await zoekRelevanteChunks(ragQuery, profiel.fonds_id, ragMax);
+    const chunks = await verrijkNotulenChunks(
+      await zoekRelevanteChunks(ragQuery, profiel.fonds_id, ragMax)
+    );
     const { contextTekst: bibliotheekContext, bronnen: bibBronnen } = maakContext(chunks);
 
     // Actieve risicos van het fonds

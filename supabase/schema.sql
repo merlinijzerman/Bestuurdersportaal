@@ -142,6 +142,27 @@ create table if not exists public.document_metadata_review_queue (
   unique (document_id)
 );
 
+-- ── 3d. Notulensegmenten (Increment D, migratie 2026_06_20d, authoritatief) ──
+-- Half-automatische segmenten per agendapunt. Alleen bevestigd=true wordt
+-- geïndexeerd (document_chunks.notulen_segment_id) en door de AI als
+-- agendapuntbron gebruikt. Trigger fn_notulen_segment_check borgt
+-- documenttype=notulen + agendapunt↔vergadering + fondsconsistentie.
+create table if not exists public.notulen_segmenten (
+  id             uuid primary key default uuid_generate_v4(),
+  document_id    uuid not null references public.documenten(id)    on delete cascade,
+  vergadering_id uuid not null references public.vergaderingen(id) on delete cascade,
+  agendapunt_id  uuid          references public.agendapunten(id)  on delete set null,
+  fonds_id       uuid not null references public.fondsen(id)       on delete cascade,
+  segment_index  int  not null,
+  titel          text,
+  tekst          text not null,
+  bevestigd      boolean not null default false,
+  bevestigd_door uuid references auth.users(id) on delete set null,
+  bevestigd_op   timestamptz,
+  aangemaakt     timestamptz not null default now(),
+  unique (document_id, segment_index)
+);
+
 -- ── 4. Document chunks (voor zoeken) ──────────────────────
 -- Increment E (migratie 2026_06_19e_indexering_classificatie.sql, authoritatief)
 -- voegt gedenormaliseerde proces-/status-/geldigheidsvelden toe zodat Increment G
@@ -171,7 +192,10 @@ create table if not exists public.document_chunks (
   periode            text,                  -- jaar van de procesinstantie of documentdatum
   bronstatus         text,
   geldig_vanaf       date,
-  geldig_tot         date
+  geldig_tot         date,
+  -- Increment D — markeert een segmentchunk (vs. whole-document-chunk = null).
+  -- Volledige definitie in 2026_06_20d_notulen_segmenten.sql.
+  notulen_segment_id uuid references public.notulen_segmenten(id) on delete cascade
 );
 
 -- Increment E — nieuw: AI-procesclassificatievoorstellen + auto-koppeling (B5).

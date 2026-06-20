@@ -2,6 +2,7 @@
 import { createServerSupabase } from "./supabase-server";
 import { selecteerChunks } from "./rag-select";
 import { embedTekst, naarVectorLiteral } from "./embeddings";
+import { notulenBronLabel } from "./notulen";
 
 // Feature-flag (Fase C): hybride retrieval staat alleen aan als HYBRID_SEARCH
 // expliciet "on" is. Default uit → niets verandert aan het zoekgedrag.
@@ -24,6 +25,14 @@ export interface DocumentChunk {
     bron: string;
     bibliotheek: string;
     opslag_pad: string | null;
+  };
+  // Increment D — aanwezig zodra de chunk uit een bevestigd notulensegment komt.
+  // Gevuld door verrijkNotulenChunks() ná retrieval (de RPC's leveren dit niet);
+  // stuurt de bronvermelding "Vastgestelde notulen [verg], agendapunt N — [titel]".
+  notulen?: {
+    vergadering_titel: string;
+    agendapunt_volgnummer: number | null;
+    agendapunt_titel: string | null;
   };
 }
 
@@ -334,13 +343,24 @@ export function maakContext(chunks: DocumentChunk[]): {
       .filter(Boolean)
       .join(", ");
 
+    // Increment D — notulensegmenten dragen een agendapunt-specifieke bronvermelding
+    // ("Vastgestelde notulen [verg], agendapunt N — [titel]"); overige chunks houden
+    // het bestaande "[bron] — [titel]"-label.
+    const bronTitel = chunk.notulen
+      ? notulenBronLabel(
+          chunk.notulen.vergadering_titel,
+          chunk.notulen.agendapunt_volgnummer,
+          chunk.notulen.agendapunt_titel
+        )
+      : `${doc.bron} — ${doc.titel}`;
+
     contextDelen.push(
-      `${bronLabel} ${doc.bron} — ${doc.titel}${locatie ? ` (${locatie})` : ""}:\n"${chunk.tekst}"`
+      `${bronLabel} ${bronTitel}${locatie ? ` (${locatie})` : ""}:\n"${chunk.tekst}"`
     );
 
     bronnen.push({
       document_id: chunk.document_id,
-      titel: doc.titel,
+      titel: chunk.notulen ? bronTitel : doc.titel,
       bron: doc.bron,
       pagina: chunk.pagina,
       paragraaf: chunk.paragraaf,
@@ -382,6 +402,64 @@ export async function haalDocumentChunks(
     return [];
   }
   return data as unknown as DocumentChunk[];
+}
+
+// Increment D — verrijk opgehaalde chunks met de vergadering/agendapunt van hun
+// bevestigde notulensegment, zodat maakContext de bronvermelding "Vastgestelde
+// notulen [verg], agendapunt N — [titel]" kan renderen. De retrieval-RPC's
+// (zoek_chunks/zoek_chunks_hybride) leveren dit NIET en blijven ongewijzigd; dit
+// is één gebatchte vervolgquery op de chunk-id's. RLS-veilig (anon-client). Muteert
+// de meegegeven chunks in-place en geeft ze terug.
+export async function verrijkNotulenChunks(
+  chunks: DocumentChunk[]
+): Promise<DocumentChunk[]> {
+  if (chunks.length === 0) return chunks;
+  const supabase = await createServerSupabase();
+  const ids = chunks.map((c) => c.id);
+
+  const { data, error } = await supabase
+    .from("document_chunks")
+    .select(
+      `id,
+       notulen_segment_id,
+       notulen_segmenten!inner(
+         agendapunt_id,
+         agendapunten(volgorde, titel),
+         vergaderingen!inner(titel)
+       )`
+    )
+    .in("id", ids)
+    .not("notulen_segment_id", "is", null);
+
+  if (error || !data || data.length === 0) return chunks;
+
+  const perChunk = new Map<string, DocumentChunk["notulen"]>();
+  for (const rij of data as unknown as NotulenVerrijkingRij[]) {
+    const seg = rij.notulen_segmenten;
+    if (!seg) continue;
+    perChunk.set(rij.id, {
+      vergadering_titel: seg.vergaderingen?.titel ?? "vergadering",
+      agendapunt_volgnummer: seg.agendapunten?.volgorde ?? null,
+      agendapunt_titel: seg.agendapunten?.titel ?? null,
+    });
+  }
+
+  for (const c of chunks) {
+    const n = perChunk.get(c.id);
+    if (n) c.notulen = n;
+  }
+  return chunks;
+}
+
+// Vorm van de verrijkingsquery hierboven (PostgREST nest embedded relaties).
+interface NotulenVerrijkingRij {
+  id: string;
+  notulen_segment_id: string | null;
+  notulen_segmenten: {
+    agendapunt_id: string | null;
+    agendapunten: { volgorde: number | null; titel: string | null } | null;
+    vergaderingen: { titel: string | null } | null;
+  } | null;
 }
 
 // Chunk-helpers leven in lib/chunking.ts (Supabase-vrij, zuiver testbaar).

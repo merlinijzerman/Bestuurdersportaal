@@ -30,8 +30,9 @@ Triviale of puur uitvoerende wijzigingen horen in de release-historie van `HANDO
 | [0003](./0003-subagent-werkwijze.md) | Laag-A-subagents als ontwikkel-werkwijze (review + ontwerpborging) | Geaccepteerd | 2026-05-22 |
 | [0004](./0004-werkverdeling-plannen-vs-uitvoeren.md) | Werkverdeling: plannen in Cowork, uitvoeren in Claude Code | Geaccepteerd | 2026-05-22 |
 | [0005](./0005-rate-limiting-en-monitoring-in-stack-mvp.md) | Rate limiting (Postgres) en monitoring (Supabase/Vercel) in-stack voor MVP; geen Upstash/Sentry | Geaccepteerd | 2026-06-07 |
-| [0006](./0006-doorontwikkeling-v2-beslispunten-B1-B10.md) | Doorontwikkeling v2: beslispunten B1–B11, O1 multi-fonds, O2 dossierstatus-mapping | Geaccepteerd | 2026-06-18 |
+| [0006](./0006-doorontwikkeling-v2-beslispunten-B1-B10.md) | Doorontwikkeling v2: beslispunten B1–B14 (B12 bronsoort, B13 tenant-isolatie generiek, B14 platform-identiteit), O1 multi-fonds, O2 dossierstatus-mapping | Geaccepteerd | 2026-06-19 |
 | [0007](./0007-fondsconsistentie-composite-fk-vs-trigger.md) | Fondsconsistentie op koppeltabellen: composite-FK standaard, trigger waar nodig | Geaccepteerd | 2026-06-18 |
 | [0008](./0008-documentkoppeling-vooruitgetrokken-naar-increment-b.md) | Documentkoppeling vooruitgetrokken naar Increment B: primaire kolom + trigger nu, join-tabel later | Geaccepteerd | 2026-06-18 |
 | [0009](./0009-increment-c-keuzes.md) | Increment C: Engelse routes, simpele capability-set, herindexering log-only, transitievalidatie | Geaccepteerd | 2026-06-18 |
 | [0010](./0010-increment-e-keuzes.md) | Increment E: B/C-verificatie eerst, refresh via DB-trigger, gedeelde queue-hub + aparte classificatie-acties, conservatieve confidence-drempels | Geaccepteerd | 2026-06-19 |
+| [0011](./0011-increment-d-keuzes.md) | Increment D: NL-routes, segmentchunks vervangen whole-document-chunks (transactioneel/RPC), audit in document_metadata_log, regelgebaseerde segmentatie, COALESCE-fix op de E-trigger | Geaccepteerd | 2026-06-20 |
