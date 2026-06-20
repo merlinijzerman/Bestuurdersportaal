@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createServerSupabase } from "@/lib/supabase-server";
-import { zoekRelevanteChunksMetMeta, maakContext, haalDocumentChunks, verrijkNotulenChunks, type DocumentChunk, type BronVerwijzing, type RetrievalMeta } from "@/lib/rag";
+import { zoekRelevanteChunksMetMeta, maakContext, haalDocumentChunks, verrijkNotulenChunks, type DocumentChunk, type BronVerwijzing, type RetrievalMeta, type RetrievalFilters } from "@/lib/rag";
 import { heeftReformulatieNodig, reformuleerVraag } from "@/lib/query-reformulatie";
 import { controleerLimiet, LIMIETEN } from "@/lib/rate-limit";
 import { rateLimited } from "@/lib/api-errors";
 import { valideerScope, type ScopeDocumentRij } from "@/lib/document-scope";
-import { bepaalVraagtype, schatTokens, kiesStrategie, maakBatches, type Strategie } from "@/lib/vraagtype";
+import { bepaalVraagtype, schatTokens, kiesStrategie, maakBatches, bepaalAntwoordmodus, retrievalModusVoor, moetWisselMeldingTonen, ANTWOORDMODUS_LABEL, type Strategie, type Antwoordmodus } from "@/lib/vraagtype";
+import { bepaalBronsoortprofiel } from "@/lib/weeg-bronsoort";
+import { haalBesluitBronnen, topProcesinstanties, opmaakBesluitContext } from "@/lib/besluitvorming-bron";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -216,6 +218,26 @@ const NIEUW_TOON = `REGISTER EN STIJL:
 - De voornaam van de bestuurder mag sporadisch, alleen waar het natuurlijk valt.`;
 
 // ============================================================
+//  Sparringmodus (Increment G, FO §13). Reflectief tegenspel met expliciete
+//  scheiding feit/interpretatie/inschatting/openstaande vraag. Geen besluit en
+//  geen voorkeursadvies — de assistent spiegelt, het bestuur besluit.
+// ============================================================
+const SP_SPARRING_REGELS = `U bent nu in SPARRINGMODUS: een kritische, reflectieve gesprekspartner die de bestuurder helpt scherper te denken — niet om het over te nemen.
+
+HOE U SPART:
+- Stel tegenvragen, benoem aannames, en breng invalshoeken in die de bestuurder mogelijk over het hoofd ziet. Speel waar nuttig advocaat van de duivel, maar blijf constructief.
+- U neemt GEEN besluit en geeft GEEN voorkeursadvies ("ik zou X kiezen" / "het beste is Y"). U legt afwegingen, voor- en nadelen en consequenties open; de keuze is aan het bestuur.
+- Bij onvoldoende of concept/historische/verlopen bronnen: zeg dat eerlijk en spar op het niveau van wat wél bekend is; verzin geen feiten.
+
+SCHEID IN ELK SPARRINGANTWOORD EXPLICIET (gebruik exact deze vier labels als korte koppen of inline-markeringen):
+- FEIT: wat aantoonbaar uit de bronnen blijkt (met [Bron N] waar van toepassing).
+- INTERPRETATIE: hoe die feiten te lezen/duiden zijn — herkenbaar als interpretatie, niet als feit.
+- INSCHATTING: uw professionele inschatting/risicobeeld, met de onzekerheid erbij.
+- OPENSTAANDE VRAAG: wat nog onbeantwoord is en wie/wat dat zou moeten ophelderen.
+
+Vermeng deze vier nooit. Een eerlijke "ik weet het niet, dit moet u verifiëren" is waardevoller dan schijnzekerheid.`;
+
+// ============================================================
 //  Persoonlijke context-bouwer
 // ============================================================
 const ROL_LABEL: Record<string, string> = {
@@ -234,10 +256,25 @@ interface BestuurderContext {
 // Het statische deel van de systeemprompt (regels per modus + toon) is identiek
 // over gebruikers heen en kan dus gecachet worden. Het dynamische deel (naam,
 // rol, fondsnaam) verschilt per gebruiker en blijft ongecachet.
-function bouwStatischeInstructies(regels: string): string {
-  if (BESTUURLIJKE_STIJL) {
-    // Bestuurlijke stijl: rol/gedrag → inhoudsregels per modus (incl. citaties)
-    // → antwoordstatus + adaptieve structuur → register/toon.
+function bouwStatischeInstructies(
+  regels: string,
+  antwoordmodus: Antwoordmodus = "feitelijk"
+): string {
+  // Sparring: rol/gedrag → inhoudsregels → 4-deling feit/interpretatie/
+  // inschatting/openstaande vraag → register/toon.
+  if (antwoordmodus === "sparring") {
+    return `${NIEUW_ROL_GEDRAG}
+
+${regels}
+
+${SP_SPARRING_REGELS}
+
+${NIEUW_TOON}`;
+  }
+  // Bestuurlijke duiding productiseert de bestuurlijke stijl (antwoordstatus +
+  // adaptieve structuur). De env-vlag BESTUURLIJKE_STIJL blijft een globale
+  // default voor de overige modi (back-compat).
+  if (antwoordmodus === "duiding" || BESTUURLIJKE_STIJL) {
     return `${NIEUW_ROL_GEDRAG}
 
 ${regels}
@@ -262,12 +299,13 @@ JE SPREEKT NU MET: ${ctx.volledigeNaam} (${ctx.rolLabel}). U mag de voornaam "${
 // Zo wordt de zware, herhaalde instructie-tekst hergebruikt uit de cache.
 function bouwSysteemBlokken(
   regels: string,
-  ctx: BestuurderContext
+  ctx: BestuurderContext,
+  antwoordmodus: Antwoordmodus = "feitelijk"
 ): Anthropic.Messages.TextBlockParam[] {
   return [
     {
       type: "text",
-      text: bouwStatischeInstructies(regels),
+      text: bouwStatischeInstructies(regels, antwoordmodus),
       cache_control: { type: "ephemeral" },
     },
     {
@@ -328,6 +366,9 @@ export async function POST(req: NextRequest) {
       // Document-scope (increment 1): beperk de vraag tot één/enkele document(en).
       // `algemene_kennis` is increment 2 — in increment 1 forceren we strict.
       document_scope?: { document_ids?: string[]; algemene_kennis?: boolean };
+      // Increment G — door de gebruiker vastgezette antwoordmodus (gespreksniveau,
+      // gesprekken.actieve_antwoordmodus). null/afwezig = auto-detectie per vraag.
+      actieve_antwoordmodus?: Antwoordmodus | null;
     };
     const { fonds_id } = body;
     const modus: Modus = body.modus || "documenten";
@@ -478,6 +519,33 @@ export async function POST(req: NextRequest) {
     }
     const breedActief = scopeActief && scopeStrategie !== "targeted";
 
+    // ── Antwoordmodusfamilie (Increment G) ──────────────────────────────────
+    // Orthogonaal op de bron-modus. Vastgezet (gesprekken.actieve_antwoordmodus)
+    // is leidend; anders auto-detectie op de vraag. Bij autodetectie van een
+    // niet-default modus tonen we een zichtbare wissel-melding (FO §13).
+    const vastgezetteModus: Antwoordmodus | null = body.actieve_antwoordmodus ?? null;
+    const gedetecteerdeModus: Antwoordmodus = bepaalAntwoordmodus(vraag);
+    const antwoordmodus: Antwoordmodus = vastgezetteModus ?? gedetecteerdeModus;
+    const wisselMelding: Antwoordmodus | null = moetWisselMeldingTonen(
+      gedetecteerdeModus,
+      vastgezetteModus
+    )
+      ? antwoordmodus
+      : null;
+
+    // Retrieval-filters volgen de antwoordmodus (peildatum = vandaag) + de
+    // bronsoort-weging volgt het vraagtype. Bij een ACTIEVE document-scope laten
+    // we de status-/geldigheidsfilter bewust achterwege: de gebruiker koos dat
+    // specifieke stuk en wil het zien, ongeacht actuele-bron-status.
+    const vandaag = new Date().toISOString().slice(0, 10);
+    const retrievalFilters: RetrievalFilters | undefined = scopeActief
+      ? undefined
+      : {
+          modus: retrievalModusVoor(antwoordmodus),
+          peildatum: vandaag,
+          bronsoortprofiel: bepaalBronsoortprofiel(vraag),
+        };
+
     // RAG-zoeken: voor de bibliotheek-modi, of bij een actieve scope met een
     // SPECIFIEKE vraag (targeted). Brede scope-vragen halen hieronder hun chunks
     // via haalDocumentChunks (volledige dekking i.p.v. top-N).
@@ -524,7 +592,8 @@ export async function POST(req: NextRequest) {
         fonds_id,
         CHUNK_BUDGET,
         hybrideAan,
-        scopeDocumentIds
+        scopeDocumentIds,
+        retrievalFilters
       );
       chunks = res.chunks;
       retrievalMeta = { ...res.meta, zoekvraag: zoekVraag, gereformuleerd };
@@ -543,6 +612,26 @@ export async function POST(req: NextRequest) {
       const ctx = maakContext(chunks);
       contextTekst = ctx.contextTekst;
       bronnen = ctx.bronnen;
+
+      // Besluitvorming-modus (Increment G): voeg de Decision Object-
+      // besluitregistratie van de relevante procesinstantie(s) toe als LEIDENDE
+      // formele bron (regressietests #5/#12). Afgeleid uit de top-chunks
+      // (denorm procesinstantie_id); RLS van decision_objects blijft leidend.
+      if (antwoordmodus === "besluitrijpheid") {
+        const procesIds = topProcesinstanties(
+          chunks.map((c) => c.documenten.procesinstantie_id)
+        );
+        const besluitBronnen = await haalBesluitBronnen(supabase, procesIds);
+        if (besluitBronnen.length > 0) {
+          const fb = opmaakBesluitContext(besluitBronnen);
+          // Formele bron leidend: vóór de document-context en vóór de bronkaarten.
+          contextTekst = `${fb.contextTekst}\n\n---\n\n${contextTekst}`;
+          bronnen = [...fb.bronnen, ...bronnen];
+          if (retrievalMeta) {
+            retrievalMeta = { ...retrievalMeta, besluitbronnen: besluitBronnen.length };
+          }
+        }
+      }
     }
 
     // Dekkingsbrede scope (increment 2): volledige documentdekking. Bronnen op
@@ -606,17 +695,17 @@ export async function POST(req: NextRequest) {
             : `In het document ${titelLabel} zijn geen passages gevonden die op deze vraag aansluiten.\n\nVRAAG: ${vraag}\n\nAls het antwoord niet in dit document staat, antwoord dan letterlijk: "Dit is niet in dit document aangetroffen." Verzin geen antwoord en vul niet aan uit andere bronnen of algemene kennis.`;
       }
     } else if (modus === "algemeen") {
-      systeemBlokken = bouwSysteemBlokken(SP_ALGEMEEN_REGELS, ctxBestuurder);
+      systeemBlokken = bouwSysteemBlokken(SP_ALGEMEEN_REGELS, ctxBestuurder, antwoordmodus);
       gebruikersPrompt = `VRAAG: ${vraag}`;
     } else if (modus === "combineren") {
-      systeemBlokken = bouwSysteemBlokken(SP_COMBINEREN_REGELS, ctxBestuurder);
+      systeemBlokken = bouwSysteemBlokken(SP_COMBINEREN_REGELS, ctxBestuurder, antwoordmodus);
       gebruikersPrompt =
         chunks.length > 0
           ? `BESCHIKBARE INTERNE BRONNEN:\n\n${contextTekst}\n\n---\n\nVRAAG: ${vraag}`
           : `Er zijn geen interne documenten gevonden die direct relevant zijn voor deze vraag.\n\nVRAAG: ${vraag}\n\nGebruik je algemene kennis om de vraag zo goed mogelijk te beantwoorden, en markeer claims met [Algemene kennis]. Sluit af met een opmerking dat er geen interne bronnen zijn gevonden.`;
     } else {
       // documenten (strikte modus)
-      systeemBlokken = bouwSysteemBlokken(SP_DOCUMENTEN_REGELS, ctxBestuurder);
+      systeemBlokken = bouwSysteemBlokken(SP_DOCUMENTEN_REGELS, ctxBestuurder, antwoordmodus);
       gebruikersPrompt =
         chunks.length > 0
           ? `BESCHIKBARE BRONNEN:\n\n${contextTekst}\n\n---\n\nVRAAG: ${vraag}`
@@ -665,6 +754,15 @@ export async function POST(req: NextRequest) {
                   strategie: scopeStrategie,
                 }
               : null,
+            // Increment G — actieve antwoordmodus + (bij autodetectie) de
+            // zichtbare wissel-melding zodat de UI 'm kan tonen + persisteren.
+            antwoordmodus,
+            antwoordmodus_label: ANTWOORDMODUS_LABEL[antwoordmodus],
+            wisselmelding: wisselMelding
+              ? `Automatisch overgeschakeld naar modus '${ANTWOORDMODUS_LABEL[wisselMelding]}'.`
+              : null,
+            retrieval_modus: retrievalFilters?.modus ?? null,
+            peildatum: retrievalFilters?.peildatum ?? null,
           });
 
           // Map-reduce (increment 2): verwerk het document in batches (map, met
@@ -716,9 +814,13 @@ export async function POST(req: NextRequest) {
           }
 
           let volledig = "";
+          // Duiding/sparring leveren langere, gestructureerde antwoorden → ruimer
+          // budget (zoals de env-vlag BESTUURLIJKE_STIJL al deed).
+          const ruimBudget =
+            BESTUURLIJKE_STIJL || antwoordmodus === "duiding" || antwoordmodus === "sparring";
           const claudeStream = anthropic.messages.stream({
             model: AI_MODEL,
-            max_tokens: BESTUURLIJKE_STIJL ? MAX_TOKENS_BESTUURLIJK : MAX_TOKENS,
+            max_tokens: ruimBudget ? MAX_TOKENS_BESTUURLIJK : MAX_TOKENS,
             system: systeemBlokken,
             messages: streamMessages,
           });
@@ -747,6 +849,18 @@ export async function POST(req: NextRequest) {
             };
           }
 
+          // Increment G — de actieve antwoordmodus hoort altijd in het auditspoor,
+          // óók in modus 'algemeen' (geen retrieval → nog geen retrievalMeta).
+          const teLoggenMeta: RetrievalMeta = {
+            ...(retrievalMeta ?? {
+              methode: "geen",
+              opgehaald: 0,
+              geselecteerd: 0,
+              chunks: [],
+            }),
+            antwoordmodus,
+          };
+
           // Loggen ná voltooiing, met het volledige antwoord.
           await supabase.from("governance_log").insert({
             gebruiker_id: user.id,
@@ -757,7 +871,7 @@ export async function POST(req: NextRequest) {
             bronnen,
             modus: effectieveModus,
             model: AI_MODEL,
-            retrieval_meta: retrievalMeta,
+            retrieval_meta: teLoggenMeta,
           });
 
           send({ type: "done" });

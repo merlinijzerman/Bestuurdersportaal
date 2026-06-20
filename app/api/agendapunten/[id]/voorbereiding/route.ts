@@ -108,11 +108,16 @@ export async function POST(
       .eq("agendapunt_id", id)
       .eq("actief", true);
 
-    // RAG over bibliotheek
+    // RAG over bibliotheek. Increment G — agendaprep gebruikt uitsluitend de
+    // ACTUELE bron (concept/verlopen/vervangen tellen niet mee als actuele basis
+    // voor een vergadering); peildatum = vandaag.
     const ragQuery = `${agendapunt.titel} ${agendapunt.beschrijving ?? ""}`.trim();
     const ragMax = diepte === "grondig" ? 10 : 4;
     const chunks = await verrijkNotulenChunks(
-      await zoekRelevanteChunks(ragQuery, profiel.fonds_id, ragMax)
+      await zoekRelevanteChunks(ragQuery, profiel.fonds_id, ragMax, {
+        modus: "actueel",
+        peildatum: new Date().toISOString().slice(0, 10),
+      })
     );
     const { contextTekst: bibliotheekContext, bronnen: bibBronnen } = maakContext(chunks);
 

@@ -111,3 +111,182 @@ export function maakBatches<T extends { tekst: string }>(
   if (huidige.length > 0) batches.push(huidige);
   return { batches, afgekapt: false };
 }
+
+// ============================================================================
+// Antwoordmodusfamilie (Increment G, FO §12–§13 / besluit B8)
+// ----------------------------------------------------------------------------
+// De ANTWOORDMODUS bepaalt hóe de assistent antwoordt (feitelijk, duiding,
+// sparring, …). Dit is een ORTHOGONALE as naast de bron-modi
+// (documenten|combineren|algemeen, in app/api/chat/route.ts) en naast het
+// vraagtype (breed|specifiek) hierboven. Pure, transparante NL-heuristiek —
+// geen modelcall — zodat de keuze uitlegbaar en programmatisch toetsbaar is
+// (lib/vraagtype.sanity.ts). De antwoordmodus stuurt óók de RETRIEVAL-modus
+// (p_modus van de zoek-RPC's) via retrievalModusVoor().
+// ============================================================================
+
+export type Antwoordmodus =
+  | "feitelijk"
+  | "bronoverzicht"
+  | "historisch"
+  | "duiding"
+  | "besluitrijpheid"
+  | "sparring"
+  | "persoonlijke_voorbereiding";
+
+export const ANTWOORDMODI: Antwoordmodus[] = [
+  "feitelijk",
+  "bronoverzicht",
+  "historisch",
+  "duiding",
+  "besluitrijpheid",
+  "sparring",
+  "persoonlijke_voorbereiding",
+];
+
+export const ANTWOORDMODUS_LABEL: Record<Antwoordmodus, string> = {
+  feitelijk: "Feitelijk antwoord",
+  bronoverzicht: "Bronoverzicht",
+  historisch: "Historische context",
+  duiding: "Bestuurlijke duiding",
+  besluitrijpheid: "Besluitrijpheid",
+  sparring: "Sparring",
+  persoonlijke_voorbereiding: "Persoonlijke voorbereiding",
+};
+
+/** Retrieval-scope die de zoek-RPC's verstaan (p_modus). */
+export type RetrievalModus = "actueel" | "historisch" | "besluitvorming" | "alles";
+
+/**
+ * Welke retrieval-scope hoort bij een antwoordmodus. Default is 'actueel':
+ * duiding/sparring/feitelijk bouwen op de ACTUELE bron (concept/verlopen
+ * tellen niet mee). Historisch verbreedt; besluitrijpheid activeert de
+ * besluitvorming-scope (rang-boost + Decision Object-injectie, route-side).
+ */
+export function retrievalModusVoor(modus: Antwoordmodus): RetrievalModus {
+  switch (modus) {
+    case "historisch":
+      return "historisch";
+    case "besluitrijpheid":
+      return "besluitvorming";
+    default:
+      return "actueel";
+  }
+}
+
+// Geordende detectieregels: de EERSTE match wint. Volgorde = sterkte van het
+// signaal. Reflectieve/afwegende intentie (sparring) en expliciete
+// besluitrijpheid gaan vóór de zwakkere duidings-/overzichtssignalen.
+const ANTWOORDMODUS_PATRONEN: { modus: Antwoordmodus; patronen: RegExp[] }[] = [
+  {
+    modus: "sparring",
+    patronen: [
+      /\bspar\b/,
+      /\bspar(?:ren|partner)/,
+      /speel (?:eens )?(?:de )?advocaat van de duivel/,
+      /tegenargument/,
+      /\btegenspraak\b/,
+      /zwakke (?:plek|plekken|punten)/,
+      /\bblinde vlek/,
+      /wat (?:zie|mis) ik (?:over het hoofd|niet)/,
+      /wat mis ik/,
+      /\b(?:wees |wat )?kritisch\b/,
+      /daag (?:me|mij|dit) uit/,
+      /\buitdagen\b/,
+      /overtuig me/,
+      /help me (?:na)?denken/,
+      /\breflecteer\b/,
+      /wat vind (?:je|jij)/,
+      /wat zou (?:je|jij) (?:hiervan |ervan )?(?:vinden|denken)/,
+      /waar zou ik (?:me )?zorgen over (?:moeten )?maken/,
+    ],
+  },
+  {
+    modus: "besluitrijpheid",
+    patronen: [
+      /besluitrijp/,
+      /besluitklaar/,
+      /klaar (?:om|voor) (?:te )?beslui/,
+      /rijp voor besluitvorming/,
+      /kunnen we (?:hier(?:over)? )?(?:al )?beslui/,
+      /voldoende onderbouwd om te beslui/,
+      /is dit (?:al )?klaar voor (?:de )?bestuursvergadering/,
+    ],
+  },
+  {
+    modus: "historisch",
+    patronen: [
+      /\bhistor(?:ie|isch)/,
+      /in het verleden/,
+      /\bdestijds\b/,
+      /\bvroeger\b/,
+      /oude (?:versie|versies)/,
+      /vorige (?:versie|versies)/,
+      /eerder (?:vastgesteld|besloten)/,
+      /\bgeschiedenis\b/,
+      /wat was (?:de|het|er) (?:toen|destijds)/,
+    ],
+  },
+  {
+    modus: "besluitrijpheid",
+    patronen: [/besluitvorming/, /\bbesluitregistratie\b/],
+  },
+  {
+    modus: "duiding",
+    patronen: [
+      /\bduid\b/,
+      /\bduiding\b/,
+      /\bduiden\b/,
+      /bestuurlijke (?:betekenis|relevantie)/,
+      /wat betekent dit voor (?:ons|het) bestuur/,
+      /hoe moet ik dit (?:lezen|interpreteren|begrijpen)/,
+      /\bimplicaties?\b/,
+      /wat zijn de gevolgen voor/,
+      /waarom is dit (?:relevant|belangrijk) voor/,
+    ],
+  },
+  {
+    modus: "bronoverzicht",
+    patronen: [
+      /welke (?:documenten|bronnen|stukken)/,
+      /overzicht van (?:de )?(?:documenten|bronnen|stukken)/,
+      /\bbronnenlijst\b/,
+      /waar (?:staat|vind ik) dit/,
+      /welke (?:beleids)?stukken (?:gaan|zijn er) over/,
+    ],
+  },
+  {
+    modus: "persoonlijke_voorbereiding",
+    patronen: [
+      /bereid me voor/,
+      /mijn voorbereiding/,
+      /help me (?:me )?voorbereiden/,
+      /voorbereiden op (?:de|deze) (?:vergadering|bespreking)/,
+    ],
+  },
+];
+
+/**
+ * Detecteer de antwoordmodus uit de vraag. Default "feitelijk" (alleen bij een
+ * herkenbaar signaal wijkt het af). Pure heuristiek; de gebruiker kan de modus
+ * altijd vastzetten/overrulen (gesprekken.actieve_antwoordmodus).
+ */
+export function bepaalAntwoordmodus(vraag: string): Antwoordmodus {
+  const g = normaliseer(vraag);
+  for (const { modus, patronen } of ANTWOORDMODUS_PATRONEN) {
+    if (patronen.some((p) => p.test(g))) return modus;
+  }
+  return "feitelijk";
+}
+
+/**
+ * Moet er een zichtbare wissel-melding komen (FO §13)? Alleen bij AUTODETECTIE
+ * (de gebruiker heeft niets vastgezet) én een afwijking van de neutrale default
+ * "feitelijk". Een vastgezette modus is een bewuste keuze → geen verrassing,
+ * geen melding.
+ */
+export function moetWisselMeldingTonen(
+  gedetecteerd: Antwoordmodus,
+  vastgezet: Antwoordmodus | null
+): boolean {
+  return vastgezet === null && gedetecteerd !== "feitelijk";
+}

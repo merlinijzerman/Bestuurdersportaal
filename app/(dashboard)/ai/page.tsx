@@ -1,8 +1,21 @@
 "use client";
 import { useState, useRef, useEffect, type ReactNode } from "react";
 import { createClient } from "@/lib/supabase";
+import { ANTWOORDMODUS_LABEL, type Antwoordmodus } from "@/lib/vraagtype";
+import { bronkaartLabels, normgewichtLabel, isVeiligeUrl } from "@/lib/bronsoort";
+import { DOCUMENT_STATUS_LABEL, BRONSTATUS_LABEL } from "@/lib/document-status-transities";
 
 type Modus = "documenten" | "combineren" | "algemeen";
+
+// Antwoordmodusfamilie (Increment G) — orthogonaal op de bron-modi. De gebruiker
+// kan de modus vastzetten ("Bekijk ook als"/sparringpaden); null = auto-detectie.
+const ANTWOORDMODUS_KEUZES: { value: Antwoordmodus; help: string }[] = [
+  { value: "feitelijk", help: "Kort en feitelijk, op actuele bronnen" },
+  { value: "duiding", help: "Bestuurlijke duiding met antwoordstatus en structuur" },
+  { value: "sparring", help: "Kritisch tegenspel: feit / interpretatie / inschatting / openstaande vraag" },
+  { value: "historisch", help: "Inclusief oude/vervangen bronnen (met label)" },
+  { value: "besluitrijpheid", help: "Weegt besluitvorming, neemt de besluitregistratie mee" },
+];
 
 interface Bron {
   document_id: string;
@@ -12,6 +25,15 @@ interface Bron {
   paragraaf: string | null;
   fragment: string;
   heeft_origineel: boolean;
+  // Increment G — bronkaartvelden (status/bronstatus/datum/bronsoort).
+  documentstatus?: string | null;
+  bronstatus?: string | null;
+  documentdatum?: string | null;
+  geldig_tot?: string | null;
+  bibliotheek?: string | null;
+  bronorganisatie?: string | null;
+  normgewicht?: string | null;
+  extern_url?: string | null;
 }
 
 interface Bericht {
@@ -46,6 +68,23 @@ interface GesprekItem {
   bijgewerkt: string;
   berichten: Bericht[];
   document_scope?: unknown;
+  actieve_antwoordmodus?: unknown;
+}
+
+// Leest een (mogelijk onbekende) antwoordmodus-waarde terug naar het type of null.
+function leesAntwoordmodus(ruw: unknown): Antwoordmodus | null {
+  const geldig: Antwoordmodus[] = [
+    "feitelijk",
+    "bronoverzicht",
+    "historisch",
+    "duiding",
+    "besluitrijpheid",
+    "sparring",
+    "persoonlijke_voorbereiding",
+  ];
+  return typeof ruw === "string" && (geldig as string[]).includes(ruw)
+    ? (ruw as Antwoordmodus)
+    : null;
 }
 
 // Leest de jsonb-scope uit een gesprek terug naar de UI-vorm (of null).
@@ -140,6 +179,12 @@ export default function AiPage() {
   const [antwoordGestart, setAntwoordGestart] = useState(false);
   const [fondsId, setFondsId] = useState<string>("");
   const [modus, setModus] = useState<Modus>("combineren");
+  // Increment G — vastgezette antwoordmodus (null = auto-detectie); de actief
+  // gebruikte modus + peildatum komen uit de meta; wissel-melding bij autodetectie.
+  const [antwoordmodus, setAntwoordmodus] = useState<Antwoordmodus | null>(null);
+  const [actieveAntwoordmodus, setActieveAntwoordmodus] = useState<string | null>(null);
+  const [peildatum, setPeildatum] = useState<string | null>(null);
+  const [wisselmelding, setWisselmelding] = useState<string | null>(null);
   // Hybride-schakelaar (alleen zichtbaar/bewerkbaar voor voorzitter/beheerder).
   const [hybrideAan, setHybrideAan] = useState(false);
   const [magBeheren, setMagBeheren] = useState(false);
@@ -185,7 +230,7 @@ export default function AiPage() {
       if (!uid) return;
       const { data } = await supabase
         .from("gesprekken")
-        .select("id, titel, bijgewerkt, berichten, document_scope")
+        .select("id, titel, bijgewerkt, berichten, document_scope, actieve_antwoordmodus")
         .eq("gebruiker_id", uid)
         .eq("gearchiveerd", false)
         .order("bijgewerkt", { ascending: false })
@@ -209,6 +254,7 @@ export default function AiPage() {
         : []
     );
     setDocumentScope(leesScope(item.document_scope));
+    setAntwoordmodus(leesAntwoordmodus(item.actieve_antwoordmodus));
     setHistorieOpen(false);
   }
 
@@ -255,6 +301,7 @@ export default function AiPage() {
           .update({
             berichten: finale,
             document_scope: scopePayload,
+            actieve_antwoordmodus: antwoordmodus,
             bijgewerkt: new Date().toISOString(),
           })
           .eq("id", gesprekId.current);
@@ -267,6 +314,7 @@ export default function AiPage() {
             titel,
             berichten: finale,
             document_scope: scopePayload,
+            actieve_antwoordmodus: antwoordmodus,
           })
           .select("id")
           .single();
@@ -338,7 +386,7 @@ export default function AiPage() {
         try {
           const { data: laatste } = await supabase
             .from("gesprekken")
-            .select("id, berichten, document_scope")
+            .select("id, berichten, document_scope, actieve_antwoordmodus")
             .eq("gebruiker_id", user.id)
             .eq("gearchiveerd", false)
             .order("bijgewerkt", { ascending: false })
@@ -350,6 +398,7 @@ export default function AiPage() {
             gesprekId.current = laatste.id as string;
             setBerichten(opgeslagen);
             setDocumentScope(leesScope(laatste.document_scope));
+            setAntwoordmodus(leesAntwoordmodus(laatste.actieve_antwoordmodus));
             hersteld = true;
           }
         } catch (e) {
@@ -442,6 +491,8 @@ export default function AiPage() {
                 algemene_kennis: documentScope.algemene_kennis === true,
               }
             : undefined,
+          // Increment G — vastgezette antwoordmodus (null = auto-detectie).
+          actieve_antwoordmodus: antwoordmodus,
         }),
       });
 
@@ -491,6 +542,10 @@ export default function AiPage() {
           fase?: string;
           batch?: number;
           totaal?: number;
+          antwoordmodus?: string;
+          antwoordmodus_label?: string;
+          wisselmelding?: string | null;
+          peildatum?: string | null;
         };
         try {
           evt = JSON.parse(regel);
@@ -501,6 +556,11 @@ export default function AiPage() {
         if (evt.type === "meta") {
           bronnenData = evt.bronnen;
           modusData = evt.modus || modus;
+          // Increment G — toon de actief gebruikte antwoordmodus + peildatum, en
+          // de wissel-melding bij autodetectie (FO §13).
+          setActieveAntwoordmodus(evt.antwoordmodus_label ?? evt.antwoordmodus ?? null);
+          setPeildatum(evt.peildatum ?? null);
+          setWisselmelding(evt.wisselmelding ?? null);
         } else if (evt.type === "progress") {
           // Map-reduce analyse-fase: toon voortgang i.p.v. de tikkende cursor.
           if (typeof evt.batch === "number" && typeof evt.totaal === "number") {
@@ -803,6 +863,61 @@ export default function AiPage() {
           </button>
         )}
       </div>
+
+      {/* Antwoordmodus-bar (Increment G) — orthogonaal op de bron-modi. */}
+      <div className="bg-white border-b border-gray-200 px-7 py-2.5 flex items-center gap-3 flex-wrap">
+        <span className="text-xs text-gray-500 font-semibold uppercase tracking-wide">
+          Antwoordstijl
+        </span>
+        <div className="flex gap-0.5 bg-gray-100 rounded-lg p-1 flex-wrap">
+          <button
+            onClick={() => setAntwoordmodus(null)}
+            title="Automatisch bepalen op basis van uw vraag"
+            className={`px-3 py-1.5 text-xs rounded-md transition-all ${
+              antwoordmodus === null
+                ? "bg-white text-[#0F2744] font-semibold shadow-sm"
+                : "text-gray-600 hover:text-[#0F2744]"
+            }`}
+          >
+            Auto
+          </button>
+          {ANTWOORDMODUS_KEUZES.map((m) => (
+            <button
+              key={m.value}
+              onClick={() => setAntwoordmodus(m.value)}
+              title={m.help}
+              className={`px-3 py-1.5 text-xs rounded-md transition-all ${
+                antwoordmodus === m.value
+                  ? "bg-white text-[#0F2744] font-semibold shadow-sm"
+                  : "text-gray-600 hover:text-[#0F2744]"
+              }`}
+            >
+              {ANTWOORDMODUS_LABEL[m.value]}
+            </button>
+          ))}
+        </div>
+        {antwoordmodus === null && actieveAntwoordmodus && (
+          <span className="text-xs text-gray-500">
+            Actief: <span className="font-semibold text-[#0F2744]">{actieveAntwoordmodus}</span>
+            {peildatum && <span className="text-gray-400"> · peildatum {peildatum}</span>}
+          </span>
+        )}
+      </div>
+
+      {/* Wissel-melding bij autodetectie (FO §13). */}
+      {wisselmelding && (
+        <div className="bg-amber-50 border-b border-amber-200 px-7 py-2 text-xs text-amber-800 flex items-center gap-2">
+          <span>🔄</span>
+          <span>{wisselmelding}</span>
+          <button
+            onClick={() => setWisselmelding(null)}
+            className="ml-auto text-amber-600 hover:text-amber-900"
+            aria-label="Melding sluiten"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {/* Chat */}
       <div className="flex-1 overflow-y-auto p-6 space-y-5">
@@ -1264,6 +1379,7 @@ function Bronkaart({
         <div className="text-gray-500 mt-1 leading-relaxed">
           „{bron.fragment}"
         </div>
+        <BronkaartMeta bron={bron} />
         {!bron.heeft_origineel && (
           <div className="text-gray-400 mt-1 text-[11px] italic">
             Origineel niet beschikbaar — alleen tekst voor de AI-assistent
@@ -1313,6 +1429,75 @@ function Bronkaart({
   return (
     <div id={idVoorScroll} className={`${baseKlasse} scroll-mt-24`}>
       {inhoud}
+    </div>
+  );
+}
+
+// Increment G — bronkaart-metadatastrip: status/bronstatus/datum + (bij generiek)
+// bronsoort/normgewicht/externe URL/"Vervallen per". Alles optioneel: ontbrekende
+// velden (bv. uit het fallback-pad) worden simpelweg niet getoond.
+function BronkaartMeta({ bron }: { bron: Bron }) {
+  const statusLabel = bron.documentstatus
+    ? (DOCUMENT_STATUS_LABEL as Record<string, string>)[bron.documentstatus] ??
+      bron.documentstatus
+    : null;
+  const bronstatusLabel =
+    bron.bronstatus && bron.bronstatus !== "actief"
+      ? (BRONSTATUS_LABEL as Record<string, string>)[bron.bronstatus] ?? bron.bronstatus
+      : null;
+  const labels = bronkaartLabels(
+    {
+      bibliotheek: bron.bibliotheek,
+      normgewicht: bron.normgewicht,
+      geldig_tot: bron.geldig_tot,
+    }
+  );
+  const heeftIets =
+    statusLabel ||
+    bronstatusLabel ||
+    bron.documentdatum ||
+    labels.isGeneriek ||
+    labels.vervallen;
+  if (!heeftIets) return null;
+
+  const chip =
+    "text-[10px] px-1.5 py-0.5 rounded border bg-white/70 border-gray-200 text-gray-600";
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+      {labels.isGeneriek && (
+        <span className="text-[10px] px-1.5 py-0.5 rounded border bg-indigo-50 border-indigo-200 text-indigo-700">
+          {labels.bronsoortLabel}
+        </span>
+      )}
+      {statusLabel && <span className={chip}>{statusLabel}</span>}
+      {bronstatusLabel && (
+        <span className="text-[10px] px-1.5 py-0.5 rounded border bg-amber-50 border-amber-200 text-amber-700">
+          {bronstatusLabel}
+        </span>
+      )}
+      {bron.documentdatum && <span className={chip}>📅 {bron.documentdatum}</span>}
+      {labels.isGeneriek && bron.normgewicht && (
+        <span className={chip}>{normgewichtLabel(bron.normgewicht)}</span>
+      )}
+      {labels.isGeneriek && bron.bronorganisatie && (
+        <span className={chip}>{bron.bronorganisatie}</span>
+      )}
+      {labels.vervallen && labels.vervallenLabel && (
+        <span className="text-[10px] px-1.5 py-0.5 rounded border bg-red-50 border-red-200 text-red-700">
+          {labels.vervallenLabel}
+        </span>
+      )}
+      {labels.isGeneriek && isVeiligeUrl(bron.extern_url) && (
+        <a
+          href={bron.extern_url ?? undefined}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[10px] px-1.5 py-0.5 rounded border bg-white/70 border-gray-200 text-blue-600 hover:underline"
+          onClick={(e) => e.stopPropagation()}
+        >
+          Externe bron ↗
+        </a>
+      )}
     </div>
   );
 }

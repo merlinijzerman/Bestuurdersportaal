@@ -1,0 +1,43 @@
+{
+  "permissions": {
+    "defaultMode": "default",
+    "allow": [
+      "Bash(npx tsc:*)",
+      "Bash(npx tsx:*)",
+      "Bash(npm run lint:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm run dev:*)",
+      "Bash(npm install)",
+      "Bash(npm install:*)",
+      "Bash(npm ci)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)",
+      "Bash(git add:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(grep:*)",
+      "Bash(rg:*)",
+      "Bash(find:*)",
+      "Bash(supabase migration new:*)",
+      "Bash(supabase migration list:*)",
+      "Edit(app/**)",
+      "Edit(lib/**)",
+      "Edit(components/**)",
+      "Edit(supabase/migrations/**)",
+      "Edit(decisions/**)"
+    ],
+    "deny": [
+      "Bash(rm -rf:*)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(supabase db reset:*)",
+      "Read(.env)",
+      "Read(.env.*)",
+      "Edit(.env)",
+      "Edit(.env.*)"
+    ]
+  }
+}

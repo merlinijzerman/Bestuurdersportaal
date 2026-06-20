@@ -307,11 +307,16 @@ create table if not exists public.gesprekken (
   -- Actieve documentscope (increment 1): {type, document_ids[], titels[], gezet_op}.
   -- NULL = hele bibliotheek. Zie migratie 2026_06_10_document_scope.sql.
   document_scope jsonb,
+  -- Actieve antwoordmodus (Increment G): feitelijk|bronoverzicht|historisch|
+  -- duiding|besluitrijpheid|sparring|persoonlijke_voorbereiding. NULL =
+  -- auto-detectie per vraag. Zie migratie 2026_06_20g_retrieval_modusfamilie.sql.
+  actieve_antwoordmodus text,
   aangemaakt    timestamptz default now(),
   bijgewerkt    timestamptz default now()
 );
 
 alter table public.gesprekken add column if not exists document_scope jsonb;
+alter table public.gesprekken add column if not exists actieve_antwoordmodus text;
 
 create index if not exists idx_gesprek_gebruiker
   on public.gesprekken(gebruiker_id, bijgewerkt desc)

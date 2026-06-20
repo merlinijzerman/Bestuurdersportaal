@@ -3,6 +3,66 @@ import { createServerSupabase } from "./supabase-server";
 import { selecteerChunks } from "./rag-select";
 import { embedTekst, naarVectorLiteral } from "./embeddings";
 import { notulenBronLabel } from "./notulen";
+import type { RetrievalModus } from "./vraagtype";
+import { weegBronsoort, type Bronsoortprofiel } from "./weeg-bronsoort";
+
+// Increment G — optionele, additieve retrieval-filters (vóór ranking/RRF in de
+// RPC's; defaults reproduceren huidig gedrag). De velden zijn gedenormaliseerd
+// op document_chunks (increment E + C+/B13), dus filtering vereist geen join.
+export interface RetrievalFilters {
+  modus?: RetrievalModus; // 'actueel'|'historisch'|'besluitvorming'|'alles'
+  peildatum?: string; // ISO YYYY-MM-DD; default current_date (server-side)
+  bronstatus?: string[] | null;
+  documentstatus?: string[] | null;
+  procesinstantie_ids?: string[] | null;
+  bronsoort?: string[] | null;
+  // Increment G — bronsoort-WEGING (rang-boost, pure TS): herordent de
+  // kandidatenset vóór de top-N-selectie zodat de primaire bronsoort vóór de
+  // aanvullende komt. Geen harde uitsluiting (anders dan p_bronsoort hierboven).
+  bronsoortprofiel?: Bronsoortprofiel;
+}
+
+// Past de bronsoort-weging toe (indien een profiel is gezet) en knipt dan terug
+// tot de prompt-set. De weging gebeurt VÓÓR selecteerChunks — dat behoudt de
+// inkomende volgorde, dus de boost werkt door in welke chunks de top-N halen.
+function weegEnSelecteer(
+  gerangschikt: DocumentChunk[],
+  filters: RetrievalFilters | undefined,
+  maxResults: number,
+  maxPerDoc: number
+): DocumentChunk[] {
+  const gewogen = filters?.bronsoortprofiel
+    ? weegBronsoort(gerangschikt, (c) => c.documenten.bibliotheek, filters.bronsoortprofiel)
+    : gerangschikt;
+  return selecteerChunks(gewogen, maxResults, maxPerDoc);
+}
+
+// Bouwt het RPC-parameterblok voor de filters. Alleen gezette velden worden
+// meegegeven; ontbrekende keys laten de SQL-defaults (huidig gedrag) intact.
+function rpcFilterParams(filters?: RetrievalFilters): Record<string, unknown> {
+  const p: Record<string, unknown> = {};
+  if (!filters) return p;
+  if (filters.modus) p.p_modus = filters.modus;
+  if (filters.peildatum) p.p_peildatum = filters.peildatum;
+  if (filters.bronstatus) p.p_bronstatus = filters.bronstatus;
+  if (filters.documentstatus) p.p_documentstatus = filters.documentstatus;
+  if (filters.procesinstantie_ids) p.p_procesinstantie_ids = filters.procesinstantie_ids;
+  if (filters.bronsoort) p.p_bronsoort = filters.bronsoort;
+  return p;
+}
+
+// Diagnostiek-vorm van de toegepaste filters voor governance_log.retrieval_meta.
+function metaFilters(filters?: RetrievalFilters): RetrievalMeta["filters"] {
+  if (!filters) return undefined;
+  return {
+    modus: filters.modus ?? "alles",
+    peildatum: filters.peildatum ?? new Date().toISOString().slice(0, 10),
+    bronstatus: filters.bronstatus ?? null,
+    documentstatus: filters.documentstatus ?? null,
+    procesinstantie_ids: filters.procesinstantie_ids ?? null,
+    bronsoort: filters.bronsoort ?? null,
+  };
+}
 
 // Feature-flag (Fase C): hybride retrieval staat alleen aan als HYBRID_SEARCH
 // expliciet "on" is. Default uit → niets verandert aan het zoekgedrag.
@@ -25,6 +85,17 @@ export interface DocumentChunk {
     bron: string;
     bibliotheek: string;
     opslag_pad: string | null;
+    // Increment G — gedenormaliseerde bronkaart-/weging-/auditvelden (optioneel;
+    // de fallback-cascade levert ze niet, de RPC's wel).
+    documentstatus?: string | null;
+    bronstatus?: string | null;
+    documentdatum?: string | null;
+    geldig_vanaf?: string | null;
+    geldig_tot?: string | null;
+    procesinstantie_id?: string | null;
+    bronorganisatie?: string | null;
+    normgewicht?: string | null;
+    extern_url?: string | null;
   };
   // Increment D — aanwezig zodra de chunk uit een bevestigd notulensegment komt.
   // Gevuld door verrijkNotulenChunks() ná retrieval (de RPC's leveren dit niet);
@@ -70,6 +141,20 @@ export interface RetrievalMeta {
     batches?: number;
     afgekapt?: boolean;
   };
+  // Increment G — de toegepaste retrieval-filters (status/bronstatus/modus/
+  // peildatum/bronsoort/procesinstantie). Append-only auditspoor (test #6).
+  filters?: {
+    modus: RetrievalModus;
+    peildatum: string;
+    bronstatus?: string[] | null;
+    documentstatus?: string[] | null;
+    procesinstantie_ids?: string[] | null;
+    bronsoort?: string[] | null;
+  };
+  // Increment G — de actieve antwoordmodus (feitelijk|duiding|sparring|…) en, in
+  // besluitvorming-modus, hoeveel Decision Object-besluitbronnen zijn meegenomen.
+  antwoordmodus?: string;
+  besluitbronnen?: number;
 }
 
 // Platte rij zoals public.zoek_chunks(...) die teruggeeft (zie migratie
@@ -86,6 +171,16 @@ interface ZoekChunkRij {
   bibliotheek: string;
   opslag_pad: string | null;
   rang: number;
+  // Increment G — denorm-velden uit de uitgebreide RPC-return.
+  documentstatus?: string | null;
+  bronstatus?: string | null;
+  documentdatum?: string | null;
+  geldig_vanaf?: string | null;
+  geldig_tot?: string | null;
+  procesinstantie_id?: string | null;
+  bronorganisatie?: string | null;
+  normgewicht?: string | null;
+  extern_url?: string | null;
 }
 
 export interface BronVerwijzing {
@@ -96,6 +191,16 @@ export interface BronVerwijzing {
   paragraaf: string | null;
   fragment: string;
   heeft_origineel: boolean;
+  // Increment G — bronkaartvelden (status/bronstatus/datum/bronsoort + generiek-
+  // metadata). Optioneel: de fallback-cascade levert ze niet.
+  documentstatus?: string | null;
+  bronstatus?: string | null;
+  documentdatum?: string | null;
+  geldig_tot?: string | null;
+  bibliotheek?: string | null;
+  bronorganisatie?: string | null;
+  normgewicht?: string | null;
+  extern_url?: string | null;
 }
 
 // Map een platte RPC-rij naar het DocumentChunk-shape met geneste documenten.
@@ -113,6 +218,15 @@ function rijNaarChunk(r: ZoekChunkRij): DocumentChunk {
       bron: r.bron,
       bibliotheek: r.bibliotheek,
       opslag_pad: r.opslag_pad,
+      documentstatus: r.documentstatus ?? null,
+      bronstatus: r.bronstatus ?? null,
+      documentdatum: r.documentdatum ?? null,
+      geldig_vanaf: r.geldig_vanaf ?? null,
+      geldig_tot: r.geldig_tot ?? null,
+      procesinstantie_id: r.procesinstantie_id ?? null,
+      bronorganisatie: r.bronorganisatie ?? null,
+      normgewicht: r.normgewicht ?? null,
+      extern_url: r.extern_url ?? null,
     },
   };
 }
@@ -144,7 +258,8 @@ export async function zoekRelevanteChunksMetMeta(
   _fondsId: string,
   maxResults = 8,
   hybrideAan?: boolean,
-  documentIds?: string[]
+  documentIds?: string[],
+  filters?: RetrievalFilters
 ): Promise<{ chunks: DocumentChunk[]; meta: RetrievalMeta }> {
   // Documentscope (increment 1): null = hele bibliotheek. Wordt vóór ranking in
   // de RPC's toegepast. Onafhankelijk van de (mogelijk geherformuleerde) vraag,
@@ -155,7 +270,7 @@ export async function zoekRelevanteChunksMetMeta(
   // env-default HYBRID_SEARCH als er geen waarde is meegegeven.
   const hybride = hybrideAan ?? HYBRID_ENABLED;
   if (!hybride) {
-    return zoekViaFTS(vraag, maxResults, scope);
+    return zoekViaFTS(vraag, maxResults, scope, filters);
   }
 
   const supabase = await createServerSupabase();
@@ -168,7 +283,7 @@ export async function zoekRelevanteChunksMetMeta(
     vector = await embedTekst(vraag);
   } catch (e) {
     console.error("Hybride: query-embedding mislukt, terugval op FTS:", e);
-    const r = await zoekViaFTS(vraag, maxResults, scope);
+    const r = await zoekViaFTS(vraag, maxResults, scope, filters);
     return {
       chunks: r.chunks,
       meta: { ...r.meta, embedding_query_success: false, fallback_reason: "embedding_error" },
@@ -177,27 +292,30 @@ export async function zoekRelevanteChunksMetMeta(
 
   // RRF-RPC: FTS + vector versmolten (SECURITY INVOKER → RLS blijft gelden).
   // p_document_ids = scope vóór de fusion (null = hele bibliotheek).
+  // Increment G — retrieval-filters worden vóór de fusion in beide armen toegepast.
   const { data, error } = await supabase.rpc("zoek_chunks_hybride", {
     p_query: vraag,
     p_embedding: naarVectorLiteral(vector),
     p_limit: overFetch,
     p_document_ids: scope,
+    ...rpcFilterParams(filters),
   });
 
   if (!error && Array.isArray(data) && data.length > 0) {
     const gerangschikt = (data as ZoekChunkRij[]).map(rijNaarChunk);
-    const geselecteerd = selecteerChunks(gerangschikt, maxResults, maxPerDoc);
+    const geselecteerd = weegEnSelecteer(gerangschikt, filters, maxResults, maxPerDoc);
     return {
       chunks: geselecteerd,
       meta: {
         ...bouwMeta("hybride_rrf", gerangschikt.length, geselecteerd),
         embedding_query_success: true,
+        filters: metaFilters(filters),
       },
     };
   }
 
   // RPC faalde of leeg → terugval op FTS (embedding lukte wél).
-  const r = await zoekViaFTS(vraag, maxResults, scope);
+  const r = await zoekViaFTS(vraag, maxResults, scope, filters);
   return {
     chunks: r.chunks,
     meta: {
@@ -219,26 +337,30 @@ export async function zoekRelevanteChunksMetMeta(
 async function zoekViaFTS(
   vraag: string,
   maxResults = 8,
-  scope: string[] | null = null
+  scope: string[] | null = null,
+  filters?: RetrievalFilters
 ): Promise<{ chunks: DocumentChunk[]; meta: RetrievalMeta }> {
   const supabase = await createServerSupabase();
   const overFetch = Math.max(maxResults * 3, 20);
   const maxPerDoc = Math.max(3, Math.ceil(maxResults / 2));
+  const fMeta = metaFilters(filters);
 
   // Poging 1: gerangschikte RPC (Dutch FTS + ts_rank_cd).
   // p_document_ids = scope vóór ranking (null = hele bibliotheek).
+  // Increment G — retrieval-filters vóór ranking in de RPC.
   const { data, error } = await supabase.rpc("zoek_chunks", {
     p_query: vraag,
     p_limit: overFetch,
     p_document_ids: scope,
+    ...rpcFilterParams(filters),
   });
 
   if (!error && Array.isArray(data) && data.length > 0) {
     const gerangschikt = (data as ZoekChunkRij[]).map(rijNaarChunk);
-    const geselecteerd = selecteerChunks(gerangschikt, maxResults, maxPerDoc);
+    const geselecteerd = weegEnSelecteer(gerangschikt, filters, maxResults, maxPerDoc);
     return {
       chunks: geselecteerd,
-      meta: bouwMeta("fts_dutch_ranked", gerangschikt.length, geselecteerd),
+      meta: { ...bouwMeta("fts_dutch_ranked", gerangschikt.length, geselecteerd), filters: fMeta },
     };
   }
 
@@ -270,14 +392,27 @@ async function zoekViaFTS(
       .textSearch("zoek_vector", zoekterm, { type: "plain" })
       .limit(overFetch);
     if (scope) q2 = q2.in("document_id", scope);
+    // Increment G — filters ook op het vangnet (geen lek langs de modusfilter).
+    if (filters?.modus === "actueel") {
+      const peil = filters.peildatum ?? new Date().toISOString().slice(0, 10);
+      q2 = q2
+        .in("documentstatus", ["vastgesteld", "van_kracht"])
+        .or("bronstatus.is.null,bronstatus.eq.actief")
+        .or(`geldig_vanaf.is.null,geldig_vanaf.lte.${peil}`)
+        .or(`geldig_tot.is.null,geldig_tot.gte.${peil}`);
+    }
+    if (filters?.bronstatus) q2 = q2.in("bronstatus", filters.bronstatus);
+    if (filters?.documentstatus) q2 = q2.in("documentstatus", filters.documentstatus);
+    if (filters?.procesinstantie_ids) q2 = q2.in("procesinstantie_id", filters.procesinstantie_ids);
+    if (filters?.bronsoort) q2 = q2.in("bibliotheek", filters.bronsoort);
     const { data: data2, error: error2 } = await q2;
 
     if (!error2 && data2 && data2.length > 0) {
       const gevonden = data2 as unknown as DocumentChunk[];
-      const geselecteerd = selecteerChunks(gevonden, maxResults, maxPerDoc);
+      const geselecteerd = weegEnSelecteer(gevonden, filters, maxResults, maxPerDoc);
       return {
         chunks: geselecteerd,
-        meta: bouwMeta("fts_plain", gevonden.length, geselecteerd),
+        meta: { ...bouwMeta("fts_plain", gevonden.length, geselecteerd), filters: fMeta },
       };
     }
   }
@@ -293,28 +428,49 @@ async function zoekViaFTS(
       .ilike("tekst", `%${hoofdwoord}%`)
       .limit(overFetch);
     if (scope) q3 = q3.in("document_id", scope);
+    // Increment G — zelfde filters op het laatste vangnet.
+    if (filters?.modus === "actueel") {
+      const peil = filters.peildatum ?? new Date().toISOString().slice(0, 10);
+      q3 = q3
+        .in("documentstatus", ["vastgesteld", "van_kracht"])
+        .or("bronstatus.is.null,bronstatus.eq.actief")
+        .or(`geldig_vanaf.is.null,geldig_vanaf.lte.${peil}`)
+        .or(`geldig_tot.is.null,geldig_tot.gte.${peil}`);
+    }
+    if (filters?.bronstatus) q3 = q3.in("bronstatus", filters.bronstatus);
+    if (filters?.documentstatus) q3 = q3.in("documentstatus", filters.documentstatus);
+    if (filters?.procesinstantie_ids) q3 = q3.in("procesinstantie_id", filters.procesinstantie_ids);
+    if (filters?.bronsoort) q3 = q3.in("bibliotheek", filters.bronsoort);
     const { data: data3 } = await q3;
 
     if (data3 && data3.length > 0) {
       const gevonden = data3 as unknown as DocumentChunk[];
-      const geselecteerd = selecteerChunks(gevonden, maxResults, maxPerDoc);
+      const geselecteerd = weegEnSelecteer(gevonden, filters, maxResults, maxPerDoc);
       return {
         chunks: geselecteerd,
-        meta: bouwMeta("ilike", gevonden.length, geselecteerd),
+        meta: { ...bouwMeta("ilike", gevonden.length, geselecteerd), filters: fMeta },
       };
     }
   }
 
-  return { chunks: [], meta: bouwMeta("geen", 0, []) };
+  return { chunks: [], meta: { ...bouwMeta("geen", 0, []), filters: fMeta } };
 }
 
 // Backwards-compatibele wrapper: geeft alleen de chunks terug.
 export async function zoekRelevanteChunks(
   vraag: string,
   fondsId: string,
-  maxResults = 8
+  maxResults = 8,
+  filters?: RetrievalFilters
 ): Promise<DocumentChunk[]> {
-  const { chunks } = await zoekRelevanteChunksMetMeta(vraag, fondsId, maxResults);
+  const { chunks } = await zoekRelevanteChunksMetMeta(
+    vraag,
+    fondsId,
+    maxResults,
+    undefined,
+    undefined,
+    filters
+  );
   return chunks;
 }
 
@@ -354,8 +510,16 @@ export function maakContext(chunks: DocumentChunk[]): {
         )
       : `${doc.bron} — ${doc.titel}`;
 
+    // Increment G — generieke bronnen expliciet labelen, zodat het model ze niet
+    // presenteert als door het fonds bestuurlijk vastgesteld (#22/#23). Het label
+    // staat in de contextregel; de gestructureerde velden gaan mee in `bronnen`.
+    const bronsoortLabel =
+      doc.bibliotheek === "generiek"
+        ? ` [generiek/extern kader${doc.bronorganisatie ? ` — ${doc.bronorganisatie}` : ""}]`
+        : "";
+
     contextDelen.push(
-      `${bronLabel} ${bronTitel}${locatie ? ` (${locatie})` : ""}:\n"${chunk.tekst}"`
+      `${bronLabel} ${bronTitel}${bronsoortLabel}${locatie ? ` (${locatie})` : ""}:\n"${chunk.tekst}"`
     );
 
     bronnen.push({
@@ -366,6 +530,14 @@ export function maakContext(chunks: DocumentChunk[]): {
       paragraaf: chunk.paragraaf,
       fragment: chunk.tekst.substring(0, 150) + "...",
       heeft_origineel: !!doc.opslag_pad,
+      documentstatus: doc.documentstatus ?? null,
+      bronstatus: doc.bronstatus ?? null,
+      documentdatum: doc.documentdatum ?? null,
+      geldig_tot: doc.geldig_tot ?? null,
+      bibliotheek: doc.bibliotheek ?? null,
+      bronorganisatie: doc.bronorganisatie ?? null,
+      normgewicht: doc.normgewicht ?? null,
+      extern_url: doc.extern_url ?? null,
     });
   });
 
