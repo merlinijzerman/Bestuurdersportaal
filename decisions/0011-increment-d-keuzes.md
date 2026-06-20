@@ -1,6 +1,6 @@
 # 0011 — Increment D: notulen op agendapuntniveau — de vijf uitvoeringskeuzes
 
-- **Status:** Geaccepteerd (2026-06-20) — vastgesteld in Plan-modus vóór de bouw, akkoord Merlin
+- **Status:** Geaccepteerd + gebouwd + live (2026-06-20) — vastgesteld in Plan-modus vóór de bouw (akkoord Merlin); migratie op live Supabase gedraaid en code gedeployed op 20-06-2026 ná de vier pre-merge subagent-reviews
 - **Datum:** 2026-06-20
 - **Betrokkenen:** Merlin IJzerman
 - **Scope:** Increment D (notulen op agendapuntniveau, bron = upload)
