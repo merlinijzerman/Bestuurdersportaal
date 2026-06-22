@@ -9,6 +9,7 @@ import { valideerScope, type ScopeDocumentRij } from "@/lib/document-scope";
 import { bepaalVraagtype, schatTokens, kiesStrategie, maakBatches, bepaalAntwoordmodus, retrievalModusVoor, bepaalInlineMeldingen, bronbasisLabel, bepaalBronIntent, moetVerduidelijken, bepaalAutoBronModus, VERDUIDELIJKINGSVRAAG, VERDUIDELIJKING_OPTIES, ANTWOORDMODUS_LABEL, type Strategie, type Antwoordmodus, type BronModus, type BronIntent, type BronIntentResultaat } from "@/lib/vraagtype";
 import { bepaalBronsoortprofiel } from "@/lib/weeg-bronsoort";
 import { haalBesluitBronnen, topProcesinstanties, opmaakBesluitContext } from "@/lib/besluitvorming-bron";
+import { documentBronNaarSource, modelKennisBronnenUitAntwoord, bouwSourceSamenvatting, ontbrekendeAlgemeneKennisMarkering, type AssistantSource } from "@/lib/assistant-source";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -106,6 +107,7 @@ REGELS VAN INHOUD:
 - Wees expliciet over wat u niet zeker weet of wat na uw trainingsdatum mogelijk is veranderd — pensioenrecht wijzigt regelmatig.
 - Verwijs bij claims over wet- en regelgeving naar de bron-instantie (DNB, AFM, Pensioenfederatie, rijksoverheid, SZW) zonder een specifieke documentlink te suggereren.
 - Markeer feitelijke claims met [Algemene kennis] of [Volgens wetgeving] — weef die natuurlijk in de tekst.
+- BELANGRIJK (geen verzonnen bronnen): verzin NOOIT een documenttitel, paragraaf-/paginanummer, URL, datum of dossiernaam bij algemene kennis. U mag de bron-instantie noemen, maar presenteer nooit een specifieke vindplaats of link die u niet daadwerkelijk is aangeleverd. Bij twijfel: noem de instantie, niet een verwijzing.
 - Voeg ergens (begin, midden of einde, waar dat het minst stoort) een opmerking toe dat dit antwoord niet op interne fondsdocumenten is gebaseerd en bij formele besluitvorming verificatie verdient. Niet als sjabloon-disclaimer aan het einde, maar als natuurlijke kanttekening.`;
 
 const SP_COMBINEREN_REGELS = `U beantwoordt vragen primair op basis van de aangeleverde interne bronnen, en vult aan met uw algemene kennis waar dat de vraag beter beantwoordt.
@@ -118,7 +120,14 @@ REGELS VAN INHOUD:
 - Vul aan met algemene kennis waar de bronnen geen antwoord geven — markeer met [Algemene kennis].
 - Maak altijd glashelder welke informatie waarvandaan komt; weef de markeringen natuurlijk in de tekst.
 - Verzin geen specifieke feiten over dit fonds; alleen wat in de bronnen staat.
-- Bij algemene kennis: noem de bron-instantie (DNB, AFM, Pensioenfederatie, rijksoverheid).`;
+- Bij algemene kennis: noem de bron-instantie (DNB, AFM, Pensioenfederatie, rijksoverheid, SZW).
+- Verzin bij algemene kennis NOOIT een documenttitel, vindplaats, URL of paginanummer. [Bron N] mag uitsluitend verwijzen naar een daadwerkelijk aangeleverde interne bron; voor externe/algemene kennis gebruikt u [Algemene kennis]/[Volgens wetgeving] met hooguit de instantienaam.`;
+
+// TODO(web-retrieval — Scenario A): zodra er ECHTE web-retrieval bestaat (Route B /
+// web-ingestion met whitelist), komt hier een SP_WEB_REGELS-blok dat het model
+// instrueert uitsluitend te citeren uit de aangeleverde, opgehaalde webresultaten
+// (kind 'web' in lib/assistant-source.ts) — nooit uit verzonnen URL's. De UI en het
+// auditspoor zijn al voorbereid (AssistantSource.web + source_summary.web_retrieval_actief).
 
 // ============================================================
 //  Document-scope (increment 1) — strict-document gedrag
@@ -938,6 +947,13 @@ export async function POST(req: NextRequest) {
     // náást treffers) hangt van de antwoordinhoud af en wordt ná het streamen
     // herberekend en in het 'done'-event meegestuurd.
     const bronbasis = bronbasisLabel(bronModusRetrieval, bronnen.length, scopeActief);
+
+    // Increment I-3 — uniform bronmodel. De documentbronnen zijn nu al bekend;
+    // de model_knowledge-bronnen (algemene kennis) hangen van de antwoordinhoud af
+    // en worden ná het streamen afgeleid. Web-retrieval bestaat nog niet (Scenario
+    // B), dus web_retrieval_actief = false en er komen geen web-bronnen bij.
+    const documentSources: AssistantSource[] = bronnen.map(documentBronNaarSource);
+    const sourceSamenvattingPre = bouwSourceSamenvatting(documentSources, false);
     const inlineMeldingenPre = bepaalInlineMeldingen({
       bronModus: bronModusRetrieval,
       antwoordmodus,
@@ -1000,6 +1016,13 @@ export async function POST(req: NextRequest) {
             bron_modus_auto: scopeActief ? null : bronModusRetrieval,
             alleen_fondsdocumenten: alleenFondsdocumenten,
             bron_intent_override: scopeActief ? false : intentOverride !== undefined,
+            // Increment I-3 — uniform bronmodel voor het paneel "Onderbouwing en
+            // bronnen". Documentbronnen zijn nu bekend; model_knowledge volgt in
+            // 'done'. web_retrieval_actief signaleert dat er (nog) geen live
+            // web-retrieval is — de UI toont dat expliciet.
+            sources: documentSources,
+            source_summary: sourceSamenvattingPre,
+            web_retrieval_actief: false,
           });
 
           // Map-reduce (increment 2): verwerk het document in batches (map, met
@@ -1100,6 +1123,26 @@ export async function POST(req: NextRequest) {
             algemeneKennisMarkers,
           });
 
+          // Increment I-3 — leid nu (mét de antwoordinhoud) de model_knowledge-
+          // bronnen af: één per door het antwoord GENOEMDE instantie per
+          // markertype. Verzint nooit een instantie die niet in de tekst staat.
+          // Bij scope of pure documentmodus levert dit niets (geen algemene kennis).
+          const modelKennisSources = scopeActief
+            ? []
+            : modelKennisBronnenUitAntwoord(volledig);
+          const alleSources: AssistantSource[] = [
+            ...documentSources,
+            ...modelKennisSources,
+          ];
+          const sourceSamenvatting = bouwSourceSamenvatting(alleSources, false);
+          // Markeer-handhaving (audit-signaal, geen blokkade): in pure algemeen-
+          // modus hoort minstens één algemene-kennismarker te staan. Ontbreekt die,
+          // dan is de herkomst-transparantie incompleet → zichtbaar in het auditspoor.
+          const markeringOntbreekt = ontbrekendeAlgemeneKennisMarkering(
+            scopeActief ? "documenten" : bronModusRetrieval,
+            algemeneKennisMarkers
+          );
+
           // Increment G/I-1 — de actieve antwoordmodus, bronbasis en getoonde
           // inline-meldingen horen altijd in het auditspoor (B10, §11d), óók in
           // modus 'algemeen' (geen retrieval → nog geen retrievalMeta).
@@ -1113,6 +1156,17 @@ export async function POST(req: NextRequest) {
             antwoordmodus,
             bronbasis,
             inline_meldingen: inlineMeldingenFinaal,
+            // Increment I-3 — uniform bronmodel volledig in het auditspoor: alle
+            // herkomst (document + model_knowledge) + telling + de markeer-handhaving.
+            sources: alleSources,
+            source_summary: sourceSamenvatting,
+            markeringen: {
+              algemene_kennis_markers: algemeneKennisMarkers,
+              instanties: modelKennisSources
+                .map((s) => s.instantie)
+                .filter((i): i is string => i !== null),
+              ontbrekend_signaal: markeringOntbreekt,
+            },
             // Increment F (FO §14, B10/§11d) — profielsturing volledig herleidbaar:
             // status + welke profielvelden de prioritering voedden. Geen profielinhoud.
             profielsturing: profielsturingStatus,
@@ -1148,7 +1202,14 @@ export async function POST(req: NextRequest) {
 
           // Stuur de definitieve inline-meldingen mee zodat de UI de #4-melding
           // (content-afhankelijk) kan tonen ná het streamen.
-          send({ type: "done", inline_meldingen: inlineMeldingenFinaal });
+          send({
+            type: "done",
+            inline_meldingen: inlineMeldingenFinaal,
+            // Increment I-3 — de content-afhankelijke model_knowledge-bronnen +
+            // bijgewerkte samenvatting voor het paneel "Onderbouwing en bronnen".
+            model_kennis: modelKennisSources,
+            source_summary: sourceSamenvatting,
+          });
         } catch (streamFout) {
           console.error("Chat stream fout:", streamFout);
           send({

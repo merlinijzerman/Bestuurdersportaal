@@ -37,7 +37,21 @@ export interface OnderbouwingMeta {
   alleenFondsdocumenten?: boolean | null;
   /** Intentie door de gebruiker bevestigd via een verduidelijkingschip (vs. heuristisch). */
   bronIntentOverride?: boolean | null;
+  // Increment I-3 — uniforme bronvermelding-transparantie. De model_knowledge-
+  // herkomst (algemene kennis uit het taalmodel, met de genoemde instantie), en
+  // de web-laag die VOORBEREID is maar nog niet gevuld (Scenario B).
+  /** Algemene-kennisbronnen: per genoemde instantie + grond (kennis/wetgeving). */
+  modelKennis?: { grond: "algemene_kennis" | "wetgeving"; instantie: string | null }[];
+  /** False zolang er geen live web-retrieval is — toont een expliciete melding. */
+  webRetrievalActief?: boolean | null;
+  /** Daadwerkelijk opgehaalde webbronnen (leeg tot web-retrieval bestaat). */
+  webBronnen?: { url: string; titel: string; domein: string; datum?: string | null }[];
 }
+
+const MODEL_KENNIS_GROND_LABEL: Record<string, string> = {
+  algemene_kennis: "Algemene kennis",
+  wetgeving: "Volgens wetgeving",
+};
 
 // Bestuurlijk leesbare labels voor de automatische bronkeuze (geen jargon).
 const BRON_INTENT_LABEL: Record<string, string> = {
@@ -154,18 +168,75 @@ export default function OnderbouwingPaneel({
             in het antwoord zelf benoemd.
           </p>
 
-          {/* Geraadpleegde documenten / bronverwijzingen. */}
+          {/* Increment I-3 — herkomst gegroepeerd per soort, zodat de bestuurder
+              ziet welk deel van het antwoord uit fondsdocumenten komt, wat
+              algemene kennis is, en (voorbereid) wat uit het web zou komen. */}
+
+          {/* 1) Documentbronnen (RAG) — de bronkaarten komen als children mee. */}
           {children ? (
             <div>
               <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2">
-                Geraadpleegde bronnen
+                Documentbronnen
               </div>
               <div className="space-y-2">{children}</div>
             </div>
           ) : (
             <p className="text-xs text-gray-500">
-              Geen interne bronnen geraadpleegd voor dit antwoord.
+              Geen interne documentbronnen geraadpleegd voor dit antwoord.
             </p>
+          )}
+
+          {/* 2) Niet-brongebaseerde duiding — algemene kennis uit het taalmodel.
+              Toont de door het antwoord GENOEMDE instantie; nooit een verzonnen
+              documentverwijzing. */}
+          {meta.modelKennis && meta.modelKennis.length > 0 && (
+            <div>
+              <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2">
+                Niet-brongebaseerde duiding (algemene kennis)
+              </div>
+              <ul className="space-y-1">
+                {meta.modelKennis.map((mk, i) => (
+                  <li key={i} className="flex items-center gap-2 text-xs">
+                    <span className="text-[10px] font-semibold text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded">
+                      {MODEL_KENNIS_GROND_LABEL[mk.grond] ?? mk.grond}
+                    </span>
+                    <span className="text-gray-700">
+                      {mk.instantie ?? "Geen specifieke instantie benoemd"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-[11px] text-gray-400 italic">
+                Dit deel komt uit de algemene kennis van het taalmodel, niet uit een
+                geverifieerde bron. Er is geen live web-retrieval actief; controleer
+                bij formele besluitvorming de genoemde instantie zelf.
+              </p>
+            </div>
+          )}
+
+          {/* 3) Webbronnen — VOORBEREID maar nog niet gevuld (Scenario B). Pas
+              zichtbaar zodra echte web-retrieval bestaat én resultaten oplevert. */}
+          {meta.webRetrievalActief && meta.webBronnen && meta.webBronnen.length > 0 && (
+            <div>
+              <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2">
+                Webbronnen
+              </div>
+              <ul className="space-y-1">
+                {meta.webBronnen.map((w, i) => (
+                  <li key={i} className="text-xs">
+                    <a
+                      href={w.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[#0F2744] underline hover:text-[#C9A84C]"
+                    >
+                      {w.titel}
+                    </a>
+                    <span className="text-gray-400"> — {w.domein}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </div>
       )}

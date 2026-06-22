@@ -11,6 +11,7 @@ import {
 import { bronkaartLabels, normgewichtLabel, isVeiligeUrl } from "@/lib/bronsoort";
 import { DOCUMENT_STATUS_LABEL, BRONSTATUS_LABEL } from "@/lib/document-status-transities";
 import OnderbouwingPaneel, { type OnderbouwingMeta } from "./_components/OnderbouwingPaneel";
+import { detecteerInstantieInTekst } from "@/lib/assistant-source";
 
 type Modus = "documenten" | "combineren" | "algemeen";
 
@@ -625,6 +626,9 @@ export default function AiPage() {
           bron_modus_auto?: "documenten" | "combineren" | "algemeen" | null;
           alleen_fondsdocumenten?: boolean;
           bron_intent_override?: boolean;
+          // Increment I-3 — uniforme bronvermelding-transparantie.
+          web_retrieval_actief?: boolean;
+          model_kennis?: { grond: "algemene_kennis" | "wetgeving"; instantie: string | null }[];
         };
         try {
           evt = JSON.parse(regel);
@@ -674,6 +678,10 @@ export default function AiPage() {
             bronVertrouwen: evt.bron_vertrouwen ?? null,
             alleenFondsdocumenten: evt.alleen_fondsdocumenten ?? null,
             bronIntentOverride: evt.bron_intent_override ?? null,
+            // Increment I-3 — web-retrieval is (nog) niet actief (Scenario B); de
+            // model_knowledge-bronnen volgen in het 'done'-event (content-afhankelijk).
+            webRetrievalActief: evt.web_retrieval_actief ?? false,
+            modelKennis: [],
           };
           // Deterministische inline-meldingen (pre-stream); de #4-melding kan in
           // het 'done'-event nog worden aangevuld.
@@ -708,6 +716,11 @@ export default function AiPage() {
           if (verduidelijkingActief) return;
           // Definitieve (content-afhankelijke) inline-meldingen, incl. #4.
           if (evt.inline_meldingen) inlineMeldingenData = evt.inline_meldingen;
+          // Increment I-3 — de afgeleide model_knowledge-bronnen (algemene kennis
+          // met genoemde instantie) komen in het 'done'-event en horen in het paneel.
+          if (evt.model_kennis && onderbouwingData) {
+            onderbouwingData = { ...onderbouwingData, modelKennis: evt.model_kennis };
+          }
           schrijfAi();
         } else if (evt.type === "error") {
           if (!aiToegevoegd) {
@@ -1466,10 +1479,10 @@ function parseInline(
       return <OngeldigeBronPill key={i} nummer={bronIdx + 1} />;
     }
     if (/^\[algemene kennis\]$/i.test(deel)) {
-      return <KennisPill key={i} label="Algemene kennis" />;
+      return <KennisPill key={i} label="Algemene kennis" instantie={detecteerInstantieInTekst(regel)} />;
     }
     if (/^\[volgens wetgeving\]$/i.test(deel)) {
-      return <KennisPill key={i} label="Volgens wetgeving" />;
+      return <KennisPill key={i} label="Volgens wetgeving" instantie={detecteerInstantieInTekst(regel)} />;
     }
     // Geen marker → verwerk inline-markdown (vet/cursief/code).
     return <span key={i}>{parseMarkdownInline(deel)}</span>;
@@ -1535,13 +1548,21 @@ function BronPill({
   );
 }
 
-function KennisPill({ label }: { label: string }) {
+// Increment I-3 — de grijze pill draagt nu, indien het antwoord die noemt, de
+// bron-instantie (DNB/AFM/…). Zo is inline al zichtbaar waaraan de algemene
+// kennis wordt toegeschreven, zonder de kennis te begrenzen of een verzonnen
+// documentverwijzing te suggereren.
+function KennisPill({ label, instantie }: { label: string; instantie?: string | null }) {
   return (
     <span
       className="relative -top-[1px] inline-flex items-center align-baseline mx-0.5 px-1.5 h-[18px] rounded-md text-[10px] font-semibold leading-none bg-gray-200 text-gray-600"
-      title="Niet uit een intern document — algemene kennis of wetgeving"
+      title={
+        instantie
+          ? `Niet uit een intern document — algemene kennis, toegeschreven aan ${instantie}`
+          : "Niet uit een intern document — algemene kennis of wetgeving"
+      }
     >
-      {label}
+      {instantie ? `${label} · ${instantie}` : label}
     </span>
   );
 }

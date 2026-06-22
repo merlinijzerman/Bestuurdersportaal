@@ -19,6 +19,7 @@ const navItems: NavItem[] = [
   { href: "/klantbeeld", label: "Klantbeeld", icon: "👥", section: "Overzicht" },
   { href: "/profiel", label: "Mijn profiel", icon: "👤", section: "Overzicht" },
   { href: "/ai", label: "AI Assistent", icon: "🤖", iconSrc: "/ai-assistent.png", section: "Kennisbase", badge: "AI" },
+  { href: "/zoeken", label: "Zoeken", icon: "🔎", section: "Kennisbase" },
   { href: "/bibliotheek", label: "Documentbibliotheek", icon: "📚", section: "Kennisbase" },
   { href: "/vergaderingen", label: "Vergaderingen", icon: "📅", section: "Bestuur" },
   { href: "/notulen", label: "Besluiten & Notulen", icon: "📋", section: "Bestuur" },

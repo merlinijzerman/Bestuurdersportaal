@@ -5,6 +5,7 @@ import { embedTekst, naarVectorLiteral } from "./embeddings";
 import { notulenBronLabel } from "./notulen";
 import type { RetrievalModus } from "./vraagtype";
 import { weegBronsoort, type Bronsoortprofiel } from "./weeg-bronsoort";
+import type { AssistantSource, AssistantSourceSamenvatting } from "./assistant-source";
 
 // Increment G — optionele, additieve retrieval-filters (vóór ranking/RRF in de
 // RPC's; defaults reproduceren huidig gedrag). De velden zijn gedenormaliseerd
@@ -160,6 +161,19 @@ export interface RetrievalMeta {
   // nu ze niet meer standaard zichtbaar zijn. Verandert niets aan retrieval.
   bronbasis?: string;
   inline_meldingen?: { type: string; tekst: string }[];
+  // Increment I-3 — uniforme bronvermelding-transparantie. Alle herkomst van het
+  // antwoord (document + model_knowledge; web is voorbereid maar nog niet gevuld)
+  // + telling per soort + de markeer-handhaving. Puur auditspoor; verandert niets
+  // aan retrieval. `web_retrieval_actief` legt vast dat er nog geen live web-
+  // retrieval is (Scenario B), zodat een latere overgang naar A herleidbaar is.
+  sources?: AssistantSource[];
+  source_summary?: AssistantSourceSamenvatting;
+  markeringen?: {
+    algemene_kennis_markers: number;
+    instanties: string[];
+    /** True = pure algemeen-modus zonder enige algemene-kennismarker (signaal). */
+    ontbrekend_signaal: boolean;
+  };
   // Increment I-2 (FO §11a/§11d) — automatische bronkeuze. De door het systeem
   // bepaalde intentie + zekerheid, de daaruit afgeleide (verborgen) retrieval-
   // modus, en of de gebruiker de harde "Alleen fondsdocumenten"-restrictie aanzette.

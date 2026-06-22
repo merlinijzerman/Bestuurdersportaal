@@ -50,6 +50,11 @@ create table if not exists public.profielen (
 --   profiel_gremia        (profiel_id, gremium_id)     → gremia
 --   profiel_focusgebieden (profiel_id, focusgebied_id) → kritische_focusgebieden
 --   profiel_log           (append-only audit)
+-- RPC profiel_opslaan(...) (migratie 2026_06_22_profiel_rpc.sql; hier alleen
+-- documentatie): SECURITY INVOKER-functie die profielvelden + de 3 koppeling-sets
+-- + de append-only profiel_log-insert in ÉÉN transactie uitvoert, zodat een
+-- partiële fout volledig terugrolt en een wijziging zonder auditregel onmogelijk
+-- is. RLS blijft onverkort gelden (geen DEFINER, geen service-role).
 
 -- Automatisch profiel aanmaken bij registratie
 create or replace function public.maak_profiel()
