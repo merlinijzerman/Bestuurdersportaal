@@ -155,6 +155,11 @@ export interface RetrievalMeta {
   // besluitvorming-modus, hoeveel Decision Object-besluitbronnen zijn meegenomen.
   antwoordmodus?: string;
   besluitbronnen?: number;
+  // Increment I-1 (FO §11d) — auditspoor van de presentatielaag, zodat de
+  // (verborgen) bronbasis en getoonde inline-meldingen volledig vastliggen ook
+  // nu ze niet meer standaard zichtbaar zijn. Verandert niets aan retrieval.
+  bronbasis?: string;
+  inline_meldingen?: { type: string; tekst: string }[];
 }
 
 // Platte rij zoals public.zoek_chunks(...) die teruggeeft (zie migratie

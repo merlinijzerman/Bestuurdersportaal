@@ -18,6 +18,11 @@ import {
   bepaalAntwoordmodus,
   retrievalModusVoor,
   moetWisselMeldingTonen,
+  bepaalInlineMeldingen,
+  bronbasisLabel,
+  bepaalVervolgacties,
+  isBesluitvormingsgericht,
+  ZICHTBARE_ANTWOORDMODI,
 } from "./vraagtype";
 
 let n = 0;
@@ -171,6 +176,174 @@ test("wissel-melding alleen bij autodetectie van een niet-default modus", () => 
   assert.equal(moetWisselMeldingTonen("feitelijk", null), false); // default, geen verrassing
   assert.equal(moetWisselMeldingTonen("sparring", "sparring"), false); // bewust vastgezet
   assert.equal(moetWisselMeldingTonen("duiding", "feitelijk"), false); // vastgezet ≠ null
+});
+
+// ── Increment I-1: zichtbare modusset ──
+test("zichtbare modusset = feitelijk/duiding/sparring (Auto = null in UI)", () => {
+  assert.deepEqual(ZICHTBARE_ANTWOORDMODI, ["feitelijk", "duiding", "sparring"]);
+  // historisch/besluitrijpheid blijven intern bestaan, maar niet als knop.
+  assert.ok(!ZICHTBARE_ANTWOORDMODI.includes("historisch" as never));
+  assert.ok(!ZICHTBARE_ANTWOORDMODI.includes("besluitrijpheid" as never));
+});
+
+// ── Increment I-1: inline-meldingen (FO §11c, zes uitzonderingen) ──
+function types(ms: { type: string }[]) {
+  return ms.map((m) => m.type);
+}
+
+// Negatieve test (a) — VERPLICHT: fondsgebonden vraag zonder fondstreffer.
+test("combineren + 0 treffers → geen_fondstreffer (algemene kennis)", () => {
+  const m = bepaalInlineMeldingen({
+    bronModus: "combineren",
+    antwoordmodus: "feitelijk",
+    aantalBronnen: 0,
+    scopeActief: false,
+  });
+  assert.deepEqual(types(m), ["geen_fondstreffer"]);
+});
+
+// Negatieve test (b) — VERPLICHT: interpretatieve duiding.
+test("antwoordmodus duiding → interpretatieve_duiding", () => {
+  const m = bepaalInlineMeldingen({
+    bronModus: "combineren",
+    antwoordmodus: "duiding",
+    aantalBronnen: 3,
+    scopeActief: false,
+  });
+  assert.ok(types(m).includes("interpretatieve_duiding"));
+});
+
+test("strikt (documenten) + treffers → alleen_fondsdocumenten", () => {
+  const m = bepaalInlineMeldingen({
+    bronModus: "documenten",
+    antwoordmodus: "feitelijk",
+    aantalBronnen: 2,
+    scopeActief: false,
+  });
+  assert.deepEqual(types(m), ["alleen_fondsdocumenten"]);
+});
+
+test("strikt (documenten) + 0 treffers → onvoldoende_basis", () => {
+  const m = bepaalInlineMeldingen({
+    bronModus: "documenten",
+    antwoordmodus: "feitelijk",
+    aantalBronnen: 0,
+    scopeActief: false,
+  });
+  assert.deepEqual(types(m), ["onvoldoende_basis"]);
+});
+
+test("scope-actief telt als strikt, ongeacht bron-modus", () => {
+  const m = bepaalInlineMeldingen({
+    bronModus: "combineren",
+    antwoordmodus: "feitelijk",
+    aantalBronnen: 1,
+    scopeActief: true,
+  });
+  assert.deepEqual(types(m), ["alleen_fondsdocumenten"]);
+});
+
+test("combineren + treffers + algemene-kennis-markers → algemene_kennis_fonds (#4)", () => {
+  const m = bepaalInlineMeldingen({
+    bronModus: "combineren",
+    antwoordmodus: "feitelijk",
+    aantalBronnen: 3,
+    scopeActief: false,
+    algemeneKennisMarkers: 2,
+  });
+  assert.deepEqual(types(m), ["algemene_kennis_fonds"]);
+});
+
+test("rustige weergave: combineren + treffers, geen markers → géén melding", () => {
+  const m = bepaalInlineMeldingen({
+    bronModus: "combineren",
+    antwoordmodus: "feitelijk",
+    aantalBronnen: 3,
+    scopeActief: false,
+  });
+  assert.deepEqual(types(m), []);
+});
+
+test("algemene vraag → geen bron-melding (bewuste keuze)", () => {
+  const m = bepaalInlineMeldingen({
+    bronModus: "algemeen",
+    antwoordmodus: "feitelijk",
+    aantalBronnen: 0,
+    scopeActief: false,
+  });
+  assert.deepEqual(types(m), []);
+});
+
+test("besluitrijpheid → onzekerheid_besluit (#6)", () => {
+  const m = bepaalInlineMeldingen({
+    bronModus: "combineren",
+    antwoordmodus: "besluitrijpheid",
+    aantalBronnen: 1,
+    scopeActief: false,
+  });
+  assert.ok(types(m).includes("onzekerheid_besluit"));
+});
+
+// ── Increment I-1: bronbasis-label ──
+test("bronbasisLabel dekt alle bron-modi + scope", () => {
+  assert.equal(bronbasisLabel("documenten", 2, false), "Uitsluitend fondsdocumenten");
+  assert.equal(bronbasisLabel("documenten", 0, false), "Geen fondsdocumenten gevonden");
+  assert.equal(
+    bronbasisLabel("combineren", 2, false),
+    "Fondsdocumenten, aangevuld met algemene kennis"
+  );
+  assert.equal(
+    bronbasisLabel("combineren", 0, false),
+    "Algemene kennis (geen fondsdocumenten gevonden)"
+  );
+  assert.equal(bronbasisLabel("algemeen", 0, false), "Algemene kennis (geen interne bronnen)");
+  assert.equal(bronbasisLabel("combineren", 5, true), "Geselecteerde documenten");
+});
+
+// ── Increment I-1: vervolgacties (FO §13) ──
+test("isBesluitvormingsgericht: duiding/besluitrijpheid + besluitsignalen", () => {
+  assert.equal(isBesluitvormingsgericht("Wat is de dekkingsgraad?", "duiding"), true);
+  assert.equal(isBesluitvormingsgericht("Wat is de dekkingsgraad?", "besluitrijpheid"), true);
+  assert.equal(isBesluitvormingsgericht("Kunnen we dit voorstel goedkeuren?", "feitelijk"), true);
+  assert.equal(isBesluitvormingsgericht("Wat is de premie in 2025?", "feitelijk"), false);
+});
+
+test("vervolgacties bevatten altijd Toon gebruikte bronnen bij bronnen", () => {
+  const a = bepaalVervolgacties("Wat is de premie?", "feitelijk", true);
+  assert.ok(a.some((x) => x.type === "toon_bronnen"));
+});
+
+test("vervolgacties: besluitvormingsvraag → Werk uit richting besluitvorming", () => {
+  const a = bepaalVervolgacties("Is dit voorstel besluitrijp?", "besluitrijpheid", true);
+  const wu = a.find((x) => x.type === "werk_uit_besluitvorming");
+  assert.ok(wu);
+  assert.equal(wu!.modus, "besluitrijpheid");
+  assert.equal(wu!.hergebruikScope, false);
+});
+
+test("vervolgacties: niet altijd alle knoppen — feitelijk zonder besluit/historie", () => {
+  const a = bepaalVervolgacties("Wat is de premie in 2025?", "feitelijk", true);
+  const t = a.map((x) => x.type);
+  assert.ok(!t.includes("werk_uit_besluitvorming")); // geen besluitsignaal
+  assert.ok(!t.includes("maak_tijdlijn")); // geen historisch signaal
+  assert.ok(!t.includes("maak_feitelijker")); // is al feitelijk
+  assert.ok(t.includes("geef_duiding"));
+  assert.ok(t.includes("stel_kritische_vragen"));
+});
+
+test("vervolgacties: historisch signaal → tijdlijn + eerdere besluiten", () => {
+  const a = bepaalVervolgacties("Wat was het beleid in het verleden?", "historisch", true);
+  const t = a.map((x) => x.type);
+  assert.ok(t.includes("maak_tijdlijn"));
+  assert.ok(t.includes("toon_eerdere_besluiten"));
+});
+
+test("vervolgacties: reformatteer-acties hergebruiken scope; verbredende niet", () => {
+  const a = bepaalVervolgacties("Geef duiding bij dit voorstel", "duiding", true);
+  const feit = a.find((x) => x.type === "maak_feitelijker");
+  const wu = a.find((x) => x.type === "werk_uit_besluitvorming");
+  assert.equal(feit!.hergebruikScope, true);
+  assert.equal(wu!.hergebruikScope, false);
 });
 
 console.log(`\n${n} sanity-tests geslaagd.`);

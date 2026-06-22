@@ -6,7 +6,7 @@ import { heeftReformulatieNodig, reformuleerVraag } from "@/lib/query-reformulat
 import { controleerLimiet, LIMIETEN } from "@/lib/rate-limit";
 import { rateLimited } from "@/lib/api-errors";
 import { valideerScope, type ScopeDocumentRij } from "@/lib/document-scope";
-import { bepaalVraagtype, schatTokens, kiesStrategie, maakBatches, bepaalAntwoordmodus, retrievalModusVoor, moetWisselMeldingTonen, ANTWOORDMODUS_LABEL, type Strategie, type Antwoordmodus } from "@/lib/vraagtype";
+import { bepaalVraagtype, schatTokens, kiesStrategie, maakBatches, bepaalAntwoordmodus, retrievalModusVoor, bepaalInlineMeldingen, bronbasisLabel, ANTWOORDMODUS_LABEL, type Strategie, type Antwoordmodus } from "@/lib/vraagtype";
 import { bepaalBronsoortprofiel } from "@/lib/weeg-bronsoort";
 import { haalBesluitBronnen, topProcesinstanties, opmaakBesluitContext } from "@/lib/besluitvorming-bron";
 
@@ -521,17 +521,13 @@ export async function POST(req: NextRequest) {
 
     // ── Antwoordmodusfamilie (Increment G) ──────────────────────────────────
     // Orthogonaal op de bron-modus. Vastgezet (gesprekken.actieve_antwoordmodus)
-    // is leidend; anders auto-detectie op de vraag. Bij autodetectie van een
-    // niet-default modus tonen we een zichtbare wissel-melding (FO §13).
+    // is leidend; anders auto-detectie op de vraag. Increment I-1 (rustige
+    // weergave §11c): de afwijking wordt niet meer als globale wissel-melding
+    // getoond maar — waar relevant — als conditionele inline-melding bij het
+    // antwoord (interpretatieve duiding/besluitvorming).
     const vastgezetteModus: Antwoordmodus | null = body.actieve_antwoordmodus ?? null;
     const gedetecteerdeModus: Antwoordmodus = bepaalAntwoordmodus(vraag);
     const antwoordmodus: Antwoordmodus = vastgezetteModus ?? gedetecteerdeModus;
-    const wisselMelding: Antwoordmodus | null = moetWisselMeldingTonen(
-      gedetecteerdeModus,
-      vastgezetteModus
-    )
-      ? antwoordmodus
-      : null;
 
     // Retrieval-filters volgen de antwoordmodus (peildatum = vandaag) + de
     // bronsoort-weging volgt het vraagtype. Bij een ACTIEVE document-scope laten
@@ -717,6 +713,20 @@ export async function POST(req: NextRequest) {
     // (strikt op interne bronnen); de scopedetails staan in retrieval_meta.
     const effectieveModus: Modus = scopeActief ? "documenten" : modus;
 
+    // ── Increment I-1 (FO §11c) — rustige weergave ──────────────────────────
+    // Bronbasis-samenvatting voor het paneel "Onderbouwing en bronnen" en het
+    // auditspoor (§11d). Inline-meldingen pre-stream: deterministisch op basis
+    // van bron-modus + antwoordmodus + treffers. De #4-melding (algemene kennis
+    // náást treffers) hangt van de antwoordinhoud af en wordt ná het streamen
+    // herberekend en in het 'done'-event meegestuurd.
+    const bronbasis = bronbasisLabel(modus, bronnen.length, scopeActief);
+    const inlineMeldingenPre = bepaalInlineMeldingen({
+      bronModus: modus,
+      antwoordmodus,
+      aantalBronnen: bronnen.length,
+      scopeActief,
+    });
+
     // Bouw de uiteindelijke messages-array voor Claude.
     // We knippen de geschiedenis op het maximum en vervangen de laatste
     // user-message door dezelfde vraag mét de zojuist opgehaalde RAG-context.
@@ -758,11 +768,12 @@ export async function POST(req: NextRequest) {
             // zichtbare wissel-melding zodat de UI 'm kan tonen + persisteren.
             antwoordmodus,
             antwoordmodus_label: ANTWOORDMODUS_LABEL[antwoordmodus],
-            wisselmelding: wisselMelding
-              ? `Automatisch overgeschakeld naar modus '${ANTWOORDMODUS_LABEL[wisselMelding]}'.`
-              : null,
             retrieval_modus: retrievalFilters?.modus ?? null,
             peildatum: retrievalFilters?.peildatum ?? null,
+            // Increment I-1 (FO §11c) — rustige weergave: bronbasis voor het
+            // onderbouwingspaneel + deterministische inline-meldingen.
+            bronbasis,
+            inline_meldingen: inlineMeldingenPre,
           });
 
           // Map-reduce (increment 2): verwerk het document in batches (map, met
@@ -849,8 +860,23 @@ export async function POST(req: NextRequest) {
             };
           }
 
-          // Increment G — de actieve antwoordmodus hoort altijd in het auditspoor,
-          // óók in modus 'algemeen' (geen retrieval → nog geen retrievalMeta).
+          // Increment I-1 (FO §11c) — herbereken de inline-meldingen mét de
+          // antwoordinhoud: tel [Algemene kennis]/[Volgens wetgeving]-markeringen
+          // zodat de #4-melding (algemene kennis náást fondsdocumenten) verschijnt.
+          const algemeneKennisMarkers = (
+            volledig.match(/\[(?:Algemene kennis|Volgens wetgeving)\]/gi) || []
+          ).length;
+          const inlineMeldingenFinaal = bepaalInlineMeldingen({
+            bronModus: modus,
+            antwoordmodus,
+            aantalBronnen: bronnen.length,
+            scopeActief,
+            algemeneKennisMarkers,
+          });
+
+          // Increment G/I-1 — de actieve antwoordmodus, bronbasis en getoonde
+          // inline-meldingen horen altijd in het auditspoor (B10, §11d), óók in
+          // modus 'algemeen' (geen retrieval → nog geen retrievalMeta).
           const teLoggenMeta: RetrievalMeta = {
             ...(retrievalMeta ?? {
               methode: "geen",
@@ -859,6 +885,8 @@ export async function POST(req: NextRequest) {
               chunks: [],
             }),
             antwoordmodus,
+            bronbasis,
+            inline_meldingen: inlineMeldingenFinaal,
           };
 
           // Loggen ná voltooiing, met het volledige antwoord.
@@ -874,7 +902,9 @@ export async function POST(req: NextRequest) {
             retrieval_meta: teLoggenMeta,
           });
 
-          send({ type: "done" });
+          // Stuur de definitieve inline-meldingen mee zodat de UI de #4-melding
+          // (content-afhankelijk) kan tonen ná het streamen.
+          send({ type: "done", inline_meldingen: inlineMeldingenFinaal });
         } catch (streamFout) {
           console.error("Chat stream fout:", streamFout);
           send({

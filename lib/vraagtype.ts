@@ -290,3 +290,276 @@ export function moetWisselMeldingTonen(
 ): boolean {
   return vastgezet === null && gedetecteerd !== "feitelijk";
 }
+
+// ============================================================================
+// Increment I-1 — presentatie-/sturingslaag (FO v1.3 §11c, §12, §13)
+// ----------------------------------------------------------------------------
+// Vereenvoudiging van de bestuurlijke UX: vier zichtbare antwoordmodi, rustige
+// weergave met inline-meldingen alleen bij relevante uitzonderingen, en
+// contextbewuste vervolgacties. Dit is bewust een PRESENTATIELAAG: niets
+// hieronder wijzigt retrieval, filtering of weging (dat blijft Increment G).
+// Alle functies zijn pure heuristiek, programmatisch toetsbaar
+// (lib/vraagtype.sanity.ts). De interne Antwoordmodus-waarden (historisch,
+// besluitrijpheid, …) blijven volledig bestaan; alleen de knoppen krimpen.
+// ============================================================================
+
+/**
+ * De vier antwoordmodi die de bestuurder ZIET (FO §13). Auto = autodetectie
+ * (antwoordmodus === null in de UI). De overige interne modi (historisch,
+ * besluitrijpheid, bronoverzicht, persoonlijke_voorbereiding) blijven onder de
+ * motorkap bestaan via auto-detectie en vervolgacties, maar krijgen geen knop.
+ */
+export const ZICHTBARE_ANTWOORDMODI: Antwoordmodus[] = [
+  "feitelijk",
+  "duiding",
+  "sparring",
+];
+
+/** Bron-modus zoals de chat-route die kent (documenten|combineren|algemeen). */
+export type BronModus = "documenten" | "combineren" | "algemeen";
+
+// ── Inline-meldingen (FO §11c, zes uitzonderingen) ──────────────────────────
+// In I-1 vallen #1 (geen fondstreffer) en #4 (algemene kennis bij fondsgebonden
+// vraag) samen wanneer er geen treffers zijn: dat is exact dezelfde situatie
+// (de route schakelt dan terug op algemene kennis). #4 verschijnt als aparte
+// melding wanneer er WÉL treffers zijn maar het antwoord aanvult met algemene
+// kennis (post-stream gedetecteerd via [Algemene kennis]-markeringen).
+
+export type InlineMeldingType =
+  | "geen_fondstreffer"
+  | "alleen_fondsdocumenten"
+  | "onvoldoende_basis"
+  | "algemene_kennis_fonds"
+  | "interpretatieve_duiding"
+  | "onzekerheid_besluit";
+
+export interface InlineMelding {
+  type: InlineMeldingType;
+  tekst: string;
+}
+
+// FO-formuleringen. Bewust géén schijnzekerheid: nooit een "actuele fondsbron"
+// suggereren die er niet is (CLAUDE.md-guardrail).
+const INLINE_MELDING_TEKST: Record<InlineMeldingType, string> = {
+  geen_fondstreffer:
+    "Geen relevante fondsdocumenten gevonden. Dit antwoord is gebaseerd op algemene kennis.",
+  alleen_fondsdocumenten:
+    "Antwoord uitsluitend gebaseerd op de geraadpleegde fondsdocumenten.",
+  onvoldoende_basis:
+    "De geraadpleegde fondsdocumenten bieden onvoldoende basis; dit kan ik hieruit niet vaststellen.",
+  algemene_kennis_fonds:
+    "Naast fondsdocumenten is ook algemene kennis gebruikt; zie 'Onderbouwing en bronnen'.",
+  interpretatieve_duiding:
+    "De duiding is interpretatief; zie 'Onderbouwing en bronnen' voor de bronnen en aannames.",
+  onzekerheid_besluit:
+    "Dit antwoord weegt besluitvorming en kan aannames en openstaande punten bevatten; zie de onderbouwing.",
+};
+
+export interface InlineMeldingInput {
+  bronModus: BronModus;
+  antwoordmodus: Antwoordmodus;
+  aantalBronnen: number;
+  /** Strikt-document-scope actief (één/enkele gekozen stukken). */
+  scopeActief: boolean;
+  /**
+   * Aantal [Algemene kennis]/[Volgens wetgeving]-markeringen in het antwoord.
+   * Alleen bekend ná het streamen; pre-stream is dit 0 (geen #4-melding dan).
+   */
+  algemeneKennisMarkers?: number;
+}
+
+/**
+ * Bepaal welke inline-meldingen direct in het antwoord horen (FO §11c). Rustige
+ * weergave: in het goed-onderbouwde standaardgeval (combineren mét treffers,
+ * feitelijk) komt er géén melding. De bron-meldingen sluiten elkaar uit; de
+ * antwoordmodus-meldingen staan daar los van.
+ */
+export function bepaalInlineMeldingen(input: InlineMeldingInput): InlineMelding[] {
+  const { bronModus, antwoordmodus, aantalBronnen, scopeActief } = input;
+  const markers = input.algemeneKennisMarkers ?? 0;
+  const types: InlineMeldingType[] = [];
+  const strict = scopeActief || bronModus === "documenten";
+
+  // ── Bronbasis (onderling uitsluitend) ──
+  if (strict) {
+    types.push(aantalBronnen > 0 ? "alleen_fondsdocumenten" : "onvoldoende_basis");
+  } else if (bronModus === "combineren") {
+    if (aantalBronnen === 0) {
+      types.push("geen_fondstreffer"); // #1 + #4: geen treffers → algemene kennis
+    } else if (markers > 0) {
+      types.push("algemene_kennis_fonds"); // #4: treffers + aanvullende algemene kennis
+    }
+  }
+  // bronModus 'algemeen' → bewuste algemene vraag; geen bron-melding.
+
+  // ── Antwoordmodus (los van de bronbasis) ──
+  if (antwoordmodus === "duiding") types.push("interpretatieve_duiding"); // #5
+  if (antwoordmodus === "besluitrijpheid") types.push("onzekerheid_besluit"); // #6
+
+  return types.map((type) => ({ type, tekst: INLINE_MELDING_TEKST[type] }));
+}
+
+/**
+ * Korte, leesbare samenvatting van de bronbasis voor het paneel "Onderbouwing
+ * en bronnen" (FO §11c) en voor het auditspoor (retrieval_meta.bronbasis, §11d).
+ */
+export function bronbasisLabel(
+  bronModus: BronModus,
+  aantalBronnen: number,
+  scopeActief: boolean
+): string {
+  if (scopeActief) return "Geselecteerde documenten";
+  switch (bronModus) {
+    case "documenten":
+      return aantalBronnen > 0
+        ? "Uitsluitend fondsdocumenten"
+        : "Geen fondsdocumenten gevonden";
+    case "combineren":
+      return aantalBronnen > 0
+        ? "Fondsdocumenten, aangevuld met algemene kennis"
+        : "Algemene kennis (geen fondsdocumenten gevonden)";
+    case "algemeen":
+      return "Algemene kennis (geen interne bronnen)";
+  }
+}
+
+// ── Contextbewuste vervolgacties (FO §13) ───────────────────────────────────
+
+export type VervolgactieType =
+  | "toon_bronnen"
+  | "werk_uit_besluitvorming"
+  | "maak_feitelijker"
+  | "geef_duiding"
+  | "stel_kritische_vragen"
+  | "maak_tijdlijn"
+  | "toon_eerdere_besluiten"
+  | "maak_korter"
+  | "maak_concreter";
+
+export interface Vervolgactie {
+  type: VervolgactieType;
+  label: string;
+  /** Antwoordmodus die de follow-up vastzet (null = ongewijzigd/Auto). */
+  modus: Antwoordmodus | null;
+  /** Follow-up gebruikersprompt; leeg voor pure UI-acties (toon_bronnen). */
+  prompt: string;
+  /**
+   * True = de follow-up hergebruikt strikt dezelfde bronselectie (de
+   * document_ids van het oorspronkelijke antwoord). False = de actie verbreedt
+   * de scope bewust (besluitvorming → Decision Object-injectie; tijdlijn/eerdere
+   * besluiten → historische laag), dus geen strikte scope.
+   */
+  hergebruikScope: boolean;
+}
+
+const HISTORISCH_SIGNAAL: RegExp[] = [
+  /\beerder/,
+  /\bvorige\b/,
+  /\bsinds\b/,
+  /ontwikkeling/,
+  /\bhistor/,
+  /tijdlijn/,
+  /verleden/,
+  /voorgeschiedenis/,
+];
+
+const BESLUIT_SIGNAAL: RegExp[] = [
+  /beslui/,
+  /\bvoorstel\b/,
+  /\bmandaat\b/,
+  /goedkeur/,
+  /vaststell/,
+  /\bakkoord\b/,
+  /aandachtspunt/,
+  /\brisico/,
+];
+
+/**
+ * Is de vraag besluitvormingsgericht? Bepaalt of "Werk uit richting
+ * besluitvorming" als vervolgactie verschijnt (FO §13). Duiding/besluitrijpheid
+ * tellen altijd; daarnaast expliciete besluitsignalen in de vraag.
+ */
+export function isBesluitvormingsgericht(
+  vraag: string,
+  antwoordmodus: Antwoordmodus
+): boolean {
+  if (antwoordmodus === "besluitrijpheid" || antwoordmodus === "duiding") return true;
+  const g = normaliseer(vraag);
+  return BESLUIT_SIGNAAL.some((p) => p.test(g));
+}
+
+const VERVOLGACTIE_PROMPT: Record<
+  Exclude<VervolgactieType, "toon_bronnen">,
+  string
+> = {
+  werk_uit_besluitvorming:
+    "Werk je vorige antwoord uit richting besluitvorming. Gebruik deze structuur: kernvraag · voorgesteld besluit · overwegingen · risico's · randvoorwaarden · openstaande vragen · benodigde aanvullende informatie · mogelijke besluittekst. Neem de besluitrijpheidscheck mee en formuleer zelf geen besluit of voorkeursadvies.",
+  maak_feitelijker:
+    "Geef hetzelfde antwoord strikt feitelijk: alleen wat aantoonbaar uit de bronnen blijkt, zonder interpretatie.",
+  geef_duiding:
+    "Geef bestuurlijke duiding bij je vorige antwoord: betekenis, governance, risico's en aandachtspunten, met onderscheid tussen feit en interpretatie.",
+  stel_kritische_vragen:
+    "Stel de kritische tegenvragen bij dit onderwerp en benoem zwakke plekken, aannames en alternatieven. Formuleer geen besluit.",
+  maak_tijdlijn:
+    "Maak een chronologische tijdlijn van dit onderwerp op basis van de stukken, met data en eerdere besluiten waar die uit de bronnen blijken.",
+  toon_eerdere_besluiten:
+    "Welke eerdere bestuursbesluiten zijn hierover genomen? Baseer je op de besluitregistratie, notulen en besluitdocumenten.",
+  maak_korter: "Vat je vorige antwoord beknopter samen, met behoud van de kern.",
+  maak_concreter:
+    "Maak je vorige antwoord concreter en handelingsgericht, met expliciete vervolgstappen.",
+};
+
+/**
+ * Contextbewuste vervolgacties onder een antwoord (FO §13). Niet alle knoppen
+ * altijd: de set hangt af van de gebruikte antwoordmodus en de vraag. Bevat
+ * minimaal "Toon gebruikte bronnen" (bij aanwezige bronnen) en — bij
+ * besluitvormingsvragen — "Werk uit richting besluitvorming".
+ */
+export function bepaalVervolgacties(
+  vraag: string,
+  antwoordmodus: Antwoordmodus,
+  heeftBronnen: boolean
+): Vervolgactie[] {
+  const acties: Vervolgactie[] = [];
+  const g = normaliseer(vraag);
+  const besluit = isBesluitvormingsgericht(vraag, antwoordmodus);
+  const historisch =
+    antwoordmodus === "historisch" || HISTORISCH_SIGNAAL.some((p) => p.test(g));
+
+  const voegToe = (
+    type: VervolgactieType,
+    label: string,
+    modus: Antwoordmodus | null,
+    hergebruikScope: boolean
+  ) =>
+    acties.push({
+      type,
+      label,
+      modus,
+      prompt: type === "toon_bronnen" ? "" : VERVOLGACTIE_PROMPT[type],
+      hergebruikScope,
+    });
+
+  if (heeftBronnen) voegToe("toon_bronnen", "Toon gebruikte bronnen", null, false);
+  if (besluit)
+    voegToe("werk_uit_besluitvorming", "Werk uit richting besluitvorming", "besluitrijpheid", false);
+
+  // Bied de niet-actieve perspectieven aan, zodat de gebruiker zonder
+  // herformuleren kan wisselen (FO §13).
+  if (antwoordmodus !== "feitelijk")
+    voegToe("maak_feitelijker", "Maak feitelijker", "feitelijk", true);
+  if (antwoordmodus !== "duiding")
+    voegToe("geef_duiding", "Geef bestuurlijke duiding", "duiding", true);
+  if (antwoordmodus !== "sparring")
+    voegToe("stel_kritische_vragen", "Stel kritische vragen", "sparring", true);
+
+  if (historisch) {
+    voegToe("maak_tijdlijn", "Maak een tijdlijn", "historisch", false);
+    voegToe("toon_eerdere_besluiten", "Toon eerdere besluiten", "historisch", false);
+  }
+
+  voegToe("maak_korter", "Maak korter", null, true);
+  voegToe("maak_concreter", "Maak concreter", null, true);
+
+  return acties;
+}
