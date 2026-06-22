@@ -462,7 +462,7 @@ async function bouwProfielsturing(
 Profiel: ${profielRegels.join("; ") || "geen specifieke aandachtsgebieden opgegeven"}.${
     voorkeurRegels.length ? ` Voorkeuren: ${voorkeurRegels.join(", ")}.` : ""
   }
-Stem de VOLGORDE en NADRUK van je antwoord hierop af: behandel wat voor deze focusgebieden/expertise relevant is als eerste en het uitgebreidst. Je mag NIETS weglaten, inkorten of verbergen uit de gedeelde feitenbasis — de volledige, collectieve onderbouwing blijft intact en zichtbaar voor iedereen. Sluit je antwoord af met één korte zin die expliciet maakt dat de ordening is afgestemd op het profiel van de lezer en dat "algemeen perspectief" dezelfde feiten zonder die prioritering toont.`;
+Stem de VOLGORDE en NADRUK van je antwoord hierop af: behandel wat voor deze focusgebieden/expertise relevant is als eerste en het uitgebreidst. Je mag NIETS weglaten, inkorten of verbergen uit de gedeelde feitenbasis — de volledige, collectieve onderbouwing blijft intact en zichtbaar voor iedereen. Verwijs in je antwoord NIET naar dit profiel, naar "algemeen perspectief" of naar het feit dát je op het profiel hebt geprioriteerd — die transparantie regelt de interface apart, in het paneel "Onderbouwing en bronnen". Geef simpelweg het antwoord in de op het profiel afgestemde volgorde, zonder erover te editorialiseren.`;
 
   return {
     tekst,
@@ -1004,6 +1004,10 @@ export async function POST(req: NextRequest) {
             antwoordmodus_label: ANTWOORDMODUS_LABEL[antwoordmodus],
             retrieval_modus: retrievalFilters?.modus ?? null,
             peildatum: retrievalFilters?.peildatum ?? null,
+            // Increment F (FO §14) — profielsturing-status voor het paneel
+            // "Onderbouwing en bronnen". De transparantie ("ordening op uw profiel
+            // afgestemd") landt deterministisch hier, niet inline in het antwoord.
+            profielsturing: profielsturingStatus,
             // Increment I-1 (FO §11c) — rustige weergave: bronbasis voor het
             // onderbouwingspaneel + deterministische inline-meldingen.
             bronbasis,

@@ -27,6 +27,12 @@ export interface OnderbouwingMeta {
   algemeneKennis?: boolean | null;
   /** Aantal geraadpleegde bronnen (voor de count-badge). */
   aantalBronnen?: number;
+  // Increment F (FO §14) — profielsturing. De transparantie dat de VOLGORDE/NADRUK
+  // op het persoonlijk profiel is afgestemd staat hier in het controlevlak (niet
+  // inline in het antwoord). De feitenbasis/bronnen zijn identiek; alleen ordening
+  // verschilt. 'uitgeschakeld' = de bestuurder koos "Algemeen perspectief".
+  /** Of het persoonlijk profiel de ordening heeft gestuurd. */
+  profielsturing?: "actief" | "uitgeschakeld" | "geen-profiel" | null;
   // Increment I-2 (FO §11a) — de automatische bronkeuze. Géén zichtbare badge in
   // de chat; de bestuurder ziet de gekozen intentie hier, in het controlevlak.
   /** Automatisch (of via verduidelijkingschip) bepaalde bron-intentie. */
@@ -159,6 +165,27 @@ export default function OnderbouwingPaneel({
               waarde={historischMeegenomen ? "Meegenomen" : "Niet meegenomen"}
             />
             {meta.peildatum && <Rij label="Peildatum" waarde={meta.peildatum} />}
+            {meta.profielsturing === "actief" && (
+              <Rij
+                label="Persoonlijk profiel"
+                waarde={
+                  <>
+                    Volgorde en nadruk afgestemd op uw profiel.
+                    <span className="text-gray-400">
+                      {" "}
+                      Zelfde feiten en bronnen; zet &ldquo;Algemeen perspectief&rdquo;
+                      aan onder &ldquo;Aanpassen&rdquo; voor de collectieve weergave.
+                    </span>
+                  </>
+                }
+              />
+            )}
+            {meta.profielsturing === "uitgeschakeld" && (
+              <Rij
+                label="Persoonlijk profiel"
+                waarde="Algemeen perspectief — collectieve weergave, niet op uw profiel geprioriteerd"
+              />
+            )}
           </div>
 
           {/* Aannames en beperkingen staan inhoudelijk in het antwoord zelf

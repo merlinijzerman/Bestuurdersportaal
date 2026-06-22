@@ -629,6 +629,8 @@ export default function AiPage() {
           // Increment I-3 — uniforme bronvermelding-transparantie.
           web_retrieval_actief?: boolean;
           model_kennis?: { grond: "algemene_kennis" | "wetgeving"; instantie: string | null }[];
+          // Increment F (FO §14) — profielsturing-status (paneel "Onderbouwing en bronnen").
+          profielsturing?: "actief" | "uitgeschakeld" | "geen-profiel" | null;
         };
         try {
           evt = JSON.parse(regel);
@@ -682,6 +684,8 @@ export default function AiPage() {
             // model_knowledge-bronnen volgen in het 'done'-event (content-afhankelijk).
             webRetrievalActief: evt.web_retrieval_actief ?? false,
             modelKennis: [],
+            // Increment F (FO §14) — transparantie profielsturing in het controlevlak.
+            profielsturing: evt.profielsturing ?? null,
           };
           // Deterministische inline-meldingen (pre-stream); de #4-melding kan in
           // het 'done'-event nog worden aangevuld.
