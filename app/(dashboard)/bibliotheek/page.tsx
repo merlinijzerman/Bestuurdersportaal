@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from "react";
 import DocumentMetadataModal from "@/components/DocumentMetadataModal";
 import { bronkaartLabels } from "@/lib/bronsoort";
+import ZoekenPaneel from "./_components/ZoekenPaneel";
 
 interface Document {
   id: string;
@@ -51,6 +52,8 @@ const BRONKLEUR: Record<string, string> = {
 };
 
 export default function BibliotheekPage() {
+  // Weergave: documentbeheer (titelzoeken + lijst) of uitgebreid inhoudelijk zoeken.
+  const [weergave, setWeergave] = useState<"beheren" | "zoeken">("beheren");
   const [actieveTab, setActieveTab] = useState<"generiek" | "fonds">("generiek");
   const [documenten, setDocumenten] = useState<Document[]>([]);
   const [laden, setLaden] = useState(true);
@@ -75,6 +78,11 @@ export default function BibliotheekPage() {
 
   useEffect(() => {
     haalDocumenten();
+    // Oude /zoeken-links komen binnen als /bibliotheek?weergave=zoeken.
+    if (typeof window !== "undefined") {
+      const p = new URLSearchParams(window.location.search);
+      if (p.get("weergave") === "zoeken") setWeergave("zoeken");
+    }
   }, []);
 
   async function haalDocumenten() {
@@ -191,17 +199,35 @@ export default function BibliotheekPage() {
         <div>
           <h1 className="text-xl font-black text-[#0F2744]">Documentbibliotheek</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Upload en beheer documenten — de kennisbasis voor de AI-assistent
+            {weergave === "zoeken"
+              ? "Uitgebreid zoeken in de inhoud van de documenten"
+              : "Upload en beheer documenten — de kennisbasis voor de AI-assistent"}
           </p>
         </div>
-        <button
-          onClick={() => setUploadOpen(true)}
-          className="bg-[#0F2744] text-white font-semibold px-4 py-2 rounded-lg text-sm hover:bg-[#1A3A5C] transition-colors"
-        >
-          + Document uploaden
-        </button>
+        {weergave === "beheren" && (
+          <button
+            onClick={() => setUploadOpen(true)}
+            className="bg-[#0F2744] text-white font-semibold px-4 py-2 rounded-lg text-sm hover:bg-[#1A3A5C] transition-colors"
+          >
+            + Document uploaden
+          </button>
+        )}
       </div>
 
+      {/* Uitgebreid zoeken — semantisch zoeken in de documentinhoud. */}
+      {weergave === "zoeken" ? (
+        <>
+          <button
+            type="button"
+            onClick={() => setWeergave("beheren")}
+            className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-[#0F2744] hover:text-[#C9A84C] transition-colors"
+          >
+            ← Terug naar documenten
+          </button>
+          <ZoekenPaneel />
+        </>
+      ) : (
+      <>
       {uploadBericht && (
         <div className="mb-4 bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-sm text-green-800">
           {uploadBericht}
@@ -266,6 +292,14 @@ export default function BibliotheekPage() {
             <span className="text-xs text-gray-400">({aantalInactief})</span>
           )}
         </label>
+        <button
+          type="button"
+          onClick={() => setWeergave("zoeken")}
+          title="Zoek op de inhoud van documenten (niet alleen de titel)"
+          className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-semibold text-[#0F2744] hover:border-[#C9A84C] transition-colors"
+        >
+          🔎 Uitgebreid zoeken
+        </button>
       </div>
 
       {/* Document lijst */}
@@ -495,6 +529,8 @@ export default function BibliotheekPage() {
             );
           })}
         </div>
+      )}
+      </>
       )}
 
       {/* Deactiveer-bevestiging */}

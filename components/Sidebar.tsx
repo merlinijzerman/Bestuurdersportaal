@@ -17,9 +17,7 @@ const navItems: NavItem[] = [
   { href: "/", label: "Home", icon: "🏠", section: "Overzicht" },
   { href: "/dashboard", label: "Stuurinformatie", icon: "📊", section: "Overzicht" },
   { href: "/klantbeeld", label: "Klantbeeld", icon: "👥", section: "Overzicht" },
-  { href: "/profiel", label: "Mijn profiel", icon: "👤", section: "Overzicht" },
   { href: "/ai", label: "AI Assistent", icon: "🤖", iconSrc: "/ai-assistent.png", section: "Kennisbase", badge: "AI" },
-  { href: "/zoeken", label: "Zoeken", icon: "🔎", section: "Kennisbase" },
   { href: "/bibliotheek", label: "Documentbibliotheek", icon: "📚", section: "Kennisbase" },
   { href: "/vergaderingen", label: "Vergaderingen", icon: "📅", section: "Bestuur" },
   { href: "/notulen", label: "Besluiten & Notulen", icon: "📋", section: "Bestuur" },
@@ -74,20 +72,33 @@ export default function Sidebar({ gebruikerNaam, gebruikerRol, fondsNaam }: Side
         <div className="text-white/40 text-xs mt-0.5">Bestuurdersportaal MVP</div>
       </div>
 
-      {/* Gebruiker */}
-      <div className="px-5 py-3 border-b border-white/10 flex items-center gap-2.5">
+      {/* Gebruiker — klik opent het eigen profiel (geen los nav-item meer) */}
+      <Link
+        href="/profiel"
+        title="Mijn profiel openen"
+        className={`px-5 py-3 border-b border-white/10 flex items-center gap-2.5 transition-colors ${
+          pathname === "/profiel" ? "bg-[#C9A84C]/15" : "hover:bg-white/7"
+        }`}
+      >
         <div className="w-8 h-8 bg-[#C9A84C] rounded-full flex items-center justify-center font-bold text-xs text-[#0F2744] flex-shrink-0">
           {initials}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-white text-xs font-semibold truncate">
+          <div
+            className={`text-xs font-semibold truncate ${
+              pathname === "/profiel" ? "text-[#C9A84C]" : "text-white"
+            }`}
+          >
             {gebruikerNaam || "Bestuurslid"}
           </div>
           <div className="text-white/40 text-xs">
             {rolLabel[gebruikerRol || "bestuurder"] || "Bestuurslid"}
           </div>
         </div>
-      </div>
+        <span aria-hidden className="text-white/30 text-xs flex-shrink-0">
+          ›
+        </span>
+      </Link>
 
       {/* Navigatie */}
       <div className="flex-1 py-3 overflow-y-auto">

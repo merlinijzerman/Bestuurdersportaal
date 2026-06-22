@@ -56,6 +56,7 @@ export default function ProfielPage() {
   const [gremia, setGremia] = useState<CatalogusItem[]>([]);
   const [focusgebieden, setFocusgebieden] = useState<CatalogusItem[]>([]);
 
+  const [naam, setNaam] = useState("");
   const [bestuurlijkeRol, setBestuurlijkeRol] = useState("");
   const [primaireExpertiseId, setPrimaireExpertiseId] = useState<string>("");
   const [antwoordvoorkeur, setAntwoordvoorkeur] = useState<string>("");
@@ -81,6 +82,7 @@ export default function ProfielPage() {
         if (profielRes.ok) {
           const data = (await profielRes.json()) as {
             profiel: {
+              naam: string | null;
               bestuurlijke_rol: string | null;
               primaire_expertise_id: string | null;
               antwoordvoorkeur: string | null;
@@ -91,6 +93,7 @@ export default function ProfielPage() {
             gremium_ids: string[];
             focusgebied_ids: string[];
           };
+          setNaam(data.profiel.naam ?? "");
           setBestuurlijkeRol(data.profiel.bestuurlijke_rol ?? "");
           setPrimaireExpertiseId(data.profiel.primaire_expertise_id ?? "");
           setAntwoordvoorkeur(data.profiel.antwoordvoorkeur ?? "");
@@ -133,6 +136,7 @@ export default function ProfielPage() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          naam: naam.trim() || null,
           bestuurlijke_rol: bestuurlijkeRol || null,
           primaire_expertise_id: primaireExpertiseId || null,
           antwoordvoorkeur: antwoordvoorkeur || null,
@@ -195,6 +199,24 @@ export default function ProfielPage() {
       )}
 
       <div className="space-y-6">
+        {/* Naam — weergavenaam op het platform */}
+        <section className="bg-white border border-gray-200 rounded-xl p-5">
+          <h2 className="font-bold text-[#0F2744] mb-1">Naam</h2>
+          <p className="text-xs text-gray-400 mb-4">
+            Uw weergavenaam op het platform (in de zijbalk en bij uw acties). Leeg laten
+            houdt de huidige naam aan.
+          </p>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Weergavenaam</label>
+          <input
+            type="text"
+            value={naam}
+            onChange={(e) => setNaam(e.target.value)}
+            placeholder="Bijv. Marieke de Vries"
+            maxLength={120}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+          />
+        </section>
+
         {/* Bestuurlijke rol + voorkeuren */}
         <section className="bg-white border border-gray-200 rounded-xl p-5">
           <h2 className="font-bold text-[#0F2744] mb-4">Bestuurlijke rol &amp; voorkeuren</h2>

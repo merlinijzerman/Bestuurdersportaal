@@ -27,8 +27,10 @@ const MAX_FOCUSGEBIEDEN = 5;
 
 const DETAILNIVEAUS = ["beknopt", "standaard", "uitgebreid"] as const;
 const ANTWOORDVOORKEUREN = ["kern-eerst", "puntsgewijs", "lopende tekst"] as const;
+const MAX_NAAM_LENGTE = 120;
 
 interface PatchBody {
+  naam?: string | null;
   bestuurlijke_rol?: string | null;
   primaire_expertise_id?: string | null;
   antwoordvoorkeur?: string | null;
@@ -141,6 +143,16 @@ export async function PATCH(req: NextRequest) {
     }
     const bestuurlijkeRol = schoonTekst(body.bestuurlijke_rol);
 
+    // Weergavenaam: optioneel. Leeg = ongewijzigd laten (RPC valt terug op de
+    // bestaande naam, nooit leeg). Wel een lengtegrens afdwingen.
+    const naam = schoonTekst(body.naam);
+    if (naam && naam.length > MAX_NAAM_LENGTE) {
+      return NextResponse.json(
+        { error: `Naam mag maximaal ${MAX_NAAM_LENGTE} tekens zijn.` },
+        { status: 400 }
+      );
+    }
+
     // ── Validatie koppelingen (aantal + onderlinge consistentie) ───────────
     const primaireExpertiseId = schoonTekst(body.primaire_expertise_id);
     const secundaire = uniekeIds(body.secundaire_expertise_ids);
@@ -174,6 +186,7 @@ export async function PATCH(req: NextRequest) {
     // — dan rolt alles terug: geen half doorgevoerde profielstaat, geen
     // ontbrekende auditregel.
     const { error: rpcFout } = await supabase.rpc("profiel_opslaan", {
+      p_naam: naam,
       p_bestuurlijke_rol: bestuurlijkeRol,
       p_primaire_expertise_id: primaireExpertiseId,
       p_antwoordvoorkeur: antwoordvoorkeur,
