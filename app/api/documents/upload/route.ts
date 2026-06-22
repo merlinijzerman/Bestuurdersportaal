@@ -7,9 +7,9 @@ import {
   bepaalBestandstype,
   CONTENT_TYPE_PER_BESTANDSTYPE,
   diagnoseerExtractie,
+  extractTekst,
   ONDERSTEUNDE_TYPES,
 } from "@/lib/document-extractie";
-import { extractTekstMetOcrFallback } from "@/lib/ocr";
 import { controleerLimiet, LIMIETEN } from "@/lib/rate-limit";
 import { rateLimited } from "@/lib/api-errors";
 
