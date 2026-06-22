@@ -27,8 +27,29 @@ create table if not exists public.profielen (
   fonds_id    uuid references public.fondsen(id),
   naam        text,
   rol         text check (rol in ('bestuurder','voorzitter','beheerder')) default 'bestuurder',
-  aangemaakt  timestamptz default now()
+  aangemaakt  timestamptz default now(),
+  -- Increment F (FO §14, migratie 2026_06_22_profiel.sql) — persoonlijk
+  -- bestuurdersprofiel. Strikt zelfbeheerd (besluit 0017): alleen de persoon zelf
+  -- muteert het eigen profiel (RLS id=auth.uid()); geen beheerder-override.
+  -- primaire_expertise_id koppelt via composite-FK (fonds_id, id) aan expertises;
+  -- uq_profielen_fonds_id (fonds_id, id) maakt die composite-verwijzing mogelijk.
+  bestuurlijke_rol       text,
+  primaire_expertise_id  uuid,
+  antwoordvoorkeur       text,  -- 'kern-eerst' | 'puntsgewijs' | 'lopende tekst' (app-validatie)
+  standaard_ai_modus     text,  -- voorselectie AI-antwoordmodus (lib/vraagtype ANTWOORDMODI)
+  detailniveau           text   -- 'beknopt' | 'standaard' | 'uitgebreid' (app-validatie)
 );
+
+-- Increment F — koppel-/audittabellen (volledige definitie in
+-- migratie 2026_06_22_profiel.sql; hier alleen documentatie). Elk met composite-FK
+-- (fonds_id NOT NULL) naar parent(fonds_id, id) — globale templates declaratief
+-- ontkoppelbaar. RLS join-tabellen: for all using/with check (profiel_id=auth.uid()).
+-- profiel_log is append-only (geen update/delete-policy), fonds-breed leesbaar,
+-- bevat uitsluitend metadata over wijzigingen (geen profielinhoud-as-waarheid).
+--   profiel_expertises    (profiel_id, expertise_id)   → expertises
+--   profiel_gremia        (profiel_id, gremium_id)     → gremia
+--   profiel_focusgebieden (profiel_id, focusgebied_id) → kritische_focusgebieden
+--   profiel_log           (append-only audit)
 
 -- Automatisch profiel aanmaken bij registratie
 create or replace function public.maak_profiel()

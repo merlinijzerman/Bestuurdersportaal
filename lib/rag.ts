@@ -174,6 +174,22 @@ export interface RetrievalMeta {
   // vlag is een bevestigde keuze in het auditspoor niet te onderscheiden van een
   // heuristisch-zekere keuze (beide bron_vertrouwen 'zeker').
   bron_intent_override?: boolean;
+  // Increment F (FO §14) — profielgestuurde PRIORITERING. Legt vast of het antwoord
+  // op het persoonlijke profiel is geprioriteerd ('actief'), bewust collectief is
+  // gehouden via 'algemeen perspectief' ('uitgeschakeld'), of de gebruiker geen
+  // profiel heeft ingevuld ('geen-profiel'). Verandert niets aan retrieval: dezelfde
+  // bronnen, alleen volgorde/nadruk in de presentatie. De _aspecten leggen vast
+  // welke profielvelden de prioritering voedden (alleen metadata, geen inhoud).
+  profielsturing?: "actief" | "uitgeschakeld" | "geen-profiel";
+  profielsturing_aspecten?: {
+    bestuurlijke_rol: boolean;
+    primaire_expertise: boolean;
+    secundaire_expertises: number;
+    gremia: number;
+    focusgebieden: number;
+    antwoordvoorkeur: string | null;
+    detailniveau: string | null;
+  };
 }
 
 // Platte rij zoals public.zoek_chunks(...) die teruggeeft (zie migratie

@@ -116,4 +116,23 @@ test("bestuurder draagt GEEN notulen.segment.confirm (server-side gating)", () =
   assert.equal(rolHeeftCapability("bestuurder", "notulen.segment.confirm"), false);
 });
 
+// ── Increment F — profile.manage.own (strikt zelfbeheer, besluit 0017) ─────
+test("alle drie de rollen dragen profile.manage.own (eigen profiel beheren)", () => {
+  for (const rol of ["beheerder", "voorzitter", "bestuurder"]) {
+    assert.equal(rolHeeftCapability(rol, "profile.manage.own"), true, `${rol} profile.manage.own`);
+  }
+});
+
+test("er bestaat GEEN profile.manage.all in de mapping (geen beheerder-override)", () => {
+  // Profielen zijn strikt zelfbeheerd; niemand mag andermans profiel wijzigen.
+  // Zou er ooit een manage.all bijkomen, dan faalt deze test bewust als signaal
+  // om de privacy-keuze (besluit 0017) opnieuw te wegen.
+  for (const caps of Object.values(ROL_CAPABILITIES)) {
+    assert.ok(
+      !(caps as string[]).includes("profile.manage.all"),
+      "profile.manage.all mag aan geen enkele rol toegekend zijn"
+    );
+  }
+});
+
 console.log(`\n${n} sanity-tests geslaagd.`);

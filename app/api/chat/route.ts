@@ -247,6 +247,12 @@ const ROL_LABEL: Record<string, string> = {
 };
 
 interface BestuurderContext {
+  // Increment F (FO §14) — profielgestuurde PRIORITERING (geen filtering). Bevat,
+  // indien aanwezig en niet onderdrukt door 'algemeen perspectief', de leesbare
+  // profielregel die de VOLGORDE/NADRUK van het antwoord stuurt. Landt uitsluitend
+  // in het dynamische (ongecachte) contextblok — nooit in de toon-systeemprompt en
+  // nooit in retrieval (gedragsneutraliteit, acceptatiecriterium 9).
+  profielsturing?: string | null;
   voornaam: string;
   volledigeNaam: string;
   rolLabel: string;
@@ -289,9 +295,10 @@ ${TOON_BLOK}`;
 }
 
 function bouwDynamischeContext(ctx: BestuurderContext): string {
-  return `Je bent de AI-assistent in het bestuurdersportaal van ${ctx.fondsnaam}, een Nederlands pensioenfonds.
+  const basis = `Je bent de AI-assistent in het bestuurdersportaal van ${ctx.fondsnaam}, een Nederlands pensioenfonds.
 
 JE SPREEKT NU MET: ${ctx.volledigeNaam} (${ctx.rolLabel}). U mag de voornaam "${ctx.voornaam}" gebruiken in uw antwoord — sporadisch, alleen waar het natuurlijk past.`;
+  return ctx.profielsturing ? `${basis}\n\n${ctx.profielsturing}` : basis;
 }
 
 // Bouwt de system-parameter als content-blokken: het statische blok eerst met
@@ -354,6 +361,114 @@ function documentBronnen(chunks: DocumentChunk[]): BronVerwijzing[] {
   return [...perDoc.values()];
 }
 
+// ============================================================
+//  Increment F (FO §14) — profielgestuurde PRIORITERING
+// ----------------------------------------------------------------------------
+//  Bouwt de leesbare profielregel voor het DYNAMISCHE contextblok. Stuurt
+//  uitsluitend de VOLGORDE/NADRUK van het antwoord — niet de retrieval, niet de
+//  gedeelde feitenbasis (die blijft volledig en zichtbaar). Leest via dezelfde
+//  RLS-client (anon-key); join-namen worden per id opgelost (geen embed, robuust
+//  bij composite-FK's). Levert null als er niets te sturen valt (leeg profiel).
+// ============================================================
+type ProfielsturingAspecten = NonNullable<RetrievalMeta["profielsturing_aspecten"]>;
+
+async function bouwProfielsturing(
+  supabase: Awaited<ReturnType<typeof createServerSupabase>>,
+  userId: string
+): Promise<{ tekst: string; aspecten: ProfielsturingAspecten } | null> {
+  const { data: p } = await supabase
+    .from("profielen")
+    .select(
+      "bestuurlijke_rol, primaire_expertise_id, antwoordvoorkeur, detailniveau"
+    )
+    .eq("id", userId)
+    .single();
+  if (!p) return null;
+
+  const [expR, gremR, focusR] = await Promise.all([
+    supabase.from("profiel_expertises").select("expertise_id").eq("profiel_id", userId),
+    supabase.from("profiel_gremia").select("gremium_id").eq("profiel_id", userId),
+    supabase.from("profiel_focusgebieden").select("focusgebied_id").eq("profiel_id", userId),
+  ]);
+  const secExpIds = (expR.data ?? []).map((r) => r.expertise_id as string);
+  const gremIds = (gremR.data ?? []).map((r) => r.gremium_id as string);
+  const focusIds = (focusR.data ?? []).map((r) => r.focusgebied_id as string);
+
+  const primExpId = p.primaire_expertise_id as string | null;
+  const expIds = Array.from(new Set([...(primExpId ? [primExpId] : []), ...secExpIds]));
+
+  const leeg = { data: [] as { id: string; naam: string }[] };
+  const [expNamen, gremNamen, focusNamen] = await Promise.all([
+    expIds.length
+      ? supabase.from("expertises").select("id, naam").in("id", expIds)
+      : Promise.resolve(leeg),
+    gremIds.length
+      ? supabase.from("gremia").select("id, naam").in("id", gremIds)
+      : Promise.resolve(leeg),
+    focusIds.length
+      ? supabase.from("kritische_focusgebieden").select("id, naam").in("id", focusIds)
+      : Promise.resolve(leeg),
+  ]);
+
+  const naam = (rij: { data: { id: string; naam: string }[] | null }, id: string) =>
+    (rij.data ?? []).find((r) => r.id === id)?.naam ?? null;
+
+  const bestuurlijkeRol =
+    typeof p.bestuurlijke_rol === "string" && p.bestuurlijke_rol.trim().length > 0
+      ? p.bestuurlijke_rol.trim()
+      : null;
+  const primaireExpertiseNaam = primExpId ? naam(expNamen, primExpId) : null;
+  const secundaireNamen = secExpIds
+    .map((id) => naam(expNamen, id))
+    .filter((n): n is string => !!n);
+  const gremiaNamen = gremIds.map((id) => naam(gremNamen, id)).filter((n): n is string => !!n);
+  const focusNamenLijst = focusIds
+    .map((id) => naam(focusNamen, id))
+    .filter((n): n is string => !!n);
+  const antwoordvoorkeur =
+    typeof p.antwoordvoorkeur === "string" && p.antwoordvoorkeur.trim().length > 0
+      ? p.antwoordvoorkeur.trim()
+      : null;
+  const detailniveau =
+    typeof p.detailniveau === "string" && p.detailniveau.trim().length > 0
+      ? p.detailniveau.trim()
+      : null;
+
+  const profielRegels: string[] = [];
+  if (bestuurlijkeRol) profielRegels.push(`bestuurlijke rol: ${bestuurlijkeRol}`);
+  if (primaireExpertiseNaam) profielRegels.push(`primaire expertise: ${primaireExpertiseNaam}`);
+  if (secundaireNamen.length) profielRegels.push(`secundaire expertise: ${secundaireNamen.join(", ")}`);
+  if (gremiaNamen.length) profielRegels.push(`actief in: ${gremiaNamen.join(", ")}`);
+  if (focusNamenLijst.length)
+    profielRegels.push(`kritische focusgebieden: ${focusNamenLijst.join(", ")}`);
+
+  const voorkeurRegels: string[] = [];
+  if (antwoordvoorkeur) voorkeurRegels.push(`antwoordvoorkeur "${antwoordvoorkeur}"`);
+  if (detailniveau) voorkeurRegels.push(`detailniveau "${detailniveau}"`);
+
+  // Niets ingevuld → geen sturing (collectieve weergave is dan de natuurlijke staat).
+  if (profielRegels.length === 0 && voorkeurRegels.length === 0) return null;
+
+  const tekst = `PERSOONLIJK PROFIEL VAN DE LEZER — UITSLUITEND VOOR PRIORITERING, NOOIT VOOR FILTERING.
+Profiel: ${profielRegels.join("; ") || "geen specifieke aandachtsgebieden opgegeven"}.${
+    voorkeurRegels.length ? ` Voorkeuren: ${voorkeurRegels.join(", ")}.` : ""
+  }
+Stem de VOLGORDE en NADRUK van je antwoord hierop af: behandel wat voor deze focusgebieden/expertise relevant is als eerste en het uitgebreidst. Je mag NIETS weglaten, inkorten of verbergen uit de gedeelde feitenbasis — de volledige, collectieve onderbouwing blijft intact en zichtbaar voor iedereen. Sluit je antwoord af met één korte zin die expliciet maakt dat de ordening is afgestemd op het profiel van de lezer en dat "algemeen perspectief" dezelfde feiten zonder die prioritering toont.`;
+
+  return {
+    tekst,
+    aspecten: {
+      bestuurlijke_rol: !!bestuurlijkeRol,
+      primaire_expertise: !!primaireExpertiseNaam,
+      secundaire_expertises: secundaireNamen.length,
+      gremia: gremiaNamen.length,
+      focusgebieden: focusNamenLijst.length,
+      antwoordvoorkeur,
+      detailniveau,
+    },
+  };
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as {
@@ -374,6 +489,11 @@ export async function POST(req: NextRequest) {
       // Increment G — door de gebruiker vastgezette antwoordmodus (gespreksniveau,
       // gesprekken.actieve_antwoordmodus). null/afwezig = auto-detectie per vraag.
       actieve_antwoordmodus?: Antwoordmodus | null;
+      // Increment F (FO §14) — "algemeen perspectief"-toggle. true = profielsturing
+      // overslaan: identieke bronnen/retrieval, maar het antwoord wordt NIET op het
+      // persoonlijke profiel geprioriteerd (collectieve weergave). Afwezig/false =
+      // profielsturing actief (indien de gebruiker een profiel heeft ingevuld).
+      algemeen_perspectief?: boolean;
     };
     const { fonds_id } = body;
 
@@ -443,6 +563,27 @@ export async function POST(req: NextRequest) {
       rolLabel,
       fondsnaam,
     };
+
+    // ── Increment F (FO §14) — profielgestuurde PRIORITERING ────────────────
+    // Standaard actief; de "algemeen perspectief"-toggle (body.algemeen_perspectief)
+    // schakelt de prioritering uit zonder iets aan de bronnen/retrieval te wijzigen.
+    // De sturing landt alleen in het dynamische contextblok (zie bouwDynamischeContext),
+    // nooit in de gecachte toon-systeemprompt of de retrievalfilters.
+    const algemeenPerspectief = body.algemeen_perspectief === true;
+    let profielsturingStatus: NonNullable<RetrievalMeta["profielsturing"]>;
+    let profielsturingAspecten: ProfielsturingAspecten | undefined;
+    if (algemeenPerspectief) {
+      profielsturingStatus = "uitgeschakeld";
+    } else {
+      const sturing = await bouwProfielsturing(supabase, user.id);
+      if (sturing) {
+        ctxBestuurder.profielsturing = sturing.tekst;
+        profielsturingStatus = "actief";
+        profielsturingAspecten = sturing.aspecten;
+      } else {
+        profielsturingStatus = "geen-profiel";
+      }
+    }
 
     // ── Document-scope (increment 1): server-side validatie vóór retrieval ──
     // De client mag document_id's meesturen, maar de server valideert altijd
@@ -972,6 +1113,12 @@ export async function POST(req: NextRequest) {
             antwoordmodus,
             bronbasis,
             inline_meldingen: inlineMeldingenFinaal,
+            // Increment F (FO §14, B10/§11d) — profielsturing volledig herleidbaar:
+            // status + welke profielvelden de prioritering voedden. Geen profielinhoud.
+            profielsturing: profielsturingStatus,
+            ...(profielsturingAspecten
+              ? { profielsturing_aspecten: profielsturingAspecten }
+              : {}),
             // Increment I-2 (FO §11a/§11d) — automatische bronkeuze in het
             // auditspoor: welke intentie, met welk vertrouwen, welke (verborgen)
             // retrieval-modus, en of de gebruiker tot fondsdocumenten beperkte.

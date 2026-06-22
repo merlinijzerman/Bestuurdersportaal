@@ -207,6 +207,10 @@ export default function AiPage() {
   // bronkeuze. De gebruiker kiest geen bron-modus meer; alleen de expliciete
   // restrictie "Alleen fondsdocumenten" (onder "Aanpassen") blijft over.
   const [alleenFondsdocumenten, setAlleenFondsdocumenten] = useState(false);
+  // Increment F (FO §14) — "algemeen perspectief": schakelt de profielgestuurde
+  // prioritering uit (zelfde bronnen, collectieve weergave). Default uit = het
+  // antwoord wordt op het eigen profiel geprioriteerd indien dat is ingevuld.
+  const [algemeenPerspectief, setAlgemeenPerspectief] = useState(false);
   const [aanpassenOpen, setAanpassenOpen] = useState(false);
   // Increment G — vastgezette antwoordmodus (null = auto-detectie). De feitelijk
   // gebruikte modus + bronbasis komen per antwoord in het paneel "Onderbouwing
@@ -378,7 +382,7 @@ export default function AiPage() {
         userIdRef.current = user.id;
         const { data } = await supabase
           .from("profielen")
-          .select("fonds_id, naam, rol, fondsen(naam)")
+          .select("fonds_id, naam, rol, standaard_ai_modus, fondsen(naam)")
           .eq("id", user.id)
           .single();
         if (data?.fonds_id) setFondsId(data.fonds_id);
@@ -428,6 +432,10 @@ export default function AiPage() {
 
         if (!hersteld) {
           setBerichten([{ rol: "ai", tekst: personalTekst }]);
+          // Increment F (A4) — profiel-default voorselecteert de antwoordmodus bij
+          // een schone start (geen hersteld gesprek met eigen vastgezette modus).
+          const profielModus = leesAntwoordmodus(data?.standaard_ai_modus);
+          if (profielModus) setAntwoordmodus(profielModus);
         }
 
         // Instappunt-knop "Vraag de AI over dit stuk": /ai?doc=<id> opent de chat
@@ -542,6 +550,8 @@ export default function AiPage() {
             : undefined,
           // Increment G — vastgezette antwoordmodus (null = auto-detectie).
           actieve_antwoordmodus: effAntwoordmodus,
+          // Increment F (FO §14) — "algemeen perspectief": profielsturing overslaan.
+          algemeen_perspectief: algemeenPerspectief,
         }),
       });
 
@@ -1001,10 +1011,30 @@ export default function AiPage() {
             Alleen fondsdocumenten
           </label>
         )}
+        {aanpassenOpen && (
+          <label
+            className="text-xs text-gray-600 inline-flex items-center gap-1.5 cursor-pointer select-none"
+            title="Toon dezelfde feiten en bronnen, maar zonder prioritering op uw persoonlijke profiel (collectieve weergave)."
+          >
+            <input
+              type="checkbox"
+              checked={algemeenPerspectief}
+              onChange={(e) => setAlgemeenPerspectief(e.target.checked)}
+              className="accent-[#0F2744]"
+            />
+            Algemeen perspectief
+          </label>
+        )}
         {alleenFondsdocumenten && (
           <span className="text-xs text-[#0F2744] inline-flex items-center gap-1">
             <span>🔒</span>
             <span>Beperkt tot interne fondsdocumenten</span>
+          </span>
+        )}
+        {algemeenPerspectief && (
+          <span className="text-xs text-[#0F2744] inline-flex items-center gap-1">
+            <span>👥</span>
+            <span>Collectieve weergave — niet op uw profiel geprioriteerd</span>
           </span>
         )}
       </div>

@@ -31,7 +31,12 @@ export type Capability =
   // GERESERVEERD voor de B14-platformrol (Increment P1); bewust aan GEEN
   // tenant-rol toegekend. Tenants zijn read-only op generiek (RLS + uploadweigering);
   // interim-curatie loopt via service-role. Pas mappen zodra de platform-surface bestaat.
-  | "generic.library.manage";
+  | "generic.library.manage"
+  // Increment F — persoonlijk bestuurdersprofiel (FO §14, besluit 0017). Profielen
+  // zijn STRIKT ZELFBEHEERD: alleen de persoon zelf wijzigt het eigen profiel. Er is
+  // bewust GEEN profile.manage.all — een beheerder/voorzitter kan andermans profiel
+  // niet wijzigen (privacy/dataminimalisatie). RLS borgt dit op id=auth.uid().
+  | "profile.manage.own";
 
 /** Rol → toegekende capabilities. Bron-van-waarheid voor autorisatie in v2.
  *  `dossiers.manage` (TO §5: secretariaat/governance/admin) dekt het handmatig
@@ -52,6 +57,7 @@ export const ROL_CAPABILITIES: Record<string, Capability[]> = {
     "metadata.review",
     "classification.review",
     "notulen.segment.confirm",
+    "profile.manage.own",
   ],
   voorzitter: [
     "dossiers.manage",
@@ -61,6 +67,7 @@ export const ROL_CAPABILITIES: Record<string, Capability[]> = {
     "metadata.review",
     "classification.review",
     "notulen.segment.confirm",
+    "profile.manage.own",
   ],
   // I-2-release: ALLE metadatavelden opengesteld voor bestuurders (huidige
   // inrichting, akkoord compliance) — vergemakkelijkt invoer/test. Omvat de
@@ -72,6 +79,7 @@ export const ROL_CAPABILITIES: Record<string, Capability[]> = {
     "documents.metadata.update",
     "documents.status.change",
     "documents.bronstatus.change",
+    "profile.manage.own",
   ],
 };
 
