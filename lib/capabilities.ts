@@ -62,7 +62,17 @@ export const ROL_CAPABILITIES: Record<string, Capability[]> = {
     "classification.review",
     "notulen.segment.confirm",
   ],
-  bestuurder: [],
+  // I-2-release: ALLE metadatavelden opengesteld voor bestuurders (huidige
+  // inrichting, akkoord compliance) — vergemakkelijkt invoer/test. Omvat de
+  // koppelvelden (documents.metadata.update) én documentstatus/bronstatus
+  // (RAG-actuele-bron-bepalend). Review-AFRONDING (metadata.review) en
+  // classification/notulen-review blijven bewust bij beheerder/voorzitter:
+  // dat is een beoordelende governance-handeling, geen metadata-bewerking.
+  bestuurder: [
+    "documents.metadata.update",
+    "documents.status.change",
+    "documents.bronstatus.change",
+  ],
 };
 
 /**

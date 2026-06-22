@@ -27,7 +27,24 @@ export interface OnderbouwingMeta {
   algemeneKennis?: boolean | null;
   /** Aantal geraadpleegde bronnen (voor de count-badge). */
   aantalBronnen?: number;
+  // Increment I-2 (FO §11a) — de automatische bronkeuze. Géén zichtbare badge in
+  // de chat; de bestuurder ziet de gekozen intentie hier, in het controlevlak.
+  /** Automatisch (of via verduidelijkingschip) bepaalde bron-intentie. */
+  bronIntent?: "fonds" | "algemeen" | "gecombineerd" | null;
+  /** Vertrouwen in de automatische bronkeuze ('zeker' | 'onzeker'). */
+  bronVertrouwen?: "zeker" | "onzeker" | null;
+  /** Of de bestuurder de vraag bewust tot fondsdocumenten beperkte. */
+  alleenFondsdocumenten?: boolean | null;
+  /** Intentie door de gebruiker bevestigd via een verduidelijkingschip (vs. heuristisch). */
+  bronIntentOverride?: boolean | null;
 }
+
+// Bestuurlijk leesbare labels voor de automatische bronkeuze (geen jargon).
+const BRON_INTENT_LABEL: Record<string, string> = {
+  fonds: "Eigen fondsdocumenten",
+  algemeen: "Algemene kennis",
+  gecombineerd: "Fondsdocumenten + algemene kennis",
+};
 
 interface Props {
   meta: OnderbouwingMeta;
@@ -93,6 +110,26 @@ export default function OnderbouwingPaneel({
         <div className="border border-t-0 border-gray-200 rounded-b-lg bg-white px-3 py-3 space-y-3">
           {/* Gestructureerde controle-informatie (§11c). */}
           <div className="space-y-1">
+            {meta.alleenFondsdocumenten ? (
+              <Rij label="Brongebruik" waarde="Beperkt tot fondsdocumenten (uw keuze)" />
+            ) : (
+              meta.bronIntent && (
+                <Rij
+                  label="Brongebruik"
+                  waarde={
+                    <>
+                      {BRON_INTENT_LABEL[meta.bronIntent] ?? meta.bronIntent}
+                      <span className="text-gray-400">
+                        {" "}
+                        {meta.bronIntentOverride
+                          ? "— door u bevestigd na verduidelijking"
+                          : "— automatisch gekozen"}
+                      </span>
+                    </>
+                  }
+                />
+              )
+            )}
             {meta.bronbasis && <Rij label="Bronbasis" waarde={meta.bronbasis} />}
             {meta.antwoordmodusLabel && (
               <Rij label="Antwoordmodus" waarde={meta.antwoordmodusLabel} />

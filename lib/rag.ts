@@ -160,6 +160,20 @@ export interface RetrievalMeta {
   // nu ze niet meer standaard zichtbaar zijn. Verandert niets aan retrieval.
   bronbasis?: string;
   inline_meldingen?: { type: string; tekst: string }[];
+  // Increment I-2 (FO §11a/§11d) — automatische bronkeuze. De door het systeem
+  // bepaalde intentie + zekerheid, de daaruit afgeleide (verborgen) retrieval-
+  // modus, en of de gebruiker de harde "Alleen fondsdocumenten"-restrictie aanzette.
+  // Volledig herleidbaar nu de bron-as niet meer zichtbaar is; verandert niets
+  // aan de retrieval-logica zelf (die blijft Increment G).
+  bron_intent?: "fonds" | "algemeen" | "gecombineerd";
+  bron_vertrouwen?: "zeker" | "onzeker";
+  bron_modus_auto?: "documenten" | "combineren" | "algemeen";
+  alleen_fondsdocumenten?: boolean;
+  // True = de intentie is door de gebruiker BEVESTIGD via een verduidelijkingschip
+  // ('Voor mijn fonds'/'In algemene zin'), niet heuristisch bepaald. Zonder deze
+  // vlag is een bevestigde keuze in het auditspoor niet te onderscheiden van een
+  // heuristisch-zekere keuze (beide bron_vertrouwen 'zeker').
+  bron_intent_override?: boolean;
 }
 
 // Platte rij zoals public.zoek_chunks(...) die teruggeeft (zie migratie

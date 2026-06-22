@@ -76,10 +76,24 @@ test("beheerder + voorzitter dragen alle C-capabilities", () => {
   }
 });
 
-test("bestuurder draagt GEEN enkele C-capability (server-side gating)", () => {
-  for (const cap of C_CAPS) {
-    assert.equal(rolHeeftCapability("bestuurder", cap), false, `bestuurder ${cap}`);
+// I-2-release: bestuurder mag ALLE metadatavelden bewerken — koppelvelden
+// (documents.metadata.update) én documentstatus/bronstatus. Review-AFRONDING
+// (metadata.review) is een beoordelende governance-handeling, GEEN metadata-
+// bewerking, en blijft bij beheerder/voorzitter.
+const C_BEWERK_CAPS = [
+  "documents.metadata.update",
+  "documents.status.change",
+  "documents.bronstatus.change",
+] as const;
+
+test("bestuurder draagt alle metadata-bewerkcapabilities (I-2-release)", () => {
+  for (const cap of C_BEWERK_CAPS) {
+    assert.equal(rolHeeftCapability("bestuurder", cap), true, `bestuurder ${cap}`);
   }
+});
+
+test("bestuurder draagt GEEN metadata.review (review = governance, geen bewerking)", () => {
+  assert.equal(rolHeeftCapability("bestuurder", "metadata.review"), false);
 });
 
 // ── Increment E — classification.review ────────────────────────────────

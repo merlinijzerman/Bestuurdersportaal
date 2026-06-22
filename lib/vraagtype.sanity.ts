@@ -23,6 +23,10 @@ import {
   bepaalVervolgacties,
   isBesluitvormingsgericht,
   ZICHTBARE_ANTWOORDMODI,
+  bepaalBronIntent,
+  moetVerduidelijken,
+  bepaalAutoBronModus,
+  VERDUIDELIJKING_OPTIES,
 } from "./vraagtype";
 
 let n = 0;
@@ -344,6 +348,120 @@ test("vervolgacties: reformatteer-acties hergebruiken scope; verbredende niet", 
   const wu = a.find((x) => x.type === "werk_uit_besluitvorming");
   assert.equal(feit!.hergebruikScope, true);
   assert.equal(wu!.hergebruikScope, false);
+});
+
+// ============================================================================
+//  Increment I-2 (FO §11a) — automatische bronkeuze.
+//  De brede meetset (40 contrastieve vragen) wordt getoetst in
+//  lib/bronkeuze-classificatie.sanity.ts met de geaccordeerde drempels. Hier:
+//  (1) de afgeleide helpers (auto-modus, verduidelijken, chip-opties) en
+//  (2) GEDRAGSNEUTRALITEIT — de intent verandert de retrieval-modus NIET en
+//      onderdrukt alleen de #1-melding bij een verwachte 'algemeen'-mis.
+// ============================================================================
+
+// ── bepaalAutoBronModus: combineren-vloer, tenzij expliciet beperkt ──
+test("auto-bronmodus: vloer = combineren; restrictie = documenten", () => {
+  assert.equal(bepaalAutoBronModus(false), "combineren");
+  assert.equal(bepaalAutoBronModus(true), "documenten");
+});
+
+// ── moetVerduidelijken: alleen bij ONZEKER én geen fondsrestrictie ──
+test("verduidelijken: alleen bij onzeker zonder fondsrestrictie", () => {
+  assert.equal(
+    moetVerduidelijken({ intent: "fonds", vertrouwen: "onzeker" }, false),
+    true
+  );
+  // Restrictie aan → bron al gekozen, niet doorvragen.
+  assert.equal(
+    moetVerduidelijken({ intent: "fonds", vertrouwen: "onzeker" }, true),
+    false
+  );
+  // Zekere intentie → nooit doorvragen.
+  assert.equal(
+    moetVerduidelijken({ intent: "fonds", vertrouwen: "zeker" }, false),
+    false
+  );
+  assert.equal(
+    moetVerduidelijken({ intent: "algemeen", vertrouwen: "zeker" }, false),
+    false
+  );
+});
+
+// ── Chip-opties: precies de twee bevestigingen ──
+test("verduidelijking-opties = Voor mijn fonds / In algemene zin", () => {
+  assert.deepEqual(
+    VERDUIDELIJKING_OPTIES.map((o) => o.intent),
+    ["fonds", "algemeen"]
+  );
+});
+
+// ── Classificatie-kern: kernpatronen + de gevaarlijke nul-tolerantie ──
+test("anker → fonds (zeker); generiek → algemeen (zeker)", () => {
+  assert.deepEqual(bepaalBronIntent("Wat is ons beleggingsbeleid?"), {
+    intent: "fonds",
+    vertrouwen: "zeker",
+  });
+  assert.deepEqual(bepaalBronIntent("Wat is een dekkingsgraad?"), {
+    intent: "algemeen",
+    vertrouwen: "zeker",
+  });
+});
+
+test("anker + generiek → gecombineerd (zeker)", () => {
+  assert.deepEqual(
+    bepaalBronIntent("Wijkt ons premiebeleid af van het wettelijk kader?"),
+    { intent: "gecombineerd", vertrouwen: "zeker" }
+  );
+});
+
+// Negatieve test (kritiek): de onzekere fallback leunt fondsgericht, NOOIT stil
+// 'algemeen' — anders schijnzekerheid op afwezige fondsbronnen.
+test("geen anker/signaal → fonds ONZEKER (nooit stil algemeen)", () => {
+  const r = bepaalBronIntent("Hoe zit het met de solidariteitsreserve?");
+  assert.equal(r.intent, "fonds");
+  assert.equal(r.vertrouwen, "onzeker");
+  assert.notEqual(r.intent, "algemeen");
+});
+
+// ── Gedragsneutraliteit t.o.v. Increment G ──
+// (1) De intent stuurt NIET de retrieval-modus: ongeacht de intentie blijft de
+//     auto-modus de combineren-vloer (alleen de fondsrestrictie wijzigt die).
+test("neutraliteit: intent verandert de auto-retrieval-modus niet", () => {
+  // Drie verschillende intenties, identieke (combineren) auto-modus.
+  for (const v of [
+    "Wat is ons beleggingsbeleid?", // fonds
+    "Wat is een dekkingsgraad?", // algemeen
+    "Hoe zit het met de solidariteitsreserve?", // onzeker
+  ]) {
+    void bepaalBronIntent(v);
+    assert.equal(bepaalAutoBronModus(false), "combineren");
+  }
+});
+
+// (2) bepaalInlineMeldingen is volledig intent-onafhankelijk: de melding hangt aan
+//     wat er DAADWERKELIJK is opgehaald, niet aan de (mogelijk foute) intent-gok.
+//     Schijnzekerheid-guardrail: combineren + 0 treffers krijgt ALTIJD
+//     'geen_fondstreffer', zodat een fondsvraag die fout als 'algemeen' is
+//     geclassificeerd nooit stil als fondsspecifiek antwoord overkomt.
+test("schijnzekerheid-guardrail: combineren + 0 treffers → ALTIJD geen_fondstreffer", () => {
+  const m = bepaalInlineMeldingen({
+    bronModus: "combineren",
+    antwoordmodus: "feitelijk",
+    aantalBronnen: 0,
+    scopeActief: false,
+  });
+  assert.deepEqual(types(m), ["geen_fondstreffer"]);
+});
+
+test("meldingen zijn intent-onafhankelijk: WEL treffers + duiding → duiding-melding, geen #1", () => {
+  const m = bepaalInlineMeldingen({
+    bronModus: "combineren",
+    antwoordmodus: "duiding",
+    aantalBronnen: 3,
+    scopeActief: false,
+  });
+  assert.ok(types(m).includes("interpretatieve_duiding"));
+  assert.ok(!types(m).includes("geen_fondstreffer"));
 });
 
 console.log(`\n${n} sanity-tests geslaagd.`);

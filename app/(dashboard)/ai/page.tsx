@@ -63,6 +63,16 @@ interface Bron {
   extern_url?: string | null;
 }
 
+// Increment I-2 (FO §11a) — bij een twijfelgeval vraagt de assistent terug i.p.v.
+// te gokken. Dit AI-bericht draagt de verduidelijkingsvraag + de twee chips en
+// de originele vraag, zodat een chipkeuze dezelfde vraag opnieuw stuurt met een
+// bevestigde bron-intentie (combineren-vloer voor "fonds", niet een harde scope).
+interface VerduidelijkingKeuze {
+  vraag: string;
+  opties: { intent: "fonds" | "algemeen"; label: string }[];
+  origineleVraag: string;
+}
+
 interface Bericht {
   rol: "gebruiker" | "ai";
   tekst: string;
@@ -72,6 +82,8 @@ interface Bericht {
   // paneel "Onderbouwing en bronnen" + de conditionele inline-meldingen.
   onderbouwing?: OnderbouwingMeta;
   inlineMeldingen?: InlineMelding[];
+  // Increment I-2 (FO §11a) — verduidelijkingsvraag met chips (geen antwoord).
+  verduidelijking?: VerduidelijkingKeuze;
 }
 
 // Actieve documentscope (increment 1). titels op moment van zetten, zodat de
@@ -163,24 +175,6 @@ const BRON_NUMMER_KLEUR: Record<string, string> = {
 // - [Volgens wetgeving], [volgens wetgeving]
 const MARKER_REGEX = /(\[Bron \d+\]|\[Algemene kennis\]|\[Volgens wetgeving\])/gi;
 
-const MODI: { value: Modus; label: string; help: string }[] = [
-  {
-    value: "documenten",
-    label: "Onze documenten",
-    help: "Strikt op interne bronnen — antwoord met expliciete citaten",
-  },
-  {
-    value: "combineren",
-    label: "Slim combineren",
-    help: "Gebruikt interne bronnen waar beschikbaar, vult aan met algemene kennis",
-  },
-  {
-    value: "algemeen",
-    label: "Algemene vraag",
-    help: "Open AI-assistent — gebruikt Claude's algemene kennis, geen interne bronnen",
-  },
-];
-
 const VOORGESTELDE_VRAGEN = [
   "Wat zijn de deskundigheidseisen voor bestuurders?",
   "Hoe wordt een tegenstrijdig belang gemeld?",
@@ -200,7 +194,7 @@ export default function AiPage() {
   const [berichten, setBerichten] = useState<Bericht[]>([
     {
       rol: "ai",
-      tekst: `Welkom terug. Ik ben uw AI-assistent voor het bestuurdersportaal.\n\nU kunt hierboven kiezen hoe ik antwoord:\n• Onze documenten — strikt op interne bronnen\n• Slim combineren — interne bronnen + algemene kennis (aanbevolen)\n• Algemene vraag — open AI-assistent zonder beperking tot de bibliotheek\n\nElke vraag wordt gelogd in de Governance Log, inclusief de gebruikte modus.`,
+      tekst: `Welkom terug. Ik ben uw AI-assistent voor het bestuurdersportaal.\n\nStelt u gerust uw vraag — ik kies automatisch de passende bron: uw fondsdocumenten, algemene kennis, of een combinatie. Twijfel ik of u het voor uw fonds of in algemene zin bedoelt, dan vraag ik het u even.\n\nElke vraag wordt vastgelegd in de Governance Log, inclusief welke bron is gebruikt.`,
     },
   ]);
   const [invoer, setInvoer] = useState("");
@@ -209,7 +203,11 @@ export default function AiPage() {
   // typ-indicator te verbergen zodra de tekst zelf begint te verschijnen.
   const [antwoordGestart, setAntwoordGestart] = useState(false);
   const [fondsId, setFondsId] = useState<string>("");
-  const [modus, setModus] = useState<Modus>("combineren");
+  // Increment I-2 (FO §11a) — de zichtbare bron-as is vervangen door automatische
+  // bronkeuze. De gebruiker kiest geen bron-modus meer; alleen de expliciete
+  // restrictie "Alleen fondsdocumenten" (onder "Aanpassen") blijft over.
+  const [alleenFondsdocumenten, setAlleenFondsdocumenten] = useState(false);
+  const [aanpassenOpen, setAanpassenOpen] = useState(false);
   // Increment G — vastgezette antwoordmodus (null = auto-detectie). De feitelijk
   // gebruikte modus + bronbasis komen per antwoord in het paneel "Onderbouwing
   // en bronnen" (Increment I-1, rustige weergave §11c) — niet meer in een
@@ -397,8 +395,8 @@ export default function AiPage() {
 
         const groet = dagdeelGroet();
         const personalTekst = voornaam
-          ? `${groet} ${voornaam}, fijn u te zien.\n\nIk help u graag met vragen rondom ${fondsnaam}. Hierboven kiest u hoe ik antwoord: strikt op onze documenten, slim gecombineerd met algemene kennis, of als open AI-assistent.\n\nElke vraag wordt vastgelegd in de Governance Log, inclusief de gekozen modus.`
-          : `${groet}. Ik help u graag met vragen rondom ${fondsnaam}.\n\nU kunt hierboven kiezen hoe ik antwoord: strikt op onze documenten, slim gecombineerd, of als open AI-assistent.\n\nElke vraag wordt vastgelegd in de Governance Log.`;
+          ? `${groet} ${voornaam}, fijn u te zien.\n\nIk help u graag met vragen rondom ${fondsnaam}. Stelt u gerust uw vraag — ik kies automatisch de passende bron: uw fondsdocumenten, algemene kennis, of een combinatie. Twijfel ik of u het voor uw fonds of in algemene zin bedoelt, dan vraag ik het u even.\n\nElke vraag wordt vastgelegd in de Governance Log, inclusief welke bron is gebruikt.`
+          : `${groet}. Ik help u graag met vragen rondom ${fondsnaam}.\n\nStelt u gerust uw vraag — ik kies automatisch de passende bron en vraag het u even als ik twijfel of u het voor uw fonds of in algemene zin bedoelt.\n\nElke vraag wordt vastgelegd in de Governance Log.`;
 
         welkomstRef.current = { rol: "ai", tekst: personalTekst };
 
@@ -480,6 +478,12 @@ export default function AiPage() {
   interface StuurOpties {
     antwoordmodusOverride?: Antwoordmodus | null;
     scopeOverride?: DocumentScope | null;
+    // Increment I-2 (FO §11a) — bevestigde bron-intentie na een verduidelijkingschip.
+    bronIntentOverride?: "fonds" | "algemeen";
+    // Stuurt dezelfde (al getoonde) vraag opnieuw zonder een nieuwe gebruikersbubbel
+    // toe te voegen; `basisBerichten` is dan de geschiedenis die op die vraag eindigt.
+    geenNieuweVraag?: boolean;
+    basisBerichten?: Bericht[];
   }
 
   async function stuurBericht(vraag?: string, opties?: StuurOpties) {
@@ -496,9 +500,13 @@ export default function AiPage() {
     const effScope =
       opties?.scopeOverride !== undefined ? opties.scopeOverride : documentScope;
 
-    // Voeg de nieuwe vraag toe en stuur de complete geschiedenis mee.
+    // Voeg de nieuwe vraag toe en stuur de complete geschiedenis mee. Bij een
+    // verduidelijkingsvervolg (geenNieuweVraag) eindigt `basisBerichten` al op de
+    // oorspronkelijke vraag; we voegen geen tweede gebruikersbubbel toe en wissen
+    // tegelijk de verduidelijkingsbubbel uit de weergave.
+    const basis = opties?.basisBerichten ?? berichten;
     const nieuw: Bericht = { rol: "gebruiker", tekst };
-    const conversatie = [...berichten, nieuw];
+    const conversatie = opties?.geenNieuweVraag ? basis : [...basis, nieuw];
     setBerichten(conversatie);
     // Scroll het zojuist gestelde bericht naar boven, zodat het antwoord eronder
     // vanaf het begin in beeld komt te staan.
@@ -522,7 +530,10 @@ export default function AiPage() {
         body: JSON.stringify({
           messages,
           fonds_id: fondsId,
-          modus,
+          // Increment I-2 (FO §11a) — geen zichtbare bron-modus meer; alleen de
+          // expliciete restrictie + (na een chip) de bevestigde bron-intentie.
+          alleen_fondsdocumenten: alleenFondsdocumenten,
+          bron_intent_override: opties?.bronIntentOverride,
           document_scope: effScope
             ? {
                 document_ids: effScope.document_ids,
@@ -550,7 +561,10 @@ export default function AiPage() {
       let aiToegevoegd = false;
       let volledig = "";
       let bronnenData: Bron[] | undefined;
-      let modusData: Modus = modus;
+      let modusData: Modus = "combineren";
+      // Increment I-2 — bij een twijfelgeval stuurt de server één verduidelijkings-
+      // event i.p.v. een antwoord; dan slaan we het 'done'-overschrijven over.
+      let verduidelijkingActief = false;
       // Increment I-1 — rustige weergave: per-antwoord controle-informatie en
       // conditionele inline-meldingen (FO §11c).
       let onderbouwingData: OnderbouwingMeta | undefined;
@@ -592,6 +606,15 @@ export default function AiPage() {
           bronbasis?: string | null;
           retrieval_modus?: string | null;
           inline_meldingen?: InlineMelding[];
+          // Increment I-2 — verduidelijkingsevent (vraag + chips).
+          vraag?: string;
+          opties?: { intent: "fonds" | "algemeen"; label: string }[];
+          // Increment I-2 — automatische bronkeuze (meta-event).
+          bron_intent?: "fonds" | "algemeen" | "gecombineerd" | null;
+          bron_vertrouwen?: "zeker" | "onzeker" | null;
+          bron_modus_auto?: "documenten" | "combineren" | "algemeen" | null;
+          alleen_fondsdocumenten?: boolean;
+          bron_intent_override?: boolean;
         };
         try {
           evt = JSON.parse(regel);
@@ -599,9 +622,30 @@ export default function AiPage() {
           return;
         }
 
-        if (evt.type === "meta") {
+        if (evt.type === "verduidelijking") {
+          // Twijfelgeval: toon de verduidelijkingsvraag met twee chips, géén
+          // antwoord. aiToegevoegd voorkomt dat het vangnet "geen antwoord" slaat;
+          // verduidelijkingActief voorkomt dat 'done' de bubbel overschrijft.
+          verduidelijkingActief = true;
+          aiToegevoegd = true;
+          setAnalyseVoortgang(null);
+          setBerichten((prev) => [
+            ...prev,
+            {
+              rol: "ai",
+              tekst:
+                evt.vraag ||
+                "Wilt u dit weten voor uw fonds specifiek, of in algemene zin?",
+              verduidelijking: {
+                vraag: evt.vraag || "",
+                opties: evt.opties ?? [],
+                origineleVraag: tekst,
+              },
+            },
+          ]);
+        } else if (evt.type === "meta") {
           bronnenData = evt.bronnen;
-          modusData = evt.modus || modus;
+          modusData = evt.modus || "combineren";
           // Increment I-1 — controle-informatie naar het paneel "Onderbouwing en
           // bronnen" (per antwoord, standaard ingeklapt) i.p.v. een globale balk.
           const aantal = evt.bronnen?.length ?? 0;
@@ -615,6 +659,11 @@ export default function AiPage() {
               ? /algemene kennis/i.test(evt.bronbasis)
               : undefined,
             aantalBronnen: aantal,
+            // Increment I-2 — automatische bronkeuze (alleen in het controlevlak).
+            bronIntent: evt.bron_intent ?? null,
+            bronVertrouwen: evt.bron_vertrouwen ?? null,
+            alleenFondsdocumenten: evt.alleen_fondsdocumenten ?? null,
+            bronIntentOverride: evt.bron_intent_override ?? null,
           };
           // Deterministische inline-meldingen (pre-stream); de #4-melding kan in
           // het 'done'-event nog worden aangevuld.
@@ -645,6 +694,8 @@ export default function AiPage() {
             schrijfAi();
           }
         } else if (evt.type === "done") {
+          // Bij een verduidelijking is er geen antwoordbubbel om bij te werken.
+          if (verduidelijkingActief) return;
           // Definitieve (content-afhankelijke) inline-meldingen, incl. #4.
           if (evt.inline_meldingen) inlineMeldingenData = evt.inline_meldingen;
           schrijfAi();
@@ -701,6 +752,25 @@ export default function AiPage() {
       setAntwoordGestart(false);
       setAnalyseVoortgang(null);
     }
+  }
+
+  // Increment I-2 (FO §11a) — de bestuurder koos een verduidelijkingschip. We
+  // sturen DEZELFDE vraag opnieuw met de bevestigde bron-intentie en wissen de
+  // verduidelijkingsbubbel; de oorspronkelijke vraag blijft staan (geen tweede
+  // gebruikersbubbel). "Voor mijn fonds" = fonds-intentie (combineren-vloer, geen
+  // harde scope); "In algemene zin" = algemeen-intentie.
+  function kiesVerduidelijking(
+    intent: "fonds" | "algemeen",
+    origineleVraag: string,
+    idx: number
+  ) {
+    if (laden) return;
+    const basis = berichten.slice(0, idx); // laat de verduidelijkingsbubbel vallen
+    stuurBericht(origineleVraag, {
+      bronIntentOverride: intent,
+      geenNieuweVraag: true,
+      basisBerichten: basis,
+    });
   }
 
   // Increment I-1 (FO §11c) — open/sluit het onderbouwingspaneel van één bericht.
@@ -900,36 +970,41 @@ export default function AiPage() {
         </button>
       </div>
 
-      {/* Modus-bar */}
+      {/* Brongebruik — Increment I-2 (FO §11a): de zichtbare bron-as is vervangen
+          door automatische bronkeuze. De assistent kiest zelf of de vraag fonds-,
+          algemeen- of gecombineerd-gericht is; bij twijfel vraagt hij terug. Onder
+          "Aanpassen" blijft alleen de expliciete restrictie "Alleen
+          fondsdocumenten" over. */}
       <div className="bg-white border-b border-gray-200 px-7 py-2.5 flex items-center gap-3 flex-wrap">
         <span className="text-xs text-gray-500 font-semibold uppercase tracking-wide">
-          Bronnen
+          Brongebruik
         </span>
-        <div className="flex gap-0.5 bg-gray-100 rounded-lg p-1">
-          {MODI.map((m) => (
-            <button
-              key={m.value}
-              onClick={() => setModus(m.value)}
-              title={m.help}
-              className={`px-3 py-1.5 text-xs rounded-md transition-all ${
-                modus === m.value
-                  ? "bg-white text-[#0F2744] font-semibold shadow-sm"
-                  : "text-gray-600 hover:text-[#0F2744]"
-              }`}
-            >
-              {m.label}
-            </button>
-          ))}
-        </div>
-        {modus === "algemeen" && (
-          <span className="text-xs text-amber-700 inline-flex items-center gap-1">
-            <span>⚠️</span>
-            <span>Antwoord wordt niet beperkt tot interne bronnen — verifieer voor besluitvorming</span>
-          </span>
+        <span className="text-xs text-gray-500">
+          De assistent kiest automatisch de passende bron — uw documenten, algemene
+          kennis of een combinatie.
+        </span>
+        <button
+          onClick={() => setAanpassenOpen((o) => !o)}
+          className="text-xs text-gray-500 hover:text-[#0F2744] border border-gray-200 px-2.5 py-1 rounded-md hover:border-[#C9A84C] transition-colors"
+          aria-expanded={aanpassenOpen}
+        >
+          Aanpassen {aanpassenOpen ? "▴" : "▾"}
+        </button>
+        {aanpassenOpen && (
+          <label className="text-xs text-gray-600 inline-flex items-center gap-1.5 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={alleenFondsdocumenten}
+              onChange={(e) => setAlleenFondsdocumenten(e.target.checked)}
+              className="accent-[#0F2744]"
+            />
+            Alleen fondsdocumenten
+          </label>
         )}
-        {modus === "combineren" && (
-          <span className="text-xs text-gray-500">
-            Combineert interne documenten met algemene kennis
+        {alleenFondsdocumenten && (
+          <span className="text-xs text-[#0F2744] inline-flex items-center gap-1">
+            <span>🔒</span>
+            <span>Beperkt tot interne fondsdocumenten</span>
           </span>
         )}
       </div>
@@ -1007,6 +1082,25 @@ export default function AiPage() {
                       </p>
                     ))}
               </div>
+
+              {/* Increment I-2 (FO §11a) — verduidelijkingschips bij een twijfelgeval.
+                  Eén klik herstuurt dezelfde vraag met de bevestigde bron-intentie. */}
+              {b.rol === "ai" && b.verduidelijking && (
+                <div className="mt-2 flex gap-2 flex-wrap">
+                  {b.verduidelijking.opties.map((o) => (
+                    <button
+                      key={o.intent}
+                      disabled={laden}
+                      onClick={() =>
+                        kiesVerduidelijking(o.intent, b.verduidelijking!.origineleVraag, i)
+                      }
+                      className="text-xs text-[#0F2744] border border-gray-300 px-3 py-1.5 rounded-full hover:border-[#C9A84C] hover:bg-amber-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {/* Contextbewuste vervolgacties (FO §13) — onder het antwoord. */}
               {b.rol === "ai" &&

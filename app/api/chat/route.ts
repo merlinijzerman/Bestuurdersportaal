@@ -6,7 +6,7 @@ import { heeftReformulatieNodig, reformuleerVraag } from "@/lib/query-reformulat
 import { controleerLimiet, LIMIETEN } from "@/lib/rate-limit";
 import { rateLimited } from "@/lib/api-errors";
 import { valideerScope, type ScopeDocumentRij } from "@/lib/document-scope";
-import { bepaalVraagtype, schatTokens, kiesStrategie, maakBatches, bepaalAntwoordmodus, retrievalModusVoor, bepaalInlineMeldingen, bronbasisLabel, ANTWOORDMODUS_LABEL, type Strategie, type Antwoordmodus } from "@/lib/vraagtype";
+import { bepaalVraagtype, schatTokens, kiesStrategie, maakBatches, bepaalAntwoordmodus, retrievalModusVoor, bepaalInlineMeldingen, bronbasisLabel, bepaalBronIntent, moetVerduidelijken, bepaalAutoBronModus, VERDUIDELIJKINGSVRAAG, VERDUIDELIJKING_OPTIES, ANTWOORDMODUS_LABEL, type Strategie, type Antwoordmodus, type BronModus, type BronIntent, type BronIntentResultaat } from "@/lib/vraagtype";
 import { bepaalBronsoortprofiel } from "@/lib/weeg-bronsoort";
 import { haalBesluitBronnen, topProcesinstanties, opmaakBesluitContext } from "@/lib/besluitvorming-bron";
 
@@ -362,7 +362,12 @@ export async function POST(req: NextRequest) {
       // backwards-compat: één losse vraag
       vraag?: string;
       fonds_id?: string;
-      modus?: Modus;
+      // Increment I-2 (FO §11a) — de zichtbare bron-as is vervangen door
+      // automatische bronkeuze. De client stuurt geen bron-modus meer; alleen de
+      // expliciete restrictie "Alleen fondsdocumenten" (onder "Aanpassen") en —
+      // wanneer de gebruiker een verduidelijkingschip koos — de bevestigde intentie.
+      alleen_fondsdocumenten?: boolean;
+      bron_intent_override?: "fonds" | "algemeen";
       // Document-scope (increment 1): beperk de vraag tot één/enkele document(en).
       // `algemene_kennis` is increment 2 — in increment 1 forceren we strict.
       document_scope?: { document_ids?: string[]; algemene_kennis?: boolean };
@@ -371,7 +376,6 @@ export async function POST(req: NextRequest) {
       actieve_antwoordmodus?: Antwoordmodus | null;
     };
     const { fonds_id } = body;
-    const modus: Modus = body.modus || "documenten";
 
     // Bouw geschiedenis-array. Backwards compat: als alleen `vraag` wordt
     // meegestuurd, behandelen we dat als one-shot conversatie.
@@ -489,6 +493,65 @@ export async function POST(req: NextRequest) {
 
     const scopeActief = !!scopeDocumentIds && scopeDocumentIds.length > 0;
 
+    // ── Increment I-2 (FO §11a) — automatische bronkeuze ────────────────────
+    // Buiten een document-scope bepaalt het systeem zélf of de vraag fonds-,
+    // algemeen- of gecombineerd-gericht is (pure heuristiek, lib/vraagtype.ts).
+    // Een door de gebruiker gekozen verduidelijkingschip (bron_intent_override)
+    // is leidend en zet de twijfel uit. Bij blijvende twijfel vragen we eerst
+    // terug i.p.v. te gokken (schijnzekerheid-guardrail).
+    const alleenFondsdocumenten =
+      !scopeActief && body.alleen_fondsdocumenten === true;
+    const intentOverride: BronIntent | undefined =
+      body.bron_intent_override === "fonds" || body.bron_intent_override === "algemeen"
+        ? body.bron_intent_override
+        : undefined;
+    const bronIntentResultaat: BronIntentResultaat | null = scopeActief
+      ? null
+      : intentOverride
+      ? { intent: intentOverride, vertrouwen: "zeker" }
+      : bepaalBronIntent(vraag);
+    const bronIntent: BronIntent | undefined = bronIntentResultaat?.intent;
+
+    // Verduidelijkingstak: twijfel → één SSE-event met de vraag + chips, géén
+    // modelcall en géén governance_log-antwoordregel (er is geen antwoord). De
+    // beslissing om te verduidelijken is puur reproduceerbaar uit de vraag.
+    if (
+      bronIntentResultaat &&
+      moetVerduidelijken(bronIntentResultaat, alleenFondsdocumenten)
+    ) {
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(
+            encoder.encode(
+              `data: ${JSON.stringify({
+                type: "verduidelijking",
+                vraag: VERDUIDELIJKINGSVRAAG,
+                opties: VERDUIDELIJKING_OPTIES,
+              })}\n\n`
+            )
+          );
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "done" })}\n\n`));
+          controller.close();
+        },
+      });
+      return new Response(stream, {
+        headers: {
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+          Connection: "keep-alive",
+        },
+      });
+    }
+
+    // Retrieval-modus (verborgen) volgt Design A "combineren-vloer": tenzij de
+    // gebruiker expliciet beperkt tot fondsdocumenten, halen we altijd op — nooit
+    // volledig overslaan. Bij een actieve document-scope is dit niet van
+    // toepassing (strict-document hieronder).
+    const bronModusRetrieval: Modus = scopeActief
+      ? "documenten"
+      : (bepaalAutoBronModus(alleenFondsdocumenten) as Modus);
+
     // ── Strategiekeuze (increment 2) bij actieve scope ──────────────────────
     // Specifieke vraag → targeted retrieval (increment 1). Dekkingsbrede vraag →
     // full-document (klein doc) of map-reduce (groot doc). Opt-in algemene kennis
@@ -550,7 +613,7 @@ export async function POST(req: NextRequest) {
     let contextTekst = "";
     let retrievalMeta: RetrievalMeta | null = null;
 
-    if (!breedActief && (scopeActief || modus === "documenten" || modus === "combineren")) {
+    if (!breedActief && (scopeActief || bronModusRetrieval === "documenten" || bronModusRetrieval === "combineren")) {
       // Hybride-schakelaar: per-fonds instelling uit het portaal is leidend;
       // valt terug op de env-default HYBRID_SEARCH als er nog niets is gezet.
       let hybrideAan = process.env.HYBRID_SEARCH === "on";
@@ -658,6 +721,20 @@ export async function POST(req: NextRequest) {
       };
     }
 
+    // ── Increment I-2 (FO §11a) — promptkeuze ontkoppeld van retrieval ───────
+    // De retrieval-modus (bronModusRetrieval) bepaalt OF en hoe breed we ophalen
+    // (Design A: combineren-vloer, altijd ophalen). De PROMPT-modus bepaalt welke
+    // van de drie kostbare instructiesets (documenten/combineren/algemeen) de AI
+    // krijgt. Die koppelen we aan de automatische bron-intentie: een expliciet
+    // algemeen-gerichte vraag zónder fondstreffers krijgt de algemene prompt
+    // (geen schijn-onderbouwing op afwezige bronnen); verder is combineren de
+    // vloer. "Alleen fondsdocumenten" forceert de strikte documenten-prompt.
+    const promptModus: Modus = alleenFondsdocumenten
+      ? "documenten"
+      : bronIntent === "algemeen" && bronnen.length === 0
+      ? "algemeen"
+      : "combineren";
+
     // Bouw prompt op basis van modus, met persoonlijke context
     let systeemBlokken: Anthropic.Messages.TextBlockParam[];
     let gebruikersPrompt: string;
@@ -690,10 +767,10 @@ export async function POST(req: NextRequest) {
             ? `BESCHIKBARE FRAGMENTEN UIT HET DOCUMENT ${titelLabel}:\n\n${contextTekst}\n\n---\n\nVRAAG: ${vraag}\n\nBeantwoord de vraag uitsluitend op basis van bovenstaande fragmenten. Staat het antwoord er niet in, zeg dan letterlijk: "Dit is niet in dit document aangetroffen."`
             : `In het document ${titelLabel} zijn geen passages gevonden die op deze vraag aansluiten.\n\nVRAAG: ${vraag}\n\nAls het antwoord niet in dit document staat, antwoord dan letterlijk: "Dit is niet in dit document aangetroffen." Verzin geen antwoord en vul niet aan uit andere bronnen of algemene kennis.`;
       }
-    } else if (modus === "algemeen") {
+    } else if (promptModus === "algemeen") {
       systeemBlokken = bouwSysteemBlokken(SP_ALGEMEEN_REGELS, ctxBestuurder, antwoordmodus);
       gebruikersPrompt = `VRAAG: ${vraag}`;
-    } else if (modus === "combineren") {
+    } else if (promptModus === "combineren") {
       systeemBlokken = bouwSysteemBlokken(SP_COMBINEREN_REGELS, ctxBestuurder, antwoordmodus);
       gebruikersPrompt =
         chunks.length > 0
@@ -711,7 +788,7 @@ export async function POST(req: NextRequest) {
     // Bij een actieve scope is het gedrag strict-document, ongeacht de gekozen
     // modus. Voor de UI-meta en het auditspoor loggen we dat als 'documenten'
     // (strikt op interne bronnen); de scopedetails staan in retrieval_meta.
-    const effectieveModus: Modus = scopeActief ? "documenten" : modus;
+    const effectieveModus: Modus = scopeActief ? "documenten" : promptModus;
 
     // ── Increment I-1 (FO §11c) — rustige weergave ──────────────────────────
     // Bronbasis-samenvatting voor het paneel "Onderbouwing en bronnen" en het
@@ -719,9 +796,9 @@ export async function POST(req: NextRequest) {
     // van bron-modus + antwoordmodus + treffers. De #4-melding (algemene kennis
     // náást treffers) hangt van de antwoordinhoud af en wordt ná het streamen
     // herberekend en in het 'done'-event meegestuurd.
-    const bronbasis = bronbasisLabel(modus, bronnen.length, scopeActief);
+    const bronbasis = bronbasisLabel(bronModusRetrieval, bronnen.length, scopeActief);
     const inlineMeldingenPre = bepaalInlineMeldingen({
-      bronModus: modus,
+      bronModus: bronModusRetrieval,
       antwoordmodus,
       aantalBronnen: bronnen.length,
       scopeActief,
@@ -764,8 +841,8 @@ export async function POST(req: NextRequest) {
                   strategie: scopeStrategie,
                 }
               : null,
-            // Increment G — actieve antwoordmodus + (bij autodetectie) de
-            // zichtbare wissel-melding zodat de UI 'm kan tonen + persisteren.
+            // Increment G/I-1 — actieve antwoordmodus + label voor het paneel
+            // "Onderbouwing en bronnen" (rustige weergave §11c).
             antwoordmodus,
             antwoordmodus_label: ANTWOORDMODUS_LABEL[antwoordmodus],
             retrieval_modus: retrievalFilters?.modus ?? null,
@@ -774,6 +851,14 @@ export async function POST(req: NextRequest) {
             // onderbouwingspaneel + deterministische inline-meldingen.
             bronbasis,
             inline_meldingen: inlineMeldingenPre,
+            // Increment I-2 (FO §11a) — automatische bronkeuze: de (verborgen)
+            // intentie + gekozen retrieval-modus. Géén zichtbare badge in de
+            // chat; uitsluitend voor het paneel "Onderbouwing en bronnen".
+            bron_intent: bronIntent ?? null,
+            bron_vertrouwen: bronIntentResultaat?.vertrouwen ?? null,
+            bron_modus_auto: scopeActief ? null : bronModusRetrieval,
+            alleen_fondsdocumenten: alleenFondsdocumenten,
+            bron_intent_override: scopeActief ? false : intentOverride !== undefined,
           });
 
           // Map-reduce (increment 2): verwerk het document in batches (map, met
@@ -867,7 +952,7 @@ export async function POST(req: NextRequest) {
             volledig.match(/\[(?:Algemene kennis|Volgens wetgeving)\]/gi) || []
           ).length;
           const inlineMeldingenFinaal = bepaalInlineMeldingen({
-            bronModus: modus,
+            bronModus: bronModusRetrieval,
             antwoordmodus,
             aantalBronnen: bronnen.length,
             scopeActief,
@@ -887,6 +972,18 @@ export async function POST(req: NextRequest) {
             antwoordmodus,
             bronbasis,
             inline_meldingen: inlineMeldingenFinaal,
+            // Increment I-2 (FO §11a/§11d) — automatische bronkeuze in het
+            // auditspoor: welke intentie, met welk vertrouwen, welke (verborgen)
+            // retrieval-modus, en of de gebruiker tot fondsdocumenten beperkte.
+            ...(scopeActief
+              ? {}
+              : {
+                  bron_intent: bronIntent,
+                  bron_vertrouwen: bronIntentResultaat?.vertrouwen,
+                  bron_modus_auto: bronModusRetrieval,
+                  alleen_fondsdocumenten: alleenFondsdocumenten,
+                  bron_intent_override: intentOverride !== undefined,
+                }),
           };
 
           // Loggen ná voltooiing, met het volledige antwoord.

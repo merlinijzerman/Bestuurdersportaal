@@ -385,6 +385,12 @@ export function bepaalInlineMeldingen(input: InlineMeldingInput): InlineMelding[
     types.push(aantalBronnen > 0 ? "alleen_fondsdocumenten" : "onvoldoende_basis");
   } else if (bronModus === "combineren") {
     if (aantalBronnen === 0) {
+      // Schijnzekerheid-guardrail (I-2): 0 fondstreffers krijgt ALTIJD deze melding,
+      // óók bij een auto 'algemeen'-intentie. De heuristiek kan een fondsvraag
+      // (zonder anker, mét generiek patroon) fout als 'algemeen' classificeren; de
+      // melding ("gebaseerd op algemene kennis") voorkomt dat zo'n antwoord stil
+      // als fondsspecifiek overkomt. Voor een echt-algemene vraag is de melding
+      // gewoon correct en transparant.
       types.push("geen_fondstreffer"); // #1 + #4: geen treffers → algemene kennis
     } else if (markers > 0) {
       types.push("algemene_kennis_fonds"); // #4: treffers + aanvullende algemene kennis
@@ -563,3 +569,147 @@ export function bepaalVervolgacties(
 
   return acties;
 }
+
+// ============================================================================
+// Increment I-2 — AUTOMATISCHE bronkeuze (FO v1.3 §11a/§11c/§11d)
+// ----------------------------------------------------------------------------
+// De zichtbare bron-as ("Onze documenten / Slim combineren / Algemene vraag")
+// verdwijnt; het systeem bepaalt zelf of een vraag fonds-, algemeen- of
+// gecombineerd-gericht is. Pure, uitlegbare NL-heuristiek (géén modelcall),
+// geijkt tegen de geaccordeerde meetset (lib/bronkeuze-meetset.ts) met
+// bewaakte drempels (lib/bronkeuze-classificatie.sanity.ts).
+//
+// BEWUST GESCHEIDEN van lib/weeg-bronsoort.ts (Increment G): de retrieval-weging
+// daar blijft ONGEWIJZIGD. Deze laag stuurt alleen de DEFAULT bron-modus,
+// de promptframing, de melding-onderdrukking en de verduidelijkingsvraag.
+//
+// Kernrisico = een fondsvraag stil als 'algemeen' afdoen (schijnzekerheid).
+// Twee waarborgen: (1) een fonds-anker sluit 'algemeen' uit, en de onzekere
+// fallback-intent is 'fonds' (nooit stil 'algemeen'); (2) Design A
+// "combineren-vloer": onder auto wordt retrieval nooit volledig overgeslagen.
+// ============================================================================
+
+/** De automatisch bepaalde intentie van een vraag. Stuurt promptframing en
+ *  meldingen — NIET de retrieval-weging (dat blijft Increment G). */
+export type BronIntent = "fonds" | "algemeen" | "gecombineerd";
+
+/** Hoe zeker is de intentie? "onzeker" = geen anker/signaal → doorvragen i.p.v.
+ *  aannemen (FO §11a endorseert de verduidelijkingsvraag bij twijfel). */
+export type Vertrouwen = "zeker" | "onzeker";
+
+export interface BronIntentResultaat {
+  intent: BronIntent;
+  vertrouwen: Vertrouwen;
+}
+
+// Generiek/wettelijk/markt- en DEFINITIE-signalen → de vraag staat (ook) los van
+// het eigen fonds. Gecureerd; elke toevoeging is een navolgbare keuze.
+const GENERIEK_INTENT_PATRONEN: RegExp[] = [
+  /\bdnb\b/,
+  /\bafm\b/,
+  /pensioenfederatie/,
+  /\bszw\b/,
+  /\btoezicht/,
+  /toezichthouder/,
+  /\bwetgeving\b/,
+  /\bwettelijk/,
+  /\bregelgeving\b/,
+  /\bpensioenwet\b/,
+  /\bde wet\b/,
+  /\bwet\b/,
+  /\bwtp\b/,
+  /wet toekomst pensioenen/,
+  /\bsector(?:breed|norm|guidance)?\b/,
+  /sectorbreed/,
+  /\brichtlijn(?:en)?\b/,
+  /\bleidraad\b/,
+  /\bguidance\b/,
+  /extern(?:e)? kader/,
+  /\bnorm(?:en|kader)?\b/,
+  /\bmarkt\b/,
+  /gebruikelijk in de markt/,
+  /vergelijkbare fondsen/,
+  /\bvergelijk/,
+  /prudent person/,
+  // Definitievraag-triggers: een definitie/"wat is een X" staat los van het
+  // eigen fonds. Bewust "wat is EEN" (onbepaald) — "wat is HET …" kan juist op
+  // de eigen inrichting slaan en blijft daarom buiten deze lijst.
+  /\bwat is een\b/,
+  /\bwat houdt\b/,
+  /\bwat betekent\b/,
+  /verschil tussen/,
+];
+
+// Fonds-ANKERS → de vraag gaat expliciet over het eigen fonds. De bezittelijke
+// voornaamwoorden ons/onze/wij zijn het sterkste, robuuste signaal; "het bestuur"
+// (het orgaan van dit fonds) telt eveneens.
+const FONDS_INTENT_PATRONEN: RegExp[] = [
+  /\bonze\b/,
+  /\bons\b/,
+  /\bwij\b/,
+  /\bhet bestuur\b/,
+  /\bdit fonds\b/,
+  /\beigen (?:beleid|fonds|stukken|regeling)/,
+];
+
+/**
+ * Bepaal de bron-intentie + het vertrouwen, puur uit de vraag (FO §11a).
+ *
+ *   anker + generiek  → "gecombineerd" (zeker)   — gescheiden antwoord
+ *   anker             → "fonds"        (zeker)    — fondsdocumenten leidend
+ *   generiek          → "algemeen"     (zeker)    — algemene kennis leidend
+ *   geen van beide    → "fonds"        (ONZEKER)  — twijfel → verduidelijken
+ *
+ * De onzekere fallback-intent is bewust "fonds", niet "algemeen": zonder
+ * doorvragen leunen we fondsgericht en nooit stil op algemene kennis
+ * (schijnzekerheid-guardrail).
+ */
+export function bepaalBronIntent(vraag: string): BronIntentResultaat {
+  const g = normaliseer(vraag);
+  const generiek = GENERIEK_INTENT_PATRONEN.some((p) => p.test(g));
+  const fonds = FONDS_INTENT_PATRONEN.some((p) => p.test(g));
+
+  if (fonds && generiek) return { intent: "gecombineerd", vertrouwen: "zeker" };
+  if (fonds) return { intent: "fonds", vertrouwen: "zeker" };
+  if (generiek) return { intent: "algemeen", vertrouwen: "zeker" };
+  return { intent: "fonds", vertrouwen: "onzeker" };
+}
+
+/**
+ * Moet de assistent eerst verduidelijken i.p.v. aannemen (FO §11a)? Alleen bij
+ * een ONZEKERE intentie én zonder expliciete fondsrestrictie — heeft de
+ * gebruiker "Alleen fondsdocumenten" aangezet, dan is de bron al gekozen.
+ */
+export function moetVerduidelijken(
+  resultaat: BronIntentResultaat,
+  alleenFondsdocumenten: boolean
+): boolean {
+  return resultaat.vertrouwen === "onzeker" && !alleenFondsdocumenten;
+}
+
+/**
+ * De AUTO bron-modus voor retrieval. Design A "combineren-vloer": tenzij de
+ * gebruiker expliciet beperkt tot fondsdocumenten, halen we altijd op
+ * ("combineren") — nooit volledig overslaan. De INTENT verandert deze modus
+ * niet (gedragsneutraal t.o.v. Increment G); intent stuurt promptframing en
+ * meldingen, niet de retrieval-modus.
+ */
+export function bepaalAutoBronModus(alleenFondsdocumenten: boolean): BronModus {
+  return alleenFondsdocumenten ? "documenten" : "combineren";
+}
+
+/** Vaste verduidelijkingsvraag bij twijfel (FO §11a). */
+export const VERDUIDELIJKINGSVRAAG =
+  "Wilt u dit weten voor uw fonds specifiek, of in algemene zin?";
+
+/** Een keuze-optie bij de verduidelijkingsvraag. `intent` is de intentie die de
+ *  gebruiker met de chip bevestigt; de UI/route hervraagt daarmee zonder twijfel. */
+export interface Verduidelijkingsoptie {
+  intent: Extract<BronIntent, "fonds" | "algemeen">;
+  label: string;
+}
+
+export const VERDUIDELIJKING_OPTIES: Verduidelijkingsoptie[] = [
+  { intent: "fonds", label: "Voor mijn fonds" },
+  { intent: "algemeen", label: "In algemene zin" },
+];
