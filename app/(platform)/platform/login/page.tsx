@@ -32,7 +32,7 @@ export default function PlatformLoginPage() {
   const [factorId, setFactorId] = useState("");
   const [challengeId, setChallengeId] = useState("");
   const [totpSecret, setTotpSecret] = useState("");
-  const [totpUri, setTotpUri] = useState("");
+  const [totpQr, setTotpQr] = useState("");
 
   async function naarPlatform() {
     router.push("/platform");
@@ -104,7 +104,7 @@ export default function PlatformLoginPage() {
     }
     setFactorId(data.id);
     setTotpSecret(data.totp.secret);
-    setTotpUri(data.totp.uri);
+    setTotpQr(data.totp.qr_code);
     setStap("enroll");
   }
 
@@ -211,21 +211,30 @@ export default function PlatformLoginPage() {
           {stap === "enroll" && (
             <form onSubmit={handleVerify} className="space-y-4">
               <p className="text-sm text-[#0F2744]/80">
-                Voeg dit account toe aan uw authenticator-app (handmatige
-                sleutel), en voer de 6-cijferige code in.
+                Scan deze QR-code met uw authenticator-app en voer de
+                6-cijferige code in.
               </p>
-              <div className="rounded-lg bg-[#F0F3F8] p-3">
-                <div className="text-xs font-medium text-[#0F2744]/60">
-                  Sleutel
+              {totpQr && (
+                <div className="flex justify-center rounded-lg bg-white p-3">
+                  {/* Supabase levert de QR als gerenderde SVG-data-URI — geen
+                      QR-library nodig. eslint-disable: bewust een <img>, geen
+                      next/image (data-URI, geen remote-optimalisatie nodig). */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={totpQr}
+                    alt="QR-code voor MFA-inschrijving"
+                    className="h-44 w-44"
+                  />
                 </div>
-                <div className="break-all font-mono text-sm">{totpSecret}</div>
-                <div className="mt-2 text-xs font-medium text-[#0F2744]/60">
-                  otpauth-URI
+              )}
+              <details className="rounded-lg bg-[#F0F3F8] p-3">
+                <summary className="cursor-pointer text-xs font-medium text-[#0F2744]/60">
+                  Scannen lukt niet? Voer de sleutel handmatig in
+                </summary>
+                <div className="mt-2 break-all font-mono text-sm">
+                  {totpSecret}
                 </div>
-                <div className="break-all font-mono text-[11px] text-[#0F2744]/70">
-                  {totpUri}
-                </div>
-              </div>
+              </details>
               <CodeInvoer code={code} setCode={setCode} />
               <button
                 type="submit"
