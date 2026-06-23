@@ -3,10 +3,10 @@ import { createServerSupabase } from "@/lib/supabase-server";
 import { maakChunksUitSegmenten } from "@/lib/rag";
 import {
   diagnoseerExtractie,
-  extractTekst,
   ONDERSTEUNDE_TYPES,
   type Bestandstype,
 } from "@/lib/document-extractie";
+import { extractTekstMetOcrFallback } from "@/lib/ocr";
 
 // POST /api/documents/[id]/her-extract
 //
@@ -91,9 +91,13 @@ export async function POST(
 
   const buffer = Buffer.from(await bestand.arrayBuffer());
 
+  // Extractie met OCR-fallback (besluit 0020): eerst de goedkope tekstlaag,
+  // alleen bij een te dunne uitkomst valt dit terug op Mistral OCR. Faalt OCR
+  // (bv. corrupte PDF), dan komt het originele (lege) resultaat terug en vangt
+  // de tekst-drempel hieronder dat gracieus af.
   let extractie;
   try {
-    extractie = await extractTekst(buffer, bestandstype);
+    extractie = await extractTekstMetOcrFallback(buffer, bestandstype);
   } catch (error) {
     console.error(`Her-extract: extractie ${bestandstype} mislukt:`, error);
     return NextResponse.json(
@@ -106,7 +110,7 @@ export async function POST(
     return NextResponse.json(
       {
         error:
-          "Her-extractie leverde te weinig tekst op — mogelijk een gescand document zonder tekstlaag.",
+          "Her-extractie leverde te weinig tekst op — mogelijk een gescand of corrupt document waaruit ook OCR geen tekst kon halen.",
       },
       { status: 400 }
     );
@@ -161,16 +165,35 @@ export async function POST(
     }
   }
 
-  await supabase
+  // Audit-velden (ocr_toegepast/ocr_engine, besluit 0020) gevouwen in dezelfde
+  // update. Best-effort: draait de migratie 2026_06_22x_ocr_audit nog niet, dan
+  // breekt de her-extract niet — we loggen en gaan door.
+  const { error: updateError } = await supabase
     .from("documenten")
-    .update({ geindexeerd: true, paginas: extractie.aantalPaginas })
+    .update({
+      geindexeerd: true,
+      paginas: extractie.aantalPaginas,
+      ocr_toegepast: extractie.ocrToegepast,
+      ocr_engine: extractie.ocrEngine,
+    })
     .eq("id", id);
+
+  if (updateError) {
+    console.warn(
+      `[her-extract] Document-update (incl. OCR-audit) mislukt voor ${id} — ` +
+        `chunks zijn wel vervangen:`,
+      updateError.message
+    );
+  }
 
   return NextResponse.json({
     success: true,
     document_id: id,
     chunks_aangemaakt: chunks.length,
     paginas: extractie.aantalPaginas,
-    bericht: `Document opnieuw geïndexeerd: ${chunks.length} fragmenten.`,
+    ocr_toegepast: extractie.ocrToegepast,
+    bericht: `Document opnieuw geïndexeerd: ${chunks.length} fragmenten${
+      extractie.ocrToegepast ? " (via OCR)" : ""
+    }.`,
   });
 }

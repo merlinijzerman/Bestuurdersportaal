@@ -125,6 +125,11 @@ create table if not exists public.documenten (
                    check (metadata_review_status in ('niet_nodig','te_controleren','gecontroleerd','afgewezen')),
   metadata_gecontroleerd_door uuid references auth.users(id) on delete set null,
   metadata_gecontroleerd_op   timestamptz,
+  -- OCR-audit (besluit 0020, migratie 2026_06_22x_ocr_audit.sql authoritatief).
+  -- ocr_toegepast = inhoud via OCR-fallback verkregen i.p.v. PDF-tekstlaag;
+  -- ocr_engine bv. 'mistral:mistral-ocr-latest' (NULL = tekstlaag gebruikt).
+  ocr_toegepast  boolean not null default false,
+  ocr_engine     text,
   -- Contextvalidatie (CHECK): dossier→procesinstantie_id, vergadering→vergadering_id,
   -- agendapunt→vergadering. Statusovergangen + secundaire koppelingen via triggers.
   constraint documenten_context_dossier_check

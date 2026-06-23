@@ -39,6 +39,11 @@ const OCR_DREMPEL_CHARS_PER_PAGINA = 50;
 
 const MAX_RETRIES = 3;
 
+// Harde timeout per OCR-call. OCR is trager dan embedding en een hangende call
+// zou anders tot de platform-/serverless-limiet blijven wachten (zie §8). Per
+// poging opnieuw toegepast via AbortController.
+const OCR_TIMEOUT_MS = 60_000;
+
 function slaap(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -103,18 +108,45 @@ export async function ocrPdfNaarResultaat(
   });
 
   for (let poging = 0; poging <= MAX_RETRIES; poging++) {
-    const res = await fetch(OCR_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${key}`,
-      },
-      body,
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), OCR_TIMEOUT_MS);
+
+    let res: Response;
+    try {
+      res = await fetch(OCR_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${key}`,
+        },
+        body,
+        signal: controller.signal,
+      });
+    } catch (error) {
+      // Abort/netwerkfout: behandel als tijdelijk en retry tot het maximum.
+      if (poging < MAX_RETRIES) {
+        await slaap(1000 * 2 ** poging);
+        continue;
+      }
+      const reden =
+        error instanceof Error && error.name === "AbortError"
+          ? `timeout na ${OCR_TIMEOUT_MS} ms`
+          : error instanceof Error
+            ? error.message
+            : String(error);
+      throw new Error(`Mistral OCR: ${reden}`);
+    } finally {
+      clearTimeout(timeout);
+    }
 
     if (res.ok) {
       const data = (await res.json()) as MistralOcrResponse;
       const paginas = [...(data.pages ?? [])].sort((a, b) => a.index - b.index);
+
+      // Kosten/usage zichtbaar in de logs (acceptatiecriterium §11) — niet opgeslagen.
+      console.info(
+        `[OCR] Mistral verwerkte ${data.usage_info?.pages_processed ?? paginas.length} pagina('s).`
+      );
 
       const paginaTeksten: string[] = [];
       const segmenten: TekstSegment[] = [];
@@ -155,8 +187,10 @@ export interface ExtractieResultaatMetOcr extends ExtractieResultaat {
 // Hoofdingang voor ingest: probeer eerst de goedkope tekstlaag-extractie en val
 // alleen terug op OCR als die te dun is. Faalt OCR (corrupt PDF, API-fout),
 // dan geven we het oorspronkelijke (lege) resultaat terug — de aanroeper houdt
-// zo zijn bestaande "geen tekst gevonden"-afhandeling. Dit is het ene pad dat
-// zowel de upload-route, de her-extract-route als het bulk-migratiescript delen.
+// zo zijn bestaande "geen tekst gevonden"-afhandeling. Wordt nu gebruikt door de
+// her-extract-route; bedoeld als gedeeld pad dat ook het bulk-migratiescript
+// (apart ticket #12) gaat hergebruiken. De upload-route blijft bewust ongewijzigd
+// (besluit 0020 §Gevolgen: live synchrone OCR pas na timeout-analyse).
 export async function extractTekstMetOcrFallback(
   buffer: Buffer,
   bestandstype: Bestandstype
