@@ -22,6 +22,14 @@ export default async function DashboardLayout({
     .eq("id", user.id)
     .single();
 
+  // 3b-blokkade (wederzijds): een sessie zonder profielen-rij is een
+  // platform-identiteit (of een ongeldig account) en hoort niet op de
+  // tenant-surface. Stuur door naar de tenant-login; de platform-kant heeft
+  // zijn eigen gate in app/(platform)/platform/(beveiligd)/layout.tsx.
+  if (!profiel) {
+    redirect("/login");
+  }
+
   // Supabase kan `fondsen` als array of als enkel object teruggeven,
   // afhankelijk van de relatie en versie van @supabase/supabase-js.
   // Robuust: behandel beide gevallen.
