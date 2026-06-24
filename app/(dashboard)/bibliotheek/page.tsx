@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from "react";
 import DocumentMetadataModal from "@/components/DocumentMetadataModal";
 import { bronkaartLabels } from "@/lib/bronsoort";
+import { DOCUMENTTYPEN, DOCUMENTTYPE_LABEL } from "@/lib/document-metadata";
 import ZoekenPaneel from "./_components/ZoekenPaneel";
 
 interface Document {
@@ -65,6 +66,8 @@ export default function BibliotheekPage() {
   const [actieBezig, setActieBezig] = useState(false);
   const [herindexId, setHerindexId] = useState<string | null>(null);
   const [metadataDocId, setMetadataDocId] = useState<string | null>(null);
+  // Welke clustergroepen zijn ingeklapt. Leeg = alles uitgeklapt (voorkeur gebruiker).
+  const [ingeklapteGroepen, setIngeklapteGroepen] = useState<Set<string>>(new Set());
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploaden, setUploaden] = useState(false);
   const [uploadBericht, setUploadBericht] = useState("");
@@ -195,6 +198,48 @@ export default function BibliotheekPage() {
     (d) => d.bibliotheek === actieveTab && d.metadata_review_status === "te_controleren"
   ).length;
 
+  function toggleGroep(key: string) {
+    setIngeklapteGroepen((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  // Clustering: generieke documenten op bron, fondsdocumenten op documenttype.
+  // Lege/onbekende waarden vallen in een 'Overig'/'Zonder type'-groep zodat niets
+  // onzichtbaar wordt. Volgorde is betekenisvol (vaste lijst), niet alfabetisch.
+  type Groep = { key: string; label: string; docs: Document[] };
+  function groepeer(lijst: Document[]): Groep[] {
+    const buckets = new Map<string, Document[]>();
+    const push = (k: string, d: Document) => {
+      const arr = buckets.get(k);
+      if (arr) arr.push(d);
+      else buckets.set(k, [d]);
+    };
+    const groepen: Groep[] = [];
+
+    if (actieveTab === "generiek") {
+      lijst.forEach((d) => push(d.bron || "Overig", d));
+      const overige = [...buckets.keys()].filter((k) => !BRONNEN.includes(k)).sort();
+      [...BRONNEN, ...overige].forEach((b) => {
+        const docs = buckets.get(b);
+        if (docs) groepen.push({ key: b, label: b, docs });
+      });
+      return groepen;
+    }
+
+    lijst.forEach((d) => push(d.documenttype || "__zonder__", d));
+    DOCUMENTTYPEN.forEach((t) => {
+      const docs = buckets.get(t);
+      if (docs) groepen.push({ key: t, label: DOCUMENTTYPE_LABEL[t], docs });
+    });
+    const zonder = buckets.get("__zonder__");
+    if (zonder) groepen.push({ key: "__zonder__", label: "Zonder type", docs: zonder });
+    return groepen;
+  }
+
   return (
     <div className="p-7">
       <div className="flex items-start justify-between mb-6">
@@ -316,8 +361,34 @@ export default function BibliotheekPage() {
           </p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {gefilterd.map((doc) => {
+        <div className="space-y-4">
+          {groepeer(gefilterd).map((groep) => {
+            const groepKey = `${actieveTab}:${groep.key}`;
+            const open = !ingeklapteGroepen.has(groepKey);
+            return (
+              <div key={groepKey}>
+                <button
+                  type="button"
+                  onClick={() => toggleGroep(groepKey)}
+                  className="flex items-center gap-2 w-full text-left mb-2"
+                >
+                  <span
+                    className={`text-gray-400 text-[10px] transition-transform ${
+                      open ? "rotate-90" : ""
+                    }`}
+                  >
+                    ▶
+                  </span>
+                  <span className="text-sm font-bold text-[#0F2744]">
+                    {groep.label}
+                  </span>
+                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-500">
+                    {groep.docs.length}
+                  </span>
+                </button>
+                {open && (
+                  <div className="space-y-2">
+                    {groep.docs.map((doc) => {
             const inactief = !doc.actief;
             const kanInzien = !!doc.opslag_pad;
             const isGeneriek = doc.bibliotheek === "generiek";
@@ -527,6 +598,11 @@ export default function BibliotheekPage() {
                     </>
                   )}
                 </div>
+              </div>
+            );
+                    })}
+                  </div>
+                )}
               </div>
             );
           })}
