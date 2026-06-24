@@ -31,6 +31,12 @@ import { embedTeksten, naarVectorLiteral, EMBED_MODEL } from "./embeddings";
 export const STORAGE_BUCKET = "documenten";
 export const GENERIEK_PAD_PREFIX = "generiek";
 
+// Private, deny-by-default zone waar een upload eerst landt (signed upload URL,
+// geen RLS-policy). De server valideert de kopie hier en promoveert pas daarna
+// naar STORAGE_BUCKET; daarna wordt de quarantaine-kopie verwijderd. Zie
+// supabase/migrations/2026_06_24_storage_quarantaine.sql.
+export const QUARANTAINE_BUCKET = "documenten-quarantaine";
+
 export type PipelineResultaat =
   | {
       ok: true;

@@ -11,6 +11,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase";
 import { NORMGEWICHTEN, NORMGEWICHT_LABEL } from "@/lib/bronsoort";
 import {
   isStandaardZichtbaarInRag,
@@ -21,6 +22,7 @@ import {
   REGELINGSTYPE_LABEL,
 } from "@/lib/generiek-curatie";
 import {
+  curatieUploadUrl,
   curatieAanmaken,
   curatieBijwerken,
   curatieVervangen,
@@ -153,11 +155,36 @@ export default function GeneriekeBibliotheekClient({
     setForm((f) => ({ ...f, [k]: v }));
   }
 
-  function bouwFormData(): FormData {
+  // Bouwt de (kleine) metadata-payload. Het bestand zit hier NIET meer in: dat
+  // is al direct naar de quarantainezone geüpload; we geven alleen het pad +
+  // oorspronkelijke naam/mime mee zodat de server het kan ophalen en valideren.
+  function bouwFormData(quarantainePad: string | null, gekozenBestand: File | null): FormData {
     const fd = new FormData();
     for (const [k, v] of Object.entries(form)) fd.set(k, v);
-    if (bestand) fd.set("bestand", bestand);
+    if (quarantainePad && gekozenBestand) {
+      fd.set("quarantaine_pad", quarantainePad);
+      fd.set("bestandsnaam", gekozenBestand.name);
+      fd.set("mime_type", gekozenBestand.type);
+    }
     return fd;
+  }
+
+  // Stap 1 van de upload: vraag een signed upload-slot aan en zet het bestand
+  // DIRECT in de quarantainebucket (browser → Supabase, buiten de server-action
+  // om). Geeft het server-gegenereerde pad terug voor stap 2 (cureren).
+  async function uploadNaarQuarantaine(
+    file: File
+  ): Promise<{ ok: true; pad: string } | { ok: false; melding: string }> {
+    const slot = await curatieUploadUrl({ bestandsnaam: file.name, mimeType: file.type });
+    if (!slot.ok) return { ok: false, melding: slot.melding };
+    const supabase = createClient();
+    const { error } = await supabase.storage
+      .from(slot.bucket)
+      .uploadToSignedUrl(slot.pad, slot.token, file);
+    if (error) {
+      return { ok: false, melding: "Uploaden naar de beveiligde zone mislukte. Probeer het opnieuw." };
+    }
+    return { ok: true, pad: slot.pad };
   }
 
   function verwerk(r: CuratieResultaat) {
@@ -174,13 +201,31 @@ export default function GeneriekeBibliotheekClient({
 
   function verstuur() {
     if (!modus) return;
+    const huidigeModus = modus;
     startTransitie(async () => {
-      if (modus.soort === "aanmaken") {
-        verwerk(await curatieAanmaken(bouwFormData()));
-      } else if (modus.soort === "bewerken") {
-        verwerk(await curatieBijwerken(modus.doc.id, bouwFormData()));
+      // Stap 1: bij aanmaken/vervangen eerst direct-naar-Storage uploaden.
+      let pad: string | null = null;
+      if (huidigeModus.soort === "aanmaken" || huidigeModus.soort === "vervangen") {
+        if (!bestand) {
+          setMelding({ ok: false, tekst: "Kies een bestand om te uploaden." });
+          return;
+        }
+        const up = await uploadNaarQuarantaine(bestand);
+        if (!up.ok) {
+          setMelding({ ok: false, tekst: up.melding });
+          return;
+        }
+        pad = up.pad;
+      }
+
+      // Stap 2: cureren met de (kleine) metadata-payload + het quarantaine-pad.
+      const fd = bouwFormData(pad, bestand);
+      if (huidigeModus.soort === "aanmaken") {
+        verwerk(await curatieAanmaken(fd));
+      } else if (huidigeModus.soort === "bewerken") {
+        verwerk(await curatieBijwerken(huidigeModus.doc.id, fd));
       } else {
-        verwerk(await curatieVervangen(modus.doc.id, bouwFormData()));
+        verwerk(await curatieVervangen(huidigeModus.doc.id, fd));
       }
     });
   }

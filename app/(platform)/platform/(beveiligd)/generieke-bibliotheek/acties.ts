@@ -20,17 +20,24 @@
 //  onderbreken de flow.
 // ============================================================================
 
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { withPlatform, PlatformError } from "@/lib/platform-wrapper";
 import type { PlatformIdentiteit } from "@/lib/platform-auth";
 import { valideerUpload } from "@/lib/bestand-validatie";
+import { bepaalBestandstype } from "@/lib/document-extractie";
 import {
   valideerCuratie,
   type CuratieInvoer,
   type CuratieGenormaliseerd,
 } from "@/lib/generiek-curatie";
-import { verwerkGeneriekBestand, STORAGE_BUCKET } from "@/lib/generiek-pipeline";
+import {
+  verwerkGeneriekBestand,
+  STORAGE_BUCKET,
+  QUARANTAINE_BUCKET,
+  GENERIEK_PAD_PREFIX,
+} from "@/lib/generiek-pipeline";
 
 const LIJST_PAD = "/platform/generieke-bibliotheek";
 const CAP = "platform.generic.library.manage" as const;
@@ -138,15 +145,49 @@ async function maakGeneriekDocument(
   fd: FormData,
   versieVan?: string | null
 ): Promise<MaakResultaat> {
-  const bestand = fd.get("bestand");
-  if (!(bestand instanceof File) || bestand.size === 0) {
-    return { ok: false, foutcode: "bestand_ontbreekt", melding: "Kies een bestand om te uploaden." };
+  // Het bestand is al direct-naar-Storage in de quarantainezone geland (signed
+  // upload URL, buiten de server-action-payload om). We krijgen alleen het pad +
+  // de oorspronkelijke naam/mime; de bytes halen we hier op en valideren we
+  // fail-closed. De quarantaine-kopie wordt aan het eind altijd opgeruimd.
+  const pad = (fd.get("quarantaine_pad") as string | null)?.trim() || "";
+  const bestandsnaam = (fd.get("bestandsnaam") as string | null) ?? "";
+  const mimeType = (fd.get("mime_type") as string | null) ?? "";
+  if (!pad || !pad.startsWith(`${GENERIEK_PAD_PREFIX}/`)) {
+    return { ok: false, foutcode: "bestand_ontbreekt", melding: "Geen geüpload bestand gevonden. Upload het bestand opnieuw." };
   }
 
-  const buffer = Buffer.from(await bestand.arrayBuffer());
+  try {
+    const { data: blob, error: dlErr } = await svc.storage.from(QUARANTAINE_BUCKET).download(pad);
+    if (dlErr || !blob) {
+      return { ok: false, foutcode: "download_mislukt", melding: "Het geüploade bestand kon niet worden opgehaald. Upload het opnieuw." };
+    }
+    const buffer = Buffer.from(await blob.arrayBuffer());
+
+    return await maakUitBuffer(svc, identiteit, correlatieId, fd, versieVan, {
+      buffer,
+      naam: bestandsnaam,
+      mimeType,
+    });
+  } finally {
+    // Cleanup: de quarantaine-kopie is na promotie naar 'documenten' overbodig.
+    // Best-effort — een opruimfout mag het resultaat niet beïnvloeden.
+    const { error: rmErr } = await svc.storage.from(QUARANTAINE_BUCKET).remove([pad]);
+    if (rmErr) console.error("[P1] quarantaine-opruimen mislukt:", rmErr.message);
+  }
+}
+
+async function maakUitBuffer(
+  svc: SupabaseClient,
+  identiteit: PlatformIdentiteit,
+  correlatieId: string,
+  fd: FormData,
+  versieVan: string | null | undefined,
+  bron: { buffer: Buffer; naam: string; mimeType: string }
+): Promise<MaakResultaat> {
+  const buffer = bron.buffer;
 
   // 1) Uploadsecurity (fail-closed: magic-bytes + OOXML-subtype + grootte).
-  const val = await valideerUpload({ naam: bestand.name, mimeType: bestand.type, buffer });
+  const val = await valideerUpload({ naam: bron.naam, mimeType: bron.mimeType, buffer });
   if (!val.ok) {
     return { ok: false, foutcode: val.foutcode, melding: val.melding };
   }
@@ -246,6 +287,68 @@ async function maakGeneriekDocument(
   ]);
 
   return { ok: true, documentId: doc.id, chunks: pipe.chunks, paginas: pipe.paginas };
+}
+
+// ── 0. UPLOAD-SLOT (signed upload URL naar de quarantainezone) ──────────────
+// De browser uploadt het bestand DIRECT naar 'documenten-quarantaine' (buiten de
+// server-action-payload om), zodat grote bestanden niet op de Next.js-/Vercel-
+// bodylimiet stuklopen. De zone is deny-by-default; de signed token autoriseert
+// de upload (geen RLS-policy nodig). Capability-gated + geaudit; het pad wordt
+// SERVER-SIDE gegenereerd (geen client-padinjectie). De bindende fail-closed-
+// validatie (magic-bytes) volgt alsnog server-side ná upload, bij het cureren.
+export type UploadSlotResultaat =
+  | { ok: true; bucket: string; pad: string; token: string }
+  | { ok: false; foutcode: string; melding: string };
+
+export async function curatieUploadUrl(input: {
+  bestandsnaam: string;
+  mimeType: string;
+}): Promise<UploadSlotResultaat> {
+  try {
+    return await withPlatform<UploadSlotResultaat>(
+      {
+        capability: CAP,
+        handeling: "platform.generic.document.upload_slot",
+        doelObject: "documenten-quarantaine:generiek",
+      },
+      async (svc) => {
+        // Vroegcontrole op type (snelle UX-afwijzing); bindt niet — magic-bytes
+        // bepaalt server-side na upload. Levert ook de vertrouwde extensie.
+        const bestandstype = bepaalBestandstype({
+          name: input.bestandsnaam,
+          type: input.mimeType,
+        } as File);
+        if (!bestandstype) {
+          return {
+            resultaat: { ok: false, foutcode: "type_niet_ondersteund", melding: "Alleen PDF, DOCX, PPTX en XLSX zijn toegestaan." },
+            effect: { afgewezen: "type_niet_ondersteund" },
+          };
+        }
+
+        const pad = `${GENERIEK_PAD_PREFIX}/${randomUUID()}.${bestandstype}`;
+        const { data, error } = await svc.storage
+          .from(QUARANTAINE_BUCKET)
+          .createSignedUploadUrl(pad);
+        if (error || !data) {
+          return {
+            resultaat: { ok: false, foutcode: "slot_mislukt", melding: "Kon geen upload-sessie starten. Probeer het opnieuw." },
+            effect: { afgewezen: "slot_mislukt" },
+          };
+        }
+
+        return {
+          resultaat: { ok: true, bucket: QUARANTAINE_BUCKET, pad: data.path, token: data.token },
+          effect: { quarantaine_pad: data.path, bestandstype },
+        };
+      }
+    );
+  } catch (e) {
+    if (e instanceof PlatformError) {
+      return { ok: false, foutcode: e.foutcode, melding: platformMelding(e.foutcode) };
+    }
+    console.error("[P1] onverwachte fout bij upload-slot:", e);
+    return { ok: false, foutcode: "serverfout", melding: "Er ging iets mis. Probeer het opnieuw." };
+  }
 }
 
 // ── 1. AANMAKEN ─────────────────────────────────────────────────────────────
