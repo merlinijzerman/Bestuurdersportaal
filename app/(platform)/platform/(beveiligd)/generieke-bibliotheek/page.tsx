@@ -16,6 +16,13 @@ import GeneriekeBibliotheekClient, {
 
 export const dynamic = "force-dynamic";
 
+// Synchrone OCR-fallback in de curatie-pipeline (besluit 0023) kan voor een
+// beeld-only PDF tientallen seconden duren. De server-actions van deze pagina
+// (acties.ts → verwerkGeneriekBestand) erven deze route-segment-limiet; 300s
+// vereist het Vercel Pro-plan + fluid compute. Zonder deze bump kapt Vercel een
+// OCR-upload halverwege af met een generieke fout.
+export const maxDuration = 300;
+
 const CAP = "platform.generic.library.manage";
 
 const DOC_KOLOMMEN =

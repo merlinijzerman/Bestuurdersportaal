@@ -22,9 +22,9 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   CONTENT_TYPE_PER_BESTANDSTYPE,
-  extractTekst,
   type Bestandstype,
 } from "./document-extractie";
+import { extractTekstMetOcrFallback } from "./ocr";
 import { maakChunksUitSegmenten } from "./rag";
 import { embedTeksten, naarVectorLiteral, EMBED_MODEL } from "./embeddings";
 
@@ -119,12 +119,18 @@ export async function verwerkGeneriekBestand(
   });
   await zetStatus(svc, documentId, "gescand");
 
-  // ── Extractie (geen OCR-fallback in P1; her-extractie kan dat later doen) ──
+  // ── Extractie met OCR-fallback (besluit 0020 + addendum 0023) ─────────────
+  // Eerst de goedkope tekstlaag; bij een te dunne uitkomst (beeld-only/gescande
+  // PDF) valt dit terug op Mistral OCR. Synchrone OCR is hier aanvaard omdat de
+  // generieke curatie back-office + laagfrequent is (zelfde risicoprofiel als de
+  // her-extract-route); de maxDuration op de curatiepagina dekt de extra
+  // wandkloktijd. Faalt OCR, dan houdt extractTekstMetOcrFallback het (lege)
+  // tekstlaag-resultaat aan en vangt de <100-tekens-poort hieronder dat af.
   t = new Date().toISOString();
   await zetStatus(svc, documentId, "extractie");
   let extractie;
   try {
-    extractie = await extractTekst(buffer, bestandstype);
+    extractie = await extractTekstMetOcrFallback(buffer, bestandstype);
   } catch (e) {
     await schrijfJob(svc, {
       documentId, versieId, correlatieId, stap: "extractie", status: "mislukt",
@@ -134,8 +140,10 @@ export async function verwerkGeneriekBestand(
     console.error("[P1-pipeline] extractie-exception:", e);
     return { ok: false, foutcode: "extractie_mislukt", verwerkingsstatus: "mislukt" };
   }
+  // OCR-job weerspiegelt of de fallback daadwerkelijk is ingezet (audit, FO §21.1).
   await schrijfJob(svc, {
-    documentId, versieId, correlatieId, stap: "ocr", status: "overgeslagen", start: t,
+    documentId, versieId, correlatieId, stap: "ocr",
+    status: extractie.ocrToegepast ? "geslaagd" : "overgeslagen", start: t,
   });
 
   if (!extractie.tekst || extractie.tekst.trim().length < 100) {
@@ -150,8 +158,15 @@ export async function verwerkGeneriekBestand(
     documentId, versieId, correlatieId, stap: "extractie", status: "geslaagd", start: t,
   });
 
-  // Paginatelling vastleggen op de documenten-rij.
-  await svc.from("documenten").update({ paginas: extractie.aantalPaginas }).eq("id", documentId);
+  // Paginatelling + OCR-audit (ocr_toegepast/ocr_engine, besluit 0020) vastleggen.
+  await svc
+    .from("documenten")
+    .update({
+      paginas: extractie.aantalPaginas,
+      ocr_toegepast: extractie.ocrToegepast,
+      ocr_engine: extractie.ocrEngine,
+    })
+    .eq("id", documentId);
 
   // ── Opslag origineel (service-role schrijft naar het generiek/-pad) ───────
   const opslagPad = `${GENERIEK_PAD_PREFIX}/${documentId}.${bestandstype}`;
