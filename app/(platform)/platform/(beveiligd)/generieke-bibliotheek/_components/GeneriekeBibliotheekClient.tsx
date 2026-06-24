@@ -27,6 +27,7 @@ import {
   curatieBijwerken,
   curatieVervangen,
   curatieIntrekken,
+  curatieVerwijderen,
   curatieInzageUrl,
   type CuratieResultaat,
 } from "../acties";
@@ -242,6 +243,22 @@ export default function GeneriekeBibliotheekClient({
     });
   }
 
+  function verwijderen(doc: GeneriekDocument) {
+    const bevestigd = window.confirm(
+      `Document "${doc.titel}" DEFINITIEF verwijderen?\n\n` +
+        "Dit verwijdert de rij, de zoekfragmenten én het opgeslagen origineel onomkeerbaar. " +
+        "Gebruik 'Intrekken' als je het document alleen wilt laten vervallen (blijft historisch bewaard)."
+    );
+    if (!bevestigd) return;
+    const reden =
+      window.prompt(`Reden voor definitief verwijderen van "${doc.titel}" (optioneel):`) ?? undefined;
+    startTransitie(async () => {
+      const r = await curatieVerwijderen(doc.id, reden);
+      setMelding(r.ok ? { ok: true, tekst: r.bericht } : { ok: false, tekst: r.melding });
+      if (r.ok) router.refresh();
+    });
+  }
+
   function inzage(doc: GeneriekDocument) {
     startTransitie(async () => {
       const r = await curatieInzageUrl(doc.id);
@@ -413,7 +430,7 @@ export default function GeneriekeBibliotheekClient({
         </form>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-[#0F2744]/10 bg-white">
+      <div className="overflow-x-auto rounded-xl border border-[#0F2744]/10 bg-white">
         <table className="w-full text-sm">
           <thead className="bg-[#F0F3F8] text-left text-xs uppercase tracking-wide text-[#0F2744]/60">
             <tr>
@@ -459,7 +476,7 @@ export default function GeneriekeBibliotheekClient({
                   </td>
                   <td className="px-4 py-2">{d.verwerkingsstatus ?? "—"}</td>
                   <td className="px-4 py-2">
-                    <div className="flex justify-end gap-2 text-xs">
+                    <div className="flex flex-wrap justify-end gap-x-3 gap-y-1 whitespace-nowrap text-xs">
                       {d.opslag_pad && (
                         <button onClick={() => inzage(d)} disabled={bezig} className="text-[#0F2744] hover:underline disabled:opacity-50">
                           Inzage
@@ -478,6 +495,9 @@ export default function GeneriekeBibliotheekClient({
                               Intrekken
                             </button>
                           )}
+                          <button onClick={() => verwijderen(d)} disabled={bezig} className="text-rose-700 hover:underline disabled:opacity-50">
+                            Verwijderen
+                          </button>
                         </>
                       )}
                       {vervangen && <span className="text-[#0F2744]/40">Vervangen</span>}

@@ -530,6 +530,86 @@ export async function curatieIntrekken(documentId: string, reden: string): Promi
   }
 }
 
+// ── 3b. HARD VERWIJDEREN (volledige verwijdering, alleen generiek) ──────────
+// Anders dan curatieIntrekken (status alleen_historisch, append-only) verwijdert
+// dit de rij + chunks + het opgeslagen origineel ONOMKEERBAAR. Bewust beperkt tot
+// de generieke bibliotheek (platform back-office, één curator); tenant-documenten
+// en Decision Objects blijven principieel niet hard-verwijderbaar (CLAUDE.md,
+// besluit 0001). Reden: een mislukt/duplicaat generiek document blokkeert anders
+// permanent een nieuwe upload van dezelfde inhoud (inhoud-hash-dedup, #8.2). De
+// verwijdering zelf wordt via withPlatform append-only geaudit in
+// platform_event_log (de document_metadata_log-rij verdwijnt mee met de FK).
+export async function curatieVerwijderen(documentId: string, reden?: string): Promise<CuratieResultaat> {
+  try {
+    return await withPlatform<CuratieResultaat>(
+      {
+        capability: CAP,
+        handeling: "platform.generic.document.delete",
+        doelObject: `documenten:${documentId}`,
+        reden: reden?.trim() || null,
+      },
+      async (svc) => {
+        const { data: huidig } = await svc
+          .from("documenten")
+          .select("id, titel, opslag_pad, bibliotheek")
+          .eq("id", documentId)
+          .maybeSingle();
+
+        if (!huidig || huidig.bibliotheek !== "generiek") {
+          return {
+            resultaat: { ok: false, foutcode: "niet_gevonden", melding: "Generiek document niet gevonden." },
+            effect: { afgewezen: "niet_gevonden" },
+          };
+        }
+
+        // 1) Chunks expliciet weg (geen bevestigde ON DELETE CASCADE op
+        //    document_chunks in de gedateerde migraties — niet op cascade vertrouwen).
+        const { error: chunkErr } = await svc.from("document_chunks").delete().eq("document_id", documentId);
+        if (chunkErr) {
+          return {
+            resultaat: { ok: false, foutcode: "verwijderen_mislukt", melding: "Kon de zoekfragmenten niet verwijderen." },
+            effect: { afgewezen: "chunks_verwijderen_mislukt", fout: chunkErr.message },
+          };
+        }
+
+        // 2) Origineel uit Storage (best-effort; een opruimfout mag de rij-delete
+        //    niet blokkeren — verweesde storage-objecten zijn minder erg dan een
+        //    onverwijderbare rij die de dedup blijft blokkeren).
+        let storageOpgeruimd = false;
+        if (huidig.opslag_pad) {
+          const { error: rmErr } = await svc.storage.from(STORAGE_BUCKET).remove([huidig.opslag_pad]);
+          if (rmErr) console.error("[P1] origineel-verwijderen mislukt:", rmErr.message);
+          else storageOpgeruimd = true;
+        }
+
+        // 3) De documentrij. document_processing_jobs hangt op ON DELETE CASCADE;
+        //    self-FK's (vervangt/vervangen_door) en externe verwijzingen staan op
+        //    ON DELETE SET NULL — dus geen FK-blokkade.
+        const { error: rowErr } = await svc.from("documenten").delete().eq("id", documentId);
+        if (rowErr) {
+          return {
+            resultaat: { ok: false, foutcode: "verwijderen_mislukt", melding: "Verwijderen geweigerd door de database." },
+            effect: { afgewezen: "rij_verwijderen_mislukt", fout: rowErr.message },
+          };
+        }
+
+        revalidatePath(LIJST_PAD);
+        return {
+          resultaat: { ok: true, documentId, bericht: "Document definitief verwijderd." },
+          effect: {
+            document_id: documentId,
+            titel_snapshot: huidig.titel,
+            had_origineel: !!huidig.opslag_pad,
+            storage_opgeruimd: storageOpgeruimd,
+          },
+        };
+      }
+    );
+  } catch (e) {
+    return naarFout(e, "verwijderen");
+  }
+}
+
 // ── 4. VERVANGEN (nieuwe versie) ────────────────────────────────────────────
 export async function curatieVervangen(oudId: string, fd: FormData): Promise<CuratieResultaat> {
   try {
