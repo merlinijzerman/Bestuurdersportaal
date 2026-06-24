@@ -37,6 +37,7 @@ interface CatalogusItem {
   omschrijving: string | null;
   fonds_id: string | null;
   categorie?: string | null;
+  actief?: boolean;
 }
 
 // A/B/C-indeling van gremia (zie migratie 2026-06-24). Volgorde bepaalt de
@@ -53,9 +54,10 @@ async function laadCatalogus(pad: string): Promise<CatalogusItem[]> {
   const res = await fetch(pad);
   if (!res.ok) return [];
   const json = (await res.json()) as { items?: CatalogusItem[] };
-  // Alleen fonds-specifieke records: globale templates (fonds_id NULL) zijn niet
-  // koppelbaar (composite-FK).
-  return (json.items ?? []).filter((i) => i.fonds_id);
+  // Alleen fonds-specifieke records (globale templates met fonds_id NULL zijn
+  // niet koppelbaar, composite-FK) én alleen ACTIEVE items: gedeactiveerde
+  // organen mogen niet meer als keuze verschijnen.
+  return (json.items ?? []).filter((i) => i.fonds_id && i.actief !== false);
 }
 
 export default function ProfielPage() {
@@ -104,15 +106,24 @@ export default function ProfielPage() {
             gremium_ids: string[];
             focusgebied_ids: string[];
           };
+          // Opgeslagen selecties opschonen tegen de ACTIEVE catalogus: organen die
+          // sinds de laatste opslag zijn gedeactiveerd of verwijderd, vallen hier
+          // weg zodat ze bij de eerstvolgende opslag ook echt loskomen (geen
+          // onzichtbare reststand in de database).
+          const expIds = new Set(exp.map((e) => e.id));
+          const gremIds = new Set(grem.map((g) => g.id));
+          const focusIds = new Set(focus.map((f) => f.id));
+
+          const primair = data.profiel.primaire_expertise_id ?? "";
           setNaam(data.profiel.naam ?? "");
           setBestuurlijkeRol(data.profiel.bestuurlijke_rol ?? "");
-          setPrimaireExpertiseId(data.profiel.primaire_expertise_id ?? "");
+          setPrimaireExpertiseId(expIds.has(primair) ? primair : "");
           setAntwoordvoorkeur(data.profiel.antwoordvoorkeur ?? "");
           setStandaardAiModus(data.profiel.standaard_ai_modus ?? "");
           setDetailniveau(data.profiel.detailniveau ?? "");
-          setSecundaire(data.secundaire_expertise_ids ?? []);
-          setGekozenGremia(data.gremium_ids ?? []);
-          setGekozenFocus(data.focusgebied_ids ?? []);
+          setSecundaire((data.secundaire_expertise_ids ?? []).filter((id) => expIds.has(id)));
+          setGekozenGremia((data.gremium_ids ?? []).filter((id) => gremIds.has(id)));
+          setGekozenFocus((data.focusgebied_ids ?? []).filter((id) => focusIds.has(id)));
         }
       } finally {
         setLaden(false);
