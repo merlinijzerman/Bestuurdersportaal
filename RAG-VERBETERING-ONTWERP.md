@@ -1,6 +1,6 @@
 # RAG-verbetering — ontwerp
 
-> Status: **Fase 1a + 1b opgeleverd** (2026-05-30). Fase 2/3 zijn ontworpen maar nog niet gebouwd.
+> Status: **Fase 1a + 1b opgeleverd** (2026-05-30), **Fase 3 hybride search live sinds 2026-06-07** (`2026_06_07_zoek_chunks_hybride.sql`, RRF), **Fase 2 structuurbewuste chunking + R1.2 contextuele retrieval opgeleverd 2026-06-24** ([`decisions/0025`](./decisions/0025-rag-structuur-contextueel-reindex.md)).
 > Bron van waarheid blijft de code + migraties; dit document beschrijft *wat en waarom*.
 
 ## Aanleiding
@@ -49,13 +49,23 @@ Twee delen, beide gebouwd.
 
 Bewust nog niet in 1b: detectie van "§3.2"/"Art. 12"-koppen — dat is structuur-chunking en hoort bij Fase 2.
 
-### Fase 2 — structurele chunking + chunk-metadata
+### Fase 2 — structurele chunking + chunk-metadata (R1.1, opgeleverd 2026-06-24)
 
-Chunken op documentstructuur (kopjes, tabellen, besluitpunten, bijlagen) en metadata per chunk (documenttype, titel, sectie, datum, `fonds_id`, optioneel `procedure_id`).
+Gebouwd. `lib/chunking.ts` splitst nu eerst per segment in **structuur-units** (`splitsInStructuurUnits` + `detecteerGrens`): kop, §, artikel, definitie, besluit en (markdown-)tabel zijn grenzen, en een chunk loopt **nooit** over zo'n grens. Elke chunk krijgt naast `pagina`/`paragraaf` ook `structuur_type` en `structuur_label` mee (nullable kolommen op `document_chunks`). De sanity-tests in `lib/chunking.sanity.ts` borgen dat lopende tekst één 'tekst'-unit blijft, artikelen niet samenvloeien, definities samenhangend/gescheiden terugkomen en een markdown-tabel ondeelbaar blijft.
 
-### Fase 3 — hybride search (pas na evaluatie)
+### R1.2 — contextuele retrieval (Optie A, opgeleverd 2026-06-24)
 
-`pgvector` náást FTS in dezelfde Supabase-database (RLS blijft gelden), gefuseerd via Reciprocal Rank Fusion. **Geen externe vector-database** zonder expliciete architectuurbeslissing — conform guardrail. Levert een vergelijking FTS-only / vector-only / hybride op kwaliteit, kosten, beheerbaarheid, privacy en uitlegbaarheid.
+Per fragment genereert `lib/chunk-ingest.ts` (`genereerPrefix`, model Haiku) één korte Nederlandse context-zin op basis van een **begrensd "structuur-venster"** (documenttitel + `structuur_type`/`structuur_label` van het bovenliggende onderdeel + het fragment, getrunceerd op `PREFIX_INPUT_MAX`). Die zin staat in de **aparte kolom `context_prefix`** en wordt **nooit getoond**: bronvermelding/citaat lezen onverkort `tekst`. De cruciale invariant — embedding én FTS over **dezelfde verrijkte tekst** — wordt afgedwongen doordat `verrijkTekst(prefix, tekst)` exact `${prefix} ${tekst}` (één spatie) produceert, identiek aan de generated kolom `zoek_vector = to_tsvector('dutch', coalesce(context_prefix || ' ', '') || tekst)`. Zo zien de BM25-arm en de vector-arm van de RRF-fusie dezelfde tekst; bij `context_prefix = NULL` vallen beide terug op kale `tekst`.
+
+**Gedeelde, herhaalbare en omkeerbare re-index.** `lib/reindex.ts` (`herindexeerDocument`) is client-agnostisch en bedient alle vier de chunk-producerende paden: upload, her-extract, de generieke pipeline (service-role) en de nieuwe backfill. Per document: origineel uit Storage → her-extractie (met OCR-fallback) → `bouwChunkRecords` (structuur + prefix + verrijkte embedding) → bestaande chunks vervangen. **`tekst` wordt nooit aangeraakt** (omkeerbaar/snapshot-integer); elke chunk krijgt `prefix_model` + `indexering_versie` als versie-stempel. Een document zonder bruikbaar origineel (geen origineel, niet-ondersteund type, of geen tekst ná OCR) wordt gestempeld `indexering_versie = 'r1-overgeslagen'` zodat de backfill terminerend blijft en één onverwerkbaar document de rij niet blokkeert. De backfill verwerkt **één document per aanroep** (tegen de Vercel-timeout); de UI loopt door tot de server `klaar` meldt.
+
+**Twee backfill-ingangen, gescheiden langs de tenant-grens:**
+- **Fonds:** `POST /api/documents/reindex-backfill` op de anon-key + RLS, alleen voorzitter/beheerder, gescoped op `bibliotheek='fonds'`. Batch-knop "Bibliotheek her-indexeren" in beheer, met kostenbevestiging vooraf.
+- **Generiek:** server-action `curatieHerindexeren` uitsluitend achter `withPlatform` (service-role), gescoped op `bibliotheek='generiek'` — nodig omdat tenants op generieke chunks read-only zijn (RLS). Batch-knop in de generieke bibliotheek, idem kostenbevestiging.
+
+### Fase 3 — hybride search (live sinds 2026-06-07)
+
+Gebouwd vóór dit increment: `pgvector` náást FTS in dezelfde Supabase-database (RLS blijft gelden), gefuseerd via Reciprocal Rank Fusion (`zoek_chunks_hybride`, k=60, `security invoker`). **Geen externe vector-database**. De R1.1/R1.2-verrijking versterkt beide armen van deze fusie zonder het RRF-algoritme zelf te wijzigen.
 
 ## RLS / security-impact
 
@@ -66,15 +76,24 @@ Chunken op documentstructuur (kopjes, tabellen, besluitpunten, bijlagen) en meta
 
 `retrieval_meta` is additief en insert-only. Geen wijziging aan bestaande append-only-garanties.
 
+**R1.1/R1.2:** `reindex_runs` is **provenance, géén append-only/hash-spoor** — bewuste keuze (index-bouw, geen governance-besluit). Het bestaande append-only auditspoor blijft onaangeroerd; de generieke re-index is bovendien volledig geaudit via `withPlatform` (twee-fasen `attempt`/`result`). De prefix is een AI-call die nooit gebruikersgerichte output produceert (alleen index), dus de chat-AI-interactielogging-eis is hier niet van toepassing; per-fragment `prefix_model` + run-`prompt_versie` (`PREFIX_PROMPT_VERSIE`) is proportioneel. Bekende restschuld (zie [`decisions/0025`](./decisions/0025-rag-structuur-contextueel-reindex.md)): de exacte `SP_PREFIX`-prompttekst wordt niet gehasht in `reindex_runs`, en `embedding_model` staat per chunk maar niet op run-niveau.
+
 ## Datamodel / migratie-impact
 
 Eén idempotente migratie `supabase/migrations/2026_05_30_rag_ranking.sql`: `create or replace function zoek_chunks(...)` + `alter table governance_log add column if not exists retrieval_meta jsonb`. Eerst in Supabase draaien, dán code-deploy. `schema.sql` als documentatie bijgewerkt.
+
+**R1.1/R1.2:** [`2026_06_24_rag_structuur_contextueel.sql`](./supabase/migrations/2026_06_24_rag_structuur_contextueel.sql) (+ `_ROLLBACK`) voegt nullable kolommen `structuur_type`, `structuur_label`, `context_prefix`, `prefix_model`, `indexering_versie` toe op `document_chunks`, herbouwt de generated `zoek_vector` als `to_tsvector('dutch', coalesce(context_prefix || ' ', '') || tekst)`, en maakt de `reindex_runs`-provenancetabel met RLS per `fonds_id`. Migratie-eerst, dán code-deploy. `schema.sql` als documentatie bijgewerkt.
+
+## Kostenraming (R1.2 re-index)
+
+Ruwe orde-grootte — **te verifiëren tegen de actuele tarieven**; de operator ziet vóór de batch een bevestiging en `reindex_runs` legt het werkelijke aantal verwerkte documenten/chunks vast. Per fragment kost de re-index **één Haiku-prefix-call** (input ≈ structuur-venster + systeemprompt, in de orde van enkele honderden tokens; output ≤ ~40 tokens, want één zin van ≤25 woorden) **plus één Mistral-embedding** over de verrijkte tekst. De kosten schalen lineair met het totaal aantal chunks in de bibliotheek (typisch enkele tot tientallen chunks per document). Voor de demo-omvang (tientallen documenten) is dat een eenmalige, lage kostenpost; bij opschaling naar duizenden grote documenten loont het de Haiku-call selectiever in te zetten of te cachen. Embeddings zijn per token aanzienlijk goedkoper dan de Haiku-call en domineren de kosten niet.
 
 ## Test / verificatie
 
 - `selecteerChunks` puur en deterministisch — sanity-test op dedup en max-per-document.
 - `tsc --noEmit --skipLibCheck` groen.
 - Handmatige toetsing online door gebruiker; `retrieval_meta` in `governance_log` als inzicht-instrument.
+- **R1.1:** `lib/chunking.sanity.ts` (9 tests groen) borgt de structuur-grenzen — geen samenvloeiing van artikelen, samenhangende/gescheiden definities, ondeelbare markdown-tabel, en geen regressie op lopende tekst. Subagent-reviews (RLS / audit-evidence / code / ontwerp-sync) gedraaid; de code-review-blocker (niet-terminerende backfill bij `mislukt`) is opgelost via het `r1-overgeslagen`-stempel + een stop-bij-`mislukt` in beide client-lussen.
 
 ## Openstaande risico's
 

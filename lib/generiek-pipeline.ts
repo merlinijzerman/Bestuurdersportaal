@@ -25,8 +25,7 @@ import {
   type Bestandstype,
 } from "./document-extractie";
 import { extractTekstMetOcrFallback } from "./ocr";
-import { maakChunksUitSegmenten } from "./rag";
-import { embedTeksten, naarVectorLiteral, EMBED_MODEL } from "./embeddings";
+import { bouwChunkRecords } from "./chunk-ingest";
 
 export const STORAGE_BUCKET = "documenten";
 export const GENERIEK_PAD_PREFIX = "generiek";
@@ -104,12 +103,13 @@ export async function verwerkGeneriekBestand(
   params: {
     documentId: string;
     versieId?: string | null;
+    titel: string;
     buffer: Buffer;
     bestandstype: Bestandstype;
     correlatieId: string;
   }
 ): Promise<PipelineResultaat> {
-  const { documentId, versieId, buffer, bestandstype, correlatieId } = params;
+  const { documentId, versieId, titel, buffer, bestandstype, correlatieId } = params;
 
   // ── Scan (mock, WP3 uitgesteld) ──────────────────────────────────────────
   let t = new Date().toISOString();
@@ -184,33 +184,17 @@ export async function verwerkGeneriekBestand(
     await svc.from("documenten").update({ opslag_pad: opslagPad }).eq("id", documentId);
   }
 
-  // ── Chunking (denorm-trigger vult bibliotheek/normgewicht op de chunk) ────
+  // ── Chunking + embedding (gedeelde R1.1+R1.2-ingest) ──────────────────────
+  // Structuur-bewuste chunking + context-prefix (Haiku) + embedding over de
+  // VERRIJKTE tekst. Denorm-trigger vult bibliotheek/normgewicht op de chunk;
+  // de R1-velden (structuur/prefix/versie) raakt die trigger niet. `tekst`
+  // blijft het originele fragment. Best-effort op prefix/embedding (FTS blijft
+  // werken zonder vector). Eén gedeeld pad met de tenant-upload/her-extract.
   t = new Date().toISOString();
   await zetStatus(svc, documentId, "chunking");
-  const chunks = maakChunksUitSegmenten(extractie.segmenten);
-  const chunkRecords: Record<string, unknown>[] = chunks.map((c, i) => ({
-    document_id: documentId,
-    chunk_index: i,
-    tekst: c.tekst,
-    pagina: c.pagina,
-    paragraaf: c.paragraaf,
-  }));
-
-  // ── Embedding (best-effort; FTS blijft werken zonder vector) ──────────────
   await zetStatus(svc, documentId, "embedding");
-  let embeddings = false;
-  try {
-    const vectoren = await embedTeksten(chunks.map((c) => c.tekst));
-    if (vectoren.length === chunkRecords.length) {
-      chunkRecords.forEach((rec, i) => {
-        rec.embedding = naarVectorLiteral(vectoren[i]);
-        rec.embedding_model = EMBED_MODEL;
-      });
-      embeddings = true;
-    }
-  } catch (e) {
-    console.error("[P1-pipeline] embeddings mislukt — chunks zonder vector:", e);
-  }
+  const { records: chunkRecords, aantalChunks, embeddingsGelukt: embeddings } =
+    await bouwChunkRecords({ documentId, titel, segmenten: extractie.segmenten });
   await schrijfJob(svc, {
     documentId, versieId, correlatieId, stap: "embedding",
     status: embeddings ? "geslaagd" : "overgeslagen", start: t,
@@ -240,7 +224,7 @@ export async function verwerkGeneriekBestand(
   return {
     ok: true,
     paginas: extractie.aantalPaginas,
-    chunks: chunks.length,
+    chunks: aantalChunks,
     embeddings,
     verwerkingsstatus: "beschikbaar",
   };

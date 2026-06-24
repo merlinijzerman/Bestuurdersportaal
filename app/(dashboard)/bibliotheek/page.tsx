@@ -159,8 +159,10 @@ export default function BibliotheekPage() {
   }
 
   // Her-indexeren: haalt het origineel opnieuw door de extractie-pipeline en
-  // vervangt de chunks (o.a. om pagina-/sectie-metadata toe te voegen aan
-  // documenten van vóór die feature). Server beperkt dit tot voorzitter/beheerder.
+  // vervangt de chunks. Sinds R1.1/R1.2 levert dat structuur-bewuste fragmenten
+  // (artikel/§/definitie/tabel blijven heel) én een contextuele zoekindex
+  // (context-prefix + verrijkte embedding/FTS); de getoonde brontekst blijft
+  // ongewijzigd. Server beperkt dit tot voorzitter/beheerder.
   async function herindexeer(doc: Document) {
     setHerindexId(doc.id);
     setUploadBericht("");
@@ -491,7 +493,7 @@ export default function BibliotheekPage() {
                             }}
                             disabled={herindexId === doc.id}
                             className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                            title="Origineel opnieuw door de extractie-pipeline halen (voorzitter/beheerder)"
+                            title="Origineel opnieuw door de extractie-pipeline halen: structuur-bewuste fragmenten + verbeterde (contextuele) zoekindex (voorzitter/beheerder)"
                           >
                             {herindexId === doc.id
                               ? "Bezig met her-indexeren..."

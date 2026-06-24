@@ -29,6 +29,7 @@ import {
   curatieIntrekken,
   curatieVerwijderen,
   curatieInzageUrl,
+  curatieHerindexeren,
   type CuratieResultaat,
 } from "../acties";
 
@@ -138,6 +139,8 @@ export default function GeneriekeBibliotheekClient({
   const [bezig, startTransitie] = useTransition();
   const [melding, setMelding] = useState<{ ok: boolean; tekst: string } | null>(null);
   const [veldfouten, setVeldfouten] = useState<Record<string, string>>({});
+  const [reindexBezig, setReindexBezig] = useState(false);
+  const [reindexMelding, setReindexMelding] = useState<string | null>(null);
 
   function open(m: Exclude<Modus, null>) {
     setMelding(null);
@@ -267,6 +270,65 @@ export default function GeneriekeBibliotheekClient({
     });
   }
 
+  // Batch her-indexering: roept de platform-actie herhaaldelijk aan (één
+  // generiek document per call) tot `klaar`. Elke verwerkte document veroorzaakt
+  // her-extractie + tientallen Haiku-prefix- en embedding-calls; daarom de
+  // kostenbevestiging vooraf. `tekst` blijft onaangeraakt (omkeerbaar).
+  async function herindexeerGeneriek() {
+    const bevestigd = window.confirm(
+      "Generieke bibliotheek opnieuw indexeren met structuur-bewuste fragmenten en " +
+        "contextuele zoekindex?\n\n" +
+        "Dit verwerkt alle nog-niet-geïndexeerde generieke documenten één voor één en " +
+        "veroorzaakt AI-kosten (per fragment een korte Haiku-context + een nieuwe embedding). " +
+        "De getoonde brontekst en citaten blijven ongewijzigd; de bewerking is omkeerbaar."
+    );
+    if (!bevestigd) return;
+    setReindexBezig(true);
+    setReindexMelding("Bezig met her-indexeren…");
+    let verwerkt = 0;
+    let overgeslagen = 0;
+    try {
+      for (let i = 0; i < 5000; i++) {
+        const r = await curatieHerindexeren();
+        if (!r.ok) {
+          setReindexMelding(`Her-indexeren gestopt: ${r.melding}`);
+          return;
+        }
+        if (r.status === "verwerkt") verwerkt++;
+        else if (r.status === "overgeslagen") overgeslagen++;
+        // Tijdelijke/document-eigen fout (download/extractie/opslag): de resterend-
+        // teller daalt niet, dus doorgaan zou hetzelfde document blijven oppakken.
+        // Stop en toon de oorzaak zodat een mens het kan oplossen.
+        else if (r.status === "mislukt") {
+          setReindexMelding(
+            `Her-indexeren gestopt bij "${r.titel ?? r.document_id}". Controleer dit document en start daarna opnieuw. ` +
+              `Tot nu toe: ${verwerkt} verwerkt, ${overgeslagen} overgeslagen.`
+          );
+          return;
+        }
+        setReindexMelding(
+          `Bezig… ${verwerkt} verwerkt, ${overgeslagen} overgeslagen, ${r.resterend} resterend.`
+        );
+        if (r.klaar) {
+          setReindexMelding(
+            `Klaar. ${verwerkt} document(en) opnieuw geïndexeerd` +
+              (overgeslagen > 0 ? `, ${overgeslagen} overgeslagen (geen origineel of niet-ondersteund type)` : "") +
+              "."
+          );
+          router.refresh();
+          return;
+        }
+      }
+      setReindexMelding(
+        `Gestopt na de veiligheidslimiet. ${verwerkt} verwerkt, ${overgeslagen} overgeslagen. Start opnieuw om verder te gaan.`
+      );
+    } catch {
+      setReindexMelding("Her-indexeren mislukte door een onverwachte fout. Probeer het opnieuw.");
+    } finally {
+      setReindexBezig(false);
+    }
+  }
+
   const heeftFile = modus?.soort === "aanmaken" || modus?.soort === "vervangen";
 
   return (
@@ -284,12 +346,26 @@ export default function GeneriekeBibliotheekClient({
       )}
 
       {magBeheren && !modus && (
-        <button
-          onClick={() => open({ soort: "aanmaken" })}
-          className="rounded-lg bg-[#0F2744] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0F2744]/90"
-        >
-          + Nieuw generiek document
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => open({ soort: "aanmaken" })}
+            className="rounded-lg bg-[#0F2744] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0F2744]/90"
+          >
+            + Nieuw generiek document
+          </button>
+          <button
+            onClick={herindexeerGeneriek}
+            disabled={reindexBezig}
+            title="Genereert per fragment een structuur-label en een korte context-zin voor de zoekindex (Haiku) en maakt een nieuwe embedding. De getoonde brontekst en citaten blijven ongewijzigd; de bewerking is omkeerbaar."
+            className="rounded-lg border border-[#0F2744]/20 px-4 py-2 text-sm font-semibold text-[#0F2744] hover:bg-[#0F2744]/5 disabled:opacity-50"
+          >
+            {reindexBezig ? "Her-indexeren…" : "Bibliotheek her-indexeren"}
+          </button>
+        </div>
+      )}
+
+      {reindexMelding && (
+        <div className="rounded-lg bg-[#F0F3F8] px-4 py-3 text-sm text-[#0F2744]">{reindexMelding}</div>
       )}
 
       {modus && (

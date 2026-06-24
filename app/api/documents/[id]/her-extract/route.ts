@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase-server";
-import { maakChunksUitSegmenten } from "@/lib/rag";
+import { bouwChunkRecords } from "@/lib/chunk-ingest";
 import {
   diagnoseerExtractie,
   ONDERSTEUNDE_TYPES,
@@ -141,14 +141,16 @@ export async function POST(
     );
   }
 
-  const chunks = maakChunksUitSegmenten(extractie.segmenten);
-  const chunkRecords = chunks.map((chunk, index) => ({
-    document_id: id,
-    chunk_index: index,
-    tekst: chunk.tekst,
-    pagina: chunk.pagina,
-    paragraaf: chunk.paragraaf,
-  }));
+  // R1.1 + R1.2 — gedeelde ingest: structuur-bewuste chunking + context-prefix
+  // (Haiku) + embedding over de VERRIJKTE tekst. Anders dan voorheen embed de
+  // her-index nu óók (gedeeld pad), zodat een her-geïndexeerd document meteen
+  // contextueel zoekbaar is en niet op de losse embeddings-backfill hoeft te
+  // wachten. `tekst` blijft het originele fragment (weergaveveld).
+  const { records: chunkRecords, aantalChunks } = await bouwChunkRecords({
+    documentId: id,
+    titel: document.titel,
+    segmenten: extractie.segmenten,
+  });
 
   const batchGrootte = 50;
   for (let i = 0; i < chunkRecords.length; i += batchGrootte) {
@@ -189,10 +191,10 @@ export async function POST(
   return NextResponse.json({
     success: true,
     document_id: id,
-    chunks_aangemaakt: chunks.length,
+    chunks_aangemaakt: aantalChunks,
     paginas: extractie.aantalPaginas,
     ocr_toegepast: extractie.ocrToegepast,
-    bericht: `Document opnieuw geïndexeerd: ${chunks.length} fragmenten${
+    bericht: `Document opnieuw geïndexeerd: ${aantalChunks} fragmenten${
       extractie.ocrToegepast ? " (via OCR)" : ""
     }.`,
   });

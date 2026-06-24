@@ -38,6 +38,8 @@ import {
   QUARANTAINE_BUCKET,
   GENERIEK_PAD_PREFIX,
 } from "@/lib/generiek-pipeline";
+import { herindexeerDocument } from "@/lib/reindex";
+import { INDEXERING_VERSIE, PREFIX_MODEL, PREFIX_PROMPT_VERSIE } from "@/lib/chunk-ingest";
 
 const LIJST_PAD = "/platform/generieke-bibliotheek";
 const CAP = "platform.generic.library.manage" as const;
@@ -260,6 +262,7 @@ async function maakUitBuffer(
   const pipe = await verwerkGeneriekBestand(svc, {
     documentId: doc.id,
     versieId: versieVan ?? null,
+    titel: meta.titel,
     buffer,
     bestandstype: val.bestandstype,
     correlatieId,
@@ -742,6 +745,126 @@ export async function curatieInzageUrl(documentId: string): Promise<InzageResult
       return { ok: false, foutcode: e.foutcode, melding: platformMelding(e.foutcode) };
     }
     console.error("[P1] onverwachte fout bij inzage:", e);
+    return { ok: false, foutcode: "serverfout", melding: "Er ging iets mis. Probeer het opnieuw." };
+  }
+}
+
+// ── 8. HER-INDEXEREN GENERIEKE BIBLIOTHEEK (R1.1 + R1.2, service-role) ───────
+// Tegenhanger van /api/documents/reindex-backfill voor de generieke bibliotheek.
+// Tenants zijn op generieke chunks read-only (RLS), dus deze re-index loopt via
+// de platform-back-office met de service-role-client. Verwerkt ÉÉN generiek
+// document per aanroep (her-extractie + prefix/embedding); de UI roept
+// herhaaldelijk aan tot `klaar`. `tekst` blijft onaangeraakt (omkeerbaar).
+export type HerindexGeneriekResultaat =
+  | {
+      ok: true;
+      document_id: string | null;
+      titel: string | null;
+      status: "verwerkt" | "overgeslagen" | "mislukt" | "klaar";
+      aantal_chunks: number;
+      resterend: number;
+      klaar: boolean;
+    }
+  | { ok: false; foutcode: string; melding: string };
+
+export async function curatieHerindexeren(): Promise<HerindexGeneriekResultaat> {
+  try {
+    return await withPlatform<HerindexGeneriekResultaat>(
+      {
+        capability: CAP,
+        handeling: "platform.generic.library.reindex",
+        doelObject: "documenten:generiek",
+      },
+      async (svc, { identiteit }) => {
+        const tellResterend = async (): Promise<number> => {
+          const { count } = await svc
+            .from("document_chunks")
+            .select("id", { count: "exact", head: true })
+            .eq("bibliotheek", "generiek")
+            .is("indexering_versie", null);
+          return count ?? 0;
+        };
+
+        // Eén nog-baseline generiek document zoeken (via een baseline-chunk).
+        const { data: chunkRij } = await svc
+          .from("document_chunks")
+          .select("document_id")
+          .eq("bibliotheek", "generiek")
+          .is("indexering_versie", null)
+          .limit(1)
+          .maybeSingle();
+
+        if (!chunkRij) {
+          return {
+            resultaat: {
+              ok: true,
+              document_id: null,
+              titel: null,
+              status: "klaar",
+              aantal_chunks: 0,
+              resterend: 0,
+              klaar: true,
+            },
+            effect: { klaar: true, resterend: 0 },
+          };
+        }
+
+        const { data: doc } = await svc
+          .from("documenten")
+          .select("id, titel, opslag_pad, bestandstype, bibliotheek")
+          .eq("id", chunkRij.document_id)
+          .maybeSingle();
+
+        if (!doc || doc.bibliotheek !== "generiek") {
+          return {
+            resultaat: { ok: false, foutcode: "niet_gevonden", melding: "Generiek document niet gevonden." },
+            effect: { afgewezen: "niet_gevonden" },
+          };
+        }
+
+        const res = await herindexeerDocument(svc, doc);
+
+        // Per-run provenance: generiek → fonds_id NULL, gestart_door = platform-id.
+        const { error: runErr } = await svc.from("reindex_runs").insert({
+          fonds_id: null,
+          bibliotheek: "generiek",
+          prefix_model: PREFIX_MODEL,
+          prompt_versie: PREFIX_PROMPT_VERSIE,
+          indexering_versie: INDEXERING_VERSIE,
+          aantal_documenten: res.status === "verwerkt" ? 1 : 0,
+          aantal_chunks: res.aantalChunks,
+          gestart_door: identiteit.id,
+        });
+        if (runErr) console.error("[P1] reindex_runs (generiek) niet geschreven:", runErr.message);
+
+        const resterend = await tellResterend();
+        if (res.status === "verwerkt") revalidatePath(LIJST_PAD);
+
+        return {
+          resultaat: {
+            ok: true,
+            document_id: doc.id,
+            titel: doc.titel,
+            status: res.status,
+            aantal_chunks: res.aantalChunks,
+            resterend,
+            klaar: resterend === 0,
+          },
+          effect: {
+            document_id: doc.id,
+            status: res.status,
+            reden: res.reden ?? null,
+            aantal_chunks: res.aantalChunks,
+            resterend,
+          },
+        };
+      }
+    );
+  } catch (e) {
+    if (e instanceof PlatformError) {
+      return { ok: false, foutcode: e.foutcode, melding: platformMelding(e.foutcode) };
+    }
+    console.error("[P1] onverwachte fout bij her-indexeren:", e);
     return { ok: false, foutcode: "serverfout", melding: "Er ging iets mis. Probeer het opnieuw." };
   }
 }

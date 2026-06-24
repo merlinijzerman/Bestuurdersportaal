@@ -53,6 +53,9 @@ export default function BeheerClient() {
   const [importeren, setImporteren] = useState(false);
   const [importMelding, setImportMelding] = useState<string | null>(null);
 
+  const [reindexBezig, setReindexBezig] = useState(false);
+  const [reindexMelding, setReindexMelding] = useState<string | null>(null);
+
   const laadAlles = useCallback(async () => {
     setLaden(true);
     setFout(null);
@@ -105,6 +108,56 @@ export default function BeheerClient() {
     }
   }
 
+  // Her-indexeer de hele fondsbibliotheek met de structuur-bewuste + contextuele
+  // indexering (R1.1/R1.2). Elke aanroep verwerkt één document (her-extractie +
+  // AI-context + embedding); we loopen tot de server `klaar` meldt. De getoonde
+  // brontekst verandert niet — alleen de afgeleide fragmenten/zoekindex.
+  async function herindexeerBibliotheek() {
+    if (
+      !confirm(
+        "Her-indexeer de HELE fondsbibliotheek met de verbeterde, structuur-bewuste en contextuele indexering.\n\n" +
+          "Per document wordt het origineel opnieuw verwerkt: structuur-bewuste fragmenten, een korte AI-context per fragment (Haiku) en een nieuwe embedding (Mistral). Dit verbruikt AI-credits en kan, afhankelijk van het aantal documenten, enkele minuten duren.\n\n" +
+          "De getoonde brontekst en bronvermelding veranderen niet. Doorgaan?"
+      )
+    )
+      return;
+    setReindexBezig(true);
+    setReindexMelding("Bezig met her-indexeren…");
+    let verwerkt = 0;
+    let overgeslagen = 0;
+    try {
+      // Veiligheidsplafond tegen een onverhoopte eindeloze lus.
+      for (let i = 0; i < 5000; i++) {
+        const data = await jsonFetch("/api/documents/reindex-backfill", { method: "POST" });
+        if (!data.document_id && data.klaar) break;
+        verwerkt += data.verwerkt ?? 0;
+        overgeslagen += data.overgeslagen ?? 0;
+        // Een tijdelijke/document-eigen fout (download, extractie, opslag) laat de
+        // resterend-teller niet dalen; doorgaan zou hetzelfde document blijven
+        // oppakken. Stop en toon de oorzaak zodat een mens het kan oplossen.
+        if (data.status === "mislukt") {
+          setReindexMelding(
+            `Her-indexeren gestopt bij "${data.titel ?? data.document_id}" (${data.reden ?? "onbekende fout"}). ` +
+              `Controleer dit document en start daarna opnieuw. Tot nu toe: ${verwerkt} verwerkt, ${overgeslagen} overgeslagen.`
+          );
+          return;
+        }
+        setReindexMelding(
+          `Verwerkt: ${verwerkt} · overgeslagen: ${overgeslagen} · resterende fragmenten: ${data.resterend ?? 0}…`
+        );
+        if (data.klaar) break;
+      }
+      setReindexMelding(
+        `Klaar — ${verwerkt} document(en) opnieuw geïndexeerd` +
+          (overgeslagen ? `, ${overgeslagen} overgeslagen (geen origineel of geen bruikbare tekst).` : ".")
+      );
+    } catch (err) {
+      setReindexMelding(err instanceof Error ? err.message : "Her-indexeren mislukt");
+    } finally {
+      setReindexBezig(false);
+    }
+  }
+
   return (
     <div>
       {/* Import */}
@@ -127,6 +180,30 @@ export default function BeheerClient() {
       {importMelding && (
         <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800 mb-6">
           {importMelding}
+        </div>
+      )}
+
+      {/* Her-indexeren (R1.1/R1.2) — hele fondsbibliotheek opnieuw verwerken. */}
+      <div className="rounded-xl border border-gray-200 bg-white p-4 mb-6 flex items-center justify-between gap-4">
+        <div>
+          <div className="font-semibold text-[#0F2744]">Bibliotheek her-indexeren</div>
+          <div className="text-sm text-gray-500">
+            Verwerkt alle fondsdocumenten opnieuw met structuur-bewuste fragmenten en
+            een contextuele zoekindex. Verbruikt AI-credits; de getoonde brontekst
+            verandert niet. Reeds bijgewerkte documenten worden overgeslagen.
+          </div>
+        </div>
+        <button
+          onClick={herindexeerBibliotheek}
+          disabled={reindexBezig}
+          className="shrink-0 rounded-lg bg-[#0F2744] px-4 py-2 text-sm font-semibold text-white hover:bg-[#163556] disabled:opacity-50"
+        >
+          {reindexBezig ? "Bezig…" : "Her-indexeren"}
+        </button>
+      </div>
+      {reindexMelding && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800 mb-6">
+          {reindexMelding}
         </div>
       )}
 

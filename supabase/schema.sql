@@ -258,10 +258,21 @@ create table if not exists public.document_chunks (
   tekst         text not null,
   pagina        int,
   paragraaf     text,  -- bijv. "§3.2" of "Art. 12"
+  -- R1.2 (contextual retrieval, migratie 2026_06_24_rag_structuur_contextueel,
+  -- authoritatief): FTS indexeert de VERRIJKTE tekst (context_prefix + tekst).
+  -- prefix NULL => to_tsvector('dutch', tekst) = baseline. `tekst` blijft het
+  -- weergaveveld en wordt nooit aangeraakt (prefix-isolatie).
   zoek_vector   tsvector generated always as (
-    to_tsvector('dutch', tekst)
+    to_tsvector('dutch', coalesce(context_prefix || ' ', '') || tekst)
   ) stored,
   aangemaakt    timestamptz default now(),
+  -- R1.1 — structuur-metadata bovenop pagina/paragraaf (migratie 2026_06_24):
+  structuur_type  text,   -- artikel|paragraaf|definitie|besluit|tabel|kop|tekst
+  structuur_label text,    -- bv. "Artikel 12", "§3.2", "Tabblad: Dekkingsgraad"
+  -- R1.2 — context-prefix (NOOIT getoond; alleen embedding + FTS) + herkomst:
+  context_prefix    text,
+  prefix_model      text,  -- model dat de prefix maakte (NULL = geen prefix)
+  indexering_versie text,   -- bv. 'r1-structuur-contextueel' (NULL = baseline)
   -- embedding/embedding_model worden additief toegevoegd bij ── 5c (Fase C).
   -- Increment E — denorm uit documenten + primaire procesinstantie (nullable):
   procesmodel_id     uuid references public.procesmodellen(id) on delete set null,
@@ -408,6 +419,25 @@ alter table public.document_chunks
   add column if not exists embedding_model text;
 create index if not exists idx_chunks_embedding
   on public.document_chunks using hnsw (embedding vector_cosine_ops);
+
+-- ── 5d. Re-index-runs (R1.1/R1.2 provenance) ────────────────
+-- Lichte per-run provenance van de gedeelde re-index (structuur + contextual
+-- prefix): welk model/prompt, hoeveel verwerkt, door wie. GEEN per-chunk en
+-- GEEN append-only/hash-spoor; het auditspoor blijft onaangeroerd. Zie migratie
+-- 2026_06_24_rag_structuur_contextueel.sql (authoritatief).
+create table if not exists public.reindex_runs (
+  id                uuid primary key default uuid_generate_v4(),
+  fonds_id          uuid references public.fondsen(id) on delete cascade,
+  bibliotheek       text,                 -- 'fonds' | 'generiek'
+  prefix_model      text,
+  prompt_versie     text,
+  indexering_versie text,
+  aantal_documenten int,
+  aantal_chunks     int,
+  gestart_door      uuid references auth.users(id) on delete set null,
+  aangemaakt        timestamptz default now()
+);
+alter table public.reindex_runs enable row level security;
 
 -- ── 6. Vergaderingen ────────────────────────────────────────
 create table if not exists public.vergaderingen (
