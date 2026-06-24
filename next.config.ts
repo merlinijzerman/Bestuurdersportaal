@@ -77,6 +77,17 @@ const nextConfig: NextConfig = {
   // - xlsx: Excel (.xlsx) parsing
   serverExternalPackages: ["unpdf", "mammoth", "xlsx"],
 
+  // Server-action-payloadlimiet op één lijn met de 25 MB-bestandsvalidatie
+  // (lib/bestand-validatie.ts MAX_BESTAND_BYTES). Next.js' default is 1 MB; een
+  // upload via FormData (curatieAanmaken/curatieVervangen) sneuvelde daarop
+  // vóór de eigen validatie en crashte de client. 30 MB geeft marge voor de
+  // overige formuliervelden; de echte poort blijft valideerUpload (25 MB).
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "30mb",
+    },
+  },
+
   // Security headers — op alle routes. Zie comment-blok bovenaan dit bestand.
   async headers() {
     return [
