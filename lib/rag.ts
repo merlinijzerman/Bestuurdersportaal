@@ -153,6 +153,10 @@ export interface RetrievalMeta {
   // Bronvermelding-validatie: aantal [Bron N]-citaties in het antwoord en
   // hoeveel daarvan niet naar een aangeleverde bron verwijzen (dangling).
   citaties?: { totaal: number; ongeldig: number };
+  // Transformatie-vervolgactie (FO §13): de beurt bewerkt het VORIGE antwoord
+  // (herstructureren/duiden/inkorten) i.p.v. een nieuwe documentvraag. Legt voor
+  // de audit vast dat de strict-document-retrievaltak bewust is overgeslagen.
+  transformatie?: boolean;
   // Document-scope (increment 1/2). Aanwezig zodra een vraag tot één/enkele
   // document(en) is beperkt; legt voor de audit vast waarop gescoopt is en welke
   // retrievalstrategie is gekozen.

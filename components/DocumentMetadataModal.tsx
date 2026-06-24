@@ -48,19 +48,6 @@ interface MetadataDoc {
   normgewicht: string | null;
 }
 
-interface PlanWijziging {
-  veld: string;
-  rag_impact: boolean;
-  redenplicht: boolean;
-}
-interface Plan {
-  ok: boolean;
-  blokkers: string[];
-  fouten: string[];
-  wijzigingen: PlanWijziging[];
-  ragImpact: boolean;
-}
-
 export default function DocumentMetadataModal({
   documentId,
   onClose,
@@ -74,7 +61,6 @@ export default function DocumentMetadataModal({
   const [vervolgstatussen, setVervolgstatussen] = useState<DocumentStatus[]>([]);
   const [form, setForm] = useState<Record<string, string>>({});
   const [reden, setReden] = useState("");
-  const [plan, setPlan] = useState<Plan | null>(null);
   const [laden, setLaden] = useState(true);
   const [bezig, setBezig] = useState(false);
   const [fout, setFout] = useState<string | null>(null);
@@ -123,25 +109,6 @@ export default function DocumentMetadataModal({
     if (leeg(form.geldig_tot) !== doc.geldig_tot) v.geldig_tot = leeg(form.geldig_tot);
     if (reden.trim()) v.reden = reden.trim();
     return v;
-  }
-
-  async function preview() {
-    setBezig(true);
-    setFout(null);
-    try {
-      const res = await fetch(`/api/documents/${documentId}/metadata`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...bouwVerzoek(), preview: true }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Preview mislukt");
-      setPlan(data.plan);
-    } catch (e) {
-      setFout(e instanceof Error ? e.message : "Preview mislukt");
-    } finally {
-      setBezig(false);
-    }
   }
 
   async function opslaan(markeerGecontroleerd = false) {
@@ -337,50 +304,7 @@ export default function DocumentMetadataModal({
               />
             </Veld>
 
-            {plan && (
-              <div
-                className={`rounded-lg border p-3 text-sm ${
-                  plan.ok
-                    ? "border-blue-200 bg-blue-50 text-blue-800"
-                    : "border-amber-200 bg-amber-50 text-amber-800"
-                }`}
-              >
-                <div className="font-semibold mb-1">
-                  Voorbeeld van de wijziging
-                </div>
-                {plan.blokkers.length > 0 && (
-                  <ul className="list-disc ml-5">
-                    {plan.blokkers.map((b, i) => (
-                      <li key={i}>{b}</li>
-                    ))}
-                  </ul>
-                )}
-                {plan.fouten.length > 0 && (
-                  <ul className="list-disc ml-5">
-                    {plan.fouten.map((f, i) => (
-                      <li key={i}>{f}</li>
-                    ))}
-                  </ul>
-                )}
-                {plan.ok && (
-                  <div>
-                    {plan.wijzigingen.length} veld(en) wijzigen.{" "}
-                    {plan.ragImpact
-                      ? "⚠️ RAG-impact: herindexering nodig."
-                      : "Geen RAG-impact."}
-                  </div>
-                )}
-              </div>
-            )}
-
             <div className="flex flex-wrap gap-3 pt-2">
-              <button
-                onClick={preview}
-                disabled={bezig}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-              >
-                Toon RAG-impact
-              </button>
               <button
                 onClick={() => opslaan(false)}
                 disabled={bezig}

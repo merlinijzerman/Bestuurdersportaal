@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase";
 import {
   ZICHTBARE_ANTWOORDMODI,
   bepaalVervolgacties,
+  isTransformatieActie,
   type Antwoordmodus,
   type Vervolgactie,
   type InlineMelding,
@@ -493,6 +494,9 @@ export default function AiPage() {
     // toe te voegen; `basisBerichten` is dan de geschiedenis die op die vraag eindigt.
     geenNieuweVraag?: boolean;
     basisBerichten?: Bericht[];
+    // FO §13 — transformatie-vervolgactie: bewerk het vorige antwoord i.p.v. een
+    // nieuwe documentvraag. De route schakelt dan naar herschrijf-intent.
+    transformatie?: boolean;
   }
 
   async function stuurBericht(vraag?: string, opties?: StuurOpties) {
@@ -553,6 +557,8 @@ export default function AiPage() {
           actieve_antwoordmodus: effAntwoordmodus,
           // Increment F (FO §14) — "algemeen perspectief": profielsturing overslaan.
           algemeen_perspectief: algemeenPerspectief,
+          // FO §13 — transformatie-vervolgactie (herschrijf-intent op vorige antwoord).
+          transformatie: opties?.transformatie === true,
         }),
       });
 
@@ -830,6 +836,7 @@ export default function AiPage() {
     stuurBericht(actie.prompt, {
       antwoordmodusOverride: actie.modus,
       scopeOverride,
+      transformatie: isTransformatieActie(actie.type),
     });
   }
 

@@ -174,6 +174,24 @@ Wat de gebruiker vroeg maar het document niet bevat. Laat dit deel weg als alles
 
 Vermeng de delen nooit en presenteer algemene kennis nooit als documentinhoud.`;
 
+// ============================================================
+//  Transformatie-vervolgacties (FO §13) — herschrijf-intent
+// ============================================================
+// Een transformatie-actie ("Werk uit richting besluitvorming", "Geef bestuurlijke
+// duiding", "Maak feitelijker/korter/concreter") bewerkt het VORIGE antwoord, niet
+// het document opnieuw. De route levert het vorige antwoord mee in de historie en
+// (indien gescoopt) de relevante fragmenten als verankering; deze prompt borgt dat
+// het model herstructureert/duidt ZONDER nieuwe fondsfeiten te verzinnen, en de
+// stapeling op een leeg vorig antwoord ("niet aangetroffen") expliciet stopt.
+const SP_TRANSFORMATIE_REGELS = `U bewerkt UW EIGEN VORIGE ANTWOORD uit dit gesprek (hierboven in de berichtgeschiedenis). Dit is een herschrijf- of duidingsopdracht, GEEN nieuwe documentvraag.
+
+REGELS VAN INHOUD:
+- Werk op basis van uw vorige antwoord en, indien hieronder meegeleverd, de ondersteunende fragmenten. Voer de gevraagde bewerking uit: herstructureren, samenvatten, feitelijker maken, bestuurlijk duiden of concretiseren.
+- Introduceer GEEN nieuwe fondsspecifieke feiten die niet in uw vorige antwoord of de meegeleverde fragmenten staan. Verzin geen cijfers, data, artikelnummers, bedragen of bronnen.
+- Behoud het expliciete onderscheid tussen feit (uit bronnen), interpretatie/duiding, aanname en onzekerheid. Aanvullende algemene duiding mag, mits herkenbaar gemarkeerd met [Algemene kennis] en nooit gepresenteerd als documentinhoud.
+- Bevatte uw vorige antwoord geen inhoudelijke basis (bijvoorbeeld omdat het gekozen document de gevraagde informatie niet bevatte), constateer dat dan expliciet en stel voor de scope te verbreden of een inhoudelijke vraag te stellen — vul NIET alsnog met verzonnen inhoud aan.
+- Neem geen formeel besluit en formuleer geen voorkeursadvies; u ondersteunt de bestuurlijke voorbereiding.`;
+
 // Systeemprompt voor de extractieve map-stap (map-reduce). Goedkoop model.
 const SP_MAP_EXTRACTIE = `U bent een analist die voor een specifieke vraag de relevante punten uit één deel van een document extraheert. Geef beknopt en feitelijk de passages/feiten die voor de vraag relevant zijn, elk met paginanummer indien beschikbaar. Verzin niets en voeg geen algemene kennis toe. Is er in dit deel niets relevant voor de vraag, antwoord dan exact met het woord: GEEN.`;
 
@@ -503,6 +521,12 @@ export async function POST(req: NextRequest) {
       // persoonlijke profiel geprioriteerd (collectieve weergave). Afwezig/false =
       // profielsturing actief (indien de gebruiker een profiel heeft ingevuld).
       algemeen_perspectief?: boolean;
+      // Transformatie-vervolgactie (FO §13): true = deze beurt bewerkt het VORIGE
+      // antwoord (werk uit / duiding / feitelijker / korter / concreter). De route
+      // schakelt dan naar herschrijf-intent i.p.v. een nieuwe documentlookup, zodat
+      // strict-document niet onterecht "niet aangetroffen" teruggeeft. De client zet
+      // dit alleen voor de gesloten set transformatie-acties (isTransformatieActie).
+      transformatie?: boolean;
     };
     const { fonds_id } = body;
 
@@ -643,6 +667,15 @@ export async function POST(req: NextRequest) {
 
     const scopeActief = !!scopeDocumentIds && scopeDocumentIds.length > 0;
 
+    // ── Transformatie-vervolgactie (FO §13) ─────────────────────────────────
+    // De beurt bewerkt het vorige antwoord (herschrijf-intent). Vereist dat er
+    // daadwerkelijk een eerder assistent-antwoord in de historie staat; anders is
+    // er niets te transformeren en valt de route terug op normaal gedrag.
+    const heeftVorigAntwoord = messages
+      .slice(0, -1)
+      .some((m) => m.role === "assistant");
+    const transformatieActief = body.transformatie === true && heeftVorigAntwoord;
+
     // ── Increment I-2 (FO §11a) — automatische bronkeuze ────────────────────
     // Buiten een document-scope bepaalt het systeem zélf of de vraag fonds-,
     // algemeen- of gecombineerd-gericht is (pure heuristiek, lib/vraagtype.ts).
@@ -666,6 +699,7 @@ export async function POST(req: NextRequest) {
     // modelcall en géén governance_log-antwoordregel (er is geen antwoord). De
     // beslissing om te verduidelijken is puur reproduceerbaar uit de vraag.
     if (
+      !transformatieActief &&
       bronIntentResultaat &&
       moetVerduidelijken(bronIntentResultaat, alleenFondsdocumenten)
     ) {
@@ -714,7 +748,7 @@ export async function POST(req: NextRequest) {
     let breedBatches: DocumentChunk[][] = [];
     let breedAfgekapt = false;
 
-    if (scopeActief) {
+    if (scopeActief && !transformatieActief) {
       if (bepaalVraagtype(vraag) === "breed") {
         breedChunks = await haalDocumentChunks(scopeDocumentIds!);
         const totaalTekst = breedChunks.map((c) => c.tekst).join("\n\n");
@@ -730,7 +764,8 @@ export async function POST(req: NextRequest) {
         }
       }
     }
-    const breedActief = scopeActief && scopeStrategie !== "targeted";
+    const breedActief =
+      scopeActief && !transformatieActief && scopeStrategie !== "targeted";
 
     // ── Antwoordmodusfamilie (Increment G) ──────────────────────────────────
     // Orthogonaal op de bron-modus. Vastgezet (gesprekken.actieve_antwoordmodus)
@@ -889,7 +924,28 @@ export async function POST(req: NextRequest) {
     let systeemBlokken: Anthropic.Messages.TextBlockParam[];
     let gebruikersPrompt: string;
 
-    if (scopeActief) {
+    if (transformatieActief) {
+      // Herschrijf-intent (FO §13): bewerk het vorige antwoord (staat al in de
+      // historie van claudeBerichten). Géén strict-document-weigering; wel
+      // grounding (geen nieuwe fondsfeiten). Eventuele gescoopte fragmenten gaan
+      // als verankering mee. De antwoordmodus (besluitrijpheid/duiding/…) komt uit
+      // de gekozen vervolgactie en stuurt de antwoordstijl.
+      const transTitel =
+        scopeTitels.length > 0
+          ? scopeTitels.map((t) => `«${t}»`).join(", ")
+          : null;
+      systeemBlokken = bouwSysteemBlokken(
+        SP_TRANSFORMATIE_REGELS,
+        ctxBestuurder,
+        antwoordmodus
+      );
+      gebruikersPrompt =
+        chunks.length > 0
+          ? `ONDERSTEUNENDE FRAGMENTEN${
+              transTitel ? ` UIT ${transTitel}` : ""
+            } (ter verankering; voeg geen feiten toe die hier of in uw vorige antwoord niet staan):\n\n${contextTekst}\n\n---\n\nOPDRACHT (bewerk uw vorige antwoord hierboven): ${vraag}`
+          : `OPDRACHT (bewerk uw vorige antwoord hierboven in de berichtgeschiedenis): ${vraag}`;
+    } else if (scopeActief) {
       // Strict-document gedrag overschrijft de gekozen modus. De regels hangen af
       // van opt-in algemene kennis (drie-deling) en van breed vs. specifiek.
       const titelLabel =
@@ -990,6 +1046,7 @@ export async function POST(req: NextRequest) {
             type: "meta",
             bronnen,
             modus: effectieveModus,
+            transformatie: transformatieActief,
             chunks_gevonden: chunks.length,
             scope: scopeActief
               ? {
@@ -1158,6 +1215,7 @@ export async function POST(req: NextRequest) {
               chunks: [],
             }),
             antwoordmodus,
+            transformatie: transformatieActief,
             bronbasis,
             inline_meldingen: inlineMeldingenFinaal,
             // Increment I-3 — uniform bronmodel volledig in het auditspoor: alle

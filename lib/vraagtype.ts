@@ -570,6 +570,28 @@ export function bepaalVervolgacties(
   return acties;
 }
 
+// ── Transformatie- vs. retrieval-vervolgacties (FO §13) ─────────────────────
+// Een TRANSFORMATIE-actie bewerkt het VORIGE antwoord (herstructureren, duiden,
+// feitelijker maken, inkorten, concretiseren). Die hoort NIET als nieuwe
+// documentvraag door retrieval te lopen: de instructie ("werk je vorige antwoord
+// uit…") heeft geen semantische overlap met de stukken, dus strict-document zou
+// onterecht "Dit is niet in dit document aangetroffen" teruggeven. De route
+// behandelt deze acties daarom als herschrijf-intent op het vorige antwoord.
+// De RETRIEVAL-acties (tijdlijn, eerdere besluiten, kritische vragen) hebben
+// juist wél nieuwe/bredere ophaling nodig en blijven ongewijzigd.
+const TRANSFORMATIE_ACTIES: ReadonlySet<VervolgactieType> = new Set([
+  "werk_uit_besluitvorming",
+  "maak_feitelijker",
+  "geef_duiding",
+  "maak_korter",
+  "maak_concreter",
+]);
+
+/** True = de vervolgactie bewerkt het vorige antwoord (geen nieuwe documentvraag). */
+export function isTransformatieActie(type: VervolgactieType): boolean {
+  return TRANSFORMATIE_ACTIES.has(type);
+}
+
 // ============================================================================
 // Increment I-2 — AUTOMATISCHE bronkeuze (FO v1.3 §11a/§11c/§11d)
 // ----------------------------------------------------------------------------
