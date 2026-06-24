@@ -15,6 +15,7 @@ export default async function PlatformHome() {
   // De (beveiligd)-layout garandeert dat identiteit hier niet null is.
   const caps = identiteit?.capabilities ?? [];
   const magBibliotheek = caps.includes("platform.generic.library.manage");
+  const magConfig = caps.includes("platform.config.manage");
 
   return (
     <div className="space-y-6">
@@ -30,13 +31,22 @@ export default async function PlatformHome() {
         <h2 className="text-sm font-semibold uppercase tracking-wide text-[#0F2744]/60">
           Beheermodules
         </h2>
-        <div className="mt-3">
+        <div className="mt-3 flex flex-wrap gap-2">
           <Link
             href="/platform/generieke-bibliotheek"
             className="inline-flex items-center gap-2 rounded-lg bg-[#F0F3F8] px-4 py-2 text-sm font-medium text-[#0F2744] hover:bg-[#0F2744]/10"
           >
             Generieke bibliotheek
             {!magBibliotheek && (
+              <span className="text-xs text-[#0F2744]/50">(alleen inzien)</span>
+            )}
+          </Link>
+          <Link
+            href="/platform/standaardcatalogus"
+            className="inline-flex items-center gap-2 rounded-lg bg-[#F0F3F8] px-4 py-2 text-sm font-medium text-[#0F2744] hover:bg-[#0F2744]/10"
+          >
+            Standaardcatalogus
+            {!magConfig && (
               <span className="text-xs text-[#0F2744]/50">(alleen inzien)</span>
             )}
           </Link>
