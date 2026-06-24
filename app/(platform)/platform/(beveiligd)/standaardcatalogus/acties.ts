@@ -51,6 +51,10 @@ const TOEGESTANE_TABELLEN: ReadonlySet<string> = new Set<CatalogusTabel>([
 const GREMIA_TYPES = ["besluitvormend", "adviserend", "toezichthoudend", "uitvoerend"] as const;
 type GremiumType = (typeof GREMIA_TYPES)[number];
 
+// Categorie-indeling (A/B/C) — orthogonaal aan het functionele type.
+const GREMIA_CATEGORIEEN = ["fondsorgaan", "bestuurscommissie", "extern_ketenpartner"] as const;
+type GremiumCategorie = (typeof GREMIA_CATEGORIEEN)[number];
+
 const TABEL_LABEL: Record<CatalogusTabel, string> = {
   gremia: "gremia/commissies",
   expertises: "expertises",
@@ -95,11 +99,11 @@ function valideerTabel(tabel: string): tabel is CatalogusTabel {
 /** Normaliseert/valideert de gedeelde velden. type alleen relevant voor gremia. */
 function valideerVelden(
   tabel: CatalogusTabel,
-  input: { naam?: string | null; type?: string | null; omschrijving?: string | null },
+  input: { naam?: string | null; type?: string | null; categorie?: string | null; omschrijving?: string | null },
   naamVerplicht: boolean
-): { ok: true; waarde: { naam?: string; type?: GremiumType | null; omschrijving?: string | null } } | { ok: false; veldfouten: Record<string, string> } {
+): { ok: true; waarde: { naam?: string; type?: GremiumType | null; categorie?: GremiumCategorie | null; omschrijving?: string | null } } | { ok: false; veldfouten: Record<string, string> } {
   const veldfouten: Record<string, string> = {};
-  const waarde: { naam?: string; type?: GremiumType | null; omschrijving?: string | null } = {};
+  const waarde: { naam?: string; type?: GremiumType | null; categorie?: GremiumCategorie | null; omschrijving?: string | null } = {};
 
   // naam
   if (input.naam !== undefined) {
@@ -128,6 +132,19 @@ function valideerVelden(
       // Bij aanmaken: type verplicht voor gremia.
       veldfouten.type = "Kies een type (commissies vallen onder 'adviserend').";
     }
+
+    // categorie (A/B/C) — alleen gremia.
+    if (input.categorie !== undefined && input.categorie !== null) {
+      const c = String(input.categorie);
+      if (!(GREMIA_CATEGORIEEN as readonly string[]).includes(c)) {
+        veldfouten.categorie = "Ongeldige categorie.";
+      } else {
+        waarde.categorie = c as GremiumCategorie;
+      }
+    } else if (naamVerplicht) {
+      // Bij aanmaken: categorie verplicht voor gremia.
+      veldfouten.categorie = "Kies een categorie (fondsorgaan / bestuurscommissie / externe ketenpartner).";
+    }
   }
 
   // omschrijving (optioneel)
@@ -149,6 +166,7 @@ export async function catalogusTemplateAanmaken(input: {
   tabel: string;
   naam: string;
   type?: string | null;
+  categorie?: string | null;
   omschrijving?: string | null;
 }): Promise<CatalogusResultaat> {
   if (!valideerTabel(input.tabel)) {
@@ -176,7 +194,10 @@ export async function catalogusTemplateAanmaken(input: {
           naam: v.waarde.naam,
           omschrijving: v.waarde.omschrijving ?? null,
         };
-        if (tabel === "gremia") rij.type = v.waarde.type;
+        if (tabel === "gremia") {
+          rij.type = v.waarde.type;
+          rij.categorie = v.waarde.categorie;
+        }
 
         const { data, error } = await svc.from(tabel).insert(rij).select("id").single();
         if (error || !data) {
@@ -197,7 +218,7 @@ export async function catalogusTemplateAanmaken(input: {
         revalidatePath(LIJST_PAD);
         return {
           resultaat: { ok: true, templateId: data.id as string, bericht: `Standaarditem toegevoegd aan ${TABEL_LABEL[tabel]}.` },
-          effect: { catalogus: tabel, template_id: data.id, naam: v.waarde.naam, type: v.waarde.type ?? null },
+          effect: { catalogus: tabel, template_id: data.id, naam: v.waarde.naam, type: v.waarde.type ?? null, categorie: v.waarde.categorie ?? null },
         };
       }
     );
@@ -212,6 +233,7 @@ export async function catalogusTemplateBijwerken(input: {
   id: string;
   naam?: string | null;
   type?: string | null;
+  categorie?: string | null;
   omschrijving?: string | null;
   reden?: string | null;
 }): Promise<CatalogusResultaat> {
@@ -228,9 +250,9 @@ export async function catalogusTemplateBijwerken(input: {
         reden: input.reden?.trim() || null,
       },
       async (svc: SupabaseClient) => {
-        const kolommen = tabel === "gremia" ? "id, naam, type, omschrijving, fonds_id" : "id, naam, omschrijving, fonds_id";
+        const kolommen = tabel === "gremia" ? "id, naam, type, categorie, omschrijving, fonds_id" : "id, naam, omschrijving, fonds_id";
         const { data: huidig } = await svc.from(tabel).select(kolommen).eq("id", input.id).maybeSingle();
-        const rij = huidig as { id: string; naam: string; type?: string | null; omschrijving: string | null; fonds_id: string | null } | null;
+        const rij = huidig as { id: string; naam: string; type?: string | null; categorie?: string | null; omschrijving: string | null; fonds_id: string | null } | null;
 
         // Alleen templates (fonds_id NULL) zijn hier beheerbaar; fonds-kopieën nooit.
         if (!rij || rij.fonds_id !== null) {
@@ -259,6 +281,10 @@ export async function catalogusTemplateBijwerken(input: {
         if (tabel === "gremia" && v.waarde.type !== undefined && v.waarde.type !== rij.type) {
           update.type = v.waarde.type;
           diff.type = { oud: rij.type ?? null, nieuw: v.waarde.type };
+        }
+        if (tabel === "gremia" && v.waarde.categorie !== undefined && v.waarde.categorie !== rij.categorie) {
+          update.categorie = v.waarde.categorie;
+          diff.categorie = { oud: rij.categorie ?? null, nieuw: v.waarde.categorie };
         }
         if (v.waarde.omschrijving !== undefined && (v.waarde.omschrijving ?? null) !== (rij.omschrijving ?? null)) {
           update.omschrijving = v.waarde.omschrijving ?? null;

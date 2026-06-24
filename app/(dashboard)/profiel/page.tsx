@@ -36,7 +36,18 @@ interface CatalogusItem {
   naam: string;
   omschrijving: string | null;
   fonds_id: string | null;
+  categorie?: string | null;
 }
+
+// A/B/C-indeling van gremia (zie migratie 2026-06-24). Volgorde bepaalt de
+// weergavevolgorde van de kopjes; "overig" vangt records zonder categorie op
+// (bv. fonds-kopieën van vóór de backfill).
+const GREMIA_CATEGORIEEN: { sleutel: string; label: string }[] = [
+  { sleutel: "fondsorgaan", label: "Fondsorganen" },
+  { sleutel: "bestuurscommissie", label: "Bestuurscommissies" },
+  { sleutel: "extern_ketenpartner", label: "Externe ketenpartners" },
+  { sleutel: "overig", label: "Overig" },
+];
 
 async function laadCatalogus(pad: string): Promise<CatalogusItem[]> {
   const res = await fetch(pad);
@@ -346,27 +357,45 @@ export default function ProfielPage() {
           </div>
         </section>
 
-        {/* Gremia */}
+        {/* Gremia — gegroepeerd per categorie (Fondsorganen / Bestuurscommissies
+            / Externe ketenpartners). */}
         <section className="bg-white border border-gray-200 rounded-xl p-5">
           <h2 className="font-bold text-[#0F2744] mb-4">Commissies &amp; gremia</h2>
-          <div className="flex flex-wrap gap-2">
-            {gremia.map((g) => {
-              const aan = gekozenGremia.includes(g.id);
+          <div className="space-y-5">
+            {GREMIA_CATEGORIEEN.map((cat) => {
+              const items = gremia.filter(
+                (g) => (g.categorie ?? "overig") === cat.sleutel
+              );
+              if (items.length === 0) return null;
               return (
-                <button
-                  key={g.id}
-                  type="button"
-                  onClick={() =>
-                    setGekozenGremia((s) => wisselSet(s, g.id, Number.MAX_SAFE_INTEGER))
-                  }
-                  className={`px-3 py-1.5 rounded-full text-sm border transition ${
-                    aan
-                      ? "bg-[#0F2744] text-white border-[#0F2744]"
-                      : "bg-white text-gray-700 border-gray-300 hover:border-[#0F2744]"
-                  }`}
-                >
-                  {g.naam}
-                </button>
+                <div key={cat.sleutel}>
+                  <div className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">
+                    {cat.label}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {items.map((g) => {
+                      const aan = gekozenGremia.includes(g.id);
+                      return (
+                        <button
+                          key={g.id}
+                          type="button"
+                          onClick={() =>
+                            setGekozenGremia((s) =>
+                              wisselSet(s, g.id, Number.MAX_SAFE_INTEGER)
+                            )
+                          }
+                          className={`px-3 py-1.5 rounded-full text-sm border transition ${
+                            aan
+                              ? "bg-[#0F2744] text-white border-[#0F2744]"
+                              : "bg-white text-gray-700 border-gray-300 hover:border-[#0F2744]"
+                          }`}
+                        >
+                          {g.naam}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               );
             })}
           </div>

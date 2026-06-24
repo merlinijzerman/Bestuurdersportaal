@@ -47,6 +47,8 @@ async function importeerOrganen(
       sort_order: t.sort_order,
       gekopieerd_van_id: t.id,
       ...(heeftType ? { type: t.type } : {}),
+      // categorie is alleen aanwezig op gremia (A/B/C-indeling).
+      ...(tabel === "gremia" ? { categorie: t.categorie ?? null } : {}),
     }));
     const { data: ins, error } = await supabase
       .from(tabel)

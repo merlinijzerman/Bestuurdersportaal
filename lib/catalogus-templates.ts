@@ -131,7 +131,7 @@ export const PROCES_ORGAAN_SUGGESTIES: Record<string, ProcesOrgaanSuggestie> = {
     ],
   },
   incident_dnb: {
-    gremia: ["Bestuur", "Dagelijks bestuur", "Risicocommissie"],
+    gremia: ["Bestuur", "Dagelijks bestuur / uitvoerend bestuur", "Risicocommissie"],
     expertises: ["Risicomanagement", "Compliance & juridisch"],
     focusgebieden: [
       "Compliance en wet- en regelgeving",

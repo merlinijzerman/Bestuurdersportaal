@@ -10,8 +10,20 @@ type Organ = {
   actief: boolean;
   sort_order: number;
   type?: string | null;
+  categorie?: string | null;
   is_template?: boolean;
 };
+
+const CATEGORIE_LABEL: Record<string, string> = {
+  fondsorgaan: "Fondsorgaan",
+  bestuurscommissie: "Bestuurscommissie",
+  extern_ketenpartner: "Externe ketenpartner",
+};
+const GREMIA_CATEGORIEEN = [
+  "fondsorgaan",
+  "bestuurscommissie",
+  "extern_ketenpartner",
+] as const;
 
 type Procesmodel = {
   id: string;
@@ -847,12 +859,16 @@ function OrgaanSectie({
 }) {
   const [naam, setNaam] = useState("");
   const [type, setType] = useState(metType ? "adviserend" : "");
+  const [categorie, setCategorie] = useState(metType ? "bestuurscommissie" : "");
 
   async function maakAan() {
     if (!naam.trim()) return;
     await jsonFetch(`/api/${endpoint}`, {
       method: "POST",
-      body: JSON.stringify({ naam: naam.trim(), ...(metType ? { type } : {}) }),
+      body: JSON.stringify({
+        naam: naam.trim(),
+        ...(metType ? { type, categorie } : {}),
+      }),
     });
     setNaam("");
     await onWijzig();
@@ -881,6 +897,22 @@ function OrgaanSectie({
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
           />
         </div>
+        {metType && (
+          <div className="min-w-[160px]">
+            <label className="block text-xs font-medium text-gray-500 mb-1">Categorie</label>
+            <select
+              value={categorie}
+              onChange={(e) => setCategorie(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            >
+              {GREMIA_CATEGORIEEN.map((c) => (
+                <option key={c} value={c}>
+                  {CATEGORIE_LABEL[c]}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         {metType && (
           <div className="min-w-[160px]">
             <label className="block text-xs font-medium text-gray-500 mb-1">Type</label>
@@ -918,6 +950,11 @@ function OrgaanSectie({
             >
               <div className="flex-1">
                 <span className="text-sm text-[#0F2744]">{o.naam}</span>
+                {metType && o.categorie && (
+                  <span className="ml-2 rounded bg-[#C9A84C]/15 px-1.5 py-0.5 text-xs text-[#0F2744]">
+                    {CATEGORIE_LABEL[o.categorie] ?? o.categorie}
+                  </span>
+                )}
                 {metType && o.type && (
                   <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-xs capitalize text-gray-500">
                     {o.type}

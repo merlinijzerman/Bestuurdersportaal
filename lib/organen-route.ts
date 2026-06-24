@@ -20,6 +20,7 @@ import {
 } from "@/lib/catalogus-api";
 
 const GREMIA_TYPES = ["besluitvormend", "adviserend", "toezichthoudend", "uitvoerend"];
+const GREMIA_CATEGORIEEN = ["fondsorgaan", "bestuurscommissie", "extern_ketenpartner"];
 
 export type OrgaanConfig = {
   tabel: "gremia" | "expertises" | "kritische_focusgebieden";
@@ -74,6 +75,10 @@ export function organenLijstCreate(cfg: OrgaanConfig) {
         if (type && !GREMIA_TYPES.includes(type))
           return badRequest(`${cfg.label}.POST`, "Ongeldig type");
         insert.type = type || null;
+        const categorie = body.categorie as string | undefined;
+        if (categorie && !GREMIA_CATEGORIEEN.includes(categorie))
+          return badRequest(`${cfg.label}.POST`, "Ongeldige categorie");
+        insert.categorie = categorie || null;
       }
 
       const { data, error } = await supabase
@@ -132,6 +137,11 @@ export function organenPatch(cfg: OrgaanConfig) {
         if (!GREMIA_TYPES.includes(body.type))
           return badRequest(`${cfg.label}.PATCH`, "Ongeldig type");
         update.type = body.type;
+      }
+      if (cfg.heeftType && typeof body.categorie === "string") {
+        if (!GREMIA_CATEGORIEEN.includes(body.categorie))
+          return badRequest(`${cfg.label}.PATCH`, "Ongeldige categorie");
+        update.categorie = body.categorie;
       }
 
       const { data, error } = await supabase

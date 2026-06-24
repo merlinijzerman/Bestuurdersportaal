@@ -24,6 +24,7 @@ export interface CatalogusItem {
   id: string;
   naam: string;
   type?: string | null;
+  categorie?: string | null;
   omschrijving: string | null;
   actief: boolean;
   sort_order: number | null;
@@ -48,6 +49,18 @@ const TYPE_LABEL: Record<string, string> = {
   adviserend: "Adviserend (commissie)",
   toezichthoudend: "Toezichthoudend",
   uitvoerend: "Uitvoerend",
+};
+
+const GREMIA_CATEGORIEEN = [
+  "fondsorgaan",
+  "bestuurscommissie",
+  "extern_ketenpartner",
+] as const;
+
+const CATEGORIE_LABEL: Record<string, string> = {
+  fondsorgaan: "Fondsorgaan",
+  bestuurscommissie: "Bestuurscommissie",
+  extern_ketenpartner: "Externe ketenpartner",
 };
 
 const TABS: { sleutel: CatalogusTabel; label: string }[] = [
@@ -252,6 +265,11 @@ function RegelWeergave({
           >
             {item.naam}
           </span>
+          {isGremia && item.categorie && (
+            <span className="rounded-full bg-[#C9A84C]/15 px-2 py-0.5 text-xs text-[#0F2744]">
+              {CATEGORIE_LABEL[item.categorie] ?? item.categorie}
+            </span>
+          )}
           {isGremia && item.type && (
             <span className="rounded-full bg-[#F0F3F8] px-2 py-0.5 text-xs text-[#0F2744]/70">
               {TYPE_LABEL[item.type] ?? item.type}
@@ -363,17 +381,19 @@ function ToevoegFormulier({
   isGremia: boolean;
   bezig: boolean;
   onSubmit: (
-    input: { naam: string; type?: string; omschrijving?: string },
+    input: { naam: string; type?: string; categorie?: string; omschrijving?: string },
     reset: () => void
   ) => void;
 }) {
   const [naam, setNaam] = useState("");
   const [type, setType] = useState<string>("adviserend");
+  const [categorie, setCategorie] = useState<string>("bestuurscommissie");
   const [omschrijving, setOmschrijving] = useState("");
 
   function reset() {
     setNaam("");
     setType("adviserend");
+    setCategorie("bestuurscommissie");
     setOmschrijving("");
   }
 
@@ -385,7 +405,7 @@ function ToevoegFormulier({
         onSubmit(
           {
             naam: naam.trim(),
-            ...(isGremia ? { type } : {}),
+            ...(isGremia ? { type, categorie } : {}),
             omschrijving: omschrijving.trim() || undefined,
           },
           reset
@@ -405,6 +425,23 @@ function ToevoegFormulier({
             className="w-64 rounded-lg border border-[#0F2744]/15 bg-white px-3 py-1.5 text-sm"
           />
         </label>
+
+        {isGremia && (
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-[#0F2744]/60">Categorie</span>
+            <select
+              value={categorie}
+              onChange={(e) => setCategorie(e.target.value)}
+              className="rounded-lg border border-[#0F2744]/15 bg-white px-3 py-1.5 text-sm"
+            >
+              {GREMIA_CATEGORIEEN.map((c) => (
+                <option key={c} value={c}>
+                  {CATEGORIE_LABEL[c]}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
         {isGremia && (
           <label className="flex flex-col gap-1">
@@ -461,12 +498,14 @@ function BewerkFormulier({
   onOpslaan: (input: {
     naam: string;
     type?: string;
+    categorie?: string;
     omschrijving?: string;
     reden?: string;
   }) => void;
 }) {
   const [naam, setNaam] = useState(item.naam);
   const [type, setType] = useState<string>(item.type ?? "adviserend");
+  const [categorie, setCategorie] = useState<string>(item.categorie ?? "bestuurscommissie");
   const [omschrijving, setOmschrijving] = useState(item.omschrijving ?? "");
   const [reden, setReden] = useState("");
 
@@ -477,7 +516,7 @@ function BewerkFormulier({
         if (!naam.trim() || reden.trim().length === 0) return;
         onOpslaan({
           naam: naam.trim(),
-          ...(isGremia ? { type } : {}),
+          ...(isGremia ? { type, categorie } : {}),
           omschrijving: omschrijving.trim(),
           reden: reden.trim(),
         });
@@ -493,6 +532,23 @@ function BewerkFormulier({
             className="w-64 rounded-lg border border-[#0F2744]/15 bg-white px-3 py-1.5 text-sm"
           />
         </label>
+
+        {isGremia && (
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-[#0F2744]/60">Categorie</span>
+            <select
+              value={categorie}
+              onChange={(e) => setCategorie(e.target.value)}
+              className="rounded-lg border border-[#0F2744]/15 bg-white px-3 py-1.5 text-sm"
+            >
+              {GREMIA_CATEGORIEEN.map((c) => (
+                <option key={c} value={c}>
+                  {CATEGORIE_LABEL[c]}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
         {isGremia && (
           <label className="flex flex-col gap-1">

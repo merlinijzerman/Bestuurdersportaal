@@ -34,7 +34,7 @@ export default async function StandaardcatalogusPagina() {
     await Promise.all([
       supabase
         .from("gremia")
-        .select("id, naam, type, omschrijving, actief, sort_order")
+        .select("id, naam, type, categorie, omschrijving, actief, sort_order")
         .is("fonds_id", null)
         .order("sort_order", { ascending: true })
         .order("naam", { ascending: true }),
