@@ -1,0 +1,50 @@
+# 0022 — Increment P1: generieke documentcuratie — bouwkeuzes
+
+- **Status:** Geaccepteerd
+- **Datum:** 2026-06-24
+- **Betrokkenen:** platform-track (back-office), opdrachtgever (werkopdracht Increment P1)
+
+## Context
+
+[`decisions/0021`](./0021-platformfundament-P0-keuzes.md) leverde het platformfundament (P0): de service-role-laag, `withPlatform`-poort, twee-fasen audit en de capability `platform.generic.library.manage`. P1 is de **eerste functionele platformmodule** erbovenop: het cureren van **generieke** (sectorbrede, fonds-overstijgende) documenten — toezichtkaders, guidance — met metadata (§8.1), uploadsecurity (§8.2) en de RAG-zichtbaarheidsregel (§8.3). De B13-splitsing was al gelegd: generieke documenten (`bibliotheek='generiek'`, `fonds_id NULL`) zijn voor tenants **read-only** via RLS; curatie loopt cross-tenant via het service-role-pad achter `withPlatform`. P1 is **additief**: geen wijziging aan tenant-RLS, `profielen` of de tenant-upload (die `bibliotheek='generiek'` blijft weigeren).
+
+Deze notitie legt de concrete bouwkeuzes vast die binnen de werkopdracht nog open stonden (vier expliciet afgetikte ontwerpkeuzes + de afgeleide invulling).
+
+## Besluit
+
+1. **Malwarescan uitgesteld (WP3), maar als expliciete `overgeslagen`-job — geen stille no-op.** De uploadsecurity-kern die wél landt is **fail-closed magic-bytes + OOXML-subtype-validatie** ([`lib/bestand-validatie.ts`](../lib/bestand-validatie.ts)): extensie + MIME + container-magic-bytes + OOXML-markerentry moeten matchen, plus grootteplafond (25 MB), naam-normalisatie/traversal-preventie en inhoud-hash. De scan-stap in de pipeline registreert een `document_processing_jobs`-rij met status `overgeslagen` en foutcode `scan_uitgesteld_wp3`, zodat de schuld zichtbaar in het auditspoor staat. De quarantainebucket (`documenten-quarantaine`, deny-by-default) is alvast aangemaakt zodat WP3 alleen de scan-stap hoeft in te vullen.
+2. **PPTX nu meebouwen** (niet uitstellen tot een latere increment): de toegestane typen zijn PDF/DOCX/PPTX/XLSX. De PPTX-extractie ([`lib/document-extractie.ts`](../lib/document-extractie.ts)) leest `ppt/slides/slideN.xml` op numerieke diavolgorde, één segment per dia (notities uitgesloten). `jszip` is daarvoor van transitieve (via `mammoth`) naar **directe** dependency gepromoveerd voor een stabiele import.
+3. **Versionering via de bestaande self-FK's** (`vervangt_document_id` / `vervangen_door_document_id` uit [`2026_06_18_documentstatus_metadata.sql`](../supabase/migrations/2026_06_18_documentstatus_metadata.sql)) i.p.v. een nieuwe versietabel. `curatieVervangen` maakt de nieuwe versie volledig aan (upload + pipeline), koppelt beide kanten van de self-FK en zet de oude versie op `status='alleen_historisch'` + `bronstatus='historisch'` + `geldig_tot=vandaag`.
+4. **Verwerkingspipeline als "middenweg": synchroon en lichtgewicht** — geen queue/worker (dat is TO/P5). [`lib/generiek-pipeline.ts`](../lib/generiek-pipeline.ts) draait scan→extractie→opslag→chunking→embedding→indexering binnen de server-action, schrijft per stap een `document_processing_jobs`-rij (FO §21.1) en houdt een lopende `documenten.verwerkingsstatus` bij. De **RAG-availability-gate werkt via afwezigheid van chunks**: een doc dat `mislukt`/`geweigerd` raakt krijgt nooit chunks, dus de retrieval-RPC's blijven ongewijzigd.
+
+### Afgeleide invulling
+
+5. **RAG-zichtbaarheid (§8.3 #6) als gedeelde bron-van-waarheid.** `isStandaardZichtbaarInRag(normgewicht)` in [`lib/generiek-curatie.ts`](../lib/generiek-curatie.ts) bepaalt dat een generiek document met een **zwak normgewicht** (`informatief`/`onbekend`, `NULL` telt als `onbekend`) **niet standaard** in RAG verschijnt. Exact dezelfde functie voedt zowel de retrievallaag ([`lib/rag.ts`](../lib/rag.ts), post-retrieval-filter `filterZwakkeGeneriek` met opt-out-vlag `toonZwakkeGeneriek`) als het UI-label, zodat label en gedrag niet uiteenlopen. Het vangnet-`select` in `rag.ts` is uitgebreid met `normgewicht` zodat een sterk generiek document daar niet ten onrechte wordt weggefilterd. **Query-aware "buiten toepassingsgebied"-uitsluiting is uitgesteld** (fondsen dragen nog geen `regelingstype`).
+6. **Businessweigeringen als geaudite `ok:false`, niet als exception.** In [`acties.ts`](<../app/(platform)/platform/(beveiligd)/generieke-bibliotheek/acties.ts>) onderbreken alleen poort-/auditfouten (`PlatformError`) de flow; bestand-/metadata-/duplicaatweigeringen worden als resultaat teruggegeven met een `effect.afgewezen`-reden — de handeling is dan een bewuste, vastgelegde weigering. Naast het `platform_event_log` (door `withPlatform`) schrijft elke handeling ook het bestaande `document_metadata_log`-spoor (DB-trigger berekent de hash).
+7. **Leeskant via anon-RLS, schrijfkant via service-role.** De lijst-/inzagepagina leest generieke documenten met de gewone anon-client (de SELECT-policy maakt `bibliotheek='generiek'` voor elke ingelogde identiteit leesbaar), zodat de service-role-only-achter-`withPlatform`-invariant intact blijft en er geen audit-ruis ontstaat bij elke paginaweergave. Het **origineel** (private bucket) is voor tenants niet leesbaar; de curator krijgt via `curatieInzageUrl` een kortlevende (120 s) signed-URL, geaudit achter `withPlatform`.
+
+## Overwogen alternatieven
+
+- **Malwarescan nu volledig meebouwen** — vereist een scan-engine/infra-keuze die buiten deze increment valt; de fail-closed magic-bytes-laag dekt de grootste klasse "vermomd bestandstype" al af. De `overgeslagen`-job maakt de resterende schuld expliciet i.p.v. stil. Uitgesteld (WP3).
+- **PPTX uitstellen** — zou de increment versmallen, maar PPTX is een veelvoorkomend guidance-formaat en de extractie is goedkoop bovenop de bestaande OOXML-aanpak. Meegebouwd.
+- **Aparte `document_versies`-tabel** — explicieter versiemodel, maar dupliceert wat de self-FK's + statuslagen al uitdrukken en raakt het tenant-datamodel. Verworpen ten gunste van de bestaande self-FK's.
+- **Asynchrone queue/worker-pipeline** — robuuster bij volume en lange OCR, maar zwaar op te zetten en niet nodig bij P1-volume; hoort bij TO/P5. De synchrone middenweg met per-stap-jobs houdt de latere overgang open. Uitgesteld.
+- **Harde RAG-uitsluiting van zwakke generieke chunks in de SQL-RPC** — zou de regel dieper verankeren, maar maakt de "tenzij expliciet gevraagd"-opt-out lastiger en raakt de gedeelde retrieval-RPC's; de post-retrieval-TS-filter met dezelfde bron-van-waarheid is reversibel en goedkoop. Gekozen voor de TS-filter.
+- **Lijst lezen via `withPlatform` (service-role)** — zou élke paginaweergave auditen, wat ruis geeft en de invariant onnodig belast; de anon-RLS-leesweg is al cross-tenant leesbaar voor generiek. Verworpen voor de leeskant (de schrijfkant blijft volledig achter `withPlatform`).
+
+## Gevolgen
+
+- **RLS/tenant-isolatie:** ongemoeid. Generieke curatie schrijft uitsluitend via de service-role achter `withPlatform`; tenants houden read-only-toegang via de bestaande SELECT-policy. De tenant-upload blijft `bibliotheek='generiek'` weigeren (B13). `document_processing_jobs` krijgt RLS deny-by-default.
+- **Audit/reproduceerbaarheid:** elke van de vier curatiehandelingen + de inzage logt attempt+result in `platform_event_log` (P0) én een `document_metadata_log`-spoor met `rag_impact`-vlag per veld; de pipeline logt per stap een `document_processing_jobs`-rij. Geen handeling kan ongelogd plaatsvinden.
+- **Datamodel/migraties:** [`2026_06_24_p1_generieke_curatie.sql`](../supabase/migrations/2026_06_24_p1_generieke_curatie.sql) (+ `_ROLLBACK`) voegt §8.1-metadatakolommen, `verwerkingsstatus`/`scan_resultaat`/`bestand_hash`/`mime_gedetecteerd`, `pptx` aan de `bestandstype`-CHECK, een partial-unique hash-index en `document_processing_jobs` toe; [`2026_06_24_storage_quarantaine.sql`](../supabase/migrations/2026_06_24_storage_quarantaine.sql) maakt de quarantainebucket. **Migratievolgorde: eerst in Supabase draaien, dan code-deploy** (anders breken inserts op de nieuwe CHECK/kolommen). `schema.sql` is als documentatie bijgewerkt en mag achterlopen.
+- **Gebruikers-/beheerervaring:** platformbeheerders met `platform.generic.library.manage` krijgen een lijst + create/edit/vervang/intrek-UI met een **impactwaarschuwing vooraf** ("wordt voor N fondsen leesbaar") en een live **RAG-zichtbaarheidslabel** uit dezelfde bron-van-waarheid als de retrieval. Zonder de capability is de module read-only.
+- **Bewust geaccepteerde schuld:** de malwarescan is een mock (`scan_resultaat: {scan:'uitgesteld_wp3'}`, job `overgeslagen`) tot WP3; query-aware "buiten toepassingsgebied"-uitsluiting in RAG wacht op `regelingstype` op fondsniveau; de pipeline is synchroon (geen OCR-fallback in P1 — her-extractie kan dat later doen). De UI is geverifieerd via `tsc` + `next build`; een interactieve browser-smoketest stond niet in deze omgeving open.
+
+## Referenties
+
+- Migraties: [`supabase/migrations/2026_06_24_p1_generieke_curatie.sql`](../supabase/migrations/2026_06_24_p1_generieke_curatie.sql) (+ `_ROLLBACK`), [`supabase/migrations/2026_06_24_storage_quarantaine.sql`](../supabase/migrations/2026_06_24_storage_quarantaine.sql)
+- Pure logica: [`lib/generiek-curatie.ts`](../lib/generiek-curatie.ts) (+ `.sanity.ts`), [`lib/bestand-validatie.ts`](../lib/bestand-validatie.ts) (+ `.sanity.ts`)
+- Pipeline/extractie: [`lib/generiek-pipeline.ts`](../lib/generiek-pipeline.ts), [`lib/document-extractie.ts`](../lib/document-extractie.ts) (PPTX)
+- Server-actions + UI: [`app/(platform)/platform/(beveiligd)/generieke-bibliotheek/acties.ts`](<../app/(platform)/platform/(beveiligd)/generieke-bibliotheek/acties.ts>), `…/page.tsx`, `…/_components/GeneriekeBibliotheekClient.tsx`
+- RAG-filter: [`lib/rag.ts`](../lib/rag.ts) (`filterZwakkeGeneriek`, `toonZwakkeGeneriek`)
+- Eerder besluit: [`decisions/0021`](./0021-platformfundament-P0-keuzes.md) (P0), [`decisions/0006`](./0006-doorontwikkeling-v2-beslispunten-B1-B10.md) (B13/B14)

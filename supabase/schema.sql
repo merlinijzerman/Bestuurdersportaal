@@ -130,6 +130,28 @@ create table if not exists public.documenten (
   -- ocr_engine bv. 'mistral:mistral-ocr-latest' (NULL = tekstlaag gebruikt).
   ocr_toegepast  boolean not null default false,
   ocr_engine     text,
+  -- Increment P1/B14 — generieke documentcuratie (platform back-office). Migratie
+  -- 2026_06_24_p1_generieke_curatie.sql is authoritatief; dit is documentatie.
+  -- Toepasbaarheidsmetadata (§8.1) + uploadsecurity-velden (§8.2), alle nullable/
+  -- additief. regelingstype-enum + verwerkingsstatus-pipeline-enum via CHECK.
+  -- bestand_hash voedt de partial-unique dedup-index ux_documenten_generiek_hash
+  -- (alleen bibliotheek='generiek'); tenant-uploads raken die niet.
+  toepassingsgebied   text,
+  regelingstype       text check (regelingstype is null or regelingstype in
+                        ('FTK','SPR','FPR','CVP','algemeen')),
+  doelgroep           text,
+  thema               text,
+  statusinterpretatie text,
+  verwerkingsstatus   text check (verwerkingsstatus is null or verwerkingsstatus in
+                        ('ontvangen','gevalideerd','gescand','extractie','chunking',
+                         'embedding','beschikbaar','geweigerd','gequarantineerd','mislukt')),
+  scan_resultaat      jsonb,
+  bestand_hash        text,
+  mime_gedetecteerd   text,
+  -- Increment P1 — bestandstype-CHECK uitgebreid met 'pptx' (§8.2). Authoritatief
+  -- in 2026_06_24; oorspronkelijk 2026_05_03 (pdf/docx/xlsx). 'bestandstype' en
+  -- 'opslag_pad' bestaan al sinds eerdere migraties (hier niet eerder gedocumenteerd).
+  -- bestandstype  text check (bestandstype in ('pdf','docx','pptx','xlsx')),
   -- Contextvalidatie (CHECK): dossier→procesinstantie_id, vergadering→vergadering_id,
   -- agendapunt→vergadering. Statusovergangen + secundaire koppelingen via triggers.
   constraint documenten_context_dossier_check
@@ -178,6 +200,28 @@ create table if not exists public.document_metadata_review_queue (
   beoordeeld_door uuid references auth.users(id) on delete set null,
   beoordeeld_op timestamptz, opmerking text,
   unique (document_id)
+);
+
+-- Increment P1/B14 — per-stap pipelineregistratie voor de generieke uploadsecurity-
+-- pipeline. Migratie 2026_06_24_p1_generieke_curatie.sql is authoritatief.
+-- NIET append-only (status/retry_count = operationele state die muteert). Platform-
+-- intern: RLS aan + deny-by-default (geen policy); toegang via service-role achter
+-- withPlatform. correlatie_id koppelt aan platform_event_log voor de audit-trail.
+create table if not exists public.document_processing_jobs (
+  id            uuid primary key default gen_random_uuid(),
+  document_id   uuid not null references public.documenten(id) on delete cascade,
+  versie_id     uuid references public.documenten(id) on delete set null,
+  stap          text not null check (stap in
+                  ('validatie','scan','extractie','ocr','chunking','embedding','indexering')),
+  status        text not null default 'wachtend' check (status in
+                  ('wachtend','bezig','geslaagd','mislukt','overgeslagen')),
+  start         timestamptz,
+  eind          timestamptz,
+  foutcode      text,
+  retry_count   integer not null default 0,
+  worker_id     text,
+  correlatie_id uuid,
+  aangemaakt    timestamptz not null default now()
 );
 
 -- ── 3d. Notulensegmenten (Increment D, migratie 2026_06_20d, authoritatief) ──

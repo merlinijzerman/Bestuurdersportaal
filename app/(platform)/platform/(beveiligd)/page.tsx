@@ -5,6 +5,7 @@
 //  (P1-P10) hangen hier later onder, allemaal achter withPlatform.
 // ============================================================================
 
+import Link from "next/link";
 import { huidigePlatformIdentiteit } from "@/lib/platform-auth";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +14,7 @@ export default async function PlatformHome() {
   const identiteit = await huidigePlatformIdentiteit();
   // De (beveiligd)-layout garandeert dat identiteit hier niet null is.
   const caps = identiteit?.capabilities ?? [];
+  const magBibliotheek = caps.includes("platform.generic.library.manage");
 
   return (
     <div className="space-y-6">
@@ -23,6 +25,23 @@ export default async function PlatformHome() {
           P1-P10; elke handeling loopt via de capability- en auditwrapper.
         </p>
       </div>
+
+      <section className="rounded-xl border border-[#0F2744]/10 bg-white p-5">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-[#0F2744]/60">
+          Beheermodules
+        </h2>
+        <div className="mt-3">
+          <Link
+            href="/platform/generieke-bibliotheek"
+            className="inline-flex items-center gap-2 rounded-lg bg-[#F0F3F8] px-4 py-2 text-sm font-medium text-[#0F2744] hover:bg-[#0F2744]/10"
+          >
+            Generieke bibliotheek
+            {!magBibliotheek && (
+              <span className="text-xs text-[#0F2744]/50">(alleen inzien)</span>
+            )}
+          </Link>
+        </div>
+      </section>
 
       <section className="rounded-xl border border-[#0F2744]/10 bg-white p-5">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-[#0F2744]/60">

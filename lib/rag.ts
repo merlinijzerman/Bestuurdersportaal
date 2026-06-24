@@ -5,6 +5,7 @@ import { embedTekst, naarVectorLiteral } from "./embeddings";
 import { notulenBronLabel } from "./notulen";
 import type { RetrievalModus } from "./vraagtype";
 import { weegBronsoort, type Bronsoortprofiel } from "./weeg-bronsoort";
+import { isStandaardZichtbaarInRag } from "./generiek-curatie";
 import type { AssistantSource, AssistantSourceSamenvatting } from "./assistant-source";
 
 // Increment G — optionele, additieve retrieval-filters (vóór ranking/RRF in de
@@ -21,20 +22,44 @@ export interface RetrievalFilters {
   // kandidatenset vóór de top-N-selectie zodat de primaire bronsoort vóór de
   // aanvullende komt. Geen harde uitsluiting (anders dan p_bronsoort hierboven).
   bronsoortprofiel?: Bronsoortprofiel;
+  // Increment P1 (§8.3 #6) — generieke documenten met een ZWAK normgewicht
+  // (informatief/onbekend) worden NIET standaard in RAG getoond. Zet deze vlag
+  // op true wanneer de gebruiker er expliciet om vraagt (dan wél meenemen).
+  // Default/afwezig = uitsluiten (huidig veilig gedrag voor het fonds).
+  toonZwakkeGeneriek?: boolean;
+}
+
+// §8.3 #6 — sluit generieke chunks met een zwak normgewicht (informatief/
+// onbekend) uit, tenzij de gebruiker er expliciet om vroeg (toonZwakkeGeneriek).
+// Niet-generieke chunks (fondsdocumenten) blijven altijd staan. Gedeelde bron-
+// van-waarheid: isStandaardZichtbaarInRag (zelfde regel als de platform-UI-label).
+function filterZwakkeGeneriek(
+  chunks: DocumentChunk[],
+  filters?: RetrievalFilters
+): DocumentChunk[] {
+  if (filters?.toonZwakkeGeneriek) return chunks;
+  return chunks.filter(
+    (c) =>
+      c.documenten.bibliotheek !== "generiek" ||
+      isStandaardZichtbaarInRag(c.documenten.normgewicht)
+  );
 }
 
 // Past de bronsoort-weging toe (indien een profiel is gezet) en knipt dan terug
 // tot de prompt-set. De weging gebeurt VÓÓR selecteerChunks — dat behoudt de
 // inkomende volgorde, dus de boost werkt door in welke chunks de top-N halen.
+// §8.3 #6-uitsluiting draait als eerste, zodat zwakke generieke chunks geen
+// prompt-plek bezetten die anders naar een fonds-/sterke bron was gegaan.
 function weegEnSelecteer(
   gerangschikt: DocumentChunk[],
   filters: RetrievalFilters | undefined,
   maxResults: number,
   maxPerDoc: number
 ): DocumentChunk[] {
+  const zichtbaar = filterZwakkeGeneriek(gerangschikt, filters);
   const gewogen = filters?.bronsoortprofiel
-    ? weegBronsoort(gerangschikt, (c) => c.documenten.bibliotheek, filters.bronsoortprofiel)
-    : gerangschikt;
+    ? weegBronsoort(zichtbaar, (c) => c.documenten.bibliotheek, filters.bronsoortprofiel)
+    : zichtbaar;
   return selecteerChunks(gewogen, maxResults, maxPerDoc);
 }
 
@@ -428,7 +453,7 @@ async function zoekViaFTS(
     pagina,
     paragraaf,
     chunk_index,
-    documenten!inner(titel, bron, bibliotheek, opslag_pad)
+    documenten!inner(titel, bron, bibliotheek, opslag_pad, normgewicht)
   `;
 
   if (zoekterm.length > 0) {
