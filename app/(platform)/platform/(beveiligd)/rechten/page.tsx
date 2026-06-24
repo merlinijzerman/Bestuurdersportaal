@@ -32,7 +32,7 @@ const GELDIGE_CAPS = new Set<string>(PLATFORM_CAPABILITIES);
 
 // Korte, leesbare labels per capability (UI). Bron-van-waarheid voor de codes
 // blijft lib/platform-capabilities.ts.
-export const CAP_LABEL: Record<string, string> = {
+const CAP_LABEL: Record<string, string> = {
   "platform.generic.library.manage": "Generieke bibliotheek beheren",
   "platform.config.manage": "Standaardcatalogus / configuratie beheren",
   "platform.tenants.manage": "Fondsen beheren",
