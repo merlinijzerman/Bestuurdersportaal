@@ -23,8 +23,8 @@ const navItems: NavItem[] = [
   { href: "/notulen", label: "Besluiten & Notulen", icon: "📋", section: "Bestuur" },
   { href: "/procedures", label: "Procedures", icon: "📂", section: "Bestuur" },
   { href: "/risicomatrix", label: "Risicomatrix", icon: "🛡️", section: "Bestuur" },
-  { href: "/governance", label: "Governance Log", icon: "🔍", section: "Bestuur" },
   { href: "/beheer", label: "Catalogus & organen", icon: "⚙️", section: "Beheer", rolVereist: "beheerder" },
+  { href: "/governance", label: "Governance Log", icon: "🔍", section: "Beheer", rolVereist: "beheerder" },
 ];
 
 interface SidebarProps {

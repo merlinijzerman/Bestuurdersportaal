@@ -25,9 +25,27 @@ export default async function GovernancePage() {
 
   const { data: profiel } = await supabase
     .from("profielen")
-    .select("fonds_id")
+    .select("fonds_id, rol")
     .eq("id", user!.id)
     .single();
+
+  // Het governance-log toont wie welke AI-vraag stelde (persoonsgegevens van
+  // bestuurders) en is voorbehouden aan de rol beheerder. Dit is de leidende,
+  // server-side autorisatie; de sidebar-gating is slechts cosmetisch. RLS borgt
+  // daarnaast de fonds-isolatie. NB: alleen-tonen-blokkade, geen mutatie.
+  if (profiel?.rol !== "beheerder") {
+    return (
+      <div className="p-7 max-w-3xl">
+        <div className="mb-6">
+          <h1 className="text-xl font-black text-[#0F2744]">Governance Log</h1>
+        </div>
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          U heeft geen rechten om het governance-log in te zien. Inzage in het
+          AI-auditspoor is voorbehouden aan de rol <strong>beheerder</strong>.
+        </div>
+      </div>
+    );
+  }
 
   const { data: logRegels } = await supabase
     .from("governance_log")
