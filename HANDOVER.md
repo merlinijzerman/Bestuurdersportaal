@@ -113,7 +113,7 @@ mvp/
 │   │   ├── agendapunten/
 │   │   │   ├── route.ts            # POST nieuw agendapunt
 │   │   │   └── [id]/voorbereiding/
-│   │   │       ├── route.ts        # POST: genereer/regenereer AI-voorbereiding (snel/grondig)
+│   │   │       ├── route.ts        # POST: genereer/regenereer AI-voorbereiding (snel/grondig); profielgestuurde NADRUK (Increment F) via lib/profielsturing.ts
 │   │   │       └── notities/route.ts # PATCH: eigen notities opslaan
 │   │   ├── inbreng/[id]/route.ts
 │   │   ├── procedures/             # 7 routes voor procedure-flows
@@ -143,6 +143,7 @@ mvp/
 │   ├── supabase.ts                 # browser client
 │   ├── supabase-server.ts          # server-side client (SSR cookies)
 │   ├── rag.ts                      # zoekRelevanteChunks, maakContext, maakChunks (3-trapt: paragraaf→zin→woord)
+│   ├── profielsturing.ts           # Increment F: profielvoorkeuren ophalen + prioriterend prompt-blok (gedeeld door chat + agendaprep)
 │   ├── document-extractie.ts       # tekstextractie per bestandstype (PDF/DOCX/XLSX) + diagnostiek
 │   ├── proces-templates.ts         # hardcoded procestemplates (Beleidswijziging)
 │   ├── risico-config.ts            # categorieën + niveau-afleiding K+I
@@ -311,6 +312,9 @@ De systeem-prompt voor `/api/agendapunten/[id]/voorbereiding` instrueert Claude 
 
 ### Voorbereiding: privé per gebruiker, RLS op gebruiker_id
 Voorbereidingen zijn persoonlijk: alleen jij ziet je eigen output en notities. RLS-policy `eigen voorbereiding` filtert strikt op `gebruiker_id = auth.uid()`. De inbreng-functie blijft het gedeelde kanaal: de "↓ Gebruik dit als startpunt voor mijn inbreng"-knop kopieert naar de inbreng-textarea zodat de bestuurder zelf kiest welk deel van zijn voorbereiding hij met collega's deelt.
+
+### Voorbereiding: profielgestuurde nadruk (Increment F)
+Sinds 26-06-2026 kleurt het persoonlijk profiel van de bestuurder óók de AI-voorbereiding, niet alleen de AI-assistent. `/api/agendapunten/[id]/voorbereiding` haalt via `lib/profielsturing.ts` (`bouwProfielsturingAgenda`) de voorkeuren op — primaire/secundaire expertise, gremia, kritische focusgebieden, bestuurlijke rol, antwoordvoorkeur, detailniveau — en voegt een prioriterend prompt-blok toe. **Kernprincipe gelijk aan de chat: prioriteren/nadruk, niet inperken.** De bestuurlijk noodzakelijke lenzen (stakeholder-impact, financierbaarheid, uitvoerbaarheid, beheerst besluitvormingsproces, evenwichtige belangenafweging) blijven leidend waar het stuk daarom vraagt; het profiel voegt extra gewicht en minstens één lens/vraag vanuit de eigen focus toe. Dit mag bestuurlijk omdat de voorbereiding per gebruiker wordt gegenereerd én privé is (RLS op `gebruiker_id`) — verschillende leden krijgen sowieso een eigen voorbereiding, dus personalisatie introduceert geen ongelijkheid in de gedeelde feitenbasis. Voor herleidbaarheid legt `bronnen_meta.profielsturing` ("actief"/"geen-profiel") + `profielsturing_aspecten` vast welke profielvelden meespeelden (alleen metadata, geen inhoud). De steering-tekst en de data-ophaling zijn gedeeld met de AI-assistent via dezelfde lib (één bron van waarheid). Heeft een bestuurder geen profiel ingevuld, dan valt de voorbereiding terug op puur collectief — identiek aan vóór deze koppeling.
 
 ### Voorbereiding: twee snelheden voor context-omvang
 *Snel* leest het agendapunt + gekoppelde stukken + lichte RAG over de bibliotheek (top 4 chunks). *Grondig* breidt dat uit naar diepere RAG (top 10 chunks) plus alle actieve risicomatrix-risico's plus alle lopende procedures als context. Bestuurder begint default met snel; een knop *↗ Verdiep* regenereert met grondig. Eigen notities blijven bewaard tussen genereer-acties.

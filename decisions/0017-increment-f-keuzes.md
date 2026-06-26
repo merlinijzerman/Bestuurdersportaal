@@ -65,6 +65,36 @@ AI-governance-checkpoint vóór go-live (build/merge mag, deploy wacht).
   de afwezigheid van `profile.manage.all`.
 - **B10-poort:** go-live geblokkeerd tot DPIA + AI-governance-checkpoint geactualiseerd.
 
+## Addendum 2026-06-26 — profielsturing uitgebreid naar de agenda-voorbereiding
+
+Bij oplevering bleek de profielsturing alleen in de AI-assistent (`/api/chat`)
+te zitten, terwijl de profielpagina expliciet belooft de **AI-voorbereiding** te
+personaliseren ("welke aandachtspunten en kritische vragen vóórkomen"). Die
+inconsistentie is weggewerkt:
+
+1. **Gedeelde lib.** `bouwProfielsturing()` + het type `ProfielsturingAspecten`
+   zijn verplaatst van `app/api/chat/route.ts` naar `lib/profielsturing.ts`
+   (één bron van waarheid). De data-ophaling (`haalProfielVoorkeuren`) is gedeeld;
+   er is een tweede tekstvariant `bouwProfielsturingAgenda()` voor de
+   gestructureerde lenzen/vragen-output.
+2. **Agendaprep gekoppeld.** `/api/agendapunten/[id]/voorbereiding` voegt het
+   profielblok toe aan de prompt. **Principe ongewijzigd: prioriteren/nadruk, niet
+   filteren** — de bestuurlijk noodzakelijke lenzen blijven leidend; het profiel
+   geeft extra gewicht en minstens één lens/vraag vanuit de eigen focus.
+3. **Bestuurlijke onderbouwing.** Personalisatie is hier aanvaardbaar omdat de
+   voorbereiding per gebruiker wordt gegenereerd én privé is (RLS op
+   `gebruiker_id`). Er ontstaat dus geen ongelijkheid in de gedeelde feitenbasis;
+   de collectieve dekking blijft intact.
+4. **Herleidbaarheid.** `voorbereidingen.bronnen_meta.profielsturing`
+   ("actief"/"geen-profiel") + `profielsturing_aspecten` leggen vast welke
+   profielvelden meespeelden (alleen metadata). Geen "uitgeschakeld": de
+   agendaprep kent (nog) geen "algemeen perspectief"-toggle.
+
+**Openstaand / te valideren:** of een per-voorbereiding "algemeen perspectief"-
+toggle wenselijk is (consistentie met de chat), en of de profielsturing onder
+dezelfde B10-poort/DPIA-actualisatie valt vóór go-live (werkhypothese: ja, het is
+dezelfde profileringsverwerking, alleen een extra afnemer).
+
 ## Referenties
 
 - FO v1.3 §14 (Module 12), TO v1.2 §2.7.

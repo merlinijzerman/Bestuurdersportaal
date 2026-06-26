@@ -4,6 +4,10 @@ import { createServerSupabase } from "@/lib/supabase-server";
 import { zoekRelevanteChunks, maakContext, verrijkNotulenChunks } from "@/lib/rag";
 import { controleerLimiet, LIMIETEN } from "@/lib/rate-limit";
 import { rateLimited } from "@/lib/api-errors";
+import {
+  bouwProfielsturingAgenda,
+  type ProfielsturingAspecten,
+} from "@/lib/profielsturing";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -47,6 +51,12 @@ interface BronnenMeta {
   documenten: { id: string; titel: string; bron: string }[];
   risicos: { id: string; titel: string; niveau: string }[];
   procedures: { id: string; titel: string; status: string }[];
+  // Increment F (FO §14) — herleidbaarheid: welke profielvelden de
+  // voorbereiding hebben gekleurd. "uitgeschakeld" bestaat hier (nog) niet:
+  // agendaprep kent geen "algemeen perspectief"-toggle, dus alleen "actief"
+  // (profiel gevuld) of "geen-profiel".
+  profielsturing?: "actief" | "geen-profiel";
+  profielsturing_aspecten?: ProfielsturingAspecten;
 }
 
 export async function POST(
@@ -84,6 +94,12 @@ export async function POST(
         { status: 400 }
       );
     }
+
+    // Increment F (FO §14) — profielgestuurde NADRUK. De voorbereiding wordt
+    // per gebruiker gegenereerd en opgeslagen (gebruiker_id), dus personalisatie
+    // is hier passend. KERNPRINCIPE: prioriteren/nadruk, niet inperken — de
+    // bestuurlijk noodzakelijke lenzen blijven leidend (zie steering-tekst).
+    const profielsturing = await bouwProfielsturingAgenda(supabase, user.id);
 
     // Agendapunt + vergadering + bovenliggende procedure (indien gekoppeld)
     const { data: agendapunt } = await supabase
@@ -220,6 +236,10 @@ export async function POST(
       }
     }
 
+    if (profielsturing) {
+      userParts.push(`\n${profielsturing.tekst}`);
+    }
+
     userParts.push(
       `\n=== UW OPDRACHT ===\nGenereer de voorbereiding voor dit agendapunt volgens het JSON-formaat in de systeem-prompt. Diepte: ${diepte}.`
     );
@@ -275,6 +295,10 @@ export async function POST(
         titel: p.titel,
         status: p.status,
       })),
+      profielsturing: profielsturing ? "actief" : "geen-profiel",
+      ...(profielsturing
+        ? { profielsturing_aspecten: profielsturing.aspecten }
+        : {}),
     };
 
     // Upsert in voorbereidingen-tabel

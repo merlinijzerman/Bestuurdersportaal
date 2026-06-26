@@ -60,6 +60,31 @@ async function laadCatalogus(pad: string): Promise<CatalogusItem[]> {
   return (json.items ?? []).filter((i) => i.fonds_id && i.actief !== false);
 }
 
+// Tekstknop om een keuzelijst in/uit te klappen.
+function InklapKnop({
+  open,
+  aantal,
+  onClick,
+}: {
+  open: boolean;
+  aantal: number;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="mt-3 text-sm font-medium text-[#0F2744] hover:underline"
+    >
+      {open
+        ? "▲ Inklappen"
+        : aantal > 0
+          ? "▾ Wijzigen of meer toevoegen"
+          : "▾ Kiezen"}
+    </button>
+  );
+}
+
 export default function ProfielPage() {
   const [laden, setLaden] = useState(true);
   const [opslaan, setOpslaan] = useState(false);
@@ -78,6 +103,13 @@ export default function ProfielPage() {
   const [secundaire, setSecundaire] = useState<string[]>([]);
   const [gekozenGremia, setGekozenGremia] = useState<string[]>([]);
   const [gekozenFocus, setGekozenFocus] = useState<string[]>([]);
+
+  // Inklap-status per keuzelijst. Standaard ingeklapt: dan toont het profiel
+  // alleen de GEKOZEN chips en blijft de pagina rustig. Uitklappen onthult de
+  // volledige keuzelijst om te wijzigen/toevoegen.
+  const [expOpen, setExpOpen] = useState(false);
+  const [gremOpen, setGremOpen] = useState(false);
+  const [focusOpen, setFocusOpen] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -123,7 +155,13 @@ export default function ProfielPage() {
           setDetailniveau(data.profiel.detailniveau ?? "");
           setSecundaire((data.secundaire_expertise_ids ?? []).filter((id) => expIds.has(id)));
           setGekozenGremia((data.gremium_ids ?? []).filter((id) => gremIds.has(id)));
-          setGekozenFocus((data.focusgebied_ids ?? []).filter((id) => focusIds.has(id)));
+          const geldigeFocus = (data.focusgebied_ids ?? []).filter((id) => focusIds.has(id));
+          setGekozenFocus(geldigeFocus);
+          // Focusgebieden kennen een minimum (≥3). Bij een (nog) leeg profiel
+          // tonen we de keuzelijst meteen uitgeklapt zodat de bestuurder wordt
+          // uitgenodigd te kiezen; bij een gevuld profiel blijft het rustig
+          // ingeklapt met alleen de gekozen chips.
+          if (geldigeFocus.length === 0) setFocusOpen(true);
         }
       } finally {
         setLaden(false);
@@ -343,73 +381,150 @@ export default function ProfielPage() {
               ({secundaire.length}/{MAX_SECUNDAIRE})
             </span>
           </label>
-          <div className="flex flex-wrap gap-2">
-            {secundaireKandidaten.map((e) => {
-              const aan = secundaire.includes(e.id);
-              const vol = !aan && secundaire.length >= MAX_SECUNDAIRE;
-              return (
-                <button
-                  key={e.id}
-                  type="button"
-                  disabled={vol}
-                  onClick={() => setSecundaire((s) => wisselSet(s, e.id, MAX_SECUNDAIRE))}
-                  className={`px-3 py-1.5 rounded-full text-sm border transition ${
-                    aan
-                      ? "bg-[#0F2744] text-white border-[#0F2744]"
-                      : vol
-                        ? "bg-gray-50 text-gray-300 border-gray-200 cursor-not-allowed"
-                        : "bg-white text-gray-700 border-gray-300 hover:border-[#0F2744]"
-                  }`}
-                >
-                  {e.naam}
-                </button>
-              );
-            })}
-          </div>
+
+          {/* Ingeklapt: alleen de gekozen expertises (klik = verwijderen). */}
+          {!expOpen && (
+            <div className="flex flex-wrap gap-2">
+              {secundaire.length === 0 ? (
+                <span className="text-sm text-gray-400">
+                  Nog geen secundaire expertise gekozen.
+                </span>
+              ) : (
+                secundaireKandidaten
+                  .filter((e) => secundaire.includes(e.id))
+                  .map((e) => (
+                    <button
+                      key={e.id}
+                      type="button"
+                      onClick={() =>
+                        setSecundaire((s) => wisselSet(s, e.id, MAX_SECUNDAIRE))
+                      }
+                      className="px-3 py-1.5 rounded-full text-sm border bg-[#0F2744] text-white border-[#0F2744]"
+                    >
+                      {e.naam} ✕
+                    </button>
+                  ))
+              )}
+            </div>
+          )}
+
+          {/* Uitgeklapt: volledige keuzelijst. */}
+          {expOpen && (
+            <div className="flex flex-wrap gap-2">
+              {secundaireKandidaten.map((e) => {
+                const aan = secundaire.includes(e.id);
+                const vol = !aan && secundaire.length >= MAX_SECUNDAIRE;
+                return (
+                  <button
+                    key={e.id}
+                    type="button"
+                    disabled={vol}
+                    onClick={() => setSecundaire((s) => wisselSet(s, e.id, MAX_SECUNDAIRE))}
+                    className={`px-3 py-1.5 rounded-full text-sm border transition ${
+                      aan
+                        ? "bg-[#0F2744] text-white border-[#0F2744]"
+                        : vol
+                          ? "bg-gray-50 text-gray-300 border-gray-200 cursor-not-allowed"
+                          : "bg-white text-gray-700 border-gray-300 hover:border-[#0F2744]"
+                    }`}
+                  >
+                    {e.naam}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          <InklapKnop
+            open={expOpen}
+            aantal={secundaire.length}
+            onClick={() => setExpOpen((o) => !o)}
+          />
         </section>
 
         {/* Gremia — gegroepeerd per categorie (Fondsorganen / Bestuurscommissies
             / Externe ketenpartners). */}
         <section className="bg-white border border-gray-200 rounded-xl p-5">
-          <h2 className="font-bold text-[#0F2744] mb-4">Commissies &amp; gremia</h2>
-          <div className="space-y-5">
-            {GREMIA_CATEGORIEEN.map((cat) => {
-              const items = gremia.filter(
-                (g) => (g.categorie ?? "overig") === cat.sleutel
-              );
-              if (items.length === 0) return null;
-              return (
-                <div key={cat.sleutel}>
-                  <div className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">
-                    {cat.label}
+          <h2 className="font-bold text-[#0F2744] mb-1">Commissies &amp; gremia</h2>
+          <p className="text-xs text-gray-400 mb-4">
+            ({gekozenGremia.length} gekozen)
+          </p>
+
+          {/* Ingeklapt: alleen de gekozen gremia (klik = verwijderen). */}
+          {!gremOpen && (
+            <div className="flex flex-wrap gap-2">
+              {gekozenGremia.length === 0 ? (
+                <span className="text-sm text-gray-400">
+                  Nog geen commissies of gremia gekozen.
+                </span>
+              ) : (
+                gremia
+                  .filter((g) => gekozenGremia.includes(g.id))
+                  .map((g) => (
+                    <button
+                      key={g.id}
+                      type="button"
+                      onClick={() =>
+                        setGekozenGremia((s) =>
+                          wisselSet(s, g.id, Number.MAX_SAFE_INTEGER)
+                        )
+                      }
+                      className="px-3 py-1.5 rounded-full text-sm border bg-[#0F2744] text-white border-[#0F2744]"
+                    >
+                      {g.naam} ✕
+                    </button>
+                  ))
+              )}
+            </div>
+          )}
+
+          {/* Uitgeklapt: volledige keuzelijst, gegroepeerd per categorie. */}
+          {gremOpen && (
+            <div className="space-y-5">
+              {GREMIA_CATEGORIEEN.map((cat) => {
+                const items = gremia.filter(
+                  (g) => (g.categorie ?? "overig") === cat.sleutel
+                );
+                if (items.length === 0) return null;
+                return (
+                  <div key={cat.sleutel}>
+                    <div className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">
+                      {cat.label}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {items.map((g) => {
+                        const aan = gekozenGremia.includes(g.id);
+                        return (
+                          <button
+                            key={g.id}
+                            type="button"
+                            onClick={() =>
+                              setGekozenGremia((s) =>
+                                wisselSet(s, g.id, Number.MAX_SAFE_INTEGER)
+                              )
+                            }
+                            className={`px-3 py-1.5 rounded-full text-sm border transition ${
+                              aan
+                                ? "bg-[#0F2744] text-white border-[#0F2744]"
+                                : "bg-white text-gray-700 border-gray-300 hover:border-[#0F2744]"
+                            }`}
+                          >
+                            {g.naam}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    {items.map((g) => {
-                      const aan = gekozenGremia.includes(g.id);
-                      return (
-                        <button
-                          key={g.id}
-                          type="button"
-                          onClick={() =>
-                            setGekozenGremia((s) =>
-                              wisselSet(s, g.id, Number.MAX_SAFE_INTEGER)
-                            )
-                          }
-                          className={`px-3 py-1.5 rounded-full text-sm border transition ${
-                            aan
-                              ? "bg-[#0F2744] text-white border-[#0F2744]"
-                              : "bg-white text-gray-700 border-gray-300 hover:border-[#0F2744]"
-                          }`}
-                        >
-                          {g.naam}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
+
+          <InklapKnop
+            open={gremOpen}
+            aantal={gekozenGremia.length}
+            onClick={() => setGremOpen((o) => !o)}
+          />
         </section>
 
         {/* Focusgebieden */}
@@ -421,29 +536,64 @@ export default function ProfielPage() {
               ({gekozenFocus.length} gekozen)
             </span>
           </p>
-          <div className="flex flex-wrap gap-2">
-            {focusgebieden.map((f) => {
-              const aan = gekozenFocus.includes(f.id);
-              const vol = !aan && gekozenFocus.length >= MAX_FOCUS;
-              return (
-                <button
-                  key={f.id}
-                  type="button"
-                  disabled={vol}
-                  onClick={() => setGekozenFocus((s) => wisselSet(s, f.id, MAX_FOCUS))}
-                  className={`px-3 py-1.5 rounded-full text-sm border transition ${
-                    aan
-                      ? "bg-[#0F2744] text-white border-[#0F2744]"
-                      : vol
-                        ? "bg-gray-50 text-gray-300 border-gray-200 cursor-not-allowed"
-                        : "bg-white text-gray-700 border-gray-300 hover:border-[#0F2744]"
-                  }`}
-                >
-                  {f.naam}
-                </button>
-              );
-            })}
-          </div>
+          {/* Ingeklapt: alleen de gekozen focusgebieden (klik = verwijderen). */}
+          {!focusOpen && (
+            <div className="flex flex-wrap gap-2">
+              {gekozenFocus.length === 0 ? (
+                <span className="text-sm text-gray-400">
+                  Nog geen focusgebieden gekozen.
+                </span>
+              ) : (
+                focusgebieden
+                  .filter((f) => gekozenFocus.includes(f.id))
+                  .map((f) => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() =>
+                        setGekozenFocus((s) => wisselSet(s, f.id, MAX_FOCUS))
+                      }
+                      className="px-3 py-1.5 rounded-full text-sm border bg-[#0F2744] text-white border-[#0F2744]"
+                    >
+                      {f.naam} ✕
+                    </button>
+                  ))
+              )}
+            </div>
+          )}
+
+          {/* Uitgeklapt: volledige keuzelijst. */}
+          {focusOpen && (
+            <div className="flex flex-wrap gap-2">
+              {focusgebieden.map((f) => {
+                const aan = gekozenFocus.includes(f.id);
+                const vol = !aan && gekozenFocus.length >= MAX_FOCUS;
+                return (
+                  <button
+                    key={f.id}
+                    type="button"
+                    disabled={vol}
+                    onClick={() => setGekozenFocus((s) => wisselSet(s, f.id, MAX_FOCUS))}
+                    className={`px-3 py-1.5 rounded-full text-sm border transition ${
+                      aan
+                        ? "bg-[#0F2744] text-white border-[#0F2744]"
+                        : vol
+                          ? "bg-gray-50 text-gray-300 border-gray-200 cursor-not-allowed"
+                          : "bg-white text-gray-700 border-gray-300 hover:border-[#0F2744]"
+                    }`}
+                  >
+                    {f.naam}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          <InklapKnop
+            open={focusOpen}
+            aantal={gekozenFocus.length}
+            onClick={() => setFocusOpen((o) => !o)}
+          />
         </section>
       </div>
 
