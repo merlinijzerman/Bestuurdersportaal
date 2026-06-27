@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createServerSupabase } from "@/lib/supabase-server";
 import { bouwChunkRecords } from "@/lib/chunk-ingest";
+import { maakChunksUitSegmenten } from "@/lib/chunking";
+import {
+  IngestCapError,
+  chunkCapMelding,
+  overschrijdtChunkCap,
+} from "@/lib/ingest-caps";
 import {
   bepaalBestandstype,
   CONTENT_TYPE_PER_BESTANDSTYPE,
@@ -165,6 +171,14 @@ export async function POST(req: NextRequest) {
     try {
       extractie = await extractTekst(buffer, bestandstype);
     } catch (error) {
+      // Ingest-cap (bv. xlsx-rijlimiet): geen extractiefout maar een bewuste
+      // weigering — eigen melding + 413 zodat de UI dit kan onderscheiden.
+      if (error instanceof IngestCapError) {
+        return NextResponse.json(
+          { error: error.message, foutcode: error.foutcode },
+          { status: 413 }
+        );
+      }
       console.error(`Tekstextractie ${bestandstype} mislukt:`, error);
       return NextResponse.json(
         {
@@ -180,6 +194,21 @@ export async function POST(req: NextRequest) {
           ? "Kon geen tekst uit deze PDF halen — het is vermoedelijk een gescand document zonder tekstlaag. Maak het bestand eerst doorzoekbaar (bijv. via Acrobat 'Tekstherkenning' of Preview 'Exporteer als PDF met OCR') en upload opnieuw."
           : `Het ${bestandstype.toUpperCase()}-bestand lijkt geen tekstuele inhoud te bevatten.`;
       return NextResponse.json({ error: melding }, { status: 400 });
+    }
+
+    // Ingest-cap (Fase 1): tel de geplande chunks via de pure chunker VÓÓR we
+    // een documentrij aanmaken of de dure prefix-/embedding-stap starten. Boven
+    // de cap timet het synchrone indexeerpad; weiger dan met een duidelijke
+    // melding i.p.v. een stille mislukking. Geen wees-documentrij.
+    const geplandeChunks = maakChunksUitSegmenten(extractie.segmenten);
+    if (overschrijdtChunkCap(geplandeChunks.length)) {
+      return NextResponse.json(
+        {
+          error: chunkCapMelding(geplandeChunks.length),
+          foutcode: "bestand_te_groot_voor_rag",
+        },
+        { status: 413 }
+      );
     }
 
     // Diagnostiek: log waarschuwingen als de extractie er verdacht uitziet.

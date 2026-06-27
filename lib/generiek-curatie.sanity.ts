@@ -24,15 +24,15 @@ function check(naam: string, fn: () => void) {
 console.log("generiek-curatie sanity-tests:");
 
 // ── RAG-zichtbaarheid (criterium #6) ───────────────────────────────────────
-check("zwak normgewicht (informatief/onbekend/null) → niet standaard in RAG", () => {
-  assert.equal(isStandaardZichtbaarInRag("informatief"), false);
+check("zwak normgewicht (onbekend/null) → niet standaard in RAG", () => {
   assert.equal(isStandaardZichtbaarInRag("onbekend"), false);
   assert.equal(isStandaardZichtbaarInRag(null), false);
   assert.equal(isStandaardZichtbaarInRag(undefined), false);
   assert.equal(isStandaardZichtbaarInRag("rcommelje"), false); // ongeldig → onbekend
 });
 
-check("sterk normgewicht → wél standaard in RAG", () => {
+check("informatief + sterk normgewicht → wél standaard in RAG", () => {
+  assert.equal(isStandaardZichtbaarInRag("informatief"), true); // herzien 2026-06-26
   assert.equal(isStandaardZichtbaarInRag("bindend"), true);
   assert.equal(isStandaardZichtbaarInRag("toezichtverwachting"), true);
   assert.equal(isStandaardZichtbaarInRag("sector_guidance"), true);

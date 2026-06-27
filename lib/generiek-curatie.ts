@@ -3,7 +3,8 @@
 // ----------------------------------------------------------------------------
 //  Pure logica voor het CUREREN van generieke (sectorbrede, fonds-overstijgende)
 //  documenten: metadata-defaults (§8.1), veld- en bronhygiene-validatie, en de
-//  RAG-zichtbaarheidsregel (§8.3 criterium #6). Geen DB/IO → los testbaar
+//  RAG-zichtbaarheidsregel (§8.3 #6, herzien 2026-06-26: alleen 'onbekend'/NULL
+//  is nog zwak; 'informatief' wordt nu wél standaard getoond). Geen DB/IO → los testbaar
 //  (generiek-curatie.sanity.ts). De server-actions (app/(platform)/…/acties.ts)
 //  consumeren `valideerCuratie` en schrijven het genormaliseerde resultaat weg.
 //
@@ -72,11 +73,13 @@ export const GENERIEK_DEFAULTS = {
   regelingstype: "algemeen",
 } as const;
 
-// ── RAG-zichtbaarheid (§8.3 #6) ─────────────────────────────────────────────
-// Een generiek document met een ZWAK normgewicht (informatief/onbekend) wordt
-// NIET standaard in RAG getoond — alleen als de gebruiker er expliciet om vraagt.
-// NULL telt als 'onbekend' (zwak). Dit is de gedeelde bron-van-waarheid.
-export const ZWAK_NORMGEWICHT: Normgewicht[] = ["informatief", "onbekend"];
+// ── RAG-zichtbaarheid (§8.3 #6, herzien 2026-06-26) ─────────────────────────
+// Alleen een generiek document met normgewicht 'onbekend' wordt NIET standaard
+// in RAG getoond — alleen als de gebruiker er expliciet om vraagt. NULL/ongeldig
+// telt als 'onbekend' (zwak). 'informatief' is bewust GEEN zwak gewicht meer:
+// informatieve generieke bronnen worden voortaan wél standaard meegenomen
+// (besluit Merlin IJzerman). Dit is de gedeelde bron-van-waarheid.
+export const ZWAK_NORMGEWICHT: Normgewicht[] = ["onbekend"];
 
 export function isStandaardZichtbaarInRag(
   normgewicht: string | null | undefined

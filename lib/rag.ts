@@ -22,15 +22,16 @@ export interface RetrievalFilters {
   // kandidatenset vóór de top-N-selectie zodat de primaire bronsoort vóór de
   // aanvullende komt. Geen harde uitsluiting (anders dan p_bronsoort hierboven).
   bronsoortprofiel?: Bronsoortprofiel;
-  // Increment P1 (§8.3 #6) — generieke documenten met een ZWAK normgewicht
-  // (informatief/onbekend) worden NIET standaard in RAG getoond. Zet deze vlag
-  // op true wanneer de gebruiker er expliciet om vraagt (dan wél meenemen).
-  // Default/afwezig = uitsluiten (huidig veilig gedrag voor het fonds).
+  // Increment P1 (§8.3 #6, herzien 2026-06-26) — generieke documenten met een
+  // ZWAK normgewicht (alleen 'onbekend'/NULL; 'informatief' niet meer) worden
+  // NIET standaard in RAG getoond. Zet deze vlag op true wanneer de gebruiker er
+  // expliciet om vraagt (dan wél meenemen). Default/afwezig = uitsluiten.
   toonZwakkeGeneriek?: boolean;
 }
 
-// §8.3 #6 — sluit generieke chunks met een zwak normgewicht (informatief/
-// onbekend) uit, tenzij de gebruiker er expliciet om vroeg (toonZwakkeGeneriek).
+// §8.3 #6 — sluit generieke chunks met een zwak normgewicht ('onbekend'/NULL;
+// 'informatief' valt hier niet meer onder) uit, tenzij de gebruiker er expliciet
+// om vroeg (toonZwakkeGeneriek).
 // Niet-generieke chunks (fondsdocumenten) blijven altijd staan. Gedeelde bron-
 // van-waarheid: isStandaardZichtbaarInRag (zelfde regel als de platform-UI-label).
 function filterZwakkeGeneriek(
