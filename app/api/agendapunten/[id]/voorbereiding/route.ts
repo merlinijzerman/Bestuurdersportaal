@@ -13,6 +13,25 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
 });
 
+// Robuuste JSON-extractie uit een AI-respons. Strip eventuele code-fences en
+// pak het fragment van de eerste '{' tot de laatste '}'. Samen met de
+// assistant-prefill ('{') vangt dit de gevallen af waarin het model toch
+// omringende tekst meelevert — de oorzaak van "AI-output kon niet geparseerd
+// worden" bij agendapunten zonder gekoppelde stukken.
+function parseAiJson(tekst: string): Record<string, unknown> {
+  let s = tekst
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+  const eerste = s.indexOf("{");
+  const laatste = s.lastIndexOf("}");
+  if (eerste !== -1 && laatste !== -1 && laatste > eerste) {
+    s = s.slice(eerste, laatste + 1);
+  }
+  return JSON.parse(s);
+}
+
 const SYSTEM_PROMPT = `U bent een ervaren sparringpartner voor het bestuur van een Nederlands pensioenfonds.
 
 Uw taak: help een bestuurder een agendapunt voor te bereiden voor een vergadering. Niet door het stuk samen te vatten, maar door scherper te denken — door blinde vlekken te markeren, kritische vragen te formuleren, en het stuk te toetsen tegen de juiste lenzen.
@@ -28,8 +47,9 @@ REGELS:
 - Geen samenvatting van het stuk — daar dient een aparte AI-functie voor. U mag wel verwijzen naar specifieke onderdelen ("paragraaf 3.2 stelt X — maar laat onbenoemd Y").
 - Wees concreet en kritisch. Vermijd algemene vragen zoals "is dit goed onderbouwd?" — vraag wat ER specifiek niet onderbouwd is.
 - Verwijs naar bronnen met [Bron N] notatie waar dat de scherpte ten goede komt. Niet als opsomming.
+- Ook als er weinig of geen stukken zijn aangeleverd, baseert u de voorbereiding op de titel en toelichting van het agendapunt plus uw vakkennis. U levert dan tóch de volledige JSON — nooit een tekstuele mededeling dat er te weinig context is, en nooit een vraag terug.
 
-OUTPUT: alleen JSON, geen markdown. Exacte formaat:
+OUTPUT: alleen JSON, geen markdown, geen omringende tekst. Begin uw antwoord direct met '{'. Exacte formaat:
 {
   "lenzen": [
     {
@@ -250,11 +270,19 @@ export async function POST(
       model: "claude-sonnet-4-5",
       max_tokens: diepte === "grondig" ? 2500 : 1500,
       system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: userMessage }],
+      messages: [
+        { role: "user", content: userMessage },
+        // Prefill met '{' dwingt het model tot directe JSON-output, ook bij
+        // dunne input (alleen een toelichting, geen stukken). Dit is de
+        // hoofdoorzaak van parse-fouten: zonder prefill antwoordt het model dan
+        // soms in proza. Zie parseAiJson() voor de robuuste extractie.
+        { role: "assistant", content: "{" },
+      ],
     });
 
     const blok = respons.content.find((c) => c.type === "text");
-    const ruweTekst = blok && blok.type === "text" ? blok.text.trim() : "";
+    // De prefill '{' zit niet in de respons; plak terug aan de kop.
+    const ruweTekst = `{${blok && blok.type === "text" ? blok.text : ""}`.trim();
 
     let aiOutput: {
       lenzen?: { naam: string; analyse: string; vraag: string }[];
@@ -263,11 +291,7 @@ export async function POST(
       samenvatting?: string;
     } = {};
     try {
-      const cleaned = ruweTekst
-        .replace(/^```json\s*/i, "")
-        .replace(/^```\s*/i, "")
-        .replace(/\s*```$/i, "");
-      aiOutput = JSON.parse(cleaned);
+      aiOutput = parseAiJson(ruweTekst) as typeof aiOutput;
     } catch (parseErr) {
       console.error("JSON-parse fout in voorbereiding:", parseErr, ruweTekst);
       return NextResponse.json(
