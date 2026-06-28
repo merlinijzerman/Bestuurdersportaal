@@ -195,7 +195,9 @@ const BRON_NUMMER_KLEUR: Record<string, string> = {
 // - [Bron 1], [Bron 12]
 // - [Algemene kennis], [algemene kennis]
 // - [Volgens wetgeving], [volgens wetgeving]
-const MARKER_REGEX = /(\[Bron \d+\]|\[Algemene kennis\]|\[Volgens wetgeving\])/gi;
+// - [Toelichting agendapunt] (ADR 0028 — ongevalideerde bestuurs-vrijetekst)
+const MARKER_REGEX =
+  /(\[Bron \d+\]|\[Algemene kennis\]|\[Volgens wetgeving\]|\[Toelichting agendapunt\])/gi;
 
 const VOORGESTELDE_VRAGEN = [
   "Wat zijn de deskundigheidseisen voor bestuurders?",
@@ -647,7 +649,10 @@ export default function AiPage() {
           transformatie: opties?.transformatie === true,
           // ADR 0028 — agendapunt-modus: alleen het id (+ titel voor de UI). De
           // route haalt de toelichting zelf op onder RLS; de client-titel wordt
-          // niet vertrouwd voor de promptinhoud.
+          // niet vertrouwd voor de promptinhoud. Precedentie: stuurt een
+          // vervolgactie tegelijk een per-turn scopeOverride mee, dan wint
+          // agendapunt-modus server-side (route.ts) — die override-stukken worden
+          // dan agendapunt-retrievalscope i.p.v. een strikte document-scope.
           agendapunt_context: agendapuntContext
             ? { id: agendapuntContext.id, titel: agendapuntContext.titel }
             : undefined,
@@ -1621,6 +1626,12 @@ function parseInline(
     if (/^\[volgens wetgeving\]$/i.test(deel)) {
       return <KennisPill key={i} label="Volgens wetgeving" instantie={detecteerInstantieInTekst(regel)} />;
     }
+    // ADR 0028 — herkomst uit de agendapunt-toelichting: ongevalideerde
+    // bestuurs-vrijetekst, géén vastgestelde fondsbron. Eigen waarschuwende
+    // styling zodat de niet-vastgestelde herkomst visueel onderscheiden blijft.
+    if (/^\[toelichting agendapunt\]$/i.test(deel)) {
+      return <ToelichtingPill key={i} />;
+    }
     // Geen marker → verwerk inline-markdown (vet/cursief/code).
     return <span key={i}>{parseMarkdownInline(deel)}</span>;
   });
@@ -1700,6 +1711,21 @@ function KennisPill({ label, instantie }: { label: string; instantie?: string | 
       }
     >
       {instantie ? `${label} · ${instantie}` : label}
+    </span>
+  );
+}
+
+// ADR 0028 — claim die steunt op de agendapunt-toelichting (door het bestuur
+// opgestelde vrije tekst, géén vastgestelde fondsbron). Eigen indigo-styling
+// onderscheidt deze herkomst visueel van de gouden [Bron N] (vastgestelde bron)
+// en de grijze [Algemene kennis], zodat de niet-vastgestelde status zichtbaar is.
+function ToelichtingPill() {
+  return (
+    <span
+      className="relative -top-[1px] inline-flex items-center align-baseline mx-0.5 px-1.5 h-[18px] rounded-md text-[10px] font-semibold leading-none bg-indigo-100 text-indigo-700 border border-indigo-200"
+      title="Steunt op de toelichting bij het agendapunt — door het bestuur opgestelde vrije tekst, geen bestuurlijk vastgestelde fondsbron. Verifieer voordat u hierop besluit."
+    >
+      Toelichting agendapunt
     </span>
   );
 }

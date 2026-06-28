@@ -87,7 +87,7 @@ Een groot deel van de "concreet in jullie product"-lijst uit het advies is **al 
 
 - **AI-interactielog (chat):** `governance_log` legt elke AI-vraag vast met `gebruiker_id`, `fonds_id`, vraag, antwoord, `bronnen` (jsonb), `modus` (documenten/combineren/algemeen) en `model`.
 - **AI-interactie + human-validation workflow (Decision Object):** `decision_ai_interactions` heeft `prompt`, `bronnen`, `model`/`modelversie`, `output`, **`validatiestatus`** (concept → gevalideerd → aangepast → afgekeurd → gearchiveerd), `gevalideerd_door`/`gevalideerd_op`, `aangepaste_output`, `gebruikt_in_dossier` en `validatie_domein` (welke rol mag valideren). Dat is vrijwel exact de human-validation workflow uit het advies — al in het schema.
-- **Transparantie:** klikbare `[Bron N]`-bronvermelding in de chat; drie AI-modi met een expliciete disclaimer bij de "Algemeen"-modus.
+- **Transparantie:** klikbare `[Bron N]`-bronvermelding in de chat; drie AI-modi met een expliciete disclaimer bij de "Algemeen"-modus. **Herkomstlabels worden strikt gescheiden gehouden** — naast `[Bron N]` (vastgestelde fondsbron) zijn er `[Algemene kennis]`/`[Volgens wetgeving]` (modelkennis) en, sinds de agendapunt-modus (ADR 0028), `[Toelichting agendapunt]` voor ongevalideerde bestuurs-vrijetekst. Kerninvariant: vrije tekst van een bestuurder wordt nooit als vastgestelde fondsbron gepresenteerd; het auditspoor legt de herkomst vast (`governance_log.retrieval_meta.herkomst='agendapunt:<id>'`).
 - **Integriteit:** `governance_events` append-only met sha256-hash per event.
 
 **Eerlijke nuance:** het *schema* voor de validation workflow bestaat, maar volgens `HANDOVER.md` ontstaan `decision_ai_interactions`-rijen nu inline en wordt de notificatie `ai_validatie_wacht` nog niet getriggerd. Of élke AI-feature consistent naar deze tabel schrijft, is dus iets om te verifiëren — een mooie eerste taak voor de `audit-evidence-reviewer`.
@@ -105,7 +105,7 @@ Een groot deel van de "concreet in jullie product"-lijst uit het advies is **al 
 Houd het licht maar aantoonbaar:
 
 1. **Benoem de vijf menselijke functies** — desnoods met één persoon op meerdere, maar expliciet vastgelegd (bv. in een ADR).
-2. **Start een AI-use-case register** in markdown; vul het met de bestaande AI-features (chat-assistent, agendapunt-voorbereiding, document-samenvatting, besluit-concept).
+2. **Start een AI-use-case register** in markdown; vul het met de bestaande AI-features (chat-assistent, agendapunt-voorbereiding, AI-vraag geframed door agendapunt-toelichting (ADR 0028; human-in-the-loop-maatregel = strikte herkomstlabeling `[Toelichting agendapunt]` + `governance_log.retrieval_meta.herkomst`), document-samenvatting, besluit-concept).
 3. **Leun op de bestaande logging** (`governance_log` + `decision_ai_interactions`) en verifieer met de `audit-evidence-reviewer` of de dekking compleet is.
 4. **Wire drie subagents** in de ontwikkelflow: `supabase-rls-reviewer`, `audit-evidence-reviewer`, `ai-governance-reviewer`.
 5. **Menselijk go/no-go** voor productiegebruik van elke nieuwe AI-feature, gelogd als besluit.
