@@ -158,6 +158,10 @@ export interface RetrievalMeta {
   // (herstructureren/duiden/inkorten) i.p.v. een nieuwe documentvraag. Legt voor
   // de audit vast dat de strict-document-retrievaltak bewust is overgeslagen.
   transformatie?: boolean;
+  // ADR 0028 — agendapunt-modus: de vraag is geframed door de toelichting van een
+  // agendapunt. Legt voor de audit de herkomst vast als "agendapunt:<id>", zodat
+  // herleidbaar is dat de toelichting (geen vastgestelde fondsbron) de context was.
+  herkomst?: string;
   // Document-scope (increment 1/2). Aanwezig zodra een vraag tot één/enkele
   // document(en) is beperkt; legt voor de audit vast waarop gescoopt is en welke
   // retrievalstrategie is gekozen.

@@ -147,6 +147,26 @@ function leesScope(ruw: unknown): DocumentScope | null {
   return { document_ids: ids, titels, algemene_kennis: ak };
 }
 
+// ADR 0028 — agendapunt-modus: de vraag is geframed door een agendapunt. We
+// bewaren id + titel zodat de chip "Agendapunt: «titel»" toont en de toelichting
+// per beurt server-side wordt opgehaald (de route trust de client-titel niet).
+interface AgendapuntContext {
+  id: string;
+  titel: string;
+}
+
+// Leest het (additieve) agendapunt_context-blok uit een opgeslagen gesprek terug,
+// zodat een hervat agendapunt-gesprek de framing behoudt.
+function leesAgendapuntContext(ruw: unknown): AgendapuntContext | null {
+  if (!ruw || typeof ruw !== "object") return null;
+  const o = (ruw as { agendapunt_context?: unknown }).agendapunt_context;
+  if (!o || typeof o !== "object") return null;
+  const id = (o as { id?: unknown }).id;
+  const titel = (o as { titel?: unknown }).titel;
+  if (typeof id !== "string" || id.length === 0) return null;
+  return { id, titel: typeof titel === "string" && titel ? titel : "dit agendapunt" };
+}
+
 const BRONKLEUR: Record<string, string> = {
   DNB: "bg-red-50 border-red-200",
   AFM: "bg-blue-50 border-blue-200",
@@ -243,6 +263,10 @@ export default function AiPage() {
   const [historieOpen, setHistorieOpen] = useState(false);
   // Document-scope (increment 1): beperkt de vraag tot één specifiek stuk.
   const [documentScope, setDocumentScope] = useState<DocumentScope | null>(null);
+  // Agendapunt-modus (ADR 0028): de vraag is geframed door een agendapunt; de
+  // toelichting wordt per beurt server-side opgehaald aan de hand van dit id.
+  const [agendapuntContext, setAgendapuntContext] =
+    useState<AgendapuntContext | null>(null);
   // @-mention-typeahead op documenttitels.
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionQuery, setMentionQuery] = useState("");
@@ -288,6 +312,7 @@ export default function AiPage() {
         : []
     );
     setDocumentScope(leesScope(item.document_scope));
+    setAgendapuntContext(leesAgendapuntContext(item.document_scope));
     setAntwoordmodus(leesAntwoordmodus(item.actieve_antwoordmodus));
     setHistorieOpen(false);
   }
@@ -304,6 +329,7 @@ export default function AiPage() {
       gesprekId.current = null;
       setBerichten(welkomstRef.current ? [welkomstRef.current] : []);
       setDocumentScope(null);
+      setAgendapuntContext(null);
     }
     laadGesprekken();
   }
@@ -319,15 +345,26 @@ export default function AiPage() {
       const titel = eersteVraag.slice(0, 80);
 
       // Scope meeschrijven als jsonb {type, document_ids, titels, gezet_op}.
-      const scopePayload = documentScope
-        ? {
-            type: "single",
-            document_ids: documentScope.document_ids,
-            titels: documentScope.titels,
-            algemene_kennis: documentScope.algemene_kennis === true,
-            gezet_op: new Date().toISOString(),
-          }
-        : null;
+      // ADR 0028: in agendapunt-modus bewaren we additief agendapunt_context, ook
+      // als er 0 stukken zijn (documentScope null) — zodat de framing terugkomt.
+      const scopePayload =
+        documentScope || agendapuntContext
+          ? {
+              type: "single",
+              document_ids: documentScope?.document_ids ?? [],
+              titels: documentScope?.titels ?? [],
+              algemene_kennis: documentScope?.algemene_kennis === true,
+              ...(agendapuntContext
+                ? {
+                    agendapunt_context: {
+                      id: agendapuntContext.id,
+                      titel: agendapuntContext.titel,
+                    },
+                  }
+                : {}),
+              gezet_op: new Date().toISOString(),
+            }
+          : null;
 
       if (gesprekId.current) {
         await supabase
@@ -425,6 +462,7 @@ export default function AiPage() {
             gesprekId.current = laatste.id as string;
             setBerichten(opgeslagen);
             setDocumentScope(leesScope(laatste.document_scope));
+            setAgendapuntContext(leesAgendapuntContext(laatste.document_scope));
             setAntwoordmodus(leesAntwoordmodus(laatste.actieve_antwoordmodus));
             hersteld = true;
           }
@@ -463,6 +501,54 @@ export default function AiPage() {
           }
         } catch (e) {
           console.error("Scope uit ?doc= zetten mislukt:", e);
+        }
+
+        // Instappunt-knop "Vraag de AI over dit agendapunt": /ai?agendapunt=<id>
+        // opent de chat geframed door het agendapunt (ADR 0028). We laden id+titel
+        // (RLS) en koppelen de actieve stukken als retrieval-scope. De toelichting
+        // zelf wordt server-side per beurt opgehaald — niet hier meegegeven. Een
+        // nieuw gesprek starten zodat de framing niet over een bestaand gesprek
+        // heen valt.
+        try {
+          const apParam = new URLSearchParams(window.location.search).get(
+            "agendapunt"
+          );
+          if (apParam) {
+            const { data: ap } = await supabase
+              .from("agendapunten")
+              .select("id, titel")
+              .eq("id", apParam)
+              .maybeSingle();
+            if (ap?.id) {
+              const { data: stukken } = await supabase
+                .from("documenten")
+                .select("id, titel")
+                .eq("agendapunt_id", ap.id)
+                .eq("actief", true);
+              const geldig = Array.isArray(stukken)
+                ? stukken.filter(
+                    (s): s is { id: string; titel: string } =>
+                      typeof s?.id === "string"
+                  )
+                : [];
+              gesprekId.current = null;
+              setBerichten([{ rol: "ai", tekst: personalTekst }]);
+              setAgendapuntContext({
+                id: ap.id as string,
+                titel: (ap.titel as string) || "dit agendapunt",
+              });
+              setDocumentScope(
+                geldig.length > 0
+                  ? {
+                      document_ids: geldig.map((s) => s.id),
+                      titels: geldig.map((s) => s.titel || "stuk"),
+                    }
+                  : null
+              );
+            }
+          }
+        } catch (e) {
+          console.error("Scope uit ?agendapunt= zetten mislukt:", e);
         }
 
         // Vul het gesprekken-overzicht.
@@ -559,6 +645,12 @@ export default function AiPage() {
           algemeen_perspectief: algemeenPerspectief,
           // FO §13 — transformatie-vervolgactie (herschrijf-intent op vorige antwoord).
           transformatie: opties?.transformatie === true,
+          // ADR 0028 — agendapunt-modus: alleen het id (+ titel voor de UI). De
+          // route haalt de toelichting zelf op onder RLS; de client-titel wordt
+          // niet vertrouwd voor de promptinhoud.
+          agendapunt_context: agendapuntContext
+            ? { id: agendapuntContext.id, titel: agendapuntContext.titel }
+            : undefined,
         }),
       });
 
@@ -848,6 +940,7 @@ export default function AiPage() {
     setBerichten(welkomstRef.current ? [welkomstRef.current] : []);
     setInvoer("");
     setDocumentScope(null);
+    setAgendapuntContext(null);
     sluitMention();
     setHistorieOpen(false);
   }
@@ -875,6 +968,9 @@ export default function AiPage() {
   // Selectie zet de scope (single → vervangt een bestaande scope) en verwijdert
   // het @-fragment uit de invoer. Selectie is altijd expliciet (§4).
   function kiesDocument(s: DocSuggestie) {
+    // Een expliciete documentkeuze verlaat de agendapunt-modus (ADR 0028): de
+    // gebruiker stuurt nu zelf op één stuk i.p.v. de agendapunt-framing.
+    setAgendapuntContext(null);
     setDocumentScope({ document_ids: [s.id], titels: [s.titel] });
     setInvoer((huidig) => huidig.replace(/@([^\s@]*)$/, "").trimEnd());
     sluitMention();
@@ -1289,8 +1385,38 @@ export default function AiPage() {
           </div>
         )}
 
+        {/* Agendapunt-chip (ADR 0028): de vraag is geframed door een agendapunt.
+            Eigen chip met eigen herkomst; geen algemene-kennis-toggle (de modus
+            combineert toelichting + eventuele stukken + algemene kennis altijd in
+            drie gescheiden delen). Wis verbreedt: agendapunt én stukken weg. */}
+        {agendapuntContext && (
+          <div className="mb-2 flex items-center gap-3 flex-wrap">
+            <span className="inline-flex items-center gap-2 max-w-full bg-indigo-50 border border-indigo-200 text-indigo-800 text-xs rounded-full pl-3 pr-2 py-1">
+              <span className="truncate">
+                Agendapunt: «{agendapuntContext.titel}»
+                {documentScope && documentScope.document_ids.length > 0
+                  ? ` · ${documentScope.document_ids.length} ${
+                      documentScope.document_ids.length === 1 ? "stuk" : "stukken"
+                    }`
+                  : " · geen stukken"}
+              </span>
+              <button
+                onClick={() => {
+                  setAgendapuntContext(null);
+                  setDocumentScope(null);
+                }}
+                className="shrink-0 w-4 h-4 rounded-full bg-indigo-200 hover:bg-indigo-300 text-indigo-800 flex items-center justify-center"
+                aria-label="Agendapunt-scope wissen"
+                title="Scope wissen — niet langer over dit agendapunt vragen"
+              >
+                ✕
+              </button>
+            </span>
+          </div>
+        )}
+
         {/* Scope-chip: "Je vraagt nu over: «titel»" + wis-knop + algemene-kennis-toggle */}
-        {documentScope && (
+        {!agendapuntContext && documentScope && (
           <div className="mb-2 flex items-center gap-3 flex-wrap">
             <span className="inline-flex items-center gap-2 max-w-full bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded-full pl-3 pr-2 py-1">
               <span className="truncate">

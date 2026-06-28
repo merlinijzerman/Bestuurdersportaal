@@ -11,6 +11,7 @@ import { bepaalBronsoortprofiel } from "@/lib/weeg-bronsoort";
 import { haalBesluitBronnen, topProcesinstanties, opmaakBesluitContext } from "@/lib/besluitvorming-bron";
 import { documentBronNaarSource, modelKennisBronnenUitAntwoord, bouwSourceSamenvatting, ontbrekendeAlgemeneKennisMarkering, type AssistantSource } from "@/lib/assistant-source";
 import { bouwProfielsturing, type ProfielsturingAspecten } from "@/lib/profielsturing";
+import { SP_AGENDAPUNT_REGELS, bouwToelichtingBlok, herkomstString, type AgendapuntSeed } from "@/lib/agendapunt-context";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -429,6 +430,14 @@ export async function POST(req: NextRequest) {
       // strict-document niet onterecht "niet aangetroffen" teruggeeft. De client zet
       // dit alleen voor de gesloten set transformatie-acties (isTransformatieActie).
       transformatie?: boolean;
+      // ADR 0028 — agendapunt-modus: de vraag is geframed door een agendapunt. De
+      // client stuurt alleen het id (+ titel voor weergave); de route haalt de
+      // toelichting (agendapunten.beschrijving) zélf op via RLS — zo wordt de
+      // fonds-grens server-side afgedwongen en logt het auditspoor de échte
+      // toelichting i.p.v. door de client aanleverbare tekst. De meegestuurde
+      // document_scope (de gekoppelde stukken) dient dan als retrieval-scope,
+      // zónder strict-document gedrag.
+      agendapunt_context?: { id?: string; titel?: string };
     };
     const { fonds_id } = body;
 
@@ -520,6 +529,28 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // ── ADR 0028 — agendapunt-modus: toelichting als seed-context ────────────
+    // De route haalt titel + toelichting zélf op via RLS. Een vreemd-fonds-id
+    // (of verwijderd punt) geeft niets terug → modus uit (criterium 7 server-side).
+    const agendapuntIdRaw =
+      typeof body.agendapunt_context?.id === "string" ? body.agendapunt_context.id : "";
+    let agendapuntSeed: AgendapuntSeed | null = null;
+    if (agendapuntIdRaw) {
+      const { data: apRow } = await supabase
+        .from("agendapunten")
+        .select("id, titel, beschrijving")
+        .eq("id", agendapuntIdRaw)
+        .maybeSingle();
+      if (apRow?.id) {
+        agendapuntSeed = {
+          id: apRow.id as string,
+          titel: (apRow.titel as string) || "dit agendapunt",
+          toelichting: (apRow.beschrijving as string | null) ?? null,
+        };
+      }
+    }
+    const agendapuntModusActief = agendapuntSeed !== null;
+
     // ── Document-scope (increment 1): server-side validatie vóór retrieval ──
     // De client mag document_id's meesturen, maar de server valideert altijd
     // (§7): bestaat, actief, toegang (RLS), geïndexeerd. Faalt een check, dan een
@@ -559,15 +590,34 @@ export async function POST(req: NextRequest) {
         heeft_chunks: metChunks.has(d.id as string),
       }));
 
-      const validatie = valideerScope(gevraagdeScopeIds, gevonden);
-      if (!validatie.ok) {
-        return NextResponse.json({ error: validatie.melding }, { status: 400 });
+      if (agendapuntModusActief) {
+        // Agendapunt-modus (ADR 0028): de gekoppelde stukken zijn de retrieval-
+        // scope, maar GEEN strict gedrag en GEEN harde 400. Een verse, nog niet
+        // geïndexeerde stuk wordt stil weggelaten; 0 geldige stukken → toelichting-
+        // only (de vraag wordt dan op de toelichting beantwoord, criterium 2).
+        const geldig = gevonden.filter(
+          (d) => d.actief && d.geindexeerd && d.heeft_chunks
+        );
+        scopeDocumentIds = geldig.length > 0 ? geldig.map((d) => d.id) : undefined;
+        scopeTitels = geldig.map((d) => d.titel);
+      } else {
+        const validatie = valideerScope(gevraagdeScopeIds, gevonden);
+        if (!validatie.ok) {
+          return NextResponse.json({ error: validatie.melding }, { status: 400 });
+        }
+        scopeDocumentIds = validatie.documenten.map((d) => d.id);
+        scopeTitels = validatie.documenten.map((d) => d.titel);
       }
-      scopeDocumentIds = validatie.documenten.map((d) => d.id);
-      scopeTitels = validatie.documenten.map((d) => d.titel);
     }
 
-    const scopeActief = !!scopeDocumentIds && scopeDocumentIds.length > 0;
+    // scopeActief = STRICT document-scope. Agendapunt-modus gebruikt de scope-ids
+    // wél voor retrieval, maar nooit voor strict-document gedrag (ADR 0028).
+    const scopeActief =
+      !agendapuntModusActief && !!scopeDocumentIds && scopeDocumentIds.length > 0;
+    // Agendapunt-modus mét doorzoekbare gekoppelde stukken: retrieval beperkt tot
+    // die stukken ([Bron N]); zonder stukken halen we niets op (toelichting-only).
+    const agendapuntMetStukken =
+      agendapuntModusActief && !!scopeDocumentIds && scopeDocumentIds.length > 0;
 
     // ── Transformatie-vervolgactie (FO §13) ─────────────────────────────────
     // De beurt bewerkt het vorige antwoord (herschrijf-intent). Vereist dat er
@@ -590,11 +640,12 @@ export async function POST(req: NextRequest) {
       body.bron_intent_override === "fonds" || body.bron_intent_override === "algemeen"
         ? body.bron_intent_override
         : undefined;
-    const bronIntentResultaat: BronIntentResultaat | null = scopeActief
-      ? null
-      : intentOverride
-      ? { intent: intentOverride, vertrouwen: "zeker" }
-      : bepaalBronIntent(vraag);
+    const bronIntentResultaat: BronIntentResultaat | null =
+      scopeActief || agendapuntModusActief
+        ? null
+        : intentOverride
+        ? { intent: intentOverride, vertrouwen: "zeker" }
+        : bepaalBronIntent(vraag);
     const bronIntent: BronIntent | undefined = bronIntentResultaat?.intent;
 
     // Verduidelijkingstak: twijfel → één SSE-event met de vraag + chips, géén
@@ -684,7 +735,10 @@ export async function POST(req: NextRequest) {
     // we de status-/geldigheidsfilter bewust achterwege: de gebruiker koos dat
     // specifieke stuk en wil het zien, ongeacht actuele-bron-status.
     const vandaag = new Date().toISOString().slice(0, 10);
-    const retrievalFilters: RetrievalFilters | undefined = scopeActief
+    // Bij een actieve scope én in agendapunt-modus (de gebruiker koos die stukken
+    // bewust) laten we de status-/geldigheidsfilter achterwege.
+    const retrievalFilters: RetrievalFilters | undefined =
+      scopeActief || agendapuntModusActief
       ? undefined
       : {
           modus: retrievalModusVoor(antwoordmodus),
@@ -700,7 +754,15 @@ export async function POST(req: NextRequest) {
     let contextTekst = "";
     let retrievalMeta: RetrievalMeta | null = null;
 
-    if (!breedActief && (scopeActief || bronModusRetrieval === "documenten" || bronModusRetrieval === "combineren")) {
+    // Agendapunt-modus (ADR 0028): retrieval alleen als er doorzoekbare gekoppelde
+    // stukken zijn. Zonder stukken halen we niets op — de toelichting is dan de
+    // enige context (geen brede bibliotheek-retrieval, ticket §2.2).
+    const moetRetrieven = !breedActief && (
+      agendapuntModusActief
+        ? agendapuntMetStukken
+        : scopeActief || bronModusRetrieval === "documenten" || bronModusRetrieval === "combineren"
+    );
+    if (moetRetrieven) {
       // Hybride-schakelaar: per-fonds instelling uit het portaal is leidend;
       // valt terug op de env-default HYBRID_SEARCH als er nog niets is gezet.
       let hybrideAan = process.env.HYBRID_SEARCH === "on";
@@ -847,6 +909,22 @@ export async function POST(req: NextRequest) {
               transTitel ? ` UIT ${transTitel}` : ""
             } (ter verankering; voeg geen feiten toe die hier of in uw vorige antwoord niet staan):\n\n${contextTekst}\n\n---\n\nOPDRACHT (bewerk uw vorige antwoord hierboven): ${vraag}`
           : `OPDRACHT (bewerk uw vorige antwoord hierboven in de berichtgeschiedenis): ${vraag}`;
+    } else if (agendapuntModusActief) {
+      // ADR 0028 — agendapunt-modus: de toelichting gaat als gelabelde seed-context
+      // mee (geen vastgestelde fondsbron → [Toelichting agendapunt]); de eventuele
+      // gekoppelde stukken komen als [Bron N] uit de retrieval. Combineren-stijl,
+      // geen strict-document "niet aangetroffen"-gedrag.
+      systeemBlokken = bouwSysteemBlokken(
+        SP_AGENDAPUNT_REGELS,
+        ctxBestuurder,
+        antwoordmodus
+      );
+      const toelichtingBlok = bouwToelichtingBlok(agendapuntSeed!);
+      const stukkenBlok =
+        chunks.length > 0
+          ? `\n\n=== GEKOPPELDE STUKKEN BIJ DIT AGENDAPUNT ===\n\n${contextTekst}`
+          : "\n\n(Er zijn geen doorzoekbare stukken aan dit agendapunt gekoppeld; baseer uw antwoord op de toelichting en, waar passend, uw algemene kennis.)";
+      gebruikersPrompt = `${toelichtingBlok}${stukkenBlok}\n\n---\n\nVRAAG: ${vraag}`;
     } else if (scopeActief) {
       // Strict-document gedrag overschrijft de gekozen modus. De regels hangen af
       // van opt-in algemene kennis (drie-deling) en van breed vs. specifiek.
@@ -896,7 +974,13 @@ export async function POST(req: NextRequest) {
     // Bij een actieve scope is het gedrag strict-document, ongeacht de gekozen
     // modus. Voor de UI-meta en het auditspoor loggen we dat als 'documenten'
     // (strikt op interne bronnen); de scopedetails staan in retrieval_meta.
-    const effectieveModus: Modus = scopeActief ? "documenten" : promptModus;
+    // Agendapunt-modus combineert toelichting + (eventueel) stukken + algemene
+    // kennis → log/UI als 'combineren'; de herkomst staat apart in retrieval_meta.
+    const effectieveModus: Modus = agendapuntModusActief
+      ? "combineren"
+      : scopeActief
+      ? "documenten"
+      : promptModus;
 
     // ── Increment I-1 (FO §11c) — rustige weergave ──────────────────────────
     // Bronbasis-samenvatting voor het paneel "Onderbouwing en bronnen" en het
@@ -1118,6 +1202,11 @@ export async function POST(req: NextRequest) {
             }),
             antwoordmodus,
             transformatie: transformatieActief,
+            // ADR 0028 — herkomst van de framing: legt in het auditspoor vast dat
+            // de vraag door de toelichting van dit agendapunt is geframed.
+            ...(agendapuntModusActief
+              ? { herkomst: herkomstString(agendapuntSeed!.id) }
+              : {}),
             bronbasis,
             inline_meldingen: inlineMeldingenFinaal,
             // Increment I-3 — uniform bronmodel volledig in het auditspoor: alle
