@@ -68,13 +68,6 @@
 .bp-public a {
   color: inherit;
 }
-.bp-public .pilcrow {
-  font-family: var(--serif);
-  color: var(--accent);
-  font-size: 22px;
-  display: block;
-  margin-bottom: 18px;
-}
 .bp-public .textlink {
   color: var(--accent);
   text-decoration: none;
@@ -101,6 +94,8 @@
   height: 64px;
 }
 .bp-public .brand {
+  display: inline-flex;
+  align-items: center;
   font-family: var(--serif);
   font-size: 19px;
   white-space: nowrap;
@@ -116,7 +111,6 @@
   border-radius: 3px;
   font-size: 13px;
   margin-right: 9px;
-  vertical-align: -4px;
 }
 .bp-public nav.links {
   display: flex;
@@ -179,7 +173,7 @@
   place-items: center;
 }
 .bp-public .hamburger {
-  display: none;
+  display: flex;
   background: none;
   border: 1px solid var(--line);
   border-radius: 4px;
@@ -339,15 +333,15 @@
   overflow: hidden;
 }
 .bp-home .hero .wrap {
-  padding-top: 92px;
+  padding-top: 52px;
   padding-bottom: 96px;
   display: grid;
   grid-template-columns: 1.25fr 0.9fr;
   gap: 48px;
-  align-items: center;
+  align-items: start;
 }
 .bp-home .hero h1 {
-  font-size: clamp(38px, 6vw, 68px);
+  font-size: clamp(34px, 5vw, 56px);
   max-width: 14ch;
   margin-bottom: 26px;
 }

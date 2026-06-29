@@ -40,26 +40,6 @@ export default function Header({
             <span className="mark">B</span>Bestuurdersportaal
           </a>
           <nav className="links">
-            <a className="navitem" href="#product">
-              Product
-            </a>
-            <a className="navitem" href="#voor-besturen">
-              Voor besturen
-            </a>
-            <a className="navitem" href="#eigen-omgeving">
-              Eigen omgeving
-            </a>
-            <a className="navitem" href="#governance-ai">
-              Governance &amp; AI
-            </a>
-            <a
-              className="navitem"
-              href="https://the-paradox.com"
-              target="_blank"
-              rel="noopener"
-            >
-              The Paradox
-            </a>
             <a href="/contact" className="btn btn-primary">
               Plan een demo
             </a>

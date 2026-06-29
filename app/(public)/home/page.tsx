@@ -47,7 +47,6 @@ export default function HomePage() {
         <div className="grid-bg" />
         <div className="wrap">
           <div>
-            <span className="pilcrow">¶</span>
             <h1>Bestuurlijke besluitvorming. Door ontwerp.</h1>
             <p className="sub">
               Het Bestuurdersportaal helpt besturen en commissies om complexe
