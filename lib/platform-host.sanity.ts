@@ -1,11 +1,13 @@
 // ============================================================================
-//  Sanity-tests voor de hostname-routing (TO §3.3, tests 12/18a/18b).
+//  Sanity-tests voor de hostname-routing (3 surfaces, variant B).
+//  Platform: TO P0 §3.3 (tests 12/18a/18b). Marketing/app: TO publieke
+//  voorkant §2.1/§2.5.
 //
 //  Uitvoeren: npx tsx lib/platform-host.sanity.ts
 // ============================================================================
 
 import assert from "node:assert/strict";
-import { isPlatformHost, bepaalRoute, PLATFORM_PREFIX } from "./platform-host";
+import { isPlatformHost, bepaalSurface, bepaalRoute, PLATFORM_PREFIX } from "./platform-host";
 
 let n = 0;
 function test(naam: string, fn: () => void) {
@@ -16,6 +18,7 @@ function test(naam: string, fn: () => void) {
 
 console.log("platform-host sanity-tests:");
 
+// ── isPlatformHost (ongewijzigd, behouden) ─────────────────────────────────
 test("isPlatformHost matcht exact (poort genegeerd, case-insensitive)", () => {
   assert.equal(isPlatformHost("beheer.fonds.nl", "beheer.fonds.nl"), true);
   assert.equal(isPlatformHost("BEHEER.fonds.nl:443", "beheer.fonds.nl"), true);
@@ -29,108 +32,133 @@ test("isPlatformHost faalt veilig bij ontbrekende config/host", () => {
 });
 
 // Concrete vastgelegde hosts (env-waarden, NIET hardcoded in code):
-//   productie PLATFORM_HOST = beheer.bestuurdersportaal.com
-//   lokaal    PLATFORM_HOST = beheer.localhost:3000
-const PROD_PLATFORM = "beheer.bestuurdersportaal.com";
-const PROD_APEX = "bestuurdersportaal.com";
-const LOKAAL_PLATFORM = "beheer.localhost:3000";
+//   productie MARKETING_HOST = bestuurdersportaal.com (incl. www.)
+//   productie APP_HOST       = app.bestuurdersportaal.com
+//   productie PLATFORM_HOST  = beheer.bestuurdersportaal.com
+const MARKETING = "bestuurdersportaal.com";
+const APP = "app.bestuurdersportaal.com";
+const PLATFORM = "beheer.bestuurdersportaal.com";
+const env = { marketingHost: MARKETING, appHost: APP, platformHost: PLATFORM };
 
-test("concrete hosts: beheer matcht, apex niet (prod én lokaal)", () => {
-  assert.equal(isPlatformHost(PROD_PLATFORM, PROD_PLATFORM), true);
-  assert.equal(isPlatformHost(PROD_APEX, PROD_PLATFORM), false);
-  // Lokaal: poort wordt genegeerd, dus beheer.localhost matcht ongeacht :3000.
-  assert.equal(isPlatformHost("beheer.localhost", LOKAAL_PLATFORM), true);
-  assert.equal(isPlatformHost("localhost:3000", LOKAAL_PLATFORM), false);
+// ── bepaalSurface ──────────────────────────────────────────────────────────
+test("surface: apex én www. → marketing", () => {
+  assert.equal(bepaalSurface({ host: "bestuurdersportaal.com", ...env }), "marketing");
+  assert.equal(bepaalSurface({ host: "www.bestuurdersportaal.com", ...env }), "marketing");
+  assert.equal(bepaalSurface({ host: "WWW.Bestuurdersportaal.com:443", ...env }), "marketing");
 });
 
-// Negatieve test (#4): lege/ontbrekende PLATFORM_HOST mag NOOIT platform-routes
-// openzetten. Zonder env is elke host een tenant-host → /platform → 404.
-test("fail-closed: lege/ontbrekende PLATFORM_HOST → /platform overal 404", () => {
-  for (const env of [undefined, "", null] as const) {
-    const platformHost = isPlatformHost(PROD_PLATFORM, env);
-    assert.equal(platformHost, false);
-    assert.deepEqual(bepaalRoute({ platformHost, pathname: "/platform" }), {
-      type: "notFound",
-    });
-    assert.deepEqual(bepaalRoute({ platformHost, pathname: "/platform/login" }), {
-      type: "notFound",
-    });
+test("surface: app-host → app, beheer-host → platform", () => {
+  assert.equal(bepaalSurface({ host: "app.bestuurdersportaal.com", ...env }), "app");
+  assert.equal(bepaalSurface({ host: "beheer.bestuurdersportaal.com", ...env }), "platform");
+});
+
+test("surface: onbekende host → fail-safe 'app' (preview/lokaal)", () => {
+  assert.equal(bepaalSurface({ host: "iets-anders.vercel.app", ...env }), "app");
+  assert.equal(bepaalSurface({ host: "localhost:3000", ...env }), "app");
+  assert.equal(bepaalSurface({ host: null, ...env }), "app");
+});
+
+test("surface: ontbrekend env-contract → 'app' (geen marketing/platform-lek)", () => {
+  // Zonder MARKETING_HOST blijft de apex 'app' (A1: cutover env-gedreven).
+  assert.equal(
+    bepaalSurface({ host: "bestuurdersportaal.com", appHost: APP, platformHost: PLATFORM }),
+    "app"
+  );
+  // Volledig zonder config: alles 'app', platform fail-closed.
+  assert.equal(bepaalSurface({ host: "bestuurdersportaal.com" }), "app");
+  assert.equal(bepaalSurface({ host: "beheer.bestuurdersportaal.com" }), "app");
+});
+
+test("surface: platform fail-closed — lege PLATFORM_HOST opent platform nooit", () => {
+  for (const ph of [undefined, "", null] as const) {
+    assert.equal(
+      bepaalSurface({ host: "beheer.bestuurdersportaal.com", marketingHost: MARKETING, appHost: APP, platformHost: ph }),
+      "app"
+    );
   }
 });
 
-// Test 18a: platform-pad op de APEX-host (tenant) → 404, ook met env gezet.
-test("18a: platform-pad op apex-host (bestuurdersportaal.com) → 404", () => {
-  const platformHost = isPlatformHost(PROD_APEX, PROD_PLATFORM); // false
-  assert.equal(platformHost, false);
-  assert.deepEqual(bepaalRoute({ platformHost, pathname: "/platform" }), {
+test("surface: app-precedentie boven marketing voorkomt redirect-lus bij misconfig", () => {
+  // Als APP_HOST == MARKETING_HOST (foutconfig), wint 'app' → /login rendert,
+  // redirect niet → geen lus.
+  assert.equal(
+    bepaalSurface({ host: "bestuurdersportaal.com", marketingHost: MARKETING, appHost: MARKETING, platformHost: PLATFORM }),
+    "app"
+  );
+});
+
+// Lokale hosts (variant B): app op localhost, platform op beheer.localhost.
+test("surface lokaal: localhost → app, beheer.localhost → platform", () => {
+  const lokaal = { marketingHost: "marketing.localhost:3000", appHost: "localhost:3000", platformHost: "beheer.localhost:3000" };
+  assert.equal(bepaalSurface({ host: "localhost:3000", ...lokaal }), "app");
+  assert.equal(bepaalSurface({ host: "beheer.localhost:3000", ...lokaal }), "platform");
+  assert.equal(bepaalSurface({ host: "marketing.localhost:3000", ...lokaal }), "marketing");
+});
+
+// ── bepaalRoute: marketing-surface ─────────────────────────────────────────
+test("marketing: /login → redirectLogin (backward-compat, AC-10/11)", () => {
+  assert.deepEqual(bepaalRoute({ surface: "marketing", pathname: "/login" }), {
+    type: "redirectLogin",
+  });
+});
+
+test("marketing: app-pad /dashboard → 404 (REQ-PV-050/051, geen lek)", () => {
+  assert.deepEqual(bepaalRoute({ surface: "marketing", pathname: "/dashboard" }), {
     type: "notFound",
   });
 });
 
-// Test 18b: tenant-pad op de BEHEER-host → bestaat niet onder /platform → 404.
-test("18b: tenant-pad op beheer-host → rewrite /platform/dashboard (bestaat niet → 404)", () => {
-  const platformHost = isPlatformHost(PROD_PLATFORM, PROD_PLATFORM); // true
-  assert.equal(platformHost, true);
-  assert.deepEqual(bepaalRoute({ platformHost, pathname: "/dashboard" }), {
-    type: "rewrite",
-    naar: "/platform/dashboard",
+test("marketing: platform-pad → 404", () => {
+  assert.deepEqual(bepaalRoute({ surface: "marketing", pathname: "/platform" }), {
+    type: "notFound",
+  });
+  assert.deepEqual(bepaalRoute({ surface: "marketing", pathname: "/platform/login" }), {
+    type: "notFound",
   });
 });
 
-// Test 12: schoon extern login-pad op de beheer-host → rewrite naar de
-// platform-login (waar de gate een sessieloze bezoeker afhandelt).
-test("12: /login op beheer-host → rewrite /platform/login (gate-redirectdoel)", () => {
-  const platformHost = isPlatformHost(PROD_PLATFORM, PROD_PLATFORM); // true
-  assert.deepEqual(bepaalRoute({ platformHost, pathname: "/login" }), {
+test("marketing: overige paden (W0, nog geen (public)) → 404, nooit homepage", () => {
+  assert.deepEqual(bepaalRoute({ surface: "marketing", pathname: "/" }), { type: "notFound" });
+  assert.deepEqual(bepaalRoute({ surface: "marketing", pathname: "/contact" }), { type: "notFound" });
+});
+
+// ── bepaalRoute: app-surface (bestaand tenant-gedrag, ongewijzigd) ──────────
+test("app: tenant-routes gaan door", () => {
+  assert.deepEqual(bepaalRoute({ surface: "app", pathname: "/" }), { type: "door" });
+  assert.deepEqual(bepaalRoute({ surface: "app", pathname: "/dashboard" }), { type: "door" });
+  assert.deepEqual(bepaalRoute({ surface: "app", pathname: "/login" }), { type: "door" });
+});
+
+test("app: /platform/* → 404 (platform onbereikbaar op app-host)", () => {
+  assert.deepEqual(bepaalRoute({ surface: "app", pathname: "/platform" }), { type: "notFound" });
+  assert.deepEqual(bepaalRoute({ surface: "app", pathname: "/platform/login" }), { type: "notFound" });
+});
+
+// ── bepaalRoute: platform-surface (TO P0, tests 12/18a/18b) ─────────────────
+test("platform: wortel → rewrite /platform", () => {
+  assert.deepEqual(bepaalRoute({ surface: "platform", pathname: "/" }), {
+    type: "rewrite",
+    naar: PLATFORM_PREFIX,
+  });
+});
+
+test("platform: /login → rewrite /platform/login (test 12)", () => {
+  assert.deepEqual(bepaalRoute({ surface: "platform", pathname: "/login" }), {
     type: "rewrite",
     naar: "/platform/login",
   });
 });
 
-// ── Platform-host: rewrite naar /platform, tenant-paden bestaan daar niet ──
-test("platform-host: wortel → rewrite /platform", () => {
-  const b = bepaalRoute({ platformHost: true, pathname: "/" });
-  assert.deepEqual(b, { type: "rewrite", naar: PLATFORM_PREFIX });
-});
-
-test("platform-host: /login → rewrite /platform/login", () => {
-  const b = bepaalRoute({ platformHost: true, pathname: "/login" });
-  assert.deepEqual(b, { type: "rewrite", naar: "/platform/login" });
-});
-
-test("platform-host: tenant-pad /dashboard → rewrite /platform/dashboard (bestaat niet → 404)", () => {
-  const b = bepaalRoute({ platformHost: true, pathname: "/dashboard" });
-  assert.deepEqual(b, { type: "rewrite", naar: "/platform/dashboard" });
-});
-
-test("platform-host: direct /platform/* toegestaan (stabiel redirect-doel)", () => {
-  assert.deepEqual(bepaalRoute({ platformHost: true, pathname: "/platform" }), {
-    type: "door",
+test("platform: tenant-pad /dashboard → rewrite /platform/dashboard (bestaat niet → 404) (test 18b)", () => {
+  assert.deepEqual(bepaalRoute({ surface: "platform", pathname: "/dashboard" }), {
+    type: "rewrite",
+    naar: "/platform/dashboard",
   });
-  assert.deepEqual(
-    bepaalRoute({ platformHost: true, pathname: "/platform/login" }),
-    { type: "door" }
-  );
 });
 
-// ── Tenant-host: platform onbereikbaar, tenant ongemoeid ───────────────────
-test("18b/12: /platform op tenant-host → 404", () => {
-  assert.deepEqual(bepaalRoute({ platformHost: false, pathname: "/platform" }), {
-    type: "notFound",
-  });
-  assert.deepEqual(
-    bepaalRoute({ platformHost: false, pathname: "/platform/login" }),
-    { type: "notFound" }
-  );
-});
-
-test("tenant-host: tenant-routes gaan ongemoeid door", () => {
-  assert.deepEqual(bepaalRoute({ platformHost: false, pathname: "/" }), {
-    type: "door",
-  });
-  assert.deepEqual(bepaalRoute({ platformHost: false, pathname: "/dashboard" }), {
-    type: "door",
-  });
+test("platform: direct /platform/* toegestaan (stabiel redirect-doel)", () => {
+  assert.deepEqual(bepaalRoute({ surface: "platform", pathname: "/platform" }), { type: "door" });
+  assert.deepEqual(bepaalRoute({ surface: "platform", pathname: "/platform/login" }), { type: "door" });
 });
 
 console.log(`\n${n} sanity-tests geslaagd.`);
