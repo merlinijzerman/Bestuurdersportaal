@@ -26,9 +26,9 @@ import { badRequest, errorResponse, rateLimited } from "@/lib/api-errors";
 
 const LABEL = "contact.POST";
 
-// Gekoppelde privacyverklaring-versie (concept; zie app/(public)/privacy).
-// Wordt server-side bij elke inzending meegeslagen (FO §10 / REQ-PV-040).
-const PRIVACY_VERSION = "concept-2026-06-29";
+// Gekoppelde privacyverklaring-versie (zie app/(public)/privacy). Wordt
+// server-side bij elke inzending meegeslagen (FO §10 / REQ-PV-040).
+const PRIVACY_VERSION = "2026-06-29";
 
 // Rate-limit: max N opgeslagen inzendingen per ip_hash binnen het venster.
 const RL_LIMIET = 3;

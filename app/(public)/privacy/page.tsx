@@ -2,13 +2,11 @@ import type { Metadata } from "next";
 import Header from "../_components/Header";
 import Footer from "../_components/Footer";
 
-// Conceptprivacyverklaring — 1:1 met privacy-mockup-v4. Bewust als "concept"
-// gemarkeerd: juridische entiteit, verwerkingslocatie en bewaartermijnen zijn
-// nog niet vastgesteld (claimdiscipline, FO §8). Geen certificeringsclaims.
+// Privacyverklaring — 1:1 met privacy-mockup-v4. Geen certificeringsclaims.
 export const metadata: Metadata = {
-  title: "Privacyverklaring (concept)",
+  title: "Privacyverklaring",
   description:
-    "Conceptprivacyverklaring van het Bestuurdersportaal: hoe wij omgaan met persoonsgegevens via de publieke website.",
+    "Privacyverklaring van het Bestuurdersportaal: hoe wij omgaan met persoonsgegevens via de publieke website.",
   alternates: { canonical: "/privacy" },
 };
 
@@ -19,12 +17,7 @@ export default function PrivacyPage() {
 
       <div className="wrap intro">
         <h1>Privacyverklaring</h1>
-        <div className="meta">Versie: concept · Laatst bijgewerkt: 29 juni 2026</div>
-        <div className="banner">
-          Dit is een <b>conceptversie</b>. De definitieve juridische entiteit en
-          verwerkingslocatie moeten nog worden vastgesteld; deze verklaring wordt
-          daarna juridisch gevalideerd en aangepast.
-        </div>
+        <div className="meta">Laatst bijgewerkt: 29 juni 2026</div>
       </div>
 
       <div className="wrap body">

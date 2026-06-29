@@ -99,6 +99,58 @@ Open je browser en ga naar: **http://localhost:3000**
 
 ---
 
+## Stap 8 — Contactformulier: e-mailnotificatie instellen (Mailgun) — TODO
+
+> Het contactformulier (`/contact`, W2) **slaat altijd op** in Supabase, ook zonder
+> mail. De mail is een **soft-fail-notificatie**: lukt-ie niet, dan blijft de
+> aanvraag bewaard en wordt het record gemarkeerd. Deze stap zet de notificatie aan.
+> Mailgun-**sandbox** is bewust een tussenoplossing (geen DNS nodig); Resend of een
+> geverifieerd `the-paradox.com`-domein is de doelopzet voor later.
+
+**A. Mailgun-account + sandbox (eenmalig)**
+
+- [ ] Maak een account op **https://www.mailgun.com** (gratis tier volstaat voor de sandbox).
+- [ ] Kies bij registratie/region **EU** (NL-context; de code gebruikt standaard `https://api.eu.mailgun.net`).
+- [ ] Ga naar **Sending → Domains** en open het automatisch aangemaakte **sandbox-domein** (`sandboxXXXX.mailgun.org`).
+- [ ] **Autoriseer beide ontvangers** onder *Authorized Recipients*: `merlin.ijzerman@the-paradox.com` én `robert.timmer@the-paradox.com`. **Belangrijk:** een sandbox stuurt alléén naar geautoriseerde adressen — beide moeten de bevestigingsmail accepteren, anders komt de notificatie niet aan.
+- [ ] Kopieer de **private API-key** (Mailgun → *Send → API keys*; begint meestal met `key-...`).
+- [ ] Noteer de **sandbox-domeinnaam** (`sandboxXXXX.mailgun.org`).
+
+**B. Environment variables (lokaal in `.env.local`, en in Vercel voor productie)**
+
+Vul deze server-side variabelen in — **nooit als `NEXT_PUBLIC_*`**:
+
+```
+MAILGUN_API_KEY=key-...                      # private API-key uit Mailgun
+MAILGUN_DOMAIN=sandboxXXXX.mailgun.org       # jouw sandbox-domein
+MAILGUN_BASE_URL=https://api.eu.mailgun.net  # optioneel; dit is al de default (EU)
+CONTACT_NOTIFY_TO=merlin.ijzerman@the-paradox.com,robert.timmer@the-paradox.com
+CONTACT_NOTIFY_FROM=postmaster@sandboxXXXX.mailgun.org   # sandbox: postmaster@<domein>
+CONTACT_IP_HASH_SALT=<een-lange-willekeurige-string>     # voor de rate-limit (geen ruw IP)
+SUPABASE_SERVICE_ROLE_KEY=<service_role-key uit Supabase> # Project Settings → API
+```
+
+- [ ] In `.env.local` ingevuld (in `mvp/.env.local` staan al uitgecommentarieerde regels — haal het `#` weg en vul de waarden in).
+- [ ] In **Vercel** dezelfde variabelen gezet onder *Project → Settings → Environment Variables*.
+
+> ⚠️ `SUPABASE_SERVICE_ROLE_KEY` is óók nodig voor de platform-back-office. Zonder deze
+> sleutel geeft het contactformulier een nette foutmelding en wordt er niets opgeslagen.
+> Genereer `CONTACT_IP_HASH_SALT` bijv. met `openssl rand -hex 32` in de Terminal.
+
+**C. Deploy + verifiëren**
+
+- [ ] Code is via GitHub Desktop gepusht → Vercel deployt automatisch.
+- [ ] Lokaal smoke-testen: `npm run dev`, ga naar `http://localhost:3000/contact`, vul het formulier in en verstuur.
+- [ ] Controleer dat er een rij verschijnt in Supabase → tabel `contact_aanvragen` (kolom `notificatie_verzonden` = `true` als de mail lukte).
+- [ ] Controleer dat Merlin **én** Robert de notificatiemail ontvangen (kijk ook in spam).
+- [ ] Test dat **antwoorden** op de notificatie naar de aanvrager gaat (`reply-to` = het ingevulde e-mailadres).
+
+**D. Later (niet blokkerend)**
+
+- [ ] Overstap naar **Resend** of een geverifieerd `the-paradox.com`-domein (SPF/DKIM), zodat mail naar elk adres mag en niet meer beperkt is tot geautoriseerde sandbox-ontvangers. De code in `lib/email.ts` is provider-agnostisch: dit raakt alleen de env-variabelen en de fetch-call.
+
+---
+
 ## Deployment naar Vercel (optioneel, 10 min)
 
 Om het portaal online te zetten:
