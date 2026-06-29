@@ -7,7 +7,7 @@
 // ============================================================================
 
 import assert from "node:assert/strict";
-import { isPlatformHost, bepaalSurface, bepaalRoute, PLATFORM_PREFIX } from "./platform-host";
+import { isPlatformHost, bepaalSurface, bepaalRoute, PLATFORM_PREFIX, MARKETING_HOME_PAD } from "./platform-host";
 
 let n = 0;
 function test(naam: string, fn: () => void) {
@@ -117,9 +117,25 @@ test("marketing: platform-pad → 404", () => {
   });
 });
 
-test("marketing: overige paden (W0, nog geen (public)) → 404, nooit homepage", () => {
-  assert.deepEqual(bepaalRoute({ surface: "marketing", pathname: "/" }), { type: "notFound" });
-  assert.deepEqual(bepaalRoute({ surface: "marketing", pathname: "/contact" }), { type: "notFound" });
+test("marketing: / → rewrite naar interne /home (homepage; URL blijft /, REQ-PV-050)", () => {
+  assert.deepEqual(bepaalRoute({ surface: "marketing", pathname: "/" }), {
+    type: "rewrite",
+    naar: MARKETING_HOME_PAD,
+  });
+});
+
+test("marketing: tekstpagina's (W1) → door ((public)-routegroep, REQ-PV-050)", () => {
+  assert.deepEqual(bepaalRoute({ surface: "marketing", pathname: "/contact" }), { type: "door" });
+  assert.deepEqual(bepaalRoute({ surface: "marketing", pathname: "/privacy" }), { type: "door" });
+});
+
+test("marketing: intern /home niet direct bereikbaar → 404 (canoniek = /)", () => {
+  assert.deepEqual(bepaalRoute({ surface: "marketing", pathname: MARKETING_HOME_PAD }), { type: "notFound" });
+});
+
+test("marketing: onbekend pad → 404, nooit homepage (geen app-lek, REQ-PV-051)", () => {
+  assert.deepEqual(bepaalRoute({ surface: "marketing", pathname: "/procedures" }), { type: "notFound" });
+  assert.deepEqual(bepaalRoute({ surface: "marketing", pathname: "/willekeurig" }), { type: "notFound" });
 });
 
 // ── bepaalRoute: app-surface (bestaand tenant-gedrag, ongewijzigd) ──────────
@@ -132,6 +148,10 @@ test("app: tenant-routes gaan door", () => {
 test("app: /platform/* → 404 (platform onbereikbaar op app-host)", () => {
   assert.deepEqual(bepaalRoute({ surface: "app", pathname: "/platform" }), { type: "notFound" });
   assert.deepEqual(bepaalRoute({ surface: "app", pathname: "/platform/login" }), { type: "notFound" });
+});
+
+test("app: intern marketing-homepad /home → 404 (geen marketing-lek op app-host)", () => {
+  assert.deepEqual(bepaalRoute({ surface: "app", pathname: MARKETING_HOME_PAD }), { type: "notFound" });
 });
 
 // ── bepaalRoute: platform-surface (TO P0, tests 12/18a/18b) ─────────────────

@@ -27,6 +27,24 @@
 
 export const PLATFORM_PREFIX = "/platform";
 
+/** Publieke marketing-routes die op de marketing-host op hun eigen pad gerenderd
+ *  mogen worden (de (public)-routegroep, W1). Een expliciete allowlist — alles
+ *  wat hier niet in staat (app-/platform-paden zoals /dashboard, /procedures,
+ *  /platform/…) blijft 404, zodat de besluitomgeving nooit op de marketing-host
+ *  lekt (REQ-PV-050/051). De homepage staat hier NIET in: die woont intern op
+ *  MARKETING_HOME_PAD en wordt via een rewrite vanaf "/" geserveerd (zie onder).
+ *  /login is geen pagina maar een redirect (zie bepaalRoute). */
+const MARKETING_PUBLIEKE_PADEN = new Set<string>(["/contact", "/privacy"]);
+
+/** Interne route van de marketing-homepage. De (public)-routegroep kan geen
+ *  page op "/" hebben — dat pad is al van de app-homepage ((dashboard)/page).
+ *  Next.js verbiedt twee pages op hetzelfde pad. Daarom woont de marketing-
+ *  homepage op /home en rewrit de marketing-host "/" hiernaartoe (de URL blijft
+ *  "/"). Dit pad is intern: direct bezoek (marketing of app) → 404, zodat de
+ *  canonieke marketing-URL "/" blijft en de marketingpagina niet op de app-host
+ *  lekt. Spiegelt het platform-patroon (extern pad → interne /platform-rewrite). */
+export const MARKETING_HOME_PAD = "/home";
+
 export type Surface = "marketing" | "app" | "platform";
 
 /** Normaliseer een host: poort strippen, lowercase, leidende `www.` weg, zodat
@@ -104,12 +122,23 @@ export function bepaalRoute(args: {
     // Backward-compat: reeds gedeelde loginlinks → app-login (§2.5). Nooit naar
     // / of homepage; geen lus (de app-host beslist daarna over de sessie).
     if (pathname === "/login") return { type: "redirectLogin" };
-    // App- en platform-paden bestaan niet op de marketing-host. In W0 bestaan de
-    // (public)-pagina's nog niet → al het overige eveneens 404 (geen lek).
+    // Homepage: "/" wordt naar de interne /home-route gerewrit (de URL blijft
+    // "/"). Het interne pad zelf → 404, zodat "/" canoniek blijft.
+    if (pathname === "/")
+      return { type: "rewrite", naar: MARKETING_HOME_PAD };
+    if (pathname === MARKETING_HOME_PAD) return { type: "notFound" };
+    // W1: de (public)-routegroep bestaat. Serveer alleen de expliciet
+    // toegestane publieke paden; al het overige (app-/platform-paden) → 404,
+    // zodat de besluitomgeving niet op de marketing-host lekt (REQ-PV-050/051).
+    if (MARKETING_PUBLIEKE_PADEN.has(pathname)) return { type: "door" };
     return { type: "notFound" };
   }
 
-  // surface === "app": bestaand tenant-gedrag, ongewijzigd.
+  // surface === "app": bestaand tenant-gedrag, ongewijzigd — op één na: het
+  // interne marketing-homepad /home bestaat in de route-tree ((public)/home) en
+  // zou anders op de app-host de marketingpagina tonen. Expliciet 404 → geen
+  // marketing-lek op de app-host (tegenhanger van REQ-PV-050/051).
   if (isPlatformPad) return { type: "notFound" };
+  if (pathname === MARKETING_HOME_PAD) return { type: "notFound" };
   return { type: "door" };
 }

@@ -33,20 +33,22 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#F0F3F8]">
       <div className="w-full max-w-md">
-        {/* Logo */}
+        {/* Logo — neutraal, geen fondsbranding (publieke login, TO §2.5) */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 bg-[#C9A84C] rounded-2xl mb-4">
-            <span className="text-[#0F2744] font-black text-2xl">P</span>
+          <div className="inline-flex items-center justify-center w-14 h-14 bg-[#0F2744] rounded-2xl mb-4">
+            <span className="text-white font-black text-2xl">B</span>
           </div>
           <h1 className="text-2xl font-bold text-[#0F2744]">Bestuurdersportaal</h1>
           <p className="text-sm text-gray-500 mt-1">
-            {process.env.NEXT_PUBLIC_FONDS_NAAM || "Pensioenfonds"}
+            Open de beveiligde omgeving van uw organisatie
           </p>
         </div>
 
         {/* Login kaart */}
         <div className="bg-white rounded-2xl border border-gray-200 p-8 shadow-sm">
-          <h2 className="text-lg font-bold text-[#0F2744] mb-6">Inloggen</h2>
+          <h2 className="text-lg font-bold text-[#0F2744] mb-6">
+            Log in op uw bestuurdersomgeving
+          </h2>
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">
@@ -57,7 +59,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#C9A84C] focus:ring-1 focus:ring-[#C9A84C]"
-                placeholder="naam@pensioenfonds.nl"
+                placeholder="naam@organisatie.nl"
                 required
               />
             </div>
