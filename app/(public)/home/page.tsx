@@ -13,8 +13,7 @@ export const metadata: Metadata = {
     absolute:
       "Bestuurdersportaal — eigen online besluitomgeving met AI voor besturen",
   },
-  description:
-    "Het Bestuurdersportaal geeft besturen en commissies een eigen online besluitomgeving waarin AI werkt met de eigen documentatie, besluitdossiers en historische context — voor zorgvuldig voorbereiden, besluiten, verantwoorden en evalueren. Digitale besluitomgeving met governance en audittrail.",
+  description: "AI-ondersteunde besluitomgeving voor besturen en commissies",
   keywords: [
     "bestuurdersportaal",
     "online bestuurdersomgeving",

@@ -3,7 +3,8 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Bestuurdersportaal",
-  description: "AI-ondersteund bestuurdersportaal voor pensioenfondsen",
+  description:
+    "AI-ondersteunde besluitomgeving voor besturen en commissies",
 };
 
 export default function RootLayout({
