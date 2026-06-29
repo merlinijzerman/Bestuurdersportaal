@@ -554,12 +554,6 @@ export default function HomePage() {
               AI-gebruik.
             </li>
           </ul>
-          <p className="note">
-            Concept — geen ISO-, SOC-, NEN- of certificeringsclaims zolang dit
-            niet feitelijk is onderbouwd. Afspraken over hostinglocatie,
-            datascheiding, encryptie, dataretentie en modelgebruik worden per
-            omgeving vastgelegd.
-          </p>
         </div>
       </section>
 

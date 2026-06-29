@@ -815,3 +815,165 @@
   max-width: 64ch;
   margin-bottom: 18px;
 }
+
+/* ============================================================================
+ *  Contactpagina (.bp-contact — formulier + intro)
+ *  1:1 met contact-mockup-v4. Gescoped zodat .grid/.intro/.note van .bp-home
+ *  en .bp-doc ongemoeid blijven.
+ * ========================================================================== */
+.bp-contact .contact-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.1fr;
+  gap: 56px;
+  padding: 72px 0 90px;
+  align-items: start;
+}
+.bp-contact .intro .label {
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 18px;
+}
+.bp-contact .intro h1 {
+  font-size: clamp(30px, 4.5vw, 46px);
+  margin-bottom: 18px;
+}
+.bp-contact .intro p {
+  color: var(--muted);
+  max-width: 42ch;
+  margin-bottom: 16px;
+}
+.bp-contact .intro .what {
+  margin-top: 26px;
+  border-top: 1px solid var(--line);
+}
+.bp-contact .intro .what div {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+  display: flex;
+  gap: 10px;
+}
+.bp-contact .intro .what b {
+  font-weight: 600;
+}
+.bp-contact .intro .what .d {
+  color: var(--accent);
+}
+
+/* ── Formulier ───────────────────────────────────────────────────────────── */
+.bp-contact form {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 28px;
+}
+.bp-contact .field {
+  margin-bottom: 16px;
+}
+.bp-contact label {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 6px;
+  color: var(--ink);
+}
+.bp-contact label .opt {
+  color: var(--muted);
+  font-weight: 400;
+}
+.bp-contact input,
+.bp-contact select,
+.bp-contact textarea {
+  width: 100%;
+  font-family: var(--sans);
+  font-size: 15px;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 11px 12px;
+}
+.bp-contact input:focus,
+.bp-contact select:focus,
+.bp-contact textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.bp-contact input[aria-invalid="true"],
+.bp-contact select[aria-invalid="true"],
+.bp-contact textarea[aria-invalid="true"] {
+  border-color: var(--err);
+}
+.bp-contact textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+.bp-contact .row2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.bp-contact .hp {
+  position: absolute;
+  left: -9999px;
+  top: -9999px;
+  height: 0;
+  width: 0;
+  overflow: hidden;
+}
+.bp-contact .privacy-note {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 6px;
+}
+.bp-contact .msg {
+  display: none;
+  padding: 12px 14px;
+  border-radius: 5px;
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+.bp-contact .msg.show {
+  display: block;
+}
+.bp-contact .msg.ok {
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
+  color: var(--ok);
+  border: 1px solid var(--ok);
+}
+.bp-contact .msg.err {
+  background: color-mix(in srgb, var(--err) 12%, transparent);
+  color: var(--err);
+  border: 1px solid var(--err);
+}
+.bp-contact .submit-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 8px;
+}
+.bp-contact .submit-note {
+  font-size: 13px;
+  color: var(--muted);
+}
+.bp-contact .btn-primary:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.bp-contact .field-err {
+  color: var(--err);
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+@media (max-width: 820px) {
+  .bp-contact .contact-grid {
+    grid-template-columns: 1fr;
+    gap: 36px;
+    padding-top: 48px;
+  }
+  .bp-contact .row2 {
+    grid-template-columns: 1fr;
+  }
+}
