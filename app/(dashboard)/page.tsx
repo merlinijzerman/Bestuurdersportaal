@@ -1,4 +1,5 @@
 import { createServerSupabase } from "@/lib/supabase-server";
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import NotificatiesBlok from "./_components/NotificatiesBlok";
 import type { NotificatieType } from "@/lib/notifications";
@@ -116,7 +117,9 @@ export default async function HomePage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return null;
+  // Consistent met de layout-guard: geen geldige sessie -> naar login
+  // (in plaats van een blanco render). Voorkomt verdere null-toegang.
+  if (!user) redirect("/login");
 
   const { data: profiel } = await supabase
     .from("profielen")
