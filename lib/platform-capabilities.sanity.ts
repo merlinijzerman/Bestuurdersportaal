@@ -28,9 +28,9 @@ function test(naam: string, fn: () => void) {
 
 console.log("platform-capability sanity-tests:");
 
-test("union telt exact 11 capabilities", () => {
-  assert.equal(PLATFORM_CAPABILITIES.length, 11);
-  assert.equal(new Set(PLATFORM_CAPABILITIES).size, 11, "geen duplicaten");
+test("union telt exact 12 capabilities", () => {
+  assert.equal(PLATFORM_CAPABILITIES.length, 12);
+  assert.equal(new Set(PLATFORM_CAPABILITIES).size, 12, "geen duplicaten");
 });
 
 test("elke capability begint met 'platform.'", () => {
@@ -101,6 +101,7 @@ const SEED_IN_MIGRATIE = [
   "platform.security.operate",
   "platform.support.operate",
   "platform.compliance.read",
+  "platform.contact.manage",
 ] as const;
 
 test("code-union en migratie-seed zijn identiek (TO §12 test 17)", () => {

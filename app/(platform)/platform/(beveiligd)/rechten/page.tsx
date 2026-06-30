@@ -44,6 +44,7 @@ const CAP_LABEL: Record<string, string> = {
   "platform.security.operate": "Securityoperaties",
   "platform.support.operate": "Support-operaties",
   "platform.compliance.read": "Compliance inzien",
+  "platform.contact.manage": "Contactaanvragen beheren",
 };
 
 export default async function RechtenPagina() {

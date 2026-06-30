@@ -19,6 +19,7 @@ export default async function PlatformHome() {
   const magRechten =
     caps.includes("platform.capabilities.grant") ||
     caps.includes("platform.capabilities.revoke");
+  const magContact = caps.includes("platform.contact.manage");
 
   return (
     <div className="space-y-6">
@@ -59,6 +60,14 @@ export default async function PlatformHome() {
               className="inline-flex items-center gap-2 rounded-lg bg-[#F0F3F8] px-4 py-2 text-sm font-medium text-[#0F2744] hover:bg-[#0F2744]/10"
             >
               Identiteiten &amp; rechten
+            </Link>
+          )}
+          {magContact && (
+            <Link
+              href="/platform/contact"
+              className="inline-flex items-center gap-2 rounded-lg bg-[#F0F3F8] px-4 py-2 text-sm font-medium text-[#0F2744] hover:bg-[#0F2744]/10"
+            >
+              Contactaanvragen
             </Link>
           )}
         </div>

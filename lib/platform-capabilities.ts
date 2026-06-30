@@ -14,9 +14,11 @@
 //  kent geen platform.* (TO §10).
 // ============================================================================
 
-/** De 11 platform-capabilities. Gesplitst tegen te brede bundeling (TO §4.1):
+/** De 12 platform-capabilities. Gesplitst tegen te brede bundeling (TO §4.1):
  *  tenants.manage / identities.manage / capabilities.grant / capabilities.revoke
- *  zijn aparte caps, zodat "fondsen beheren" niet "rechten uitdelen" impliceert. */
+ *  zijn aparte caps, zodat "fondsen beheren" niet "rechten uitdelen" impliceert.
+ *  contact.manage staat los: het beheert UITSLUITEND de niet-tenant contact-
+ *  inbox van de publieke voorkant (geen platform-privilege-escalatie). */
 export type PlatformCapability =
   | "platform.generic.library.manage"
   | "platform.config.manage"
@@ -28,7 +30,8 @@ export type PlatformCapability =
   | "platform.logs.read"
   | "platform.security.operate"
   | "platform.support.operate"
-  | "platform.compliance.read";
+  | "platform.compliance.read"
+  | "platform.contact.manage";         // publieke contact-inbox inzien/opvolgen
 
 /** Volledige, geordende lijst — gespiegeld door de DB-seed (TO §12 test 17). */
 export const PLATFORM_CAPABILITIES: readonly PlatformCapability[] = [
@@ -43,6 +46,7 @@ export const PLATFORM_CAPABILITIES: readonly PlatformCapability[] = [
   "platform.security.operate",
   "platform.support.operate",
   "platform.compliance.read",
+  "platform.contact.manage",
 ] as const;
 
 /** Zware capabilities: toekennen vereist altijd vier-ogen (vier_ogen_door
@@ -70,7 +74,11 @@ export const PLATFORM_ROL_CAPABILITIES: Record<string, PlatformCapability[]> = {
     "platform.compliance.read",
   ],
   platform_identity_admin: ["platform.identities.manage"],
-  platform_support_viewer: ["platform.observability.read", "platform.support.operate"],
+  platform_support_viewer: [
+    "platform.observability.read",
+    "platform.support.operate",
+    "platform.contact.manage",
+  ],
   platform_security_op: ["platform.observability.read", "platform.security.operate"],
   platform_audit_reader: ["platform.observability.read", "platform.logs.read"],
 };
