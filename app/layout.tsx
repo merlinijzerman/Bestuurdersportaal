@@ -5,7 +5,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Bestuurdersportaal",
   description:
-    "AI-ondersteunde besluitomgeving voor besturen en commissies",
+    "Besluitvorming die standhoudt - AI-ondersteunde besluitvorming voor besturen, commissies en toezichthoudende organen.",
 };
 
 export default function RootLayout({
