@@ -1,7 +1,22 @@
 "use client";
+// ============================================================
+//  VoorbereidingsBlok — persoonlijke AI-voorbereiding per agendapunt
+// ============================================================
+// Increment "bestuurlijke duiding" (FO v0.2, opvolging gebruikersfeedback
+// 05-07): de duiding (betekenis / gevraagd besluit / impact) is het
+// hoofdproduct, de vergadervragen zijn de afsluiter. Alle AI-tekst rendert
+// via de gedeelde CitatieTekst-component ([Bron N]-pills i.p.v. kale
+// markers); een uitklapbaar blok "Onderbouwing en bronnen" toont de
+// genummerde bronnen (ai_output.bronnen, FR-4) plus bronnen_meta.
+// Backward compat (FR-8): oude voorbereidingen zonder `duiding` blijven
+// renderen, met een hint om te vernieuwen.
+// Persoonlijke voorbereiding: vrije aantekeningen (agendapunt-breed), een
+// notitieveld per lens én per vergadervraag (keys `vraag_N` in hetzelfde
+// eigen_notities-jsonb — geen schemawijziging).
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import CitatieTekst, { MARKER_REGEX } from "./CitatieTekst";
 
 export interface VoorbereidingLens {
   naam: string;
@@ -9,17 +24,37 @@ export interface VoorbereidingLens {
   vraag: string;
 }
 
+export interface VoorbereidingDuiding {
+  betekenis?: string;
+  gevraagd_besluit?: string;
+  impact?: string;
+}
+
+// Zelfde vorm als BronVerwijzing uit de chat-route (FR-4).
+export interface VoorbereidingBron {
+  document_id: string;
+  titel: string;
+  bron: string;
+  pagina: number | null;
+  paragraaf: string | null;
+  fragment: string;
+  heeft_origineel: boolean;
+}
+
 export interface VoorbereidingAIOutput {
+  duiding?: VoorbereidingDuiding;
   lenzen?: VoorbereidingLens[];
   ontbrekend?: string[];
   vergadervragen?: string[];
   samenvatting?: string;
+  bronnen?: VoorbereidingBron[];
 }
 
 export interface BronnenMeta {
   documenten?: { id: string; titel: string; bron: string }[];
   risicos?: { id: string; titel: string; niveau: string }[];
   procedures?: { id: string; titel: string; status: string }[];
+  profielsturing?: "actief" | "geen-profiel";
 }
 
 export interface Voorbereiding {
@@ -48,6 +83,11 @@ function formatDatumKort(d: string) {
   });
 }
 
+// Markers ([Bron N] e.d.) horen niet thuis in gedeelde inbreng-tekst.
+function stripMarkers(s: string): string {
+  return s.replace(new RegExp(MARKER_REGEX.source, "gi"), "").replace(/ {2,}/g, " ").trim();
+}
+
 const NIVEAU_KLEUR: Record<string, string> = {
   hoog: "text-red-700 bg-red-50",
   middel: "text-amber-700 bg-amber-50",
@@ -72,6 +112,7 @@ export default function VoorbereidingsBlok({
   const [notitiesGewijzigd, setNotitiesGewijzigd] = useState(false);
   const [inbrengDialoogOpen, setInbrengDialoogOpen] = useState(false);
   const [neemVrijeNotitiesMee, setNeemVrijeNotitiesMee] = useState(true);
+  const [onderbouwingOpen, setOnderbouwingOpen] = useState(false);
 
   useEffect(() => {
     if (initieel) {
@@ -157,10 +198,15 @@ export default function VoorbereidingsBlok({
         }
       }
     }
-    // 3. AI-vergadervragen
+    // 3. AI-vergadervragen + eventuele eigen notitie per vraag
     if (ai.vergadervragen && ai.vergadervragen.length > 0) {
+      const regels = ai.vergadervragen.map((v, i) => {
+        const eigen = notities[`vraag_${i + 1}`];
+        const basis = `${i + 1}. ${stripMarkers(v)}`;
+        return eigen && eigen.trim() ? `${basis}\n   Eigen notitie: ${eigen.trim()}` : basis;
+      });
       stukken.push(
-        `Vragen die ik graag in de vergadering wil stellen:\n${ai.vergadervragen.map((v, i) => `${i + 1}. ${v}`).join("\n")}`
+        `Vragen die ik graag in de vergadering wil stellen:\n${regels.join("\n")}`
       );
     }
     return stukken.join("\n\n");
@@ -205,6 +251,7 @@ export default function VoorbereidingsBlok({
   const heeftAI = !!(
     voorbereiding &&
     (
+      !!voorbereiding.ai_output?.duiding ||
       (voorbereiding.ai_output?.lenzen && voorbereiding.ai_output.lenzen.length > 0) ||
       (voorbereiding.ai_output?.vergadervragen && voorbereiding.ai_output.vergadervragen.length > 0) ||
       !!voorbereiding.ai_output?.samenvatting
@@ -222,9 +269,9 @@ export default function VoorbereidingsBlok({
               Mijn voorbereiding
             </div>
             <p className="text-xs text-gray-600 mt-1 leading-relaxed">
-              Laat de AI helpen scherper na te denken over dit punt — kritische
-              vragen, blinde vlekken en perspectieven die ertoe doen. Persoonlijk
-              en alleen voor u zichtbaar.
+              Laat de AI helpen scherper na te denken over dit punt — wat het
+              stuk betekent, welk besluit wordt gevraagd, blinde vlekken en
+              vragen voor de vergadering. Persoonlijk en alleen voor u zichtbaar.
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <button
@@ -286,10 +333,17 @@ export default function VoorbereidingsBlok({
   }
 
   const ai = voorbereiding.ai_output;
+  const duiding = ai.duiding;
+  const heeftDuiding = !!(
+    duiding &&
+    (duiding.betekenis || duiding.gevraagd_besluit || duiding.impact)
+  );
   const lenzen = ai.lenzen || [];
   const ontbrekend = ai.ontbrekend || [];
   const vergadervragen = ai.vergadervragen || [];
-  const bronnen = voorbereiding.bronnen_meta || {};
+  const aiBronnen = ai.bronnen || [];
+  const meta = voorbereiding.bronnen_meta || {};
+  const toonOnderbouwing = () => setOnderbouwingOpen(true);
 
   return (
     <div className="bg-amber-50/30 border border-amber-200 rounded-lg p-4 space-y-4">
@@ -332,7 +386,162 @@ export default function VoorbereidingsBlok({
         </div>
       </div>
 
-      {/* Vrij notitieveld — los van AI-lenzen, voor losse aantekeningen */}
+      {/* FR-8 backward compat — oud schema zonder duiding: hint om te vernieuwen */}
+      {!heeftDuiding && (
+        <div className="text-xs text-amber-900 bg-amber-100/70 border border-amber-200 rounded-lg px-3 py-2 flex items-center justify-between gap-3 flex-wrap">
+          <span>
+            Deze voorbereiding is met een eerdere versie gemaakt en bevat nog
+            geen bestuurlijke duiding.
+          </span>
+          <button
+            onClick={() => genereer(voorbereiding.diepte)}
+            disabled={bezig !== null}
+            className="font-medium underline hover:no-underline disabled:opacity-50 whitespace-nowrap"
+          >
+            Vernieuw voorbereiding
+          </button>
+        </div>
+      )}
+
+      {/* Bestuurlijke duiding — hoofdproduct (FR-1/FR-5) */}
+      {heeftDuiding && (
+        <div className="bg-white border border-amber-200 rounded-lg p-3 space-y-2.5">
+          <div className="text-xs font-semibold text-[#0F2744] uppercase tracking-wide">
+            Bestuurlijke duiding
+          </div>
+          {duiding!.betekenis && (
+            <div className="text-sm text-gray-800 leading-relaxed">
+              <CitatieTekst
+                tekst={duiding!.betekenis}
+                bronnen={aiBronnen}
+                onBronKlik={toonOnderbouwing}
+              />
+            </div>
+          )}
+          {duiding!.gevraagd_besluit && (
+            <div className="text-sm text-gray-800 leading-relaxed border-l-2 border-[#C9A84C] pl-2.5">
+              <span className="font-medium text-[#0F2744]">Gevraagd besluit: </span>
+              <CitatieTekst
+                tekst={duiding!.gevraagd_besluit}
+                bronnen={aiBronnen}
+                onBronKlik={toonOnderbouwing}
+              />
+            </div>
+          )}
+          {duiding!.impact && (
+            <div className="text-sm text-gray-800 leading-relaxed">
+              <span className="font-medium text-[#0F2744]">Impact: </span>
+              <CitatieTekst
+                tekst={duiding!.impact}
+                bronnen={aiBronnen}
+                onBronKlik={toonOnderbouwing}
+              />
+            </div>
+          )}
+          {/* FR-7 — zelfde kadering als de chat */}
+          <div className="text-[10px] text-gray-400 pt-1 border-t border-gray-100">
+            AI-hulpmiddel ter voorbereiding — geen bestuurlijk advies.
+          </div>
+        </div>
+      )}
+
+      {/* Onderbouwing en bronnen (FR-3) — genummerde bronnen + bronnen_meta */}
+      {(aiBronnen.length > 0 ||
+        meta.documenten?.length ||
+        meta.risicos?.length ||
+        meta.procedures?.length) && (
+        <div className="text-xs text-gray-600">
+          <button
+            onClick={() => setOnderbouwingOpen(!onderbouwingOpen)}
+            className="font-medium hover:text-[#0F2744]"
+          >
+            {onderbouwingOpen ? "▾" : "▸"} Onderbouwing en bronnen
+            {aiBronnen.length > 0 ? ` (${aiBronnen.length})` : ""}
+          </button>
+          {onderbouwingOpen && (
+            <div className="mt-2 space-y-2">
+              {aiBronnen.length > 0 && (
+                <div className="space-y-1.5">
+                  {aiBronnen.map((bron, i) => (
+                    <div
+                      key={`${bron.document_id}-${i}`}
+                      className="bg-white border border-gray-200 rounded px-2 py-1.5"
+                    >
+                      <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-[#0F2744] text-white text-[9px] font-semibold mr-1.5">
+                        {i + 1}
+                      </span>
+                      <span className="font-medium text-[#0F2744]">{bron.titel}</span>
+                      <span className="text-gray-400"> ({bron.bron})</span>
+                      {bron.pagina != null && (
+                        <span className="text-gray-500"> · p. {bron.pagina}</span>
+                      )}
+                      {bron.paragraaf && (
+                        <span className="text-gray-500"> · {bron.paragraaf}</span>
+                      )}
+                      {bron.fragment && (
+                        <div className="text-gray-600 mt-0.5 line-clamp-2">
+                          “{bron.fragment}”
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="space-y-1.5 ml-1">
+                {(meta.risicos?.length || 0) > 0 && (
+                  <div>
+                    <span className="font-semibold">Meegenomen risico&apos;s:</span>{" "}
+                    {meta.risicos!.map((r, i) => (
+                      <span key={r.id}>
+                        {i > 0 ? ", " : ""}
+                        {r.titel}{" "}
+                        <span
+                          className={`px-1 py-0.5 rounded ${NIVEAU_KLEUR[r.niveau] || ""}`}
+                        >
+                          {r.niveau}
+                        </span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {(meta.procedures?.length || 0) > 0 && (
+                  <div>
+                    <span className="font-semibold">Lopende procedures:</span>{" "}
+                    {meta.procedures!.map((p, i) => (
+                      <span key={p.id}>
+                        {i > 0 ? ", " : ""}
+                        {p.titel}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {/* Oud schema (geen ai_output.bronnen): toon dan de documentenlijst uit bronnen_meta */}
+                {aiBronnen.length === 0 && (meta.documenten?.length || 0) > 0 && (
+                  <div>
+                    <span className="font-semibold">Documenten:</span>{" "}
+                    {meta.documenten!.map((d, i) => (
+                      <span key={d.id}>
+                        {i > 0 ? ", " : ""}
+                        {d.titel} <span className="text-gray-400">({d.bron})</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {meta.profielsturing && (
+                  <div className="text-gray-400">
+                    Profielsturing:{" "}
+                    {meta.profielsturing === "actief"
+                      ? "actief (nadruk op uw profiel, zelfde bronnen)"
+                      : "geen profiel ingevuld"}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Vrij notitieveld — persoonlijke voorbereiding, los van AI-output */}
       <div className="bg-white border border-amber-200 rounded-lg p-3">
         <div className="text-xs font-semibold text-[#0F2744] uppercase tracking-wide mb-2">
           Mijn aantekeningen
@@ -352,13 +561,6 @@ export default function VoorbereidingsBlok({
         />
       </div>
 
-      {/* Samenvatting (één zin) */}
-      {ai.samenvatting && (
-        <div className="text-sm text-gray-800 italic border-l-2 border-amber-400 pl-3">
-          {ai.samenvatting}
-        </div>
-      )}
-
       {/* Lenzen */}
       {lenzen.length > 0 && (
         <div className="space-y-3">
@@ -373,11 +575,20 @@ export default function VoorbereidingsBlok({
                 <div className="text-xs font-semibold text-[#0F2744] uppercase tracking-wide">
                   {lens.naam}
                 </div>
-                <p className="text-sm text-gray-800 mt-1.5 leading-relaxed">
-                  {lens.analyse}
-                </p>
+                <div className="text-sm text-gray-800 mt-1.5 leading-relaxed">
+                  <CitatieTekst
+                    tekst={lens.analyse}
+                    bronnen={aiBronnen}
+                    onBronKlik={toonOnderbouwing}
+                  />
+                </div>
                 <div className="mt-2 text-sm text-amber-900 bg-amber-50/60 border border-amber-200 rounded px-2.5 py-1.5">
-                  <span className="font-medium">Open vraag:</span> {lens.vraag}
+                  <span className="font-medium">Open vraag:</span>{" "}
+                  <CitatieTekst
+                    tekst={lens.vraag}
+                    bronnen={aiBronnen}
+                    onBronKlik={toonOnderbouwing}
+                  />
                 </div>
                 <textarea
                   rows={2}
@@ -405,82 +616,73 @@ export default function VoorbereidingsBlok({
             {ontbrekend.map((o, idx) => (
               <li key={idx} className="text-sm text-gray-800 flex gap-2">
                 <span className="text-amber-700 mt-0.5">·</span>
-                <span>{o}</span>
+                <span>
+                  <CitatieTekst
+                    tekst={o}
+                    bronnen={aiBronnen}
+                    onBronKlik={toonOnderbouwing}
+                  />
+                </span>
               </li>
             ))}
           </ul>
         </div>
       )}
 
-      {/* Vergadervragen */}
+      {/* Vergadervragen — afsluitend actieblok (FR-5), met eigen notitie per vraag */}
       {vergadervragen.length > 0 && (
-        <div className="bg-white border border-amber-200 rounded-lg p-3">
-          <div className="text-xs font-semibold text-[#0F2744] uppercase tracking-wide mb-2">
-            Vragen voor in de vergadering
+        <div className="bg-white border-2 border-[#C9A84C]/50 rounded-lg p-3">
+          <div className="text-xs font-semibold text-[#0F2744] uppercase tracking-wide mb-0.5">
+            Neem mee de vergadering in
           </div>
-          <ol className="space-y-1.5">
-            {vergadervragen.map((v, idx) => (
-              <li key={idx} className="text-sm text-gray-800 flex gap-2">
-                <span className="text-[#0F2744] font-semibold tabular-nums w-5 flex-shrink-0">
-                  {idx + 1}.
-                </span>
-                <span className="leading-relaxed">{v}</span>
-              </li>
-            ))}
+          <div className="text-[11px] text-gray-500 mb-2">
+            Kritische vragen als afsluiting van uw voorbereiding — noteer per
+            vraag wat u ermee wilt.
+          </div>
+          <ol className="space-y-2.5">
+            {vergadervragen.map((v, idx) => {
+              const sleutel = `vraag_${idx + 1}`;
+              const huidigeNotitie = notities[sleutel] ?? "";
+              return (
+                <li key={idx} className="text-sm text-gray-800 flex gap-2">
+                  <span className="text-[#0F2744] font-semibold tabular-nums w-5 flex-shrink-0">
+                    {idx + 1}.
+                  </span>
+                  <div className="flex-1">
+                    <span className="leading-relaxed">
+                      <CitatieTekst
+                        tekst={v}
+                        bronnen={aiBronnen}
+                        onBronKlik={toonOnderbouwing}
+                      />
+                    </span>
+                    <textarea
+                      rows={1}
+                      value={huidigeNotitie}
+                      onChange={(e) => {
+                        setNotities({ ...notities, [sleutel]: e.target.value });
+                        setNotitiesGewijzigd(true);
+                      }}
+                      placeholder="Uw notitie bij deze vraag (alleen voor u zichtbaar)…"
+                      className="mt-1.5 w-full text-xs border border-gray-200 rounded px-2 py-1.5 focus:border-[#C9A84C] outline-none resize-none bg-gray-50"
+                    />
+                  </div>
+                </li>
+              );
+            })}
           </ol>
         </div>
       )}
 
-      {/* Bronvermelding */}
-      {(bronnen.documenten?.length ||
-        bronnen.risicos?.length ||
-        bronnen.procedures?.length) && (
-        <details className="text-xs text-gray-600">
-          <summary className="cursor-pointer font-medium hover:text-[#0F2744]">
-            Geraadpleegde bronnen
-          </summary>
-          <div className="mt-2 space-y-1.5 ml-2">
-            {(bronnen.documenten?.length || 0) > 0 && (
-              <div>
-                <span className="font-semibold">Documenten:</span>{" "}
-                {bronnen.documenten!.map((d, i) => (
-                  <span key={d.id}>
-                    {i > 0 ? ", " : ""}
-                    {d.titel}{" "}
-                    <span className="text-gray-400">({d.bron})</span>
-                  </span>
-                ))}
-              </div>
-            )}
-            {(bronnen.risicos?.length || 0) > 0 && (
-              <div>
-                <span className="font-semibold">Risico&apos;s:</span>{" "}
-                {bronnen.risicos!.map((r, i) => (
-                  <span key={r.id}>
-                    {i > 0 ? ", " : ""}
-                    {r.titel}{" "}
-                    <span
-                      className={`px-1 py-0.5 rounded ${NIVEAU_KLEUR[r.niveau] || ""}`}
-                    >
-                      {r.niveau}
-                    </span>
-                  </span>
-                ))}
-              </div>
-            )}
-            {(bronnen.procedures?.length || 0) > 0 && (
-              <div>
-                <span className="font-semibold">Procedures:</span>{" "}
-                {bronnen.procedures!.map((p, i) => (
-                  <span key={p.id}>
-                    {i > 0 ? ", " : ""}
-                    {p.titel}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-        </details>
+      {/* Samenvatting-oneliner (besluitrijpheid/scherpte) */}
+      {ai.samenvatting && (
+        <div className="text-sm text-gray-800 italic border-l-2 border-amber-400 pl-3">
+          <CitatieTekst
+            tekst={ai.samenvatting}
+            bronnen={aiBronnen}
+            onBronKlik={toonOnderbouwing}
+          />
+        </div>
       )}
 
       {/* Acties */}

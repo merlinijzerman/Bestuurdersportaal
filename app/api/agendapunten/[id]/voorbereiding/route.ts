@@ -13,6 +13,10 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
 });
 
+// FR-6 (increment "bestuurlijke duiding") — zelfde model als de chat-route,
+// in één constante zodat een upgrade op één plek gebeurt.
+const AI_MODEL = "claude-sonnet-4-6";
+
 // Robuuste JSON-extractie uit een AI-respons. Strip eventuele code-fences en
 // pak het fragment van de eerste '{' tot de laatste '}'. Samen met de
 // assistant-prefill ('{') vangt dit de gevallen af waarin het model toch
@@ -34,7 +38,7 @@ function parseAiJson(tekst: string): Record<string, unknown> {
 
 const SYSTEM_PROMPT = `U bent een ervaren sparringpartner voor het bestuur van een Nederlands pensioenfonds.
 
-Uw taak: help een bestuurder een agendapunt voor te bereiden voor een vergadering. Niet door het stuk samen te vatten, maar door scherper te denken — door blinde vlekken te markeren, kritische vragen te formuleren, en het stuk te toetsen tegen de juiste lenzen.
+Uw taak: help een bestuurder een agendapunt voor te bereiden voor een vergadering. Begin met een BESTUURLIJKE DUIDING (wat betekent dit stuk, welk besluit wordt gevraagd, wie raakt het), toets het stuk vervolgens tegen de juiste lenzen, markeer blinde vlekken, en sluit af met vragen om mee de vergadering in te nemen.
 
 LENZEN waarover u kunt nadenken (kies de 2-4 die ECHT van toepassing zijn op DIT stuk — niet alle):
 * Stakeholder-impact: werkgevers, actieve deelnemers, gewezen deelnemers, pensioengerechtigden, ex-partners
@@ -42,15 +46,22 @@ LENZEN waarover u kunt nadenken (kies de 2-4 die ECHT van toepassing zijn op DIT
 * Bestuurlijke uitgangspunten: beheerst besluitvormingsproces, evenwichtige belangenafweging, intern toezicht informeren, verantwoording afleggen
 
 REGELS:
+- De duiding is het hoofdproduct. "betekenis": 2-4 zinnen — wat betekent dit stuk voor het fonds, in bestuurlijke taal. "gevraagd_besluit": 1-2 zinnen — welk besluit wordt van het bestuur gevraagd; is er geen besluit, schrijf dan expliciet dat het punt informatief is. "impact": 1-3 zinnen — gevolgen voor deelnemers, financiering, risico of uitvoering; noem alleen wat van toepassing is.
+- BRONVERWIJZING VERPLICHT in de duiding: elke feitelijke claim krijgt direct erna een marker. [Bron N] voor claims uit de genummerde bronnen; [Toelichting agendapunt] voor claims die alleen op de toelichting van het agendapunt steunen; [Algemene kennis] voor vakkennis zonder fondsbron. Afzonderlijke claims krijgen afzonderlijke markers. Verzin NOOIT een bronnummer of vindplaats.
 - Kies alleen de lenzen die er voor dit specifieke stuk toe doen. Het mag voorkomen dat een stuk vooral over ÉÉN lens gaat — zeg dat dan, dwing geen kunstmatige completeness.
-- Per lens: één tot twee zinnen scherpe analyse en één gerichte open vraag aan de bestuurder.
+- Per lens: één tot twee zinnen scherpe analyse en één gerichte open vraag aan de bestuurder. Gebruik [Bron N] waar dat de scherpte ten goede komt.
 - Geen samenvatting van het stuk — daar dient een aparte AI-functie voor. U mag wel verwijzen naar specifieke onderdelen ("paragraaf 3.2 stelt X — maar laat onbenoemd Y").
 - Wees concreet en kritisch. Vermijd algemene vragen zoals "is dit goed onderbouwd?" — vraag wat ER specifiek niet onderbouwd is.
-- Verwijs naar bronnen met [Bron N] notatie waar dat de scherpte ten goede komt. Niet als opsomming.
-- Ook als er weinig of geen stukken zijn aangeleverd, baseert u de voorbereiding op de titel en toelichting van het agendapunt plus uw vakkennis. U levert dan tóch de volledige JSON — nooit een tekstuele mededeling dat er te weinig context is, en nooit een vraag terug.
+- De vergadervragen zijn de afsluiter: 3 concrete kritische vragen die de bestuurder mee de vergadering in neemt.
+- Ook als er weinig of geen stukken zijn aangeleverd, baseert u de voorbereiding op de titel en toelichting van het agendapunt plus uw vakkennis (markeer dan met [Toelichting agendapunt] / [Algemene kennis]). U levert dan tóch de volledige JSON — nooit een tekstuele mededeling dat er te weinig context is, en nooit een vraag terug.
 
 OUTPUT: alleen JSON, geen markdown, geen omringende tekst. Begin uw antwoord direct met '{'. Exacte formaat:
 {
+  "duiding": {
+    "betekenis": "2-4 zinnen: wat betekent dit stuk voor het fonds, met bronmarkers",
+    "gevraagd_besluit": "1-2 zinnen: welk besluit wordt gevraagd, of expliciet 'geen besluit gevraagd — informatief'",
+    "impact": "1-3 zinnen: wie/wat raakt dit (deelnemers, financiering, risico, uitvoering), met bronmarkers"
+  },
   "lenzen": [
     {
       "naam": "korte label, bv. 'Stakeholder-impact: gepensioneerden'",
@@ -140,7 +151,7 @@ export async function POST(
     // Gedeactiveerde documenten worden uitgesloten als context.
     const { data: stukken } = await supabase
       .from("documenten")
-      .select("id, titel, bron, samenvatting_ai")
+      .select("id, titel, bron, samenvatting_ai, opslag_pad")
       .eq("agendapunt_id", id)
       .eq("actief", true);
 
@@ -155,7 +166,15 @@ export async function POST(
         peildatum: new Date().toISOString().slice(0, 10),
       })
     );
-    const { contextTekst: bibliotheekContext, bronnen: bibBronnen } = maakContext(chunks);
+    // FR-4 — één doorlopende bronnummering: gekoppelde stukken eerst
+    // ([Bron 1..k]), daarna de bibliotheek-chunks ([Bron k+1..]). Dezelfde
+    // nummering gaat als `bronnen` mee in ai_output, zodat pill N in de UI
+    // altijd naar bron N in de lijst verwijst.
+    const aantalStukken = (stukken || []).length;
+    const { contextTekst: bibliotheekContext, bronnen: bibBronnen } = maakContext(
+      chunks,
+      aantalStukken
+    );
 
     // Actieve risicos van het fonds
     const { data: risicos } = await supabase
@@ -181,7 +200,21 @@ export async function POST(
       titel: string;
       bron: string;
       samenvatting_ai: string | null;
+      opslag_pad: string | null;
     }>;
+
+    // Samenvatting_ai is (meestal) een JSON-string; maak er leesbare tekst van.
+    const leesbareSamenvatting = (raw: string | null): string | null => {
+      if (!raw) return null;
+      try {
+        const obj = JSON.parse(raw);
+        return Object.entries(obj)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join("\n");
+      } catch {
+        return raw;
+      }
+    };
     const risicosLijst = (risicos || []) as Array<{
       id: string;
       titel: string;
@@ -208,25 +241,16 @@ export async function POST(
     ];
 
     if (stukkenLijst.length > 0) {
-      userParts.push(`\n=== GEKOPPELDE STUKKEN BIJ DIT AGENDAPUNT ===`);
-      for (const s of stukkenLijst) {
-        userParts.push(`\n--- ${s.titel} (${s.bron}) ---`);
-        if (s.samenvatting_ai) {
-          // Samenvatting is JSON-string, probeer te parsen
-          let leesbaar = s.samenvatting_ai;
-          try {
-            const obj = JSON.parse(s.samenvatting_ai);
-            leesbaar = Object.entries(obj)
-              .map(([k, v]) => `${k}: ${v}`)
-              .join("\n");
-          } catch {
-            // niet JSON, gebruik raw
-          }
-          userParts.push(leesbaar);
-        } else {
-          userParts.push("(Nog geen samenvatting beschikbaar)");
-        }
-      }
+      userParts.push(
+        `\n=== GEKOPPELDE STUKKEN BIJ DIT AGENDAPUNT (genummerde bronnen) ===`
+      );
+      stukkenLijst.forEach((s, i) => {
+        userParts.push(`\n[Bron ${i + 1}] ${s.titel} (${s.bron}):`);
+        userParts.push(
+          leesbareSamenvatting(s.samenvatting_ai) ??
+            "(Nog geen samenvatting beschikbaar)"
+        );
+      });
     } else {
       userParts.push(
         `\n=== GEKOPPELDE STUKKEN ===\n(Geen stukken aan dit agendapunt gekoppeld)`
@@ -234,7 +258,7 @@ export async function POST(
     }
 
     if (chunks.length > 0) {
-      userParts.push(`\n=== BREDERE BIBLIOTHEEK (RAG) ===`);
+      userParts.push(`\n=== BREDERE BIBLIOTHEEK (genummerde bronnen, vervolg) ===`);
       userParts.push(bibliotheekContext);
     }
 
@@ -267,7 +291,7 @@ export async function POST(
     const userMessage = userParts.join("\n");
 
     const respons = await anthropic.messages.create({
-      model: "claude-sonnet-4-5",
+      model: AI_MODEL,
       max_tokens: diepte === "grondig" ? 2500 : 1500,
       system: SYSTEM_PROMPT,
       messages: [
@@ -285,6 +309,7 @@ export async function POST(
     const ruweTekst = `{${blok && blok.type === "text" ? blok.text : ""}`.trim();
 
     let aiOutput: {
+      duiding?: { betekenis?: string; gevraagd_besluit?: string; impact?: string };
       lenzen?: { naam: string; analyse: string; vraag: string }[];
       ontbrekend?: string[];
       vergadervragen?: string[];
@@ -299,6 +324,24 @@ export async function POST(
         { status: 502 }
       );
     }
+
+    // FR-4 — de genummerde bronlijst waarnaar de [Bron N]-markers verwijzen:
+    // eerst de gekoppelde stukken (1..k), dan de bibliotheek-chunks (k+1..).
+    // Zelfde vorm als de chat-route (BronVerwijzing) zodat CitatieTekst en het
+    // onderbouwingsblok in de UI identiek kunnen renderen. Opslag als extra
+    // veld in het bestaande ai_output-jsonb — geen schemawijziging.
+    const bronnenLijst = [
+      ...stukkenLijst.map((s) => ({
+        document_id: s.id,
+        titel: s.titel,
+        bron: s.bron,
+        pagina: null as number | null,
+        paragraaf: null as string | null,
+        fragment: (leesbareSamenvatting(s.samenvatting_ai) ?? "").slice(0, 150),
+        heeft_origineel: !!s.opslag_pad,
+      })),
+      ...bibBronnen,
+    ];
 
     const bronnenMeta: BronnenMeta = {
       documenten: [
@@ -339,7 +382,7 @@ export async function POST(
         .from("voorbereidingen")
         .update({
           diepte,
-          ai_output: aiOutput,
+          ai_output: { ...aiOutput, bronnen: bronnenLijst },
           bronnen_meta: bronnenMeta,
           gegenereerd_op: new Date().toISOString(),
           bijgewerkt_op: new Date().toISOString(),
@@ -359,7 +402,7 @@ export async function POST(
           agendapunt_id: id,
           gebruiker_id: user.id,
           diepte,
-          ai_output: aiOutput,
+          ai_output: { ...aiOutput, bronnen: bronnenLijst },
           eigen_notities: {},
           bronnen_meta: bronnenMeta,
         })

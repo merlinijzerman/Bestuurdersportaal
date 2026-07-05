@@ -11,13 +11,13 @@
 //   ook in de historie van /ai terugkomt (en andersom hervat kan worden).
 // - Compacte weergave: inline [Bron N]-pills met een uitklapbaar
 //   "Onderbouwing en bronnen"-blok per antwoord (herleidbaarheid).
-// Bewust een eigen, lichte renderer i.p.v. hergebruik van de 1900-regel
-// AI-pagina: geen regressierisico daar, en de inline-context vraagt om een
-// compactere weergave. De SSE- en opslag-contracten zijn identiek gehouden.
+// De marker-rendering is geconsolideerd in de gedeelde component CitatieTekst
+// (was hier eerst een eigen renderer — geaccepteerde schuld ADR 0036, opgelost).
 
-import { useState, useRef, useEffect, type ReactNode } from "react";
+import { useState, useRef, useEffect } from "react";
 import { createClient } from "@/lib/supabase";
 import type { InlineMelding } from "@/lib/vraagtype";
+import CitatieTekst from "./CitatieTekst";
 
 interface Bron {
   document_id: string;
@@ -43,14 +43,11 @@ interface Bericht {
   verduidelijking?: Verduidelijking;
 }
 
-// Zelfde markers als de AI-pagina (incl. [Toelichting agendapunt], ADR 0028).
-const MARKER_REGEX =
-  /(\[Bron \d+\]|\[Algemene kennis\]|\[Volgens wetgeving\]|\[Toelichting agendapunt\])/gi;
-
-// Startvragen die het stuk bestuurlijke betekenis geven — de eerste is de
-// "bestuurlijke duiding" die de aanleiding was voor deze integratie.
+// Startvragen die het stuk bestuurlijke betekenis geven. De eerdere chip
+// "bestuurlijke duiding" is verwijderd (05-07): de duiding is het hoofdproduct
+// van "Mijn voorbereiding" (FO duiding v0.2) — dubbel genereren gaf twee licht
+// verschillende duidingen naast elkaar. De chat verwijst nu naar dat blok.
 const STARTVRAGEN = [
-  "Geef een bestuurlijke duiding van dit agendapunt en de stukken.",
   "Welke risico's en aandachtspunten zitten er voor het fonds in dit voorstel?",
   "Welk besluit wordt gevraagd en is dit stuk daarvoor besluitrijp?",
   "Wat betekent dit voorstel voor de deelnemers?",
@@ -434,7 +431,11 @@ export default function AgendapuntChat({
                       </div>
                     )}
                     <div className="text-sm text-gray-800 leading-relaxed">
-                      {renderAntwoord(b.tekst, b.bronnen, () => toggleBronnen(idx))}
+                      <CitatieTekst
+                        tekst={b.tekst}
+                        bronnen={b.bronnen}
+                        onBronKlik={() => toggleBronnen(idx)}
+                      />
                     </div>
                     {b.verduidelijking && b.verduidelijking.opties.length > 0 && (
                       <div className="flex gap-2 mt-2">
@@ -503,17 +504,26 @@ export default function AgendapuntChat({
 
           {/* Startvragen zolang er nog geen gesprek is */}
           {!heeftGesprek && initGedaan && (
-            <div className="flex flex-wrap gap-1.5">
-              {STARTVRAGEN.map((v) => (
-                <button
-                  key={v}
-                  onClick={() => stuurBericht(v)}
-                  disabled={laden}
-                  className="text-xs text-left border border-gray-300 bg-white rounded-full px-3 py-1.5 hover:border-[#C9A84C] hover:bg-amber-50 transition-colors disabled:opacity-50"
-                >
-                  {v}
-                </button>
-              ))}
+            <div className="space-y-2">
+              <div className="flex flex-wrap gap-1.5">
+                {STARTVRAGEN.map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => stuurBericht(v)}
+                    disabled={laden}
+                    className="text-xs text-left border border-gray-300 bg-white rounded-full px-3 py-1.5 hover:border-[#C9A84C] hover:bg-amber-50 transition-colors disabled:opacity-50"
+                  >
+                    {v}
+                  </button>
+                ))}
+              </div>
+              <div className="text-[11px] text-gray-500">
+                De bestuurlijke duiding van dit agendapunt vind je onder{" "}
+                <span className="font-medium text-gray-700">
+                  Mijn voorbereiding
+                </span>{" "}
+                verderop in deze kaart — inclusief bronnen en eigen notities.
+              </div>
             </div>
           )}
 
@@ -551,123 +561,3 @@ export default function AgendapuntChat({
   );
 }
 
-// ============================================================
-//  Compacte weergave van het AI-antwoord met citatie-pills
-// ============================================================
-// Lichte variant van de renderer op de AI-pagina: alinea's, opsommingen en
-// vet; markers worden pills. Klik op een [Bron N]-pill opent het bronnenblok.
-function renderAntwoord(
-  tekst: string,
-  bronnen: Bron[] | undefined,
-  onBronKlik: () => void
-) {
-  const regels = tekst.split("\n");
-  const blokken: ReactNode[] = [];
-  let lijstItems: string[] = [];
-  let sleutel = 0;
-
-  const inline = (s: string) => parseInline(s, bronnen, onBronKlik);
-
-  const sluitLijst = () => {
-    if (lijstItems.length === 0) return;
-    blokken.push(
-      <ul key={sleutel++} className="list-disc pl-4 my-1 space-y-0.5">
-        {lijstItems.map((it, k) => (
-          <li key={k}>{inline(it)}</li>
-        ))}
-      </ul>
-    );
-    lijstItems = [];
-  };
-
-  for (const regel of regels) {
-    const li = regel.match(/^\s*(?:[-*]|\d+\.)\s+(.*)$/);
-    if (li) {
-      lijstItems.push(li[1]);
-      continue;
-    }
-    sluitLijst();
-    const kop = regel.match(/^#{1,6}\s+(.*)$/);
-    if (kop) {
-      blokken.push(
-        <p key={sleutel++} className="font-semibold text-[#0F2744] mt-1.5 mb-0.5">
-          {inline(kop[1])}
-        </p>
-      );
-      continue;
-    }
-    if (!regel.trim()) continue;
-    blokken.push(
-      <p key={sleutel++} className={blokken.length > 0 ? "mt-1.5" : ""}>
-        {inline(regel)}
-      </p>
-    );
-  }
-  sluitLijst();
-  return blokken;
-}
-
-function parseInline(regel: string, bronnen: Bron[] | undefined, onBronKlik: () => void) {
-  if (!regel) return null;
-  const regex = new RegExp(MARKER_REGEX.source, "gi");
-  const delen = regel.split(regex);
-  return delen.map((deel, i) => {
-    if (!deel) return null;
-    const bronMatch = deel.match(/^\[Bron (\d+)\]$/i);
-    if (bronMatch) {
-      const nr = parseInt(bronMatch[1], 10);
-      const bron = bronnen?.[nr - 1];
-      return (
-        <button
-          key={i}
-          onClick={onBronKlik}
-          title={
-            bron
-              ? `${bron.titel}${bron.pagina != null ? `, p. ${bron.pagina}` : ""}`
-              : "Bron niet gevonden in de aangeleverde context"
-          }
-          className={`inline-flex items-center justify-center min-w-4 h-4 px-0.5 rounded-full text-[9px] font-semibold align-text-top mx-0.5 ${
-            bron
-              ? "bg-[#0F2744] text-white hover:bg-[#C9A84C] hover:text-[#0F2744]"
-              : "bg-red-100 text-red-700 line-through"
-          }`}
-        >
-          {nr}
-        </button>
-      );
-    }
-    if (/^\[(algemene kennis|volgens wetgeving)\]$/i.test(deel)) {
-      const label = /wetgeving/i.test(deel) ? "Volgens wetgeving" : "Algemene kennis";
-      return (
-        <span
-          key={i}
-          className="inline-block text-[9px] font-medium bg-gray-100 text-gray-600 border border-gray-200 rounded-full px-1.5 align-text-top mx-0.5"
-          title="Niet gebaseerd op interne fondsdocumenten"
-        >
-          {label}
-        </span>
-      );
-    }
-    if (/^\[toelichting agendapunt\]$/i.test(deel)) {
-      return (
-        <span
-          key={i}
-          className="inline-block text-[9px] font-medium bg-amber-100 text-amber-800 border border-amber-200 rounded-full px-1.5 align-text-top mx-0.5"
-          title="Afkomstig uit de toelichting van het agendapunt — geen vastgestelde fondsbron"
-        >
-          Toelichting agendapunt
-        </span>
-      );
-    }
-    // Minimale inline-markdown: **vet**.
-    const stukjes = deel.split(/(\*\*[^*]+\*\*)/g);
-    return (
-      <span key={i}>
-        {stukjes.map((s, j) => {
-          const vet = s.match(/^\*\*([^*]+)\*\*$/);
-          return vet ? <strong key={j}>{vet[1]}</strong> : <span key={j}>{s}</span>;
-        })}
-      </span>
-    );
-  });
-}

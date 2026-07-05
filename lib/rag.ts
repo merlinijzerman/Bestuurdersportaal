@@ -558,7 +558,10 @@ export async function zoekRelevanteChunks(
 }
 
 // Maak een gestructureerde context-string voor Claude
-export function maakContext(chunks: DocumentChunk[]): {
+// `startIndex` (optioneel): laat de [Bron N]-nummering hoger beginnen, zodat een
+// aanroeper eigen bronnen (bv. gekoppelde vergaderstukken in de agendaprep) vóór
+// de bibliotheek-chunks kan nummeren en één doorlopende bronlijst ontstaat.
+export function maakContext(chunks: DocumentChunk[], startIndex = 0): {
   contextTekst: string;
   bronnen: BronVerwijzing[];
 } {
@@ -574,7 +577,7 @@ export function maakContext(chunks: DocumentChunk[]): {
 
   chunks.forEach((chunk, index) => {
     const doc = chunk.documenten;
-    const bronLabel = `[Bron ${index + 1}]`;
+    const bronLabel = `[Bron ${startIndex + index + 1}]`;
     const locatie = [
       chunk.paragraaf && `${chunk.paragraaf}`,
       chunk.pagina && `pag. ${chunk.pagina}`,
