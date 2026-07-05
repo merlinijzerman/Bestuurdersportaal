@@ -12,6 +12,7 @@ import StemrondeBlok, {
   type StemData,
   type Bestuurslid,
 } from "./StemrondeBlok";
+import AgendapuntChat from "./AgendapuntChat";
 
 export interface Stuk {
   id: string;
@@ -399,16 +400,15 @@ export default function AgendapuntKaart({
             <p className="text-sm text-gray-700 leading-relaxed">{punt.beschrijving}</p>
           )}
 
-          {/* Instappunt "Vraag de AI over dit agendapunt" (ADR 0028): opent de
-              assistent geframed door dit punt — titel + toelichting als seed,
-              gekoppelde stukken als scope. Werkt ook zonder stukken. */}
-          <a
-            href={`/ai?agendapunt=${punt.id}`}
-            className="inline-flex items-center gap-1.5 text-xs font-medium text-[#0F2744] bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5 hover:border-[#C9A84C] hover:bg-amber-100 transition-colors"
-            title="Open de AI-assistent met dit agendapunt en de gekoppelde stukken als context"
-          >
-            ✨ Vraag de AI over dit agendapunt
-          </a>
+          {/* Inline AI-assistent (ADR 0028): geframed door dit punt — titel +
+              toelichting als seed, gekoppelde stukken als scope. Vervangt de
+              eerdere link naar /ai zodat de bestuurder niet hoeft te schakelen;
+              de volledige assistent blijft bereikbaar vanuit het paneel zelf. */}
+          <AgendapuntChat
+            agendapuntId={punt.id}
+            titel={punt.titel}
+            stukken={punt.stukken.map((s) => ({ id: s.id, titel: s.titel }))}
+          />
 
           {/* Stemronde — alleen bij besluitvorming */}
           {punt.categorie === "besluitvorming" && (
