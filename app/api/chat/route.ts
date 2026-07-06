@@ -484,7 +484,7 @@ export async function POST(req: NextRequest) {
     // Profiel + fondsnaam ophalen voor persoonlijke context
     const { data: profiel } = await supabase
       .from("profielen")
-      .select("naam, rol, fondsen(naam)")
+      .select("naam, rol, fonds_id, fondsen(naam)")
       .eq("id", user.id)
       .single();
 
@@ -550,6 +550,57 @@ export async function POST(req: NextRequest) {
       }
     }
     const agendapuntModusActief = agendapuntSeed !== null;
+
+    // ── FO duiding v0.3 (06-07) — module-context in agendapunt-modus ────────
+    // Doorvragen na "Stel mijn voorbereiding op" mag niet minder weten dan de
+    // voorbereiding-route: actieve risico's + lopende procedures gaan compact
+    // mee (zelfde selecties als die route). Alleen in agendapunt-modus, om
+    // kosten en ruis in de overige modi te vermijden. Geen genummerde bronnen:
+    // het model verwijst bij naam (herleidbaarheidskeuze gelijk aan de
+    // voorbereiding-route; profielsturing loopt al generiek via Increment F).
+    let modulesBlok = "";
+    if (agendapuntModusActief && profiel?.fonds_id) {
+      const [{ data: risicoRows }, { data: procedureRows }] = await Promise.all([
+        supabase
+          .from("risicos")
+          .select("titel, toelichting, niveau, type_risico, categorie")
+          .eq("fonds_id", profiel.fonds_id)
+          .eq("status", "actief")
+          .order("niveau", { ascending: false })
+          .limit(15),
+        supabase
+          .from("procedures")
+          .select("titel, beschrijving, status, template_code")
+          .eq("fonds_id", profiel.fonds_id)
+          .neq("status", "afgerond")
+          .order("gestart_op", { ascending: false })
+          .limit(10),
+      ]);
+      const delen: string[] = [];
+      if ((risicoRows?.length ?? 0) > 0) {
+        delen.push(
+          `=== ACTIEVE RISICO'S VAN HET FONDS (context — geen genummerde bron; verwijs bij naam) ===\n` +
+            risicoRows!
+              .map(
+                (r) =>
+                  `- [${String(r.niveau).toUpperCase()}] ${r.titel} (${r.categorie}, ${r.type_risico})${r.toelichting ? ` — ${String(r.toelichting).slice(0, 200)}` : ""}`
+              )
+              .join("\n")
+        );
+      }
+      if ((procedureRows?.length ?? 0) > 0) {
+        delen.push(
+          `=== LOPENDE PROCEDURES (context — geen genummerde bron; verwijs bij naam) ===\n` +
+            procedureRows!
+              .map(
+                (p) =>
+                  `- ${p.titel} (${p.template_code}, ${p.status})${p.beschrijving ? ` — ${String(p.beschrijving).slice(0, 200)}` : ""}`
+              )
+              .join("\n")
+        );
+      }
+      if (delen.length > 0) modulesBlok = `\n\n${delen.join("\n\n")}`;
+    }
 
     // ── Document-scope (increment 1): server-side validatie vóór retrieval ──
     // De client mag document_id's meesturen, maar de server valideert altijd
@@ -924,7 +975,8 @@ export async function POST(req: NextRequest) {
         chunks.length > 0
           ? `\n\n=== GEKOPPELDE STUKKEN BIJ DIT AGENDAPUNT ===\n\n${contextTekst}`
           : "\n\n(Er zijn geen doorzoekbare stukken aan dit agendapunt gekoppeld; baseer uw antwoord op de toelichting en, waar passend, uw algemene kennis.)";
-      gebruikersPrompt = `${toelichtingBlok}${stukkenBlok}\n\n---\n\nVRAAG: ${vraag}`;
+      // Module-context (risico's/procedures) na de stukken — zie opbouw hierboven.
+      gebruikersPrompt = `${toelichtingBlok}${stukkenBlok}${modulesBlok}\n\n---\n\nVRAAG: ${vraag}`;
     } else if (scopeActief) {
       // Strict-document gedrag overschrijft de gekozen modus. De regels hangen af
       // van opt-in algemene kennis (drie-deling) en van breed vs. specifiek.

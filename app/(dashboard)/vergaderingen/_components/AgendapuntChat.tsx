@@ -588,28 +588,31 @@ export default function AgendapuntChat({
             </div>
           )}
 
-          {/* Startvragen zolang er nog geen gesprek is. De voorbereiding-chip
-              gaat via de rijke voorbereiding-route (met bronnen); de overige
-              via de gewone chat-route. */}
-          {!heeftGesprek && initGedaan && (
+          {/* De voorbereiding-chip is er altijd (rijke voorbereiding-route,
+              ook midden in een gesprek opnieuw op te stellen); de start-
+              vragen alleen zolang er nog geen gesprek is (gewone chat-route). */}
+          {initGedaan && (
             <div className="flex flex-wrap gap-1.5">
               <button
                 onClick={() => genereerVoorbereiding()}
                 disabled={laden}
                 className="text-xs text-left bg-[#0F2744] text-white rounded-full px-3 py-1.5 hover:bg-[#1a3858] transition-colors disabled:opacity-50 font-medium"
               >
-                Stel mijn voorbereiding op
+                {heeftGesprek
+                  ? "Stel mijn voorbereiding (opnieuw) op"
+                  : "Stel mijn voorbereiding op"}
               </button>
-              {STARTVRAGEN.map((v) => (
-                <button
-                  key={v}
-                  onClick={() => stuurBericht(v)}
-                  disabled={laden}
-                  className="text-xs text-left border border-gray-300 bg-white rounded-full px-3 py-1.5 hover:border-[#C9A84C] hover:bg-amber-50 transition-colors disabled:opacity-50"
-                >
-                  {v}
-                </button>
-              ))}
+              {!heeftGesprek &&
+                STARTVRAGEN.map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => stuurBericht(v)}
+                    disabled={laden}
+                    className="text-xs text-left border border-gray-300 bg-white rounded-full px-3 py-1.5 hover:border-[#C9A84C] hover:bg-amber-50 transition-colors disabled:opacity-50"
+                  >
+                    {v}
+                  </button>
+                ))}
             </div>
           )}
 
