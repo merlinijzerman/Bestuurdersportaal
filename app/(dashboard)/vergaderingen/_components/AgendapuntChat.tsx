@@ -3,7 +3,8 @@
 //  AgendapuntChat — inline AI-assistent per agendapunt
 // ============================================================
 // Bestuurders hoeven niet meer naar /ai te schakelen: de assistent is direct
-// in de agendapuntkaart beschikbaar (uitklapbaar, onder de voorbereiding).
+// beschikbaar binnen "Mijn voorbereiding" (sinds 05-07 geïntegreerd in
+// VoorbereidingsBlok, zodat de agendapuntkaart één AI-plek kent).
 // - Hergebruikt de bestaande chat-backend (/api/chat) in agendapunt-modus
 //   (ADR 0028): agendapunt_context + gekoppelde stukken als retrieval-scope.
 // - Gesprekken worden per agendapunt opgeslagen in `gesprekken` met hetzelfde
@@ -381,7 +382,7 @@ export default function AgendapuntChat({
         className="w-full flex items-center justify-between px-3 py-2 text-left"
       >
         <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#0F2744]">
-          ✨ Vraag de assistent over dit agendapunt
+          ✨ Vraag door over dit agendapunt
           {heeftGesprek && !open && (
             <span className="text-[10px] font-normal text-gray-500">
               — eerder gesprek beschikbaar
@@ -518,11 +519,8 @@ export default function AgendapuntChat({
                 ))}
               </div>
               <div className="text-[11px] text-gray-500">
-                De bestuurlijke duiding van dit agendapunt vind je onder{" "}
-                <span className="font-medium text-gray-700">
-                  Mijn voorbereiding
-                </span>{" "}
-                verderop in deze kaart — inclusief bronnen en eigen notities.
+                Voor de bestuurlijke duiding met bronnen: genereer de
+                voorbereiding hierboven. Deze chat is voor doorvragen.
               </div>
             </div>
           )}

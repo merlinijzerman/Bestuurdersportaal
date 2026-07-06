@@ -12,7 +12,6 @@ import StemrondeBlok, {
   type StemData,
   type Bestuurslid,
 } from "./StemrondeBlok";
-import AgendapuntChat from "./AgendapuntChat";
 
 export interface Stuk {
   id: string;
@@ -155,7 +154,9 @@ export default function AgendapuntKaart({
   totaalBestuursleden: number;
 }) {
   const router = useRouter();
-  const [open, setOpen] = useState(true);
+  // Standaard ingeklapt (05-07): een agenda met meerdere punten werd te lang
+  // wanneer elk punt uitgeklapt opende; de bestuurder klapt gericht uit.
+  const [open, setOpen] = useState(false);
   const [inbrengTekst, setInbrengTekst] = useState("");
   const [inbrengBezig, setInbrengBezig] = useState(false);
   const [uploadBezig, setUploadBezig] = useState(false);
@@ -400,16 +401,6 @@ export default function AgendapuntKaart({
             <p className="text-sm text-gray-700 leading-relaxed">{punt.beschrijving}</p>
           )}
 
-          {/* Inline AI-assistent (ADR 0028): geframed door dit punt — titel +
-              toelichting als seed, gekoppelde stukken als scope. Vervangt de
-              eerdere link naar /ai zodat de bestuurder niet hoeft te schakelen;
-              de volledige assistent blijft bereikbaar vanuit het paneel zelf. */}
-          <AgendapuntChat
-            agendapuntId={punt.id}
-            titel={punt.titel}
-            stukken={punt.stukken.map((s) => ({ id: s.id, titel: s.titel }))}
-          />
-
           {/* Stemronde — alleen bij besluitvorming */}
           {punt.categorie === "besluitvorming" && (
             <StemrondeBlok
@@ -462,9 +453,13 @@ export default function AgendapuntKaart({
             </div>
           </div>
 
-          {/* Mijn voorbereiding (privé) */}
+          {/* Mijn voorbereiding (privé) — sinds 05-07 dé AI-plek van de kaart:
+              gestructureerde voorbereiding (duiding) én de inline chat (0036)
+              zitten in dit blok, zodat er één AI-ingang is per agendapunt. */}
           <VoorbereidingsBlok
             agendapuntId={punt.id}
+            titel={punt.titel}
+            stukken={punt.stukken.map((s) => ({ id: s.id, titel: s.titel }))}
             initieel={voorbereiding}
             onVulInbreng={(tekst) =>
               setInbrengTekst(
@@ -588,13 +583,10 @@ function StukKaart({ stuk }: { stuk: Stuk }) {
             {!kanInzien ? " · origineel niet beschikbaar" : ""}
           </div>
         </div>
-        <a
-          href={`/ai?doc=${stuk.id}`}
-          className="text-[11px] font-medium text-[#0F2744] px-2 py-1 rounded hover:bg-amber-50 whitespace-nowrap flex-shrink-0"
-          title="Open de AI-assistent met de vraag beperkt tot dit stuk"
-        >
-          Vraag de AI
-        </a>
+        {/* "Vraag de AI" per stuk verwijderd (05-07, beperking AI-ingangen):
+            navigeerde naar /ai en was redundant met de inline chat (0036),
+            die de stukken al in scope heeft. In de documentbibliotheek
+            blijft de /ai?doc=-ingang bestaan. */}
         <button
           onClick={() => setOpen(!open)}
           className="text-gray-400 text-xs px-2 py-1 hover:text-[#0F2744]"

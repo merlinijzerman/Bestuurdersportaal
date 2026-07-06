@@ -17,6 +17,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import CitatieTekst, { MARKER_REGEX } from "./CitatieTekst";
+import AgendapuntChat from "./AgendapuntChat";
 
 export interface VoorbereidingLens {
   naam: string;
@@ -71,6 +72,10 @@ export interface Voorbereiding {
 
 interface Props {
   agendapuntId: string;
+  /* Titel + stukken voor de geïntegreerde chat (05-07): de inline assistent
+     (0036) is onderdeel van dit blok geworden zodat de kaart één AI-plek kent. */
+  titel: string;
+  stukken: { id: string; titel: string }[];
   initieel: Voorbereiding | null;
   onVulInbreng?: (tekst: string) => void;
 }
@@ -96,6 +101,8 @@ const NIVEAU_KLEUR: Record<string, string> = {
 
 export default function VoorbereidingsBlok({
   agendapuntId,
+  titel,
+  stukken,
   initieel,
   onVulInbreng,
 }: Props) {
@@ -328,6 +335,10 @@ export default function VoorbereidingsBlok({
             </div>
           )}
         </div>
+
+        {/* Geïntegreerde assistent (0036) — ook zonder gegenereerde voorbereiding
+            direct vragen kunnen stellen over dit punt en de stukken. */}
+        <AgendapuntChat agendapuntId={agendapuntId} titel={titel} stukken={stukken} />
       </div>
     );
   }
@@ -718,6 +729,10 @@ export default function VoorbereidingsBlok({
           {fout}
         </div>
       )}
+
+      {/* Geïntegreerde assistent (0036) — doorvragen op de voorbereiding of de
+          stukken, binnen hetzelfde privé-blok (één AI-plek per agendapunt). */}
+      <AgendapuntChat agendapuntId={agendapuntId} titel={titel} stukken={stukken} />
 
       {/* Bevestigingsdialoog vóór vullen van inbreng — voorkomt dat ruwe of
           vertrouwelijke vrije notities ongewild in de gedeelde inbreng belanden. */}
