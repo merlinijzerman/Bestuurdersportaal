@@ -61,8 +61,8 @@ export default function CohortenPage() {
           <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxHeight: 380 }}>
             {yTicks.map((t, i) => (
               <g key={i}>
-                <line x1={PAD.l} y1={yS(t)} x2={W - PAD.r} y2={yS(t)} stroke="#f1f5f9" />
-                <text x={PAD.l - 8} y={yS(t) + 4} textAnchor="end" fontSize={9} fill="#94a3b8">
+                <line x1={PAD.l} y1={yS(t)} x2={W - PAD.r} y2={yS(t)} stroke="var(--line)" />
+                <text x={PAD.l - 8} y={yS(t) + 4} textAnchor="end" fontSize={9} fill="var(--muted)">
                   {fmtEurShort(t)}
                 </text>
               </g>
@@ -94,11 +94,11 @@ export default function CohortenPage() {
               y={H - 8}
               textAnchor="middle"
               fontSize={11}
-              fill="#64748b"
+              fill="var(--muted)"
             >
               Leeftijd
             </text>
-            <text x={20} y={PAD.t - 12} fontSize={11} fill="#64748b">
+            <text x={20} y={PAD.t - 12} fontSize={11} fill="var(--muted)">
               Totaal pensioenvermogen per cohort (€)
             </text>
           </svg>

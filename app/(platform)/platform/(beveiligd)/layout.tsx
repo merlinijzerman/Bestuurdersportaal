@@ -46,10 +46,10 @@ export default async function BeveiligdePlatformLayout({
   }
 
   return (
-    <div className="min-h-screen bg-[#F0F3F8] text-[#0F2744]">
+    <div className="min-h-screen bg-app-bg text-[#0F2744]">
       <header className="flex items-center justify-between bg-[#0F2744] px-6 py-3 text-white">
         <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#C9A84C] font-black text-[#0F2744]">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent font-black text-[#0F2744]">
             P
           </div>
           <div>

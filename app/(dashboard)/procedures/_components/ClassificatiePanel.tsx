@@ -131,7 +131,7 @@ export default function ClassificatiePanel({ decision }: Props) {
               value={besluitvraag}
               onChange={(e) => setBesluitvraag(e.target.value)}
               rows={3}
-              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
               placeholder="Wat is de centrale vraag waarover een besluit moet worden genomen?"
             />
           </Veldgroep>
@@ -140,7 +140,7 @@ export default function ClassificatiePanel({ decision }: Props) {
               value={scope}
               onChange={(e) => setScope(e.target.value)}
               rows={2}
-              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
               placeholder="Welke deelnemers, welke beleggingscategorie, welke periode raakt dit besluit?"
             />
           </Veldgroep>
@@ -301,7 +301,7 @@ function Checkbox({
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="rounded border-gray-300 text-[#0F2744] focus:ring-[#C9A84C]/40"
+        className="rounded border-gray-300 text-[#0F2744] focus:ring-accent/40"
       />
       <span className="text-gray-900">{label}</span>
     </label>

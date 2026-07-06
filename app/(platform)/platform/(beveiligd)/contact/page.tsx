@@ -31,7 +31,7 @@ export default async function ContactPagina() {
         <div>
           <h1 className="text-2xl font-bold">Contactaanvragen</h1>
         </div>
-        <div className="rounded-lg border border-[#C9A84C]/40 bg-[#C9A84C]/10 px-4 py-3 text-sm text-[#0F2744]">
+        <div className="rounded-lg border border-accent/40 bg-accent/10 px-4 py-3 text-sm text-[#0F2744]">
           Je hebt geen recht om de contact-inbox in te zien. Dit vereist{" "}
           <code className="font-mono">platform.contact.manage</code>.
         </div>

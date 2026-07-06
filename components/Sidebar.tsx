@@ -63,7 +63,7 @@ export default function Sidebar({ gebruikerNaam, gebruikerRol, fondsNaam }: Side
     <nav className="w-64 h-screen bg-[#0F2744] flex flex-col fixed top-0 left-0 z-50">
       {/* Logo */}
       <div className="px-5 py-6 border-b border-white/10">
-        <div className="w-10 h-10 bg-[#C9A84C] rounded-xl flex items-center justify-center font-black text-lg text-[#0F2744] mb-3">
+        <div className="w-10 h-10 bg-accent rounded-xl flex items-center justify-center font-black text-lg text-[#0F2744] mb-3">
           P
         </div>
         <div className="text-white font-bold text-sm leading-snug">
@@ -77,16 +77,16 @@ export default function Sidebar({ gebruikerNaam, gebruikerRol, fondsNaam }: Side
         href="/profiel"
         title="Mijn profiel openen"
         className={`px-5 py-3 border-b border-white/10 flex items-center gap-2.5 transition-colors ${
-          pathname === "/profiel" ? "bg-[#C9A84C]/15" : "hover:bg-white/7"
+          pathname === "/profiel" ? "bg-accent/15" : "hover:bg-white/7"
         }`}
       >
-        <div className="w-8 h-8 bg-[#C9A84C] rounded-full flex items-center justify-center font-bold text-xs text-[#0F2744] flex-shrink-0">
+        <div className="w-8 h-8 bg-accent rounded-full flex items-center justify-center font-bold text-xs text-[#0F2744] flex-shrink-0">
           {initials}
         </div>
         <div className="flex-1 min-w-0">
           <div
             className={`text-xs font-semibold truncate ${
-              pathname === "/profiel" ? "text-[#C9A84C]" : "text-white"
+              pathname === "/profiel" ? "text-accent" : "text-white"
             }`}
           >
             {gebruikerNaam || "Bestuurslid"}
@@ -124,7 +124,7 @@ export default function Sidebar({ gebruikerNaam, gebruikerRol, fondsNaam }: Side
                 href={item.href}
                 className={`flex items-center gap-2.5 px-5 py-2.5 text-sm border-l-[3px] transition-all ${
                   actief
-                    ? "bg-[#C9A84C]/15 text-[#C9A84C] border-[#C9A84C]"
+                    ? "bg-accent/15 text-accent border-accent"
                     : "text-white/65 border-transparent hover:bg-white/7 hover:text-white"
                 }`}
               >
@@ -141,7 +141,7 @@ export default function Sidebar({ gebruikerNaam, gebruikerRol, fondsNaam }: Side
                 )}
                 <span className="flex-1">{item.label}</span>
                 {item.badge && (
-                  <span className="bg-[#C9A84C] text-[#0F2744] text-xs font-bold px-2 py-0.5 rounded-full">
+                  <span className="bg-accent text-[#0F2744] text-xs font-bold px-2 py-0.5 rounded-full">
                     {item.badge}
                   </span>
                 )}

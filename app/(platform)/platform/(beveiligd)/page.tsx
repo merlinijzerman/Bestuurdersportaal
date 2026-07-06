@@ -38,7 +38,7 @@ export default async function PlatformHome() {
         <div className="mt-3 flex flex-wrap gap-2">
           <Link
             href="/platform/generieke-bibliotheek"
-            className="inline-flex items-center gap-2 rounded-lg bg-[#F0F3F8] px-4 py-2 text-sm font-medium text-[#0F2744] hover:bg-[#0F2744]/10"
+            className="inline-flex items-center gap-2 rounded-lg bg-app-bg px-4 py-2 text-sm font-medium text-[#0F2744] hover:bg-[#0F2744]/10"
           >
             Generieke bibliotheek
             {!magBibliotheek && (
@@ -47,7 +47,7 @@ export default async function PlatformHome() {
           </Link>
           <Link
             href="/platform/standaardcatalogus"
-            className="inline-flex items-center gap-2 rounded-lg bg-[#F0F3F8] px-4 py-2 text-sm font-medium text-[#0F2744] hover:bg-[#0F2744]/10"
+            className="inline-flex items-center gap-2 rounded-lg bg-app-bg px-4 py-2 text-sm font-medium text-[#0F2744] hover:bg-[#0F2744]/10"
           >
             Standaardcatalogus
             {!magConfig && (
@@ -57,7 +57,7 @@ export default async function PlatformHome() {
           {magRechten && (
             <Link
               href="/platform/rechten"
-              className="inline-flex items-center gap-2 rounded-lg bg-[#F0F3F8] px-4 py-2 text-sm font-medium text-[#0F2744] hover:bg-[#0F2744]/10"
+              className="inline-flex items-center gap-2 rounded-lg bg-app-bg px-4 py-2 text-sm font-medium text-[#0F2744] hover:bg-[#0F2744]/10"
             >
               Identiteiten &amp; rechten
             </Link>
@@ -65,7 +65,7 @@ export default async function PlatformHome() {
           {magContact && (
             <Link
               href="/platform/contact"
-              className="inline-flex items-center gap-2 rounded-lg bg-[#F0F3F8] px-4 py-2 text-sm font-medium text-[#0F2744] hover:bg-[#0F2744]/10"
+              className="inline-flex items-center gap-2 rounded-lg bg-app-bg px-4 py-2 text-sm font-medium text-[#0F2744] hover:bg-[#0F2744]/10"
             >
               Contactaanvragen
             </Link>
@@ -87,7 +87,7 @@ export default async function PlatformHome() {
             {caps.map((cap) => (
               <li
                 key={cap}
-                className="rounded-lg bg-[#F0F3F8] px-3 py-2 font-mono text-xs"
+                className="rounded-lg bg-app-bg px-3 py-2 font-mono text-xs"
               >
                 {cap}
               </li>

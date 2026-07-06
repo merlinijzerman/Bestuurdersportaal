@@ -269,7 +269,7 @@ export default function AannamesPaneel({ decisionId, assumptions }: Props) {
               value={tekst}
               onChange={(e) => setTekst(e.target.value)}
               rows={2}
-              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
               placeholder="Bijv. 'De rendementsverwachting voor zakelijke waarden bedraagt 6% per jaar over de planhorizon.'"
             />
           </Veldgroep>
@@ -309,7 +309,7 @@ export default function AannamesPaneel({ decisionId, assumptions }: Props) {
               type="text"
               value={evaluatie}
               onChange={(e) => setEvaluatie(e.target.value)}
-              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
               placeholder="Wanneer is deze aanname onhoudbaar? Bijv. 'rendement < 3% over 24 maanden'"
             />
           </Veldgroep>
@@ -356,7 +356,7 @@ export default function AannamesPaneel({ decisionId, assumptions }: Props) {
                 a.status === "verwijderd"
                   ? "border-gray-200 bg-gray-50/50"
                   : editId === a.id
-                    ? "border-[#C9A84C] bg-amber-50/30"
+                    ? "border-accent bg-amber-50/30"
                     : "border-gray-200 bg-white"
               }`}
             >
@@ -368,7 +368,7 @@ export default function AannamesPaneel({ decisionId, assumptions }: Props) {
                       value={editTekst}
                       onChange={(e) => setEditTekst(e.target.value)}
                       rows={2}
-                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
                     />
                   </Veldgroep>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -409,7 +409,7 @@ export default function AannamesPaneel({ decisionId, assumptions }: Props) {
                       type="text"
                       value={editEvaluatie}
                       onChange={(e) => setEditEvaluatie(e.target.value)}
-                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
                     />
                   </Veldgroep>
                   {fout && (

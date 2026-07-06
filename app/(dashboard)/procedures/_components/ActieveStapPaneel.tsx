@@ -373,14 +373,14 @@ export default function ActieveStapPaneel({
                 className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer ${
                   c.voldaan
                     ? "bg-gray-50"
-                    : "bg-white border border-gray-200 hover:border-[#C9A84C]"
+                    : "bg-white border border-gray-200 hover:border-accent"
                 }`}
               >
                 <input
                   type="checkbox"
                   checked={c.voldaan}
                   onChange={() => checklistToggle(c)}
-                  className="mt-0.5 accent-[#C9A84C] w-4 h-4 rounded"
+                  className="mt-0.5 accent-accent w-4 h-4 rounded"
                 />
                 <div className="flex-1">
                   <div
@@ -436,7 +436,7 @@ export default function ActieveStapPaneel({
               <Link
                 key={a.id}
                 href={`/vergaderingen/${a.vergadering_id}`}
-                className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:border-[#C9A84C]"
+                className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:border-accent"
               >
                 <div className="w-9 h-10 bg-blue-50 text-blue-700 rounded flex items-center justify-center text-[10px] font-bold flex-shrink-0">
                   AGENDA
@@ -468,7 +468,7 @@ export default function ActieveStapPaneel({
             <select
               value={vergaderingKeuze}
               onChange={(e) => setVergaderingKeuze(e.target.value)}
-              className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm focus:border-[#C9A84C] outline-none bg-white"
+              className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm focus:border-accent outline-none bg-white"
             >
               <option value="">— Kies een komende vergadering —</option>
               {komendeVergaderingen.map((v) => (
@@ -537,14 +537,14 @@ export default function ActieveStapPaneel({
               value={bewijsTitel}
               onChange={(e) => setBewijsTitel(e.target.value)}
               placeholder="Titel of bestandsnaam"
-              className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm focus:border-[#C9A84C] outline-none"
+              className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm focus:border-accent outline-none"
             />
             <textarea
               rows={2}
               value={bewijsBeschrijving}
               onChange={(e) => setBewijsBeschrijving(e.target.value)}
               placeholder="Korte beschrijving (optioneel)"
-              className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm focus:border-[#C9A84C] outline-none resize-none"
+              className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm focus:border-accent outline-none resize-none"
             />
             {/* 1D-4: documenttype-tag uit de stap-requirements.
                 Als er documenttypes in deze stap zijn, presenteren we
@@ -553,7 +553,7 @@ export default function ActieveStapPaneel({
               <select
                 value={bewijsDocumenttype}
                 onChange={(e) => setBewijsDocumenttype(e.target.value)}
-                className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm bg-white focus:border-[#C9A84C] outline-none"
+                className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm bg-white focus:border-accent outline-none"
               >
                 <option value="">— kies documenttype (optioneel) —</option>
                 {documentRequirements.map((d) => (
@@ -568,7 +568,7 @@ export default function ActieveStapPaneel({
                 value={bewijsDocumenttype}
                 onChange={(e) => setBewijsDocumenttype(e.target.value)}
                 placeholder="Documenttype-tag (optioneel, bv. ALM_analyse)"
-                className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm focus:border-[#C9A84C] outline-none"
+                className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm focus:border-accent outline-none"
               />
             )}
             {/* 1D-4 + 3-D: bewijs-bron — drie opties:
@@ -607,7 +607,7 @@ export default function ActieveStapPaneel({
                     <button
                       type="button"
                       onClick={() => setPickerOpen(true)}
-                      className="text-xs px-3 py-1.5 border border-gray-200 rounded hover:border-[#C9A84C] text-[#0F2744]"
+                      className="text-xs px-3 py-1.5 border border-gray-200 rounded hover:border-accent text-[#0F2744]"
                     >
                       Kies uit bibliotheek →
                     </button>
@@ -695,7 +695,7 @@ export default function ActieveStapPaneel({
                 <button
                   onClick={besluitConceptOphalen}
                   disabled={bezig === "concept"}
-                  className="text-xs text-[#C9A84C] hover:underline disabled:opacity-50 inline-flex items-center gap-1"
+                  className="text-xs text-accent hover:underline disabled:opacity-50 inline-flex items-center gap-1"
                   title="Laat Claude een conceptformulering opstellen op basis van bewijs en eerdere stappen"
                 >
                   {bezig === "concept" ? "Concept aan het schrijven…" : "↗ Concept met AI"}
@@ -747,27 +747,27 @@ export default function ActieveStapPaneel({
                 value={besluitFormulering}
                 onChange={(e) => setBesluitFormulering(e.target.value)}
                 placeholder="Bv.: Akkoord met verhoging hedge-ratio naar 70%, conform voorstel."
-                className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm focus:border-[#C9A84C] outline-none resize-none"
+                className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm focus:border-accent outline-none resize-none"
               />
               <textarea
                 rows={3}
                 value={besluitMotivering}
                 onChange={(e) => setBesluitMotivering(e.target.value)}
                 placeholder="Motivering (optioneel)"
-                className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm focus:border-[#C9A84C] outline-none resize-none"
+                className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm focus:border-accent outline-none resize-none"
               />
               <textarea
                 rows={3}
                 value={besluitAlternatieven}
                 onChange={(e) => setBesluitAlternatieven(e.target.value)}
                 placeholder="Verworpen alternatieven (één per regel, optioneel)&#10;Bv.:&#10;Alternatief 1: hedge-ratio op 80% → afgewezen ivm kosten&#10;Alternatief 2: bandbreedte 60-70% → afgewezen ivm complexiteit"
-                className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm focus:border-[#C9A84C] outline-none resize-none"
+                className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm focus:border-accent outline-none resize-none"
               />
               <input
                 type="date"
                 value={besluitDatum}
                 onChange={(e) => setBesluitDatum(e.target.value)}
-                className="border border-gray-200 rounded px-2 py-1.5 text-sm focus:border-[#C9A84C] outline-none"
+                className="border border-gray-200 rounded px-2 py-1.5 text-sm focus:border-accent outline-none"
               />
               <div className="flex justify-end gap-2">
                 <button

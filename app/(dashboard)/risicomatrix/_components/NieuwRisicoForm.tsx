@@ -84,7 +84,7 @@ export default function NieuwRisicoForm() {
           value={titel}
           onChange={(e) => setTitel(e.target.value)}
           placeholder="bv. Concentratierisico vastgoedportefeuille"
-          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-[#C9A84C] outline-none"
+          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-accent outline-none"
         />
       </div>
 
@@ -107,7 +107,7 @@ export default function NieuwRisicoForm() {
                 name="categorie"
                 checked={categorie === c.slug}
                 onChange={() => setCategorie(c.slug)}
-                className="accent-[#C9A84C] mt-0.5"
+                className="accent-accent mt-0.5"
               />
               <div>
                 <div className="text-sm font-medium">{c.label}</div>
@@ -129,7 +129,7 @@ export default function NieuwRisicoForm() {
           value={toelichting}
           onChange={(e) => setToelichting(e.target.value)}
           placeholder="Beschrijf het risico, oorzaken en mogelijke gevolgen."
-          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-[#C9A84C] outline-none resize-none"
+          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-accent outline-none resize-none"
         />
       </div>
 
@@ -243,7 +243,7 @@ export default function NieuwRisicoForm() {
               name="type"
               checked={type === "structureel"}
               onChange={() => setType("structureel")}
-              className="accent-[#C9A84C]"
+              className="accent-accent"
             />
             <div>
               <div className="text-sm font-medium">Structureel</div>
@@ -264,7 +264,7 @@ export default function NieuwRisicoForm() {
               name="type"
               checked={type === "tijdelijk"}
               onChange={() => setType("tijdelijk")}
-              className="accent-[#C9A84C]"
+              className="accent-accent"
             />
             <div>
               <div className="text-sm font-medium">Tijdelijk</div>

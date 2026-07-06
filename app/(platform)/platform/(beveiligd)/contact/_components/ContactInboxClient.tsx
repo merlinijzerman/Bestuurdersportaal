@@ -140,7 +140,7 @@ export default function ContactInboxClient({ rijen }: Props) {
               "rounded-lg px-3 py-1.5 text-sm font-medium transition-colors " +
               (filter === f.key
                 ? "bg-[#0F2744] text-white"
-                : "bg-[#F0F3F8] text-[#0F2744] hover:bg-[#0F2744]/10")
+                : "bg-app-bg text-[#0F2744] hover:bg-[#0F2744]/10")
             }
           >
             {f.label}{" "}
@@ -168,7 +168,7 @@ export default function ContactInboxClient({ rijen }: Props) {
                 {/* Kop — klikbaar om uit te klappen */}
                 <button
                   onClick={() => setOpen(isOpen ? null : r.id)}
-                  className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-[#F0F3F8]/60"
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-app-bg/60"
                 >
                   <span
                     className={
@@ -214,7 +214,7 @@ export default function ContactInboxClient({ rijen }: Props) {
                         waarde={
                           <a
                             href={`mailto:${r.email}`}
-                            className="text-[#0F2744] underline hover:text-[#C9A84C]"
+                            className="text-[#0F2744] underline hover:text-accent"
                           >
                             {r.email}
                           </a>
@@ -241,7 +241,7 @@ export default function ContactInboxClient({ rijen }: Props) {
                       <div className="text-xs font-semibold uppercase tracking-wide text-[#0F2744]/50">
                         Bericht
                       </div>
-                      <p className="mt-1 whitespace-pre-wrap rounded-lg bg-[#F0F3F8] px-3 py-2 text-sm text-[#0F2744]">
+                      <p className="mt-1 whitespace-pre-wrap rounded-lg bg-app-bg px-3 py-2 text-sm text-[#0F2744]">
                         {r.bericht}
                       </p>
                     </div>
@@ -264,7 +264,7 @@ export default function ContactInboxClient({ rijen }: Props) {
                             key={s}
                             disabled={rijBezig}
                             onClick={() => wijzig(r.id, s)}
-                            className="rounded-lg border border-[#0F2744]/20 px-3 py-1.5 text-sm font-medium text-[#0F2744] hover:border-[#C9A84C] hover:bg-[#F0F3F8] disabled:opacity-50"
+                            className="rounded-lg border border-[#0F2744]/20 px-3 py-1.5 text-sm font-medium text-[#0F2744] hover:border-accent hover:bg-app-bg disabled:opacity-50"
                           >
                             {STATUS_LABEL[s]}
                           </button>

@@ -117,7 +117,7 @@ function parseInline(
           }
           className={`inline-flex items-center justify-center min-w-4 h-4 px-0.5 rounded-full text-[9px] font-semibold align-text-top mx-0.5 ${
             bron
-              ? "bg-[#0F2744] text-white hover:bg-[#C9A84C] hover:text-[#0F2744]"
+              ? "bg-[#0F2744] text-white hover:bg-accent hover:text-[#0F2744]"
               : "bg-red-100 text-red-700 line-through"
           }`}
         >

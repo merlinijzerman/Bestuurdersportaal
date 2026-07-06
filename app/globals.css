@@ -3,22 +3,53 @@
 @tailwind utilities;
 
 :root {
+  /* ── Legacy (worden in fase 4 verwijderd; nergens meer gebruikt) ── */
   --navy: #0F2744;
   --gold: #C9A84C;
+
+  /* ── Merk / basis (bron: public.css van de marketingsite) ── */
+  --paper:       #F6F3EC;
+  --ink:         #191815;
+  --muted:       #6B6A63;
+  --line:        #D8D3C7;
+  --accent:      #234E70;   /* primaire interactieve kleur (was navy-als-primary én goud) */
+  --accent-ink:  #1A3A57;
+  --accent-tint: #EAEFF4;
+  --card:        #FBFAF5;
+
+  /* ── App-surfaces (functioneel, rustiger dan paper onder dichte data) ── */
+  --app-bg:          #F1EEE7;
+  --app-surface:     #FBFAF5;
+  --app-line:        #E2DCCF;
+  --app-line-strong: #CFC8B8;
+  --app-zebra:       #F6F3EC;
+
+  /* ── Navigatie / sidebar (lichte, warme variant — gekozen; toegepast in fase 2) ── */
+  --nav:             #EAE5DA;
+  --nav-line:        #D8D3C7;
+  --nav-text:        #6B6A63;
+  --nav-text-active: #1A3A57;
+  --nav-active:      rgba(35, 78, 112, 0.10);
+  --nav-accent:      #234E70;
+
+  /* ── Semantisch ── */
+  --ok:   #2E7D5B;
+  --err:  #B23A48;
+  --warn: #BA7517;
 }
 
 * { box-sizing: border-box; }
 
 body {
   font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
-  background: #F0F3F8;
-  color: #1A2B3C;
+  background: var(--app-bg);
+  color: var(--ink);
 }
 
 /* Scrollbar */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #D8E2EE; border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
 
 /* Typing animation */
 @keyframes bounce {
@@ -45,7 +76,7 @@ body {
    klikbare status-pill in DecisionObjectHeader. Visuele bevestiging
    dat de gebruiker op de juiste plek is beland. */
 @keyframes status-puls {
-  0%   { box-shadow: 0 0 0 0 rgba(201, 168, 76, 0.55); }
-  100% { box-shadow: 0 0 0 14px rgba(201, 168, 76, 0); }
+  0%   { box-shadow: 0 0 0 0 rgba(35, 78, 112, 0.55); }
+  100% { box-shadow: 0 0 0 14px rgba(35, 78, 112, 0); }
 }
 .status-puls { animation: status-puls 1.6s ease-out 1; }

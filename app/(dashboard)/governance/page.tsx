@@ -94,7 +94,7 @@ export default async function GovernancePage() {
               <div key={log.id} className="bg-white border border-gray-200 rounded-xl p-4">
                 {/* Header */}
                 <div className="flex items-center gap-2.5 mb-3">
-                  <div className="w-7 h-7 bg-[#C9A84C] rounded-full flex items-center justify-center text-xs font-bold text-[#0F2744] flex-shrink-0">
+                  <div className="w-7 h-7 bg-accent rounded-full flex items-center justify-center text-xs font-bold text-[#0F2744] flex-shrink-0">
                     {initials}
                   </div>
                   <span className="font-semibold text-sm text-[#0F2744]">

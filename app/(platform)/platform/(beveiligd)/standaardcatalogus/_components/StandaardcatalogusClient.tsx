@@ -266,12 +266,12 @@ function RegelWeergave({
             {item.naam}
           </span>
           {isGremia && item.categorie && (
-            <span className="rounded-full bg-[#C9A84C]/15 px-2 py-0.5 text-xs text-[#0F2744]">
+            <span className="rounded-full bg-accent/15 px-2 py-0.5 text-xs text-[#0F2744]">
               {CATEGORIE_LABEL[item.categorie] ?? item.categorie}
             </span>
           )}
           {isGremia && item.type && (
-            <span className="rounded-full bg-[#F0F3F8] px-2 py-0.5 text-xs text-[#0F2744]/70">
+            <span className="rounded-full bg-app-bg px-2 py-0.5 text-xs text-[#0F2744]/70">
               {TYPE_LABEL[item.type] ?? item.type}
             </span>
           )}
@@ -292,7 +292,7 @@ function RegelWeergave({
             type="button"
             disabled={bezig}
             onClick={onBewerk}
-            className="rounded-lg px-3 py-1.5 text-sm text-[#0F2744] hover:bg-[#F0F3F8] disabled:opacity-50"
+            className="rounded-lg px-3 py-1.5 text-sm text-[#0F2744] hover:bg-app-bg disabled:opacity-50"
           >
             Bewerken
           </button>
@@ -362,7 +362,7 @@ function TogglerKnop({
           setOpen(false);
           setReden("");
         }}
-        className="rounded-lg px-2 py-1.5 text-sm text-[#0F2744]/60 hover:bg-[#F0F3F8]"
+        className="rounded-lg px-2 py-1.5 text-sm text-[#0F2744]/60 hover:bg-app-bg"
       >
         Annuleer
       </button>
@@ -411,7 +411,7 @@ function ToevoegFormulier({
           reset
         );
       }}
-      className="rounded-xl border border-[#0F2744]/10 bg-[#F0F3F8]/50 p-4"
+      className="rounded-xl border border-[#0F2744]/10 bg-app-bg/50 p-4"
     >
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1">
@@ -521,7 +521,7 @@ function BewerkFormulier({
           reden: reden.trim(),
         });
       }}
-      className="space-y-3 rounded-lg bg-[#F0F3F8]/50 p-3"
+      className="space-y-3 rounded-lg bg-app-bg/50 p-3"
     >
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1">

@@ -42,7 +42,7 @@ interface Props {
 
 const STAP_STATUS_DOT: Record<TijdlijnStap["status"], string> = {
   afgerond: "bg-emerald-500",
-  actief: "bg-[#C9A84C]",
+  actief: "bg-accent",
   open: "bg-gray-300",
 };
 

@@ -158,14 +158,14 @@ export default function MaatregelenBlok({
             value={beschrijving}
             onChange={(e) => setBeschrijving(e.target.value)}
             placeholder="Beschrijving van de maatregel"
-            className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm focus:border-[#C9A84C] outline-none"
+            className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm focus:border-accent outline-none"
           />
           <input
             type="text"
             value={verantwoordelijke}
             onChange={(e) => setVerantwoordelijke(e.target.value)}
             placeholder="Verantwoordelijke (optioneel)"
-            className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm focus:border-[#C9A84C] outline-none"
+            className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm focus:border-accent outline-none"
           />
           {fout && (
             <div className="text-xs text-red-700">{fout}</div>

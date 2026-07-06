@@ -145,7 +145,7 @@ export default function AIValidatieBlok({ decisionId, ai }: Props) {
               value={aangepast}
               onChange={(e) => setAangepast(e.target.value)}
               rows={3}
-              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
               placeholder="Vul aan met eigen woorden waar de AI niet helemaal correct was."
             />
           </div>
@@ -156,7 +156,7 @@ export default function AIValidatieBlok({ decisionId, ai }: Props) {
             <input
               value={gebruikContext}
               onChange={(e) => setGebruikContext(e.target.value)}
-              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
               placeholder="Bv. 'samenvatting voor board review' of 'input besluittekst'"
             />
           </div>
@@ -169,7 +169,7 @@ export default function AIValidatieBlok({ decisionId, ai }: Props) {
                 value={verworpenReden}
                 onChange={(e) => setVerworpenReden(e.target.value)}
                 rows={2}
-                className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+                className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
               />
             </div>
           )}

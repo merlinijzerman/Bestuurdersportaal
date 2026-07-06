@@ -19,7 +19,7 @@ export function HoofdTabs() {
             href={t.href}
             className={`px-1 pb-3 border-b-2 text-sm transition-colors ${
               actief
-                ? "border-[#C9A84C] text-[#0F2744] font-semibold"
+                ? "border-accent text-[#0F2744] font-semibold"
                 : "border-transparent text-gray-600 hover:text-[#0F2744]"
             }`}
           >

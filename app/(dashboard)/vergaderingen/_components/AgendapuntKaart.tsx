@@ -68,7 +68,7 @@ const AVATAR_KLEUREN = [
   { bg: "#9FE1CB", text: "#085041" },
   { bg: "#F5C4B3", text: "#712B13" },
   { bg: "#F4C0D1", text: "#72243E" },
-  { bg: "#FAC775", text: "#854F0B" },
+  { bg: "var(--warn)", text: "#854F0B" },
   { bg: "#B5D4F4", text: "#0C447C" },
 ];
 
@@ -430,7 +430,7 @@ export default function AgendapuntKaart({
                 <StukKaart key={s.id} stuk={s} />
               ))}
               <label
-                className={`flex items-center gap-2 text-xs border border-dashed border-gray-300 rounded-lg px-3 py-2 hover:border-[#C9A84C] transition-colors ${
+                className={`flex items-center gap-2 text-xs border border-dashed border-gray-300 rounded-lg px-3 py-2 hover:border-accent transition-colors ${
                   uploadBezig ? "opacity-50 cursor-wait" : "cursor-pointer text-gray-600"
                 }`}
               >
@@ -522,12 +522,12 @@ export default function AgendapuntKaart({
                 onChange={(e) => setInbrengTekst(e.target.value)}
                 placeholder="Wat wil je vooraf inbrengen voor de discussie van dit punt?"
                 rows={2}
-                className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 outline-none focus:border-[#C9A84C] resize-none"
+                className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 outline-none focus:border-accent resize-none"
               />
               <button
                 onClick={plaatsInbreng}
                 disabled={inbrengBezig || !inbrengTekst.trim()}
-                className="bg-[#0F2744] text-white text-sm font-medium px-3 py-2 rounded-lg hover:bg-[#C9A84C] hover:text-[#0F2744] transition-colors disabled:opacity-40 disabled:cursor-not-allowed self-stretch"
+                className="bg-[#0F2744] text-white text-sm font-medium px-3 py-2 rounded-lg hover:bg-accent hover:text-[#0F2744] transition-colors disabled:opacity-40 disabled:cursor-not-allowed self-stretch"
               >
                 {inbrengBezig ? "..." : "Plaats"}
               </button>
@@ -560,7 +560,7 @@ function StukKaart({ stuk }: { stuk: Stuk }) {
               href={`/api/documents/${stuk.id}/bestand`}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-sm font-medium text-[#0F2744] truncate hover:text-[#C9A84C] transition-colors block"
+              className="text-sm font-medium text-[#0F2744] truncate hover:text-accent transition-colors block"
               title="Origineel openen of downloaden"
             >
               {stuk.titel}

@@ -120,7 +120,7 @@ export default function VoorbereidingsBlok({
             setNotitiesGewijzigd(true);
           }}
           placeholder="Eigen aantekeningen bij dit agendapunt…"
-          className="w-full text-sm border border-gray-200 rounded px-3 py-2 focus:border-[#C9A84C] outline-none resize-none bg-gray-50"
+          className="w-full text-sm border border-gray-200 rounded px-3 py-2 focus:border-accent outline-none resize-none bg-gray-50"
         />
         <div className="mt-1.5 flex items-center justify-between text-xs">
           <span className="text-red-700">{fout}</span>

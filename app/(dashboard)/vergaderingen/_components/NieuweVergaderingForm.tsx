@@ -53,7 +53,7 @@ export default function NieuweVergaderingForm() {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="bg-[#0F2744] text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-[#C9A84C] hover:text-[#0F2744] transition-colors"
+        className="bg-[#0F2744] text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-accent hover:text-[#0F2744] transition-colors"
       >
         + Nieuwe vergadering
       </button>
@@ -75,7 +75,7 @@ export default function NieuweVergaderingForm() {
             value={titel}
             onChange={(e) => setTitel(e.target.value)}
             placeholder="Bijv. Bestuursvergadering Q3 2026"
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 outline-none focus:border-[#C9A84C]"
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 outline-none focus:border-accent"
           />
         </div>
 
@@ -86,7 +86,7 @@ export default function NieuweVergaderingForm() {
               type="datetime-local"
               value={datum}
               onChange={(e) => setDatum(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 outline-none focus:border-[#C9A84C]"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 outline-none focus:border-accent"
             />
           </div>
           <div>
@@ -96,7 +96,7 @@ export default function NieuweVergaderingForm() {
               value={locatie}
               onChange={(e) => setLocatie(e.target.value)}
               placeholder="Optioneel"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 outline-none focus:border-[#C9A84C]"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 outline-none focus:border-accent"
             />
           </div>
         </div>
@@ -107,7 +107,7 @@ export default function NieuweVergaderingForm() {
           <button
             type="submit"
             disabled={bezig}
-            className="bg-[#0F2744] text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-[#C9A84C] hover:text-[#0F2744] transition-colors disabled:opacity-50"
+            className="bg-[#0F2744] text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-accent hover:text-[#0F2744] transition-colors disabled:opacity-50"
           >
             {bezig ? "Bezig..." : "Aanmaken"}
           </button>

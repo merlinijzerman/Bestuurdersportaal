@@ -1039,7 +1039,7 @@ export default function AiPage() {
                     key={g.id}
                     className={`group flex items-center gap-2 rounded-lg px-3 py-2 cursor-pointer transition-colors ${
                       g.id === gesprekId.current
-                        ? "bg-[#C9A84C]/15"
+                        ? "bg-accent/15"
                         : "hover:bg-gray-100"
                     }`}
                     onClick={() => openGesprek(g)}
@@ -1075,7 +1075,7 @@ export default function AiPage() {
             <div className="border-t border-gray-200 p-3">
               <button
                 onClick={startNieuwGesprek}
-                className="w-full text-sm text-[#0F2744] border border-gray-200 rounded-lg px-3 py-2 hover:border-[#C9A84C] transition-colors"
+                className="w-full text-sm text-[#0F2744] border border-gray-200 rounded-lg px-3 py-2 hover:border-accent transition-colors"
               >
                 + Nieuw gesprek
               </button>
@@ -1092,14 +1092,14 @@ export default function AiPage() {
         </span>
         <button
           onClick={() => setHistorieOpen(true)}
-          className="ml-auto text-xs text-gray-500 hover:text-[#0F2744] border border-gray-200 px-3 py-1.5 rounded-lg hover:border-[#C9A84C] transition-colors"
+          className="ml-auto text-xs text-gray-500 hover:text-[#0F2744] border border-gray-200 px-3 py-1.5 rounded-lg hover:border-accent transition-colors"
         >
           🕑 Gesprekken{gesprekken.length > 0 ? ` (${gesprekken.length})` : ""}
         </button>
         <button
           onClick={startNieuwGesprek}
           disabled={laden || berichten.length <= 1}
-          className="text-xs text-gray-500 hover:text-[#0F2744] border border-gray-200 px-3 py-1.5 rounded-lg hover:border-[#C9A84C] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          className="text-xs text-gray-500 hover:text-[#0F2744] border border-gray-200 px-3 py-1.5 rounded-lg hover:border-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           + Nieuw gesprek
         </button>
@@ -1120,7 +1120,7 @@ export default function AiPage() {
         </span>
         <button
           onClick={() => setAanpassenOpen((o) => !o)}
-          className="text-xs text-gray-500 hover:text-[#0F2744] border border-gray-200 px-2.5 py-1 rounded-md hover:border-[#C9A84C] transition-colors"
+          className="text-xs text-gray-500 hover:text-[#0F2744] border border-gray-200 px-2.5 py-1 rounded-md hover:border-accent transition-colors"
           aria-expanded={aanpassenOpen}
         >
           Aanpassen {aanpassenOpen ? "▴" : "▾"}
@@ -1249,7 +1249,7 @@ export default function AiPage() {
                       onClick={() =>
                         kiesVerduidelijking(o.intent, b.verduidelijking!.origineleVraag, i)
                       }
-                      className="text-xs text-[#0F2744] border border-gray-300 px-3 py-1.5 rounded-full hover:border-[#C9A84C] hover:bg-amber-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="text-xs text-[#0F2744] border border-gray-300 px-3 py-1.5 rounded-full hover:border-accent hover:bg-amber-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       {o.label}
                     </button>
@@ -1281,7 +1281,7 @@ export default function AiPage() {
                           key={a.type}
                           onClick={() => stuurVervolgactie(a, b, i)}
                           disabled={laden}
-                          className="text-xs text-[#0F2744] bg-white border border-gray-200 rounded-full px-3 py-1 hover:border-[#C9A84C] hover:bg-yellow-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                          className="text-xs text-[#0F2744] bg-white border border-gray-200 rounded-full px-3 py-1 hover:border-accent hover:bg-yellow-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                         >
                           {a.label}
                         </button>
@@ -1348,7 +1348,7 @@ export default function AiPage() {
               <button
                 key={v}
                 onClick={() => stuurBericht(v)}
-                className="bg-gray-50 border border-gray-200 rounded-full px-3 py-1.5 text-xs text-gray-500 hover:border-[#C9A84C] hover:text-[#0F2744] hover:bg-yellow-50 transition-all"
+                className="bg-gray-50 border border-gray-200 rounded-full px-3 py-1.5 text-xs text-gray-500 hover:border-accent hover:text-[#0F2744] hover:bg-yellow-50 transition-all"
               >
                 {v}
               </button>
@@ -1453,7 +1453,7 @@ export default function AiPage() {
                       : null
                   )
                 }
-                className="accent-[#C9A84C]"
+                className="accent-accent"
               />
               Ook algemene kennis gebruiken
             </label>
@@ -1480,14 +1480,14 @@ export default function AiPage() {
                 ? "Stel een vraag over dit document... (@ om te wisselen)"
                 : "Stel een vraag... (@ om een specifiek document te kiezen)"
             }
-            className="flex-1 border border-gray-200 rounded-xl px-3 py-2.5 text-sm resize-none outline-none focus:border-[#C9A84C] bg-gray-50"
+            className="flex-1 border border-gray-200 rounded-xl px-3 py-2.5 text-sm resize-none outline-none focus:border-accent bg-gray-50"
             rows={2}
             disabled={laden}
           />
           <button
             onClick={() => stuurBericht()}
             disabled={laden || !invoer.trim()}
-            className="w-11 h-11 bg-[#0F2744] rounded-xl flex items-center justify-center text-white hover:bg-[#C9A84C] hover:text-[#0F2744] disabled:opacity-40 disabled:cursor-not-allowed transition-colors self-end"
+            className="w-11 h-11 bg-[#0F2744] rounded-xl flex items-center justify-center text-white hover:bg-accent hover:text-[#0F2744] disabled:opacity-40 disabled:cursor-not-allowed transition-colors self-end"
           >
             ➤
           </button>
@@ -1688,7 +1688,7 @@ function BronPill({
       className={`relative -top-[1px] inline-flex items-center justify-center align-baseline mx-0.5 min-w-[20px] h-[18px] px-1.5 rounded-md text-[10px] font-bold leading-none transition-colors cursor-pointer ${
         gehighlight
           ? "bg-[#0F2744] text-white"
-          : "bg-[#C9A84C]/20 text-[#0F2744] hover:bg-[#C9A84C]/45 hover:shadow-sm"
+          : "bg-accent/20 text-[#0F2744] hover:bg-accent/45 hover:shadow-sm"
       }`}
     >
       {nummer}
@@ -1799,7 +1799,7 @@ function Bronkaart({
     BRONKLEUR[bron.bron] || "bg-gray-50 border-gray-200"
   } ${
     gehighlight
-      ? "ring-2 ring-[#C9A84C] ring-offset-1 shadow-md scale-[1.01]"
+      ? "ring-2 ring-accent ring-offset-1 shadow-md scale-[1.01]"
       : ""
   }`;
 
@@ -1816,7 +1816,7 @@ function Bronkaart({
         href={href}
         target="_blank"
         rel="noopener noreferrer"
-        className={`group ${baseKlasse} hover:border-[#C9A84C] hover:shadow-sm cursor-pointer scroll-mt-24`}
+        className={`group ${baseKlasse} hover:border-accent hover:shadow-sm cursor-pointer scroll-mt-24`}
         title={
           bron.pagina
             ? `Origineel openen op pagina ${bron.pagina} (nieuw tabblad)`

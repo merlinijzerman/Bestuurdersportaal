@@ -115,7 +115,7 @@ export default function ProcedureMetadataEdit({
       <button
         type="button"
         onClick={openModal}
-        className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-[#0F2744] border border-gray-200 hover:border-[#C9A84C] rounded-md px-2 py-1 transition-colors"
+        className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-[#0F2744] border border-gray-200 hover:border-accent rounded-md px-2 py-1 transition-colors"
         aria-label="Procedure bewerken"
         title="Procedure-titel, beschrijving of deadline bewerken"
       >
@@ -155,7 +155,7 @@ export default function ProcedureMetadataEdit({
                   type="text"
                   value={titelInput}
                   onChange={(e) => setTitelInput(e.target.value)}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-[#C9A84C]"
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-accent"
                   disabled={bezig}
                 />
               </div>
@@ -168,7 +168,7 @@ export default function ProcedureMetadataEdit({
                   value={beschrijvingInput}
                   onChange={(e) => setBeschrijvingInput(e.target.value)}
                   rows={4}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-[#C9A84C] resize-y"
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-accent resize-y"
                   placeholder="Optioneel — context, doel, scope…"
                   disabled={bezig}
                 />
@@ -182,7 +182,7 @@ export default function ProcedureMetadataEdit({
                   type="date"
                   value={deadlineInput}
                   onChange={(e) => setDeadlineInput(e.target.value)}
-                  className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-[#C9A84C]"
+                  className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-accent"
                   disabled={bezig}
                 />
               </div>
@@ -195,7 +195,7 @@ export default function ProcedureMetadataEdit({
                   value={motivering}
                   onChange={(e) => setMotivering(e.target.value)}
                   rows={2}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-[#C9A84C] resize-y"
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-accent resize-y"
                   placeholder="Waarom past u dit aan? — landt in de audit-trail."
                   disabled={bezig}
                 />

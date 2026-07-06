@@ -181,7 +181,7 @@ export default function DissentPaneel({
               value={standpunt}
               onChange={(e) => setStandpunt(e.target.value)}
               rows={2}
-              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
               placeholder="Wat is het afwijkende standpunt? Eén zin volstaat."
             />
           </Veldgroep>
@@ -190,7 +190,7 @@ export default function DissentPaneel({
               value={argument}
               onChange={(e) => setArgument(e.target.value)}
               rows={3}
-              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
               placeholder="Onderbouwing: welke informatie of overweging weegt zwaarder dan in het hoofdstandpunt?"
             />
           </Veldgroep>
@@ -209,7 +209,7 @@ export default function DissentPaneel({
                     type="radio"
                     checked={zichtbaarheid === z}
                     onChange={() => setZichtbaarheid(z)}
-                    className="mt-0.5 text-[#0F2744] focus:ring-[#C9A84C]/40"
+                    className="mt-0.5 text-[#0F2744] focus:ring-accent/40"
                   />
                   <div className="flex-1">
                     <div className="text-sm font-medium text-gray-900">

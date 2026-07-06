@@ -137,7 +137,7 @@ function TabKnop({
       aria-selected={active}
       className={`px-4 py-2.5 border-b-2 text-sm font-medium flex items-center gap-1.5 whitespace-nowrap transition ${
         active
-          ? "border-[#C9A84C] text-[#0F2744]"
+          ? "border-accent text-[#0F2744]"
           : "border-transparent text-gray-500 hover:text-[#0F2744] hover:bg-gray-50"
       }`}
     >
@@ -145,7 +145,7 @@ function TabKnop({
       <span
         className={`text-[11px] rounded-full px-1.5 font-medium ${
           active
-            ? "bg-[#C9A84C]/15 text-[#0F2744]"
+            ? "bg-accent/15 text-[#0F2744]"
             : "bg-gray-100 text-gray-700"
         }`}
       >

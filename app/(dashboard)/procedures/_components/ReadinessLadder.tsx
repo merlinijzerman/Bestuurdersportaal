@@ -77,7 +77,7 @@ export default function ReadinessLadder({ readiness }: Props) {
                   r.voldoet
                     ? "bg-emerald-500 text-white"
                     : isActief
-                      ? "bg-[#C9A84C] text-[#0F2744] ring-4 ring-amber-100"
+                      ? "bg-accent text-[#0F2744] ring-4 ring-amber-100"
                       : "bg-gray-100 text-gray-400 border-2 border-gray-200"
                 }`}
               >

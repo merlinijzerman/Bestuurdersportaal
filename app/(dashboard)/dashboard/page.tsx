@@ -64,9 +64,9 @@ const DEELNEMERS = {
   verdeling: [
     { status: "Actief", aantal: 462180, delta: 820, kleur: "#185FA5" },
     { status: "Slaper", aantal: 389640, delta: 120, kleur: "#85B7EB" },
-    { status: "Arbeidsongeschikt", aantal: 19350, delta: -30, kleur: "#BA7517" },
-    { status: "Pensioengerechtigd", aantal: 331860, delta: 960, kleur: "#1D9E75" },
-    { status: "Nabestaande / wees", aantal: 7270, delta: -30, kleur: "#888780" },
+    { status: "Arbeidsongeschikt", aantal: 19350, delta: -30, kleur: "var(--warn)" },
+    { status: "Pensioengerechtigd", aantal: 331860, delta: 960, kleur: "var(--ok)" },
+    { status: "Nabestaande / wees", aantal: 7270, delta: -30, kleur: "var(--muted)" },
   ],
   mutaties: { instroom: 4130, uitstroom: 2290, pensioneringen: 1120 },
 };
@@ -243,7 +243,7 @@ export default async function DashboardPage() {
               Financieringsgraad
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <span className="w-3 h-0.5" style={{ background: "#BA7517" }}></span>
+              <span className="w-3 h-0.5" style={{ background: "var(--warn)" }}></span>
               Doel 100%
             </span>
           </div>
@@ -258,22 +258,22 @@ export default async function DashboardPage() {
                   x2={trendW}
                   y1={yPos}
                   y2={yPos}
-                  stroke="#E5E7EB"
+                  stroke="var(--line)"
                   strokeWidth={0.5}
                 />
-                <text x={4} y={yPos - 2} fontSize={10} fill="#9CA3AF">
+                <text x={4} y={yPos - 2} fontSize={10} fill="var(--muted)">
                   {y}%
                 </text>
               </g>
             );
           })}
-          <path d={targetPath} stroke="#BA7517" strokeWidth={1.5} strokeDasharray="4,4" fill="none" />
+          <path d={targetPath} stroke="var(--warn)" strokeWidth={1.5} strokeDasharray="4,4" fill="none" />
           <path d={fgPath} stroke="#185FA5" strokeWidth={2} fill="none" />
           {TREND_LABELS.map((label, i) => {
             if (i % 4 !== 0) return null;
             const x = (trendW / (TREND_LABELS.length - 1)) * i;
             return (
-              <text key={i} x={x} y={trendH + 16} fontSize={10} fill="#9CA3AF" textAnchor="middle">
+              <text key={i} x={x} y={trendH + 16} fontSize={10} fill="var(--muted)" textAnchor="middle">
                 {label}
               </text>
             );
@@ -400,7 +400,7 @@ export default async function DashboardPage() {
           <div className="flex gap-1 h-5 rounded-md overflow-hidden">
             {PASSIVA.persoonlijkePensioenvermogens.map((c, idx) => {
               const pct = (c.mln / totaalPersoonlijk) * 100;
-              const kleuren = ["#534AB7", "#185FA5", "#1D9E75", "#888780"];
+              const kleuren = ["#534AB7", "#185FA5", "var(--ok)", "var(--muted)"];
               return (
                 <div
                   key={c.naam}

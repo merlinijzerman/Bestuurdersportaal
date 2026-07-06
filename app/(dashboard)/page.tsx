@@ -293,7 +293,7 @@ export default async function HomePage() {
                   {" "}De volgende vergadering is{" "}
                   <Link
                     href={`/vergaderingen/${volgendeVergadering.id}`}
-                    className="text-[#0F2744] font-medium hover:text-[#C9A84C]"
+                    className="text-[#0F2744] font-medium hover:text-accent"
                   >
                     {volgendeVergadering.titel}
                   </Link>
@@ -306,7 +306,7 @@ export default async function HomePage() {
           </div>
           <Link
             href="/dashboard"
-            className="text-xs text-[#0F2744] border border-gray-200 px-3 py-1.5 rounded-lg hover:border-[#C9A84C] transition-colors"
+            className="text-xs text-[#0F2744] border border-gray-200 px-3 py-1.5 rounded-lg hover:border-accent transition-colors"
           >
             Open volledige stuurinformatie →
           </Link>
@@ -350,7 +350,7 @@ export default async function HomePage() {
             </div>
             <Link
               href="/procedures"
-              className="text-xs text-[#0F2744] hover:text-[#C9A84C]"
+              className="text-xs text-[#0F2744] hover:text-accent"
             >
               Alle procedures →
             </Link>
@@ -367,11 +367,11 @@ export default async function HomePage() {
                 <Link
                   key={s.id}
                   href={`/procedures/${s.procedure_id}`}
-                  className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:border-[#C9A84C]"
+                  className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:border-accent"
                 >
                   <span
                     className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                      dringend ? "bg-amber-400" : "bg-[#C9A84C]"
+                      dringend ? "bg-amber-400" : "bg-accent"
                     }`}
                   />
                   <div className="flex-1 min-w-0">
@@ -415,7 +415,7 @@ export default async function HomePage() {
                 <div className="text-xs text-gray-500 mb-1">Komende vergadering</div>
                 <Link
                   href={`/vergaderingen/${volgendeVergadering.id}`}
-                  className="text-sm font-medium text-[#0F2744] hover:text-[#C9A84C]"
+                  className="text-sm font-medium text-[#0F2744] hover:text-accent"
                 >
                   {volgendeVergadering.titel}
                 </Link>
@@ -443,7 +443,7 @@ export default async function HomePage() {
                         inbreng geplaatst.{" "}
                         <Link
                           href={`/vergaderingen/${volgendeVergadering.id}`}
-                          className="text-[#0F2744] hover:text-[#C9A84C] font-medium"
+                          className="text-[#0F2744] hover:text-accent font-medium"
                         >
                           Bekijken →
                         </Link>
@@ -460,7 +460,7 @@ export default async function HomePage() {
                     Er zijn nog geen agendapunten toegevoegd.{" "}
                     <Link
                       href={`/vergaderingen/${volgendeVergadering.id}`}
-                      className="text-[#0F2744] hover:text-[#C9A84C] font-medium"
+                      className="text-[#0F2744] hover:text-accent font-medium"
                     >
                       Toevoegen →
                     </Link>
@@ -473,7 +473,7 @@ export default async function HomePage() {
               Geen openstaande vergaderingen.{" "}
               <Link
                 href="/vergaderingen"
-                className="text-[#0F2744] hover:text-[#C9A84C] font-medium"
+                className="text-[#0F2744] hover:text-accent font-medium"
               >
                 Vergadering inplannen →
               </Link>
@@ -599,7 +599,7 @@ function RecentRij({
     </div>
   );
   return href ? (
-    <Link href={href} className="block hover:text-[#C9A84C] transition-colors">
+    <Link href={href} className="block hover:text-accent transition-colors">
       {inhoud}
     </Link>
   ) : (

@@ -530,7 +530,7 @@ export default function AgendapuntChat({
                             key={o.intent}
                             onClick={() => kiesVerduidelijking(b, o.intent)}
                             disabled={laden}
-                            className="text-xs border border-gray-300 rounded-full px-3 py-1 hover:border-[#C9A84C] hover:bg-amber-50 disabled:opacity-50"
+                            className="text-xs border border-gray-300 rounded-full px-3 py-1 hover:border-accent hover:bg-amber-50 disabled:opacity-50"
                           >
                             {o.label}
                           </button>
@@ -608,7 +608,7 @@ export default function AgendapuntChat({
                     key={v}
                     onClick={() => stuurBericht(v)}
                     disabled={laden}
-                    className="text-xs text-left border border-gray-300 bg-white rounded-full px-3 py-1.5 hover:border-[#C9A84C] hover:bg-amber-50 transition-colors disabled:opacity-50"
+                    className="text-xs text-left border border-gray-300 bg-white rounded-full px-3 py-1.5 hover:border-accent hover:bg-amber-50 transition-colors disabled:opacity-50"
                   >
                     {v}
                   </button>
@@ -629,12 +629,12 @@ export default function AgendapuntChat({
               }}
               placeholder={`Stel een vraag over "${titel}"…`}
               rows={2}
-              className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white outline-none focus:border-[#C9A84C] resize-none"
+              className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white outline-none focus:border-accent resize-none"
             />
             <button
               onClick={() => stuurBericht()}
               disabled={laden || !invoer.trim()}
-              className="bg-[#0F2744] text-white text-sm font-medium px-3 py-2 rounded-lg hover:bg-[#C9A84C] hover:text-[#0F2744] transition-colors disabled:opacity-40 disabled:cursor-not-allowed self-stretch"
+              className="bg-[#0F2744] text-white text-sm font-medium px-3 py-2 rounded-lg hover:bg-accent hover:text-[#0F2744] transition-colors disabled:opacity-40 disabled:cursor-not-allowed self-stretch"
             >
               {laden ? "…" : "Vraag"}
             </button>

@@ -17,13 +17,13 @@ interface Props {
 }
 
 const COMPONENTEN = [
-  { key: "premie",      kleur: "#16a34a", label: "Premie",          sign: 1 },
+  { key: "premie",      kleur: "var(--ok)", label: "Premie",          sign: 1 },
   { key: "toevoeging",  kleur: "#06b6d4", label: "Toevoegingen",    sign: 1 },
   { key: "kas",         kleur: "#0ea5e9", label: "Kasrendement",    sign: 1 },
-  { key: "beschermRTS", kleur: "#C9A84C", label: "Bescherming RTS", sign: 1 },
+  { key: "beschermRTS", kleur: "var(--accent)", label: "Bescherming RTS", sign: 1 },
   { key: "overRend",    kleur: "#7c3aed", label: "Overrendement",   sign: 1 },
   { key: "langleven",   kleur: "#14b8a6", label: "Micro-langleven", sign: 1 },
-  { key: "onttrekking", kleur: "#ef4444", label: "Onttrekkingen",   sign: -1 },
+  { key: "onttrekking", kleur: "var(--err)", label: "Onttrekkingen",   sign: -1 },
 ] as const;
 
 const PRESETS = [25, 35, 45, 55, 65];
@@ -125,12 +125,12 @@ export default function MaandOntwikkelingClient({ cohorten, initialAge = 45 }: P
         <MonthlyDeltaChart cohort={cohort} maandIdx={maandIdx} />
 
         <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-xs text-gray-700">
-          <Legend kleur="#94a3b8" label="Begin-saldo / invaarkapitaal" />
-          <Legend kleur="#16a34a" label="Premie-instroom" />
+          <Legend kleur="var(--muted)" label="Begin-saldo / invaarkapitaal" />
+          <Legend kleur="var(--ok)" label="Premie-instroom" />
           <Legend kleur="#06b6d4" label="Toevoegingen (overdracht in)" />
-          <Legend kleur="#ef4444" label="Onttrekkingen (overdracht uit)" />
+          <Legend kleur="var(--err)" label="Onttrekkingen (overdracht uit)" />
           <Legend kleur="#0ea5e9" label="Kasrendement" />
-          <Legend kleur="#C9A84C" label="Beschermingsrendement RTS" />
+          <Legend kleur="var(--accent)" label="Beschermingsrendement RTS" />
           <Legend kleur="#7c3aed" label="Overrendement" />
           <Legend kleur="#14b8a6" label="Micro-langleven" />
         </div>
@@ -206,15 +206,15 @@ function TrajectoryChart({
     <svg viewBox={`0 0 ${w} ${h}`} className="w-full" style={{ maxHeight: 220 }}>
       {yTicks.map((t, i) => (
         <g key={i}>
-          <line x1={pad.l} y1={t.y} x2={w - pad.r} y2={t.y} stroke="#f1f5f9" />
-          <text x={pad.l - 8} y={t.y + 4} textAnchor="end" fontSize={10} fill="#94a3b8">
+          <line x1={pad.l} y1={t.y} x2={w - pad.r} y2={t.y} stroke="var(--line)" />
+          <text x={pad.l - 8} y={t.y + 4} textAnchor="end" fontSize={10} fill="var(--muted)">
             {fmtEurShort(t.v)}
           </text>
         </g>
       ))}
       {reeks.map((r, i) =>
         i % 3 === 0 || i === reeks.length - 1 ? (
-          <text key={i} x={xS(i)} y={h - 8} textAnchor="middle" fontSize={10} fill="#94a3b8">
+          <text key={i} x={xS(i)} y={h - 8} textAnchor="middle" fontSize={10} fill="var(--muted)">
             {r.maandKort}
           </text>
         ) : null
@@ -224,10 +224,10 @@ function TrajectoryChart({
         y1={invaarY}
         x2={w - pad.r}
         y2={invaarY}
-        stroke="#94a3b8"
+        stroke="var(--muted)"
         strokeDasharray="3 3"
       />
-      <text x={w - pad.r - 4} y={invaarY - 4} textAnchor="end" fontSize={10} fill="#64748b">
+      <text x={w - pad.r - 4} y={invaarY - 4} textAnchor="end" fontSize={10} fill="var(--muted)">
         invaar-kapitaal · {fmtEurShort(cohort.invaarKapitaal)}
       </text>
       <path d={areaPath} fill="#0F2744" fillOpacity={0.06} />
@@ -238,7 +238,7 @@ function TrajectoryChart({
           cx={xS(i)}
           cy={yS(r.eind)}
           r={i === maandIdx ? 5 : 3}
-          fill={i === maandIdx ? "#C9A84C" : "#0F2744"}
+          fill={i === maandIdx ? "var(--accent)" : "#0F2744"}
           style={{ cursor: "pointer" }}
           onClick={() => onSelect(i)}
         />
@@ -284,9 +284,9 @@ function MonthlyDeltaChart({ cohort, maandIdx }: { cohort: Cohort; maandIdx: num
 
   return (
     <svg viewBox={`0 0 ${w} ${h}`} className="w-full mt-2" style={{ maxHeight: 160 }}>
-      <line x1={pad.l} y1={yS(0)} x2={w - pad.r} y2={yS(0)} stroke="#cbd5e1" />
+      <line x1={pad.l} y1={yS(0)} x2={w - pad.r} y2={yS(0)} stroke="var(--line)" />
       {[-range, -range / 2, range / 2, range].map((v, i) => (
-        <text key={i} x={pad.l - 8} y={yS(v) + 4} textAnchor="end" fontSize={9} fill="#94a3b8">
+        <text key={i} x={pad.l - 8} y={yS(v) + 4} textAnchor="end" fontSize={9} fill="var(--muted)">
           {fmtEurShort(v)}
         </text>
       ))}
@@ -335,7 +335,7 @@ function MonthlyDeltaChart({ cohort, maandIdx }: { cohort: Cohort; maandIdx: num
                 width={barW + 4}
                 height={innerH}
                 fill="none"
-                stroke="#C9A84C"
+                stroke="var(--accent)"
                 strokeWidth={1.5}
                 rx={2}
               />

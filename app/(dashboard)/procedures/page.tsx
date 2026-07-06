@@ -237,7 +237,7 @@ function ProcedureKaart({
   return (
     <Link
       href={`/procedures/${p.id}`}
-      className={`block bg-white border border-gray-200 rounded-xl p-4 hover:border-[#C9A84C] transition-colors ${
+      className={`block bg-white border border-gray-200 rounded-xl p-4 hover:border-accent transition-colors ${
         variant === "afgerond" ? "opacity-80" : ""
       }`}
     >
@@ -311,7 +311,7 @@ function ProcedureKaart({
           {teller && teller.totaal > 0 && (
             <div className="w-32 h-1.5 bg-gray-100 rounded-full overflow-hidden">
               <div
-                className="h-full bg-[#C9A84C]"
+                className="h-full bg-accent"
                 style={{ width: `${voortgang}%` }}
               />
             </div>

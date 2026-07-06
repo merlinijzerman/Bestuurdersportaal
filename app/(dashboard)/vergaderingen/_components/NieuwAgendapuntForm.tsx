@@ -65,7 +65,7 @@ export default function NieuwAgendapuntForm({ vergaderingId }: { vergaderingId: 
     return (
       <button
         onClick={() => setOpen(true)}
-        className="text-sm text-[#0F2744] border border-gray-300 rounded-lg px-3 py-1.5 hover:border-[#C9A84C] transition-colors"
+        className="text-sm text-[#0F2744] border border-gray-300 rounded-lg px-3 py-1.5 hover:border-accent transition-colors"
       >
         + Agendapunt toevoegen
       </button>
@@ -86,7 +86,7 @@ export default function NieuwAgendapuntForm({ vergaderingId }: { vergaderingId: 
             value={titel}
             onChange={(e) => setTitel(e.target.value)}
             placeholder="Bijv. Concept jaarverslag 2025 vaststellen"
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 outline-none focus:border-[#C9A84C]"
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 outline-none focus:border-accent"
           />
         </div>
         <div className="grid grid-cols-3 gap-3">
@@ -95,7 +95,7 @@ export default function NieuwAgendapuntForm({ vergaderingId }: { vergaderingId: 
             <select
               value={categorie}
               onChange={(e) => setCategorie(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 outline-none focus:border-[#C9A84C]"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 outline-none focus:border-accent"
             >
               {CATEGORIEEN.map((c) => (
                 <option key={c.value} value={c.value}>
@@ -113,7 +113,7 @@ export default function NieuwAgendapuntForm({ vergaderingId }: { vergaderingId: 
               placeholder="30"
               min={5}
               max={300}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 outline-none focus:border-[#C9A84C]"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 outline-none focus:border-accent"
             />
           </div>
           <div>
@@ -123,7 +123,7 @@ export default function NieuwAgendapuntForm({ vergaderingId }: { vergaderingId: 
               value={verantwoordelijke}
               onChange={(e) => setVerantwoordelijke(e.target.value)}
               placeholder="Bijv. Voorzitter"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 outline-none focus:border-[#C9A84C]"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 outline-none focus:border-accent"
             />
           </div>
         </div>
@@ -134,7 +134,7 @@ export default function NieuwAgendapuntForm({ vergaderingId }: { vergaderingId: 
             onChange={(e) => setBeschrijving(e.target.value)}
             rows={2}
             placeholder="Optionele toelichting voor het bestuur."
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 outline-none focus:border-[#C9A84C] resize-none"
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 outline-none focus:border-accent resize-none"
           />
         </div>
 
@@ -144,7 +144,7 @@ export default function NieuwAgendapuntForm({ vergaderingId }: { vergaderingId: 
           <button
             type="submit"
             disabled={bezig}
-            className="bg-[#0F2744] text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-[#C9A84C] hover:text-[#0F2744] transition-colors disabled:opacity-50"
+            className="bg-[#0F2744] text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-accent hover:text-[#0F2744] transition-colors disabled:opacity-50"
           >
             {bezig ? "Bezig..." : "Toevoegen"}
           </button>

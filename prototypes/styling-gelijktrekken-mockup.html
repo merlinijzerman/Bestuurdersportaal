@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Bestuurdersportaal — Styling gelijktrekken (mockup)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ==========================================================================
+   GEDEELDE TOKENS — overgenomen uit bestuurdersportaal.com (public.css)
+   Eén bron van waarheid voor marketing, app en beheer.
+   Goud (#C9A84C) is vervangen door editorial-blauw (#234E70) als primary.
+   ========================================================================== */
+:root {
+  --paper:  #F6F3EC;   /* marketing achtergrond */
+  --ink:    #191815;
+  --muted:  #6B6A63;
+  --line:   #D8D3C7;
+  --accent: #234E70;   /* editorial-blauw = nieuwe primary (was goud) */
+  --accent-ink:#1A3A57;
+  --card:   #FBFAF5;
+  --err:    #B23A48;
+  --ok:     #2E7D5B;
+  --serif:  'Newsreader', Georgia, serif;
+  --sans:   'Inter', -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  /* App-specifieke, functionele surfaces (rustiger dan paper voor dichte data) */
+  --app-bg:     #F1EEE7;   /* iets koeler dan paper, minder vermoeiend achter tabellen */
+  --app-surface:#FBFAF5;
+  --app-line:   #E2DCCF;
+  --app-line-strong:#CFC8B8;
+  --app-zebra:  #F6F3EC;
+  --radius: 8px;
+  --radius-sm: 5px;
+}
+
+/* ---- DARK MODE (alleen app-surface) ---- */
+.stage[data-theme="dark"] .app {
+  --app-bg:     #16171A;
+  --app-surface:#1E2024;
+  --app-line:   #2C2F35;
+  --app-line-strong:#3A3E45;
+  --app-zebra:  #202226;
+  --ink:   #ECEAE3;
+  --muted: #9B9A92;
+  --line:  #2C2F35;
+  --accent:#8FB4D6;
+  --accent-ink:#8FB4D6;
+  --card:  #1E2024;
+}
+
+/* ---- VOLLEDIGE MERKFUSIE: app krijgt letterlijk het paper-beeld ---- */
+.stage[data-mode="fusie"] .app {
+  --app-bg: var(--paper);
+  --app-surface: var(--card);
+  --app-line: var(--line);
+  --app-zebra: #F1ECE0;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: var(--sans);
+  background: #E7E2D8;
+  color: var(--ink);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  padding: 22px;
+}
+
+/* ---------- Bedieningsbalk ---------- */
+.controls {
+  max-width: 1180px; margin: 0 auto 18px;
+  background: #fff; border: 1px solid var(--line); border-radius: 12px;
+  padding: 16px 20px; display: flex; flex-wrap: wrap; gap: 22px; align-items: center;
+  box-shadow: 0 1px 3px rgba(0,0,0,.05);
+}
+.controls h1 { font-family: var(--serif); font-weight: 500; font-size: 20px; letter-spacing:-.01em; }
+.controls h1 span { color: var(--muted); font-family: var(--sans); font-size: 13px; display:block; font-weight:400; }
+.ctrl-group { display:flex; flex-direction:column; gap:6px; }
+.ctrl-group .lbl { font-size: 11px; text-transform: uppercase; letter-spacing:.08em; color: var(--muted); font-weight:600;}
+.seg { display:inline-flex; border:1px solid var(--line); border-radius:7px; overflow:hidden; background:#F3EFE7;}
+.seg button {
+  font-family: var(--sans); font-size: 13px; font-weight:500; padding: 7px 14px; border:0; cursor:pointer;
+  background: transparent; color: var(--muted); transition:.15s;
+}
+.seg button[aria-pressed="true"] { background: var(--accent); color:#fff; }
+.hint { flex-basis:100%; font-size:12.5px; color:var(--muted); border-top:1px dashed var(--line); padding-top:11px; }
+.hint b { color: var(--ink); }
+
+/* ---------- Stage / frame ---------- */
+.stage { max-width: 1180px; margin: 0 auto; }
+.browserbar {
+  display:flex; align-items:center; gap:8px; background:#DED8CC; border:1px solid var(--line);
+  border-bottom:0; border-radius:12px 12px 0 0; padding:9px 14px;
+}
+.browserbar .dot{width:11px;height:11px;border-radius:50%;background:#C6BFB0;}
+.browserbar .url{
+  margin-left:8px; font-size:12.5px; color:#5c584f; background:#F3EFE7; border:1px solid var(--line);
+  padding:5px 12px; border-radius:20px; flex:1; max-width:340px;
+}
+.frame {
+  border:1px solid var(--line); border-radius:0 0 12px 12px; overflow:hidden;
+  box-shadow: 0 12px 40px rgba(0,0,0,.10);
+}
+
+/* ---------- APP: sidebar + main ---------- */
+.app { display:flex; min-height: 640px; background: var(--app-bg); color: var(--ink); }
+
+.sidebar { width: 244px; flex-shrink:0; background: var(--accent); display:flex; flex-direction:column; }
+.stage[data-theme="dark"] .app .sidebar { background:#12233A; }
+.sb-brand { padding: 18px 18px 16px; border-bottom:1px solid rgba(255,255,255,.12); }
+.sb-mark {
+  width:34px;height:34px;border-radius:8px;background:rgba(255,255,255,.14);
+  display:grid;place-items:center;font-family:var(--serif);color:#fff;font-size:18px;margin-bottom:10px;
+  border:1px solid rgba(255,255,255,.25);
+}
+.sb-fonds{color:#fff;font-weight:600;font-size:13.5px;}
+.sb-sub{color:rgba(255,255,255,.55);font-size:11.5px;margin-top:2px;}
+.sb-user{
+  padding:12px 18px;border-bottom:1px solid rgba(255,255,255,.12);display:flex;gap:10px;align-items:center;
+}
+.sb-ava{width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.18);color:#fff;display:grid;place-items:center;font-weight:600;font-size:12px;}
+.sb-user .nm{color:#fff;font-size:12.5px;font-weight:600;}
+.sb-user .rl{color:rgba(255,255,255,.55);font-size:11px;}
+.sb-nav{padding:10px 0;flex:1;overflow:auto;}
+.sb-sec{padding:12px 18px 5px;color:rgba(255,255,255,.4);font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;}
+.sb-item{
+  display:flex;align-items:center;gap:11px;padding:9px 18px;color:rgba(255,255,255,.72);font-size:13.5px;
+  border-left:3px solid transparent;text-decoration:none;cursor:pointer;transition:.15s;
+}
+.sb-item:hover{background:rgba(255,255,255,.08);color:#fff;}
+.sb-item.active{background:rgba(255,255,255,.14);color:#fff;border-left-color:#fff;font-weight:600;}
+.sb-ic{width:18px;text-align:center;opacity:.9;}
+
+.main{flex:1;display:flex;flex-direction:column;min-width:0;}
+.topbar{
+  height:60px;flex-shrink:0;background:var(--app-surface);border-bottom:1px solid var(--app-line);
+  display:flex;align-items:center;gap:14px;padding:0 26px;
+}
+.crumb{font-size:12.5px;color:var(--muted);}
+.crumb b{color:var(--ink);font-weight:600;}
+.search{
+  margin-left:auto;background:var(--app-bg);border:1px solid var(--app-line);border-radius:20px;
+  padding:7px 14px;font-size:12.5px;color:var(--muted);width:220px;
+}
+.btn{
+  font-family:var(--sans);font-size:13px;font-weight:500;padding:8px 16px;border-radius:var(--radius-sm);
+  border:1px solid transparent;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:7px;transition:.15s;
+}
+.btn-primary{background:var(--accent);color:#fff;}
+.stage[data-theme="dark"] .app .btn-primary{color:#16171A;}
+.btn-primary:hover{filter:brightness(1.08);}
+.btn-outline{border-color:var(--app-line-strong);color:var(--ink);background:transparent;}
+.btn-outline:hover{border-color:var(--accent);color:var(--accent-ink);}
+
+.content{padding:28px 26px;overflow:auto;}
+.page-title{font-family:var(--serif);font-weight:500;font-size:26px;letter-spacing:-.01em;margin-bottom:4px;}
+.stage[data-mode="fusie"] .app .content{padding:36px 34px;}    /* meer witruimte in fusie */
+.page-lead{color:var(--muted);font-size:13.5px;margin-bottom:22px;}
+
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:26px;}
+.stat{background:var(--app-surface);border:1px solid var(--app-line);border-radius:var(--radius);padding:16px 18px;}
+.stat .k{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600;}
+.stat .v{font-family:var(--serif);font-size:30px;font-weight:500;margin-top:6px;line-height:1;}
+.stat .d{font-size:12px;margin-top:7px;}
+.stat .d.up{color:var(--ok);} .stat .d.dn{color:var(--err);}
+.stat .bar{height:4px;border-radius:3px;background:var(--app-line);margin-top:12px;overflow:hidden;}
+.stat .bar i{display:block;height:100%;background:var(--accent);}
+
+.panel{background:var(--app-surface);border:1px solid var(--app-line);border-radius:var(--radius);overflow:hidden;}
+.panel-head{display:flex;align-items:center;padding:15px 18px;border-bottom:1px solid var(--app-line);}
+.panel-head h3{font-family:var(--serif);font-weight:500;font-size:17px;}
+.panel-head .pill{margin-left:auto;font-size:11.5px;color:var(--accent-ink);background:color-mix(in srgb, var(--accent) 12%, transparent);padding:4px 11px;border-radius:20px;font-weight:600;border:1px solid color-mix(in srgb, var(--accent) 24%, transparent);}
+
+table{width:100%;border-collapse:collapse;font-size:13.5px;}
+th{
+  text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);
+  font-weight:600;padding:11px 18px;border-bottom:1px solid var(--app-line);background:var(--app-bg);
+}
+td{padding:12px 18px;border-bottom:1px solid var(--app-line);color:var(--ink);}
+tr:nth-child(even) td{background:var(--app-zebra);}
+tr:last-child td{border-bottom:0;}
+.tag{font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;display:inline-block;}
+.tag.open{background:color-mix(in srgb,var(--accent) 13%,transparent);color:var(--accent-ink);}
+.tag.done{background:color-mix(in srgb,var(--ok) 15%,transparent);color:var(--ok);}
+.tag.risk{background:color-mix(in srgb,var(--err) 14%,transparent);color:var(--err);}
+.who{display:flex;align-items:center;gap:9px;}
+.who .a{width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;display:grid;place-items:center;font-size:10.5px;font-weight:600;}
+
+.two{display:grid;grid-template-columns:1.6fr 1fr;gap:16px;margin-top:22px;}
+.list-item{display:flex;gap:12px;padding:13px 18px;border-bottom:1px solid var(--app-line);}
+.list-item:last-child{border-bottom:0;}
+.li-ic{width:30px;height:30px;border-radius:7px;background:var(--app-bg);border:1px solid var(--app-line);display:grid;place-items:center;flex-shrink:0;}
+.li-t{font-size:13.5px;font-weight:500;}
+.li-s{font-size:12px;color:var(--muted);margin-top:1px;}
+
+/* Beheer view verschilt inhoudelijk (config-tabel) maar deelt exact dezelfde tokens */
+.hide{display:none !important;}
+
+@media (max-width: 760px){
+  .stats{grid-template-columns:repeat(2,1fr);}
+  .two{grid-template-columns:1fr;}
+  .sidebar{display:none;}
+}
+</style>
+</head>
+<body>
+
+<div class="controls">
+  <h1>Bestuurdersportaal <span>Styling gelijktrekken — interactieve mockup</span></h1>
+
+  <div class="ctrl-group">
+    <span class="lbl">Richting</span>
+    <div class="seg" id="modeSeg">
+      <button data-mode="tokens" aria-pressed="true">Gedeelde tokens</button>
+      <button data-mode="fusie" aria-pressed="false">Volledige merkfusie</button>
+    </div>
+  </div>
+
+  <div class="ctrl-group">
+    <span class="lbl">Thema (app)</span>
+    <div class="seg" id="themeSeg">
+      <button data-theme="light" aria-pressed="true">Licht</button>
+      <button data-theme="dark" aria-pressed="false">Donker</button>
+    </div>
+  </div>
+
+  <div class="ctrl-group">
+    <span class="lbl">Surface</span>
+    <div class="seg" id="viewSeg">
+      <button data-view="app" aria-pressed="true">app.</button>
+      <button data-view="beheer" aria-pressed="false">beheer.</button>
+    </div>
+  </div>
+
+  <p class="hint" id="hint"></p>
+</div>
+
+<div class="stage" id="stage" data-mode="tokens" data-theme="light" data-view="app">
+  <div class="browserbar">
+    <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+    <span class="url" id="url">app.bestuurdersportaal.com/dashboard</span>
+  </div>
+  <div class="frame">
+    <div class="app">
+      <!-- SIDEBAR -->
+      <aside class="sidebar">
+        <div class="sb-brand">
+          <div class="sb-mark">B</div>
+          <div class="sb-fonds">Pensioenfonds Demo</div>
+          <div class="sb-sub" id="sbSub">Bestuurdersportaal</div>
+        </div>
+        <div class="sb-user">
+          <div class="sb-ava">MIJ</div>
+          <div><div class="nm">M. IJzerman</div><div class="rl">Voorzitter bestuur</div></div>
+        </div>
+        <nav class="sb-nav" id="sbNav"><!-- gevuld via JS per surface --></nav>
+      </aside>
+
+      <!-- MAIN -->
+      <div class="main">
+        <div class="topbar">
+          <div class="crumb" id="crumb">Overzicht / <b>Stuurinformatie</b></div>
+          <input class="search" placeholder="Zoeken in portaal…" />
+          <a class="btn btn-outline">Exporteren</a>
+          <a class="btn btn-primary" id="cta">+ Nieuw besluit</a>
+        </div>
+
+        <!-- APP CONTENT -->
+        <div class="content" id="appContent">
+          <div class="page-title">Stuurinformatie</div>
+          <div class="page-lead">Actueel beeld van besluitvorming, risico's en openstaande acties voor het bestuur.</div>
+
+          <div class="stats">
+            <div class="stat"><div class="k">Open besluiten</div><div class="v">7</div><div class="d up">▲ 2 t.o.v. vorige maand</div><div class="bar"><i style="width:58%"></i></div></div>
+            <div class="stat"><div class="k">Vergaderingen Q3</div><div class="v">4</div><div class="d">Volgende: 14 juli</div><div class="bar"><i style="width:33%"></i></div></div>
+            <div class="stat"><div class="k">Risico's hoog</div><div class="v">3</div><div class="d dn">▲ 1 nieuw geëscaleerd</div><div class="bar"><i style="width:25%"></i></div></div>
+            <div class="stat"><div class="k">Acties op mij</div><div class="v">5</div><div class="d">2 verlopen</div><div class="bar"><i style="width:70%"></i></div></div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head"><h3>Openstaande besluiten</h3><span class="pill">7 actief</span></div>
+            <table>
+              <thead><tr><th>Onderwerp</th><th>Gremium</th><th>Eigenaar</th><th>Status</th><th>Deadline</th></tr></thead>
+              <tbody>
+                <tr><td>Herijking beleggingsbeleid 2026</td><td>Bestuur</td><td><div class="who"><span class="a">JD</span>J. de Vries</div></td><td><span class="tag open">In behandeling</span></td><td>14 jul</td></tr>
+                <tr><td>Uitbesteding vermogensbeheer</td><td>Beleggingscie.</td><td><div class="who"><span class="a">PK</span>P. Koning</div></td><td><span class="tag risk">Escalatie</span></td><td>09 jul</td></tr>
+                <tr><td>Actuariële grondslagen herzien</td><td>Bestuur</td><td><div class="who"><span class="a">MIJ</span>M. IJzerman</div></td><td><span class="tag open">In behandeling</span></td><td>22 jul</td></tr>
+                <tr><td>Klachtenreglement WTP</td><td>Bestuursbureau</td><td><div class="who"><span class="a">SL</span>S. Loos</div></td><td><span class="tag done">Vastgesteld</span></td><td>—</td></tr>
+                <tr><td>Communicatieplan invaren</td><td>Communicatie</td><td><div class="who"><span class="a">RB</span>R. Bakker</div></td><td><span class="tag open">In behandeling</span></td><td>31 jul</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="two">
+            <div class="panel">
+              <div class="panel-head"><h3>Recente activiteit</h3></div>
+              <div class="list-item"><div class="li-ic">📋</div><div><div class="li-t">Notulen 12 juni goedgekeurd</div><div class="li-s">door J. de Vries · 2 uur geleden</div></div></div>
+              <div class="list-item"><div class="li-ic">🛡️</div><div><div class="li-t">Risico "uitbestedingsketen" geëscaleerd naar hoog</div><div class="li-s">door systeem · gisteren</div></div></div>
+              <div class="list-item"><div class="li-ic">📂</div><div><div class="li-t">Procedure "wijziging beleggingsmandaat" bijgewerkt</div><div class="li-s">door P. Koning · 2 dagen geleden</div></div></div>
+            </div>
+            <div class="panel">
+              <div class="panel-head"><h3>AI-assistent</h3><span class="pill">AI</span></div>
+              <div style="padding:18px;">
+                <p style="font-size:13.5px;color:var(--muted);margin-bottom:12px;">Vraag iets over documenten, besluiten of procedures.</p>
+                <div style="background:var(--app-bg);border:1px solid var(--app-line);border-radius:var(--radius-sm);padding:12px 14px;font-size:13px;">"Wat is er in de laatste vergadering besloten over het beleggingsbeleid?"</div>
+                <a class="btn btn-primary" style="margin-top:14px;">Stel je vraag</a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- BEHEER CONTENT -->
+        <div class="content hide" id="beheerContent">
+          <div class="page-title">Catalogus &amp; organen</div>
+          <div class="page-lead">Beheer van gremia, rollen en de besluitcatalogus voor deze tenant.</div>
+
+          <div class="stats" style="grid-template-columns:repeat(3,1fr);">
+            <div class="stat"><div class="k">Gremia</div><div class="v">6</div><div class="d">Laatst gewijzigd: 3 jul</div></div>
+            <div class="stat"><div class="k">Gebruikers</div><div class="v">18</div><div class="d up">▲ 2 uitgenodigd</div></div>
+            <div class="stat"><div class="k">Catalogus-items</div><div class="v">42</div><div class="d">4 concept</div></div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head"><h3>Gremia &amp; rollen</h3><a class="btn btn-primary" style="margin-left:auto;padding:6px 13px;">+ Gremium</a></div>
+            <table>
+              <thead><tr><th>Gremium</th><th>Type</th><th>Leden</th><th>Voorzitter</th><th>Status</th></tr></thead>
+              <tbody>
+                <tr><td>Bestuur</td><td>Statutair orgaan</td><td>7</td><td>M. IJzerman</td><td><span class="tag done">Actief</span></td></tr>
+                <tr><td>Beleggingscommissie</td><td>Commissie</td><td>4</td><td>P. Koning</td><td><span class="tag done">Actief</span></td></tr>
+                <tr><td>Auditcommissie</td><td>Commissie</td><td>3</td><td>S. Loos</td><td><span class="tag done">Actief</span></td></tr>
+                <tr><td>Verantwoordingsorgaan</td><td>Statutair orgaan</td><td>6</td><td>R. Bakker</td><td><span class="tag open">Concept</span></td></tr>
+                <tr><td>Bestuursbureau</td><td>Ondersteuning</td><td>5</td><td>—</td><td><span class="tag done">Actief</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="panel" style="margin-top:22px;">
+            <div class="panel-head"><h3>Systeeminstellingen</h3></div>
+            <div class="list-item"><div class="li-ic">⚙️</div><div><div class="li-t">Tenant-branding</div><div class="li-s">Logo, naam en accentkleur van dit fonds</div></div><a class="btn btn-outline" style="margin-left:auto;padding:6px 13px;">Beheren</a></div>
+            <div class="list-item"><div class="li-ic">🔍</div><div><div class="li-t">Governance-log</div><div class="li-s">Volledig auditspoor van wijzigingen</div></div><a class="btn btn-outline" style="margin-left:auto;padding:6px 13px;">Openen</a></div>
+            <div class="list-item"><div class="li-ic">👥</div><div><div class="li-t">Gebruikers &amp; uitnodigingen</div><div class="li-s">18 actief · 2 openstaand</div></div><a class="btn btn-outline" style="margin-left:auto;padding:6px 13px;">Beheren</a></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const stage = document.getElementById('stage');
+const url = document.getElementById('url');
+const crumb = document.getElementById('crumb');
+const sbSub = document.getElementById('sbSub');
+const cta = document.getElementById('cta');
+const hint = document.getElementById('hint');
+const sbNav = document.getElementById('sbNav');
+const themeSeg = document.getElementById('themeSeg');
+
+const navApp = [
+  ['Overzicht', [['🏠','Home',0],['📊','Stuurinformatie',1],['👥','Klantbeeld',0]]],
+  ['Kennisbase', [['🤖','AI Assistent',0],['📚','Documentbibliotheek',0]]],
+  ['Bestuur', [['📅','Vergaderingen',0],['📋','Besluiten & Notulen',0],['📂','Procedures',0],['🛡️','Risicomatrix',0]]],
+];
+const navBeheer = [
+  ['Beheer', [['⚙️','Catalogus & organen',1],['👥','Gebruikers',0],['🔍','Governance Log',0],['🎨','Branding',0]]],
+  ['Terug', [['↩︎','Naar de app',0]]],
+];
+
+function renderNav(view){
+  const data = view==='beheer'?navBeheer:navApp;
+  sbNav.innerHTML = data.map(([sec,items])=>
+    `<div class="sb-sec">${sec}</div>` +
+    items.map(([ic,label,active])=>`<a class="sb-item${active?' active':''}"><span class="sb-ic">${ic}</span>${label}</a>`).join('')
+  ).join('');
+}
+
+const hints = {
+  tokens: '<b>Gedeelde tokens:</b> app & beheer erven kleur, typografie en knopstijl van bestuurdersportaal.com, maar houden een rustige werk-achtergrond en compacte tabellen. Serif alleen voor titels. Aanbevolen voor datadichte schermen.',
+  fusie:  '<b>Volledige merkfusie:</b> de app krijgt letterlijk de paper-crème achtergrond en meer witruimte van de marketingsite. Maximaal één beeld — let op contrast/scanbaarheid onder dichte tabellen.'
+};
+
+function set(attr, val, segId){
+  stage.setAttribute(attr, val);
+  document.querySelectorAll(`#${segId} button`).forEach(b=>{
+    b.setAttribute('aria-pressed', b.dataset[attr.replace('data-','')]===val ? 'true':'false');
+  });
+}
+
+document.getElementById('modeSeg').addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b)return;
+  set('data-mode', b.dataset.mode, 'modeSeg');
+  hint.innerHTML = hints[b.dataset.mode];
+});
+themeSeg.addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b)return;
+  set('data-theme', b.dataset.theme, 'themeSeg');
+});
+document.getElementById('viewSeg').addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b)return;
+  const v=b.dataset.view;
+  set('data-view', v, 'viewSeg');
+  const beheer = v==='beheer';
+  document.getElementById('appContent').classList.toggle('hide', beheer);
+  document.getElementById('beheerContent').classList.toggle('hide', !beheer);
+  url.textContent = beheer ? 'beheer.bestuurdersportaal.com/catalogus' : 'app.bestuurdersportaal.com/dashboard';
+  crumb.innerHTML = beheer ? 'Beheer / <b>Catalogus & organen</b>' : 'Overzicht / <b>Stuurinformatie</b>';
+  sbSub.textContent = beheer ? 'Platformbeheer' : 'Bestuurdersportaal';
+  cta.textContent = beheer ? '+ Gremium' : '+ Nieuw besluit';
+  renderNav(v);
+});
+
+renderNav('app');
+hint.innerHTML = hints.tokens;
+</script>
+</body>
+</html>

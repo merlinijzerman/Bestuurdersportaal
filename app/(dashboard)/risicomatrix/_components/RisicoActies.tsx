@@ -66,7 +66,7 @@ export default function RisicoActies({ risicoId }: Props) {
         value={motivering}
         onChange={(e) => setMotivering(e.target.value)}
         placeholder="Bijv.: Maatregelen geïmplementeerd, restrisico binnen tolerantie."
-        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-[#C9A84C] outline-none resize-none"
+        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-accent outline-none resize-none"
       />
       {fout && (
         <div className="text-xs text-red-700 mt-2">{fout}</div>

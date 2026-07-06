@@ -92,7 +92,7 @@ export default async function NotulenPage() {
               <Link
                 key={doc.id}
                 href={`/notulen/${doc.id}`}
-                className="block bg-white border border-gray-200 rounded-xl p-4 hover:border-[#C9A84C] transition-colors"
+                className="block bg-white border border-gray-200 rounded-xl p-4 hover:border-accent transition-colors"
               >
                 <div className="flex gap-4 items-start">
                   <div className="bg-[#0F2744] text-white rounded-xl p-3 text-center min-w-[52px] flex-shrink-0">

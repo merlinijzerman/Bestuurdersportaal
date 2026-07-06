@@ -226,7 +226,7 @@ export default function ZoekenPaneel() {
             <select
               value={bronsoort}
               onChange={(e) => wijzigBronsoort(e.target.value as Bronsoort)}
-              className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-[#C9A84C] bg-white"
+              className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-accent bg-white"
             >
               {BRONSOORT_OPTIES.map((o) => (
                 <option key={o.waarde} value={o.waarde}>
@@ -242,7 +242,7 @@ export default function ZoekenPaneel() {
               <select
                 value={procesinstantieFilter}
                 onChange={(e) => wijzigProces(e.target.value)}
-                className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-[#C9A84C] bg-white max-w-[260px]"
+                className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-accent bg-white max-w-[260px]"
               >
                 <option value="alles">Alle dossiers</option>
                 {procesinstanties.map((p) => (
@@ -324,7 +324,7 @@ function Resultaatkaart({ r }: { r: ZoekResultaat }) {
   const externLink = isVeiligeUrl(r.extern_url) ? r.extern_url : null;
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4 hover:border-[#C9A84C] transition-colors">
+    <div className="bg-white border border-gray-200 rounded-xl p-4 hover:border-accent transition-colors">
       <div className="flex items-start gap-3">
         <div className="w-9 h-9 bg-gray-100 rounded-lg flex items-center justify-center text-lg flex-shrink-0">
           📋
@@ -335,7 +335,7 @@ function Resultaatkaart({ r }: { r: ZoekResultaat }) {
               href={`/api/documents/${r.document_id}/bestand`}
               target="_blank"
               rel="noopener noreferrer"
-              className="font-semibold text-[#0F2744] text-sm hover:text-[#C9A84C] transition-colors"
+              className="font-semibold text-[#0F2744] text-sm hover:text-accent transition-colors"
               title="Origineel openen"
             >
               {r.titel}
@@ -378,7 +378,7 @@ function Resultaatkaart({ r }: { r: ZoekResultaat }) {
                 href={externLink}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[#0F2744] underline hover:text-[#C9A84C] font-semibold"
+                className="text-[#0F2744] underline hover:text-accent font-semibold"
               >
                 Externe bron ↗
               </a>
@@ -405,7 +405,7 @@ function Resultaatkaart({ r }: { r: ZoekResultaat }) {
                             href={ankerLink}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="hover:text-[#C9A84C] underline"
+                            className="hover:text-accent underline"
                           >
                             Pagina {t.pagina}
                           </a>

@@ -42,7 +42,7 @@ export default function DashboardError({
           </button>
           <Link
             href="/"
-            className="text-sm text-[#0F2744] border border-gray-200 px-4 py-2 rounded-lg hover:border-[#C9A84C] transition-colors"
+            className="text-sm text-[#0F2744] border border-gray-200 px-4 py-2 rounded-lg hover:border-accent transition-colors"
           >
             Naar overzicht
           </Link>

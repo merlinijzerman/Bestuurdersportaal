@@ -257,7 +257,7 @@ export default function RisicosPaneel({ decisionId, risks }: Props) {
               value={beschrijving}
               onChange={(e) => setBeschrijving(e.target.value)}
               rows={2}
-              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
               placeholder="Bijv. 'Liquiditeitsdruk in onderpand bij snelle rentestijging.'"
             />
           </Veldgroep>
@@ -314,7 +314,7 @@ export default function RisicosPaneel({ decisionId, risks }: Props) {
               type="text"
               value={eigenaar}
               onChange={(e) => setEigenaar(e.target.value)}
-              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
               placeholder="Naam van eigenaar"
             />
           </Veldgroep>
@@ -323,7 +323,7 @@ export default function RisicosPaneel({ decisionId, risks }: Props) {
               value={mitigatie}
               onChange={(e) => setMitigatie(e.target.value)}
               rows={2}
-              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
               placeholder="Welke maatregelen verlagen de impact of de kans?"
             />
           </Veldgroep>
@@ -332,7 +332,7 @@ export default function RisicosPaneel({ decisionId, risks }: Props) {
               value={residual}
               onChange={(e) => setResidual(e.target.value)}
               rows={2}
-              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
               placeholder="Wat blijft er over na mitigatie? Of: waarom accepteren we dit risico?"
             />
           </Veldgroep>
@@ -377,7 +377,7 @@ export default function RisicosPaneel({ decisionId, risks }: Props) {
               key={r.id}
               className={`border rounded-lg p-3 ${
                 editId === r.id
-                  ? "border-[#C9A84C] bg-amber-50/30"
+                  ? "border-accent bg-amber-50/30"
                   : "border-gray-200 bg-white"
               }`}
             >
@@ -389,7 +389,7 @@ export default function RisicosPaneel({ decisionId, risks }: Props) {
                       value={editBeschrijving}
                       onChange={(e) => setEditBeschrijving(e.target.value)}
                       rows={2}
-                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
                     />
                   </Veldgroep>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -455,7 +455,7 @@ export default function RisicosPaneel({ decisionId, risks }: Props) {
                       type="text"
                       value={editEigenaar}
                       onChange={(e) => setEditEigenaar(e.target.value)}
-                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
                     />
                   </Veldgroep>
                   <Veldgroep label="Mitigatie (optioneel)">
@@ -463,7 +463,7 @@ export default function RisicosPaneel({ decisionId, risks }: Props) {
                       value={editMitigatie}
                       onChange={(e) => setEditMitigatie(e.target.value)}
                       rows={2}
-                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
                     />
                   </Veldgroep>
                   <Veldgroep label="Restrisico / rationale (optioneel)">
@@ -471,7 +471,7 @@ export default function RisicosPaneel({ decisionId, risks }: Props) {
                       value={editResidual}
                       onChange={(e) => setEditResidual(e.target.value)}
                       rows={2}
-                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
                     />
                   </Veldgroep>
                   {fout && (

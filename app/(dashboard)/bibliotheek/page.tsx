@@ -267,7 +267,7 @@ export default function BibliotheekPage() {
           <button
             type="button"
             onClick={() => setWeergave("beheren")}
-            className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-[#0F2744] hover:text-[#C9A84C] transition-colors"
+            className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-[#0F2744] hover:text-accent transition-colors"
           >
             ← Terug naar documenten
           </button>
@@ -343,7 +343,7 @@ export default function BibliotheekPage() {
           type="button"
           onClick={() => setWeergave("zoeken")}
           title="Zoek op de inhoud van documenten (niet alleen de titel)"
-          className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-semibold text-[#0F2744] hover:border-[#C9A84C] transition-colors"
+          className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-semibold text-[#0F2744] hover:border-accent transition-colors"
         >
           🔎 Uitgebreid zoeken
         </button>
@@ -399,7 +399,7 @@ export default function BibliotheekPage() {
                 className={`relative bg-white border rounded-xl p-4 flex items-center gap-4 transition-colors ${
                   inactief
                     ? "border-gray-200 opacity-70"
-                    : "border-gray-200 hover:border-[#C9A84C]"
+                    : "border-gray-200 hover:border-accent"
                 }`}
               >
                 <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-xl flex-shrink-0">
@@ -411,7 +411,7 @@ export default function BibliotheekPage() {
                       href={`/api/documents/${doc.id}/bestand`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="font-semibold text-[#0F2744] text-sm truncate hover:text-[#C9A84C] transition-colors block"
+                      className="font-semibold text-[#0F2744] text-sm truncate hover:text-accent transition-colors block"
                       title="Origineel openen of downloaden"
                     >
                       {doc.titel}
@@ -631,7 +631,7 @@ export default function BibliotheekPage() {
               onChange={(e) => setDeactiveerReden(e.target.value)}
               rows={3}
               placeholder="bijv. verouderd, vervangen door nieuwere versie..."
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#C9A84C] mb-4"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-accent mb-4"
             />
             <div className="flex gap-3">
               <button
@@ -701,7 +701,7 @@ export default function BibliotheekPage() {
                   value={uploadForm.titel}
                   onChange={(e) => setUploadForm({ ...uploadForm, titel: e.target.value })}
                   placeholder="bijv. DNB Leidraad Deskundigheid 2024"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#C9A84C]"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-accent"
                   required
                 />
               </div>

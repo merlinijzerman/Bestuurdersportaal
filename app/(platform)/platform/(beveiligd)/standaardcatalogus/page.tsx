@@ -67,7 +67,7 @@ export default async function StandaardcatalogusPagina() {
       </div>
 
       {!magBeheren && (
-        <div className="rounded-lg border border-[#C9A84C]/40 bg-[#C9A84C]/10 px-4 py-3 text-sm text-[#0F2744]">
+        <div className="rounded-lg border border-accent/40 bg-accent/10 px-4 py-3 text-sm text-[#0F2744]">
           Je kunt de standaardcatalogus inzien maar niet beheren. Beheer vereist
           de capability <code className="font-mono">{CAP}</code>.
         </div>

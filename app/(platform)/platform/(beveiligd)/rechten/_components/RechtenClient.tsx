@@ -141,7 +141,7 @@ function IdentiteitKaart({
           <div className="flex items-center gap-2">
             <span className="font-medium text-[#0F2744]">{identiteit.naam}</span>
             {identiteit.isZelf && (
-              <span className="rounded-full bg-[#F0F3F8] px-2 py-0.5 text-xs text-[#0F2744]/70">
+              <span className="rounded-full bg-app-bg px-2 py-0.5 text-xs text-[#0F2744]/70">
                 jij
               </span>
             )}
@@ -205,13 +205,13 @@ function CapChip({
   const [reden, setReden] = useState("");
 
   return (
-    <li className="rounded-lg bg-[#F0F3F8] px-3 py-1.5 text-sm">
+    <li className="rounded-lg bg-app-bg px-3 py-1.5 text-sm">
       <div className="flex items-center gap-2">
         <span className="text-[#0F2744]">{cap.label}</span>
         {cap.zwaar && (
           <span
             title="Zware capability"
-            className="rounded-full bg-[#C9A84C]/20 px-1.5 py-0.5 text-[10px] font-medium text-[#0F2744]"
+            className="rounded-full bg-accent/20 px-1.5 py-0.5 text-[10px] font-medium text-[#0F2744]"
           >
             zwaar
           </span>

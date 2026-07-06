@@ -255,7 +255,7 @@ export default function OnderbouwingPaneel({
                       href={w.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-[#0F2744] underline hover:text-[#C9A84C]"
+                      className="text-[#0F2744] underline hover:text-accent"
                     >
                       {w.titel}
                     </a>

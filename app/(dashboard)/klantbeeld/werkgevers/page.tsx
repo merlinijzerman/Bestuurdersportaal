@@ -60,7 +60,7 @@ export default function WerkgeversPage() {
           <PremieStaaf reeks={WERKGEVERS_REEKS} />
           <div className="mt-2 flex gap-3 text-xs text-gray-700">
             <Legend kleur="#0F2744" label="Werkgeversdeel (2/3)" />
-            <Legend kleur="#C9A84C" label="Werknemersdeel (1/3)" />
+            <Legend kleur="var(--accent)" label="Werknemersdeel (1/3)" />
           </div>
         </div>
 
@@ -125,9 +125,9 @@ export default function WerkgeversPage() {
 
         <InningChart />
         <div className="mt-2 mb-5 flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-700">
-          <Legend kleur="#10b981" label="Op tijd (≤14 dagen)" />
-          <Legend kleur="#f59e0b" label="Te laat (14–30 dagen)" />
-          <Legend kleur="#ef4444" label="Achterstand (>30 dagen / dispuut)" />
+          <Legend kleur="var(--ok)" label="Op tijd (≤14 dagen)" />
+          <Legend kleur="var(--warn)" label="Te laat (14–30 dagen)" />
+          <Legend kleur="var(--err)" label="Achterstand (>30 dagen / dispuut)" />
           <span className="text-gray-400">·</span>
           <span className="inline-flex items-center">
             <span className="inline-block mr-1.5" style={{ width: 14, height: 2, background: "#0F2744" }} />
@@ -294,8 +294,8 @@ function Trendlijn({
     <svg viewBox={`0 0 ${w} ${h}`} className="w-full" style={{ maxHeight: 120 }}>
       {ticks.map((t, i) => (
         <g key={i}>
-          <line x1={pad.l} y1={yS(t)} x2={w - pad.r} y2={yS(t)} stroke="#f1f5f9" />
-          <text x={pad.l - 4} y={yS(t) + 3} textAnchor="end" fontSize={9} fill="#94a3b8">
+          <line x1={pad.l} y1={yS(t)} x2={w - pad.r} y2={yS(t)} stroke="var(--line)" />
+          <text x={pad.l - 4} y={yS(t) + 3} textAnchor="end" fontSize={9} fill="var(--muted)">
             {fmt(t)}
           </text>
         </g>
@@ -304,7 +304,7 @@ function Trendlijn({
         const labels = ["mei '24", "mei '25", "apr '26"];
         const idx = i === 0 ? 0 : i === values.length - 1 ? 2 : 1;
         return (
-          <text key={i} x={xS(i)} y={h - 6} textAnchor="middle" fontSize={9} fill="#94a3b8">
+          <text key={i} x={xS(i)} y={h - 6} textAnchor="middle" fontSize={9} fill="var(--muted)">
             {labels[idx]}
           </text>
         );
@@ -331,8 +331,8 @@ function PremieStaaf({ reeks }: { reeks: typeof WERKGEVERS_REEKS }) {
     <svg viewBox={`0 0 ${w} ${h}`} className="w-full" style={{ maxHeight: 120 }}>
       {[0, max / 2, max].map((t, i) => (
         <g key={i}>
-          <line x1={pad.l} y1={yS(t)} x2={w - pad.r} y2={yS(t)} stroke="#f1f5f9" />
-          <text x={pad.l - 4} y={yS(t) + 3} textAnchor="end" fontSize={9} fill="#94a3b8">
+          <line x1={pad.l} y1={yS(t)} x2={w - pad.r} y2={yS(t)} stroke="var(--line)" />
+          <text x={pad.l - 4} y={yS(t) + 3} textAnchor="end" fontSize={9} fill="var(--muted)">
             {fmtEurShort(t)}
           </text>
         </g>
@@ -341,7 +341,7 @@ function PremieStaaf({ reeks }: { reeks: typeof WERKGEVERS_REEKS }) {
         const labels = ["mei '24", "mei '25", "apr '26"];
         const idx = i === 0 ? 0 : i === reeks.length - 1 ? 2 : 1;
         return (
-          <text key={i} x={xS(i)} y={h - 6} textAnchor="middle" fontSize={9} fill="#94a3b8">
+          <text key={i} x={xS(i)} y={h - 6} textAnchor="middle" fontSize={9} fill="var(--muted)">
             {labels[idx]}
           </text>
         );
@@ -357,7 +357,7 @@ function PremieStaaf({ reeks }: { reeks: typeof WERKGEVERS_REEKS }) {
               y={yTotaal}
               width={barW}
               height={yWg - yTotaal}
-              fill="#C9A84C"
+              fill="var(--accent)"
             />
           </g>
         );
@@ -389,7 +389,7 @@ function InningChart() {
               y1={yS(p)}
               x2={w - pad.r}
               y2={yS(p)}
-              stroke={isNorm ? "#0F2744" : "#f1f5f9"}
+              stroke={isNorm ? "#0F2744" : "var(--line)"}
               strokeWidth={isNorm ? 1.2 : 1}
               strokeDasharray={isNorm ? "4 3" : undefined}
             />
@@ -398,7 +398,7 @@ function InningChart() {
               y={yS(p) + 3}
               textAnchor="end"
               fontSize={10}
-              fill={isNorm ? "#0F2744" : "#94a3b8"}
+              fill={isNorm ? "#0F2744" : "var(--muted)"}
               fontWeight={isNorm ? 600 : 400}
             >
               {`${(p * 100).toFixed(0)}%`}
@@ -416,16 +416,16 @@ function InningChart() {
         const yTopAch = yS(1.0);
         return (
           <g key={i}>
-            <rect x={x0} y={yTopOp} width={barW} height={yS(0) - yTopOp} fill="#10b981" />
-            <rect x={x0} y={yTopLaat} width={barW} height={yTopOp - yTopLaat} fill="#f59e0b" />
-            <rect x={x0} y={yTopAch} width={barW} height={yTopLaat - yTopAch} fill="#ef4444" />
+            <rect x={x0} y={yTopOp} width={barW} height={yS(0) - yTopOp} fill="var(--ok)" />
+            <rect x={x0} y={yTopLaat} width={barW} height={yTopOp - yTopLaat} fill="var(--warn)" />
+            <rect x={x0} y={yTopAch} width={barW} height={yTopLaat - yTopAch} fill="var(--err)" />
             {r.opTijd < 0.9 && (
               <text
                 x={xS(i)}
                 y={yTopOp - 4}
                 textAnchor="middle"
                 fontSize={9}
-                fill="#b91c1c"
+                fill="var(--err)"
                 fontWeight={600}
               >
                 {fmtPct(r.opTijd, 1)}
@@ -436,7 +436,7 @@ function InningChart() {
       })}
       {reeks.map((r, i) =>
         i % 3 === 0 || i === reeks.length - 1 ? (
-          <text key={i} x={xS(i)} y={h - 10} textAnchor="middle" fontSize={9} fill="#94a3b8">
+          <text key={i} x={xS(i)} y={h - 10} textAnchor="middle" fontSize={9} fill="var(--muted)">
             {r.maandKort}
           </text>
         ) : null

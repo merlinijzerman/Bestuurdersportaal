@@ -120,7 +120,7 @@ export default function NotificatiesBlok({
             type="button"
             onClick={markeerAllesGelezen}
             disabled={bulkBezig}
-            className="text-[11px] text-[#0F2744] hover:text-[#C9A84C] disabled:opacity-50"
+            className="text-[11px] text-[#0F2744] hover:text-accent disabled:opacity-50"
           >
             Alles als gelezen
           </button>
@@ -142,7 +142,7 @@ export default function NotificatiesBlok({
               <div className="flex items-center gap-2 min-w-0">
                 <span
                   className={`flex-shrink-0 text-sm ${
-                    isOngelezen ? "text-[#C9A84C]" : "text-gray-400"
+                    isOngelezen ? "text-accent" : "text-gray-400"
                   }`}
                   aria-hidden
                 >
@@ -173,7 +173,7 @@ export default function NotificatiesBlok({
                     void markeerGelezen(n.id);
                   }
                 }}
-                className="block hover:text-[#C9A84C] transition-colors"
+                className="block hover:text-accent transition-colors"
               >
                 {inhoud}
               </Link>
@@ -186,7 +186,7 @@ export default function NotificatiesBlok({
               onClick={() => {
                 if (isOngelezen) void markeerGelezen(n.id);
               }}
-              className="w-full text-left hover:text-[#C9A84C] transition-colors"
+              className="w-full text-left hover:text-accent transition-colors"
             >
               {inhoud}
             </button>

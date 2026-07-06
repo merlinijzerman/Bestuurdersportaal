@@ -95,7 +95,7 @@ export default function NieuweProcedureForm({ templates }: Props) {
                 name="template"
                 checked={templateCode === t.code}
                 onChange={() => setTemplateCode(t.code)}
-                className="accent-[#C9A84C] mt-0.5"
+                className="accent-accent mt-0.5"
               />
               <div className="flex-1">
                 <div className="font-semibold text-[#0F2744] text-sm">
@@ -123,7 +123,7 @@ export default function NieuweProcedureForm({ templates }: Props) {
           value={titel}
           onChange={(e) => setTitel(e.target.value)}
           placeholder="bv. Aanpassing strategisch beleggingsplan 2026"
-          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-[#C9A84C] outline-none"
+          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-accent outline-none"
         />
       </div>
 
@@ -136,7 +136,7 @@ export default function NieuweProcedureForm({ templates }: Props) {
           value={beschrijving}
           onChange={(e) => setBeschrijving(e.target.value)}
           placeholder="Korte omschrijving van wat deze procedure betreft."
-          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-[#C9A84C] outline-none resize-none"
+          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-accent outline-none resize-none"
         />
       </div>
 
@@ -156,7 +156,7 @@ export default function NieuweProcedureForm({ templates }: Props) {
               }
             }}
             placeholder="Naam toevoegen en op Enter drukken"
-            className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-[#C9A84C] outline-none"
+            className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-accent outline-none"
           />
           <button
             type="button"
@@ -200,7 +200,7 @@ export default function NieuweProcedureForm({ templates }: Props) {
           type="date"
           value={deadline}
           onChange={(e) => setDeadline(e.target.value)}
-          className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-[#C9A84C] outline-none"
+          className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-accent outline-none"
         />
       </div>
 

@@ -246,7 +246,7 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
               value={voorwaarde}
               onChange={(e) => setVoorwaarde(e.target.value)}
               rows={2}
-              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
               placeholder="Bijv. 'Allocatie naar zakelijke waarden blijft binnen mandaatbandbreedte 35-45%.'"
             />
           </Veldgroep>
@@ -256,7 +256,7 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
                 type="text"
                 value={kpi}
                 onChange={(e) => setKpi(e.target.value)}
-                className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+                className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
                 placeholder="bijv. allocatie zakelijke waarden"
               />
             </Veldgroep>
@@ -265,7 +265,7 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
                 type="text"
                 value={drempel}
                 onChange={(e) => setDrempel(e.target.value)}
-                className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+                className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
                 placeholder="35–45%"
               />
             </Veldgroep>
@@ -274,7 +274,7 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
                 type="text"
                 value={monitor}
                 onChange={(e) => setMonitor(e.target.value)}
-                className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+                className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
                 placeholder="maandelijks"
               />
             </Veldgroep>
@@ -283,7 +283,7 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
                 type="date"
                 value={deadline}
                 onChange={(e) => setDeadline(e.target.value)}
-                className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+                className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
               />
             </Veldgroep>
           </div>
@@ -292,7 +292,7 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
               type="text"
               value={eigenaar}
               onChange={(e) => setEigenaar(e.target.value)}
-              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
               placeholder="Wie bewaakt deze voorwaarde?"
             />
           </Veldgroep>
@@ -301,7 +301,7 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
               type="text"
               value={trigger}
               onChange={(e) => setTrigger(e.target.value)}
-              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
               placeholder="Wanneer moet dit besluit opnieuw besproken worden? Bijv. 'bij overschrijden 6 maanden'"
             />
           </Veldgroep>
@@ -345,7 +345,7 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
               key={c.id}
               className={`border rounded-lg p-3 ${
                 editId === c.id
-                  ? "border-[#C9A84C] bg-amber-50/30"
+                  ? "border-accent bg-amber-50/30"
                   : "border-gray-200 bg-white"
               }`}
             >
@@ -357,7 +357,7 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
                       value={editVoorwaarde}
                       onChange={(e) => setEditVoorwaarde(e.target.value)}
                       rows={2}
-                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
                     />
                   </Veldgroep>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -366,7 +366,7 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
                         type="text"
                         value={editKpi}
                         onChange={(e) => setEditKpi(e.target.value)}
-                        className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+                        className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
                       />
                     </Veldgroep>
                     <Veldgroep label="Drempelwaarde">
@@ -374,7 +374,7 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
                         type="text"
                         value={editDrempel}
                         onChange={(e) => setEditDrempel(e.target.value)}
-                        className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+                        className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
                       />
                     </Veldgroep>
                     <Veldgroep label="Monitorfrequentie">
@@ -382,7 +382,7 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
                         type="text"
                         value={editMonitor}
                         onChange={(e) => setEditMonitor(e.target.value)}
-                        className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+                        className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
                       />
                     </Veldgroep>
                     <Veldgroep label="Deadline">
@@ -390,7 +390,7 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
                         type="date"
                         value={editDeadline}
                         onChange={(e) => setEditDeadline(e.target.value)}
-                        className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+                        className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
                       />
                     </Veldgroep>
                   </div>
@@ -399,7 +399,7 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
                       type="text"
                       value={editEigenaar}
                       onChange={(e) => setEditEigenaar(e.target.value)}
-                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
                     />
                   </Veldgroep>
                   <Veldgroep label="Heroverwegingstrigger">
@@ -407,7 +407,7 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
                       type="text"
                       value={editTrigger}
                       onChange={(e) => setEditTrigger(e.target.value)}
-                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
                     />
                   </Veldgroep>
                   {fout && (

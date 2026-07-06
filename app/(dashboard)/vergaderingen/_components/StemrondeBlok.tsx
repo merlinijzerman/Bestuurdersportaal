@@ -334,7 +334,7 @@ function StemPaneel({
               className={`text-sm px-3 py-1.5 rounded-lg border transition-colors ${
                 keuze === a.code
                   ? "bg-[#0F2744] text-white border-[#0F2744]"
-                  : "bg-white text-[#0F2744] border-gray-300 hover:border-[#C9A84C]"
+                  : "bg-white text-[#0F2744] border-gray-300 hover:border-accent"
               }`}
             >
               {a.label}
@@ -346,7 +346,7 @@ function StemPaneel({
           value={motivering}
           onChange={(e) => setMotivering(e.target.value)}
           placeholder="Optionele motivering…"
-          className="w-full text-xs border border-gray-200 rounded px-2 py-1.5 focus:border-[#C9A84C] outline-none resize-none bg-gray-50"
+          className="w-full text-xs border border-gray-200 rounded px-2 py-1.5 focus:border-accent outline-none resize-none bg-gray-50"
         />
         <div className="flex justify-end">
           <button
@@ -377,7 +377,7 @@ function StemPaneel({
           <select
             value={volmachtVoor}
             onChange={(e) => setVolmachtVoor(e.target.value)}
-            className="w-full text-sm border border-gray-200 rounded px-2 py-1.5 bg-white outline-none focus:border-[#C9A84C]"
+            className="w-full text-sm border border-gray-200 rounded px-2 py-1.5 bg-white outline-none focus:border-accent"
           >
             <option value="">— kies bestuurslid —</option>
             {beschikbareVolmachtgevers.map((b) => (
@@ -406,7 +406,7 @@ function StemPaneel({
             value={volmachtToelichting}
             onChange={(e) => setVolmachtToelichting(e.target.value)}
             placeholder="Hoe is de volmacht verleend? (optioneel)"
-            className="w-full text-xs border border-gray-200 rounded px-2 py-1.5 focus:border-[#C9A84C] outline-none"
+            className="w-full text-xs border border-gray-200 rounded px-2 py-1.5 focus:border-accent outline-none"
           />
           <label className="flex items-start gap-2 text-xs text-gray-800">
             <input
@@ -508,7 +508,7 @@ function StemPaneel({
                 value={intrekReden}
                 onChange={(e) => setIntrekReden(e.target.value)}
                 placeholder="Reden voor intrekken (minimaal 10 tekens)…"
-                className="w-full text-xs border border-gray-200 rounded px-2 py-1.5 outline-none focus:border-[#C9A84C] resize-none"
+                className="w-full text-xs border border-gray-200 rounded px-2 py-1.5 outline-none focus:border-accent resize-none"
               />
               <div className="flex justify-end gap-2">
                 <button
@@ -763,7 +763,7 @@ function StemStartenModal({
             rows={2}
             value={vraag}
             onChange={(e) => setVraag(e.target.value)}
-            className="mt-1 w-full text-sm border border-gray-200 rounded px-3 py-2 focus:border-[#C9A84C] outline-none resize-none"
+            className="mt-1 w-full text-sm border border-gray-200 rounded px-3 py-2 focus:border-accent outline-none resize-none"
           />
         </label>
 
@@ -805,7 +805,7 @@ function StemStartenModal({
                       setCustomAlt(next);
                     }}
                     placeholder={`Alternatief ${i + 1}`}
-                    className="flex-1 text-sm border border-gray-200 rounded px-2 py-1.5 outline-none focus:border-[#C9A84C]"
+                    className="flex-1 text-sm border border-gray-200 rounded px-2 py-1.5 outline-none focus:border-accent"
                   />
                   {customAlt.length > 2 && (
                     <button
@@ -841,7 +841,7 @@ function StemStartenModal({
               value={quorum}
               onChange={(e) => setQuorum(e.target.value)}
               placeholder="—"
-              className="mt-1 w-full text-sm border border-gray-200 rounded px-3 py-2 outline-none focus:border-[#C9A84C]"
+              className="mt-1 w-full text-sm border border-gray-200 rounded px-3 py-2 outline-none focus:border-accent"
             />
           </label>
           <label className="block">
@@ -851,7 +851,7 @@ function StemStartenModal({
             <select
               value={meerderheid}
               onChange={(e) => setMeerderheid(e.target.value)}
-              className="mt-1 w-full text-sm border border-gray-200 rounded px-3 py-2 outline-none focus:border-[#C9A84C] bg-white"
+              className="mt-1 w-full text-sm border border-gray-200 rounded px-3 py-2 outline-none focus:border-accent bg-white"
             >
               <option value="">— geen —</option>
               <option value="gewone">Gewone</option>

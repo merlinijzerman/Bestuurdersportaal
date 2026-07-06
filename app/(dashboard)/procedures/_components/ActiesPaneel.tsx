@@ -161,7 +161,7 @@ export default function ActiesPaneel({
               value={actie}
               onChange={(e) => setActie(e.target.value)}
               rows={2}
-              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
               placeholder="Wat moet er concreet gebeuren?"
             />
           </Veldgroep>
@@ -171,7 +171,7 @@ export default function ActiesPaneel({
                 type="text"
                 value={eigenaar}
                 onChange={(e) => setEigenaar(e.target.value)}
-                className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+                className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
                 placeholder="Naam van eigenaar"
               />
             </Veldgroep>
@@ -180,7 +180,7 @@ export default function ActiesPaneel({
                 type="date"
                 value={deadline}
                 onChange={(e) => setDeadline(e.target.value)}
-                className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/40"
+                className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
               />
             </Veldgroep>
           </div>

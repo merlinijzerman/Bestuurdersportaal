@@ -133,7 +133,7 @@ export default function BibliotheekPicker({ onSelect, onClose }: Props) {
             value={zoek}
             onChange={(e) => setZoek(e.target.value)}
             placeholder="Zoek op titel…"
-            className="flex-1 text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:border-[#C9A84C]"
+            className="flex-1 text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:border-accent"
             autoFocus
           />
           <select
@@ -176,7 +176,7 @@ export default function BibliotheekPicker({ onSelect, onClose }: Props) {
                         onSelect(d.id, d.titel);
                         onClose();
                       }}
-                      className="w-full text-left flex items-center gap-3 p-2.5 border border-gray-200 hover:border-[#C9A84C] rounded-lg transition-colors group"
+                      className="w-full text-left flex items-center gap-3 p-2.5 border border-gray-200 hover:border-accent rounded-lg transition-colors group"
                     >
                       <span
                         className={`text-[10px] font-semibold uppercase tracking-wide border rounded px-1.5 py-0.5 flex-shrink-0 ${badge.kleur}`}
@@ -184,7 +184,7 @@ export default function BibliotheekPicker({ onSelect, onClose }: Props) {
                         {badge.label}
                       </span>
                       <span className="flex-1 min-w-0">
-                        <span className="block text-sm text-[#0F2744] truncate group-hover:text-[#C9A84C]">
+                        <span className="block text-sm text-[#0F2744] truncate group-hover:text-accent">
                           {d.titel}
                         </span>
                         <span className="block text-[11px] text-gray-500">

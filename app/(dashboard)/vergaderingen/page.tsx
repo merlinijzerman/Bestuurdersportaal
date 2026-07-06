@@ -110,7 +110,7 @@ function VergaderingKaart({
   return (
     <Link
       href={`/vergaderingen/${v.id}`}
-      className={`block bg-white border border-gray-200 rounded-xl p-4 hover:border-[#C9A84C] transition-colors ${
+      className={`block bg-white border border-gray-200 rounded-xl p-4 hover:border-accent transition-colors ${
         variant === "afgelopen" ? "opacity-75" : ""
       }`}
     >

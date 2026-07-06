@@ -227,7 +227,7 @@ export default function BeheerClient() {
             onClick={() => setTab(t)}
             className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
               tab === t
-                ? "border-[#C9A84C] text-[#0F2744]"
+                ? "border-accent text-[#0F2744]"
                 : "border-transparent text-gray-500 hover:text-gray-700"
             }`}
           >
@@ -449,7 +449,7 @@ function ReviewHub() {
             >
               {s.label}
               {stream === s.key && tellingen.open ? (
-                <span className="ml-1.5 rounded-full bg-[#C9A84C] text-[#0F2744] px-1.5">
+                <span className="ml-1.5 rounded-full bg-accent text-[#0F2744] px-1.5">
                   {tellingen.open}
                 </span>
               ) : null}
@@ -951,7 +951,7 @@ function OrgaanSectie({
               <div className="flex-1">
                 <span className="text-sm text-[#0F2744]">{o.naam}</span>
                 {metType && o.categorie && (
-                  <span className="ml-2 rounded bg-[#C9A84C]/15 px-1.5 py-0.5 text-xs text-[#0F2744]">
+                  <span className="ml-2 rounded bg-accent/15 px-1.5 py-0.5 text-xs text-[#0F2744]">
                     {CATEGORIE_LABEL[o.categorie] ?? o.categorie}
                   </span>
                 )}

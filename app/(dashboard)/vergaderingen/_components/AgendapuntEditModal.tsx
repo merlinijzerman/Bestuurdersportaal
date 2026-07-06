@@ -182,7 +182,7 @@ export default function AgendapuntEditModal({
                   type="text"
                   value={titel}
                   onChange={(e) => setTitel(e.target.value)}
-                  className="w-full text-sm border border-gray-200 rounded px-3 py-2 focus:border-[#C9A84C] outline-none"
+                  className="w-full text-sm border border-gray-200 rounded px-3 py-2 focus:border-accent outline-none"
                 />
               </Veld>
 
@@ -191,7 +191,7 @@ export default function AgendapuntEditModal({
                   rows={3}
                   value={beschrijving}
                   onChange={(e) => setBeschrijving(e.target.value)}
-                  className="w-full text-sm border border-gray-200 rounded px-3 py-2 focus:border-[#C9A84C] outline-none resize-none"
+                  className="w-full text-sm border border-gray-200 rounded px-3 py-2 focus:border-accent outline-none resize-none"
                 />
               </Veld>
 
@@ -200,7 +200,7 @@ export default function AgendapuntEditModal({
                   <select
                     value={categorie}
                     onChange={(e) => setCategorie(e.target.value as Categorie)}
-                    className="w-full text-sm border border-gray-200 rounded px-3 py-2 focus:border-[#C9A84C] outline-none bg-white"
+                    className="w-full text-sm border border-gray-200 rounded px-3 py-2 focus:border-accent outline-none bg-white"
                   >
                     {TOEGESTANE_CATEGORIEEN.map((c) => (
                       <option key={c.code} value={c.code}>
@@ -216,7 +216,7 @@ export default function AgendapuntEditModal({
                     min={0}
                     value={tijdsduur}
                     onChange={(e) => setTijdsduur(e.target.value)}
-                    className="w-full text-sm border border-gray-200 rounded px-3 py-2 focus:border-[#C9A84C] outline-none"
+                    className="w-full text-sm border border-gray-200 rounded px-3 py-2 focus:border-accent outline-none"
                   />
                 </Veld>
               </div>
@@ -226,7 +226,7 @@ export default function AgendapuntEditModal({
                   type="text"
                   value={verantwoordelijke}
                   onChange={(e) => setVerantwoordelijke(e.target.value)}
-                  className="w-full text-sm border border-gray-200 rounded px-3 py-2 focus:border-[#C9A84C] outline-none"
+                  className="w-full text-sm border border-gray-200 rounded px-3 py-2 focus:border-accent outline-none"
                 />
               </Veld>
 
@@ -238,7 +238,7 @@ export default function AgendapuntEditModal({
                 <select
                   value={vergaderingId}
                   onChange={(e) => setVergaderingId(e.target.value)}
-                  className="w-full text-sm border border-gray-200 rounded px-3 py-2 focus:border-[#C9A84C] outline-none bg-white"
+                  className="w-full text-sm border border-gray-200 rounded px-3 py-2 focus:border-accent outline-none bg-white"
                   disabled={komendeVergaderingen.length === 0}
                 >
                   <option value={punt.vergadering_id}>— huidige vergadering —</option>
@@ -259,7 +259,7 @@ export default function AgendapuntEditModal({
                     value={motivering}
                     onChange={(e) => setMotivering(e.target.value)}
                     placeholder="Waarom past u dit punt aan?"
-                    className={`w-full text-sm border rounded px-3 py-2 focus:border-[#C9A84C] outline-none resize-none ${
+                    className={`w-full text-sm border rounded px-3 py-2 focus:border-accent outline-none resize-none ${
                       motivering.length > 0 && motivering.length < MOTIVERING_MIN
                         ? "border-amber-300 bg-amber-50/50"
                         : "border-gray-200"
@@ -339,7 +339,7 @@ export default function AgendapuntEditModal({
                 value={verwijderReden}
                 onChange={(e) => setVerwijderReden(e.target.value)}
                 placeholder="Waarom wordt dit punt verwijderd?"
-                className={`w-full text-sm border rounded px-3 py-2 focus:border-[#C9A84C] outline-none resize-none ${
+                className={`w-full text-sm border rounded px-3 py-2 focus:border-accent outline-none resize-none ${
                   verwijderReden.length > 0 && verwijderReden.length < MOTIVERING_MIN
                     ? "border-amber-300 bg-amber-50/50"
                     : "border-gray-200"

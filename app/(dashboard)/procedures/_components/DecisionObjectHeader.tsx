@@ -1,7 +1,7 @@
 // Client-component: Decision Object-header bovenaan de procedure-detail
 // pagina. Toont besluitcode, titel-banner, klikbare status-pill en
 // classificatie-pills. Klik op de status-pill scrolt naar het
-// statusovergang-paneel onderaan de pagina en geeft kort een gold-puls
+// statusovergang-paneel onderaan de pagina en geeft kort een accent-puls
 // als visuele bevestiging.
 //
 // MVP-2A: status-pill omgezet van statische <span> naar klikbare
@@ -48,7 +48,7 @@ const RISICO_KLEUREN: Record<string, string> = {
 };
 
 // Scrolt naar de StatusOvergangPaneel-anker en geeft een korte
-// gold-puls om de gebruiker visueel te bevestigen dat we daar zijn
+// accent-puls om de gebruiker visueel te bevestigen dat we daar zijn
 // beland. De anker-id "status-overgang" is gezet op de
 // UitklapbaarPaneel-wrapper rond StatusOvergangPaneel in page.tsx.
 function scrollNaarStatusOvergang() {
@@ -74,12 +74,12 @@ export default function DecisionObjectHeader({ decision, autoUpgraded }: Props) 
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap text-[11px] font-medium uppercase tracking-wide">
-            <span className="text-[#C9A84C]">{decision.besluit_code}</span>
+            <span className="text-accent">{decision.besluit_code}</span>
             <span className="text-white/40">·</span>
             <button
               type="button"
               onClick={scrollNaarStatusOvergang}
-              className={`px-2 py-0.5 rounded ${statusKlasse} text-[11px] font-medium normal-case hover:brightness-110 hover:ring-2 hover:ring-[#C9A84C]/40 transition cursor-pointer`}
+              className={`px-2 py-0.5 rounded ${statusKlasse} text-[11px] font-medium normal-case hover:brightness-110 hover:ring-2 hover:ring-accent/40 transition cursor-pointer`}
               title="Klik om naar statusovergang te gaan"
               aria-label={`Status: ${DECISION_STATUS_LABEL[decision.status]} — klik voor statusovergang`}
             >

@@ -365,7 +365,7 @@ export default function GeneriekeBibliotheekClient({
       )}
 
       {reindexMelding && (
-        <div className="rounded-lg bg-[#F0F3F8] px-4 py-3 text-sm text-[#0F2744]">{reindexMelding}</div>
+        <div className="rounded-lg bg-app-bg px-4 py-3 text-sm text-[#0F2744]">{reindexMelding}</div>
       )}
 
       {modus && (
@@ -390,7 +390,7 @@ export default function GeneriekeBibliotheekClient({
           </div>
 
           {/* Impactwaarschuwing (UX: maak gevolg vooraf expliciet). */}
-          <div className="rounded-lg border border-[#C9A84C]/40 bg-[#C9A84C]/10 px-4 py-3 text-sm">
+          <div className="rounded-lg border border-accent/40 bg-accent/10 px-4 py-3 text-sm">
             Dit document wordt voor <strong>{aantalFondsen} aangesloten fonds(en)</strong>{" "}
             leesbaar. <RagBadge normgewicht={form.normgewicht} /> op basis van het
             gekozen normgewicht.
@@ -508,7 +508,7 @@ export default function GeneriekeBibliotheekClient({
 
       <div className="overflow-x-auto rounded-xl border border-[#0F2744]/10 bg-white">
         <table className="w-full text-sm">
-          <thead className="bg-[#F0F3F8] text-left text-xs uppercase tracking-wide text-[#0F2744]/60">
+          <thead className="bg-app-bg text-left text-xs uppercase tracking-wide text-[#0F2744]/60">
             <tr>
               <th className="px-4 py-2">Titel</th>
               <th className="px-4 py-2">Bron</th>

@@ -151,10 +151,10 @@ export default function PlatformLoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#F0F3F8] px-4">
+    <div className="flex min-h-screen items-center justify-center bg-app-bg px-4">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
-          <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-[#C9A84C]">
+          <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-accent">
             <span className="text-2xl font-black text-[#0F2744]">P</span>
           </div>
           <h1 className="text-xl font-bold text-[#0F2744]">
@@ -227,7 +227,7 @@ export default function PlatformLoginPage() {
                   />
                 </div>
               )}
-              <details className="rounded-lg bg-[#F0F3F8] p-3">
+              <details className="rounded-lg bg-app-bg p-3">
                 <summary className="cursor-pointer text-xs font-medium text-[#0F2744]/60">
                   Scannen lukt niet? Voer de sleutel handmatig in
                 </summary>

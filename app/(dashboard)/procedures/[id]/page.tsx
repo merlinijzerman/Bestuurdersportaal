@@ -462,7 +462,7 @@ export default async function ProcedureDetailPage({
           </div>
           <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden mt-1.5">
             <div
-              className="h-full bg-[#C9A84C]"
+              className="h-full bg-accent"
               style={{
                 width: `${
                   totaalStappen > 0
@@ -561,7 +561,7 @@ export default async function ProcedureDetailPage({
                       key={s.id}
                       className="relative pl-9 py-2.5 bg-amber-50/40 -mx-3 px-3 rounded-lg"
                     >
-                      <div className="absolute left-3 top-3 w-6 h-6 rounded-full bg-[#C9A84C] border-2 border-[#C9A84C] text-[#0F2744] flex items-center justify-center text-xs font-bold ring-4 ring-amber-100">
+                      <div className="absolute left-3 top-3 w-6 h-6 rounded-full bg-accent border-2 border-accent text-[#0F2744] flex items-center justify-center text-xs font-bold ring-4 ring-amber-100">
                         {s.volgorde}
                       </div>
                       {!isLast && (
