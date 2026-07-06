@@ -213,12 +213,24 @@ export async function POST(
       `\n=== UW OPDRACHT ===\nStel de voorbereiding op voor dit agendapunt volgens de opbouw en regels in de systeem-prompt.`
     );
 
+    // 3500 i.p.v. 2000: het v0.3-antwoord is één doorlopende prose (duiding +
+    // aandachtspunten + vergadervragen); bij een te krap budget sneuvelt juist
+    // de staart — de vergadervragen. In lijn met MAX_TOKENS_BESTUURLIJK (4500)
+    // in de chat-route; ongebruikt budget kost niets.
     const respons = await anthropic.messages.create({
       model: AI_MODEL,
-      max_tokens: 2000,
+      max_tokens: 3500,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: userParts.join("\n") }],
     });
+
+    // Afkapping niet stil laten passeren: zichtbaar in de serverlog, zodat een
+    // ontbrekend slot ("Neem mee de vergadering in") herleidbaar is.
+    if (respons.stop_reason === "max_tokens") {
+      console.warn(
+        `Voorbereiding agendapunt ${id}: antwoord afgekapt op max_tokens — vergadervragen mogelijk onvolledig.`
+      );
+    }
 
     const blok = respons.content.find((c) => c.type === "text");
     const tekst = (blok && blok.type === "text" ? blok.text : "").trim();
