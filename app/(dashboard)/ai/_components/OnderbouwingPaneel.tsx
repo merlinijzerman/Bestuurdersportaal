@@ -52,6 +52,11 @@ export interface OnderbouwingMeta {
   webRetrievalActief?: boolean | null;
   /** Daadwerkelijk opgehaalde webbronnen (leeg tot web-retrieval bestaat). */
   webBronnen?: { url: string; titel: string; domein: string; datum?: string | null }[];
+  // B1 / scope-split — reizen mee zodat de vervolgacties na herladen consistent zijn.
+  /** Ging de vraag over een specifiek stuk of agendapunt? Stuurt de vervolgacties. */
+  documentGericht?: boolean | null;
+  /** Inhoudelijke vervolgvragen (B1), op basis van het antwoord gegenereerd. */
+  vervolgvragen?: string[] | null;
 }
 
 const MODEL_KENNIS_GROND_LABEL: Record<string, string> = {

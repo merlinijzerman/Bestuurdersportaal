@@ -524,7 +524,12 @@ const VERVOLGACTIE_PROMPT: Record<
 export function bepaalVervolgacties(
   vraag: string,
   antwoordmodus: Antwoordmodus,
-  heeftBronnen: boolean
+  heeftBronnen: boolean,
+  // True = de vraag ging over een specifiek stuk of agendapunt. Dan behouden we de
+  // perspectief-lenzen (duiding/kritische vragen) en de lengte-acties. Bij een
+  // ALGEMENE vraag dragen de inhoudelijke B1-vervolgvragen (los, in de UI) de
+  // "wat nu"-suggesties; de generieke transformatieknoppen voelden daar aangeplakt.
+  documentGericht = false
 ): Vervolgactie[] {
   const acties: Vervolgactie[] = [];
   const g = normaliseer(vraag);
@@ -550,25 +555,36 @@ export function bepaalVervolgacties(
   // paneel staat direct onder het antwoord (page.tsx), dus een aparte knop was
   // dubbelop. Het type + de UI-afhandeling blijven bestaan voor de deeplink die
   // het paneel opent, maar de knop wordt niet meer aangeboden.
+  // heeftBronnen blijft in de signatuur voor API-stabiliteit (callers geven het mee).
+  void heeftBronnen;
+
+  // Signaalgedreven acties gelden in BEIDE gevallen (algemeen én documentgericht):
+  // ze komen alleen op als de vraag er expliciet om vraagt.
   if (besluit)
     voegToe("werk_uit_besluitvorming", "Werk uit richting besluitvorming", "besluitrijpheid", false);
 
-  // Bied de niet-actieve perspectieven aan, zodat de gebruiker zonder
-  // herformuleren kan wisselen (FO §13).
-  if (antwoordmodus !== "feitelijk")
-    voegToe("maak_feitelijker", "Maak feitelijker", "feitelijk", true);
-  if (antwoordmodus !== "duiding")
-    voegToe("geef_duiding", "Geef bestuurlijke duiding", "duiding", true);
-  if (antwoordmodus !== "sparring")
-    voegToe("stel_kritische_vragen", "Stel kritische vragen", "sparring", true);
+  // Perspectief-lenzen: alleen bij een documentgerichte vraag. De gebruiker kan zo
+  // hetzelfde stuk door een andere bril lezen zonder te herformuleren (FO §13).
+  if (documentGericht) {
+    if (antwoordmodus !== "feitelijk")
+      voegToe("maak_feitelijker", "Maak feitelijker", "feitelijk", true);
+    if (antwoordmodus !== "duiding")
+      voegToe("geef_duiding", "Geef bestuurlijke duiding", "duiding", true);
+    if (antwoordmodus !== "sparring")
+      voegToe("stel_kritische_vragen", "Stel kritische vragen", "sparring", true);
+  }
 
   if (historisch) {
     voegToe("maak_tijdlijn", "Maak een tijdlijn", "historisch", false);
     voegToe("toon_eerdere_besluiten", "Toon eerdere besluiten", "historisch", false);
   }
 
-  voegToe("maak_korter", "Maak korter", null, true);
-  voegToe("maak_concreter", "Maak concreter", null, true);
+  // Lengte-transformaties: eveneens alleen documentgericht — bij een algemene vraag
+  // waren "korter/concreter" juist de knoppen die aangeplakt aanvoelden.
+  if (documentGericht) {
+    voegToe("maak_korter", "Maak korter", null, true);
+    voegToe("maak_concreter", "Maak concreter", null, true);
+  }
 
   return acties;
 }

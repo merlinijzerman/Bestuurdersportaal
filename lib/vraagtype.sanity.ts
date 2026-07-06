@@ -325,14 +325,26 @@ test("vervolgacties: besluitvormingsvraag → Werk uit richting besluitvorming",
   assert.equal(wu!.hergebruikScope, false);
 });
 
-test("vervolgacties: niet altijd alle knoppen — feitelijk zonder besluit/historie", () => {
+test("vervolgacties: ALGEMENE vraag (documentGericht=false) → geen perspectief-/lengte-knoppen", () => {
+  // Bij een algemene vraag dragen de losse B1-vervolgvragen de "wat nu"-suggesties;
+  // de generieke transformatieknoppen worden bewust NIET aangeboden.
   const a = bepaalVervolgacties("Wat is de premie in 2025?", "feitelijk", true);
   const t = a.map((x) => x.type);
   assert.ok(!t.includes("werk_uit_besluitvorming")); // geen besluitsignaal
   assert.ok(!t.includes("maak_tijdlijn")); // geen historisch signaal
+  assert.ok(!t.includes("geef_duiding")); // lens alleen documentgericht
+  assert.ok(!t.includes("stel_kritische_vragen")); // lens alleen documentgericht
+  assert.ok(!t.includes("maak_korter")); // lengte alleen documentgericht
+});
+
+test("vervolgacties: DOCUMENTGERICHTE vraag → behoud duiding + kritische vragen", () => {
+  const a = bepaalVervolgacties("Wat is de premie in 2025?", "feitelijk", true, true);
+  const t = a.map((x) => x.type);
   assert.ok(!t.includes("maak_feitelijker")); // is al feitelijk
   assert.ok(t.includes("geef_duiding"));
   assert.ok(t.includes("stel_kritische_vragen"));
+  assert.ok(t.includes("maak_korter")); // lengte-acties komen terug
+  assert.ok(t.includes("maak_concreter"));
 });
 
 test("vervolgacties: historisch signaal → tijdlijn + eerdere besluiten", () => {
@@ -343,7 +355,8 @@ test("vervolgacties: historisch signaal → tijdlijn + eerdere besluiten", () =>
 });
 
 test("vervolgacties: reformatteer-acties hergebruiken scope; verbredende niet", () => {
-  const a = bepaalVervolgacties("Geef duiding bij dit voorstel", "duiding", true);
+  // documentGericht=true zodat maak_feitelijker (lens) wordt aangeboden.
+  const a = bepaalVervolgacties("Geef duiding bij dit voorstel", "duiding", true, true);
   const feit = a.find((x) => x.type === "maak_feitelijker");
   const wu = a.find((x) => x.type === "werk_uit_besluitvorming");
   assert.equal(feit!.hergebruikScope, true);

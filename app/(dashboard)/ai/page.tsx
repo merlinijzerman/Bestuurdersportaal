@@ -734,6 +734,9 @@ export default function AiPage() {
           model_kennis?: { grond: "algemene_kennis" | "wetgeving"; instantie: string | null }[];
           // Increment F (FO §14) — profielsturing-status (paneel "Onderbouwing en bronnen").
           profielsturing?: "actief" | "uitgeschakeld" | "geen-profiel" | null;
+          // B1 / scope-split — documentgericht (meta) + vervolgvragen (done).
+          document_gericht?: boolean;
+          vervolgvragen?: string[];
         };
         try {
           evt = JSON.parse(regel);
@@ -789,6 +792,10 @@ export default function AiPage() {
             modelKennis: [],
             // Increment F (FO §14) — transparantie profielsturing in het controlevlak.
             profielsturing: evt.profielsturing ?? null,
+            // B1 / scope-split — documentgericht bepaalt in de render welke
+            // vervolgacties (duiding/kritische vragen) blijven staan.
+            documentGericht: evt.document_gericht ?? null,
+            vervolgvragen: [],
           };
           // Deterministische inline-meldingen (pre-stream); de #4-melding kan in
           // het 'done'-event nog worden aangevuld.
@@ -827,6 +834,13 @@ export default function AiPage() {
           // met genoemde instantie) komen in het 'done'-event en horen in het paneel.
           if (evt.model_kennis && onderbouwingData) {
             onderbouwingData = { ...onderbouwingData, modelKennis: evt.model_kennis };
+          }
+          // B1 — inhoudelijke vervolgvragen (kunnen leeg zijn) naar het bericht.
+          if (onderbouwingData) {
+            onderbouwingData = {
+              ...onderbouwingData,
+              vervolgvragen: evt.vervolgvragen ?? [],
+            };
           }
           schrijfAi();
         } else if (evt.type === "error") {
@@ -1284,7 +1298,35 @@ export default function AiPage() {
                 </OnderbouwingPaneel>
               )}
 
-              {/* Contextbewuste vervolgacties (FO §13) — ná de onderbouwing. */}
+              {/* B1 — inhoudelijke vervolgvragen (op basis van het antwoord).
+                  Ná de onderbouwing, zodat ze duidelijk bij het antwoord horen.
+                  Deze starten een NIEUWE vraag (geen transformatie). */}
+              {b.rol === "ai" &&
+                b.onderbouwing?.vervolgvragen &&
+                b.onderbouwing.vervolgvragen.length > 0 &&
+                !(laden && i === berichten.length - 1) && (
+                  <div className="mt-3">
+                    <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
+                      Vervolgvragen
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {b.onderbouwing.vervolgvragen.map((vraag, vi) => (
+                        <button
+                          key={vi}
+                          onClick={() => stuurBericht(vraag)}
+                          disabled={laden}
+                          className="text-xs text-ink bg-white border border-gray-200 rounded-full px-3 py-1 hover:border-accent hover:bg-yellow-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        >
+                          {vraag}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+              {/* Contextbewuste vervolgacties (FO §13) — ná de onderbouwing.
+                  Bij documentgerichte vragen blijven bestuurlijke duiding en
+                  kritische vragen behouden; bij algemene vragen niet. */}
               {b.rol === "ai" &&
                 b.onderbouwing &&
                 !(laden && i === berichten.length - 1) &&
@@ -1298,7 +1340,8 @@ export default function AiPage() {
                   const acties = bepaalVervolgacties(
                     vorigeVraag,
                     am,
-                    !!b.bronnen?.length
+                    !!b.bronnen?.length,
+                    b.onderbouwing?.documentGericht === true
                   );
                   if (acties.length === 0) return null;
                   return (

@@ -91,6 +91,39 @@ NOOIT ZO BEGINNEN:
 - "Met betrekking tot uw vraag over..."
 - Direct met een bullet list of genummerde lijst zonder context.`;
 
+// ── B1: inhoudelijke vervolgvragen inline in de antwoord-call ────────────────
+// In plaats van een tweede modelcall laten we het antwoordmodel zélf, ná het
+// zichtbare antwoord, 2-3 échte vervolgvragen meegeven achter een sentinel. De
+// server knipt die tail eraf (nooit zichtbaar in de stream), parset de vragen en
+// stuurt ze apart in het 'done'-event. Zo sluiten de vervolgvragen aan op wat er
+// dáádwerkelijk stond, zonder extra latency of kosten.
+const VERVOLGVRAGEN_MARKER = "###VERVOLGVRAGEN###";
+
+const VERVOLGVRAGEN_INSTRUCTIE = `NA UW ANTWOORD — VERVOLGVRAGEN (niet zichtbaar voor de lezer):
+Zet, op een geheel nieuwe regel ná uw volledige antwoord, exact deze regel:
+${VERVOLGVRAGEN_MARKER}
+Geef daaronder 2 of 3 korte, inhoudelijke vervolgvragen die deze bestuurder op basis van úw antwoord logisch als volgende zou stellen. Elk op een eigen regel, beginnend met "- ".
+Harde eisen:
+- Het zijn ECHTE vragen over de inhoud, geen bewerkingen van dit antwoord (dus niet "vat korter samen", "geef duiding", "maak concreter" — dat zijn losse knoppen).
+- Elke vraag staat op zichzelf (begrijpelijk zonder deze chat), is in de u-vorm, en is kort (max ± 12 woorden).
+- Baseer ze op wat u zojuist schreef; verzin geen nieuwe feiten.
+- Kunt u geen zinnige vervolgvraag bedenken, zet dan enkel de markerregel zonder vragen eronder.
+- Schrijf niets ná de vervolgvragen en verwijs in uw antwoord nergens naar dit blok.`;
+
+// Knipt het zichtbare antwoord los van het vervolgvragen-blok en parset de vragen.
+function splitsVervolgvragen(ruw: string): { zichtbaar: string; vervolgvragen: string[] } {
+  const idx = ruw.indexOf(VERVOLGVRAGEN_MARKER);
+  if (idx === -1) return { zichtbaar: ruw, vervolgvragen: [] };
+  const zichtbaar = ruw.slice(0, idx).trimEnd();
+  const vervolgvragen = ruw
+    .slice(idx + VERVOLGVRAGEN_MARKER.length)
+    .split("\n")
+    .map((r) => r.replace(/^\s*[-*•]\s*/, "").trim())
+    .filter((r) => r.length > 0 && r.length <= 160)
+    .slice(0, 3);
+  return { zichtbaar, vervolgvragen };
+}
+
 // ============================================================
 //  Systeemprompts per modus — basis (worden aangevuld met
 //  persoonlijke context van de bestuurder)
@@ -1090,6 +1123,11 @@ export async function POST(req: NextRequest) {
             modus: effectieveModus,
             transformatie: transformatieActief,
             chunks_gevonden: chunks.length,
+            // "Documentgericht" = de vraag ging over een specifiek stuk (strict
+            // document-scope) of een agendapunt met stukken. Bepaalt in de UI welke
+            // vervolgacties (duiding/kritische vragen) blijven staan naast de B1-
+            // vervolgvragen. Reist mee in de onderbouwing zodat het na herladen klopt.
+            document_gericht: scopeActief || agendapuntModusActief,
             scope: scopeActief
               ? {
                   document_ids: scopeDocumentIds,
@@ -1181,26 +1219,70 @@ export async function POST(req: NextRequest) {
           // budget (zoals de env-vlag BESTUURLIJKE_STIJL al deed).
           const ruimBudget =
             BESTUURLIJKE_STIJL || antwoordmodus === "duiding" || antwoordmodus === "sparring";
+
+          // B1 — vraag het model om inline vervolgvragen, behalve bij een
+          // transformatie-actie (die herschrijft juist het vorige antwoord; daar
+          // horen geen nieuwe vervolgvragen bij, dat zou de keten laten uitdijen).
+          const metVervolgvragen = !transformatieActief;
+          const streamSysteem = metVervolgvragen
+            ? [
+                ...systeemBlokken,
+                { type: "text" as const, text: VERVOLGVRAGEN_INSTRUCTIE },
+              ]
+            : systeemBlokken;
+
           const claudeStream = anthropic.messages.stream({
             model: AI_MODEL,
             max_tokens: ruimBudget ? MAX_TOKENS_BESTUURLIJK : MAX_TOKENS,
-            system: systeemBlokken,
+            system: streamSysteem,
             messages: streamMessages,
           });
 
+          // Stream de zichtbare tekst, maar houd steeds een staart ter grootte van
+          // de marker achter: zo lekt "###VERVOLGVRAGEN###" nooit naar de client,
+          // ook niet als de marker over twee deltas heen arriveert. Zodra de marker
+          // opduikt, sturen we tot dáár en daarna niets meer.
+          let verzonden = 0;
+          let markerGezien = false;
           claudeStream.on("text", (delta) => {
             volledig += delta;
-            send({ type: "delta", text: delta });
+            if (markerGezien) return;
+            const idx = volledig.indexOf(VERVOLGVRAGEN_MARKER);
+            if (idx !== -1) {
+              if (idx > verzonden) send({ type: "delta", text: volledig.slice(verzonden, idx) });
+              verzonden = idx;
+              markerGezien = true;
+              return;
+            }
+            const veiligeGrens = Math.max(
+              verzonden,
+              volledig.length - VERVOLGVRAGEN_MARKER.length
+            );
+            if (veiligeGrens > verzonden) {
+              send({ type: "delta", text: volledig.slice(verzonden, veiligeGrens) });
+              verzonden = veiligeGrens;
+            }
           });
 
           await claudeStream.finalMessage();
+
+          // Flush de resterende zichtbare staart als de marker nooit kwam.
+          if (!markerGezien && verzonden < volledig.length) {
+            send({ type: "delta", text: volledig.slice(verzonden) });
+            verzonden = volledig.length;
+          }
+
+          // Splits het zichtbare antwoord van de vervolgvragen. Alles hierná werkt
+          // op het ZICHTBARE antwoord (citaties, markers, model_knowledge, logging).
+          const { zichtbaar: zichtbaarAntwoord, vervolgvragen } =
+            splitsVervolgvragen(volledig);
 
           // Bronvermelding-validatie: tel [Bron N]-citaties en hoeveel daarvan
           // buiten het bereik van de aangeleverde bronnen vallen (dangling).
           // Audit-signaal: zo is in de log zichtbaar wanneer het model een
           // niet-bestaande bron aanhaalde.
           if (retrievalMeta) {
-            const citatieMatches = volledig.match(/\[Bron (\d+)\]/gi) || [];
+            const citatieMatches = zichtbaarAntwoord.match(/\[Bron (\d+)\]/gi) || [];
             let ongeldig = 0;
             for (const m of citatieMatches) {
               const n = parseInt(/\d+/.exec(m)![0], 10);
@@ -1216,7 +1298,7 @@ export async function POST(req: NextRequest) {
           // antwoordinhoud: tel [Algemene kennis]/[Volgens wetgeving]-markeringen
           // zodat de #4-melding (algemene kennis náást fondsdocumenten) verschijnt.
           const algemeneKennisMarkers = (
-            volledig.match(/\[(?:Algemene kennis|Volgens wetgeving)\]/gi) || []
+            zichtbaarAntwoord.match(/\[(?:Algemene kennis|Volgens wetgeving)\]/gi) || []
           ).length;
           const inlineMeldingenFinaal = bepaalInlineMeldingen({
             bronModus: bronModusRetrieval,
@@ -1232,7 +1314,7 @@ export async function POST(req: NextRequest) {
           // Bij scope of pure documentmodus levert dit niets (geen algemene kennis).
           const modelKennisSources = scopeActief
             ? []
-            : modelKennisBronnenUitAntwoord(volledig);
+            : modelKennisBronnenUitAntwoord(zichtbaarAntwoord);
           const alleSources: AssistantSource[] = [
             ...documentSources,
             ...modelKennisSources,
@@ -1302,7 +1384,7 @@ export async function POST(req: NextRequest) {
             gebruiker_naam: profiel?.naam || user.email,
             fonds_id,
             vraag,
-            antwoord: volledig,
+            antwoord: zichtbaarAntwoord,
             bronnen,
             modus: effectieveModus,
             model: AI_MODEL,
@@ -1318,6 +1400,9 @@ export async function POST(req: NextRequest) {
             // bijgewerkte samenvatting voor het paneel "Onderbouwing en bronnen".
             model_kennis: modelKennisSources,
             source_summary: sourceSamenvatting,
+            // B1 — inhoudelijke vervolgvragen op basis van het antwoord (kunnen
+            // leeg zijn). De UI toont ze als klikbare chips ná de onderbouwing.
+            vervolgvragen,
           });
         } catch (streamFout) {
           console.error("Chat stream fout:", streamFout);
