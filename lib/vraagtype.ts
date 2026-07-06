@@ -546,7 +546,10 @@ export function bepaalVervolgacties(
       hergebruikScope,
     });
 
-  if (heeftBronnen) voegToe("toon_bronnen", "Toon gebruikte bronnen", null, false);
+  // "Toon gebruikte bronnen" is bewust GEEN vervolgactie meer: het onderbouwings-
+  // paneel staat direct onder het antwoord (page.tsx), dus een aparte knop was
+  // dubbelop. Het type + de UI-afhandeling blijven bestaan voor de deeplink die
+  // het paneel opent, maar de knop wordt niet meer aangeboden.
   if (besluit)
     voegToe("werk_uit_besluitvorming", "Werk uit richting besluitvorming", "besluitrijpheid", false);
 

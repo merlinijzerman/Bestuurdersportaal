@@ -1257,7 +1257,34 @@ export default function AiPage() {
                 </div>
               )}
 
-              {/* Contextbewuste vervolgacties (FO §13) — onder het antwoord. */}
+              {/* Onderbouwing en bronnen (FO §11c) — standaard ingeklapt.
+                  Staat bewust vóór de vervolgacties: het antwoord staat zo
+                  direct naast zijn bronnen, en de vervolgvragen sluiten daar
+                  daaronder op aan. */}
+              {b.rol === "ai" && b.onderbouwing && (
+                <OnderbouwingPaneel
+                  meta={{ ...b.onderbouwing, aantalBronnen: b.bronnen?.length ?? 0 }}
+                  open={openPanelen.has(i)}
+                  onToggle={() => togglePaneel(i)}
+                  ankerId={`onderbouwing-${i}`}
+                >
+                  {b.bronnen && b.bronnen.length > 0
+                    ? b.bronnen.map((bron, j) => (
+                        <Bronkaart
+                          key={j}
+                          idx={j}
+                          bron={bron}
+                          idVoorScroll={`bron-${i}-${j}`}
+                          gehighlight={
+                            highlight?.berichtIdx === i && highlight?.bronIdx === j
+                          }
+                        />
+                      ))
+                    : null}
+                </OnderbouwingPaneel>
+              )}
+
+              {/* Contextbewuste vervolgacties (FO §13) — ná de onderbouwing. */}
               {b.rol === "ai" &&
                 b.onderbouwing &&
                 !(laden && i === berichten.length - 1) &&
@@ -1289,30 +1316,6 @@ export default function AiPage() {
                     </div>
                   );
                 })()}
-
-              {/* Onderbouwing en bronnen (FO §11c) — standaard ingeklapt. */}
-              {b.rol === "ai" && b.onderbouwing && (
-                <OnderbouwingPaneel
-                  meta={{ ...b.onderbouwing, aantalBronnen: b.bronnen?.length ?? 0 }}
-                  open={openPanelen.has(i)}
-                  onToggle={() => togglePaneel(i)}
-                  ankerId={`onderbouwing-${i}`}
-                >
-                  {b.bronnen && b.bronnen.length > 0
-                    ? b.bronnen.map((bron, j) => (
-                        <Bronkaart
-                          key={j}
-                          idx={j}
-                          bron={bron}
-                          idVoorScroll={`bron-${i}-${j}`}
-                          gehighlight={
-                            highlight?.berichtIdx === i && highlight?.bronIdx === j
-                          }
-                        />
-                      ))
-                    : null}
-                </OnderbouwingPaneel>
-              )}
             </div>
           </div>
         ))}

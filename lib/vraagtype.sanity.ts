@@ -312,9 +312,9 @@ test("isBesluitvormingsgericht: duiding/besluitrijpheid + besluitsignalen", () =
   assert.equal(isBesluitvormingsgericht("Wat is de premie in 2025?", "feitelijk"), false);
 });
 
-test("vervolgacties bevatten altijd Toon gebruikte bronnen bij bronnen", () => {
+test("vervolgacties bieden GEEN 'Toon gebruikte bronnen' meer aan (paneel staat er al)", () => {
   const a = bepaalVervolgacties("Wat is de premie?", "feitelijk", true);
-  assert.ok(a.some((x) => x.type === "toon_bronnen"));
+  assert.ok(!a.some((x) => x.type === "toon_bronnen"));
 });
 
 test("vervolgacties: besluitvormingsvraag → Werk uit richting besluitvorming", () => {
