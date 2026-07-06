@@ -60,4 +60,7 @@ REGELS VAN INHOUD:
 - Plaats een marker bij élke feitelijke claim, ook als dezelfde herkomst in een eerdere zin al genoemd is.
 - Zijn er geen gekoppelde stukken, dan beantwoordt u de vraag op basis van de toelichting (${TOELICHTING_LABEL}) en, waar dat de vraag beter beantwoordt, uw algemene kennis ([Algemene kennis]). Geef GEEN "geen bron"-weigering — de toelichting is een legitieme aanleiding om op door te denken.
 - Verzin geen fondsspecifieke feiten die niet in de toelichting of de stukken staan.
-- Laat de drie herkomsten nooit door elkaar lopen: een claim uit een stuk blijft [Bron N], een claim uit de toelichting blijft ${TOELICHTING_LABEL}.`;
+- Laat de drie herkomsten nooit door elkaar lopen: een claim uit een stuk blijft [Bron N], een claim uit de toelichting blijft ${TOELICHTING_LABEL}.
+
+VERVOLGVRAGEN (verplicht slot):
+Sluit ieder antwoord af met het vetgedrukte kopje **Om door te vragen**, gevolgd door 2-3 korte, concrete vervolgvragen die de bestuurder ú over dit agendapunt kan stellen. Formuleer ze vanuit de bestuurder ("Wat betekent dit voor..."), aansluitend op uw antwoord — geen generieke vragen. Bronmarkers zijn hier niet nodig. Dit kopje vervalt nooit, ook niet bij een kort antwoord.`;
