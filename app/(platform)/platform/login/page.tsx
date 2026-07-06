@@ -167,7 +167,7 @@ export default function PlatformLoginPage() {
 
         <div className="rounded-2xl bg-white p-6 shadow-sm">
           {fout && (
-            <div className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+            <div className="mb-4 rounded-lg bg-err-tint px-3 py-2 text-sm text-err-ink">
               {fout}
             </div>
           )}

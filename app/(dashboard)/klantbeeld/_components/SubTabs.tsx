@@ -10,7 +10,7 @@ const TABS = [
 export function HoofdTabs() {
   const pathname = usePathname();
   return (
-    <div className="flex gap-6 mt-6 border-b border-gray-200 -mb-px">
+    <div className="flex gap-6 mt-6 border-b border-line -mb-px">
       {TABS.map((t) => {
         const actief = pathname.startsWith(t.href);
         return (
@@ -20,11 +20,11 @@ export function HoofdTabs() {
             className={`px-1 pb-3 border-b-2 text-sm transition-colors ${
               actief
                 ? "border-accent text-ink font-semibold"
-                : "border-transparent text-gray-600 hover:text-ink"
+                : "border-transparent text-muted hover:text-ink"
             }`}
           >
             {t.label}
-            <span className="ml-1 text-[11px] text-gray-400 font-normal">{t.aantal}</span>
+            <span className="ml-1 text-[11px] text-muted font-normal">{t.aantal}</span>
           </Link>
         );
       })}
@@ -40,7 +40,7 @@ const DEELNEMERS_SUBS = [
 export function DeelnemersSubTabs() {
   const pathname = usePathname();
   return (
-    <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit text-sm">
+    <div className="flex gap-1 bg-app-bg p-1 rounded-lg w-fit text-sm">
       {DEELNEMERS_SUBS.map((t) => {
         const actief = pathname === t.href;
         return (
@@ -50,7 +50,7 @@ export function DeelnemersSubTabs() {
             className={`px-4 py-2 rounded-md transition-colors ${
               actief
                 ? "bg-accent text-white"
-                : "text-gray-700 hover:text-ink"
+                : "text-ink hover:text-ink"
             }`}
           >
             {t.label}

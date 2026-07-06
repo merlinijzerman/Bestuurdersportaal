@@ -73,10 +73,10 @@ export default function NieuwRisicoForm() {
   return (
     <form
       onSubmit={indienen}
-      className="bg-white border border-gray-200 rounded-xl p-6 space-y-5"
+      className="bg-white border border-line rounded-xl p-6 space-y-5"
     >
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+        <label className="block text-sm font-medium text-ink mb-1.5">
           Titel
         </label>
         <input
@@ -84,12 +84,12 @@ export default function NieuwRisicoForm() {
           value={titel}
           onChange={(e) => setTitel(e.target.value)}
           placeholder="bv. Concentratierisico vastgoedportefeuille"
-          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-accent outline-none"
+          className="w-full border border-line rounded-lg px-3 py-2 text-sm focus:border-accent outline-none"
         />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+        <label className="block text-sm font-medium text-ink mb-1.5">
           Categorie
         </label>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -99,7 +99,7 @@ export default function NieuwRisicoForm() {
               className={`flex items-start gap-2 border rounded-lg px-3 py-2.5 cursor-pointer hover:border-accent ${
                 categorie === c.slug
                   ? "border-accent bg-accent/5"
-                  : "border-gray-200"
+                  : "border-line"
               }`}
             >
               <input
@@ -111,7 +111,7 @@ export default function NieuwRisicoForm() {
               />
               <div>
                 <div className="text-sm font-medium">{c.label}</div>
-                <div className="text-xs text-gray-500 leading-tight">
+                <div className="text-xs text-muted leading-tight">
                   {c.korteOmschrijving}
                 </div>
               </div>
@@ -121,7 +121,7 @@ export default function NieuwRisicoForm() {
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+        <label className="block text-sm font-medium text-ink mb-1.5">
           Toelichting
         </label>
         <textarea
@@ -129,13 +129,13 @@ export default function NieuwRisicoForm() {
           value={toelichting}
           onChange={(e) => setToelichting(e.target.value)}
           placeholder="Beschrijf het risico, oorzaken en mogelijke gevolgen."
-          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-accent outline-none resize-none"
+          className="w-full border border-line rounded-lg px-3 py-2 text-sm focus:border-accent outline-none resize-none"
         />
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">
+          <label className="block text-sm font-medium text-ink mb-1.5">
             Kans
           </label>
           <div className="flex gap-1">
@@ -147,19 +147,19 @@ export default function NieuwRisicoForm() {
                 className={`flex-1 py-2 text-xs rounded transition ${
                   kans === n
                     ? "border-2 border-accent bg-accent text-white font-semibold"
-                    : "border border-gray-200 hover:border-accent"
+                    : "border border-line hover:border-accent"
                 }`}
               >
                 {n}
               </button>
             ))}
           </div>
-          <div className="text-xs text-gray-500 mt-1.5">
+          <div className="text-xs text-muted mt-1.5">
             {KANS_LABELS[kans]}
           </div>
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">
+          <label className="block text-sm font-medium text-ink mb-1.5">
             Impact
           </label>
           <div className="flex gap-1">
@@ -171,14 +171,14 @@ export default function NieuwRisicoForm() {
                 className={`flex-1 py-2 text-xs rounded transition ${
                   impact === n
                     ? "border-2 border-accent bg-accent text-white font-semibold"
-                    : "border border-gray-200 hover:border-accent"
+                    : "border border-line hover:border-accent"
                 }`}
               >
                 {n}
               </button>
             ))}
           </div>
-          <div className="text-xs text-gray-500 mt-1.5">
+          <div className="text-xs text-muted mt-1.5">
             {IMPACT_LABELS[impact]}
           </div>
         </div>
@@ -189,13 +189,13 @@ export default function NieuwRisicoForm() {
       >
         <div className={`w-3 h-3 rounded-full ${niveauKleur.dot}`} />
         <div className="text-sm">
-          <span className="text-gray-700">
+          <span className="text-ink">
             {handmatigNiveau ? "Handmatig niveau:" : "Afgeleid risiconiveau:"}
           </span>{" "}
           <span className={`font-semibold ${niveauKleur.pillText}`}>
             {NIVEAU_LABEL[niveau]}
           </span>
-          <span className="text-xs text-gray-500 ml-2">
+          <span className="text-xs text-muted ml-2">
             (K{kans} + I{impact} = {kans + impact})
           </span>
         </div>
@@ -204,7 +204,7 @@ export default function NieuwRisicoForm() {
             <button
               type="button"
               onClick={() => setHandmatigNiveau(null)}
-              className="text-xs text-gray-500 hover:text-ink"
+              className="text-xs text-muted hover:text-ink"
             >
               Reset
             </button>
@@ -216,7 +216,7 @@ export default function NieuwRisicoForm() {
               if (v === "") setHandmatigNiveau(null);
               else setHandmatigNiveau(v as NiveauSlug);
             }}
-            className="text-xs border border-gray-200 rounded px-2 py-1 bg-white"
+            className="text-xs border border-line rounded px-2 py-1 bg-white"
           >
             <option value="">Handmatig overschrijven…</option>
             <option value="laag">Laag</option>
@@ -227,7 +227,7 @@ export default function NieuwRisicoForm() {
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+        <label className="block text-sm font-medium text-ink mb-1.5">
           Type
         </label>
         <div className="flex gap-2">
@@ -235,7 +235,7 @@ export default function NieuwRisicoForm() {
             className={`flex-1 flex items-center gap-2 rounded-lg px-3 py-2.5 cursor-pointer ${
               type === "structureel"
                 ? "border-2 border-accent bg-accent/5"
-                : "border border-gray-200 hover:border-accent"
+                : "border border-line hover:border-accent"
             }`}
           >
             <input
@@ -247,7 +247,7 @@ export default function NieuwRisicoForm() {
             />
             <div>
               <div className="text-sm font-medium">Structureel</div>
-              <div className="text-xs text-gray-500">
+              <div className="text-xs text-muted">
                 Inherent aan bedrijfsvoering
               </div>
             </div>
@@ -256,7 +256,7 @@ export default function NieuwRisicoForm() {
             className={`flex-1 flex items-center gap-2 rounded-lg px-3 py-2.5 cursor-pointer ${
               type === "tijdelijk"
                 ? "border-2 border-accent bg-accent/5"
-                : "border border-gray-200 hover:border-accent"
+                : "border border-line hover:border-accent"
             }`}
           >
             <input
@@ -268,7 +268,7 @@ export default function NieuwRisicoForm() {
             />
             <div>
               <div className="text-sm font-medium">Tijdelijk</div>
-              <div className="text-xs text-gray-500">
+              <div className="text-xs text-muted">
                 Gebonden aan project of gebeurtenis
               </div>
             </div>
@@ -277,15 +277,15 @@ export default function NieuwRisicoForm() {
       </div>
 
       {fout && (
-        <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+        <div className="text-sm text-err-ink bg-err-tint border border-err/30 rounded-lg px-3 py-2">
           {fout}
         </div>
       )}
 
-      <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">
+      <div className="flex justify-end gap-2 pt-3 border-t border-line">
         <a
           href="/risicomatrix"
-          className="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:border-accent text-gray-700"
+          className="px-4 py-2 text-sm border border-line rounded-lg hover:border-accent text-ink"
         >
           Annuleren
         </a>

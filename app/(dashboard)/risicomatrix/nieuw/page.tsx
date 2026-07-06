@@ -6,14 +6,14 @@ export default function NieuwRisicoPage() {
     <div className="p-4 sm:p-6 lg:p-7 max-w-3xl">
       <Link
         href="/risicomatrix"
-        className="text-sm text-gray-500 hover:text-ink inline-flex items-center gap-1"
+        className="text-sm text-muted hover:text-ink inline-flex items-center gap-1"
       >
         ← Terug naar matrix
       </Link>
       <h1 className="font-serif text-ink text-xl font-bold mt-2">
         Nieuw risico vastleggen
       </h1>
-      <p className="text-gray-500 text-sm mt-0.5">
+      <p className="text-muted text-sm mt-0.5">
         Geef een titel, kies een categorie, en bepaal kans en impact. Het
         risiconiveau wordt automatisch afgeleid &mdash; je kunt het
         handmatig overschrijven indien nodig.

@@ -160,7 +160,7 @@ export default function AgendapuntEditModal({
                   Agendapunt bewerken
                 </div>
                 {aantalBijdragers > 0 && (
-                  <div className="text-[11px] text-amber-700 mt-0.5">
+                  <div className="text-[11px] text-warn-ink mt-0.5">
                     Let op: er staan al {aantalBijdragers}{" "}
                     {aantalBijdragers === 1 ? "bijdrage" : "bijdragen"} op dit punt.
                     Een motivering is verplicht — bijdragers ontvangen een notificatie.
@@ -169,7 +169,7 @@ export default function AgendapuntEditModal({
               </div>
               <button
                 onClick={onClose}
-                className="text-gray-400 text-sm hover:text-ink"
+                className="text-muted text-sm hover:text-ink"
                 aria-label="Sluiten"
               >
                 ✕
@@ -182,7 +182,7 @@ export default function AgendapuntEditModal({
                   type="text"
                   value={titel}
                   onChange={(e) => setTitel(e.target.value)}
-                  className="w-full text-sm border border-gray-200 rounded px-3 py-2 focus:border-accent outline-none"
+                  className="w-full text-sm border border-line rounded px-3 py-2 focus:border-accent outline-none"
                 />
               </Veld>
 
@@ -191,7 +191,7 @@ export default function AgendapuntEditModal({
                   rows={3}
                   value={beschrijving}
                   onChange={(e) => setBeschrijving(e.target.value)}
-                  className="w-full text-sm border border-gray-200 rounded px-3 py-2 focus:border-accent outline-none resize-none"
+                  className="w-full text-sm border border-line rounded px-3 py-2 focus:border-accent outline-none resize-none"
                 />
               </Veld>
 
@@ -200,7 +200,7 @@ export default function AgendapuntEditModal({
                   <select
                     value={categorie}
                     onChange={(e) => setCategorie(e.target.value as Categorie)}
-                    className="w-full text-sm border border-gray-200 rounded px-3 py-2 focus:border-accent outline-none bg-white"
+                    className="w-full text-sm border border-line rounded px-3 py-2 focus:border-accent outline-none bg-white"
                   >
                     {TOEGESTANE_CATEGORIEEN.map((c) => (
                       <option key={c.code} value={c.code}>
@@ -216,7 +216,7 @@ export default function AgendapuntEditModal({
                     min={0}
                     value={tijdsduur}
                     onChange={(e) => setTijdsduur(e.target.value)}
-                    className="w-full text-sm border border-gray-200 rounded px-3 py-2 focus:border-accent outline-none"
+                    className="w-full text-sm border border-line rounded px-3 py-2 focus:border-accent outline-none"
                   />
                 </Veld>
               </div>
@@ -226,7 +226,7 @@ export default function AgendapuntEditModal({
                   type="text"
                   value={verantwoordelijke}
                   onChange={(e) => setVerantwoordelijke(e.target.value)}
-                  className="w-full text-sm border border-gray-200 rounded px-3 py-2 focus:border-accent outline-none"
+                  className="w-full text-sm border border-line rounded px-3 py-2 focus:border-accent outline-none"
                 />
               </Veld>
 
@@ -238,7 +238,7 @@ export default function AgendapuntEditModal({
                 <select
                   value={vergaderingId}
                   onChange={(e) => setVergaderingId(e.target.value)}
-                  className="w-full text-sm border border-gray-200 rounded px-3 py-2 focus:border-accent outline-none bg-white"
+                  className="w-full text-sm border border-line rounded px-3 py-2 focus:border-accent outline-none bg-white"
                   disabled={komendeVergaderingen.length === 0}
                 >
                   <option value={punt.vergadering_id}>— huidige vergadering —</option>
@@ -261,37 +261,37 @@ export default function AgendapuntEditModal({
                     placeholder="Waarom past u dit punt aan?"
                     className={`w-full text-sm border rounded px-3 py-2 focus:border-accent outline-none resize-none ${
                       motivering.length > 0 && motivering.length < MOTIVERING_MIN
-                        ? "border-amber-300 bg-amber-50/50"
-                        : "border-gray-200"
+                        ? "border-warn/30 bg-warn-tint"
+                        : "border-line"
                     }`}
                   />
-                  <div className="text-[11px] text-gray-500 mt-1">
+                  <div className="text-[11px] text-muted mt-1">
                     {motivering.trim().length}/{MOTIVERING_MIN} tekens
                   </div>
                 </Veld>
               )}
 
               {fout && (
-                <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                <div className="text-xs text-err-ink bg-err-tint border border-err/30 rounded-lg px-3 py-2">
                   {fout}
                 </div>
               )}
             </div>
 
-            <div className="flex items-center justify-between gap-2 pt-2 border-t border-gray-100">
+            <div className="flex items-center justify-between gap-2 pt-2 border-t border-line">
               <button
                 onClick={() => {
                   setFout(null);
                   setToonVerwijderen(true);
                 }}
-                className="text-xs text-red-600 hover:text-red-800 font-medium"
+                className="text-xs text-err-ink hover:text-err-ink font-medium"
               >
                 Verwijderen…
               </button>
               <div className="flex items-center gap-2">
                 <button
                   onClick={onClose}
-                  className="text-xs text-gray-600 hover:text-ink px-3 py-1.5"
+                  className="text-xs text-muted hover:text-ink px-3 py-1.5"
                 >
                   Annuleren
                 </button>
@@ -308,7 +308,7 @@ export default function AgendapuntEditModal({
         ) : (
           <>
             <div className="flex items-start justify-between gap-3">
-              <div className="text-sm font-semibold text-red-700">
+              <div className="text-sm font-semibold text-err-ink">
                 Agendapunt verwijderen
               </div>
               <button
@@ -316,14 +316,14 @@ export default function AgendapuntEditModal({
                   setToonVerwijderen(false);
                   setFout(null);
                 }}
-                className="text-gray-400 text-sm hover:text-ink"
+                className="text-muted text-sm hover:text-ink"
                 aria-label="Terug"
               >
                 ✕
               </button>
             </div>
 
-            <p className="text-xs text-gray-700 leading-relaxed">
+            <p className="text-xs text-ink leading-relaxed">
               U gaat dit agendapunt verwijderen.{" "}
               {aantalBijdragers > 0
                 ? `Er staan ${aantalBijdragers} ${
@@ -341,17 +341,17 @@ export default function AgendapuntEditModal({
                 placeholder="Waarom wordt dit punt verwijderd?"
                 className={`w-full text-sm border rounded px-3 py-2 focus:border-accent outline-none resize-none ${
                   verwijderReden.length > 0 && verwijderReden.length < MOTIVERING_MIN
-                    ? "border-amber-300 bg-amber-50/50"
-                    : "border-gray-200"
+                    ? "border-warn/30 bg-warn-tint"
+                    : "border-line"
                 }`}
               />
-              <div className="text-[11px] text-gray-500 mt-1">
+              <div className="text-[11px] text-muted mt-1">
                 {verwijderReden.trim().length}/{MOTIVERING_MIN} tekens
               </div>
             </Veld>
 
             {fout && (
-              <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              <div className="text-xs text-err-ink bg-err-tint border border-err/30 rounded-lg px-3 py-2">
                 {fout}
               </div>
             )}
@@ -362,14 +362,14 @@ export default function AgendapuntEditModal({
                   setToonVerwijderen(false);
                   setFout(null);
                 }}
-                className="text-xs text-gray-600 hover:text-ink px-3 py-1.5"
+                className="text-xs text-muted hover:text-ink px-3 py-1.5"
               >
                 Annuleren
               </button>
               <button
                 onClick={verwijderen}
                 disabled={verwijderReden.trim().length < MOTIVERING_MIN || bezig}
-                className="bg-red-600 text-white text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="bg-err text-white text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-err disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {bezig ? "Verwijderen…" : "Definitief verwijderen"}
               </button>
@@ -390,7 +390,7 @@ function Veld({
 }) {
   return (
     <label className="block">
-      <span className="text-[11px] font-semibold text-gray-600 uppercase tracking-wide">
+      <span className="text-[11px] font-semibold text-muted uppercase tracking-wide">
         {label}
       </span>
       <div className="mt-1">{children}</div>

@@ -29,9 +29,9 @@ interface Vergadering {
 }
 
 const STATUS_BADGE: Record<string, { bg: string; text: string; label: string }> = {
-  gepland: { bg: "bg-blue-50", text: "text-blue-700", label: "Gepland" },
-  in_voorbereiding: { bg: "bg-amber-50", text: "text-amber-800", label: "In voorbereiding" },
-  afgerond: { bg: "bg-gray-100", text: "text-gray-600", label: "Afgerond" },
+  gepland: { bg: "bg-accent-tint", text: "text-accent-ink", label: "Gepland" },
+  in_voorbereiding: { bg: "bg-warn-tint", text: "text-warn-ink", label: "In voorbereiding" },
+  afgerond: { bg: "bg-app-bg", text: "text-muted", label: "Afgerond" },
 };
 
 function formatDatum(d: string) {
@@ -245,19 +245,19 @@ export default async function VergaderingDetailPage({
 
   return (
     <div className="p-4 sm:p-6 lg:p-7 space-y-5">
-      <div className="flex items-center gap-2 text-xs text-gray-500">
+      <div className="flex items-center gap-2 text-xs text-muted">
         <Link href="/vergaderingen" className="hover:text-ink">
           Vergaderingen
         </Link>
-        <span className="text-gray-300">›</span>
+        <span className="text-muted">›</span>
         <span className="text-ink font-medium">{v.titel}</span>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl p-5">
+      <div className="bg-white border border-line rounded-xl p-5">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>
             <h1 className="font-serif text-ink text-xl font-bold">{v.titel}</h1>
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="text-sm text-muted mt-1">
               {formatDatum(v.datum)}
               {v.locatie ? ` · ${v.locatie}` : ""}
             </p>
@@ -269,7 +269,7 @@ export default async function VergaderingDetailPage({
           </span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-4 border-t border-gray-200">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-4 border-t border-line">
           <Stat label="Agendapunten" value={agendapunten.length} />
           <Stat label="Stukken" value={totaalStukken} />
           <Stat label="Met AI-samenvatting" value={`${totaalSamengevat} / ${totaalStukken}`} />
@@ -282,7 +282,7 @@ export default async function VergaderingDetailPage({
           <h2 className="text-ink font-semibold text-sm">Agenda</h2>
           <Link
             href={`/vergaderingen/${v.id}${toonVerwijderde ? "" : "?verwijderd=1"}`}
-            className="text-[11px] text-gray-500 hover:text-ink"
+            className="text-[11px] text-muted hover:text-ink"
           >
             {toonVerwijderde ? "← Verberg verwijderde" : "Toon verwijderde"}
           </Link>
@@ -291,7 +291,7 @@ export default async function VergaderingDetailPage({
       </div>
 
       {agendapunten.length === 0 ? (
-        <div className="bg-white border border-dashed border-gray-300 rounded-xl p-8 text-center text-sm text-gray-500">
+        <div className="bg-white border border-dashed border-app-line-strong rounded-xl p-8 text-center text-sm text-muted">
           {toonVerwijderde
             ? "Geen verwijderde agendapunten op deze vergadering."
             : "Nog geen agendapunten. Voeg er hierboven één toe om te beginnen."}
@@ -335,7 +335,7 @@ export default async function VergaderingDetailPage({
 function Stat({ label, value }: { label: string; value: string | number }) {
   return (
     <div>
-      <div className="text-xs text-gray-500">{label}</div>
+      <div className="text-xs text-muted">{label}</div>
       <div className="text-base font-semibold text-ink mt-0.5">{value}</div>
     </div>
   );

@@ -37,13 +37,13 @@ export default function MaandOntwikkelingClient({ cohorten, initialAge = 45 }: P
   return (
     <div className="space-y-6">
       {/* Cohortkiezer */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
+      <div className="bg-white rounded-xl border border-line p-6">
         <div className="flex items-start justify-between gap-6 flex-wrap">
           <div className="flex-1 min-w-0 sm:min-w-[300px]">
-            <div className="text-xs uppercase tracking-wider text-gray-500 mb-1">Geselecteerd cohort</div>
+            <div className="text-xs uppercase tracking-wider text-muted mb-1">Geselecteerd cohort</div>
             <div className="flex items-baseline gap-2">
               <span className="text-3xl font-semibold text-ink">{cohort.age}-jarigen</span>
-              <span className="text-sm text-gray-500">
+              <span className="text-sm text-muted">
                 geboren rond {2026 - cohort.age}
               </span>
             </div>
@@ -67,7 +67,7 @@ export default function MaandOntwikkelingClient({ cohorten, initialAge = 45 }: P
                       setAge(p);
                       setMaandIdx(23);
                     }}
-                    className="px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 transition-colors"
+                    className="px-2 py-1 rounded bg-app-bg hover:bg-app-line transition-colors"
                   >
                     {p}
                   </button>
@@ -105,17 +105,17 @@ export default function MaandOntwikkelingClient({ cohorten, initialAge = 45 }: P
       </div>
 
       {/* Hoofdgrafiek: trajectory + maand-delta */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
+      <div className="bg-white rounded-xl border border-line p-6">
         <div className="flex items-start justify-between mb-4 flex-wrap gap-2">
           <div>
             <h2 className="text-lg font-semibold text-ink">
               Ontwikkeling persoonlijk pensioenvermogen — laatste 24 maanden
             </h2>
-            <p className="text-sm text-gray-600 mt-1">
+            <p className="text-sm text-muted mt-1">
               Boven: vermogen-traject (€). Onder: bouwstenen per maand. Klik een maand om de waterval te bekijken.
             </p>
           </div>
-          <div className="text-xs text-gray-500 text-right">
+          <div className="text-xs text-muted text-right">
             <div>mei 2024 — apr 2026</div>
             <div className="mt-0.5">Inclusief invaar-moment 1 jan 2026</div>
           </div>
@@ -124,7 +124,7 @@ export default function MaandOntwikkelingClient({ cohorten, initialAge = 45 }: P
         <TrajectoryChart cohort={cohort} maandIdx={maandIdx} onSelect={setMaandIdx} />
         <MonthlyDeltaChart cohort={cohort} maandIdx={maandIdx} />
 
-        <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-xs text-gray-700">
+        <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-xs text-ink">
           <Legend kleur="var(--muted)" label="Begin-saldo / invaarkapitaal" />
           <Legend kleur="var(--ok)" label="Premie-instroom" />
           <Legend kleur="#06b6d4" label="Toevoegingen (overdracht in)" />
@@ -138,14 +138,14 @@ export default function MaandOntwikkelingClient({ cohorten, initialAge = 45 }: P
 
       {/* Maand-detail (waterval) + Wat valt op */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-6">
+        <div className="lg:col-span-2 bg-white rounded-xl border border-line p-6">
           <div className="flex items-baseline justify-between">
             <h3 className="text-sm font-semibold text-ink uppercase tracking-wider">Maand-detail</h3>
-            <div className="text-xs text-gray-500">{cohort.reeks[maandIdx].maandKort.replace("'", "20")}</div>
+            <div className="text-xs text-muted">{cohort.reeks[maandIdx].maandKort.replace("'", "20")}</div>
           </div>
           <Waterval rij={cohort.reeks[maandIdx]} />
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <div className="bg-white rounded-xl border border-line p-6">
           <h3 className="text-sm font-semibold text-ink uppercase tracking-wider mb-3">Wat valt op</h3>
           <Observaties cohort={cohort} />
         </div>
@@ -157,7 +157,7 @@ export default function MaandOntwikkelingClient({ cohorten, initialAge = 45 }: P
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <div className="text-xs text-gray-500">{label}</div>
+      <div className="text-xs text-muted">{label}</div>
       <div className="font-semibold text-ink">{value}</div>
     </div>
   );
@@ -379,11 +379,11 @@ function Waterval({ rij }: { rij: MaandRij }) {
           const pct = (s.v / max) * 100;
           return (
             <div key={i} className="flex items-center gap-3">
-              <div className="w-40 text-xs text-gray-700 font-medium">{s.label}</div>
-              <div className="flex-1 relative h-7 bg-gray-100 rounded overflow-hidden">
+              <div className="w-40 text-xs text-ink font-medium">{s.label}</div>
+              <div className="flex-1 relative h-7 bg-app-bg rounded overflow-hidden">
                 <div
                   className={`absolute left-0 top-0 bottom-0 ${
-                    s.type === "total" ? "bg-accent" : "bg-gray-400"
+                    s.type === "total" ? "bg-accent" : "bg-app-line"
                   }`}
                   style={{ width: `${pct}%` }}
                 />
@@ -402,15 +402,15 @@ function Waterval({ rij }: { rij: MaandRij }) {
         const pct = (Math.abs(s.v) / max) * 100;
         return (
           <div key={i} className="flex items-center gap-3">
-            <div className="w-40 text-xs text-gray-700">{s.label}</div>
-            <div className="flex-1 relative h-5 bg-gray-50 rounded overflow-hidden">
+            <div className="w-40 text-xs text-ink">{s.label}</div>
+            <div className="flex-1 relative h-5 bg-app-bg rounded overflow-hidden">
               <div
                 className={`absolute left-0 top-0 bottom-0 opacity-80 ${
-                  isSub ? "bg-red-500" : "bg-emerald-500"
+                  isSub ? "bg-err" : "bg-ok"
                 }`}
                 style={{ width: `${pct}%` }}
               />
-              <div className="absolute inset-0 flex items-center px-2 text-xs text-gray-800 font-medium">
+              <div className="absolute inset-0 flex items-center px-2 text-xs text-ink font-medium">
                 {isSub ? "−" : "+"} {fmtEur(Math.abs(s.v))}
               </div>
             </div>
@@ -429,7 +429,7 @@ function Observaties({ cohort }: { cohort: Cohort }) {
   const maxRTS = r.reduce((a, b) => (Math.abs(b.beschermRTS) > Math.abs(a.beschermRTS) ? b : a));
   if (Math.abs(maxRTS.beschermRTS) > cohort.invaarKapitaal * 0.005) {
     obs.push({
-      kleur: "border-amber-200",
+      kleur: "border-warn/30",
       titel: `Bescherming RTS sterk in ${maxRTS.maandKort.replace("'", "20")}`,
       tekst: `${fmtEurShort(maxRTS.beschermRTS)} bijdrage door ${
         maxRTS.beschermRTS > 0 ? "rentedaling" : "rentestijging"
@@ -442,7 +442,7 @@ function Observaties({ cohort }: { cohort: Cohort }) {
   const maxOver = r.reduce((a, b) => (b.overRend > a.overRend ? b : a));
   if (maxOver.overRend > cohort.invaarKapitaal * 0.01) {
     obs.push({
-      kleur: "border-emerald-200",
+      kleur: "border-ok/30",
       titel: `Overrendement piek in ${maxOver.maandKort.replace("'", "20")}`,
       tekst: `${fmtEurShort(maxOver.overRend)} extra rendement bovenop kas. Geldt voor ${Math.round(
         cohort.overWeight * 100
@@ -453,7 +453,7 @@ function Observaties({ cohort }: { cohort: Cohort }) {
   const minOver = r.reduce((a, b) => (b.overRend < a.overRend ? b : a));
   if (minOver.overRend < -cohort.invaarKapitaal * 0.01) {
     obs.push({
-      kleur: "border-red-200",
+      kleur: "border-err/30",
       titel: `Overrendement-dip in ${minOver.maandKort.replace("'", "20")}`,
       tekst: `${fmtEurShort(
         minOver.overRend
@@ -477,7 +477,7 @@ function Observaties({ cohort }: { cohort: Cohort }) {
   }
 
   obs.push({
-    kleur: "border-gray-200",
+    kleur: "border-line",
     titel: `Bouwbron: ${
       totRend > totPremie ? "rendement dominant" : totPremie > 0 ? "premie dominant" : "alleen rendement"
     }`,
@@ -491,11 +491,11 @@ function Observaties({ cohort }: { cohort: Cohort }) {
   });
 
   return (
-    <div className="space-y-3 text-sm text-gray-700">
+    <div className="space-y-3 text-sm text-ink">
       {obs.map((o, i) => (
         <div key={i} className={`border-l-2 ${o.kleur} pl-3 py-1`}>
           <div className="font-medium text-ink">{o.titel}</div>
-          <div className="text-xs text-gray-600 mt-0.5 leading-snug">{o.tekst}</div>
+          <div className="text-xs text-muted mt-0.5 leading-snug">{o.tekst}</div>
         </div>
       ))}
     </div>

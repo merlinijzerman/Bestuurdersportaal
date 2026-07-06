@@ -454,7 +454,7 @@ export default function AgendapuntChat({
   const heeftGesprek = berichten.length > 0;
 
   return (
-    <div className="border border-amber-200 rounded-lg bg-amber-50/40">
+    <div className="border border-warn/30 rounded-lg bg-warn-tint">
       <button
         onClick={() => setOpen(!open)}
         className="w-full px-3 py-2 text-left"
@@ -463,14 +463,14 @@ export default function AgendapuntChat({
           <span className="inline-flex items-center gap-1.5 text-xs font-medium text-ink">
             ✨ Vraag door over dit agendapunt
             {heeftGesprek && !open && (
-              <span className="text-[10px] font-normal text-gray-500">
+              <span className="text-[10px] font-normal text-muted">
                 — eerder gesprek beschikbaar
               </span>
             )}
           </span>
-          <span className="text-gray-400 text-xs">{open ? "▾" : "▸"}</span>
+          <span className="text-muted text-xs">{open ? "▾" : "▸"}</span>
         </span>
-        <span className="block text-xs text-gray-600 mt-1 leading-relaxed font-normal">
+        <span className="block text-xs text-muted mt-1 leading-relaxed font-normal">
           Laat de AI helpen scherper na te denken over dit punt — wat het stuk
           betekent, welk besluit wordt gevraagd, blinde vlekken en vragen voor
           de vergadering. Persoonlijk en alleen voor u zichtbaar.
@@ -480,7 +480,7 @@ export default function AgendapuntChat({
       {open && (
         <div className="px-3 pb-3 space-y-3">
           {/* Contextregel: waarop is de assistent hier gescoped? */}
-          <div className="text-[11px] text-gray-500">
+          <div className="text-[11px] text-muted">
             Context: dit agendapunt
             {stukken.length > 0
               ? ` en ${stukken.length} gekoppeld${stukken.length === 1 ? " stuk" : "e stukken"}`
@@ -506,17 +506,17 @@ export default function AgendapuntChat({
                     </div>
                   </div>
                 ) : (
-                  <div key={idx} className="bg-white border border-gray-200 rounded-lg px-3 py-2">
+                  <div key={idx} className="bg-white border border-line rounded-lg px-3 py-2">
                     {b.inlineMeldingen && b.inlineMeldingen.length > 0 && (
                       <div className="mb-1.5 space-y-1">
                         {b.inlineMeldingen.map((m, i) => (
-                          <div key={i} className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                          <div key={i} className="text-[11px] text-warn-ink bg-warn-tint border border-warn/30 rounded px-2 py-1">
                             {m.tekst}
                           </div>
                         ))}
                       </div>
                     )}
-                    <div className="text-sm text-gray-800 leading-relaxed">
+                    <div className="text-sm text-ink leading-relaxed">
                       <CitatieTekst
                         tekst={b.tekst}
                         bronnen={b.bronnen}
@@ -530,7 +530,7 @@ export default function AgendapuntChat({
                             key={o.intent}
                             onClick={() => kiesVerduidelijking(b, o.intent)}
                             disabled={laden}
-                            className="text-xs border border-gray-300 rounded-full px-3 py-1 hover:border-accent hover:bg-amber-50 disabled:opacity-50"
+                            className="text-xs border border-app-line-strong rounded-full px-3 py-1 hover:border-accent hover:bg-warn-tint disabled:opacity-50"
                           >
                             {o.label}
                           </button>
@@ -538,10 +538,10 @@ export default function AgendapuntChat({
                       </div>
                     )}
                     {b.bronnen && b.bronnen.length > 0 && (
-                      <div className="mt-2 border-t border-gray-100 pt-1.5">
+                      <div className="mt-2 border-t border-line pt-1.5">
                         <button
                           onClick={() => toggleBronnen(idx)}
-                          className="text-[11px] font-medium text-gray-500 hover:text-ink"
+                          className="text-[11px] font-medium text-muted hover:text-ink"
                         >
                           {openBronnen.has(idx) ? "▾" : "▸"} Onderbouwing en bronnen (
                           {b.bronnen.length})
@@ -551,20 +551,20 @@ export default function AgendapuntChat({
                             {b.bronnen.map((bron, i) => (
                               <div
                                 key={i}
-                                className="text-[11px] bg-gray-50 border border-gray-200 rounded px-2 py-1.5"
+                                className="text-[11px] bg-app-bg border border-line rounded px-2 py-1.5"
                               >
                                 <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-accent text-white text-[9px] font-semibold mr-1.5">
                                   {i + 1}
                                 </span>
                                 <span className="font-medium text-ink">{bron.titel}</span>
                                 {bron.pagina != null && (
-                                  <span className="text-gray-500"> · p. {bron.pagina}</span>
+                                  <span className="text-muted"> · p. {bron.pagina}</span>
                                 )}
                                 {bron.paragraaf && (
-                                  <span className="text-gray-500"> · {bron.paragraaf}</span>
+                                  <span className="text-muted"> · {bron.paragraaf}</span>
                                 )}
                                 {bron.fragment && (
-                                  <div className="text-gray-600 mt-0.5 line-clamp-2">
+                                  <div className="text-muted mt-0.5 line-clamp-2">
                                     “{bron.fragment}”
                                   </div>
                                 )}
@@ -578,7 +578,7 @@ export default function AgendapuntChat({
                 )
               )}
               {laden && !antwoordGestart && (
-                <div className="text-xs text-gray-500 italic px-1">
+                <div className="text-xs text-muted italic px-1">
                   {analyseVoortgang
                     ? `Analyseert stukken (${analyseVoortgang.batch}/${analyseVoortgang.totaal})…`
                     : "De assistent denkt na…"}
@@ -608,7 +608,7 @@ export default function AgendapuntChat({
                     key={v}
                     onClick={() => stuurBericht(v)}
                     disabled={laden}
-                    className="text-xs text-left border border-gray-300 bg-white rounded-full px-3 py-1.5 hover:border-accent hover:bg-amber-50 transition-colors disabled:opacity-50"
+                    className="text-xs text-left border border-app-line-strong bg-white rounded-full px-3 py-1.5 hover:border-accent hover:bg-warn-tint transition-colors disabled:opacity-50"
                   >
                     {v}
                   </button>
@@ -629,7 +629,7 @@ export default function AgendapuntChat({
               }}
               placeholder={`Stel een vraag over "${titel}"…`}
               rows={2}
-              className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white outline-none focus:border-accent resize-none"
+              className="flex-1 border border-line rounded-lg px-3 py-2 text-sm bg-white outline-none focus:border-accent resize-none"
             />
             <button
               onClick={() => stuurBericht()}
@@ -640,7 +640,7 @@ export default function AgendapuntChat({
             </button>
           </div>
 
-          <div className="text-[10px] text-gray-400">
+          <div className="text-[10px] text-muted">
             AI-hulpmiddel ter voorbereiding — geen bestuurlijk advies. Vragen en
             bronkeuze worden vastgelegd in de governance log.
           </div>

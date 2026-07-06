@@ -47,14 +47,14 @@ export default async function BeveiligdePlatformLayout({
 
   return (
     <div className="min-h-screen bg-app-bg text-ink">
-      <header className="flex items-center justify-between gap-3 bg-accent px-4 py-3 text-white sm:px-6">
+      <header className="flex items-center justify-between gap-3 bg-nav border-b border-nav-line px-4 py-3 text-nav-text-active sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent font-black text-ink">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-nav-accent font-black text-white">
             P
           </div>
           <div className="min-w-0">
             <div className="text-sm font-semibold">Platform back-office</div>
-            <div className="truncate text-xs text-white/70">{identiteit.email}</div>
+            <div className="truncate text-xs text-nav-text">{identiteit.email}</div>
           </div>
         </div>
         <PlatformUitloggen />

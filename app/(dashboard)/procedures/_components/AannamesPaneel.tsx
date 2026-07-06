@@ -54,24 +54,24 @@ const STATUS_CYCLUS: AssumptionStatus[] = [
 function statusKleur(s: AssumptionStatus): string {
   switch (s) {
     case "gevalideerd":
-      return "bg-emerald-50 text-emerald-800 border-emerald-200";
+      return "bg-ok-tint text-ok-ink border-ok/30";
     case "gewijzigd":
-      return "bg-amber-50 text-amber-800 border-amber-200";
+      return "bg-warn-tint text-warn-ink border-warn/30";
     case "verwijderd":
-      return "bg-gray-100 text-gray-500 border-gray-200 line-through";
+      return "bg-app-bg text-muted border-line line-through";
     default:
-      return "bg-gray-50 text-gray-700 border-gray-200";
+      return "bg-app-bg text-ink border-line";
   }
 }
 
 function onzekerheidKleur(n: Risiconiveau): string {
   switch (n) {
     case "hoog":
-      return "bg-rose-50 text-rose-800 border-rose-200";
+      return "bg-err-tint text-err-ink border-err/30";
     case "middel":
-      return "bg-amber-50 text-amber-800 border-amber-200";
+      return "bg-warn-tint text-warn-ink border-warn/30";
     default:
-      return "bg-blue-50 text-blue-800 border-blue-200";
+      return "bg-accent-tint text-accent-ink border-accent/30";
   }
 }
 
@@ -241,11 +241,11 @@ export default function AannamesPaneel({ decisionId, assumptions }: Props) {
   }
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5">
+    <div className="bg-white border border-line rounded-xl p-5">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="text-sm font-semibold text-ink">Aannames</h3>
-          <p className="text-xs text-gray-500 mt-0.5">
+          <p className="text-xs text-muted mt-0.5">
             Gestructureerde aannames waarop dit besluit rust. Validatie maakt
             ze onderdeel van de readiness-check.
           </p>
@@ -263,13 +263,13 @@ export default function AannamesPaneel({ decisionId, assumptions }: Props) {
       </div>
 
       {open && (
-        <div className="mb-4 border border-gray-200 rounded-lg p-4 bg-gray-50/50 space-y-3">
+        <div className="mb-4 border border-line rounded-lg p-4 bg-app-bg/50 space-y-3">
           <Veldgroep label="Aanname *">
             <textarea
               value={tekst}
               onChange={(e) => setTekst(e.target.value)}
               rows={2}
-              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
+              className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
               placeholder="Bijv. 'De rendementsverwachting voor zakelijke waarden bedraagt 6% per jaar over de planhorizon.'"
             />
           </Veldgroep>
@@ -278,7 +278,7 @@ export default function AannamesPaneel({ decisionId, assumptions }: Props) {
               <select
                 value={type}
                 onChange={(e) => setType(e.target.value as AssumptionType)}
-                className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 bg-white"
+                className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 bg-white"
               >
                 {TYPES.map((t) => (
                   <option key={t} value={t}>
@@ -293,7 +293,7 @@ export default function AannamesPaneel({ decisionId, assumptions }: Props) {
                 onChange={(e) =>
                   setOnzekerheid(e.target.value as Risiconiveau | "")
                 }
-                className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 bg-white"
+                className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 bg-white"
               >
                 <option value="">— niet ingevuld —</option>
                 {ONZEKERHEID.map((o) => (
@@ -309,12 +309,12 @@ export default function AannamesPaneel({ decisionId, assumptions }: Props) {
               type="text"
               value={evaluatie}
               onChange={(e) => setEvaluatie(e.target.value)}
-              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
+              className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
               placeholder="Wanneer is deze aanname onhoudbaar? Bijv. 'rendement < 3% over 24 maanden'"
             />
           </Veldgroep>
           {fout && (
-            <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-md px-3 py-2">
+            <div className="text-xs text-err-ink bg-err-tint border border-err/30 rounded-md px-3 py-2">
               {fout}
             </div>
           )}
@@ -333,7 +333,7 @@ export default function AannamesPaneel({ decisionId, assumptions }: Props) {
                 setOpen(false);
                 setFout(null);
               }}
-              className="text-sm text-gray-600 hover:text-gray-900 px-3 py-2"
+              className="text-sm text-muted hover:text-ink px-3 py-2"
             >
               Annuleer
             </button>
@@ -342,7 +342,7 @@ export default function AannamesPaneel({ decisionId, assumptions }: Props) {
       )}
 
       {zichtbaar.length === 0 ? (
-        <div className="text-sm text-gray-400 italic">
+        <div className="text-sm text-muted italic">
           {assumptions.length === 0
             ? "Nog geen aannames vastgelegd. Voeg er één toe om de onderbouwing van het besluit expliciet te maken."
             : "Geen actieve aannames. Klik 'Toon verwijderde' om het volledige spoor te zien."}
@@ -354,10 +354,10 @@ export default function AannamesPaneel({ decisionId, assumptions }: Props) {
               key={a.id}
               className={`border rounded-lg p-3 ${
                 a.status === "verwijderd"
-                  ? "border-gray-200 bg-gray-50/50"
+                  ? "border-line bg-app-bg/50"
                   : editId === a.id
-                    ? "border-accent bg-amber-50/30"
-                    : "border-gray-200 bg-white"
+                    ? "border-accent bg-warn-tint"
+                    : "border-line bg-white"
               }`}
             >
               {editId === a.id ? (
@@ -368,7 +368,7 @@ export default function AannamesPaneel({ decisionId, assumptions }: Props) {
                       value={editTekst}
                       onChange={(e) => setEditTekst(e.target.value)}
                       rows={2}
-                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
+                      className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
                     />
                   </Veldgroep>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -378,7 +378,7 @@ export default function AannamesPaneel({ decisionId, assumptions }: Props) {
                         onChange={(e) =>
                           setEditType(e.target.value as AssumptionType)
                         }
-                        className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 bg-white"
+                        className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 bg-white"
                       >
                         {TYPES.map((t) => (
                           <option key={t} value={t}>
@@ -393,7 +393,7 @@ export default function AannamesPaneel({ decisionId, assumptions }: Props) {
                         onChange={(e) =>
                           setEditOnzekerheid(e.target.value as Risiconiveau | "")
                         }
-                        className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 bg-white"
+                        className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 bg-white"
                       >
                         <option value="">— niet ingevuld —</option>
                         {ONZEKERHEID.map((o) => (
@@ -409,11 +409,11 @@ export default function AannamesPaneel({ decisionId, assumptions }: Props) {
                       type="text"
                       value={editEvaluatie}
                       onChange={(e) => setEditEvaluatie(e.target.value)}
-                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
+                      className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
                     />
                   </Veldgroep>
                   {fout && (
-                    <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-md px-3 py-2">
+                    <div className="text-xs text-err-ink bg-err-tint border border-err/30 rounded-md px-3 py-2">
                       {fout}
                     </div>
                   )}
@@ -430,7 +430,7 @@ export default function AannamesPaneel({ decisionId, assumptions }: Props) {
                       type="button"
                       onClick={annuleerBewerken}
                       disabled={bezig === a.id}
-                      className="text-sm text-gray-600 hover:text-gray-900 px-3 py-2"
+                      className="text-sm text-muted hover:text-ink px-3 py-2"
                     >
                       Annuleer
                     </button>
@@ -443,14 +443,14 @@ export default function AannamesPaneel({ decisionId, assumptions }: Props) {
                   <div
                     className={`text-sm ${
                       a.status === "verwijderd"
-                        ? "text-gray-500 line-through"
-                        : "text-gray-900"
+                        ? "text-muted line-through"
+                        : "text-ink"
                     } whitespace-pre-line`}
                   >
                     {a.tekst}
                   </div>
                   <div className="flex items-center gap-2 mt-2 flex-wrap">
-                    <span className="text-[11px] font-medium uppercase tracking-wide text-gray-500 bg-gray-50 border border-gray-200 px-2 py-0.5 rounded">
+                    <span className="text-[11px] font-medium uppercase tracking-wide text-muted bg-app-bg border border-line px-2 py-0.5 rounded">
                       {ASSUMPTION_TYPE_LABEL[a.type]}
                     </span>
                     {a.onzekerheid && (
@@ -490,7 +490,7 @@ export default function AannamesPaneel({ decisionId, assumptions }: Props) {
                     </button>
                   </div>
                   {a.evaluatiecriterium && (
-                    <div className="text-xs text-gray-600 mt-2 italic">
+                    <div className="text-xs text-muted mt-2 italic">
                       Evaluatiecriterium: {a.evaluatiecriterium}
                     </div>
                   )}
@@ -520,7 +520,7 @@ export default function AannamesPaneel({ decisionId, assumptions }: Props) {
                         type="button"
                         onClick={() => verwijder(a)}
                         disabled={bezig === a.id}
-                        className="text-xs text-rose-700 hover:underline disabled:opacity-50"
+                        className="text-xs text-err-ink hover:underline disabled:opacity-50"
                       >
                         Verwijder
                       </button>
@@ -535,11 +535,11 @@ export default function AannamesPaneel({ decisionId, assumptions }: Props) {
       )}
 
       {verwijderdAantal > 0 && (
-        <div className="mt-3 pt-3 border-t border-gray-100">
+        <div className="mt-3 pt-3 border-t border-line">
           <button
             type="button"
             onClick={() => setToonVerwijderde((v) => !v)}
-            className="text-xs text-gray-500 hover:text-ink"
+            className="text-xs text-muted hover:text-ink"
           >
             {toonVerwijderde
               ? `Verberg verwijderde (${verwijderdAantal})`
@@ -548,7 +548,7 @@ export default function AannamesPaneel({ decisionId, assumptions }: Props) {
         </div>
       )}
       {fout && !open && (
-        <div className="mt-3 text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-md px-3 py-2">
+        <div className="mt-3 text-xs text-err-ink bg-err-tint border border-err/30 rounded-md px-3 py-2">
           {fout}
         </div>
       )}
@@ -565,7 +565,7 @@ function Veldgroep({
 }) {
   return (
     <div>
-      <label className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold block mb-1">
+      <label className="text-[11px] uppercase tracking-wide text-muted font-semibold block mb-1">
         {label}
       </label>
       {children}

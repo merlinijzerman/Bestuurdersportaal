@@ -47,9 +47,9 @@ const STATUS_LABEL: Record<ContactStatus, string> = {
 };
 
 const STATUS_STIJL: Record<ContactStatus, string> = {
-  nieuw: "bg-amber-100 text-amber-800",
-  in_behandeling: "bg-blue-100 text-blue-800",
-  afgehandeld: "bg-emerald-100 text-emerald-800",
+  nieuw: "bg-warn-tint text-warn-ink",
+  in_behandeling: "bg-accent-tint text-accent-ink",
+  afgehandeld: "bg-ok-tint text-ok-ink",
 };
 
 const TYPE_LABEL: Record<string, string> = {
@@ -122,8 +122,8 @@ export default function ContactInboxClient({ rijen }: Props) {
           className={
             "rounded-lg px-4 py-2 text-sm " +
             (melding.soort === "ok"
-              ? "bg-emerald-50 text-emerald-800"
-              : "bg-red-50 text-red-800")
+              ? "bg-ok-tint text-ok-ink"
+              : "bg-err-tint text-err-ink")
           }
         >
           {melding.tekst}
@@ -194,7 +194,7 @@ export default function ContactInboxClient({ rijen }: Props) {
                   {!r.notificatie_verzonden && (
                     <span
                       title="Notificatiemail niet verzonden"
-                      className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700"
+                      className="rounded-full bg-err-tint px-2 py-0.5 text-xs font-medium text-err-ink"
                     >
                       mail mislukt
                     </span>
@@ -247,7 +247,7 @@ export default function ContactInboxClient({ rijen }: Props) {
                     </div>
 
                     {r.mail_error && (
-                      <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
+                      <p className="mt-3 rounded-lg bg-err-tint px-3 py-2 text-xs text-err-ink">
                         Notificatie soft-fail: {r.mail_error}
                       </p>
                     )}

@@ -118,7 +118,7 @@ function parseInline(
           className={`inline-flex items-center justify-center min-w-4 h-4 px-0.5 rounded-full text-[9px] font-semibold align-text-top mx-0.5 ${
             bron
               ? "bg-accent text-white hover:bg-accent hover:text-ink"
-              : "bg-red-100 text-red-700 line-through"
+              : "bg-err-tint text-err-ink line-through"
           }`}
         >
           {nr}
@@ -130,7 +130,7 @@ function parseInline(
       return (
         <span
           key={i}
-          className="inline-block text-[9px] font-medium bg-gray-100 text-gray-600 border border-gray-200 rounded-full px-1.5 align-text-top mx-0.5"
+          className="inline-block text-[9px] font-medium bg-app-bg text-muted border border-line rounded-full px-1.5 align-text-top mx-0.5"
           title="Niet gebaseerd op interne fondsdocumenten"
         >
           {label}
@@ -141,7 +141,7 @@ function parseInline(
       return (
         <span
           key={i}
-          className="inline-block text-[9px] font-medium bg-amber-100 text-amber-800 border border-amber-200 rounded-full px-1.5 align-text-top mx-0.5"
+          className="inline-block text-[9px] font-medium bg-warn-tint text-warn-ink border border-warn/30 rounded-full px-1.5 align-text-top mx-0.5"
           title="Afkomstig uit de toelichting van het agendapunt — geen vastgestelde fondsbron"
         >
           Toelichting agendapunt

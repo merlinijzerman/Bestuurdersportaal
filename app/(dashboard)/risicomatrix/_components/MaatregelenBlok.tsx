@@ -27,24 +27,24 @@ const STATUS_KLEUR: Record<
   { dot: string; pillBg: string; pillText: string; border: string; bg: string }
 > = {
   genomen: {
-    dot: "text-emerald-600",
-    pillBg: "bg-emerald-100",
-    pillText: "text-emerald-800",
-    border: "border-emerald-200",
-    bg: "bg-emerald-50/30",
+    dot: "text-ok-ink",
+    pillBg: "bg-ok-tint",
+    pillText: "text-ok-ink",
+    border: "border-ok/30",
+    bg: "bg-ok-tint",
   },
   in_voorbereiding: {
-    dot: "text-amber-600",
-    pillBg: "bg-amber-100",
-    pillText: "text-amber-800",
-    border: "border-amber-200",
-    bg: "bg-amber-50/30",
+    dot: "text-warn-ink",
+    pillBg: "bg-warn-tint",
+    pillText: "text-warn-ink",
+    border: "border-warn/30",
+    bg: "bg-warn-tint",
   },
   open: {
-    dot: "text-gray-400",
-    pillBg: "bg-gray-100",
-    pillText: "text-gray-700",
-    border: "border-gray-200",
+    dot: "text-muted",
+    pillBg: "bg-app-bg",
+    pillText: "text-ink",
+    border: "border-line",
     bg: "bg-white",
   },
 };
@@ -133,7 +133,7 @@ export default function MaatregelenBlok({
   }
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5">
+    <div className="bg-white border border-line rounded-xl p-5">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-ink">
           Getroffen maatregelen
@@ -151,24 +151,24 @@ export default function MaatregelenBlok({
       {toonForm && !readonly && (
         <form
           onSubmit={maatregelToevoegen}
-          className="mb-3 p-3 border border-gray-200 rounded-lg bg-gray-50 space-y-2"
+          className="mb-3 p-3 border border-line rounded-lg bg-app-bg space-y-2"
         >
           <input
             type="text"
             value={beschrijving}
             onChange={(e) => setBeschrijving(e.target.value)}
             placeholder="Beschrijving van de maatregel"
-            className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm focus:border-accent outline-none"
+            className="w-full border border-line rounded px-2 py-1.5 text-sm focus:border-accent outline-none"
           />
           <input
             type="text"
             value={verantwoordelijke}
             onChange={(e) => setVerantwoordelijke(e.target.value)}
             placeholder="Verantwoordelijke (optioneel)"
-            className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm focus:border-accent outline-none"
+            className="w-full border border-line rounded px-2 py-1.5 text-sm focus:border-accent outline-none"
           />
           {fout && (
-            <div className="text-xs text-red-700">{fout}</div>
+            <div className="text-xs text-err-ink">{fout}</div>
           )}
           <div className="flex justify-end gap-2">
             <button
@@ -177,7 +177,7 @@ export default function MaatregelenBlok({
                 setToonForm(false);
                 setFout(null);
               }}
-              className="text-xs px-3 py-1.5 border border-gray-200 rounded hover:border-accent"
+              className="text-xs px-3 py-1.5 border border-line rounded hover:border-accent"
             >
               Annuleren
             </button>
@@ -193,7 +193,7 @@ export default function MaatregelenBlok({
       )}
 
       {maatregelen.length === 0 ? (
-        <div className="text-sm text-gray-400 italic py-2">
+        <div className="text-sm text-muted italic py-2">
           Nog geen maatregelen vastgelegd.
         </div>
       ) : (
@@ -209,11 +209,11 @@ export default function MaatregelenBlok({
                   {STATUS_ICOON[m.status]}
                 </span>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-gray-900">
+                  <div className="text-sm font-medium text-ink">
                     {m.beschrijving}
                   </div>
                   {m.verantwoordelijke && (
-                    <div className="text-xs text-gray-600 mt-0.5">
+                    <div className="text-xs text-muted mt-0.5">
                       Verantwoordelijke: {m.verantwoordelijke}
                     </div>
                   )}

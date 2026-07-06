@@ -67,15 +67,15 @@ function statusKleur(s: DecisionStatus): string {
     s === "in_evaluatie" ||
     s === "afgesloten"
   ) {
-    return "bg-emerald-50 text-emerald-800 border-emerald-200";
+    return "bg-ok-tint text-ok-ink border-ok/30";
   }
   if (s === "afgewezen" || s === "geannuleerd") {
-    return "bg-rose-50 text-rose-800 border-rose-200";
+    return "bg-err-tint text-err-ink border-err/30";
   }
   if (s === "aangehouden" || s === "teruggezet" || s === "geescaleerd") {
-    return "bg-amber-50 text-amber-800 border-amber-200";
+    return "bg-warn-tint text-warn-ink border-warn/30";
   }
-  return "bg-blue-50 text-blue-800 border-blue-200";
+  return "bg-accent-tint text-accent-ink border-accent/30";
 }
 
 export default function StatusOvergangPaneel({
@@ -158,12 +158,12 @@ export default function StatusOvergangPaneel({
 
   if (vlgndOpties.length === 0) {
     return (
-      <div className="bg-white border border-gray-200 rounded-xl p-5">
+      <div className="bg-white border border-line rounded-xl p-5">
         <h3 className="text-sm font-semibold text-ink mb-2">
           Status-overgang
         </h3>
         <div className="flex items-center gap-2">
-          <span className="text-xs uppercase tracking-wide text-gray-500 font-semibold">
+          <span className="text-xs uppercase tracking-wide text-muted font-semibold">
             Huidig:
           </span>
           <span
@@ -174,7 +174,7 @@ export default function StatusOvergangPaneel({
             {DECISION_STATUS_LABEL[decision.status]}
           </span>
         </div>
-        <p className="text-xs text-gray-500 mt-2">
+        <p className="text-xs text-muted mt-2">
           Geen overgangen meer mogelijk vanuit deze status.
         </p>
       </div>
@@ -182,13 +182,13 @@ export default function StatusOvergangPaneel({
   }
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5">
+    <div className="bg-white border border-line rounded-xl p-5">
       <h3 className="text-sm font-semibold text-ink mb-3">
         Status-overgang
       </h3>
 
       <div className="flex items-center gap-2 mb-4">
-        <span className="text-xs uppercase tracking-wide text-gray-500 font-semibold">
+        <span className="text-xs uppercase tracking-wide text-muted font-semibold">
           Huidig:
         </span>
         <span
@@ -208,7 +208,7 @@ export default function StatusOvergangPaneel({
               setTarget(e.target.value as DecisionStatus | "");
               setFout(null);
             }}
-            className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 bg-white"
+            className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 bg-white"
           >
             <option value="">— kies doelstatus —</option>
             {vlgndOpties.map((s) => (
@@ -242,7 +242,7 @@ export default function StatusOvergangPaneel({
             type="text"
             value={reden}
             onChange={(e) => setReden(e.target.value)}
-            className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
+            className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
             placeholder="Korte aanduiding voor het audit-spoor"
           />
         </Veldgroep>
@@ -253,10 +253,10 @@ export default function StatusOvergangPaneel({
               value={overrideReden}
               onChange={(e) => setOverrideReden(e.target.value)}
               rows={3}
-              className="w-full text-sm border border-amber-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400/40 bg-amber-50/40"
+              className="w-full text-sm border border-warn/30 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-warn/40 bg-warn-tint"
               placeholder="Waarom mag deze overgang plaatsvinden ondanks ontbrekende readiness?"
             />
-            <p className="text-[11px] text-amber-800 mt-1">
+            <p className="text-[11px] text-warn-ink mt-1">
               Wordt apart gelogd als <code>override_…</code>-event in het
               auditdossier.
             </p>
@@ -264,14 +264,14 @@ export default function StatusOvergangPaneel({
         )}
 
         {target && overrideNodig && !currentUserIsPrivileged && (
-          <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-md px-3 py-2">
+          <div className="text-xs text-err-ink bg-err-tint border border-err/30 rounded-md px-3 py-2">
             Deze overgang vereist readiness die nog niet vervuld is. Alleen
             voorzitter of beheerder kan een onderbouwde override doorzetten.
           </div>
         )}
 
         {fout && (
-          <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-md px-3 py-2 whitespace-pre-line">
+          <div className="text-xs text-err-ink bg-err-tint border border-err/30 rounded-md px-3 py-2 whitespace-pre-line">
             {fout}
           </div>
         )}
@@ -306,8 +306,8 @@ function ReadinessHint({
     <div
       className={`text-xs border rounded-md px-3 py-2 ${
         voldoet
-          ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-          : "bg-amber-50 border-amber-200 text-amber-900"
+          ? "bg-ok-tint border-ok/30 text-ok-ink"
+          : "bg-warn-tint border-warn/30 text-warn-ink"
       }`}
     >
       <div className="font-semibold flex items-center gap-1.5">
@@ -339,7 +339,7 @@ function Veldgroep({
 }) {
   return (
     <div>
-      <label className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold block mb-1">
+      <label className="text-[11px] uppercase tracking-wide text-muted font-semibold block mb-1">
         {label}
       </label>
       {children}

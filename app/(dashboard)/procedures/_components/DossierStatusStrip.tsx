@@ -33,19 +33,19 @@ function statusKleur(status: DecisionObject["status"]): string {
     status === "in_evaluatie" ||
     status === "afgesloten"
   ) {
-    return "bg-emerald-50 text-emerald-800 border-emerald-200";
+    return "bg-ok-tint text-ok-ink border-ok/30";
   }
   if (status === "afgewezen" || status === "geannuleerd") {
-    return "bg-rose-50 text-rose-800 border-rose-200";
+    return "bg-err-tint text-err-ink border-err/30";
   }
   if (
     status === "aangehouden" ||
     status === "teruggezet" ||
     status === "geescaleerd"
   ) {
-    return "bg-amber-50 text-amber-800 border-amber-200";
+    return "bg-warn-tint text-warn-ink border-warn/30";
   }
-  return "bg-blue-50 text-blue-800 border-blue-200";
+  return "bg-accent-tint text-accent-ink border-accent/30";
 }
 
 export default function DossierStatusStrip({
@@ -62,9 +62,9 @@ export default function DossierStatusStrip({
     : 0;
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl px-5 py-3 flex items-center justify-between gap-4 flex-wrap">
+    <div className="bg-white border border-line rounded-xl px-5 py-3 flex items-center justify-between gap-4 flex-wrap">
       <div className="flex items-center gap-3 flex-wrap">
-        <span className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold">
+        <span className="text-[11px] uppercase tracking-wide text-muted font-semibold">
           Status
         </span>
         <span
@@ -74,26 +74,26 @@ export default function DossierStatusStrip({
         >
           {DECISION_STATUS_LABEL[decision.status]}
         </span>
-        <span aria-hidden className="text-gray-300">
+        <span aria-hidden className="text-muted">
           ·
         </span>
         {eersteOnvolledig ? (
           <>
-            <span className="text-xs text-gray-700">
-              <span className="text-gray-500">Volgende horde:</span>{" "}
+            <span className="text-xs text-ink">
+              <span className="text-muted">Volgende horde:</span>{" "}
               <span className="font-medium text-ink">
                 {READINESS_LABEL[eersteOnvolledig]}
               </span>
             </span>
             {ontbrekendCount > 0 && (
-              <span className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
+              <span className="text-[11px] text-warn-ink bg-warn-tint border border-warn/30 px-2 py-0.5 rounded">
                 {ontbrekendCount} ontbrekend
                 {ontbrekendCount === 1 ? "" : "e items"}
               </span>
             )}
           </>
         ) : (
-          <span className="text-xs text-emerald-700 font-medium">
+          <span className="text-xs text-ok-ink font-medium">
             Alle readiness-niveaus voldoen
           </span>
         )}

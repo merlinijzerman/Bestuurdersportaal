@@ -37,42 +37,42 @@ export default function WerkgeversPage() {
 
       {/* Drie trend-grafieken */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white rounded-xl border border-line p-5">
           <div className="flex items-baseline justify-between mb-3">
             <h3 className="text-sm font-semibold text-ink uppercase tracking-wider">
               Pensioengrondslag totaal
             </h3>
-            <span className="text-[11px] text-gray-500">€/maand</span>
+            <span className="text-[11px] text-muted">€/maand</span>
           </div>
           <Trendlijn values={WERKGEVERS_REEKS.map((r) => r.pgTotaalMaand)} kleur="var(--accent-ink)" fmt={fmtEurShort} />
-          <div className="mt-2 text-xs text-gray-600 leading-snug">
+          <div className="mt-2 text-xs text-muted leading-snug">
             Stand mei 2024: <strong>{fmtEurShort(WERKGEVERS_REEKS[0].pgTotaalMaand)}</strong>/mnd · nu:{" "}
             <strong>{fmtEurShort(last.pgTotaalMaand)}</strong>/mnd. Groei volgt salarisontwikkeling
             en netto in/uit-stroom werknemers.
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white rounded-xl border border-line p-5">
           <div className="flex items-baseline justify-between mb-3">
             <h3 className="text-sm font-semibold text-ink uppercase tracking-wider">Premie totaal</h3>
-            <span className="text-[11px] text-gray-500">werkgever / werknemer</span>
+            <span className="text-[11px] text-muted">werkgever / werknemer</span>
           </div>
           <PremieStaaf reeks={WERKGEVERS_REEKS} />
-          <div className="mt-2 flex gap-3 text-xs text-gray-700">
+          <div className="mt-2 flex gap-3 text-xs text-ink">
             <Legend kleur="var(--accent-ink)" label="Werkgeversdeel (2/3)" />
             <Legend kleur="var(--accent)" label="Werknemersdeel (1/3)" />
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white rounded-xl border border-line p-5">
           <div className="flex items-baseline justify-between mb-3">
             <h3 className="text-sm font-semibold text-ink uppercase tracking-wider">
               Gem. salarisontwikkeling
             </h3>
-            <span className="text-[11px] text-gray-500">indexcijfer (mei &apos;24 = 100)</span>
+            <span className="text-[11px] text-muted">indexcijfer (mei &apos;24 = 100)</span>
           </div>
           <Trendlijn values={indexReeks} kleur="#7c3aed" fmt={(v) => v.toFixed(1).replace(".", ",")} />
-          <div className="mt-2 text-xs text-gray-600 leading-snug">
+          <div className="mt-2 text-xs text-muted leading-snug">
             Cumulatieve CAO-stijging over 24 maanden:{" "}
             <strong>{cumulatiefSalaris.toFixed(1).replace(".", ",")}%</strong>. Twee zichtbare CAO-stappen
             (oktober &apos;24 en oktober &apos;25). Indicator voor sectorale loonontwikkeling.
@@ -81,10 +81,10 @@ export default function WerkgeversPage() {
       </div>
 
       {/* Werkgever-grootte-segmentatie */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
+      <div className="bg-white rounded-xl border border-line p-6 mb-6">
         <div className="mb-4">
           <h2 className="text-lg font-semibold text-ink">Werkgever-grootte — concentratie</h2>
-          <p className="text-sm text-gray-600 mt-1 max-w-3xl">
+          <p className="text-sm text-muted mt-1 max-w-3xl">
             Verdeling van aangesloten werkgevers over drie groottesegmenten. Bestuurlijk relevant:
             hoeveel premie-instroom is afhankelijk van een klein aantal grote werkgevers? Een hoog
             aandeel premie bij weinig werkgevers betekent concentratierisico.
@@ -96,9 +96,9 @@ export default function WerkgeversPage() {
               <div className="flex items-baseline justify-between text-sm mb-1.5">
                 <span className="font-medium text-ink">
                   {s.naam}{" "}
-                  <span className="text-xs text-gray-500 font-normal">· {s.toelichting}</span>
+                  <span className="text-xs text-muted font-normal">· {s.toelichting}</span>
                 </span>
-                <span className="text-xs text-gray-600">
+                <span className="text-xs text-muted">
                   {s.werkgeversAantal} werkgevers · {s.werknemersAantal.toLocaleString("nl-NL")} werknemers ·{" "}
                   {fmtEurShort(s.premieAantal)} premie/mnd
                 </span>
@@ -114,49 +114,49 @@ export default function WerkgeversPage() {
       </div>
 
       {/* Premie-inning */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
+      <div className="bg-white rounded-xl border border-line p-6">
         <div className="mb-4">
           <h2 className="text-lg font-semibold text-ink">Premie-inning-discipline</h2>
-          <p className="text-sm text-gray-600 mt-1">
+          <p className="text-sm text-muted mt-1">
             Aandeel van premie-afdrachten dat op tijd, te laat of in achterstand binnenkomt — per maand.
             KPI voor service-niveau van de uitvoerder. Norm op-tijd: ≥90%.
           </p>
         </div>
 
         <InningChart />
-        <div className="mt-2 mb-5 flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-700">
+        <div className="mt-2 mb-5 flex flex-wrap gap-x-6 gap-y-1 text-xs text-ink">
           <Legend kleur="var(--ok)" label="Op tijd (≤14 dagen)" />
           <Legend kleur="var(--warn)" label="Te laat (14–30 dagen)" />
           <Legend kleur="var(--err)" label="Achterstand (>30 dagen / dispuut)" />
-          <span className="text-gray-400">·</span>
+          <span className="text-muted">·</span>
           <span className="inline-flex items-center">
             <span className="inline-block mr-1.5" style={{ width: 14, height: 2, background: "var(--accent-ink)" }} />
             Norm op-tijd 90%
           </span>
         </div>
 
-        <div className="border-t border-gray-100 pt-4">
+        <div className="border-t border-line pt-4">
           <div className="flex items-baseline justify-between mb-2">
             <h3 className="text-sm font-semibold text-ink uppercase tracking-wider">
               12-maands gemiddelde
             </h3>
-            <span className="text-[11px] text-gray-500">mei 2025 — apr 2026</span>
+            <span className="text-[11px] text-muted">mei 2025 — apr 2026</span>
           </div>
           <div className="flex h-8 rounded-lg overflow-hidden mb-3">
             <div
-              className="bg-emerald-500 flex items-center justify-center text-xs text-white font-medium"
+              className="bg-ok flex items-center justify-center text-xs text-white font-medium"
               style={{ width: `${INNING_AGGREGAAT.opTijd * 100}%` }}
             >
               {fmtPct(INNING_AGGREGAAT.opTijd, 1)}
             </div>
             <div
-              className="bg-amber-500 flex items-center justify-center text-xs text-white font-medium"
+              className="bg-warn flex items-center justify-center text-xs text-white font-medium"
               style={{ width: `${INNING_AGGREGAAT.teLaat * 100}%` }}
             >
               {fmtPct(INNING_AGGREGAAT.teLaat, 1)}
             </div>
             <div
-              className="bg-red-500 flex items-center justify-center text-xs text-white font-medium"
+              className="bg-err flex items-center justify-center text-xs text-white font-medium"
               style={{ width: `${INNING_AGGREGAAT.achterstand * 100}%` }}
             >
               {fmtPct(INNING_AGGREGAAT.achterstand, 1)}
@@ -207,15 +207,15 @@ function Kpi({
   sub: string;
 }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5">
-      <div className="text-xs uppercase tracking-wider text-gray-500">{label}</div>
+    <div className="bg-white rounded-xl border border-line p-5">
+      <div className="text-xs uppercase tracking-wider text-muted">{label}</div>
       <div className="mt-1 flex items-baseline gap-2">
         <span className="text-2xl font-semibold text-ink">{value}</span>
-        <span className={`text-xs ${deltaKleur === "emerald" ? "text-emerald-700" : "text-red-700"}`}>
+        <span className={`text-xs ${deltaKleur === "emerald" ? "text-ok-ink" : "text-err-ink"}`}>
           {delta}
         </span>
       </div>
-      <div className="text-[11px] text-gray-500 mt-1">{sub}</div>
+      <div className="text-[11px] text-muted mt-1">{sub}</div>
     </div>
   );
 }
@@ -235,10 +235,10 @@ function Legend({ kleur, label }: { kleur: string; label: string }) {
 function SegmentBar({ pct, kleur, label }: { pct: number; kleur: string; label: string }) {
   return (
     <div>
-      <div className="text-[11px] text-gray-500 mb-1">
+      <div className="text-[11px] text-muted mb-1">
         {Math.round(pct * 100)}% {label}
       </div>
-      <div className="h-2 rounded bg-gray-100 overflow-hidden">
+      <div className="h-2 rounded bg-app-bg overflow-hidden">
         <div className="h-full" style={{ width: `${pct * 100}%`, background: kleur }} />
       </div>
     </div>
@@ -257,12 +257,12 @@ function InningTegel({
   tekst: string;
 }) {
   const borderClass =
-    kleur === "emerald" ? "border-emerald-500" : kleur === "amber" ? "border-amber-500" : "border-red-500";
+    kleur === "emerald" ? "border-ok/30" : kleur === "amber" ? "border-warn/30" : "border-err/30";
   return (
     <div className={`border-l-2 ${borderClass} pl-3`}>
-      <div className="text-xs uppercase tracking-wider text-gray-500">{label}</div>
+      <div className="text-xs uppercase tracking-wider text-muted">{label}</div>
       <div className="font-semibold text-ink">{waarde}</div>
-      <div className="text-xs text-gray-600 mt-0.5">{tekst}</div>
+      <div className="text-xs text-muted mt-0.5">{tekst}</div>
     </div>
   );
 }

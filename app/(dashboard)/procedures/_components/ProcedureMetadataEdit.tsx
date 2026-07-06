@@ -115,7 +115,7 @@ export default function ProcedureMetadataEdit({
       <button
         type="button"
         onClick={openModal}
-        className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-ink border border-gray-200 hover:border-accent rounded-md px-2 py-1 transition-colors"
+        className="inline-flex items-center gap-1 text-xs text-muted hover:text-ink border border-line hover:border-accent rounded-md px-2 py-1 transition-colors"
         aria-label="Procedure bewerken"
         title="Procedure-titel, beschrijving of deadline bewerken"
       >
@@ -139,7 +139,7 @@ export default function ProcedureMetadataEdit({
               <button
                 type="button"
                 onClick={sluit}
-                className="text-gray-400 hover:text-gray-600 text-xl leading-none"
+                className="text-muted hover:text-ink text-xl leading-none"
                 aria-label="Sluiten"
               >
                 ×
@@ -148,61 +148,61 @@ export default function ProcedureMetadataEdit({
 
             <div className="space-y-3">
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">
+                <label className="block text-xs font-medium text-muted mb-1">
                   Titel
                 </label>
                 <input
                   type="text"
                   value={titelInput}
                   onChange={(e) => setTitelInput(e.target.value)}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-accent"
+                  className="w-full border border-app-line-strong rounded-md px-3 py-2 text-sm focus:outline-none focus:border-accent"
                   disabled={bezig}
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">
+                <label className="block text-xs font-medium text-muted mb-1">
                   Beschrijving
                 </label>
                 <textarea
                   value={beschrijvingInput}
                   onChange={(e) => setBeschrijvingInput(e.target.value)}
                   rows={4}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-accent resize-y"
+                  className="w-full border border-app-line-strong rounded-md px-3 py-2 text-sm focus:outline-none focus:border-accent resize-y"
                   placeholder="Optioneel — context, doel, scope…"
                   disabled={bezig}
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">
+                <label className="block text-xs font-medium text-muted mb-1">
                   Deadline (optioneel)
                 </label>
                 <input
                   type="date"
                   value={deadlineInput}
                   onChange={(e) => setDeadlineInput(e.target.value)}
-                  className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-accent"
+                  className="border border-app-line-strong rounded-md px-3 py-2 text-sm focus:outline-none focus:border-accent"
                   disabled={bezig}
                 />
               </div>
 
-              <div className="pt-2 border-t border-gray-100">
-                <label className="block text-xs font-medium text-gray-600 mb-1">
-                  Motivering <span className="text-red-500">*</span>
+              <div className="pt-2 border-t border-line">
+                <label className="block text-xs font-medium text-muted mb-1">
+                  Motivering <span className="text-err-ink">*</span>
                 </label>
                 <textarea
                   value={motivering}
                   onChange={(e) => setMotivering(e.target.value)}
                   rows={2}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-accent resize-y"
+                  className="w-full border border-app-line-strong rounded-md px-3 py-2 text-sm focus:outline-none focus:border-accent resize-y"
                   placeholder="Waarom past u dit aan? — landt in de audit-trail."
                   disabled={bezig}
                 />
               </div>
 
               {fout && (
-                <div className="bg-rose-50 border border-rose-200 rounded-md p-2.5 text-xs text-rose-700">
+                <div className="bg-err-tint border border-err/30 rounded-md p-2.5 text-xs text-err-ink">
                   {fout}
                 </div>
               )}
@@ -213,7 +213,7 @@ export default function ProcedureMetadataEdit({
                 type="button"
                 onClick={sluit}
                 disabled={bezig}
-                className="text-sm text-gray-600 hover:text-gray-900 px-3 py-1.5 disabled:opacity-50"
+                className="text-sm text-muted hover:text-ink px-3 py-1.5 disabled:opacity-50"
               >
                 Annuleer
               </button>

@@ -38,18 +38,18 @@ const TYPE_LABEL: Record<NonNullable<Document["bestandstype"]>, string> = {
 };
 
 const TYPE_KLEUR: Record<NonNullable<Document["bestandstype"]>, string> = {
-  pdf: "bg-red-50 text-red-700",
-  docx: "bg-blue-50 text-blue-700",
-  xlsx: "bg-emerald-50 text-emerald-700",
+  pdf: "bg-err-tint text-err-ink",
+  docx: "bg-accent-tint text-accent-ink",
+  xlsx: "bg-ok-tint text-ok-ink",
 };
 
 const BRONNEN = ["DNB", "AFM", "Pensioenfederatie", "Intern", "Extern"];
 const BRONKLEUR: Record<string, string> = {
-  DNB: "bg-red-100 text-red-700",
-  AFM: "bg-blue-100 text-blue-700",
-  Pensioenfederatie: "bg-green-100 text-green-700",
-  Intern: "bg-amber-100 text-amber-700",
-  Extern: "bg-amber-100 text-amber-700",
+  DNB: "bg-err-tint text-err-ink",
+  AFM: "bg-accent-tint text-accent-ink",
+  Pensioenfederatie: "bg-ok-tint text-ok-ink",
+  Intern: "bg-warn-tint text-warn-ink",
+  Extern: "bg-warn-tint text-warn-ink",
 };
 
 export default function BibliotheekPage() {
@@ -245,7 +245,7 @@ export default function BibliotheekPage() {
       <div className="flex items-start justify-between flex-wrap gap-3 mb-6">
         <div>
           <h1 className="font-serif text-xl font-black text-ink">Documentbibliotheek</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="text-sm text-muted mt-1">
             {weergave === "zoeken"
               ? "Uitgebreid zoeken in de inhoud van de documenten"
               : "Upload en beheer documenten — de kennisbasis voor de AI-assistent"}
@@ -276,22 +276,22 @@ export default function BibliotheekPage() {
       ) : (
       <>
       {uploadBericht && (
-        <div className="mb-4 bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-sm text-green-800">
+        <div className="mb-4 bg-ok-tint border border-ok/30 rounded-lg px-4 py-3 text-sm text-ok-ink">
           {uploadBericht}
         </div>
       )}
 
       {/* Increment C — review-banner: nog niet verrijkte documenten */}
       {aantalTeVerrijken > 0 && (
-        <div className="mb-4 flex items-center justify-between flex-wrap gap-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
-          <div className="text-sm text-amber-800">
+        <div className="mb-4 flex items-center justify-between flex-wrap gap-4 rounded-lg border border-warn/30 bg-warn-tint px-4 py-3">
+          <div className="text-sm text-warn-ink">
             <span className="font-semibold">{aantalTeVerrijken}</span>{" "}
             {aantalTeVerrijken === 1 ? "document is" : "documenten zijn"} nog niet
             verrijkt (status/bronstatus/context ontbreken of zijn onzeker).
           </div>
           <a
             href="/beheer"
-            className="shrink-0 rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-700"
+            className="shrink-0 rounded-lg bg-warn px-3 py-1.5 text-sm font-semibold text-white hover:bg-warn"
           >
             Naar review →
           </a>
@@ -299,7 +299,7 @@ export default function BibliotheekPage() {
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl mb-5 w-fit">
+      <div className="flex gap-1 bg-app-bg p-1 rounded-xl mb-5 w-fit">
         {(["generiek", "fonds"] as const).map((tab) => (
           <button
             key={tab}
@@ -307,7 +307,7 @@ export default function BibliotheekPage() {
             className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
               actieveTab === tab
                 ? "bg-white text-ink shadow-sm"
-                : "text-gray-500 hover:text-gray-700"
+                : "text-muted hover:text-ink"
             }`}
           >
             {tab === "generiek" ? "🏛️ Generiek (DNB / AFM / PF)" : "🏢 Fondsbibliotheek"}
@@ -317,17 +317,17 @@ export default function BibliotheekPage() {
 
       {/* Zoekbalk + toggle */}
       <div className="flex items-center gap-3 mb-4 flex-wrap">
-        <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-4 py-2.5 flex-1 min-w-[260px]">
-          <span className="text-gray-400">🔍</span>
+        <div className="flex items-center gap-2 bg-white border border-line rounded-xl px-4 py-2.5 flex-1 min-w-[260px]">
+          <span className="text-muted">🔍</span>
           <input
             type="text"
             placeholder="Zoek op titel..."
             value={zoekterm}
             onChange={(e) => setZoekterm(e.target.value)}
-            className="flex-1 outline-none text-sm text-gray-700 bg-transparent"
+            className="flex-1 outline-none text-sm text-ink bg-transparent"
           />
         </div>
-        <label className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-700 cursor-pointer select-none">
+        <label className="flex items-center gap-2 bg-white border border-line rounded-xl px-4 py-2.5 text-sm text-ink cursor-pointer select-none">
           <input
             type="checkbox"
             checked={toonInactief}
@@ -336,14 +336,14 @@ export default function BibliotheekPage() {
           />
           Toon gedeactiveerde documenten
           {aantalInactief > 0 && (
-            <span className="text-xs text-gray-400">({aantalInactief})</span>
+            <span className="text-xs text-muted">({aantalInactief})</span>
           )}
         </label>
         <button
           type="button"
           onClick={() => setWeergave("zoeken")}
           title="Zoek op de inhoud van documenten (niet alleen de titel)"
-          className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-semibold text-ink hover:border-accent transition-colors"
+          className="flex items-center gap-2 bg-white border border-line rounded-xl px-4 py-2.5 text-sm font-semibold text-ink hover:border-accent transition-colors"
         >
           🔎 Uitgebreid zoeken
         </button>
@@ -351,12 +351,12 @@ export default function BibliotheekPage() {
 
       {/* Document lijst */}
       {laden ? (
-        <div className="text-center py-12 text-gray-400">Documenten laden...</div>
+        <div className="text-center py-12 text-muted">Documenten laden...</div>
       ) : gefilterd.length === 0 ? (
         <div className="text-center py-12">
           <div className="text-4xl mb-3">📂</div>
-          <h3 className="font-semibold text-gray-700 mb-1">Geen documenten</h3>
-          <p className="text-sm text-gray-400">
+          <h3 className="font-semibold text-ink mb-1">Geen documenten</h3>
+          <p className="text-sm text-muted">
             Upload een PDF, Word- of Excel-bestand om te beginnen. De AI-assistent kan dan uw vragen beantwoorden.
           </p>
         </div>
@@ -373,7 +373,7 @@ export default function BibliotheekPage() {
                   className="flex items-center gap-2 w-full text-left mb-2"
                 >
                   <span
-                    className={`text-gray-400 text-[10px] transition-transform ${
+                    className={`text-muted text-[10px] transition-transform ${
                       open ? "rotate-90" : ""
                     }`}
                   >
@@ -382,7 +382,7 @@ export default function BibliotheekPage() {
                   <span className="text-sm font-bold text-ink">
                     {groep.label}
                   </span>
-                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-500">
+                  <span className="rounded-full bg-app-bg px-2 py-0.5 text-xs font-semibold text-muted">
                     {groep.docs.length}
                   </span>
                 </button>
@@ -398,11 +398,11 @@ export default function BibliotheekPage() {
                 key={doc.id}
                 className={`relative bg-white border rounded-xl p-4 flex items-center gap-4 transition-colors ${
                   inactief
-                    ? "border-gray-200 opacity-70"
-                    : "border-gray-200 hover:border-accent"
+                    ? "border-line opacity-70"
+                    : "border-line hover:border-accent"
                 }`}
               >
-                <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-xl flex-shrink-0">
+                <div className="w-10 h-10 bg-app-bg rounded-lg flex items-center justify-center text-xl flex-shrink-0">
                   📋
                 </div>
                 <div className="flex-1 min-w-0">
@@ -419,16 +419,16 @@ export default function BibliotheekPage() {
                   ) : (
                     <div
                       className={`font-semibold text-sm truncate ${
-                        inactief ? "text-gray-500" : "text-ink"
+                        inactief ? "text-muted" : "text-ink"
                       }`}
                     >
                       {doc.titel}
                     </div>
                   )}
-                  <div className="flex items-center gap-2 mt-1 text-xs text-gray-400 flex-wrap">
+                  <div className="flex items-center gap-2 mt-1 text-xs text-muted flex-wrap">
                     <span
                       className={`px-2 py-0.5 rounded-full font-semibold ${
-                        BRONKLEUR[doc.bron] || "bg-gray-100 text-gray-600"
+                        BRONKLEUR[doc.bron] || "bg-app-bg text-muted"
                       }`}
                     >
                       {doc.bron}
@@ -441,12 +441,12 @@ export default function BibliotheekPage() {
                       </span>
                     )}
                     {isGeneriek && (
-                      <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-semibold border border-indigo-200">
+                      <span className="px-2 py-0.5 rounded-full bg-accent-tint text-accent-ink font-semibold border border-accent/30">
                         {labels.bronsoortLabel}
                       </span>
                     )}
                     {isGeneriek && labels.vervallen && (
-                      <span className="px-2 py-0.5 rounded-full bg-red-50 text-red-700 font-semibold border border-red-200">
+                      <span className="px-2 py-0.5 rounded-full bg-err-tint text-err-ink font-semibold border border-err/30">
                         {labels.vervallenLabel}
                       </span>
                     )}
@@ -460,23 +460,23 @@ export default function BibliotheekPage() {
                       {new Date(doc.aangemaakt).toLocaleDateString("nl-NL")}
                     </span>
                     {doc.geindexeerd && !inactief && (
-                      <span className="text-green-600 font-semibold">
+                      <span className="text-ok-ink font-semibold">
                         ✓ Geïndexeerd
                       </span>
                     )}
                     {doc.status && !inactief && (
-                      <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-semibold">
+                      <span className="px-2 py-0.5 rounded-full bg-app-bg text-muted font-semibold">
                         {doc.status}
                       </span>
                     )}
                     {doc.metadata_review_status === "te_controleren" && !inactief && (
-                      <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-semibold">
+                      <span className="px-2 py-0.5 rounded-full bg-warn-tint text-warn-ink font-semibold">
                         Nog niet verrijkt
                       </span>
                     )}
                     {inactief && (
                       <span
-                        className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-semibold"
+                        className="px-2 py-0.5 rounded-full bg-err-tint text-err-ink font-semibold"
                         title={doc.deactivatie_reden ?? undefined}
                       >
                         Gedeactiveerd
@@ -484,7 +484,7 @@ export default function BibliotheekPage() {
                     )}
                     {!kanInzien && !inactief && (
                       <span
-                        className="text-gray-400"
+                        className="text-muted"
                         title="Origineel niet beschikbaar — vóór mei 2026 geüpload"
                       >
                         Origineel niet beschikbaar
@@ -492,7 +492,7 @@ export default function BibliotheekPage() {
                     )}
                   </div>
                   {inactief && doc.deactivatie_reden && (
-                    <div className="text-xs text-gray-500 mt-1 italic">
+                    <div className="text-xs text-muted mt-1 italic">
                       Reden: {doc.deactivatie_reden}
                     </div>
                   )}
@@ -504,7 +504,7 @@ export default function BibliotheekPage() {
                     onClick={() =>
                       setOpenMenuId(openMenuId === doc.id ? null : doc.id)
                     }
-                    className="w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-500 text-lg"
+                    className="w-8 h-8 rounded-lg hover:bg-app-bg flex items-center justify-center text-muted text-lg"
                     aria-label="Acties"
                   >
                     ⋮
@@ -515,14 +515,14 @@ export default function BibliotheekPage() {
                         className="fixed inset-0 z-10"
                         onClick={() => setOpenMenuId(null)}
                       />
-                      <div className="absolute right-0 top-9 z-20 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[180px]">
+                      <div className="absolute right-0 top-9 z-20 bg-white border border-line rounded-lg shadow-lg py-1 min-w-[180px]">
                         {!inactief && (
                           <button
                             onClick={() => {
                               setMetadataDocId(doc.id);
                               setOpenMenuId(null);
                             }}
-                            className="w-full text-left px-4 py-2 text-sm font-medium text-ink hover:bg-amber-50"
+                            className="w-full text-left px-4 py-2 text-sm font-medium text-ink hover:bg-warn-tint"
                             title={
                               isGeneriek
                                 ? "Generiek document — metadata is alleen-lezen (centraal beheerd)"
@@ -536,7 +536,7 @@ export default function BibliotheekPage() {
                           <a
                             href={`/ai?doc=${doc.id}`}
                             onClick={() => setOpenMenuId(null)}
-                            className="block px-4 py-2 text-sm font-medium text-ink hover:bg-amber-50"
+                            className="block px-4 py-2 text-sm font-medium text-ink hover:bg-warn-tint"
                             title="Open de AI-assistent met de vraag beperkt tot dit document"
                           >
                             Vraag de AI over dit stuk
@@ -548,7 +548,7 @@ export default function BibliotheekPage() {
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={() => setOpenMenuId(null)}
-                            className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                            className="block px-4 py-2 text-sm text-ink hover:bg-app-bg"
                           >
                             Bekijken
                           </a>
@@ -563,7 +563,7 @@ export default function BibliotheekPage() {
                               setOpenMenuId(null);
                             }}
                             disabled={herindexId === doc.id}
-                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                            className="w-full text-left px-4 py-2 text-sm text-ink hover:bg-app-bg disabled:opacity-50"
                             title="Origineel opnieuw door de extractie-pipeline halen: structuur-bewuste fragmenten + verbeterde (contextuele) zoekindex (voorzitter/beheerder)"
                           >
                             {herindexId === doc.id
@@ -578,7 +578,7 @@ export default function BibliotheekPage() {
                                 setDeactiveerDoc(doc);
                                 setOpenMenuId(null);
                               }}
-                              className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                              className="w-full text-left px-4 py-2 text-sm text-err-ink hover:bg-err-tint"
                             >
                               Deactiveren
                             </button>
@@ -589,7 +589,7 @@ export default function BibliotheekPage() {
                                 setOpenMenuId(null);
                               }}
                               disabled={actieBezig}
-                              className="w-full text-left px-4 py-2 text-sm text-green-700 hover:bg-green-50 disabled:opacity-50"
+                              className="w-full text-left px-4 py-2 text-sm text-ok-ink hover:bg-ok-tint disabled:opacity-50"
                             >
                               Reactiveren
                             </button>
@@ -618,12 +618,12 @@ export default function BibliotheekPage() {
             <h2 className="text-lg font-bold text-ink mb-2">
               Document deactiveren
             </h2>
-            <p className="text-sm text-gray-600 mb-4">
+            <p className="text-sm text-muted mb-4">
               <span className="font-semibold">{deactiveerDoc.titel}</span> wordt
               uitgesloten van zoeken en AI-antwoorden. Het origineel en de
               chunks blijven bewaard; reactiveren kan later weer.
             </p>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">
+            <label className="block text-sm font-semibold text-ink mb-1">
               Reden (optioneel)
             </label>
             <textarea
@@ -631,7 +631,7 @@ export default function BibliotheekPage() {
               onChange={(e) => setDeactiveerReden(e.target.value)}
               rows={3}
               placeholder="bijv. verouderd, vervangen door nieuwere versie..."
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-accent mb-4"
+              className="w-full border border-line rounded-lg px-3 py-2 text-sm outline-none focus:border-accent mb-4"
             />
             <div className="flex gap-3">
               <button
@@ -639,14 +639,14 @@ export default function BibliotheekPage() {
                   setDeactiveerDoc(null);
                   setDeactiveerReden("");
                 }}
-                className="flex-1 border border-gray-200 rounded-lg py-2.5 text-sm font-semibold text-gray-600 hover:bg-gray-50"
+                className="flex-1 border border-line rounded-lg py-2.5 text-sm font-semibold text-muted hover:bg-app-bg"
               >
                 Annuleren
               </button>
               <button
                 onClick={() => deactiveer(deactiveerDoc, deactiveerReden)}
                 disabled={actieBezig}
-                className="flex-1 bg-red-600 text-white rounded-lg py-2.5 text-sm font-semibold hover:bg-red-700 disabled:opacity-50"
+                className="flex-1 bg-err text-white rounded-lg py-2.5 text-sm font-semibold hover:bg-err disabled:opacity-50"
               >
                 {actieBezig ? "Bezig..." : "Deactiveren"}
               </button>
@@ -672,14 +672,14 @@ export default function BibliotheekPage() {
               <h2 className="text-lg font-bold text-ink">Document uploaden</h2>
               <button
                 onClick={() => setUploadOpen(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-muted hover:text-ink"
               >
                 ✕
               </button>
             </div>
             <form onSubmit={handleUpload} className="space-y-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                <label className="block text-sm font-semibold text-ink mb-1">
                   Bestand
                 </label>
                 <input
@@ -687,30 +687,30 @@ export default function BibliotheekPage() {
                   type="file"
                   accept=".pdf,.docx,.xlsx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                   required
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                  className="w-full border border-line rounded-lg px-3 py-2 text-sm"
                 />
-                <p className="text-[11px] text-gray-500 mt-1">
+                <p className="text-[11px] text-muted mt-1">
                   PDF, Word (.docx) of Excel (.xlsx). Gescande PDF&apos;s eerst
                   doorzoekbaar maken via Acrobat/Preview.
                 </p>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Titel</label>
+                <label className="block text-sm font-semibold text-ink mb-1">Titel</label>
                 <input
                   type="text"
                   value={uploadForm.titel}
                   onChange={(e) => setUploadForm({ ...uploadForm, titel: e.target.value })}
                   placeholder="bijv. DNB Leidraad Deskundigheid 2024"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-accent"
+                  className="w-full border border-line rounded-lg px-3 py-2 text-sm outline-none focus:border-accent"
                   required
                 />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Bron</label>
+                <label className="block text-sm font-semibold text-ink mb-1">Bron</label>
                 <select
                   value={uploadForm.bron}
                   onChange={(e) => setUploadForm({ ...uploadForm, bron: e.target.value })}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none"
+                  className="w-full border border-line rounded-lg px-3 py-2 text-sm outline-none"
                 >
                   {BRONNEN.map((b) => (
                     <option key={b} value={b}>{b}</option>
@@ -719,18 +719,18 @@ export default function BibliotheekPage() {
               </div>
               {/* B13: tenants uploaden uitsluitend naar de fondsbibliotheek.
                   Generieke (platform-gecureerde) documenten worden centraal beheerd. */}
-              <p className="text-[11px] text-gray-500 -mt-1">
+              <p className="text-[11px] text-muted -mt-1">
                 Dit document wordt opgeslagen in de <span className="font-semibold">fondsbibliotheek</span>.
                 Generieke (DNB/AFM/PF) documenten worden centraal beheerd en zijn alleen-lezen.
               </p>
               {uploadBericht && (
-                <div className="text-sm text-red-600">{uploadBericht}</div>
+                <div className="text-sm text-err-ink">{uploadBericht}</div>
               )}
               <div className="flex gap-3 pt-2">
                 <button
                   type="button"
                   onClick={() => setUploadOpen(false)}
-                  className="flex-1 border border-gray-200 rounded-lg py-2.5 text-sm font-semibold text-gray-600 hover:bg-gray-50"
+                  className="flex-1 border border-line rounded-lg py-2.5 text-sm font-semibold text-muted hover:bg-app-bg"
                 >
                   Annuleren
                 </button>

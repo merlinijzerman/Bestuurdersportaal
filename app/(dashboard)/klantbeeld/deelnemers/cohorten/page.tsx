@@ -46,12 +46,12 @@ export default function CohortenPage() {
         </div>
 
         {/* Hoofdvisual */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <div className="bg-white rounded-xl border border-line p-6">
           <div className="mb-4">
             <h2 className="text-lg font-semibold text-ink">
               Cohorten naast elkaar — 18 t/m 68 jaar
             </h2>
-            <p className="text-sm text-gray-600 mt-1 max-w-3xl">
+            <p className="text-sm text-muted mt-1 max-w-3xl">
               Totaal pensioenvermogen per leeftijdscohort: aantal deelnemers ×
               gemiddeld persoonlijk vermogen. Toont waar het fondsvermogen geconcentreerd is
               over de leeftijdsverdeling.
@@ -110,10 +110,10 @@ export default function CohortenPage() {
 
 function Kpi({ label, value, sub }: { label: string; value: string; sub: string }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5">
-      <div className="text-xs uppercase tracking-wider text-gray-500">{label}</div>
+    <div className="bg-white rounded-xl border border-line p-5">
+      <div className="text-xs uppercase tracking-wider text-muted">{label}</div>
       <div className="text-2xl font-semibold text-ink mt-1">{value}</div>
-      <div className="text-[11px] text-gray-500 mt-1">{sub}</div>
+      <div className="text-[11px] text-muted mt-1">{sub}</div>
     </div>
   );
 }

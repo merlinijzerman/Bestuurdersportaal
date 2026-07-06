@@ -41,9 +41,9 @@ interface Props {
 }
 
 const STAP_STATUS_DOT: Record<TijdlijnStap["status"], string> = {
-  afgerond: "bg-emerald-500",
+  afgerond: "bg-ok",
   actief: "bg-accent",
-  open: "bg-gray-300",
+  open: "bg-app-line",
 };
 
 export default function DossierTijdlijn({
@@ -69,10 +69,10 @@ export default function DossierTijdlijn({
   }
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5">
+    <div className="bg-white border border-line rounded-xl p-5">
       <div className="flex items-baseline justify-between mb-4">
         <h2 className="text-ink font-bold text-sm">Tijdlijn</h2>
-        <span className="text-[11px] text-gray-400 uppercase tracking-wide">
+        <span className="text-[11px] text-muted uppercase tracking-wide">
           Dossierfases
         </span>
       </div>
@@ -86,15 +86,15 @@ export default function DossierTijdlijn({
               <div className="flex flex-col items-center">
                 <div
                   className={`w-3 h-3 rounded-full ${
-                    heeftInhoud ? "bg-accent" : "bg-gray-200"
+                    heeftInhoud ? "bg-accent" : "bg-app-line"
                   }`}
                 />
-                <div className="flex-1 w-px bg-gray-200 mt-1" />
+                <div className="flex-1 w-px bg-app-line mt-1" />
               </div>
               <div className="flex-1 pb-2">
                 <div
                   className={`text-xs font-semibold uppercase tracking-wide ${
-                    heeftInhoud ? "text-ink" : "text-gray-400"
+                    heeftInhoud ? "text-ink" : "text-muted"
                   }`}
                 >
                   {TIJDLIJNFASE_LABEL[fase]}
@@ -109,14 +109,14 @@ export default function DossierTijdlijn({
                             STAP_STATUS_DOT[s.status]
                           }`}
                         />
-                        <span className="text-sm text-gray-800">{s.naam}</span>
+                        <span className="text-sm text-ink">{s.naam}</span>
                       </div>
                       {docs.length > 0 && (
                         <ul className="ml-4 mt-1 space-y-0.5">
                           {docs.map((d) => (
                             <li
                               key={d.id}
-                              className="text-xs text-gray-500 truncate"
+                              className="text-xs text-muted truncate"
                               title={d.titel}
                             >
                               📄 {d.titel}
@@ -128,7 +128,7 @@ export default function DossierTijdlijn({
                   );
                 })}
                 {!heeftInhoud && (
-                  <p className="text-xs text-gray-400 mt-0.5">
+                  <p className="text-xs text-muted mt-0.5">
                     Nog geen stappen in deze fase.
                   </p>
                 )}
@@ -139,15 +139,15 @@ export default function DossierTijdlijn({
       </div>
 
       {dossierDocumenten.length > 0 && (
-        <div className="mt-4 pt-4 border-t border-gray-100">
-          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1.5">
+        <div className="mt-4 pt-4 border-t border-line">
+          <div className="text-xs font-semibold uppercase tracking-wide text-muted mb-1.5">
             Dossierbreed gekoppeld ({dossierDocumenten.length})
           </div>
           <ul className="space-y-0.5">
             {dossierDocumenten.map((d) => (
               <li
                 key={d.id}
-                className="text-xs text-gray-600 truncate"
+                className="text-xs text-muted truncate"
                 title={d.titel}
               >
                 📄 {d.titel}

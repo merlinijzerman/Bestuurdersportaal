@@ -94,7 +94,7 @@ export default function AuditExportKnop({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="text-xs font-medium text-ink bg-white border border-gray-300 hover:bg-gray-50 px-3 py-1.5 rounded-md whitespace-nowrap"
+        className="text-xs font-medium text-ink bg-white border border-app-line-strong hover:bg-app-bg px-3 py-1.5 rounded-md whitespace-nowrap"
         aria-expanded={open}
         aria-haspopup="menu"
       >
@@ -103,9 +103,9 @@ export default function AuditExportKnop({
       {open && (
         <div
           role="menu"
-          className="absolute right-0 mt-1 w-72 bg-white border border-gray-200 rounded-lg shadow-lg z-30 overflow-hidden"
+          className="absolute right-0 mt-1 w-72 bg-white border border-line rounded-lg shadow-lg z-30 overflow-hidden"
         >
-          <ul className="divide-y divide-gray-100">
+          <ul className="divide-y divide-line">
             {opties.map((o) => {
               const href = `/api/decisions/${decisionId}/auditdossier?versie=${o.versie}&formaat=${o.formaat}`;
               return (
@@ -116,13 +116,13 @@ export default function AuditExportKnop({
                     rel={o.doel === "_blank" ? "noopener noreferrer" : undefined}
                     download={o.doel === "download" ? "" : undefined}
                     onClick={() => setOpen(false)}
-                    className="block px-3 py-2 hover:bg-gray-50 text-left"
+                    className="block px-3 py-2 hover:bg-app-bg text-left"
                   >
-                    <div className="text-sm font-medium text-gray-900">
+                    <div className="text-sm font-medium text-ink">
                       {o.label}
                     </div>
                     {o.hint && (
-                      <div className="text-[11px] text-gray-500 mt-0.5">
+                      <div className="text-[11px] text-muted mt-0.5">
                         {o.hint}
                       </div>
                     )}
@@ -132,7 +132,7 @@ export default function AuditExportKnop({
             })}
           </ul>
           {!heeftSnapshot && (
-            <div className="px-3 py-2 text-[11px] text-gray-500 italic border-t border-gray-100 bg-gray-50">
+            <div className="px-3 py-2 text-[11px] text-muted italic border-t border-line bg-app-bg">
               Snapshot-versies verschijnen zodra er een audit-snapshot is
               vastgelegd (bij overgang naar besloten of afgesloten).
             </div>

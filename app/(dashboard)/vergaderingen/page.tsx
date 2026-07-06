@@ -12,9 +12,9 @@ interface Vergadering {
 }
 
 const STATUS_BADGE: Record<string, { bg: string; text: string; label: string }> = {
-  gepland: { bg: "bg-blue-50", text: "text-blue-700", label: "Gepland" },
-  in_voorbereiding: { bg: "bg-amber-50", text: "text-amber-800", label: "In voorbereiding" },
-  afgerond: { bg: "bg-gray-100", text: "text-gray-600", label: "Afgerond" },
+  gepland: { bg: "bg-accent-tint", text: "text-accent-ink", label: "Gepland" },
+  in_voorbereiding: { bg: "bg-warn-tint", text: "text-warn-ink", label: "In voorbereiding" },
+  afgerond: { bg: "bg-app-bg", text: "text-muted", label: "Afgerond" },
 };
 
 function formatDatum(d: string) {
@@ -59,7 +59,7 @@ export default async function VergaderingenPage() {
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
           <h1 className="font-serif text-ink text-xl font-bold">Vergaderingen</h1>
-          <p className="text-gray-500 text-sm mt-0.5">
+          <p className="text-muted text-sm mt-0.5">
             Plan, agendeer en bereid bestuursvergaderingen voor.
           </p>
         </div>
@@ -67,11 +67,11 @@ export default async function VergaderingenPage() {
       </div>
 
       <section>
-        <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
+        <div className="text-xs font-bold text-muted uppercase tracking-wider mb-3">
           Komend ({komend.length})
         </div>
         {komend.length === 0 ? (
-          <div className="bg-white border border-dashed border-gray-300 rounded-xl p-8 text-center text-sm text-gray-500">
+          <div className="bg-white border border-dashed border-app-line-strong rounded-xl p-8 text-center text-sm text-muted">
             Nog geen geplande vergaderingen. Maak hierboven een nieuwe vergadering aan.
           </div>
         ) : (
@@ -85,7 +85,7 @@ export default async function VergaderingenPage() {
 
       {afgelopen.length > 0 && (
         <section>
-          <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
+          <div className="text-xs font-bold text-muted uppercase tracking-wider mb-3">
             Afgelopen ({afgelopen.length})
           </div>
           <div className="space-y-2">
@@ -110,14 +110,14 @@ function VergaderingKaart({
   return (
     <Link
       href={`/vergaderingen/${v.id}`}
-      className={`block bg-white border border-gray-200 rounded-xl p-4 hover:border-accent transition-colors ${
+      className={`block bg-white border border-line rounded-xl p-4 hover:border-accent transition-colors ${
         variant === "afgelopen" ? "opacity-75" : ""
       }`}
     >
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="min-w-0">
           <div className="font-semibold text-ink text-sm">{v.titel}</div>
-          <div className="text-xs text-gray-500 mt-1">
+          <div className="text-xs text-muted mt-1">
             {formatDatum(v.datum)}
             {v.locatie ? ` · ${v.locatie}` : ""}
           </div>

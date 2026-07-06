@@ -21,6 +21,14 @@ const LEGACY_HEX = /#(0f2744|1a3a5c|c9a84c|e8d090)\b/i;
 const ARBITRARY_HEX_CLASS =
   /\b(?:text|bg|border|from|to|via|ring|fill|stroke|divide|shadow|outline|decoration|caret|accent)-\[#[0-9a-fA-F]{3,8}\]/;
 
+// 3) Named Tailwind palette-classes voor families die naar de tokenlaag zijn
+//    gemigreerd (fase 5). Terugval hierop faalt. Bewust NIET geblokkeerd:
+//    purple/violet (fase-semantiek "oordeelsvorming"/"in_evaluatie" — nog geen
+//    token) en cyan/sky/teal (chart-palet, buiten scope). \b vangt ook de
+//    variant-prefix (hover:/md: etc.).
+const MIGRATED_PALETTE_CLASS =
+  /\b(?:text|bg|border|ring|divide|from|to|via|fill|stroke|placeholder|caret|outline|decoration)-(?:gray|slate|zinc|neutral|stone|red|rose|emerald|green|amber|yellow|orange|blue|indigo)-\d{2,3}\b/;
+
 function walk(dir) {
   const out = [];
   let entries;
@@ -49,6 +57,9 @@ for (const root of ROOTS) {
       }
       if (ARBITRARY_HEX_CLASS.test(line)) {
         violations.push({ file, line: i + 1, kind: "arbitrary-hex-class", text: line.trim() });
+      }
+      if (MIGRATED_PALETTE_CLASS.test(line)) {
+        violations.push({ file, line: i + 1, kind: "palette-class", text: line.trim() });
       }
     });
   }

@@ -151,7 +151,7 @@ export default async function ProceduresPage() {
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
           <h1 className="font-serif text-ink text-xl font-bold">Procedures</h1>
-          <p className="text-gray-500 text-sm mt-0.5">
+          <p className="text-muted text-sm mt-0.5">
             Lopende processen, beleidswijzigingen en besluittrajecten van het fonds.
           </p>
         </div>
@@ -164,11 +164,11 @@ export default async function ProceduresPage() {
       </div>
 
       <section>
-        <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
+        <div className="text-xs font-bold text-muted uppercase tracking-wider mb-3">
           Lopend ({lopend.length})
         </div>
         {lopend.length === 0 ? (
-          <div className="bg-white border border-dashed border-gray-300 rounded-xl p-8 text-center text-sm text-gray-500">
+          <div className="bg-white border border-dashed border-app-line-strong rounded-xl p-8 text-center text-sm text-muted">
             Nog geen lopende procedures. Start hierboven een nieuwe.
           </div>
         ) : (
@@ -188,7 +188,7 @@ export default async function ProceduresPage() {
 
       {afgerond.length > 0 && (
         <section>
-          <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
+          <div className="text-xs font-bold text-muted uppercase tracking-wider mb-3">
             Afgerond ({afgerond.length})
           </div>
           <div className="space-y-2">
@@ -237,7 +237,7 @@ function ProcedureKaart({
   return (
     <Link
       href={`/procedures/${p.id}`}
-      className={`block bg-white border border-gray-200 rounded-xl p-4 hover:border-accent transition-colors ${
+      className={`block bg-white border border-line rounded-xl p-4 hover:border-accent transition-colors ${
         variant === "afgerond" ? "opacity-80" : ""
       }`}
     >
@@ -255,23 +255,23 @@ function ProcedureKaart({
               {statusLabel}
             </span>
             {sublabel && (
-              <span className="text-[10px] font-medium uppercase tracking-wide px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200">
+              <span className="text-[10px] font-medium uppercase tracking-wide px-2 py-0.5 rounded bg-warn-tint text-warn-ink border border-warn/30">
                 {sublabel}
               </span>
             )}
             {periodeLabel && (
-              <span className="text-[10px] font-medium uppercase tracking-wide px-2 py-0.5 rounded bg-slate-50 text-slate-700 border border-slate-200">
+              <span className="text-[10px] font-medium uppercase tracking-wide px-2 py-0.5 rounded bg-app-bg text-ink border border-line">
                 {periodeLabel}
               </span>
             )}
           </div>
           <div className="font-semibold text-ink text-sm">{p.titel}</div>
           {p.beschrijving && (
-            <p className="text-xs text-gray-600 mt-0.5 line-clamp-1">
+            <p className="text-xs text-muted mt-0.5 line-clamp-1">
               {p.beschrijving}
             </p>
           )}
-          <div className="flex items-center gap-3 mt-2 text-xs text-gray-500 flex-wrap">
+          <div className="flex items-center gap-3 mt-2 text-xs text-muted flex-wrap">
             {teller && teller.totaal > 0 && (
               <span>
                 Stap {teller.afgerond + (teller.actief_volgorde ? 1 : 0)} van{" "}
@@ -302,14 +302,14 @@ function ProcedureKaart({
                 </div>
               ))}
               {eigenaren.length > 3 && (
-                <div className="w-7 h-7 rounded-full bg-gray-100 text-gray-700 text-[10px] flex items-center justify-center font-medium border-2 border-white">
+                <div className="w-7 h-7 rounded-full bg-app-bg text-ink text-[10px] flex items-center justify-center font-medium border-2 border-white">
                   +{eigenaren.length - 3}
                 </div>
               )}
             </div>
           )}
           {teller && teller.totaal > 0 && (
-            <div className="w-32 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+            <div className="w-32 h-1.5 bg-app-bg rounded-full overflow-hidden">
               <div
                 className="h-full bg-accent"
                 style={{ width: `${voortgang}%` }}

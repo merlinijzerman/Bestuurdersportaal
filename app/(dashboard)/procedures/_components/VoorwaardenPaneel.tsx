@@ -30,15 +30,15 @@ const STATUS_CYCLUS: ConditionStatus[] = [
 function statusKleur(s: ConditionStatus): string {
   switch (s) {
     case "vervuld":
-      return "bg-emerald-50 text-emerald-800 border-emerald-200";
+      return "bg-ok-tint text-ok-ink border-ok/30";
     case "op_schema":
-      return "bg-blue-50 text-blue-800 border-blue-200";
+      return "bg-accent-tint text-accent-ink border-accent/30";
     case "afwijking":
-      return "bg-amber-50 text-amber-800 border-amber-200";
+      return "bg-warn-tint text-warn-ink border-warn/30";
     case "overschreden":
-      return "bg-rose-50 text-rose-800 border-rose-200";
+      return "bg-err-tint text-err-ink border-err/30";
     default:
-      return "bg-gray-50 text-gray-700 border-gray-200";
+      return "bg-app-bg text-ink border-line";
   }
 }
 
@@ -218,11 +218,11 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
   }
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5">
+    <div className="bg-white border border-line rounded-xl p-5">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="text-sm font-semibold text-ink">Voorwaarden</h3>
-          <p className="text-xs text-gray-500 mt-0.5">
+          <p className="text-xs text-muted mt-0.5">
             Voorwaarden waaronder dit besluit van kracht is — met KPI,
             drempelwaarde en heroverwegingstrigger.
           </p>
@@ -240,13 +240,13 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
       </div>
 
       {open && (
-        <div className="mb-4 border border-gray-200 rounded-lg p-4 bg-gray-50/50 space-y-3">
+        <div className="mb-4 border border-line rounded-lg p-4 bg-app-bg/50 space-y-3">
           <Veldgroep label="Voorwaarde *">
             <textarea
               value={voorwaarde}
               onChange={(e) => setVoorwaarde(e.target.value)}
               rows={2}
-              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
+              className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
               placeholder="Bijv. 'Allocatie naar zakelijke waarden blijft binnen mandaatbandbreedte 35-45%.'"
             />
           </Veldgroep>
@@ -256,7 +256,7 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
                 type="text"
                 value={kpi}
                 onChange={(e) => setKpi(e.target.value)}
-                className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
+                className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
                 placeholder="bijv. allocatie zakelijke waarden"
               />
             </Veldgroep>
@@ -265,7 +265,7 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
                 type="text"
                 value={drempel}
                 onChange={(e) => setDrempel(e.target.value)}
-                className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
+                className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
                 placeholder="35–45%"
               />
             </Veldgroep>
@@ -274,7 +274,7 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
                 type="text"
                 value={monitor}
                 onChange={(e) => setMonitor(e.target.value)}
-                className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
+                className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
                 placeholder="maandelijks"
               />
             </Veldgroep>
@@ -283,7 +283,7 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
                 type="date"
                 value={deadline}
                 onChange={(e) => setDeadline(e.target.value)}
-                className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
+                className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
               />
             </Veldgroep>
           </div>
@@ -292,7 +292,7 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
               type="text"
               value={eigenaar}
               onChange={(e) => setEigenaar(e.target.value)}
-              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
+              className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
               placeholder="Wie bewaakt deze voorwaarde?"
             />
           </Veldgroep>
@@ -301,12 +301,12 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
               type="text"
               value={trigger}
               onChange={(e) => setTrigger(e.target.value)}
-              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
+              className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
               placeholder="Wanneer moet dit besluit opnieuw besproken worden? Bijv. 'bij overschrijden 6 maanden'"
             />
           </Veldgroep>
           {fout && (
-            <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-md px-3 py-2">
+            <div className="text-xs text-err-ink bg-err-tint border border-err/30 rounded-md px-3 py-2">
               {fout}
             </div>
           )}
@@ -325,7 +325,7 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
                 setOpen(false);
                 setFout(null);
               }}
-              className="text-sm text-gray-600 hover:text-gray-900 px-3 py-2"
+              className="text-sm text-muted hover:text-ink px-3 py-2"
             >
               Annuleer
             </button>
@@ -334,7 +334,7 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
       )}
 
       {conditions.length === 0 ? (
-        <div className="text-sm text-gray-400 italic">
+        <div className="text-sm text-muted italic">
           Nog geen voorwaarden vastgelegd. Bij voorwaardelijke besluiten zijn
           deze verplicht voor verantwoordingsrijp.
         </div>
@@ -345,8 +345,8 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
               key={c.id}
               className={`border rounded-lg p-3 ${
                 editId === c.id
-                  ? "border-accent bg-amber-50/30"
-                  : "border-gray-200 bg-white"
+                  ? "border-accent bg-warn-tint"
+                  : "border-line bg-white"
               }`}
             >
               {editId === c.id ? (
@@ -357,7 +357,7 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
                       value={editVoorwaarde}
                       onChange={(e) => setEditVoorwaarde(e.target.value)}
                       rows={2}
-                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
+                      className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
                     />
                   </Veldgroep>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -366,7 +366,7 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
                         type="text"
                         value={editKpi}
                         onChange={(e) => setEditKpi(e.target.value)}
-                        className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
+                        className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
                       />
                     </Veldgroep>
                     <Veldgroep label="Drempelwaarde">
@@ -374,7 +374,7 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
                         type="text"
                         value={editDrempel}
                         onChange={(e) => setEditDrempel(e.target.value)}
-                        className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
+                        className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
                       />
                     </Veldgroep>
                     <Veldgroep label="Monitorfrequentie">
@@ -382,7 +382,7 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
                         type="text"
                         value={editMonitor}
                         onChange={(e) => setEditMonitor(e.target.value)}
-                        className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
+                        className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
                       />
                     </Veldgroep>
                     <Veldgroep label="Deadline">
@@ -390,7 +390,7 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
                         type="date"
                         value={editDeadline}
                         onChange={(e) => setEditDeadline(e.target.value)}
-                        className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
+                        className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
                       />
                     </Veldgroep>
                   </div>
@@ -399,7 +399,7 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
                       type="text"
                       value={editEigenaar}
                       onChange={(e) => setEditEigenaar(e.target.value)}
-                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
+                      className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
                     />
                   </Veldgroep>
                   <Veldgroep label="Heroverwegingstrigger">
@@ -407,11 +407,11 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
                       type="text"
                       value={editTrigger}
                       onChange={(e) => setEditTrigger(e.target.value)}
-                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
+                      className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
                     />
                   </Veldgroep>
                   {fout && (
-                    <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-md px-3 py-2">
+                    <div className="text-xs text-err-ink bg-err-tint border border-err/30 rounded-md px-3 py-2">
                       {fout}
                     </div>
                   )}
@@ -428,7 +428,7 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
                       type="button"
                       onClick={annuleerBewerken}
                       disabled={bezig === c.id}
-                      className="text-sm text-gray-600 hover:text-gray-900 px-3 py-2"
+                      className="text-sm text-muted hover:text-ink px-3 py-2"
                     >
                       Annuleer
                     </button>
@@ -437,46 +437,46 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
               ) : (
                 <div className="flex items-start gap-3">
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm text-gray-900 whitespace-pre-line">
+                  <div className="text-sm text-ink whitespace-pre-line">
                     {c.voorwaarde}
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-1 mt-2 text-xs">
                     {c.kpi && (
                       <div>
-                        <span className="text-gray-500">KPI:</span>{" "}
-                        <span className="text-gray-900">{c.kpi}</span>
+                        <span className="text-muted">KPI:</span>{" "}
+                        <span className="text-ink">{c.kpi}</span>
                       </div>
                     )}
                     {c.drempelwaarde && (
                       <div>
-                        <span className="text-gray-500">Drempel:</span>{" "}
-                        <span className="text-gray-900">{c.drempelwaarde}</span>
+                        <span className="text-muted">Drempel:</span>{" "}
+                        <span className="text-ink">{c.drempelwaarde}</span>
                       </div>
                     )}
                     {c.monitorfrequentie && (
                       <div>
-                        <span className="text-gray-500">Monitor:</span>{" "}
-                        <span className="text-gray-900">
+                        <span className="text-muted">Monitor:</span>{" "}
+                        <span className="text-ink">
                           {c.monitorfrequentie}
                         </span>
                       </div>
                     )}
                     {c.deadline && (
                       <div>
-                        <span className="text-gray-500">Deadline:</span>{" "}
-                        <span className="text-gray-900">
+                        <span className="text-muted">Deadline:</span>{" "}
+                        <span className="text-ink">
                           {formatDatum(c.deadline)}
                         </span>
                       </div>
                     )}
                   </div>
                   {c.heroverwegingstrigger && (
-                    <div className="text-xs text-gray-700 mt-2 italic">
+                    <div className="text-xs text-ink mt-2 italic">
                       Heroverweging: {c.heroverwegingstrigger}
                     </div>
                   )}
                   {c.eigenaar_naam && (
-                    <div className="text-xs text-gray-500 mt-1">
+                    <div className="text-xs text-muted mt-1">
                       Eigenaar: {c.eigenaar_naam}
                     </div>
                   )}
@@ -498,7 +498,7 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
                       type="button"
                       onClick={() => patchStatus(c, "overschreden")}
                       disabled={bezig === c.id}
-                      className="text-[11px] text-rose-700 hover:underline disabled:opacity-50"
+                      className="text-[11px] text-err-ink hover:underline disabled:opacity-50"
                     >
                       Overschreden
                     </button>
@@ -521,7 +521,7 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
       )}
 
       {fout && !open && (
-        <div className="mt-3 text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-md px-3 py-2">
+        <div className="mt-3 text-xs text-err-ink bg-err-tint border border-err/30 rounded-md px-3 py-2">
           {fout}
         </div>
       )}
@@ -538,7 +538,7 @@ function Veldgroep({
 }) {
   return (
     <div>
-      <label className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold block mb-1">
+      <label className="text-[11px] uppercase tracking-wide text-muted font-semibold block mb-1">
         {label}
       </label>
       {children}

@@ -162,23 +162,23 @@ export default async function DashboardPage() {
           <div className="font-serif text-ink text-xl font-bold">
             Welkom terug, {naam}
           </div>
-          <div className="text-gray-500 text-sm mt-0.5">
+          <div className="text-muted text-sm mt-0.5">
             Stuurinformatie · per {FONDS_DATUM}
           </div>
         </div>
-        <span className="text-[11px] uppercase tracking-wider text-gray-400 bg-gray-100 px-2 py-1 rounded-md">
+        <span className="text-[11px] uppercase tracking-wider text-muted bg-app-bg px-2 py-1 rounded-md">
           Demo-data
         </span>
       </div>
 
       {/* KPI tegels */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <div className="text-xs text-gray-500">Financieringsgraad</div>
+        <div className="bg-white rounded-xl border border-line p-4">
+          <div className="text-xs text-muted">Financieringsgraad</div>
           <div className="text-2xl font-bold text-ink mt-1">
             {KPI.financieringsgraad.huidig.toFixed(1).replace(".", ",")}%
           </div>
-          <div className="text-xs text-green-600 mt-1">
+          <div className="text-xs text-ok-ink mt-1">
             +{KPI.financieringsgraad.deltaPP} pp t.o.v. Q4
           </div>
         </div>
@@ -186,58 +186,58 @@ export default async function DashboardPage() {
           const aanpassingPct = (KPI.financieringsgraad.huidig - 100) / 5;
           const teken = aanpassingPct >= 0 ? "+" : "−";
           const absStr = Math.abs(aanpassingPct).toFixed(1).replace(".", ",");
-          const kleur = aanpassingPct >= 0 ? "text-green-600" : "text-red-600";
+          const kleur = aanpassingPct >= 0 ? "text-ok-ink" : "text-err-ink";
           return (
-            <div className="bg-white rounded-xl border border-gray-200 p-4">
-              <div className="text-xs text-gray-500">
+            <div className="bg-white rounded-xl border border-line p-4">
+              <div className="text-xs text-muted">
                 Jaarlijkse aanpassing uitkeringen
               </div>
               <div className={`text-2xl font-bold mt-1 ${kleur}`}>
                 {teken}
                 {absStr}%
               </div>
-              <div className="text-xs text-gray-500 mt-1">
+              <div className="text-xs text-muted mt-1">
                 indicatie volgend jaar · 1/5 × (FG − 100%)
               </div>
             </div>
           );
         })()}
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <div className="text-xs text-gray-500">Solidariteitsreserve</div>
+        <div className="bg-white rounded-xl border border-line p-4">
+          <div className="text-xs text-muted">Solidariteitsreserve</div>
           <div className="text-2xl font-bold text-ink mt-1">
             {KPI.solidariteitsreserve.percentage.toFixed(1).replace(".", ",")}%
           </div>
-          <div className="text-xs text-gray-500 mt-1">
+          <div className="text-xs text-muted mt-1">
             target {KPI.solidariteitsreserve.target.toFixed(0)}% · opbouw
           </div>
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <div className="text-xs text-gray-500">Vermogen</div>
+        <div className="bg-white rounded-xl border border-line p-4">
+          <div className="text-xs text-muted">Vermogen</div>
           <div className="text-2xl font-bold text-ink mt-1">
             € {fmtMln(KPI.vermogen.mln)}
           </div>
-          <div className="text-xs text-green-600 mt-1">
+          <div className="text-xs text-ok-ink mt-1">
             +{(KPI.vermogen.deltaYTDmln / 1000).toFixed(1).replace(".", ",")} mld YTD
           </div>
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <div className="text-xs text-gray-500">Rendement YTD</div>
+        <div className="bg-white rounded-xl border border-line p-4">
+          <div className="text-xs text-muted">Rendement YTD</div>
           <div className="text-2xl font-bold text-ink mt-1">
             +{KPI.rendementYTD.fonds.toFixed(1).replace(".", ",")}%
           </div>
-          <div className="text-xs text-gray-500 mt-1">
+          <div className="text-xs text-muted mt-1">
             benchmark +{KPI.rendementYTD.benchmark.toFixed(1).replace(".", ",")}%
           </div>
         </div>
       </div>
 
       {/* Trend financieringsgraad */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
+      <div className="bg-white rounded-xl border border-line p-5">
         <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
           <div className="font-semibold text-ink text-sm">
             Financieringsgraad — 24 maanden
           </div>
-          <div className="flex gap-4 text-xs text-gray-500">
+          <div className="flex gap-4 text-xs text-muted">
             <span className="inline-flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-sm" style={{ background: "#185FA5" }}></span>
               Financieringsgraad
@@ -282,22 +282,22 @@ export default async function DashboardPage() {
       </div>
 
       {/* Balans */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
+      <div className="bg-white rounded-xl border border-line p-5">
         <div className="flex items-baseline justify-between mb-4 flex-wrap gap-2">
           <div>
             <div className="font-semibold text-ink text-sm">Balans · Wtp-regeling</div>
-            <div className="text-xs text-gray-500 mt-0.5">
+            <div className="text-xs text-muted mt-0.5">
               Solidaire premieregeling · bedragen in € mln
             </div>
           </div>
-          <div className="text-xs text-gray-400">vs Q4 2025</div>
+          <div className="text-xs text-muted">vs Q4 2025</div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Activa */}
           <div>
-            <div className="flex items-baseline justify-between pb-2 mb-3 border-b border-gray-200">
-              <span className="text-xs font-bold uppercase tracking-wider text-gray-500">
+            <div className="flex items-baseline justify-between pb-2 mb-3 border-b border-line">
+              <span className="text-xs font-bold uppercase tracking-wider text-muted">
                 Activa
               </span>
               <span className="text-lg font-semibold text-ink">
@@ -312,8 +312,8 @@ export default async function DashboardPage() {
 
           {/* Passiva */}
           <div>
-            <div className="flex items-baseline justify-between pb-2 mb-3 border-b border-gray-200">
-              <span className="text-xs font-bold uppercase tracking-wider text-gray-500">
+            <div className="flex items-baseline justify-between pb-2 mb-3 border-b border-line">
+              <span className="text-xs font-bold uppercase tracking-wider text-muted">
                 Passiva
               </span>
               <span className="text-lg font-semibold text-ink">
@@ -321,16 +321,16 @@ export default async function DashboardPage() {
               </span>
             </div>
 
-            <div className="text-xs font-medium text-gray-500 mb-2 mt-1">
+            <div className="text-xs font-medium text-muted mb-2 mt-1">
               Persoonlijke pensioenvermogens
             </div>
             <div className="space-y-1.5 text-sm">
               {PASSIVA.persoonlijkePensioenvermogens.map((r) => (
                 <div key={r.naam} className="flex justify-between">
-                  <span className="text-gray-700">{r.naam}</span>
+                  <span className="text-ink">{r.naam}</span>
                   <span className="inline-flex gap-2 items-baseline">
                     <span className="tabular-nums">{fmt(r.mln)}</span>
-                    <span className="text-[11px] text-green-600 min-w-[40px] text-right">
+                    <span className="text-[11px] text-ok-ink min-w-[40px] text-right">
                       +{r.rendementPct.toFixed(1).replace(".", ",")}%
                     </span>
                   </span>
@@ -338,37 +338,37 @@ export default async function DashboardPage() {
               ))}
             </div>
 
-            <div className="text-xs font-medium text-gray-500 mb-2 mt-4">
+            <div className="text-xs font-medium text-muted mb-2 mt-4">
               Solidariteitsreserve
             </div>
             <div className="space-y-1.5 text-sm">
               <div className="flex justify-between">
-                <span className="text-gray-700">Beschikbaar saldo</span>
+                <span className="text-ink">Beschikbaar saldo</span>
                 <span className="inline-flex gap-2 items-baseline">
                   <span className="tabular-nums">{fmt(PASSIVA.solidariteitsreserve.mln)}</span>
-                  <span className="text-[11px] text-green-600 min-w-[40px] text-right">
+                  <span className="text-[11px] text-ok-ink min-w-[40px] text-right">
                     +{PASSIVA.solidariteitsreserve.deltaMln}
                   </span>
                 </span>
               </div>
             </div>
 
-            <div className="text-xs font-medium text-gray-500 mb-2 mt-4">
+            <div className="text-xs font-medium text-muted mb-2 mt-4">
               Overige verplichtingen
             </div>
             <div className="space-y-1.5 text-sm">
               {PASSIVA.overigeVerplichtingen.map((r) => (
                 <div key={r.naam} className="flex justify-between">
-                  <span className="text-gray-700">{r.naam}</span>
+                  <span className="text-ink">{r.naam}</span>
                   <span className="inline-flex gap-2 items-baseline">
                     <span className="tabular-nums">{fmt(r.mln)}</span>
                     <span
                       className={`text-[11px] min-w-[40px] text-right ${
                         r.deltaMln < 0
-                          ? "text-red-600"
+                          ? "text-err-ink"
                           : r.deltaMln > 0
-                          ? "text-green-600"
-                          : "text-gray-400"
+                          ? "text-ok-ink"
+                          : "text-muted"
                       }`}
                     >
                       {r.deltaMln === 0 ? "—" : r.deltaMln > 0 ? `+${r.deltaMln}` : r.deltaMln}
@@ -378,13 +378,13 @@ export default async function DashboardPage() {
               ))}
             </div>
 
-            <div className="bg-gray-50 rounded-md px-3 py-2.5 mt-5">
-              <div className="text-[11px] text-gray-500">
+            <div className="bg-app-bg rounded-md px-3 py-2.5 mt-5">
+              <div className="text-[11px] text-muted">
                 Financieringsgraad (vermogen ÷ verplichtingen)
               </div>
               <div className="text-base font-semibold text-ink mt-0.5">
                 {KPI.financieringsgraad.huidig.toFixed(1).replace(".", ",")}%
-                <span className="text-xs text-green-600 font-normal ml-2">
+                <span className="text-xs text-ok-ink font-normal ml-2">
                   surplus → solidariteitsreserve
                 </span>
               </div>
@@ -393,8 +393,8 @@ export default async function DashboardPage() {
         </div>
 
         {/* Cohortverdeling onderaan */}
-        <div className="mt-6 pt-4 border-t border-gray-200">
-          <div className="text-xs font-medium text-gray-500 mb-2">
+        <div className="mt-6 pt-4 border-t border-line">
+          <div className="text-xs font-medium text-muted mb-2">
             Verdeling persoonlijke pensioenvermogens per cohort
           </div>
           <div className="flex gap-1 h-5 rounded-md overflow-hidden">
@@ -412,7 +412,7 @@ export default async function DashboardPage() {
               );
             })}
           </div>
-          <div className="text-[11px] text-gray-400 mt-1.5">
+          <div className="text-[11px] text-muted mt-1.5">
             Toedelingsregels per cohort sturen verdeling van bescherming- en overrendement.
           </div>
         </div>
@@ -421,17 +421,17 @@ export default async function DashboardPage() {
       {/* Deelnemers + Signaleringen */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         {/* Deelnemers */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white rounded-xl border border-line p-5">
           <div className="flex items-baseline justify-between mb-3">
             <div className="font-semibold text-ink text-sm">Deelnemers naar status</div>
-            <span className="text-xs text-gray-400">vs Q4 2025</span>
+            <span className="text-xs text-muted">vs Q4 2025</span>
           </div>
           <div className="flex items-baseline gap-2 mb-3">
             <span className="text-xl font-bold text-ink">
               {fmt(DEELNEMERS.totaal)}
             </span>
-            <span className="text-xs text-gray-500">totaal</span>
-            <span className="text-xs text-green-600 ml-2">
+            <span className="text-xs text-muted">totaal</span>
+            <span className="text-xs text-ok-ink ml-2">
               +{fmt(DEELNEMERS.nettoDelta)} netto
             </span>
           </div>
@@ -455,17 +455,17 @@ export default async function DashboardPage() {
                     className="w-2.5 h-2.5 rounded-sm"
                     style={{ background: d.kleur }}
                   />
-                  <span className="text-gray-700">{d.status}</span>
+                  <span className="text-ink">{d.status}</span>
                 </span>
                 <span className="inline-flex gap-2 items-baseline">
                   <span className="tabular-nums">{fmt(d.aantal)}</span>
                   <span
                     className={`text-[11px] min-w-[40px] text-right ${
                       d.delta > 0
-                        ? "text-green-600"
+                        ? "text-ok-ink"
                         : d.delta < 0
-                        ? "text-red-600"
-                        : "text-gray-400"
+                        ? "text-err-ink"
+                        : "text-muted"
                     }`}
                   >
                     {d.delta > 0 ? `+${d.delta}` : d.delta}
@@ -474,21 +474,21 @@ export default async function DashboardPage() {
               </div>
             ))}
           </div>
-          <div className="grid grid-cols-3 gap-3 mt-4 pt-3 border-t border-gray-200">
+          <div className="grid grid-cols-3 gap-3 mt-4 pt-3 border-t border-line">
             <div>
-              <div className="text-[11px] text-gray-500">Instroom Q1</div>
+              <div className="text-[11px] text-muted">Instroom Q1</div>
               <div className="text-sm font-semibold text-ink mt-0.5">
                 +{fmt(DEELNEMERS.mutaties.instroom)}
               </div>
             </div>
             <div>
-              <div className="text-[11px] text-gray-500">Uitstroom Q1</div>
+              <div className="text-[11px] text-muted">Uitstroom Q1</div>
               <div className="text-sm font-semibold text-ink mt-0.5">
                 −{fmt(DEELNEMERS.mutaties.uitstroom)}
               </div>
             </div>
             <div>
-              <div className="text-[11px] text-gray-500">Pensioneringen Q1</div>
+              <div className="text-[11px] text-muted">Pensioneringen Q1</div>
               <div className="text-sm font-semibold text-ink mt-0.5">
                 {fmt(DEELNEMERS.mutaties.pensioneringen)}
               </div>
@@ -497,7 +497,7 @@ export default async function DashboardPage() {
         </div>
 
         {/* Signaleringen */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white rounded-xl border border-line p-5">
           <div className="font-semibold text-ink text-sm mb-3">Signaleringen</div>
           <ul className="space-y-3">
             {SIGNALERINGEN.map((s, i) => (
@@ -505,15 +505,15 @@ export default async function DashboardPage() {
                 <span
                   className={`w-2 h-2 rounded-full flex-shrink-0 mt-1.5 ${
                     s.kleur === "amber"
-                      ? "bg-amber-400"
+                      ? "bg-warn"
                       : s.kleur === "green"
-                      ? "bg-green-500"
-                      : "bg-blue-500"
+                      ? "bg-ok"
+                      : "bg-accent"
                   }`}
                 />
                 <div>
                   <div className="text-sm font-semibold text-ink">{s.titel}</div>
-                  <div className="text-xs text-gray-500 mt-0.5">{s.sub}</div>
+                  <div className="text-xs text-muted mt-0.5">{s.sub}</div>
                 </div>
               </li>
             ))}
@@ -522,12 +522,12 @@ export default async function DashboardPage() {
       </div>
 
       {/* Vergaderingen / acties */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
+      <div className="bg-white rounded-xl border border-line p-5">
         <div className="flex items-baseline justify-between mb-3">
           <div className="font-semibold text-ink text-sm">
             Openstaande acties &amp; vergaderingen
           </div>
-          <span className="text-xs text-gray-400">{VERGADERINGEN.length} lopend</span>
+          <span className="text-xs text-muted">{VERGADERINGEN.length} lopend</span>
         </div>
         <div className="space-y-2.5">
           {VERGADERINGEN.map((v, i) => (
@@ -536,22 +536,22 @@ export default async function DashboardPage() {
                 <span
                   className={`text-[11px] px-2 py-0.5 rounded-md whitespace-nowrap ${
                     v.kleur === "amber"
-                      ? "bg-amber-50 text-amber-800"
-                      : "bg-blue-50 text-blue-800"
+                      ? "bg-warn-tint text-warn-ink"
+                      : "bg-accent-tint text-accent-ink"
                   }`}
                 >
                   {v.categorie}
                 </span>
-                <span className="text-sm text-gray-700 truncate">{v.titel}</span>
+                <span className="text-sm text-ink truncate">{v.titel}</span>
               </div>
-              <span className="text-xs text-gray-500 whitespace-nowrap">{v.datum}</span>
+              <span className="text-xs text-muted whitespace-nowrap">{v.datum}</span>
             </div>
           ))}
         </div>
       </div>
 
       {/* Governance traceability — kleinere voet */}
-      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center gap-3 text-xs text-blue-800">
+      <div className="bg-accent-tint border border-accent/30 rounded-xl p-4 flex items-center gap-3 text-xs text-accent-ink">
         <span className="text-base">ℹ️</span>
         <div className="flex-1">
           <strong>{aantalDocs ?? 0}</strong> bron-documenten beschikbaar ·{" "}
@@ -575,20 +575,20 @@ function BalansGroep({
 }) {
   return (
     <div className="mb-3">
-      <div className="text-xs font-medium text-gray-500 mb-2 mt-3">{titel}</div>
+      <div className="text-xs font-medium text-muted mb-2 mt-3">{titel}</div>
       <div className="space-y-1.5 text-sm">
         {rijen.map((r) => (
           <div key={r.naam} className="flex justify-between">
-            <span className="text-gray-700">{r.naam}</span>
+            <span className="text-ink">{r.naam}</span>
             <span className="inline-flex gap-2 items-baseline">
               <span className="tabular-nums">{fmt(r.mln)}</span>
               <span
                 className={`text-[11px] min-w-[40px] text-right ${
                   r.deltaPct < 0
-                    ? "text-red-600"
+                    ? "text-err-ink"
                     : r.deltaPct > 0
-                    ? "text-green-600"
-                    : "text-gray-400"
+                    ? "text-ok-ink"
+                    : "text-muted"
                 }`}
               >
                 {r.deltaPct === 0

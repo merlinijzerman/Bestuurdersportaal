@@ -96,25 +96,25 @@ export const NIVEAU_KLEUREN: Record<
   { dot: string; pillBg: string; pillText: string; cellBg: string; cellBorder: string }
 > = {
   hoog: {
-    dot: "bg-red-500",
-    pillBg: "bg-red-50",
-    pillText: "text-red-700",
-    cellBg: "bg-red-50",
-    cellBorder: "border-red-100",
+    dot: "bg-err",
+    pillBg: "bg-err-tint",
+    pillText: "text-err-ink",
+    cellBg: "bg-err-tint",
+    cellBorder: "border-err/30",
   },
   middel: {
-    dot: "bg-amber-500",
-    pillBg: "bg-amber-50",
-    pillText: "text-amber-700",
-    cellBg: "bg-amber-50",
-    cellBorder: "border-amber-100",
+    dot: "bg-warn",
+    pillBg: "bg-warn-tint",
+    pillText: "text-warn-ink",
+    cellBg: "bg-warn-tint",
+    cellBorder: "border-warn/30",
   },
   laag: {
-    dot: "bg-emerald-500",
-    pillBg: "bg-emerald-50",
-    pillText: "text-emerald-700",
-    cellBg: "bg-emerald-50",
-    cellBorder: "border-emerald-100",
+    dot: "bg-ok",
+    pillBg: "bg-ok-tint",
+    pillText: "text-ok-ink",
+    cellBg: "bg-ok-tint",
+    cellBorder: "border-ok/30",
   },
 };
 

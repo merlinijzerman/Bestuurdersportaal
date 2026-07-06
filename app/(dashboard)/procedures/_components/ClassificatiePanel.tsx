@@ -77,7 +77,7 @@ export default function ClassificatiePanel({ decision }: Props) {
   }
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5">
+    <div className="bg-white border border-line rounded-xl p-5">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-ink">
           Classificatie & besluitvraag
@@ -111,7 +111,7 @@ export default function ClassificatiePanel({ decision }: Props) {
             label="AI-risicoklasse"
             waarde={RISICONIVEAU_LABEL[decision.ai_risicoklasse]}
           />
-          <div className="col-span-2 md:col-span-3 mt-2 pt-3 border-t border-gray-100 space-y-2">
+          <div className="col-span-2 md:col-span-3 mt-2 pt-3 border-t border-line space-y-2">
             <Veld
               label="Besluitvraag"
               waarde={
@@ -131,7 +131,7 @@ export default function ClassificatiePanel({ decision }: Props) {
               value={besluitvraag}
               onChange={(e) => setBesluitvraag(e.target.value)}
               rows={3}
-              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
+              className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
               placeholder="Wat is de centrale vraag waarover een besluit moet worden genomen?"
             />
           </Veldgroep>
@@ -140,12 +140,12 @@ export default function ClassificatiePanel({ decision }: Props) {
               value={scope}
               onChange={(e) => setScope(e.target.value)}
               rows={2}
-              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
+              className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
               placeholder="Welke deelnemers, welke beleggingscategorie, welke periode raakt dit besluit?"
             />
           </Veldgroep>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-gray-100">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-line">
             <Veldgroep label="Complexiteit">
               <SegmentRadio<Complexiteit>
                 opties={COMPLEXITEIT}
@@ -190,7 +190,7 @@ export default function ClassificatiePanel({ decision }: Props) {
           </div>
 
           {fout && (
-            <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-md px-3 py-2">
+            <div className="text-xs text-err-ink bg-err-tint border border-err/30 rounded-md px-3 py-2">
               {fout}
             </div>
           )}
@@ -206,7 +206,7 @@ export default function ClassificatiePanel({ decision }: Props) {
             <button
               type="button"
               onClick={() => setOpen(false)}
-              className="text-sm text-gray-600 hover:text-gray-900 px-3 py-2"
+              className="text-sm text-muted hover:text-ink px-3 py-2"
             >
               Annuleer
             </button>
@@ -228,10 +228,10 @@ function Veld({
 }) {
   return (
     <div className={vol ? "col-span-full" : ""}>
-      <div className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold">
+      <div className="text-[11px] uppercase tracking-wide text-muted font-semibold">
         {label}
       </div>
-      <div className="text-sm text-gray-900 mt-0.5 whitespace-pre-line">
+      <div className="text-sm text-ink mt-0.5 whitespace-pre-line">
         {waarde}
       </div>
     </div>
@@ -247,7 +247,7 @@ function Veldgroep({
 }) {
   return (
     <div>
-      <label className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold block mb-1">
+      <label className="text-[11px] uppercase tracking-wide text-muted font-semibold block mb-1">
         {label}
       </label>
       {children}
@@ -267,7 +267,7 @@ function SegmentRadio<T extends string>({
   label: Record<T, string>;
 }) {
   return (
-    <div className="inline-flex rounded-md border border-gray-300 overflow-hidden">
+    <div className="inline-flex rounded-md border border-app-line-strong overflow-hidden">
       {opties.map((o) => (
         <button
           key={o}
@@ -276,7 +276,7 @@ function SegmentRadio<T extends string>({
           className={`text-sm px-3 py-1.5 ${
             o === waarde
               ? "bg-accent text-white"
-              : "bg-white text-gray-700 hover:bg-gray-50"
+              : "bg-white text-ink hover:bg-app-bg"
           }`}
         >
           {label[o]}
@@ -301,9 +301,9 @@ function Checkbox({
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="rounded border-gray-300 text-ink focus:ring-accent/40"
+        className="rounded border-app-line-strong text-ink focus:ring-accent/40"
       />
-      <span className="text-gray-900">{label}</span>
+      <span className="text-ink">{label}</span>
     </label>
   );
 }

@@ -334,7 +334,7 @@ export default async function ProcedureDetailPage({
     <div className="p-4 sm:p-6 lg:p-7 space-y-6">
       <Link
         href="/procedures"
-        className="text-sm text-gray-500 hover:text-ink inline-flex items-center gap-1"
+        className="text-sm text-muted hover:text-ink inline-flex items-center gap-1"
       >
         ← Terug naar procedures
       </Link>
@@ -376,17 +376,17 @@ export default async function ProcedureDetailPage({
               procedure.status}
           </span>
           {dossierSublabel && (
-            <span className="text-[11px] font-medium uppercase tracking-wide border border-amber-200 bg-amber-50 text-amber-800 px-2 py-0.5 rounded">
+            <span className="text-[11px] font-medium uppercase tracking-wide border border-warn/30 bg-warn-tint text-warn-ink px-2 py-0.5 rounded">
               {dossierSublabel}
             </span>
           )}
           {periodeLabel && (
-            <span className="text-[11px] font-medium uppercase tracking-wide border border-slate-200 bg-slate-50 text-slate-700 px-2 py-0.5 rounded">
+            <span className="text-[11px] font-medium uppercase tracking-wide border border-line bg-app-bg text-ink px-2 py-0.5 rounded">
               {periodeLabel}
             </span>
           )}
           {statusView?.afgeleid_van_decision && (
-            <span className="text-[11px] text-gray-400">
+            <span className="text-[11px] text-muted">
               afgeleid uit Decision Object
             </span>
           )}
@@ -404,20 +404,20 @@ export default async function ProcedureDetailPage({
           />
         </div>
         {procedure.beschrijving && (
-          <p className="text-sm text-gray-600 mt-1.5 max-w-3xl whitespace-pre-line">
+          <p className="text-sm text-muted mt-1.5 max-w-3xl whitespace-pre-line">
             {procedure.beschrijving}
           </p>
         )}
       </div>
 
       {/* Meta-strook */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-white border border-gray-200 rounded-xl p-5">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-white border border-line rounded-xl p-5">
         <div>
-          <div className="text-xs uppercase tracking-wide text-gray-500 font-semibold">
+          <div className="text-xs uppercase tracking-wide text-muted font-semibold">
             Co-eigenaars
           </div>
           {eigenaren.length === 0 ? (
-            <div className="text-sm text-gray-400 italic mt-2">
+            <div className="text-sm text-muted italic mt-2">
               Geen toegewezen
             </div>
           ) : (
@@ -439,12 +439,12 @@ export default async function ProcedureDetailPage({
                   </div>
                 ))}
                 {eigenaren.length > 3 && (
-                  <div className="w-8 h-8 rounded-full bg-gray-100 text-gray-700 text-xs flex items-center justify-center font-medium border-2 border-white">
+                  <div className="w-8 h-8 rounded-full bg-app-bg text-ink text-xs flex items-center justify-center font-medium border-2 border-white">
                     +{eigenaren.length - 3}
                   </div>
                 )}
               </div>
-              <span className="text-sm text-gray-700">
+              <span className="text-sm text-ink">
                 {eigenaren.slice(0, 2).join(", ")}
                 {eigenaren.length > 2 && ` +${eigenaren.length - 2}`}
               </span>
@@ -452,15 +452,15 @@ export default async function ProcedureDetailPage({
           )}
         </div>
         <div>
-          <div className="text-xs uppercase tracking-wide text-gray-500 font-semibold">
+          <div className="text-xs uppercase tracking-wide text-muted font-semibold">
             Voortgang
           </div>
-          <div className="text-sm text-gray-900 mt-2 font-medium">
+          <div className="text-sm text-ink mt-2 font-medium">
             Stap{" "}
             {Math.min(afgerondAantal + (actieveStap ? 1 : 0), totaalStappen)} van{" "}
             {totaalStappen}
           </div>
-          <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden mt-1.5">
+          <div className="w-full h-1.5 bg-app-bg rounded-full overflow-hidden mt-1.5">
             <div
               className="h-full bg-accent"
               style={{
@@ -474,15 +474,15 @@ export default async function ProcedureDetailPage({
           </div>
         </div>
         <div>
-          <div className="text-xs uppercase tracking-wide text-gray-500 font-semibold">
+          <div className="text-xs uppercase tracking-wide text-muted font-semibold">
             Deadline
           </div>
           {procedure.deadline ? (
             <>
-              <div className="text-sm text-gray-900 font-medium mt-2">
+              <div className="text-sm text-ink font-medium mt-2">
                 {formatDatum(procedure.deadline)}
               </div>
-              <div className="text-xs text-gray-500">
+              <div className="text-xs text-muted">
                 {(() => {
                   const d = dagenTot(procedure.deadline);
                   if (d < 0) return `${Math.abs(d)} dagen verstreken`;
@@ -492,16 +492,16 @@ export default async function ProcedureDetailPage({
               </div>
             </>
           ) : (
-            <div className="text-sm text-gray-400 italic mt-2">
+            <div className="text-sm text-muted italic mt-2">
               Geen deadline
             </div>
           )}
         </div>
         <div>
-          <div className="text-xs uppercase tracking-wide text-gray-500 font-semibold">
+          <div className="text-xs uppercase tracking-wide text-muted font-semibold">
             Gestart op
           </div>
-          <div className="text-sm text-gray-900 font-medium mt-2">
+          <div className="text-sm text-ink font-medium mt-2">
             {formatDatum(procedure.gestart_op)}
           </div>
         </div>
@@ -528,8 +528,8 @@ export default async function ProcedureDetailPage({
       <div className="grid grid-cols-12 gap-5">
         {/* Step rail */}
         <div className="col-span-12 lg:col-span-4">
-          <div className="bg-white border border-gray-200 rounded-xl p-5 sticky top-4">
-            <div className="text-xs uppercase tracking-wide text-gray-500 font-semibold mb-4">
+          <div className="bg-white border border-line rounded-xl p-5 sticky top-4">
+            <div className="text-xs uppercase tracking-wide text-muted font-semibold mb-4">
               Procesfasen
             </div>
             <ol className="space-y-1">
@@ -538,16 +538,16 @@ export default async function ProcedureDetailPage({
                 if (s.status === "afgerond") {
                   return (
                     <li key={s.id} className="relative pl-9 py-2.5">
-                      <div className="absolute left-0 top-3 w-6 h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center text-xs font-bold">
+                      <div className="absolute left-0 top-3 w-6 h-6 rounded-full bg-ok text-white flex items-center justify-center text-xs font-bold">
                         ✓
                       </div>
                       {!isLast && (
-                        <div className="absolute left-3 top-9 bottom-0 w-px bg-emerald-300" />
+                        <div className="absolute left-3 top-9 bottom-0 w-px bg-ok" />
                       )}
-                      <div className="text-sm font-medium text-gray-900">
+                      <div className="text-sm font-medium text-ink">
                         {s.naam}
                       </div>
-                      <div className="text-xs text-gray-500 mt-0.5">
+                      <div className="text-xs text-muted mt-0.5">
                         {s.voltooid_op
                           ? `Afgerond ${formatDatumKort(s.voltooid_op)}`
                           : "Afgerond"}
@@ -559,18 +559,18 @@ export default async function ProcedureDetailPage({
                   return (
                     <li
                       key={s.id}
-                      className="relative pl-9 py-2.5 bg-amber-50/40 -mx-3 px-3 rounded-lg"
+                      className="relative pl-9 py-2.5 bg-warn-tint -mx-3 px-3 rounded-lg"
                     >
-                      <div className="absolute left-3 top-3 w-6 h-6 rounded-full bg-accent border-2 border-accent text-ink flex items-center justify-center text-xs font-bold ring-4 ring-amber-100">
+                      <div className="absolute left-3 top-3 w-6 h-6 rounded-full bg-accent border-2 border-accent text-ink flex items-center justify-center text-xs font-bold ring-4 ring-warn/30">
                         {s.volgorde}
                       </div>
                       {!isLast && (
-                        <div className="absolute left-6 top-9 bottom-0 w-px bg-gray-200" />
+                        <div className="absolute left-6 top-9 bottom-0 w-px bg-app-line" />
                       )}
                       <div className="text-sm font-semibold text-ink ml-6">
                         {s.naam}
                       </div>
-                      <div className="text-xs text-amber-700 font-medium mt-0.5 ml-6">
+                      <div className="text-xs text-warn-ink font-medium mt-0.5 ml-6">
                         Actief
                         {s.deadline
                           ? ` — deadline ${formatDatumKort(s.deadline)}`
@@ -581,22 +581,22 @@ export default async function ProcedureDetailPage({
                 }
                 return (
                   <li key={s.id} className="relative pl-9 py-2.5">
-                    <div className="absolute left-0 top-3 w-6 h-6 rounded-full bg-gray-100 border-2 border-gray-300 text-gray-500 flex items-center justify-center text-xs font-medium">
+                    <div className="absolute left-0 top-3 w-6 h-6 rounded-full bg-app-bg border-2 border-app-line-strong text-muted flex items-center justify-center text-xs font-medium">
                       {s.volgorde}
                     </div>
                     {!isLast && (
-                      <div className="absolute left-3 top-9 bottom-0 w-px bg-gray-200" />
+                      <div className="absolute left-3 top-9 bottom-0 w-px bg-app-line" />
                     )}
-                    <div className="text-sm font-medium text-gray-500">
+                    <div className="text-sm font-medium text-muted">
                       {s.naam}
                     </div>
                     {s.vereist_besluit && (
-                      <div className="text-xs text-amber-700 mt-0.5">
+                      <div className="text-xs text-warn-ink mt-0.5">
                         Vereist formeel besluit
                       </div>
                     )}
                     {!s.vereist_besluit && s.geschatte_dagen && (
-                      <div className="text-xs text-gray-400 mt-0.5">
+                      <div className="text-xs text-muted mt-0.5">
                         Geschat {s.geschatte_dagen} dagen
                       </div>
                     )}
@@ -648,11 +648,11 @@ export default async function ProcedureDetailPage({
               }
             />
           ) : procedure.status === "afgerond" ? (
-            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-5">
-              <div className="text-sm font-semibold text-emerald-800">
+            <div className="bg-ok-tint border border-ok/30 rounded-xl p-5">
+              <div className="text-sm font-semibold text-ok-ink">
                 Procedure is afgerond
               </div>
-              <div className="text-xs text-emerald-700 mt-1">
+              <div className="text-xs text-ok-ink mt-1">
                 Afgerond op{" "}
                 {procedure.afgerond_op
                   ? formatDatum(procedure.afgerond_op)
@@ -661,7 +661,7 @@ export default async function ProcedureDetailPage({
               </div>
             </div>
           ) : (
-            <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 text-sm text-gray-600">
+            <div className="bg-app-bg border border-line rounded-xl p-5 text-sm text-muted">
               Geen actieve stap. Markeer een open stap als actief om door te
               gaan.
             </div>
@@ -669,7 +669,7 @@ export default async function ProcedureDetailPage({
 
           {/* Besluiten — als er vastgelegd zijn */}
           {besluiten.length > 0 && (
-            <div className="bg-white border border-gray-200 rounded-xl p-5">
+            <div className="bg-white border border-line rounded-xl p-5">
               <h3 className="text-sm font-semibold text-ink mb-3">
                 Vastgelegde besluiten
               </h3>
@@ -677,20 +677,20 @@ export default async function ProcedureDetailPage({
                 {besluiten.map((b) => (
                   <div
                     key={b.id}
-                    className="border border-gray-200 rounded-lg p-3"
+                    className="border border-line rounded-lg p-3"
                   >
-                    <div className="text-sm text-gray-900 font-medium">
+                    <div className="text-sm text-ink font-medium">
                       {b.formulering}
                     </div>
                     {b.motivering && (
-                      <p className="text-xs text-gray-600 mt-1 whitespace-pre-line">
+                      <p className="text-xs text-muted mt-1 whitespace-pre-line">
                         {b.motivering}
                       </p>
                     )}
                     {b.verworpen_alternatieven &&
                       b.verworpen_alternatieven.length > 0 && (
-                        <div className="text-xs text-gray-700 mt-2 border-l-2 border-amber-200 pl-3">
-                          <span className="text-[10px] uppercase tracking-wide text-amber-700 font-semibold block mb-0.5">
+                        <div className="text-xs text-ink mt-2 border-l-2 border-warn/30 pl-3">
+                          <span className="text-[10px] uppercase tracking-wide text-warn-ink font-semibold block mb-0.5">
                             Verworpen alternatieven
                           </span>
                           <ul className="list-disc pl-4 space-y-0.5">
@@ -700,7 +700,7 @@ export default async function ProcedureDetailPage({
                           </ul>
                         </div>
                       )}
-                    <div className="text-xs text-gray-500 mt-2">
+                    <div className="text-xs text-muted mt-2">
                       {formatDatum(b.datum)}
                       {b.vastgelegd_door_naam
                         ? ` · ${b.vastgelegd_door_naam}`
@@ -721,7 +721,7 @@ export default async function ProcedureDetailPage({
           besluitdossier. Klik op een paneel-header om uit te klappen. */}
       {dossier && (
         <div>
-          <h2 className="text-xs uppercase tracking-wide text-gray-500 font-semibold mb-3">
+          <h2 className="text-xs uppercase tracking-wide text-muted font-semibold mb-3">
             Dossier
           </h2>
           <div className="space-y-2">
@@ -779,29 +779,29 @@ export default async function ProcedureDetailPage({
               status="neutraal"
               samenvatting={`${log.length} append-only event${log.length === 1 ? "" : "s"}`}
             >
-              <div className="bg-white border border-gray-200 rounded-xl p-5">
+              <div className="bg-white border border-line rounded-xl p-5">
                 {log.length === 0 ? (
-                  <div className="text-sm text-gray-400 italic">
+                  <div className="text-sm text-muted italic">
                     Nog geen events.
                   </div>
                 ) : (
                   <ol className="space-y-3 text-sm">
                     {log.map((e) => (
                       <li key={e.id} className="flex gap-3">
-                        <div className="w-2 h-2 rounded-full bg-gray-300 mt-1.5 flex-shrink-0" />
+                        <div className="w-2 h-2 rounded-full bg-app-line mt-1.5 flex-shrink-0" />
                         <div className="flex-1">
-                          <div className="text-gray-900">
+                          <div className="text-ink">
                             <span className="font-medium">
                               {EVENT_LABEL[e.event_type] || e.event_type}
                             </span>
                             {e.payload && Object.keys(e.payload).length > 0 && (
-                              <span className="text-gray-600">
+                              <span className="text-muted">
                                 {" "}
                                 — {formatPayload(e.event_type, e.payload)}
                               </span>
                             )}
                           </div>
-                          <div className="text-xs text-gray-500 mt-0.5">
+                          <div className="text-xs text-muted mt-0.5">
                             {formatDatumTijd(e.tijdstip)}
                             {e.actor_naam ? ` · door ${e.actor_naam}` : ""}
                           </div>

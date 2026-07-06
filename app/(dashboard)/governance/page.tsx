@@ -10,11 +10,11 @@ interface LogRegel {
 }
 
 const BRONKLEUR: Record<string, string> = {
-  DNB: "bg-red-100 text-red-700",
-  AFM: "bg-blue-100 text-blue-700",
-  Pensioenfederatie: "bg-green-100 text-green-700",
-  Intern: "bg-amber-100 text-amber-700",
-  Extern: "bg-amber-100 text-amber-700",
+  DNB: "bg-err-tint text-err-ink",
+  AFM: "bg-accent-tint text-accent-ink",
+  Pensioenfederatie: "bg-ok-tint text-ok-ink",
+  Intern: "bg-warn-tint text-warn-ink",
+  Extern: "bg-warn-tint text-warn-ink",
 };
 
 export default async function GovernancePage() {
@@ -39,7 +39,7 @@ export default async function GovernancePage() {
         <div className="mb-6">
           <h1 className="font-serif text-xl font-black text-ink">Governance Log</h1>
         </div>
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+        <div className="rounded-xl border border-warn/30 bg-warn-tint p-4 text-sm text-warn-ink">
           U heeft geen rechten om het governance-log in te zien. Inzage in het
           AI-auditspoor is voorbehouden aan de rol <strong>beheerder</strong>.
         </div>
@@ -58,12 +58,12 @@ export default async function GovernancePage() {
     <div className="p-4 sm:p-6 lg:p-7">
       <div className="mb-6">
         <h1 className="font-serif text-xl font-black text-ink">Governance Log</h1>
-        <p className="text-sm text-gray-500 mt-1">
+        <p className="text-sm text-muted mt-1">
           Alle AI-interacties worden automatisch gelogd voor compliance en traceerbaarheid
         </p>
       </div>
 
-      <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 mb-6 text-sm text-blue-800">
+      <div className="flex items-start gap-3 bg-accent-tint border border-accent/30 rounded-xl px-4 py-3 mb-6 text-sm text-accent-ink">
         <span>🛡️</span>
         <div>
           Dit log registreert <strong>elke vraag</strong> gesteld aan de AI-assistent: wie,
@@ -75,8 +75,8 @@ export default async function GovernancePage() {
       {!logRegels || logRegels.length === 0 ? (
         <div className="text-center py-12">
           <div className="text-4xl mb-3">📋</div>
-          <h3 className="font-semibold text-gray-700 mb-1">Nog geen AI-interacties</h3>
-          <p className="text-sm text-gray-400">
+          <h3 className="font-semibold text-ink mb-1">Nog geen AI-interacties</h3>
+          <p className="text-sm text-muted">
             Zodra bestuurders vragen stellen aan de AI, verschijnen die hier.
           </p>
         </div>
@@ -91,7 +91,7 @@ export default async function GovernancePage() {
               .toUpperCase() || "??";
 
             return (
-              <div key={log.id} className="bg-white border border-gray-200 rounded-xl p-4">
+              <div key={log.id} className="bg-white border border-line rounded-xl p-4">
                 {/* Header */}
                 <div className="flex items-center gap-2.5 mb-3">
                   <div className="w-7 h-7 bg-accent rounded-full flex items-center justify-center text-xs font-bold text-ink flex-shrink-0">
@@ -100,7 +100,7 @@ export default async function GovernancePage() {
                   <span className="font-semibold text-sm text-ink">
                     {log.gebruiker_naam}
                   </span>
-                  <span className="ml-auto text-xs text-gray-400">
+                  <span className="ml-auto text-xs text-muted">
                     {new Date(log.aangemaakt).toLocaleString("nl-NL", {
                       day: "numeric",
                       month: "short",
@@ -112,7 +112,7 @@ export default async function GovernancePage() {
                 </div>
 
                 {/* Vraag */}
-                <div className="bg-gray-50 rounded-lg px-3 py-2 text-sm text-gray-700 mb-3">
+                <div className="bg-app-bg rounded-lg px-3 py-2 text-sm text-ink mb-3">
                   ❓ „{log.vraag}"
                 </div>
 
@@ -123,7 +123,7 @@ export default async function GovernancePage() {
                       <span
                         key={j}
                         className={`text-xs font-semibold px-2 py-1 rounded-full ${
-                          BRONKLEUR[b.bron] || "bg-gray-100 text-gray-600"
+                          BRONKLEUR[b.bron] || "bg-app-bg text-muted"
                         }`}
                       >
                         {b.bron} — {b.titel.substring(0, 40)}{b.titel.length > 40 ? "…" : ""}
@@ -135,7 +135,7 @@ export default async function GovernancePage() {
                 )}
 
                 {log.bronnen?.length === 0 && (
-                  <span className="text-xs text-gray-400 italic">
+                  <span className="text-xs text-muted italic">
                     Geen documentbronnen gevonden voor deze vraag
                   </span>
                 )}
@@ -147,10 +147,10 @@ export default async function GovernancePage() {
 
       {logRegels && logRegels.length > 0 && (
         <div className="mt-5 flex gap-3">
-          <button className="border border-gray-200 rounded-lg px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
+          <button className="border border-line rounded-lg px-4 py-2 text-sm font-semibold text-muted hover:bg-app-bg transition-colors">
             📥 Exporteren als CSV
           </button>
-          <div className="ml-auto text-xs text-gray-400 self-center">
+          <div className="ml-auto text-xs text-muted self-center">
             {logRegels.length} interacties weergegeven
           </div>
         </div>

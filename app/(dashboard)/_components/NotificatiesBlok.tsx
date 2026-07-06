@@ -112,7 +112,7 @@ export default function NotificatiesBlok({
   return (
     <div>
       <div className="flex items-center justify-between mb-1.5">
-        <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
+        <div className="text-[11px] font-semibold text-muted uppercase tracking-wide">
           Meldingen{ongelezenAantal > 0 ? ` (${ongelezenAantal})` : ""}
         </div>
         {ongelezenAantal > 0 && (
@@ -142,7 +142,7 @@ export default function NotificatiesBlok({
               <div className="flex items-center gap-2 min-w-0">
                 <span
                   className={`flex-shrink-0 text-sm ${
-                    isOngelezen ? "text-accent" : "text-gray-400"
+                    isOngelezen ? "text-accent" : "text-muted"
                   }`}
                   aria-hidden
                 >
@@ -150,13 +150,13 @@ export default function NotificatiesBlok({
                 </span>
                 <span
                   className={`text-sm truncate ${
-                    isOngelezen ? "text-ink font-medium" : "text-gray-500"
+                    isOngelezen ? "text-ink font-medium" : "text-muted"
                   }`}
                 >
                   {zin.length > 70 ? `${zin.substring(0, 70)}…` : zin}
                 </span>
               </div>
-              <span className="text-[11px] text-gray-400 whitespace-nowrap flex-shrink-0">
+              <span className="text-[11px] text-muted whitespace-nowrap flex-shrink-0">
                 {formatRelatief(n.aangemaakt)}
               </span>
             </div>

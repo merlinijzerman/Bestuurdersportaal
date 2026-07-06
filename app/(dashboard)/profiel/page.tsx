@@ -221,7 +221,7 @@ export default function ProfielPage() {
   }
 
   if (laden) {
-    return <div className="p-4 sm:p-6 lg:p-7 text-sm text-gray-500">Profiel laden…</div>;
+    return <div className="p-4 sm:p-6 lg:p-7 text-sm text-muted">Profiel laden…</div>;
   }
 
   const geenCatalogus =
@@ -231,13 +231,13 @@ export default function ProfielPage() {
     <div className="p-4 sm:p-6 lg:p-7 max-w-3xl">
       <div className="mb-6">
         <h1 className="font-serif text-xl font-black text-ink">Mijn profiel</h1>
-        <p className="text-sm text-gray-500 mt-1">
+        <p className="text-sm text-muted mt-1">
           Uw profiel personaliseert de AI-voorbereiding (welke aandachtspunten en kritische
           vragen vóórkomen).
         </p>
       </div>
 
-      <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 mb-6 text-sm text-blue-800">
+      <div className="flex items-start gap-3 bg-accent-tint border border-accent/30 rounded-xl px-4 py-3 mb-6 text-sm text-accent-ink">
         <span>ℹ️</span>
         <div>
           Het profiel <strong>prioriteert</strong>, het <strong>filtert niet</strong>: de
@@ -248,7 +248,7 @@ export default function ProfielPage() {
       </div>
 
       {geenCatalogus && (
-        <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-6 text-sm text-amber-800">
+        <div className="flex items-start gap-3 bg-warn-tint border border-warn/30 rounded-xl px-4 py-3 mb-6 text-sm text-warn-ink">
           <span>⚠️</span>
           <div>
             Er zijn nog geen fonds-specifieke expertises, gremia of focusgebieden ingericht.
@@ -260,28 +260,28 @@ export default function ProfielPage() {
 
       <div className="space-y-6">
         {/* Naam — weergavenaam op het platform */}
-        <section className="bg-white border border-gray-200 rounded-xl p-5">
+        <section className="bg-white border border-line rounded-xl p-5">
           <h2 className="font-bold text-ink mb-1">Naam</h2>
-          <p className="text-xs text-gray-400 mb-4">
+          <p className="text-xs text-muted mb-4">
             Uw weergavenaam op het platform (in de zijbalk en bij uw acties). Leeg laten
             houdt de huidige naam aan.
           </p>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Weergavenaam</label>
+          <label className="block text-sm font-medium text-ink mb-1">Weergavenaam</label>
           <input
             type="text"
             value={naam}
             onChange={(e) => setNaam(e.target.value)}
             placeholder="Bijv. Marieke de Vries"
             maxLength={120}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+            className="w-full border border-app-line-strong rounded-lg px-3 py-2 text-sm"
           />
         </section>
 
         {/* Bestuurlijke rol + voorkeuren */}
-        <section className="bg-white border border-gray-200 rounded-xl p-5">
+        <section className="bg-white border border-line rounded-xl p-5">
           <h2 className="font-bold text-ink mb-4">Bestuurlijke rol &amp; voorkeuren</h2>
 
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-medium text-ink mb-1">
             Functionele bestuurlijke rol
           </label>
           <input
@@ -289,21 +289,21 @@ export default function ProfielPage() {
             value={bestuurlijkeRol}
             onChange={(e) => setBestuurlijkeRol(e.target.value)}
             placeholder="Bijv. voorzitter beleggingscommissie"
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mb-1"
+            className="w-full border border-app-line-strong rounded-lg px-3 py-2 text-sm mb-1"
           />
-          <p className="text-xs text-gray-400 mb-4">
+          <p className="text-xs text-muted mb-4">
             Functioneel, ter context voor de AI. Dit bepaalt geen rechten of autorisatie.
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-ink mb-1">
                 Standaard AI-modus
               </label>
               <select
                 value={standaardAiModus}
                 onChange={(e) => setStandaardAiModus(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                className="w-full border border-app-line-strong rounded-lg px-3 py-2 text-sm"
               >
                 <option value="">Automatisch</option>
                 {ZICHTBARE_ANTWOORDMODI.map((m) => (
@@ -314,11 +314,11 @@ export default function ProfielPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Detailniveau</label>
+              <label className="block text-sm font-medium text-ink mb-1">Detailniveau</label>
               <select
                 value={detailniveau}
                 onChange={(e) => setDetailniveau(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                className="w-full border border-app-line-strong rounded-lg px-3 py-2 text-sm"
               >
                 <option value="">—</option>
                 {DETAILNIVEAUS.map((d) => (
@@ -329,13 +329,13 @@ export default function ProfielPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-ink mb-1">
                 Antwoordvoorkeur
               </label>
               <select
                 value={antwoordvoorkeur}
                 onChange={(e) => setAntwoordvoorkeur(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                className="w-full border border-app-line-strong rounded-lg px-3 py-2 text-sm"
               >
                 <option value="">—</option>
                 {ANTWOORDVOORKEUREN.map((a) => (
@@ -349,13 +349,13 @@ export default function ProfielPage() {
         </section>
 
         {/* Expertise */}
-        <section className="bg-white border border-gray-200 rounded-xl p-5">
+        <section className="bg-white border border-line rounded-xl p-5">
           <h2 className="font-bold text-ink mb-1">Expertise</h2>
-          <p className="text-xs text-gray-400 mb-4">
+          <p className="text-xs text-muted mb-4">
             Eén primaire expertise; maximaal {MAX_SECUNDAIRE} secundaire.
           </p>
 
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-medium text-ink mb-1">
             Primaire expertise
           </label>
           <select
@@ -365,7 +365,7 @@ export default function ProfielPage() {
               setPrimaireExpertiseId(id);
               setSecundaire((s) => s.filter((x) => x !== id));
             }}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mb-4"
+            className="w-full border border-app-line-strong rounded-lg px-3 py-2 text-sm mb-4"
           >
             <option value="">—</option>
             {expertises.map((e) => (
@@ -375,9 +375,9 @@ export default function ProfielPage() {
             ))}
           </select>
 
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-ink mb-2">
             Secundaire expertises{" "}
-            <span className="text-xs text-gray-400">
+            <span className="text-xs text-muted">
               ({secundaire.length}/{MAX_SECUNDAIRE})
             </span>
           </label>
@@ -386,7 +386,7 @@ export default function ProfielPage() {
           {!expOpen && (
             <div className="flex flex-wrap gap-2">
               {secundaire.length === 0 ? (
-                <span className="text-sm text-gray-400">
+                <span className="text-sm text-muted">
                   Nog geen secundaire expertise gekozen.
                 </span>
               ) : (
@@ -424,8 +424,8 @@ export default function ProfielPage() {
                       aan
                         ? "bg-accent text-white border-accent"
                         : vol
-                          ? "bg-gray-50 text-gray-300 border-gray-200 cursor-not-allowed"
-                          : "bg-white text-gray-700 border-gray-300 hover:border-accent"
+                          ? "bg-app-bg text-muted border-line cursor-not-allowed"
+                          : "bg-white text-ink border-app-line-strong hover:border-accent"
                     }`}
                   >
                     {e.naam}
@@ -444,9 +444,9 @@ export default function ProfielPage() {
 
         {/* Gremia — gegroepeerd per categorie (Fondsorganen / Bestuurscommissies
             / Externe ketenpartners). */}
-        <section className="bg-white border border-gray-200 rounded-xl p-5">
+        <section className="bg-white border border-line rounded-xl p-5">
           <h2 className="font-bold text-ink mb-1">Commissies &amp; gremia</h2>
-          <p className="text-xs text-gray-400 mb-4">
+          <p className="text-xs text-muted mb-4">
             ({gekozenGremia.length} gekozen)
           </p>
 
@@ -454,7 +454,7 @@ export default function ProfielPage() {
           {!gremOpen && (
             <div className="flex flex-wrap gap-2">
               {gekozenGremia.length === 0 ? (
-                <span className="text-sm text-gray-400">
+                <span className="text-sm text-muted">
                   Nog geen commissies of gremia gekozen.
                 </span>
               ) : (
@@ -488,7 +488,7 @@ export default function ProfielPage() {
                 if (items.length === 0) return null;
                 return (
                   <div key={cat.sleutel}>
-                    <div className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">
+                    <div className="text-xs font-bold uppercase tracking-widest text-muted mb-2">
                       {cat.label}
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -506,7 +506,7 @@ export default function ProfielPage() {
                             className={`px-3 py-1.5 rounded-full text-sm border transition ${
                               aan
                                 ? "bg-accent text-white border-accent"
-                                : "bg-white text-gray-700 border-gray-300 hover:border-accent"
+                                : "bg-white text-ink border-app-line-strong hover:border-accent"
                             }`}
                           >
                             {g.naam}
@@ -528,11 +528,11 @@ export default function ProfielPage() {
         </section>
 
         {/* Focusgebieden */}
-        <section className="bg-white border border-gray-200 rounded-xl p-5">
+        <section className="bg-white border border-line rounded-xl p-5">
           <h2 className="font-bold text-ink mb-1">Kritische focusgebieden</h2>
-          <p className="text-xs text-gray-400 mb-4">
+          <p className="text-xs text-muted mb-4">
             Kies er {MIN_FOCUS} tot {MAX_FOCUS}.{" "}
-            <span className={focusBuitenBereik ? "text-red-600 font-medium" : ""}>
+            <span className={focusBuitenBereik ? "text-err-ink font-medium" : ""}>
               ({gekozenFocus.length} gekozen)
             </span>
           </p>
@@ -540,7 +540,7 @@ export default function ProfielPage() {
           {!focusOpen && (
             <div className="flex flex-wrap gap-2">
               {gekozenFocus.length === 0 ? (
-                <span className="text-sm text-gray-400">
+                <span className="text-sm text-muted">
                   Nog geen focusgebieden gekozen.
                 </span>
               ) : (
@@ -578,8 +578,8 @@ export default function ProfielPage() {
                       aan
                         ? "bg-accent text-white border-accent"
                         : vol
-                          ? "bg-gray-50 text-gray-300 border-gray-200 cursor-not-allowed"
-                          : "bg-white text-gray-700 border-gray-300 hover:border-accent"
+                          ? "bg-app-bg text-muted border-line cursor-not-allowed"
+                          : "bg-white text-ink border-app-line-strong hover:border-accent"
                     }`}
                   >
                     {f.naam}
@@ -601,8 +601,8 @@ export default function ProfielPage() {
         <div
           className={`mt-6 rounded-xl px-4 py-3 text-sm ${
             melding.type === "ok"
-              ? "bg-green-50 border border-green-200 text-green-800"
-              : "bg-red-50 border border-red-200 text-red-700"
+              ? "bg-ok-tint border border-ok/30 text-ok-ink"
+              : "bg-err-tint border border-err/30 text-err-ink"
           }`}
         >
           {melding.tekst}
@@ -619,7 +619,7 @@ export default function ProfielPage() {
           {opslaan ? "Opslaan…" : "Profiel opslaan"}
         </button>
         {focusBuitenBereik && (
-          <span className="text-xs text-red-600">
+          <span className="text-xs text-err-ink">
             Kies {MIN_FOCUS}–{MAX_FOCUS} focusgebieden (of geen) om op te slaan.
           </span>
         )}

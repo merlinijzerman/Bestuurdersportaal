@@ -43,11 +43,11 @@ type Ki = (typeof KI_OPTIES)[number];
 function statusKleur(s: RiskStatus): string {
   switch (s) {
     case "gemitigeerd":
-      return "bg-emerald-50 text-emerald-800 border-emerald-200";
+      return "bg-ok-tint text-ok-ink border-ok/30";
     case "geaccepteerd":
-      return "bg-blue-50 text-blue-800 border-blue-200";
+      return "bg-accent-tint text-accent-ink border-accent/30";
     default:
-      return "bg-rose-50 text-rose-800 border-rose-200";
+      return "bg-err-tint text-err-ink border-err/30";
   }
 }
 
@@ -55,11 +55,11 @@ function statusKleur(s: RiskStatus): string {
 // in `lib/risico-config.ts` (laag/middel/hoog op basis van K+I, hier
 // als K×I voor compactheid: ≤4 groen, 5-9 amber, ≥10 rood).
 function kiKleur(impact: number | null, kans: number | null): string {
-  if (impact === null || kans === null) return "bg-gray-100 text-gray-600";
+  if (impact === null || kans === null) return "bg-app-bg text-muted";
   const score = impact * kans;
-  if (score >= 10) return "bg-rose-100 text-rose-900";
-  if (score >= 5) return "bg-amber-100 text-amber-900";
-  return "bg-emerald-100 text-emerald-900";
+  if (score >= 10) return "bg-err-tint text-err-ink";
+  if (score >= 5) return "bg-warn-tint text-warn-ink";
+  return "bg-ok-tint text-ok-ink";
 }
 
 export default function RisicosPaneel({ decisionId, risks }: Props) {
@@ -227,13 +227,13 @@ export default function RisicosPaneel({ decisionId, risks }: Props) {
   }
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5">
+    <div className="bg-white border border-line rounded-xl p-5">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="text-sm font-semibold text-ink">
             Risico&apos;s (besluitgebonden)
           </h3>
-          <p className="text-xs text-gray-500 mt-0.5">
+          <p className="text-xs text-muted mt-0.5">
             Risico&apos;s die specifiek bij dit besluit horen, met optionele
             koppeling aan de fondsbrede risicomatrix.
           </p>
@@ -251,13 +251,13 @@ export default function RisicosPaneel({ decisionId, risks }: Props) {
       </div>
 
       {open && (
-        <div className="mb-4 border border-gray-200 rounded-lg p-4 bg-gray-50/50 space-y-3">
+        <div className="mb-4 border border-line rounded-lg p-4 bg-app-bg/50 space-y-3">
           <Veldgroep label="Beschrijving *">
             <textarea
               value={beschrijving}
               onChange={(e) => setBeschrijving(e.target.value)}
               rows={2}
-              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
+              className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
               placeholder="Bijv. 'Liquiditeitsdruk in onderpand bij snelle rentestijging.'"
             />
           </Veldgroep>
@@ -266,7 +266,7 @@ export default function RisicosPaneel({ decisionId, risks }: Props) {
               <select
                 value={categorie}
                 onChange={(e) => setCategorie(e.target.value as RiskCategorie | "")}
-                className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 bg-white"
+                className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 bg-white"
               >
                 <option value="">— niet ingevuld —</option>
                 {CATEGORIEEN.map((c) => (
@@ -282,7 +282,7 @@ export default function RisicosPaneel({ decisionId, risks }: Props) {
                 onChange={(e) =>
                   setImpact(e.target.value === "" ? "" : (Number(e.target.value) as Ki))
                 }
-                className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 bg-white"
+                className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 bg-white"
               >
                 <option value="">—</option>
                 {KI_OPTIES.map((n) => (
@@ -298,7 +298,7 @@ export default function RisicosPaneel({ decisionId, risks }: Props) {
                 onChange={(e) =>
                   setKans(e.target.value === "" ? "" : (Number(e.target.value) as Ki))
                 }
-                className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 bg-white"
+                className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 bg-white"
               >
                 <option value="">—</option>
                 {KI_OPTIES.map((n) => (
@@ -314,7 +314,7 @@ export default function RisicosPaneel({ decisionId, risks }: Props) {
               type="text"
               value={eigenaar}
               onChange={(e) => setEigenaar(e.target.value)}
-              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
+              className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
               placeholder="Naam van eigenaar"
             />
           </Veldgroep>
@@ -323,7 +323,7 @@ export default function RisicosPaneel({ decisionId, risks }: Props) {
               value={mitigatie}
               onChange={(e) => setMitigatie(e.target.value)}
               rows={2}
-              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
+              className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
               placeholder="Welke maatregelen verlagen de impact of de kans?"
             />
           </Veldgroep>
@@ -332,12 +332,12 @@ export default function RisicosPaneel({ decisionId, risks }: Props) {
               value={residual}
               onChange={(e) => setResidual(e.target.value)}
               rows={2}
-              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
+              className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
               placeholder="Wat blijft er over na mitigatie? Of: waarom accepteren we dit risico?"
             />
           </Veldgroep>
           {fout && (
-            <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-md px-3 py-2">
+            <div className="text-xs text-err-ink bg-err-tint border border-err/30 rounded-md px-3 py-2">
               {fout}
             </div>
           )}
@@ -356,7 +356,7 @@ export default function RisicosPaneel({ decisionId, risks }: Props) {
                 setOpen(false);
                 setFout(null);
               }}
-              className="text-sm text-gray-600 hover:text-gray-900 px-3 py-2"
+              className="text-sm text-muted hover:text-ink px-3 py-2"
             >
               Annuleer
             </button>
@@ -365,7 +365,7 @@ export default function RisicosPaneel({ decisionId, risks }: Props) {
       )}
 
       {risks.length === 0 ? (
-        <div className="text-sm text-gray-400 italic">
+        <div className="text-sm text-muted italic">
           Nog geen risico&apos;s vastgelegd. Voeg er minimaal één toe; de
           readiness-check vraagt expliciete risicoregistratie voordat het
           dossier reviewrijp is.
@@ -377,8 +377,8 @@ export default function RisicosPaneel({ decisionId, risks }: Props) {
               key={r.id}
               className={`border rounded-lg p-3 ${
                 editId === r.id
-                  ? "border-accent bg-amber-50/30"
-                  : "border-gray-200 bg-white"
+                  ? "border-accent bg-warn-tint"
+                  : "border-line bg-white"
               }`}
             >
               {editId === r.id ? (
@@ -389,7 +389,7 @@ export default function RisicosPaneel({ decisionId, risks }: Props) {
                       value={editBeschrijving}
                       onChange={(e) => setEditBeschrijving(e.target.value)}
                       rows={2}
-                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
+                      className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
                     />
                   </Veldgroep>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -399,7 +399,7 @@ export default function RisicosPaneel({ decisionId, risks }: Props) {
                         onChange={(e) =>
                           setEditCategorie(e.target.value as RiskCategorie | "")
                         }
-                        className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 bg-white"
+                        className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 bg-white"
                       >
                         <option value="">— niet ingevuld —</option>
                         {CATEGORIEEN.map((c) => (
@@ -419,7 +419,7 @@ export default function RisicosPaneel({ decisionId, risks }: Props) {
                               : (Number(e.target.value) as Ki)
                           )
                         }
-                        className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 bg-white"
+                        className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 bg-white"
                       >
                         <option value="">—</option>
                         {KI_OPTIES.map((n) => (
@@ -439,7 +439,7 @@ export default function RisicosPaneel({ decisionId, risks }: Props) {
                               : (Number(e.target.value) as Ki)
                           )
                         }
-                        className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 bg-white"
+                        className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 bg-white"
                       >
                         <option value="">—</option>
                         {KI_OPTIES.map((n) => (
@@ -455,7 +455,7 @@ export default function RisicosPaneel({ decisionId, risks }: Props) {
                       type="text"
                       value={editEigenaar}
                       onChange={(e) => setEditEigenaar(e.target.value)}
-                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
+                      className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
                     />
                   </Veldgroep>
                   <Veldgroep label="Mitigatie (optioneel)">
@@ -463,7 +463,7 @@ export default function RisicosPaneel({ decisionId, risks }: Props) {
                       value={editMitigatie}
                       onChange={(e) => setEditMitigatie(e.target.value)}
                       rows={2}
-                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
+                      className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
                     />
                   </Veldgroep>
                   <Veldgroep label="Restrisico / rationale (optioneel)">
@@ -471,11 +471,11 @@ export default function RisicosPaneel({ decisionId, risks }: Props) {
                       value={editResidual}
                       onChange={(e) => setEditResidual(e.target.value)}
                       rows={2}
-                      className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
+                      className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
                     />
                   </Veldgroep>
                   {fout && (
-                    <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-md px-3 py-2">
+                    <div className="text-xs text-err-ink bg-err-tint border border-err/30 rounded-md px-3 py-2">
                       {fout}
                     </div>
                   )}
@@ -492,7 +492,7 @@ export default function RisicosPaneel({ decisionId, risks }: Props) {
                       type="button"
                       onClick={annuleerBewerken}
                       disabled={bezig === r.id}
-                      className="text-sm text-gray-600 hover:text-gray-900 px-3 py-2"
+                      className="text-sm text-muted hover:text-ink px-3 py-2"
                     >
                       Annuleer
                     </button>
@@ -501,12 +501,12 @@ export default function RisicosPaneel({ decisionId, risks }: Props) {
               ) : (
                 <div className="flex items-start gap-3">
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm text-gray-900 whitespace-pre-line">
+                  <div className="text-sm text-ink whitespace-pre-line">
                     {r.beschrijving}
                   </div>
                   <div className="flex items-center gap-2 mt-2 flex-wrap">
                     {r.categorie && (
-                      <span className="text-[11px] font-medium uppercase tracking-wide text-gray-500 bg-gray-50 border border-gray-200 px-2 py-0.5 rounded">
+                      <span className="text-[11px] font-medium uppercase tracking-wide text-muted bg-app-bg border border-line px-2 py-0.5 rounded">
                         {RISK_CATEGORIE_LABEL[r.categorie]}
                       </span>
                     )}
@@ -522,22 +522,22 @@ export default function RisicosPaneel({ decisionId, risks }: Props) {
                       </span>
                     )}
                     {r.eigenaar_naam && (
-                      <span className="text-[11px] text-gray-500">
+                      <span className="text-[11px] text-muted">
                         Eigenaar: {r.eigenaar_naam}
                       </span>
                     )}
                   </div>
                   {r.mitigatie && (
-                    <div className="mt-2 text-xs text-gray-700 border-l-2 border-emerald-200 pl-3 whitespace-pre-line">
-                      <span className="text-[10px] uppercase tracking-wide text-emerald-700 font-semibold block mb-0.5">
+                    <div className="mt-2 text-xs text-ink border-l-2 border-ok/30 pl-3 whitespace-pre-line">
+                      <span className="text-[10px] uppercase tracking-wide text-ok-ink font-semibold block mb-0.5">
                         Mitigatie
                       </span>
                       {r.mitigatie}
                     </div>
                   )}
                   {r.residual_risk && (
-                    <div className="mt-2 text-xs text-gray-700 border-l-2 border-amber-200 pl-3 whitespace-pre-line">
-                      <span className="text-[10px] uppercase tracking-wide text-amber-700 font-semibold block mb-0.5">
+                    <div className="mt-2 text-xs text-ink border-l-2 border-warn/30 pl-3 whitespace-pre-line">
+                      <span className="text-[10px] uppercase tracking-wide text-warn-ink font-semibold block mb-0.5">
                         Restrisico
                       </span>
                       {r.residual_risk}
@@ -558,7 +558,7 @@ export default function RisicosPaneel({ decisionId, risks }: Props) {
                         type="button"
                         onClick={() => wijzigStatus(r, "gemitigeerd")}
                         disabled={bezig === r.id}
-                        className="text-[11px] text-emerald-800 hover:underline disabled:opacity-50"
+                        className="text-[11px] text-ok-ink hover:underline disabled:opacity-50"
                       >
                         Markeer gemitigeerd
                       </button>
@@ -566,7 +566,7 @@ export default function RisicosPaneel({ decisionId, risks }: Props) {
                         type="button"
                         onClick={() => wijzigStatus(r, "geaccepteerd")}
                         disabled={bezig === r.id}
-                        className="text-[11px] text-blue-800 hover:underline disabled:opacity-50"
+                        className="text-[11px] text-accent-ink hover:underline disabled:opacity-50"
                       >
                         Accepteren
                       </button>
@@ -576,7 +576,7 @@ export default function RisicosPaneel({ decisionId, risks }: Props) {
                       type="button"
                       onClick={() => wijzigStatus(r, "open")}
                       disabled={bezig === r.id}
-                      className="text-[11px] text-gray-600 hover:underline disabled:opacity-50 mt-1"
+                      className="text-[11px] text-muted hover:underline disabled:opacity-50 mt-1"
                     >
                       Heropen
                     </button>
@@ -599,7 +599,7 @@ export default function RisicosPaneel({ decisionId, risks }: Props) {
       )}
 
       {fout && !open && (
-        <div className="mt-3 text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-md px-3 py-2">
+        <div className="mt-3 text-xs text-err-ink bg-err-tint border border-err/30 rounded-md px-3 py-2">
           {fout}
         </div>
       )}
@@ -616,7 +616,7 @@ function Veldgroep({
 }) {
   return (
     <div>
-      <label className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold block mb-1">
+      <label className="text-[11px] uppercase tracking-wide text-muted font-semibold block mb-1">
         {label}
       </label>
       {children}

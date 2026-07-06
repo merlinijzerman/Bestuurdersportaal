@@ -38,9 +38,21 @@ const config: Config = {
           active: "var(--nav-active)",
           accent: "rgb(var(--nav-accent-rgb) / <alpha-value>)",
         },
-        ok: "rgb(var(--ok-rgb) / <alpha-value>)",
-        err: "rgb(var(--err-rgb) / <alpha-value>)",
-        warn: "rgb(var(--warn-rgb) / <alpha-value>)",
+        ok: {
+          DEFAULT: "rgb(var(--ok-rgb) / <alpha-value>)",
+          tint: "rgb(var(--ok-tint-rgb) / <alpha-value>)",
+          ink: "rgb(var(--ok-ink-rgb) / <alpha-value>)",
+        },
+        err: {
+          DEFAULT: "rgb(var(--err-rgb) / <alpha-value>)",
+          tint: "rgb(var(--err-tint-rgb) / <alpha-value>)",
+          ink: "rgb(var(--err-ink-rgb) / <alpha-value>)",
+        },
+        warn: {
+          DEFAULT: "rgb(var(--warn-rgb) / <alpha-value>)",
+          tint: "rgb(var(--warn-tint-rgb) / <alpha-value>)",
+          ink: "rgb(var(--warn-ink-rgb) / <alpha-value>)",
+        },
       },
       fontFamily: {
         serif: ["var(--font-serif)", "Georgia", "serif"],

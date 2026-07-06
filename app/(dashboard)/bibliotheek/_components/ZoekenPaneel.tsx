@@ -172,21 +172,21 @@ export default function ZoekenPaneel() {
 
   return (
     <div>
-      <p className="text-sm text-gray-500 mb-4">
+      <p className="text-sm text-muted mb-4">
         Doorzoek de kennisbasis op de inhoud van documenten — dezelfde bronnen en
         relevantie als de AI-assistent, maar dan als doorzoekbare lijst.
       </p>
 
       {/* Zoekformulier */}
       <form onSubmit={onSubmit} className="space-y-3 mb-5">
-        <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-4 py-3">
-          <span className="text-gray-400">🔎</span>
+        <div className="flex items-center gap-2 bg-white border border-line rounded-xl px-4 py-3">
+          <span className="text-muted">🔎</span>
           <input
             type="text"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Zoek op een woord of zin, bijv. ‘premievrijstelling bij arbeidsongeschiktheid’"
-            className="flex-1 outline-none text-sm text-gray-700 bg-transparent"
+            className="flex-1 outline-none text-sm text-ink bg-transparent"
             autoFocus
           />
           <button
@@ -201,8 +201,8 @@ export default function ZoekenPaneel() {
         {/* Filters */}
         <div className="flex flex-wrap items-end gap-4">
           <div>
-            <div className="text-xs font-semibold text-gray-500 mb-1">Tijdsperiode</div>
-            <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit">
+            <div className="text-xs font-semibold text-muted mb-1">Tijdsperiode</div>
+            <div className="flex gap-1 bg-app-bg p-1 rounded-lg w-fit">
               {MODUS_OPTIES.map((o) => (
                 <button
                   key={o.waarde}
@@ -212,7 +212,7 @@ export default function ZoekenPaneel() {
                   className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
                     modus === o.waarde
                       ? "bg-white text-ink shadow-sm"
-                      : "text-gray-500 hover:text-gray-700"
+                      : "text-muted hover:text-ink"
                   }`}
                 >
                   {o.label}
@@ -222,11 +222,11 @@ export default function ZoekenPaneel() {
           </div>
 
           <div>
-            <div className="text-xs font-semibold text-gray-500 mb-1">Bronsoort</div>
+            <div className="text-xs font-semibold text-muted mb-1">Bronsoort</div>
             <select
               value={bronsoort}
               onChange={(e) => wijzigBronsoort(e.target.value as Bronsoort)}
-              className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-accent bg-white"
+              className="border border-line rounded-lg px-3 py-1.5 text-sm outline-none focus:border-accent bg-white"
             >
               {BRONSOORT_OPTIES.map((o) => (
                 <option key={o.waarde} value={o.waarde}>
@@ -238,11 +238,11 @@ export default function ZoekenPaneel() {
 
           {procesinstanties.length > 0 && (
             <div>
-              <div className="text-xs font-semibold text-gray-500 mb-1">Dossier</div>
+              <div className="text-xs font-semibold text-muted mb-1">Dossier</div>
               <select
                 value={procesinstantieFilter}
                 onChange={(e) => wijzigProces(e.target.value)}
-                className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-accent bg-white max-w-[260px]"
+                className="border border-line rounded-lg px-3 py-1.5 text-sm outline-none focus:border-accent bg-white max-w-[260px]"
               >
                 <option value="alles">Alle dossiers</option>
                 {procesinstanties.map((p) => (
@@ -258,7 +258,7 @@ export default function ZoekenPaneel() {
 
       {/* Meta-/relevantieregel */}
       {meta && gezocht && (
-        <div className="text-xs text-gray-400 mb-3">
+        <div className="text-xs text-muted mb-3">
           {resultaten.length} {resultaten.length === 1 ? "document" : "documenten"} gevonden ·{" "}
           {meta.methode === "hybride" ? "hybride zoeken (tekst + betekenis)" : "tekstzoeken"} ·{" "}
           {meta.opgehaald} fragmenten doorzocht
@@ -267,19 +267,19 @@ export default function ZoekenPaneel() {
 
       {/* Melding (bv. te korte zoekterm) */}
       {melding && (
-        <div className="mb-4 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
+        <div className="mb-4 bg-warn-tint border border-warn/30 rounded-lg px-4 py-3 text-sm text-warn-ink">
           {melding}
         </div>
       )}
 
       {/* Resultaten */}
       {laden ? (
-        <div className="text-center py-12 text-gray-400">Zoeken…</div>
+        <div className="text-center py-12 text-muted">Zoeken…</div>
       ) : gezocht && resultaten.length === 0 && !melding ? (
         <div className="text-center py-12">
           <div className="text-4xl mb-3">🔎</div>
-          <h3 className="font-semibold text-gray-700 mb-1">Geen resultaten</h3>
-          <p className="text-sm text-gray-400">
+          <h3 className="font-semibold text-ink mb-1">Geen resultaten</h3>
+          <p className="text-sm text-muted">
             Geen documenten gevonden voor deze zoekterm en filters. Probeer andere
             bewoordingen of verruim de filters (bijv. tijdsperiode op ‘Alles’).
           </p>
@@ -295,11 +295,11 @@ export default function ZoekenPaneel() {
             return (
               <div key={sleutel}>
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="text-gray-400 text-sm">
+                  <span className="text-muted text-sm">
                     {sleutel === NIET_GEKOPPELD ? "📄" : "📂"}
                   </span>
                   <h2 className="text-sm font-bold text-ink">{dossierTitel}</h2>
-                  <span className="text-[11px] text-gray-400">({groep.length})</span>
+                  <span className="text-[11px] text-muted">({groep.length})</span>
                 </div>
                 <div className="space-y-2">
                   {groep.map((r) => (
@@ -324,9 +324,9 @@ function Resultaatkaart({ r }: { r: ZoekResultaat }) {
   const externLink = isVeiligeUrl(r.extern_url) ? r.extern_url : null;
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4 hover:border-accent transition-colors">
+    <div className="bg-white border border-line rounded-xl p-4 hover:border-accent transition-colors">
       <div className="flex items-start gap-3">
-        <div className="w-9 h-9 bg-gray-100 rounded-lg flex items-center justify-center text-lg flex-shrink-0">
+        <div className="w-9 h-9 bg-app-bg rounded-lg flex items-center justify-center text-lg flex-shrink-0">
           📋
         </div>
         <div className="flex-1 min-w-0">
@@ -345,27 +345,27 @@ function Resultaatkaart({ r }: { r: ZoekResultaat }) {
           )}
 
           {/* Metadatabadges */}
-          <div className="flex items-center gap-2 mt-1 text-xs text-gray-400 flex-wrap">
-            <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-semibold">
+          <div className="flex items-center gap-2 mt-1 text-xs text-muted flex-wrap">
+            <span className="px-2 py-0.5 rounded-full bg-app-bg text-muted font-semibold">
               {r.bron}
             </span>
             {labels.isGeneriek && (
-              <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-semibold border border-indigo-200">
+              <span className="px-2 py-0.5 rounded-full bg-accent-tint text-accent-ink font-semibold border border-accent/30">
                 {labels.bronsoortLabel}
               </span>
             )}
             {labels.isGeneriek && (
-              <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-semibold">
+              <span className="px-2 py-0.5 rounded-full bg-app-bg text-muted font-semibold">
                 {labels.normgewichtLabel}
               </span>
             )}
             {labels.vervallen && (
-              <span className="px-2 py-0.5 rounded-full bg-red-50 text-red-700 font-semibold border border-red-200">
+              <span className="px-2 py-0.5 rounded-full bg-err-tint text-err-ink font-semibold border border-err/30">
                 {labels.vervallenLabel}
               </span>
             )}
             {r.documentstatus && (
-              <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-semibold">
+              <span className="px-2 py-0.5 rounded-full bg-app-bg text-muted font-semibold">
                 {r.documentstatus}
               </span>
             )}
@@ -395,9 +395,9 @@ function Resultaatkaart({ r }: { r: ZoekResultaat }) {
               return (
                 <div
                   key={i}
-                  className="text-xs text-gray-600 bg-gray-50 rounded-lg px-3 py-2 border border-gray-100"
+                  className="text-xs text-muted bg-app-bg rounded-lg px-3 py-2 border border-line"
                 >
-                  <div className="flex items-center gap-2 mb-0.5 text-[11px] text-gray-400">
+                  <div className="flex items-center gap-2 mb-0.5 text-[11px] text-muted">
                     {t.pagina && (
                       <span>
                         {ankerLink ? (
@@ -416,7 +416,7 @@ function Resultaatkaart({ r }: { r: ZoekResultaat }) {
                     )}
                     {t.paragraaf && <span>· {t.paragraaf}</span>}
                   </div>
-                  <span className="text-gray-700">{t.fragment}</span>
+                  <span className="text-ink">{t.fragment}</span>
                 </div>
               );
             })}

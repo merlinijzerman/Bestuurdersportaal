@@ -119,7 +119,7 @@ export default async function RisicoDetailPage({
     <div className="p-4 sm:p-6 lg:p-7 space-y-6">
       <Link
         href="/risicomatrix"
-        className="text-sm text-gray-500 hover:text-ink inline-flex items-center gap-1"
+        className="text-sm text-muted hover:text-ink inline-flex items-center gap-1"
       >
         ← Terug naar matrix
       </Link>
@@ -128,7 +128,7 @@ export default async function RisicoDetailPage({
       <div className="flex items-start justify-between gap-6 flex-wrap">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap mb-2">
-            <span className="text-[11px] font-medium uppercase tracking-wide text-blue-700 bg-blue-50 px-2 py-0.5 rounded">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-accent-ink bg-accent-tint px-2 py-0.5 rounded">
               {categorieLabel(risico.categorie)}
             </span>
             <span
@@ -142,8 +142,8 @@ export default async function RisicoDetailPage({
             <span
               className={`text-[11px] uppercase tracking-wide px-2 py-0.5 rounded ${
                 isGesloten
-                  ? "bg-gray-100 text-gray-700"
-                  : "bg-emerald-50 text-emerald-700"
+                  ? "bg-app-bg text-ink"
+                  : "bg-ok-tint text-ok-ink"
               }`}
             >
               {isGesloten ? "Gesloten" : "Actief"}
@@ -151,7 +151,7 @@ export default async function RisicoDetailPage({
           </div>
           <h1 className="font-serif text-ink text-2xl font-semibold">{risico.titel}</h1>
           {risico.toelichting && (
-            <p className="text-sm text-gray-600 mt-1.5 max-w-3xl whitespace-pre-line">
+            <p className="text-sm text-muted mt-1.5 max-w-3xl whitespace-pre-line">
               {risico.toelichting}
             </p>
           )}
@@ -162,15 +162,15 @@ export default async function RisicoDetailPage({
 
       {/* K/I/niveau strook */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white border border-gray-200 rounded-xl p-5">
-          <div className="text-xs uppercase tracking-wide text-gray-500 font-semibold">
+        <div className="bg-white border border-line rounded-xl p-5">
+          <div className="text-xs uppercase tracking-wide text-muted font-semibold">
             Kans
           </div>
           <div className="flex items-baseline gap-2 mt-2">
             <div className="text-2xl font-semibold text-ink">
               {risico.kans}
             </div>
-            <div className="text-sm text-gray-600">
+            <div className="text-sm text-muted">
               — {KANS_LABELS[risico.kans]}
             </div>
           </div>
@@ -179,22 +179,22 @@ export default async function RisicoDetailPage({
               <div
                 key={`k-bar-${n}`}
                 className={`h-1.5 flex-1 rounded-full ${
-                  n <= risico.kans ? "bg-accent" : "bg-gray-200"
+                  n <= risico.kans ? "bg-accent" : "bg-app-line"
                 }`}
               />
             ))}
           </div>
         </div>
 
-        <div className="bg-white border border-gray-200 rounded-xl p-5">
-          <div className="text-xs uppercase tracking-wide text-gray-500 font-semibold">
+        <div className="bg-white border border-line rounded-xl p-5">
+          <div className="text-xs uppercase tracking-wide text-muted font-semibold">
             Impact
           </div>
           <div className="flex items-baseline gap-2 mt-2">
             <div className="text-2xl font-semibold text-ink">
               {risico.impact}
             </div>
-            <div className="text-sm text-gray-600">
+            <div className="text-sm text-muted">
               — {IMPACT_LABELS[risico.impact]}
             </div>
           </div>
@@ -203,7 +203,7 @@ export default async function RisicoDetailPage({
               <div
                 key={`i-bar-${n}`}
                 className={`h-1.5 flex-1 rounded-full ${
-                  n <= risico.impact ? "bg-accent" : "bg-gray-200"
+                  n <= risico.impact ? "bg-accent" : "bg-app-line"
                 }`}
               />
             ))}
@@ -224,11 +224,11 @@ export default async function RisicoDetailPage({
             >
               {NIVEAU_LABEL[risico.niveau]}
             </div>
-            <div className="text-sm text-gray-600">
+            <div className="text-sm text-muted">
               (K + I = {risico.kans + risico.impact})
             </div>
           </div>
-          <div className="text-xs text-gray-600 mt-2">
+          <div className="text-xs text-muted mt-2">
             {risico.niveau_handmatig
               ? "Niveau is handmatig overschreven."
               : "Niveau afgeleid uit Kans + Impact."}
@@ -237,20 +237,20 @@ export default async function RisicoDetailPage({
       </div>
 
       {isGesloten && (
-        <div className="bg-gray-50 border border-gray-200 rounded-xl p-5">
+        <div className="bg-app-bg border border-line rounded-xl p-5">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div>
-              <div className="text-xs uppercase tracking-wide text-gray-500 font-semibold">
+              <div className="text-xs uppercase tracking-wide text-muted font-semibold">
                 Gesloten
               </div>
-              <div className="text-sm text-gray-700 mt-1">
+              <div className="text-sm text-ink mt-1">
                 {risico.gesloten_op
                   ? formatDatum(risico.gesloten_op)
                   : "Datum onbekend"}
               </div>
             </div>
             {risico.sluit_motivering && (
-              <div className="max-w-2xl text-sm text-gray-700 italic">
+              <div className="max-w-2xl text-sm text-ink italic">
                 &ldquo;{risico.sluit_motivering}&rdquo;
               </div>
             )}
@@ -269,35 +269,35 @@ export default async function RisicoDetailPage({
           />
 
           {/* Logboek */}
-          <div className="bg-white border border-gray-200 rounded-xl p-5">
+          <div className="bg-white border border-line rounded-xl p-5">
             <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
               <h3 className="text-sm font-semibold text-ink">Logboek</h3>
-              <span className="text-xs text-gray-500">
+              <span className="text-xs text-muted">
                 Append-only · {(log || []).length} events
               </span>
             </div>
             {(log || []).length === 0 ? (
-              <div className="text-sm text-gray-400 italic">
+              <div className="text-sm text-muted italic">
                 Nog geen events.
               </div>
             ) : (
               <ol className="space-y-3 text-sm">
                 {((log || []) as LogEvent[]).map((e) => (
                   <li key={e.id} className="flex gap-3">
-                    <div className="w-2 h-2 rounded-full bg-gray-300 mt-1.5 flex-shrink-0" />
+                    <div className="w-2 h-2 rounded-full bg-app-line mt-1.5 flex-shrink-0" />
                     <div className="flex-1">
-                      <div className="text-gray-900">
+                      <div className="text-ink">
                         <span className="font-medium">
                           {EVENT_LABEL[e.event_type] || e.event_type}
                         </span>
                         {e.payload && Object.keys(e.payload).length > 0 && (
-                          <span className="text-gray-600">
+                          <span className="text-muted">
                             {" "}
                             — {formatPayload(e.event_type, e.payload)}
                           </span>
                         )}
                       </div>
-                      <div className="text-xs text-gray-500 mt-0.5">
+                      <div className="text-xs text-muted mt-0.5">
                         {formatDatumTijd(e.tijdstip)}
                         {e.actor_naam ? ` · door ${e.actor_naam}` : ""}
                       </div>
@@ -310,38 +310,38 @@ export default async function RisicoDetailPage({
         </div>
 
         <aside className="col-span-12 lg:col-span-4">
-          <div className="bg-white border border-gray-200 rounded-xl p-5">
-            <h3 className="text-xs uppercase tracking-wide text-gray-500 font-semibold mb-3">
+          <div className="bg-white border border-line rounded-xl p-5">
+            <h3 className="text-xs uppercase tracking-wide text-muted font-semibold mb-3">
               Eigenschappen
             </h3>
             <dl className="space-y-3 text-sm">
               <div>
-                <dt className="text-xs text-gray-500">Eigenaar</dt>
-                <dd className="text-gray-900 mt-0.5">
+                <dt className="text-xs text-muted">Eigenaar</dt>
+                <dd className="text-ink mt-0.5">
                   {risico.eigenaar_naam || (
-                    <span className="text-gray-400 italic">
+                    <span className="text-muted italic">
                       Geen eigenaar toegewezen
                     </span>
                   )}
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-gray-500">Aangemaakt</dt>
-                <dd className="text-gray-900 mt-0.5">
+                <dt className="text-xs text-muted">Aangemaakt</dt>
+                <dd className="text-ink mt-0.5">
                   {formatDatum(risico.aangemaakt)}
                 </dd>
               </div>
               {risico.volgende_beoordeling && (
                 <div>
-                  <dt className="text-xs text-gray-500">Volgende beoordeling</dt>
-                  <dd className="text-gray-900 mt-0.5">
+                  <dt className="text-xs text-muted">Volgende beoordeling</dt>
+                  <dd className="text-ink mt-0.5">
                     {formatDatum(risico.volgende_beoordeling)}
                   </dd>
                 </div>
               )}
               <div>
-                <dt className="text-xs text-gray-500">Type</dt>
-                <dd className="text-gray-900 mt-0.5">
+                <dt className="text-xs text-muted">Type</dt>
+                <dd className="text-ink mt-0.5">
                   {TYPE_LABEL[risico.type_risico]}
                 </dd>
               </div>

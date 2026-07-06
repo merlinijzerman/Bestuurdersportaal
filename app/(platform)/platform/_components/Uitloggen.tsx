@@ -20,7 +20,7 @@ export default function PlatformUitloggen() {
     <button
       onClick={uitloggen}
       disabled={bezig}
-      className="rounded-lg border border-white/30 px-3 py-1.5 text-sm text-white hover:bg-white/10 disabled:opacity-50"
+      className="rounded-lg border border-nav-line px-3 py-1.5 text-sm text-nav-text-active hover:bg-nav-line/40 disabled:opacity-50"
     >
       {bezig ? "Uitloggen…" : "Uitloggen"}
     </button>

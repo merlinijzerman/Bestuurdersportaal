@@ -39,45 +39,45 @@ export default function LoginPage() {
             <span className="text-white font-black text-2xl">B</span>
           </div>
           <h1 className="font-serif text-2xl font-bold text-ink">Bestuurdersportaal</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="text-sm text-muted mt-1">
             Open de beveiligde omgeving van uw organisatie
           </p>
         </div>
 
         {/* Login kaart */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-8 shadow-sm">
+        <div className="bg-white rounded-2xl border border-line p-8 shadow-sm">
           <h2 className="text-lg font-bold text-ink mb-6">
             Log in op uw bestuurdersomgeving
           </h2>
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">
+              <label className="block text-sm font-semibold text-ink mb-1">
                 E-mailadres
               </label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+                className="w-full border border-line rounded-lg px-3 py-2.5 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent"
                 placeholder="naam@organisatie.nl"
                 required
               />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">
+              <label className="block text-sm font-semibold text-ink mb-1">
                 Wachtwoord
               </label>
               <input
                 type="password"
                 value={wachtwoord}
                 onChange={(e) => setWachtwoord(e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+                className="w-full border border-line rounded-lg px-3 py-2.5 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent"
                 placeholder="••••••••"
                 required
               />
             </div>
             {fout && (
-              <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm text-red-700">
+              <div className="bg-err-tint border border-err/30 rounded-lg px-3 py-2 text-sm text-err-ink">
                 {fout}
               </div>
             )}
@@ -92,8 +92,8 @@ export default function LoginPage() {
         </div>
 
         <div className="mt-6 text-center">
-          <div className="flex items-center justify-center gap-2 text-xs text-gray-400">
-            <span className="w-2 h-2 bg-green-400 rounded-full pulse-dot"></span>
+          <div className="flex items-center justify-center gap-2 text-xs text-muted">
+            <span className="w-2 h-2 bg-ok rounded-full pulse-dot"></span>
             Beveiligde, beheerde AI-omgeving
           </div>
         </div>

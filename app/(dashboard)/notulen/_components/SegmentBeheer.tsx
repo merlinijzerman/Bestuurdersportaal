@@ -82,20 +82,20 @@ export default function SegmentBeheer({
           >
             {bezig === "segmenteer" ? "Bezig…" : "Segmentvoorstellen genereren / verversen"}
           </button>
-          <span className="text-xs text-gray-400">
+          <span className="text-xs text-muted">
             Verversen laat bevestigde segmenten ongemoeid.
           </span>
         </div>
       )}
 
       {fout && (
-        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-3 py-2 mb-4">
+        <div className="bg-err-tint border border-err/30 text-err-ink text-sm rounded-lg px-3 py-2 mb-4">
           {fout}
         </div>
       )}
 
       {segmenten.length === 0 ? (
-        <div className="text-sm text-gray-400 py-8 text-center">
+        <div className="text-sm text-muted py-8 text-center">
           Nog geen segmenten. {magBeheren ? "Genereer voorstellen om te beginnen." : ""}
         </div>
       ) : (
@@ -156,7 +156,7 @@ function SegmentKaart({
   return (
     <div
       className={`border rounded-xl p-4 ${
-        segment.bevestigd ? "border-green-300 bg-green-50/40" : "border-gray-200 bg-white"
+        segment.bevestigd ? "border-ok/30 bg-ok-tint" : "border-line bg-white"
       }`}
     >
       <div className="flex items-start justify-between gap-3">
@@ -164,11 +164,11 @@ function SegmentKaart({
           <div className="font-semibold text-ink text-sm">
             {segment.titel || `Segment ${segment.segment_index + 1}`}
           </div>
-          <div className="text-xs text-gray-500 mt-0.5">{apLabel(segment.agendapunt_id)}</div>
+          <div className="text-xs text-muted mt-0.5">{apLabel(segment.agendapunt_id)}</div>
         </div>
         <span
           className={`px-2 py-0.5 rounded-full text-xs font-semibold flex-shrink-0 ${
-            segment.bevestigd ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
+            segment.bevestigd ? "bg-ok-tint text-ok-ink" : "bg-app-bg text-muted"
           }`}
         >
           {segment.bevestigd ? "Bevestigd ✓" : "Voorstel"}
@@ -177,12 +177,12 @@ function SegmentKaart({
 
       <button
         onClick={() => setOpen((v) => !v)}
-        className="text-xs text-gray-400 hover:text-gray-600 mt-2"
+        className="text-xs text-muted hover:text-ink mt-2"
       >
         {open ? "Tekst verbergen" : "Tekst tonen"}
       </button>
       {open && (
-        <pre className="text-xs text-gray-600 whitespace-pre-wrap mt-2 bg-gray-50 rounded-lg p-3 max-h-60 overflow-auto">
+        <pre className="text-xs text-muted whitespace-pre-wrap mt-2 bg-app-bg rounded-lg p-3 max-h-60 overflow-auto">
           {segment.tekst}
         </pre>
       )}
@@ -194,7 +194,7 @@ function SegmentKaart({
             onChange={(e) => onKoppel(e.target.value || null)}
             disabled={dit || segment.bevestigd}
             title={segment.bevestigd ? "Ont-bevestig eerst om het agendapunt te wijzigen" : ""}
-            className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 disabled:opacity-50"
+            className="text-xs border border-line rounded-lg px-2 py-1.5 disabled:opacity-50"
           >
             <option value="">— geen agendapunt —</option>
             {agendapunten.map((a) => (
@@ -209,7 +209,7 @@ function SegmentKaart({
               onClick={() => onBevestig()}
               disabled={dit || !vastgesteld}
               title={vastgesteld ? "" : "Notulen moeten eerst vastgesteld zijn"}
-              className="bg-green-700 text-white font-semibold px-3 py-1.5 rounded-lg text-xs hover:bg-green-800 disabled:opacity-40"
+              className="bg-ok text-white font-semibold px-3 py-1.5 rounded-lg text-xs hover:bg-ok disabled:opacity-40"
             >
               {dit ? "Bezig…" : "Bevestigen & indexeren"}
             </button>
@@ -217,7 +217,7 @@ function SegmentKaart({
             <button
               onClick={onOntBevestig}
               disabled={dit}
-              className="border border-amber-300 text-amber-700 font-semibold px-3 py-1.5 rounded-lg text-xs hover:bg-amber-50 disabled:opacity-40"
+              className="border border-warn/30 text-warn-ink font-semibold px-3 py-1.5 rounded-lg text-xs hover:bg-warn-tint disabled:opacity-40"
             >
               {dit ? "Bezig…" : "Ont-bevestigen"}
             </button>
@@ -226,7 +226,7 @@ function SegmentKaart({
           <button
             onClick={onVerwijder}
             disabled={dit}
-            className="border border-red-200 text-red-600 font-semibold px-3 py-1.5 rounded-lg text-xs hover:bg-red-50 disabled:opacity-40"
+            className="border border-err/30 text-err-ink font-semibold px-3 py-1.5 rounded-lg text-xs hover:bg-err-tint disabled:opacity-40"
           >
             Verwijderen
           </button>

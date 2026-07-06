@@ -38,11 +38,11 @@ interface Props {
 function statusKleur(s: PaneelStatus | undefined): string {
   switch (s) {
     case "voldoet":
-      return "bg-emerald-500 text-white";
+      return "bg-ok text-white";
     case "aandacht":
-      return "bg-amber-500 text-white";
+      return "bg-warn text-white";
     default:
-      return "bg-gray-200 text-gray-600";
+      return "bg-app-line text-muted";
   }
 }
 
@@ -78,7 +78,7 @@ export default function UitklapbaarPaneel({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className={`w-full flex items-center justify-between gap-3 px-5 py-3 bg-white border border-gray-200 hover:bg-gray-50 text-left ${
+        className={`w-full flex items-center justify-between gap-3 px-5 py-3 bg-white border border-line hover:bg-app-bg text-left ${
           open ? "rounded-t-xl" : "rounded-xl"
         }`}
         aria-expanded={open}
@@ -96,19 +96,19 @@ export default function UitklapbaarPaneel({
             {titel}
           </h3>
           {typeof count === "number" && (
-            <span className="text-[11px] text-gray-600 bg-gray-100 px-2 py-0.5 rounded-full font-medium">
+            <span className="text-[11px] text-muted bg-app-bg px-2 py-0.5 rounded-full font-medium">
               {count}
             </span>
           )}
           {samenvatting && !open && (
-            <span className="text-xs text-gray-500 truncate hidden sm:inline">
+            <span className="text-xs text-muted truncate hidden sm:inline">
               — {samenvatting}
             </span>
           )}
         </div>
         <span
           aria-hidden
-          className={`flex-shrink-0 text-gray-400 text-xs transition-transform ${open ? "rotate-180" : ""}`}
+          className={`flex-shrink-0 text-muted text-xs transition-transform ${open ? "rotate-180" : ""}`}
         >
           ▾
         </span>

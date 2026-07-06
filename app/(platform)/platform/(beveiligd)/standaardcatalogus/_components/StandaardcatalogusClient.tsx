@@ -160,8 +160,8 @@ function CatalogusTab({
           className={
             "rounded-lg px-4 py-2 text-sm " +
             (melding.soort === "ok"
-              ? "bg-emerald-50 text-emerald-800"
-              : "bg-red-50 text-red-800")
+              ? "bg-ok-tint text-ok-ink"
+              : "bg-err-tint text-err-ink")
           }
         >
           {melding.tekst}
@@ -326,8 +326,8 @@ function TogglerKnop({
         className={
           "rounded-lg px-3 py-1.5 text-sm disabled:opacity-50 " +
           (naarInactief
-            ? "text-red-700 hover:bg-red-50"
-            : "text-emerald-700 hover:bg-emerald-50")
+            ? "text-err-ink hover:bg-err-tint"
+            : "text-ok-ink hover:bg-ok-tint")
         }
       >
         {naarInactief ? "Deactiveren" : "Activeren"}

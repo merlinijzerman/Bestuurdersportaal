@@ -51,13 +51,13 @@ export default function StapRequirementsPaneel({
   const aantalVervuld = stapRequirements.filter((r) => r.vervuld).length;
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
+    <div className="bg-white border border-line rounded-xl p-5 space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-ink">
           Vereisten voor deze stap
         </h3>
         {stapRequirements.length > 0 && (
-          <span className="text-xs text-gray-500">
+          <span className="text-xs text-muted">
             {aantalVervuld} van {stapRequirements.length} voldaan
           </span>
         )}
@@ -68,46 +68,46 @@ export default function StapRequirementsPaneel({
           {stapRequirements.map((r, i) => (
             <li
               key={`${r.requirement_type}-${r.label}-${i}`}
-              className="flex items-start gap-3 border border-gray-100 rounded-lg px-3 py-2"
+              className="flex items-start gap-3 border border-line rounded-lg px-3 py-2"
             >
               <div
                 className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold mt-px shrink-0 ${
                   r.vervuld
-                    ? "bg-emerald-500 text-white"
+                    ? "bg-ok text-white"
                     : r.blokkerend
-                      ? "bg-rose-100 text-rose-700 border border-rose-300"
-                      : "bg-amber-100 text-amber-800 border border-amber-300"
+                      ? "bg-err-tint text-err-ink border border-err/30"
+                      : "bg-warn-tint text-warn-ink border border-warn/30"
                 }`}
               >
                 {r.vervuld ? "✓" : "!"}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-baseline gap-2 flex-wrap">
-                  <span className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">
+                  <span className="text-[10px] uppercase tracking-wide text-muted font-semibold">
                     {REQUIREMENT_LABELS[r.requirement_type] ?? r.requirement_type}
                   </span>
-                  <span className="text-sm text-gray-900">{r.label}</span>
+                  <span className="text-sm text-ink">{r.label}</span>
                 </div>
                 {r.bron_titel && (
                   <div
                     className={`text-xs mt-0.5 ${
-                      r.vervuld ? "text-emerald-700" : "text-gray-500"
+                      r.vervuld ? "text-ok-ink" : "text-muted"
                     }`}
                   >
                     {r.bron_titel}
                   </div>
                 )}
                 {!r.vervuld && r.documenttype && (
-                  <div className="text-xs text-gray-500 mt-0.5">
+                  <div className="text-xs text-muted mt-0.5">
                     Vereist documenttype:{" "}
-                    <span className="font-mono text-gray-700">
+                    <span className="font-mono text-ink">
                       {r.documenttype}
                     </span>
                   </div>
                 )}
               </div>
               {!r.vervuld && r.blokkerend && (
-                <span className="text-[10px] uppercase tracking-wide text-rose-700 font-semibold shrink-0">
+                <span className="text-[10px] uppercase tracking-wide text-err-ink font-semibold shrink-0">
                   Blokkerend
                 </span>
               )}
@@ -115,14 +115,14 @@ export default function StapRequirementsPaneel({
           ))}
         </ul>
       ) : (
-        <div className="text-xs text-gray-500 italic">
+        <div className="text-xs text-muted italic">
           Geen formele vereisten gedefinieerd voor deze stap.
         </div>
       )}
 
       {stapAi.length > 0 && (
-        <div className="pt-3 border-t border-gray-100 space-y-2">
-          <div className="text-xs uppercase tracking-wide text-gray-500 font-semibold">
+        <div className="pt-3 border-t border-line space-y-2">
+          <div className="text-xs uppercase tracking-wide text-muted font-semibold">
             AI-output ter validatie ({stapAi.length})
           </div>
           {stapAi.map((ai) => (

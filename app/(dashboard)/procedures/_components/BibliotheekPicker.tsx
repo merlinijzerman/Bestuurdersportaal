@@ -80,18 +80,18 @@ export default function BibliotheekPicker({ onSelect, onClose }: Props) {
   function typeBadge(type: string | null): { label: string; kleur: string } {
     switch (type) {
       case "pdf":
-        return { label: "PDF", kleur: "bg-rose-50 text-rose-700 border-rose-200" };
+        return { label: "PDF", kleur: "bg-err-tint text-err-ink border-err/30" };
       case "docx":
-        return { label: "Word", kleur: "bg-blue-50 text-blue-700 border-blue-200" };
+        return { label: "Word", kleur: "bg-accent-tint text-accent-ink border-accent/30" };
       case "xlsx":
         return {
           label: "Excel",
-          kleur: "bg-emerald-50 text-emerald-700 border-emerald-200",
+          kleur: "bg-ok-tint text-ok-ink border-ok/30",
         };
       default:
         return {
           label: type ?? "?",
-          kleur: "bg-gray-50 text-gray-600 border-gray-200",
+          kleur: "bg-app-bg text-muted border-line",
         };
     }
   }
@@ -107,12 +107,12 @@ export default function BibliotheekPicker({ onSelect, onClose }: Props) {
         className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between p-5 border-b border-gray-100">
+        <div className="flex items-start justify-between p-5 border-b border-line">
           <div>
             <h2 className="text-ink font-semibold text-lg">
               Kies een bestaand document
             </h2>
-            <p className="text-xs text-gray-500 mt-0.5">
+            <p className="text-xs text-muted mt-0.5">
               Selecteer een stuk uit de bibliotheek om als bewijs te koppelen.
               Geen duplicatie — het origineel blijft in de bibliotheek.
             </p>
@@ -120,20 +120,20 @@ export default function BibliotheekPicker({ onSelect, onClose }: Props) {
           <button
             type="button"
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-xl leading-none"
+            className="text-muted hover:text-ink text-xl leading-none"
             aria-label="Sluiten"
           >
             ×
           </button>
         </div>
 
-        <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-3">
+        <div className="px-5 py-3 border-b border-line flex items-center gap-3">
           <input
             type="text"
             value={zoek}
             onChange={(e) => setZoek(e.target.value)}
             placeholder="Zoek op titel…"
-            className="flex-1 text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:border-accent"
+            className="flex-1 text-sm border border-app-line-strong rounded-md px-3 py-2 focus:outline-none focus:border-accent"
             autoFocus
           />
           <select
@@ -141,7 +141,7 @@ export default function BibliotheekPicker({ onSelect, onClose }: Props) {
             onChange={(e) =>
               setBibliotheekFilter(e.target.value as "alle" | "fonds" | "generiek")
             }
-            className="text-sm border border-gray-300 rounded-md px-2 py-2 bg-white"
+            className="text-sm border border-app-line-strong rounded-md px-2 py-2 bg-white"
           >
             <option value="alle">Alle bibliotheken</option>
             <option value="fonds">Fonds</option>
@@ -151,15 +151,15 @@ export default function BibliotheekPicker({ onSelect, onClose }: Props) {
 
         <div className="flex-1 overflow-y-auto px-5 py-3">
           {fout ? (
-            <div className="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-md p-3">
+            <div className="text-sm text-err-ink bg-err-tint border border-err/30 rounded-md p-3">
               {fout}
             </div>
           ) : documenten === null ? (
-            <div className="text-sm text-gray-400 italic py-6 text-center">
+            <div className="text-sm text-muted italic py-6 text-center">
               Documenten laden…
             </div>
           ) : zichtbaar.length === 0 ? (
-            <div className="text-sm text-gray-400 italic py-6 text-center">
+            <div className="text-sm text-muted italic py-6 text-center">
               {zoek
                 ? `Geen documenten gevonden voor "${zoek}".`
                 : "Geen documenten in de bibliotheek."}
@@ -176,7 +176,7 @@ export default function BibliotheekPicker({ onSelect, onClose }: Props) {
                         onSelect(d.id, d.titel);
                         onClose();
                       }}
-                      className="w-full text-left flex items-center gap-3 p-2.5 border border-gray-200 hover:border-accent rounded-lg transition-colors group"
+                      className="w-full text-left flex items-center gap-3 p-2.5 border border-line hover:border-accent rounded-lg transition-colors group"
                     >
                       <span
                         className={`text-[10px] font-semibold uppercase tracking-wide border rounded px-1.5 py-0.5 flex-shrink-0 ${badge.kleur}`}
@@ -187,7 +187,7 @@ export default function BibliotheekPicker({ onSelect, onClose }: Props) {
                         <span className="block text-sm text-ink truncate group-hover:text-accent">
                           {d.titel}
                         </span>
-                        <span className="block text-[11px] text-gray-500">
+                        <span className="block text-[11px] text-muted">
                           {d.bron ? `${d.bron} · ` : ""}
                           {d.bibliotheek}
                         </span>
@@ -200,11 +200,11 @@ export default function BibliotheekPicker({ onSelect, onClose }: Props) {
           )}
         </div>
 
-        <div className="px-5 py-3 border-t border-gray-100 flex justify-end">
+        <div className="px-5 py-3 border-t border-line flex justify-end">
           <button
             type="button"
             onClick={onClose}
-            className="text-sm text-gray-600 hover:text-gray-900 px-3 py-1.5"
+            className="text-sm text-muted hover:text-ink px-3 py-1.5"
           >
             Annuleer
           </button>

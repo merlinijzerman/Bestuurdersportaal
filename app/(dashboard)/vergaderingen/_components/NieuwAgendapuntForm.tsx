@@ -65,7 +65,7 @@ export default function NieuwAgendapuntForm({ vergaderingId }: { vergaderingId: 
     return (
       <button
         onClick={() => setOpen(true)}
-        className="text-sm text-ink border border-gray-300 rounded-lg px-3 py-1.5 hover:border-accent transition-colors"
+        className="text-sm text-ink border border-app-line-strong rounded-lg px-3 py-1.5 hover:border-accent transition-colors"
       >
         + Agendapunt toevoegen
       </button>
@@ -75,27 +75,27 @@ export default function NieuwAgendapuntForm({ vergaderingId }: { vergaderingId: 
   return (
     <form
       onSubmit={indienen}
-      className="bg-white border border-gray-200 rounded-xl p-4 w-full"
+      className="bg-white border border-line rounded-xl p-4 w-full"
     >
       <div className="text-sm font-semibold text-ink mb-3">Nieuw agendapunt</div>
       <div className="space-y-3">
         <div>
-          <label className="text-xs text-gray-500 block mb-1">Titel</label>
+          <label className="text-xs text-muted block mb-1">Titel</label>
           <input
             type="text"
             value={titel}
             onChange={(e) => setTitel(e.target.value)}
             placeholder="Bijv. Concept jaarverslag 2025 vaststellen"
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 outline-none focus:border-accent"
+            className="w-full border border-line rounded-lg px-3 py-2 text-sm bg-app-bg outline-none focus:border-accent"
           />
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
-            <label className="text-xs text-gray-500 block mb-1">Categorie</label>
+            <label className="text-xs text-muted block mb-1">Categorie</label>
             <select
               value={categorie}
               onChange={(e) => setCategorie(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 outline-none focus:border-accent"
+              className="w-full border border-line rounded-lg px-3 py-2 text-sm bg-app-bg outline-none focus:border-accent"
             >
               {CATEGORIEEN.map((c) => (
                 <option key={c.value} value={c.value}>
@@ -105,7 +105,7 @@ export default function NieuwAgendapuntForm({ vergaderingId }: { vergaderingId: 
             </select>
           </div>
           <div>
-            <label className="text-xs text-gray-500 block mb-1">Tijdsduur (min)</label>
+            <label className="text-xs text-muted block mb-1">Tijdsduur (min)</label>
             <input
               type="number"
               value={tijdsduur}
@@ -113,32 +113,32 @@ export default function NieuwAgendapuntForm({ vergaderingId }: { vergaderingId: 
               placeholder="30"
               min={5}
               max={300}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 outline-none focus:border-accent"
+              className="w-full border border-line rounded-lg px-3 py-2 text-sm bg-app-bg outline-none focus:border-accent"
             />
           </div>
           <div>
-            <label className="text-xs text-gray-500 block mb-1">Verantwoordelijke</label>
+            <label className="text-xs text-muted block mb-1">Verantwoordelijke</label>
             <input
               type="text"
               value={verantwoordelijke}
               onChange={(e) => setVerantwoordelijke(e.target.value)}
               placeholder="Bijv. Voorzitter"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 outline-none focus:border-accent"
+              className="w-full border border-line rounded-lg px-3 py-2 text-sm bg-app-bg outline-none focus:border-accent"
             />
           </div>
         </div>
         <div>
-          <label className="text-xs text-gray-500 block mb-1">Korte beschrijving</label>
+          <label className="text-xs text-muted block mb-1">Korte beschrijving</label>
           <textarea
             value={beschrijving}
             onChange={(e) => setBeschrijving(e.target.value)}
             rows={2}
             placeholder="Optionele toelichting voor het bestuur."
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 outline-none focus:border-accent resize-none"
+            className="w-full border border-line rounded-lg px-3 py-2 text-sm bg-app-bg outline-none focus:border-accent resize-none"
           />
         </div>
 
-        {fout && <div className="text-sm text-red-600">{fout}</div>}
+        {fout && <div className="text-sm text-err-ink">{fout}</div>}
 
         <div className="flex gap-2">
           <button
@@ -154,7 +154,7 @@ export default function NieuwAgendapuntForm({ vergaderingId }: { vergaderingId: 
               setOpen(false);
               setFout(null);
             }}
-            className="text-sm text-gray-500 hover:text-gray-800 px-3 py-2"
+            className="text-sm text-muted hover:text-ink px-3 py-2"
           >
             Annuleren
           </button>

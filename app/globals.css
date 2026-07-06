@@ -35,10 +35,19 @@
   --nav-accent-rgb: 78 124 166;   --nav-accent: rgb(var(--nav-accent-rgb)); /* #4E7CA6 gelifte blauwtint */
   --nav-active: rgba(255, 255, 255, 0.08);
 
-  /* Semantisch */
+  /* Semantisch — elk token in drie rollen:
+     DEFAULT  = volvlak/icoon/nadruk-tekst (donker, hoog contrast op paper)
+     -tint    = zachte badge-/rij-achtergrond (licht, warm afgestemd op paper)
+     -ink     = leesbare tekst OP de tint (donkerder dan DEFAULT voor AA) */
   --ok-rgb: 46 125 91;   --ok: rgb(var(--ok-rgb));
+  --ok-tint-rgb: 230 240 234;  --ok-tint: rgb(var(--ok-tint-rgb));
+  --ok-ink-rgb: 33 88 64;      --ok-ink: rgb(var(--ok-ink-rgb));
   --err-rgb: 178 58 72;  --err: rgb(var(--err-rgb));
+  --err-tint-rgb: 247 233 234; --err-tint: rgb(var(--err-tint-rgb));
+  --err-ink-rgb: 138 40 51;    --err-ink: rgb(var(--err-ink-rgb));
   --warn-rgb: 186 117 23;--warn: rgb(var(--warn-rgb));
+  --warn-tint-rgb: 246 236 216; --warn-tint: rgb(var(--warn-tint-rgb));
+  --warn-ink-rgb: 122 76 14;    --warn-ink: rgb(var(--warn-ink-rgb));
 }
 
 * { box-sizing: border-box; }

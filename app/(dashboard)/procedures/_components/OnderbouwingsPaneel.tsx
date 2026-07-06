@@ -103,10 +103,10 @@ function indicatorDissent(items: DissentItem[]): Indicator {
 // ----------------------------------------------------------
 
 const INDICATOR_KLASSE: Record<Indicator, string> = {
-  groen: "bg-emerald-500",
-  oranje: "bg-amber-500",
-  grijs: "bg-gray-300",
-  rood: "bg-rose-500",
+  groen: "bg-ok",
+  oranje: "bg-warn",
+  grijs: "bg-app-line",
+  rood: "bg-err",
 };
 
 const INDICATOR_TITEL: Record<Indicator, string> = {
@@ -138,7 +138,7 @@ function TabKnop({
       className={`px-4 py-2.5 border-b-2 text-sm font-medium flex items-center gap-1.5 whitespace-nowrap transition ${
         active
           ? "border-accent text-ink"
-          : "border-transparent text-gray-500 hover:text-ink hover:bg-gray-50"
+          : "border-transparent text-muted hover:text-ink hover:bg-app-bg"
       }`}
     >
       <span>{label}</span>
@@ -146,7 +146,7 @@ function TabKnop({
         className={`text-[11px] rounded-full px-1.5 font-medium ${
           active
             ? "bg-accent/15 text-ink"
-            : "bg-gray-100 text-gray-700"
+            : "bg-app-bg text-ink"
         }`}
       >
         {count}
@@ -183,11 +183,11 @@ export default function OnderbouwingsPaneel({
   const aantalDissent = dissents.length;
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+    <div className="bg-white border border-line rounded-xl overflow-hidden">
       {/* Paneel-header */}
-      <div className="px-5 py-3 border-b border-gray-200 flex items-center justify-between gap-3">
+      <div className="px-5 py-3 border-b border-line flex items-center justify-between gap-3">
         <h3 className="text-sm font-semibold text-ink">Onderbouwing</h3>
-        <span className="text-xs text-gray-500 hidden sm:inline">
+        <span className="text-xs text-muted hidden sm:inline">
           Wat staat er onder dit besluit
         </span>
       </div>
@@ -195,7 +195,7 @@ export default function OnderbouwingsPaneel({
       {/* Tab-balk */}
       <div
         role="tablist"
-        className="flex flex-wrap gap-1 px-3 border-b border-gray-200 overflow-x-auto"
+        className="flex flex-wrap gap-1 px-3 border-b border-line overflow-x-auto"
       >
         <TabKnop
           label="Aannames"

@@ -279,14 +279,14 @@ export default async function HomePage() {
   return (
     <div className="p-4 sm:p-6 lg:p-7 space-y-5">
       {/* Persoonlijke welkomst */}
-      <div className="bg-white border border-gray-200 rounded-xl p-5">
+      <div className="bg-white border border-line rounded-xl p-5">
         <div className="flex items-end justify-between flex-wrap gap-3">
           <div>
             <div className="font-serif text-ink text-xl font-bold">
               {dagdeelGroet()}
               {voornaam ? ` ${voornaam}` : ""}, fijn u terug te zien.
             </div>
-            <div className="text-sm text-gray-500 mt-1">
+            <div className="text-sm text-muted mt-1">
               U bent {rolLabel} van {fondsnaam}.
               {volgendeVergadering ? (
                 <>
@@ -306,7 +306,7 @@ export default async function HomePage() {
           </div>
           <Link
             href="/dashboard"
-            className="text-xs text-ink border border-gray-200 px-3 py-1.5 rounded-lg hover:border-accent transition-colors"
+            className="text-xs text-ink border border-line px-3 py-1.5 rounded-lg hover:border-accent transition-colors"
           >
             Open volledige stuurinformatie →
           </Link>
@@ -319,31 +319,31 @@ export default async function HomePage() {
           label="Financieringsgraad"
           waarde={`${KPI.financieringsgraad.huidig.toFixed(1).replace(".", ",")}%`}
           extra={`+${KPI.financieringsgraad.deltaPP} pp t.o.v. Q4`}
-          extraKleur="text-green-600"
+          extraKleur="text-ok-ink"
         />
         <KpiCard
           label="Solidariteitsreserve"
           waarde={`${KPI.solidariteitsreserve.percentage.toFixed(1).replace(".", ",")}%`}
           extra={`target ${KPI.solidariteitsreserve.target.toFixed(0)}%`}
-          extraKleur="text-gray-500"
+          extraKleur="text-muted"
         />
         <KpiCard
           label="Vermogen"
           waarde={`€ ${fmtMln(KPI.vermogen.mln)}`}
           extra={`+${(KPI.vermogen.deltaYTDmln / 1000).toFixed(1).replace(".", ",")} mld YTD`}
-          extraKleur="text-green-600"
+          extraKleur="text-ok-ink"
         />
         <KpiCard
           label="Rendement YTD"
           waarde={`+${KPI.rendementYTD.fonds.toFixed(1).replace(".", ",")}%`}
           extra={`benchmark +${KPI.rendementYTD.benchmark.toFixed(1).replace(".", ",")}%`}
-          extraKleur="text-gray-500"
+          extraKleur="text-muted"
         />
       </div>
 
       {/* Mijn open procedure-stappen */}
       {openStappen.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-xl p-5">
+        <div className="bg-white border border-line rounded-xl p-5">
           <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
             <div className="font-semibold text-ink text-sm">
               Uw open procedure-stappen
@@ -367,25 +367,25 @@ export default async function HomePage() {
                 <Link
                   key={s.id}
                   href={`/procedures/${s.procedure_id}`}
-                  className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:border-accent"
+                  className="flex items-center gap-3 p-3 border border-line rounded-lg hover:border-accent"
                 >
                   <span
                     className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                      dringend ? "bg-amber-400" : "bg-accent"
+                      dringend ? "bg-warn" : "bg-accent"
                     }`}
                   />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium text-ink truncate">
                       {s.naam}
                     </div>
-                    <div className="text-xs text-gray-500 truncate">
+                    <div className="text-xs text-muted truncate">
                       {s.procedure_titel}
                     </div>
                   </div>
                   {s.deadline && (
                     <div
                       className={`text-xs flex-shrink-0 ${
-                        dringend ? "text-amber-700 font-medium" : "text-gray-500"
+                        dringend ? "text-warn-ink font-medium" : "text-muted"
                       }`}
                     >
                       {dagen !== null && dagen < 0
@@ -407,19 +407,19 @@ export default async function HomePage() {
       {/* Voor u open + Mijn activiteit */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         {/* Voor u open */}
-        <div className="bg-white border border-gray-200 rounded-xl p-5">
+        <div className="bg-white border border-line rounded-xl p-5">
           <div className="font-semibold text-ink text-sm mb-3">Voor u open</div>
           {volgendeVergadering ? (
             <div className="space-y-3">
-              <div className="bg-gray-50 rounded-lg p-3">
-                <div className="text-xs text-gray-500 mb-1">Komende vergadering</div>
+              <div className="bg-app-bg rounded-lg p-3">
+                <div className="text-xs text-muted mb-1">Komende vergadering</div>
                 <Link
                   href={`/vergaderingen/${volgendeVergadering.id}`}
                   className="text-sm font-medium text-ink hover:text-accent"
                 >
                   {volgendeVergadering.titel}
                 </Link>
-                <div className="text-xs text-gray-500 mt-1">
+                <div className="text-xs text-muted mt-1">
                   {formatDatum(volgendeVergadering.datum)}
                   {volgendeVergadering.locatie ? ` · ${volgendeVergadering.locatie}` : ""}
                 </div>
@@ -429,10 +429,10 @@ export default async function HomePage() {
                 <div className="flex items-start gap-2.5">
                   <span
                     className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${
-                      agendapuntenZonderInbreng > 0 ? "bg-amber-400" : "bg-green-500"
+                      agendapuntenZonderInbreng > 0 ? "bg-warn" : "bg-ok"
                     }`}
                   />
-                  <div className="text-sm text-gray-700">
+                  <div className="text-sm text-ink">
                     {agendapuntenZonderInbreng > 0 ? (
                       <>
                         Op{" "}
@@ -455,8 +455,8 @@ export default async function HomePage() {
                 </div>
               ) : (
                 <div className="flex items-start gap-2.5">
-                  <span className="w-2 h-2 rounded-full bg-gray-300 mt-1.5 flex-shrink-0" />
-                  <div className="text-sm text-gray-700">
+                  <span className="w-2 h-2 rounded-full bg-app-line mt-1.5 flex-shrink-0" />
+                  <div className="text-sm text-ink">
                     Er zijn nog geen agendapunten toegevoegd.{" "}
                     <Link
                       href={`/vergaderingen/${volgendeVergadering.id}`}
@@ -469,7 +469,7 @@ export default async function HomePage() {
               )}
             </div>
           ) : (
-            <div className="text-sm text-gray-500">
+            <div className="text-sm text-muted">
               Geen openstaande vergaderingen.{" "}
               <Link
                 href="/vergaderingen"
@@ -482,12 +482,12 @@ export default async function HomePage() {
         </div>
 
         {/* Mijn recente activiteit */}
-        <div className="bg-white border border-gray-200 rounded-xl p-5">
+        <div className="bg-white border border-line rounded-xl p-5">
           <div className="font-semibold text-ink text-sm mb-3">
             Uw recente activiteit
           </div>
           {!heeftActiviteit ? (
-            <div className="text-sm text-gray-500">
+            <div className="text-sm text-muted">
               Hier verschijnen uw meldingen, laatste vragen, inbreng en uploads zodra u ze ontvangt of gebruikt.
             </div>
           ) : (
@@ -536,7 +536,7 @@ export default async function HomePage() {
       </div>
 
       {/* Governance traceability — slim onderaan */}
-      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center gap-3 text-xs text-blue-800">
+      <div className="bg-accent-tint border border-accent/30 rounded-xl p-4 flex items-center gap-3 text-xs text-accent-ink">
         <span className="text-base">ℹ️</span>
         <div className="flex-1">
           Alle AI-interacties worden gelogd in de{" "}
@@ -562,8 +562,8 @@ function KpiCard({
   extraKleur: string;
 }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4">
-      <div className="text-xs text-gray-500">{label}</div>
+    <div className="bg-white rounded-xl border border-line p-4">
+      <div className="text-xs text-muted">{label}</div>
       <div className="text-2xl font-bold text-ink mt-1">{waarde}</div>
       <div className={`text-xs mt-1 ${extraKleur}`}>{extra}</div>
     </div>
@@ -573,7 +573,7 @@ function KpiCard({
 function RecentBlok({ titel, children }: { titel: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
+      <div className="text-[11px] font-semibold text-muted uppercase tracking-wide mb-1.5">
         {titel}
       </div>
       <div className="space-y-1.5">{children}</div>
@@ -592,10 +592,10 @@ function RecentRij({
 }) {
   const inhoud = (
     <div className="flex justify-between items-baseline gap-3">
-      <span className="text-sm text-gray-700 truncate">
+      <span className="text-sm text-ink truncate">
         {tekst.length > 70 ? `${tekst.substring(0, 70)}…` : tekst}
       </span>
-      <span className="text-[11px] text-gray-400 whitespace-nowrap flex-shrink-0">{tijd}</span>
+      <span className="text-[11px] text-muted whitespace-nowrap flex-shrink-0">{tijd}</span>
     </div>
   );
   return href ? (

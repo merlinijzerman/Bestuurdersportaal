@@ -80,8 +80,8 @@ export default function RechtenClient({
           className={
             "rounded-lg px-4 py-2 text-sm " +
             (melding.soort === "ok"
-              ? "bg-emerald-50 text-emerald-800"
-              : "bg-red-50 text-red-800")
+              ? "bg-ok-tint text-ok-ink"
+              : "bg-err-tint text-err-ink")
           }
         >
           {melding.tekst}
@@ -146,7 +146,7 @@ function IdentiteitKaart({
               </span>
             )}
             {!identiteit.actief && (
-              <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs text-red-700">
+              <span className="rounded-full bg-err-tint px-2 py-0.5 text-xs text-err-ink">
                 geblokkeerd
               </span>
             )}
@@ -221,7 +221,7 @@ function CapChip({
             type="button"
             disabled={bezig}
             onClick={() => setOpen(true)}
-            className="text-xs text-red-700 hover:underline disabled:opacity-50"
+            className="text-xs text-err-ink hover:underline disabled:opacity-50"
           >
             intrekken
           </button>
@@ -244,7 +244,7 @@ function CapChip({
               setOpen(false);
               setReden("");
             }}
-            className="rounded bg-red-700 px-2 py-1 text-xs font-medium text-white disabled:opacity-40"
+            className="rounded bg-err px-2 py-1 text-xs font-medium text-white disabled:opacity-40"
           >
             Bevestig
           </button>

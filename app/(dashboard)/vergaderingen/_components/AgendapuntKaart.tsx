@@ -25,9 +25,9 @@ export interface Stuk {
 }
 
 const STUK_BADGE: Record<NonNullable<Stuk["bestandstype"]>, { label: string; kleur: string }> = {
-  pdf: { label: "PDF", kleur: "text-red-700" },
-  docx: { label: "DOCX", kleur: "text-blue-700" },
-  xlsx: { label: "XLSX", kleur: "text-emerald-700" },
+  pdf: { label: "PDF", kleur: "text-err-ink" },
+  docx: { label: "DOCX", kleur: "text-accent-ink" },
+  xlsx: { label: "XLSX", kleur: "text-ok-ink" },
 };
 
 export interface Inbreng {
@@ -57,10 +57,10 @@ export interface Agendapunt {
 }
 
 const CATEGORIE_BADGE: Record<Agendapunt["categorie"], { bg: string; text: string; label: string }> = {
-  beeldvorming: { bg: "bg-amber-50", text: "text-amber-800", label: "Beeldvorming" },
+  beeldvorming: { bg: "bg-warn-tint", text: "text-warn-ink", label: "Beeldvorming" },
   oordeelsvorming: { bg: "bg-purple-50", text: "text-purple-800", label: "Oordeelsvorming" },
-  besluitvorming: { bg: "bg-blue-50", text: "text-blue-800", label: "Besluitvorming" },
-  informatie: { bg: "bg-gray-100", text: "text-gray-700", label: "Informatie" },
+  besluitvorming: { bg: "bg-accent-tint", text: "text-accent-ink", label: "Besluitvorming" },
+  informatie: { bg: "bg-app-bg", text: "text-ink", label: "Informatie" },
 };
 
 const AVATAR_KLEUREN = [
@@ -284,11 +284,11 @@ export default function AgendapuntKaart({
     <div
       id={`agendapunt-${punt.id}`}
       className={`bg-white border rounded-xl ${
-        isVerwijderd ? "border-red-200 bg-red-50/30" : "border-gray-200"
+        isVerwijderd ? "border-err/30 bg-err-tint" : "border-line"
       }`}
     >
       <div className="w-full flex items-start gap-3 p-4">
-        <span className="text-xs text-gray-400 tabular-nums w-5 pt-1">{nummer}.</span>
+        <span className="text-xs text-muted tabular-nums w-5 pt-1">{nummer}.</span>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className={`text-xs font-medium px-2 py-0.5 rounded-md ${badge.bg} ${badge.text}`}>
@@ -296,18 +296,18 @@ export default function AgendapuntKaart({
             </span>
             <span
               className={`text-sm font-semibold ${
-                isVerwijderd ? "text-gray-500 line-through" : "text-ink"
+                isVerwijderd ? "text-muted line-through" : "text-ink"
               }`}
             >
               {punt.titel}
             </span>
             {isVerwijderd && (
-              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-red-100 text-red-700">
+              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-err-tint text-err-ink">
                 Verwijderd
               </span>
             )}
           </div>
-          <div className="text-xs text-gray-500 mt-1">
+          <div className="text-xs text-muted mt-1">
             {[
               punt.tijdsduur_minuten ? `${punt.tijdsduur_minuten} min` : null,
               punt.verantwoordelijke,
@@ -318,7 +318,7 @@ export default function AgendapuntKaart({
               .join(" · ")}
           </div>
           {isVerwijderd && punt.verwijder_reden && (
-            <div className="text-[11px] text-red-700 mt-1 italic">
+            <div className="text-[11px] text-err-ink mt-1 italic">
               Reden: {punt.verwijder_reden}
             </div>
           )}
@@ -329,7 +329,7 @@ export default function AgendapuntKaart({
           <button
             onClick={herstel}
             disabled={volgordeBezig}
-            className="text-xs text-emerald-700 hover:text-emerald-900 px-2 py-1 disabled:opacity-50"
+            className="text-xs text-ok-ink hover:text-ok-ink px-2 py-1 disabled:opacity-50"
             title="Agendapunt herstellen"
           >
             ↶ Herstellen
@@ -342,7 +342,7 @@ export default function AgendapuntKaart({
             <button
               onClick={() => verschuif("omhoog")}
               disabled={!kanOmhoog || volgordeBezig}
-              className="text-gray-400 hover:text-ink disabled:opacity-30 text-xs px-1.5 py-1"
+              className="text-muted hover:text-ink disabled:opacity-30 text-xs px-1.5 py-1"
               title="Omhoog verplaatsen"
               aria-label="Omhoog verplaatsen"
             >
@@ -351,7 +351,7 @@ export default function AgendapuntKaart({
             <button
               onClick={() => verschuif("omlaag")}
               disabled={!kanOmlaag || volgordeBezig}
-              className="text-gray-400 hover:text-ink disabled:opacity-30 text-xs px-1.5 py-1"
+              className="text-muted hover:text-ink disabled:opacity-30 text-xs px-1.5 py-1"
               title="Omlaag verplaatsen"
               aria-label="Omlaag verplaatsen"
             >
@@ -359,7 +359,7 @@ export default function AgendapuntKaart({
             </button>
             <button
               onClick={() => setEditOpen(true)}
-              className="text-gray-400 hover:text-ink text-sm px-2 py-1"
+              className="text-muted hover:text-ink text-sm px-2 py-1"
               title="Bewerken"
               aria-label="Bewerken"
             >
@@ -370,7 +370,7 @@ export default function AgendapuntKaart({
 
         <button
           onClick={() => setOpen(!open)}
-          className="text-gray-400 text-sm pt-1 px-1.5"
+          className="text-muted text-sm pt-1 px-1.5"
           aria-label={open ? "Inklappen" : "Uitklappen"}
         >
           {open ? "▾" : "▸"}
@@ -396,9 +396,9 @@ export default function AgendapuntKaart({
       )}
 
       {open && !isVerwijderd && (
-        <div className="px-4 pb-4 pl-12 space-y-4 border-t border-gray-100 pt-4">
+        <div className="px-4 pb-4 pl-12 space-y-4 border-t border-line pt-4">
           {punt.beschrijving && (
-            <p className="text-sm text-gray-700 leading-relaxed">{punt.beschrijving}</p>
+            <p className="text-sm text-ink leading-relaxed">{punt.beschrijving}</p>
           )}
 
           {/* Stemronde — alleen bij besluitvorming */}
@@ -422,7 +422,7 @@ export default function AgendapuntKaart({
 
           {/* Stukken */}
           <div>
-            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            <div className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">
               Stukken ({punt.stukken.length})
             </div>
             <div className="space-y-2">
@@ -430,8 +430,8 @@ export default function AgendapuntKaart({
                 <StukKaart key={s.id} stuk={s} />
               ))}
               <label
-                className={`flex items-center gap-2 text-xs border border-dashed border-gray-300 rounded-lg px-3 py-2 hover:border-accent transition-colors ${
-                  uploadBezig ? "opacity-50 cursor-wait" : "cursor-pointer text-gray-600"
+                className={`flex items-center gap-2 text-xs border border-dashed border-app-line-strong rounded-lg px-3 py-2 hover:border-accent transition-colors ${
+                  uploadBezig ? "opacity-50 cursor-wait" : "cursor-pointer text-muted"
                 }`}
               >
                 <input
@@ -449,7 +449,7 @@ export default function AgendapuntKaart({
                   ? "Bezig met uploaden en samenvatten..."
                   : "+ Stuk toevoegen — PDF, Word of Excel (AI-samenvatting volgt automatisch)"}
               </label>
-              {uploadFout && <div className="text-xs text-red-600">{uploadFout}</div>}
+              {uploadFout && <div className="text-xs text-err-ink">{uploadFout}</div>}
             </div>
           </div>
 
@@ -467,10 +467,10 @@ export default function AgendapuntKaart({
           {/* Inbreng */}
           <div>
             <div className="flex items-baseline justify-between mb-2">
-              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+              <div className="text-xs font-semibold text-muted uppercase tracking-wide">
                 Inbreng vooraf ({punt.inbreng.length})
               </div>
-              <span className="text-[11px] text-gray-400">
+              <span className="text-[11px] text-muted">
                 zichtbaar voor alle bestuursleden
               </span>
             </div>
@@ -487,26 +487,26 @@ export default function AgendapuntKaart({
                       >
                         {initialen(i.gebruiker_naam)}
                       </span>
-                      <div className="flex-1 min-w-0 bg-gray-50 rounded-lg px-3 py-2">
+                      <div className="flex-1 min-w-0 bg-app-bg rounded-lg px-3 py-2">
                         <div className="flex items-baseline justify-between gap-2 flex-wrap">
                           <div className="flex items-baseline gap-2">
                             <span className="text-xs font-medium text-ink">
                               {i.gebruiker_naam || "Onbekend"}
                             </span>
-                            <span className="text-[11px] text-gray-400">
+                            <span className="text-[11px] text-muted">
                               {formatRelatief(i.aangemaakt)}
                             </span>
                           </div>
                           {isEigen && (
                             <button
                               onClick={() => verwijderInbreng(i.id)}
-                              className="text-[11px] text-gray-400 hover:text-red-600"
+                              className="text-[11px] text-muted hover:text-err-ink"
                             >
                               Verwijderen
                             </button>
                           )}
                         </div>
-                        <p className="text-sm text-gray-800 mt-1 leading-relaxed whitespace-pre-wrap">
+                        <p className="text-sm text-ink mt-1 leading-relaxed whitespace-pre-wrap">
                           {i.tekst}
                         </p>
                       </div>
@@ -522,7 +522,7 @@ export default function AgendapuntKaart({
                 onChange={(e) => setInbrengTekst(e.target.value)}
                 placeholder="Wat wil je vooraf inbrengen voor de discussie van dit punt?"
                 rows={2}
-                className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 outline-none focus:border-accent resize-none"
+                className="flex-1 border border-line rounded-lg px-3 py-2 text-sm bg-app-bg outline-none focus:border-accent resize-none"
               />
               <button
                 onClick={plaatsInbreng}
@@ -547,10 +547,10 @@ function StukKaart({ stuk }: { stuk: Stuk }) {
   const kanInzien = !!stuk.opslag_pad;
 
   return (
-    <div className="bg-gray-50 rounded-lg border border-gray-200">
-      <div className="w-full flex items-center gap-3 p-3 hover:bg-gray-100 transition-colors rounded-lg">
+    <div className="bg-app-bg rounded-lg border border-line">
+      <div className="w-full flex items-center gap-3 p-3 hover:bg-app-bg transition-colors rounded-lg">
         <span
-          className={`w-9 h-9 bg-white border border-gray-200 rounded-md inline-flex items-center justify-center text-[10px] font-semibold flex-shrink-0 ${badge.kleur}`}
+          className={`w-9 h-9 bg-white border border-line rounded-md inline-flex items-center justify-center text-[10px] font-semibold flex-shrink-0 ${badge.kleur}`}
         >
           {badge.label}
         </span>
@@ -573,7 +573,7 @@ function StukKaart({ stuk }: { stuk: Stuk }) {
               {stuk.titel}
             </div>
           )}
-          <div className="text-[11px] text-gray-500 mt-0.5">
+          <div className="text-[11px] text-muted mt-0.5">
             {stuk.paginas ? `${stuk.paginas} ${eenheid}` : badge.label}
             {stuk.samenvatting_ai ? " · AI-samenvatting beschikbaar" : " · samenvatting wordt nog gegenereerd"}
             {!kanInzien ? " · origineel niet beschikbaar" : ""}
@@ -585,7 +585,7 @@ function StukKaart({ stuk }: { stuk: Stuk }) {
             blijft de /ai?doc=-ingang bestaan. */}
         <button
           onClick={() => setOpen(!open)}
-          className="text-gray-400 text-xs px-2 py-1 hover:text-ink"
+          className="text-muted text-xs px-2 py-1 hover:text-ink"
           aria-label={open ? "Samenvatting inklappen" : "Samenvatting uitklappen"}
         >
           {open ? "▾" : "▸"}
@@ -595,15 +595,15 @@ function StukKaart({ stuk }: { stuk: Stuk }) {
       {open && (
         <div className="px-3 pb-3">
           {samenvatting ? (
-            <div className="bg-white rounded-md border border-gray-200 p-3 space-y-3">
+            <div className="bg-white rounded-md border border-line p-3 space-y-3">
               {samenvatting.aanleiding && (
                 <Sectie label="Aanleiding">
-                  <p className="text-sm text-gray-800 leading-relaxed">{samenvatting.aanleiding}</p>
+                  <p className="text-sm text-ink leading-relaxed">{samenvatting.aanleiding}</p>
                 </Sectie>
               )}
               {samenvatting.hoofdpunten && samenvatting.hoofdpunten.length > 0 && (
                 <Sectie label="Hoofdpunten">
-                  <ul className="text-sm text-gray-800 list-disc pl-5 space-y-1">
+                  <ul className="text-sm text-ink list-disc pl-5 space-y-1">
                     {samenvatting.hoofdpunten.map((h, i) => (
                       <li key={i}>{h}</li>
                     ))}
@@ -612,12 +612,12 @@ function StukKaart({ stuk }: { stuk: Stuk }) {
               )}
               {samenvatting.gevraagd_besluit && (
                 <Sectie label="Gevraagd besluit">
-                  <p className="text-sm text-gray-800 leading-relaxed">{samenvatting.gevraagd_besluit}</p>
+                  <p className="text-sm text-ink leading-relaxed">{samenvatting.gevraagd_besluit}</p>
                 </Sectie>
               )}
               {samenvatting.aandachtspunten && samenvatting.aandachtspunten.length > 0 && (
                 <Sectie label="Aandachtspunten">
-                  <ul className="text-sm text-gray-800 list-disc pl-5 space-y-1">
+                  <ul className="text-sm text-ink list-disc pl-5 space-y-1">
                     {samenvatting.aandachtspunten.map((a, i) => (
                       <li key={i}>{a}</li>
                     ))}
@@ -626,11 +626,11 @@ function StukKaart({ stuk }: { stuk: Stuk }) {
               )}
             </div>
           ) : stuk.samenvatting_ai ? (
-            <div className="bg-white rounded-md border border-gray-200 p-3 text-sm text-gray-700 whitespace-pre-wrap">
+            <div className="bg-white rounded-md border border-line p-3 text-sm text-ink whitespace-pre-wrap">
               {stuk.samenvatting_ai}
             </div>
           ) : (
-            <div className="bg-white rounded-md border border-gray-200 p-3 text-xs text-gray-500 italic">
+            <div className="bg-white rounded-md border border-line p-3 text-xs text-muted italic">
               Samenvatting wordt nog gegenereerd. Vernieuw de pagina over een paar seconden.
             </div>
           )}
@@ -643,7 +643,7 @@ function StukKaart({ stuk }: { stuk: Stuk }) {
 function Sectie({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">
+      <div className="text-[11px] font-semibold text-muted uppercase tracking-wide mb-1">
         {label}
       </div>
       {children}

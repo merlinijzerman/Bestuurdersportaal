@@ -208,16 +208,16 @@ export function dossierStatusKleur(status: DossierStatus | null): string {
     case "besloten":
     case "in_implementatie":
     case "afgerond":
-      return "bg-emerald-50 text-emerald-800 border-emerald-200";
+      return "bg-ok-tint text-ok-ink border-ok/30";
     case "ter_besluitvorming":
-      return "bg-amber-50 text-amber-800 border-amber-200";
+      return "bg-warn-tint text-warn-ink border-warn/30";
     case "heropend":
       return "bg-purple-50 text-purple-800 border-purple-200";
     case "gearchiveerd":
-      return "bg-gray-100 text-gray-600 border-gray-200";
+      return "bg-app-bg text-muted border-line";
     case "gepland":
-      return "bg-slate-50 text-slate-700 border-slate-200";
+      return "bg-app-bg text-ink border-line";
     default:
-      return "bg-blue-50 text-blue-800 border-blue-200";
+      return "bg-accent-tint text-accent-ink border-accent/30";
   }
 }

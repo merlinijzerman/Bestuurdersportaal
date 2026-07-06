@@ -72,28 +72,28 @@ export default async function NotulenDetailPage({
 
   return (
     <div className="p-4 sm:p-6 lg:p-7 max-w-4xl">
-      <Link href="/notulen" className="text-sm text-gray-500 hover:text-ink">
+      <Link href="/notulen" className="text-sm text-muted hover:text-ink">
         ← Terug naar notulen
       </Link>
       <div className="flex items-start justify-between flex-wrap gap-2 mt-2 mb-1">
         <h1 className="font-serif text-xl font-black text-ink">{doc.titel}</h1>
         <span
           className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-            vastgesteld ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
+            vastgesteld ? "bg-ok-tint text-ok-ink" : "bg-warn-tint text-warn-ink"
           }`}
         >
           {vastgesteld ? "Vastgesteld" : `Concept (${doc.status ?? "—"})`}
         </span>
       </div>
       {verg && (
-        <p className="text-sm text-gray-500 mb-5">
+        <p className="text-sm text-muted mb-5">
           Vergadering: <strong>{verg.titel}</strong>
           {verg.datum && ` — ${new Date(verg.datum).toLocaleDateString("nl-NL")}`}
         </p>
       )}
 
       {!vastgesteld && (
-        <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-5 text-sm text-amber-800">
+        <div className="flex items-start gap-3 bg-warn-tint border border-warn/30 rounded-xl px-4 py-3 mb-5 text-sm text-warn-ink">
           <span>⚠️</span>
           <div>
             Deze notulen zijn nog niet <strong>vastgesteld</strong>. Je kunt segmenten

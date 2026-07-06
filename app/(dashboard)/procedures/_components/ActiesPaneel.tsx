@@ -30,15 +30,15 @@ const STATUS_CYCLUS: ActionStatus[] = [
 function statusKleur(s: ActionStatus): string {
   switch (s) {
     case "afgerond":
-      return "bg-emerald-50 text-emerald-800 border-emerald-200";
+      return "bg-ok-tint text-ok-ink border-ok/30";
     case "in_behandeling":
-      return "bg-blue-50 text-blue-800 border-blue-200";
+      return "bg-accent-tint text-accent-ink border-accent/30";
     case "vervallen":
-      return "bg-gray-100 text-gray-500 border-gray-200";
+      return "bg-app-bg text-muted border-line";
     case "escalatie":
-      return "bg-rose-50 text-rose-800 border-rose-200";
+      return "bg-err-tint text-err-ink border-err/30";
     default:
-      return "bg-gray-50 text-gray-700 border-gray-200";
+      return "bg-app-bg text-ink border-line";
   }
 }
 
@@ -133,11 +133,11 @@ export default function ActiesPaneel({
   const voorwaardeMap = new Map(conditions.map((c) => [c.id, c]));
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5">
+    <div className="bg-white border border-line rounded-xl p-5">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="text-sm font-semibold text-ink">Acties</h3>
-          <p className="text-xs text-gray-500 mt-0.5">
+          <p className="text-xs text-muted mt-0.5">
             Concrete acties die uit dit besluit voortvloeien — optioneel
             gekoppeld aan een voorwaarde die ze bewaken.
           </p>
@@ -155,13 +155,13 @@ export default function ActiesPaneel({
       </div>
 
       {open && (
-        <div className="mb-4 border border-gray-200 rounded-lg p-4 bg-gray-50/50 space-y-3">
+        <div className="mb-4 border border-line rounded-lg p-4 bg-app-bg/50 space-y-3">
           <Veldgroep label="Actie *">
             <textarea
               value={actie}
               onChange={(e) => setActie(e.target.value)}
               rows={2}
-              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
+              className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
               placeholder="Wat moet er concreet gebeuren?"
             />
           </Veldgroep>
@@ -171,7 +171,7 @@ export default function ActiesPaneel({
                 type="text"
                 value={eigenaar}
                 onChange={(e) => setEigenaar(e.target.value)}
-                className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
+                className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
                 placeholder="Naam van eigenaar"
               />
             </Veldgroep>
@@ -180,7 +180,7 @@ export default function ActiesPaneel({
                 type="date"
                 value={deadline}
                 onChange={(e) => setDeadline(e.target.value)}
-                className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
+                className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
               />
             </Veldgroep>
           </div>
@@ -188,7 +188,7 @@ export default function ActiesPaneel({
             <select
               value={voorwaardeId}
               onChange={(e) => setVoorwaardeId(e.target.value)}
-              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 bg-white"
+              className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 bg-white"
               disabled={conditions.length === 0}
             >
               <option value="">— geen koppeling —</option>
@@ -202,7 +202,7 @@ export default function ActiesPaneel({
             </select>
           </Veldgroep>
           {fout && (
-            <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-md px-3 py-2">
+            <div className="text-xs text-err-ink bg-err-tint border border-err/30 rounded-md px-3 py-2">
               {fout}
             </div>
           )}
@@ -221,7 +221,7 @@ export default function ActiesPaneel({
                 setOpen(false);
                 setFout(null);
               }}
-              className="text-sm text-gray-600 hover:text-gray-900 px-3 py-2"
+              className="text-sm text-muted hover:text-ink px-3 py-2"
             >
               Annuleer
             </button>
@@ -230,7 +230,7 @@ export default function ActiesPaneel({
       )}
 
       {actions.length === 0 ? (
-        <div className="text-sm text-gray-400 italic">
+        <div className="text-sm text-muted italic">
           Nog geen acties vastgelegd.
         </div>
       ) : (
@@ -242,34 +242,34 @@ export default function ActiesPaneel({
             return (
               <li
                 key={a.id}
-                className="border border-gray-200 rounded-lg p-3 bg-white"
+                className="border border-line rounded-lg p-3 bg-white"
               >
                 <div className="flex items-start gap-3">
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm text-gray-900 whitespace-pre-line">
+                    <div className="text-sm text-ink whitespace-pre-line">
                       {a.actie}
                     </div>
                     <div className="flex items-center gap-3 mt-2 flex-wrap text-xs">
                       {a.eigenaar_naam && (
-                        <span className="text-gray-500">
+                        <span className="text-muted">
                           Eigenaar:{" "}
-                          <span className="text-gray-900">
+                          <span className="text-ink">
                             {a.eigenaar_naam}
                           </span>
                         </span>
                       )}
                       {a.deadline && (
-                        <span className="text-gray-500">
+                        <span className="text-muted">
                           Deadline:{" "}
-                          <span className="text-gray-900">
+                          <span className="text-ink">
                             {formatDatum(a.deadline)}
                           </span>
                         </span>
                       )}
                       {voorw && (
-                        <span className="text-gray-500">
+                        <span className="text-muted">
                           Bewaakt:{" "}
-                          <span className="text-gray-900 italic">
+                          <span className="text-ink italic">
                             {voorw.voorwaarde.length > 50
                               ? `${voorw.voorwaarde.slice(0, 50)}…`
                               : voorw.voorwaarde}
@@ -308,7 +308,7 @@ export default function ActiesPaneel({
                           type="button"
                           onClick={() => patchStatus(a, "vervallen")}
                           disabled={bezig === a.id}
-                          className="text-[11px] text-gray-500 hover:underline disabled:opacity-50"
+                          className="text-[11px] text-muted hover:underline disabled:opacity-50"
                         >
                           Markeer vervallen
                         </button>
@@ -316,7 +316,7 @@ export default function ActiesPaneel({
                           type="button"
                           onClick={() => patchStatus(a, "escalatie")}
                           disabled={bezig === a.id}
-                          className="text-[11px] text-rose-700 hover:underline disabled:opacity-50"
+                          className="text-[11px] text-err-ink hover:underline disabled:opacity-50"
                         >
                           Escaleer
                         </button>
@@ -327,7 +327,7 @@ export default function ActiesPaneel({
                         type="button"
                         onClick={() => patchStatus(a, "open")}
                         disabled={bezig === a.id}
-                        className="text-[11px] text-gray-600 hover:underline disabled:opacity-50 mt-1"
+                        className="text-[11px] text-muted hover:underline disabled:opacity-50 mt-1"
                       >
                         Heropen
                       </button>
@@ -341,7 +341,7 @@ export default function ActiesPaneel({
       )}
 
       {fout && !open && (
-        <div className="mt-3 text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-md px-3 py-2">
+        <div className="mt-3 text-xs text-err-ink bg-err-tint border border-err/30 rounded-md px-3 py-2">
           {fout}
         </div>
       )}
@@ -358,7 +358,7 @@ function Veldgroep({
 }) {
   return (
     <div>
-      <label className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold block mb-1">
+      <label className="text-[11px] uppercase tracking-wide text-muted font-semibold block mb-1">
         {label}
       </label>
       {children}

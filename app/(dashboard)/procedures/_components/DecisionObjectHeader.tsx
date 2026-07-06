@@ -22,29 +22,29 @@ interface Props {
 }
 
 const STATUS_KLEUREN: Record<string, string> = {
-  concept: "bg-gray-100 text-gray-700",
-  in_onderbouwing: "bg-amber-50 text-amber-800",
-  in_validatie: "bg-amber-50 text-amber-800",
-  in_review: "bg-blue-50 text-blue-700",
-  geagendeerd: "bg-blue-50 text-blue-700",
-  in_bespreking: "bg-blue-50 text-blue-700",
-  besloten: "bg-emerald-50 text-emerald-800",
-  voorwaardelijk_besloten: "bg-emerald-50 text-emerald-800",
-  in_uitvoering: "bg-emerald-50 text-emerald-800",
+  concept: "bg-app-bg text-ink",
+  in_onderbouwing: "bg-warn-tint text-warn-ink",
+  in_validatie: "bg-warn-tint text-warn-ink",
+  in_review: "bg-accent-tint text-accent-ink",
+  geagendeerd: "bg-accent-tint text-accent-ink",
+  in_bespreking: "bg-accent-tint text-accent-ink",
+  besloten: "bg-ok-tint text-ok-ink",
+  voorwaardelijk_besloten: "bg-ok-tint text-ok-ink",
+  in_uitvoering: "bg-ok-tint text-ok-ink",
   in_evaluatie: "bg-purple-50 text-purple-800",
-  afgesloten: "bg-gray-100 text-gray-700",
-  afgewezen: "bg-rose-50 text-rose-800",
-  geannuleerd: "bg-gray-100 text-gray-500",
-  aangehouden: "bg-amber-50 text-amber-800",
-  geescaleerd: "bg-rose-50 text-rose-800",
-  teruggezet: "bg-rose-50 text-rose-800",
-  heropend: "bg-amber-50 text-amber-800",
+  afgesloten: "bg-app-bg text-ink",
+  afgewezen: "bg-err-tint text-err-ink",
+  geannuleerd: "bg-app-bg text-muted",
+  aangehouden: "bg-warn-tint text-warn-ink",
+  geescaleerd: "bg-err-tint text-err-ink",
+  teruggezet: "bg-err-tint text-err-ink",
+  heropend: "bg-warn-tint text-warn-ink",
 };
 
 const RISICO_KLEUREN: Record<string, string> = {
-  laag: "bg-emerald-50 text-emerald-800 border-emerald-200",
-  middel: "bg-amber-50 text-amber-800 border-amber-200",
-  hoog: "bg-rose-50 text-rose-800 border-rose-200",
+  laag: "bg-ok-tint text-ok-ink border-ok/30",
+  middel: "bg-warn-tint text-warn-ink border-warn/30",
+  hoog: "bg-err-tint text-err-ink border-err/30",
 };
 
 // Scrolt naar de StatusOvergangPaneel-anker en geeft een korte
@@ -65,7 +65,7 @@ function scrollNaarStatusOvergang() {
 
 export default function DecisionObjectHeader({ decision, autoUpgraded }: Props) {
   const statusKlasse =
-    STATUS_KLEUREN[decision.status] ?? "bg-gray-100 text-gray-700";
+    STATUS_KLEUREN[decision.status] ?? "bg-app-bg text-ink";
   const isPlaceholder =
     decision.besluitvraag.startsWith("Aanvullen na auto-upgrade");
 
@@ -93,7 +93,7 @@ export default function DecisionObjectHeader({ decision, autoUpgraded }: Props) 
           </div>
           <div className="mt-1 text-xs text-white/70">
             {isPlaceholder ? (
-              <span className="text-amber-200">
+              <span className="text-warn-ink">
                 ⚠ Besluitvraag nog aan te vullen — placeholder-tekst staat in dossier
               </span>
             ) : (
@@ -104,7 +104,7 @@ export default function DecisionObjectHeader({ decision, autoUpgraded }: Props) 
       </div>
 
       {autoUpgraded && (
-        <div className="bg-amber-50/10 border border-amber-200/30 rounded-lg px-3 py-2 text-xs text-amber-100">
+        <div className="bg-warn-tint border border-warn/30 rounded-lg px-3 py-2 text-xs text-warn-ink">
           <strong className="font-semibold">Net aangemaakt</strong> — dit Decision Object
           is automatisch gegenereerd op basis van de bestaande procedure. Vul de
           besluitvraag, scope en classificatie aan om het dossier compleet te maken.
@@ -132,12 +132,12 @@ export default function DecisionObjectHeader({ decision, autoUpgraded }: Props) 
           </span>
         )}
         {decision.toezichtgevoelig && (
-          <span className="px-2 py-1 rounded text-xs font-medium bg-rose-100 text-rose-900 border border-rose-200">
+          <span className="px-2 py-1 rounded text-xs font-medium bg-err-tint text-err-ink border border-err/30">
             Toezichtgevoelig
           </span>
         )}
         {decision.beleidsafwijking && (
-          <span className="px-2 py-1 rounded text-xs font-medium bg-orange-100 text-orange-900 border border-orange-200">
+          <span className="px-2 py-1 rounded text-xs font-medium bg-warn-tint text-warn-ink border border-warn/30">
             Beleidsafwijking
           </span>
         )}

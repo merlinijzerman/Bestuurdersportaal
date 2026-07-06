@@ -39,12 +39,12 @@ export default function ReadinessLadder({ readiness }: Props) {
   );
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5">
+    <div className="bg-white border border-line rounded-xl p-5">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold text-ink">
           Readiness-ladder
         </h3>
-        <span className="text-xs text-gray-500">
+        <span className="text-xs text-muted">
           {eersteOnvolledig
             ? `Volgende horde: ${READINESS_LABEL[eersteOnvolledig]}`
             : "Alle niveaus voldoen"}
@@ -63,22 +63,22 @@ export default function ReadinessLadder({ readiness }: Props) {
             <li
               key={target}
               className={`relative pl-9 py-2 ${
-                isActief ? "bg-amber-50/40 -mx-3 px-3 rounded-lg" : ""
+                isActief ? "bg-warn-tint -mx-3 px-3 rounded-lg" : ""
               }`}
             >
               {/* Verbindingslijn */}
               {!isLast && (
-                <div className="absolute left-3 top-8 bottom-0 w-px bg-gray-200" />
+                <div className="absolute left-3 top-8 bottom-0 w-px bg-app-line" />
               )}
 
               {/* Status-icoon */}
               <div
                 className={`absolute left-0 top-2 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
                   r.voldoet
-                    ? "bg-emerald-500 text-white"
+                    ? "bg-ok text-white"
                     : isActief
-                      ? "bg-accent text-ink ring-4 ring-amber-100"
-                      : "bg-gray-100 text-gray-400 border-2 border-gray-200"
+                      ? "bg-accent text-ink ring-4 ring-warn/30"
+                      : "bg-app-bg text-muted border-2 border-line"
                 }`}
               >
                 {r.voldoet ? "✓" : idx + 1}
@@ -96,15 +96,15 @@ export default function ReadinessLadder({ readiness }: Props) {
                   <div
                     className={`text-sm font-medium ${
                       r.voldoet
-                        ? "text-gray-900"
+                        ? "text-ink"
                         : isActief
                           ? "text-ink"
-                          : "text-gray-500"
+                          : "text-muted"
                     }`}
                   >
                     {READINESS_LABEL[target as ReadinessTarget]}
                   </div>
-                  <div className="text-xs text-gray-500 mt-0.5">
+                  <div className="text-xs text-muted mt-0.5">
                     {r.voldoet
                       ? "Voldoet"
                       : `${ontbrekend.length} ontbrekend${
@@ -113,7 +113,7 @@ export default function ReadinessLadder({ readiness }: Props) {
                   </div>
                 </button>
                 {ontbrekend.length > 0 && (
-                  <span className="text-xs text-gray-400">
+                  <span className="text-xs text-muted">
                     {isOpen ? "▴" : "▾"}
                   </span>
                 )}
@@ -124,22 +124,22 @@ export default function ReadinessLadder({ readiness }: Props) {
                   {ontbrekend.map((o, i) => (
                     <li
                       key={i}
-                      className="flex items-start gap-2 text-gray-700 border-l-2 border-amber-200 pl-2"
+                      className="flex items-start gap-2 text-ink border-l-2 border-warn/30 pl-2"
                     >
-                      <span className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold mt-px shrink-0">
+                      <span className="text-[10px] uppercase tracking-wide text-muted font-semibold mt-px shrink-0">
                         Stap {o.stap_volgorde}
                       </span>
                       <span className="flex-1">
-                        <span className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold mr-1">
+                        <span className="text-[10px] uppercase tracking-wide text-muted font-semibold mr-1">
                           {REQUIREMENT_LABELS[o.requirement_type] ??
                             o.requirement_type}
                         </span>
                         {o.label}
                         {o.documenttype && (
-                          <span className="text-gray-500"> · {o.documenttype}</span>
+                          <span className="text-muted"> · {o.documenttype}</span>
                         )}
                         {!o.blokkerend && (
-                          <span className="ml-1 text-[10px] text-gray-400">
+                          <span className="ml-1 text-[10px] text-muted">
                             (niet blokkerend)
                           </span>
                         )}
@@ -153,7 +153,7 @@ export default function ReadinessLadder({ readiness }: Props) {
         })}
       </ol>
 
-      <div className="mt-4 pt-3 border-t border-gray-100 text-[11px] text-gray-500">
+      <div className="mt-4 pt-3 border-t border-line text-[11px] text-muted">
         Override door voorzitter of beheerder mogelijk; iedere override wordt
         gelogd in de audit-trail.
       </div>

@@ -333,22 +333,22 @@ export default function ActieveStapPaneel({
   }
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-6">
+    <div className="bg-white border border-line rounded-xl p-6">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="flex-1 min-w-0">
-          <div className="text-xs uppercase tracking-wide text-amber-700 font-semibold">
+          <div className="text-xs uppercase tracking-wide text-warn-ink font-semibold">
             Actieve stap
           </div>
           <h2 className="text-lg font-semibold text-ink mt-1">
             {stap.volgorde} — {stap.naam}
           </h2>
           {stap.beschrijving && (
-            <p className="text-sm text-gray-600 mt-1.5">{stap.beschrijving}</p>
+            <p className="text-sm text-muted mt-1.5">{stap.beschrijving}</p>
           )}
         </div>
-        <div className="text-right text-xs text-gray-500 flex-shrink-0">
+        <div className="text-right text-xs text-muted flex-shrink-0">
           {stap.deadline && (
-            <div className="text-amber-700 font-medium">
+            <div className="text-warn-ink font-medium">
               Deadline {formatDatumKort(stap.deadline)}
             </div>
           )}
@@ -358,11 +358,11 @@ export default function ActieveStapPaneel({
 
       {/* Checklist */}
       <div className="mt-6">
-        <div className="text-xs uppercase tracking-wide text-gray-500 font-semibold mb-3">
+        <div className="text-xs uppercase tracking-wide text-muted font-semibold mb-3">
           Checklist
         </div>
         {checklist.length === 0 ? (
-          <div className="text-sm text-gray-400 italic">
+          <div className="text-sm text-muted italic">
             Geen checklist-items.
           </div>
         ) : (
@@ -372,8 +372,8 @@ export default function ActieveStapPaneel({
                 key={c.id}
                 className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer ${
                   c.voldaan
-                    ? "bg-gray-50"
-                    : "bg-white border border-gray-200 hover:border-accent"
+                    ? "bg-app-bg"
+                    : "bg-white border border-line hover:border-accent"
                 }`}
               >
                 <input
@@ -385,20 +385,20 @@ export default function ActieveStapPaneel({
                 <div className="flex-1">
                   <div
                     className={`text-sm ${
-                      c.voldaan ? "text-gray-500 line-through" : "text-gray-900"
+                      c.voldaan ? "text-muted line-through" : "text-ink"
                     }`}
                   >
                     {c.label}
                   </div>
                   {c.voldaan && c.voldaan_op && (
-                    <div className="text-xs text-gray-500 mt-0.5">
+                    <div className="text-xs text-muted mt-0.5">
                       Afgevinkt {formatDatumKort(c.voldaan_op)}
                       {c.voldaan_door_naam ? ` · ${c.voldaan_door_naam}` : ""}
                     </div>
                   )}
                 </div>
                 {c.bewijs_vereist && !c.voldaan && (
-                  <span className="text-[11px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded font-medium">
+                  <span className="text-[11px] text-warn-ink bg-warn-tint px-2 py-0.5 rounded font-medium">
                     Bewijs vereist
                   </span>
                 )}
@@ -411,7 +411,7 @@ export default function ActieveStapPaneel({
       {/* Vergaderingen */}
       <div className="mt-6">
         <div className="flex items-center justify-between mb-3">
-          <div className="text-xs uppercase tracking-wide text-gray-500 font-semibold">
+          <div className="text-xs uppercase tracking-wide text-muted font-semibold">
             Vergaderingen
           </div>
           {!vergaderingForm && komendeVergaderingen.length > 0 && (
@@ -425,7 +425,7 @@ export default function ActieveStapPaneel({
         </div>
 
         {gekoppeldeAgendapunten.length === 0 && !vergaderingForm && (
-          <div className="text-sm text-gray-400 italic">
+          <div className="text-sm text-muted italic">
             Deze stap staat (nog) niet op een vergader-agenda.
           </div>
         )}
@@ -436,16 +436,16 @@ export default function ActieveStapPaneel({
               <Link
                 key={a.id}
                 href={`/vergaderingen/${a.vergadering_id}`}
-                className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:border-accent"
+                className="flex items-center gap-3 p-3 border border-line rounded-lg hover:border-accent"
               >
-                <div className="w-9 h-10 bg-blue-50 text-blue-700 rounded flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+                <div className="w-9 h-10 bg-accent-tint text-accent-ink rounded flex items-center justify-center text-[10px] font-bold flex-shrink-0">
                   AGENDA
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-gray-900 truncate">
+                  <div className="text-sm font-medium text-ink truncate">
                     {a.titel}
                   </div>
-                  <div className="text-xs text-gray-500 mt-0.5">
+                  <div className="text-xs text-muted mt-0.5">
                     {a.vergadering_titel}
                     {a.vergadering_datum
                       ? ` · ${formatDatumKort(a.vergadering_datum)}`
@@ -463,12 +463,12 @@ export default function ActieveStapPaneel({
         {vergaderingForm && (
           <form
             onSubmit={vergaderingKoppelen}
-            className="p-3 border border-gray-200 rounded-lg bg-gray-50 space-y-2"
+            className="p-3 border border-line rounded-lg bg-app-bg space-y-2"
           >
             <select
               value={vergaderingKeuze}
               onChange={(e) => setVergaderingKeuze(e.target.value)}
-              className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm focus:border-accent outline-none bg-white"
+              className="w-full border border-line rounded px-2 py-1.5 text-sm focus:border-accent outline-none bg-white"
             >
               <option value="">— Kies een komende vergadering —</option>
               {komendeVergaderingen.map((v) => (
@@ -477,7 +477,7 @@ export default function ActieveStapPaneel({
                 </option>
               ))}
             </select>
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-muted">
               Er wordt automatisch een agendapunt aangemaakt met de stap-titel
               als onderwerp en categorie {stap.vereist_besluit ? "Besluitvorming" : "Oordeelsvorming"}.
             </p>
@@ -488,7 +488,7 @@ export default function ActieveStapPaneel({
                   setVergaderingForm(false);
                   setVergaderingKeuze("");
                 }}
-                className="text-xs px-3 py-1.5 border border-gray-200 rounded hover:border-accent"
+                className="text-xs px-3 py-1.5 border border-line rounded hover:border-accent"
               >
                 Annuleren
               </button>
@@ -504,7 +504,7 @@ export default function ActieveStapPaneel({
         )}
 
         {komendeVergaderingen.length === 0 && (
-          <p className="text-xs text-gray-500 mt-1">
+          <p className="text-xs text-muted mt-1">
             Geen komende vergaderingen om aan te koppelen.{" "}
             <Link href="/vergaderingen" className="text-ink underline">
               Plan eerst een vergadering →
@@ -516,7 +516,7 @@ export default function ActieveStapPaneel({
       {/* Bewijs */}
       <div className="mt-6">
         <div className="flex items-center justify-between mb-3">
-          <div className="text-xs uppercase tracking-wide text-gray-500 font-semibold">
+          <div className="text-xs uppercase tracking-wide text-muted font-semibold">
             Bewijsstukken
           </div>
           <button
@@ -530,21 +530,21 @@ export default function ActieveStapPaneel({
         {bewijsForm && (
           <form
             onSubmit={bewijsToevoegen}
-            className="mb-3 p-3 border border-gray-200 rounded-lg bg-gray-50 space-y-2"
+            className="mb-3 p-3 border border-line rounded-lg bg-app-bg space-y-2"
           >
             <input
               type="text"
               value={bewijsTitel}
               onChange={(e) => setBewijsTitel(e.target.value)}
               placeholder="Titel of bestandsnaam"
-              className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm focus:border-accent outline-none"
+              className="w-full border border-line rounded px-2 py-1.5 text-sm focus:border-accent outline-none"
             />
             <textarea
               rows={2}
               value={bewijsBeschrijving}
               onChange={(e) => setBewijsBeschrijving(e.target.value)}
               placeholder="Korte beschrijving (optioneel)"
-              className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm focus:border-accent outline-none resize-none"
+              className="w-full border border-line rounded px-2 py-1.5 text-sm focus:border-accent outline-none resize-none"
             />
             {/* 1D-4: documenttype-tag uit de stap-requirements.
                 Als er documenttypes in deze stap zijn, presenteren we
@@ -553,7 +553,7 @@ export default function ActieveStapPaneel({
               <select
                 value={bewijsDocumenttype}
                 onChange={(e) => setBewijsDocumenttype(e.target.value)}
-                className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm bg-white focus:border-accent outline-none"
+                className="w-full border border-line rounded px-2 py-1.5 text-sm bg-white focus:border-accent outline-none"
               >
                 <option value="">— kies documenttype (optioneel) —</option>
                 {documentRequirements.map((d) => (
@@ -568,7 +568,7 @@ export default function ActieveStapPaneel({
                 value={bewijsDocumenttype}
                 onChange={(e) => setBewijsDocumenttype(e.target.value)}
                 placeholder="Documenttype-tag (optioneel, bv. ALM_analyse)"
-                className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm focus:border-accent outline-none"
+                className="w-full border border-line rounded px-2 py-1.5 text-sm focus:border-accent outline-none"
               />
             )}
             {/* 1D-4 + 3-D: bewijs-bron — drie opties:
@@ -577,13 +577,13 @@ export default function ActieveStapPaneel({
                 3. Alleen titel + beschrijving (geen document gekoppeld)
                 Opties (1) en (2) sluiten elkaar uit — de eerstgekozen wint. */}
             <div>
-              <label className="block text-[11px] uppercase tracking-wide text-gray-500 font-semibold mb-1">
+              <label className="block text-[11px] uppercase tracking-wide text-muted font-semibold mb-1">
                 Document koppelen (optioneel)
               </label>
               {bewijsBibliotheekId ? (
-                <div className="flex items-center justify-between gap-3 p-2.5 bg-amber-50/50 border border-amber-200 rounded">
+                <div className="flex items-center justify-between gap-3 p-2.5 bg-warn-tint border border-warn/30 rounded">
                   <div className="min-w-0 flex-1">
-                    <p className="text-[11px] text-amber-700 uppercase tracking-wide font-semibold">
+                    <p className="text-[11px] text-warn-ink uppercase tracking-wide font-semibold">
                       Gekozen uit bibliotheek
                     </p>
                     <p className="text-sm text-ink truncate">
@@ -596,7 +596,7 @@ export default function ActieveStapPaneel({
                       setBewijsBibliotheekId(null);
                       setBewijsBibliotheekTitel("");
                     }}
-                    className="text-xs text-rose-700 hover:underline whitespace-nowrap"
+                    className="text-xs text-err-ink hover:underline whitespace-nowrap"
                   >
                     Loskoppelen
                   </button>
@@ -607,20 +607,20 @@ export default function ActieveStapPaneel({
                     <button
                       type="button"
                       onClick={() => setPickerOpen(true)}
-                      className="text-xs px-3 py-1.5 border border-gray-200 rounded hover:border-accent text-ink"
+                      className="text-xs px-3 py-1.5 border border-line rounded hover:border-accent text-ink"
                     >
                       Kies uit bibliotheek →
                     </button>
-                    <span className="text-[11px] text-gray-400">of upload nieuw bestand:</span>
+                    <span className="text-[11px] text-muted">of upload nieuw bestand:</span>
                   </div>
                   <input
                     type="file"
                     accept=".pdf,.docx,.xlsx"
                     onChange={(e) => setBewijsBestand(e.target.files?.[0] ?? null)}
-                    className="block w-full text-xs text-gray-700 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-accent file:text-white file:text-xs hover:file:bg-accent-ink"
+                    className="block w-full text-xs text-ink file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-accent file:text-white file:text-xs hover:file:bg-accent-ink"
                   />
                   {bewijsBestand && (
-                    <p className="text-[11px] text-gray-600 mt-1">
+                    <p className="text-[11px] text-muted mt-1">
                       Geselecteerd: <span className="font-medium">{bewijsBestand.name}</span>
                       {" — "}wordt geüpload naar de documentbibliotheek bij vastleggen.
                     </p>
@@ -632,7 +632,7 @@ export default function ActieveStapPaneel({
               <button
                 type="button"
                 onClick={() => setBewijsForm(false)}
-                className="text-xs px-3 py-1.5 border border-gray-200 rounded hover:border-accent"
+                className="text-xs px-3 py-1.5 border border-line rounded hover:border-accent"
               >
                 Annuleren
               </button>
@@ -648,7 +648,7 @@ export default function ActieveStapPaneel({
         )}
 
         {bewijs.length === 0 ? (
-          <div className="text-sm text-gray-400 italic">
+          <div className="text-sm text-muted italic">
             Nog geen bewijsstukken bij deze stap.
           </div>
         ) : (
@@ -656,21 +656,21 @@ export default function ActieveStapPaneel({
             {bewijs.map((b) => (
               <div
                 key={b.id}
-                className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg"
+                className="flex items-start gap-3 p-3 border border-line rounded-lg"
               >
-                <div className="w-9 h-10 bg-red-50 text-red-700 rounded flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+                <div className="w-9 h-10 bg-err-tint text-err-ink rounded flex items-center justify-center text-[10px] font-bold flex-shrink-0">
                   PDF
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-gray-900">
+                  <div className="text-sm font-medium text-ink">
                     {b.titel}
                   </div>
                   {b.beschrijving && (
-                    <div className="text-xs text-gray-600 mt-0.5 whitespace-pre-line">
+                    <div className="text-xs text-muted mt-0.5 whitespace-pre-line">
                       {b.beschrijving}
                     </div>
                   )}
-                  <div className="text-xs text-gray-500 mt-1">
+                  <div className="text-xs text-muted mt-1">
                     {b.toegevoegd_door_naam
                       ? `Toegevoegd door ${b.toegevoegd_door_naam}`
                       : "Toegevoegd"}{" "}
@@ -687,7 +687,7 @@ export default function ActieveStapPaneel({
       {stap.vereist_besluit && (
         <div className="mt-6">
           <div className="flex items-center justify-between mb-3">
-            <div className="text-xs uppercase tracking-wide text-gray-500 font-semibold">
+            <div className="text-xs uppercase tracking-wide text-muted font-semibold">
               Besluit
             </div>
             {!besluit && (
@@ -712,21 +712,21 @@ export default function ActieveStapPaneel({
             )}
           </div>
           {conceptHint && (
-            <div className="mb-3 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            <div className="mb-3 text-xs text-warn-ink bg-warn-tint border border-warn/30 rounded-lg px-3 py-2">
               {conceptHint}
             </div>
           )}
           {besluit ? (
-            <div className="border border-emerald-200 bg-emerald-50/30 rounded-lg p-3">
-              <div className="text-sm text-gray-900 font-medium">
+            <div className="border border-ok/30 bg-ok-tint rounded-lg p-3">
+              <div className="text-sm text-ink font-medium">
                 {besluit.formulering}
               </div>
               {besluit.motivering && (
-                <p className="text-xs text-gray-600 mt-1 whitespace-pre-line">
+                <p className="text-xs text-muted mt-1 whitespace-pre-line">
                   {besluit.motivering}
                 </p>
               )}
-              <div className="text-xs text-gray-500 mt-2">
+              <div className="text-xs text-muted mt-2">
                 {new Date(besluit.datum).toLocaleDateString("nl-NL", {
                   day: "numeric",
                   month: "long",
@@ -740,40 +740,40 @@ export default function ActieveStapPaneel({
           ) : besluitForm ? (
             <form
               onSubmit={besluitVastleggen}
-              className="p-3 border border-gray-200 rounded-lg bg-gray-50 space-y-2"
+              className="p-3 border border-line rounded-lg bg-app-bg space-y-2"
             >
               <textarea
                 rows={2}
                 value={besluitFormulering}
                 onChange={(e) => setBesluitFormulering(e.target.value)}
                 placeholder="Bv.: Akkoord met verhoging hedge-ratio naar 70%, conform voorstel."
-                className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm focus:border-accent outline-none resize-none"
+                className="w-full border border-line rounded px-2 py-1.5 text-sm focus:border-accent outline-none resize-none"
               />
               <textarea
                 rows={3}
                 value={besluitMotivering}
                 onChange={(e) => setBesluitMotivering(e.target.value)}
                 placeholder="Motivering (optioneel)"
-                className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm focus:border-accent outline-none resize-none"
+                className="w-full border border-line rounded px-2 py-1.5 text-sm focus:border-accent outline-none resize-none"
               />
               <textarea
                 rows={3}
                 value={besluitAlternatieven}
                 onChange={(e) => setBesluitAlternatieven(e.target.value)}
                 placeholder="Verworpen alternatieven (één per regel, optioneel)&#10;Bv.:&#10;Alternatief 1: hedge-ratio op 80% → afgewezen ivm kosten&#10;Alternatief 2: bandbreedte 60-70% → afgewezen ivm complexiteit"
-                className="w-full border border-gray-200 rounded px-2 py-1.5 text-sm focus:border-accent outline-none resize-none"
+                className="w-full border border-line rounded px-2 py-1.5 text-sm focus:border-accent outline-none resize-none"
               />
               <input
                 type="date"
                 value={besluitDatum}
                 onChange={(e) => setBesluitDatum(e.target.value)}
-                className="border border-gray-200 rounded px-2 py-1.5 text-sm focus:border-accent outline-none"
+                className="border border-line rounded px-2 py-1.5 text-sm focus:border-accent outline-none"
               />
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setBesluitForm(false)}
-                  className="text-xs px-3 py-1.5 border border-gray-200 rounded hover:border-accent"
+                  className="text-xs px-3 py-1.5 border border-line rounded hover:border-accent"
                 >
                   Annuleren
                 </button>
@@ -787,7 +787,7 @@ export default function ActieveStapPaneel({
               </div>
             </form>
           ) : (
-            <div className="text-sm text-gray-400 italic">
+            <div className="text-sm text-muted italic">
               Deze stap vereist een formeel besluit.
             </div>
           )}
@@ -795,14 +795,14 @@ export default function ActieveStapPaneel({
       )}
 
       {fout && (
-        <div className="mt-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+        <div className="mt-3 text-sm text-err-ink bg-err-tint border border-err/30 rounded-lg px-3 py-2">
           {fout}
         </div>
       )}
 
       {/* Voltooien — vereisten-strook (1D-4) maakt blokkers expliciet
           conform het overkoepelende ontwerpprincipe. */}
-      <div className="mt-6 pt-5 border-t border-gray-100">
+      <div className="mt-6 pt-5 border-t border-line">
         <VereistenStrook
           titel="Vereisten voor stap-voltooien"
           vereisten={[
@@ -846,7 +846,7 @@ export default function ActieveStapPaneel({
                 className={`px-4 py-2 text-sm rounded-lg font-medium ${
                   kanVoltooien
                     ? "bg-accent text-white hover:bg-accent-ink"
-                    : "bg-gray-200 text-gray-500 cursor-not-allowed"
+                    : "bg-app-line text-muted cursor-not-allowed"
                 }`}
               >
                 {bezig === "voltooien" ? "Bezig…" : "Stap voltooien"}

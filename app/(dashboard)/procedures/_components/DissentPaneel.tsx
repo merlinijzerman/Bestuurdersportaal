@@ -45,11 +45,11 @@ function zichtbaarheidKleur(z: DissentZichtbaarheid): string {
     case "minderheidsnotitie":
       return "bg-purple-50 text-purple-800 border-purple-200";
     case "formele_dissent":
-      return "bg-rose-50 text-rose-800 border-rose-200";
+      return "bg-err-tint text-err-ink border-err/30";
     case "gedeelde_zorg":
-      return "bg-amber-50 text-amber-800 border-amber-200";
+      return "bg-warn-tint text-warn-ink border-warn/30";
     default:
-      return "bg-gray-50 text-gray-700 border-gray-200";
+      return "bg-app-bg text-ink border-line";
   }
 }
 
@@ -153,11 +153,11 @@ export default function DissentPaneel({
   }
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5">
+    <div className="bg-white border border-line rounded-xl p-5">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="text-sm font-semibold text-ink">Dissent</h3>
-          <p className="text-xs text-gray-500 mt-0.5">
+          <p className="text-xs text-muted mt-0.5">
             Afwijkende standpunten, met expliciete keuze hoe formeel ze in het
             dossier landen.
           </p>
@@ -175,13 +175,13 @@ export default function DissentPaneel({
       </div>
 
       {open && (
-        <div className="mb-4 border border-gray-200 rounded-lg p-4 bg-gray-50/50 space-y-3">
+        <div className="mb-4 border border-line rounded-lg p-4 bg-app-bg/50 space-y-3">
           <Veldgroep label="Standpunt *">
             <textarea
               value={standpunt}
               onChange={(e) => setStandpunt(e.target.value)}
               rows={2}
-              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
+              className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
               placeholder="Wat is het afwijkende standpunt? Eén zin volstaat."
             />
           </Veldgroep>
@@ -190,7 +190,7 @@ export default function DissentPaneel({
               value={argument}
               onChange={(e) => setArgument(e.target.value)}
               rows={3}
-              className="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
+              className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
               placeholder="Onderbouwing: welke informatie of overweging weegt zwaarder dan in het hoofdstandpunt?"
             />
           </Veldgroep>
@@ -202,7 +202,7 @@ export default function DissentPaneel({
                   className={`flex items-start gap-2 cursor-pointer p-2 rounded border ${
                     zichtbaarheid === z
                       ? "border-accent bg-white"
-                      : "border-gray-200 bg-white hover:bg-gray-50"
+                      : "border-line bg-white hover:bg-app-bg"
                   }`}
                 >
                   <input
@@ -212,10 +212,10 @@ export default function DissentPaneel({
                     className="mt-0.5 text-ink focus:ring-accent/40"
                   />
                   <div className="flex-1">
-                    <div className="text-sm font-medium text-gray-900">
+                    <div className="text-sm font-medium text-ink">
                       {DISSENT_ZICHTBAARHEID_LABEL[z]}
                     </div>
-                    <div className="text-xs text-gray-600 mt-0.5">
+                    <div className="text-xs text-muted mt-0.5">
                       {DISSENT_ZICHTBAARHEID_HINT[z]}
                     </div>
                   </div>
@@ -224,7 +224,7 @@ export default function DissentPaneel({
             </div>
           </Veldgroep>
           {fout && (
-            <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-md px-3 py-2">
+            <div className="text-xs text-err-ink bg-err-tint border border-err/30 rounded-md px-3 py-2">
               {fout}
             </div>
           )}
@@ -243,7 +243,7 @@ export default function DissentPaneel({
                 setOpen(false);
                 setFout(null);
               }}
-              className="text-sm text-gray-600 hover:text-gray-900 px-3 py-2"
+              className="text-sm text-muted hover:text-ink px-3 py-2"
             >
               Annuleer
             </button>
@@ -252,7 +252,7 @@ export default function DissentPaneel({
       )}
 
       {dissents.length === 0 ? (
-        <div className="text-sm text-gray-400 italic">
+        <div className="text-sm text-muted italic">
           Nog geen dissent vastgelegd. Een leeg dissent-blok kan ook
           betekenen dat afwijkende standpunten als &lsquo;privé&rsquo;
           zijn vastgelegd door anderen — die zijn voor jou niet
@@ -266,15 +266,15 @@ export default function DissentPaneel({
             return (
               <li
                 key={d.id}
-                className="border border-gray-200 rounded-lg p-3 bg-white"
+                className="border border-line rounded-lg p-3 bg-white"
               >
                 <div className="flex items-start gap-3">
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm text-gray-900 whitespace-pre-line font-medium">
+                    <div className="text-sm text-ink whitespace-pre-line font-medium">
                       {d.standpunt}
                     </div>
                     {d.argument && (
-                      <div className="text-xs text-gray-700 mt-1.5 whitespace-pre-line border-l-2 border-gray-200 pl-3">
+                      <div className="text-xs text-ink mt-1.5 whitespace-pre-line border-l-2 border-line pl-3">
                         {d.argument}
                       </div>
                     )}
@@ -287,7 +287,7 @@ export default function DissentPaneel({
                               zichtbaarheid: e.target.value as DissentZichtbaarheid,
                             })
                           }
-                          className="text-xs border border-gray-300 rounded px-2 py-0.5 bg-white"
+                          className="text-xs border border-app-line-strong rounded px-2 py-0.5 bg-white"
                           disabled={bezig === d.id}
                         >
                           {(currentUserIsPrivileged
@@ -323,7 +323,7 @@ export default function DissentPaneel({
                           Formeel vastgesteld
                         </span>
                       )}
-                      <span className="text-[11px] text-gray-500">
+                      <span className="text-[11px] text-muted">
                         {d.bestuurder_naam}
                         {isEigen ? " (jij)" : ""}
                       </span>
@@ -347,7 +347,7 @@ export default function DissentPaneel({
                         type="button"
                         onClick={() => intrekken(d)}
                         disabled={bezig === d.id}
-                        className="text-[11px] text-rose-700 hover:underline disabled:opacity-50"
+                        className="text-[11px] text-err-ink hover:underline disabled:opacity-50"
                       >
                         Intrekken
                       </button>
@@ -361,7 +361,7 @@ export default function DissentPaneel({
       )}
 
       {fout && !open && (
-        <div className="mt-3 text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-md px-3 py-2">
+        <div className="mt-3 text-xs text-err-ink bg-err-tint border border-err/30 rounded-md px-3 py-2">
           {fout}
         </div>
       )}
@@ -378,7 +378,7 @@ function Veldgroep({
 }) {
   return (
     <div>
-      <label className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold block mb-1">
+      <label className="text-[11px] uppercase tracking-wide text-muted font-semibold block mb-1">
         {label}
       </label>
       {children}

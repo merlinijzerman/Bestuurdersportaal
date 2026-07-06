@@ -48,7 +48,7 @@ export default async function NotulenPage() {
       <div className="flex items-start justify-between flex-wrap gap-3 mb-6">
         <div>
           <h1 className="font-serif text-xl font-black text-ink">Notulen</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="text-sm text-muted mt-1">
             Geüploade notulen worden per agendapunt benutbaar zodra de secretaris de
             voorgestelde segmenten bevestigt. Alleen bevestigde segmenten van
             vastgestelde notulen gebruikt de AI als agendapuntbron.
@@ -65,8 +65,8 @@ export default async function NotulenPage() {
       {!documenten || documenten.length === 0 ? (
         <div className="text-center py-16">
           <div className="text-4xl mb-3">📋</div>
-          <h3 className="font-semibold text-gray-700 mb-2">Nog geen notulen</h3>
-          <p className="text-sm text-gray-400 mb-4">
+          <h3 className="font-semibold text-ink mb-2">Nog geen notulen</h3>
+          <p className="text-sm text-muted mb-4">
             Upload notulen als PDF via de Documentbibliotheek (documenttype:{" "}
             <em>notulen</em>) en koppel ze aan een vergadering.
           </p>
@@ -92,7 +92,7 @@ export default async function NotulenPage() {
               <Link
                 key={doc.id}
                 href={`/notulen/${doc.id}`}
-                className="block bg-white border border-gray-200 rounded-xl p-4 hover:border-accent transition-colors"
+                className="block bg-white border border-line rounded-xl p-4 hover:border-accent transition-colors"
               >
                 <div className="flex gap-4 items-start">
                   <div className="bg-accent text-white rounded-xl p-3 text-center min-w-[52px] flex-shrink-0">
@@ -105,29 +105,29 @@ export default async function NotulenPage() {
                   <div className="flex-1 min-w-0">
                     <div className="font-bold text-ink text-sm">{doc.titel}</div>
                     {verg && (
-                      <div className="text-xs text-gray-500 mt-0.5">
+                      <div className="text-xs text-muted mt-0.5">
                         Vergadering: {verg.titel}
                       </div>
                     )}
-                    <div className="text-xs text-gray-400 mt-2 flex flex-wrap gap-2 items-center">
+                    <div className="text-xs text-muted mt-2 flex flex-wrap gap-2 items-center">
                       <span
                         className={`px-2 py-0.5 rounded-full font-semibold ${
                           vastgesteld
-                            ? "bg-green-100 text-green-700"
-                            : "bg-amber-100 text-amber-700"
+                            ? "bg-ok-tint text-ok-ink"
+                            : "bg-warn-tint text-warn-ink"
                         }`}
                       >
                         {vastgesteld ? "Vastgesteld" : `Concept (${doc.status ?? "—"})`}
                       </span>
                       {seg.totaal === 0 ? (
-                        <span className="text-gray-400">Nog niet gesegmenteerd</span>
+                        <span className="text-muted">Nog niet gesegmenteerd</span>
                       ) : (
-                        <span className="text-gray-500">
+                        <span className="text-muted">
                           {seg.bevestigd} van {seg.totaal} segment(en) bevestigd
                         </span>
                       )}
                       {seg.bevestigd > 0 && (
-                        <span className="text-green-600 font-semibold">
+                        <span className="text-ok-ink font-semibold">
                           ✓ {seg.bevestigd} agendapuntbron(nen) actief
                         </span>
                       )}

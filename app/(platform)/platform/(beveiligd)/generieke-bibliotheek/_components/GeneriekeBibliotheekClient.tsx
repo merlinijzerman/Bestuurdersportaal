@@ -110,7 +110,7 @@ function RagBadge({ normgewicht }: { normgewicht: string | null }) {
   return (
     <span
       className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-        zichtbaar ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
+        zichtbaar ? "bg-ok-tint text-ok-ink" : "bg-warn-tint text-warn-ink"
       }`}
       title={
         zichtbaar
@@ -337,8 +337,8 @@ export default function GeneriekeBibliotheekClient({
         <div
           className={`rounded-lg px-4 py-3 text-sm ${
             melding.ok
-              ? "bg-emerald-50 text-emerald-800"
-              : "bg-rose-50 text-rose-800"
+              ? "bg-ok-tint text-ok-ink"
+              : "bg-err-tint text-err-ink"
           }`}
         >
           {melding.tekst}
@@ -567,11 +567,11 @@ export default function GeneriekeBibliotheekClient({
                             Vervangen
                           </button>
                           {d.status !== "alleen_historisch" && (
-                            <button onClick={() => intrekken(d)} disabled={bezig} className="text-rose-700 hover:underline disabled:opacity-50">
+                            <button onClick={() => intrekken(d)} disabled={bezig} className="text-err-ink hover:underline disabled:opacity-50">
                               Intrekken
                             </button>
                           )}
-                          <button onClick={() => verwijderen(d)} disabled={bezig} className="text-rose-700 hover:underline disabled:opacity-50">
+                          <button onClick={() => verwijderen(d)} disabled={bezig} className="text-err-ink hover:underline disabled:opacity-50">
                             Verwijderen
                           </button>
                         </>
@@ -602,7 +602,7 @@ function Veld({
     <label className="block">
       <span className="mb-1 block text-xs font-medium text-ink/70">{label}</span>
       {children}
-      {fout && <span className="mt-1 block text-xs text-rose-600">{fout}</span>}
+      {fout && <span className="mt-1 block text-xs text-err-ink">{fout}</span>}
     </label>
   );
 }

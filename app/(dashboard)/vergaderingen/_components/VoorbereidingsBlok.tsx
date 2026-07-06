@@ -105,10 +105,10 @@ export default function VoorbereidingsBlok({
       />
 
       {/* Vrij notitieveld — privé, los van de AI; direct boven "Inbreng vooraf" */}
-      <div className="bg-white border border-amber-200 rounded-lg p-3">
+      <div className="bg-white border border-warn/30 rounded-lg p-3">
         <div className="text-xs font-semibold text-ink uppercase tracking-wide mb-2">
           Mijn aantekeningen
-          <span className="text-[10px] text-gray-400 font-normal ml-2 normal-case tracking-normal">
+          <span className="text-[10px] text-muted font-normal ml-2 normal-case tracking-normal">
             privé · niet zichtbaar voor anderen
           </span>
         </div>
@@ -120,10 +120,10 @@ export default function VoorbereidingsBlok({
             setNotitiesGewijzigd(true);
           }}
           placeholder="Eigen aantekeningen bij dit agendapunt…"
-          className="w-full text-sm border border-gray-200 rounded px-3 py-2 focus:border-accent outline-none resize-none bg-gray-50"
+          className="w-full text-sm border border-line rounded px-3 py-2 focus:border-accent outline-none resize-none bg-app-bg"
         />
         <div className="mt-1.5 flex items-center justify-between text-xs">
-          <span className="text-red-700">{fout}</span>
+          <span className="text-err-ink">{fout}</span>
           {notitiesGewijzigd ? (
             <button
               onClick={notitiesOpslaan}
@@ -134,7 +134,7 @@ export default function VoorbereidingsBlok({
             </button>
           ) : (
             opgeslagenOp && (
-              <span className="text-gray-400">
+              <span className="text-muted">
                 Opgeslagen {formatDatumKort(opgeslagenOp)}
               </span>
             )

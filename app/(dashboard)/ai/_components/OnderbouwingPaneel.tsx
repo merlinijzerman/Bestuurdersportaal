@@ -83,8 +83,8 @@ interface Props {
 function Rij({ label, waarde }: { label: string; waarde: ReactNode }) {
   return (
     <div className="flex gap-2 text-xs">
-      <span className="text-gray-400 w-36 flex-shrink-0">{label}</span>
-      <span className="text-gray-700">{waarde}</span>
+      <span className="text-muted w-36 flex-shrink-0">{label}</span>
+      <span className="text-ink">{waarde}</span>
     </div>
   );
 }
@@ -104,26 +104,26 @@ export default function OnderbouwingPaneel({
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className={`w-full flex items-center justify-between gap-3 px-3 py-2 bg-white border border-gray-200 text-left hover:bg-gray-50 transition-colors ${
+        className={`w-full flex items-center justify-between gap-3 px-3 py-2 bg-white border border-line text-left hover:bg-app-bg transition-colors ${
           open ? "rounded-t-lg" : "rounded-lg"
         }`}
       >
         <span className="flex items-center gap-2 min-w-0">
-          <span aria-hidden className="text-gray-400 text-xs">
+          <span aria-hidden className="text-muted text-xs">
             🔎
           </span>
           <span className="text-xs font-semibold text-ink">
             Onderbouwing en bronnen
           </span>
           {typeof meta.aantalBronnen === "number" && meta.aantalBronnen > 0 && (
-            <span className="text-[11px] text-gray-600 bg-gray-100 px-2 py-0.5 rounded-full font-medium">
+            <span className="text-[11px] text-muted bg-app-bg px-2 py-0.5 rounded-full font-medium">
               {meta.aantalBronnen}
             </span>
           )}
         </span>
         <span
           aria-hidden
-          className={`flex-shrink-0 text-gray-400 text-xs transition-transform ${
+          className={`flex-shrink-0 text-muted text-xs transition-transform ${
             open ? "rotate-180" : ""
           }`}
         >
@@ -132,7 +132,7 @@ export default function OnderbouwingPaneel({
       </button>
 
       {open && (
-        <div className="border border-t-0 border-gray-200 rounded-b-lg bg-white px-3 py-3 space-y-3">
+        <div className="border border-t-0 border-line rounded-b-lg bg-white px-3 py-3 space-y-3">
           {/* Gestructureerde controle-informatie (§11c). */}
           <div className="space-y-1">
             {meta.alleenFondsdocumenten ? (
@@ -144,7 +144,7 @@ export default function OnderbouwingPaneel({
                   waarde={
                     <>
                       {BRON_INTENT_LABEL[meta.bronIntent] ?? meta.bronIntent}
-                      <span className="text-gray-400">
+                      <span className="text-muted">
                         {" "}
                         {meta.bronIntentOverride
                           ? "— door u bevestigd na verduidelijking"
@@ -176,7 +176,7 @@ export default function OnderbouwingPaneel({
                 waarde={
                   <>
                     Volgorde en nadruk afgestemd op uw profiel.
-                    <span className="text-gray-400">
+                    <span className="text-muted">
                       {" "}
                       Zelfde feiten en bronnen; zet &ldquo;Algemeen perspectief&rdquo;
                       aan onder &ldquo;Aanpassen&rdquo; voor de collectieve weergave.
@@ -195,7 +195,7 @@ export default function OnderbouwingPaneel({
 
           {/* Aannames en beperkingen staan inhoudelijk in het antwoord zelf
               (duiding/sparring scheiden feit/interpretatie/aanname expliciet). */}
-          <p className="text-[11px] text-gray-400 italic">
+          <p className="text-[11px] text-muted italic">
             Aannames, beperkingen en openstaande vragen staan, waar van toepassing,
             in het antwoord zelf benoemd.
           </p>
@@ -207,13 +207,13 @@ export default function OnderbouwingPaneel({
           {/* 1) Documentbronnen (RAG) — de bronkaarten komen als children mee. */}
           {children ? (
             <div>
-              <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2">
+              <div className="text-[11px] font-bold text-muted uppercase tracking-wide mb-2">
                 Documentbronnen
               </div>
               <div className="space-y-2">{children}</div>
             </div>
           ) : (
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-muted">
               Geen interne documentbronnen geraadpleegd voor dit antwoord.
             </p>
           )}
@@ -223,22 +223,22 @@ export default function OnderbouwingPaneel({
               documentverwijzing. */}
           {meta.modelKennis && meta.modelKennis.length > 0 && (
             <div>
-              <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2">
+              <div className="text-[11px] font-bold text-muted uppercase tracking-wide mb-2">
                 Niet-brongebaseerde duiding (algemene kennis)
               </div>
               <ul className="space-y-1">
                 {meta.modelKennis.map((mk, i) => (
                   <li key={i} className="flex items-center gap-2 text-xs">
-                    <span className="text-[10px] font-semibold text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded">
+                    <span className="text-[10px] font-semibold text-muted bg-app-bg px-1.5 py-0.5 rounded">
                       {MODEL_KENNIS_GROND_LABEL[mk.grond] ?? mk.grond}
                     </span>
-                    <span className="text-gray-700">
+                    <span className="text-ink">
                       {mk.instantie ?? "Geen specifieke instantie benoemd"}
                     </span>
                   </li>
                 ))}
               </ul>
-              <p className="mt-2 text-[11px] text-gray-400 italic">
+              <p className="mt-2 text-[11px] text-muted italic">
                 Dit deel komt uit de algemene kennis van het taalmodel, niet uit een
                 geverifieerde bron. Er is geen live web-retrieval actief; controleer
                 bij formele besluitvorming de genoemde instantie zelf.
@@ -250,7 +250,7 @@ export default function OnderbouwingPaneel({
               zichtbaar zodra echte web-retrieval bestaat én resultaten oplevert. */}
           {meta.webRetrievalActief && meta.webBronnen && meta.webBronnen.length > 0 && (
             <div>
-              <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2">
+              <div className="text-[11px] font-bold text-muted uppercase tracking-wide mb-2">
                 Webbronnen
               </div>
               <ul className="space-y-1">
@@ -264,7 +264,7 @@ export default function OnderbouwingPaneel({
                     >
                       {w.titel}
                     </a>
-                    <span className="text-gray-400"> — {w.domein}</span>
+                    <span className="text-muted"> — {w.domein}</span>
                   </li>
                 ))}
               </ul>

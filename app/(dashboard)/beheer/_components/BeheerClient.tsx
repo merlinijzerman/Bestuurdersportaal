@@ -173,10 +173,10 @@ export default function BeheerClient() {
   return (
     <div>
       {/* Import */}
-      <div className="rounded-xl border border-gray-200 bg-white p-4 mb-6 flex items-center justify-between gap-4">
+      <div className="rounded-xl border border-line bg-white p-4 mb-6 flex items-center justify-between gap-4">
         <div>
           <div className="font-semibold text-ink">Standaardcatalogus importeren</div>
-          <div className="text-sm text-gray-500">
+          <div className="text-sm text-muted">
             Kopieert de globale templates naar dit fonds als bewerkbaar startpunt.
             Idempotent — bestaande items blijven ongemoeid.
           </div>
@@ -190,16 +190,16 @@ export default function BeheerClient() {
         </button>
       </div>
       {importMelding && (
-        <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800 mb-6">
+        <div className="rounded-lg border border-accent/30 bg-accent-tint p-3 text-sm text-accent-ink mb-6">
           {importMelding}
         </div>
       )}
 
       {/* Her-indexeren (R1.1/R1.2) — hele fondsbibliotheek opnieuw verwerken. */}
-      <div className="rounded-xl border border-gray-200 bg-white p-4 mb-6 flex items-center justify-between gap-4">
+      <div className="rounded-xl border border-line bg-white p-4 mb-6 flex items-center justify-between gap-4">
         <div>
           <div className="font-semibold text-ink">Bibliotheek her-indexeren</div>
-          <div className="text-sm text-gray-500">
+          <div className="text-sm text-muted">
             Verwerkt alle fondsdocumenten opnieuw met structuur-bewuste fragmenten en
             een contextuele zoekindex. Verbruikt AI-credits; de getoonde brontekst
             verandert niet. Reeds bijgewerkte documenten worden overgeslagen.
@@ -214,13 +214,13 @@ export default function BeheerClient() {
         </button>
       </div>
       {reindexMelding && (
-        <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800 mb-6">
+        <div className="rounded-lg border border-accent/30 bg-accent-tint p-3 text-sm text-accent-ink mb-6">
           {reindexMelding}
         </div>
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-gray-200 mb-6">
+      <div className="flex gap-1 border-b border-line mb-6">
         {(["catalogus", "organen", "review"] as const).map((t) => (
           <button
             key={t}
@@ -228,7 +228,7 @@ export default function BeheerClient() {
             className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
               tab === t
                 ? "border-accent text-ink"
-                : "border-transparent text-gray-500 hover:text-gray-700"
+                : "border-transparent text-muted hover:text-ink"
             }`}
           >
             {t === "catalogus"
@@ -241,14 +241,14 @@ export default function BeheerClient() {
       </div>
 
       {fout && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 mb-4">
+        <div className="rounded-lg border border-err/30 bg-err-tint p-3 text-sm text-err-ink mb-4">
           {fout}
         </div>
       )}
       {tab === "review" ? (
         <ReviewHub />
       ) : laden ? (
-        <div className="text-gray-400 text-sm">Laden…</div>
+        <div className="text-muted text-sm">Laden…</div>
       ) : tab === "catalogus" ? (
         <CatalogusTab
           procesmodellen={procesmodellen}
@@ -330,10 +330,10 @@ const REDEN_LABEL: Record<string, string> = {
 };
 
 const CONFIDENCE_BADGE: Record<string, string> = {
-  hoog: "bg-emerald-100 text-emerald-800",
-  middel: "bg-amber-100 text-amber-800",
-  laag: "bg-gray-100 text-gray-700",
-  geen_match: "bg-gray-100 text-gray-500",
+  hoog: "bg-ok-tint text-ok-ink",
+  middel: "bg-warn-tint text-warn-ink",
+  laag: "bg-app-bg text-ink",
+  geen_match: "bg-app-bg text-muted",
 };
 
 function ReviewHub() {
@@ -444,7 +444,7 @@ function ReviewHub() {
               className={`rounded-full px-3 py-1 text-xs font-semibold ${
                 stream === s.key
                   ? "bg-accent text-white"
-                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  : "bg-app-bg text-muted hover:bg-app-line"
               }`}
             >
               {s.label}
@@ -459,7 +459,7 @@ function ReviewHub() {
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+          className="rounded-lg border border-app-line-strong px-3 py-1.5 text-sm"
         >
           {statusOpties.map(([v, l]) => (
             <option key={v} value={v}>
@@ -469,23 +469,23 @@ function ReviewHub() {
         </select>
       </div>
 
-      <p className="text-sm text-gray-500 mb-4">
+      <p className="text-sm text-muted mb-4">
         {stream === "classificatie"
           ? "AI-procesclassificatie. Bij hoge zekerheid is het document automatisch gekoppeld (terugdraaibaar); bij middelmatige zekerheid bevestig je het voorstel. Expliciet gekoppelde documenten worden nooit omgehangen."
           : "Documenten die nog niet zijn verrijkt of een onzekere status hebben. Open het document in de bibliotheek om de metadata te corrigeren; markeer het hier als gecontroleerd zodra de metadata klopt."}
       </p>
 
       {fout && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 mb-4">
+        <div className="rounded-lg border border-err/30 bg-err-tint p-3 text-sm text-err-ink mb-4">
           {fout}
         </div>
       )}
 
       {laden ? (
-        <div className="text-gray-400 text-sm">Laden…</div>
+        <div className="text-muted text-sm">Laden…</div>
       ) : stream === "classificatie" ? (
         classItems.length === 0 ? (
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+          <div className="rounded-xl border border-ok/30 bg-ok-tint p-4 text-sm text-ok-ink">
             Geen classificatievoorstellen in deze status.
           </div>
         ) : (
@@ -493,7 +493,7 @@ function ReviewHub() {
             {classItems.map((it) => (
               <div
                 key={it.id}
-                className="rounded-xl border border-gray-200 bg-white p-4 flex items-center gap-3"
+                className="rounded-xl border border-line bg-white p-4 flex items-center gap-3"
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
@@ -502,7 +502,7 @@ function ReviewHub() {
                     </span>
                     <span
                       className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                        CONFIDENCE_BADGE[it.confidence] ?? "bg-gray-100 text-gray-700"
+                        CONFIDENCE_BADGE[it.confidence] ?? "bg-app-bg text-ink"
                       }`}
                     >
                       {it.confidence}
@@ -513,7 +513,7 @@ function ReviewHub() {
                       </span>
                     )}
                   </div>
-                  <div className="text-xs text-gray-500">
+                  <div className="text-xs text-muted">
                     bron: {it.bron}
                     {it.documenten?.documenttype ? ` · ${it.documenten.documenttype}` : ""}
                     {it.toelichting ? ` · ${it.toelichting}` : ""}
@@ -527,7 +527,7 @@ function ReviewHub() {
                         classificatieActie(it.id, "beoordeel", { actie: "bevestigen" })
                       }
                       disabled={bezig === it.id}
-                      className="shrink-0 rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                      className="shrink-0 rounded-lg bg-ok px-3 py-1.5 text-sm font-semibold text-white hover:bg-ok disabled:opacity-50"
                     >
                       Bevestigen
                     </button>
@@ -536,7 +536,7 @@ function ReviewHub() {
                         classificatieActie(it.id, "beoordeel", { actie: "afwijzen" })
                       }
                       disabled={bezig === it.id}
-                      className="shrink-0 rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                      className="shrink-0 rounded-lg border border-app-line-strong px-3 py-1.5 text-sm text-ink hover:bg-app-bg disabled:opacity-50"
                     >
                       Afwijzen
                     </button>
@@ -546,7 +546,7 @@ function ReviewHub() {
                   <button
                     onClick={() => classificatieActie(it.id, "terugdraai", {})}
                     disabled={bezig === it.id}
-                    className="shrink-0 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+                    className="shrink-0 rounded-lg border border-warn/30 bg-warn-tint px-3 py-1.5 text-sm font-semibold text-warn-ink hover:bg-warn-tint disabled:opacity-50"
                   >
                     Terugdraaien
                   </button>
@@ -556,7 +556,7 @@ function ReviewHub() {
           </div>
         )
       ) : items.length === 0 ? (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+        <div className="rounded-xl border border-ok/30 bg-ok-tint p-4 text-sm text-ok-ink">
           Niets te beoordelen in deze stream — de queue is leeg.
         </div>
       ) : (
@@ -564,13 +564,13 @@ function ReviewHub() {
           {items.map((it) => (
             <div
               key={it.id}
-              className="rounded-xl border border-gray-200 bg-white p-4 flex items-center gap-3"
+              className="rounded-xl border border-line bg-white p-4 flex items-center gap-3"
             >
               <div className="flex-1 min-w-0">
                 <div className="font-semibold text-ink truncate">
                   {it.documenten?.titel ?? "(document verwijderd)"}
                 </div>
-                <div className="text-xs text-gray-500">
+                <div className="text-xs text-muted">
                   {REDEN_LABEL[it.reden] ?? it.reden}
                   {it.documenten?.documenttype ? ` · ${it.documenten.documenttype}` : ""}
                   {it.documenten?.status ? ` · ${it.documenten.status}` : " · geen status"}
@@ -578,7 +578,7 @@ function ReviewHub() {
               </div>
               <a
                 href="/bibliotheek"
-                className="shrink-0 rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+                className="shrink-0 rounded-lg border border-app-line-strong px-3 py-1.5 text-sm text-ink hover:bg-app-bg"
               >
                 Naar bibliotheek
               </a>
@@ -586,7 +586,7 @@ function ReviewHub() {
                 <button
                   onClick={() => beoordeelMetadata(it.document_id, "gecontroleerd")}
                   disabled={bezig === it.document_id}
-                  className="shrink-0 rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                  className="shrink-0 rounded-lg bg-ok px-3 py-1.5 text-sm font-semibold text-white hover:bg-ok disabled:opacity-50"
                 >
                   Gecontroleerd
                 </button>
@@ -595,7 +595,7 @@ function ReviewHub() {
                 <button
                   onClick={() => beoordeelMetadata(it.document_id, "afgewezen")}
                   disabled={bezig === it.document_id}
-                  className="shrink-0 rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  className="shrink-0 rounded-lg border border-app-line-strong px-3 py-1.5 text-sm text-ink hover:bg-app-bg disabled:opacity-50"
                 >
                   Afwijzen
                 </button>
@@ -647,25 +647,25 @@ function CatalogusTab({
 
   return (
     <div>
-      <div className="rounded-xl border border-gray-200 bg-white p-4 mb-4 flex flex-wrap items-end gap-3">
+      <div className="rounded-xl border border-line bg-white p-4 mb-4 flex flex-wrap items-end gap-3">
         <div className="flex-1 min-w-[180px]">
-          <label className="block text-xs font-medium text-gray-500 mb-1">Naam</label>
+          <label className="block text-xs font-medium text-muted mb-1">Naam</label>
           <input
             value={nieuwNaam}
             onChange={(e) => setNieuwNaam(e.target.value)}
             placeholder="bv. Uitbestedingsreview vermogensbeheer"
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            className="w-full rounded-lg border border-app-line-strong px-3 py-2 text-sm"
           />
         </div>
         <div className="flex-1 min-w-[180px]">
-          <label className="block text-xs font-medium text-gray-500 mb-1">
+          <label className="block text-xs font-medium text-muted mb-1">
             Generiek procestype
           </label>
           <input
             value={nieuwType}
             onChange={(e) => setNieuwType(e.target.value)}
             placeholder="bv. uitbestedingsreview"
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            className="w-full rounded-lg border border-app-line-strong px-3 py-2 text-sm"
           />
         </div>
         <button
@@ -677,37 +677,37 @@ function CatalogusTab({
       </div>
 
       {procesmodellen.length === 0 ? (
-        <div className="text-gray-400 text-sm">
+        <div className="text-muted text-sm">
           Nog geen procesmodellen. Importeer de standaardcatalogus of voeg er een toe.
         </div>
       ) : (
         <div className="space-y-2">
           {procesmodellen.map((pm) => (
-            <div key={pm.id} className="rounded-xl border border-gray-200 bg-white">
+            <div key={pm.id} className="rounded-xl border border-line bg-white">
               <div className="flex items-center gap-3 p-4">
                 <div className="flex-1">
                   <div className="font-semibold text-ink">
                     {pm.naam}{" "}
                     {!pm.actief && (
-                      <span className="ml-1 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
+                      <span className="ml-1 rounded bg-app-bg px-1.5 py-0.5 text-xs text-muted">
                         inactief
                       </span>
                     )}
                   </div>
-                  <div className="text-xs text-gray-500">
+                  <div className="text-xs text-muted">
                     {pm.generiek_procestype}
                     {pm.frequentie ? ` · ${FREQUENTIE_LABEL[pm.frequentie] ?? pm.frequentie}` : ""}
                   </div>
                 </div>
                 <button
                   onClick={() => setOpen(open === pm.id ? null : pm.id)}
-                  className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+                  className="rounded-lg border border-app-line-strong px-3 py-1.5 text-sm text-ink hover:bg-app-bg"
                 >
                   Koppelingen
                 </button>
                 <button
                   onClick={() => toggleActief(pm)}
-                  className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+                  className="rounded-lg border border-app-line-strong px-3 py-1.5 text-sm text-ink hover:bg-app-bg"
                 >
                   {pm.actief ? "Deactiveren" : "Activeren"}
                 </button>
@@ -775,7 +775,7 @@ function KoppelPanel({
     await laad();
   }
 
-  if (laden) return <div className="border-t border-gray-100 p-4 text-sm text-gray-400">Laden…</div>;
+  if (laden) return <div className="border-t border-line p-4 text-sm text-muted">Laden…</div>;
 
   const blok = (
     titel: string,
@@ -784,15 +784,15 @@ function KoppelPanel({
     type: "gremium" | "expertise" | "focusgebied"
   ) => (
     <div>
-      <div className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-2">{titel}</div>
+      <div className="text-xs font-bold uppercase tracking-wide text-muted mb-2">{titel}</div>
       {items.length === 0 ? (
-        <div className="text-xs text-gray-400">Geen actieve items — importeer of voeg ze toe bij Organen.</div>
+        <div className="text-xs text-muted">Geen actieve items — importeer of voeg ze toe bij Organen.</div>
       ) : (
         <div className="space-y-1">
           {items.map((o) => {
             const gekoppeld = gekoppeldeIds.includes(o.id);
             return (
-              <label key={o.id} className="flex items-center gap-2 text-sm text-gray-700">
+              <label key={o.id} className="flex items-center gap-2 text-sm text-ink">
                 <input
                   type="checkbox"
                   checked={gekoppeld}
@@ -808,7 +808,7 @@ function KoppelPanel({
   );
 
   return (
-    <div className="grid grid-cols-1 gap-5 border-t border-gray-100 p-4 md:grid-cols-3">
+    <div className="grid grid-cols-1 gap-5 border-t border-line p-4 md:grid-cols-3">
       {blok("Gremia", gremia, koppelingen.gremia, "gremium")}
       {blok("Expertises", expertises, koppelingen.expertises, "expertise")}
       {blok("Focusgebieden", focus, koppelingen.focusgebieden, "focusgebied")}
@@ -888,22 +888,22 @@ function OrgaanSectie({
   return (
     <div>
       <h2 className="text-lg font-semibold text-ink mb-3">{titel}</h2>
-      <div className="rounded-xl border border-gray-200 bg-white p-4 mb-3 flex flex-wrap items-end gap-3">
+      <div className="rounded-xl border border-line bg-white p-4 mb-3 flex flex-wrap items-end gap-3">
         <div className="flex-1 min-w-[180px]">
-          <label className="block text-xs font-medium text-gray-500 mb-1">Naam</label>
+          <label className="block text-xs font-medium text-muted mb-1">Naam</label>
           <input
             value={naam}
             onChange={(e) => setNaam(e.target.value)}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            className="w-full rounded-lg border border-app-line-strong px-3 py-2 text-sm"
           />
         </div>
         {metType && (
           <div className="min-w-[160px]">
-            <label className="block text-xs font-medium text-gray-500 mb-1">Categorie</label>
+            <label className="block text-xs font-medium text-muted mb-1">Categorie</label>
             <select
               value={categorie}
               onChange={(e) => setCategorie(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-app-line-strong px-3 py-2 text-sm"
             >
               {GREMIA_CATEGORIEEN.map((c) => (
                 <option key={c} value={c}>
@@ -915,11 +915,11 @@ function OrgaanSectie({
         )}
         {metType && (
           <div className="min-w-[160px]">
-            <label className="block text-xs font-medium text-gray-500 mb-1">Type</label>
+            <label className="block text-xs font-medium text-muted mb-1">Type</label>
             <select
               value={type}
               onChange={(e) => setType(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm capitalize"
+              className="w-full rounded-lg border border-app-line-strong px-3 py-2 text-sm capitalize"
             >
               {GREMIA_TYPES.map((t) => (
                 <option key={t} value={t}>
@@ -938,7 +938,7 @@ function OrgaanSectie({
       </div>
 
       {fondsItems.length === 0 ? (
-        <div className="text-gray-400 text-sm mb-2">
+        <div className="text-muted text-sm mb-2">
           Nog geen fonds-specifieke items. Importeer de standaardset of voeg er een toe.
         </div>
       ) : (
@@ -946,7 +946,7 @@ function OrgaanSectie({
           {fondsItems.map((o) => (
             <div
               key={o.id}
-              className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-2.5"
+              className="flex items-center gap-3 rounded-lg border border-line bg-white px-4 py-2.5"
             >
               <div className="flex-1">
                 <span className="text-sm text-ink">{o.naam}</span>
@@ -956,19 +956,19 @@ function OrgaanSectie({
                   </span>
                 )}
                 {metType && o.type && (
-                  <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-xs capitalize text-gray-500">
+                  <span className="ml-2 rounded bg-app-bg px-1.5 py-0.5 text-xs capitalize text-muted">
                     {o.type}
                   </span>
                 )}
                 {!o.actief && (
-                  <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
+                  <span className="ml-2 rounded bg-app-bg px-1.5 py-0.5 text-xs text-muted">
                     inactief
                   </span>
                 )}
               </div>
               <button
                 onClick={() => toggleActief(o)}
-                className="rounded-lg border border-gray-300 px-3 py-1 text-sm text-gray-700 hover:bg-gray-50"
+                className="rounded-lg border border-app-line-strong px-3 py-1 text-sm text-ink hover:bg-app-bg"
               >
                 {o.actief ? "Deactiveren" : "Activeren"}
               </button>
@@ -978,11 +978,11 @@ function OrgaanSectie({
       )}
 
       {templates.length > 0 && (
-        <details className="text-sm text-gray-500">
+        <details className="text-sm text-muted">
           <summary className="cursor-pointer">Globale templates ({templates.length})</summary>
           <div className="mt-2 flex flex-wrap gap-1.5">
             {templates.map((t) => (
-              <span key={t.id} className="rounded-full bg-gray-100 px-2.5 py-1 text-xs text-gray-600">
+              <span key={t.id} className="rounded-full bg-app-bg px-2.5 py-1 text-xs text-muted">
                 {t.naam}
               </span>
             ))}

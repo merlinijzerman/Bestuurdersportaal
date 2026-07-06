@@ -44,7 +44,7 @@ export default function RisicoActies({ risicoId }: Props) {
       <div className="flex items-center gap-2">
         <button
           onClick={() => setToonSluiten(true)}
-          className="px-3 py-2 text-sm border border-gray-200 rounded-lg hover:border-red-400 text-red-600"
+          className="px-3 py-2 text-sm border border-line rounded-lg hover:border-err/30 text-err-ink"
         >
           Risico sluiten
         </button>
@@ -53,11 +53,11 @@ export default function RisicoActies({ risicoId }: Props) {
   }
 
   return (
-    <div className="bg-white border border-red-200 rounded-xl p-4 max-w-md">
+    <div className="bg-white border border-err/30 rounded-xl p-4 max-w-md">
       <div className="text-sm font-semibold text-ink mb-1">
         Risico sluiten
       </div>
-      <div className="text-xs text-gray-600 mb-3">
+      <div className="text-xs text-muted mb-3">
         Geef een korte motivering. Het risico verhuist naar het archief en
         blijft daar onbeperkt raadpleegbaar.
       </div>
@@ -66,10 +66,10 @@ export default function RisicoActies({ risicoId }: Props) {
         value={motivering}
         onChange={(e) => setMotivering(e.target.value)}
         placeholder="Bijv.: Maatregelen geïmplementeerd, restrisico binnen tolerantie."
-        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-accent outline-none resize-none"
+        className="w-full border border-line rounded-lg px-3 py-2 text-sm focus:border-accent outline-none resize-none"
       />
       {fout && (
-        <div className="text-xs text-red-700 mt-2">{fout}</div>
+        <div className="text-xs text-err-ink mt-2">{fout}</div>
       )}
       <div className="flex justify-end gap-2 mt-3">
         <button
@@ -78,14 +78,14 @@ export default function RisicoActies({ risicoId }: Props) {
             setFout(null);
             setMotivering("");
           }}
-          className="px-3 py-1.5 text-xs border border-gray-200 rounded hover:border-accent"
+          className="px-3 py-1.5 text-xs border border-line rounded hover:border-accent"
         >
           Annuleren
         </button>
         <button
           onClick={risicoSluiten}
           disabled={bezig}
-          className="px-3 py-1.5 text-xs bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
+          className="px-3 py-1.5 text-xs bg-err text-white rounded hover:bg-err disabled:opacity-50"
         >
           {bezig ? "Bezig…" : "Bevestig sluiten"}
         </button>

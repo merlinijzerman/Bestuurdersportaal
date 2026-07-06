@@ -50,16 +50,16 @@ export default function VereistenStrook({
     <div
       className={`rounded-md border ${
         allesVoldaan
-          ? "border-emerald-200 bg-emerald-50/40"
-          : "border-amber-200 bg-amber-50/40"
+          ? "border-ok/30 bg-ok-tint"
+          : "border-warn/30 bg-warn-tint"
       } ${compact ? "p-2.5" : "p-3"}`}
     >
       {!compact && titel && (
         <div className="flex items-center justify-between mb-2">
-          <h4 className="text-xs uppercase tracking-wide text-gray-700 font-semibold">
+          <h4 className="text-xs uppercase tracking-wide text-ink font-semibold">
             {titel}
           </h4>
-          <span className="text-[11px] text-gray-600">
+          <span className="text-[11px] text-muted">
             {voldoetAantal} van {vereisten.length} voldaan
           </span>
         </div>
@@ -74,10 +74,10 @@ export default function VereistenStrook({
               aria-hidden
               className={`flex-shrink-0 mt-0.5 inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold ${
                 v.voldaan
-                  ? "bg-emerald-500 text-white"
+                  ? "bg-ok text-white"
                   : v.blokkerend === false
-                    ? "bg-gray-300 text-white"
-                    : "bg-rose-500 text-white"
+                    ? "bg-app-line text-white"
+                    : "bg-err text-white"
               }`}
             >
               {v.voldaan ? "✓" : "×"}
@@ -86,14 +86,14 @@ export default function VereistenStrook({
               <span
                 className={
                   v.voldaan
-                    ? "text-gray-700"
-                    : "text-gray-900 font-medium"
+                    ? "text-ink"
+                    : "text-ink font-medium"
                 }
               >
                 {v.label}
               </span>
               {v.hint && (
-                <span className="text-gray-600 ml-1">— {v.hint}</span>
+                <span className="text-muted ml-1">— {v.hint}</span>
               )}
             </div>
           </li>
