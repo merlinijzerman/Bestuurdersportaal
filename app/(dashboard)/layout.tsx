@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/lib/supabase-server";
 import Sidebar from "@/components/Sidebar";
-import TopBar from "@/components/TopBar";
 
 export default async function DashboardLayout({
   children,
@@ -50,11 +49,6 @@ export default async function DashboardLayout({
         fondsNaam={fondsNaam}
       />
       <main className="flex-1 ml-64 flex flex-col min-h-screen">
-        <TopBar
-          gebruikerNaam={profiel?.naam}
-          gebruikerRol={profiel?.rol}
-          fondsNaam={fondsNaam}
-        />
         {children}
       </main>
     </div>

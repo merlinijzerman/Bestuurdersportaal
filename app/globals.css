@@ -7,10 +7,6 @@
      (rgb(var(--x-rgb) / <alpha-value>) → opacity-modifiers werken) als de
      afgeleide --x kleur voor direct CSS/SVG-gebruik (fill="var(--accent)"). */
 
-  /* Legacy (verwijderen in fase 4; nergens meer gebruikt) */
-  --navy: #0F2744;
-  --gold: #C9A84C;
-
   /* Merk / basis (bron: public.css) */
   --paper-rgb: 246 243 236;   --paper: rgb(var(--paper-rgb));
   --ink-rgb: 25 24 21;        --ink: rgb(var(--ink-rgb));

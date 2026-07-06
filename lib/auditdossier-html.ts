@@ -659,7 +659,7 @@ export function renderAuditdossierHtml(
       padding: 12mm;
     }
     header {
-      border-bottom: 2px solid #0F2744;
+      border-bottom: 2px solid #234E70;
       padding-bottom: 8mm;
       margin-bottom: 8mm;
     }
@@ -668,16 +668,16 @@ export function renderAuditdossierHtml(
       font-size: 9pt;
       letter-spacing: 0.06em;
       text-transform: uppercase;
-      color: #0F2744;
-      background: #f3e8a4;
+      color: #234E70;
+      background: #eaeff4;
       padding: 2pt 6pt;
       border-radius: 3pt;
       margin-bottom: 4pt;
     }
-    h1 { font-size: 18pt; margin: 0 0 2pt 0; color: #0F2744; }
+    h1 { font-size: 18pt; margin: 0 0 2pt 0; color: #234E70; }
     .besluit-code { font-family: "Menlo", "Courier New", monospace; font-size: 10pt; color: #6b7280; margin-bottom: 4pt; }
-    h2 { font-size: 14pt; margin: 0 0 8pt 0; color: #0F2744; font-weight: 600; }
-    h3 { font-size: 12pt; margin: 6mm 0 3mm 0; color: #0F2744; border-bottom: 1px solid #d1d5db; padding-bottom: 2pt; }
+    h2 { font-size: 14pt; margin: 0 0 8pt 0; color: #234E70; font-weight: 600; }
+    h3 { font-size: 12pt; margin: 6mm 0 3mm 0; color: #234E70; border-bottom: 1px solid #d1d5db; padding-bottom: 2pt; }
     section { page-break-inside: avoid; margin-bottom: 6mm; }
     .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4pt 12pt; font-size: 10pt; }
     .meta-item .label { display: block; font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; font-weight: 600; }
@@ -687,7 +687,7 @@ export function renderAuditdossierHtml(
     pre { font-family: inherit; white-space: pre-wrap; margin: 0; }
     table { width: 100%; border-collapse: collapse; font-size: 10pt; margin-top: 2pt; }
     th, td { text-align: left; vertical-align: top; padding: 4pt 6pt; border-bottom: 1px solid #e5e7eb; }
-    th { background: #f9fafb; color: #0F2744; font-weight: 600; font-size: 9.5pt; text-transform: uppercase; letter-spacing: 0.04em; }
+    th { background: #f9fafb; color: #234E70; font-weight: 600; font-size: 9.5pt; text-transform: uppercase; letter-spacing: 0.04em; }
     td pre { margin: 0; }
     table.classificatie th { width: 40mm; }
     table.classificatie td { font-weight: 500; }
@@ -713,15 +713,15 @@ export function renderAuditdossierHtml(
     .prompt, .output { font-size: 10pt; margin: 3pt 0; }
     .bronnen { font-size: 9.5pt; margin-top: 3pt; }
     .bronnen ul { margin: 1pt 0; padding-left: 16pt; }
-    .besluit-blok { border-left: 3pt solid #0F2744; padding: 4pt 10pt; margin-bottom: 6pt; background: #f8fafc; page-break-inside: avoid; }
+    .besluit-blok { border-left: 3pt solid #234E70; padding: 4pt 10pt; margin-bottom: 6pt; background: #f8fafc; page-break-inside: avoid; }
     .besluit-header { font-size: 9pt; color: #4b5563; margin-bottom: 3pt; }
     .besluit-header .badge { display: inline-block; padding: 1pt 4pt; background: #fff; border: 1px solid #d1d5db; border-radius: 2pt; margin-right: 4pt; font-size: 8.5pt; }
     .besluit-header .datum { color: #6b7280; margin-right: 6pt; }
     .besluit-header .auteur { font-weight: 600; color: #374151; }
-    .besluit-formulering { font-weight: 600; font-size: 11pt; color: #0F2744; margin: 3pt 0; }
+    .besluit-formulering { font-weight: 600; font-size: 11pt; color: #234E70; margin: 3pt 0; }
     .besluit-formulering pre { font-weight: 600; }
     .bewijs-blok { margin-bottom: 4mm; page-break-inside: avoid; }
-    .bewijs-stap-titel { font-size: 10.5pt; margin: 3pt 0 2pt 0; color: #0F2744; font-weight: 600; }
+    .bewijs-stap-titel { font-size: 10.5pt; margin: 3pt 0 2pt 0; color: #234E70; font-weight: 600; }
     .bewijs-blok .lijst { font-size: 9.5pt; }
     .alternatieven { font-size: 9.5pt; color: #4b5563; margin-top: 4pt; }
     .alternatieven ul { margin: 1pt 0; padding-left: 16pt; }

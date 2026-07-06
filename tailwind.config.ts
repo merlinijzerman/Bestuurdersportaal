@@ -9,15 +9,6 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Legacy (nergens meer als benoemde class gebruikt; verwijderen in fase 4)
-        navy: {
-          DEFAULT: "#0F2744",
-          light: "#1A3A5C",
-        },
-        gold: {
-          DEFAULT: "#C9A84C",
-          light: "#E8D090",
-        },
         // Semantische tokenlaag — bron van waarheid in app/globals.css.
         // RGB-channel patroon zodat Tailwind opacity-modifiers (bg-accent/15,
         // ring-accent/40) correct renderen. Losse --x kleuren blijven bestaan

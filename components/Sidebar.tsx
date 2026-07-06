@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase";
 
 type NavItem = {
   href: string;
@@ -32,8 +33,29 @@ interface SidebarProps {
   fondsNaam?: string;
 }
 
-export default function Sidebar({ gebruikerRol, fondsNaam }: SidebarProps) {
+export default function Sidebar({ gebruikerNaam, gebruikerRol, fondsNaam }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
+  const supabase = createClient();
+
+  async function uitloggen() {
+    await supabase.auth.signOut();
+    router.push("/login");
+    router.refresh();
+  }
+
+  const initials = gebruikerNaam
+    ?.split(" ")
+    .map((n) => n[0])
+    .join("")
+    .substring(0, 2)
+    .toUpperCase() || "??";
+
+  const rolLabel: Record<string, string> = {
+    voorzitter: "Voorzitter bestuur",
+    bestuurder: "Bestuurslid",
+    beheerder: "Beheerder",
+  };
 
   let huidigSection = "";
 
@@ -49,6 +71,30 @@ export default function Sidebar({ gebruikerRol, fondsNaam }: SidebarProps) {
         </div>
         <div className="text-nav-text text-xs mt-0.5">Bestuurdersportaal MVP</div>
       </div>
+
+      {/* Gebruiker — klik opent het eigen profiel (geen los nav-item meer) */}
+      <Link
+        href="/profiel"
+        title="Mijn profiel openen"
+        className={`px-5 py-3 border-b border-nav-line flex items-center gap-2.5 transition-colors ${
+          pathname === "/profiel" ? "bg-nav-active" : "hover:bg-nav-line/40"
+        }`}
+      >
+        <div className="w-8 h-8 bg-nav-accent rounded-full flex items-center justify-center font-bold text-xs text-white flex-shrink-0">
+          {initials}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-xs font-semibold truncate text-nav-text-active">
+            {gebruikerNaam || "Bestuurslid"}
+          </div>
+          <div className="text-nav-text text-xs">
+            {rolLabel[gebruikerRol || "bestuurder"] || "Bestuurslid"}
+          </div>
+        </div>
+        <span aria-hidden className="text-nav-text/60 text-xs flex-shrink-0">
+          ›
+        </span>
+      </Link>
 
       {/* Navigatie */}
       <div className="flex-1 py-3 overflow-y-auto">
@@ -99,6 +145,20 @@ export default function Sidebar({ gebruikerRol, fondsNaam }: SidebarProps) {
             </div>
           );
         })}
+      </div>
+
+      {/* Footer */}
+      <div className="px-5 py-4 border-t border-nav-line space-y-2">
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 bg-ok rounded-full pulse-dot"></span>
+          <span className="text-nav-text text-xs">Beheerde AI-omgeving actief</span>
+        </div>
+        <button
+          onClick={uitloggen}
+          className="text-nav-text text-xs hover:text-nav-text-active transition-colors"
+        >
+          Uitloggen →
+        </button>
       </div>
     </nav>
   );

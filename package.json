@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "lint:colors": "node scripts/check-brand-hex.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
