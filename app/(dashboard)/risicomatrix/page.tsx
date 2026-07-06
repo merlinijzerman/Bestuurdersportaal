@@ -57,7 +57,7 @@ export default async function RisicomatrixPage() {
   };
 
   return (
-    <div className="p-7 space-y-6">
+    <div className="p-4 sm:p-6 lg:p-7 space-y-6">
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
           <h1 className="font-serif text-ink text-xl font-bold">Risicomatrix</h1>
@@ -84,7 +84,7 @@ export default async function RisicomatrixPage() {
 
       <div className="grid grid-cols-12 gap-5">
         <div className="col-span-12 lg:col-span-8 bg-white border border-gray-200 rounded-xl p-5">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
             <div>
               <h2 className="text-sm font-semibold text-ink">
                 Kans &times; Impact heatmap
@@ -163,7 +163,7 @@ export default async function RisicomatrixPage() {
           const inCat = lijst.filter((r) => r.categorie === cat.slug);
           return (
             <section key={cat.slug}>
-              <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
                 <h2 className="text-sm font-semibold text-ink uppercase tracking-wide">
                   {cat.label}
                 </h2>

@@ -31,14 +31,25 @@ interface SidebarProps {
   gebruikerNaam?: string;
   gebruikerRol?: string;
   fondsNaam?: string;
+  /** Drawer open (mobiel). Op desktop (md+) altijd zichtbaar, ongeacht deze waarde. */
+  open?: boolean;
+  /** Aangeroepen bij navigatie/uitloggen zodat de mobiele drawer sluit. */
+  onNavigate?: () => void;
 }
 
-export default function Sidebar({ gebruikerNaam, gebruikerRol, fondsNaam }: SidebarProps) {
+export default function Sidebar({
+  gebruikerNaam,
+  gebruikerRol,
+  fondsNaam,
+  open = false,
+  onNavigate,
+}: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClient();
 
   async function uitloggen() {
+    onNavigate?.();
     await supabase.auth.signOut();
     router.push("/login");
     router.refresh();
@@ -60,7 +71,11 @@ export default function Sidebar({ gebruikerNaam, gebruikerRol, fondsNaam }: Side
   let huidigSection = "";
 
   return (
-    <nav className="w-64 h-screen bg-nav border-r border-nav-line flex flex-col fixed top-0 left-0 z-50">
+    <nav
+      className={`w-64 h-screen bg-nav border-r border-nav-line flex flex-col fixed top-0 left-0 z-50 transition-transform duration-200 ease-out md:translate-x-0 ${
+        open ? "translate-x-0" : "-translate-x-full"
+      }`}
+    >
       {/* Logo */}
       <div className="px-5 py-6 border-b border-nav-line">
         <div className="w-10 h-10 bg-nav-accent rounded-xl flex items-center justify-center font-black text-lg text-white mb-3">
@@ -76,6 +91,7 @@ export default function Sidebar({ gebruikerNaam, gebruikerRol, fondsNaam }: Side
       <Link
         href="/profiel"
         title="Mijn profiel openen"
+        onClick={onNavigate}
         className={`px-5 py-3 border-b border-nav-line flex items-center gap-2.5 transition-colors ${
           pathname === "/profiel" ? "bg-nav-active" : "hover:bg-nav-line/40"
         }`}
@@ -118,6 +134,7 @@ export default function Sidebar({ gebruikerNaam, gebruikerRol, fondsNaam }: Side
               )}
               <Link
                 href={item.href}
+                onClick={onNavigate}
                 className={`flex items-center gap-2.5 px-5 py-2.5 text-sm border-l-[3px] transition-all ${
                   actief
                     ? "bg-nav-active text-nav-text-active border-nav-accent font-medium"

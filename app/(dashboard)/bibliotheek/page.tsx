@@ -241,8 +241,8 @@ export default function BibliotheekPage() {
   }
 
   return (
-    <div className="p-7">
-      <div className="flex items-start justify-between mb-6">
+    <div className="p-4 sm:p-6 lg:p-7">
+      <div className="flex items-start justify-between flex-wrap gap-3 mb-6">
         <div>
           <h1 className="font-serif text-xl font-black text-ink">Documentbibliotheek</h1>
           <p className="text-sm text-gray-500 mt-1">
@@ -283,7 +283,7 @@ export default function BibliotheekPage() {
 
       {/* Increment C — review-banner: nog niet verrijkte documenten */}
       {aantalTeVerrijken > 0 && (
-        <div className="mb-4 flex items-center justify-between gap-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+        <div className="mb-4 flex items-center justify-between flex-wrap gap-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
           <div className="text-sm text-amber-800">
             <span className="font-semibold">{aantalTeVerrijken}</span>{" "}
             {aantalTeVerrijken === 1 ? "document is" : "documenten zijn"} nog niet
@@ -668,7 +668,7 @@ export default function BibliotheekPage() {
       {uploadOpen && (
         <div className="fixed inset-0 bg-accent/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl p-7 w-full max-w-md shadow-xl">
-            <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center justify-between flex-wrap gap-2 mb-5">
               <h2 className="text-lg font-bold text-ink">Document uploaden</h2>
               <button
                 onClick={() => setUploadOpen(false)}

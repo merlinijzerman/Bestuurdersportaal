@@ -277,7 +277,7 @@ export default async function HomePage() {
   }
 
   return (
-    <div className="p-7 space-y-5">
+    <div className="p-4 sm:p-6 lg:p-7 space-y-5">
       {/* Persoonlijke welkomst */}
       <div className="bg-white border border-gray-200 rounded-xl p-5">
         <div className="flex items-end justify-between flex-wrap gap-3">
@@ -344,7 +344,7 @@ export default async function HomePage() {
       {/* Mijn open procedure-stappen */}
       {openStappen.length > 0 && (
         <div className="bg-white border border-gray-200 rounded-xl p-5">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
             <div className="font-semibold text-ink text-sm">
               Uw open procedure-stappen
             </div>

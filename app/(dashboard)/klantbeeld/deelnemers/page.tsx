@@ -13,7 +13,7 @@ export default async function DeelnemersOntwikkelingPage({ searchParams }: Props
   const safeAge = Number.isFinite(initialAge) && initialAge >= 18 && initialAge <= 68 ? initialAge : 45;
 
   return (
-    <div className="p-7">
+    <div className="p-4 sm:p-6 lg:p-7">
       <KlantbeeldHeader />
       <div className="space-y-6">
         <DeelnemersSubTabs />

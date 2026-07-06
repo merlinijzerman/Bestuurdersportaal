@@ -244,7 +244,7 @@ export default async function VergaderingDetailPage({
   const badge = STATUS_BADGE[v.status] || STATUS_BADGE.in_voorbereiding;
 
   return (
-    <div className="p-7 space-y-5">
+    <div className="p-4 sm:p-6 lg:p-7 space-y-5">
       <div className="flex items-center gap-2 text-xs text-gray-500">
         <Link href="/vergaderingen" className="hover:text-ink">
           Vergaderingen

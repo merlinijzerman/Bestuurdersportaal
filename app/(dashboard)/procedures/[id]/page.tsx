@@ -331,7 +331,7 @@ export default async function ProcedureDetailPage({
   }
 
   return (
-    <div className="p-7 space-y-6">
+    <div className="p-4 sm:p-6 lg:p-7 space-y-6">
       <Link
         href="/procedures"
         className="text-sm text-gray-500 hover:text-ink inline-flex items-center gap-1"
@@ -391,7 +391,7 @@ export default async function ProcedureDetailPage({
             </span>
           )}
         </div>
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start justify-between flex-wrap gap-3">
           <h1 className="font-serif text-ink text-2xl font-semibold">
             {procedure.titel}
           </h1>

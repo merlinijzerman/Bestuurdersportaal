@@ -830,7 +830,7 @@ function StemStartenModal({
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label className="block">
             <span className="text-[11px] font-semibold text-gray-600 uppercase tracking-wide">
               Quorum (optioneel)

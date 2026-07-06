@@ -3,7 +3,7 @@ import NieuwRisicoForm from "../_components/NieuwRisicoForm";
 
 export default function NieuwRisicoPage() {
   return (
-    <div className="p-7 max-w-3xl">
+    <div className="p-4 sm:p-6 lg:p-7 max-w-3xl">
       <Link
         href="/risicomatrix"
         className="text-sm text-gray-500 hover:text-ink inline-flex items-center gap-1"

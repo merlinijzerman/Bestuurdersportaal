@@ -39,7 +39,7 @@ export default function MaandOntwikkelingClient({ cohorten, initialAge = 45 }: P
       {/* Cohortkiezer */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <div className="flex items-start justify-between gap-6 flex-wrap">
-          <div className="flex-1 min-w-[300px]">
+          <div className="flex-1 min-w-0 sm:min-w-[300px]">
             <div className="text-xs uppercase tracking-wider text-gray-500 mb-1">Geselecteerd cohort</div>
             <div className="flex items-baseline gap-2">
               <span className="text-3xl font-semibold text-ink">{cohort.age}-jarigen</span>
@@ -75,7 +75,7 @@ export default function MaandOntwikkelingClient({ cohorten, initialAge = 45 }: P
               </div>
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-x-6 gap-y-3 text-sm flex-shrink-0">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 sm:gap-x-6 gap-y-3 text-sm flex-shrink-0">
             <Stat label="Aantal deelnemers" value={cohort.aantal.toLocaleString("nl-NL")} />
             <Stat
               label="Mix actief / slapend / uitkerend"

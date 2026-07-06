@@ -24,7 +24,7 @@ export default function WerkgeversPage() {
   const cumulatiefSalaris = indexReeks[indexReeks.length - 1] - 100;
 
   return (
-    <div className="p-7">
+    <div className="p-4 sm:p-6 lg:p-7">
       <KlantbeeldHeader />
 
       {/* KPI-strook */}

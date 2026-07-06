@@ -29,7 +29,7 @@ export default function CohortenPage() {
   const yTicks = [0, maxV * 0.25, maxV * 0.5, maxV * 0.75, maxV];
 
   return (
-    <div className="p-7">
+    <div className="p-4 sm:p-6 lg:p-7">
       <KlantbeeldHeader />
       <div className="space-y-6">
         <DeelnemersSubTabs />

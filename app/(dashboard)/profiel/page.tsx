@@ -221,14 +221,14 @@ export default function ProfielPage() {
   }
 
   if (laden) {
-    return <div className="p-7 text-sm text-gray-500">Profiel laden…</div>;
+    return <div className="p-4 sm:p-6 lg:p-7 text-sm text-gray-500">Profiel laden…</div>;
   }
 
   const geenCatalogus =
     expertises.length === 0 && gremia.length === 0 && focusgebieden.length === 0;
 
   return (
-    <div className="p-7 max-w-3xl">
+    <div className="p-4 sm:p-6 lg:p-7 max-w-3xl">
       <div className="mb-6">
         <h1 className="font-serif text-xl font-black text-ink">Mijn profiel</h1>
         <p className="text-sm text-gray-500 mt-1">

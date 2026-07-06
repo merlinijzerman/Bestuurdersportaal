@@ -116,7 +116,7 @@ export default async function RisicoDetailPage({
   const isGesloten = risico.status === "gesloten";
 
   return (
-    <div className="p-7 space-y-6">
+    <div className="p-4 sm:p-6 lg:p-7 space-y-6">
       <Link
         href="/risicomatrix"
         className="text-sm text-gray-500 hover:text-ink inline-flex items-center gap-1"
@@ -238,7 +238,7 @@ export default async function RisicoDetailPage({
 
       {isGesloten && (
         <div className="bg-gray-50 border border-gray-200 rounded-xl p-5">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <div>
               <div className="text-xs uppercase tracking-wide text-gray-500 font-semibold">
                 Gesloten
@@ -270,7 +270,7 @@ export default async function RisicoDetailPage({
 
           {/* Logboek */}
           <div className="bg-white border border-gray-200 rounded-xl p-5">
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
               <h3 className="text-sm font-semibold text-ink">Logboek</h3>
               <span className="text-xs text-gray-500">
                 Append-only · {(log || []).length} events

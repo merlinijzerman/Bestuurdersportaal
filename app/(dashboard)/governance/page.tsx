@@ -35,7 +35,7 @@ export default async function GovernancePage() {
   // daarnaast de fonds-isolatie. NB: alleen-tonen-blokkade, geen mutatie.
   if (profiel?.rol !== "beheerder") {
     return (
-      <div className="p-7 max-w-3xl">
+      <div className="p-4 sm:p-6 lg:p-7 max-w-3xl">
         <div className="mb-6">
           <h1 className="font-serif text-xl font-black text-ink">Governance Log</h1>
         </div>
@@ -55,7 +55,7 @@ export default async function GovernancePage() {
     .limit(50);
 
   return (
-    <div className="p-7">
+    <div className="p-4 sm:p-6 lg:p-7">
       <div className="mb-6">
         <h1 className="font-serif text-xl font-black text-ink">Governance Log</h1>
         <p className="text-sm text-gray-500 mt-1">

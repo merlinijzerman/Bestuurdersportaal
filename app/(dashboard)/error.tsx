@@ -20,7 +20,7 @@ export default function DashboardError({
   }, [error]);
 
   return (
-    <div className="p-7">
+    <div className="p-4 sm:p-6 lg:p-7">
       <div className="max-w-xl mx-auto bg-white border border-gray-200 rounded-xl p-6 text-center">
         <div className="inline-flex items-center justify-center w-12 h-12 bg-amber-50 rounded-2xl mb-4">
           <span className="text-2xl">⚠️</span>

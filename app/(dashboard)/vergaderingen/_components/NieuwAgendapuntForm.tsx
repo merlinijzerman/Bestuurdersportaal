@@ -89,7 +89,7 @@ export default function NieuwAgendapuntForm({ vergaderingId }: { vergaderingId: 
             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 outline-none focus:border-accent"
           />
         </div>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
             <label className="text-xs text-gray-500 block mb-1">Categorie</label>
             <select

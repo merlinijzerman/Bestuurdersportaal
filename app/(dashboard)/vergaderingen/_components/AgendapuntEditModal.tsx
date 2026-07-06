@@ -195,7 +195,7 @@ export default function AgendapuntEditModal({
                 />
               </Veld>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Veld label="Categorie">
                   <select
                     value={categorie}

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/lib/supabase-server";
-import Sidebar from "@/components/Sidebar";
+import DashboardShell from "@/components/DashboardShell";
 
 export default async function DashboardLayout({
   children,
@@ -42,13 +42,13 @@ export default async function DashboardLayout({
   const fondsNaam = fondsenObj?.naam || process.env.NEXT_PUBLIC_FONDS_NAAM;
 
   return (
-    <div className="flex min-h-screen">
-      <Sidebar
+    <div className="min-h-screen">
+      <DashboardShell
         gebruikerNaam={profiel?.naam}
         gebruikerRol={profiel?.rol}
         fondsNaam={fondsNaam}
       />
-      <main className="flex-1 ml-64 flex flex-col min-h-screen">
+      <main className="md:ml-64 flex flex-col min-h-screen pt-14 md:pt-0">
         {children}
       </main>
     </div>

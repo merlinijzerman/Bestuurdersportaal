@@ -155,7 +155,7 @@ export default async function DashboardPage() {
   const targetPath = buildPath(Array(TREND_FG.length).fill(100), trendW, trendH, yMin, yMax);
 
   return (
-    <div className="p-7 space-y-5">
+    <div className="p-4 sm:p-6 lg:p-7 space-y-5">
       {/* Header */}
       <div className="flex items-end justify-between flex-wrap gap-2">
         <div>

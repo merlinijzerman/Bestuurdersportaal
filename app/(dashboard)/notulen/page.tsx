@@ -44,8 +44,8 @@ export default async function NotulenPage() {
   }
 
   return (
-    <div className="p-7">
-      <div className="flex items-start justify-between mb-6">
+    <div className="p-4 sm:p-6 lg:p-7">
+      <div className="flex items-start justify-between flex-wrap gap-3 mb-6">
         <div>
           <h1 className="font-serif text-xl font-black text-ink">Notulen</h1>
           <p className="text-sm text-gray-500 mt-1">

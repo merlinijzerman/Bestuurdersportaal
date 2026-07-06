@@ -376,15 +376,15 @@ export default function GeneriekeBibliotheekClient({
           }}
           className="space-y-4 rounded-xl border border-line bg-white p-5"
         >
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="min-w-0 text-lg font-semibold">
               {modus.soort === "aanmaken"
                 ? "Nieuw generiek document"
                 : modus.soort === "bewerken"
                   ? `Bewerken — ${modus.doc.titel}`
                   : `Vervangen — ${modus.doc.titel}`}
             </h2>
-            <button type="button" onClick={sluit} className="text-sm text-ink/60 hover:underline">
+            <button type="button" onClick={sluit} className="shrink-0 text-sm text-ink/60 hover:underline">
               Annuleren
             </button>
           </div>
