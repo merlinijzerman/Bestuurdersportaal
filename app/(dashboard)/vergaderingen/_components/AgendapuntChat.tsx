@@ -14,8 +14,21 @@
 //   "Onderbouwing en bronnen"-blok per antwoord (herleidbaarheid).
 // De marker-rendering is geconsolideerd in de gedeelde component CitatieTekst
 // (was hier eerst een eigen renderer — geaccepteerde schuld ADR 0036, opgelost).
+// - Sinds 06-07 (herziening FO duiding): "Genereer voorbereiding" plaatst de
+//   AI-voorbereiding als eerste beurt in DIT gesprek. VoorbereidingsBlok roept
+//   daarvoor genereerVoorbereiding() aan via een ref; de voorbereiding-route
+//   levert { tekst, bronnen } in dezelfde vorm als de chat, zodat pills en
+//   onderbouwing identiek renderen. Het gebruikersbericht gaat vóór het
+//   AI-antwoord het gesprek in, zodat de init-logica (welkomstbericht-slice)
+//   het antwoord niet wegsnijdt.
 
-import { useState, useRef, useEffect } from "react";
+import {
+  useState,
+  useRef,
+  useEffect,
+  forwardRef,
+  useImperativeHandle,
+} from "react";
 import { createClient } from "@/lib/supabase";
 import type { InlineMelding } from "@/lib/vraagtype";
 import CitatieTekst from "./CitatieTekst";
@@ -54,15 +67,24 @@ const STARTVRAGEN = [
   "Wat betekent dit voorstel voor de deelnemers?",
 ];
 
-export default function AgendapuntChat({
-  agendapuntId,
-  titel,
-  stukken,
-}: {
-  agendapuntId: string;
-  titel: string;
-  stukken: { id: string; titel: string }[];
-}) {
+// Het gebruikersbericht dat de voorbereiding in het gesprek opent. Bewust een
+// gewone gebruiker-beurt: zo overleeft het AI-antwoord de welkomst-slice bij
+// init en leest het gesprek terug als een natuurlijke dialoog.
+const VOORBEREIDING_VRAAG = "Stel mijn voorbereiding op voor dit agendapunt.";
+
+export interface AgendapuntChatHandle {
+  /** Opent de chat en plaatst de AI-voorbereiding als eerste/volgende beurt. */
+  genereerVoorbereiding: () => Promise<void>;
+}
+
+const AgendapuntChat = forwardRef<
+  AgendapuntChatHandle,
+  {
+    agendapuntId: string;
+    titel: string;
+    stukken: { id: string; titel: string }[];
+  }
+>(function AgendapuntChat({ agendapuntId, titel, stukken }, ref) {
   const [open, setOpen] = useState(false);
   const [berichten, setBerichten] = useState<Bericht[]>([]);
   const [invoer, setInvoer] = useState("");
@@ -79,48 +101,116 @@ export default function AgendapuntChat({
   const userIdRef = useRef<string | null>(null);
   const gesprekId = useRef<string | null>(null);
   const eindRef = useRef<HTMLDivElement>(null);
+  // Spiegel van `berichten` voor imperatieve callers (genereerVoorbereiding):
+  // die lopen buiten de render-cyclus en mogen niet op een verouderde state-
+  // closure bouwen.
+  const berichtenRef = useRef<Bericht[]>([]);
+  const initPromise = useRef<Promise<void> | null>(null);
   const supabase = createClient();
 
-  // Init bij eerste keer openen: profiel (fonds_id) + eventueel eerder gesprek
-  // over dit agendapunt (meest recente, niet gearchiveerd). Best-effort.
+  useEffect(() => {
+    berichtenRef.current = berichten;
+  }, [berichten]);
+
+  // Init: profiel (fonds_id) + eventueel eerder gesprek over dit agendapunt
+  // (meest recente, niet gearchiveerd). Best-effort; als promise zodat ook
+  // genereerVoorbereiding() erop kan wachten vóór hij berichten toevoegt.
+  function zorgInit(): Promise<void> {
+    if (!initPromise.current) {
+      initPromise.current = (async () => {
+        try {
+          const {
+            data: { user },
+          } = await supabase.auth.getUser();
+          if (!user) return;
+          userIdRef.current = user.id;
+          const { data: profiel } = await supabase
+            .from("profielen")
+            .select("fonds_id")
+            .eq("id", user.id)
+            .single();
+          if (profiel?.fonds_id) fondsIdRef.current = profiel.fonds_id as string;
+
+          const { data: bestaand } = await supabase
+            .from("gesprekken")
+            .select("id, berichten")
+            .eq("gebruiker_id", user.id)
+            .eq("gearchiveerd", false)
+            .eq("document_scope->agendapunt_context->>id", agendapuntId)
+            .order("bijgewerkt", { ascending: false })
+            .limit(1);
+          const item = bestaand?.[0];
+          if (item && Array.isArray(item.berichten) && item.berichten.length > 0) {
+            gesprekId.current = item.id as string;
+            // Welkomstbericht van de AI-pagina (index 0, rol ai) is puur UI.
+            const b = item.berichten as Bericht[];
+            const zonderWelkomst =
+              b.length > 0 && b[0].rol === "ai" ? b.slice(1) : b;
+            berichtenRef.current = zonderWelkomst;
+            setBerichten(zonderWelkomst);
+          }
+        } catch (e) {
+          console.error("AgendapuntChat init mislukt:", e);
+        } finally {
+          setInitGedaan(true);
+        }
+      })();
+    }
+    return initPromise.current;
+  }
+
   useEffect(() => {
     if (!open || initGedaan) return;
-    (async () => {
-      try {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        if (!user) return;
-        userIdRef.current = user.id;
-        const { data: profiel } = await supabase
-          .from("profielen")
-          .select("fonds_id")
-          .eq("id", user.id)
-          .single();
-        if (profiel?.fonds_id) fondsIdRef.current = profiel.fonds_id as string;
+    zorgInit();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, initGedaan, agendapuntId]);
 
-        const { data: bestaand } = await supabase
-          .from("gesprekken")
-          .select("id, berichten")
-          .eq("gebruiker_id", user.id)
-          .eq("gearchiveerd", false)
-          .eq("document_scope->agendapunt_context->>id", agendapuntId)
-          .order("bijgewerkt", { ascending: false })
-          .limit(1);
-        const item = bestaand?.[0];
-        if (item && Array.isArray(item.berichten) && item.berichten.length > 0) {
-          gesprekId.current = item.id as string;
-          // Welkomstbericht van de AI-pagina (index 0, rol ai) is puur UI.
-          const b = item.berichten as Bericht[];
-          setBerichten(b.length > 0 && b[0].rol === "ai" ? b.slice(1) : b);
-        }
-      } catch (e) {
-        console.error("AgendapuntChat init mislukt:", e);
+  // Imperatief instappunt voor VoorbereidingsBlok: "Genereer voorbereiding"
+  // opent de chat en plaatst vraag + AI-voorbereiding (met bronnen in dezelfde
+  // vorm als de chat-route) als beurten in dit gesprek.
+  useImperativeHandle(ref, () => ({
+    async genereerVoorbereiding() {
+      if (laden) return;
+      setOpen(true);
+      await zorgInit();
+      const conversatie: Bericht[] = [
+        ...berichtenRef.current,
+        { rol: "gebruiker", tekst: VOORBEREIDING_VRAAG },
+      ];
+      berichtenRef.current = conversatie;
+      setBerichten(conversatie);
+      setLaden(true);
+      setAntwoordGestart(false);
+      try {
+        const res = await fetch(`/api/agendapunten/${agendapuntId}/voorbereiding`, {
+          method: "POST",
+        });
+        const data = await res.json().catch(() => null);
+        const aiBericht: Bericht =
+          res.ok && data?.tekst
+            ? { rol: "ai", tekst: data.tekst, bronnen: data.bronnen }
+            : {
+                rol: "ai",
+                tekst:
+                  data?.error ||
+                  "De voorbereiding kon niet worden opgesteld. Probeer het opnieuw.",
+              };
+        const finale = [...conversatie, aiBericht];
+        berichtenRef.current = finale;
+        setBerichten(finale);
+        if (res.ok && data?.tekst) bewaarGesprek(finale);
+      } catch {
+        const finale: Bericht[] = [
+          ...conversatie,
+          { rol: "ai", tekst: "Verbindingsfout. Probeer het opnieuw." },
+        ];
+        berichtenRef.current = finale;
+        setBerichten(finale);
       } finally {
-        setInitGedaan(true);
+        setLaden(false);
       }
-    })();
-  }, [open, initGedaan, agendapuntId, supabase]);
+    },
+  }));
 
   useEffect(() => {
     if (laden) eindRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -519,8 +609,8 @@ export default function AgendapuntChat({
                 ))}
               </div>
               <div className="text-[11px] text-gray-500">
-                Voor de bestuurlijke duiding met bronnen: genereer de
-                voorbereiding hierboven. Deze chat is voor doorvragen.
+                Tip: &ldquo;Genereer voorbereiding&rdquo; hierboven opent dit
+                gesprek met een volledige voorbereiding, inclusief bronnen.
               </div>
             </div>
           )}
@@ -557,5 +647,7 @@ export default function AgendapuntChat({
       )}
     </div>
   );
-}
+});
+
+export default AgendapuntChat;
 

@@ -453,19 +453,15 @@ export default function AgendapuntKaart({
             </div>
           </div>
 
-          {/* Mijn voorbereiding (privé) — sinds 05-07 dé AI-plek van de kaart:
-              gestructureerde voorbereiding (duiding) én de inline chat (0036)
-              zitten in dit blok, zodat er één AI-ingang is per agendapunt. */}
+          {/* Mijn voorbereiding (privé) — dé AI-plek van de kaart: sinds 06-07
+              opent "Genereer voorbereiding" het geïntegreerde gesprek (0036)
+              met de AI-voorbereiding als eerste beurt; daarnaast alleen nog
+              het vrije aantekeningenveld. */}
           <VoorbereidingsBlok
             agendapuntId={punt.id}
             titel={punt.titel}
             stukken={punt.stukken.map((s) => ({ id: s.id, titel: s.titel }))}
             initieel={voorbereiding}
-            onVulInbreng={(tekst) =>
-              setInbrengTekst(
-                inbrengTekst ? `${inbrengTekst}\n\n${tekst}` : tekst
-              )
-            }
           />
 
           {/* Inbreng */}
