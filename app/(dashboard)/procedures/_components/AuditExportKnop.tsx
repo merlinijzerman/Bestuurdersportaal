@@ -94,7 +94,7 @@ export default function AuditExportKnop({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="text-xs font-medium text-[#0F2744] bg-white border border-gray-300 hover:bg-gray-50 px-3 py-1.5 rounded-md whitespace-nowrap"
+        className="text-xs font-medium text-ink bg-white border border-gray-300 hover:bg-gray-50 px-3 py-1.5 rounded-md whitespace-nowrap"
         aria-expanded={open}
         aria-haspopup="menu"
       >

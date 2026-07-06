@@ -53,7 +53,7 @@ export default function StapRequirementsPaneel({
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-[#0F2744]">
+        <h3 className="text-sm font-semibold text-ink">
           Vereisten voor deze stap
         </h3>
         {stapRequirements.length > 0 && (

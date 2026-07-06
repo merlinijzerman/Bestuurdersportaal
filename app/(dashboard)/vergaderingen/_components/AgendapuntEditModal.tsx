@@ -156,7 +156,7 @@ export default function AgendapuntEditModal({
           <>
             <div className="flex items-start justify-between gap-3">
               <div>
-                <div className="text-sm font-semibold text-[#0F2744]">
+                <div className="text-sm font-semibold text-ink">
                   Agendapunt bewerken
                 </div>
                 {aantalBijdragers > 0 && (
@@ -169,7 +169,7 @@ export default function AgendapuntEditModal({
               </div>
               <button
                 onClick={onClose}
-                className="text-gray-400 text-sm hover:text-[#0F2744]"
+                className="text-gray-400 text-sm hover:text-ink"
                 aria-label="Sluiten"
               >
                 ✕
@@ -291,14 +291,14 @@ export default function AgendapuntEditModal({
               <div className="flex items-center gap-2">
                 <button
                   onClick={onClose}
-                  className="text-xs text-gray-600 hover:text-[#0F2744] px-3 py-1.5"
+                  className="text-xs text-gray-600 hover:text-ink px-3 py-1.5"
                 >
                   Annuleren
                 </button>
                 <button
                   onClick={opslaan}
                   disabled={!heeftWijziging || !motiveringOk || bezig}
-                  className="bg-[#0F2744] text-white text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-[#1a3858] disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="bg-accent text-white text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-accent-ink disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {bezig ? "Opslaan…" : "Opslaan"}
                 </button>
@@ -316,7 +316,7 @@ export default function AgendapuntEditModal({
                   setToonVerwijderen(false);
                   setFout(null);
                 }}
-                className="text-gray-400 text-sm hover:text-[#0F2744]"
+                className="text-gray-400 text-sm hover:text-ink"
                 aria-label="Terug"
               >
                 ✕
@@ -362,7 +362,7 @@ export default function AgendapuntEditModal({
                   setToonVerwijderen(false);
                   setFout(null);
                 }}
-                className="text-xs text-gray-600 hover:text-[#0F2744] px-3 py-1.5"
+                className="text-xs text-gray-600 hover:text-ink px-3 py-1.5"
               >
                 Annuleren
               </button>

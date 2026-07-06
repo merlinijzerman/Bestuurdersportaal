@@ -42,7 +42,7 @@ export default function MaandOntwikkelingClient({ cohorten, initialAge = 45 }: P
           <div className="flex-1 min-w-[300px]">
             <div className="text-xs uppercase tracking-wider text-gray-500 mb-1">Geselecteerd cohort</div>
             <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-semibold text-[#0F2744]">{cohort.age}-jarigen</span>
+              <span className="text-3xl font-semibold text-ink">{cohort.age}-jarigen</span>
               <span className="text-sm text-gray-500">
                 geboren rond {2026 - cohort.age}
               </span>
@@ -57,7 +57,7 @@ export default function MaandOntwikkelingClient({ cohorten, initialAge = 45 }: P
                   setAge(parseInt(e.target.value, 10));
                   setMaandIdx(23);
                 }}
-                className="flex-1 max-w-md accent-[#0F2744]"
+                className="flex-1 max-w-md accent-accent"
               />
               <div className="flex gap-1 text-xs">
                 {PRESETS.map((p) => (
@@ -108,7 +108,7 @@ export default function MaandOntwikkelingClient({ cohorten, initialAge = 45 }: P
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <div className="flex items-start justify-between mb-4 flex-wrap gap-2">
           <div>
-            <h2 className="text-lg font-semibold text-[#0F2744]">
+            <h2 className="text-lg font-semibold text-ink">
               Ontwikkeling persoonlijk pensioenvermogen — laatste 24 maanden
             </h2>
             <p className="text-sm text-gray-600 mt-1">
@@ -140,13 +140,13 @@ export default function MaandOntwikkelingClient({ cohorten, initialAge = 45 }: P
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-6">
           <div className="flex items-baseline justify-between">
-            <h3 className="text-sm font-semibold text-[#0F2744] uppercase tracking-wider">Maand-detail</h3>
+            <h3 className="text-sm font-semibold text-ink uppercase tracking-wider">Maand-detail</h3>
             <div className="text-xs text-gray-500">{cohort.reeks[maandIdx].maandKort.replace("'", "20")}</div>
           </div>
           <Waterval rij={cohort.reeks[maandIdx]} />
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h3 className="text-sm font-semibold text-[#0F2744] uppercase tracking-wider mb-3">Wat valt op</h3>
+          <h3 className="text-sm font-semibold text-ink uppercase tracking-wider mb-3">Wat valt op</h3>
           <Observaties cohort={cohort} />
         </div>
       </div>
@@ -158,7 +158,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <div className="text-xs text-gray-500">{label}</div>
-      <div className="font-semibold text-[#0F2744]">{value}</div>
+      <div className="font-semibold text-ink">{value}</div>
     </div>
   );
 }
@@ -230,15 +230,15 @@ function TrajectoryChart({
       <text x={w - pad.r - 4} y={invaarY - 4} textAnchor="end" fontSize={10} fill="var(--muted)">
         invaar-kapitaal · {fmtEurShort(cohort.invaarKapitaal)}
       </text>
-      <path d={areaPath} fill="#0F2744" fillOpacity={0.06} />
-      <path d={linePath} fill="none" stroke="#0F2744" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+      <path d={areaPath} fill="var(--accent)" fillOpacity={0.06} />
+      <path d={linePath} fill="none" stroke="var(--accent)" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
       {reeks.map((r, i) => (
         <circle
           key={i}
           cx={xS(i)}
           cy={yS(r.eind)}
           r={i === maandIdx ? 5 : 3}
-          fill={i === maandIdx ? "var(--accent)" : "#0F2744"}
+          fill={i === maandIdx ? "var(--accent-ink)" : "var(--accent)"}
           style={{ cursor: "pointer" }}
           onClick={() => onSelect(i)}
         />
@@ -247,7 +247,7 @@ function TrajectoryChart({
         x={xS(reeks.length - 1) + 8}
         y={yS(last.eind) + 4}
         fontSize={11}
-        fill="#0F2744"
+        fill="var(--accent)"
         fontWeight={600}
       >
         {fmtEur(last.eind)}
@@ -383,7 +383,7 @@ function Waterval({ rij }: { rij: MaandRij }) {
               <div className="flex-1 relative h-7 bg-gray-100 rounded overflow-hidden">
                 <div
                   className={`absolute left-0 top-0 bottom-0 ${
-                    s.type === "total" ? "bg-[#0F2744]" : "bg-gray-400"
+                    s.type === "total" ? "bg-accent" : "bg-gray-400"
                   }`}
                   style={{ width: `${pct}%` }}
                 />
@@ -494,7 +494,7 @@ function Observaties({ cohort }: { cohort: Cohort }) {
     <div className="space-y-3 text-sm text-gray-700">
       {obs.map((o, i) => (
         <div key={i} className={`border-l-2 ${o.kleur} pl-3 py-1`}>
-          <div className="font-medium text-[#0F2744]">{o.titel}</div>
+          <div className="font-medium text-ink">{o.titel}</div>
           <div className="text-xs text-gray-600 mt-0.5 leading-snug">{o.tekst}</div>
         </div>
       ))}

@@ -246,17 +246,17 @@ export default async function VergaderingDetailPage({
   return (
     <div className="p-7 space-y-5">
       <div className="flex items-center gap-2 text-xs text-gray-500">
-        <Link href="/vergaderingen" className="hover:text-[#0F2744]">
+        <Link href="/vergaderingen" className="hover:text-ink">
           Vergaderingen
         </Link>
         <span className="text-gray-300">›</span>
-        <span className="text-[#0F2744] font-medium">{v.titel}</span>
+        <span className="text-ink font-medium">{v.titel}</span>
       </div>
 
       <div className="bg-white border border-gray-200 rounded-xl p-5">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>
-            <h1 className="text-[#0F2744] text-xl font-bold">{v.titel}</h1>
+            <h1 className="text-ink text-xl font-bold">{v.titel}</h1>
             <p className="text-sm text-gray-500 mt-1">
               {formatDatum(v.datum)}
               {v.locatie ? ` · ${v.locatie}` : ""}
@@ -279,10 +279,10 @@ export default async function VergaderingDetailPage({
 
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-3">
-          <h2 className="text-[#0F2744] font-semibold text-sm">Agenda</h2>
+          <h2 className="text-ink font-semibold text-sm">Agenda</h2>
           <Link
             href={`/vergaderingen/${v.id}${toonVerwijderde ? "" : "?verwijderd=1"}`}
-            className="text-[11px] text-gray-500 hover:text-[#0F2744]"
+            className="text-[11px] text-gray-500 hover:text-ink"
           >
             {toonVerwijderde ? "← Verberg verwijderde" : "Toon verwijderde"}
           </Link>
@@ -336,7 +336,7 @@ function Stat({ label, value }: { label: string; value: string | number }) {
   return (
     <div>
       <div className="text-xs text-gray-500">{label}</div>
-      <div className="text-base font-semibold text-[#0F2744] mt-0.5">{value}</div>
+      <div className="text-base font-semibold text-ink mt-0.5">{value}</div>
     </div>
   );
 }

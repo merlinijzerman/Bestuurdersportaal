@@ -120,7 +120,7 @@ export default function NotificatiesBlok({
             type="button"
             onClick={markeerAllesGelezen}
             disabled={bulkBezig}
-            className="text-[11px] text-[#0F2744] hover:text-accent disabled:opacity-50"
+            className="text-[11px] text-ink hover:text-accent disabled:opacity-50"
           >
             Alles als gelezen
           </button>
@@ -150,7 +150,7 @@ export default function NotificatiesBlok({
                 </span>
                 <span
                   className={`text-sm truncate ${
-                    isOngelezen ? "text-[#0F2744] font-medium" : "text-gray-500"
+                    isOngelezen ? "text-ink font-medium" : "text-gray-500"
                   }`}
                 >
                   {zin.length > 70 ? `${zin.substring(0, 70)}…` : zin}

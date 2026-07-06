@@ -150,14 +150,14 @@ export default async function ProceduresPage() {
     <div className="p-7 space-y-6">
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-[#0F2744] text-xl font-bold">Procedures</h1>
+          <h1 className="text-ink text-xl font-bold">Procedures</h1>
           <p className="text-gray-500 text-sm mt-0.5">
             Lopende processen, beleidswijzigingen en besluittrajecten van het fonds.
           </p>
         </div>
         <Link
           href="/procedures/nieuw"
-          className="bg-[#0F2744] text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-[#1a3858]"
+          className="bg-accent text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-accent-ink"
         >
           + Nieuwe procedure
         </Link>
@@ -265,7 +265,7 @@ function ProcedureKaart({
               </span>
             )}
           </div>
-          <div className="font-semibold text-[#0F2744] text-sm">{p.titel}</div>
+          <div className="font-semibold text-ink text-sm">{p.titel}</div>
           {p.beschrijving && (
             <p className="text-xs text-gray-600 mt-0.5 line-clamp-1">
               {p.beschrijving}

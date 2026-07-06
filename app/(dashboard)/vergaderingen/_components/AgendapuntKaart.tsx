@@ -296,7 +296,7 @@ export default function AgendapuntKaart({
             </span>
             <span
               className={`text-sm font-semibold ${
-                isVerwijderd ? "text-gray-500 line-through" : "text-[#0F2744]"
+                isVerwijderd ? "text-gray-500 line-through" : "text-ink"
               }`}
             >
               {punt.titel}
@@ -342,7 +342,7 @@ export default function AgendapuntKaart({
             <button
               onClick={() => verschuif("omhoog")}
               disabled={!kanOmhoog || volgordeBezig}
-              className="text-gray-400 hover:text-[#0F2744] disabled:opacity-30 text-xs px-1.5 py-1"
+              className="text-gray-400 hover:text-ink disabled:opacity-30 text-xs px-1.5 py-1"
               title="Omhoog verplaatsen"
               aria-label="Omhoog verplaatsen"
             >
@@ -351,7 +351,7 @@ export default function AgendapuntKaart({
             <button
               onClick={() => verschuif("omlaag")}
               disabled={!kanOmlaag || volgordeBezig}
-              className="text-gray-400 hover:text-[#0F2744] disabled:opacity-30 text-xs px-1.5 py-1"
+              className="text-gray-400 hover:text-ink disabled:opacity-30 text-xs px-1.5 py-1"
               title="Omlaag verplaatsen"
               aria-label="Omlaag verplaatsen"
             >
@@ -359,7 +359,7 @@ export default function AgendapuntKaart({
             </button>
             <button
               onClick={() => setEditOpen(true)}
-              className="text-gray-400 hover:text-[#0F2744] text-sm px-2 py-1"
+              className="text-gray-400 hover:text-ink text-sm px-2 py-1"
               title="Bewerken"
               aria-label="Bewerken"
             >
@@ -490,7 +490,7 @@ export default function AgendapuntKaart({
                       <div className="flex-1 min-w-0 bg-gray-50 rounded-lg px-3 py-2">
                         <div className="flex items-baseline justify-between gap-2 flex-wrap">
                           <div className="flex items-baseline gap-2">
-                            <span className="text-xs font-medium text-[#0F2744]">
+                            <span className="text-xs font-medium text-ink">
                               {i.gebruiker_naam || "Onbekend"}
                             </span>
                             <span className="text-[11px] text-gray-400">
@@ -527,7 +527,7 @@ export default function AgendapuntKaart({
               <button
                 onClick={plaatsInbreng}
                 disabled={inbrengBezig || !inbrengTekst.trim()}
-                className="bg-[#0F2744] text-white text-sm font-medium px-3 py-2 rounded-lg hover:bg-accent hover:text-[#0F2744] transition-colors disabled:opacity-40 disabled:cursor-not-allowed self-stretch"
+                className="bg-accent text-white text-sm font-medium px-3 py-2 rounded-lg hover:bg-accent hover:text-ink transition-colors disabled:opacity-40 disabled:cursor-not-allowed self-stretch"
               >
                 {inbrengBezig ? "..." : "Plaats"}
               </button>
@@ -560,14 +560,14 @@ function StukKaart({ stuk }: { stuk: Stuk }) {
               href={`/api/documents/${stuk.id}/bestand`}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-sm font-medium text-[#0F2744] truncate hover:text-accent transition-colors block"
+              className="text-sm font-medium text-ink truncate hover:text-accent transition-colors block"
               title="Origineel openen of downloaden"
             >
               {stuk.titel}
             </a>
           ) : (
             <div
-              className="text-sm font-medium text-[#0F2744] truncate"
+              className="text-sm font-medium text-ink truncate"
               title="Origineel niet beschikbaar — geüpload vóór mei 2026"
             >
               {stuk.titel}
@@ -585,7 +585,7 @@ function StukKaart({ stuk }: { stuk: Stuk }) {
             blijft de /ai?doc=-ingang bestaan. */}
         <button
           onClick={() => setOpen(!open)}
-          className="text-gray-400 text-xs px-2 py-1 hover:text-[#0F2744]"
+          className="text-gray-400 text-xs px-2 py-1 hover:text-ink"
           aria-label={open ? "Samenvatting inklappen" : "Samenvatting uitklappen"}
         >
           {open ? "▾" : "▸"}

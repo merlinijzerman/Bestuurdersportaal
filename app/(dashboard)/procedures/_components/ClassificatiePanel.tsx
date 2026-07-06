@@ -79,13 +79,13 @@ export default function ClassificatiePanel({ decision }: Props) {
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-5">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-[#0F2744]">
+        <h3 className="text-sm font-semibold text-ink">
           Classificatie & besluitvraag
         </h3>
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
-          className="text-xs text-[#0F2744] hover:underline"
+          className="text-xs text-ink hover:underline"
         >
           {open ? "Sluiten" : "Bewerken"}
         </button>
@@ -199,7 +199,7 @@ export default function ClassificatiePanel({ decision }: Props) {
               type="button"
               onClick={bewaar}
               disabled={bezig}
-              className="bg-[#0F2744] text-white text-sm px-4 py-2 rounded-md hover:bg-[#1a3a5e] disabled:opacity-50"
+              className="bg-accent text-white text-sm px-4 py-2 rounded-md hover:bg-accent-ink disabled:opacity-50"
             >
               {bezig ? "Bezig…" : "Bewaren"}
             </button>
@@ -275,7 +275,7 @@ function SegmentRadio<T extends string>({
           onClick={() => opWijzig(o)}
           className={`text-sm px-3 py-1.5 ${
             o === waarde
-              ? "bg-[#0F2744] text-white"
+              ? "bg-accent text-white"
               : "bg-white text-gray-700 hover:bg-gray-50"
           }`}
         >
@@ -301,7 +301,7 @@ function Checkbox({
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="rounded border-gray-300 text-[#0F2744] focus:ring-accent/40"
+        className="rounded border-gray-300 text-ink focus:ring-accent/40"
       />
       <span className="text-gray-900">{label}</span>
     </label>

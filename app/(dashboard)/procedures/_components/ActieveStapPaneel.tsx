@@ -339,7 +339,7 @@ export default function ActieveStapPaneel({
           <div className="text-xs uppercase tracking-wide text-amber-700 font-semibold">
             Actieve stap
           </div>
-          <h2 className="text-lg font-semibold text-[#0F2744] mt-1">
+          <h2 className="text-lg font-semibold text-ink mt-1">
             {stap.volgorde} — {stap.naam}
           </h2>
           {stap.beschrijving && (
@@ -417,7 +417,7 @@ export default function ActieveStapPaneel({
           {!vergaderingForm && komendeVergaderingen.length > 0 && (
             <button
               onClick={() => setVergaderingForm(true)}
-              className="text-xs text-[#0F2744] hover:underline"
+              className="text-xs text-ink hover:underline"
             >
               + Voeg toe aan vergadering
             </button>
@@ -452,7 +452,7 @@ export default function ActieveStapPaneel({
                       : ""}
                   </div>
                 </div>
-                <span className="text-xs text-[#0F2744] hover:underline">
+                <span className="text-xs text-ink hover:underline">
                   Open →
                 </span>
               </Link>
@@ -488,14 +488,14 @@ export default function ActieveStapPaneel({
                   setVergaderingForm(false);
                   setVergaderingKeuze("");
                 }}
-                className="text-xs px-3 py-1.5 border border-gray-200 rounded hover:border-[#0F2744]"
+                className="text-xs px-3 py-1.5 border border-gray-200 rounded hover:border-accent"
               >
                 Annuleren
               </button>
               <button
                 type="submit"
                 disabled={bezig === "vergadering"}
-                className="text-xs px-3 py-1.5 bg-[#0F2744] text-white rounded hover:bg-[#1a3858] disabled:opacity-50"
+                className="text-xs px-3 py-1.5 bg-accent text-white rounded hover:bg-accent-ink disabled:opacity-50"
               >
                 {bezig === "vergadering" ? "Bezig…" : "Koppelen"}
               </button>
@@ -506,7 +506,7 @@ export default function ActieveStapPaneel({
         {komendeVergaderingen.length === 0 && (
           <p className="text-xs text-gray-500 mt-1">
             Geen komende vergaderingen om aan te koppelen.{" "}
-            <Link href="/vergaderingen" className="text-[#0F2744] underline">
+            <Link href="/vergaderingen" className="text-ink underline">
               Plan eerst een vergadering →
             </Link>
           </p>
@@ -521,7 +521,7 @@ export default function ActieveStapPaneel({
           </div>
           <button
             onClick={() => setBewijsForm(!bewijsForm)}
-            className="text-xs text-[#0F2744] hover:underline"
+            className="text-xs text-ink hover:underline"
           >
             {bewijsForm ? "Annuleren" : "+ Toevoegen"}
           </button>
@@ -586,7 +586,7 @@ export default function ActieveStapPaneel({
                     <p className="text-[11px] text-amber-700 uppercase tracking-wide font-semibold">
                       Gekozen uit bibliotheek
                     </p>
-                    <p className="text-sm text-[#0F2744] truncate">
+                    <p className="text-sm text-ink truncate">
                       {bewijsBibliotheekTitel}
                     </p>
                   </div>
@@ -607,7 +607,7 @@ export default function ActieveStapPaneel({
                     <button
                       type="button"
                       onClick={() => setPickerOpen(true)}
-                      className="text-xs px-3 py-1.5 border border-gray-200 rounded hover:border-accent text-[#0F2744]"
+                      className="text-xs px-3 py-1.5 border border-gray-200 rounded hover:border-accent text-ink"
                     >
                       Kies uit bibliotheek →
                     </button>
@@ -617,7 +617,7 @@ export default function ActieveStapPaneel({
                     type="file"
                     accept=".pdf,.docx,.xlsx"
                     onChange={(e) => setBewijsBestand(e.target.files?.[0] ?? null)}
-                    className="block w-full text-xs text-gray-700 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-[#0F2744] file:text-white file:text-xs hover:file:bg-[#1a3858]"
+                    className="block w-full text-xs text-gray-700 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-accent file:text-white file:text-xs hover:file:bg-accent-ink"
                   />
                   {bewijsBestand && (
                     <p className="text-[11px] text-gray-600 mt-1">
@@ -632,14 +632,14 @@ export default function ActieveStapPaneel({
               <button
                 type="button"
                 onClick={() => setBewijsForm(false)}
-                className="text-xs px-3 py-1.5 border border-gray-200 rounded hover:border-[#0F2744]"
+                className="text-xs px-3 py-1.5 border border-gray-200 rounded hover:border-accent"
               >
                 Annuleren
               </button>
               <button
                 type="submit"
                 disabled={bezig === "bewijs"}
-                className="text-xs px-3 py-1.5 bg-[#0F2744] text-white rounded hover:bg-[#1a3858] disabled:opacity-50"
+                className="text-xs px-3 py-1.5 bg-accent text-white rounded hover:bg-accent-ink disabled:opacity-50"
               >
                 {bezig === "bewijs" ? "Bezig…" : "Toevoegen"}
               </button>
@@ -703,7 +703,7 @@ export default function ActieveStapPaneel({
                 {!besluitForm && (
                   <button
                     onClick={() => setBesluitForm(true)}
-                    className="text-xs text-[#0F2744] hover:underline"
+                    className="text-xs text-ink hover:underline"
                   >
                     + Besluit vastleggen
                   </button>
@@ -773,14 +773,14 @@ export default function ActieveStapPaneel({
                 <button
                   type="button"
                   onClick={() => setBesluitForm(false)}
-                  className="text-xs px-3 py-1.5 border border-gray-200 rounded hover:border-[#0F2744]"
+                  className="text-xs px-3 py-1.5 border border-gray-200 rounded hover:border-accent"
                 >
                   Annuleren
                 </button>
                 <button
                   type="submit"
                   disabled={bezig === "besluit"}
-                  className="text-xs px-3 py-1.5 bg-[#0F2744] text-white rounded hover:bg-[#1a3858] disabled:opacity-50"
+                  className="text-xs px-3 py-1.5 bg-accent text-white rounded hover:bg-accent-ink disabled:opacity-50"
                 >
                   {bezig === "besluit" ? "Bezig…" : "Vastleggen"}
                 </button>
@@ -845,7 +845,7 @@ export default function ActieveStapPaneel({
                 disabled={!kanVoltooien || bezig === "voltooien"}
                 className={`px-4 py-2 text-sm rounded-lg font-medium ${
                   kanVoltooien
-                    ? "bg-[#0F2744] text-white hover:bg-[#1a3858]"
+                    ? "bg-accent text-white hover:bg-accent-ink"
                     : "bg-gray-200 text-gray-500 cursor-not-allowed"
                 }`}
               >

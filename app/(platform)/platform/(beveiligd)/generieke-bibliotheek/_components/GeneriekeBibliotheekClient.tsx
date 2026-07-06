@@ -349,7 +349,7 @@ export default function GeneriekeBibliotheekClient({
         <div className="flex flex-wrap items-center gap-3">
           <button
             onClick={() => open({ soort: "aanmaken" })}
-            className="rounded-lg bg-[#0F2744] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0F2744]/90"
+            className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent/90"
           >
             + Nieuw generiek document
           </button>
@@ -357,7 +357,7 @@ export default function GeneriekeBibliotheekClient({
             onClick={herindexeerGeneriek}
             disabled={reindexBezig}
             title="Genereert per fragment een structuur-label en een korte context-zin voor de zoekindex (Haiku) en maakt een nieuwe embedding. De getoonde brontekst en citaten blijven ongewijzigd; de bewerking is omkeerbaar."
-            className="rounded-lg border border-[#0F2744]/20 px-4 py-2 text-sm font-semibold text-[#0F2744] hover:bg-[#0F2744]/5 disabled:opacity-50"
+            className="rounded-lg border border-line px-4 py-2 text-sm font-semibold text-ink hover:bg-accent/5 disabled:opacity-50"
           >
             {reindexBezig ? "Her-indexeren…" : "Bibliotheek her-indexeren"}
           </button>
@@ -365,7 +365,7 @@ export default function GeneriekeBibliotheekClient({
       )}
 
       {reindexMelding && (
-        <div className="rounded-lg bg-app-bg px-4 py-3 text-sm text-[#0F2744]">{reindexMelding}</div>
+        <div className="rounded-lg bg-app-bg px-4 py-3 text-sm text-ink">{reindexMelding}</div>
       )}
 
       {modus && (
@@ -374,7 +374,7 @@ export default function GeneriekeBibliotheekClient({
             e.preventDefault();
             verstuur();
           }}
-          className="space-y-4 rounded-xl border border-[#0F2744]/10 bg-white p-5"
+          className="space-y-4 rounded-xl border border-line bg-white p-5"
         >
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">
@@ -384,7 +384,7 @@ export default function GeneriekeBibliotheekClient({
                   ? `Bewerken — ${modus.doc.titel}`
                   : `Vervangen — ${modus.doc.titel}`}
             </h2>
-            <button type="button" onClick={sluit} className="text-sm text-[#0F2744]/60 hover:underline">
+            <button type="button" onClick={sluit} className="text-sm text-ink/60 hover:underline">
               Annuleren
             </button>
           </div>
@@ -425,7 +425,7 @@ export default function GeneriekeBibliotheekClient({
               <select
                 value={form.normgewicht}
                 onChange={(e) => set("normgewicht", e.target.value)}
-                className="w-full rounded-lg border border-[#0F2744]/20 px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-line px-3 py-2 text-sm"
               >
                 {NORMGEWICHTEN.map((n) => (
                   <option key={n} value={n}>
@@ -438,7 +438,7 @@ export default function GeneriekeBibliotheekClient({
               <select
                 value={form.regelingstype}
                 onChange={(e) => set("regelingstype", e.target.value)}
-                className="w-full rounded-lg border border-[#0F2744]/20 px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-line px-3 py-2 text-sm"
               >
                 {REGELINGSTYPES.map((r) => (
                   <option key={r} value={r}>
@@ -478,7 +478,7 @@ export default function GeneriekeBibliotheekClient({
               value={form.statusinterpretatie}
               onChange={(e) => set("statusinterpretatie", e.target.value)}
               rows={2}
-              className="w-full rounded-lg border border-[#0F2744]/20 px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-line px-3 py-2 text-sm"
             />
           </Veld>
 
@@ -492,7 +492,7 @@ export default function GeneriekeBibliotheekClient({
             <button
               type="submit"
               disabled={bezig}
-              className="rounded-lg bg-[#0F2744] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0F2744]/90 disabled:opacity-50"
+              className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent/90 disabled:opacity-50"
             >
               {bezig
                 ? "Bezig…"
@@ -506,9 +506,9 @@ export default function GeneriekeBibliotheekClient({
         </form>
       )}
 
-      <div className="overflow-x-auto rounded-xl border border-[#0F2744]/10 bg-white">
+      <div className="overflow-x-auto rounded-xl border border-line bg-white">
         <table className="w-full text-sm">
-          <thead className="bg-app-bg text-left text-xs uppercase tracking-wide text-[#0F2744]/60">
+          <thead className="bg-app-bg text-left text-xs uppercase tracking-wide text-ink/60">
             <tr>
               <th className="px-4 py-2">Titel</th>
               <th className="px-4 py-2">Bron</th>
@@ -522,7 +522,7 @@ export default function GeneriekeBibliotheekClient({
           <tbody>
             {documenten.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-[#0F2744]/50">
+                <td colSpan={7} className="px-4 py-6 text-center text-ink/50">
                   Nog geen generieke documenten.
                 </td>
               </tr>
@@ -530,11 +530,11 @@ export default function GeneriekeBibliotheekClient({
             {documenten.map((d) => {
               const vervangen = !!d.vervangen_door_document_id;
               return (
-                <tr key={d.id} className="border-t border-[#0F2744]/5">
+                <tr key={d.id} className="border-t border-line">
                   <td className="px-4 py-2">
                     <div className="font-medium">{d.titel}</div>
                     {d.bronorganisatie && (
-                      <div className="text-xs text-[#0F2744]/50">{d.bronorganisatie}</div>
+                      <div className="text-xs text-ink/50">{d.bronorganisatie}</div>
                     )}
                   </td>
                   <td className="px-4 py-2">{d.bron}</td>
@@ -548,22 +548,22 @@ export default function GeneriekeBibliotheekClient({
                   </td>
                   <td className="px-4 py-2">
                     <div>{d.status ?? "—"}</div>
-                    <div className="text-xs text-[#0F2744]/50">{d.bronstatus ?? "—"}</div>
+                    <div className="text-xs text-ink/50">{d.bronstatus ?? "—"}</div>
                   </td>
                   <td className="px-4 py-2">{d.verwerkingsstatus ?? "—"}</td>
                   <td className="px-4 py-2">
                     <div className="flex flex-wrap justify-end gap-x-3 gap-y-1 whitespace-nowrap text-xs">
                       {d.opslag_pad && (
-                        <button onClick={() => inzage(d)} disabled={bezig} className="text-[#0F2744] hover:underline disabled:opacity-50">
+                        <button onClick={() => inzage(d)} disabled={bezig} className="text-ink hover:underline disabled:opacity-50">
                           Inzage
                         </button>
                       )}
                       {magBeheren && !vervangen && (
                         <>
-                          <button onClick={() => open({ soort: "bewerken", doc: d })} className="text-[#0F2744] hover:underline">
+                          <button onClick={() => open({ soort: "bewerken", doc: d })} className="text-ink hover:underline">
                             Bewerken
                           </button>
-                          <button onClick={() => open({ soort: "vervangen", doc: d })} className="text-[#0F2744] hover:underline">
+                          <button onClick={() => open({ soort: "vervangen", doc: d })} className="text-ink hover:underline">
                             Vervangen
                           </button>
                           {d.status !== "alleen_historisch" && (
@@ -576,7 +576,7 @@ export default function GeneriekeBibliotheekClient({
                           </button>
                         </>
                       )}
-                      {vervangen && <span className="text-[#0F2744]/40">Vervangen</span>}
+                      {vervangen && <span className="text-ink/40">Vervangen</span>}
                     </div>
                   </td>
                 </tr>
@@ -600,7 +600,7 @@ function Veld({
 }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-xs font-medium text-[#0F2744]/70">{label}</span>
+      <span className="mb-1 block text-xs font-medium text-ink/70">{label}</span>
       {children}
       {fout && <span className="mt-1 block text-xs text-rose-600">{fout}</span>}
     </label>
@@ -624,7 +624,7 @@ function Input({
       value={value}
       placeholder={placeholder}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full rounded-lg border border-[#0F2744]/20 px-3 py-2 text-sm"
+      className="w-full rounded-lg border border-line px-3 py-2 text-sm"
     />
   );
 }
@@ -642,7 +642,7 @@ function Select({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full rounded-lg border border-[#0F2744]/20 px-3 py-2 text-sm"
+      className="w-full rounded-lg border border-line px-3 py-2 text-sm"
     >
       {opties.map((o) => (
         <option key={o} value={o}>

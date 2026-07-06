@@ -53,7 +53,7 @@ export default async function GeneriekeBibliotheekPagina() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Generieke bibliotheek</h1>
-        <p className="mt-1 text-sm text-[#0F2744]/70">
+        <p className="mt-1 text-sm text-ink/70">
           Sectorbrede, fonds-overstijgende documenten (toezichtkaders, guidance).
           Elke wijziging verschijnt direct bij alle aangesloten fondsen en wordt
           append-only geaudit.
@@ -61,7 +61,7 @@ export default async function GeneriekeBibliotheekPagina() {
       </div>
 
       {!magBeheren && (
-        <div className="rounded-lg border border-accent/40 bg-accent/10 px-4 py-3 text-sm text-[#0F2744]">
+        <div className="rounded-lg border border-accent/40 bg-accent/10 px-4 py-3 text-sm text-ink">
           Je kunt de generieke bibliotheek inzien maar niet beheren. Beheer
           vereist de capability <code className="font-mono">{CAP}</code>.
         </div>

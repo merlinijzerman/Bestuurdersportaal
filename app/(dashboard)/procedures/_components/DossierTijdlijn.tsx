@@ -71,7 +71,7 @@ export default function DossierTijdlijn({
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-5">
       <div className="flex items-baseline justify-between mb-4">
-        <h2 className="text-[#0F2744] font-bold text-sm">Tijdlijn</h2>
+        <h2 className="text-ink font-bold text-sm">Tijdlijn</h2>
         <span className="text-[11px] text-gray-400 uppercase tracking-wide">
           Dossierfases
         </span>
@@ -86,7 +86,7 @@ export default function DossierTijdlijn({
               <div className="flex flex-col items-center">
                 <div
                   className={`w-3 h-3 rounded-full ${
-                    heeftInhoud ? "bg-[#0F2744]" : "bg-gray-200"
+                    heeftInhoud ? "bg-accent" : "bg-gray-200"
                   }`}
                 />
                 <div className="flex-1 w-px bg-gray-200 mt-1" />
@@ -94,7 +94,7 @@ export default function DossierTijdlijn({
               <div className="flex-1 pb-2">
                 <div
                   className={`text-xs font-semibold uppercase tracking-wide ${
-                    heeftInhoud ? "text-[#0F2744]" : "text-gray-400"
+                    heeftInhoud ? "text-ink" : "text-gray-400"
                   }`}
                 >
                   {TIJDLIJNFASE_LABEL[fase]}

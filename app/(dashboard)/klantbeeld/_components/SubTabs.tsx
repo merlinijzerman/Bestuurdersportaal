@@ -19,8 +19,8 @@ export function HoofdTabs() {
             href={t.href}
             className={`px-1 pb-3 border-b-2 text-sm transition-colors ${
               actief
-                ? "border-accent text-[#0F2744] font-semibold"
-                : "border-transparent text-gray-600 hover:text-[#0F2744]"
+                ? "border-accent text-ink font-semibold"
+                : "border-transparent text-gray-600 hover:text-ink"
             }`}
           >
             {t.label}
@@ -49,8 +49,8 @@ export function DeelnemersSubTabs() {
             href={t.href}
             className={`px-4 py-2 rounded-md transition-colors ${
               actief
-                ? "bg-[#0F2744] text-white"
-                : "text-gray-700 hover:text-[#0F2744]"
+                ? "bg-accent text-white"
+                : "text-gray-700 hover:text-ink"
             }`}
           >
             {t.label}

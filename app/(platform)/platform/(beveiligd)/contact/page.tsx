@@ -31,7 +31,7 @@ export default async function ContactPagina() {
         <div>
           <h1 className="text-2xl font-bold">Contactaanvragen</h1>
         </div>
-        <div className="rounded-lg border border-accent/40 bg-accent/10 px-4 py-3 text-sm text-[#0F2744]">
+        <div className="rounded-lg border border-accent/40 bg-accent/10 px-4 py-3 text-sm text-ink">
           Je hebt geen recht om de contact-inbox in te zien. Dit vereist{" "}
           <code className="font-mono">platform.contact.manage</code>.
         </div>
@@ -53,7 +53,7 @@ export default async function ContactPagina() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Contactaanvragen</h1>
-        <p className="mt-1 max-w-3xl text-sm text-[#0F2744]/70">
+        <p className="mt-1 max-w-3xl text-sm text-ink/70">
           Inzendingen vanaf de publieke voorkant. Volg ze op via de status
           (nieuw &rarr; in behandeling &rarr; afgehandeld). Elke wijziging wordt
           append-only geaudit met wie en wanneer. Inzendingen kunnen

@@ -115,7 +115,7 @@ export default function ProcedureMetadataEdit({
       <button
         type="button"
         onClick={openModal}
-        className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-[#0F2744] border border-gray-200 hover:border-accent rounded-md px-2 py-1 transition-colors"
+        className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-ink border border-gray-200 hover:border-accent rounded-md px-2 py-1 transition-colors"
         aria-label="Procedure bewerken"
         title="Procedure-titel, beschrijving of deadline bewerken"
       >
@@ -135,7 +135,7 @@ export default function ProcedureMetadataEdit({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between mb-4">
-              <h2 className="text-[#0F2744] font-semibold text-lg">Procedure bewerken</h2>
+              <h2 className="text-ink font-semibold text-lg">Procedure bewerken</h2>
               <button
                 type="button"
                 onClick={sluit}
@@ -221,7 +221,7 @@ export default function ProcedureMetadataEdit({
                 type="button"
                 onClick={bewaar}
                 disabled={bezig}
-                className="bg-[#0F2744] text-white text-sm font-medium px-4 py-1.5 rounded-md hover:bg-[#1a3658] disabled:opacity-50 disabled:cursor-not-allowed"
+                className="bg-accent text-white text-sm font-medium px-4 py-1.5 rounded-md hover:bg-accent-ink disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {bezig ? "Bewaren…" : "Bewaar"}
               </button>

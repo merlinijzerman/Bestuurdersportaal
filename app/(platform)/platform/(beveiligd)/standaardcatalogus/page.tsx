@@ -56,7 +56,7 @@ export default async function StandaardcatalogusPagina() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Standaardcatalogus</h1>
-        <p className="mt-1 max-w-3xl text-sm text-[#0F2744]/70">
+        <p className="mt-1 max-w-3xl text-sm text-ink/70">
           Platformbrede standaarditems voor gremia/commissies, expertises en
           kritische focusgebieden. Deze items voeden de keuzelijsten in het
           persoonlijk profiel van bestuursleden en zijn de importeerbare
@@ -67,7 +67,7 @@ export default async function StandaardcatalogusPagina() {
       </div>
 
       {!magBeheren && (
-        <div className="rounded-lg border border-accent/40 bg-accent/10 px-4 py-3 text-sm text-[#0F2744]">
+        <div className="rounded-lg border border-accent/40 bg-accent/10 px-4 py-3 text-sm text-ink">
           Je kunt de standaardcatalogus inzien maar niet beheren. Beheer vereist
           de capability <code className="font-mono">{CAP}</code>.
         </div>

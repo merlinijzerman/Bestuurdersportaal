@@ -37,7 +37,7 @@ export default async function GovernancePage() {
     return (
       <div className="p-7 max-w-3xl">
         <div className="mb-6">
-          <h1 className="text-xl font-black text-[#0F2744]">Governance Log</h1>
+          <h1 className="text-xl font-black text-ink">Governance Log</h1>
         </div>
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
           U heeft geen rechten om het governance-log in te zien. Inzage in het
@@ -57,7 +57,7 @@ export default async function GovernancePage() {
   return (
     <div className="p-7">
       <div className="mb-6">
-        <h1 className="text-xl font-black text-[#0F2744]">Governance Log</h1>
+        <h1 className="text-xl font-black text-ink">Governance Log</h1>
         <p className="text-sm text-gray-500 mt-1">
           Alle AI-interacties worden automatisch gelogd voor compliance en traceerbaarheid
         </p>
@@ -94,10 +94,10 @@ export default async function GovernancePage() {
               <div key={log.id} className="bg-white border border-gray-200 rounded-xl p-4">
                 {/* Header */}
                 <div className="flex items-center gap-2.5 mb-3">
-                  <div className="w-7 h-7 bg-accent rounded-full flex items-center justify-center text-xs font-bold text-[#0F2744] flex-shrink-0">
+                  <div className="w-7 h-7 bg-accent rounded-full flex items-center justify-center text-xs font-bold text-ink flex-shrink-0">
                     {initials}
                   </div>
-                  <span className="font-semibold text-sm text-[#0F2744]">
+                  <span className="font-semibold text-sm text-ink">
                     {log.gebruiker_naam}
                   </span>
                   <span className="ml-auto text-xs text-gray-400">

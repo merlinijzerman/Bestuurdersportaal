@@ -334,7 +334,7 @@ export default async function ProcedureDetailPage({
     <div className="p-7 space-y-6">
       <Link
         href="/procedures"
-        className="text-sm text-gray-500 hover:text-[#0F2744] inline-flex items-center gap-1"
+        className="text-sm text-gray-500 hover:text-ink inline-flex items-center gap-1"
       >
         ← Terug naar procedures
       </Link>
@@ -392,7 +392,7 @@ export default async function ProcedureDetailPage({
           )}
         </div>
         <div className="flex items-start justify-between gap-3">
-          <h1 className="text-[#0F2744] text-2xl font-semibold">
+          <h1 className="text-ink text-2xl font-semibold">
             {procedure.titel}
           </h1>
           <ProcedureMetadataEdit
@@ -561,13 +561,13 @@ export default async function ProcedureDetailPage({
                       key={s.id}
                       className="relative pl-9 py-2.5 bg-amber-50/40 -mx-3 px-3 rounded-lg"
                     >
-                      <div className="absolute left-3 top-3 w-6 h-6 rounded-full bg-accent border-2 border-accent text-[#0F2744] flex items-center justify-center text-xs font-bold ring-4 ring-amber-100">
+                      <div className="absolute left-3 top-3 w-6 h-6 rounded-full bg-accent border-2 border-accent text-ink flex items-center justify-center text-xs font-bold ring-4 ring-amber-100">
                         {s.volgorde}
                       </div>
                       {!isLast && (
                         <div className="absolute left-6 top-9 bottom-0 w-px bg-gray-200" />
                       )}
-                      <div className="text-sm font-semibold text-[#0F2744] ml-6">
+                      <div className="text-sm font-semibold text-ink ml-6">
                         {s.naam}
                       </div>
                       <div className="text-xs text-amber-700 font-medium mt-0.5 ml-6">
@@ -670,7 +670,7 @@ export default async function ProcedureDetailPage({
           {/* Besluiten — als er vastgelegd zijn */}
           {besluiten.length > 0 && (
             <div className="bg-white border border-gray-200 rounded-xl p-5">
-              <h3 className="text-sm font-semibold text-[#0F2744] mb-3">
+              <h3 className="text-sm font-semibold text-ink mb-3">
                 Vastgelegde besluiten
               </h3>
               <div className="space-y-3">

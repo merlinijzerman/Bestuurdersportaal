@@ -1019,10 +1019,10 @@ export default function AiPage() {
           />
           <div className="absolute top-0 left-0 h-full w-80 max-w-[85vw] bg-white shadow-xl flex flex-col">
             <div className="px-5 h-14 flex items-center justify-between border-b border-gray-200">
-              <span className="font-bold text-[#0F2744]">Gesprekken</span>
+              <span className="font-bold text-ink">Gesprekken</span>
               <button
                 onClick={() => setHistorieOpen(false)}
-                className="text-gray-400 hover:text-[#0F2744] text-lg leading-none"
+                className="text-gray-400 hover:text-ink text-lg leading-none"
                 aria-label="Sluiten"
               >
                 ✕
@@ -1045,7 +1045,7 @@ export default function AiPage() {
                     onClick={() => openGesprek(g)}
                   >
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm text-[#0F2744] truncate">
+                      <div className="text-sm text-ink truncate">
                         {g.titel || "Gesprek"}
                       </div>
                       <div className="text-xs text-gray-400">
@@ -1075,7 +1075,7 @@ export default function AiPage() {
             <div className="border-t border-gray-200 p-3">
               <button
                 onClick={startNieuwGesprek}
-                className="w-full text-sm text-[#0F2744] border border-gray-200 rounded-lg px-3 py-2 hover:border-accent transition-colors"
+                className="w-full text-sm text-ink border border-gray-200 rounded-lg px-3 py-2 hover:border-accent transition-colors"
               >
                 + Nieuw gesprek
               </button>
@@ -1086,20 +1086,20 @@ export default function AiPage() {
 
       {/* Topbar */}
       <div className="bg-white border-b border-gray-200 px-7 h-14 flex items-center">
-        <span className="font-bold text-[#0F2744]">AI Assistent</span>
+        <span className="font-bold text-ink">AI Assistent</span>
         <span className="ml-3 bg-green-100 text-green-700 text-xs font-semibold px-2.5 py-1 rounded-full">
           ● Governance logging actief
         </span>
         <button
           onClick={() => setHistorieOpen(true)}
-          className="ml-auto text-xs text-gray-500 hover:text-[#0F2744] border border-gray-200 px-3 py-1.5 rounded-lg hover:border-accent transition-colors"
+          className="ml-auto text-xs text-gray-500 hover:text-ink border border-gray-200 px-3 py-1.5 rounded-lg hover:border-accent transition-colors"
         >
           🕑 Gesprekken{gesprekken.length > 0 ? ` (${gesprekken.length})` : ""}
         </button>
         <button
           onClick={startNieuwGesprek}
           disabled={laden || berichten.length <= 1}
-          className="text-xs text-gray-500 hover:text-[#0F2744] border border-gray-200 px-3 py-1.5 rounded-lg hover:border-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          className="text-xs text-gray-500 hover:text-ink border border-gray-200 px-3 py-1.5 rounded-lg hover:border-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           + Nieuw gesprek
         </button>
@@ -1120,7 +1120,7 @@ export default function AiPage() {
         </span>
         <button
           onClick={() => setAanpassenOpen((o) => !o)}
-          className="text-xs text-gray-500 hover:text-[#0F2744] border border-gray-200 px-2.5 py-1 rounded-md hover:border-accent transition-colors"
+          className="text-xs text-gray-500 hover:text-ink border border-gray-200 px-2.5 py-1 rounded-md hover:border-accent transition-colors"
           aria-expanded={aanpassenOpen}
         >
           Aanpassen {aanpassenOpen ? "▴" : "▾"}
@@ -1131,7 +1131,7 @@ export default function AiPage() {
               type="checkbox"
               checked={alleenFondsdocumenten}
               onChange={(e) => setAlleenFondsdocumenten(e.target.checked)}
-              className="accent-[#0F2744]"
+              className="accent-accent"
             />
             Alleen fondsdocumenten
           </label>
@@ -1145,19 +1145,19 @@ export default function AiPage() {
               type="checkbox"
               checked={algemeenPerspectief}
               onChange={(e) => setAlgemeenPerspectief(e.target.checked)}
-              className="accent-[#0F2744]"
+              className="accent-accent"
             />
             Algemeen perspectief
           </label>
         )}
         {alleenFondsdocumenten && (
-          <span className="text-xs text-[#0F2744] inline-flex items-center gap-1">
+          <span className="text-xs text-ink inline-flex items-center gap-1">
             <span>🔒</span>
             <span>Beperkt tot interne fondsdocumenten</span>
           </span>
         )}
         {algemeenPerspectief && (
-          <span className="text-xs text-[#0F2744] inline-flex items-center gap-1">
+          <span className="text-xs text-ink inline-flex items-center gap-1">
             <span>👥</span>
             <span>Collectieve weergave — niet op uw profiel geprioriteerd</span>
           </span>
@@ -1178,8 +1178,8 @@ export default function AiPage() {
             title="Automatisch de passende antwoordvorm bepalen op basis van uw vraag"
             className={`px-3 py-1.5 text-xs rounded-md transition-all ${
               antwoordmodus === null
-                ? "bg-white text-[#0F2744] font-semibold shadow-sm"
-                : "text-gray-600 hover:text-[#0F2744]"
+                ? "bg-white text-ink font-semibold shadow-sm"
+                : "text-gray-600 hover:text-ink"
             }`}
           >
             Auto
@@ -1191,8 +1191,8 @@ export default function AiPage() {
               title={m.help}
               className={`px-3 py-1.5 text-xs rounded-md transition-all ${
                 antwoordmodus === m.value
-                  ? "bg-white text-[#0F2744] font-semibold shadow-sm"
-                  : "text-gray-600 hover:text-[#0F2744]"
+                  ? "bg-white text-ink font-semibold shadow-sm"
+                  : "text-gray-600 hover:text-ink"
               }`}
             >
               {m.label}
@@ -1225,7 +1225,7 @@ export default function AiPage() {
               <div
                 className={
                   b.rol === "gebruiker"
-                    ? "bg-[#0F2744] text-white px-4 py-3 rounded-2xl rounded-tr-sm text-sm leading-relaxed"
+                    ? "bg-accent text-white px-4 py-3 rounded-2xl rounded-tr-sm text-sm leading-relaxed"
                     : "bg-gray-50 border border-gray-200 px-4 py-3 rounded-2xl rounded-tl-sm text-sm leading-relaxed text-gray-800"
                 }
               >
@@ -1249,7 +1249,7 @@ export default function AiPage() {
                       onClick={() =>
                         kiesVerduidelijking(o.intent, b.verduidelijking!.origineleVraag, i)
                       }
-                      className="text-xs text-[#0F2744] border border-gray-300 px-3 py-1.5 rounded-full hover:border-accent hover:bg-amber-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="text-xs text-ink border border-gray-300 px-3 py-1.5 rounded-full hover:border-accent hover:bg-amber-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       {o.label}
                     </button>
@@ -1281,7 +1281,7 @@ export default function AiPage() {
                           key={a.type}
                           onClick={() => stuurVervolgactie(a, b, i)}
                           disabled={laden}
-                          className="text-xs text-[#0F2744] bg-white border border-gray-200 rounded-full px-3 py-1 hover:border-accent hover:bg-yellow-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                          className="text-xs text-ink bg-white border border-gray-200 rounded-full px-3 py-1 hover:border-accent hover:bg-yellow-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                         >
                           {a.label}
                         </button>
@@ -1348,7 +1348,7 @@ export default function AiPage() {
               <button
                 key={v}
                 onClick={() => stuurBericht(v)}
-                className="bg-gray-50 border border-gray-200 rounded-full px-3 py-1.5 text-xs text-gray-500 hover:border-accent hover:text-[#0F2744] hover:bg-yellow-50 transition-all"
+                className="bg-gray-50 border border-gray-200 rounded-full px-3 py-1.5 text-xs text-gray-500 hover:border-accent hover:text-ink hover:bg-yellow-50 transition-all"
               >
                 {v}
               </button>
@@ -1376,7 +1376,7 @@ export default function AiPage() {
                   onClick={() => kiesDocument(s)}
                   className="w-full text-left px-3 py-2 hover:bg-amber-50 border-b border-gray-50 last:border-0"
                 >
-                  <div className="text-sm font-medium text-[#0F2744] truncate">{s.titel}</div>
+                  <div className="text-sm font-medium text-ink truncate">{s.titel}</div>
                   <div className="text-xs text-gray-500">
                     {s.bron}
                     {s.bestandstype ? ` · ${s.bestandstype.toUpperCase()}` : ""}
@@ -1487,7 +1487,7 @@ export default function AiPage() {
           <button
             onClick={() => stuurBericht()}
             disabled={laden || !invoer.trim()}
-            className="w-11 h-11 bg-[#0F2744] rounded-xl flex items-center justify-center text-white hover:bg-accent hover:text-[#0F2744] disabled:opacity-40 disabled:cursor-not-allowed transition-colors self-end"
+            className="w-11 h-11 bg-accent rounded-xl flex items-center justify-center text-white hover:bg-accent hover:text-ink disabled:opacity-40 disabled:cursor-not-allowed transition-colors self-end"
           >
             ➤
           </button>
@@ -1566,7 +1566,7 @@ function renderAntwoord(
 
     if (kop) {
       blokken.push(
-        <p key={sleutel++} className="font-bold text-[#0F2744] mt-2 mb-1">
+        <p key={sleutel++} className="font-bold text-ink mt-2 mb-1">
           {inline(kop[2])}
         </p>
       );
@@ -1687,8 +1687,8 @@ function BronPill({
       title={tooltip}
       className={`relative -top-[1px] inline-flex items-center justify-center align-baseline mx-0.5 min-w-[20px] h-[18px] px-1.5 rounded-md text-[10px] font-bold leading-none transition-colors cursor-pointer ${
         gehighlight
-          ? "bg-[#0F2744] text-white"
-          : "bg-accent/20 text-[#0F2744] hover:bg-accent/45 hover:shadow-sm"
+          ? "bg-accent text-white"
+          : "bg-accent/20 text-ink hover:bg-accent/45 hover:shadow-sm"
       }`}
     >
       {nummer}
@@ -1788,7 +1788,7 @@ function Bronkaart({
         )}
       </div>
       {bron.heeft_origineel && (
-        <span className="flex-shrink-0 text-gray-400 group-hover:text-[#0F2744] transition-colors text-sm leading-none mt-1">
+        <span className="flex-shrink-0 text-gray-400 group-hover:text-ink transition-colors text-sm leading-none mt-1">
           ↗
         </span>
       )}

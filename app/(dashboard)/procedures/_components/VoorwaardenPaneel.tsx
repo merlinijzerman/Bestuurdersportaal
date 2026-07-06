@@ -221,7 +221,7 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
     <div className="bg-white border border-gray-200 rounded-xl p-5">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="text-sm font-semibold text-[#0F2744]">Voorwaarden</h3>
+          <h3 className="text-sm font-semibold text-ink">Voorwaarden</h3>
           <p className="text-xs text-gray-500 mt-0.5">
             Voorwaarden waaronder dit besluit van kracht is — met KPI,
             drempelwaarde en heroverwegingstrigger.
@@ -233,7 +233,7 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
             setOpen((o) => !o);
             setFout(null);
           }}
-          className="text-xs text-[#0F2744] hover:underline whitespace-nowrap"
+          className="text-xs text-ink hover:underline whitespace-nowrap"
         >
           {open ? "Sluiten" : "+ Nieuwe voorwaarde"}
         </button>
@@ -315,7 +315,7 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
               type="button"
               onClick={nieuw}
               disabled={bezig === "nieuw"}
-              className="bg-[#0F2744] text-white text-sm px-4 py-2 rounded-md hover:bg-[#1a3a5e] disabled:opacity-50"
+              className="bg-accent text-white text-sm px-4 py-2 rounded-md hover:bg-accent-ink disabled:opacity-50"
             >
               {bezig === "nieuw" ? "Bezig…" : "Toevoegen"}
             </button>
@@ -420,7 +420,7 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
                       type="button"
                       onClick={() => bewaarBewerken(c)}
                       disabled={bezig === c.id}
-                      className="bg-[#0F2744] text-white text-sm px-4 py-2 rounded-md hover:bg-[#1a3a5e] disabled:opacity-50"
+                      className="bg-accent text-white text-sm px-4 py-2 rounded-md hover:bg-accent-ink disabled:opacity-50"
                     >
                       {bezig === c.id ? "Bezig…" : "Bewaar"}
                     </button>
@@ -507,7 +507,7 @@ export default function VoorwaardenPaneel({ decisionId, conditions }: Props) {
                     type="button"
                     onClick={() => startBewerken(c)}
                     disabled={bezig === c.id}
-                    className="text-[11px] text-[#0F2744] hover:underline disabled:opacity-50"
+                    className="text-[11px] text-ink hover:underline disabled:opacity-50"
                     title="Voorwaarde bewerken"
                   >
                     Bewerk

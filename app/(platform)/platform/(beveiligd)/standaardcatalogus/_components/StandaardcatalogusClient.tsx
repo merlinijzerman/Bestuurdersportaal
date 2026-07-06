@@ -87,7 +87,7 @@ export default function StandaardcatalogusClient({
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap gap-1 border-b border-[#0F2744]/10">
+      <div className="flex flex-wrap gap-1 border-b border-line">
         {TABS.map((t) => {
           const aantal = items[t.sleutel].length;
           const actief = t.sleutel === tab;
@@ -99,12 +99,12 @@ export default function StandaardcatalogusClient({
               className={
                 "rounded-t-lg px-4 py-2 text-sm font-medium transition-colors " +
                 (actief
-                  ? "bg-white text-[#0F2744] shadow-sm"
-                  : "text-[#0F2744]/60 hover:text-[#0F2744]")
+                  ? "bg-white text-ink shadow-sm"
+                  : "text-ink/60 hover:text-ink")
               }
             >
               {t.label}
-              <span className="ml-2 text-xs text-[#0F2744]/40">{aantal}</span>
+              <span className="ml-2 text-xs text-ink/40">{aantal}</span>
             </button>
           );
         })}
@@ -179,13 +179,13 @@ function CatalogusTab({
         />
       )}
 
-      <div className="overflow-hidden rounded-xl border border-[#0F2744]/10 bg-white">
+      <div className="overflow-hidden rounded-xl border border-line bg-white">
         {items.length === 0 ? (
-          <p className="px-5 py-6 text-sm text-[#0F2744]/60">
+          <p className="px-5 py-6 text-sm text-ink/60">
             Nog geen standaarditems in deze catalogus.
           </p>
         ) : (
-          <ul className="divide-y divide-[#0F2744]/5">
+          <ul className="divide-y divide-line">
             {items.map((item) => (
               <li key={item.id} className="px-5 py-3">
                 {bewerkId === item.id ? (
@@ -260,29 +260,29 @@ function RegelWeergave({
           <span
             className={
               "font-medium " +
-              (item.actief ? "text-[#0F2744]" : "text-[#0F2744]/40 line-through")
+              (item.actief ? "text-ink" : "text-ink/40 line-through")
             }
           >
             {item.naam}
           </span>
           {isGremia && item.categorie && (
-            <span className="rounded-full bg-accent/15 px-2 py-0.5 text-xs text-[#0F2744]">
+            <span className="rounded-full bg-accent/15 px-2 py-0.5 text-xs text-ink">
               {CATEGORIE_LABEL[item.categorie] ?? item.categorie}
             </span>
           )}
           {isGremia && item.type && (
-            <span className="rounded-full bg-app-bg px-2 py-0.5 text-xs text-[#0F2744]/70">
+            <span className="rounded-full bg-app-bg px-2 py-0.5 text-xs text-ink/70">
               {TYPE_LABEL[item.type] ?? item.type}
             </span>
           )}
           {!item.actief && (
-            <span className="rounded-full bg-[#0F2744]/5 px-2 py-0.5 text-xs text-[#0F2744]/50">
+            <span className="rounded-full bg-accent/5 px-2 py-0.5 text-xs text-ink/50">
               inactief
             </span>
           )}
         </div>
         {item.omschrijving && (
-          <p className="mt-0.5 text-sm text-[#0F2744]/60">{item.omschrijving}</p>
+          <p className="mt-0.5 text-sm text-ink/60">{item.omschrijving}</p>
         )}
       </div>
 
@@ -292,7 +292,7 @@ function RegelWeergave({
             type="button"
             disabled={bezig}
             onClick={onBewerk}
-            className="rounded-lg px-3 py-1.5 text-sm text-[#0F2744] hover:bg-app-bg disabled:opacity-50"
+            className="rounded-lg px-3 py-1.5 text-sm text-ink hover:bg-app-bg disabled:opacity-50"
           >
             Bewerken
           </button>
@@ -342,7 +342,7 @@ function TogglerKnop({
         value={reden}
         onChange={(e) => setReden(e.target.value)}
         placeholder="Reden (verplicht)"
-        className="w-44 rounded-lg border border-[#0F2744]/15 px-2 py-1.5 text-sm"
+        className="w-44 rounded-lg border border-line px-2 py-1.5 text-sm"
       />
       <button
         type="button"
@@ -352,7 +352,7 @@ function TogglerKnop({
           setOpen(false);
           setReden("");
         }}
-        className="rounded-lg bg-[#0F2744] px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
+        className="rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
       >
         Bevestig
       </button>
@@ -362,7 +362,7 @@ function TogglerKnop({
           setOpen(false);
           setReden("");
         }}
-        className="rounded-lg px-2 py-1.5 text-sm text-[#0F2744]/60 hover:bg-app-bg"
+        className="rounded-lg px-2 py-1.5 text-sm text-ink/60 hover:bg-app-bg"
       >
         Annuleer
       </button>
@@ -411,28 +411,28 @@ function ToevoegFormulier({
           reset
         );
       }}
-      className="rounded-xl border border-[#0F2744]/10 bg-app-bg/50 p-4"
+      className="rounded-xl border border-line bg-app-bg/50 p-4"
     >
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-[#0F2744]/60">Naam</span>
+          <span className="text-xs font-medium text-ink/60">Naam</span>
           <input
             value={naam}
             onChange={(e) => setNaam(e.target.value)}
             placeholder={
               isGremia ? "bv. Geschillencommissie" : "bv. Nieuw item"
             }
-            className="w-64 rounded-lg border border-[#0F2744]/15 bg-white px-3 py-1.5 text-sm"
+            className="w-64 rounded-lg border border-line bg-white px-3 py-1.5 text-sm"
           />
         </label>
 
         {isGremia && (
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-[#0F2744]/60">Categorie</span>
+            <span className="text-xs font-medium text-ink/60">Categorie</span>
             <select
               value={categorie}
               onChange={(e) => setCategorie(e.target.value)}
-              className="rounded-lg border border-[#0F2744]/15 bg-white px-3 py-1.5 text-sm"
+              className="rounded-lg border border-line bg-white px-3 py-1.5 text-sm"
             >
               {GREMIA_CATEGORIEEN.map((c) => (
                 <option key={c} value={c}>
@@ -445,11 +445,11 @@ function ToevoegFormulier({
 
         {isGremia && (
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-[#0F2744]/60">Type</span>
+            <span className="text-xs font-medium text-ink/60">Type</span>
             <select
               value={type}
               onChange={(e) => setType(e.target.value)}
-              className="rounded-lg border border-[#0F2744]/15 bg-white px-3 py-1.5 text-sm"
+              className="rounded-lg border border-line bg-white px-3 py-1.5 text-sm"
             >
               {GREMIA_TYPES.map((t) => (
                 <option key={t} value={t}>
@@ -461,20 +461,20 @@ function ToevoegFormulier({
         )}
 
         <label className="flex flex-1 flex-col gap-1">
-          <span className="text-xs font-medium text-[#0F2744]/60">
+          <span className="text-xs font-medium text-ink/60">
             Omschrijving (optioneel)
           </span>
           <input
             value={omschrijving}
             onChange={(e) => setOmschrijving(e.target.value)}
-            className="w-full min-w-48 rounded-lg border border-[#0F2744]/15 bg-white px-3 py-1.5 text-sm"
+            className="w-full min-w-48 rounded-lg border border-line bg-white px-3 py-1.5 text-sm"
           />
         </label>
 
         <button
           type="submit"
           disabled={bezig || !naam.trim()}
-          className="rounded-lg bg-[#0F2744] px-4 py-1.5 text-sm font-medium text-white disabled:opacity-40"
+          className="rounded-lg bg-accent px-4 py-1.5 text-sm font-medium text-white disabled:opacity-40"
         >
           Toevoegen
         </button>
@@ -525,21 +525,21 @@ function BewerkFormulier({
     >
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-[#0F2744]/60">Naam</span>
+          <span className="text-xs font-medium text-ink/60">Naam</span>
           <input
             value={naam}
             onChange={(e) => setNaam(e.target.value)}
-            className="w-64 rounded-lg border border-[#0F2744]/15 bg-white px-3 py-1.5 text-sm"
+            className="w-64 rounded-lg border border-line bg-white px-3 py-1.5 text-sm"
           />
         </label>
 
         {isGremia && (
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-[#0F2744]/60">Categorie</span>
+            <span className="text-xs font-medium text-ink/60">Categorie</span>
             <select
               value={categorie}
               onChange={(e) => setCategorie(e.target.value)}
-              className="rounded-lg border border-[#0F2744]/15 bg-white px-3 py-1.5 text-sm"
+              className="rounded-lg border border-line bg-white px-3 py-1.5 text-sm"
             >
               {GREMIA_CATEGORIEEN.map((c) => (
                 <option key={c} value={c}>
@@ -552,11 +552,11 @@ function BewerkFormulier({
 
         {isGremia && (
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-[#0F2744]/60">Type</span>
+            <span className="text-xs font-medium text-ink/60">Type</span>
             <select
               value={type}
               onChange={(e) => setType(e.target.value)}
-              className="rounded-lg border border-[#0F2744]/15 bg-white px-3 py-1.5 text-sm"
+              className="rounded-lg border border-line bg-white px-3 py-1.5 text-sm"
             >
               {GREMIA_TYPES.map((t) => (
                 <option key={t} value={t}>
@@ -568,40 +568,40 @@ function BewerkFormulier({
         )}
 
         <label className="flex flex-1 flex-col gap-1">
-          <span className="text-xs font-medium text-[#0F2744]/60">
+          <span className="text-xs font-medium text-ink/60">
             Omschrijving
           </span>
           <input
             value={omschrijving}
             onChange={(e) => setOmschrijving(e.target.value)}
-            className="w-full min-w-48 rounded-lg border border-[#0F2744]/15 bg-white px-3 py-1.5 text-sm"
+            className="w-full min-w-48 rounded-lg border border-line bg-white px-3 py-1.5 text-sm"
           />
         </label>
       </div>
 
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex flex-1 flex-col gap-1">
-          <span className="text-xs font-medium text-[#0F2744]/60">
+          <span className="text-xs font-medium text-ink/60">
             Reden van wijziging (verplicht)
           </span>
           <input
             value={reden}
             onChange={(e) => setReden(e.target.value)}
             placeholder="bv. Naam aangepast n.a.v. besluit bestuur 2026-06"
-            className="w-full min-w-48 rounded-lg border border-[#0F2744]/15 bg-white px-3 py-1.5 text-sm"
+            className="w-full min-w-48 rounded-lg border border-line bg-white px-3 py-1.5 text-sm"
           />
         </label>
         <button
           type="submit"
           disabled={bezig || !naam.trim() || reden.trim().length === 0}
-          className="rounded-lg bg-[#0F2744] px-4 py-1.5 text-sm font-medium text-white disabled:opacity-40"
+          className="rounded-lg bg-accent px-4 py-1.5 text-sm font-medium text-white disabled:opacity-40"
         >
           Opslaan
         </button>
         <button
           type="button"
           onClick={onAnnuleer}
-          className="rounded-lg px-3 py-1.5 text-sm text-[#0F2744]/60 hover:bg-white"
+          className="rounded-lg px-3 py-1.5 text-sm text-ink/60 hover:bg-white"
         >
           Annuleer
         </button>

@@ -60,7 +60,7 @@ export default async function RisicomatrixPage() {
     <div className="p-7 space-y-6">
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-[#0F2744] text-xl font-bold">Risicomatrix</h1>
+          <h1 className="text-ink text-xl font-bold">Risicomatrix</h1>
           <p className="text-gray-500 text-sm mt-0.5">
             Actueel inzicht in de risico&apos;s van het fonds, gerangschikt op
             Kans &times; Impact en onderverdeeld in vier categorie&euml;n.
@@ -69,13 +69,13 @@ export default async function RisicomatrixPage() {
         <div className="flex items-center gap-2">
           <Link
             href="/risicomatrix/archief"
-            className="px-3 py-2 text-sm border border-gray-200 rounded-lg hover:border-[#0F2744] text-gray-700"
+            className="px-3 py-2 text-sm border border-gray-200 rounded-lg hover:border-accent text-gray-700"
           >
             Archief gesloten risico&apos;s
           </Link>
           <Link
             href="/risicomatrix/nieuw"
-            className="bg-[#0F2744] text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-[#1a3858]"
+            className="bg-accent text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-accent-ink"
           >
             + Nieuw risico
           </Link>
@@ -86,7 +86,7 @@ export default async function RisicomatrixPage() {
         <div className="col-span-12 lg:col-span-8 bg-white border border-gray-200 rounded-xl p-5">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <h2 className="text-sm font-semibold text-[#0F2744]">
+              <h2 className="text-sm font-semibold text-ink">
                 Kans &times; Impact heatmap
               </h2>
               <p className="text-xs text-gray-500 mt-0.5">
@@ -139,7 +139,7 @@ export default async function RisicomatrixPage() {
                   <div className="flex-1 text-sm text-gray-700">
                     {NIVEAU_LABEL[n]}
                   </div>
-                  <div className="text-sm font-semibold text-[#0F2744]">
+                  <div className="text-sm font-semibold text-ink">
                     {tellers[n]}
                   </div>
                 </div>
@@ -164,7 +164,7 @@ export default async function RisicomatrixPage() {
           return (
             <section key={cat.slug}>
               <div className="flex items-center justify-between mb-2">
-                <h2 className="text-sm font-semibold text-[#0F2744] uppercase tracking-wide">
+                <h2 className="text-sm font-semibold text-ink uppercase tracking-wide">
                   {cat.label}
                 </h2>
                 <span className="text-xs text-gray-500">
@@ -188,10 +188,10 @@ export default async function RisicomatrixPage() {
                       />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-medium text-[#0F2744]">
+                          <span className="text-sm font-medium text-ink">
                             {r.titel}
                           </span>
-                          <span className="text-[10px] uppercase tracking-wide text-[#0F2744] bg-blue-50 px-1.5 py-0.5 rounded">
+                          <span className="text-[10px] uppercase tracking-wide text-ink bg-blue-50 px-1.5 py-0.5 rounded">
                             {TYPE_LABEL[r.type_risico]}
                           </span>
                         </div>

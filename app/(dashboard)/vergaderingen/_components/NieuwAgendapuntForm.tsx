@@ -65,7 +65,7 @@ export default function NieuwAgendapuntForm({ vergaderingId }: { vergaderingId: 
     return (
       <button
         onClick={() => setOpen(true)}
-        className="text-sm text-[#0F2744] border border-gray-300 rounded-lg px-3 py-1.5 hover:border-accent transition-colors"
+        className="text-sm text-ink border border-gray-300 rounded-lg px-3 py-1.5 hover:border-accent transition-colors"
       >
         + Agendapunt toevoegen
       </button>
@@ -77,7 +77,7 @@ export default function NieuwAgendapuntForm({ vergaderingId }: { vergaderingId: 
       onSubmit={indienen}
       className="bg-white border border-gray-200 rounded-xl p-4 w-full"
     >
-      <div className="text-sm font-semibold text-[#0F2744] mb-3">Nieuw agendapunt</div>
+      <div className="text-sm font-semibold text-ink mb-3">Nieuw agendapunt</div>
       <div className="space-y-3">
         <div>
           <label className="text-xs text-gray-500 block mb-1">Titel</label>
@@ -144,7 +144,7 @@ export default function NieuwAgendapuntForm({ vergaderingId }: { vergaderingId: 
           <button
             type="submit"
             disabled={bezig}
-            className="bg-[#0F2744] text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-accent hover:text-[#0F2744] transition-colors disabled:opacity-50"
+            className="bg-accent text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-accent hover:text-ink transition-colors disabled:opacity-50"
           >
             {bezig ? "Bezig..." : "Toevoegen"}
           </button>

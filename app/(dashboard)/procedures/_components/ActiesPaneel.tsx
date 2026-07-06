@@ -136,7 +136,7 @@ export default function ActiesPaneel({
     <div className="bg-white border border-gray-200 rounded-xl p-5">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="text-sm font-semibold text-[#0F2744]">Acties</h3>
+          <h3 className="text-sm font-semibold text-ink">Acties</h3>
           <p className="text-xs text-gray-500 mt-0.5">
             Concrete acties die uit dit besluit voortvloeien — optioneel
             gekoppeld aan een voorwaarde die ze bewaken.
@@ -148,7 +148,7 @@ export default function ActiesPaneel({
             setOpen((o) => !o);
             setFout(null);
           }}
-          className="text-xs text-[#0F2744] hover:underline whitespace-nowrap"
+          className="text-xs text-ink hover:underline whitespace-nowrap"
         >
           {open ? "Sluiten" : "+ Nieuwe actie"}
         </button>
@@ -211,7 +211,7 @@ export default function ActiesPaneel({
               type="button"
               onClick={nieuw}
               disabled={bezig === "nieuw"}
-              className="bg-[#0F2744] text-white text-sm px-4 py-2 rounded-md hover:bg-[#1a3a5e] disabled:opacity-50"
+              className="bg-accent text-white text-sm px-4 py-2 rounded-md hover:bg-accent-ink disabled:opacity-50"
             >
               {bezig === "nieuw" ? "Bezig…" : "Toevoegen"}
             </button>

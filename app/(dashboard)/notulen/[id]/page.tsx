@@ -72,11 +72,11 @@ export default async function NotulenDetailPage({
 
   return (
     <div className="p-7 max-w-4xl">
-      <Link href="/notulen" className="text-sm text-gray-500 hover:text-[#0F2744]">
+      <Link href="/notulen" className="text-sm text-gray-500 hover:text-ink">
         ← Terug naar notulen
       </Link>
       <div className="flex items-start justify-between mt-2 mb-1">
-        <h1 className="text-xl font-black text-[#0F2744]">{doc.titel}</h1>
+        <h1 className="text-xl font-black text-ink">{doc.titel}</h1>
         <span
           className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
             vastgesteld ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"

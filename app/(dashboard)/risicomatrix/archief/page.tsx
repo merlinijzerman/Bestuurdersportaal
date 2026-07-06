@@ -53,14 +53,14 @@ export default async function ArchiefPage() {
     <div className="p-7 space-y-5">
       <Link
         href="/risicomatrix"
-        className="text-sm text-gray-500 hover:text-[#0F2744] inline-flex items-center gap-1"
+        className="text-sm text-gray-500 hover:text-ink inline-flex items-center gap-1"
       >
         ← Terug naar matrix
       </Link>
 
       <div className="flex items-end justify-between">
         <div>
-          <h1 className="text-[#0F2744] text-xl font-bold">
+          <h1 className="text-ink text-xl font-bold">
             Archief gesloten risico&apos;s
           </h1>
           <p className="text-gray-500 text-sm mt-0.5">
@@ -93,7 +93,7 @@ export default async function ArchiefPage() {
                 className="grid grid-cols-12 gap-4 px-4 py-4 items-center hover:bg-gray-50 text-sm"
               >
                 <div className="col-span-5 min-w-0">
-                  <div className="font-medium text-[#0F2744]">{r.titel}</div>
+                  <div className="font-medium text-ink">{r.titel}</div>
                   {r.toelichting && (
                     <div className="text-xs text-gray-500 mt-0.5 line-clamp-1">
                       {r.toelichting}

@@ -92,7 +92,7 @@ export default function UitklapbaarPaneel({
           >
             {statusIcoon(status)}
           </span>
-          <h3 className="text-sm font-semibold text-[#0F2744] truncate">
+          <h3 className="text-sm font-semibold text-ink truncate">
             {titel}
           </h3>
           {typeof count === "number" && (

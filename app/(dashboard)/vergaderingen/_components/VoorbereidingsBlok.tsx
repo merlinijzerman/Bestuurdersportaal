@@ -106,7 +106,7 @@ export default function VoorbereidingsBlok({
 
       {/* Vrij notitieveld — privé, los van de AI; direct boven "Inbreng vooraf" */}
       <div className="bg-white border border-amber-200 rounded-lg p-3">
-        <div className="text-xs font-semibold text-[#0F2744] uppercase tracking-wide mb-2">
+        <div className="text-xs font-semibold text-ink uppercase tracking-wide mb-2">
           Mijn aantekeningen
           <span className="text-[10px] text-gray-400 font-normal ml-2 normal-case tracking-normal">
             privé · niet zichtbaar voor anderen
@@ -128,7 +128,7 @@ export default function VoorbereidingsBlok({
             <button
               onClick={notitiesOpslaan}
               disabled={opslaan}
-              className="text-[#0F2744] font-medium hover:underline disabled:opacity-50"
+              className="text-ink font-medium hover:underline disabled:opacity-50"
             >
               {opslaan ? "Opslaan…" : "Aantekeningen opslaan"}
             </button>

@@ -74,7 +74,7 @@ function renderBlokken(
     const kop = regel.match(/^#{1,6}\s+(.*)$/);
     if (kop) {
       blokken.push(
-        <p key={sleutel++} className="font-semibold text-[#0F2744] mt-1.5 mb-0.5">
+        <p key={sleutel++} className="font-semibold text-ink mt-1.5 mb-0.5">
           {inline(kop[1])}
         </p>
       );
@@ -117,7 +117,7 @@ function parseInline(
           }
           className={`inline-flex items-center justify-center min-w-4 h-4 px-0.5 rounded-full text-[9px] font-semibold align-text-top mx-0.5 ${
             bron
-              ? "bg-[#0F2744] text-white hover:bg-accent hover:text-[#0F2744]"
+              ? "bg-accent text-white hover:bg-accent hover:text-ink"
               : "bg-red-100 text-red-700 line-through"
           }`}
         >

@@ -81,7 +81,7 @@ export default function DossierStatusStrip({
           <>
             <span className="text-xs text-gray-700">
               <span className="text-gray-500">Volgende horde:</span>{" "}
-              <span className="font-medium text-[#0F2744]">
+              <span className="font-medium text-ink">
                 {READINESS_LABEL[eersteOnvolledig]}
               </span>
             </span>
@@ -105,7 +105,7 @@ export default function DossierStatusStrip({
         />
         <a
           href={`#${statusOvergangAnker}`}
-          className="text-xs font-medium text-white bg-[#0F2744] hover:bg-[#1a3a5e] px-3 py-1.5 rounded-md whitespace-nowrap"
+          className="text-xs font-medium text-white bg-accent hover:bg-accent-ink px-3 py-1.5 rounded-md whitespace-nowrap"
         >
           Statusovergang →
         </a>

@@ -54,7 +54,7 @@ export default function RisicoActies({ risicoId }: Props) {
 
   return (
     <div className="bg-white border border-red-200 rounded-xl p-4 max-w-md">
-      <div className="text-sm font-semibold text-[#0F2744] mb-1">
+      <div className="text-sm font-semibold text-ink mb-1">
         Risico sluiten
       </div>
       <div className="text-xs text-gray-600 mb-3">
@@ -78,7 +78,7 @@ export default function RisicoActies({ risicoId }: Props) {
             setFout(null);
             setMotivering("");
           }}
-          className="px-3 py-1.5 text-xs border border-gray-200 rounded hover:border-[#0F2744]"
+          className="px-3 py-1.5 text-xs border border-gray-200 rounded hover:border-accent"
         >
           Annuleren
         </button>

@@ -67,7 +67,7 @@ export default function RechtenClient({
 
   if (identiteiten.length === 0) {
     return (
-      <p className="text-sm text-[#0F2744]/60">
+      <p className="text-sm text-ink/60">
         Geen platform-identiteiten gevonden.
       </p>
     );
@@ -135,13 +135,13 @@ function IdentiteitKaart({
   const beschikbaar = toekenbareCaps.filter((c) => !reedsToegekend.has(c.capability));
 
   return (
-    <li className="rounded-xl border border-[#0F2744]/10 bg-white p-5">
+    <li className="rounded-xl border border-line bg-white p-5">
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="font-medium text-[#0F2744]">{identiteit.naam}</span>
+            <span className="font-medium text-ink">{identiteit.naam}</span>
             {identiteit.isZelf && (
-              <span className="rounded-full bg-app-bg px-2 py-0.5 text-xs text-[#0F2744]/70">
+              <span className="rounded-full bg-app-bg px-2 py-0.5 text-xs text-ink/70">
                 jij
               </span>
             )}
@@ -151,16 +151,16 @@ function IdentiteitKaart({
               </span>
             )}
           </div>
-          <p className="text-sm text-[#0F2744]/60">{identiteit.email}</p>
+          <p className="text-sm text-ink/60">{identiteit.email}</p>
         </div>
       </div>
 
       <div className="mt-4">
-        <p className="text-xs font-medium uppercase tracking-wide text-[#0F2744]/50">
+        <p className="text-xs font-medium uppercase tracking-wide text-ink/50">
           Capabilities ({identiteit.capabilities.length})
         </p>
         {identiteit.capabilities.length === 0 ? (
-          <p className="mt-2 text-sm text-[#0F2744]/50">Geen capabilities.</p>
+          <p className="mt-2 text-sm text-ink/50">Geen capabilities.</p>
         ) : (
           <ul className="mt-2 flex flex-wrap gap-2">
             {identiteit.capabilities.map((c) => (
@@ -207,11 +207,11 @@ function CapChip({
   return (
     <li className="rounded-lg bg-app-bg px-3 py-1.5 text-sm">
       <div className="flex items-center gap-2">
-        <span className="text-[#0F2744]">{cap.label}</span>
+        <span className="text-ink">{cap.label}</span>
         {cap.zwaar && (
           <span
             title="Zware capability"
-            className="rounded-full bg-accent/20 px-1.5 py-0.5 text-[10px] font-medium text-[#0F2744]"
+            className="rounded-full bg-accent/20 px-1.5 py-0.5 text-[10px] font-medium text-ink"
           >
             zwaar
           </span>
@@ -234,7 +234,7 @@ function CapChip({
             value={reden}
             onChange={(e) => setReden(e.target.value)}
             placeholder="Reden (verplicht)"
-            className="w-44 rounded border border-[#0F2744]/15 bg-white px-2 py-1 text-xs"
+            className="w-44 rounded border border-line bg-white px-2 py-1 text-xs"
           />
           <button
             type="button"
@@ -254,7 +254,7 @@ function CapChip({
               setOpen(false);
               setReden("");
             }}
-            className="text-xs text-[#0F2744]/60 hover:underline"
+            className="text-xs text-ink/60 hover:underline"
           >
             annuleer
           </button>
@@ -288,21 +288,21 @@ function ToekenFormulier({
 
   if (isZelf) {
     return (
-      <p className="mt-4 border-t border-[#0F2744]/5 pt-3 text-xs text-[#0F2744]/50">
+      <p className="mt-4 border-t border-line pt-3 text-xs text-ink/50">
         Je kunt jezelf geen capabilities toekennen (functiescheiding).
       </p>
     );
   }
   if (!actief) {
     return (
-      <p className="mt-4 border-t border-[#0F2744]/5 pt-3 text-xs text-[#0F2744]/50">
+      <p className="mt-4 border-t border-line pt-3 text-xs text-ink/50">
         Identiteit is geblokkeerd; toekennen is niet mogelijk.
       </p>
     );
   }
   if (beschikbaar.length === 0) {
     return (
-      <p className="mt-4 border-t border-[#0F2744]/5 pt-3 text-xs text-[#0F2744]/50">
+      <p className="mt-4 border-t border-line pt-3 text-xs text-ink/50">
         Alle toekenbare capabilities zijn al toegekend.
       </p>
     );
@@ -315,14 +315,14 @@ function ToekenFormulier({
         if (!capability || reden.trim().length === 0) return;
         onToekennen(capability, reden.trim(), reset);
       }}
-      className="mt-4 flex flex-wrap items-end gap-3 border-t border-[#0F2744]/5 pt-4"
+      className="mt-4 flex flex-wrap items-end gap-3 border-t border-line pt-4"
     >
       <label className="flex flex-col gap-1">
-        <span className="text-xs font-medium text-[#0F2744]/60">Capability</span>
+        <span className="text-xs font-medium text-ink/60">Capability</span>
         <select
           value={capability}
           onChange={(e) => setCapability(e.target.value)}
-          className="rounded-lg border border-[#0F2744]/15 bg-white px-3 py-1.5 text-sm"
+          className="rounded-lg border border-line bg-white px-3 py-1.5 text-sm"
         >
           {beschikbaar.map((c) => (
             <option key={c.capability} value={c.capability}>
@@ -332,20 +332,20 @@ function ToekenFormulier({
         </select>
       </label>
       <label className="flex flex-1 flex-col gap-1">
-        <span className="text-xs font-medium text-[#0F2744]/60">
+        <span className="text-xs font-medium text-ink/60">
           Reden (verplicht)
         </span>
         <input
           value={reden}
           onChange={(e) => setReden(e.target.value)}
           placeholder="bv. Toegang n.a.v. functiewijziging / besluit"
-          className="w-full min-w-48 rounded-lg border border-[#0F2744]/15 bg-white px-3 py-1.5 text-sm"
+          className="w-full min-w-48 rounded-lg border border-line bg-white px-3 py-1.5 text-sm"
         />
       </label>
       <button
         type="submit"
         disabled={bezig || !capability || reden.trim().length === 0}
-        className="rounded-lg bg-[#0F2744] px-4 py-1.5 text-sm font-medium text-white disabled:opacity-40"
+        className="rounded-lg bg-accent px-4 py-1.5 text-sm font-medium text-white disabled:opacity-40"
       >
         Toekennen
       </button>

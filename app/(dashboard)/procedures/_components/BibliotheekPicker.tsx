@@ -109,7 +109,7 @@ export default function BibliotheekPicker({ onSelect, onClose }: Props) {
       >
         <div className="flex items-start justify-between p-5 border-b border-gray-100">
           <div>
-            <h2 className="text-[#0F2744] font-semibold text-lg">
+            <h2 className="text-ink font-semibold text-lg">
               Kies een bestaand document
             </h2>
             <p className="text-xs text-gray-500 mt-0.5">
@@ -184,7 +184,7 @@ export default function BibliotheekPicker({ onSelect, onClose }: Props) {
                         {badge.label}
                       </span>
                       <span className="flex-1 min-w-0">
-                        <span className="block text-sm text-[#0F2744] truncate group-hover:text-accent">
+                        <span className="block text-sm text-ink truncate group-hover:text-accent">
                           {d.titel}
                         </span>
                         <span className="block text-[11px] text-gray-500">

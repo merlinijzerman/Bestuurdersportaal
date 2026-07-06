@@ -41,7 +41,7 @@ export default function ReadinessLadder({ readiness }: Props) {
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-5">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold text-[#0F2744]">
+        <h3 className="text-sm font-semibold text-ink">
           Readiness-ladder
         </h3>
         <span className="text-xs text-gray-500">
@@ -77,7 +77,7 @@ export default function ReadinessLadder({ readiness }: Props) {
                   r.voldoet
                     ? "bg-emerald-500 text-white"
                     : isActief
-                      ? "bg-accent text-[#0F2744] ring-4 ring-amber-100"
+                      ? "bg-accent text-ink ring-4 ring-amber-100"
                       : "bg-gray-100 text-gray-400 border-2 border-gray-200"
                 }`}
               >
@@ -98,7 +98,7 @@ export default function ReadinessLadder({ readiness }: Props) {
                       r.voldoet
                         ? "text-gray-900"
                         : isActief
-                          ? "text-[#0F2744]"
+                          ? "text-ink"
                           : "text-gray-500"
                     }`}
                   >

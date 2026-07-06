@@ -70,7 +70,7 @@ export default function DecisionObjectHeader({ decision, autoUpgraded }: Props) 
     decision.besluitvraag.startsWith("Aanvullen na auto-upgrade");
 
   return (
-    <div className="bg-gradient-to-r from-[#0F2744] to-[#1a3a5e] text-white rounded-xl p-5 space-y-4">
+    <div className="bg-gradient-to-r from-accent to-accent-ink text-white rounded-xl p-5 space-y-4">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap text-[11px] font-medium uppercase tracking-wide">

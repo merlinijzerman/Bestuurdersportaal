@@ -25,7 +25,7 @@ export default function DashboardError({
         <div className="inline-flex items-center justify-center w-12 h-12 bg-amber-50 rounded-2xl mb-4">
           <span className="text-2xl">⚠️</span>
         </div>
-        <h1 className="text-[#0F2744] text-lg font-bold">
+        <h1 className="text-ink text-lg font-bold">
           Er ging iets mis bij het laden van deze pagina
         </h1>
         <p className="text-sm text-gray-500 mt-2">
@@ -36,13 +36,13 @@ export default function DashboardError({
         <div className="flex items-center justify-center gap-3 mt-5">
           <button
             onClick={() => reset()}
-            className="text-sm text-white bg-[#0F2744] px-4 py-2 rounded-lg hover:bg-[#163457] transition-colors"
+            className="text-sm text-white bg-accent px-4 py-2 rounded-lg hover:bg-accent-ink transition-colors"
           >
             Opnieuw proberen
           </button>
           <Link
             href="/"
-            className="text-sm text-[#0F2744] border border-gray-200 px-4 py-2 rounded-lg hover:border-accent transition-colors"
+            className="text-sm text-ink border border-gray-200 px-4 py-2 rounded-lg hover:border-accent transition-colors"
           >
             Naar overzicht
           </Link>

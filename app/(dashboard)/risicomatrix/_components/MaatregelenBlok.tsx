@@ -135,13 +135,13 @@ export default function MaatregelenBlok({
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-5">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-[#0F2744]">
+        <h3 className="text-sm font-semibold text-ink">
           Getroffen maatregelen
         </h3>
         {!readonly && (
           <button
             onClick={() => setToonForm(!toonForm)}
-            className="text-xs text-[#0F2744] hover:underline"
+            className="text-xs text-ink hover:underline"
           >
             {toonForm ? "Annuleren" : "+ Maatregel toevoegen"}
           </button>
@@ -177,14 +177,14 @@ export default function MaatregelenBlok({
                 setToonForm(false);
                 setFout(null);
               }}
-              className="text-xs px-3 py-1.5 border border-gray-200 rounded hover:border-[#0F2744]"
+              className="text-xs px-3 py-1.5 border border-gray-200 rounded hover:border-accent"
             >
               Annuleren
             </button>
             <button
               type="submit"
               disabled={bezig}
-              className="text-xs px-3 py-1.5 bg-[#0F2744] text-white rounded hover:bg-[#1a3858] disabled:opacity-50"
+              className="text-xs px-3 py-1.5 bg-accent text-white rounded hover:bg-accent-ink disabled:opacity-50"
             >
               {bezig ? "Bezig…" : "Toevoegen"}
             </button>

@@ -156,7 +156,7 @@ export default function DissentPaneel({
     <div className="bg-white border border-gray-200 rounded-xl p-5">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="text-sm font-semibold text-[#0F2744]">Dissent</h3>
+          <h3 className="text-sm font-semibold text-ink">Dissent</h3>
           <p className="text-xs text-gray-500 mt-0.5">
             Afwijkende standpunten, met expliciete keuze hoe formeel ze in het
             dossier landen.
@@ -168,7 +168,7 @@ export default function DissentPaneel({
             setOpen((o) => !o);
             setFout(null);
           }}
-          className="text-xs text-[#0F2744] hover:underline whitespace-nowrap"
+          className="text-xs text-ink hover:underline whitespace-nowrap"
         >
           {open ? "Sluiten" : "+ Nieuwe notitie"}
         </button>
@@ -201,7 +201,7 @@ export default function DissentPaneel({
                   key={z}
                   className={`flex items-start gap-2 cursor-pointer p-2 rounded border ${
                     zichtbaarheid === z
-                      ? "border-[#0F2744] bg-white"
+                      ? "border-accent bg-white"
                       : "border-gray-200 bg-white hover:bg-gray-50"
                   }`}
                 >
@@ -209,7 +209,7 @@ export default function DissentPaneel({
                     type="radio"
                     checked={zichtbaarheid === z}
                     onChange={() => setZichtbaarheid(z)}
-                    className="mt-0.5 text-[#0F2744] focus:ring-accent/40"
+                    className="mt-0.5 text-ink focus:ring-accent/40"
                   />
                   <div className="flex-1">
                     <div className="text-sm font-medium text-gray-900">
@@ -233,7 +233,7 @@ export default function DissentPaneel({
               type="button"
               onClick={nieuw}
               disabled={bezig === "nieuw"}
-              className="bg-[#0F2744] text-white text-sm px-4 py-2 rounded-md hover:bg-[#1a3a5e] disabled:opacity-50"
+              className="bg-accent text-white text-sm px-4 py-2 rounded-md hover:bg-accent-ink disabled:opacity-50"
             >
               {bezig === "nieuw" ? "Bezig…" : "Vastleggen"}
             </button>

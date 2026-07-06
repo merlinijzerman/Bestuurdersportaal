@@ -107,7 +107,7 @@ export default function OnderbouwingPaneel({
           <span aria-hidden className="text-gray-400 text-xs">
             🔎
           </span>
-          <span className="text-xs font-semibold text-[#0F2744]">
+          <span className="text-xs font-semibold text-ink">
             Onderbouwing en bronnen
           </span>
           {typeof meta.aantalBronnen === "number" && meta.aantalBronnen > 0 && (
@@ -255,7 +255,7 @@ export default function OnderbouwingPaneel({
                       href={w.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-[#0F2744] underline hover:text-accent"
+                      className="text-ink underline hover:text-accent"
                     >
                       {w.titel}
                     </a>

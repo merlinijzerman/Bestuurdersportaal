@@ -74,7 +74,7 @@ function InklapKnop({
     <button
       type="button"
       onClick={onClick}
-      className="mt-3 text-sm font-medium text-[#0F2744] hover:underline"
+      className="mt-3 text-sm font-medium text-ink hover:underline"
     >
       {open
         ? "▲ Inklappen"
@@ -230,7 +230,7 @@ export default function ProfielPage() {
   return (
     <div className="p-7 max-w-3xl">
       <div className="mb-6">
-        <h1 className="text-xl font-black text-[#0F2744]">Mijn profiel</h1>
+        <h1 className="text-xl font-black text-ink">Mijn profiel</h1>
         <p className="text-sm text-gray-500 mt-1">
           Uw profiel personaliseert de AI-voorbereiding (welke aandachtspunten en kritische
           vragen vóórkomen).
@@ -261,7 +261,7 @@ export default function ProfielPage() {
       <div className="space-y-6">
         {/* Naam — weergavenaam op het platform */}
         <section className="bg-white border border-gray-200 rounded-xl p-5">
-          <h2 className="font-bold text-[#0F2744] mb-1">Naam</h2>
+          <h2 className="font-bold text-ink mb-1">Naam</h2>
           <p className="text-xs text-gray-400 mb-4">
             Uw weergavenaam op het platform (in de zijbalk en bij uw acties). Leeg laten
             houdt de huidige naam aan.
@@ -279,7 +279,7 @@ export default function ProfielPage() {
 
         {/* Bestuurlijke rol + voorkeuren */}
         <section className="bg-white border border-gray-200 rounded-xl p-5">
-          <h2 className="font-bold text-[#0F2744] mb-4">Bestuurlijke rol &amp; voorkeuren</h2>
+          <h2 className="font-bold text-ink mb-4">Bestuurlijke rol &amp; voorkeuren</h2>
 
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Functionele bestuurlijke rol
@@ -350,7 +350,7 @@ export default function ProfielPage() {
 
         {/* Expertise */}
         <section className="bg-white border border-gray-200 rounded-xl p-5">
-          <h2 className="font-bold text-[#0F2744] mb-1">Expertise</h2>
+          <h2 className="font-bold text-ink mb-1">Expertise</h2>
           <p className="text-xs text-gray-400 mb-4">
             Eén primaire expertise; maximaal {MAX_SECUNDAIRE} secundaire.
           </p>
@@ -399,7 +399,7 @@ export default function ProfielPage() {
                       onClick={() =>
                         setSecundaire((s) => wisselSet(s, e.id, MAX_SECUNDAIRE))
                       }
-                      className="px-3 py-1.5 rounded-full text-sm border bg-[#0F2744] text-white border-[#0F2744]"
+                      className="px-3 py-1.5 rounded-full text-sm border bg-accent text-white border-accent"
                     >
                       {e.naam} ✕
                     </button>
@@ -422,10 +422,10 @@ export default function ProfielPage() {
                     onClick={() => setSecundaire((s) => wisselSet(s, e.id, MAX_SECUNDAIRE))}
                     className={`px-3 py-1.5 rounded-full text-sm border transition ${
                       aan
-                        ? "bg-[#0F2744] text-white border-[#0F2744]"
+                        ? "bg-accent text-white border-accent"
                         : vol
                           ? "bg-gray-50 text-gray-300 border-gray-200 cursor-not-allowed"
-                          : "bg-white text-gray-700 border-gray-300 hover:border-[#0F2744]"
+                          : "bg-white text-gray-700 border-gray-300 hover:border-accent"
                     }`}
                   >
                     {e.naam}
@@ -445,7 +445,7 @@ export default function ProfielPage() {
         {/* Gremia — gegroepeerd per categorie (Fondsorganen / Bestuurscommissies
             / Externe ketenpartners). */}
         <section className="bg-white border border-gray-200 rounded-xl p-5">
-          <h2 className="font-bold text-[#0F2744] mb-1">Commissies &amp; gremia</h2>
+          <h2 className="font-bold text-ink mb-1">Commissies &amp; gremia</h2>
           <p className="text-xs text-gray-400 mb-4">
             ({gekozenGremia.length} gekozen)
           </p>
@@ -469,7 +469,7 @@ export default function ProfielPage() {
                           wisselSet(s, g.id, Number.MAX_SAFE_INTEGER)
                         )
                       }
-                      className="px-3 py-1.5 rounded-full text-sm border bg-[#0F2744] text-white border-[#0F2744]"
+                      className="px-3 py-1.5 rounded-full text-sm border bg-accent text-white border-accent"
                     >
                       {g.naam} ✕
                     </button>
@@ -505,8 +505,8 @@ export default function ProfielPage() {
                             }
                             className={`px-3 py-1.5 rounded-full text-sm border transition ${
                               aan
-                                ? "bg-[#0F2744] text-white border-[#0F2744]"
-                                : "bg-white text-gray-700 border-gray-300 hover:border-[#0F2744]"
+                                ? "bg-accent text-white border-accent"
+                                : "bg-white text-gray-700 border-gray-300 hover:border-accent"
                             }`}
                           >
                             {g.naam}
@@ -529,7 +529,7 @@ export default function ProfielPage() {
 
         {/* Focusgebieden */}
         <section className="bg-white border border-gray-200 rounded-xl p-5">
-          <h2 className="font-bold text-[#0F2744] mb-1">Kritische focusgebieden</h2>
+          <h2 className="font-bold text-ink mb-1">Kritische focusgebieden</h2>
           <p className="text-xs text-gray-400 mb-4">
             Kies er {MIN_FOCUS} tot {MAX_FOCUS}.{" "}
             <span className={focusBuitenBereik ? "text-red-600 font-medium" : ""}>
@@ -553,7 +553,7 @@ export default function ProfielPage() {
                       onClick={() =>
                         setGekozenFocus((s) => wisselSet(s, f.id, MAX_FOCUS))
                       }
-                      className="px-3 py-1.5 rounded-full text-sm border bg-[#0F2744] text-white border-[#0F2744]"
+                      className="px-3 py-1.5 rounded-full text-sm border bg-accent text-white border-accent"
                     >
                       {f.naam} ✕
                     </button>
@@ -576,10 +576,10 @@ export default function ProfielPage() {
                     onClick={() => setGekozenFocus((s) => wisselSet(s, f.id, MAX_FOCUS))}
                     className={`px-3 py-1.5 rounded-full text-sm border transition ${
                       aan
-                        ? "bg-[#0F2744] text-white border-[#0F2744]"
+                        ? "bg-accent text-white border-accent"
                         : vol
                           ? "bg-gray-50 text-gray-300 border-gray-200 cursor-not-allowed"
-                          : "bg-white text-gray-700 border-gray-300 hover:border-[#0F2744]"
+                          : "bg-white text-gray-700 border-gray-300 hover:border-accent"
                     }`}
                   >
                     {f.naam}
@@ -614,7 +614,7 @@ export default function ProfielPage() {
           type="button"
           onClick={opslaanProfiel}
           disabled={opslaan || focusBuitenBereik}
-          className="bg-[#0F2744] text-white text-sm font-semibold px-5 py-2.5 rounded-lg hover:bg-[#0a1c30] disabled:opacity-50 disabled:cursor-not-allowed"
+          className="bg-accent text-white text-sm font-semibold px-5 py-2.5 rounded-lg hover:bg-accent-ink disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {opslaan ? "Opslaan…" : "Profiel opslaan"}
         </button>

@@ -159,7 +159,7 @@ export default function StatusOvergangPaneel({
   if (vlgndOpties.length === 0) {
     return (
       <div className="bg-white border border-gray-200 rounded-xl p-5">
-        <h3 className="text-sm font-semibold text-[#0F2744] mb-2">
+        <h3 className="text-sm font-semibold text-ink mb-2">
           Status-overgang
         </h3>
         <div className="flex items-center gap-2">
@@ -183,7 +183,7 @@ export default function StatusOvergangPaneel({
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-5">
-      <h3 className="text-sm font-semibold text-[#0F2744] mb-3">
+      <h3 className="text-sm font-semibold text-ink mb-3">
         Status-overgang
       </h3>
 
@@ -283,7 +283,7 @@ export default function StatusOvergangPaneel({
             disabled={
               !target || bezig || (!kanZonderOverride && !kanMetOverride)
             }
-            className="bg-[#0F2744] text-white text-sm px-4 py-2 rounded-md hover:bg-[#1a3a5e] disabled:opacity-50 disabled:cursor-not-allowed"
+            className="bg-accent text-white text-sm px-4 py-2 rounded-md hover:bg-accent-ink disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {bezig ? "Bezig…" : kanMetOverride ? "Doorzetten via override" : "Overgang doorvoeren"}
           </button>

@@ -53,7 +53,7 @@ export default function NieuweVergaderingForm() {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="bg-[#0F2744] text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-accent hover:text-[#0F2744] transition-colors"
+        className="bg-accent text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-accent hover:text-ink transition-colors"
       >
         + Nieuwe vergadering
       </button>
@@ -65,7 +65,7 @@ export default function NieuweVergaderingForm() {
       onSubmit={indienen}
       className="bg-white border border-gray-200 rounded-xl p-4 w-full max-w-xl"
     >
-      <div className="text-sm font-semibold text-[#0F2744] mb-3">Nieuwe vergadering</div>
+      <div className="text-sm font-semibold text-ink mb-3">Nieuwe vergadering</div>
 
       <div className="space-y-3">
         <div>
@@ -107,7 +107,7 @@ export default function NieuweVergaderingForm() {
           <button
             type="submit"
             disabled={bezig}
-            className="bg-[#0F2744] text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-accent hover:text-[#0F2744] transition-colors disabled:opacity-50"
+            className="bg-accent text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-accent hover:text-ink transition-colors disabled:opacity-50"
           >
             {bezig ? "Bezig..." : "Aanmaken"}
           </button>

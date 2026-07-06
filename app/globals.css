@@ -3,39 +3,43 @@
 @tailwind utilities;
 
 :root {
-  /* ── Legacy (worden in fase 4 verwijderd; nergens meer gebruikt) ── */
+  /* ── Tokenlaag ── bron van waarheid. RGB-channels voeden zowel Tailwind
+     (rgb(var(--x-rgb) / <alpha-value>) → opacity-modifiers werken) als de
+     afgeleide --x kleur voor direct CSS/SVG-gebruik (fill="var(--accent)"). */
+
+  /* Legacy (verwijderen in fase 4; nergens meer gebruikt) */
   --navy: #0F2744;
   --gold: #C9A84C;
 
-  /* ── Merk / basis (bron: public.css van de marketingsite) ── */
-  --paper:       #F6F3EC;
-  --ink:         #191815;
-  --muted:       #6B6A63;
-  --line:        #D8D3C7;
-  --accent:      #234E70;   /* primaire interactieve kleur (was navy-als-primary én goud) */
-  --accent-ink:  #1A3A57;
-  --accent-tint: #EAEFF4;
-  --card:        #FBFAF5;
+  /* Merk / basis (bron: public.css) */
+  --paper-rgb: 246 243 236;   --paper: rgb(var(--paper-rgb));
+  --ink-rgb: 25 24 21;        --ink: rgb(var(--ink-rgb));
+  --muted-rgb: 107 106 99;    --muted: rgb(var(--muted-rgb));
+  --line-rgb: 216 211 199;    --line: rgb(var(--line-rgb));
+  --accent-rgb: 35 78 112;    --accent: rgb(var(--accent-rgb));   /* primaire interactieve kleur */
+  --accent-ink-rgb: 26 58 87; --accent-ink: rgb(var(--accent-ink-rgb));
+  --accent-tint-rgb: 234 239 244; --accent-tint: rgb(var(--accent-tint-rgb));
+  --card-rgb: 251 250 245;    --card: rgb(var(--card-rgb));
 
-  /* ── App-surfaces (functioneel, rustiger dan paper onder dichte data) ── */
-  --app-bg:          #F1EEE7;
-  --app-surface:     #FBFAF5;
-  --app-line:        #E2DCCF;
-  --app-line-strong: #CFC8B8;
-  --app-zebra:       #F6F3EC;
+  /* App-surfaces (functioneel, rustiger dan paper onder dichte data) */
+  --app-bg-rgb: 241 238 231;      --app-bg: rgb(var(--app-bg-rgb));
+  --app-surface-rgb: 251 250 245; --app-surface: rgb(var(--app-surface-rgb));
+  --app-line-rgb: 226 220 207;    --app-line: rgb(var(--app-line-rgb));
+  --app-line-strong-rgb: 207 200 184; --app-line-strong: rgb(var(--app-line-strong-rgb));
+  --app-zebra-rgb: 246 243 236;   --app-zebra: rgb(var(--app-zebra-rgb));
 
-  /* ── Navigatie / sidebar (lichte, warme variant — gekozen; toegepast in fase 2) ── */
-  --nav:             #EAE5DA;
-  --nav-line:        #D8D3C7;
-  --nav-text:        #6B6A63;
-  --nav-text-active: #1A3A57;
-  --nav-active:      rgba(35, 78, 112, 0.10);
-  --nav-accent:      #234E70;
+  /* Navigatie / sidebar (lichte, warme variant — gekozen) */
+  --nav-rgb: 234 229 218;         --nav: rgb(var(--nav-rgb));
+  --nav-line-rgb: 216 211 199;    --nav-line: rgb(var(--nav-line-rgb));
+  --nav-text-rgb: 107 106 99;     --nav-text: rgb(var(--nav-text-rgb));
+  --nav-text-active-rgb: 26 58 87;--nav-text-active: rgb(var(--nav-text-active-rgb));
+  --nav-accent-rgb: 35 78 112;    --nav-accent: rgb(var(--nav-accent-rgb));
+  --nav-active: rgba(35, 78, 112, 0.10);
 
-  /* ── Semantisch ── */
-  --ok:   #2E7D5B;
-  --err:  #B23A48;
-  --warn: #BA7517;
+  /* Semantisch */
+  --ok-rgb: 46 125 91;   --ok: rgb(var(--ok-rgb));
+  --err-rgb: 178 58 72;  --err: rgb(var(--err-rgb));
+  --warn-rgb: 186 117 23;--warn: rgb(var(--warn-rgb));
 }
 
 * { box-sizing: border-box; }

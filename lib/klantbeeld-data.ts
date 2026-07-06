@@ -411,7 +411,7 @@ export const WG_SEGMENTEN: WgSegment[] = (() => {
   const def = [
     { naam: "Klein",  toelichting: "1–25 werknemers",  werkgeversAandeel: 0.66, werknemersAandeel: 0.18, premieAandeel: 0.16, kleur: "#94a3b8" },
     { naam: "Midden", toelichting: "25–200 werknemers", werkgeversAandeel: 0.27, werknemersAandeel: 0.38, premieAandeel: 0.39, kleur: "#0ea5e9" },
-    { naam: "Groot",  toelichting: "> 200 werknemers",  werkgeversAandeel: 0.07, werknemersAandeel: 0.44, premieAandeel: 0.45, kleur: "#0F2744" },
+    { naam: "Groot",  toelichting: "> 200 werknemers",  werkgeversAandeel: 0.07, werknemersAandeel: 0.44, premieAandeel: 0.45, kleur: "var(--accent)" },
   ];
   return def.map((s) => ({
     ...s,

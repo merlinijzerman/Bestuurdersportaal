@@ -35,10 +35,10 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         {/* Logo — neutraal, geen fondsbranding (publieke login, TO §2.5) */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 bg-[#0F2744] rounded-2xl mb-4">
+          <div className="inline-flex items-center justify-center w-14 h-14 bg-accent rounded-2xl mb-4">
             <span className="text-white font-black text-2xl">B</span>
           </div>
-          <h1 className="text-2xl font-bold text-[#0F2744]">Bestuurdersportaal</h1>
+          <h1 className="text-2xl font-bold text-ink">Bestuurdersportaal</h1>
           <p className="text-sm text-gray-500 mt-1">
             Open de beveiligde omgeving van uw organisatie
           </p>
@@ -46,7 +46,7 @@ export default function LoginPage() {
 
         {/* Login kaart */}
         <div className="bg-white rounded-2xl border border-gray-200 p-8 shadow-sm">
-          <h2 className="text-lg font-bold text-[#0F2744] mb-6">
+          <h2 className="text-lg font-bold text-ink mb-6">
             Log in op uw bestuurdersomgeving
           </h2>
           <form onSubmit={handleLogin} className="space-y-4">
@@ -84,7 +84,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={laden}
-              className="w-full bg-[#0F2744] text-white font-semibold py-2.5 rounded-lg text-sm hover:bg-[#1A3A5C] disabled:opacity-50 transition-colors"
+              className="w-full bg-accent text-white font-semibold py-2.5 rounded-lg text-sm hover:bg-accent-ink disabled:opacity-50 transition-colors"
             >
               {laden ? "Inloggen..." : "Inloggen"}
             </button>

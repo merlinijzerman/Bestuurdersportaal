@@ -149,10 +149,10 @@ export default function DocumentMetadataModal({
   const labels = doc ? bronkaartLabels(doc) : null;
 
   return (
-    <div className="fixed inset-0 bg-[#0F2744]/50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-accent/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl p-7 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-1">
-          <h2 className="text-lg font-bold text-[#0F2744]">Metadata bewerken</h2>
+          <h2 className="text-lg font-bold text-ink">Metadata bewerken</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             ✕
           </button>
@@ -308,7 +308,7 @@ export default function DocumentMetadataModal({
               <button
                 onClick={() => opslaan(false)}
                 disabled={bezig}
-                className="rounded-lg bg-[#0F2744] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1A3A5C] disabled:opacity-50"
+                className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-ink disabled:opacity-50"
               >
                 {bezig ? "Bezig…" : "Opslaan"}
               </button>

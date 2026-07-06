@@ -139,12 +139,12 @@ export default function ContactInboxClient({ rijen }: Props) {
             className={
               "rounded-lg px-3 py-1.5 text-sm font-medium transition-colors " +
               (filter === f.key
-                ? "bg-[#0F2744] text-white"
-                : "bg-app-bg text-[#0F2744] hover:bg-[#0F2744]/10")
+                ? "bg-accent text-white"
+                : "bg-app-bg text-ink hover:bg-accent/10")
             }
           >
             {f.label}{" "}
-            <span className={filter === f.key ? "text-white/70" : "text-[#0F2744]/50"}>
+            <span className={filter === f.key ? "text-white/70" : "text-ink/50"}>
               {f.aantal}
             </span>
           </button>
@@ -152,7 +152,7 @@ export default function ContactInboxClient({ rijen }: Props) {
       </div>
 
       {zichtbaar.length === 0 ? (
-        <p className="rounded-lg border border-[#0F2744]/10 bg-white px-4 py-6 text-center text-sm text-[#0F2744]/60">
+        <p className="rounded-lg border border-line bg-white px-4 py-6 text-center text-sm text-ink/60">
           Geen aanvragen in deze weergave.
         </p>
       ) : (
@@ -163,7 +163,7 @@ export default function ContactInboxClient({ rijen }: Props) {
             return (
               <li
                 key={r.id}
-                className="overflow-hidden rounded-xl border border-[#0F2744]/10 bg-white"
+                className="overflow-hidden rounded-xl border border-line bg-white"
               >
                 {/* Kop — klikbaar om uit te klappen */}
                 <button
@@ -179,14 +179,14 @@ export default function ContactInboxClient({ rijen }: Props) {
                     {STATUS_LABEL[r.status]}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium text-[#0F2744]">
+                    <div className="truncate text-sm font-medium text-ink">
                       {r.naam}
-                      <span className="font-normal text-[#0F2744]/60">
+                      <span className="font-normal text-ink/60">
                         {" "}
                         &middot; {r.organisatie}
                       </span>
                     </div>
-                    <div className="truncate text-xs text-[#0F2744]/60">
+                    <div className="truncate text-xs text-ink/60">
                       {TYPE_LABEL[r.type_verzoek] ?? r.type_verzoek} &middot;{" "}
                       {formatDatum(r.aangemaakt_op)}
                     </div>
@@ -199,12 +199,12 @@ export default function ContactInboxClient({ rijen }: Props) {
                       mail mislukt
                     </span>
                   )}
-                  <span className="text-[#0F2744]/40">{isOpen ? "▴" : "▾"}</span>
+                  <span className="text-ink/40">{isOpen ? "▴" : "▾"}</span>
                 </button>
 
                 {/* Detail */}
                 {isOpen && (
-                  <div className="border-t border-[#0F2744]/10 px-4 py-4">
+                  <div className="border-t border-line px-4 py-4">
                     <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
                       <Veld label="Naam" waarde={r.naam} />
                       <Veld label="Organisatie" waarde={r.organisatie} />
@@ -214,7 +214,7 @@ export default function ContactInboxClient({ rijen }: Props) {
                         waarde={
                           <a
                             href={`mailto:${r.email}`}
-                            className="text-[#0F2744] underline hover:text-accent"
+                            className="text-ink underline hover:text-accent"
                           >
                             {r.email}
                           </a>
@@ -238,10 +238,10 @@ export default function ContactInboxClient({ rijen }: Props) {
                     </dl>
 
                     <div className="mt-3">
-                      <div className="text-xs font-semibold uppercase tracking-wide text-[#0F2744]/50">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-ink/50">
                         Bericht
                       </div>
-                      <p className="mt-1 whitespace-pre-wrap rounded-lg bg-app-bg px-3 py-2 text-sm text-[#0F2744]">
+                      <p className="mt-1 whitespace-pre-wrap rounded-lg bg-app-bg px-3 py-2 text-sm text-ink">
                         {r.bericht}
                       </p>
                     </div>
@@ -254,7 +254,7 @@ export default function ContactInboxClient({ rijen }: Props) {
 
                     {/* Statusacties — toon alleen de andere twee statussen */}
                     <div className="mt-4 flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-medium text-[#0F2744]/60">
+                      <span className="text-xs font-medium text-ink/60">
                         Status zetten op:
                       </span>
                       {(["nieuw", "in_behandeling", "afgehandeld"] as ContactStatus[])
@@ -264,13 +264,13 @@ export default function ContactInboxClient({ rijen }: Props) {
                             key={s}
                             disabled={rijBezig}
                             onClick={() => wijzig(r.id, s)}
-                            className="rounded-lg border border-[#0F2744]/20 px-3 py-1.5 text-sm font-medium text-[#0F2744] hover:border-accent hover:bg-app-bg disabled:opacity-50"
+                            className="rounded-lg border border-line px-3 py-1.5 text-sm font-medium text-ink hover:border-accent hover:bg-app-bg disabled:opacity-50"
                           >
                             {STATUS_LABEL[s]}
                           </button>
                         ))}
                       {rijBezig && (
-                        <span className="text-xs text-[#0F2744]/50">bezig…</span>
+                        <span className="text-xs text-ink/50">bezig…</span>
                       )}
                     </div>
                   </div>
@@ -287,10 +287,10 @@ export default function ContactInboxClient({ rijen }: Props) {
 function Veld({ label, waarde }: { label: string; waarde: React.ReactNode }) {
   return (
     <div>
-      <dt className="text-xs font-semibold uppercase tracking-wide text-[#0F2744]/50">
+      <dt className="text-xs font-semibold uppercase tracking-wide text-ink/50">
         {label}
       </dt>
-      <dd className="text-[#0F2744]">{waarde}</dd>
+      <dd className="text-ink">{waarde}</dd>
     </div>
   );
 }

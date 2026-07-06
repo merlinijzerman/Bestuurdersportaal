@@ -98,7 +98,7 @@ export default function AIValidatieBlok({ decisionId, ai }: Props) {
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
-          className="ml-auto text-xs text-[#0F2744] hover:underline"
+          className="ml-auto text-xs text-ink hover:underline"
         >
           {open ? "Inklappen" : "Uitklappen"}
         </button>
@@ -229,7 +229,7 @@ export default function AIValidatieBlok({ decisionId, ai }: Props) {
               onClick={() =>
                 patch({ gebruikt_in_dossier: !ai.gebruikt_in_dossier })
               }
-              className="bg-white text-[#0F2744] text-xs px-3 py-1.5 rounded-md border border-gray-300 hover:bg-gray-50 disabled:opacity-50"
+              className="bg-white text-ink text-xs px-3 py-1.5 rounded-md border border-gray-300 hover:bg-gray-50 disabled:opacity-50"
             >
               {ai.gebruikt_in_dossier
                 ? "Niet meer gebruiken in dossier"

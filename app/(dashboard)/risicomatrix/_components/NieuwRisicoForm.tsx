@@ -96,9 +96,9 @@ export default function NieuwRisicoForm() {
           {CATEGORIEEN.map((c) => (
             <label
               key={c.slug}
-              className={`flex items-start gap-2 border rounded-lg px-3 py-2.5 cursor-pointer hover:border-[#0F2744] ${
+              className={`flex items-start gap-2 border rounded-lg px-3 py-2.5 cursor-pointer hover:border-accent ${
                 categorie === c.slug
-                  ? "border-[#0F2744] bg-[#0F2744]/5"
+                  ? "border-accent bg-accent/5"
                   : "border-gray-200"
               }`}
             >
@@ -146,8 +146,8 @@ export default function NieuwRisicoForm() {
                 onClick={() => setKans(n)}
                 className={`flex-1 py-2 text-xs rounded transition ${
                   kans === n
-                    ? "border-2 border-[#0F2744] bg-[#0F2744] text-white font-semibold"
-                    : "border border-gray-200 hover:border-[#0F2744]"
+                    ? "border-2 border-accent bg-accent text-white font-semibold"
+                    : "border border-gray-200 hover:border-accent"
                 }`}
               >
                 {n}
@@ -170,8 +170,8 @@ export default function NieuwRisicoForm() {
                 onClick={() => setImpact(n)}
                 className={`flex-1 py-2 text-xs rounded transition ${
                   impact === n
-                    ? "border-2 border-[#0F2744] bg-[#0F2744] text-white font-semibold"
-                    : "border border-gray-200 hover:border-[#0F2744]"
+                    ? "border-2 border-accent bg-accent text-white font-semibold"
+                    : "border border-gray-200 hover:border-accent"
                 }`}
               >
                 {n}
@@ -204,7 +204,7 @@ export default function NieuwRisicoForm() {
             <button
               type="button"
               onClick={() => setHandmatigNiveau(null)}
-              className="text-xs text-gray-500 hover:text-[#0F2744]"
+              className="text-xs text-gray-500 hover:text-ink"
             >
               Reset
             </button>
@@ -234,8 +234,8 @@ export default function NieuwRisicoForm() {
           <label
             className={`flex-1 flex items-center gap-2 rounded-lg px-3 py-2.5 cursor-pointer ${
               type === "structureel"
-                ? "border-2 border-[#0F2744] bg-[#0F2744]/5"
-                : "border border-gray-200 hover:border-[#0F2744]"
+                ? "border-2 border-accent bg-accent/5"
+                : "border border-gray-200 hover:border-accent"
             }`}
           >
             <input
@@ -255,8 +255,8 @@ export default function NieuwRisicoForm() {
           <label
             className={`flex-1 flex items-center gap-2 rounded-lg px-3 py-2.5 cursor-pointer ${
               type === "tijdelijk"
-                ? "border-2 border-[#0F2744] bg-[#0F2744]/5"
-                : "border border-gray-200 hover:border-[#0F2744]"
+                ? "border-2 border-accent bg-accent/5"
+                : "border border-gray-200 hover:border-accent"
             }`}
           >
             <input
@@ -285,14 +285,14 @@ export default function NieuwRisicoForm() {
       <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">
         <a
           href="/risicomatrix"
-          className="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:border-[#0F2744] text-gray-700"
+          className="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:border-accent text-gray-700"
         >
           Annuleren
         </a>
         <button
           type="submit"
           disabled={bezig}
-          className="px-4 py-2 text-sm bg-[#0F2744] text-white rounded-lg hover:bg-[#1a3858] disabled:opacity-50"
+          className="px-4 py-2 text-sm bg-accent text-white rounded-lg hover:bg-accent-ink disabled:opacity-50"
         >
           {bezig ? "Bezig…" : "Risico vastleggen"}
         </button>

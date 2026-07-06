@@ -84,9 +84,9 @@ export default function NieuweProcedureForm({ templates }: Props) {
           {templates.map((t) => (
             <label
               key={t.code}
-              className={`flex items-start gap-3 border rounded-lg px-4 py-3 cursor-pointer hover:border-[#0F2744] ${
+              className={`flex items-start gap-3 border rounded-lg px-4 py-3 cursor-pointer hover:border-accent ${
                 templateCode === t.code
-                  ? "border-[#0F2744] bg-[#0F2744]/5"
+                  ? "border-accent bg-accent/5"
                   : "border-gray-200"
               }`}
             >
@@ -98,7 +98,7 @@ export default function NieuweProcedureForm({ templates }: Props) {
                 className="accent-accent mt-0.5"
               />
               <div className="flex-1">
-                <div className="font-semibold text-[#0F2744] text-sm">
+                <div className="font-semibold text-ink text-sm">
                   {t.naam}
                 </div>
                 <div className="text-xs text-gray-600 mt-0.5">
@@ -161,7 +161,7 @@ export default function NieuweProcedureForm({ templates }: Props) {
           <button
             type="button"
             onClick={eigenaarToevoegen}
-            className="px-3 py-2 text-sm border border-gray-200 rounded-lg hover:border-[#0F2744] text-gray-700"
+            className="px-3 py-2 text-sm border border-gray-200 rounded-lg hover:border-accent text-gray-700"
           >
             Toevoegen
           </button>
@@ -213,14 +213,14 @@ export default function NieuweProcedureForm({ templates }: Props) {
       <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">
         <a
           href="/procedures"
-          className="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:border-[#0F2744] text-gray-700"
+          className="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:border-accent text-gray-700"
         >
           Annuleren
         </a>
         <button
           type="submit"
           disabled={bezig}
-          className="px-4 py-2 text-sm bg-[#0F2744] text-white rounded-lg hover:bg-[#1a3858] disabled:opacity-50"
+          className="px-4 py-2 text-sm bg-accent text-white rounded-lg hover:bg-accent-ink disabled:opacity-50"
         >
           {bezig ? "Bezig…" : "Procedure starten"}
         </button>

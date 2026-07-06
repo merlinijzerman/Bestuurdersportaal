@@ -74,13 +74,13 @@ export default function StemrondeBlok({
   return (
     <div className="border border-blue-200 bg-blue-50/30 rounded-lg p-4">
       <div className="flex items-center justify-between mb-2">
-        <div className="text-xs font-semibold text-[#0F2744] uppercase tracking-wide flex items-center gap-2">
+        <div className="text-xs font-semibold text-ink uppercase tracking-wide flex items-center gap-2">
           <span>🗳</span> Besluitvorming — stemronde
         </div>
         {!stemming && magStarten && (
           <button
             onClick={() => setStartOpen(true)}
-            className="bg-[#0F2744] text-white text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-[#1a3858]"
+            className="bg-accent text-white text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-accent-ink"
           >
             Stemronde starten
           </button>
@@ -120,7 +120,7 @@ export default function StemrondeBlok({
           {magStarten && (
             <button
               onClick={() => setStartOpen(true)}
-              className="ml-2 text-[#0F2744] not-italic font-medium hover:underline"
+              className="ml-2 text-ink not-italic font-medium hover:underline"
             >
               Nieuwe stemronde starten
             </button>
@@ -319,7 +319,7 @@ function StemPaneel({
 
   return (
     <div className="space-y-3">
-      <div className="text-sm font-medium text-[#0F2744]">{stemming.vraag}</div>
+      <div className="text-sm font-medium text-ink">{stemming.vraag}</div>
 
       {/* Eigen stem */}
       <div className="bg-white border border-gray-200 rounded-lg p-3 space-y-2">
@@ -333,8 +333,8 @@ function StemPaneel({
               onClick={() => setKeuze(a.code)}
               className={`text-sm px-3 py-1.5 rounded-lg border transition-colors ${
                 keuze === a.code
-                  ? "bg-[#0F2744] text-white border-[#0F2744]"
-                  : "bg-white text-[#0F2744] border-gray-300 hover:border-accent"
+                  ? "bg-accent text-white border-accent"
+                  : "bg-white text-ink border-gray-300 hover:border-accent"
               }`}
             >
               {a.label}
@@ -352,7 +352,7 @@ function StemPaneel({
           <button
             onClick={stem}
             disabled={!keuze || bezig}
-            className="bg-[#0F2744] text-white text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-[#1a3858] disabled:opacity-40"
+            className="bg-accent text-white text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-accent-ink disabled:opacity-40"
           >
             {bezig ? "Bezig…" : eigenStem ? "Stem bijwerken" : "Stem uitbrengen"}
           </button>
@@ -364,7 +364,7 @@ function StemPaneel({
         beschikbareVolmachtgevers.length > 0 && (
           <button
             onClick={() => setVolmachtModus(true)}
-            className="text-xs text-[#0F2744] hover:underline"
+            className="text-xs text-ink hover:underline"
           >
             + Stem namens iemand anders (volmacht)
           </button>
@@ -394,7 +394,7 @@ function StemPaneel({
                 className={`text-sm px-3 py-1.5 rounded-lg border transition-colors ${
                   volmachtKeuze === a.code
                     ? "bg-amber-600 text-white border-amber-600"
-                    : "bg-white text-[#0F2744] border-gray-300 hover:border-amber-400"
+                    : "bg-white text-ink border-gray-300 hover:border-amber-400"
                 }`}
               >
                 {a.label}
@@ -420,7 +420,7 @@ function StemPaneel({
           <div className="flex justify-end gap-2">
             <button
               onClick={() => setVolmachtModus(false)}
-              className="text-xs text-gray-600 hover:text-[#0F2744] px-2 py-1"
+              className="text-xs text-gray-600 hover:text-ink px-2 py-1"
             >
               Annuleren
             </button>
@@ -441,13 +441,13 @@ function StemPaneel({
       {/* Uitgebrachte stemmen (open = transparant) */}
       {stemmen.length > 0 && (
         <details className="text-xs text-gray-600">
-          <summary className="cursor-pointer font-medium hover:text-[#0F2744]">
+          <summary className="cursor-pointer font-medium hover:text-ink">
             Uitgebrachte stemmen ({stemmen.length})
           </summary>
           <div className="mt-2 space-y-1">
             {stemmen.map((s) => (
               <div key={s.id} className="flex items-baseline gap-2">
-                <span className="font-medium text-[#0F2744]">
+                <span className="font-medium text-ink">
                   {s.stemgerechtigde_naam || "Onbekend"}
                 </span>
                 {s.is_volmacht && (
@@ -513,7 +513,7 @@ function StemPaneel({
               <div className="flex justify-end gap-2">
                 <button
                   onClick={() => setIntrekModus(false)}
-                  className="text-xs text-gray-600 hover:text-[#0F2744] px-2 py-1"
+                  className="text-xs text-gray-600 hover:text-ink px-2 py-1"
                 >
                   Annuleren
                 </button>
@@ -553,7 +553,7 @@ function LiveTotalen({
             <span className="text-xs text-gray-700 w-24 truncate">{a.label}</span>
             <div className="flex-1 bg-gray-100 rounded h-3 overflow-hidden">
               <div
-                className="bg-[#0F2744] h-3 rounded"
+                className="bg-accent h-3 rounded"
                 style={{ width: `${(n / max) * 100}%` }}
               />
             </div>
@@ -588,10 +588,10 @@ function StemUitslagWeergave({
 
   return (
     <div className="space-y-3">
-      <div className="text-sm font-medium text-[#0F2744]">{stemming.vraag}</div>
+      <div className="text-sm font-medium text-ink">{stemming.vraag}</div>
 
       <div className="bg-white border border-gray-200 rounded-lg p-3">
-        <div className="text-sm font-semibold text-[#0F2744] mb-1">
+        <div className="text-sm font-semibold text-ink mb-1">
           Uitslag: {winnaarLabel}
         </div>
         <LiveTotalen uitslag={uitslag} alternatieven={stemming.alternatieven} />
@@ -617,14 +617,14 @@ function StemUitslagWeergave({
       {/* Per-persoon */}
       {uitslag.per_stemgerechtigde.length > 0 && (
         <details className="text-xs text-gray-600">
-          <summary className="cursor-pointer font-medium hover:text-[#0F2744]">
+          <summary className="cursor-pointer font-medium hover:text-ink">
             Stemmen per bestuurslid ({uitslag.per_stemgerechtigde.length})
           </summary>
           <div className="mt-2 space-y-1.5">
             {uitslag.per_stemgerechtigde.map((p, i) => (
               <div key={i} className="border-l-2 border-gray-200 pl-2">
                 <div className="flex items-baseline gap-2">
-                  <span className="font-medium text-[#0F2744]">{p.naam || "Onbekend"}</span>
+                  <span className="font-medium text-ink">{p.naam || "Onbekend"}</span>
                   {p.is_volmacht && (
                     <span className="text-[10px] text-amber-700">
                       (volmacht via {p.uitgebracht_door_naam || "?"})
@@ -749,8 +749,8 @@ function StemStartenModal({
     <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4 overflow-y-auto">
       <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-5 space-y-4 my-8">
         <div className="flex items-start justify-between">
-          <div className="text-sm font-semibold text-[#0F2744]">Stemronde starten</div>
-          <button onClick={onClose} className="text-gray-400 text-sm hover:text-[#0F2744]">
+          <div className="text-sm font-semibold text-ink">Stemronde starten</div>
+          <button onClick={onClose} className="text-gray-400 text-sm hover:text-ink">
             ✕
           </button>
         </div>
@@ -775,7 +775,7 @@ function StemStartenModal({
             <button
               onClick={() => setCustomMode(false)}
               className={`px-2 py-1 rounded border ${
-                !customMode ? "bg-[#0F2744] text-white border-[#0F2744]" : "border-gray-300"
+                !customMode ? "bg-accent text-white border-accent" : "border-gray-300"
               }`}
             >
               Voor / Tegen / Onthouden
@@ -783,7 +783,7 @@ function StemStartenModal({
             <button
               onClick={() => setCustomMode(true)}
               className={`px-2 py-1 rounded border ${
-                customMode ? "bg-[#0F2744] text-white border-[#0F2744]" : "border-gray-300"
+                customMode ? "bg-accent text-white border-accent" : "border-gray-300"
               }`}
             >
               Eigen alternatieven
@@ -819,7 +819,7 @@ function StemStartenModal({
               ))}
               <button
                 onClick={() => setCustomAlt([...customAlt, { code: "", label: "" }])}
-                className="text-xs text-[#0F2744] hover:underline"
+                className="text-xs text-ink hover:underline"
               >
                 + Alternatief toevoegen
               </button>
@@ -868,13 +868,13 @@ function StemStartenModal({
         )}
 
         <div className="flex justify-end gap-2 pt-2">
-          <button onClick={onClose} className="text-xs text-gray-600 hover:text-[#0F2744] px-3 py-1.5">
+          <button onClick={onClose} className="text-xs text-gray-600 hover:text-ink px-3 py-1.5">
             Annuleren
           </button>
           <button
             onClick={start}
             disabled={!vraag.trim() || bezig}
-            className="bg-[#0F2744] text-white text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-[#1a3858] disabled:opacity-40"
+            className="bg-accent text-white text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-accent-ink disabled:opacity-40"
           >
             {bezig ? "Starten…" : "Stemronde openen"}
           </button>
@@ -938,7 +938,7 @@ function DissentPromptDialog({
   return (
     <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-5 space-y-4">
-        <div className="text-sm font-semibold text-[#0F2744]">
+        <div className="text-sm font-semibold text-ink">
           Wilt u dit als dissent vastleggen?
         </div>
         <p className="text-xs text-gray-700 leading-relaxed">
@@ -977,14 +977,14 @@ function DissentPromptDialog({
         <div className="flex justify-end gap-2">
           <button
             onClick={onKlaar}
-            className="text-xs text-gray-600 hover:text-[#0F2744] px-3 py-1.5"
+            className="text-xs text-gray-600 hover:text-ink px-3 py-1.5"
           >
             Niet vastleggen
           </button>
           <button
             onClick={leg_vast}
             disabled={bezig}
-            className="bg-[#0F2744] text-white text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-[#1a3858] disabled:opacity-40"
+            className="bg-accent text-white text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-accent-ink disabled:opacity-40"
           >
             {bezig ? "Vastleggen…" : "Dissent vastleggen"}
           </button>

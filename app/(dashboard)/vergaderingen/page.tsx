@@ -58,7 +58,7 @@ export default async function VergaderingenPage() {
     <div className="p-7 space-y-6">
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-[#0F2744] text-xl font-bold">Vergaderingen</h1>
+          <h1 className="text-ink text-xl font-bold">Vergaderingen</h1>
           <p className="text-gray-500 text-sm mt-0.5">
             Plan, agendeer en bereid bestuursvergaderingen voor.
           </p>
@@ -116,7 +116,7 @@ function VergaderingKaart({
     >
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="min-w-0">
-          <div className="font-semibold text-[#0F2744] text-sm">{v.titel}</div>
+          <div className="font-semibold text-ink text-sm">{v.titel}</div>
           <div className="text-xs text-gray-500 mt-1">
             {formatDatum(v.datum)}
             {v.locatie ? ` · ${v.locatie}` : ""}

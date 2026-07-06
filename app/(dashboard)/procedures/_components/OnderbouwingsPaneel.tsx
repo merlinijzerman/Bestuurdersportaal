@@ -137,15 +137,15 @@ function TabKnop({
       aria-selected={active}
       className={`px-4 py-2.5 border-b-2 text-sm font-medium flex items-center gap-1.5 whitespace-nowrap transition ${
         active
-          ? "border-accent text-[#0F2744]"
-          : "border-transparent text-gray-500 hover:text-[#0F2744] hover:bg-gray-50"
+          ? "border-accent text-ink"
+          : "border-transparent text-gray-500 hover:text-ink hover:bg-gray-50"
       }`}
     >
       <span>{label}</span>
       <span
         className={`text-[11px] rounded-full px-1.5 font-medium ${
           active
-            ? "bg-accent/15 text-[#0F2744]"
+            ? "bg-accent/15 text-ink"
             : "bg-gray-100 text-gray-700"
         }`}
       >
@@ -186,7 +186,7 @@ export default function OnderbouwingsPaneel({
     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
       {/* Paneel-header */}
       <div className="px-5 py-3 border-b border-gray-200 flex items-center justify-between gap-3">
-        <h3 className="text-sm font-semibold text-[#0F2744]">Onderbouwing</h3>
+        <h3 className="text-sm font-semibold text-ink">Onderbouwing</h3>
         <span className="text-xs text-gray-500 hidden sm:inline">
           Wat staat er onder dit besluit
         </span>

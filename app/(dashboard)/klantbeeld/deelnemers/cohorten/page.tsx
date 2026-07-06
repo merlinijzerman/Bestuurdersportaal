@@ -48,7 +48,7 @@ export default function CohortenPage() {
         {/* Hoofdvisual */}
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <div className="mb-4">
-            <h2 className="text-lg font-semibold text-[#0F2744]">
+            <h2 className="text-lg font-semibold text-ink">
               Cohorten naast elkaar — 18 t/m 68 jaar
             </h2>
             <p className="text-sm text-gray-600 mt-1 max-w-3xl">
@@ -76,7 +76,7 @@ export default function CohortenPage() {
                   y={yS(c.totaal)}
                   width={colW}
                   height={yS(0) - yS(c.totaal)}
-                  fill="#0F2744"
+                  fill="var(--accent)"
                 />
               );
             })}
@@ -112,7 +112,7 @@ function Kpi({ label, value, sub }: { label: string; value: string; sub: string 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5">
       <div className="text-xs uppercase tracking-wider text-gray-500">{label}</div>
-      <div className="text-2xl font-semibold text-[#0F2744] mt-1">{value}</div>
+      <div className="text-2xl font-semibold text-ink mt-1">{value}</div>
       <div className="text-[11px] text-gray-500 mt-1">{sub}</div>
     </div>
   );

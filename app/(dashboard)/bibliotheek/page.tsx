@@ -244,7 +244,7 @@ export default function BibliotheekPage() {
     <div className="p-7">
       <div className="flex items-start justify-between mb-6">
         <div>
-          <h1 className="text-xl font-black text-[#0F2744]">Documentbibliotheek</h1>
+          <h1 className="text-xl font-black text-ink">Documentbibliotheek</h1>
           <p className="text-sm text-gray-500 mt-1">
             {weergave === "zoeken"
               ? "Uitgebreid zoeken in de inhoud van de documenten"
@@ -254,7 +254,7 @@ export default function BibliotheekPage() {
         {weergave === "beheren" && (
           <button
             onClick={() => setUploadOpen(true)}
-            className="bg-[#0F2744] text-white font-semibold px-4 py-2 rounded-lg text-sm hover:bg-[#1A3A5C] transition-colors"
+            className="bg-accent text-white font-semibold px-4 py-2 rounded-lg text-sm hover:bg-accent-ink transition-colors"
           >
             + Document uploaden
           </button>
@@ -267,7 +267,7 @@ export default function BibliotheekPage() {
           <button
             type="button"
             onClick={() => setWeergave("beheren")}
-            className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-[#0F2744] hover:text-accent transition-colors"
+            className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-ink hover:text-accent transition-colors"
           >
             ← Terug naar documenten
           </button>
@@ -306,7 +306,7 @@ export default function BibliotheekPage() {
             onClick={() => setActieveTab(tab)}
             className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
               actieveTab === tab
-                ? "bg-white text-[#0F2744] shadow-sm"
+                ? "bg-white text-ink shadow-sm"
                 : "text-gray-500 hover:text-gray-700"
             }`}
           >
@@ -332,7 +332,7 @@ export default function BibliotheekPage() {
             type="checkbox"
             checked={toonInactief}
             onChange={(e) => setToonInactief(e.target.checked)}
-            className="accent-[#0F2744]"
+            className="accent-accent"
           />
           Toon gedeactiveerde documenten
           {aantalInactief > 0 && (
@@ -343,7 +343,7 @@ export default function BibliotheekPage() {
           type="button"
           onClick={() => setWeergave("zoeken")}
           title="Zoek op de inhoud van documenten (niet alleen de titel)"
-          className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-semibold text-[#0F2744] hover:border-accent transition-colors"
+          className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-semibold text-ink hover:border-accent transition-colors"
         >
           🔎 Uitgebreid zoeken
         </button>
@@ -379,7 +379,7 @@ export default function BibliotheekPage() {
                   >
                     ▶
                   </span>
-                  <span className="text-sm font-bold text-[#0F2744]">
+                  <span className="text-sm font-bold text-ink">
                     {groep.label}
                   </span>
                   <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-500">
@@ -411,7 +411,7 @@ export default function BibliotheekPage() {
                       href={`/api/documents/${doc.id}/bestand`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="font-semibold text-[#0F2744] text-sm truncate hover:text-accent transition-colors block"
+                      className="font-semibold text-ink text-sm truncate hover:text-accent transition-colors block"
                       title="Origineel openen of downloaden"
                     >
                       {doc.titel}
@@ -419,7 +419,7 @@ export default function BibliotheekPage() {
                   ) : (
                     <div
                       className={`font-semibold text-sm truncate ${
-                        inactief ? "text-gray-500" : "text-[#0F2744]"
+                        inactief ? "text-gray-500" : "text-ink"
                       }`}
                     >
                       {doc.titel}
@@ -522,7 +522,7 @@ export default function BibliotheekPage() {
                               setMetadataDocId(doc.id);
                               setOpenMenuId(null);
                             }}
-                            className="w-full text-left px-4 py-2 text-sm font-medium text-[#0F2744] hover:bg-amber-50"
+                            className="w-full text-left px-4 py-2 text-sm font-medium text-ink hover:bg-amber-50"
                             title={
                               isGeneriek
                                 ? "Generiek document — metadata is alleen-lezen (centraal beheerd)"
@@ -536,7 +536,7 @@ export default function BibliotheekPage() {
                           <a
                             href={`/ai?doc=${doc.id}`}
                             onClick={() => setOpenMenuId(null)}
-                            className="block px-4 py-2 text-sm font-medium text-[#0F2744] hover:bg-amber-50"
+                            className="block px-4 py-2 text-sm font-medium text-ink hover:bg-amber-50"
                             title="Open de AI-assistent met de vraag beperkt tot dit document"
                           >
                             Vraag de AI over dit stuk
@@ -613,9 +613,9 @@ export default function BibliotheekPage() {
 
       {/* Deactiveer-bevestiging */}
       {deactiveerDoc && (
-        <div className="fixed inset-0 bg-[#0F2744]/50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-accent/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl p-7 w-full max-w-md shadow-xl">
-            <h2 className="text-lg font-bold text-[#0F2744] mb-2">
+            <h2 className="text-lg font-bold text-ink mb-2">
               Document deactiveren
             </h2>
             <p className="text-sm text-gray-600 mb-4">
@@ -666,10 +666,10 @@ export default function BibliotheekPage() {
 
       {/* Upload modal */}
       {uploadOpen && (
-        <div className="fixed inset-0 bg-[#0F2744]/50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-accent/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl p-7 w-full max-w-md shadow-xl">
             <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-bold text-[#0F2744]">Document uploaden</h2>
+              <h2 className="text-lg font-bold text-ink">Document uploaden</h2>
               <button
                 onClick={() => setUploadOpen(false)}
                 className="text-gray-400 hover:text-gray-600"
@@ -737,7 +737,7 @@ export default function BibliotheekPage() {
                 <button
                   type="submit"
                   disabled={uploaden}
-                  className="flex-1 bg-[#0F2744] text-white rounded-lg py-2.5 text-sm font-semibold hover:bg-[#1A3A5C] disabled:opacity-50"
+                  className="flex-1 bg-accent text-white rounded-lg py-2.5 text-sm font-semibold hover:bg-accent-ink disabled:opacity-50"
                 >
                   {uploaden ? "Verwerken..." : "Uploaden & indexeren"}
                 </button>

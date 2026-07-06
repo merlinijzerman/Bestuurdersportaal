@@ -119,7 +119,7 @@ export default async function RisicoDetailPage({
     <div className="p-7 space-y-6">
       <Link
         href="/risicomatrix"
-        className="text-sm text-gray-500 hover:text-[#0F2744] inline-flex items-center gap-1"
+        className="text-sm text-gray-500 hover:text-ink inline-flex items-center gap-1"
       >
         ← Terug naar matrix
       </Link>
@@ -136,7 +136,7 @@ export default async function RisicoDetailPage({
             >
               {NIVEAU_LABEL[risico.niveau]}
             </span>
-            <span className="text-[11px] uppercase tracking-wide text-[#0F2744] bg-[#0F2744]/5 px-2 py-0.5 rounded">
+            <span className="text-[11px] uppercase tracking-wide text-ink bg-accent/5 px-2 py-0.5 rounded">
               {TYPE_LABEL[risico.type_risico]}
             </span>
             <span
@@ -149,7 +149,7 @@ export default async function RisicoDetailPage({
               {isGesloten ? "Gesloten" : "Actief"}
             </span>
           </div>
-          <h1 className="text-[#0F2744] text-2xl font-semibold">{risico.titel}</h1>
+          <h1 className="text-ink text-2xl font-semibold">{risico.titel}</h1>
           {risico.toelichting && (
             <p className="text-sm text-gray-600 mt-1.5 max-w-3xl whitespace-pre-line">
               {risico.toelichting}
@@ -167,7 +167,7 @@ export default async function RisicoDetailPage({
             Kans
           </div>
           <div className="flex items-baseline gap-2 mt-2">
-            <div className="text-2xl font-semibold text-[#0F2744]">
+            <div className="text-2xl font-semibold text-ink">
               {risico.kans}
             </div>
             <div className="text-sm text-gray-600">
@@ -179,7 +179,7 @@ export default async function RisicoDetailPage({
               <div
                 key={`k-bar-${n}`}
                 className={`h-1.5 flex-1 rounded-full ${
-                  n <= risico.kans ? "bg-[#0F2744]" : "bg-gray-200"
+                  n <= risico.kans ? "bg-accent" : "bg-gray-200"
                 }`}
               />
             ))}
@@ -191,7 +191,7 @@ export default async function RisicoDetailPage({
             Impact
           </div>
           <div className="flex items-baseline gap-2 mt-2">
-            <div className="text-2xl font-semibold text-[#0F2744]">
+            <div className="text-2xl font-semibold text-ink">
               {risico.impact}
             </div>
             <div className="text-sm text-gray-600">
@@ -203,7 +203,7 @@ export default async function RisicoDetailPage({
               <div
                 key={`i-bar-${n}`}
                 className={`h-1.5 flex-1 rounded-full ${
-                  n <= risico.impact ? "bg-[#0F2744]" : "bg-gray-200"
+                  n <= risico.impact ? "bg-accent" : "bg-gray-200"
                 }`}
               />
             ))}
@@ -271,7 +271,7 @@ export default async function RisicoDetailPage({
           {/* Logboek */}
           <div className="bg-white border border-gray-200 rounded-xl p-5">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-[#0F2744]">Logboek</h3>
+              <h3 className="text-sm font-semibold text-ink">Logboek</h3>
               <span className="text-xs text-gray-500">
                 Append-only · {(log || []).length} events
               </span>

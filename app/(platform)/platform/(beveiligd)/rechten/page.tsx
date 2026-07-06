@@ -65,7 +65,7 @@ export default async function RechtenPagina() {
         <div>
           <h1 className="text-2xl font-bold">Identiteiten &amp; rechten</h1>
         </div>
-        <div className="rounded-lg border border-accent/40 bg-accent/10 px-4 py-3 text-sm text-[#0F2744]">
+        <div className="rounded-lg border border-accent/40 bg-accent/10 px-4 py-3 text-sm text-ink">
           Je hebt geen recht om het rechtenregister in te zien. Dit vereist{" "}
           <code className="font-mono">platform.capabilities.grant</code> of{" "}
           <code className="font-mono">platform.capabilities.revoke</code>.
@@ -116,7 +116,7 @@ export default async function RechtenPagina() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Identiteiten &amp; rechten</h1>
-        <p className="mt-1 max-w-3xl text-sm text-[#0F2744]/70">
+        <p className="mt-1 max-w-3xl text-sm text-ink/70">
           Beheer welke platform-identiteit welke capabilities heeft. In deze
           versie kun je uitsluitend <strong>niet-zware</strong> capabilities
           toekennen of intrekken; zware capabilities (o.a. fondsen beheren,

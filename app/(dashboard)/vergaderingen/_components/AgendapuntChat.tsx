@@ -460,7 +460,7 @@ export default function AgendapuntChat({
         className="w-full px-3 py-2 text-left"
       >
         <span className="flex items-center justify-between">
-          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#0F2744]">
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-ink">
             ✨ Vraag door over dit agendapunt
             {heeftGesprek && !open && (
               <span className="text-[10px] font-normal text-gray-500">
@@ -488,7 +488,7 @@ export default function AgendapuntChat({
             .{" "}
             <a
               href={`/ai?agendapunt=${agendapuntId}`}
-              className="underline hover:text-[#0F2744]"
+              className="underline hover:text-ink"
               title="Zelfde gesprek met alle opties in de volledige assistent"
             >
               Openen in volledige assistent
@@ -501,7 +501,7 @@ export default function AgendapuntChat({
               {berichten.map((b, idx) =>
                 b.rol === "gebruiker" ? (
                   <div key={idx} className="flex justify-end">
-                    <div className="bg-[#0F2744] text-white text-sm rounded-lg px-3 py-2 max-w-[85%] whitespace-pre-wrap">
+                    <div className="bg-accent text-white text-sm rounded-lg px-3 py-2 max-w-[85%] whitespace-pre-wrap">
                       {b.tekst}
                     </div>
                   </div>
@@ -541,7 +541,7 @@ export default function AgendapuntChat({
                       <div className="mt-2 border-t border-gray-100 pt-1.5">
                         <button
                           onClick={() => toggleBronnen(idx)}
-                          className="text-[11px] font-medium text-gray-500 hover:text-[#0F2744]"
+                          className="text-[11px] font-medium text-gray-500 hover:text-ink"
                         >
                           {openBronnen.has(idx) ? "▾" : "▸"} Onderbouwing en bronnen (
                           {b.bronnen.length})
@@ -553,10 +553,10 @@ export default function AgendapuntChat({
                                 key={i}
                                 className="text-[11px] bg-gray-50 border border-gray-200 rounded px-2 py-1.5"
                               >
-                                <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-[#0F2744] text-white text-[9px] font-semibold mr-1.5">
+                                <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-accent text-white text-[9px] font-semibold mr-1.5">
                                   {i + 1}
                                 </span>
-                                <span className="font-medium text-[#0F2744]">{bron.titel}</span>
+                                <span className="font-medium text-ink">{bron.titel}</span>
                                 {bron.pagina != null && (
                                   <span className="text-gray-500"> · p. {bron.pagina}</span>
                                 )}
@@ -596,7 +596,7 @@ export default function AgendapuntChat({
               <button
                 onClick={() => genereerVoorbereiding()}
                 disabled={laden}
-                className="text-xs text-left bg-[#0F2744] text-white rounded-full px-3 py-1.5 hover:bg-[#1a3858] transition-colors disabled:opacity-50 font-medium"
+                className="text-xs text-left bg-accent text-white rounded-full px-3 py-1.5 hover:bg-accent-ink transition-colors disabled:opacity-50 font-medium"
               >
                 {heeftGesprek
                   ? "Stel mijn voorbereiding (opnieuw) op"
@@ -634,7 +634,7 @@ export default function AgendapuntChat({
             <button
               onClick={() => stuurBericht()}
               disabled={laden || !invoer.trim()}
-              className="bg-[#0F2744] text-white text-sm font-medium px-3 py-2 rounded-lg hover:bg-accent hover:text-[#0F2744] transition-colors disabled:opacity-40 disabled:cursor-not-allowed self-stretch"
+              className="bg-accent text-white text-sm font-medium px-3 py-2 rounded-lg hover:bg-accent hover:text-ink transition-colors disabled:opacity-40 disabled:cursor-not-allowed self-stretch"
             >
               {laden ? "…" : "Vraag"}
             </button>

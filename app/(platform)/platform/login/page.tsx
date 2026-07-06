@@ -155,12 +155,12 @@ export default function PlatformLoginPage() {
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
           <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-accent">
-            <span className="text-2xl font-black text-[#0F2744]">P</span>
+            <span className="text-2xl font-black text-ink">P</span>
           </div>
-          <h1 className="text-xl font-bold text-[#0F2744]">
+          <h1 className="text-xl font-bold text-ink">
             Platform back-office
           </h1>
-          <p className="mt-1 text-sm text-[#0F2744]/60">
+          <p className="mt-1 text-sm text-ink/60">
             Afgeschermde toegang — MFA verplicht.
           </p>
         </div>
@@ -175,7 +175,7 @@ export default function PlatformLoginPage() {
           {stap === "wachtwoord" && (
             <form onSubmit={handleWachtwoord} className="space-y-4">
               <div>
-                <label className="mb-1 block text-sm font-medium text-[#0F2744]">
+                <label className="mb-1 block text-sm font-medium text-ink">
                   E-mailadres
                 </label>
                 <input
@@ -183,11 +183,11 @@ export default function PlatformLoginPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full rounded-lg border border-[#0F2744]/15 px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-line px-3 py-2 text-sm"
                 />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-[#0F2744]">
+                <label className="mb-1 block text-sm font-medium text-ink">
                   Wachtwoord
                 </label>
                 <input
@@ -195,13 +195,13 @@ export default function PlatformLoginPage() {
                   required
                   value={wachtwoord}
                   onChange={(e) => setWachtwoord(e.target.value)}
-                  className="w-full rounded-lg border border-[#0F2744]/15 px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-line px-3 py-2 text-sm"
                 />
               </div>
               <button
                 type="submit"
                 disabled={laden}
-                className="w-full rounded-lg bg-[#0F2744] py-2 text-sm font-semibold text-white disabled:opacity-50"
+                className="w-full rounded-lg bg-accent py-2 text-sm font-semibold text-white disabled:opacity-50"
               >
                 {laden ? "Bezig…" : "Inloggen"}
               </button>
@@ -210,7 +210,7 @@ export default function PlatformLoginPage() {
 
           {stap === "enroll" && (
             <form onSubmit={handleVerify} className="space-y-4">
-              <p className="text-sm text-[#0F2744]/80">
+              <p className="text-sm text-ink/80">
                 Scan deze QR-code met uw authenticator-app en voer de
                 6-cijferige code in.
               </p>
@@ -228,7 +228,7 @@ export default function PlatformLoginPage() {
                 </div>
               )}
               <details className="rounded-lg bg-app-bg p-3">
-                <summary className="cursor-pointer text-xs font-medium text-[#0F2744]/60">
+                <summary className="cursor-pointer text-xs font-medium text-ink/60">
                   Scannen lukt niet? Voer de sleutel handmatig in
                 </summary>
                 <div className="mt-2 break-all font-mono text-sm">
@@ -239,7 +239,7 @@ export default function PlatformLoginPage() {
               <button
                 type="submit"
                 disabled={laden}
-                className="w-full rounded-lg bg-[#0F2744] py-2 text-sm font-semibold text-white disabled:opacity-50"
+                className="w-full rounded-lg bg-accent py-2 text-sm font-semibold text-white disabled:opacity-50"
               >
                 {laden ? "Verifiëren…" : "Inschrijven en inloggen"}
               </button>
@@ -248,14 +248,14 @@ export default function PlatformLoginPage() {
 
           {stap === "challenge" && (
             <form onSubmit={handleVerify} className="space-y-4">
-              <p className="text-sm text-[#0F2744]/80">
+              <p className="text-sm text-ink/80">
                 Voer de 6-cijferige code uit uw authenticator-app in.
               </p>
               <CodeInvoer code={code} setCode={setCode} />
               <button
                 type="submit"
                 disabled={laden}
-                className="w-full rounded-lg bg-[#0F2744] py-2 text-sm font-semibold text-white disabled:opacity-50"
+                className="w-full rounded-lg bg-accent py-2 text-sm font-semibold text-white disabled:opacity-50"
               >
                 {laden ? "Verifiëren…" : "Verifiëren"}
               </button>
@@ -284,7 +284,7 @@ function CodeInvoer({
       value={code}
       onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
       placeholder="123456"
-      className="w-full rounded-lg border border-[#0F2744]/15 px-3 py-2 text-center font-mono text-lg tracking-widest"
+      className="w-full rounded-lg border border-line px-3 py-2 text-center font-mono text-lg tracking-widest"
     />
   );
 }

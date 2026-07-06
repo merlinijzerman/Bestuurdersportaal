@@ -282,7 +282,7 @@ export default async function HomePage() {
       <div className="bg-white border border-gray-200 rounded-xl p-5">
         <div className="flex items-end justify-between flex-wrap gap-3">
           <div>
-            <div className="text-[#0F2744] text-xl font-bold">
+            <div className="text-ink text-xl font-bold">
               {dagdeelGroet()}
               {voornaam ? ` ${voornaam}` : ""}, fijn u terug te zien.
             </div>
@@ -293,7 +293,7 @@ export default async function HomePage() {
                   {" "}De volgende vergadering is{" "}
                   <Link
                     href={`/vergaderingen/${volgendeVergadering.id}`}
-                    className="text-[#0F2744] font-medium hover:text-accent"
+                    className="text-ink font-medium hover:text-accent"
                   >
                     {volgendeVergadering.titel}
                   </Link>
@@ -306,7 +306,7 @@ export default async function HomePage() {
           </div>
           <Link
             href="/dashboard"
-            className="text-xs text-[#0F2744] border border-gray-200 px-3 py-1.5 rounded-lg hover:border-accent transition-colors"
+            className="text-xs text-ink border border-gray-200 px-3 py-1.5 rounded-lg hover:border-accent transition-colors"
           >
             Open volledige stuurinformatie →
           </Link>
@@ -345,12 +345,12 @@ export default async function HomePage() {
       {openStappen.length > 0 && (
         <div className="bg-white border border-gray-200 rounded-xl p-5">
           <div className="flex items-center justify-between mb-3">
-            <div className="font-semibold text-[#0F2744] text-sm">
+            <div className="font-semibold text-ink text-sm">
               Uw open procedure-stappen
             </div>
             <Link
               href="/procedures"
-              className="text-xs text-[#0F2744] hover:text-accent"
+              className="text-xs text-ink hover:text-accent"
             >
               Alle procedures →
             </Link>
@@ -375,7 +375,7 @@ export default async function HomePage() {
                     }`}
                   />
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-[#0F2744] truncate">
+                    <div className="text-sm font-medium text-ink truncate">
                       {s.naam}
                     </div>
                     <div className="text-xs text-gray-500 truncate">
@@ -408,14 +408,14 @@ export default async function HomePage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         {/* Voor u open */}
         <div className="bg-white border border-gray-200 rounded-xl p-5">
-          <div className="font-semibold text-[#0F2744] text-sm mb-3">Voor u open</div>
+          <div className="font-semibold text-ink text-sm mb-3">Voor u open</div>
           {volgendeVergadering ? (
             <div className="space-y-3">
               <div className="bg-gray-50 rounded-lg p-3">
                 <div className="text-xs text-gray-500 mb-1">Komende vergadering</div>
                 <Link
                   href={`/vergaderingen/${volgendeVergadering.id}`}
-                  className="text-sm font-medium text-[#0F2744] hover:text-accent"
+                  className="text-sm font-medium text-ink hover:text-accent"
                 >
                   {volgendeVergadering.titel}
                 </Link>
@@ -436,14 +436,14 @@ export default async function HomePage() {
                     {agendapuntenZonderInbreng > 0 ? (
                       <>
                         Op{" "}
-                        <span className="font-medium text-[#0F2744]">
+                        <span className="font-medium text-ink">
                           {agendapuntenZonderInbreng}
                         </span>{" "}
                         van de {totaalAgendapunten} agendapunten heeft u nog geen
                         inbreng geplaatst.{" "}
                         <Link
                           href={`/vergaderingen/${volgendeVergadering.id}`}
-                          className="text-[#0F2744] hover:text-accent font-medium"
+                          className="text-ink hover:text-accent font-medium"
                         >
                           Bekijken →
                         </Link>
@@ -460,7 +460,7 @@ export default async function HomePage() {
                     Er zijn nog geen agendapunten toegevoegd.{" "}
                     <Link
                       href={`/vergaderingen/${volgendeVergadering.id}`}
-                      className="text-[#0F2744] hover:text-accent font-medium"
+                      className="text-ink hover:text-accent font-medium"
                     >
                       Toevoegen →
                     </Link>
@@ -473,7 +473,7 @@ export default async function HomePage() {
               Geen openstaande vergaderingen.{" "}
               <Link
                 href="/vergaderingen"
-                className="text-[#0F2744] hover:text-accent font-medium"
+                className="text-ink hover:text-accent font-medium"
               >
                 Vergadering inplannen →
               </Link>
@@ -483,7 +483,7 @@ export default async function HomePage() {
 
         {/* Mijn recente activiteit */}
         <div className="bg-white border border-gray-200 rounded-xl p-5">
-          <div className="font-semibold text-[#0F2744] text-sm mb-3">
+          <div className="font-semibold text-ink text-sm mb-3">
             Uw recente activiteit
           </div>
           {!heeftActiviteit ? (
@@ -564,7 +564,7 @@ function KpiCard({
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-4">
       <div className="text-xs text-gray-500">{label}</div>
-      <div className="text-2xl font-bold text-[#0F2744] mt-1">{waarde}</div>
+      <div className="text-2xl font-bold text-ink mt-1">{waarde}</div>
       <div className={`text-xs mt-1 ${extraKleur}`}>{extra}</div>
     </div>
   );

@@ -192,7 +192,7 @@ export default function ZoekenPaneel() {
           <button
             type="submit"
             disabled={laden}
-            className="bg-[#0F2744] text-white font-semibold px-4 py-1.5 rounded-lg text-sm hover:bg-[#1A3A5C] transition-colors disabled:opacity-50"
+            className="bg-accent text-white font-semibold px-4 py-1.5 rounded-lg text-sm hover:bg-accent-ink transition-colors disabled:opacity-50"
           >
             {laden ? "Bezig…" : "Zoeken"}
           </button>
@@ -211,7 +211,7 @@ export default function ZoekenPaneel() {
                   title={o.uitleg}
                   className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
                     modus === o.waarde
-                      ? "bg-white text-[#0F2744] shadow-sm"
+                      ? "bg-white text-ink shadow-sm"
                       : "text-gray-500 hover:text-gray-700"
                   }`}
                 >
@@ -298,7 +298,7 @@ export default function ZoekenPaneel() {
                   <span className="text-gray-400 text-sm">
                     {sleutel === NIET_GEKOPPELD ? "📄" : "📂"}
                   </span>
-                  <h2 className="text-sm font-bold text-[#0F2744]">{dossierTitel}</h2>
+                  <h2 className="text-sm font-bold text-ink">{dossierTitel}</h2>
                   <span className="text-[11px] text-gray-400">({groep.length})</span>
                 </div>
                 <div className="space-y-2">
@@ -335,13 +335,13 @@ function Resultaatkaart({ r }: { r: ZoekResultaat }) {
               href={`/api/documents/${r.document_id}/bestand`}
               target="_blank"
               rel="noopener noreferrer"
-              className="font-semibold text-[#0F2744] text-sm hover:text-accent transition-colors"
+              className="font-semibold text-ink text-sm hover:text-accent transition-colors"
               title="Origineel openen"
             >
               {r.titel}
             </a>
           ) : (
-            <div className="font-semibold text-[#0F2744] text-sm">{r.titel}</div>
+            <div className="font-semibold text-ink text-sm">{r.titel}</div>
           )}
 
           {/* Metadatabadges */}
@@ -378,7 +378,7 @@ function Resultaatkaart({ r }: { r: ZoekResultaat }) {
                 href={externLink}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[#0F2744] underline hover:text-accent font-semibold"
+                className="text-ink underline hover:text-accent font-semibold"
               >
                 Externe bron ↗
               </a>

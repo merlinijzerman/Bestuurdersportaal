@@ -244,7 +244,7 @@ export default function AannamesPaneel({ decisionId, assumptions }: Props) {
     <div className="bg-white border border-gray-200 rounded-xl p-5">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="text-sm font-semibold text-[#0F2744]">Aannames</h3>
+          <h3 className="text-sm font-semibold text-ink">Aannames</h3>
           <p className="text-xs text-gray-500 mt-0.5">
             Gestructureerde aannames waarop dit besluit rust. Validatie maakt
             ze onderdeel van de readiness-check.
@@ -256,7 +256,7 @@ export default function AannamesPaneel({ decisionId, assumptions }: Props) {
             setOpen((o) => !o);
             setFout(null);
           }}
-          className="text-xs text-[#0F2744] hover:underline whitespace-nowrap"
+          className="text-xs text-ink hover:underline whitespace-nowrap"
         >
           {open ? "Sluiten" : "+ Nieuwe aanname"}
         </button>
@@ -323,7 +323,7 @@ export default function AannamesPaneel({ decisionId, assumptions }: Props) {
               type="button"
               onClick={nieuw}
               disabled={bezig === "nieuw"}
-              className="bg-[#0F2744] text-white text-sm px-4 py-2 rounded-md hover:bg-[#1a3a5e] disabled:opacity-50"
+              className="bg-accent text-white text-sm px-4 py-2 rounded-md hover:bg-accent-ink disabled:opacity-50"
             >
               {bezig === "nieuw" ? "Bezig…" : "Toevoegen"}
             </button>
@@ -422,7 +422,7 @@ export default function AannamesPaneel({ decisionId, assumptions }: Props) {
                       type="button"
                       onClick={() => bewaarBewerken(a)}
                       disabled={bezig === a.id}
-                      className="bg-[#0F2744] text-white text-sm px-4 py-2 rounded-md hover:bg-[#1a3a5e] disabled:opacity-50"
+                      className="bg-accent text-white text-sm px-4 py-2 rounded-md hover:bg-accent-ink disabled:opacity-50"
                     >
                       {bezig === a.id ? "Bezig…" : "Bewaar"}
                     </button>
@@ -501,7 +501,7 @@ export default function AannamesPaneel({ decisionId, assumptions }: Props) {
                       type="button"
                       onClick={() => herstel(a)}
                       disabled={bezig === a.id}
-                      className="text-xs text-[#0F2744] hover:underline disabled:opacity-50"
+                      className="text-xs text-ink hover:underline disabled:opacity-50"
                     >
                       Herstellen
                     </button>
@@ -511,7 +511,7 @@ export default function AannamesPaneel({ decisionId, assumptions }: Props) {
                         type="button"
                         onClick={() => startBewerken(a)}
                         disabled={bezig === a.id}
-                        className="text-xs text-[#0F2744] hover:underline disabled:opacity-50"
+                        className="text-xs text-ink hover:underline disabled:opacity-50"
                         title="Aanname bewerken"
                       >
                         Bewerk
@@ -539,7 +539,7 @@ export default function AannamesPaneel({ decisionId, assumptions }: Props) {
           <button
             type="button"
             onClick={() => setToonVerwijderde((v) => !v)}
-            className="text-xs text-gray-500 hover:text-[#0F2744]"
+            className="text-xs text-gray-500 hover:text-ink"
           >
             {toonVerwijderde
               ? `Verberg verwijderde (${verwijderdAantal})`

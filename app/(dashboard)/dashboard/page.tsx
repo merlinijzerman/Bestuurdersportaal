@@ -159,7 +159,7 @@ export default async function DashboardPage() {
       {/* Header */}
       <div className="flex items-end justify-between flex-wrap gap-2">
         <div>
-          <div className="text-[#0F2744] text-xl font-bold">
+          <div className="text-ink text-xl font-bold">
             Welkom terug, {naam}
           </div>
           <div className="text-gray-500 text-sm mt-0.5">
@@ -175,7 +175,7 @@ export default async function DashboardPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <div className="text-xs text-gray-500">Financieringsgraad</div>
-          <div className="text-2xl font-bold text-[#0F2744] mt-1">
+          <div className="text-2xl font-bold text-ink mt-1">
             {KPI.financieringsgraad.huidig.toFixed(1).replace(".", ",")}%
           </div>
           <div className="text-xs text-green-600 mt-1">
@@ -204,7 +204,7 @@ export default async function DashboardPage() {
         })()}
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <div className="text-xs text-gray-500">Solidariteitsreserve</div>
-          <div className="text-2xl font-bold text-[#0F2744] mt-1">
+          <div className="text-2xl font-bold text-ink mt-1">
             {KPI.solidariteitsreserve.percentage.toFixed(1).replace(".", ",")}%
           </div>
           <div className="text-xs text-gray-500 mt-1">
@@ -213,7 +213,7 @@ export default async function DashboardPage() {
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <div className="text-xs text-gray-500">Vermogen</div>
-          <div className="text-2xl font-bold text-[#0F2744] mt-1">
+          <div className="text-2xl font-bold text-ink mt-1">
             € {fmtMln(KPI.vermogen.mln)}
           </div>
           <div className="text-xs text-green-600 mt-1">
@@ -222,7 +222,7 @@ export default async function DashboardPage() {
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <div className="text-xs text-gray-500">Rendement YTD</div>
-          <div className="text-2xl font-bold text-[#0F2744] mt-1">
+          <div className="text-2xl font-bold text-ink mt-1">
             +{KPI.rendementYTD.fonds.toFixed(1).replace(".", ",")}%
           </div>
           <div className="text-xs text-gray-500 mt-1">
@@ -234,7 +234,7 @@ export default async function DashboardPage() {
       {/* Trend financieringsgraad */}
       <div className="bg-white rounded-xl border border-gray-200 p-5">
         <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
-          <div className="font-semibold text-[#0F2744] text-sm">
+          <div className="font-semibold text-ink text-sm">
             Financieringsgraad — 24 maanden
           </div>
           <div className="flex gap-4 text-xs text-gray-500">
@@ -285,7 +285,7 @@ export default async function DashboardPage() {
       <div className="bg-white rounded-xl border border-gray-200 p-5">
         <div className="flex items-baseline justify-between mb-4 flex-wrap gap-2">
           <div>
-            <div className="font-semibold text-[#0F2744] text-sm">Balans · Wtp-regeling</div>
+            <div className="font-semibold text-ink text-sm">Balans · Wtp-regeling</div>
             <div className="text-xs text-gray-500 mt-0.5">
               Solidaire premieregeling · bedragen in € mln
             </div>
@@ -300,7 +300,7 @@ export default async function DashboardPage() {
               <span className="text-xs font-bold uppercase tracking-wider text-gray-500">
                 Activa
               </span>
-              <span className="text-lg font-semibold text-[#0F2744]">
+              <span className="text-lg font-semibold text-ink">
                 {fmt(totaalActiva)}
               </span>
             </div>
@@ -316,7 +316,7 @@ export default async function DashboardPage() {
               <span className="text-xs font-bold uppercase tracking-wider text-gray-500">
                 Passiva
               </span>
-              <span className="text-lg font-semibold text-[#0F2744]">
+              <span className="text-lg font-semibold text-ink">
                 {fmt(totaalPassiva)}
               </span>
             </div>
@@ -382,7 +382,7 @@ export default async function DashboardPage() {
               <div className="text-[11px] text-gray-500">
                 Financieringsgraad (vermogen ÷ verplichtingen)
               </div>
-              <div className="text-base font-semibold text-[#0F2744] mt-0.5">
+              <div className="text-base font-semibold text-ink mt-0.5">
                 {KPI.financieringsgraad.huidig.toFixed(1).replace(".", ",")}%
                 <span className="text-xs text-green-600 font-normal ml-2">
                   surplus → solidariteitsreserve
@@ -423,11 +423,11 @@ export default async function DashboardPage() {
         {/* Deelnemers */}
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <div className="flex items-baseline justify-between mb-3">
-            <div className="font-semibold text-[#0F2744] text-sm">Deelnemers naar status</div>
+            <div className="font-semibold text-ink text-sm">Deelnemers naar status</div>
             <span className="text-xs text-gray-400">vs Q4 2025</span>
           </div>
           <div className="flex items-baseline gap-2 mb-3">
-            <span className="text-xl font-bold text-[#0F2744]">
+            <span className="text-xl font-bold text-ink">
               {fmt(DEELNEMERS.totaal)}
             </span>
             <span className="text-xs text-gray-500">totaal</span>
@@ -477,19 +477,19 @@ export default async function DashboardPage() {
           <div className="grid grid-cols-3 gap-3 mt-4 pt-3 border-t border-gray-200">
             <div>
               <div className="text-[11px] text-gray-500">Instroom Q1</div>
-              <div className="text-sm font-semibold text-[#0F2744] mt-0.5">
+              <div className="text-sm font-semibold text-ink mt-0.5">
                 +{fmt(DEELNEMERS.mutaties.instroom)}
               </div>
             </div>
             <div>
               <div className="text-[11px] text-gray-500">Uitstroom Q1</div>
-              <div className="text-sm font-semibold text-[#0F2744] mt-0.5">
+              <div className="text-sm font-semibold text-ink mt-0.5">
                 −{fmt(DEELNEMERS.mutaties.uitstroom)}
               </div>
             </div>
             <div>
               <div className="text-[11px] text-gray-500">Pensioneringen Q1</div>
-              <div className="text-sm font-semibold text-[#0F2744] mt-0.5">
+              <div className="text-sm font-semibold text-ink mt-0.5">
                 {fmt(DEELNEMERS.mutaties.pensioneringen)}
               </div>
             </div>
@@ -498,7 +498,7 @@ export default async function DashboardPage() {
 
         {/* Signaleringen */}
         <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="font-semibold text-[#0F2744] text-sm mb-3">Signaleringen</div>
+          <div className="font-semibold text-ink text-sm mb-3">Signaleringen</div>
           <ul className="space-y-3">
             {SIGNALERINGEN.map((s, i) => (
               <li key={i} className="flex gap-2.5 items-start">
@@ -512,7 +512,7 @@ export default async function DashboardPage() {
                   }`}
                 />
                 <div>
-                  <div className="text-sm font-semibold text-[#0F2744]">{s.titel}</div>
+                  <div className="text-sm font-semibold text-ink">{s.titel}</div>
                   <div className="text-xs text-gray-500 mt-0.5">{s.sub}</div>
                 </div>
               </li>
@@ -524,7 +524,7 @@ export default async function DashboardPage() {
       {/* Vergaderingen / acties */}
       <div className="bg-white rounded-xl border border-gray-200 p-5">
         <div className="flex items-baseline justify-between mb-3">
-          <div className="font-semibold text-[#0F2744] text-sm">
+          <div className="font-semibold text-ink text-sm">
             Openstaande acties &amp; vergaderingen
           </div>
           <span className="text-xs text-gray-400">{VERGADERINGEN.length} lopend</span>

@@ -47,7 +47,7 @@ export default async function NotulenPage() {
     <div className="p-7">
       <div className="flex items-start justify-between mb-6">
         <div>
-          <h1 className="text-xl font-black text-[#0F2744]">Notulen</h1>
+          <h1 className="text-xl font-black text-ink">Notulen</h1>
           <p className="text-sm text-gray-500 mt-1">
             Geüploade notulen worden per agendapunt benutbaar zodra de secretaris de
             voorgestelde segmenten bevestigt. Alleen bevestigde segmenten van
@@ -56,7 +56,7 @@ export default async function NotulenPage() {
         </div>
         <Link
           href="/bibliotheek"
-          className="bg-[#0F2744] text-white font-semibold px-4 py-2 rounded-lg text-sm hover:bg-[#1A3A5C] transition-colors"
+          className="bg-accent text-white font-semibold px-4 py-2 rounded-lg text-sm hover:bg-accent-ink transition-colors"
         >
           + Notulen uploaden
         </Link>
@@ -72,7 +72,7 @@ export default async function NotulenPage() {
           </p>
           <Link
             href="/bibliotheek"
-            className="inline-block bg-[#0F2744] text-white font-semibold px-5 py-2.5 rounded-lg text-sm hover:bg-[#1A3A5C]"
+            className="inline-block bg-accent text-white font-semibold px-5 py-2.5 rounded-lg text-sm hover:bg-accent-ink"
           >
             Naar Documentbibliotheek →
           </Link>
@@ -95,7 +95,7 @@ export default async function NotulenPage() {
                 className="block bg-white border border-gray-200 rounded-xl p-4 hover:border-accent transition-colors"
               >
                 <div className="flex gap-4 items-start">
-                  <div className="bg-[#0F2744] text-white rounded-xl p-3 text-center min-w-[52px] flex-shrink-0">
+                  <div className="bg-accent text-white rounded-xl p-3 text-center min-w-[52px] flex-shrink-0">
                     <div className="text-xs font-bold uppercase opacity-70">
                       {datum.toLocaleString("nl-NL", { month: "short" })}
                     </div>
@@ -103,7 +103,7 @@ export default async function NotulenPage() {
                     <div className="text-xs opacity-60">{datum.getFullYear()}</div>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-bold text-[#0F2744] text-sm">{doc.titel}</div>
+                    <div className="font-bold text-ink text-sm">{doc.titel}</div>
                     {verg && (
                       <div className="text-xs text-gray-500 mt-0.5">
                         Vergadering: {verg.titel}

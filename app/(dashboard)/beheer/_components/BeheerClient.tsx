@@ -175,7 +175,7 @@ export default function BeheerClient() {
       {/* Import */}
       <div className="rounded-xl border border-gray-200 bg-white p-4 mb-6 flex items-center justify-between gap-4">
         <div>
-          <div className="font-semibold text-[#0F2744]">Standaardcatalogus importeren</div>
+          <div className="font-semibold text-ink">Standaardcatalogus importeren</div>
           <div className="text-sm text-gray-500">
             Kopieert de globale templates naar dit fonds als bewerkbaar startpunt.
             Idempotent — bestaande items blijven ongemoeid.
@@ -184,7 +184,7 @@ export default function BeheerClient() {
         <button
           onClick={importeerStandaard}
           disabled={importeren}
-          className="shrink-0 rounded-lg bg-[#0F2744] px-4 py-2 text-sm font-semibold text-white hover:bg-[#163556] disabled:opacity-50"
+          className="shrink-0 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-ink disabled:opacity-50"
         >
           {importeren ? "Bezig…" : "Importeren"}
         </button>
@@ -198,7 +198,7 @@ export default function BeheerClient() {
       {/* Her-indexeren (R1.1/R1.2) — hele fondsbibliotheek opnieuw verwerken. */}
       <div className="rounded-xl border border-gray-200 bg-white p-4 mb-6 flex items-center justify-between gap-4">
         <div>
-          <div className="font-semibold text-[#0F2744]">Bibliotheek her-indexeren</div>
+          <div className="font-semibold text-ink">Bibliotheek her-indexeren</div>
           <div className="text-sm text-gray-500">
             Verwerkt alle fondsdocumenten opnieuw met structuur-bewuste fragmenten en
             een contextuele zoekindex. Verbruikt AI-credits; de getoonde brontekst
@@ -208,7 +208,7 @@ export default function BeheerClient() {
         <button
           onClick={herindexeerBibliotheek}
           disabled={reindexBezig}
-          className="shrink-0 rounded-lg bg-[#0F2744] px-4 py-2 text-sm font-semibold text-white hover:bg-[#163556] disabled:opacity-50"
+          className="shrink-0 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-ink disabled:opacity-50"
         >
           {reindexBezig ? "Bezig…" : "Her-indexeren"}
         </button>
@@ -227,7 +227,7 @@ export default function BeheerClient() {
             onClick={() => setTab(t)}
             className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
               tab === t
-                ? "border-accent text-[#0F2744]"
+                ? "border-accent text-ink"
                 : "border-transparent text-gray-500 hover:text-gray-700"
             }`}
           >
@@ -443,13 +443,13 @@ function ReviewHub() {
               onClick={() => kiesStream(s.key)}
               className={`rounded-full px-3 py-1 text-xs font-semibold ${
                 stream === s.key
-                  ? "bg-[#0F2744] text-white"
+                  ? "bg-accent text-white"
                   : "bg-gray-100 text-gray-600 hover:bg-gray-200"
               }`}
             >
               {s.label}
               {stream === s.key && tellingen.open ? (
-                <span className="ml-1.5 rounded-full bg-accent text-[#0F2744] px-1.5">
+                <span className="ml-1.5 rounded-full bg-accent text-ink px-1.5">
                   {tellingen.open}
                 </span>
               ) : null}
@@ -497,7 +497,7 @@ function ReviewHub() {
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="font-semibold text-[#0F2744] truncate">
+                    <span className="font-semibold text-ink truncate">
                       {it.documenten?.titel ?? "(document verwijderd)"}
                     </span>
                     <span
@@ -508,7 +508,7 @@ function ReviewHub() {
                       {it.confidence}
                     </span>
                     {it.status === "auto_toegepast" && (
-                      <span className="shrink-0 rounded-full bg-[#0F2744] text-white px-2 py-0.5 text-[11px] font-semibold">
+                      <span className="shrink-0 rounded-full bg-accent text-white px-2 py-0.5 text-[11px] font-semibold">
                         auto-gekoppeld
                       </span>
                     )}
@@ -567,7 +567,7 @@ function ReviewHub() {
               className="rounded-xl border border-gray-200 bg-white p-4 flex items-center gap-3"
             >
               <div className="flex-1 min-w-0">
-                <div className="font-semibold text-[#0F2744] truncate">
+                <div className="font-semibold text-ink truncate">
                   {it.documenten?.titel ?? "(document verwijderd)"}
                 </div>
                 <div className="text-xs text-gray-500">
@@ -670,7 +670,7 @@ function CatalogusTab({
         </div>
         <button
           onClick={maakAan}
-          className="rounded-lg bg-[#0F2744] px-4 py-2 text-sm font-semibold text-white hover:bg-[#163556]"
+          className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-ink"
         >
           Toevoegen
         </button>
@@ -686,7 +686,7 @@ function CatalogusTab({
             <div key={pm.id} className="rounded-xl border border-gray-200 bg-white">
               <div className="flex items-center gap-3 p-4">
                 <div className="flex-1">
-                  <div className="font-semibold text-[#0F2744]">
+                  <div className="font-semibold text-ink">
                     {pm.naam}{" "}
                     {!pm.actief && (
                       <span className="ml-1 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
@@ -887,7 +887,7 @@ function OrgaanSectie({
 
   return (
     <div>
-      <h2 className="text-lg font-semibold text-[#0F2744] mb-3">{titel}</h2>
+      <h2 className="text-lg font-semibold text-ink mb-3">{titel}</h2>
       <div className="rounded-xl border border-gray-200 bg-white p-4 mb-3 flex flex-wrap items-end gap-3">
         <div className="flex-1 min-w-[180px]">
           <label className="block text-xs font-medium text-gray-500 mb-1">Naam</label>
@@ -931,7 +931,7 @@ function OrgaanSectie({
         )}
         <button
           onClick={maakAan}
-          className="rounded-lg bg-[#0F2744] px-4 py-2 text-sm font-semibold text-white hover:bg-[#163556]"
+          className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-ink"
         >
           Toevoegen
         </button>
@@ -949,9 +949,9 @@ function OrgaanSectie({
               className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-2.5"
             >
               <div className="flex-1">
-                <span className="text-sm text-[#0F2744]">{o.naam}</span>
+                <span className="text-sm text-ink">{o.naam}</span>
                 {metType && o.categorie && (
-                  <span className="ml-2 rounded bg-accent/15 px-1.5 py-0.5 text-xs text-[#0F2744]">
+                  <span className="ml-2 rounded bg-accent/15 px-1.5 py-0.5 text-xs text-ink">
                     {CATEGORIE_LABEL[o.categorie] ?? o.categorie}
                   </span>
                 )}
