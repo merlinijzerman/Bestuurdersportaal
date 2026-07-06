@@ -3,30 +3,20 @@ import Header from "../_components/Header";
 import Footer from "../_components/Footer";
 import DossierKaart from "../_components/DossierKaart";
 import Flow from "../_components/Flow";
-import Steps from "../_components/Steps";
+import Cmp from "../_components/Cmp";
+import CtaBand from "../_components/CtaBand";
 
-// Homepage — 1:1 met de goedgekeurde homepage-mockup-v4. Alle teksten volgen de
-// claimmatrix (FO §8): geen ISO/SOC/NEN-claims, AI ondersteunt maar besluit
-// niet, "concept" waar van toepassing.
+// Homepage — compacte commerciële voorkant (copy v0.2 §1 + onderscheidingsblok
+// §10). Claimdiscipline (contentplan §0.1/§4): veilige werkwoorden, AI
+// ondersteunt maar besluit niet, geen certificerings-/hosting-/encryptieclaims.
+// Primaire CTA overal "Neem contact op" (Bouwoverdracht §1).
 export const metadata: Metadata = {
   title: {
     absolute:
       "Bestuurdersportaal — eigen online besluitomgeving met AI voor besturen",
   },
-  description: "AI-ondersteunde besluitomgeving voor besturen en commissies",
-  keywords: [
-    "bestuurdersportaal",
-    "online bestuurdersomgeving",
-    "digitale besluitomgeving",
-    "eigen bestuursomgeving",
-    "AI op eigen documenten",
-    "AI op besluitdossiers",
-    "besluitdossier bestuur",
-    "historische besluitvorming",
-    "governancecontext",
-    "besluitvorming besturen",
-    "commissies",
-  ],
+  description:
+    "Een eigen online besluitomgeving voor besturen en commissies, waarin AI werkt met de eigen documentatie, besluitdossiers en historische context — van vraagstuk tot verantwoording en evaluatie.",
   alternates: { canonical: "/" },
   openGraph: {
     title:
@@ -34,13 +24,20 @@ export const metadata: Metadata = {
     description:
       "Een eigen online besluitomgeving voor besturen en commissies, waarin AI werkt met de eigen documentatie, besluitdossiers en historische context.",
     type: "website",
+    url: "/",
   },
 };
+
+// Legacy-fragment-redirect (SpoorB §5): oude onepager-ankers doorsturen naar de
+// nieuwe zelfstandige pagina's. Fragmenten bereiken de server niet, dus dit
+// gebeurt client-side, en alleen op "/".
+const legacyHash = `(function(){var m={'#gebruikssituaties':'/product#gebruikssituaties','#voor-besturen':'/voor-wie','#eigen-omgeving':'/product#dossiers','#governance-ai':'/governance-ai','#product':'/product','#voorwie':'/voor-wie'};var d=m[window.location.hash];if(d&&window.location.pathname==='/'){window.location.replace(d);}})();`;
 
 export default function HomePage() {
   return (
     <div className="bp-home">
-      <Header variant="home" />
+      <script dangerouslySetInnerHTML={{ __html: legacyHash }} />
+      <Header variant="full" />
 
       {/* HERO */}
       <section className="hero">
@@ -49,14 +46,11 @@ export default function HomePage() {
           <div>
             <h1>Bestuurlijke besluitvorming. Door ontwerp.</h1>
             <p className="sub">
-              Het Bestuurdersportaal helpt besturen en commissies om complexe
+              Bestuurdersportaal helpt besturen en commissies om complexe
               besluiten zorgvuldig voor te bereiden, te onderbouwen, vast te
-              leggen, te verantwoorden en te evalueren.
-            </p>
-            <p className="sub">
-              Iedere organisatie krijgt een eigen online besluitomgeving waarin
-              AI werkt met de eigen documentatie, besluitdossiers en historische
-              context.
+              leggen, te verantwoorden en te evalueren. Iedere organisatie krijgt
+              een eigen online besluitomgeving waarin AI werkt met de eigen
+              documentatie, besluitdossiers en historische context.
             </p>
             <p className="flowline">
               Van vraagstuk naar besluit. Van besluit naar verantwoording en
@@ -68,18 +62,10 @@ export default function HomePage() {
             </p>
             <div className="cta">
               <a href="/contact" className="btn btn-primary">
-                Plan een demo
+                Neem contact op
               </a>
-              <a href="/login" className="btn btn-outline">
-                Inloggen
-              </a>
-              <a
-                href="https://the-paradox.com"
-                target="_blank"
-                rel="noopener"
-                className="textlink"
-              >
-                Ontdek The Paradox →
+              <a href="/product" className="btn btn-outline">
+                Bekijk hoe het werkt
               </a>
             </div>
           </div>
@@ -99,8 +85,8 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* PROBLEEM */}
-      <section id="product">
+      {/* HET VRAAGSTUK */}
+      <section>
         <div className="wrap">
           <div className="label">Het vraagstuk</div>
           <h2>
@@ -111,8 +97,8 @@ export default function HomePage() {
           <p className="lede">
             Bestuurders en commissies verwerken steeds meer: documenten,
             adviezen, risicoanalyses, toezichtskaders en onderlinge
-            afhankelijkheden. De hoeveelheid groeit; de tijd om te oordelen
-            niet. AI kan die complexiteit ordenen — maar alleen als het gebruik
+            afhankelijkheden. De hoeveelheid groeit; de tijd om te oordelen niet.
+            AI kan die complexiteit ordenen — maar alleen als het gebruik
             transparant, controleerbaar en rolzuiver is ingericht, en werkt
             vanuit de eigen context van de organisatie. Zonder die voorwaarden
             ontstaat het risico op schijnzekerheid: antwoorden die overtuigend
@@ -138,43 +124,73 @@ export default function HomePage() {
               </p>
             </div>
           </div>
-          <p className="prob-statement">
-            Waar klassieke bestuurdersportalen vooral documenten ontsluiten en
-            vergaderingen ondersteunen, richt het Bestuurdersportaal zich op het
-            besluit zelf: de voorbereiding, afweging, vastlegging, verantwoording
-            en evaluatie.
+        </div>
+      </section>
+
+      {/* ONDERSCHEIDINGSBLOK (§10) */}
+      <section className="distinct">
+        <div className="wrap">
+          <div className="label">Onderscheid</div>
+          <h2>
+            Geen documentportaal. Geen vergadertool.{" "}
+            <span>Geen losse AI-chat.</span>
+          </h2>
+          <p className="lede">
+            Een eigen besluitomgeving. Bestaande tools beheren documenten, plannen
+            vergaderingen of beantwoorden losse vragen zonder kennis van uw
+            context. Bestuurdersportaal is een organisatiegebonden
+            besluitomgeving, ontworpen rond de volledige besluitcyclus — van
+            voorbereiding en afweging tot besluit, verantwoording, opvolging en
+            evaluatie — en werkt vanuit uw eigen documentatie, dossiers en
+            historie op de plek waar het besluit valt.
+          </p>
+          <Cmp />
+          <p className="cmp-note">
+            Bestuurdersportaal vult het gat tussen documentbeheer, vergaderen,
+            risicobeheersing en AI. Het richt zich op de bestuurlijke afweging
+            zelf: welke informatie is gebruikt, welke risico's en aannames zijn
+            expliciet gemaakt, welk besluit is genomen, welke acties volgen
+            daaruit en hoe kan dit later worden gereconstrueerd?
+          </p>
+          <p className="link-row">
+            <a href="/product" className="textlink">
+              Bekijk hoe het werkt →
+            </a>
           </p>
         </div>
       </section>
 
-      {/* OPLOSSING */}
-      <section id="voor-besturen">
+      {/* DE OPLOSSING — BESLUITCYCLUS */}
+      <section>
         <div className="wrap">
           <div className="label">De oplossing</div>
           <h2>Eén omgeving voor de volledige besluitcyclus.</h2>
           <p className="lede">
-            Het portaal begeleidt de weg van vraagstuk naar besluit — en van
-            besluit naar verantwoording en evaluatie — in één samenhangende
+            Bestuurdersportaal begeleidt de weg van vraagstuk naar besluit — en
+            van besluit naar verantwoording en evaluatie — in één samenhangende
             omgeving. Niet als losse stappen, maar als één doorlopend dossier dat
             blijft leren van wat eerder is besloten.
           </p>
           <Flow />
-          <Steps />
+          <p className="link-row">
+            <a href="/product" className="textlink">
+              Bekijk de besluitcyclus →
+            </a>
+          </p>
         </div>
       </section>
 
-      {/* EIGEN OMGEVING */}
-      <section id="eigen-omgeving">
+      {/* UW EIGEN OMGEVING */}
+      <section>
         <div className="wrap">
           <div className="label">Uw eigen omgeving</div>
           <h2>Een eigen omgeving voor uw bestuurlijke context.</h2>
           <p className="lede">
-            Het Bestuurdersportaal is geen generieke AI-chat. Iedere organisatie
-            krijgt een eigen online besluitomgeving die wordt ingericht rond de
-            eigen documentatie, besluitdossiers, eerdere besluiten en
-            governancecontext. Daardoor werkt de ondersteuning vanuit wat in úw
-            organisatie geldt en eerder is besloten — niet vanuit algemene
-            aannames.
+            Bestuurdersportaal is geen generieke AI-chat. Iedere organisatie
+            krijgt een eigen online besluitomgeving, ingericht rond de eigen
+            documentatie, besluitdossiers, eerdere besluiten en governancecontext.
+            Daardoor werkt de ondersteuning vanuit wat in úw organisatie geldt en
+            eerder is besloten — niet vanuit algemene aannames.
           </p>
           <div className="own">
             <ul>
@@ -195,8 +211,8 @@ export default function HomePage() {
               <li>
                 <span className="ck">—</span>
                 <span>
-                  <b>Historische context blijft beschikbaar</b>: eerdere
-                  besluiten en onderbouwingen blijven vindbaar en herbruikbaar.
+                  <b>Historische context blijft beschikbaar</b>: eerdere besluiten
+                  en onderbouwingen blijven vindbaar en herbruikbaar.
                 </span>
               </li>
               <li>
@@ -229,85 +245,54 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* CONCREET */}
+      {/* GOVERNANCE-TEASER */}
       <section>
         <div className="wrap">
-          <div className="label">Concreet</div>
-          <h2>Wat krijgt een bestuur concreet?</h2>
-          <div className="value">
-            <ul>
-              <li>
-                <span className="ck">—</span>
-                <span>
-                  <b>Een eigen online besluitomgeving</b> voor uw organisatie.
-                </span>
-              </li>
-              <li>
-                <span className="ck">—</span>
-                <span>
-                  <b>Een gestructureerd besluitdossier</b> per vraagstuk.
-                </span>
-              </li>
-              <li>
-                <span className="ck">—</span>
-                <span>
-                  <b>
-                    AI-ondersteuning op uw eigen documentatie, dossiers en
-                    historie
-                  </b>{" "}
-                  — samenvatten, toetsen, risico's signaleren en alternatieven
-                  ordenen, met verwijzing naar de bron.
-                </span>
-              </li>
-              <li>
-                <span className="ck">—</span>
-                <span>
-                  <b>Vastlegging</b> van aannames, risico's, overwegingen,
-                  voorwaarden en acties.
-                </span>
-              </li>
-              <li>
-                <span className="ck">—</span>
-                <span>
-                  <b>Een reconstrueerbare audittrail of export</b> voor
-                  verantwoording.
-                </span>
-              </li>
-              <li>
-                <span className="ck">—</span>
-                <span>
-                  <b>Evaluatie en opvolging</b>: aannames toetsen, effecten
-                  beoordelen, leerpunten vastleggen en opnieuw agenderen.
-                </span>
-              </li>
-            </ul>
-            <DossierKaart
-              titel="Dossier · investeringsbesluit"
-              status="v4"
-              rijen={[
-                { label: "Bronnen", waarde: "samengevat & gekoppeld" },
-                { label: "Historie", waarde: "eerdere besluiten" },
-                { label: "Risico's", waarde: "gesignaleerd" },
-                { label: "Aannames", waarde: "expliciet" },
-                { label: "Besluit", waarde: "+ onderbouwing" },
-                { label: "Acties", waarde: "toegewezen" },
-                { label: "Evaluatie", waarde: "opvolging gepland" },
-              ]}
-            />
-          </div>
+          <div className="label">Vertrouwen &amp; governance</div>
+          <h2>AI ondersteunt, maar stuurt niet ongemerkt.</h2>
+          <p className="lede">
+            Verantwoord AI-gebruik is bewust begrensd en zichtbaar gemaakt. De AI
+            werkt binnen uw eigen context, houdt feit en duiding gescheiden, maakt
+            aannames zichtbaar, respecteert rollen en rechten, en legt via een
+            audittrail navolgbaar vast hoe een besluit tot stand kwam.
+          </p>
+          <p className="link-row">
+            <a href="/governance-ai" className="textlink">
+              Zo borgen we verantwoord AI-gebruik →
+            </a>
+          </p>
         </div>
       </section>
 
-      {/* BRUG */}
+      {/* VOOR WIE */}
+      <section>
+        <div className="wrap">
+          <div className="label">Voor wie</div>
+          <h2>Voor de organen die samen tot een besluit komen.</h2>
+          <p className="lede">
+            Bestuurdersportaal ondersteunt besturen en directies, commissies,
+            raden van toezicht, bestuursbureaus en secretariaten, en
+            GRC/compliance — de organen die samen tot een besluit komen.
+          </p>
+          <p className="link-row">
+            <a href="/voor-wie" className="textlink">
+              Kijk of het bij uw rol past →
+            </a>
+          </p>
+        </div>
+      </section>
+
+      {/* THE PARADOX */}
       <section>
         <div className="wrap">
           <div className="label">The Paradox</div>
           <h2>Van besluitarchitectuur naar besluitpraktijk.</h2>
           <p className="lede">
             The Paradox onderzoekt en adviseert over betere besluitvorming in een
-            wereld waarin menselijk oordeel en AI steeds meer samenkomen. Het
+            wereld waarin menselijk oordeel en AI steeds meer samenkomen.
             Bestuurdersportaal vertaalt dat gedachtegoed naar een concrete
-            digitale werkomgeving voor de dagelijkse bestuurspraktijk.
+            digitale werkomgeving voor de dagelijkse bestuurspraktijk. The Paradox
+            levert het denkkader; Bestuurdersportaal maakt het toepasbaar.
           </p>
           <div className="bridge">
             <div className="col">
@@ -321,11 +306,7 @@ export default function HomePage() {
               <p>De omgeving waarin dat denken dagelijks toepasbaar wordt.</p>
             </div>
           </div>
-          <p className="bridge-quote">
-            The Paradox levert het denkkader. Het Bestuurdersportaal maakt het
-            toepasbaar in de bestuurspraktijk.
-          </p>
-          <p style={{ marginTop: "16px" }}>
+          <p className="link-row">
             <a
               href="https://the-paradox.com"
               target="_blank"
@@ -338,253 +319,37 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* VOOR WIE */}
-      <section id="voorwie">
-        <div className="wrap">
-          <div className="label">Voor wie</div>
-          <h2>
-            Voor besturen en commissies waar besluiten aantoonbaar zorgvuldig
-            moeten zijn.
-          </h2>
-          <p className="lede">
-            Gebouwd voor bestuurlijke omgevingen waar besluiten gevolgen hebben
-            en verantwoording vragen. Bestuursbureaus, secretariaten en
-            GRC-teams ondersteunen daarbij het bestuurlijke proces.
-          </p>
-          <div className="blocks">
-            <div className="bl">
-              <h3>Besturen</h3>
-              <p>
-                Voor strategische en bestuurlijke besluiten waarbij informatie,
-                risico's, alternatieven en verantwoordelijkheden zorgvuldig
-                moeten worden gewogen.
-              </p>
-            </div>
-            <div className="bl">
-              <h3>Commissies</h3>
-              <p>
-                Voor commissies die besluiten voorbereiden, verdiepen of
-                adviseren — bijvoorbeeld op het gebied van beleid, risico, audit,
-                beleggingen, uitbesteding of governance.
-              </p>
-            </div>
-            <div className="bl">
-              <h3>Raden van toezicht</h3>
-              <p>
-                Voor toezicht op besluitvorming, onderbouwing, opvolging en
-                bestuurlijke zorgvuldigheid.
-              </p>
-            </div>
-            <div className="bl">
-              <h3>Bestuursbureaus en secretariaten</h3>
-              <p>
-                Voor structuur, dossiervorming, procesondersteuning, opvolging
-                van acties en voorbereiding van besluitvorming.
-              </p>
-            </div>
-            <div className="bl">
-              <h3>Governance-, risk- en compliance-teams</h3>
-              <p>
-                Voor toetsing, signalering, risicoduiding en borging van
-                verantwoorde besluitvorming.
-              </p>
-            </div>
-            <div className="bl spec">
-              <h3>Pensioenfondsbesturen en -commissies</h3>
-              <p>
-                Als eerste specialisatie, waar toezicht, uitbesteding, WTP,
-                datakwaliteit, risicobeheersing en bestuurlijke
-                verantwoordelijkheid scherp samenkomen.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* GEBRUIKSSITUATIES */}
-      <section id="gebruikssituaties">
-        <div className="wrap">
-          <div className="label">Gebruikssituaties</div>
-          <h2>Voor welk besluit?</h2>
-          <p className="lede">
-            Het Bestuurdersportaal is gemaakt voor besluiten die zorgvuldige
-            voorbereiding, verantwoording en opvolging vragen.
-          </p>
-          <div className="who">
-            <span className="chip">Beleidsbesluiten</span>
-            <span className="chip">Investeringsbesluiten</span>
-            <span className="chip">Uitbestedingsbesluiten</span>
-            <span className="chip">Risicodossiers</span>
-            <span className="chip">Commissieadviezen</span>
-            <span className="chip">Toezicht- &amp; verantwoordingsdossiers</span>
-            <span className="chip">Governance-evaluaties</span>
-            <span className="chip">Pensioendossiers</span>
-            <span className="chip spec">WTP-besluiten (specialisatie)</span>
-          </div>
-        </div>
-      </section>
-
-      {/* SPECIALISATIE */}
-      <section id="specialisatie">
-        <div className="wrap">
-          <div className="label">Specialisatie</div>
-          <h2>Diepe expertise in de pensioensector.</h2>
-          <p className="lede">
-            De pensioensector is onze eerste specialisatie. Daar komen
-            governance, toezicht, uitbesteding, WTP-transitie, datakwaliteit,
-            risicobeheersing en bestuurlijke verantwoordelijkheid scherp en
-            gelijktijdig samen. De pensioensector verdiept het product, maar
-            beperkt het niet. De onderliggende besluitarchitectuur is toepasbaar
-            in iedere omgeving waar besluiten zorgvuldig, transparant en
-            reconstrueerbaar moeten zijn.
-          </p>
-        </div>
-      </section>
-
-      {/* ONDERSCHEID */}
-      <section className="distinct">
-        <div className="wrap">
-          <div className="label">Onderscheid</div>
-          <h2>
-            Geen documentportaal. Geen vergadertool.{" "}
-            <span>Geen losse AI-chat.</span>
-          </h2>
-          <p className="lede">
-            Een eigen besluitomgeving. Bestaande tools beheren documenten,
-            plannen vergaderingen of beantwoorden losse vragen zonder kennis van
-            uw context. Het Bestuurdersportaal is een organisatiegebonden
-            besluitomgeving, ontworpen rond de volledige besluitcyclus — van
-            voorbereiding en afweging tot besluit, verantwoording, opvolging en
-            evaluatie — en werkt vanuit uw eigen documentatie, dossiers en
-            historie op de plek waar het besluit valt.
-          </p>
-        </div>
-      </section>
-
-      {/* GOVERNANCE & AI */}
-      <section id="governance-ai">
-        <div className="wrap">
-          <div className="label">Governance &amp; AI</div>
-          <h2>AI mag ondersteunen. Niet ongemerkt sturen.</h2>
-          <p className="lede">AI-ondersteuning is bewust begrensd en zichtbaar gemaakt.</p>
-          <div className="principles">
-            <div className="pr">
-              <span className="n">01</span>
-              <div>
-                <h3>Werkt binnen uw context</h3>
-                <p>
-                  AI werkt binnen de eigen ingerichte context van uw organisatie
-                  — uw documenten, besluitdossiers en historie — en redeneert met
-                  verwijzing naar de bron, niet op basis van een onzichtbaar
-                  achtergrondmodel.
-                </p>
-              </div>
-            </div>
-            <div className="pr">
-              <span className="n">02</span>
-              <div>
-                <h3>Feit vs. duiding</h3>
-                <p>
-                  Onderscheid tussen feitelijke analyse en bestuurlijke duiding
-                  blijft expliciet.
-                </p>
-              </div>
-            </div>
-            <div className="pr">
-              <span className="n">03</span>
-              <div>
-                <h3>Aannames zichtbaar</h3>
-                <p>
-                  Aannames, risico's en onzekerheden worden benoemd, niet
-                  weggepoetst.
-                </p>
-              </div>
-            </div>
-            <div className="pr">
-              <span className="n">04</span>
-              <div>
-                <h3>Rollen en rechten</h3>
-                <p>
-                  Wie wat mag zien en doen, is vastgelegd in rollen, rechten en
-                  verantwoordelijkheden.
-                </p>
-              </div>
-            </div>
-            <div className="pr">
-              <span className="n">05</span>
-              <div>
-                <h3>Reconstrueerbaar</h3>
-                <p>
-                  Een audittrail maakt achteraf navolgbaar hoe een besluit tot
-                  stand kwam.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* VEILIGHEID */}
+      {/* PROOF POINT — PENSIOEN */}
       <section>
         <div className="wrap">
-          <div className="label">Veiligheid &amp; vertrouwen</div>
-          <h2>Zorgvuldig met informatie, bewust met AI.</h2>
+          <div className="label">Eerste specialisatie</div>
+          <h2>Pensioen als eerste specialisatie.</h2>
           <p className="lede">
-            Elke organisatie krijgt een eigen omgeving die per organisatie wordt
-            ingericht, met aandacht voor rollen en rechten, logging, beheerste
-            documentcontext en verantwoord AI-gebruik. Definitieve beveiligings-
-            en verwerkingsafspraken worden per omgeving vastgelegd.
+            Pensioenfondsen nemen ingrijpende besluiten in een omgeving met veel
+            documenten, een uitbestedingsketen, toezicht en hoge
+            verantwoordingsdruk. Het is de eerste sector waarvoor we
+            Bestuurdersportaal het diepst hebben ingericht — de onderliggende
+            besluitarchitectuur is toepasbaar in elke omgeving waar besluiten
+            zorgvuldig en reconstrueerbaar moeten zijn.
           </p>
-          <ul className="sec-list">
-            <li>
-              Een eigen, per organisatie ingerichte omgeving met eigen
-              documentcontext.
-            </li>
-            <li>Beveiligde toegang op basis van rollen en rechten.</li>
-            <li>
-              Logging van relevante handelingen ten behoeve van
-              controleerbaarheid.
-            </li>
-            <li>
-              Beheerde documentcontext: AI werkt binnen het afgebakende dossier
-              en de eigen context.
-            </li>
-            <li>
-              Aandacht voor privacy, informatiebeveiliging en verantwoord
-              AI-gebruik.
-            </li>
-          </ul>
+          <p className="link-row">
+            <a href="/sectoren/pensioenfondsen" className="textlink">
+              Bekijk de pensioenspecialisatie →
+            </a>
+          </p>
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="cta-band" id="contact">
-        <div className="wrap inner">
-          <div>
-            <div className="label">Pilot / demo</div>
-            <h2>Start met één besluitdossier in uw eigen omgeving.</h2>
-            <p>
-              De waarde wordt het snelst zichtbaar met een concreet bestuurlijk
-              vraagstuk — een beleidsbesluit, governance-dossier,
-              investeringsbesluit, risicodossier, commissieadvies,
-              uitbestedingsbesluit of pensioendossier. We richten samen uw eigen
-              omgeving in met uw documentatie, eerdere besluiten en
-              governancecontext, werken één dossier uit van voorbereiding tot
-              evaluatie, en u ervaart het verschil in de praktijk.
-            </p>
-          </div>
-          <div className="btns">
-            <a href="/contact" className="btn btn-primary">
-              Plan een demo
-            </a>
-            <a href="/contact" className="btn btn-outline">
-              Bespreek een pilot
-            </a>
-          </div>
-        </div>
-      </section>
+      {/* AFSLUITENDE CTA */}
+      <CtaBand
+        label="Pilot / demo"
+        kop="Start met één besluitdossier in uw eigen omgeving."
+        tekst="De waarde wordt het snelst zichtbaar met een concreet bestuurlijk vraagstuk. We richten samen uw eigen omgeving in en werken één dossier uit — van voorbereiding tot evaluatie."
+        primair={{ href: "/contact", label: "Neem contact op" }}
+        secundair={[{ href: "/product", label: "Bekijk hoe het werkt" }]}
+      />
 
-      <Footer variant="home" />
+      <Footer variant="full" />
     </div>
   );
 }

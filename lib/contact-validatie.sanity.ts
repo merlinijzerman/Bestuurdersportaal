@@ -55,10 +55,28 @@ test("ontbrekende verplichte velden geven per-veld een fout", () => {
   const r = valideerContact({});
   assert.equal(r.ok, false);
   if (!r.ok) {
-    for (const veld of ["naam", "organisatie", "rol", "email", "type", "bericht"] as const) {
+    for (const veld of ["naam", "organisatie", "email", "type"] as const) {
       assert.ok(r.fouten[veld], `verwacht fout voor ${veld}`);
     }
-    assert.equal(r.fouten.telefoon, undefined); // telefoon optioneel
+    // rol, bericht en telefoon zijn optioneel (besluit 0037 #2).
+    assert.equal(r.fouten.rol, undefined);
+    assert.equal(r.fouten.bericht, undefined);
+    assert.equal(r.fouten.telefoon, undefined);
+  }
+});
+
+test("rol en bericht zijn optioneel: zonder beide → geldig, opgeslagen als ''", () => {
+  const r = valideerContact({
+    naam: "Jan Bestuurder",
+    organisatie: "Stichting Pensioenfonds Horizon",
+    email: "jan@example.com",
+    type_verzoek: "pilot",
+  });
+  assert.equal(r.ok, true);
+  if (r.ok) {
+    assert.equal(r.schoon.rol, ""); // NOT NULL kolom → '' bij leeg
+    assert.equal(r.schoon.bericht, ""); // NOT NULL kolom → '' bij leeg
+    assert.equal(r.schoon.telefoon, null);
   }
 });
 

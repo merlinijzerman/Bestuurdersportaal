@@ -3,8 +3,12 @@ import { headers } from "next/headers";
 import { bepaalSurface } from "@/lib/platform-host";
 
 // Host-bewuste sitemap. Alleen de marketing-host heeft publieke, indexeerbare
-// pagina's (/, /contact, /privacy — de (public)-allowlist, TO §9.1). Op de app-
-// en platform-host is er niets te indexeren → lege sitemap.
+// pagina's (de (public)-allowlist, TO §9.1). Op de app- en platform-host is er
+// niets te indexeren → lege sitemap.
+//
+// /sectoren/pensioenfondsen was gated tot de pensioen-SME-validatie (besluit
+// 0037 #4); die is akkoord (6 juli 2026), dus het pad staat nu in de sitemap én
+// in MARKETING_PUBLIEKE_PADEN (lib/platform-host.ts).
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const host = (await headers()).get("host");
   const surface = bepaalSurface({
@@ -23,6 +27,42 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   return [
     { url: `${origin}/`, lastModified: nu, changeFrequency: "monthly", priority: 1 },
+    {
+      url: `${origin}/product`,
+      lastModified: nu,
+      changeFrequency: "monthly",
+      priority: 0.9,
+    },
+    {
+      url: `${origin}/voor-wie`,
+      lastModified: nu,
+      changeFrequency: "monthly",
+      priority: 0.8,
+    },
+    {
+      url: `${origin}/sectoren`,
+      lastModified: nu,
+      changeFrequency: "monthly",
+      priority: 0.8,
+    },
+    {
+      url: `${origin}/sectoren/pensioenfondsen`,
+      lastModified: nu,
+      changeFrequency: "monthly",
+      priority: 0.7,
+    },
+    {
+      url: `${origin}/governance-ai`,
+      lastModified: nu,
+      changeFrequency: "monthly",
+      priority: 0.8,
+    },
+    {
+      url: `${origin}/over-ons`,
+      lastModified: nu,
+      changeFrequency: "yearly",
+      priority: 0.5,
+    },
     {
       url: `${origin}/contact`,
       lastModified: nu,

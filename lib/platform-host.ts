@@ -28,13 +28,31 @@
 export const PLATFORM_PREFIX = "/platform";
 
 /** Publieke marketing-routes die op de marketing-host op hun eigen pad gerenderd
- *  mogen worden (de (public)-routegroep, W1). Een expliciete allowlist — alles
- *  wat hier niet in staat (app-/platform-paden zoals /dashboard, /procedures,
+ *  mogen worden (de (public)-routegroep). Een expliciete allowlist — alles wat
+ *  hier niet in staat (app-/platform-paden zoals /dashboard, /procedures,
  *  /platform/…) blijft 404, zodat de besluitomgeving nooit op de marketing-host
  *  lekt (REQ-PV-050/051). De homepage staat hier NIET in: die woont intern op
  *  MARKETING_HOME_PAD en wordt via een rewrite vanaf "/" geserveerd (zie onder).
- *  /login is geen pagina maar een redirect (zie bepaalRoute). */
-const MARKETING_PUBLIEKE_PADEN = new Set<string>(["/contact", "/privacy"]);
+ *  /login is geen pagina maar een redirect (zie bepaalRoute).
+ *
+ *  Fase 1 meerpagina (besluit 0035 + 0037): naast /contact en /privacy komen de
+ *  nieuwe publieke routes hierbij. Dezelfde set 404't óók op de app-surface, zodat
+ *  marketingpagina's niet op de app-host lekken (tegenhanger van REQ-PV-050/051).
+ *
+ *  /sectoren/pensioenfondsen stond hier lange tijd BEWUST NIET in: de pagina was
+ *  gebouwd maar mocht pas live ná feitelijke pensioen-SME-validatie (besluit 0035).
+ *  Die validatie is akkoord (6 juli 2026) → het pad is vrijgegeven, hier én in
+ *  app/sitemap.ts. */
+export const MARKETING_PUBLIEKE_PADEN = new Set<string>([
+  "/contact",
+  "/privacy",
+  "/product",
+  "/voor-wie",
+  "/sectoren",
+  "/sectoren/pensioenfondsen",
+  "/governance-ai",
+  "/over-ons",
+]);
 
 /** Interne route van de marketing-homepage. De (public)-routegroep kan geen
  *  page op "/" hebben — dat pad is al van de app-homepage ((dashboard)/page).
@@ -134,11 +152,13 @@ export function bepaalRoute(args: {
     return { type: "notFound" };
   }
 
-  // surface === "app": bestaand tenant-gedrag, ongewijzigd — op één na: het
-  // interne marketing-homepad /home bestaat in de route-tree ((public)/home) en
-  // zou anders op de app-host de marketingpagina tonen. Expliciet 404 → geen
-  // marketing-lek op de app-host (tegenhanger van REQ-PV-050/051).
+  // surface === "app": bestaand tenant-gedrag, ongewijzigd — op de marketing-
+  // paden na: de (public)-routegroep (home + /contact, /product, …) bestaat in de
+  // route-tree en zou anders óók op de app-host de marketingpagina's tonen.
+  // Expliciet 404 → geen marketing-lek op de app-host (tegenhanger van
+  // REQ-PV-050/051). /home is het interne homepad, de rest de allowlist.
   if (isPlatformPad) return { type: "notFound" };
   if (pathname === MARKETING_HOME_PAD) return { type: "notFound" };
+  if (MARKETING_PUBLIEKE_PADEN.has(pathname)) return { type: "notFound" };
   return { type: "door" };
 }

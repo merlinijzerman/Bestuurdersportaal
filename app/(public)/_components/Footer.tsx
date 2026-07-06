@@ -1,17 +1,21 @@
-// Marketing-footer (server component). variant "home" = volledige footer;
+// Marketing-footer (server component). variant "full" = volledige footer met
+// route-links (incl. /over-ons, dat niet in de hoofdnav zit — Bouwoverdracht §3);
 // "simple" = compacte linkbalk voor tekstpagina's (privacy, contact).
 export default function Footer({
-  variant = "home",
+  variant = "full",
 }: {
-  variant?: "home" | "simple";
+  variant?: "full" | "simple";
 }) {
   if (variant === "simple") {
     return (
       <footer>
         <div className="wrap wide foot-links">
           <a href="/">Home</a>
+          <a href="/product">Product</a>
+          <a href="/over-ons">Over ons</a>
           <a href="/contact">Contact</a>
           <a href="/login">Inloggen</a>
+          <a href="/privacy">Privacy</a>
           <a href="https://the-paradox.com" target="_blank" rel="noopener">
             The Paradox
           </a>
@@ -27,10 +31,11 @@ export default function Footer({
           Bestuurdersportaal — bestuurlijke besluitvorming, door ontwerp.
         </div>
         <div className="foot-links">
-          <a href="#product">Product</a>
-          <a href="#voor-besturen">Voor besturen</a>
-          <a href="#eigen-omgeving">Eigen omgeving</a>
-          <a href="#governance-ai">Governance &amp; AI</a>
+          <a href="/product">Product</a>
+          <a href="/voor-wie">Voor wie</a>
+          <a href="/sectoren">Sectoren</a>
+          <a href="/governance-ai">Governance &amp; AI</a>
+          <a href="/over-ons">Over ons</a>
           <a href="https://the-paradox.com" target="_blank" rel="noopener">
             The Paradox
           </a>

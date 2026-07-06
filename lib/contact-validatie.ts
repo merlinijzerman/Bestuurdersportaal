@@ -7,8 +7,12 @@
 //  I/O — daardoor programmatisch na te rekenen (zie contact-validatie.sanity.ts).
 //
 //  Veldcontract ↔ datamodel (supabase/migrations/2026_06_29_contact_aanvragen):
-//    naam, organisatie, rol, email, bericht  → verplicht
-//    telefoon                                → optioneel (→ null bij leeg)
+//    naam, organisatie, email    → verplicht
+//    rol, bericht                → optioneel (besluit 0037 #2); de DB-kolommen
+//                                  zijn NOT NULL, dus we slaan '' op bij leeg
+//                                  (geen migratie). De publieke UI toont rol
+//                                  niet meer als veld.
+//    telefoon                    → optioneel (→ null bij leeg)
 //    type_verzoek ∈ {demo,pilot,vraag,samenwerking}
 //  Foutsleutels zijn de FORM-veld-ids (type i.p.v. type_verzoek) zodat de
 //  client ze direct aan het juiste invoerveld kan koppelen.
@@ -102,8 +106,8 @@ export function valideerContact(invoer: ContactInvoer): ValidatieResultaat {
   else if (organisatie.length > VELD_MAX.organisatie)
     fouten.organisatie = "Organisatie is te lang.";
 
-  if (!rol) fouten.rol = "Vul uw rol of functie in.";
-  else if (rol.length > VELD_MAX.rol) fouten.rol = "Rol of functie is te lang.";
+  // rol is optioneel (besluit 0037 #2): alleen lengte begrenzen; leeg → '' opslaan.
+  if (rol && rol.length > VELD_MAX.rol) fouten.rol = "Rol of functie is te lang.";
 
   if (!email) fouten.email = "Vul een geldig e-mailadres in.";
   else if (email.length > VELD_MAX.email || !EMAIL_RE.test(email))
@@ -116,8 +120,8 @@ export function valideerContact(invoer: ContactInvoer): ValidatieResultaat {
   if (!typeRuw) fouten.type = "Kies een type verzoek.";
   else if (!typeGeldig) fouten.type = "Ongeldig type verzoek.";
 
-  if (!bericht) fouten.bericht = "Vul een bericht in.";
-  else if (bericht.length > VELD_MAX.bericht)
+  // bericht is optioneel (besluit 0037 #2): alleen lengte begrenzen; leeg → '' opslaan.
+  if (bericht && bericht.length > VELD_MAX.bericht)
     fouten.bericht = "Bericht is te lang.";
 
   if (Object.keys(fouten).length > 0) {

@@ -3,22 +3,26 @@
 import { useState } from "react";
 import {
   valideerContact,
-  TYPE_VERZOEK_OPTIES,
   type ContactVeld,
+  type TypeVerzoek,
 } from "@/lib/contact-validatie";
 
 // Client-formulier voor het publieke contactverzoek (W2a). Client-validatie is
 // uitsluitend UX — /api/contact valideert autoritatief opnieuw. Veldcontract en
 // validatieregels komen 1:1 uit lib/contact-validatie.ts (gedeeld met de server).
-// Honeypot ("website") + toegankelijke foutweergave conform contact-mockup-v4.
+// Honeypot ("website") + toegankelijke foutweergave.
+//
+// Velden (copy v0.2 §7 / besluit 0037 #2): Naam · Organisatie · E-mailadres ·
+// Type verzoek · Bericht (optioneel). Rol en telefoon zijn bewust geen
+// zichtbaar veld meer; ze worden als '' / null opgeslagen (NOT NULL-kolommen).
+//
+// Type verzoek: de UI toont 6 vriendelijke labels; verstuurd wordt de DB-waarde
+// (4 enum-waarden). `/contact?type=pilot` preselecteert de pilot-optie.
 
 type Velden = {
   naam: string;
   organisatie: string;
-  rol: string;
   email: string;
-  telefoon: string;
-  type_verzoek: string;
   bericht: string;
   website: string; // honeypot — blijft leeg voor mensen
 };
@@ -26,25 +30,43 @@ type Velden = {
 const LEEG: Velden = {
   naam: "",
   organisatie: "",
-  rol: "",
   email: "",
-  telefoon: "",
-  type_verzoek: "",
   bericht: "",
   website: "",
 };
 
 type Status = "idle" | "verzenden" | "ok" | "error";
 
-const TYPE_LABEL: Record<string, string> = {
-  demo: "Demo",
-  pilot: "Pilot",
-  vraag: "Algemene vraag",
-  samenwerking: "Samenwerking",
-};
+// 6 labels → 4 DB-waarden (copy v0.2 §7). `id` is de select-waarde (uniek),
+// `db` is wat naar de server gaat. Meerdere labels mogen op dezelfde DB-waarde
+// mappen ("Anders" en de vraag-varianten → `vraag`).
+const TYPE_OPTIES: { id: string; label: string; db: TypeVerzoek }[] = [
+  { id: "informatie", label: "Ik wil meer informatie ontvangen", db: "vraag" },
+  { id: "vraag", label: "Ik heb een algemene vraag", db: "vraag" },
+  {
+    id: "past",
+    label: "Ik wil bespreken of dit bij mijn organisatie past",
+    db: "samenwerking",
+  },
+  { id: "demo", label: "Ik wil een demo aanvragen", db: "demo" },
+  {
+    id: "pilot",
+    label: "Ik wil een pilot of eerste besluitdossier bespreken",
+    db: "pilot",
+  },
+  { id: "anders", label: "Anders", db: "vraag" },
+];
 
-export default function ContactForm() {
+// Vertaal een ?type-DB-waarde naar de bijbehorende select-optie-id (eerste
+// match). Onbekend/leeg → geen preselectie.
+function keuzeVoorType(type?: string): string {
+  const opt = TYPE_OPTIES.find((o) => o.db === type);
+  return opt ? opt.id : "";
+}
+
+export default function ContactForm({ initialType }: { initialType?: string }) {
   const [velden, setVelden] = useState<Velden>(LEEG);
+  const [keuze, setKeuze] = useState<string>(keuzeVoorType(initialType));
   const [fouten, setFouten] = useState<Partial<Record<ContactVeld, string>>>({});
   const [status, setStatus] = useState<Status>("idle");
   const [foutmelding, setFoutmelding] = useState(
@@ -62,7 +84,16 @@ export default function ContactForm() {
     // Honeypot ingevuld → stil negeren (zoals de server: geen signaal aan bots).
     if (velden.website.trim()) return;
 
-    const resultaat = valideerContact(velden);
+    // Vertaal de gekozen optie-id naar de DB-waarde die we versturen.
+    const dbWaarde = TYPE_OPTIES.find((o) => o.id === keuze)?.db ?? "";
+
+    const resultaat = valideerContact({
+      naam: velden.naam,
+      organisatie: velden.organisatie,
+      email: velden.email,
+      bericht: velden.bericht,
+      type_verzoek: dbWaarde,
+    });
     if (!resultaat.ok) {
       setFouten(resultaat.fouten);
       setFoutmelding(
@@ -89,6 +120,7 @@ export default function ContactForm() {
 
       if (resp.ok) {
         setVelden(LEEG);
+        setKeuze("");
         setStatus("ok");
         window.scrollTo({ top: 0, behavior: "smooth" });
         return;
@@ -138,8 +170,7 @@ export default function ContactForm() {
       <div id="contact-status" aria-live="polite">
         {status === "ok" && (
           <div className="msg ok show" role="status">
-            Bedankt — uw verzoek is verzonden. We nemen zo snel mogelijk contact
-            met u op.
+            Bedankt, uw bericht is ontvangen. We nemen contact met u op.
           </div>
         )}
         {status === "error" && (
@@ -178,37 +209,6 @@ export default function ContactForm() {
         </div>
       </div>
 
-      <div className="row2">
-        <div className="field">
-          <label htmlFor="rol">Rol / functie</label>
-          <input
-            id="rol"
-            name="rol"
-            type="text"
-            autoComplete="organization-title"
-            value={velden.rol}
-            onChange={(e) => update("rol", e.target.value)}
-            {...veldProps("rol")}
-          />
-          <FieldError veld="rol" />
-        </div>
-        <div className="field">
-          <label htmlFor="telefoon">
-            Telefoonnummer <span className="opt">(optioneel)</span>
-          </label>
-          <input
-            id="telefoon"
-            name="telefoon"
-            type="tel"
-            autoComplete="tel"
-            value={velden.telefoon}
-            onChange={(e) => update("telefoon", e.target.value)}
-            {...veldProps("telefoon")}
-          />
-          <FieldError veld="telefoon" />
-        </div>
-      </div>
-
       <div className="field">
         <label htmlFor="email">E-mailadres</label>
         <input
@@ -228,14 +228,14 @@ export default function ContactForm() {
         <select
           id="type"
           name="type"
-          value={velden.type_verzoek}
-          onChange={(e) => update("type_verzoek", e.target.value)}
+          value={keuze}
+          onChange={(e) => setKeuze(e.target.value)}
           {...veldProps("type")}
         >
           <option value="">Maak een keuze…</option>
-          {TYPE_VERZOEK_OPTIES.map((t) => (
-            <option key={t} value={t}>
-              {TYPE_LABEL[t]}
+          {TYPE_OPTIES.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.label}
             </option>
           ))}
         </select>
@@ -243,7 +243,9 @@ export default function ContactForm() {
       </div>
 
       <div className="field">
-        <label htmlFor="bericht">Bericht</label>
+        <label htmlFor="bericht">
+          Bericht <span className="opt">(optioneel)</span>
+        </label>
         <textarea
           id="bericht"
           name="bericht"
@@ -273,9 +275,6 @@ export default function ContactForm() {
         <button type="submit" className="btn btn-primary" disabled={bezig}>
           {bezig ? "Verzenden…" : "Verstuur verzoek"}
         </button>
-        <span className="submit-note">
-          Reactie meestal binnen enkele werkdagen.
-        </span>
       </div>
 
       <p className="privacy-note">

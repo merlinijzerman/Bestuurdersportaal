@@ -4,14 +4,36 @@ import { useState } from "react";
 import ThemeToggle from "./ThemeToggle";
 import MobileMenu from "./MobileMenu";
 
-// Marketing-header. variant "home" = volledige navigatie + hamburger/mobiel
-// menu (homepage). variant "simple" = compacte balk voor tekstpagina's
-// (privacy, contact). "Inloggen"/"/login" is een gewone link: op de
-// marketing-host redirect de middleware naar de app-login (TO §2.5).
+// Marketing-header. variant "full" = volledige navigatie + hamburger/mobiel menu
+// (homepage + subpagina's). variant "simple" = compacte balk voor tekstpagina's
+// (privacy, contact). "Inloggen"/"/login" is een gewone link: op de marketing-
+// host redirect de middleware naar de app-login (TO §2.5). Primaire CTA is
+// overal "Neem contact op" (Bouwoverdracht §1 punt 3), nooit "Plan een demo".
+//
+// De `actief`-prop markeert het huidige menu-item (aria-current) voor a11y +
+// visuele nadruk. Waarden = route-paden ("/product", "/voor-wie", …).
+export type NavKey =
+  | "/product"
+  | "/voor-wie"
+  | "/sectoren"
+  | "/governance-ai"
+  | "/over-ons"
+  | null;
+
+const NAV: { href: string; label: string; extern?: boolean }[] = [
+  { href: "/product", label: "Product" },
+  { href: "/voor-wie", label: "Voor wie" },
+  { href: "/sectoren", label: "Sectoren" },
+  { href: "/governance-ai", label: "Governance & AI" },
+  { href: "https://the-paradox.com", label: "The Paradox", extern: true },
+];
+
 export default function Header({
-  variant = "home",
+  variant = "full",
+  actief = null,
 }: {
-  variant?: "home" | "simple";
+  variant?: "full" | "simple";
+  actief?: NavKey;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -24,7 +46,7 @@ export default function Header({
           </a>
           <span style={{ marginLeft: "auto" }} />
           <a href="/contact" className="btn">
-            Contact
+            Neem contact op
           </a>
           <ThemeToggle />
         </div>
@@ -40,8 +62,30 @@ export default function Header({
             <span className="mark">B</span>Bestuurdersportaal
           </a>
           <nav className="links">
+            {NAV.map((item) =>
+              item.extern ? (
+                <a
+                  key={item.href}
+                  className="navitem"
+                  href={item.href}
+                  target="_blank"
+                  rel="noopener"
+                >
+                  {item.label}
+                </a>
+              ) : (
+                <a
+                  key={item.href}
+                  className="navitem"
+                  href={item.href}
+                  aria-current={actief === item.href ? "page" : undefined}
+                >
+                  {item.label}
+                </a>
+              )
+            )}
             <a href="/contact" className="btn btn-primary">
-              Plan een demo
+              Neem contact op
             </a>
             <a href="/login" className="btn btn-outline">
               Inloggen
@@ -60,7 +104,7 @@ export default function Header({
           </nav>
         </div>
       </header>
-      <MobileMenu open={open} onNavigate={() => setOpen(false)} />
+      <MobileMenu open={open} actief={actief} onNavigate={() => setOpen(false)} />
     </>
   );
 }

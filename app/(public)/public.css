@@ -1,14 +1,23 @@
 /* ============================================================================
- *  Scoped marketing-styling voor de (public)-routegroep (W1).
- *  1:1 met de goedgekeurde v4-mockups (homepage/privacy). ALLES is gescoped
- *  onder .bp-public zodat de bestaande app-styling (Tailwind) ongemoeid blijft
- *  (FO §13.1 / TO §3.2, besluit: scoped CSS met marketingtokens).
+ *  Scoped marketing-styling voor de (public)-routegroep (fase 1 meerpagina).
+ *  ALLES is gescoped onder .bp-public zodat de bestaande app-styling (Tailwind)
+ *  ongemoeid blijft (besluit 0032: scoped CSS met marketingtokens).
  *
  *  Lagen:
- *   - .bp-public  : tokens, reset, basis-typografie, header, footer, knoppen.
- *   - .bp-home    : homepage-specifieke secties/typografie.
- *   - .bp-doc     : tekstpagina's (privacy, contact-placeholder).
+ *   - .bp-public                 : tokens, reset, basis-typografie, header, footer, knoppen.
+ *   - :is(.bp-home, .bp-page)    : herbruikbare marketingcomponenten, gedeeld door de
+ *                                  homepage (.bp-home) en de subpagina's (.bp-page) —
+ *                                  één bron van waarheid, geen duplicatie (besluit 0037).
+ *   - .bp-home                   : homepage-eigen secties (hero, probcols, value, own, bridge).
+ *   - .bp-page                   : subpagina-eigen (phero, crumb).
+ *   - .bp-doc                    : tekstpagina's (privacy).
+ *   - .bp-contact                : contactpagina (formulier).
  *  --serif/--sans worden gevoed door next/font (var(--font-serif/-sans)).
+ *
+ *  Responsiveness (Bouwoverdracht §2, twee breakpoints):
+ *   - >920px      : volledige desktoplayout.
+ *   - 641–920px   : meerkoloms-grids → 2 kolommen; desktopnav → hamburger.
+ *   - ≤640px      : 1 kolom; .cmp-vergelijking → gestapelde kaarten met ::before-labels.
  * ========================================================================== */
 
 .bp-public {
@@ -18,6 +27,8 @@
   --line: #D8D3C7;
   --accent: #234E70;
   --card: #FBFAF5;
+  --err: #B23A48;
+  --ok: #2E7D5B;
   --serif: var(--font-serif), Georgia, serif;
   --sans: var(--font-sans), -apple-system, "Segoe UI", Roboto, sans-serif;
 
@@ -37,6 +48,8 @@
   --line: #2A2C30;
   --accent: #8FB4D6;
   --card: #181A1E;
+  --err: #E48A94;
+  --ok: #6FBF95;
 }
 
 .bp-public *,
@@ -124,7 +137,8 @@
   text-decoration: none;
   transition: color 0.2s;
 }
-.bp-public nav.links a.navitem:hover {
+.bp-public nav.links a.navitem:hover,
+.bp-public nav.links a.navitem[aria-current="page"] {
   color: var(--ink);
 }
 .bp-public .btn {
@@ -173,7 +187,7 @@
   place-items: center;
 }
 .bp-public .hamburger {
-  display: flex;
+  display: none;
   background: none;
   border: 1px solid var(--line);
   border-radius: 4px;
@@ -195,6 +209,7 @@
   flex-direction: column;
   gap: 4px;
   border-top: 1px solid var(--line);
+  overflow-y: auto;
 }
 .bp-public .mobile-menu.open {
   display: flex;
@@ -298,13 +313,14 @@
 }
 
 /* ============================================================================
- *  Homepage (.bp-home)
+ *  Gedeelde marketingcomponenten — homepage + subpagina's (besluit 0037).
+ *  Selectoren via :is(.bp-home, .bp-page) zodat er één bron van waarheid is.
  * ========================================================================== */
-.bp-home section {
+:is(.bp-home, .bp-page) section {
   padding: 84px 0;
   border-top: 1px solid var(--line);
 }
-.bp-home .label {
+:is(.bp-home, .bp-page) .label {
   font-size: 11px;
   letter-spacing: 0.22em;
   text-transform: uppercase;
@@ -312,18 +328,311 @@
   font-weight: 500;
   margin-bottom: 22px;
 }
-.bp-home h2 {
+:is(.bp-home, .bp-page) h2 {
   font-size: clamp(28px, 4vw, 42px);
   margin-bottom: 18px;
 }
-.bp-home h3 {
+:is(.bp-home, .bp-page) section h3 {
   font-size: 22px;
   margin-bottom: 8px;
 }
-.bp-home .lede {
+:is(.bp-home, .bp-page) .lede {
   font-size: 18px;
   color: var(--muted);
   max-width: 64ch;
+}
+
+/* flow (besluitcyclus) */
+:is(.bp-home, .bp-page) .flow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-top: 38px;
+}
+:is(.bp-home, .bp-page) .flow .node {
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 9px 14px;
+  font-size: 13px;
+  background: var(--card);
+}
+:is(.bp-home, .bp-page) .flow .node.spec {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+:is(.bp-home, .bp-page) .flow .arr {
+  color: var(--accent);
+  font-size: 14px;
+}
+
+/* steps (zes stappen) */
+:is(.bp-home, .bp-page) .steps {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  margin-top: 26px;
+  border-top: 1px solid var(--line);
+}
+:is(.bp-home, .bp-page) .steps .step {
+  padding: 22px 14px 0 0;
+  border-right: 1px solid var(--line);
+}
+:is(.bp-home, .bp-page) .steps .step:last-child {
+  border-right: none;
+}
+:is(.bp-home, .bp-page) .steps .num {
+  font-family: var(--serif);
+  font-size: 25px;
+  color: var(--accent);
+  display: block;
+  margin-bottom: 8px;
+}
+:is(.bp-home, .bp-page) .steps h3 {
+  font-size: 15px;
+  margin-bottom: 6px;
+}
+:is(.bp-home, .bp-page) .steps p {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* blocks (doelgroepen / kenmerken) */
+:is(.bp-home, .bp-page) .blocks {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0;
+  margin-top: 32px;
+  border-top: 1px solid var(--line);
+}
+:is(.bp-home, .bp-page) .blocks .bl {
+  padding: 24px 24px 24px 0;
+  border-bottom: 1px solid var(--line);
+}
+:is(.bp-home, .bp-page) .blocks .bl:nth-child(odd) {
+  border-right: 1px solid var(--line);
+  padding-right: 32px;
+}
+:is(.bp-home, .bp-page) .blocks .bl:nth-child(even) {
+  padding-left: 32px;
+}
+:is(.bp-home, .bp-page) .blocks h3 {
+  font-size: 18px;
+  margin-bottom: 6px;
+}
+:is(.bp-home, .bp-page) .blocks p {
+  font-size: 14px;
+  color: var(--muted);
+}
+:is(.bp-home, .bp-page) .blocks .bl.spec h3 {
+  color: var(--accent);
+}
+:is(.bp-home, .bp-page) .blocks .bl .out {
+  display: block;
+  margin-top: 8px;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--accent);
+}
+
+/* who / chips */
+:is(.bp-home, .bp-page) .who {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 11px;
+  margin-top: 32px;
+}
+:is(.bp-home, .bp-page) .chip {
+  border: 1px solid var(--line);
+  border-radius: 40px;
+  padding: 9px 17px;
+  font-size: 14px;
+}
+:is(.bp-home, .bp-page) .chip.spec {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.bp-public[data-theme="dark"] :is(.bp-home, .bp-page) .chip.spec {
+  color: #121316;
+}
+
+/* governance principles */
+:is(.bp-home, .bp-page) .principles {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0 48px;
+  margin-top: 32px;
+}
+:is(.bp-home, .bp-page) .principles .pr {
+  padding: 20px 0;
+  border-top: 1px solid var(--line);
+  display: flex;
+  gap: 16px;
+}
+:is(.bp-home, .bp-page) .principles .n {
+  font-family: var(--serif);
+  color: var(--accent);
+  font-size: 18px;
+  min-width: 32px;
+}
+:is(.bp-home, .bp-page) .principles h3 {
+  font-size: 16px;
+  margin-bottom: 4px;
+}
+:is(.bp-home, .bp-page) .principles p {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+/* cta-band */
+:is(.bp-home, .bp-page) .cta-band {
+  background: var(--card);
+}
+:is(.bp-home, .bp-page) .cta-band .inner {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 32px;
+  flex-wrap: wrap;
+}
+:is(.bp-home, .bp-page) .cta-band p {
+  max-width: 58ch;
+  color: var(--muted);
+  margin-top: 14px;
+}
+:is(.bp-home, .bp-page) .cta-band .btns {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* pledge / opsommingslijst met streepjes (veiligheid, wat-niet) */
+:is(.bp-home, .bp-page) .pledge {
+  margin-top: 28px;
+  max-width: 74ch;
+}
+:is(.bp-home, .bp-page) .pledge li {
+  list-style: none;
+  padding: 15px 0;
+  border-top: 1px solid var(--line);
+  display: flex;
+  gap: 14px;
+  font-size: 15px;
+}
+:is(.bp-home, .bp-page) .pledge li::before {
+  content: "—";
+  color: var(--accent);
+}
+:is(.bp-home, .bp-page) .note {
+  margin-top: 22px;
+  font-size: 13px;
+  color: var(--muted);
+  font-style: italic;
+  max-width: 72ch;
+}
+
+/* duo (twee kolommen: wel / niet) */
+:is(.bp-home, .bp-page) .duo {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin-top: 32px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+:is(.bp-home, .bp-page) .duo .col {
+  padding: 28px 30px;
+}
+:is(.bp-home, .bp-page) .duo .col:first-child {
+  border-right: 1px solid var(--line);
+  background: var(--card);
+}
+:is(.bp-home, .bp-page) .duo .tag {
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 14px;
+}
+:is(.bp-home, .bp-page) .duo ul {
+  list-style: none;
+}
+:is(.bp-home, .bp-page) .duo li {
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+  font-size: 15px;
+  display: flex;
+  gap: 12px;
+}
+:is(.bp-home, .bp-page) .duo li:first-child {
+  border-top: none;
+}
+:is(.bp-home, .bp-page) .duo li .ck {
+  color: var(--accent);
+}
+
+/* cmp (vergelijkingstabel — onderscheidingsblok) */
+:is(.bp-home, .bp-page) .cmp {
+  margin-top: 32px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+:is(.bp-home, .bp-page) .cmp table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+:is(.bp-home, .bp-page) .cmp th,
+:is(.bp-home, .bp-page) .cmp td {
+  text-align: left;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  vertical-align: top;
+}
+:is(.bp-home, .bp-page) .cmp th:last-child,
+:is(.bp-home, .bp-page) .cmp td:last-child {
+  border-right: none;
+}
+:is(.bp-home, .bp-page) .cmp thead th {
+  font-family: var(--sans);
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--card);
+}
+:is(.bp-home, .bp-page) .cmp tbody th {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 15px;
+  white-space: nowrap;
+}
+:is(.bp-home, .bp-page) .cmp tbody tr:last-child th,
+:is(.bp-home, .bp-page) .cmp tbody tr:last-child td {
+  border-bottom: none;
+}
+:is(.bp-home, .bp-page) .cmp tr.spec th {
+  color: var(--accent);
+}
+:is(.bp-home, .bp-page) .cmp tr.spec {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+:is(.bp-home, .bp-page) .cmp-note {
+  margin-top: 22px;
+  font-size: 15px;
+  color: var(--muted);
+  max-width: 74ch;
+}
+
+/* ============================================================================
+ *  Homepage-eigen secties (.bp-home)
+ * ========================================================================== */
+.bp-home h3 {
+  font-size: 22px;
+  margin-bottom: 8px;
 }
 
 /* hero */
@@ -382,7 +691,7 @@
   mask-image: radial-gradient(circle at 88% 40%, #000, transparent 60%);
 }
 
-/* probleem-grid (was inline in mockup) */
+/* probleem-grid */
 .bp-home .probcols {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -406,58 +715,6 @@
   font-size: 20px;
   line-height: 1.45;
   max-width: 62ch;
-}
-
-/* flow + steps */
-.bp-home .flow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: center;
-  margin-top: 38px;
-}
-.bp-home .flow .node {
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  padding: 9px 14px;
-  font-size: 13px;
-  background: var(--card);
-}
-.bp-home .flow .node.spec {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-.bp-home .flow .arr {
-  color: var(--accent);
-  font-size: 14px;
-}
-.bp-home .steps {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  margin-top: 26px;
-  border-top: 1px solid var(--line);
-}
-.bp-home .steps .step {
-  padding: 22px 14px 0 0;
-  border-right: 1px solid var(--line);
-}
-.bp-home .steps .step:last-child {
-  border-right: none;
-}
-.bp-home .steps .num {
-  font-family: var(--serif);
-  font-size: 25px;
-  color: var(--accent);
-  display: block;
-  margin-bottom: 8px;
-}
-.bp-home .steps h3 {
-  font-size: 15px;
-  margin-bottom: 6px;
-}
-.bp-home .steps p {
-  font-size: 12.5px;
-  color: var(--muted);
 }
 
 /* value + own */
@@ -505,7 +762,7 @@
   color: var(--accent);
 }
 
-/* bridge */
+/* bridge (The Paradox) */
 .bp-home .bridge {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -544,141 +801,104 @@
   margin-top: 30px;
 }
 
-/* blocks (voor wie) */
-.bp-home .blocks {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 0;
-  margin-top: 32px;
-  border-top: 1px solid var(--line);
-}
-.bp-home .blocks .bl {
-  padding: 24px 24px 24px 0;
-  border-bottom: 1px solid var(--line);
-}
-.bp-home .blocks .bl:nth-child(odd) {
-  border-right: 1px solid var(--line);
-  padding-right: 32px;
-}
-.bp-home .blocks .bl:nth-child(even) {
-  padding-left: 32px;
-}
-.bp-home .blocks h3 {
-  font-size: 18px;
-  margin-bottom: 6px;
-}
-.bp-home .blocks p {
-  font-size: 14px;
-  color: var(--muted);
-}
-.bp-home .blocks .bl.spec h3 {
-  color: var(--accent);
-}
-
-/* who / chips */
-.bp-home .who {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 11px;
-  margin-top: 32px;
-}
-.bp-home .chip {
-  border: 1px solid var(--line);
-  border-radius: 40px;
-  padding: 9px 17px;
-  font-size: 14px;
-}
-.bp-home .chip.spec {
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent);
-}
-.bp-home[data-theme="dark"] .chip.spec,
-.bp-public[data-theme="dark"] .bp-home .chip.spec {
-  color: #121316;
-}
-
-/* distinct */
+/* distinct kop-accent */
 .bp-home .distinct h2 span {
   color: var(--muted);
 }
 
-/* governance principles */
-.bp-home .principles {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 0 48px;
-  margin-top: 32px;
-}
-.bp-home .principles .pr {
-  padding: 20px 0;
-  border-top: 1px solid var(--line);
+/* ============================================================================
+ *  Subpagina-eigen (.bp-page)
+ * ========================================================================== */
+/* breadcrumb */
+.bp-page .crumb {
   display: flex;
-  gap: 16px;
-}
-.bp-home .principles .n {
-  font-family: var(--serif);
-  color: var(--accent);
-  font-size: 18px;
-  min-width: 32px;
-}
-.bp-home .principles h3 {
-  font-size: 16px;
-  margin-bottom: 4px;
-}
-.bp-home .principles p {
-  font-size: 14px;
-  color: var(--muted);
-}
-
-/* veiligheid list */
-.bp-home .sec-list {
-  margin-top: 28px;
-  max-width: 72ch;
-}
-.bp-home .sec-list li {
-  list-style: none;
-  padding: 15px 0;
-  border-top: 1px solid var(--line);
-  display: flex;
-  gap: 14px;
-  font-size: 15px;
-}
-.bp-home .sec-list li::before {
-  content: "—";
-  color: var(--accent);
-}
-.bp-home .note {
-  margin-top: 22px;
+  gap: 8px;
+  align-items: center;
   font-size: 13px;
   color: var(--muted);
-  font-style: italic;
-  max-width: 72ch;
+  margin-bottom: 20px;
+}
+.bp-page .crumb a {
+  color: var(--muted);
+  text-decoration: none;
+}
+.bp-page .crumb a:hover {
+  color: var(--ink);
+}
+.bp-page .crumb .sep {
+  opacity: 0.5;
+}
+.bp-page .crumb [aria-current="page"] {
+  color: var(--ink);
 }
 
-/* cta-band */
-.bp-home .cta-band {
-  background: var(--card);
+/* phero — subpagina-hero (één kolom) */
+.bp-page .phero {
+  border-top: none;
+  padding-top: 48px;
+  padding-bottom: 56px;
+  position: relative;
+  overflow: hidden;
 }
-.bp-home .cta-band .inner {
+.bp-page .phero h1 {
+  font-size: clamp(32px, 4.5vw, 50px);
+  max-width: 18ch;
+  margin-bottom: 20px;
+}
+.bp-page .phero .sub {
+  font-size: 19px;
+  color: var(--muted);
+  max-width: 60ch;
+  margin-bottom: 18px;
+}
+.bp-page .phero .intro {
+  font-size: 16px;
+  color: var(--muted);
+  max-width: 64ch;
+  margin-bottom: 26px;
+}
+.bp-page .phero .cta {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  gap: 32px;
+  gap: 14px;
+  align-items: center;
   flex-wrap: wrap;
 }
-.bp-home .cta-band p {
-  max-width: 58ch;
+
+/* prose-blokken op subpagina's */
+.bp-page .prose {
+  font-size: 16px;
   color: var(--muted);
-  margin-top: 14px;
+  max-width: 68ch;
 }
-.bp-home .cta-band .btns {
+.bp-page .prose p {
+  margin-bottom: 14px;
+}
+.bp-page .prose p:last-child {
+  margin-bottom: 0;
+}
+.bp-page .link-row {
+  margin-top: 22px;
+}
+.bp-page .kenmerken {
+  margin-top: 28px;
+  max-width: 74ch;
+}
+.bp-page .kenmerken li {
+  list-style: none;
+  padding: 14px 0;
+  border-top: 1px solid var(--line);
   display: flex;
   gap: 12px;
-  flex-wrap: wrap;
+  font-size: 15px;
+}
+.bp-page .kenmerken li .ck {
+  color: var(--accent);
 }
 
-@media (max-width: 880px) {
+/* ============================================================================
+ *  Responsiveness — twee breakpoints (Bouwoverdracht §2).
+ * ========================================================================== */
+@media (max-width: 920px) {
   .bp-public nav.links a.navitem,
   .bp-public nav.links .btn-primary,
   .bp-public nav.links .btn-outline {
@@ -693,44 +913,96 @@
     padding-top: 60px;
     padding-bottom: 68px;
   }
-  .bp-home .steps,
-  .bp-home .bridge,
-  .bp-home .principles,
+  :is(.bp-home, .bp-page) .steps {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  :is(.bp-home, .bp-page) .principles,
+  :is(.bp-home, .bp-page) .duo,
   .bp-home .value,
-  .bp-home .blocks,
   .bp-home .own,
+  .bp-home .bridge,
   .bp-home .probcols {
     grid-template-columns: 1fr;
-  }
-  .bp-home .steps .step {
-    border-right: none;
-    border-bottom: 1px solid var(--line);
-    padding-bottom: 16px;
   }
   .bp-home .own li:first-child {
     border-top: 1px solid var(--line);
   }
+  :is(.bp-home, .bp-page) .duo .col:first-child,
   .bp-home .bridge .col:first-child {
     border-right: none;
     border-bottom: 1px solid var(--line);
   }
-  .bp-home .blocks .bl:nth-child(odd) {
+}
+
+@media (max-width: 640px) {
+  :is(.bp-home, .bp-page) section {
+    padding: 60px 0;
+  }
+  /* blocks + steps → één kolom op telefoon */
+  :is(.bp-home, .bp-page) .blocks,
+  :is(.bp-home, .bp-page) .steps {
+    grid-template-columns: 1fr;
+  }
+  :is(.bp-home, .bp-page) .steps .step {
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 16px;
+  }
+  :is(.bp-home, .bp-page) .blocks .bl:nth-child(odd) {
     border-right: none;
     padding-right: 0;
   }
-  .bp-home .blocks .bl:nth-child(even) {
+  :is(.bp-home, .bp-page) .blocks .bl:nth-child(even) {
     padding-left: 0;
+  }
+  /* cmp-tabel → gestapelde kaarten met ::before-labels */
+  :is(.bp-home, .bp-page) .cmp {
+    border: none;
+    border-radius: 0;
+  }
+  :is(.bp-home, .bp-page) .cmp table,
+  :is(.bp-home, .bp-page) .cmp tbody,
+  :is(.bp-home, .bp-page) .cmp tr,
+  :is(.bp-home, .bp-page) .cmp th,
+  :is(.bp-home, .bp-page) .cmp td {
+    display: block;
+    width: 100%;
+  }
+  :is(.bp-home, .bp-page) .cmp thead {
+    display: none;
+  }
+  :is(.bp-home, .bp-page) .cmp tr {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    margin-bottom: 14px;
+    overflow: hidden;
+  }
+  :is(.bp-home, .bp-page) .cmp th,
+  :is(.bp-home, .bp-page) .cmp td {
+    border-right: none;
+    padding: 12px 16px;
+  }
+  :is(.bp-home, .bp-page) .cmp td::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  :is(.bp-home, .bp-page) .cmp tbody th {
+    background: var(--card);
+    white-space: normal;
   }
 }
 
 /* ============================================================================
- *  Tekstpagina's (.bp-doc — privacy, contact-placeholder)
+ *  Tekstpagina's (.bp-doc — privacy)
  * ========================================================================== */
 .bp-doc {
   line-height: 1.7;
 }
-/* Tekstpagina's hebben een smallere leeskolom (760px); header/footer met
- * .wide blijven 1080px breed (1:1 met privacy-mockup-v4). */
 .bp-doc .wrap {
   max-width: 760px;
 }
@@ -818,8 +1090,6 @@
 
 /* ============================================================================
  *  Contactpagina (.bp-contact — formulier + intro)
- *  1:1 met contact-mockup-v4. Gescoped zodat .grid/.intro/.note van .bp-home
- *  en .bp-doc ongemoeid blijven.
  * ========================================================================== */
 .bp-contact .contact-grid {
   display: grid;

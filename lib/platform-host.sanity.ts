@@ -154,6 +154,14 @@ test("app: intern marketing-homepad /home → 404 (geen marketing-lek op app-hos
   assert.deepEqual(bepaalRoute({ surface: "app", pathname: MARKETING_HOME_PAD }), { type: "notFound" });
 });
 
+test("app: publieke marketingpaden → 404 (geen marketing-lek op app-host, tegenhanger REQ-PV-050/051)", () => {
+  // De fase-1 (public)-routegroep bestaat óók in de app-route-tree; expliciet 404
+  // zodat marketingpagina's niet op app.bestuurdersportaal.com renderen (besluit 0037).
+  for (const pad of ["/product", "/voor-wie", "/sectoren", "/governance-ai", "/over-ons"]) {
+    assert.deepEqual(bepaalRoute({ surface: "app", pathname: pad }), { type: "notFound" });
+  }
+});
+
 // ── bepaalRoute: platform-surface (TO P0, tests 12/18a/18b) ─────────────────
 test("platform: wortel → rewrite /platform", () => {
   assert.deepEqual(bepaalRoute({ surface: "platform", pathname: "/" }), {
