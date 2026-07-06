@@ -453,10 +453,10 @@ export default function AgendapuntKaart({
             </div>
           </div>
 
-          {/* Mijn voorbereiding (privé) — dé AI-plek van de kaart: sinds 06-07
-              opent "Genereer voorbereiding" het geïntegreerde gesprek (0036)
-              met de AI-voorbereiding als eerste beurt; daarnaast alleen nog
-              het vrije aantekeningenveld. */}
+          {/* Dé AI-plek van de kaart (0036 + FO duiding v0.3): de inline chat
+              "Vraag door over dit agendapunt" is het enige instappunt, met de
+              rijke voorbereiding als startchip; daaronder "Mijn aantekeningen"
+              (privé), direct boven "Inbreng vooraf". */}
           <VoorbereidingsBlok
             agendapuntId={punt.id}
             titel={punt.titel}

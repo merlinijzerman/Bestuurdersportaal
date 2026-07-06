@@ -1,21 +1,20 @@
 "use client";
 // ============================================================
-//  VoorbereidingsBlok — persoonlijke voorbereiding per agendapunt
+//  VoorbereidingsBlok — assistent + aantekeningen per agendapunt
 // ============================================================
-// Herziening 06-07 (opvolging gebruikersfeedback op FO duiding v0.2): het
-// gestructureerde AI-product (duiding / lenzen / vergadervragen / notitie per
-// vraag / "Vul inbreng") is vervallen. "Genereer voorbereiding" plaatst de
-// AI-voorbereiding nu als eerste beurt in het geïntegreerde gesprek
-// (AgendapuntChat.genereerVoorbereiding via ref) — met dezelfde [Bron N]-pills
-// en onderbouwing als de assistent, en direct doorvraagbaar.
-// Wat dit blok zelf nog doet: intro + één genereer-knop, en het vrije
-// aantekeningenveld (vrije_notities, privé; PATCH notities-route werkt ook
-// zonder gegenereerde voorbereiding). De `voorbereidingen`-tabel dient alleen
-// nog voor die aantekeningen.
-// Oude versie: Archief/ + git-historie.
+// Herziening 06-07 (na toetsing met externe bestuurder): het aparte blok
+// "Mijn voorbereiding" met eigen genereer-knop is vervallen — de inline chat
+// ("Vraag door over dit agendapunt") is het enige AI-instappunt. De rijke
+// voorbereiding (route met risicomatrix, procedures, profielsturing) zit
+// daar als startchip "Stel mijn voorbereiding op" (zie AgendapuntChat).
+// Dit component ordent alleen nog: (1) de chat, (2) daaronder "Mijn
+// aantekeningen" (vrije_notities, privé; PATCH notities-route werkt zonder
+// gegenereerde voorbereiding) — direct boven "Inbreng vooraf" in de kaart.
+// De `voorbereidingen`-tabel dient uitsluitend nog voor die aantekeningen.
+// Oude versies: Archief/ + git-historie.
 
-import { useState, useRef, useEffect } from "react";
-import AgendapuntChat, { type AgendapuntChatHandle } from "./AgendapuntChat";
+import { useState, useEffect } from "react";
+import AgendapuntChat from "./AgendapuntChat";
 
 // De rij uit `voorbereidingen` — alleen de aantekeningen-velden worden nog
 // gebruikt; de overige velden blijven getypeerd voor bestaande rijen.
@@ -31,8 +30,6 @@ export interface Voorbereiding {
 
 interface Props {
   agendapuntId: string;
-  /* Titel + stukken voor de geïntegreerde chat: de inline assistent (0036)
-     is onderdeel van dit blok, zodat de kaart één AI-plek kent. */
   titel: string;
   stukken: { id: string; titel: string }[];
   initieel: Voorbereiding | null;
@@ -60,9 +57,7 @@ export default function VoorbereidingsBlok({
   const [opgeslagenOp, setOpgeslagenOp] = useState<string | null>(
     initieel?.bijgewerkt_op || null
   );
-  const [genereren, setGenereren] = useState(false);
   const [fout, setFout] = useState<string | null>(null);
-  const chatRef = useRef<AgendapuntChatHandle>(null);
 
   useEffect(() => {
     if (initieel) {
@@ -71,18 +66,6 @@ export default function VoorbereidingsBlok({
       setNotitiesGewijzigd(false);
     }
   }, [initieel]);
-
-  // "Genereer voorbereiding" → eerste beurt in het geïntegreerde gesprek.
-  async function genereer() {
-    if (genereren) return;
-    setFout(null);
-    setGenereren(true);
-    try {
-      await chatRef.current?.genereerVoorbereiding();
-    } finally {
-      setGenereren(false);
-    }
-  }
 
   async function notitiesOpslaan() {
     setFout(null);
@@ -113,36 +96,15 @@ export default function VoorbereidingsBlok({
   }
 
   return (
-    <div className="bg-amber-50/40 border border-amber-200 rounded-lg p-4 space-y-3">
-      {/* Intro + genereer-knop */}
-      <div className="flex items-start gap-3">
-        <span className="text-base">🔒</span>
-        <div className="flex-1">
-          <div className="text-sm font-semibold text-[#0F2744]">
-            Mijn voorbereiding
-          </div>
-          <p className="text-xs text-gray-600 mt-1 leading-relaxed">
-            Laat de AI helpen scherper na te denken over dit punt — wat het
-            stuk betekent, welk besluit wordt gevraagd, blinde vlekken en
-            vragen voor de vergadering. Persoonlijk en alleen voor u zichtbaar.
-          </p>
-          <div className="mt-3">
-            <button
-              onClick={genereer}
-              disabled={genereren}
-              className="bg-[#0F2744] text-white text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-[#1a3858] disabled:opacity-50"
-            >
-              {genereren ? "Bezig met opstellen…" : "Genereer voorbereiding"}
-            </button>
-            <span className="text-[11px] text-gray-500 ml-2">
-              verschijnt als eerste bericht in het gesprek hieronder
-            </span>
-          </div>
-          {fout && <div className="text-xs text-red-700 mt-2">{fout}</div>}
-        </div>
-      </div>
+    <div className="space-y-3">
+      {/* Hét AI-instappunt van de kaart (0036 + FO duiding v0.3) */}
+      <AgendapuntChat
+        agendapuntId={agendapuntId}
+        titel={titel}
+        stukken={stukken}
+      />
 
-      {/* Vrij notitieveld — privé, los van de AI */}
+      {/* Vrij notitieveld — privé, los van de AI; direct boven "Inbreng vooraf" */}
       <div className="bg-white border border-amber-200 rounded-lg p-3">
         <div className="text-xs font-semibold text-[#0F2744] uppercase tracking-wide mb-2">
           Mijn aantekeningen
@@ -160,7 +122,8 @@ export default function VoorbereidingsBlok({
           placeholder="Eigen aantekeningen bij dit agendapunt…"
           className="w-full text-sm border border-gray-200 rounded px-3 py-2 focus:border-[#C9A84C] outline-none resize-none bg-gray-50"
         />
-        <div className="mt-1.5 flex items-center justify-end text-xs">
+        <div className="mt-1.5 flex items-center justify-between text-xs">
+          <span className="text-red-700">{fout}</span>
           {notitiesGewijzigd ? (
             <button
               onClick={notitiesOpslaan}
@@ -178,15 +141,6 @@ export default function VoorbereidingsBlok({
           )}
         </div>
       </div>
-
-      {/* Geïntegreerd gesprek (0036) — de voorbereiding opent dit gesprek;
-          doorvragen over het punt en de stukken gebeurt op dezelfde plek. */}
-      <AgendapuntChat
-        ref={chatRef}
-        agendapuntId={agendapuntId}
-        titel={titel}
-        stukken={stukken}
-      />
     </div>
   );
 }

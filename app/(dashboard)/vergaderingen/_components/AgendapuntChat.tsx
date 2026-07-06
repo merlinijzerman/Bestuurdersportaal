@@ -14,21 +14,16 @@
 //   "Onderbouwing en bronnen"-blok per antwoord (herleidbaarheid).
 // De marker-rendering is geconsolideerd in de gedeelde component CitatieTekst
 // (was hier eerst een eigen renderer — geaccepteerde schuld ADR 0036, opgelost).
-// - Sinds 06-07 (herziening FO duiding): "Genereer voorbereiding" plaatst de
-//   AI-voorbereiding als eerste beurt in DIT gesprek. VoorbereidingsBlok roept
-//   daarvoor genereerVoorbereiding() aan via een ref; de voorbereiding-route
-//   levert { tekst, bronnen } in dezelfde vorm als de chat, zodat pills en
-//   onderbouwing identiek renderen. Het gebruikersbericht gaat vóór het
-//   AI-antwoord het gesprek in, zodat de init-logica (welkomstbericht-slice)
-//   het antwoord niet wegsnijdt.
+// - Sinds 06-07 (herziening FO duiding, na toetsing externe bestuurder): de
+//   chat is HET enige instappunt. De losse knop "Genereer voorbereiding" is
+//   vervallen; de rijke voorbereiding (route met risicomatrix, procedures,
+//   profielsturing) zit als eerste startchip "Stel mijn voorbereiding op" in
+//   dit gesprek. De route levert { tekst, bronnen } in dezelfde vorm als de
+//   chat, zodat pills en onderbouwing identiek renderen. Het gebruikersbericht
+//   gaat vóór het AI-antwoord het gesprek in, zodat de init-logica
+//   (welkomstbericht-slice) het antwoord niet wegsnijdt.
 
-import {
-  useState,
-  useRef,
-  useEffect,
-  forwardRef,
-  useImperativeHandle,
-} from "react";
+import { useState, useRef, useEffect } from "react";
 import { createClient } from "@/lib/supabase";
 import type { InlineMelding } from "@/lib/vraagtype";
 import CitatieTekst from "./CitatieTekst";
@@ -57,10 +52,8 @@ interface Bericht {
   verduidelijking?: Verduidelijking;
 }
 
-// Startvragen die het stuk bestuurlijke betekenis geven. De eerdere chip
-// "bestuurlijke duiding" is verwijderd (05-07): de duiding is het hoofdproduct
-// van "Mijn voorbereiding" (FO duiding v0.2) — dubbel genereren gaf twee licht
-// verschillende duidingen naast elkaar. De chat verwijst nu naar dat blok.
+// Startvragen die het stuk bestuurlijke betekenis geven. De voorbereiding-chip
+// (hieronder apart) gaat via de rijke voorbereiding-route; deze drie via /api/chat.
 const STARTVRAGEN = [
   "Welke risico's en aandachtspunten zitten er voor het fonds in dit voorstel?",
   "Welk besluit wordt gevraagd en is dit stuk daarvoor besluitrijp?",
@@ -72,19 +65,15 @@ const STARTVRAGEN = [
 // init en leest het gesprek terug als een natuurlijke dialoog.
 const VOORBEREIDING_VRAAG = "Stel mijn voorbereiding op voor dit agendapunt.";
 
-export interface AgendapuntChatHandle {
-  /** Opent de chat en plaatst de AI-voorbereiding als eerste/volgende beurt. */
-  genereerVoorbereiding: () => Promise<void>;
-}
-
-const AgendapuntChat = forwardRef<
-  AgendapuntChatHandle,
-  {
-    agendapuntId: string;
-    titel: string;
-    stukken: { id: string; titel: string }[];
-  }
->(function AgendapuntChat({ agendapuntId, titel, stukken }, ref) {
+export default function AgendapuntChat({
+  agendapuntId,
+  titel,
+  stukken,
+}: {
+  agendapuntId: string;
+  titel: string;
+  stukken: { id: string; titel: string }[];
+}) {
   const [open, setOpen] = useState(false);
   const [berichten, setBerichten] = useState<Bericht[]>([]);
   const [invoer, setInvoer] = useState("");
@@ -165,52 +154,51 @@ const AgendapuntChat = forwardRef<
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initGedaan, agendapuntId]);
 
-  // Imperatief instappunt voor VoorbereidingsBlok: "Genereer voorbereiding"
-  // opent de chat en plaatst vraag + AI-voorbereiding (met bronnen in dezelfde
-  // vorm als de chat-route) als beurten in dit gesprek.
-  useImperativeHandle(ref, () => ({
-    async genereerVoorbereiding() {
-      if (laden) return;
-      setOpen(true);
-      await zorgInit();
-      const conversatie: Bericht[] = [
-        ...berichtenRef.current,
-        { rol: "gebruiker", tekst: VOORBEREIDING_VRAAG },
+  // Voorbereiding als gespreksopener: de startchip "Stel mijn voorbereiding op"
+  // gaat via de rijke voorbereiding-route (risicomatrix, procedures,
+  // profielsturing) en plaatst vraag + antwoord (bronnen in chat-vorm) als
+  // beurten in dit gesprek.
+  async function genereerVoorbereiding() {
+    if (laden) return;
+    setOpen(true);
+    await zorgInit();
+    const conversatie: Bericht[] = [
+      ...berichtenRef.current,
+      { rol: "gebruiker", tekst: VOORBEREIDING_VRAAG },
+    ];
+    berichtenRef.current = conversatie;
+    setBerichten(conversatie);
+    setLaden(true);
+    setAntwoordGestart(false);
+    try {
+      const res = await fetch(`/api/agendapunten/${agendapuntId}/voorbereiding`, {
+        method: "POST",
+      });
+      const data = await res.json().catch(() => null);
+      const aiBericht: Bericht =
+        res.ok && data?.tekst
+          ? { rol: "ai", tekst: data.tekst, bronnen: data.bronnen }
+          : {
+              rol: "ai",
+              tekst:
+                data?.error ||
+                "De voorbereiding kon niet worden opgesteld. Probeer het opnieuw.",
+            };
+      const finale = [...conversatie, aiBericht];
+      berichtenRef.current = finale;
+      setBerichten(finale);
+      if (res.ok && data?.tekst) bewaarGesprek(finale);
+    } catch {
+      const finale: Bericht[] = [
+        ...conversatie,
+        { rol: "ai", tekst: "Verbindingsfout. Probeer het opnieuw." },
       ];
-      berichtenRef.current = conversatie;
-      setBerichten(conversatie);
-      setLaden(true);
-      setAntwoordGestart(false);
-      try {
-        const res = await fetch(`/api/agendapunten/${agendapuntId}/voorbereiding`, {
-          method: "POST",
-        });
-        const data = await res.json().catch(() => null);
-        const aiBericht: Bericht =
-          res.ok && data?.tekst
-            ? { rol: "ai", tekst: data.tekst, bronnen: data.bronnen }
-            : {
-                rol: "ai",
-                tekst:
-                  data?.error ||
-                  "De voorbereiding kon niet worden opgesteld. Probeer het opnieuw.",
-              };
-        const finale = [...conversatie, aiBericht];
-        berichtenRef.current = finale;
-        setBerichten(finale);
-        if (res.ok && data?.tekst) bewaarGesprek(finale);
-      } catch {
-        const finale: Bericht[] = [
-          ...conversatie,
-          { rol: "ai", tekst: "Verbindingsfout. Probeer het opnieuw." },
-        ];
-        berichtenRef.current = finale;
-        setBerichten(finale);
-      } finally {
-        setLaden(false);
-      }
-    },
-  }));
+      berichtenRef.current = finale;
+      setBerichten(finale);
+    } finally {
+      setLaden(false);
+    }
+  }
 
   useEffect(() => {
     if (laden) eindRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -469,17 +457,24 @@ const AgendapuntChat = forwardRef<
     <div className="border border-amber-200 rounded-lg bg-amber-50/40">
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-3 py-2 text-left"
+        className="w-full px-3 py-2 text-left"
       >
-        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#0F2744]">
-          ✨ Vraag door over dit agendapunt
-          {heeftGesprek && !open && (
-            <span className="text-[10px] font-normal text-gray-500">
-              — eerder gesprek beschikbaar
-            </span>
-          )}
+        <span className="flex items-center justify-between">
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#0F2744]">
+            ✨ Vraag door over dit agendapunt
+            {heeftGesprek && !open && (
+              <span className="text-[10px] font-normal text-gray-500">
+                — eerder gesprek beschikbaar
+              </span>
+            )}
+          </span>
+          <span className="text-gray-400 text-xs">{open ? "▾" : "▸"}</span>
         </span>
-        <span className="text-gray-400 text-xs">{open ? "▾" : "▸"}</span>
+        <span className="block text-xs text-gray-600 mt-1 leading-relaxed font-normal">
+          Laat de AI helpen scherper na te denken over dit punt — wat het stuk
+          betekent, welk besluit wordt gevraagd, blinde vlekken en vragen voor
+          de vergadering. Persoonlijk en alleen voor u zichtbaar.
+        </span>
       </button>
 
       {open && (
@@ -593,25 +588,28 @@ const AgendapuntChat = forwardRef<
             </div>
           )}
 
-          {/* Startvragen zolang er nog geen gesprek is */}
+          {/* Startvragen zolang er nog geen gesprek is. De voorbereiding-chip
+              gaat via de rijke voorbereiding-route (met bronnen); de overige
+              via de gewone chat-route. */}
           {!heeftGesprek && initGedaan && (
-            <div className="space-y-2">
-              <div className="flex flex-wrap gap-1.5">
-                {STARTVRAGEN.map((v) => (
-                  <button
-                    key={v}
-                    onClick={() => stuurBericht(v)}
-                    disabled={laden}
-                    className="text-xs text-left border border-gray-300 bg-white rounded-full px-3 py-1.5 hover:border-[#C9A84C] hover:bg-amber-50 transition-colors disabled:opacity-50"
-                  >
-                    {v}
-                  </button>
-                ))}
-              </div>
-              <div className="text-[11px] text-gray-500">
-                Tip: &ldquo;Genereer voorbereiding&rdquo; hierboven opent dit
-                gesprek met een volledige voorbereiding, inclusief bronnen.
-              </div>
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                onClick={() => genereerVoorbereiding()}
+                disabled={laden}
+                className="text-xs text-left bg-[#0F2744] text-white rounded-full px-3 py-1.5 hover:bg-[#1a3858] transition-colors disabled:opacity-50 font-medium"
+              >
+                Stel mijn voorbereiding op
+              </button>
+              {STARTVRAGEN.map((v) => (
+                <button
+                  key={v}
+                  onClick={() => stuurBericht(v)}
+                  disabled={laden}
+                  className="text-xs text-left border border-gray-300 bg-white rounded-full px-3 py-1.5 hover:border-[#C9A84C] hover:bg-amber-50 transition-colors disabled:opacity-50"
+                >
+                  {v}
+                </button>
+              ))}
             </div>
           )}
 
@@ -647,7 +645,5 @@ const AgendapuntChat = forwardRef<
       )}
     </div>
   );
-});
-
-export default AgendapuntChat;
+}
 
