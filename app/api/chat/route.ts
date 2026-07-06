@@ -24,8 +24,11 @@ const anthropic = new Anthropic({
 const AI_MODEL = "claude-sonnet-4-6";
 const MAX_TOKENS = 3200;
 const CHUNK_BUDGET = 10;
-// Snel, goedkoop model voor de history-aware query-reformulatie (Fase B1).
-const REWRITE_MODEL = "claude-haiku-4-5-20251001";
+// History-aware query-reformulatie (Fase B1). Bewust op het sterke model: de
+// rewrite bepaalt wat de retrieval ophaalt, dus fouten hier (bv. dubbelzinnige
+// afkortingen verkeerd expanderen) vergiftigen álle downstream-resultaten. De
+// meerkosten zijn klein (één korte call), de hefboom op antwoordkwaliteit groot.
+const REWRITE_MODEL = "claude-sonnet-4-6";
 
 // ── Document-scope increment 2: dekkingsbrede strategieën ──────────────────
 // Drempel full-document vs. map-reduce, in geschatte tokens (≈ tekens/4). Onder
@@ -69,6 +72,7 @@ INHOUD:
 - Erken complexiteit waar dat klopt, zonder excuserend of onderdanig te worden.
 - Wees concreet: "artikel 102 PW" beter dan "de Pensioenwet"; "circa 5%" beter dan "een aanzienlijk deel".
 - Vakjargon mag, mits u het in één bijzin even toelicht voor wie het niet paraat heeft.
+- Let op dubbelzinnige afkortingen. In Wtp-context betekenen SPR en FPR standaard de solidaire premieregeling en de flexibele premieregeling (de twee premieovereenkomsten), níét de reserves daarbinnen (solidariteitsreserve, risicodelingsreserve). Meer algemeen: expandeer een afkorting nooit stilzwijgend als de context de bedoelde betekenis niet eenduidig maakt. Benoem dan kort de mogelijke lezingen en beantwoord de meest waarschijnlijke, of vraag om verduidelijking — kies nooit ongemerkt één betekenis en bouw daar het hele antwoord op.
 
 REGISTER:
 - Spreek met "u" — dit is een professionele bestuurscontext.
