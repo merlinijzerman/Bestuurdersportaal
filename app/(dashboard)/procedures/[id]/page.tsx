@@ -392,7 +392,7 @@ export default async function ProcedureDetailPage({
           )}
         </div>
         <div className="flex items-start justify-between gap-3">
-          <h1 className="text-ink text-2xl font-semibold">
+          <h1 className="font-serif text-ink text-2xl font-semibold">
             {procedure.titel}
           </h1>
           <ProcedureMetadataEdit

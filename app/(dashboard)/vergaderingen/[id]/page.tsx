@@ -256,7 +256,7 @@ export default async function VergaderingDetailPage({
       <div className="bg-white border border-gray-200 rounded-xl p-5">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>
-            <h1 className="text-ink text-xl font-bold">{v.titel}</h1>
+            <h1 className="font-serif text-ink text-xl font-bold">{v.titel}</h1>
             <p className="text-sm text-gray-500 mt-1">
               {formatDatum(v.datum)}
               {v.locatie ? ` · ${v.locatie}` : ""}

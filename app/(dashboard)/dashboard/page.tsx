@@ -159,7 +159,7 @@ export default async function DashboardPage() {
       {/* Header */}
       <div className="flex items-end justify-between flex-wrap gap-2">
         <div>
-          <div className="text-ink text-xl font-bold">
+          <div className="font-serif text-ink text-xl font-bold">
             Welkom terug, {naam}
           </div>
           <div className="text-gray-500 text-sm mt-0.5">

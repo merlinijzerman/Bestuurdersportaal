@@ -58,7 +58,7 @@ export default async function VergaderingenPage() {
     <div className="p-7 space-y-6">
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-ink text-xl font-bold">Vergaderingen</h1>
+          <h1 className="font-serif text-ink text-xl font-bold">Vergaderingen</h1>
           <p className="text-gray-500 text-sm mt-0.5">
             Plan, agendeer en bereid bestuursvergaderingen voor.
           </p>

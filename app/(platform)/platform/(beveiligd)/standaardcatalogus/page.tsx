@@ -55,7 +55,7 @@ export default async function StandaardcatalogusPagina() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Standaardcatalogus</h1>
+        <h1 className="font-serif text-2xl font-bold">Standaardcatalogus</h1>
         <p className="mt-1 max-w-3xl text-sm text-ink/70">
           Platformbrede standaarditems voor gremia/commissies, expertises en
           kritische focusgebieden. Deze items voeden de keuzelijsten in het

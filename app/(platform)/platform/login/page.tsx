@@ -157,7 +157,7 @@ export default function PlatformLoginPage() {
           <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-accent">
             <span className="text-2xl font-black text-ink">P</span>
           </div>
-          <h1 className="text-xl font-bold text-ink">
+          <h1 className="font-serif text-xl font-bold text-ink">
             Platform back-office
           </h1>
           <p className="mt-1 text-sm text-ink/60">

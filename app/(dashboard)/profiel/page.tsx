@@ -230,7 +230,7 @@ export default function ProfielPage() {
   return (
     <div className="p-7 max-w-3xl">
       <div className="mb-6">
-        <h1 className="text-xl font-black text-ink">Mijn profiel</h1>
+        <h1 className="font-serif text-xl font-black text-ink">Mijn profiel</h1>
         <p className="text-sm text-gray-500 mt-1">
           Uw profiel personaliseert de AI-voorbereiding (welke aandachtspunten en kritische
           vragen vóórkomen).

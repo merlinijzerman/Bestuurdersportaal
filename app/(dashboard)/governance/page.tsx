@@ -37,7 +37,7 @@ export default async function GovernancePage() {
     return (
       <div className="p-7 max-w-3xl">
         <div className="mb-6">
-          <h1 className="text-xl font-black text-ink">Governance Log</h1>
+          <h1 className="font-serif text-xl font-black text-ink">Governance Log</h1>
         </div>
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
           U heeft geen rechten om het governance-log in te zien. Inzage in het
@@ -57,7 +57,7 @@ export default async function GovernancePage() {
   return (
     <div className="p-7">
       <div className="mb-6">
-        <h1 className="text-xl font-black text-ink">Governance Log</h1>
+        <h1 className="font-serif text-xl font-black text-ink">Governance Log</h1>
         <p className="text-sm text-gray-500 mt-1">
           Alle AI-interacties worden automatisch gelogd voor compliance en traceerbaarheid
         </p>

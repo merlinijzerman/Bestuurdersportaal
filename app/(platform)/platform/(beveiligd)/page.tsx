@@ -24,7 +24,7 @@ export default async function PlatformHome() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Welkom, {identiteit?.naam}</h1>
+        <h1 className="font-serif text-2xl font-bold">Welkom, {identiteit?.naam}</h1>
         <p className="mt-1 text-sm text-ink/70">
           Platformfundament (P0) actief. De functionele beheermodules volgen in
           P1-P10; elke handeling loopt via de capability- en auditwrapper.

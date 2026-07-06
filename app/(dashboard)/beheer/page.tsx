@@ -21,7 +21,7 @@ export default async function BeheerPage() {
   return (
     <div className="p-8 max-w-6xl mx-auto w-full">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-ink">Catalogus &amp; organen</h1>
+        <h1 className="font-serif text-2xl font-bold text-ink">Catalogus &amp; organen</h1>
         <p className="text-gray-500 text-sm mt-1">
           Beheer fonds-specifieke procesmodellen, gremia, expertises en kritische
           focusgebieden. Importeer de standaardset als startpunt.

@@ -6,7 +6,7 @@ export function KlantbeeldHeader() {
       <div className="max-w-7xl">
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-2xl font-semibold text-ink">Klantbeeld</h1>
+            <h1 className="font-serif text-2xl font-semibold text-ink">Klantbeeld</h1>
             <p className="text-sm text-gray-600 mt-1 max-w-3xl">
               Inzicht in hoe het fonds zijn klanten — deelnemers en werkgevers — bedient.
               Voor deelnemers ligt de focus op de ontwikkeling van het persoonlijk pensioenvermogen

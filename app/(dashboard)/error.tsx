@@ -25,7 +25,7 @@ export default function DashboardError({
         <div className="inline-flex items-center justify-center w-12 h-12 bg-amber-50 rounded-2xl mb-4">
           <span className="text-2xl">⚠️</span>
         </div>
-        <h1 className="text-ink text-lg font-bold">
+        <h1 className="font-serif text-ink text-lg font-bold">
           Er ging iets mis bij het laden van deze pagina
         </h1>
         <p className="text-sm text-gray-500 mt-2">

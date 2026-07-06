@@ -60,7 +60,7 @@ export default async function RisicomatrixPage() {
     <div className="p-7 space-y-6">
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-ink text-xl font-bold">Risicomatrix</h1>
+          <h1 className="font-serif text-ink text-xl font-bold">Risicomatrix</h1>
           <p className="text-gray-500 text-sm mt-0.5">
             Actueel inzicht in de risico&apos;s van het fonds, gerangschikt op
             Kans &times; Impact en onderverdeeld in vier categorie&euml;n.

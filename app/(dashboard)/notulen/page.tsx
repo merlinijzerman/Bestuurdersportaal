@@ -47,7 +47,7 @@ export default async function NotulenPage() {
     <div className="p-7">
       <div className="flex items-start justify-between mb-6">
         <div>
-          <h1 className="text-xl font-black text-ink">Notulen</h1>
+          <h1 className="font-serif text-xl font-black text-ink">Notulen</h1>
           <p className="text-sm text-gray-500 mt-1">
             Geüploade notulen worden per agendapunt benutbaar zodra de secretaris de
             voorgestelde segmenten bevestigt. Alleen bevestigde segmenten van

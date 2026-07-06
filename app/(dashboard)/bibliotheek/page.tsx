@@ -244,7 +244,7 @@ export default function BibliotheekPage() {
     <div className="p-7">
       <div className="flex items-start justify-between mb-6">
         <div>
-          <h1 className="text-xl font-black text-ink">Documentbibliotheek</h1>
+          <h1 className="font-serif text-xl font-black text-ink">Documentbibliotheek</h1>
           <p className="text-sm text-gray-500 mt-1">
             {weergave === "zoeken"
               ? "Uitgebreid zoeken in de inhoud van de documenten"

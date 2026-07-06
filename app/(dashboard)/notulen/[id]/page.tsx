@@ -76,7 +76,7 @@ export default async function NotulenDetailPage({
         ← Terug naar notulen
       </Link>
       <div className="flex items-start justify-between mt-2 mb-1">
-        <h1 className="text-xl font-black text-ink">{doc.titel}</h1>
+        <h1 className="font-serif text-xl font-black text-ink">{doc.titel}</h1>
         <span
           className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
             vastgesteld ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"

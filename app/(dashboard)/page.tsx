@@ -282,7 +282,7 @@ export default async function HomePage() {
       <div className="bg-white border border-gray-200 rounded-xl p-5">
         <div className="flex items-end justify-between flex-wrap gap-3">
           <div>
-            <div className="text-ink text-xl font-bold">
+            <div className="font-serif text-ink text-xl font-bold">
               {dagdeelGroet()}
               {voornaam ? ` ${voornaam}` : ""}, fijn u terug te zien.
             </div>

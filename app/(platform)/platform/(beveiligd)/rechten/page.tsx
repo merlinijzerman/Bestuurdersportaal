@@ -63,7 +63,7 @@ export default async function RechtenPagina() {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold">Identiteiten &amp; rechten</h1>
+          <h1 className="font-serif text-2xl font-bold">Identiteiten &amp; rechten</h1>
         </div>
         <div className="rounded-lg border border-accent/40 bg-accent/10 px-4 py-3 text-sm text-ink">
           Je hebt geen recht om het rechtenregister in te zien. Dit vereist{" "}
@@ -115,7 +115,7 @@ export default async function RechtenPagina() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Identiteiten &amp; rechten</h1>
+        <h1 className="font-serif text-2xl font-bold">Identiteiten &amp; rechten</h1>
         <p className="mt-1 max-w-3xl text-sm text-ink/70">
           Beheer welke platform-identiteit welke capabilities heeft. In deze
           versie kun je uitsluitend <strong>niet-zware</strong> capabilities

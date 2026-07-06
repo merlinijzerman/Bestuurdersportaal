@@ -38,7 +38,7 @@ export default function LoginPage() {
           <div className="inline-flex items-center justify-center w-14 h-14 bg-accent rounded-2xl mb-4">
             <span className="text-white font-black text-2xl">B</span>
           </div>
-          <h1 className="text-2xl font-bold text-ink">Bestuurdersportaal</h1>
+          <h1 className="font-serif text-2xl font-bold text-ink">Bestuurdersportaal</h1>
           <p className="text-sm text-gray-500 mt-1">
             Open de beveiligde omgeving van uw organisatie
           </p>

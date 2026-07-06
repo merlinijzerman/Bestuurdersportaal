@@ -149,7 +149,7 @@ export default async function RisicoDetailPage({
               {isGesloten ? "Gesloten" : "Actief"}
             </span>
           </div>
-          <h1 className="text-ink text-2xl font-semibold">{risico.titel}</h1>
+          <h1 className="font-serif text-ink text-2xl font-semibold">{risico.titel}</h1>
           {risico.toelichting && (
             <p className="text-sm text-gray-600 mt-1.5 max-w-3xl whitespace-pre-line">
               {risico.toelichting}

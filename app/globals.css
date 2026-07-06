@@ -28,13 +28,16 @@
   --app-line-strong-rgb: 207 200 184; --app-line-strong: rgb(var(--app-line-strong-rgb));
   --app-zebra-rgb: 246 243 236;   --app-zebra: rgb(var(--app-zebra-rgb));
 
-  /* Navigatie / sidebar (lichte, warme variant — gekozen) */
-  --nav-rgb: 234 229 218;         --nav: rgb(var(--nav-rgb));
-  --nav-line-rgb: 216 211 199;    --nav-line: rgb(var(--nav-line-rgb));
-  --nav-text-rgb: 107 106 99;     --nav-text: rgb(var(--nav-text-rgb));
-  --nav-text-active-rgb: 26 58 87;--nav-text-active: rgb(var(--nav-text-active-rgb));
-  --nav-accent-rgb: 35 78 112;    --nav-accent: rgb(var(--nav-accent-rgb));
-  --nav-active: rgba(35, 78, 112, 0.10);
+  /* Navigatie / sidebar + topbar (diepe ink-navy variant — gekozen)
+     Donker navy chrome-frame rond lichte content. Tekst is licht/paper,
+     accent is een gelifte blauwtint zodat tiles/badge/active-rand oplichten
+     tegen de diepe achtergrond. */
+  --nav-rgb: 18 42 64;            --nav: rgb(var(--nav-rgb));          /* #122A40 diep ink-navy vlak */
+  --nav-line-rgb: 42 70 98;       --nav-line: rgb(var(--nav-line-rgb));/* #2A4662 divider/hover-basis */
+  --nav-text-rgb: 166 180 194;    --nav-text: rgb(var(--nav-text-rgb));/* #A6B4C2 gedempt licht (inactief) */
+  --nav-text-active-rgb: 244 246 248; --nav-text-active: rgb(var(--nav-text-active-rgb)); /* #F4F6F8 bijna-wit (actief/brand) */
+  --nav-accent-rgb: 78 124 166;   --nav-accent: rgb(var(--nav-accent-rgb)); /* #4E7CA6 gelifte blauwtint */
+  --nav-active: rgba(255, 255, 255, 0.08);
 
   /* Semantisch */
   --ok-rgb: 46 125 91;   --ok: rgb(var(--ok-rgb));
@@ -45,7 +48,7 @@
 * { box-sizing: border-box; }
 
 body {
-  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: var(--font-sans), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background: var(--app-bg);
   color: var(--ink);
 }

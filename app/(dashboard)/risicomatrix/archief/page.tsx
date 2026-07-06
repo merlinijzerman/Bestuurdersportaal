@@ -60,7 +60,7 @@ export default async function ArchiefPage() {
 
       <div className="flex items-end justify-between">
         <div>
-          <h1 className="text-ink text-xl font-bold">
+          <h1 className="font-serif text-ink text-xl font-bold">
             Archief gesloten risico&apos;s
           </h1>
           <p className="text-gray-500 text-sm mt-0.5">

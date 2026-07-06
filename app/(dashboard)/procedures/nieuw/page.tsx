@@ -11,7 +11,7 @@ export default function NieuweProcedurePage() {
       >
         ← Terug naar procedures
       </Link>
-      <h1 className="text-ink text-xl font-bold mt-2">
+      <h1 className="font-serif text-ink text-xl font-bold mt-2">
         Start een nieuwe procedure
       </h1>
       <p className="text-gray-500 text-sm mt-0.5">

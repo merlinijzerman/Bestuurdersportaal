@@ -52,7 +52,7 @@ export default async function GeneriekeBibliotheekPagina() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Generieke bibliotheek</h1>
+        <h1 className="font-serif text-2xl font-bold">Generieke bibliotheek</h1>
         <p className="mt-1 text-sm text-ink/70">
           Sectorbrede, fonds-overstijgende documenten (toezichtkaders, guidance).
           Elke wijziging verschijnt direct bij alle aangesloten fondsen en wordt
