@@ -1,6 +1,6 @@
 # Fase 5 — palette→token migratie · QA-checklist
 
-**Branch:** `feature/tokenlaag-fase-5-palette` (commit 606391f, 1 vóór op `main`)
+**Status:** gemerged + gepusht naar `main` (07-07-2026), commits `606391f` (palette→token) + `44afa61` (phase-token + guard-automatisering). Vercel-deploy loopt via push.
 **Automatisch geverifieerd (groen):** `lint:colors` = 0 overtredingen · Tailwind genereert alle nieuwe token-utilities · tsc = geen nieuwe fouten (enige melding `@vercel/analytics` is pre-existing, sandbox-only) · WCAG-contrast van tint/ink-combinaties en beheer-nav narekend (zie onder).
 
 Wat overblijft is **visuele QA** — niet automatiseerbaar. Loop onderstaande schermen na op de dev-server.
@@ -9,7 +9,7 @@ Wat overblijft is **visuele QA** — niet automatiseerbaar. Loop onderstaande sc
 - **1490 wijzigingen in 76 bestanden**: named Tailwind palette-classes (`text-gray-500`, `bg-red-50`, `text-emerald-800`, …) → tokens.
   - grijstinten → `ink`/`muted`/`line`/`app-line`/`app-line-strong`
   - rood/rose → `err(-tint/-ink)`, emerald/groen → `ok(-tint/-ink)`, amber/geel/oranje → `warn(-tint/-ink)`, blauw/indigo → `accent(-ink/-tint)`
-- **Nieuwe tokens**: `--ok/err/warn-tint` (badge-achtergrond) en `--ok/err/warn-ink` (leesbare tekst op tint).
+- **Nieuwe tokens**: `--ok/err/warn-tint` (badge-achtergrond) en `--ok/err/warn-ink` (leesbare tekst op tint); `--phase(-tint/-ink)` voor de paarse fase-/oordeelsvormingsmarkers (commit `44afa61`).
 - **Beheer-nav** (`platform/(beveiligd)/layout.tsx` + `Uitloggen.tsx`): blauwe topbalk → **donker navy chrome-frame** (`bg-nav`), gelijk aan de app-sidebar. Merkvierkant-contrastbug opgelost (was 1.00:1 → nu zichtbaar).
 - **Guard** (`check-brand-hex.mjs`): blokkeert voortaan ook gemigreerde palette-classes.
 
@@ -39,9 +39,12 @@ Let telkens op: (a) statusbadges/pills — juiste kleur + leesbaar, (b) randen/s
 - [ ] Governance-log
 - [ ] AI-assistent (onderbouwing, validatie)
 
-## Openstaand besluit — bewust niet gemigreerd
-1. **Paars/violet** (~33×, procedures & vergaderingen): betekenisdragende fase-kleur ("oordeelsvorming"/"in_evaluatie", dissent). Naar `accent` mappen zou de betekenis wegvagen. Keuze: (a) eigen token `--phase`/`--eval` toevoegen, of (b) laten staan. Guard blokkeert paars nu **niet**.
-2. **Cyan/chart-kleuren**: datavis-palet, expliciet buiten scope (zoals in het oorspronkelijke plan).
+## Openstaand besluit — afgehandeld / bewust niet gemigreerd
+1. **Paars/violet** (~33×, procedures & vergaderingen): **BESLIST** → eigen `--phase`-token (tint/ink) toegevoegd en gemigreerd (commit `44afa61`). Betekenisdragende fase-kleur ("oordeelsvorming"/"in_evaluatie", dissent) blijft dus onderscheiden van `accent`. Guard blokkeert `purple/violet` nu ook.
+2. **Cyan/chart-kleuren**: datavis-palet, expliciet buiten scope (zoals in het oorspronkelijke plan) — bewust níét geblokkeerd.
 
-## Borging
-- `npm run lint:colors` handmatig groen. **Nog te doen**: aan CI of een pre-commit hook hangen (er is geen `.github/workflows` / husky) — anders vangt de guard pas bij een handmatige run.
+## Borging — geautomatiseerd (commit `44afa61`)
+- `npm run lint:colors` groen. De guard draait nu automatisch via drie poorten:
+  - **prebuild-gate**: `prebuild`→`lint:colors` blokkeert de Vercel-build bij een overtreding.
+  - **git pre-commit hook**: `scripts/hooks/pre-commit` via `core.hooksPath` (gezet door `prepare` bij `npm install`); noodgeval-overslaan met `git commit --no-verify`.
+  - **GitHub Actions CI**: `.github/workflows/lint-colors.yml` op elke push/PR.

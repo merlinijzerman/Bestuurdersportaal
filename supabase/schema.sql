@@ -75,6 +75,40 @@ create trigger bij_registratie
   after insert on auth.users
   for each row execute procedure public.maak_profiel();
 
+-- ── 2b. Organisatieprofiel ─────────────────────────────────
+-- Generiek, bestuurlijk-licht contextprofiel per organisatie (1-op-1 met
+-- fondsen). Grondt AI-duiding met organisatiespecifieke feiten + strategie en
+-- voorkomt sectoraannames. Migratie 2026_07_06_organisatie_profielen.sql is
+-- authoritatief; dit is documentatie. FO Organisatieprofiel v0.4 (§4/§5, FR-1).
+--
+-- BEWUST GEEN autorisatie-/vaststellings-/status-laag: geen profiel_status/
+-- gating (elk profiel direct actief), geen schrijfrol/goedkeuring (bewerken
+-- loopt server-side via de service-role back-office — zelfde patroon als
+-- generiek-curatie), van beheer resteert alleen wie/wanneer-audit.
+--
+-- RLS: aan. SELECT eigen fonds (fonds_id = profielen.fonds_id van auth.uid()).
+-- GEEN INSERT/UPDATE/DELETE-policy → schrijven alleen via de service-role.
+-- Trigger trg_organisatie_profielen_touch zet bijgewerkt_op op now() bij UPDATE.
+create table if not exists public.organisatie_profielen (
+  id                       uuid primary key default uuid_generate_v4(),
+  fonds_id                 uuid not null unique
+                             references public.fondsen(id) on delete cascade,
+  organisatietype          text,   -- generiek type (bijv. "pensioenfonds (OPF)")
+  uitvoerende_partijen     text,   -- administrateur, vermogensbeheerder e.d.
+  omvang                   text,   -- korte omvang-indicatie
+  kernfeiten               text,   -- overige stabiele, foutgevoelige feiten
+  missie                   text check (missie is null or char_length(missie) <= 600),
+  visie                    text check (visie is null or char_length(visie) <= 600),
+  strategische_speerpunten text check (strategische_speerpunten is null
+                             or char_length(strategische_speerpunten) <= 600),
+  risicohouding            text check (risicohouding is null
+                             or char_length(risicohouding) <= 600),
+  peildatum                date,   -- optioneel; promptblok + conflictregel
+  bijgewerkt_door          text,   -- audit: wie (back-office, geen FK)
+  bijgewerkt_op            timestamptz not null default now(),  -- audit: wanneer (trigger)
+  aangemaakt_op            timestamptz not null default now()
+);
+
 -- ── 3. Documenten ──────────────────────────────────────────
 create table if not exists public.documenten (
   id            uuid primary key default uuid_generate_v4(),
