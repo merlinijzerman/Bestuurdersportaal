@@ -54,6 +54,14 @@ export default async function PlatformHome() {
               <span className="text-xs text-ink/50">(alleen inzien)</span>
             )}
           </Link>
+          {magConfig && (
+            <Link
+              href="/platform/organisatieprofiel"
+              className="inline-flex items-center gap-2 rounded-lg bg-app-bg px-4 py-2 text-sm font-medium text-ink hover:bg-accent/10"
+            >
+              Organisatieprofiel
+            </Link>
+          )}
           {magRechten && (
             <Link
               href="/platform/rechten"
