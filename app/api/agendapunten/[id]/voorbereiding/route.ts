@@ -5,6 +5,7 @@ import { zoekRelevanteChunks, maakContext, verrijkNotulenChunks } from "@/lib/ra
 import { controleerLimiet, LIMIETEN } from "@/lib/rate-limit";
 import { rateLimited } from "@/lib/api-errors";
 import { bouwProfielsturingAgenda } from "@/lib/profielsturing";
+import { bouwOrganisatieprofiel } from "@/lib/organisatieprofiel";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -75,6 +76,9 @@ export async function POST(
 
     // Increment F (FO §14) — profielgestuurde NADRUK: prioriteren, niet inperken.
     const profielsturing = await bouwProfielsturingAgenda(supabase, user.id);
+
+    // OP-3 (FO Organisatieprofiel v0.4 §6, B3) — organisatiecontext van het eigen fonds.
+    const organisatieprofiel = await bouwOrganisatieprofiel(supabase, profiel.fonds_id);
 
     const { data: agendapunt } = await supabase
       .from("agendapunten")
@@ -203,6 +207,10 @@ export async function POST(
           `- ${p.titel} (${p.template_code}, ${p.status})${p.beschrijving ? ` — ${p.beschrijving.slice(0, 200)}` : ""}`
         );
       }
+    }
+
+    if (organisatieprofiel) {
+      userParts.push(`\n${organisatieprofiel.tekst}`);
     }
 
     if (profielsturing) {

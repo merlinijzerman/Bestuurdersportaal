@@ -11,6 +11,7 @@ import { bepaalBronsoortprofiel } from "@/lib/weeg-bronsoort";
 import { haalBesluitBronnen, topProcesinstanties, opmaakBesluitContext } from "@/lib/besluitvorming-bron";
 import { documentBronNaarSource, modelKennisBronnenUitAntwoord, bouwSourceSamenvatting, ontbrekendeAlgemeneKennisMarkering, type AssistantSource } from "@/lib/assistant-source";
 import { bouwProfielsturing, type ProfielsturingAspecten } from "@/lib/profielsturing";
+import { bouwOrganisatieprofiel } from "@/lib/organisatieprofiel";
 import { SP_AGENDAPUNT_REGELS, bouwToelichtingBlok, herkomstString, type AgendapuntSeed } from "@/lib/agendapunt-context";
 
 const anthropic = new Anthropic({
@@ -319,6 +320,10 @@ interface BestuurderContext {
   // in het dynamische (ongecachte) contextblok — nooit in de toon-systeemprompt en
   // nooit in retrieval (gedragsneutraliteit, acceptatiecriterium 9).
   profielsturing?: string | null;
+  // OP-3 (FO Organisatieprofiel v0.4 §6/§7) — organisatiespecifiek contextprofiel.
+  // Landt, net als profielsturing, uitsluitend in het dynamische (ongecachte)
+  // contextblok — nooit in de gecachte toon-systeemprompt en nooit in retrieval.
+  organisatieprofiel?: string | null;
   voornaam: string;
   volledigeNaam: string;
   rolLabel: string;
@@ -364,7 +369,10 @@ function bouwDynamischeContext(ctx: BestuurderContext): string {
   const basis = `Je bent de AI-assistent in het bestuurdersportaal van ${ctx.fondsnaam}, een Nederlands pensioenfonds.
 
 JE SPREEKT NU MET: ${ctx.volledigeNaam} (${ctx.rolLabel}). U mag de voornaam "${ctx.voornaam}" gebruiken in uw antwoord — sporadisch, alleen waar het natuurlijk past.`;
-  return ctx.profielsturing ? `${basis}\n\n${ctx.profielsturing}` : basis;
+  const blokken = [basis];
+  if (ctx.organisatieprofiel) blokken.push(ctx.organisatieprofiel);
+  if (ctx.profielsturing) blokken.push(ctx.profielsturing);
+  return blokken.join("\n\n");
 }
 
 // Bouwt de system-parameter als content-blokken: het statische blok eerst met
@@ -563,6 +571,25 @@ export async function POST(req: NextRequest) {
         profielsturingAspecten = sturing.aspecten;
       } else {
         profielsturingStatus = "geen-profiel";
+      }
+    }
+
+    // ── OP-3 (FO Organisatieprofiel v0.4 §6, B3, FR-10) — organisatieprofiel ──
+    // Generiek, bestuurlijk-licht contextprofiel van de EIGEN organisatie. Injectie
+    // op de server-geverifieerde fonds_id van de ingelogde gebruiker (nooit de
+    // client-waarde), zodat nooit een ander fonds lekt. Leeg/ontbrekend → geen blok.
+    // Naast — niet in plaats van — profielsturing.
+    let organisatieprofielStatus: NonNullable<RetrievalMeta["organisatieprofiel"]> =
+      "geen-profiel";
+    let organisatieprofielAspecten:
+      | NonNullable<RetrievalMeta["organisatieprofiel_aspecten"]>
+      | undefined;
+    if (profiel?.fonds_id) {
+      const orgProfiel = await bouwOrganisatieprofiel(supabase, profiel.fonds_id);
+      if (orgProfiel) {
+        ctxBestuurder.organisatieprofiel = orgProfiel.tekst;
+        organisatieprofielStatus = "actief";
+        organisatieprofielAspecten = orgProfiel.aspecten;
       }
     }
 
@@ -1145,6 +1172,8 @@ export async function POST(req: NextRequest) {
             // "Onderbouwing en bronnen". De transparantie ("ordening op uw profiel
             // afgestemd") landt deterministisch hier, niet inline in het antwoord.
             profielsturing: profielsturingStatus,
+            // OP-3 (FO §8) — organisatieprofiel-status voor het onderbouwingspaneel.
+            organisatieprofiel: organisatieprofielStatus,
             // Increment I-1 (FO §11c) — rustige weergave: bronbasis voor het
             // onderbouwingspaneel + deterministische inline-meldingen.
             bronbasis,
@@ -1363,6 +1392,12 @@ export async function POST(req: NextRequest) {
             profielsturing: profielsturingStatus,
             ...(profielsturingAspecten
               ? { profielsturing_aspecten: profielsturingAspecten }
+              : {}),
+            // OP-3 (FO §8) — organisatieprofiel volledig herleidbaar: status +
+            // welke veldgroepen zijn geïnjecteerd (geen profielinhoud).
+            organisatieprofiel: organisatieprofielStatus,
+            ...(organisatieprofielAspecten
+              ? { organisatieprofiel_aspecten: organisatieprofielAspecten }
               : {}),
             // Increment I-2 (FO §11a/§11d) — automatische bronkeuze in het
             // auditspoor: welke intentie, met welk vertrouwen, welke (verborgen)
