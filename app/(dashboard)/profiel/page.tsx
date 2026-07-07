@@ -15,6 +15,7 @@ import {
   ZICHTBARE_ANTWOORDMODI,
   ANTWOORDMODUS_LABEL,
 } from "@/lib/vraagtype";
+import OrganisatieprofielTab from "./_components/OrganisatieprofielTab";
 
 const MAX_SECUNDAIRE = 3;
 const MIN_FOCUS = 3;
@@ -85,7 +86,34 @@ function InklapKnop({
   );
 }
 
+type Tab = "mij" | "org";
+
+function TabKnop({
+  actief,
+  onClick,
+  children,
+}: {
+  actief: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`-mb-px px-4 py-2 text-sm font-semibold border-b-2 transition ${
+        actief
+          ? "border-accent text-ink"
+          : "border-transparent text-muted hover:text-ink"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
 export default function ProfielPage() {
+  const [tab, setTab] = useState<Tab>("mij");
   const [laden, setLaden] = useState(true);
   const [opslaan, setOpslaan] = useState(false);
   const [melding, setMelding] = useState<{ type: "ok" | "fout"; tekst: string } | null>(null);
@@ -228,16 +256,30 @@ export default function ProfielPage() {
     expertises.length === 0 && gremia.length === 0 && focusgebieden.length === 0;
 
   return (
-    <div className="p-4 sm:p-6 lg:p-7 max-w-3xl">
+    <div className="p-4 sm:p-6 lg:p-7">
       <div className="mb-6">
         <h1 className="font-serif text-xl font-black text-ink">Mijn profiel</h1>
-        <p className="text-sm text-muted mt-1">
-          Uw profiel personaliseert de AI-voorbereiding (welke aandachtspunten en kritische
-          vragen vóórkomen).
-        </p>
       </div>
 
-      <div className="flex items-start gap-3 bg-accent-tint border border-accent/30 rounded-xl px-4 py-3 mb-6 text-sm text-accent-ink">
+      <div className="mb-6 flex gap-1 border-b border-line">
+        <TabKnop actief={tab === "mij"} onClick={() => setTab("mij")}>
+          Mijn profiel
+        </TabKnop>
+        <TabKnop actief={tab === "org"} onClick={() => setTab("org")}>
+          Organisatieprofiel
+        </TabKnop>
+      </div>
+
+      {tab === "org" ? (
+        <OrganisatieprofielTab />
+      ) : (
+        <div className="max-w-3xl">
+          <p className="text-sm text-muted mb-6">
+            Uw profiel personaliseert de AI-voorbereiding (welke aandachtspunten en kritische
+            vragen vóórkomen).
+          </p>
+
+          <div className="flex items-start gap-3 bg-accent-tint border border-accent/30 rounded-xl px-4 py-3 mb-6 text-sm text-accent-ink">
         <span>ℹ️</span>
         <div>
           Het profiel <strong>prioriteert</strong>, het <strong>filtert niet</strong>: de
@@ -624,6 +666,8 @@ export default function ProfielPage() {
           </span>
         )}
       </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -81,13 +81,17 @@ create trigger bij_registratie
 -- voorkomt sectoraannames. Migratie 2026_07_06_organisatie_profielen.sql is
 -- authoritatief; dit is documentatie. FO Organisatieprofiel v0.4 (§4/§5, FR-1).
 --
--- BEWUST GEEN autorisatie-/vaststellings-/status-laag: geen profiel_status/
--- gating (elk profiel direct actief), geen schrijfrol/goedkeuring (bewerken
--- loopt server-side via de service-role back-office — zelfde patroon als
--- generiek-curatie), van beheer resteert alleen wie/wanneer-audit.
+-- GEEN vaststellings-/status-laag: geen profiel_status/gating (elk profiel
+-- direct actief). Van beheer resteert alleen wie/wanneer-audit (bijgewerkt_door/
+-- -op). Bewerken kan langs twee wegen: (1) tenant-zelfservice door de fonds-
+-- beheerder in het portaal (tab op Mijn profiel, capability
+-- organisation.profile.manage, alleen rol 'beheerder'); (2) de platform-back-
+-- office via de service-role (omzeilt RLS). Zie besluit 0038 (herzien).
 --
 -- RLS: aan. SELECT eigen fonds (fonds_id = profielen.fonds_id van auth.uid()).
--- GEEN INSERT/UPDATE/DELETE-policy → schrijven alleen via de service-role.
+-- INSERT/UPDATE eigen fonds (migratie 2026_07_07_organisatieprofiel_tenant_write.sql);
+-- de beheerder-rolgate zit server-side in /api/organisatieprofiel, niet in RLS
+-- (huispatroon: RLS = fonds-isolatie, code = rolgate). Geen DELETE-policy.
 -- Trigger trg_organisatie_profielen_touch zet bijgewerkt_op op now() bij UPDATE.
 create table if not exists public.organisatie_profielen (
   id                       uuid primary key default uuid_generate_v4(),

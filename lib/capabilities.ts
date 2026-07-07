@@ -36,7 +36,12 @@ export type Capability =
   // zijn STRIKT ZELFBEHEERD: alleen de persoon zelf wijzigt het eigen profiel. Er is
   // bewust GEEN profile.manage.all — een beheerder/voorzitter kan andermans profiel
   // niet wijzigen (privacy/dataminimalisatie). RLS borgt dit op id=auth.uid().
-  | "profile.manage.own";
+  | "profile.manage.own"
+  // Organisatieprofiel v0.4 — tenant-zelfservice op het generieke, fonds-brede
+  // contextprofiel (organisatie_profielen). In tegenstelling tot het PERSOONLIJKE
+  // profiel is dit fonds-breed, dus beheerder-gated (analoog aan catalog.manage),
+  // niet strikt zelfbeheerd. RLS borgt eigen-fonds; deze capability de rolgate.
+  | "organisation.profile.manage";
 
 /** Rol → toegekende capabilities. Bron-van-waarheid voor autorisatie in v2.
  *  `dossiers.manage` (TO §5: secretariaat/governance/admin) dekt het handmatig
@@ -58,6 +63,7 @@ export const ROL_CAPABILITIES: Record<string, Capability[]> = {
     "classification.review",
     "notulen.segment.confirm",
     "profile.manage.own",
+    "organisation.profile.manage",
   ],
   voorzitter: [
     "dossiers.manage",

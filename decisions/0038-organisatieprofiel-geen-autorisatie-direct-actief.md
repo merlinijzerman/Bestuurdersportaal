@@ -1,6 +1,6 @@
 # 0038 — Organisatieprofiel: geen autorisatie/vaststelling/gating, direct actief
 
-- **Status:** Geaccepteerd
+- **Status:** Geaccepteerd — besluitpunt 1 (schrijven alleen via service-role) deels herzien door [0039](0039-organisatieprofiel-tenant-zelfservice-beheerder.md)
 - **Datum:** 2026-07-06
 - **Betrokkenen:** Merlin (akkoord), Claude (uitvoering)
 
