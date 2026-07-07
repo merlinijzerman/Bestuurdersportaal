@@ -1174,6 +1174,11 @@ export async function POST(req: NextRequest) {
             profielsturing: profielsturingStatus,
             // OP-3 (FO §8) — organisatieprofiel-status voor het onderbouwingspaneel.
             organisatieprofiel: organisatieprofielStatus,
+            // OP-4 (FO §8) — veldgroepen (feiten/strategie/risicohouding) voor het
+            // paneel; alleen metadata, geen profielinhoud.
+            ...(organisatieprofielAspecten
+              ? { organisatieprofiel_aspecten: organisatieprofielAspecten }
+              : {}),
             // Increment I-1 (FO §11c) — rustige weergave: bronbasis voor het
             // onderbouwingspaneel + deterministische inline-meldingen.
             bronbasis,

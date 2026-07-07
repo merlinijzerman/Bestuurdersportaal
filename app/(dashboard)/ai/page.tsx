@@ -196,8 +196,9 @@ const BRON_NUMMER_KLEUR: Record<string, string> = {
 // - [Algemene kennis], [algemene kennis]
 // - [Volgens wetgeving], [volgens wetgeving]
 // - [Toelichting agendapunt] (ADR 0028 — ongevalideerde bestuurs-vrijetekst)
+// - [Organisatieprofiel] (OP-4 — organisatiespecifieke context, geen fondsbron)
 const MARKER_REGEX =
-  /(\[Bron \d+\]|\[Algemene kennis\]|\[Volgens wetgeving\]|\[Toelichting agendapunt\])/gi;
+  /(\[Bron \d+\]|\[Algemene kennis\]|\[Volgens wetgeving\]|\[Toelichting agendapunt\]|\[Organisatieprofiel\])/gi;
 
 const VOORGESTELDE_VRAGEN = [
   "Wat zijn de deskundigheidseisen voor bestuurders?",
@@ -734,6 +735,20 @@ export default function AiPage() {
           model_kennis?: { grond: "algemene_kennis" | "wetgeving"; instantie: string | null }[];
           // Increment F (FO §14) — profielsturing-status (paneel "Onderbouwing en bronnen").
           profielsturing?: "actief" | "uitgeschakeld" | "geen-profiel" | null;
+          // OP-4 (FO §8) — organisatieprofiel-status + geïnjecteerde veldgroepen
+          // voor het paneel "Onderbouwing en bronnen".
+          organisatieprofiel?: "actief" | "geen-profiel" | null;
+          organisatieprofiel_aspecten?: {
+            organisatietype: boolean;
+            uitvoerende_partijen: boolean;
+            omvang: boolean;
+            kernfeiten: boolean;
+            missie: boolean;
+            visie: boolean;
+            strategische_speerpunten: boolean;
+            risicohouding: boolean;
+            peildatum: string | null;
+          } | null;
           // B1 / scope-split — documentgericht (meta) + vervolgvragen (done).
           document_gericht?: boolean;
           vervolgvragen?: string[];
@@ -792,6 +807,9 @@ export default function AiPage() {
             modelKennis: [],
             // Increment F (FO §14) — transparantie profielsturing in het controlevlak.
             profielsturing: evt.profielsturing ?? null,
+            // OP-4 (FO §8) — organisatieprofiel in het controlevlak (status + veldgroepen).
+            organisatieprofiel: evt.organisatieprofiel ?? null,
+            organisatieprofielAspecten: evt.organisatieprofiel_aspecten ?? null,
             // B1 / scope-split — documentgericht bepaalt in de render welke
             // vervolgacties (duiding/kritische vragen) blijven staan.
             documentGericht: evt.document_gericht ?? null,
@@ -1678,6 +1696,9 @@ function parseInline(
     if (/^\[toelichting agendapunt\]$/i.test(deel)) {
       return <ToelichtingPill key={i} />;
     }
+    if (/^\[organisatieprofiel\]$/i.test(deel)) {
+      return <OrganisatieprofielPill key={i} />;
+    }
     // Geen marker → verwerk inline-markdown (vet/cursief/code).
     return <span key={i}>{parseMarkdownInline(deel)}</span>;
   });
@@ -1772,6 +1793,23 @@ function ToelichtingPill() {
       title="Steunt op de toelichting bij het agendapunt — door het bestuur opgestelde vrije tekst, geen bestuurlijk vastgestelde fondsbron. Verifieer voordat u hierop besluit."
     >
       Toelichting agendapunt
+    </span>
+  );
+}
+
+// OP-4 (FO Organisatieprofiel v0.4 §7/§8) — claim gegrond op het generieke
+// organisatieprofiel: organisatiespecifieke context, geen bestuurlijk vastgestelde
+// fondsbron en geen wet/regelgeving. Weegt boven algemene kennis, maar onder
+// formele stukken. Eigen paars-getinte styling (phase-token) onderscheidt deze
+// herkomst van de gouden [Bron N], de grijze [Algemene kennis] en de amber
+// [Toelichting agendapunt].
+function OrganisatieprofielPill() {
+  return (
+    <span
+      className="relative -top-[1px] inline-flex items-center align-baseline mx-0.5 px-1.5 h-[18px] rounded-md text-[10px] font-semibold leading-none bg-phase-tint text-phase-ink border border-phase/30"
+      title="Gegrond op het organisatieprofiel — organisatiespecifieke context, geen bestuurlijk vastgestelde bron en geen wet- of regelgeving. Weegt boven algemene kennis, maar onder formele stukken."
+    >
+      Organisatieprofiel
     </span>
   );
 }

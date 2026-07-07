@@ -33,6 +33,23 @@ export interface OnderbouwingMeta {
   // verschilt. 'uitgeschakeld' = de bestuurder koos "Algemeen perspectief".
   /** Of het persoonlijk profiel de ordening heeft gestuurd. */
   profielsturing?: "actief" | "uitgeschakeld" | "geen-profiel" | null;
+  // OP-4 (FO Organisatieprofiel v0.4 §8) — of het organisatieprofiel is meegewogen
+  // ('actief') of ontbrak/leeg was ('geen-profiel'). De _aspecten voeden het
+  // onderscheid feiten/strategie/risicohouding in het paneel (metadata, geen inhoud).
+  /** Of het organisatieprofiel als context is meegewogen. */
+  organisatieprofiel?: "actief" | "geen-profiel" | null;
+  /** Welke veldgroepen zijn geïnjecteerd — voedt de feiten/strategie/risicohouding-split. */
+  organisatieprofielAspecten?: {
+    organisatietype: boolean;
+    uitvoerende_partijen: boolean;
+    omvang: boolean;
+    kernfeiten: boolean;
+    missie: boolean;
+    visie: boolean;
+    strategische_speerpunten: boolean;
+    risicohouding: boolean;
+    peildatum: string | null;
+  } | null;
   // Increment I-2 (FO §11a) — de automatische bronkeuze. Géén zichtbare badge in
   // de chat; de bestuurder ziet de gekozen intentie hier, in het controlevlak.
   /** Automatisch (of via verduidelijkingschip) bepaalde bron-intentie. */
@@ -63,6 +80,19 @@ const MODEL_KENNIS_GROND_LABEL: Record<string, string> = {
   algemene_kennis: "Algemene kennis",
   wetgeving: "Volgens wetgeving",
 };
+
+// OP-4 — welke veldgroepen uit het organisatieprofiel zijn meegewogen. Bepaalt
+// het feiten/strategie/risicohouding-onderscheid dat het paneel toont (§8).
+function organisatieprofielVeldgroepen(
+  a: NonNullable<OnderbouwingMeta["organisatieprofielAspecten"]>
+): string[] {
+  const groepen: string[] = [];
+  if (a.organisatietype || a.uitvoerende_partijen || a.omvang || a.kernfeiten)
+    groepen.push("feiten");
+  if (a.missie || a.visie || a.strategische_speerpunten) groepen.push("strategie");
+  if (a.risicohouding) groepen.push("risicohouding");
+  return groepen;
+}
 
 // Bestuurlijk leesbare labels voor de automatische bronkeuze (geen jargon).
 const BRON_INTENT_LABEL: Record<string, string> = {
@@ -189,6 +219,28 @@ export default function OnderbouwingPaneel({
               <Rij
                 label="Persoonlijk profiel"
                 waarde="Algemeen perspectief — collectieve weergave, niet op uw profiel geprioriteerd"
+              />
+            )}
+            {meta.organisatieprofiel === "actief" && (
+              <Rij
+                label="Organisatieprofiel"
+                waarde={
+                  <>
+                    Meegewogen als organisatiecontext
+                    {meta.organisatieprofielAspecten &&
+                      organisatieprofielVeldgroepen(meta.organisatieprofielAspecten).length > 0 &&
+                      ` — ${organisatieprofielVeldgroepen(meta.organisatieprofielAspecten).join(" · ")}`}
+                    .
+                    <span className="text-muted">
+                      {" "}
+                      Organisatiespecifieke context; weegt onder wet- en regelgeving
+                      en formele stukken.
+                      {meta.organisatieprofielAspecten?.peildatum
+                        ? ` Peildatum ${meta.organisatieprofielAspecten.peildatum}.`
+                        : ""}
+                    </span>
+                  </>
+                }
               />
             )}
           </div>

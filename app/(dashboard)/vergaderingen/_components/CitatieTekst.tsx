@@ -4,7 +4,7 @@
 // ============================================================
 // Eén renderer voor alle plekken waar AI-output met herkomstmarkers wordt
 // getoond ([Bron N], [Algemene kennis], [Volgens wetgeving],
-// [Toelichting agendapunt]). Geëxtraheerd uit AgendapuntChat (ADR 0036 —
+// [Toelichting agendapunt], [Organisatieprofiel]). Geëxtraheerd uit AgendapuntChat (ADR 0036 —
 // geaccepteerde schuld "dubbele marker-rendering" hiermee opgelost) en
 // hergebruikt door VoorbereidingsBlok (bestuurlijke duiding).
 //
@@ -17,9 +17,10 @@
 
 import type { ReactNode } from "react";
 
-// Zelfde markers als de AI-pagina (incl. [Toelichting agendapunt], ADR 0028).
+// Zelfde markers als de AI-pagina (incl. [Toelichting agendapunt], ADR 0028;
+// [Organisatieprofiel], OP-4).
 export const MARKER_REGEX =
-  /(\[Bron \d+\]|\[Algemene kennis\]|\[Volgens wetgeving\]|\[Toelichting agendapunt\])/gi;
+  /(\[Bron \d+\]|\[Algemene kennis\]|\[Volgens wetgeving\]|\[Toelichting agendapunt\]|\[Organisatieprofiel\])/gi;
 
 // Minimaal broncontract — structureel compatibel met BronVerwijzing (lib/rag)
 // en met de bronnenlijst die de voorbereiding-route opslaat in ai_output.
@@ -145,6 +146,17 @@ function parseInline(
           title="Afkomstig uit de toelichting van het agendapunt — geen vastgestelde fondsbron"
         >
           Toelichting agendapunt
+        </span>
+      );
+    }
+    if (/^\[organisatieprofiel\]$/i.test(deel)) {
+      return (
+        <span
+          key={i}
+          className="inline-block text-[9px] font-medium bg-phase-tint text-phase-ink border border-phase/30 rounded-full px-1.5 align-text-top mx-0.5"
+          title="Gegrond op het organisatieprofiel — organisatiespecifieke context, geen bestuurlijk vastgestelde fondsbron"
+        >
+          Organisatieprofiel
         </span>
       );
     }
