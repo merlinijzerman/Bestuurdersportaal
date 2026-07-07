@@ -1,0 +1,11 @@
+#!/bin/sh
+# Gedeelde pre-commit hook — geactiveerd via `core.hooksPath scripts/hooks`
+# (gezet door het "prepare"-script bij `npm install`).
+# Blokkeert een commit zodra er hardcoded merkkleuren of gemigreerde
+# Tailwind-palette-classes insluipen. Zie scripts/check-brand-hex.mjs.
+npm run --silent lint:colors || {
+  echo ""
+  echo "✗ Commit geblokkeerd: gebruik semantische tokens i.p.v. losse kleuren."
+  echo "  (overslaan in noodgeval: git commit --no-verify)"
+  exit 1
+}

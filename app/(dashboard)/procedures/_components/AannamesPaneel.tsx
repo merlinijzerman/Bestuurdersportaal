@@ -463,7 +463,7 @@ export default function AannamesPaneel({ decisionId, assumptions }: Props) {
                       </span>
                     )}
                     {a.ai_gedetecteerd && (
-                      <span className="text-[11px] font-medium uppercase tracking-wide text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded">
+                      <span className="text-[11px] font-medium uppercase tracking-wide text-phase-ink bg-phase-tint border border-phase/30 px-2 py-0.5 rounded">
                         AI-gedetecteerd
                       </span>
                     )}

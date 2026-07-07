@@ -53,6 +53,11 @@ const config: Config = {
           tint: "rgb(var(--warn-tint-rgb) / <alpha-value>)",
           ink: "rgb(var(--warn-ink-rgb) / <alpha-value>)",
         },
+        phase: {
+          DEFAULT: "rgb(var(--phase-rgb) / <alpha-value>)",
+          tint: "rgb(var(--phase-tint-rgb) / <alpha-value>)",
+          ink: "rgb(var(--phase-ink-rgb) / <alpha-value>)",
+        },
       },
       fontFamily: {
         serif: ["var(--font-serif)", "Georgia", "serif"],

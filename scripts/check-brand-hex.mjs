@@ -22,12 +22,11 @@ const ARBITRARY_HEX_CLASS =
   /\b(?:text|bg|border|from|to|via|ring|fill|stroke|divide|shadow|outline|decoration|caret|accent)-\[#[0-9a-fA-F]{3,8}\]/;
 
 // 3) Named Tailwind palette-classes voor families die naar de tokenlaag zijn
-//    gemigreerd (fase 5). Terugval hierop faalt. Bewust NIET geblokkeerd:
-//    purple/violet (fase-semantiek "oordeelsvorming"/"in_evaluatie" — nog geen
-//    token) en cyan/sky/teal (chart-palet, buiten scope). \b vangt ook de
-//    variant-prefix (hover:/md: etc.).
+//    gemigreerd (fase 5). Terugval hierop faalt. purple/violet -> phase-token.
+//    Bewust NIET geblokkeerd: cyan/sky/teal (chart-palet, buiten scope).
+//    \b vangt ook de variant-prefix (hover:/md: etc.).
 const MIGRATED_PALETTE_CLASS =
-  /\b(?:text|bg|border|ring|divide|from|to|via|fill|stroke|placeholder|caret|outline|decoration)-(?:gray|slate|zinc|neutral|stone|red|rose|emerald|green|amber|yellow|orange|blue|indigo)-\d{2,3}\b/;
+  /\b(?:text|bg|border|ring|divide|from|to|via|fill|stroke|placeholder|caret|outline|decoration)-(?:gray|slate|zinc|neutral|stone|red|rose|emerald|green|amber|yellow|orange|blue|indigo|purple|violet)-\d{2,3}\b/;
 
 function walk(dir) {
   const out = [];

@@ -171,13 +171,13 @@ export default function NieuweProcedureForm({ templates }: Props) {
             {eigenaren.map((n) => (
               <span
                 key={n}
-                className="inline-flex items-center gap-1.5 bg-purple-50 text-purple-800 text-xs px-2 py-1 rounded"
+                className="inline-flex items-center gap-1.5 bg-phase-tint text-phase-ink text-xs px-2 py-1 rounded"
               >
                 {n}
                 <button
                   type="button"
                   onClick={() => eigenaarVerwijderen(n)}
-                  className="text-purple-500 hover:text-purple-800"
+                  className="text-phase-ink hover:text-phase-ink"
                   aria-label={`Verwijder ${n}`}
                 >
                   ×

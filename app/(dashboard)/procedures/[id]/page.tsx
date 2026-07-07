@@ -364,7 +364,7 @@ export default async function ProcedureDetailPage({
       {/* Header */}
       <div>
         <div className="flex items-center gap-2 mb-2 flex-wrap">
-          <span className="text-[11px] font-medium uppercase tracking-wide text-purple-700 bg-purple-50 px-2 py-0.5 rounded">
+          <span className="text-[11px] font-medium uppercase tracking-wide text-phase-ink bg-phase-tint px-2 py-0.5 rounded">
             {templateLabel(procedure.template_code)}
           </span>
           <span
@@ -427,7 +427,7 @@ export default async function ProcedureDetailPage({
                   <div
                     key={idx}
                     title={n}
-                    className="w-8 h-8 rounded-full bg-purple-200 text-purple-900 text-xs flex items-center justify-center font-medium border-2 border-white"
+                    className="w-8 h-8 rounded-full bg-phase-tint text-phase-ink text-xs flex items-center justify-center font-medium border-2 border-white"
                   >
                     {n
                       .split(/\s+/)

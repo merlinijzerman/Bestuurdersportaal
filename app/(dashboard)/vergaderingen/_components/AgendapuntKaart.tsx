@@ -58,7 +58,7 @@ export interface Agendapunt {
 
 const CATEGORIE_BADGE: Record<Agendapunt["categorie"], { bg: string; text: string; label: string }> = {
   beeldvorming: { bg: "bg-warn-tint", text: "text-warn-ink", label: "Beeldvorming" },
-  oordeelsvorming: { bg: "bg-purple-50", text: "text-purple-800", label: "Oordeelsvorming" },
+  oordeelsvorming: { bg: "bg-phase-tint", text: "text-phase-ink", label: "Oordeelsvorming" },
   besluitvorming: { bg: "bg-accent-tint", text: "text-accent-ink", label: "Besluitvorming" },
   informatie: { bg: "bg-app-bg", text: "text-ink", label: "Informatie" },
 };

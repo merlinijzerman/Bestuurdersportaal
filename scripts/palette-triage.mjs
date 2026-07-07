@@ -39,10 +39,10 @@ const ROOTS = ["app", "components", "lib"];
 const EXTS = new Set([".ts", ".tsx", ".js", ".jsx"]);
 
 const NEUTRAL = new Set(["gray", "slate", "zinc", "neutral", "stone"]);
-const SEM = { red: "err", rose: "err", emerald: "ok", green: "ok", amber: "warn", yellow: "warn", orange: "warn" };
+const SEM = { red: "err", rose: "err", emerald: "ok", green: "ok", amber: "warn", yellow: "warn", orange: "warn", purple: "phase", violet: "phase" };
 const INFO = new Set(["blue", "indigo"]);
-// Bewust ongemapt -> rapport, niet aanraken.
-const REPORT_ONLY = new Set(["purple", "violet", "fuchsia", "pink", "sky", "cyan", "teal", "lime"]);
+// Bewust ongemapt -> rapport, niet aanraken (chart-palet / geen tokenrol).
+const REPORT_ONLY = new Set(["fuchsia", "pink", "sky", "cyan", "teal", "lime"]);
 
 const ALL_FAMILIES = [...NEUTRAL, ...Object.keys(SEM), ...INFO, ...REPORT_ONLY].join("|");
 // prefix - family - shade (/opacity)?
@@ -72,7 +72,7 @@ function semTarget(prefix, tok, shade, opacity) {
     case "text": case "caret": case "decoration":
       return `${prefix}-${tok}-ink`;
     case "bg": case "from": case "to": case "via":
-      return `${prefix}-${s <= 100 ? `${tok}-tint` : tok}`;
+      return `${prefix}-${s <= 300 ? `${tok}-tint` : tok}`;
     case "fill": case "stroke":
       return `${prefix}-${tok}`;
     case "border": case "outline": case "ring": case "divide":
@@ -87,7 +87,7 @@ function infoTarget(prefix, shade, opacity) {
     case "text": case "caret": case "decoration":
       return `${prefix}-accent-ink`;
     case "bg": case "from": case "to": case "via":
-      return `${prefix}-${s <= 100 ? "accent-tint" : "accent"}`;
+      return `${prefix}-${s <= 300 ? "accent-tint" : "accent"}`;
     case "fill": case "stroke":
       return `${prefix}-accent`;
     case "border": case "outline": case "ring": case "divide":

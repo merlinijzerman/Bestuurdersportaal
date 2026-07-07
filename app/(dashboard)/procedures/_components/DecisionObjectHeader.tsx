@@ -31,7 +31,7 @@ const STATUS_KLEUREN: Record<string, string> = {
   besloten: "bg-ok-tint text-ok-ink",
   voorwaardelijk_besloten: "bg-ok-tint text-ok-ink",
   in_uitvoering: "bg-ok-tint text-ok-ink",
-  in_evaluatie: "bg-purple-50 text-purple-800",
+  in_evaluatie: "bg-phase-tint text-phase-ink",
   afgesloten: "bg-app-bg text-ink",
   afgewezen: "bg-err-tint text-err-ink",
   geannuleerd: "bg-app-bg text-muted",
@@ -127,7 +127,7 @@ export default function DecisionObjectHeader({ decision, autoUpgraded }: Props) 
           Risico {RISICONIVEAU_LABEL[decision.risiconiveau]}
         </span>
         {decision.mandaatgevoelig && (
-          <span className="px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-900 border border-purple-200">
+          <span className="px-2 py-1 rounded text-xs font-medium bg-phase-tint text-phase-ink border border-phase/30">
             Mandaatgevoelig
           </span>
         )}

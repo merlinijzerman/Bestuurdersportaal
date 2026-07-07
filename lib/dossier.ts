@@ -212,7 +212,7 @@ export function dossierStatusKleur(status: DossierStatus | null): string {
     case "ter_besluitvorming":
       return "bg-warn-tint text-warn-ink border-warn/30";
     case "heropend":
-      return "bg-purple-50 text-purple-800 border-purple-200";
+      return "bg-phase-tint text-phase-ink border-phase/30";
     case "gearchiveerd":
       return "bg-app-bg text-muted border-line";
     case "gepland":

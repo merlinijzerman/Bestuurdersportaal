@@ -43,7 +43,7 @@ const ZICHTBAARHEID_VOLLEDIG: DissentZichtbaarheid[] = [
 function zichtbaarheidKleur(z: DissentZichtbaarheid): string {
   switch (z) {
     case "minderheidsnotitie":
-      return "bg-purple-50 text-purple-800 border-purple-200";
+      return "bg-phase-tint text-phase-ink border-phase/30";
     case "formele_dissent":
       return "bg-err-tint text-err-ink border-err/30";
     case "gedeelde_zorg":
@@ -319,7 +319,7 @@ export default function DissentPaneel({
                         </button>
                       )}
                       {d.formeel_vastgesteld && (
-                        <span className="text-[11px] font-medium uppercase tracking-wide text-purple-800 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded">
+                        <span className="text-[11px] font-medium uppercase tracking-wide text-phase-ink bg-phase-tint border border-phase/30 px-2 py-0.5 rounded">
                           Formeel vastgesteld
                         </span>
                       )}
@@ -337,7 +337,7 @@ export default function DissentPaneel({
                           patch(d.id, { formeel_vastgesteld: true })
                         }
                         disabled={bezig === d.id}
-                        className="text-[11px] text-purple-800 hover:underline disabled:opacity-50"
+                        className="text-[11px] text-phase-ink hover:underline disabled:opacity-50"
                       >
                         Formeel vastleggen
                       </button>
