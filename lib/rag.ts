@@ -238,6 +238,23 @@ export interface RetrievalMeta {
     antwoordvoorkeur: string | null;
     detailniveau: string | null;
   };
+  // OP-2 (FO Organisatieprofiel v0.4 §8) — organisatiespecifiek contextprofiel.
+  // Legt vast of een niet-leeg profiel is geïnjecteerd ('actief') of dat er geen
+  // (bruikbaar) profiel was ('geen-profiel'). De _aspecten leggen vast wélke
+  // veldgroepen zijn geïnjecteerd (alleen metadata, geen inhoud) + de peildatum.
+  // Verandert niets aan retrieval: extra context, geen bron-filter.
+  organisatieprofiel?: "actief" | "geen-profiel";
+  organisatieprofiel_aspecten?: {
+    organisatietype: boolean;
+    uitvoerende_partijen: boolean;
+    omvang: boolean;
+    kernfeiten: boolean;
+    missie: boolean;
+    visie: boolean;
+    strategische_speerpunten: boolean;
+    risicohouding: boolean;
+    peildatum: string | null;
+  };
 }
 
 // Platte rij zoals public.zoek_chunks(...) die teruggeeft (zie migratie
