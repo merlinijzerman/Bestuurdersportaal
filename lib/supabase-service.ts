@@ -1,10 +1,12 @@
 // ============================================================================
 //  Generieke service-role Supabase-client — SERVER-ONLY, RLS-BYPASS.
 // ----------------------------------------------------------------------------
-//  Voor server-side schrijfpaden naar tabellen die BEWUST geen anon/auth-policy
-//  hebben en niet tenant-gebonden zijn. Eerste gebruiker: /api/contact, dat in
-//  `contact_aanvragen` insert (RLS aan, deny-by-default; de browser schrijft
+//  Voor server-side lees-/schrijfpaden naar tabellen die BEWUST geen anon/auth-
+//  policy hebben en niet tenant-gebonden zijn. Eerste gebruiker: /api/contact, dat
+//  in `contact_aanvragen` insert (RLS aan, deny-by-default; de browser schrijft
 //  nooit direct — zie migratie 2026_06_29_contact_aanvragen.sql, FO REQ-PV-042).
+//  Ook gebruikt als LEESpad: lib/tenant-domains.ts leest de globale host→fonds-
+//  mapping `tenant_domains` (deny-by-default, T1.2/besluit 0040 B4).
 //
 //  ⚠️ Net als lib/supabase-platform.ts raakt dit bestand de service-role-key en
 //  draait het uitsluitend server-side (`import "server-only"` laat een client-
