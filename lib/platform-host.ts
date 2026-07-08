@@ -66,8 +66,9 @@ export const MARKETING_HOME_PAD = "/home";
 export type Surface = "marketing" | "app" | "platform";
 
 /** Normaliseer een host: poort strippen, lowercase, leidende `www.` weg, zodat
- *  apex en `www.apex` dezelfde marketing-surface zijn. */
-function normaliseerHost(host: string | null | undefined): string | null {
+ *  apex en `www.apex` dezelfde marketing-surface zijn. Geëxporteerd zodat de
+ *  tenant-resolver (lib/tenant-host.ts) exact hetzelfde contract hergebruikt. */
+export function normaliseerHost(host: string | null | undefined): string | null {
   if (!host) return null;
   let h = host.split(":")[0].trim().toLowerCase();
   if (h.startsWith("www.")) h = h.slice(4);

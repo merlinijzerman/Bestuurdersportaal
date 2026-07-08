@@ -8,7 +8,7 @@
 | Beperking | Toelichting | Status |
 |---|---|---|
 | **Klantbeeld draait op 100% dummydata** | `lib/klantbeeld-data.ts` levert deterministische demo-cijfers (Wtp-cohorten, werkgevers); geen koppeling met een uitvoerder | Bewust — demo |
-| Eén demo-fonds | Multi-tenant-fundament gebouwd, maar geen tweede echte tenant beproefd; her-introductie-gate (decision 0026) vóór fonds 2 | Aanname/Te valideren |
+| Eén demo-fonds | Multi-tenant-fundament gebouwd, maar geen tweede echte tenant beproefd. Het tenant-model is inmiddels vastgelegd (decision 0040: bridge-ready pool standaard, dedicated isolatie premium) met een uitvoeringspad (T-serie); onboarding fonds 2 pas na de P0-go/no-go (gate G2) incl. her-introductie-gate 0026 | Aanname/Te valideren — model + pad vastgelegd (0040) |
 | Geen e-mail naar bestuurders | Alleen in-app notificaties; eigenaars/verantwoordelijken als vrije tekst (geen FK) blokkeert gerichte notificaties | Open |
 | Notulen half-automatisch | Regelgebaseerde segmentatie; koppeling aan afgeronde vergaderingen beperkt | Open |
 | Procedure-templates hardcoded | Nieuwe template = code-deploy; registry alleen Ontworpen (decision 0002) | Open |
@@ -69,7 +69,7 @@ Geprioriteerd; 1–8 zijn randvoorwaardelijk voor een pilot met een echte klant,
 6. **Mailgun-productie of Resend-besluit** — geverifieerd domein; sandbox-beperking opheffen.
 7. **Operationele backstops**: Anthropic spend-limiet, Vercel CVE-branch mergen, HSTS-preload, back-up-/restore-procedure vastleggen (nu Onbekend).
 8. **Monitoring**: Sentry-besluit (EU-residency + sub-verwerker-registratie) of gelijkwaardig alternatief; minimale alerting.
-9. **Her-introductie-gate decision 0026** (vier-ogen, zware platformhandelingen, tenantbeheer) vóór een tweede fonds.
+9. **P0-fundament T-serie (decision 0040)** vóór een tweede fonds: tenant-resolver, deterministische fondskoppeling (R1), server-side auditfonds (R2), RLS-hardening, RAG-tenantdiscipline, dataclassificatie, demo/productie-scheiding en de geformaliseerde her-introductie-gate 0026 — samengevat in gate G2.
 10. **Klantbeeld op echte data** — datakoppeling uitvoerder + verwerkersafspraken.
 11. **Eigenaars-FK + e-mailnotificaties** voor bestuurders.
 12. **Route B/C** (strikte CSP, pen-test, certificering) zodra een betalende klant in zicht is.

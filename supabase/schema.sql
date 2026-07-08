@@ -113,6 +113,23 @@ create table if not exists public.organisatie_profielen (
   aangemaakt_op            timestamptz not null default now()
 );
 
+-- ── 2b. Tenant-domains (host→fonds-mapping, besluit 0040 B4) ─────────────────
+-- Globale mappingtabel voor de server-side tenant-resolver. BEWUSTE GLOBALE /
+-- UITZONDERINGSTABEL: RLS aan, deny-by-default (GEEN policy) → alleen leesbaar
+-- via de service-role (T1.2). Defense-in-depth naast RLS, geen autorisatie.
+-- Pure resolver: lib/tenant-host.ts (bepaalFondsContext, fail-closed).
+create table if not exists public.tenant_domains (
+  id            uuid primary key default gen_random_uuid(),
+  host          text not null unique,   -- genormaliseerd: lowercase, geen poort, geen leidende www.
+  fonds_id      uuid not null references public.fondsen(id) on delete restrict,
+  actief        boolean not null default true,   -- actief=false → host geldt als onbekend
+  aangemaakt_op timestamptz not null default now()
+);
+create unique index if not exists tenant_domains_host_idx
+  on public.tenant_domains (host);
+-- RLS aan, deny-by-default: GEEN policy (bewuste globale tabel, RLS-hardening 0040).
+alter table public.tenant_domains enable row level security;
+
 -- ── 3. Documenten ──────────────────────────────────────────
 create table if not exists public.documenten (
   id            uuid primary key default uuid_generate_v4(),
