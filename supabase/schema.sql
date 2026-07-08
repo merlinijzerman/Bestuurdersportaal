@@ -56,15 +56,50 @@ create table if not exists public.profielen (
 -- partiële fout volledig terugrolt en een wijziging zonder auditregel onmogelijk
 -- is. RLS blijft onverkort gelden (geen DEFINER, geen service-role).
 
--- Automatisch profiel aanmaken bij registratie
+-- Automatisch profiel aanmaken bij registratie.
+-- Authoritatief in de migraties: 2026-06-23b (platform-skip-guard) +
+-- 2026-07-08 (R1, deterministische fondstoewijzing). Hier alleen documentatie.
+--  - Platform-back-office-accounts ({"platform": true}) krijgen bewust GEEN
+--    tenant-profiel.
+--  - Het fonds komt UITSLUITEND uit raw_user_meta_data.fonds_id (geen limit 1 /
+--    default-fonds). Ontbrekend/ongeldig/onbekend fonds → fail-closed exception
+--    (auth.users-insert rolt terug). Zie decisions/0044.
 create or replace function public.maak_profiel()
 returns trigger language plpgsql security definer as $$
+declare
+  v_fonds_tekst text;
+  v_fonds_id    uuid;
 begin
+  if coalesce(new.raw_user_meta_data->>'platform', '') = 'true' then
+    return new;
+  end if;
+
+  v_fonds_tekst := new.raw_user_meta_data->>'fonds_id';
+
+  if v_fonds_tekst is null or btrim(v_fonds_tekst) = '' then
+    raise exception
+      'maak_profiel: geen fonds_id in user-metadata (geen default/eerste-fonds). Zie decisions/0044.'
+      using errcode = 'check_violation';
+  end if;
+
+  begin
+    v_fonds_id := v_fonds_tekst::uuid;
+  exception
+    when others then
+      raise exception 'maak_profiel: fonds_id (%) is geen geldige UUID.', v_fonds_tekst
+        using errcode = 'check_violation';
+  end;
+
+  if not exists (select 1 from public.fondsen f where f.id = v_fonds_id) then
+    raise exception 'maak_profiel: fonds_id % bestaat niet in public.fondsen.', v_fonds_id
+      using errcode = 'foreign_key_violation';
+  end if;
+
   insert into public.profielen (id, naam, fonds_id)
   values (
     new.id,
     coalesce(new.raw_user_meta_data->>'naam', new.email),
-    (select id from public.fondsen limit 1)
+    v_fonds_id
   );
   return new;
 end;
@@ -73,7 +108,7 @@ $$;
 drop trigger if exists bij_registratie on auth.users;
 create trigger bij_registratie
   after insert on auth.users
-  for each row execute procedure public.maak_profiel();
+  for each row execute function public.maak_profiel();
 
 -- ── 2b. Organisatieprofiel ─────────────────────────────────
 -- Generiek, bestuurlijk-licht contextprofiel per organisatie (1-op-1 met
