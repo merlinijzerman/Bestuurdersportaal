@@ -94,6 +94,7 @@ Er is op dit moment **geen testframework** in de repo; verificatie loopt via `ts
 - **AI-chat:** `app/api/chat/route.ts`.
 - **Migraties (bron van waarheid voor schema):** `supabase/migrations/`.
 - **Security-status:** `SECURITY-ROUTE-A-PLAN.md`, `SECURITY-ROUTE-A-IMPLEMENTATIE.md`, `lib/api-errors.ts`.
+- **RLS-controlekader + wijzigingsproces (T3):** `T3-RLS-CONTROLEKADER.md` (policy-matrix, §14-checklist, service-role-inventaris, testkader). Elke nieuwe tenant-policy krijgt een `WITH CHECK`; de structurele test `supabase/checks/2026_07_08_t3_cross_tenant.sql` faalt anders.
 
 ## Niet doen zonder expliciet voorstel
 

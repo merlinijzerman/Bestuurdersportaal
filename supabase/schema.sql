@@ -2,6 +2,22 @@
 --  Bestuurdersportaal — Supabase Database Schema
 --  Plak dit in: Supabase Dashboard → SQL Editor → Run
 -- ============================================================
+--  ⚠️ DIT BESTAND IS DOCUMENTATIE EN LOOPT ACHTER (zie CLAUDE.md). De
+--  migraties in supabase/migrations/ zijn authoritatief. Niet alle latere
+--  tabellen/policies staan hier (o.a. decision_objects, catalogus, platform_*,
+--  tenant_domains). Verifieer altijd tegen de migraties.
+--
+--  T3 RLS-HARDENING (2026-07-08, besluit 0040 / beslisnotitie v0.4 §14):
+--   • Elke for-all/for-update schrijf-policy heeft nu een gespiegelde WITH CHECK,
+--     zodat de schrijfkant fail-closed is (geen cross-tenant fonds_id-injectie).
+--     Bron: migratie 2026_07_08_t3_rls_with_check.sql. De policies hieronder zijn
+--     bijgewerkt; policies buiten dit bestand zijn in dezelfde migratie gehard.
+--   • De audit-logtabellen governance_log, risico_log, procedure_log en
+--     agendapunt_log zijn append-only afgedwongen via before update/delete-
+--     triggers. Bron: migratie 2026_07_08_t3_append_only_logs.sql.
+--   • Bewust globale/hybride referentietabellen zijn gedocumenteerd via
+--     COMMENT ON TABLE. Bron: 2026_07_08_t3_globale_tabellen_register.sql.
+-- ============================================================
 
 -- Extensies
 create extension if not exists "uuid-ossp";
@@ -644,11 +660,11 @@ create policy "chunks write eigen fonds" on public.document_chunks
       fonds_id = (select fonds_id from public.profielen where id = auth.uid())
       and bibliotheek = 'fonds'));
 
--- Governance log: alleen eigen fonds
+-- Governance log: alleen eigen fonds (T3: WITH CHECK sluit schrijfkant, append-only via trigger)
 create policy "fonds log" on public.governance_log
-  for all using (
-    fonds_id = (select fonds_id from public.profielen where id = auth.uid())
-  );
+  for all
+  using (fonds_id = (select fonds_id from public.profielen where id = auth.uid()))
+  with check (fonds_id = (select fonds_id from public.profielen where id = auth.uid()));
 
 -- Gesprekken: alleen de auteur, binnen het eigen fonds (using + with check)
 alter table public.gesprekken enable row level security;
@@ -673,12 +689,19 @@ alter table public.agendapunten enable row level security;
 alter table public.agendapunt_inbreng enable row level security;
 
 create policy "fonds vergaderingen" on public.vergaderingen
-  for all using (
-    fonds_id = (select fonds_id from public.profielen where id = auth.uid())
-  );
+  for all
+  using (fonds_id = (select fonds_id from public.profielen where id = auth.uid()))
+  with check (fonds_id = (select fonds_id from public.profielen where id = auth.uid()));
 
 create policy "fonds agendapunten" on public.agendapunten
-  for all using (
+  for all
+  using (
+    vergadering_id in (
+      select id from public.vergaderingen where
+        fonds_id = (select fonds_id from public.profielen where id = auth.uid())
+    )
+  )
+  with check (
     vergadering_id in (
       select id from public.vergaderingen where
         fonds_id = (select fonds_id from public.profielen where id = auth.uid())
@@ -698,7 +721,9 @@ create policy "eigen inbreng schrijven" on public.agendapunt_inbreng
   for insert with check (gebruiker_id = auth.uid());
 
 create policy "eigen inbreng wijzigen" on public.agendapunt_inbreng
-  for update using (gebruiker_id = auth.uid());
+  for update
+  using (gebruiker_id = auth.uid())
+  with check (gebruiker_id = auth.uid());
 
 create policy "eigen inbreng verwijderen" on public.agendapunt_inbreng
   for delete using (gebruiker_id = auth.uid());
@@ -767,22 +792,37 @@ alter table public.risico_log enable row level security;
 
 drop policy if exists "fonds risicos" on public.risicos;
 create policy "fonds risicos" on public.risicos
-  for all using (
-    fonds_id = (select fonds_id from public.profielen where id = auth.uid())
-  );
+  for all
+  using (fonds_id = (select fonds_id from public.profielen where id = auth.uid()))
+  with check (fonds_id = (select fonds_id from public.profielen where id = auth.uid()));
 
 drop policy if exists "fonds maatregelen" on public.risico_maatregelen;
 create policy "fonds maatregelen" on public.risico_maatregelen
-  for all using (
+  for all
+  using (
+    risico_id in (
+      select id from public.risicos where
+        fonds_id = (select fonds_id from public.profielen where id = auth.uid())
+    )
+  )
+  with check (
     risico_id in (
       select id from public.risicos where
         fonds_id = (select fonds_id from public.profielen where id = auth.uid())
     )
   );
 
+-- risico_log: T3 WITH CHECK + append-only via before update/delete-trigger.
 drop policy if exists "fonds risico log" on public.risico_log;
 create policy "fonds risico log" on public.risico_log
-  for all using (
+  for all
+  using (
+    risico_id in (
+      select id from public.risicos where
+        fonds_id = (select fonds_id from public.profielen where id = auth.uid())
+    )
+  )
+  with check (
     risico_id in (
       select id from public.risicos where
         fonds_id = (select fonds_id from public.profielen where id = auth.uid())
@@ -948,13 +988,20 @@ alter table public.procedure_log enable row level security;
 
 drop policy if exists "fonds procedures" on public.procedures;
 create policy "fonds procedures" on public.procedures
-  for all using (
-    fonds_id = (select fonds_id from public.profielen where id = auth.uid())
-  );
+  for all
+  using (fonds_id = (select fonds_id from public.profielen where id = auth.uid()))
+  with check (fonds_id = (select fonds_id from public.profielen where id = auth.uid()));
 
 drop policy if exists "fonds proc eigenaars" on public.procedure_eigenaars;
 create policy "fonds proc eigenaars" on public.procedure_eigenaars
-  for all using (
+  for all
+  using (
+    procedure_id in (
+      select id from public.procedures where
+        fonds_id = (select fonds_id from public.profielen where id = auth.uid())
+    )
+  )
+  with check (
     procedure_id in (
       select id from public.procedures where
         fonds_id = (select fonds_id from public.profielen where id = auth.uid())
@@ -963,7 +1010,14 @@ create policy "fonds proc eigenaars" on public.procedure_eigenaars
 
 drop policy if exists "fonds proc stappen" on public.procedure_stappen;
 create policy "fonds proc stappen" on public.procedure_stappen
-  for all using (
+  for all
+  using (
+    procedure_id in (
+      select id from public.procedures where
+        fonds_id = (select fonds_id from public.profielen where id = auth.uid())
+    )
+  )
+  with check (
     procedure_id in (
       select id from public.procedures where
         fonds_id = (select fonds_id from public.profielen where id = auth.uid())
@@ -972,7 +1026,15 @@ create policy "fonds proc stappen" on public.procedure_stappen
 
 drop policy if exists "fonds proc checklist" on public.procedure_checklist;
 create policy "fonds proc checklist" on public.procedure_checklist
-  for all using (
+  for all
+  using (
+    stap_id in (
+      select s.id from public.procedure_stappen s
+      join public.procedures p on p.id = s.procedure_id
+      where p.fonds_id = (select fonds_id from public.profielen where id = auth.uid())
+    )
+  )
+  with check (
     stap_id in (
       select s.id from public.procedure_stappen s
       join public.procedures p on p.id = s.procedure_id
@@ -982,7 +1044,15 @@ create policy "fonds proc checklist" on public.procedure_checklist
 
 drop policy if exists "fonds proc bewijs" on public.procedure_bewijs;
 create policy "fonds proc bewijs" on public.procedure_bewijs
-  for all using (
+  for all
+  using (
+    stap_id in (
+      select s.id from public.procedure_stappen s
+      join public.procedures p on p.id = s.procedure_id
+      where p.fonds_id = (select fonds_id from public.profielen where id = auth.uid())
+    )
+  )
+  with check (
     stap_id in (
       select s.id from public.procedure_stappen s
       join public.procedures p on p.id = s.procedure_id
@@ -992,16 +1062,31 @@ create policy "fonds proc bewijs" on public.procedure_bewijs
 
 drop policy if exists "fonds proc besluiten" on public.procedure_besluiten;
 create policy "fonds proc besluiten" on public.procedure_besluiten
-  for all using (
+  for all
+  using (
+    procedure_id in (
+      select id from public.procedures where
+        fonds_id = (select fonds_id from public.profielen where id = auth.uid())
+    )
+  )
+  with check (
     procedure_id in (
       select id from public.procedures where
         fonds_id = (select fonds_id from public.profielen where id = auth.uid())
     )
   );
 
+-- procedure_log: T3 WITH CHECK + append-only via before update/delete-trigger.
 drop policy if exists "fonds proc log" on public.procedure_log;
 create policy "fonds proc log" on public.procedure_log
-  for all using (
+  for all
+  using (
+    procedure_id in (
+      select id from public.procedures where
+        fonds_id = (select fonds_id from public.profielen where id = auth.uid())
+    )
+  )
+  with check (
     procedure_id in (
       select id from public.procedures where
         fonds_id = (select fonds_id from public.profielen where id = auth.uid())
@@ -1049,7 +1134,9 @@ create policy "eigen notificaties select" on public.notificaties
 
 drop policy if exists "eigen notificaties update" on public.notificaties;
 create policy "eigen notificaties update" on public.notificaties
-  for update using (ontvanger_id = auth.uid());
+  for update
+  using (ontvanger_id = auth.uid())
+  with check (ontvanger_id = auth.uid());
 
 drop policy if exists "notificaties insert eigen fonds" on public.notificaties;
 create policy "notificaties insert eigen fonds" on public.notificaties

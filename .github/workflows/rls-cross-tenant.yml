@@ -1,0 +1,20 @@
+name: rls-cross-tenant
+
+# T3-controlekader (beslisnotitie v0.4 §14 punt 7): negatieve cross-tenant
+# RLS-tests. Gated op secret TEST_DATABASE_URL — zolang die niet is gezet, is de
+# job non-blocking (skip met exit 0). Volledige, altijd-blokkerende automatisering
+# tegen een ephemere Supabase-DB is T5-scope. Zet het secret op een wegwerpbare
+# test-branch-DB om de suite scherp te zetten.
+on:
+  push:
+  pull_request:
+
+jobs:
+  rls-cross-tenant:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cross-tenant RLS-suite (skip zonder TEST_DATABASE_URL)
+        env:
+          TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+        run: bash scripts/rls-cross-tenant-test.sh

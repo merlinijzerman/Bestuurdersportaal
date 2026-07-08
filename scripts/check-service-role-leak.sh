@@ -4,8 +4,9 @@
 # ----------------------------------------------------------------------------
 #  Statische guard die afdwingt dat de platform-service-role NOOIT in client- of
 #  tenant-code lekt. Drie regels:
-#   1. SUPABASE_SERVICE_ROLE_KEY mag alleen in de server-only platform-laag staan
-#      (lib/supabase-platform.ts + lib/platform-*.ts), nergens anders.
+#   1. SUPABASE_SERVICE_ROLE_KEY mag alleen in de server-only service-role-laag
+#      staan (lib/supabase-platform.ts + lib/platform-*.ts + lib/supabase-service.ts),
+#      nergens anders.
 #   2. lib/supabase-platform.ts (de enige service-role-client) MOET met
 #      `import "server-only"` beginnen.
 #   3. De tenant-surface app/(dashboard)/ en elk "use client"-bestand mogen NIET
@@ -22,7 +23,7 @@ melding() { echo "  LEK: $1"; fouten=$((fouten + 1)); }
 
 echo "[1/3] SUPABASE_SERVICE_ROLE_KEY alleen in de server-only platform-laag…"
 # Toegestane vindplaatsen: de service-role-client zelf en de platform-libs.
-toegestaan_regex='^(lib/supabase-platform\.ts|lib/platform-.*\.ts|scripts/.*)$'
+toegestaan_regex='^(lib/supabase-platform\.ts|lib/supabase-service\.ts|lib/platform-.*\.ts|scripts/.*)$'
 while IFS= read -r bestand; do
   [ -z "$bestand" ] && continue
   if ! [[ "$bestand" =~ $toegestaan_regex ]]; then
@@ -55,7 +56,7 @@ fi
 # trekken de service-role-client aan; geen ervan mag in een client-bundle landen.
 while IFS= read -r bestand; do
   [ -z "$bestand" ] && continue
-  if grep -qE "supabase-platform|@/lib/platform-(wrapper|audit|auth)" "$bestand"; then
+  if grep -qE "supabase-platform|supabase-service|@/lib/platform-(wrapper|audit|auth)" "$bestand"; then
     melding "client-component importeert platform-service-role-laag: $bestand"
   fi
 done < <(grep -rl --include='*.ts' --include='*.tsx' \
