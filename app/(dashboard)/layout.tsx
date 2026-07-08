@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { createServerSupabase } from "@/lib/supabase-server";
-import { haalFondsContext } from "@/lib/tenant-context";
+import { haalFondsContext, tenantEnforceAan } from "@/lib/tenant-context";
+import { beoordeelToegang, type ToegangsOordeel } from "@/lib/tenant-enforce";
 import DashboardShell from "@/components/DashboardShell";
 
 export default async function DashboardLayout({
@@ -32,18 +33,20 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
-  // ── T1.2: observerende host→fonds-resolutie (besluit 0040, B4) ────────────
-  // Bepaal de fondscontext server-side uit de request-host en log de uitkomst +
-  // een eventuele mismatch met het profiel-fonds. OBSERVEREND: nooit blokkeren.
-  // De fail-closed afdwinging + dekkende uitrol over alle entrypoints is T1.3;
-  // zolang tenant_domains nog niet geseed is voor de pilothosts is `onbekend`
-  // het verwachte, niet-blokkerende resultaat. Best-effort: logging mag het
-  // renderen van de layout nooit breken.
+  // ── T1.2/T1.3: host→fonds-resolutie + fail-closed afdwinging ──────────────
+  // Bepaal de fondscontext server-side uit de request-host, log de uitkomst +
+  // een eventuele mismatch (observe, besluit 0041) en dwing af als
+  // TENANT_ENFORCE=on (fail-closed, besluit 0042). De layout is het pagina-
+  // chokepoint voor de tenant-surface; API-routes hebben hun eigen enforce
+  // (T1.3). Observe blijft ook onder enforce staan. Best-effort voor de LOGGING:
+  // een logfout mag de render nooit breken. Het OORDEEL is echter reliable —
+  // faalt de resolutie hard, dan weigeren we onder enforce (fail-closed).
+  const sessieFondsId = profiel.fonds_id ?? null;
+  let oordeel: ToegangsOordeel = { toegestaan: true };
   try {
     const host = (await headers()).get("host");
     const resolutie = await haalFondsContext(host);
     const hostFondsId = resolutie.type === "gevonden" ? resolutie.fondsId : null;
-    const sessieFondsId = profiel.fonds_id ?? null;
     const mismatch = hostFondsId !== null && hostFondsId !== sessieFondsId;
     // Proportioneel loggen (besluit 0041): alleen de anomalieën — een onbekende
     // host of een host-fonds ≠ profiel-fonds. De happy path (gevonden + match)
@@ -57,12 +60,40 @@ export default async function DashboardLayout({
         sessieFondsId,
         mismatch,
         gebruikerId: user.id,
+        enforce: tenantEnforceAan(),
       });
     }
+    oordeel = beoordeelToegang({
+      resolutie,
+      sessieFondsId,
+      enforce: tenantEnforceAan(),
+    });
   } catch (e) {
     console.warn(
-      "[TENANT-RESOLVE] observerende resolutie faalde (niet-blokkerend)",
+      "[TENANT-RESOLVE] resolutie faalde",
       e instanceof Error ? e.message : e
+    );
+    // Fail-closed: een harde resolutiefout weigeren we alléén onder enforce.
+    if (tenantEnforceAan()) {
+      oordeel = { toegestaan: false, reden: "onbekende-host" };
+    }
+  }
+
+  // Fail-closed blokkade (besluit 0042): geen redirect (voorkomt een lus met de
+  // login-gate), maar een expliciete mismatch-pagina die de blokker benoemt —
+  // conform het UX-principe "maak vereisten en blokkers expliciet".
+  if (!oordeel.toegestaan) {
+    return (
+      <main className="min-h-screen flex items-center justify-center p-6">
+        <div className="max-w-md text-center space-y-3">
+          <h1 className="text-lg font-semibold">Geen toegang op dit adres</h1>
+          <p className="text-sm text-muted">
+            {oordeel.reden === "fonds-mismatch"
+              ? "Dit webadres hoort bij een ander fonds dan uw account. Log in via het adres van uw eigen fonds."
+              : "Dit webadres is niet gekoppeld aan een bekend fonds. Controleer of u het juiste adres van uw fonds gebruikt."}
+          </p>
+        </div>
+      </main>
     );
   }
 

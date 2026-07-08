@@ -129,6 +129,13 @@ create unique index if not exists tenant_domains_host_idx
   on public.tenant_domains (host);
 -- RLS aan, deny-by-default: GEEN policy (bewuste globale tabel, RLS-hardening 0040).
 alter table public.tenant_domains enable row level security;
+-- Seed (T1.3, besluit 0042): pilothost Horizon, via fondsen.slug i.p.v. UUID.
+-- Migratie 2026_07_08_tenant_domains_seed.sql. Fail-closed afdwinging staat achter
+-- env TENANT_ENFORCE=on (alleen productie, pas ná seed + observatie-gate).
+insert into public.tenant_domains (host, fonds_id, actief)
+select 'horizon.bestuurdersportaal.com', f.id, true
+from public.fondsen f where f.slug = 'horizon'
+on conflict (host) do nothing;
 
 -- ── 3. Documenten ──────────────────────────────────────────
 create table if not exists public.documenten (

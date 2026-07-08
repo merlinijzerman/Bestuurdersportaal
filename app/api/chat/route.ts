@@ -451,6 +451,9 @@ export async function POST(req: NextRequest) {
       messages?: ChatBericht[];
       // backwards-compat: één losse vraag
       vraag?: string;
+      // NB (T1.3, besluit 0042): de client mag dit veld nog meesturen voor
+      // backwards-compat, maar het wordt server-side GENEGEERD. De fonds-scope
+      // komt uitsluitend uit de sessie (profiel.fonds_id), nooit uit de body.
       fonds_id?: string;
       // Increment I-2 (FO §11a) — de zichtbare bron-as is vervangen door
       // automatische bronkeuze. De client stuurt geen bron-modus meer; alleen de
@@ -484,8 +487,6 @@ export async function POST(req: NextRequest) {
       // zónder strict-document gedrag.
       agendapunt_context?: { id?: string; titel?: string };
     };
-    const { fonds_id } = body;
-
     // Bouw geschiedenis-array. Backwards compat: als alleen `vraag` wordt
     // meegestuurd, behandelen we dat als one-shot conversatie.
     const messages: ChatBericht[] =
@@ -495,9 +496,9 @@ export async function POST(req: NextRequest) {
         ? [{ role: "user", content: body.vraag }]
         : [];
 
-    if (messages.length === 0 || !fonds_id) {
+    if (messages.length === 0) {
       return NextResponse.json(
-        { error: "messages of vraag, plus fonds_id zijn verplicht" },
+        { error: "messages of vraag is verplicht" },
         { status: 400 }
       );
     }
@@ -532,6 +533,17 @@ export async function POST(req: NextRequest) {
       .select("naam, rol, fonds_id, fondsen(naam)")
       .eq("id", user.id)
       .single();
+
+    // Fonds-scope komt UITSLUITEND uit de sessie (T1.3, besluit 0042). Nooit uit
+    // de request-body — dat was de laatste client-gestuurde fonds-filter. Zonder
+    // gekoppeld fonds is er geen tenant-context: fail-closed 403.
+    const fondsId = profiel?.fonds_id ?? null;
+    if (!fondsId) {
+      return NextResponse.json(
+        { error: "Geen fonds gekoppeld aan dit account" },
+        { status: 403 }
+      );
+    }
 
     const fondsenRel = profiel?.fondsen as
       | { naam: string }
@@ -884,7 +896,7 @@ export async function POST(req: NextRequest) {
       const { data: inst } = await supabase
         .from("fonds_instellingen")
         .select("hybride_zoeken")
-        .eq("fonds_id", fonds_id)
+        .eq("fonds_id", fondsId)
         .maybeSingle();
       if (inst) hybrideAan = inst.hybride_zoeken;
 
@@ -912,7 +924,7 @@ export async function POST(req: NextRequest) {
 
       const res = await zoekRelevanteChunksMetMeta(
         zoekVraag,
-        fonds_id,
+        fondsId,
         CHUNK_BUDGET,
         hybrideAan,
         scopeDocumentIds,
@@ -1422,7 +1434,7 @@ export async function POST(req: NextRequest) {
           await supabase.from("governance_log").insert({
             gebruiker_id: user.id,
             gebruiker_naam: profiel?.naam || user.email,
-            fonds_id,
+            fonds_id: fondsId,
             vraag,
             antwoord: zichtbaarAntwoord,
             bronnen,
