@@ -9,13 +9,14 @@
     "start": "next start",
     "lint": "next lint",
     "lint:colors": "node scripts/check-brand-hex.mjs",
+    "sanity": "for f in lib/*.sanity.ts; do echo \"› $f\"; npx tsx \"$f\" || exit 1; done",
     "prepare": "git config core.hooksPath scripts/hooks || true"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.49.4",
-    "@vercel/analytics": "^1.4.1",
+    "@vercel/analytics": "^1.6.1",
     "jszip": "^3.10.1",
     "mammoth": "^1.8.0",
     "next": "^15.5.0",
