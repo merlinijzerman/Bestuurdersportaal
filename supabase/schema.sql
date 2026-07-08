@@ -136,6 +136,13 @@ insert into public.tenant_domains (host, fonds_id, actief)
 select 'horizon.bestuurdersportaal.com', f.id, true
 from public.fondsen f where f.slug = 'horizon'
 on conflict (host) do nothing;
+-- Transitionele bridge (besluit 0043): de gedeelde app-host resolveert óók naar
+-- Horizon zolang single-tenant. Migratie 2026_07_08_tenant_domains_bridge_app_host.sql.
+-- VERWIJDEREN (rollback) vóór het onboarden van een tweede fonds.
+insert into public.tenant_domains (host, fonds_id, actief)
+select 'app.bestuurdersportaal.com', f.id, true
+from public.fondsen f where f.slug = 'horizon'
+on conflict (host) do nothing;
 
 -- ── 3. Documenten ──────────────────────────────────────────
 create table if not exists public.documenten (
