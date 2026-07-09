@@ -198,18 +198,40 @@ Elke wijziging aan tenant-tabellen of policies volgt:
 4. **Globaal = expliciet.** Wijkt een tabel bewust af van strikte fonds-isolatie, documenteer
    dat via `COMMENT ON TABLE` én in §5 hierboven en voeg 'm toe aan de `global_allow`-lijst in
    de structurele test.
-5. **Verifieer.** Draai `scripts/rls-cross-tenant-test.sh` tegen een test-DB en
-   `./node_modules/.bin/tsc --noEmit --skipLibCheck`. Werk `schema.sql` (documentatie) en
-   `HANDOVER.md` bij.
+5. **Verifieer — verplicht commando bij elk tenant-pad.** Draai de gebundelde §15-suite
+   `bash scripts/cross-tenant-ci.sh` (tsc + app-laag node:test T1–T14 + DB-laag T3/T4/T6/T7
+   onder échte RLS). Dit is HÉT verificatiecommando bij elke wijziging aan een host-/fonds-/
+   RLS-/audit-/retrieval-/storage-pad; één rood/groen. Voor de DB-laag: zet `TEST_DATABASE_URL`
+   naar een wegwerpbare test-DB (of draai lokaal een `supabase start`). Werk `schema.sql`
+   (documentatie) en `HANDOVER.md` bij.
 6. **Deploy** via GitHub Desktop (commit → push `main` → Vercel). Geen terminal-git commits.
 
 ---
 
 ## 8. Testkader (§14 punt 7 / §15)
 
-`supabase/checks/2026_07_08_t3_cross_tenant.sql`, gedraaid door
-`scripts/rls-cross-tenant-test.sh` (psql) en de non-blocking workflow
-`.github/workflows/rls-cross-tenant.yml` (gated op secret `TEST_DATABASE_URL`).
+**Sinds T5 (besluit 0046) is de volledige §15-matrix (T1–T14) gebundeld tot één blokkerende
+suite** achter `scripts/cross-tenant-ci.sh` en de workflow `.github/workflows/rls-cross-tenant.yml`
+(nu blokkerend: ephemere Supabase-CLI-DB via `supabase start`, `XTENANT_REQUIRE_DB=1` maakt een
+ontbrekende DB rood). De suite kent twee lagen:
+
+- **App-laag (`tests/cross-tenant/*.test.ts`, node:test + tsx).** Benoemde, 1-op-1 op §15
+  herleidbare tests over de bestaande pure functies (geen duplicatie — importeert `lib/*`):
+  **T1–T4** host→fonds-resolutie + fail-closed enforce (`tenant-host`/`tenant-enforce`),
+  **T5/T8** auditfonds server-side afgeleid (broninspectie via `lib/audit-fonds-guard.ts`, gedeeld
+  met `lib/audit-fonds.sanity.ts`), **T9/T10** platform-routing surface-isolatie (`platform-host`),
+  **T11–T14** RAG-fondsdiscipline (`lib/rag`). Elk scenario heeft óf een expliciete negatieve-
+  controle-test, óf een guard die aantoonbaar rood wordt op een lek (T5- en T10-negatieftests).
+- **DB-laag (psql, onder échte RLS).** T3 (write-isolatie) + T4 (retrieval T11–T14) + de nieuwe
+  **T6/T7** (`supabase/checks/2026_07_09_t5_export_storage.sql`): export-leesisolatie en
+  storage-download/-upload-grens op `storage.objects` (incl. B13 generiek read-only). De runner
+  `scripts/testdb-apply-migrations.sh` bouwt eerst het schema op (psql-apply in gesorteerde
+  volgorde; `_ROLLBACK.sql` en `checks/` uitgesloten — besluit 0046, want de repo-migratienamen
+  volgen niet het CLI-timestampformaat).
+
+Onderstaande DEEL 1/DEEL 2-beschrijving betreft de T3-SQL-suite
+`supabase/checks/2026_07_08_t3_cross_tenant.sql`, die via `scripts/rls-cross-tenant-test.sh`
+binnen de gebundelde suite draait.
 
 - **DEEL 1 — structureel (geen seed; harde gate, draait overal).** Faalt met `raise exception`
   zodra (1a) een schrijf-policy (`ALL`/`INSERT`/`UPDATE`) op een niet-globale tabel géén
@@ -240,9 +262,22 @@ bron), **T14** (bronstatus `uitgesloten` generiek evenmin), plus een positieve r
 DB-data de uitkomst niet vertroebelt. Elke `LEK:`/`FAALT`/`REGRESSIE` = non-zero psql-exit = rode CI.
 De app-laag guard is los getest in `lib/rag-fondsdiscipline.sanity.ts` (pure functies, geen DB).
 
-> **Grens met T5:** volledige, altijd-blokkerende automatisering tegen een ephemere Supabase-DB
-> (met auth/storage/pgvector) is T5-scope. Tot dan is de workflow non-blocking (skip zonder
-> `TEST_DATABASE_URL`); zet het secret op een wegwerpbare test-branch-DB om 'm scherp te zetten.
+**Negatieve controle per scenario (besluit 0046 §E).** Elk §15-scenario bewijst dat een
+geïntroduceerd lek de bijbehorende test ROOD maakt — nooit naar main gecommit:
+- App-laag: T5 en T10 dragen een expliciete negatieve-controle-test; de guard-gebaseerde
+  scenario's (T5/T8) tonen via `lib/audit-fonds-guard.ts` aan dat een `body.fonds_id`-lek als
+  auditbron gedetecteerd wordt. Verzwak een pure functie (bv. `beoordeelToegang` fail-open) →
+  de bijbehorende T-test faalt.
+- DB-laag: verwijder één `with check` → DEEL 1a of de T7-dekkingscheck faalt; verzwak een
+  tenant-/pad-predicaat → de bijbehorende cross-tenant insert/select slaagt en doet
+  `raise exception 'LEK: …'`. Elke `LEK:`/`FAALT`/`REGRESSIE` = non-zero exit = rode CI.
+
+> **T5 afgerond (was: T5-grens).** De in T3/T4 aangekondigde "altijd-blokkerende automatisering
+> tegen een ephemere Supabase-DB (auth/storage/pgvector)" is met T5 (besluit 0046) geleverd:
+> `.github/workflows/rls-cross-tenant.yml` is nu blokkerend via `supabase start` +
+> `XTENANT_REQUIRE_DB=1`. De optie-B-fideliteitsrun (nachtelijk, non-blocking, tegen een gehoste
+> test-DB) staat in `.github/workflows/nightly-fidelity.yml`. Branch-protection "required status
+> check" op main is een repo-adminactie buiten deze repo-files.
 
 ---
 

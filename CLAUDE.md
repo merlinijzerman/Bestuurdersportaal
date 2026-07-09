@@ -71,7 +71,9 @@ Doe geen harde juridische, actuariële, fiscale of toezichtclaims zonder bron in
 
 ## Tests
 
-Er is op dit moment **geen testframework** in de repo; verificatie loopt via `tsc --noEmit` + handmatige smoke-tests. Bij nieuwe businesslogica: voeg tests toe of motiveer expliciet waarom niet. Reken berekeningen waar mogelijk programmatisch na (zie de sanity-tests bij `lib/stemming.ts` als patroon). Geef prioriteit aan sanity-checks voor risicovolle logica: stemming, readiness/gating, procedurestatussen, audit-eventconstructie, permissie-/rolchecks, stuurinformatie-berekeningen en AI-validatiestatussen.
+Verificatie loopt primair via `tsc --noEmit` + de `lib/*.sanity.ts`-checks (pure functies, `npm run sanity`) + handmatige smoke-tests. Voor de cross-tenant-isolatie is er sinds T5 een **licht testframework** (`node:test` + `tsx`, geen extra runtime-dep): benoemde §15-tests in `tests/cross-tenant/*.test.ts`. Bij nieuwe businesslogica: voeg tests toe of motiveer expliciet waarom niet. Reken berekeningen waar mogelijk programmatisch na (zie de sanity-tests bij `lib/stemming.ts` als patroon). Geef prioriteit aan sanity-checks voor risicovolle logica: stemming, readiness/gating, procedurestatussen, audit-eventconstructie, permissie-/rolchecks, stuurinformatie-berekeningen en AI-validatiestatussen.
+
+**Verplicht bij elk tenant-pad (host/fonds/RLS/audit/retrieval/storage):** draai de gebundelde §15 cross-tenant suite — `bash scripts/cross-tenant-ci.sh` (tsc + app-laag T1–T14 + DB-laag T3/T4/T6/T7 onder échte RLS, één rood/groen). Dit is HÉT verificatiecommando en is blokkerend in CI (`.github/workflows/rls-cross-tenant.yml`, ephemere Supabase-DB). Voor de DB-laag lokaal: `supabase start` of een wegwerpbare `TEST_DATABASE_URL`. Zie `T3-RLS-CONTROLEKADER.md` §7–§8.
 
 ## Definition of Done
 

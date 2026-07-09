@@ -1,0 +1,48 @@
+name: nightly-fidelity
+
+# ============================================================================
+#  §15 cross-tenant suite — nightly FIDELITEIT (optie B, besluit 0046).
+# ----------------------------------------------------------------------------
+#  NIET-blokkerend fidelity-vangnet naast de blokkerende ephemere CI-run
+#  (rls-cross-tenant.yml, optie A). Draait dezelfde §15-suite tegen een echte,
+#  wegwerpbare GEHOSTE test-DB (secret TEST_DATABASE_URL) die dichter bij de
+#  productie-Supabase-config staat dan de CLI-stack. Zo surfacet drift die
+#  optie A niet ziet: config die alleen in het Supabase-dashboard leeft
+#  (auth-instellingen, extensies, storage-policies buiten de migraties).
+#
+#  Non-blocking bewust: een gehoste test-DB is deelbaar/traag/soms afwezig; hij
+#  mag geen PR blokkeren. De harde poort blijft optie A. Ontbreekt het secret,
+#  dan skipt de suite netjes (scripts/cross-tenant-ci.sh → geen DB → app-laag).
+#
+#  De DB-laag draait hier NIET-destructief: de gedrag-suites seeden en rollen
+#  terug (begin … rollback). Draai desondanks NOOIT tegen productie — het secret
+#  moet naar een aparte, wegwerpbare test-branch-DB wijzen.
+# ============================================================================
+on:
+  schedule:
+    - cron: "0 3 * * *" # elke nacht 03:00 UTC
+  workflow_dispatch: # handmatig aan te trappen
+
+jobs:
+  fidelity:
+    runs-on: ubuntu-latest
+    # Non-blocking: een falende fidelity-run mag geen merge tegenhouden.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Node opzetten
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Dependencies installeren
+        run: npm ci
+
+      - name: Volledige §15-suite tegen de gehoste test-DB
+        env:
+          TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+          # Bewust NIET XTENANT_REQUIRE_DB: ontbreekt het secret, dan draait
+          # alleen de app-laag en blijft de run groen (fidelity is optioneel).
+        run: bash scripts/cross-tenant-ci.sh

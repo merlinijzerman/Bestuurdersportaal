@@ -1,0 +1,58 @@
+# ============================================================================
+#  Supabase CLI-config voor de ephemere test-DB (increment T5, besluit 0046).
+# ----------------------------------------------------------------------------
+#  Deze config voedt UITSLUITEND de wegwerpbare CI-test-DB (optie A): de runner
+#  boot hiermee de stack (Postgres + auth + storage) en past daarna de migraties
+#  via psql toe (scripts/testdb-apply-migrations.sh — de repo-migratienamen
+#  volgen niet het 14-cijferige CLI-tijdstempelformaat, dus we omzeilen de
+#  CLI-migratietracker bewust; zie besluit 0046 → Gevolgen).
+#
+#  Versie-pin (besluit 0046, validatiepunt 1): het gehoste project draait
+#  Postgres major 14 en pgvector 0.8.0. `major_version = 14` houdt de test-DB
+#  representatief. Migreert het gehoste project later naar 15/17, dan MOET deze
+#  pin mee (regressierisico op het testfundament).
+#
+#  Dit bestand is GEEN productieconfig — de app deployt via Vercel op het
+#  gehoste Supabase-project, niet via deze CLI-stack.
+# ============================================================================
+
+project_id = "bestuurdersportaal"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+# Pin op het gehoste project (besluit 0046, validatiepunt 1). pgvector 0.8.0
+# wordt door de migraties aangetrokken (`create extension vector`); het PG14-
+# image levert die extensie. Bij een image-upgrade: verifieer de pgvector-versie.
+major_version = 14
+
+[db.pooler]
+enabled = false
+
+[storage]
+# Vereist voor T7 (storage-download-isolatie): de bucket `documenten` + de
+# storage.objects-policies worden door de migraties opgebouwd.
+enabled = true
+file_size_limit = "50MiB"
+
+[auth]
+# Vereist voor de self-seeding suites (T3 DEEL 2, T4, T6/T7): auth.users +
+# de trigger maak_profiel() maken de synthetische tenant-profielen.
+enabled = true
+site_url = "http://localhost:3000"
+
+[studio]
+enabled = false
+
+[analytics]
+enabled = false
+
+[edge_runtime]
+enabled = false

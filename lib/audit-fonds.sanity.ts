@@ -23,6 +23,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { controleerChatAuditFondsbron } from "./audit-fonds-guard";
 
 const hier = dirname(fileURLToPath(import.meta.url));
 const routePad = join(hier, "..", "app", "api", "chat", "route.ts");
@@ -35,40 +36,11 @@ function test(naam: string, fn: () => void) {
   console.log(`  ✓ ${naam}`);
 }
 
-// Regels zónder commentaar, zodat toelichtende comments (die "body.fonds_id"
-// mogen noemen) geen vals alarm geven.
-const codeRegels = bron
-  .split("\n")
-  .filter((r) => !r.trim().startsWith("//") && !r.trim().startsWith("*"));
-const code = codeRegels.join("\n");
-
-test("body-fonds_id wordt nergens gedereferenced (geen client-bron)", () => {
-  assert.ok(
-    !/\bbody\.fonds_id\b/.test(code) && !/\bbody\[["']fonds_id["']\]/.test(code),
-    "Regressie: app/api/chat/route.ts dereferencet weer body.fonds_id — het " +
-      "auditfonds mag UITSLUITEND uit profiel.fonds_id komen (R2, besluit 0042)."
-  );
-});
-
-test("fondsId wordt server-side afgeleid uit profiel.fonds_id", () => {
-  assert.ok(
-    /const\s+fondsId\s*=\s*profiel\?\.fonds_id/.test(code),
-    "Kon de server-side afleiding `const fondsId = profiel?.fonds_id …` niet " +
-      "vinden — is de auditbron gewijzigd?"
-  );
-});
-
-test("governance_log-insert gebruikt de server-side fondsId", () => {
-  // Zoek het governance_log.insert({...})-blok en bevestig dat het
-  // `fonds_id: fondsId` bevat (niet een body-waarde of een ander veld).
-  const idx = code.indexOf('.from("governance_log").insert(');
-  assert.ok(idx !== -1, "governance_log-insert niet gevonden in de route.");
-  const blok = code.slice(idx, idx + 400);
-  assert.ok(
-    /fonds_id:\s*fondsId\b/.test(blok),
-    "Regressie: de governance_log-insert gebruikt niet langer `fonds_id: fondsId` " +
-      "(de server-side afgeleide waarde)."
-  );
+// De inspectielogica leeft in lib/audit-fonds-guard.ts (gedeeld met de
+// §15-matrixsuite, scenario's T5 + T8) — hier alleen de sanity-wrapper.
+test("auditfonds-bron-guard: R2-invariant intact (T5 body-negeer + T8 server-afleiding)", () => {
+  const fouten = controleerChatAuditFondsbron(bron);
+  assert.equal(fouten.length, 0, fouten.join("\n"));
 });
 
 console.log(`\n${n} sanity-tests geslaagd.`);

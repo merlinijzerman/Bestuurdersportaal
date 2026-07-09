@@ -1,20 +1,58 @@
 name: rls-cross-tenant
 
-# T3-controlekader (beslisnotitie v0.4 §14 punt 7): negatieve cross-tenant
-# RLS-tests. Gated op secret TEST_DATABASE_URL — zolang die niet is gezet, is de
-# job non-blocking (skip met exit 0). Volledige, altijd-blokkerende automatisering
-# tegen een ephemere Supabase-DB is T5-scope. Zet het secret op een wegwerpbare
-# test-branch-DB om de suite scherp te zetten.
+# ============================================================================
+#  §15 cross-tenant testsuite — BLOKKEREND (increment T5, besluit 0046).
+# ----------------------------------------------------------------------------
+#  Draait de volledige §15-matrix (T1–T14) tegen een EPHEMERE Supabase-DB
+#  (optie A): de CLI boot Postgres + auth + storage, scripts/cross-tenant-ci.sh
+#  past de migraties toe en draait de app-laag (node:test) én de DB-laag (psql:
+#  T3/T4/T6/T7). Elke overtreding → non-zero exit → deze job faalt.
+#
+#  Blokkerend: XTENANT_REQUIRE_DB=1 zorgt dat een ontbrekende DB de suite ROOD
+#  maakt (geen stille skip meer). Zet deze job als "required status check" op de
+#  branch-protection van main (repo-adminactie, buiten deze repo-file).
+#
+#  Nooit tegen productie: de suite draait uitsluitend tegen de wegwerp-CLI-DB;
+#  de gedrag-suites seeden en rollen terug (begin … rollback).
+# ============================================================================
 on:
   push:
   pull_request:
 
 jobs:
-  rls-cross-tenant:
+  cross-tenant:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Cross-tenant RLS-suite (skip zonder TEST_DATABASE_URL)
+
+      - name: Node opzetten
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Dependencies installeren
+        run: npm ci
+
+      # Supabase CLI gepind (besluit 0046). LET OP: dit MOET een bestaande
+      # release-tag zijn (https://github.com/supabase/cli/releases). Bij een
+      # bump: verifieer dat major_version=14 + pgvector 0.8.0 representatief blijft.
+      - name: Supabase CLI opzetten (gepind)
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.30.4
+
+      - name: Ephemere Supabase-stack starten (Postgres + auth + storage)
+        run: supabase start
+
+      - name: Volledige §15 cross-tenant suite (app-laag + DB-laag)
         env:
-          TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
-        run: bash scripts/rls-cross-tenant-test.sh
+          # De lokale CLI-DB (config.toml → [db] port 54322). Wegwerpbaar.
+          TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          # Blokkerend: geen DB → rood (geen stille skip).
+          XTENANT_REQUIRE_DB: "1"
+        run: bash scripts/cross-tenant-ci.sh
+
+      - name: Supabase-stack stoppen
+        if: always()
+        run: supabase stop || true
