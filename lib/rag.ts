@@ -46,6 +46,65 @@ function filterZwakkeGeneriek(
   );
 }
 
+// ── Increment T4: expliciete fonds-discipline op het retrievalpad ───────────
+// Defense-in-depth NÁÁST RLS én de RPC-fondsfilter (p_fonds_id). Dropt elke chunk
+// die de fondsgrens of de published-generiek-regel schendt, en telt de droppings
+// zodat een (theoretisch) lek zichtbaar wordt in retrieval_meta. Wordt op ELK
+// retrievalpad toegepast — óók de PostgREST-fallback en haalDocumentChunks, die
+// niet door de RPC (met p_fonds_id) lopen. Zie decisions/0045.
+//
+// Vereist dat het pad `documenten.fonds_id` (en voor regel 2 documentstatus/
+// bronstatus) heeft geselecteerd; alle aanroepers hieronder doen dat.
+export function isPublishedGeneriek(chunk: DocumentChunk): boolean {
+  const d = chunk.documenten;
+  if (d.bibliotheek !== "generiek") return true; // niet-generiek: regel n.v.t.
+  const status = d.documentstatus ?? null;
+  const bronstatus = d.bronstatus ?? "actief"; // NULL ≡ actief (spiegelt de RPC)
+  return status === "van_kracht" && bronstatus === "actief";
+}
+
+// Regels:
+//   1. Fondsgrens (alleen bij een gezette fondsFilter): een niet-generieke chunk
+//      mag alleen mee als hij exact het eigen fonds draagt
+//      (documenten.fonds_id === fondsFilter). Een afwijkend/ontbrekend fonds_id
+//      op een fondschunk = cross-tenant en wordt gedropt (kan alleen als zowel RLS
+//      als de RPC-filter faalden).
+//   2. Published-only generiek (T13/T14): een generieke chunk mag alleen mee als
+//      hij published is (van_kracht + actief). Spiegelt de RPC-gate en borgt de
+//      fallbackpaden die de RPC niet raken.
+// fondsFilter=null → regel 1 wordt overgeslagen (RLS-only, geen regressie);
+// regel 2 blijft gelden (published-only is fonds-onafhankelijk).
+export function handhaafFondsdiscipline(
+  chunks: DocumentChunk[],
+  fondsFilter: string | null
+): { chunks: DocumentChunk[]; gedropt: number } {
+  const behouden = chunks.filter((c) => {
+    const generiek = c.documenten.bibliotheek === "generiek";
+    if (fondsFilter && !generiek && (c.documenten.fonds_id ?? null) !== fondsFilter) {
+      return false; // regel 1 — cross-tenant
+    }
+    if (generiek && !isPublishedGeneriek(c)) {
+      return false; // regel 2 — niet-published generiek
+    }
+    return true;
+  });
+  return { chunks: behouden, gedropt: chunks.length - behouden.length };
+}
+
+// Diagnostiek-velden voor retrieval_meta die bij ELKE retrieval-retour horen:
+// de toegepaste fondsfilter, de namespace-conventie en het aantal door de guard
+// gedropte chunks (>0 = signaal dat RLS+RPC iets doorlieten).
+function fondsMeta(
+  fondsFilter: string | null,
+  gedropt: number
+): Pick<RetrievalMeta, "toegepaste_fonds_filter" | "namespace_conventie" | "fondsdiscipline_gedropt"> {
+  return {
+    toegepaste_fonds_filter: fondsFilter,
+    namespace_conventie: "bibliotheek",
+    fondsdiscipline_gedropt: gedropt,
+  };
+}
+
 // Past de bronsoort-weging toe (indien een profiel is gezet) en knipt dan terug
 // tot de prompt-set. De weging gebeurt VÓÓR selecteerChunks — dat behoudt de
 // inkomende volgorde, dus de boost werkt door in welke chunks de top-N halen.
@@ -112,6 +171,10 @@ export interface DocumentChunk {
     bron: string;
     bibliotheek: string;
     opslag_pad: string | null;
+    // Increment T4 — het fonds van de bron (NULL = generiek/gedeeld). Uit de RPC-
+    // return (d.fonds_id) én uit de fallback-select; voedt de expliciete fonds-
+    // guard (handhaafFondsdiscipline) en de bronversie-audit in retrieval_meta.
+    fonds_id?: string | null;
     // Increment G — gedenormaliseerde bronkaart-/weging-/auditvelden (optioneel;
     // de fallback-cascade levert ze niet, de RPC's wel).
     documentstatus?: string | null;
@@ -142,6 +205,31 @@ export interface RetrievalMeta {
   opgehaald: number;
   geselecteerd: number;
   chunks: { id: string; document_id: string; rang: number | null }[];
+  // ── Increment T4 — expliciete fonds-discipline (defense-in-depth náást RLS) ──
+  // De server-side geresolveerde fondsfilter die op DIT pad is toegepast (null =
+  // RLS-only, geen expliciete filter meegegeven). `namespace_conventie` legt vast
+  // dat de generiek/fonds-scheiding via de kolom `bibliotheek` loopt (niet een
+  // aparte fonds_id op de chunk). `fondsdiscipline_gedropt` = hoeveel chunks de
+  // app-guard (handhaafFondsdiscipline) alsnog wegfilterde ná RLS+RPC; >0 is een
+  // signaal dat een van de onderliggende lagen iets doorliet (zie decisions/0045).
+  toegepaste_fonds_filter?: string | null;
+  namespace_conventie?: "bibliotheek";
+  fondsdiscipline_gedropt?: number;
+  // True = de request leverde een fonds_id/namespace mee die afweek van de server-
+  // side context; deze is genegeerd (T1.3). Puur signaal voor het auditspoor.
+  body_fonds_id_genegeerd?: boolean;
+  // Minimale bronversie-audit (§werkopdracht T4 #4): per geselecteerde bron de
+  // herkomst-/versievelden, zodat achteraf herleidbaar is wélke fonds-namespace en
+  // welke bron-/documentstatus in de prompt belandden. Append-only in retrieval_meta.
+  bronversie_audit?: {
+    document_id: string;
+    bron: string;
+    bibliotheek: string;
+    fonds_id: string | null;
+    documentstatus: string | null;
+    bronstatus: string | null;
+    documentdatum: string | null;
+  }[];
   // Hybride retrieval (Fase C). Of de query-embedding lukte en, bij terugval op
   // FTS, waarom — zodat een stille terugval zichtbaar is in het auditspoor.
   embedding_query_success?: boolean;
@@ -271,6 +359,8 @@ interface ZoekChunkRij {
   bibliotheek: string;
   opslag_pad: string | null;
   rang: number;
+  // Increment T4 — fonds van de bron (NULL = generiek). Alleen de T4-RPC levert dit.
+  fonds_id?: string | null;
   // Increment G — denorm-velden uit de uitgebreide RPC-return.
   documentstatus?: string | null;
   bronstatus?: string | null;
@@ -318,6 +408,7 @@ function rijNaarChunk(r: ZoekChunkRij): DocumentChunk {
       bron: r.bron,
       bibliotheek: r.bibliotheek,
       opslag_pad: r.opslag_pad,
+      fonds_id: r.fonds_id ?? null,
       documentstatus: r.documentstatus ?? null,
       bronstatus: r.bronstatus ?? null,
       documentdatum: r.documentdatum ?? null,
@@ -345,6 +436,16 @@ function bouwMeta(
       document_id: c.document_id,
       rang: c.rang ?? null,
     })),
+    // T4 — minimale bronversie-audit over de daadwerkelijk geselecteerde chunks.
+    bronversie_audit: geselecteerd.map((c) => ({
+      document_id: c.document_id,
+      bron: c.documenten.bron,
+      bibliotheek: c.documenten.bibliotheek,
+      fonds_id: c.documenten.fonds_id ?? null,
+      documentstatus: c.documenten.documentstatus ?? null,
+      bronstatus: c.documenten.bronstatus ?? null,
+      documentdatum: c.documenten.documentdatum ?? null,
+    })),
   };
 }
 
@@ -355,7 +456,7 @@ function bouwMeta(
 // terugval zichtbaar is in het auditspoor. Tenant-isolatie loopt overal via RLS.
 export async function zoekRelevanteChunksMetMeta(
   vraag: string,
-  _fondsId: string,
+  fondsId: string,
   maxResults = 8,
   hybrideAan?: boolean,
   documentIds?: string[],
@@ -366,11 +467,17 @@ export async function zoekRelevanteChunksMetMeta(
   // zodat reformulatie de scope nooit kan wijzigen.
   const scope = documentIds && documentIds.length > 0 ? documentIds : null;
 
+  // Increment T4 — de expliciete fondsfilter. De aanroeper geeft de server-side
+  // geresolveerde fonds_id door (uit profiel via RLS; body wordt genegeerd). Leeg/
+  // afwezig → null = RLS-only (geen expliciete filter). Deze waarde gaat als
+  // p_fonds_id naar de RPC én voedt de app-guard (handhaafFondsdiscipline).
+  const fondsFilter = fondsId && fondsId.length > 0 ? fondsId : null;
+
   // Per-aanroep instelling (uit het portaal) is leidend; valt terug op de
   // env-default HYBRID_SEARCH als er geen waarde is meegegeven.
   const hybride = hybrideAan ?? HYBRID_ENABLED;
   if (!hybride) {
-    return zoekViaFTS(vraag, maxResults, scope, filters);
+    return zoekViaFTS(vraag, maxResults, scope, filters, fondsFilter);
   }
 
   const supabase = await createServerSupabase();
@@ -383,7 +490,7 @@ export async function zoekRelevanteChunksMetMeta(
     vector = await embedTekst(vraag);
   } catch (e) {
     console.error("Hybride: query-embedding mislukt, terugval op FTS:", e);
-    const r = await zoekViaFTS(vraag, maxResults, scope, filters);
+    const r = await zoekViaFTS(vraag, maxResults, scope, filters, fondsFilter);
     return {
       chunks: r.chunks,
       meta: { ...r.meta, embedding_query_success: false, fallback_reason: "embedding_error" },
@@ -393,29 +500,35 @@ export async function zoekRelevanteChunksMetMeta(
   // RRF-RPC: FTS + vector versmolten (SECURITY INVOKER → RLS blijft gelden).
   // p_document_ids = scope vóór de fusion (null = hele bibliotheek).
   // Increment G — retrieval-filters worden vóór de fusion in beide armen toegepast.
+  // Increment T4 — p_fonds_id dwingt de fondsgrens al in de RPC af (kan niet omzeild).
   const { data, error } = await supabase.rpc("zoek_chunks_hybride", {
     p_query: vraag,
     p_embedding: naarVectorLiteral(vector),
     p_limit: overFetch,
     p_document_ids: scope,
     ...rpcFilterParams(filters),
+    p_fonds_id: fondsFilter,
   });
 
   if (!error && Array.isArray(data) && data.length > 0) {
     const gerangschikt = (data as ZoekChunkRij[]).map(rijNaarChunk);
-    const geselecteerd = weegEnSelecteer(gerangschikt, filters, maxResults, maxPerDoc);
+    // T4 — app-guard náást de RPC: dropt (theoretische) cross-tenant/niet-published
+    // lekken en telt ze, zodat een falen van RLS+RPC zichtbaar wordt in de meta.
+    const bewaakt = handhaafFondsdiscipline(gerangschikt, fondsFilter);
+    const geselecteerd = weegEnSelecteer(bewaakt.chunks, filters, maxResults, maxPerDoc);
     return {
       chunks: geselecteerd,
       meta: {
-        ...bouwMeta("hybride_rrf", gerangschikt.length, geselecteerd),
+        ...bouwMeta("hybride_rrf", bewaakt.chunks.length, geselecteerd),
         embedding_query_success: true,
         filters: metaFilters(filters),
+        ...fondsMeta(fondsFilter, bewaakt.gedropt),
       },
     };
   }
 
   // RPC faalde of leeg → terugval op FTS (embedding lukte wél).
-  const r = await zoekViaFTS(vraag, maxResults, scope, filters);
+  const r = await zoekViaFTS(vraag, maxResults, scope, filters, fondsFilter);
   return {
     chunks: r.chunks,
     meta: {
@@ -438,7 +551,10 @@ async function zoekViaFTS(
   vraag: string,
   maxResults = 8,
   scope: string[] | null = null,
-  filters?: RetrievalFilters
+  filters?: RetrievalFilters,
+  // Increment T4 — expliciete fondsfilter (server-side geresolveerd). Voedt zowel
+  // p_fonds_id op de RPC als de app-guard op ELK fallbackpad (die de RPC niet raakt).
+  fondsFilter: string | null = null
 ): Promise<{ chunks: DocumentChunk[]; meta: RetrievalMeta }> {
   const supabase = await createServerSupabase();
   const overFetch = Math.max(maxResults * 3, 20);
@@ -448,19 +564,26 @@ async function zoekViaFTS(
   // Poging 1: gerangschikte RPC (Dutch FTS + ts_rank_cd).
   // p_document_ids = scope vóór ranking (null = hele bibliotheek).
   // Increment G — retrieval-filters vóór ranking in de RPC.
+  // Increment T4 — p_fonds_id dwingt de fondsgrens al in de RPC af.
   const { data, error } = await supabase.rpc("zoek_chunks", {
     p_query: vraag,
     p_limit: overFetch,
     p_document_ids: scope,
     ...rpcFilterParams(filters),
+    p_fonds_id: fondsFilter,
   });
 
   if (!error && Array.isArray(data) && data.length > 0) {
     const gerangschikt = (data as ZoekChunkRij[]).map(rijNaarChunk);
-    const geselecteerd = weegEnSelecteer(gerangschikt, filters, maxResults, maxPerDoc);
+    const bewaakt = handhaafFondsdiscipline(gerangschikt, fondsFilter);
+    const geselecteerd = weegEnSelecteer(bewaakt.chunks, filters, maxResults, maxPerDoc);
     return {
       chunks: geselecteerd,
-      meta: { ...bouwMeta("fts_dutch_ranked", gerangschikt.length, geselecteerd), filters: fMeta },
+      meta: {
+        ...bouwMeta("fts_dutch_ranked", bewaakt.chunks.length, geselecteerd),
+        filters: fMeta,
+        ...fondsMeta(fondsFilter, bewaakt.gedropt),
+      },
     };
   }
 
@@ -472,6 +595,10 @@ async function zoekViaFTS(
     .filter((w) => w.length > 2)
     .join(" ");
 
+  // Increment T4 — óók de fallback-selects leveren nu fonds_id + document-/bronstatus
+  // (uit de documenten-join; `documentstatus:status` = PostgREST-alias naar de
+  // documenten-kolom `status`), zodat handhaafFondsdiscipline op dit RLS-only pad
+  // de fondsgrens én de published-generiek-regel kan afdwingen.
   const selectQuery = `
     id,
     document_id,
@@ -479,7 +606,7 @@ async function zoekViaFTS(
     pagina,
     paragraaf,
     chunk_index,
-    documenten!inner(titel, bron, bibliotheek, opslag_pad, normgewicht)
+    documenten!inner(titel, bron, bibliotheek, opslag_pad, normgewicht, fonds_id, documentstatus:status, bronstatus)
   `;
 
   if (zoekterm.length > 0) {
@@ -509,10 +636,15 @@ async function zoekViaFTS(
 
     if (!error2 && data2 && data2.length > 0) {
       const gevonden = data2 as unknown as DocumentChunk[];
-      const geselecteerd = weegEnSelecteer(gevonden, filters, maxResults, maxPerDoc);
+      const bewaakt = handhaafFondsdiscipline(gevonden, fondsFilter);
+      const geselecteerd = weegEnSelecteer(bewaakt.chunks, filters, maxResults, maxPerDoc);
       return {
         chunks: geselecteerd,
-        meta: { ...bouwMeta("fts_plain", gevonden.length, geselecteerd), filters: fMeta },
+        meta: {
+          ...bouwMeta("fts_plain", bewaakt.chunks.length, geselecteerd),
+          filters: fMeta,
+          ...fondsMeta(fondsFilter, bewaakt.gedropt),
+        },
       };
     }
   }
@@ -545,15 +677,23 @@ async function zoekViaFTS(
 
     if (data3 && data3.length > 0) {
       const gevonden = data3 as unknown as DocumentChunk[];
-      const geselecteerd = weegEnSelecteer(gevonden, filters, maxResults, maxPerDoc);
+      const bewaakt = handhaafFondsdiscipline(gevonden, fondsFilter);
+      const geselecteerd = weegEnSelecteer(bewaakt.chunks, filters, maxResults, maxPerDoc);
       return {
         chunks: geselecteerd,
-        meta: { ...bouwMeta("ilike", gevonden.length, geselecteerd), filters: fMeta },
+        meta: {
+          ...bouwMeta("ilike", bewaakt.chunks.length, geselecteerd),
+          filters: fMeta,
+          ...fondsMeta(fondsFilter, bewaakt.gedropt),
+        },
       };
     }
   }
 
-  return { chunks: [], meta: { ...bouwMeta("geen", 0, []), filters: fMeta } };
+  return {
+    chunks: [],
+    meta: { ...bouwMeta("geen", 0, []), filters: fMeta, ...fondsMeta(fondsFilter, 0) },
+  };
 }
 
 // Backwards-compatibele wrapper: geeft alleen de chunks terug.
@@ -655,8 +795,13 @@ export function maakContext(chunks: DocumentChunk[], startIndex = 0): {
 // en map-reduce). Géén ranking: bij een samenvatting/beoordeling wil je het
 // volledige document, niet de top-N. RLS blijft leidend (anon-client); de
 // scope-filter (`.in("document_id", …)`) is een AND bovenop de fonds-isolatie.
+// Increment T4 — `fondsId` (server-side geresolveerd; body genegeerd) dwingt de
+// fonds-discipline ook op dit dekkingsbrede pad af. Dit pad loopt NIET via de RPC
+// (met p_fonds_id), dus de app-guard (handhaafFondsdiscipline) is hier de enige
+// expliciete laag náást RLS. De select levert daarom fonds_id + document-/bronstatus.
 export async function haalDocumentChunks(
-  documentIds: string[]
+  documentIds: string[],
+  fondsId: string | null = null
 ): Promise<DocumentChunk[]> {
   if (documentIds.length === 0) return [];
   const supabase = await createServerSupabase();
@@ -664,7 +809,7 @@ export async function haalDocumentChunks(
     .from("document_chunks")
     .select(
       `id, document_id, tekst, pagina, paragraaf, chunk_index,
-       documenten!inner(titel, bron, bibliotheek, opslag_pad)`
+       documenten!inner(titel, bron, bibliotheek, opslag_pad, fonds_id, documentstatus:status, bronstatus)`
     )
     .in("document_id", documentIds)
     .eq("documenten.actief", true)
@@ -676,7 +821,9 @@ export async function haalDocumentChunks(
     console.error("haalDocumentChunks fout:", error);
     return [];
   }
-  return data as unknown as DocumentChunk[];
+  const chunks = data as unknown as DocumentChunk[];
+  const fondsFilter = fondsId && fondsId.length > 0 ? fondsId : null;
+  return handhaafFondsdiscipline(chunks, fondsFilter).chunks;
 }
 
 // Increment D — verrijk opgehaalde chunks met de vergadering/agendapunt van hun

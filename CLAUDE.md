@@ -83,6 +83,7 @@ Er is op dit moment **geen testframework** in de repo; verificatie loopt via `ts
 - `tsc --noEmit --skipLibCheck` groen.
 - Bij een niet-triviale feature: ontwerpdoc (`*-ONTWERP.md`) opgesteld of bijgewerkt en de ontwerp-sync-check groen.
 - `HANDOVER.md` release-historie bijgewerkt; bij een besluit een decision-log-entry.
+- **Documentatiehaak (bron van waarheid = deze repo-markdown):** bij een **gate/mijlpaal** of een increment met architectuur-, data-, security- of tenant-impact wordt aansluitend de projectdocumentatie geactualiseerd volgens `00 Overzicht en status/release-template.md` (de `00–09`-markdown én de as-built Word-doc als momentopname). Bij een kleine release volstaat `HANDOVER.md`; de wekelijkse drift-check (`Scheduled/doc-drift-check`) signaleert wanneer een gate-actualisatie openstaat. Werk na een Word-doc-actualisatie de marker in `00 Overzicht en status/doc-actualisatie-log.md` bij.
 
 ## Waar te kijken
 

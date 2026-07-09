@@ -450,6 +450,15 @@ create index if not exists idx_chunks_document on public.document_chunks(documen
 -- VÓÓR ranking. Zie migratie 2026_06_10_document_scope.sql. De zustertfunctie
 -- public.zoek_chunks_hybride (FTS+vector via RRF) heeft dezelfde scope-param in
 -- beide armen — staat niet in dit documentatiebestand, zie die migratie.
+--
+-- NB (increment T4, migratie 2026_07_08_t4_retrieval_fondsfilter.sql — AUTHORITATIEF;
+-- dit documentatieblok loopt op dat punt achter): beide RPC's hebben een extra
+-- param `p_fonds_id uuid default null` (expliciete server-side fondsfilter, ADDITIEF
+-- náást RLS: `d.fonds_id = p_fonds_id OR bibliotheek='generiek'`), een published-only-
+-- gate voor generiek (`documentstatus='van_kracht' AND coalesce(bronstatus,'actief')
+-- ='actief'`, modus-onafhankelijk) en een extra return-kolom `fonds_id` (d.fonds_id;
+-- NULL = generiek/gedeeld). default null = huidig gedrag. Namespace-conventie =
+-- `bibliotheek`; zie decisions/0045.
 create or replace function public.zoek_chunks(
   p_query text,
   p_limit int default 20,

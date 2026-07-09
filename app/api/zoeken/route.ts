@@ -67,6 +67,23 @@ export async function GET(req: NextRequest) {
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
 
+    // Increment T4 — resolveer het fonds SERVER-SIDE (uit profiel via RLS), zodat
+    // de expliciete fondsfilter meegaat naar de retrieval. Fail-closed: zonder fonds
+    // geen retrieval (een profiel zonder fonds mag niets zien). De query-string kan
+    // dit niet beïnvloeden — er is geen fonds-parameter en RLS blijft leidend.
+    const { data: profiel } = await supabase
+      .from("profielen")
+      .select("fonds_id")
+      .eq("id", user.id)
+      .single();
+    const fondsId = profiel?.fonds_id ?? null;
+    if (!fondsId) {
+      return NextResponse.json(
+        { error: "Geen fonds gekoppeld aan dit profiel." },
+        { status: 403 }
+      );
+    }
+
     const sp = req.nextUrl.searchParams;
     const q = (sp.get("q") ?? "").trim();
     if (q.length < 2) {
@@ -88,7 +105,7 @@ export async function GET(req: NextRequest) {
     // Ruimere top-N dan de chat (een zoekpagina toont meer): 40 chunks.
     const { chunks, meta } = await zoekRelevanteChunksMetMeta(
       q,
-      "", // fonds-isolatie loopt via RLS; _fondsId wordt niet gebruikt
+      fondsId, // T4 — expliciete fondsfilter náást RLS (server-side geresolveerd)
       40,
       undefined,
       undefined,

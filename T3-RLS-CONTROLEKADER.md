@@ -92,8 +92,20 @@ Gesplitste of reeds-`with check`-policies: `documenten`, `document_chunks`, `ges
 | 7 | Negatieve cross-tenant tests per tenant-tabel in CI; lek laat test falen | ✅ | §8 |
 
 **Buiten T3-scope (coördineren, niet dupliceren):** audit-bron-code in route.ts = T2/R2;
-RAG-namespace/retrieval = T4; generieke content-status = T6; volledige §15-matrix-automatisering
+generieke content-status = T6; volledige §15-matrix-automatisering
 in CI = T5; host/unknown-host = T1; `fonds_memberships` = T12; SSO = TP2.
+
+**T4 (RAG-namespace/retrieval) — geïmplementeerd (2026-07-08, besluit 0045).** De
+retrieval-fondsdiscipline is nu defense-in-depth náást RLS: een expliciete
+`p_fonds_id`-filter in `zoek_chunks`/`zoek_chunks_hybride` (additief; verruimt
+leesrechten nooit), een published-only-gate voor generieke content (T13/T14),
+een app-laag guard (`handhaafFondsdiscipline`) op élk retrievalpad incl. de
+PostgREST-fallback en `haalDocumentChunks`, en rijkere `retrieval_meta`
+(fondsfilter, namespace-conventie=`bibliotheek`, drop-telling, manipulatie-vlag,
+bronversie-audit). Namespace-`CHECK`-constraint + generiek-status-workflow blijven
+T6. Negatieve tests T11–T14: `supabase/checks/2026_07_08_t4_retrieval_fondsdiscipline.sql`
+(zelfde runner/CI-job als T3). Premisse-correctie: `document_chunks` heeft géén
+eigen `fonds_id` — de grens loopt via de join naar `documenten` (zie 0045).
 
 ---
 
@@ -110,8 +122,10 @@ in CI = T5; host/unknown-host = T1; `fonds_memberships` = T12; SSO = TP2.
 | `fn_profiel_bevries_kolommen()` | bevriest `fonds_id`+`rol` bij zelfservice-update | BEFORE-trigger die moet vuren ongeacht caller-privileges; **alleen blokkerend** (defense-in-depth naast `WITH CHECK`). |
 | `fn_rate_limit_check()` | server-side rate limiting op gedeelde teller | teller is per opzet cross-user (geen tenant-data); server-only aangeroepen. |
 
-**SECURITY INVOKER (respecteert RLS, correct):** `zoek_chunks()` (RAG-retrieval — RLS op
-`document_chunks`/`documenten` dwingt isolatie af), RPC `profiel_opslaan`,
+**SECURITY INVOKER (respecteert RLS, correct):** `zoek_chunks()`/`zoek_chunks_hybride()`
+(RAG-retrieval — RLS op `document_chunks`/`documenten` dwingt isolatie af; T4 voegt de
+additieve `p_fonds_id`-filter + published-only-generiek toe als defense-in-depth,
+zonder de INVOKER-semantiek te wijzigen), RPC `profiel_opslaan`,
 `fn_decision_readiness_overview()`.
 
 > Let op: `schema.sql` toont nog de **oude** `maak_profiel()`-body (`limit 1`); dat is
@@ -214,6 +228,17 @@ Elke wijziging aan tenant-tabellen of policies volgt:
 faalt; verwijder een append-only-trigger → DEEL 1b + DEEL 2 #6 falen; verzwak een tenant-predicaat
 → DEEL 2 laat de bijbehorende cross-tenant insert slagen en doet `raise exception 'LEK: …'`.
 Elke `LEK:`/`FAALT` = non-zero psql-exit = rode CI.
+
+**T4 — retrieval-fondsdiscipline (T11–T14).** `supabase/checks/2026_07_08_t4_retrieval_fondsdiscipline.sql`
+draait via **dezelfde runner** (`scripts/rls-cross-tenant-test.sh`) en CI-job, ná de T3-suite.
+Self-seeding (2 fondsen + 5 documenten met chunks), impersoneert fonds A en roept de retrieval-RPC's
+aan: **T11** (fonds A ziet nooit chunks van fonds B — `zoek_chunks` én `zoek_chunks_hybride`),
+**T12** (een gespooft `p_fonds_id => B` surfacet géén B-content en onttrekt A's eigen fondsdoc aan
+het resultaat — de server-side filter is leidend), **T13** (gearchiveerd generiek is geen actuele
+bron), **T14** (bronstatus `uitgesloten` generiek evenmin), plus een positieve regressie (eigen fonds
++ published generiek blijven zichtbaar). Assertions toetsen op de seed-`document_id`'s zodat echte
+DB-data de uitkomst niet vertroebelt. Elke `LEK:`/`FAALT`/`REGRESSIE` = non-zero psql-exit = rode CI.
+De app-laag guard is los getest in `lib/rag-fondsdiscipline.sanity.ts` (pure functies, geen DB).
 
 > **Grens met T5:** volledige, altijd-blokkerende automatisering tegen een ephemere Supabase-DB
 > (met auth/storage/pgvector) is T5-scope. Tot dan is de workflow non-blocking (skip zonder

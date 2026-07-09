@@ -20,7 +20,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 DB_URL="${TEST_DATABASE_URL:-${DATABASE_URL:-}}"
-SQL="supabase/checks/2026_07_08_t3_cross_tenant.sql"
+# Beide negatieve suites in dezelfde runner: T3 (cross-tenant write-isolatie) en
+# T4 (retrieval-fondsdiscipline T11–T14). Beide zijn self-seeding + rollback.
+SQL_T3="supabase/checks/2026_07_08_t3_cross_tenant.sql"
+SQL_T4="supabase/checks/2026_07_08_t4_retrieval_fondsdiscipline.sql"
 
 if [ -z "$DB_URL" ]; then
   echo "OVERGESLAGEN: geen TEST_DATABASE_URL/DATABASE_URL gezet."
@@ -36,6 +39,12 @@ fi
 
 echo "T3 cross-tenant RLS-suite draaien tegen de test-DB…"
 # ON_ERROR_STOP staat ook in het script; hier extra als vangnet.
-psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_T3"
 echo
 echo "OK: T3 cross-tenant RLS-suite groen (geen lek, append-only intact)."
+
+echo
+echo "T4 retrieval-fondsdiscipline-suite draaien tegen de test-DB…"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_T4"
+echo
+echo "OK: T4 retrieval-fondsdiscipline-suite groen (T11–T14 geen lek)."

@@ -545,6 +545,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Increment T4 — manipulatie-signaal: de client MAG body.fonds_id nog meesturen
+    // (backwards-compat), maar hij wordt genegeerd. Wijkt hij af van de server-side
+    // fonds, dan is dat een poging tot cross-tenant sturing: log het en leg het vast
+    // in retrieval_meta (body_fonds_id_genegeerd). De retrieval draait onverstoord
+    // op de server-side fonds — dit is puur diagnostiek/auditspoor.
+    const bodyFondsAfwijkend =
+      typeof body.fonds_id === "string" &&
+      body.fonds_id.length > 0 &&
+      body.fonds_id !== fondsId;
+    if (bodyFondsAfwijkend) {
+      console.warn(
+        `[T4] body.fonds_id (${body.fonds_id}) wijkt af van sessie-fonds (${fondsId}) — genegeerd (gebruiker ${user.id}).`
+      );
+    }
+
     const fondsenRel = profiel?.fondsen as
       | { naam: string }
       | { naam: string }[]
@@ -830,7 +845,10 @@ export async function POST(req: NextRequest) {
 
     if (scopeActief && !transformatieActief) {
       if (bepaalVraagtype(vraag) === "breed") {
-        breedChunks = await haalDocumentChunks(scopeDocumentIds!);
+        // T4 — geef de server-side fonds mee: dit dekkingsbrede pad loopt niet via
+        // de RPC (met p_fonds_id), dus de app-guard in haalDocumentChunks is hier de
+        // enige expliciete fonds-laag náást RLS.
+        breedChunks = await haalDocumentChunks(scopeDocumentIds!, fondsId);
         const totaalTekst = breedChunks.map((c) => c.tekst).join("\n\n");
         scopeStrategie = kiesStrategie(
           "breed",
@@ -931,7 +949,12 @@ export async function POST(req: NextRequest) {
         retrievalFilters
       );
       chunks = res.chunks;
-      retrievalMeta = { ...res.meta, zoekvraag: zoekVraag, gereformuleerd };
+      retrievalMeta = {
+        ...res.meta,
+        zoekvraag: zoekVraag,
+        gereformuleerd,
+        body_fonds_id_genegeerd: bodyFondsAfwijkend,
+      };
       // Auditspoor (§9): leg de scope vast waarop deze vraag is beperkt.
       if (scopeActief) {
         retrievalMeta.scope = {
@@ -985,6 +1008,11 @@ export async function POST(req: NextRequest) {
         opgehaald: breedChunks.length,
         geselecteerd: breedChunks.length,
         chunks: [],
+        // T4 — dit pad past de fonds-guard toe in haalDocumentChunks; leg de
+        // toegepaste filter + het manipulatie-signaal ook hier in het auditspoor vast.
+        toegepaste_fonds_filter: fondsId,
+        namespace_conventie: "bibliotheek",
+        body_fonds_id_genegeerd: bodyFondsAfwijkend,
         scope: {
           document_ids: scopeDocumentIds!,
           titels: scopeTitels,
