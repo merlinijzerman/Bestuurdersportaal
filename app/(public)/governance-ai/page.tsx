@@ -168,6 +168,26 @@ export default function GovernanceAiPage() {
         </div>
       </section>
 
+      {/* EU AI ACT — verdieping */}
+      <section>
+        <div className="wrap">
+          <div className="label">EU AI Act</div>
+          <h2>Wat de EU AI Act betekent voor verantwoord AI-gebruik.</h2>
+          <p className="lede">
+            De EU AI Act vergroot de noodzaak om zorgvuldig met AI om te gaan. Ze
+            versterkt dezelfde uitgangspunten: brongebonden werken, menselijk
+            toezicht, transparantie en verantwoording. Bestuurdersportaal helpt die
+            randvoorwaarden in de bestuurspraktijk in te richten — met het oordeel
+            altijd bij het bestuur.
+          </p>
+          <p className="link-row">
+            <a href="/governance-ai/eu-ai-act" className="textlink">
+              EU AI Act &amp; verantwoord AI-gebruik →
+            </a>
+          </p>
+        </div>
+      </section>
+
       {/* CTA */}
       <CtaBand
         kop="Vragen over verantwoord AI-gebruik in uw context?"

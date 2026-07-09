@@ -261,6 +261,11 @@ export default function HomePage() {
               Zo borgen we verantwoord AI-gebruik →
             </a>
           </p>
+          <p className="link-row">
+            <a href="/governance-ai/eu-ai-act" className="textlink">
+              EU AI Act &amp; verantwoord AI-gebruik →
+            </a>
+          </p>
         </div>
       </section>
 

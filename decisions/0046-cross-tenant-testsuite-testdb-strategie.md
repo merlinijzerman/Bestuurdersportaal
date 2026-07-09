@@ -1,8 +1,10 @@
 # 0046 — Cross-tenant testsuite (T5): ephemere test-DB in CI als blokkerende poort
 
-- **Status:** Geaccepteerd (beide validatiepunten gesloten, 2026-07-09)
+- **Status:** Geaccepteerd — definitief (beide validatiepunten gesloten; scope
+  vastgesteld: optie A niet-blokkerend nu, optie B en gate-eigenaar gekoppeld aan de
+  PGB-flip, 2026-07-09)
 - **Datum:** 2026-07-09
-- **Betrokkenen:** Merlin (akkoord richting), Claude (uitvoering)
+- **Betrokkenen:** Merlin (akkoord), Claude (uitvoering)
 - **Nummerhistorie:** oorspronkelijk als `0045` opgesteld; hernummerd naar `0046`
   omdat besluit `0045` al door increment T4 (retrieval-fondsfilter) is bezet.
 
@@ -42,12 +44,16 @@ leidend, `schema.sql` volgend).
 het kritieke pad; een rode test blokkeert de merge (via GitHub-branchprotectie,
 zie Gevolgen — operationeel).
 
-**Secundair — optie B behouden als niet-blokkerende fideliteitsrun.** Het bestaande
-`TEST_DATABASE_URL`-pad naar een aparte, wegwerpbare gehoste test-branch-DB blijft
-bestaan, maar **nachtelijk/handmatig** en **niet-blokkerend**. Doel: gehoste
-configuratie vangen die niet in migraties zit (dashboard-instellingen,
-storage-policies, rol-setup) — de bekende drift die A per definitie niet ziet.
-Dit overlapt met de openstaande live-DB dump-diff-audit (`huidige-status.md` §6).
+**Secundair — optie B als niet-blokkerende fideliteitsrun, geparkeerd tot de
+PGB-voorbereiding (besloten 2026-07-09, Merlin).** Het bestaande
+`TEST_DATABASE_URL`-pad naar een aparte, wegwerpbare gehoste test-branch-DB kán
+als **nachtelijke/handmatige, niet-blokkerende** run gehoste configuratie vangen
+die niet in migraties zit (dashboard-instellingen, storage-policies, rol-setup) —
+de bekende drift die A per definitie niet ziet. Die meerwaarde is echter klein
+zolang er één tenant is en overlapt met de live-DB dump-diff-audit
+(`huidige-status.md` §6). Daarom valt B **buiten de T5-scope nu**: T5 levert
+uitsluitend optie A (niet-blokkerend, zie Activering). B wordt opgezet als
+onderdeel van de PGB-voorbereiding, samen met de flip naar blokkerend.
 
 ## Overwogen alternatieven
 

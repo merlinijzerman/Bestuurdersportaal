@@ -97,6 +97,21 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+
+  // Korte, deelbare alias voor de EU AI Act-verdiepingspagina. Redirects draaien
+  // vóór de middleware (volgorde: headers → redirects → middleware → rewrites),
+  // dus /ai-act hoeft NIET in MARKETING_PUBLIEKE_PADEN: de redirect vuurt al
+  // voordat de allowlist-check wordt bereikt. Canonieke URL blijft
+  // /governance-ai/eu-ai-act (permanent → 308, deelt SEO-signaal).
+  async redirects() {
+    return [
+      {
+        source: "/ai-act",
+        destination: "/governance-ai/eu-ai-act",
+        permanent: true,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

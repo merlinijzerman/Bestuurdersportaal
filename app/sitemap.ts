@@ -58,6 +58,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.8,
     },
     {
+      url: `${origin}/governance-ai/eu-ai-act`,
+      lastModified: nu,
+      changeFrequency: "monthly",
+      priority: 0.7,
+    },
+    {
       url: `${origin}/over-ons`,
       lastModified: nu,
       changeFrequency: "yearly",

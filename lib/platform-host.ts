@@ -51,6 +51,7 @@ export const MARKETING_PUBLIEKE_PADEN = new Set<string>([
   "/sectoren",
   "/sectoren/pensioenfondsen",
   "/governance-ai",
+  "/governance-ai/eu-ai-act",
   "/over-ons",
 ]);
 
