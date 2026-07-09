@@ -77,6 +77,16 @@ const nextConfig: NextConfig = {
   // - xlsx: Excel (.xlsx) parsing
   serverExternalPackages: ["unpdf", "mammoth", "xlsx"],
 
+  // ESLint bewust NIET tijdens `next build` draaien. Sinds T9 staat er een
+  // eslint.config.mjs in de repo (alleen code-scheiding-boundaries, geen
+  // next/recommended-ruleset). Zonder deze vlag zou `next build` die config
+  // oppakken en op de bestaande code gaan linten — buiten scope en risico op
+  // een gebroken Vercel-build. De boundary-gate draait bewust los
+  // (`npm run lint:boundaries` + eigen CI-job). Zie eslint.config.mjs.
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+
   // Server-action-payloadlimiet op één lijn met de 25 MB-bestandsvalidatie
   // (lib/bestand-validatie.ts MAX_BESTAND_BYTES). Next.js' default is 1 MB; een
   // upload via FormData (curatieAanmaken/curatieVervangen) sneuvelde daarop
