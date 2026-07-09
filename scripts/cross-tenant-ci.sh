@@ -38,6 +38,8 @@ SQL_T5="supabase/checks/2026_07_09_t5_export_storage.sql"
 # Increment T6 — generieke contentlaag read-only + namespace-invariant. (Let op:
 # de "T6-export"-regel hieronder is een §15-matrixlabel, niet dit increment.)
 SQL_T6C="supabase/checks/2026_07_09_t6_generiek_readonly.sql"
+# Increment T8 — config-/manifestlaag: cross-tenant + rolgate + append-only.
+SQL_T8C="supabase/checks/2026_07_09_t8_config_cross_tenant.sql"
 
 echo "== [1/4] tsc --noEmit --skipLibCheck =="
 ./node_modules/.bin/tsc --noEmit --skipLibCheck
@@ -77,6 +79,9 @@ echo
 echo "-- T6 (generieke contentlaag read-only + namespace-invariant) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_T6C"
 echo
+echo "-- T8 (config-/manifestlaag: cross-tenant + rolgate + append-only) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_T8C"
+echo
 
 echo "============================================================================"
 echo "GROEN: volledige §15 cross-tenant suite geslaagd (app-laag + DB-laag)."
@@ -86,4 +91,5 @@ echo "  T9/T10 platform-routing surface-isolatie      (app-laag)"
 echo "  T11–14 RAG-fondsdiscipline                     (app-laag + DB DEEL 2)"
 echo "  T3-write / T6-export / T7-storage             (DB-laag onder échte RLS)"
 echo "  T6-content generieke read-only + namespace    (DB-laag onder échte RLS)"
+echo "  T8-config cross-tenant + rolgate + append-only (DB-laag onder échte RLS)"
 echo "============================================================================"

@@ -1348,3 +1348,97 @@ create table if not exists public.catalogus_log (
   actor_id uuid references auth.users(id) on delete set null,
   payload jsonb default '{}', tijdstip timestamptz default now()
 );
+
+-- ============================================================
+--  Increment T8 — Configuratie-/manifestlaag (2026_07_09)
+--  Documentatie; de migratie 2026_07_09_t8_config_manifestlaag.sql is
+--  authoritatief. Differentiatie-als-data: een fonds volledig via CONFIGURATIE
+--  onderscheidbaar (theming + welke modules actief + feature flags + content-
+--  overrides), zonder codewijziging, versiebeheerd en append-only auditbaar.
+--  KERNRANDVOORWAARDE (v0.4 §9): het manifest bepaalt BESCHIKBAARHEID, NIET
+--  autorisatie — requireCapability()/RLS blijft de securitygrens. Alle tabellen
+--  tenant-aware (deny-by-default RLS per fonds_id); lezen = eigen fonds (alle
+--  leden), schrijven = eigen fonds + rol voorzitter/beheerder (WITH CHECK),
+--  geen DELETE-policy. fonds_id wordt in de app altijd server-side afgeleid.
+-- ============================================================
+
+-- Design-tokens per fonds (jsonb, allowlist-gevalideerd; logo als storage-ref,
+-- geen binaries). Fail-safe: geen rij = generiek default-thema uit code.
+create table if not exists public.fonds_theming (
+  fonds_id        uuid primary key references public.fondsen(id) on delete cascade,
+  tokens          jsonb not null default '{}'::jsonb,
+  versie          integer not null default 1,
+  bijgewerkt      timestamptz not null default now(),
+  bijgewerkt_door uuid references auth.users(id)
+);
+
+-- Welke modules beschikbaar per fonds. module_key getoetst tegen de code-registry
+-- (lib/module-registry.ts); onbekend/uit = niet beschikbaar. Effectieve
+-- beschikbaarheid = rij.actief indien aanwezig, anders registry.defaultActief.
+create table if not exists public.fonds_module_manifest (
+  fonds_id        uuid not null references public.fondsen(id) on delete cascade,
+  module_key      text not null,
+  actief          boolean not null default true,
+  config          jsonb not null default '{}'::jsonb,
+  versie          integer not null default 1,
+  bijgewerkt      timestamptz not null default now(),
+  bijgewerkt_door uuid references auth.users(id),
+  primary key (fonds_id, module_key)
+);
+
+-- Sleutel→waarde feature flags (waarde jsonb). Generalisatie van
+-- fonds_instellingen; hybride_zoeken is de eerste gemigreerde flag (backfill
+-- 2026_07_09_t8_flags_backfill.sql). Env-default blijft fallback.
+create table if not exists public.fonds_feature_flags (
+  fonds_id        uuid not null references public.fondsen(id) on delete cascade,
+  flag_key        text not null,
+  waarde          jsonb not null,
+  versie          integer not null default 1,
+  bijgewerkt      timestamptz not null default now(),
+  bijgewerkt_door uuid references auth.users(id),
+  primary key (fonds_id, flag_key)
+);
+
+-- Minimale per-fonds copy-overrides (sleutel→waarde). Volledige redactie-/
+-- publicatieworkflow = T10.
+create table if not exists public.fonds_content_overrides (
+  fonds_id        uuid not null references public.fondsen(id) on delete cascade,
+  sleutel         text not null,
+  waarde          text not null,
+  versie          integer not null default 1,
+  bijgewerkt      timestamptz not null default now(),
+  bijgewerkt_door uuid references auth.users(id),
+  primary key (fonds_id, sleutel)
+);
+
+-- APPEND-ONLY audit van elke config-wijziging (wie/wanneer/fonds/config_type/
+-- sleutel/oud→nieuw/versie). Hergebruikt fn_log_append_only (geen tweede
+-- logmechanisme; decisions/0051). Triggers blokkeren UPDATE/DELETE. Herstel =
+-- een eerdere waarde opnieuw wegschrijven als nieuwe versie.
+-- AUDIT WORDT ATOMISCH DOOR DE DB GESCHREVEN (migratie t8b, niet door de app):
+-- een AFTER-trigger fn_fonds_config_capture op de vier config-tabellen legt de
+-- logregel in dezelfde transactie vast (geen stil audit-gat). De UNIQUE-constraint
+-- (fonds_id, config_type, config_sleutel, versie) voorkomt dubbele versies bij
+-- gelijktijdige schrijvers.
+create table if not exists public.fonds_config_log (
+  id              uuid primary key default uuid_generate_v4(),
+  fonds_id        uuid not null references public.fondsen(id) on delete cascade,
+  gebruiker_id    uuid references auth.users(id),
+  gebruiker_naam  text,
+  config_type     text not null check (config_type in ('theming','manifest','flag','override')),
+  config_sleutel  text not null,
+  oude_waarde     jsonb,
+  nieuwe_waarde   jsonb,
+  versie          integer not null,
+  aangemaakt      timestamptz not null default now(),
+  -- t8b: serialiseert gelijktijdige schrijvers; blokkeert dubbele versie per sleutel.
+  constraint fonds_config_log_versie_uniek
+    unique (fonds_id, config_type, config_sleutel, versie)
+);
+
+-- t8b — atomische, onoverslaanbare config-audit via AFTER-trigger op de vier
+-- config-tabellen. Bron van waarheid: migratie 2026_07_09_t8b_config_audit_trigger.sql.
+-- create or replace function public.fn_fonds_config_capture() ... (dispatch op
+-- TG_TABLE_NAME → config_type/sleutel/oud→nieuw) insert into fonds_config_log.
+-- after insert or update on {fonds_theming, fonds_module_manifest,
+--   fonds_feature_flags, fonds_content_overrides} execute fn_fonds_config_capture().

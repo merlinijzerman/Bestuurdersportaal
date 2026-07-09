@@ -2,35 +2,19 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
-
-type NavItem = {
-  href: string;
-  label: string;
-  icon: string;
-  section: string;
-  iconSrc?: string;
-  badge?: string;
-  rolVereist?: string;
-};
-
-const navItems: NavItem[] = [
-  { href: "/", label: "Home", icon: "🏠", section: "Overzicht" },
-  { href: "/dashboard", label: "Stuurinformatie", icon: "📊", section: "Overzicht" },
-  { href: "/klantbeeld", label: "Klantbeeld", icon: "👥", section: "Overzicht" },
-  { href: "/ai", label: "AI Assistent", icon: "🤖", iconSrc: "/ai-assistent.png", section: "Kennisbase", badge: "AI" },
-  { href: "/bibliotheek", label: "Documentbibliotheek", icon: "📚", section: "Kennisbase" },
-  { href: "/vergaderingen", label: "Vergaderingen", icon: "📅", section: "Bestuur" },
-  { href: "/notulen", label: "Besluiten & Notulen", icon: "📋", section: "Bestuur" },
-  { href: "/procedures", label: "Procedures", icon: "📂", section: "Bestuur" },
-  { href: "/risicomatrix", label: "Risicomatrix", icon: "🛡️", section: "Bestuur" },
-  { href: "/beheer", label: "Catalogus & organen", icon: "⚙️", section: "Beheer", rolVereist: "beheerder" },
-  { href: "/governance", label: "Governance Log", icon: "🔍", section: "Beheer", rolVereist: "beheerder" },
-];
+import { alleModules, isModuleKey, type ModuleKey } from "@/lib/module-registry";
 
 interface SidebarProps {
   gebruikerNaam?: string;
   gebruikerRol?: string;
   fondsNaam?: string;
+  /** Manifest-beschikbare modules (server-side afgeleid, T8). Ontbreekt de prop,
+   *  dan tonen we alles (backward-compat). Dit is UI-cosmetica: de echte gate zit
+   *  server-side in requireCapability()/RLS + de module-guard per route. */
+  beschikbareModules?: string[];
+  /** Optionele branding uit de fonds-theming (logo-letter/-url). */
+  logoLetter?: string;
+  logoUrl?: string;
   /** Drawer open (mobiel). Op desktop (md+) altijd zichtbaar, ongeacht deze waarde. */
   open?: boolean;
   /** Aangeroepen bij navigatie/uitloggen zodat de mobiele drawer sluit. */
@@ -41,6 +25,9 @@ export default function Sidebar({
   gebruikerNaam,
   gebruikerRol,
   fondsNaam,
+  beschikbareModules,
+  logoLetter,
+  logoUrl,
   open = false,
   onNavigate,
 }: SidebarProps) {
@@ -68,6 +55,16 @@ export default function Sidebar({
     beheerder: "Beheerder",
   };
 
+  // Manifest-filter (T8): toon alleen modules die voor dit fonds beschikbaar zijn.
+  // Ontbreekt de prop → toon alles (backward-compat). Kern-infrastructuur (home/
+  // beheer/governance) zit sowieso in de set (registry: manifestBeheerbaar=false).
+  const beschikbaarSet: Set<ModuleKey> | null = beschikbareModules
+    ? new Set(beschikbareModules.filter(isModuleKey))
+    : null;
+  const navItems = alleModules().filter(
+    (m) => !beschikbaarSet || beschikbaarSet.has(m.key)
+  );
+
   let huidigSection = "";
 
   return (
@@ -76,10 +73,16 @@ export default function Sidebar({
         open ? "translate-x-0" : "-translate-x-full"
       }`}
     >
-      {/* Logo */}
+      {/* Logo — brandbaar via fonds-theming (T8): logo-url wint, dan logo-letter,
+          anders de default "P". Cosmetisch; geen autorisatiebetekenis. */}
       <div className="px-5 py-6 border-b border-nav-line">
-        <div className="w-10 h-10 bg-nav-accent rounded-xl flex items-center justify-center font-black text-lg text-white mb-3">
-          P
+        <div className="w-10 h-10 bg-nav-accent rounded-xl flex items-center justify-center font-black text-lg text-white mb-3 overflow-hidden">
+          {logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={logoUrl} alt="" aria-hidden="true" className="w-full h-full object-contain" />
+          ) : (
+            logoLetter || "P"
+          )}
         </div>
         <div className="text-nav-text-active font-bold text-sm leading-snug">
           {fondsNaam || process.env.NEXT_PUBLIC_FONDS_NAAM || "Bestuurdersportaal"}

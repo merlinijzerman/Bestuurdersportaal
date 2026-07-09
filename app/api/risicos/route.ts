@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase-server";
+import { weigerAlsModuleUit } from "@/lib/module-guard";
 import {
   CategorieSlug,
   NiveauSlug,
@@ -87,6 +88,12 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+
+    // T8 — BESCHIKBAARHEIDSgate: staat de risicomatrix-module in het manifest van
+    // dit fonds UIT, dan weigeren we de directe API-call (403). BESCHIKBAARHEID ≠
+    // AUTORISATIE: komt bovenop RLS, vervangt die niet. fonds_id is server-side afgeleid.
+    const moduleWeigering = await weigerAlsModuleUit(profiel.fonds_id, "risicomatrix");
+    if (moduleWeigering) return moduleWeigering;
 
     const { data: risico, error } = await supabase
       .from("risicos")

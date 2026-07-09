@@ -6,6 +6,8 @@ import { heeftReformulatieNodig, reformuleerVraag } from "@/lib/query-reformulat
 import { controleerLimiet, LIMIETEN } from "@/lib/rate-limit";
 import { rateLimited } from "@/lib/api-errors";
 import { beoordeelRouteHostToegang } from "@/lib/tenant-route-guard";
+import { hybrideZoekenAan } from "@/lib/fonds-config";
+import { weigerAlsModuleUit } from "@/lib/module-guard";
 import { valideerScope, type ScopeDocumentRij } from "@/lib/document-scope";
 import { bepaalVraagtype, schatTokens, kiesStrategie, maakBatches, bepaalAntwoordmodus, retrievalModusVoor, bepaalInlineMeldingen, bronbasisLabel, bepaalBronIntent, moetVerduidelijken, bepaalAutoBronModus, VERDUIDELIJKINGSVRAAG, VERDUIDELIJKING_OPTIES, ANTWOORDMODUS_LABEL, type Strategie, type Antwoordmodus, type BronModus, type BronIntent, type BronIntentResultaat } from "@/lib/vraagtype";
 import { bepaalBronsoortprofiel } from "@/lib/weeg-bronsoort";
@@ -561,6 +563,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // T8 — server-side BESCHIKBAARHEIDSgate op dit hoog-risico module-entrypoint.
+    // Staat de AI-module in het manifest van dit fonds UIT, dan weigeren we de
+    // directe API-call (403) — niet alleen UI-verborgen. BESCHIKBAARHEID ≠
+    // AUTORISATIE: dit komt BOVENOP de bestaande auth/RLS-checks en vervangt die
+    // nooit. fondsId is server-side afgeleid (profiel), nooit uit de body.
+    const moduleWeigering = await weigerAlsModuleUit(fondsId, "ai");
+    if (moduleWeigering) return moduleWeigering;
+
     // Increment T4 — manipulatie-signaal: de client MAG body.fonds_id nog meesturen
     // (backwards-compat), maar hij wordt genegeerd. Wijkt hij af van de server-side
     // fonds, dan is dat een poging tot cross-tenant sturing: log het en leg het vast
@@ -924,15 +934,12 @@ export async function POST(req: NextRequest) {
         : scopeActief || bronModusRetrieval === "documenten" || bronModusRetrieval === "combineren"
     );
     if (moetRetrieven) {
-      // Hybride-schakelaar: per-fonds instelling uit het portaal is leidend;
-      // valt terug op de env-default HYBRID_SEARCH als er nog niets is gezet.
-      let hybrideAan = process.env.HYBRID_SEARCH === "on";
-      const { data: inst } = await supabase
-        .from("fonds_instellingen")
-        .select("hybride_zoeken")
-        .eq("fonds_id", fondsId)
-        .maybeSingle();
-      if (inst) hybrideAan = inst.hybride_zoeken;
+      // Hybride-schakelaar (T8): gelezen uit de generieke feature-flag-laag
+      // (fonds_feature_flags via lib/fonds-config). De flag is per-fonds leidend;
+      // zonder flag valt het terug op de env-default HYBRID_SEARCH — 1-op-1 het
+      // gedrag van vóór de generalisatie (backfill borgt de bestaande waarde).
+      // fondsId is server-side afgeleid, nooit uit de request-body.
+      const hybrideAan = await hybrideZoekenAan(fondsId);
 
       // History-aware reformulatie (Fase B1): bij een vervolgvraag die op
       // eerdere context leunt, herschrijven we de vraag tot een zelfstandige

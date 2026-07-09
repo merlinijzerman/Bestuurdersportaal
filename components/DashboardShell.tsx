@@ -6,6 +6,11 @@ interface DashboardShellProps {
   gebruikerNaam?: string;
   gebruikerRol?: string;
   fondsNaam?: string;
+  /** Manifest-beschikbare modules (T8) — doorgegeven aan de Sidebar-filter. */
+  beschikbareModules?: string[];
+  /** Optionele branding uit de fonds-theming. */
+  logoLetter?: string;
+  logoUrl?: string;
 }
 
 // Mobiele chrome rond de bestaande (desktop) sidebar. Op md+ verandert er niets:
@@ -15,6 +20,9 @@ export default function DashboardShell({
   gebruikerNaam,
   gebruikerRol,
   fondsNaam,
+  beschikbareModules,
+  logoLetter,
+  logoUrl,
 }: DashboardShellProps) {
   const [open, setOpen] = useState(false);
 
@@ -56,6 +64,9 @@ export default function DashboardShell({
         gebruikerNaam={gebruikerNaam}
         gebruikerRol={gebruikerRol}
         fondsNaam={fondsNaam}
+        beschikbareModules={beschikbareModules}
+        logoLetter={logoLetter}
+        logoUrl={logoUrl}
         open={open}
         onNavigate={() => setOpen(false)}
       />

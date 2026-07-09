@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { createServerSupabase } from "@/lib/supabase-server";
 import { haalFondsContext, tenantEnforceAan } from "@/lib/tenant-context";
 import { beoordeelToegang, type ToegangsOordeel } from "@/lib/tenant-enforce";
+import { haalFondsConfig } from "@/lib/fonds-config";
 import DashboardShell from "@/components/DashboardShell";
 
 export default async function DashboardLayout({
@@ -108,12 +109,45 @@ export default async function DashboardLayout({
   const fondsenObj = Array.isArray(fondsenRel) ? fondsenRel[0] : fondsenRel;
   const fondsNaam = fondsenObj?.naam || process.env.NEXT_PUBLIC_FONDS_NAAM;
 
+  // ── T8: fonds-config (theming + manifest + branding) ──────────────────────
+  // Server-side afgeleid uit profiel.fonds_id (nooit uit de request). De theming-
+  // CSS is een gevalideerde, veilige :root-override (allowlist in fonds-config-
+  // core); ontbreekt config, dan valt alles terug op globals.css (fail-safe). Het
+  // manifest bepaalt UITSLUITEND welke nav-items zichtbaar zijn — de autorisatie
+  // blijft server-side (requireCapability/RLS + module-guard per route).
+  let themingCss = "";
+  let beschikbareModules: string[] | undefined;
+  let logoLetter: string | undefined;
+  let logoUrl: string | undefined;
+  if (profiel.fonds_id) {
+    try {
+      const config = await haalFondsConfig(profiel.fonds_id);
+      themingCss = config.themingCss;
+      beschikbareModules = [...config.beschikbareModules];
+      logoLetter = config.branding.logoLetter;
+      logoUrl = config.branding.logoUrl;
+    } catch (e) {
+      // Fail-safe: config-fout mag de tenant-render nooit breken → defaults.
+      console.warn("[FONDS-CONFIG] laden faalde", e instanceof Error ? e.message : e);
+    }
+  }
+
   return (
     <div className="min-h-screen">
+      {themingCss && (
+        <style
+          // Veilige, server-gevalideerde tokens (allowlist: alleen RGB-triples →
+          // CSS-vars). Geen gebruikersinvoer belandt ongefilterd in deze <style>.
+          dangerouslySetInnerHTML={{ __html: themingCss }}
+        />
+      )}
       <DashboardShell
         gebruikerNaam={profiel?.naam}
         gebruikerRol={profiel?.rol}
         fondsNaam={fondsNaam}
+        beschikbareModules={beschikbareModules}
+        logoLetter={logoLetter}
+        logoUrl={logoUrl}
       />
       <main className="md:ml-64 flex flex-col min-h-screen pt-14 md:pt-0">
         {children}

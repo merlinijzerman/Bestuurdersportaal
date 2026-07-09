@@ -41,7 +41,13 @@ export type Capability =
   // contextprofiel (organisatie_profielen). In tegenstelling tot het PERSOONLIJKE
   // profiel is dit fonds-breed, dus beheerder-gated (analoog aan catalog.manage),
   // niet strikt zelfbeheerd. RLS borgt eigen-fonds; deze capability de rolgate.
-  | "organisation.profile.manage";
+  | "organisation.profile.manage"
+  // Increment T8 (besluit 0040 / v0.4 §9) — beheer van de fonds-configuratielaag
+  // (theming, module-manifest, feature flags, content-overrides) voor het EIGEN
+  // fonds. Fonds-breed, dus beheerder/voorzitter-gated (analoog aan
+  // organisation.profile.manage). RLS borgt eigen-fonds én dubbelt deze rolgate
+  // op de config-tabellen (WITH CHECK). Platform-brede config = Increment P.
+  | "fonds.config.manage";
 
 /** Rol → toegekende capabilities. Bron-van-waarheid voor autorisatie in v2.
  *  `dossiers.manage` (TO §5: secretariaat/governance/admin) dekt het handmatig
@@ -64,6 +70,7 @@ export const ROL_CAPABILITIES: Record<string, Capability[]> = {
     "notulen.segment.confirm",
     "profile.manage.own",
     "organisation.profile.manage",
+    "fonds.config.manage",
   ],
   voorzitter: [
     "dossiers.manage",
@@ -74,6 +81,7 @@ export const ROL_CAPABILITIES: Record<string, Capability[]> = {
     "classification.review",
     "notulen.segment.confirm",
     "profile.manage.own",
+    "fonds.config.manage",
   ],
   // I-2-release: ALLE metadatavelden opengesteld voor bestuurders (huidige
   // inrichting, akkoord compliance) — vergemakkelijkt invoer/test. Omvat de
