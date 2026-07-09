@@ -1,4 +1,4 @@
-# 0048 — T7: G2 go/no-go-gate geformaliseerd (0026-her-introductie-gate geëffectueerd)
+# 0049 — T7: G2 go/no-go-gate geformaliseerd (0026-her-introductie-gate geëffectueerd)
 
 - **Status:** Geaccepteerd
 - **Datum:** 2026-07-09

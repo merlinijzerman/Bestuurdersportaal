@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase-server";
+import { beoordeelRouteHostToegang } from "@/lib/tenant-route-guard";
 import {
   CONTENT_TYPE_PER_BESTANDSTYPE,
   type Bestandstype,
@@ -21,6 +22,26 @@ export async function GET(
   } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+  }
+
+  // T1.3 — resolveer de sessie-fonds server-side en dwing host↔fonds af vóór de
+  // document-lookup/download (defense-in-depth náást RLS). `profiel` wordt hier
+  // ook hergebruikt voor de inzage-logging. Gedrag-neutraal zolang enforce uit.
+  const { data: profiel } = await supabase
+    .from("profielen")
+    .select("naam, fonds_id")
+    .eq("id", user.id)
+    .single();
+  const hostOordeel = await beoordeelRouteHostToegang({
+    sessieFondsId: profiel?.fonds_id ?? null,
+    gebruikerId: user.id,
+    label: "documents.bestand.GET",
+  });
+  if (!hostOordeel.toegestaan) {
+    return NextResponse.json(
+      { error: "Dit webadres hoort niet bij uw fonds." },
+      { status: 403 }
+    );
   }
 
   const { data: document, error: docError } = await supabase
@@ -57,13 +78,8 @@ export async function GET(
     );
   }
 
-  // Inzage loggen — non-blocking, fouten worden alleen geprint.
-  const { data: profiel } = await supabase
-    .from("profielen")
-    .select("naam")
-    .eq("id", user.id)
-    .single();
-
+  // Inzage loggen — non-blocking, fouten worden alleen geprint. `profiel` is
+  // hierboven al opgehaald (naam + fonds_id) voor de host-afdwinging.
   await supabase.from("document_inzage").insert({
     document_id: document.id,
     document_titel_snapshot: document.titel,

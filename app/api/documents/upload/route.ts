@@ -17,6 +17,7 @@ import {
 } from "@/lib/document-extractie";
 import { controleerLimiet, LIMIETEN } from "@/lib/rate-limit";
 import { rateLimited } from "@/lib/api-errors";
+import { beoordeelRouteHostToegang } from "@/lib/tenant-route-guard";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -112,6 +113,21 @@ export async function POST(req: NextRequest) {
 
     if (!profiel?.fonds_id) {
       return NextResponse.json({ error: "Geen fonds gekoppeld" }, { status: 400 });
+    }
+
+    // T1.3 — host↔fonds-afdwinging (defense-in-depth náást RLS), vóór het inlezen/
+    // opslaan van het bestand. Observe + fail-closed onder TENANT_ENFORCE=on;
+    // gedrag-neutraal zolang enforce uit staat.
+    const hostOordeel = await beoordeelRouteHostToegang({
+      sessieFondsId: profiel.fonds_id,
+      gebruikerId: user.id,
+      label: "documents.upload.POST",
+    });
+    if (!hostOordeel.toegestaan) {
+      return NextResponse.json(
+        { error: "Dit webadres hoort niet bij uw fonds." },
+        { status: 403 }
+      );
     }
 
     const formData = await req.formData();

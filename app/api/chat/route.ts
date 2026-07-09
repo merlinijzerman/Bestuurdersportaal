@@ -5,6 +5,7 @@ import { zoekRelevanteChunksMetMeta, maakContext, haalDocumentChunks, verrijkNot
 import { heeftReformulatieNodig, reformuleerVraag } from "@/lib/query-reformulatie";
 import { controleerLimiet, LIMIETEN } from "@/lib/rate-limit";
 import { rateLimited } from "@/lib/api-errors";
+import { beoordeelRouteHostToegang } from "@/lib/tenant-route-guard";
 import { valideerScope, type ScopeDocumentRij } from "@/lib/document-scope";
 import { bepaalVraagtype, schatTokens, kiesStrategie, maakBatches, bepaalAntwoordmodus, retrievalModusVoor, bepaalInlineMeldingen, bronbasisLabel, bepaalBronIntent, moetVerduidelijken, bepaalAutoBronModus, VERDUIDELIJKINGSVRAAG, VERDUIDELIJKING_OPTIES, ANTWOORDMODUS_LABEL, type Strategie, type Antwoordmodus, type BronModus, type BronIntent, type BronIntentResultaat } from "@/lib/vraagtype";
 import { bepaalBronsoortprofiel } from "@/lib/weeg-bronsoort";
@@ -541,6 +542,21 @@ export async function POST(req: NextRequest) {
     if (!fondsId) {
       return NextResponse.json(
         { error: "Geen fonds gekoppeld aan dit account" },
+        { status: 403 }
+      );
+    }
+
+    // T1.3 — host↔fonds-afdwinging (defense-in-depth náást RLS), vóór retrieval/
+    // Anthropic. Observe + fail-closed onder TENANT_ENFORCE=on; gedrag-neutraal
+    // zolang enforce uit staat.
+    const hostOordeel = await beoordeelRouteHostToegang({
+      sessieFondsId: fondsId,
+      gebruikerId: user.id,
+      label: "chat.POST",
+    });
+    if (!hostOordeel.toegestaan) {
+      return NextResponse.json(
+        { error: "Dit webadres hoort niet bij uw fonds." },
         { status: 403 }
       );
     }

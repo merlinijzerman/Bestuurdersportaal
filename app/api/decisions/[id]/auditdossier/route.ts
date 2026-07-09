@@ -31,6 +31,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase-server";
+import { beoordeelRouteHostToegang } from "@/lib/tenant-route-guard";
 import { buildDecisionDossierView } from "@/lib/decision";
 import { renderAuditdossierHtml } from "@/lib/auditdossier-html";
 import type {
@@ -75,6 +76,26 @@ export async function GET(
     } = await supabase.auth.getUser();
     if (!user) {
       return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+    }
+
+    // T1.3 — resolveer de sessie-fonds server-side en dwing host↔fonds af vóór de
+    // export (defense-in-depth náást RLS). `profiel` wordt hergebruikt voor de
+    // actor-naam in audit-event + HTML-footer. Gedrag-neutraal zolang enforce uit.
+    const { data: profiel } = await supabase
+      .from("profielen")
+      .select("naam, fonds_id")
+      .eq("id", user.id)
+      .maybeSingle();
+    const hostOordeel = await beoordeelRouteHostToegang({
+      sessieFondsId: profiel?.fonds_id ?? null,
+      gebruikerId: user.id,
+      label: "decisions.auditdossier.GET",
+    });
+    if (!hostOordeel.toegestaan) {
+      return NextResponse.json(
+        { error: "Dit webadres hoort niet bij uw fonds." },
+        { status: 403 }
+      );
     }
 
     const url = new URL(req.url);
@@ -174,12 +195,8 @@ export async function GET(
       });
     }
 
-    // Actor-naam voor audit-event en HTML-footer.
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam")
-      .eq("id", user.id)
-      .maybeSingle();
+    // Actor-naam voor audit-event en HTML-footer. `profiel` is hierboven al
+    // opgehaald (naam + fonds_id) voor de host-afdwinging.
     const aanvragerNaam = profiel?.naam ?? null;
 
     // Logging — best effort. Bij faillende insert (RLS, etc.) blokkeren

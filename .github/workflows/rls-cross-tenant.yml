@@ -8,11 +8,15 @@ name: rls-cross-tenant
 #  past de migraties toe en draait de app-laag (node:test) én de DB-laag (psql:
 #  T3/T4/T6/T7). Elke overtreding → non-zero exit → deze job faalt.
 #
-#  Activering (fasering, besluit 0046): de suite draait op ELKE push, maar is
-#  VOORLOPIG NIET-BLOKKEREND — geen branch protection, de directe-push-flow naar
-#  main blijft zolang er feitelijk één tenant is (Horizon-demo). Omzetten naar
-#  blokkerende merge-gate ("required status check" op main) = actiepunt in de
-#  PGB-onboardingchecklist, net vóór PGB live gaat (valt samen met gate G2 + T7).
+#  Activering (fasering, besluit 0046 → geëffectueerd in T7/besluit 0049): de
+#  suite draait op ELKE push én pull_request. Blokkerend maken = één repo-admin-
+#  handeling: zet branch protection op `main` met deze job als REQUIRED STATUS
+#  CHECK. De check-naam is bewust gepind (job `name:` hieronder) zodat hij
+#  stabiel te selecteren is: "Cross-tenant isolatie (§15 T1-T14)". Stappen +
+#  motivering staan in `G2-GO-NO-GO-CONTROLEKADER.md` (repo-root) en de
+#  go/no-go-checklist B9. Het AANZETTEN blijft een admin-handeling (Claude Code
+#  bereidt voor + documenteert); de directe-push-flow naar main blijft geldig
+#  zolang er feitelijk één tenant is (Horizon-demo), tot net vóór PGB live.
 #
 #  XTENANT_REQUIRE_DB=1 gaat NIET over merge-blokkade maar over test-integriteit
 #  BINNEN deze job: in CI staat de DB er altijd (supabase start), dus een
@@ -28,6 +32,10 @@ on:
 
 jobs:
   cross-tenant:
+    # Gepinde check-naam voor branch protection "required status check" (B9/T7).
+    # Wijzig deze naam NIET zonder de branch-protection-regel mee te verzetten,
+    # anders wordt de gate stil losgekoppeld.
+    name: Cross-tenant isolatie (§15 T1-T14)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

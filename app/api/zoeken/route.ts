@@ -24,6 +24,7 @@ import {
   type DocumentChunk,
   type RetrievalFilters,
 } from "@/lib/rag";
+import { beoordeelRouteHostToegang } from "@/lib/tenant-route-guard";
 import type { RetrievalModus } from "@/lib/vraagtype";
 
 export const dynamic = "force-dynamic";
@@ -80,6 +81,20 @@ export async function GET(req: NextRequest) {
     if (!fondsId) {
       return NextResponse.json(
         { error: "Geen fonds gekoppeld aan dit profiel." },
+        { status: 403 }
+      );
+    }
+
+    // T1.3 — host↔fonds-afdwinging (defense-in-depth náást RLS). Observe + fail-
+    // closed onder TENANT_ENFORCE=on; gedrag-neutraal zolang enforce uit staat.
+    const hostOordeel = await beoordeelRouteHostToegang({
+      sessieFondsId: fondsId,
+      gebruikerId: user.id,
+      label: "zoeken.GET",
+    });
+    if (!hostOordeel.toegestaan) {
+      return NextResponse.json(
+        { error: "Dit webadres hoort niet bij uw fonds." },
         { status: 403 }
       );
     }
