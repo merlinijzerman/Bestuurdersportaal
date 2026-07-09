@@ -89,6 +89,17 @@ Dit overlapt met de openstaande live-DB dump-diff-audit (`huidige-status.md` §6
   nodig die bij een rode/flaky run triëert (echt lek vs. ruis). Zonder belegging
   belandt elke geblokkeerde PR bij Merlin. Beleggen vóór de poort scherp gaat;
   hangt samen met de open T7-gate-eigenaarvraag.
+- **Activering (fasering, besloten 2026-07-09, Merlin):** de suite wordt gebouwd en
+  draait op elke push, maar **voorlopig niet-blokkerend** — geen branch protection,
+  de directe-push-flow naar `main` blijft. Reden: zolang er feitelijk één tenant is
+  (Horizon-demo) is de blast radius van een tenant-muur-regressie klein; de
+  blokkerende poort levert pas waarde bij een tweede échte tenant. **Omzetten naar
+  blokkerend = actiepunt in de PGB-onboardingchecklist, net vóór PGB live gaat (niet
+  erna)**, zodat de eerste échte multi-tenant merges al gegated zijn. Valt samen met
+  gate G2 (go/no-go vóór fonds 2) en met het beleggen van de gate-eigenaar (T7). De
+  concrete GitHub-handeling op dat moment: Settings → Branches → regel op `main` met
+  *Require status checks* (de optie-A-checknaam, verschijnt pas na ≥1 run) +
+  *Require a pull request before merging*.
 
 **Twee validatiepunten (beide gesloten 2026-07-09; waren blokkerend voor "Geaccepteerd" i.p.v. "richting"):**
 1. **Versie-pinning.** Optie A test alleen representatief als de CLI-Postgres- en

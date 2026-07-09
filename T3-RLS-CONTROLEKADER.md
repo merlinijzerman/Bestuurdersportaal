@@ -210,10 +210,13 @@ Elke wijziging aan tenant-tabellen of policies volgt:
 
 ## 8. Testkader (§14 punt 7 / §15)
 
-**Sinds T5 (besluit 0046) is de volledige §15-matrix (T1–T14) gebundeld tot één blokkerende
+**Sinds T5 (besluit 0046) is de volledige §15-matrix (T1–T14) gebundeld tot één
 suite** achter `scripts/cross-tenant-ci.sh` en de workflow `.github/workflows/rls-cross-tenant.yml`
-(nu blokkerend: ephemere Supabase-CLI-DB via `supabase start`, `XTENANT_REQUIRE_DB=1` maakt een
-ontbrekende DB rood). De suite kent twee lagen:
+(ephemere Supabase-CLI-DB via `supabase start`; `XTENANT_REQUIRE_DB=1` maakt een ontbrekende DB rood
+— test-integriteit binnen de job, geen merge-blokkade). **Fasering (besluit 0046):** de suite draait
+op elke push maar is **voorlopig niet-blokkerend** (geen branch protection; de directe-push-flow naar
+`main` blijft zolang er één tenant is). Omzetten naar blokkerende merge-gate = actiepunt bij
+PGB-onboarding, net vóór PGB live. De suite kent twee lagen:
 
 - **App-laag (`tests/cross-tenant/*.test.ts`, node:test + tsx).** Benoemde, 1-op-1 op §15
   herleidbare tests over de bestaande pure functies (geen duplicatie — importeert `lib/*`):
@@ -272,12 +275,15 @@ geïntroduceerd lek de bijbehorende test ROOD maakt — nooit naar main gecommit
   tenant-/pad-predicaat → de bijbehorende cross-tenant insert/select slaagt en doet
   `raise exception 'LEK: …'`. Elke `LEK:`/`FAALT`/`REGRESSIE` = non-zero exit = rode CI.
 
-> **T5 afgerond (was: T5-grens).** De in T3/T4 aangekondigde "altijd-blokkerende automatisering
-> tegen een ephemere Supabase-DB (auth/storage/pgvector)" is met T5 (besluit 0046) geleverd:
-> `.github/workflows/rls-cross-tenant.yml` is nu blokkerend via `supabase start` +
-> `XTENANT_REQUIRE_DB=1`. De optie-B-fideliteitsrun (nachtelijk, non-blocking, tegen een gehoste
-> test-DB) staat in `.github/workflows/nightly-fidelity.yml`. Branch-protection "required status
-> check" op main is een repo-adminactie buiten deze repo-files.
+> **T5 afgerond (was: T5-grens).** De in T3/T4 aangekondigde automatisering tegen een ephemere
+> Supabase-DB (auth/storage/pgvector) is met T5 (besluit 0046) geleverd:
+> `.github/workflows/rls-cross-tenant.yml` draait de volledige suite via `supabase start` +
+> `XTENANT_REQUIRE_DB=1` op elke push. **Activering is gefaseerd:** voorlopig **niet-blokkerend**
+> (geen branch protection) — omzetten naar blokkerende merge-gate is een actiepunt in de
+> PGB-onboardingchecklist, net vóór PGB live (besluit 0046, "Activering/fasering"). De optie-B-
+> fideliteitsrun (nachtelijk, non-blocking, tegen een gehoste test-DB) staat in
+> `.github/workflows/nightly-fidelity.yml`. Branch-protection "required status check" op main is
+> op dat moment een repo-adminactie buiten deze repo-files.
 
 ---
 
