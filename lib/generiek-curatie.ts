@@ -106,6 +106,11 @@ export interface CuratieInvoer {
   doelgroep?: string | null;
   thema?: string | null;
   statusinterpretatie?: string | null;
+  // Increment T6 — beheerkenmerken (§7/B3). eigenaar = functioneel/team-label;
+  // volgende_review = datum eerstvolgende review; versie = leesbaar label.
+  eigenaar?: string | null;
+  volgende_review?: string | null;
+  versie?: string | null;
 }
 
 // Het genormaliseerde, DB-klare resultaat. Kolomnamen = documenten-kolommen,
@@ -129,6 +134,10 @@ export interface CuratieGenormaliseerd {
   doelgroep: string | null;
   thema: string | null;
   statusinterpretatie: string | null;
+  // Increment T6 — beheerkenmerken (§7/B3), DB-klaar (documenten-kolomnamen).
+  eigenaar: string | null;
+  volgende_review: string | null;
+  versie: string | null;
 }
 
 export type CuratieValidatie =
@@ -197,10 +206,12 @@ export function valideerCuratie(invoer: CuratieInvoer): CuratieValidatie {
   const documentdatum = trimNaarNull(invoer.documentdatum);
   const geldigVanaf = trimNaarNull(invoer.geldig_vanaf);
   const geldigTot = trimNaarNull(invoer.geldig_tot);
+  const volgendeReview = trimNaarNull(invoer.volgende_review); // T6
   for (const [veld, waarde] of [
     ["documentdatum", documentdatum],
     ["geldig_vanaf", geldigVanaf],
     ["geldig_tot", geldigTot],
+    ["volgende_review", volgendeReview],
   ] as const) {
     if (waarde !== null && !isGeldigeDatum(waarde)) {
       fouten[veld] = "Datum moet het formaat JJJJ-MM-DD hebben.";
@@ -239,6 +250,9 @@ export function valideerCuratie(invoer: CuratieInvoer): CuratieValidatie {
       doelgroep: trimNaarNull(invoer.doelgroep),
       thema: trimNaarNull(invoer.thema),
       statusinterpretatie: trimNaarNull(invoer.statusinterpretatie),
+      eigenaar: trimNaarNull(invoer.eigenaar),
+      volgende_review: volgendeReview,
+      versie: trimNaarNull(invoer.versie),
     },
   };
 }

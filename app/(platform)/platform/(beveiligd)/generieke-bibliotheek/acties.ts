@@ -81,6 +81,9 @@ function leesInvoer(fd: FormData): CuratieInvoer {
     doelgroep: s("doelgroep"),
     thema: s("thema"),
     statusinterpretatie: s("statusinterpretatie"),
+    eigenaar: s("eigenaar"),
+    volgende_review: s("volgende_review"),
+    versie: s("versie"),
   };
 }
 
@@ -397,7 +400,7 @@ export async function curatieBijwerken(documentId: string, fd: FormData): Promis
         const { data: huidig } = await svc
           .from("documenten")
           .select(
-            "id, titel, bron, bronorganisatie, extern_url, normgewicht, documentdatum, geldig_vanaf, geldig_tot, status, bronstatus, toepassingsgebied, regelingstype, doelgroep, thema, statusinterpretatie, bibliotheek"
+            "id, titel, bron, bronorganisatie, extern_url, normgewicht, documentdatum, geldig_vanaf, geldig_tot, status, bronstatus, toepassingsgebied, regelingstype, doelgroep, thema, statusinterpretatie, eigenaar, volgende_review, versie, bibliotheek"
           )
           .eq("id", documentId)
           .maybeSingle();
@@ -423,6 +426,7 @@ export async function curatieBijwerken(documentId: string, fd: FormData): Promis
           "titel", "bron", "bronorganisatie", "extern_url", "normgewicht",
           "documentdatum", "geldig_vanaf", "geldig_tot", "status", "bronstatus",
           "toepassingsgebied", "regelingstype", "doelgroep", "thema", "statusinterpretatie",
+          "eigenaar", "volgende_review", "versie",
         ];
         const update: Record<string, unknown> = {};
         const logRijen: LogRij[] = [];

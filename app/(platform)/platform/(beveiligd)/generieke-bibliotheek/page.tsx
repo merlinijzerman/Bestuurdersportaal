@@ -28,7 +28,8 @@ const CAP = "platform.generic.library.manage";
 const DOC_KOLOMMEN =
   "id, titel, bron, bronorganisatie, extern_url, normgewicht, documentdatum, " +
   "geldig_vanaf, geldig_tot, status, bronstatus, toepassingsgebied, regelingstype, " +
-  "doelgroep, thema, statusinterpretatie, verwerkingsstatus, paginas, opslag_pad, " +
+  "doelgroep, thema, statusinterpretatie, eigenaar, volgende_review, versie, " +
+  "verwerkingsstatus, paginas, opslag_pad, " +
   "vervangen_door_document_id, vervangt_document_id, aangemaakt";
 
 export default async function GeneriekeBibliotheekPagina() {

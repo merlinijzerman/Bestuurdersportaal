@@ -50,6 +50,10 @@ export interface GeneriekDocument {
   doelgroep: string | null;
   thema: string | null;
   statusinterpretatie: string | null;
+  // Increment T6 — beheerkenmerken generieke contentlaag (§7/B3).
+  eigenaar: string | null;
+  volgende_review: string | null;
+  versie: string | null;
   verwerkingsstatus: string | null;
   paginas: number | null;
   opslag_pad: string | null;
@@ -80,6 +84,9 @@ const LEEG_FORM = {
   doelgroep: "",
   thema: "",
   statusinterpretatie: "",
+  eigenaar: "",
+  volgende_review: "",
+  versie: "",
   reden: "",
 };
 type FormState = typeof LEEG_FORM;
@@ -101,6 +108,9 @@ function docNaarForm(d: GeneriekDocument): FormState {
     doelgroep: d.doelgroep ?? "",
     thema: d.thema ?? "",
     statusinterpretatie: d.statusinterpretatie ?? "",
+    eigenaar: d.eigenaar ?? "",
+    volgende_review: d.volgende_review ?? "",
+    versie: d.versie ?? "",
     reden: "",
   };
 }
@@ -470,6 +480,16 @@ export default function GeneriekeBibliotheekClient({
             </Veld>
             <Veld label="Doelgroep" fout={veldfouten.doelgroep}>
               <Input value={form.doelgroep} onChange={(v) => set("doelgroep", v)} />
+            </Veld>
+            {/* Increment T6 — beheerkenmerken generieke contentlaag (§7/B3). */}
+            <Veld label="Eigenaar (team/functie)" fout={veldfouten.eigenaar}>
+              <Input value={form.eigenaar} onChange={(v) => set("eigenaar", v)} />
+            </Veld>
+            <Veld label="Versie" fout={veldfouten.versie}>
+              <Input value={form.versie} onChange={(v) => set("versie", v)} />
+            </Veld>
+            <Veld label="Volgende review" fout={veldfouten.volgende_review}>
+              <Input type="date" value={form.volgende_review} onChange={(v) => set("volgende_review", v)} />
             </Veld>
           </div>
 

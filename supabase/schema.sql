@@ -268,6 +268,15 @@ create table if not exists public.documenten (
   scan_resultaat      jsonb,
   bestand_hash        text,
   mime_gedetecteerd   text,
+  -- Increment T6 — beheerkenmerken generieke contentlaag (§7/B3, besluit 0040).
+  -- Migratie 2026_07_09_t6_generiek_beheerkenmerken.sql is authoritatief. Alle
+  -- drie additief/nullable, alleen zinvol voor bibliotheek='generiek'. eigenaar =
+  -- functioneel/team-label (geen persoonsnaam/FK, PII-minimaal); volgende_review
+  -- = datum eerstvolgende review (handhaving = T10); versie = leesbaar label naast
+  -- de self-FK-lineage (vervangt_/vervangen_door_document_id, decisions/0022).
+  eigenaar        text,
+  volgende_review date,
+  versie          text,
   -- Increment P1 — bestandstype-CHECK uitgebreid met 'pptx' (§8.2). Authoritatief
   -- in 2026_06_24; oorspronkelijk 2026_05_03 (pdf/docx/xlsx). 'bestandstype' en
   -- 'opslag_pad' bestaan al sinds eerdere migraties (hier niet eerder gedocumenteerd).
@@ -279,7 +288,14 @@ create table if not exists public.documenten (
   constraint documenten_context_vergadering_check
     check (context <> 'vergadering' or vergadering_id is not null),
   constraint documenten_agendapunt_vergadering_check
-    check (agendapunt_id is null or vergadering_id is not null)
+    check (agendapunt_id is null or vergadering_id is not null),
+  -- Increment T6 (migratie 2026_07_09 authoritatief) — namespace-invariant
+  -- (besluit 0045, doorgeschoven naar T6): generiek ⇒ fonds_id NULL, fonds ⇒
+  -- fonds_id NOT NULL. Hardt de classificatie waarop de read-only-RLS en de
+  -- fondsfilter rusten; verzwakt geen policy.
+  constraint documenten_generiek_namespace_check
+    check ((bibliotheek = 'generiek' and fonds_id is null)
+        or (bibliotheek = 'fonds' and fonds_id is not null))
 );
 
 -- Increment C — secundaire dossierkoppelingen, append-only metadata-auditlog en
