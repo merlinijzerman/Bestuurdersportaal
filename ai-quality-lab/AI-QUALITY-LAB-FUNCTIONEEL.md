@@ -2,7 +2,7 @@
 
 > **Status**: Concept **v0.5** (ter review — géén implementatie)
 > **Datum**: 2026-07-10
-> **Samenhang**: leest na [`AI-QUALITY-LAB-ARCHITECTUUR.md`](./AI-QUALITY-LAB-ARCHITECTUUR.md); voedt [`AI-QUALITY-LAB-TECHNISCH.md`](./AI-QUALITY-LAB-TECHNISCH.md); eerste golden set in [`AQLAB-MVP-REGRESSIESET-v0.1.md`](./AI-QUALITY-LAB-REGRESSIESET.md).
+> **Samenhang**: leest na [`AI-QUALITY-LAB-ARCHITECTUUR.md`](./AI-QUALITY-LAB-ARCHITECTUUR.md); voedt [`AI-QUALITY-LAB-TECHNISCH.md`](./AI-QUALITY-LAB-TECHNISCH.md); eerste golden set in [`AI-QUALITY-LAB-REGRESSIESET-v0.4.md`](./AI-QUALITY-LAB-REGRESSIESET-v0.4.md).
 > **Markering**: **[FEIT]** geverifieerd tegen codebase · **[ONTWERPKEUZE]** voorstel · **[AANNAME]** werkhypothese · **[OPEN]** openstaande vraag.
 
 > **Wijziging t.o.v. v0.4 (kort).** **Consistentiemeting als standaard onderdeel**: binnen één run wordt een testcase/ad-hoc vraag meerdere keren als iteratie uitgevoerd met exact dezelfde instellingen; nieuw zijn de consistentie-opties in scherm 3 (subset + ad-hoc, §scherm 3), een **consistentie-overzicht + Iteraties-tab** in de outputpresentatie (§scherm 6b), consistentie in de **releaseadvieslogica** (§6.3b) en de DoD. Volledige wijzigingenlijst in §11.

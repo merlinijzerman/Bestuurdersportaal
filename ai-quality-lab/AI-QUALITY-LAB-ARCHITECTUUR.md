@@ -5,7 +5,7 @@
 > **Auteur/rol**: Solution/Product Architect + AI-governance
 > **Scope**: Architectuur (dit document) + Functioneel ontwerp + Technisch ontwerp (aparte docs) + Bestuurssamenvatting (docx) + eerste regressieset (AQLAB-MVP-REGRESSIESET-v0.1)
 > **Werknaam module**: *AI Output Quality & Governance Lab* (afgekort **AI Quality Lab**, code `aqlab`)
-> **Verhouding tot bestaand werk**: bouwt voort op [`AI-GOVERNANCE-ONTWERP.md`](./AI-GOVERNANCE-ONTWERP.md), het bestaande evalprotocol [`evals/organisatieprofiel-gedrag.md`](./evals/organisatieprofiel-gedrag.md) + [`lib/organisatieprofiel.eval.sanity.ts`](./lib/organisatieprofiel.eval.sanity.ts), en de append-only auditlaag (`governance_events`, `governance_log`, `decision_ai_interactions`).
+> **Verhouding tot bestaand werk**: bouwt voort op [`AI-GOVERNANCE-ONTWERP.md`](../AI-GOVERNANCE-ONTWERP.md), het bestaande evalprotocol [`evals/organisatieprofiel-gedrag.md`](../evals/organisatieprofiel-gedrag.md) + [`lib/organisatieprofiel.eval.sanity.ts`](../lib/organisatieprofiel.eval.sanity.ts), en de append-only auditlaag (`governance_events`, `governance_log`, `decision_ai_interactions`).
 
 > **Wijziging t.o.v. v0.2 (kort).** Expliciet onderscheid tussen **productbrede assurance** (MVP: toetsing van AI-feature/prompt/model op synthetische testsets) en **fonds-specifieke assurance** (later: toetsing op echte fondsdocumenten) — §1.4. Datamodel-hoofdlijnen uitgebreid met **`aqlab_release_decisions`** (bron van waarheid voor vrijgave) en **`aqlab_fixture_documents`** (synthetische golden data) — §5.3. Volledige wijzigingenlijst in §14 (t.o.v. v0.2).
 

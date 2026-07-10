@@ -2,7 +2,7 @@
 
 > **Status**: Concept **v0.5** (ter review — géén implementatie)
 > **Datum**: 2026-07-10
-> **Samenhang**: implementeert [`AI-QUALITY-LAB-ARCHITECTUUR.md`](./AI-QUALITY-LAB-ARCHITECTUUR.md) + [`AI-QUALITY-LAB-FUNCTIONEEL.md`](./AI-QUALITY-LAB-FUNCTIONEEL.md); golden set + consistentieconfig in [`AI-QUALITY-LAB-REGRESSIESET-v0.3.md`](./AI-QUALITY-LAB-REGRESSIESET-v0.3.md) + [`AQLAB-SEED-STRUCTUUR-v0.1.yaml`](./AQLAB-SEED-STRUCTUUR-v0.1.yaml).
+> **Samenhang**: implementeert [`AI-QUALITY-LAB-ARCHITECTUUR.md`](./AI-QUALITY-LAB-ARCHITECTUUR.md) + [`AI-QUALITY-LAB-FUNCTIONEEL.md`](./AI-QUALITY-LAB-FUNCTIONEEL.md); golden set + consistentieconfig in [`AI-QUALITY-LAB-REGRESSIESET-v0.4.md`](./AI-QUALITY-LAB-REGRESSIESET-v0.4.md) + [`AQLAB-SEED-STRUCTUUR-v0.2.yaml`](./AQLAB-SEED-STRUCTUUR-v0.2.yaml).
 > **Markering**: **[FEIT]** geverifieerd tegen codebase/migraties · **[ONTWERPKEUZE]** voorstel · **[AANNAME]** · **[OPEN]**.
 > **Bron van waarheid**: de migraties in `supabase/migrations/` zijn authoritatief; dit doc is design-laag en mag t.o.v. de code achterlopen (`CLAUDE.md`).
 
