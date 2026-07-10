@@ -17,6 +17,12 @@ import {
   generiekGeldigheidsstatus,
   isActueleGeneriekeBron,
   GENERIEKE_GELDIGHEIDSSTATUS,
+  GENERIEKE_TRANSITIES,
+  generiekTransitieToegestaan,
+  generiekTransitieRedenplicht,
+  isReviewVerlopen,
+  reviewSignaal,
+  type GeneriekeGeldigheidsstatus,
 } from "./generiek-status";
 
 let n = 0;
@@ -118,6 +124,65 @@ check("mapping is totaal: elke combinatie geeft een canonieke waarde", () => {
       assert.ok((GENERIEKE_GELDIGHEIDSSTATUS as readonly string[]).includes(s), `onbekende status: ${s}`);
     }
   }
+});
+
+// ── 7. T10 — canonieke toestandsmachine: exact de toegestane overgangen ──────
+const ALLE_CANON: GeneriekeGeldigheidsstatus[] = [
+  "draft",
+  "published",
+  "deprecated",
+  "withdrawn",
+];
+const TOEGESTAAN = new Set(GENERIEKE_TRANSITIES.map((t) => `${t.van}→${t.naar}`));
+
+check("generiekTransitieToegestaan matcht exact de tabel (en no-op = false)", () => {
+  for (const van of ALLE_CANON) {
+    for (const naar of ALLE_CANON) {
+      const verwacht = van !== naar && TOEGESTAAN.has(`${van}→${naar}`);
+      assert.equal(
+        generiekTransitieToegestaan(van, naar),
+        verwacht,
+        `overgang ${van}→${naar}: verwacht ${verwacht}`
+      );
+    }
+  }
+});
+
+check("withdrawn is terminaal en verboden sprongen worden geweigerd", () => {
+  for (const naar of ALLE_CANON) {
+    assert.equal(generiekTransitieToegestaan("withdrawn", naar), false, `withdrawn→${naar}`);
+  }
+  // draft→deprecated en draft→withdrawn zijn geen geldige paden.
+  assert.equal(generiekTransitieToegestaan("draft", "deprecated"), false);
+  assert.equal(generiekTransitieToegestaan("draft", "withdrawn"), false);
+  // herpublicatie mag; herpublicatie vanuit withdrawn niet.
+  assert.equal(generiekTransitieToegestaan("deprecated", "published"), true);
+  assert.equal(generiekTransitieToegestaan("withdrawn", "published"), false);
+});
+
+check("reden verplicht op de risicovolle overgangen (niet op draft→published)", () => {
+  assert.equal(generiekTransitieRedenplicht("draft", "published"), false);
+  assert.equal(generiekTransitieRedenplicht("published", "deprecated"), true);
+  assert.equal(generiekTransitieRedenplicht("published", "withdrawn"), true);
+  assert.equal(generiekTransitieRedenplicht("deprecated", "withdrawn"), true);
+  assert.equal(generiekTransitieRedenplicht("deprecated", "published"), true);
+});
+
+// ── 8. T10 — review-verval (read-time; NULL = niet afgedwongen) ───────────────
+check("isReviewVerlopen: verleden = true, toekomst/gelijk/NULL = false", () => {
+  assert.equal(isReviewVerlopen("2020-01-01", "2026-07-10"), true);
+  assert.equal(isReviewVerlopen("2026-07-10", "2026-07-10"), false); // gelijk = niet verlopen
+  assert.equal(isReviewVerlopen("2030-01-01", "2026-07-10"), false);
+  assert.equal(isReviewVerlopen(null, "2026-07-10"), false);
+  assert.equal(isReviewVerlopen(undefined, "2026-07-10"), false);
+});
+
+check("reviewSignaal: verlopen/nadert/geen_datum/actueel", () => {
+  const peil = "2026-07-10";
+  assert.equal(reviewSignaal("2026-07-09", peil), "verlopen");
+  assert.equal(reviewSignaal("2026-07-20", peil, 30), "nadert"); // binnen 30 dagen
+  assert.equal(reviewSignaal("2027-07-10", peil, 30), "actueel"); // ruim buiten horizon
+  assert.equal(reviewSignaal(null, peil), "geen_datum");
 });
 
 console.log(`\n${n} sanity-checks geslaagd.`);

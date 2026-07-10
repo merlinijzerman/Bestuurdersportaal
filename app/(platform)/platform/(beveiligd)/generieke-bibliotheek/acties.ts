@@ -33,6 +33,10 @@ import {
   type CuratieGenormaliseerd,
 } from "@/lib/generiek-curatie";
 import {
+  generiekGeldigheidsstatus,
+  generiekTransitieRedenplicht,
+} from "@/lib/generiek-status";
+import {
   verwerkGeneriekBestand,
   STORAGE_BUCKET,
   QUARANTAINE_BUCKET,
@@ -50,6 +54,8 @@ export type CuratieResultaat =
 
 // Retrieval-relevante velden: een wijziging hieraan werkt door in de RAG-laag
 // (denorm op de chunks / G-filtering), dus rag_impact=true in het auditspoor.
+// Increment T10: `volgende_review` is nu óók retrieval-relevant — een verstreken
+// review degradeert de bron als actuele bron (review-verval-gate in de RPC).
 const RAG_VELDEN = new Set([
   "normgewicht",
   "bronorganisatie",
@@ -57,7 +63,17 @@ const RAG_VELDEN = new Set([
   "bronstatus",
   "geldig_tot",
   "status",
+  "volgende_review",
 ]);
+
+// Increment T10 (besluit 0053) — standaard reviewhorizon bij publicatie zonder
+// expliciete datum. Configureerbare governance-default (te valideren): 12 maanden.
+const STANDAARD_REVIEW_MAANDEN = 12;
+function standaardVolgendeReview(): string {
+  const d = new Date();
+  d.setMonth(d.getMonth() + STANDAARD_REVIEW_MAANDEN);
+  return d.toISOString().slice(0, 10);
+}
 
 // ── FormData → CuratieInvoer ────────────────────────────────────────────────
 function leesInvoer(fd: FormData): CuratieInvoer {
@@ -208,6 +224,16 @@ async function maakUitBuffer(
     };
   }
   const meta: CuratieGenormaliseerd = curatie.waarde;
+
+  // T10: publicatie zet standaard een volgende reviewdatum als er geen is
+  // opgegeven, zodat verse published-content niet zónder reviewhandhaving landt.
+  if (
+    meta.status === "van_kracht" &&
+    (meta.bronstatus ?? "actief") === "actief" &&
+    !meta.volgende_review
+  ) {
+    meta.volgende_review = standaardVolgendeReview();
+  }
 
   // 3) Deduplicatie op inhoud-hash binnen de generieke bibliotheek (#8.2).
   const { data: dup } = await svc
@@ -389,11 +415,13 @@ export async function curatieAanmaken(fd: FormData): Promise<CuratieResultaat> {
 // ── 2. BIJWERKEN (geen re-upload) ───────────────────────────────────────────
 export async function curatieBijwerken(documentId: string, fd: FormData): Promise<CuratieResultaat> {
   try {
+    const reden = (fd.get("reden") as string)?.trim() || "";
     return await withPlatform<CuratieResultaat>(
       {
         capability: CAP,
         handeling: "platform.generic.document.update",
         doelObject: `documenten:${documentId}`,
+        reden: reden || null,
       },
       async (svc, { identiteit, correlatieId }) => {
         void correlatieId;
@@ -420,6 +448,25 @@ export async function curatieBijwerken(documentId: string, fd: FormData): Promis
           };
         }
         const meta = curatie.waarde;
+
+        // T10: als de bewerking een CANONIEKE overgang inhoudt (bv. via status/
+        // bronstatus published→deprecated of →withdrawn), geldt dezelfde reden-plicht
+        // als bij de expliciete deprecate/withdraw/herpubliceer-acties — fail-closed,
+        // zodat de audit-reden niet omzeild kan worden via de vrije edit. De DB-poort
+        // borgt de LEGALITEIT van de overgang; de reden-plicht borgen we hier server-side.
+        const oudCanon = generiekGeldigheidsstatus({ status: huidig.status, bronstatus: huidig.bronstatus });
+        const nieuwCanon = generiekGeldigheidsstatus({ status: meta.status, bronstatus: meta.bronstatus });
+        if (oudCanon !== nieuwCanon && generiekTransitieRedenplicht(oudCanon, nieuwCanon) && !reden) {
+          return {
+            resultaat: {
+              ok: false,
+              foutcode: "reden_vereist",
+              melding: `Statusovergang ${oudCanon} → ${nieuwCanon} vereist een reden (verplicht voor het auditspoor).`,
+              veldfouten: { reden: "Geef een reden op voor deze statusovergang." },
+            },
+            effect: { afgewezen: "reden_vereist", van: oudCanon, naar: nieuwCanon },
+          };
+        }
 
         // Diff t.o.v. de huidige waarden (alleen de bewerkbare §8.1-velden).
         const velden: (keyof CuratieGenormaliseerd & string)[] = [
@@ -461,8 +508,7 @@ export async function curatieBijwerken(documentId: string, fd: FormData): Promis
           };
         }
 
-        const reden = (fd.get("reden") as string)?.trim() || null;
-        await logMetadata(svc, documentId, meta.titel, identiteit, reden, logRijen);
+        await logMetadata(svc, documentId, meta.titel, identiteit, reden || null, logRijen);
         revalidatePath(LIJST_PAD);
 
         return {
@@ -476,17 +522,28 @@ export async function curatieBijwerken(documentId: string, fd: FormData): Promis
   }
 }
 
-// ── 3. INTREKKEN / LATEN VERVALLEN ──────────────────────────────────────────
-export async function curatieIntrekken(documentId: string, reden: string): Promise<CuratieResultaat> {
+// ── 3. DEPRECATE — markeer als verouderd (blijft raadpleegbaar als historie) ──
+// Increment T10: dit is een DEPRECATE (canoniek published → deprecated), NIET een
+// withdraw. Zet status='alleen_historisch' + bronstatus='historisch' (→ afgeleide
+// status 'deprecated'). De bron valt weg als ACTUELE bron (RPC published-gate),
+// maar blijft als historie leesbaar. Reden verplicht (transitie-redenplicht).
+export async function curatieDepreceren(documentId: string, reden: string): Promise<CuratieResultaat> {
+  const redenTrim = reden?.trim() || "";
   try {
     return await withPlatform<CuratieResultaat>(
       {
         capability: CAP,
-        handeling: "platform.generic.document.withdraw",
+        handeling: "platform.generic.document.deprecate",
         doelObject: `documenten:${documentId}`,
-        reden: reden?.trim() || null,
+        reden: redenTrim || null,
       },
       async (svc, { identiteit }) => {
+        if (!redenTrim) {
+          return {
+            resultaat: { ok: false, foutcode: "reden_vereist", melding: "Geef een reden op (verplicht voor het auditspoor)." },
+            effect: { afgewezen: "reden_vereist" },
+          };
+        }
         const { data: huidig } = await svc
           .from("documenten")
           .select("id, titel, status, bronstatus, geldig_tot, bibliotheek")
@@ -499,9 +556,10 @@ export async function curatieIntrekken(documentId: string, reden: string): Promi
             effect: { afgewezen: "niet_gevonden" },
           };
         }
-        if (huidig.status === "alleen_historisch") {
+        const canon = generiekGeldigheidsstatus({ status: huidig.status, bronstatus: huidig.bronstatus });
+        if (canon === "deprecated") {
           return {
-            resultaat: { ok: true, documentId, bericht: "Document was al ingetrokken." },
+            resultaat: { ok: true, documentId, bericht: "Document was al gemarkeerd als verouderd." },
             effect: { document_id: documentId, reeds: true },
           };
         }
@@ -514,12 +572,12 @@ export async function curatieIntrekken(documentId: string, reden: string): Promi
           .eq("id", documentId);
         if (updErr) {
           return {
-            resultaat: { ok: false, foutcode: "intrekken_mislukt", melding: "Intrekken geweigerd door de database." },
-            effect: { afgewezen: "intrekken_mislukt" },
+            resultaat: { ok: false, foutcode: "deprecate_mislukt", melding: "Markeren als verouderd geweigerd door de database (mogelijk een ongeldige statusovergang)." },
+            effect: { afgewezen: "deprecate_mislukt" },
           };
         }
 
-        await logMetadata(svc, documentId, huidig.titel, identiteit, reden?.trim() || null, [
+        await logMetadata(svc, documentId, huidig.titel, identiteit, redenTrim, [
           { veld_naam: "status", oude_waarde: huidig.status, nieuwe_waarde: "alleen_historisch", wijzig_type: "status", rag_impact: true },
           { veld_naam: "bronstatus", oude_waarde: huidig.bronstatus, nieuwe_waarde: "historisch", wijzig_type: "bronstatus", rag_impact: true },
           { veld_naam: "geldig_tot", oude_waarde: huidig.geldig_tot, nieuwe_waarde: nieuwGeldigTot, wijzig_type: "metadata", rag_impact: true },
@@ -527,13 +585,168 @@ export async function curatieIntrekken(documentId: string, reden: string): Promi
         revalidatePath(LIJST_PAD);
 
         return {
-          resultaat: { ok: true, documentId, bericht: "Document ingetrokken (alleen historisch)." },
-          effect: { document_id: documentId, status: "alleen_historisch" },
+          resultaat: { ok: true, documentId, bericht: "Document gemarkeerd als verouderd (deprecated)." },
+          effect: { document_id: documentId, canoniek: "deprecated" },
         };
       }
     );
   } catch (e) {
-    return naarFout(e, "intrekken");
+    return naarFout(e, "deprecate");
+  }
+}
+
+// ── 3a. WITHDRAW — intrekken als bron (uitgesloten, niet meer bruikbaar) ──────
+// Increment T10: canoniek published/deprecated → withdrawn. Zet bronstatus=
+// 'uitgesloten' (→ afgeleide status 'withdrawn' ongeacht documentstatus). De bron
+// is daarmee definitief uitgesloten als bron (herstel = nieuw document / expliciete
+// herpublicatie is niet toegestaan vanuit withdrawn). Reden verplicht.
+export async function curatieWithdrawn(documentId: string, reden: string): Promise<CuratieResultaat> {
+  const redenTrim = reden?.trim() || "";
+  try {
+    return await withPlatform<CuratieResultaat>(
+      {
+        capability: CAP,
+        handeling: "platform.generic.document.withdraw",
+        doelObject: `documenten:${documentId}`,
+        reden: redenTrim || null,
+      },
+      async (svc, { identiteit }) => {
+        if (!redenTrim) {
+          return {
+            resultaat: { ok: false, foutcode: "reden_vereist", melding: "Geef een reden op (verplicht voor het auditspoor)." },
+            effect: { afgewezen: "reden_vereist" },
+          };
+        }
+        const { data: huidig } = await svc
+          .from("documenten")
+          .select("id, titel, status, bronstatus, geldig_tot, bibliotheek")
+          .eq("id", documentId)
+          .maybeSingle();
+
+        if (!huidig || huidig.bibliotheek !== "generiek") {
+          return {
+            resultaat: { ok: false, foutcode: "niet_gevonden", melding: "Generiek document niet gevonden." },
+            effect: { afgewezen: "niet_gevonden" },
+          };
+        }
+        const canon = generiekGeldigheidsstatus({ status: huidig.status, bronstatus: huidig.bronstatus });
+        if (canon === "withdrawn") {
+          return {
+            resultaat: { ok: true, documentId, bericht: "Document was al ingetrokken (uitgesloten)." },
+            effect: { document_id: documentId, reeds: true },
+          };
+        }
+
+        const vandaag = new Date().toISOString().slice(0, 10);
+        const nieuwGeldigTot = huidig.geldig_tot ?? vandaag;
+        const { error: updErr } = await svc
+          .from("documenten")
+          .update({ bronstatus: "uitgesloten", geldig_tot: nieuwGeldigTot })
+          .eq("id", documentId);
+        if (updErr) {
+          return {
+            resultaat: { ok: false, foutcode: "withdraw_mislukt", melding: "Intrekken geweigerd door de database (mogelijk een ongeldige statusovergang)." },
+            effect: { afgewezen: "withdraw_mislukt" },
+          };
+        }
+
+        await logMetadata(svc, documentId, huidig.titel, identiteit, redenTrim, [
+          { veld_naam: "bronstatus", oude_waarde: huidig.bronstatus, nieuwe_waarde: "uitgesloten", wijzig_type: "bronstatus", rag_impact: true },
+          { veld_naam: "geldig_tot", oude_waarde: huidig.geldig_tot, nieuwe_waarde: nieuwGeldigTot, wijzig_type: "metadata", rag_impact: true },
+        ]);
+        revalidatePath(LIJST_PAD);
+
+        return {
+          resultaat: { ok: true, documentId, bericht: "Document ingetrokken (uitgesloten als bron)." },
+          effect: { document_id: documentId, canoniek: "withdrawn" },
+        };
+      }
+    );
+  } catch (e) {
+    return naarFout(e, "withdraw");
+  }
+}
+
+// ── 3b. HERPUBLICEREN — verouderde content weer actueel maken na review ───────
+// Increment T10: canoniek deprecated → published. Zet status='van_kracht' +
+// bronstatus='actief' en een NIEUWE volgende_review (opgegeven of standaard).
+// Alleen toegestaan vanuit 'deprecated' (niet vanuit 'withdrawn'; die is terminaal).
+// Reden verplicht.
+export async function curatieHerpubliceren(
+  documentId: string,
+  reden: string,
+  volgendeReview?: string
+): Promise<CuratieResultaat> {
+  const redenTrim = reden?.trim() || "";
+  const reviewInvoer = volgendeReview?.trim() || "";
+  try {
+    return await withPlatform<CuratieResultaat>(
+      {
+        capability: CAP,
+        handeling: "platform.generic.document.republish",
+        doelObject: `documenten:${documentId}`,
+        reden: redenTrim || null,
+      },
+      async (svc, { identiteit }) => {
+        if (!redenTrim) {
+          return {
+            resultaat: { ok: false, foutcode: "reden_vereist", melding: "Geef een reden op (verplicht voor het auditspoor)." },
+            effect: { afgewezen: "reden_vereist" },
+          };
+        }
+        if (reviewInvoer && !/^\d{4}-\d{2}-\d{2}$/.test(reviewInvoer)) {
+          return {
+            resultaat: { ok: false, foutcode: "validatie", melding: "Volgende review moet het formaat JJJJ-MM-DD hebben." },
+            effect: { afgewezen: "validatie" },
+          };
+        }
+        const { data: huidig } = await svc
+          .from("documenten")
+          .select("id, titel, status, bronstatus, volgende_review, bibliotheek")
+          .eq("id", documentId)
+          .maybeSingle();
+
+        if (!huidig || huidig.bibliotheek !== "generiek") {
+          return {
+            resultaat: { ok: false, foutcode: "niet_gevonden", melding: "Generiek document niet gevonden." },
+            effect: { afgewezen: "niet_gevonden" },
+          };
+        }
+        const canon = generiekGeldigheidsstatus({ status: huidig.status, bronstatus: huidig.bronstatus });
+        if (canon !== "deprecated") {
+          return {
+            resultaat: { ok: false, foutcode: "niet_deprecated", melding: "Alleen verouderde (deprecated) content kan opnieuw worden gepubliceerd." },
+            effect: { afgewezen: `canoniek_${canon}` },
+          };
+        }
+
+        const nieuweReview = reviewInvoer || standaardVolgendeReview();
+        const { error: updErr } = await svc
+          .from("documenten")
+          .update({ status: "van_kracht", bronstatus: "actief", volgende_review: nieuweReview })
+          .eq("id", documentId);
+        if (updErr) {
+          return {
+            resultaat: { ok: false, foutcode: "herpubliceren_mislukt", melding: "Herpubliceren geweigerd door de database (mogelijk een ongeldige statusovergang)." },
+            effect: { afgewezen: "herpubliceren_mislukt" },
+          };
+        }
+
+        await logMetadata(svc, documentId, huidig.titel, identiteit, redenTrim, [
+          { veld_naam: "status", oude_waarde: huidig.status, nieuwe_waarde: "van_kracht", wijzig_type: "status", rag_impact: true },
+          { veld_naam: "bronstatus", oude_waarde: huidig.bronstatus, nieuwe_waarde: "actief", wijzig_type: "bronstatus", rag_impact: true },
+          { veld_naam: "volgende_review", oude_waarde: huidig.volgende_review, nieuwe_waarde: nieuweReview, wijzig_type: "metadata", rag_impact: true },
+        ]);
+        revalidatePath(LIJST_PAD);
+
+        return {
+          resultaat: { ok: true, documentId, bericht: `Document opnieuw gepubliceerd; volgende review ${nieuweReview}.` },
+          effect: { document_id: documentId, canoniek: "published", volgende_review: nieuweReview },
+        };
+      }
+    );
+  } catch (e) {
+    return naarFout(e, "herpubliceren");
   }
 }
 

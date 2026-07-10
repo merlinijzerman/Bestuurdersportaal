@@ -22,11 +22,20 @@ import {
   REGELINGSTYPE_LABEL,
 } from "@/lib/generiek-curatie";
 import {
+  generiekGeldigheidsstatus,
+  GELDIGHEIDSSTATUS_LABEL,
+  reviewSignaal,
+  REVIEW_SIGNAAL_LABEL,
+  type ReviewSignaal,
+} from "@/lib/generiek-status";
+import {
   curatieUploadUrl,
   curatieAanmaken,
   curatieBijwerken,
   curatieVervangen,
-  curatieIntrekken,
+  curatieDepreceren,
+  curatieWithdrawn,
+  curatieHerpubliceren,
   curatieVerwijderen,
   curatieInzageUrl,
   curatieHerindexeren,
@@ -129,6 +138,70 @@ function RagBadge({ normgewicht }: { normgewicht: string | null }) {
       }
     >
       {zichtbaar ? "Standaard in RAG" : "Niet standaard in RAG"}
+    </span>
+  );
+}
+
+function vandaagISO(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+// Canonieke geldigheidsstatus (draft/published/deprecated/withdrawn) als badge.
+function CanonBadge({ canon }: { canon: keyof typeof GELDIGHEIDSSTATUS_LABEL }) {
+  const kleur =
+    canon === "published"
+      ? "bg-ok-tint text-ok-ink"
+      : canon === "withdrawn"
+        ? "bg-err-tint text-err-ink"
+        : canon === "deprecated"
+          ? "bg-warn-tint text-warn-ink"
+          : "bg-app-bg text-ink/70";
+  return (
+    <span
+      className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${kleur}`}
+      title={GELDIGHEIDSSTATUS_LABEL[canon]}
+    >
+      {canon}
+    </span>
+  );
+}
+
+// Review-signaal als badge (verlopen/nadert/geen datum/actueel).
+function ReviewBadge({ signaal }: { signaal: ReviewSignaal }) {
+  const kleur =
+    signaal === "verlopen"
+      ? "bg-err-tint text-err-ink"
+      : signaal === "nadert" || signaal === "geen_datum"
+        ? "bg-warn-tint text-warn-ink"
+        : "bg-ok-tint text-ok-ink";
+  return (
+    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${kleur}`}>
+      {REVIEW_SIGNAAL_LABEL[signaal]}
+    </span>
+  );
+}
+
+function TelChip({
+  label,
+  aantal,
+  toon,
+}: {
+  label: string;
+  aantal: number;
+  toon: "err" | "warn" | "neutraal";
+}) {
+  const actief = aantal > 0;
+  const kleur = !actief
+    ? "bg-app-bg text-ink/40"
+    : toon === "err"
+      ? "bg-err-tint text-err-ink"
+      : toon === "warn"
+        ? "bg-warn-tint text-warn-ink"
+        : "bg-app-bg text-ink/70";
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-medium ${kleur}`}>
+      <span className="font-bold">{aantal}</span>
+      {label}
     </span>
   );
 }
@@ -244,13 +317,49 @@ export default function GeneriekeBibliotheekClient({
     });
   }
 
-  function intrekken(doc: GeneriekDocument) {
+  // T10 — DEPRECATE: markeer als verouderd (blijft raadpleegbaar als historie).
+  function depreceren(doc: GeneriekDocument) {
     const reden = window.prompt(
-      `Document "${doc.titel}" intrekken (alleen historisch)? Geef een reden:`
+      `Document "${doc.titel}" markeren als VEROUDERD (deprecated)?\n\n` +
+        "De bron valt weg als actuele bron in de AI-assistent, maar blijft als historie leesbaar. " +
+        "Geef een reden (verplicht voor het auditspoor):"
     );
     if (reden === null) return;
     startTransitie(async () => {
-      const r = await curatieIntrekken(doc.id, reden);
+      const r = await curatieDepreceren(doc.id, reden);
+      setMelding(r.ok ? { ok: true, tekst: r.bericht } : { ok: false, tekst: r.melding });
+      if (r.ok) router.refresh();
+    });
+  }
+
+  // T10 — WITHDRAW: definitief intrekken (uitgesloten als bron).
+  function withdrawn(doc: GeneriekDocument) {
+    const reden = window.prompt(
+      `Document "${doc.titel}" INTREKKEN (uitgesloten als bron)?\n\n` +
+        "De bron wordt definitief uitgesloten als bron (herstel = nieuw document). " +
+        "Geef een reden (verplicht voor het auditspoor):"
+    );
+    if (reden === null) return;
+    startTransitie(async () => {
+      const r = await curatieWithdrawn(doc.id, reden);
+      setMelding(r.ok ? { ok: true, tekst: r.bericht } : { ok: false, tekst: r.melding });
+      if (r.ok) router.refresh();
+    });
+  }
+
+  // T10 — HERPUBLICEREN: verouderde content na review weer actueel maken.
+  function herpubliceren(doc: GeneriekDocument) {
+    const reden = window.prompt(
+      `Document "${doc.titel}" OPNIEUW PUBLICEREN (na review)?\n\nGeef een reden (verplicht):`
+    );
+    if (reden === null) return;
+    const review = window.prompt(
+      "Volgende reviewdatum (JJJJ-MM-DD). Laat leeg voor de standaardhorizon (12 maanden):",
+      doc.volgende_review ?? ""
+    );
+    if (review === null) return;
+    startTransitie(async () => {
+      const r = await curatieHerpubliceren(doc.id, reden, review || undefined);
       setMelding(r.ok ? { ok: true, tekst: r.bericht } : { ok: false, tekst: r.melding });
       if (r.ok) router.refresh();
     });
@@ -339,6 +448,19 @@ export default function GeneriekeBibliotheekClient({
     }
   }
 
+  // T10 — review-/statussignalering voor de curatierol (afgeleid; besluit 0053).
+  // Geen tweede store: puur berekend over de al opgehaalde generieke documenten.
+  const vandaag = vandaagISO();
+  const signalen = documenten.map((d) => ({
+    canon: generiekGeldigheidsstatus({ status: d.status, bronstatus: d.bronstatus }),
+    signaal: reviewSignaal(d.volgende_review, vandaag),
+  }));
+  const telVerlopen = signalen.filter((s) => s.canon !== "withdrawn" && s.signaal === "verlopen").length;
+  const telNadert = signalen.filter((s) => s.canon !== "withdrawn" && s.signaal === "nadert").length;
+  const telGeenDatum = signalen.filter((s) => s.canon === "published" && s.signaal === "geen_datum").length;
+  const telDeprecated = signalen.filter((s) => s.canon === "deprecated").length;
+  const telWithdrawn = signalen.filter((s) => s.canon === "withdrawn").length;
+
   const heeftFile = modus?.soort === "aanmaken" || modus?.soort === "vervangen";
 
   return (
@@ -376,6 +498,25 @@ export default function GeneriekeBibliotheekClient({
 
       {reindexMelding && (
         <div className="rounded-lg bg-app-bg px-4 py-3 text-sm text-ink">{reindexMelding}</div>
+      )}
+
+      {/* T10 — review-/statusoverzicht voor de curatierol. Verlopen review =
+          niet meer actueel als bron; naderende review = binnenkort actie nodig. */}
+      {documenten.length > 0 && (
+        <div className="rounded-xl border border-line bg-white p-4">
+          <h2 className="text-sm font-semibold text-ink">Review- en statussignalering</h2>
+          <p className="mt-0.5 text-xs text-ink/60">
+            Verlopen of ingetrokken generieke content telt niet meer als actuele bron in de
+            AI-assistent. Content zonder reviewdatum wordt niet gehandhaafd tot een datum is gezet.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <TelChip label="Review verlopen" aantal={telVerlopen} toon="err" />
+            <TelChip label="Review nadert (≤30 d)" aantal={telNadert} toon="warn" />
+            <TelChip label="Geen reviewdatum" aantal={telGeenDatum} toon="warn" />
+            <TelChip label="Verouderd (deprecated)" aantal={telDeprecated} toon="neutraal" />
+            <TelChip label="Ingetrokken (withdrawn)" aantal={telWithdrawn} toon="neutraal" />
+          </div>
+        </div>
       )}
 
       {modus && (
@@ -503,7 +644,10 @@ export default function GeneriekeBibliotheekClient({
           </Veld>
 
           {modus.soort === "bewerken" && (
-            <Veld label="Reden van wijziging (voor het auditspoor)">
+            <Veld
+              label="Reden van wijziging (verplicht bij een statusovergang; voor het auditspoor)"
+              fout={veldfouten.reden}
+            >
               <Input value={form.reden} onChange={(v) => set("reden", v)} />
             </Veld>
           )}
@@ -535,6 +679,7 @@ export default function GeneriekeBibliotheekClient({
               <th className="px-4 py-2">Normgewicht</th>
               <th className="px-4 py-2">RAG</th>
               <th className="px-4 py-2">Status</th>
+              <th className="px-4 py-2">Review</th>
               <th className="px-4 py-2">Verwerking</th>
               <th className="px-4 py-2 text-right">Acties</th>
             </tr>
@@ -542,13 +687,15 @@ export default function GeneriekeBibliotheekClient({
           <tbody>
             {documenten.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-ink/50">
+                <td colSpan={8} className="px-4 py-6 text-center text-ink/50">
                   Nog geen generieke documenten.
                 </td>
               </tr>
             )}
             {documenten.map((d) => {
               const vervangen = !!d.vervangen_door_document_id;
+              const canon = generiekGeldigheidsstatus({ status: d.status, bronstatus: d.bronstatus });
+              const signaal = reviewSignaal(d.volgende_review, vandaagISO());
               return (
                 <tr key={d.id} className="border-t border-line">
                   <td className="px-4 py-2">
@@ -567,8 +714,16 @@ export default function GeneriekeBibliotheekClient({
                     <RagBadge normgewicht={d.normgewicht} />
                   </td>
                   <td className="px-4 py-2">
-                    <div>{d.status ?? "—"}</div>
-                    <div className="text-xs text-ink/50">{d.bronstatus ?? "—"}</div>
+                    <CanonBadge canon={canon} />
+                    <div className="mt-0.5 text-xs text-ink/50">
+                      {d.status ?? "—"} · {d.bronstatus ?? "—"}
+                    </div>
+                  </td>
+                  <td className="px-4 py-2">
+                    <ReviewBadge signaal={signaal} />
+                    {d.volgende_review && (
+                      <div className="mt-0.5 text-xs text-ink/50">{d.volgende_review}</div>
+                    )}
                   </td>
                   <td className="px-4 py-2">{d.verwerkingsstatus ?? "—"}</td>
                   <td className="px-4 py-2">
@@ -586,8 +741,18 @@ export default function GeneriekeBibliotheekClient({
                           <button onClick={() => open({ soort: "vervangen", doc: d })} className="text-ink hover:underline">
                             Vervangen
                           </button>
-                          {d.status !== "alleen_historisch" && (
-                            <button onClick={() => intrekken(d)} disabled={bezig} className="text-err-ink hover:underline disabled:opacity-50">
+                          {canon === "published" && (
+                            <button onClick={() => depreceren(d)} disabled={bezig} className="text-warn-ink hover:underline disabled:opacity-50">
+                              Markeer verouderd
+                            </button>
+                          )}
+                          {canon === "deprecated" && (
+                            <button onClick={() => herpubliceren(d)} disabled={bezig} className="text-ink hover:underline disabled:opacity-50">
+                              Herpubliceren
+                            </button>
+                          )}
+                          {canon !== "withdrawn" && (
+                            <button onClick={() => withdrawn(d)} disabled={bezig} className="text-err-ink hover:underline disabled:opacity-50">
                               Intrekken
                             </button>
                           )}

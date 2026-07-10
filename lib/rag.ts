@@ -6,6 +6,7 @@ import { notulenBronLabel } from "./notulen";
 import type { RetrievalModus } from "./vraagtype";
 import { weegBronsoort, type Bronsoortprofiel } from "./weeg-bronsoort";
 import { isStandaardZichtbaarInRag } from "./generiek-curatie";
+import { isReviewVerlopen } from "./generiek-status";
 import type { AssistantSource, AssistantSourceSamenvatting } from "./assistant-source";
 
 // Increment G — optionele, additieve retrieval-filters (vóór ranking/RRF in de
@@ -63,6 +64,12 @@ export function isPublishedGeneriek(chunk: DocumentChunk): boolean {
   return status === "van_kracht" && bronstatus === "actief";
 }
 
+// Increment T10 — vandaag als ISO-peildatum voor de review-verval-regel wanneer
+// een aanroeper er geen expliciete meegeeft (bv. de dekkingsbrede paden).
+function vandaagISO(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 // Regels:
 //   1. Fondsgrens (alleen bij een gezette fondsFilter): een niet-generieke chunk
 //      mag alleen mee als hij exact het eigen fonds draagt
@@ -72,11 +79,16 @@ export function isPublishedGeneriek(chunk: DocumentChunk): boolean {
 //   2. Published-only generiek (T13/T14): een generieke chunk mag alleen mee als
 //      hij published is (van_kracht + actief). Spiegelt de RPC-gate en borgt de
 //      fallbackpaden die de RPC niet raken.
+//   3. Review-verval generiek (T10, besluit 0053): een generieke chunk met een
+//      VERSTREKEN verplichte review (volgende_review < peildatum) telt niet meer
+//      als actuele bron. Spiegelt de T10-RPC-gate; borgt de fallbackpaden. NULL
+//      volgende_review = niet afgedwongen (backward-compat).
 // fondsFilter=null → regel 1 wordt overgeslagen (RLS-only, geen regressie);
-// regel 2 blijft gelden (published-only is fonds-onafhankelijk).
+// regel 2+3 blijven gelden (fonds-onafhankelijk). peildatum default = vandaag.
 export function handhaafFondsdiscipline(
   chunks: DocumentChunk[],
-  fondsFilter: string | null
+  fondsFilter: string | null,
+  peildatum: string = vandaagISO()
 ): { chunks: DocumentChunk[]; gedropt: number } {
   const behouden = chunks.filter((c) => {
     const generiek = c.documenten.bibliotheek === "generiek";
@@ -85,6 +97,9 @@ export function handhaafFondsdiscipline(
     }
     if (generiek && !isPublishedGeneriek(c)) {
       return false; // regel 2 — niet-published generiek
+    }
+    if (generiek && isReviewVerlopen(c.documenten.volgende_review, peildatum)) {
+      return false; // regel 3 — verlopen review (T10)
     }
     return true;
   });
@@ -186,6 +201,10 @@ export interface DocumentChunk {
     bronorganisatie?: string | null;
     normgewicht?: string | null;
     extern_url?: string | null;
+    // Increment T10 — verplichte reviewdatum van de (generieke) bron. Voedt de
+    // review-verval-regel in handhaafFondsdiscipline (defense-in-depth náást de
+    // T10-RPC-gate). Alleen de T10-RPC en de fallback-selects leveren dit.
+    volgende_review?: string | null;
   };
   // Increment D — aanwezig zodra de chunk uit een bevestigd notulensegment komt.
   // Gevuld door verrijkNotulenChunks() ná retrieval (de RPC's leveren dit niet);
@@ -371,6 +390,8 @@ interface ZoekChunkRij {
   bronorganisatie?: string | null;
   normgewicht?: string | null;
   extern_url?: string | null;
+  // Increment T10 — reviewdatum uit de RPC-return (d.volgende_review).
+  volgende_review?: string | null;
 }
 
 export interface BronVerwijzing {
@@ -418,6 +439,7 @@ function rijNaarChunk(r: ZoekChunkRij): DocumentChunk {
       bronorganisatie: r.bronorganisatie ?? null,
       normgewicht: r.normgewicht ?? null,
       extern_url: r.extern_url ?? null,
+      volgende_review: r.volgende_review ?? null,
     },
   };
 }
@@ -514,7 +536,7 @@ export async function zoekRelevanteChunksMetMeta(
     const gerangschikt = (data as ZoekChunkRij[]).map(rijNaarChunk);
     // T4 — app-guard náást de RPC: dropt (theoretische) cross-tenant/niet-published
     // lekken en telt ze, zodat een falen van RLS+RPC zichtbaar wordt in de meta.
-    const bewaakt = handhaafFondsdiscipline(gerangschikt, fondsFilter);
+    const bewaakt = handhaafFondsdiscipline(gerangschikt, fondsFilter, filters?.peildatum ?? vandaagISO());
     const geselecteerd = weegEnSelecteer(bewaakt.chunks, filters, maxResults, maxPerDoc);
     return {
       chunks: geselecteerd,
@@ -575,7 +597,7 @@ async function zoekViaFTS(
 
   if (!error && Array.isArray(data) && data.length > 0) {
     const gerangschikt = (data as ZoekChunkRij[]).map(rijNaarChunk);
-    const bewaakt = handhaafFondsdiscipline(gerangschikt, fondsFilter);
+    const bewaakt = handhaafFondsdiscipline(gerangschikt, fondsFilter, filters?.peildatum ?? vandaagISO());
     const geselecteerd = weegEnSelecteer(bewaakt.chunks, filters, maxResults, maxPerDoc);
     return {
       chunks: geselecteerd,
@@ -606,7 +628,7 @@ async function zoekViaFTS(
     pagina,
     paragraaf,
     chunk_index,
-    documenten!inner(titel, bron, bibliotheek, opslag_pad, normgewicht, fonds_id, documentstatus:status, bronstatus)
+    documenten!inner(titel, bron, bibliotheek, opslag_pad, normgewicht, fonds_id, documentstatus:status, bronstatus, volgende_review)
   `;
 
   if (zoekterm.length > 0) {
@@ -636,7 +658,7 @@ async function zoekViaFTS(
 
     if (!error2 && data2 && data2.length > 0) {
       const gevonden = data2 as unknown as DocumentChunk[];
-      const bewaakt = handhaafFondsdiscipline(gevonden, fondsFilter);
+      const bewaakt = handhaafFondsdiscipline(gevonden, fondsFilter, filters?.peildatum ?? vandaagISO());
       const geselecteerd = weegEnSelecteer(bewaakt.chunks, filters, maxResults, maxPerDoc);
       return {
         chunks: geselecteerd,
@@ -677,7 +699,7 @@ async function zoekViaFTS(
 
     if (data3 && data3.length > 0) {
       const gevonden = data3 as unknown as DocumentChunk[];
-      const bewaakt = handhaafFondsdiscipline(gevonden, fondsFilter);
+      const bewaakt = handhaafFondsdiscipline(gevonden, fondsFilter, filters?.peildatum ?? vandaagISO());
       const geselecteerd = weegEnSelecteer(bewaakt.chunks, filters, maxResults, maxPerDoc);
       return {
         chunks: geselecteerd,
@@ -809,7 +831,7 @@ export async function haalDocumentChunks(
     .from("document_chunks")
     .select(
       `id, document_id, tekst, pagina, paragraaf, chunk_index,
-       documenten!inner(titel, bron, bibliotheek, opslag_pad, fonds_id, documentstatus:status, bronstatus)`
+       documenten!inner(titel, bron, bibliotheek, opslag_pad, fonds_id, documentstatus:status, bronstatus, volgende_review)`
     )
     .in("document_id", documentIds)
     .eq("documenten.actief", true)

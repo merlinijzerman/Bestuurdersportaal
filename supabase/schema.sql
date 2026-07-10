@@ -272,8 +272,8 @@ create table if not exists public.documenten (
   -- Migratie 2026_07_09_t6_generiek_beheerkenmerken.sql is authoritatief. Alle
   -- drie additief/nullable, alleen zinvol voor bibliotheek='generiek'. eigenaar =
   -- functioneel/team-label (geen persoonsnaam/FK, PII-minimaal); volgende_review
-  -- = datum eerstvolgende review (handhaving = T10); versie = leesbaar label naast
-  -- de self-FK-lineage (vervangt_/vervangen_door_document_id, decisions/0022).
+  -- = datum eerstvolgende review (HANDHAVING geleverd in T10 — zie onder); versie =
+  -- leesbaar label naast de self-FK-lineage (vervangt_/vervangen_door, 0022).
   eigenaar        text,
   volgende_review date,
   versie          text,
@@ -297,6 +297,30 @@ create table if not exists public.documenten (
     check ((bibliotheek = 'generiek' and fonds_id is null)
         or (bibliotheek = 'fonds' and fonds_id is not null))
 );
+
+-- ── Increment T10 — review-/publicatieworkflow generieke contentlaag ─────────
+-- Migraties 2026_07_10_t10_generiek_transitiepoort.sql (toestandsmachine) en
+-- 2026_07_10_t10_retrieval_review_verval.sql (retrieval-gate) zijn authoritatief;
+-- besluit decisions/0053. Bouwt de T6-contentlaag uit tot een beheerd redactie-
+-- proces. Kern (géén nieuwe kolom — status blijft AFGELEID, besluit 0048):
+--   • fn_generiek_geldigheidsstatus(status,bronstatus) — SQL-spiegel van
+--     lib/generiek-status.ts (draft/published/deprecated/withdrawn).
+--   • fn_generiek_transitie(van,naar) — toegestane canonieke overgangen:
+--     draft→published, published→deprecated, published→withdrawn,
+--     deprecated→withdrawn, deprecated→published; withdrawn = terminaal.
+--   • trg_generiek_status_overgang (BEFORE UPDATE op documenten) — weigert voor
+--     bibliotheek='generiek' een ongeldige canonieke overgang (dekt óók de
+--     bronstatus-as). fn_document_status_overgang_check() slaat generiek nu over
+--     (één autoriteit per bibliotheek; de fonds-lifecycle blijft ongewijzigd).
+--   • Review-verval: de retrieval-RPC's (zoek_chunks / zoek_chunks_hybride)
+--     filteren generiek published-content met een VERSTREKEN volgende_review
+--     (volgende_review < p_peildatum) weg als actuele bron. NULL = niet afgedwongen
+--     (backward-compat). Read-time; geen muterende job. Return-kolom volgende_review
+--     voedt de app-guard (lib/rag.ts::handhaafFondsdiscipline) als defense-in-depth.
+-- Audit: geen nieuwe tabel — elke overgang schrijft append-only naar
+-- document_metadata_log (wijzig_type status/bronstatus, reden verplicht). RLS
+-- ONGEWIJZIGD (generiek read-only voor fondsen; curatie via de service-role achter
+-- withPlatform, capability platform.generic.library.manage).
 
 -- Increment C — secundaire dossierkoppelingen, append-only metadata-auditlog en
 -- metadata-review-queue. Volledige definitie + triggers/RLS in migratie
