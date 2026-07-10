@@ -27,7 +27,7 @@ De consistentiemeting van AQLab draait een testcase/ad-hoc vraag meerdere keren 
 - **Releaselogica:** `release_eligible = (stabiliteit voldoet) EN (correctheid voldoet) EN (geen kritieke/safety-blokkade)`.
 - **UI:** het consistentie-overzicht (functioneel §scherm 6b) toont zowel stabiliteits- als correctheidsmaten en beide bronmetrics.
 - **Reproduceerbaarheid/audit:** correctheid is deels deterministisch (`expected_facts`, gate, format), deels judge/mens (inhoudelijke juistheid buiten `expected_facts`) — dit wordt expliciet gelabeld, geen schijnzekerheid.
-- **Doorvoering:** besluit **geaccepteerd 2026-07-10**, nog niet geïmplementeerd; doorvoering raakt `lib/aqlab/consistency.ts`, het aggregaat en de UI. De regressieset (v0.4) en fixtures blijven ongewijzigd.
+- **Doorvoering:** besluit **geaccepteerd 2026-07-10**, **geïmplementeerd in AQL-3 (2026-07-10)** — `lib/aqlab/consistency.ts::berekenConsistentie`, de regressie-doorwerking (`lib/aqlab/regression.ts` + `regression-core.ts`) en de UI (scherm 6b/6/4). Geen migratie nodig (aggregaat blijft JSON). Zie `decisions/0060`. De regressieset (v0.4) en fixtures blijven ongewijzigd.
 
 ## Referenties
 

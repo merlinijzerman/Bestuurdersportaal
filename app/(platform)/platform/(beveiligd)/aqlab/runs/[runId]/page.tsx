@@ -9,10 +9,23 @@
 import Link from "next/link";
 import { huidigePlatformIdentiteit } from "@/lib/platform-auth";
 import { createServiceSupabase } from "@/lib/supabase-service";
-import { haalRunDetail, type OutputMetScores, type ScoreRij } from "@/lib/aqlab/console-lees";
+import { haalRunDetail, haalVergelijking, type OutputMetScores, type ScoreRij } from "@/lib/aqlab/console-lees";
 import { criteriumByKey } from "@/lib/aqlab/criteria";
 import { HARDE_BLOKKADE_CHECKS } from "@/lib/aqlab/checks";
 import { annuleerRunActie, humanReviewActie } from "../../acties";
+import RegressieBlok from "./regressie-blok";
+import VergelijkingBlok, { type VergelijkingItem } from "./vergelijking-blok";
+import ConsistentieBlok, { type IteratieView } from "./consistentie-blok";
+
+function bronLabels(gebruikteBronnen: unknown): string[] {
+  if (!Array.isArray(gebruikteBronnen)) return [];
+  return gebruikteBronnen
+    .map((b) => {
+      const o = (b ?? {}) as Record<string, unknown>;
+      return String(o.bron ?? o.titel ?? o.document_id ?? "");
+    })
+    .filter((s) => s.length > 0);
+}
 
 export const dynamic = "force-dynamic";
 
@@ -232,6 +245,20 @@ export default async function AqlabRunPagina({ params }: { params: Promise<{ run
   const svc = createServiceSupabase();
   const { run, outputs } = await haalRunDetail(svc, runId);
 
+  // Scherm 4: baseline-vs-challenger vergelijking (indien baseline gezet).
+  const vergelijking = run?.baseline_run_id ? await haalVergelijking(svc, runId) : null;
+  const vergelijkingItems: VergelijkingItem[] = (vergelijking?.paren ?? []).map((p) => ({
+    test_case_id: p.test_case_id,
+    code: p.code,
+    vraag: p.vraag,
+    baseline_antwoord: p.baseline?.gegenereerd_antwoord ?? null,
+    challenger_antwoord: p.challenger?.gegenereerd_antwoord ?? null,
+    baseline_score: p.baseline?.quality_score ?? null,
+    challenger_score: p.challenger?.quality_score ?? null,
+    baseline_gate: p.baseline?.gate_status ?? null,
+    challenger_gate: p.challenger?.gate_status ?? null,
+  }));
+
   if (!run) {
     return (
       <div className="rounded-xl border border-line bg-white p-5">
@@ -244,6 +271,30 @@ export default async function AqlabRunPagina({ params }: { params: Promise<{ run
   }
 
   const perf = run.aggregatie?.performance;
+  const regressie = run.aggregatie?.regressie ?? null;
+  const consistencyMap = run.aggregatie?.consistency ?? {};
+
+  // Consistentie-overzicht per testcase (of ad-hoc): groepeer de outputs → iteraties.
+  const iteratiesPer = new Map<string, IteratieView[]>();
+  for (const o of outputs) {
+    const key = o.test_case_id ?? "ad_hoc";
+    const lijst = iteratiesPer.get(key) ?? iteratiesPer.set(key, []).get(key)!;
+    lijst.push({
+      iteratie: o.iteratie,
+      antwoord: o.gegenereerd_antwoord,
+      quality_score: o.quality_score,
+      gate_status: o.gate_status,
+      latency_ms: o.latency_ms,
+      tokengebruik: o.tokengebruik,
+      bronnen: bronLabels(o.gebruikte_bronnen),
+    });
+  }
+  const consistentieGroepen = Object.entries(consistencyMap).map(([key, aggregaat]) => ({
+    key,
+    titel: key === "ad_hoc" ? "ad-hoc vraag" : `testcase ${key.slice(0, 8)}`,
+    aggregaat,
+    iteraties: (iteratiesPer.get(key) ?? []).sort((a, b) => a.iteratie - b.iteratie),
+  }));
 
   return (
     <div className="space-y-6">
@@ -305,7 +356,35 @@ export default async function AqlabRunPagina({ params }: { params: Promise<{ run
             Langzaamste testcase: <span className="font-mono">{perf.langzaamste_test_case_id.slice(0, 8)}</span>
           </p>
         )}
+        <div className="mt-3 flex flex-wrap gap-4 text-xs text-ink/60">
+          {run.baseline_run_id && (
+            <span>
+              baseline: <Link href={`/platform/aqlab/runs/${run.baseline_run_id}`} className="font-mono text-accent hover:underline">{run.baseline_run_id.slice(0, 8)}</Link>
+              {run.rol ? ` · rol ${run.rol}` : ""}
+            </span>
+          )}
+          {run.gewijzigde_as && <span>gewijzigde as: {run.gewijzigde_as}</span>}
+          {run.promoted_to_testcase && run.promoted_testcase_id && (
+            <span className="text-ok-ink">gepromoveerd → testcase {run.promoted_testcase_id.slice(0, 8)}</span>
+          )}
+        </div>
       </section>
+
+      {/* Scherm 6 — regressierapport (challenger vs baseline) */}
+      {regressie && <RegressieBlok regressie={regressie} />}
+
+      {/* Scherm 4 — outputvergelijking baseline vs challenger */}
+      {vergelijkingItems.length > 0 && <VergelijkingBlok items={vergelijkingItems} />}
+
+      {/* Scherm 6b — consistentie-overzicht + Iteraties-tab */}
+      {consistentieGroepen.length > 0 && (
+        <section className="space-y-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/60">Consistentie (ADR 0056)</h2>
+          {consistentieGroepen.map((g) => (
+            <ConsistentieBlok key={g.key} titel={g.titel} aggregaat={g.aggregaat} iteraties={g.iteraties} />
+          ))}
+        </section>
+      )}
 
       {/* Verplichte disclaimer (§4.4) */}
       <p className="rounded-lg border border-line bg-app-bg p-3 text-xs text-ink/70">{DISCLAIMER}</p>

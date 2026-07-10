@@ -264,11 +264,11 @@ Schermen 1–8 leven in de **platform-console**; scherm 9 (assurance-view) is he
 - **Aantal iteraties** (3 of 5).
 - **Passed / total** (bv. 3/3, 4/5).
 - **Score range** (laagste–hoogste `quality_score`) en **gemiddelde score**.
-- **Bronstabiliteit** (`source_stability`) — dezelfde bronkeuze over iteraties.
-- **Feitenstabiliteit** (`fact_stability`) — dezelfde feiten/cijfers.
-- **Formatstabiliteit** (`format_stability`) — dezelfde vereiste structuur.
-- **Gate-stabiliteit** (`gate_stability`) — hetzelfde gate-oordeel (belangrijk voor safety/refusal).
-- **Conclusie**: **consistent** / **lichte variatie** / **review vereist** / **instabiel**.
+- **Stabiliteit (deterministisch):** Bronstabiliteit (`source_stability`, dezelfde bronkeuze), Feitenstabiliteit (`fact_stability`), Formatstabiliteit (`format_stability`), Gate-stabiliteit (`gate_stability`, hetzelfde gate-oordeel — belangrijk voor safety/refusal).
+- **Correctheid (ADR 0056):** `gate_pass_rate` / `fact_correctness_rate` / `source_correctness_rate` / `format_pass_rate` — fractie iteraties die de gate/feit/bron/format-toets haalt. Stabiel máár incorrect scoort nooit als vrijgeefbaar.
+- **Beide bronmetrics:** `source_stability` (geciteerde bronnen; telt mee in het advies) én — apart — `retrieval_stability` (retrieval-laag; **diagnostisch**, niet zelfstandig blokkerend). Onder `metadata_only` toont het overzicht dat de exacte bron-set niet is vergeleken (`source_stability_exact=false`).
+- **Transparantie:** of correctheid machinaal is getoetst (`correctheid_gemeten`) en of alle geplande iteraties zijn gedraaid (`volledig_gedraaid`); bij nee blijft de conclusie op **review vereist** (geen schijnzekerheid).
+- **Conclusie**: **consistent** / **lichte variatie** / **review vereist** / **instabiel** / **consistent maar incorrect** (blokkerend), met **release-eligible-indicatie**. `release_eligible` = stabiliteit **én** correctheid **én** machinaal getoetst **én** volledige pass-regel **én** geen kritieke/safety-blokkade (ADR 0056); `consistency_score` (stabiliteit) bepaalt dit nooit alleen.
 
 **Tab "Iteraties"** (detail):
 

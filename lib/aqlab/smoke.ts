@@ -12,7 +12,8 @@
 
 import assert from "node:assert/strict";
 import { genereerViaAdapter, type FixtureContext } from "./generate-adapter";
-import { evalueerOutput } from "./evaluation-engine";
+import { evalueerOutput, type EvaluatieResultaat } from "./evaluation-engine";
+import { berekenConsistentie, type IteratieMeting } from "./consistency";
 import type { GenereerAntwoordParams } from "@/lib/generatie-kern";
 import type { TestcaseSpec } from "./checks";
 import type { JudgeCriterium, JudgeInput, JudgeResultaat } from "./judge";
@@ -135,11 +136,62 @@ async function main() {
     }
   }
 
+  // ── Consistentie-mini (AQL-3, ADR 0056) — end-to-end over 3 iteraties ──────
+  function metingUit(iteratie: number, res: EvaluatieResultaat, bronIds: string[]): IteratieMeting {
+    const passByCode: Record<string, boolean | null> = {};
+    for (const s of res.scores) passByCode[s.criterium_code] = s.pass;
+    return {
+      iteratie,
+      gate_status: res.gate_status,
+      quality_score: res.quality_score,
+      passByCode,
+      bronIds,
+      retrievalIds: ["HORIZON-MEMO-STANDAARD-001"],
+      kritiekeBlokkade: res.gate_status === "geblokkeerd",
+    };
+  }
+  async function evalAntwoord(antwoord: string): Promise<EvaluatieResultaat> {
+    const gen = await genereerViaAdapter({
+      vraag: "Vat de kern van dit memo samen.",
+      rol: "voorzitter",
+      fixtures: [FIXTURE],
+      metVervolgvragen: false,
+      client: mockModelClient(antwoord),
+    });
+    return evalueerOutput(
+      { vraag: "Vat de kern van dit memo samen.", antwoord: gen.antwoord, bronnenAantal: gen.bronnenAantal, bronContext: gen.contextTekst, spec: SPEC, snapshotRefs: gen.snapshot_refs.fixture_ids, criteria: SPEC.checks ?? [], reviewVerplicht: false },
+      { judge: mockJudge(true) }
+    );
+  }
+
+  const schoon = "Aanleiding: de beleidsdekkingsgraad is 112,4% [Bron 1]. Voorstel: de premie 2027 wordt 28,6% [Bron 1].";
+  const stabiel = [
+    metingUit(1, await evalAntwoord(schoon), ["HORIZON-MEMO-STANDAARD-001"]),
+    metingUit(2, await evalAntwoord(schoon), ["HORIZON-MEMO-STANDAARD-001"]),
+    metingUit(3, await evalAntwoord(schoon), ["HORIZON-MEMO-STANDAARD-001"]),
+  ];
+  const aggStabiel = berekenConsistentie(stabiel, { iterations: 3, consistency_required: true, critical: false });
+  const okStabiel = aggStabiel.consistency_status === "consistent" && aggStabiel.release_eligible;
+  if (!okStabiel) fouten++;
+  console.log(`  ${okStabiel ? "✓" : "✗"} 3× identiek → consistent + release_eligible (status=${aggStabiel.consistency_status})`);
+
+  // Eén iteratie met ander cijfer → verboden variatie → niet release_eligible.
+  const afwijkend = "Aanleiding: de beleidsdekkingsgraad is 130,0% [Bron 1]. Voorstel: de premie 2027 wordt 28,6% [Bron 1].";
+  const wisselend = [
+    metingUit(1, await evalAntwoord(schoon), ["HORIZON-MEMO-STANDAARD-001"]),
+    metingUit(2, await evalAntwoord(afwijkend), ["HORIZON-MEMO-STANDAARD-001"]),
+    metingUit(3, await evalAntwoord(schoon), ["HORIZON-MEMO-STANDAARD-001"]),
+  ];
+  const aggWissel = berekenConsistentie(wisselend, { iterations: 3, consistency_required: true, critical: false });
+  const okWissel = !aggWissel.release_eligible && aggWissel.consistency_status !== "consistent";
+  if (!okWissel) fouten++;
+  console.log(`  ${okWissel ? "✓" : "✗"} wisselend cijfer → niet release_eligible (status=${aggWissel.consistency_status})`);
+
   if (fouten > 0) {
     console.error(`\nSMOKE FAALT: ${fouten} geval(len) niet zoals verwacht.`);
     process.exit(1);
   }
-  console.log(`\n${GEVALLEN.length} smoke-gevallen geslaagd.`);
+  console.log(`\n${GEVALLEN.length + 2} smoke-gevallen geslaagd.`);
 }
 
 main().catch((e) => {

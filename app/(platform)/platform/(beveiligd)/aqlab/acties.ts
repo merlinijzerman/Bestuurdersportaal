@@ -14,21 +14,32 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { withPlatform } from "@/lib/platform-wrapper";
-import { planRun, annuleerRun, type RunConfig } from "@/lib/aqlab/run-orchestrator";
+import { planRun, annuleerRun, draaiAdHocConsistentieSync, type RunConfig, type AdHocConsistentieResultaat } from "@/lib/aqlab/run-orchestrator";
+import { promoveerAdHocNaarTestcase, valideerPromotie, type PromotieConfig } from "@/lib/aqlab/promotie";
 
 const CAP_OPERATE = "platform.aqlab.operate" as const;
 const CAP_REVIEW = "platform.aqlab.review" as const;
 const LIJST_PAD = "/platform/aqlab";
 
+function leeg(v: FormDataEntryValue | null): string | null {
+  const s = ((v as string) || "").trim();
+  return s.length ? s : null;
+}
+
 export async function startRunActie(formData: FormData): Promise<void> {
-  const testSetId = ((formData.get("test_set_id") as string) || "").trim() || null;
-  const runType = ((formData.get("run_type") as string) || "full_regression") as NonNullable<
-    RunConfig["run_type"]
-  >;
-  const persistMode = ((formData.get("persist_mode") as string) || "full_synthetic") as NonNullable<
-    RunConfig["persist_mode"]
-  >;
-  const adHocVraag = ((formData.get("ad_hoc_question") as string) || "").trim() || null;
+  const testSetId = leeg(formData.get("test_set_id"));
+  const runType = ((formData.get("run_type") as string) || "full_regression") as NonNullable<RunConfig["run_type"]>;
+  const persistMode = ((formData.get("persist_mode") as string) || "full_synthetic") as NonNullable<RunConfig["persist_mode"]>;
+  const adHocVraag = leeg(formData.get("ad_hoc_question"));
+  const modelConfigId = leeg(formData.get("model_configuration_id"));
+  const baselineRunId = leeg(formData.get("baseline_run_id"));
+  const rol = (leeg(formData.get("rol")) as RunConfig["rol"]) ?? null;
+  const soort = (leeg(formData.get("soort")) as RunConfig["soort"]) ?? "functioneel";
+  const gewijzigdeAs = (leeg(formData.get("gewijzigde_as")) as RunConfig["gewijzigde_as"]) ?? null;
+  const consistencyEnabled = formData.get("consistency_enabled") === "on";
+  const iterRaw = leeg(formData.get("iteraties"));
+  const iteraties = iterRaw ? Number(iterRaw) : null;
+  const selectedTestCaseIds = (formData.getAll("selected_test_case_ids") as string[]).map((s) => s.trim()).filter(Boolean);
 
   const { run_id } = await withPlatform(
     {
@@ -42,6 +53,15 @@ export async function startRunActie(formData: FormData): Promise<void> {
         test_set_id: testSetId,
         persist_mode: persistMode,
         ad_hoc_question: adHocVraag,
+        model_configuration_id: modelConfigId,
+        baseline_run_id: baselineRunId,
+        rol,
+        soort,
+        gewijzigde_as: gewijzigdeAs,
+        consistency_enabled: runType === "full_regression" ? null : consistencyEnabled,
+        iteraties,
+        selected_test_case_ids: runType === "subset" && selectedTestCaseIds.length ? selectedTestCaseIds : null,
+        subset_filter: runType === "subset" ? { handmatig: selectedTestCaseIds, alleen_security_safety: soort === "security_blocking" } : null,
         notitie: `Gestart door ${ctx.identiteit.naam}`,
       });
       return { resultaat: r, effect: { run_id: r.run_id, jobs: r.aantalJobs } };
@@ -50,6 +70,77 @@ export async function startRunActie(formData: FormData): Promise<void> {
 
   revalidatePath(LIJST_PAD);
   redirect(`${LIJST_PAD}/runs/${run_id}`);
+}
+
+/** Scherm 6b — synchrone ad-hoc consistentietest (respecteert persist_mode; bij none niets persistent). */
+export async function adHocConsistentieActie(
+  _prev: AdHocConsistentieResultaat | { fout: string } | null,
+  formData: FormData
+): Promise<AdHocConsistentieResultaat | { fout: string } | null> {
+  const vraag = leeg(formData.get("vraag"));
+  if (!vraag) return { fout: "Vraag is verplicht." };
+  const persistMode = ((formData.get("persist_mode") as string) || "none") as NonNullable<RunConfig["persist_mode"]>;
+  const iteraties = Number(leeg(formData.get("iteraties")) || "3");
+  const rol = leeg(formData.get("rol"));
+  const modelConfigId = leeg(formData.get("model_configuration_id"));
+  const fixtureIds = (leeg(formData.get("fixture_ids")) || "").split(",").map((s) => s.trim()).filter(Boolean);
+
+  try {
+    return await withPlatform(
+      { capability: CAP_OPERATE, handeling: "platform.aqlab.adhoc.consistentie", doelObject: "aqlab:ad_hoc" },
+      async (svc, ctx) => {
+        const r = await draaiAdHocConsistentieSync(svc, {
+          vraag,
+          rol,
+          fixtureIds,
+          model_configuration_id: modelConfigId,
+          iteraties,
+          persist_mode: persistMode,
+          gestart_door: null,
+          notitie: `Ad-hoc consistentietest door ${ctx.identiteit.naam}`,
+        });
+        return { resultaat: r, effect: { persisted: r.persisted, run_id: r.run_id, status: r.aggregaat.consistency_status } };
+      }
+    );
+  } catch (e) {
+    return { fout: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/** Scherm 5a — ad-hoc vraag promoveren tot officiële testcase. */
+export async function promoveerActie(formData: FormData): Promise<void> {
+  const config: PromotieConfig = {
+    bron_run_id: (formData.get("bron_run_id") as string) || "",
+    test_set_id: leeg(formData.get("test_set_id")),
+    nieuwe_testset: leeg(formData.get("nieuwe_testset_code"))
+      ? { code: (formData.get("nieuwe_testset_code") as string).trim(), naam: ((formData.get("nieuwe_testset_naam") as string) || "").trim() || (formData.get("nieuwe_testset_code") as string).trim() }
+      : null,
+    code: ((formData.get("code") as string) || "").trim(),
+    titel: ((formData.get("titel") as string) || "").trim(),
+    kritikaliteit: ((formData.get("kritikaliteit") as string) || "middel") as PromotieConfig["kritikaliteit"],
+    minimale_acceptatiescore: Number(leeg(formData.get("minimale_acceptatiescore")) || "0"),
+    review_verplicht: formData.get("review_verplicht") === "on",
+    verwachte_outputvorm: ((formData.get("verwachte_outputvorm") as string) || "").trim(),
+    verplichte_onderdelen: ((formData.get("verplichte_onderdelen") as string) || "").split("\n").map((s) => s.trim()).filter(Boolean),
+    blokkadecriteria: ((formData.get("blokkadecriteria") as string) || "").split(",").map((s) => s.trim()).filter(Boolean),
+  };
+
+  const ontbrekend = valideerPromotie(config);
+  if (ontbrekend.length > 0) {
+    redirect(`${LIJST_PAD}/promoveren?run=${config.bron_run_id}&ontbreekt=${encodeURIComponent(ontbrekend.join(","))}`);
+  }
+
+  const res = await withPlatform(
+    { capability: CAP_OPERATE, handeling: "platform.aqlab.adhoc.promote", doelObject: `aqlab_runs:${config.bron_run_id}` },
+    async (svc) => {
+      const r = await promoveerAdHocNaarTestcase(svc, config);
+      return { resultaat: r, effect: { ok: r.ok, test_case_id: r.test_case_id } };
+    }
+  );
+
+  revalidatePath(LIJST_PAD);
+  if (res.ok && res.test_case_id) redirect(`${LIJST_PAD}/runs/${config.bron_run_id}`);
+  else redirect(`${LIJST_PAD}/promoveren?run=${config.bron_run_id}&fout=${encodeURIComponent(res.reden ?? "onbekend")}`);
 }
 
 export async function annuleerRunActie(formData: FormData): Promise<void> {

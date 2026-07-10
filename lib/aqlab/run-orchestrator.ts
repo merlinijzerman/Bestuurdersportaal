@@ -24,6 +24,13 @@ import { evalueerOutput, type CriteriumScore } from "./evaluation-engine";
 import { beoordeelMetJudge, type JudgeCriterium, type JudgeInput } from "./judge";
 import { fixtureTekst } from "./fixtures";
 import type { TestcaseSpec } from "./checks";
+import {
+  berekenConsistentie,
+  type IteratieMeting,
+  type IteratieGateStatus,
+  type ConsistentieAggregaat,
+} from "./consistency";
+import { berekenRegressie } from "./regression";
 
 export type PersistMode = "full_synthetic" | "none" | "metadata_only";
 
@@ -41,6 +48,17 @@ export interface RunConfig {
   /** Override op het aantal iteraties per testcase. */
   iteraties?: number | null;
   notitie?: string | null;
+  /** Regressie-as (technisch §2.6): baseline/challenger + gewijzigde as. */
+  baseline_run_id?: string | null;
+  rol?: "baseline" | "challenger" | null;
+  soort?: "functioneel" | "security_blocking" | null;
+  gewijzigde_as?: "prompt" | "model" | "temperature" | "max_tokens" | "retrieval" | "geen" | "meerdere" | null;
+  atomair?: boolean | null;
+  /**
+   * Consistentie expliciet aan/uit voor subset/ad-hoc (scherm 3). undefined =
+   * volg de testcase-instelling (consistency_required). false = forceer 1 iteratie.
+   */
+  consistency_enabled?: boolean | null;
 }
 
 export interface BatchOpties {
@@ -99,6 +117,11 @@ export async function planRun(
       subset_filter: config.subset_filter ?? null,
       selected_test_case_ids: config.selected_test_case_ids ?? null,
       ad_hoc_question: config.ad_hoc_question ?? null,
+      baseline_run_id: config.baseline_run_id ?? null,
+      rol: config.rol ?? null,
+      soort: config.soort ?? "functioneel",
+      gewijzigde_as: config.gewijzigde_as ?? null,
+      atomair: config.atomair ?? null,
       notitie: config.notitie ?? null,
       gestart_door: config.gestart_door ?? null,
     })
@@ -144,9 +167,15 @@ export async function planRun(
 
   const jobs: { run_id: string; test_case_id: string; iteratie: number }[] = [];
   for (const tc of testcases) {
-    const iteraties =
-      config.iteraties ??
-      (tc.consistency_required ? tc.consistency_iterations ?? 3 : 1);
+    // consistency_enabled === false forceert 1 iteratie; true (of undefined bij
+    // consistency_required) gebruikt de override of de testcase-instelling.
+    const consistentieAan =
+      config.consistency_enabled === false
+        ? false
+        : config.consistency_enabled === true || tc.consistency_required === true;
+    const iteraties = !consistentieAan
+      ? 1
+      : config.iteraties ?? tc.consistency_iterations ?? 3;
     for (let i = 1; i <= Math.max(1, iteraties); i++) {
       jobs.push({ run_id, test_case_id: tc.id, iteratie: i });
     }
@@ -480,6 +509,117 @@ export async function verwerkBatch(
   return { verwerkt, afgerond };
 }
 
+/** Extraheert stabiele bron-ids uit gebruikte_bronnen (null onder metadata_only). */
+function bronIdsUit(gebruikteBronnen: unknown): string[] | null {
+  if (!Array.isArray(gebruikteBronnen)) return null;
+  const ids = gebruikteBronnen
+    .map((b) => {
+      const o = (b ?? {}) as Record<string, unknown>;
+      return String(o.document_id ?? o.bron ?? o.titel ?? o.nummer ?? "");
+    })
+    .filter((s) => s.length > 0);
+  return ids.sort();
+}
+
+function retrievalIdsUit(snapshotRefs: unknown): string[] | null {
+  const o = (snapshotRefs ?? {}) as Record<string, unknown>;
+  const ids = o.fixture_ids;
+  if (!Array.isArray(ids)) return null;
+  return ids.map((x) => String(x)).sort();
+}
+
+/**
+ * Berekent het consistentie-aggregaat per testcase (of "ad_hoc") uit de
+ * gepersisteerde outputs + scores van een run. Werkt onder full_synthetic én
+ * metadata_only (scores/gate/snapshot blijven vastgelegd); source_stability valt
+ * onder metadata_only terug op de bron-check-uitkomst (bronIds = null).
+ */
+async function berekenConsistentieVoorRun(
+  svc: SupabaseClient,
+  runId: string
+): Promise<Record<string, ConsistentieAggregaat>> {
+  const { data: outs } = await svc
+    .from("aqlab_run_outputs")
+    .select("id, test_case_id, iteratie, quality_score, gate_status, gebruikte_bronnen, snapshot_refs")
+    .eq("run_id", runId);
+  const outputs = (outs ?? []) as {
+    id: string;
+    test_case_id: string | null;
+    iteratie: number;
+    quality_score: number | null;
+    gate_status: string | null;
+    gebruikte_bronnen: unknown;
+    snapshot_refs: unknown;
+  }[];
+  if (outputs.length === 0) return {};
+
+  const { data: scoreData } = await svc
+    .from("aqlab_scores")
+    .select("run_output_id, criterium_code, pass, methode")
+    .in("run_output_id", outputs.map((o) => o.id));
+  const scoresPer = new Map<string, { criterium_code: string; pass: boolean | null; methode: string }[]>();
+  for (const s of (scoreData ?? []) as { run_output_id: string; criterium_code: string; pass: boolean | null; methode: string }[]) {
+    (scoresPer.get(s.run_output_id) ?? scoresPer.set(s.run_output_id, []).get(s.run_output_id)!).push(s);
+  }
+
+  // Groepeer per testcase (ad-hoc → "ad_hoc").
+  const perTc = new Map<string, IteratieMeting[]>();
+  for (const o of outputs) {
+    const key = o.test_case_id ?? "ad_hoc";
+    const scores = scoresPer.get(o.id) ?? [];
+    const passByCode: Record<string, boolean | null> = {};
+    let judgeOnbetrouwbaar = false;
+    for (const s of scores) {
+      passByCode[s.criterium_code] = s.pass;
+      if (s.methode === "llm_judge" && s.pass === null) judgeOnbetrouwbaar = true;
+    }
+    const gate = (o.gate_status ?? "review_vereist") as IteratieGateStatus;
+    const meting: IteratieMeting = {
+      iteratie: o.iteratie,
+      gate_status: gate,
+      quality_score: o.quality_score,
+      passByCode,
+      bronIds: bronIdsUit(o.gebruikte_bronnen),
+      retrievalIds: retrievalIdsUit(o.snapshot_refs),
+      kritiekeBlokkade: gate === "geblokkeerd",
+      judgeOnbetrouwbaar,
+    };
+    (perTc.get(key) ?? perTc.set(key, []).get(key)!).push(meting);
+  }
+
+  // Bepaal per testcase of het governance-kritiek/safety is (5/5-regel).
+  const echteTcIds = [...perTc.keys()].filter((k) => k !== "ad_hoc");
+  const critMeta = new Map<string, { required: boolean; iterations: number; critical: boolean }>();
+  if (echteTcIds.length) {
+    const { data: tcs } = await svc
+      .from("aqlab_test_cases")
+      .select("id, consistency_required, consistency_iterations, soort, kritikaliteit")
+      .in("id", echteTcIds);
+    for (const t of (tcs ?? []) as { id: string; consistency_required: boolean; consistency_iterations: number; soort: string; kritikaliteit: string }[]) {
+      critMeta.set(t.id, {
+        required: t.consistency_required,
+        iterations: t.consistency_iterations ?? 3,
+        critical: t.soort === "security_blocking" || t.kritikaliteit === "kritiek" || (t.consistency_iterations ?? 3) >= 5,
+      });
+    }
+  }
+
+  const result: Record<string, ConsistentieAggregaat> = {};
+  for (const [key, iteraties] of perTc) {
+    // Alleen zinvol bij ≥2 iteraties óf een expliciet consistency_required geval.
+    const meta = critMeta.get(key);
+    if (iteraties.length < 2 && !(meta?.required)) continue;
+    iteraties.sort((a, b) => a.iteratie - b.iteratie);
+    const critical = key === "ad_hoc" ? iteraties.length >= 5 : meta?.critical ?? false;
+    result[key] = berekenConsistentie(iteraties, {
+      iterations: meta?.iterations ?? iteraties.length,
+      consistency_required: meta?.required ?? key === "ad_hoc",
+      critical,
+    });
+  }
+  return result;
+}
+
 /** Rondt een run af (done + performance-aggregatie) als er geen open jobs meer zijn. */
 export async function rondRunAfIndienKlaar(svc: SupabaseClient, runId: string): Promise<boolean> {
   const { count } = await svc
@@ -489,7 +629,7 @@ export async function rondRunAfIndienKlaar(svc: SupabaseClient, runId: string): 
     .in("status", ["wachtend", "bezig"]);
   if ((count ?? 0) > 0) return false;
 
-  const { data: runRow } = await svc.from("aqlab_runs").select("status, aggregatie, totale_kosten").eq("id", runId).maybeSingle();
+  const { data: runRow } = await svc.from("aqlab_runs").select("status, aggregatie, totale_kosten, baseline_run_id").eq("id", runId).maybeSingle();
   if (!runRow || runRow.status === "done" || runRow.status === "cancelled") return false;
 
   // Performance-aggregatie uit de outputs.
@@ -527,13 +667,30 @@ export async function rondRunAfIndienKlaar(svc: SupabaseClient, runId: string): 
     aantal_geblokkeerd: geblokkeerd,
     aantal_review_vereist: reviewVereist,
   };
-  const aggregatie = { ...((runRow.aggregatie as Record<string, unknown>) ?? {}), performance };
+  // Consistentie-aggregaat per testcase (ADR 0056) uit de gepersisteerde outputs.
+  const consistency = await berekenConsistentieVoorRun(svc, runId);
+  const aggregatie = { ...((runRow.aggregatie as Record<string, unknown>) ?? {}), performance, consistency };
 
   await svc
     .from("aqlab_runs")
     .update({ status: "done", voltooid_op: new Date().toISOString(), aggregatie })
     .eq("id", runId);
-  await logAqlab(svc, "run_afgerond", "aqlab_runs", runId, { performance });
+  await logAqlab(svc, "run_afgerond", "aqlab_runs", runId, {
+    performance,
+    consistency_testcases: Object.keys(consistency).length,
+  });
+
+  // Regressie challenger-vs-baseline (indien baseline gezet). Best-effort: een
+  // fout in de regressieberekening mag het afronden van de run niet blokkeren.
+  if ((runRow as { baseline_run_id?: string | null }).baseline_run_id) {
+    try {
+      await berekenRegressie(svc, runId, new Date().toISOString());
+    } catch (e) {
+      await logAqlab(svc, "regressie_fout", "aqlab_runs", runId, {
+        foutcode: (e instanceof Error ? e.message : String(e)).slice(0, 200),
+      });
+    }
+  }
   return true;
 }
 
@@ -542,4 +699,208 @@ export async function annuleerRun(svc: SupabaseClient, runId: string): Promise<v
   await svc.from("aqlab_runs").update({ status: "cancelled", voltooid_op: new Date().toISOString() }).eq("id", runId);
   await svc.from("aqlab_run_jobs").update({ status: "overgeslagen", bijgewerkt_op: new Date().toISOString() }).eq("run_id", runId).eq("status", "wachtend");
   await logAqlab(svc, "run_geannuleerd", "aqlab_runs", runId);
+}
+
+// ── Synchrone ad-hoc consistentietest (AQL-3, scherm 6b) ──────────────────────
+// Draait N≤5 iteraties IN-PROCES (niet via de async job-queue) zodat het resultaat
+// direct getoond kan worden. Respecteert persist_mode STRIKT: bij 'none' wordt
+// niets persistent opgeslagen (alleen teruggegeven voor weergave). Bij
+// metadata_only/full_synthetic wordt een ad-hoc run + outputs + scores +
+// consistency-aggregaat weggeschreven.
+export interface AdHocConsistentieConfig {
+  vraag: string;
+  rol?: string | null;
+  fixtureIds?: string[];
+  model_configuration_id?: string | null;
+  prompt_version_id?: string | null;
+  iteraties: number;
+  persist_mode: PersistMode;
+  gestart_door?: string | null;
+  judgeEnabled?: boolean;
+  notitie?: string | null;
+}
+
+export interface AdHocIteratieView {
+  iteratie: number;
+  antwoord: string | null;
+  bronnen: unknown;
+  bronContext: string | null;
+  quality_score: number;
+  gate_status: string;
+  latency_ms: number;
+  tokengebruik: { in: number; out: number };
+  kosten_indicatie: number | null;
+}
+
+export interface AdHocConsistentieResultaat {
+  aggregaat: ConsistentieAggregaat;
+  iteraties: AdHocIteratieView[];
+  persisted: boolean;
+  run_id: string | null;
+  persist_mode: PersistMode;
+  vraag: string;
+}
+
+export async function draaiAdHocConsistentieSync(
+  svc: SupabaseClient,
+  config: AdHocConsistentieConfig
+): Promise<AdHocConsistentieResultaat> {
+  const n = Math.max(2, Math.min(5, config.iteraties || 3));
+  const persistMode = config.persist_mode;
+  const judgeEnabled = config.judgeEnabled ?? true;
+  const spec: TestcaseSpec = {};
+  const criteria: string[] = [];
+
+  const modelConfig = await laadModelConfig(svc, config.model_configuration_id);
+  const fixtures = await laadFixtures(svc, config.fixtureIds ?? []);
+
+  const metingen: IteratieMeting[] = [];
+  const views: AdHocIteratieView[] = [];
+  // In-memory bewaren voor de (optionele) persistentie ná de berekening.
+  const teBewaren: {
+    iteratie: number;
+    gen: Awaited<ReturnType<typeof genereerViaAdapter>>;
+    evalResultaat: Awaited<ReturnType<typeof evalueerOutput>>;
+    kosten: number;
+  }[] = [];
+
+  for (let i = 1; i <= n; i++) {
+    const gen = await genereerViaAdapter({ vraag: config.vraag, rol: config.rol ?? undefined, fixtures, modelConfig });
+    const evalResultaat = await evalueerOutput(
+      {
+        vraag: config.vraag,
+        antwoord: gen.antwoord,
+        bronnenAantal: gen.bronnenAantal,
+        bronContext: gen.contextTekst,
+        spec,
+        snapshotRefs: gen.snapshot_refs.fixture_ids,
+        criteria,
+        reviewVerplicht: false,
+      },
+      judgeEnabled ? { judge: (c: JudgeCriterium, inp: JudgeInput) => beoordeelMetJudge(c, inp) } : {}
+    );
+    const kosten = schatKosten(gen.effectieveInstellingen.model_name, gen.tokengebruik.in, gen.tokengebruik.out) ?? 0;
+
+    const passByCode: Record<string, boolean | null> = {};
+    let judgeOnbetrouwbaar = false;
+    for (const s of evalResultaat.scores) {
+      passByCode[s.criterium_code] = s.pass;
+      if (s.methode === "llm_judge" && s.pass === null) judgeOnbetrouwbaar = true;
+    }
+    metingen.push({
+      iteratie: i,
+      gate_status: evalResultaat.gate_status,
+      quality_score: evalResultaat.quality_score,
+      passByCode,
+      bronIds: bronIdsUit(gen.bronnen),
+      retrievalIds: retrievalIdsUit(gen.snapshot_refs),
+      kritiekeBlokkade: evalResultaat.gate_status === "geblokkeerd",
+      judgeOnbetrouwbaar,
+    });
+    views.push({
+      iteratie: i,
+      antwoord: persistMode === "metadata_only" ? null : gen.antwoord,
+      bronnen: persistMode === "metadata_only" ? null : gen.bronnen,
+      bronContext: persistMode === "metadata_only" ? null : gen.contextTekst,
+      quality_score: evalResultaat.quality_score,
+      gate_status: evalResultaat.gate_status,
+      latency_ms: gen.latency_ms,
+      tokengebruik: gen.tokengebruik,
+      kosten_indicatie: kosten,
+    });
+    teBewaren.push({ iteratie: i, gen, evalResultaat, kosten });
+  }
+
+  const aggregaat = berekenConsistentie(metingen, {
+    iterations: n,
+    consistency_required: true,
+    critical: n >= 5,
+  });
+
+  // persist_mode = none → NIETS persistent (alleen tonen). Geen run-rij, geen outputs.
+  if (persistMode === "none") {
+    return { aggregaat, iteraties: views, persisted: false, run_id: null, persist_mode: persistMode, vraag: config.vraag };
+  }
+
+  // metadata_only / full_synthetic → run-rij + outputs + scores + aggregaat.
+  const { data: runRow, error: runErr } = await svc
+    .from("aqlab_runs")
+    .insert({
+      run_type: "ad_hoc",
+      status: "running",
+      persist_mode: persistMode,
+      ad_hoc_question: config.vraag,
+      model_configuration_id: config.model_configuration_id ?? null,
+      prompt_version_id: config.prompt_version_id ?? null,
+      notitie: config.notitie ?? null,
+      gestart_door: config.gestart_door ?? null,
+    })
+    .select("id")
+    .single();
+  if (runErr || !runRow) throw new Error(`ad-hoc run insert mislukt: ${runErr?.message}`);
+  const run_id = runRow.id as string;
+  await logAqlab(svc, "adhoc_consistentie_gestart", "aqlab_runs", run_id, { iteraties: n, persist_mode: persistMode });
+
+  const metadataOnly = persistMode === "metadata_only";
+  let totaleKosten = 0;
+  for (const b of teBewaren) {
+    const eff = b.gen.effectieveInstellingen;
+    totaleKosten += b.kosten;
+    const { data: outRow } = await svc
+      .from("aqlab_run_outputs")
+      .insert({
+        run_id,
+        test_case_id: null,
+        iteratie: b.iteratie,
+        inputvraag: metadataOnly ? null : config.vraag,
+        gebruikte_context: metadataOnly ? null : { tekst: b.gen.contextTekst },
+        gegenereerd_antwoord: metadataOnly ? null : b.gen.antwoord,
+        gebruikte_bronnen: metadataOnly ? null : b.gen.bronnen,
+        herkomstlabels: metadataOnly ? null : { citaties: b.gen.citaties },
+        snapshot_refs: b.gen.snapshot_refs,
+        snapshot_hash: b.gen.snapshot_hash,
+        model_name: eff.model_name,
+        temperature_effective: eff.temperature_effective,
+        max_tokens_effective: eff.max_tokens_effective,
+        top_p_effective: eff.top_p_effective,
+        provider_default_used: eff.provider_default_used,
+        retrieval_settings_effective: b.gen.retrieval_settings_effective,
+        prompt_version_id: config.prompt_version_id ?? null,
+        tokengebruik: b.gen.tokengebruik,
+        latency_ms: b.gen.latency_ms,
+        kosten_indicatie: b.kosten,
+        quality_score: b.evalResultaat.quality_score,
+        gate_status: b.evalResultaat.gate_status,
+      })
+      .select("id")
+      .single();
+    const outputId = outRow?.id as string | undefined;
+    if (outputId) {
+      for (const s of b.evalResultaat.scores) {
+        const geredigeerd = metadataOnly && s.methode === "llm_judge";
+        await svc.from("aqlab_scores").insert({
+          run_output_id: outputId,
+          criterium_code: s.criterium_code,
+          methode: s.methode,
+          score: s.score,
+          pass: s.pass,
+          motivatie: geredigeerd ? "(motivatie niet bewaard in metadata_only)" : s.motivatie,
+          bewijs: geredigeerd ? null : s.bewijs ?? null,
+          judge_model: s.judge_model ?? null,
+        });
+      }
+    }
+  }
+
+  const aggregatie = { consistency: { ad_hoc: aggregaat } };
+  await svc
+    .from("aqlab_runs")
+    .update({ status: "done", voltooid_op: new Date().toISOString(), aggregatie, totale_kosten: totaleKosten })
+    .eq("id", run_id);
+  await logAqlab(svc, "adhoc_consistentie_afgerond", "aqlab_runs", run_id, {
+    consistency_status: aggregaat.consistency_status,
+    release_eligible: aggregaat.release_eligible,
+  });
+
+  return { aggregaat, iteraties: views, persisted: true, run_id, persist_mode: persistMode, vraag: config.vraag };
 }
