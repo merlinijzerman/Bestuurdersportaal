@@ -64,7 +64,8 @@ end $$;
 do $$
 declare
   t text;
-  logtabellen text[] := array['governance_log','risico_log','procedure_log','agendapunt_log'];
+  logtabellen text[] := array['governance_log','risico_log','procedure_log','agendapunt_log',
+                              'aqlab_log'];  -- AQLab append-only auditspoor (AQL-1)
   ontbreekt text := '';
 begin
   foreach t in array logtabellen loop

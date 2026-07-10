@@ -1529,3 +1529,38 @@ create table if not exists public.fonds_klantbeeld_cohort (
 );
 -- RLS (per tabel, identiek T8-patroon): select = eigen fonds; insert/update =
 -- eigen fonds + rol voorzitter/beheerder (WITH CHECK); geen delete-policy.
+
+-- ── 14. AI Output Quality & Governance Lab (AQLab, aqlab_*) ──────────────────
+-- Werkticket AQL-1 (2026-07-10). AUTHORITATIEF = de migraties:
+--   supabase/migrations/2026_07_10_aqlab_1_register.sql   (register)
+--   supabase/migrations/2026_07_10_aqlab_2_runs.sql       (runs/outputs/scores)
+--   supabase/migrations/2026_07_10_aqlab_3_governance.sql (release/audit/log)
+-- Deze sectie is documentatie (mag achterlopen). Alle aqlab_-tabellen zijn in de
+-- MVP PROVIDER-GLOBAAL en SYNTHETISCH — geen fonds_id. Autorisatie loopt
+-- server-side via de platform-service-role-wrapper (decision 0058), niet via
+-- tabel-policies: RLS staat AAN met DENY-BY-DEFAULT (bewust geen permissive
+-- policies), analoog aan platform_* (2026_06_23).
+--
+-- Register (aqlab_1):
+--   aqlab_ai_features            — register te toetsen AI-features
+--   aqlab_test_sets              — golden set per feature (4 sets in de seed)
+--   aqlab_fixture_documents      — synthetisch bronregister; synthetic=true CHECK
+--   aqlab_test_cases             — reproduceerbaar testgeval + consistency_*
+--   aqlab_test_case_fixtures     — n-n testcase↔fixture (required/excluded)
+--   aqlab_prompt_versions        — versiebeheer prompts
+--   aqlab_model_configurations   — benoemde modelinstelling (gevraagd vs effectief)
+-- Runs (aqlab_2):
+--   aqlab_runs                   — uitvoering + aggregatie (consistency-JSON gereserveerd, ADR 0056)
+--   aqlab_run_outputs            — resultaat per iteratie + snapshot-refs (refs_only) + effectieve instellingen
+--   aqlab_scores                 — score per output×criterium (criterium_code → lib/aqlab/criteria.ts)
+--   aqlab_findings               — bevindingen per score
+--   aqlab_human_reviews          — menselijke aftekening (MVP light)
+-- Governance (aqlab_3), APPEND-ONLY (fn_log_append_only-triggers):
+--   aqlab_release_decisions      — bron van waarheid vrijgave; kritieke bevinding blokkeert (CHECK)
+--   aqlab_audit_exports          — bevroren auditdossier (inhoud_hash)
+--   aqlab_log                    — append-only auditspoor van Lab-acties
+--
+-- Scorecriteria (14) en consistency-config zijn CODE-SEED (geen tabel in de MVP):
+--   lib/aqlab/criteria.ts, lib/aqlab/consistency.ts.
+-- Seeden gebeurt via de gate-bewaakte loader (lib/aqlab/seed/*, dry-run default);
+-- seeden is GEBLOKKEERD tot de vier seeding-gate-poorten sluiten (validatierapport §6).

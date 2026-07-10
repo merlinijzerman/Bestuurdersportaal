@@ -11,6 +11,8 @@
     "lint:colors": "node scripts/check-brand-hex.mjs",
     "lint:boundaries": "eslint core platform fondsen --no-error-on-unmatched-pattern",
     "sanity": "for f in lib/*.sanity.ts; do echo \"› $f\"; ./node_modules/.bin/tsx \"$f\" || exit 1; done",
+    "aqlab:seed": "tsx lib/aqlab/seed/cli.ts",
+    "aqlab:seed:apply": "tsx lib/aqlab/seed/cli.ts --apply",
     "test:xtenant": "node --import tsx --test tests/cross-tenant/*.test.ts",
     "test:xtenant:ci": "bash scripts/cross-tenant-ci.sh",
     "prepare": "git config core.hooksPath scripts/hooks || true"
@@ -35,6 +37,7 @@
     "@typescript-eslint/parser": "^8.63.0",
     "autoprefixer": "^10.4.21",
     "eslint": "^9.39.4",
+    "js-yaml": "^4.1.0",
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.17",
     "tsx": "^4.19.2",

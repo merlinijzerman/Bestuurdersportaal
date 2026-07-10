@@ -125,15 +125,15 @@ Elk rapport en elke export draagt daarom een `assurance_scope`-markering (`produ
 
 ### 2.2 `aqlab_test_sets`
 **Doel**: benoemde, herbruikbare verzameling testcases per feature (de "golden set").
-**Velden**: `id` · `feature_id fk` · `naam text` · `omschrijving` · `versie int` · `status text` (`actief`/`verouderd`/`gearchiveerd`) · `aangemaakt_op/_door`.
-**Relaties**: n—1 feature; 1—n testcases; 1—n runs.
+**Velden**: `id` · `feature_id fk` · `code text unique` **[AS-BUILT AQL-1]** (natuurlijke sleutel, loader-idempotentie: `samenvatting`/`vraagbeantwoording`/`besluitvoorbereiding`/`security_safety`) · `naam text` · `omschrijving` · `versie int` · `status text` (`actief`/`verouderd`/`gearchiveerd`) · `aangemaakt_op/_door`.
+**Relaties**: n—1 feature (nullable — de `security_safety`-set heeft `feature_id = null`); 1—n testcases; 1—n runs.
 **MVP**: `feature_id`, `naam`, `versie`, `status`. **Later**: `scope`-kolom + `fonds_id` voor fonds-eigen sets.
 **Let op**: géén `scope`/`fonds_id` in MVP — golden sets zijn provider-globaal en synthetisch.
 
 ### 2.3 `aqlab_test_cases`
 **Doel**: één reproduceerbaar testgeval (de kern van reproduceerbaarheid).
-**Velden**: `id` · `test_set_id fk` · `feature_id fk` · `code text` (bv. `BS-01`, `SEC-03` — koppelt aan de regressieset) · `titel` · `gebruikersvraag text` · `gebruikersrol text` (bestuurder/bestuursbureau/commissie/adviseur) · `broncontext_ref jsonb` (verwijzing naar `aqlab_fixture_documents` — synthetische demodocumenten) · `verwachte_outputvorm text` · `verplichte_onderdelen jsonb` (lijst toetsbare eisen) · `blokkadecriteria jsonb` (lijst harde criteria) · `minimale_acceptatiescore int` (0–100) · `soort text` check (`functioneel`/`security_blocking`) · `kritikaliteit text` check (`kritiek`/`hoog`/`middel`/`laag`) · `tags text[]` (**vrije labels voor subset-selectie**, bv. `compliance`, `hallucinatie`, `autorisatie`) · `review_verplicht bool` · `herhalingen int` default 3 · `actief bool` · `aangemaakt_op/_door`.
-**Relaties**: n—1 testset; n—n `aqlab_fixture_documents`; 1—n run_outputs.
+**Velden**: `id` · `test_set_id fk` · `feature_id fk` · `code text` (bv. `BS-01`, `SEC-03` — koppelt aan de regressieset) · `titel` · `gebruikersvraag text` · `gebruikersrol text` (bestuurder/bestuursbureau/commissie/adviseur) · `broncontext_ref jsonb` (verwijzing naar `aqlab_fixture_documents` — synthetische demodocumenten) · `verwachte_outputvorm text` · `verplichte_onderdelen jsonb` (lijst toetsbare eisen) · `blokkadecriteria jsonb` (lijst harde criteria) · `minimale_acceptatiescore int` (0–100) · `soort text` check (`functioneel`/`security_blocking`) · `kritikaliteit text` check (`kritiek`/`hoog`/`middel`/`laag`) · `tags text[]` (**vrije labels voor subset-selectie**, bv. `compliance`, `hallucinatie`, `autorisatie`) · `review_verplicht bool` · `herhalingen int` default 3 · `spec jsonb` **[AS-BUILT AQL-1]** (geseede testcase-spec: `expected_facts`/`outline`/`checks` uit de golden set) · `actief bool` · `aangemaakt_op/_door`.
+**Relaties**: n—1 testset; n—n `aqlab_fixture_documents` **via de koppeltabel `aqlab_test_case_fixtures`** (§2.14b); 1—n run_outputs.
 **Consistentievelden (v0.5)**: `consistency_required bool default false` · `consistency_iterations int default 3` check (3 of 5). Bepalen of een testcase binnen één run meerdere keren als iteratie draait; de gedeelde dimensies/pass-regels/toegestane variatie staan in de seedconfig (`AQLAB-SEED-STRUCTUUR-v0.1.yaml` → `consistency.global`) en in `lib/aqlab/consistency.ts`.
 **MVP**: alle bovenstaande. `code`, `soort` en `tags` maken subset-selectie (§2.6) en koppeling met de regressieset mogelijk; `consistency_required`/`consistency_iterations` sturen de consistentiemeting. **Later**: multi-turn/full-funnel-vragen.
 
@@ -222,6 +222,15 @@ Elk rapport en elke export draagt daarom een `assurance_scope`-markering (`produ
 **RLS/audit**: provider-owned globaal; mutaties append-only gelogd in `aqlab_log`.
 **[ONTWERPKEUZE — fixturebeleid] (§2A)**: zie de aparte sectie hieronder voor opslag, versionering, hashbepaling, borging tegen echte fondsdata en UI-markering.
 **MVP**: alle bovenstaande. **Later**: fixture-generatoren, meertalige varianten.
+
+### 2.14b `aqlab_test_case_fixtures` **[AS-BUILT AQL-1]**
+**Doel**: genormaliseerde n—n-koppeling tussen testcase en synthetische fixture, zodat de post-seed-verificatie de bidirectionele koppeling sluitend kan toetsen. De `broncontext_ref jsonb` op `aqlab_test_cases` blijft de gedenormaliseerde snapshot; deze koppeltabel is de genormaliseerde waarheid.
+**Velden**: `test_case_id fk` · `fixture_document_id fk` · `rol text` check (`required`/`excluded`) · pk (`test_case_id`,`fixture_document_id`,`rol`).
+**Relaties**: n—1 testcase; n—1 fixture.
+**RLS**: provider-globaal, deny-by-default (decision 0058) — géén permissive policy; toegang server-side via de platform-service-role-wrapper.
+**MVP**: alle bovenstaande.
+
+> **[AS-BUILT — ontwerp-sync AQL-1]** De koppeltabel `aqlab_test_case_fixtures` is toegevoegd in migratie `2026_07_10_aqlab_1_register.sql` (§5) en vervangt in de tabellenset (§1.2) de plek van het *nog niet gebouwde* `aqlab_score_criteria` (dat blijft "later" — de 14 scorecriteria zijn code-seed in `lib/aqlab/criteria.ts`). Netto blijft het aantal MVP-tabellen 15. Autorisatie: **decision 0058** (deny-by-default + service-role-wrapper i.p.v. capability-policy).
 
 ### 2A. Fixture-/demodatabeleid (waar de golden data leeft)
 
@@ -375,8 +384,10 @@ Server-side; geeft geaggregeerde scores/metadata terug voor de features die een 
 | `source_stability` | dezelfde bronkeuze/`[Bron N]`-set |
 | `format_stability` | dezelfde vereiste secties/structuur |
 | `score_spread` | spreiding (max−min) van `quality_score` over iteraties |
-| `consistency_status` | `consistent` / `light_variation` / `review_required` / `unstable` |
+| `consistency_status` | `consistent` / `light_variation` / `review_required` / `unstable` / `consistent_but_incorrect` (ADR 0056) |
 | `consistency_findings` | jsonb: per afwijking welke dimensie + welke iteraties verschilden |
+
+> **[ADR 0056 — gereserveerd, berekend in AQL-3]** Naast de stabiliteitsmaten hierboven reserveert het aggregaat de **correctheidsmaten** `gate_pass_rate` / `fact_correctness_rate` / `source_correctness_rate` / `format_pass_rate` en de technische `retrieval_stability` (naast `source_stability`). Deze staan als code-constante in `lib/aqlab/consistency.ts` (`AQLAB_CONSISTENCY_AGGREGATE_FIELDS`) en worden in **AQL-1 niet berekend** — alleen gereserveerd. `release_eligible` vereist stabiliteit **én** correctheid; hoge stabiliteit met lage correctheid → `consistent_but_incorrect` (blokkerend).
 
 **Berekening** (`lib/aqlab/consistency.ts`, deterministisch waar mogelijk): `fact_stability`/`format_stability`/`gate_stability`/`source_stability` zijn **deterministisch** (vergelijk de per-iteratie auto-check-uitkomsten en gekozen bron-ID's); `score_spread` volgt uit de `quality_score`s. **Toegestane variatie** (formulering/volgorde/stijl) telt niet als inconsistentie; **verboden variatie** (ander feit/cijfer/bronkeuze/conclusie, besluit-als-genomen, wisselend juridisch/compliance- of safety/refusal-gedrag) verlaagt de score en vult `consistency_findings`.
 

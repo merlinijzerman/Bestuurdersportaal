@@ -1,0 +1,22 @@
+# ---------------------------------------------------------------------------
+# AQLAB-VALIDATION-STATE
+# De MENSELIJKE seeding-gate-poorten (pre-seed validatierapport §6).
+# De loader leest dit bestand; content_hash-poort wordt AUTOMATISCH bepaald
+# (placeholders in de seed-YAML). SEED_ALLOWED wordt AFGELEID uit alle vier —
+# nooit hardcoded. Zet een vlag pas op true NA de betreffende validatie.
+#
+# STATUS 2026-07-10: alle vier OPEN → SEED_ALLOWED = false → loader weigert apply.
+# ---------------------------------------------------------------------------
+
+# Poort 2 — AVG-scope SEC-06 (FIX-19) juridisch/FG-bevestigd.
+avg_scope_SEC06_confirmed: false
+
+# Poort 3 — juridische/compliance-duiding BS-06 / BV-04 / SEC-04 gevalideerd.
+legal_compliance_confirmed: false
+
+# Poort 4 — judge-JSON-schema's definitief gedefinieerd.
+judge_json_schemas_present: false
+
+# Poort 1 (content_hash gevuld) staat NIET hier: die wordt door de loader
+# automatisch bepaald door te detecteren of de seed-YAML nog
+# '<sha256-placeholder>' bevat.

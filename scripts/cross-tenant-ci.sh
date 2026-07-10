@@ -46,6 +46,9 @@ SQL_T10="supabase/checks/2026_07_10_t10_review_verval.sql"
 # (Let op: het "T11–14"-label in de eindsamenvatting is een §15-matrixlabel voor
 #  RAG-fondsdiscipline — niet dit increment.)
 SQL_T11M="supabase/checks/2026_07_10_t11_cross_tenant.sql"
+# AQLab (AQL-1) — provider-globale aqlab_-tabellen: RLS-aan + append-only +
+# synthetic-CHECK + release-beslisregel + deny-by-default (geen tenant-lees/schrijf).
+SQL_AQLAB="supabase/checks/2026_07_10_aqlab_cross_tenant.sql"
 
 echo "== [1/4] tsc --noEmit --skipLibCheck =="
 ./node_modules/.bin/tsc --noEmit --skipLibCheck
@@ -94,6 +97,9 @@ echo
 echo "-- T11-modules (stuurinformatie/klantbeeld-data: cross-tenant + rolgate + deny-delete) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_T11M"
 echo
+echo "-- AQLab (aqlab_: RLS-aan + append-only + synthetic-CHECK + release-beslisregel + deny-by-default) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_AQLAB"
+echo
 
 echo "============================================================================"
 echo "GROEN: volledige §15 cross-tenant suite geslaagd (app-laag + DB-laag)."
@@ -106,4 +112,5 @@ echo "  T6-content generieke read-only + namespace    (DB-laag onder échte RLS)
 echo "  T8-config cross-tenant + rolgate + append-only (DB-laag onder échte RLS)"
 echo "  T10-review verval-gate + generieke toestandsmachine (DB-laag)"
 echo "  T11-modules stuurinfo/klantbeeld cross-tenant + rolgate + deny-delete (DB-laag)"
+echo "  AQLab aqlab_ RLS-aan + append-only + synthetic + beslisregel + deny-by-default (DB-laag)"
 echo "============================================================================"
