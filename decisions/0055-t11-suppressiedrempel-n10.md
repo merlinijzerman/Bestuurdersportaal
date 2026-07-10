@@ -4,7 +4,9 @@
 - **Datum:** 2026-07-10
 - **Betrokkenen:** Ontwikkeling (T11-werkopdracht), Merlin (drempel-akkoord)
 - **Leidend ontwerp:** beslisnotitie multi-tenant v0.4 §13 (herleidbaarheid bij
-  kleine populaties)
+  kleine populaties) + de vaststelling **2026-07-08** (klantbeeld zonder deelnemer-
+  persoonsgegevens); de suppressiedrempel operationaliseert diezelfde
+  privacy-by-design-lijn.
 
 ## Context
 

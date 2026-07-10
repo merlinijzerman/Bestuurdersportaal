@@ -1,0 +1,80 @@
+# AQLAB dry-run — voorbeeldoutput (verwachte RODE gates)
+# Commando: python3 aqlab_seed_dryrun.py
+# Exit code: 2 (NO-GO — seeding geblokkeerd)
+# Datum: 2026-07-10 · spike, geen DB, geen mutatie
+#========================================================================
+
+AQLAB SEED DRY-RUN (spike) — GEEN Supabase, GEEN mutatie, GEEN seeding
+========================================================================
+1. PARSE  ->  testcases: 33 | fixtures: 24 | checks: 14 | canonical_texts: 24
+------------------------------------------------------------------------
+2. STRUCTURELE VALIDATIE (fail-hard condities)
+   hard-fails structureel: 0
+------------------------------------------------------------------------
+3. HASHING (sha256 over canonical_text; conventie: LF, trailing ws weg, 1 trailing newline)
+   hashes berekend: 24/24 | placeholders in seed-YAML: 24
+     HORIZON-ACTIELIJST-001: d5f56a4fb88ee93c…
+     HORIZON-ACTUARIEEL-001: 80989597dcdda519…
+     HORIZON-AFGESCHERMD-001: 04474fc899330062…
+     HORIZON-ANDERFONDS-PLACEHOLDER-001: 6e99daaaada2aded…
+     … (+20 meer; volledige lijst in AQLAB-FIXTURE-HASHES-v0.1.yaml)
+------------------------------------------------------------------------
+4. SEEDING-GATE
+   [RED ] content_hash gevuld
+   [RED ] AVG-scope SEC-06
+   [RED ] juridisch BS-06/BV-04/SEC-04
+   [RED ] judge JSON-schema's
+
+   SEED_ALLOWED = false
+------------------------------------------------------------------------
+5. UPSERT-PLAN (dry-run — er wordt NIETS geschreven)
+   Geraakte tabellen:
+     - aqlab_fixture_documents : 24 upsert (op fixture_id + versie)
+     - aqlab_test_sets         : 4 upsert (besluitvoorbereiding, samenvatting, security_safety, vraagbeantwoording)
+     - aqlab_test_cases        : 33 upsert (op code)
+     - aqlab_log               : 1 append (seed-actie, alleen bij echte apply)
+   Voorbeeld-records (zouden worden ge-upsert):
+     fixture  HORIZON-CIJFERS-001 v1 hash=aea4f79424fd… synthetic=True
+     testcase BQ-07 'Cijfermatige vraag' feature=brongebonden_vraagbeantwoording min_score=85 consistency=True
+------------------------------------------------------------------------
+6. RESULTAAT
+   Hard fails: geen (structureel groen).
+   GEBLOKKEERDE GATES (4):
+     x content_hash placeholders bestaan (24 fixtures)
+     x AVG-scope SEC-06 niet bevestigd
+     x juridische/compliance-duiding BS-06/BV-04/SEC-04 niet gevalideerd
+     x judge JSON-schema's ontbreken
+
+   >>> SEED_ALLOWED = false  (NO-GO — seeding geblokkeerd)
+========================================================================
+
+#========================================================================
+# Simulatie: AVG/juridisch/judge extern op 'bevestigd' gezet
+#   (--state met alle 3 op true). content_hash blijft placeholder in de
+#   seed-YAML, dus SEED_ALLOWED blijft false. Bewijst dat hashes-invullen
+#   een aparte, laatste poort is. Exit code blijft 2.
+#========================================================================
+
+   [PASS] AVG-scope SEC-06
+   [PASS] juridisch BS-06/BV-04/SEC-04
+   [PASS] judge JSON-schema's
+
+   SEED_ALLOWED = false
+------------------------------------------------------------------------
+5. UPSERT-PLAN (dry-run — er wordt NIETS geschreven)
+   Geraakte tabellen:
+     - aqlab_fixture_documents : 24 upsert (op fixture_id + versie)
+     - aqlab_test_sets         : 4 upsert (besluitvoorbereiding, samenvatting, security_safety, vraagbeantwoording)
+     - aqlab_test_cases        : 33 upsert (op code)
+     - aqlab_log               : 1 append (seed-actie, alleen bij echte apply)
+   Voorbeeld-records (zouden worden ge-upsert):
+     fixture  HORIZON-CIJFERS-001 v1 hash=aea4f79424fd… synthetic=True
+     testcase BQ-07 'Cijfermatige vraag' feature=brongebonden_vraagbeantwoording min_score=85 consistency=True
+------------------------------------------------------------------------
+6. RESULTAAT
+   Hard fails: geen (structureel groen).
+   GEBLOKKEERDE GATES (1):
+     x content_hash placeholders bestaan (24 fixtures)
+
+   >>> SEED_ALLOWED = false  (NO-GO — seeding geblokkeerd)
+========================================================================

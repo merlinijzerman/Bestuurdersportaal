@@ -69,3 +69,13 @@ buiten T11 (apart ticket indien nodig).
   fonds-forks; consistent met de T8-config-laag en de `core`/`fondsen`-boundaries.
 - **Migratie-eerst:** nieuwe tabellen + seed draaien eerst in Supabase, dán
   code-deploy.
+
+## Bewust restrisico
+
+De feiten-tabellen hebben alleen een `bijgewerkt`-timestamp, **geen actor of
+oude-waarde-change-log**: een voorzitter/beheerder kan de getoonde cijfers
+wijzigen zonder spoor van wie/wanneer/wat-daarvoor. Voor de huidige **synthetische
+demo-data** is dat verdedigbaar (geen besluit, geen AI-interactie — daarom bewust
+geen append-only audit). **Zodra deze cijfers echte, aan het bestuur gerapporteerde
+getallen worden** (ETL uit administratie), hoort hier een lichte change-log of een
+governance-event bij; koppel dat aan het eventuele administratie-integratieticket.

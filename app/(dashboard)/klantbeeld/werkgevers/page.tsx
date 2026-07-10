@@ -14,6 +14,22 @@ export default async function WerkgeversPage() {
   const { fondsId } = await vereisModuleToegang("klantbeeld", "klantbeeld.view");
   const { werkgeversReeks, segmenten, inningReeks, inningAgg } = await haalWerkgevers(fondsId);
 
+  // Lege-state: geen cohort-data → werknemers/premie = 0 → geen zinvolle grafieken
+  // (voorkomt +NaN% en ongeldige SVG-paden). Zelfde patroon als de deelnemers-pagina.
+  const geenData =
+    werkgeversReeks.length === 0 ||
+    werkgeversReeks[werkgeversReeks.length - 1].werknemers === 0;
+  if (geenData) {
+    return (
+      <div className="p-4 sm:p-6 lg:p-7">
+        <KlantbeeldHeader />
+        <div className="bg-white rounded-xl border border-line p-6 text-sm text-muted">
+          Nog geen werkgever-/deelnemerdata beschikbaar voor dit fonds.
+        </div>
+      </div>
+    );
+  }
+
   const last = werkgeversReeks[werkgeversReeks.length - 1];
   const first12 = werkgeversReeks[werkgeversReeks.length - 13];
 

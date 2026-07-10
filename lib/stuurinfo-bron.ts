@@ -143,14 +143,17 @@ export async function haalStuurinfo(fondsId: string): Promise<StuurinfoData> {
 
   const kpis: Kpi[] = geordend.map((r) => {
     const onderdrukt = isOnderdrukt(r.populatie_n);
+    // Onderdrukt → GEEN getal, delta én exacte teller in de payload (structurele
+    // garantie: geen leak, ook niet als het object later aan een client-component
+    // wordt doorgegeven — besluit 0055).
     return {
       key: r.kpi_key,
       label: r.label,
       waarde: onderdrukt ? null : r.waarde === null ? null : Number(r.waarde),
-      delta: r.delta === null ? null : Number(r.delta),
+      delta: onderdrukt ? null : r.delta === null ? null : Number(r.delta),
       eenheid: r.eenheid,
       toelichting: r.toelichting,
-      populatieN: r.populatie_n,
+      populatieN: onderdrukt ? null : r.populatie_n,
       onderdrukt,
     };
   });
@@ -167,13 +170,15 @@ export async function haalStuurinfo(fondsId: string): Promise<StuurinfoData> {
 
   const deelnemerStatus: StatusRij[] = groep("deelnemer_status").map((r) => {
     const onderdrukt = isOnderdrukt(r.populatie_n);
+    // Onderdrukt → aantal, delta én exacte teller uit de payload (geen leak, ook
+    // niet via een afgeleide zoals nettoDelta; besluit 0055).
     return {
       key: r.punt_key,
       label: r.label ?? r.punt_key,
       aantal: onderdrukt ? null : Number(r.waarde ?? 0),
-      delta: r.delta === null ? null : Number(r.delta),
+      delta: onderdrukt ? null : r.delta === null ? null : Number(r.delta),
       kleur: r.kleur,
-      populatieN: r.populatie_n,
+      populatieN: onderdrukt ? null : r.populatie_n,
       onderdrukt,
     };
   });

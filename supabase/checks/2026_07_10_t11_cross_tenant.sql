@@ -144,6 +144,48 @@ begin
   raise notice 'OK T11e: DELETE raakt 0 rijen (geen delete-policy = deny-by-default).';
 end $$;
 
+-- ════════════════════════════════════════════════════════════════════════════
+-- T11f — UPDATE-rolgate NEGATIEF: een bestuurder van A mag GEEN KPI bijwerken.
+--        De UPDATE-USING-clause eist een privileged rol → de rij is onzichtbaar
+--        voor UPDATE → 0 rijen geraakt (geen mutatie).
+-- ════════════════════════════════════════════════════════════════════════════
+set local request.jwt.claims to '{"sub":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"}';
+
+do $$
+declare geraakt int;
+begin
+  update public.fonds_stuurinfo_kpi set waarde = 999
+   where fonds_id = '11111111-1111-1111-1111-111111111111' and kpi_key = 'financieringsgraad';
+  get diagnostics geraakt = row_count;
+  if geraakt <> 0 then
+    raise exception 'LEK T11f: bestuurder kon % KPI-rij(en) UPDATEN (UPDATE-rolgate geschonden).', geraakt;
+  end if;
+  raise notice 'OK T11f: KPI-UPDATE raakt 0 rijen voor niet-privileged bestuurder (rolgate).';
+end $$;
+
+-- ════════════════════════════════════════════════════════════════════════════
+-- T11g — Cross-tenant UPDATE-move NEGATIEF: beheerder van A mag een eigen rij
+--        niet naar fonds B "verplaatsen" (WITH CHECK op fonds_id weigert).
+-- ════════════════════════════════════════════════════════════════════════════
+set local request.jwt.claims to '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}';
+
+do $$
+declare gelukt boolean := false;
+begin
+  begin
+    update public.fonds_stuurinfo_kpi
+       set fonds_id = '22222222-2222-2222-2222-222222222222'
+     where fonds_id = '11111111-1111-1111-1111-111111111111' and kpi_key = 'financieringsgraad';
+    gelukt := true;
+  exception when insufficient_privilege then
+    gelukt := false; -- verwacht: WITH CHECK op de nieuwe fonds_id weigert
+  end;
+  if gelukt then
+    raise exception 'LEK T11g: beheerder van A kon een eigen KPI-rij naar fonds B verplaatsen (cross-tenant UPDATE-move).';
+  end if;
+  raise notice 'OK T11g: cross-tenant UPDATE-move (A→B) geweigerd (WITH CHECK).';
+end $$;
+
 reset role;
 
 rollback;

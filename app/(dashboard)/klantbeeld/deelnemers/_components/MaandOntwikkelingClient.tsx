@@ -32,7 +32,17 @@ export default function MaandOntwikkelingClient({ cohorten, initialAge = 45 }: P
   const [age, setAge] = useState(initialAge);
   const [maandIdx, setMaandIdx] = useState(23);
 
-  const cohort = useMemo(() => cohorten.find((c) => c.age === age) ?? cohorten[27], [cohorten, age]);
+  // Robuust tegen een niet-contigue/gedeeltelijke cohortset (config-gedreven per
+  // fonds; suppressie n<10 kan rijen verwijderen): exacte leeftijd, anders de
+  // dichtstbijzijnde beschikbare cohort. `cohorten` is nooit leeg (pagina guardt).
+  const cohort = useMemo(() => {
+    const exact = cohorten.find((c) => c.age === age);
+    if (exact) return exact;
+    return cohorten.reduce(
+      (best, c) => (Math.abs(c.age - age) < Math.abs(best.age - age) ? c : best),
+      cohorten[0]
+    );
+  }, [cohorten, age]);
 
   return (
     <div className="space-y-6">

@@ -49,6 +49,8 @@ Alle **24 hashes** staan in `AQLAB-FIXTURE-HASHES-v0.1.yaml`. Voorbeelden:
 
 **Niet ingevuld in de bron.** De hashes zijn **berekend** maar **niet** in `AQLAB-HORIZON-FIXTURES-v0.2.md`/de seed-YAML geschreven (dat is een wijziging die expliciete goedkeuring vraagt). Bovendien zijn de hashes van de **compliance-/AVG-fixtures provisorisch**: als hun tekst na juridische/AVG-validatie wijzigt, verandert de hash en moet `versie` omhoog. Advies: vul hashes pas definitief in ná die validatie.
 
+> **Opvolging:** de twee bevindingen hieronder (§3 en §4) zijn vastgelegd als ontwerpbesluit in **`AQLAB-ADR-0001-consistency-correctness-en-stability.md`**.
+
 # 3. Bevinding — `source_stability` vs `retrieval_stability`
 
 De huidige consistentiemeting kent één bronmetric: `source_stability` (stabiliteit van de **geciteerde/gebruikte** bronnen in de output). Punt 3 vraagt terecht een onderscheid:
