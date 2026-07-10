@@ -1466,3 +1466,66 @@ create table if not exists public.fonds_config_log (
 -- TG_TABLE_NAME → config_type/sleutel/oud→nieuw) insert into fonds_config_log.
 -- after insert or update on {fonds_theming, fonds_module_manifest,
 --   fonds_feature_flags, fonds_content_overrides} execute fn_fonds_config_capture().
+
+-- ============================================================
+--  Increment T11 — Data-laag stuurinformatie + klantbeeld (2026_07_10)
+--  Tenant-veilige AGGREGAAT-data (GEEN deelnemer-PII). Deny-by-default RLS per
+--  fonds_id: lezen = eigen fonds (alle leden); schrijven = eigen fonds +
+--  voorzitter/beheerder (WITH CHECK); GEEN delete-policy. populatie_n/aantal =
+--  celgrootte voor kleine-populatie-suppressie (n<10, app-leeslaag). Presentatie/
+--  content per fonds staat in fonds_module_manifest.config (jsonb). Bron van
+--  waarheid: migraties 2026_07_10_t11_stuurinfo_klantbeeld_data.sql (+ seed).
+--  Zie decisions/0054 (bronkeuze) + decisions/0055 (suppressiedrempel).
+-- ============================================================
+
+create table if not exists public.fonds_stuurinfo_kpi (
+  fonds_id     uuid not null references public.fondsen(id) on delete cascade,
+  kpi_key      text not null,
+  label        text not null,
+  waarde       numeric,
+  delta        numeric,
+  eenheid      text not null default 'getal',
+  toelichting  text,
+  volgorde     integer not null default 0,
+  populatie_n  integer,                 -- celgrootte-drager (suppressie n<10)
+  bijgewerkt   timestamptz not null default now(),
+  primary key (fonds_id, kpi_key)
+);
+
+create table if not exists public.fonds_stuurinfo_reeks (
+  fonds_id     uuid not null references public.fondsen(id) on delete cascade,
+  reeks_key    text not null,           -- trend_fg / balans_* / deelnemer_status / ...
+  punt_key     text not null,
+  label        text,
+  volgorde     integer not null default 0,
+  waarde       numeric,
+  delta        numeric,
+  kleur        text,
+  populatie_n  integer,                 -- celgrootte-drager (suppressie n<10)
+  bijgewerkt   timestamptz not null default now(),
+  primary key (fonds_id, reeks_key, punt_key)
+);
+
+create table if not exists public.fonds_klantbeeld_cohort (
+  fonds_id          uuid not null references public.fondsen(id) on delete cascade,
+  leeftijd          integer not null check (leeftijd between 0 and 120),
+  aantal            integer not null default 0,   -- populatie_n (suppressie n<10)
+  actief_p          numeric not null default 0,
+  slapend_p         numeric not null default 0,
+  uitkerend_p       numeric not null default 0,
+  salaris           numeric not null default 0,
+  maand_premie      numeric not null default 0,
+  maand_uitkering   numeric not null default 0,
+  invaar_kapitaal   numeric not null default 0,
+  doel_op67         numeric not null default 0,
+  over_weight       numeric not null default 0,
+  bescherm_weight   numeric not null default 0,
+  duration_jr       numeric not null default 0,
+  uitvoering_mult   numeric not null default 1,
+  bijgewerkt        timestamptz not null default now(),
+  primary key (fonds_id, leeftijd)
+  -- BEWUST GEEN individu-identificator (geen deelnemer-id/naam/bsn/geboortedatum):
+  -- dit is de cohort-samenvatting, geen deelnemerslijst.
+);
+-- RLS (per tabel, identiek T8-patroon): select = eigen fonds; insert/update =
+-- eigen fonds + rol voorzitter/beheerder (WITH CHECK); geen delete-policy.

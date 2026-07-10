@@ -1,0 +1,53 @@
+# ---------------------------------------------------------------------------
+# AQLAB-FIXTURE-HASHES-v0.1
+# Berekende sha256-hashes over de canonical_text van de Horizon-fixtures.
+# Bron: AQLAB-HORIZON-FIXTURES-v0.2.md  ·  conventie: content_hash_convention (seed-YAML v0.2)
+#
+# STATUS: BEREKEND, NOG NIET INGEVULD in de bron-artefacten.
+# Dit manifest wijzigt niets aan de seed-YAML of fixtures; het invullen van
+# content_hash in de bron gebeurt pas NA expliciete goedkeuring (geen productiewijziging nu).
+#
+# hash_algorithm: sha256
+# hash_input: canonical_text (blockquote 'Volledige synthetische tekst'), zonder runtime-metadata
+# normalisatie: LF line-endings, trailing whitespace per regel verwijderd, exact 1 trailing newline, UTF-8
+# referentie: fixture_id + versie + content_hash  (reproduceerbare bronreferentie in een run)
+# ---------------------------------------------------------------------------
+meta:
+  manifest_versie: "0.1"
+  fixtures_bron: "AQLAB-HORIZON-FIXTURES-v0.2.md"
+  algorithm: sha256
+  computed_count: 24
+  filled_into_source: false
+  note: "bronset FIX-10 is gesplitst in 3 aparte canonical_texts (Bron 1/2/3) met elk een eigen hash"
+
+hashes:
+  - {fixture_id: HORIZON-MEMO-STANDAARD-001,        versie: 1, content_hash: cefc95178e8376481f2cc1322fec13af70997c6466cd187fee63876ffb4f94ec, chars: 889}
+  - {fixture_id: HORIZON-RISICOMEMO-001,            versie: 1, content_hash: 2b1003acd5255c88631b68da703f17ec13daf967b6ab3b64129b76c1b9b3b464, chars: 781}
+  - {fixture_id: HORIZON-MEMO-ONVOLLEDIG-001,       versie: 1, content_hash: 865f7d2d086f67dea979ac2dd637883c12ee09c8712a86a5d2024c1cbea0c745, chars: 362}
+  - {fixture_id: HORIZON-MEMO-BIJLAGEN-001,         versie: 1, content_hash: 49f8cb2d8ba06bc56e7ae6a8b98f87569f776a068bcd9c29ee7836881807b162, chars: 694}
+  - {fixture_id: HORIZON-MEMO-TEGENSTRIJDIG-001,    versie: 1, content_hash: 0d4b8f4a160305adf267bee54edf2df150d07837139d22018b9af41c02038e74, chars: 341}
+  - {fixture_id: HORIZON-MEMO-COMPLIANCE-001,       versie: 1, content_hash: bc1f94b0d04a83befca4f1c3da0f0732e380f8334747f3ab54e22ab1ed4a7567, chars: 610}
+  - {fixture_id: HORIZON-ACTUARIEEL-001,            versie: 1, content_hash: 80989597dcdda519227605b999bb0bac2df7ec8c8fb63eec19b009b4f65e24e5, chars: 425}
+  - {fixture_id: HORIZON-MEMO-BRONARM-001,          versie: 1, content_hash: 59b1b0561094edcc92dbedfed2661051687fd4bec02cbd7deb4a91713560476e, chars: 184}
+  - {fixture_id: HORIZON-REGLEMENT-001,             versie: 1, content_hash: 2b3ae1f158122acbb40ae8ec8c16cd3eb30b07abf39277c41961f2964873ee2c, chars: 422}
+  - {fixture_id: HORIZON-BRONSET-MEERVOUD-001,      versie: 1, content_hash: eec7f2c6db18bf3244561303c9096531fd0a54c881a29d7d01e99d330e4d431c, chars: 231}
+  - {fixture_id: HORIZON-BRONSET-MEERVOUD-002,      versie: 1, content_hash: f06b1ff41194647063d6ef331f99fc6ea0ed6ceca8d9464a4ca95d07f73e61d4, chars: 199}
+  - {fixture_id: HORIZON-BRONSET-MEERVOUD-003,      versie: 1, content_hash: 0e9139658f50d72b2fcf272536594a4515bec5120f4038861240115af2cdbe0d, chars: 185}
+  - {fixture_id: HORIZON-DOC-VEROUDERD-001,         versie: 1, content_hash: 6b528571d25bff5b701692a4a72970a4ee2ba5ba52ac9c2cb6f0413757e9e6a4, chars: 193}
+  - {fixture_id: HORIZON-DOC-ACTUEEL-001,           versie: 2, content_hash: 00526e4143e042fa1df272d2060f1680abfb7ccd98867d72939607babf0d6706, chars: 192}
+  - {fixture_id: HORIZON-BEGRIPPEN-001,             versie: 1, content_hash: fa714ef14bface7c7eefaac30d3f1307e5bcfdf3dc4bf1247ab8f96c05cb9d69, chars: 224}
+  - {fixture_id: HORIZON-CIJFERS-001,               versie: 1, content_hash: aea4f79424fdcc97add3c8870bc2280c381a3f09c7b5982182fb5bb87a3a642e, chars: 308}
+  - {fixture_id: HORIZON-AFGESCHERMD-001,           versie: 1, content_hash: 04474fc899330062601960305ccba1bf3a1bb18c9364507e521640fba448c457, chars: 218}
+  - {fixture_id: HORIZON-BESLUITMEMO-OPTIES-001,    versie: 1, content_hash: 36bbee84090b95b8845b4ea600d003491d8b925ef1a451fdae9b5501f30fbb94, chars: 609}
+  - {fixture_id: HORIZON-BESLUITMEMO-COMPLIANCE-001, versie: 1, content_hash: ec5c741a1b76be9a67b7472537d484aea6be8823d5c1421b204320b0a17b244b, chars: 471}
+  - {fixture_id: HORIZON-ACTIELIJST-001,            versie: 1, content_hash: d5f56a4fb88ee93c6dff7721d27a0765920b645a1fce66da17d0f4f08f1fd0a6, chars: 327}
+  - {fixture_id: HORIZON-PERSOONSGEGEVENS-001,      versie: 1, content_hash: 94dd1cf306f9249a381a3200a84887d04b5b3a0dc10f813634e1b76e42c8c0da, chars: 319}
+  - {fixture_id: HORIZON-INJECTION-001,             versie: 1, content_hash: f0bec5f02569b52ae424a2e359f73d9d1ad1c5ea135a390dc6b4f3dfb2de2aa8, chars: 276}
+  - {fixture_id: HORIZON-INJECTION-LABELS-001,      versie: 1, content_hash: 3a6dcc5be7f93339b181fca13b730a045d2e78379c2f9133346e1a475a893107, chars: 200}
+  - {fixture_id: HORIZON-ANDERFONDS-PLACEHOLDER-001, versie: 1, content_hash: 6e99daaaada2adedb5af145383f6efe203cb842621969879e091bbd405db0f7b, chars: 223}
+
+# LET OP (validatie-afhankelijkheid):
+# De hashes van compliance-/juridische fixtures (HORIZON-MEMO-COMPLIANCE-001,
+# HORIZON-BESLUITMEMO-COMPLIANCE-001) en de AVG-fixture (HORIZON-PERSOONSGEGEVENS-001)
+# zijn PROVISORISCH: als de tekst na juridische/AVG-validatie wijzigt, wijzigt de hash
+# en moet fixture.versie worden opgehoogd. Vul deze pas definitief in NA die validatie.

@@ -47,7 +47,16 @@ export type Capability =
   // fonds. Fonds-breed, dus beheerder/voorzitter-gated (analoog aan
   // organisation.profile.manage). RLS borgt eigen-fonds én dubbelt deze rolgate
   // op de config-tabellen (WITH CHECK). Platform-brede config = Increment P.
-  | "fonds.config.manage";
+  | "fonds.config.manage"
+  // Increment T11 (v0.4 §13 / vaststelling 2026-07-08) — LEESrecht op de fonds-
+  // modules stuurinformatie en klantbeeld. Dit is de server-side rol-/capability-
+  // gate NAAST (a) de manifest-beschikbaarheidscheck en (b) de fonds-RLS op de
+  // data. Beide modules verwerken uitsluitend AGGREGAAT-data (geen deelnemer-PII),
+  // dus het leesrecht is breed: elke bestuurdersrol mag meekijken. Een sessie
+  // zónder deze capability (onbekende rol / geen profiel) wordt server-side
+  // geweigerd — beschikbaarheid ≠ autorisatie.
+  | "stuurinformatie.view"
+  | "klantbeeld.view";
 
 /** Rol → toegekende capabilities. Bron-van-waarheid voor autorisatie in v2.
  *  `dossiers.manage` (TO §5: secretariaat/governance/admin) dekt het handmatig
@@ -71,6 +80,8 @@ export const ROL_CAPABILITIES: Record<string, Capability[]> = {
     "profile.manage.own",
     "organisation.profile.manage",
     "fonds.config.manage",
+    "stuurinformatie.view",
+    "klantbeeld.view",
   ],
   voorzitter: [
     "dossiers.manage",
@@ -82,6 +93,8 @@ export const ROL_CAPABILITIES: Record<string, Capability[]> = {
     "notulen.segment.confirm",
     "profile.manage.own",
     "fonds.config.manage",
+    "stuurinformatie.view",
+    "klantbeeld.view",
   ],
   // I-2-release: ALLE metadatavelden opengesteld voor bestuurders (huidige
   // inrichting, akkoord compliance) — vergemakkelijkt invoer/test. Omvat de
@@ -94,6 +107,8 @@ export const ROL_CAPABILITIES: Record<string, Capability[]> = {
     "documents.status.change",
     "documents.bronstatus.change",
     "profile.manage.own",
+    "stuurinformatie.view",
+    "klantbeeld.view",
   ],
 };
 

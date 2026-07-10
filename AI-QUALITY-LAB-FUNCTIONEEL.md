@@ -1,9 +1,11 @@
 # AI Output Quality & Governance Lab — Functioneel ontwerp
 
-> **Status**: Concept **v0.4** (ter review — géén implementatie)
+> **Status**: Concept **v0.5** (ter review — géén implementatie)
 > **Datum**: 2026-07-10
 > **Samenhang**: leest na [`AI-QUALITY-LAB-ARCHITECTUUR.md`](./AI-QUALITY-LAB-ARCHITECTUUR.md); voedt [`AI-QUALITY-LAB-TECHNISCH.md`](./AI-QUALITY-LAB-TECHNISCH.md); eerste golden set in [`AQLAB-MVP-REGRESSIESET-v0.1.md`](./AI-QUALITY-LAB-REGRESSIESET.md).
 > **Markering**: **[FEIT]** geverifieerd tegen codebase · **[ONTWERPKEUZE]** voorstel · **[AANNAME]** werkhypothese · **[OPEN]** openstaande vraag.
+
+> **Wijziging t.o.v. v0.4 (kort).** **Consistentiemeting als standaard onderdeel**: binnen één run wordt een testcase/ad-hoc vraag meerdere keren als iteratie uitgevoerd met exact dezelfde instellingen; nieuw zijn de consistentie-opties in scherm 3 (subset + ad-hoc, §scherm 3), een **consistentie-overzicht + Iteraties-tab** in de outputpresentatie (§scherm 6b), consistentie in de **releaseadvieslogica** (§6.3b) en de DoD. Volledige wijzigingenlijst in §11.
 
 > **Wijziging t.o.v. v0.3 (kort).** Uitgewerkt **hoe de output van een AQLab-run wordt gepresenteerd**: run-overzicht met performance (§scherm 6), testcase-overzicht, volledige outputvergelijking (baseline vs challenger), evaluatiescorekaart. Drie **run-types** toegevoegd — **volledige regressierun**, **subset-run**, **ad-hoc testvraag** — met governance-afbakening, "Opslaan als testcase"-flow en `run_type` in de rapportage (§2.5, §scherm 3). Expliciete **performance-meting** (latency/P95/tokens/kosten). Scherpe scheiding **platform-console (ruwe output) vs fonds-assurance-view (geen ruwe output)**. Volledige wijzigingenlijst in §11.
 
@@ -147,11 +149,15 @@ Schermen 1–8 leven in de **platform-console**; scherm 9 (assurance-view) is he
 
 **Modus 2 — Subset selecteren** (`subset`)
 - Filters: **feature** · **kritikaliteit** · **vorige status** (bv. "alleen wat in de vorige run faalde") · **review verplicht** · **security/safety** · **handmatige selectie** van individuele testcases (met testcase-ID + titel).
+- **Consistentie-filters** (nieuw): *alle testcases draaien* · *alleen `consistency_required` testcases* · *alleen testcases met vorige inconsistentie* · *alleen governance-kritieke consistency-cases*.
+- **Consistentiemeting aan/uit** voor deze subset, en **aantal iteraties aanpassen** binnen de toegestane grenzen (3 normaal, 5 governance-kritiek/safety).
 - Toont continu welke testcases wél/niet meelopen; de gedraaide selectie wordt reproduceerbaar vastgelegd (Technisch §2.6: `subset_filter` + `selected_test_case_ids`).
+- Vaste melding bij consistentie: *"Dit blijft één run; de geselecteerde testcases worden meerdere keren als iteratie uitgevoerd."*
 - Levert een **indicatief** resultaat; geen automatische formele vrijgave.
 
 **Modus 3 — Eigen testvraag stellen** (`ad_hoc`)
 - Velden: **AI-feature** · **gebruikersrol** · **eigen vraag** · **gekozen broncontext / fixture-documenten** · **promptversie** · **modelconfiguratie** · **temperature** · **max tokens** · **retrieval-instellingen** · **baseline/challenger-keuze** (indien vergelijking gewenst) · optioneel: **verwachte outputvorm** · optioneel: **verplichte onderdelen** · optioneel: **blokkadecriteria**.
+- **Consistentie testen** (nieuw): toggle *Consistentie testen*; **aantal herhalingen** 3 of 5; **consistency_dimensions** selecteren (feiten · bronnen · format · gate/safety · score).
 - Toont bovenaan een vaste melding: *"Deze test telt niet mee voor de formele regressiescore, tenzij je deze opslaat als officiële testcase."*
 - Actie na afloop: **"Opslaan als testcase"** (§scherm 5a).
 
@@ -246,6 +252,39 @@ Schermen 1–8 leven in de **platform-console**; scherm 9 (assurance-view) is he
 **Validaties**: advies "accepteren" onmogelijk zolang er een openstaande kritieke blokkade is; bij `run_type ≠ full_regression` is het advies **indicatief** en niet automatisch formeel (§6.3a).
 **Autorisatie**: `aqlab:beheer`/`aqlab:review`/`aqlab:govern`.
 **UX**: sorteer op grootste verslechtering eerst; onderscheid "score lager" (gradueel) van "nu geblokkeerd" (categorisch); toon expliciet welke as veranderde t.o.v. baseline; markeer de **langzaamste testcase** in het performance-blok.
+
+---
+
+### Scherm 6b — Consistentie-overzicht en iteraties
+
+**Doel**: laten zien of een testcase (of ad-hoc vraag) bij herhaling met exact dezelfde instellingen **stabiel** hetzelfde produceert. De iteraties draaien **binnen één run** (geen losse runs).
+
+**Consistentie-overzicht (per testcase/ad-hoc vraag)**:
+
+- **Aantal iteraties** (3 of 5).
+- **Passed / total** (bv. 3/3, 4/5).
+- **Score range** (laagste–hoogste `quality_score`) en **gemiddelde score**.
+- **Bronstabiliteit** (`source_stability`) — dezelfde bronkeuze over iteraties.
+- **Feitenstabiliteit** (`fact_stability`) — dezelfde feiten/cijfers.
+- **Formatstabiliteit** (`format_stability`) — dezelfde vereiste structuur.
+- **Gate-stabiliteit** (`gate_stability`) — hetzelfde gate-oordeel (belangrijk voor safety/refusal).
+- **Conclusie**: **consistent** / **lichte variatie** / **review vereist** / **instabiel**.
+
+**Tab "Iteraties"** (detail):
+
+| Per iteratie | Toont |
+| --- | --- |
+| Output | iteratie 1 / 2 / 3(/4/5) volledige output |
+| Gebruikte bronnen | `[Bron N]`-refs per iteratie |
+| Score | `quality_score` per iteratie |
+| Latency | `latency_ms` per iteratie |
+| Tokengebruik | input/output per iteratie |
+
+Daarnaast een **verschil-weergave** tussen de iteraties (tekst-diff), met markering van **verboden variatie** (ander cijfer/feit/bronkeuze/conclusie, wisselend safety-gedrag) in rood versus toegestane variatie (formulering/volgorde) neutraal.
+
+**Ad-hoc consistentietest**: de gebruiker ziet **alle** iteratie-antwoorden, de onderlinge verschillen en een berekende **`consistency_score`**. De resultaten tellen **niet** mee voor formele regressie, tenzij de vraag wordt opgeslagen als officiële testcase (§scherm 5a). Respecteert `persist_mode` (Technisch): bij `none` wordt niets persistent opgeslagen — alleen tonen.
+
+**Autorisatie**: platform-console (`aqlab:beheer`/`aqlab:review`). **Niet** in de fonds-assurance-view. **UX**: pure SVG/HTML; conclusie-badge met kleur; verboden-variatie altijd expliciet gemarkeerd.
 
 ---
 
@@ -469,6 +508,21 @@ De formele waarde van het advies hangt af van `run_type`:
 
 Kernregel: **een formele vrijgave vereist in principe een volledige regressierun** (of een expliciet gemotiveerde governancebeslissing). Dit wordt in de UI en in `aqlab_release_decisions` zichtbaar gemaakt.
 
+### 6.3b Consistentie in het releaseadvies
+
+Consistentie weegt mee náást `quality_score` en `gate_status`:
+
+| Situatie | Effect op advies |
+| --- | --- |
+| `consistency_required = true` en consistentie faalt | **Geen automatisch accepteren** |
+| Governance-kritieke consistency failure | **Blokkeren** of minimaal **review vereist** |
+| Cijfermatige inconsistentie (bv. BQ-07) | **Blokkeren** |
+| Bronkeuze-inconsistentie (bv. BQ-05) | **Aanpassen of blokkeren** |
+| Safety/refusal-inconsistentie (SEC-cases) | **Blokkeren** |
+| Hoge `quality_score` maar lage `consistency_score` | **Niet automatisch `release_eligible`** |
+
+Een output die gemiddeld goed scoort maar per iteratie wisselt van feiten, bronkeuze of gate-oordeel is dus niet vrijgeefbaar op de gemiddelde score alleen — stabiliteit is een zelfstandige voorwaarde.
+
 ### 6.4 Vastlegging en auditrapport
 
 ```mermaid
@@ -596,7 +650,13 @@ Tien voorbeeldtestcases voor de drie voorgestelde MVP-features. Elke testcase: *
 
 ---
 
-## 11. Belangrijkste wijzigingen t.o.v. v0.3
+## 11. Belangrijkste wijzigingen t.o.v. v0.4
+
+- **Consistentiemeting als standaard onderdeel** (binnen één run, meerdere iteraties, exact dezelfde instellingen): consistentie-filters en aan/uit + iteraties in scherm 3 (subset én ad-hoc), consistentie-overzicht + Iteraties-tab (§scherm 6b), effect op releaseadvies (§6.3b), DoD-aanvulling.
+- Vaste UI-melding bij subset: *"Dit blijft één run; de geselecteerde testcases worden meerdere keren als iteratie uitgevoerd."*
+- Ad-hoc consistentietest toont alle iteraties + verschillen + `consistency_score`; respecteert `persist_mode` (geen persistente opslag bij `none`).
+
+## 11b. Belangrijkste wijzigingen t.o.v. v0.3
 
 - **Run-outputpresentatie volledig uitgewerkt**: run-overzicht met performance (§scherm 6A), testcase-overzicht (§scherm 6B), volledige outputvergelijking baseline vs challenger (§scherm 4), evaluatiescorekaart met methode/motivatie/bewijs/beperking/human-review/blokkadecriteria (§scherm 5).
 - **Drie run-types** — volledige regressierun, subset-run, ad-hoc testvraag — met governance-afbakening en formele waarde (§2.5, §6.3a); scherm 3 herwerkt tot drie modi met subset-filters en ad-hoc-velden + waarschuwing.

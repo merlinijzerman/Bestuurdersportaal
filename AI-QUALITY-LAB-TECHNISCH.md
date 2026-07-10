@@ -1,10 +1,12 @@
 # AI Output Quality & Governance Lab — Technisch ontwerp
 
-> **Status**: Concept **v0.4** (ter review — géén implementatie)
+> **Status**: Concept **v0.5** (ter review — géén implementatie)
 > **Datum**: 2026-07-10
-> **Samenhang**: implementeert [`AI-QUALITY-LAB-ARCHITECTUUR.md`](./AI-QUALITY-LAB-ARCHITECTUUR.md) + [`AI-QUALITY-LAB-FUNCTIONEEL.md`](./AI-QUALITY-LAB-FUNCTIONEEL.md); eerste golden set in [`AQLAB-MVP-REGRESSIESET-v0.1.md`](./AI-QUALITY-LAB-REGRESSIESET.md).
+> **Samenhang**: implementeert [`AI-QUALITY-LAB-ARCHITECTUUR.md`](./AI-QUALITY-LAB-ARCHITECTUUR.md) + [`AI-QUALITY-LAB-FUNCTIONEEL.md`](./AI-QUALITY-LAB-FUNCTIONEEL.md); golden set + consistentieconfig in [`AI-QUALITY-LAB-REGRESSIESET-v0.3.md`](./AI-QUALITY-LAB-REGRESSIESET-v0.3.md) + [`AQLAB-SEED-STRUCTUUR-v0.1.yaml`](./AQLAB-SEED-STRUCTUUR-v0.1.yaml).
 > **Markering**: **[FEIT]** geverifieerd tegen codebase/migraties · **[ONTWERPKEUZE]** voorstel · **[AANNAME]** · **[OPEN]**.
 > **Bron van waarheid**: de migraties in `supabase/migrations/` zijn authoritatief; dit doc is design-laag en mag t.o.v. de code achterlopen (`CLAUDE.md`).
+
+> **Wijziging t.o.v. v0.4 (kort).** **Consistentiemeting binnen één run**: `aqlab_run_outputs` bevat al één rij per iteratie; toegevoegd zijn `consistency_required`/`consistency_iterations` op `aqlab_test_cases` (§2.3) en een **consistentie-aggregaat** in `aqlab_runs.aggregatie` (§2.6, §7A) met `consistency_score`, `gate/fact/source/format_stability`, `score_spread`, `consistency_status`, `consistency_findings`. Nieuw: **`persist_mode`** (`full_synthetic`/`none`/`metadata_only`) (§7B); consistentie in het releaseadvies (§5.6); DoD-aanvulling (§13). Volledige lijst in §14-0.
 
 > **Wijziging t.o.v. v0.3 (kort).** `aqlab_runs` uitgebreid met **`run_type`** (`full_regression`/`subset`/`ad_hoc`) + `subset_filter`, `selected_test_case_ids`, `ad_hoc_question`, `promoted_to_testcase`, `promoted_testcase_id` (§2.6). **Ad-hoc testvraag** + **"Opslaan als testcase"**-promotie (§2.6b, §4). **Performance-aggregatie** (gemiddelde/mediaan/**P95** latency, langzaamste testcase) expliciet in de run-aggregatie (§7). **Releaseadvies per run-type** (§5.6). DoD aangevuld voor output-zichtbaarheid, latency-opslag en run-types (§13). Volledige wijzigingenlijst in §14a.
 
@@ -132,7 +134,8 @@ Elk rapport en elke export draagt daarom een `assurance_scope`-markering (`produ
 **Doel**: één reproduceerbaar testgeval (de kern van reproduceerbaarheid).
 **Velden**: `id` · `test_set_id fk` · `feature_id fk` · `code text` (bv. `BS-01`, `SEC-03` — koppelt aan de regressieset) · `titel` · `gebruikersvraag text` · `gebruikersrol text` (bestuurder/bestuursbureau/commissie/adviseur) · `broncontext_ref jsonb` (verwijzing naar `aqlab_fixture_documents` — synthetische demodocumenten) · `verwachte_outputvorm text` · `verplichte_onderdelen jsonb` (lijst toetsbare eisen) · `blokkadecriteria jsonb` (lijst harde criteria) · `minimale_acceptatiescore int` (0–100) · `soort text` check (`functioneel`/`security_blocking`) · `kritikaliteit text` check (`kritiek`/`hoog`/`middel`/`laag`) · `tags text[]` (**vrije labels voor subset-selectie**, bv. `compliance`, `hallucinatie`, `autorisatie`) · `review_verplicht bool` · `herhalingen int` default 3 · `actief bool` · `aangemaakt_op/_door`.
 **Relaties**: n—1 testset; n—n `aqlab_fixture_documents`; 1—n run_outputs.
-**MVP**: alle bovenstaande. `code`, `soort` en `tags` maken subset-selectie (§2.6) en koppeling met de regressieset mogelijk. **Later**: multi-turn/full-funnel-vragen.
+**Consistentievelden (v0.5)**: `consistency_required bool default false` · `consistency_iterations int default 3` check (3 of 5). Bepalen of een testcase binnen één run meerdere keren als iteratie draait; de gedeelde dimensies/pass-regels/toegestane variatie staan in de seedconfig (`AQLAB-SEED-STRUCTUUR-v0.1.yaml` → `consistency.global`) en in `lib/aqlab/consistency.ts`.
+**MVP**: alle bovenstaande. `code`, `soort` en `tags` maken subset-selectie (§2.6) en koppeling met de regressieset mogelijk; `consistency_required`/`consistency_iterations` sturen de consistentiemeting. **Later**: multi-turn/full-funnel-vragen.
 
 ### 2.4 `aqlab_prompt_versions`
 **Doel**: versiebeheer van prompts/system-prompts per feature — herleidbaarheid output→prompt.
@@ -153,7 +156,7 @@ Elk rapport en elke export draagt daarom een `assurance_scope`-markering (`produ
 
 ### 2.6 `aqlab_runs`
 **Doel**: één uitvoering van (testset × prompt_version × model_configuration), evt. tegen een baseline. **Bevat de regressie-uitkomst als JSON** (geen aparte tabel in MVP).
-**Velden**: `id` · `run_type text` check (`full_regression`/`subset`/`ad_hoc`) · `test_set_id fk null` (null bij ad-hoc) · `prompt_version_id fk` · `model_configuration_id fk` · `baseline_run_id uuid null` · `rol text` check (`baseline`/`challenger`) · `soort text` check (`functioneel`/`security_blocking`) · `subset_filter jsonb null` (de gekozen filtercriteria) · `selected_test_case_ids uuid[] null` (welke testcases daadwerkelijk liepen) · `ad_hoc_question text null` (bij `run_type = ad_hoc`) · `promoted_to_testcase bool default false` · `promoted_testcase_id uuid null` (→ `aqlab_test_cases`) · `gewijzigde_as text` check (`prompt`/`model`/`temperature`/`max_tokens`/`retrieval`/`geen`/`meerdere`) · `atomair bool` · `status text` check (`queued`/`running`/`done`/`failed`/`cancelled`) · `gestart_door` · `gestart_op` · `voltooid_op` · `aggregatie jsonb` (gem. score, pass-rate, #verbeteringen, #regressies, #blokkades, #openstaande_reviews, **regressie-delta's per testcase**, **release_advies**, **performance-blok**: `latency_gem`/`latency_mediaan`/`latency_p95`/`langzaamste_test_case_id`, `tokens_in`/`tokens_out`, `kosten_indicatie`) · `kostenplafond numeric null` · `totale_kosten numeric null` · `notitie`.
+**Velden**: `id` · `run_type text` check (`full_regression`/`subset`/`ad_hoc`) · `test_set_id fk null` (null bij ad-hoc) · `prompt_version_id fk` · `model_configuration_id fk` · `baseline_run_id uuid null` · `rol text` check (`baseline`/`challenger`) · `soort text` check (`functioneel`/`security_blocking`) · `subset_filter jsonb null` (de gekozen filtercriteria) · `selected_test_case_ids uuid[] null` (welke testcases daadwerkelijk liepen) · `ad_hoc_question text null` (bij `run_type = ad_hoc`) · `promoted_to_testcase bool default false` · `promoted_testcase_id uuid null` (→ `aqlab_test_cases`) · `gewijzigde_as text` check (`prompt`/`model`/`temperature`/`max_tokens`/`retrieval`/`geen`/`meerdere`) · `atomair bool` · `status text` check (`queued`/`running`/`done`/`failed`/`cancelled`) · `gestart_door` · `gestart_op` · `voltooid_op` · `persist_mode text` check (`full_synthetic`/`none`/`metadata_only`) default `full_synthetic` (§7B) · `aggregatie jsonb` (gem. score, pass-rate, #verbeteringen, #regressies, #blokkades, #openstaande_reviews, **regressie-delta's per testcase**, **release_advies**, **performance-blok**: `latency_gem`/`latency_mediaan`/`latency_p95`/`langzaamste_test_case_id`, `tokens_in`/`tokens_out`, `kosten_indicatie`, **consistentie-blok per testcase**: zie §7A) · `kostenplafond numeric null` · `totale_kosten numeric null` · `notitie`.
 **Relaties**: 1—n outputs, audit_exports, release_decisions; n—1 `promoted_testcase_id`.
 **MVP**: alle bovenstaande; `kostenplafond`/`totale_kosten` optioneel. **Later**: geplande/terugkerende runs; aparte `aqlab_regression_results`-tabel.
 
@@ -321,6 +324,8 @@ Per output: (1) deterministische checks → (2) heuristische checks → (3) blok
 ### 5.6 Regressie-service (`lib/aqlab/regression.ts`)
 Vergelijkt challenger vs baseline per testcase, schrijft delta's + release-advies in `aqlab_runs.aggregatie` (geen aparte tabel in MVP). Werkt uitsluitend als beide varianten volledige **effectieve** instellingen hebben (§2B) en, bij een subsetrun, dezelfde subset. Harde regel: openstaande kritieke blokkade of een niet-gehaalde `security_blocking`-case → advies kan niet "accepteren" zijn.
 
+**Consistentie in het advies (v0.5).** Naast `quality_score` en `gate_status` weegt het consistentie-aggregaat (§7A) mee: `consistency_required = true` én consistentie faalt → **geen automatisch accepteren**; governance-kritieke consistency failure → **blokkeren** of minimaal **review_required**; cijfermatige inconsistentie (bv. BQ-07) → **blokkeren**; bronkeuze-inconsistentie (bv. BQ-05) → **aanpassen/blokkeren**; safety/refusal-inconsistentie (SEC-cases, `gate_stability` gefaald) → **blokkeren**; een hoge `quality_score` met lage `consistency_score` maakt een output **niet automatisch `release_eligible`**.
+
 ### 5.6b Release-service (`lib/aqlab/release.ts`)
 Legt het vrijgavebesluit vast als **append-only regel in `aqlab_release_decisions`** (niet als UPDATE op de run). Neemt `release_advies` uit de run over, vereist bij afwijking een `motivatie`, telt `kritieke_bevindingen_count` uit `aqlab_findings` (ernst `kritiek`, status open), en dwingt af: `kritieke_bevindingen_count > 0` ⇒ `besluit ≠ vrijgegeven`. Zet `assurance_scope = productbreed` in de MVP. De "laatst vrijgegeven"-status per feature = de meest recente regel met `release_status = vrijgegeven` — dit is de bron voor de assurance-view.
 
@@ -353,6 +358,41 @@ Server-side; geeft geaggregeerde scores/metadata terug voor de features die een 
 - **Performance**: run = testcases × iteraties × (1 generatie + k judge-calls). MVP: 25 × 3 × ~2 ≈ 150 modelcalls/run — async, batched, retrieval-caching per snapshot.
 - **Performance-meting (expliciet)**: per output wordt **`latency_ms`** bevroren op `aqlab_run_outputs`. De run-aggregatie (`aqlab_runs.aggregatie.performance`) berekent en toont: **gemiddelde latency per testcase** (over de iteraties), **mediane latency per run**, **P95 latency per run**, en de **langzaamste testcase** (`langzaamste_test_case_id`). Tokengebruik input/output per output en getotaliseerd; kostenindicatie waar beschikbaar. Deze grootheden verschijnen in het run-overzicht (Functioneel §scherm 6/8a) en per output op scorekaart/vergelijking. Alleen platform-console; niet in de assurance-view.
 - **Kosten**: tokengebruik per output vastleggen; `kostenplafond` per run stopt bij overschrijding. Kosten/latency-per-model-dashboard = later.
+
+### 7A. Consistentiemeting (binnen één run)
+
+**[ONTWERPKEUZE]** Consistentie wordt **niet** via losse runs gemeten, maar door een testcase (of ad-hoc vraag) **meerdere keren als iteratie** binnen dezelfde run te draaien met **exact dezelfde effectieve instellingen** (§2B). `aqlab_run_outputs` bevat al één rij per iteratie (`iteratie int`), dus er is **geen** nieuwe tabel nodig; consistentie is een **aggregaat over de iteraties** per testcase.
+
+**Aggregatievelden** (in `aqlab_runs.aggregatie.consistency[test_case_id]`):
+
+| Veld | Betekenis |
+| --- | --- |
+| `consistency_required` | of consistentie voor deze testcase vereist was |
+| `consistency_iterations` | aantal gedraaide iteraties (3 of 5) |
+| `consistency_score` | 0–100; mate van stabiliteit over de dimensies |
+| `gate_stability` | is het gate-oordeel gelijk over alle iteraties (kritiek voor safety/refusal) |
+| `fact_stability` | dezelfde feiten/cijfers (deterministisch te toetsen op `expected_facts`) |
+| `source_stability` | dezelfde bronkeuze/`[Bron N]`-set |
+| `format_stability` | dezelfde vereiste secties/structuur |
+| `score_spread` | spreiding (max−min) van `quality_score` over iteraties |
+| `consistency_status` | `consistent` / `light_variation` / `review_required` / `unstable` |
+| `consistency_findings` | jsonb: per afwijking welke dimensie + welke iteraties verschilden |
+
+**Berekening** (`lib/aqlab/consistency.ts`, deterministisch waar mogelijk): `fact_stability`/`format_stability`/`gate_stability`/`source_stability` zijn **deterministisch** (vergelijk de per-iteratie auto-check-uitkomsten en gekozen bron-ID's); `score_spread` volgt uit de `quality_score`s. **Toegestane variatie** (formulering/volgorde/stijl) telt niet als inconsistentie; **verboden variatie** (ander feit/cijfer/bronkeuze/conclusie, besluit-als-genomen, wisselend juridisch/compliance- of safety/refusal-gedrag) verlaagt de score en vult `consistency_findings`.
+
+**Pass-regel**: normaal `≥ 3/3` iteraties zonder gate-fout → `consistent`; governance-kritiek/safety vereist `5/5 passed`. Zie §5.6 voor de doorwerking naar het releaseadvies.
+
+### 7B. `persist_mode` (opslag van iteratie-output)
+
+**[ONTWERPKEUZE]** `aqlab_runs.persist_mode` bepaalt wat van de iteraties persistent wordt opgeslagen (sluit aan op retentie/spike 4):
+
+| `persist_mode` | Gedrag |
+| --- | --- |
+| `full_synthetic` | Alle iteratie-output mag persistent worden opgeslagen (default in de MVP; data is synthetisch). |
+| `none` | Iteratie-output **alleen tijdelijk** tonen in de browser/API-response; **niets** persistent opslaan (geen `aqlab_run_outputs`-rijen). |
+| `metadata_only` | Alleen **consistentiemetadata** opslaan (scores/statussen/findings); **geen** vraagtekst, broncontext of antwoordtekst. |
+
+`none` en `metadata_only` zijn met name relevant voor **ad-hoc consistentietests** die de gebruiker niet wil bewaren, en als vooruitblik op fonds-scoped runs (waar echte content strengere retentie vraagt). De orchestrator respecteert `persist_mode` vóór het wegschrijven; bij `none` bestaat de output alleen in de response-payload.
 
 ---
 
@@ -453,8 +493,22 @@ De MVP is "done" wanneer aantoonbaar aan **alle** onderstaande criteria is volda
 - [ ] **Auditexport** genereerbaar (met `inhoud_hash`).
 - [ ] Outputs bevatten **promptversie, modelconfiguratie, bronnen, tokengebruik, latency en timestamp**.
 - [ ] Een **kritieke bevinding blokkeert** vrijgave (`besluit ≠ vrijgegeven`) en het releaseadvies "accepteren".
+- [ ] **`consistency_required`** kan per testcase worden ingesteld (`aqlab_test_cases`).
+- [ ] Een **consistentie-run draait meerdere iteraties binnen één run** (geen losse runs).
+- [ ] Gebruiker kan **`consistency_required` testcases als subset** selecteren en draaien.
+- [ ] Gebruiker kan **consistentie testen bij een ad-hoc vraag** (toggle + iteraties + dimensies).
+- [ ] **Iteratie-output is zichtbaar** in de platform-console (Iteraties-tab).
+- [ ] **`consistency_score` en `consistency_status`** worden berekend en getoond.
+- [ ] Het **releaseadvies houdt rekening met consistentie** (§5.6).
+- [ ] Bij een **no-store ad-hoc consistentietest** (`persist_mode = none`) wordt **niets persistent** opgeslagen.
 
 ---
+
+## 14-0. Belangrijkste wijzigingen t.o.v. v0.4
+
+- **Consistentiemeting binnen één run**: `consistency_required`/`consistency_iterations` op `aqlab_test_cases` (§2.3); consistentie-aggregaat in `aqlab_runs.aggregatie` met `consistency_score`, `gate/fact/source/format_stability`, `score_spread`, `consistency_status`, `consistency_findings` (§7A) — geen nieuwe tabel, want `aqlab_run_outputs` legt al per iteratie vast.
+- **`persist_mode`** (`full_synthetic`/`none`/`metadata_only`) op `aqlab_runs` (§7B).
+- **Consistentie in het releaseadvies** (§5.6) en in de DoD (§13).
 
 ## 14a. Belangrijkste wijzigingen t.o.v. v0.3
 

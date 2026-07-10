@@ -116,6 +116,31 @@ export async function moduleBeschikbaar(fondsId: string, key: string): Promise<b
   return beschikbaar.has(key);
 }
 
+/**
+ * Per-module configuratie-jsonb (fonds_module_manifest.config) voor het EIGEN
+ * fonds. Dit is de config-gedreven differentiatielaag van T11: welke KPI's/
+ * widgets/tabs een module toont, plus presentatie/content (labels, peildatum,
+ * signaleringen, werkgever-basisparameters). Numerieke FEITEN staan in de
+ * RLS-datatabellen; PRESENTATIE/CONTENT hier. RLS op de manifest-tabel borgt de
+ * tenant-isolatie. Onbekende key of geen rij → leeg object (fail-safe defaults).
+ */
+export async function moduleConfig(
+  fondsId: string,
+  key: ModuleKey
+): Promise<Record<string, JsonWaarde>> {
+  const supabase = await createServerSupabase();
+  const { data } = await supabase
+    .from("fonds_module_manifest")
+    .select("config")
+    .eq("fonds_id", fondsId)
+    .eq("module_key", key)
+    .maybeSingle();
+  const c = data?.config;
+  return c && typeof c === "object" && !Array.isArray(c)
+    ? (c as Record<string, JsonWaarde>)
+    : {};
+}
+
 /** Ruwe flagwaarde (jsonb) voor een fonds, of undefined als de flag niet bestaat. */
 export async function haalFlag(fondsId: string, flagKey: string): Promise<JsonWaarde | undefined> {
   const supabase = await createServerSupabase();

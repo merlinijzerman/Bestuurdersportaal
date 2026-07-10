@@ -42,6 +42,10 @@ SQL_T6C="supabase/checks/2026_07_09_t6_generiek_readonly.sql"
 SQL_T8C="supabase/checks/2026_07_09_t8_config_cross_tenant.sql"
 # Increment T10 — review-verval-gate op retrieval + generieke toestandsmachine.
 SQL_T10="supabase/checks/2026_07_10_t10_review_verval.sql"
+# Increment T11 — stuurinformatie/klantbeeld-data: cross-tenant + rolgate + deny-delete.
+# (Let op: het "T11–14"-label in de eindsamenvatting is een §15-matrixlabel voor
+#  RAG-fondsdiscipline — niet dit increment.)
+SQL_T11M="supabase/checks/2026_07_10_t11_cross_tenant.sql"
 
 echo "== [1/4] tsc --noEmit --skipLibCheck =="
 ./node_modules/.bin/tsc --noEmit --skipLibCheck
@@ -87,6 +91,9 @@ echo
 echo "-- T10 (review-verval-gate op retrieval + generieke toestandsmachine) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_T10"
 echo
+echo "-- T11-modules (stuurinformatie/klantbeeld-data: cross-tenant + rolgate + deny-delete) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_T11M"
+echo
 
 echo "============================================================================"
 echo "GROEN: volledige §15 cross-tenant suite geslaagd (app-laag + DB-laag)."
@@ -98,4 +105,5 @@ echo "  T3-write / T6-export / T7-storage             (DB-laag onder échte RLS)
 echo "  T6-content generieke read-only + namespace    (DB-laag onder échte RLS)"
 echo "  T8-config cross-tenant + rolgate + append-only (DB-laag onder échte RLS)"
 echo "  T10-review verval-gate + generieke toestandsmachine (DB-laag)"
+echo "  T11-modules stuurinfo/klantbeeld cross-tenant + rolgate + deny-delete (DB-laag)"
 echo "============================================================================"
