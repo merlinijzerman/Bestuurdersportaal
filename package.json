@@ -13,6 +13,7 @@
     "sanity": "for f in lib/*.sanity.ts; do echo \"› $f\"; ./node_modules/.bin/tsx \"$f\" || exit 1; done",
     "aqlab:seed": "tsx lib/aqlab/seed/cli.ts",
     "aqlab:seed:apply": "tsx lib/aqlab/seed/cli.ts --apply",
+    "aqlab:smoke": "tsx lib/aqlab/smoke.ts",
     "test:xtenant": "node --import tsx --test tests/cross-tenant/*.test.ts",
     "test:xtenant:ci": "bash scripts/cross-tenant-ci.sh",
     "prepare": "git config core.hooksPath scripts/hooks || true"

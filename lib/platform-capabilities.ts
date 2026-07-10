@@ -31,7 +31,9 @@ export type PlatformCapability =
   | "platform.security.operate"
   | "platform.support.operate"
   | "platform.compliance.read"
-  | "platform.contact.manage";         // publieke contact-inbox inzien/opvolgen
+  | "platform.contact.manage"          // publieke contact-inbox inzien/opvolgen
+  | "platform.aqlab.operate"           // AQLab: runs starten + scorekaart/run-overzicht
+  | "platform.aqlab.review";           // AQLab: menselijke review/aftekening op outputs
 
 /** Volledige, geordende lijst — gespiegeld door de DB-seed (TO §12 test 17). */
 export const PLATFORM_CAPABILITIES: readonly PlatformCapability[] = [
@@ -47,6 +49,8 @@ export const PLATFORM_CAPABILITIES: readonly PlatformCapability[] = [
   "platform.support.operate",
   "platform.compliance.read",
   "platform.contact.manage",
+  "platform.aqlab.operate",
+  "platform.aqlab.review",
 ] as const;
 
 /** Zware capabilities: toekennen vereist altijd vier-ogen (vier_ogen_door
@@ -81,6 +85,9 @@ export const PLATFORM_ROL_CAPABILITIES: Record<string, PlatformCapability[]> = {
   ],
   platform_security_op: ["platform.observability.read", "platform.security.operate"],
   platform_audit_reader: ["platform.observability.read", "platform.logs.read"],
+  // AQLab-operator (AI Quality Lab): runs draaien, scorekaarten inzien en
+  // menselijke review aftekenen. Los profiel — géén overige platformprivileges.
+  platform_aqlab_operator: ["platform.aqlab.operate", "platform.aqlab.review"],
 };
 
 /** Pure check: bevat de set effectieve capabilities de gevraagde cap?

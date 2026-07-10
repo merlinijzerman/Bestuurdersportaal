@@ -20,6 +20,7 @@ export default async function PlatformHome() {
     caps.includes("platform.capabilities.grant") ||
     caps.includes("platform.capabilities.revoke");
   const magContact = caps.includes("platform.contact.manage");
+  const magAqlab = caps.includes("platform.aqlab.operate");
 
   return (
     <div className="space-y-6">
@@ -76,6 +77,14 @@ export default async function PlatformHome() {
               className="inline-flex items-center gap-2 rounded-lg bg-app-bg px-4 py-2 text-sm font-medium text-ink hover:bg-accent/10"
             >
               Contactaanvragen
+            </Link>
+          )}
+          {magAqlab && (
+            <Link
+              href="/platform/aqlab"
+              className="inline-flex items-center gap-2 rounded-lg bg-app-bg px-4 py-2 text-sm font-medium text-ink hover:bg-accent/10"
+            >
+              AI Quality Lab
             </Link>
           )}
         </div>

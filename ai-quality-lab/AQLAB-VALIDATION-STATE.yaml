@@ -5,7 +5,8 @@
 # (placeholders in de seed-YAML). SEED_ALLOWED wordt AFGELEID uit alle vier —
 # nooit hardcoded. Zet een vlag pas op true NA de betreffende validatie.
 #
-# STATUS 2026-07-10: alle vier OPEN → SEED_ALLOWED = false → loader weigert apply.
+# STATUS 2026-07-10: poort 4 gesloten in AQL-2 (judge-schema in code). Poort 1/2/3
+# nog OPEN → SEED_ALLOWED = false → loader weigert apply tot die drie sluiten.
 # ---------------------------------------------------------------------------
 
 # Poort 2 — AVG-scope SEC-06 (FIX-19) juridisch/FG-bevestigd.
@@ -15,7 +16,10 @@ avg_scope_SEC06_confirmed: false
 legal_compliance_confirmed: false
 
 # Poort 4 — judge-JSON-schema's definitief gedefinieerd.
-judge_json_schemas_present: false
+# GESLOTEN (AQL-2): vast JSON-output-schema per judge-criterium +
+# runtime-validator in lib/aqlab/judge.ts (score_0_100/motivation/evidence en
+# de boolean-variant pass/violated), apart gepind judge-model claude-opus-4-8.
+judge_json_schemas_present: true
 
 # Poort 1 (content_hash gevuld) staat NIET hier: die wordt door de loader
 # automatisch bepaald door te detecteren of de seed-YAML nog
