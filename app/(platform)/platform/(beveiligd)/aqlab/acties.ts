@@ -13,8 +13,19 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { withPlatform } from "@/lib/platform-wrapper";
 import { planRun, annuleerRun, draaiAdHocConsistentieSync, type RunConfig, type AdHocConsistentieResultaat } from "@/lib/aqlab/run-orchestrator";
+import { haalProductieBaseline } from "@/lib/aqlab/console-lees";
+import {
+  isToegestaanModel,
+  toegestaanModel,
+  autoNaam,
+  leidGewijzigdeAsAf,
+  type VariantInstellingen,
+  type GewijzigdeAs,
+} from "@/lib/aqlab/modellen";
+import { configHash } from "@/lib/aqlab/modellen-hash";
 import { promoveerAdHocNaarTestcase, valideerPromotie, type PromotieConfig } from "@/lib/aqlab/promotie";
 import { legVrijgavebesluitVast, valideerVrijgaveMogelijk, type Besluit, type Releasestatus } from "@/lib/aqlab/release";
 import { genereerAuditExport, verifieerAuditExport } from "@/lib/aqlab/audit-export";
@@ -29,20 +40,95 @@ function leeg(v: FormDataEntryValue | null): string | null {
   return s.length ? s : null;
 }
 
+/**
+ * Server-side her-validatie van de harde blokkers (CLAUDE.md: gating hoort niet
+ * uitsluitend in de frontend). Retourneert een reden bij een blokkade, anders null.
+ */
+function valideerRunInvoer(o: { runType: string; testSetId: string | null; adHocVraag: string | null }): string | null {
+  if ((o.runType === "full_regression" || o.runType === "subset") && !o.testSetId) {
+    return "Kies een testset voor een regressie-/subset-run.";
+  }
+  if (o.runType === "ad_hoc" && !o.adHocVraag) {
+    return "Vul een ad-hoc vraag in.";
+  }
+  return null;
+}
+
+/**
+ * Pin de challenger-variant als append-only aqlab_model_configurations-rij met
+ * DEDUP-OP-HASH: identieke effectieve instellingen hergebruiken de bestaande rij
+ * (§2B, besloten optie A). Een nieuw gepinde variant wordt append-only gelogd.
+ */
+async function pinModelConfig(svc: SupabaseClient, variant: VariantInstellingen): Promise<string> {
+  const hash = configHash(variant);
+  const { data: bestaand } = await svc
+    .from("aqlab_model_configurations").select("id").eq("config_hash", hash).maybeSingle();
+  if (bestaand?.id) return bestaand.id as string;
+
+  const naam = autoNaam(variant);
+  const { data: ins, error } = await svc
+    .from("aqlab_model_configurations")
+    .insert({
+      naam,
+      model_provider: "anthropic",
+      model_name: variant.model,
+      temperature_requested: variant.temperature,
+      max_tokens_requested: variant.maxTokens,
+      top_p_requested: variant.topP,
+      retrieval_settings: variant.retrieval,
+      is_baseline: false,
+      config_hash: hash,
+    })
+    .select("id")
+    .single();
+  if (error || !ins) {
+    // Race op de unieke config_hash → her-lees de nu bestaande rij.
+    const { data: retry } = await svc
+      .from("aqlab_model_configurations").select("id").eq("config_hash", hash).maybeSingle();
+    if (retry?.id) return retry.id as string;
+    throw new Error(`modelconfig pin mislukt: ${error?.message ?? "onbekend"}`);
+  }
+  // Append-only auditregel: nieuwe variant gepind.
+  await svc.from("aqlab_log").insert({
+    actie: "modelconfig_pinned",
+    object_type: "aqlab_model_configurations",
+    object_id: ins.id,
+    nieuwe_waarde: {
+      naam,
+      config_hash: hash,
+      model: variant.model,
+      temperature: variant.temperature,
+      max_tokens: variant.maxTokens,
+      top_p: variant.topP,
+    },
+  });
+  return ins.id as string;
+}
+
 export async function startRunActie(formData: FormData): Promise<void> {
+  const naam = leeg(formData.get("naam"));
   const testSetId = leeg(formData.get("test_set_id"));
   const runType = ((formData.get("run_type") as string) || "full_regression") as NonNullable<RunConfig["run_type"]>;
   const persistMode = ((formData.get("persist_mode") as string) || "full_synthetic") as NonNullable<RunConfig["persist_mode"]>;
   const adHocVraag = leeg(formData.get("ad_hoc_question"));
-  const modelConfigId = leeg(formData.get("model_configuration_id"));
-  const baselineRunId = leeg(formData.get("baseline_run_id"));
-  const rol = (leeg(formData.get("rol")) as RunConfig["rol"]) ?? null;
   const soort = (leeg(formData.get("soort")) as RunConfig["soort"]) ?? "functioneel";
-  const gewijzigdeAs = (leeg(formData.get("gewijzigde_as")) as RunConfig["gewijzigde_as"]) ?? null;
   const consistencyEnabled = formData.get("consistency_enabled") === "on";
   const iterRaw = leeg(formData.get("iteraties"));
   const iteraties = iterRaw ? Number(iterRaw) : null;
   const selectedTestCaseIds = (formData.getAll("selected_test_case_ids") as string[]).map((s) => s.trim()).filter(Boolean);
+
+  // Challenger-variant (allowlist-model + optionele expliciete instellingen).
+  const challengerModel = leeg(formData.get("challenger_model"));
+  const tempMode = leeg(formData.get("temp_mode")); // "default" of een getalstring
+  const maxTokensRaw = leeg(formData.get("max_tokens"));
+  const topPRaw = leeg(formData.get("top_p"));
+
+  // Harde blokkers server-side afdwingen (defense-in-depth naast de UI).
+  const blokker = valideerRunInvoer({ runType, testSetId, adHocVraag });
+  if (blokker) redirect(`${LIJST_PAD}?fout=${encodeURIComponent(blokker)}`);
+  if (challengerModel && !isToegestaanModel(challengerModel)) {
+    redirect(`${LIJST_PAD}?fout=${encodeURIComponent(`Model niet toegestaan: ${challengerModel}`)}`);
+  }
 
   const { run_id } = await withPlatform(
     {
@@ -51,23 +137,40 @@ export async function startRunActie(formData: FormData): Promise<void> {
       doelObject: testSetId ? `aqlab_test_sets:${testSetId}` : "aqlab:ad_hoc",
     },
     async (svc, ctx) => {
+      // Vaste productie-baseline (laatst vrijgegeven variant) voor regressie/subset.
+      const baseline = runType !== "ad_hoc" ? await haalProductieBaseline(svc, testSetId) : null;
+
+      // Challenger-config pinnen (dedup-op-hash) + gewijzigde as automatisch afleiden.
+      let modelConfigId: string | null = null;
+      let gewijzigdeAs: GewijzigdeAs | null = null;
+      if (challengerModel) {
+        const kern = toegestaanModel(challengerModel)!;
+        const temperature = !tempMode || tempMode === "default" ? null : Number(tempMode);
+        const maxTokens = maxTokensRaw ? Number(maxTokensRaw) : kern.defaultMaxTokens;
+        const topP = topPRaw ? Number(topPRaw) : null;
+        const variant: VariantInstellingen = { model: challengerModel, temperature, maxTokens, topP, retrieval: {} };
+        modelConfigId = await pinModelConfig(svc, variant);
+        gewijzigdeAs = leidGewijzigdeAsAf(baseline?.variant ?? null, variant);
+      }
+
       const r = await planRun(svc, {
         run_type: runType,
         test_set_id: testSetId,
         persist_mode: persistMode,
         ad_hoc_question: adHocVraag,
         model_configuration_id: modelConfigId,
-        baseline_run_id: baselineRunId,
-        rol,
+        baseline_run_id: baseline?.baseline_run_id ?? null,
+        rol: baseline ? "challenger" : null,
         soort,
         gewijzigde_as: gewijzigdeAs,
         consistency_enabled: runType === "full_regression" ? null : consistencyEnabled,
         iteraties,
         selected_test_case_ids: runType === "subset" && selectedTestCaseIds.length ? selectedTestCaseIds : null,
         subset_filter: runType === "subset" ? { handmatig: selectedTestCaseIds, alleen_security_safety: soort === "security_blocking" } : null,
+        naam,
         notitie: `Gestart door ${ctx.identiteit.naam}`,
       });
-      return { resultaat: r, effect: { run_id: r.run_id, jobs: r.aantalJobs } };
+      return { resultaat: r, effect: { run_id: r.run_id, jobs: r.aantalJobs, model_configuration_id: modelConfigId } };
     }
   );
 

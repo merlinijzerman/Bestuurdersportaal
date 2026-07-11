@@ -1,7 +1,14 @@
 # AI Output Quality & Governance Lab — Technisch ontwerp
 
-> **Status**: Concept **v0.5** (ter review — géén implementatie)
+> **Status**: **AS-BUILT** t/m AQL-4 (assurance/release/audit gebouwd + gereleased 2026-07-10). De keten AQL-1 t/m AQL-4 is geïmplementeerd; dit doc is design-laag en kan op detail achterlopen (`CLAUDE.md`).
 > **Datum**: 2026-07-10
+
+> **AS-BUILT-correcties (AQL-4, ontwerp-sync 2026-07-10) — de code is leidend:**
+> - **Capabilities**: het model kent `platform.aqlab.operate` (runs/scorekaart/overzicht), `platform.aqlab.review` (aftekenen) en `platform.aqlab.govern` (formeel vrijgavebesluit, Governance Owner). De eerdere shorthand `aqlab:beheer` = **`platform.aqlab.operate`** (ander woord, niet alleen prefix).
+> - **API (§4)**: mutaties (vrijgavebesluit, auditexport, promotie, ad-hoc, human-review) lopen **niet** als REST-routes maar als **Next.js server-actions in `app/(platform)/…/aqlab/acties.ts` achter `withPlatform`** (patroon uit AQL-2/3). De enige echte route-handlers onder `app/api/aqlab/` zijn: `assurance/route.ts` (fonds-JSON), `assurance/audit/[exportId]/route.ts` (fonds-download), `audit/[exportId]/route.ts` (platform-download), `worker/route.ts` (cron). De assurance-export is per **export-id** (`/assurance/audit/[exportId]`), niet per feature; de assurance-lijst neemt géén `?fonds=` (fonds-id komt uit het geauthenticeerde profiel — privacy-guardrail).
+> - **§5.8 assurance-service**: joint uitsluitend op **`fonds_module_manifest`** + de in-code mapping `AQLAB_FEATURE_MODULE` (`lib/aqlab/assurance-core.ts`). `fonds_feature_flags` wordt **niet** gejoined.
+> - **Spikes/open vragen**: spike 1 (headless `genereerAntwoord`, `lib/generatie-kern.ts`) en spike 2 (jobqueue `aqlab_run_jobs` + cron-worker) zijn **gebouwd** in AQL-2 — §8/§12-items daarover zijn gesloten.
+> - **Migratie AQL-4**: `2026_07_10_aqlab_5_assurance.sql` = private bucket `aqlab-audit` (deny-by-default, géén policy) + seed `platform.aqlab.govern`; géén nieuwe tabellen/`fonds_id`. Implementatiekeuzes in [`decisions/0061`](../decisions/0061-aqlab-aql4-assurance-release-audit-implementatie.md).
 > **Samenhang**: implementeert [`AI-QUALITY-LAB-ARCHITECTUUR.md`](./AI-QUALITY-LAB-ARCHITECTUUR.md) + [`AI-QUALITY-LAB-FUNCTIONEEL.md`](./AI-QUALITY-LAB-FUNCTIONEEL.md); golden set + consistentieconfig in [`AI-QUALITY-LAB-REGRESSIESET-v0.4.md`](./AI-QUALITY-LAB-REGRESSIESET-v0.4.md) + [`AQLAB-SEED-STRUCTUUR-v0.2.yaml`](./AQLAB-SEED-STRUCTUUR-v0.2.yaml).
 > **Markering**: **[FEIT]** geverifieerd tegen codebase/migraties · **[ONTWERPKEUZE]** voorstel · **[AANNAME]** · **[OPEN]**.
 > **Bron van waarheid**: de migraties in `supabase/migrations/` zijn authoritatief; dit doc is design-laag en mag t.o.v. de code achterlopen (`CLAUDE.md`).
@@ -154,11 +161,15 @@ Elk rapport en elke export draagt daarom een `assurance_scope`-markering (`produ
 
 > **[ONTWERPKEUZE — reproduceerbaarheid modelinstellingen] (§2B).** Voor AQLab-runs worden de **effectieve** instellingen altijd opgeslagen. Testconfiguraties worden bij voorkeur **expliciet gezet** (temperature, max_tokens, top_p, retrieval), ook als productie nu de provider-default gebruikt; als een default wordt overgenomen, legt de run dat vast via `provider_default_used = true` mét de effectief teruggekomen waarde. Een `temperature_requested = null` is daarmee geen bron van onduidelijkheid meer: `temperature_effective` en `provider_default_used` maken achteraf altijd herleidbaar wat er werkelijk draaide. Een regressievergelijking is **alleen geldig** als beide varianten volledige effectieve instellingen hebben.
 
+> **[AS-BUILT — AQL-5, besluit [0062]].** De toegestane modellen zijn een **code-constante allowlist** `AQLAB_TOEGESTANE_MODELLEN` (`lib/aqlab/modellen.ts`): `claude-sonnet-4-6` (productiekern/`is_baseline`), `claude-opus-4-8`, `claude-haiku-4-5-20251001`, `claude-sonnet-4-5` — modelkeuze is nooit vrije tekst. Een starter-set wordt geseed via `npm run aqlab:seed:modellen` (idempotent). Challenger-instellingen (tokens/temperature/top_p) worden **append-only gepind met dedup-op-hash**: kolom **`config_hash`** (uniek) = sha256 over model+temperature+max_tokens+top_p+retrieval (`lib/aqlab/modellen-hash.ts`, single source of truth). Een identieke variant hergebruikt de bestaande rij; een nieuwe rij krijgt een interne auto-naam (`sonnet-4-6 · temp0.2 · 3200`) en wordt append-only gelogd (`aqlab_log` `modelconfig_pinned`). Migratie `2026_07_11_aqlab_6_console_ux.sql`.
+
 ### 2.6 `aqlab_runs`
 **Doel**: één uitvoering van (testset × prompt_version × model_configuration), evt. tegen een baseline. **Bevat de regressie-uitkomst als JSON** (geen aparte tabel in MVP).
 **Velden**: `id` · `run_type text` check (`full_regression`/`subset`/`ad_hoc`) · `test_set_id fk null` (null bij ad-hoc) · `prompt_version_id fk` · `model_configuration_id fk` · `baseline_run_id uuid null` · `rol text` check (`baseline`/`challenger`) · `soort text` check (`functioneel`/`security_blocking`) · `subset_filter jsonb null` (de gekozen filtercriteria) · `selected_test_case_ids uuid[] null` (welke testcases daadwerkelijk liepen) · `ad_hoc_question text null` (bij `run_type = ad_hoc`) · `promoted_to_testcase bool default false` · `promoted_testcase_id uuid null` (→ `aqlab_test_cases`) · `gewijzigde_as text` check (`prompt`/`model`/`temperature`/`max_tokens`/`retrieval`/`geen`/`meerdere`) · `atomair bool` · `status text` check (`queued`/`running`/`done`/`failed`/`cancelled`) · `gestart_door` · `gestart_op` · `voltooid_op` · `persist_mode text` check (`full_synthetic`/`none`/`metadata_only`) default `full_synthetic` (§7B) · `aggregatie jsonb` (gem. score, pass-rate, #verbeteringen, #regressies, #blokkades, #openstaande_reviews, **regressie-delta's per testcase**, **release_advies**, **performance-blok**: `latency_gem`/`latency_mediaan`/`latency_p95`/`langzaamste_test_case_id`, `tokens_in`/`tokens_out`, `kosten_indicatie`, **consistentie-blok per testcase**: zie §7A) · `kostenplafond numeric null` · `totale_kosten numeric null` · `notitie`.
 **Relaties**: 1—n outputs, audit_exports, release_decisions; n—1 `promoted_testcase_id`.
 **MVP**: alle bovenstaande; `kostenplafond`/`totale_kosten` optioneel. **Later**: geplande/terugkerende runs; aparte `aqlab_regression_results`-tabel.
+
+> **[AS-BUILT — AQL-5, besluit [0062]].** Toegevoegd: kolom **`naam text`** (door de gebruiker gekozen run-naam/label, náást `notitie` voor vrije toelichting) — zichtbaar in de runs-lijst en de run-header. De **`gewijzigde_as`** wordt niet meer handmatig gekozen maar **automatisch afgeleid** uit baseline-vs-challenger (`leidGewijzigdeAsAf`); een top_p-wijziging telt onder de sampling-as `temperature` (de enum kent geen aparte top_p-as). De vaste productie-baseline (`baseline_run_id`) = de laatst vrijgegeven variant uit `aqlab_release_decisions` voor de feature van de testset. Migratie `2026_07_11_aqlab_6_console_ux.sql`.
 
 > **[ONTWERPKEUZE — run_type].** Drie soorten runs (Functioneel §2.5): **`full_regression`** (volledige golden set → kan formeel releaseadvies geven), **`subset`** (deelselectie → indicatief) en **`ad_hoc`** (één eigen vraag → geen formeel advies). `run_type` wordt overal in de rapportage getoond en bepaalt of een `aqlab_release_decisions`-regel formeel mag zijn (§5.6b).
 
@@ -204,7 +215,7 @@ Elk rapport en elke export draagt daarom een `assurance_scope`-markering (`produ
 **Doel**: menselijke aftekening/overrule van een output — **light**: geen toewijzing, queue-beheer of SLA.
 **Velden**: `id` · `run_output_id fk` · `reviewer_id uuid` · `oordeel text` check (`bevestigd`/`overruled`/`geblokkeerd`) · `score_override numeric null` · `motivatie text` (verplicht bij overrule/blokkade) · `beoordeeld_op`.
 **Relaties**: n—1 output.
-**RLS**: provider-globaal in MVP (provider-reviewer via `aqlab:review`). **Later (fonds-review)**: `fonds_id` + RLS + `WITH CHECK` + `validatie_domein`-match.
+**RLS**: provider-globaal in MVP (provider-reviewer via `platform.aqlab.review`). **Later (fonds-review)**: `fonds_id` + RLS + `WITH CHECK` + `validatie_domein`-match.
 **MVP**: `oordeel`, `motivatie`, `reviewer_id`, `score_override`. **Later**: reviewtoewijzing/SLA, `validatie_domein`, fondsreviewers.
 
 ### 2.13 `aqlab_release_decisions`
@@ -250,20 +261,20 @@ Elk rapport en elke export draagt daarom een `assurance_scope`-markering (`produ
 
 | Tabel | RLS aan | Wie mag lezen | Wie mag schrijven | `WITH CHECK` | Verplichte cross-tenant test |
 | --- | --- | --- | --- | --- | --- |
-| `aqlab_ai_features` | ja | `aqlab:*` (platform); fonds via assurance-API (features enabled) | `aqlab:beheer` | n.v.t. (geen fonds_id) | features/register lekken geen fondscontent |
-| `aqlab_test_sets` | ja | `aqlab:*` | `aqlab:beheer` | n.v.t. | synthetische inhoud aantoonbaar |
-| `aqlab_test_cases` | ja | `aqlab:*` | `aqlab:beheer` | n.v.t. | broncontext = synthetisch |
-| `aqlab_prompt_versions` | ja | `aqlab:*` | `aqlab:beheer` | n.v.t. | geen fonds-content |
-| `aqlab_model_configurations` | ja | `aqlab:*` | `aqlab:beheer` | n.v.t. | — |
-| `aqlab_runs` | ja | `aqlab:*` | `aqlab:beheer`/systeem | n.v.t. | aggregatie lekt geen ruwe content |
-| `aqlab_run_outputs` | ja | `aqlab:*` | systeem (orchestrator) | n.v.t. | output = synthetisch; assurance-API geeft nooit ruwe output aan fonds |
-| `aqlab_scores` | ja | `aqlab:*` | systeem/`aqlab:beheer` | n.v.t. | — |
-| `aqlab_findings` | ja | `aqlab:*` | systeem/`aqlab:review` | n.v.t. | — |
-| `aqlab_release_decisions` | ja | `aqlab:*`; fonds leest **alleen laatst-vrijgegeven status** via assurance-API | `aqlab:govern`; **append-only** | n.v.t. | besluit lekt geen ruwe content; scope-veld correct |
-| `aqlab_human_reviews` | ja | `aqlab:*` | `aqlab:review` | n.v.t. in MVP | — |
-| `aqlab_audit_exports` | ja | `aqlab:*`; fonds read-only via assurance-API | `aqlab:beheer`/`aqlab:govern`; **append-only** | n.v.t. | export bevat geen cross-tenant ruwe content |
-| `aqlab_fixture_documents` | ja | `aqlab:*` | `aqlab:beheer` | n.v.t. | `synthetic = true` afgedwongen; geen echte fondsdata |
-| `aqlab_log` | ja | `aqlab:*` | systeem; **append-only** (UPDATE/DELETE geblokkeerd) | n.v.t. | append-only-trigger actief |
+| `aqlab_ai_features` | ja | `platform.aqlab.*` (platform); fonds via assurance-API (features enabled) | `platform.aqlab.operate` | n.v.t. (geen fonds_id) | features/register lekken geen fondscontent |
+| `aqlab_test_sets` | ja | `platform.aqlab.*` | `platform.aqlab.operate` | n.v.t. | synthetische inhoud aantoonbaar |
+| `aqlab_test_cases` | ja | `platform.aqlab.*` | `platform.aqlab.operate` | n.v.t. | broncontext = synthetisch |
+| `aqlab_prompt_versions` | ja | `platform.aqlab.*` | `platform.aqlab.operate` | n.v.t. | geen fonds-content |
+| `aqlab_model_configurations` | ja | `platform.aqlab.*` | `platform.aqlab.operate` | n.v.t. | — |
+| `aqlab_runs` | ja | `platform.aqlab.*` | `platform.aqlab.operate`/systeem | n.v.t. | aggregatie lekt geen ruwe content |
+| `aqlab_run_outputs` | ja | `platform.aqlab.*` | systeem (orchestrator) | n.v.t. | output = synthetisch; assurance-API geeft nooit ruwe output aan fonds |
+| `aqlab_scores` | ja | `platform.aqlab.*` | systeem/`platform.aqlab.operate` | n.v.t. | — |
+| `aqlab_findings` | ja | `platform.aqlab.*` | systeem/`platform.aqlab.review` | n.v.t. | — |
+| `aqlab_release_decisions` | ja | `platform.aqlab.*`; fonds leest **alleen laatst-vrijgegeven status** via assurance-API | `platform.aqlab.govern`; **append-only** | n.v.t. | besluit lekt geen ruwe content; scope-veld correct |
+| `aqlab_human_reviews` | ja | `platform.aqlab.*` | `platform.aqlab.review` | n.v.t. in MVP | — |
+| `aqlab_audit_exports` | ja | `platform.aqlab.*`; fonds read-only via assurance-API | `platform.aqlab.operate`/`platform.aqlab.govern`; **append-only** | n.v.t. | export bevat geen cross-tenant ruwe content |
+| `aqlab_fixture_documents` | ja | `platform.aqlab.*` | `platform.aqlab.operate` | n.v.t. | `synthetic = true` afgedwongen; geen echte fondsdata |
+| `aqlab_log` | ja | `platform.aqlab.*` | systeem; **append-only** (UPDATE/DELETE geblokkeerd) | n.v.t. | append-only-trigger actief |
 
 **Latere fonds-scoped tabellen** (buiten MVP) — RLS-eisen vooraf vastgelegd:
 
@@ -283,27 +294,27 @@ Elk rapport en elke export draagt daarom een `assurance_scope`-markering (`produ
 
 | Methode + route | Doel | Autorisatie |
 | --- | --- | --- |
-| `GET /api/aqlab/testsets?feature=` | Testsets ophalen | `aqlab:beheer` |
-| `POST /api/aqlab/testsets` | Testset aanmaken | `aqlab:beheer` |
-| `PATCH /api/aqlab/testsets/[id]` | Testset bewerken/archiveren | `aqlab:beheer` |
-| `GET /api/aqlab/testsets/[id]/testcases` | Testcases van set | `aqlab:beheer` |
-| `POST /api/aqlab/testcases` | Testcase aanmaken | `aqlab:beheer` |
-| `PATCH /api/aqlab/testcases/[id]` | Testcase bewerken | `aqlab:beheer` |
-| `GET /api/aqlab/prompt-versions?feature=` | Promptversies | `aqlab:beheer` |
-| `POST /api/aqlab/prompt-versions` | Nieuwe promptversie | `aqlab:beheer` |
-| `GET /api/aqlab/model-configs` | Modelconfiguraties | `aqlab:beheer` |
-| `POST /api/aqlab/model-configs` | Modelconfig aanmaken | `aqlab:beheer` |
-| `GET /api/aqlab/fixtures` | Synthetische fixture-documenten ophalen | `aqlab:beheer` |
-| `POST /api/aqlab/fixtures` | Fixture registreren (`synthetic=true` afgedwongen) | `aqlab:beheer` |
-| `POST /api/aqlab/runs` | **Testrun starten** (async; `run_type` = `full_regression`/`subset`/`ad_hoc`) | `aqlab:beheer` |
-| `POST /api/aqlab/runs/ad-hoc` | **Ad-hoc testvraag** starten (eigen vraag + fixtures + variant; geen formeel advies) | `aqlab:beheer` |
-| `POST /api/aqlab/runs/[id]/promote-testcase` | Ad-hoc output **opslaan als officiële testcase** (zet `promoted_to_testcase`) | `aqlab:beheer` |
-| `GET /api/aqlab/runs/[id]` | **Runstatus + aggregatie + regressie + performance** ophalen | `aqlab:beheer` |
-| `GET /api/aqlab/runs/[id]/outputs` | Outputs van run (volledige baseline-/challenger-output) | `aqlab:beheer` |
-| `POST /api/aqlab/outputs/[id]/reviews` | **Human review toevoegen** (light) | `aqlab:review` |
-| `POST /api/aqlab/runs/[id]/audit-export` | **Auditrapport exporteren** | `aqlab:beheer`/`aqlab:govern` |
-| `POST /api/aqlab/runs/[id]/release-decision` | **Vrijgavebesluit vastleggen** in `aqlab_release_decisions` (append-only; kritieke bevinding blokkeert) | `aqlab:govern` |
-| `GET /api/aqlab/features/[id]/release-status` | Laatst vrijgegeven run/prompt/model + scope | `aqlab:*` |
+| `GET /api/aqlab/testsets?feature=` | Testsets ophalen | `platform.aqlab.operate` |
+| `POST /api/aqlab/testsets` | Testset aanmaken | `platform.aqlab.operate` |
+| `PATCH /api/aqlab/testsets/[id]` | Testset bewerken/archiveren | `platform.aqlab.operate` |
+| `GET /api/aqlab/testsets/[id]/testcases` | Testcases van set | `platform.aqlab.operate` |
+| `POST /api/aqlab/testcases` | Testcase aanmaken | `platform.aqlab.operate` |
+| `PATCH /api/aqlab/testcases/[id]` | Testcase bewerken | `platform.aqlab.operate` |
+| `GET /api/aqlab/prompt-versions?feature=` | Promptversies | `platform.aqlab.operate` |
+| `POST /api/aqlab/prompt-versions` | Nieuwe promptversie | `platform.aqlab.operate` |
+| `GET /api/aqlab/model-configs` | Modelconfiguraties | `platform.aqlab.operate` |
+| `POST /api/aqlab/model-configs` | Modelconfig aanmaken | `platform.aqlab.operate` |
+| `GET /api/aqlab/fixtures` | Synthetische fixture-documenten ophalen | `platform.aqlab.operate` |
+| `POST /api/aqlab/fixtures` | Fixture registreren (`synthetic=true` afgedwongen) | `platform.aqlab.operate` |
+| `POST /api/aqlab/runs` | **Testrun starten** (async; `run_type` = `full_regression`/`subset`/`ad_hoc`) | `platform.aqlab.operate` |
+| `POST /api/aqlab/runs/ad-hoc` | **Ad-hoc testvraag** starten (eigen vraag + fixtures + variant; geen formeel advies) | `platform.aqlab.operate` |
+| `POST /api/aqlab/runs/[id]/promote-testcase` | Ad-hoc output **opslaan als officiële testcase** (zet `promoted_to_testcase`) | `platform.aqlab.operate` |
+| `GET /api/aqlab/runs/[id]` | **Runstatus + aggregatie + regressie + performance** ophalen | `platform.aqlab.operate` |
+| `GET /api/aqlab/runs/[id]/outputs` | Outputs van run (volledige baseline-/challenger-output) | `platform.aqlab.operate` |
+| `POST /api/aqlab/outputs/[id]/reviews` | **Human review toevoegen** (light) | `platform.aqlab.review` |
+| `POST /api/aqlab/runs/[id]/audit-export` | **Auditrapport exporteren** | `platform.aqlab.operate`/`platform.aqlab.govern` |
+| `POST /api/aqlab/runs/[id]/release-decision` | **Vrijgavebesluit vastleggen** in `aqlab_release_decisions` (append-only; kritieke bevinding blokkeert) | `platform.aqlab.govern` |
+| `GET /api/aqlab/features/[id]/release-status` | Laatst vrijgegeven run/prompt/model + scope | `platform.aqlab.*` |
 | `GET /api/aqlab/assurance?fonds=` | **Read-only assurance-aggregaten** (tenant-gefilterd, incl. `assurance_scope`) | fondsrol (read) |
 | `GET /api/aqlab/assurance/[featureId]/export` | Read-only auditrapport downloaden | fondsrol (read) |
 

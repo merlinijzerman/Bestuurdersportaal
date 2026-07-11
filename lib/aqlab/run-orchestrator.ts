@@ -47,6 +47,8 @@ export interface RunConfig {
   ad_hoc_question?: string | null;
   /** Override op het aantal iteraties per testcase. */
   iteraties?: number | null;
+  /** Door de gebruiker gekozen run-naam/label (AQL-5, terugvindbaarheid). */
+  naam?: string | null;
   notitie?: string | null;
   /** Regressie-as (technisch §2.6): baseline/challenger + gewijzigde as. */
   baseline_run_id?: string | null;
@@ -73,6 +75,7 @@ export interface BatchOpties {
 // als SCHATTING gelabeld in de UI. Onbekend model → null (geen schijnprecisie).
 const KOSTEN_PER_MTOK: Record<string, { in: number; out: number }> = {
   "claude-sonnet-4-6": { in: 3, out: 15 },
+  "claude-sonnet-4-5": { in: 3, out: 15 },
   "claude-opus-4-8": { in: 15, out: 75 },
   "claude-haiku-4-5-20251001": { in: 0.8, out: 4 },
 };
@@ -122,6 +125,7 @@ export async function planRun(
       soort: config.soort ?? "functioneel",
       gewijzigde_as: config.gewijzigde_as ?? null,
       atomair: config.atomair ?? null,
+      naam: config.naam ?? null,
       notitie: config.notitie ?? null,
       gestart_door: config.gestart_door ?? null,
     })

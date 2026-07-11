@@ -1549,8 +1549,11 @@ create table if not exists public.fonds_klantbeeld_cohort (
 --   aqlab_test_case_fixtures     — n-n testcase↔fixture (required/excluded)
 --   aqlab_prompt_versions        — versiebeheer prompts
 --   aqlab_model_configurations   — benoemde modelinstelling (gevraagd vs effectief)
+--                                   + config_hash (uniek, AQL-5): dedup-op-hash bij
+--                                     append-only pinnen van challenger-varianten
 -- Runs (aqlab_2):
 --   aqlab_runs                   — uitvoering + aggregatie (consistency-JSON gereserveerd, ADR 0056)
+--                                   + naam (AQL-5): benoembare/terugvindbare run
 --   aqlab_run_outputs            — resultaat per iteratie + snapshot-refs (refs_only) + effectieve instellingen
 --   aqlab_scores                 — score per output×criterium (criterium_code → lib/aqlab/criteria.ts)
 --   aqlab_findings               — bevindingen per score
@@ -1560,7 +1563,12 @@ create table if not exists public.fonds_klantbeeld_cohort (
 --   aqlab_audit_exports          — bevroren auditdossier (inhoud_hash)
 --   aqlab_log                    — append-only auditspoor van Lab-acties
 --
+-- Console-UX (aqlab_6, AQL-5): aqlab_runs.naam + aqlab_model_configurations.config_hash
+--   (uniek). Zie 2026_07_11_aqlab_6_console_ux.sql.
+--
 -- Scorecriteria (14) en consistency-config zijn CODE-SEED (geen tabel in de MVP):
 --   lib/aqlab/criteria.ts, lib/aqlab/consistency.ts.
+-- Modelconfiguraties (allowlist) zijn CODE-SEED (AQL-5): lib/aqlab/modellen.ts →
+--   npm run aqlab:seed:modellen (idempotent, dedup-op-hash).
 -- Seeden gebeurt via de gate-bewaakte loader (lib/aqlab/seed/*, dry-run default);
 -- seeden is GEBLOKKEERD tot de vier seeding-gate-poorten sluiten (validatierapport §6).

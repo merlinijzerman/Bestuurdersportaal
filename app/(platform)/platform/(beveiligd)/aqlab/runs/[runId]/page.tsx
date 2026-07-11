@@ -9,7 +9,8 @@
 import Link from "next/link";
 import { huidigePlatformIdentiteit } from "@/lib/platform-auth";
 import { createServiceSupabase } from "@/lib/supabase-service";
-import { haalRunDetail, haalVergelijking, type OutputMetScores, type ScoreRij } from "@/lib/aqlab/console-lees";
+import { haalRunDetail, haalVergelijking, haalRunPerformance, type OutputMetScores, type ScoreRij } from "@/lib/aqlab/console-lees";
+import PerformanceVergelijkingBlok from "./performance-vergelijking-blok";
 import { criteriumByKey } from "@/lib/aqlab/criteria";
 import { HARDE_BLOKKADE_CHECKS } from "@/lib/aqlab/checks";
 import { annuleerRunActie, humanReviewActie } from "../../acties";
@@ -296,6 +297,8 @@ export default async function AqlabRunPagina({
   const perf = run.aggregatie?.performance;
   const regressie = run.aggregatie?.regressie ?? null;
   const consistencyMap = run.aggregatie?.consistency ?? {};
+  // Baseline-performance meeladen voor de vergelijkende weergave (scherm 6).
+  const baselinePerf = run.baseline_run_id ? await haalRunPerformance(svc, run.baseline_run_id) : null;
   const releaseCtx = await haalReleaseConsole(svc, runId);
   const magGovern = caps.includes(CAP_GOVERN);
 
@@ -327,7 +330,8 @@ export default async function AqlabRunPagina({
         <Link href="/platform/aqlab" className="text-sm text-accent hover:underline">
           ← Terug naar het Lab
         </Link>
-        <h1 className="mt-1 font-serif text-2xl font-bold">Run-overzicht</h1>
+        <h1 className="mt-1 font-serif text-2xl font-bold">{run.naam ?? "Run-overzicht"}</h1>
+        {run.naam && <p className="text-xs text-ink/50">Run-uitkomst · {run.id.slice(0, 8)}</p>}
       </div>
 
       {/* Scherm 6 — run header + performance */}
@@ -394,6 +398,14 @@ export default async function AqlabRunPagina({
           )}
         </div>
       </section>
+
+      {/* Scherm 6 — performance vergelijkend (baseline naast challenger) */}
+      {baselinePerf && (
+        <PerformanceVergelijkingBlok
+          baseline={{ naam: baselinePerf.naam, performance: baselinePerf.performance, totale_kosten: baselinePerf.totale_kosten }}
+          challenger={{ naam: run.naam ?? null, performance: perf, totale_kosten: run.totale_kosten ?? null }}
+        />
+      )}
 
       {/* Scherm 6 — regressierapport (challenger vs baseline) */}
       {regressie && <RegressieBlok regressie={regressie} />}

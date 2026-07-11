@@ -1,7 +1,8 @@
 # AI Output Quality & Governance Lab — Functioneel ontwerp
 
-> **Status**: Concept **v0.5** (ter review — géén implementatie)
+> **Status**: **AS-BUILT** t/m AQL-4 (gebouwd + gereleased 2026-07-10). Schermen 1–9 geïmplementeerd; scherm 9 (assurance-view) op `/governance/assurance`, scherm 7/8 in de platform-console.
 > **Datum**: 2026-07-10
+> **AS-BUILT-noot (AQL-4):** capabilities heten `platform.aqlab.operate` / `.review` / `.govern` (het formele vrijgavebesluit = `platform.aqlab.govern`, Governance Owner). Statustaal-labels ("Vrijgegeven voor gebruik" enz.) leven in `lib/aqlab/assurance-teksten.ts`; de positieve "wat betekent dit wél"-uitleg verschijnt alleen bij een vrijgegeven feature (geen schijnzekerheid). Fonds-download van het auditrapport bevat conform scherm 8 volledige findings + reviewers (besluit 0061); ruwe output/`fragment` uitgesloten.
 > **Samenhang**: leest na [`AI-QUALITY-LAB-ARCHITECTUUR.md`](./AI-QUALITY-LAB-ARCHITECTUUR.md); voedt [`AI-QUALITY-LAB-TECHNISCH.md`](./AI-QUALITY-LAB-TECHNISCH.md); eerste golden set in [`AI-QUALITY-LAB-REGRESSIESET-v0.4.md`](./AI-QUALITY-LAB-REGRESSIESET-v0.4.md).
 > **Markering**: **[FEIT]** geverifieerd tegen codebase · **[ONTWERPKEUZE]** voorstel · **[AANNAME]** werkhypothese · **[OPEN]** openstaande vraag.
 
@@ -25,10 +26,10 @@ Conform de vastgelegde architectuur (Architectuur §2.2) zijn er twee gebruikers
 
 | Rol | Doel in het Lab | Autorisatie |
 | --- | --- | --- |
-| **Product Owner AI** | Testcases + acceptatiecriteria definiëren; releasebesluit voorbereiden | `aqlab:beheer` |
-| **AI/ML-engineer** | Prompt-/model-/configvarianten aanmaken; runs starten; regressie duiden | `aqlab:beheer` |
-| **AI Risk & Compliance Reviewer** | Groundedness/compliance beoordelen; blokkadecriteria bewaken; human review kritieke testcases | `aqlab:review` |
-| **AI Governance Owner** | Go/no-go per release | `aqlab:govern` |
+| **Product Owner AI** | Testcases + acceptatiecriteria definiëren; releasebesluit voorbereiden | `platform.aqlab.operate` |
+| **AI/ML-engineer** | Prompt-/model-/configvarianten aanmaken; runs starten; regressie duiden | `platform.aqlab.operate` |
+| **AI Risk & Compliance Reviewer** | Groundedness/compliance beoordelen; blokkadecriteria bewaken; human review kritieke testcases | `platform.aqlab.review` |
+| **AI Governance Owner** | Go/no-go per release | `platform.aqlab.govern` |
 
 **B. Verantwoordingskant (tenant-dashboard/governance)** — het fonds, **uitsluitend lezend**:
 
@@ -121,7 +122,7 @@ Schermen 1–8 leven in de **platform-console**; scherm 9 (assurance-view) is he
 **Velden (kolommen)**: naam testset · gekoppelde AI-feature · aantal testcases · laatste run (datum) · laatste gemiddelde score · trend (▲/▼) · aantal geblokkeerd · status (actueel/verouderd).
 **Acties**: nieuwe testset · openen · run starten · dupliceren · archiveren (nooit hard-delete).
 **Validaties**: uniek naam per feature.
-**Autorisatie**: `aqlab:beheer`.
+**Autorisatie**: `platform.aqlab.operate`.
 **UX**: trend/kleur direct zichtbaar (SVG, geen chart-lib — `CLAUDE.md`); "verouderd"-badge als de testset sinds X niet is gedraaid of de prompt is gewijzigd; toon vóór "run starten" wat nog ontbreekt.
 
 ---
@@ -132,7 +133,7 @@ Schermen 1–8 leven in de **platform-console**; scherm 9 (assurance-view) is he
 **Velden**: identiteit (titel · feature · testset · kritikaliteit `kritiek`/`hoog`/`middel`/`laag`) · invoer (gebruikersvraag · gebruikersrol · synthetische broncontext-ref · snapshot-refs/hash/peildatum) · verwachting (verwachte outputvorm · **verplichte onderdelen** · **blokkadecriteria** · minimale acceptatiescore · `review_verplicht`) · historie (laatste outputs + scores per variant).
 **Acties**: opslaan · testcase draaien (ad hoc, 1 variant) · snapshot-refs vernieuwen · verplichte onderdelen/blokkadecriteria bewerken.
 **Validaties**: vraag verplicht; minimale acceptatiescore 0–100; `kritikaliteit=kritiek` → minstens één blokkadecriterium én `review_verplicht=true`.
-**Autorisatie**: `aqlab:beheer`.
+**Autorisatie**: `platform.aqlab.operate`.
 **UX**: maak per verplicht onderdeel zichtbaar of het **deterministisch**, **heuristisch**, via **judge** of via **mens** wordt getoetst; toon snapshot-herkomst prominent; waarschuw als een verplicht onderdeel niet automatisch meetbaar is (valt dan op judge/mens terug).
 
 ---
@@ -163,8 +164,10 @@ Schermen 1–8 leven in de **platform-console**; scherm 9 (assurance-view) is he
 
 **Acties**: modus kiezen · variant selecteren of nieuwe variant vastleggen · (modus 2) subset-filters/handmatige selectie · (modus 3) eigen vraag + fixtures kiezen · baseline kiezen · "dry run" (1 testcase) · run starten · security/safety-set apart draaien.
 **Validaties**: variant volledig gepind (geen impliciete defaults — temp expliciet, model exact; effectieve instellingen worden vastgelegd, Technisch §2B); regressie → baseline verplicht en vergelijkbaar (**zelfde testset én dezelfde subset**); **MVP: max. één challenger tegen één baseline**; kostenplafond > 0; een subset zonder de blocking-set kan niet tot advies "accepteren" leiden; ad-hoc levert nooit automatisch releaseadvies.
-**Autorisatie**: `aqlab:beheer`.
+**Autorisatie**: `platform.aqlab.operate`.
 **UX**: toon een **diff** van de challenger t.o.v. baseline vóór starten; waarschuw bij verandering van méér dan één as tegelijk (prompt én model) — regressiesignaal dan niet toewijsbaar; toon geschatte kosten/duur vooraf; label de run zichtbaar als **"Volledige regressierun" / "Subset-run" / "Ad-hoc testvraag"** vanaf het startmoment.
+
+> **[AS-BUILT — AQL-5, besluit [0062]].** Het scherm is herbouwd als **progressive-disclosure**-formulier: het run-type stuurt welke velden verschijnen (baseline→challenger + testset bij regressie/subset, ad-hoc-vraag bij ad_hoc, subset-selectie bij subset). Links de **read-only productie-baseline** (laatst vrijgegeven variant), rechts de **challenger** (allowlist-modelkeuze + optionele tokens/temperature/top_p). De **gewijzigde as wordt automatisch afgeleid** (niet meer handmatig). Expliciete temperature waarschuwt (wijkt af van productie, §2B). **Proactieve vereisten/blokkers** staan vóóraf zichtbaar en blokkeren de knop met reden (lege/lege-cases testset, ad-hoc zonder vraag; empty-state "nog geen testset geseed"); deze gating wordt **server-side her-gevalideerd**. Run krijgt een **naam** (scherm 6/runs-lijst). Scherm 4 (outputvergelijking) is nu **uitklapbaar per testcase** en scherm 6 toont de performance **baseline naast challenger**.
 
 ---
 
@@ -188,7 +191,7 @@ Schermen 1–8 leven in de **platform-console**; scherm 9 (assurance-view) is he
 - **Kostenindicatie** — waar beschikbaar.
 
 **Acties**: variant als baseline markeren · verschil highlighten (tekst-diff) · doorklikken naar scorekaart · testcase markeren voor human review · (bij ad-hoc) "Opslaan als testcase".
-**Autorisatie**: `aqlab:beheer`/`aqlab:review`. **Niet** beschikbaar in de fonds-assurance-view — ruwe output en prompts blijven binnen de platform-console (§5.7).
+**Autorisatie**: `platform.aqlab.operate`/`platform.aqlab.review`. **Niet** beschikbaar in de fonds-assurance-view — ruwe output en prompts blijven binnen de platform-console (§5.7).
 **UX**: side-by-side met duidelijke markering van ontbrekende verplichte onderdelen en herkomstlabel-schendingen (vrije tekst als `[Bron]` = rood); tekst-diff zonder chart-lib; volledige outputs inklapbaar maar standaard volledig leesbaar.
 
 ---
@@ -200,7 +203,7 @@ Schermen 1–8 leven in de **platform-console**; scherm 9 (assurance-view) is he
 **Velden — geheel**: gewogen totaalscore; pass/fail t.o.v. minimale acceptatiescore; blokkade-status; findings met ernst; human-review-status + reviewer + tijdstip; volledige herkomst: prompt(versie), model(config), snapshot(hash), effectieve modelinstellingen, tijdstip, wie de run startte; latency/tokens/kosten van de output.
 **Acties**: human review toevoegen (bevestig/overrule + motivatie) · finding aanmaken/sluiten · exporteren · (bij ad-hoc output) "Opslaan als testcase" (§scherm 5a).
 **Validaties**: overrule vereist motivatie; kritieke finding blokkeert pass ongeacht totaalscore.
-**Autorisatie**: review = `aqlab:review`; inzien = `aqlab:beheer`/`aqlab:govern`.
+**Autorisatie**: review = `platform.aqlab.review`; inzien = `platform.aqlab.operate`/`platform.aqlab.govern`.
 **UX**: maak zichtbaar wélke score van een mens komt en welke van de judge; toon judge-motivatie letterlijk; **nooit een "groen vinkje" zonder onderliggend bewijs** (geen schijnzekerheid); toon per criterium de meetbeperking (§4.3) en of menselijke review mogelijk/vereist is.
 
 ---
@@ -211,7 +214,7 @@ Schermen 1–8 leven in de **platform-console**; scherm 9 (assurance-view) is he
 **Voorwaarden voor promotie** (alle vereist): de vraag wordt opgeslagen; broncontext/fixture is vastgelegd; verwachte outputvorm is vastgelegd; verplichte onderdelen zijn bepaald; blokkadecriteria zijn bepaald; minimale score is bepaald; reviewverplichting is bepaald.
 **Keuzevelden bij opslaan**: bestaande **testset** of nieuwe testset · **testcase-ID** (bv. `BS-09`) · **titel** · **kritikaliteit** · **minimale acceptatiescore** · **review verplicht** (ja/nee) · **machine-toetsbare specificatie** indien beschikbaar (welke verplichte onderdelen deterministisch/heuristisch te toetsen zijn).
 **Effect**: de ad-hoc vraag wordt een `aqlab_test_cases`-rij; de bron-run wordt gemarkeerd `promoted_to_testcase = ja` met `promoted_testcase_id` (Technisch §2.6). Vanaf dat moment telt de (nieuwe) testcase mee in reguliere runs — de oorspronkelijke ad-hoc run blijft indicatief en telt zelf niet met terugwerkende kracht mee.
-**Autorisatie**: `aqlab:beheer`.
+**Autorisatie**: `platform.aqlab.operate`.
 **UX**: toon vóór opslaan welke verplichte velden nog ontbreken (blokker vooraf, niet als foutmelding achteraf); bevestig expliciet dat de ad-hoc run zelf niet formeel meetelt.
 
 ---
@@ -250,7 +253,7 @@ Schermen 1–8 leven in de **platform-console**; scherm 9 (assurance-view) is he
 
 **Acties**: doorklik naar outputvergelijking/scorekaart · advies overnemen als go/no-go-voorstel · exporteren · sorteren/filteren op status.
 **Validaties**: advies "accepteren" onmogelijk zolang er een openstaande kritieke blokkade is; bij `run_type ≠ full_regression` is het advies **indicatief** en niet automatisch formeel (§6.3a).
-**Autorisatie**: `aqlab:beheer`/`aqlab:review`/`aqlab:govern`.
+**Autorisatie**: `platform.aqlab.operate`/`platform.aqlab.review`/`platform.aqlab.govern`.
 **UX**: sorteer op grootste verslechtering eerst; onderscheid "score lager" (gradueel) van "nu geblokkeerd" (categorisch); toon expliciet welke as veranderde t.o.v. baseline; markeer de **langzaamste testcase** in het performance-blok.
 
 ---
@@ -284,7 +287,7 @@ Daarnaast een **verschil-weergave** tussen de iteraties (tekst-diff), met marker
 
 **Ad-hoc consistentietest**: de gebruiker ziet **alle** iteratie-antwoorden, de onderlinge verschillen en een berekende **`consistency_score`**. De resultaten tellen **niet** mee voor formele regressie, tenzij de vraag wordt opgeslagen als officiële testcase (§scherm 5a). Respecteert `persist_mode` (Technisch): bij `none` wordt niets persistent opgeslagen — alleen tonen.
 
-**Autorisatie**: platform-console (`aqlab:beheer`/`aqlab:review`). **Niet** in de fonds-assurance-view. **UX**: pure SVG/HTML; conclusie-badge met kleur; verboden-variatie altijd expliciet gemarkeerd.
+**Autorisatie**: platform-console (`platform.aqlab.operate`/`platform.aqlab.review`). **Niet** in de fonds-assurance-view. **UX**: pure SVG/HTML; conclusie-badge met kleur; verboden-variatie altijd expliciet gemarkeerd.
 
 ---
 
@@ -304,7 +307,7 @@ Daarnaast een **verschil-weergave** tussen de iteraties (tekst-diff), met marker
 **Inhoud**: feature + versie · testset + snapshot-hashes · variant (prompt/model/config) · scores per criterium + methode · blokkades/findings · human reviews (wie/wanneer) · regressie-uitkomst · go/no-go-besluit + besluitnemer + tijdstip · export-hash/tijdstip · **disclaimer (geen juridische garantie)**.
 **Acties**: genereren (HTML/PDF) · downloaden · vastleggen in fondsdossier · verifiëren (hash).
 **Validaties**: export bevriest de onderliggende run (immutable); export zelf append-only gelogd.
-**Autorisatie**: `aqlab:beheer`/`aqlab:govern`; fonds downloadt read-only via assurance-view.
+**Autorisatie**: `platform.aqlab.operate`/`platform.aqlab.govern`; fonds downloadt read-only via assurance-view.
 **UX**: hergebruik het bestaande auditdossier-patroon (`lib/auditdossier-html.ts`, `AuditExportKnop`); standalone leesbaar zonder portaal; expliciete versionering en hash.
 
 ---
@@ -484,7 +487,7 @@ Statussen: **concept · getest · review vereist · aangepast · vrijgegeven · 
 ### 6.2 Wie adviseert, wie keurt goed
 
 - **Releaseadvies geven**: het Lab genereert automatisch een advies (accepteren/aanpassen/blokkeren) op basis van scores + regressie + blokkades; de **AI Risk & Compliance Reviewer** en **Product Owner AI** duiden het.
-- **Release goedkeuren (vrijgeven)**: uitsluitend de **AI Governance Owner** (`aqlab:govern`) — menselijk besluit, human-in-the-loop.
+- **Release goedkeuren (vrijgeven)**: uitsluitend de **AI Governance Owner** (`platform.aqlab.govern`) — menselijk besluit, human-in-the-loop.
 
 ### 6.3 Beslisregels
 

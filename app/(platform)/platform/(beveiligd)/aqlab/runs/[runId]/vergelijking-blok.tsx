@@ -38,32 +38,54 @@ function Diff({ oud, nieuw }: { oud: string; nieuw: string }) {
   );
 }
 
+const GATE_BADGE: Record<string, string> = {
+  pass: "bg-ok-tint text-ok-ink",
+  geblokkeerd: "bg-err-tint text-err-ink",
+  review_vereist: "bg-warn-tint text-warn-ink",
+};
+
+function GateChip({ gate }: { gate: string | null }) {
+  return (
+    <span className={`rounded px-1.5 py-0.5 text-[11px] ${GATE_BADGE[gate ?? ""] ?? "bg-app-bg text-ink/60"}`}>
+      {gate ?? "—"}
+    </span>
+  );
+}
+
 export default function VergelijkingBlok({ items }: { items: VergelijkingItem[] }) {
   return (
     <section className="rounded-xl border border-line bg-white p-5">
       <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/60">Outputvergelijking (baseline vs challenger)</h2>
-      <div className="mt-3 space-y-5">
+      <p className="mt-1 text-xs text-ink/50">Klap een testcase uit voor de volledige antwoorden naast elkaar + woord-diff.</p>
+      <div className="mt-3 space-y-2">
         {items.map((it) => (
-          <div key={it.test_case_id ?? "ad_hoc"} className="rounded-lg border border-line p-3">
-            <div className="text-sm font-semibold">{it.code ?? it.test_case_id?.slice(0, 8) ?? "ad-hoc"}</div>
-            {it.vraag && <p className="text-xs text-ink/60">{it.vraag}</p>}
-            <div className="mt-2 grid gap-3 lg:grid-cols-2">
-              <div>
-                <div className="text-xs font-semibold uppercase text-ink/50">Baseline (score {it.baseline_score ?? "—"} · gate {it.baseline_gate ?? "—"})</div>
-                <pre className="mt-1 whitespace-pre-wrap rounded-lg bg-app-bg p-2 text-xs">{it.baseline_antwoord ?? "— geen tekst (persist_mode) —"}</pre>
+          <details key={it.test_case_id ?? "ad_hoc"} className="rounded-lg border border-line">
+            <summary className="cursor-pointer list-none px-3 py-2 text-sm">
+              <span className="font-semibold">{it.code ?? it.test_case_id?.slice(0, 8) ?? "ad-hoc"}</span>
+              <span className="ml-2 text-xs text-ink/60">
+                baseline {it.baseline_score ?? "—"} <GateChip gate={it.baseline_gate} /> → challenger {it.challenger_score ?? "—"} <GateChip gate={it.challenger_gate} />
+              </span>
+            </summary>
+            <div className="border-t border-line p-3">
+              {it.vraag && <p className="text-xs text-ink/60">{it.vraag}</p>}
+              <div className="mt-2 grid gap-3 lg:grid-cols-2">
+                <div>
+                  <div className="text-xs font-semibold uppercase text-ink/50">Baseline (score {it.baseline_score ?? "—"} · gate {it.baseline_gate ?? "—"})</div>
+                  <pre className="mt-1 whitespace-pre-wrap rounded-lg bg-app-bg p-2 text-xs">{it.baseline_antwoord ?? "— geen tekst (persist_mode) —"}</pre>
+                </div>
+                <div>
+                  <div className="text-xs font-semibold uppercase text-ink/50">Challenger (score {it.challenger_score ?? "—"} · gate {it.challenger_gate ?? "—"})</div>
+                  <pre className="mt-1 whitespace-pre-wrap rounded-lg bg-app-bg p-2 text-xs">{it.challenger_antwoord ?? "— geen tekst (persist_mode) —"}</pre>
+                </div>
               </div>
-              <div>
-                <div className="text-xs font-semibold uppercase text-ink/50">Challenger (score {it.challenger_score ?? "—"} · gate {it.challenger_gate ?? "—"})</div>
-                <pre className="mt-1 whitespace-pre-wrap rounded-lg bg-app-bg p-2 text-xs">{it.challenger_antwoord ?? "— geen tekst (persist_mode) —"}</pre>
-              </div>
+              {it.baseline_antwoord && it.challenger_antwoord && (
+                <div className="mt-2">
+                  <div className="text-xs font-semibold uppercase text-ink/50">Verschil (challenger t.o.v. baseline)</div>
+                  <Diff oud={it.baseline_antwoord} nieuw={it.challenger_antwoord} />
+                </div>
+              )}
             </div>
-            {it.baseline_antwoord && it.challenger_antwoord && (
-              <div className="mt-2">
-                <div className="text-xs font-semibold uppercase text-ink/50">Verschil (challenger t.o.v. baseline)</div>
-                <Diff oud={it.baseline_antwoord} nieuw={it.challenger_antwoord} />
-              </div>
-            )}
-          </div>
+          </details>
         ))}
       </div>
     </section>

@@ -13,6 +13,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ConsistentieAggregaat } from "./consistency";
 import type { RegressieResultaat } from "./regression-core";
+import { AQLAB_TOEGESTANE_MODELLEN, type VariantInstellingen } from "./modellen";
 
 export interface RunAggregatie {
   performance?: RunPerformance;
@@ -22,6 +23,7 @@ export interface RunAggregatie {
 
 export interface RunLijstItem {
   id: string;
+  naam?: string | null;
   run_type: string;
   status: string;
   persist_mode: string;
@@ -100,7 +102,7 @@ export interface OutputMetScores {
 export async function lijstRuns(svc: SupabaseClient, limit = 50): Promise<RunLijstItem[]> {
   const { data } = await svc
     .from("aqlab_runs")
-    .select("id, run_type, status, persist_mode, test_set_id, totale_kosten, aggregatie, gestart_op, voltooid_op")
+    .select("id, naam, run_type, status, persist_mode, test_set_id, totale_kosten, aggregatie, gestart_op, voltooid_op")
     .order("gestart_op", { ascending: false })
     .limit(limit);
   return (data ?? []) as RunLijstItem[];
@@ -123,7 +125,7 @@ export interface RunDetail {
 export async function haalRunDetail(svc: SupabaseClient, runId: string): Promise<RunDetail> {
   const { data: runData } = await svc
     .from("aqlab_runs")
-    .select("id, run_type, status, persist_mode, test_set_id, baseline_run_id, rol, gewijzigde_as, ad_hoc_question, promoted_to_testcase, promoted_testcase_id, totale_kosten, aggregatie, gestart_op, voltooid_op")
+    .select("id, naam, run_type, status, persist_mode, test_set_id, baseline_run_id, rol, gewijzigde_as, ad_hoc_question, promoted_to_testcase, promoted_testcase_id, totale_kosten, aggregatie, gestart_op, voltooid_op")
     .eq("id", runId)
     .maybeSingle();
   const run = (runData as RunLijstItem) ?? null;
@@ -175,6 +177,100 @@ export async function haalModelConfiguraties(svc: SupabaseClient): Promise<Model
   return (data ?? []) as ModelConfigItem[];
 }
 
+/**
+ * De vaste productie-baseline voor een testset (scherm 3): de laatst vrijgegeven
+ * variant volgens aqlab_release_decisions (release_status='vrijgegeven') voor de
+ * feature van de testset. Null als de testset geen feature heeft (bv. de
+ * security/safety-set, feature_id=null) of er nog geen vrijgave is → de UI toont
+ * dan de productiekern-default zonder harde blokkade.
+ */
+export interface ProductieBaselineInfo {
+  baseline_run_id: string;
+  besluit_op: string | null;
+  config_naam: string | null;
+  variant: VariantInstellingen;
+}
+export async function haalProductieBaseline(
+  svc: SupabaseClient,
+  testSetId: string | null
+): Promise<ProductieBaselineInfo | null> {
+  if (!testSetId) return null;
+  const { data: ts } = await svc
+    .from("aqlab_test_sets").select("feature_id").eq("id", testSetId).maybeSingle();
+  const featureId = (ts as { feature_id: string | null } | null)?.feature_id ?? null;
+  if (!featureId) return null;
+
+  const { data: rd } = await svc
+    .from("aqlab_release_decisions")
+    .select("run_id, besluit_op, aangemaakt_op")
+    .eq("feature_id", featureId)
+    .eq("release_status", "vrijgegeven")
+    .order("aangemaakt_op", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const runId = (rd as { run_id: string | null } | null)?.run_id ?? null;
+  if (!runId) return null;
+
+  const { data: run } = await svc
+    .from("aqlab_runs").select("model_configuration_id").eq("id", runId).maybeSingle();
+  const mcId = (run as { model_configuration_id: string | null } | null)?.model_configuration_id ?? null;
+
+  // Fallback = productiekern-default (allowlist-baseline) als er geen config gepind is.
+  const kern = AQLAB_TOEGESTANE_MODELLEN.find((m) => m.isBaseline)!;
+  let variant: VariantInstellingen = {
+    model: kern.model_name,
+    temperature: null,
+    maxTokens: kern.defaultMaxTokens,
+    topP: null,
+    retrieval: {},
+  };
+  let configNaam: string | null = "Productiekern";
+  if (mcId) {
+    const { data: cfg } = await svc
+      .from("aqlab_model_configurations")
+      .select("naam, model_name, temperature_requested, max_tokens_requested, top_p_requested, retrieval_settings")
+      .eq("id", mcId)
+      .maybeSingle();
+    if (cfg) {
+      variant = {
+        model: (cfg.model_name as string) || kern.model_name,
+        temperature: (cfg.temperature_requested as number | null) ?? null,
+        maxTokens: (cfg.max_tokens_requested as number | null) ?? null,
+        topP: (cfg.top_p_requested as number | null) ?? null,
+        retrieval: (cfg.retrieval_settings as Record<string, unknown>) ?? {},
+      };
+      configNaam = (cfg.naam as string) ?? null;
+    }
+  }
+  return {
+    baseline_run_id: runId,
+    besluit_op: (rd as { besluit_op: string | null } | null)?.besluit_op ?? null,
+    config_naam: configNaam,
+    variant,
+  };
+}
+
+/** Lichte performance-samenvatting van één run (voor de baseline-kolom, scherm 6). */
+export interface RunPerformanceSamenvatting {
+  naam: string | null;
+  performance: RunPerformance | undefined;
+  totale_kosten: number | null;
+}
+export async function haalRunPerformance(
+  svc: SupabaseClient,
+  runId: string
+): Promise<RunPerformanceSamenvatting | null> {
+  const { data } = await svc
+    .from("aqlab_runs").select("naam, aggregatie, totale_kosten").eq("id", runId).maybeSingle();
+  if (!data) return null;
+  const agg = ((data as { aggregatie: RunAggregatie | null }).aggregatie ?? null) as RunAggregatie | null;
+  return {
+    naam: ((data as { naam: string | null }).naam) ?? null,
+    performance: agg?.performance,
+    totale_kosten: ((data as { totale_kosten: number | null }).totale_kosten) ?? null,
+  };
+}
+
 export interface FixtureItem { code: string; titel: string }
 export async function haalFixtures(svc: SupabaseClient): Promise<FixtureItem[]> {
   const { data } = await svc
@@ -190,6 +286,20 @@ export async function haalFixtures(svc: SupabaseClient): Promise<FixtureItem[]> 
     uit.push(r);
   }
   return uit;
+}
+
+/** Aantal actieve testcases per testset (voor empty-state + proactieve blokkers). */
+export async function haalTestsetTellingen(svc: SupabaseClient): Promise<Record<string, number>> {
+  const { data } = await svc
+    .from("aqlab_test_cases")
+    .select("test_set_id")
+    .eq("actief", true);
+  const tel: Record<string, number> = {};
+  for (const r of (data ?? []) as { test_set_id: string | null }[]) {
+    if (!r.test_set_id) continue;
+    tel[r.test_set_id] = (tel[r.test_set_id] ?? 0) + 1;
+  }
+  return tel;
 }
 
 export interface TestcaseItem {
