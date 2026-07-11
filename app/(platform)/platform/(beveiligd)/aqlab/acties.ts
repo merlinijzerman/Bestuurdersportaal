@@ -16,9 +16,12 @@ import { redirect } from "next/navigation";
 import { withPlatform } from "@/lib/platform-wrapper";
 import { planRun, annuleerRun, draaiAdHocConsistentieSync, type RunConfig, type AdHocConsistentieResultaat } from "@/lib/aqlab/run-orchestrator";
 import { promoveerAdHocNaarTestcase, valideerPromotie, type PromotieConfig } from "@/lib/aqlab/promotie";
+import { legVrijgavebesluitVast, valideerVrijgaveMogelijk, type Besluit, type Releasestatus } from "@/lib/aqlab/release";
+import { genereerAuditExport, verifieerAuditExport } from "@/lib/aqlab/audit-export";
 
 const CAP_OPERATE = "platform.aqlab.operate" as const;
 const CAP_REVIEW = "platform.aqlab.review" as const;
+const CAP_GOVERN = "platform.aqlab.govern" as const;
 const LIJST_PAD = "/platform/aqlab";
 
 function leeg(v: FormDataEntryValue | null): string | null {
@@ -141,6 +144,96 @@ export async function promoveerActie(formData: FormData): Promise<void> {
   revalidatePath(LIJST_PAD);
   if (res.ok && res.test_case_id) redirect(`${LIJST_PAD}/runs/${config.bron_run_id}`);
   else redirect(`${LIJST_PAD}/promoveren?run=${config.bron_run_id}&fout=${encodeURIComponent(res.reden ?? "onbekend")}`);
+}
+
+// ── AQL-4 — vrijgavebesluit (scherm 8) ─────────────────────────────────────
+// Formeel mensbesluit door de AI Governance Owner (CAP_GOVERN), strikt gescheiden
+// van operate/review. Bij een formeel go/no-go bevriezen we óók het auditrapport
+// en koppelen het (audit_export_id) — append-only, herleidbaar.
+export async function legVrijgaveActie(formData: FormData): Promise<void> {
+  const runId = (formData.get("run_id") as string) || "";
+  const status = ((formData.get("gewenste_status") as string) || "") as Releasestatus;
+  // Het formele besluit volgt DETERMINISTISCH uit de status (geen los,
+  // inconsistent besluit-veld): een formele status = het gelijknamige besluit.
+  const besluit = (status === "vrijgegeven" || status === "geblokkeerd" ? status : null) as Besluit | null;
+  const motivatie = leeg(formData.get("motivatie"));
+  if (!runId || !status) redirect(`${LIJST_PAD}/runs/${runId}?release_fout=${encodeURIComponent("run of status ontbreekt")}`);
+
+  const res = await withPlatform(
+    { capability: CAP_GOVERN, handeling: "platform.aqlab.release.besluit", doelObject: `aqlab_runs:${runId}` },
+    async (svc, ctx) => {
+      const nu = new Date().toISOString();
+      const invoer = {
+        run_id: runId,
+        gewenste_status: status,
+        besluit,
+        besluit_door: besluit ? ctx.identiteit.id : null,
+        acteur_id: ctx.identiteit.id,
+        motivatie,
+      };
+
+      // 1. VALIDEER EERST (zonder te schrijven), zodat een geweigerd besluit nooit
+      //    een onherroepelijke, bevroren auditexport-wees achterlaat.
+      const voor = await valideerVrijgaveMogelijk(svc, invoer);
+      if (!voor.ok) {
+        return { resultaat: { ok: false, redenen: voor.redenen }, effect: { ok: false } };
+      }
+
+      // 2. Bij een formeel besluit: bevries + koppel het auditrapport (nu pas).
+      let auditExportId: string | null = null;
+      if (besluit) {
+        const exp = await genereerAuditExport(
+          svc,
+          { run_id: runId, besluit, besluit_door: ctx.identiteit.id, gegenereerd_door: ctx.identiteit.id },
+          nu
+        );
+        auditExportId = exp.ok ? exp.id : null;
+      }
+
+      // 3. Leg het besluit append-only vast (her-valideert defense-in-depth).
+      const r = await legVrijgavebesluitVast(svc, { ...invoer, audit_export_id: auditExportId }, nu);
+      return { resultaat: r, effect: { ok: r.ok, release_status: r.release_status, kritiek: r.kritieke_bevindingen_count } };
+    }
+  );
+
+  revalidatePath(`${LIJST_PAD}/runs/${runId}`);
+  if (res.ok) redirect(`${LIJST_PAD}/runs/${runId}?release_ok=1`);
+  redirect(`${LIJST_PAD}/runs/${runId}?release_fout=${encodeURIComponent(res.redenen.join(" · "))}`);
+}
+
+// Standalone auditrapport genereren (scherm 8, zonder formeel besluit).
+export async function genereerAuditActie(formData: FormData): Promise<void> {
+  const runId = (formData.get("run_id") as string) || "";
+  if (!runId) return;
+  const res = await withPlatform(
+    { capability: CAP_OPERATE, handeling: "platform.aqlab.audit.genereer", doelObject: `aqlab_runs:${runId}` },
+    async (svc, ctx) => {
+      const r = await genereerAuditExport(
+        svc,
+        { run_id: runId, besluit: null, besluit_door: null, gegenereerd_door: ctx.identiteit.id },
+        new Date().toISOString()
+      );
+      return { resultaat: r, effect: { ok: r.ok, id: r.id } };
+    }
+  );
+  revalidatePath(`${LIJST_PAD}/runs/${runId}`);
+  redirect(`${LIJST_PAD}/runs/${runId}?${res.ok ? `audit_ok=${res.id}` : `audit_fout=${encodeURIComponent(res.reden ?? "onbekend")}`}`);
+}
+
+// Integriteitsverificatie: herbereken de hash van de opgeslagen bytes.
+export async function verifieerAuditActie(formData: FormData): Promise<void> {
+  const runId = (formData.get("run_id") as string) || "";
+  const exportId = (formData.get("export_id") as string) || "";
+  if (!exportId) return;
+  const res = await withPlatform(
+    { capability: CAP_OPERATE, handeling: "platform.aqlab.audit.verifieer", doelObject: `aqlab_audit_exports:${exportId}` },
+    async (svc) => {
+      const r = await verifieerAuditExport(svc, exportId);
+      return { resultaat: r, effect: { match: r.match } };
+    }
+  );
+  revalidatePath(`${LIJST_PAD}/runs/${runId}`);
+  redirect(`${LIJST_PAD}/runs/${runId}?verify=${res.ok ? (res.match ? "match" : "mismatch") : "fout"}`);
 }
 
 export async function annuleerRunActie(formData: FormData): Promise<void> {

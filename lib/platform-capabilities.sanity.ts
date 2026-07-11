@@ -28,9 +28,9 @@ function test(naam: string, fn: () => void) {
 
 console.log("platform-capability sanity-tests:");
 
-test("union telt exact 14 capabilities", () => {
-  assert.equal(PLATFORM_CAPABILITIES.length, 14);
-  assert.equal(new Set(PLATFORM_CAPABILITIES).size, 14, "geen duplicaten");
+test("union telt exact 15 capabilities", () => {
+  assert.equal(PLATFORM_CAPABILITIES.length, 15);
+  assert.equal(new Set(PLATFORM_CAPABILITIES).size, 15, "geen duplicaten");
 });
 
 test("elke capability begint met 'platform.'", () => {
@@ -104,6 +104,7 @@ const SEED_IN_MIGRATIE = [
   "platform.contact.manage",
   "platform.aqlab.operate",
   "platform.aqlab.review",
+  "platform.aqlab.govern",
 ] as const;
 
 test("code-union en migratie-seed zijn identiek (TO §12 test 17)", () => {

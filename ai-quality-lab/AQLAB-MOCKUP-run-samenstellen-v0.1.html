@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AQLab — Run samenstellen (mockup v0.1)</title>
+<style>
+  :root{
+    --bg:#f2efe9; --card:#ffffff; --ink:#1c1a17; --muted:#6b655c; --line:#ded8cd;
+    --accent:#3d5a73; --accent-ink:#fff; --ok:#2f6f4f; --ok-bg:#e7f2ec;
+    --warn:#8a5a00; --warn-bg:#faf1dd; --err:#8a2f2f; --err-bg:#f7e7e7;
+    --chip:#eee9e0;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding:28px;}
+  .wrap{max-width:960px;margin:0 auto}
+  h1{font-family:Georgia,"Times New Roman",serif;font-size:30px;margin:0 0 6px}
+  .lede{color:var(--muted);margin:0 0 18px;max-width:70ch}
+  .disc{font-size:13px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px;margin-top:16px}
+  .kicker{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 14px}
+  .seg{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+  .seg button{border:1px solid var(--line);background:#fff;border-radius:10px;padding:9px 13px;font-size:13.5px;cursor:pointer;color:var(--ink)}
+  .seg button .sub{display:block;font-size:11px;color:var(--muted);font-weight:400}
+  .seg button[aria-pressed="true"]{border-color:var(--accent);background:#eef3f7;box-shadow:inset 0 0 0 1px var(--accent)}
+  .step{border:1px solid var(--line);border-radius:12px;padding:16px;margin-top:14px;background:#fdfcfa}
+  .step h3{margin:0 0 3px;font-size:14.5px}
+  .step .hint{color:var(--muted);font-size:12.5px;margin:0 0 12px}
+  .grid{display:grid;gap:12px;grid-template-columns:1fr 1fr}
+  @media(max-width:640px){.grid{grid-template-columns:1fr}}
+  label.f{font-size:13px;display:block}
+  label.f > span{display:block;color:var(--muted);margin-bottom:4px}
+  select,input[type=text],input[type=number]{width:100%;border:1px solid var(--line);border-radius:9px;padding:9px 10px;font-size:13.5px;background:#fff;color:var(--ink)}
+  .chip{display:inline-block;background:var(--chip);border-radius:999px;padding:2px 9px;font-size:11.5px;color:var(--muted)}
+  .derived{background:#f4f2ec;border:1px dashed var(--line);border-radius:9px;padding:9px 10px;font-size:13px}
+  .derived b{font-weight:600}
+  .cmp{display:flex;gap:12px;align-items:stretch;margin-top:6px}
+  @media(max-width:640px){.cmp{flex-direction:column}}
+  .cmpcard{flex:1;border:1px solid var(--line);border-radius:12px;padding:14px;background:#fff}
+  .cmpcard.base{border-left:4px solid #9aa7b1;background:#f7f8f9}
+  .cmpcard.chal{border-left:4px solid var(--accent);background:#eef3f7}
+  .cmptag{font-size:11.5px;font-weight:700;letter-spacing:.03em;color:var(--muted);margin-bottom:6px}
+  .cmpcard.chal .cmptag{color:var(--accent)}
+  .cmpmodel{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:15px;font-weight:600;color:var(--ink)}
+  .cmpmeta{font-size:12px;color:var(--muted);margin-top:3px}
+  .cmparrow{align-self:center;font-size:20px;color:var(--muted);font-weight:700}
+  @media(max-width:640px){.cmparrow{transform:rotate(90deg)}}
+  .addbtn{margin-top:8px;border:1px dashed var(--accent);color:var(--accent);background:#fff;border-radius:9px;padding:8px 12px;font-size:13px;cursor:pointer}
+  .variantnew{margin-top:10px;border:1px solid var(--accent);border-radius:10px;padding:14px;background:#eef3f7;display:none}
+  .variantnew.open{display:block}
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+  @media(max-width:640px){.row3{grid-template-columns:1fr}}
+  .small{font-size:11.5px;color:var(--muted)}
+  details.adv{margin-top:14px}
+  details.adv summary{cursor:pointer;font-size:13px;color:var(--muted)}
+  .req{margin-top:16px;border-radius:12px;padding:14px 16px;font-size:13.5px}
+  .req.ok{background:var(--ok-bg);border:1px solid #bfe0cd}
+  .req.block{background:var(--warn-bg);border:1px solid #e8d6a8}
+  .req h4{margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.05em}
+  .req ul{margin:0;padding-left:18px}
+  .req li{margin:3px 0}
+  .req li.done{color:var(--ok);list-style:"✓  "}
+  .req li.todo{color:var(--warn);list-style:"•  "}
+  .actions{margin-top:16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .submit{background:var(--accent);color:#fff;border:none;border-radius:10px;padding:11px 18px;font-size:14px;font-weight:600;cursor:pointer}
+  .submit:disabled{opacity:.45;cursor:not-allowed}
+  .subhint{color:var(--muted);font-size:12px;max-width:52ch}
+  .badge{font-size:11px;padding:1px 7px;border-radius:6px;background:#eef3f7;color:var(--accent);border:1px solid #cfdce6}
+  .hide{display:none!important}
+  .note{font-size:12px;color:var(--muted);margin-top:10px}
+  .legendbar{background:#fbf7ee;border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-size:12.5px;color:var(--muted);margin-top:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>AI Quality Lab</h1>
+  <p class="lede">Draait de <strong>exact dezelfde generatie-/retrievalkern als productie</strong> op de synthetische golden set en scoort elke output.
+  <span class="disc">Scores ondersteunen kwaliteitsborging; zij vormen geen juridische garantie en vervangen geen menselijke verantwoordelijkheid.</span></p>
+
+  <div class="card">
+    <p class="kicker">Run samenstellen</p>
+
+    <label class="f" style="display:block;margin-bottom:14px">
+      <span>Naam / label voor deze run <span class="small">(optioneel — om 'm later makkelijk terug te vinden)</span></span>
+      <input type="text" placeholder="bv. Opus-challenger — toeslagbeleid, juli 2026" />
+    </label>
+
+    <!-- STAP 1: run-type stuurt de rest -->
+    <div>
+      <label class="f"><span>1 · Wat voor run wil je draaien?</span></label>
+      <div class="seg" id="runtypeSeg">
+        <button data-rt="full_regression" aria-pressed="true">Volledige regressierun<span class="sub">formeel advies mogelijk</span></button>
+        <button data-rt="subset" aria-pressed="false">Subset<span class="sub">indicatief</span></button>
+        <button data-rt="ad_hoc" aria-pressed="false">Ad-hoc testvraag<span class="sub">geen formeel advies</span></button>
+      </div>
+    </div>
+
+    <!-- STAP 2: variant + vergelijking (samengevoegd) -->
+    <div class="step" id="stepVariant">
+      <h3>2 · Wat vergelijk je? <span class="small">(baseline → challenger)</span></h3>
+      <p class="hint">Links staat wat er <b>nú live draait</b> — je baseline. Rechts kies je het model/de variant die je ertegenaf zet — de <b>challenger</b>. Het verschil (de "gewijzigde as") leidt het Lab automatisch af.</p>
+      <div class="cmp">
+        <div class="cmpcard base">
+          <div class="cmptag">● HUIDIG — PRODUCTIE (BASELINE)</div>
+          <div class="cmpmodel">claude-sonnet-4-6</div>
+          <div class="cmpmeta">Productiekern · max_tokens 3200 · temperature provider-default</div>
+          <div class="cmpmeta" style="margin-top:10px">Laatst vrijgegeven variant — automatisch de baseline.</div>
+        </div>
+        <div class="cmparrow">→</div>
+        <div class="cmpcard chal">
+          <div class="cmptag">◆ NIEUW — WAT JE TEST (CHALLENGER)</div>
+          <label class="f">
+            <span>Kies het model / de variant</span>
+            <select id="variant">
+              <option value="baseline" data-model="claude-sonnet-4-6" data-maxtokens="3200" data-temp="provider-default">Zelfde als productie — claude-sonnet-4-6</option>
+              <option value="opus" data-model="claude-opus-4-8" data-maxtokens="4500" data-temp="provider-default">claude-opus-4-8 — Opus</option>
+              <option value="haiku" data-model="claude-haiku-4-5-20251001" data-maxtokens="3200" data-temp="provider-default">claude-haiku-4-5-20251001 — Haiku</option>
+              <option value="sonnet45" data-model="claude-sonnet-4-5" data-maxtokens="3200" data-temp="provider-default">claude-sonnet-4-5 — Sonnet 4.5</option>
+              <option value="mistral" data-model="mistral-large-latest" data-provider="mistral" data-maxtokens="3200" data-temp="provider-default">mistral-large-latest — Mistral (ander provider)</option>
+            </select>
+          </label>
+          <div class="cmpmeta" id="variantSummary" style="margin-top:8px">max_tokens 3200 · temperature provider-default</div>
+        </div>
+      </div>
+      <button class="addbtn" id="addVariantBtn" type="button">⚙ Challenger-instellingen aanpassen (tokens / temperature)</button>
+      <div class="variantnew" id="variantNew">
+        <p class="small" style="margin:0 0 10px">Instellingen voor de gekozen challenger. Geen naam nodig — ze worden automatisch append-only gepind bij de run, zodat de uitkomst reproduceerbaar blijft.</p>
+        <div class="row3">
+          <label class="f"><span>Max tokens</span><input type="number" step="100" min="256" max="8192" value="3200" /></label>
+          <label class="f"><span>Temperature</span>
+            <select id="tempMode">
+              <option value="default">provider-default (zoals productie)</option>
+              <option value="0.0">0.0 — deterministisch</option>
+              <option value="0.2">0.2 — laag</option>
+              <option value="0.5">0.5 — midden</option>
+              <option value="0.7">0.7 — creatief</option>
+              <option value="1.0">1.0 — hoog</option>
+            </select>
+          </label>
+          <label class="f"><span>Top-p <span class="small">(optioneel)</span></span><input type="number" step="0.05" min="0" max="1" placeholder="provider-default" /></label>
+        </div>
+        <p class="small" id="tempNote">Alleen modellen die de infra + API-key ondersteunen. De variant wordt <b>append-only</b> vastgelegd met volledige effectieve instellingen (reproduceerbaarheid, §2B).</p>
+        <div class="derived" id="axisDerived" style="margin-top:8px">Gewijzigde as t.o.v. baseline: <b id="axisTxt">—</b> <span class="small">(automatisch afgeleid — niet handmatig)</span></div>
+      </div>
+      <div class="derived" id="axisMain" style="margin-top:12px">Verschil dat je test (gewijzigde as): <b id="axisMainTxt">geen (zelfde als baseline)</b> <span class="small">— automatisch afgeleid uit baseline vs challenger</span></div>
+      <div class="req block" id="providerWarn" style="display:none;margin-top:10px">
+        <h4>Let op — ander provider dan productie</h4>
+        <ul>
+          <li class="todo">Productie genereert op Anthropic (claude-sonnet-4-6). Mistral is nu alleen in gebruik voor embeddings/OCR, niet voor generatie.</li>
+          <li class="todo">Vereist een multi-provider-generatiekern (buiten de huidige MVP). API-key is er al (MISTRAL_API_KEY).</li>
+          <li class="todo">Gewijzigde as = <b>provider + model</b> → regressiesignaal minder zuiver toewijsbaar. Judge blijft Claude-opus (cross-provider = anti-bias, prima).</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- STAP 3: scope, wisselt per run-type -->
+    <div class="step" id="stepScope">
+      <h3>3 · Waarop draait de run?</h3>
+
+      <div id="scopeFull">
+        <label class="f"><span>Testset</span>
+          <select id="testset">
+            <option value="">— nog geen testset geseed —</option>
+            <option value="ts1">Bestuurlijke samenvatting (BS) · 8 cases</option>
+            <option value="ts2">Brongebonden vraagbeantwoording (BQ) · 8 cases</option>
+            <option value="ts3">Besluitvoorbereiding (BV) · 8 cases</option>
+          </select>
+        </label>
+        <label class="f" style="margin-top:10px;display:flex;gap:8px;align-items:center">
+          <input type="checkbox" id="incBlocking" checked />
+          <span style="margin:0">Security/safety-set (9 blocking-cases) meenemen <span class="badge">vereist voor "accepteren"</span></span>
+        </label>
+      </div>
+
+      <div id="scopeSubset" class="hide">
+        <p class="hint">Kies handmatig of via filters. De gedraaide selectie wordt reproduceerbaar vastgelegd.</p>
+        <div class="grid">
+          <label class="f"><span>Filter op kritikaliteit</span><select><option>alle</option><option>kritiek</option><option>hoog</option></select></label>
+          <label class="f"><span>Filter op tag</span><select><option>alle</option><option>compliance</option><option>hallucinatie</option><option>autorisatie</option></select></label>
+        </div>
+        <p class="small" style="margin-top:8px">Een subset zonder de blocking-set kan nooit tot advies "accepteren" leiden.</p>
+      </div>
+
+      <div id="scopeAdhoc" class="hide">
+        <label class="f"><span>Ad-hoc vraag</span><input type="text" placeholder="Stel je eigen testvraag…" /></label>
+        <label class="f" style="margin-top:10px"><span>Broncontext (fixtures)</span>
+          <select><option>Horizon — bestuursmemo's + naslag (demo)</option></select></label>
+        <p class="small" style="margin-top:8px">Ad-hoc telt niet mee voor de formele regressiescore, tenzij je hem opslaat als officiële testcase.</p>
+      </div>
+
+      <!-- consistentie -->
+      <div style="margin-top:14px;display:flex;gap:18px;align-items:center;flex-wrap:wrap">
+        <label class="f" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="cons" /><span style="margin:0">Consistentie meten</span></label>
+        <label class="f" id="iterWrap" style="display:none;gap:8px;align-items:center">
+          <span style="margin:0">Iteraties</span>
+          <select style="width:auto"><option>testcase-default</option><option>3 (normaal)</option><option>5 (governance-kritiek/safety)</option></select>
+        </label>
+      </div>
+    </div>
+
+    <!-- geavanceerd -->
+    <details class="adv">
+      <summary>Geavanceerd — opslag & retentie</summary>
+      <div class="grid" style="margin-top:10px">
+        <label class="f"><span>Persist-modus</span>
+          <select><option>full_synthetic (alles bewaren — synthetisch)</option><option>metadata_only (alleen scores/status)</option><option>none (niets persistent)</option></select></label>
+      </div>
+    </details>
+
+    <!-- live vereisten -->
+    <div class="req ok" id="reqPanel">
+      <h4 id="reqTitle">Klaar om te draaien</h4>
+      <ul id="reqList"></ul>
+    </div>
+
+    <div class="actions">
+      <button class="submit" id="submitBtn">Run in de wachtrij zetten</button>
+      <span class="subhint">De run wordt asynchroon verwerkt door de achtergrond-worker. Voor een <b>directe</b> ad-hoc consistentietest: aparte knop.</span>
+    </div>
+
+    <div class="legendbar">
+      Mockup v0.1 — verbeteringen t.o.v. huidige scherm: run-type stuurt welke velden verschijnen (progressive disclosure) · variant &amp; vergelijking samengevoegd · "gewijzigde as" automatisch afgeleid i.p.v. handmatig · modeldropdown gevuld met de echte modellen uit de techniek + "nieuwe variant" · vereisten/blokkers vooraf zichtbaar en knop geblokkeerd met reden.
+    </div>
+  </div>
+</div>
+
+<script>
+  const state={rt:"full_regression"};
+  const $=s=>document.querySelector(s);
+  const segBtns=[...document.querySelectorAll("#runtypeSeg button")];
+
+  segBtns.forEach(b=>b.addEventListener("click",()=>{
+    segBtns.forEach(x=>x.setAttribute("aria-pressed", x===b?"true":"false"));
+    state.rt=b.dataset.rt; render();
+  }));
+  $("#addVariantBtn").addEventListener("click",()=>{
+    $("#variantNew").classList.toggle("open");
+  });
+  $("#variant").addEventListener("change",render);
+  document.addEventListener("change",e=>{ if(e.target.id==="tempMode") render(); });
+  $("#testset").addEventListener("change",render);
+  $("#incBlocking").addEventListener("change",render);
+  $("#cons").addEventListener("change",()=>{ $("#iterWrap").style.display = $("#cons").checked?"flex":"none"; });
+
+  function selectedProvider(){
+    const opt=$("#variant").selectedOptions[0];
+    return opt?.dataset.provider || "anthropic";
+  }
+  function axisFor(){
+    const v=$("#variant").value;
+    if(v==="baseline") return "geen (zelfde als baseline)";
+    if(selectedProvider()!=="anthropic") return "provider + model";
+    return "model";
+  }
+
+  function render(){
+    // scope-secties tonen per run-type
+    $("#scopeFull").classList.toggle("hide", state.rt!=="full_regression");
+    $("#scopeSubset").classList.toggle("hide", state.rt!=="subset");
+    $("#scopeAdhoc").classList.toggle("hide", state.rt!=="ad_hoc");
+    // afgeleide as
+    const ax=axisFor();
+    $("#axisMainTxt").textContent=ax; $("#axisTxt").textContent=ax;
+    $("#providerWarn").style.display = selectedProvider()!=="anthropic" ? "block" : "none";
+
+    // variant-samenvatting (read-only weergave van wat er draait)
+    const opt=$("#variant").selectedOptions[0];
+    const mt=opt?.dataset.maxtokens || "3200";
+    const tmpMode=$("#tempMode");
+    const tempTxt = (tmpMode && tmpMode.value!=="default") ? (tmpMode.value+" (expliciet)") : "provider-default";
+    $("#variantSummary").innerHTML = "max_tokens "+mt+" · temperature "+tempTxt;
+    // waarschuw als temperature expliciet afwijkt van productie
+    if(tmpMode && tmpMode.value!=="default"){
+      $("#tempNote").innerHTML = "⚠ Je zet temperature <b>expliciet</b>. Productie zet 'm niet (provider-default) — deze variant wijkt dus af van wat live draait. Voor een zuivere baseline: laat op provider-default. De variant wordt append-only gepind (§2B).";
+      $("#tempNote").style.color = "var(--warn)";
+    } else {
+      $("#tempNote").innerHTML = "Instellingen worden append-only gepind bij de run (§2B) — geen naam of handmatig opslaan nodig.";
+      $("#tempNote").style.color = "";
+    }
+
+    // vereisten
+    const req=[];
+    const hasTestset=!!$("#testset").value;
+    const blocking=$("#incBlocking").checked;
+
+    if(state.rt==="full_regression"){
+      req.push([hasTestset,"Testset gekozen","Kies een testset (nog geen geseed?)"]);
+      req.push([blocking,"Security/safety-set meegenomen","Zonder blocking-set kan het advies nooit 'accepteren' zijn"]);
+    } else if(state.rt==="subset"){
+      req.push([true,"Subset levert een indicatief advies","—"]);
+    } else {
+      req.push([true,"Ad-hoc: geen formele vereisten","—"]);
+      req.push([true,"Telt niet mee voor formele regressie","—"]);
+    }
+
+    const list=$("#reqList"); list.innerHTML="";
+    let blocked=false;
+    req.forEach(([ok,doneTxt,todoTxt])=>{
+      const li=document.createElement("li");
+      li.className=ok?"done":"todo";
+      li.textContent=ok?doneTxt:todoTxt;
+      if(!ok) blocked=true;
+      list.appendChild(li);
+    });
+    const panel=$("#reqPanel");
+    panel.className="req "+(blocked?"block":"ok");
+    $("#reqTitle").textContent=blocked?"Nog niet klaar — vul dit eerst aan":"Klaar om te draaien";
+    $("#submitBtn").disabled=blocked;
+  }
+  render();
+</script>
+</body>
+</html>

@@ -13,7 +13,9 @@ import { haalRunDetail, haalVergelijking, type OutputMetScores, type ScoreRij } 
 import { criteriumByKey } from "@/lib/aqlab/criteria";
 import { HARDE_BLOKKADE_CHECKS } from "@/lib/aqlab/checks";
 import { annuleerRunActie, humanReviewActie } from "../../acties";
+import { haalReleaseConsole } from "@/lib/aqlab/release";
 import RegressieBlok from "./regressie-blok";
+import ReleaseBlok from "./release-blok";
 import VergelijkingBlok, { type VergelijkingItem } from "./vergelijking-blok";
 import ConsistentieBlok, { type IteratieView } from "./consistentie-blok";
 
@@ -31,6 +33,20 @@ export const dynamic = "force-dynamic";
 
 const CAP = "platform.aqlab.operate";
 const CAP_REVIEW = "platform.aqlab.review";
+const CAP_GOVERN = "platform.aqlab.govern";
+
+function releaseMelding(sp: Record<string, string | undefined>):
+  | { soort: "ok" | "fout" | "audit_ok" | "audit_fout" | "verify"; tekst: string }
+  | null {
+  if (sp.release_ok) return { soort: "ok", tekst: "Vrijgavebesluit vastgelegd (append-only)." };
+  if (sp.release_fout) return { soort: "fout", tekst: `Besluit geweigerd: ${sp.release_fout}` };
+  if (sp.audit_ok) return { soort: "audit_ok", tekst: "Auditrapport gegenereerd en bevroren (inhoud_hash vastgelegd)." };
+  if (sp.audit_fout) return { soort: "audit_fout", tekst: `Auditrapport mislukt: ${sp.audit_fout}` };
+  if (sp.verify === "match") return { soort: "verify", tekst: "Integriteit bevestigd: herberekende hash komt overeen." };
+  if (sp.verify === "mismatch") return { soort: "audit_fout", tekst: "LET OP: hash komt NIET overeen — rapport gewijzigd/beschadigd." };
+  if (sp.verify === "fout") return { soort: "audit_fout", tekst: "Verificatie mislukt (rapport niet leesbaar)." };
+  return null;
+}
 
 const DISCLAIMER =
   "Scores ondersteunen kwaliteitsborging en releasebesluitvorming, maar vormen geen juridische garantie en vervangen geen menselijke verantwoordelijkheid. De indicatoren meten toetsbare vormen van brongebondenheid, volledigheid en bestuurlijke bruikbaarheid; zij bewijzen niet dat elke feitelijke claim juist is. De eindverantwoordelijkheid voor besluitvorming blijft menselijk (human-in-the-loop).";
@@ -227,8 +243,15 @@ function Scorekaart({
   );
 }
 
-export default async function AqlabRunPagina({ params }: { params: Promise<{ runId: string }> }) {
+export default async function AqlabRunPagina({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ runId: string }>;
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
   const { runId } = await params;
+  const sp = await searchParams;
   const identiteit = await huidigePlatformIdentiteit();
   const caps = identiteit?.capabilities ?? [];
   if (!caps.includes(CAP)) {
@@ -273,6 +296,8 @@ export default async function AqlabRunPagina({ params }: { params: Promise<{ run
   const perf = run.aggregatie?.performance;
   const regressie = run.aggregatie?.regressie ?? null;
   const consistencyMap = run.aggregatie?.consistency ?? {};
+  const releaseCtx = await haalReleaseConsole(svc, runId);
+  const magGovern = caps.includes(CAP_GOVERN);
 
   // Consistentie-overzicht per testcase (of ad-hoc): groepeer de outputs → iteraties.
   const iteratiesPer = new Map<string, IteratieView[]>();
@@ -372,6 +397,9 @@ export default async function AqlabRunPagina({ params }: { params: Promise<{ run
 
       {/* Scherm 6 — regressierapport (challenger vs baseline) */}
       {regressie && <RegressieBlok regressie={regressie} />}
+
+      {/* Scherm 8 — vrijgavebesluit + auditrapport (AQL-4). */}
+      <ReleaseBlok runId={run.id} ctx={releaseCtx} magGovern={magGovern} melding={releaseMelding(sp)} />
 
       {/* Scherm 4 — outputvergelijking baseline vs challenger */}
       {vergelijkingItems.length > 0 && <VergelijkingBlok items={vergelijkingItems} />}

@@ -14,7 +14,7 @@
 //  kent geen platform.* (TO §10).
 // ============================================================================
 
-/** De 12 platform-capabilities. Gesplitst tegen te brede bundeling (TO §4.1):
+/** De platform-capabilities. Gesplitst tegen te brede bundeling (TO §4.1):
  *  tenants.manage / identities.manage / capabilities.grant / capabilities.revoke
  *  zijn aparte caps, zodat "fondsen beheren" niet "rechten uitdelen" impliceert.
  *  contact.manage staat los: het beheert UITSLUITEND de niet-tenant contact-
@@ -33,7 +33,8 @@ export type PlatformCapability =
   | "platform.compliance.read"
   | "platform.contact.manage"          // publieke contact-inbox inzien/opvolgen
   | "platform.aqlab.operate"           // AQLab: runs starten + scorekaart/run-overzicht
-  | "platform.aqlab.review";           // AQLab: menselijke review/aftekening op outputs
+  | "platform.aqlab.review"            // AQLab: menselijke review/aftekening op outputs
+  | "platform.aqlab.govern";           // AQLab: formeel vrijgavebesluit (go/no-go) — Governance Owner
 
 /** Volledige, geordende lijst — gespiegeld door de DB-seed (TO §12 test 17). */
 export const PLATFORM_CAPABILITIES: readonly PlatformCapability[] = [
@@ -51,6 +52,7 @@ export const PLATFORM_CAPABILITIES: readonly PlatformCapability[] = [
   "platform.contact.manage",
   "platform.aqlab.operate",
   "platform.aqlab.review",
+  "platform.aqlab.govern",
 ] as const;
 
 /** Zware capabilities: toekennen vereist altijd vier-ogen (vier_ogen_door
@@ -88,6 +90,11 @@ export const PLATFORM_ROL_CAPABILITIES: Record<string, PlatformCapability[]> = {
   // AQLab-operator (AI Quality Lab): runs draaien, scorekaarten inzien en
   // menselijke review aftekenen. Los profiel — géén overige platformprivileges.
   platform_aqlab_operator: ["platform.aqlab.operate", "platform.aqlab.review"],
+  // AQLab Governance Owner (AI Governance Owner, functioneel §6.2): het FORMELE
+  // vrijgavebesluit (go/no-go). Bewust GESCHEIDEN van de operator (scheiding van
+  // machten, human-in-the-loop) — wie draait/aftekent, beslist niet zelf de
+  // vrijgave. Los profiel; géén overige platformprivileges.
+  platform_aqlab_governance_owner: ["platform.aqlab.govern"],
 };
 
 /** Pure check: bevat de set effectieve capabilities de gevraagde cap?

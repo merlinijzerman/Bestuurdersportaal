@@ -73,6 +73,9 @@ export default async function AqlabConsole() {
         <Link href="/platform/aqlab/promoveren" className="rounded-lg border border-line bg-white px-3 py-2 text-sm hover:bg-app-bg">
           Ad-hoc vraag opslaan als testcase →
         </Link>
+        <Link href="/platform/aqlab/dashboard" className="rounded-lg border border-line bg-white px-3 py-2 text-sm hover:bg-app-bg">
+          Kwaliteit per feature (scherm 7) →
+        </Link>
       </div>
 
       {/* Scherm 3 — Run samenstellen */}

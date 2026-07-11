@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AQLab — Run-uitkomst / scorekaart (mockup v0.1)</title>
+<style>
+  :root{
+    --bg:#f2efe9; --card:#fff; --ink:#1c1a17; --muted:#6b655c; --line:#ded8cd;
+    --accent:#3d5a73; --ok:#2f6f4f; --ok-bg:#e7f2ec; --warn:#8a5a00; --warn-bg:#faf1dd;
+    --err:#8a2f2f; --err-bg:#f7e7e7; --chip:#eee9e0;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding:28px}
+  .wrap{max-width:980px;margin:0 auto}
+  a.back{color:var(--accent);text-decoration:none;font-size:13px}
+  h1{font-family:Georgia,serif;font-size:28px;margin:6px 0 4px}
+  h2{font-size:12px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin:26px 0 10px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px}
+  .mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+  .badge{display:inline-block;font-size:12px;padding:2px 9px;border-radius:7px;border:1px solid var(--line);background:#f7f5f0}
+  .b-done{background:var(--ok-bg);color:var(--ok);border-color:#bfe0cd}
+  .b-warn{background:var(--warn-bg);color:var(--warn);border-color:#e8d6a8}
+  .b-err{background:var(--err-bg);color:var(--err);border-color:#e2b8b8}
+  .metabar{display:flex;flex-wrap:wrap;gap:22px;align-items:flex-start}
+  .metabar .lbl{font-size:11px;text-transform:uppercase;color:var(--muted)}
+  .perf{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:16px}
+  @media(max-width:640px){.perf{grid-template-columns:1fr}}
+  .perf .box{background:#faf8f4;border:1px solid var(--line);border-radius:10px;padding:12px}
+  .perf .box .lbl{font-size:11px;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+  .perf .box div{font-size:13.5px}
+  .cmpmini{width:100%;border-collapse:collapse;margin-top:4px}
+  .cmpmini th{font-size:9.5px;text-transform:uppercase;color:var(--muted);text-align:right;padding:2px 3px;border:none}
+  .cmpmini th:first-child{text-align:left}
+  .cmpmini td{font-size:12.5px;padding:2px 3px;border:none;text-align:right}
+  .cmpmini td:first-child{text-align:left;color:var(--muted)}
+  .cmpmini .ch{font-weight:600}
+  .vglrow{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:10px;background:#fff}
+  .vglrow summary{cursor:pointer;font-size:13.5px}
+  .vglrow[open]{background:#faf8f4}
+  /* regressie */
+  .regrow{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}
+  .pill{border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:13px;background:#faf8f4;min-width:120px}
+  .pill b{display:block;font-size:20px}
+  .advies{margin-top:14px;padding:12px 14px;border-radius:10px;font-size:13.5px}
+  /* scorekaart */
+  .sk-top{display:flex;flex-wrap:wrap;justify-content:space-between;gap:14px;align-items:center}
+  .axes{display:flex;gap:12px}
+  .axis{border:1px solid var(--line);border-radius:12px;padding:10px 16px;text-align:center;min-width:120px}
+  .axis .lbl{font-size:11px;text-transform:uppercase;color:var(--muted)}
+  .axis .val{font-size:26px;font-weight:700;line-height:1.1;margin-top:2px}
+  .axis.gate{background:var(--err-bg);border-color:#e2b8b8}
+  .axis.qual{background:#eef3f7;border-color:#cfdce6}
+  .twoaxis-note{font-size:12.5px;color:var(--muted);margin:8px 0 0}
+  .herkomst{margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:6px 18px;background:#faf8f4;border:1px solid var(--line);border-radius:10px;padding:12px;font-size:12.5px}
+  @media(max-width:640px){.herkomst{grid-template-columns:1fr}}
+  .answer{margin-top:12px}
+  .answer summary{cursor:pointer;font-size:13px;color:var(--muted)}
+  .answer pre{white-space:pre-wrap;background:#faf8f4;border:1px solid var(--line);border-radius:10px;padding:12px;font-size:12.5px;margin-top:8px}
+  .src{background:#eef3f7;border:1px solid #cfdce6;border-radius:5px;padding:0 4px;font-size:11.5px}
+  table{width:100%;border-collapse:collapse;margin-top:14px}
+  th{font-size:10.5px;text-transform:uppercase;color:var(--muted);text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+  td{font-size:12.5px;padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+  .m-det{color:var(--ok)} .m-heu{color:var(--warn)} .m-judge{color:var(--accent)} .m-human{color:var(--muted)}
+  .blk{color:var(--err);font-weight:600}
+  .findings{margin-top:14px;background:var(--err-bg);border:1px solid #e2b8b8;border-radius:10px;padding:12px}
+  .findings .lbl{font-size:11px;text-transform:uppercase;color:var(--err);font-weight:700;margin-bottom:6px}
+  .findings li{font-size:12.5px;margin:3px 0}
+  .review{margin-top:14px;border-top:1px solid var(--line);padding-top:12px;display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+  .review label{font-size:12px;color:var(--muted)}
+  select,input[type=text]{border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-size:13px;background:#fff}
+  .btn{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:8px 13px;font-size:13px;font-weight:600;cursor:pointer}
+  .disc{margin-top:20px;background:#faf8f4;border:1px solid var(--line);border-radius:10px;padding:12px;font-size:12px;color:var(--muted)}
+  /* consistentie */
+  .cons{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+  .cons .k{border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:12px;background:#faf8f4}
+  .cons .k b{color:var(--ink)}
+  .note{font-size:12px;color:var(--muted);margin-top:6px}
+  /* outputvergelijking (scherm 4) */
+  .vgl{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:6px}
+  @media(max-width:640px){.vgl{grid-template-columns:1fr}}
+  .col .colhead{font-size:11px;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+  .col.base .colhead{color:#556}
+  .col.chal .colhead{color:var(--accent)}
+  .opre{white-space:pre-wrap;background:#faf8f4;border:1px solid var(--line);border-radius:10px;padding:11px;font-size:12.5px;margin:0}
+  .col.chal .opre{background:#eef3f7;border-color:#cfdce6}
+  .diffbox{margin-top:10px}
+  .diffbox pre{white-space:pre-wrap;background:#faf8f4;border:1px solid var(--line);border-radius:10px;padding:11px;font-size:12.5px;line-height:1.7;margin:6px 0 0}
+  .add{background:var(--ok-bg);color:var(--ok);border-radius:3px;padding:0 2px}
+  .del{background:var(--err-bg);color:var(--err);border-radius:3px;padding:0 2px;text-decoration:line-through}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="#">← Terug naar het Lab</a>
+  <h1>Opus-challenger — toeslagbeleid, juli 2026</h1>
+  <p class="note" style="margin-top:0">Run-uitkomst · voorbeelddata · challenger <span class="mono">claude-opus-4-8</span> vs baseline <span class="mono">claude-sonnet-4-6</span></p>
+
+  <!-- RUN HEADER + PERFORMANCE (scherm 6) -->
+  <div class="card">
+    <div class="metabar">
+      <div><div class="lbl">Naam</div><div>Opus-challenger — toeslagbeleid</div></div>
+      <div><div class="lbl">Type</div><div>Volledige regressierun</div></div>
+      <div><div class="lbl">Status</div><span class="badge b-done">done</span></div>
+      <div><div class="lbl">Gewijzigde as</div><div>model</div></div>
+      <div><div class="lbl">persist-modus</div><div class="mono">full_synthetic</div></div>
+      <div><div class="lbl">Baseline</div><div class="mono">a1b2c3d4 · sonnet-4-6</div></div>
+    </div>
+    <div class="perf">
+      <div class="box">
+        <div class="lbl">Latency</div>
+        <table class="cmpmini">
+          <tr><th></th><th>baseline</th><th>challenger</th></tr>
+          <tr><td>gem</td><td>3.900 ms</td><td class="ch">4.120 ms</td></tr>
+          <tr><td>mediaan</td><td>3.640 ms</td><td class="ch">3.870 ms</td></tr>
+          <tr><td>P95</td><td>6.800 ms</td><td class="ch">7.450 ms</td></tr>
+        </table>
+      </div>
+      <div class="box">
+        <div class="lbl">Tokens / kosten</div>
+        <table class="cmpmini">
+          <tr><th></th><th>baseline</th><th>challenger</th></tr>
+          <tr><td>tokens in/out</td><td>16.9k / 8.4k</td><td class="ch">18.4k / 9.1k</td></tr>
+          <tr><td>kosten (schatting)</td><td>± $0,28</td><td class="ch">± $0,63</td></tr>
+        </table>
+      </div>
+      <div class="box">
+        <div class="lbl">Uitkomsten (33 outputs elk)</div>
+        <table class="cmpmini">
+          <tr><th></th><th>baseline</th><th>challenger</th></tr>
+          <tr><td>voldoet</td><td>30</td><td class="ch">29</td></tr>
+          <tr><td style="color:var(--err)">geblokkeerd</td><td>0</td><td class="ch" style="color:var(--err)">2</td></tr>
+          <tr><td style="color:var(--warn)">review vereist</td><td>1</td><td class="ch" style="color:var(--warn)">2</td></tr>
+        </table>
+      </div>
+    </div>
+    <p class="note">De challenger (Opus) is <b>trager en duurder</b> én introduceert 2 nieuwe blokkades — kwaliteitswinst weegt niet vanzelf op tegen kosten/latency/risico. Langzaamste testcase challenger: <span class="mono">BV-04</span> (7.450 ms).</p>
+  </div>
+
+  <!-- REGRESSIE-SAMENVATTING (scherm 6) -->
+  <h2>Regressie — challenger vs baseline</h2>
+  <div class="card">
+    <div class="metabar">
+      <div><div class="lbl">Gem. kwaliteit baseline</div><div style="font-size:20px;font-weight:700">84</div></div>
+      <div><div class="lbl">Gem. kwaliteit challenger</div><div style="font-size:20px;font-weight:700">86 <span class="badge b-done" style="font-size:11px">+2</span></div></div>
+    </div>
+    <div class="regrow">
+      <div class="pill"><b style="color:var(--ok)">24</b>verbeterd</div>
+      <div class="pill"><b>5</b>gelijk</div>
+      <div class="pill"><b style="color:var(--warn)">2</b>regressie</div>
+      <div class="pill"><b style="color:var(--err)">2</b>nieuwe blokkade</div>
+    </div>
+    <table>
+      <thead><tr><th>Testcase</th><th>Baseline</th><th>Challenger</th><th>Delta</th><th>Status</th><th>Consistentie</th><th>Review</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">BS-03</td><td>82</td><td>90</td><td style="color:var(--ok)">+8</td><td style="color:var(--ok)">verbeterd</td><td>consistent</td><td>nee</td></tr>
+        <tr><td class="mono">BQ-05</td><td>88</td><td>88</td><td>0</td><td style="color:var(--muted)">gelijk</td><td>consistent</td><td>nee</td></tr>
+        <tr><td class="mono">BQ-07</td><td>85</td><td>81</td><td style="color:var(--warn)">−4</td><td style="color:var(--warn)">regressie</td><td style="color:var(--err)">consistent_but_incorrect</td><td>ja</td></tr>
+        <tr style="background:#fcf1f1"><td class="mono">BS-06</td><td>84</td><td>88</td><td style="color:var(--ok)">+4</td><td class="blk">nieuwe blokkade</td><td>consistent</td><td>ja</td></tr>
+      </tbody>
+    </table>
+    <p class="note">Let op BS-06: challenger scoort hóger (+4) maar krijgt een <b>nieuwe blokkade</b> — score-delta en gate-status zijn aparte assen. Sorteer bij voorkeur op grootste verslechtering / nieuwe blokkades eerst.</p>
+    <div class="advies b-warn" style="background:var(--warn-bg)">
+      <b>Releaseadvies: AANPASSEN</b> — de gemiddelde kwaliteit stijgt, maar er staan <b>2 nieuwe blokkades</b> open (o.a. BS-06). Advies "accepteren" is onmogelijk zolang een kritieke blokkade openstaat. Vrijgave blijft een mensbesluit (Governance Owner).
+    </div>
+  </div>
+
+  <!-- OUTPUTVERGELIJKING (scherm 4) -->
+  <h2>Outputvergelijking — daadwerkelijke antwoorden naast elkaar</h2>
+  <div class="card">
+    <p class="note" style="margin-top:0">Klap een testcase uit voor de volledige antwoorden van baseline en challenger + de woord-diff.</p>
+    <details class="vglrow" open>
+    <summary><span class="mono">BS-06</span> — Bestuurlijke samenvatting · baseline 84 <span class="badge b-done" style="font-size:10px">pass</span> → challenger 88 <span class="badge b-err" style="font-size:10px">geblokkeerd</span></summary>
+    <p class="note" style="margin-top:8px">Vraag: "Vat het besluit over het toeslagbeleid samen met de wettelijke context."</p>
+    <div class="vgl">
+      <div class="col base">
+        <div class="colhead">● Baseline — claude-sonnet-4-6 · score 84 · gate <span class="badge b-done" style="font-size:10px">pass</span></div>
+        <pre class="opre">Het bestuur heeft op 12 juni de wijziging van het toeslagbeleid besproken <span class="src">[Bron 1]</span>. De dekkingsgraad bedroeg per 31 mei 128,4% <span class="src">[Bron 2]</span>.
+
+Toeslagverlening is in dit scenario mogelijk; de exacte wettelijke voorwaarden vergen een aparte toets.</pre>
+      </div>
+      <div class="col chal">
+        <div class="colhead">◆ Challenger — claude-opus-4-8 · score 88 · gate <span class="badge b-err" style="font-size:10px">geblokkeerd</span></div>
+        <pre class="opre">Het bestuur heeft in de vergadering van 12 juni de wijziging van het toeslagbeleid besproken <span class="src">[Bron 1]</span>. De dekkingsgraad bedroeg per 31 mei 128,4% <span class="src">[Bron 2]</span>.
+
+Op grond van de geldende wetgeving is toeslagverlening in dit scenario toegestaan mits de beleidsdekkingsgraad boven de grens blijft.</pre>
+      </div>
+    </div>
+    <div class="diffbox">
+      <div class="colhead">Verschil (challenger t.o.v. baseline)</div>
+      <pre>Het bestuur heeft <span class="add">in de vergadering van</span> 12 juni de wijziging van het toeslagbeleid besproken [Bron 1]. De dekkingsgraad bedroeg per 31 mei 128,4% [Bron 2].
+
+<span class="del">Toeslagverlening is in dit scenario mogelijk; de exacte wettelijke voorwaarden vergen een aparte toets.</span><span class="add">Op grond van de geldende wetgeving is toeslagverlening in dit scenario toegestaan mits de beleidsdekkingsgraad boven de grens blijft.</span></pre>
+      <p class="note">De challenger is vloeiender én scoort hoger, maar doet een <b>wettelijke uitspraak zonder bron</b> — precies wat de baseline bewust vermeed. Daarom challenger-gate = geblokkeerd. Toegevoegd = <span class="add">groen</span>, verwijderd = <span class="del">rood doorgestreept</span>.</p>
+    </div>
+    </details>
+
+    <details class="vglrow">
+      <summary><span class="mono">BS-03</span> — Bestuurlijke samenvatting · baseline 82 → challenger 90 <span class="badge b-done" style="font-size:10px">pass</span></summary>
+      <p class="note" style="margin-top:8px">Uitklappen voor de volledige antwoorden + woord-diff.</p>
+    </details>
+    <details class="vglrow">
+      <summary><span class="mono">BQ-07</span> — Vraagbeantwoording · baseline 85 → challenger 81 <span class="badge b-warn" style="font-size:10px">regressie</span></summary>
+      <p class="note" style="margin-top:8px">Uitklappen voor de volledige antwoorden + woord-diff.</p>
+    </details>
+  </div>
+
+  <!-- SCOREKAART PER OUTPUT (scherm 5) -->
+  <h2>Scorekaart — output BS-06 · iteratie 1</h2>
+  <div class="card">
+    <div class="sk-top">
+      <div>
+        <div style="font-weight:600">Testcase <span class="mono">BS-06</span> — Bestuurlijke samenvatting met wettelijke duiding</div>
+        <div class="note" style="margin-top:2px">Rol: bestuurder · security/safety: nee · kritikaliteit: hoog</div>
+      </div>
+      <div class="axes">
+        <div class="axis qual"><div class="lbl">Kwaliteit (gradueel)</div><div class="val">88</div></div>
+        <div class="axis gate"><div class="lbl">Gate (categorisch)</div><div class="val" style="font-size:18px;padding-top:6px">geblokkeerd</div></div>
+      </div>
+    </div>
+    <p class="twoaxis-note">⚠ Kwaliteit en blokkade zijn twee aparte assen: deze output scoort hoog (88), maar wordt tóch geblokkeerd door een kritieke bevinding. Een hoge kwaliteitsscore heft een blokkade nooit op.</p>
+
+    <div class="herkomst">
+      <div>Model: <span class="mono">claude-opus-4-8</span></div>
+      <div>Prompt-versie: <span class="mono">system_prompt v3</span></div>
+      <div>snapshot_hash: <span class="mono">00526e4143e042fa…</span></div>
+      <div>Effectief: temp=provider-default · max_tokens=4500 · top_p=default · provider_default=true</div>
+      <div>Latency: 4.980 ms · Tokens: 612 / 388</div>
+      <div>Kosten (schatting): ± $0,021</div>
+      <div>Tijdstip: 11-07-2026 09:14</div>
+      <div>Bronnen gebruikt: <span class="src">[Bron 1]</span> <span class="src">[Bron 2]</span></div>
+    </div>
+
+    <details class="answer">
+      <summary>Gegenereerd antwoord tonen</summary>
+      <pre>Het bestuur heeft in de vergadering van 12 juni de wijziging van het toeslagbeleid besproken <span class="src">[Bron 1]</span>. De dekkingsgraad bedroeg per 31 mei 128,4% <span class="src">[Bron 2]</span>.
+
+Op grond van de geldende wetgeving is toeslagverlening in dit scenario toegestaan mits de beleidsdekkingsgraad boven de grens blijft. [→ deze wettelijke duiding is niet herleidbaar naar een bron]</pre>
+    </details>
+
+    <table>
+      <thead><tr><th>Criterium</th><th>Methode</th><th>Score</th><th>Motivatie + bewijs</th><th>Meetbeperking</th><th>Blokkade</th><th>Human review</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="mono">brongebondenheid</td><td class="m-det">Deterministisch (hard)</td><td>100 <span style="color:var(--muted)">(voldoet)</span></td>
+          <td>Elke feitelijke claim heeft een geldige <span class="src">[Bron N]</span>-marker.<div class="note">Bewijs: 2/2 claims gemarkeerd</div></td>
+          <td>Toetst aanwezigheid van markers, niet feitelijke juistheid</td><td>nee</td><td>ja</td>
+        </tr>
+        <tr>
+          <td class="mono">herkomstlabel-scheiding</td><td class="m-det">Deterministisch (hard)</td><td>100 <span style="color:var(--muted)">(voldoet)</span></td>
+          <td>Vrije bestuurstekst niet als <span class="src">[Bron]</span> gelabeld.</td>
+          <td>Structureel, geen inhoudsoordeel</td><td>nee</td><td>ja</td>
+        </tr>
+        <tr>
+          <td class="mono">verplichte-onderdelen</td><td class="m-heu">Heuristisch (indicatief)</td><td>80 <span style="color:var(--muted)">(voldoet)</span></td>
+          <td>Besluit, onderbouwing en dekkingsgraad aanwezig; risicoparagraaf beknopt.</td>
+          <td>Herkenning op trefwoorden — kan nuance missen</td><td>nee</td><td>ja</td>
+        </tr>
+        <tr style="background:#fcf1f1">
+          <td class="mono">wettelijke-duiding</td><td class="m-judge">LLM-as-judge (adviserend)</td><td>40 <span style="color:var(--err)">(voldoet niet)</span></td>
+          <td>Judge: wettelijke claim zonder brondekking — mogelijke schijnzekerheid.<div class="note">Judge-model: claude-opus-4-8 · bewijs: "toeslagverlening … toegestaan mits …"</div></td>
+          <td>Judge-oordeel is adviserend, geen deterministische wetstoets</td><td class="blk">blokkadecriterium</td><td>ja</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="findings">
+      <div class="lbl">Bevindingen</div>
+      <ul style="margin:0;padding-left:18px">
+        <li><span class="blk">[kritiek]</span> <span class="mono">bron_ontbreekt</span> — wettelijke duiding zonder herleidbare bron (blokkeert de gate).</li>
+        <li><span style="color:var(--warn);font-weight:600">[middel]</span> <span class="mono">format</span> — risicoparagraaf ontbreekt of te beknopt.</li>
+      </ul>
+    </div>
+
+    <div class="review">
+      <div><label>Oordeel</label><br><select><option>bevestigd</option><option>overruled</option><option>geblokkeerd</option></select></div>
+      <div style="flex:1;min-width:220px"><label>Motivatie (verplicht bij overrule/blokkade)</label><br><input type="text" style="width:100%" placeholder="Onderbouwing…" /></div>
+      <button class="btn">Review vastleggen</button>
+    </div>
+  </div>
+
+  <!-- CONSISTENTIE (scherm 6b) -->
+  <h2>Consistentie (ADR 0056) — testcase BQ-07</h2>
+  <div class="card">
+    <div class="cons">
+      <div class="k">Iteraties <b>5/5</b></div>
+      <div class="k">Score-range <b>72–90</b></div>
+      <div class="k">Feitenstabiliteit <b style="color:var(--err)">gefaald</b></div>
+      <div class="k">Bronstabiliteit <b style="color:var(--ok)">stabiel</b></div>
+      <div class="k">Gate-stabiliteit <b style="color:var(--ok)">stabiel</b></div>
+      <div class="k">Status <b style="color:var(--err)">consistent_but_incorrect</b></div>
+    </div>
+    <p class="note">Verboden variatie: iteratie 3 noemde een afwijkend dekkingsgraadcijfer (128,4% vs 126,1%). Stabiel qua vorm, maar niet feitelijk correct → niet release-eligible (blokkerend).</p>
+    <details class="answer" style="margin-top:10px"><summary>Iteraties tonen (5)</summary>
+      <pre>it1  score 90  · dekkingsgraad 128,4%  · [Bron 2]
+it2  score 88  · dekkingsgraad 128,4%  · [Bron 2]
+it3  score 72  · dekkingsgraad <span style="color:var(--err)">126,1%</span>  · [Bron 2]   ← verboden variatie (cijfer)
+it4  score 85  · dekkingsgraad 128,4%  · [Bron 2]
+it5  score 84  · dekkingsgraad 128,4%  · [Bron 2]</pre>
+    </details>
+  </div>
+
+  <p class="disc">Scores ondersteunen kwaliteitsborging en releasebesluitvorming, maar vormen geen juridische garantie en vervangen geen menselijke verantwoordelijkheid. De indicatoren meten toetsbare vormen van brongebondenheid, volledigheid en bestuurlijke bruikbaarheid; zij bewijzen niet dat elke feitelijke claim juist is. De eindverantwoordelijkheid blijft menselijk (human-in-the-loop).</p>
+</div>
+</body>
+</html>

@@ -89,6 +89,9 @@ test('AQL-1 — gate blokkeert seeden zolang content_hash-placeholders bestaan',
   const metPlaceholder = evalueerGate(`x: ${PLACEHOLDER}\n`, statePath);
   assert.equal(metPlaceholder.seedAllowed, false);
   assert.ok(metPlaceholder.redenen.length >= 1);
-  // Alle vier poorten in de huidige state open → geblokkeerd.
-  assert.ok(metPlaceholder.poorten.every((p) => !p.groen));
+  // Minstens één poort rood → geblokkeerd. (Poort 4 / judge-schema's is sinds
+  // AQL-2 legitiem GESLOTEN in AQLAB-VALIDATION-STATE.yaml; de eerdere
+  // every(!groen)-assertie was daardoor stale — de content_hash-poort blijft
+  // hoe dan ook rood zolang er een placeholder is.)
+  assert.ok(metPlaceholder.poorten.some((p) => !p.groen));
 });
