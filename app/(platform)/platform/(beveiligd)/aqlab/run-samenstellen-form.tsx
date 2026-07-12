@@ -363,7 +363,7 @@ export default function RunSamenstellenForm({
                   onClick={() => setToonInstellingen((v) => !v)}
                   className="mt-2 rounded-lg border border-dashed border-line px-2 py-1 text-xs text-ink/70 hover:bg-app-bg"
                 >
-                  ⚙ Challenger-instellingen {toonInstellingen ? "verbergen" : `aanpassen (tokens / ${isReasoning ? "reasoning-effort" : "temperature"})`}
+                  ⚙ {toonAdHoc ? "Modelinstellingen" : "Challenger-instellingen"} {toonInstellingen ? "verbergen" : `aanpassen (tokens / ${isReasoning ? "reasoning-effort" : "temperature"})`}
                 </button>
 
                 {toonInstellingen && (
