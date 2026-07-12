@@ -1,5 +1,5 @@
-import { vereisModuleToegang } from "@/lib/module-gate-page";
-import { haalWerkgevers } from "@/lib/klantbeeld-bron";
+import { vereisModuleToegang } from "@/core/lib/module-gate-page";
+import { haalWerkgevers } from "@/core/lib/klantbeeld-bron";
 import {
   fmtEur,
   fmtEurShort,
@@ -7,7 +7,7 @@ import {
   fmtPctSigned,
   type WerkgeversMaand,
   type InningMaand,
-} from "@/lib/klantbeeld-data";
+} from "@/core/lib/klantbeeld-data";
 import { KlantbeeldHeader } from "../_components/KlantbeeldHeader";
 
 export default async function WerkgeversPage() {

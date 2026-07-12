@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { createServerSupabase } from "@/lib/supabase-server";
+import { createServerSupabase } from "@/core/lib/supabase-server";
 
 // Server-laag rond de (client-)loginpagina. Twee taken:
 //  1. noindex/follow: de login mag niet in de zoekindex, maar links erin mogen

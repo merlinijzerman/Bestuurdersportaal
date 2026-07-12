@@ -13,8 +13,8 @@
 //   • ai_output_gevalideerd, ai_output_aangepast, ai_output_afgekeurd
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/lib/supabase-server";
-import type { AIValidatieStatus } from "@/lib/decision-view";
+import { createServerSupabase } from "@/core/lib/supabase-server";
+import type { AIValidatieStatus } from "@/core/lib/decision-view";
 
 const ROLLEN_VOOR_SPECIALISTISCH = new Set(["voorzitter", "beheerder"]);
 const TOEGESTANE_STATUSSEN: AIValidatieStatus[] = [

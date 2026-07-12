@@ -16,10 +16,10 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/lib/supabase-server";
-import { requireCapability } from "@/lib/capabilities";
-import { maakChunksUitSegmenten } from "@/lib/rag";
-import { embedTeksten, naarVectorLiteral, EMBED_MODEL } from "@/lib/embeddings";
+import { createServerSupabase } from "@/core/lib/supabase-server";
+import { requireCapability } from "@/core/lib/capabilities";
+import { maakChunksUitSegmenten } from "@/core/lib/rag";
+import { embedTeksten, naarVectorLiteral, EMBED_MODEL } from "@/core/lib/embeddings";
 
 export const dynamic = "force-dynamic";
 

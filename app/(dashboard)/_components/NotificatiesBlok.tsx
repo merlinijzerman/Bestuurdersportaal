@@ -21,7 +21,7 @@ import {
   bouwNotificatieLink,
   notificatieIcoon,
   type NotificatieType,
-} from "@/lib/notifications";
+} from "@/core/lib/notifications";
 
 type NotifRow = {
   id: string;

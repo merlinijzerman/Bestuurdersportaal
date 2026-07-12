@@ -12,7 +12,7 @@ import {
   NiveauSlug,
   TypeRisicoSlug,
   leidNiveauAf,
-} from "@/lib/risico-config";
+} from "@/core/lib/risico-config";
 
 export default function NieuwRisicoForm() {
   const router = useRouter();

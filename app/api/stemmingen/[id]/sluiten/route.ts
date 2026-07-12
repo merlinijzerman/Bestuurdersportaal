@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/lib/supabase-server";
-import { notifyUser } from "@/lib/notifications";
+import { createServerSupabase } from "@/core/lib/supabase-server";
+import { notifyUser } from "@/core/lib/notifications";
 import {
   berekenUitslag,
   uitslagSamenvatting,
   type Alternatief,
   type StemRij,
   type VereisteMeerderheid,
-} from "@/lib/stemming";
+} from "@/core/lib/stemming";
 
 // ============================================================
 //  POST /api/stemmingen/[id]/sluiten — sluit een open stemronde.

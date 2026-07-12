@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { errorResponse, badRequest } from "@/lib/api-errors";
+import { errorResponse, badRequest } from "@/core/lib/api-errors";
 import {
   catalogusContext,
   magCatalogusBeheren,
   logCatalogus,
-} from "@/lib/catalogus-api";
+} from "@/core/lib/catalogus-api";
 
 const FREQUENTIES = [
   "jaarlijks",

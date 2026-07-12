@@ -14,13 +14,13 @@
 //  via de server-actions (acties.ts) achter withPlatform.
 // ============================================================================
 
-import { createPlatformSupabase } from "@/lib/supabase-platform";
-import { huidigePlatformIdentiteit } from "@/lib/platform-auth";
+import { createPlatformSupabase } from "@/platform/lib/supabase-platform";
+import { huidigePlatformIdentiteit } from "@/platform/lib/platform-auth";
 import {
   PLATFORM_CAPABILITIES,
   isZwareCapability,
   type PlatformCapability,
-} from "@/lib/platform-capabilities";
+} from "@/platform/lib/platform-capabilities";
 import RechtenClient, {
   type IdentiteitMetRechten,
   type ToekenbareCap,

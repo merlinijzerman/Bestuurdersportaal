@@ -19,7 +19,7 @@ import {
   type DissentZichtbaarheid,
   DISSENT_ZICHTBAARHEID_HINT,
   DISSENT_ZICHTBAARHEID_LABEL,
-} from "@/lib/decision-view";
+} from "@/core/lib/decision-view";
 
 interface Props {
   decisionId: string;

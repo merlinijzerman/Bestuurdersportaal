@@ -1,7 +1,7 @@
-import { vereisModuleToegang } from "@/lib/module-gate-page";
-import { haalCohorten } from "@/lib/klantbeeld-bron";
-import { fmtEur, fmtEurShort } from "@/lib/klantbeeld-data";
-import { SUPPRESSIE_MASKER } from "@/lib/suppressie";
+import { vereisModuleToegang } from "@/core/lib/module-gate-page";
+import { haalCohorten } from "@/core/lib/klantbeeld-bron";
+import { fmtEur, fmtEurShort } from "@/core/lib/klantbeeld-data";
+import { SUPPRESSIE_MASKER } from "@/core/lib/suppressie";
 import { KlantbeeldHeader } from "../../_components/KlantbeeldHeader";
 import { DeelnemersSubTabs } from "../../_components/SubTabs";
 

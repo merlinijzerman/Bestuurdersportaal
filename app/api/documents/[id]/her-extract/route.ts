@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/lib/supabase-server";
-import { bouwChunkRecords } from "@/lib/chunk-ingest";
+import { createServerSupabase } from "@/core/lib/supabase-server";
+import { bouwChunkRecords } from "@/core/lib/chunk-ingest";
 import {
   diagnoseerExtractie,
   ONDERSTEUNDE_TYPES,
   type Bestandstype,
-} from "@/lib/document-extractie";
-import { extractTekstMetOcrFallback } from "@/lib/ocr";
+} from "@/core/lib/document-extractie";
+import { extractTekstMetOcrFallback } from "@/core/lib/ocr";
 
 // POST /api/documents/[id]/her-extract
 //

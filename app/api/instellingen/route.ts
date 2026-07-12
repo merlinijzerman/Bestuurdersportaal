@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/lib/supabase-server";
-import { requireCapability } from "@/lib/capabilities";
+import { createServerSupabase } from "@/core/lib/supabase-server";
+import { requireCapability } from "@/core/lib/capabilities";
 import {
   haalFondsConfig,
   haalConfigHistorie,
@@ -10,9 +10,9 @@ import {
   schrijfTheming,
   schrijfOverride,
   herstelConfig,
-} from "@/lib/fonds-config";
-import { isModuleKey, beheerbareModules } from "@/lib/module-registry";
-import type { JsonWaarde } from "@/lib/fonds-config-core";
+} from "@/core/lib/fonds-config";
+import { isModuleKey, beheerbareModules } from "@/core/lib/module-registry";
+import type { JsonWaarde } from "@/core/lib/fonds-config-core";
 
 // ============================================================
 //  /api/instellingen — fonds-configuratielaag (T8, generalisatie).

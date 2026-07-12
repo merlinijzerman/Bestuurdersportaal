@@ -1,21 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { createServerSupabase } from "@/lib/supabase-server";
-import { zoekRelevanteChunksMetMeta, maakContext, haalDocumentChunks, verrijkNotulenChunks, type DocumentChunk, type BronVerwijzing, type RetrievalMeta, type RetrievalFilters } from "@/lib/rag";
-import { heeftReformulatieNodig, reformuleerVraag } from "@/lib/query-reformulatie";
-import { controleerLimiet, LIMIETEN } from "@/lib/rate-limit";
-import { rateLimited } from "@/lib/api-errors";
-import { beoordeelRouteHostToegang } from "@/lib/tenant-route-guard";
-import { hybrideZoekenAan } from "@/lib/fonds-config";
-import { weigerAlsModuleUit } from "@/lib/module-guard";
-import { valideerScope, type ScopeDocumentRij } from "@/lib/document-scope";
-import { bepaalVraagtype, schatTokens, kiesStrategie, maakBatches, bepaalAntwoordmodus, retrievalModusVoor, bepaalInlineMeldingen, bronbasisLabel, bepaalBronIntent, moetVerduidelijken, bepaalAutoBronModus, VERDUIDELIJKINGSVRAAG, VERDUIDELIJKING_OPTIES, ANTWOORDMODUS_LABEL, type Strategie, type Antwoordmodus, type BronModus, type BronIntent, type BronIntentResultaat } from "@/lib/vraagtype";
-import { bepaalBronsoortprofiel } from "@/lib/weeg-bronsoort";
-import { haalBesluitBronnen, topProcesinstanties, opmaakBesluitContext } from "@/lib/besluitvorming-bron";
-import { documentBronNaarSource, modelKennisBronnenUitAntwoord, bouwSourceSamenvatting, ontbrekendeAlgemeneKennisMarkering, type AssistantSource } from "@/lib/assistant-source";
-import { bouwProfielsturing, type ProfielsturingAspecten } from "@/lib/profielsturing";
-import { bouwOrganisatieprofiel } from "@/lib/organisatieprofiel";
-import { SP_AGENDAPUNT_REGELS, bouwToelichtingBlok, herkomstString, type AgendapuntSeed } from "@/lib/agendapunt-context";
+import { createServerSupabase } from "@/core/lib/supabase-server";
+import { zoekRelevanteChunksMetMeta, maakContext, haalDocumentChunks, verrijkNotulenChunks, type DocumentChunk, type BronVerwijzing, type RetrievalMeta, type RetrievalFilters } from "@/core/lib/rag";
+import { heeftReformulatieNodig, reformuleerVraag } from "@/core/lib/query-reformulatie";
+import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
+import { rateLimited } from "@/core/lib/api-errors";
+import { beoordeelRouteHostToegang } from "@/core/lib/tenant-route-guard";
+import { hybrideZoekenAan } from "@/core/lib/fonds-config";
+import { weigerAlsModuleUit } from "@/core/lib/module-guard";
+import { valideerScope, type ScopeDocumentRij } from "@/core/lib/document-scope";
+import { bepaalVraagtype, schatTokens, kiesStrategie, maakBatches, bepaalAntwoordmodus, retrievalModusVoor, bepaalInlineMeldingen, bronbasisLabel, bepaalBronIntent, moetVerduidelijken, bepaalAutoBronModus, VERDUIDELIJKINGSVRAAG, VERDUIDELIJKING_OPTIES, ANTWOORDMODUS_LABEL, type Strategie, type Antwoordmodus, type BronModus, type BronIntent, type BronIntentResultaat } from "@/core/lib/vraagtype";
+import { bepaalBronsoortprofiel } from "@/core/lib/weeg-bronsoort";
+import { haalBesluitBronnen, topProcesinstanties, opmaakBesluitContext } from "@/core/lib/besluitvorming-bron";
+import { documentBronNaarSource, modelKennisBronnenUitAntwoord, bouwSourceSamenvatting, ontbrekendeAlgemeneKennisMarkering, type AssistantSource } from "@/core/lib/assistant-source";
+import { bouwProfielsturing, type ProfielsturingAspecten } from "@/core/lib/profielsturing";
+import { bouwOrganisatieprofiel } from "@/core/lib/organisatieprofiel";
+import { SP_AGENDAPUNT_REGELS, bouwToelichtingBlok, herkomstString, type AgendapuntSeed } from "@/core/lib/agendapunt-context";
 // AQL-2 / spike 1 — de answer-generation-kern (toon-systeemprompt, per-modus
 // instructiesets, system-prompt-builders, model-/budgetconstanten) is verplaatst
 // naar lib/generatie-kern.ts zodat zowel deze streaming-route als het AI Quality
@@ -41,7 +41,7 @@ import {
   ROL_LABEL,
   bouwSysteemBlokken,
   type BestuurderContext,
-} from "@/lib/generatie-kern";
+} from "@/core/lib/generatie-kern";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,

@@ -28,13 +28,13 @@
 
 import { revalidatePath } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { withPlatform, PlatformError } from "@/lib/platform-wrapper";
+import { withPlatform, PlatformError } from "@/platform/lib/platform-wrapper";
 import {
   PLATFORM_CAPABILITIES,
   isZwareCapability,
   type PlatformCapability,
-} from "@/lib/platform-capabilities";
-import { valideerGrant, valideerRevoke } from "@/lib/platform-grant-regels";
+} from "@/platform/lib/platform-capabilities";
+import { valideerGrant, valideerRevoke } from "@/platform/lib/platform-grant-regels";
 
 const LIJST_PAD = "/platform/rechten";
 

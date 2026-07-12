@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/lib/supabase-server";
-import { herindexeerDocument } from "@/lib/reindex";
-import { INDEXERING_VERSIE, PREFIX_MODEL, PREFIX_PROMPT_VERSIE } from "@/lib/chunk-ingest";
+import { createServerSupabase } from "@/core/lib/supabase-server";
+import { herindexeerDocument } from "@/core/lib/reindex";
+import { INDEXERING_VERSIE, PREFIX_MODEL, PREFIX_PROMPT_VERSIE } from "@/core/lib/chunk-ingest";
 
 // ============================================================================
 //  POST /api/documents/reindex-backfill — gedeelde R1.1+R1.2-re-index (fonds).

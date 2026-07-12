@@ -24,7 +24,7 @@ import type {
   DecisionCondition,
   ActionItem,
   DissentItem,
-} from "@/lib/decision-view";
+} from "@/core/lib/decision-view";
 import AannamesPaneel from "./AannamesPaneel";
 import RisicosPaneel from "./RisicosPaneel";
 import VoorwaardenPaneel from "./VoorwaardenPaneel";

@@ -30,13 +30,13 @@
 //   }
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/lib/supabase-server";
+import { createServerSupabase } from "@/core/lib/supabase-server";
 import {
   mapDecisionToProcedureStatus,
   type DecisionStatus,
   type ReadinessTarget,
   type ReadinessResult,
-} from "@/lib/decision-view";
+} from "@/core/lib/decision-view";
 
 const ALLE_STATUSSEN: DecisionStatus[] = [
   "concept",

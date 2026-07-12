@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { ProcessTemplate } from "@/lib/proces-templates";
+import type { ProcessTemplate } from "@/core/lib/proces-templates";
 
 interface Props {
   templates: ProcessTemplate[];

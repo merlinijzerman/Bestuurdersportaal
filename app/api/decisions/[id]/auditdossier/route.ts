@@ -30,14 +30,14 @@
 // dossier-export heeft opgevraagd.
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/lib/supabase-server";
-import { beoordeelRouteHostToegang } from "@/lib/tenant-route-guard";
-import { buildDecisionDossierView } from "@/lib/decision";
-import { renderAuditdossierHtml } from "@/lib/auditdossier-html";
+import { createServerSupabase } from "@/core/lib/supabase-server";
+import { beoordeelRouteHostToegang } from "@/core/lib/tenant-route-guard";
+import { buildDecisionDossierView } from "@/core/lib/decision";
+import { renderAuditdossierHtml } from "@/core/lib/auditdossier-html";
 import type {
   AuditSnapshotMeta,
   DecisionDossierView,
-} from "@/lib/decision-view";
+} from "@/core/lib/decision-view";
 
 type Versie = "actueel" | "besluitmoment";
 type Formaat = "html" | "json";

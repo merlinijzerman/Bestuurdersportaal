@@ -6,8 +6,8 @@
 // ============================================================================
 
 import Link from "next/link";
-import { huidigePlatformIdentiteit } from "@/lib/platform-auth";
-import { createServiceSupabase } from "@/lib/supabase-service";
+import { huidigePlatformIdentiteit } from "@/platform/lib/platform-auth";
+import { createServiceSupabase } from "@/core/lib/supabase-service";
 import {
   lijstRuns,
   haalTestsets,
@@ -15,8 +15,8 @@ import {
   haalTestsetTellingen,
   haalProductieBaseline,
   haalFixtures,
-} from "@/lib/aqlab/console-lees";
-import { AQLAB_TOEGESTANE_MODELLEN } from "@/lib/aqlab/modellen";
+} from "@/platform/lib/aqlab/console-lees";
+import { AQLAB_TOEGESTANE_MODELLEN } from "@/core/lib/aqlab/modellen";
 import RunSamenstellenForm, { type BaselineProp } from "./run-samenstellen-form";
 
 export const dynamic = "force-dynamic";

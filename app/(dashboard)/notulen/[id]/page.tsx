@@ -1,5 +1,5 @@
-import { createServerSupabase } from "@/lib/supabase-server";
-import { rolHeeftCapability } from "@/lib/capabilities";
+import { createServerSupabase } from "@/core/lib/supabase-server";
+import { rolHeeftCapability } from "@/core/lib/capabilities";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import SegmentBeheer, { type SegmentData, type AgendapuntOptie } from "../_components/SegmentBeheer";

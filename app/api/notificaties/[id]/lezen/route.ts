@@ -8,7 +8,7 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/lib/supabase-server";
+import { createServerSupabase } from "@/core/lib/supabase-server";
 
 export async function PATCH(
   _req: NextRequest,

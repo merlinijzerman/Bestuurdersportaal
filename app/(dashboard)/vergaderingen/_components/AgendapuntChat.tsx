@@ -24,8 +24,8 @@
 //   (welkomstbericht-slice) het antwoord niet wegsnijdt.
 
 import { useState, useRef, useEffect } from "react";
-import { createClient } from "@/lib/supabase";
-import type { InlineMelding } from "@/lib/vraagtype";
+import { createClient } from "@/core/lib/supabase";
+import type { InlineMelding } from "@/core/lib/vraagtype";
 import CitatieTekst from "./CitatieTekst";
 
 interface Bron {

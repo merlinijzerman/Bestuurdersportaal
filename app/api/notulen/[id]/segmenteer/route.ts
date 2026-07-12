@@ -14,14 +14,14 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/lib/supabase-server";
-import { requireCapability } from "@/lib/capabilities";
-import { stelSegmentenVoor, type AgendapuntRef } from "@/lib/notulen";
+import { createServerSupabase } from "@/core/lib/supabase-server";
+import { requireCapability } from "@/core/lib/capabilities";
+import { stelSegmentenVoor, type AgendapuntRef } from "@/core/lib/notulen";
 import {
   extractTekst,
   ONDERSTEUNDE_TYPES,
   type Bestandstype,
-} from "@/lib/document-extractie";
+} from "@/core/lib/document-extractie";
 
 export const dynamic = "force-dynamic";
 

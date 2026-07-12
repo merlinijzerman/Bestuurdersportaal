@@ -19,10 +19,10 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "node:crypto";
-import { createServiceSupabase } from "@/lib/supabase-service";
-import { valideerContact } from "@/lib/contact-validatie";
-import { verstuurContactNotificatie } from "@/lib/email";
-import { badRequest, errorResponse, rateLimited } from "@/lib/api-errors";
+import { createServiceSupabase } from "@/core/lib/supabase-service";
+import { valideerContact } from "@/core/lib/contact-validatie";
+import { verstuurContactNotificatie } from "@/core/lib/email";
+import { badRequest, errorResponse, rateLimited } from "@/core/lib/api-errors";
 
 const LABEL = "contact.POST";
 

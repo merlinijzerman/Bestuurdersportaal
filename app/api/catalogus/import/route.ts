@@ -1,15 +1,15 @@
 import { NextResponse } from "next/server";
-import { errorResponse, badRequest } from "@/lib/api-errors";
+import { errorResponse, badRequest } from "@/core/lib/api-errors";
 import {
   catalogusContext,
   magCatalogusBeheren,
   logCatalogus,
   type CatalogusSupabase,
-} from "@/lib/catalogus-api";
+} from "@/core/lib/catalogus-api";
 import {
   PROCESMODEL_TEMPLATES,
   PROCES_ORGAAN_SUGGESTIES,
-} from "@/lib/catalogus-templates";
+} from "@/core/lib/catalogus-templates";
 
 type OrgaanTabel = "gremia" | "expertises" | "kritische_focusgebieden";
 type ImportTelling = { aangemaakt: number; overgeslagen: number };

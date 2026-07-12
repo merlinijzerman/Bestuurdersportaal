@@ -9,10 +9,10 @@
 // -----------------------------------------------------------------------------
 
 import { NextResponse } from "next/server";
-import { createServerSupabase } from "@/lib/supabase-server";
-import { createServiceSupabase } from "@/lib/supabase-service";
-import { beoordeelRouteHostToegang } from "@/lib/tenant-route-guard";
-import { magFondsAuditExportZien } from "@/lib/aqlab/assurance";
+import { createServerSupabase } from "@/core/lib/supabase-server";
+import { createServiceSupabase } from "@/core/lib/supabase-service";
+import { beoordeelRouteHostToegang } from "@/core/lib/tenant-route-guard";
+import { magFondsAuditExportZien } from "@/core/lib/aqlab/assurance";
 
 const BUCKET = "aqlab-audit";
 

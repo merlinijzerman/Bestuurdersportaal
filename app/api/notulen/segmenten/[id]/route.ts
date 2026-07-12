@@ -17,8 +17,8 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/lib/supabase-server";
-import { requireCapability } from "@/lib/capabilities";
+import { createServerSupabase } from "@/core/lib/supabase-server";
+import { requireCapability } from "@/core/lib/capabilities";
 
 export const dynamic = "force-dynamic";
 

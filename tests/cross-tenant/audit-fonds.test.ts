@@ -16,7 +16,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { controleerChatAuditFondsbron } from "../../lib/audit-fonds-guard";
+import { controleerChatAuditFondsbron } from "../../core/lib/audit-fonds-guard";
 
 const hier = dirname(fileURLToPath(import.meta.url));
 const routeBron = readFileSync(

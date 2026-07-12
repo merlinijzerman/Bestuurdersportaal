@@ -1,5 +1,5 @@
-import { vereisModuleToegang } from "@/lib/module-gate-page";
-import { haalCohorten } from "@/lib/klantbeeld-bron";
+import { vereisModuleToegang } from "@/core/lib/module-gate-page";
+import { haalCohorten } from "@/core/lib/klantbeeld-bron";
 import { KlantbeeldHeader } from "../_components/KlantbeeldHeader";
 import { DeelnemersSubTabs } from "../_components/SubTabs";
 import MaandOntwikkelingClient from "./_components/MaandOntwikkelingClient";

@@ -1,4 +1,4 @@
-import { organenPatch } from "@/lib/organen-route";
+import { organenPatch } from "@/core/lib/organen-route";
 
 export const { PATCH } = organenPatch({
   tabel: "kritische_focusgebieden",

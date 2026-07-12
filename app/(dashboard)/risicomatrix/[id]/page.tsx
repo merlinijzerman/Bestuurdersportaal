@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { createServerSupabase } from "@/lib/supabase-server";
+import { createServerSupabase } from "@/core/lib/supabase-server";
 import {
   CategorieSlug,
   MaatregelStatus,
@@ -12,7 +12,7 @@ import {
   NIVEAU_LABEL,
   TYPE_LABEL,
   categorieLabel,
-} from "@/lib/risico-config";
+} from "@/core/lib/risico-config";
 import MaatregelenBlok from "../_components/MaatregelenBlok";
 import RisicoActies from "../_components/RisicoActies";
 

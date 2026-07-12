@@ -14,7 +14,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ZICHTBARE_ANTWOORDMODI,
   ANTWOORDMODUS_LABEL,
-} from "@/lib/vraagtype";
+} from "@/core/lib/vraagtype";
 import OrganisatieprofielTab from "./_components/OrganisatieprofielTab";
 
 const MAX_SECUNDAIRE = 3;

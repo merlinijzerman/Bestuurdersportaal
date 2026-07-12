@@ -13,7 +13,7 @@ import {
   type ConditionStatus,
   type DecisionCondition,
   CONDITION_STATUS_LABEL,
-} from "@/lib/decision-view";
+} from "@/core/lib/decision-view";
 
 interface Props {
   decisionId: string;

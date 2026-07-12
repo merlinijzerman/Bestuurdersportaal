@@ -19,13 +19,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { beschikbareModuleKeys } from "../../lib/module-registry";
+import { beschikbareModuleKeys } from "../../core/lib/module-registry";
 import {
   valideerThemingTokens,
   bouwThemingCss,
   isGeldigeRgbTriple,
   flagAlsBoolean,
-} from "../../lib/fonds-config-core";
+} from "../../core/lib/fonds-config-core";
 
 const hier = dirname(fileURLToPath(import.meta.url));
 const lees = (...p: string[]) => readFileSync(join(hier, "..", "..", ...p), "utf8");

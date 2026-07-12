@@ -23,27 +23,27 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { withPlatform, PlatformError } from "@/lib/platform-wrapper";
-import type { PlatformIdentiteit } from "@/lib/platform-auth";
-import { valideerUpload } from "@/lib/bestand-validatie";
-import { bepaalBestandstype } from "@/lib/document-extractie";
+import { withPlatform, PlatformError } from "@/platform/lib/platform-wrapper";
+import type { PlatformIdentiteit } from "@/platform/lib/platform-auth";
+import { valideerUpload } from "@/platform/lib/bestand-validatie";
+import { bepaalBestandstype } from "@/core/lib/document-extractie";
 import {
   valideerCuratie,
   type CuratieInvoer,
   type CuratieGenormaliseerd,
-} from "@/lib/generiek-curatie";
+} from "@/core/lib/generiek-curatie";
 import {
   generiekGeldigheidsstatus,
   generiekTransitieRedenplicht,
-} from "@/lib/generiek-status";
+} from "@/core/lib/generiek-status";
 import {
   verwerkGeneriekBestand,
   STORAGE_BUCKET,
   QUARANTAINE_BUCKET,
   GENERIEK_PAD_PREFIX,
-} from "@/lib/generiek-pipeline";
-import { herindexeerDocument } from "@/lib/reindex";
-import { INDEXERING_VERSIE, PREFIX_MODEL, PREFIX_PROMPT_VERSIE } from "@/lib/chunk-ingest";
+} from "@/platform/lib/generiek-pipeline";
+import { herindexeerDocument } from "@/core/lib/reindex";
+import { INDEXERING_VERSIE, PREFIX_MODEL, PREFIX_PROMPT_VERSIE } from "@/core/lib/chunk-ingest";
 
 const LIJST_PAD = "/platform/generieke-bibliotheek";
 const CAP = "platform.generic.library.manage" as const;

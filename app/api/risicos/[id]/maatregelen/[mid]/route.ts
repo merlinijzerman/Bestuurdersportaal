@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/lib/supabase-server";
+import { createServerSupabase } from "@/core/lib/supabase-server";
 
 const TOEGESTANE_STATUSSEN = ["open", "in_voorbereiding", "genomen"] as const;
 type Status = (typeof TOEGESTANE_STATUSSEN)[number];

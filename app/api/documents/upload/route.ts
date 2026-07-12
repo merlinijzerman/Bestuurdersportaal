@@ -1,23 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { createServerSupabase } from "@/lib/supabase-server";
-import { bouwChunkRecords } from "@/lib/chunk-ingest";
-import { maakChunksUitSegmenten } from "@/lib/chunking";
+import { createServerSupabase } from "@/core/lib/supabase-server";
+import { bouwChunkRecords } from "@/core/lib/chunk-ingest";
+import { maakChunksUitSegmenten } from "@/core/lib/chunking";
 import {
   IngestCapError,
   chunkCapMelding,
   overschrijdtChunkCap,
-} from "@/lib/ingest-caps";
+} from "@/core/lib/ingest-caps";
 import {
   bepaalBestandstype,
   CONTENT_TYPE_PER_BESTANDSTYPE,
   diagnoseerExtractie,
   extractTekst,
   ONDERSTEUNDE_TYPES,
-} from "@/lib/document-extractie";
-import { controleerLimiet, LIMIETEN } from "@/lib/rate-limit";
-import { rateLimited } from "@/lib/api-errors";
-import { beoordeelRouteHostToegang } from "@/lib/tenant-route-guard";
+} from "@/core/lib/document-extractie";
+import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
+import { rateLimited } from "@/core/lib/api-errors";
+import { beoordeelRouteHostToegang } from "@/core/lib/tenant-route-guard";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,

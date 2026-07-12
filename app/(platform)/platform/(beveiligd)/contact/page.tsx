@@ -12,8 +12,8 @@
 //  lopen uitsluitend via de server-action (acties.ts) achter withPlatform.
 // ============================================================================
 
-import { createPlatformSupabase } from "@/lib/supabase-platform";
-import { huidigePlatformIdentiteit } from "@/lib/platform-auth";
+import { createPlatformSupabase } from "@/platform/lib/supabase-platform";
+import { huidigePlatformIdentiteit } from "@/platform/lib/platform-auth";
 import ContactInboxClient, {
   type ContactAanvraagRij,
 } from "./_components/ContactInboxClient";

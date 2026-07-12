@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/lib/supabase-server";
-import { weigerAlsModuleUit } from "@/lib/module-guard";
+import { createServerSupabase } from "@/core/lib/supabase-server";
+import { weigerAlsModuleUit } from "@/core/lib/module-guard";
 import {
   CategorieSlug,
   NiveauSlug,
   TypeRisicoSlug,
   leidNiveauAf,
-} from "@/lib/risico-config";
+} from "@/core/lib/risico-config";
 
 const TOEGESTANE_CATEGORIEEN: CategorieSlug[] = [
   "financieel_actuarieel",

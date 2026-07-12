@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/lib/supabase-server";
-import { notifyUser } from "@/lib/notifications";
+import { createServerSupabase } from "@/core/lib/supabase-server";
+import { notifyUser } from "@/core/lib/notifications";
 
 export async function POST(
   req: NextRequest,

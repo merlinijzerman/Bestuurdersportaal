@@ -8,8 +8,8 @@
 // ============================================================================
 
 import { useState } from "react";
-import type { ConsistentieAggregaat } from "@/lib/aqlab/consistency";
-import { woordDiff, heeftVerschil } from "@/lib/aqlab/diff";
+import type { ConsistentieAggregaat } from "@/platform/lib/aqlab/consistency";
+import { woordDiff, heeftVerschil } from "@/platform/lib/aqlab/diff";
 
 export interface IteratieView {
   iteratie: number;

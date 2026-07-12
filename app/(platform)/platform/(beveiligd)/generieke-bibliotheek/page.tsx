@@ -8,8 +8,8 @@
 //  withPlatform (service-role + capability + twee-fasen-audit) — nooit hier.
 // ============================================================================
 
-import { createServerSupabase } from "@/lib/supabase-server";
-import { huidigePlatformIdentiteit } from "@/lib/platform-auth";
+import { createServerSupabase } from "@/core/lib/supabase-server";
+import { huidigePlatformIdentiteit } from "@/platform/lib/platform-auth";
 import GeneriekeBibliotheekClient, {
   type GeneriekDocument,
 } from "./_components/GeneriekeBibliotheekClient";

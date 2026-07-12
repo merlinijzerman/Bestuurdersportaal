@@ -15,8 +15,8 @@
 //  poort. Dit verzwakt de tenant-RLS niet (besluit B-OP5-2).
 // ============================================================================
 
-import { createServiceSupabase } from "@/lib/supabase-service";
-import { huidigePlatformIdentiteit } from "@/lib/platform-auth";
+import { createServiceSupabase } from "@/core/lib/supabase-service";
+import { huidigePlatformIdentiteit } from "@/platform/lib/platform-auth";
 import OrganisatieprofielClient from "./_components/OrganisatieprofielClient";
 
 export const dynamic = "force-dynamic";

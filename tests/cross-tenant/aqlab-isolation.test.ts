@@ -14,8 +14,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { testsetVan } from '../../lib/aqlab/seed/loader';
-import { evalueerGate, PLACEHOLDER } from '../../lib/aqlab/seed/gate';
+import { testsetVan } from '../../platform/lib/aqlab/seed/loader';
+import { evalueerGate, PLACEHOLDER } from '../../platform/lib/aqlab/seed/gate';
 
 const hier = dirname(fileURLToPath(import.meta.url));
 const lees = (...p: string[]) => readFileSync(join(hier, '..', '..', ...p), 'utf8');

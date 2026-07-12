@@ -11,7 +11,7 @@ import {
   type ReadinessTarget,
   READINESS_LABEL,
   READINESS_VOLGORDE,
-} from "@/lib/decision-view";
+} from "@/core/lib/decision-view";
 
 interface Props {
   readiness: ReadinessOverview;

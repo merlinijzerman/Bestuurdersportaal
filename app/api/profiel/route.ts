@@ -15,9 +15,9 @@
 // ============================================================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/lib/supabase-server";
-import { requireCapability } from "@/lib/capabilities";
-import { ANTWOORDMODI, type Antwoordmodus } from "@/lib/vraagtype";
+import { createServerSupabase } from "@/core/lib/supabase-server";
+import { requireCapability } from "@/core/lib/capabilities";
+import { ANTWOORDMODI, type Antwoordmodus } from "@/core/lib/vraagtype";
 
 export const dynamic = "force-dynamic";
 

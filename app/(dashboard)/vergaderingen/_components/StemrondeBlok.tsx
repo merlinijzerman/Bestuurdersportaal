@@ -10,7 +10,7 @@ import {
   type Uitslag,
   type StemRij,
   type VereisteMeerderheid,
-} from "@/lib/stemming";
+} from "@/core/lib/stemming";
 
 export interface StemData {
   id: string;

@@ -66,7 +66,7 @@ echo "--------------------------------------------------------------------------
 
 # A1 — Tenant-resolver (T1) op de entrypoints + fail-closed enforce-schakelaar.
 check_files "A1 resolver/enforce-modules aanwezig" \
-  lib/tenant-host.ts lib/tenant-context.ts lib/tenant-enforce.ts lib/tenant-route-guard.ts
+  core/lib/tenant-host.ts core/lib/tenant-context.ts core/lib/tenant-enforce.ts core/lib/tenant-route-guard.ts
 check_grep  "A1 pagina-chokepoint (dashboard-layout) achter enforce" \
   "beoordeelToegang" "app/(dashboard)/layout.tsx"
 for r in \
@@ -85,7 +85,7 @@ check_files "A2 R1 deterministische maak_profiel-check aanwezig" \
 
 # A3 — R2 auditfonds server-side afgeleid + regressie-guard.
 check_files "A3 R2 auditfonds-guard + sanity aanwezig" \
-  lib/audit-fonds-guard.ts lib/audit-fonds.sanity.ts
+  core/lib/audit-fonds-guard.ts core/lib/audit-fonds.sanity.ts
 
 # A4 — RLS-hardening (T3): migraties + controlekader.
 check_files "A4 T3 RLS-hardening-migraties aanwezig" \
@@ -100,7 +100,7 @@ check_files "A5 T4 retrieval-fondsfilter-migratie aanwezig" \
 ops_open "A5 T4-migratie DRAAIEN op live Supabase vóór deploy — ops (migratie-first)"
 
 # A6 — Dataclassificatie generic/fund_specific operationeel (as-built 'bibliotheek').
-check_grep "A6 bibliotheek-namespace as-built in retrieval" "bibliotheek" "lib/rag.ts"
+check_grep "A6 bibliotheek-namespace as-built in retrieval" "bibliotheek" "core/lib/rag.ts"
 
 # A7 — Demo/productie-scheiding (B6). Bewust buiten T7-scope (apart ticket).
 ops_open "A7 demo/productie-scheiding NIET aangetoond — apart increment (grootste gat); mensbesluit/ops"
@@ -142,7 +142,7 @@ else
 
 # Pure guards.
 if npm run --silent sanity >/tmp/g2_sanity.log 2>&1; then
-  repo_pass "lib/*.sanity.ts guards groen"
+  repo_pass "core/lib + platform/lib *.sanity.ts guards groen"
 else
   repo_fail "sanity-guards — zie /tmp/g2_sanity.log"; fi
 

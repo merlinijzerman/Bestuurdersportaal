@@ -11,11 +11,11 @@
 // ============================================================================
 
 import { redirect } from "next/navigation";
-import { createServerSupabase } from "@/lib/supabase-server";
+import { createServerSupabase } from "@/core/lib/supabase-server";
 import {
   huidigePlatformIdentiteit,
   heeftActueleMFA,
-} from "@/lib/platform-auth";
+} from "@/platform/lib/platform-auth";
 import PlatformUitloggen from "../_components/Uitloggen";
 
 export const dynamic = "force-dynamic";

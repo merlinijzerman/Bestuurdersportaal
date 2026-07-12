@@ -11,12 +11,12 @@
 // ============================================================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/lib/supabase-server";
-import { requireCapability } from "@/lib/capabilities";
+import { createServerSupabase } from "@/core/lib/supabase-server";
+import { requireCapability } from "@/core/lib/capabilities";
 import {
   logClassificatieKoppeling,
   bouwClassificatieReden,
-} from "@/lib/classificatie-service";
+} from "@/core/lib/classificatie-service";
 
 export const dynamic = "force-dynamic";
 

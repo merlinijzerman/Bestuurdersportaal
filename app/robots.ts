@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 import { headers } from "next/headers";
-import { bepaalSurface } from "@/lib/platform-host";
+import { bepaalSurface } from "@/core/lib/platform-host";
 
 // Host-bewuste robots.txt. Eén deployment bedient drie surfaces, dus de inhoud
 // hangt af van de request-host (TO §9.1):

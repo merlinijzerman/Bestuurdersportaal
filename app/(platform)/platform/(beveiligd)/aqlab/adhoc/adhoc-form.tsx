@@ -10,7 +10,7 @@
 import { useActionState } from "react";
 import { adHocConsistentieActie } from "../acties";
 import ConsistentieBlok, { type IteratieView } from "../runs/[runId]/consistentie-blok";
-import type { AdHocConsistentieResultaat } from "@/lib/aqlab/run-orchestrator";
+import type { AdHocConsistentieResultaat } from "@/platform/lib/aqlab/run-orchestrator";
 
 type State = AdHocConsistentieResultaat | { fout: string } | null;
 

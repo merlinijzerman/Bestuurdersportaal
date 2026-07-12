@@ -14,8 +14,8 @@
 
 import { revalidatePath } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { withPlatform, PlatformError } from "@/lib/platform-wrapper";
-import type { PlatformIdentiteit } from "@/lib/platform-auth";
+import { withPlatform, PlatformError } from "@/platform/lib/platform-wrapper";
+import type { PlatformIdentiteit } from "@/platform/lib/platform-auth";
 
 const PAD = "/platform/organisatieprofiel";
 const CAP = "platform.config.manage" as const; // zie besluit B-OP5-1

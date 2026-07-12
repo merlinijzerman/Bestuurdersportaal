@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/lib/supabase-server";
-import { beoordeelRouteHostToegang } from "@/lib/tenant-route-guard";
+import { createServerSupabase } from "@/core/lib/supabase-server";
+import { beoordeelRouteHostToegang } from "@/core/lib/tenant-route-guard";
 import {
   CONTENT_TYPE_PER_BESTANDSTYPE,
   type Bestandstype,
-} from "@/lib/document-extractie";
+} from "@/core/lib/document-extractie";
 
 // GET /api/documents/[id]/bestand
 // Streamt het originele bestand inline (PDF) of als download (Word/Excel).

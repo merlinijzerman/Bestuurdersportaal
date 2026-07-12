@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/lib/supabase-server";
+import { createServerSupabase } from "@/core/lib/supabase-server";
 
 // PATCH /api/documents/[id]
 // Body: { actie: "deactiveren" | "reactiveren", reden?: string }

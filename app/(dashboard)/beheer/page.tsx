@@ -1,5 +1,5 @@
-import { createServerSupabase } from "@/lib/supabase-server";
-import { requireCapability } from "@/lib/capabilities";
+import { createServerSupabase } from "@/core/lib/supabase-server";
+import { requireCapability } from "@/core/lib/capabilities";
 import BeheerClient from "./_components/BeheerClient";
 import ConfigBeheer from "./_components/ConfigBeheer";
 

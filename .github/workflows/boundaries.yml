@@ -1,0 +1,37 @@
+name: boundaries
+
+# ============================================================================
+#  Code-scheiding-gate (T9 fase 2, besluit 0052).
+# ----------------------------------------------------------------------------
+#  Twee statische borgingen, samen op elke push/PR:
+#   1. ESLint boundary-gate (eslint.config.mjs) — dwingt de EENRICHTING af:
+#      core ← platform, core/app-groepen ← platform/*. Een import over de grens
+#      (bv. app/(dashboard) → @/platform/lib) → non-zero exit → deze job faalt.
+#   2. Service-role-lek-check — de platform-service-role-laag (@/platform/lib)
+#      mag nooit in tenant-/client-code lekken (TO §12 test 2).
+#
+#  BLOKKEREND MAKEN (fasering, spiegelt besluit 0046/0049 voor de xtenant-gate):
+#  het AANZETTEN als required status check is één repo-admin-handeling — zet
+#  branch protection op `main` met de hieronder GEPINDE job-`name` als required
+#  check. Wijzig die naam NIET zonder de branch-protection-regel mee te verzetten,
+#  anders wordt de gate stil losgekoppeld.
+# ============================================================================
+on:
+  push:
+  pull_request:
+
+jobs:
+  boundaries:
+    # Gepinde check-naam voor branch protection "required status check".
+    name: Code-scheiding (T9 core/platform-grens)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+      - name: ESLint boundary-gate (core ↔ platform ↔ app)
+        run: npm run lint:boundaries
+      - name: Service-role-lek-check
+        run: bash scripts/check-service-role-leak.sh

@@ -6,7 +6,7 @@
 // ----------------------------------------------------------------------------
 //  Schrijven loopt via de server-action organisatieprofielOpslaan (achter
 //  withPlatform). De live preview gebruikt bouwOrganisatieprofielBlok uit
-//  @/lib/organisatieprofiel (pure functie, type-only imports → client-safe),
+//  @/core/lib/organisatieprofiel (pure functie, type-only imports → client-safe),
 //  zodat de beheerder exact ziet wat de AI meekrijgt.
 // ============================================================================
 
@@ -14,7 +14,7 @@ import { useMemo, useState } from "react";
 import {
   bouwOrganisatieprofielBlok,
   type Organisatieprofiel,
-} from "@/lib/organisatieprofiel";
+} from "@/core/lib/organisatieprofiel";
 import { organisatieprofielOpslaan, type OpslaanResultaat } from "../acties";
 
 const MAX_STRATEGISCH = 600;

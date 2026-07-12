@@ -13,16 +13,16 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/lib/supabase-server";
-import { rolHeeftCapability } from "@/lib/capabilities";
+import { createServerSupabase } from "@/core/lib/supabase-server";
+import { rolHeeftCapability } from "@/core/lib/capabilities";
 import {
   bouwMetadataPlan,
   type HuidigDocument,
   type MetadataVerzoek,
   type GebruikerCapabilities,
-} from "@/lib/document-metadata-service";
-import { toegestaneVervolgstatussen } from "@/lib/document-status-transities";
-import { valideerContext } from "@/lib/document-metadata";
+} from "@/core/lib/document-metadata-service";
+import { toegestaneVervolgstatussen } from "@/core/lib/document-status-transities";
+import { valideerContext } from "@/core/lib/document-metadata";
 
 export const dynamic = "force-dynamic";
 

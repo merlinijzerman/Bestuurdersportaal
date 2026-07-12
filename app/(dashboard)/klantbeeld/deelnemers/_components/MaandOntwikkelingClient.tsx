@@ -9,7 +9,7 @@ import {
   fmtPct,
   fmtPctSigned,
   MAANDLABEL_KORT,
-} from "@/lib/klantbeeld-data";
+} from "@/core/lib/klantbeeld-data";
 
 interface Props {
   cohorten: Cohort[];

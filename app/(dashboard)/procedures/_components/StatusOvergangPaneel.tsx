@@ -18,7 +18,7 @@ import {
   type ReadinessTarget,
   DECISION_STATUS_LABEL,
   READINESS_LABEL,
-} from "@/lib/decision-view";
+} from "@/core/lib/decision-view";
 
 interface Props {
   decision: DecisionObject;

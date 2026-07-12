@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { errorResponse, badRequest } from "@/lib/api-errors";
+import { errorResponse, badRequest } from "@/core/lib/api-errors";
 import {
   catalogusContext,
   magCatalogusBeheren,
   logCatalogus,
-} from "@/lib/catalogus-api";
+} from "@/core/lib/catalogus-api";
 
 // type → join-tabel + doel-kolom. Fondsconsistentie + template-onkoppelbaarheid
 // worden declaratief door de composite-FK afgedwongen (besluit 0007); een

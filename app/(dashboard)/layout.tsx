@@ -1,10 +1,10 @@
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
-import { createServerSupabase } from "@/lib/supabase-server";
-import { haalFondsContext, tenantEnforceAan } from "@/lib/tenant-context";
-import { beoordeelToegang, type ToegangsOordeel } from "@/lib/tenant-enforce";
-import { haalFondsConfig } from "@/lib/fonds-config";
-import DashboardShell from "@/components/DashboardShell";
+import { createServerSupabase } from "@/core/lib/supabase-server";
+import { haalFondsContext, tenantEnforceAan } from "@/core/lib/tenant-context";
+import { beoordeelToegang, type ToegangsOordeel } from "@/core/lib/tenant-enforce";
+import { haalFondsConfig } from "@/core/lib/fonds-config";
+import DashboardShell from "@/core/components/DashboardShell";
 
 export default async function DashboardLayout({
   children,

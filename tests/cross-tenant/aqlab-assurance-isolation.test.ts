@@ -20,8 +20,8 @@ import {
   bepaalGebruikteFeatures,
   bouwAssuranceTegel,
   type AssuranceMeetwaarden,
-} from '../../lib/aqlab/assurance-core';
-import type { ModuleKey } from '../../lib/module-registry';
+} from '../../core/lib/aqlab/assurance-core';
+import type { ModuleKey } from '../../core/lib/module-registry';
 
 const hier = dirname(fileURLToPath(import.meta.url));
 const lees = (...p: string[]) => readFileSync(join(hier, '..', '..', ...p), 'utf8');
@@ -78,7 +78,7 @@ test('AQL-4 — het assurance-endpoint authenticeert (anon+RLS) én dwingt host�
 });
 
 test('AQL-4 — fonds-download alleen voor VRIJGEGEVEN rapporten (niet geblokkeerd/tussenstatus)', () => {
-  const svc = lees('lib', 'aqlab', 'assurance.ts');
+  const svc = lees('core', 'lib', 'aqlab', 'assurance.ts');
   // De download-poort én de tegel-hash moeten op release_status='vrijgegeven' filteren.
   assert.ok(/audit_export_id[\s\S]{0,120}release_status["']?\s*,\s*["']vrijgegeven/.test(svc),
     "magFondsAuditExportZien filtert de export-referentie niet op release_status='vrijgegeven'");
@@ -89,14 +89,14 @@ test('AQL-4 — het bevroren auditrapport selecteert nooit ruwe-excerpt-kolommen
   // Regressie-borg (RLS-review): bouwAuditView mag de harde ruwe kolommen niet
   // in het (fonds-downloadbare) rapport trekken. `fragment` = ruw excerpt op
   // aqlab_findings; gegenereerd_antwoord/gebruikte_context/inputvraag = ruwe output.
-  const gen = lees('lib', 'aqlab', 'audit-export.ts');
+  const gen = lees('platform', 'lib', 'aqlab', 'audit-export.ts');
   for (const veld of ['fragment', 'gegenereerd_antwoord', 'gebruikte_context', 'inputvraag']) {
     assert.ok(!gen.includes(veld), `audit-export selecteert ruw veld '${veld}' in het rapport`);
   }
 });
 
 test('AQL-4 — de assurance-service selecteert geen ruwe-output-kolommen', () => {
-  const svc = lees('lib', 'aqlab', 'assurance.ts');
+  const svc = lees('core', 'lib', 'aqlab', 'assurance.ts');
   for (const veld of ['gegenereerd_antwoord', 'gebruikte_context', 'inputvraag', 'gebruikte_bronnen', 'snapshot_refs']) {
     assert.ok(!svc.includes(veld), `assurance-service selecteert ruw veld '${veld}'`);
   }

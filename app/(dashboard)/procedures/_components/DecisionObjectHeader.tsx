@@ -14,7 +14,7 @@ import {
   DECISION_STATUS_LABEL,
   COMPLEXITEIT_LABEL,
   RISICONIVEAU_LABEL,
-} from "@/lib/decision-view";
+} from "@/core/lib/decision-view";
 
 interface Props {
   decision: DecisionObject;

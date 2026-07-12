@@ -14,7 +14,7 @@ import {
   TIJDLIJNFASE_LABEL,
   tijdlijnfaseVanStap,
   type Tijdlijnfase,
-} from "@/lib/dossier";
+} from "@/core/lib/dossier";
 
 interface TijdlijnStap {
   id: string;

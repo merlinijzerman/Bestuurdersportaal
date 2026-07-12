@@ -1,8 +1,8 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import DocumentMetadataModal from "@/components/DocumentMetadataModal";
-import { bronkaartLabels } from "@/lib/bronsoort";
-import { DOCUMENTTYPEN, DOCUMENTTYPE_LABEL } from "@/lib/document-metadata";
+import DocumentMetadataModal from "@/core/components/DocumentMetadataModal";
+import { bronkaartLabels } from "@/core/lib/bronsoort";
+import { DOCUMENTTYPEN, DOCUMENTTYPE_LABEL } from "@/core/lib/document-metadata";
 import ZoekenPaneel from "./_components/ZoekenPaneel";
 
 interface Document {

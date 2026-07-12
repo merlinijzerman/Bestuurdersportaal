@@ -14,8 +14,8 @@
 //  (service-role + capability platform.config.manage + twee-fasen-audit).
 // ============================================================================
 
-import { createServerSupabase } from "@/lib/supabase-server";
-import { huidigePlatformIdentiteit } from "@/lib/platform-auth";
+import { createServerSupabase } from "@/core/lib/supabase-server";
+import { huidigePlatformIdentiteit } from "@/platform/lib/platform-auth";
 import StandaardcatalogusClient, {
   type CatalogusItem,
 } from "./_components/StandaardcatalogusClient";

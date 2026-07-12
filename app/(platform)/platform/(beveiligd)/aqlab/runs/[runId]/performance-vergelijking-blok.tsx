@@ -4,7 +4,7 @@
 //  client-state). Alleen platform-console (nooit de fonds-assurance-view).
 // ============================================================================
 
-import type { RunPerformance } from "@/lib/aqlab/console-lees";
+import type { RunPerformance } from "@/platform/lib/aqlab/console-lees";
 
 export interface PerfKolom {
   naam: string | null;

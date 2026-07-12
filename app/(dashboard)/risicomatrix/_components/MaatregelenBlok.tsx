@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   MaatregelStatus,
   MAATREGEL_STATUS_LABEL,
-} from "@/lib/risico-config";
+} from "@/core/lib/risico-config";
 
 export interface MaatregelDTO {
   id: string;

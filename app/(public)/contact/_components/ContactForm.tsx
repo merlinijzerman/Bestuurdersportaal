@@ -5,7 +5,7 @@ import {
   valideerContact,
   type ContactVeld,
   type TypeVerzoek,
-} from "@/lib/contact-validatie";
+} from "@/core/lib/contact-validatie";
 
 // Client-formulier voor het publieke contactverzoek (W2a). Client-validatie is
 // uitsluitend UX — /api/contact valideert autoritatief opnieuw. Veldcontract en

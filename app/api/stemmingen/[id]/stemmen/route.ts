@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/lib/supabase-server";
-import { notifyUser } from "@/lib/notifications";
-import type { Alternatief } from "@/lib/stemming";
+import { createServerSupabase } from "@/core/lib/supabase-server";
+import { notifyUser } from "@/core/lib/notifications";
+import type { Alternatief } from "@/core/lib/stemming";
 
 // ============================================================
 //  POST /api/stemmingen/[id]/stemmen — breng een stem uit of wijzig 'm.

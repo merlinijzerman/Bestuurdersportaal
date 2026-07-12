@@ -7,14 +7,14 @@
 // ============================================================================
 
 import Link from "next/link";
-import { huidigePlatformIdentiteit } from "@/lib/platform-auth";
-import { createServiceSupabase } from "@/lib/supabase-service";
-import { haalRunDetail, haalVergelijking, haalRunPerformance, type OutputMetScores, type ScoreRij } from "@/lib/aqlab/console-lees";
+import { huidigePlatformIdentiteit } from "@/platform/lib/platform-auth";
+import { createServiceSupabase } from "@/core/lib/supabase-service";
+import { haalRunDetail, haalVergelijking, haalRunPerformance, type OutputMetScores, type ScoreRij } from "@/platform/lib/aqlab/console-lees";
 import PerformanceVergelijkingBlok from "./performance-vergelijking-blok";
-import { criteriumByKey } from "@/lib/aqlab/criteria";
-import { HARDE_BLOKKADE_CHECKS } from "@/lib/aqlab/checks";
+import { criteriumByKey } from "@/platform/lib/aqlab/criteria";
+import { HARDE_BLOKKADE_CHECKS } from "@/platform/lib/aqlab/checks/index";
 import { annuleerRunActie, humanReviewActie } from "../../acties";
-import { haalReleaseConsole } from "@/lib/aqlab/release";
+import { haalReleaseConsole } from "@/platform/lib/aqlab/release";
 import RegressieBlok from "./regressie-blok";
 import ReleaseBlok from "./release-blok";
 import VergelijkingBlok, { type VergelijkingItem } from "./vergelijking-blok";

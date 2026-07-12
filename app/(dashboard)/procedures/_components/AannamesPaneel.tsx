@@ -24,7 +24,7 @@ import {
   ASSUMPTION_STATUS_LABEL,
   ASSUMPTION_TYPE_LABEL,
   RISICONIVEAU_LABEL,
-} from "@/lib/decision-view";
+} from "@/core/lib/decision-view";
 
 interface Props {
   decisionId: string;

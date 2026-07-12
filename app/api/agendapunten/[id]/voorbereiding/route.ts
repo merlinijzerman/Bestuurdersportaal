@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { createServerSupabase } from "@/lib/supabase-server";
-import { zoekRelevanteChunks, maakContext, verrijkNotulenChunks } from "@/lib/rag";
-import { controleerLimiet, LIMIETEN } from "@/lib/rate-limit";
-import { rateLimited } from "@/lib/api-errors";
-import { bouwProfielsturingAgenda } from "@/lib/profielsturing";
-import { bouwOrganisatieprofiel } from "@/lib/organisatieprofiel";
+import { createServerSupabase } from "@/core/lib/supabase-server";
+import { zoekRelevanteChunks, maakContext, verrijkNotulenChunks } from "@/core/lib/rag";
+import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
+import { rateLimited } from "@/core/lib/api-errors";
+import { bouwProfielsturingAgenda } from "@/core/lib/profielsturing";
+import { bouwOrganisatieprofiel } from "@/core/lib/organisatieprofiel";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,

@@ -12,7 +12,7 @@ import {
   DECISION_STATUS_LABEL,
   READINESS_LABEL,
   READINESS_VOLGORDE,
-} from "@/lib/decision-view";
+} from "@/core/lib/decision-view";
 import AuditExportKnop from "./AuditExportKnop";
 
 interface Props {

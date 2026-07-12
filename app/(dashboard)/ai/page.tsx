@@ -1,6 +1,6 @@
 "use client";
 import { useState, useRef, useEffect, type ReactNode } from "react";
-import { createClient } from "@/lib/supabase";
+import { createClient } from "@/core/lib/supabase";
 import {
   ZICHTBARE_ANTWOORDMODI,
   bepaalVervolgacties,
@@ -8,11 +8,11 @@ import {
   type Antwoordmodus,
   type Vervolgactie,
   type InlineMelding,
-} from "@/lib/vraagtype";
-import { bronkaartLabels, normgewichtLabel, isVeiligeUrl } from "@/lib/bronsoort";
-import { DOCUMENT_STATUS_LABEL, BRONSTATUS_LABEL } from "@/lib/document-status-transities";
+} from "@/core/lib/vraagtype";
+import { bronkaartLabels, normgewichtLabel, isVeiligeUrl } from "@/core/lib/bronsoort";
+import { DOCUMENT_STATUS_LABEL, BRONSTATUS_LABEL } from "@/core/lib/document-status-transities";
 import OnderbouwingPaneel, { type OnderbouwingMeta } from "./_components/OnderbouwingPaneel";
-import { detecteerInstantieInTekst } from "@/lib/assistant-source";
+import { detecteerInstantieInTekst } from "@/core/lib/assistant-source";
 
 type Modus = "documenten" | "combineren" | "algemeen";
 

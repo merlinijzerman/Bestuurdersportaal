@@ -23,7 +23,7 @@
 // ============================================================================
 
 import { NextResponse, type NextRequest } from "next/server";
-import { bepaalSurface, bepaalRoute, type Surface } from "@/lib/platform-host";
+import { bepaalSurface, bepaalRoute, type Surface } from "@/core/lib/platform-host";
 
 export function middleware(request: NextRequest) {
   const host = request.headers.get("host");

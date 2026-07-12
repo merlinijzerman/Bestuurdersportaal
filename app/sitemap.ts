@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 import { headers } from "next/headers";
-import { bepaalSurface } from "@/lib/platform-host";
+import { bepaalSurface } from "@/core/lib/platform-host";
 
 // Host-bewuste sitemap. Alleen de marketing-host heeft publieke, indexeerbare
 // pagina's (de (public)-allowlist, TO §9.1). Op de app- en platform-host is er

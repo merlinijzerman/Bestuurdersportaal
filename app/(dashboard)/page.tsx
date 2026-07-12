@@ -1,8 +1,8 @@
-import { createServerSupabase } from "@/lib/supabase-server";
+import { createServerSupabase } from "@/core/lib/supabase-server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import NotificatiesBlok from "./_components/NotificatiesBlok";
-import type { NotificatieType } from "@/lib/notifications";
+import type { NotificatieType } from "@/core/lib/notifications";
 
 // ============================================================
 //  Demo-KPI's — zelfde cijfers als de Stuurinformatiepagina,

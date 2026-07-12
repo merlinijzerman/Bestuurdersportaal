@@ -12,7 +12,7 @@
 // -----------------------------------------------------------------------------
 
 import { headers } from "next/headers";
-import type { AssuranceView } from "@/lib/aqlab/assurance-core";
+import type { AssuranceView } from "@/core/lib/aqlab/assurance-core";
 
 export const dynamic = "force-dynamic";
 

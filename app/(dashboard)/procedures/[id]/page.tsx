@@ -1,14 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { createServerSupabase } from "@/lib/supabase-server";
-import { templateLabel } from "@/lib/proces-templates";
+import { createServerSupabase } from "@/core/lib/supabase-server";
+import { templateLabel } from "@/core/lib/proces-templates";
 import {
   DOSSIER_STATUS_LABEL,
   dossierStatusKleur,
   PERIODE_TYPE_LABEL,
   type DossierStatus,
   type PeriodeType,
-} from "@/lib/dossier";
+} from "@/core/lib/dossier";
 import DossierTijdlijn from "../_components/DossierTijdlijn";
 import ActieveStapPaneel from "../_components/ActieveStapPaneel";
 import DecisionObjectHeader from "../_components/DecisionObjectHeader";
@@ -21,7 +21,7 @@ import ProcedureMetadataEdit from "../_components/ProcedureMetadataEdit";
 import {
   buildDecisionDossierView,
   ensureDecisionForProcedure,
-} from "@/lib/decision";
+} from "@/core/lib/decision";
 
 // Forceer dynamische rendering: deze page leest live data uit Supabase
 // (decision-state, readiness, evidence) en mag absoluut niet door de

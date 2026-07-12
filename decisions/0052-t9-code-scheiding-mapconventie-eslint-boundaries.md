@@ -74,3 +74,26 @@ met [`0050`](./0050-t8-moduleregistry-in-code.md).
   [`0049`](./0049-t7-g2-go-no-go-gate.md) (G2-gate),
   [`0050`](./0050-t8-moduleregistry-in-code.md) (registry-eigendom)
 - Beslisnotitie multi-tenant v0.4 §9 (B5 — code-scheiding); Implementatieroadmap T-serie v0.1 (T9)
+
+## Uitvoering fase 2 (12 juli 2026, werkopdracht C1 Fase A)
+
+Fase 2 is uitgevoerd als enabler voor de variant-C-projectsplitsing (werkopdracht C1). Het
+gate-voorbehoud ("pas na de formele PGB-go") is bewust vooruit gehaald: C1 commissioneert de
+scheiding nu expliciet als voorwaarde voor de service-role-isolatie. 159 bestanden verhuisd
+(`lib/**`→`core/lib/**`, `components/**`→`core/components/**`, platform-back-officelaag→`platform/lib/**`)
+via `git mv` + een import-codemod. Twee **dependency-gedreven correcties op de naam-regel**, geverifieerd
+tegen de echte imports:
+
+- **`platform-host.ts` = core**, niet platform: gedeelde host-vloer (`middleware`, `sitemap`,
+  `robots`, `tenant-host` consumeren hem). Blind de `platform-`naam volgen gaf de enige echte
+  runtime core→platform-schending.
+- **De aqlab-*assurance*-tak = core** (`modellen`, `assurance`, `assurance-core`, `assurance-teksten`):
+  tenant-surfaces consumeren die; de rest van `lib/aqlab/` is platform.
+- **`core/lib/supabase-service.ts` blijft bewust core** tot D1 (RPC-migratie) de twee gedeelde
+  service-role-paden (publieke `/api/contact`-insert + host→fonds-resolutie) naar anon+RPC verplaatst.
+
+De boundary-gate is nu blokkerend belegd (`.github/workflows/boundaries.yml`, gepinde check-naam;
+aanzetten als required check = repo-admin-handeling) plus `CODEOWNERS`. De app-route-grens is aan
+`eslint.config.mjs` toegevoegd. Verificatie groen: `tsc`, `sanity`, `test:xtenant` (54/54),
+`lint:boundaries`, service-role-lek-check, `next build`; negatieve test bevestigt dat de gate faalt
+op een core→platform én app→platform import. Zie de HANDOVER-release-historie (12 juli 2026, C1 Fase A).

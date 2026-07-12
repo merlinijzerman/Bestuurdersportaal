@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { createServerSupabase } from "@/lib/supabase-server";
+import { createServerSupabase } from "@/core/lib/supabase-server";
 import {
   CategorieSlug,
   NiveauSlug,
@@ -7,7 +7,7 @@ import {
   NIVEAU_KLEUREN,
   NIVEAU_LABEL,
   categorieLabel,
-} from "@/lib/risico-config";
+} from "@/core/lib/risico-config";
 
 interface GeslotenRisico {
   id: string;

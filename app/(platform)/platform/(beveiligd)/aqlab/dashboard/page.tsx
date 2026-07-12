@@ -7,9 +7,9 @@
 // -----------------------------------------------------------------------------
 
 import Link from "next/link";
-import { huidigePlatformIdentiteit } from "@/lib/platform-auth";
-import { createServiceSupabase } from "@/lib/supabase-service";
-import { haalKwaliteitDashboard } from "@/lib/aqlab/dashboard-lees";
+import { huidigePlatformIdentiteit } from "@/platform/lib/platform-auth";
+import { createServiceSupabase } from "@/core/lib/supabase-service";
+import { haalKwaliteitDashboard } from "@/platform/lib/aqlab/dashboard-lees";
 
 export const dynamic = "force-dynamic";
 

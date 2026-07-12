@@ -1,4 +1,4 @@
-import { createServerSupabase } from "@/lib/supabase-server";
+import { createServerSupabase } from "@/core/lib/supabase-server";
 import Link from "next/link";
 import NieuweVergaderingForm from "./_components/NieuweVergaderingForm";
 

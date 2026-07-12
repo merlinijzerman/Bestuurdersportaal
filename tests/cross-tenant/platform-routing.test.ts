@@ -16,7 +16,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { bepaalSurface, bepaalRoute } from "../../lib/platform-host";
+import { bepaalSurface, bepaalRoute } from "../../core/lib/platform-host";
 
 const PLATFORM_HOST = "platform.example";
 const FONDS_HOST = "horizon.nl"; // een tenant/app-host

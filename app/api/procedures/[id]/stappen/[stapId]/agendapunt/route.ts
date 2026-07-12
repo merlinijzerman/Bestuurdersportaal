@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/lib/supabase-server";
+import { createServerSupabase } from "@/core/lib/supabase-server";
 
 // POST: maak een agendapunt aan in een bestaande vergadering en koppel
 // het aan deze procedure-stap. Vult titel/beschrijving uit de stap als

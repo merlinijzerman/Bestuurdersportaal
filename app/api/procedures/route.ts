@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/lib/supabase-server";
-import { vindTemplate } from "@/lib/proces-templates";
+import { createServerSupabase } from "@/core/lib/supabase-server";
+import { vindTemplate } from "@/core/lib/proces-templates";
 
 export async function POST(req: NextRequest) {
   try {

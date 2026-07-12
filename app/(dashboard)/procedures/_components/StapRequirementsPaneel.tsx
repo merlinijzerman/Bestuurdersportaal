@@ -10,7 +10,7 @@ import type {
   AIInteraction,
   EvidenceItem,
   ProcedureStep,
-} from "@/lib/decision-view";
+} from "@/core/lib/decision-view";
 import AIValidatieBlok from "./AIValidatieBlok";
 
 const REQUIREMENT_LABELS: Record<string, string> = {

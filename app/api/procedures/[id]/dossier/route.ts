@@ -9,11 +9,11 @@
 // op true als er nu een nieuw Decision Object is aangemaakt.
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/lib/supabase-server";
+import { createServerSupabase } from "@/core/lib/supabase-server";
 import {
   buildDecisionDossierView,
   ensureDecisionForProcedure,
-} from "@/lib/decision";
+} from "@/core/lib/decision";
 
 export async function GET(
   _req: NextRequest,

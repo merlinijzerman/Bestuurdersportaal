@@ -1,4 +1,4 @@
-import { organenLijstCreate } from "@/lib/organen-route";
+import { organenLijstCreate } from "@/core/lib/organen-route";
 
 export const { GET, POST } = organenLijstCreate({
   tabel: "kritische_focusgebieden",

@@ -21,9 +21,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { rolHeeftCapability } from "../../lib/capabilities";
-import { beschikbareModuleKeys } from "../../lib/module-registry";
-import { isOnderdrukt, SUPPRESSIE_DREMPEL } from "../../lib/suppressie";
+import { rolHeeftCapability } from "../../core/lib/capabilities";
+import { beschikbareModuleKeys } from "../../core/lib/module-registry";
+import { isOnderdrukt, SUPPRESSIE_DREMPEL } from "../../core/lib/suppressie";
 
 const hier = dirname(fileURLToPath(import.meta.url));
 const lees = (...p: string[]) => readFileSync(join(hier, "..", "..", ...p), "utf8");
@@ -74,7 +74,7 @@ test("T11 — elke module-pagina roept de server-guard vereisModuleToegang() aan
 });
 
 test("T11 — de pagina-guard weigert server-side met notFound() (geen UI-only verberging)", () => {
-  const guard = lees("lib/module-gate-page.ts");
+  const guard = lees("core/lib/module-gate-page.ts");
   assert.ok(guard.includes("notFound()"), "guard moet server-side weigeren met notFound()");
   assert.ok(guard.includes("rolHeeftCapability"), "guard moet de capability server-side toetsen");
   assert.ok(guard.includes("moduleBeschikbaar"), "guard moet de manifest-beschikbaarheid server-side toetsen");
@@ -89,8 +89,8 @@ test("T11 — de suppressiedrempel is n<10 (besluit 0055)", () => {
 });
 
 test("T11 — beide leeslagen passen de suppressie toe (isOnderdrukt) vóór de client", () => {
-  assert.ok(lees("lib/stuurinfo-bron.ts").includes("isOnderdrukt"), "stuurinfo-bron past suppressie toe");
-  assert.ok(lees("lib/klantbeeld-bron.ts").includes("isOnderdrukt"), "klantbeeld-bron past suppressie toe");
+  assert.ok(lees("core/lib/stuurinfo-bron.ts").includes("isOnderdrukt"), "stuurinfo-bron past suppressie toe");
+  assert.ok(lees("core/lib/klantbeeld-bron.ts").includes("isOnderdrukt"), "klantbeeld-bron past suppressie toe");
 });
 
 // ── (4) Geen deelnemer-PII in het datamodel (structuur-inspectie) ───────────

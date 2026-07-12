@@ -21,7 +21,7 @@
 
 import { revalidatePath } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { withPlatform, PlatformError } from "@/lib/platform-wrapper";
+import { withPlatform, PlatformError } from "@/platform/lib/platform-wrapper";
 
 const LIJST_PAD = "/platform/contact";
 

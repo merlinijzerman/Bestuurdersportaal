@@ -1,0 +1,22 @@
+# ============================================================================
+#  CODEOWNERS — reviewbundel-scoping (T9 fase 2, besluit 0052).
+# ----------------------------------------------------------------------------
+#  Path-filter op de mapindeling na T9: elke wijziging aan de service-role-laag,
+#  de boundary-gate of het datamodel trekt automatisch een review. Dit is de
+#  review-/IP-maatregel uit 0040 §B5 — geen runtime-isolatie.
+# ============================================================================
+
+# Boundary- en scheiding-tooling
+/eslint.config.mjs                   @merlinijzerman
+/.github/workflows/boundaries.yml    @merlinijzerman
+/scripts/check-service-role-leak.sh  @merlinijzerman
+
+# Platform back-office incl. de service-role-laag (RLS-bypass)
+/platform/                           @merlinijzerman
+/app/(platform)/                     @merlinijzerman
+
+# Generieke service-role-client (blijft core tot D1 — RPC-migratie)
+/core/lib/supabase-service.ts        @merlinijzerman
+
+# Datamodel + RLS (migratie-eerst-dan-deploy)
+/supabase/migrations/                @merlinijzerman

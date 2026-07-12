@@ -10,7 +10,7 @@ import { useRouter } from "next/navigation";
 import type {
   AIInteraction,
   AIValidatieDomein,
-} from "@/lib/decision-view";
+} from "@/core/lib/decision-view";
 
 interface Props {
   decisionId: string;

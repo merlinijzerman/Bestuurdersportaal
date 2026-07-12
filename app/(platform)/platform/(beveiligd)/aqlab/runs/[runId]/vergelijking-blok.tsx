@@ -6,7 +6,7 @@
 //  Pure SVG/HTML, geen chart-lib. Alleen platform-console (nooit de assurance-view).
 // ============================================================================
 
-import { woordDiff, heeftVerschil } from "@/lib/aqlab/diff";
+import { woordDiff, heeftVerschil } from "@/platform/lib/aqlab/diff";
 
 export interface VergelijkingItem {
   test_case_id: string | null;

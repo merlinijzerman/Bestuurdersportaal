@@ -1,6 +1,6 @@
 import Link from "next/link";
 import NieuweProcedureForm from "../_components/NieuweProcedureForm";
-import { TEMPLATES } from "@/lib/proces-templates";
+import { TEMPLATES } from "@/core/lib/proces-templates";
 
 export default function NieuweProcedurePage() {
   return (

@@ -14,9 +14,9 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { withPlatform } from "@/lib/platform-wrapper";
-import { planRun, annuleerRun, draaiAdHocConsistentieSync, type RunConfig, type AdHocConsistentieResultaat } from "@/lib/aqlab/run-orchestrator";
-import { haalProductieBaseline } from "@/lib/aqlab/console-lees";
+import { withPlatform } from "@/platform/lib/platform-wrapper";
+import { planRun, annuleerRun, draaiAdHocConsistentieSync, type RunConfig, type AdHocConsistentieResultaat } from "@/platform/lib/aqlab/run-orchestrator";
+import { haalProductieBaseline } from "@/platform/lib/aqlab/console-lees";
 import {
   AQLAB_TOEGESTANE_MODELLEN,
   isToegestaanModel,
@@ -29,12 +29,12 @@ import {
   type ReasoningEffort,
   type VariantInstellingen,
   type GewijzigdeAs,
-} from "@/lib/aqlab/modellen";
-import { configHash } from "@/lib/aqlab/modellen-hash";
-import type { AdapterModelConfig } from "@/lib/aqlab/generate-adapter";
-import { promoveerAdHocNaarTestcase, valideerPromotie, type PromotieConfig } from "@/lib/aqlab/promotie";
-import { legVrijgavebesluitVast, valideerVrijgaveMogelijk, type Besluit, type Releasestatus } from "@/lib/aqlab/release";
-import { genereerAuditExport, verifieerAuditExport } from "@/lib/aqlab/audit-export";
+} from "@/core/lib/aqlab/modellen";
+import { configHash } from "@/platform/lib/aqlab/modellen-hash";
+import type { AdapterModelConfig } from "@/platform/lib/aqlab/generate-adapter";
+import { promoveerAdHocNaarTestcase, valideerPromotie, type PromotieConfig } from "@/platform/lib/aqlab/promotie";
+import { legVrijgavebesluitVast, valideerVrijgaveMogelijk, type Besluit, type Releasestatus } from "@/platform/lib/aqlab/release";
+import { genereerAuditExport, verifieerAuditExport } from "@/platform/lib/aqlab/audit-export";
 
 const CAP_OPERATE = "platform.aqlab.operate" as const;
 const CAP_REVIEW = "platform.aqlab.review" as const;

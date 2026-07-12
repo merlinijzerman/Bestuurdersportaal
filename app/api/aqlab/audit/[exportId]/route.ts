@@ -8,9 +8,9 @@
 // -----------------------------------------------------------------------------
 
 import { NextResponse } from "next/server";
-import { huidigePlatformIdentiteit, heeftActueleMFA } from "@/lib/platform-auth";
-import { heeftCapability } from "@/lib/platform-capabilities";
-import { createServiceSupabase } from "@/lib/supabase-service";
+import { huidigePlatformIdentiteit, heeftActueleMFA } from "@/platform/lib/platform-auth";
+import { heeftCapability } from "@/platform/lib/platform-capabilities";
+import { createServiceSupabase } from "@/core/lib/supabase-service";
 
 const BUCKET = "aqlab-audit";
 const CAP = "platform.aqlab.operate" as const;

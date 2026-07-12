@@ -1,7 +1,7 @@
-import { createServerSupabase } from "@/lib/supabase-server";
-import { vereisModuleToegang } from "@/lib/module-gate-page";
-import { haalStuurinfo, type BalansRij, type Kpi } from "@/lib/stuurinfo-bron";
-import { SUPPRESSIE_MASKER } from "@/lib/suppressie";
+import { createServerSupabase } from "@/core/lib/supabase-server";
+import { vereisModuleToegang } from "@/core/lib/module-gate-page";
+import { haalStuurinfo, type BalansRij, type Kpi } from "@/core/lib/stuurinfo-bron";
+import { SUPPRESSIE_MASKER } from "@/core/lib/suppressie";
 
 // ============================================================
 //  Stuurinformatie — CONFIG-GEDREVEN, tenant-veilig (T11)

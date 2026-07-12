@@ -12,7 +12,7 @@
 // ============================================================================
 
 import { useState, useCallback, useRef } from "react";
-import { bronkaartLabels, isVeiligeUrl } from "@/lib/bronsoort";
+import { bronkaartLabels, isVeiligeUrl } from "@/core/lib/bronsoort";
 
 interface Treffer {
   pagina: number | null;

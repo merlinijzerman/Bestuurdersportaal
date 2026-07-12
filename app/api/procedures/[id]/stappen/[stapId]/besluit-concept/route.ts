@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { createServerSupabase } from "@/lib/supabase-server";
-import { controleerLimiet, LIMIETEN } from "@/lib/rate-limit";
-import { rateLimited } from "@/lib/api-errors";
+import { createServerSupabase } from "@/core/lib/supabase-server";
+import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
+import { rateLimited } from "@/core/lib/api-errors";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,

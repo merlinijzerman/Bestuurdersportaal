@@ -15,13 +15,13 @@
 // ============================================================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/lib/supabase-server";
-import { classificeerDocument, type ClassificatieInvoer } from "@/lib/classificatie";
+import { createServerSupabase } from "@/core/lib/supabase-server";
+import { classificeerDocument, type ClassificatieInvoer } from "@/core/lib/classificatie";
 import {
   haalKandidaten,
   logClassificatieKoppeling,
   bouwClassificatieReden,
-} from "@/lib/classificatie-service";
+} from "@/core/lib/classificatie-service";
 
 export const dynamic = "force-dynamic";
 

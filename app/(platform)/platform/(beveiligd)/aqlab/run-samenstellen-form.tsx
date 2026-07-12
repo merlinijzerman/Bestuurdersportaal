@@ -13,14 +13,14 @@
 import { useActionState, useState } from "react";
 import { startRunActie, adHocTestActie } from "./acties";
 import ConsistentieBlok, { type IteratieView } from "./runs/[runId]/consistentie-blok";
-import type { AdHocConsistentieResultaat } from "@/lib/aqlab/run-orchestrator";
+import type { AdHocConsistentieResultaat } from "@/platform/lib/aqlab/run-orchestrator";
 import {
   autoNaam,
   leidGewijzigdeAsAf,
   type ModelProvider,
   type ToegestaanModel,
   type VariantInstellingen,
-} from "@/lib/aqlab/modellen";
+} from "@/core/lib/aqlab/modellen";
 
 type RunType = "full_regression" | "subset" | "ad_hoc";
 

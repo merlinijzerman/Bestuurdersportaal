@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/lib/supabase-server";
-import { notifyByRole } from "@/lib/notifications";
+import { createServerSupabase } from "@/core/lib/supabase-server";
+import { notifyByRole } from "@/core/lib/notifications";
 import {
   DEFAULT_ALTERNATIEVEN,
   isAlternatievenArray,
   type Alternatief,
   type VereisteMeerderheid,
-} from "@/lib/stemming";
+} from "@/core/lib/stemming";
 
 const TOEGESTANE_MEERDERHEDEN: VereisteMeerderheid[] = [
   "gewone",

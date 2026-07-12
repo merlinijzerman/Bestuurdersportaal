@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/lib/supabase-server";
-import { embedTeksten, embedTekst, naarVectorLiteral, EMBED_MODEL } from "@/lib/embeddings";
+import { createServerSupabase } from "@/core/lib/supabase-server";
+import { embedTeksten, embedTekst, naarVectorLiteral, EMBED_MODEL } from "@/core/lib/embeddings";
 
 // ============================================================
 //  POST /api/documents/embeddings-backfill

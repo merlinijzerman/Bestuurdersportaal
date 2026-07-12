@@ -29,6 +29,16 @@ const FONDS_SLUGS = ["pgb", "horizon"];
 
 const TS_FILES = ["**/*.ts", "**/*.tsx"];
 
+// No-op stub-rules zodat bestaande `eslint-disable`-comments voor de next/
+// react-hooks-ruleset (die deze minimale, boundary-only config bewust NIET laadt)
+// oplossen naar een bekende regel i.p.v. "Definition for rule not found" te
+// geven. De regels doen niets — ze laten de gate alleen niet struikelen over
+// directieven die voor `next lint` bedoeld zijn. Boundary T9 fase 2.
+const noopRule = { meta: { schema: [] }, create: () => ({}) };
+function stubPlugin(ruleNames) {
+  return { rules: Object.fromEntries(ruleNames.map((r) => [r, noopRule])) };
+}
+
 /** Glob-varianten die één laag-/fondsprefix afdekken: alias (@/x) én relatief (../x). */
 function laagGlobs(prefix) {
   return [`@/${prefix}`, `@/${prefix}/**`, `**/${prefix}`, `**/${prefix}/**`];
@@ -43,9 +53,19 @@ export default [
     ignores: ["node_modules/**", ".next/**"],
   },
 
-  // Basis: TypeScript-parser voor alle .ts/.tsx (zonder eigen regels).
+  // Basis: TypeScript-parser voor alle .ts/.tsx (zonder eigen regels). De
+  // stub-plugins laten bestaande next/react-hooks `eslint-disable`-comments
+  // schoon oplossen; reportUnusedDisableDirectives uit zodat die no-op-directieven
+  // geen "unused"-ruis geven. De boundary-regel zelf staat los hieronder.
   {
     files: TS_FILES,
+    plugins: {
+      "@next/next": stubPlugin(["no-img-element"]),
+      "react-hooks": stubPlugin(["exhaustive-deps"]),
+    },
+    linterOptions: {
+      reportUnusedDisableDirectives: "off",
+    },
     languageOptions: {
       parser: tsParser,
       ecmaVersion: "latest",
@@ -95,4 +115,42 @@ export default [
       },
     ]),
   })),
+
+  // ── App-route-boundary (T9 fase 2) ────────────────────────────────────────
+  // App Router-routes wonen fysiek in app/ (Next-vereiste), maar volgen dezelfde
+  // eenrichting. De tenant- en publieke surface mogen NOOIT uit platform/*
+  // importeren — dat is de service-role-laag (RLS-bypass). Dit is de statische
+  // tegenhanger van scripts/check-service-role-leak.sh: geen platform-laag op de
+  // internet-facing surface. fondsen/* is ook verboden (surface is fonds-agnost).
+  {
+    files: [
+      "app/(dashboard)/**/*.ts", "app/(dashboard)/**/*.tsx",
+      "app/(public)/**/*.ts", "app/(public)/**/*.tsx",
+    ],
+    rules: verbied([
+      {
+        group: laagGlobs("platform"),
+        message:
+          "De tenant/publieke surface mag NIET uit platform/* importeren (service-role-laag, RLS-bypass). Boundary T9.",
+      },
+      {
+        group: laagGlobs("fondsen"),
+        message:
+          "De tenant/publieke surface mag NIET uit fondsen/* importeren (surface is fonds-agnostisch). Boundary T9.",
+      },
+    ]),
+  },
+
+  // De platform-surface mag core/* + platform/*, maar NIET fondsen/* (platform is
+  // fonds-overstijgend, spiegelt de platform/lib-regel).
+  {
+    files: ["app/(platform)/**/*.ts", "app/(platform)/**/*.tsx"],
+    rules: verbied([
+      {
+        group: laagGlobs("fondsen"),
+        message:
+          "De platform-surface mag NIET uit fondsen/* importeren (fonds-overstijgend). Boundary T9.",
+      },
+    ]),
+  },
 ];

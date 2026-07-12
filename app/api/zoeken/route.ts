@@ -18,14 +18,14 @@
 // ============================================================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/lib/supabase-server";
+import { createServerSupabase } from "@/core/lib/supabase-server";
 import {
   zoekRelevanteChunksMetMeta,
   type DocumentChunk,
   type RetrievalFilters,
-} from "@/lib/rag";
-import { beoordeelRouteHostToegang } from "@/lib/tenant-route-guard";
-import type { RetrievalModus } from "@/lib/vraagtype";
+} from "@/core/lib/rag";
+import { beoordeelRouteHostToegang } from "@/core/lib/tenant-route-guard";
+import type { RetrievalModus } from "@/core/lib/vraagtype";
 
 export const dynamic = "force-dynamic";
 

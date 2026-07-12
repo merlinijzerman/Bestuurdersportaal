@@ -20,7 +20,7 @@ import {
   type RiskStatus,
   RISK_CATEGORIE_LABEL,
   RISK_STATUS_LABEL,
-} from "@/lib/decision-view";
+} from "@/core/lib/decision-view";
 
 interface Props {
   decisionId: string;

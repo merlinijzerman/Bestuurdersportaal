@@ -14,9 +14,9 @@
 // -----------------------------------------------------------------------------
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServiceSupabase } from "@/lib/supabase-service";
-import { verwerkBatch } from "@/lib/aqlab/run-orchestrator";
-import { errorResponse } from "@/lib/api-errors";
+import { createServiceSupabase } from "@/core/lib/supabase-service";
+import { verwerkBatch } from "@/platform/lib/aqlab/run-orchestrator";
+import { errorResponse } from "@/core/lib/api-errors";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60; // seconden; de cron herhaalt tot de queue leeg is.

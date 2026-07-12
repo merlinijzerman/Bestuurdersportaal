@@ -5,7 +5,7 @@
 // 'risk_gewijzigd'. Geen hard-delete (audit).
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/lib/supabase-server";
+import { createServerSupabase } from "@/core/lib/supabase-server";
 
 const RISK_CATEGORIE = [
   "financieel",

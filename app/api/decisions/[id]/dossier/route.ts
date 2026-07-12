@@ -8,8 +8,8 @@
 // parallele route `/api/procedures/[id]/dossier`.
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/lib/supabase-server";
-import { buildDecisionDossierView } from "@/lib/decision";
+import { createServerSupabase } from "@/core/lib/supabase-server";
+import { buildDecisionDossierView } from "@/core/lib/decision";
 
 export async function GET(
   _req: NextRequest,

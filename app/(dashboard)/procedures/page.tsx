@@ -1,13 +1,13 @@
 import Link from "next/link";
-import { createServerSupabase } from "@/lib/supabase-server";
-import { templateLabel } from "@/lib/proces-templates";
+import { createServerSupabase } from "@/core/lib/supabase-server";
+import { templateLabel } from "@/core/lib/proces-templates";
 import {
   DOSSIER_STATUS_LABEL,
   dossierStatusKleur,
   PERIODE_TYPE_LABEL,
   type DossierStatus,
   type PeriodeType,
-} from "@/lib/dossier";
+} from "@/core/lib/dossier";
 
 interface ProcedureRij {
   id: string;

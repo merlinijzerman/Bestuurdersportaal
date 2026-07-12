@@ -11,8 +11,8 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase";
-import { NORMGEWICHTEN, NORMGEWICHT_LABEL } from "@/lib/bronsoort";
+import { createClient } from "@/core/lib/supabase";
+import { NORMGEWICHTEN, NORMGEWICHT_LABEL } from "@/core/lib/bronsoort";
 import {
   isStandaardZichtbaarInRag,
   GENERIEKE_BRONNEN,
@@ -20,14 +20,14 @@ import {
   GENERIEKE_BRONSTATUS,
   REGELINGSTYPES,
   REGELINGSTYPE_LABEL,
-} from "@/lib/generiek-curatie";
+} from "@/core/lib/generiek-curatie";
 import {
   generiekGeldigheidsstatus,
   GELDIGHEIDSSTATUS_LABEL,
   reviewSignaal,
   REVIEW_SIGNAAL_LABEL,
   type ReviewSignaal,
-} from "@/lib/generiek-status";
+} from "@/core/lib/generiek-status";
 import {
   curatieUploadUrl,
   curatieAanmaken,

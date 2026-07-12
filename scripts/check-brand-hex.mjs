@@ -11,7 +11,10 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, extname } from "node:path";
 
-const ROOTS = ["app", "components", "lib"];
+// T9 fase 2 (besluit 0052): components/ + lib/ zijn opgesplitst naar
+// core/ (+ core/lib, core/components) en platform/ (+ platform/lib). Scan die
+// lagen expliciet — anders scant deze gate stil niets meer (false green).
+const ROOTS = ["app", "core", "platform", "fondsen"];
 const EXTS = new Set([".ts", ".tsx", ".js", ".jsx", ".css"]);
 
 // 1) Verboden legacy merk-hex (case-insensitief).

@@ -12,8 +12,8 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { bepaalFondsContext, type TenantDomain } from "../../lib/tenant-host";
-import { beoordeelToegang } from "../../lib/tenant-enforce";
+import { bepaalFondsContext, type TenantDomain } from "../../core/lib/tenant-host";
+import { beoordeelToegang } from "../../core/lib/tenant-enforce";
 
 const FONDS_A = "11111111-1111-1111-1111-111111111111";
 const FONDS_B = "22222222-2222-2222-2222-222222222222";

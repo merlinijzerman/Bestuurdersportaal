@@ -15,7 +15,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   bouwOrganisatieprofielBlok,
   type Organisatieprofiel,
-} from "@/lib/organisatieprofiel";
+} from "@/core/lib/organisatieprofiel";
 
 const MAX_STRATEGISCH = 600;
 

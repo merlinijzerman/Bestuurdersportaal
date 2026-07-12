@@ -6,7 +6,7 @@
 // ============================================================================
 
 import Link from "next/link";
-import { huidigePlatformIdentiteit } from "@/lib/platform-auth";
+import { huidigePlatformIdentiteit } from "@/platform/lib/platform-auth";
 
 export const dynamic = "force-dynamic";
 

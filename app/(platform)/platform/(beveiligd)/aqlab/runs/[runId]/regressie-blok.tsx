@@ -4,7 +4,7 @@
 //  subset/ad-hoc. Server-rendered (geen client-state).
 // ============================================================================
 
-import type { RegressieResultaat } from "@/lib/aqlab/regression-core";
+import type { RegressieResultaat } from "@/platform/lib/aqlab/regression-core";
 
 const ADVIES_BADGE: Record<string, string> = {
   accepteren: "bg-ok-tint text-ok-ink",

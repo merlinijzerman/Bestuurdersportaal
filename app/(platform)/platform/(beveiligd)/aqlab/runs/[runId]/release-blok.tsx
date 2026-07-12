@@ -8,7 +8,7 @@
 // -----------------------------------------------------------------------------
 
 import { legVrijgaveActie, genereerAuditActie, verifieerAuditActie } from "../../acties";
-import type { ReleaseConsoleContext } from "@/lib/aqlab/release";
+import type { ReleaseConsoleContext } from "@/platform/lib/aqlab/release";
 
 // Het formele besluit volgt uit de status (vrijgegeven/geblokkeerd = go/no-go);
 // er is bewust GÉÉN los besluit-veld (voorkomt status↔besluit-inconsistentie).
