@@ -75,3 +75,30 @@ anon-client + de twee contact-RPC's. `core/lib/supabase-service.ts` blijft **bew
   `core/lib/tenant-context.ts`, `app/api/contact/route.ts`
 - Werkopdracht C1 (Fase B criterium 2); besluit [`0040`](./0040-bridge-ready-pool-standaard-dedicated-isolatie-premium.md)
   (deny-by-default tenant_domains), [`0052`](./0052-t9-code-scheiding-mapconventie-eslint-boundaries.md) (code-scheiding)
+
+## Security-review + hardening (2026-07-12)
+
+Adversariële RLS/security-review op de migratie + code. **Uitkomst:** tenant-isolatie **intact**
+(geen RPC raakt een per-`fonds_id`-tabel), `search_path`/grants/idempotentie/rollback/append-only
+correct, `resolve_tenant_host` lekt de mapping niet — **geen blocker**. Twee "belangrijk"-bevindingen
+op de nu anon-bereikbare publieke schrijf-surface, met follow-up-migratie
+`2026_07_12_d1_hardening.sql`:
+
+- **B1** — `contact_aanvraag_insert` is met de publieke anon-key direct aanroepbaar (buiten de
+  route-guards om) en de rate-limit leunt op de caller-parameter `p_ip_hash` → bypass-baar. Dit is
+  een bewuste posture-wijziging t.o.v. REQ-PV-042. **Mitigatie (gedaan):** lengte-CHECK
+  `contact_aanvragen_lengtes` (payload-cap == VELD_MAX) tegen storage-bom. **Restrisico:**
+  ongeauthenticeerde, ongelimiteerde *volume*-inserts van begrensde inhoud (spam in de contact-inbox).
+  Correcte vervolgstap = een form-side bot-mitigatie. **Gekozen (2026-07-12): Cloudflare Turnstile**
+  op het contactformulier + serverside token-verificatie in `/api/contact`. Apart deelincrement;
+  randvoorwaarde is dat de Turnstile-keys geprovisioneerd worden (site-key `NEXT_PUBLIC_*`, secret-key
+  in de gedeelde server-env — een smal bot-verificatie-secret, géén service-role). Tot dat live is,
+  dekken de payload-cap (B1) + de soft ip_hash-limiet + de handmatige inbox-review het restrisico af.
+- **B2** — `contact_notificatie_status` kon elke rij op `id` muteren (integriteit opvolg-status; de
+  `mail_error`-XSS is niet realiseerbaar want de back-office rendert via JSX-escaping). **Mitigatie
+  (gedaan):** one-shot gescope't (recente, nog niet gemarkeerde rij) + `mail_error` gekapt op 500.
+- **K1** (rate-limit-race, geen regressie — niet gefixt) en **K2** (succes-pad logde de notificatie-
+  RPC-fout niet — **gefixt** in `app/api/contact/route.ts`).
+
+Least-privilege-observatie (niet gewijzigd, harmloos): de `grant … to authenticated` is voor de drie
+RPC's overbodig omdat ze uitsluitend via de cookieless anon-client (rol `anon`) worden aangeroepen.

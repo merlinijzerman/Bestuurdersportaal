@@ -213,11 +213,14 @@ export async function POST(req: NextRequest) {
         console.error(`[${LABEL}] kon mail_error niet wegschrijven`, updateFout);
       }
     } else {
-      await db.rpc("contact_notificatie_status", {
+      const { error: updateFout } = await db.rpc("contact_notificatie_status", {
         p_id: rij.id,
         p_verzonden: true,
         p_error: null,
       });
+      if (updateFout) {
+        console.error(`[${LABEL}] kon notificatie-status niet wegschrijven`, updateFout);
+      }
     }
 
     // 8. Succes — minimale payload. Mailstatus lekt niet naar de gebruiker:
