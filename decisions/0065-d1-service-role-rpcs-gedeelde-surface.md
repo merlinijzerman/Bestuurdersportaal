@@ -1,0 +1,77 @@
+# 0065 — D1: service-role weg van de gedeelde surface via SECURITY DEFINER-RPC's
+
+- **Status:** Geaccepteerd
+- **Datum:** 2026-07-12
+- **Betrokkenen:** Merlin (akkoord), Ontwikkeling (werkopdracht C1)
+
+## Context
+
+Werkopdracht C1 (variant B→C) eist dat `SUPABASE_SERVICE_ROLE_KEY` — het enige RLS-omzeilende
+secret — straks UITSLUITEND in het geïsoleerde beheer-project leeft (Fase B, criterium 2). Bij
+verificatie tegen de code bleek de gedeelde (app/publiek) surface de service-role nog op twee paden
+nodig te hebben, in strijd met de aanname dat service-role alleen in de platform-back-office zit:
+
+1. **host→fonds-resolutie** (`core/lib/tenant-domains.ts` → `(dashboard)/layout.tsx`, elke tenant-load):
+   las de volledige `tenant_domains`-mapping met de service-role (tabel is bewust deny-by-default, 0040).
+2. **publieke contactinzending** (`app/api/contact/route.ts`): insert + rate-limit-COUNT +
+   notificatie-status-UPDATE in `contact_aanvragen` (bewust deny-by-default, REQ-PV-042).
+
+De `(dashboard)/layout`-resolutie is `try/catch` fail-open zolang `TENANT_ENFORCE` uit staat; de
+sleutel daar nu weghalen zou "werken" tot enforce aan gaat (zelf een harde pre-PGB-eis) — dat is
+schijnzekerheid (CLAUDE.md). Het contactformulier zou direct breken. Criterium 2 is dus niet
+haalbaar zolang deze paden de service-role vereisen.
+
+## Besluit
+
+De twee gedeelde paden worden **key-vrij** gemaakt met **`SECURITY DEFINER`-RPC's**, aanroepbaar met
+de **anon-key**; de tabellen blijven **deny-by-default** (géén nieuwe policy). Migratie
+`2026_07_12_d1_service_role_rpcs.sql`:
+
+- `resolve_tenant_host(p_host text)` — geeft 0/1 ACTIEVE rij voor een genormaliseerde host. Strikt
+  minder blootstelling dan een full-table-read; geen enumeratie van de volledige mapping mogelijk.
+- `contact_aanvraag_insert(...)` — insert MÉT ingebouwde rate-limit (max 3/10 min per ip_hash;
+  `status ok|rate_limited`), vervangt de losse service-role-COUNT.
+- `contact_notificatie_status(p_id, p_verzonden, p_error)` — post-mail-ops-velden.
+
+Alle drie: `security definer`, `set search_path = public, pg_temp`, `revoke all from public` +
+`grant execute to anon, authenticated`. De RLS-bypass is strikt afgebakend tot de functie-bodies.
+Code: cookieless anon-client `core/lib/supabase-anon.ts`; de resolver resolveert per host via de RPC
+met een gesleutelde (per-host) TTL-cache (stale-fallback behouden); de contactroute draait op de
+anon-client + de twee contact-RPC's. `core/lib/supabase-service.ts` blijft **bewust core** tot D1b.
+
+## Overwogen alternatieven
+
+- **Full-list-RPC `list_active_tenant_domains()`** (anon-EXECUTE) — afgewezen: minimale code, maar
+  stelt de volledige host→fonds-mapping bloot aan anon en draait daarmee de bewuste deny-by-default
+  van 0040 terug. De single-host-RPC honoreert die posture.
+- **Tenant-RLS-policies op `tenant_domains`/`contact_aanvragen`** — afgewezen: verbreedt het
+  RLS-oppervlak op globale tabellen; de deny-by-default + smalle RPC is scherper en kleiner.
+- **Aparte low-privilege DB-rol/sleutel in het gedeelde project** — afgewezen (nu): Supabase heeft
+  één service-role; een eigen PostgREST-rol/JWT is nieuwe infra (richting B14-1), buiten scope.
+- **Contact-POST naar het beheer-project proxyen + enforce-pad fail-open laten** — afgewezen:
+  koppelt publiek→beheer en zet schijnzekerheid op het enforce-pad.
+
+## Gevolgen
+
+- **RLS/tenant-isolatie:** ongewijzigd. Geen tabelpolicy; beide tabellen zijn globaal/niet-tenant
+  (geen `fonds_id`-RLS). De functies raken geen enkele per-fonds tenant-tabel.
+- **Security:** de gedeelde surface heeft de service-role niet meer nodig voor deze twee paden; de
+  sleutel kan in Fase B uit de gedeelde env. `search_path` gepind (hijack-hardening).
+- **Kanttekening:** `contact_notificatie_status` laat anon twee ops-velden (bool + errortekst) op een
+  rij-id zetten — geen tenant/PII-data, UUID onraadbaar; bewust geaccepteerd.
+- **Migratie-eerst:** de migratie is standalone veilig (nog geen code roept ze aan); de code-switch
+  deployt erna. Rollback: functies droppen + code reverten (oude paden werken zolang de sleutel er is).
+- **Resttaak D1b (openstaand criterium-2-blokker):** de tenant-facing routes
+  `app/api/aqlab/assurance` en `app/api/aqlab/assurance/audit/[exportId]` draaien nog op de
+  service-role. Aanpak: zelfde SECURITY DEFINER-RPC-lijn (fonds uit de geverifieerde sessie),
+  apart deelincrement. Pas ná D1b verhuist `supabase-service.ts` naar `platform/lib` en is de
+  gedeelde surface volledig service-role-vrij.
+
+## Referenties
+
+- Migratie `supabase/migrations/2026_07_12_d1_service_role_rpcs.sql` (+ ROLLBACK);
+  `supabase/schema.sql` (D1-documentatieblok)
+- Code: `core/lib/supabase-anon.ts`, `core/lib/tenant-domains.ts`, `core/lib/tenant-domains-cache.ts`,
+  `core/lib/tenant-context.ts`, `app/api/contact/route.ts`
+- Werkopdracht C1 (Fase B criterium 2); besluit [`0040`](./0040-bridge-ready-pool-standaard-dedicated-isolatie-premium.md)
+  (deny-by-default tenant_domains), [`0052`](./0052-t9-code-scheiding-mapconventie-eslint-boundaries.md) (code-scheiding)

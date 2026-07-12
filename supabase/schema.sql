@@ -1577,3 +1577,23 @@ create table if not exists public.fonds_klantbeeld_cohort (
 --   npm run aqlab:seed:modellen (idempotent, dedup-op-hash).
 -- Seeden gebeurt via de gate-bewaakte loader (lib/aqlab/seed/*, dry-run default);
 -- seeden is GEBLOKKEERD tot de vier seeding-gate-poorten sluiten (validatierapport §6).
+
+-- ============================================================================
+-- D1 — SECURITY DEFINER-RPC's voor de gedeelde surface (werkopdracht C1).
+-- Migratie: 2026_07_12_d1_service_role_rpcs.sql (AUTORITATIEF). Documentatie:
+--   * resolve_tenant_host(p_host text) -> table(host, fonds_id, actief)
+--       host->fonds-resolutie met de ANON-key (0/1 actieve rij). Vervangt het
+--       service-role full-list-read in core/lib/tenant-domains.ts. tenant_domains
+--       blijft deny-by-default.
+--   * contact_aanvraag_insert(p_naam,...,p_ip_hash) -> table(id, aangemaakt_op, status)
+--       publieke contactinsert MÉT ingebouwde rate-limit (max 3/10 min per
+--       ip_hash; status ok|rate_limited). Vervangt de service-role insert+COUNT
+--       in app/api/contact/route.ts. contact_aanvragen blijft deny-by-default.
+--   * contact_notificatie_status(p_id, p_verzonden, p_error) -> void
+--       markeert notificatie_verzonden/mail_error na de (soft-fail) mailstap.
+-- Alle drie: SECURITY DEFINER, set search_path = public, pg_temp; EXECUTE aan
+-- anon+authenticated; GEEN tabelpolicy toegevoegd (RLS ongewijzigd). Doel: de
+-- gedeelde (app/publiek) surface heeft de service-role niet meer nodig, zodat de
+-- sleutel in Fase B uitsluitend in het beheer-project leeft (criterium 2).
+-- Resttaak D1b: de tenant-facing aqlab-assurance-routes (app/api/aqlab/assurance*)
+-- gebruiken de service-role nog — apart deelincrement, zelfde RPC-aanpak.

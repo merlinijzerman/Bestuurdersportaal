@@ -1,9 +1,9 @@
 // ============================================================================
-//  Sanity-tests voor de tenant_domains-cache (T1.2, data-access).
+//  Sanity-tests voor de tenant-host-resolutie-cache (T1.2 / D1, data-access).
 //  De pure host→fonds-resolutie is al in tenant-host.sanity.ts gedekt; hier
-//  testen we alleen het cache-/fetch-gedrag via de injecteerbare kern.
+//  testen we alleen het (gesleutelde) cache-/fetch-gedrag via de injecteerbare kern.
 //
-//  Uitvoeren: npx tsx lib/tenant-domains.sanity.ts
+//  Uitvoeren: npx tsx core/lib/tenant-domains.sanity.ts
 // ============================================================================
 
 import assert from "node:assert/strict";
@@ -18,7 +18,8 @@ function test(naam: string, fn: () => Promise<void> | void) {
   });
 }
 
-const rijen: TenantDomain[] = [{ host: "horizon.nl", fondsId: "fonds-a", actief: true }];
+const rij: TenantDomain = { host: "horizon.nl", fondsId: "fonds-a", actief: true };
+const KEY = "horizon.nl";
 
 async function main() {
   console.log("tenant-domains sanity-tests:");
@@ -29,57 +30,76 @@ async function main() {
 
   await test("eerste aanroep fetcht; tweede binnen TTL fetcht NIET (cache-hit)", async () => {
     let calls = 0;
-    const haal = maakTenantDomainsCache({
-      fetcher: async () => { calls++; return rijen; },
+    const haal = maakTenantDomainsCache<TenantDomain | null>({
+      fetcher: async () => { calls++; return rij; },
       now,
       ttlMs: 1000,
+      leeg: null,
     });
     nu = 0;
-    assert.deepEqual(await haal(), rijen);
+    assert.deepEqual(await haal(KEY), rij);
     nu = 999; // net binnen TTL
-    assert.deepEqual(await haal(), rijen);
+    assert.deepEqual(await haal(KEY), rij);
     assert.equal(calls, 1, "binnen TTL mag de DB niet opnieuw geraakt worden");
+  });
+
+  await test("cache is gesleuteld: een andere host fetcht apart", async () => {
+    const gezien: string[] = [];
+    const haal = maakTenantDomainsCache<TenantDomain | null>({
+      fetcher: async (sleutel) => { gezien.push(sleutel); return rij; },
+      now,
+      ttlMs: 1000,
+      leeg: null,
+    });
+    nu = 0;
+    await haal("horizon.nl");
+    await haal("horizon.nl"); // hit
+    await haal("pgb.nl");     // andere sleutel → miss
+    assert.deepEqual(gezien, ["horizon.nl", "pgb.nl"]);
   });
 
   await test("na TTL-verloop wordt opnieuw gefetcht", async () => {
     let calls = 0;
-    const haal = maakTenantDomainsCache({
-      fetcher: async () => { calls++; return rijen; },
+    const haal = maakTenantDomainsCache<TenantDomain | null>({
+      fetcher: async () => { calls++; return rij; },
       now,
       ttlMs: 1000,
+      leeg: null,
     });
     nu = 0;
-    await haal();
+    await haal(KEY);
     nu = 1000; // TTL verlopen (nu < verlooptOp is false)
-    await haal();
+    await haal(KEY);
     assert.equal(calls, 2, "na TTL moet de mapping opnieuw worden opgehaald");
   });
 
-  await test("fetch-fout zonder cache → lege lijst (fail-safe → resolver 'onbekend')", async () => {
-    const haal = maakTenantDomainsCache({
+  await test("fetch-fout zonder cache → leeg (null; fail-safe → resolver 'onbekend')", async () => {
+    const haal = maakTenantDomainsCache<TenantDomain | null>({
       fetcher: async () => { throw new Error("db down"); },
       now,
       ttlMs: 1000,
+      leeg: null,
     });
     nu = 0;
-    assert.deepEqual(await haal(), []);
+    assert.equal(await haal(KEY), null);
   });
 
   await test("fetch-fout na eerdere succesvolle fetch → stale cache hergebruikt", async () => {
     let calls = 0;
-    const haal = maakTenantDomainsCache({
+    const haal = maakTenantDomainsCache<TenantDomain | null>({
       fetcher: async () => {
         calls++;
-        if (calls === 1) return rijen;
+        if (calls === 1) return rij;
         throw new Error("db down");
       },
       now,
       ttlMs: 1000,
+      leeg: null,
     });
     nu = 0;
-    assert.deepEqual(await haal(), rijen); // vult de cache
+    assert.deepEqual(await haal(KEY), rij); // vult de cache
     nu = 2000; // TTL verlopen → refetch, die nu faalt
-    assert.deepEqual(await haal(), rijen, "stale cache moet blijven staan bij een fetch-fout");
+    assert.deepEqual(await haal(KEY), rij, "stale cache moet blijven staan bij een fetch-fout");
     assert.equal(calls, 2);
   });
 

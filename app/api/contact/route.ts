@@ -19,7 +19,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "node:crypto";
-import { createServiceSupabase } from "@/core/lib/supabase-service";
+import { createAnonSupabase } from "@/core/lib/supabase-anon";
 import { valideerContact } from "@/core/lib/contact-validatie";
 import { verstuurContactNotificatie } from "@/core/lib/email";
 import { badRequest, errorResponse, rateLimited } from "@/core/lib/api-errors";
@@ -30,8 +30,9 @@ const LABEL = "contact.POST";
 // server-side bij elke inzending meegeslagen (FO §10 / REQ-PV-040).
 const PRIVACY_VERSION = "2026-06-29";
 
-// Rate-limit: max N opgeslagen inzendingen per ip_hash binnen het venster.
-const RL_LIMIET = 3;
+// Rate-limit-venster voor de Retry-After bij een 429. De AUTORITATIEVE limiet
+// (max 3 / 10 min) is sinds D1 in de RPC contact_aanvraag_insert belegd; dit
+// venster spiegelt het RPC-interval alleen voor de reset-hint naar de client.
 const RL_VENSTER_MS = 10 * 60 * 1000;
 
 const HERKOMST_MAX = 255;
@@ -103,26 +104,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    const service = createServiceSupabase();
-
-    // 4. Rate-limit op ip_hash (eigen telling; lib/rate-limit.ts is auth-only en
-    //    hier niet bruikbaar). Geen ip_hash (geen salt/IP) → fail-open.
+    // D1: GEEN service-role meer. Insert + rate-limit + notificatie-status lopen
+    // via SECURITY DEFINER-RPC's met de anon-key (contact_aanvragen blijft
+    // deny-by-default). De rate-limit is nu in contact_aanvraag_insert belegd;
+    // hier alleen nog de ip_hash-berekening (fail-open zonder salt/IP).
+    const db = createAnonSupabase();
     const ipHash = berekenIpHash(req);
-    if (ipHash) {
-      const sinds = new Date(Date.now() - RL_VENSTER_MS).toISOString();
-      const { count, error: telFout } = await service
-        .from("contact_aanvragen")
-        .select("id", { count: "exact", head: true })
-        .eq("ip_hash", ipHash)
-        .gte("aangemaakt_op", sinds);
-      if (telFout) {
-        // Fail-open: een telstoring mag het formulier niet platleggen.
-        console.error(`[${LABEL}] rate-limit telling mislukt — fail-open`, telFout);
-      } else if ((count ?? 0) >= RL_LIMIET) {
-        const reset = new Date(Date.now() + RL_VENSTER_MS);
-        return rateLimited(LABEL, reset);
-      }
-    }
 
     // 5. Server-side validatie (autoritatief). Generieke 400 naar buiten.
     const resultaat = valideerContact({
@@ -158,27 +145,44 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 6. Insert via service-role. Bron-van-waarheid; gebruiker krijgt succes
-    //    zodra dit lukt (mail volgt soft-fail).
-    const { data: rij, error: insertFout } = await service
-      .from("contact_aanvragen")
-      .insert({
-        naam: schoon.naam,
-        organisatie: schoon.organisatie,
-        rol: schoon.rol,
-        email: schoon.email,
-        telefoon: schoon.telefoon,
-        type_verzoek: schoon.type_verzoek,
-        bericht: schoon.bericht,
-        herkomst_pagina: herkomst,
-        privacy_version: PRIVACY_VERSION,
-        ip_hash: ipHash,
-      })
-      .select("id, aangemaakt_op")
-      .single();
+    // 6. Insert via de anon-RPC (bron-van-waarheid). De RPC toetst intern de
+    //    rate-limit (status 'rate_limited') en insert anders. Rate-limit valt nu
+    //    dus ná validatie i.p.v. ervoor — functioneel gelijk (een over-limiet
+    //    geldige inzending krijgt nog steeds 429).
+    const { data: rpcRijen, error: insertFout } = await db.rpc(
+      "contact_aanvraag_insert",
+      {
+        p_naam: schoon.naam,
+        p_organisatie: schoon.organisatie,
+        p_rol: schoon.rol,
+        p_email: schoon.email,
+        p_telefoon: schoon.telefoon,
+        p_type_verzoek: schoon.type_verzoek,
+        p_bericht: schoon.bericht,
+        p_herkomst_pagina: herkomst,
+        p_privacy_version: PRIVACY_VERSION,
+        p_ip_hash: ipHash,
+      }
+    );
+
+    // De RPC geeft een tabel (0/1 rij) terug: { id, aangemaakt_op, status }.
+    const rij = (Array.isArray(rpcRijen) ? rpcRijen[0] : rpcRijen) as
+      | { id: string | null; aangemaakt_op: string | null; status: string }
+      | undefined;
 
     if (insertFout || !rij) {
       return errorResponse(LABEL, insertFout, {
+        userMessage:
+          "Het verzoek kon niet worden opgeslagen. Probeer het later opnieuw.",
+      });
+    }
+
+    // Rate-limit-uitkomst uit de RPC → 429 met reset-hint.
+    if (rij.status === "rate_limited") {
+      return rateLimited(LABEL, new Date(Date.now() + RL_VENSTER_MS));
+    }
+    if (!rij.id) {
+      return errorResponse(LABEL, null, {
         userMessage:
           "Het verzoek kon niet worden opgeslagen. Probeer het later opnieuw.",
       });
@@ -200,18 +204,20 @@ export async function POST(req: NextRequest) {
 
     if (!mail.ok) {
       console.error(`[${LABEL}] notificatie soft-fail:`, mail.error);
-      const { error: updateFout } = await service
-        .from("contact_aanvragen")
-        .update({ notificatie_verzonden: false, mail_error: mail.error })
-        .eq("id", rij.id);
+      const { error: updateFout } = await db.rpc("contact_notificatie_status", {
+        p_id: rij.id,
+        p_verzonden: false,
+        p_error: mail.error ?? null,
+      });
       if (updateFout) {
         console.error(`[${LABEL}] kon mail_error niet wegschrijven`, updateFout);
       }
     } else {
-      await service
-        .from("contact_aanvragen")
-        .update({ notificatie_verzonden: true })
-        .eq("id", rij.id);
+      await db.rpc("contact_notificatie_status", {
+        p_id: rij.id,
+        p_verzonden: true,
+        p_error: null,
+      });
     }
 
     // 8. Succes — minimale payload. Mailstatus lekt niet naar de gebruiker:

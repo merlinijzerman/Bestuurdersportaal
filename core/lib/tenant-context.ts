@@ -12,18 +12,19 @@
 // ============================================================================
 
 import "server-only";
-import { haalActieveTenantDomains } from "@/core/lib/tenant-domains";
+import { haalTenantDomainVoorHost } from "@/core/lib/tenant-domains";
 import { bepaalFondsContext, type FondsResolutie } from "@/core/lib/tenant-host";
 import { beoordeelToegang, type ToegangsOordeel } from "@/core/lib/tenant-enforce";
 
 /** Resolveert de fondscontext voor een request-host. `host` levert de caller aan
  *  uit de server-context (bv. `(await headers()).get("host")`). Fail-closed:
- *  onbekende/lege/inactieve host → `{ onbekend }`. */
+ *  onbekende/lege/inactieve host → `{ onbekend }`. D1: de host-resolutie loopt
+ *  via de anon-RPC (0/1 rij); bepaalFondsContext blijft de pure beslislaag. */
 export async function haalFondsContext(
   host: string | null | undefined
 ): Promise<FondsResolutie> {
-  const domains = await haalActieveTenantDomains();
-  return bepaalFondsContext({ host, domains });
+  const rij = await haalTenantDomainVoorHost(host);
+  return bepaalFondsContext({ host, domains: rij ? [rij] : [] });
 }
 
 /** Env-schakelaar (besluit 0042): fail-closed afdwinging staat alleen aan bij
