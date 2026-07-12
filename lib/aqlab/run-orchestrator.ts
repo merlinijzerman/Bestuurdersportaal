@@ -734,6 +734,13 @@ export interface AdHocConsistentieConfig {
   rol?: string | null;
   fixtureIds?: string[];
   model_configuration_id?: string | null;
+  /**
+   * Inline (niet-gepersisteerde) modelconfig. Wint van model_configuration_id.
+   * Gebruikt door de synchrone ad-hoc-test (AQL-6.1): de allowlist-modelkeuze wordt
+   * meegegeven zonder een aqlab_model_configurations-rij te pinnen, zodat een
+   * ad-hoc-test bij persist_mode = none écht niets persistent achterlaat.
+   */
+  modelConfig?: AdapterModelConfig;
   prompt_version_id?: string | null;
   iteraties: number;
   persist_mode: PersistMode;
@@ -773,7 +780,7 @@ export async function draaiAdHocConsistentieSync(
   const spec: TestcaseSpec = {};
   const criteria: string[] = [];
 
-  const modelConfig = await laadModelConfig(svc, config.model_configuration_id);
+  const modelConfig = config.modelConfig ?? await laadModelConfig(svc, config.model_configuration_id);
   const fixtures = await laadFixtures(svc, config.fixtureIds ?? []);
 
   const metingen: IteratieMeting[] = [];

@@ -31,6 +31,7 @@ import {
   type GewijzigdeAs,
 } from "@/lib/aqlab/modellen";
 import { configHash } from "@/lib/aqlab/modellen-hash";
+import type { AdapterModelConfig } from "@/lib/aqlab/generate-adapter";
 import { promoveerAdHocNaarTestcase, valideerPromotie, type PromotieConfig } from "@/lib/aqlab/promotie";
 import { legVrijgavebesluitVast, valideerVrijgaveMogelijk, type Besluit, type Releasestatus } from "@/lib/aqlab/release";
 import { genereerAuditExport, verifieerAuditExport } from "@/lib/aqlab/audit-export";
@@ -222,6 +223,96 @@ export async function startRunActie(formData: FormData): Promise<void> {
 
   revalidatePath(LIJST_PAD);
   redirect(`${LIJST_PAD}/runs/${run_id}`);
+}
+
+/**
+ * Scherm 3 (AQL-6.1) — geconsolideerde ad-hoc-test vanuit het samenstel-formulier.
+ * Draait SYNCHROON en FORCEERT persist_mode = none (niet-persistent, niet instelbaar):
+ * de gebeurtenis wordt append-only gelogd, de inhoud (vraag/antwoord) NIET.
+ * De challenger-modelkeuze wordt inline meegegeven (geen aqlab_model_configurations-
+ * rij gepind), zodat een ad-hoc-test écht niets persistent achterlaat.
+ */
+export async function adHocTestActie(
+  _prev: AdHocConsistentieResultaat | { fout: string } | null,
+  formData: FormData
+): Promise<AdHocConsistentieResultaat | { fout: string } | null> {
+  const vraag = leeg(formData.get("ad_hoc_question"));
+  if (!vraag) return { fout: "Vul een ad-hoc vraag in." };
+
+  const challengerModel = leeg(formData.get("challenger_model"));
+  if (challengerModel && !isToegestaanModel(challengerModel)) {
+    return { fout: `Model niet toegestaan: ${challengerModel}` };
+  }
+  const model = challengerModel ?? KERN_BASELINE.model_name;
+
+  const iterRaw = leeg(formData.get("iteraties"));
+  const iteraties = iterRaw ? Number(iterRaw) : 3;
+
+  // Challenger-instellingen — exact dezelfde NaN-veilige/redeneermodel-logica als
+  // startRunActie, zodat de effectieve waarden nooit uiteenlopen (§2B).
+  const kern = toegestaanModel(model)!;
+  const redeneermodel = isRedeneermodel(model);
+  const maxTokensRaw = leeg(formData.get("max_tokens"));
+  const maxNum = maxTokensRaw ? Number(maxTokensRaw) : NaN;
+  const maxTokens = Number.isFinite(maxNum) && maxNum > 0 ? maxNum : kern.defaultMaxTokens;
+  const reasoningEffortRaw = leeg(formData.get("reasoning_effort"));
+  const effort =
+    redeneermodel && reasoningEffortRaw && reasoningEffortRaw !== "default"
+      ? (REASONING_EFFORTS as string[]).includes(reasoningEffortRaw)
+        ? (reasoningEffortRaw as ReasoningEffort)
+        : null
+      : null;
+  const tempMode = leeg(formData.get("temp_mode"));
+  const tempNum = tempMode && tempMode !== "default" ? Number(tempMode) : NaN;
+  const temperature = !redeneermodel && Number.isFinite(tempNum) ? tempNum : null;
+  const topPRaw = leeg(formData.get("top_p"));
+  const topNum = topPRaw ? Number(topPRaw) : NaN;
+  const topP = !redeneermodel && Number.isFinite(topNum) && topNum >= 0 && topNum <= 1 ? topNum : null;
+
+  const modelConfig: AdapterModelConfig = {
+    model,
+    provider: providerVanModel(model),
+    redeneermodel,
+    reasoningEffort: effort,
+    maxTokens,
+    temperature,
+    topP,
+    retrievalSettings: {},
+  };
+
+  try {
+    return await withPlatform(
+      { capability: CAP_OPERATE, handeling: "platform.aqlab.adhoc.test", doelObject: "aqlab:ad_hoc" },
+      async (svc, ctx) => {
+        const r = await draaiAdHocConsistentieSync(svc, {
+          vraag,
+          rol: null,
+          fixtureIds: [],
+          modelConfig,
+          iteraties,
+          persist_mode: "none", // geforceerd: ad-hoc bewaart nooit
+          gestart_door: null,
+          notitie: `Ad-hoc test (niet bewaard) door ${ctx.identiteit.naam}`,
+        });
+        // Append-only gebeurtenislog — WEL het feit, GEEN inhoud (persist_mode none).
+        const { error: logErr } = await svc.from("aqlab_log").insert({
+          actie: "adhoc_test_niet_bewaard",
+          object_type: "aqlab_runs",
+          object_id: null,
+          nieuwe_waarde: {
+            model,
+            iteraties: r.iteraties.length,
+            consistency_status: r.aggregaat.consistency_status,
+            persist_mode: "none",
+          },
+        });
+        if (logErr) throw new Error(`aqlab_log (adhoc_test_niet_bewaard): ${logErr.message}`);
+        return { resultaat: r, effect: { persisted: r.persisted, consistency_status: r.aggregaat.consistency_status } };
+      }
+    );
+  } catch (e) {
+    return { fout: e instanceof Error ? e.message : String(e) };
+  }
 }
 
 /** Scherm 6b — synchrone ad-hoc consistentietest (respecteert persist_mode; bij none niets persistent). */

@@ -65,25 +65,18 @@ export default async function AqlabConsole() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-serif text-2xl font-bold">AI Quality Lab</h1>
-        <p className="mt-1 text-sm text-ink/70">
-          Draait de <strong>exact dezelfde generatie-/retrievalkern als productie</strong> op de
-          synthetische golden set en scoort elke output. Scores ondersteunen kwaliteitsborging;
-          zij vormen geen juridische garantie en vervangen geen menselijke verantwoordelijkheid.
-        </p>
-      </div>
-
-      {/* Snelkoppelingen (scherm 6b ad-hoc consistentietest + scherm 5a promotie) */}
-      <div className="flex flex-wrap gap-3">
-        <Link href="/platform/aqlab/adhoc" className="rounded-lg border border-line bg-white px-3 py-2 text-sm hover:bg-app-bg">
-          Ad-hoc consistentietest →
-        </Link>
-        <Link href="/platform/aqlab/promoveren" className="rounded-lg border border-line bg-white px-3 py-2 text-sm hover:bg-app-bg">
-          Ad-hoc vraag opslaan als testcase →
-        </Link>
-        <Link href="/platform/aqlab/dashboard" className="rounded-lg border border-line bg-white px-3 py-2 text-sm hover:bg-app-bg">
-          Kwaliteit per feature (scherm 7) →
+      <div className="flex items-baseline justify-between gap-4">
+        <div>
+          <h1 className="font-serif text-2xl font-bold">AI Quality Lab</h1>
+          <p className="mt-1 text-sm text-ink/70">
+            Draait de <strong>exact dezelfde generatie-/retrievalkern als productie</strong> op de
+            synthetische golden set en scoort elke output. Scores ondersteunen kwaliteitsborging;
+            zij vormen geen juridische garantie en vervangen geen menselijke verantwoordelijkheid.
+          </p>
+        </div>
+        {/* Rustige nav-link naar het feature-dashboard (scherm 7) — geen samenstel-knop. */}
+        <Link href="/platform/aqlab/dashboard" className="whitespace-nowrap text-sm text-accent hover:underline">
+          Kwaliteit per feature →
         </Link>
       </div>
 

@@ -10,8 +10,10 @@
 //  uitsluitend in de frontend.
 // ============================================================================
 
-import { useState } from "react";
-import { startRunActie } from "./acties";
+import { useActionState, useState } from "react";
+import { startRunActie, adHocTestActie } from "./acties";
+import ConsistentieBlok, { type IteratieView } from "./runs/[runId]/consistentie-blok";
+import type { AdHocConsistentieResultaat } from "@/lib/aqlab/run-orchestrator";
 import {
   autoNaam,
   leidGewijzigdeAsAf,
@@ -84,6 +86,18 @@ function kort(id: string): string {
   return id.slice(0, 8);
 }
 
+type AdHocState = AdHocConsistentieResultaat | { fout: string } | null;
+
+function bronLabels(bronnen: unknown): string[] {
+  if (!Array.isArray(bronnen)) return [];
+  return bronnen
+    .map((b) => {
+      const o = (b ?? {}) as Record<string, unknown>;
+      return String(o.bron ?? o.titel ?? o.document_id ?? o.nummer ?? "");
+    })
+    .filter((s) => s.length > 0);
+}
+
 export default function RunSamenstellenForm({
   testsets,
   testsetTellingen,
@@ -110,6 +124,22 @@ export default function RunSamenstellenForm({
   const [reasoningEffort, setReasoningEffort] = useState<string>("default");
   const [adHocVraag, setAdHocVraag] = useState<string>("");
   const [soort, setSoort] = useState<string>("functioneel");
+  const [persistMode, setPersistMode] = useState<string>("full_synthetic");
+
+  // Ad-hoc draait SYNCHROON (niet in de wachtrij) en toont het resultaat inline;
+  // persist_mode is server-side geforceerd op none (AQL-6.1).
+  const [adhocState, adhocFormAction, adhocPending] = useActionState<AdHocState, FormData>(adHocTestActie, null);
+  const adhocResultaat = adhocState && !("fout" in adhocState) ? adhocState : null;
+  const adhocFout = adhocState && "fout" in adhocState ? adhocState.fout : null;
+  const adhocIteraties: IteratieView[] = (adhocResultaat?.iteraties ?? []).map((it) => ({
+    iteratie: it.iteratie,
+    antwoord: it.antwoord,
+    quality_score: it.quality_score,
+    gate_status: it.gate_status,
+    latency_ms: it.latency_ms,
+    tokengebruik: it.tokengebruik,
+    bronnen: bronLabels(it.bronnen),
+  }));
 
   const gekozenModel = allowlist.find((m) => m.model_name === challengerModel) ?? productiekern;
   // Reasoning-modellen (o-serie/GPT-5): sampling vergrendeld → toon reasoning-effort
@@ -207,7 +237,7 @@ export default function RunSamenstellenForm({
         </div>
       )}
 
-      <form action={startRunActie} className="mt-3 space-y-5">
+      <form action={toonAdHoc ? adhocFormAction : startRunActie} className="mt-3 space-y-5">
         {/* Run-naam */}
         <label className="block text-sm">
           <span className="mb-1 block text-ink/70">Naam / label voor deze run <span className="text-ink/40">(optioneel — om 'm later makkelijk terug te vinden)</span></span>
@@ -244,16 +274,26 @@ export default function RunSamenstellenForm({
           </div>
         </fieldset>
 
-        {/* Stap 2 — baseline → challenger (alleen bij regressie/subset) */}
-        {toonVergelijking && (
-          <fieldset>
-            <legend className="mb-1 text-sm text-ink/70">2 · Wat vergelijk je? (baseline → challenger)</legend>
+        {/* Stap 2 — model/variant. Bij regressie/subset: baseline → challenger.
+            Bij ad-hoc: alleen de modelkeuze (geen vergelijking) — de stap blijft
+            zichtbaar zodat de nummering 1-2-3 nooit overslaat (AQL-6.1). */}
+        <fieldset>
+            <legend className="mb-1 text-sm text-ink/70">
+              {toonAdHoc ? (
+                <>2 · Welk model gebruik je? <span className="text-ink/40">(voor de ad-hoc vraag — geen vergelijking)</span></>
+              ) : (
+                "2 · Wat vergelijk je? (baseline → challenger)"
+              )}
+            </legend>
             <p className="mb-2 text-xs text-ink/50">
-              Links draait nu live (baseline), rechts zet je een variant ertegenaf (challenger). De gewijzigde as
-              leidt het Lab automatisch af.
+              {toonAdHoc
+                ? "Kies het model/de variant waarmee je de ad-hoc vraag laat beantwoorden. Een ad-hoc run levert geen formeel advies."
+                : "Links draait nu live (baseline), rechts zet je een variant ertegenaf (challenger). De gewijzigde as leidt het Lab automatisch af."}
             </p>
-            <div className="grid gap-3 lg:grid-cols-[1fr_auto_1fr] lg:items-stretch">
-              {/* Baseline (read-only) */}
+            <div className={toonAdHoc ? "grid gap-3" : "grid gap-3 lg:grid-cols-[1fr_auto_1fr] lg:items-stretch"}>
+              {/* Baseline (read-only) + pijl — alleen bij vergelijking */}
+              {!toonAdHoc && (
+              <>
               <div className="rounded-lg border border-line bg-app-bg p-3">
                 <div className="text-xs font-semibold uppercase text-ink/50">● Huidig — productie (baseline)</div>
                 <div className="mt-1 font-mono text-sm">{baselineVariant.model}</div>
@@ -269,10 +309,14 @@ export default function RunSamenstellenForm({
               </div>
 
               <div className="hidden items-center justify-center text-2xl text-ink/40 lg:flex">→</div>
+              </>
+              )}
 
-              {/* Challenger */}
+              {/* Challenger (bij ad-hoc: het model voor de ad-hoc vraag) */}
               <div className="rounded-lg border border-accent/40 p-3">
-                <div className="text-xs font-semibold uppercase text-accent">◆ Nieuw — wat je test (challenger)</div>
+                <div className="text-xs font-semibold uppercase text-accent">
+                  {toonAdHoc ? "◆ Model voor de ad-hoc vraag" : "◆ Nieuw — wat je test (challenger)"}
+                </div>
                 <label className="mt-2 block text-sm">
                   <span className="mb-1 block text-ink/70">Kies het model / de variant</span>
                   <select
@@ -412,26 +456,30 @@ export default function RunSamenstellenForm({
                   </>
                 )}
 
-                <div className="mt-2 text-xs text-ink/60">
-                  Gewijzigde as t.o.v. baseline:{" "}
-                  <span className="font-medium">
-                    {gekozenModel.provider !== "anthropic" && afgeleideAs !== "geen"
-                      ? "provider + model"
-                      : AS_LABEL[afgeleideAs]}
-                  </span>{" "}
-                  <span className="text-ink/40">(automatisch afgeleid)</span>
-                </div>
-                {afgeleideAs === "geen" && (
-                  <div className="mt-1 text-xs text-ink/50">Identiek aan de baseline — er valt niets te vergelijken.</div>
+                {/* Gewijzigde as + "gepind als" — alleen bij een vergelijking (regressie/subset). */}
+                {!toonAdHoc && (
+                  <>
+                    <div className="mt-2 text-xs text-ink/60">
+                      Gewijzigde as t.o.v. baseline:{" "}
+                      <span className="font-medium">
+                        {gekozenModel.provider !== "anthropic" && afgeleideAs !== "geen"
+                          ? "provider + model"
+                          : AS_LABEL[afgeleideAs]}
+                      </span>{" "}
+                      <span className="text-ink/40">(automatisch afgeleid)</span>
+                    </div>
+                    {afgeleideAs === "geen" && (
+                      <div className="mt-1 text-xs text-ink/50">Identiek aan de baseline — er valt niets te vergelijken.</div>
+                    )}
+                    {afgeleideAs === "meerdere" && (
+                      <div className="mt-1 text-xs text-warn-ink">Meerdere assen tegelijk gewijzigd — een verschil is straks niet zuiver aan één oorzaak toe te schrijven. Wijzig bij voorkeur één as per run.</div>
+                    )}
+                    <div className="mt-1 text-xs text-ink/50">Wordt gepind als: <span className="font-mono">{autoNaam(challengerVariant)}</span></div>
+                  </>
                 )}
-                {afgeleideAs === "meerdere" && (
-                  <div className="mt-1 text-xs text-warn-ink">Meerdere assen tegelijk gewijzigd — een verschil is straks niet zuiver aan één oorzaak toe te schrijven. Wijzig bij voorkeur één as per run.</div>
-                )}
-                <div className="mt-1 text-xs text-ink/50">Wordt gepind als: <span className="font-mono">{autoNaam(challengerVariant)}</span></div>
               </div>
             </div>
           </fieldset>
-        )}
 
         {/* Stap 3 — waarop draait de run (progressive disclosure) */}
         <fieldset>
@@ -495,17 +543,21 @@ export default function RunSamenstellenForm({
             </label>
           )}
 
-          {/* Consistentie (subset/ad-hoc) */}
+          {/* Consistentie. Bij subset: opt-in met checkbox. Bij ad-hoc draait de
+              synchrone motor altijd N iteraties + berekent consistentie — dus geen
+              (misleidende) checkbox, alleen het aantal herhalingen. */}
           {(runType === "subset" || runType === "ad_hoc") && (
             <div className="mt-3 flex flex-wrap items-center gap-4 text-sm">
+              {!toonAdHoc && (
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" name="consistency_enabled" className="rounded border-line" />
+                  <span className="text-ink/70">Consistentie meten</span>
+                </label>
+              )}
               <label className="flex items-center gap-2">
-                <input type="checkbox" name="consistency_enabled" className="rounded border-line" />
-                <span className="text-ink/70">Consistentie meten</span>
-              </label>
-              <label className="flex items-center gap-2">
-                <span className="text-ink/70">Iteraties</span>
+                <span className="text-ink/70">{toonAdHoc ? "Herhalingen (consistentie)" : "Iteraties"}</span>
                 <select name="iteraties" className="rounded-lg border border-line bg-white px-2 py-1 text-sm">
-                  <option value="">testcase-default</option>
+                  {!toonAdHoc && <option value="">testcase-default</option>}
                   <option value="3">3 (normaal)</option>
                   <option value="5">5 (governance-kritiek/safety)</option>
                 </select>
@@ -532,11 +584,20 @@ export default function RunSamenstellenForm({
             </label>
             <label className="text-sm">
               <span className="mb-1 block text-ink/70">Persist-modus</span>
-              <select name="persist_mode" className="w-full rounded-lg border border-line bg-white px-3 py-2 text-sm">
+              <select
+                name="persist_mode"
+                disabled={toonAdHoc}
+                value={toonAdHoc ? "none" : persistMode}
+                onChange={(e) => setPersistMode(e.target.value)}
+                className="w-full rounded-lg border border-line bg-white px-3 py-2 text-sm disabled:opacity-60"
+              >
                 <option value="full_synthetic">full_synthetic (alles bewaren — synthetisch)</option>
                 <option value="metadata_only">metadata_only (alleen scores/status)</option>
                 <option value="none">none (niets persistent)</option>
               </select>
+              {toonAdHoc && (
+                <span className="mt-1 block text-xs text-ink/50">Vast op &apos;niets bewaren&apos; bij ad-hoc — de test wordt niet opgeslagen.</span>
+              )}
             </label>
           </div>
         </details>
@@ -561,17 +622,31 @@ export default function RunSamenstellenForm({
         <div>
           <button
             type="submit"
-            disabled={geblokkeerd}
+            disabled={geblokkeerd || (toonAdHoc && adhocPending)}
             className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            Run in de wachtrij zetten
+            {toonAdHoc ? (adhocPending ? "Ad-hoc testen…" : "Ad-hoc testen (niet bewaard)") : "Run in de wachtrij zetten"}
           </button>
           <p className="mt-2 text-xs text-ink/50">
-            De run wordt asynchroon verwerkt door de achtergrond-worker (cron). Ververs deze pagina voor de voortgang.
-            Voor een <strong>directe</strong> ad-hoc consistentietest (incl. persist_mode none): gebruik de knop bovenaan.
+            {toonAdHoc
+              ? "Wordt direct getest en niet opgeslagen (persist_mode none). Het resultaat verschijnt hieronder — puur verkennend, telt niet mee voor de formele regressiescore."
+              : "De run wordt asynchroon verwerkt door de achtergrond-worker (cron). Ververs deze pagina voor de voortgang."}
           </p>
         </div>
       </form>
+
+      {/* Ad-hoc: synchroon resultaat inline (niet-persistent). */}
+      {toonAdHoc && adhocFout && (
+        <p className="mt-4 text-sm text-err-ink">Fout: {adhocFout}</p>
+      )}
+      {toonAdHoc && adhocResultaat && (
+        <div className="mt-5 space-y-4">
+          <p className="rounded-lg border border-line bg-app-bg p-3 text-xs text-ink/70">
+            Niet persistent opgeslagen (persist_mode none) — dit resultaat verdwijnt bij verversen.
+          </p>
+          <ConsistentieBlok titel="ad-hoc vraag" aggregaat={adhocResultaat.aggregaat} iteraties={adhocIteraties} />
+        </div>
+      )}
     </section>
   );
 }

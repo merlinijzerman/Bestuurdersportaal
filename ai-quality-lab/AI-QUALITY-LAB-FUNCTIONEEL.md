@@ -1,6 +1,6 @@
 # AI Output Quality & Governance Lab — Functioneel ontwerp
 
-> **Status**: **AS-BUILT** t/m AQL-5 (AQL-1..4 gebouwd + gereleased 2026-07-10; AQL-5 console-UX 2026-07-11, besluit 0062). Schermen 1–9 geïmplementeerd; scherm 9 (assurance-view) op `/governance/assurance`, scherm 7/8 in de platform-console; scherm 3/4/6 herzien in AQL-5 (zie as-built-noten hieronder).
+> **Status**: **AS-BUILT** t/m AQL-6 (AQL-1..4 gebouwd + gereleased 2026-07-10; AQL-5 console-UX 2026-07-11, besluit 0062; **AQL-6 multi-provider generatie + reasoning-modellen 2026-07-12, besluit 0064** — provider-labeling in scherm 3). Schermen 1–9 geïmplementeerd; scherm 9 (assurance-view) op `/governance/assurance`, scherm 7/8 in de platform-console; scherm 3/4/6 herzien in AQL-5 (zie as-built-noten hieronder).
 > **Datum**: 2026-07-10
 > **AS-BUILT-noot (AQL-4):** capabilities heten `platform.aqlab.operate` / `.review` / `.govern` (het formele vrijgavebesluit = `platform.aqlab.govern`, Governance Owner). Statustaal-labels ("Vrijgegeven voor gebruik" enz.) leven in `lib/aqlab/assurance-teksten.ts`; de positieve "wat betekent dit wél"-uitleg verschijnt alleen bij een vrijgegeven feature (geen schijnzekerheid). Fonds-download van het auditrapport bevat conform scherm 8 volledige findings + reviewers (besluit 0061); ruwe output/`fragment` uitgesloten.
 > **Samenhang**: leest na [`AI-QUALITY-LAB-ARCHITECTUUR.md`](./AI-QUALITY-LAB-ARCHITECTUUR.md); voedt [`AI-QUALITY-LAB-TECHNISCH.md`](./AI-QUALITY-LAB-TECHNISCH.md); eerste golden set in [`AI-QUALITY-LAB-REGRESSIESET-v0.4.md`](./AI-QUALITY-LAB-REGRESSIESET-v0.4.md).
@@ -85,7 +85,7 @@ De 10 voorbeeldtestcases in §10 zijn illustratief; de volledige, gestructureerd
 | --- | --- | --- | --- |
 | **Volledige regressierun** (`full_regression`) | De volledige golden set (alle relevante testcases + security/safety-set) | **Formele releasecontrole** — kan formeel releaseadvies geven | Volledig regressierapport + releaseadvies (accepteren/aanpassen/blokkeren), baseline vs challenger verplicht |
 | **Subset-run** (`subset`) | Een geselecteerde deelverzameling (feature, categorie, kritikaliteit, security/safety, vorige-run-falers, review-verplicht, handmatig) | **Indicatief** — telt niet automatisch als formele vrijgave | Regressie-indicatie op de subset; releaseadvies alleen indicatief, tenzij governance de subset expliciet voldoende acht |
-| **Ad-hoc testvraag** (`ad_hoc`) | Eén door de gebruiker geformuleerde vraag tegen een gekozen variant | **Geen formele waarde** — test-/debugresultaat | Volledige output + checks/judge; **geen** formeel releaseadvies; kan worden opgeslagen als officiële testcase |
+| **Ad-hoc testvraag** (`ad_hoc`) | Eén door de gebruiker geformuleerde vraag tegen een gekozen variant | **Geen formele waarde** — test-/debugresultaat | Volledige output + checks/judge; **geen** formeel releaseadvies; ~~kan worden opgeslagen als officiële testcase~~ *(promotie sinds AQL-6.1 niet in de UI — zie AS-BUILT-noot bij scherm 3)* |
 
 **Ontwerpregel (governance).** Een subset-run en een ad-hoc testvraag helpen bij ontwikkeling, debugging en tussentijdse validatie, maar een **formele vrijgave vereist in principe een volledige regressierun** — of een expliciet gemotiveerde governancebeslissing die vastlegt waarom een subset in dit geval volstaat. Een ad-hoc testvraag telt standaard **niet** mee voor de formele regressiescore en leidt nooit automatisch tot releaseadvies.
 
@@ -144,6 +144,8 @@ Schermen 1–8 leven in de **platform-console**; scherm 9 (assurance-view) is he
 
 **Gemeenschappelijke velden (alle modi)**: promptversie · system-promptversie · model · temperature · max tokens · retrieval-/chunking-instellingen · guardrails/answer-template · **rol (baseline/challenger)** · baseline-run (voor vergelijking) · aantal runs per testcase (herhaling; default conform evalprotocol, §7) · kostenplafond.
 
+> **[AS-BUILT — AQL-6, besluit [0064]] — provider-labeling in scherm 3.** De challenger-modelkeuze is **gegroepeerd per provider** (`<optgroup>` Anthropic / OpenAI / Mistral) met een **provider-badge**; kiest de gebruiker een niet-Anthropic model, dan verschijnt de expliciete waarschuwing **"ander provider dan productie"** (productie draait op Claude → de gewijzigde as is **provider + model**, signaal minder zuiver toewijsbaar). Voor **reasoning-modellen** (GPT-5-serie) verbergt het formulier de temperature/top-p-knoppen — die zijn bij de provider vergrendeld — en toont in plaats daarvan een **reasoning-effort-keuze** (minimal/low/medium/high) plus een notitie over de verborgen reasoning-tokens (zet "max completion tokens" ruim). **Baseline blijft Claude; judge blijft Claude-opus.** Externe providers draaien uitsluitend op de synthetische golden set (geen echte fondsdata); de eerste live externe call staat achter de governance-poort (FG/DPO-akkoord + keys). Zie Technisch §2.5 as-built-noot.
+
 **Modus 1 — Volledige regressieset draaien** (`full_regression`)
 - Draait de volledige golden set voor de gekozen feature(s) inclusief de security/safety-set.
 - Baseline vs challenger **verplicht**; kan formeel releaseadvies opleveren.
@@ -162,12 +164,16 @@ Schermen 1–8 leven in de **platform-console**; scherm 9 (assurance-view) is he
 - Toont bovenaan een vaste melding: *"Deze test telt niet mee voor de formele regressiescore, tenzij je deze opslaat als officiële testcase."*
 - Actie na afloop: **"Opslaan als testcase"** (§scherm 5a).
 
+> **[AS-BUILT — AQL-6.1] — geconsolideerde ad-hoc.** Modus 3 is opgegaan in scherm 3 (run-type `ad_hoc`) en draait **synchroon + niet-persistent** (`persist_mode` geforceerd op `none`, niet instelbaar). Vervallen t.o.v. deze ontwerpversie: **baseline/challenger-vergelijking** (geen "gewijzigde as" bij ad-hoc) en de **broncontext/fixture-selectie** (de geconsolideerde ad-hoc draait op de default broncontext). De actie **"Opslaan als testcase"** is **niet meer in de UI** (§scherm 5a, geparkeerd). Zie de AS-BUILT-noot bij scherm 3.
+
 **Acties**: modus kiezen · variant selecteren of nieuwe variant vastleggen · (modus 2) subset-filters/handmatige selectie · (modus 3) eigen vraag + fixtures kiezen · baseline kiezen · "dry run" (1 testcase) · run starten · security/safety-set apart draaien.
 **Validaties**: variant volledig gepind (geen impliciete defaults — temp expliciet, model exact; effectieve instellingen worden vastgelegd, Technisch §2B); regressie → baseline verplicht en vergelijkbaar (**zelfde testset én dezelfde subset**); **MVP: max. één challenger tegen één baseline**; kostenplafond > 0; een subset zonder de blocking-set kan niet tot advies "accepteren" leiden; ad-hoc levert nooit automatisch releaseadvies.
 **Autorisatie**: `platform.aqlab.operate`.
 **UX**: toon een **diff** van de challenger t.o.v. baseline vóór starten; waarschuw bij verandering van méér dan één as tegelijk (prompt én model) — regressiesignaal dan niet toewijsbaar; toon geschatte kosten/duur vooraf; label de run zichtbaar als **"Volledige regressierun" / "Subset-run" / "Ad-hoc testvraag"** vanaf het startmoment.
 
 > **[AS-BUILT — AQL-5, besluit [0062]].** Het scherm is herbouwd als **progressive-disclosure**-formulier: het run-type stuurt welke velden verschijnen (baseline→challenger + testset bij regressie/subset, ad-hoc-vraag bij ad_hoc, subset-selectie bij subset). Links de **read-only productie-baseline** (laatst vrijgegeven variant), rechts de **challenger** (allowlist-modelkeuze + optionele tokens/temperature/top_p). De **gewijzigde as wordt automatisch afgeleid** (niet meer handmatig). Expliciete temperature waarschuwt (wijkt af van productie, §2B). **Proactieve vereisten/blokkers** staan vóóraf zichtbaar en blokkeren de knop met reden (lege/lege-cases testset, ad-hoc zonder vraag; empty-state "nog geen testset geseed"); deze gating wordt **server-side her-gevalideerd**. Run krijgt een **naam** (scherm 6/runs-lijst). Scherm 4 (outputvergelijking) is nu **uitklapbaar per testcase** en scherm 6 toont de performance **baseline naast challenger**.
+
+> **[AS-BUILT — AQL-6.1] — console-UX nalevering (scherm 3).** Vier verfijningen die de schermen simpeler/eerlijker maken. **(1)** Stap 2 blijft bij **álle** run-types zichtbaar zodat de nummering nooit 1→3 overslaat; bij `ad_hoc` toont stap 2 **alleen de modelkeuze** ("Welk model gebruik je?") — geen baseline-kaart, geen "gewijzigde as". **(2)** De **ad-hoc testvraag is geconsolideerd in scherm 3**: run-type `ad_hoc` draait **synchroon** en **niet-persistent** (`persist_mode = none`, niet instelbaar, server-side geforceerd), toont het consistentie-resultaat **inline**, en heet **"Ad-hoc testen (niet bewaard)"**. De aparte route-ingang **Ad-hoc consistentietest** (scherm 6b als los scherm) is daarmee **vervallen** (redirect naar het Lab); de synchrone iteratie-/consistentiepresentatie zelf (§scherm 6b) blijft ongewijzigd. De ad-hoc **gebeurtenis** wordt append-only gelogd (geen inhoud). **(3)** De actie **"Ad-hoc vraag opslaan als testcase"** (§scherm 5a) is **uit de UI** (geparkeerd; logica blijft bestaan, alleen niet bereikbaar). **(4)** De losse **topknoppenrij** boven "Run samenstellen" is weg; **"Kwaliteit per feature"** (scherm 7) is nu een **rustige nav-link** rechtsboven in de header, geen samenstel-knop.
 
 ---
 
@@ -190,7 +196,7 @@ Schermen 1–8 leven in de **platform-console**; scherm 9 (assurance-view) is he
 - **Tokengebruik** — input/output-tokens per output.
 - **Kostenindicatie** — waar beschikbaar.
 
-**Acties**: variant als baseline markeren · verschil highlighten (tekst-diff) · doorklikken naar scorekaart · testcase markeren voor human review · (bij ad-hoc) "Opslaan als testcase".
+**Acties**: variant als baseline markeren · verschil highlighten (tekst-diff) · doorklikken naar scorekaart · testcase markeren voor human review · ~~(bij ad-hoc) "Opslaan als testcase"~~ *(sinds AQL-6.1 niet in de UI — zie §scherm 5a).*
 **Autorisatie**: `platform.aqlab.operate`/`platform.aqlab.review`. **Niet** beschikbaar in de fonds-assurance-view — ruwe output en prompts blijven binnen de platform-console (§5.7).
 **UX**: side-by-side met duidelijke markering van ontbrekende verplichte onderdelen en herkomstlabel-schendingen (vrije tekst als `[Bron]` = rood); tekst-diff zonder chart-lib; volledige outputs inklapbaar maar standaard volledig leesbaar.
 
@@ -201,7 +207,7 @@ Schermen 1–8 leven in de **platform-console**; scherm 9 (assurance-view) is he
 **Doel**: het volledige, herleidbare oordeel over één output.
 **Velden — per criterium (§4)**: **score** · **methode** (deterministisch / heuristisch / LLM-as-judge / mens) · **motivatie** · **bewijs** (geciteerde brontekst/regelverwijzing) · **beperking van de meting** · **human-review-mogelijkheid** (kan een mens dit criterium bevestigen/overrulen?) · **blokkadecriteria** (welke harde criteria op dit criterium van toepassing zijn en of ze geschonden zijn).
 **Velden — geheel**: gewogen totaalscore; pass/fail t.o.v. minimale acceptatiescore; blokkade-status; findings met ernst; human-review-status + reviewer + tijdstip; volledige herkomst: prompt(versie), model(config), snapshot(hash), effectieve modelinstellingen, tijdstip, wie de run startte; latency/tokens/kosten van de output.
-**Acties**: human review toevoegen (bevestig/overrule + motivatie) · finding aanmaken/sluiten · exporteren · (bij ad-hoc output) "Opslaan als testcase" (§scherm 5a).
+**Acties**: human review toevoegen (bevestig/overrule + motivatie) · finding aanmaken/sluiten · exporteren · ~~(bij ad-hoc output) "Opslaan als testcase" (§scherm 5a)~~ *(sinds AQL-6.1 niet in de UI — zie §scherm 5a).*
 **Validaties**: overrule vereist motivatie; kritieke finding blokkeert pass ongeacht totaalscore.
 **Autorisatie**: review = `platform.aqlab.review`; inzien = `platform.aqlab.operate`/`platform.aqlab.govern`.
 **UX**: maak zichtbaar wélke score van een mens komt en welke van de judge; toon judge-motivatie letterlijk; **nooit een "groen vinkje" zonder onderliggend bewijs** (geen schijnzekerheid); toon per criterium de meetbeperking (§4.3) en of menselijke review mogelijk/vereist is.
@@ -209,6 +215,8 @@ Schermen 1–8 leven in de **platform-console**; scherm 9 (assurance-view) is he
 ---
 
 ### Scherm 5a — Ad-hoc output opslaan als officiële testcase
+
+> **[AS-BUILT — AQL-6.1] — geparkeerd (uit de UI).** De promoveren-flow is **niet bereikbaar via de UI** om de schermen simpel te houden; de logica (`lib/aqlab/promotie.ts`), de server-action (`promoveerActie`) en de route `/aqlab/promoveren` **blijven bestaan** (niet verwijderd). Bovendien kan de geconsolideerde ad-hoc-test (scherm 3) door de geforceerde `persist_mode = none` geen persistente ad-hoc-run meer aanmaken om te promoveren. Onderstaand ontwerp beschrijft de geparkeerde flow.
 
 **Doel**: een waardevolle ad-hoc testvraag promoveren tot een reproduceerbare, formeel meetellende testcase.
 **Voorwaarden voor promotie** (alle vereist): de vraag wordt opgeslagen; broncontext/fixture is vastgelegd; verwachte outputvorm is vastgelegd; verplichte onderdelen zijn bepaald; blokkadecriteria zijn bepaald; minimale score is bepaald; reviewverplichting is bepaald.
@@ -286,6 +294,8 @@ Schermen 1–8 leven in de **platform-console**; scherm 9 (assurance-view) is he
 Daarnaast een **verschil-weergave** tussen de iteraties (tekst-diff), met markering van **verboden variatie** (ander cijfer/feit/bronkeuze/conclusie, wisselend safety-gedrag) in rood versus toegestane variatie (formulering/volgorde) neutraal.
 
 **Ad-hoc consistentietest**: de gebruiker ziet **alle** iteratie-antwoorden, de onderlinge verschillen en een berekende **`consistency_score`**. De resultaten tellen **niet** mee voor formele regressie, tenzij de vraag wordt opgeslagen als officiële testcase (§scherm 5a). Respecteert `persist_mode` (Technisch): bij `none` wordt niets persistent opgeslagen — alleen tonen.
+
+> **[AS-BUILT — AQL-6.1] — ingang verplaatst.** Dit consistentie-/iteratie-overzicht is inhoudelijk ongewijzigd, maar de **ad-hoc consistentietest is geen los scherm meer**: de aparte route redirect naar het Lab en de ad-hoc-ingang leeft nu in **scherm 3** (run-type `ad_hoc`, synchroon, resultaat inline). Bij de geconsolideerde ad-hoc is `persist_mode` **geforceerd op `none`** (niet meer instelbaar) en is er **geen fixture/broncontext-selectie** (default broncontext). "Opslaan als testcase" (§scherm 5a) is geparkeerd.
 
 **Autorisatie**: platform-console (`platform.aqlab.operate`/`platform.aqlab.review`). **Niet** in de fonds-assurance-view. **UX**: pure SVG/HTML; conclusie-badge met kleur; verboden-variatie altijd expliciet gemarkeerd.
 
