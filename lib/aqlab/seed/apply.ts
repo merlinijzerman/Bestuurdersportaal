@@ -140,7 +140,9 @@ export async function apply(seedAllowed: boolean, applyFlag: boolean): Promise<{
           review_verplicht: t.review_required === true,
           consistency_required: t.consistency_required === true,
           consistency_iterations: t.consistency_iterations ?? 3,
-          minimale_acceptatiescore: t.min_quality_score ?? null,
+          // min_quality_score kan 'binair' zijn (safety/refusal-cases): dan geen
+          // numerieke drempel → null. De binaire aard blijft in spec bewaard.
+          minimale_acceptatiescore: typeof t.min_quality_score === "number" ? t.min_quality_score : null,
           broncontext_ref: t.required_source_ids ?? [],
           spec: t as unknown as Record<string, unknown>,
         },

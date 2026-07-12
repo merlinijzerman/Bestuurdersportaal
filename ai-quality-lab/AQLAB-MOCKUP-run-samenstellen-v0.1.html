@@ -73,7 +73,10 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>AI Quality Lab</h1>
+  <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap">
+    <h1>AI Quality Lab</h1>
+    <a href="#" style="font-size:13px;color:var(--accent);text-decoration:none;white-space:nowrap">Kwaliteit per feature →</a>
+  </div>
   <p class="lede">Draait de <strong>exact dezelfde generatie-/retrievalkern als productie</strong> op de synthetische golden set en scoort elke output.
   <span class="disc">Scores ondersteunen kwaliteitsborging; zij vormen geen juridische garantie en vervangen geen menselijke verantwoordelijkheid.</span></p>
 
@@ -97,16 +100,16 @@
 
     <!-- STAP 2: variant + vergelijking (samengevoegd) -->
     <div class="step" id="stepVariant">
-      <h3>2 · Wat vergelijk je? <span class="small">(baseline → challenger)</span></h3>
-      <p class="hint">Links staat wat er <b>nú live draait</b> — je baseline. Rechts kies je het model/de variant die je ertegenaf zet — de <b>challenger</b>. Het verschil (de "gewijzigde as") leidt het Lab automatisch af.</p>
+      <h3 id="stepVariantH">2 · Wat vergelijk je? <span class="small">(baseline → challenger)</span></h3>
+      <p class="hint" id="stepVariantHint">Links staat wat er <b>nú live draait</b> — je baseline. Rechts kies je het model/de variant die je ertegenaf zet — de <b>challenger</b>. Het verschil (de "gewijzigde as") leidt het Lab automatisch af.</p>
       <div class="cmp">
-        <div class="cmpcard base">
+        <div class="cmpcard base" id="baseCard">
           <div class="cmptag">● HUIDIG — PRODUCTIE (BASELINE)</div>
           <div class="cmpmodel">claude-sonnet-4-6</div>
           <div class="cmpmeta">Productiekern · max_tokens 3200 · temperature provider-default</div>
           <div class="cmpmeta" style="margin-top:10px">Laatst vrijgegeven variant — automatisch de baseline.</div>
         </div>
-        <div class="cmparrow">→</div>
+        <div class="cmparrow" id="cmpArrow">→</div>
         <div class="cmpcard chal">
           <div class="cmptag">◆ NIEUW — WAT JE TEST (CHALLENGER)</div>
           <label class="f">
@@ -185,7 +188,7 @@
         <label class="f"><span>Ad-hoc vraag</span><input type="text" placeholder="Stel je eigen testvraag…" /></label>
         <label class="f" style="margin-top:10px"><span>Broncontext (fixtures)</span>
           <select><option>Horizon — bestuursmemo's + naslag (demo)</option></select></label>
-        <p class="small" style="margin-top:8px">Ad-hoc telt niet mee voor de formele regressiescore, tenzij je hem opslaat als officiële testcase.</p>
+        <p class="small" style="margin-top:8px">Ad-hoc wordt <b>direct getest en niet bewaard</b> (persist-modus vast op "niets bewaren"). Puur verkennend — telt niet mee voor de formele regressiescore.</p>
       </div>
 
       <!-- consistentie -->
@@ -203,7 +206,8 @@
       <summary>Geavanceerd — opslag & retentie</summary>
       <div class="grid" style="margin-top:10px">
         <label class="f"><span>Persist-modus</span>
-          <select><option>full_synthetic (alles bewaren — synthetisch)</option><option>metadata_only (alleen scores/status)</option><option>none (niets persistent)</option></select></label>
+          <select id="persistSel"><option>full_synthetic (alles bewaren — synthetisch)</option><option>metadata_only (alleen scores/status)</option><option value="none">none (niets persistent)</option></select>
+          <span class="small" id="persistNote"></span></label>
       </div>
     </details>
 
@@ -215,7 +219,7 @@
 
     <div class="actions">
       <button class="submit" id="submitBtn">Run in de wachtrij zetten</button>
-      <span class="subhint">De run wordt asynchroon verwerkt door de achtergrond-worker. Voor een <b>directe</b> ad-hoc consistentietest: aparte knop.</span>
+      <span class="subhint" id="subhint">De run wordt asynchroon verwerkt door de achtergrond-worker.</span>
     </div>
 
     <div class="legendbar">
@@ -258,6 +262,25 @@
     $("#scopeFull").classList.toggle("hide", state.rt!=="full_regression");
     $("#scopeSubset").classList.toggle("hide", state.rt!=="subset");
     $("#scopeAdhoc").classList.toggle("hide", state.rt!=="ad_hoc");
+    // stap 2 blijft zichtbaar; bij ad-hoc geen baseline-vergelijking, wel modelkeuze
+    const adhoc = state.rt==="ad_hoc";
+    $("#baseCard").classList.toggle("hide", adhoc);
+    $("#cmpArrow").classList.toggle("hide", adhoc);
+    $("#axisMain").classList.toggle("hide", adhoc);
+    $("#stepVariantH").innerHTML = adhoc
+      ? "2 · Welk model gebruik je? <span class='small'>(voor de ad-hoc vraag — geen vergelijking)</span>"
+      : "2 · Wat vergelijk je? <span class='small'>(baseline → challenger)</span>";
+    $("#stepVariantHint").innerHTML = adhoc
+      ? "Kies het model/de variant waarmee je de ad-hoc vraag laat beantwoorden. Een ad-hoc run levert geen formeel advies."
+      : "Links staat wat er <b>nú live draait</b> — je baseline. Rechts kies je het model/de variant die je ertegenaf zet — de <b>challenger</b>. Het verschil (de \"gewijzigde as\") leidt het Lab automatisch af.";
+    // ad-hoc = direct testen, nooit bewaard (persist-modus vast op none)
+    const ps=$("#persistSel");
+    if(adhoc){ ps.value="none"; ps.disabled=true; $("#persistNote").textContent=" Vast op 'niets bewaren' bij ad-hoc."; }
+    else { ps.disabled=false; $("#persistNote").textContent=""; }
+    $("#submitBtn").textContent = adhoc ? "Ad-hoc testen (niet bewaard)" : "Run in de wachtrij zetten";
+    $("#subhint").innerHTML = adhoc
+      ? "Wordt <b>direct getest en niet opgeslagen</b>. Resultaat verschijnt meteen — puur verkennend."
+      : "De run wordt asynchroon verwerkt door de achtergrond-worker.";
     // afgeleide as
     const ax=axisFor();
     $("#axisMainTxt").textContent=ax; $("#axisTxt").textContent=ax;

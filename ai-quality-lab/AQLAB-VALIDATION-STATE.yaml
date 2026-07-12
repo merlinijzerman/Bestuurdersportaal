@@ -10,10 +10,12 @@
 # ---------------------------------------------------------------------------
 
 # Poort 2 — AVG-scope SEC-06 (FIX-19) juridisch/FG-bevestigd.
-avg_scope_SEC06_confirmed: false
+# Afgetekend 2026-07-12 (Merlin, plansessie AQL-5): FG-review SEC-06 gedaan.
+avg_scope_SEC06_confirmed: true
 
 # Poort 3 — juridische/compliance-duiding BS-06 / BV-04 / SEC-04 gevalideerd.
-legal_compliance_confirmed: false
+# Afgetekend 2026-07-12 (Merlin, plansessie AQL-5): juridische duiding gevalideerd.
+legal_compliance_confirmed: true
 
 # Poort 4 — judge-JSON-schema's definitief gedefinieerd.
 # GESLOTEN (AQL-2): vast JSON-output-schema per judge-criterium +
