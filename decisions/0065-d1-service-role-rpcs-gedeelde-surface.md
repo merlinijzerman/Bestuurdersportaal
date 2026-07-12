@@ -89,11 +89,15 @@ op de nu anon-bereikbare publieke schrijf-surface, met follow-up-migratie
   een bewuste posture-wijziging t.o.v. REQ-PV-042. **Mitigatie (gedaan):** lengte-CHECK
   `contact_aanvragen_lengtes` (payload-cap == VELD_MAX) tegen storage-bom. **Restrisico:**
   ongeauthenticeerde, ongelimiteerde *volume*-inserts van begrensde inhoud (spam in de contact-inbox).
-  Correcte vervolgstap = een form-side bot-mitigatie. **Gekozen (2026-07-12): Cloudflare Turnstile**
-  op het contactformulier + serverside token-verificatie in `/api/contact`. Apart deelincrement;
-  randvoorwaarde is dat de Turnstile-keys geprovisioneerd worden (site-key `NEXT_PUBLIC_*`, secret-key
-  in de gedeelde server-env — een smal bot-verificatie-secret, géén service-role). Tot dat live is,
-  dekken de payload-cap (B1) + de soft ip_hash-limiet + de handmatige inbox-review het restrisico af.
+  Correcte vervolgstap = een form-side bot-mitigatie. **Gekozen + geïmplementeerd (2026-07-12):
+  Cloudflare Turnstile** op het contactformulier + serverside token-verificatie in `/api/contact`
+  (siteverify). Widget expliciet gerenderd in `ContactForm.tsx` (token in de POST); de route dwingt af
+  zodra `TURNSTILE_SECRET_KEY` gezet is (soft-config: zonder secret → overslaan, voor lokaal/dev),
+  fail-open alleen bij een eigen netwerkfout. CSP in `next.config.ts` uitgebreid met
+  `challenges.cloudflare.com` (script-/frame-/connect-src). Keys: site-key `NEXT_PUBLIC_TURNSTILE_SITE_KEY`
+  (publiek), secret `TURNSTILE_SECRET_KEY` (gedeelde server-env — smal bot-secret, géén service-role).
+  Hiermee is het B1-restrisico afgedekt: een directe RPC-aanroep mist de bot-verificatie die de route
+  nu vóór de insert afdwingt.
 - **B2** — `contact_notificatie_status` kon elke rij op `id` muteren (integriteit opvolg-status; de
   `mail_error`-XSS is niet realiseerbaar want de back-office rendert via JSX-escaping). **Mitigatie
   (gedaan):** one-shot gescope't (recente, nog niet gemarkeerde rij) + `mail_error` gekapt op 500.

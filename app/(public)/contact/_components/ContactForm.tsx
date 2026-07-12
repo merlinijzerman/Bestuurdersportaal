@@ -1,11 +1,35 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import Script from "next/script";
 import {
   valideerContact,
   type ContactVeld,
   type TypeVerzoek,
 } from "@/core/lib/contact-validatie";
+
+// Cloudflare Turnstile (bot-mitigatie, D1-hardening B1). Site-key is publiek en
+// wordt bij build ingelined; ontbreekt hij (bv. lokaal zonder keys), dan toont het
+// formulier geen widget en slaat de server de verificatie over (soft-config).
+const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+
+type TurnstileApi = {
+  render: (
+    el: HTMLElement,
+    opts: {
+      sitekey: string;
+      callback: (token: string) => void;
+      "error-callback"?: () => void;
+      "expired-callback"?: () => void;
+    }
+  ) => string;
+  reset: (id?: string) => void;
+};
+declare global {
+  interface Window {
+    turnstile?: TurnstileApi;
+  }
+}
 
 // Client-formulier voor het publieke contactverzoek (W2a). Client-validatie is
 // uitsluitend UX — /api/contact valideert autoritatief opnieuw. Veldcontract en
@@ -72,6 +96,43 @@ export default function ContactForm({ initialType }: { initialType?: string }) {
   const [foutmelding, setFoutmelding] = useState(
     "Er ging iets mis. Controleer de gemarkeerde velden en probeer het opnieuw."
   );
+  const [token, setToken] = useState<string>("");
+  const widgetRef = useRef<HTMLDivElement>(null);
+  const widgetIdRef = useRef<string | null>(null);
+
+  // Turnstile expliciet renderen zodra het script beschikbaar is; de callback zet
+  // het token in state. Het widget-token is single-use → na elke serverronde
+  // resetten (zie resetTurnstile) zodat een retry een vers token krijgt.
+  useEffect(() => {
+    if (!TURNSTILE_SITE_KEY) return;
+    let actief = true;
+    function render() {
+      if (!actief || !widgetRef.current || !window.turnstile) return;
+      if (widgetIdRef.current !== null) return;
+      widgetIdRef.current = window.turnstile.render(widgetRef.current, {
+        sitekey: TURNSTILE_SITE_KEY as string,
+        callback: (t) => setToken(t),
+        "error-callback": () => setToken(""),
+        "expired-callback": () => setToken(""),
+      });
+    }
+    if (window.turnstile) render();
+    const iv = setInterval(() => {
+      if (window.turnstile) {
+        clearInterval(iv);
+        render();
+      }
+    }, 200);
+    return () => {
+      actief = false;
+      clearInterval(iv);
+    };
+  }, []);
+
+  function resetTurnstile() {
+    if (widgetIdRef.current && window.turnstile) window.turnstile.reset(widgetIdRef.current);
+    setToken("");
+  }
 
   function update(veld: keyof Velden, waarde: string) {
     setVelden((v) => ({ ...v, [veld]: waarde }));
@@ -104,6 +165,16 @@ export default function ContactForm({ initialType }: { initialType?: string }) {
       return;
     }
 
+    // Bot-verificatie: zodra Turnstile geconfigureerd is, is een token vereist.
+    if (TURNSTILE_SITE_KEY && !token) {
+      setFoutmelding(
+        "Bevestig eerst dat u geen robot bent en probeer het opnieuw."
+      );
+      setStatus("error");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
     setFouten({});
     setStatus("verzenden");
     try {
@@ -113,6 +184,7 @@ export default function ContactForm({ initialType }: { initialType?: string }) {
         body: JSON.stringify({
           ...resultaat.schoon,
           website: "",
+          turnstile_token: token,
           herkomst_pagina:
             typeof window !== "undefined" ? window.location.pathname : null,
         }),
@@ -121,6 +193,7 @@ export default function ContactForm({ initialType }: { initialType?: string }) {
       if (resp.ok) {
         setVelden(LEEG);
         setKeuze("");
+        resetTurnstile();
         setStatus("ok");
         window.scrollTo({ top: 0, behavior: "smooth" });
         return;
@@ -134,10 +207,13 @@ export default function ContactForm({ initialType }: { initialType?: string }) {
       } catch {
         /* houd generieke melding */
       }
+      // Token is na de serverronde verbruikt → reset voor een schone retry.
+      resetTurnstile();
       setFoutmelding(melding);
       setStatus("error");
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch {
+      resetTurnstile();
       setFoutmelding(
         "Verzenden mislukt door een netwerkfout. Controleer uw verbinding en probeer het opnieuw."
       );
@@ -270,6 +346,16 @@ export default function ContactForm({ initialType }: { initialType?: string }) {
           />
         </label>
       </div>
+
+      {TURNSTILE_SITE_KEY && (
+        <div className="field">
+          <Script
+            src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
+            strategy="afterInteractive"
+          />
+          <div ref={widgetRef} />
+        </div>
+      )}
 
       <div className="submit-row">
         <button type="submit" className="btn btn-primary" disabled={bezig}>

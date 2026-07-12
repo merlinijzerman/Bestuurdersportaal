@@ -76,6 +76,37 @@ function berekenIpHash(req: NextRequest): string | null {
   return createHash("sha256").update(`${salt}:${ip}`).digest("hex");
 }
 
+/** Verifieert het Turnstile-token serverside bij Cloudflare (D1-hardening B1).
+ *  Een expliciet ongeldig token → false. Fail-open ALLEEN bij een eigen netwerk-/
+ *  parsefout: de payload-cap + rate-limit blijven dan de vangrail, en een
+ *  Cloudflare-hik mag het contactformulier niet volledig platleggen. */
+async function verifieerTurnstile(
+  secret: string,
+  token: string,
+  req: NextRequest
+): Promise<boolean> {
+  try {
+    const form = new URLSearchParams({ secret, response: token });
+    const ip =
+      req.headers.get("cf-connecting-ip") ||
+      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+    if (ip) form.set("remoteip", ip);
+    const r = await fetch(
+      "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: form,
+      }
+    );
+    const data = (await r.json()) as { success?: boolean };
+    return data.success === true;
+  } catch (e) {
+    console.error(`[${LABEL}] Turnstile-verificatie faalde (fail-open)`, e);
+    return true;
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     // 1. Content-type moet JSON zijn.
@@ -102,6 +133,27 @@ export async function POST(req: NextRequest) {
     const honeypot = typeof body.website === "string" ? body.website.trim() : "";
     if (honeypot) {
       return NextResponse.json({ ok: true });
+    }
+
+    // 3b. Bot-verificatie (Cloudflare Turnstile, D1-hardening B1). Alleen
+    //     afdwingen als de secret geconfigureerd is (soft-config: lokaal zonder
+    //     keys → overslaan). Token is single-use; de client reset na elke ronde.
+    const turnstileSecret = process.env.TURNSTILE_SECRET_KEY;
+    if (turnstileSecret) {
+      const tsToken =
+        typeof body.turnstile_token === "string" ? body.turnstile_token : "";
+      if (!tsToken) {
+        return badRequest(
+          LABEL,
+          "Bevestig dat u geen robot bent en probeer het opnieuw."
+        );
+      }
+      if (!(await verifieerTurnstile(turnstileSecret, tsToken, req))) {
+        return badRequest(
+          LABEL,
+          "Bot-verificatie mislukt. Vernieuw de pagina en probeer het opnieuw."
+        );
+      }
     }
 
     // D1: GEEN service-role meer. Insert + rate-limit + notificatie-status lopen
