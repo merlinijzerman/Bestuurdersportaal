@@ -43,11 +43,16 @@ const GATE_BADGE: Record<string, string> = {
   geblokkeerd: "bg-err-tint text-err-ink",
   review_vereist: "bg-warn-tint text-warn-ink",
 };
+const GATE_LABEL: Record<string, string> = {
+  pass: "pass",
+  geblokkeerd: "geblokkeerd",
+  review_vereist: "review vereist",
+};
 
 function GateChip({ gate }: { gate: string | null }) {
   return (
     <span className={`rounded px-1.5 py-0.5 text-[11px] ${GATE_BADGE[gate ?? ""] ?? "bg-app-bg text-ink/60"}`}>
-      {gate ?? "—"}
+      {GATE_LABEL[gate ?? ""] ?? gate ?? "—"}
     </span>
   );
 }
@@ -57,6 +62,10 @@ export default function VergelijkingBlok({ items }: { items: VergelijkingItem[] 
     <section className="rounded-xl border border-line bg-white p-5">
       <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/60">Outputvergelijking (baseline vs challenger)</h2>
       <p className="mt-1 text-xs text-ink/50">Klap een testcase uit voor de volledige antwoorden naast elkaar + woord-diff.</p>
+      <p className="mt-1 text-xs text-ink/50">
+        Score = kwaliteit (geleidelijk, 0–100). Gate = categorisch oordeel (pass / review vereist / geblokkeerd). De twee
+        staan los: een hogere score heft een gate-blokkade niet op.
+      </p>
       <div className="mt-3 space-y-2">
         {items.map((it) => (
           <details key={it.test_case_id ?? "ad_hoc"} className="rounded-lg border border-line">

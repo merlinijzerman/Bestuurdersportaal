@@ -1,6 +1,6 @@
 # AI Output Quality & Governance Lab — Technisch ontwerp
 
-> **Status**: **AS-BUILT** t/m AQL-4 (assurance/release/audit gebouwd + gereleased 2026-07-10). De keten AQL-1 t/m AQL-4 is geïmplementeerd; dit doc is design-laag en kan op detail achterlopen (`CLAUDE.md`).
+> **Status**: **AS-BUILT** t/m AQL-5 (AQL-1..4 assurance/release/audit gereleased 2026-07-10; AQL-5 console-UX & variantbeheer 2026-07-11, besluit 0062 — zie §2.5/§2.6 as-built-noten). Dit doc is design-laag en kan op detail achterlopen (`CLAUDE.md`).
 > **Datum**: 2026-07-10
 
 > **AS-BUILT-correcties (AQL-4, ontwerp-sync 2026-07-10) — de code is leidend:**

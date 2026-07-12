@@ -61,12 +61,14 @@ export async function seedStarterModelConfigs(
     };
   });
 
-  // Tel vooraf hoeveel er al bestaan (voor een eerlijke toegevoegd-telling).
+  // Tel vooraf hoeveel er al bestaan (best-effort telling; de daadwerkelijke
+  // dedup gebeurt via de unieke config_hash + ignoreDuplicates hieronder).
   const hashes = rijen.map((r) => r.config_hash);
-  const { data: bestaand } = await svc
+  const { data: bestaand, error: selErr } = await svc
     .from("aqlab_model_configurations")
     .select("config_hash")
     .in("config_hash", hashes);
+  if (selErr) throw new Error(`seed modelconfigs voorafgaande telling mislukt: ${selErr.message}`);
   const bestaandSet = new Set((bestaand ?? []).map((r) => r.config_hash as string));
   const nieuw = rijen.filter((r) => !bestaandSet.has(r.config_hash));
 

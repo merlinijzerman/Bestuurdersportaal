@@ -37,6 +37,16 @@ export interface RunSamenstellenProps {
   baselines: Record<string, BaselineProp>;
 }
 
+// Leesbare labels voor de afgeleide as (de ruwe waarden zijn DB-enum-strings).
+const AS_LABEL: Record<string, string> = {
+  geen: "geen wijziging",
+  model: "model",
+  temperature: "sampling (temperature/top-p)",
+  max_tokens: "max tokens",
+  retrieval: "retrieval",
+  meerdere: "meerdere assen",
+};
+
 const TEMP_OPTIES: { value: string; label: string }[] = [
   { value: "default", label: "provider-default (zoals productie)" },
   { value: "0.0", label: "0.0 — deterministisch" },
@@ -90,11 +100,13 @@ export default function RunSamenstellenForm({
     retrieval: {},
   };
   const afgeleideAs = leidGewijzigdeAsAf(baselineVariant, challengerVariant);
-  const expliciteTemp = tempMode !== "default";
+  const expliciteSampling = tempMode !== "default" || topP.trim() !== "";
 
   // ── Proactieve vereisten/blokkers ──────────────────────────────────────────
   const blokkers: string[] = [];
   const waarschuwingen: string[] = [];
+
+  const geselecteerdeTestset = testsets.find((t) => t.id === testSetId);
 
   if (testsets.length === 0) {
     blokkers.push("Er is nog geen testset geseed. Draai eerst de golden-set-seed (npm run aqlab:seed:apply).");
@@ -109,14 +121,17 @@ export default function RunSamenstellenForm({
     blokkers.push("Vul een ad-hoc vraag in.");
   }
 
-  if (runType === "full_regression" && soort !== "security_blocking") {
+  // Een volledige vrijgave vereist óók de security/safety-blocking-set. Deze run
+  // draait één testset; is dat niet de security/safety-set, dan kan 'accepteren'
+  // alleen als die set apart is meegenomen én slaagt (engine-regel, regression-core).
+  if (runType === "full_regression" && geselecteerdeTestset && geselecteerdeTestset.code !== "security_safety") {
     waarschuwingen.push(
-      "Dit is geen security/safety-set. Een volledige regressie vereist óók een geslaagde security/safety-run; op basis van deze run alleen kan het advies nooit 'accepteren' zijn."
+      "Deze run draait één testset (geen security/safety-blocking-set). Een formeel advies 'accepteren' kan alleen als óók de security/safety-set is meegenomen en slaagt."
     );
   }
-  if (expliciteTemp) {
+  if (expliciteSampling) {
     waarschuwingen.push(
-      "Je zet temperature expliciet. Productie zet 'm niet (provider-default) — deze variant wijkt dus af van wat live draait. Voor een zuivere baseline: laat op provider-default. De variant wordt append-only gepind (§2B)."
+      "Je zet een sampling-parameter expliciet (temperature en/of top-p). Productie laat beide op provider-default — deze variant wijkt dus af van wat live draait. Voor een zuivere vergelijking met de baseline: laat op provider-default. De variant wordt append-only gepind (§2B)."
     );
   }
   if ((runType === "full_regression" || runType === "subset") && testSetId && !baseline) {
@@ -126,6 +141,7 @@ export default function RunSamenstellenForm({
   }
 
   const geblokkeerd = blokkers.length > 0;
+  const heeftWaarschuwing = waarschuwingen.length > 0;
 
   const toonVergelijking = runType === "full_regression" || runType === "subset";
   const toonSubset = runType === "subset";
@@ -295,9 +311,15 @@ export default function RunSamenstellenForm({
                 )}
 
                 <div className="mt-2 text-xs text-ink/60">
-                  Gewijzigde as t.o.v. baseline: <span className="font-medium">{afgeleideAs}</span>{" "}
+                  Gewijzigde as t.o.v. baseline: <span className="font-medium">{AS_LABEL[afgeleideAs]}</span>{" "}
                   <span className="text-ink/40">(automatisch afgeleid)</span>
                 </div>
+                {afgeleideAs === "geen" && (
+                  <div className="mt-1 text-xs text-ink/50">Identiek aan de baseline — er valt niets te vergelijken.</div>
+                )}
+                {afgeleideAs === "meerdere" && (
+                  <div className="mt-1 text-xs text-warn-ink">Meerdere assen tegelijk gewijzigd — een verschil is straks niet zuiver aan één oorzaak toe te schrijven. Wijzig bij voorkeur één as per run.</div>
+                )}
                 <div className="mt-1 text-xs text-ink/50">Wordt gepind als: <span className="font-mono">{autoNaam(challengerVariant)}</span></div>
               </div>
             </div>
@@ -412,10 +434,11 @@ export default function RunSamenstellenForm({
           </div>
         </details>
 
-        {/* Vereisten/blokkers-paneel */}
-        <div className={`rounded-lg border p-3 text-xs ${geblokkeerd ? "border-warn-ink/30 bg-warn-tint" : "border-ok-ink/30 bg-ok-tint"}`}>
-          <div className={`font-semibold ${geblokkeerd ? "text-warn-ink" : "text-ok-ink"}`}>
-            {geblokkeerd ? "Nog niet klaar — vul dit eerst aan" : "Klaar om te draaien"}
+        {/* Vereisten/blokkers-paneel. Groen alleen zónder aandachtspunten; met
+            openstaande waarschuwingen een neutrale toon (geen groen over een ⚠). */}
+        <div className={`rounded-lg border p-3 text-xs ${geblokkeerd ? "border-warn-ink/30 bg-warn-tint" : heeftWaarschuwing ? "border-line bg-app-bg" : "border-ok-ink/30 bg-ok-tint"}`}>
+          <div className={`font-semibold ${geblokkeerd ? "text-warn-ink" : heeftWaarschuwing ? "text-ink/80" : "text-ok-ink"}`}>
+            {geblokkeerd ? "Nog niet klaar — vul dit eerst aan" : heeftWaarschuwing ? "Klaar om te draaien — let op de aandachtspunten" : "Klaar om te draaien"}
           </div>
           <ul className="mt-1 space-y-0.5">
             {blokkers.map((b, i) => (

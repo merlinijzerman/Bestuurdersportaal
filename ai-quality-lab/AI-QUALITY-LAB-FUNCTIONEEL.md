@@ -1,6 +1,6 @@
 # AI Output Quality & Governance Lab — Functioneel ontwerp
 
-> **Status**: **AS-BUILT** t/m AQL-4 (gebouwd + gereleased 2026-07-10). Schermen 1–9 geïmplementeerd; scherm 9 (assurance-view) op `/governance/assurance`, scherm 7/8 in de platform-console.
+> **Status**: **AS-BUILT** t/m AQL-5 (AQL-1..4 gebouwd + gereleased 2026-07-10; AQL-5 console-UX 2026-07-11, besluit 0062). Schermen 1–9 geïmplementeerd; scherm 9 (assurance-view) op `/governance/assurance`, scherm 7/8 in de platform-console; scherm 3/4/6 herzien in AQL-5 (zie as-built-noten hieronder).
 > **Datum**: 2026-07-10
 > **AS-BUILT-noot (AQL-4):** capabilities heten `platform.aqlab.operate` / `.review` / `.govern` (het formele vrijgavebesluit = `platform.aqlab.govern`, Governance Owner). Statustaal-labels ("Vrijgegeven voor gebruik" enz.) leven in `lib/aqlab/assurance-teksten.ts`; de positieve "wat betekent dit wél"-uitleg verschijnt alleen bij een vrijgegeven feature (geen schijnzekerheid). Fonds-download van het auditrapport bevat conform scherm 8 volledige findings + reviewers (besluit 0061); ruwe output/`fragment` uitgesloten.
 > **Samenhang**: leest na [`AI-QUALITY-LAB-ARCHITECTUUR.md`](./AI-QUALITY-LAB-ARCHITECTUUR.md); voedt [`AI-QUALITY-LAB-TECHNISCH.md`](./AI-QUALITY-LAB-TECHNISCH.md); eerste golden set in [`AI-QUALITY-LAB-REGRESSIESET-v0.4.md`](./AI-QUALITY-LAB-REGRESSIESET-v0.4.md).

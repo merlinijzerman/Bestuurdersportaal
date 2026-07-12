@@ -18,6 +18,7 @@ import { withPlatform } from "@/lib/platform-wrapper";
 import { planRun, annuleerRun, draaiAdHocConsistentieSync, type RunConfig, type AdHocConsistentieResultaat } from "@/lib/aqlab/run-orchestrator";
 import { haalProductieBaseline } from "@/lib/aqlab/console-lees";
 import {
+  AQLAB_TOEGESTANE_MODELLEN,
   isToegestaanModel,
   toegestaanModel,
   autoNaam,
@@ -38,6 +39,14 @@ const LIJST_PAD = "/platform/aqlab";
 function leeg(v: FormDataEntryValue | null): string | null {
   const s = ((v as string) || "").trim();
   return s.length ? s : null;
+}
+
+// Productiekern-default-variant (allowlist-baseline). Gebruikt om de "gewijzigde
+// as" tegen af te leiden wanneer er (nog) geen vrijgegeven baseline is — identiek
+// aan wat het formulier toont, zodat UI en opgeslagen auditwaarde overeenkomen.
+const KERN_BASELINE = AQLAB_TOEGESTANE_MODELLEN.find((m) => m.isBaseline) ?? AQLAB_TOEGESTANE_MODELLEN[0];
+function productiekernDefaultVariant(): VariantInstellingen {
+  return { model: KERN_BASELINE.model_name, temperature: null, maxTokens: KERN_BASELINE.defaultMaxTokens, topP: null, retrieval: {} };
 }
 
 /**
@@ -88,8 +97,10 @@ async function pinModelConfig(svc: SupabaseClient, variant: VariantInstellingen)
     if (retry?.id) return retry.id as string;
     throw new Error(`modelconfig pin mislukt: ${error?.message ?? "onbekend"}`);
   }
-  // Append-only auditregel: nieuwe variant gepind.
-  await svc.from("aqlab_log").insert({
+  // Append-only auditregel: nieuwe variant gepind. Fail-hard bij een logfout —
+  // een gepinde config mag nooit zonder auditspoor bestaan (CLAUDE.md: elke
+  // mutatie logt expliciet).
+  const { error: logErr } = await svc.from("aqlab_log").insert({
     actie: "modelconfig_pinned",
     object_type: "aqlab_model_configurations",
     object_id: ins.id,
@@ -102,6 +113,7 @@ async function pinModelConfig(svc: SupabaseClient, variant: VariantInstellingen)
       top_p: variant.topP,
     },
   });
+  if (logErr) throw new Error(`aqlab_log (modelconfig_pinned): ${logErr.message}`);
   return ins.id as string;
 }
 
@@ -145,12 +157,21 @@ export async function startRunActie(formData: FormData): Promise<void> {
       let gewijzigdeAs: GewijzigdeAs | null = null;
       if (challengerModel) {
         const kern = toegestaanModel(challengerModel)!;
-        const temperature = !tempMode || tempMode === "default" ? null : Number(tempMode);
-        const maxTokens = maxTokensRaw ? Number(maxTokensRaw) : kern.defaultMaxTokens;
-        const topP = topPRaw ? Number(topPRaw) : null;
+        // NaN-veilig: negeer malformed numerieke invoer (defense-in-depth naast de
+        // UI-constraints), zodat config_hash en de opgeslagen effectieve waarden
+        // nooit uiteenlopen (§2B reproduceerbaarheid).
+        const tempNum = tempMode && tempMode !== "default" ? Number(tempMode) : NaN;
+        const temperature = Number.isFinite(tempNum) ? tempNum : null;
+        const maxNum = maxTokensRaw ? Number(maxTokensRaw) : NaN;
+        const maxTokens = Number.isFinite(maxNum) && maxNum > 0 ? maxNum : kern.defaultMaxTokens;
+        const topNum = topPRaw ? Number(topPRaw) : NaN;
+        const topP = Number.isFinite(topNum) && topNum >= 0 && topNum <= 1 ? topNum : null;
         const variant: VariantInstellingen = { model: challengerModel, temperature, maxTokens, topP, retrieval: {} };
         modelConfigId = await pinModelConfig(svc, variant);
-        gewijzigdeAs = leidGewijzigdeAsAf(baseline?.variant ?? null, variant);
+        // Gewijzigde as t.o.v. de productie-baseline; zonder vrijgegeven baseline
+        // t.o.v. de productiekern-default — identiek aan wat het formulier toont,
+        // zodat de opgeslagen auditwaarde de UI niet tegenspreekt.
+        gewijzigdeAs = leidGewijzigdeAsAf(baseline?.variant ?? productiekernDefaultVariant(), variant);
       }
 
       const r = await planRun(svc, {
