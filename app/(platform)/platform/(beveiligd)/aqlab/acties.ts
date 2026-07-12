@@ -247,6 +247,9 @@ export async function adHocTestActie(
 
   const iterRaw = leeg(formData.get("iteraties"));
   const iteraties = iterRaw ? Number(iterRaw) : 3;
+  // Optionele broncontext (synthetische golden-set-fixtures). Leeg = zonder bronnen —
+  // het Lab doet geen live retrieval; context komt uitsluitend uit fixtures.
+  const fixtureIds = (leeg(formData.get("fixture_ids")) || "").split(",").map((s) => s.trim()).filter(Boolean);
 
   // Challenger-instellingen — exact dezelfde NaN-veilige/redeneermodel-logica als
   // startRunActie, zodat de effectieve waarden nooit uiteenlopen (§2B).
@@ -287,7 +290,7 @@ export async function adHocTestActie(
         const r = await draaiAdHocConsistentieSync(svc, {
           vraag,
           rol: null,
-          fixtureIds: [],
+          fixtureIds,
           modelConfig,
           iteraties,
           persist_mode: "none", // geforceerd: ad-hoc bewaart nooit

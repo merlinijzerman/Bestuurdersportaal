@@ -38,6 +38,8 @@ export interface RunSamenstellenProps {
   allowlist: ToegestaanModel[];
   /** Per testset de vaste productie-baseline (null-key = geen vrijgegeven variant). */
   baselines: Record<string, BaselineProp>;
+  /** Synthetische fixture-documenten (golden set) — optionele broncontext bij ad-hoc. */
+  fixtures: { code: string; titel: string }[];
 }
 
 // Leesbare labels voor de afgeleide as (de ruwe waarden zijn DB-enum-strings).
@@ -104,6 +106,7 @@ export default function RunSamenstellenForm({
   testcases,
   allowlist,
   baselines,
+  fixtures,
 }: RunSamenstellenProps) {
   const productiekern = allowlist.find((m) => m.isBaseline) ?? allowlist[0];
   const productiekernVariant: VariantInstellingen = {
@@ -538,7 +541,27 @@ export default function RunSamenstellenForm({
                 className="w-full rounded-lg border border-line bg-white px-3 py-2 text-sm"
               />
               <span className="mt-1 block text-xs text-ink/50">
-                Ad-hoc telt niet mee voor de formele regressiescore, tenzij je hem opslaat als officiële testcase.
+                Ad-hoc telt niet mee voor de formele regressiescore.
+              </span>
+            </label>
+          )}
+
+          {toonAdHoc && (
+            <label className="mt-3 block text-sm">
+              <span className="mb-1 block text-ink/70">
+                Broncontext <span className="text-ink/40">(optioneel — fixture-codes, komma-gescheiden)</span>
+              </span>
+              <input
+                name="fixture_ids"
+                type="text"
+                placeholder={fixtures.slice(0, 2).map((f) => f.code).join(", ") || "bv. horizon-memo-01, horizon-naslag-02"}
+                className="w-full rounded-lg border border-line bg-white px-3 py-2 text-sm"
+              />
+              <span className="mt-1 block text-xs text-ink/50">
+                {fixtures.length > 0 ? (
+                  <>Beschikbaar: <span className="font-mono">{fixtures.slice(0, 8).map((f) => f.code).join(", ")}{fixtures.length > 8 ? "…" : ""}</span>. </>
+                ) : null}
+                Laat leeg om <strong>zonder bronnen</strong> te draaien — het Lab doet geen live retrieval; de broncontext komt uit de synthetische golden-set-fixtures.
               </span>
             </label>
           )}

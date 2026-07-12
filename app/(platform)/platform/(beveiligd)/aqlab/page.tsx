@@ -14,6 +14,7 @@ import {
   haalTestcases,
   haalTestsetTellingen,
   haalProductieBaseline,
+  haalFixtures,
 } from "@/lib/aqlab/console-lees";
 import { AQLAB_TOEGESTANE_MODELLEN } from "@/lib/aqlab/modellen";
 import RunSamenstellenForm, { type BaselineProp } from "./run-samenstellen-form";
@@ -47,11 +48,12 @@ export default async function AqlabConsole() {
   }
 
   const svc = createServiceSupabase();
-  const [runs, testsets, testcases, testsetTellingen] = await Promise.all([
+  const [runs, testsets, testcases, testsetTellingen, fixtures] = await Promise.all([
     lijstRuns(svc),
     haalTestsets(svc),
     haalTestcases(svc),
     haalTestsetTellingen(svc),
+    haalFixtures(svc),
   ]);
 
   // Vaste productie-baseline per testset (laatst vrijgegeven variant).
@@ -87,6 +89,7 @@ export default async function AqlabConsole() {
         testcases={testcases}
         allowlist={AQLAB_TOEGESTANE_MODELLEN}
         baselines={baselines}
+        fixtures={fixtures}
       />
 
       {/* Runs */}
