@@ -5,7 +5,7 @@
 #  Statische guard die afdwingt dat de platform-service-role NOOIT in client- of
 #  tenant-code lekt. Drie regels:
 #   1. SUPABASE_SERVICE_ROLE_KEY mag alleen in de server-only service-role-laag
-#      staan (platform/lib/* + core/lib/supabase-service.ts), nergens anders.
+#      staan (platform/lib/*), nergens anders.
 #   2. platform/lib/supabase-platform.ts (de enige service-role-client) MOET met
 #      `import "server-only"` beginnen.
 #   3. De tenant-surface app/(dashboard)/ en elk "use client"-bestand mogen NIET
@@ -21,12 +21,12 @@ fouten=0
 melding() { echo "  LEK: $1"; fouten=$((fouten + 1)); }
 
 echo "[1/3] SUPABASE_SERVICE_ROLE_KEY alleen in de server-only platform-laag…"
-# Toegestane vindplaatsen (T9 fase 2): de volledige platform/lib-laag (service-
-# role-client + platform-libs + aqlab-seed-CLI's) en de generieke service-client.
-# core/lib/supabase-service.ts is BEWUST tijdelijk core (contact + tenant-domains
-# gebruiken hem nog); D1 (RPC-migratie) verhuist hem naar platform/lib — scherp
-# deze regel dan aan tot uitsluitend platform/lib/.*.
-toegestaan_regex='^(platform/lib/.*\.ts|core/lib/supabase-service\.ts|scripts/.*)$'
+# Toegestane vindplaatsen: de volledige server-only platform/lib-laag (service-
+# role-clients + platform-libs + aqlab-seed-CLI's). Sinds D1/D1b heeft de gedeelde
+# (app/publiek) surface GEEN service-role meer (host-resolutie + contact + assurance
+# lopen via anon + SECURITY DEFINER-RPC's); supabase-service.ts is naar platform/lib
+# verhuisd — dus uitsluitend platform/lib/.* + scripts/.
+toegestaan_regex='^(platform/lib/.*\.ts|scripts/.*)$'
 while IFS= read -r bestand; do
   [ -z "$bestand" ] && continue
   if ! [[ "$bestand" =~ $toegestaan_regex ]]; then
@@ -50,7 +50,7 @@ fi
 echo "[3/3] Tenant-surface en client-componenten verwijzen niet naar de platform-service-role…"
 # 3a. (dashboard)-tenant-surface mag de platform-laag niet importeren.
 if grep -rn --include='*.ts' --include='*.tsx' \
-     -E "@/platform/lib/|@/core/lib/supabase-service" \
+     -E "@/platform/lib/" \
      'app/(dashboard)' 2>/dev/null; then
   melding "app/(dashboard) verwijst naar de platform-service-role-laag"
 fi
@@ -59,7 +59,7 @@ fi
 # trekken de service-role-client aan; geen ervan mag in een client-bundle landen.
 while IFS= read -r bestand; do
   [ -z "$bestand" ] && continue
-  if grep -qE "@/platform/lib/supabase-platform|@/core/lib/supabase-service|@/platform/lib/platform-(wrapper|audit|auth)" "$bestand"; then
+  if grep -qE "@/platform/lib/supabase-platform|@/platform/lib/supabase-service|@/platform/lib/platform-(wrapper|audit|auth)" "$bestand"; then
     melding "client-component importeert platform-service-role-laag: $bestand"
   fi
 done < <(grep -rl --include='*.ts' --include='*.tsx' \

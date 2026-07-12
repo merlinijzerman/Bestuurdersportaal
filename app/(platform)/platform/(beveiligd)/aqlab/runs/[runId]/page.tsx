@@ -8,7 +8,7 @@
 
 import Link from "next/link";
 import { huidigePlatformIdentiteit } from "@/platform/lib/platform-auth";
-import { createServiceSupabase } from "@/core/lib/supabase-service";
+import { createServiceSupabase } from "@/platform/lib/supabase-service";
 import { haalRunDetail, haalVergelijking, haalRunPerformance, type OutputMetScores, type ScoreRij } from "@/platform/lib/aqlab/console-lees";
 import PerformanceVergelijkingBlok from "./performance-vergelijking-blok";
 import { criteriumByKey } from "@/platform/lib/aqlab/criteria";

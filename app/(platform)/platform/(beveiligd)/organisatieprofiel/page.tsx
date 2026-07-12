@@ -15,7 +15,7 @@
 //  poort. Dit verzwakt de tenant-RLS niet (besluit B-OP5-2).
 // ============================================================================
 
-import { createServiceSupabase } from "@/core/lib/supabase-service";
+import { createServiceSupabase } from "@/platform/lib/supabase-service";
 import { huidigePlatformIdentiteit } from "@/platform/lib/platform-auth";
 import OrganisatieprofielClient from "./_components/OrganisatieprofielClient";
 

@@ -79,10 +79,14 @@ test('AQL-4 — het assurance-endpoint authenticeert (anon+RLS) én dwingt host�
 
 test('AQL-4 — fonds-download alleen voor VRIJGEGEVEN rapporten (niet geblokkeerd/tussenstatus)', () => {
   const svc = lees('core', 'lib', 'aqlab', 'assurance.ts');
-  // De download-poort én de tegel-hash moeten op release_status='vrijgegeven' filteren.
-  assert.ok(/audit_export_id[\s\S]{0,120}release_status["']?\s*,\s*["']vrijgegeven/.test(svc),
-    "magFondsAuditExportZien filtert de export-referentie niet op release_status='vrijgegeven'");
-  assert.ok(svc.includes('laatstVrijgegeven'), 'downloadbaar rapport komt niet uit de laatst-vrijgegeven release');
+  // D1b: de download-poort weigert zodra de export niet vrijgegeven is (RPC-vlag
+  // is_vrijgegeven → opslag_ref null → 403); de feitelijke release_status-filtering
+  // zit in de SECURITY DEFINER-RPC's + de storage-policy.
+  assert.ok(svc.includes('is_vrijgegeven'),
+    'magFondsAuditExportZien toetst de vrijgegeven-status (is_vrijgegeven) niet');
+  const mig = lees('supabase', 'migrations', '2026_07_12_d1b_assurance_rpcs.sql');
+  assert.ok(/release_status\s*=\s*'vrijgegeven'/.test(mig),
+    "de D1b-RPC's/storage-policy filteren de export-referentie niet op release_status='vrijgegeven'");
 });
 
 test('AQL-4 — het bevroren auditrapport selecteert nooit ruwe-excerpt-kolommen', () => {

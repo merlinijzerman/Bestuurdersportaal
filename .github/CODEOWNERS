@@ -11,12 +11,11 @@
 /.github/workflows/boundaries.yml    @merlinijzerman
 /scripts/check-service-role-leak.sh  @merlinijzerman
 
-# Platform back-office incl. de service-role-laag (RLS-bypass)
+# Platform back-office incl. de volledige service-role-laag (RLS-bypass).
+# Sinds D1/D1b woont ALLE service-role-code hier (supabase-service.ts is naar
+# platform/lib verhuisd); de gedeelde surface is service-role-vrij.
 /platform/                           @merlinijzerman
 /app/(platform)/                     @merlinijzerman
-
-# Generieke service-role-client (blijft core tot D1 — RPC-migratie)
-/core/lib/supabase-service.ts        @merlinijzerman
 
 # Datamodel + RLS (migratie-eerst-dan-deploy)
 /supabase/migrations/                @merlinijzerman

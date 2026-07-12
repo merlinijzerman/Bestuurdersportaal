@@ -7,7 +7,7 @@
 
 import Link from "next/link";
 import { huidigePlatformIdentiteit } from "@/platform/lib/platform-auth";
-import { createServiceSupabase } from "@/core/lib/supabase-service";
+import { createServiceSupabase } from "@/platform/lib/supabase-service";
 import { haalPromoveerbareRuns, haalTestsets } from "@/platform/lib/aqlab/console-lees";
 import { promoveerActie } from "../acties";
 

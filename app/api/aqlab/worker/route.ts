@@ -14,7 +14,7 @@
 // -----------------------------------------------------------------------------
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServiceSupabase } from "@/core/lib/supabase-service";
+import { createServiceSupabase } from "@/platform/lib/supabase-service";
 import { verwerkBatch } from "@/platform/lib/aqlab/run-orchestrator";
 import { errorResponse } from "@/core/lib/api-errors";
 

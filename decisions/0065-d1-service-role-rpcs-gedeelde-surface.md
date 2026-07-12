@@ -61,11 +61,21 @@ anon-client + de twee contact-RPC's. `core/lib/supabase-service.ts` blijft **bew
   rij-id zetten — geen tenant/PII-data, UUID onraadbaar; bewust geaccepteerd.
 - **Migratie-eerst:** de migratie is standalone veilig (nog geen code roept ze aan); de code-switch
   deployt erna. Rollback: functies droppen + code reverten (oude paden werken zolang de sleutel er is).
-- **Resttaak D1b (openstaand criterium-2-blokker):** de tenant-facing routes
-  `app/api/aqlab/assurance` en `app/api/aqlab/assurance/audit/[exportId]` draaien nog op de
-  service-role. Aanpak: zelfde SECURITY DEFINER-RPC-lijn (fonds uit de geverifieerde sessie),
-  apart deelincrement. Pas ná D1b verhuist `supabase-service.ts` naar `platform/lib` en is de
-  gedeelde surface volledig service-role-vrij.
+- **D1b — UITGEVOERD (2026-07-12):** de tenant-facing routes `app/api/aqlab/assurance` en
+  `app/api/aqlab/assurance/audit/[exportId]` draaien niet meer op de service-role. Migratie
+  `2026_07_12_d1b_assurance_rpcs.sql`: `aqlab_assurance_meetwaarden(codes)` (curatie IN SQL — het
+  rauwe aggregatie-blob verlaat de DB niet), `aqlab_audit_export_bron(id)` (alleen vrijgegeven →
+  geen pad-lek), `aqlab_log_download(id)` (append-only), + een storage-policy op `aqlab-audit`
+  (authenticated leest alleen vrijgegeven objecten). Manifest via RLS (geen RPC). `assurance.ts` +
+  de twee routes gebruiken nu de sessie-client. **Adversariële RLS/storage-review:** geen
+  tenant-isolatie-blocker (aqlab-data is productbreed/geen fonds_id; manifest via `auth.uid()`);
+  B1 (over-exposure heel aggregatie-blob) → gecureerd in SQL; K1 (embargo-pad-lek) → null tenzij
+  vrijgegeven; O1 (manifest hoefde geen RPC) → via RLS; O2 (log-spam) → alleen vrijgegeven. Bewuste
+  keuze (K2): elke bestuurder mag elk vrijgegeven (productbreed) rapport lezen — geen tenant-lek.
+- **Criterium 2 — precondition gehaald:** na D1+D1b is er GEEN service-role-consument meer op de
+  gedeelde (app/publiek) surface; `supabase-service.ts` is naar `platform/lib` verhuisd en de
+  leak-check is aangescherpt tot uitsluitend `platform/lib/*`. De sleutelrotatie + het weghalen uit
+  de gedeelde env gebeurt in Fase B (de Vercel-projectsplitsing).
 
 ## Referenties
 

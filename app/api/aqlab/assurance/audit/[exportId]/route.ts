@@ -1,16 +1,15 @@
 // GET /api/aqlab/assurance/audit/[exportId]
 // -----------------------------------------------------------------------------
 // Read-only fonds-download van het BEVROREN auditrapport (AQL-4, functioneel
-// scherm 8/9). Server-gemedieerd: de private 'aqlab-audit'-bucket heeft géén
-// storage-policy; deze route authenticeert de fondsgebruiker (anon+RLS), dwingt
-// host↔fonds af, controleert via magFondsAuditExportZien dat de export bij een
-// door dit fonds gebruikte feature én bij een vrijgavebesluit hoort, en streamt
-// dan de HTML via de service-role. Elke download wordt append-only gelogd.
+// scherm 8/9). Deze route authenticeert de fondsgebruiker (anon+RLS), dwingt
+// host↔fonds af, controleert via magFondsAuditExportZien (RPC) dat de export bij
+// een door dit fonds gebruikte feature én bij een vrijgavebesluit hoort, en streamt
+// dan de HTML met de SESSIE-client (D1b: storage-policy op vrijgegeven exports —
+// geen service-role meer). Elke download wordt append-only gelogd (RPC).
 // -----------------------------------------------------------------------------
 
 import { NextResponse } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
-import { createServiceSupabase } from "@/core/lib/supabase-service";
 import { beoordeelRouteHostToegang } from "@/core/lib/tenant-route-guard";
 import { magFondsAuditExportZien } from "@/core/lib/aqlab/assurance";
 
@@ -37,26 +36,21 @@ export async function GET(
     return NextResponse.json({ error: "Dit webadres hoort niet bij uw fonds." }, { status: 403 });
   }
 
-  const svc = createServiceSupabase();
-  const toegang = await magFondsAuditExportZien(svc, fondsId, exportId);
+  // D1b: sessie-client + SECURITY DEFINER-RPC's (autorisatie + log) en een
+  // storage-policy op vrijgegeven exports — geen service-role meer.
+  const toegang = await magFondsAuditExportZien(supabase, fondsId, exportId);
   if (!toegang.ok || !toegang.opslag_ref) {
     return NextResponse.json({ error: toegang.reden ?? "Geen toegang tot dit auditrapport." }, { status: 403 });
   }
 
-  const { data: blob, error } = await svc.storage.from(BUCKET).download(toegang.opslag_ref);
+  const { data: blob, error } = await supabase.storage.from(BUCKET).download(toegang.opslag_ref);
   if (error || !blob) {
     return NextResponse.json({ error: "Auditrapport niet beschikbaar." }, { status: 404 });
   }
   const html = await blob.text();
 
   // Append-only downloadspoor (herleidbaar wie/wanneer welk rapport ophaalde).
-  await svc.from("aqlab_log").insert({
-    gebruiker_id: user.id,
-    actie: "audit_export_gedownload_fonds",
-    object_type: "aqlab_audit_exports",
-    object_id: exportId,
-    nieuwe_waarde: { fonds_id: fondsId },
-  });
+  await supabase.rpc("aqlab_log_download", { p_export_id: exportId });
 
   return new NextResponse(html, {
     headers: {
