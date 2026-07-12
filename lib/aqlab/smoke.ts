@@ -32,6 +32,37 @@ function mockModelClient(antwoord: string): GenereerAntwoordParams["client"] {
   } as GenereerAntwoordParams["client"];
 }
 
+/**
+ * Gemockte fetch die een OpenAI/Mistral chat-completions-respons nabootst
+ * (zelfde vorm voor beide providers). Bewijst de provider-pariteit zonder netwerk.
+ */
+function mockChatFetch(antwoord: string): typeof fetch {
+  return (async () =>
+    ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [{ message: { content: antwoord } }],
+        usage: { prompt_tokens: 120, completion_tokens: 240 },
+      }),
+    })) as unknown as typeof fetch;
+}
+
+/** Als mockChatFetch, maar legt de verstuurde request-body vast (param-mapping-check). */
+function mockCapturingChatFetch(antwoord: string, sink: { body?: Record<string, unknown> }): typeof fetch {
+  return (async (_url: string, init: { body: string }) => {
+    sink.body = JSON.parse(init.body) as Record<string, unknown>;
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [{ message: { content: antwoord } }],
+        usage: { prompt_tokens: 120, completion_tokens: 240 },
+      }),
+    };
+  }) as unknown as typeof fetch;
+}
+
 /** Judge-stub: geeft een vaste (adviserende) uitkomst per criterium. */
 function mockJudge(pass: boolean) {
   return async (c: JudgeCriterium, _inp: JudgeInput): Promise<JudgeResultaat> => ({
@@ -136,6 +167,75 @@ async function main() {
     }
   }
 
+  // ── Provider-pariteit (AQL-6) — retrieval/[Bron N] identiek over providers ──
+  // Zelfde fixtures + vraag; alleen het GENERATIEMODEL swapt (anthropic-stub vs
+  // openai/mistral-fetch-stub). contextTekst en bronnen MOETEN identiek zijn —
+  // dat bewijst dat alleen de generatie wisselt, niet de retrieval/labeling.
+  {
+    const schoonAntwoord =
+      "Aanleiding: de beleidsdekkingsgraad is 112,4% [Bron 1]. Voorstel: premie 28,6% [Bron 1].";
+    const gemeen = { vraag: "Vat de kern van dit memo samen.", rol: "voorzitter", fixtures: [FIXTURE], metVervolgvragen: false as const };
+
+    const viaAnthropic = await genereerViaAdapter({ ...gemeen, client: mockModelClient(schoonAntwoord) });
+    const viaOpenAI = await genereerViaAdapter({
+      ...gemeen,
+      modelConfig: { model: "gpt-4.1", provider: "openai" },
+      fetchImpl: mockChatFetch(schoonAntwoord),
+    });
+    const viaMistral = await genereerViaAdapter({
+      ...gemeen,
+      modelConfig: { model: "mistral-large-latest", provider: "mistral" },
+      fetchImpl: mockChatFetch(schoonAntwoord),
+    });
+
+    const contextIdentiek =
+      viaAnthropic.contextTekst === viaOpenAI.contextTekst &&
+      viaAnthropic.contextTekst === viaMistral.contextTekst;
+    const bronnenIdentiek =
+      JSON.stringify(viaAnthropic.bronnen) === JSON.stringify(viaOpenAI.bronnen) &&
+      JSON.stringify(viaAnthropic.bronnen) === JSON.stringify(viaMistral.bronnen);
+    const providerBevroren =
+      viaOpenAI.effectieveInstellingen.model_provider === "openai" &&
+      viaMistral.effectieveInstellingen.model_provider === "mistral" &&
+      viaAnthropic.effectieveInstellingen.model_provider === "anthropic";
+
+    const okPariteit = contextIdentiek && bronnenIdentiek && providerBevroren;
+    if (!okPariteit) fouten++;
+    console.log(
+      `  ${okPariteit ? "✓" : "✗"} provider-pariteit: context/bronnen identiek over anthropic/openai/mistral; provider bevroren`
+    );
+  }
+
+  // ── Reasoning-model param-mapping (AQL-6) ──────────────────────────────────
+  // Reasoning-modellen (GPT-5-serie): de OpenAI-adapter MOET max_completion_tokens
+  // sturen (geen max_tokens), GEEN temperature/top_p (vergrendeld), wél
+  // reasoning_effort — en dat effort moet per output bevroren worden.
+  {
+    const sink: { body?: Record<string, unknown> } = {};
+    const gen = await genereerViaAdapter({
+      vraag: "Vat de kern van dit memo samen.",
+      rol: "voorzitter",
+      fixtures: [FIXTURE],
+      metVervolgvragen: false,
+      modelConfig: { model: "gpt-5", provider: "openai", redeneermodel: true, reasoningEffort: "high" },
+      fetchImpl: mockCapturingChatFetch("Aanleiding: 112,4% [Bron 1].", sink),
+    });
+    const b = sink.body ?? {};
+    const okReasoning =
+      typeof b.max_completion_tokens === "number" &&
+      !("max_tokens" in b) &&
+      !("temperature" in b) &&
+      !("top_p" in b) &&
+      b.reasoning_effort === "high" &&
+      gen.effectieveInstellingen.reasoning_effort_effective === "high" &&
+      gen.effectieveInstellingen.temperature_effective === null &&
+      gen.effectieveInstellingen.top_p_effective === null;
+    if (!okReasoning) fouten++;
+    console.log(
+      `  ${okReasoning ? "✓" : "✗"} reasoning-mapping (gpt-5): max_completion_tokens + reasoning_effort, géén temperature/top_p; effort bevroren`
+    );
+  }
+
   // ── Consistentie-mini (AQL-3, ADR 0056) — end-to-end over 3 iteraties ──────
   function metingUit(iteratie: number, res: EvaluatieResultaat, bronIds: string[]): IteratieMeting {
     const passByCode: Record<string, boolean | null> = {};
@@ -191,7 +291,7 @@ async function main() {
     console.error(`\nSMOKE FAALT: ${fouten} geval(len) niet zoals verwacht.`);
     process.exit(1);
   }
-  console.log(`\n${GEVALLEN.length + 2} smoke-gevallen geslaagd.`);
+  console.log(`\n${GEVALLEN.length + 4} smoke-gevallen geslaagd.`);
 }
 
 main().catch((e) => {

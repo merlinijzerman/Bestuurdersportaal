@@ -60,6 +60,21 @@ Elk van de vier tickets is een **gate/mijlpaal**, dus de documentatiehaak geldt 
 
 ---
 
+## Vervolgtickets (na de MVP)
+
+- **AQL-5 — Console-UX & variantbeheer** (zie `AQLAB-WERKTICKET-AQL-5-…`).
+- **AQL-6 — Multi-provider vergelijking** (OpenAI + Mistral naast Claude; zie `AQLAB-WERKTICKET-AQL-6-…`). **Interim:** reguliere OpenAI API (VS), no-training aan, uitsluitend synthetische data.
+
+## Roadmap-item — EU-dataresidentie migratie (belangrijk, ingepland)
+
+Verplaatsen van álle generatie naar **EU-residentie**, consistent voor baseline én challengers:
+
+- **Claude** (baseline + judge) van de first-party Anthropic API (VS) naar **AWS Bedrock EU** (Frankfurt/Ierland/Parijs/Stockholm) of **Google Vertex AI EU** — de first-party API kent (nog) geen EU-residentie.
+- **OpenAI** van de reguliere API (VS) naar **Azure OpenAI EU**.
+- **Mistral** EU-instellingen/no-training bevestigen.
+
+**Harde grens:** deze migratie is **verplicht vóórdat er echte fondsdata** (i.p.v. de synthetische golden set) via externe/US-providers wordt verwerkt — geldt ook voor de bestaande productie-chat, die nu op de VS-Anthropic-API draait. Impact: provider-abstractie (AQL-6) + auth/infra-wissel + verificatie van modelbeschikbaarheid/versies per EU-regio. Valideren met FG. Advies: start met een korte spike (modelbeschikbaarheid + één EU-adapter + retrieval-pariteit).
+
 ## Buiten deze roadmap (bewust later)
 
 Fonds-specifieke assurance op echte fondsdocumenten (fonds-scoped tabellen + RLS + retentie), CI/CD-blokkade als merge-gate, multi-model-orchestratie, auditor-portaal, materialized snapshots, per-fonds scorecriteria. Zie architectuur §12 (MVP vs groeipad).

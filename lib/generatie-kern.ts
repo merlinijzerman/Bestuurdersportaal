@@ -22,6 +22,8 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import type { Antwoordmodus } from "@/lib/vraagtype";
+import { genereerViaProvider, type ProviderRequest } from "@/lib/llm-providers";
+import type { ModelProvider, ReasoningEffort } from "@/lib/aqlab/modellen";
 
 // ── Centrale model- en budget-instellingen (verplaatst uit chat-route) ───────
 // Eén plek zodat chat-call, governance_log én het Lab dezelfde waarde gebruiken.
@@ -361,18 +363,27 @@ export function bouwSysteemBlokken(
 //  streaming-route (regels 1314-1392 van app/api/chat/route.ts), maar
 //  non-streaming: `.finalMessage()` i.p.v. token-deltas. Uitsluitend het Lab
 //  gebruikt deze; de route blijft streamen.
+//
+//  AQL-6: de ráw model-call is verplaatst naar lib/llm-providers/* (adapters per
+//  provider). Deze functie is de provider-DISPATCHER + alle provider-neutrale
+//  post-processing (vervolgvragen knippen, [Bron N]-telling, effectieve
+//  instellingen bevriezen). Anthropic is de default; het gedrag daarvan is
+//  ongewijzigd (byte-identieke call-params in lib/llm-providers/anthropic.ts).
 // ============================================================
-
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY!,
-});
 
 /** Bevroren, effectief toegepaste modelinstellingen per output (§2B, reproduceerbaarheid). */
 export interface EffectieveInstellingen {
+  /** Generatie-provider (AQL-6). Anthropic = baseline/productie; OpenAI/Mistral = challenger. */
+  model_provider: ModelProvider;
   model_name: string;
   temperature_effective: number | null;
   max_tokens_effective: number;
   top_p_effective: number | null;
+  /**
+   * Reasoning-effort bevroren (AQL-6). null = provider-default óf niet-reasoning-
+   * model (klassiek chat-model, sampling via temperature). Zie decision 0064.
+   */
+  reasoning_effort_effective: ReasoningEffort | null;
   /** true = de provider-default is overgenomen (waarde niet expliciet gezet). */
   provider_default_used: boolean;
 }
@@ -384,6 +395,12 @@ export interface GenereerAntwoordParams {
   berichten: { role: "user" | "assistant"; content: string }[];
   model: string;
   maxTokens: number;
+  /** Generatie-provider (AQL-6). Default "anthropic" = baseline/productiepad. */
+  provider?: ModelProvider;
+  /** Reasoning-model (o-serie/GPT-5)? Stuurt de OpenAI-adapter-parametermapping. */
+  redeneermodel?: boolean;
+  /** Reasoning-effort (alleen bij redeneermodel). null = provider-default. */
+  reasoningEffort?: ReasoningEffort | null;
   /** null/undefined → provider-default overnemen (zoals productie doet). */
   temperature?: number | null;
   topP?: number | null;
@@ -391,8 +408,10 @@ export interface GenereerAntwoordParams {
   metVervolgvragen?: boolean;
   /** Aantal aangeleverde [Bron N]-bronnen, voor de dangling-citatie-telling. */
   bronnenAantal?: number;
-  /** Optioneel: injecteer een client (tests/mocks). Default = de gedeelde productie-client. */
+  /** Optioneel: injecteer een Anthropic stream-client (tests/mocks). Default = de gedeelde productie-client. */
   client?: Pick<Anthropic["messages"], "stream">;
+  /** Optioneel: injecteer fetch voor de OpenAI/Mistral-adapters (hermetische tests). */
+  fetchImpl?: typeof fetch;
 }
 
 export interface GenereerAntwoordResultaat {
@@ -424,14 +443,16 @@ export async function genereerAntwoord(
     berichten,
     model,
     maxTokens,
+    provider = "anthropic",
+    redeneermodel = false,
+    reasoningEffort,
     temperature,
     topP,
     metVervolgvragen = true,
     bronnenAantal = 0,
     client,
+    fetchImpl,
   } = params;
-
-  const streamer = client ?? anthropic.messages;
 
   const streamSysteem = metVervolgvragen
     ? [...systeemBlokken, { type: "text" as const, text: VERVOLGVRAGEN_INSTRUCTIE }]
@@ -441,23 +462,26 @@ export async function genereerAntwoord(
   // het over (identiek aan de streaming-route, die temperature/top_p niet zet).
   const temperatuurGezet = typeof temperature === "number";
   const topPGezet = typeof topP === "number";
-  const callParams: Anthropic.Messages.MessageStreamParams = {
+
+  // Provider-neutraal verzoek → de gekozen adapter (anthropic/openai/mistral).
+  // Retrieval/[Bron N] zit in de aanroeper (generate-adapter); hier swapt enkel
+  // het generatiemodel.
+  const req: ProviderRequest = {
+    systeemBlokken: streamSysteem,
+    berichten,
     model,
-    max_tokens: maxTokens,
-    system: streamSysteem,
-    messages: berichten,
-    ...(temperatuurGezet ? { temperature: temperature as number } : {}),
-    ...(topPGezet ? { top_p: topP as number } : {}),
+    maxTokens,
+    temperature,
+    topP,
+    redeneermodel,
+    reasoningEffort,
   };
-
-  const start = Date.now();
-  const stream = streamer.stream(callParams);
-  const finalMessage = await stream.finalMessage();
-  const latency_ms = Date.now() - start;
-
-  const volledig = finalMessage.content
-    .map((blok) => (blok.type === "text" ? blok.text : ""))
-    .join("");
+  const providerResultaat = await genereerViaProvider(provider, req, {
+    anthropicClient: client,
+    fetchImpl,
+  });
+  const volledig = providerResultaat.tekst;
+  const latency_ms = providerResultaat.latency_ms;
 
   const { zichtbaar, vervolgvragen } = splitsVervolgvragen(volledig);
 
@@ -474,15 +498,19 @@ export async function genereerAntwoord(
     vervolgvragen,
     citaties: { totaal: citatieMatches.length, ongeldig },
     tokengebruik: {
-      in: finalMessage.usage?.input_tokens ?? 0,
-      out: finalMessage.usage?.output_tokens ?? 0,
+      in: providerResultaat.tokens.in,
+      out: providerResultaat.tokens.out,
     },
     latency_ms,
     effectieveInstellingen: {
+      model_provider: provider,
       model_name: model,
-      temperature_effective: temperatuurGezet ? (temperature as number) : null,
+      // Bij reasoning-modellen is sampling vergrendeld → temperature/top_p altijd
+      // null (ook als er per ongeluk een waarde is meegegeven; de adapter negeert die).
+      temperature_effective: redeneermodel ? null : temperatuurGezet ? (temperature as number) : null,
       max_tokens_effective: maxTokens,
-      top_p_effective: topPGezet ? (topP as number) : null,
+      top_p_effective: redeneermodel ? null : topPGezet ? (topP as number) : null,
+      reasoning_effort_effective: redeneermodel ? reasoningEffort ?? null : null,
       provider_default_used: !temperatuurGezet || !topPGezet,
     },
   };

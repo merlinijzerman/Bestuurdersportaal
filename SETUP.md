@@ -59,6 +59,22 @@ ANTHROPIC_API_KEY=sk-ant-...               (jouw Anthropic sleutel)
 NEXT_PUBLIC_FONDS_NAAM=Stichting Pensioenfonds Horizon
 ```
 
+**Optioneel — AI Quality Lab multi-provider (AQL-6, alleen voor de providervergelijking).**
+Deze keys zijn **server-side only** (nooit `NEXT_PUBLIC_`) en worden pas gezet nadat de
+governance-poort groen is (decision `0064`, FG/DPO-akkoord). Zonder key blijft de betreffende
+challenger simpelweg onbruikbaar; de baseline (Claude) draait ongewijzigd.
+
+```
+OPENAI_API_KEY=sk-...        # OpenAI GPT-challenger (reguliere api.openai.com)
+MISTRAL_API_KEY=...          # Mistral: embeddings/OCR én (AQL-6) generatie-challenger
+# Optioneel voor de latere EU-migratie (config-wissel, geen herbouw):
+# OPENAI_BASE_URL=https://<azure-openai-eu-endpoint>/...   (default: https://api.openai.com/v1)
+# MISTRAL_CHAT_URL=https://<mistral-eu-endpoint>/v1/chat/completions
+```
+
+> ⚠️ Externe providers draaien uitsluitend op de **synthetische golden set** — nooit echte
+> fondsdata (decision `0064`). No-training aan; EU-residentie is bewust uitgesteld (roadmap).
+
 ---
 
 ## Stap 5 — Applicatie starten (3 min)

@@ -73,11 +73,25 @@ export interface BatchOpties {
 
 // Indicatieve kosten (schatting) per miljoen tokens, USD. Bewust conservatief en
 // als SCHATTING gelabeld in de UI. Onbekend model → null (geen schijnprecisie).
+// AQL-6: OpenAI/Mistral-tarieven zijn INDICATIEF — verifieer tegen de actuele
+// prijslijst van de provider vóór ze in een formeel kostenoordeel meewegen.
 const KOSTEN_PER_MTOK: Record<string, { in: number; out: number }> = {
   "claude-sonnet-4-6": { in: 3, out: 15 },
   "claude-sonnet-4-5": { in: 3, out: 15 },
   "claude-opus-4-8": { in: 15, out: 75 },
   "claude-haiku-4-5-20251001": { in: 0.8, out: 4 },
+  // Challengers (ander provider dan productie) — indicatieve tarieven.
+  "gpt-4.1": { in: 3, out: 12 },
+  "gpt-4.1-mini": { in: 0.8, out: 3.2 },
+  "gpt-4o": { in: 2.5, out: 10 },
+  "gpt-4o-mini": { in: 0.15, out: 0.6 },
+  // Reasoning-modellen: de out-tokens omvatten óók de (gefactureerde) reasoning-
+  // tokens; de effectieve kosten liggen daardoor in de praktijk hoger dan bij een
+  // chat-model met hetzelfde zichtbare antwoord. Tarieven indicatief.
+  "gpt-5": { in: 1.25, out: 10 },
+  "gpt-5-mini": { in: 0.25, out: 2 },
+  "gpt-5-nano": { in: 0.05, out: 0.4 },
+  "mistral-large-latest": { in: 2, out: 6 },
 };
 function schatKosten(model: string, tin: number, tout: number): number | null {
   const p = KOSTEN_PER_MTOK[model];
@@ -203,12 +217,14 @@ async function laadModelConfig(
   if (!modelConfigId) return {};
   const { data } = await svc
     .from("aqlab_model_configurations")
-    .select("model_name, temperature_requested, max_tokens_requested, top_p_requested, retrieval_settings")
+    .select("model_provider, model_name, temperature_requested, max_tokens_requested, top_p_requested, reasoning_effort_requested, retrieval_settings")
     .eq("id", modelConfigId)
     .maybeSingle();
   if (!data) return {};
   return {
     model: (data.model_name as string) || undefined,
+    provider: (data.model_provider as AdapterModelConfig["provider"]) ?? undefined,
+    reasoningEffort: (data.reasoning_effort_requested as AdapterModelConfig["reasoningEffort"]) ?? undefined,
     maxTokens: (data.max_tokens_requested as number) ?? undefined,
     temperature: (data.temperature_requested as number | null) ?? undefined,
     topP: (data.top_p_requested as number | null) ?? undefined,
@@ -334,10 +350,12 @@ async function verwerkJob(
         snapshot_refs: gen.snapshot_refs,
         snapshot_hash: gen.snapshot_hash,
         retrieval_filter: null,
+        model_provider: eff.model_provider,
         model_name: eff.model_name,
         temperature_effective: eff.temperature_effective,
         max_tokens_effective: eff.max_tokens_effective,
         top_p_effective: eff.top_p_effective,
+        reasoning_effort_effective: eff.reasoning_effort_effective,
         provider_default_used: eff.provider_default_used,
         retrieval_settings_effective: gen.retrieval_settings_effective,
         prompt_version_id: run.prompt_version_id,
@@ -863,10 +881,12 @@ export async function draaiAdHocConsistentieSync(
         herkomstlabels: metadataOnly ? null : { citaties: b.gen.citaties },
         snapshot_refs: b.gen.snapshot_refs,
         snapshot_hash: b.gen.snapshot_hash,
+        model_provider: eff.model_provider,
         model_name: eff.model_name,
         temperature_effective: eff.temperature_effective,
         max_tokens_effective: eff.max_tokens_effective,
         top_p_effective: eff.top_p_effective,
+        reasoning_effort_effective: eff.reasoning_effort_effective,
         provider_default_used: eff.provider_default_used,
         retrieval_settings_effective: b.gen.retrieval_settings_effective,
         prompt_version_id: config.prompt_version_id ?? null,

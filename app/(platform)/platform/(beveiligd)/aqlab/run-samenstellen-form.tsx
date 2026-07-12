@@ -15,6 +15,7 @@ import { startRunActie } from "./acties";
 import {
   autoNaam,
   leidGewijzigdeAsAf,
+  type ModelProvider,
   type ToegestaanModel,
   type VariantInstellingen,
 } from "@/lib/aqlab/modellen";
@@ -47,6 +48,20 @@ const AS_LABEL: Record<string, string> = {
   meerdere: "meerdere assen",
 };
 
+// AQL-6 — provider-groepering in de challenger-dropdown. Anthropic eerst
+// (baseline/productie), daarna de "ander provider dan productie"-challengers.
+const PROVIDER_LABEL: Record<ModelProvider, string> = {
+  anthropic: "Anthropic — productie",
+  openai: "OpenAI — ander provider dan productie",
+  mistral: "Mistral — ander provider dan productie",
+};
+const PROVIDER_BADGE: Record<ModelProvider, string> = {
+  anthropic: "Anthropic",
+  openai: "OpenAI",
+  mistral: "Mistral",
+};
+const PROVIDER_VOLGORDE: ModelProvider[] = ["anthropic", "openai", "mistral"];
+
 const TEMP_OPTIES: { value: string; label: string }[] = [
   { value: "default", label: "provider-default (zoals productie)" },
   { value: "0.0", label: "0.0 — deterministisch" },
@@ -54,6 +69,15 @@ const TEMP_OPTIES: { value: string; label: string }[] = [
   { value: "0.5", label: "0.5 — midden" },
   { value: "0.7", label: "0.7 — creatief" },
   { value: "1.0", label: "1.0 — hoog" },
+];
+
+// Reasoning-effort-opties (AQL-6) — vervangt temperature bij reasoning-modellen.
+const EFFORT_OPTIES: { value: string; label: string }[] = [
+  { value: "default", label: "provider-default" },
+  { value: "minimal", label: "minimal — snelst/goedkoopst" },
+  { value: "low", label: "low" },
+  { value: "medium", label: "medium" },
+  { value: "high", label: "high — grondigst/duurst" },
 ];
 
 function kort(id: string): string {
@@ -83,10 +107,14 @@ export default function RunSamenstellenForm({
   const [tempMode, setTempMode] = useState<string>("default");
   const [maxTokens, setMaxTokens] = useState<number>(productiekern.defaultMaxTokens);
   const [topP, setTopP] = useState<string>("");
+  const [reasoningEffort, setReasoningEffort] = useState<string>("default");
   const [adHocVraag, setAdHocVraag] = useState<string>("");
   const [soort, setSoort] = useState<string>("functioneel");
 
   const gekozenModel = allowlist.find((m) => m.model_name === challengerModel) ?? productiekern;
+  // Reasoning-modellen (o-serie/GPT-5): sampling vergrendeld → toon reasoning-effort
+  // i.p.v. temperature/top-p (AQL-6).
+  const isReasoning = gekozenModel.redeneermodel === true;
 
   // Baseline voor de gekozen testset (of productiekern-default als er geen vrijgave is).
   const baseline = testSetId ? baselines[testSetId] ?? null : null;
@@ -94,13 +122,16 @@ export default function RunSamenstellenForm({
 
   const challengerVariant: VariantInstellingen = {
     model: challengerModel,
-    temperature: tempMode === "default" ? null : Number(tempMode),
+    // Reasoning-modellen: temperature/top-p vergrendeld → altijd null; de knop is effort.
+    temperature: isReasoning || tempMode === "default" ? null : Number(tempMode),
     maxTokens,
-    topP: topP.trim() ? Number(topP) : null,
+    topP: isReasoning || !topP.trim() ? null : Number(topP),
+    reasoningEffort: isReasoning && reasoningEffort !== "default" ? (reasoningEffort as VariantInstellingen["reasoningEffort"]) : null,
     retrieval: {},
   };
   const afgeleideAs = leidGewijzigdeAsAf(baselineVariant, challengerVariant);
-  const expliciteSampling = tempMode !== "default" || topP.trim() !== "";
+  const expliciteSampling = !isReasoning && (tempMode !== "default" || topP.trim() !== "");
+  const expliciteEffort = isReasoning && reasoningEffort !== "default";
 
   // ── Proactieve vereisten/blokkers ──────────────────────────────────────────
   const blokkers: string[] = [];
@@ -132,6 +163,20 @@ export default function RunSamenstellenForm({
   if (expliciteSampling) {
     waarschuwingen.push(
       "Je zet een sampling-parameter expliciet (temperature en/of top-p). Productie laat beide op provider-default — deze variant wijkt dus af van wat live draait. Voor een zuivere vergelijking met de baseline: laat op provider-default. De variant wordt append-only gepind (§2B)."
+    );
+  }
+  // AQL-6 — "ander provider dan productie": productie draait op Claude; een GPT-/
+  // Mistral-run test een ánder provider. De gewijzigde as is dan provider + model
+  // en het regressiesignaal is minder zuiver toewijsbaar (geen schijnzekerheid).
+  if ((runType === "full_regression" || runType === "subset") && gekozenModel.provider !== "anthropic") {
+    waarschuwingen.push(
+      `Challenger draait op een ander provider dan productie (${PROVIDER_BADGE[gekozenModel.provider]}). Productie draait op Claude; dit test een ánder provider — de gewijzigde as is provider + model en het signaal is minder zuiver aan één oorzaak toe te schrijven. Externe providers draaien uitsluitend op de synthetische golden set (geen echte fondsdata). Baseline en judge blijven Claude.`
+    );
+  }
+  // AQL-6 — reasoning-model: sampling vergrendeld; de knop is reasoning-effort.
+  if ((runType === "full_regression" || runType === "subset") && isReasoning) {
+    waarschuwingen.push(
+      `Dit is een reasoning-model: temperature/top-p zijn vergrendeld en het model besteedt (gefactureerde) verborgen reasoning-tokens vóór het zichtbare antwoord. Zet "max completion tokens" ruim en stuur via reasoning-effort${expliciteEffort ? ` (nu: ${reasoningEffort}, wordt append-only gepind)` : " (nu: provider-default)"}.`
     );
   }
   if ((runType === "full_regression" || runType === "subset") && testSetId && !baseline) {
@@ -240,13 +285,33 @@ export default function RunSamenstellenForm({
                     }}
                     className="w-full rounded-lg border border-line bg-white px-3 py-2 text-sm"
                   >
-                    {allowlist.map((m) => (
-                      <option key={m.model_name} value={m.model_name}>
-                        {modelOptieLabel(m)}
-                      </option>
-                    ))}
+                    {PROVIDER_VOLGORDE.map((prov) => {
+                      const groep = allowlist.filter((m) => m.provider === prov);
+                      if (groep.length === 0) return null;
+                      return (
+                        <optgroup key={prov} label={PROVIDER_LABEL[prov]}>
+                          {groep.map((m) => (
+                            <option key={m.model_name} value={m.model_name}>
+                              {modelOptieLabel(m)}
+                            </option>
+                          ))}
+                        </optgroup>
+                      );
+                    })}
                   </select>
                 </label>
+                <div className="mt-1 flex items-center gap-2">
+                  <span
+                    className={`rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${
+                      gekozenModel.provider === "anthropic"
+                        ? "bg-ink/10 text-ink/60"
+                        : "bg-warn-tint text-warn-ink"
+                    }`}
+                  >
+                    {PROVIDER_BADGE[gekozenModel.provider]}
+                    {gekozenModel.provider !== "anthropic" && " · ander provider"}
+                  </span>
+                </div>
                 <p className="mt-1 text-xs text-ink/50">{gekozenModel.toelichting}</p>
 
                 <button
@@ -254,64 +319,106 @@ export default function RunSamenstellenForm({
                   onClick={() => setToonInstellingen((v) => !v)}
                   className="mt-2 rounded-lg border border-dashed border-line px-2 py-1 text-xs text-ink/70 hover:bg-app-bg"
                 >
-                  ⚙ Challenger-instellingen {toonInstellingen ? "verbergen" : "aanpassen (tokens / temperature)"}
+                  ⚙ Challenger-instellingen {toonInstellingen ? "verbergen" : `aanpassen (tokens / ${isReasoning ? "reasoning-effort" : "temperature"})`}
                 </button>
 
                 {toonInstellingen && (
                   <div className="mt-2 grid gap-2 sm:grid-cols-3">
                     <label className="text-xs">
-                      <span className="mb-1 block text-ink/60">Max tokens</span>
+                      <span className="mb-1 block text-ink/60">
+                        {isReasoning ? "Max completion tokens" : "Max tokens"}
+                      </span>
                       <input
                         name="max_tokens"
                         type="number"
                         min={256}
-                        max={8192}
+                        max={16384}
                         step={100}
                         value={maxTokens}
                         onChange={(e) => setMaxTokens(Number(e.target.value))}
                         className="w-full rounded-lg border border-line bg-white px-2 py-1"
                       />
+                      {isReasoning && (
+                        <span className="mt-0.5 block text-[10px] text-ink/40">
+                          incl. verborgen reasoning-tokens — zet ruim
+                        </span>
+                      )}
                     </label>
-                    <label className="text-xs">
-                      <span className="mb-1 block text-ink/60">Temperature</span>
-                      <select
-                        name="temp_mode"
-                        value={tempMode}
-                        onChange={(e) => setTempMode(e.target.value)}
-                        className="w-full rounded-lg border border-line bg-white px-2 py-1"
-                      >
-                        {TEMP_OPTIES.map((o) => (
-                          <option key={o.value} value={o.value}>{o.label}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="text-xs">
-                      <span className="mb-1 block text-ink/60">Top-p (optioneel)</span>
-                      <input
-                        name="top_p"
-                        type="number"
-                        min={0}
-                        max={1}
-                        step={0.05}
-                        value={topP}
-                        onChange={(e) => setTopP(e.target.value)}
-                        placeholder="provider-default"
-                        className="w-full rounded-lg border border-line bg-white px-2 py-1"
-                      />
-                    </label>
+
+                    {isReasoning ? (
+                      // Reasoning-modellen: temperature/top-p vergrendeld → effort-knop.
+                      <label className="text-xs">
+                        <span className="mb-1 block text-ink/60">Reasoning-effort</span>
+                        <select
+                          name="reasoning_effort"
+                          value={reasoningEffort}
+                          onChange={(e) => setReasoningEffort(e.target.value)}
+                          className="w-full rounded-lg border border-line bg-white px-2 py-1"
+                        >
+                          {EFFORT_OPTIES.map((o) => (
+                            <option key={o.value} value={o.value}>{o.label}</option>
+                          ))}
+                        </select>
+                        <span className="mt-0.5 block text-[10px] text-ink/40">
+                          temperature/top-p zijn bij dit model vergrendeld
+                        </span>
+                      </label>
+                    ) : (
+                      <>
+                        <label className="text-xs">
+                          <span className="mb-1 block text-ink/60">Temperature</span>
+                          <select
+                            name="temp_mode"
+                            value={tempMode}
+                            onChange={(e) => setTempMode(e.target.value)}
+                            className="w-full rounded-lg border border-line bg-white px-2 py-1"
+                          >
+                            {TEMP_OPTIES.map((o) => (
+                              <option key={o.value} value={o.value}>{o.label}</option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="text-xs">
+                          <span className="mb-1 block text-ink/60">Top-p (optioneel)</span>
+                          <input
+                            name="top_p"
+                            type="number"
+                            min={0}
+                            max={1}
+                            step={0.05}
+                            value={topP}
+                            onChange={(e) => setTopP(e.target.value)}
+                            placeholder="provider-default"
+                            className="w-full rounded-lg border border-line bg-white px-2 py-1"
+                          />
+                        </label>
+                      </>
+                    )}
                   </div>
                 )}
-                {/* Zorg dat de challenger-instellingen ook meegaan als het paneel dicht is. */}
+                {/* Zorg dat de challenger-instellingen ook meegaan als het paneel dicht is.
+                    Reasoning-modellen dragen effort mee; chat-modellen temperature/top-p. */}
                 {!toonInstellingen && (
                   <>
                     <input type="hidden" name="max_tokens" value={maxTokens} />
-                    <input type="hidden" name="temp_mode" value={tempMode} />
-                    <input type="hidden" name="top_p" value={topP} />
+                    {isReasoning ? (
+                      <input type="hidden" name="reasoning_effort" value={reasoningEffort} />
+                    ) : (
+                      <>
+                        <input type="hidden" name="temp_mode" value={tempMode} />
+                        <input type="hidden" name="top_p" value={topP} />
+                      </>
+                    )}
                   </>
                 )}
 
                 <div className="mt-2 text-xs text-ink/60">
-                  Gewijzigde as t.o.v. baseline: <span className="font-medium">{AS_LABEL[afgeleideAs]}</span>{" "}
+                  Gewijzigde as t.o.v. baseline:{" "}
+                  <span className="font-medium">
+                    {gekozenModel.provider !== "anthropic" && afgeleideAs !== "geen"
+                      ? "provider + model"
+                      : AS_LABEL[afgeleideAs]}
+                  </span>{" "}
                   <span className="text-ink/40">(automatisch afgeleid)</span>
                 </div>
                 {afgeleideAs === "geen" && (

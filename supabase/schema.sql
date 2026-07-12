@@ -1555,6 +1555,11 @@ create table if not exists public.fonds_klantbeeld_cohort (
 --   aqlab_runs                   — uitvoering + aggregatie (consistency-JSON gereserveerd, ADR 0056)
 --                                   + naam (AQL-5): benoembare/terugvindbare run
 --   aqlab_run_outputs            — resultaat per iteratie + snapshot-refs (refs_only) + effectieve instellingen
+--                                   + model_provider (AQL-6): bevroren generatie-provider per iteratie
+--                                     (anthropic=baseline; openai/mistral=challenger). Zie 2026_07_12_aqlab_7_*.sql.
+--                                   + reasoning_effort_effective (AQL-6): bevroren reasoning-effort bij
+--                                     reasoning-modellen (o-serie/GPT-5). Zie 2026_07_12_aqlab_8_*.sql
+--                                     (+ aqlab_model_configurations.reasoning_effort_requested).
 --   aqlab_scores                 — score per output×criterium (criterium_code → lib/aqlab/criteria.ts)
 --   aqlab_findings               — bevindingen per score
 --   aqlab_human_reviews          — menselijke aftekening (MVP light)

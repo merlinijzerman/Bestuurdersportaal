@@ -26,6 +26,7 @@ import {
   type GenereerAntwoordParams,
 } from "@/lib/generatie-kern";
 import { sha256 } from "@/lib/aqlab/seed/canonical";
+import { providerVanModel, isRedeneermodel, type ModelProvider, type ReasoningEffort } from "@/lib/aqlab/modellen";
 
 /** Eén synthetische fixture-bron voor een testcase. */
 export interface FixtureContext {
@@ -37,6 +38,12 @@ export interface FixtureContext {
 
 export interface AdapterModelConfig {
   model?: string;
+  /** Generatie-provider (AQL-6). Ontbreekt → afgeleid uit het model (default anthropic). */
+  provider?: ModelProvider;
+  /** Reasoning-model (o-serie/GPT-5)? Ontbreekt → afgeleid uit de allowlist. */
+  redeneermodel?: boolean;
+  /** Reasoning-effort (alleen bij reasoning-modellen). null = provider-default. */
+  reasoningEffort?: ReasoningEffort | null;
   maxTokens?: number;
   /** null/undefined → provider-default overnemen (zoals productie). */
   temperature?: number | null;
@@ -54,8 +61,10 @@ export interface AdapterParams {
   modelConfig?: AdapterModelConfig;
   promptVersieId?: string | null;
   metVervolgvragen?: boolean;
-  /** Injecteerbare model-client (hermetische tests). */
+  /** Injecteerbare Anthropic stream-client (hermetische tests). */
   client?: GenereerAntwoordParams["client"];
+  /** Injecteerbare fetch voor de OpenAI/Mistral-adapters (hermetische provider-pariteitstest). */
+  fetchImpl?: GenereerAntwoordParams["fetchImpl"];
 }
 
 export interface AdapterResultaat {
@@ -113,6 +122,11 @@ export async function genereerViaAdapter(params: AdapterParams): Promise<Adapter
   const cfg = params.modelConfig ?? {};
   const model = cfg.model ?? AI_MODEL;
   const maxTokens = cfg.maxTokens ?? MAX_TOKENS;
+  // Provider expliciet van de config, anders afgeleid uit de (unieke) modelnaam.
+  const provider = cfg.provider ?? providerVanModel(model);
+  // Reasoning-model + effort: expliciet van de config, anders afgeleid uit de allowlist.
+  const redeneermodel = cfg.redeneermodel ?? isRedeneermodel(model);
+  const reasoningEffort = cfg.reasoningEffort ?? null;
 
   const chunks = fixturesNaarChunks(params.fixtures);
   const { contextTekst, bronnen } = maakContext(chunks);
@@ -129,12 +143,16 @@ export async function genereerViaAdapter(params: AdapterParams): Promise<Adapter
     systeemBlokken,
     berichten: [{ role: "user", content: gebruikersPrompt }],
     model,
+    provider,
+    redeneermodel,
+    reasoningEffort,
     maxTokens,
     temperature: cfg.temperature,
     topP: cfg.topP,
     metVervolgvragen: params.metVervolgvragen ?? true,
     bronnenAantal: bronnen.length,
     client: params.client,
+    fetchImpl: params.fetchImpl,
   });
 
   // snapshot_hash: sha256 over de gebruikte, canonieke fixture-teksten.

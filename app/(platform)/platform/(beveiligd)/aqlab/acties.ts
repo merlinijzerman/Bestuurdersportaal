@@ -21,8 +21,12 @@ import {
   AQLAB_TOEGESTANE_MODELLEN,
   isToegestaanModel,
   toegestaanModel,
+  providerVanModel,
+  isRedeneermodel,
+  REASONING_EFFORTS,
   autoNaam,
   leidGewijzigdeAsAf,
+  type ReasoningEffort,
   type VariantInstellingen,
   type GewijzigdeAs,
 } from "@/lib/aqlab/modellen";
@@ -79,11 +83,14 @@ async function pinModelConfig(svc: SupabaseClient, variant: VariantInstellingen)
     .from("aqlab_model_configurations")
     .insert({
       naam,
-      model_provider: "anthropic",
+      // AQL-6: provider afgeleid uit de (unieke) modelnaam — challengers kunnen nu
+      // OpenAI/Mistral zijn. De hash blijft provider-onafhankelijk (decision 0064).
+      model_provider: providerVanModel(variant.model),
       model_name: variant.model,
       temperature_requested: variant.temperature,
       max_tokens_requested: variant.maxTokens,
       top_p_requested: variant.topP,
+      reasoning_effort_requested: variant.reasoningEffort ?? null,
       retrieval_settings: variant.retrieval,
       is_baseline: false,
       config_hash: hash,
@@ -111,6 +118,7 @@ async function pinModelConfig(svc: SupabaseClient, variant: VariantInstellingen)
       temperature: variant.temperature,
       max_tokens: variant.maxTokens,
       top_p: variant.topP,
+      reasoning_effort: variant.reasoningEffort ?? null,
     },
   });
   if (logErr) throw new Error(`aqlab_log (modelconfig_pinned): ${logErr.message}`);
@@ -134,6 +142,7 @@ export async function startRunActie(formData: FormData): Promise<void> {
   const tempMode = leeg(formData.get("temp_mode")); // "default" of een getalstring
   const maxTokensRaw = leeg(formData.get("max_tokens"));
   const topPRaw = leeg(formData.get("top_p"));
+  const reasoningEffortRaw = leeg(formData.get("reasoning_effort")); // "default" of een effort
 
   // Harde blokkers server-side afdwingen (defense-in-depth naast de UI).
   const blokker = valideerRunInvoer({ runType, testSetId, adHocVraag });
@@ -157,16 +166,32 @@ export async function startRunActie(formData: FormData): Promise<void> {
       let gewijzigdeAs: GewijzigdeAs | null = null;
       if (challengerModel) {
         const kern = toegestaanModel(challengerModel)!;
+        const redeneermodel = isRedeneermodel(challengerModel);
         // NaN-veilig: negeer malformed numerieke invoer (defense-in-depth naast de
         // UI-constraints), zodat config_hash en de opgeslagen effectieve waarden
         // nooit uiteenlopen (§2B reproduceerbaarheid).
-        const tempNum = tempMode && tempMode !== "default" ? Number(tempMode) : NaN;
-        const temperature = Number.isFinite(tempNum) ? tempNum : null;
         const maxNum = maxTokensRaw ? Number(maxTokensRaw) : NaN;
         const maxTokens = Number.isFinite(maxNum) && maxNum > 0 ? maxNum : kern.defaultMaxTokens;
+        // Reasoning-modellen: sampling is vergrendeld (temperature/top_p altijd null);
+        // de "denk-knop" is reasoning_effort. Chat-modellen: andersom (geen effort).
+        const effort =
+          redeneermodel && reasoningEffortRaw && reasoningEffortRaw !== "default"
+            ? (REASONING_EFFORTS as string[]).includes(reasoningEffortRaw)
+              ? (reasoningEffortRaw as ReasoningEffort)
+              : null
+            : null;
+        const tempNum = tempMode && tempMode !== "default" ? Number(tempMode) : NaN;
+        const temperature = !redeneermodel && Number.isFinite(tempNum) ? tempNum : null;
         const topNum = topPRaw ? Number(topPRaw) : NaN;
-        const topP = Number.isFinite(topNum) && topNum >= 0 && topNum <= 1 ? topNum : null;
-        const variant: VariantInstellingen = { model: challengerModel, temperature, maxTokens, topP, retrieval: {} };
+        const topP = !redeneermodel && Number.isFinite(topNum) && topNum >= 0 && topNum <= 1 ? topNum : null;
+        const variant: VariantInstellingen = {
+          model: challengerModel,
+          temperature,
+          maxTokens,
+          topP,
+          reasoningEffort: effort,
+          retrieval: {},
+        };
         modelConfigId = await pinModelConfig(svc, variant);
         // Gewijzigde as t.o.v. de productie-baseline; zonder vrijgegeven baseline
         // t.o.v. de productiekern-default — identiek aan wat het formulier toont,

@@ -50,7 +50,8 @@ export async function seedStarterModelConfigs(
     };
     return {
       naam: m.label,
-      model_provider: "anthropic",
+      // AQL-6: de ECHTE provider per allowlist-entry (niet meer hardcoded).
+      model_provider: m.provider,
       model_name: m.model_name,
       temperature_requested: null,
       max_tokens_requested: m.defaultMaxTokens,

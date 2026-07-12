@@ -11,8 +11,11 @@ import assert from "node:assert/strict";
 import {
   AQLAB_TOEGESTANE_MODELLEN,
   isToegestaanModel,
+  providerVanModel,
+  isRedeneermodel,
   autoNaam,
   leidGewijzigdeAsAf,
+  type ModelProvider,
   type VariantInstellingen,
 } from "./aqlab/modellen";
 import { configHash } from "./aqlab/modellen-hash";
@@ -45,8 +48,71 @@ check("allowlist telt ≥3 modellen (DoD)", () => {
 });
 check("isToegestaanModel accepteert allowlist, weigert vrije tekst", () => {
   assert.equal(isToegestaanModel("claude-opus-4-8"), true);
-  assert.equal(isToegestaanModel("gpt-4o"), false);
+  // Niet-allowlisted modelstrings (ook plausibel klinkende) blijven geweigerd —
+  // modelkeuze is nooit vrije tekst.
+  assert.equal(isToegestaanModel("gpt-3.5-turbo"), false);
+  assert.equal(isToegestaanModel("gpt-4o-realtime"), false);
   assert.equal(isToegestaanModel(""), false);
+});
+
+// ── Multi-provider (AQL-6) ───────────────────────────────────────────────────
+check("allowlist bevat de toegestane OpenAI- en Mistral-challengers", () => {
+  for (const m of ["gpt-4.1", "gpt-4.1-mini", "gpt-4o", "gpt-4o-mini", "mistral-large-latest"]) {
+    assert.equal(isToegestaanModel(m), true);
+  }
+});
+check("elke allowlist-entry heeft een geldige provider; baseline = anthropic", () => {
+  const geldig: ModelProvider[] = ["anthropic", "openai", "mistral"];
+  for (const m of AQLAB_TOEGESTANE_MODELLEN) assert.ok(geldig.includes(m.provider));
+  const baseline = AQLAB_TOEGESTANE_MODELLEN.find((m) => m.isBaseline)!;
+  assert.equal(baseline.provider, "anthropic");
+});
+check("providerVanModel leidt provider af uit de modelnaam (default anthropic)", () => {
+  assert.equal(providerVanModel("claude-sonnet-4-6"), "anthropic");
+  assert.equal(providerVanModel("gpt-4.1"), "openai");
+  assert.equal(providerVanModel("mistral-large-latest"), "mistral");
+  assert.equal(providerVanModel("onbekend-model"), "anthropic");
+});
+check("config-hash is provider-onafhankelijk (decision 0064): model draagt identiteit", () => {
+  // Twee verschillende modellen (dus providers) → verschillende hash via model,
+  // niet via een aparte provider-as. Zelfde model → zelfde hash ongeacht provider.
+  const claude: VariantInstellingen = { model: "claude-sonnet-4-6", temperature: null, maxTokens: 3200, topP: null, retrieval: {} };
+  const gpt: VariantInstellingen = { ...claude, model: "gpt-4.1" };
+  assert.notEqual(configHash(claude), configHash(gpt));
+  // Canoniek bevat geen provider-veld → hash blijft stabiel over herhaalde opbouw.
+  assert.equal(configHash(gpt), configHash({ ...gpt }));
+});
+
+// ── Reasoning-modellen (AQL-6) ───────────────────────────────────────────────
+check("reasoning-modellen (GPT-5-serie) staan op de allowlist en zijn geflagd", () => {
+  for (const m of ["gpt-5", "gpt-5-mini", "gpt-5-nano"]) assert.equal(isToegestaanModel(m), true);
+  assert.equal(isRedeneermodel("gpt-5"), true);
+  assert.equal(isRedeneermodel("gpt-5-mini"), true);
+  // Chat-modellen zijn géén reasoning-model.
+  assert.equal(isRedeneermodel("gpt-4.1"), false);
+  assert.equal(isRedeneermodel("claude-sonnet-4-6"), false);
+});
+check("reasoning_effort is back-compat in de hash: null == weggelaten", () => {
+  const zonder: VariantInstellingen = { model: "gpt-5", temperature: null, maxTokens: 8000, topP: null, retrieval: {} };
+  const nul: VariantInstellingen = { ...zonder, reasoningEffort: null };
+  // Een expliciete null mag de hash NIET veranderen (anders zouden bestaande
+  // chat-configs kantelen). Alleen een gezette effort telt mee.
+  assert.equal(configHash(zonder), configHash(nul));
+});
+check("reasoning_effort is een eigen hash-as als het gezet is", () => {
+  const base: VariantInstellingen = { model: "gpt-5", temperature: null, maxTokens: 8000, topP: null, retrieval: {} };
+  assert.notEqual(configHash(base), configHash({ ...base, reasoningEffort: "high" }));
+  assert.notEqual(configHash({ ...base, reasoningEffort: "low" }), configHash({ ...base, reasoningEffort: "high" }));
+});
+check("autoNaam toont reasoning-effort i.p.v. temperature bij reasoning-modellen", () => {
+  assert.equal(
+    autoNaam({ model: "gpt-5", temperature: null, maxTokens: 8000, topP: null, reasoningEffort: "high", retrieval: {} }),
+    "gpt-5 · effort:high · 8000"
+  );
+});
+check("reasoning_effort-wijziging telt als de sampling-as ('temperature')", () => {
+  const base: VariantInstellingen = { model: "gpt-5", temperature: null, maxTokens: 8000, topP: null, reasoningEffort: "low", retrieval: {} };
+  assert.equal(leidGewijzigdeAsAf(base, { ...base, reasoningEffort: "high" }), "temperature");
 });
 
 // ── Hash-stabiliteit + dedup ─────────────────────────────────────────────────
