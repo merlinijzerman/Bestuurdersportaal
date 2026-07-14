@@ -35,6 +35,14 @@ function geautoriseerd(req: NextRequest): boolean {
 }
 
 async function draai(req: NextRequest): Promise<NextResponse> {
+  // Fase B (variant C): de cron staat in vercel.json en vuurt in BEIDE Vercel-
+  // projecten. De worker hoort alleen in het beheer-project — dat is het enige
+  // project met de service-role. Skip expliciet op de gedeelde app/publiek-surface
+  // (die heeft de service-role niet meer). Zonder DEPLOY_TARGET (huidige enkel-
+  // project) draait hij gewoon door (backward-compat).
+  if (process.env.DEPLOY_TARGET === "app") {
+    return NextResponse.json({ ok: true, skipped: "deploy_target=app" });
+  }
   if (!geautoriseerd(req)) {
     return NextResponse.json({ error: "Niet geautoriseerd" }, { status: 401 });
   }

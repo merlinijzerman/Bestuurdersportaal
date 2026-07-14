@@ -76,23 +76,38 @@ export function normaliseerHost(host: string | null | undefined): string | null 
   return h || null;
 }
 
-/** Hoort deze host bij de platform-surface? Lege/ontbrekende config → nooit. */
+/** Normaliseer een komma-gescheiden hostlijst naar een set genormaliseerde hosts.
+ *  Zo mag elke *_HOST-env één host ÓF een komma-lijst zijn (bv. apex + www);
+ *  elke variant wordt via normaliseerHost (poort/`www.`) gelijkgetrokken. Dit
+ *  contract is identiek aan de origin-check (originToegestaan in /api/contact),
+ *  zodat surface-routing en CSRF-check dezelfde env-waarde consistent lezen. */
+function hostSet(waarde: string | null | undefined): Set<string> {
+  const out = new Set<string>();
+  if (!waarde) return out;
+  for (const deel of waarde.split(",")) {
+    const n = normaliseerHost(deel);
+    if (n) out.add(n);
+  }
+  return out;
+}
+
+/** Hoort deze host bij de platform-surface? Lege/ontbrekende config → nooit.
+ *  platformHost mag een komma-lijst zijn (consistent met bepaalSurface). */
 export function isPlatformHost(
   host: string | null | undefined,
   platformHost: string | null | undefined
 ): boolean {
-  if (!host || !platformHost) return false;
-  // Strip poort (localhost:3000) en normaliseer.
-  const h = host.split(":")[0].trim().toLowerCase();
-  const p = platformHost.split(":")[0].trim().toLowerCase();
-  return h === p;
+  const h = normaliseerHost(host);
+  if (!h) return false;
+  return hostSet(platformHost).has(h);
 }
 
 /** Bepaalt de surface op basis van de request-host en het env-contract. Pure,
  *  zodat de host-matrix zonder server testbaar is. Matchvolgorde:
- *  platform → app → marketing → default 'app'. De app-precedentie boven
+ *  platform → app → marketing → default 'app'. Elke *_HOST mag een komma-lijst
+ *  zijn (apex + www); elk deel wordt genormaliseerd. De app-precedentie boven
  *  marketing voorkomt bovendien een redirect-lus bij een (fout)configuratie
- *  waarin APP_HOST en MARKETING_HOST gelijk zijn. */
+ *  waarin APP_HOST en MARKETING_HOST overlappen. */
 export function bepaalSurface(args: {
   host: string | null | undefined;
   marketingHost?: string | null;
@@ -100,13 +115,11 @@ export function bepaalSurface(args: {
   platformHost?: string | null;
 }): Surface {
   const h = normaliseerHost(args.host);
-  const platform = normaliseerHost(args.platformHost);
-  const app = normaliseerHost(args.appHost);
-  const marketing = normaliseerHost(args.marketingHost);
+  if (!h) return "app";
 
-  if (h && platform && h === platform) return "platform";
-  if (h && app && h === app) return "app";
-  if (h && marketing && h === marketing) return "marketing";
+  if (hostSet(args.platformHost).has(h)) return "platform";
+  if (hostSet(args.appHost).has(h)) return "app";
+  if (hostSet(args.marketingHost).has(h)) return "marketing";
   // Fail-safe: onbekende/onconfigureerde host → 'app' (achter de auth-gate).
   // Platform is hierboven al afgehandeld en wordt nooit default → fail-closed.
   return "app";

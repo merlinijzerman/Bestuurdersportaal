@@ -52,6 +52,17 @@ test("surface: app-host → app, beheer-host → platform", () => {
   assert.equal(bepaalSurface({ host: "beheer.bestuurdersportaal.com", ...env }), "platform");
 });
 
+test("surface: MARKETING_HOST mag een komma-lijst zijn (apex + www expliciet)", () => {
+  // Elke *_HOST mag één host óf een komma-lijst zijn; elk deel wordt
+  // genormaliseerd en gematcht (consistent met de origin-check in /api/contact).
+  const komma = { ...env, marketingHost: "bestuurdersportaal.com,www.bestuurdersportaal.com" };
+  assert.equal(bepaalSurface({ host: "bestuurdersportaal.com", ...komma }), "marketing");
+  assert.equal(bepaalSurface({ host: "www.bestuurdersportaal.com", ...komma }), "marketing");
+  // Spaties rond een komma-deel mogen niet breken.
+  const metSpatie = { ...env, marketingHost: "bestuurdersportaal.com , www.bestuurdersportaal.com" };
+  assert.equal(bepaalSurface({ host: "www.bestuurdersportaal.com", ...metSpatie }), "marketing");
+});
+
 test("surface: onbekende host → fail-safe 'app' (preview/lokaal)", () => {
   assert.equal(bepaalSurface({ host: "iets-anders.vercel.app", ...env }), "app");
   assert.equal(bepaalSurface({ host: "localhost:3000", ...env }), "app");
