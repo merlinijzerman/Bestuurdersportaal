@@ -29,3 +29,7 @@ Input van een bestuurslid: bij laag vraagvolume weegt de bruikbaarheid van het a
 
 - `core/lib/generatie-kern.ts` (`AI_MODEL`), `app/api/agendapunten/[id]/voorbereiding/route.ts`, `core/lib/chunk-ingest.ts` (`PREFIX_MODEL`, ongewijzigd).
 - Werknotitie `AI-assistent - verbeterpunten notitie 2026-07-15.md` (onderwerp 4).
+
+## Vervolg (2026-07-15) — tokenbudget & zichtbaar afkap-signaal
+
+Direct gevolg van de Opus-overstap: Opus schrijft uitgebreider, waardoor gestructureerde antwoorden tegen het `max_tokens`-plafond aanliepen en middenin een sectie afbraken. Bijgesteld: `MAX_TOKENS_BESTUURLIJK` 4500 → **8000** en `MAX_TOKENS` (feitelijk) 3200 → **5000** (`core/lib/generatie-kern.ts`), en de agendavoorbereiding-route 3500 → **5000**. Plafonds, geen streefwaarden. Aanvullend een **zichtbaar afkap-signaal** (`AFGEKAPT_MELDING` in `core/lib/vraagtype.ts`): raakt een antwoord alsnog het plafond (`stop_reason === "max_tokens"`), dan verschijnt een inline-melding "antwoord afgekapt — vraag om een vervolg" in plaats van een stille afkap. Toegepast op zowel de chat-route als de agendavoorbereiding-route. Verificatie: `tsc` 0; `vraagtype.sanity` 60/60.

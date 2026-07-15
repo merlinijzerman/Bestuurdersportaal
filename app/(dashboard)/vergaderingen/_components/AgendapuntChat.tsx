@@ -25,7 +25,14 @@
 
 import { useState, useRef, useEffect } from "react";
 import { createClient } from "@/core/lib/supabase";
-import type { InlineMelding } from "@/core/lib/vraagtype";
+import {
+  bepaalVervolgacties,
+  bepaalAntwoordmodus,
+  isTransformatieActie,
+  type InlineMelding,
+  type Vervolgactie,
+  type Antwoordmodus,
+} from "@/core/lib/vraagtype";
 import CitatieTekst from "./CitatieTekst";
 
 interface Bron {
@@ -50,6 +57,9 @@ interface Bericht {
   bronnen?: Bron[];
   inlineMeldingen?: InlineMelding[];
   verduidelijking?: Verduidelijking;
+  // Inhoudelijke vervolgvragen (klikbaar), identiek aan de assistent (/ai): de
+  // chat-backend levert ze als aparte array (uit de ###VERVOLGVRAGEN###-marker).
+  vervolgvragen?: string[];
 }
 
 // Startvragen die het stuk bestuurlijke betekenis geven. De voorbereiding-chip
@@ -377,6 +387,10 @@ export default function AgendapuntChat({
     bronIntentOverride?: "fonds" | "algemeen";
     geenNieuweVraag?: boolean;
     basisBerichten?: Bericht[];
+    // Contextbewuste vervolgacties (gelijk aan de assistent): een vastgezette
+    // antwoordmodus en/of een transformatie van het vorige antwoord.
+    antwoordmodusOverride?: Antwoordmodus | null;
+    transformatie?: boolean;
   }
 
   async function stuurBericht(vraag?: string, opties?: StuurOpties) {
@@ -415,7 +429,8 @@ export default function AgendapuntChat({
             stukken.length > 0
               ? { document_ids: stukken.map((s) => s.id), algemene_kennis: false }
               : undefined,
-          actieve_antwoordmodus: null,
+          actieve_antwoordmodus: opties?.antwoordmodusOverride ?? null,
+          transformatie: opties?.transformatie,
           // ADR 0028 — de route haalt de toelichting zelf op onder RLS.
           agendapunt_context: { id: agendapuntId, titel },
         }),
@@ -437,6 +452,7 @@ export default function AgendapuntChat({
       let volledig = "";
       let bronnenData: Bron[] | undefined;
       let inlineMeldingenData: InlineMelding[] | undefined;
+      let vervolgvragenData: string[] | undefined;
       let verduidelijkingActief = false;
 
       const schrijfAi = () => {
@@ -464,6 +480,7 @@ export default function AgendapuntChat({
           batch?: number;
           totaal?: number;
           inline_meldingen?: InlineMelding[];
+          vervolgvragen?: string[];
           vraag?: string;
           opties?: { intent: "fonds" | "algemeen"; label: string }[];
         };
@@ -513,6 +530,7 @@ export default function AgendapuntChat({
         } else if (evt.type === "done") {
           if (verduidelijkingActief) return;
           if (evt.inline_meldingen) inlineMeldingenData = evt.inline_meldingen;
+          if (evt.vervolgvragen) vervolgvragenData = evt.vervolgvragen;
           schrijfAi();
         } else if (evt.type === "error") {
           if (!aiToegevoegd) {
@@ -543,7 +561,13 @@ export default function AgendapuntChat({
       } else if (volledig.trim()) {
         const finale: Bericht[] = [
           ...conversatie,
-          { rol: "ai", tekst: volledig, bronnen: bronnenData, inlineMeldingen: inlineMeldingenData },
+          {
+            rol: "ai",
+            tekst: volledig,
+            bronnen: bronnenData,
+            inlineMeldingen: inlineMeldingenData,
+            vervolgvragen: vervolgvragenData,
+          },
         ];
         setBerichten(finale);
         bewaarGesprek(finale);
@@ -576,6 +600,17 @@ export default function AgendapuntChat({
       if (n.has(idx)) n.delete(idx);
       else n.add(idx);
       return n;
+    });
+  }
+
+  // Contextbewuste vervolgactie (FO §13), identiek aan de assistent: een
+  // transformatie herschrijft het vorige antwoord, een lens/retrieval-actie stuurt
+  // de prompt met een vastgezette antwoordmodus. De agendapunt-scope blijft leidend
+  // (geen aparte scope-override — de gekoppelde stukken zijn al de context).
+  function stuurVervolgactie(actie: Vervolgactie) {
+    stuurBericht(actie.prompt, {
+      antwoordmodusOverride: actie.modus,
+      transformatie: isTransformatieActie(actie.type),
     });
   }
 
@@ -702,6 +737,49 @@ export default function AgendapuntChat({
                         )}
                       </div>
                     )}
+                    {b.vervolgvragen && b.vervolgvragen.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {b.vervolgvragen.map((v, vi) => (
+                          <button
+                            key={vi}
+                            onClick={() => stuurBericht(v)}
+                            disabled={laden}
+                            className="text-xs text-left border border-app-line-strong bg-white rounded-full px-3 py-1.5 hover:border-accent hover:bg-warn-tint transition-colors disabled:opacity-50"
+                          >
+                            {v}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {b.rol === "ai" &&
+                      !(laden && idx === berichten.length - 1) &&
+                      (() => {
+                        const vorigeVraag =
+                          idx > 0 && berichten[idx - 1].rol === "gebruiker"
+                            ? berichten[idx - 1].tekst
+                            : "";
+                        const acties = bepaalVervolgacties(
+                          vorigeVraag,
+                          bepaalAntwoordmodus(vorigeVraag),
+                          !!b.bronnen?.length,
+                          true // de agenda is altijd stukgericht
+                        );
+                        if (acties.length === 0) return null;
+                        return (
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {acties.map((a) => (
+                              <button
+                                key={a.type}
+                                onClick={() => stuurVervolgactie(a)}
+                                disabled={laden}
+                                className="text-xs text-ink bg-white border border-line rounded-full px-3 py-1 hover:border-accent hover:bg-warn-tint disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                              >
+                                {a.label}
+                              </button>
+                            ))}
+                          </div>
+                        );
+                      })()}
                   </div>
                 )
               )}
