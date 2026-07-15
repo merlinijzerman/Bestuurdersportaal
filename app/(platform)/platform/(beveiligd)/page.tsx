@@ -63,6 +63,14 @@ export default async function PlatformHome() {
               Organisatieprofiel
             </Link>
           )}
+          {magConfig && (
+            <Link
+              href="/platform/bronnen-whitelist"
+              className="inline-flex items-center gap-2 rounded-lg bg-app-bg px-4 py-2 text-sm font-medium text-ink hover:bg-accent/10"
+            >
+              Bronnen-whitelist
+            </Link>
+          )}
           {magRechten && (
             <Link
               href="/platform/rechten"

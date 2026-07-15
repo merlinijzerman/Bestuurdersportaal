@@ -733,6 +733,15 @@ export default function AiPage() {
           // Increment I-3 — uniforme bronvermelding-transparantie.
           web_retrieval_actief?: boolean;
           model_kennis?: { grond: "algemene_kennis" | "wetgeving"; instantie: string | null }[];
+          // Scenario A (besluit 0072) — geverifieerde webbronnen (done-event).
+          web_bronnen?: {
+            url: string;
+            titel: string;
+            domein: string;
+            datum?: string | null;
+            normgewicht?: string | null;
+            ophaaldatum?: string | null;
+          }[];
           // Increment F (FO §14) — profielsturing-status (paneel "Onderbouwing en bronnen").
           profielsturing?: "actief" | "uitgeschakeld" | "geen-profiel" | null;
           // OP-4 (FO §8) — organisatieprofiel-status + geïnjecteerde veldgroepen
@@ -852,6 +861,15 @@ export default function AiPage() {
           // met genoemde instantie) komen in het 'done'-event en horen in het paneel.
           if (evt.model_kennis && onderbouwingData) {
             onderbouwingData = { ...onderbouwingData, modelKennis: evt.model_kennis };
+          }
+          // Scenario A (besluit 0072) — de geverifieerde webbronnen + vlag komen in
+          // het 'done'-event (content-afhankelijk) en horen in het paneel.
+          if (onderbouwingData) {
+            onderbouwingData = {
+              ...onderbouwingData,
+              webRetrievalActief: evt.web_retrieval_actief ?? onderbouwingData.webRetrievalActief ?? false,
+              webBronnen: evt.web_bronnen ?? onderbouwingData.webBronnen ?? [],
+            };
           }
           // B1 — inhoudelijke vervolgvragen (kunnen leeg zijn) naar het bericht.
           if (onderbouwingData) {

@@ -11,6 +11,7 @@
 // De bronkaarten zelf komen als children mee (renderlogica leeft in page).
 
 import { type ReactNode } from "react";
+import { normgewichtLabel } from "@/core/lib/bronsoort";
 
 export interface OnderbouwingMeta {
   /** Korte samenvatting van de bronbasis (lib/vraagtype.bronbasisLabel). */
@@ -65,10 +66,17 @@ export interface OnderbouwingMeta {
   // de web-laag die VOORBEREID is maar nog niet gevuld (Scenario B).
   /** Algemene-kennisbronnen: per genoemde instantie + grond (kennis/wetgeving). */
   modelKennis?: { grond: "algemene_kennis" | "wetgeving"; instantie: string | null }[];
-  /** False zolang er geen live web-retrieval is — toont een expliciete melding. */
+  /** True als voor dit antwoord live web-retrieval webbronnen opleverde (Scenario A). */
   webRetrievalActief?: boolean | null;
-  /** Daadwerkelijk opgehaalde webbronnen (leeg tot web-retrieval bestaat). */
-  webBronnen?: { url: string; titel: string; domein: string; datum?: string | null }[];
+  /** Geverifieerde webbronnen (URL + titel + domein + ophaaldatum + normgewicht). */
+  webBronnen?: {
+    url: string;
+    titel: string;
+    domein: string;
+    datum?: string | null;
+    normgewicht?: string | null;
+    ophaaldatum?: string | null;
+  }[];
   // B1 / scope-split — reizen mee zodat de vervolgacties na herladen consistent zijn.
   /** Ging de vraag over een specifiek stuk of agendapunt? Stuurt de vervolgacties. */
   documentGericht?: boolean | null;
@@ -298,28 +306,49 @@ export default function OnderbouwingPaneel({
             </div>
           )}
 
-          {/* 3) Webbronnen — VOORBEREID maar nog niet gevuld (Scenario B). Pas
-              zichtbaar zodra echte web-retrieval bestaat én resultaten oplevert. */}
+          {/* 3) Webbronnen (Scenario A, besluit 0072) — daadwerkelijk opgehaalde en
+              tegen de whitelist geverifieerde externe bronnen: URL + titel +
+              ophaaldatum + normgewicht-badge, gescheiden van fondsbronnen. */}
           {meta.webRetrievalActief && meta.webBronnen && meta.webBronnen.length > 0 && (
             <div>
               <div className="text-[11px] font-bold text-muted uppercase tracking-wide mb-2">
-                Webbronnen
+                Webbronnen (live opgehaald)
               </div>
-              <ul className="space-y-1">
+              <ul className="space-y-1.5">
                 {meta.webBronnen.map((w, i) => (
                   <li key={i} className="text-xs">
-                    <a
-                      href={w.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-ink underline hover:text-accent"
-                    >
-                      {w.titel}
-                    </a>
-                    <span className="text-muted"> — {w.domein}</span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <a
+                        href={w.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-ink underline hover:text-accent"
+                      >
+                        {w.titel}
+                      </a>
+                      {w.normgewicht && (
+                        <span className="text-[10px] font-semibold text-muted bg-app-bg px-1.5 py-0.5 rounded">
+                          {normgewichtLabel(w.normgewicht)}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-muted">
+                      {w.domein}
+                      {w.ophaaldatum
+                        ? ` — opgehaald ${new Date(w.ophaaldatum).toLocaleString("nl-NL", {
+                            dateStyle: "medium",
+                            timeStyle: "short",
+                          })}`
+                        : ""}
+                    </span>
                   </li>
                 ))}
               </ul>
+              <p className="mt-2 text-[11px] text-muted italic">
+                Live opgehaald uit gezaghebbende bronnen op het genoemde moment. Bij
+                tijdgevoelige informatie (deadlines, tarieven, wetsstatus): verifieer
+                bij formele besluitvorming de instantie zelf.
+              </p>
             </div>
           )}
         </div>

@@ -108,3 +108,35 @@
 | 11.5 | `tsc --noEmit` exit 0 op main | Behaald (na H5-fix) / Te valideren op HEAD | reviewlog 03-07 |
 | 11.6 | Alle Kritiek-bevindingen review 03-07 gefixt en traceerbaar | Deels — **Te valideren** | K1 traceerbaar (migratie); K2/K3-fixes niet als migratie terug te vinden |
 | 11.7 | Onafhankelijke eindverificatie (WP8) uitgevoerd | **Niet behaald** | Route A open |
+
+## 12. Scenario A — live web-retrieval (besluit 0072)
+
+> Ontwerp: [`AI-WEBRETRIEVAL-ONTWERP.md`](./AI-WEBRETRIEVAL-ONTWERP.md). De feature staat achter de env-vlag `WEB_RETRIEVAL_ACTIEF` (uit = Scenario B, ongewijzigd). "Behaald (test)" = gedekt door sanity-/cross-tenant-tests; livegang vergt daarnaast Anthropic-accountactivering + EU-residentie-bekrachtiging (open, zie 0072 §12).
+
+**Retrieval**
+
+| # | Criterium | Status | Bron/toets |
+|---|---|---|---|
+| AC-1 | Niet-whitelist-URL wordt vóór ophalen geweigerd en gelogd; verschijnt niet in het antwoord | Behaald (test) | `allowedDomeinenUit` + `matchWhitelist`; `web-retrieval.sanity.ts`, `web-whitelist.sanity.ts` |
+| AC-2 | Toegestaan subdomein (`domein+subdomeinen`) geaccepteerd met normgewicht van het hoofddomein | Behaald (test) | `web-whitelist.sanity.ts` |
+| AC-3 | Elk op live-inhoud gebaseerd deel draagt URL + titel + ophaaldatum; geen ongeciteerde live-inhoud | Behaald | `bouwWebbronnen` + `OnderbouwingPaneel`; anti-fabricage KERNBESLUIT |
+| AC-4 | Bij `bindend` vs. `sector_guidance`-conflict volgt het antwoord `bindend`; lager gewicht hooguit context | Behaald (test) | `weegWebbronnen`; `SP_WEB_REGELS` |
+| AC-5 | Geen whitelist-treffer → terugval RAG/modelkennis + bestaande melding; geen verzonnen bron | Behaald (test) | `beoordeelWebGate`/fallback; `web-retrieval.sanity.ts` |
+| AC-6 | Verborgen instructies in een opgehaalde pagina wijzigen gedrag/citatieplicht/weging niet | Behaald | `SP_WEB_REGELS` (data-niet-instructie) + tool-result-sandbox |
+| AC-7 | Time-out/dode bron → gecontroleerde terugval + gelogde mislukte ophaalpoging | Behaald (test) | `extractWebResultaten` foutcode + `retrieval_meta.web.fallback` |
+| AC-8 | Bij tijdgevoelige info zijn ophaaldatum én "verifieer bij de instantie zelf" zichtbaar | Behaald | `OnderbouwingPaneel` webbronnenblok |
+| AC-9 | Auditlog per live-antwoord: geschoonde vraag, bevraagde + gebruikte bronnen (met normgewicht), ophaaltijdstip, fallback | Behaald | `governance_log.retrieval_meta.web` |
+| AC-10 | Vraag met persoons-/fondsgegevens → live retrieval geblokkeerd (AVG); keuze gelogd | Behaald (test) | `bevatPersoonsgegevens` + `beoordeelWebGate`; `pii-gate.sanity.ts` |
+
+**Beheerscherm (platform-surface)**
+
+| # | Criterium | Status | Bron/toets |
+|---|---|---|---|
+| AC-B1 | Toevoegen zonder normgewicht of toelichting → geweigerd met validatiemelding | Behaald | `acties.ts` `valideer` |
+| AC-B2 | Vier-ogen uit: één beheerder mag toevoegen én activeren | Behaald | `platform.config.manage` (niet-zwaar) |
+| AC-B3 | Activatie direct live, append-only gelogd + genotificeerd aan overige beheerders | Behaald | `whitelistStatus` + `bron_whitelist_log` + wijzigingslog |
+| AC-B4 | `padprefix`-entry: URL op zelfde domein buiten het pad wordt geweigerd | Behaald (test) | `matchWhitelist`; `web-whitelist.sanity.ts` |
+| AC-B5 | `domein+subdomeinen`-entry: subdomein-URL toegestaan met tier/normgewicht hoofddomein | Behaald (test) | `web-whitelist.sanity.ts` |
+| AC-B6 | Deactiveren haalt het domein uit retrieval; entry blijft met historie zichtbaar | Behaald | RLS (alleen actief in retrieval) + status-behoud |
+| AC-B7 | Verstreken `review_datum` → in het overzicht als "review nodig" gemarkeerd | Behaald | `BronnenWhitelistClient` review-signalering |
+| AC-B8 | Look-alike/ongeldig domein triggert waarschuwing bij opslaan (harde validatie blijft) | Behaald (test) | `isGeldigDomein` + `detecteerLookAlike`; `web-whitelist.sanity.ts` |

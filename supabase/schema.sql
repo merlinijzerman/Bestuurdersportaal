@@ -195,6 +195,49 @@ select 'app.bestuurdersportaal.com', f.id, true
 from public.fondsen f where f.slug = 'horizon'
 on conflict (host) do nothing;
 
+-- ── 2c. Bronnen-whitelist (Scenario A live web-retrieval, besluit 0072) ──────
+-- Generieke platformconfiguratie (fonds_id-loos) van gezaghebbende domeinen voor
+-- live web-retrieval. RLS: tenants lezen ACTIEVE entries (leespad chat-route →
+-- allowed_domains); schrijven deny-by-default (alleen service-role achter
+-- withPlatform, cap platform.config.manage). Weging op normgewicht (hergebruik,
+-- geen parallel tier-veld). Migratie 2026_07_15_bron_whitelist.sql (authoritatief).
+create table if not exists public.bron_whitelist (
+  id              uuid primary key default uuid_generate_v4(),
+  domein          text not null,                 -- genormaliseerd, zonder 'www.'
+  matchtype       text not null default 'domein',-- 'domein'|'domein_subdomeinen'|'padprefix'
+  pad             text,                           -- alleen bij matchtype='padprefix'
+  normgewicht     text not null,                 -- bindend|toezichtverwachting|sector_guidance|informatief|onbekend
+  categorie       text,
+  tier            text,                           -- '1'|'2'|'3'|'context' — beheerlabel, niet de weging
+  status          text not null default 'in_review', -- 'actief'|'inactief'|'in_review'
+  toelichting     text not null,
+  toegevoegd_door uuid,                           -- platform-identiteit (geen FK)
+  gewijzigd_door  uuid,
+  toegevoegd_op   timestamptz not null default now(),
+  gewijzigd_op    timestamptz not null default now(),
+  review_datum    date
+);
+create unique index if not exists ux_bron_whitelist_domein_match
+  on public.bron_whitelist (domein, matchtype, coalesce(pad, ''));
+-- RLS: SELECT op status='actief' voor geauthenticeerden; mutatie service-role-only.
+alter table public.bron_whitelist enable row level security;
+-- Append-only domeinlog (naast platform_event_log): immutable + sha256-hash.
+create table if not exists public.bron_whitelist_log (
+  id              uuid primary key default uuid_generate_v4(),
+  whitelist_id    uuid,                           -- geen FK: log overleeft hard-delete
+  domein_snapshot text,
+  handeling       text not null,                  -- aanmaken|bijwerken|activeren|deactiveren|verwijderen
+  gewijzigd_door  uuid,
+  gewijzigd_op    timestamptz not null default now(),
+  oud             jsonb,
+  nieuw           jsonb,
+  reden           text,
+  hash            text,
+  tijdstip        timestamptz not null default now()
+);
+-- RLS aan, deny-by-default: geen policy (alleen service-role).
+alter table public.bron_whitelist_log enable row level security;
+
 -- ── 3. Documenten ──────────────────────────────────────────
 create table if not exists public.documenten (
   id            uuid primary key default uuid_generate_v4(),

@@ -9,12 +9,15 @@
 //    • document        — een daadwerkelijk geraadpleegde fonds-/generieke bron
 //                        (RAG). Mapt 1-op-1 op de bestaande BronVerwijzing.
 //    • web             — een daadwerkelijk via web-retrieval opgehaalde externe
-//                        bron. VOORBEREID maar nog niet gevuld: er bestaat nog
-//                        geen live web-retrieval (Scenario B). Het type ligt klaar
-//                        zodat Route B / web-ingestion later inplugt zonder een
-//                        tweede bronmodel. TODO(web-retrieval): vul dit pas met
-//                        ECHT opgehaalde resultaten — nooit met door het model
-//                        verzonnen URL's (anti-fabricage, besluit hieronder).
+//                        bron (Scenario A, besluit 0072). Gevuld met resultaten
+//                        die de Anthropic web_search-tool over de gezaghebbende-
+//                        bronnen-whitelist ophaalde en die tegen die whitelist
+//                        zijn HERVERIFIEERD (lib/web-whitelist.ts): draagt de
+//                        bron-URL, titel, ophaaldatum én het normgewicht van de
+//                        matchende whitelist-entry. Blijft achter de env-vlag
+//                        WEB_RETRIEVAL_ACTIEF; is die uit, dan draait de assistent
+//                        in Scenario B (geen web-bronnen). Nooit een door het
+//                        model verzonnen URL (anti-fabricage, besluit hieronder).
 //    • model_knowledge — algemene kennis uit het taalmodel zelf (geen externe
 //                        bron). Draagt de door het antwoord GENOEMDE bron-instantie
 //                        (DNB/AFM/…) als die letterlijk in de tekst staat; nooit
@@ -52,14 +55,19 @@ export interface AssistantSourceDocument {
   geldig_tot?: string | null;
 }
 
-/** Webbron — alleen geldig met een veilige http(s)-URL. (Nog niet in gebruik.) */
+/** Webbron — alleen geldig met een veilige http(s)-URL (Scenario A). */
 export interface AssistantSourceWeb {
   kind: "web";
   url: string;
   titel: string;
   domein: string;
+  /** Publicatiedatum van de pagina, indien bekend (page_age). */
   datum?: string | null;
   snippet?: string | null;
+  /** Normgewicht van de matchende whitelist-entry (FR-3 weging + UI-badge). */
+  normgewicht?: string | null;
+  /** Wanneer de applicatie de bron ophaalde (FR-2: ISO-tijdstempel). */
+  ophaaldatum?: string | null;
 }
 
 /** Algemene kennis uit het taalmodel — draagt de genoemde instantie, geen URL. */
@@ -81,7 +89,8 @@ export interface AssistantSourceSamenvatting {
   documenten: number;
   web: number;
   model_kennis: number;
-  /** False zolang er geen echte web-retrieval bestaat (huidige situatie). */
+  /** True als voor dít antwoord live web-retrieval is ingezet én ≥1 geverifieerde
+   *  webbron opleverde (Scenario A); anders false (Scenario B / geen treffer). */
   web_retrieval_actief: boolean;
 }
 
@@ -138,6 +147,8 @@ export interface WebBronInput {
   titel?: string | null;
   datum?: string | null;
   snippet?: string | null;
+  normgewicht?: string | null;
+  ophaaldatum?: string | null;
 }
 
 /**
@@ -161,6 +172,8 @@ export function webBronNaarSource(b: WebBronInput): AssistantSourceWeb | null {
     domein,
     datum: b.datum ?? null,
     snippet: b.snippet ?? null,
+    normgewicht: b.normgewicht ?? null,
+    ophaaldatum: b.ophaaldatum ?? null,
   };
 }
 

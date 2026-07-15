@@ -12,7 +12,11 @@ import { valideerScope, type ScopeDocumentRij } from "@/core/lib/document-scope"
 import { bepaalVraagtype, schatTokens, kiesStrategie, maakBatches, bepaalAntwoordmodus, retrievalModusVoor, bepaalInlineMeldingen, AFGEKAPT_MELDING, bronbasisLabel, bepaalBronIntent, moetVerduidelijken, bepaalAutoBronModus, VERDUIDELIJKINGSVRAAG, VERDUIDELIJKING_OPTIES, ANTWOORDMODUS_LABEL, type Strategie, type Antwoordmodus, type BronModus, type BronIntent, type BronIntentResultaat } from "@/core/lib/vraagtype";
 import { bepaalBronsoortprofiel } from "@/core/lib/weeg-bronsoort";
 import { haalBesluitBronnen, topProcesinstanties, opmaakBesluitContext } from "@/core/lib/besluitvorming-bron";
-import { documentBronNaarSource, modelKennisBronnenUitAntwoord, bouwSourceSamenvatting, ontbrekendeAlgemeneKennisMarkering, type AssistantSource } from "@/core/lib/assistant-source";
+import { documentBronNaarSource, modelKennisBronnenUitAntwoord, bouwSourceSamenvatting, ontbrekendeAlgemeneKennisMarkering, type AssistantSource, type AssistantSourceWeb } from "@/core/lib/assistant-source";
+import { allowedDomeinenUit } from "@/core/lib/web-whitelist";
+import { haalActieveWhitelist } from "@/core/lib/web-whitelist-data";
+import { beoordeelWebGate, buildWebSearchTool, extractWebResultaten, bouwWebbronnen, bevraagdeDomeinen } from "@/core/lib/web-retrieval";
+import { bevatPersoonsgegevens } from "@/core/lib/pii-gate";
 import { bouwProfielsturing, type ProfielsturingAspecten } from "@/core/lib/profielsturing";
 import { bouwOrganisatieprofiel } from "@/core/lib/organisatieprofiel";
 import { SP_AGENDAPUNT_REGELS, bouwToelichtingBlok, herkomstString, type AgendapuntSeed } from "@/core/lib/agendapunt-context";
@@ -38,6 +42,7 @@ import {
   SP_DOCUMENT_SCOPE_ALG_REGELS,
   SP_TRANSFORMATIE_REGELS,
   SP_MAP_EXTRACTIE,
+  SP_WEB_REGELS,
   ROL_LABEL,
   bouwSysteemBlokken,
   type BestuurderContext,
@@ -72,6 +77,14 @@ const MAX_BATCHES = 12;
 // reduce-stap (kwaliteit van het eindantwoord).
 const MAP_MODEL = "claude-haiku-4-5-20251001";
 
+// ── Scenario A live web-retrieval (besluit 0072) ────────────────────────────
+// Hoofdschakelaar: web-retrieval draait ALLEEN als WEB_RETRIEVAL_ACTIEF='true'
+// (dubbele poort náást DB-actieve whitelist-entries). Staat de vlag uit, dan
+// draait de assistent in Scenario B — ongewijzigd gedrag. WEB_MAX_USES begrenst
+// het aantal zoekopdrachten per antwoord (kosten-/latency-cap, 0019).
+const WEB_RETRIEVAL_ACTIEF = process.env.WEB_RETRIEVAL_ACTIEF === "true";
+const WEB_MAX_USES = Number(process.env.WEB_MAX_USES ?? 3) || 3;
+
 type Modus = "documenten" | "combineren" | "algemeen";
 
 // ============================================================
@@ -85,12 +98,13 @@ type Modus = "documenten" | "combineren" | "algemeen";
 //  (byte-identiek; bewaakt door lib/generatie-kern.sanity.ts). Wijzig de
 //  toon-prompt daar, niet hier.
 //
-//  TODO(web-retrieval — Scenario A): zodra er ECHTE web-retrieval bestaat (Route B /
-//  web-ingestion met whitelist), komt in generatie-kern een SP_WEB_REGELS-blok dat
-//  het model instrueert uitsluitend te citeren uit de aangeleverde, opgehaalde
-//  webresultaten (kind 'web' in lib/assistant-source.ts) — nooit uit verzonnen
-//  URL's. De UI en het auditspoor zijn al voorbereid (AssistantSource.web +
-//  source_summary.web_retrieval_actief).
+//  Scenario A live web-retrieval (besluit 0072, GEEFFECTUEERD): SP_WEB_REGELS in
+//  generatie-kern instrueert het model uitsluitend te citeren uit de aangeleverde,
+//  opgehaalde webresultaten (kind 'web' in lib/assistant-source.ts) — nooit uit
+//  verzonnen URL's. De whitelist-fetch + gating + citaat-herverificatie hangen in
+//  de streaming-handler hieronder; de UI en het auditspoor waren al voorbereid
+//  (AssistantSource.web + source_summary.web_retrieval_actief). Alles achter de
+//  env-vlag WEB_RETRIEVAL_ACTIEF (uit = Scenario B, ongewijzigd gedrag).
 // ============================================================
 
 // ============================================================
@@ -884,6 +898,28 @@ export async function POST(req: NextRequest) {
       scopeActief,
     });
 
+    // ── Scenario A (besluit 0072) — beslis of live web-retrieval mag draaien ──
+    // Deterministische gating (FR-1/FR-4/FR-9): env-vlag aan + ≥1 actieve
+    // whitelist-entry + geen document-/agendapuntscope + extern (generiek/
+    // gecombineerd) bronsoortsignaal + PII-gate slaagt. De whitelist wordt alleen
+    // gelezen als de vlag aan staat (Scenario B doet géén extra query). fondsId is
+    // server-side afgeleid; de PII-gate blokkeert de uitgaande zoekvraag bij
+    // persoons-/fondsgegevens (AVG). Alles hierna is no-op bij WEB_RETRIEVAL_ACTIEF=false.
+    const webBronsoortprofiel = bepaalBronsoortprofiel(vraag);
+    const whitelistEntries =
+      WEB_RETRIEVAL_ACTIEF && !scopeActief ? await haalActieveWhitelist(supabase) : [];
+    const piiUitkomst = bevatPersoonsgegevens(vraag, [fondsnaam]);
+    const webGate = beoordeelWebGate({
+      vlagAan: WEB_RETRIEVAL_ACTIEF,
+      aantalActieveEntries: whitelistEntries.length,
+      scopeActief,
+      bronsoortprofiel: webBronsoortprofiel,
+      bevatPii: piiUitkomst.bevatPii,
+    });
+    const webTool = webGate.mag
+      ? buildWebSearchTool(allowedDomeinenUit(whitelistEntries), WEB_MAX_USES)
+      : null;
+
     // Bouw de uiteindelijke messages-array voor Claude.
     // We knippen de geschiedenis op het maximum en vervangen de laatste
     // user-message door dezelfde vraag mét de zojuist opgehaalde RAG-context.
@@ -957,9 +993,10 @@ export async function POST(req: NextRequest) {
             alleen_fondsdocumenten: alleenFondsdocumenten,
             bron_intent_override: scopeActief ? false : intentOverride !== undefined,
             // Increment I-3 — uniform bronmodel voor het paneel "Onderbouwing en
-            // bronnen". Documentbronnen zijn nu bekend; model_knowledge volgt in
-            // 'done'. web_retrieval_actief signaleert dat er (nog) geen live
-            // web-retrieval is — de UI toont dat expliciet.
+            // bronnen". Documentbronnen zijn nu bekend; model_knowledge én de
+            // (Scenario A) webbronnen hangen van de antwoordinhoud af en volgen in
+            // 'done'. Pre-stream is web_retrieval_actief dus nog false; de definitieve
+            // waarde + web_bronnen komen in het 'done'-event.
             sources: documentSources,
             source_summary: sourceSamenvattingPre,
             web_retrieval_actief: false,
@@ -1023,19 +1060,32 @@ export async function POST(req: NextRequest) {
           // transformatie-actie (die herschrijft juist het vorige antwoord; daar
           // horen geen nieuwe vervolgvragen bij, dat zou de keten laten uitdijen).
           const metVervolgvragen = !transformatieActief;
-          const streamSysteem = metVervolgvragen
-            ? [
-                ...systeemBlokken,
-                { type: "text" as const, text: VERVOLGVRAGEN_INSTRUCTIE },
-              ]
-            : systeemBlokken;
+          // Scenario A — voeg het webbronnen-instructieblok toe wanneer de
+          // web_search-tool voor dit antwoord is ingeschakeld (injection-sandboxing,
+          // weging, citatieplicht, geen PII in de zoekopdracht).
+          const webBlok = webTool
+            ? [{ type: "text" as const, text: SP_WEB_REGELS }]
+            : [];
+          const streamSysteem = [
+            ...systeemBlokken,
+            ...webBlok,
+            ...(metVervolgvragen
+              ? [{ type: "text" as const, text: VERVOLGVRAGEN_INSTRUCTIE }]
+              : []),
+          ];
 
-          const claudeStream = anthropic.messages.stream({
+          // Basis-call; de web_search-server-tool wordt defensief toegevoegd (SDK
+          // 0.39 typeert deze server-tool nog niet — de API ondersteunt hem wel).
+          const streamParams: Anthropic.Messages.MessageStreamParams = {
             model: AI_MODEL,
             max_tokens: ruimBudget ? MAX_TOKENS_BESTUURLIJK : MAX_TOKENS,
             system: streamSysteem,
             messages: streamMessages,
-          });
+          };
+          if (webTool) {
+            (streamParams as { tools?: unknown[] }).tools = [webTool];
+          }
+          const claudeStream = anthropic.messages.stream(streamParams);
 
           // Stream de zichtbare tekst, maar houd steeds een staart ter grootte van
           // de marker achter: zo lekt "###VERVOLGVRAGEN###" nooit naar de client,
@@ -1121,11 +1171,52 @@ export async function POST(req: NextRequest) {
           const modelKennisSources = scopeActief
             ? []
             : modelKennisBronnenUitAntwoord(zichtbaarAntwoord);
+
+          // Scenario A (besluit 0072) — leid de webbronnen af uit het afgeronde
+          // antwoord: lees de door de tool geciteerde bronnen en HERVERIFIEER elke
+          // URL tegen de whitelist (matchWhitelist, dwingt matchtype/padprefix af,
+          // koppelt normgewicht). Niet-whitelist/onveilige citaties vallen af
+          // (FR-1 / anti-fabricage). web_retrieval_actief = alleen true bij ≥1
+          // geverifieerde webbron. Bij een uitgeschakelde tool: no-op + gelogde reden.
+          let webBronnen: AssistantSourceWeb[] = [];
+          let webAudit: RetrievalMeta["web"];
+          if (webTool) {
+            const ophaaltijdstip = new Date().toISOString();
+            const webRes = extractWebResultaten(finaleMsg.content);
+            webBronnen = bouwWebbronnen(webRes.geciteerd, whitelistEntries, ophaaltijdstip);
+            webAudit = {
+              ingezet: true,
+              ophaaltijdstip,
+              bevraagde_domeinen: bevraagdeDomeinen(webRes.bevraagd),
+              aantal_geciteerd: webRes.geciteerd.length,
+              aantal_gebruikt: webBronnen.length,
+              foutcode: webRes.foutcode,
+              // Fallback-status (FR-7): niets bruikbaars opgehaald → terugval op RAG/kennis.
+              fallback: webBronnen.length === 0,
+              gebruikte_bronnen: webBronnen.map((w) => ({
+                url: w.url,
+                domein: w.domein,
+                normgewicht: w.normgewicht ?? null,
+              })),
+            };
+          } else {
+            // Web niet ingezet: leg de deterministische reden vast (FR-8/FR-9).
+            webAudit = {
+              ingezet: false,
+              reden: webGate.reden,
+              ...(webGate.reden === "pii_geblokkeerd"
+                ? { pii_soorten: piiUitkomst.soorten }
+                : {}),
+            };
+          }
+          const webRetrievalActief = webBronnen.length > 0;
+
           const alleSources: AssistantSource[] = [
             ...documentSources,
             ...modelKennisSources,
+            ...webBronnen,
           ];
-          const sourceSamenvatting = bouwSourceSamenvatting(alleSources, false);
+          const sourceSamenvatting = bouwSourceSamenvatting(alleSources, webRetrievalActief);
           // Markeer-handhaving (audit-signaal, geen blokkade): in pure algemeen-
           // modus hoort minstens één algemene-kennismarker te staan. Ontbreekt die,
           // dan is de herkomst-transparantie incompleet → zichtbaar in het auditspoor.
@@ -1157,6 +1248,11 @@ export async function POST(req: NextRequest) {
             // herkomst (document + model_knowledge) + telling + de markeer-handhaving.
             sources: alleSources,
             source_summary: sourceSamenvatting,
+            // Scenario A (FR-8) — retrieval-provenance van de web-tak: ingezet ja/nee
+            // (+ reden), bevraagde domeinen, gebruikte webbronnen met normgewicht,
+            // ophaaltijdstip, fallback-status. Geen tweede logmechanisme: dit reist
+            // mee in het bestaande append-only governance_log.retrieval_meta.
+            web: webAudit,
             markeringen: {
               algemene_kennis_markers: algemeneKennisMarkers,
               instanties: modelKennisSources
@@ -1212,6 +1308,10 @@ export async function POST(req: NextRequest) {
             // bijgewerkte samenvatting voor het paneel "Onderbouwing en bronnen".
             model_kennis: modelKennisSources,
             source_summary: sourceSamenvatting,
+            // Scenario A (besluit 0072) — geverifieerde webbronnen + vlag voor het
+            // onderbouwingspaneel (URL + titel + ophaaldatum + normgewicht-badge).
+            web_retrieval_actief: webRetrievalActief,
+            web_bronnen: webBronnen,
             // B1 — inhoudelijke vervolgvragen op basis van het antwoord (kunnen
             // leeg zijn). De UI toont ze als klikbare chips ná de onderbouwing.
             vervolgvragen,

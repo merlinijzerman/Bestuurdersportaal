@@ -303,12 +303,30 @@ export interface RetrievalMeta {
   bronbasis?: string;
   inline_meldingen?: { type: string; tekst: string }[];
   // Increment I-3 — uniforme bronvermelding-transparantie. Alle herkomst van het
-  // antwoord (document + model_knowledge; web is voorbereid maar nog niet gevuld)
-  // + telling per soort + de markeer-handhaving. Puur auditspoor; verandert niets
-  // aan retrieval. `web_retrieval_actief` legt vast dat er nog geen live web-
-  // retrieval is (Scenario B), zodat een latere overgang naar A herleidbaar is.
+  // antwoord (document + model_knowledge + web) + telling per soort + de markeer-
+  // handhaving. Puur auditspoor; verandert niets aan retrieval. `source_summary.
+  // web_retrieval_actief` legt vast of voor dít antwoord live web-retrieval is
+  // ingezet én ≥1 geverifieerde webbron opleverde (Scenario A, besluit 0072).
   sources?: AssistantSource[];
   source_summary?: AssistantSourceSamenvatting;
+  // Scenario A (besluit 0072) — retrieval-provenance van de web-tak (FR-8). Bij
+  // `ingezet:true`: bevraagde domeinen, gebruikte webbronnen (met normgewicht),
+  // ophaaltijdstip, fallback-status en een eventuele web_search-foutcode. Bij
+  // `ingezet:false`: de deterministische reden (vlag_uit/geen_whitelist/scope_actief/
+  // geen_extern_signaal/pii_geblokkeerd) + bij PII de gedetecteerde soorten. Zo is
+  // per antwoord herleidbaar of/waarom er wel of niet extern is gezocht.
+  web?: {
+    ingezet: boolean;
+    reden?: string;
+    pii_soorten?: string[];
+    ophaaltijdstip?: string;
+    bevraagde_domeinen?: string[];
+    aantal_geciteerd?: number;
+    aantal_gebruikt?: number;
+    foutcode?: string | null;
+    fallback?: boolean;
+    gebruikte_bronnen?: { url: string; domein: string; normgewicht: string | null }[];
+  };
   markeringen?: {
     algemene_kennis_markers: number;
     instanties: string[];
