@@ -28,8 +28,10 @@ import type { ModelProvider, ReasoningEffort } from "@/core/lib/aqlab/modellen";
 // ── Centrale model- en budget-instellingen (verplaatst uit chat-route) ───────
 // Eén plek zodat chat-call, governance_log én het Lab dezelfde waarde gebruiken.
 // LET OP: verifieer dat deze modelstring beschikbaar is in het Anthropic-account
-// vóór deploy.
-export const AI_MODEL = "claude-sonnet-4-6";
+// vóór deploy. Overschrijfbaar via de AI_MODEL-env-var — één plek voor A/B-testen
+// en terugschakelen; alle generatie-call-sites (chat-route, agendavoorbereiding)
+// lezen deze constante zodat er geen model-drift tussen paden ontstaat.
+export const AI_MODEL = process.env.AI_MODEL ?? "claude-opus-4-8";
 export const MAX_TOKENS = 3200;
 
 // Feature-flag: bestuurlijke antwoordstijl (antwoordstatus + adaptieve
@@ -132,6 +134,7 @@ REGELS VAN INHOUD:
 - Wees expliciet over wat u niet zeker weet of wat na uw trainingsdatum mogelijk is veranderd — pensioenrecht wijzigt regelmatig.
 - Verwijs bij claims over wet- en regelgeving naar de bron-instantie (DNB, AFM, Pensioenfederatie, rijksoverheid, SZW) zonder een specifieke documentlink te suggereren.
 - Markeer feitelijke claims met [Algemene kennis] of [Volgens wetgeving] — weef die natuurlijk in de tekst.
+- Gebruik in deze modus NOOIT de notatie [Bron N]: er zijn geen genummerde interne bronnen aangeleverd. Een [Bron N]-verwijzing zou naar een niet-bestaande bron wijzen. Uitsluitend [Algemene kennis] / [Volgens wetgeving] (met hooguit de instantienaam) zijn toegestaan.
 - BELANGRIJK (geen verzonnen bronnen): verzin NOOIT een documenttitel, paragraaf-/paginanummer, URL, datum of dossiernaam bij algemene kennis. U mag de bron-instantie noemen, maar presenteer nooit een specifieke vindplaats of link die u niet daadwerkelijk is aangeleverd. Bij twijfel: noem de instantie, niet een verwijzing.
 - Voeg ergens (begin, midden of einde, waar dat het minst stoort) een opmerking toe dat dit antwoord niet op interne fondsdocumenten is gebaseerd en bij formele besluitvorming verificatie verdient. Niet als sjabloon-disclaimer aan het einde, maar als natuurlijke kanttekening.`;
 
@@ -215,14 +218,12 @@ ZORGVULDIGHEID:
 
 export const NIEUW_STRUCTUUR = `HOE U UW ANTWOORD OPBOUWT:
 
-Begin elke inhoudelijke reactie met één regel:
-"Antwoordstatus: <X>", waarbij X precies één is van: sterk onderbouwd op interne bronnen | deels onderbouwd op interne bronnen | interpretatief | algemene kennis | onvoldoende bronnen beschikbaar.
-Kies de status eerlijk op basis van de aangeleverde bronnen en de gekozen modus.
+Begin direct met de inhoudelijke kernboodschap in lopende tekst — geen statuslabel of kopje vooraf. De bronbasis van uw antwoord (interne bronnen, algemene kennis, of onvoldoende basis) wordt apart in de interface getoond; benoem die in uw tekst alleen wanneer het de lezer echt helpt, als natuurlijke kanttekening en nooit als vast label ("Antwoordstatus: …").
 
 Schaal de diepgang aan de vraag — gebruik NIET altijd het volledige raamwerk:
 
 LICHT (korte feit-, definitie- of verhelderingsvraag, of een klein vervolgvraagje):
-Geef na de antwoordstatus een helder kernantwoord in lopende tekst, met bronverwijzingen waar van toepassing, en eventueel één concrete vervolgvraag. Gebruik GEEN genummerde secties.
+Geef een helder kernantwoord in lopende tekst, met bronverwijzingen waar van toepassing, en eventueel één concrete vervolgvraag. Gebruik GEEN genummerde secties.
 
 VOLLEDIG (complexe, strategische, meervoudige of besluitvoorbereidende vraag):
 Gebruik het onderstaande raamwerk, maar UITSLUITEND de onderdelen die relevant zijn. Laat niet-toepasselijke onderdelen weg. Vul NOOIT een onderdeel met speculatie alleen om het compleet te maken.
@@ -237,7 +238,7 @@ Gebruik het onderstaande raamwerk, maar UITSLUITEND de onderdelen die relevant z
 8. Concrete vragen voor de bestuurder — vragen aan zichzelf, de uitvoerder, adviseur, sleutelfunctiehouder, VO/BO, RvT of andere betrokkenen.
 9. Mogelijke vervolgvraag aan de assistent — enkele logische verdiepingsopties.
 
-Koppel de analytische onderdelen (3 t/m 7) aan de antwoordstatus: bij "onvoldoende bronnen beschikbaar" geeft u geen schijnanalyse, maar benoemt u helder wat ontbreekt en welke conclusies daarom niet hard te trekken zijn.
+Is de basis onvoldoende, geef dan geen schijnanalyse maar benoem helder wat ontbreekt en welke conclusies daarom niet hard te trekken zijn.
 De inline bronmarkeringen ([Bron N], [Algemene kennis], [Volgens wetgeving]) uit de inhoudsregels blijven verplicht binnen de tekst, ook in dit raamwerk.`;
 
 export const NIEUW_TOON = `REGISTER EN STIJL:

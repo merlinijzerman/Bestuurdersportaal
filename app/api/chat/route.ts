@@ -830,7 +830,15 @@ export async function POST(req: NextRequest) {
       systeemBlokken = bouwSysteemBlokken(SP_ALGEMEEN_REGELS, ctxBestuurder, antwoordmodus);
       gebruikersPrompt = `VRAAG: ${vraag}`;
     } else if (promptModus === "combineren") {
-      systeemBlokken = bouwSysteemBlokken(SP_COMBINEREN_REGELS, ctxBestuurder, antwoordmodus);
+      // Bij nul interne treffers valt het antwoord terug op algemene kennis. Gebruik
+      // dan ook de algemene-kennis-regels (die [Bron N] verbieden) i.p.v. de
+      // combineren-regels — anders kan het model naar niet-bestaande [Bron N]
+      // verwijzen (kapotte bron-chips). De bronbasis-melding blijft "combineren".
+      systeemBlokken = bouwSysteemBlokken(
+        chunks.length > 0 ? SP_COMBINEREN_REGELS : SP_ALGEMEEN_REGELS,
+        ctxBestuurder,
+        antwoordmodus
+      );
       gebruikersPrompt =
         chunks.length > 0
           ? `BESCHIKBARE INTERNE BRONNEN:\n\n${contextTekst}\n\n---\n\nVRAAG: ${vraag}`

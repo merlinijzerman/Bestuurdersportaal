@@ -79,4 +79,17 @@ export const BRONKEUZE_MEETSET: MeetsetVraag[] = [
   { id: 38, label: "mag-terugvragen", vraag: "Hoe gaat het met het invaren?", toelichting: "onze voortgang óf het proces" },
   { id: 39, label: "mag-terugvragen", vraag: "Wat moet ik weten over tegenstrijdig belang?", toelichting: "onze gedragscode óf algemeen" },
   { id: 40, label: "mag-terugvragen", vraag: "Hoe staat het met het transitieplan?", toelichting: "ons plan óf algemeen" },
+
+  // ── Uitbreiding 2026-07-15 (wettelijke-plicht/kadervragen zonder anker) ──
+  // Reële misclassificaties: kadervragen naar een wettelijke verplichting die
+  // vóór de patroon-uitbreiding onterecht in de twijfelbak (mag-terugvragen)
+  // vielen. Met de plicht-signalen classificeren ze nu als 'algemeen'. Het
+  // contrastieve mag-terugvragen-item (45) borgt dat écht ankerloze/plichtloze
+  // varianten nog steeds terugvragen.
+  { id: 41, label: "algemeen", vraag: "Wat zijn de communicatieverplichtingen naar deelnemers bij een verlaging van de uitkering?", toelichting: '"verplichting", geen anker' },
+  { id: 42, label: "algemeen", vraag: "Welke informatieverplichtingen gelden richting deelnemers?", toelichting: '"verplichting", geen anker' },
+  { id: 43, label: "algemeen", vraag: "Wat houdt de zorgplicht van een pensioenfonds in?", toelichting: '"zorgplicht" + "wat houdt"' },
+  { id: 44, label: "gecombineerd", vraag: "Voldoen wij aan de wettelijke informatieverplichtingen richting deelnemers?", toelichting: '"wij" + "wettelijk"/"verplichting"' },
+  { id: 45, label: "mag-terugvragen", vraag: "Hoe zit het met de communicatie naar deelnemers?", toelichting: "geen anker, geen plicht-woord" },
+  { id: 46, label: "algemeen", vraag: "Welke informatieplicht heeft een pensioenfonds bij een wijziging van de regeling?", toelichting: '"informatieplicht", geen anker' },
 ];

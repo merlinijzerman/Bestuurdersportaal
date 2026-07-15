@@ -174,20 +174,125 @@ export default function AgendapuntChat({
       const res = await fetch(`/api/agendapunten/${agendapuntId}/voorbereiding`, {
         method: "POST",
       });
-      const data = await res.json().catch(() => null);
-      const aiBericht: Bericht =
-        res.ok && data?.tekst
-          ? { rol: "ai", tekst: data.tekst, bronnen: data.bronnen }
-          : {
-              rol: "ai",
-              tekst:
-                data?.error ||
-                "De voorbereiding kon niet worden opgesteld. Probeer het opnieuw.",
-            };
-      const finale = [...conversatie, aiBericht];
-      berichtenRef.current = finale;
-      setBerichten(finale);
-      if (res.ok && data?.tekst) bewaarGesprek(finale);
+      if (!res.ok || !res.body) {
+        const fout = await res.json().catch(() => null);
+        const finale: Bericht[] = [
+          ...conversatie,
+          {
+            rol: "ai",
+            tekst:
+              fout?.error ||
+              "De voorbereiding kon niet worden opgesteld. Probeer het opnieuw.",
+          },
+        ];
+        berichtenRef.current = finale;
+        setBerichten(finale);
+        return;
+      }
+
+      // SSE-consumer — zelfde event-vorm (meta → delta → done) als de chat-route,
+      // zodat het antwoord token voor token wordt opgebouwd i.p.v. in één keer.
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let aiToegevoegd = false;
+      let volledig = "";
+      let bronnenData: Bron[] | undefined;
+      let inlineMeldingenData: InlineMelding[] | undefined;
+
+      const schrijfAi = () => {
+        setBerichten((prev) => {
+          if (!aiToegevoegd) return prev;
+          const kopie = [...prev];
+          kopie[kopie.length - 1] = {
+            rol: "ai",
+            tekst: volledig,
+            bronnen: bronnenData,
+            inlineMeldingen: inlineMeldingenData,
+          };
+          return kopie;
+        });
+      };
+
+      const verwerkEvent = (raw: string) => {
+        const regel = raw.replace(/^data: ?/, "").trim();
+        if (!regel) return;
+        let evt: {
+          type: string;
+          text?: string;
+          bronnen?: Bron[];
+          error?: string;
+          inline_meldingen?: InlineMelding[];
+        };
+        try {
+          evt = JSON.parse(regel);
+        } catch {
+          return;
+        }
+        if (evt.type === "meta") {
+          bronnenData = evt.bronnen;
+          inlineMeldingenData = evt.inline_meldingen ?? [];
+        } else if (evt.type === "delta") {
+          volledig += evt.text || "";
+          if (!aiToegevoegd) {
+            aiToegevoegd = true;
+            setAntwoordGestart(true);
+            setBerichten((prev) => [
+              ...prev,
+              {
+                rol: "ai",
+                tekst: volledig,
+                bronnen: bronnenData,
+                inlineMeldingen: inlineMeldingenData,
+              },
+            ]);
+          } else {
+            schrijfAi();
+          }
+        } else if (evt.type === "done") {
+          schrijfAi();
+        } else if (evt.type === "error") {
+          if (!aiToegevoegd) {
+            aiToegevoegd = true;
+            setBerichten((prev) => [
+              ...prev,
+              { rol: "ai", tekst: evt.error || "Er is een fout opgetreden." },
+            ]);
+          }
+        }
+      };
+
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const delen = buffer.split("\n\n");
+        buffer = delen.pop() || "";
+        for (const deel of delen) verwerkEvent(deel);
+      }
+      if (buffer.trim()) verwerkEvent(buffer);
+
+      if (!aiToegevoegd) {
+        const finale: Bericht[] = [
+          ...conversatie,
+          { rol: "ai", tekst: "Er is geen antwoord ontvangen. Probeer het opnieuw." },
+        ];
+        berichtenRef.current = finale;
+        setBerichten(finale);
+      } else if (volledig.trim()) {
+        const finale: Bericht[] = [
+          ...conversatie,
+          {
+            rol: "ai",
+            tekst: volledig,
+            bronnen: bronnenData,
+            inlineMeldingen: inlineMeldingenData,
+          },
+        ];
+        berichtenRef.current = finale;
+        setBerichten(finale);
+        bewaarGesprek(finale);
+      }
     } catch {
       const finale: Bericht[] = [
         ...conversatie,

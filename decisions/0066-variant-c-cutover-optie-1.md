@@ -57,6 +57,23 @@ vergt later een tweede omgevings-cutover.
 - **Restant na dit increment:** A7 blijft G2-blokkerend; C2 (vier-ogen 0026) en C3 (P2-schrijfpad)
   volgen. Werkstroom C is hiermee niet afgerond.
 
+## Uitvoering (12-15 juli 2026)
+
+Cutover uitgevoerd. Beheer draait als apart Vercel-project (`bestuurdersportaal-beheer`) op
+`beheer.bestuurdersportaal.com`; env-split met `DEPLOY_TARGET`; worker-guard actief; `PLATFORM_HOST`
+alleen op beheer. `SUPABASE_SERVICE_ROLE_KEY` uit de gedeelde env — criterium 2 gehaald.
+
+**Sleutelrotatie via het nieuwe Supabase-key-systeem** (pijnloos, geen sessie-logout): anon →
+**publishable key** (beide projecten), service_role → **secret key** (alleen beheer), daarna de
+**legacy JWT-based API keys uitgeschakeld** → de ooit-blootgestelde legacy `service_role` (git-historie
++ oude gedeelde env) is ingetrokken. De code hoefde niet te wijzigen (supabase-js accepteert de nieuwe
+keys op de bestaande env-var-posities).
+
+**Meegenomen bugfix (`core/lib/platform-host.ts`):** `bepaalSurface`/`isPlatformHost` splitsen nu op
+komma's — een `MARKETING_HOST` als komma-lijst (apex + www) werd door de surface-routing als één
+exacte string gelezen (contact-origin-check splitste wél), waardoor `www` naar de tenant-fail-closed
+routeerde. Nu consistent; sanity-test toegevoegd.
+
 ## Referenties
 
 - Runbook in de HANDOVER-release-historie (Fase B-cutover); `app/api/aqlab/worker/route.ts`

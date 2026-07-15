@@ -6,13 +6,14 @@ import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
 import { rateLimited } from "@/core/lib/api-errors";
 import { bouwProfielsturingAgenda } from "@/core/lib/profielsturing";
 import { bouwOrganisatieprofiel } from "@/core/lib/organisatieprofiel";
+// Eén gedeelde modelconstante (env-overschrijfbaar) i.p.v. een eigen hardcoded
+// string — voorkomt dat de agendavoorbereiding op een ander model draait dan de
+// chat-route na een modelwissel.
+import { AI_MODEL } from "@/core/lib/generatie-kern";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
 });
-
-// Zelfde model als de chat-route, in één constante.
-const AI_MODEL = "claude-sonnet-4-6";
 
 // ============================================================
 //  Voorbereiding als gespreksopener (06-07, herziening FO duiding)
@@ -221,37 +222,10 @@ export async function POST(
       `\n=== UW OPDRACHT ===\nStel de voorbereiding op voor dit agendapunt volgens de opbouw en regels in de systeem-prompt.`
     );
 
-    // 3500 i.p.v. 2000: het v0.3-antwoord is één doorlopende prose (duiding +
-    // aandachtspunten + vergadervragen); bij een te krap budget sneuvelt juist
-    // de staart — de vergadervragen. In lijn met MAX_TOKENS_BESTUURLIJK (4500)
-    // in de chat-route; ongebruikt budget kost niets.
-    const respons = await anthropic.messages.create({
-      model: AI_MODEL,
-      max_tokens: 3500,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: userParts.join("\n") }],
-    });
-
-    // Afkapping niet stil laten passeren: zichtbaar in de serverlog, zodat een
-    // ontbrekend slot ("Neem mee de vergadering in") herleidbaar is.
-    if (respons.stop_reason === "max_tokens") {
-      console.warn(
-        `Voorbereiding agendapunt ${id}: antwoord afgekapt op max_tokens — vergadervragen mogelijk onvolledig.`
-      );
-    }
-
-    const blok = respons.content.find((c) => c.type === "text");
-    const tekst = (blok && blok.type === "text" ? blok.text : "").trim();
-    if (!tekst) {
-      return NextResponse.json(
-        { error: "Geen antwoord ontvangen, probeer opnieuw." },
-        { status: 502 }
-      );
-    }
-
     // De genummerde bronlijst waarnaar de [Bron N]-markers verwijzen — zelfde
     // vorm als de chat-route (BronVerwijzing), zodat de chat-UI het bericht
-    // identiek rendert (pills + onderbouwingsblok).
+    // identiek rendert (pills + onderbouwingsblok). Vóór de model-call opgebouwd
+    // zodat we het onderbouwingsblok meteen met het meta-event kunnen meesturen.
     const bronnen = [
       ...stukkenLijst.map((s) => ({
         document_id: s.id,
@@ -265,7 +239,81 @@ export async function POST(
       ...bibBronnen,
     ];
 
-    return NextResponse.json({ tekst, bronnen });
+    // Bronbasis-melding (uitlegbaarheid). Zonder genummerde fondsbronnen steunt de
+    // voorbereiding op de toelichting van het agendapunt en algemene kennis; dan is
+    // er geen "Onderbouwing en bronnen"-blok, dus tonen we een expliciete melding
+    // zodat de bestuurder de basis ziet. Zijn er wél bronnen, dan draagt het
+    // onderbouwingsblok die transparantie al (rustige weergave — geen melding).
+    const inlineMeldingen =
+      bronnen.length === 0
+        ? [
+            {
+              type: "geen_fondstreffer",
+              tekst:
+                "Geen gekoppelde fondsstukken gevonden. Deze voorbereiding steunt op de toelichting van het agendapunt en algemene kennis; verifieer bij formele besluitvorming.",
+            },
+          ]
+        : [];
+
+    // Streaming (SSE): het antwoord wordt token voor token opgebouwd i.p.v. in één
+    // keer volledig geladen — bij een trager model (Opus) voelt dat sneller en
+    // houdt het de bestuurder betrokken. Zelfde event-vorm als /api/chat
+    // (meta → delta → done), zodat AgendapuntChat dezelfde consumer hergebruikt.
+    // max_tokens 3500: bij een te krap budget sneuvelt de staart (de vergadervragen).
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const send = (obj: unknown) =>
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
+        try {
+          // Bronnen + melding vooraf: onderbouwingsblok en melding staan er meteen,
+          // terwijl de tekst nog binnenkomt.
+          send({ type: "meta", bronnen, inline_meldingen: inlineMeldingen });
+
+          let volledig = "";
+          const claudeStream = anthropic.messages.stream({
+            model: AI_MODEL,
+            max_tokens: 3500,
+            // SYSTEM_PROMPT is volledig statisch → cache-breakpoint (ephemeral),
+            // zelfde patroon als bouwSysteemBlokken in de chat-route.
+            system: [
+              { type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } },
+            ],
+            messages: [{ role: "user", content: userParts.join("\n") }],
+          });
+          claudeStream.on("text", (delta) => {
+            volledig += delta;
+            send({ type: "delta", text: delta });
+          });
+
+          const finaal = await claudeStream.finalMessage();
+          // Afkapping niet stil laten passeren (herleidbaar in de serverlog).
+          if (finaal.stop_reason === "max_tokens") {
+            console.warn(
+              `Voorbereiding agendapunt ${id}: antwoord afgekapt op max_tokens — vergadervragen mogelijk onvolledig.`
+            );
+          }
+          if (!volledig.trim()) {
+            send({ type: "error", error: "Geen antwoord ontvangen, probeer opnieuw." });
+          } else {
+            send({ type: "done" });
+          }
+        } catch (e) {
+          console.error("Fout in voorbereiding-streamen:", e);
+          send({ type: "error", error: "Serverfout" });
+        } finally {
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+      },
+    });
   } catch (e) {
     console.error("Fout in voorbereiding-genereren:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });

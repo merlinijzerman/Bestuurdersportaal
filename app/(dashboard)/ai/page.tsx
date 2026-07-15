@@ -1196,10 +1196,11 @@ export default function AiPage() {
         )}
       </div>
 
-      {/* Antwoordmodus-bar — Increment I-1 (FO §13): vier zichtbare modi
-          (Auto · Feiten · Duiding · Sparren), Auto default. De gebruikte modus
-          wordt niet meer in een globale balk herhaald (rustige weergave §11c);
-          die staat per antwoord in "Onderbouwing en bronnen". */}
+      {/* Antwoordmodus-bar — teruggebracht tot Auto (default) · Sparren. Feiten en
+          Duiding zijn geen voorafknop meer; ze verschijnen als vervolgactie ná een
+          antwoord ("Maak feitelijker" / "Geef bestuurlijke duiding"). Auto detecteert
+          de passende modus; Sparren zet een houding voor het hele gesprek. De
+          gebruikte modus staat per antwoord in "Onderbouwing en bronnen". */}
       <div className="bg-white border-b border-line px-7 py-2.5 flex items-center gap-3 flex-wrap">
         <span className="text-xs text-muted font-semibold uppercase tracking-wide">
           Antwoordmodus

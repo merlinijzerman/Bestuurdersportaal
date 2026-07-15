@@ -304,16 +304,17 @@ export function moetWisselMeldingTonen(
 // ============================================================================
 
 /**
- * De vier antwoordmodi die de bestuurder ZIET (FO §13). Auto = autodetectie
- * (antwoordmodus === null in de UI). De overige interne modi (historisch,
- * besluitrijpheid, bronoverzicht, persoonlijke_voorbereiding) blijven onder de
- * motorkap bestaan via auto-detectie en vervolgacties, maar krijgen geen knop.
+ * De antwoordmodi die de bestuurder als KNOP ziet. Naast Auto (= autodetectie,
+ * antwoordmodus === null) nog uitsluitend Sparren. Reden: Feiten en Duiding zijn
+ * geen blijvende HOUDING maar een bewerking van één concreet antwoord — die horen
+ * als vervolgactie ná het antwoord (bepaalVervolgacties: "Maak feitelijker" /
+ * "Geef bestuurlijke duiding"), niet als voorafkeuze. Sparren is wél een houding
+ * voor het hele gesprek en houdt daarom een knop. De overige interne modi
+ * (feitelijk, duiding, historisch, besluitrijpheid, bronoverzicht,
+ * persoonlijke_voorbereiding) blijven onder de motorkap bestaan via auto-detectie
+ * en vervolgacties.
  */
-export const ZICHTBARE_ANTWOORDMODI: Antwoordmodus[] = [
-  "feitelijk",
-  "duiding",
-  "sparring",
-];
+export const ZICHTBARE_ANTWOORDMODI: Antwoordmodus[] = ["sparring"];
 
 /** Bron-modus zoals de chat-route die kent (documenten|combineren|algemeen). */
 export type BronModus = "documenten" | "combineren" | "algemeen";
@@ -563,16 +564,20 @@ export function bepaalVervolgacties(
   if (besluit)
     voegToe("werk_uit_besluitvorming", "Werk uit richting besluitvorming", "besluitrijpheid", false);
 
-  // Perspectief-lenzen: alleen bij een documentgerichte vraag. De gebruiker kan zo
-  // hetzelfde stuk door een andere bril lezen zonder te herformuleren (FO §13).
-  if (documentGericht) {
-    if (antwoordmodus !== "feitelijk")
-      voegToe("maak_feitelijker", "Maak feitelijker", "feitelijk", true);
-    if (antwoordmodus !== "duiding")
-      voegToe("geef_duiding", "Geef bestuurlijke duiding", "duiding", true);
-    if (antwoordmodus !== "sparring")
-      voegToe("stel_kritische_vragen", "Stel kritische vragen", "sparring", true);
-  }
+  // Feiten en Duiding zijn geen voorafmodus meer (alleen Auto + Sparren als knop).
+  // Ze blijven beschikbaar als vervolgactie op ELK antwoord — het zijn
+  // transformatie-acties (ze bewerken het vorige antwoord, zie TRANSFORMATIE_ACTIES),
+  // dus ze werken ook zonder documentscope. Zo verliest de gebruiker geen
+  // functionaliteit door het schrappen van de knoppen.
+  if (antwoordmodus !== "feitelijk")
+    voegToe("maak_feitelijker", "Maak feitelijker", "feitelijk", true);
+  if (antwoordmodus !== "duiding")
+    voegToe("geef_duiding", "Geef bestuurlijke duiding", "duiding", true);
+
+  // "Stel kritische vragen" (sparring-lens) blijft aan een documentgerichte vraag
+  // gekoppeld; voor een houding-voor-het-hele-gesprek is er de Sparren-knop.
+  if (documentGericht && antwoordmodus !== "sparring")
+    voegToe("stel_kritische_vragen", "Stel kritische vragen", "sparring", true);
 
   if (historisch) {
     voegToe("maak_tijdlijn", "Maak een tijdlijn", "historisch", false);
@@ -672,6 +677,15 @@ const GENERIEK_INTENT_PATRONEN: RegExp[] = [
   /vergelijkbare fondsen/,
   /\bvergelijk/,
   /prudent person/,
+  // Wettelijke-plicht/kadersignalen: een vraag naar een wettelijke verplichting of
+  // plicht staat (ook zonder fondsanker) in algemene zin. Voorkomt dat zuiver
+  // kadermatige vragen ("wat zijn de communicatieverplichtingen richting
+  // deelnemers…") ten onrechte in de twijfelbak → terugvraag belanden. LET OP:
+  // géén leidende \b, want in Nederlandse samenstellingen (communicatie­verplichting,
+  // informatie­plicht) staat geen woordgrens vóór het kernwoord. Bewust specifieke
+  // plicht-woorden, geen bare "deelnemers"/"pensioenfonds" (te breed).
+  /verplichting/,
+  /plicht(?:en)?\b/,
   // Definitievraag-triggers: een definitie/"wat is een X" staat los van het
   // eigen fonds. Bewust "wat is EEN" (onbepaald) — "wat is HET …" kan juist op
   // de eigen inrichting slaan en blijft daarom buiten deze lijst.

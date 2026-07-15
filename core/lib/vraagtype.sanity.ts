@@ -183,9 +183,14 @@ test("wissel-melding alleen bij autodetectie van een niet-default modus", () => 
 });
 
 // ── Increment I-1: zichtbare modusset ──
-test("zichtbare modusset = feitelijk/duiding/sparring (Auto = null in UI)", () => {
-  assert.deepEqual(ZICHTBARE_ANTWOORDMODI, ["feitelijk", "duiding", "sparring"]);
-  // historisch/besluitrijpheid blijven intern bestaan, maar niet als knop.
+test("zichtbare modusset = alleen sparring (Auto = null in UI)", () => {
+  // Teruggebracht tot Auto (= null) + Sparren. Feiten en Duiding zijn geen
+  // voorafknop meer maar vervolgacties ná een antwoord (zie bepaalVervolgacties).
+  assert.deepEqual(ZICHTBARE_ANTWOORDMODI, ["sparring"]);
+  // feitelijk/duiding/historisch/besluitrijpheid blijven intern bestaan (auto-
+  // detectie + vervolgacties), maar niet als knop.
+  assert.ok(!ZICHTBARE_ANTWOORDMODI.includes("feitelijk" as never));
+  assert.ok(!ZICHTBARE_ANTWOORDMODI.includes("duiding" as never));
   assert.ok(!ZICHTBARE_ANTWOORDMODI.includes("historisch" as never));
   assert.ok(!ZICHTBARE_ANTWOORDMODI.includes("besluitrijpheid" as never));
 });
@@ -325,14 +330,16 @@ test("vervolgacties: besluitvormingsvraag → Werk uit richting besluitvorming",
   assert.equal(wu!.hergebruikScope, false);
 });
 
-test("vervolgacties: ALGEMENE vraag (documentGericht=false) → geen perspectief-/lengte-knoppen", () => {
-  // Bij een algemene vraag dragen de losse B1-vervolgvragen de "wat nu"-suggesties;
-  // de generieke transformatieknoppen worden bewust NIET aangeboden.
+test("vervolgacties: ALGEMENE vraag (documentGericht=false) → Feiten/Duiding wél, lens/lengte niet", () => {
+  // Sinds de modus-reductie (Auto + Sparren) zijn Feiten en Duiding geen voorafknop
+  // meer maar vervolgacties op ELK antwoord — dus ook bij een algemene vraag. De
+  // sparring-lens (kritische vragen) en de lengte-acties blijven documentgericht.
   const a = bepaalVervolgacties("Wat is de premie in 2025?", "feitelijk", true);
   const t = a.map((x) => x.type);
+  assert.ok(t.includes("geef_duiding")); // Duiding nu breed beschikbaar
+  assert.ok(!t.includes("maak_feitelijker")); // antwoord is al feitelijk
   assert.ok(!t.includes("werk_uit_besluitvorming")); // geen besluitsignaal
   assert.ok(!t.includes("maak_tijdlijn")); // geen historisch signaal
-  assert.ok(!t.includes("geef_duiding")); // lens alleen documentgericht
   assert.ok(!t.includes("stel_kritische_vragen")); // lens alleen documentgericht
   assert.ok(!t.includes("maak_korter")); // lengte alleen documentgericht
 });
