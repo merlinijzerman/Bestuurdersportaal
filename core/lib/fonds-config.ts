@@ -161,6 +161,53 @@ export async function hybrideZoekenAan(fondsId: string): Promise<boolean> {
   return flagAlsBoolean(flag);
 }
 
+// R1.3–R1.6 — retrieval-kwaliteitsvlaggen per fonds (reranker, relevantie-drempel,
+// jargonexpansie, parent-retrieval) + de instelbare drempelwaarde. Elke vlag valt
+// terug op zijn env-default als er geen fonds-flag is gezet — zo blijft het gedrag
+// centraal in-/uitschakelbaar (bisectie bij regressie, besluit gelijktijdig-
+// activeren). Eén query i.p.v. vijf losse roundtrips. Vorm is structureel gelijk
+// aan RetrievalOpties in lib/rag.ts (bewust geen rag-import hier om de config-laag
+// licht te houden).
+export interface RetrievalVlaggen {
+  rerank: boolean;
+  relevantieDrempel: boolean;
+  jargonExpansie: boolean;
+  parentRetrieval: boolean;
+  drempelWaarde?: number;
+}
+
+export async function retrievalVlaggenVoorFonds(fondsId: string): Promise<RetrievalVlaggen> {
+  const supabase = await createServerSupabase();
+  const { data } = await supabase
+    .from("fonds_feature_flags")
+    .select("flag_key, waarde")
+    .eq("fonds_id", fondsId)
+    .in("flag_key", [
+      "rerank",
+      "relevantie_drempel",
+      "jargon_expansie",
+      "parent_retrieval",
+      "relevantie_drempel_waarde",
+    ]);
+
+  const m = new Map<string, JsonWaarde>();
+  for (const r of data ?? []) m.set(r.flag_key, r.waarde as JsonWaarde);
+
+  const vlag = (key: string, envKey: string): boolean =>
+    m.has(key) ? flagAlsBoolean(m.get(key)!) : process.env[envKey] === "on";
+
+  const drempelRuw = m.get("relevantie_drempel_waarde");
+  const drempelWaarde = typeof drempelRuw === "number" ? drempelRuw : undefined;
+
+  return {
+    rerank: vlag("rerank", "RERANK"),
+    relevantieDrempel: vlag("relevantie_drempel", "RELEVANTIE_DREMPEL"),
+    jargonExpansie: vlag("jargon_expansie", "JARGON_EXPANSIE"),
+    parentRetrieval: vlag("parent_retrieval", "PARENT_RETRIEVAL"),
+    drempelWaarde,
+  };
+}
+
 // ── Schrijven + append-only audit (versiebeheer) ─────────────────────────────
 //  Patroon per write: (1) lees huidige versie; (2) upsert nieuwe waarde met
 //  versie+1. Het AUDITSPOOR wordt NIET meer vanuit de app geschreven: een

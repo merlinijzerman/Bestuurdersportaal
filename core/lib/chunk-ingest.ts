@@ -35,6 +35,7 @@ import {
   type StructuurType,
 } from "./chunking";
 import { embedTeksten, naarVectorLiteral, EMBED_MODEL } from "./embeddings";
+import { HAIKU_MODEL } from "./llm-modellen";
 import type { TekstSegment } from "./document-extractie";
 
 // Versiestempel van deze gedeelde R1.1+R1.2-indexering. Komt op elke chunk
@@ -42,7 +43,8 @@ import type { TekstSegment } from "./document-extractie";
 export const INDEXERING_VERSIE = "r1-structuur-contextueel";
 
 // Goedkoop model voor de context-prefixes (zelfde keuze als de chat-rewrite/map).
-export const PREFIX_MODEL = "claude-haiku-4-5-20251001";
+// Centraal in lib/llm-modellen.ts zodat ingest, map-stap en reranker niet driften.
+export const PREFIX_MODEL = HAIKU_MODEL;
 
 // Versie van de prefix-prompt (SP_PREFIX). Apart van INDEXERING_VERSIE zodat een
 // prompt-aanpassing zónder schema-/chunkingwijziging traceerbaar blijft in

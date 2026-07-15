@@ -8,6 +8,13 @@ import { weegBronsoort, type Bronsoortprofiel } from "./weeg-bronsoort";
 import { isStandaardZichtbaarInRag } from "./generiek-curatie";
 import { isReviewVerlopen } from "./generiek-status";
 import type { AssistantSource, AssistantSourceSamenvatting } from "./assistant-source";
+// R1.3–R1.6 retrieval-kwaliteitsbundel. Elk onderdeel draait achter een eigen
+// vlag (zie RetrievalOpties) en heeft een eigen fail-safe; defaults reproduceren
+// het huidige gedrag. jargon-expansie is puur; rerank/parent-context hebben een
+// zuivere kern + een onzuivere schil.
+import { expandeerFtsQuery } from "./jargon-expansie";
+import { rerankChunks, type RerankMeta, type RerankClient } from "./rerank";
+import { verrijkMetParents, type ParentMeta } from "./parent-context";
 
 // Increment G — optionele, additieve retrieval-filters (vóór ranking/RRF in de
 // RPC's; defaults reproduceren huidig gedrag). De velden zijn gedenormaliseerd
@@ -169,6 +176,165 @@ function metaFilters(filters?: RetrievalFilters): RetrievalMeta["filters"] {
 // expliciet "on" is. Default uit → niets verandert aan het zoekgedrag.
 const HYBRID_ENABLED = process.env.HYBRID_SEARCH === "on";
 
+// ── R1.3–R1.6 — vlaggen + na-verwerking van de kandidatenset ────────────────
+// Elk onderdeel heeft een eigen vlag, uitsluitend als terugdraai-/diagnose-
+// mechanisme (bisectie bij regressie). De aanroeper (chat-route) resolvet ze
+// per fonds via fonds-config en geeft ze door; ontbreekt de optie, dan geldt de
+// env-default. Zo blijven overige aanroepers (agendaprep) ongemoeid.
+export interface RetrievalOpties {
+  rerank?: boolean; // R1.3 Haiku-reranker
+  relevantieDrempel?: boolean; // R1.5 ilike-uitsluiting (b1) + scoredrempel (b2)
+  jargonExpansie?: boolean; // R1.4 FTS-jargonexpansie
+  parentRetrieval?: boolean; // R1.6 small-to-big
+  drempelWaarde?: number; // R1.5 b2-drempel op de rerankscore (0–100)
+  rerankClient?: RerankClient; // injectie voor hermetische tests
+}
+
+// Conservatieve default-drempel (R1.5 b2): kandidaten met een rerankscore < 20
+// gaan niet de prompt in. Bijstelbaar zonder deploy via de fonds-flag; hier de
+// code-default voor aanroepers die geen waarde meegeven.
+const DEFAULT_RELEVANTIE_DREMPEL = 20;
+
+type VolledigeOpties = {
+  rerank: boolean;
+  relevantieDrempel: boolean;
+  jargonExpansie: boolean;
+  parentRetrieval: boolean;
+  drempelWaarde: number;
+  rerankClient?: RerankClient;
+};
+
+function volledigeOpties(o?: RetrievalOpties): VolledigeOpties {
+  return {
+    rerank: o?.rerank ?? process.env.RERANK === "on",
+    relevantieDrempel: o?.relevantieDrempel ?? process.env.RELEVANTIE_DREMPEL === "on",
+    jargonExpansie: o?.jargonExpansie ?? process.env.JARGON_EXPANSIE === "on",
+    parentRetrieval: o?.parentRetrieval ?? process.env.PARENT_RETRIEVAL === "on",
+    drempelWaarde: o?.drempelWaarde ?? DEFAULT_RELEVANTIE_DREMPEL,
+    rerankClient: o?.rerankClient,
+  };
+}
+
+// R1.4 — bouw de FTS-query (evt. jargon-verbreed) en de bijbehorende meta. De
+// vectorquery blijft ALTIJD de originele vraag; alleen de FTS-arm wordt verbreed.
+function ftsQueryVoor(vraag: string, opties: VolledigeOpties): {
+  ftsQuery: string;
+  jargon: { van: string; naar: string }[];
+} {
+  if (!opties.jargonExpansie) return { ftsQuery: vraag, jargon: [] };
+  const r = expandeerFtsQuery(vraag);
+  return { ftsQuery: r.query, jargon: r.toegepast };
+}
+
+// R1.3 — verrijkte tekst per chunk voor de reranker: context_prefix + fragment,
+// consistent met wat geëmbed/geïndexeerd wordt (spiegelt lib/chunk-ingest.verrijkTekst).
+// De prefix zit niet op de RPC-return; we halen hem gebatcht op via de id's. De
+// chunks zijn al RLS-geautoriseerd (kwamen via de RPC); dit is puur her-lezen.
+async function haalContextPrefixes(ids: string[]): Promise<Map<string, string | null>> {
+  const map = new Map<string, string | null>();
+  if (ids.length === 0) return map;
+  try {
+    const supabase = await createServerSupabase();
+    const { data } = await supabase
+      .from("document_chunks")
+      .select("id, context_prefix")
+      .in("id", ids);
+    for (const r of (data ?? []) as { id: string; context_prefix: string | null }[]) {
+      map.set(r.id, r.context_prefix ?? null);
+    }
+  } catch (e) {
+    console.error("[rag] context_prefix ophalen mislukt — rerank over kale tekst:", e);
+  }
+  return map;
+}
+
+function verrijkTekst(prefix: string | null | undefined, tekst: string): string {
+  return prefix ? `${prefix} ${tekst}` : tekst;
+}
+
+function scoreVerdeling(scores: number[]): { min: number; max: number; mediaan: number } {
+  if (scores.length === 0) return { min: 0, max: 0, mediaan: 0 };
+  const s = [...scores].sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  const mediaan = s.length % 2 ? s[mid] : Math.round((s[mid - 1] + s[mid]) / 2);
+  return { min: s[0], max: s[s.length - 1], mediaan };
+}
+
+// Gedeelde na-verwerking van de (na fondsdiscipline) bewaakte kandidatenset:
+//   A (rerank, alleen sterke paden) → B2 (scoredrempel) → weeg+select →
+//   B1 (ilike nooit citeerbaar) → D (parent-retrieval).
+// Vervangt de losse weegEnSelecteer-aanroep in elk methode-blok. Geeft de
+// prompt-set + de additieve meta-velden terug.
+async function naVerwerking(
+  bewaakteChunks: DocumentChunk[],
+  methode: RetrievalMeta["methode"],
+  zoekvraag: string,
+  filters: RetrievalFilters | undefined,
+  maxResults: number,
+  maxPerDoc: number,
+  fondsFilter: string | null,
+  peildatum: string,
+  opties: VolledigeOpties,
+  rerankToegestaan: boolean
+): Promise<{ chunks: DocumentChunk[]; extra: Partial<RetrievalMeta> }> {
+  const extra: Partial<RetrievalMeta> = {};
+  let kandidaten = bewaakteChunks;
+
+  // A — Haiku-reranker (alleen op de sterke paden: hybride + Dutch-FTS-ranked).
+  let rerankScores: Record<string, number> | null = null;
+  if (opties.rerank && rerankToegestaan && kandidaten.length >= 2) {
+    const prefixMap = await haalContextPrefixes(kandidaten.map((c) => c.id));
+    const r = await rerankChunks(
+      zoekvraag,
+      kandidaten,
+      (c) => verrijkTekst(prefixMap.get(c.id), c.tekst),
+      { client: opties.rerankClient }
+    );
+    kandidaten = r.chunks;
+    extra.rerank = r.meta;
+    if (r.meta.toegepast) rerankScores = r.meta.scores;
+  }
+
+  // B2 — relevantie-ondergrens op de (gekalibreerde) rerankscore. Alleen zinvol
+  // als de rerank scores opleverde; bij fallback poorten we niet (geen schijn).
+  if (opties.relevantieDrempel && rerankScores) {
+    const voor = kandidaten.length;
+    const behouden = kandidaten.filter(
+      (c) => (rerankScores![c.id] ?? Infinity) >= opties.drempelWaarde
+    );
+    extra.drempel = {
+      waarde: opties.drempelWaarde,
+      scoreverdeling: scoreVerdeling(Object.values(rerankScores)),
+      gedropt: voor - behouden.length,
+    };
+    kandidaten = behouden;
+  }
+
+  // Bronsoort-weging + dedup + top-N (ongewijzigd; werkt op de nieuwe volgorde).
+  let geselecteerd = weegEnSelecteer(kandidaten, filters, maxResults, maxPerDoc);
+
+  // B1 — ilike-treffers zijn NOOIT citeerbaar: uit de prompt-set gehaald, alleen
+  // als audit vastgelegd. Leeg resultaat valt op het bestaande geen-treffers-pad.
+  if (opties.relevantieDrempel && methode === "ilike" && geselecteerd.length > 0) {
+    extra.zwakke_bronbasis = true;
+    extra.mogelijk_gerelateerd = geselecteerd.map((c) => ({
+      document_id: c.document_id,
+      titel: c.documenten.titel,
+    }));
+    geselecteerd = [];
+  }
+
+  // D — parent-retrieval (small-to-big): treffers uitbreiden met hun structuur-
+  // unit. Fondsdiscipline draait binnen verrijkMetParents op de siblings.
+  if (opties.parentRetrieval && geselecteerd.length > 0) {
+    const p = await verrijkMetParents(geselecteerd, fondsFilter, peildatum);
+    geselecteerd = p.chunks;
+    extra.parent = p.meta;
+  }
+
+  return { chunks: geselecteerd, extra };
+}
+
 // Pure selectie-helper opnieuw exporteren zodat bestaande imports werken.
 export { selecteerChunks } from "./rag-select";
 
@@ -214,6 +380,11 @@ export interface DocumentChunk {
     agendapunt_volgnummer: number | null;
     agendapunt_titel: string | null;
   };
+  // Increment R1.6 (parent-retrieval) — gezet zodra de treffer is uitgebreid met
+  // zijn omliggende structuur-unit. maakContext levert dán deze samengevoegde
+  // passage als brontekst i.p.v. de kale `tekst`; de bronvermelding/locatie blijft
+  // op de treffer-chunk (citatie precies). NULL/afwezig = kale chunk (geen regressie).
+  aangeleverde_passage?: string;
 }
 
 // Diagnostiek per retrieval: wat is opgehaald en wat is uiteindelijk
@@ -380,6 +551,28 @@ export interface RetrievalMeta {
     risicohouding: boolean;
     peildatum: string | null;
   };
+  // ── R1.3–R1.6 retrieval-kwaliteitsbundel — additief auditspoor ──────────────
+  // R1.4 — toegepaste NL-jargonexpansies op de FTS-arm (leeg = geen). Puur
+  // diagnostisch; de vectorquery blijft de originele vraag.
+  jargon_expansie?: { van: string; naar: string }[];
+  // R1.3 — Haiku-reranker: methode/model/scores per chunk_id/volgorde voor+na en,
+  // bij fallback, de reden (RRF-volgorde behouden). `toegepast:false` = fallback.
+  rerank?: RerankMeta;
+  // R1.5 — relevantie-ondergrens op de rerankscore: drempelwaarde, scoreverdeling
+  // (voor empirische bijstelling) en het aantal onder de drempel gedropte chunks.
+  drempel?: {
+    waarde: number;
+    scoreverdeling: { min: number; max: number; mediaan: number };
+    gedropt: number;
+  };
+  // R1.5 (b1) — de bronbasis is zwak (alleen ilike-treffers): die zijn NOOIT
+  // citeerbaar en gaan niet als [Bron N] de prompt in. `mogelijk_gerelateerd`
+  // legt de uitgesloten treffers vast als auditspoor (geen UI).
+  zwakke_bronbasis?: boolean;
+  mogelijk_gerelateerd?: { document_id: string; titel: string }[];
+  // R1.6 — parent-retrieval: hoeveel treffers zijn uitgebreid met hun structuur-
+  // unit, hoeveel vielen terug op de kale chunk, en het totale tekstbudget.
+  parent?: ParentMeta;
 }
 
 // Platte rij zoals public.zoek_chunks(...) die teruggeeft (zie migratie
@@ -500,7 +693,8 @@ export async function zoekRelevanteChunksMetMeta(
   maxResults = 8,
   hybrideAan?: boolean,
   documentIds?: string[],
-  filters?: RetrievalFilters
+  filters?: RetrievalFilters,
+  opties?: RetrievalOpties
 ): Promise<{ chunks: DocumentChunk[]; meta: RetrievalMeta }> {
   // Documentscope (increment 1): null = hele bibliotheek. Wordt vóór ranking in
   // de RPC's toegepast. Onafhankelijk van de (mogelijk geherformuleerde) vraag,
@@ -513,11 +707,15 @@ export async function zoekRelevanteChunksMetMeta(
   // p_fonds_id naar de RPC én voedt de app-guard (handhaafFondsdiscipline).
   const fondsFilter = fondsId && fondsId.length > 0 ? fondsId : null;
 
+  // R1.3–R1.6 — vlaggen resolven (env-default als de aanroeper niets meegeeft).
+  const opt = volledigeOpties(opties);
+  const peildatum = filters?.peildatum ?? vandaagISO();
+
   // Per-aanroep instelling (uit het portaal) is leidend; valt terug op de
   // env-default HYBRID_SEARCH als er geen waarde is meegegeven.
   const hybride = hybrideAan ?? HYBRID_ENABLED;
   if (!hybride) {
-    return zoekViaFTS(vraag, maxResults, scope, filters, fondsFilter);
+    return zoekViaFTS(vraag, maxResults, scope, filters, fondsFilter, opt);
   }
 
   const supabase = await createServerSupabase();
@@ -530,19 +728,22 @@ export async function zoekRelevanteChunksMetMeta(
     vector = await embedTekst(vraag);
   } catch (e) {
     console.error("Hybride: query-embedding mislukt, terugval op FTS:", e);
-    const r = await zoekViaFTS(vraag, maxResults, scope, filters, fondsFilter);
+    const r = await zoekViaFTS(vraag, maxResults, scope, filters, fondsFilter, opt);
     return {
       chunks: r.chunks,
       meta: { ...r.meta, embedding_query_success: false, fallback_reason: "embedding_error" },
     };
   }
 
+  // R1.4 — FTS-arm (evt.) jargon-verbreed; de vectorquery blijft de originele vraag.
+  const { ftsQuery, jargon } = ftsQueryVoor(vraag, opt);
+
   // RRF-RPC: FTS + vector versmolten (SECURITY INVOKER → RLS blijft gelden).
   // p_document_ids = scope vóór de fusion (null = hele bibliotheek).
   // Increment G — retrieval-filters worden vóór de fusion in beide armen toegepast.
   // Increment T4 — p_fonds_id dwingt de fondsgrens al in de RPC af (kan niet omzeild).
   const { data, error } = await supabase.rpc("zoek_chunks_hybride", {
-    p_query: vraag,
+    p_query: ftsQuery,
     p_embedding: naarVectorLiteral(vector),
     p_limit: overFetch,
     p_document_ids: scope,
@@ -554,21 +755,27 @@ export async function zoekRelevanteChunksMetMeta(
     const gerangschikt = (data as ZoekChunkRij[]).map(rijNaarChunk);
     // T4 — app-guard náást de RPC: dropt (theoretische) cross-tenant/niet-published
     // lekken en telt ze, zodat een falen van RLS+RPC zichtbaar wordt in de meta.
-    const bewaakt = handhaafFondsdiscipline(gerangschikt, fondsFilter, filters?.peildatum ?? vandaagISO());
-    const geselecteerd = weegEnSelecteer(bewaakt.chunks, filters, maxResults, maxPerDoc);
+    const bewaakt = handhaafFondsdiscipline(gerangschikt, fondsFilter, peildatum);
+    // R1.3 (rerank op dit sterke pad) → R1.5 (drempel/ilike) → weeg → R1.6 (parent).
+    const na = await naVerwerking(
+      bewaakt.chunks, "hybride_rrf", vraag, filters, maxResults, maxPerDoc,
+      fondsFilter, peildatum, opt, true
+    );
     return {
-      chunks: geselecteerd,
+      chunks: na.chunks,
       meta: {
-        ...bouwMeta("hybride_rrf", bewaakt.chunks.length, geselecteerd),
+        ...bouwMeta("hybride_rrf", bewaakt.chunks.length, na.chunks),
         embedding_query_success: true,
         filters: metaFilters(filters),
         ...fondsMeta(fondsFilter, bewaakt.gedropt),
+        ...(jargon.length ? { jargon_expansie: jargon } : {}),
+        ...na.extra,
       },
     };
   }
 
   // RPC faalde of leeg → terugval op FTS (embedding lukte wél).
-  const r = await zoekViaFTS(vraag, maxResults, scope, filters, fondsFilter);
+  const r = await zoekViaFTS(vraag, maxResults, scope, filters, fondsFilter, opt);
   return {
     chunks: r.chunks,
     meta: {
@@ -594,19 +801,25 @@ async function zoekViaFTS(
   filters?: RetrievalFilters,
   // Increment T4 — expliciete fondsfilter (server-side geresolveerd). Voedt zowel
   // p_fonds_id op de RPC als de app-guard op ELK fallbackpad (die de RPC niet raakt).
-  fondsFilter: string | null = null
+  fondsFilter: string | null = null,
+  // R1.3–R1.6 — na-verwerkingsvlaggen (env-default als afwezig).
+  opties?: RetrievalOpties
 ): Promise<{ chunks: DocumentChunk[]; meta: RetrievalMeta }> {
   const supabase = await createServerSupabase();
   const overFetch = Math.max(maxResults * 3, 20);
   const maxPerDoc = Math.max(3, Math.ceil(maxResults / 2));
   const fMeta = metaFilters(filters);
+  const opt = volledigeOpties(opties);
+  const peildatum = filters?.peildatum ?? vandaagISO();
 
   // Poging 1: gerangschikte RPC (Dutch FTS + ts_rank_cd).
   // p_document_ids = scope vóór ranking (null = hele bibliotheek).
   // Increment G — retrieval-filters vóór ranking in de RPC.
   // Increment T4 — p_fonds_id dwingt de fondsgrens al in de RPC af.
+  // R1.4 — de FTS-query is hier (evt.) jargon-verbreed (websearch-arm).
+  const { ftsQuery, jargon } = ftsQueryVoor(vraag, opt);
   const { data, error } = await supabase.rpc("zoek_chunks", {
-    p_query: vraag,
+    p_query: ftsQuery,
     p_limit: overFetch,
     p_document_ids: scope,
     ...rpcFilterParams(filters),
@@ -615,14 +828,20 @@ async function zoekViaFTS(
 
   if (!error && Array.isArray(data) && data.length > 0) {
     const gerangschikt = (data as ZoekChunkRij[]).map(rijNaarChunk);
-    const bewaakt = handhaafFondsdiscipline(gerangschikt, fondsFilter, filters?.peildatum ?? vandaagISO());
-    const geselecteerd = weegEnSelecteer(bewaakt.chunks, filters, maxResults, maxPerDoc);
+    const bewaakt = handhaafFondsdiscipline(gerangschikt, fondsFilter, peildatum);
+    // R1.3 rerank (sterk pad) → R1.5 drempel → weeg → R1.6 parent.
+    const na = await naVerwerking(
+      bewaakt.chunks, "fts_dutch_ranked", vraag, filters, maxResults, maxPerDoc,
+      fondsFilter, peildatum, opt, true
+    );
     return {
-      chunks: geselecteerd,
+      chunks: na.chunks,
       meta: {
-        ...bouwMeta("fts_dutch_ranked", bewaakt.chunks.length, geselecteerd),
+        ...bouwMeta("fts_dutch_ranked", bewaakt.chunks.length, na.chunks),
         filters: fMeta,
         ...fondsMeta(fondsFilter, bewaakt.gedropt),
+        ...(jargon.length ? { jargon_expansie: jargon } : {}),
+        ...na.extra,
       },
     };
   }
@@ -676,14 +895,19 @@ async function zoekViaFTS(
 
     if (!error2 && data2 && data2.length > 0) {
       const gevonden = data2 as unknown as DocumentChunk[];
-      const bewaakt = handhaafFondsdiscipline(gevonden, fondsFilter, filters?.peildatum ?? vandaagISO());
-      const geselecteerd = weegEnSelecteer(bewaakt.chunks, filters, maxResults, maxPerDoc);
+      const bewaakt = handhaafFondsdiscipline(gevonden, fondsFilter, peildatum);
+      // Geen rerank op dit vangnet (plainto=AND, zwakke kandidaten); wél R1.5/R1.6.
+      const na = await naVerwerking(
+        bewaakt.chunks, "fts_plain", vraag, filters, maxResults, maxPerDoc,
+        fondsFilter, peildatum, opt, false
+      );
       return {
-        chunks: geselecteerd,
+        chunks: na.chunks,
         meta: {
-          ...bouwMeta("fts_plain", bewaakt.chunks.length, geselecteerd),
+          ...bouwMeta("fts_plain", bewaakt.chunks.length, na.chunks),
           filters: fMeta,
           ...fondsMeta(fondsFilter, bewaakt.gedropt),
+          ...na.extra,
         },
       };
     }
@@ -717,14 +941,21 @@ async function zoekViaFTS(
 
     if (data3 && data3.length > 0) {
       const gevonden = data3 as unknown as DocumentChunk[];
-      const bewaakt = handhaafFondsdiscipline(gevonden, fondsFilter, filters?.peildatum ?? vandaagISO());
-      const geselecteerd = weegEnSelecteer(bewaakt.chunks, filters, maxResults, maxPerDoc);
+      const bewaakt = handhaafFondsdiscipline(gevonden, fondsFilter, peildatum);
+      // R1.5 (b1): ilike-treffers zijn nooit citeerbaar → naVerwerking haalt ze
+      // uit de prompt-set (achter de RELEVANTIE_DREMPEL-vlag) en logt ze als
+      // mogelijk_gerelateerd. Geen rerank op dit laatste vangnet.
+      const na = await naVerwerking(
+        bewaakt.chunks, "ilike", vraag, filters, maxResults, maxPerDoc,
+        fondsFilter, peildatum, opt, false
+      );
       return {
-        chunks: geselecteerd,
+        chunks: na.chunks,
         meta: {
-          ...bouwMeta("ilike", bewaakt.chunks.length, geselecteerd),
+          ...bouwMeta("ilike", bewaakt.chunks.length, na.chunks),
           filters: fMeta,
           ...fondsMeta(fondsFilter, bewaakt.gedropt),
+          ...na.extra,
         },
       };
     }
@@ -801,8 +1032,12 @@ export function maakContext(chunks: DocumentChunk[], startIndex = 0): {
         ? ` [generiek/extern kader${doc.bronorganisatie ? ` — ${doc.bronorganisatie}` : ""}]`
         : "";
 
+    // R1.6 — is de treffer uitgebreid tot zijn structuur-unit, dan leveren we die
+    // samengevoegde passage als brontekst; het bronlabel/locatie/fragment-preview
+    // blijft op de treffer-chunk (citatie precies). Anders de kale chunk.
+    const brontekst = chunk.aangeleverde_passage ?? chunk.tekst;
     contextDelen.push(
-      `${bronLabel} ${bronTitel}${bronsoortLabel}${locatie ? ` (${locatie})` : ""}:\n"${chunk.tekst}"`
+      `${bronLabel} ${bronTitel}${bronsoortLabel}${locatie ? ` (${locatie})` : ""}:\n"${brontekst}"`
     );
 
     bronnen.push({

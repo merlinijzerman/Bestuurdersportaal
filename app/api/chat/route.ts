@@ -6,7 +6,8 @@ import { heeftReformulatieNodig, reformuleerVraag } from "@/core/lib/query-refor
 import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
 import { rateLimited } from "@/core/lib/api-errors";
 import { beoordeelRouteHostToegang } from "@/core/lib/tenant-route-guard";
-import { hybrideZoekenAan } from "@/core/lib/fonds-config";
+import { hybrideZoekenAan, retrievalVlaggenVoorFonds } from "@/core/lib/fonds-config";
+import { HAIKU_MODEL } from "@/core/lib/llm-modellen";
 import { weigerAlsModuleUit } from "@/core/lib/module-guard";
 import { valideerScope, type ScopeDocumentRij } from "@/core/lib/document-scope";
 import { bepaalVraagtype, schatTokens, kiesStrategie, maakBatches, bepaalAntwoordmodus, retrievalModusVoor, bepaalInlineMeldingen, AFGEKAPT_MELDING, bronbasisLabel, bepaalBronIntent, moetVerduidelijken, bepaalAutoBronModus, VERDUIDELIJKINGSVRAAG, VERDUIDELIJKING_OPTIES, ANTWOORDMODUS_LABEL, type Strategie, type Antwoordmodus, type BronModus, type BronIntent, type BronIntentResultaat } from "@/core/lib/vraagtype";
@@ -75,7 +76,7 @@ const MAP_BATCH_TOKENS = 16000;
 const MAX_BATCHES = 12;
 // Goedkoop/snel model voor de extractieve map-stap; het sterke AI_MODEL doet de
 // reduce-stap (kwaliteit van het eindantwoord).
-const MAP_MODEL = "claude-haiku-4-5-20251001";
+const MAP_MODEL = HAIKU_MODEL;
 
 // ── Scenario A live web-retrieval (besluit 0072) ────────────────────────────
 // Hoofdschakelaar: web-retrieval draait ALLEEN als WEB_RETRIEVAL_ACTIEF='true'
@@ -649,6 +650,12 @@ export async function POST(req: NextRequest) {
       // fondsId is server-side afgeleid, nooit uit de request-body.
       const hybrideAan = await hybrideZoekenAan(fondsId);
 
+      // R1.3–R1.6 — retrieval-kwaliteitsvlaggen per fonds (reranker, relevantie-
+      // drempel, jargonexpansie, parent-retrieval + drempelwaarde). Vallen terug
+      // op de env-defaults; fondsId is server-side afgeleid. Worden als opties
+      // doorgegeven aan de retrieval en volledig in retrieval_meta gelogd.
+      const retrievalVlaggen = await retrievalVlaggenVoorFonds(fondsId);
+
       // History-aware reformulatie (Fase B1): bij een vervolgvraag die op
       // eerdere context leunt, herschrijven we de vraag tot een zelfstandige
       // zoekvraag vóór de retrieval. De originele vraag blijft ongemoeid in de
@@ -677,7 +684,8 @@ export async function POST(req: NextRequest) {
         CHUNK_BUDGET,
         hybrideAan,
         scopeDocumentIds,
-        retrievalFilters
+        retrievalFilters,
+        retrievalVlaggen
       );
       chunks = res.chunks;
       retrievalMeta = {
