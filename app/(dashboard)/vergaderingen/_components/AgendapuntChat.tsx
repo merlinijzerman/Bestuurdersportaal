@@ -90,6 +90,12 @@ export default function AgendapuntChat({
   const userIdRef = useRef<string | null>(null);
   const gesprekId = useRef<string | null>(null);
   const eindRef = useRef<HTMLDivElement>(null);
+  // Scroll-container + "sticky bottom": tijdens het streamen scrollt de weergave
+  // alleen automatisch mee als de gebruiker al (bijna) onderaan staat. Scrollt de
+  // gebruiker omhoog om terug te lezen, dan stopt het meescrollen tot hij weer
+  // onderaan komt. Zo houdt de lezer de controle tijdens het streamen.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const volgtBodemRef = useRef(true);
   // Spiegel van `berichten` voor imperatieve callers (genereerVoorbereiding):
   // die lopen buiten de render-cyclus en mogen niet op een verouderde state-
   // closure bouwen.
@@ -170,6 +176,8 @@ export default function AgendapuntChat({
     setBerichten(conversatie);
     setLaden(true);
     setAntwoordGestart(false);
+    // Vers antwoord volgt vanaf de start mee, tot de gebruiker omhoog scrollt.
+    volgtBodemRef.current = true;
     try {
       const res = await fetch(`/api/agendapunten/${agendapuntId}/voorbereiding`, {
         method: "POST",
@@ -250,6 +258,7 @@ export default function AgendapuntChat({
             schrijfAi();
           }
         } else if (evt.type === "done") {
+          if (evt.inline_meldingen) inlineMeldingenData = evt.inline_meldingen;
           schrijfAi();
         } else if (evt.type === "error") {
           if (!aiToegevoegd) {
@@ -305,8 +314,20 @@ export default function AgendapuntChat({
     }
   }
 
+  // Houd bij of de gebruiker (bijna) onderaan staat. Bij handmatig omhoogscrollen
+  // zetten we het meescrollen uit; komt hij weer binnen de drempel, dan weer aan.
+  function bijScroll() {
+    const el = scrollRef.current;
+    if (!el) return;
+    volgtBodemRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+  }
+
   useEffect(() => {
-    if (laden) eindRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    if (!laden) return;
+    const el = scrollRef.current;
+    // Alleen meescrollen als de lezer al onderaan volgt (sticky bottom); anders
+    // laten we de scrollpositie met rust zodat hij rustig kan teruglezen.
+    if (el && volgtBodemRef.current) el.scrollTop = el.scrollHeight;
   }, [berichten, laden]);
 
   // Opslag — zelfde payload-vorm als de AI-pagina (Fase B2 + ADR 0028), zodat
@@ -364,6 +385,8 @@ export default function AgendapuntChat({
     setInvoer("");
     setLaden(true);
     setAntwoordGestart(false);
+    // Vers antwoord volgt vanaf de start mee, tot de gebruiker omhoog scrollt.
+    volgtBodemRef.current = true;
 
     const basis = opties?.basisBerichten ?? berichten;
     const conversatie = opties?.geenNieuweVraag
@@ -602,7 +625,7 @@ export default function AgendapuntChat({
 
           {/* Berichten */}
           {heeftGesprek && (
-            <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+            <div ref={scrollRef} onScroll={bijScroll} className="space-y-2 max-h-96 overflow-y-auto pr-1">
               {berichten.map((b, idx) =>
                 b.rol === "gebruiker" ? (
                   <div key={idx} className="flex justify-end">

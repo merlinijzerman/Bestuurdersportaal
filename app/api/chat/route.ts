@@ -9,7 +9,7 @@ import { beoordeelRouteHostToegang } from "@/core/lib/tenant-route-guard";
 import { hybrideZoekenAan } from "@/core/lib/fonds-config";
 import { weigerAlsModuleUit } from "@/core/lib/module-guard";
 import { valideerScope, type ScopeDocumentRij } from "@/core/lib/document-scope";
-import { bepaalVraagtype, schatTokens, kiesStrategie, maakBatches, bepaalAntwoordmodus, retrievalModusVoor, bepaalInlineMeldingen, bronbasisLabel, bepaalBronIntent, moetVerduidelijken, bepaalAutoBronModus, VERDUIDELIJKINGSVRAAG, VERDUIDELIJKING_OPTIES, ANTWOORDMODUS_LABEL, type Strategie, type Antwoordmodus, type BronModus, type BronIntent, type BronIntentResultaat } from "@/core/lib/vraagtype";
+import { bepaalVraagtype, schatTokens, kiesStrategie, maakBatches, bepaalAntwoordmodus, retrievalModusVoor, bepaalInlineMeldingen, AFGEKAPT_MELDING, bronbasisLabel, bepaalBronIntent, moetVerduidelijken, bepaalAutoBronModus, VERDUIDELIJKINGSVRAAG, VERDUIDELIJKING_OPTIES, ANTWOORDMODUS_LABEL, type Strategie, type Antwoordmodus, type BronModus, type BronIntent, type BronIntentResultaat } from "@/core/lib/vraagtype";
 import { bepaalBronsoortprofiel } from "@/core/lib/weeg-bronsoort";
 import { haalBesluitBronnen, topProcesinstanties, opmaakBesluitContext } from "@/core/lib/besluitvorming-bron";
 import { documentBronNaarSource, modelKennisBronnenUitAntwoord, bouwSourceSamenvatting, ontbrekendeAlgemeneKennisMarkering, type AssistantSource } from "@/core/lib/assistant-source";
@@ -1063,7 +1063,7 @@ export async function POST(req: NextRequest) {
             }
           });
 
-          await claudeStream.finalMessage();
+          const finaleMsg = await claudeStream.finalMessage();
 
           // Flush de resterende zichtbare staart als de marker nooit kwam.
           if (!markerGezien && verzonden < volledig.length) {
@@ -1106,6 +1106,13 @@ export async function POST(req: NextRequest) {
             scopeActief,
             algemeneKennisMarkers,
           });
+
+          // Afkap-signaal: raakt het antwoord het max_tokens-plafond, dan tonen we
+          // dat expliciet i.p.v. het stil af te kappen (relevant sinds de Opus-
+          // overstap, besluit 0067). De gebruiker kan dan om een vervolg vragen.
+          if (finaleMsg.stop_reason === "max_tokens") {
+            inlineMeldingenFinaal.push(AFGEKAPT_MELDING);
+          }
 
           // Increment I-3 — leid nu (mét de antwoordinhoud) de model_knowledge-
           // bronnen af: één per door het antwoord GENOEMDE instantie per

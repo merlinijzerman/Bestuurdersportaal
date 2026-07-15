@@ -332,7 +332,8 @@ export type InlineMeldingType =
   | "onvoldoende_basis"
   | "algemene_kennis_fonds"
   | "interpretatieve_duiding"
-  | "onzekerheid_besluit";
+  | "onzekerheid_besluit"
+  | "afgekapt";
 
 export interface InlineMelding {
   type: InlineMeldingType;
@@ -354,6 +355,16 @@ const INLINE_MELDING_TEKST: Record<InlineMeldingType, string> = {
     "De duiding is interpretatief; zie 'Onderbouwing en bronnen' voor de bronnen en aannames.",
   onzekerheid_besluit:
     "Dit antwoord weegt besluitvorming en kan aannames en openstaande punten bevatten; zie de onderbouwing.",
+  afgekapt:
+    "Dit antwoord is afgekapt op de lengtelimiet. Vraag om een vervolg of om het resterende deel.",
+};
+
+// Post-stream-melding: wordt door de routes toegevoegd wanneer het antwoord het
+// max_tokens-plafond raakt (stop_reason === "max_tokens"), zodat een afkap nooit
+// stil gebeurt. Los van bepaalInlineMeldingen (dat kent de stop_reason niet).
+export const AFGEKAPT_MELDING: InlineMelding = {
+  type: "afgekapt",
+  tekst: INLINE_MELDING_TEKST.afgekapt,
 };
 
 export interface InlineMeldingInput {

@@ -10,6 +10,7 @@ import { bouwOrganisatieprofiel } from "@/core/lib/organisatieprofiel";
 // string — voorkomt dat de agendavoorbereiding op een ander model draait dan de
 // chat-route na een modelwissel.
 import { AI_MODEL } from "@/core/lib/generatie-kern";
+import { AFGEKAPT_MELDING } from "@/core/lib/vraagtype";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -273,7 +274,10 @@ export async function POST(
           let volledig = "";
           const claudeStream = anthropic.messages.stream({
             model: AI_MODEL,
-            max_tokens: 3500,
+            // 5000 (was 3500): na de overstap naar Opus 4.8 (besluit 0067) schrijft
+            // het model uitgebreider en liep de voorbereiding tegen de limiet aan
+            // (afgekapte staart). Plafond, geen streefwaarde.
+            max_tokens: 5000,
             // SYSTEM_PROMPT is volledig statisch → cache-breakpoint (ephemeral),
             // zelfde patroon als bouwSysteemBlokken in de chat-route.
             system: [
@@ -295,6 +299,14 @@ export async function POST(
           }
           if (!volledig.trim()) {
             send({ type: "error", error: "Geen antwoord ontvangen, probeer opnieuw." });
+          } else if (finaal.stop_reason === "max_tokens") {
+            // Afgekapt op het plafond → toon dat expliciet. `done` vervangt de
+            // meta-meldingen client-side, dus stuur de volledige lijst mee
+            // (bronbasis-melding + afkap-signaal).
+            send({
+              type: "done",
+              inline_meldingen: [...inlineMeldingen, AFGEKAPT_MELDING],
+            });
           } else {
             send({ type: "done" });
           }

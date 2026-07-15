@@ -32,14 +32,22 @@ import type { ModelProvider, ReasoningEffort } from "@/core/lib/aqlab/modellen";
 // en terugschakelen; alle generatie-call-sites (chat-route, agendavoorbereiding)
 // lezen deze constante zodat er geen model-drift tussen paden ontstaat.
 export const AI_MODEL = process.env.AI_MODEL ?? "claude-opus-4-8";
-export const MAX_TOKENS = 3200;
+// Verhoogd naar 5000 (was 3200) na de overstap naar Opus 4.8 (besluit 0067):
+// ook feitelijke antwoorden schrijft Opus uitgebreider, dus ruimer plafond tegen
+// afkappen. Plafond, geen streefwaarde; het afkap-signaal (AFGEKAPT_MELDING) vangt
+// de resterende randgevallen zichtbaar op.
+export const MAX_TOKENS = 5000;
 
 // Feature-flag: bestuurlijke antwoordstijl (antwoordstatus + adaptieve
 // lichte/volledige structuur). Default uit → huidige gesprekspartner-stijl.
 export const BESTUURLIJKE_STIJL = process.env.BESTUURLIJKE_STIJL === "on";
-// De bestuurlijke stijl levert langere, gestructureerde antwoorden; iets ruimer
-// tokenbudget zodat het volledige raamwerk niet wordt afgekapt.
-export const MAX_TOKENS_BESTUURLIJK = 4500;
+// De bestuurlijke stijl levert langere, gestructureerde antwoorden; ruimer
+// tokenbudget zodat het volledige raamwerk niet wordt afgekapt. Verhoogd naar
+// 8000 (was 4500) na de overstap naar Opus 4.8 (besluit 0067): Opus schrijft
+// uitgebreider, waardoor gestructureerde duiding-/besluitantwoorden tegen de
+// oude limiet aanliepen en middenin een sectie afbraken. Het is een plafond,
+// geen streefwaarde — kortere antwoorden kosten niets extra.
+export const MAX_TOKENS_BESTUURLIJK = 8000;
 
 // ============================================================
 //  Toon-instructies — gemeenschappelijk voor alle modi
