@@ -43,6 +43,14 @@ export const STRUCTUUR_UNITS = new Set(["artikel", "paragraaf", "besluit", "defi
 // chunk-overlap is ~100 tekens (≈16 woorden, lib/chunking.ts); ruim hierboven.
 const MAX_OVERLAP_TEKENS = 300;
 
+// Sibling-fetch-plafond. Schaalt mee met het aantal betrokken documenten zodat
+// één groot document de siblings van de andere treffers niet wegdrukt (een vlak
+// globaal LIMIT zou, geordend op document_id, de láátste documenten afkappen).
+// Ondergrens = ruim voor één groot document; harde bovengrens tegen ontsporing.
+const SIBLING_FETCH_PER_DOC = 1500;
+const SIBLING_FETCH_MIN = 5000;
+const SIBLING_FETCH_MAX = 20000;
+
 // Sibling-vorm: DocumentChunk + de structuurvelden die de RPC niet levert maar de
 // directe select wél (voor sibling-scoping).
 export interface SiblingRij extends DocumentChunk {
@@ -147,7 +155,9 @@ export async function verrijkMetParents(
     .eq("documenten.actief", true)
     .order("document_id", { ascending: true })
     .order("chunk_index", { ascending: true })
-    .limit(5000);
+    .limit(
+      Math.min(SIBLING_FETCH_MAX, Math.max(SIBLING_FETCH_MIN, docIds.length * SIBLING_FETCH_PER_DOC))
+    );
 
   if (error || !data || data.length === 0) {
     // Geen siblings ophaalbaar → alles kaal (fail-safe, geen regressie).

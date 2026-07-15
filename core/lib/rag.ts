@@ -297,8 +297,14 @@ async function naVerwerking(
 
   // B2 — relevantie-ondergrens op de (gekalibreerde) rerankscore. Alleen zinvol
   // als de rerank scores opleverde; bij fallback poorten we niet (geen schijn).
+  // Bisectie-eigenschap: RELEVANTIE_DREMPEL aan + RERANK uit ⇒ geen rerankScores
+  // ⇒ b2 slaat zichzelf over en alleen b1 (ilike-uitsluiting) draait. Zo zijn b1
+  // en b2 in de praktijk apart te isoleren, ondanks de gedeelde vlag.
   if (opties.relevantieDrempel && rerankScores) {
     const voor = kandidaten.length;
+    // Fail-open: een kandidaat die de reranker NIET scoorde (partiële JSON) krijgt
+    // Infinity en blijft staan — bewust conservatief (niet droppen op ontbrekende
+    // data, geen schijnzekerheid). pasVolgordeToe zette zulke chunks al achteraan.
     const behouden = kandidaten.filter(
       (c) => (rerankScores![c.id] ?? Infinity) >= opties.drempelWaarde
     );
@@ -1034,7 +1040,11 @@ export function maakContext(chunks: DocumentChunk[], startIndex = 0): {
 
     // R1.6 — is de treffer uitgebreid tot zijn structuur-unit, dan leveren we die
     // samengevoegde passage als brontekst; het bronlabel/locatie/fragment-preview
-    // blijft op de treffer-chunk (citatie precies). Anders de kale chunk.
+    // blijft op de treffer-chunk. Bewuste small-to-big-afweging: de aangeleverde
+    // passage kan tekst van een náást-liggende pagina/paragraaf bevatten, terwijl
+    // de getoonde locatie die van de treffer-chunk is. De citatie-ANKER (welk
+    // document/welke unit) blijft dus exact; de pagina-aanduiding kan de bredere
+    // unit onder-specificeren. Alleen achter de parent-vlag; kale chunk = default.
     const brontekst = chunk.aangeleverde_passage ?? chunk.tekst;
     contextDelen.push(
       `${bronLabel} ${bronTitel}${bronsoortLabel}${locatie ? ` (${locatie})` : ""}:\n"${brontekst}"`

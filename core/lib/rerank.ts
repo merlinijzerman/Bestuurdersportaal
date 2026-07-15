@@ -168,6 +168,10 @@ export async function rerankChunks<T extends { id: string }>(
   const c = opties?.client ?? client();
 
   let ruw: string;
+  // Timer-handle buiten de try zodat we hem in `finally` altijd opruimen: wint de
+  // API-call de race, dan blijft de timeout anders 4s gewapend staan en houdt hij
+  // de event loop bezig (dangling teardown-latency op het kritieke chatpad).
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const call = c.create({
       model,
@@ -180,15 +184,17 @@ export async function rerankChunks<T extends { id: string }>(
         },
       ],
     });
-    const timeout = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("rerank_timeout")), timeoutMs)
-    );
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error("rerank_timeout")), timeoutMs);
+    });
     const response = await Promise.race([call, timeout]);
     ruw = response.content[0]?.type === "text" ? response.content[0].text : "";
   } catch (e) {
     const reden = e instanceof Error && e.message === "rerank_timeout" ? "timeout" : "api_error";
     console.error("[rerank] fallback naar RRF-volgorde:", e);
     return metFallback(kandidaten, reden, model);
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 
   const scores = parseRerankScores(ruw, set.length);
