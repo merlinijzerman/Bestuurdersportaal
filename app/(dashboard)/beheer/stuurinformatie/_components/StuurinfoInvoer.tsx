@@ -24,8 +24,11 @@ import {
   type VrijeReserveKey,
 } from "@/core/lib/stuurinfo-invoer";
 import { parseNlGetal } from "@/core/lib/stuurinfo-sjabloon";
+import { SOLI_VULLING_KEYS } from "@/core/lib/stuurinfo-soli";
 import BalansInvoerTabel from "./BalansInvoerTabel";
 import ReservesInvoer from "./ReservesInvoer";
+import SpreidingInvoer from "./SpreidingInvoer";
+import SolidariteitInvoer from "./SolidariteitInvoer";
 import UploadPaneel, { type UploadToepassing } from "./UploadPaneel";
 
 // ── Respons-vormen (spiegelen core/lib/stuurinfo-beheer-bron.ts) ────────────
@@ -35,6 +38,14 @@ export type Snapshot = {
   reserves: Record<string, number | null>;
   grenzen: { solidariteitsreserve: { ondergrens: number | null; bovengrens: number | null } };
   financieringsgraad: number | null;
+  spreiding: {
+    beschikbaar: number | null;
+    voorziening: number | null;
+    aanpassingsfactor: number | null;
+    bandOnder: number | null;
+    bandBoven: number | null;
+  };
+  soli: Record<string, number | null> & { uitdeling: number | null; reserveStand: number | null };
 };
 
 type PeriodeOptie = { periode: string; label: string; peildatum: string; bron: string };
@@ -68,6 +79,10 @@ export type VeldState = {
   ondergrens: string;
   bovengrens: string;
   fg: string;
+  /** Tab 4 (T15): payload-veldnamen (beschikbaar, voorziening, …, band_onder/_boven). */
+  spreiding: Record<string, string>;
+  /** Tab 5 (T15): vier bronnen + uitdeling. */
+  soli: Record<string, string>;
 };
 
 const naarTekst = (v: number | null): string =>
@@ -80,6 +95,17 @@ const naarVeldState = (s: Snapshot): VeldState => ({
   ondergrens: naarTekst(s.grenzen.solidariteitsreserve.ondergrens),
   bovengrens: naarTekst(s.grenzen.solidariteitsreserve.bovengrens),
   fg: naarTekst(s.financieringsgraad),
+  spreiding: {
+    beschikbaar: naarTekst(s.spreiding.beschikbaar),
+    voorziening: naarTekst(s.spreiding.voorziening),
+    aanpassingsfactor: naarTekst(s.spreiding.aanpassingsfactor),
+    band_onder: naarTekst(s.spreiding.bandOnder),
+    band_boven: naarTekst(s.spreiding.bandBoven),
+  },
+  soli: {
+    ...Object.fromEntries(SOLI_VULLING_KEYS.map((k) => [k, naarTekst(s.soli[k] ?? null)])),
+    uitdeling: naarTekst(s.soli.uitdeling),
+  },
 });
 
 async function jsonFetch(url: string, init?: RequestInit) {
@@ -98,11 +124,11 @@ const SECTIES = [
   { id: "periode", label: "Periode & bron", actief: true, tag: null },
   { id: "balans", label: "1 · Balans", actief: true, tag: "Tab 1" },
   { id: "reserves", label: "1 · Reserves", actief: true, tag: "Tab 1" },
+  { id: "spreiding", label: "4 · Spreiding", actief: true, tag: "Tab 4" },
+  { id: "solidariteit", label: "5 · Solidariteit", actief: true, tag: "Tab 5" },
   { id: "upload", label: "Upload i.p.v. typen", actief: true, tag: null },
   { id: null, label: "2 · Rendementstoedeling", actief: false, tag: "volgt" },
   { id: null, label: "3 · Biometrisch", actief: false, tag: "volgt" },
-  { id: null, label: "4 · Spreiding", actief: false, tag: "volgt" },
-  { id: null, label: "5 · Solidariteit", actief: false, tag: "volgt" },
   { id: null, label: "6 · Operationeel", actief: false, tag: "volgt" },
   { id: null, label: "7 · Premie & compensatie", actief: false, tag: "volgt" },
   { id: null, label: "Deelnemers & signalen", actief: false, tag: "volgt" },
@@ -172,6 +198,18 @@ export default function StuurinfoInvoer() {
     setVelden((v) => (v ? { ...v, [veld]: waarde } : v));
     setInvoerBron("handmatig");
     setGewijzigd(true);
+  };
+  // Tab 4/5-secties (T15): eigen save per sectie — de gedeelde gewijzigd-vlag
+  // van de balans-savebar blijft onaangeraakt (losse publicatiepaden). Een
+  // handmatige wijziging zet de invoerbron wél terug (correcte herkomst in
+  // het auditlog, ook ná "upload toepassen" op de balans-sectie).
+  const zetSpreidingVeld = (key: string, waarde: string) => {
+    setVelden((v) => (v ? { ...v, spreiding: { ...v.spreiding, [key]: waarde } } : v));
+    setInvoerBron("handmatig");
+  };
+  const zetSoliVeld = (key: string, waarde: string) => {
+    setVelden((v) => (v ? { ...v, soli: { ...v.soli, [key]: waarde } } : v));
+    setInvoerBron("handmatig");
   };
 
   // ── Upload → formulierstate (één publish-pad via de savebar) ──────────────
@@ -294,6 +332,68 @@ export default function StuurinfoInvoer() {
         }),
       });
       setMelding(`Opgeslagen en gepubliceerd naar het dashboard (periode ${data.gekozen}).`);
+      await laad(data.gekozen);
+    } catch (err) {
+      setFout(err instanceof Error ? err.message : "Opslaan mislukt");
+    } finally {
+      setBezig(false);
+    }
+  }
+
+  // ── Tab 4/5-saves (T15): eigen POST-type per sectie ────────────────────────
+  async function slaSpreidingOp() {
+    if (!velden || !data?.gekozen) return;
+    setBezig(true);
+    setFout(null);
+    setMelding(null);
+    try {
+      await jsonFetch("/api/stuurinformatie/beheer", {
+        method: "POST",
+        body: JSON.stringify({
+          type: "spreiding",
+          periode: data.gekozen,
+          invoer_bron: invoerBron,
+          kerncijfers: {
+            beschikbaar: parseNlGetal(velden.spreiding.beschikbaar),
+            voorziening: parseNlGetal(velden.spreiding.voorziening),
+            aanpassingsfactor: parseNlGetal(velden.spreiding.aanpassingsfactor),
+            band_onder: velden.spreiding.band_onder.trim() === "" ? null : parseNlGetal(velden.spreiding.band_onder),
+            band_boven: velden.spreiding.band_boven.trim() === "" ? null : parseNlGetal(velden.spreiding.band_boven),
+          },
+        }),
+      });
+      setMelding(`Spreiding opgeslagen en gepubliceerd naar het dashboard (periode ${data.gekozen}).`);
+      await laad(data.gekozen);
+    } catch (err) {
+      setFout(err instanceof Error ? err.message : "Opslaan mislukt");
+    } finally {
+      setBezig(false);
+    }
+  }
+
+  async function slaSolidariteitOp() {
+    if (!velden || !data?.gekozen) return;
+    setBezig(true);
+    setFout(null);
+    setMelding(null);
+    try {
+      await jsonFetch("/api/stuurinformatie/beheer", {
+        method: "POST",
+        body: JSON.stringify({
+          type: "solidariteit",
+          periode: data.gekozen,
+          invoer_bron: invoerBron,
+          vulling: Object.fromEntries(
+            SOLI_VULLING_KEYS.map((k) => [k, parseNlGetal(velden.soli[k])])
+          ),
+          uitdeling: parseNlGetal(velden.soli.uitdeling),
+          grenzen: {
+            ondergrens: velden.ondergrens.trim() === "" ? null : parseNlGetal(velden.ondergrens),
+            bovengrens: velden.bovengrens.trim() === "" ? null : parseNlGetal(velden.bovengrens),
+          },
+        }),
+      });
+      setMelding(`Solidariteit opgeslagen en gepubliceerd naar het dashboard (periode ${data.gekozen}).`);
       await laad(data.gekozen);
     } catch (err) {
       setFout(err instanceof Error ? err.message : "Opslaan mislukt");
@@ -490,7 +590,28 @@ export default function StuurinfoInvoer() {
           velden={velden}
           referentie={data.referentie}
           zetVeld={(key, w) => zetVeld("reserves", key, w)}
+          uitgeschakeld={bezig || nieuwOpen}
+        />
+
+        {/* ── Spreiding (tab 4, T15) — eigen save ───────────────────────── */}
+        <SpreidingInvoer
+          velden={velden}
+          referentie={data.referentie}
+          zetVeld={zetSpreidingVeld}
+          opslaan={slaSpreidingOp}
+          bezig={bezig}
+          uitgeschakeld={bezig || nieuwOpen}
+        />
+
+        {/* ── Solidariteit (tab 5, T15) — eigen save; grenzen = één bron ── */}
+        <SolidariteitInvoer
+          velden={velden}
+          huidig={data.huidig}
+          referentie={data.referentie}
+          zetVeld={zetSoliVeld}
           zetGrens={(veld, w) => zetLosVeld(veld, w)}
+          opslaan={slaSolidariteitOp}
+          bezig={bezig}
           uitgeschakeld={bezig || nieuwOpen}
         />
 

@@ -5,21 +5,22 @@ import { StuurinfoShell } from "../_components/StuurinfoShell";
 import { STUURINFO_TABS } from "../_components/StuurinfoTabs";
 
 // ============================================================
-//  Bestuurdersdashboard — placeholders tabs 2–7 (T13).
+//  Bestuurdersdashboard — placeholders tabs 2/3/6/7 (T13; T15 bouwde 4+5).
 //  Server-side gegate "Binnenkort"-pagina's: dezelfde toegangsguard als de
 //  Balans-tab (manifest + capability + RLS-sessie), allowlist op de tab-key
 //  (onbekend → notFound). BEWUST geen data of nep-cijfers — geen
 //  schijnzekerheid; de inhoud volgt per tab in een eigen ticket
-//  (Plan uitbreiding stuurinformatie, AZL-lijn).
+//  (Plan uitbreiding stuurinformatie, AZL-lijn). Gebouwde tabs (balans,
+//  spreiding, solidariteit) hebben een eigen statische route die van deze
+//  dynamische route wint — hier expliciet uitgefilterd (geen dead paths).
 // ============================================================
 
-const PLACEHOLDER_TABS = STUURINFO_TABS.filter((t) => t.key !== "balans");
+const GEBOUWDE_TABS = ["balans", "spreiding", "solidariteit"];
+const PLACEHOLDER_TABS = STUURINFO_TABS.filter((t) => !GEBOUWDE_TABS.includes(t.key));
 const TOELICHTING: Record<string, string> = {
   rendement:
     "Gerealiseerd vs. toebedeeld rendement, beschermings- en overrendement en de kapitaalontwikkeling per cohort.",
   biometrie: "Biometrische resultaten: micro/macro langleven, PP/Wzp en AO per cohort.",
-  spreiding: "Aanpassingsfactor en in-/uitloop van de spreidingsreserve.",
-  solidariteit: "Vullen en uitdelen van de solidariteitsreserve en de evenwichtigheid daarvan.",
   operationeel: "Operationele reserve, kostenontwikkeling en buffer t.o.v. de norm.",
   premie: "Premiedekking, compensatiedepot en uitputtingsprognose.",
 };

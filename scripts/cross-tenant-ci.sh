@@ -50,6 +50,8 @@ SQL_T11M="supabase/checks/2026_07_10_t11_cross_tenant.sql"
 SQL_T13="supabase/checks/2026_07_16_t13_cross_tenant.sql"
 # Increment T14 — stuurinfo-invoerlaag: auditlog-isolatie + append-only + capture-trigger + RPC-rolgate.
 SQL_T14="supabase/checks/2026_07_17_t14_cross_tenant.sql"
+# Increment T15 — tabs 4/5 (spreiding/soli): soli-RPC-rolgate + eindstand-consistentie + één-bron-band.
+SQL_T15="supabase/checks/2026_07_17_t15_cross_tenant.sql"
 # AQLab (AQL-1) — provider-globale aqlab_-tabellen: RLS-aan + append-only +
 # synthetic-CHECK + release-beslisregel + deny-by-default (geen tenant-lees/schrijf).
 SQL_AQLAB="supabase/checks/2026_07_10_aqlab_cross_tenant.sql"
@@ -107,6 +109,9 @@ echo
 echo "-- T14 (stuurinfo-invoerlaag: auditlog + append-only + capture-trigger + RPC-rolgate) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_T14"
 echo
+echo "-- T15 (stuurinfo tabs 4/5: soli-RPC-rolgate + eindstand-consistentie + één-bron-band) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_T15"
+echo
 echo "-- AQLab (aqlab_: RLS-aan + append-only + synthetic-CHECK + release-beslisregel + deny-by-default) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_AQLAB"
 echo
@@ -124,5 +129,6 @@ echo "  T10-review verval-gate + generieke toestandsmachine (DB-laag)"
 echo "  T11-modules stuurinfo/klantbeeld cross-tenant + rolgate + deny-delete (DB-laag)"
 echo "  T13 stuurinfo-periodemodel + reserves cross-tenant + rolgate + deny-delete (DB-laag)"
 echo "  T14 stuurinfo-invoerlaag auditlog + append-only + capture-trigger + RPC-rolgate (DB-laag)"
+echo "  T15 stuurinfo tabs 4/5 soli-RPC + eindstand-consistentie + één-bron-band (DB-laag)"
 echo "  AQLab aqlab_ RLS-aan + append-only + synthetic + beslisregel + deny-by-default (DB-laag)"
 echo "============================================================================"

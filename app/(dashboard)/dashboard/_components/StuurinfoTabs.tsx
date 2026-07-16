@@ -2,8 +2,9 @@ import Link from "next/link";
 
 // ============================================================
 //  Tab-navigatie bestuurdersdashboard (T13) — server component.
-//  Zeven tabs conform het AZL-lijn-prototype; alleen Balans is gebouwd, de
-//  overige zes zijn server-side gegate placeholders ([tab]/page.tsx).
+//  Zeven tabs conform het AZL-lijn-prototype; Balans (T13), Spreiding en
+//  Solidariteit (T15) zijn gebouwd, de overige vier zijn server-side gegate
+//  placeholders ([tab]/page.tsx).
 //  De actieve tab komt als prop mee (elke tab is een eigen route); de
 //  ?periode-parameter reist mee in de links zodat de paginabrede
 //  periodefilter zijn keuze niet verliest bij tab-wissel.

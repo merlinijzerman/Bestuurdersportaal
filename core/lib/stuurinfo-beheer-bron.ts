@@ -33,6 +33,13 @@ import {
   type VrijeReserveKey,
   type SoliGrenzen,
 } from "@/core/lib/stuurinfo-invoer";
+import { SPREIDING_KPI_KEYS } from "@/core/lib/stuurinfo-spreiding";
+import {
+  SOLI_VULLING_KEYS,
+  SOLI_VULLING_REEKS,
+  SOLI_UITDELING_KPI,
+  type SoliVullingKey,
+} from "@/core/lib/stuurinfo-soli";
 
 // ── Publieke vormen ─────────────────────────────────────────────────────────
 
@@ -50,6 +57,20 @@ export type InvoerSnapshot = {
   reserves: Record<VrijeReserveKey, number | null>;
   grenzen: { solidariteitsreserve: SoliGrenzen };
   financieringsgraad: number | null;
+  /** Tab 4 (T15): uitkeringsfase-kerncijfers (kpi-rijen). */
+  spreiding: {
+    beschikbaar: number | null;
+    voorziening: number | null;
+    aanpassingsfactor: number | null;
+    bandOnder: number | null;
+    bandBoven: number | null;
+  };
+  /** Tab 5 (T15): vullingsbronnen + uitdeling + soli-reserve-stand (read-only
+   *  anker uit de balans; beginstand-veld = referentie.soli.reserveStand). */
+  soli: Record<SoliVullingKey, number | null> & {
+    uitdeling: number | null;
+    reserveStand: number | null;
+  };
 };
 
 export type StuurinfoLogRegel = {
@@ -84,7 +105,7 @@ type ReserveRow = {
   ondergrens: number | null;
   bovengrens: number | null;
 };
-type KpiRow = { periode: string; waarde: number | null };
+type KpiRow = { periode: string; kpi_key: string; waarde: number | null };
 
 const legeSnapshot = (): InvoerSnapshot => ({
   activa: Object.fromEntries(ACTIVA_KEYS.map((k) => [k, null])) as Record<ActivaKey, number | null>,
@@ -92,6 +113,12 @@ const legeSnapshot = (): InvoerSnapshot => ({
   reserves: Object.fromEntries(VRIJE_RESERVE_KEYS.map((k) => [k, null])) as Record<VrijeReserveKey, number | null>,
   grenzen: { solidariteitsreserve: { ondergrens: null, bovengrens: null } },
   financieringsgraad: null,
+  spreiding: { beschikbaar: null, voorziening: null, aanpassingsfactor: null, bandOnder: null, bandBoven: null },
+  soli: {
+    ...(Object.fromEntries(SOLI_VULLING_KEYS.map((k) => [k, null])) as Record<SoliVullingKey, number | null>),
+    uitdeling: null,
+    reserveStand: null,
+  },
 });
 
 const num = (v: number | null | undefined): number | null =>
@@ -135,7 +162,7 @@ export async function haalStuurinfoInvoer(
       .select("periode, reeks_key, punt_key, waarde")
       .eq("fonds_id", fondsId)
       .in("periode", gekozenPeriodes)
-      .in("reeks_key", ["balans_activa", "balans_passiva"]),
+      .in("reeks_key", ["balans_activa", "balans_passiva", SOLI_VULLING_REEKS]),
     supabase
       .from("fonds_stuurinfo_reserve")
       .select("periode, reserve_key, stand, ondergrens, bovengrens")
@@ -143,9 +170,9 @@ export async function haalStuurinfoInvoer(
       .in("periode", gekozenPeriodes),
     supabase
       .from("fonds_stuurinfo_kpi")
-      .select("periode, waarde")
+      .select("periode, kpi_key, waarde")
       .eq("fonds_id", fondsId)
-      .eq("kpi_key", "financieringsgraad")
+      .in("kpi_key", ["financieringsgraad", ...SPREIDING_KPI_KEYS, SOLI_UITDELING_KPI])
       .in("periode", gekozenPeriodes),
     supabase
       .from("fonds_stuurinfo_log")
@@ -167,6 +194,8 @@ export async function haalStuurinfoInvoer(
         snap.activa[r.punt_key as ActivaKey] = num(r.waarde);
       } else if (r.reeks_key === "balans_passiva" && (PASSIVA_KEYS as string[]).includes(r.punt_key)) {
         snap.passiva[r.punt_key as PassivaKey] = num(r.waarde);
+      } else if (r.reeks_key === SOLI_VULLING_REEKS && (SOLI_VULLING_KEYS as readonly string[]).includes(r.punt_key)) {
+        snap.soli[r.punt_key as SoliVullingKey] = num(r.waarde);
       }
     }
     for (const r of reserveRijen) {
@@ -179,10 +208,25 @@ export async function haalStuurinfoInvoer(
           ondergrens: num(r.ondergrens),
           bovengrens: num(r.bovengrens),
         };
+        // Read-only anker (T15): de soli-stand komt uit de balans-save; de
+        // Solidariteit-sectie toont hem als eindstand-referentie en gebruikt
+        // de stand van de VOORGAANDE periode als read-only beginstand.
+        snap.soli.reserveStand = num(r.stand);
       }
     }
-    const kpi = kpiRijen.find((k) => k.periode === periode);
-    snap.financieringsgraad = kpi ? num(kpi.waarde) : null;
+    const kpiVan = (key: string): number | null => {
+      const kpi = kpiRijen.find((k) => k.periode === periode && k.kpi_key === key);
+      return kpi ? num(kpi.waarde) : null;
+    };
+    snap.financieringsgraad = kpiVan("financieringsgraad");
+    snap.spreiding = {
+      beschikbaar: kpiVan("uitkeringsfase_beschikbaar"),
+      voorziening: kpiVan("uitkeringsfase_voorziening"),
+      aanpassingsfactor: kpiVan("uitkeringsfase_aanpassingsfactor"),
+      bandOnder: kpiVan("uitkeringsfase_band_onder"),
+      bandBoven: kpiVan("uitkeringsfase_band_boven"),
+    };
+    snap.soli.uitdeling = kpiVan(SOLI_UITDELING_KPI);
     return snap;
   };
 

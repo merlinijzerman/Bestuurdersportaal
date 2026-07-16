@@ -1,10 +1,12 @@
 "use client";
 
 // ============================================================================
-//  Reserves-invoer (T14) — vrije reservestanden + band solidariteitsreserve.
+//  Reserves-invoer (T14) — vrije reservestanden.
 //  De gedeelde standen (solidariteitsreserve, MVEV-, operationele reserve,
 //  compensatiedepot) worden bij Balans ingevoerd en hier alleen benoemd als
-//  "gekoppeld" — één bron per bedrag, geen dubbele invoer.
+//  "gekoppeld" — één bron per bedrag, geen dubbele invoer. De band van de
+//  solidariteitsreserve wordt sinds T15 bij Solidariteit (tab 5) ingevoerd —
+//  één bron, dezelfde reserve-rij die het tab 1-stoplicht voedt.
 // ============================================================================
 
 import { RESERVE_DEFINITIES, VRIJE_RESERVE_KEYS } from "@/core/lib/stuurinfo-invoer";
@@ -14,14 +16,13 @@ type Props = {
   velden: VeldState;
   referentie: Snapshot | null;
   zetVeld: (key: string, waarde: string) => void;
-  zetGrens: (veld: "ondergrens" | "bovengrens", waarde: string) => void;
   uitgeschakeld: boolean;
 };
 
 const fmt = (v: number | null): string =>
   v === null ? "—" : v.toLocaleString("nl-NL", { maximumFractionDigits: 1 });
 
-export default function ReservesInvoer({ velden, referentie, zetVeld, zetGrens, uitgeschakeld }: Props) {
+export default function ReservesInvoer({ velden, referentie, zetVeld, uitgeschakeld }: Props) {
   const labelVan = (key: string) => RESERVE_DEFINITIES.find((d) => d.key === key)?.label ?? key;
 
   return (
@@ -31,8 +32,8 @@ export default function ReservesInvoer({ velden, referentie, zetVeld, zetGrens, 
         <span className="rounded-full bg-app-bg px-2.5 py-0.5 text-xs text-muted">Tab 1</span>
       </div>
       <p className="text-sm text-muted mb-4">
-        Standen in € mln; de band van de solidariteitsreserve in % van de technische voorziening.
-        Het reservepercentage wordt bij opslaan berekend (stand ÷ technische voorziening).
+        Standen in € mln. Het reservepercentage wordt bij opslaan berekend (stand ÷ technische
+        voorziening).
       </p>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -55,38 +56,13 @@ export default function ReservesInvoer({ velden, referentie, zetVeld, zetGrens, 
             </div>
           </div>
         ))}
-        <div>
-          <label className="block text-xs font-medium text-muted mb-1">
-            Solidariteitsreserve — ondergrens (% kap.)
-          </label>
-          <input
-            value={velden.ondergrens}
-            onChange={(e) => zetGrens("ondergrens", e.target.value)}
-            disabled={uitgeschakeld}
-            inputMode="decimal"
-            placeholder="1,5"
-            className="w-full rounded-lg border border-app-line-strong px-3 py-2 text-sm text-right disabled:opacity-50"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-muted mb-1">
-            Solidariteitsreserve — bovengrens (% kap.)
-          </label>
-          <input
-            value={velden.bovengrens}
-            onChange={(e) => zetGrens("bovengrens", e.target.value)}
-            disabled={uitgeschakeld}
-            inputMode="decimal"
-            placeholder="5,0"
-            className="w-full rounded-lg border border-app-line-strong px-3 py-2 text-sm text-right disabled:opacity-50"
-          />
-        </div>
       </div>
 
       <p className="mt-4 rounded-lg bg-app-bg p-3 text-xs text-muted">
         <strong className="text-ink">Gekoppeld (ingevoerd bij Balans):</strong> solidariteitsreserve,
         MVEV-reserve, operationele reserve, compensatiedepot. Alleen de solidariteitsreserve heeft een
-        formele band; de rest is monitoring. MVEV en operationele reserve: grens{" "}
+        formele band — de <strong className="text-ink">bandbreedte wordt bij Solidariteit (tab 5)</strong>{" "}
+        ingevoerd (één bron); de rest is monitoring. MVEV en operationele reserve: grens{" "}
         <strong>nog te valideren</strong>.
       </p>
     </section>

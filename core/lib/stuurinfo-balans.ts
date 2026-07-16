@@ -96,7 +96,8 @@ export function kiesPeriode(
 
 // ── Balans-afleiding ────────────────────────────────────────────────────────
 
-const richtingVan = (huidig: number, vorig: number | null): Richting | null =>
+/** Richting uit twee periodewaarden (T13-besluit: geen delta-kolom). Ook gebruikt door de tab 4/5-modules (T15). */
+export const richtingVan = (huidig: number, vorig: number | null): Richting | null =>
   vorig === null ? null : huidig > vorig ? "op" : huidig < vorig ? "neer" : "gelijk";
 
 /** Passiva-structuur (AZL-lijn): leaf-keys → inspringniveau + volgorde. */

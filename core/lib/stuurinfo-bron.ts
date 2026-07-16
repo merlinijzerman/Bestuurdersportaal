@@ -1,17 +1,22 @@
 // ============================================================================
-//  Stuurinformatie — SERVER-side tenant-veilige leeslaag (T11 → T13 Balans-tab).
+//  Stuurinformatie — SERVER-side tenant-veilige leeslaag (T11 → T13 → T15).
 // ----------------------------------------------------------------------------
-//  Leest de periode-registry (fonds_stuurinfo_periode), de balans-reeksen
+//  Leest de periode-registry (fonds_stuurinfo_periode), de reeksen
 //  (fonds_stuurinfo_reeks), de reserves (fonds_stuurinfo_reserve) en de
-//  financieringsgraad-KPI (fonds_stuurinfo_kpi) ONDER FONDS-RLS, voor de
-//  gekozen rapportageperiode + het voorgaande kwartaal. Presentatie
-//  (regelingLabel) komt uit de per-fonds module-config (T8).
+//  KPI's (fonds_stuurinfo_kpi) ONDER FONDS-RLS, voor de gekozen
+//  rapportageperiode + het voorgaande kwartaal. Presentatie (regelingLabel)
+//  komt uit de per-fonds module-config (T8). Drie readers:
+//    haalStuurinfoBalans        — tab 1 (T13)
+//    haalStuurinfoSpreiding     — tab 4 (T15, decisions/0076)
+//    haalStuurinfoSolidariteit  — tab 5 (T15, decisions/0076)
 //
-//  Alle rekenlogica (subtotalen, balansevenwicht, stoplicht, mutaties) is puur
-//  en staat in stuurinfo-balans.ts (sanity-getest). GEEN deelnemer-PII: alles
-//  is fonds-aggregaat. De kleine-populatie-suppressie (n<10) blijft als
-//  defense-in-depth bedraad: draagt een rij tóch een populatie_n < 10, dan
-//  wordt de waarde vóór de payload genuld (isOnderdrukt, besluit 0055).
+//  Alle rekenlogica (subtotalen, evenwicht, stoplicht, spreidings-/soli-
+//  afleiding, mutaties) is puur en staat in stuurinfo-balans.ts,
+//  stuurinfo-spreiding.ts en stuurinfo-soli.ts (sanity-getest). GEEN
+//  deelnemer-PII: alles is fonds-aggregaat. De kleine-populatie-suppressie
+//  (n<10) blijft als defense-in-depth bedraad: draagt een rij tóch een
+//  populatie_n < 10, dan wordt de waarde vóór de payload genuld
+//  (isOnderdrukt, besluit 0055).
 //
 //  fonds_id komt server-side (haalFondsSessie); nooit uit de request-body.
 //  De periode-parameter uit de URL wordt uitsluitend GEVALIDEERD tegen de
@@ -35,6 +40,23 @@ import {
   type PeriodeRij,
   type ReserveStatus,
 } from "@/core/lib/stuurinfo-balans";
+import {
+  leidSpreidingAf,
+  bouwSpreidingTabel,
+  bouwFgMaandreeks,
+  SPREIDING_KPI_KEYS,
+  UITKERINGSFASE_FG_REEKS,
+  type SpreidingKerncijfers,
+  type SpreidingAfleiding,
+  type SpreidingRegel,
+} from "@/core/lib/stuurinfo-spreiding";
+import {
+  leidSoliOntwikkelingAf,
+  SOLI_VULLING_REEKS,
+  SOLI_UITDELING_KPI,
+  type SoliOntwikkeling,
+  type SoliPeriodeBron,
+} from "@/core/lib/stuurinfo-soli";
 
 // ── Publieke vormen ─────────────────────────────────────────────────────────
 export type PeriodeOptie = {
@@ -253,5 +275,249 @@ export async function haalStuurinfoBalans(
     financieringsgraad: fgHuidig,
     balans,
     reserves,
+  };
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  Tab 4 (Spreidingsbeleid) + tab 5 (Solidariteitsbeleid) — T15 (decisions/0076)
+// ════════════════════════════════════════════════════════════════════════════
+
+/** Gedeelde tab-basis: periodefilter + header-gegevens (StuurinfoShell). */
+export type StuurinfoTabBasis = {
+  periodes: PeriodeOptie[];          // nieuwste eerst (voor de periodefilter)
+  gekozenPeriode: PeriodeOptie | null;
+  vorigePeriode: PeriodeOptie | null;
+  regelingLabel: string;
+  /** Fondsbrede FG (kpi 'financieringsgraad') voor de status-pill in de header. */
+  financieringsgraad: number | null;
+};
+
+type KpiRow = {
+  periode: string;
+  kpi_key: string;
+  waarde: number | null;
+  populatie_n: number | null;
+};
+
+// KPI-cellen behouden de n<10-suppressie als defense-in-depth (besluit 0055).
+const kpiWaarde = (rijen: KpiRow[], periode: string, key: string): number | null => {
+  const rij = rijen.find((r) => r.periode === periode && r.kpi_key === key);
+  if (!rij || isOnderdrukt(rij.populatie_n)) return null;
+  return rij.waarde === null ? null : Number(rij.waarde);
+};
+
+async function haalPeriodeRegistry(
+  supabase: Awaited<ReturnType<typeof createServerSupabase>>,
+  fondsId: string,
+  periodeParam?: string
+) {
+  const res = await supabase
+    .from("fonds_stuurinfo_periode")
+    .select("periode, peildatum, volgorde")
+    .eq("fonds_id", fondsId)
+    .order("volgorde", { ascending: false });
+  const periodes = (res.data ?? []) as PeriodeRij[];
+  return { periodes, ...kiesPeriode(periodes, periodeParam) };
+}
+
+// ── Tab 4 — Spreidingsbeleid ────────────────────────────────────────────────
+
+export type StuurinfoSpreidingData = StuurinfoTabBasis & {
+  /** Ingevoerde kerncijfers van de gekozen periode (incl. bandgrenzen). */
+  kerncijfers: SpreidingKerncijfers;
+  /** Afgeleid (spreidingsvermogen, FG uitkeringsfase) — nooit data. */
+  afgeleid: SpreidingAfleiding;
+  /** Kerncijfertabel huidig + voorgaand kwartaal (afgeleide rijen gemarkeerd). */
+  tabel: SpreidingRegel[];
+  /** FG-maandreeks van de gekozen periode (seed/upload; leeg = geen grafiek). */
+  maandreeks: Array<{ label: string; waarde: number }>;
+};
+
+/**
+ * Leest de Spreidingsbeleid-tab (tab 4): uitkeringsfase-kerncijfers van de
+ * gekozen + voorgaande periode (kpi-rijen) en de FG-maandreeks van de gekozen
+ * periode. Spreidingsvermogen en FG worden hier AFGELEID (stuurinfo-spreiding).
+ */
+export async function haalStuurinfoSpreiding(
+  fondsId: string,
+  periodeParam?: string
+): Promise<StuurinfoSpreidingData> {
+  const supabase = await createServerSupabase();
+  const { periodes, gekozen, vorige } = await haalPeriodeRegistry(supabase, fondsId, periodeParam);
+
+  const legeKerncijfers: SpreidingKerncijfers = {
+    beschikbaar: null, voorziening: null, aanpassingsfactor: null, bandOnder: null, bandBoven: null,
+  };
+  if (!gekozen) {
+    return {
+      periodes: periodes.map(naarOptie),
+      gekozenPeriode: null,
+      vorigePeriode: null,
+      regelingLabel: "",
+      financieringsgraad: null,
+      kerncijfers: legeKerncijfers,
+      afgeleid: leidSpreidingAf(legeKerncijfers),
+      tabel: bouwSpreidingTabel(legeKerncijfers, null),
+      maandreeks: [],
+    };
+  }
+
+  const gekozenPeriodes = vorige ? [gekozen.periode, vorige.periode] : [gekozen.periode];
+
+  const [kpiRes, reeksRes, cfg] = await Promise.all([
+    supabase
+      .from("fonds_stuurinfo_kpi")
+      .select("periode, kpi_key, waarde, populatie_n")
+      .eq("fonds_id", fondsId)
+      .in("periode", gekozenPeriodes)
+      .in("kpi_key", ["financieringsgraad", ...SPREIDING_KPI_KEYS]),
+    supabase
+      .from("fonds_stuurinfo_reeks")
+      .select("punt_key, label, volgorde, waarde, populatie_n")
+      .eq("fonds_id", fondsId)
+      .eq("periode", gekozen.periode)
+      .eq("reeks_key", UITKERINGSFASE_FG_REEKS)
+      .order("volgorde", { ascending: true }),
+    moduleConfig(fondsId, "stuurinformatie"),
+  ]);
+
+  const kpiRijen = (kpiRes.data ?? []) as KpiRow[];
+  const kerncijfersVan = (periode: string): SpreidingKerncijfers => ({
+    beschikbaar: kpiWaarde(kpiRijen, periode, "uitkeringsfase_beschikbaar"),
+    voorziening: kpiWaarde(kpiRijen, periode, "uitkeringsfase_voorziening"),
+    aanpassingsfactor: kpiWaarde(kpiRijen, periode, "uitkeringsfase_aanpassingsfactor"),
+    bandOnder: kpiWaarde(kpiRijen, periode, "uitkeringsfase_band_onder"),
+    bandBoven: kpiWaarde(kpiRijen, periode, "uitkeringsfase_band_boven"),
+  });
+
+  const kerncijfers = kerncijfersVan(gekozen.periode);
+  const kerncijfersVorig = vorige ? kerncijfersVan(vorige.periode) : null;
+
+  type MaandRow = { punt_key: string; label: string | null; volgorde: number; waarde: number | null; populatie_n: number | null };
+  const maandreeks = bouwFgMaandreeks(
+    ((reeksRes.data ?? []) as MaandRow[]).map((r) => ({
+      puntKey: r.punt_key,
+      label: r.label,
+      volgorde: r.volgorde,
+      waarde: isOnderdrukt(r.populatie_n) ? null : r.waarde === null ? null : Number(r.waarde),
+    }))
+  );
+
+  return {
+    periodes: periodes.map(naarOptie),
+    gekozenPeriode: naarOptie(gekozen),
+    vorigePeriode: vorige ? naarOptie(vorige) : null,
+    regelingLabel: tekst(cfg.regelingLabel, ""),
+    financieringsgraad: kpiWaarde(kpiRijen, gekozen.periode, "financieringsgraad"),
+    kerncijfers,
+    afgeleid: leidSpreidingAf(kerncijfers),
+    tabel: bouwSpreidingTabel(kerncijfers, kerncijfersVorig),
+    maandreeks,
+  };
+}
+
+// ── Tab 5 — Solidariteitsbeleid ─────────────────────────────────────────────
+
+export type StuurinfoSolidariteitData = StuurinfoTabBasis & {
+  /** Ontwikkeling gekozen periode (bronnen, netto, begin/eindstand, band, status). */
+  huidig: SoliOntwikkeling;
+  /** Ontwikkeling voorgaand kwartaal (beginstand teruggerekend); null zonder. */
+  vorig: SoliOntwikkeling | null;
+  /** pct_basis van de soli-reserve-rij ('technische_voorziening') — presentatie. */
+  pctBasis: string | null;
+};
+
+/**
+ * Leest de Solidariteitsbeleid-tab (tab 5): vullingsbronnen + uitdeling van
+ * beide periodes en de soli-reserve-rij (stand/pct/band — DEZELFDE bron als
+ * het tab 1-stoplicht). Netto vulling, begin- en eindstand worden AFGELEID
+ * (stuurinfo-soli); beginstand huidig = stand voorgaande periode.
+ */
+export async function haalStuurinfoSolidariteit(
+  fondsId: string,
+  periodeParam?: string
+): Promise<StuurinfoSolidariteitData> {
+  const supabase = await createServerSupabase();
+  const { periodes, gekozen, vorige } = await haalPeriodeRegistry(supabase, fondsId, periodeParam);
+
+  const legeBron: SoliPeriodeBron = {
+    vulling: [], uitdeling: null, stand: null, pctWaarde: null, ondergrens: null, bovengrens: null,
+  };
+  if (!gekozen) {
+    return {
+      periodes: periodes.map(naarOptie),
+      gekozenPeriode: null,
+      vorigePeriode: null,
+      regelingLabel: "",
+      financieringsgraad: null,
+      huidig: leidSoliOntwikkelingAf(legeBron, null),
+      vorig: null,
+      pctBasis: null,
+    };
+  }
+
+  const gekozenPeriodes = vorige ? [gekozen.periode, vorige.periode] : [gekozen.periode];
+
+  const [reeksRes, kpiRes, reserveRes, cfg] = await Promise.all([
+    supabase
+      .from("fonds_stuurinfo_reeks")
+      .select("periode, punt_key, label, volgorde, waarde, populatie_n")
+      .eq("fonds_id", fondsId)
+      .in("periode", gekozenPeriodes)
+      .eq("reeks_key", SOLI_VULLING_REEKS)
+      .order("volgorde", { ascending: true }),
+    supabase
+      .from("fonds_stuurinfo_kpi")
+      .select("periode, kpi_key, waarde, populatie_n")
+      .eq("fonds_id", fondsId)
+      .in("periode", gekozenPeriodes)
+      .in("kpi_key", ["financieringsgraad", SOLI_UITDELING_KPI]),
+    supabase
+      .from("fonds_stuurinfo_reserve")
+      .select("periode, stand, pct_basis, pct_waarde, ondergrens, bovengrens")
+      .eq("fonds_id", fondsId)
+      .in("periode", gekozenPeriodes)
+      .eq("reserve_key", "solidariteitsreserve"),
+    moduleConfig(fondsId, "stuurinformatie"),
+  ]);
+
+  type VullingRow = { periode: string; punt_key: string; label: string | null; volgorde: number; waarde: number | null; populatie_n: number | null };
+  type SoliReserveRow = { periode: string; stand: number | null; pct_basis: string | null; pct_waarde: number | null; ondergrens: number | null; bovengrens: number | null };
+
+  const vullingRijen = (reeksRes.data ?? []) as VullingRow[];
+  const kpiRijen = (kpiRes.data ?? []) as KpiRow[];
+  const reserveRijen = (reserveRes.data ?? []) as SoliReserveRow[];
+
+  const num = (v: number | null): number | null => (v === null ? null : Number(v));
+  const bronVan = (periode: string): SoliPeriodeBron => {
+    const reserve = reserveRijen.find((r) => r.periode === periode);
+    return {
+      vulling: vullingRijen
+        .filter((r) => r.periode === periode)
+        .map((r) => ({
+          puntKey: r.punt_key,
+          label: r.label,
+          volgorde: r.volgorde,
+          waarde: isOnderdrukt(r.populatie_n) ? null : num(r.waarde),
+        })),
+      uitdeling: kpiWaarde(kpiRijen, periode, SOLI_UITDELING_KPI),
+      stand: num(reserve?.stand ?? null),
+      pctWaarde: num(reserve?.pct_waarde ?? null),
+      ondergrens: num(reserve?.ondergrens ?? null),
+      bovengrens: num(reserve?.bovengrens ?? null),
+    };
+  };
+
+  const vorigeBron = vorige ? bronVan(vorige.periode) : null;
+
+  return {
+    periodes: periodes.map(naarOptie),
+    gekozenPeriode: naarOptie(gekozen),
+    vorigePeriode: vorige ? naarOptie(vorige) : null,
+    regelingLabel: tekst(cfg.regelingLabel, ""),
+    financieringsgraad: kpiWaarde(kpiRijen, gekozen.periode, "financieringsgraad"),
+    huidig: leidSoliOntwikkelingAf(bronVan(gekozen.periode), vorigeBron?.stand ?? null),
+    vorig: vorigeBron ? leidSoliOntwikkelingAf(vorigeBron, null) : null,
+    pctBasis: reserveRijen.find((r) => r.periode === gekozen.periode)?.pct_basis ?? null,
   };
 }

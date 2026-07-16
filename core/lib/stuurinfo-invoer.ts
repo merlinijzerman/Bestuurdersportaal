@@ -24,6 +24,7 @@ import {
   type BalansBronRij,
   type BalansEvenwicht,
 } from "./stuurinfo-balans";
+import { SOLI_VULLING_KEYS, type SoliVullingKey } from "./stuurinfo-soli";
 
 // ── Taxonomie (labels/volgorde = T13-seed; de RPC draagt dezelfde lijst) ─────
 
@@ -343,4 +344,176 @@ export function bouwReserveRijen(invoer: BalansReservesInvoer): ReserveRijInvoer
     bovengrens: d.key === "solidariteitsreserve" ? invoer.grenzen.solidariteitsreserve.bovengrens : null,
     volgorde: d.volgorde,
   }));
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  Tab 4 (Spreiding) + tab 5 (Solidariteit) — invoervalidatie (T15, 0076)
+// ════════════════════════════════════════════════════════════════════════════
+
+/** Payload-veldnamen Spreiding-sectie (afgeleide velden — spreidingsvermogen,
+ *  financieringsgraad — bestaan bewust niet in de vorm → allowlist-400). */
+export const SPREIDING_VELD_KEYS = [
+  "beschikbaar",
+  "voorziening",
+  "aanpassingsfactor",
+  "band_onder",
+  "band_boven",
+] as const;
+
+export type SpreidingInvoer = {
+  periode: string;
+  invoerBron: InvoerBron;
+  beschikbaar: number;
+  voorziening: number;
+  /** Aangeleverde waarde van de actuaris (±) — nooit berekend (decisions/0076). */
+  aanpassingsfactor: number;
+  /** Bandbreedte uitkeringsfase (%); null = geen grens. */
+  bandOnder: number | null;
+  bandBoven: number | null;
+};
+
+export type SpreidingValidatie =
+  | { ok: true; invoer: SpreidingInvoer }
+  | { ok: false; status: 400 | 422; fout: string };
+
+/** Nullable grens binnen [min, max]; null = geen grens. */
+const leesGrensWaarde = (
+  v: unknown,
+  naam: string,
+  min: number,
+  max: number
+): { ok: true; waarde: number | null } | { ok: false; fout: string } => {
+  if (v === null) return { ok: true, waarde: null };
+  if (!isGetal(v) || v < min || v > max) {
+    return { ok: false, fout: `Ongeldige ${naam} (${min}–${max}% of leeg).` };
+  }
+  return { ok: true, waarde: v };
+};
+
+/**
+ * Valideert de Spreiding-payload: exhaustieve key-allowlist op 'kerncijfers'
+ * (400), drie verplichte getallen + nullable bandgrenzen, en 422 zodra de
+ * voorziening onbruikbaar is als FG-noemer (≤ 0).
+ */
+export function valideerSpreidingInvoer(body: unknown): SpreidingValidatie {
+  if (!isRecord(body)) return { ok: false, status: 400, fout: "Ongeldige aanvraag." };
+
+  const { periode } = body;
+  if (typeof periode !== "string" || !PERIODE_REGEX.test(periode)) {
+    return { ok: false, status: 400, fout: "Ongeldige periode — verwacht kwartaalvorm zoals '2026Q2'." };
+  }
+  const invoerBron = body.invoer_bron;
+  if (invoerBron !== "handmatig" && invoerBron !== "upload") {
+    return { ok: false, status: 400, fout: "Ongeldige invoerbron (handmatig/upload)." };
+  }
+
+  const kerncijfers = body.kerncijfers;
+  if (!isRecord(kerncijfers)) {
+    return { ok: false, status: 400, fout: "Veld 'kerncijfers' ontbreekt of is geen object." };
+  }
+  const onbekend = Object.keys(kerncijfers).filter(
+    (k) => !(SPREIDING_VELD_KEYS as readonly string[]).includes(k)
+  );
+  if (onbekend.length > 0) {
+    return { ok: false, status: 400, fout: `Onbekend of afgeleid veld in 'kerncijfers': ${onbekend.join(", ")}.` };
+  }
+  for (const k of ["beschikbaar", "voorziening", "aanpassingsfactor"] as const) {
+    if (!isGetal(kerncijfers[k])) {
+      return { ok: false, status: 400, fout: `Veld 'kerncijfers.${k}' ontbreekt of is geen getal.` };
+    }
+  }
+  // Bandgrenzen: percentages rond de 100 (85–115 in de seed) — ruim toegestaan.
+  const onder = leesGrensWaarde(kerncijfers.band_onder ?? null, "ondergrens", 0, 200);
+  if (!onder.ok) return { ok: false, status: 400, fout: onder.fout };
+  const boven = leesGrensWaarde(kerncijfers.band_boven ?? null, "bovengrens", 0, 200);
+  if (!boven.ok) return { ok: false, status: 400, fout: boven.fout };
+  if (onder.waarde !== null && boven.waarde !== null && onder.waarde > boven.waarde) {
+    return { ok: false, status: 400, fout: "De ondergrens ligt boven de bovengrens." };
+  }
+
+  const beschikbaar = kerncijfers.beschikbaar as number;
+  const voorziening = kerncijfers.voorziening as number;
+  if (voorziening <= 0) {
+    return { ok: false, status: 422, fout: "Uitkeringsvermogen (voorziening) moet groter dan nul zijn." };
+  }
+
+  return {
+    ok: true,
+    invoer: {
+      periode,
+      invoerBron,
+      beschikbaar,
+      voorziening,
+      aanpassingsfactor: kerncijfers.aanpassingsfactor as number,
+      bandOnder: onder.waarde,
+      bandBoven: boven.waarde,
+    },
+  };
+}
+
+export type SolidariteitInvoer = {
+  periode: string;
+  invoerBron: InvoerBron;
+  /** Vulling naar bron (±, € mln) — micro_langleven = biometrisch resultaat tab 3. */
+  vulling: Record<SoliVullingKey, number>;
+  uitdeling: number;
+  /** Band solidariteitsreserve (zelfde vorm als de balans-payload — één bron). */
+  grenzen: SoliGrenzen;
+};
+
+export type SolidariteitValidatie =
+  | { ok: true; invoer: SolidariteitInvoer }
+  | { ok: false; status: 400 | 422; fout: string };
+
+/**
+ * Valideert de Solidariteit-payload: exhaustieve key-allowlist op 'vulling'
+ * (exact de vier bronnen — netto vulling/beginstand/eindstand bestaan niet in
+ * de vorm), uitdeling ≥ 0 (422) en de bandgrenzen (zelfde regels als de
+ * balans-payload). De RPC herhaalt deze checks + de eindstand-consistentie
+ * op DB-niveau (defense-in-depth).
+ */
+export function valideerSolidariteitInvoer(body: unknown): SolidariteitValidatie {
+  if (!isRecord(body)) return { ok: false, status: 400, fout: "Ongeldige aanvraag." };
+
+  const { periode } = body;
+  if (typeof periode !== "string" || !PERIODE_REGEX.test(periode)) {
+    return { ok: false, status: 400, fout: "Ongeldige periode — verwacht kwartaalvorm zoals '2026Q2'." };
+  }
+  const invoerBron = body.invoer_bron;
+  if (invoerBron !== "handmatig" && invoerBron !== "upload") {
+    return { ok: false, status: 400, fout: "Ongeldige invoerbron (handmatig/upload)." };
+  }
+
+  const vulling = leesExacteGetallen(body.vulling, SOLI_VULLING_KEYS, "vulling");
+  if (!vulling.ok) return { ok: false, status: 400, fout: vulling.fout };
+
+  if (!isGetal(body.uitdeling)) {
+    return { ok: false, status: 400, fout: "Veld 'uitdeling' ontbreekt of is geen getal." };
+  }
+  if (body.uitdeling < 0) {
+    return { ok: false, status: 422, fout: "Uitdeling kan niet negatief zijn." };
+  }
+
+  const grenzenVeld = isRecord(body.grenzen) ? body.grenzen : undefined;
+  if (!grenzenVeld) {
+    return { ok: false, status: 400, fout: "Veld 'grenzen' ontbreekt." };
+  }
+  const onder = leesGrensWaarde(grenzenVeld.ondergrens ?? null, "ondergrens", 0, 100);
+  if (!onder.ok) return { ok: false, status: 400, fout: onder.fout };
+  const boven = leesGrensWaarde(grenzenVeld.bovengrens ?? null, "bovengrens", 0, 100);
+  if (!boven.ok) return { ok: false, status: 400, fout: boven.fout };
+  if (onder.waarde !== null && boven.waarde !== null && onder.waarde > boven.waarde) {
+    return { ok: false, status: 400, fout: "De ondergrens ligt boven de bovengrens." };
+  }
+
+  return {
+    ok: true,
+    invoer: {
+      periode,
+      invoerBron,
+      vulling: vulling.record,
+      uitdeling: body.uitdeling,
+      grenzen: { ondergrens: onder.waarde, bovengrens: boven.waarde },
+    },
+  };
 }

@@ -1668,6 +1668,39 @@ create table if not exists public.fonds_stuurinfo_log (
   aangemaakt     timestamptz not null default now()
 );
 
+-- ============================================================
+--  Increment T15 (2026_07_17) — tabs 4 (Spreiding) + 5 (Solidariteit)
+--  Bron van waarheid: 2026_07_17_t15_stuurinfo_spreiding_soli.sql (RPC) +
+--  2026_07_17_t15b_stuurinfo_spreiding_soli_seed.sql (seed). Zie decisions/0076.
+--  GEEN nieuwe tabellen — nieuwe keys in de bestaande T13-structuur:
+--  * kpi_keys (per fonds/periode): uitkeringsfase_beschikbaar,
+--    uitkeringsfase_voorziening, uitkeringsfase_aanpassingsfactor (INVOER van
+--    de actuaris, nooit berekend), uitkeringsfase_band_onder/_boven,
+--    soli_uitdeling. Spreidingsvermogen, financieringsgraad uitkeringsfase,
+--    netto vulling, begin-/eindstand worden in de LEESLAAG afgeleid (geen
+--    opgeslagen duplicaat).
+--  * reeks_keys: uitkeringsfase_fg_maand (12 maandpunten per periode,
+--    punt_key '00'..'11', maandlabel in label; seed-only — handinvoer via het
+--    latere Excel-uploadticket) en soli_vulling (punt_keys premie|rendement|
+--    micro_langleven|overrendementsbijdrage, ± in € mln). micro_langleven =
+--    het biometrische resultaat van tab 3 (later ticket) — ÉÉN bron.
+--  * De bandbreedte van de solidariteitsreserve blijft UITSLUITEND op de
+--    soli-rij in fonds_stuurinfo_reserve (ondergrens/bovengrens) — dezelfde
+--    bron als het tab 1-stoplicht (bewust géén soli_band_*-kpi's).
+--  * RPC stuurinfo_soli_opslaan(p_periode, p_invoer_bron, p_vulling jsonb,
+--    p_uitdeling, p_ondergrens, p_bovengrens) — SECURITY INVOKER (RLS geldt;
+--    fonds_id uit auth.uid(), geen parameter): 4 vullingsbronnen + uitdeling-
+--    KPI + grenzen-update op de soli-reserve-rij in één transactie.
+--    Defense-in-depth: key-allowlist ('ONGELDIGE_VULLING'), typechecks
+--    ('ONGELDIGE_WAARDE'), grenzenorde ('ONGELDIGE_GRENZEN'), soli-rij moet
+--    bestaan ('SOLI_RESERVE_ONTBREEKT' — stand komt uit de balans-save) en
+--    HARDE eindstand-consistentie: vorige stand + netto − uitdeling = huidige
+--    stand, tolerantie 0.005 ('SOLI_EINDSTAND_ONGELIJK').
+--    De Spreiding-save loopt zonder RPC (één batch-upsert op één tabel).
+--  Auditlog: de bestaande T14-capture-triggers dekken alle writes (kpi/reeks/
+--  reserve) — geen triggerwijziging.
+-- ============================================================
+
 -- ── 14. AI Output Quality & Governance Lab (AQLab, aqlab_*) ──────────────────
 -- Werkticket AQL-1 (2026-07-10). AUTHORITATIEF = de migraties:
 --   supabase/migrations/2026_07_10_aqlab_1_register.sql   (register)
