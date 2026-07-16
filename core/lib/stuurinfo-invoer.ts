@@ -25,6 +25,18 @@ import {
   type BalansEvenwicht,
 } from "./stuurinfo-balans";
 import { SOLI_VULLING_KEYS, type SoliVullingKey } from "./stuurinfo-soli";
+import {
+  OPER_MUTATIE_KEYS,
+  OPER_KOSTEN_KEYS,
+  type OperMutatieKey,
+  type OperKostenKey,
+} from "./stuurinfo-operationeel";
+import {
+  PREMIE_COMPONENT_KEYS,
+  COMP_MUTATIE_KEYS,
+  type PremieComponentKey,
+  type CompMutatieKey,
+} from "./stuurinfo-premie";
 
 // ── Taxonomie (labels/volgorde = T13-seed; de RPC draagt dezelfde lijst) ─────
 
@@ -514,6 +526,200 @@ export function valideerSolidariteitInvoer(body: unknown): SolidariteitValidatie
       vulling: vulling.record,
       uitdeling: body.uitdeling,
       grenzen: { ondergrens: onder.waarde, bovengrens: boven.waarde },
+    },
+  };
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  Tab 6 (Operationeel) + tab 7 (Premie & compensatie) — invoervalidatie
+//  (T16, decisions/0077)
+// ════════════════════════════════════════════════════════════════════════════
+
+/** Gedeelde kop van de tab 6/7-payloads: periode + invoerbron. */
+const leesPeriodeEnInvoerBron = (
+  body: Record<string, unknown>
+):
+  | { ok: true; periode: string; invoerBron: InvoerBron }
+  | { ok: false; fout: string } => {
+  const { periode } = body;
+  if (typeof periode !== "string" || !PERIODE_REGEX.test(periode)) {
+    return { ok: false, fout: "Ongeldige periode — verwacht kwartaalvorm zoals '2026Q2'." };
+  }
+  const invoerBron = body.invoer_bron;
+  if (invoerBron !== "handmatig" && invoerBron !== "upload") {
+    return { ok: false, fout: "Ongeldige invoerbron (handmatig/upload)." };
+  }
+  return { ok: true, periode, invoerBron };
+};
+
+/** Nullable bedraggrens in € mln (geen %-boodschap); null = geen grens. */
+const leesBedragGrens = (
+  v: unknown,
+  naam: string
+): { ok: true; waarde: number | null } | { ok: false; fout: string } => {
+  if (v === null || v === undefined) return { ok: true, waarde: null };
+  if (!isGetal(v) || v < 0) {
+    return { ok: false, fout: `Ongeldige ${naam} (€ mln ≥ 0 of leeg).` };
+  }
+  return { ok: true, waarde: v };
+};
+
+export type OperationeelInvoer = {
+  periode: string;
+  invoerBron: InvoerBron;
+  /** Mutatiebronnen (±, € mln) — incl. de kosten als geaggregeerde post (−).
+   *  Totaal mutatie, primo en ultimo bestaan bewust niet in de vorm. */
+  mutaties: Record<OperMutatieKey, number>;
+  /** Norm operationele reserve (€ mln, aangeleverd). */
+  norm: number;
+  /** Band in € mln; null = geen grens. */
+  bandOnder: number | null;
+  bandBoven: number | null;
+  /** Kostendetail YTD per kostensoort (aangeleverd; ≥ 0). */
+  kostenRealisatie: Record<OperKostenKey, number>;
+  kostenBegroot: Record<OperKostenKey, number>;
+};
+
+export type OperationeelValidatie =
+  | { ok: true; invoer: OperationeelInvoer }
+  | { ok: false; status: 400 | 422; fout: string };
+
+/**
+ * Valideert de Operationeel-payload: exhaustieve key-allowlists op 'mutaties'
+ * en het kostendetail (afgeleide velden — totaal mutatie, primo, ultimo —
+ * bestaan niet in de vorm → 400), norm/kosten ≥ 0 en bandgrenzen in € mln.
+ * De RPC herhaalt deze checks + de mutatie-consistentie tegen de reserve-
+ * standen op DB-niveau (OPER_MUTATIE_ONGELIJK — defense-in-depth).
+ */
+export function valideerOperationeelInvoer(body: unknown): OperationeelValidatie {
+  if (!isRecord(body)) return { ok: false, status: 400, fout: "Ongeldige aanvraag." };
+
+  const kop = leesPeriodeEnInvoerBron(body);
+  if (!kop.ok) return { ok: false, status: 400, fout: kop.fout };
+
+  const mutaties = leesExacteGetallen(body.mutaties, OPER_MUTATIE_KEYS, "mutaties");
+  if (!mutaties.ok) return { ok: false, status: 400, fout: mutaties.fout };
+
+  const realisatie = leesExacteGetallen(body.kosten_realisatie, OPER_KOSTEN_KEYS, "kosten_realisatie");
+  if (!realisatie.ok) return { ok: false, status: 400, fout: realisatie.fout };
+  const begroot = leesExacteGetallen(body.kosten_begroot, OPER_KOSTEN_KEYS, "kosten_begroot");
+  if (!begroot.ok) return { ok: false, status: 400, fout: begroot.fout };
+  for (const k of OPER_KOSTEN_KEYS) {
+    if (realisatie.record[k] < 0 || begroot.record[k] < 0) {
+      return { ok: false, status: 422, fout: "Kosten kunnen niet negatief zijn." };
+    }
+  }
+
+  if (!isGetal(body.norm)) {
+    return { ok: false, status: 400, fout: "Veld 'norm' ontbreekt of is geen getal." };
+  }
+  if (body.norm < 0) {
+    return { ok: false, status: 422, fout: "De norm kan niet negatief zijn." };
+  }
+
+  const onder = leesBedragGrens(body.band_onder, "ondergrens");
+  if (!onder.ok) return { ok: false, status: 400, fout: onder.fout };
+  const boven = leesBedragGrens(body.band_boven, "bovengrens");
+  if (!boven.ok) return { ok: false, status: 400, fout: boven.fout };
+  if (onder.waarde !== null && boven.waarde !== null && onder.waarde > boven.waarde) {
+    return { ok: false, status: 400, fout: "De ondergrens ligt boven de bovengrens." };
+  }
+
+  return {
+    ok: true,
+    invoer: {
+      periode: kop.periode,
+      invoerBron: kop.invoerBron,
+      mutaties: mutaties.record,
+      norm: body.norm,
+      bandOnder: onder.waarde,
+      bandBoven: boven.waarde,
+      kostenRealisatie: realisatie.record,
+      kostenBegroot: begroot.record,
+    },
+  };
+}
+
+export type PremieInvoer = {
+  periode: string;
+  invoerBron: InvoerBron;
+  /** Premiecomponenten: € én % grondslag, beide AANGELEVERD (uitvoerder).
+   *  Totaal premie bestaat bewust niet in de vorm (afgeleid). */
+  componentenEur: Record<PremieComponentKey, number>;
+  componentenPct: Record<PremieComponentKey, number>;
+  /** Depot-mutatiebronnen (±, € mln; onttrekkingen −). */
+  compMutaties: Record<CompMutatieKey, number>;
+  /** Compensatietoekenning per jaar (€ mln, ≥ 0). */
+  toekenning: number;
+  /** Startomvang depot (€ mln, > 0) — voor de vulgraad; null = onbekend. */
+  startomvang: number | null;
+  /** Ondergrens als % van de startomvang; null = geen ondergrens. */
+  ondergrensPct: number | null;
+};
+
+export type PremieValidatie =
+  | { ok: true; invoer: PremieInvoer }
+  | { ok: false; status: 400 | 422; fout: string };
+
+/**
+ * Valideert de Premie & compensatie-payload: exhaustieve key-allowlists op
+ * de componenten (€ én %) en de depot-mutaties (afgeleide velden — totaal
+ * premie, totaal mutatie, primo, ultimo — bestaan niet in de vorm → 400);
+ * premies/toekenning ≥ 0 en %-waarden 0–100. De uitputtingsprognose-reeks
+ * zit bewust NIET in deze payload (seed/upload-only). De RPC herhaalt de
+ * checks + de mutatie-consistentie (COMP_MUTATIE_ONGELIJK).
+ */
+export function valideerPremieInvoer(body: unknown): PremieValidatie {
+  if (!isRecord(body)) return { ok: false, status: 400, fout: "Ongeldige aanvraag." };
+
+  const kop = leesPeriodeEnInvoerBron(body);
+  if (!kop.ok) return { ok: false, status: 400, fout: kop.fout };
+
+  const eur = leesExacteGetallen(body.componenten_eur, PREMIE_COMPONENT_KEYS, "componenten_eur");
+  if (!eur.ok) return { ok: false, status: 400, fout: eur.fout };
+  const pct = leesExacteGetallen(body.componenten_pct, PREMIE_COMPONENT_KEYS, "componenten_pct");
+  if (!pct.ok) return { ok: false, status: 400, fout: pct.fout };
+  for (const k of PREMIE_COMPONENT_KEYS) {
+    if (eur.record[k] < 0) {
+      return { ok: false, status: 422, fout: "Premiecomponenten kunnen niet negatief zijn." };
+    }
+    if (pct.record[k] < 0 || pct.record[k] > 100) {
+      return { ok: false, status: 400, fout: "Ongeldig %-aandeel (0–100%)." };
+    }
+  }
+
+  const mutaties = leesExacteGetallen(body.comp_mutaties, COMP_MUTATIE_KEYS, "comp_mutaties");
+  if (!mutaties.ok) return { ok: false, status: 400, fout: mutaties.fout };
+
+  if (!isGetal(body.toekenning)) {
+    return { ok: false, status: 400, fout: "Veld 'toekenning' ontbreekt of is geen getal." };
+  }
+  if (body.toekenning < 0) {
+    return { ok: false, status: 422, fout: "De toekenning kan niet negatief zijn." };
+  }
+
+  const startomvang = body.startomvang ?? null;
+  if (startomvang !== null && !isGetal(startomvang)) {
+    return { ok: false, status: 400, fout: "Ongeldige startomvang (€ mln of leeg)." };
+  }
+  if (startomvang !== null && startomvang <= 0) {
+    return { ok: false, status: 422, fout: "De startomvang moet groter dan nul zijn (of leeg)." };
+  }
+
+  const ondergrens = leesGrensWaarde(body.ondergrens_pct ?? null, "ondergrens", 0, 100);
+  if (!ondergrens.ok) return { ok: false, status: 400, fout: ondergrens.fout };
+
+  return {
+    ok: true,
+    invoer: {
+      periode: kop.periode,
+      invoerBron: kop.invoerBron,
+      componentenEur: eur.record,
+      componentenPct: pct.record,
+      compMutaties: mutaties.record,
+      toekenning: body.toekenning,
+      startomvang,
+      ondergrensPct: ondergrens.waarde,
     },
   };
 }

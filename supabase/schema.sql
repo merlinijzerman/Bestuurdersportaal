@@ -1701,6 +1701,48 @@ create table if not exists public.fonds_stuurinfo_log (
 --  reserve) — geen triggerwijziging.
 -- ============================================================
 
+-- ============================================================
+--  Increment T16 (2026_07_18) — tabs 6 (Operationeel) + 7 (Premie & compensatie)
+--  Bron van waarheid: 2026_07_18_t16_stuurinfo_oper_premie.sql (RPC's) +
+--  2026_07_18_t16b_stuurinfo_oper_premie_seed.sql (seed + depot-correctie).
+--  Zie decisions/0077. GEEN nieuwe tabellen — nieuwe keys in de T13-structuur:
+--  * reeks_keys tab 6: oper_mutatie (punt_keys premie_kostenopslag|
+--    beschermingsrendement|overrendement|gemist_rendement_twk|twk_invaar|
+--    verrekening_reserves|overig|kosten, ± in € mln — kosten = geaggregeerde
+--    post −) en oper_kosten_realisatie/oper_kosten_begroot (punt_keys
+--    uitvoeringskosten|vermogensbeheer|bestuur_overig, YTD, aangeleverd).
+--  * kpi_keys tab 6: oper_norm, oper_band_onder, oper_band_boven — in € MLN
+--    (bewust GEEN band op de reserve-rij: die is in % van de TV en zou het
+--    tab 1-stoplicht wijzigen; operationele_reserve blijft daar "monitoring").
+--  * reeks_keys tab 7: premie_component (€) + premie_component_pct (% van de
+--    premiegrondslag) — zelfde punt_keys (spaarpremie|risico_ppwzp|risico_aop|
+--    risico_pvi|opslag_uitvoeringskosten|opslag_toekomstige_kosten), beide
+--    AANGELEVERD; comp_mutatie (punt_keys premie|beschermingsrendement|
+--    overrendement|onttrekkingen|verrekening_reserves|overig, ±);
+--    comp_uitputting_prognose (punt_key = jaartal, ALM-reeks, seed/upload-only).
+--  * kpi_keys tab 7: comp_toekenning_jaar, comp_startomvang, comp_ondergrens_pct.
+--  * Totaal mutatie, primo, ultimo en totaal premie worden in de LEESLAAG
+--    afgeleid (stuurinfo-ontwikkeling.ts — geen opgeslagen duplicaat). De
+--    ULTIMO = de reservestand uit de balans: operationele_reserve
+--    (= ev_toets_oper) resp. compensatiedepot (= ev_comp) — ÉÉN bron.
+--  * RPC's stuurinfo_operationeel_opslaan(p_periode, p_invoer_bron, p_mutaties
+--    jsonb, p_norm, p_band_onder, p_band_boven, p_kosten_realisatie jsonb,
+--    p_kosten_begroot jsonb) en stuurinfo_premie_opslaan(p_periode,
+--    p_invoer_bron, p_componenten_eur jsonb, p_componenten_pct jsonb,
+--    p_comp_mutaties jsonb, p_toekenning, p_startomvang, p_ondergrens_pct) —
+--    SECURITY INVOKER (RLS geldt; fonds_id uit auth.uid(), geen parameter).
+--    Defense-in-depth: key-allowlists ('ONGELDIGE_MUTATIES'/'ONGELDIGE_KOSTEN'/
+--    'ONGELDIGE_COMPONENTEN'), typechecks ('ONGELDIGE_WAARDE'), grenzenorde
+--    ('ONGELDIGE_GRENZEN'), reserve-rij moet bestaan ('OPER_/COMP_RESERVE_
+--    ONTBREEKT') en HARDE mutatie-consistentie: vorige stand + som(mutaties)
+--    = huidige stand, tolerantie 0.005 ('OPER_/COMP_MUTATIE_ONGELIJK').
+--  * Seed-correctie (besluit Merlin): compensatiedepot 2026Q1 40 → 42,4
+--    (horizon) en 17 → 18,6 (meridiaan), gecompenseerd in balans_passiva
+--    'overig' zodat de balans blijft sluiten — het depot is uitputtend.
+--  Auditlog: de bestaande T14-capture-triggers dekken alle writes — geen
+--  triggerwijziging.
+-- ============================================================
+
 -- ── 14. AI Output Quality & Governance Lab (AQLab, aqlab_*) ──────────────────
 -- Werkticket AQL-1 (2026-07-10). AUTHORITATIEF = de migraties:
 --   supabase/migrations/2026_07_10_aqlab_1_register.sql   (register)

@@ -57,6 +57,30 @@ import {
   type SoliOntwikkeling,
   type SoliPeriodeBron,
 } from "@/core/lib/stuurinfo-soli";
+import type { MutatieBron, Ontwikkeling } from "@/core/lib/stuurinfo-ontwikkeling";
+import {
+  leidOperationeelAf,
+  leidOperKostenAf,
+  OPER_MUTATIE_REEKS,
+  OPER_KOSTEN_REALISATIE_REEKS,
+  OPER_KOSTEN_BEGROOT_REEKS,
+  OPER_KPI_KEYS,
+  type OperOntwikkeling,
+  type OperKostenOverzicht,
+  type OperPeriodeBron,
+} from "@/core/lib/stuurinfo-operationeel";
+import {
+  leidPremieTabelAf,
+  leidCompDepotAf,
+  leidUitputtingAf,
+  PREMIE_COMPONENT_REEKS,
+  PREMIE_COMPONENT_PCT_REEKS,
+  COMP_MUTATIE_REEKS,
+  COMP_PROGNOSE_REEKS,
+  PREMIE_KPI_KEYS,
+  type PremieTabel,
+  type UitputtingAfleiding,
+} from "@/core/lib/stuurinfo-premie";
 
 // ── Publieke vormen ─────────────────────────────────────────────────────────
 export type PeriodeOptie = {
@@ -519,5 +543,252 @@ export async function haalStuurinfoSolidariteit(
     huidig: leidSoliOntwikkelingAf(bronVan(gekozen.periode), vorigeBron?.stand ?? null),
     vorig: vorigeBron ? leidSoliOntwikkelingAf(vorigeBron, null) : null,
     pctBasis: reserveRijen.find((r) => r.periode === gekozen.periode)?.pct_basis ?? null,
+  };
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  Tab 6 (Operationeel) + tab 7 (Premie & compensatie) — T16 (decisions/0077)
+// ════════════════════════════════════════════════════════════════════════════
+
+type T16ReeksRow = {
+  periode: string;
+  reeks_key: string;
+  punt_key: string;
+  label: string | null;
+  volgorde: number;
+  waarde: number | null;
+  populatie_n: number | null;
+};
+
+// Defense-in-depth (besluit 0055): reeks-punten dragen normaliter geen
+// populatie_n; met n<10 wordt de waarde vóór de payload genuld.
+const naarMutatieBron = (r: T16ReeksRow): MutatieBron => ({
+  puntKey: r.punt_key,
+  label: r.label,
+  volgorde: r.volgorde,
+  waarde: isOnderdrukt(r.populatie_n) ? null : r.waarde === null ? null : Number(r.waarde),
+});
+
+type StandRow = { periode: string; stand: number | null };
+
+const standVan = (rijen: StandRow[], periode: string): number | null => {
+  const rij = rijen.find((r) => r.periode === periode);
+  return rij?.stand === null || rij?.stand === undefined ? null : Number(rij.stand);
+};
+
+// ── Tab 6 — Operationeel beleid ─────────────────────────────────────────────
+
+export type StuurinfoOperationeelData = StuurinfoTabBasis & {
+  /** Ontwikkeling gekozen periode (primo, bronnen, totaal, ultimo, norm/band). */
+  huidig: OperOntwikkeling;
+  /** Ontwikkeling voorgaand kwartaal (primo teruggerekend); null zonder. */
+  vorig: OperOntwikkeling | null;
+  /** Kostendetail (realisatie YTD vs. begroot) van de gekozen periode. */
+  kosten: OperKostenOverzicht;
+};
+
+/**
+ * Leest de Operationeel beleid-tab (tab 6): mutatiebronnen + norm/band van
+ * beide periodes, het kostendetail van de gekozen periode en de oper-reserve-
+ * rij (stand — DEZELFDE bron als de operationele reserve op de balans, tab 1).
+ * Totaal mutatie, primo en ultimo worden AFGELEID (stuurinfo-operationeel);
+ * primo huidig = stand voorgaande periode.
+ */
+export async function haalStuurinfoOperationeel(
+  fondsId: string,
+  periodeParam?: string
+): Promise<StuurinfoOperationeelData> {
+  const supabase = await createServerSupabase();
+  const { periodes, gekozen, vorige } = await haalPeriodeRegistry(supabase, fondsId, periodeParam);
+
+  const legeBron: OperPeriodeBron = {
+    mutaties: [], stand: null, norm: null, bandOnder: null, bandBoven: null,
+  };
+  if (!gekozen) {
+    return {
+      periodes: periodes.map(naarOptie),
+      gekozenPeriode: null,
+      vorigePeriode: null,
+      regelingLabel: "",
+      financieringsgraad: null,
+      huidig: leidOperationeelAf(legeBron, null),
+      vorig: null,
+      kosten: leidOperKostenAf([], []),
+    };
+  }
+
+  const gekozenPeriodes = vorige ? [gekozen.periode, vorige.periode] : [gekozen.periode];
+
+  const [reeksRes, kpiRes, reserveRes, cfg] = await Promise.all([
+    supabase
+      .from("fonds_stuurinfo_reeks")
+      .select("periode, reeks_key, punt_key, label, volgorde, waarde, populatie_n")
+      .eq("fonds_id", fondsId)
+      .in("periode", gekozenPeriodes)
+      .in("reeks_key", [OPER_MUTATIE_REEKS, OPER_KOSTEN_REALISATIE_REEKS, OPER_KOSTEN_BEGROOT_REEKS])
+      .order("volgorde", { ascending: true }),
+    supabase
+      .from("fonds_stuurinfo_kpi")
+      .select("periode, kpi_key, waarde, populatie_n")
+      .eq("fonds_id", fondsId)
+      .in("periode", gekozenPeriodes)
+      .in("kpi_key", ["financieringsgraad", ...OPER_KPI_KEYS]),
+    supabase
+      .from("fonds_stuurinfo_reserve")
+      .select("periode, stand")
+      .eq("fonds_id", fondsId)
+      .in("periode", gekozenPeriodes)
+      .eq("reserve_key", "operationele_reserve"),
+    moduleConfig(fondsId, "stuurinformatie"),
+  ]);
+
+  const reeksRijen = (reeksRes.data ?? []) as T16ReeksRow[];
+  const kpiRijen = (kpiRes.data ?? []) as KpiRow[];
+  const reserveRijen = (reserveRes.data ?? []) as StandRow[];
+
+  const reeks = (periode: string, key: string): MutatieBron[] =>
+    reeksRijen
+      .filter((r) => r.periode === periode && r.reeks_key === key)
+      .map(naarMutatieBron);
+
+  const bronVan = (periode: string): OperPeriodeBron => ({
+    mutaties: reeks(periode, OPER_MUTATIE_REEKS),
+    stand: standVan(reserveRijen, periode),
+    norm: kpiWaarde(kpiRijen, periode, "oper_norm"),
+    bandOnder: kpiWaarde(kpiRijen, periode, "oper_band_onder"),
+    bandBoven: kpiWaarde(kpiRijen, periode, "oper_band_boven"),
+  });
+
+  const vorigeBron = vorige ? bronVan(vorige.periode) : null;
+
+  return {
+    periodes: periodes.map(naarOptie),
+    gekozenPeriode: naarOptie(gekozen),
+    vorigePeriode: vorige ? naarOptie(vorige) : null,
+    regelingLabel: tekst(cfg.regelingLabel, ""),
+    financieringsgraad: kpiWaarde(kpiRijen, gekozen.periode, "financieringsgraad"),
+    huidig: leidOperationeelAf(bronVan(gekozen.periode), vorigeBron?.stand ?? null),
+    vorig: vorigeBron ? leidOperationeelAf(vorigeBron, null) : null,
+    kosten: leidOperKostenAf(
+      reeks(gekozen.periode, OPER_KOSTEN_REALISATIE_REEKS),
+      reeks(gekozen.periode, OPER_KOSTEN_BEGROOT_REEKS)
+    ),
+  };
+}
+
+// ── Tab 7 — Premie- & compensatiebeleid ─────────────────────────────────────
+
+export type StuurinfoPremieData = StuurinfoTabBasis & {
+  /** Premiecomponenten (€ + % grondslag) huidig + vorig; totalen afgeleid. */
+  premie: PremieTabel;
+  /** Depot-ontwikkeling gekozen periode (primo, bronnen, totaal, ultimo). */
+  depotHuidig: Ontwikkeling;
+  /** Depot-ontwikkeling voorgaand kwartaal (primo teruggerekend); null zonder. */
+  depotVorig: Ontwikkeling | null;
+  /** Uitputtingssignalering uit de aangeleverde ALM-prognose + kpi's. */
+  uitputting: UitputtingAfleiding;
+  /** kpi comp_toekenning_jaar (€ mln/jaar, aangeleverd). */
+  toekenningJaar: number | null;
+};
+
+/**
+ * Leest de Premie- & compensatiebeleid-tab (tab 7): premiecomponenten (€ + %
+ * grondslag) van beide periodes, depot-mutatiebronnen van beide periodes, de
+ * uitputtingsprognose (ALM-reeks, snapshot van de gekozen periode) en de
+ * depot-reserve-rij (stand — DEZELFDE bron als het compensatiedepot op de
+ * balans, tab 1). Totaal premie, totaal mutatie, primo en ultimo worden
+ * AFGELEID (stuurinfo-premie); primo huidig = stand voorgaande periode.
+ */
+export async function haalStuurinfoPremie(
+  fondsId: string,
+  periodeParam?: string
+): Promise<StuurinfoPremieData> {
+  const supabase = await createServerSupabase();
+  const { periodes, gekozen, vorige } = await haalPeriodeRegistry(supabase, fondsId, periodeParam);
+
+  if (!gekozen) {
+    return {
+      periodes: periodes.map(naarOptie),
+      gekozenPeriode: null,
+      vorigePeriode: null,
+      regelingLabel: "",
+      financieringsgraad: null,
+      premie: leidPremieTabelAf([], [], null),
+      depotHuidig: leidCompDepotAf([], null, null),
+      depotVorig: null,
+      uitputting: leidUitputtingAf([], null, null, null),
+      toekenningJaar: null,
+    };
+  }
+
+  const gekozenPeriodes = vorige ? [gekozen.periode, vorige.periode] : [gekozen.periode];
+
+  const [reeksRes, kpiRes, reserveRes, cfg] = await Promise.all([
+    supabase
+      .from("fonds_stuurinfo_reeks")
+      .select("periode, reeks_key, punt_key, label, volgorde, waarde, populatie_n")
+      .eq("fonds_id", fondsId)
+      .in("periode", gekozenPeriodes)
+      .in("reeks_key", [
+        PREMIE_COMPONENT_REEKS,
+        PREMIE_COMPONENT_PCT_REEKS,
+        COMP_MUTATIE_REEKS,
+        COMP_PROGNOSE_REEKS,
+      ])
+      .order("volgorde", { ascending: true }),
+    supabase
+      .from("fonds_stuurinfo_kpi")
+      .select("periode, kpi_key, waarde, populatie_n")
+      .eq("fonds_id", fondsId)
+      .in("periode", gekozenPeriodes)
+      .in("kpi_key", ["financieringsgraad", ...PREMIE_KPI_KEYS]),
+    supabase
+      .from("fonds_stuurinfo_reserve")
+      .select("periode, stand")
+      .eq("fonds_id", fondsId)
+      .in("periode", gekozenPeriodes)
+      .eq("reserve_key", "compensatiedepot"),
+    moduleConfig(fondsId, "stuurinformatie"),
+  ]);
+
+  const reeksRijen = (reeksRes.data ?? []) as T16ReeksRow[];
+  const kpiRijen = (kpiRes.data ?? []) as KpiRow[];
+  const reserveRijen = (reserveRes.data ?? []) as StandRow[];
+
+  const reeks = (periode: string, key: string): MutatieBron[] =>
+    reeksRijen
+      .filter((r) => r.periode === periode && r.reeks_key === key)
+      .map(naarMutatieBron);
+
+  const standHuidig = standVan(reserveRijen, gekozen.periode);
+  const vorigeStand = vorige ? standVan(reserveRijen, vorige.periode) : null;
+
+  return {
+    periodes: periodes.map(naarOptie),
+    gekozenPeriode: naarOptie(gekozen),
+    vorigePeriode: vorige ? naarOptie(vorige) : null,
+    regelingLabel: tekst(cfg.regelingLabel, ""),
+    financieringsgraad: kpiWaarde(kpiRijen, gekozen.periode, "financieringsgraad"),
+    premie: leidPremieTabelAf(
+      reeks(gekozen.periode, PREMIE_COMPONENT_REEKS),
+      reeks(gekozen.periode, PREMIE_COMPONENT_PCT_REEKS),
+      vorige ? reeks(vorige.periode, PREMIE_COMPONENT_REEKS) : null
+    ),
+    depotHuidig: leidCompDepotAf(reeks(gekozen.periode, COMP_MUTATIE_REEKS), standHuidig, vorigeStand),
+    depotVorig: vorige
+      ? leidCompDepotAf(reeks(vorige.periode, COMP_MUTATIE_REEKS), vorigeStand, null)
+      : null,
+    // De prognose is het snapshot van de GEKOZEN periode (punt_key = jaartal).
+    uitputting: leidUitputtingAf(
+      reeks(gekozen.periode, COMP_PROGNOSE_REEKS).map((p) => ({
+        puntKey: p.puntKey,
+        volgorde: p.volgorde,
+        waarde: p.waarde,
+      })),
+      standHuidig,
+      kpiWaarde(kpiRijen, gekozen.periode, "comp_startomvang"),
+      kpiWaarde(kpiRijen, gekozen.periode, "comp_ondergrens_pct")
+    ),
+    toekenningJaar: kpiWaarde(kpiRijen, gekozen.periode, "comp_toekenning_jaar"),
   };
 }

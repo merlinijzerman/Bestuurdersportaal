@@ -16,6 +16,12 @@
 //  * slaSolidariteitOp()   — tab 5 (T15): atomische save via RPC
 //                            stuurinfo_soli_opslaan (vulling + uitdeling +
 //                            bandgrenzen; harde eindstand-consistentie).
+//  * slaOperationeelOp()   — tab 6 (T16): atomische save via RPC
+//                            stuurinfo_operationeel_opslaan (mutaties +
+//                            kostendetail + norm/band; harde consistentie).
+//  * slaPremieOp()         — tab 7 (T16): atomische save via RPC
+//                            stuurinfo_premie_opslaan (componenten € + % +
+//                            depot-mutaties + kpi's; harde consistentie).
 //
 //  De caller (route handler) heeft de payload al gevalideerd met
 //  valideerBalansInvoer()/valideerPeriodeInvoer() (400/422) én de capability-
@@ -34,6 +40,8 @@ import {
   type PeriodeInvoer,
   type SpreidingInvoer,
   type SolidariteitInvoer,
+  type OperationeelInvoer,
+  type PremieInvoer,
 } from "@/core/lib/stuurinfo-invoer";
 import { SPREIDING_KPI_DEFINITIES } from "@/core/lib/stuurinfo-spreiding";
 
@@ -197,6 +205,91 @@ export async function slaSolidariteitOp(invoer: SolidariteitInvoer): Promise<Sav
     const bekend = Object.keys(kaart).find((k) => error.message.includes(k));
     if (bekend) return { ok: false, status: 422, fout: kaart[bekend] };
     throw new Error(error.message);
+  }
+  return { ok: true };
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  Tab 6 (Operationeel) + tab 7 (Premie & compensatie) — schrijvers
+//  (T16, decisions/0077)
+// ════════════════════════════════════════════════════════════════════════════
+
+/** Gedeelde DB-foutmapping: bekende weigering → 422-result; onbekend → throw
+ *  (→ generieke 500 via errorResponse). */
+function mapRpcFout(error: { message: string }, kaart: Record<string, string>): SaveResultaat {
+  const bekend = Object.keys(kaart).find((k) => error.message.includes(k));
+  if (bekend) return { ok: false, status: 422, fout: kaart[bekend] };
+  throw new Error(error.message);
+}
+
+/**
+ * Slaat de Operationeel-sectie atomisch op via de RPC
+ * stuurinfo_operationeel_opslaan (T16): 8 mutatiebronnen (reeks) +
+ * kostendetail realisatie/begroot (2 reeksen) + norm/band (3 kpi's) in één
+ * transactie. fonds_id wordt hier nooit meegegeven: de RPC leidt hem af uit
+ * auth.uid(). De DB herhaalt de validaties en dwingt de mutatie-consistentie
+ * hard af (OPER_MUTATIE_ONGELIJK, decisions/0077).
+ */
+export async function slaOperationeelOp(invoer: OperationeelInvoer): Promise<SaveResultaat> {
+  const supabase = await createServerSupabase();
+  const { error } = await supabase.rpc("stuurinfo_operationeel_opslaan", {
+    p_periode: invoer.periode,
+    p_invoer_bron: invoer.invoerBron,
+    p_mutaties: invoer.mutaties,
+    p_norm: invoer.norm,
+    p_band_onder: invoer.bandOnder,
+    p_band_boven: invoer.bandBoven,
+    p_kosten_realisatie: invoer.kostenRealisatie,
+    p_kosten_begroot: invoer.kostenBegroot,
+  });
+  if (error) {
+    return mapRpcFout(error, {
+      OPER_RESERVE_ONTBREEKT:
+        "De operationele reserve van deze periode is nog niet vastgelegd — sla eerst de balans/reserves op.",
+      OPER_MUTATIE_ONGELIJK:
+        "Primo + totaal mutatie wijkt af van de reservestand uit de balans — opslaan geweigerd.",
+      ONGELDIGE_MUTATIES: "Ongeldige mutatiebronnen — opslaan geweigerd.",
+      ONGELDIGE_KOSTEN: "Ongeldig kostendetail — opslaan geweigerd.",
+      ONGELDIGE_WAARDE: "Ongeldige waarde in de invoer — opslaan geweigerd.",
+      ONGELDIGE_GRENZEN: "Ongeldige bandgrenzen — opslaan geweigerd.",
+      ONGELDIGE_INVOER_BRON: "Ongeldige invoerbron — opslaan geweigerd.",
+    });
+  }
+  return { ok: true };
+}
+
+/**
+ * Slaat de Premie & compensatie-sectie atomisch op via de RPC
+ * stuurinfo_premie_opslaan (T16): premiecomponenten € + % (2 reeksen) +
+ * depot-mutatiebronnen (reeks) + toekenning/startomvang/ondergrens (3 kpi's)
+ * in één transactie. De uitputtingsprognose-reeks blijft seed/upload-only en
+ * wordt hier bewust niet geschreven. De DB dwingt de mutatie-consistentie
+ * hard af (COMP_MUTATIE_ONGELIJK, decisions/0077).
+ */
+export async function slaPremieOp(invoer: PremieInvoer): Promise<SaveResultaat> {
+  const supabase = await createServerSupabase();
+  const { error } = await supabase.rpc("stuurinfo_premie_opslaan", {
+    p_periode: invoer.periode,
+    p_invoer_bron: invoer.invoerBron,
+    p_componenten_eur: invoer.componentenEur,
+    p_componenten_pct: invoer.componentenPct,
+    p_comp_mutaties: invoer.compMutaties,
+    p_toekenning: invoer.toekenning,
+    p_startomvang: invoer.startomvang,
+    p_ondergrens_pct: invoer.ondergrensPct,
+  });
+  if (error) {
+    return mapRpcFout(error, {
+      COMP_RESERVE_ONTBREEKT:
+        "Het compensatiedepot van deze periode is nog niet vastgelegd — sla eerst de balans/reserves op.",
+      COMP_MUTATIE_ONGELIJK:
+        "Primo + totaal mutatie wijkt af van de depotstand uit de balans — opslaan geweigerd.",
+      ONGELDIGE_COMPONENTEN: "Ongeldige premiecomponenten — opslaan geweigerd.",
+      ONGELDIGE_MUTATIES: "Ongeldige mutatiebronnen — opslaan geweigerd.",
+      ONGELDIGE_WAARDE: "Ongeldige waarde in de invoer — opslaan geweigerd.",
+      ONGELDIGE_GRENZEN: "Ongeldige ondergrens — opslaan geweigerd.",
+      ONGELDIGE_INVOER_BRON: "Ongeldige invoerbron — opslaan geweigerd.",
+    });
   }
   return { ok: true };
 }

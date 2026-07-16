@@ -9,12 +9,16 @@ import {
   slaBalansReservesOp,
   schrijfSpreiding,
   slaSolidariteitOp,
+  slaOperationeelOp,
+  slaPremieOp,
 } from "@/core/lib/stuurinfo-beheer";
 import {
   valideerBalansInvoer,
   valideerPeriodeInvoer,
   valideerSpreidingInvoer,
   valideerSolidariteitInvoer,
+  valideerOperationeelInvoer,
+  valideerPremieInvoer,
 } from "@/core/lib/stuurinfo-invoer";
 
 // ============================================================
@@ -30,7 +34,14 @@ import {
 //         in één batch-upsert (allowlist 400, voorziening ≤ 0 → 422);
 //         { type: "solidariteit" }    → tab 5 (T15): atomische save (RPC) van
 //         vulling + uitdeling + bandgrenzen, met HARDE eindstand-consistentie
-//         (SOLI_EINDSTAND_ONGELIJK → 422, decisions/0076).
+//         (SOLI_EINDSTAND_ONGELIJK → 422, decisions/0076);
+//         { type: "operationeel" }    → tab 6 (T16): atomische save (RPC) van
+//         mutatiebronnen + kostendetail + norm/band, met HARDE mutatie-
+//         consistentie (OPER_MUTATIE_ONGELIJK → 422, decisions/0077);
+//         { type: "premie" }          → tab 7 (T16): atomische save (RPC) van
+//         premiecomponenten (€+%) + depot-mutaties + kpi's, met HARDE
+//         mutatie-consistentie (COMP_MUTATIE_ONGELIJK → 422); de
+//         uitputtingsprognose is seed/upload-only (geen handinvoer).
 //         Opslaan publiceert direct naar het dashboard (geen vier-ogen —
 //         bewust besluit, decisions/0075); elke mutatie wordt door de
 //         DB-trigger append-only gelogd.
@@ -136,6 +147,29 @@ export async function POST(req: NextRequest) {
         const check = valideerSolidariteitInvoer(body);
         if (!check.ok) return badRequest("stuurinformatie.beheer.POST", check.fout, check.status);
         const resultaat = await slaSolidariteitOp(check.invoer);
+        if (!resultaat.ok)
+          return badRequest("stuurinformatie.beheer.POST", resultaat.fout, resultaat.status);
+        return NextResponse.json({ ok: true });
+      }
+      case "operationeel": {
+        // Tab 6 (T16): allowlist-400 (totaal mutatie/primo/ultimo bestaan
+        // niet in de vorm — afgeleid). De RPC herhaalt de checks en dwingt de
+        // mutatie-consistentie hard af (OPER_MUTATIE_ONGELIJK → 422).
+        const check = valideerOperationeelInvoer(body);
+        if (!check.ok) return badRequest("stuurinformatie.beheer.POST", check.fout, check.status);
+        const resultaat = await slaOperationeelOp(check.invoer);
+        if (!resultaat.ok)
+          return badRequest("stuurinformatie.beheer.POST", resultaat.fout, resultaat.status);
+        return NextResponse.json({ ok: true });
+      }
+      case "premie": {
+        // Tab 7 (T16): allowlist-400 (totaal premie/totaal mutatie/primo/
+        // ultimo bestaan niet in de vorm — afgeleid; de prognose-reeks is
+        // seed/upload-only). De RPC dwingt de mutatie-consistentie hard af
+        // (COMP_MUTATIE_ONGELIJK → 422).
+        const check = valideerPremieInvoer(body);
+        if (!check.ok) return badRequest("stuurinformatie.beheer.POST", check.fout, check.status);
+        const resultaat = await slaPremieOp(check.invoer);
         if (!resultaat.ok)
           return badRequest("stuurinformatie.beheer.POST", resultaat.fout, resultaat.status);
         return NextResponse.json({ ok: true });

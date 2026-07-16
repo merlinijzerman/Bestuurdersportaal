@@ -40,6 +40,26 @@ import {
   SOLI_UITDELING_KPI,
   type SoliVullingKey,
 } from "@/core/lib/stuurinfo-soli";
+import {
+  OPER_MUTATIE_KEYS,
+  OPER_KOSTEN_KEYS,
+  OPER_MUTATIE_REEKS,
+  OPER_KOSTEN_REALISATIE_REEKS,
+  OPER_KOSTEN_BEGROOT_REEKS,
+  OPER_KPI_KEYS,
+  type OperMutatieKey,
+  type OperKostenKey,
+} from "@/core/lib/stuurinfo-operationeel";
+import {
+  PREMIE_COMPONENT_KEYS,
+  COMP_MUTATIE_KEYS,
+  PREMIE_COMPONENT_REEKS,
+  PREMIE_COMPONENT_PCT_REEKS,
+  COMP_MUTATIE_REEKS,
+  PREMIE_KPI_KEYS,
+  type PremieComponentKey,
+  type CompMutatieKey,
+} from "@/core/lib/stuurinfo-premie";
 
 // ── Publieke vormen ─────────────────────────────────────────────────────────
 
@@ -69,6 +89,29 @@ export type InvoerSnapshot = {
    *  anker uit de balans; beginstand-veld = referentie.soli.reserveStand). */
   soli: Record<SoliVullingKey, number | null> & {
     uitdeling: number | null;
+    reserveStand: number | null;
+  };
+  /** Tab 6 (T16): mutatiebronnen + norm/band (€ mln) + oper-reserve-stand
+   *  (read-only anker; primo-veld = referentie.operationeel.reserveStand). */
+  operationeel: Record<OperMutatieKey, number | null> & {
+    norm: number | null;
+    bandOnder: number | null;
+    bandBoven: number | null;
+    reserveStand: number | null;
+  };
+  /** Tab 6 (T16): kostendetail per kostensoort (realisatie YTD + begroot). */
+  operKostenRealisatie: Record<OperKostenKey, number | null>;
+  operKostenBegroot: Record<OperKostenKey, number | null>;
+  /** Tab 7 (T16): premiecomponenten (€ + %), depot-mutaties, kpi's en de
+   *  depot-reserve-stand (read-only anker uit de balans). De uitputtings-
+   *  prognose is seed/upload-only en bewust geen invoerveld. */
+  premie: {
+    eur: Record<PremieComponentKey, number | null>;
+    pct: Record<PremieComponentKey, number | null>;
+    mutaties: Record<CompMutatieKey, number | null>;
+    toekenning: number | null;
+    startomvang: number | null;
+    ondergrensPct: number | null;
     reserveStand: number | null;
   };
 };
@@ -119,6 +162,28 @@ const legeSnapshot = (): InvoerSnapshot => ({
     uitdeling: null,
     reserveStand: null,
   },
+  operationeel: {
+    ...(Object.fromEntries(OPER_MUTATIE_KEYS.map((k) => [k, null])) as Record<OperMutatieKey, number | null>),
+    norm: null,
+    bandOnder: null,
+    bandBoven: null,
+    reserveStand: null,
+  },
+  operKostenRealisatie: Object.fromEntries(
+    OPER_KOSTEN_KEYS.map((k) => [k, null])
+  ) as Record<OperKostenKey, number | null>,
+  operKostenBegroot: Object.fromEntries(
+    OPER_KOSTEN_KEYS.map((k) => [k, null])
+  ) as Record<OperKostenKey, number | null>,
+  premie: {
+    eur: Object.fromEntries(PREMIE_COMPONENT_KEYS.map((k) => [k, null])) as Record<PremieComponentKey, number | null>,
+    pct: Object.fromEntries(PREMIE_COMPONENT_KEYS.map((k) => [k, null])) as Record<PremieComponentKey, number | null>,
+    mutaties: Object.fromEntries(COMP_MUTATIE_KEYS.map((k) => [k, null])) as Record<CompMutatieKey, number | null>,
+    toekenning: null,
+    startomvang: null,
+    ondergrensPct: null,
+    reserveStand: null,
+  },
 });
 
 const num = (v: number | null | undefined): number | null =>
@@ -162,7 +227,17 @@ export async function haalStuurinfoInvoer(
       .select("periode, reeks_key, punt_key, waarde")
       .eq("fonds_id", fondsId)
       .in("periode", gekozenPeriodes)
-      .in("reeks_key", ["balans_activa", "balans_passiva", SOLI_VULLING_REEKS]),
+      .in("reeks_key", [
+        "balans_activa",
+        "balans_passiva",
+        SOLI_VULLING_REEKS,
+        OPER_MUTATIE_REEKS,
+        OPER_KOSTEN_REALISATIE_REEKS,
+        OPER_KOSTEN_BEGROOT_REEKS,
+        PREMIE_COMPONENT_REEKS,
+        PREMIE_COMPONENT_PCT_REEKS,
+        COMP_MUTATIE_REEKS,
+      ]),
     supabase
       .from("fonds_stuurinfo_reserve")
       .select("periode, reserve_key, stand, ondergrens, bovengrens")
@@ -172,7 +247,13 @@ export async function haalStuurinfoInvoer(
       .from("fonds_stuurinfo_kpi")
       .select("periode, kpi_key, waarde")
       .eq("fonds_id", fondsId)
-      .in("kpi_key", ["financieringsgraad", ...SPREIDING_KPI_KEYS, SOLI_UITDELING_KPI])
+      .in("kpi_key", [
+        "financieringsgraad",
+        ...SPREIDING_KPI_KEYS,
+        SOLI_UITDELING_KPI,
+        ...OPER_KPI_KEYS,
+        ...PREMIE_KPI_KEYS,
+      ])
       .in("periode", gekozenPeriodes),
     supabase
       .from("fonds_stuurinfo_log")
@@ -196,6 +277,18 @@ export async function haalStuurinfoInvoer(
         snap.passiva[r.punt_key as PassivaKey] = num(r.waarde);
       } else if (r.reeks_key === SOLI_VULLING_REEKS && (SOLI_VULLING_KEYS as readonly string[]).includes(r.punt_key)) {
         snap.soli[r.punt_key as SoliVullingKey] = num(r.waarde);
+      } else if (r.reeks_key === OPER_MUTATIE_REEKS && (OPER_MUTATIE_KEYS as readonly string[]).includes(r.punt_key)) {
+        snap.operationeel[r.punt_key as OperMutatieKey] = num(r.waarde);
+      } else if (r.reeks_key === OPER_KOSTEN_REALISATIE_REEKS && (OPER_KOSTEN_KEYS as readonly string[]).includes(r.punt_key)) {
+        snap.operKostenRealisatie[r.punt_key as OperKostenKey] = num(r.waarde);
+      } else if (r.reeks_key === OPER_KOSTEN_BEGROOT_REEKS && (OPER_KOSTEN_KEYS as readonly string[]).includes(r.punt_key)) {
+        snap.operKostenBegroot[r.punt_key as OperKostenKey] = num(r.waarde);
+      } else if (r.reeks_key === PREMIE_COMPONENT_REEKS && (PREMIE_COMPONENT_KEYS as readonly string[]).includes(r.punt_key)) {
+        snap.premie.eur[r.punt_key as PremieComponentKey] = num(r.waarde);
+      } else if (r.reeks_key === PREMIE_COMPONENT_PCT_REEKS && (PREMIE_COMPONENT_KEYS as readonly string[]).includes(r.punt_key)) {
+        snap.premie.pct[r.punt_key as PremieComponentKey] = num(r.waarde);
+      } else if (r.reeks_key === COMP_MUTATIE_REEKS && (COMP_MUTATIE_KEYS as readonly string[]).includes(r.punt_key)) {
+        snap.premie.mutaties[r.punt_key as CompMutatieKey] = num(r.waarde);
       }
     }
     for (const r of reserveRijen) {
@@ -213,6 +306,14 @@ export async function haalStuurinfoInvoer(
         // de stand van de VOORGAANDE periode als read-only beginstand.
         snap.soli.reserveStand = num(r.stand);
       }
+      // Read-only ankers (T16): de ultimo's van tab 6/7 komen uit de
+      // balans-save; primo = de stand van de VOORGAANDE periode (referentie).
+      if (r.reserve_key === "operationele_reserve") {
+        snap.operationeel.reserveStand = num(r.stand);
+      }
+      if (r.reserve_key === "compensatiedepot") {
+        snap.premie.reserveStand = num(r.stand);
+      }
     }
     const kpiVan = (key: string): number | null => {
       const kpi = kpiRijen.find((k) => k.periode === periode && k.kpi_key === key);
@@ -227,6 +328,12 @@ export async function haalStuurinfoInvoer(
       bandBoven: kpiVan("uitkeringsfase_band_boven"),
     };
     snap.soli.uitdeling = kpiVan(SOLI_UITDELING_KPI);
+    snap.operationeel.norm = kpiVan("oper_norm");
+    snap.operationeel.bandOnder = kpiVan("oper_band_onder");
+    snap.operationeel.bandBoven = kpiVan("oper_band_boven");
+    snap.premie.toekenning = kpiVan("comp_toekenning_jaar");
+    snap.premie.startomvang = kpiVan("comp_startomvang");
+    snap.premie.ondergrensPct = kpiVan("comp_ondergrens_pct");
     return snap;
   };
 

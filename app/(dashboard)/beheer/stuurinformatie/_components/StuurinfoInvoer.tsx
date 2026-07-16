@@ -25,10 +25,14 @@ import {
 } from "@/core/lib/stuurinfo-invoer";
 import { parseNlGetal } from "@/core/lib/stuurinfo-sjabloon";
 import { SOLI_VULLING_KEYS } from "@/core/lib/stuurinfo-soli";
+import { OPER_MUTATIE_KEYS, OPER_KOSTEN_KEYS } from "@/core/lib/stuurinfo-operationeel";
+import { PREMIE_COMPONENT_KEYS, COMP_MUTATIE_KEYS } from "@/core/lib/stuurinfo-premie";
 import BalansInvoerTabel from "./BalansInvoerTabel";
 import ReservesInvoer from "./ReservesInvoer";
 import SpreidingInvoer from "./SpreidingInvoer";
 import SolidariteitInvoer from "./SolidariteitInvoer";
+import OperationeelInvoer from "./OperationeelInvoer";
+import PremieInvoer from "./PremieInvoer";
 import UploadPaneel, { type UploadToepassing } from "./UploadPaneel";
 
 // ── Respons-vormen (spiegelen core/lib/stuurinfo-beheer-bron.ts) ────────────
@@ -46,6 +50,25 @@ export type Snapshot = {
     bandBoven: number | null;
   };
   soli: Record<string, number | null> & { uitdeling: number | null; reserveStand: number | null };
+  /** Tab 6 (T16): mutaties + norm/band + oper-reservestand (read-only anker). */
+  operationeel: Record<string, number | null> & {
+    norm: number | null;
+    bandOnder: number | null;
+    bandBoven: number | null;
+    reserveStand: number | null;
+  };
+  operKostenRealisatie: Record<string, number | null>;
+  operKostenBegroot: Record<string, number | null>;
+  /** Tab 7 (T16): componenten (€ + %), depot-mutaties, kpi's + depotstand. */
+  premie: {
+    eur: Record<string, number | null>;
+    pct: Record<string, number | null>;
+    mutaties: Record<string, number | null>;
+    toekenning: number | null;
+    startomvang: number | null;
+    ondergrensPct: number | null;
+    reserveStand: number | null;
+  };
 };
 
 type PeriodeOptie = { periode: string; label: string; peildatum: string; bron: string };
@@ -83,7 +106,26 @@ export type VeldState = {
   spreiding: Record<string, string>;
   /** Tab 5 (T15): vier bronnen + uitdeling. */
   soli: Record<string, string>;
+  /** Tab 6 (T16): acht mutatiebronnen + norm + band_onder/_boven. */
+  operationeel: Record<string, string>;
+  operKostenRealisatie: Record<string, string>;
+  operKostenBegroot: Record<string, string>;
+  /** Tab 7 (T16): componenten (€ + %), depot-mutaties en kpi-velden. */
+  premieEur: Record<string, string>;
+  premiePct: Record<string, string>;
+  compMutaties: Record<string, string>;
+  premieKpis: Record<string, string>;
 };
+
+/** T16-veldsecties (tab 6/7) — gedeelde setter voor beide invoercomponenten. */
+export type T16VeldSectie =
+  | "operationeel"
+  | "operKostenRealisatie"
+  | "operKostenBegroot"
+  | "premieEur"
+  | "premiePct"
+  | "compMutaties"
+  | "premieKpis";
 
 const naarTekst = (v: number | null): string =>
   v === null ? "" : String(v).replace(".", ",");
@@ -106,6 +148,32 @@ const naarVeldState = (s: Snapshot): VeldState => ({
     ...Object.fromEntries(SOLI_VULLING_KEYS.map((k) => [k, naarTekst(s.soli[k] ?? null)])),
     uitdeling: naarTekst(s.soli.uitdeling),
   },
+  operationeel: {
+    ...Object.fromEntries(OPER_MUTATIE_KEYS.map((k) => [k, naarTekst(s.operationeel[k] ?? null)])),
+    norm: naarTekst(s.operationeel.norm),
+    band_onder: naarTekst(s.operationeel.bandOnder),
+    band_boven: naarTekst(s.operationeel.bandBoven),
+  },
+  operKostenRealisatie: Object.fromEntries(
+    OPER_KOSTEN_KEYS.map((k) => [k, naarTekst(s.operKostenRealisatie[k] ?? null)])
+  ),
+  operKostenBegroot: Object.fromEntries(
+    OPER_KOSTEN_KEYS.map((k) => [k, naarTekst(s.operKostenBegroot[k] ?? null)])
+  ),
+  premieEur: Object.fromEntries(
+    PREMIE_COMPONENT_KEYS.map((k) => [k, naarTekst(s.premie.eur[k] ?? null)])
+  ),
+  premiePct: Object.fromEntries(
+    PREMIE_COMPONENT_KEYS.map((k) => [k, naarTekst(s.premie.pct[k] ?? null)])
+  ),
+  compMutaties: Object.fromEntries(
+    COMP_MUTATIE_KEYS.map((k) => [k, naarTekst(s.premie.mutaties[k] ?? null)])
+  ),
+  premieKpis: {
+    toekenning: naarTekst(s.premie.toekenning),
+    startomvang: naarTekst(s.premie.startomvang),
+    ondergrens_pct: naarTekst(s.premie.ondergrensPct),
+  },
 });
 
 async function jsonFetch(url: string, init?: RequestInit) {
@@ -126,17 +194,19 @@ const SECTIES = [
   { id: "reserves", label: "1 · Reserves", actief: true, tag: "Tab 1" },
   { id: "spreiding", label: "4 · Spreiding", actief: true, tag: "Tab 4" },
   { id: "solidariteit", label: "5 · Solidariteit", actief: true, tag: "Tab 5" },
+  { id: "operationeel", label: "6 · Operationeel", actief: true, tag: "Tab 6" },
+  { id: "premie", label: "7 · Premie & compensatie", actief: true, tag: "Tab 7" },
   { id: "upload", label: "Upload i.p.v. typen", actief: true, tag: null },
   { id: null, label: "2 · Rendementstoedeling", actief: false, tag: "volgt" },
   { id: null, label: "3 · Biometrisch", actief: false, tag: "volgt" },
-  { id: null, label: "6 · Operationeel", actief: false, tag: "volgt" },
-  { id: null, label: "7 · Premie & compensatie", actief: false, tag: "volgt" },
   { id: null, label: "Deelnemers & signalen", actief: false, tag: "volgt" },
 ] as const;
 
+// "reeks" heette hier t/m T15 "Balans" (toen de enige reeks); sinds T15/T16
+// dekt de tabel ook soli-, oper- en premie-reeksen — neutraal label dus.
 const LOG_TABEL_LABEL: Record<string, string> = {
   periode: "Periode",
-  reeks: "Balans",
+  reeks: "Reeks",
   reserve: "Reserve",
   kpi: "KPI",
 };
@@ -209,6 +279,11 @@ export default function StuurinfoInvoer() {
   };
   const zetSoliVeld = (key: string, waarde: string) => {
     setVelden((v) => (v ? { ...v, soli: { ...v.soli, [key]: waarde } } : v));
+    setInvoerBron("handmatig");
+  };
+  // Tab 6/7-secties (T16): één setter voor alle T16-veldsecties.
+  const zetT16Veld = (sectie: T16VeldSectie, key: string, waarde: string) => {
+    setVelden((v) => (v ? { ...v, [sectie]: { ...v[sectie], [key]: waarde } } : v));
     setInvoerBron("handmatig");
   };
 
@@ -394,6 +469,96 @@ export default function StuurinfoInvoer() {
         }),
       });
       setMelding(`Solidariteit opgeslagen en gepubliceerd naar het dashboard (periode ${data.gekozen}).`);
+      await laad(data.gekozen);
+    } catch (err) {
+      setFout(err instanceof Error ? err.message : "Opslaan mislukt");
+    } finally {
+      setBezig(false);
+    }
+  }
+
+  // ── Tab 6/7-saves (T16): eigen POST-type per sectie ────────────────────────
+  async function slaOperationeelOp() {
+    if (!velden || !data?.gekozen) return;
+    setBezig(true);
+    setFout(null);
+    setMelding(null);
+    try {
+      await jsonFetch("/api/stuurinformatie/beheer", {
+        method: "POST",
+        body: JSON.stringify({
+          type: "operationeel",
+          periode: data.gekozen,
+          // Altijd 'handmatig': de Excel-upload mapt geen T16-velden, dus de
+          // gedeelde invoerBron-state ('upload' na "upload toepassen" op de
+          // balans) zou hier een onjuiste herkomst loggen (audit-review T16).
+          // Bij de latere sjabloon-uitbreiding: per-sectie herkomst invoeren.
+          invoer_bron: "handmatig",
+          mutaties: Object.fromEntries(
+            OPER_MUTATIE_KEYS.map((k) => [k, parseNlGetal(velden.operationeel[k])])
+          ),
+          norm: parseNlGetal(velden.operationeel.norm),
+          band_onder:
+            velden.operationeel.band_onder.trim() === ""
+              ? null
+              : parseNlGetal(velden.operationeel.band_onder),
+          band_boven:
+            velden.operationeel.band_boven.trim() === ""
+              ? null
+              : parseNlGetal(velden.operationeel.band_boven),
+          kosten_realisatie: Object.fromEntries(
+            OPER_KOSTEN_KEYS.map((k) => [k, parseNlGetal(velden.operKostenRealisatie[k])])
+          ),
+          kosten_begroot: Object.fromEntries(
+            OPER_KOSTEN_KEYS.map((k) => [k, parseNlGetal(velden.operKostenBegroot[k])])
+          ),
+        }),
+      });
+      setMelding(`Operationeel opgeslagen en gepubliceerd naar het dashboard (periode ${data.gekozen}).`);
+      await laad(data.gekozen);
+    } catch (err) {
+      setFout(err instanceof Error ? err.message : "Opslaan mislukt");
+    } finally {
+      setBezig(false);
+    }
+  }
+
+  async function slaPremieOp() {
+    if (!velden || !data?.gekozen) return;
+    setBezig(true);
+    setFout(null);
+    setMelding(null);
+    try {
+      await jsonFetch("/api/stuurinformatie/beheer", {
+        method: "POST",
+        body: JSON.stringify({
+          type: "premie",
+          periode: data.gekozen,
+          // Altijd 'handmatig' — zelfde reden als de operationeel-save.
+          invoer_bron: "handmatig",
+          componenten_eur: Object.fromEntries(
+            PREMIE_COMPONENT_KEYS.map((k) => [k, parseNlGetal(velden.premieEur[k])])
+          ),
+          componenten_pct: Object.fromEntries(
+            PREMIE_COMPONENT_KEYS.map((k) => [k, parseNlGetal(velden.premiePct[k])])
+          ),
+          comp_mutaties: Object.fromEntries(
+            COMP_MUTATIE_KEYS.map((k) => [k, parseNlGetal(velden.compMutaties[k])])
+          ),
+          toekenning: parseNlGetal(velden.premieKpis.toekenning),
+          startomvang:
+            velden.premieKpis.startomvang.trim() === ""
+              ? null
+              : parseNlGetal(velden.premieKpis.startomvang),
+          ondergrens_pct:
+            velden.premieKpis.ondergrens_pct.trim() === ""
+              ? null
+              : parseNlGetal(velden.premieKpis.ondergrens_pct),
+        }),
+      });
+      setMelding(
+        `Premie & compensatie opgeslagen en gepubliceerd naar het dashboard (periode ${data.gekozen}).`
+      );
       await laad(data.gekozen);
     } catch (err) {
       setFout(err instanceof Error ? err.message : "Opslaan mislukt");
@@ -611,6 +776,28 @@ export default function StuurinfoInvoer() {
           zetVeld={zetSoliVeld}
           zetGrens={(veld, w) => zetLosVeld(veld, w)}
           opslaan={slaSolidariteitOp}
+          bezig={bezig}
+          uitgeschakeld={bezig || nieuwOpen}
+        />
+
+        {/* ── Operationeel (tab 6, T16) — eigen save ────────────────────── */}
+        <OperationeelInvoer
+          velden={velden}
+          huidig={data.huidig}
+          referentie={data.referentie}
+          zetVeld={zetT16Veld}
+          opslaan={slaOperationeelOp}
+          bezig={bezig}
+          uitgeschakeld={bezig || nieuwOpen}
+        />
+
+        {/* ── Premie & compensatie (tab 7, T16) — eigen save ────────────── */}
+        <PremieInvoer
+          velden={velden}
+          huidig={data.huidig}
+          referentie={data.referentie}
+          zetVeld={zetT16Veld}
+          opslaan={slaPremieOp}
           bezig={bezig}
           uitgeschakeld={bezig || nieuwOpen}
         />
