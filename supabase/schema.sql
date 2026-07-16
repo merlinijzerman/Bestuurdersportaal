@@ -1519,10 +1519,30 @@ create table if not exists public.fonds_config_log (
 --  content per fonds staat in fonds_module_manifest.config (jsonb). Bron van
 --  waarheid: migraties 2026_07_10_t11_stuurinfo_klantbeeld_data.sql (+ seed).
 --  Zie decisions/0054 (bronkeuze) + decisions/0055 (suppressiedrempel).
+--
+--  Increment T13 (2026_07_16) — periodemodel + reserves (Balans-tab, AZL-lijn):
+--  nieuwe registry fonds_stuurinfo_periode + reserve-tabel fonds_stuurinfo_reserve;
+--  kpi/reeks kregen een verplichte periode-kolom in de PK + samengestelde FK naar
+--  de registry. Bron van waarheid: 2026_07_16_t13_stuurinfo_periode_reserve.sql
+--  (+ seed 2026_07_16_t13b). Zie decisions/0074.
 -- ============================================================
+
+-- Periode-registry: welke rapportageperiodes bestaan per fonds ('2026Q2').
+-- Bron van waarheid voor de paginabrede periodefilter; de invoerlaag
+-- (vervolgticket) bouwt hierop voort (periode + peildatum + bron per periode).
+create table if not exists public.fonds_stuurinfo_periode (
+  fonds_id    uuid not null references public.fondsen(id) on delete cascade,
+  periode     text not null check (periode ~ '^\d{4}Q[1-4]$'),  -- '2026Q2'
+  peildatum   date not null,
+  bron        text not null default 'seed_synthetisch',
+  volgorde    integer not null default 0,  -- hoog = recentst
+  bijgewerkt  timestamptz not null default now(),
+  primary key (fonds_id, periode)
+);
 
 create table if not exists public.fonds_stuurinfo_kpi (
   fonds_id     uuid not null references public.fondsen(id) on delete cascade,
+  periode      text not null,           -- T13: rapportageperiode ('2026Q1')
   kpi_key      text not null,
   label        text not null,
   waarde       numeric,
@@ -1532,12 +1552,15 @@ create table if not exists public.fonds_stuurinfo_kpi (
   volgorde     integer not null default 0,
   populatie_n  integer,                 -- celgrootte-drager (suppressie n<10)
   bijgewerkt   timestamptz not null default now(),
-  primary key (fonds_id, kpi_key)
+  primary key (fonds_id, periode, kpi_key),
+  foreign key (fonds_id, periode)
+    references public.fonds_stuurinfo_periode(fonds_id, periode) on delete cascade
 );
 
 create table if not exists public.fonds_stuurinfo_reeks (
   fonds_id     uuid not null references public.fondsen(id) on delete cascade,
-  reeks_key    text not null,           -- trend_fg / balans_* / deelnemer_status / ...
+  periode      text not null,           -- T13: rapportageperiode ('2026Q1')
+  reeks_key    text not null,           -- trend_fg / balans_activa / balans_passiva / deelnemer_status / ...
   punt_key     text not null,
   label        text,
   volgorde     integer not null default 0,
@@ -1546,7 +1569,34 @@ create table if not exists public.fonds_stuurinfo_reeks (
   kleur        text,
   populatie_n  integer,                 -- celgrootte-drager (suppressie n<10)
   bijgewerkt   timestamptz not null default now(),
-  primary key (fonds_id, reeks_key, punt_key)
+  primary key (fonds_id, periode, reeks_key, punt_key),
+  foreign key (fonds_id, periode)
+    references public.fonds_stuurinfo_periode(fonds_id, periode) on delete cascade
+);
+-- Balans-taxonomie (T13, AZL-lijn): balans_activa {belegd, overig};
+-- balans_passiva {ev_toets_mvev, ev_toets_oper, ev_toets_overig, ev_soli,
+-- ev_comp, tv, vuk, overig}. Subtotalen (toetsvermogen, eigen vermogen,
+-- totalen) + balansevenwicht worden in de app-leeslaag AFGELEID.
+
+-- Reservestanden per periode met optionele ABTN-band (grenzen in dezelfde
+-- eenheid als pct_waarde). Stoplichtstatus is AFGELEID in de leeslaag:
+-- binnen band = ok, onder = rood, boven = oranje, geen band = monitoring —
+-- bewust geen status-kolom (decisions/0074).
+create table if not exists public.fonds_stuurinfo_reserve (
+  fonds_id    uuid not null references public.fondsen(id) on delete cascade,
+  periode     text not null,
+  reserve_key text not null,            -- solidariteitsreserve / mvev_reserve / ...
+  label       text not null,
+  stand       numeric not null,         -- € mln
+  pct_basis   text,                     -- noemer van pct_waarde ('technische_voorziening')
+  pct_waarde  numeric,
+  ondergrens  numeric,                  -- NULL = geen formele band → monitoring
+  bovengrens  numeric,
+  volgorde    integer not null default 0,
+  bijgewerkt  timestamptz not null default now(),
+  primary key (fonds_id, periode, reserve_key),
+  foreign key (fonds_id, periode)
+    references public.fonds_stuurinfo_periode(fonds_id, periode) on delete cascade
 );
 
 create table if not exists public.fonds_klantbeeld_cohort (

@@ -42,11 +42,17 @@ update public.profielen set rol = 'beheerder'  where id = 'aaaaaaaa-aaaa-aaaa-aa
 update public.profielen set rol = 'bestuurder' where id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 update public.profielen set rol = 'beheerder'  where id = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
 
+-- Periode-registry (T13): kpi/reeks dragen sinds 2026_07_16_t13 een verplichte
+-- periode-kolom + FK naar fonds_stuurinfo_periode. Seed één periode per fonds.
+insert into public.fonds_stuurinfo_periode (fonds_id, periode, peildatum, bron, volgorde) values
+  ('11111111-1111-1111-1111-111111111111', '2026Q1', date '2026-03-31', 'test', 1),
+  ('22222222-2222-2222-2222-222222222222', '2026Q1', date '2026-03-31', 'test', 1);
+
 -- Data-rijen voor fonds B (eigenaar-insert; RLS omzeild bij seed).
-insert into public.fonds_stuurinfo_kpi (fonds_id, kpi_key, label, waarde, eenheid)
-  values ('22222222-2222-2222-2222-222222222222', 'financieringsgraad', 'FG', 111.0, 'pct');
-insert into public.fonds_stuurinfo_reeks (fonds_id, reeks_key, punt_key, waarde)
-  values ('22222222-2222-2222-2222-222222222222', 'trend_fg', '00', 111.0);
+insert into public.fonds_stuurinfo_kpi (fonds_id, periode, kpi_key, label, waarde, eenheid)
+  values ('22222222-2222-2222-2222-222222222222', '2026Q1', 'financieringsgraad', 'FG', 111.0, 'pct');
+insert into public.fonds_stuurinfo_reeks (fonds_id, periode, reeks_key, punt_key, waarde)
+  values ('22222222-2222-2222-2222-222222222222', '2026Q1', 'trend_fg', '00', 111.0);
 insert into public.fonds_klantbeeld_cohort (fonds_id, leeftijd, aantal)
   values ('22222222-2222-2222-2222-222222222222', 45, 1234);
 
@@ -79,8 +85,8 @@ do $$
 declare gelukt boolean := false;
 begin
   begin
-    insert into public.fonds_stuurinfo_kpi (fonds_id, kpi_key, label, waarde, eenheid)
-    values ('11111111-1111-1111-1111-111111111111', 'poging', 'X', 1, 'pct');
+    insert into public.fonds_stuurinfo_kpi (fonds_id, periode, kpi_key, label, waarde, eenheid)
+    values ('11111111-1111-1111-1111-111111111111', '2026Q1', 'poging', 'X', 1, 'pct');
     gelukt := true;
   exception when insufficient_privilege then
     gelukt := false; -- verwacht: RLS WITH CHECK (rol) weigert
@@ -99,8 +105,8 @@ set local request.jwt.claims to '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}'
 do $$
 declare n int;
 begin
-  insert into public.fonds_stuurinfo_kpi (fonds_id, kpi_key, label, waarde, eenheid)
-  values ('11111111-1111-1111-1111-111111111111', 'financieringsgraad', 'FG', 102.4, 'pct');
+  insert into public.fonds_stuurinfo_kpi (fonds_id, periode, kpi_key, label, waarde, eenheid)
+  values ('11111111-1111-1111-1111-111111111111', '2026Q1', 'financieringsgraad', 'FG', 102.4, 'pct');
   select count(*) into n from public.fonds_stuurinfo_kpi
    where fonds_id='11111111-1111-1111-1111-111111111111';
   if n <> 1 then

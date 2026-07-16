@@ -1,216 +1,257 @@
 // ============================================================================
-//  Stuurinformatie — SERVER-side tenant-veilige leeslaag (T11).
+//  Stuurinformatie — SERVER-side tenant-veilige leeslaag (T11 → T13 Balans-tab).
 // ----------------------------------------------------------------------------
-//  Leest de KPI's (fonds_stuurinfo_kpi) en reeksen (fonds_stuurinfo_reeks) ONDER
-//  FONDS-RLS en de presentatie/content (peildatum, signaleringen, vergaderingen,
-//  KPI-volgorde) uit de per-fonds module-config. Past kleine-populatie-suppressie
-//  (n<10) toe op elke cel met een populatie-teller. GEEN deelnemer-PII (aggregaat).
+//  Leest de periode-registry (fonds_stuurinfo_periode), de balans-reeksen
+//  (fonds_stuurinfo_reeks), de reserves (fonds_stuurinfo_reserve) en de
+//  financieringsgraad-KPI (fonds_stuurinfo_kpi) ONDER FONDS-RLS, voor de
+//  gekozen rapportageperiode + het voorgaande kwartaal. Presentatie
+//  (regelingLabel) komt uit de per-fonds module-config (T8).
+//
+//  Alle rekenlogica (subtotalen, balansevenwicht, stoplicht, mutaties) is puur
+//  en staat in stuurinfo-balans.ts (sanity-getest). GEEN deelnemer-PII: alles
+//  is fonds-aggregaat. De kleine-populatie-suppressie (n<10) blijft als
+//  defense-in-depth bedraad: draagt een rij tóch een populatie_n < 10, dan
+//  wordt de waarde vóór de payload genuld (isOnderdrukt, besluit 0055).
 //
 //  fonds_id komt server-side (haalFondsSessie); nooit uit de request-body.
+//  De periode-parameter uit de URL wordt uitsluitend GEVALIDEERD tegen de
+//  eigen registry (onbekend → nieuwste periode); hij stuurt nooit het fonds.
 // ============================================================================
 
 import "server-only";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { moduleConfig } from "@/core/lib/fonds-config";
 import { isOnderdrukt } from "@/core/lib/suppressie";
+import {
+  leidBalansAf,
+  leidReserveStatusAf,
+  kiesPeriode,
+  formatteerPeriode,
+  formatteerPeildatum,
+  mutatiePct,
+  mutatiePt,
+  type BalansBronRij,
+  type BalansOverzicht,
+  type PeriodeRij,
+  type ReserveStatus,
+} from "@/core/lib/stuurinfo-balans";
 
 // ── Publieke vormen ─────────────────────────────────────────────────────────
-export type Kpi = {
+export type PeriodeOptie = {
+  periode: string;      // '2026Q2'
+  label: string;        // 'Q2 2026 — 30-06-2026'
+  peildatum: string;    // '30-06-2026'
+};
+
+export type KpiTegel = {
   key: string;
   label: string;
   waarde: number | null;
-  delta: number | null;
-  eenheid: string;
-  toelichting: string | null;
-  populatieN: number | null;
-  onderdrukt: boolean;
+  eenheid: "mln" | "pct";
+  /** Mutatie t.o.v. voorgaand kwartaal: procenten (mln-tegels) of procentpunten (pct-tegels). */
+  mutatie: number | null;
+  mutatieEenheid: "pct" | "pt";
 };
 
-export type BalansRij = {
-  key: string;
-  naam: string;
-  waarde: number;
-  delta: number | null;
-  kleur: string | null;
-};
-
-export type StatusRij = {
+export type ReserveRegel = {
   key: string;
   label: string;
-  aantal: number | null;
-  delta: number | null;
-  kleur: string | null;
-  populatieN: number | null;
-  onderdrukt: boolean;
+  stand: number;
+  pctWaarde: number | null;
+  ondergrens: number | null;
+  bovengrens: number | null;
+  status: ReserveStatus;
 };
 
-export type Signalering = { kleur: string; titel: string; sub: string };
-export type Vergadering = { categorie: string; titel: string; datum: string; kleur: string };
-
-export type StuurinfoData = {
-  peildatum: string;
-  toonTrend: boolean;
-  toonBalans: boolean;
-  kpis: Kpi[];
-  trend: { labels: string[]; waarden: number[] };
-  balans: {
-    activa: { bescherming: BalansRij[]; overrend: BalansRij[]; liquide: BalansRij[] };
-    passiva: { ppv: BalansRij[]; reserve: BalansRij[]; overig: BalansRij[] };
-  };
-  deelnemerStatus: StatusRij[];
-  deelnemerMutatie: { instroom: number; uitstroom: number; pensioneringen: number };
-  signaleringen: Signalering[];
-  vergaderingen: Vergadering[];
+export type StuurinfoBalansData = {
+  periodes: PeriodeOptie[];          // nieuwste eerst (voor de periodefilter)
+  gekozenPeriode: PeriodeOptie | null;
+  vorigePeriode: PeriodeOptie | null;
+  regelingLabel: string;
+  kpiTegels: KpiTegel[];
+  financieringsgraad: number | null; // voor de status-pill in de header
+  balans: BalansOverzicht;
+  reserves: ReserveRegel[];
 };
 
-// ── Coercie-helpers voor jsonb-config ───────────────────────────────────────
-function tekst(v: unknown, fallback: string): string {
-  return typeof v === "string" ? v : fallback;
-}
-function stringLijst(v: unknown): string[] {
-  return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
-}
-function signaleringen(v: unknown): Signalering[] {
-  if (!Array.isArray(v)) return [];
-  return v.map((s) => {
-    const r = (s && typeof s === "object" ? s : {}) as Record<string, unknown>;
-    return {
-      kleur: tekst(r.kleur, "blue"),
-      titel: tekst(r.titel, ""),
-      sub: tekst(r.sub, ""),
-    };
-  }).filter((s) => s.titel);
-}
-function vergaderingen(v: unknown): Vergadering[] {
-  if (!Array.isArray(v)) return [];
-  return v.map((s) => {
-    const r = (s && typeof s === "object" ? s : {}) as Record<string, unknown>;
-    return {
-      categorie: tekst(r.categorie, ""),
-      titel: tekst(r.titel, ""),
-      datum: tekst(r.datum, ""),
-      kleur: tekst(r.kleur, "blue"),
-    };
-  }).filter((s) => s.titel);
-}
-
+// ── Interne rijvormen ───────────────────────────────────────────────────────
 type ReeksRow = {
+  periode: string;
   reeks_key: string;
   punt_key: string;
   label: string | null;
   volgorde: number;
   waarde: number | null;
-  delta: number | null;
-  kleur: string | null;
   populatie_n: number | null;
 };
 
-const balansRij = (r: ReeksRow): BalansRij => ({
-  key: r.punt_key,
-  naam: r.label ?? r.punt_key,
-  waarde: Number(r.waarde ?? 0),
-  delta: r.delta === null ? null : Number(r.delta),
-  kleur: r.kleur,
+type ReserveRow = {
+  reserve_key: string;
+  label: string;
+  stand: number | null;
+  pct_waarde: number | null;
+  ondergrens: number | null;
+  bovengrens: number | null;
+  volgorde: number;
+};
+
+const naarOptie = (p: PeriodeRij): PeriodeOptie => {
+  const peildatum = formatteerPeildatum(p.peildatum);
+  return { periode: p.periode, label: `${formatteerPeriode(p.periode)} — ${peildatum}`, peildatum };
+};
+
+// Defense-in-depth (besluit 0055): balans-rijen dragen normaliter GEEN
+// populatie_n; draagt een rij er tóch een met n<10, dan wordt de waarde genuld
+// vóór hij de payload bereikt. Het balansevenwicht signaleert het gat dan
+// expliciet — geen stille schijnzekerheid.
+const naarBronRij = (r: ReeksRow): BalansBronRij => ({
+  puntKey: r.punt_key,
+  label: r.label,
+  volgorde: r.volgorde,
+  waarde: isOnderdrukt(r.populatie_n) ? null : r.waarde === null ? null : Number(r.waarde),
 });
 
-export async function haalStuurinfo(fondsId: string): Promise<StuurinfoData> {
-  const supabase = await createServerSupabase();
-  const cfg = await moduleConfig(fondsId, "stuurinformatie");
+function tekst(v: unknown, fallback: string): string {
+  return typeof v === "string" ? v : fallback;
+}
 
-  const [kpiRes, reeksRes] = await Promise.all([
-    supabase
-      .from("fonds_stuurinfo_kpi")
-      .select("kpi_key, label, waarde, delta, eenheid, toelichting, volgorde, populatie_n")
-      .eq("fonds_id", fondsId),
+/**
+ * Leest de Balans-tab-data voor het eigen fonds: gekozen periode (gevalideerd
+ * tegen de registry; onbekend/ontbrekend → nieuwste) + voorgaand kwartaal.
+ */
+export async function haalStuurinfoBalans(
+  fondsId: string,
+  periodeParam?: string
+): Promise<StuurinfoBalansData> {
+  const supabase = await createServerSupabase();
+
+  // 1. Periode-registry (RLS: eigen fonds) → filterlijst + gekozen/vorige.
+  const periodeRes = await supabase
+    .from("fonds_stuurinfo_periode")
+    .select("periode, peildatum, volgorde")
+    .eq("fonds_id", fondsId)
+    .order("volgorde", { ascending: false });
+
+  const periodes = (periodeRes.data ?? []) as PeriodeRij[];
+  const { gekozen, vorige } = kiesPeriode(periodes, periodeParam);
+
+  const leeg: StuurinfoBalansData = {
+    periodes: periodes.map(naarOptie),
+    gekozenPeriode: null,
+    vorigePeriode: null,
+    regelingLabel: "",
+    kpiTegels: [],
+    financieringsgraad: null,
+    balans: leidBalansAf([], [], null, null),
+    reserves: [],
+  };
+  if (!gekozen) return leeg;
+
+  const gekozenPeriodes = vorige ? [gekozen.periode, vorige.periode] : [gekozen.periode];
+
+  // 2. Parallel: balans-reeksen (beide periodes), reserves (gekozen periode),
+  //    FG-KPI (beide periodes), module-config (presentatie).
+  const [reeksRes, reserveRes, kpiRes, cfg] = await Promise.all([
     supabase
       .from("fonds_stuurinfo_reeks")
-      .select("reeks_key, punt_key, label, volgorde, waarde, delta, kleur, populatie_n")
+      .select("periode, reeks_key, punt_key, label, volgorde, waarde, populatie_n")
       .eq("fonds_id", fondsId)
-      .order("reeks_key", { ascending: true })
+      .in("periode", gekozenPeriodes)
+      .in("reeks_key", ["balans_activa", "balans_passiva"])
       .order("volgorde", { ascending: true }),
+    supabase
+      .from("fonds_stuurinfo_reserve")
+      .select("reserve_key, label, stand, pct_waarde, ondergrens, bovengrens, volgorde")
+      .eq("fonds_id", fondsId)
+      .eq("periode", gekozen.periode)
+      .order("volgorde", { ascending: true }),
+    supabase
+      .from("fonds_stuurinfo_kpi")
+      .select("periode, waarde, populatie_n")
+      .eq("fonds_id", fondsId)
+      .eq("kpi_key", "financieringsgraad")
+      .in("periode", gekozenPeriodes),
+    moduleConfig(fondsId, "stuurinformatie"),
   ]);
 
-  // ── KPI's: config-gedreven volgorde (kpiVolgorde), anders volgorde-kolom ──
-  const volgordeCfg = stringLijst(cfg.kpiVolgorde);
-  const kpiRows = (kpiRes.data ?? []) as Array<{
-    kpi_key: string; label: string; waarde: number | null; delta: number | null;
-    eenheid: string; toelichting: string | null; volgorde: number; populatie_n: number | null;
-  }>;
-  const kpiMap = new Map(kpiRows.map((r) => [r.kpi_key, r]));
-  const geordend = volgordeCfg.length
-    ? volgordeCfg.map((k) => kpiMap.get(k)).filter((r): r is (typeof kpiRows)[number] => !!r)
-    : kpiRows.slice().sort((a, b) => a.volgorde - b.volgorde);
+  // 3. Balans afleiden (subtotalen + evenwicht + richting) — puur.
+  const rijen = (reeksRes.data ?? []) as ReeksRow[];
+  const selecteer = (periode: string, reeks: string) =>
+    rijen.filter((r) => r.periode === periode && r.reeks_key === reeks).map(naarBronRij);
 
-  const kpis: Kpi[] = geordend.map((r) => {
-    const onderdrukt = isOnderdrukt(r.populatie_n);
-    // Onderdrukt → GEEN getal, delta én exacte teller in de payload (structurele
-    // garantie: geen leak, ook niet als het object later aan een client-component
-    // wordt doorgegeven — besluit 0055).
+  const balans = leidBalansAf(
+    selecteer(gekozen.periode, "balans_activa"),
+    selecteer(gekozen.periode, "balans_passiva"),
+    vorige ? selecteer(vorige.periode, "balans_activa") : null,
+    vorige ? selecteer(vorige.periode, "balans_passiva") : null
+  );
+
+  // 4. Reserves + afgeleide stoplichtstatus — puur.
+  const reserves: ReserveRegel[] = ((reserveRes.data ?? []) as ReserveRow[]).map((r) => {
+    const pctWaarde = r.pct_waarde === null ? null : Number(r.pct_waarde);
+    const ondergrens = r.ondergrens === null ? null : Number(r.ondergrens);
+    const bovengrens = r.bovengrens === null ? null : Number(r.bovengrens);
     return {
-      key: r.kpi_key,
+      key: r.reserve_key,
       label: r.label,
-      waarde: onderdrukt ? null : r.waarde === null ? null : Number(r.waarde),
-      delta: onderdrukt ? null : r.delta === null ? null : Number(r.delta),
-      eenheid: r.eenheid,
-      toelichting: r.toelichting,
-      populatieN: onderdrukt ? null : r.populatie_n,
-      onderdrukt,
+      stand: Number(r.stand ?? 0),
+      pctWaarde,
+      ondergrens,
+      bovengrens,
+      status: leidReserveStatusAf(ondergrens, bovengrens, pctWaarde),
     };
   });
 
-  // ── Reeksen groeperen ──
-  const rows = (reeksRes.data ?? []) as ReeksRow[];
-  const groep = (key: string) => rows.filter((r) => r.reeks_key === key);
-
-  const trendRows = groep("trend_fg");
-  const trend = {
-    labels: trendRows.map((r) => r.label ?? r.punt_key),
-    waarden: trendRows.map((r) => Number(r.waarde ?? 0)),
+  // 5. KPI-tegels: FG uit de KPI-tabel (beide periodes), de rest afgeleid uit
+  //    de balans — de balans is de enige bron voor bedragen (geen dubbele
+  //    waarheid tussen tegel en tabel).
+  // KPI-cellen behouden de n<10-suppressie (besluit 0055): draagt de FG-rij
+  // ooit een populatie_n < 10, dan blijft de waarde uit de payload.
+  const fgVan = (periode: string): number | null => {
+    const rij = (kpiRes.data ?? []).find((k) => (k as { periode: string }).periode === periode) as
+      | { waarde: number | null; populatie_n: number | null }
+      | undefined;
+    if (!rij || isOnderdrukt(rij.populatie_n)) return null;
+    return rij.waarde === null || rij.waarde === undefined ? null : Number(rij.waarde);
   };
+  const fgHuidig = fgVan(gekozen.periode);
+  const fgVorig = vorige ? fgVan(vorige.periode) : null;
 
-  const deelnemerStatus: StatusRij[] = groep("deelnemer_status").map((r) => {
-    const onderdrukt = isOnderdrukt(r.populatie_n);
-    // Onderdrukt → aantal, delta én exacte teller uit de payload (geen leak, ook
-    // niet via een afgeleide zoals nettoDelta; besluit 0055).
-    return {
-      key: r.punt_key,
-      label: r.label ?? r.punt_key,
-      aantal: onderdrukt ? null : Number(r.waarde ?? 0),
-      delta: onderdrukt ? null : r.delta === null ? null : Number(r.delta),
-      kleur: r.kleur,
-      populatieN: onderdrukt ? null : r.populatie_n,
-      onderdrukt,
-    };
+  const regelVan = (key: string) => balans.passiva.find((r) => r.key === key) ?? null;
+  const evRegel = regelVan("eigen_vermogen");
+  const tvRegel = regelVan("tv");
+  const mlnTegel = (key: string, label: string, huidig: number | null, vorig: number | null): KpiTegel => ({
+    key,
+    label,
+    waarde: huidig,
+    eenheid: "mln",
+    mutatie: mutatiePct(huidig, vorig),
+    mutatieEenheid: "pct",
   });
 
-  const mutatieMap = new Map(groep("deelnemer_mutatie").map((r) => [r.punt_key, Number(r.waarde ?? 0)]));
-  const deelnemerMutatie = {
-    instroom: mutatieMap.get("instroom") ?? 0,
-    uitstroom: mutatieMap.get("uitstroom") ?? 0,
-    pensioneringen: mutatieMap.get("pensioneringen") ?? 0,
-  };
+  const kpiTegels: KpiTegel[] = [
+    mlnTegel("balanstotaal", "Balanstotaal", balans.evenwicht.totaalActiva,
+      balans.evenwichtVorig?.totaalActiva ?? null),
+    {
+      key: "financieringsgraad",
+      label: "Financieringsgraad",
+      waarde: fgHuidig,
+      eenheid: "pct",
+      mutatie: mutatiePt(fgHuidig, fgVorig),
+      mutatieEenheid: "pt",
+    },
+    mlnTegel("eigen_vermogen", "Eigen vermogen (buffer)", evRegel?.huidig ?? null, evRegel?.vorig ?? null),
+    mlnTegel("kapitalen", "Kapitalen deelnemers", tvRegel?.huidig ?? null, tvRegel?.vorig ?? null),
+  ];
 
   return {
-    peildatum: tekst(cfg.peildatum, ""),
-    toonTrend: cfg.toonTrend !== false,
-    toonBalans: cfg.toonBalans !== false,
-    kpis,
-    trend,
-    balans: {
-      activa: {
-        bescherming: groep("balans_activa_bescherming").map(balansRij),
-        overrend: groep("balans_activa_overrend").map(balansRij),
-        liquide: groep("balans_activa_liquide").map(balansRij),
-      },
-      passiva: {
-        ppv: groep("balans_passiva_ppv").map(balansRij),
-        reserve: groep("balans_passiva_reserve").map(balansRij),
-        overig: groep("balans_passiva_overig").map(balansRij),
-      },
-    },
-    deelnemerStatus,
-    deelnemerMutatie,
-    signaleringen: signaleringen(cfg.signaleringen),
-    vergaderingen: vergaderingen(cfg.vergaderingen),
+    periodes: periodes.map(naarOptie),
+    gekozenPeriode: naarOptie(gekozen),
+    vorigePeriode: vorige ? naarOptie(vorige) : null,
+    regelingLabel: tekst(cfg.regelingLabel, ""),
+    kpiTegels,
+    financieringsgraad: fgHuidig,
+    balans,
+    reserves,
   };
 }

@@ -1,453 +1,305 @@
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { vereisModuleToegang } from "@/core/lib/module-gate-page";
-import { haalStuurinfo, type BalansRij, type Kpi } from "@/core/lib/stuurinfo-bron";
-import { SUPPRESSIE_MASKER } from "@/core/lib/suppressie";
+import { haalStuurinfoBalans, type KpiTegel, type ReserveRegel } from "@/core/lib/stuurinfo-bron";
+import { formatteerPeriode, type BalansRegel, type Richting } from "@/core/lib/stuurinfo-balans";
+import { StuurinfoShell } from "./_components/StuurinfoShell";
 
 // ============================================================
-//  Stuurinformatie — CONFIG-GEDREVEN, tenant-veilig (T11)
-//  Data uit fonds_stuurinfo_kpi/-reeks onder fonds-RLS; presentatie/content uit
-//  de per-fonds module-config. Alle cijfers zijn realistische dummy-data.
-//  Server-side gate: beschikbaarheid (manifest) + capability (stuurinformatie.view)
-//  + fonds-RLS. Kleine-populatie-suppressie (n<10) in de leeslaag.
+//  Bestuurdersdashboard — tab 1 Balans (T13, AZL-lijn).
+//  Herstructureerde balans (activa 2 posten; passiva-hiërarchie eigen
+//  vermogen → toetsvermogen + solidariteitsreserve + compensatiedepot) +
+//  Overzicht reserves (ABTN-band + afgeleid stoplicht) + periodemodel
+//  (gekozen periode vs. voorgaand kwartaal, paginabrede periodefilter).
+//  Data uit fonds_stuurinfo_periode/-reeks/-reserve/-kpi onder fonds-RLS;
+//  alle cijfers zijn synthetische demo-data. Server-side gate:
+//  beschikbaarheid (manifest) + capability (stuurinformatie.view) + RLS.
+//  Subtotalen, balansevenwicht en stoplicht zijn AFGELEID (stuurinfo-balans.ts).
 // ============================================================
 
-const fmt = (n: number) => n.toLocaleString("nl-NL");
-const fmtMln = (mln: number) =>
-  mln >= 1000 ? `${(mln / 1000).toFixed(1).replace(".", ",")} mld` : `${fmt(mln)} mln`;
+const fmt = (n: number) => n.toLocaleString("nl-NL", { maximumFractionDigits: 0 });
+const fmtBedrag = (n: number) =>
+  Number.isInteger(n)
+    ? fmt(n)
+    : n.toLocaleString("nl-NL", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const fmt1 = (n: number) =>
+  n.toLocaleString("nl-NL", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const fmtPct = (n: number) => `${fmt1(n)}%`;
 
-function formatKpi(k: Kpi): string {
-  if (k.onderdrukt || k.waarde === null) return SUPPRESSIE_MASKER;
-  switch (k.eenheid) {
-    case "pct":
-      return `${k.waarde.toFixed(1).replace(".", ",")}%`;
-    case "pct_signed": {
-      const teken = k.waarde >= 0 ? "+" : "−";
-      return `${teken}${Math.abs(k.waarde).toFixed(1).replace(".", ",")}%`;
-    }
-    case "mln":
-      return `€ ${fmtMln(k.waarde)}`;
-    case "aantal":
-      return fmt(k.waarde);
-    default:
-      return String(k.waarde);
-  }
+function Pijl({ richting }: { richting: Richting | null }) {
+  if (richting === "op") return <span className="text-ok-ink text-[11px]">▲</span>;
+  if (richting === "neer") return <span className="text-err-ink text-[11px]">▼</span>;
+  return <span className="text-muted text-[11px]">–</span>;
 }
 
-function buildPath(values: number[], w: number, h: number, yMin: number, yMax: number) {
-  const stepX = w / (values.length - 1);
-  const range = yMax - yMin;
-  return values
-    .map((v, i) => {
-      const x = i * stepX;
-      const y = h - ((v - yMin) / range) * h;
-      return `${i === 0 ? "M" : "L"} ${x.toFixed(1)} ${y.toFixed(1)}`;
-    })
-    .join(" ");
-}
-
-export default async function DashboardPage() {
-  // Server-side gate: beschikbaarheid (manifest) + capability + (queries) RLS.
-  const { fondsId, userId } = await vereisModuleToegang("stuurinformatie", "stuurinformatie.view");
-
-  const supabase = await createServerSupabase();
-  const { data: profiel } = await supabase
-    .from("profielen")
-    .select("naam")
-    .eq("id", userId)
-    .single();
-  const naam = profiel?.naam?.split(" ")[0] || "Bestuurder";
-
-  const data = await haalStuurinfo(fondsId);
-
-  const [{ count: aantalDocs }, { count: aantalLogs }] = await Promise.all([
-    supabase.from("documenten").select("*", { count: "exact", head: true }),
-    supabase.from("governance_log").select("*", { count: "exact", head: true }),
-  ]);
-
-  const sumBalans = (rijen: BalansRij[]) => rijen.reduce((s, r) => s + r.waarde, 0);
-  const totaalActiva =
-    sumBalans(data.balans.activa.bescherming) +
-    sumBalans(data.balans.activa.overrend) +
-    sumBalans(data.balans.activa.liquide);
-  const totaalPersoonlijk = sumBalans(data.balans.passiva.ppv);
-  const totaalPassiva =
-    totaalPersoonlijk +
-    sumBalans(data.balans.passiva.reserve) +
-    sumBalans(data.balans.passiva.overig);
-  const reserve = data.balans.passiva.reserve[0] ?? null;
-
-  const totaalDeelnemers = data.deelnemerStatus.reduce((s, r) => s + (r.aantal ?? 0), 0);
-  const nettoDelta = data.deelnemerStatus.reduce((s, r) => s + (r.delta ?? 0), 0);
-
-  // Trendgrafiek
-  const trendW = 700;
-  const trendH = 180;
-  const yMin = 96;
-  const yMax = 110;
-  const heeftTrend = data.toonTrend && data.trend.waarden.length > 1;
-  const fgPath = heeftTrend ? buildPath(data.trend.waarden, trendW, trendH, yMin, yMax) : "";
-  const targetPath = heeftTrend
-    ? buildPath(Array(data.trend.waarden.length).fill(100), trendW, trendH, yMin, yMax)
-    : "";
-
+function KpiMutatie({ tegel, vorigLabel }: { tegel: KpiTegel; vorigLabel: string | null }) {
+  if (tegel.mutatie === null || !vorigLabel) return <div className="text-xs text-muted mt-1">—</div>;
+  const positief = tegel.mutatie > 0;
+  const teken = positief ? "+" : tegel.mutatie < 0 ? "−" : "";
+  const eenheid = tegel.mutatieEenheid === "pt" ? " %-pt" : "%";
   return (
-    <div className="p-4 sm:p-6 lg:p-7 space-y-5">
-      {/* Header */}
-      <div className="flex items-end justify-between flex-wrap gap-2">
-        <div>
-          <div className="font-serif text-ink text-xl font-bold">Welkom terug, {naam}</div>
-          <div className="text-muted text-sm mt-0.5">
-            Stuurinformatie{data.peildatum ? ` · per ${data.peildatum}` : ""}
-          </div>
-        </div>
-        <span className="text-[11px] uppercase tracking-wider text-muted bg-app-bg px-2 py-1 rounded-md">
-          Demo-data
-        </span>
-      </div>
-
-      {/* KPI-tegels (config-gedreven volgorde + aantal) */}
-      {data.kpis.length > 0 && (
-        <div
-          className="grid gap-3"
-          style={{ gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))" }}
-        >
-          {data.kpis.map((k) => (
-            <div key={k.key} className="bg-white rounded-xl border border-line p-4">
-              <div className="text-xs text-muted">{k.label}</div>
-              <div className="text-2xl font-bold text-ink mt-1">{formatKpi(k)}</div>
-              {k.toelichting && <div className="text-xs text-muted mt-1">{k.toelichting}</div>}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Trend financieringsgraad */}
-      {heeftTrend && (
-        <div className="bg-white rounded-xl border border-line p-5">
-          <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
-            <div className="font-semibold text-ink text-sm">Financieringsgraad — 24 maanden</div>
-            <div className="flex gap-4 text-xs text-muted">
-              <span className="inline-flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-sm" style={{ background: "#185FA5" }}></span>
-                Financieringsgraad
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <span className="w-3 h-0.5" style={{ background: "var(--warn)" }}></span>
-                Doel 100%
-              </span>
-            </div>
-          </div>
-          <svg viewBox={`0 0 ${trendW} ${trendH + 24}`} className="w-full h-auto">
-            {[98, 100, 102, 104, 106, 108].map((y) => {
-              const yPos = trendH - ((y - yMin) / (yMax - yMin)) * trendH;
-              return (
-                <g key={y}>
-                  <line x1={0} x2={trendW} y1={yPos} y2={yPos} stroke="var(--line)" strokeWidth={0.5} />
-                  <text x={4} y={yPos - 2} fontSize={10} fill="var(--muted)">
-                    {y}%
-                  </text>
-                </g>
-              );
-            })}
-            <path d={targetPath} stroke="var(--warn)" strokeWidth={1.5} strokeDasharray="4,4" fill="none" />
-            <path d={fgPath} stroke="#185FA5" strokeWidth={2} fill="none" />
-            {data.trend.labels.map((label, i) => {
-              if (i % 4 !== 0) return null;
-              const x = (trendW / (data.trend.labels.length - 1)) * i;
-              return (
-                <text key={i} x={x} y={trendH + 16} fontSize={10} fill="var(--muted)" textAnchor="middle">
-                  {label}
-                </text>
-              );
-            })}
-          </svg>
-        </div>
-      )}
-
-      {/* Balans */}
-      {data.toonBalans && totaalActiva > 0 && (
-        <div className="bg-white rounded-xl border border-line p-5">
-          <div className="flex items-baseline justify-between mb-4 flex-wrap gap-2">
-            <div>
-              <div className="font-semibold text-ink text-sm">Balans · Wtp-regeling</div>
-              <div className="text-xs text-muted mt-0.5">Solidaire premieregeling · bedragen in € mln</div>
-            </div>
-            <div className="text-xs text-muted">vs Q4 2025</div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Activa */}
-            <div>
-              <div className="flex items-baseline justify-between pb-2 mb-3 border-b border-line">
-                <span className="text-xs font-bold uppercase tracking-wider text-muted">Activa</span>
-                <span className="text-lg font-semibold text-ink">{fmt(totaalActiva)}</span>
-              </div>
-              <BalansGroep titel="Beschermingsportefeuille" rijen={data.balans.activa.bescherming} />
-              <BalansGroep titel="Overrendementsportefeuille" rijen={data.balans.activa.overrend} />
-              <BalansGroep titel="Liquide" rijen={data.balans.activa.liquide} />
-            </div>
-
-            {/* Passiva */}
-            <div>
-              <div className="flex items-baseline justify-between pb-2 mb-3 border-b border-line">
-                <span className="text-xs font-bold uppercase tracking-wider text-muted">Passiva</span>
-                <span className="text-lg font-semibold text-ink">{fmt(totaalPassiva)}</span>
-              </div>
-
-              <div className="text-xs font-medium text-muted mb-2 mt-1">Persoonlijke pensioenvermogens</div>
-              <div className="space-y-1.5 text-sm">
-                {data.balans.passiva.ppv.map((r) => (
-                  <div key={r.key} className="flex justify-between">
-                    <span className="text-ink">{r.naam}</span>
-                    <span className="inline-flex gap-2 items-baseline">
-                      <span className="tabular-nums">{fmt(r.waarde)}</span>
-                      {r.delta !== null && (
-                        <span className="text-[11px] text-ok-ink min-w-[40px] text-right">
-                          +{r.delta.toFixed(1).replace(".", ",")}%
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              {reserve && (
-                <>
-                  <div className="text-xs font-medium text-muted mb-2 mt-4">Solidariteitsreserve</div>
-                  <div className="space-y-1.5 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-ink">{reserve.naam}</span>
-                      <span className="inline-flex gap-2 items-baseline">
-                        <span className="tabular-nums">{fmt(reserve.waarde)}</span>
-                        {reserve.delta !== null && (
-                          <span className="text-[11px] text-ok-ink min-w-[40px] text-right">
-                            +{reserve.delta}
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {data.balans.passiva.overig.length > 0 && (
-                <>
-                  <div className="text-xs font-medium text-muted mb-2 mt-4">Overige verplichtingen</div>
-                  <div className="space-y-1.5 text-sm">
-                    {data.balans.passiva.overig.map((r) => (
-                      <div key={r.key} className="flex justify-between">
-                        <span className="text-ink">{r.naam}</span>
-                        <span className="inline-flex gap-2 items-baseline">
-                          <span className="tabular-nums">{fmt(r.waarde)}</span>
-                          <span
-                            className={`text-[11px] min-w-[40px] text-right ${
-                              (r.delta ?? 0) < 0
-                                ? "text-err-ink"
-                                : (r.delta ?? 0) > 0
-                                ? "text-ok-ink"
-                                : "text-muted"
-                            }`}
-                          >
-                            {!r.delta ? "—" : r.delta > 0 ? `+${r.delta}` : r.delta}
-                          </span>
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Cohortverdeling onderaan */}
-          {totaalPersoonlijk > 0 && (
-            <div className="mt-6 pt-4 border-t border-line">
-              <div className="text-xs font-medium text-muted mb-2">
-                Verdeling persoonlijke pensioenvermogens per cohort
-              </div>
-              <div className="flex gap-1 h-5 rounded-md overflow-hidden">
-                {data.balans.passiva.ppv.map((c) => {
-                  const pct = (c.waarde / totaalPersoonlijk) * 100;
-                  return (
-                    <div
-                      key={c.key}
-                      className="flex items-center justify-center text-white text-[11px]"
-                      style={{ width: `${pct}%`, background: c.kleur ?? "var(--muted)" }}
-                    >
-                      {Math.round(pct)}%
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Deelnemers + Signaleringen */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        {/* Deelnemers */}
-        <div className="bg-white rounded-xl border border-line p-5">
-          <div className="flex items-baseline justify-between mb-3">
-            <div className="font-semibold text-ink text-sm">Deelnemers naar status</div>
-            <span className="text-xs text-muted">vs Q4 2025</span>
-          </div>
-          <div className="flex items-baseline gap-2 mb-3">
-            <span className="text-xl font-bold text-ink">{fmt(totaalDeelnemers)}</span>
-            <span className="text-xs text-muted">totaal</span>
-            <span className="text-xs text-ok-ink ml-2">
-              {nettoDelta >= 0 ? "+" : ""}
-              {fmt(nettoDelta)} netto
-            </span>
-          </div>
-          <div className="flex gap-0.5 h-3 rounded-md overflow-hidden mb-3">
-            {data.deelnemerStatus.map((d) => {
-              const pct = totaalDeelnemers > 0 ? ((d.aantal ?? 0) / totaalDeelnemers) * 100 : 0;
-              return (
-                <div
-                  key={d.key}
-                  style={{ width: `${pct}%`, background: d.kleur ?? "var(--muted)" }}
-                  title={`${d.label} ${pct.toFixed(1)}%`}
-                />
-              );
-            })}
-          </div>
-          <div className="space-y-1 text-sm">
-            {data.deelnemerStatus.map((d) => (
-              <div key={d.key} className="flex justify-between items-center">
-                <span className="inline-flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-sm" style={{ background: d.kleur ?? "var(--muted)" }} />
-                  <span className="text-ink">{d.label}</span>
-                </span>
-                <span className="inline-flex gap-2 items-baseline">
-                  <span className="tabular-nums">
-                    {d.onderdrukt ? SUPPRESSIE_MASKER : fmt(d.aantal ?? 0)}
-                  </span>
-                  {d.onderdrukt ? (
-                    <span className="text-[11px] min-w-[40px] text-right text-muted" title="n<10 — onderdrukt">
-                      n&lt;10
-                    </span>
-                  ) : (
-                    <span
-                      className={`text-[11px] min-w-[40px] text-right ${
-                        (d.delta ?? 0) > 0 ? "text-ok-ink" : (d.delta ?? 0) < 0 ? "text-err-ink" : "text-muted"
-                      }`}
-                    >
-                      {(d.delta ?? 0) > 0 ? `+${d.delta}` : d.delta ?? 0}
-                    </span>
-                  )}
-                </span>
-              </div>
-            ))}
-          </div>
-          <div className="grid grid-cols-3 gap-3 mt-4 pt-3 border-t border-line">
-            <div>
-              <div className="text-[11px] text-muted">Instroom Q1</div>
-              <div className="text-sm font-semibold text-ink mt-0.5">+{fmt(data.deelnemerMutatie.instroom)}</div>
-            </div>
-            <div>
-              <div className="text-[11px] text-muted">Uitstroom Q1</div>
-              <div className="text-sm font-semibold text-ink mt-0.5">−{fmt(data.deelnemerMutatie.uitstroom)}</div>
-            </div>
-            <div>
-              <div className="text-[11px] text-muted">Pensioneringen Q1</div>
-              <div className="text-sm font-semibold text-ink mt-0.5">{fmt(data.deelnemerMutatie.pensioneringen)}</div>
-            </div>
-          </div>
-          {data.deelnemerStatus.some((d) => d.onderdrukt) && (
-            <div className="text-[11px] text-muted mt-3">
-              {SUPPRESSIE_MASKER} = onderdrukt wegens kleine populatie (n&lt;10, privacy-by-design).
-            </div>
-          )}
-        </div>
-
-        {/* Signaleringen */}
-        <div className="bg-white rounded-xl border border-line p-5">
-          <div className="font-semibold text-ink text-sm mb-3">Signaleringen</div>
-          {data.signaleringen.length > 0 ? (
-            <ul className="space-y-3">
-              {data.signaleringen.map((s, i) => (
-                <li key={i} className="flex gap-2.5 items-start">
-                  <span
-                    className={`w-2 h-2 rounded-full flex-shrink-0 mt-1.5 ${
-                      s.kleur === "amber" ? "bg-warn" : s.kleur === "green" ? "bg-ok" : "bg-accent"
-                    }`}
-                  />
-                  <div>
-                    <div className="text-sm font-semibold text-ink">{s.titel}</div>
-                    <div className="text-xs text-muted mt-0.5">{s.sub}</div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div className="text-xs text-muted">Geen actieve signaleringen.</div>
-          )}
-        </div>
-      </div>
-
-      {/* Vergaderingen / acties */}
-      {data.vergaderingen.length > 0 && (
-        <div className="bg-white rounded-xl border border-line p-5">
-          <div className="flex items-baseline justify-between mb-3">
-            <div className="font-semibold text-ink text-sm">Openstaande acties &amp; vergaderingen</div>
-            <span className="text-xs text-muted">{data.vergaderingen.length} lopend</span>
-          </div>
-          <div className="space-y-2.5">
-            {data.vergaderingen.map((v, i) => (
-              <div key={i} className="flex justify-between items-center gap-3">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <span
-                    className={`text-[11px] px-2 py-0.5 rounded-md whitespace-nowrap ${
-                      v.kleur === "amber" ? "bg-warn-tint text-warn-ink" : "bg-accent-tint text-accent-ink"
-                    }`}
-                  >
-                    {v.categorie}
-                  </span>
-                  <span className="text-sm text-ink truncate">{v.titel}</span>
-                </div>
-                <span className="text-xs text-muted whitespace-nowrap">{v.datum}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Governance traceability */}
-      <div className="bg-accent-tint border border-accent/30 rounded-xl p-4 flex items-center gap-3 text-xs text-accent-ink">
-        <span className="text-base">ℹ️</span>
-        <div className="flex-1">
-          <strong>{aantalDocs ?? 0}</strong> bron-documenten beschikbaar ·{" "}
-          <strong>{aantalLogs ?? 0}</strong> AI-vragen gelogd · alle interacties traceerbaar via de
-          Governance Log.
-        </div>
-      </div>
+    <div
+      className={`text-xs mt-1 ${
+        positief ? "text-ok-ink" : tegel.mutatie < 0 ? "text-err-ink" : "text-muted"
+      }`}
+    >
+      {positief ? "▲" : tegel.mutatie < 0 ? "▼" : ""} {teken}
+      {fmt1(Math.abs(tegel.mutatie))}
+      {eenheid} t.o.v. {vorigLabel}
     </div>
   );
 }
 
-function BalansGroep({ titel, rijen }: { titel: string; rijen: BalansRij[] }) {
-  if (rijen.length === 0) return null;
+const RESERVE_CHIP: Record<
+  ReserveRegel["status"],
+  { tekst: string; chip: string; dot: string }
+> = {
+  ok: { tekst: "Binnen band", chip: "bg-ok-tint text-ok-ink", dot: "bg-ok" },
+  onder: { tekst: "Onder ondergrens", chip: "bg-err-tint text-err-ink", dot: "bg-err" },
+  boven: { tekst: "Boven bovengrens", chip: "bg-warn-tint text-warn-ink", dot: "bg-warn" },
+  monitoring: { tekst: "Monitoring", chip: "bg-app-bg text-muted", dot: "" },
+};
+
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ periode?: string }>;
+}) {
+  // Server-side gate: beschikbaarheid (manifest) + capability + (queries) RLS.
+  const { fondsId } = await vereisModuleToegang("stuurinformatie", "stuurinformatie.view");
+
+  const { periode } = await searchParams;
+  const supabase = await createServerSupabase();
+  const [fondsRes, data] = await Promise.all([
+    supabase.from("fondsen").select("naam").eq("id", fondsId).single(),
+    haalStuurinfoBalans(fondsId, typeof periode === "string" ? periode : undefined),
+  ]);
+  const fondsNaam = fondsRes.data?.naam ?? "";
+
+  const huidigLabel = data.gekozenPeriode ? formatteerPeriode(data.gekozenPeriode.periode) : null;
+  const vorigLabel = data.vorigePeriode ? formatteerPeriode(data.vorigePeriode.periode) : null;
+  // Balansdata aanwezig = op minstens één zijde meer dan de afgeleide totaalrij.
+  // Beide zijden meewegen: een aanlevering met alléén passiva moet de balans
+  // (en dus het niet-sluitend-signaal) tonen, niet de lege-staat.
+  const heeftBalans =
+    data.balans.activa.length > 1 || data.balans.evenwicht.totaalPassiva !== 0;
+
   return (
-    <div className="mb-3">
-      <div className="text-xs font-medium text-muted mb-2 mt-3">{titel}</div>
-      <div className="space-y-1.5 text-sm">
-        {rijen.map((r) => (
-          <div key={r.key} className="flex justify-between">
-            <span className="text-ink">{r.naam}</span>
-            <span className="inline-flex gap-2 items-baseline">
-              <span className="tabular-nums">{fmt(r.waarde)}</span>
-              <span
-                className={`text-[11px] min-w-[40px] text-right ${
-                  (r.delta ?? 0) < 0 ? "text-err-ink" : (r.delta ?? 0) > 0 ? "text-ok-ink" : "text-muted"
-                }`}
-              >
-                {!r.delta ? "—" : `${r.delta > 0 ? "+" : ""}${r.delta.toFixed(1).replace(".", ",")}%`}
-              </span>
-            </span>
+    <StuurinfoShell
+      actieveTab="balans"
+      fondsNaam={fondsNaam}
+      regelingLabel={data.regelingLabel}
+      gekozenPeriode={data.gekozenPeriode}
+      periodes={data.periodes}
+      financieringsgraad={data.financieringsgraad}
+    >
+      {!data.gekozenPeriode ? (
+        <div className="bg-white rounded-xl border border-line p-5 text-sm text-muted">
+          Er zijn nog geen rapportageperiodes beschikbaar voor dit fonds.
+        </div>
+      ) : !heeftBalans ? (
+        <div className="bg-white rounded-xl border border-line p-5 text-sm text-muted">
+          Geen balansdata beschikbaar voor {huidigLabel}.
+        </div>
+      ) : (
+        <>
+          {/* KPI-rij */}
+          <div
+            className="grid gap-3"
+            style={{ gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))" }}
+          >
+            {data.kpiTegels.map((k) => (
+              <div key={k.key} className="bg-white rounded-xl border border-line p-4">
+                <div className="text-xs text-muted">{k.label}</div>
+                <div className="text-2xl font-bold text-ink mt-1">
+                  {k.waarde === null
+                    ? "—"
+                    : k.eenheid === "pct"
+                    ? fmtPct(k.waarde)
+                    : `€ ${fmt(k.waarde)} mln`}
+                </div>
+                <KpiMutatie tegel={k} vorigLabel={vorigLabel} />
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
-    </div>
+
+          {/* Balans */}
+          <div className="bg-white rounded-xl border border-line p-5">
+            <div className="mb-4">
+              <div className="font-semibold text-ink text-sm">Balans</div>
+              <div className="text-xs text-muted mt-0.5">
+                Marktwaarde, € mln — balans van het fonds. Vergelijking met het voorgaande
+                kwartaal.
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-xs text-muted border-b border-line">
+                    <th className="text-left font-medium py-2 pr-3">Post</th>
+                    <th className="text-right font-medium py-2 pl-3 whitespace-nowrap">
+                      {huidigLabel} <span className="font-normal">huidig</span>
+                    </th>
+                    {vorigLabel && (
+                      <th className="text-right font-medium py-2 pl-3 whitespace-nowrap">
+                        {vorigLabel} <span className="font-normal">vorig kwartaal</span>
+                      </th>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  <SectieKop titel="Activa" kolommen={vorigLabel ? 3 : 2} />
+                  {data.balans.activa.map((r) => (
+                    <BalansTabelRij key={r.key} r={r} toonVorig={!!vorigLabel} />
+                  ))}
+                  <SectieKop titel="Passiva" kolommen={vorigLabel ? 3 : 2} />
+                  {data.balans.passiva.map((r) => (
+                    <BalansTabelRij key={r.key} r={r} toonVorig={!!vorigLabel} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Balansevenwicht — afgeleide validatie, geen invoerveld */}
+            {data.balans.evenwicht.sluit ? (
+              <div className="mt-4 bg-app-bg border-l-2 border-accent rounded-r-lg px-4 py-3 text-xs text-muted">
+                <strong className="text-ink">Structuur:</strong> cohorten verhuisd naar tab 2,
+                activa teruggebracht tot twee posten, eigen vermogen volgt de hiërarchie
+                toetsvermogen + solidariteitsreserve + compensatiedepot.{" "}
+                <strong className="text-ink">
+                  Beide balanszijden sluiten op € {fmt(data.balans.evenwicht.totaalActiva)} mln.
+                </strong>
+              </div>
+            ) : (
+              <div className="mt-4 bg-err-tint border-l-2 border-err rounded-r-lg px-4 py-3 text-xs text-err-ink">
+                <strong>Balans sluit niet:</strong> totaal activa €{" "}
+                {fmtBedrag(data.balans.evenwicht.totaalActiva)} mln vs. totaal passiva €{" "}
+                {fmtBedrag(data.balans.evenwicht.totaalPassiva)} mln (verschil €{" "}
+                {data.balans.evenwicht.verschil < 0 ? "−" : ""}
+                {fmtBedrag(Math.abs(data.balans.evenwicht.verschil))} mln). Controleer de
+                aanlevering voor {huidigLabel}.
+              </div>
+            )}
+          </div>
+
+          {/* Overzicht reserves */}
+          <div className="bg-white rounded-xl border border-line p-5">
+            <div className="mb-4">
+              <div className="font-semibold text-ink text-sm">Overzicht van de reserves</div>
+              <div className="text-xs text-muted mt-0.5">
+                Stand t.o.v. bandbreedtes uit de financiële opzet (ABTN) — met stoplichtstatus
+              </div>
+            </div>
+
+            {data.reserves.length === 0 ? (
+              <div className="text-sm text-muted">
+                Geen reservestanden beschikbaar voor {huidigLabel}.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-xs text-muted border-b border-line">
+                      <th className="text-left font-medium py-2 pr-3">Reserve / maatstaf</th>
+                      <th className="text-right font-medium py-2 px-3">Stand</th>
+                      <th className="text-right font-medium py-2 px-3">Stand %</th>
+                      <th className="text-right font-medium py-2 px-3">Ondergrens</th>
+                      <th className="text-right font-medium py-2 px-3">Bovengrens</th>
+                      <th className="text-left font-medium py-2 pl-3">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.reserves.map((r) => {
+                      const chip = RESERVE_CHIP[r.status];
+                      return (
+                        <tr key={r.key} className="border-b border-line last:border-0">
+                          <td className="py-2.5 pr-3 text-ink">{r.label}</td>
+                          <td className="py-2.5 px-3 text-right tabular-nums">
+                            € {fmtBedrag(r.stand)} mln
+                          </td>
+                          <td className="py-2.5 px-3 text-right tabular-nums">
+                            {r.pctWaarde === null ? "—" : fmtPct(r.pctWaarde)}
+                          </td>
+                          <td className="py-2.5 px-3 text-right tabular-nums text-muted">
+                            {r.ondergrens === null ? "—" : fmtPct(r.ondergrens)}
+                          </td>
+                          <td className="py-2.5 px-3 text-right tabular-nums text-muted">
+                            {r.bovengrens === null ? "—" : fmtPct(r.bovengrens)}
+                          </td>
+                          <td className="py-2.5 pl-3">
+                            <span
+                              className={`inline-flex items-center gap-1.5 text-[11px] px-2 py-0.5 rounded-full whitespace-nowrap ${chip.chip}`}
+                            >
+                              {chip.dot ? (
+                                <span className={`w-1.5 h-1.5 rounded-full ${chip.dot}`} />
+                              ) : (
+                                <span
+                                  className="w-1.5 h-1.5 rounded-full"
+                                  style={{ background: "var(--muted)" }}
+                                />
+                              )}
+                              {chip.tekst}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <div className="mt-4 bg-app-bg border-l-2 border-accent rounded-r-lg px-4 py-3 text-xs text-muted">
+              <strong className="text-ink">Grenzen:</strong> alleen de solidariteitsreserve heeft
+              een formele bandbreedte uit de ABTN — daar geldt de stoplichttoets. De overige
+              reserves worden ter informatie getoond («monitoring»): stand + ontwikkeling, nog
+              zonder onder-/bovengrens.{" "}
+              <strong className="text-ink">Compensatiedepot:</strong> uitputting wordt als
+              prognose gevolgd in tab 7, niet als bandtoets hier.
+            </div>
+          </div>
+        </>
+      )}
+    </StuurinfoShell>
+  );
+}
+
+function SectieKop({ titel, kolommen }: { titel: string; kolommen: number }) {
+  return (
+    <tr>
+      <td
+        colSpan={kolommen}
+        className="bg-app-bg text-[11px] uppercase tracking-wider text-muted font-semibold py-1.5 px-2 rounded-sm"
+      >
+        {titel}
+      </td>
+    </tr>
+  );
+}
+
+function BalansTabelRij({ r, toonVorig }: { r: BalansRegel; toonVorig: boolean }) {
+  const inspring = r.niveau === 2 ? "pl-10" : r.niveau === 1 ? "pl-6" : "";
+  const stijl = r.subtotaal
+    ? r.key === "toetsvermogen"
+      ? "italic text-ink"
+      : "font-semibold text-ink"
+    : r.niveau === 2
+    ? "text-muted"
+    : "text-ink";
+  return (
+    <tr className="border-b border-line last:border-0">
+      <td className={`py-2 pr-3 ${inspring} ${stijl}`}>
+        {r.label}
+        {r.key === "tv" && <span className="text-muted italic"> (kapitalen deelnemers)</span>}
+      </td>
+      <td className={`py-2 pl-3 text-right tabular-nums whitespace-nowrap ${r.subtotaal ? "font-semibold" : ""}`}>
+        {fmtBedrag(r.huidig)} <Pijl richting={r.richting} />
+      </td>
+      {toonVorig && (
+        <td className={`py-2 pl-3 text-right tabular-nums text-muted ${r.subtotaal ? "font-semibold" : ""}`}>
+          {r.vorig === null ? "—" : fmtBedrag(r.vorig)}
+        </td>
+      )}
+    </tr>
   );
 }
