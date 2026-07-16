@@ -38,6 +38,9 @@ export type Limiet = {
 export const LIMIETEN = {
   chat: { endpoint: "chat", limiet: 20, venster: "5 minutes" },
   upload: { endpoint: "upload", limiet: 10, venster: "1 hour" },
+  // T14 — Excel-upload stuurinformatie-invoer (parse-only; commit loopt via
+  // het normale POST-schrijfpad). Ruim genoeg voor herhaald controleren.
+  stuurinfo_upload: { endpoint: "stuurinfo_upload", limiet: 20, venster: "1 hour" },
   voorbereiding: { endpoint: "voorbereiding", limiet: 30, venster: "1 hour" },
   besluit_concept: { endpoint: "besluit_concept", limiet: 30, venster: "1 hour" },
 } as const satisfies Record<string, Limiet>;

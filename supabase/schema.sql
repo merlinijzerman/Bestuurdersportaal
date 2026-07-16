@@ -1535,7 +1535,8 @@ create table if not exists public.fonds_stuurinfo_periode (
   periode     text not null check (periode ~ '^\d{4}Q[1-4]$'),  -- '2026Q2'
   peildatum   date not null,
   bron        text not null default 'seed_synthetisch',
-  volgorde    integer not null default 0,  -- hoog = recentst
+  volgorde    integer not null default 0,  -- T14: deterministisch jaar*4+kwartaal
+  invoer_bron text,                        -- T14: 'handmatig'|'upload'|null (seed)
   bijgewerkt  timestamptz not null default now(),
   primary key (fonds_id, periode)
 );
@@ -1551,6 +1552,7 @@ create table if not exists public.fonds_stuurinfo_kpi (
   toelichting  text,
   volgorde     integer not null default 0,
   populatie_n  integer,                 -- celgrootte-drager (suppressie n<10)
+  invoer_bron  text,                    -- T14: 'handmatig'|'upload'|null (seed)
   bijgewerkt   timestamptz not null default now(),
   primary key (fonds_id, periode, kpi_key),
   foreign key (fonds_id, periode)
@@ -1568,6 +1570,7 @@ create table if not exists public.fonds_stuurinfo_reeks (
   delta        numeric,
   kleur        text,
   populatie_n  integer,                 -- celgrootte-drager (suppressie n<10)
+  invoer_bron  text,                    -- T14: 'handmatig'|'upload'|null (seed)
   bijgewerkt   timestamptz not null default now(),
   primary key (fonds_id, periode, reeks_key, punt_key),
   foreign key (fonds_id, periode)
@@ -1593,6 +1596,7 @@ create table if not exists public.fonds_stuurinfo_reserve (
   ondergrens  numeric,                  -- NULL = geen formele band → monitoring
   bovengrens  numeric,
   volgorde    integer not null default 0,
+  invoer_bron text,                     -- T14: 'handmatig'|'upload'|null (seed)
   bijgewerkt  timestamptz not null default now(),
   primary key (fonds_id, periode, reserve_key),
   foreign key (fonds_id, periode)
@@ -1622,6 +1626,47 @@ create table if not exists public.fonds_klantbeeld_cohort (
 );
 -- RLS (per tabel, identiek T8-patroon): select = eigen fonds; insert/update =
 -- eigen fonds + rol voorzitter/beheerder (WITH CHECK); geen delete-policy.
+
+-- ============================================================
+--  Increment T14 (2026_07_17) — beheer-invoerlaag stuurinformatie (audit + RPC)
+--  Bron van waarheid: 2026_07_17_t14_stuurinfo_invoer_audit.sql +
+--  2026_07_17_t14b_stuurinfo_audit_hardening.sql (reviewfixes: capture =
+--  VOLLEDIGE rij to_jsonb(new/old) minus 'bijgewerkt'; log-INSERT-policy met
+--  actor-check gebruiker_id = auth.uid(); RPC met waarde-typechecks,
+--  bron-allowlist en vaste reserve-labels; revoke execute from PUBLIC).
+--  Zie decisions/0075.
+--  * invoer_bron text-kolom (nullable; CHECK null|'handmatig'|'upload') op
+--    fonds_stuurinfo_periode/kpi/reeks/reserve — bron-marker die het schrijfpad
+--    meestuurt en de audittrigger naar het log kopieert (seed = null).
+--  * fonds_stuurinfo_periode.volgorde is DETERMINISTISCH: jaar*4 + kwartaal
+--    (2026Q2 → 8106), zodat historische periodes altijd goed sorteren.
+--  * RPC stuurinfo_balans_opslaan(p_periode, p_peildatum, p_bron, p_invoer_bron,
+--    p_activa jsonb, p_passiva jsonb, p_reserves jsonb, p_financieringsgraad)
+--    — SECURITY INVOKER (RLS geldt onverkort; fonds_id uit auth.uid(), geen
+--    parameter): registry + 10 balans-leaves + 8 reserves + FG-KPI in één
+--    transactie. Defense-in-depth in de functie: key-allowlists, balans-
+--    evenwicht (tolerantie 0.005, 'BALANS_SLUIT_NIET'), gekoppelde-standen-
+--    check ('GEKOPPELDE_STAND_ONGELIJK').
+-- ============================================================
+
+-- Append-only auditspoor van stuurinformatie-invoer/upload (T14). Gevuld door
+-- AFTER-trigger fn_fonds_stuurinfo_capture op de vier fonds_stuurinfo_*-data-
+-- tabellen (T8b-patroon: atomisch, niet overslaanbaar; no-op-updates loggen
+-- niet). Nooit UPDATE/DELETE (fn_log_append_only-triggers). RLS: lezen = eigen
+-- fonds; insert = eigen fonds + voorzitter/beheerder (WITH CHECK).
+create table if not exists public.fonds_stuurinfo_log (
+  id             uuid primary key default gen_random_uuid(),
+  fonds_id       uuid not null references public.fondsen(id) on delete cascade,
+  periode        text not null,
+  tabel          text not null check (tabel in ('periode','kpi','reeks','reserve')),
+  veld_key       text not null,          -- bv. 'balans_passiva.ev_soli', 'solidariteitsreserve'
+  oude_waarde    jsonb,                  -- null bij INSERT (nieuwe rij)
+  nieuwe_waarde  jsonb not null,
+  invoer_bron    text,                   -- 'handmatig'|'upload'|null (seed/migratie)
+  gebruiker_id   uuid,                   -- auth.uid(); null bij owner-/seed-writes
+  gebruiker_naam text,                   -- naam-snapshot (T8b-patroon)
+  aangemaakt     timestamptz not null default now()
+);
 
 -- ── 14. AI Output Quality & Governance Lab (AQLab, aqlab_*) ──────────────────
 -- Werkticket AQL-1 (2026-07-10). AUTHORITATIEF = de migraties:

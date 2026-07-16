@@ -1,0 +1,56 @@
+import { NextResponse } from "next/server";
+import * as XLSX from "xlsx";
+import { createServerSupabase } from "@/core/lib/supabase-server";
+import { requireCapability } from "@/core/lib/capabilities";
+import { weigerAlsModuleUit } from "@/core/lib/module-guard";
+import { errorResponse } from "@/core/lib/api-errors";
+import { sjabloonAoa, SJABLOON_WERKBLAD } from "@/core/lib/stuurinfo-sjabloon";
+
+// ============================================================
+//  GET /api/stuurinformatie/beheer/sjabloon — download van het vaste
+//  Excel-sjabloon (T14). De inhoud komt uit de pure module (sjabloonAoa);
+//  roundtrip-garantie: de upload-parser herkent elk veld (sanity-getest).
+//  Zelfde gates als de rest van de invoerlaag (capability + module).
+// ============================================================
+
+export async function GET() {
+  try {
+    const supabase = await createServerSupabase();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+
+    const { data: profiel } = await supabase
+      .from("profielen")
+      .select("fonds_id")
+      .eq("id", user.id)
+      .single();
+    if (!profiel?.fonds_id)
+      return NextResponse.json({ error: "Geen fonds" }, { status: 400 });
+
+    const magBeheren = await requireCapability(user.id, "stuurinformatie.manage");
+    if (!magBeheren)
+      return NextResponse.json({ error: "Onvoldoende rechten" }, { status: 403 });
+
+    const weigering = await weigerAlsModuleUit(profiel.fonds_id, "stuurinformatie");
+    if (weigering) return weigering;
+
+    const werkboek = XLSX.utils.book_new();
+    const werkblad = XLSX.utils.aoa_to_sheet(sjabloonAoa());
+    // Kolombreedtes voor leesbaarheid (label / waarde / eenheid).
+    werkblad["!cols"] = [{ wch: 42 }, { wch: 14 }, { wch: 12 }];
+    XLSX.utils.book_append_sheet(werkboek, werkblad, SJABLOON_WERKBLAD);
+    const buffer = XLSX.write(werkboek, { type: "buffer", bookType: "xlsx" }) as Buffer;
+
+    return new NextResponse(new Uint8Array(buffer), {
+      headers: {
+        "Content-Type":
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": 'attachment; filename="stuurinformatie-sjabloon.xlsx"',
+      },
+    });
+  } catch (e) {
+    return errorResponse("stuurinformatie.beheer.sjabloon.GET", e);
+  }
+}

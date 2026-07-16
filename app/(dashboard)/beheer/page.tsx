@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { requireCapability } from "@/core/lib/capabilities";
 import BeheerClient from "./_components/BeheerClient";
@@ -22,6 +23,9 @@ export default async function BeheerPage() {
   // Fonds-configuratie volgt de capability (beheerder ÉN voorzitter dragen
   // fonds.config.manage) i.p.v. een hardcoded rol; consistent met de API-gate.
   const magConfigBeheren = await requireCapability(user.id, "fonds.config.manage");
+  // Stuurinformatie-invoer (T14): eigen sub-scherm, capability-gated
+  // (stuurinformatie.manage; UI-zichtbaarheid is cosmetisch — API + RLS gelden).
+  const magStuurinfoInvoeren = await requireCapability(user.id, "stuurinformatie.manage");
 
   return (
     <div className="p-8 max-w-6xl mx-auto w-full">
@@ -32,6 +36,23 @@ export default async function BeheerPage() {
           focusgebieden. Importeer de standaardset als startpunt.
         </p>
       </div>
+
+      {/* Stuurinformatie-invoerlaag (T14): periodes, balans/reserves, Excel-upload. */}
+      {magStuurinfoInvoeren && (
+        <Link
+          href="/beheer/stuurinformatie"
+          className="mb-8 flex items-center justify-between rounded-xl border border-line bg-white px-5 py-4 hover:bg-app-bg"
+        >
+          <div>
+            <div className="font-semibold text-ink">Stuurinformatie — bedragen invoeren</div>
+            <div className="text-sm text-muted mt-0.5">
+              Rapportageperiodes aanmaken, balans en reserves invoeren of via Excel-sjabloon
+              uploaden. Elke wijziging wordt append-only gelogd.
+            </div>
+          </div>
+          <span className="text-muted">›</span>
+        </Link>
+      )}
 
       {!magBeheren ? (
         <div className="rounded-xl border border-warn/30 bg-warn-tint p-4 text-warn-ink text-sm">

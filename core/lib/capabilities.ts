@@ -56,7 +56,14 @@ export type Capability =
   // zónder deze capability (onbekende rol / geen profiel) wordt server-side
   // geweigerd — beschikbaarheid ≠ autorisatie.
   | "stuurinformatie.view"
-  | "klantbeeld.view";
+  | "klantbeeld.view"
+  // Increment T14 (decisions/0075) — SCHRIJFrecht op de stuurinformatie-
+  // invoerlaag (Beheer › Stuurinformatie: periodes aanmaken, balans/reserves
+  // invoeren, Excel-upload). Fonds-breed, dus beheerder/voorzitter-gated
+  // (analoog aan fonds.config.manage) — consistent met de bestaande RLS-
+  // schrijfpolicy op de fonds_stuurinfo_*-tabellen (voorzitter/beheerder,
+  // WITH CHECK), die deze rolgate op DB-niveau dubbelt.
+  | "stuurinformatie.manage";
 
 /** Rol → toegekende capabilities. Bron-van-waarheid voor autorisatie in v2.
  *  `dossiers.manage` (TO §5: secretariaat/governance/admin) dekt het handmatig
@@ -81,6 +88,7 @@ export const ROL_CAPABILITIES: Record<string, Capability[]> = {
     "organisation.profile.manage",
     "fonds.config.manage",
     "stuurinformatie.view",
+    "stuurinformatie.manage",
     "klantbeeld.view",
   ],
   voorzitter: [
@@ -94,6 +102,7 @@ export const ROL_CAPABILITIES: Record<string, Capability[]> = {
     "profile.manage.own",
     "fonds.config.manage",
     "stuurinformatie.view",
+    "stuurinformatie.manage",
     "klantbeeld.view",
   ],
   // I-2-release: ALLE metadatavelden opengesteld voor bestuurders (huidige
