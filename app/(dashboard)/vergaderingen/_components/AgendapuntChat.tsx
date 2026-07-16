@@ -10,10 +10,13 @@
 // - Gesprekken worden per agendapunt opgeslagen in `gesprekken` met hetzelfde
 //   document_scope-payload als de AI-pagina, zodat een gesprek dat hier start
 //   ook in de historie van /ai terugkomt (en andersom hervat kan worden).
-// - Compacte weergave: inline [Bron N]-pills met een uitklapbaar
-//   "Onderbouwing en bronnen"-blok per antwoord (herleidbaarheid).
-// De marker-rendering is geconsolideerd in de gedeelde component CitatieTekst
-// (was hier eerst een eigen renderer — geaccepteerde schuld ADR 0036, opgelost).
+// - Weergave identiek aan de volledige assistent (/ai): inline [Bron N]-pills
+//   die naar de bronkaart scrollen en die kort oplichten, plus het rijke,
+//   standaard ingeklapte paneel "Onderbouwing en bronnen" met DOORKLIKBARE
+//   bronkaarten (link naar het origineel). Vervolg op ADR 0036: naast de
+//   marker-rendering delen /ai en dit component nu ook de bronkaart en het
+//   onderbouwingspaneel via AntwoordWeergave.tsx + OnderbouwingPaneel.tsx, zodat
+//   de eerdere divergentie (agenda kon niet doorklikken op bronnen) is opgeheven.
 // - Sinds 06-07 (herziening FO duiding, na toetsing externe bestuurder): de
 //   chat is HET enige instappunt. De losse knop "Genereer voorbereiding" is
 //   vervallen; de rijke voorbereiding (route met risicomatrix, procedures,
@@ -33,17 +36,11 @@ import {
   type Vervolgactie,
   type Antwoordmodus,
 } from "@/core/lib/vraagtype";
-import CitatieTekst from "./CitatieTekst";
-
-interface Bron {
-  document_id: string;
-  titel: string;
-  bron: string;
-  pagina: number | null;
-  paragraaf: string | null;
-  fragment: string;
-  heeft_origineel: boolean;
-}
+// Gedeelde weergave met de volledige assistent (/ai): identieke antwoord-render
+// (pills → scroll+highlight), rijk "Onderbouwing en bronnen"-paneel en
+// doorklikbare bronkaarten (naar het origineel). Zie AntwoordWeergave.tsx.
+import OnderbouwingPaneel, { type OnderbouwingMeta } from "../../ai/_components/OnderbouwingPaneel";
+import { renderAntwoord, Bronkaart, type Bron } from "../../ai/_components/AntwoordWeergave";
 
 interface Verduidelijking {
   vraag: string;
@@ -55,6 +52,11 @@ interface Bericht {
   rol: "gebruiker" | "ai";
   tekst: string;
   bronnen?: Bron[];
+  // Increment I-1 (FO §11c) — controle-informatie voor het paneel "Onderbouwing
+  // en bronnen", identiek aan /ai. Bij de chat-route rijk gevuld; bij de
+  // voorbereiding-route minimaal (alleen aantalBronnen) — het paneel toont dan
+  // enkel de doorklikbare documentbronnen.
+  onderbouwing?: OnderbouwingMeta;
   inlineMeldingen?: InlineMelding[];
   verduidelijking?: Verduidelijking;
   // Inhoudelijke vervolgvragen (klikbaar), identiek aan de assistent (/ai): de
@@ -94,6 +96,13 @@ export default function AgendapuntChat({
     totaal: number;
   } | null>(null);
   const [openBronnen, setOpenBronnen] = useState<Set<number>>(new Set());
+  // Increment I-1 — pill → scroll+highlight (identiek aan /ai): welke bronkaart
+  // kort oplicht na een klik op een [Bron N]-pill.
+  const [highlight, setHighlight] = useState<{
+    berichtIdx: number;
+    bronIdx: number;
+  } | null>(null);
+  const highlightTimer = useRef<number | null>(null);
   const [initGedaan, setInitGedaan] = useState(false);
 
   const fondsIdRef = useRef<string>("");
@@ -217,6 +226,7 @@ export default function AgendapuntChat({
       let volledig = "";
       let bronnenData: Bron[] | undefined;
       let inlineMeldingenData: InlineMelding[] | undefined;
+      let onderbouwingData: OnderbouwingMeta | undefined;
 
       const schrijfAi = () => {
         setBerichten((prev) => {
@@ -227,6 +237,7 @@ export default function AgendapuntChat({
             tekst: volledig,
             bronnen: bronnenData,
             inlineMeldingen: inlineMeldingenData,
+            onderbouwing: onderbouwingData,
           };
           return kopie;
         });
@@ -250,6 +261,9 @@ export default function AgendapuntChat({
         if (evt.type === "meta") {
           bronnenData = evt.bronnen;
           inlineMeldingenData = evt.inline_meldingen ?? [];
+          // De voorbereiding-route levert alleen bronnen + meldingen; het paneel
+          // "Onderbouwing en bronnen" toont dan de doorklikbare documentbronnen.
+          onderbouwingData = { aantalBronnen: evt.bronnen?.length ?? 0 };
         } else if (evt.type === "delta") {
           volledig += evt.text || "";
           if (!aiToegevoegd) {
@@ -262,6 +276,7 @@ export default function AgendapuntChat({
                 tekst: volledig,
                 bronnen: bronnenData,
                 inlineMeldingen: inlineMeldingenData,
+                onderbouwing: onderbouwingData,
               },
             ]);
           } else {
@@ -306,6 +321,7 @@ export default function AgendapuntChat({
             tekst: volledig,
             bronnen: bronnenData,
             inlineMeldingen: inlineMeldingenData,
+            onderbouwing: onderbouwingData,
           },
         ];
         berichtenRef.current = finale;
@@ -452,6 +468,7 @@ export default function AgendapuntChat({
       let volledig = "";
       let bronnenData: Bron[] | undefined;
       let inlineMeldingenData: InlineMelding[] | undefined;
+      let onderbouwingData: OnderbouwingMeta | undefined;
       let vervolgvragenData: string[] | undefined;
       let verduidelijkingActief = false;
 
@@ -464,6 +481,7 @@ export default function AgendapuntChat({
             tekst: volledig,
             bronnen: bronnenData,
             inlineMeldingen: inlineMeldingenData,
+            onderbouwing: onderbouwingData,
           };
           return kopie;
         });
@@ -483,6 +501,41 @@ export default function AgendapuntChat({
           vervolgvragen?: string[];
           vraag?: string;
           opties?: { intent: "fonds" | "algemeen"; label: string }[];
+          // Increment I-1/I-2/I-3 — controle-informatie voor het paneel
+          // "Onderbouwing en bronnen" (identiek aan /ai).
+          antwoordmodus?: string;
+          antwoordmodus_label?: string;
+          peildatum?: string | null;
+          bronbasis?: string | null;
+          retrieval_modus?: string | null;
+          bron_intent?: "fonds" | "algemeen" | "gecombineerd" | null;
+          bron_vertrouwen?: "zeker" | "onzeker" | null;
+          alleen_fondsdocumenten?: boolean;
+          bron_intent_override?: boolean;
+          web_retrieval_actief?: boolean;
+          model_kennis?: { grond: "algemene_kennis" | "wetgeving"; instantie: string | null }[];
+          web_bronnen?: {
+            url: string;
+            titel: string;
+            domein: string;
+            datum?: string | null;
+            normgewicht?: string | null;
+            ophaaldatum?: string | null;
+          }[];
+          profielsturing?: "actief" | "uitgeschakeld" | "geen-profiel" | null;
+          organisatieprofiel?: "actief" | "geen-profiel" | null;
+          organisatieprofiel_aspecten?: {
+            organisatietype: boolean;
+            uitvoerende_partijen: boolean;
+            omvang: boolean;
+            kernfeiten: boolean;
+            missie: boolean;
+            visie: boolean;
+            strategische_speerpunten: boolean;
+            risicohouding: boolean;
+            peildatum: string | null;
+          } | null;
+          document_gericht?: boolean;
         };
         try {
           evt = JSON.parse(regel);
@@ -510,6 +563,30 @@ export default function AgendapuntChat({
         } else if (evt.type === "meta") {
           bronnenData = evt.bronnen;
           inlineMeldingenData = evt.inline_meldingen ?? [];
+          // Rijke controle-informatie naar het paneel "Onderbouwing en bronnen"
+          // (identiek aan /ai). De model_knowledge/webbronnen volgen in 'done'.
+          onderbouwingData = {
+            bronbasis: evt.bronbasis ?? null,
+            antwoordmodusLabel: evt.antwoordmodus_label ?? evt.antwoordmodus ?? null,
+            antwoordmodus: evt.antwoordmodus ?? null,
+            retrievalModus: evt.retrieval_modus ?? null,
+            peildatum: evt.peildatum ?? null,
+            algemeneKennis: evt.bronbasis
+              ? /algemene kennis/i.test(evt.bronbasis)
+              : undefined,
+            aantalBronnen: evt.bronnen?.length ?? 0,
+            bronIntent: evt.bron_intent ?? null,
+            bronVertrouwen: evt.bron_vertrouwen ?? null,
+            alleenFondsdocumenten: evt.alleen_fondsdocumenten ?? null,
+            bronIntentOverride: evt.bron_intent_override ?? null,
+            webRetrievalActief: evt.web_retrieval_actief ?? false,
+            modelKennis: [],
+            profielsturing: evt.profielsturing ?? null,
+            organisatieprofiel: evt.organisatieprofiel ?? null,
+            organisatieprofielAspecten: evt.organisatieprofiel_aspecten ?? null,
+            documentGericht: evt.document_gericht ?? null,
+            vervolgvragen: [],
+          };
         } else if (evt.type === "progress") {
           if (typeof evt.batch === "number" && typeof evt.totaal === "number") {
             setAnalyseVoortgang({ batch: evt.batch, totaal: evt.totaal });
@@ -522,7 +599,7 @@ export default function AgendapuntChat({
             setAntwoordGestart(true);
             setBerichten((prev) => [
               ...prev,
-              { rol: "ai", tekst: volledig, bronnen: bronnenData, inlineMeldingen: inlineMeldingenData },
+              { rol: "ai", tekst: volledig, bronnen: bronnenData, inlineMeldingen: inlineMeldingenData, onderbouwing: onderbouwingData },
             ]);
           } else {
             schrijfAi();
@@ -531,6 +608,17 @@ export default function AgendapuntChat({
           if (verduidelijkingActief) return;
           if (evt.inline_meldingen) inlineMeldingenData = evt.inline_meldingen;
           if (evt.vervolgvragen) vervolgvragenData = evt.vervolgvragen;
+          // Increment I-3 — afgeleide algemene-kennisbronnen + geverifieerde
+          // webbronnen komen in het 'done'-event en horen in het paneel (als /ai).
+          if (onderbouwingData) {
+            onderbouwingData = {
+              ...onderbouwingData,
+              modelKennis: evt.model_kennis ?? onderbouwingData.modelKennis ?? [],
+              webRetrievalActief:
+                evt.web_retrieval_actief ?? onderbouwingData.webRetrievalActief ?? false,
+              webBronnen: evt.web_bronnen ?? onderbouwingData.webBronnen ?? [],
+            };
+          }
           schrijfAi();
         } else if (evt.type === "error") {
           if (!aiToegevoegd) {
@@ -566,6 +654,7 @@ export default function AgendapuntChat({
             tekst: volledig,
             bronnen: bronnenData,
             inlineMeldingen: inlineMeldingenData,
+            onderbouwing: onderbouwingData,
             vervolgvragen: vervolgvragenData,
           },
         ];
@@ -601,6 +690,23 @@ export default function AgendapuntChat({
       else n.add(idx);
       return n;
     });
+  }
+
+  // Increment I-1 — klik op een [Bron N]-pill: open het (standaard ingeklapte)
+  // paneel "Onderbouwing en bronnen", scrol naar de betreffende kaart en licht
+  // die kort op. Zelfde gedrag als de volledige assistent (/ai).
+  function scrollNaarBron(berichtIdx: number, bronIdx: number) {
+    setOpenBronnen((s) => new Set(s).add(berichtIdx));
+    window.setTimeout(() => {
+      const el = document.getElementById(`bron-${berichtIdx}-${bronIdx}`);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 60);
+    setHighlight({ berichtIdx, bronIdx });
+    if (highlightTimer.current) window.clearTimeout(highlightTimer.current);
+    highlightTimer.current = window.setTimeout(() => {
+      setHighlight(null);
+      highlightTimer.current = null;
+    }, 2000);
   }
 
   // Contextbewuste vervolgactie (FO §13), identiek aan de assistent: een
@@ -680,11 +786,7 @@ export default function AgendapuntChat({
                       </div>
                     )}
                     <div className="text-sm text-ink leading-relaxed">
-                      <CitatieTekst
-                        tekst={b.tekst}
-                        bronnen={b.bronnen}
-                        onBronKlik={() => toggleBronnen(idx)}
-                      />
+                      {renderAntwoord(b.tekst, b.bronnen, idx, highlight, scrollNaarBron)}
                     </div>
                     {b.verduidelijking && b.verduidelijking.opties.length > 0 && (
                       <div className="flex gap-2 mt-2">
@@ -700,42 +802,31 @@ export default function AgendapuntChat({
                         ))}
                       </div>
                     )}
-                    {b.bronnen && b.bronnen.length > 0 && (
-                      <div className="mt-2 border-t border-line pt-1.5">
-                        <button
-                          onClick={() => toggleBronnen(idx)}
-                          className="text-[11px] font-medium text-muted hover:text-ink"
-                        >
-                          {openBronnen.has(idx) ? "▾" : "▸"} Onderbouwing en bronnen (
-                          {b.bronnen.length})
-                        </button>
-                        {openBronnen.has(idx) && (
-                          <div className="mt-1.5 space-y-1.5">
-                            {b.bronnen.map((bron, i) => (
-                              <div
+                    {(b.onderbouwing || (b.bronnen && b.bronnen.length > 0)) && (
+                      <OnderbouwingPaneel
+                        meta={{
+                          ...(b.onderbouwing ?? {}),
+                          aantalBronnen: b.bronnen?.length ?? 0,
+                        }}
+                        open={openBronnen.has(idx)}
+                        onToggle={() => toggleBronnen(idx)}
+                        ankerId={`onderbouwing-${idx}`}
+                      >
+                        {b.bronnen && b.bronnen.length > 0
+                          ? b.bronnen.map((bron, i) => (
+                              <Bronkaart
                                 key={i}
-                                className="text-[11px] bg-app-bg border border-line rounded px-2 py-1.5"
-                              >
-                                <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-accent text-white text-[9px] font-semibold mr-1.5">
-                                  {i + 1}
-                                </span>
-                                <span className="font-medium text-ink">{bron.titel}</span>
-                                {bron.pagina != null && (
-                                  <span className="text-muted"> · p. {bron.pagina}</span>
-                                )}
-                                {bron.paragraaf && (
-                                  <span className="text-muted"> · {bron.paragraaf}</span>
-                                )}
-                                {bron.fragment && (
-                                  <div className="text-muted mt-0.5 line-clamp-2">
-                                    “{bron.fragment}”
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
+                                idx={i}
+                                bron={bron}
+                                idVoorScroll={`bron-${idx}-${i}`}
+                                gehighlight={
+                                  highlight?.berichtIdx === idx &&
+                                  highlight?.bronIdx === i
+                                }
+                              />
+                            ))
+                          : null}
+                      </OnderbouwingPaneel>
                     )}
                     {b.vervolgvragen && b.vervolgvragen.length > 0 && (
                       <div className="mt-2 flex flex-wrap gap-1.5">
