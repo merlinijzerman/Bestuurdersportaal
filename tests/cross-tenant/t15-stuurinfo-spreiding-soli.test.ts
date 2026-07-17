@@ -120,17 +120,21 @@ test("T15 — spreiding: bandgrenzen nullable, maar orde en bereik worden getoet
   assert.equal(valideerSpreidingInvoer(omgekeerd).ok, false, "onder > boven moet geweigerd worden");
 });
 
+// T17 (decisions/0078): de vulling-allowlist is nog DRIE invoerbronnen; het
+// netto langleven-resultaat is afgeleid uit tab 3 (reeks langleven) en bestaat
+// bewust niet meer als invoer-key (micro_langleven/langleven → 400).
 const geldigeSoli = () => ({
   type: "solidariteit",
   periode: "2026Q2",
   invoer_bron: "handmatig",
-  vulling: { premie: 1.1, rendement: 4.6, micro_langleven: -0.6, overrendementsbijdrage: 4.9 },
+  vulling: { premie: 1.1, rendement: 4.6, overrendementsbijdrage: 4.9 },
   uitdeling: 0,
   grenzen: { ondergrens: 1.5, bovengrens: 5.0 },
 });
 
-test("T15 — solidariteit: afgeleide/onbekende keys in vulling → 400-vorm", () => {
-  for (const afgeleid of ["netto_vulling", "beginstand", "eindstand", "nep"]) {
+test("T15/T17 — solidariteit: afgeleide/onbekende keys in vulling → 400-vorm", () => {
+  // micro_langleven en langleven zijn afgeleid (tab 3) — geen invoer meer.
+  for (const afgeleid of ["netto_vulling", "beginstand", "eindstand", "micro_langleven", "langleven", "nep"]) {
     const body = geldigeSoli() as Record<string, unknown>;
     body.vulling = { ...geldigeSoli().vulling, [afgeleid]: 1 };
     const r = valideerSolidariteitInvoer(body);
@@ -139,7 +143,7 @@ test("T15 — solidariteit: afgeleide/onbekende keys in vulling → 400-vorm", (
   }
 });
 
-test("T15 — solidariteit: micro-langleven mag negatief; uitdeling < 0 → 422", () => {
+test("T15/T17 — solidariteit: vulling mag ±; uitdeling < 0 → 422", () => {
   assert.equal(valideerSolidariteitInvoer(geldigeSoli()).ok, true, "±-vulling is geldig");
   const negatief = geldigeSoli();
   negatief.uitdeling = -1;
@@ -150,7 +154,7 @@ test("T15 — solidariteit: micro-langleven mag negatief; uitdeling < 0 → 422"
 
 test("T15 — solidariteit: ontbrekende bron of grenzen-object → 400", () => {
   const zonderBron = geldigeSoli() as Record<string, unknown>;
-  zonderBron.vulling = { premie: 1.1, rendement: 4.6, micro_langleven: -0.6 };
+  zonderBron.vulling = { premie: 1.1, rendement: 4.6 };
   assert.equal(valideerSolidariteitInvoer(zonderBron).ok, false);
 
   const zonderGrenzen = geldigeSoli() as Record<string, unknown>;
@@ -191,12 +195,16 @@ test("T15 — geen soli_band-kpi's (band = reserve-rij, dezelfde bron als tab 1)
   );
 });
 
-test("T15 — micro-langleven is één reeks-punt (soli_vulling.micro_langleven), geen tweede opslag", () => {
+test("T15 — micro-langleven was in de T15-seed één reeks-punt (soli_vulling), geen kpi-duplicaat", () => {
+  // T15-tijdlijn: het biometrische resultaat leefde als reeks-punt
+  // soli_vulling.micro_langleven (geen tweede kpi-opslag). T17 (decisions/0078)
+  // vervangt dit door reader-afleiding uit de langleven-reeks en ruimt het
+  // punt in t17b op — zie de dedicated T17-test voor de nieuwe invariant.
   const seed = lees(SEED_MIGRATIE);
-  assert.ok(seed.includes("'micro_langleven'"), "seed vult het micro-langleven-punt");
+  assert.ok(seed.includes("'micro_langleven'"), "T15-seed vulde het micro-langleven-punt");
   assert.ok(
     !/kpi[\s\S]{0,400}micro_langleven/i.test(seed.replace(/--.*$/gm, "")),
-    "micro-langleven mag niet óók als kpi bestaan (één bron met tab 3)"
+    "micro-langleven bestond niet óók als kpi (één bron)"
   );
 });
 

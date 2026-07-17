@@ -54,6 +54,9 @@ SQL_T14="supabase/checks/2026_07_17_t14_cross_tenant.sql"
 SQL_T15="supabase/checks/2026_07_17_t15_cross_tenant.sql"
 # Increment T16 — tabs 6/7 (operationeel/premie): RPC-rolgate + mutatie-consistentie + één-bron-ultimo.
 SQL_T16="supabase/checks/2026_07_18_t16_cross_tenant.sql"
+# Increment T17 — tab 3 (biometrie): reeks-isolatie langleven/risicodekking + één-bron-koppeling
+# (soli SOLI_LANGLEVEN_ONTBREEKT; oper OPER_BIOMETRIE_/PREMIE_ONTBREEKT + som-check) + deny-delete.
+SQL_T17="supabase/checks/2026_07_19_t17_cross_tenant.sql"
 # AQLab (AQL-1) — provider-globale aqlab_-tabellen: RLS-aan + append-only +
 # synthetic-CHECK + release-beslisregel + deny-by-default (geen tenant-lees/schrijf).
 SQL_AQLAB="supabase/checks/2026_07_10_aqlab_cross_tenant.sql"
@@ -117,6 +120,9 @@ echo
 echo "-- T16 (stuurinfo tabs 6/7: oper/premie-RPC-rolgate + mutatie-consistentie + één-bron-ultimo) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_T16"
 echo
+echo "-- T17 (stuurinfo tab 3 biometrie: reeks-isolatie + één-bron-koppeling soli/oper + deny-delete) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_T17"
+echo
 echo "-- AQLab (aqlab_: RLS-aan + append-only + synthetic-CHECK + release-beslisregel + deny-by-default) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_AQLAB"
 echo
@@ -136,5 +142,6 @@ echo "  T13 stuurinfo-periodemodel + reserves cross-tenant + rolgate + deny-dele
 echo "  T14 stuurinfo-invoerlaag auditlog + append-only + capture-trigger + RPC-rolgate (DB-laag)"
 echo "  T15 stuurinfo tabs 4/5 soli-RPC + eindstand-consistentie + één-bron-band (DB-laag)"
 echo "  T16 stuurinfo tabs 6/7 oper/premie-RPC + mutatie-consistentie + één-bron-ultimo (DB-laag)"
+echo "  T17 stuurinfo tab 3 biometrie reeks-isolatie + één-bron-koppeling soli/oper + deny-delete (DB-laag)"
 echo "  AQLab aqlab_ RLS-aan + append-only + synthetic + beslisregel + deny-by-default (DB-laag)"
 echo "============================================================================"

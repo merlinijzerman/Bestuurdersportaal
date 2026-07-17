@@ -24,6 +24,12 @@
 //  - WERKHYPOTHESE (compliancegevoelig, valideren met actuaris/uitvoerder):
 //    de TWK-/verrekeningsposten zijn fondsspecifiek/transitiegerelateerd;
 //    definities en structurele terugkeer zijn niet bevestigd.
+//  - T17 (decisions/0078): de resultaten PP/WZP en AO/PVI (tab 3) zijn
+//    AFGELEIDE mutatieregels in de ontwikkeling (na 'Verrekening reserves'):
+//    resultaat = binnengekomen risicopremie (tab 7, premie_component) +
+//    toegekende dekkingen (tab 3, risicodekking). Eén bron — nooit hier
+//    ingevoerd; de leeslaag injecteert de waarden en de RPC-check telt ze
+//    hard mee (vorige + som(8) + r_ppwzp + r_aopvi = stand).
 // ============================================================================
 
 import { leidReserveStatusAf, type ReserveStatus } from "./stuurinfo-balans";
@@ -50,6 +56,32 @@ export const OPER_MUTATIE_DEFINITIES = [
 export type OperMutatieKey = (typeof OPER_MUTATIE_DEFINITIES)[number]["key"];
 
 export const OPER_MUTATIE_KEYS = OPER_MUTATIE_DEFINITIES.map((d) => d.key) as OperMutatieKey[];
+
+/** De AFGELEIDE resultaatregels uit tab 3 (decisions/0078) — nooit opgeslagen;
+ *  de leeslaag injecteert de waarden (risicopremie tab 7 + toegekend tab 3). */
+export const OPER_RESULTAAT_DEFINITIES = [
+  { key: "resultaat_ppwzp", label: "Resultaat PP/WZP (tab 3)", volgorde: 7 },
+  { key: "resultaat_aopvi", label: "Resultaat AO/PVI (tab 3)", volgorde: 8 },
+] as const;
+
+export type OperResultaatKey = (typeof OPER_RESULTAAT_DEFINITIES)[number]["key"];
+
+export const OPER_RESULTAAT_KEYS =
+  OPER_RESULTAAT_DEFINITIES.map((d) => d.key) as OperResultaatKey[];
+
+/** Volledige ontwikkelingsvolgorde: 6 ingevoerde bronnen, de 2 afgeleide
+ *  resultaatregels (na 'Verrekening reserves'), dan overig + kosten. */
+export const OPER_ONTWIKKELING_DEFINITIES: ReadonlyArray<{
+  readonly key: string;
+  readonly label: string;
+  readonly volgorde: number;
+}> = [
+  ...OPER_MUTATIE_DEFINITIES.filter((d) => d.volgorde <= 6),
+  ...OPER_RESULTAAT_DEFINITIES,
+  ...OPER_MUTATIE_DEFINITIES
+    .filter((d) => d.volgorde > 6)
+    .map((d) => ({ key: d.key, label: d.label, volgorde: d.volgorde + 2 })),
+];
 
 export const OPER_KOSTEN_DEFINITIES = [
   { key: "uitvoeringskosten", label: "Uitvoeringskosten", volgorde: 1 },
@@ -100,6 +132,10 @@ export type OperKostenOverzicht = {
 /** De operationeel-gegevens van één periode zoals de leeslaag ze aanlevert. */
 export type OperPeriodeBron = {
   mutaties: MutatieBron[];
+  /** AFGELEIDE resultaten uit tab 3/7 (risicopremie + toegekend — één bron);
+   *  null = biometrie-/premie-invoer (nog) niet compleet. */
+  resultaatPpwzp: number | null;
+  resultaatAopvi: number | null;
   /** Oper-stand uit fonds_stuurinfo_reserve (balansbron) = de ultimo. */
   stand: number | null;
   /** kpi's — € mln; null = (nog) niet ingevoerd. */
@@ -128,6 +164,24 @@ export type OperOntwikkeling = Ontwikkeling & {
 
 const rondAf1 = (x: number): number => Math.round(x * 10) / 10;
 
+/** Combineert de ingevoerde mutaties met de twee afgeleide resultaatregels
+ *  (tab 3) tot één bronnenlijst voor de generieke ontwikkelings-afleiding. */
+function metResultaten(
+  mutaties: MutatieBron[],
+  resultaatPpwzp: number | null,
+  resultaatAopvi: number | null
+): MutatieBron[] {
+  return [
+    ...mutaties,
+    ...OPER_RESULTAAT_DEFINITIES.map((d) => ({
+      puntKey: d.key,
+      label: d.label,
+      volgorde: d.volgorde,
+      waarde: d.key === "resultaat_ppwzp" ? resultaatPpwzp : resultaatAopvi,
+    })),
+  ];
+}
+
 const bandPositie = (
   onder: number | null,
   boven: number | null,
@@ -146,7 +200,12 @@ export function leidOperationeelAf(
   bron: OperPeriodeBron,
   vorigeStand: number | null
 ): OperOntwikkeling {
-  const ontwikkeling = leidOntwikkelingAf(OPER_MUTATIE_DEFINITIES, bron.mutaties, bron.stand, vorigeStand);
+  const ontwikkeling = leidOntwikkelingAf(
+    OPER_ONTWIKKELING_DEFINITIES,
+    metResultaten(bron.mutaties, bron.resultaatPpwzp, bron.resultaatAopvi),
+    bron.stand,
+    vorigeStand
+  );
 
   const buffer = bron.stand !== null && bron.norm !== null ? bron.stand - bron.norm : null;
   const pctVanNorm =
@@ -169,9 +228,17 @@ export function leidOperationeelAf(
   };
 }
 
-/** Som van de kwartaalmutatie-bronnen zonder stand-anker (beheer-UI, live). */
-export function operTotaalMutatie(bronnen: MutatieBron[]): number | null {
-  return somMutaties(OPER_MUTATIE_DEFINITIES, bronnen);
+/** Som van de kwartaalmutatie-bronnen + de afgeleide resultaatregels (tab 3),
+ *  zonder stand-anker (beheer-UI, live). Null zodra een bron ontbreekt. */
+export function operTotaalMutatie(
+  bronnen: MutatieBron[],
+  resultaatPpwzp: number | null,
+  resultaatAopvi: number | null
+): number | null {
+  return somMutaties(
+    OPER_ONTWIKKELING_DEFINITIES,
+    metResultaten(bronnen, resultaatPpwzp, resultaatAopvi)
+  );
 }
 
 /**

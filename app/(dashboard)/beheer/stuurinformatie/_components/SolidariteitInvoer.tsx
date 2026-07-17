@@ -1,25 +1,29 @@
 "use client";
 
 // ============================================================================
-//  Solidariteit-invoer (T15, tab 5 — decisions/0076).
-//  Vulling naar bron (premie, rendement, resultaat micro-langleven ±,
-//  overrendementsbijdrage) + uitdeling + bandgrenzen. Netto vulling en
-//  eindstand worden LIVE afgeleid (zelfde pure module als het dashboard);
-//  beginstand = soli-reservestand van de voorgaande periode (read-only).
+//  Solidariteit-invoer (T15, tab 5 — decisions/0076; bijgewerkt T17, 0078).
+//  Vulling naar invoerbron (premie, rendement, overrendementsbijdrage) +
+//  uitdeling + bandgrenzen. Het netto langleven-resultaat is AFGELEID uit de
+//  OPGESLAGEN Biometrisch-sectie (tab 3) — read-only regel, geen invoerveld.
+//  Netto vulling en eindstand worden LIVE afgeleid (zelfde pure module als
+//  het dashboard); beginstand = soli-reservestand voorgaande periode.
 //
-//  Kernregels (decisions/0076):
+//  Kernregels (decisions/0076 + 0078):
 //  - De soli-STAND komt uit de balans-save (gekoppelde reserve) — hier alleen
 //    zichtbaar als anker. Ontbreekt de reserve-rij: expliciete blokker
 //    ("sla eerst de balans op") vóór de save i.p.v. een 422 erna.
 //  - HARDE consistentie: beginstand + netto − uitdeling moet de balans-stand
 //    zijn; de RPC weigert anders (SOLI_EINDSTAND_ONGELIJK). De UI blokkeert
 //    dezelfde afwijking vooraf (UX-principe: blokkers expliciet).
-//  - micro-langleven = het biometrische resultaat (tab 3) — één bron.
+//  - Netto langleven = het biometrische resultaat (tab 3) — één bron; de RPC
+//    leest de langleven-reeks zelf (SOLI_LANGLEVEN_ONTBREEKT → blokker hier).
 //  - De bandbreedte hier is DE bron voor het tab 1-stoplicht (reserve-rij).
 // ============================================================================
 
 import {
   SOLI_VULLING_DEFINITIES,
+  SOLI_VULLING_INVOER_DEFINITIES,
+  SOLI_LANGLEVEN_POST,
   SOLI_TOLERANTIE,
   nettoVullingVan,
 } from "@/core/lib/stuurinfo-soli";
@@ -30,6 +34,9 @@ type Props = {
   velden: VeldState;
   huidig: Snapshot;
   referentie: Snapshot | null;
+  /** AFGELEID netto langleven-resultaat uit de opgeslagen Biometrisch-sectie
+   *  (tab 3, één bron); null = biometrie-invoer (nog) niet compleet. */
+  langlevenNetto: number | null;
   zetVeld: (key: string, waarde: string) => void;
   zetGrens: (veld: "ondergrens" | "bovengrens", waarde: string) => void;
   opslaan: () => void;
@@ -46,6 +53,7 @@ export default function SolidariteitInvoer({
   velden,
   huidig,
   referentie,
+  langlevenNetto,
   zetVeld,
   zetGrens,
   opslaan,
@@ -58,14 +66,17 @@ export default function SolidariteitInvoer({
   const beginstand = referentie?.soli.reserveStand ?? null;
 
   // Live afleiding — cosmetisch, via dezelfde pure module (nettoVullingVan +
-  // SOLI_TOLERANTIE) als leeslaag en RPC-spiegel; de RPC dwingt hard af.
+  // SOLI_TOLERANTIE) als leeslaag en RPC-spiegel; de RPC dwingt hard af. De
+  // langleven-post komt uit de OPGESLAGEN biometrie-invoer (tab 3, één bron) —
+  // de RPC leest bij de save dezelfde reeks.
   const netto = nettoVullingVan(
-    SOLI_VULLING_DEFINITIES.map((d) => ({
+    SOLI_VULLING_INVOER_DEFINITIES.map((d) => ({
       puntKey: d.key,
       label: null,
       volgorde: d.volgorde,
       waarde: parseNlGetal(velden.soli[d.key]),
-    }))
+    })),
+    langlevenNetto
   );
   const uitdeling = parseNlGetal(velden.soli.uitdeling);
   const eindstand =
@@ -77,7 +88,10 @@ export default function SolidariteitInvoer({
     reserveStand !== null &&
     Math.abs(eindstand - reserveStand) >= SOLI_TOLERANTIE;
 
-  const verplichtLeeg = netto === null || uitdeling === null;
+  const invoerLeeg =
+    SOLI_VULLING_INVOER_DEFINITIES.some((d) => parseNlGetal(velden.soli[d.key]) === null) ||
+    uitdeling === null;
+  const langlevenOntbreekt = langlevenNetto === null;
   const reserveOntbreekt = reserveStand === null;
   // Niet-leeg maar onparseerbaar grensveld blokkeert de save: anders zou een
   // typefout de ABTN-band stilzwijgend als null (= geen grens) wegschrijven
@@ -89,7 +103,13 @@ export default function SolidariteitInvoer({
   // en toont het dashboard hem teruggerekend; opslaan kan gewoon (de RPC slaat
   // de eindstand-check dan over).
   const magOpslaan =
-    !bezig && !uitgeschakeld && !verplichtLeeg && !reserveOntbreekt && !wijktAf && !ongeldigeGrens;
+    !bezig &&
+    !uitgeschakeld &&
+    !invoerLeeg &&
+    !langlevenOntbreekt &&
+    !reserveOntbreekt &&
+    !wijktAf &&
+    !ongeldigeGrens;
 
   return (
     <section id="solidariteit" className="rounded-xl border border-line bg-white p-5">
@@ -110,6 +130,14 @@ export default function SolidariteitInvoer({
         </div>
       )}
 
+      {langlevenOntbreekt && (
+        <div className="mb-4 rounded-lg border border-warn/30 bg-warn-tint px-4 py-3 text-sm text-warn-ink">
+          <strong>Eerst Biometrisch opslaan:</strong> het netto langleven-resultaat komt uit de
+          sectie 3 · Biometrisch (één bron, tab 3). Sla die sectie eerst op; daarna kan de vulling
+          hier worden vastgelegd.
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         <div>
           <label className="block text-xs font-medium text-muted mb-1">Beginstand (€ mln)</label>
@@ -120,20 +148,32 @@ export default function SolidariteitInvoer({
             className="w-full rounded-lg border border-app-line-strong bg-app-bg px-3 py-2 text-sm text-right text-muted"
           />
         </div>
-        {SOLI_VULLING_DEFINITIES.map((d) => (
-          <div key={d.key}>
-            <label className="block text-xs font-medium text-muted mb-1">
-              {d.label} (€ mln{d.key === "micro_langleven" ? ", ±" : ""})
-            </label>
-            <input
-              value={velden.soli[d.key]}
-              onChange={(e) => zetVeld(d.key, e.target.value)}
-              disabled={uitgeschakeld}
-              inputMode="decimal"
-              className="w-full rounded-lg border border-app-line-strong px-3 py-2 text-sm text-right disabled:opacity-50"
-            />
-          </div>
-        ))}
+        {SOLI_VULLING_DEFINITIES.map((d) =>
+          d.key === SOLI_LANGLEVEN_POST.key ? (
+            <div key={d.key}>
+              <label className="block text-xs font-medium text-muted mb-1">
+                {d.label} (€ mln, uit 3 · Biometrisch)
+              </label>
+              <input
+                value={langlevenNetto === null ? "—" : fmt1(langlevenNetto)}
+                readOnly
+                disabled
+                className="w-full rounded-lg border border-app-line-strong bg-app-bg px-3 py-2 text-sm text-right text-muted"
+              />
+            </div>
+          ) : (
+            <div key={d.key}>
+              <label className="block text-xs font-medium text-muted mb-1">{d.label} (€ mln, ±)</label>
+              <input
+                value={velden.soli[d.key]}
+                onChange={(e) => zetVeld(d.key, e.target.value)}
+                disabled={uitgeschakeld}
+                inputMode="decimal"
+                className="w-full rounded-lg border border-app-line-strong px-3 py-2 text-sm text-right disabled:opacity-50"
+              />
+            </div>
+          )
+        )}
         <div>
           <label className="block text-xs font-medium text-muted mb-1">Uitdeling (€ mln)</label>
           <input
@@ -201,9 +241,9 @@ export default function SolidariteitInvoer({
         >
           {bezig ? "Bezig…" : "Solidariteit opslaan & publiceren"}
         </button>
-        {verplichtLeeg && !reserveOntbreekt && (
+        {invoerLeeg && !reserveOntbreekt && (
           <span className="text-xs text-warn-ink">
-            Alle vier de bronnen en de uitdeling zijn verplicht (0 mag).
+            Alle drie de bronnen en de uitdeling zijn verplicht (0 mag).
           </span>
         )}
         {ongeldigeGrens && (
@@ -215,8 +255,8 @@ export default function SolidariteitInvoer({
 
       <p className="mt-3 text-xs text-muted">
         Bandbreedte uit de ABTN; voedt de stoplichtstatus in het Overzicht reserves (tab 1) — één
-        bron. Resultaat micro-langleven: onderbouwing komt uit tab 3 (Biometrische rendementen),
-        geen dubbele invoer.
+        bron. Het netto langleven-resultaat wordt afgeleid uit de sectie 3 · Biometrisch
+        (tab 3) — geen dubbele invoer.
       </p>
     </section>
   );

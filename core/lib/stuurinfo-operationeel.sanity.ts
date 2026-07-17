@@ -1,7 +1,9 @@
 // ============================================================
-//  Sanity-tests voor de Operationeel beleid-afleidingslogica (T16, decisions/0077).
+//  Sanity-tests voor de Operationeel beleid-afleidingslogica
+//  (T16, decisions/0077 — bijgewerkt in T17, decisions/0078).
 //
 //  Borgt de tab 6-specifieke logica bovenop stuurinfo-ontwikkeling.ts:
+//  de AFGELEIDE resultaatregels PP/WZP en AO/PVI (tab 3) in de ontwikkeling,
 //  buffer (stand − norm), % van norm, het hergebruikte stoplicht + de
 //  gauge-posities in € mln, en het kostendetail (realisatie vs. begroot,
 //  totalen alleen bij complete sets). De generieke primo/ultimo-logica
@@ -17,6 +19,8 @@ import {
   leidOperKostenAf,
   operTotaalMutatie,
   OPER_MUTATIE_KEYS,
+  OPER_RESULTAAT_KEYS,
+  OPER_ONTWIKKELING_DEFINITIES,
   type OperPeriodeBron,
 } from "./stuurinfo-operationeel";
 import type { MutatieBron } from "./stuurinfo-ontwikkeling";
@@ -35,19 +39,22 @@ const bron = (puntKey: string, waarde: number | null): MutatieBron => ({
   waarde,
 });
 
-// Seedwaarden Horizon 2026Q2 (2026_07_18_t16b): 8,0 + 1,0 = 9,0.
+// Seedwaarden Horizon 2026Q2 (t16b, herijkt in t17b): som(8) = −0,5;
+// resultaten (tab 3/7) +0,8 en +0,7 → totaal +1,0; 8,0 + 1,0 = 9,0.
 const mutatiesQ2 = [
   bron("premie_kostenopslag", 0.0),
   bron("beschermingsrendement", -0.1),
-  bron("overrendement", 1.3),
+  bron("overrendement", 0.4),
   bron("gemist_rendement_twk", 0.1),
   bron("twk_invaar", 0.2),
-  bron("verrekening_reserves", 0.2),
-  bron("overig", 0.1),
+  bron("verrekening_reserves", 0.0),
+  bron("overig", -0.3),
   bron("kosten", -0.8),
 ];
 const q2: OperPeriodeBron = {
   mutaties: mutatiesQ2,
+  resultaatPpwzp: 0.8,
+  resultaatAopvi: 0.7,
   stand: 9.0,
   norm: 8.0,
   bandOnder: 6.0,
@@ -58,7 +65,7 @@ console.log("stuurinfo-operationeel sanity-tests:");
 
 // ── Ontwikkeling (seed rekent rond via de generieke module) ─────────────────
 
-test("horizon Q2-seed: totaal mutatie +1,0; primo 8,0 → ultimo 9,0; consistent", () => {
+test("horizon Q2-seed: som(8) −0,5 + resultaten +1,5 = +1,0; primo 8,0 → ultimo 9,0; consistent", () => {
   const o = leidOperationeelAf(q2, 8.0);
   assert.ok(o.totaalMutatie !== null && Math.abs(o.totaalMutatie - 1.0) < 1e-9);
   assert.equal(o.primo, 8.0);
@@ -66,7 +73,30 @@ test("horizon Q2-seed: totaal mutatie +1,0; primo 8,0 → ultimo 9,0; consistent
   assert.equal(o.consistent, true);
 });
 
-test("horizon Q1-seed (oudste periode): som +0,8; primo teruggerekend 7,2", () => {
+test("de afgeleide resultaatregels staan ná 'Verrekening reserves' in de ontwikkeling", () => {
+  const o = leidOperationeelAf(q2, 8.0);
+  const keys = o.bronnen.map((b) => b.key);
+  assert.deepEqual(keys, OPER_ONTWIKKELING_DEFINITIES.map((d) => d.key));
+  assert.equal(keys.indexOf("resultaat_ppwzp"), keys.indexOf("verrekening_reserves") + 1);
+  assert.equal(keys.indexOf("resultaat_aopvi"), keys.indexOf("resultaat_ppwzp") + 1);
+  assert.equal(o.bronnen.find((b) => b.key === "resultaat_ppwzp")?.waarde, 0.8);
+  assert.equal(o.bronnen.find((b) => b.key === "resultaat_aopvi")?.waarde, 0.7);
+});
+
+test("ontbrekend resultaat (biometrie-/premie-invoer incompleet) → totaal null, geen vals alarm", () => {
+  const o = leidOperationeelAf({ ...q2, resultaatAopvi: null }, 8.0);
+  assert.equal(o.totaalMutatie, null);
+  assert.equal(o.ultimo, null);
+  assert.equal(o.consistent, true); // niets toetsbaars → geen vals alarm
+  assert.equal(o.bronnen.find((b) => b.key === "resultaat_aopvi")?.waarde, null);
+});
+
+test("een later gewijzigd resultaat → consistent false (drift-signaal)", () => {
+  const o = leidOperationeelAf({ ...q2, resultaatPpwzp: 1.8 }, 8.0);
+  assert.equal(o.consistent, false);
+});
+
+test("horizon Q1-seed (oudste periode): som(8) +0,8 + resultaten +1,3 = +2,1; primo teruggerekend 5,9", () => {
   const q1: OperPeriodeBron = {
     mutaties: [
       bron("premie_kostenopslag", 0.0),
@@ -78,21 +108,25 @@ test("horizon Q1-seed (oudste periode): som +0,8; primo teruggerekend 7,2", () =
       bron("overig", 0.1),
       bron("kosten", -0.7),
     ],
+    resultaatPpwzp: 0.7,
+    resultaatAopvi: 0.6,
     stand: 8.0,
     norm: 8.0,
     bandOnder: 6.0,
     bandBoven: 12.0,
   };
   const o = leidOperationeelAf(q1, null);
-  assert.ok(o.totaalMutatie !== null && Math.abs(o.totaalMutatie - 0.8) < 1e-9);
-  assert.ok(o.primo !== null && Math.abs(o.primo - 7.2) < 1e-9);
+  assert.ok(o.totaalMutatie !== null && Math.abs(o.totaalMutatie - 2.1) < 1e-9);
+  assert.ok(o.primo !== null && Math.abs(o.primo - 5.9) < 1e-9);
   assert.equal(o.consistent, true);
 });
 
-test("operTotaalMutatie vereist alle acht bronnen (geen halve som)", () => {
+test("operTotaalMutatie vereist alle acht bronnen + beide resultaten (geen halve som)", () => {
   assert.equal(OPER_MUTATIE_KEYS.length, 8);
-  assert.equal(operTotaalMutatie(mutatiesQ2.slice(0, 7)), null);
-  const som = operTotaalMutatie(mutatiesQ2);
+  assert.equal(OPER_RESULTAAT_KEYS.length, 2);
+  assert.equal(operTotaalMutatie(mutatiesQ2.slice(0, 7), 0.8, 0.7), null);
+  assert.equal(operTotaalMutatie(mutatiesQ2, null, 0.7), null);
+  const som = operTotaalMutatie(mutatiesQ2, 0.8, 0.7);
   assert.ok(som !== null && Math.abs(som - 1.0) < 1e-9);
 });
 

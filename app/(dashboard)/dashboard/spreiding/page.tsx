@@ -153,11 +153,11 @@ export default async function SpreidingPage({
       financieringsgraad={data.financieringsgraad}
     >
       {!data.gekozenPeriode ? (
-        <div className="bg-white rounded-xl border border-line p-5 text-sm text-muted">
+        <div className="si-card text-sm text-muted">
           Er zijn nog geen rapportageperiodes beschikbaar voor dit fonds.
         </div>
       ) : !heeftData ? (
-        <div className="bg-white rounded-xl border border-line p-5 text-sm text-muted">
+        <div className="si-card text-sm text-muted">
           Geen spreidingsdata beschikbaar voor {huidigLabel}. Een voorzitter of beheerder kan de
           kerncijfers invoeren via Beheer › Stuurinformatie (sectie Spreiding).
         </div>
@@ -168,7 +168,7 @@ export default async function SpreidingPage({
             className="grid gap-3"
             style={{ gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))" }}
           >
-            <div className="bg-white rounded-xl border border-line p-4">
+            <div className="si-kpi">
               <div className="text-xs text-muted">Financieringsgraad uitkeringsfase</div>
               <div className="text-2xl font-bold text-ink mt-1">
                 {data.afgeleid.financieringsgraad === null ? "—" : fmtPct(data.afgeleid.financieringsgraad)}
@@ -183,7 +183,7 @@ export default async function SpreidingPage({
                   : `${fgMutatie > 0 ? "▲ +" : fgMutatie < 0 ? "▼ −" : ""}${fmt1(Math.abs(fgMutatie))} %-pt t.o.v. ${vorigLabel}`}
               </div>
             </div>
-            <div className="bg-white rounded-xl border border-line p-4">
+            <div className="si-kpi">
               <div className="text-xs text-muted">Aanpassingsfactor (na spreiden)</div>
               <div
                 className={`text-2xl font-bold mt-1 ${
@@ -202,7 +202,7 @@ export default async function SpreidingPage({
               </div>
               <div className="text-xs text-muted mt-1">toegekend dit kwartaal</div>
             </div>
-            <div className="bg-white rounded-xl border border-line p-4">
+            <div className="si-kpi">
               <div className="text-xs text-muted">Spreidingsvermogen</div>
               <div className="text-2xl font-bold text-ink mt-1">
                 {data.afgeleid.spreidingsvermogen === null
@@ -211,7 +211,7 @@ export default async function SpreidingPage({
               </div>
               <div className="text-xs text-muted mt-1">nog uit te smeren</div>
             </div>
-            <div className="bg-white rounded-xl border border-line p-4">
+            <div className="si-kpi">
               <div className="text-xs text-muted">Bandbreedte</div>
               <div className="text-2xl font-bold text-ink mt-1">
                 {bandOnder !== null && bandBoven !== null ? `${fmt(bandOnder)}–${fmt(bandBoven)}%` : "—"}
@@ -221,7 +221,7 @@ export default async function SpreidingPage({
           </div>
 
           {/* Kerncijfertabel — ontwikkeling collectieve uitkeringsfase */}
-          <div className="bg-white rounded-xl border border-line p-5">
+          <div className="si-card">
             <div className="mb-4">
               <div className="font-semibold text-ink text-sm">
                 Ontwikkeling collectieve uitkeringsfase
@@ -233,15 +233,15 @@ export default async function SpreidingPage({
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="si-tabel">
                 <thead>
-                  <tr className="text-xs text-muted border-b border-line">
-                    <th className="text-left font-medium py-2 pr-3">Post</th>
-                    <th className="text-right font-medium py-2 pl-3 whitespace-nowrap">
+                  <tr>
+                    <th className="text-left">Post</th>
+                    <th className="text-right whitespace-nowrap">
                       {huidigLabel} <span className="font-normal">huidig</span>
                     </th>
                     {vorigLabel && (
-                      <th className="text-right font-medium py-2 pl-3 whitespace-nowrap">
+                      <th className="text-right whitespace-nowrap">
                         {vorigLabel} <span className="font-normal">vorig</span>
                       </th>
                     )}
@@ -266,7 +266,7 @@ export default async function SpreidingPage({
               </table>
             </div>
 
-            <div className="mt-4 bg-app-bg border-l-2 border-accent rounded-r-lg px-4 py-3 text-xs text-muted">
+            <div className="mt-4 si-note">
               <strong className="text-ink">Zo lees je dit:</strong> het{" "}
               <strong className="text-ink">spreidingsvermogen</strong> is het verschil tussen wat er
               is (beschikbaar) en wat nodig is voor de uitkeringen (voorziening). Een positief saldo
@@ -287,7 +287,7 @@ export default async function SpreidingPage({
           </div>
 
           {/* FG-trend met bandbreedte */}
-          <div className="bg-white rounded-xl border border-line p-5">
+          <div className="si-card">
             <div className="mb-4">
               <div className="font-semibold text-ink text-sm">
                 Financieringsgraad collectieve uitkeringsfase
@@ -318,7 +318,7 @@ export default async function SpreidingPage({
                     Bandbreedte
                   </span>
                 </div>
-                <div className="mt-3 bg-app-bg border-l-2 border-accent rounded-r-lg px-4 py-3 text-xs text-muted">
+                <div className="mt-3 si-note">
                   Verloop van de financieringsgraad van de collectieve uitkeringsfase over de
                   getoonde maanden, ten opzichte van de bandbreedte uit het spreidingsbeleid.
                 </div>
@@ -327,7 +327,7 @@ export default async function SpreidingPage({
           </div>
 
           {/* Evenwichtigheids-aandachtspunt (prototype) */}
-          <div className="bg-app-bg border-l-2 border-accent rounded-r-lg px-4 py-3 text-xs text-muted">
+          <div className="si-note">
             <strong className="text-ink">Aandachtspunt evenwichtigheid:</strong> uitsmeren schuift
             resultaat door de tijd — nieuwe gepensioneerden en zittende gepensioneerden delen anders
             in het spreidingsvermogen. Expliciet toetsen of dat evenwichtig uitpakt.
@@ -356,16 +356,16 @@ function SpreidingRij({
           <td colSpan={toonVorig ? 3 : 2} className="py-1" />
         </tr>
       )}
-      <tr className="border-b border-line last:border-0">
-        <td className={`py-2 pr-3 ${vet ? "font-semibold" : ""} text-ink`}>
+      <tr className="last:border-0">
+        <td className={`${vet ? "font-semibold" : ""} text-ink`}>
           {r.label}
           {r.afgeleid && <span className="text-muted text-xs italic"> (afgeleid)</span>}
         </td>
-        <td className={`py-2 pl-3 text-right tabular-nums whitespace-nowrap ${vet ? "font-semibold" : ""}`}>
+        <td className={`si-num whitespace-nowrap ${vet ? "font-semibold" : ""}`}>
           {celTekst(r, r.huidig)} <Pijl richting={r.richting} />
         </td>
         {toonVorig && (
-          <td className={`py-2 pl-3 text-right tabular-nums text-muted ${vet ? "font-semibold" : ""}`}>
+          <td className={`si-num text-muted ${vet ? "font-semibold" : ""}`}>
             {celTekst(r, r.vorig)}
           </td>
         )}

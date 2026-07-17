@@ -24,7 +24,13 @@ import {
   type BalansBronRij,
   type BalansEvenwicht,
 } from "./stuurinfo-balans";
-import { SOLI_VULLING_KEYS, type SoliVullingKey } from "./stuurinfo-soli";
+import { SOLI_VULLING_INVOER_KEYS, type SoliVullingInvoerKey } from "./stuurinfo-soli";
+import {
+  LANGLEVEN_KEYS,
+  RISICODEKKING_KEYS,
+  type LanglevenKey,
+  type RisicodekkingKey,
+} from "./stuurinfo-biometrie";
 import {
   OPER_MUTATIE_KEYS,
   OPER_KOSTEN_KEYS,
@@ -466,8 +472,10 @@ export function valideerSpreidingInvoer(body: unknown): SpreidingValidatie {
 export type SolidariteitInvoer = {
   periode: string;
   invoerBron: InvoerBron;
-  /** Vulling naar bron (±, € mln) — micro_langleven = biometrisch resultaat tab 3. */
-  vulling: Record<SoliVullingKey, number>;
+  /** Vulling naar bron (±, € mln) — drie invoerbronnen. Het netto langleven-
+   *  resultaat is AFGELEID uit tab 3 (reeks langleven) en bestaat bewust niet
+   *  in de vorm (decisions/0078 — allowlist-400). */
+  vulling: Record<SoliVullingInvoerKey, number>;
   uitdeling: number;
   /** Band solidariteitsreserve (zelfde vorm als de balans-payload — één bron). */
   grenzen: SoliGrenzen;
@@ -479,10 +487,10 @@ export type SolidariteitValidatie =
 
 /**
  * Valideert de Solidariteit-payload: exhaustieve key-allowlist op 'vulling'
- * (exact de vier bronnen — netto vulling/beginstand/eindstand bestaan niet in
- * de vorm), uitdeling ≥ 0 (422) en de bandgrenzen (zelfde regels als de
- * balans-payload). De RPC herhaalt deze checks + de eindstand-consistentie
- * op DB-niveau (defense-in-depth).
+ * (exact de drie invoerbronnen — netto vulling/beginstand/eindstand én het
+ * afgeleide langleven-netto bestaan niet in de vorm), uitdeling ≥ 0 (422) en
+ * de bandgrenzen (zelfde regels als de balans-payload). De RPC herhaalt deze
+ * checks + de eindstand-consistentie op DB-niveau (defense-in-depth).
  */
 export function valideerSolidariteitInvoer(body: unknown): SolidariteitValidatie {
   if (!isRecord(body)) return { ok: false, status: 400, fout: "Ongeldige aanvraag." };
@@ -496,7 +504,7 @@ export function valideerSolidariteitInvoer(body: unknown): SolidariteitValidatie
     return { ok: false, status: 400, fout: "Ongeldige invoerbron (handmatig/upload)." };
   }
 
-  const vulling = leesExacteGetallen(body.vulling, SOLI_VULLING_KEYS, "vulling");
+  const vulling = leesExacteGetallen(body.vulling, SOLI_VULLING_INVOER_KEYS, "vulling");
   if (!vulling.ok) return { ok: false, status: 400, fout: vulling.fout };
 
   if (!isGetal(body.uitdeling)) {
@@ -720,6 +728,73 @@ export function valideerPremieInvoer(body: unknown): PremieValidatie {
       toekenning: body.toekenning,
       startomvang,
       ondergrensPct: ondergrens.waarde,
+    },
+  };
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  Tab 3 (Biometrische rendementen) — invoervalidatie (T17, decisions/0078)
+// ════════════════════════════════════════════════════════════════════════════
+
+export type BiometrieInvoer = {
+  periode: string;
+  invoerBron: InvoerBron;
+  /** Langleven-bronnen (±, € mln); vrijval ≥ 0 (opbrengst). Het netto
+   *  langleven-resultaat is AFGELEID en bestaat bewust niet in de vorm. */
+  langleven: Record<LanglevenKey, number>;
+  /** Toegekende dekkingen (≤ 0, lasten). De binnengekomen risicopremies zijn
+   *  de premie_component-rijen van tab 7 (één bron) en de resultaten zijn
+   *  AFGELEID — geen van beide bestaat in de vorm. */
+  toegekend: Record<RisicodekkingKey, number>;
+};
+
+export type BiometrieValidatie =
+  | { ok: true; invoer: BiometrieInvoer }
+  | { ok: false; status: 400 | 422; fout: string };
+
+/**
+ * Valideert de Biometrisch-payload: exhaustieve key-allowlists op 'langleven'
+ * en 'toegekend' (afgeleide velden — netto langleven, resultaten PP/WZP en
+ * AO/PVI — én de risicopremies uit tab 7 bestaan niet in de vorm → 400);
+ * tekenconventies hard: vrijval ≥ 0 (opbrengst), toegekend ≤ 0 (last) — 422.
+ * De save is een batch-upsert op fonds_stuurinfo_reeks (RLS + WITH CHECK +
+ * audittrigger); de soli-/oper-RPC's toetsen de doorwerking naar tabs 5/6.
+ */
+export function valideerBiometrieInvoer(body: unknown): BiometrieValidatie {
+  if (!isRecord(body)) return { ok: false, status: 400, fout: "Ongeldige aanvraag." };
+
+  const kop = leesPeriodeEnInvoerBron(body);
+  if (!kop.ok) return { ok: false, status: 400, fout: kop.fout };
+
+  const langleven = leesExacteGetallen(body.langleven, LANGLEVEN_KEYS, "langleven");
+  if (!langleven.ok) return { ok: false, status: 400, fout: langleven.fout };
+  if (langleven.record.vrijval < 0) {
+    return {
+      ok: false,
+      status: 422,
+      fout: "Vrijval van kapitaal bij overlijden is een opbrengst en kan niet negatief zijn.",
+    };
+  }
+
+  const toegekend = leesExacteGetallen(body.toegekend, RISICODEKKING_KEYS, "toegekend");
+  if (!toegekend.ok) return { ok: false, status: 400, fout: toegekend.fout };
+  for (const k of RISICODEKKING_KEYS) {
+    if (toegekend.record[k] > 0) {
+      return {
+        ok: false,
+        status: 422,
+        fout: "Toegekende dekkingen zijn lasten — voer ze als 0 of negatief bedrag in.",
+      };
+    }
+  }
+
+  return {
+    ok: true,
+    invoer: {
+      periode: kop.periode,
+      invoerBron: kop.invoerBron,
+      langleven: langleven.record,
+      toegekend: toegekend.record,
     },
   };
 }

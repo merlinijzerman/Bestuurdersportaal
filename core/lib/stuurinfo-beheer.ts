@@ -22,6 +22,11 @@
 //  * slaPremieOp()         — tab 7 (T16): atomische save via RPC
 //                            stuurinfo_premie_opslaan (componenten € + % +
 //                            depot-mutaties + kpi's; harde consistentie).
+//  * slaBiometrieOp()      — tab 3 (T17): vijf reeks-rijen (langleven +
+//                            risicodekking) in één batch-upsert (één tabel =
+//                            atomisch; geen RPC nodig — spreiding-patroon,
+//                            decisions/0078). De doorwerking naar tabs 5/6
+//                            wordt door de soli-/oper-RPC's hard getoetst.
 //
 //  De caller (route handler) heeft de payload al gevalideerd met
 //  valideerBalansInvoer()/valideerPeriodeInvoer() (400/422) én de capability-
@@ -42,8 +47,15 @@ import {
   type SolidariteitInvoer,
   type OperationeelInvoer,
   type PremieInvoer,
+  type BiometrieInvoer,
 } from "@/core/lib/stuurinfo-invoer";
 import { SPREIDING_KPI_DEFINITIES } from "@/core/lib/stuurinfo-spreiding";
+import {
+  LANGLEVEN_DEFINITIES,
+  RISICODEKKING_DEFINITIES,
+  LANGLEVEN_REEKS,
+  RISICODEKKING_REEKS,
+} from "@/core/lib/stuurinfo-biometrie";
 
 /** Postgres unique_violation (bestaande periode). */
 const PG_UNIQUE_VIOLATION = "23505";
@@ -176,10 +188,12 @@ export async function schrijfSpreiding(
 
 /**
  * Slaat de Solidariteit-sectie atomisch op via de RPC stuurinfo_soli_opslaan
- * (T15): 4 vullingsbronnen (reeks) + uitdeling (kpi) + bandgrenzen-update op
- * de soli-reserve-rij in één transactie. fonds_id wordt hier nooit meegegeven:
- * de RPC leidt hem af uit auth.uid(). De DB herhaalt de validaties en dwingt
- * de eindstand-consistentie hard af (SOLI_EINDSTAND_ONGELIJK, decisions/0076).
+ * (T15/T17): 3 invoerbronnen (reeks) + uitdeling (kpi) + bandgrenzen-update op
+ * de soli-reserve-rij in één transactie. Het netto langleven-resultaat leest
+ * de RPC zelf uit de langleven-reeks (tab 3 — één bron, decisions/0078).
+ * fonds_id wordt hier nooit meegegeven: de RPC leidt hem af uit auth.uid().
+ * De DB herhaalt de validaties en dwingt de eindstand-consistentie hard af
+ * (SOLI_EINDSTAND_ONGELIJK, decisions/0076).
  */
 export async function slaSolidariteitOp(invoer: SolidariteitInvoer): Promise<SaveResultaat> {
   const supabase = await createServerSupabase();
@@ -195,6 +209,8 @@ export async function slaSolidariteitOp(invoer: SolidariteitInvoer): Promise<Sav
     const kaart: Record<string, string> = {
       SOLI_RESERVE_ONTBREEKT:
         "De solidariteitsreserve van deze periode is nog niet vastgelegd — sla eerst de balans/reserves op.",
+      SOLI_LANGLEVEN_ONTBREEKT:
+        "Het langleven-resultaat van deze periode is nog niet ingevoerd — vul eerst de sectie 3 · Biometrisch in.",
       SOLI_EINDSTAND_ONGELIJK:
         "Beginstand + netto vulling − uitdeling wijkt af van de reservestand uit de balans — opslaan geweigerd.",
       ONGELDIGE_VULLING: "Ongeldige vullingsbronnen — opslaan geweigerd.",
@@ -246,14 +262,75 @@ export async function slaOperationeelOp(invoer: OperationeelInvoer): Promise<Sav
     return mapRpcFout(error, {
       OPER_RESERVE_ONTBREEKT:
         "De operationele reserve van deze periode is nog niet vastgelegd — sla eerst de balans/reserves op.",
+      OPER_PREMIE_ONTBREEKT:
+        "De risicopremies van deze periode ontbreken — vul eerst de sectie 7 · Premie & compensatie in.",
+      OPER_BIOMETRIE_ONTBREEKT:
+        "De toegekende dekkingen van deze periode ontbreken — vul eerst de sectie 3 · Biometrisch in.",
       OPER_MUTATIE_ONGELIJK:
-        "Primo + totaal mutatie wijkt af van de reservestand uit de balans — opslaan geweigerd.",
+        "Primo + totaal mutatie (incl. resultaten PP/WZP en AO/PVI) wijkt af van de reservestand uit de balans — opslaan geweigerd.",
       ONGELDIGE_MUTATIES: "Ongeldige mutatiebronnen — opslaan geweigerd.",
       ONGELDIGE_KOSTEN: "Ongeldig kostendetail — opslaan geweigerd.",
       ONGELDIGE_WAARDE: "Ongeldige waarde in de invoer — opslaan geweigerd.",
       ONGELDIGE_GRENZEN: "Ongeldige bandgrenzen — opslaan geweigerd.",
       ONGELDIGE_INVOER_BRON: "Ongeldige invoerbron — opslaan geweigerd.",
     });
+  }
+  return { ok: true };
+}
+
+/**
+ * Slaat de Biometrisch-sectie (tab 3, T17) op: vijf reeks-rijen (langleven:
+ * micro/macro/vrijval + risicodekking: toegekende PP/WZP en AO/PVI) in ÉÉN
+ * batch-upsert — één INSERT … ON CONFLICT-statement is atomisch, dus een RPC
+ * voegt hier niets toe (één tabel, geen eigen cross-tabel-consistentie;
+ * spreiding-patroon, decisions/0076/0078). De afgeleiden (netto langleven,
+ * resultaten) worden nooit geschreven; de doorwerking naar de reserves wordt
+ * door stuurinfo_soli_opslaan/stuurinfo_operationeel_opslaan hard getoetst.
+ * RLS (eigen fonds + voorzitter/beheerder, WITH CHECK) en de T14-audittrigger
+ * gelden onverkort; de samengestelde FK borgt dat de periode bestaat.
+ */
+export async function slaBiometrieOp(
+  fondsId: string,
+  invoer: BiometrieInvoer
+): Promise<SaveResultaat> {
+  const supabase = await createServerSupabase();
+  const bijgewerkt = new Date().toISOString();
+  const rijen = [
+    ...LANGLEVEN_DEFINITIES.map((d) => ({
+      fonds_id: fondsId,
+      periode: invoer.periode,
+      reeks_key: LANGLEVEN_REEKS,
+      punt_key: d.key,
+      label: d.label,
+      volgorde: d.volgorde,
+      waarde: invoer.langleven[d.key],
+      invoer_bron: invoer.invoerBron,
+      bijgewerkt,
+    })),
+    ...RISICODEKKING_DEFINITIES.map((d) => ({
+      fonds_id: fondsId,
+      periode: invoer.periode,
+      reeks_key: RISICODEKKING_REEKS,
+      punt_key: d.key,
+      label: d.label,
+      volgorde: d.volgorde,
+      waarde: invoer.toegekend[d.key],
+      invoer_bron: invoer.invoerBron,
+      bijgewerkt,
+    })),
+  ];
+  const { error } = await supabase
+    .from("fonds_stuurinfo_reeks")
+    .upsert(rijen, { onConflict: "fonds_id,periode,reeks_key,punt_key" });
+  if (error) {
+    if (error.code === PG_FK_VIOLATION) {
+      return {
+        ok: false,
+        status: 422,
+        fout: `Periode ${invoer.periode} bestaat nog niet — maak eerst de rapportageperiode aan.`,
+      };
+    }
+    throw new Error(error.message);
   }
   return { ok: true };
 }

@@ -93,11 +93,11 @@ export default async function DashboardPage({
       financieringsgraad={data.financieringsgraad}
     >
       {!data.gekozenPeriode ? (
-        <div className="bg-white rounded-xl border border-line p-5 text-sm text-muted">
+        <div className="si-card text-sm text-muted">
           Er zijn nog geen rapportageperiodes beschikbaar voor dit fonds.
         </div>
       ) : !heeftBalans ? (
-        <div className="bg-white rounded-xl border border-line p-5 text-sm text-muted">
+        <div className="si-card text-sm text-muted">
           Geen balansdata beschikbaar voor {huidigLabel}.
         </div>
       ) : (
@@ -108,7 +108,7 @@ export default async function DashboardPage({
             style={{ gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))" }}
           >
             {data.kpiTegels.map((k) => (
-              <div key={k.key} className="bg-white rounded-xl border border-line p-4">
+              <div key={k.key} className="si-kpi">
                 <div className="text-xs text-muted">{k.label}</div>
                 <div className="text-2xl font-bold text-ink mt-1">
                   {k.waarde === null
@@ -123,7 +123,7 @@ export default async function DashboardPage({
           </div>
 
           {/* Balans */}
-          <div className="bg-white rounded-xl border border-line p-5">
+          <div className="si-card">
             <div className="mb-4">
               <div className="font-semibold text-ink text-sm">Balans</div>
               <div className="text-xs text-muted mt-0.5">
@@ -133,15 +133,15 @@ export default async function DashboardPage({
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="si-tabel">
                 <thead>
-                  <tr className="text-xs text-muted border-b border-line">
-                    <th className="text-left font-medium py-2 pr-3">Post</th>
-                    <th className="text-right font-medium py-2 pl-3 whitespace-nowrap">
+                  <tr>
+                    <th className="text-left">Post</th>
+                    <th className="text-right whitespace-nowrap">
                       {huidigLabel} <span className="font-normal">huidig</span>
                     </th>
                     {vorigLabel && (
-                      <th className="text-right font-medium py-2 pl-3 whitespace-nowrap">
+                      <th className="text-right whitespace-nowrap">
                         {vorigLabel} <span className="font-normal">vorig kwartaal</span>
                       </th>
                     )}
@@ -162,7 +162,7 @@ export default async function DashboardPage({
 
             {/* Balansevenwicht — afgeleide validatie, geen invoerveld */}
             {data.balans.evenwicht.sluit ? (
-              <div className="mt-4 bg-app-bg border-l-2 border-accent rounded-r-lg px-4 py-3 text-xs text-muted">
+              <div className="mt-4 si-note">
                 <strong className="text-ink">Structuur:</strong> cohorten verhuisd naar tab 2,
                 activa teruggebracht tot twee posten, eigen vermogen volgt de hiërarchie
                 toetsvermogen + solidariteitsreserve + compensatiedepot.{" "}
@@ -183,7 +183,7 @@ export default async function DashboardPage({
           </div>
 
           {/* Overzicht reserves */}
-          <div className="bg-white rounded-xl border border-line p-5">
+          <div className="si-card">
             <div className="mb-4">
               <div className="font-semibold text-ink text-sm">Overzicht van de reserves</div>
               <div className="text-xs text-muted mt-0.5">
@@ -197,36 +197,36 @@ export default async function DashboardPage({
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="si-tabel">
                   <thead>
-                    <tr className="text-xs text-muted border-b border-line">
-                      <th className="text-left font-medium py-2 pr-3">Reserve / maatstaf</th>
-                      <th className="text-right font-medium py-2 px-3">Stand</th>
-                      <th className="text-right font-medium py-2 px-3">Stand %</th>
-                      <th className="text-right font-medium py-2 px-3">Ondergrens</th>
-                      <th className="text-right font-medium py-2 px-3">Bovengrens</th>
-                      <th className="text-left font-medium py-2 pl-3">Status</th>
+                    <tr>
+                      <th className="text-left">Reserve / maatstaf</th>
+                      <th className="text-right">Stand</th>
+                      <th className="text-right">Stand %</th>
+                      <th className="text-right">Ondergrens</th>
+                      <th className="text-right">Bovengrens</th>
+                      <th className="text-left">Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {data.reserves.map((r) => {
                       const chip = RESERVE_CHIP[r.status];
                       return (
-                        <tr key={r.key} className="border-b border-line last:border-0">
-                          <td className="py-2.5 pr-3 text-ink">{r.label}</td>
-                          <td className="py-2.5 px-3 text-right tabular-nums">
+                        <tr key={r.key} className="last:border-0">
+                          <td className="text-ink">{r.label}</td>
+                          <td className="si-num">
                             € {fmtBedrag(r.stand)} mln
                           </td>
-                          <td className="py-2.5 px-3 text-right tabular-nums">
+                          <td className="si-num">
                             {r.pctWaarde === null ? "—" : fmtPct(r.pctWaarde)}
                           </td>
-                          <td className="py-2.5 px-3 text-right tabular-nums text-muted">
+                          <td className="si-num text-muted">
                             {r.ondergrens === null ? "—" : fmtPct(r.ondergrens)}
                           </td>
-                          <td className="py-2.5 px-3 text-right tabular-nums text-muted">
+                          <td className="si-num text-muted">
                             {r.bovengrens === null ? "—" : fmtPct(r.bovengrens)}
                           </td>
-                          <td className="py-2.5 pl-3">
+                          <td>
                             <span
                               className={`inline-flex items-center gap-1.5 text-[11px] px-2 py-0.5 rounded-full whitespace-nowrap ${chip.chip}`}
                             >
@@ -249,7 +249,7 @@ export default async function DashboardPage({
               </div>
             )}
 
-            <div className="mt-4 bg-app-bg border-l-2 border-accent rounded-r-lg px-4 py-3 text-xs text-muted">
+            <div className="mt-4 si-note">
               <strong className="text-ink">Grenzen:</strong> alleen de solidariteitsreserve heeft
               een formele bandbreedte uit de ABTN — daar geldt de stoplichttoets. De overige
               reserves worden ter informatie getoond («monitoring»): stand + ontwikkeling, nog
@@ -287,16 +287,16 @@ function BalansTabelRij({ r, toonVorig }: { r: BalansRegel; toonVorig: boolean }
     ? "text-muted"
     : "text-ink";
   return (
-    <tr className="border-b border-line last:border-0">
-      <td className={`py-2 pr-3 ${inspring} ${stijl}`}>
+    <tr className={`last:border-0${r.subtotaal && r.key !== "toetsvermogen" ? " si-totaalrij" : ""}`}>
+      <td className={`${inspring} ${stijl}`}>
         {r.label}
         {r.key === "tv" && <span className="text-muted italic"> (kapitalen deelnemers)</span>}
       </td>
-      <td className={`py-2 pl-3 text-right tabular-nums whitespace-nowrap ${r.subtotaal ? "font-semibold" : ""}`}>
+      <td className={`si-num whitespace-nowrap ${r.subtotaal ? "font-semibold" : ""}`}>
         {fmtBedrag(r.huidig)} <Pijl richting={r.richting} />
       </td>
       {toonVorig && (
-        <td className={`py-2 pl-3 text-right tabular-nums text-muted ${r.subtotaal ? "font-semibold" : ""}`}>
+        <td className={`si-num text-muted ${r.subtotaal ? "font-semibold" : ""}`}>
           {r.vorig === null ? "—" : fmtBedrag(r.vorig)}
         </td>
       )}

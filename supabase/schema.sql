@@ -1743,6 +1743,41 @@ create table if not exists public.fonds_stuurinfo_log (
 --  triggerwijziging.
 -- ============================================================
 
+-- ============================================================
+--  Increment T17 (2026_07_19) — tab 3 (Biometrische rendementen)
+--  Bron van waarheid: 2026_07_19_t17_stuurinfo_biometrie.sql (RPC-replaces) +
+--  2026_07_19_t17b_stuurinfo_biometrie_seed.sql (seed + herijking + opschoning).
+--  Zie decisions/0078. GEEN nieuwe tabellen én GEEN nieuwe RPC — nieuwe keys
+--  in de T13-structuur; de biometrie-save is een app-side batch-upsert op
+--  alleen fonds_stuurinfo_reeks (spreiding-precedent):
+--  * reeks_keys tab 3: langleven (punt_keys micro|macro|vrijval, ± in € mln;
+--    vrijval >= 0 = opbrengst) en risicodekking (punt_keys ppwzp_toegekend|
+--    aopvi_toegekend, <= 0 = last).
+--  * AFGELEID in de leeslaag (stuurinfo-biometrie.ts — nooit opgeslagen):
+--    netto langleven = micro + macro + vrijval; resultaat PP/WZP =
+--    premie_component.risico_ppwzp + ppwzp_toegekend; resultaat AO/PVI =
+--    premie_component.risico_aop + .risico_pvi + aopvi_toegekend. De
+--    binnengekomen risicopremies zijn de BESTAANDE premie_component-rijen
+--    (tab 7) — read-only referentie, geen tweede opslag.
+--  * ÉÉN-BRON-KOPPELINGEN (vervangt de T15-formulering "micro_langleven =
+--    het biometrische resultaat"): de langleven-post in de soli-ontwikkeling
+--    (tab 5) is het AFGELEIDE netto langleven-resultaat — het opgeslagen punt
+--    soli_vulling.micro_langleven is VERVALLEN (t17b-opschoning). De
+--    resultaten PP/WZP en AO/PVI zijn afgeleide mutatieregels in de
+--    oper-ontwikkeling (tab 6).
+--  * RPC-wijzigingen (signaturen ongewijzigd, SECURITY INVOKER blijft):
+--    stuurinfo_soli_opslaan — p_vulling exact 3 keys (premie|rendement|
+--    overrendementsbijdrage); netto langleven leest de functie uit de
+--    langleven-reeks ('SOLI_LANGLEVEN_ONTBREEKT' bij onvolledige reeks);
+--    eindstand-check: vorige + som(3) + langleven − uitdeling = stand.
+--    stuurinfo_operationeel_opslaan — mutatie-check telt de afgeleide
+--    resultaten mee: vorige + som(8) + r_ppwzp + r_aopvi = stand
+--    ('OPER_PREMIE_ONTBREEKT'/'OPER_BIOMETRIE_ONTBREEKT' bij ontbrekende
+--    bron terwijl de check draait).
+--  Auditlog: de bestaande T14-capture-triggers dekken alle writes — geen
+--  triggerwijziging.
+-- ============================================================
+
 -- ── 14. AI Output Quality & Governance Lab (AQLab, aqlab_*) ──────────────────
 -- Werkticket AQL-1 (2026-07-10). AUTHORITATIEF = de migraties:
 --   supabase/migrations/2026_07_10_aqlab_1_register.sql   (register)

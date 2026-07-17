@@ -24,12 +24,20 @@ import {
   type VrijeReserveKey,
 } from "@/core/lib/stuurinfo-invoer";
 import { parseNlGetal } from "@/core/lib/stuurinfo-sjabloon";
-import { SOLI_VULLING_KEYS } from "@/core/lib/stuurinfo-soli";
+import { SOLI_VULLING_INVOER_KEYS } from "@/core/lib/stuurinfo-soli";
 import { OPER_MUTATIE_KEYS, OPER_KOSTEN_KEYS } from "@/core/lib/stuurinfo-operationeel";
 import { PREMIE_COMPONENT_KEYS, COMP_MUTATIE_KEYS } from "@/core/lib/stuurinfo-premie";
+import {
+  LANGLEVEN_KEYS,
+  RISICODEKKING_KEYS,
+  nettoLangleven,
+  leidRisicodekkingAf,
+  risicopremiesVan,
+} from "@/core/lib/stuurinfo-biometrie";
 import BalansInvoerTabel from "./BalansInvoerTabel";
 import ReservesInvoer from "./ReservesInvoer";
 import SpreidingInvoer from "./SpreidingInvoer";
+import BiometrieInvoer from "./BiometrieInvoer";
 import SolidariteitInvoer from "./SolidariteitInvoer";
 import OperationeelInvoer from "./OperationeelInvoer";
 import PremieInvoer from "./PremieInvoer";
@@ -49,6 +57,8 @@ export type Snapshot = {
     bandOnder: number | null;
     bandBoven: number | null;
   };
+  /** Tab 3 (T17): langleven-bronnen + toegekende dekkingen. */
+  biometrie: Record<string, number | null>;
   soli: Record<string, number | null> & { uitdeling: number | null; reserveStand: number | null };
   /** Tab 6 (T16): mutaties + norm/band + oper-reservestand (read-only anker). */
   operationeel: Record<string, number | null> & {
@@ -104,7 +114,9 @@ export type VeldState = {
   fg: string;
   /** Tab 4 (T15): payload-veldnamen (beschikbaar, voorziening, …, band_onder/_boven). */
   spreiding: Record<string, string>;
-  /** Tab 5 (T15): vier bronnen + uitdeling. */
+  /** Tab 3 (T17): langleven-bronnen + toegekende dekkingen. */
+  biometrie: Record<string, string>;
+  /** Tab 5 (T15/T17): drie invoerbronnen + uitdeling. */
   soli: Record<string, string>;
   /** Tab 6 (T16): acht mutatiebronnen + norm + band_onder/_boven. */
   operationeel: Record<string, string>;
@@ -144,8 +156,11 @@ const naarVeldState = (s: Snapshot): VeldState => ({
     band_onder: naarTekst(s.spreiding.bandOnder),
     band_boven: naarTekst(s.spreiding.bandBoven),
   },
+  biometrie: Object.fromEntries(
+    [...LANGLEVEN_KEYS, ...RISICODEKKING_KEYS].map((k) => [k, naarTekst(s.biometrie[k] ?? null)])
+  ),
   soli: {
-    ...Object.fromEntries(SOLI_VULLING_KEYS.map((k) => [k, naarTekst(s.soli[k] ?? null)])),
+    ...Object.fromEntries(SOLI_VULLING_INVOER_KEYS.map((k) => [k, naarTekst(s.soli[k] ?? null)])),
     uitdeling: naarTekst(s.soli.uitdeling),
   },
   operationeel: {
@@ -192,13 +207,13 @@ const SECTIES = [
   { id: "periode", label: "Periode & bron", actief: true, tag: null },
   { id: "balans", label: "1 · Balans", actief: true, tag: "Tab 1" },
   { id: "reserves", label: "1 · Reserves", actief: true, tag: "Tab 1" },
+  { id: "biometrie", label: "3 · Biometrisch", actief: true, tag: "Tab 3" },
   { id: "spreiding", label: "4 · Spreiding", actief: true, tag: "Tab 4" },
   { id: "solidariteit", label: "5 · Solidariteit", actief: true, tag: "Tab 5" },
   { id: "operationeel", label: "6 · Operationeel", actief: true, tag: "Tab 6" },
   { id: "premie", label: "7 · Premie & compensatie", actief: true, tag: "Tab 7" },
   { id: "upload", label: "Upload i.p.v. typen", actief: true, tag: null },
   { id: null, label: "2 · Rendementstoedeling", actief: false, tag: "volgt" },
-  { id: null, label: "3 · Biometrisch", actief: false, tag: "volgt" },
   { id: null, label: "Deelnemers & signalen", actief: false, tag: "volgt" },
 ] as const;
 
@@ -279,6 +294,11 @@ export default function StuurinfoInvoer() {
   };
   const zetSoliVeld = (key: string, waarde: string) => {
     setVelden((v) => (v ? { ...v, soli: { ...v.soli, [key]: waarde } } : v));
+    setInvoerBron("handmatig");
+  };
+  // Tab 3-sectie (T17): eigen save — zelfde losse-publicatiepad-patroon.
+  const zetBiometrieVeld = (key: string, waarde: string) => {
+    setVelden((v) => (v ? { ...v, biometrie: { ...v.biometrie, [key]: waarde } } : v));
     setInvoerBron("handmatig");
   };
   // Tab 6/7-secties (T16): één setter voor alle T16-veldsecties.
@@ -459,7 +479,7 @@ export default function StuurinfoInvoer() {
           periode: data.gekozen,
           invoer_bron: invoerBron,
           vulling: Object.fromEntries(
-            SOLI_VULLING_KEYS.map((k) => [k, parseNlGetal(velden.soli[k])])
+            SOLI_VULLING_INVOER_KEYS.map((k) => [k, parseNlGetal(velden.soli[k])])
           ),
           uitdeling: parseNlGetal(velden.soli.uitdeling),
           grenzen: {
@@ -469,6 +489,38 @@ export default function StuurinfoInvoer() {
         }),
       });
       setMelding(`Solidariteit opgeslagen en gepubliceerd naar het dashboard (periode ${data.gekozen}).`);
+      await laad(data.gekozen);
+    } catch (err) {
+      setFout(err instanceof Error ? err.message : "Opslaan mislukt");
+    } finally {
+      setBezig(false);
+    }
+  }
+
+  // ── Tab 3-save (T17): eigen POST-type ──────────────────────────────────────
+  async function slaBiometrieOp() {
+    if (!velden || !data?.gekozen) return;
+    setBezig(true);
+    setFout(null);
+    setMelding(null);
+    try {
+      await jsonFetch("/api/stuurinformatie/beheer", {
+        method: "POST",
+        body: JSON.stringify({
+          type: "biometrie",
+          periode: data.gekozen,
+          // Altijd 'handmatig' — de Excel-upload mapt geen tab 3-velden
+          // (zelfde audit-overweging als de T16-secties).
+          invoer_bron: "handmatig",
+          langleven: Object.fromEntries(
+            LANGLEVEN_KEYS.map((k) => [k, parseNlGetal(velden.biometrie[k])])
+          ),
+          toegekend: Object.fromEntries(
+            RISICODEKKING_KEYS.map((k) => [k, parseNlGetal(velden.biometrie[k])])
+          ),
+        }),
+      });
+      setMelding(`Biometrisch opgeslagen en gepubliceerd naar het dashboard (periode ${data.gekozen}).`);
       await laad(data.gekozen);
     } catch (err) {
       setFout(err instanceof Error ? err.message : "Opslaan mislukt");
@@ -574,6 +626,34 @@ export default function StuurinfoInvoer() {
       <div className="rounded-lg border border-err/30 bg-err-tint p-3 text-sm text-err-ink">{fout}</div>
     );
   if (!data || !velden) return null;
+
+  // Afgeleiden uit de OPGESLAGEN snapshot (tab 3/7 — één bron): de soli-/oper-
+  // RPC's lezen bij hún save dezelfde reeksen, dus de referentiewaarden hier
+  // volgen de opgeslagen staat, niet onopgeslagen veldwijzigingen.
+  const langlevenNetto = nettoLangleven(
+    LANGLEVEN_KEYS.map((k) => ({
+      puntKey: k,
+      label: null,
+      volgorde: 0,
+      waarde: data.huidig.biometrie[k] ?? null,
+    }))
+  );
+  const premies = risicopremiesVan(
+    ["risico_ppwzp", "risico_aop", "risico_pvi"].map((k) => ({
+      puntKey: k,
+      label: null,
+      volgorde: 0,
+      waarde: data.huidig.premie.eur[k] ?? null,
+    }))
+  );
+  const resultaatPpwzp = leidRisicodekkingAf(
+    premies.ppwzp,
+    data.huidig.biometrie.ppwzp_toegekend ?? null
+  ).resultaat;
+  const resultaatAopvi = leidRisicodekkingAf(
+    premies.aopvi,
+    data.huidig.biometrie.aopvi_toegekend ?? null
+  ).resultaat;
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[210px_1fr]">
@@ -758,6 +838,16 @@ export default function StuurinfoInvoer() {
           uitgeschakeld={bezig || nieuwOpen}
         />
 
+        {/* ── Biometrisch (tab 3, T17) — eigen save ─────────────────────── */}
+        <BiometrieInvoer
+          velden={velden}
+          huidig={data.huidig}
+          zetVeld={zetBiometrieVeld}
+          opslaan={slaBiometrieOp}
+          bezig={bezig}
+          uitgeschakeld={bezig || nieuwOpen}
+        />
+
         {/* ── Spreiding (tab 4, T15) — eigen save ───────────────────────── */}
         <SpreidingInvoer
           velden={velden}
@@ -768,11 +858,13 @@ export default function StuurinfoInvoer() {
           uitgeschakeld={bezig || nieuwOpen}
         />
 
-        {/* ── Solidariteit (tab 5, T15) — eigen save; grenzen = één bron ── */}
+        {/* ── Solidariteit (tab 5, T15/T17) — eigen save; langleven-post
+            afgeleid uit de opgeslagen Biometrisch-sectie (één bron) ─────── */}
         <SolidariteitInvoer
           velden={velden}
           huidig={data.huidig}
           referentie={data.referentie}
+          langlevenNetto={langlevenNetto}
           zetVeld={zetSoliVeld}
           zetGrens={(veld, w) => zetLosVeld(veld, w)}
           opslaan={slaSolidariteitOp}
@@ -780,11 +872,14 @@ export default function StuurinfoInvoer() {
           uitgeschakeld={bezig || nieuwOpen}
         />
 
-        {/* ── Operationeel (tab 6, T16) — eigen save ────────────────────── */}
+        {/* ── Operationeel (tab 6, T16/T17) — eigen save; resultaten PP/WZP
+            en AO/PVI afgeleid uit tab 3/7 (één bron) ─────────────────────── */}
         <OperationeelInvoer
           velden={velden}
           huidig={data.huidig}
           referentie={data.referentie}
+          resultaatPpwzp={resultaatPpwzp}
+          resultaatAopvi={resultaatAopvi}
           zetVeld={zetT16Veld}
           opslaan={slaOperationeelOp}
           bezig={bezig}

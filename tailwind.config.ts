@@ -63,6 +63,11 @@ const config: Config = {
         serif: ["var(--font-serif)", "Georgia", "serif"],
         sans: ["var(--font-sans)", "-apple-system", "Segoe UI", "sans-serif"],
       },
+      // Kaart-elevatie voor de stuurinformatie-opmaak (T17): shadow-card mapt
+      // op het --shadow-card-token in globals.css (bron van waarheid).
+      boxShadow: {
+        card: "var(--shadow-card)",
+      },
     },
   },
   plugins: [],

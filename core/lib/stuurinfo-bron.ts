@@ -5,10 +5,13 @@
 //  (fonds_stuurinfo_reeks), de reserves (fonds_stuurinfo_reserve) en de
 //  KPI's (fonds_stuurinfo_kpi) ONDER FONDS-RLS, voor de gekozen
 //  rapportageperiode + het voorgaande kwartaal. Presentatie (regelingLabel)
-//  komt uit de per-fonds module-config (T8). Drie readers:
+//  komt uit de per-fonds module-config (T8). Readers:
 //    haalStuurinfoBalans        — tab 1 (T13)
+//    haalStuurinfoBiometrie     — tab 3 (T17, decisions/0078)
 //    haalStuurinfoSpreiding     — tab 4 (T15, decisions/0076)
 //    haalStuurinfoSolidariteit  — tab 5 (T15, decisions/0076)
+//    haalStuurinfoOperationeel  — tab 6 (T16, decisions/0077)
+//    haalStuurinfoPremie        — tab 7 (T16, decisions/0077)
 //
 //  Alle rekenlogica (subtotalen, evenwicht, stoplicht, spreidings-/soli-
 //  afleiding, mutaties) is puur en staat in stuurinfo-balans.ts,
@@ -58,6 +61,18 @@ import {
   type SoliPeriodeBron,
 } from "@/core/lib/stuurinfo-soli";
 import type { MutatieBron, Ontwikkeling } from "@/core/lib/stuurinfo-ontwikkeling";
+import {
+  leidBiometrieAf,
+  nettoLangleven,
+  risicopremiesVan,
+  toegekendVan,
+  leidRisicodekkingAf,
+  LANGLEVEN_REEKS,
+  RISICODEKKING_REEKS,
+  RISICOPREMIE_PPWZP_PUNT,
+  RISICOPREMIE_AOPVI_PUNTEN,
+  type BiometriePeriode,
+} from "@/core/lib/stuurinfo-biometrie";
 import {
   leidOperationeelAf,
   leidOperKostenAf,
@@ -465,7 +480,8 @@ export async function haalStuurinfoSolidariteit(
   const { periodes, gekozen, vorige } = await haalPeriodeRegistry(supabase, fondsId, periodeParam);
 
   const legeBron: SoliPeriodeBron = {
-    vulling: [], uitdeling: null, stand: null, pctWaarde: null, ondergrens: null, bovengrens: null,
+    vulling: [], langlevenNetto: null, uitdeling: null,
+    stand: null, pctWaarde: null, ondergrens: null, bovengrens: null,
   };
   if (!gekozen) {
     return {
@@ -485,10 +501,12 @@ export async function haalStuurinfoSolidariteit(
   const [reeksRes, kpiRes, reserveRes, cfg] = await Promise.all([
     supabase
       .from("fonds_stuurinfo_reeks")
-      .select("periode, punt_key, label, volgorde, waarde, populatie_n")
+      .select("periode, reeks_key, punt_key, label, volgorde, waarde, populatie_n")
       .eq("fonds_id", fondsId)
       .in("periode", gekozenPeriodes)
-      .eq("reeks_key", SOLI_VULLING_REEKS)
+      // langleven = de biometrie-bron (tab 3) waaruit de langleven-post in de
+      // ontwikkeling wordt AFGELEID (decisions/0078 — één bron).
+      .in("reeks_key", [SOLI_VULLING_REEKS, LANGLEVEN_REEKS])
       .order("volgorde", { ascending: true }),
     supabase
       .from("fonds_stuurinfo_kpi")
@@ -505,25 +523,29 @@ export async function haalStuurinfoSolidariteit(
     moduleConfig(fondsId, "stuurinformatie"),
   ]);
 
-  type VullingRow = { periode: string; punt_key: string; label: string | null; volgorde: number; waarde: number | null; populatie_n: number | null };
+  type VullingRow = { periode: string; reeks_key: string; punt_key: string; label: string | null; volgorde: number; waarde: number | null; populatie_n: number | null };
   type SoliReserveRow = { periode: string; stand: number | null; pct_basis: string | null; pct_waarde: number | null; ondergrens: number | null; bovengrens: number | null };
 
-  const vullingRijen = (reeksRes.data ?? []) as VullingRow[];
+  const reeksRijen = (reeksRes.data ?? []) as VullingRow[];
   const kpiRijen = (kpiRes.data ?? []) as KpiRow[];
   const reserveRijen = (reserveRes.data ?? []) as SoliReserveRow[];
 
   const num = (v: number | null): number | null => (v === null ? null : Number(v));
+  const rijenVan = (periode: string, reeksKey: string): MutatieBron[] =>
+    reeksRijen
+      .filter((r) => r.periode === periode && r.reeks_key === reeksKey)
+      .map((r) => ({
+        puntKey: r.punt_key,
+        label: r.label,
+        volgorde: r.volgorde,
+        waarde: isOnderdrukt(r.populatie_n) ? null : num(r.waarde),
+      }));
   const bronVan = (periode: string): SoliPeriodeBron => {
     const reserve = reserveRijen.find((r) => r.periode === periode);
     return {
-      vulling: vullingRijen
-        .filter((r) => r.periode === periode)
-        .map((r) => ({
-          puntKey: r.punt_key,
-          label: r.label,
-          volgorde: r.volgorde,
-          waarde: isOnderdrukt(r.populatie_n) ? null : num(r.waarde),
-        })),
+      vulling: rijenVan(periode, SOLI_VULLING_REEKS),
+      // AFGELEID uit de langleven-reeks (tab 3) — nooit een opgeslagen rij.
+      langlevenNetto: nettoLangleven(rijenVan(periode, LANGLEVEN_REEKS)),
       uitdeling: kpiWaarde(kpiRijen, periode, SOLI_UITDELING_KPI),
       stand: num(reserve?.stand ?? null),
       pctWaarde: num(reserve?.pct_waarde ?? null),
@@ -602,7 +624,8 @@ export async function haalStuurinfoOperationeel(
   const { periodes, gekozen, vorige } = await haalPeriodeRegistry(supabase, fondsId, periodeParam);
 
   const legeBron: OperPeriodeBron = {
-    mutaties: [], stand: null, norm: null, bandOnder: null, bandBoven: null,
+    mutaties: [], resultaatPpwzp: null, resultaatAopvi: null,
+    stand: null, norm: null, bandOnder: null, bandBoven: null,
   };
   if (!gekozen) {
     return {
@@ -625,7 +648,15 @@ export async function haalStuurinfoOperationeel(
       .select("periode, reeks_key, punt_key, label, volgorde, waarde, populatie_n")
       .eq("fonds_id", fondsId)
       .in("periode", gekozenPeriodes)
-      .in("reeks_key", [OPER_MUTATIE_REEKS, OPER_KOSTEN_REALISATIE_REEKS, OPER_KOSTEN_BEGROOT_REEKS])
+      // risicodekking (tab 3) + premie_component (tab 7) voeden de AFGELEIDE
+      // resultaatregels PP/WZP en AO/PVI (decisions/0078 — één bron).
+      .in("reeks_key", [
+        OPER_MUTATIE_REEKS,
+        OPER_KOSTEN_REALISATIE_REEKS,
+        OPER_KOSTEN_BEGROOT_REEKS,
+        RISICODEKKING_REEKS,
+        PREMIE_COMPONENT_REEKS,
+      ])
       .order("volgorde", { ascending: true }),
     supabase
       .from("fonds_stuurinfo_kpi")
@@ -651,13 +682,20 @@ export async function haalStuurinfoOperationeel(
       .filter((r) => r.periode === periode && r.reeks_key === key)
       .map(naarMutatieBron);
 
-  const bronVan = (periode: string): OperPeriodeBron => ({
-    mutaties: reeks(periode, OPER_MUTATIE_REEKS),
-    stand: standVan(reserveRijen, periode),
-    norm: kpiWaarde(kpiRijen, periode, "oper_norm"),
-    bandOnder: kpiWaarde(kpiRijen, periode, "oper_band_onder"),
-    bandBoven: kpiWaarde(kpiRijen, periode, "oper_band_boven"),
-  });
+  const bronVan = (periode: string): OperPeriodeBron => {
+    // Afgeleide resultaten (tab 3/7): risicopremie + toegekende dekkingen.
+    const premies = risicopremiesVan(reeks(periode, PREMIE_COMPONENT_REEKS));
+    const dekking = reeks(periode, RISICODEKKING_REEKS);
+    return {
+      mutaties: reeks(periode, OPER_MUTATIE_REEKS),
+      resultaatPpwzp: leidRisicodekkingAf(premies.ppwzp, toegekendVan(dekking, "ppwzp_toegekend")).resultaat,
+      resultaatAopvi: leidRisicodekkingAf(premies.aopvi, toegekendVan(dekking, "aopvi_toegekend")).resultaat,
+      stand: standVan(reserveRijen, periode),
+      norm: kpiWaarde(kpiRijen, periode, "oper_norm"),
+      bandOnder: kpiWaarde(kpiRijen, periode, "oper_band_onder"),
+      bandBoven: kpiWaarde(kpiRijen, periode, "oper_band_boven"),
+    };
+  };
 
   const vorigeBron = vorige ? bronVan(vorige.periode) : null;
 
@@ -790,5 +828,96 @@ export async function haalStuurinfoPremie(
       kpiWaarde(kpiRijen, gekozen.periode, "comp_ondergrens_pct")
     ),
     toekenningJaar: kpiWaarde(kpiRijen, gekozen.periode, "comp_toekenning_jaar"),
+  };
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  Tab 3 (Biometrische rendementen) — T17 (decisions/0078)
+// ════════════════════════════════════════════════════════════════════════════
+
+export type StuurinfoBiometrieData = StuurinfoTabBasis & {
+  /** Langleven-tabel + risicodekkingstabellen gekozen periode (afgeleid). */
+  huidig: BiometriePeriode;
+  /** Zelfde afleiding voorgaand kwartaal (KPI-mutaties); null zonder. */
+  vorig: BiometriePeriode | null;
+};
+
+/**
+ * Leest de Biometrische rendementen-tab (tab 3): langleven-bronnen (micro/
+ * macro/vrijval) en toegekende risicodekkingen van beide periodes, plus de
+ * risicopremie-componenten uit tab 7 (premie_component — DEZELFDE bron als de
+ * premie-opbrengsten, geen tweede opslag). Netto langleven en de resultaten
+ * PP/WZP en AO/PVI worden AFGELEID (stuurinfo-biometrie.ts) en verrekend met
+ * de solidariteits- (tab 5) resp. operationele reserve (tab 6).
+ */
+export async function haalStuurinfoBiometrie(
+  fondsId: string,
+  periodeParam?: string
+): Promise<StuurinfoBiometrieData> {
+  const supabase = await createServerSupabase();
+  const { periodes, gekozen, vorige } = await haalPeriodeRegistry(supabase, fondsId, periodeParam);
+
+  if (!gekozen) {
+    return {
+      periodes: periodes.map(naarOptie),
+      gekozenPeriode: null,
+      vorigePeriode: null,
+      regelingLabel: "",
+      financieringsgraad: null,
+      huidig: leidBiometrieAf([], [], []),
+      vorig: null,
+    };
+  }
+
+  const gekozenPeriodes = vorige ? [gekozen.periode, vorige.periode] : [gekozen.periode];
+
+  const [reeksRes, kpiRes, cfg] = await Promise.all([
+    supabase
+      .from("fonds_stuurinfo_reeks")
+      .select("periode, reeks_key, punt_key, label, volgorde, waarde, populatie_n")
+      .eq("fonds_id", fondsId)
+      .in("periode", gekozenPeriodes)
+      .in("reeks_key", [LANGLEVEN_REEKS, RISICODEKKING_REEKS, PREMIE_COMPONENT_REEKS])
+      .order("volgorde", { ascending: true }),
+    supabase
+      .from("fonds_stuurinfo_kpi")
+      .select("periode, kpi_key, waarde, populatie_n")
+      .eq("fonds_id", fondsId)
+      .in("periode", gekozenPeriodes)
+      .eq("kpi_key", "financieringsgraad"),
+    moduleConfig(fondsId, "stuurinformatie"),
+  ]);
+
+  const reeksRijen = (reeksRes.data ?? []) as T16ReeksRow[];
+  const kpiRijen = (kpiRes.data ?? []) as KpiRow[];
+
+  const reeks = (periode: string, key: string): MutatieBron[] =>
+    reeksRijen
+      .filter((r) => r.periode === periode && r.reeks_key === key)
+      .map(naarMutatieBron);
+
+  // Van premie_component zijn alleen de risicopremie-punten nodig; de overige
+  // componenten (spaarpremie, opslagen) blijven buiten de tab 3-payload.
+  const risicoComponenten = (periode: string): MutatieBron[] =>
+    reeks(periode, PREMIE_COMPONENT_REEKS).filter((c) =>
+      c.puntKey === RISICOPREMIE_PPWZP_PUNT ||
+      (RISICOPREMIE_AOPVI_PUNTEN as readonly string[]).includes(c.puntKey)
+    );
+
+  const bronVan = (periode: string): BiometriePeriode =>
+    leidBiometrieAf(
+      reeks(periode, LANGLEVEN_REEKS),
+      reeks(periode, RISICODEKKING_REEKS),
+      risicoComponenten(periode)
+    );
+
+  return {
+    periodes: periodes.map(naarOptie),
+    gekozenPeriode: naarOptie(gekozen),
+    vorigePeriode: vorige ? naarOptie(vorige) : null,
+    regelingLabel: tekst(cfg.regelingLabel, ""),
+    financieringsgraad: kpiWaarde(kpiRijen, gekozen.periode, "financieringsgraad"),
+    huidig: bronVan(gekozen.periode),
+    vorig: vorige ? bronVan(vorige.periode) : null,
   };
 }

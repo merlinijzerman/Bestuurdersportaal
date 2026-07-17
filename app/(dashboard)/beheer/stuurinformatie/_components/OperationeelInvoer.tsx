@@ -9,13 +9,15 @@
 //  LIVE afgeleid (zelfde pure module als het dashboard); primo = oper-
 //  reservestand van de voorgaande periode (read-only).
 //
-//  Kernregels (decisions/0077, soli-patroon):
+//  Kernregels (decisions/0077, soli-patroon; bijgewerkt T17, 0078):
 //  - De oper-STAND (= ultimo) komt uit de balans-save (gekoppelde reserve) —
 //    hier alleen zichtbaar als anker. Ontbreekt de reserve-rij: expliciete
 //    blokker ("sla eerst de balans op") vóór de save i.p.v. een 422 erna.
-//  - HARDE consistentie: primo + totaal mutatie moet de balans-stand zijn;
-//    de RPC weigert anders (OPER_MUTATIE_ONGELIJK). De UI blokkeert dezelfde
-//    afwijking vooraf (UX-principe: blokkers expliciet).
+//  - HARDE consistentie: primo + totaal mutatie (incl. de AFGELEIDE resultaten
+//    PP/WZP en AO/PVI uit tab 3/7) moet de balans-stand zijn; de RPC weigert
+//    anders (OPER_MUTATIE_ONGELIJK / OPER_PREMIE_ONTBREEKT /
+//    OPER_BIOMETRIE_ONTBREEKT). De UI blokkeert dezelfde afwijking vooraf
+//    (UX-principe: blokkers expliciet).
 //  - Norm + band zijn kpi's in € MLN — bewust niet de reserve-rij-band
 //    (die is in % van de TV en stuurt het tab 1-stoplicht).
 // ============================================================================
@@ -33,6 +35,10 @@ type Props = {
   velden: VeldState;
   huidig: Snapshot;
   referentie: Snapshot | null;
+  /** AFGELEIDE resultaten uit de opgeslagen tab 3-/tab 7-invoer (risicopremie
+   *  + toegekende dekkingen — één bron); null = die invoer is niet compleet. */
+  resultaatPpwzp: number | null;
+  resultaatAopvi: number | null;
   zetVeld: (sectie: T16VeldSectie, key: string, waarde: string) => void;
   opslaan: () => void;
   bezig: boolean;
@@ -48,6 +54,8 @@ export default function OperationeelInvoer({
   velden,
   huidig,
   referentie,
+  resultaatPpwzp,
+  resultaatAopvi,
   zetVeld,
   opslaan,
   bezig,
@@ -59,14 +67,18 @@ export default function OperationeelInvoer({
   const primo = referentie?.operationeel.reserveStand ?? null;
 
   // Live afleiding — cosmetisch, via dezelfde pure module (operTotaalMutatie +
-  // ONTWIKKELING_TOLERANTIE) als leeslaag en RPC-spiegel; de RPC dwingt hard af.
+  // ONTWIKKELING_TOLERANTIE) als leeslaag en RPC-spiegel; de RPC dwingt hard
+  // af. De resultaten PP/WZP en AO/PVI komen uit de OPGESLAGEN tab 3-/tab 7-
+  // invoer (één bron) — de RPC leest bij de save dezelfde reeksen.
   const totaal = operTotaalMutatie(
     OPER_MUTATIE_DEFINITIES.map((d) => ({
       puntKey: d.key,
       label: null,
       volgorde: d.volgorde,
       waarde: parseNlGetal(velden.operationeel[d.key]),
-    }))
+    })),
+    resultaatPpwzp,
+    resultaatAopvi
   );
   const ultimo = primo !== null && totaal !== null ? primo + totaal : null;
   const wijktAf =
@@ -78,7 +90,11 @@ export default function OperationeelInvoer({
   const kostenLeeg =
     OPER_KOSTEN_DEFINITIES.some((d) => parseNlGetal(velden.operKostenRealisatie[d.key]) === null) ||
     OPER_KOSTEN_DEFINITIES.some((d) => parseNlGetal(velden.operKostenBegroot[d.key]) === null);
-  const verplichtLeeg = totaal === null || norm === null || kostenLeeg;
+  const invoerLeeg =
+    OPER_MUTATIE_DEFINITIES.some((d) => parseNlGetal(velden.operationeel[d.key]) === null) ||
+    norm === null ||
+    kostenLeeg;
+  const resultaatOntbreekt = resultaatPpwzp === null || resultaatAopvi === null;
   const reserveOntbreekt = reserveStand === null;
   // Niet-leeg maar onparseerbaar bandveld blokkeert de save: anders zou een
   // typefout de band stilzwijgend als null (= geen grens) wegschrijven.
@@ -87,9 +103,16 @@ export default function OperationeelInvoer({
   );
   // Zonder voorgaande periode is de primo niet onafhankelijk te bepalen en
   // toont het dashboard hem teruggerekend; opslaan kan gewoon (de RPC slaat
-  // de consistentie-check dan over).
+  // de consistentie-check — en dus ook de resultaat-vereiste — dan over).
+  const checkActief = primo !== null;
   const magOpslaan =
-    !bezig && !uitgeschakeld && !verplichtLeeg && !reserveOntbreekt && !wijktAf && !ongeldigeBand;
+    !bezig &&
+    !uitgeschakeld &&
+    !invoerLeeg &&
+    !(checkActief && resultaatOntbreekt) &&
+    !reserveOntbreekt &&
+    !wijktAf &&
+    !ongeldigeBand;
 
   const inputClass =
     "w-full rounded-lg border border-app-line-strong px-3 py-2 text-sm text-right disabled:opacity-50";
@@ -113,6 +136,15 @@ export default function OperationeelInvoer({
         </div>
       )}
 
+      {checkActief && resultaatOntbreekt && (
+        <div className="mb-4 rounded-lg border border-warn/30 bg-warn-tint px-4 py-3 text-sm text-warn-ink">
+          <strong>Eerst Biometrisch en Premie opslaan:</strong> de resultaten PP/WZP en AO/PVI
+          (afgeleide mutatieregels) komen uit de secties 3 · Biometrisch en 7 · Premie &amp;
+          compensatie (één bron). Sla die secties eerst op; daarna kunnen de mutaties hier worden
+          vastgelegd.
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         <div>
           <label className="block text-xs font-medium text-muted mb-1">Primo (€ mln)</label>
@@ -123,7 +155,41 @@ export default function OperationeelInvoer({
             className="w-full rounded-lg border border-app-line-strong bg-app-bg px-3 py-2 text-sm text-right text-muted"
           />
         </div>
-        {OPER_MUTATIE_DEFINITIES.map((d) => (
+        {OPER_MUTATIE_DEFINITIES.filter((d) => d.volgorde <= 6).map((d) => (
+          <div key={d.key}>
+            <label className="block text-xs font-medium text-muted mb-1">
+              {d.label} (€ mln, ±)
+            </label>
+            <input
+              value={velden.operationeel[d.key]}
+              onChange={(e) => zetVeld("operationeel", d.key, e.target.value)}
+              disabled={uitgeschakeld}
+              inputMode="decimal"
+              className={inputClass}
+            />
+          </div>
+        ))}
+        {/* Afgeleide mutatieregels (T17): risicopremie (tab 7) + toegekend
+            (tab 3) — read-only, één bron; tellen mee in het totaal. */}
+        {(
+          [
+            { key: "resultaat_ppwzp", label: "Resultaat PP/WZP", waarde: resultaatPpwzp },
+            { key: "resultaat_aopvi", label: "Resultaat AO/PVI", waarde: resultaatAopvi },
+          ] as const
+        ).map((r) => (
+          <div key={r.key}>
+            <label className="block text-xs font-medium text-muted mb-1">
+              {r.label} (€ mln, uit 3 · Biometrisch)
+            </label>
+            <input
+              value={r.waarde === null ? "—" : fmt1(r.waarde)}
+              readOnly
+              disabled
+              className="w-full rounded-lg border border-app-line-strong bg-app-bg px-3 py-2 text-sm text-right text-muted"
+            />
+          </div>
+        ))}
+        {OPER_MUTATIE_DEFINITIES.filter((d) => d.volgorde > 6).map((d) => (
           <div key={d.key}>
             <label className="block text-xs font-medium text-muted mb-1">
               {d.label} (€ mln, ±)
@@ -147,7 +213,9 @@ export default function OperationeelInvoer({
       >
         Totaal mutatie <strong>€ {fmt1(totaal)} mln</strong> · ultimo{" "}
         <strong>€ {fmt1(ultimo)} mln</strong>{" "}
-        <span className="text-xs">(berekend: primo + som mutaties)</span>
+        <span className="text-xs">
+          (berekend: primo + som mutaties, incl. resultaten PP/WZP en AO/PVI)
+        </span>
         {wijktAf && (
           <div className="mt-1 text-xs">
             <strong>Wijkt af van de balans:</strong> de operationele reserve staat daar op €{" "}
@@ -242,7 +310,7 @@ export default function OperationeelInvoer({
         >
           {bezig ? "Bezig…" : "Operationeel opslaan & publiceren"}
         </button>
-        {verplichtLeeg && !reserveOntbreekt && (
+        {invoerLeeg && !reserveOntbreekt && (
           <span className="text-xs text-warn-ink">
             Alle acht de mutaties, de norm en het kostendetail zijn verplicht (0 mag).
           </span>

@@ -54,6 +54,10 @@
   --phase-rgb: 109 91 166;      --phase: rgb(var(--phase-rgb));
   --phase-tint-rgb: 236 234 244; --phase-tint: rgb(var(--phase-tint-rgb));
   --phase-ink-rgb: 75 62 120;   --phase-ink: rgb(var(--phase-ink-rgb));
+
+  /* Kaart-elevatie (stuurinformatie-opmaak, T17): subtiele dubbele schaduw —
+     ink-getint zodat hij op de warme paper-achtergrond rustig blijft. */
+  --shadow-card: 0 1px 2px rgb(var(--ink-rgb) / 0.04), 0 6px 16px rgb(var(--ink-rgb) / 0.04);
 }
 
 * { box-sizing: border-box; }
@@ -98,3 +102,163 @@ body {
   100% { box-shadow: 0 0 0 14px rgba(35, 78, 112, 0); }
 }
 .status-puls { animation: status-puls 1.6s ease-out 1; }
+
+/* ============================================================================
+   Stuurinformatie-opmaaklaag (T17, decisions/0078) — gedeelde componentklassen
+   voor kaarten, KPI-tegels, tabellen, de balans en toelichting-/databoxen.
+   BRON VAN WAARHEID = de semantische tokens hierboven (geen losse hex per
+   pagina). Alle stuurinformatie-tabs erven deze klassen — inclusief de reeds
+   gebouwde balans/tabs. Visuele referentie: stuurinformatie-prototype.html.
+   ============================================================================ */
+@layer components {
+  /* ── Kaart ── rustige rand + subtiele elevatie ─────────────────────────── */
+  .si-card {
+    background: var(--app-surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 1.25rem;
+    box-shadow: var(--shadow-card);
+  }
+
+  /* ── KPI-tegel ── kaartbasis + dun accentstreepje links ────────────────── */
+  .si-kpi {
+    position: relative;
+    overflow: hidden;
+    background: var(--app-surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 0.9rem 1rem;
+    box-shadow: var(--shadow-card);
+  }
+  .si-kpi::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--accent);
+    opacity: 0.85;
+  }
+  .si-kpi-label {
+    font-size: 0.6875rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+  }
+  .si-kpi-waarde {
+    font-family: var(--font-serif), Georgia, serif;
+    font-size: 1.5rem;
+    line-height: 1.15;
+    margin-top: 0.4rem;
+    letter-spacing: -0.01em;
+    font-weight: 700;
+  }
+  .si-kpi-sub {
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-top: 0.25rem;
+  }
+
+  /* ── Tabel ── gearceerde kopregel + accentlijn, hairlines, hover, totalen ─ */
+  .si-tabel {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.8125rem;
+  }
+  .si-tabel thead th {
+    padding: 0.625rem 0.75rem;
+    font-size: 0.65625rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    font-weight: 700;
+    background: var(--app-zebra);
+    border-top: 1px solid var(--app-line);
+    border-bottom: 1.5px solid var(--app-line-strong);
+  }
+  .si-tabel thead th:first-child {
+    border-top-left-radius: 9px;
+    border-left: 1px solid var(--app-line);
+  }
+  .si-tabel thead th:last-child {
+    border-top-right-radius: 9px;
+    border-right: 1px solid var(--app-line);
+  }
+  .si-tabel tbody td {
+    padding: 0.5625rem 0.75rem;
+    border-bottom: 1px solid var(--line);
+    color: var(--ink);
+  }
+  .si-tabel tbody tr:hover td { background: var(--app-zebra); }
+  /* Getalkolommen: rechts uitgelijnd, tabular-nums (uitlijnende cijfers). */
+  .si-tabel .si-num,
+  .si-tabel th.si-num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  /* Totaal-/subtotaalregel — gearceerd met dubbele topborder (tfoot of
+     expliciete .si-totaalrij). */
+  .si-tabel tfoot td,
+  .si-tabel tr.si-totaalrij td {
+    padding: 0.6875rem 0.75rem;
+    border-top: 2px solid var(--app-line-strong);
+    border-bottom: 1px solid var(--app-line);
+    font-weight: 700;
+    background: var(--app-zebra);
+  }
+  .si-tabel tfoot td:first-child,
+  .si-tabel tr.si-totaalrij td:first-child {
+    border-bottom-left-radius: 9px;
+    border-left: 1px solid var(--app-line);
+  }
+  .si-tabel tfoot td:last-child,
+  .si-tabel tr.si-totaalrij td:last-child {
+    border-bottom-right-radius: 9px;
+    border-right: 1px solid var(--app-line);
+  }
+
+  /* ── Balans ── hairline-regels + gearceerde totaalbalk ─────────────────── */
+  .si-balansrij {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.5625rem 0.25rem;
+    border-bottom: 1px solid var(--line);
+  }
+  .si-balansrij:last-child { border-bottom: 0; }
+  .si-balansrij .si-num { font-variant-numeric: tabular-nums; font-weight: 500; }
+  .si-totaalbalk {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+    padding: 0.6875rem 0.875rem;
+    font-weight: 700;
+    background: var(--app-zebra);
+    border: 1px solid var(--app-line);
+    border-top: 2px solid var(--app-line-strong);
+    border-radius: 9px;
+  }
+
+  /* ── Toelichting-/databox ── accent- resp. warn-linkerrand ─────────────── */
+  .si-note {
+    background: var(--accent-tint);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    border-radius: 8px;
+    padding: 0.75rem 0.875rem;
+    font-size: 0.78125rem;
+    color: var(--muted);
+  }
+  .si-req {
+    background: var(--warn-tint);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--warn);
+    border-radius: 8px;
+    padding: 0.75rem 0.875rem;
+    font-size: 0.78125rem;
+    color: var(--warn-ink);
+  }
+}

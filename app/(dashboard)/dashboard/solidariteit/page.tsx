@@ -6,14 +6,16 @@ import type { SoliOntwikkeling } from "@/core/lib/stuurinfo-soli";
 import { StuurinfoShell } from "../_components/StuurinfoShell";
 
 // ============================================================
-//  Bestuurdersdashboard — tab 5 Solidariteitsbeleid (T15, decisions/0076).
+//  Bestuurdersdashboard — tab 5 Solidariteitsbeleid (T15, decisions/0076;
+//  bijgewerkt T17, decisions/0078).
 //  Ontwikkeling van de solidariteitsreserve met de vulling uitgesplitst naar
-//  bron (premie, rendement, resultaat micro-langleven ±, overrendements-
+//  bron (premie, rendement, netto langleven-resultaat ±, overrendements-
 //  bijdrage → netto vulling), de positie t.o.v. de bandbreedte (band-gauge)
 //  en de evenwichtigheidsduiding. Netto vulling, begin- en eindstand zijn
 //  AFGELEID (stuurinfo-soli.ts); de stand + band komen van de soli-reserve-rij
-//  — DEZELFDE bron als het tab 1-stoplicht (één bron). Micro-langleven is
-//  herleidbaar tot het biometrische resultaat van tab 3 (later ticket).
+//  — DEZELFDE bron als het tab 1-stoplicht (één bron). De langleven-post is
+//  het AFGELEIDE netto langleven-resultaat uit tab 3 (reeks langleven:
+//  micro + macro + vrijval — stuurinfo-biometrie.ts, één bron).
 //  Data onder fonds-RLS; presentatie volgt het goedgekeurde prototype
 //  (stuurinformatie-prototype.html, tab 5).
 //  WERKHYPOTHESE (compliancegevoelig): de vulregels (welke bronnen de reserve
@@ -161,11 +163,11 @@ export default async function SolidariteitPage({
       financieringsgraad={data.financieringsgraad}
     >
       {!data.gekozenPeriode ? (
-        <div className="bg-white rounded-xl border border-line p-5 text-sm text-muted">
+        <div className="si-card text-sm text-muted">
           Er zijn nog geen rapportageperiodes beschikbaar voor dit fonds.
         </div>
       ) : !heeftData ? (
-        <div className="bg-white rounded-xl border border-line p-5 text-sm text-muted">
+        <div className="si-card text-sm text-muted">
           Geen solidariteitsdata beschikbaar voor {huidigLabel}. Een voorzitter of beheerder kan de
           vulling invoeren via Beheer › Stuurinformatie (sectie Solidariteit).
         </div>
@@ -187,7 +189,7 @@ export default async function SolidariteitPage({
             className="grid gap-3"
             style={{ gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))" }}
           >
-            <div className="bg-white rounded-xl border border-line p-4">
+            <div className="si-kpi">
               <div className="text-xs text-muted">Stand solidariteitsreserve</div>
               <div className="text-2xl font-bold text-ink mt-1">
                 {o.stand === null ? "—" : `€ ${fmt1(o.stand)} mln`}
@@ -196,7 +198,7 @@ export default async function SolidariteitPage({
                 {o.pctWaarde === null ? "—" : `${fmtPct(o.pctWaarde)} ${basisLabel}`}
               </div>
             </div>
-            <div className="bg-white rounded-xl border border-line p-4">
+            <div className="si-kpi">
               <div className="text-xs text-muted">Netto vulling {huidigLabel}</div>
               <div
                 className={`text-2xl font-bold mt-1 ${
@@ -213,7 +215,7 @@ export default async function SolidariteitPage({
               </div>
               <div className="text-xs text-muted mt-1">som van de bronnen</div>
             </div>
-            <div className="bg-white rounded-xl border border-line p-4">
+            <div className="si-kpi">
               <div className="text-xs text-muted">Uitdeling {huidigLabel}</div>
               <div className="text-2xl font-bold text-ink mt-1">
                 {o.uitdeling === null ? "—" : `€ ${fmt1(o.uitdeling)} mln`}
@@ -222,7 +224,7 @@ export default async function SolidariteitPage({
                 {o.uitdeling === 0 ? "geen aanwending" : "aanwending dit kwartaal"}
               </div>
             </div>
-            <div className="bg-white rounded-xl border border-line p-4">
+            <div className="si-kpi">
               <div className="text-xs text-muted">Bandbreedte</div>
               <div className="text-2xl font-bold text-ink mt-1">
                 {o.ondergrens !== null && o.bovengrens !== null
@@ -235,7 +237,7 @@ export default async function SolidariteitPage({
 
           <div className="grid gap-4 lg:grid-cols-2 items-start">
             {/* Band-gauge */}
-            <div className="bg-white rounded-xl border border-line p-5">
+            <div className="si-card">
               <div className="mb-3">
                 <div className="font-semibold text-ink text-sm">Stand t.o.v. bandbreedte</div>
                 <div className="text-xs text-muted mt-0.5">
@@ -243,13 +245,13 @@ export default async function SolidariteitPage({
                 </div>
               </div>
               <BandGauge o={o} />
-              <div className="mt-3 bg-app-bg border-l-2 border-accent rounded-r-lg px-4 py-3 text-xs text-muted">
+              <div className="mt-3 si-note">
                 <strong className="text-ink">Status:</strong> {STATUS_DUIDING[o.status]}
               </div>
             </div>
 
             {/* Ontwikkeling solidariteitsreserve */}
-            <div className="bg-white rounded-xl border border-line p-5">
+            <div className="si-card">
               <div className="mb-3">
                 <div className="font-semibold text-ink text-sm">Ontwikkeling solidariteitsreserve</div>
                 <div className="text-xs text-muted mt-0.5">
@@ -258,28 +260,28 @@ export default async function SolidariteitPage({
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="si-tabel">
                   <thead>
-                    <tr className="text-xs text-muted border-b border-line">
-                      <th className="text-left font-medium py-2 pr-3">Post</th>
-                      <th className="text-right font-medium py-2 pl-3 whitespace-nowrap">
+                    <tr>
+                      <th className="text-left">Post</th>
+                      <th className="si-num">
                         {huidigLabel} <span className="font-normal">huidig</span>
                       </th>
                       {vorigLabel && (
-                        <th className="text-right font-medium py-2 pl-3 whitespace-nowrap">
+                        <th className="si-num">
                           {vorigLabel} <span className="font-normal">vorig</span>
                         </th>
                       )}
                     </tr>
                   </thead>
                   <tbody>
-                    <tr className="border-b border-line">
-                      <td className="py-2 pr-3 text-ink">Beginstand</td>
-                      <td className="py-2 pl-3 text-right tabular-nums">
+                    <tr>
+                      <td className="text-ink">Beginstand</td>
+                      <td className="si-num">
                         {o.beginstand === null ? "—" : fmt1(o.beginstand)}
                       </td>
                       {vorigLabel && (
-                        <td className="py-2 pl-3 text-right tabular-nums text-muted">
+                        <td className="si-num text-muted">
                           {v?.beginstand == null ? "—" : fmt1(v.beginstand)}
                         </td>
                       )}
@@ -287,57 +289,57 @@ export default async function SolidariteitPage({
                     {o.bronnen.map((b) => {
                       const vorigeBron = v?.bronnen.find((x) => x.key === b.key);
                       return (
-                        <tr key={b.key} className="border-b border-line">
-                          <td className="py-2 pr-3 pl-6 text-ink">
+                        <tr key={b.key}>
+                          <td className="pl-6 text-ink">
                             {b.label}
-                            {b.key === "micro_langleven" && (
-                              <span className="text-muted text-xs"> (± · zie tab 3)</span>
+                            {b.key === "langleven" && (
+                              <span className="text-muted text-xs"> (afgeleid · tab 3)</span>
                             )}
                           </td>
-                          <td className="py-2 pl-3 text-right tabular-nums">
+                          <td className="si-num">
                             <SignedCel waarde={b.waarde} />
                           </td>
                           {vorigLabel && (
-                            <td className="py-2 pl-3 text-right tabular-nums">
+                            <td className="si-num">
                               <SignedCel waarde={vorigeBron?.waarde ?? null} />
                             </td>
                           )}
                         </tr>
                       );
                     })}
-                    <tr className="border-b border-line font-semibold">
-                      <td className="py-2 pr-3 text-ink">
+                    <tr className="si-totaalrij font-semibold">
+                      <td className="text-ink">
                         Netto vulling <span className="text-muted text-xs italic font-normal">(afgeleid)</span>
                       </td>
-                      <td className="py-2 pl-3 text-right tabular-nums">
+                      <td className="si-num">
                         <SignedCel waarde={o.nettoVulling} vet />
                       </td>
                       {vorigLabel && (
-                        <td className="py-2 pl-3 text-right tabular-nums">
+                        <td className="si-num">
                           <SignedCel waarde={v?.nettoVulling ?? null} vet />
                         </td>
                       )}
                     </tr>
-                    <tr className="border-b border-line">
-                      <td className="py-2 pr-3 text-ink">Uitdeling</td>
-                      <td className="py-2 pl-3 text-right tabular-nums">
+                    <tr>
+                      <td className="text-ink">Uitdeling</td>
+                      <td className="si-num">
                         {o.uitdeling === null ? "—" : fmt1(o.uitdeling)}
                       </td>
                       {vorigLabel && (
-                        <td className="py-2 pl-3 text-right tabular-nums text-muted">
+                        <td className="si-num text-muted">
                           {v?.uitdeling == null ? "—" : fmt1(v.uitdeling)}
                         </td>
                       )}
                     </tr>
-                    <tr className="border-b border-line font-semibold">
-                      <td className="py-2 pr-3 text-ink">
+                    <tr className="si-totaalrij font-semibold">
+                      <td className="text-ink">
                         Eindstand <span className="text-muted text-xs italic font-normal">(afgeleid)</span>
                       </td>
-                      <td className="py-2 pl-3 text-right tabular-nums whitespace-nowrap">
+                      <td className="si-num">
                         {o.eindstand === null ? "—" : fmt1(o.eindstand)} <Pijl richting={eindRichting} />
                       </td>
                       {vorigLabel && (
-                        <td className="py-2 pl-3 text-right tabular-nums text-muted">
+                        <td className="si-num text-muted">
                           {v?.eindstand == null ? "—" : fmt1(v.eindstand)}
                         </td>
                       )}
@@ -345,19 +347,19 @@ export default async function SolidariteitPage({
                     <tr>
                       <td colSpan={vorigLabel ? 3 : 2} className="py-1" />
                     </tr>
-                    <tr className="border-b border-line">
-                      <td className="py-2 pr-3 text-ink">Stand % {basisLabel}</td>
-                      <td className="py-2 pl-3 text-right tabular-nums">
+                    <tr>
+                      <td className="text-ink">Stand % {basisLabel}</td>
+                      <td className="si-num">
                         {o.pctWaarde === null ? "—" : fmtPct(o.pctWaarde)}
                       </td>
                       {vorigLabel && (
-                        <td className="py-2 pl-3 text-right tabular-nums text-muted">
+                        <td className="si-num text-muted">
                           {v?.pctWaarde == null ? "—" : fmtPct(v.pctWaarde)}
                         </td>
                       )}
                     </tr>
                     <tr>
-                      <td className="py-2 pr-3 text-ink">
+                      <td className="text-ink">
                         Positie in band
                         {o.ondergrens !== null && o.bovengrens !== null && (
                           <span className="text-muted text-xs">
@@ -366,11 +368,11 @@ export default async function SolidariteitPage({
                           </span>
                         )}
                       </td>
-                      <td className="py-2 pl-3 text-right">
+                      <td className="text-right">
                         <Chip status={o.status} />
                       </td>
                       {vorigLabel && (
-                        <td className="py-2 pl-3 text-right">
+                        <td className="text-right">
                           {v ? <Chip status={v.status} /> : <span className="text-muted">—</span>}
                         </td>
                       )}
@@ -382,14 +384,16 @@ export default async function SolidariteitPage({
           </div>
 
           {/* Duiding — mutatie naar bron + evenwichtigheid (prototype) */}
-          <div className="bg-app-bg border-l-2 border-accent rounded-r-lg px-4 py-3 text-xs text-muted">
+          <div className="si-note">
             <strong className="text-ink">Mutatie naar bron:</strong> de reserve muteert door premie,
-            beleggingsrendement, het <strong className="text-ink">resultaat op micro-langleven</strong>{" "}
-            (sterfte — kan positief óf negatief zijn; onderbouwing in tab 3 Biometrische
-            rendementen) en een overrendementsbijdrage. Netto vulling = de som hiervan, minus
-            eventuele uitdeling. Door de bron te tonen zie je wélke resultaten de reserve voeden of
-            juist drukken — relevant voor de evenwichtigheidstoets. Vul- en uitdeelregels blijven
-            een expliciet bestuursbesluit.
+            beleggingsrendement, het{" "}
+            <strong className="text-ink">netto langleven-resultaat</strong> (micro- en
+            macro-langleven en de vrijval van kapitaal bij overlijden — kan positief óf negatief
+            zijn; afgeleid uit tab 3 Biometrische rendementen, dezelfde bron) en een
+            overrendementsbijdrage. Netto vulling = de som hiervan, minus eventuele uitdeling. Door
+            de bron te tonen zie je wélke resultaten de reserve voeden of juist drukken — relevant
+            voor de evenwichtigheidstoets. Vul- en uitdeelregels blijven een expliciet
+            bestuursbesluit.
           </div>
         </>
       )}

@@ -5,14 +5,18 @@
 //  (stuurinfo-soli.sanity.ts) én de beheer-invoersectie dezelfde afleiding
 //  live kan tonen als de server-leeslaag (stuurinfo-bron.ts).
 //
-//  Kernbesluiten (decisions/0076, werkopdracht Spreiding+Solidariteit):
-//  - De vulling van de solidariteitsreserve wordt per BRON opgeslagen (reeks
-//    soli_vulling: premie, rendement, micro_langleven ±, overrendements-
-//    bijdrage) + de uitdeling (kpi soli_uitdeling). Netto vulling, beginstand
-//    en eindstand worden hier AFGELEID — nooit data.
-//  - micro_langleven = het biometrische resultaat van tab 3 (later ticket) —
-//    ÉÉN bron: tab 3 leest/schrijft ditzelfde reeks-punt, nooit een tweede
-//    losse invoer van hetzelfde bedrag.
+//  Kernbesluiten (decisions/0076 + 0078, werkopdrachten Solidariteit + Biometrie):
+//  - De vulling van de solidariteitsreserve wordt per INVOERBRON opgeslagen
+//    (reeks soli_vulling: premie, rendement, overrendementsbijdrage) + de
+//    uitdeling (kpi soli_uitdeling). Netto vulling, beginstand en eindstand
+//    worden hier AFGELEID — nooit data.
+//  - De langleven-post (SOLI_LANGLEVEN_POST, volgorde 3) is het AFGELEIDE
+//    netto langleven-resultaat uit tab 3 (reeks langleven: micro + macro +
+//    vrijval — stuurinfo-biometrie.ts). ÉÉN bron, reader-afleiding
+//    (decisions/0078 — vervangt het T15-opslagpunt soli_vulling.
+//    micro_langleven): de leeslaag injecteert de waarde als langlevenNetto,
+//    en de RPC stuurinfo_soli_opslaan berekent 'm zelf uit de langleven-reeks
+//    (SOLI_LANGLEVEN_ONTBREEKT als die onvolledig is).
 //  - De EINDSTAND is per definitie de soli-stand uit de balans (reserve-rij);
 //    beginstand = stand van de voorgaande periode. De afgeleide eindstand
 //    (begin + netto − uitdeling) moet daarmee sporen: de RPC weigert een
@@ -29,16 +33,36 @@ import { leidReserveStatusAf, type ReserveStatus } from "./stuurinfo-balans";
 
 // ── Definities (één bron voor reader, validator, beheer-UI en RPC-docs) ──────
 
-export const SOLI_VULLING_DEFINITIES = [
+/** De drie INVOERBRONNEN (opgeslagen als soli_vulling-rijen; volgorde 3 is
+ *  gereserveerd voor de afgeleide langleven-post). */
+export const SOLI_VULLING_INVOER_DEFINITIES = [
   { key: "premie", label: "Premie", volgorde: 1 },
   { key: "rendement", label: "Rendement", volgorde: 2 },
-  { key: "micro_langleven", label: "Resultaat micro-langleven", volgorde: 3 },
   { key: "overrendementsbijdrage", label: "Overrendementsbijdrage", volgorde: 4 },
 ] as const;
 
-export type SoliVullingKey = (typeof SOLI_VULLING_DEFINITIES)[number]["key"];
+export type SoliVullingInvoerKey = (typeof SOLI_VULLING_INVOER_DEFINITIES)[number]["key"];
 
-export const SOLI_VULLING_KEYS = SOLI_VULLING_DEFINITIES.map((d) => d.key) as SoliVullingKey[];
+export const SOLI_VULLING_INVOER_KEYS =
+  SOLI_VULLING_INVOER_DEFINITIES.map((d) => d.key) as SoliVullingInvoerKey[];
+
+/** De AFGELEIDE langleven-post (netto langleven-resultaat, tab 3) — nooit
+ *  opgeslagen; de leeslaag injecteert de waarde (decisions/0078). */
+export const SOLI_LANGLEVEN_POST = {
+  key: "langleven",
+  label: "Netto langleven resultaat",
+  volgorde: 3,
+} as const;
+
+/** Volledige ontwikkelingsvolgorde (3 invoerbronnen + afgeleide langleven-post). */
+export const SOLI_VULLING_DEFINITIES = [
+  ...SOLI_VULLING_INVOER_DEFINITIES,
+  SOLI_LANGLEVEN_POST,
+].sort((a, b) => a.volgorde - b.volgorde) as ReadonlyArray<{
+  readonly key: string;
+  readonly label: string;
+  readonly volgorde: number;
+}>;
 
 /** reeks_key van de vullingsbronnen en kpi_key van de uitdeling. */
 export const SOLI_VULLING_REEKS = "soli_vulling";
@@ -57,6 +81,9 @@ export type SoliVullingBron = {
 /** De soli-gegevens van één periode zoals de leeslaag ze aanlevert. */
 export type SoliPeriodeBron = {
   vulling: SoliVullingBron[];
+  /** AFGELEID netto langleven-resultaat (tab 3, reeks langleven — één bron);
+   *  null = biometrie-invoer (nog) niet compleet. */
+  langlevenNetto: number | null;
   /** kpi soli_uitdeling; null = (nog) niet ingevoerd. */
   uitdeling: number | null;
   /** Soli-stand uit fonds_stuurinfo_reserve (balansbron) = de eindstand. */
@@ -69,9 +96,11 @@ export type SoliPeriodeBron = {
 export type SoliOntwikkeling = {
   /** Stand voorgaande periode, of teruggerekend (stand − netto + uitdeling). */
   beginstand: number | null;
-  /** Bronregels in vaste volgorde (premie, rendement, micro-langleven, overrendementsbijdrage). */
+  /** Bronregels in vaste volgorde (premie, rendement, langleven-post [afgeleid,
+   *  tab 3], overrendementsbijdrage). */
   bronnen: Array<{ key: string; label: string; volgorde: number; waarde: number | null }>;
-  /** Som van de vier bronnen; null zodra een bron ontbreekt (geen halve som). */
+  /** Som van de drie invoerbronnen + de afgeleide langleven-post; null zodra
+   *  een bron ontbreekt (geen halve som). */
   nettoVulling: number | null;
   uitdeling: number | null;
   /** beginstand + netto − uitdeling (afgeleid); null zonder volledige invoer. */
@@ -94,11 +123,16 @@ export type SoliOntwikkeling = {
  *  beheer-UI en (gespiegeld in SQL) de RPC-check SOLI_EINDSTAND_ONGELIJK. */
 export const SOLI_TOLERANTIE = 0.005;
 
-/** Som van de vier bronnen; null zodra er een ontbreekt (geen schijnzekerheid). */
-export function nettoVullingVan(vulling: SoliVullingBron[]): number | null {
+/** Som van de drie invoerbronnen + de afgeleide langleven-post; null zodra er
+ *  een ontbreekt (geen schijnzekerheid). */
+export function nettoVullingVan(
+  vulling: SoliVullingBron[],
+  langlevenNetto: number | null
+): number | null {
+  if (langlevenNetto === null) return null;
   const perKey = new Map(vulling.map((b) => [b.puntKey, b.waarde]));
-  let som = 0;
-  for (const def of SOLI_VULLING_DEFINITIES) {
+  let som = langlevenNetto;
+  for (const def of SOLI_VULLING_INVOER_DEFINITIES) {
     const w = perKey.get(def.key);
     if (w === null || w === undefined) return null;
     som += Number(w);
@@ -116,14 +150,25 @@ export function leidSoliOntwikkelingAf(
   vorigeStand: number | null
 ): SoliOntwikkeling {
   const perKey = new Map(bron.vulling.map((b) => [b.puntKey, b]));
-  const bronnen = SOLI_VULLING_DEFINITIES.map((def) => ({
-    key: def.key,
-    label: perKey.get(def.key)?.label ?? def.label,
-    volgorde: def.volgorde,
-    waarde: perKey.get(def.key)?.waarde ?? null,
-  }));
+  const bronnen = SOLI_VULLING_DEFINITIES.map((def) =>
+    def.key === SOLI_LANGLEVEN_POST.key
+      ? {
+          // De langleven-post is AFGELEID (tab 3) — waarde uit langlevenNetto,
+          // nooit uit een opgeslagen soli_vulling-rij (decisions/0078).
+          key: def.key,
+          label: def.label,
+          volgorde: def.volgorde,
+          waarde: bron.langlevenNetto,
+        }
+      : {
+          key: def.key,
+          label: perKey.get(def.key)?.label ?? def.label,
+          volgorde: def.volgorde,
+          waarde: perKey.get(def.key)?.waarde ?? null,
+        }
+  );
 
-  const netto = nettoVullingVan(bron.vulling);
+  const netto = nettoVullingVan(bron.vulling, bron.langlevenNetto);
 
   const beginstand =
     vorigeStand !== null

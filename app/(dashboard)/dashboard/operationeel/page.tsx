@@ -160,11 +160,11 @@ export default async function OperationeelPage({
       financieringsgraad={data.financieringsgraad}
     >
       {!data.gekozenPeriode ? (
-        <div className="bg-white rounded-xl border border-line p-5 text-sm text-muted">
+        <div className="si-card text-sm text-muted">
           Er zijn nog geen rapportageperiodes beschikbaar voor dit fonds.
         </div>
       ) : !heeftData ? (
-        <div className="bg-white rounded-xl border border-line p-5 text-sm text-muted">
+        <div className="si-card text-sm text-muted">
           Geen operationeel-beleidsdata beschikbaar voor {huidigLabel}. Een voorzitter of beheerder
           kan de mutaties invoeren via Beheer › Stuurinformatie (sectie Operationeel).
         </div>
@@ -186,7 +186,7 @@ export default async function OperationeelPage({
             className="grid gap-3"
             style={{ gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))" }}
           >
-            <div className="bg-white rounded-xl border border-line p-4">
+            <div className="si-kpi">
               <div className="text-xs text-muted">Operationele reserve</div>
               <div className="text-2xl font-bold text-ink mt-1">
                 {o.stand === null ? "—" : `€ ${fmt1(o.stand)} mln`}
@@ -203,14 +203,14 @@ export default async function OperationeelPage({
                 {o.pctVanNorm === null ? "—" : `${fmtPct(o.pctVanNorm)} v. norm`}
               </div>
             </div>
-            <div className="bg-white rounded-xl border border-line p-4">
+            <div className="si-kpi">
               <div className="text-xs text-muted">Norm</div>
               <div className="text-2xl font-bold text-ink mt-1">
                 {o.norm === null ? "—" : `€ ${fmt1(o.norm)} mln`}
               </div>
               <div className="text-xs text-muted mt-1">ABTN</div>
             </div>
-            <div className="bg-white rounded-xl border border-line p-4">
+            <div className="si-kpi">
               <div className="text-xs text-muted">Kosten YTD</div>
               <div className="text-2xl font-bold text-ink mt-1">
                 {data.kosten.totaalRealisatie === null
@@ -233,7 +233,7 @@ export default async function OperationeelPage({
                     : "boven begroting"}
               </div>
             </div>
-            <div className="bg-white rounded-xl border border-line p-4">
+            <div className="si-kpi">
               <div className="text-xs text-muted">Buffer</div>
               <div
                 className={`text-2xl font-bold mt-1 ${
@@ -253,7 +253,7 @@ export default async function OperationeelPage({
           </div>
 
           {/* Ontwikkeling operationele reserve */}
-          <div className="bg-white rounded-xl border border-line p-5">
+          <div className="si-card">
             <div className="mb-3">
               <div className="font-semibold text-ink text-sm">Ontwikkeling operationele reserve</div>
               <div className="text-xs text-muted mt-0.5">
@@ -262,28 +262,28 @@ export default async function OperationeelPage({
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="si-tabel">
                 <thead>
-                  <tr className="text-xs text-muted border-b border-line">
-                    <th className="text-left font-medium py-2 pr-3">Post</th>
-                    <th className="text-right font-medium py-2 pl-3 whitespace-nowrap">
+                  <tr>
+                    <th className="text-left">Post</th>
+                    <th className="text-right whitespace-nowrap">
                       {huidigLabel} <span className="font-normal">huidig</span>
                     </th>
                     {vorigLabel && (
-                      <th className="text-right font-medium py-2 pl-3 whitespace-nowrap">
+                      <th className="text-right whitespace-nowrap">
                         {vorigLabel} <span className="font-normal">vorig</span>
                       </th>
                     )}
                   </tr>
                 </thead>
                 <tbody>
-                  <tr className="border-b border-line">
-                    <td className="py-2 pr-3 text-ink">Primo</td>
-                    <td className="py-2 pl-3 text-right tabular-nums">
+                  <tr>
+                    <td className="text-ink">Primo</td>
+                    <td className="si-num">
                       {o.primo === null ? "—" : fmt1(o.primo)}
                     </td>
                     {vorigLabel && (
-                      <td className="py-2 pl-3 text-right tabular-nums text-muted">
+                      <td className="si-num text-muted">
                         {v?.primo == null ? "—" : fmt1(v.primo)}
                       </td>
                     )}
@@ -291,8 +291,8 @@ export default async function OperationeelPage({
                   {o.bronnen.map((b) => {
                     const vorigeBron = v?.bronnen.find((x) => x.key === b.key);
                     return (
-                      <tr key={b.key} className="border-b border-line">
-                        <td className="py-2 pr-3 pl-6 text-ink">
+                      <tr key={b.key}>
+                        <td className="pl-6 text-ink">
                           {b.key === "gemist_rendement_twk" ? (
                             <>
                               Gemist rendement <span className="text-muted text-xs">(a.g.v. TWK)</span>
@@ -301,43 +301,53 @@ export default async function OperationeelPage({
                             <>
                               Kosten <span className="text-muted text-xs">(geaggregeerd)</span>
                             </>
+                          ) : b.key === "resultaat_ppwzp" ? (
+                            <>
+                              Resultaat PP/WZP{" "}
+                              <span className="text-muted text-xs">(afgeleid · tab 3)</span>
+                            </>
+                          ) : b.key === "resultaat_aopvi" ? (
+                            <>
+                              Resultaat AO/PVI{" "}
+                              <span className="text-muted text-xs">(afgeleid · tab 3)</span>
+                            </>
                           ) : (
                             b.label
                           )}
                         </td>
-                        <td className="py-2 pl-3 text-right tabular-nums">
+                        <td className="si-num">
                           <SignedCel waarde={b.waarde} />
                         </td>
                         {vorigLabel && (
-                          <td className="py-2 pl-3 text-right tabular-nums">
+                          <td className="si-num">
                             <SignedCel waarde={vorigeBron?.waarde ?? null} />
                           </td>
                         )}
                       </tr>
                     );
                   })}
-                  <tr className="border-b border-line font-semibold">
-                    <td className="py-2 pr-3 text-ink">
+                  <tr className="si-totaalrij font-semibold">
+                    <td className="text-ink">
                       Totaal mutatie <span className="text-muted text-xs italic font-normal">(afgeleid)</span>
                     </td>
-                    <td className="py-2 pl-3 text-right tabular-nums">
+                    <td className="si-num">
                       <SignedCel waarde={o.totaalMutatie} vet />
                     </td>
                     {vorigLabel && (
-                      <td className="py-2 pl-3 text-right tabular-nums">
+                      <td className="si-num">
                         <SignedCel waarde={v?.totaalMutatie ?? null} vet />
                       </td>
                     )}
                   </tr>
-                  <tr className="font-semibold">
-                    <td className="py-2 pr-3 text-ink">
+                  <tr className="si-totaalrij font-semibold">
+                    <td className="text-ink">
                       Ultimo <span className="text-muted text-xs italic font-normal">(afgeleid)</span>
                     </td>
-                    <td className="py-2 pl-3 text-right tabular-nums whitespace-nowrap">
+                    <td className="si-num whitespace-nowrap">
                       {o.ultimo === null ? "—" : fmt1(o.ultimo)} <Pijl richting={ultimoRichting} />
                     </td>
                     {vorigLabel && (
-                      <td className="py-2 pl-3 text-right tabular-nums text-muted">
+                      <td className="si-num text-muted">
                         {v?.ultimo == null ? "—" : fmt1(v.ultimo)}
                       </td>
                     )}
@@ -346,10 +356,12 @@ export default async function OperationeelPage({
               </table>
             </div>
 
-            <div className="mt-3 bg-app-bg border-l-2 border-accent rounded-r-lg px-4 py-3 text-xs text-muted">
+            <div className="mt-3 si-note">
               <strong className="text-ink">Opbrengsten minus kosten:</strong> de tabel toont de
               reserve-ontwikkeling — opbrengsten/resultaten (premie-/kostenopslag, rendement,
-              invaar- en verrekeningsmutaties) minus de{" "}
+              invaar- en verrekeningsmutaties), de{" "}
+              <strong className="text-ink">resultaten PP/WZP en AO/PVI</strong> (afgeleid uit de
+              biometrische risicodekkingen, tab 3 — dezelfde bron) minus de{" "}
               <strong className="text-ink">geaggregeerde kosten</strong> = totaal mutatie. De
               kosten zijn hier één post; de uitsplitsing naar kostensoort en de
               begrotingsvergelijking staan hieronder. Premie betreft de kostenopslag. De ultimo is
@@ -359,13 +371,13 @@ export default async function OperationeelPage({
 
           <div className="grid gap-4 lg:grid-cols-2 items-start">
             {/* Reserve t.o.v. norm */}
-            <div className="bg-white rounded-xl border border-line p-5">
+            <div className="si-card">
               <div className="mb-3">
                 <div className="font-semibold text-ink text-sm">Operationele reserve t.o.v. norm</div>
                 <div className="text-xs text-muted mt-0.5">Stand, norm en bandbreedte (€ mln)</div>
               </div>
               <NormGauge o={o} />
-              <div className="mt-3 bg-app-bg border-l-2 border-accent rounded-r-lg px-4 py-3 text-xs text-muted">
+              <div className="mt-3 si-note">
                 <strong className="text-ink">Status:</strong>{" "}
                 {normDuiding ? `${normDuiding}, ` : ""}
                 {STATUS_DUIDING[o.status]}
@@ -373,7 +385,7 @@ export default async function OperationeelPage({
             </div>
 
             {/* Kosten: realisatie vs. begroting */}
-            <div className="bg-white rounded-xl border border-line p-5">
+            <div className="si-card">
               <div className="mb-3">
                 <div className="font-semibold text-ink text-sm">Kosten: realisatie vs. begroting</div>
                 <div className="text-xs text-muted mt-0.5">
@@ -382,32 +394,32 @@ export default async function OperationeelPage({
               </div>
               <KostenBars kosten={data.kosten} />
               <div className="overflow-x-auto mt-4">
-                <table className="w-full text-sm">
+                <table className="si-tabel">
                   <thead>
-                    <tr className="text-xs text-muted border-b border-line">
-                      <th className="text-left font-medium py-2 pr-3">Post</th>
-                      <th className="text-right font-medium py-2 pl-3">Realisatie</th>
-                      <th className="text-right font-medium py-2 pl-3">Begroot</th>
-                      <th className="text-right font-medium py-2 pl-3">Status</th>
+                    <tr>
+                      <th className="text-left">Post</th>
+                      <th className="text-right">Realisatie</th>
+                      <th className="text-right">Begroot</th>
+                      <th className="text-right">Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     <tr>
-                      <td className="py-2 pr-3 text-ink">
+                      <td className="text-ink">
                         Totaal kosten YTD{" "}
                         <span className="text-muted text-xs italic">(afgeleid)</span>
                       </td>
-                      <td className="py-2 pl-3 text-right tabular-nums">
+                      <td className="si-num">
                         {data.kosten.totaalRealisatie === null
                           ? "—"
                           : `€ ${fmt1(data.kosten.totaalRealisatie)}`}
                       </td>
-                      <td className="py-2 pl-3 text-right tabular-nums text-muted">
+                      <td className="si-num text-muted">
                         {data.kosten.totaalBegroot === null
                           ? "—"
                           : `€ ${fmt1(data.kosten.totaalBegroot)}`}
                       </td>
-                      <td className="py-2 pl-3 text-right">
+                      <td className="text-right">
                         {data.kosten.binnenBudget === null ? (
                           <span className="text-muted">—</span>
                         ) : data.kosten.binnenBudget ? (
@@ -426,7 +438,7 @@ export default async function OperationeelPage({
                   </tbody>
                 </table>
               </div>
-              <div className="mt-3 bg-app-bg border-l-2 border-accent rounded-r-lg px-4 py-3 text-xs text-muted">
+              <div className="mt-3 si-note">
                 <strong className="text-ink">Duiding:</strong> het kostendetail (YTD) is een
                 aangeleverde uitsplitsing en wordt bewust niet één-op-één verrekend met de
                 geaggregeerde kwartaal-kostenpost in de ontwikkeling hierboven.

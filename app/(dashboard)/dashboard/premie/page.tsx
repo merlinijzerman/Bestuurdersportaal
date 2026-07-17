@@ -151,11 +151,11 @@ export default async function PremiePage({
       financieringsgraad={data.financieringsgraad}
     >
       {!data.gekozenPeriode ? (
-        <div className="bg-white rounded-xl border border-line p-5 text-sm text-muted">
+        <div className="si-card text-sm text-muted">
           Er zijn nog geen rapportageperiodes beschikbaar voor dit fonds.
         </div>
       ) : !heeftData ? (
-        <div className="bg-white rounded-xl border border-line p-5 text-sm text-muted">
+        <div className="si-card text-sm text-muted">
           Geen premie- en compensatiedata beschikbaar voor {huidigLabel}. Een voorzitter of
           beheerder kan de gegevens invoeren via Beheer › Stuurinformatie (sectie Premie &amp;
           compensatie).
@@ -178,7 +178,7 @@ export default async function PremiePage({
             className="grid gap-3"
             style={{ gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))" }}
           >
-            <div className="bg-white rounded-xl border border-line p-4">
+            <div className="si-kpi">
               <div className="text-xs text-muted">Totaal premie {huidigLabel}</div>
               <div className="text-2xl font-bold text-ink mt-1">
                 {data.premie.totaalHuidig === null ? "—" : `€ ${fmt1(data.premie.totaalHuidig)} mln`}
@@ -187,7 +187,7 @@ export default async function PremiePage({
                 {data.premie.totaalPct === null ? "—" : `${fmt2(data.premie.totaalPct)}% v. grondslag`}
               </div>
             </div>
-            <div className="bg-white rounded-xl border border-line p-4">
+            <div className="si-kpi">
               <div className="text-xs text-muted">Compensatiedepot</div>
               <div className="text-2xl font-bold text-ink mt-1">
                 {d.stand === null ? "—" : `€ ${fmt1(d.stand)} mln`}
@@ -196,14 +196,14 @@ export default async function PremiePage({
                 {u.gevuldPct === null ? "—" : `${fmt1(u.gevuldPct)}% van de startomvang`}
               </div>
             </div>
-            <div className="bg-white rounded-xl border border-line p-4">
+            <div className="si-kpi">
               <div className="text-xs text-muted">Toekenning / jaar</div>
               <div className="text-2xl font-bold text-ink mt-1">
                 {data.toekenningJaar === null ? "—" : `€ ${fmt1(data.toekenningJaar)} mln`}
               </div>
               <div className="text-xs text-muted mt-1">compensatie</div>
             </div>
-            <div className="bg-white rounded-xl border border-line p-4">
+            <div className="si-kpi">
               <div className="text-xs text-muted">Prognose (ALM)</div>
               <div className="text-2xl font-bold text-ink mt-1">
                 {u.laatsteJaar === null || u.laatsteWaarde === null
@@ -223,7 +223,7 @@ export default async function PremiePage({
           </div>
 
           {/* Premie-opbrengsten naar component */}
-          <div className="bg-white rounded-xl border border-line p-5">
+          <div className="si-card">
             <div className="mb-3">
               <div className="font-semibold text-ink text-sm">Premie-opbrengsten naar component</div>
               <div className="text-xs text-muted mt-0.5">
@@ -233,16 +233,16 @@ export default async function PremiePage({
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="si-tabel">
                 <thead>
-                  <tr className="text-xs text-muted border-b border-line">
-                    <th className="text-left font-medium py-2 pr-3">Premiecomponent</th>
-                    <th className="text-right font-medium py-2 pl-3">% grondslag</th>
-                    <th className="text-right font-medium py-2 pl-3 whitespace-nowrap">
+                  <tr>
+                    <th className="text-left">Premiecomponent</th>
+                    <th className="text-right">% grondslag</th>
+                    <th className="text-right whitespace-nowrap">
                       {huidigLabel} <span className="font-normal">huidig</span>
                     </th>
                     {vorigLabel && (
-                      <th className="text-right font-medium py-2 pl-3 whitespace-nowrap">
+                      <th className="text-right whitespace-nowrap">
                         {vorigLabel} <span className="font-normal">vorig</span>
                       </th>
                     )}
@@ -250,33 +250,33 @@ export default async function PremiePage({
                 </thead>
                 <tbody>
                   {data.premie.regels.map((r) => (
-                    <tr key={r.key} className="border-b border-line">
-                      <td className="py-2 pr-3 text-ink">{r.label}</td>
-                      <td className="py-2 pl-3 text-right tabular-nums">
+                    <tr key={r.key}>
+                      <td className="text-ink">{r.label}</td>
+                      <td className="si-num">
                         {r.pct === null ? "—" : `${fmt2(r.pct)}%`}
                       </td>
-                      <td className="py-2 pl-3 text-right tabular-nums">
+                      <td className="si-num">
                         {r.huidig === null ? "—" : fmt1(r.huidig)}
                       </td>
                       {vorigLabel && (
-                        <td className="py-2 pl-3 text-right tabular-nums text-muted">
+                        <td className="si-num text-muted">
                           {r.vorig === null ? "—" : fmt1(r.vorig)}
                         </td>
                       )}
                     </tr>
                   ))}
-                  <tr className="font-semibold">
-                    <td className="py-2 pr-3 text-ink">
+                  <tr className="si-totaalrij font-semibold">
+                    <td className="text-ink">
                       Totaal premie <span className="text-muted text-xs italic font-normal">(afgeleid)</span>
                     </td>
-                    <td className="py-2 pl-3 text-right tabular-nums">
+                    <td className="si-num">
                       {data.premie.totaalPct === null ? "—" : `${fmt2(data.premie.totaalPct)}%`}
                     </td>
-                    <td className="py-2 pl-3 text-right tabular-nums">
+                    <td className="si-num">
                       {data.premie.totaalHuidig === null ? "—" : fmt1(data.premie.totaalHuidig)}
                     </td>
                     {vorigLabel && (
-                      <td className="py-2 pl-3 text-right tabular-nums text-muted">
+                      <td className="si-num text-muted">
                         {data.premie.totaalVorig === null ? "—" : fmt1(data.premie.totaalVorig)}
                       </td>
                     )}
@@ -285,7 +285,7 @@ export default async function PremiePage({
               </table>
             </div>
 
-            <div className="mt-3 bg-app-bg border-l-2 border-accent rounded-r-lg px-4 py-3 text-xs text-muted">
+            <div className="mt-3 si-note">
               <strong className="text-ink">% grondslag:</strong> elke component als percentage van
               de premiegrondslag; samen de totale premie. De{" "}
               <strong className="text-ink">opslagen</strong> (uitvoerings- en toekomstige kosten)
@@ -296,7 +296,7 @@ export default async function PremiePage({
 
           <div className="grid gap-4 lg:grid-cols-2 items-start">
             {/* Ontwikkeling compensatiedepot */}
-            <div className="bg-white rounded-xl border border-line p-5">
+            <div className="si-card">
               <div className="mb-3">
                 <div className="font-semibold text-ink text-sm">Ontwikkeling compensatiedepot</div>
                 <div className="text-xs text-muted mt-0.5">
@@ -305,28 +305,28 @@ export default async function PremiePage({
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="si-tabel">
                   <thead>
-                    <tr className="text-xs text-muted border-b border-line">
-                      <th className="text-left font-medium py-2 pr-3">Post</th>
-                      <th className="text-right font-medium py-2 pl-3 whitespace-nowrap">
+                    <tr>
+                      <th className="text-left">Post</th>
+                      <th className="text-right whitespace-nowrap">
                         {huidigLabel} <span className="font-normal">huidig</span>
                       </th>
                       {vorigLabel && (
-                        <th className="text-right font-medium py-2 pl-3 whitespace-nowrap">
+                        <th className="text-right whitespace-nowrap">
                           {vorigLabel} <span className="font-normal">vorig</span>
                         </th>
                       )}
                     </tr>
                   </thead>
                   <tbody>
-                    <tr className="border-b border-line">
-                      <td className="py-2 pr-3 text-ink">Primo</td>
-                      <td className="py-2 pl-3 text-right tabular-nums">
+                    <tr>
+                      <td className="text-ink">Primo</td>
+                      <td className="si-num">
                         {d.primo === null ? "—" : fmt1(d.primo)}
                       </td>
                       {vorigLabel && (
-                        <td className="py-2 pl-3 text-right tabular-nums text-muted">
+                        <td className="si-num text-muted">
                           {dv?.primo == null ? "—" : fmt1(dv.primo)}
                         </td>
                       )}
@@ -334,8 +334,8 @@ export default async function PremiePage({
                     {d.bronnen.map((b) => {
                       const vorigeBron = dv?.bronnen.find((x) => x.key === b.key);
                       return (
-                        <tr key={b.key} className="border-b border-line">
-                          <td className="py-2 pr-3 pl-6 text-ink">
+                        <tr key={b.key}>
+                          <td className="pl-6 text-ink">
                             {b.key === "onttrekkingen" ? (
                               <>
                                 Onttrekkingen{" "}
@@ -345,40 +345,40 @@ export default async function PremiePage({
                               b.label
                             )}
                           </td>
-                          <td className="py-2 pl-3 text-right tabular-nums">
+                          <td className="si-num">
                             <SignedCel waarde={b.waarde} />
                           </td>
                           {vorigLabel && (
-                            <td className="py-2 pl-3 text-right tabular-nums">
+                            <td className="si-num">
                               <SignedCel waarde={vorigeBron?.waarde ?? null} />
                             </td>
                           )}
                         </tr>
                       );
                     })}
-                    <tr className="border-b border-line font-semibold">
-                      <td className="py-2 pr-3 text-ink">
+                    <tr className="font-semibold">
+                      <td className="text-ink">
                         Totaal mutatie{" "}
                         <span className="text-muted text-xs italic font-normal">(afgeleid)</span>
                       </td>
-                      <td className="py-2 pl-3 text-right tabular-nums">
+                      <td className="si-num">
                         <SignedCel waarde={d.totaalMutatie} vet />
                       </td>
                       {vorigLabel && (
-                        <td className="py-2 pl-3 text-right tabular-nums">
+                        <td className="si-num">
                           <SignedCel waarde={dv?.totaalMutatie ?? null} vet />
                         </td>
                       )}
                     </tr>
-                    <tr className="font-semibold">
-                      <td className="py-2 pr-3 text-ink">
+                    <tr className="si-totaalrij font-semibold">
+                      <td className="text-ink">
                         Ultimo <span className="text-muted text-xs italic font-normal">(afgeleid)</span>
                       </td>
-                      <td className="py-2 pl-3 text-right tabular-nums whitespace-nowrap">
+                      <td className="si-num whitespace-nowrap">
                         {d.ultimo === null ? "—" : fmt1(d.ultimo)} <Pijl richting={ultimoRichting} />
                       </td>
                       {vorigLabel && (
-                        <td className="py-2 pl-3 text-right tabular-nums text-muted">
+                        <td className="si-num text-muted">
                           {dv?.ultimo == null ? "—" : fmt1(dv.ultimo)}
                         </td>
                       )}
@@ -387,7 +387,7 @@ export default async function PremiePage({
                 </table>
               </div>
 
-              <div className="mt-3 bg-app-bg border-l-2 border-accent rounded-r-lg px-4 py-3 text-xs text-muted">
+              <div className="mt-3 si-note">
                 <strong className="text-ink">Uitputtend:</strong> het depot is bedoeld om te worden
                 uitgeput — de onttrekkingen (compensatietoekenning) overtreffen doorgaans de
                 opbrengsten. De ultimo is dezelfde bron als het compensatiedepot op de balans
@@ -396,7 +396,7 @@ export default async function PremiePage({
             </div>
 
             {/* Uitputtingsprognose */}
-            <div className="bg-white rounded-xl border border-line p-5">
+            <div className="si-card">
               <div className="mb-3">
                 <div className="font-semibold text-ink text-sm">Uitputting compensatiedepot</div>
                 <div className="text-xs text-muted mt-0.5">
@@ -404,7 +404,7 @@ export default async function PremiePage({
                 </div>
               </div>
               <UitputtingChart u={u} />
-              <div className="mt-3 bg-app-bg border-l-2 border-accent rounded-r-lg px-4 py-3 text-xs text-muted">
+              <div className="mt-3 si-note">
                 <strong className="text-ink">Signalering:</strong>{" "}
                 {u.kruisjaarOndergrens !== null ? (
                   <>

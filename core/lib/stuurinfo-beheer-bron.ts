@@ -35,11 +35,19 @@ import {
 } from "@/core/lib/stuurinfo-invoer";
 import { SPREIDING_KPI_KEYS } from "@/core/lib/stuurinfo-spreiding";
 import {
-  SOLI_VULLING_KEYS,
+  SOLI_VULLING_INVOER_KEYS,
   SOLI_VULLING_REEKS,
   SOLI_UITDELING_KPI,
-  type SoliVullingKey,
+  type SoliVullingInvoerKey,
 } from "@/core/lib/stuurinfo-soli";
+import {
+  LANGLEVEN_KEYS,
+  RISICODEKKING_KEYS,
+  LANGLEVEN_REEKS,
+  RISICODEKKING_REEKS,
+  type LanglevenKey,
+  type RisicodekkingKey,
+} from "@/core/lib/stuurinfo-biometrie";
 import {
   OPER_MUTATIE_KEYS,
   OPER_KOSTEN_KEYS,
@@ -85,9 +93,15 @@ export type InvoerSnapshot = {
     bandOnder: number | null;
     bandBoven: number | null;
   };
-  /** Tab 5 (T15): vullingsbronnen + uitdeling + soli-reserve-stand (read-only
-   *  anker uit de balans; beginstand-veld = referentie.soli.reserveStand). */
-  soli: Record<SoliVullingKey, number | null> & {
+  /** Tab 3 (T17): langleven-bronnen + toegekende dekkingen. De risicopremies
+   *  (read-only referentie) staan in premie.eur (risico_ppwzp/risico_aop/
+   *  risico_pvi — tab 7, één bron); netto/resultaten worden in de UI afgeleid. */
+  biometrie: Record<LanglevenKey, number | null> & Record<RisicodekkingKey, number | null>;
+  /** Tab 5 (T15/T17): drie invoerbronnen + uitdeling + soli-reserve-stand
+   *  (read-only anker uit de balans; beginstand-veld = referentie.soli.
+   *  reserveStand). Het netto langleven-resultaat is AFGELEID uit de
+   *  biometrie-invoer (tab 3) — geen invoerveld. */
+  soli: Record<SoliVullingInvoerKey, number | null> & {
     uitdeling: number | null;
     reserveStand: number | null;
   };
@@ -157,8 +171,12 @@ const legeSnapshot = (): InvoerSnapshot => ({
   grenzen: { solidariteitsreserve: { ondergrens: null, bovengrens: null } },
   financieringsgraad: null,
   spreiding: { beschikbaar: null, voorziening: null, aanpassingsfactor: null, bandOnder: null, bandBoven: null },
+  biometrie: {
+    ...(Object.fromEntries(LANGLEVEN_KEYS.map((k) => [k, null])) as Record<LanglevenKey, number | null>),
+    ...(Object.fromEntries(RISICODEKKING_KEYS.map((k) => [k, null])) as Record<RisicodekkingKey, number | null>),
+  },
   soli: {
-    ...(Object.fromEntries(SOLI_VULLING_KEYS.map((k) => [k, null])) as Record<SoliVullingKey, number | null>),
+    ...(Object.fromEntries(SOLI_VULLING_INVOER_KEYS.map((k) => [k, null])) as Record<SoliVullingInvoerKey, number | null>),
     uitdeling: null,
     reserveStand: null,
   },
@@ -231,6 +249,8 @@ export async function haalStuurinfoInvoer(
         "balans_activa",
         "balans_passiva",
         SOLI_VULLING_REEKS,
+        LANGLEVEN_REEKS,
+        RISICODEKKING_REEKS,
         OPER_MUTATIE_REEKS,
         OPER_KOSTEN_REALISATIE_REEKS,
         OPER_KOSTEN_BEGROOT_REEKS,
@@ -275,8 +295,12 @@ export async function haalStuurinfoInvoer(
         snap.activa[r.punt_key as ActivaKey] = num(r.waarde);
       } else if (r.reeks_key === "balans_passiva" && (PASSIVA_KEYS as string[]).includes(r.punt_key)) {
         snap.passiva[r.punt_key as PassivaKey] = num(r.waarde);
-      } else if (r.reeks_key === SOLI_VULLING_REEKS && (SOLI_VULLING_KEYS as readonly string[]).includes(r.punt_key)) {
-        snap.soli[r.punt_key as SoliVullingKey] = num(r.waarde);
+      } else if (r.reeks_key === SOLI_VULLING_REEKS && (SOLI_VULLING_INVOER_KEYS as readonly string[]).includes(r.punt_key)) {
+        snap.soli[r.punt_key as SoliVullingInvoerKey] = num(r.waarde);
+      } else if (r.reeks_key === LANGLEVEN_REEKS && (LANGLEVEN_KEYS as readonly string[]).includes(r.punt_key)) {
+        snap.biometrie[r.punt_key as LanglevenKey] = num(r.waarde);
+      } else if (r.reeks_key === RISICODEKKING_REEKS && (RISICODEKKING_KEYS as readonly string[]).includes(r.punt_key)) {
+        snap.biometrie[r.punt_key as RisicodekkingKey] = num(r.waarde);
       } else if (r.reeks_key === OPER_MUTATIE_REEKS && (OPER_MUTATIE_KEYS as readonly string[]).includes(r.punt_key)) {
         snap.operationeel[r.punt_key as OperMutatieKey] = num(r.waarde);
       } else if (r.reeks_key === OPER_KOSTEN_REALISATIE_REEKS && (OPER_KOSTEN_KEYS as readonly string[]).includes(r.punt_key)) {

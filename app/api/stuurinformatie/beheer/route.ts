@@ -11,6 +11,7 @@ import {
   slaSolidariteitOp,
   slaOperationeelOp,
   slaPremieOp,
+  slaBiometrieOp,
 } from "@/core/lib/stuurinfo-beheer";
 import {
   valideerBalansInvoer,
@@ -19,6 +20,7 @@ import {
   valideerSolidariteitInvoer,
   valideerOperationeelInvoer,
   valideerPremieInvoer,
+  valideerBiometrieInvoer,
 } from "@/core/lib/stuurinfo-invoer";
 
 // ============================================================
@@ -41,7 +43,11 @@ import {
 //         { type: "premie" }          → tab 7 (T16): atomische save (RPC) van
 //         premiecomponenten (€+%) + depot-mutaties + kpi's, met HARDE
 //         mutatie-consistentie (COMP_MUTATIE_ONGELIJK → 422); de
-//         uitputtingsprognose is seed/upload-only (geen handinvoer).
+//         uitputtingsprognose is seed/upload-only (geen handinvoer);
+//         { type: "biometrie" }       → tab 3 (T17): vijf reeks-rijen
+//         (langleven + toegekende dekkingen) in één batch-upsert (allowlist
+//         400; tekenconventies 422). Afgeleiden (netto langleven, resultaten)
+//         en de risicopremies (tab 7 — één bron) bestaan niet in de vorm.
 //         Opslaan publiceert direct naar het dashboard (geen vier-ogen —
 //         bewust besluit, decisions/0075); elke mutatie wordt door de
 //         DB-trigger append-only gelogd.
@@ -158,6 +164,18 @@ export async function POST(req: NextRequest) {
         const check = valideerOperationeelInvoer(body);
         if (!check.ok) return badRequest("stuurinformatie.beheer.POST", check.fout, check.status);
         const resultaat = await slaOperationeelOp(check.invoer);
+        if (!resultaat.ok)
+          return badRequest("stuurinformatie.beheer.POST", resultaat.fout, resultaat.status);
+        return NextResponse.json({ ok: true });
+      }
+      case "biometrie": {
+        // Tab 3 (T17): allowlist-400 (netto langleven/resultaten en de
+        // risicopremies uit tab 7 bestaan niet in de vorm — afgeleid resp.
+        // één bron); tekenconventies 422 (vrijval ≥ 0, toegekend ≤ 0). De
+        // doorwerking naar tabs 5/6 wordt door de soli-/oper-RPC's getoetst.
+        const check = valideerBiometrieInvoer(body);
+        if (!check.ok) return badRequest("stuurinformatie.beheer.POST", check.fout, check.status);
+        const resultaat = await slaBiometrieOp(g.fondsId, check.invoer);
         if (!resultaat.ok)
           return badRequest("stuurinformatie.beheer.POST", resultaat.fout, resultaat.status);
         return NextResponse.json({ ok: true });
