@@ -150,7 +150,7 @@ export default async function ProceduresPage() {
     <div className="p-4 sm:p-6 lg:p-7 space-y-6">
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
-          <h1 className="font-serif text-ink text-xl font-bold">Procedures</h1>
+          <h1 className="font-serif text-ink text-xl font-bold">Processen</h1>
           <p className="text-muted text-sm mt-0.5">
             Lopende processen, beleidswijzigingen en besluittrajecten van het fonds.
           </p>

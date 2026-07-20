@@ -545,10 +545,21 @@ function StukKaart({ stuk }: { stuk: Stuk }) {
   const badge = STUK_BADGE[stuk.bestandstype ?? "pdf"];
   const eenheid = stuk.bestandstype === "xlsx" ? "tabbladen" : "pagina's";
   const kanInzien = !!stuk.opslag_pad;
+  const snippetBron = samenvatting
+    ? samenvatting.gevraagd_besluit ||
+      samenvatting.aanleiding ||
+      samenvatting.hoofdpunten?.[0] ||
+      ""
+    : stuk.samenvatting_ai ?? "";
+  const snippet = snippetBron
+    ? snippetBron.replace(/\s+/g, " ").trim().slice(0, 160) +
+      (snippetBron.length > 160 ? "…" : "")
+    : "";
 
   return (
     <div className="bg-app-bg rounded-lg border border-line">
-      <div className="w-full flex items-center gap-3 p-3 hover:bg-app-bg transition-colors rounded-lg">
+      <div className="p-3">
+        <div className="flex items-center gap-3">
         <span
           className={`w-9 h-9 bg-white border border-line rounded-md inline-flex items-center justify-center text-[10px] font-semibold flex-shrink-0 ${badge.kleur}`}
         >
@@ -575,21 +586,25 @@ function StukKaart({ stuk }: { stuk: Stuk }) {
           )}
           <div className="text-[11px] text-muted mt-0.5">
             {stuk.paginas ? `${stuk.paginas} ${eenheid}` : badge.label}
-            {stuk.samenvatting_ai ? " · AI-samenvatting beschikbaar" : " · samenvatting wordt nog gegenereerd"}
+            {!stuk.samenvatting_ai ? " · samenvatting wordt nog gegenereerd" : ""}
             {!kanInzien ? " · origineel niet beschikbaar" : ""}
           </div>
         </div>
-        {/* "Vraag de AI" per stuk verwijderd (05-07, beperking AI-ingangen):
-            navigeerde naar /ai en was redundant met de inline chat (0036),
-            die de stukken al in scope heeft. In de documentbibliotheek
-            blijft de /ai?doc=-ingang bestaan. */}
-        <button
-          onClick={() => setOpen(!open)}
-          className="text-muted text-xs px-2 py-1 hover:text-ink"
-          aria-label={open ? "Samenvatting inklappen" : "Samenvatting uitklappen"}
-        >
-          {open ? "▾" : "▸"}
-        </button>
+        </div>
+        {snippet && (
+          <p className="text-[13px] leading-snug text-ink/70 mt-2 line-clamp-2">
+            {snippet}
+          </p>
+        )}
+        {stuk.samenvatting_ai && (
+          <button
+            onClick={() => setOpen(!open)}
+            aria-expanded={open}
+            className="mt-3 inline-flex items-center gap-1.5 bg-accent-tint text-accent-ink text-[13px] font-medium px-3 py-1.5 rounded-lg hover:bg-accent hover:text-white transition-colors"
+          >
+            {open ? "Verberg samenvatting" : "Lees samenvatting"}
+          </button>
+        )}
       </div>
 
       {open && (
@@ -633,6 +648,12 @@ function StukKaart({ stuk }: { stuk: Stuk }) {
             <div className="bg-white rounded-md border border-line p-3 text-xs text-muted italic">
               Samenvatting wordt nog gegenereerd. Vernieuw de pagina over een paar seconden.
             </div>
+          )}
+          {stuk.samenvatting_ai && (
+            <p className="text-[11px] text-muted mt-2 leading-relaxed">
+              ⚠️ Automatisch gegenereerd door AI. Controleer altijd aan het bronstuk
+              voordat u een oordeel vormt.
+            </p>
           )}
         </div>
       )}

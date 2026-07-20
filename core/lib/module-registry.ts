@@ -87,7 +87,7 @@ export const MODULE_REGISTRY: Record<ModuleKey, ModuleDef> = {
     icon: "📋", defaultActief: true, manifestBeheerbaar: true,
   },
   procedures: {
-    key: "procedures", label: "Procedures", href: "/procedures", section: "Bestuur",
+    key: "procedures", label: "Processen", href: "/procedures", section: "Bestuur",
     icon: "📂", defaultActief: true, manifestBeheerbaar: true,
   },
   risicomatrix: {
