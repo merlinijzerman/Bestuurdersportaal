@@ -698,7 +698,7 @@ export default function AgendapuntChat({
   function scrollNaarBron(berichtIdx: number, bronIdx: number) {
     setOpenBronnen((s) => new Set(s).add(berichtIdx));
     window.setTimeout(() => {
-      const el = document.getElementById(`bron-${berichtIdx}-${bronIdx}`);
+      const el = document.getElementById(`bron-${agendapuntId}-${berichtIdx}-${bronIdx}`);
       if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
     }, 60);
     setHighlight({ berichtIdx, bronIdx });
@@ -810,7 +810,7 @@ export default function AgendapuntChat({
                         }}
                         open={openBronnen.has(idx)}
                         onToggle={() => toggleBronnen(idx)}
-                        ankerId={`onderbouwing-${idx}`}
+                        ankerId={`onderbouwing-${agendapuntId}-${idx}`}
                       >
                         {b.bronnen && b.bronnen.length > 0
                           ? b.bronnen.map((bron, i) => (
@@ -818,7 +818,7 @@ export default function AgendapuntChat({
                                 key={i}
                                 idx={i}
                                 bron={bron}
-                                idVoorScroll={`bron-${idx}-${i}`}
+                                idVoorScroll={`bron-${agendapuntId}-${idx}-${i}`}
                                 gehighlight={
                                   highlight?.berichtIdx === idx &&
                                   highlight?.bronIdx === i
