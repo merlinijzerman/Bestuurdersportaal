@@ -251,6 +251,25 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Stuk bij een agendapunt: vergadering_id afleiden uit het agendapunt. De
+    // trigger fn_document_agendapunt_vergadering_check eist dat vergadering_id
+    // gelijk is aan de vergadering van het agendapunt (en dus niet NULL).
+    let vergadering_id: string | null = null;
+    if (agendapunt_id) {
+      const { data: agendapuntRij, error: agendapuntError } = await supabase
+        .from("agendapunten")
+        .select("vergadering_id")
+        .eq("id", agendapunt_id)
+        .single();
+      if (agendapuntError || !agendapuntRij) {
+        return NextResponse.json(
+          { error: "Agendapunt niet gevonden of geen toegang" },
+          { status: 400 }
+        );
+      }
+      vergadering_id = agendapuntRij.vergadering_id;
+    }
+
     const { data: document, error: docError } = await supabase
       .from("documenten")
       .insert({
@@ -266,6 +285,7 @@ export async function POST(req: NextRequest) {
         opgeslagen_door: user.id,
         geindexeerd: false,
         agendapunt_id,
+        vergadering_id,
       })
       .select()
       .single();
