@@ -2,6 +2,7 @@ import { createServerSupabase } from "@/core/lib/supabase-server";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import NieuwAgendapuntForm from "../_components/NieuwAgendapuntForm";
+import VergaderingEditModal from "../_components/VergaderingEditModal";
 import AgendapuntKaart, {
   type Agendapunt,
   type Stuk,
@@ -26,6 +27,7 @@ interface Vergadering {
   locatie: string | null;
   status: "gepland" | "in_voorbereiding" | "afgerond";
   fonds_id: string;
+  aangemaakt_door: string | null;
 }
 
 const STATUS_BADGE: Record<string, { bg: string; text: string; label: string }> = {
@@ -243,6 +245,15 @@ export default async function VergaderingDetailPage({
 
   const badge = STATUS_BADGE[v.status] || STATUS_BADGE.in_voorbereiding;
 
+  // Bewerken van de vergaderkop: zelfde rechtenmodel als agendapunten
+  // (aanmaker + voorzitter/beheerder); afgerond = vergrendeld. De server
+  // (PATCH /api/vergaderingen/[id]) dwingt dit onafhankelijk af.
+  const magVergaderingBewerken =
+    v.status !== "afgerond" &&
+    (v.aangemaakt_door === user.id ||
+      huidigeRol === "voorzitter" ||
+      huidigeRol === "beheerder");
+
   return (
     <div className="p-4 sm:p-6 lg:p-7 space-y-5">
       <div className="flex items-center gap-2 text-xs text-muted">
@@ -262,11 +273,23 @@ export default async function VergaderingDetailPage({
               {v.locatie ? ` · ${v.locatie}` : ""}
             </p>
           </div>
-          <span
-            className={`text-xs font-medium px-2.5 py-1 rounded-md ${badge.bg} ${badge.text}`}
-          >
-            {badge.label}
-          </span>
+          <div className="flex items-center gap-2">
+            {magVergaderingBewerken && (
+              <VergaderingEditModal
+                vergadering={{
+                  id: v.id,
+                  titel: v.titel,
+                  datum: v.datum,
+                  locatie: v.locatie,
+                }}
+              />
+            )}
+            <span
+              className={`text-xs font-medium px-2.5 py-1 rounded-md ${badge.bg} ${badge.text}`}
+            >
+              {badge.label}
+            </span>
+          </div>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-4 border-t border-line">

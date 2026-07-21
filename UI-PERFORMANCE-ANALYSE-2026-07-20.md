@@ -78,7 +78,7 @@ Per navigatie draaien minimaal twee keer dezelfde queries:
 
 ## Aannames en openstaande vragen
 
-1. **Aanname:** Vercel- en Supabase-regio zijn mogelijk niet gecoloceerd. **Vraag:** in welke regio's draaien beide? (Bepaalt hoe zwaar B2/B3 wegen.)
+1. ~~**Aanname:** Vercel- en Supabase-regio zijn mogelijk niet gecoloceerd.~~ **Beantwoord (2026-07-20):** mismatch bevestigd — Vercel-functions in `iad1` (Washington DC), Supabase in Stockholm (`eu-north-1`). Elke DB-round-trip kostte hierdoor ~100 ms; bij ±7 sequentiële trips per pagina (B2) verklaart dit ~600–800 ms per navigatie. Fix: Function Region naar `arn1` (Stockholm) via het Vercel-dashboard; verificatie na deploy is opgenomen in de werkopdracht (tranche 1, acceptatiecriterium 4). B2/B3 blijven daarna relevant, maar met mildere weging per round trip.
 2. **Aanname:** de klacht betreft vooral navigatie- en interactietraagheid in het dashboard, niet de publieke marketingpagina's. **Vraag:** klopt dat, en zijn er specifieke schermen die het meest storen (bijv. vergaderingen-detail, AI-assistent)?
 3. **Professionele inschatting:** voor een demo-/MVP-context weegt waargenomen snelheid (B1, B4) zwaarder dan ruwe serverlatency; bestuurders beoordelen het portaal op directheid van feedback.
 
