@@ -660,10 +660,29 @@ create table if not exists public.vergaderingen (
   locatie         text,
   status          text check (status in ('gepland','in_voorbereiding','afgerond')) default 'in_voorbereiding',
   aangemaakt_door uuid references auth.users(id),
-  aangemaakt      timestamptz default now()
+  aangemaakt      timestamptz default now(),
+  -- Wijzig-audit vergaderkop (migratie 2026_07_20_vergadering_wijzigen.sql)
+  gewijzigd_op    timestamptz,
+  gewijzigd_door  uuid references auth.users(id) on delete set null
 );
 
 create index if not exists idx_verg_fonds_datum on public.vergaderingen(fonds_id, datum desc);
+
+-- Append-only mutatie-log voor de vergaderkop (titel/locatie/datum).
+-- Apart van governance_events (besluit-gericht) en agendapunt_log; RLS
+-- select/insert binnen eigen fonds, immutability via fn_log_append_only-
+-- triggers. Bron: migratie 2026_07_20_vergadering_wijzigen.sql.
+create table if not exists public.vergadering_log (
+  id             uuid primary key default uuid_generate_v4(),
+  vergadering_id uuid not null references public.vergaderingen(id) on delete cascade,
+  event_type     text not null check (event_type in ('vergadering_gewijzigd')),
+  actor_id       uuid not null references auth.users(id) on delete set null,
+  payload        jsonb not null default '{}',
+  aangemaakt     timestamptz not null default now()
+);
+
+create index if not exists idx_vergadering_log_verg
+  on public.vergadering_log(vergadering_id, aangemaakt desc);
 
 -- ── 7. Agendapunten ─────────────────────────────────────────
 create table if not exists public.agendapunten (

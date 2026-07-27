@@ -51,6 +51,11 @@ test("T10 — platformbeheerder op fonds-host → platform-back-office niet bere
   assert.deepEqual(bepaalRoute({ surface, pathname: "/platform/dashboard" }), {
     type: "notFound",
   });
+  // P3B-7: het nieuwe tenant-gebruikersscherm mag op de fonds-host niet
+  // bereikbaar zijn (service-role-pad hoort uitsluitend op de platform-host).
+  assert.deepEqual(bepaalRoute({ surface, pathname: "/platform/gebruikers" }), {
+    type: "notFound",
+  });
 });
 
 test("T10 — negatieve controle: platform is nooit de fail-safe default", () => {

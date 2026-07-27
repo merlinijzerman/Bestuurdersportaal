@@ -21,6 +21,7 @@ export default async function PlatformHome() {
     caps.includes("platform.capabilities.revoke");
   const magContact = caps.includes("platform.contact.manage");
   const magAqlab = caps.includes("platform.aqlab.operate");
+  const magGebruikers = caps.includes("platform.tenants.manage");
 
   return (
     <div className="space-y-6">
@@ -69,6 +70,14 @@ export default async function PlatformHome() {
               className="inline-flex items-center gap-2 rounded-lg bg-app-bg px-4 py-2 text-sm font-medium text-ink hover:bg-accent/10"
             >
               Bronnen-whitelist
+            </Link>
+          )}
+          {magGebruikers && (
+            <Link
+              href="/platform/gebruikers"
+              className="inline-flex items-center gap-2 rounded-lg bg-app-bg px-4 py-2 text-sm font-medium text-ink hover:bg-accent/10"
+            >
+              Tenant-gebruikers
             </Link>
           )}
           {magRechten && (
