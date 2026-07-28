@@ -1,4 +1,5 @@
 import { createServerSupabase } from "@/core/lib/supabase-server";
+import { getPortaalContext } from "@/core/lib/portaalcontext";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import NotificatiesBlok from "./_components/NotificatiesBlok";
@@ -63,18 +64,6 @@ function fmtMln(mln: number) {
   return mln >= 1000 ? `${(mln / 1000).toFixed(1).replace(".", ",")} mld` : `${mln.toLocaleString("nl-NL")} mln`;
 }
 
-interface Vergadering {
-  id: string;
-  titel: string;
-  datum: string;
-  locatie: string | null;
-}
-
-interface AgendapuntCount {
-  id: string;
-  titel: string;
-}
-
 interface LogItem {
   id: string;
   vraag: string;
@@ -104,14 +93,6 @@ interface NotifRow {
   gelezen_op: string | null;
 }
 
-interface OpenStap {
-  id: string;
-  naam: string;
-  deadline: string | null;
-  procedure_id: string;
-  procedure_titel: string;
-}
-
 export default async function HomePage() {
   const supabase = await createServerSupabase();
   const {
@@ -138,45 +119,17 @@ export default async function HomePage() {
   const voornaam = profiel?.naam?.split(" ")[0] || "";
   const rolLabel = ROL_LABEL[profiel?.rol || "bestuurder"] || "bestuurslid";
 
-  const nu = new Date().toISOString();
-
-  // Volgende vergadering
-  const { data: volgendeVergaderingenRaw } = await supabase
-    .from("vergaderingen")
-    .select("id, titel, datum, locatie")
-    .eq("fonds_id", profiel?.fonds_id || "")
-    .gte("datum", nu)
-    .order("datum", { ascending: true })
-    .limit(1);
-
-  const volgendeVergadering = (volgendeVergaderingenRaw?.[0] as Vergadering | undefined) || null;
-
-  // Agendapunten in komende vergadering + mijn inbreng-status
-  let agendapuntenZonderInbreng = 0;
-  let totaalAgendapunten = 0;
-  if (volgendeVergadering) {
-    const { data: ap } = await supabase
-      .from("agendapunten")
-      .select("id, titel")
-      .eq("vergadering_id", volgendeVergadering.id);
-    const apList = (ap || []) as AgendapuntCount[];
-    totaalAgendapunten = apList.length;
-
-    if (apList.length > 0) {
-      const { data: mijnInbreng } = await supabase
-        .from("agendapunt_inbreng")
-        .select("agendapunt_id")
-        .eq("gebruiker_id", user.id)
-        .in(
-          "agendapunt_id",
-          apList.map((a) => a.id)
-        );
-      const inbrengSet = new Set(
-        (mijnInbreng || []).map((i: { agendapunt_id: string }) => i.agendapunt_id)
-      );
-      agendapuntenZonderInbreng = apList.filter((a) => !inbrengSet.has(a.id)).length;
-    }
-  }
+  // Gedeelde portaalcontext (besluit 0085): dezelfde bron als het AI-startpunt.
+  // We geven de reeds-opgehaalde sessie door zodat er geen extra profiel-query
+  // ontstaat; React.cache() dedupliceert de afleiding binnen deze render.
+  const ctx = await getPortaalContext({
+    userId: user.id,
+    fondsId: profiel?.fonds_id || "",
+    gebruikerNaam: profiel?.naam ?? null,
+  });
+  const volgendeVergadering = ctx.volgendeVergadering;
+  const totaalAgendapunten = ctx.agendapunten.totaal;
+  const agendapuntenZonderInbreng = ctx.agendapunten.zonderEigenInbreng;
 
   // Mijn recente activiteit + meldingen (iteratie 3-A)
   // We laden alle 4 streams parallel zodat de homepage zo snel mogelijk
@@ -229,52 +182,9 @@ export default async function HomePage() {
     docs.length > 0 ||
     notificaties.length > 0;
 
-  // Mijn open procedure-stappen (waar ik co-eigenaar ben)
-  const eigenaarFilters = await Promise.all([
-    supabase
-      .from("procedure_eigenaars")
-      .select("procedure_id")
-      .eq("gebruiker_id", user.id),
-    profiel?.naam
-      ? supabase
-          .from("procedure_eigenaars")
-          .select("procedure_id")
-          .eq("gebruiker_naam", profiel.naam)
-      : Promise.resolve({ data: [] as { procedure_id: string }[] }),
-  ]);
-  const mijnProcedureIds = new Set<string>();
-  for (const res of eigenaarFilters) {
-    for (const rij of (res.data || []) as { procedure_id: string }[]) {
-      mijnProcedureIds.add(rij.procedure_id);
-    }
-  }
-
-  let openStappen: OpenStap[] = [];
-  if (mijnProcedureIds.size > 0) {
-    const { data: stappenRaw } = await supabase
-      .from("procedure_stappen")
-      .select("id, naam, deadline, procedure_id, procedures(titel)")
-      .eq("status", "actief")
-      .in("procedure_id", Array.from(mijnProcedureIds))
-      .order("deadline", { ascending: true, nullsFirst: false })
-      .limit(5);
-    for (const s of (stappenRaw || []) as Array<{
-      id: string;
-      naam: string;
-      deadline: string | null;
-      procedure_id: string;
-      procedures: { titel: string } | { titel: string }[] | null;
-    }>) {
-      const procRel = Array.isArray(s.procedures) ? s.procedures[0] : s.procedures;
-      openStappen.push({
-        id: s.id,
-        naam: s.naam,
-        deadline: s.deadline,
-        procedure_id: s.procedure_id,
-        procedure_titel: procRel?.titel ?? "Procedure",
-      });
-    }
-  }
+  // Mijn open procedure-stappen (waar ik co-eigenaar ben) — uit de gedeelde
+  // portaalcontext (besluit 0085); zelfde query, volgorde en limiet als voorheen.
+  const openStappen = ctx.openStappen;
 
   return (
     <div className="p-4 sm:p-6 lg:p-7 space-y-5">

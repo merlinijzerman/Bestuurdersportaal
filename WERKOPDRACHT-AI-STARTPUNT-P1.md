@@ -25,7 +25,8 @@ Dit plateau lost een **vindbaarheidsprobleem** op, geen functionaliteitsgat. `/a
    - *Een vraag over een document* → opent de bestaande chat met een vooraf gezette `document_scope` op het gekozen document (bestaand mechanisme).
    - *Een vrije vraag stellen* → opent de bestaande chat, ongewijzigd.
 4. **Gedeelde contexthelper** — de queries voor de contextkaarten worden geëxtraheerd uit `app/(dashboard)/page.tsx` naar één herbruikbare server-helper (bijvoorbeeld `core/lib/portaalcontext.ts`), zodat de homepage en het startpunt dezelfde bron gebruiken. De homepage blijft functioneel identiek.
-5. **Ontwerpdocument + besluitregistratie** — zie Definition of Done.
+5. **Auto-restore begrenzen tot de browsersessie** — zie §"Wanneer verschijnt het startpunt" hieronder. Zonder deze wijziging is het startscherm in de praktijk onbereikbaar.
+6. **Ontwerpdocument + besluitregistratie** — zie Definition of Done.
 
 **Niet**
 
@@ -36,6 +37,25 @@ Dit plateau lost een **vindbaarheidsprobleem** op, geen functionaliteitsgat. `/a
 - **Geen nieuwe of opnieuw zichtbaar gemaakte antwoordmodi.** In het bijzonder: `besluitrijpheid` en `persoonlijke_voorbereiding` bestaan als interne modus maar krijgen hier géén knop. Besluit `0068` heeft de zichtbare modi juist teruggebracht; daarvan afwijken vergt een eigen besluit (voorzien in plateau 4).
 - **Geen tweede implementatie van de voorbereiding.** Het startpunt routeert naar de bestaande component; er komt geen gekopieerde variant bij. Besluiten `0036` en `0079` hebben die duplicatie net opgelost.
 - Geen wijziging aan RLS-policies, datamodel, migraties, governance-logging of API-contracten.
+
+---
+
+### Wanneer verschijnt het startpunt
+
+`AssistentClient.tsx` doet bij elke mount een **auto-restore** (Fase B2, comment rond regel 421): het haalt het meest recente niet-gearchiveerde gesprek op en zet dat terug, inclusief scope en antwoordmodus. Die query kijkt alleen naar `bijgewerkt`, niet naar sessie of tijd. Gevolg: wie vorige maand een vraag stelde, landt vandaag ná inloggen weer in dat oude gesprek — en ziet het startscherm nooit.
+
+**Gewenst gedrag:**
+
+| Situatie | Wat er gebeurt |
+|---|---|
+| Opnieuw inloggen | Startpunt — schoon gesprek |
+| Nieuw browsertabblad | Startpunt |
+| Binnen dezelfde sessie weg van `/ai` en terug (bijvoorbeeld via een brondocument) | Lopende gesprek blijft staan |
+| Gesprek kiezen uit de gesprekken-lade | Dat gesprek wordt geladen, zoals nu |
+
+**Uitvoering** — houd het actieve gesprek bij in `sessionStorage` in plaats van het uit de database af te leiden, en wis die markering expliciet in de uitlogfunctie in `core/components/Sidebar.tsx`. Bij mount wordt alleen hersteld als er een markering uit deze browsersessie is. Geen serverstate, geen nieuwe tabel, geen RLS- of auditgevolg.
+
+**Belangrijk om te benoemen:** gesprekken worden hiermee **niet minder bewaard**. Fase B2 blijft intact — alle gesprekken staan in de gesprekken-lade en zijn met één klik terug te halen. Alleen het *automatisch terugzetten* vervalt. Neem dat expliciet op in de besluitregistratie, zodat later niemand concludeert dat de persistentie is teruggedraaid.
 
 ---
 
@@ -50,7 +70,7 @@ Dit plateau lost een **vindbaarheidsprobleem** op, geen functionaliteitsgat. `/a
 
 ---
 
-**Relevante bestanden / modules** — `app/(dashboard)/ai/page.tsx` (startstaat; zie architectuurpunt), nieuwe `app/(dashboard)/ai/_components/Startpunt.tsx`, nieuwe `core/lib/portaalcontext.ts` (gedeelde contextqueries), `app/(dashboard)/page.tsx` (queries eruit halen, gedrag gelijk), `core/lib/fonds-sessie.ts` + `core/lib/module-gate-page.ts` (bestaande patronen voor sessie en modulegate — volgen, niet omzeilen), `app/(dashboard)/vergaderingen/_components/AgendapuntKaart.tsx` (alleen lezen: het anker waarnaar gerouteerd wordt). Claude Code verifieert tegen de werkelijke code.
+**Relevante bestanden / modules** — `app/(dashboard)/ai/page.tsx` (startstaat; zie architectuurpunt), nieuwe `app/(dashboard)/ai/_components/Startpunt.tsx`, nieuwe `core/lib/portaalcontext.ts` (gedeelde contextqueries), `app/(dashboard)/page.tsx` (queries eruit halen, gedrag gelijk), `core/lib/fonds-sessie.ts` + `core/lib/module-gate-page.ts` (bestaande patronen voor sessie en modulegate — volgen, niet omzeilen), `app/(dashboard)/ai/_components/AssistentClient.tsx` (auto-restore begrenzen), `core/components/Sidebar.tsx` (sessiemarkering wissen bij uitloggen), `app/(dashboard)/vergaderingen/_components/AgendapuntKaart.tsx` (alleen lezen: het anker waarnaar gerouteerd wordt). Claude Code verifieert tegen de werkelijke code.
 
 **Guardrails (zie `CLAUDE.md`)** — bevestig naleving van: RLS per `fonds_id` (alleen anon-key), append-only audit, human-in-the-loop, migratie-eerst-dan-deploy, snapshot-integriteit, geen schijnzekerheid. Specifiek voor deze opdracht:
 
@@ -67,15 +87,16 @@ Dit plateau lost een **vindbaarheidsprobleem** op, geen functionaliteitsgat. `/a
 
 ### Acceptatiecriteria
 
-1. **Geen leeg invoerveld meer.** Wie `/ai` opent zonder lopend gesprek, ziet het startscherm met contextkaarten en taakknoppen. De oude `VOORGESTELDE_VRAGEN`-chips zijn vervangen, niet ernaast gezet.
-2. **Bestaand gedrag intact.** Zodra een gesprek loopt — nieuw of hersteld uit de gesprekshistorie — is `/ai` functioneel identiek aan vóór deze wijziging: modi, bronselectie, @-mentions, agendapunt-scope, verduidelijkingsvragen en het onderbouwingspaneel werken ongewijzigd.
-3. **Routeren, niet dupliceren.** "Een agendapunt voorbereiden" brengt de gebruiker naar het bestaande agendapunt op de vergaderpagina, met het juiste agendapunt in beeld via het bestaande anker. Er is geen tweede implementatie van de voorbereiding ontstaan; `AgendapuntChat`, `VoorbereidingsBlok` en `AntwoordWeergave` zijn ongewijzigd.
-4. **Context klopt of ontbreekt.** Elke getoonde kaart is aantoonbaar afgeleid uit de eigen fondsdata van de ingelogde gebruiker. Is er geen vergadering, geen actieve procedurestap of geen recent document, dan wordt die kaart weggelaten. Een gebruiker zonder enige context ziet een begrijpelijk startscherm met alleen de taakknoppen en de vrije vraag — geen lege kaders, geen foutmelding.
-5. **Geen privacylek.** Het startscherm toont geen inbreng, aantekening of voorbereiding van een andere gebruiker. Verifieer dit met twee accounts binnen hetzelfde fonds.
-6. **Eén bron voor de context.** De homepage en het startpunt gebruiken dezelfde helper; de homepage rendert functioneel identiek aan vóór de wijziging (zelfde blokken, zelfde tellingen, zelfde volgorde).
-7. **Geen extra query-last.** Per server-render worden de gedeelde contextqueries aantoonbaar maximaal 1× uitgevoerd (verifieerbaar via tijdelijke dev-logging; logging verwijderd vóór merge). `/ai` toont binnen ~100 ms een skelet of laadindicator.
-8. **Geen functionele wijziging elders.** Geen wijziging in governance-events, RLS-policies, migraties, API-contracten, antwoordmodi of de moduleregistry.
-9. **Verificatie groen.** `./node_modules/.bin/tsc --noEmit --skipLibCheck`, `npm run lint:colors`, `npm run lint:boundaries`, `npm run sanity` en `bash scripts/cross-tenant-ci.sh` zijn groen. De cross-tenant-suite is hier **verplicht**: de opdracht introduceert nieuwe tenant-gescopete reads.
+1. **Geen leeg invoerveld meer.** Wie `/ai` opent zonder lopend gesprek in deze browsersessie, ziet het startscherm met contextkaarten en taakknoppen. De oude `VOORGESTELDE_VRAGEN`-chips zijn vervangen, niet ernaast gezet.
+2. **Opnieuw inloggen geeft een schoon gesprek.** Na uitloggen en opnieuw inloggen, en in een nieuw browsertabblad, verschijnt het startpunt — niet het laatste gesprek. Binnen dezelfde sessie blijft een lopend gesprek staan bij het verlaten en terugkeren naar `/ai`. Alle gesprekken blijven bereikbaar via de gesprekken-lade.
+3. **Bestaand gedrag intact.** Zodra een gesprek loopt — nieuw of hersteld uit de gesprekshistorie — is `/ai` functioneel identiek aan vóór deze wijziging: modi, bronselectie, @-mentions, agendapunt-scope, verduidelijkingsvragen en het onderbouwingspaneel werken ongewijzigd.
+4. **Routeren, niet dupliceren.** "Een agendapunt voorbereiden" brengt de gebruiker naar het bestaande agendapunt op de vergaderpagina, met het juiste agendapunt in beeld via het bestaande anker. Er is geen tweede implementatie van de voorbereiding ontstaan; `AgendapuntChat`, `VoorbereidingsBlok` en `AntwoordWeergave` zijn ongewijzigd.
+5. **Context klopt of ontbreekt.** Elke getoonde kaart is aantoonbaar afgeleid uit de eigen fondsdata van de ingelogde gebruiker. Is er geen vergadering, geen actieve procedurestap of geen recent document, dan wordt die kaart weggelaten. Een gebruiker zonder enige context ziet een begrijpelijk startscherm met alleen de taakknoppen en de vrije vraag — geen lege kaders, geen foutmelding.
+6. **Geen privacylek.** Het startscherm toont geen inbreng, aantekening of voorbereiding van een andere gebruiker. Verifieer dit met twee accounts binnen hetzelfde fonds.
+7. **Eén bron voor de context.** De homepage en het startpunt gebruiken dezelfde helper; de homepage rendert functioneel identiek aan vóór de wijziging (zelfde blokken, zelfde tellingen, zelfde volgorde).
+8. **Geen extra query-last.** Per server-render worden de gedeelde contextqueries aantoonbaar maximaal 1× uitgevoerd (verifieerbaar via tijdelijke dev-logging; logging verwijderd vóór merge). `/ai` toont binnen ~100 ms een skelet of laadindicator.
+9. **Geen functionele wijziging elders.** Geen wijziging in governance-events, RLS-policies, migraties, API-contracten, antwoordmodi of de moduleregistry.
+10. **Verificatie groen.** `./node_modules/.bin/tsc --noEmit --skipLibCheck`, `npm run lint:colors`, `npm run lint:boundaries`, `npm run sanity` en `bash scripts/cross-tenant-ci.sh` zijn groen. De cross-tenant-suite is hier **verplicht**: de opdracht introduceert nieuwe tenant-gescopete reads.
 
 ---
 
@@ -84,7 +105,8 @@ Dit plateau lost een **vindbaarheidsprobleem** op, geen functionaliteitsgat. `/a
 Laatste bestaande entry is `0083`; verifieer het eerstvolgende vrije nummer (let op: `0082` ontbreekt in de reeks).
 
 1. **Het startpunt vervangt het lege invoerveld op `/ai`.** Gevolg: de assistent presenteert zich als taakgericht in plaats van conversationeel. Benoem het geaccepteerde nadeel — de intensieve gebruiker die direct wil typen, krijgt één extra scherm tussen zich en het invoerveld. Beschrijf hoe dat is gemitigeerd (vrije vraag direct zichtbaar op het startscherm, en het startscherm verdwijnt zodra een gesprek loopt).
-2. **Twee ingangen naar dezelfde agendavoorbereiding.** Vanaf nu is de voorbereiding bereikbaar via de vergaderpagina én via `/ai`. Leg vast dat `/ai` uitsluitend **routeert** en dat een tweede implementatie principieel is uitgesloten — dit is de schuld die `0036` accepteerde en `0079` heeft opgeruimd. Verwijs naar beide.
+2. **Auto-restore wordt begrensd tot de browsersessie.** Fase B2 herstelde bij elke mount het meest recente gesprek. Leg vast dat dit vervalt bij een nieuwe sessie, dat gesprekken onverminderd bewaard blijven en via de gesprekken-lade bereikbaar zijn, en waarom dit nodig is (zonder deze wijziging is het startpunt onbereikbaar voor iedere terugkerende gebruiker). Benoem het geaccepteerde nadeel: wie zijn gesprek van gisteren wil hervatten, moet dat nu zelf uit de lade kiezen.
+3. **Twee ingangen naar dezelfde agendavoorbereiding.** Vanaf nu is de voorbereiding bereikbaar via de vergaderpagina én via `/ai`. Leg vast dat `/ai` uitsluitend **routeert** en dat een tweede implementatie principieel is uitgesloten — dit is de schuld die `0036` accepteerde en `0079` heeft opgeruimd. Verwijs naar beide.
 
 Neem in beide gevallen ook de negatieve gevolgen op, conform `decisions/TEMPLATE.md` §Gevolgen.
 

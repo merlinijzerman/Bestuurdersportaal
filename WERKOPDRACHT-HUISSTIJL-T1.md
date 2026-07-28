@@ -13,11 +13,12 @@
 **Wel**
 
 1. **Tokenwaarden in `app/globals.css`** — het `:root`-blok krijgt de nieuwe waarden uit §"Tokenwaarden". Tokennamen, structuur, de RGB-channel-opzet en de `@layer components`-blok (`si-*`) blijven **ongewijzigd**.
-2. **Inklapbare sidebar** in `core/components/Sidebar.tsx` — hamburger in het logoblok, ingeklapte breedte `w-14`, titel als tooltip per item in ingeklapte stand, voorkeur bewaard in `localStorage`. De marge van de content in `app/(dashboard)/layout.tsx` (`md:ml-64`) beweegt mee.
+2. **Inklapbare sidebar** in `core/components/Sidebar.tsx` — ingeklapte breedte `w-14`, titel als tooltip per item in ingeklapte stand, voorkeur bewaard in `localStorage`. De marge van de content in `app/(dashboard)/layout.tsx` (`md:ml-64`) beweegt mee. Voor de plaatsing van de hamburger: zie §"Positie van de hamburger".
 3. **Iconen in `core/lib/module-registry.ts`** — de `icon`-velden vervangen door de geometrische set uit §"Iconen". De `iconSrc` van de AI-module (`/ai-assistent.png`) blijft ongewijzigd en houdt voorrang.
 4. **Verschuiving van `--phase`** van paars naar teal, omdat `--accent` zelf paars wordt en de fase-markering per fase 5 bewust van accent onderscheiden moet blijven. Dit is een besluit dat een `decisions/`-entry vergt (zie §"Besluitpunten").
-5. **Inventarisatie van bestaande `fonds_theming`-rijen** en, waar nodig, correctie — zie de tenant-risico's onder Acceptatiecriteria.
-6. **Bijwerken van de tokenlaag-documentatie** die nu de oude waarden beschrijft (`TOKENLAAG-REFACTOR-PLAN.md`, `TOKENLAAG-FASE5-QA.md`, en de tech-stack-alinea in `HANDOVER.md` die `#234E70` en "navigatie diep ink-navy" noemt).
+5. **Inventarisatie van bestaande `fonds_theming`-rijen** en, waar nodig, correctie — zie de tenant-risico's onder Acceptatiecriteria. **Het demofonds Horizon is hier geval nummer één:** dat fonds heeft nu een theming-override die de navigatie licht en het accent violet maakt, terwijl `globals.css` nog de warme basis (`--app-bg: 241 238 231`) bevat. Na deze tranche is die override mogelijk overbodig of tegenstrijdig.
+6. **Laagconsistentie op het AI-scherm** — zie §"Gelaagdheid AI-scherm" hieronder.
+7. **Bijwerken van de tokenlaag-documentatie** die nu de oude waarden beschrijft (`TOKENLAAG-REFACTOR-PLAN.md`, `TOKENLAAG-FASE5-QA.md`, en de tech-stack-alinea in `HANDOVER.md` die `#234E70` en "navigatie diep ink-navy" noemt).
 
 **Niet**
 
@@ -95,6 +96,41 @@ Verifieer deze tabel opnieuw ná implementatie tegen de daadwerkelijk toegepaste
 
 ---
 
+### Positie van de hamburger
+
+De hamburger staat per stand op een andere plek. Beide standen delen één rij-container in het logoblok; alleen de richting van die rij verschilt.
+
+| Stand | Plaatsing | Uitvoering |
+|---|---|---|
+| **Uitgeklapt** | naast het merkvierkant, op dezelfde regel — merkvierkant links, hamburger rechts uitgelijnd | rij met `justify-between`; fondsnaam en ondertitel staan daaronder |
+| **Ingeklapt** | boven het merkvierkant, beide gecentreerd | dezelfde container in kolomrichting, met het merkvierkant onder de hamburger |
+
+In de DOM staat het merkvierkant vóór de hamburger; de ingeklapte stand keert de rijrichting om (`flex-direction: column-reverse`) in plaats van de elementen te verplaatsen. Zo blijft het één component en verspringt de tabvolgorde niet tussen de standen.
+
+De bijgewerkte referentie staat in `03 Functioneel ontwerp/Designrichtingen portaal/portaal-nieuwe-kleuren.html` — klik daar op de hamburger om beide standen te zien.
+
+---
+
+### Gelaagdheid AI-scherm
+
+Het AI-scherm wijkt af van de laagopbouw die de rest van het portaal hanteert, en dat valt na de herkleuring extra op omdat het de grootste aaneengesloten oppervlakken heeft. Overal elders staat inhoud op een **kaart** (`bg-white` / `app-surface`) op de **paginakleur** (`app-bg`). In `AssistentClient.tsx` staat het AI-antwoord op `bg-app-bg` — dezelfde kleur als de pagina eronder — en is het alleen door een rand te onderscheiden.
+
+Pas daarom aan, met **uitsluitend bestaande tokens** (geen nieuwe waarden):
+
+| Element | Nu | Wordt |
+|---|---|---|
+| Chat-scrollvlak (regel ~1228) | geen achtergrond, erft `--app-bg` | ongewijzigd — dit is correct |
+| AI-antwoordbubbel (regel ~1252) | `bg-app-bg border border-line` | `bg-app-surface border border-line` |
+| Typ-indicator (regel ~1379) | `bg-app-bg border border-line` | `bg-app-surface border border-line` |
+| Topbalk, brongebruik-, antwoordmodusbalk, invoerbalk | `bg-white` | `bg-card` |
+| Gesprekken-drawer, mention-typeahead | `bg-white` | `bg-card` |
+
+De `bg-white` → `bg-card` omzetting is **visueel neutraal** (`--card` wordt zuiver wit) maar haalt het scherm binnen de tokenlaag, zodat een volgende merk- of themawijziging het meeneemt. Beperk deze opruiming tot `AssistentClient.tsx`; de overige `bg-white`-voorkomens in de app blijven buiten scope.
+
+**Controleer beide ingangen.** De agendapunt-chat op de vergaderpagina deelt sinds besluit `0079` dezelfde renderer (`AntwoordWeergave` + `OnderbouwingPaneel`). Verifieer dat het antwoord er in de vergadering identiek uitziet als op `/ai`; introduceer geen verschil tussen de twee.
+
+---
+
 ### Iconen
 
 In `core/lib/module-registry.ts`, veld `icon`:
@@ -118,7 +154,7 @@ De set is gekozen op onderlinge onderscheidbaarheid in ingeklapte stand (18–20
 
 ---
 
-**Relevante bestanden / modules** — `app/globals.css` (tokenwaarden), `core/components/Sidebar.tsx` (inklappen + tooltips), `app/(dashboard)/layout.tsx` (`md:ml-64` meebewegen), `core/components/DashboardShell.tsx` (bestaande mobiele drawer-state; controleren op interferentie met de nieuwe inklapstand), `core/lib/module-registry.ts` (iconen), `platform/platform/(beveiligd)/layout.tsx` (erft `bg-nav`; alleen verifiëren). Documentatie: `HANDOVER.md`, `TOKENLAAG-REFACTOR-PLAN.md`, `TOKENLAAG-FASE5-QA.md`, nieuwe `decisions/0084`. Claude Code verifieert tegen de werkelijke code.
+**Relevante bestanden / modules** — `app/globals.css` (tokenwaarden), `core/components/Sidebar.tsx` (inklappen + tooltips), `app/(dashboard)/layout.tsx` (`md:ml-64` meebewegen), `core/components/DashboardShell.tsx` (bestaande mobiele drawer-state; controleren op interferentie met de nieuwe inklapstand), `core/lib/module-registry.ts` (iconen), `app/(dashboard)/ai/_components/AssistentClient.tsx` (gelaagdheid + `bg-white` → `bg-card`; **let op:** dit bestand is op 28-07-2026 ontstaan uit de startpunt-opdracht — verifieer de actuele naam), `app/(dashboard)/ai/_components/AntwoordWeergave.tsx` (alleen verifiëren: gedeeld met de agendapunt-chat), `platform/platform/(beveiligd)/layout.tsx` (erft `bg-nav`; alleen verifiëren). Documentatie: `HANDOVER.md`, `TOKENLAAG-REFACTOR-PLAN.md`, `TOKENLAAG-FASE5-QA.md`, nieuwe `decisions/0084`. Claude Code verifieert tegen de werkelijke code.
 
 **Guardrails (zie `CLAUDE.md`)** — bevestig naleving van: RLS per `fonds_id` (alleen anon-key), append-only audit, human-in-the-loop, migratie-eerst-dan-deploy, snapshot-integriteit, geen schijnzekerheid. Specifiek voor deze opdracht:
 
@@ -138,14 +174,16 @@ De set is gekozen op onderlinge onderscheidbaarheid in ingeklapte stand (18–20
 2. **Geen nieuwe kleuren buiten de tokenlaag.** `npm run lint:colors` is groen; de diff bevat geen nieuwe hex, geen arbitrary-hex-class en geen palette-class.
 3. **Contrast aantoonbaar AA.** De tabel onder §"Tokenwaarden" is nagerekend tegen de geïmplementeerde waarden en opgenomen in `TOKENLAAG-FASE5-QA.md`. `--muted` haalt ≥4,5:1 op `app-bg`, `card` én `app-zebra`.
 4. **Sidebar inklapbaar.** Hamburger klapt in en uit; in ingeklapte stand toont elk item zijn moduletitel als tooltip; de contentmarge beweegt mee zonder sprong; de voorkeur overleeft een herlaadbeurt. De bestaande mobiele drawer werkt ongewijzigd en interfereert niet.
-5. **Iconen onderscheidbaar.** Alle elf modules zijn in ingeklapte stand zonder label van elkaar te onderscheiden; geen enkel icoon rendert als leeg blok of vervangingsteken.
-6. **Tenant-theming gecontroleerd.** De bestaande rijen in `fonds_theming` zijn geïnventariseerd en per fonds is vastgesteld of de override nog werkt tegen de lichte navigatie. Twee concrete risico's expliciet nalopen:
+5. **Hamburger staat goed in beide standen.** Uitgeklapt naast het merkvierkant op dezelfde regel, rechts uitgelijnd; ingeklapt erboven, gecentreerd. De tabvolgorde binnen het logoblok is in beide standen gelijk.
+6. **Iconen onderscheidbaar.** Alle elf modules zijn in ingeklapte stand zonder label van elkaar te onderscheiden; geen enkel icoon rendert als leeg blok of vervangingsteken.
+7. **Tenant-theming gecontroleerd.** De bestaande rijen in `fonds_theming` zijn geïnventariseerd en per fonds is vastgesteld of de override nog werkt tegen de lichte navigatie. Twee concrete risico's expliciet nalopen:
    - een fonds dat `nav-rgb` naar een donkere waarde overschrijft, erft het nieuwe **lichte** `nav-text-rgb` en krijgt onleesbare menu-items — `--nav-active` staat namelijk **niet** in de allowlist (`THEMABARE_TOKENS`) en kan dus niet per fonds worden meegekleurd;
    - een fonds met een lichte `accent-rgb` (gekozen om op te lichten tegen het oude donkere navy) verdwijnt nu tegen wit.
    Bevindingen rapporteren; correctie alleen na akkoord.
-7. **Visuele QA doorlopen.** De schermchecklist uit `TOKENLAAG-FASE5-QA.md` §"Visuele checklist per scherm" is afgevinkt, met bijzondere aandacht voor de schermen waar `--phase` betekenis draagt (procedures: fase-markers, dissent; vergaderingen: "oordeelsvorming"-badge).
-8. **Geen functionele wijziging.** Geen wijziging in governance-events, RLS-policies, migraties, API-contracten of de moduleregistry-logica (alleen het `icon`-veld).
-9. **Verificatie groen.** `./node_modules/.bin/tsc --noEmit --skipLibCheck`, `npm run lint:colors`, `npm run sanity` en `bash scripts/cross-tenant-ci.sh` zijn groen. De cross-tenant-suite draait als regressiecontrole: de opdracht raakt de theming-keten conceptueel, ook al wijzigt die code niet.
+8. **AI-scherm volgt de portaalgelaagdheid.** Het AI-antwoord staat op een lichter vlak dan de pagina eronder, net als elke andere kaart in het portaal — niet op dezelfde kleur met alleen een rand. In `AssistentClient.tsx` komt geen `bg-white` meer voor. Het antwoord ziet er in de agendapunt-chat op de vergaderpagina identiek uit als op `/ai`.
+9. **Visuele QA doorlopen.** De schermchecklist uit `TOKENLAAG-FASE5-QA.md` §"Visuele checklist per scherm" is afgevinkt, met bijzondere aandacht voor de schermen waar `--phase` betekenis draagt (procedures: fase-markers, dissent; vergaderingen: "oordeelsvorming"-badge).
+10. **Geen functionele wijziging.** Geen wijziging in governance-events, RLS-policies, migraties, API-contracten of de moduleregistry-logica (alleen het `icon`-veld).
+11. **Verificatie groen.** `./node_modules/.bin/tsc --noEmit --skipLibCheck`, `npm run lint:colors`, `npm run sanity` en `bash scripts/cross-tenant-ci.sh` zijn groen. De cross-tenant-suite draait als regressiecontrole: de opdracht raakt de theming-keten conceptueel, ook al wijzigt die code niet.
 
 ---
 
