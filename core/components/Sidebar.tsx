@@ -101,35 +101,39 @@ export default function Sidebar({
           ingeklapt ? "px-5 py-6 md:px-0 md:py-4" : "px-5 py-6"
         }`}
       >
-        <button
-          type="button"
-          onClick={onToggleInklap}
-          aria-label={ingeklapt ? "Menu uitklappen" : "Menu inklappen"}
-          aria-expanded={!ingeklapt}
-          className={`hidden md:flex items-center justify-center w-8 h-8 mb-3 rounded-lg text-nav-text hover:bg-nav-line hover:text-nav-text-active transition-colors ${
-            ingeklapt ? "md:mx-auto" : ""
-          }`}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path
-              d="M3 6h18M3 12h18M3 18h18"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-            />
-          </svg>
-        </button>
+        {/* Logo + inklap-hamburger op één regel. Uitgeklapt: logo links, hamburger
+            rechts (justify-between). Ingeklapt (md): kolom-omgekeerd → hamburger
+            bóven het logo, gecentreerd. DOM-volgorde = logo vóór hamburger, zodat
+            de tabvolgorde niet verspringt tussen de standen. */}
         <div
-          className={`w-10 h-10 bg-nav-accent rounded-xl flex items-center justify-center font-black text-lg text-white mb-3 overflow-hidden ${
-            ingeklapt ? "md:mx-auto md:mb-0" : ""
+          className={`flex items-center mb-3 ${
+            ingeklapt ? "md:flex-col-reverse md:gap-2 md:mb-0" : "justify-between"
           }`}
         >
-          {logoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={logoUrl} alt="" aria-hidden="true" className="w-full h-full object-contain" />
-          ) : (
-            logoLetter || "P"
-          )}
+          <div className="w-10 h-10 bg-nav-accent rounded-xl flex items-center justify-center font-black text-lg text-white overflow-hidden flex-shrink-0">
+            {logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={logoUrl} alt="" aria-hidden="true" className="w-full h-full object-contain" />
+            ) : (
+              logoLetter || "P"
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={onToggleInklap}
+            aria-label={ingeklapt ? "Menu uitklappen" : "Menu inklappen"}
+            aria-expanded={!ingeklapt}
+            className="hidden md:flex items-center justify-center w-8 h-8 rounded-lg text-nav-text hover:bg-nav-line hover:text-nav-text-active transition-colors flex-shrink-0"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path
+                d="M3 6h18M3 12h18M3 18h18"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
         </div>
         <div className={`text-nav-text-active font-bold text-sm leading-snug ${bijInklapVerborgen}`}>
           {fondsNaam || process.env.NEXT_PUBLIC_FONDS_NAAM || "Bestuurdersportaal"}
