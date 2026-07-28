@@ -74,6 +74,13 @@ ongewijzigd, contrast aantoonbaar WCAG AA, en de per-fonds theming-allowlist
   `hover:bg-nav-line/40` te weinig contrast; de nav-hovers gebruiken nu de volle
   lijnkleur `hover:bg-nav-line` (bestaand token, geen nieuwe class) — een nette
   grijs-hover die ook op een donkere tenant-nav zichtbaar blijft.
+- **Tailwind content-globs (bewuste afwijking van "tailwind.config.ts ongewijzigd").**
+  De inklapbare sidebar verhuisde `md:ml-64` naar `core/components/` en introduceerde
+  `md:w-14`/`md:ml-14`. Die classes werden niet gegenereerd omdat `tailwind.config.ts`
+  sinds de T9-splitsing (besluit 0052) `core/`/`platform/`/`fondsen/` niet scande —
+  een latente bug die deze tranche blootlegde. `core/**`, `platform/**` en `fondsen/**`
+  zijn aan de content-globs toegevoegd (zelfde roots als de kleur-guard). Additief:
+  het genereert alleen ontbrekende classes, verwijdert niets.
 - **Geen dark mode.** RLS-/policy-model ongewijzigd. De Meridiaan-correctie is een
   cosmetische data-UPDATE op één bestaande, RLS-beschermde rij en produceert één
   append-only config-auditregel (versie 1→2). Verder: alleen tokenwaarden + UI-state

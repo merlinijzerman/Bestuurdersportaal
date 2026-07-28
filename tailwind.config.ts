@@ -5,6 +5,14 @@ const config: Config = {
     "./pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
+    // T9-splitsing (besluit 0052): componenten/lib leven sinds de core/-split ook
+    // in core/, platform/ en fondsen/. Zonder deze globs scant Tailwind die lagen
+    // niet en worden classes die ALLEEN daar voorkomen (bv. de inklap-sidebar
+    // md:w-14 / md:ml-14) niet gegenereerd. Zelfde roots als de kleur-guard
+    // (scripts/check-brand-hex.mjs).
+    "./core/**/*.{js,ts,jsx,tsx,mdx}",
+    "./platform/**/*.{js,ts,jsx,tsx,mdx}",
+    "./fondsen/**/*.{js,ts,jsx,tsx,mdx}",
   ],
   theme: {
     extend: {
