@@ -3,6 +3,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/core/lib/supabase";
 import { alleModules, isModuleKey, type ModuleKey } from "@/core/lib/module-registry";
+import { ACTIEF_GESPREK_SLEUTEL } from "@/core/lib/ai-sessie";
 
 interface SidebarProps {
   gebruikerNaam?: string;
@@ -44,6 +45,13 @@ export default function Sidebar({
 
   async function uitloggen() {
     onNavigate?.();
+    // Wis de AI-sessiemarkering (besluit 0086): na uitloggen + opnieuw inloggen
+    // in dezelfde tab landt de gebruiker op het startpunt, niet in een oud gesprek.
+    try {
+      window.sessionStorage.removeItem(ACTIEF_GESPREK_SLEUTEL);
+    } catch {
+      /* best-effort */
+    }
     await supabase.auth.signOut();
     router.push("/login");
     router.refresh();

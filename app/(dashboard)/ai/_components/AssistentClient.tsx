@@ -12,6 +12,7 @@ import {
 import OnderbouwingPaneel, { type OnderbouwingMeta } from "./OnderbouwingPaneel";
 import { renderAntwoord, Bronkaart, type Bron } from "./AntwoordWeergave";
 import Startpunt from "./Startpunt";
+import { ACTIEF_GESPREK_SLEUTEL } from "@/core/lib/ai-sessie";
 import type {
   PortaalContext,
   DocumentCtx,
@@ -161,6 +162,21 @@ function dagdeelGroet() {
   return "Goedenavond";
 }
 
+// Zichtbare voortgang tijdens het wachten (besluit 0087). Eén afgeronde regel per
+// bereikte serverfase (met uitkomst) + de actieve fase als lopende regel. De
+// map-reduce-analyse draagt batch/totaal in `analyse`.
+interface VoortgangKlaarRegel {
+  fase: string;
+  label: string;
+  uitkomst?: string;
+}
+interface VoortgangUI {
+  actieveFase: string | null;
+  actiefLabel: string | null;
+  analyse: { batch: number; totaal: number } | null;
+  klaar: VoortgangKlaarRegel[];
+}
+
 export default function AssistentClient({
   startpuntContext,
 }: {
@@ -227,12 +243,11 @@ export default function AssistentClient({
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionQuery, setMentionQuery] = useState("");
   const [mentionSuggesties, setMentionSuggesties] = useState<DocSuggestie[]>([]);
-  // Voortgang bij map-reduce (increment 2): {batch, totaal} tijdens de analyse-
-  // fase; null zodra het antwoord begint te streamen.
-  const [analyseVoortgang, setAnalyseVoortgang] = useState<{
-    batch: number;
-    totaal: number;
-  } | null>(null);
+  // Voortgang tijdens het wachten (besluit 0087): één staat die de actieve fase
+  // als lopende regel toont en afgeronde fasen (met hun uitkomst) eronder. Bij
+  // brede documentanalyse draagt de analyse-fase batch/totaal. null zodra het
+  // antwoord begint te streamen (eerste delta) of bij een schone start.
+  const [voortgang, setVoortgang] = useState<VoortgangUI | null>(null);
   const supabase = createClient();
 
   // Haalt de eigen, niet-gearchiveerde gesprekken op voor het overzicht.
@@ -255,11 +270,31 @@ export default function AssistentClient({
     }
   }
 
+  // Auto-restore-begrenzing (besluit 0086): markeer/wis het actieve gesprek in
+  // sessionStorage (per tab). Zo herstelt /ai bij mount alleen een gesprek dat
+  // in DEZE browsersessie actief was — niet automatisch het laatste uit de DB.
+  function markeerActiefGesprek(id: string) {
+    gesprekId.current = id;
+    try {
+      window.sessionStorage.setItem(ACTIEF_GESPREK_SLEUTEL, id);
+    } catch {
+      /* private mode e.d. — markering is best-effort */
+    }
+  }
+  function wisActiefGesprek() {
+    gesprekId.current = null;
+    try {
+      window.sessionStorage.removeItem(ACTIEF_GESPREK_SLEUTEL);
+    } catch {
+      /* best-effort */
+    }
+  }
+
   // Opent een bestaand gesprek in de chat — inclusief de opgeslagen scope (§8),
   // zodat een hervat gesprek herkenbaar "over «titel»" blijft.
   function openGesprek(item: GesprekItem) {
     if (laden) return;
-    gesprekId.current = item.id;
+    markeerActiefGesprek(item.id);
     setBerichten(
       Array.isArray(item.berichten) && item.berichten.length > 0
         ? item.berichten
@@ -285,7 +320,7 @@ export default function AssistentClient({
 
   function startDocumentVraag(doc: DocumentCtx) {
     if (laden) return;
-    gesprekId.current = null;
+    wisActiefGesprek();
     setBerichten(welkomstRef.current ? [welkomstRef.current] : []);
     setAgendapuntContext(null);
     setDocumentScope({ document_ids: [doc.id], titels: [doc.titel] });
@@ -301,7 +336,7 @@ export default function AssistentClient({
       console.error("Gesprek archiveren mislukt:", e);
     }
     if (gesprekId.current === id) {
-      gesprekId.current = null;
+      wisActiefGesprek();
       setBerichten(welkomstRef.current ? [welkomstRef.current] : []);
       setDocumentScope(null);
       setAgendapuntContext(null);
@@ -364,7 +399,7 @@ export default function AssistentClient({
           })
           .select("id")
           .single();
-        if (data?.id) gesprekId.current = data.id as string;
+        if (data?.id) markeerActiefGesprek(data.id as string);
       }
       // Ververs het overzicht zodat nieuwe/bijgewerkte gesprekken bovenaan komen.
       laadGesprekken();
@@ -418,31 +453,44 @@ export default function AssistentClient({
 
         welkomstRef.current = { rol: "ai", tekst: personalTekst };
 
-        // Auto-restore (Fase B2): haal het meest recente, niet-gearchiveerde
-        // gesprek terug. RLS beperkt dit al tot de eigen gesprekken; de extra
-        // gebruiker_id-filter maakt de query expliciet.
+        // Auto-restore (Fase B2), begrensd tot de browsersessie (besluit 0086).
+        // We herstellen ALLEEN als er in DEZE tab een actief-gesprek-markering is
+        // (sessionStorage) — niet automatisch het laatste gesprek uit de DB. Zo
+        // landt een terugkerende gebruiker (nieuwe tab / opnieuw ingelogd) op het
+        // startpunt. De gesprekken-lade houdt alle gesprekken bereikbaar. RLS +
+        // de expliciete gebruiker_id-filter beperken tot de eigen gesprekken.
         let hersteld = false;
+        let actiefGesprekId: string | null = null;
         try {
-          const { data: laatste } = await supabase
-            .from("gesprekken")
-            .select("id, berichten, document_scope, actieve_antwoordmodus")
-            .eq("gebruiker_id", user.id)
-            .eq("gearchiveerd", false)
-            .order("bijgewerkt", { ascending: false })
-            .limit(1)
-            .maybeSingle();
+          actiefGesprekId = window.sessionStorage.getItem(ACTIEF_GESPREK_SLEUTEL);
+        } catch {
+          actiefGesprekId = null;
+        }
+        if (actiefGesprekId) {
+          try {
+            const { data: laatste } = await supabase
+              .from("gesprekken")
+              .select("id, berichten, document_scope, actieve_antwoordmodus")
+              .eq("gebruiker_id", user.id)
+              .eq("gearchiveerd", false)
+              .eq("id", actiefGesprekId)
+              .maybeSingle();
 
-          const opgeslagen = laatste?.berichten as Bericht[] | undefined;
-          if (laatste?.id && Array.isArray(opgeslagen) && opgeslagen.length > 0) {
-            gesprekId.current = laatste.id as string;
-            setBerichten(opgeslagen);
-            setDocumentScope(leesScope(laatste.document_scope));
-            setAgendapuntContext(leesAgendapuntContext(laatste.document_scope));
-            setAntwoordmodus(leesAntwoordmodus(laatste.actieve_antwoordmodus));
-            hersteld = true;
+            const opgeslagen = laatste?.berichten as Bericht[] | undefined;
+            if (laatste?.id && Array.isArray(opgeslagen) && opgeslagen.length > 0) {
+              markeerActiefGesprek(laatste.id as string);
+              setBerichten(opgeslagen);
+              setDocumentScope(leesScope(laatste.document_scope));
+              setAgendapuntContext(leesAgendapuntContext(laatste.document_scope));
+              setAntwoordmodus(leesAntwoordmodus(laatste.actieve_antwoordmodus));
+              hersteld = true;
+            } else {
+              // Markering wees naar een gearchiveerd/verwijderd gesprek → opruimen.
+              wisActiefGesprek();
+            }
+          } catch (e) {
+            console.error("Gesprek herstellen mislukt:", e);
           }
-        } catch (e) {
-          console.error("Gesprek herstellen mislukt:", e);
         }
 
         if (!hersteld) {
@@ -685,6 +733,9 @@ export default function AssistentClient({
           modus?: Modus;
           error?: string;
           fase?: string;
+          status?: string;
+          label?: string;
+          uitkomst?: string;
           batch?: number;
           totaal?: number;
           antwoordmodus?: string;
@@ -746,7 +797,7 @@ export default function AssistentClient({
           // verduidelijkingActief voorkomt dat 'done' de bubbel overschrijft.
           verduidelijkingActief = true;
           aiToegevoegd = true;
-          setAnalyseVoortgang(null);
+          setVoortgang(null);
           setBerichten((prev) => [
             ...prev,
             {
@@ -800,15 +851,50 @@ export default function AssistentClient({
           // het 'done'-event nog worden aangevuld.
           inlineMeldingenData = evt.inline_meldingen ?? [];
         } else if (evt.type === "progress") {
-          // Map-reduce analyse-fase: toon voortgang i.p.v. de tikkende cursor.
-          if (typeof evt.batch === "number" && typeof evt.totaal === "number") {
-            setAnalyseVoortgang({ batch: evt.batch, totaal: evt.totaal });
+          // Voortgang per bereikte serverfase (besluit 0087). De brede-analyse-fase
+          // draagt batch/totaal (map-reduce). Overige fasen sturen status "bezig"
+          // (lopende regel) of "klaar" (afgeronde regel + eventuele uitkomst).
+          const fase = evt.fase;
+          if (!fase) {
+            /* onbekende progress zonder fase → negeren */
+          } else if (fase === "analyse") {
+            const batch = typeof evt.batch === "number" ? evt.batch : 0;
+            const totaal = typeof evt.totaal === "number" ? evt.totaal : 0;
+            setVoortgang((v) => ({
+              actieveFase: "analyse",
+              actiefLabel: evt.label || "Document wordt geanalyseerd",
+              analyse: { batch, totaal },
+              klaar: v?.klaar ?? [],
+            }));
+          } else if (evt.status === "klaar") {
+            setVoortgang((v) => {
+              const klaar = [
+                ...(v?.klaar ?? []),
+                { fase, label: evt.label || fase, uitkomst: evt.uitkomst },
+              ];
+              // De actieve regel wist als deze fase 'm bezette (bv. retrieval).
+              const actiefWeg = v?.actieveFase === fase;
+              return {
+                actieveFase: actiefWeg ? null : v?.actieveFase ?? null,
+                actiefLabel: actiefWeg ? null : v?.actiefLabel ?? null,
+                analyse: v?.analyse ?? null,
+                klaar,
+              };
+            });
+          } else {
+            // status "bezig" (of onbekend) → lopende regel.
+            setVoortgang((v) => ({
+              actieveFase: fase,
+              actiefLabel: evt.label || fase,
+              analyse: null,
+              klaar: v?.klaar ?? [],
+            }));
           }
         } else if (evt.type === "delta") {
           volledig += evt.text || "";
           if (!aiToegevoegd) {
             aiToegevoegd = true;
-            setAnalyseVoortgang(null); // analyse klaar, antwoord begint
+            setVoortgang(null); // analyse klaar, antwoord begint
             setAntwoordGestart(true);
             setBerichten((prev) => [
               ...prev,
@@ -902,7 +988,7 @@ export default function AssistentClient({
     } finally {
       setLaden(false);
       setAntwoordGestart(false);
-      setAnalyseVoortgang(null);
+      setVoortgang(null);
     }
   }
 
@@ -1039,7 +1125,7 @@ export default function AssistentClient({
             className="absolute inset-0 bg-black/30"
             onClick={() => setHistorieOpen(false)}
           />
-          <div className="absolute top-0 left-0 h-full w-80 max-w-[85vw] bg-white shadow-xl flex flex-col">
+          <div className="absolute top-0 left-0 h-full w-80 max-w-[85vw] bg-card shadow-xl flex flex-col">
             <div className="px-5 h-14 flex items-center justify-between border-b border-line">
               <span className="font-bold text-ink">Gesprekken</span>
               <button
@@ -1107,7 +1193,7 @@ export default function AssistentClient({
       )}
 
       {/* Topbar */}
-      <div className="bg-white border-b border-line px-7 h-14 flex items-center">
+      <div className="bg-card border-b border-line px-7 h-14 flex items-center">
         <span className="font-bold text-ink">AI Assistent</span>
         <span className="ml-3 bg-ok-tint text-ok-ink text-xs font-semibold px-2.5 py-1 rounded-full">
           ● Governance logging actief
@@ -1132,7 +1218,7 @@ export default function AssistentClient({
           algemeen- of gecombineerd-gericht is; bij twijfel vraagt hij terug. Onder
           "Aanpassen" blijft alleen de expliciete restrictie "Alleen
           fondsdocumenten" over. */}
-      <div className="bg-white border-b border-line px-7 py-2.5 flex items-center gap-3 flex-wrap">
+      <div className="bg-card border-b border-line px-7 py-2.5 flex items-center gap-3 flex-wrap">
         <span className="text-xs text-muted font-semibold uppercase tracking-wide">
           Brongebruik
         </span>
@@ -1191,7 +1277,7 @@ export default function AssistentClient({
           antwoord ("Maak feitelijker" / "Geef bestuurlijke duiding"). Auto detecteert
           de passende modus; Sparren zet een houding voor het hele gesprek. De
           gebruikte modus staat per antwoord in "Onderbouwing en bronnen". */}
-      <div className="bg-white border-b border-line px-7 py-2.5 flex items-center gap-3 flex-wrap">
+      <div className="bg-card border-b border-line px-7 py-2.5 flex items-center gap-3 flex-wrap">
         <span className="text-xs text-muted font-semibold uppercase tracking-wide">
           Antwoordmodus
         </span>
@@ -1201,7 +1287,7 @@ export default function AssistentClient({
             title="Automatisch de passende antwoordvorm bepalen op basis van uw vraag"
             className={`px-3 py-1.5 text-xs rounded-md transition-all ${
               antwoordmodus === null
-                ? "bg-white text-ink font-semibold shadow-sm"
+                ? "bg-card text-ink font-semibold shadow-sm"
                 : "text-muted hover:text-ink"
             }`}
           >
@@ -1214,7 +1300,7 @@ export default function AssistentClient({
               title={m.help}
               className={`px-3 py-1.5 text-xs rounded-md transition-all ${
                 antwoordmodus === m.value
-                  ? "bg-white text-ink font-semibold shadow-sm"
+                  ? "bg-card text-ink font-semibold shadow-sm"
                   : "text-muted hover:text-ink"
               }`}
             >
@@ -1249,7 +1335,7 @@ export default function AssistentClient({
                 className={
                   b.rol === "gebruiker"
                     ? "bg-accent text-white px-4 py-3 rounded-2xl rounded-tr-sm text-sm leading-relaxed"
-                    : "bg-app-bg border border-line px-4 py-3 rounded-2xl rounded-tl-sm text-sm leading-relaxed text-ink"
+                    : "bg-app-surface border border-line px-4 py-3 rounded-2xl rounded-tl-sm text-sm leading-relaxed text-ink"
                 }
               >
                 {b.rol === "ai"
@@ -1324,7 +1410,7 @@ export default function AssistentClient({
                           key={vi}
                           onClick={() => stuurBericht(vraag)}
                           disabled={laden}
-                          className="text-xs text-ink bg-white border border-line rounded-full px-3 py-1 hover:border-accent hover:bg-warn-tint disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                          className="text-xs text-ink bg-card border border-line rounded-full px-3 py-1 hover:border-accent hover:bg-warn-tint disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                         >
                           {vraag}
                         </button>
@@ -1360,7 +1446,7 @@ export default function AssistentClient({
                           key={a.type}
                           onClick={() => stuurVervolgactie(a, b, i)}
                           disabled={laden}
-                          className="text-xs text-ink bg-white border border-line rounded-full px-3 py-1 hover:border-accent hover:bg-warn-tint disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                          className="text-xs text-ink bg-card border border-line rounded-full px-3 py-1 hover:border-accent hover:bg-warn-tint disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                         >
                           {a.label}
                         </button>
@@ -1376,11 +1462,43 @@ export default function AssistentClient({
           <div className="flex gap-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/ai-assistent.png" alt="AI" className="w-8 h-8 object-contain flex-shrink-0" />
-            <div className="bg-app-bg border border-line px-4 py-3 rounded-2xl rounded-tl-sm">
-              {analyseVoortgang ? (
-                <div className="text-sm text-muted">
-                  Document wordt geanalyseerd… (deel {analyseVoortgang.batch} van{" "}
-                  {analyseVoortgang.totaal})
+            <div className="bg-app-surface border border-line px-4 py-3 rounded-2xl rounded-tl-sm">
+              {voortgang &&
+              (voortgang.klaar.length > 0 ||
+                voortgang.actiefLabel ||
+                voortgang.analyse) ? (
+                <div className="space-y-1.5">
+                  {/* Afgeronde fasen met hun uitkomst. */}
+                  {voortgang.klaar.map((k) => (
+                    <div
+                      key={k.fase}
+                      className="text-xs text-muted flex items-start gap-1.5"
+                    >
+                      <span className="text-ok-ink flex-shrink-0" aria-hidden>
+                        ✓
+                      </span>
+                      <span>
+                        {k.label}
+                        {k.uitkomst ? ` — ${k.uitkomst}` : ""}
+                      </span>
+                    </div>
+                  ))}
+                  {/* Actieve fase als lopende regel. */}
+                  {voortgang.analyse ? (
+                    <div className="text-sm text-muted">
+                      {voortgang.actiefLabel}… (deel {voortgang.analyse.batch} van{" "}
+                      {voortgang.analyse.totaal})
+                    </div>
+                  ) : voortgang.actiefLabel ? (
+                    <div className="text-sm text-muted flex items-center gap-2">
+                      <span className="flex gap-1 items-center" aria-hidden>
+                        <span className="typing-dot"></span>
+                        <span className="typing-dot"></span>
+                        <span className="typing-dot"></span>
+                      </span>
+                      {voortgang.actiefLabel}…
+                    </div>
+                  ) : null}
                 </div>
               ) : (
                 <div className="flex gap-1.5 items-center">
@@ -1407,10 +1525,10 @@ export default function AssistentClient({
       )}
 
       {/* Invoerbalk */}
-      <div className="bg-white border-t border-line p-4 relative">
+      <div className="bg-card border-t border-line p-4 relative">
         {/* @-mention-typeahead */}
         {mentionOpen && (
-          <div className="absolute bottom-full left-4 right-4 mb-2 max-h-64 overflow-y-auto bg-white border border-line rounded-xl shadow-lg z-20">
+          <div className="absolute bottom-full left-4 right-4 mb-2 max-h-64 overflow-y-auto bg-card border border-line rounded-xl shadow-lg z-20">
             <div className="px-3 py-2 text-xs text-muted border-b border-line">
               Kies een document om uw vraag tot dat stuk te beperken
             </div>

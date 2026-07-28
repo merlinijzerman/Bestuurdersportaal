@@ -16,7 +16,7 @@
 
 Vandaag staan merkkleuren als **hardcoded hex** door de JSX (`bg-[#0f2744]`, `border-[#c9a84c]`, …). Dat maakt gelijktrekken onmogelijk zonder overal te zoeken-en-vervangen, en elke toekomstige merkwijziging opnieuw. De refactor introduceert een **semantische tokenlaag**: kleuren krijgen een betekenisnaam (`ink`, `accent`, `nav`, `line`), gedefinieerd op één plek (CSS-variabelen + Tailwind-thema). Componenten verwijzen naar de rol, niet naar de hex.
 
-Kernregel: **een token beschrijft een rol, geen kleur.** `accent` is "de interactieve/primaire kleur" — vandaag blauw `#234E70`, morgen desgewenst iets anders, zonder één component aan te raken.
+Kernregel: **een token beschrijft een rol, geen kleur.** `accent` is "de interactieve/primaire kleur" — sinds huisstijl tranche 1 (besluit 0084) **violet** (`91 79 224`, was editorial-blue `#234E70`), morgen desgewenst iets anders, zonder één component aan te raken.
 
 ---
 

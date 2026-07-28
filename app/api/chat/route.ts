@@ -7,6 +7,12 @@ import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
 import { rateLimited } from "@/core/lib/api-errors";
 import { beoordeelRouteHostToegang } from "@/core/lib/tenant-route-guard";
 import { hybrideZoekenAan, retrievalVlaggenVoorFonds } from "@/core/lib/fonds-config";
+import {
+  VOORTGANG_LABEL,
+  retrievalUitkomst,
+  rerankUitkomst,
+  webUitkomst,
+} from "@/core/lib/voortgang";
 import { HAIKU_MODEL } from "@/core/lib/llm-modellen";
 import { weigerAlsModuleUit } from "@/core/lib/module-guard";
 import { valideerScope, type ScopeDocumentRij } from "@/core/lib/document-scope";
@@ -558,6 +564,23 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // ── Stream-openpunt (besluit 0087) ──────────────────────────────────────
+    // Vanaf hier draait het retrieval- en promptopbouwblok BINNEN de stream,
+    // zodat het per fase voortgang kan melden ({type:"progress"}). Auth, rate-
+    // limiting, fonds-/host-/module-gates en de verduidelijkingstak staan bewust
+    // vóór dit punt: die moeten een echte HTTP-status kunnen geven. Zodra de
+    // stream open is, is status 200 verzonden — fouten hierna worden daarom
+    // {type:"error"}-events binnen de 200-respons (het foutcontract verschuift;
+    // de client toont ze als chatmelding). De governance_log-insert blijft
+    // ongewijzigd op zijn plek ná het streamen. `progress`-events worden NOOIT
+    // gelogd (vluchtige UI-state).
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const send = (obj: unknown) =>
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
+
+        try {
     // Retrieval-modus (verborgen) volgt Design A "combineren-vloer": tenzij de
     // gebruiker expliciet beperkt tot fondsdocumenten, halen we altijd op — nooit
     // volledig overslaan. Bij een actieve document-scope is dit niet van
@@ -666,6 +689,9 @@ export async function POST(req: NextRequest) {
       let gereformuleerd = false;
 
       if (heeftReformulatieNodig(vraag, priorBeurten.length > 0)) {
+        // Voortgang (besluit 0087): de reformulatie draait op het STERKE model en
+        // is meestal het grootste stille-tijd-blok. Melden vóór en na de call.
+        send({ type: "progress", fase: "reformulatie", status: "bezig", label: VOORTGANG_LABEL.reformulatie });
         const herschreven = await reformuleerVraag(
           anthropic,
           priorBeurten,
@@ -676,8 +702,13 @@ export async function POST(req: NextRequest) {
           zoekVraag = herschreven.trim();
           gereformuleerd = true;
         }
+        send({ type: "progress", fase: "reformulatie", status: "klaar", label: VOORTGANG_LABEL.reformulatie });
       }
 
+      // Voortgang (besluit 0087): melden dat we de fondsdocumenten doorzoeken.
+      // De reranker draait BINNEN deze call; we melden 'rerank' daarom als een
+      // afgeronde stap ná de retrieval (alleen als de fondsvlag rerank aan staat).
+      send({ type: "progress", fase: "retrieval", status: "bezig", label: VOORTGANG_LABEL.retrieval });
       const res = await zoekRelevanteChunksMetMeta(
         zoekVraag,
         fondsId,
@@ -694,6 +725,22 @@ export async function POST(req: NextRequest) {
         gereformuleerd,
         body_fonds_id_genegeerd: bodyFondsAfwijkend,
       };
+      send({
+        type: "progress",
+        fase: "retrieval",
+        status: "klaar",
+        label: VOORTGANG_LABEL.retrieval,
+        uitkomst: retrievalUitkomst(res.meta.opgehaald),
+      });
+      if (retrievalVlaggen.rerank) {
+        send({
+          type: "progress",
+          fase: "rerank",
+          status: "klaar",
+          label: VOORTGANG_LABEL.rerank,
+          uitkomst: rerankUitkomst(res.meta.geselecteerd),
+        });
+      }
       // Auditspoor (§9): leg de scope vast waarop deze vraag is beperkt.
       if (scopeActief) {
         retrievalMeta.scope = {
@@ -928,6 +975,19 @@ export async function POST(req: NextRequest) {
       ? buildWebSearchTool(allowedDomeinenUit(whitelistEntries), WEB_MAX_USES)
       : null;
 
+    // Voortgang (besluit 0087): alleen melden als live web-retrieval daadwerkelijk
+    // is toegestaan voor deze vraag (whitelist beschikbaar gemaakt). Uit → geen
+    // fase (geen schijnzekerheid).
+    if (webGate.mag) {
+      send({
+        type: "progress",
+        fase: "web",
+        status: "klaar",
+        label: VOORTGANG_LABEL.web,
+        uitkomst: webUitkomst(whitelistEntries.length),
+      });
+    }
+
     // Bouw de uiteindelijke messages-array voor Claude.
     // We knippen de geschiedenis op het maximum en vervangen de laatste
     // user-message door dezelfde vraag mét de zojuist opgehaalde RAG-context.
@@ -939,20 +999,26 @@ export async function POST(req: NextRequest) {
 
     // Stream het antwoord via Server-Sent Events.
     // Protocol (één JSON-object per `data:`-regel):
-    //   { type: "meta",  bronnen, modus, chunks_gevonden }  — als eerste
+    //   { type: "progress", fase, status?, label?, uitkomst?, batch?, totaal? }
+    //        — voortgang per bereikte serverfase (besluit 0087). `fase` ∈
+    //          reformulatie | retrieval | rerank | web | analyse | generatie.
+    //          status "bezig" = lopende regel; "klaar" = afgeronde regel (+ uitkomst,
+    //          bv. "18 passages gevonden"). Analyse draagt batch/totaal (map-reduce).
+    //          Overgeslagen fasen sturen geen event (geen schijnzekerheid). Deze
+    //          events zijn VLUCHTIGE UI-STATE en worden NOOIT in het auditspoor gelogd.
+    //   { type: "meta",  bronnen, modus, chunks_gevonden }  — vóór het eerste token
     //   { type: "delta", text }                              — per token
     //   { type: "done" }                                     — na het loggen
-    //   { type: "error", error }                             — bij een fout
+    //   { type: "error", error }                             — bij een fout (ook
+    //        fouten in retrieval/promptopbouw: die draaien nu ín de stream, dus
+    //        verschijnen als error-event in een 200-respons i.p.v. een HTTP-status).
+    // De voorbereidingsroute (0071) kan deze eventvorm ongewijzigd overnemen.
     // De governance_log-insert gebeurt PAS na het voltooien van de stream, met
     // het volledige antwoord. Append-only blijft intact: enkel een insert, geen
     // UPDATE/DELETE. Een afgebroken stream logt geen half antwoord als definitief.
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream<Uint8Array>({
-      async start(controller) {
-        const send = (obj: unknown) =>
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
-
-        try {
+          // ── Generatiefase (besluit 0087): het antwoord wordt opgesteld. Deze
+          // melding vervangt de lopende voortgangsregel tot het eerste delta-token.
+          send({ type: "progress", fase: "generatie", status: "bezig", label: VOORTGANG_LABEL.generatie });
           send({
             type: "meta",
             bronnen,
@@ -1024,6 +1090,7 @@ export async function POST(req: NextRequest) {
               send({
                 type: "progress",
                 fase: "analyse",
+                label: VOORTGANG_LABEL.analyse,
                 batch: i + 1,
                 totaal: breedBatches.length,
               });

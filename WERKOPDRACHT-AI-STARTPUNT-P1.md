@@ -1,5 +1,9 @@
 ## Werkopdracht: AI-startpunt plateau 1 — ingang in plaats van leeg invoerveld
 
+> **Status: uitgevoerd op 28-07-2026.** `page.tsx` is teruggebracht tot een server-wrapper (optie A), met `_components/Startpunt.tsx`, `_components/AssistentClient.tsx` en een `loading.tsx`.
+>
+> **Scope-item 5 (auto-restore begrenzen tot de browsersessie) is ná oplevering toegevoegd en daarom verplaatst naar `WERKOPDRACHT-HUISSTIJL-T1`.** Dat is de eerstvolgende opdracht in de rij. Zie daar §"Auto-restore van het laatste gesprek".
+
 **Doel & context** — De AI-assistent opent nu met een leeg invoerveld en vier statische voorbeeldvragen. Voor een bestuurder die het portaal een paar keer per maand opent, is dat het minst behulpzame startpunt dat er is: hij moet zelf bedenken wat hij kan vragen. Tegelijk staat de rijkste AI-functionaliteit die het portaal heeft — de agendavoorbereiding met bestuurlijke duiding, aandachtspunten en drie kritische vragen — **alleen op de vergaderpagina**, waar je hem moet weten te vinden.
 
 Dit plateau lost een **vindbaarheidsprobleem** op, geen functionaliteitsgat. `/ai` krijgt een startscherm dat toont wat er nu speelt en dat doorverwijst naar bestaande functionaliteit. Er wordt geen enkele nieuwe AI-aanroep, prompt of antwoordmodus toegevoegd.
@@ -25,7 +29,7 @@ Dit plateau lost een **vindbaarheidsprobleem** op, geen functionaliteitsgat. `/a
    - *Een vraag over een document* → opent de bestaande chat met een vooraf gezette `document_scope` op het gekozen document (bestaand mechanisme).
    - *Een vrije vraag stellen* → opent de bestaande chat, ongewijzigd.
 4. **Gedeelde contexthelper** — de queries voor de contextkaarten worden geëxtraheerd uit `app/(dashboard)/page.tsx` naar één herbruikbare server-helper (bijvoorbeeld `core/lib/portaalcontext.ts`), zodat de homepage en het startpunt dezelfde bron gebruiken. De homepage blijft functioneel identiek.
-5. **Auto-restore begrenzen tot de browsersessie** — zie §"Wanneer verschijnt het startpunt" hieronder. Zonder deze wijziging is het startscherm in de praktijk onbereikbaar.
+5. ~~**Auto-restore begrenzen tot de browsersessie.**~~ — **verplaatst naar `WERKOPDRACHT-HUISSTIJL-T1`** (toegevoegd ná oplevering van deze opdracht). De onderbouwing in §"Wanneer verschijnt het startpunt" blijft hier staan als achtergrond.
 6. **Ontwerpdocument + besluitregistratie** — zie Definition of Done.
 
 **Niet**
@@ -88,7 +92,7 @@ Dit plateau lost een **vindbaarheidsprobleem** op, geen functionaliteitsgat. `/a
 ### Acceptatiecriteria
 
 1. **Geen leeg invoerveld meer.** Wie `/ai` opent zonder lopend gesprek in deze browsersessie, ziet het startscherm met contextkaarten en taakknoppen. De oude `VOORGESTELDE_VRAGEN`-chips zijn vervangen, niet ernaast gezet.
-2. **Opnieuw inloggen geeft een schoon gesprek.** Na uitloggen en opnieuw inloggen, en in een nieuw browsertabblad, verschijnt het startpunt — niet het laatste gesprek. Binnen dezelfde sessie blijft een lopend gesprek staan bij het verlaten en terugkeren naar `/ai`. Alle gesprekken blijven bereikbaar via de gesprekken-lade.
+2. ~~**Opnieuw inloggen geeft een schoon gesprek.**~~ *(verplaatst naar `WERKOPDRACHT-HUISSTIJL-T1`)* Na uitloggen en opnieuw inloggen, en in een nieuw browsertabblad, verschijnt het startpunt — niet het laatste gesprek. Binnen dezelfde sessie blijft een lopend gesprek staan bij het verlaten en terugkeren naar `/ai`. Alle gesprekken blijven bereikbaar via de gesprekken-lade.
 3. **Bestaand gedrag intact.** Zodra een gesprek loopt — nieuw of hersteld uit de gesprekshistorie — is `/ai` functioneel identiek aan vóór deze wijziging: modi, bronselectie, @-mentions, agendapunt-scope, verduidelijkingsvragen en het onderbouwingspaneel werken ongewijzigd.
 4. **Routeren, niet dupliceren.** "Een agendapunt voorbereiden" brengt de gebruiker naar het bestaande agendapunt op de vergaderpagina, met het juiste agendapunt in beeld via het bestaande anker. Er is geen tweede implementatie van de voorbereiding ontstaan; `AgendapuntChat`, `VoorbereidingsBlok` en `AntwoordWeergave` zijn ongewijzigd.
 5. **Context klopt of ontbreekt.** Elke getoonde kaart is aantoonbaar afgeleid uit de eigen fondsdata van de ingelogde gebruiker. Is er geen vergadering, geen actieve procedurestap of geen recent document, dan wordt die kaart weggelaten. Een gebruiker zonder enige context ziet een begrijpelijk startscherm met alleen de taakknoppen en de vrije vraag — geen lege kaders, geen foutmelding.
@@ -105,7 +109,7 @@ Dit plateau lost een **vindbaarheidsprobleem** op, geen functionaliteitsgat. `/a
 Laatste bestaande entry is `0083`; verifieer het eerstvolgende vrije nummer (let op: `0082` ontbreekt in de reeks).
 
 1. **Het startpunt vervangt het lege invoerveld op `/ai`.** Gevolg: de assistent presenteert zich als taakgericht in plaats van conversationeel. Benoem het geaccepteerde nadeel — de intensieve gebruiker die direct wil typen, krijgt één extra scherm tussen zich en het invoerveld. Beschrijf hoe dat is gemitigeerd (vrije vraag direct zichtbaar op het startscherm, en het startscherm verdwijnt zodra een gesprek loopt).
-2. **Auto-restore wordt begrensd tot de browsersessie.** Fase B2 herstelde bij elke mount het meest recente gesprek. Leg vast dat dit vervalt bij een nieuwe sessie, dat gesprekken onverminderd bewaard blijven en via de gesprekken-lade bereikbaar zijn, en waarom dit nodig is (zonder deze wijziging is het startpunt onbereikbaar voor iedere terugkerende gebruiker). Benoem het geaccepteerde nadeel: wie zijn gesprek van gisteren wil hervatten, moet dat nu zelf uit de lade kiezen.
+2. ~~**Auto-restore wordt begrensd tot de browsersessie.**~~ *(verplaatst naar `WERKOPDRACHT-HUISSTIJL-T1`)* Fase B2 herstelde bij elke mount het meest recente gesprek. Leg vast dat dit vervalt bij een nieuwe sessie, dat gesprekken onverminderd bewaard blijven en via de gesprekken-lade bereikbaar zijn, en waarom dit nodig is (zonder deze wijziging is het startpunt onbereikbaar voor iedere terugkerende gebruiker). Benoem het geaccepteerde nadeel: wie zijn gesprek van gisteren wil hervatten, moet dat nu zelf uit de lade kiezen.
 3. **Twee ingangen naar dezelfde agendavoorbereiding.** Vanaf nu is de voorbereiding bereikbaar via de vergaderpagina én via `/ai`. Leg vast dat `/ai` uitsluitend **routeert** en dat een tweede implementatie principieel is uitgesloten — dit is de schuld die `0036` accepteerde en `0079` heeft opgeruimd. Verwijs naar beide.
 
 Neem in beide gevallen ook de negatieve gevolgen op, conform `decisions/TEMPLATE.md` §Gevolgen.
