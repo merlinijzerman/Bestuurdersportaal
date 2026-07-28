@@ -148,10 +148,9 @@ export default async function DashboardLayout({
         beschikbareModules={beschikbareModules}
         logoLetter={logoLetter}
         logoUrl={logoUrl}
-      />
-      <main className="md:ml-64 flex flex-col min-h-screen pt-14 md:pt-0">
+      >
         {children}
-      </main>
+      </DashboardShell>
     </div>
   );
 }

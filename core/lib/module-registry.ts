@@ -59,48 +59,48 @@ export type ModuleDef = {
 export const MODULE_REGISTRY: Record<ModuleKey, ModuleDef> = {
   home: {
     key: "home", label: "Home", href: "/", section: "Overzicht",
-    icon: "🏠", defaultActief: true, manifestBeheerbaar: false,
+    icon: "⌂", defaultActief: true, manifestBeheerbaar: false,
   },
   stuurinformatie: {
     key: "stuurinformatie", label: "Stuurinformatie", href: "/dashboard", section: "Overzicht",
-    icon: "📊", defaultActief: true, manifestBeheerbaar: true,
+    icon: "◐", defaultActief: true, manifestBeheerbaar: true,
   },
   klantbeeld: {
     key: "klantbeeld", label: "Klantbeeld", href: "/klantbeeld", section: "Overzicht",
-    icon: "👥", defaultActief: true, manifestBeheerbaar: true,
+    icon: "◍", defaultActief: true, manifestBeheerbaar: true,
   },
   ai: {
     key: "ai", label: "AI Assistent", href: "/ai", section: "Kennisbase",
-    icon: "🤖", iconSrc: "/ai-assistent.png", badge: "AI",
+    icon: "✦", iconSrc: "/ai-assistent.png", badge: "AI",
     defaultActief: true, manifestBeheerbaar: true,
   },
   bibliotheek: {
     key: "bibliotheek", label: "Documentbibliotheek", href: "/bibliotheek", section: "Kennisbase",
-    icon: "📚", defaultActief: true, manifestBeheerbaar: true,
+    icon: "▤", defaultActief: true, manifestBeheerbaar: true,
   },
   vergaderingen: {
     key: "vergaderingen", label: "Vergaderingen", href: "/vergaderingen", section: "Bestuur",
-    icon: "📅", defaultActief: true, manifestBeheerbaar: true,
+    icon: "▦", defaultActief: true, manifestBeheerbaar: true,
   },
   notulen: {
     key: "notulen", label: "Besluiten & Notulen", href: "/notulen", section: "Bestuur",
-    icon: "📋", defaultActief: true, manifestBeheerbaar: true,
+    icon: "✓", defaultActief: true, manifestBeheerbaar: true,
   },
   procedures: {
     key: "procedures", label: "Processen", href: "/procedures", section: "Bestuur",
-    icon: "📂", defaultActief: true, manifestBeheerbaar: true,
+    icon: "◧", defaultActief: true, manifestBeheerbaar: true,
   },
   risicomatrix: {
     key: "risicomatrix", label: "Risicomatrix", href: "/risicomatrix", section: "Bestuur",
-    icon: "🛡️", defaultActief: true, manifestBeheerbaar: true,
+    icon: "◇", defaultActief: true, manifestBeheerbaar: true,
   },
   beheer: {
     key: "beheer", label: "Catalogus & organen", href: "/beheer", section: "Beheer",
-    icon: "⚙️", rolVereist: "beheerder", defaultActief: true, manifestBeheerbaar: false,
+    icon: "⚙", rolVereist: "beheerder", defaultActief: true, manifestBeheerbaar: false,
   },
   governance: {
     key: "governance", label: "Governance Log", href: "/governance", section: "Beheer",
-    icon: "🔍", rolVereist: "beheerder", defaultActief: true, manifestBeheerbaar: false,
+    icon: "◎", rolVereist: "beheerder", defaultActief: true, manifestBeheerbaar: false,
   },
   // AQL-4 scherm 9 — read-only assurance-view (kwaliteitsborging AI). Zichtbaar
   // voor ÁLLE fondsrollen (geen rolVereist), read-only. Kern-audit-infrastructuur
@@ -109,7 +109,7 @@ export const MODULE_REGISTRY: Record<ModuleKey, ModuleDef> = {
   // module (niet 'governance').
   assurance: {
     key: "assurance", label: "Kwaliteitsborging AI", href: "/governance/assurance", section: "Beheer",
-    icon: "🛡️", defaultActief: true, manifestBeheerbaar: false,
+    icon: "◇", defaultActief: true, manifestBeheerbaar: false,
   },
 };
 

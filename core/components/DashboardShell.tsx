@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Sidebar from "./Sidebar";
 
 interface DashboardShellProps {
@@ -11,11 +11,19 @@ interface DashboardShellProps {
   /** Optionele branding uit de fonds-theming. */
   logoLetter?: string;
   logoUrl?: string;
+  /** De (server-gerenderde) paginacontent. Wordt hier omhuld zodat de contentmarge
+   *  met de inklapstand van de sidebar meebeweegt (client-state, één bron). */
+  children: React.ReactNode;
 }
 
-// Mobiele chrome rond de bestaande (desktop) sidebar. Op md+ verandert er niets:
-// de sidebar staat vast links en deze topbar/backdrop zijn verborgen (md:hidden).
-// Op < md wordt de sidebar een off-canvas drawer die opent via de hamburger.
+// localStorage-sleutel voor de desktop-inklapvoorkeur. Puur client-side UI-state:
+// geen serverstate, geen tabel, geen governance-event (huisstijl T1, besluit 0084).
+const INKLAP_SLEUTEL = "nav-ingeklapt";
+
+// Mobiele chrome rond de bestaande (desktop) sidebar + de contentwrapper. Op md+
+// staat de sidebar vast links; deze topbar/backdrop zijn verborgen (max-md/md:hidden).
+// Op < md wordt de sidebar een off-canvas drawer die opent via de hamburger — die
+// mobiele drawer staat LOS van de desktop-inklapstand (`ingeklapt` is md-only).
 export default function DashboardShell({
   gebruikerNaam,
   gebruikerRol,
@@ -23,8 +31,35 @@ export default function DashboardShell({
   beschikbareModules,
   logoLetter,
   logoUrl,
+  children,
 }: DashboardShellProps) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(false); // mobiele drawer
+  const [ingeklapt, setIngeklapt] = useState(false); // desktop inklap (md+)
+
+  // Voorkeur na hydration inlezen. Bewuste afweging (besluit 0084): de eerste
+  // client-render blijft uitgeklapt (= SSR-HTML), daarna past dit de voorkeur toe.
+  // Voor "ingeklapt"-gebruikers geeft dat één frame reflow bij herladen; de
+  // transition op breedte/marge maakt dat vloeiend. Geen flits-vrije pre-paint
+  // hack nodig voor deze UI-state.
+  useEffect(() => {
+    try {
+      setIngeklapt(localStorage.getItem(INKLAP_SLEUTEL) === "1");
+    } catch {
+      /* localStorage niet beschikbaar → default uitgeklapt */
+    }
+  }, []);
+
+  function toggleInklap() {
+    setIngeklapt((v) => {
+      const volgende = !v;
+      try {
+        localStorage.setItem(INKLAP_SLEUTEL, volgende ? "1" : "0");
+      } catch {
+        /* stil: voorkeur bewaren is best-effort */
+      }
+      return volgende;
+    });
+  }
 
   return (
     <>
@@ -37,7 +72,7 @@ export default function DashboardShell({
           onClick={() => setOpen(true)}
           aria-label="Menu openen"
           aria-expanded={open}
-          className="text-nav-text-active -ml-1 p-2 rounded-lg hover:bg-nav-line/40 transition-colors"
+          className="text-nav-text-active -ml-1 p-2 rounded-lg hover:bg-nav-line transition-colors"
         >
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path
@@ -71,7 +106,19 @@ export default function DashboardShell({
         logoUrl={logoUrl}
         open={open}
         onNavigate={() => setOpen(false)}
+        ingeklapt={ingeklapt}
+        onToggleInklap={toggleInklap}
       />
+
+      {/* Contentmarge beweegt mee met de inklapstand (md+); op < md geen marge
+          (drawer overlapt). De transition houdt marge en sidebarrand synchroon. */}
+      <main
+        className={`${
+          ingeklapt ? "md:ml-14" : "md:ml-64"
+        } flex flex-col min-h-screen pt-14 md:pt-0 transition-[margin] duration-200 ease-out`}
+      >
+        {children}
+      </main>
     </>
   );
 }

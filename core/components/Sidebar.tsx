@@ -19,6 +19,11 @@ interface SidebarProps {
   open?: boolean;
   /** Aangeroepen bij navigatie/uitloggen zodat de mobiele drawer sluit. */
   onNavigate?: () => void;
+  /** Ingeklapte (smalle) stand op desktop (md+). Client-side UI-voorkeur; op < md
+   *  altijd genegeerd — daar is de sidebar een volledige off-canvas drawer. */
+  ingeklapt?: boolean;
+  /** Toggle voor de inklapstand (hamburger in het logoblok, md-only). */
+  onToggleInklap?: () => void;
 }
 
 export default function Sidebar({
@@ -30,6 +35,8 @@ export default function Sidebar({
   logoUrl,
   open = false,
   onNavigate,
+  ingeklapt = false,
+  onToggleInklap,
 }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
@@ -67,16 +74,48 @@ export default function Sidebar({
 
   let huidigSection = "";
 
+  // Helper: klasse die een element bij inklap op md+ verbergt (mobiel altijd tonen).
+  const bijInklapVerborgen = ingeklapt ? "md:hidden" : "";
+
   return (
     <nav
-      className={`w-64 h-screen bg-nav border-r border-nav-line flex flex-col fixed top-0 left-0 z-50 transition-transform duration-200 ease-out md:translate-x-0 ${
+      className={`w-64 ${
+        ingeklapt ? "md:w-14" : "md:w-64"
+      } h-screen bg-nav border-r border-nav-line flex flex-col fixed top-0 left-0 z-50 transition-[transform,width] duration-200 ease-out md:translate-x-0 ${
         open ? "translate-x-0" : "-translate-x-full"
       }`}
     >
       {/* Logo — brandbaar via fonds-theming (T8): logo-url wint, dan logo-letter,
-          anders de default "P". Cosmetisch; geen autorisatiebetekenis. */}
-      <div className="px-5 py-6 border-b border-nav-line">
-        <div className="w-10 h-10 bg-nav-accent rounded-xl flex items-center justify-center font-black text-lg text-white mb-3 overflow-hidden">
+          anders de default "P". Cosmetisch; geen autorisatiebetekenis. De
+          inklap-hamburger (md-only) klapt de sidebar smal/breed. */}
+      <div
+        className={`border-b border-nav-line ${
+          ingeklapt ? "px-5 py-6 md:px-0 md:py-4" : "px-5 py-6"
+        }`}
+      >
+        <button
+          type="button"
+          onClick={onToggleInklap}
+          aria-label={ingeklapt ? "Menu uitklappen" : "Menu inklappen"}
+          aria-expanded={!ingeklapt}
+          className={`hidden md:flex items-center justify-center w-8 h-8 mb-3 rounded-lg text-nav-text hover:bg-nav-line hover:text-nav-text-active transition-colors ${
+            ingeklapt ? "md:mx-auto" : ""
+          }`}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="M3 6h18M3 12h18M3 18h18"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
+        <div
+          className={`w-10 h-10 bg-nav-accent rounded-xl flex items-center justify-center font-black text-lg text-white mb-3 overflow-hidden ${
+            ingeklapt ? "md:mx-auto md:mb-0" : ""
+          }`}
+        >
           {logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={logoUrl} alt="" aria-hidden="true" className="w-full h-full object-contain" />
@@ -84,25 +123,25 @@ export default function Sidebar({
             logoLetter || "P"
           )}
         </div>
-        <div className="text-nav-text-active font-bold text-sm leading-snug">
+        <div className={`text-nav-text-active font-bold text-sm leading-snug ${bijInklapVerborgen}`}>
           {fondsNaam || process.env.NEXT_PUBLIC_FONDS_NAAM || "Bestuurdersportaal"}
         </div>
-        <div className="text-nav-text text-xs mt-0.5">Bestuurdersportaal MVP</div>
+        <div className={`text-nav-text text-xs mt-0.5 ${bijInklapVerborgen}`}>Bestuurdersportaal MVP</div>
       </div>
 
       {/* Gebruiker — klik opent het eigen profiel (geen los nav-item meer) */}
       <Link
         href="/profiel"
-        title="Mijn profiel openen"
+        title={ingeklapt ? "Mijn profiel" : "Mijn profiel openen"}
         onClick={onNavigate}
-        className={`px-5 py-3 border-b border-nav-line flex items-center gap-2.5 transition-colors ${
-          pathname === "/profiel" ? "bg-nav-active" : "hover:bg-nav-line/40"
-        }`}
+        className={`border-b border-nav-line flex items-center gap-2.5 transition-colors ${
+          ingeklapt ? "px-5 py-3 md:px-0 md:py-3 md:justify-center" : "px-5 py-3"
+        } ${pathname === "/profiel" ? "bg-nav-active" : "hover:bg-nav-line"}`}
       >
         <div className="w-8 h-8 bg-nav-accent rounded-full flex items-center justify-center font-bold text-xs text-white flex-shrink-0">
           {initials}
         </div>
-        <div className="flex-1 min-w-0">
+        <div className={`flex-1 min-w-0 ${bijInklapVerborgen}`}>
           <div className="text-xs font-semibold truncate text-nav-text-active">
             {gebruikerNaam || "Bestuurslid"}
           </div>
@@ -110,7 +149,7 @@ export default function Sidebar({
             {rolLabel[gebruikerRol || "bestuurder"] || "Bestuurslid"}
           </div>
         </div>
-        <span aria-hidden className="text-nav-text/60 text-xs flex-shrink-0">
+        <span aria-hidden className={`text-nav-text/60 text-xs flex-shrink-0 ${bijInklapVerborgen}`}>
           ›
         </span>
       </Link>
@@ -131,17 +170,23 @@ export default function Sidebar({
           return (
             <div key={item.href}>
               {showSection && (
-                <div className="px-5 pt-3 pb-1 text-nav-text/70 text-xs font-bold uppercase tracking-widest">
+                <div
+                  className={`px-5 pt-3 pb-1 text-nav-text/70 text-xs font-bold uppercase tracking-widest ${bijInklapVerborgen}`}
+                >
                   {item.section}
                 </div>
               )}
               <Link
                 href={item.href}
                 onClick={onNavigate}
-                className={`flex items-center gap-2.5 px-5 py-2.5 text-sm border-l-[3px] transition-all ${
+                // Tooltip toont de moduletitel in ingeklapte stand (label is dan verborgen).
+                title={ingeklapt ? item.label : undefined}
+                className={`flex items-center gap-2.5 text-sm border-l-[3px] transition-all ${
+                  ingeklapt ? "px-5 py-2.5 md:px-0 md:justify-center md:gap-0" : "px-5 py-2.5"
+                } ${
                   actief
                     ? "bg-nav-active text-nav-text-active border-nav-accent font-medium"
-                    : "text-nav-text border-transparent hover:bg-nav-line/40 hover:text-nav-text-active"
+                    : "text-nav-text border-transparent hover:bg-nav-line hover:text-nav-text-active"
                 }`}
               >
                 {item.iconSrc ? (
@@ -153,11 +198,13 @@ export default function Sidebar({
                     className="w-5 h-5 object-contain"
                   />
                 ) : (
-                  <span className="text-base w-5 text-center">{item.icon}</span>
+                  <span className="text-base w-5 text-center flex-shrink-0">{item.icon}</span>
                 )}
-                <span className="flex-1">{item.label}</span>
+                <span className={`flex-1 ${bijInklapVerborgen}`}>{item.label}</span>
                 {item.badge && (
-                  <span className="bg-nav-accent text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                  <span
+                    className={`bg-nav-accent text-white text-xs font-bold px-2 py-0.5 rounded-full ${bijInklapVerborgen}`}
+                  >
                     {item.badge}
                   </span>
                 )}
@@ -168,16 +215,20 @@ export default function Sidebar({
       </div>
 
       {/* Footer */}
-      <div className="px-5 py-4 border-t border-nav-line space-y-2">
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 bg-ok rounded-full pulse-dot"></span>
-          <span className="text-nav-text text-xs">Beheerde AI-omgeving actief</span>
+      <div className={`border-t border-nav-line space-y-2 ${ingeklapt ? "px-5 py-4 md:px-0" : "px-5 py-4"}`}>
+        <div className={`flex items-center gap-2 ${ingeklapt ? "md:justify-center" : ""}`}>
+          <span className="w-2 h-2 bg-ok rounded-full pulse-dot flex-shrink-0"></span>
+          <span className={`text-nav-text text-xs ${bijInklapVerborgen}`}>Beheerde AI-omgeving actief</span>
         </div>
         <button
           onClick={uitloggen}
-          className="text-nav-text text-xs hover:text-nav-text-active transition-colors"
+          title={ingeklapt ? "Uitloggen" : undefined}
+          className={`text-nav-text text-xs hover:text-nav-text-active transition-colors ${
+            ingeklapt ? "md:w-full md:text-center" : ""
+          }`}
         >
-          Uitloggen →
+          <span className={bijInklapVerborgen}>Uitloggen </span>
+          <span aria-hidden>→</span>
         </button>
       </div>
     </nav>

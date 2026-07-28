@@ -2,6 +2,14 @@
 
 **Status:** plan ter review · **Scope:** light-thema, geen dark mode · **Doel:** één bron van waarheid voor kleur/typografie over marketing, app en beheer.
 
+> ⚠️ **Waardes verouderd (huisstijl tranche 1, 2026-07-28, besluit 0084).** De concrete
+> hex/kleurwaarden in dit document beschrijven de historische set en zijn **niet meer
+> actueel**: `--accent` is nu **violet** (`91 79 224`, was `#234E70`), de navigatie is
+> **licht met donkere navtekst** (was diep ink-navy) en `--phase` is **teal** (was paars).
+> Het *principe* (rol-tokens, geen dark mode, één bron van waarheid) blijft ongewijzigd.
+> Actuele waarden: `app/globals.css` (bron van waarheid) + de contrasttabel in
+> `TOKENLAAG-FASE5-QA.md`.
+
 ---
 
 ## 1. Principe
