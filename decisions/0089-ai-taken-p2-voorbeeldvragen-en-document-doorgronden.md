@@ -18,14 +18,25 @@ de code; die zijn hieronder als besluit vastgelegd.
 
 ## Besluit
 
-**Deel A — voorbeeldvragen.** Een pure vragenpool (`core/lib/startvragen.ts`) met
-twee generatoren (`context`, `signaal`) vult kandidaten; een selectieregel toont er
-**maximaal drie, elk van een verschillende `vraagsoort`** (Antwoordmodus), met de
-signaalvraag bovenaan. Alles uit de **al geladen** portaalcontext — **nul nieuwe
-query's** (criterium 6). Chips renderen inline op de lege staat van `/ai` (patroon
-`STARTVRAGEN` in `AgendapuntChat`), niet als apart scherm. Een klik start de vraag
-meteen en logt de herkomst-`bron` in `governance_log.retrieval_meta.startvraag_bron`
-(criterium 4) — **geen nieuwe tabel, geen nieuw `governance_events`-type**.
+**Deel A — voorbeeldvragen.** Een **vaste, generieke set** starters
+(`core/lib/startvragen.ts`, `GENERIEKE_STARTVRAGEN`) — géén context-afleiding, géén
+koppeling, géén query. De chips verschijnen op de lege staat van `/ai` **pas nadat
+de gebruiker op "Een vrije vraag stellen" klikte** (patroon `STARTVRAGEN` in
+`AgendapuntChat`). Een klik start de vraag meteen als vrije vraag; het auditspoor
+krijgt een telemetrie-marker `governance_log.retrieval_meta.startvraag_bron =
+"voorbeeldvraag"` (prefill vs. zelf getypt) — **geen nieuwe tabel, geen nieuw
+`governance_events`-type**.
+
+> **Herziening 2026-07-29 (opdrachtgever).** Deel A is bewust vereenvoudigd t.o.v.
+> de oorspronkelijke werkopdracht (A1–A4: context-afgeleide vragen met twee
+> generatoren, spreiding over `vraagsoort`, herkomst-logging per generator). Reden:
+> een voorbeeldvraag die een specifiek stuk/agendapunt bij naam noemt zonder dat het
+> gekoppeld is, "slaat nergens op"; en wie een vraag over een document heeft,
+> gebruikt taakkaart 2 ("Een document doorgronden"), die wél de scope zet. Daarmee
+> vervallen de acceptatiecriteria 1/2/3 (echte context, verschillende vraagsoort,
+> signaal-vraag) en de bijbehorende koppeling-/scope-machinerie; criterium 6 (nul
+> query's) blijft triviaal gehaald (de set is statisch). De eerder gebouwde
+> generatoren + koppeling zijn verwijderd.
 
 **Deel B — document doorgronden.** Klik opent een **scherpsteltoestand binnen `/ai`**
 (geen route). Eén document (kiezer hergebruikt de bestaande documentzoek-suggestiebron
@@ -67,20 +78,16 @@ wordt bij "Afwijkingen" de **voorganger óók in de retrieval-scope** opgenomen
 aantoonbare voorganger, niet het uitgestelde "meerdere willekeurige documenten"
 (plateau 2c).
 
-### Scope-resolutie — `signaal`-generator en fase-weging begrensd tot geladen data
+### Scope-resolutie — vervallen door de herziening (context-afleiding geschrapt)
 
-De werkopdracht noemde als signaalbronnen ook een onvervulde
-`procedure_requirements`-regel, en een procesfase-weging (A3). Bij verificatie bleek:
-- `procedure_requirements` is **niet** in de portaalcontext geladen; ophalen zou een
-  nieuwe query zijn en schendt criterium 6.
-- De vier fasenamen (beeldvorming/oordeelsvorming/besluitvorming/in_evaluatie) komen
-  **nergens in de code** voor en zijn niet geladen.
-
-Daarom gebruikt de `signaal`-generator in dit plateau **uitsluitend** de twee wél
-geladen signalen (agendapunt zonder eigen inbreng, naderende deadline op de
-eerstvolgende processtap) — genoeg voor criterium 3 (OR-formulering). Fase-weging en
-de requirement-signaalvariant zijn **gedeferd** (vervolgpunt), niet benaderd met een
-gok — conform "geen schijnzekerheid".
+> **Achterhaald door de herziening 2026-07-29.** Deze afweging gold voor de
+> oorspronkelijke, context-afgeleide Deel A: de werkopdracht noemde als
+> signaalbronnen ook een onvervulde `procedure_requirements`-regel en een
+> procesfase-weging (A3). Bij verificatie bleek `procedure_requirements` niet in de
+> portaalcontext geladen (ophalen = nieuwe query, schendt criterium 6) en kwamen de
+> vier fasenamen (beeldvorming/oordeelsvorming/besluitvorming/in_evaluatie) **nergens
+> in de code** voor. Met de generieke set is er geen context-afleiding meer, dus deze
+> hele resolutie is niet meer van toepassing — de vragen zijn statisch en fondsneutraal.
 
 ## Gevolgen
 

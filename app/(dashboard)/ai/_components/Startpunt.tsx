@@ -18,11 +18,6 @@ import type {
   DocumentCtx,
 } from "@/core/lib/portaalcontext-afleiding";
 import { heeftEnigeContext } from "@/core/lib/portaalcontext-afleiding";
-import type {
-  Startvraag,
-  StartvraagBron,
-  StartvraagKoppeling,
-} from "@/core/lib/startvragen";
 
 function formatDatum(d: string) {
   return new Date(d).toLocaleString("nl-NL", {
@@ -66,16 +61,12 @@ export default function Startpunt({
 }: {
   context: PortaalContext;
   voornaam: string;
-  /** P2 Deel A — ≤3 voorbeeldvragen, afgeleid uit de context (geen extra query). */
-  voorbeeldvragen: Startvraag[];
+  /** P2 Deel A — vaste, generieke voorbeeldvragen (geen context/koppeling). */
+  voorbeeldvragen: readonly string[];
   /** True zodra de gebruiker op "Een vrije vraag stellen" klikte: dan pas tonen. */
   voorbeeldvragenZichtbaar: boolean;
   onVrijeVraag: () => void;
-  onVoorbeeldvraag: (
-    tekst: string,
-    bron: StartvraagBron,
-    koppeling: StartvraagKoppeling
-  ) => void;
+  onVoorbeeldvraag: (tekst: string) => void;
   onDocumentVraag: (doc: DocumentCtx) => void;
 }) {
   const { volgendeVergadering, agendapunten, openStappen, recentDocument } =
@@ -226,24 +217,22 @@ export default function Startpunt({
           />
         </div>
 
-        {/* P2 Deel A — voorbeeldvragen: afgeleid uit wat er nu speelt (dezelfde
-            gegevens die het startpunt al ophaalt, geen extra query). Max drie, elk
-            van een verschillende vraagsoort. Verschijnen PAS nadat de gebruiker op
-            "Een vrije vraag stellen" klikte (voorbeeldvragenZichtbaar), en alleen op
-            de lege staat. Neutraal-kritisch, nooit richting een uitkomst. Een klik
-            start de vraag meteen en logt de bron. */}
+        {/* P2 Deel A — vaste, generieke voorbeeldvragen. Verschijnen PAS nadat de
+            gebruiker op "Een vrije vraag stellen" klikte (voorbeeldvragenZichtbaar),
+            en alleen op de lege staat. Neutraal-kritisch, nooit richting een uitkomst.
+            Een klik start de vraag meteen (patroon STARTVRAGEN in AgendapuntChat). */}
         {voorbeeldvragenZichtbaar && voorbeeldvragen.length > 0 && (
           <div className="mt-3">
             <div className="text-xs text-muted mb-2">Of begin met een voorbeeldvraag</div>
             <div className="flex flex-wrap gap-1.5">
               {voorbeeldvragen.map((v) => (
                 <button
-                  key={v.tekst}
+                  key={v}
                   type="button"
-                  onClick={() => onVoorbeeldvraag(v.tekst, v.bron, v.koppeling)}
+                  onClick={() => onVoorbeeldvraag(v)}
                   className="text-xs text-left border border-line bg-card rounded-full px-3 py-1.5 text-ink hover:border-accent hover:bg-accent/5 transition-colors"
                 >
-                  {v.tekst}
+                  {v}
                 </button>
               ))}
             </div>

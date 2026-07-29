@@ -592,10 +592,10 @@ export interface RetrievalMeta {
     vorige_document_id: string | null;
     promptvariant: string;
   };
-  // P2 Deel A — welke generator een aangeklikte voorbeeldvraag leverde
-  // (context|signaal), zodat na enkele weken meetbaar is welke generator werkt
-  // (criterium 4). Meelift op de bestaande chat-logging; geen nieuwe tabel.
-  startvraag_bron?: "context" | "signaal";
+  // P2 Deel A — markeert dat de beurt uit een aangeklikte (generieke) voorbeeldvraag
+  // kwam i.p.v. zelf getypt. Telemetrie in het auditspoor; meelift op de bestaande
+  // chat-logging, geen nieuwe tabel.
+  startvraag_bron?: "voorbeeldvraag";
 }
 
 // Platte rij zoals public.zoek_chunks(...) die teruggeeft (zie migratie

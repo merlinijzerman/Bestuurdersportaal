@@ -1381,8 +1381,8 @@ export async function POST(req: NextRequest) {
                   },
                 }
               : {}),
-            // P2 Deel A (criterium 4) — herkomst van een aangeklikte voorbeeldvraag.
-            ...(body.startvraag_bron === "context" || body.startvraag_bron === "signaal"
+            // P2 Deel A — telemetrie: kwam de beurt uit een aangeklikte voorbeeldvraag?
+            ...(body.startvraag_bron === "voorbeeldvraag"
               ? { startvraag_bron: body.startvraag_bron }
               : {}),
             // ADR 0028 — herkomst van de framing: legt in het auditspoor vast dat
