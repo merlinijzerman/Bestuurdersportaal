@@ -14,11 +14,11 @@
 
 | # | Scène | Duur | Beeld | Kop (klein, uppercase) | Regel (groot) |
 |---|---|---|---|---|---|
-| 01 | Opening | 5s | Tekstkaart | — | *Bestuurlijke besluiten, herleidbaar vastgelegd.* |
+| 01 | Opening | 5s | Tekstkaart | — | *Waar beheerste AI en besluitvorming elkaar versterken.* |
 | 02 | Overzicht | 10s | Home → Stuurinformatie | Eén omgeving per fonds | Stukken, vergaderingen, processen en risico's bij elkaar — afgeschermd per fonds. |
 | 03 | Bibliotheek | 8s | Documentbibliotheek, scroll | Uw eigen documenten als kennisbasis | PDF, Word, Excel en PowerPoint worden geëxtraheerd en doorzoekbaar gemaakt. |
-| 04 | AI-assistent | 16s | Vraag typen → antwoord → bron openklikken | Antwoord mét bron | De assistent antwoordt uitsluitend uit fondsdocumenten en een gecureerde bibliotheek — elke bewering is herleidbaar. |
-| 05 | Vergadering | 10s | Kalender → vergadering met agendapunten | Voorbereid de vergadering in | Per agendapunt de bijbehorende stukken en een privé AI-voorbereiding. |
+| 04 | AI-assistent | 20s | *Een document doorgronden* → onderdelen kiezen → Start → antwoord → bron openklikken | Sparringpartner, geen zoekmachine | De AI-assistent denkt met u mee over uw eigen stukken: aandachtspunten, kritische vragen — altijd met bron. |
+| 05 | Vergadering | 16s | Vergadering → agendapunt uitklappen → *Lees samenvatting* → *Vraag door* → voorbereiding genereren | Voorbereid de vergadering in | Stukken per agendapunt, een AI-samenvatting en een privé voorbereiding. |
 | 06 | Proces | 14s | Processen → Decision Object, statusgang, doorscrollen naar het auditspoor | Governance by design | Elk besluit doorloopt een vaste statusgang — met verplichte onderbouwing en een vastgelegd auditspoor. |
 | 09 | Slot | 6s | Tekstkaart | — | MVP-disclaimer + call to action |
 
@@ -43,7 +43,8 @@ Elke regel in de video is teruggevoerd op een as-built status. Wat expliciet **n
 |---|---|---|
 | "afgeschermd per fonds" | RLS + tenant-enforce (fail-closed), `middleware.ts` / dashboard-layout | Niet: "veilig", "compliant", "AVG-proof" — WP3/4/5/8 staan open |
 | "geëxtraheerd en doorzoekbaar" | unpdf/mammoth/xlsx/jszip + Mistral-embeddings, *Geïmplementeerd* | Niet: OCR van scans (zit niet op de tenant-uploadroute); niet: malwarescan |
-| "uitsluitend uit fondsdocumenten… herleidbaar" | Hybride retrieval + citatievalidatie, *Geïmplementeerd* | Niet: "actuele wet- en regelgeving" of live DNB/AFM — web-retrieval is een open besluit (0019); niet: "foutloos" |
+| "sparringpartner… denkt met u mee" | Positioneringsclaim, gedekt door wat in beeld staat: de route *Een document doorgronden* levert expliciet "Bestuurlijke aandachtspunten" en "Kritische vragen" (`core/lib/doorgrond.ts`) | Niet: "adviseert" of "beoordeelt" — het blijft duiding op stukken, de toetsing is aan het bestuur |
+| "altijd met bron" | Hybride retrieval + citatievalidatie, *Geïmplementeerd* | Niet: "actuele wet- en regelgeving" of live DNB/AFM — web-retrieval is een open besluit (0019); niet: "foutloos" |
 | "privé AI-voorbereiding per agendapunt" | *Geïmplementeerd* (profielgestuurd) | Niet: Teams-/agenda-integratie, e-mailuitnodigingen, versionering van stukken |
 | "vaste statusgang met verplichte onderbouwing" | 17-statusmachine + readiness-gate, *Geïmplementeerd* | Niet: aantal statussen noemen in beeld (nodigt uit tot doorvragen dat de teaser niet kan dragen); niet: decision rights/escalatie (Plateau 3) |
 | "een vastgelegd auditspoor" | `governance_events` append-only, sha256 per gebeurtenis, triggers blokkeren UPDATE/DELETE | Niet: "voldoet aan toezichteisen" — dat is een oordeel van de toezichthouder, niet van ons. Bewust vaag gehouden ("vastgelegd" i.p.v. "hash-geketend"): de teaser kan de uitleg niet dragen, de live demo wel |

@@ -61,6 +61,12 @@ export interface OnderbouwingMeta {
   alleenFondsdocumenten?: boolean | null;
   /** Intentie door de gebruiker bevestigd via een verduidelijkingschip (vs. heuristisch). */
   bronIntentOverride?: boolean | null;
+  // Contextbesef (besluit 0090) — of de PORTAALSTAND (eigen eerstvolgende
+  // processtap, komende vergadering, agendapunten zonder eigen inbreng) is
+  // meegewogen. Aparte aanduiding in het controlevlak, onderscheiden van de
+  // documentbronnen (transparantielijn besluit 0071).
+  /** Of de eigen portaalstand als context is meegewogen. */
+  portaalstandGebruikt?: boolean | null;
   // Increment I-3 — uniforme bronvermelding-transparantie. De model_knowledge-
   // herkomst (algemene kennis uit het taalmodel, met de genoemde instantie), en
   // de web-laag die VOORBEREID is maar nog niet gevuld (Scenario B).
@@ -227,6 +233,22 @@ export default function OnderbouwingPaneel({
               <Rij
                 label="Persoonlijk profiel"
                 waarde="Algemeen perspectief — collectieve weergave, niet op uw profiel geprioriteerd"
+              />
+            )}
+            {meta.portaalstandGebruikt && (
+              <Rij
+                label="Portaalstand"
+                waarde={
+                  <>
+                    Meegewogen als uw eigen proces-/taakstand.
+                    <span className="text-muted">
+                      {" "}
+                      Uw eerstvolgende processtap, de komende vergadering en
+                      agendapunten zonder uw inbreng — geen documentbron, maar de
+                      actuele stand uit het portaal.
+                    </span>
+                  </>
+                }
               />
             )}
             {meta.organisatieprofiel === "actief" && (

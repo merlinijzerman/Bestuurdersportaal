@@ -27,6 +27,9 @@ import {
   moetVerduidelijken,
   bepaalAutoBronModus,
   VERDUIDELIJKING_OPTIES,
+  isPersoonlijkeVraag,
+  isStatusgerichteVraag,
+  heeftPortaalstandNodig,
 } from "./vraagtype";
 
 let n = 0;
@@ -482,6 +485,65 @@ test("meldingen zijn intent-onafhankelijk: WEL treffers + duiding → duiding-me
   });
   assert.ok(types(m).includes("interpretatieve_duiding"));
   assert.ok(!types(m).includes("geen_fondstreffer"));
+});
+
+// ============================================================================
+//  Contextbesef (besluit 0090) — persoonlijke/statusgerichte vragen + portaalstand.
+//  De brede meetset (54 contrastieve vragen) wordt getoetst in
+//  lib/bronkeuze-classificatie.sanity.ts. Hier: de acceptatiecriteria 1/2/3 als
+//  expliciete cases + de drie nieuwe pure helpers.
+// ============================================================================
+
+// ── Acceptatiecriterium 1: persoonlijke vraag → fonds, zeker (geen terugvraag) ──
+test("criterium 1: 'mijn volgende actie' → fonds zeker (geen verduidelijking)", () => {
+  const r = bepaalBronIntent("Wat is mijn volgende actie om op te pakken?");
+  assert.deepEqual(r, { intent: "fonds", vertrouwen: "zeker" });
+  assert.equal(moetVerduidelijken(r, false), false); // geen verduidelijkingsvraag meer
+});
+
+// ── Acceptatiecriterium 2: zuiver algemene vraag blijft algemeen, géén portaalstand ──
+test("criterium 2: 'Wtp over invaren' → algemeen én geen portaalstand", () => {
+  const v = "Wat zegt de Wtp over invaren?";
+  assert.equal(bepaalBronIntent(v).intent, "algemeen");
+  assert.equal(heeftPortaalstandNodig(v), false); // criterium 6
+});
+
+// ── Acceptatiecriterium 3: persoonlijk + generiek → gecombineerd ──
+test("criterium 3: 'Wtp voor mijn rol' → gecombineerd", () => {
+  assert.deepEqual(bepaalBronIntent("Wat betekent de Wtp voor mijn rol?"), {
+    intent: "gecombineerd",
+    vertrouwen: "zeker",
+  });
+});
+
+// ── isPersoonlijkeVraag: taak-/staatvraag herkennen, kennisvraag niet ──
+test("isPersoonlijkeVraag: mijn/voor mij/moet ik; NIET 'moet ik weten' of kaal 'ik'", () => {
+  assert.equal(isPersoonlijkeVraag("Wat is mijn volgende actie?"), true);
+  assert.equal(isPersoonlijkeVraag("Welke stappen staan voor mij open?"), true);
+  assert.equal(isPersoonlijkeVraag("Wat moet ik nog oppakken?"), true);
+  assert.equal(isPersoonlijkeVraag("Wat vraagt de wet van mij?"), true);
+  // Uitsluitingen: kennisvraag en kaal "ik".
+  assert.equal(isPersoonlijkeVraag("Wat moet ik weten over tegenstrijdig belang?"), false);
+  assert.equal(isPersoonlijkeVraag("Ik wil begrijpen wat een dekkingsgraad is."), false);
+  assert.equal(isPersoonlijkeVraag("Wat is een dekkingsgraad?"), false);
+});
+
+// ── isStatusgerichteVraag: voortgang herkennen, kale onderwerpvraag niet ──
+test("isStatusgerichteVraag: 'wat staat er open'/'hoe ver zijn we'; NIET 'hoe ver mag …'", () => {
+  assert.equal(isStatusgerichteVraag("Wat staat er nog open?"), true);
+  assert.equal(isStatusgerichteVraag("Hoe ver zijn we met het transitieplan?"), true);
+  assert.equal(isStatusgerichteVraag("Wat is de status?"), true);
+  // Bewust géén treffer: "hoe ver" zonder "zijn/staan we".
+  assert.equal(isStatusgerichteVraag("Hoe ver mag de dekkingsgraad dalen?"), false);
+  assert.equal(isStatusgerichteVraag("Wat is een dekkingsgraad?"), false);
+});
+
+// ── heeftPortaalstandNodig: persoonlijk OF status; zuiver algemeen niet ──
+test("heeftPortaalstandNodig: persoonlijk óf status → true; zuiver algemeen → false", () => {
+  assert.equal(heeftPortaalstandNodig("Wat is mijn volgende actie?"), true);
+  assert.equal(heeftPortaalstandNodig("Wat staat er nog open?"), true);
+  assert.equal(heeftPortaalstandNodig("Wat is een dekkingsgraad?"), false); // criterium 6
+  assert.equal(heeftPortaalstandNodig("Wat zegt de Wtp over invaren?"), false);
 });
 
 console.log(`\n${n} sanity-tests geslaagd.`);

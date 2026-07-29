@@ -524,6 +524,12 @@ export interface RetrievalMeta {
   // vlag is een bevestigde keuze in het auditspoor niet te onderscheiden van een
   // heuristisch-zekere keuze (beide bron_vertrouwen 'zeker').
   bron_intent_override?: boolean;
+  // Contextbesef (besluit 0090) — of de PORTAALSTAND (eigen eerstvolgende
+  // processtap, komende vergadering, agendapunten zonder eigen inbreng) als context
+  // is meegestuurd. Alleen bij een persoonlijke/statusgerichte vraag; nooit bij een
+  // zuiver algemene vraag. De stand komt uit query's onder RLS op de sessie (nooit
+  // fondsbreed voor iets persoonlijks) — dit is het herleidbaarheidsspoor daarvan.
+  portaalstand_gebruikt?: boolean;
   // Increment F (FO §14) — profielgestuurde PRIORITERING. Legt vast of het antwoord
   // op het persoonlijke profiel is geprioriteerd ('actief'), bewust collectief is
   // gehouden via 'algemeen perspectief' ('uitgeschakeld'), of de gebruiker geen

@@ -65,10 +65,10 @@ function evalueer(v: MeetsetVraag): Uitkomst {
   return { vraag: v, intent, vertrouwen, goed, foutAuto, fondsAlsAlgemeen, terugvraag };
 }
 
-console.log("bronkeuze-classificatie — meetset (40 vragen):\n");
-
 const uitkomsten = BRONKEUZE_MEETSET.map(evalueer);
 const n = uitkomsten.length;
+
+console.log(`bronkeuze-classificatie — meetset (${n} vragen):\n`);
 
 // Per-vraag-overzicht (zichtbaar bij falen én slagen).
 for (const u of uitkomsten) {

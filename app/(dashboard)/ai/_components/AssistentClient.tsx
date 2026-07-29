@@ -842,6 +842,8 @@ export default function AssistentClient({
           bron_modus_auto?: "documenten" | "combineren" | "algemeen" | null;
           alleen_fondsdocumenten?: boolean;
           bron_intent_override?: boolean;
+          // Contextbesef (besluit 0090) — of de portaalstand is meegewogen.
+          portaalstand_gebruikt?: boolean;
           // Increment I-3 — uniforme bronvermelding-transparantie.
           web_retrieval_actief?: boolean;
           model_kennis?: { grond: "algemene_kennis" | "wetgeving"; instantie: string | null }[];
@@ -922,6 +924,8 @@ export default function AssistentClient({
             bronVertrouwen: evt.bron_vertrouwen ?? null,
             alleenFondsdocumenten: evt.alleen_fondsdocumenten ?? null,
             bronIntentOverride: evt.bron_intent_override ?? null,
+            // Contextbesef (besluit 0090) — portaalstand als aparte aanduiding.
+            portaalstandGebruikt: evt.portaalstand_gebruikt ?? null,
             // Increment I-3 — web-retrieval is (nog) niet actief (Scenario B); de
             // model_knowledge-bronnen volgen in het 'done'-event (content-afhankelijk).
             webRetrievalActief: evt.web_retrieval_actief ?? false,

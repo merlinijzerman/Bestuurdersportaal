@@ -718,6 +718,44 @@ const FONDS_INTENT_PATRONEN: RegExp[] = [
   /\beigen (?:beleid|fonds|stukken|regeling)/,
 ];
 
+// PERSOONLIJKE ANKERS (contextbesef, besluit 0090) → de vraag gaat over de EIGEN
+// staat van deze bestuurder binnen dit fonds ("mijn volgende actie", "wat moet ik
+// nog oppakken"). Persoonlijke staat bestaat uitsluitend BINNEN dit fonds, dus een
+// treffer telt als fonds-anker (net als ons/onze/wij) — zie bepaalBronIntent.
+// Bewust een APARTE lijst, niet de fondslijst opgerekt: in de code blijft afleesbaar
+// dat dit een andere soort signaal is (persoonlijk i.p.v. collectief).
+//
+// Bewust NIET kaal /\bik\b/: "Ik wil begrijpen wat een dekkingsgraad is" is een
+// algemene vraag. Alleen `ik` in combinatie met een verplichtingswerkwoord.
+// Bij `moet ik` sluit de lookahead "moet ik weten" uit: dat is een KENNISvraag
+// ("wat moet ik weten over tegenstrijdig belang", meetset-item 39), geen taakvraag,
+// en moet in de twijfelbak (mag-terugvragen) blijven vallen.
+const PERSOONLIJK_INTENT_PATRONEN: RegExp[] = [
+  /\bmijn\b/,
+  /\bvoor mij\b/,
+  /\bvan mij\b/,
+  /\bmoet ik\b(?!\s+weten\b)/,
+  /\bik moet\b/,
+];
+
+// STATUSGERICHTE SIGNALEN (contextbesef, besluit 0090) → de vraag vraagt naar de
+// VOORTGANG/OPENSTAANDE stand ("wat staat er open", "hoe ver zijn we"). Deze lijst
+// stuurt NIET de intent-classificatie (bepaalBronIntent blijft ongewijzigd), maar
+// alléén of de portaalstand als context wordt meegestuurd (route.ts). Bewust
+// verankerd op proces-/voortgangsformuleringen ("…zijn we", "…staat open", "de
+// status"), niet op kale onderwerpwoorden: "hoe ver mag de dekkingsgraad dalen"
+// mag géén status-treffer zijn.
+const STATUS_INTENT_PATRONEN: RegExp[] = [
+  /\bwat staat er (?:nog )?open\b/,
+  /\bwat staat (?:er )?open\b/,
+  /\bhoe ver zijn we\b/,
+  /\bhoe ver staan we\b/,
+  /\bwaar staan we\b/,
+  /\bwat is de status\b/,
+  /\bwat loopt er nog\b/,
+  /\bwat moet er nog gebeuren\b/,
+];
+
 /**
  * Bepaal de bron-intentie + het vertrouwen, puur uit de vraag (FO §11a).
  *
@@ -726,6 +764,12 @@ const FONDS_INTENT_PATRONEN: RegExp[] = [
  *   generiek          → "algemeen"     (zeker)    — algemene kennis leidend
  *   geen van beide    → "fonds"        (ONZEKER)  — twijfel → verduidelijken
  *
+ * Een fonds-anker is een collectief signaal (ons/onze/wij/…) OF een persoonlijk
+ * signaal (mijn/moet ik/…, besluit 0090): de persoonlijke staat van een bestuurder
+ * bestaat uitsluitend binnen dít fonds, dus telt eveneens als "zeker fonds". Een
+ * persoonlijke vraag mét generiek signaal ("wat betekent de Wtp voor mijn rol")
+ * blijft daarmee "gecombineerd".
+ *
  * De onzekere fallback-intent is bewust "fonds", niet "algemeen": zonder
  * doorvragen leunen we fondsgericht en nooit stil op algemene kennis
  * (schijnzekerheid-guardrail).
@@ -733,12 +777,44 @@ const FONDS_INTENT_PATRONEN: RegExp[] = [
 export function bepaalBronIntent(vraag: string): BronIntentResultaat {
   const g = normaliseer(vraag);
   const generiek = GENERIEK_INTENT_PATRONEN.some((p) => p.test(g));
-  const fonds = FONDS_INTENT_PATRONEN.some((p) => p.test(g));
+  const fondsAnker =
+    FONDS_INTENT_PATRONEN.some((p) => p.test(g)) ||
+    PERSOONLIJK_INTENT_PATRONEN.some((p) => p.test(g));
 
-  if (fonds && generiek) return { intent: "gecombineerd", vertrouwen: "zeker" };
-  if (fonds) return { intent: "fonds", vertrouwen: "zeker" };
+  if (fondsAnker && generiek) return { intent: "gecombineerd", vertrouwen: "zeker" };
+  if (fondsAnker) return { intent: "fonds", vertrouwen: "zeker" };
   if (generiek) return { intent: "algemeen", vertrouwen: "zeker" };
   return { intent: "fonds", vertrouwen: "onzeker" };
+}
+
+/**
+ * Is dit een PERSOONLIJKE vraag (over de eigen proces-/taakstand van deze
+ * bestuurder)? Puur, herbruikbaar (besluit 0090). Stuurt — samen met
+ * isStatusgerichteVraag — of de route de portaalstand meestuurt.
+ */
+export function isPersoonlijkeVraag(vraag: string): boolean {
+  const g = normaliseer(vraag);
+  return PERSOONLIJK_INTENT_PATRONEN.some((p) => p.test(g));
+}
+
+/**
+ * Is dit een STATUSGERICHTE vraag (naar openstaande stand/voortgang)? Puur,
+ * herbruikbaar (besluit 0090). Raakt de intent-classificatie NIET; bepaalt
+ * uitsluitend of de portaalstand als context wordt meegestuurd.
+ */
+export function isStatusgerichteVraag(vraag: string): boolean {
+  const g = normaliseer(vraag);
+  return STATUS_INTENT_PATRONEN.some((p) => p.test(g));
+}
+
+/**
+ * Moet de portaalstand (eigen eerstvolgende processtap, komende vergadering,
+ * agendapunten zonder eigen inbreng) als context worden meegestuurd (besluit
+ * 0090)? Alleen bij een persoonlijke of statusgerichte vraag — bij een zuiver
+ * algemene vraag gaat er niets extra's mee (kosten/ruis-afweging blijft intact).
+ */
+export function heeftPortaalstandNodig(vraag: string): boolean {
+  return isPersoonlijkeVraag(vraag) || isStatusgerichteVraag(vraag);
 }
 
 /**

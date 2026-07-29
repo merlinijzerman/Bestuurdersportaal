@@ -14,36 +14,36 @@
       "id": "01-opening",
       "type": "kaart",
       "duur": 5,
-      "kop": "Bestuurlijke besluiten,\nherleidbaar vastgelegd.",
+      "kop": "Waar beheerste AI en\nbesluitvorming elkaar versterken.",
       "sub": "Eén beveiligde omgeving voor stukken, voorbereiding, besluitvorming en verantwoording."
     },
     {
       "id": "02-overzicht",
       "type": "opname",
-      "duurDoel": 10,
+      "duurDoel": 6,
       "kop": "Eén omgeving per fonds",
       "regel": "Stukken, vergaderingen, processen en risico's bij elkaar — afgeschermd per fonds."
     },
     {
       "id": "03-bibliotheek",
       "type": "opname",
-      "duurDoel": 8,
+      "duurDoel": 6,
       "kop": "Uw eigen documenten als kennisbasis",
-      "regel": "PDF, Word, Excel en PowerPoint worden geëxtraheerd en doorzoekbaar gemaakt."
+      "regel": "Uw documenten worden ontsloten en doorzoekbaar gemaakt voor de AI-assistent."
     },
     {
       "id": "04-ai",
       "type": "opname",
-      "duurDoel": 16,
-      "kop": "Antwoord mét bron",
-      "regel": "De assistent antwoordt uitsluitend uit fondsdocumenten en een gecureerde bibliotheek — elke bewering is herleidbaar."
+      "duurDoel": 26,
+      "kop": "Sparringpartner, geen zoekmachine",
+      "regel": "De AI-assistent denkt met u mee over uw eigen stukken: aandachtspunten, kritische vragen — altijd met bron."
     },
     {
       "id": "05-vergadering",
       "type": "opname",
-      "duurDoel": 10,
+      "duurDoel": 16,
       "kop": "Voorbereid de vergadering in",
-      "regel": "Per agendapunt de bijbehorende stukken en een privé AI-voorbereiding."
+      "regel": "Stukken per agendapunt, een AI-samenvatting en een privé voorbereiding."
     },
     {
       "id": "06-proces",

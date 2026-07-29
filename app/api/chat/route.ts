@@ -16,7 +16,9 @@ import {
 import { HAIKU_MODEL } from "@/core/lib/llm-modellen";
 import { weigerAlsModuleUit } from "@/core/lib/module-guard";
 import { valideerScope, type ScopeDocumentRij } from "@/core/lib/document-scope";
-import { bepaalVraagtype, schatTokens, kiesStrategie, maakBatches, bepaalAntwoordmodus, retrievalModusVoor, bepaalInlineMeldingen, AFGEKAPT_MELDING, bronbasisLabel, bepaalBronIntent, moetVerduidelijken, bepaalAutoBronModus, VERDUIDELIJKINGSVRAAG, VERDUIDELIJKING_OPTIES, ANTWOORDMODUS_LABEL, type Strategie, type Antwoordmodus, type BronModus, type BronIntent, type BronIntentResultaat } from "@/core/lib/vraagtype";
+import { bepaalVraagtype, schatTokens, kiesStrategie, maakBatches, bepaalAntwoordmodus, retrievalModusVoor, bepaalInlineMeldingen, AFGEKAPT_MELDING, bronbasisLabel, bepaalBronIntent, moetVerduidelijken, bepaalAutoBronModus, heeftPortaalstandNodig, VERDUIDELIJKINGSVRAAG, VERDUIDELIJKING_OPTIES, ANTWOORDMODUS_LABEL, type Strategie, type Antwoordmodus, type BronModus, type BronIntent, type BronIntentResultaat } from "@/core/lib/vraagtype";
+import { getPortaalContext } from "@/core/lib/portaalcontext";
+import { bouwPortaalstandBlok } from "@/core/lib/portaalstand-blok";
 import { bepaalBronsoortprofiel } from "@/core/lib/weeg-bronsoort";
 import { haalBesluitBronnen, topProcesinstanties, opmaakBesluitContext } from "@/core/lib/besluitvorming-bron";
 import { documentBronNaarSource, modelKennisBronnenUitAntwoord, bouwSourceSamenvatting, ontbrekendeAlgemeneKennisMarkering, type AssistantSource, type AssistantSourceWeb } from "@/core/lib/assistant-source";
@@ -398,27 +400,26 @@ export async function POST(req: NextRequest) {
     }
     const agendapuntModusActief = agendapuntSeed !== null;
 
-    // ── FO duiding v0.3 (06-07) — module-context in agendapunt-modus ────────
-    // Doorvragen na "Stel mijn voorbereiding op" mag niet minder weten dan de
-    // voorbereiding-route: actieve risico's + lopende procedures gaan compact
-    // mee (zelfde selecties als die route). Alleen in agendapunt-modus, om
-    // kosten en ruis in de overige modi te vermijden. Geen genummerde bronnen:
-    // het model verwijst bij naam (herleidbaarheidskeuze gelijk aan de
-    // voorbereiding-route; profielsturing loopt al generiek via Increment F).
-    let modulesBlok = "";
-    if (agendapuntModusActief && profiel?.fonds_id) {
+    // ── FO duiding v0.3 (06-07) — fondsbrede module-context ─────────────────
+    // Actieve risico's + lopende procedures gaan compact mee (zelfde selecties als
+    // de voorbereiding-route). Geen genummerde bronnen: het model verwijst bij naam
+    // (herleidbaarheidskeuze gelijk aan de voorbereiding-route; profielsturing loopt
+    // al generiek via Increment F). Wordt ingezet in agendapunt-modus én — sinds
+    // contextbesef (besluit 0090) — bij een persoonlijke/statusgerichte vraag; bij
+    // een zuiver algemene vraag gaat er niets extra's mee (kosten/ruis-afweging).
+    const haalModuleContextBlok = async (fid: string): Promise<string> => {
       const [{ data: risicoRows }, { data: procedureRows }] = await Promise.all([
         supabase
           .from("risicos")
           .select("titel, toelichting, niveau, type_risico, categorie")
-          .eq("fonds_id", profiel.fonds_id)
+          .eq("fonds_id", fid)
           .eq("status", "actief")
           .order("niveau", { ascending: false })
           .limit(15),
         supabase
           .from("procedures")
           .select("titel, beschrijving, status, template_code")
-          .eq("fonds_id", profiel.fonds_id)
+          .eq("fonds_id", fid)
           .neq("status", "afgerond")
           .order("gestart_op", { ascending: false })
           .limit(10),
@@ -446,8 +447,18 @@ export async function POST(req: NextRequest) {
               .join("\n")
         );
       }
-      if (delen.length > 0) modulesBlok = `\n\n${delen.join("\n\n")}`;
-    }
+      return delen.length > 0 ? `\n\n${delen.join("\n\n")}` : "";
+    };
+
+    // In agendapunt-modus staat de fondsbrede context al vóór het streamen vast
+    // (die tak raakt de verduidelijkingstak nooit). De persoonlijke portaalstand +
+    // de fondsbrede context voor een gewone persoonlijke/statusvraag worden PAS in
+    // de stream opgebouwd (ná de verduidelijkingstak), zodat een onzekere statusvraag
+    // die terugvraagt geen queries verspilt.
+    let modulesBlok =
+      agendapuntModusActief && profiel?.fonds_id
+        ? await haalModuleContextBlok(profiel.fonds_id)
+        : "";
 
     // ── Document-scope (increment 1): server-side validatie vóór retrieval ──
     // De client mag document_id's meesturen, maar de server valideert altijd
@@ -881,6 +892,45 @@ export async function POST(req: NextRequest) {
       ? "algemeen"
       : "combineren";
 
+    // ── Contextbesef (besluit 0090) — portaalstand meesturen ────────────────
+    // Bij een persoonlijke of statusgerichte vraag (heeftPortaalstandNodig) buiten
+    // scope/agendapunt/transformatie krijgt het model de eigen proces-/taakstand mee:
+    // de eerstvolgende processtap, de komende vergadering en de agendapunten zonder
+    // eigen inbreng — plus de fondsbrede risico's/procedures. De PERSOONLIJKE stand
+    // komt uit getPortaalContext: uitsluitend query's onder RLS op de sessie (eigen
+    // inbreng, eigen procedure-eigenaarschap), nooit een fondsbrede query voor iets
+    // persoonlijks (criterium 7). Deze opbouw draait ná de verduidelijkingstak, zodat
+    // een onzekere statusvraag die terugvraagt geen queries verspilt. Bij een zuiver
+    // algemene vraag blijft dit blok leeg (criterium 6).
+    let portaalstandBlok = "";
+    const portaalstandNodig =
+      !scopeActief &&
+      !agendapuntModusActief &&
+      !transformatieActief &&
+      heeftPortaalstandNodig(vraag);
+    if (portaalstandNodig) {
+      const stand = await getPortaalContext({
+        userId: user.id,
+        fondsId,
+        gebruikerNaam: profiel?.naam ?? null,
+      });
+      portaalstandBlok = bouwPortaalstandBlok(stand);
+      // Fondsbrede module-context (risico's/procedures) ook buiten agendapunt-modus,
+      // onder dezelfde conditie (stap 2). Agendapunt-modus vulde modulesBlok al vóór
+      // het streamen; die tak komt hier niet.
+      if (modulesBlok === "") modulesBlok = await haalModuleContextBlok(fondsId);
+    }
+    const portaalstandGebruikt = portaalstandBlok.length > 0;
+
+    // Compacte context-prefix voor de gewone chat-takken (algemeen/combineren/
+    // documenten): de portaalstand + fondsbrede modules vóór de vraag, gelabeld en
+    // met een scheidingslijn. Leeg bij een zuiver algemene vraag → geen prefix.
+    const portaalDelen = [portaalstandBlok, modulesBlok.trim()].filter(
+      (s) => s.length > 0
+    );
+    const portaalContextPrefix =
+      portaalDelen.length > 0 ? `${portaalDelen.join("\n\n")}\n\n---\n\n` : "";
+
     // Bouw prompt op basis van modus, met persoonlijke context
     let systeemBlokken: Anthropic.Messages.TextBlockParam[];
     let gebruikersPrompt: string;
@@ -953,7 +1003,7 @@ export async function POST(req: NextRequest) {
       }
     } else if (promptModus === "algemeen") {
       systeemBlokken = bouwSysteemBlokken(SP_ALGEMEEN_REGELS, ctxBestuurder, antwoordmodus);
-      gebruikersPrompt = `VRAAG: ${vraag}`;
+      gebruikersPrompt = `${portaalContextPrefix}VRAAG: ${vraag}`;
     } else if (promptModus === "combineren") {
       // Bij nul interne treffers valt het antwoord terug op algemene kennis. Gebruik
       // dan ook de algemene-kennis-regels (die [Bron N] verbieden) i.p.v. de
@@ -966,15 +1016,15 @@ export async function POST(req: NextRequest) {
       );
       gebruikersPrompt =
         chunks.length > 0
-          ? `BESCHIKBARE INTERNE BRONNEN:\n\n${contextTekst}\n\n---\n\nVRAAG: ${vraag}`
-          : `Er zijn geen interne documenten gevonden die direct relevant zijn voor deze vraag.\n\nVRAAG: ${vraag}\n\nGebruik je algemene kennis om de vraag zo goed mogelijk te beantwoorden, en markeer claims met [Algemene kennis]. Sluit af met een opmerking dat er geen interne bronnen zijn gevonden.`;
+          ? `${portaalContextPrefix}BESCHIKBARE INTERNE BRONNEN:\n\n${contextTekst}\n\n---\n\nVRAAG: ${vraag}`
+          : `${portaalContextPrefix}Er zijn geen interne documenten gevonden die direct relevant zijn voor deze vraag.\n\nVRAAG: ${vraag}\n\nGebruik je algemene kennis om de vraag zo goed mogelijk te beantwoorden, en markeer claims met [Algemene kennis]. Sluit af met een opmerking dat er geen interne bronnen zijn gevonden.`;
     } else {
       // documenten (strikte modus)
       systeemBlokken = bouwSysteemBlokken(SP_DOCUMENTEN_REGELS, ctxBestuurder, antwoordmodus);
       gebruikersPrompt =
         chunks.length > 0
-          ? `BESCHIKBARE BRONNEN:\n\n${contextTekst}\n\n---\n\nVRAAG: ${vraag}`
-          : `Er zijn geen relevante documenten gevonden voor deze vraag.\n\nVRAAG: ${vraag}\n\nGeef aan dat er geen relevante bronnen zijn gevonden en stel voor welk type document zou kunnen helpen.`;
+          ? `${portaalContextPrefix}BESCHIKBARE BRONNEN:\n\n${contextTekst}\n\n---\n\nVRAAG: ${vraag}`
+          : `${portaalContextPrefix}Er zijn geen relevante documenten gevonden voor deze vraag.\n\nVRAAG: ${vraag}\n\nGeef aan dat er geen relevante bronnen zijn gevonden en stel voor welk type document zou kunnen helpen.`;
     }
 
     // Bij een actieve scope is het gedrag strict-document, ongeacht de gekozen
@@ -1122,6 +1172,9 @@ export async function POST(req: NextRequest) {
             bron_modus_auto: scopeActief ? null : bronModusRetrieval,
             alleen_fondsdocumenten: alleenFondsdocumenten,
             bron_intent_override: scopeActief ? false : intentOverride !== undefined,
+            // Contextbesef (besluit 0090) — of de portaalstand is meegewogen; het
+            // onderbouwingspaneel toont dit als aparte aanduiding, los van bronnen.
+            portaalstand_gebruikt: portaalstandGebruikt,
             // Increment I-3 — uniform bronmodel voor het paneel "Onderbouwing en
             // bronnen". Documentbronnen zijn nu bekend; model_knowledge én de
             // (Scenario A) webbronnen hangen van de antwoordinhoud af en volgen in
@@ -1431,6 +1484,8 @@ export async function POST(req: NextRequest) {
                   bron_modus_auto: bronModusRetrieval,
                   alleen_fondsdocumenten: alleenFondsdocumenten,
                   bron_intent_override: intentOverride !== undefined,
+                  // Contextbesef (besluit 0090) — herleidbaar of de portaalstand meeging.
+                  portaalstand_gebruikt: portaalstandGebruikt,
                 }),
           };
 

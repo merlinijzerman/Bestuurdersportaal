@@ -2,8 +2,10 @@
 //  lib/bronkeuze-meetset.ts — Increment I-2. Gelabelde meetset voor de
 //  AUTOMATISCHE bronkeuze (FO v1.3 §11a).
 // ----------------------------------------------------------------------------
-//  40 bestuurlijke vragen met een door gebruiker/compliance GEACCORDEERD label
-//  (sign-off 2026-06-22). Dit is de bron-van-waarheid waartegen de pure
+//  Bestuurlijke vragen met een door gebruiker/compliance GEACCORDEERD label
+//  (basis: 40 vragen, sign-off 2026-06-22; uitbreidingen 41-46 wettelijke-plicht
+//  en 47-54 persoonlijk/status contextbesef, besluit 0090). Dit is de
+//  bron-van-waarheid waartegen de pure
 //  classificatie (lib/vraagtype.ts → bepaalBronIntent) wordt geijkt en
 //  bewaakt — zie de runner lib/bronkeuze-classificatie.sanity.ts met de
 //  (eveneens geaccordeerde) drempels.
@@ -92,4 +94,22 @@ export const BRONKEUZE_MEETSET: MeetsetVraag[] = [
   { id: 44, label: "gecombineerd", vraag: "Voldoen wij aan de wettelijke informatieverplichtingen richting deelnemers?", toelichting: '"wij" + "wettelijk"/"verplichting"' },
   { id: 45, label: "mag-terugvragen", vraag: "Hoe zit het met de communicatie naar deelnemers?", toelichting: "geen anker, geen plicht-woord" },
   { id: 46, label: "algemeen", vraag: "Welke informatieplicht heeft een pensioenfonds bij een wijziging van de regeling?", toelichting: '"informatieplicht", geen anker' },
+
+  // ── Uitbreiding 2026-07-29 (contextbesef, besluit 0090) — PERSOONLIJKE vragen ──
+  // Een persoonlijk signaal (mijn/voor mij/moet ik/…) telt als fonds-anker: de
+  // eigen proces-/taakstand bestaat alleen binnen dit fonds. Contrastief met de
+  // tegenvoorbeelden hieronder (48/52/53) die persoonlijk-LIJKEN maar algemeen of
+  // terugvraag moeten blijven, zodat de classificatie aantoonbaar op het SOORT
+  // signaal let en niet op oppervlakkige "ik"-woorden.
+  { id: 47, label: "fonds", vraag: "Wat is mijn volgende actie om op te pakken?", toelichting: '"mijn" — persoonlijk anker' },
+  { id: 48, label: "fonds", vraag: "Wat moet ik nog oppakken voor de komende vergadering?", toelichting: '"moet ik" (geen "weten") — persoonlijk anker' },
+  { id: 49, label: "fonds", vraag: "Welke stappen staan voor mij nog open?", toelichting: '"voor mij" — persoonlijk anker' },
+  { id: 50, label: "fonds", vraag: "Op welke agendapunten moet ik nog inbreng leveren?", toelichting: '"moet ik" — persoonlijk anker' },
+  // Persoonlijk anker ÉN generiek → gecombineerd (criterium 3).
+  { id: 51, label: "gecombineerd", vraag: "Wat betekent de Wtp voor mijn rol?", toelichting: '"mijn" + "Wtp" → gecombineerd' },
+  { id: 52, label: "gecombineerd", vraag: "Wat vraagt de wet van mij als bestuurder?", toelichting: '"van mij" + "wet" → gecombineerd' },
+  // Tegenvoorbeelden: persoonlijk-lijkend maar géén taak-/proceszaak.
+  // "moet ik WETEN" = kennisvraag (lookahead sluit het uit) + "zorgplicht"/plicht.
+  { id: 53, label: "algemeen", vraag: "Wat moet ik weten over de zorgplicht?", toelichting: '"moet ik weten" uitgesloten; "zorgplicht" → algemeen' },
+  { id: 54, label: "algemeen", vraag: "Wat betekent invaren in de Wtp?", toelichting: '"wat betekent"/"Wtp", geen persoonlijk anker' },
 ];

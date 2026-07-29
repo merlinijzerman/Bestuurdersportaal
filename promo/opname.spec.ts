@@ -97,12 +97,16 @@ test("promo-opname", async () => {
     await installeerCursor(ctx);
     const page = await ctx.newPage();
 
+    // Dev-overlays bij élke navigatie verbergen. Eerder gebeurde dat na een
+    // goto("/") vooraf — dat gaf aan het begin van iedere scène een seconde
+    // homepage in beeld. Nu navigeert alleen de scène zelf.
+    page.on("load", () => {
+      verbergRuis(page, SELECTORS.ruis).catch(() => {});
+    });
+
     let ok = true;
     let fout: string | undefined;
     try {
-      await page.goto("/");
-      await verbergRuis(page, SELECTORS.ruis);
-      await pauze(page, 400);
       await actie(page);
       await pauze(page, 800); // rustige uitloop, zodat de fade niet in een klik valt
     } catch (e) {
