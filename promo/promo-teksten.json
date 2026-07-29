@@ -1,0 +1,63 @@
+{
+  "_toelichting": "Bron van waarheid voor alle on-screen tekst en scène-timing. Wordt gelezen door scenes.ts (opname) en maak-overlays.mjs (montage). Tekst hier wijzigen = tekst in de video wijzigen; niets dupliceren in code.",
+  "merk": {
+    "product": "Bestuurdersportaal",
+    "accent": "#5B4FE0",
+    "ink": "#171A28",
+    "paper": "#F4F5FA",
+    "wit": "#FFFFFF",
+    "muted": "#6B7185"
+  },
+  "voettekst": "MVP-demo-omgeving · alle gegevens in beeld zijn demodata",
+  "scenes": [
+    {
+      "id": "01-opening",
+      "type": "kaart",
+      "duur": 5,
+      "kop": "Bestuurlijke besluiten,\nherleidbaar vastgelegd.",
+      "sub": "Eén beveiligde omgeving voor stukken, voorbereiding, besluitvorming en verantwoording."
+    },
+    {
+      "id": "02-overzicht",
+      "type": "opname",
+      "duurDoel": 10,
+      "kop": "Eén omgeving per fonds",
+      "regel": "Stukken, vergaderingen, processen en risico's bij elkaar — afgeschermd per fonds."
+    },
+    {
+      "id": "03-bibliotheek",
+      "type": "opname",
+      "duurDoel": 8,
+      "kop": "Uw eigen documenten als kennisbasis",
+      "regel": "PDF, Word, Excel en PowerPoint worden geëxtraheerd en doorzoekbaar gemaakt."
+    },
+    {
+      "id": "04-ai",
+      "type": "opname",
+      "duurDoel": 16,
+      "kop": "Antwoord mét bron",
+      "regel": "De assistent antwoordt uitsluitend uit fondsdocumenten en een gecureerde bibliotheek — elke bewering is herleidbaar."
+    },
+    {
+      "id": "05-vergadering",
+      "type": "opname",
+      "duurDoel": 10,
+      "kop": "Voorbereid de vergadering in",
+      "regel": "Per agendapunt de bijbehorende stukken en een privé AI-voorbereiding."
+    },
+    {
+      "id": "06-proces",
+      "type": "opname",
+      "duurDoel": 14,
+      "kop": "Governance by design",
+      "regel": "Elk besluit doorloopt een vaste statusgang — met verplichte onderbouwing en een vastgelegd auditspoor."
+    },
+    {
+      "id": "09-slot",
+      "type": "kaart",
+      "duur": 6,
+      "kop": "Bestuurdersportaal",
+      "sub": "Besluitvorming die zichzelf verantwoordt.\n\nDit is een MVP-demo-omgeving met demodata — nog niet productiegeschikt.\nBenieuwd? Neem contact op voor een live demo."
+    }
+  ]
+}

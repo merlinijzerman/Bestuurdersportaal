@@ -18,7 +18,11 @@ import type {
   DocumentCtx,
 } from "@/core/lib/portaalcontext-afleiding";
 import { heeftEnigeContext } from "@/core/lib/portaalcontext-afleiding";
-import type { Startvraag, StartvraagBron } from "@/core/lib/startvragen";
+import type {
+  Startvraag,
+  StartvraagBron,
+  StartvraagKoppeling,
+} from "@/core/lib/startvragen";
 
 function formatDatum(d: string) {
   return new Date(d).toLocaleString("nl-NL", {
@@ -67,7 +71,11 @@ export default function Startpunt({
   /** True zodra de gebruiker op "Een vrije vraag stellen" klikte: dan pas tonen. */
   voorbeeldvragenZichtbaar: boolean;
   onVrijeVraag: () => void;
-  onVoorbeeldvraag: (tekst: string, bron: StartvraagBron) => void;
+  onVoorbeeldvraag: (
+    tekst: string,
+    bron: StartvraagBron,
+    koppeling: StartvraagKoppeling
+  ) => void;
   onDocumentVraag: (doc: DocumentCtx) => void;
 }) {
   const { volgendeVergadering, agendapunten, openStappen, recentDocument } =
@@ -232,7 +240,7 @@ export default function Startpunt({
                 <button
                   key={v.tekst}
                   type="button"
-                  onClick={() => onVoorbeeldvraag(v.tekst, v.bron)}
+                  onClick={() => onVoorbeeldvraag(v.tekst, v.bron, v.koppeling)}
                   className="text-xs text-left border border-line bg-card rounded-full px-3 py-1.5 text-ink hover:border-accent hover:bg-accent/5 transition-colors"
                 >
                   {v.tekst}

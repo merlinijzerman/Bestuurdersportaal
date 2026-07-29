@@ -33,6 +33,20 @@ import type { Antwoordmodus } from "./vraagtype";
 /** Herkomst van een voorbeeldvraag — meetbaar gelogd bij een klik (criterium 4). */
 export type StartvraagBron = "context" | "signaal";
 
+/**
+ * Waar de vraag naar verwijst, zodat de klik de juiste KOPPELING zet i.p.v. de
+ * titel alleen als losse tekst mee te sturen. Zonder koppeling zou "welke risico's
+ * zitten er in «stuk X»" als vrije vraag door de automatische RAG lopen — en een
+ * agendapunt is geen document in de bibliotheek, dus dan zou de assistent er
+ * naast kunnen zitten. `document` → `document_scope`; `agendapunt` → de bestaande
+ * agendapunt-modus (ADR 0028: route haalt toelichting + gekoppelde stukken op).
+ * `null` = een genuine algemene vraag zonder specifieke bron.
+ */
+export type StartvraagKoppeling =
+  | { soort: "document"; id: string; titel: string }
+  | { soort: "agendapunt"; id: string; titel: string }
+  | null;
+
 export interface Startvraag {
   tekst: string;
   bron: StartvraagBron;
@@ -40,6 +54,8 @@ export interface Startvraag {
   vraagsoort: Antwoordmodus;
   /** Hoger = eerder getoond. Signaal weegt zwaarder dan context. */
   gewicht: number;
+  /** Waar de vraag naar verwijst; de klik zet hiermee de scope/agendapunt-modus. */
+  koppeling: StartvraagKoppeling;
 }
 
 /** Een naderende deadline telt als signaal binnen deze horizon. */
@@ -63,6 +79,7 @@ export function genereerContextvragen(ctx: PortaalContext): Startvraag[] {
       bron: "context",
       vraagsoort: "besluitrijpheid",
       gewicht: 60,
+      koppeling: { soort: "agendapunt", id: ap.id, titel: ap.titel },
     });
   }
 
@@ -73,28 +90,26 @@ export function genereerContextvragen(ctx: PortaalContext): Startvraag[] {
       bron: "context",
       vraagsoort: "duiding",
       gewicht: 55,
+      koppeling: { soort: "document", id: doc.id, titel: doc.titel },
     });
   }
 
   const stap = ctx.openStappen[0];
   if (stap) {
+    // Een processtap is geen document/agendapunt — geen scope om aan te koppelen;
+    // dit is bewust een algemene vraag naar de betekenis van de stap.
     uit.push({
       tekst: `Wat houdt «${stap.naam}» in en wat wordt er van mij verwacht?`,
       bron: "context",
       vraagsoort: "feitelijk",
       gewicht: 50,
+      koppeling: null,
     });
   }
 
-  const verg = ctx.volgendeVergadering;
-  if (verg) {
-    uit.push({
-      tekst: `Welke stukken horen bij de vergadering «${verg.titel}»?`,
-      bron: "context",
-      vraagsoort: "bronoverzicht",
-      gewicht: 45,
-    });
-  }
+  // Bewust GEEN "welke stukken horen bij vergadering X"-vraag: die verwijst naar de
+  // stukken van een vergadering zonder dat er één scope aan te koppelen is (het zou
+  // exact het euvel zijn dat deze koppeling oplost). Weggelaten.
 
   return uit;
 }
@@ -119,6 +134,7 @@ export function genereerSignaalvragen(
       bron: "signaal",
       vraagsoort: "persoonlijke_voorbereiding",
       gewicht: 100,
+      koppeling: { soort: "agendapunt", id: ap.id, titel: ap.titel },
     });
   }
 
@@ -133,6 +149,7 @@ export function genereerSignaalvragen(
         bron: "signaal",
         vraagsoort: "besluitrijpheid",
         gewicht: 95,
+        koppeling: null,
       });
     }
   }

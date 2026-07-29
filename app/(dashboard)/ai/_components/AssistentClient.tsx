@@ -23,7 +23,11 @@ import type {
   PortaalContext,
   DocumentCtx,
 } from "@/core/lib/portaalcontext-afleiding";
-import { startvragenVoor, type StartvraagBron } from "@/core/lib/startvragen";
+import {
+  startvragenVoor,
+  type StartvraagBron,
+  type StartvraagKoppeling,
+} from "@/core/lib/startvragen";
 import { bouwDoorgrondZin, type DoorgrondSectieId } from "@/core/lib/doorgrond";
 
 type Modus = "documenten" | "combineren" | "algemeen";
@@ -338,9 +342,45 @@ export default function AssistentClient({
   }
 
   // P2 Deel A — een aangeklikte voorbeeldvraag start meteen (patroon STARTVRAGEN
-  // in AgendapuntChat), met de herkomst-`bron` meegelogd (criterium 4).
-  function startVoorbeeldvraag(tekst: string, bron: StartvraagBron) {
+  // in AgendapuntChat), met de herkomst-`bron` meegelogd (criterium 4). De
+  // KOPPELING zorgt dat de vraag niet als losse tekst over een niet-gekoppeld stuk
+  // gaat: een documentvraag scoopt op dat stuk, een agendapuntvraag zet de
+  // agendapunt-modus (ADR 0028: route haalt toelichting + gekoppelde stukken op).
+  function startVoorbeeldvraag(
+    tekst: string,
+    bron: StartvraagBron,
+    koppeling: StartvraagKoppeling
+  ) {
     if (laden) return;
+    if (koppeling?.soort === "document") {
+      wisActiefGesprek();
+      setBerichten(welkomstRef.current ? [welkomstRef.current] : []);
+      setAgendapuntContext(null);
+      const scope: DocumentScope = {
+        document_ids: [koppeling.id],
+        titels: [koppeling.titel],
+      };
+      setDocumentScope(scope);
+      void stuurBericht(tekst, {
+        scopeOverride: scope,
+        persistScope: scope,
+        startvraagBron: bron,
+      });
+      return;
+    }
+    if (koppeling?.soort === "agendapunt") {
+      wisActiefGesprek();
+      setBerichten(welkomstRef.current ? [welkomstRef.current] : []);
+      setDocumentScope(null);
+      const apCtx: AgendapuntContext = { id: koppeling.id, titel: koppeling.titel };
+      setAgendapuntContext(apCtx);
+      void stuurBericht(tekst, {
+        agendapuntOverride: apCtx,
+        startvraagBron: bron,
+      });
+      return;
+    }
+    // Geen koppeling → genuine algemene vraag.
     stuurBericht(tekst, { startvraagBron: bron });
   }
 
@@ -413,7 +453,8 @@ export default function AssistentClient({
   // retrieval-override en mag de bewaarde gespreksscope niet wijzigen.
   async function bewaarGesprek(
     finale: Bericht[],
-    scopeVoorOpslag: DocumentScope | null
+    scopeVoorOpslag: DocumentScope | null,
+    agendapuntVoorOpslag: AgendapuntContext | null
   ) {
     try {
       const uid = userIdRef.current;
@@ -426,17 +467,17 @@ export default function AssistentClient({
       // ADR 0028: in agendapunt-modus bewaren we additief agendapunt_context, ook
       // als er 0 stukken zijn (documentScope null) — zodat de framing terugkomt.
       const scopePayload =
-        scopeVoorOpslag || agendapuntContext
+        scopeVoorOpslag || agendapuntVoorOpslag
           ? {
               type: "single",
               document_ids: scopeVoorOpslag?.document_ids ?? [],
               titels: scopeVoorOpslag?.titels ?? [],
               algemene_kennis: scopeVoorOpslag?.algemene_kennis === true,
-              ...(agendapuntContext
+              ...(agendapuntVoorOpslag
                 ? {
                     agendapunt_context: {
-                      id: agendapuntContext.id,
-                      titel: agendapuntContext.titel,
+                      id: agendapuntVoorOpslag.id,
+                      titel: agendapuntVoorOpslag.titel,
                     },
                   }
                 : {}),
@@ -687,6 +728,10 @@ export default function AssistentClient({
     // een puur PER-TURN retrieval-override is (vervolgacties) en de bewaarde
     // gespreksscope juist NIET mag wijzigen.
     persistScope?: DocumentScope | null;
+    // Agendapunt-modus (ADR 0028) die in dezelfde tick wordt gezet én verstuurd
+    // (voorbeeldvraag met agendapunt-koppeling). Zowel voor de body als voor opslag,
+    // omdat de `agendapuntContext`-state dan nog niet gecommit is.
+    agendapuntOverride?: AgendapuntContext | null;
   }
 
   async function stuurBericht(vraag?: string, opties?: StuurOpties) {
@@ -709,6 +754,12 @@ export default function AssistentClient({
     // omdat het de scope in dezelfde tick zet én verstuurt (state nog niet gecommit).
     const scopeVoorOpslag =
       opties?.persistScope !== undefined ? opties.persistScope : documentScope;
+    // Agendapunt-modus voor deze beurt (body + opslag). Default = de state; alleen
+    // een voorbeeldvraag met agendapunt-koppeling geeft een override mee (same-tick).
+    const effAgendapunt =
+      opties?.agendapuntOverride !== undefined
+        ? opties.agendapuntOverride
+        : agendapuntContext;
 
     // Voeg de nieuwe vraag toe en stuur de complete geschiedenis mee. Bij een
     // verduidelijkingsvervolg (geenNieuweVraag) eindigt `basisBerichten` al op de
@@ -762,8 +813,8 @@ export default function AssistentClient({
           // vervolgactie tegelijk een per-turn scopeOverride mee, dan wint
           // agendapunt-modus server-side (route.ts) — die override-stukken worden
           // dan agendapunt-retrievalscope i.p.v. een strikte document-scope.
-          agendapunt_context: agendapuntContext
-            ? { id: agendapuntContext.id, titel: agendapuntContext.titel }
+          agendapunt_context: effAgendapunt
+            ? { id: effAgendapunt.id, titel: effAgendapunt.titel }
             : undefined,
           // P2 Deel B — de doorgrond-parameters; de route stelt hieruit de
           // instructie samen en logt ze in retrieval_meta (criterium 13).
@@ -1039,7 +1090,7 @@ export default function AssistentClient({
             inlineMeldingen: inlineMeldingenData,
           },
         ];
-        await bewaarGesprek(finale, scopeVoorOpslag);
+        await bewaarGesprek(finale, scopeVoorOpslag, effAgendapunt);
       }
     } catch {
       setBerichten((prev) => [

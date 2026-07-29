@@ -46,3 +46,10 @@ next-env.d.ts
 # --- Test coverage ---
 coverage/
 .env*
+
+# promo-opnames (kunnen fondsdata bevatten) en sessiestaat
+promo/opnames/
+promo/overlays/
+promo/uit/
+promo/.werk/
+promo/.auth/

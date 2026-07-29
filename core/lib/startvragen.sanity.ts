@@ -60,11 +60,40 @@ const LEEG: PortaalContext = {
 // ── generatoren vullen uit al-geladen titels ────────────────────────────────
 check("contextgenerator vult uit titels; alle bron=context", () => {
   const v = genereerContextvragen(VOL);
-  assert.ok(v.length >= 3);
+  assert.ok(v.length >= 2);
   assert.ok(v.every((x) => x.bron === "context"));
   // Titels moeten letterlijk terugkomen (geen generieke placeholder).
   assert.ok(v.some((x) => x.tekst.includes("Wijziging beleggingsbeleid ESG")));
   assert.ok(v.some((x) => x.tekst.includes("Actuarieel rapport Q2 2026")));
+});
+
+check("koppeling: documentvraag → document-scope, agendapuntvraag → agendapunt", () => {
+  const v = genereerContextvragen(VOL);
+  const docVraag = v.find((x) => x.tekst.includes("Actuarieel rapport Q2 2026"));
+  const apVraag = v.find((x) => x.tekst.includes("Welk besluit wordt gevraagd"));
+  assert.deepEqual(docVraag?.koppeling, {
+    soort: "document",
+    id: "d1",
+    titel: "Actuarieel rapport Q2 2026",
+  });
+  assert.deepEqual(apVraag?.koppeling, {
+    soort: "agendapunt",
+    id: "a2",
+    titel: "Wijziging beleggingsbeleid ESG",
+  });
+  // De processtap-vraag heeft geen koppeling (geen scope).
+  const stapVraag = v.find((x) => x.tekst.includes("Implementatie & evaluatie"));
+  assert.equal(stapVraag?.koppeling, null);
+});
+
+check("signaal-agendapuntvraag draagt de agendapunt-koppeling", () => {
+  const v = genereerSignaalvragen(VOL, NU);
+  const apSignaal = v.find((x) => x.vraagsoort === "persoonlijke_voorbereiding");
+  assert.deepEqual(apSignaal?.koppeling, {
+    soort: "agendapunt",
+    id: "a2",
+    titel: "Wijziging beleggingsbeleid ESG",
+  });
 });
 
 check("signaalgenerator: agendapunt-zonder-inbreng + naderende deadline", () => {
@@ -130,8 +159,8 @@ check("geen context → lege lijst, geen generieke tekst", () => {
 
 check("kiesStartvragen is stabiel bij gelijk gewicht (invoegvolgorde wint)", () => {
   const pool: Startvraag[] = [
-    { tekst: "A", bron: "context", vraagsoort: "feitelijk", gewicht: 50 },
-    { tekst: "B", bron: "context", vraagsoort: "duiding", gewicht: 50 },
+    { tekst: "A", bron: "context", vraagsoort: "feitelijk", gewicht: 50, koppeling: null },
+    { tekst: "B", bron: "context", vraagsoort: "duiding", gewicht: 50, koppeling: null },
   ];
   const uit = kiesStartvragen(pool, 3);
   assert.deepEqual(uit.map((x) => x.tekst), ["A", "B"]);
