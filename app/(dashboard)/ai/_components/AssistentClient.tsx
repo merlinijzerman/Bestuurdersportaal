@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { createClient } from "@/core/lib/supabase";
 import {
   ZICHTBARE_ANTWOORDMODI,
@@ -17,11 +17,14 @@ import {
   type VoortgangUI,
 } from "./Voortgang";
 import Startpunt from "./Startpunt";
+import DocumentDoorgronden, { type DoorgrondDoc } from "./DocumentDoorgronden";
 import { ACTIEF_GESPREK_SLEUTEL } from "@/core/lib/ai-sessie";
 import type {
   PortaalContext,
   DocumentCtx,
 } from "@/core/lib/portaalcontext-afleiding";
+import { startvragenVoor, type StartvraagBron } from "@/core/lib/startvragen";
+import { bouwDoorgrondZin, type DoorgrondSectieId } from "@/core/lib/doorgrond";
 
 type Modus = "documenten" | "combineren" | "algemeen";
 
@@ -239,6 +242,19 @@ export default function AssistentClient({
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionQuery, setMentionQuery] = useState("");
   const [mentionSuggesties, setMentionSuggesties] = useState<DocSuggestie[]>([]);
+  // P2 Deel B — "een document doorgronden": scherpsteltoestand binnen /ai (geen
+  // route). Open + het (voorgevulde) document waarop de taak wordt uitgevoerd.
+  const [doorgrondOpen, setDoorgrondOpen] = useState(false);
+  const [doorgrondDoc, setDoorgrondDoc] = useState<DocumentCtx | null>(null);
+  // P2 Deel A — de voorbeeldvragen verschijnen pas nadat de gebruiker op "Een vrije
+  // vraag stellen" klikte (i.p.v. altijd op de lege staat).
+  const [vrijeVraagOpen, setVrijeVraagOpen] = useState(false);
+  // P2 Deel A — de ≤3 voorbeeldvragen voor de lege staat. Client-side afgeleid
+  // (Date.now() → geen hydration-mismatch op de "over N dagen"-tekst), uit de al
+  // opgehaalde startpuntcontext (geen nieuwe query, criterium 6).
+  const [voorbeeldvragen, setVoorbeeldvragen] = useState<
+    ReturnType<typeof startvragenVoor>
+  >([]);
   // Voortgang tijdens het wachten (besluit 0087): één staat die de actieve fase
   // als lopende regel toont en afgeronde fasen (met hun uitkomst) eronder. Bij
   // brede documentanalyse draagt de analyse-fase batch/totaal. null zodra het
@@ -304,23 +320,70 @@ export default function AssistentClient({
     setHistorieOpen(false);
   }
 
+  // P2 Deel A — leid de ≤3 voorbeeldvragen af zodra de context er is. Client-side
+  // (Date.now()) zodat de "over N dagen"-tekst geen hydration-mismatch geeft.
+  useEffect(() => {
+    setVoorbeeldvragen(startvragenVoor(startpuntContext, Date.now()));
+  }, [startpuntContext]);
+
   // ── Startpunt-taken (P1, besluit 0085) — routeren/scope-zetten, GEEN nieuwe
-  // AI-logica. "Vrije vraag" zet enkel de cursor in het invoerveld. "Vraag over
-  // een document" gebruikt het bestaande document_scope-mechanisme (identiek aan
-  // de ?doc=-instap): schone start + scope op het gekozen stuk. Het startscherm
+  // AI-logica. "Vrije vraag" zet enkel de cursor in het invoerveld. "Een document
+  // doorgronden" opent de scherpsteltoestand (P2 Deel B). Het startscherm
   // verdwijnt zodra er een scope of een bericht is. "Agendapunt voorbereiden"
   // routeert (via <Link> in Startpunt) naar de vergaderpagina — geen handler.
   function startVrijeVraag() {
+    // Toon de voorbeeldvragen en zet de cursor in het invoerveld.
+    setVrijeVraagOpen(true);
     invoerRef.current?.focus();
   }
 
+  // P2 Deel A — een aangeklikte voorbeeldvraag start meteen (patroon STARTVRAGEN
+  // in AgendapuntChat), met de herkomst-`bron` meegelogd (criterium 4).
+  function startVoorbeeldvraag(tekst: string, bron: StartvraagBron) {
+    if (laden) return;
+    stuurBericht(tekst, { startvraagBron: bron });
+  }
+
+  // P2 Deel B — open de scherpsteltoestand i.p.v. direct scope + focus. De taak
+  // wordt pas een gesprek na "Start" (startDoorgronden).
   function startDocumentVraag(doc: DocumentCtx) {
     if (laden) return;
+    setVrijeVraagOpen(false);
+    setDoorgrondDoc(doc);
+    setDoorgrondOpen(true);
+  }
+
+  // P2 Deel B — "Start" in de scherpstel: schone start, scope op het document
+  // (+ bij "Afwijkingen" de eerdere versie, zodat het model daadwerkelijk kan
+  // vergelijken), en één leesbare gebruikersbeurt. De samengestelde instructie +
+  // parameterlogging gebeuren server-side (route.ts).
+  function startDoorgronden(
+    doc: DoorgrondDoc,
+    secties: DoorgrondSectieId[],
+    vorige: DoorgrondDoc | null
+  ) {
+    if (laden || secties.length === 0) return;
     wisActiefGesprek();
     setBerichten(welkomstRef.current ? [welkomstRef.current] : []);
     setAgendapuntContext(null);
-    setDocumentScope({ document_ids: [doc.id], titels: [doc.titel] });
-    invoerRef.current?.focus();
+    // De voorganger komt ALLEEN in de scope (en het auditspoor) als "Afwijkingen"
+    // gekozen is — anders zou een pure "Samenvatting" de hele vorige versie
+    // meetrekken (retrieval-dilutie) en een niet-gevraagde vergelijking loggen.
+    const vergelijk = secties.includes("afwijkingen") ? vorige : null;
+    const ids = vergelijk ? [doc.id, vergelijk.id] : [doc.id];
+    const titels = vergelijk ? [doc.titel, vergelijk.titel] : [doc.titel];
+    const scope: DocumentScope = { document_ids: ids, titels };
+    setDocumentScope(scope);
+    setDoorgrondOpen(false);
+    setDoorgrondDoc(null);
+    // Leesbare gebruikersbeurt (B5), uit dezelfde bron als de server-instructie.
+    const zin = bouwDoorgrondZin(doc.titel, secties);
+    void stuurBericht(zin, {
+      scopeOverride: scope,
+      // De scope in dezelfde tick gezet én verstuurd → expliciet meegeven voor opslag.
+      persistScope: scope,
+      doorgrond: { secties, vorigeId: vergelijk?.id ?? null },
+    });
   }
 
   // Archiveert een gesprek (soft-delete). governance_log blijft intact. Als het
@@ -342,7 +405,16 @@ export default function AssistentClient({
 
   // Slaat het gesprek best-effort op. Faalt veilig: een mislukte opslag mag de
   // chat nooit verstoren. governance_log (auditspoor) staat hier los van.
-  async function bewaarGesprek(finale: Bericht[]) {
+  // `scopeVoorOpslag` is de GESPREKSSCOPE die bewaard moet worden. Normaal is dat
+  // gewoon de gecommitte `documentScope`-state; alleen wanneer een taak de scope in
+  // dezelfde tick zet én verstuurt (P2 "doorgronden") geeft de aanroeper de nieuwe
+  // scope expliciet mee (anders zou de nog-niet-gecommitte closure worden bewaard).
+  // Bewust NIET de per-turn `scopeOverride` van een vervolgactie: die is een
+  // retrieval-override en mag de bewaarde gespreksscope niet wijzigen.
+  async function bewaarGesprek(
+    finale: Bericht[],
+    scopeVoorOpslag: DocumentScope | null
+  ) {
     try {
       const uid = userIdRef.current;
       if (!uid || !fondsId || finale.length === 0) return;
@@ -354,12 +426,12 @@ export default function AssistentClient({
       // ADR 0028: in agendapunt-modus bewaren we additief agendapunt_context, ook
       // als er 0 stukken zijn (documentScope null) — zodat de framing terugkomt.
       const scopePayload =
-        documentScope || agendapuntContext
+        scopeVoorOpslag || agendapuntContext
           ? {
               type: "single",
-              document_ids: documentScope?.document_ids ?? [],
-              titels: documentScope?.titels ?? [],
-              algemene_kennis: documentScope?.algemene_kennis === true,
+              document_ids: scopeVoorOpslag?.document_ids ?? [],
+              titels: scopeVoorOpslag?.titels ?? [],
+              algemene_kennis: scopeVoorOpslag?.algemene_kennis === true,
               ...(agendapuntContext
                 ? {
                     agendapunt_context: {
@@ -603,12 +675,25 @@ export default function AssistentClient({
     // FO §13 — transformatie-vervolgactie: bewerk het vorige antwoord i.p.v. een
     // nieuwe documentvraag. De route schakelt dan naar herschrijf-intent.
     transformatie?: boolean;
+    // P2 Deel B — "een document doorgronden": de gekozen secties (+ bij Afwijkingen
+    // de eerdere versie). De route stelt hieruit de instructie samen en logt de
+    // parameters; de zichtbare beurt blijft de korte zin.
+    doorgrond?: { secties: DoorgrondSectieId[]; vorigeId: string | null };
+    // P2 Deel A — herkomst van een aangeklikte voorbeeldvraag (criterium 4).
+    startvraagBron?: StartvraagBron;
+    // De GESPREKSSCOPE die bij deze beurt bewaard moet worden. Alleen nodig als een
+    // taak de scope in dezelfde tick zet én verstuurt (doorgronden) — dan is de
+    // `documentScope`-state nog niet gecommit. Losstaand van `scopeOverride`, dat
+    // een puur PER-TURN retrieval-override is (vervolgacties) en de bewaarde
+    // gespreksscope juist NIET mag wijzigen.
+    persistScope?: DocumentScope | null;
   }
 
   async function stuurBericht(vraag?: string, opties?: StuurOpties) {
     const tekst = vraag || invoer.trim();
     if (!tekst || laden) return;
     setInvoer("");
+    setVrijeVraagOpen(false);
     setLaden(true);
 
     // Eén-turn-overrides (vervolgacties); undefined = gebruik de gespreksstaat.
@@ -618,6 +703,12 @@ export default function AssistentClient({
         : antwoordmodus;
     const effScope =
       opties?.scopeOverride !== undefined ? opties.scopeOverride : documentScope;
+    // De te BEWAREN gespreksscope. Default = de (gecommitte) documentScope-state,
+    // zodat vervolgacties met een per-turn scopeOverride de bewaarde gespreksscope
+    // NIET wijzigen (regressie-fix). Alleen doorgronden geeft persistScope mee,
+    // omdat het de scope in dezelfde tick zet én verstuurt (state nog niet gecommit).
+    const scopeVoorOpslag =
+      opties?.persistScope !== undefined ? opties.persistScope : documentScope;
 
     // Voeg de nieuwe vraag toe en stuur de complete geschiedenis mee. Bij een
     // verduidelijkingsvervolg (geenNieuweVraag) eindigt `basisBerichten` al op de
@@ -674,6 +765,16 @@ export default function AssistentClient({
           agendapunt_context: agendapuntContext
             ? { id: agendapuntContext.id, titel: agendapuntContext.titel }
             : undefined,
+          // P2 Deel B — de doorgrond-parameters; de route stelt hieruit de
+          // instructie samen en logt ze in retrieval_meta (criterium 13).
+          doorgrond: opties?.doorgrond
+            ? {
+                secties: opties.doorgrond.secties,
+                vorige_document_id: opties.doorgrond.vorigeId ?? undefined,
+              }
+            : undefined,
+          // P2 Deel A — herkomst voorbeeldvraag, meegelogd (criterium 4).
+          startvraag_bron: opties?.startvraagBron,
         }),
       });
 
@@ -938,7 +1039,7 @@ export default function AssistentClient({
             inlineMeldingen: inlineMeldingenData,
           },
         ];
-        await bewaarGesprek(finale);
+        await bewaarGesprek(finale, scopeVoorOpslag);
       }
     } catch {
       setBerichten((prev) => [
@@ -1014,6 +1115,7 @@ export default function AssistentClient({
     setInvoer("");
     setDocumentScope(null);
     setAgendapuntContext(null);
+    setVrijeVraagOpen(false);
     sluitMention();
     setHistorieOpen(false);
   }
@@ -1049,11 +1151,11 @@ export default function AssistentClient({
     sluitMention();
   }
 
-  // Zoek documenten zodra het @-fragment wijzigt (ILIKE op titel, eigen fonds).
-  useEffect(() => {
-    if (!mentionOpen) return;
-    let geannuleerd = false;
-    const timer = window.setTimeout(async () => {
+  // Gedeelde documentzoek-suggestiebron (ILIKE op titel, eigen fonds via RLS).
+  // Eén implementatie voor zowel de @-mention-typeahead als de documentkiezer in
+  // "een document doorgronden" (P2 Deel B, criterium 8 — geen tweede zoekcode).
+  const zoekDocumenten = useCallback(
+    async (query: string): Promise<DocSuggestie[]> => {
       try {
         let q = supabase
           .from("documenten")
@@ -1061,26 +1163,74 @@ export default function AssistentClient({
           .eq("actief", true)
           .order("aangemaakt", { ascending: false })
           .limit(8);
-        if (mentionQuery.trim()) q = q.ilike("titel", `%${mentionQuery.trim()}%`);
+        if (query.trim()) q = q.ilike("titel", `%${query.trim()}%`);
         const { data } = await q;
-        if (!geannuleerd && Array.isArray(data)) {
-          setMentionSuggesties(data as DocSuggestie[]);
-        }
+        return Array.isArray(data) ? (data as DocSuggestie[]) : [];
       } catch (e) {
-        console.error("Documenten zoeken (mention) mislukt:", e);
+        console.error("Documenten zoeken mislukt:", e);
+        return [];
       }
+    },
+    // supabase is de browser-client (effectief stabiel); bewust buiten de deps,
+    // conform de bestaande effecten in dit bestand.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+
+  // Bepaalt de aantoonbaar eerdere versie van een document (besluitpunt 2):
+  // documenten.vervangt_document_id (self-FK, server-side afgedwongen bij de
+  // overgang naar status 'vervangen'). RLS scoopt beide reads tot het eigen fonds.
+  const haalVorigeVersie = useCallback(
+    async (docId: string): Promise<DoorgrondDoc | null> => {
+      try {
+        const { data: rij } = await supabase
+          .from("documenten")
+          .select("vervangt_document_id")
+          .eq("id", docId)
+          .maybeSingle();
+        const vorigeId = (rij as { vervangt_document_id?: string | null } | null)
+          ?.vervangt_document_id;
+        if (!vorigeId) return null;
+        const { data: v } = await supabase
+          .from("documenten")
+          .select("id, titel")
+          .eq("id", vorigeId)
+          .eq("actief", true)
+          .maybeSingle();
+        return v ? { id: v.id as string, titel: v.titel as string } : null;
+      } catch (e) {
+        console.error("Vorige versie ophalen mislukt:", e);
+        return null;
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+
+  // Zoek documenten zodra het @-fragment wijzigt (gedeelde suggestiebron).
+  useEffect(() => {
+    if (!mentionOpen) return;
+    let geannuleerd = false;
+    const timer = window.setTimeout(async () => {
+      const data = await zoekDocumenten(mentionQuery);
+      if (!geannuleerd) setMentionSuggesties(data);
     }, 150);
     return () => {
       geannuleerd = true;
       window.clearTimeout(timer);
     };
-  }, [mentionOpen, mentionQuery]);
+  }, [mentionOpen, mentionQuery, zoekDocumenten]);
 
   // Lege staat: geen gesprek, geen scope. Dan tonen we het startpunt (met de
   // editoriale aanhef) i.p.v. de begroetingsbubbel; zodra er een vraag loopt,
-  // verschijnt de reguliere chat.
+  // verschijnt de reguliere chat. De doorgrond-scherpstel (P2 Deel B) neemt de
+  // lege staat tijdelijk over: dan tonen we noch het startpunt, noch de chat.
+  const scherpstelActief = doorgrondOpen && !!doorgrondDoc;
   const toonStartpunt =
-    berichten.length <= 1 && !documentScope && !agendapuntContext;
+    !scherpstelActief &&
+    berichten.length <= 1 &&
+    !documentScope &&
+    !agendapuntContext;
 
   return (
     <div className="flex flex-col h-screen">
@@ -1282,7 +1432,7 @@ export default function AssistentClient({
           aan de schermrand (de scrollcontainer houdt flex-1 overflow-y-auto). */}
       <div className="flex-1 overflow-y-auto p-6">
         <div className="mx-auto w-full max-w-[1020px] space-y-5">
-        {!toonStartpunt &&
+        {!toonStartpunt && !scherpstelActief &&
           berichten.map((b, i) => (
           <div key={i} id={`bericht-${i}`} className={b.rol === "gebruiker" ? "flex justify-end" : "flex"}>
             <div className={b.rol === "gebruiker" ? "max-w-[75%]" : "flex-1"}>
@@ -1441,8 +1591,26 @@ export default function AssistentClient({
             <Startpunt
               context={startpuntContext}
               voornaam={voornaam}
+              voorbeeldvragen={voorbeeldvragen}
+              voorbeeldvragenZichtbaar={vrijeVraagOpen}
               onVrijeVraag={startVrijeVraag}
+              onVoorbeeldvraag={startVoorbeeldvraag}
               onDocumentVraag={startDocumentVraag}
+            />
+          )}
+          {/* P2 Deel B — "een document doorgronden": scherpsteltoestand binnen /ai
+              (geen route). Neemt de lege staat over; Annuleren keert terug. */}
+          {scherpstelActief && (
+            <DocumentDoorgronden
+              initieelDoc={{ id: doorgrondDoc!.id, titel: doorgrondDoc!.titel }}
+              laden={laden}
+              zoekDocumenten={zoekDocumenten}
+              haalVorigeVersie={haalVorigeVersie}
+              onStart={startDoorgronden}
+              onAnnuleren={() => {
+                setDoorgrondOpen(false);
+                setDoorgrondDoc(null);
+              }}
             />
           )}
         </div>

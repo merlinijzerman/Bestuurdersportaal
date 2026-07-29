@@ -579,6 +579,23 @@ export interface RetrievalMeta {
   // R1.6 — parent-retrieval: hoeveel treffers zijn uitgebreid met hun structuur-
   // unit, hoeveel vielen terug op de kale chunk, en het totale tekstbudget.
   parent?: ParentMeta;
+  // P2 Deel B — "een document doorgronden": de parameters van de samengestelde
+  // instructie volledig in het auditspoor (B6 / criterium 13). De zichtbare
+  // gebruikersbeurt is korter dan de instructie die het model kreeg; zonder deze
+  // parameters is achteraf niet te reconstrueren waaróm een antwoord eruitziet
+  // zoals het eruitziet (gekozen secties + promptvariant). Append-only; geen
+  // nieuw audit-event-type. `vorige_document_id` is gezet zodra "Afwijkingen"
+  // meeging (de aantoonbaar eerdere versie is dan óók in de retrieval-scope).
+  doorgrond?: {
+    secties: string[];
+    document_ids: string[];
+    vorige_document_id: string | null;
+    promptvariant: string;
+  };
+  // P2 Deel A — welke generator een aangeklikte voorbeeldvraag leverde
+  // (context|signaal), zodat na enkele weken meetbaar is welke generator werkt
+  // (criterium 4). Meelift op de bestaande chat-logging; geen nieuwe tabel.
+  startvraag_bron?: "context" | "signaal";
 }
 
 // Platte rij zoals public.zoek_chunks(...) die teruggeeft (zie migratie

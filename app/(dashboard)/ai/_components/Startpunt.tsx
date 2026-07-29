@@ -18,6 +18,7 @@ import type {
   DocumentCtx,
 } from "@/core/lib/portaalcontext-afleiding";
 import { heeftEnigeContext } from "@/core/lib/portaalcontext-afleiding";
+import type { Startvraag, StartvraagBron } from "@/core/lib/startvragen";
 
 function formatDatum(d: string) {
   return new Date(d).toLocaleString("nl-NL", {
@@ -53,12 +54,20 @@ function BlokKop({ tekst }: { tekst: string }) {
 export default function Startpunt({
   context,
   voornaam,
+  voorbeeldvragen,
+  voorbeeldvragenZichtbaar,
   onVrijeVraag,
+  onVoorbeeldvraag,
   onDocumentVraag,
 }: {
   context: PortaalContext;
   voornaam: string;
+  /** P2 Deel A — ≤3 voorbeeldvragen, afgeleid uit de context (geen extra query). */
+  voorbeeldvragen: Startvraag[];
+  /** True zodra de gebruiker op "Een vrije vraag stellen" klikte: dan pas tonen. */
+  voorbeeldvragenZichtbaar: boolean;
   onVrijeVraag: () => void;
+  onVoorbeeldvraag: (tekst: string, bron: StartvraagBron) => void;
   onDocumentVraag: (doc: DocumentCtx) => void;
 }) {
   const { volgendeVergadering, agendapunten, openStappen, recentDocument } =
@@ -183,19 +192,19 @@ export default function Startpunt({
             }
           />
 
-          {/* 2. Vraag over een document — zet document_scope (bestaand mechanisme). */}
+          {/* 2. Een document doorgronden — opent de scherpsteltoestand (P2 Deel B). */}
           {recentDocument ? (
             <TaakKnop
               icoon="▤"
-              titel="Een vraag over een document"
-              subtitel={`«${recentDocument.titel}»`}
+              titel="Een document doorgronden"
+              subtitel="Kies een stuk en wat u terugkrijgt"
               onClick={() => onDocumentVraag(recentDocument)}
             />
           ) : (
             <TaakLink
               href="/bibliotheek"
               icoon="▤"
-              titel="Een vraag over een document"
+              titel="Een document doorgronden"
               subtitel="Kies een document in de bibliotheek"
             />
           )}
@@ -204,10 +213,34 @@ export default function Startpunt({
           <TaakKnop
             icoon="✦"
             titel="Een vrije vraag stellen"
-            subtitel="Typ direct uw vraag hieronder"
+            subtitel="Typ direct uw vraag, of kies een voorbeeld"
             onClick={onVrijeVraag}
           />
         </div>
+
+        {/* P2 Deel A — voorbeeldvragen: afgeleid uit wat er nu speelt (dezelfde
+            gegevens die het startpunt al ophaalt, geen extra query). Max drie, elk
+            van een verschillende vraagsoort. Verschijnen PAS nadat de gebruiker op
+            "Een vrije vraag stellen" klikte (voorbeeldvragenZichtbaar), en alleen op
+            de lege staat. Neutraal-kritisch, nooit richting een uitkomst. Een klik
+            start de vraag meteen en logt de bron. */}
+        {voorbeeldvragenZichtbaar && voorbeeldvragen.length > 0 && (
+          <div className="mt-3">
+            <div className="text-xs text-muted mb-2">Of begin met een voorbeeldvraag</div>
+            <div className="flex flex-wrap gap-1.5">
+              {voorbeeldvragen.map((v) => (
+                <button
+                  key={v.tekst}
+                  type="button"
+                  onClick={() => onVoorbeeldvraag(v.tekst, v.bron)}
+                  className="text-xs text-left border border-line bg-card rounded-full px-3 py-1.5 text-ink hover:border-accent hover:bg-accent/5 transition-colors"
+                >
+                  {v.tekst}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 # AI-startpunt — Ontwerpdocument
 
-> **Status**: Revisie 1.0 — P1 gebouwd (2026-07-28)
+> **Status**: Revisie 1.1 — P1 gebouwd (2026-07-28); AI-taken "P2" voorbeeldvragen + document doorgronden gebouwd (2026-07-29, besluit 0089)
 > **Datum**: 2026-07-28
 > **Scope**: het startscherm van `/ai` en de doorgroei naar een taakgerichte assistent, opgedeeld in vijf los uitleverbare plateaus (P1–P5).
 > **Doel**: vastleggen wat P1 oplevert en waar de vervolgstappen landen, zodat elk plateau een eigen plek en afbakening heeft. Bron van waarheid blijft de code + `supabase/migrations/`; dit document beschrijft het *wat en waarom*.
@@ -56,6 +56,24 @@ Besluit 0068 bracht de zichtbare antwoordmodi terug tot Auto · Feiten · Duidin
 ### P5 — Aan het werk / Resultaat: voortgang met benoemde stappen
 
 **Schermen**: "Aan het werk" en "Resultaat". Een voortgangsweergave met benoemde stappen tijdens het genereren, plus een gestructureerde resultaatweergave. Bouwt op P3 (configuratie) en P2 (bewaren).
+
+---
+
+## Uitvoering — AI-taken "P2" (plansessie 28-07): voorbeeldvragen + document doorgronden *(gebouwd — besluit 0089, 2026-07-29)*
+
+> **Let op de nummering.** De plansessie-werkopdracht (`WERKOPDRACHT-AI-TAKEN-P2.md`) en de mockup [`document-doorgronden.html`](<../03 Functioneel ontwerp/Designrichtingen portaal/document-doorgronden.html>) nummeren als "plateau 2a/2b" — dat is een **andere** telling dan de P1–P5 hierboven. Inhoudelijk realiseert deze uitvoering een deel van **P3 (scherpstellen/taakconfiguratie)** voor de documenttaak; de doc-eigen **P2 (bewaren & koppelen)** blijft open. De drie taakkaarten (0085) maken twee taken echt taakgericht; taakkaart 1 (agendapunt voorbereiden) blijft ongewijzigd.
+
+**Deel A — voorbeeldvragen bij de vrije vraag.** Een pure vragenpool ([`core/lib/startvragen.ts`](./core/lib/startvragen.ts)) met twee generatoren — `context` (titels uit de al geladen context in vaste zinsvormen) en `signaal` (agendapunt zonder eigen inbreng, naderende deadline) — en een selectieregel: **max drie, elk een verschillende `vraagsoort`** (Antwoordmodus), signaal bovenaan. **Nul nieuwe query's**: uitsluitend uit de al opgehaalde `PortaalContext`. De chips verschijnen **pas nadat de gebruiker op "Een vrije vraag stellen" klikte** (op verzoek van de opdrachtgever, 29-07) en alleen op de lege staat (patroon `STARTVRAGEN` in de vergader-AI). Een klik start de vraag en logt de herkomst-`bron` in `retrieval_meta.startvraag_bron` — geen nieuwe tabel, geen nieuw `governance_events`-type.
+
+> **Scopebegrenzing (geen schijnzekerheid).** De werkopdracht noemde ook een `procedure_requirements`-signaal en een procesfase-weging. Beide zijn **niet** in de portaalcontext geladen (en de viertrapsfase bestaat niet in het datamodel); ze zouden een nieuwe query vergen. Daarom in dit plateau **gedeferd**; de signaal-generator gebruikt alleen de twee wél geladen signalen.
+
+**Deel B — "een document doorgronden".** De taakkaart (voorheen "een vraag over een document") opent een **scherpsteltoestand binnen `/ai`** ([`DocumentDoorgronden.tsx`](<./app/(dashboard)/ai/_components/DocumentDoorgronden.tsx>), geen route): één document (kiezer hergebruikt de bestaande documentzoek-suggestiebron), vier kiesbare secties (Samenvatting · Bestuurlijke aandachtspunten · Kritische vragen · Afwijkingen), een recap, en een Start die in het gewone chatvenster landt met een **korte leesbare gebruikersbeurt**. De samengestelde instructie (koppen per sectie + vaste norm "kort — ±1 A4") wordt **server-side** opgebouwd uit [`core/lib/doorgrond.ts`](./core/lib/doorgrond.ts) en in de gebruikersprompt geïnjecteerd — de toon-systeemprompt (`SP_*`) blijft ongemoeid. **Nieuw AI-gedrag** (samengestelde instructies), dus volledig gelogd: de parameters (secties, document-id's, voorganger, promptvariant `doorgrond_v1_kort`) staan in `retrieval_meta.doorgrond` — de zichtbare beurt is korter dan de instructie, dus zonder deze parameters is het antwoord niet reconstrueerbaar.
+
+- **Afwijkingen is voorwaardelijk** op een aantoonbaar eerdere versie: `documenten.vervangt_document_id` (self-FK, server-side afgedwongen bij `van_kracht → vervangen`). Aanwezig → selecteerbaar, en de voorganger komt óók in de retrieval-scope (eerlijke vergelijking); afwezig → uitgegrijsd **mét reden**.
+- **Geen lengteknop** (bewust): "kort — ±1 A4" is de vaste norm; lengte stuur je achteraf met de bestaande vervolgacties `maak_korter`/`maak_concreter`. Halveert de promptmatrix (acht sectiecombinaties).
+- **Eval (criterium 14):** menselijke aftekening van de acht sectiecombinaties in [`evals/document-doorgronden-gedrag.md`](./evals/document-doorgronden-gedrag.md) — op het échte feature, niet AQLab (ander promptpad).
+
+**Besluitpunt (0089):** de asymmetrie tussen taak 1 (vaste prompt, 3 vaste secties) en taak 2 (kiesbare secties) wordt geaccepteerd en als **convergentie op de roadmap** gezet. **Geen migratie, geen RLS-/datamodelimpact**; append-only audit ongemoeid.
 
 ---
 

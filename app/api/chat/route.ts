@@ -54,6 +54,12 @@ import {
   bouwSysteemBlokken,
   type BestuurderContext,
 } from "@/core/lib/generatie-kern";
+import {
+  DOORGROND_SECTIES,
+  DOORGROND_PROMPTVARIANT,
+  bouwDoorgrondInstructie,
+  type DoorgrondSectieId,
+} from "@/core/lib/doorgrond";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -204,6 +210,15 @@ export async function POST(req: NextRequest) {
       // document_scope (de gekoppelde stukken) dient dan als retrieval-scope,
       // zónder strict-document gedrag.
       agendapunt_context?: { id?: string; titel?: string };
+      // P2 Deel B — "een document doorgronden": de gekozen secties + (bij
+      // "Afwijkingen") de aantoonbaar eerdere versie. De zichtbare beurt blijft de
+      // korte zin in `messages`; de route stelt hieruit server-side de instructie
+      // samen en legt de parameters vast in retrieval_meta (B6). `vorige_document_id`
+      // hoort óók in `document_scope.document_ids` te staan (retrieval van beide).
+      doorgrond?: { secties?: string[]; vorige_document_id?: string };
+      // P2 Deel A — herkomst van een aangeklikte voorbeeldvraag (context|signaal),
+      // meegelogd zodat meetbaar is welke generator werkt (criterium 4).
+      startvraag_bron?: string;
     };
     // Bouw geschiedenis-array. Backwards compat: als alleen `vraag` wordt
     // meegestuurd, behandelen we dat als one-shot conversatie.
@@ -443,6 +458,10 @@ export async function POST(req: NextRequest) {
     );
     let scopeDocumentIds: string[] | undefined;
     let scopeTitels: string[] = [];
+    // Titel per (server-gevalideerd) scope-id — bron voor het "Afwijkingen"-label
+    // in de doorgrond-instructie (P2 Deel B), zodat de route de voorgangertitel niet
+    // van de client hoeft te vertrouwen.
+    const scopeTitelPerId = new Map<string, string>();
 
     if (gevraagdeScopeIds.length > 0) {
       // Documentrijen ophalen — RLS beperkt tot eigen fonds (+ generiek). Een
@@ -491,6 +510,7 @@ export async function POST(req: NextRequest) {
         scopeDocumentIds = validatie.documenten.map((d) => d.id);
         scopeTitels = validatie.documenten.map((d) => d.titel);
       }
+      for (const d of gevonden) scopeTitelPerId.set(d.id, d.titel);
     }
 
     // scopeActief = STRICT document-scope. Agendapunt-modus gebruikt de scope-ids
@@ -501,6 +521,31 @@ export async function POST(req: NextRequest) {
     // die stukken ([Bron N]); zonder stukken halen we niets op (toelichting-only).
     const agendapuntMetStukken =
       agendapuntModusActief && !!scopeDocumentIds && scopeDocumentIds.length > 0;
+
+    // ── P2 Deel B — "een document doorgronden" ───────────────────────────────
+    // De client stuurt de gekozen secties (+ bij "Afwijkingen" de eerdere versie).
+    // Alleen geldig binnen een strict document-scope. De zichtbare beurt blijft de
+    // korte zin (vraag); de route stelt hieruit de instructie samen en forceert
+    // breed (secties zijn dekkingsbreed — anders zou een enkel "Afwijkingen" als
+    // 'specifiek' door de targeted-tak lopen). De voorgangertitel komt server-side
+    // uit scopeTitelPerId, niet van de client.
+    const GELDIGE_SECTIES = new Set<DoorgrondSectieId>(
+      DOORGROND_SECTIES.map((s) => s.id)
+    );
+    const doorgrondSecties: DoorgrondSectieId[] = Array.isArray(body.doorgrond?.secties)
+      ? (body.doorgrond!.secties!.filter(
+          (s): s is DoorgrondSectieId =>
+            typeof s === "string" && GELDIGE_SECTIES.has(s as DoorgrondSectieId)
+        ))
+      : [];
+    const doorgrondActief = scopeActief && doorgrondSecties.length > 0;
+    const doorgrondVorigeId =
+      doorgrondActief && typeof body.doorgrond?.vorige_document_id === "string"
+        ? body.doorgrond.vorige_document_id
+        : null;
+    const doorgrondVorigeTitel = doorgrondVorigeId
+      ? scopeTitelPerId.get(doorgrondVorigeId) ?? null
+      : null;
 
     // ── Transformatie-vervolgactie (FO §13) ─────────────────────────────────
     // De beurt bewerkt het vorige antwoord (herschrijf-intent). Vereist dat er
@@ -602,7 +647,9 @@ export async function POST(req: NextRequest) {
     let breedAfgekapt = false;
 
     if (scopeActief && !transformatieActief) {
-      if (bepaalVraagtype(vraag) === "breed") {
+      // Doorgronden forceert breed: de secties zijn dekkingsbreed, ook als de
+      // korte zichtbare zin geen breed-signaalwoord bevat (bv. alleen "Afwijkingen").
+      if (bepaalVraagtype(vraag) === "breed" || doorgrondActief) {
         // T4 — geef de server-side fonds mee: dit dekkingsbrede pad loopt niet via
         // de RPC (met p_fonds_id), dus de app-guard in haalDocumentChunks is hier de
         // enige expliciete fonds-laag náást RLS.
@@ -622,6 +669,15 @@ export async function POST(req: NextRequest) {
     }
     const breedActief =
       scopeActief && !transformatieActief && scopeStrategie !== "targeted";
+
+    // P2 Deel B — de samengestelde doorgrond-instructie (koppen per sectie +
+    // vaste lengtenorm) vervangt de korte zichtbare zin ín de prompt. `vraag`
+    // zelf blijft de korte zin (zichtbaar + gelogd); alleen wat het model als
+    // instructie krijgt is de samenstelling. Enige bron: core/lib/doorgrond.ts.
+    const doorgrondInstructie = doorgrondActief
+      ? bouwDoorgrondInstructie(doorgrondSecties, doorgrondVorigeTitel)
+      : null;
+    const vraagVoorPrompt = doorgrondInstructie ?? vraag;
 
     // ── Antwoordmodusfamilie (Increment G) ──────────────────────────────────
     // Orthogonaal op de bron-modus. Vastgezet (gesprekken.actieve_antwoordmodus)
@@ -887,7 +943,7 @@ export async function POST(req: NextRequest) {
         gebruikersPrompt = "";
       } else if (breedActief) {
         // full-document: volledige documenttekst in de prompt.
-        gebruikersPrompt = `VOLLEDIGE INHOUD VAN HET DOCUMENT ${titelLabel}:\n\n${contextTekst}\n\n---\n\nVRAAG: ${vraag}`;
+        gebruikersPrompt = `VOLLEDIGE INHOUD VAN HET DOCUMENT ${titelLabel}:\n\n${contextTekst}\n\n---\n\nVRAAG: ${vraagVoorPrompt}`;
       } else {
         // targeted (increment 1): top-N fragmenten.
         gebruikersPrompt =
@@ -1120,7 +1176,7 @@ export async function POST(req: NextRequest) {
               : "";
             const reducePrompt = `DEELANALYSES VAN HET DOCUMENT ${titelLabel} (${breedBatches.length} delen):\n\n${
               deelanalyses.join("\n\n") || "(geen relevante passages aangetroffen in het document)"
-            }\n\n---\n\nVRAAG: ${vraag}\n\nStel op basis van bovenstaande deelanalyses één samenhangend antwoord op het document op. Gebruik paginaverwijzingen "(pag. X)" waar die in de deelanalyses staan.${dekkingNoot}`;
+            }\n\n---\n\nVRAAG: ${vraagVoorPrompt}\n\nStel op basis van bovenstaande deelanalyses één samenhangend antwoord op het document op. Gebruik paginaverwijzingen "(pag. X)" waar die in de deelanalyses staan.${dekkingNoot}`;
 
             streamMessages = [{ role: "user" as const, content: reducePrompt }];
           }
@@ -1312,6 +1368,23 @@ export async function POST(req: NextRequest) {
             }),
             antwoordmodus,
             transformatie: transformatieActief,
+            // P2 Deel B (B6/criterium 13) — de zichtbare beurt is korter dan de
+            // instructie; leg de parameters vast zodat het antwoord reconstrueerbaar
+            // is. Geen nieuw event-type; meelift in retrieval_meta.
+            ...(doorgrondActief
+              ? {
+                  doorgrond: {
+                    secties: doorgrondSecties,
+                    document_ids: scopeDocumentIds ?? [],
+                    vorige_document_id: doorgrondVorigeId,
+                    promptvariant: DOORGROND_PROMPTVARIANT,
+                  },
+                }
+              : {}),
+            // P2 Deel A (criterium 4) — herkomst van een aangeklikte voorbeeldvraag.
+            ...(body.startvraag_bron === "context" || body.startvraag_bron === "signaal"
+              ? { startvraag_bron: body.startvraag_bron }
+              : {}),
             // ADR 0028 — herkomst van de framing: legt in het auditspoor vast dat
             // de vraag door de toelichting van dit agendapunt is geframed.
             ...(agendapuntModusActief
