@@ -11,6 +11,11 @@ import {
 } from "@/core/lib/vraagtype";
 import OnderbouwingPaneel, { type OnderbouwingMeta } from "./OnderbouwingPaneel";
 import { renderAntwoord, Bronkaart, type Bron } from "./AntwoordWeergave";
+import {
+  pasVoortgangToe,
+  VoortgangWeergave,
+  type VoortgangUI,
+} from "./Voortgang";
 import Startpunt from "./Startpunt";
 import { ACTIEF_GESPREK_SLEUTEL } from "@/core/lib/ai-sessie";
 import type {
@@ -162,20 +167,8 @@ function dagdeelGroet() {
   return "Goedenavond";
 }
 
-// Zichtbare voortgang tijdens het wachten (besluit 0087). Eén afgeronde regel per
-// bereikte serverfase (met uitkomst) + de actieve fase als lopende regel. De
-// map-reduce-analyse draagt batch/totaal in `analyse`.
-interface VoortgangKlaarRegel {
-  fase: string;
-  label: string;
-  uitkomst?: string;
-}
-interface VoortgangUI {
-  actieveFase: string | null;
-  actiefLabel: string | null;
-  analyse: { batch: number; totaal: number } | null;
-  klaar: VoortgangKlaarRegel[];
-}
+// Voortgang tijdens het wachten (besluit 0087): types, reducer en weergave leven
+// in ./Voortgang, gedeeld met de agenda-voorbereiding (AgendapuntChat).
 
 export default function AssistentClient({
   startpuntContext,
@@ -185,7 +178,7 @@ export default function AssistentClient({
   const [berichten, setBerichten] = useState<Bericht[]>([
     {
       rol: "ai",
-      tekst: `Welkom terug. Ik ben uw AI-assistent voor het bestuurdersportaal.\n\nStelt u gerust uw vraag — ik kies automatisch de passende bron: uw fondsdocumenten, algemene kennis, of een combinatie. Twijfel ik of u het voor uw fonds of in algemene zin bedoelt, dan vraag ik het u even.\n\nElke vraag wordt vastgelegd in de Governance Log, inclusief welke bron is gebruikt.`,
+      tekst: `Welkom terug. Ik ben uw AI-assistent voor het bestuurdersportaal.\n\nElke vraag wordt vastgelegd in de Governance Log, inclusief welke bron is gebruikt.`,
     },
   ]);
   const [invoer, setInvoer] = useState("");
@@ -194,6 +187,9 @@ export default function AssistentClient({
   // typ-indicator te verbergen zodra de tekst zelf begint te verschijnen.
   const [antwoordGestart, setAntwoordGestart] = useState(false);
   const [fondsId, setFondsId] = useState<string>("");
+  // Voornaam voor de startpunt-aanhef ("Waar werkt u nu aan, {voornaam}?"). Wordt
+  // in het profiel-effect gezet; leeg tot dat geladen is (fallback zonder naam).
+  const [voornaam, setVoornaam] = useState<string>("");
   // Increment I-2 (FO §11a) — de zichtbare bron-as is vervangen door automatische
   // bronkeuze. De gebruiker kiest geen bron-modus meer; alleen de expliciete
   // restrictie "Alleen fondsdocumenten" (onder "Aanpassen") blijft over.
@@ -437,6 +433,7 @@ export default function AssistentClient({
         if (data?.fonds_id) setFondsId(data.fonds_id);
 
         const voornaam = (data?.naam as string | null)?.split(" ")[0] || "";
+        setVoornaam(voornaam);
         const fondsenRel = data?.fondsen as
           | { naam: string }
           | { naam: string }[]
@@ -448,8 +445,8 @@ export default function AssistentClient({
 
         const groet = dagdeelGroet();
         const personalTekst = voornaam
-          ? `${groet} ${voornaam}, fijn u te zien.\n\nIk help u graag met vragen rondom ${fondsnaam}. Stelt u gerust uw vraag — ik kies automatisch de passende bron: uw fondsdocumenten, algemene kennis, of een combinatie. Twijfel ik of u het voor uw fonds of in algemene zin bedoelt, dan vraag ik het u even.\n\nElke vraag wordt vastgelegd in de Governance Log, inclusief welke bron is gebruikt.`
-          : `${groet}. Ik help u graag met vragen rondom ${fondsnaam}.\n\nStelt u gerust uw vraag — ik kies automatisch de passende bron en vraag het u even als ik twijfel of u het voor uw fonds of in algemene zin bedoelt.\n\nElke vraag wordt vastgelegd in de Governance Log.`;
+          ? `${groet} ${voornaam}, fijn u te zien.\n\nIk help u graag met vragen rondom ${fondsnaam}.\n\nElke vraag wordt vastgelegd in de Governance Log, inclusief welke bron is gebruikt.`
+          : `${groet}. Ik help u graag met vragen rondom ${fondsnaam}.\n\nElke vraag wordt vastgelegd in de Governance Log.`;
 
         welkomstRef.current = { rol: "ai", tekst: personalTekst };
 
@@ -851,45 +848,8 @@ export default function AssistentClient({
           // het 'done'-event nog worden aangevuld.
           inlineMeldingenData = evt.inline_meldingen ?? [];
         } else if (evt.type === "progress") {
-          // Voortgang per bereikte serverfase (besluit 0087). De brede-analyse-fase
-          // draagt batch/totaal (map-reduce). Overige fasen sturen status "bezig"
-          // (lopende regel) of "klaar" (afgeronde regel + eventuele uitkomst).
-          const fase = evt.fase;
-          if (!fase) {
-            /* onbekende progress zonder fase → negeren */
-          } else if (fase === "analyse") {
-            const batch = typeof evt.batch === "number" ? evt.batch : 0;
-            const totaal = typeof evt.totaal === "number" ? evt.totaal : 0;
-            setVoortgang((v) => ({
-              actieveFase: "analyse",
-              actiefLabel: evt.label || "Document wordt geanalyseerd",
-              analyse: { batch, totaal },
-              klaar: v?.klaar ?? [],
-            }));
-          } else if (evt.status === "klaar") {
-            setVoortgang((v) => {
-              const klaar = [
-                ...(v?.klaar ?? []),
-                { fase, label: evt.label || fase, uitkomst: evt.uitkomst },
-              ];
-              // De actieve regel wist als deze fase 'm bezette (bv. retrieval).
-              const actiefWeg = v?.actieveFase === fase;
-              return {
-                actieveFase: actiefWeg ? null : v?.actieveFase ?? null,
-                actiefLabel: actiefWeg ? null : v?.actiefLabel ?? null,
-                analyse: v?.analyse ?? null,
-                klaar,
-              };
-            });
-          } else {
-            // status "bezig" (of onbekend) → lopende regel.
-            setVoortgang((v) => ({
-              actieveFase: fase,
-              actiefLabel: evt.label || fase,
-              analyse: null,
-              klaar: v?.klaar ?? [],
-            }));
-          }
+          // Voortgang per bereikte serverfase (besluit 0087) — gedeelde reducer.
+          setVoortgang((v) => pasVoortgangToe(v, evt));
         } else if (evt.type === "delta") {
           volledig += evt.text || "";
           if (!aiToegevoegd) {
@@ -1116,6 +1076,12 @@ export default function AssistentClient({
     };
   }, [mentionOpen, mentionQuery]);
 
+  // Lege staat: geen gesprek, geen scope. Dan tonen we het startpunt (met de
+  // editoriale aanhef) i.p.v. de begroetingsbubbel; zodra er een vraag loopt,
+  // verschijnt de reguliere chat.
+  const toonStartpunt =
+    berichten.length <= 1 && !documentScope && !agendapuntContext;
+
   return (
     <div className="flex flex-col h-screen">
       {/* Gesprekken-overzicht (drawer) */}
@@ -1192,96 +1158,81 @@ export default function AssistentClient({
         </div>
       )}
 
-      {/* Topbar */}
-      <div className="bg-card border-b border-line px-7 h-14 flex items-center">
+      {/* Kopbalk — samengevoegd tot één balk (besluitpunt 1, middenpad): titel +
+          governance-badge, brongebruik als compacte chip mét zichtbare stand (i.p.v.
+          de volzin), antwoordmodus als segmented control, en rechts de gespreksacties.
+          Brongebruik én antwoordmodus blijven volledig afleesbaar (transparantie,
+          besluit 0068/0071); alleen de brongebruik-VOLZIN is een chip-met-stand
+          geworden — de volledige uitleg staat in de tooltip. Dit vervangt de drie
+          losse kopbalken (topbar h-14 + brongebruik + antwoordmodus, ~200px chrome). */}
+      <div className="bg-card border-b border-line px-7 py-2.5 flex items-center gap-x-3 gap-y-2 flex-wrap">
         <span className="font-bold text-ink">AI Assistent</span>
-        <span className="ml-3 bg-ok-tint text-ok-ink text-xs font-semibold px-2.5 py-1 rounded-full">
+        <span className="bg-ok-tint text-ok-ink text-xs font-semibold px-2.5 py-1 rounded-full">
           ● Governance logging actief
         </span>
-        <button
-          onClick={() => setHistorieOpen(true)}
-          className="ml-auto text-xs text-muted hover:text-ink border border-line px-3 py-1.5 rounded-lg hover:border-accent transition-colors"
-        >
-          🕑 Gesprekken{gesprekken.length > 0 ? ` (${gesprekken.length})` : ""}
-        </button>
-        <button
-          onClick={startNieuwGesprek}
-          disabled={laden || berichten.length <= 1}
-          className="text-xs text-muted hover:text-ink border border-line px-3 py-1.5 rounded-lg hover:border-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          + Nieuw gesprek
-        </button>
-      </div>
 
-      {/* Brongebruik — Increment I-2 (FO §11a): de zichtbare bron-as is vervangen
-          door automatische bronkeuze. De assistent kiest zelf of de vraag fonds-,
-          algemeen- of gecombineerd-gericht is; bij twijfel vraagt hij terug. Onder
-          "Aanpassen" blijft alleen de expliciete restrictie "Alleen
-          fondsdocumenten" over. */}
-      <div className="bg-card border-b border-line px-7 py-2.5 flex items-center gap-3 flex-wrap">
-        <span className="text-xs text-muted font-semibold uppercase tracking-wide">
-          Brongebruik
-        </span>
-        <span className="text-xs text-muted">
-          De assistent kiest automatisch de passende bron — uw documenten, algemene
-          kennis of een combinatie.
-        </span>
-        <button
-          onClick={() => setAanpassenOpen((o) => !o)}
-          className="text-xs text-muted hover:text-ink border border-line px-2.5 py-1 rounded-md hover:border-accent transition-colors"
-          aria-expanded={aanpassenOpen}
-        >
-          Aanpassen {aanpassenOpen ? "▴" : "▾"}
-        </button>
-        {aanpassenOpen && (
-          <label className="text-xs text-muted inline-flex items-center gap-1.5 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={alleenFondsdocumenten}
-              onChange={(e) => setAlleenFondsdocumenten(e.target.checked)}
-              className="accent-accent"
-            />
-            Alleen fondsdocumenten
-          </label>
-        )}
-        {aanpassenOpen && (
-          <label
-            className="text-xs text-muted inline-flex items-center gap-1.5 cursor-pointer select-none"
-            title="Toon dezelfde feiten en bronnen, maar zonder prioritering op uw persoonlijke profiel (collectieve weergave)."
+        {/* Brongebruik-chip — toont de gekozen bron-stand en opent de aanpas-popover.
+            De volledige uitleg ("automatische bronkeuze …") staat in de tooltip, zodat
+            er t.o.v. de oude volzin geen informatie verloren gaat. */}
+        <div className="relative">
+          <button
+            onClick={() => setAanpassenOpen((o) => !o)}
+            aria-expanded={aanpassenOpen}
+            title="De assistent kiest automatisch de passende bron — uw documenten, algemene kennis of een combinatie. Klik om te beperken tot fondsdocumenten of over te schakelen naar een collectieve weergave."
+            className="text-xs text-muted hover:text-ink border border-line px-2.5 py-1 rounded-md hover:border-accent transition-colors inline-flex items-center gap-1.5"
           >
-            <input
-              type="checkbox"
-              checked={algemeenPerspectief}
-              onChange={(e) => setAlgemeenPerspectief(e.target.checked)}
-              className="accent-accent"
-            />
-            Algemeen perspectief
-          </label>
-        )}
-        {alleenFondsdocumenten && (
-          <span className="text-xs text-ink inline-flex items-center gap-1">
-            <span>🔒</span>
-            <span>Beperkt tot interne fondsdocumenten</span>
-          </span>
-        )}
-        {algemeenPerspectief && (
-          <span className="text-xs text-ink inline-flex items-center gap-1">
-            <span>👥</span>
-            <span>Collectieve weergave — niet op uw profiel geprioriteerd</span>
-          </span>
-        )}
-      </div>
+            <span className="font-semibold uppercase tracking-wide">Bron</span>
+            <span className="text-ink">
+              {alleenFondsdocumenten ? "alleen fondsdocumenten" : "automatisch"}
+            </span>
+            <span>{aanpassenOpen ? "▴" : "▾"}</span>
+          </button>
+          {aanpassenOpen && (
+            <div className="absolute top-full left-0 mt-1.5 w-64 bg-card border border-line rounded-lg shadow-lg z-20 p-3 space-y-2.5">
+              <label className="text-xs text-muted flex items-center gap-1.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={alleenFondsdocumenten}
+                  onChange={(e) => setAlleenFondsdocumenten(e.target.checked)}
+                  className="accent-accent"
+                />
+                Alleen fondsdocumenten
+              </label>
+              <label
+                className="text-xs text-muted flex items-center gap-1.5 cursor-pointer select-none"
+                title="Toon dezelfde feiten en bronnen, maar zonder prioritering op uw persoonlijke profiel (collectieve weergave)."
+              >
+                <input
+                  type="checkbox"
+                  checked={algemeenPerspectief}
+                  onChange={(e) => setAlgemeenPerspectief(e.target.checked)}
+                  className="accent-accent"
+                />
+                Algemeen perspectief
+              </label>
+            </div>
+          )}
+        </div>
 
-      {/* Antwoordmodus-bar — teruggebracht tot Auto (default) · Sparren. Feiten en
-          Duiding zijn geen voorafknop meer; ze verschijnen als vervolgactie ná een
-          antwoord ("Maak feitelijker" / "Geef bestuurlijke duiding"). Auto detecteert
-          de passende modus; Sparren zet een houding voor het hele gesprek. De
-          gebruikte modus staat per antwoord in "Onderbouwing en bronnen". */}
-      <div className="bg-card border-b border-line px-7 py-2.5 flex items-center gap-3 flex-wrap">
+        {/* Actieve-stand-indicator: de bron-chip draagt de bron-stand al; dit
+            governance-signaal (niet op profiel geprioriteerd) niet. */}
+        {algemeenPerspectief && (
+          <span
+            className="text-xs text-ink inline-flex items-center gap-1"
+            title="Collectieve weergave — niet op uw profiel geprioriteerd"
+          >
+            <span>👥</span>
+            <span>Collectief</span>
+          </span>
+        )}
+
+        {/* Antwoordmodus — Auto (default) · Sparren; blijft volledig zichtbaar
+            (besluit 0068). De gebruikte modus staat per antwoord in "Onderbouwing en
+            bronnen". */}
         <span className="text-xs text-muted font-semibold uppercase tracking-wide">
           Antwoordmodus
         </span>
-        <div className="flex gap-0.5 bg-app-bg rounded-lg p-1 flex-wrap">
+        <div className="flex gap-0.5 bg-app-bg rounded-lg p-1">
           <button
             onClick={() => setAntwoordmodus(null)}
             title="Automatisch de passende antwoordvorm bepalen op basis van uw vraag"
@@ -1308,16 +1259,32 @@ export default function AssistentClient({
             </button>
           ))}
         </div>
+
+        {/* Gespreksacties — rechts uitgelijnd. */}
+        <button
+          onClick={() => setHistorieOpen(true)}
+          className="ml-auto text-xs text-muted hover:text-ink border border-line px-3 py-1.5 rounded-lg hover:border-accent transition-colors"
+        >
+          🕑 Gesprekken{gesprekken.length > 0 ? ` (${gesprekken.length})` : ""}
+        </button>
+        <button
+          onClick={startNieuwGesprek}
+          disabled={laden || berichten.length <= 1}
+          className="text-xs text-muted hover:text-ink border border-line px-3 py-1.5 rounded-lg hover:border-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          + Nieuw gesprek
+        </button>
       </div>
 
-      {/* Chat */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-5">
-        {berichten.map((b, i) => (
-          <div key={i} id={`bericht-${i}`} className={b.rol === "gebruiker" ? "flex justify-end" : "flex gap-3"}>
-            {b.rol === "ai" && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src="/ai-assistent.png" alt="AI" className="w-8 h-8 object-contain flex-shrink-0 mt-0.5" />
-            )}
+      {/* Chat — gedeelde kolom: één centrerende wrapper (max-w-[1020px], mockup
+          .wrap) omvat zowel de berichten als het startpunt, zodat de bubbels en de
+          startpuntkaarten dezelfde linker- en rechterrand delen. De scrollbar blijft
+          aan de schermrand (de scrollcontainer houdt flex-1 overflow-y-auto). */}
+      <div className="flex-1 overflow-y-auto p-6">
+        <div className="mx-auto w-full max-w-[1020px] space-y-5">
+        {!toonStartpunt &&
+          berichten.map((b, i) => (
+          <div key={i} id={`bericht-${i}`} className={b.rol === "gebruiker" ? "flex justify-end" : "flex"}>
             <div className={b.rol === "gebruiker" ? "max-w-[75%]" : "flex-1"}>
               {/* Inline-meldingen (FO §11c) — alleen bij de zes uitzonderingen,
                   direct boven het antwoord. */}
@@ -1335,7 +1302,7 @@ export default function AssistentClient({
                 className={
                   b.rol === "gebruiker"
                     ? "bg-accent text-white px-4 py-3 rounded-2xl rounded-tr-sm text-sm leading-relaxed"
-                    : "bg-app-surface border border-line px-4 py-3 rounded-2xl rounded-tl-sm text-sm leading-relaxed text-ink"
+                    : "text-sm leading-relaxed text-ink"
                 }
               >
                 {b.rol === "ai"
@@ -1459,70 +1426,27 @@ export default function AssistentClient({
         ))}
 
         {laden && !antwoordGestart && (
-          <div className="flex gap-3">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/ai-assistent.png" alt="AI" className="w-8 h-8 object-contain flex-shrink-0" />
-            <div className="bg-app-surface border border-line px-4 py-3 rounded-2xl rounded-tl-sm">
-              {voortgang &&
-              (voortgang.klaar.length > 0 ||
-                voortgang.actiefLabel ||
-                voortgang.analyse) ? (
-                <div className="space-y-1.5">
-                  {/* Afgeronde fasen met hun uitkomst. */}
-                  {voortgang.klaar.map((k) => (
-                    <div
-                      key={k.fase}
-                      className="text-xs text-muted flex items-start gap-1.5"
-                    >
-                      <span className="text-ok-ink flex-shrink-0" aria-hidden>
-                        ✓
-                      </span>
-                      <span>
-                        {k.label}
-                        {k.uitkomst ? ` — ${k.uitkomst}` : ""}
-                      </span>
-                    </div>
-                  ))}
-                  {/* Actieve fase als lopende regel. */}
-                  {voortgang.analyse ? (
-                    <div className="text-sm text-muted">
-                      {voortgang.actiefLabel}… (deel {voortgang.analyse.batch} van{" "}
-                      {voortgang.analyse.totaal})
-                    </div>
-                  ) : voortgang.actiefLabel ? (
-                    <div className="text-sm text-muted flex items-center gap-2">
-                      <span className="flex gap-1 items-center" aria-hidden>
-                        <span className="typing-dot"></span>
-                        <span className="typing-dot"></span>
-                        <span className="typing-dot"></span>
-                      </span>
-                      {voortgang.actiefLabel}…
-                    </div>
-                  ) : null}
-                </div>
-              ) : (
-                <div className="flex gap-1.5 items-center">
-                  <span className="typing-dot"></span>
-                  <span className="typing-dot"></span>
-                  <span className="typing-dot"></span>
-                </div>
-              )}
+          <div className="flex">
+            <div className="text-sm leading-relaxed text-ink">
+              <VoortgangWeergave voortgang={voortgang} />
             </div>
           </div>
         )}
+          {/* Startpunt (P1, besluit 0085) — vervangt de oude VOORGESTELDE_VRAGEN-chips.
+              Toont wat er nu speelt + taakknoppen zolang er geen gesprek/scope loopt;
+              verdwijnt zodra er een bericht, een documentscope of een agendapunt-scope
+              is (dan gedraagt /ai zich exact zoals voorheen). Staat binnen de gedeelde
+              kolom-wrapper zodat het startpunt dezelfde breedte erft als de bubbels. */}
+          {toonStartpunt && (
+            <Startpunt
+              context={startpuntContext}
+              voornaam={voornaam}
+              onVrijeVraag={startVrijeVraag}
+              onDocumentVraag={startDocumentVraag}
+            />
+          )}
+        </div>
       </div>
-
-      {/* Startpunt (P1, besluit 0085) — vervangt de oude VOORGESTELDE_VRAGEN-chips.
-          Toont wat er nu speelt + taakknoppen zolang er geen gesprek/scope loopt;
-          verdwijnt zodra er een bericht, een documentscope of een agendapunt-scope
-          is (dan gedraagt /ai zich exact zoals voorheen). */}
-      {berichten.length <= 1 && !documentScope && !agendapuntContext && (
-        <Startpunt
-          context={startpuntContext}
-          onVrijeVraag={startVrijeVraag}
-          onDocumentVraag={startDocumentVraag}
-        />
-      )}
 
       {/* Invoerbalk */}
       <div className="bg-card border-t border-line p-4 relative">

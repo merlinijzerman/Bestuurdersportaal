@@ -125,7 +125,77 @@ export function renderAntwoord(
     lijstItems = [];
   };
 
-  for (const regel of regels) {
+  // Markdown-tabel-herkenning. Een tabel is een pipe-rij ( | a | b | ) gevolgd door
+  // een scheidingsrij ( |---|---| ). Zonder deze afhandeling toonde de AI-tabel als
+  // ruwe pipe-tekst; nu rendert hij als echte tabel binnen de kolom (breed = scroll).
+  const splitCellen = (r: string) =>
+    r
+      .trim()
+      .replace(/^\|/, "")
+      .replace(/\|$/, "")
+      .split("|")
+      .map((c) => c.trim());
+  const isTabelRij = (r: string) => /^\s*\|.*\|\s*$/.test(r);
+  const isScheiding = (r: string) => {
+    if (!isTabelRij(r)) return false;
+    const cellen = splitCellen(r);
+    return cellen.length > 0 && cellen.every((c) => /^:?-{1,}:?$/.test(c));
+  };
+
+  for (let i = 0; i < regels.length; i++) {
+    const regel = regels[i];
+
+    // Tabelblok: kop + scheiding + alle aansluitende pipe-rijen als één <table>.
+    if (
+      isTabelRij(regel) &&
+      i + 1 < regels.length &&
+      isScheiding(regels[i + 1])
+    ) {
+      sluitLijst();
+      const kopCellen = splitCellen(regel);
+      const rijen: string[][] = [];
+      let j = i + 2;
+      while (
+        j < regels.length &&
+        isTabelRij(regels[j]) &&
+        !isScheiding(regels[j])
+      ) {
+        rijen.push(splitCellen(regels[j]));
+        j++;
+      }
+      blokken.push(
+        <div key={sleutel++} className="my-2 overflow-x-auto">
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr>
+                {kopCellen.map((c, ci) => (
+                  <th
+                    key={ci}
+                    className="text-left font-semibold text-ink border-b border-line px-3 py-2 align-top"
+                  >
+                    {inline(c)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rijen.map((rij, ri) => (
+                <tr key={ri} className="border-b border-line/60 align-top">
+                  {rij.map((c, ci) => (
+                    <td key={ci} className="px-3 py-2 align-top">
+                      {inline(c)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+      i = j - 1; // de for-lus verhoogt i weer
+      continue;
+    }
+
     const ul = regel.match(/^\s*[-*]\s+(.*)$/);
     const ol = regel.match(/^\s*\d+\.\s+(.*)$/);
     const kop = regel.match(/^(#{1,6})\s+(.*)$/);

@@ -41,6 +41,12 @@ import {
 // doorklikbare bronkaarten (naar het origineel). Zie AntwoordWeergave.tsx.
 import OnderbouwingPaneel, { type OnderbouwingMeta } from "../../ai/_components/OnderbouwingPaneel";
 import { renderAntwoord, Bronkaart, type Bron } from "../../ai/_components/AntwoordWeergave";
+// Gedeelde gefaseerde statusweergave (besluit 0087), gelijk aan /ai.
+import {
+  pasVoortgangToe,
+  VoortgangWeergave,
+  type VoortgangUI,
+} from "../../ai/_components/Voortgang";
 
 interface Verduidelijking {
   vraag: string;
@@ -91,10 +97,8 @@ export default function AgendapuntChat({
   const [invoer, setInvoer] = useState("");
   const [laden, setLaden] = useState(false);
   const [antwoordGestart, setAntwoordGestart] = useState(false);
-  const [analyseVoortgang, setAnalyseVoortgang] = useState<{
-    batch: number;
-    totaal: number;
-  } | null>(null);
+  // Gefaseerde voortgang tijdens het wachten (besluit 0087), gedeeld met /ai.
+  const [voortgang, setVoortgang] = useState<VoortgangUI | null>(null);
   const [openBronnen, setOpenBronnen] = useState<Set<number>>(new Set());
   // Increment I-1 — pill → scroll+highlight (identiek aan /ai): welke bronkaart
   // kort oplicht na een klik op een [Bron N]-pill.
@@ -546,7 +550,7 @@ export default function AgendapuntChat({
         if (evt.type === "verduidelijking") {
           verduidelijkingActief = true;
           aiToegevoegd = true;
-          setAnalyseVoortgang(null);
+          setVoortgang(null);
           setBerichten((prev) => [
             ...prev,
             {
@@ -588,14 +592,13 @@ export default function AgendapuntChat({
             vervolgvragen: [],
           };
         } else if (evt.type === "progress") {
-          if (typeof evt.batch === "number" && typeof evt.totaal === "number") {
-            setAnalyseVoortgang({ batch: evt.batch, totaal: evt.totaal });
-          }
+          // Gefaseerde voortgang (besluit 0087) — gedeelde reducer, gelijk aan /ai.
+          setVoortgang((v) => pasVoortgangToe(v, evt));
         } else if (evt.type === "delta") {
           volledig += evt.text || "";
           if (!aiToegevoegd) {
             aiToegevoegd = true;
-            setAnalyseVoortgang(null);
+            setVoortgang(null);
             setAntwoordGestart(true);
             setBerichten((prev) => [
               ...prev,
@@ -668,7 +671,7 @@ export default function AgendapuntChat({
       ]);
     } finally {
       setLaden(false);
-      setAnalyseVoortgang(null);
+      setVoortgang(null);
     }
   }
 
@@ -723,7 +726,14 @@ export default function AgendapuntChat({
   const heeftGesprek = berichten.length > 0;
 
   return (
-    <div className="border border-warn/30 rounded-lg bg-warn-tint">
+    // Dicht = amber trigger (nodigt uit als AI-affordance); open = wit blok in de
+    // stijl van de AI-assistent (bg-card + neutrale rand), zodat het uitgeklapte
+    // paneel dezelfde rustige kleurstelling krijgt als /ai.
+    <div
+      className={`border rounded-lg ${
+        open ? "border-line bg-card" : "border-warn/30 bg-warn-tint"
+      }`}
+    >
       <button
         onClick={() => setOpen(!open)}
         className="w-full px-3 py-2 text-left"
@@ -775,7 +785,10 @@ export default function AgendapuntChat({
                     </div>
                   </div>
                 ) : (
-                  <div key={idx} className="bg-white border border-line rounded-lg px-3 py-2">
+                  // AI-antwoord zonder wit kaartje — gelijk aan /ai (ontblokt,
+                  // platte tekst op het paneel). Gebruikersbubbel en chips houden
+                  // hun eigen stijl.
+                  <div key={idx}>
                     {b.inlineMeldingen && b.inlineMeldingen.length > 0 && (
                       <div className="mb-1.5 space-y-1">
                         {b.inlineMeldingen.map((m, i) => (
@@ -875,10 +888,8 @@ export default function AgendapuntChat({
                 )
               )}
               {laden && !antwoordGestart && (
-                <div className="text-xs text-muted italic px-1">
-                  {analyseVoortgang
-                    ? `Analyseert stukken (${analyseVoortgang.batch}/${analyseVoortgang.totaal})…`
-                    : "De assistent denkt na…"}
+                <div className="text-sm leading-relaxed text-ink px-1">
+                  <VoortgangWeergave voortgang={voortgang} />
                 </div>
               )}
               <div ref={eindRef} />

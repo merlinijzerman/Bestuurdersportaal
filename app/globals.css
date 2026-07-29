@@ -59,6 +59,10 @@
   /* Kaart-elevatie (stuurinformatie-opmaak, T17): subtiele dubbele schaduw —
      ink-getint zodat hij op de lichte achtergrond rustig blijft. */
   --shadow-card: 0 1px 2px rgb(var(--ink-rgb) / 0.04), 0 10px 26px -18px rgb(var(--ink-rgb) / 0.35);
+  /* Hover-elevatie voor interactieve kaarten (AI-startpunt, besluit 0084/0085):
+     zelfde ink-basis, iets sterker dan --shadow-card zodat een kaart bij hover
+     "oplicht". Spiegelt --sh-lg uit de goedgekeurde startpunt-flow-mockup. */
+  --shadow-card-hover: 0 4px 14px rgb(var(--ink-rgb) / 0.07), 0 30px 60px -30px rgb(var(--ink-rgb) / 0.45);
 }
 
 * { box-sizing: border-box; }

@@ -55,7 +55,9 @@ const BRONKLEUR: Record<string, string> = {
 export default function BibliotheekPage() {
   // Weergave: documentbeheer (titelzoeken + lijst) of uitgebreid inhoudelijk zoeken.
   const [weergave, setWeergave] = useState<"beheren" | "zoeken">("beheren");
-  const [actieveTab, setActieveTab] = useState<"generiek" | "fonds">("generiek");
+  // Standaard de Fondsbibliotheek als eerste/actieve tab (verzoek 29-07): het
+  // eigen fondsmateriaal is het startpunt; het generieke kader staat ernaast.
+  const [actieveTab, setActieveTab] = useState<"generiek" | "fonds">("fonds");
   const [documenten, setDocumenten] = useState<Document[]>([]);
   const [laden, setLaden] = useState(true);
   const [zoekterm, setZoekterm] = useState("");
@@ -300,7 +302,7 @@ export default function BibliotheekPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 bg-app-bg p-1 rounded-xl mb-5 w-fit">
-        {(["generiek", "fonds"] as const).map((tab) => (
+        {(["fonds", "generiek"] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setActieveTab(tab)}

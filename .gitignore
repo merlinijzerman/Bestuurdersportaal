@@ -33,6 +33,8 @@ yarn-error.log*
 *.swo
 .vscode/
 .idea/
+# LibreOffice/OpenOffice lockbestanden (bijv. .~lock.whitepaper.pdf#)
+.~lock.*#
 
 # --- TypeScript build info ---
 *.tsbuildinfo

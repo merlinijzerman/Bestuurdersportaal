@@ -287,7 +287,15 @@ export default function AgendapuntKaart({
         isVerwijderd ? "border-err/30 bg-err-tint" : "border-line"
       }`}
     >
-      <div className="w-full flex items-start gap-3 p-4">
+      {/* Hele kop klikbaar om uit/in te klappen (niet alleen het pijltje). De
+          knoppen erin stoppen de bubbling zodat ze hun eigen actie houden. Op
+          verwijderde rijen is er niets uit te klappen, dus dan niet klikbaar. */}
+      <div
+        className={`w-full flex items-start gap-3 p-4${
+          isVerwijderd ? "" : " cursor-pointer"
+        }`}
+        onClick={isVerwijderd ? undefined : () => setOpen((o) => !o)}
+      >
         <span className="text-xs text-muted tabular-nums w-5 pt-1">{nummer}.</span>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
@@ -327,7 +335,10 @@ export default function AgendapuntKaart({
         {/* Herstel-knop op verwijderde rijen (alleen voorzitter/beheerder) */}
         {isVerwijderd && isPrivileged && (
           <button
-            onClick={herstel}
+            onClick={(e) => {
+              e.stopPropagation();
+              herstel();
+            }}
             disabled={volgordeBezig}
             className="text-xs text-ok-ink hover:text-ok-ink px-2 py-1 disabled:opacity-50"
             title="Agendapunt herstellen"
@@ -340,7 +351,10 @@ export default function AgendapuntKaart({
         {magBewerken && !isVerwijderd && (
           <div className="flex items-center gap-0.5 pt-1">
             <button
-              onClick={() => verschuif("omhoog")}
+              onClick={(e) => {
+                e.stopPropagation();
+                verschuif("omhoog");
+              }}
               disabled={!kanOmhoog || volgordeBezig}
               className="text-muted hover:text-ink disabled:opacity-30 text-xs px-1.5 py-1"
               title="Omhoog verplaatsen"
@@ -349,7 +363,10 @@ export default function AgendapuntKaart({
               ▲
             </button>
             <button
-              onClick={() => verschuif("omlaag")}
+              onClick={(e) => {
+                e.stopPropagation();
+                verschuif("omlaag");
+              }}
               disabled={!kanOmlaag || volgordeBezig}
               className="text-muted hover:text-ink disabled:opacity-30 text-xs px-1.5 py-1"
               title="Omlaag verplaatsen"
@@ -358,7 +375,10 @@ export default function AgendapuntKaart({
               ▼
             </button>
             <button
-              onClick={() => setEditOpen(true)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditOpen(true);
+              }}
               className="text-muted hover:text-ink text-sm px-2 py-1"
               title="Bewerken"
               aria-label="Bewerken"
@@ -369,7 +389,10 @@ export default function AgendapuntKaart({
         )}
 
         <button
-          onClick={() => setOpen(!open)}
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpen(!open);
+          }}
           className="text-muted text-sm pt-1 px-1.5"
           aria-label={open ? "Inklappen" : "Uitklappen"}
         >
@@ -610,7 +633,9 @@ function StukKaart({ stuk }: { stuk: Stuk }) {
       {open && (
         <div className="px-3 pb-3">
           {samenvatting ? (
-            <div className="bg-white rounded-md border border-line p-3 space-y-3">
+            // Ontblokt: op de kaartachtergrond i.p.v. in een wit kaartje (iteratie
+            // 29-07). Dezelfde behandeling als de ontblokte AI-tekst.
+            <div className="space-y-3 pt-1">
               {samenvatting.aanleiding && (
                 <Sectie label="Aanleiding">
                   <p className="text-sm text-ink leading-relaxed">{samenvatting.aanleiding}</p>
@@ -641,11 +666,11 @@ function StukKaart({ stuk }: { stuk: Stuk }) {
               )}
             </div>
           ) : stuk.samenvatting_ai ? (
-            <div className="bg-white rounded-md border border-line p-3 text-sm text-ink whitespace-pre-wrap">
+            <div className="pt-1 text-sm text-ink whitespace-pre-wrap">
               {stuk.samenvatting_ai}
             </div>
           ) : (
-            <div className="bg-white rounded-md border border-line p-3 text-xs text-muted italic">
+            <div className="pt-1 text-xs text-muted italic">
               Samenvatting wordt nog gegenereerd. Vernieuw de pagina over een paar seconden.
             </div>
           )}

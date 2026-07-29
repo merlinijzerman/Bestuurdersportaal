@@ -4,7 +4,7 @@
 > **Datum**: 2026-07-28
 > **Scope**: het startscherm van `/ai` en de doorgroei naar een taakgerichte assistent, opgedeeld in vijf los uitleverbare plateaus (P1–P5).
 > **Doel**: vastleggen wat P1 oplevert en waar de vervolgstappen landen, zodat elk plateau een eigen plek en afbakening heeft. Bron van waarheid blijft de code + `supabase/migrations/`; dit document beschrijft het *wat en waarom*.
-> **Visuele referentie**: de werkopdracht noemt `03 Functioneel ontwerp/Designrichtingen portaal/startpunt-flow.html` (schermen: Startpunt · Scherpstellen · Aan het werk · Resultaat · Mijn voorbereidingen). **Dat bestand staat (nog) niet in de repo** — de map bevat wel `richting-a/b/c`, `prototype-c-cockpit` en `voortgangsmelding`. P1 is daarom gebouwd op de tekstuele spec uit de werkopdracht + de bestaande tokenlaag; lever `startpunt-flow.html` aan om deze referentie hard te maken. *Let op* (indien geleverd): het demofonds heet in die preview "Vitalis"; het echte demofonds is **Stichting Pensioenfonds Horizon**, en namen/cijfers zijn illustratief.
+> **Visuele referentie**: `03 Functioneel ontwerp/Designrichtingen portaal/startpunt-flow.html` (schermen: Startpunt · Scherpstellen · Aan het werk · Resultaat · Mijn voorbereidingen). **Dit bestand staat inmiddels in de projectmap, één niveau boven de git-repo** (`…/MVP bestuurdersportaal/03 Functioneel ontwerp/…`, dus buiten `mvp/` en niet repo-relatief resolvebaar); de map bevat daarnaast `richting-a/b/c`, `prototype-c-cockpit` en `voortgangsmelding`. P1 is gebouwd op de tekstuele spec + de tokenlaag; de compositie is op **2026-07-29 op deze mockup afgestemd (besluit 0088)**. *Let op*: het demofonds heet in de preview "Vitalis"; het echte demofonds is **Stichting Pensioenfonds Horizon**, en namen/cijfers zijn illustratief.
 
 ---
 
@@ -38,6 +38,8 @@ Zodra er een bericht, een documentscope of een agendapunt-scope is, verdwijnt he
 **Architectuur**: `app/(dashboard)/ai/page.tsx` is een server-component (route A) die de sessie server-side afleidt, de gedeelde context ophaalt (`core/lib/portaalcontext.ts`, `React.cache()`-gededupliceerd, gedeeld met de homepage) en de mechanisch verhuisde client-component `_components/AssistentClient.tsx` rendert met een `_components/Startpunt.tsx`. Een `loading.tsx`-skelet dekt de eerste weergave. Geen migratie, geen RLS-/API-contractwijziging.
 
 **Bewust buiten P1**: geen taakconfiguratie, geen bewaren/koppelen, geen voortgangsstappen, geen nieuwe/heropende antwoordmodi (`besluitrijpheid`/`persoonlijke_voorbereiding` blijven zonder knop — besluit 0068), geen tweede implementatie van de voorbereiding (besluiten 0036/0079).
+
+**Compositie-actualisatie (2026-07-29, besluit 0088)**: P1 is visueel op de referentiemockup gebracht — gedeelde 1020px-contentkolom (bubbels + kaarten delen randen), drie kopbalken samengevoegd tot één (brongebruik als chip-met-stand, antwoordmodus zichtbaar), uniforme kaartbehandeling + hover-elevatie (`--shadow-card-hover`). De **serif-aanhef "Waar werkt u nu aan, {voornaam}?"** vervangt op de lege staat de AI-begroetingsbubbel, de AI-avatar is verwijderd en AI-antwoorden staan **ontblokt** (platte tekst, geen wit kaartje). Zie [`decisions/0088`](./decisions/0088-ai-scherm-compositie-en-vergader-ai-consistentie.md).
 
 ### P2 — Mijn voorbereidingen: bewaren & koppelen
 

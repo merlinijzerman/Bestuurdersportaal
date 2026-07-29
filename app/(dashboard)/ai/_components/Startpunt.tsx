@@ -52,10 +52,12 @@ function BlokKop({ tekst }: { tekst: string }) {
 
 export default function Startpunt({
   context,
+  voornaam,
   onVrijeVraag,
   onDocumentVraag,
 }: {
   context: PortaalContext;
+  voornaam: string;
   onVrijeVraag: () => void;
   onDocumentVraag: (doc: DocumentCtx) => void;
 }) {
@@ -73,7 +75,20 @@ export default function Startpunt({
     : "/vergaderingen";
 
   return (
-    <div className="px-6 pb-3 pt-1 space-y-5 max-w-3xl">
+    <div className="pb-3 pt-1 space-y-5">
+      {/* ── Aanhef ── editoriale kop i.p.v. een AI-begroetingsbubbel (iteratie
+          28-07-2026). Vervangt de begroeting op de lege staat; de bubbel wordt in
+          AssistentClient onderdrukt zolang het startpunt zichtbaar is. */}
+      <div>
+        <h1 className="font-serif text-2xl md:text-3xl font-semibold text-ink">
+          {voornaam ? `Waar werkt u nu aan, ${voornaam}?` : "Waar werkt u nu aan?"}
+        </h1>
+        <p className="text-sm text-muted mt-2 max-w-xl leading-relaxed">
+          Ik zie wat er op uw agenda staat. Kies een startpunt — dan help ik de juiste
+          stukken en de juiste context klaar te zetten.
+        </p>
+      </div>
+
       {/* ── Speelt nu voor u ── (alleen bij context; lege kaarten weggelaten) */}
       {heeftContext && (
         <div>
@@ -82,7 +97,7 @@ export default function Startpunt({
             {volgendeVergadering && (
               <Link
                 href={`/vergaderingen/${volgendeVergadering.id}`}
-                className="block border border-line rounded-lg p-3 bg-white hover:border-accent transition-colors"
+                className="block border border-line rounded-xl p-3 bg-card hover:border-accent hover:shadow-card-hover motion-safe:hover:-translate-y-px transition-all"
               >
                 <div className="text-[11px] text-muted mb-1">
                   Komende vergadering · over {dagenTot(volgendeVergadering.datum)} dgn
@@ -113,7 +128,7 @@ export default function Startpunt({
             {eersteStap && (
               <Link
                 href={`/procedures/${eersteStap.procedure_id}`}
-                className="block border border-line rounded-lg p-3 bg-white hover:border-accent transition-colors"
+                className="block border border-line rounded-xl p-3 bg-card hover:border-accent hover:shadow-card-hover motion-safe:hover:-translate-y-px transition-all"
               >
                 <div className="text-[11px] text-muted mb-1">
                   Uw eerstvolgende processtap
@@ -133,7 +148,7 @@ export default function Startpunt({
             {recentDocument && (
               <Link
                 href="/bibliotheek"
-                className="block border border-line rounded-lg p-3 bg-white hover:border-accent transition-colors"
+                className="block border border-line rounded-xl p-3 bg-card hover:border-accent hover:shadow-card-hover motion-safe:hover:-translate-y-px transition-all"
               >
                 <div className="text-[11px] text-muted mb-1">
                   Recent toegevoegd aan de bibliotheek
@@ -234,7 +249,7 @@ function TaakLink({
   return (
     <Link
       href={href}
-      className="block text-left border border-line rounded-xl p-3 bg-app-bg hover:border-accent hover:bg-white transition-colors"
+      className="block text-left border border-line rounded-xl p-3 bg-card hover:border-accent hover:shadow-card-hover motion-safe:hover:-translate-y-px transition-all"
     >
       <TaakInhoud icoon={icoon} titel={titel} subtitel={subtitel} />
     </Link>
@@ -256,7 +271,7 @@ function TaakKnop({
     <button
       type="button"
       onClick={onClick}
-      className="block text-left w-full border border-line rounded-xl p-3 bg-app-bg hover:border-accent hover:bg-white transition-colors"
+      className="block text-left w-full border border-line rounded-xl p-3 bg-card hover:border-accent hover:shadow-card-hover motion-safe:hover:-translate-y-px transition-all"
     >
       <TaakInhoud icoon={icoon} titel={titel} subtitel={subtitel} />
     </button>

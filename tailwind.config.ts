@@ -75,6 +75,7 @@ const config: Config = {
       // op het --shadow-card-token in globals.css (bron van waarheid).
       boxShadow: {
         card: "var(--shadow-card)",
+        "card-hover": "var(--shadow-card-hover)",
       },
     },
   },
