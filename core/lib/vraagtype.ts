@@ -247,6 +247,13 @@ const ANTWOORDMODUS_PATRONEN: { modus: Antwoordmodus; patronen: RegExp[] }[] = [
   {
     modus: "bronoverzicht",
     patronen: [
+      // Verbreed 30-07-2026: "welke …" is niet de enige vorm waarin naar de
+      // inventaris wordt gevraagd. Deze varianten kwamen in echt gebruik langs en
+      // vielen op 'feitelijk' → retrievalmodus 'actueel' → concepten onzichtbaar.
+      /\bzijn er (?:al )?(?:nog )?(?:documenten|stukken|bronnen|voorstellen)/,
+      /\bhebben we (?:documenten|stukken|bronnen|iets)\b/,
+      /\bwat hebben we\b[^.?!]*\b(?:over|rond|inzake)\b/,
+      /\bwelke informatie (?:is er|hebben we)\b/,
       /welke (?:documenten|bronnen|stukken)/,
       /overzicht van (?:de )?(?:documenten|bronnen|stukken)/,
       /\bbronnenlijst\b/,
@@ -331,7 +338,14 @@ export function retrievalModusVoorVraag(
   vraag: string
 ): RetrievalModus {
   const basis = retrievalModusVoor(modus);
-  if (basis === "actueel" && isVoorstelvraag(vraag)) return "besluitvorming";
+  if (basis !== "actueel") return basis;
+  // CATALOGUSVRAAG (30-07-2026, tweede ronde). "Welke documenten/stukken/bronnen
+  // zijn er over X?" vraagt naar wat er BESTAAT, niet naar wat geldend beleid is.
+  // Onder 'actueel' verdwijnen concepten en vervallen stukken uit die inventaris en
+  // meldt de assistent dat er niets is — de omgekeerde conclusie. Een inventaris
+  // hoort volledig te zijn; de statuslabels op de bronkaarten dragen de nuance.
+  if (modus === "bronoverzicht") return "alles";
+  if (isVoorstelvraag(vraag)) return "besluitvorming";
   return basis;
 }
 

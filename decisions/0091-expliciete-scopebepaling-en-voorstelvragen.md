@@ -207,6 +207,37 @@ gedrag, **nooit** tot een bewering over stukken die er niet zijn.
   bewuste intentiekeuze. Opgenomen in de reviewchecklist; de sanity-test op de generieke
   set is het vangnet.
 
+## Aanvulling 30-07-2026 (tweede ronde, na terugkoppeling uit gebruik)
+
+Na de eerste deploy bleven conceptdocumenten in de praktijk onvindbaar. Twee oorzaken,
+allebei in dit besluit hersteld:
+
+**1. De trigger van de schaduwtelling was verkeerd.** De telling liep op
+`bronnen.length === 0`, maar bij een fondsvraag levert retrieval vaak wél **generieke**
+treffers (Pensioenwet, DNB-guidance) terwijl er geen enkel fondsstuk doorheen komt. De
+telling sloeg dan niet aan en het antwoord bleef *"de bronnen die ik ken zijn zonder
+uitzondering generieke kaders"* — exact het geval waarvoor de melding bedoeld was.
+Trigger is nu **nul FONDStreffers** (`chunks.filter(c => c.documenten.bibliotheek !==
+"generiek")`), niet nul treffers totaal.
+
+**2. De uitzondering was te smal: catalogusvragen ontbraken.** `isVoorstelvraag` vangt
+alleen vragen met een voorstel-/conceptsignaal. Een **inventarisvraag** — "welke
+documenten/stukken zijn er over X?" — heeft dat signaal niet en bleef daardoor op
+`actueel` staan, terwijl juist die vraag naar wat er **bestaat** vraagt en niet naar wat
+geldend beleid is. Gemeten op tien realistische formuleringen viel de helft nog buiten de
+fix. Daarom: een vraag met antwoordmodus **`bronoverzicht`** krijgt retrievalmodus
+**`alles`** (in `retrievalModusVoorVraag`, niet in `retrievalModusVoor` — de basisfunctie
+blijft stabiel). Een inventaris hoort volledig te zijn; de statuslabels op de bronkaarten
+dragen de nuance. Daarnaast zijn de `bronoverzicht`-patronen verbreed met vormen die in
+echt gebruik langskwamen: *"zijn er documenten/stukken/bronnen/voorstellen …"*, *"hebben
+we documenten/stukken/iets …"*, *"wat hebben we over …"*, *"welke informatie is er …"*.
+
+Meetset-gating opnieuw gedraaid: 54/54, alle geaccordeerde drempels ongewijzigd gehaald.
+`vraagtype.sanity` van 70 naar **71** tests. Wat nog steeds op `actueel` blijft: vragen
+zonder enig staat- of inventarissignaal ("Is er al iets bekend over …?"). Daarvoor is de
+schaduwtelling (nu met de juiste trigger) het vangnet: die meldt dat er niet-vastgestelde
+stukken zijn en biedt de verbredingschip.
+
 ## Referenties
 
 - Code: `core/lib/startvragen.ts` (+ `.sanity.ts`), `core/lib/vraagtype.ts`

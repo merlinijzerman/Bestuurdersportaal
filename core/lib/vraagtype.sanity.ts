@@ -595,13 +595,30 @@ test("retrievalModusVoorVraag: voorstelvraag verlaat 'actueel', rest ongemoeid",
     retrievalModusVoorVraag("besluitrijpheid", "Is dit voorstel besluitrijp?"),
     "besluitvorming"
   );
-  // Gelijk aan de basisfunctie waar geen voorstelsignaal is.
-  for (const m of ["feitelijk", "duiding", "sparring", "bronoverzicht"] as const) {
+  // Gelijk aan de basisfunctie waar geen voorstel-/catalogussignaal is.
+  for (const m of ["feitelijk", "duiding", "sparring"] as const) {
     assert.equal(
       retrievalModusVoorVraag(m, "Wat is de dekkingsgraad?"),
       retrievalModusVoor(m)
     );
   }
+});
+
+test("retrievalModusVoorVraag: catalogusvraag (bronoverzicht) → 'alles'", () => {
+  // "Welke documenten zijn er over X" vraagt naar wat BESTAAT. Onder 'actueel'
+  // verdwijnen concepten en vervallen stukken uit die inventaris en meldt de
+  // assistent dat er niets is — de omgekeerde conclusie van de werkelijkheid.
+  assert.equal(bepaalAntwoordmodus("Welke documenten ken je over het beleggingsbeleid?"), "bronoverzicht");
+  assert.equal(
+    retrievalModusVoorVraag("bronoverzicht", "Welke documenten ken je over het beleggingsbeleid?"),
+    "alles"
+  );
+  assert.equal(
+    retrievalModusVoorVraag("bronoverzicht", "Welke stukken zijn er over de wijziging beleggingsbeleid?"),
+    "alles"
+  );
+  // Een historische of besluitvormingsgerichte modus blijft leidend.
+  assert.equal(retrievalModusVoorVraag("historisch", "Welke documenten waren er destijds?"), "historisch");
 });
 
 test("meldingNietVastgesteldeStukken: aantal en enkelvoud/meervoud kloppen", () => {

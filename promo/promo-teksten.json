@@ -47,6 +47,15 @@
           "cx": 0.5,
           "cy": 0.5
         }
+      ],
+      "fragmentenVerticaal": [
+        {
+          "van": 0.6,
+          "tot": 5.2,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5
+        }
       ]
     },
     {
@@ -99,6 +108,29 @@
         {
           "van": 25.5,
           "tot": 28.5,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5
+        }
+      ],
+      "fragmentenVerticaal": [
+        {
+          "van": 0.6,
+          "tot": 3.4,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5
+        },
+        {
+          "van": 6.5,
+          "tot": 9.5,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5
+        },
+        {
+          "van": 21.5,
+          "tot": 24.5,
           "zoom": 1.0,
           "cx": 0.5,
           "cy": 0.5
@@ -159,6 +191,29 @@
           "cx": 0.5,
           "cy": 0.5
         }
+      ],
+      "fragmentenVerticaal": [
+        {
+          "van": 0.8,
+          "tot": 3.8,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5
+        },
+        {
+          "van": 16.5,
+          "tot": 19.5,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5
+        },
+        {
+          "van": 35.5,
+          "tot": 38.5,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5
+        }
       ]
     },
     {
@@ -215,15 +270,40 @@
           "cx": 0.5,
           "cy": 0.5
         }
+      ],
+      "fragmentenVerticaal": [
+        {
+          "van": 0.6,
+          "tot": 3.6,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5
+        },
+        {
+          "van": 6.0,
+          "tot": 9.0,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5
+        },
+        {
+          "van": 9.2,
+          "tot": 12.4,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5
+        }
       ]
     },
     {
       "id": "06-slot",
       "type": "slot",
-      "duur": 7,
+      "duur": 8.5,
       "kop": "Goed voorbereid.\nZorgvuldig besloten.\nAantoonbaar verantwoord.",
-      "sub": "Ervaar het Bestuurdersportaal."
+      "sub": "Ervaar het Bestuurdersportaal.",
+      "_let_op": "8,5s in plaats van 7: de voice-over eindigt op ~39,8s en moet kunnen uitlopen zonder afgekapt te worden (montage.sh gebruikt -shortest). Extra voordeel: de call-to-action staat langer in beeld. Wijzigt de lengte van de voice-over, controleer dit dan."
     }
   ],
-  "_kader": "fragmentenKader wordt alleen gebruikt bij PROMO_LAYOUT=kader. Vaste niveaus: zoom 1.0 = het hele portalscherm past in het venster (niets afgesneden), zoom ~1.45 = één detailniveau. Elke scène gaat overzicht → detail → overzicht terug, zodat de kijker steeds hetzelfde kader herkent."
+  "_kader": "fragmentenKader wordt alleen gebruikt bij PROMO_LAYOUT=kader. Vaste niveaus: zoom 1.0 = het hele portalscherm past in het venster (niets afgesneden), zoom ~1.45 = één detailniveau. Elke scène gaat overzicht → detail → overzicht terug, zodat de kijker steeds hetzelfde kader herkent.",
+  "_verticaal": "fragmentenVerticaal geldt alleen bij PROMO_LAYOUT=verticaal. Die tijden horen bij de APARTE staande opname in promo/opnames-9x16/ (venster 1080x1200) en wijken af van de brede opname."
 }

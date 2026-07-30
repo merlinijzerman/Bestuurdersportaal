@@ -46,11 +46,25 @@ OPNAMES="$HIER/opnames"
 # dan met vaste niveaus (fragmentenKader in promo-teksten.json) in plaats van
 # met een uitsnede over het hele beeld.
 LAYOUT="${PROMO_LAYOUT:-vol}"
-if [ "$LAYOUT" = "kader" ]; then
+if [ "$LAYOUT" = "verticaal" ]; then
+  # Staand 1080×1920, gebouwd uit een APARTE opname bij 1080×1200. Geen
+  # uitsnede uit de brede opname: het portaal is responsive, dus bij een smal
+  # venster herschikt het zichzelf en wordt er niets afgesneden.
+  OPNAMES="$HIER/opnames-9x16"
+  OVERLAYS="$HIER/overlays-9x16"
+  UIT="$HIER/uit-9x16"
+  WERK="$HIER/.werk-9x16"
+  FRW=1080; FRH=1200; VX=0; VY=440
+  DOEK_B=1080; DOEK_H=1920
+  PUSH="${PROMO_PUSH:-0}"
+  FXF="${PROMO_FRAGMENT_OVERGANG:-0.25}"
+  XF="${PROMO_OVERGANG:-0.30}"
+elif [ "$LAYOUT" = "kader" ]; then
   OVERLAYS="$HIER/overlays-kader"
   UIT="$HIER/uit-kader"
   WERK="$HIER/.werk-kader"
   FRW=1568; FRH=882; VX=176; VY=100
+  DOEK_B=1920; DOEK_H=1080
   PUSH="${PROMO_PUSH:-0}"                       # bewust geen push-in: rustig beeld
   FXF="${PROMO_FRAGMENT_OVERGANG:-0.12}"        # vrijwel harde cuts
   XF="${PROMO_OVERGANG:-0.25}"
@@ -59,6 +73,7 @@ else
   UIT="$HIER/uit"
   WERK="$HIER/.werk"
   FRW=1920; FRH=1080; VX=0; VY=0
+  DOEK_B=1920; DOEK_H=1080
   # Geen push-in meer: die zoomt gaandeweg 5% in en snijdt dus alsnog beeld weg.
   # De opdracht is nu juist "volledig in beeld" — de beweging komt van de
   # intekenende tekst en van wat er op het scherm zelf gebeurt.
@@ -118,7 +133,7 @@ while IFS= read -r regel; do
   # ── Dekkende kaarten (opening / slot) ────────────────────────────────────
   if [ "$type" = "kaart" ] || [ "$type" = "slot" ]; then
     "$FFMPEG" -nostdin -y -loglevel error -loop 1 -t "$doel" -i "$png" \
-      -vf "scale=1920:1080,fps=30,format=yuv420p,setsar=1" \
+      -vf "scale=${DOEK_B}:${DOEK_H},fps=30,format=yuv420p,setsar=1" \
       "${ENC[@]}" "$uitbestand"
     printf "  %-6s %-16s %ss\n" "$type" "$id" "$doel"
     SCENES+=("$uitbestand")
@@ -161,14 +176,15 @@ while IFS= read -r regel; do
       continue
     fi
 
-    # Uitsnede berekenen in het 1920×1080-doelvlak. Even afmetingen (h264).
-    read -r cw ch cxp cyp <<< "$(awk -v z="$zoom" -v cx="$cx" -v cy="$cy" 'BEGIN{
+    # Uitsnede berekenen in het referentievlak van de bron. Even afmetingen (h264).
+    REF_B=$FRW; REF_H=$FRH
+    read -r cw ch cxp cyp <<< "$(awk -v z="$zoom" -v cx="$cx" -v cy="$cy" -v rb="$REF_B" -v rh="$REF_H" 'BEGIN{
       if (z < 1) z = 1;
-      w = int(1920/z); h = int(1080/z);
+      w = int(rb/z); h = int(rh/z);
       w -= w % 2; h -= h % 2;
-      x = int(cx*1920 - w/2); y = int(cy*1080 - h/2);
+      x = int(cx*rb - w/2); y = int(cy*rh - h/2);
       if (x < 0) x = 0; if (y < 0) y = 0;
-      if (x > 1920-w) x = 1920-w; if (y > 1080-h) y = 1080-h;
+      if (x > rb-w) x = rb-w; if (y > rh-h) y = rh-h;
       printf "%d %d %d %d", w, h, x, y;
     }')"
 
@@ -185,7 +201,7 @@ while IFS= read -r regel; do
 
     fragbestand="$WERK/$id-f$fnr.mp4"
     "$FFMPEG" -nostdin -y -loglevel error -i "$bron" -ss "$van" -t "$lengte" \
-      -vf "scale=1920:1080:flags=lanczos,crop=${cw}:${ch}:${cxp}:${cyp},scale=${FRW}:${FRH}:flags=lanczos,fps=30${beweging},\
+      -vf "scale=${REF_B}:${REF_H}:flags=lanczos,crop=${cw}:${ch}:${cxp}:${cyp},scale=${FRW}:${FRH}:flags=lanczos,fps=30${beweging},\
 format=yuv420p,setsar=1" \
       -an "${ENC[@]}" "$fragbestand"
     FRAGS+=("$fragbestand")
@@ -237,7 +253,13 @@ format=yuv420p,setsar=1" \
   #    en de hele overlay blijft onzichtbaar.
   #  - komma's in de y-expressie moeten ontsnapt (\,), anders leest ffmpeg ze
   #    als scheidingsteken tussen filters.
-  if [ "$LAYOUT" = "kader" ]; then
+  if [ "$LAYOUT" = "verticaal" ]; then
+    "$FFMPEG" -nostdin -y -loglevel error -i "$ruw" \
+      -loop 1 -framerate 30 -t "$duur" -i "$png" -filter_complex "\
+[0:v]setpts=PTS/${factor},fps=30[v];\
+[1:v][v]overlay=x=${VX}:y=${VY}:format=auto:shortest=1,format=yuv420p,setsar=1[o]" \
+      -map "[o]" -an -shortest "${ENC[@]}" "$uitbestand"
+  elif [ "$LAYOUT" = "kader" ]; then
     # De scène-PNG is hier de ACHTERGROND (dekkend, met schaduw en tekst); de
     # opname komt daar als venster bovenop. Het masker rondt de hoeken af.
     # Let op: zowel de PNG als het masker moeten gelooptd worden — één enkel
@@ -294,7 +316,8 @@ FILT="${FILT}${huidig}fade=t=in:st=0:d=0.5,fade=t=out:st=${eind}:d=0.7,format=yu
   -map "[out]" -an "${ENC[@]}" "$WERK/master-stil.mp4"
 TOTAAL=$(duur_van "$WERK/master-stil.mp4")
 
-MASTER="$UIT/promo-16x9.mp4"
+# Naam volgt de opmaak: bij staand is 9:16 de master, niet 16:9.
+if [ "$LAYOUT" = "verticaal" ]; then MASTER="$UIT/promo-9x16.mp4"; else MASTER="$UIT/promo-16x9.mp4"; fi
 
 # ── Voice-over (optioneel) ──────────────────────────────────────────────────
 # PROMO_STEM=/pad/naar/voice-over.mp3 bash promo/montage.sh
@@ -378,9 +401,13 @@ variant() { # naam breedte hoogte
     -vf "scale=$2:-2,pad=$2:$3:0:($3-ih)/2:color=${INK}" \
     -c:v libx264 -preset medium -crf 20 -pix_fmt yuv420p "${AUDIO[@]}" "$UIT/promo-$1.mp4"
 }
-variant "1x1"  1080 1080
-variant "4x5"  1080 1350
-variant "9x16" 1080 1920
+if [ "$LAYOUT" = "verticaal" ]; then
+  echo "› staand formaat is de master — geen afgeleide varianten"
+else
+  variant "1x1"  1080 1080
+  variant "4x5"  1080 1350
+  variant "9x16" 1080 1920
+fi
 
 echo
 echo "Totale duur: $(rond "$TOTAAL")s"

@@ -1133,12 +1133,21 @@ export async function POST(req: NextRequest) {
     // alleen als de filter daadwerkelijk actief WAS, en FTS-only (geen embedding).
     let nietVastgesteld: { documenten: number; chunks: number; titels: string[] } | null =
       null;
+    // CORRECTIE 30-07-2026 (tweede ronde): de trigger is nul FONDStreffers, niet nul
+    // treffers totaal. Bij een fondsvraag levert retrieval vaak wél generieke
+    // treffers (Pensioenwet, DNB-guidance) terwijl er geen enkel fondsstuk doorheen
+    // komt. Met `bronnen.length === 0` sloeg de telling dan niet aan en bleef het
+    // antwoord "de bronnen die ik ken zijn zonder uitzondering generieke kaders" —
+    // precies het geval waarvoor deze melding bedoeld is.
+    const fondsTreffers = chunks.filter(
+      (c) => c.documenten.bibliotheek !== "generiek"
+    ).length;
     if (
       !scopeActief &&
       !agendapuntModusActief &&
       !transformatieActief &&
       !neemNietVastgesteldeMee &&
-      bronnen.length === 0 &&
+      fondsTreffers === 0 &&
       retrievalFilters?.modus === "actueel"
     ) {
       const telling = await telNietActueleFondstreffers(vraag, fondsId, vandaag);

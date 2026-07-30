@@ -27,12 +27,17 @@ import { fileURLToPath } from "node:url";
 
 const HIER = path.dirname(fileURLToPath(import.meta.url));
 const TEKSTEN = JSON.parse(fs.readFileSync(path.join(HIER, "promo-teksten.json"), "utf8"));
-const UIT = path.join(HIER, process.env.PROMO_LAYOUT === "kader" ? "overlays-kader" : "overlays");
+const _L = process.env.PROMO_LAYOUT ?? "vol";
+const UIT = path.join(HIER,
+  _L === "kader" ? "overlays-kader" : _L === "verticaal" ? "overlays-9x16" : "overlays");
 
 const B = TEKSTEN.merk;
 const CTA = TEKSTEN.cta ?? {};
-const W = 1920;
-const H = 1080;
+
+/** Staand formaat werkt op een eigen canvas met een eigen opname (1080×1200). */
+const VERT = _L === "verticaal";
+const W = VERT ? 1080 : 1920;
+const H = VERT ? 1920 : 1080;
 
 /** Veilige marge: onder deze afstand tot de rand komt geen dragende tekst. */
 const MARGE = 140;
@@ -51,8 +56,19 @@ const MARGE = 140;
  * 180px nodig. Dat is de rekensom achter "85–92%": met tekst bóven én ónder
  * het scherm is 83% het maximum dat nog leesbare banden overhoudt.
  */
-const LAYOUT = process.env.PROMO_LAYOUT === "kader" ? "kader" : "vol";
-const VENSTER = { x: 176, y: 100, w: 1568, h: 882, radius: 16 };
+const LAYOUT = ["kader", "verticaal"].includes(_L) ? _L : "vol";
+
+/**
+ * Positie van het "venster" waarin de opname landt.
+ *
+ * Staand: het venster is 1080×1200 en vult de volle breedte. Dat is geen
+ * uitsnede uit de brede opname maar een APARTE opname bij een smal venster —
+ * het portaal herschikt zichzelf dan, dus er wordt niets afgesneden en de
+ * interfacetekst is een derde groter ten opzichte van het kader.
+ */
+const VENSTER = VERT
+  ? { x: 0, y: 440, w: 1080, h: 1200, radius: 0 }
+  : { x: 176, y: 100, w: 1568, h: 882, radius: 16 };
 
 const basis = `
   * { margin:0; padding:0; box-sizing:border-box; }
@@ -78,32 +94,55 @@ function regelGrootte(regel = "") {
 
 function kopGrootte(kop = "") {
   const n = String(kop).length;
+  if (VERT) return n <= 30 ? 66 : n <= 48 ? 58 : 50;
   if (n <= 30) return 96;
   if (n <= 48) return 84;
   return 74;
 }
+
+/** Maatvoering die meeschaalt met het canvas. Staand is smaller, dus alles
+ *  compacter — anders loopt de tekst tegen de veilige marge aan. */
+const M = VERT ? 64 : MARGE;
+const MK = VERT ? 48 : 64;        // merkteken
+const MKF = VERT ? 26 : 34;       // letter in het merkteken
+const NAAM = VERT ? 24 : 30;      // productnaam
+const SUBP = VERT ? 30 : 40;      // subregel op de kaarten
+const CTAP = VERT ? 32 : 46;      // knoptekst
+const URLP = VERT ? 27 : 42;
 
 /** Merkblok linksboven — herhaald op alle dekkende kaarten. */
 function logoHtml() {
   return `<div class="logo"><div class="mark">B</div><div class="naam">${esc(B.product)}</div></div>`;
 }
 
-/** Openingskaart — zet in vier seconden het onderwerp neer. */
+/**
+ * Openingskaart — zet in vijf seconden het onderwerp neer.
+ *
+ * Staand krijgt hij de DONKERE kleurstelling van het eindscherm. Op een
+ * telefoon staan begin en eind kort na elkaar in de feed; een lichte opening
+ * en een donker slot lezen dan als twee losse video's in plaats van één.
+ * Liggend blijft de lichte kaart: daar zit 40 seconden tussen en geeft het
+ * contrast juist ritme.
+ */
 function kaartHtml(scene) {
+  const donker = VERT;
   return `<!doctype html><meta charset="utf-8"><style>${basis}
-    body { background:${B.paper}; display:flex; align-items:center; }
+    body { background:${donker ? B.ink : B.paper}; display:flex; align-items:center; }
     .vlak { position:absolute; inset:0; overflow:hidden; }
-    .blob { position:absolute; right:-260px; top:-220px; width:1100px; height:1100px;
-            border-radius:50%; background:radial-gradient(circle at 30% 30%, ${B.accent}22, ${B.accent}05 60%, transparent 70%); }
-    .streep { position:absolute; left:0; top:0; bottom:0; width:10px; background:${B.accent}; }
-    .inhoud { position:relative; padding:0 ${MARGE}px; max-width:1560px; }
-    .logo { display:flex; align-items:center; gap:18px; margin-bottom:60px; }
-    .mark { width:64px; height:64px; border-radius:18px; background:${B.accent}; color:#fff;
-            font-weight:900; font-size:34px; display:flex; align-items:center; justify-content:center; }
-    .naam { font-size:30px; font-weight:700; color:${B.ink}; letter-spacing:.01em; }
-    h1 { font-size:${kopGrootte(scene.kop)}px; line-height:1.08; color:${B.ink}; font-weight:700; white-space:pre-line; letter-spacing:-.025em; }
-    p  { margin-top:40px; font-size:40px; line-height:1.45; color:${B.muted}; white-space:pre-line; max-width:1300px; }
-    .voet { position:absolute; left:${MARGE}px; bottom:64px; font-size:21px; color:${B.muted}; letter-spacing:.03em; }
+    .blob { position:absolute; ${donker
+              ? `right:-300px; bottom:-360px; width:1200px; height:1200px;`
+              : `right:-260px; top:-220px; width:1100px; height:1100px;`}
+            border-radius:50%; background:radial-gradient(circle at ${donker ? "40% 40%" : "30% 30%"},
+              ${B.accent}${donker ? "55" : "22"}, ${B.accent}${donker ? "18" : "05"} ${donker ? "55%" : "60%"}, transparent ${donker ? "72%" : "70%"}); }
+    .streep { position:absolute; left:0; top:0; bottom:0; width:${donker ? 0 : 10}px; background:${B.accent}; }
+    .inhoud { position:relative; padding:0 ${M}px; max-width:${VERT ? 980 : 1560}px; }
+    .logo { display:flex; align-items:center; gap:${VERT ? 14 : 18}px; margin-bottom:${VERT ? 42 : 60}px; }
+    .mark { width:${MK}px; height:${MK}px; border-radius:${VERT ? 13 : 18}px; background:${B.accent}; color:#fff;
+            font-weight:900; font-size:${MKF}px; display:flex; align-items:center; justify-content:center; }
+    .naam { font-size:${NAAM}px; font-weight:700; color:${donker ? "#fff" : B.ink}; letter-spacing:.01em; }
+    h1 { font-size:${kopGrootte(scene.kop)}px; line-height:1.08; color:${donker ? "#fff" : B.ink}; font-weight:700; white-space:pre-line; letter-spacing:-.025em; }
+    p  { margin-top:${VERT ? 28 : 40}px; font-size:${SUBP}px; line-height:1.45; color:${donker ? "rgba(255,255,255,.78)" : B.muted}; white-space:pre-line; max-width:${VERT ? 950 : 1300}px; }
+    .voet { position:absolute; left:${M}px; bottom:${VERT ? 52 : 64}px; font-size:${VERT ? 22 : 21}px; color:${donker ? "rgba(255,255,255,.45)" : B.muted}; letter-spacing:.03em; }
   </style>
   <div class="vlak"><div class="blob"></div><div class="streep"></div></div>
   <div class="inhoud">
@@ -125,20 +164,20 @@ function slotHtml(scene) {
     .vlak { position:absolute; inset:0; overflow:hidden; }
     .blob { position:absolute; right:-320px; bottom:-380px; width:1300px; height:1300px;
             border-radius:50%; background:radial-gradient(circle at 40% 40%, ${B.accent}55, ${B.accent}18 55%, transparent 72%); }
-    .inhoud { position:relative; padding:0 ${MARGE}px; max-width:1600px; }
-    .logo { display:flex; align-items:center; gap:18px; margin-bottom:56px; }
-    .mark { width:64px; height:64px; border-radius:18px; background:${B.accent}; color:#fff;
-            font-weight:900; font-size:34px; display:flex; align-items:center; justify-content:center; }
-    .naam { font-size:30px; font-weight:700; color:#fff; letter-spacing:.01em; }
-    h1 { font-size:80px; line-height:1.14; color:#fff; font-weight:700; white-space:pre-line; letter-spacing:-.022em; }
+    .inhoud { position:relative; padding:0 ${M}px; max-width:${VERT ? 980 : 1600}px; }
+    .logo { display:flex; align-items:center; gap:${VERT ? 14 : 18}px; margin-bottom:${VERT ? 40 : 56}px; }
+    .mark { width:${MK}px; height:${MK}px; border-radius:${VERT ? 13 : 18}px; background:${B.accent}; color:#fff;
+            font-weight:900; font-size:${MKF}px; display:flex; align-items:center; justify-content:center; }
+    .naam { font-size:${NAAM}px; font-weight:700; color:#fff; letter-spacing:.01em; }
+    h1 { font-size:${VERT ? 56 : 80}px; line-height:1.14; color:#fff; font-weight:700; white-space:pre-line; letter-spacing:-.022em; }
     /* De call-to-action moet het zwaarste element op dit scherm zijn — zwaarder
        dan de belofte erboven. Dit is het enige moment waarop we iets vragen. */
-    .cta { margin-top:64px; display:flex; align-items:center; gap:40px; }
-    .knop { background:${B.accent}; color:#fff; font-size:46px; font-weight:700;
-            padding:32px 64px; border-radius:18px; letter-spacing:-.01em;
+    .cta { margin-top:${VERT ? 44 : 64}px; display:flex; align-items:${VERT ? "flex-start" : "center"}; gap:${VERT ? 22 : 40}px; flex-direction:${VERT ? "column" : "row"}; }
+    .knop { background:${B.accent}; color:#fff; font-size:${CTAP}px; font-weight:700;
+            padding:${VERT ? "22px 40px" : "32px 64px"}; border-radius:${VERT ? 14 : 18}px; letter-spacing:-.01em;
             box-shadow:0 22px 60px rgba(91,79,224,.5); }
-    .url { font-size:42px; font-weight:600; color:#fff; letter-spacing:.005em; }
-    .voet { position:absolute; left:${MARGE}px; bottom:64px; font-size:21px; color:rgba(255,255,255,.55); letter-spacing:.03em; }
+    .url { font-size:${URLP}px; font-weight:600; color:#fff; letter-spacing:.005em; }
+    .voet { position:absolute; left:${M}px; bottom:${VERT ? 52 : 64}px; font-size:${VERT ? 22 : 21}px; color:rgba(255,255,255,.55); letter-spacing:.03em; }
   </style>
   <div class="vlak"><div class="blob"></div></div>
   <div class="inhoud">
@@ -250,6 +289,50 @@ function kaderHtml(scene) {
   </div>`;
 }
 
+/**
+ * Staande opmaak (1080×1920). Zelfde principe als de kaderopmaak: de PNG is
+ * dekkend en bevat alles behalve de opname. Omdat de opname hier apart is
+ * gemaakt bij 1080×1200, vult hij de volle breedte en is er ruim plek voor een
+ * grote kop erboven — op een telefoon is dat het verschil tussen meelezen en
+ * afhaken.
+ */
+function verticaalHtml(scene) {
+  const V = VENSTER;
+  const n = String(scene.regel ?? "").length;
+  const regelPx = n <= 40 ? 60 : n <= 58 ? 54 : 48;
+  return `<!doctype html><meta charset="utf-8"><style>${basis}
+    body { background:${B.ink}; }
+    .vlak { position:absolute; inset:0; overflow:hidden; }
+    .gloed { position:absolute; left:50%; top:-380px; transform:translateX(-50%);
+             width:1700px; height:1300px; border-radius:50%;
+             background:radial-gradient(ellipse at 50% 45%, ${B.accent}40, ${B.accent}14 50%, transparent 70%); }
+    .logo { position:absolute; left:60px; top:52px; display:flex; align-items:center; gap:14px; }
+    .mark { width:46px; height:46px; border-radius:13px; background:${B.accent}; color:#fff;
+            font-weight:900; font-size:25px; display:flex; align-items:center; justify-content:center; }
+    .naam { font-size:23px; font-weight:700; color:#fff; }
+    .kop { position:absolute; left:60px; right:60px; top:158px; }
+    .eyebrow { display:flex; align-items:center; gap:12px; margin-bottom:14px; }
+    .eyebrow span { font-size:19px; font-weight:800; letter-spacing:.15em; text-transform:uppercase; color:#CFC9FF; }
+    .streepje { width:26px; height:4px; border-radius:2px; background:${B.accent}; }
+    .regel { font-size:${regelPx}px; font-weight:700; color:#fff; letter-spacing:-.02em; line-height:1.12; }
+    .venster { position:absolute; left:${V.x}px; top:${V.y}px; width:${V.w}px; height:${V.h}px;
+               background:${B.paper}; box-shadow:0 -14px 50px rgba(0,0,0,.45); }
+    .sub { position:absolute; left:60px; right:60px; top:${V.y + V.h + 42}px;
+           font-size:33px; line-height:1.35; font-weight:400; color:rgba(255,255,255,.86); }
+    .voet { position:absolute; left:60px; bottom:52px; font-size:22px; font-weight:500;
+            color:rgba(255,255,255,.45); letter-spacing:.03em; }
+  </style>
+  <div class="vlak"><div class="gloed"></div></div>
+  <div class="logo"><div class="mark">B</div><div class="naam">${esc(B.product)}</div></div>
+  <div class="kop">
+    <div class="eyebrow"><div class="streepje"></div><span>${esc(scene.kop)}</span></div>
+    <div class="regel">${esc(scene.regel)}</div>
+  </div>
+  <div class="venster"></div>
+  <div class="sub">${esc(scene.sub ?? "")}</div>
+  <div class="voet">${esc(TEKSTEN.voettekst)}</div>`;
+}
+
 /** Masker voor de afgeronde hoeken van het venster: wit vlak op zwart. */
 function maskerHtml() {
   const V = VENSTER;
@@ -271,7 +354,9 @@ function esc(s = "") {
  */
 function fragmentVelden(scene) {
   const bron =
-    LAYOUT === "kader" && scene.fragmentenKader?.length
+    LAYOUT === "verticaal" && scene.fragmentenVerticaal?.length
+      ? scene.fragmentenVerticaal
+      : LAYOUT === "kader" && scene.fragmentenKader?.length
       ? scene.fragmentenKader
       : scene.fragmenten;
   const frags = bron?.length
@@ -301,10 +386,11 @@ const plan = [];
 let totaal = 0;
 for (const scene of TEKSTEN.scenes) {
   const kaartachtig = scene.type === "kaart" || scene.type === "slot";
-  const dekkend = kaartachtig || LAYOUT === "kader";
+  const dekkend = kaartachtig || LAYOUT === "kader" || LAYOUT === "verticaal";
   const html =
     scene.type === "kaart" ? kaartHtml(scene)
     : scene.type === "slot" ? slotHtml(scene)
+    : LAYOUT === "verticaal" ? verticaalHtml(scene)
     : LAYOUT === "kader" ? kaderHtml(scene)
     : onderregelHtml(scene);
 
