@@ -238,6 +238,42 @@ zonder enig staat- of inventarissignaal ("Is er al iets bekend over …?"). Daar
 schaduwtelling (nu met de juiste trigger) het vangnet: die meldt dat er niet-vastgestelde
 stukken zijn en biedt de verbredingschip.
 
+## Correctie 30-07-2026 (derde ronde, na reproductie in productie)
+
+Nagebootst in de live-omgeving met de vraag die de opdrachtgever stelde
+(*"documenten met beleggingsbeleid ken je?"*). Twee waarnemingen:
+
+**Werkt zoals bedoeld.** De vraag valt eerst in de verduidelijkingstak (geen anker,
+geen generiek signaal). Na "Voor mijn fonds" verscheen de nieuwe melding — *"Geen
+ACTUELE fondsbron gevonden, maar er zijn wel 3 stukken … met de status concept of ter
+bespreking"* — mét de titels en de chip, en dat naast tien generieke bronnen. Daarmee is
+de correctie op de trigger (nul FONDStreffers i.p.v. nul treffers) in productie
+bevestigd.
+
+**Defect in de verbredingschip.** Een klik op "Neem deze niet-vastgestelde stukken mee"
+leverde opnieuw de verduidelijkingsvraag op in plaats van een antwoord.
+`kiesVerbreding` stuurde alleen `neem_niet_vastgestelde_mee` mee, zonder bron-intentie;
+de route classificeerde de vraag daardoor opnieuw, kwam bij een ankerloze vraag weer op
+`fonds/onzeker` uit en viel in de verduidelijkingstak — die vóór alles staat. De vlag
+ging daarbij verloren. Netto: **de chip werkte niet voor precies de vragen waarvoor hij
+bedoeld is**, want die beginnen vaak mét een terugvraag.
+
+Twee reparaties, bewust op beide lagen:
+
+1. **Client** — `kiesVerbreding` geeft de intentie mee die bij het verbrede antwoord
+   gold (`onderbouwing.bronIntent`); `gecombineerd`/onbekend vallen terug op `"fonds"`,
+   omdat de verbreding per definitie over weggefilterde fondsstukken gaat. Herkomst
+   `bron_intent_bron = "chip"`.
+2. **Server** — de verduidelijkingstak wordt overgeslagen wanneer
+   `neem_niet_vastgestelde_mee === true`. Die vlag komt per definitie ná een antwoord
+   waarin de intentie al vaststond, dus doorvragen is daar altijd fout. Backstop, zodat
+   geen enkele clientfout deze lus kan herhalen.
+
+Les voor de werkwijze: `tsc` en de sanity-tests waren groen, en de meetset-gating ook —
+deze lus was alleen zichtbaar door de keten in een echte browser te doorlopen. Een
+klikpad-controle in de acceptatiestap hoort bij elke wijziging die een nieuwe knop of
+chip introduceert.
+
 ## Referenties
 
 - Code: `core/lib/startvragen.ts` (+ `.sanity.ts`), `core/lib/vraagtype.ts`

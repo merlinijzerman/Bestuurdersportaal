@@ -290,18 +290,32 @@ function kaderHtml(scene) {
 }
 
 /**
- * Staande opmaak (1080×1920). Zelfde principe als de kaderopmaak: de PNG is
+ * Staande opmaak (1080×1920), in TWEE lagen.
+ *
+ * Waarom gesplitst: bij een overvloeier van een halve seconde tussen twee
+ * scènes zag je heel even twee koppen door elkaar heen staan — precies wat een
+ * lange crossfade papperig maakt. Nu vloeit alleen de opname over (dat leest
+ * juist prettig) terwijl de tekst zijn eigen timing krijgt: hij is al weg
+ * vóórdat de overgang begint en komt pas ná de overgang terug.
+ *
+ * Bijvangst: achtergrond, logo en voetnoot zitten in de vaste laag en blijven
+ * dus muurvast staan tijdens de overgang in plaats van mee te knipperen.
+ * Zelfde principe als de kaderopmaak: de PNG is
  * dekkend en bevat alles behalve de opname. Omdat de opname hier apart is
  * gemaakt bij 1080×1200, vult hij de volle breedte en is er ruim plek voor een
  * grote kop erboven — op een telefoon is dat het verschil tussen meelezen en
  * afhaken.
  */
-function verticaalHtml(scene) {
+function verticaalHtml(scene, deel = "alles") {
   const V = VENSTER;
+  const toonVast = deel !== "tekst";     // achtergrond, venster, logo, voetnoot
+  const toonTekst = deel !== "achtergrond"; // kop, regel, subregel
   const n = String(scene.regel ?? "").length;
   const regelPx = n <= 40 ? 60 : n <= 58 ? 54 : 48;
   return `<!doctype html><meta charset="utf-8"><style>${basis}
-    body { background:${B.ink}; }
+    /* Alléén de vaste laag krijgt een achtergrondkleur. De tekstlaag moet
+       volledig transparant blijven, anders dekt hij de opname eronder af. */
+    body { background:${toonVast ? B.ink : "transparent"}; }
     .vlak { position:absolute; inset:0; overflow:hidden; }
     .gloed { position:absolute; left:50%; top:-380px; transform:translateX(-50%);
              width:1700px; height:1300px; border-radius:50%;
@@ -322,15 +336,15 @@ function verticaalHtml(scene) {
     .voet { position:absolute; left:60px; bottom:52px; font-size:22px; font-weight:500;
             color:rgba(255,255,255,.45); letter-spacing:.03em; }
   </style>
-  <div class="vlak"><div class="gloed"></div></div>
+  ${toonVast ? `<div class="vlak"><div class="gloed"></div></div>
   <div class="logo"><div class="mark">B</div><div class="naam">${esc(B.product)}</div></div>
-  <div class="kop">
+  <div class="venster"></div>
+  <div class="voet">${esc(TEKSTEN.voettekst)}</div>` : ""}
+  ${toonTekst ? `<div class="kop">
     <div class="eyebrow"><div class="streepje"></div><span>${esc(scene.kop)}</span></div>
     <div class="regel">${esc(scene.regel)}</div>
   </div>
-  <div class="venster"></div>
-  <div class="sub">${esc(scene.sub ?? "")}</div>
-  <div class="voet">${esc(TEKSTEN.voettekst)}</div>`;
+  <div class="sub">${esc(scene.sub ?? "")}</div>` : ""}`;
 }
 
 /** Masker voor de afgeronde hoeken van het venster: wit vlak op zwart. */
@@ -390,13 +404,22 @@ for (const scene of TEKSTEN.scenes) {
   const html =
     scene.type === "kaart" ? kaartHtml(scene)
     : scene.type === "slot" ? slotHtml(scene)
-    : LAYOUT === "verticaal" ? verticaalHtml(scene)
+    : LAYOUT === "verticaal" ? verticaalHtml(scene, "achtergrond")
     : LAYOUT === "kader" ? kaderHtml(scene)
     : onderregelHtml(scene);
 
   await page.setContent(html, { waitUntil: "load" });
   await page.waitForTimeout(120);
   await page.screenshot({ path: path.join(UIT, `${scene.id}.png`), omitBackground: !dekkend });
+
+  // Staand: tekstlaag apart, transparant. Die krijgt in de montage zijn eigen
+  // in- en uitvloeier zodat er tijdens een scèneovergang nooit twee koppen
+  // tegelijk in beeld staan.
+  if (LAYOUT === "verticaal" && !kaartachtig) {
+    await page.setContent(verticaalHtml(scene, "tekst"), { waitUntil: "load" });
+    await page.waitForTimeout(80);
+    await page.screenshot({ path: path.join(UIT, `${scene.id}-tekst.png`), omitBackground: true });
+  }
 
   // Let op: `dekkend` bepaalt alleen of de PNG een achtergrond krijgt. Welke
   // plan-regel eruit rolt hangt af van het scènetype, niet van de opmaak — in

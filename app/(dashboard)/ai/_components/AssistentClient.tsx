@@ -1190,9 +1190,22 @@ export default function AssistentClient({
   // fout (er is geen actuele bron), het is alleen niet het hele beeld. Zo blijft in
   // het gesprek zichtbaar dat er eerst niets actueels was — belangrijk voor de
   // navolgbaarheid van wat de bestuurder heeft gezien.
-  function kiesVerbreding(origineleVraag: string) {
+  function kiesVerbreding(
+    origineleVraag: string,
+    bronIntent: "fonds" | "algemeen" | "gecombineerd" | null
+  ) {
     if (laden) return;
-    stuurBericht(origineleVraag, { neemNietVastgesteldeMee: true });
+    // De intentie van het antwoord dat we verbreden gaat MEE. Zonder dat
+    // classificeerde de route de vraag opnieuw, kwam bij een ankerloze vraag weer
+    // op 'onzeker' uit en vuurde de verduidelijkingstak — waarmee de chip precies
+    // niet werkte voor de vragen die met een terugvraag begonnen (geconstateerd in
+    // productie, 30-07-2026). 'gecombineerd' en 'onbekend' vallen terug op "fonds":
+    // de verbreding gaat per definitie over weggefilterde FONDSstukken.
+    stuurBericht(origineleVraag, {
+      neemNietVastgesteldeMee: true,
+      bronIntentOverride: bronIntent === "algemeen" ? "algemeen" : "fonds",
+      bronIntentBron: "chip",
+    });
   }
 
   // Increment I-1 (FO §11c) — open/sluit het onderbouwingspaneel van één bericht.
@@ -1658,7 +1671,12 @@ export default function AssistentClient({
                   <button
                     type="button"
                     disabled={laden}
-                    onClick={() => kiesVerbreding(b.verbreding!.vraag)}
+                    onClick={() =>
+                      kiesVerbreding(
+                        b.verbreding!.vraag,
+                        b.onderbouwing?.bronIntent ?? null
+                      )
+                    }
                     className="text-xs text-ink border border-app-line-strong px-3 py-1.5 rounded-full hover:border-accent hover:bg-warn-tint transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     {b.verbreding.label}

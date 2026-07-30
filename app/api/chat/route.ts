@@ -606,6 +606,15 @@ export async function POST(req: NextRequest) {
         : bepaalBronIntent(vraag);
     const bronIntent: BronIntent | undefined = bronIntentResultaat?.intent;
 
+    // Expliciete verbreding (chip "Neem niet-vastgestelde stukken mee"). Staat
+    // bewust HIER, vóór de verduidelijkingstak: deze vlag komt per definitie ná een
+    // antwoord waarin de bron-intentie al vaststond, dus doorvragen is daar altijd
+    // fout. Zonder deze vangrail belandde een klik op de chip opnieuw in de
+    // terugvraag — en werd de vlag weggegooid (geconstateerd in productie,
+    // 30-07-2026). De client stuurt óók de bevestigde intentie mee; deze guard is
+    // de server-side backstop zodat geen enkele clientfout die lus kan herhalen.
+    const neemNietVastgesteldeMee = body.neem_niet_vastgestelde_mee === true;
+
     // Verduidelijkingstak: twijfel → één SSE-event met de vraag + chips, géén
     // modelcall. De beslissing om te verduidelijken is puur reproduceerbaar uit
     // de vraag.
@@ -623,6 +632,7 @@ export async function POST(req: NextRequest) {
     // gegenereerd is. `antwoord` is de gestelde verduidelijkingsvraag, `bronnen` leeg.
     if (
       !transformatieActief &&
+      !neemNietVastgesteldeMee &&
       bronIntentResultaat &&
       moetVerduidelijken(bronIntentResultaat, alleenFondsdocumenten)
     ) {
@@ -775,7 +785,6 @@ export async function POST(req: NextRequest) {
     //  (b) Anders bepaalt retrievalModusVoorVraag de modus: een voorstel-/
     //      conceptvraag die op 'actueel' zou uitkomen wordt 'besluitvorming',
     //      omdat een nog niet vastgesteld stuk anders per definitie onvindbaar is.
-    const neemNietVastgesteldeMee = body.neem_niet_vastgestelde_mee === true;
     const retrievalFilters: RetrievalFilters | undefined =
       scopeActief || agendapuntModusActief
       ? undefined

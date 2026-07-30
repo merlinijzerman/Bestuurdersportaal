@@ -57,8 +57,11 @@ if [ "$LAYOUT" = "verticaal" ]; then
   FRW=1080; FRH=1200; VX=0; VY=440
   DOEK_B=1080; DOEK_H=1920
   PUSH="${PROMO_PUSH:-0}"
-  FXF="${PROMO_FRAGMENT_OVERGANG:-0.25}"
-  XF="${PROMO_OVERGANG:-0.30}"
+  # Ruimere overvloeiers dan liggend. Staand wordt op een telefoon bekeken,
+  # vaak zonder geluid en met de duim al klaar om door te scrollen; een zachte
+  # overgang leest daar als rust, een harde snede als haast.
+  FXF="${PROMO_FRAGMENT_OVERGANG:-0.35}"
+  XF="${PROMO_OVERGANG:-0.50}"
 elif [ "$LAYOUT" = "kader" ]; then
   OVERLAYS="$HIER/overlays-kader"
   UIT="$HIER/uit-kader"
@@ -88,7 +91,17 @@ FFMPEG="${FFMPEG:-ffmpeg}"
 FFPROBE="${FFPROBE:-}"
 command -v "$FFMPEG" >/dev/null || { echo "ffmpeg ontbreekt — zie promo/README.md"; exit 1; }
 
-ENC=(-c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p -r 30 -video_track_timescale 30000)
+# ── Kwaliteit ───────────────────────────────────────────────────────────────
+# De keten codeert vier keer achter elkaar: fragment → scène → overgang →
+# eindmontage. Elke generatie kost kwaliteit, dus de TUSSENSTAPPEN staan
+# bewust hoog (crf 14 = praktisch verliesvrij). Alleen de laatste stap mag
+# comprimeren. Kleurtags erbij zodat spelers niet zelf gaan gokken en de
+# kleuren verschuiven.
+KLEUR=(-color_primaries bt709 -color_trc bt709 -colorspace bt709)
+ENC=(-c:v libx264 -preset medium -crf "${PROMO_CRF_TUSSEN:-14}" -pix_fmt yuv420p -r 30
+     -video_track_timescale 30000 "${KLEUR[@]}")
+ENC_EIND=(-c:v libx264 -preset medium -crf "${PROMO_CRF:-15}" -pix_fmt yuv420p -r 30
+          -video_track_timescale 30000 "${KLEUR[@]}" -movflags +faststart)
 
 duur_van() {
   local f="$1" d=""
@@ -254,10 +267,19 @@ format=yuv420p,setsar=1" \
   #  - komma's in de y-expressie moeten ontsnapt (\,), anders leest ffmpeg ze
   #    als scheidingsteken tussen filters.
   if [ "$LAYOUT" = "verticaal" ]; then
+    # Drie lagen: vaste achtergrond (met venster, logo en voetnoot), daarop de
+    # opname, en daar bovenop de tekst met een EIGEN in- en uitvloeier. Die
+    # tekst is al weg vóór de scèneovergang begint en komt pas erna terug —
+    # daardoor staan er tijdens een overvloeier nooit twee koppen tegelijk.
+    tin="${PROMO_TEKST_IN:-0.35}"
+    tuit=$(awk -v d="$duur" -v x="$XF" 'BEGIN{printf "%.3f", d - x - 0.15}')
     "$FFMPEG" -nostdin -y -loglevel error -i "$ruw" \
-      -loop 1 -framerate 30 -t "$duur" -i "$png" -filter_complex "\
+      -loop 1 -framerate 30 -t "$duur" -i "$png" \
+      -loop 1 -framerate 30 -t "$duur" -i "$OVERLAYS/${id}-tekst.png" -filter_complex "\
 [0:v]setpts=PTS/${factor},fps=30[v];\
-[1:v][v]overlay=x=${VX}:y=${VY}:format=auto:shortest=1,format=yuv420p,setsar=1[o]" \
+[1:v][v]overlay=x=${VX}:y=${VY}:format=auto:shortest=1[onder];\
+[2:v]format=rgba,fade=t=in:st=${tin}:d=0.45:alpha=1,fade=t=out:st=${tuit}:d=0.40:alpha=1[tekst];\
+[onder][tekst]overlay=0:0:format=auto:shortest=1,format=yuv420p,setsar=1[o]" \
       -map "[o]" -an -shortest "${ENC[@]}" "$uitbestand"
   elif [ "$LAYOUT" = "kader" ]; then
     # De scène-PNG is hier de ACHTERGROND (dekkend, met schaduw en tekst); de
@@ -313,7 +335,7 @@ eind=$(awk -v a="$acc" 'BEGIN{printf "%.3f", a-0.7}')
 FILT="${FILT}${huidig}fade=t=in:st=0:d=0.5,fade=t=out:st=${eind}:d=0.7,format=yuv420p[out]"
 
 "$FFMPEG" -nostdin -y -loglevel error "${INV[@]}" -filter_complex "$FILT" \
-  -map "[out]" -an "${ENC[@]}" "$WERK/master-stil.mp4"
+  -map "[out]" -an "${ENC_EIND[@]}" "$WERK/master-stil.mp4"
 TOTAAL=$(duur_van "$WERK/master-stil.mp4")
 
 # Naam volgt de opmaak: bij staand is 9:16 de master, niet 16:9.
@@ -360,7 +382,7 @@ afade=t=in:st=0:d=1.5,afade=t=out:st=${fade}:d=2.5,apad,aformat=channel_layouts=
 [stem]asplit=2[stem1][stem2];\
 [muz][stem1]sidechaincompress=threshold=0.03:ratio=12:attack=25:release=450:makeup=1[gedoken];\
 [gedoken][stem2]amix=inputs=2:normalize=0:duration=longest[a]" \
-    -map 0:v -map "[a]" -t "$TOTAAL" -c:v copy -c:a aac -b:a 192k "$MASTER"
+    -map 0:v -map "[a]" -t "$TOTAAL" -c:v copy -c:a aac -b:a 256k -movflags +faststart "$MASTER"
 
 elif [ -n "${PROMO_STEM:-}" ]; then
   # Alleen stem, geen muziek.
@@ -368,7 +390,7 @@ elif [ -n "${PROMO_STEM:-}" ]; then
   "$FFMPEG" -nostdin -y -loglevel error -i "$WERK/master-stil.mp4" -i "$PROMO_STEM" \
     -filter_complex "[1:a]volume=${stemgain}dB,adelay=${stemvertraging}|${stemvertraging},apad,\
 aformat=channel_layouts=stereo[a]" \
-    -map 0:v -map "[a]" -t "$TOTAAL" -c:v copy -c:a aac -b:a 192k "$MASTER"
+    -map 0:v -map "[a]" -t "$TOTAAL" -c:v copy -c:a aac -b:a 256k -movflags +faststart "$MASTER"
 
 elif [ -n "${PROMO_MUZIEK:-}" ] && [ -f "${PROMO_MUZIEK}" ]; then
   fade=$(awk -v t="$TOTAAL" 'BEGIN{printf "%.3f", (t-2.5)}')
@@ -386,7 +408,7 @@ elif [ -n "${PROMO_MUZIEK:-}" ] && [ -f "${PROMO_MUZIEK}" ]; then
     -filter_complex "[1:a]volume=${gain}dB,volume=${PROMO_MUZIEK_VOLUME:-1.0},\
 volume='1+0.30*(t/${TOTAAL})*(t/${TOTAAL})*(t/${TOTAAL})':eval=frame,\
 afade=t=in:st=0:d=1.5,afade=t=out:st=${fade}:d=2.5[a]" \
-    -map 0:v -map "[a]" -shortest -c:v copy -c:a aac -b:a 160k "$MASTER"
+    -map 0:v -map "[a]" -shortest -c:v copy -c:a aac -b:a 256k -movflags +faststart "$MASTER"
 else
   cp "$WERK/master-stil.mp4" "$MASTER"
 fi
@@ -399,7 +421,8 @@ variant() { # naam breedte hoogte
   echo "› variant $1"
   "$FFMPEG" -nostdin -y -loglevel error -i "$MASTER" \
     -vf "scale=$2:-2,pad=$2:$3:0:($3-ih)/2:color=${INK}" \
-    -c:v libx264 -preset medium -crf 20 -pix_fmt yuv420p "${AUDIO[@]}" "$UIT/promo-$1.mp4"
+    -c:v libx264 -preset medium -crf "${PROMO_CRF_VARIANT:-17}" -pix_fmt yuv420p \
+    "${KLEUR[@]}" -movflags +faststart "${AUDIO[@]}" "$UIT/promo-$1.mp4"
 }
 if [ "$LAYOUT" = "verticaal" ]; then
   echo "› staand formaat is de master — geen afgeleide varianten"

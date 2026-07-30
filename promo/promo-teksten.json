@@ -51,7 +51,7 @@
       "fragmentenVerticaal": [
         {
           "van": 0.6,
-          "tot": 5.2,
+          "tot": 5.45,
           "zoom": 1.0,
           "cx": 0.5,
           "cy": 0.5
@@ -115,22 +115,22 @@
       ],
       "fragmentenVerticaal": [
         {
-          "van": 0.6,
-          "tot": 3.4,
+          "van": 0.5,
+          "tot": 3.55,
           "zoom": 1.0,
           "cx": 0.5,
           "cy": 0.5
         },
         {
-          "van": 6.5,
-          "tot": 9.5,
+          "van": 6.4,
+          "tot": 9.65,
           "zoom": 1.0,
           "cx": 0.5,
           "cy": 0.5
         },
         {
-          "van": 21.5,
-          "tot": 24.5,
+          "van": 21.4,
+          "tot": 24.65,
           "zoom": 1.0,
           "cx": 0.5,
           "cy": 0.5
@@ -194,22 +194,22 @@
       ],
       "fragmentenVerticaal": [
         {
-          "van": 0.8,
-          "tot": 3.8,
+          "van": 0.7,
+          "tot": 3.95,
           "zoom": 1.0,
           "cx": 0.5,
           "cy": 0.5
         },
         {
-          "van": 16.5,
-          "tot": 19.5,
+          "van": 16.4,
+          "tot": 19.65,
           "zoom": 1.0,
           "cx": 0.5,
           "cy": 0.5
         },
         {
-          "van": 35.5,
-          "tot": 38.5,
+          "van": 35.4,
+          "tot": 38.65,
           "zoom": 1.0,
           "cx": 0.5,
           "cy": 0.5
@@ -273,22 +273,22 @@
       ],
       "fragmentenVerticaal": [
         {
-          "van": 0.6,
-          "tot": 3.6,
+          "van": 0.5,
+          "tot": 3.75,
           "zoom": 1.0,
           "cx": 0.5,
           "cy": 0.5
         },
         {
           "van": 6.0,
-          "tot": 9.0,
+          "tot": 9.25,
           "zoom": 1.0,
           "cx": 0.5,
           "cy": 0.5
         },
         {
-          "van": 9.2,
-          "tot": 12.4,
+          "van": 9.3,
+          "tot": 12.55,
           "zoom": 1.0,
           "cx": 0.5,
           "cy": 0.5
@@ -305,5 +305,5 @@
     }
   ],
   "_kader": "fragmentenKader wordt alleen gebruikt bij PROMO_LAYOUT=kader. Vaste niveaus: zoom 1.0 = het hele portalscherm past in het venster (niets afgesneden), zoom ~1.45 = één detailniveau. Elke scène gaat overzicht → detail → overzicht terug, zodat de kijker steeds hetzelfde kader herkent.",
-  "_verticaal": "fragmentenVerticaal geldt alleen bij PROMO_LAYOUT=verticaal. Die tijden horen bij de APARTE staande opname in promo/opnames-9x16/ (venster 1080x1200) en wijken af van de brede opname."
+  "_verticaal": "fragmentenVerticaal geldt alleen bij PROMO_LAYOUT=verticaal (aparte opname 1080x1200). De fragmenten zijn bewust IETS langer dan liggend: de overvloeiers staan daar ruimer (0,50s tussen scenes, 0,35s binnen een scene) en dat kost speelduur. Zonder die compensatie zou de eindkaart te vroeg beginnen en valt de slotzin van de voice-over ernaast."
 }
