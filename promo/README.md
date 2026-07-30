@@ -1,10 +1,15 @@
 # promo/ — promovideo van het Bestuurdersportaal
 
-Reproduceerbare pipeline voor een teaser van ~69 seconden (7 scènes): Playwright
+Reproduceerbare pipeline voor een teaser van ~36 seconden (6 scènes): Playwright
 klikt een vast pad door de app en neemt per scène video op, Chromium rendert de
-tekstoverlays in huisstijl, ffmpeg monteert het geheel.
+tekstoverlays in huisstijl, ffmpeg knipt en monteert het geheel.
 
 Wijzigt de UI? Draai de opname opnieuw in plaats van opnieuw te filmen.
+
+**Belangrijk principe:** opnemen is niet monteren. De opnames mogen rustig en
+volledig zijn; `montage.sh` knipt er per scène alleen de betekenisvolle
+fragmenten uit en zoomt in op het relevante schermdeel. Kort opnemen levert
+geen korte video op — het levert te weinig keuze op.
 
 **Alle tekst staat in `promo-teksten.json`. Alle wankele selectors staan in
 `scenes.ts` → `SELECTORS`. Nergens anders hoef je te zijn.**
@@ -23,7 +28,9 @@ Lees vóór de eerste opname `promo-script.md` — met name de preflight-checkli
 | `opname.spec.ts` | Neemt de scènes op (één browsercontext per scène) |
 | `playwright.config.ts` | Losse config, zodat de opname nooit meelift in CI |
 | `maak-overlays.mjs` | Rendert tekstkaarten en onderregels als PNG |
-| `montage.sh` | ffmpeg-montage → 16:9 master + 4:5 LinkedIn-variant |
+| `montage.sh` | ffmpeg-montage: fragmenten knippen, uitsnede, crossfades, 4 formaten |
+| `maak-muziek.sh` | Genereert een rechtenvrije bedtrack (sinustonen, geen licentie nodig) |
+| `toon-frames.sh` | Contactvellen per opname, om fragmenttijden af te lezen en te herijken |
 
 ## Eenmalige installatie
 
@@ -68,7 +75,8 @@ bash promo/montage.sh
 PROMO_MUZIEK=~/Music/bed.mp3 bash promo/montage.sh
 ```
 
-Resultaat: `promo/uit/promo-16x9.mp4` en `promo/uit/promo-4x5.mp4`.
+Resultaat: `promo/uit/promo-16x9.mp4` (master) plus `promo-1x1.mp4`,
+`promo-4x5.mp4` en `promo-9x16.mp4`.
 
 Omgevingsvariabelen: `PROMO_BASE_URL` (default `http://localhost:3000`),
 `PROMO_EMAIL`, `PROMO_WACHTWOORD`, `PROMO_MUZIEK`.
@@ -90,14 +98,34 @@ PWDEBUG=1 npx playwright test --config=promo/playwright.config.ts   # stap voor 
 npx playwright codegen http://localhost:3000                        # selectors opzoeken
 ```
 
-## Timing en de AI-wachttijd
+## Fragmenten, uitsnede en timing
 
-Het AI-antwoord duurt echt een aantal seconden. Die wachttijd wordt niet
-weggeknipt maar **versneld** tot de scène op zijn doelduur uitkomt (`duurDoel`
-in `promo-teksten.json`, maximaal ×3). De kijker ziet dus dat er verwerkt
-wordt, zonder dat de video stilvalt. Wil je een scène langer of korter: pas
-`duurDoel` aan en draai alleen `maak-overlays.mjs` + `montage.sh` opnieuw — de
-opname hoeft niet opnieuw.
+Elke opnamescène in `promo-teksten.json` heeft een `bron` (welke `.webm`), een
+`duurDoel` en een lijst `fragmenten`:
+
+```json
+{ "van": 16.3, "tot": 22.8, "zoom": 1.7, "cx": 0.525, "cy": 0.564 }
+```
+
+- `van`/`tot` — seconden in de originele opname
+- `zoom` — 1.0 is volledig beeld, 1.7 is stevig ingezoomd
+- `cx`/`cy` — middelpunt van de uitsnede als fractie
+
+Vuistregel voor `cy`: zet hem **lager** dan het inhoudelijke midden. Dan landt
+de inhoud in de bovenste beeldhelft en blijft hij vrij van de tekstbalk onderin.
+
+`duurDoel` is een vangnet, geen stuurmiddel: een scène die langer duurt dan zijn
+doel wordt hooguit ×1,6 versneld. Wil je een scène korter, pas dan de fragmenten
+aan — niet de doelduur.
+
+Na een nieuwe opname verschuiven alle fragmenttijden. Herijken:
+
+```bash
+bash promo/toon-frames.sh     # contactvellen in promo/frames/
+```
+
+Wijzig je alleen tekst, timing of uitsnede, dan hoef je **niet** opnieuw op te
+nemen: `node promo/maak-overlays.mjs` + `bash promo/montage.sh` volstaat.
 
 ## Formaat
 
@@ -113,9 +141,12 @@ Voeg toe aan `.gitignore`:
 ```
 promo/opnames/
 promo/overlays/
+promo/frames/
 promo/uit/
 promo/.werk/
+promo/.muziek/
 promo/.auth/
+promo/muziek-bed.mp3
 ```
 
 De opnames kunnen fondsdata bevatten en `promo/.auth/staat.json` bevat een

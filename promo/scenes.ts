@@ -13,6 +13,16 @@
  *
  * Moet er toch iets bij: pas het uitsluitend aan in SELECTORS hieronder.
  * Een falende scène stopt de run niet; die scène ontbreekt in de montage.
+ *
+ * ── Opnemen is niet monteren ────────────────────────────────────────────────
+ * Deze scènes mogen RUSTIG en volledig zijn. De montage knipt er per scène
+ * alleen de betekenisvolle fragmenten uit (van/tot in promo-teksten.json), dus
+ * een langere opname kost geen speelduur — hij geeft juist keuze. Kort en
+ * gehaast opnemen is het probleem, niet de oplossing: dan is er geen bruikbaar
+ * moment om uit te snijden.
+ *
+ * Na een nieuwe opname verschuiven de fragmenttijden. Herijken:
+ *   bash promo/toon-frames.sh
  */
 
 import type { Locator, Page } from "@playwright/test";
@@ -53,10 +63,25 @@ export const SELECTORS = {
   vergadering: {
     /** Vergaderkaart in de lijst; sluit de "nieuwe vergadering"-route uit. */
     kaart: 'a[href^="/vergaderingen/"]:not([href$="/nieuw"])',
-    uitklappen: "Uitklappen",
+    /**
+     * Uitklapknop van een agendapunt (AgendapuntKaart.tsx r. 391-400):
+     * aria-label wisselt tussen "Uitklappen" en "Inklappen", de inhoud is het
+     * teken ▸ / ▾. In eerdere opnames bleef het punt dicht zonder dat de scène
+     * faalde; daarom nu twee ingangen én een harde controle achteraf.
+     */
+    uitklappen: 'button[aria-label="Uitklappen"]',
+    uitklappenNaam: "Uitklappen",
+    uitklappenGlyph: 'button:has-text("▸")',
     leesSamenvatting: "Lees samenvatting",
-    /** Klapt het AI-paneel onder het agendapunt open (AgendapuntChat). */
-    vraagDoor: "Vraag door over dit agendapunt",
+    /**
+     * Klapt het AI-paneel onder het agendapunt open (AgendapuntChat r. 737).
+     * BEWUST een reguliere expressie: die knop bevat naast het label ook een
+     * beschrijvende alinea ("Laat de AI helpen scherper na te denken…"). De
+     * toegankelijke naam is dus die hele lap tekst, en een exacte match op de
+     * labelzin faalt stilzwijgend — precies waarom de verdieping in eerdere
+     * opnames nooit gebeurde.
+     */
+    vraagDoor: /Vraag door over dit agendapunt/,
     /** Startknop die de persoonlijke voorbereiding daadwerkelijk genereert. */
     voorbereiding: 'button:has-text("met de voorbereiding")',
     voorbereidingBezig: 'button:has-text("met de voorbereiding")[disabled]',
@@ -116,6 +141,66 @@ async function klikKnop(
 
 export type SceneActie = (page: Page) => Promise<void>;
 
+/**
+ * Klapt het eerste agendapunt uit en controleert dat het ook echt open staat.
+ *
+ * De vorige versie klikte en ging door. Klapte het punt niet uit, dan liep de
+ * scène gewoon door en leverde een opname op die er compleet uitziet maar de
+ * kern mist — dat kost een montageronde voordat je het doorhebt. Nu faalt de
+ * scène luid: hij komt met ok:false in opname-log.json.
+ */
+async function klapAgendapuntUit(page: Page): Promise<void> {
+  const open = async () =>
+    (await page.getByRole("button", { name: SELECTORS.vergadering.leesSamenvatting }).count()) > 0;
+
+  // 1. rechtstreeks op het aria-label — omzeilt de naamberekening van getByRole
+  await klikEerste(page, SELECTORS.vergadering.uitklappen, 420, 6_000);
+  await pauze(page, 900);
+
+  // 2. terugval via het teken zelf
+  if (!(await open())) {
+    await klikEerste(page, SELECTORS.vergadering.uitklappenGlyph, 420, 3_000);
+    await pauze(page, 900);
+  }
+
+  // 3. terugval via de rol
+  if (!(await open())) {
+    await klikKnop(page, SELECTORS.vergadering.uitklappenNaam, 420, 3_000);
+    await pauze(page, 900);
+  }
+
+  if (!(await open())) {
+    throw new Error(
+      "Agendapunt klapt niet uit: alle drie de ingangen (aria-label, ▸, rol) " +
+        "faalden. Controleer AgendapuntKaart.tsx en of het punt een " +
+        "vergaderstuk MET AI-samenvatting heeft — zonder samenvatting is er " +
+        "geen knop 'Lees samenvatting' en meet deze controle verkeerd."
+    );
+  }
+}
+
+/**
+ * Zet de inklapstand van de navigatie vóór de pagina laadt.
+ *
+ * DashboardShell leest de voorkeur bij mount uit localStorage
+ * ("nav-ingeklapt"; "1" = ingeklapt, marge 56px i.p.v. 256px). Door hem via
+ * addInitScript te zetten begint de scène al in de juiste stand — geen klik op
+ * beeld, geen animatie, geen seconden kwijt.
+ *
+ * Waarom niet overal ingeklapt: op de startpagina is de navigatie juist het
+ * bewijs dát het een samenhangend platform is en geen chatbot. Daar hoort hij
+ * uitgeklapt. Vanaf de tweede scène gaat de aandacht naar de functionaliteit.
+ */
+async function zetMenu(page: Page, ingeklapt: boolean): Promise<void> {
+  await page.addInitScript((waarde) => {
+    try {
+      localStorage.setItem("nav-ingeklapt", waarde as string);
+    } catch {
+      /* localStorage niet beschikbaar — dan gewoon de standaardstand */
+    }
+  }, ingeklapt ? "1" : "0");
+}
+
 export const SCENE_ACTIES: Record<string, SceneActie> = {
   /**
    * Overzicht — alleen de persoonlijke startpagina.
@@ -124,20 +209,12 @@ export const SCENE_ACTIES: Record<string, SceneActie> = {
    * vragen oproepen ("welk fonds heeft €98,4 mld?").
    */
   "02-overzicht": async (page) => {
+    await zetMenu(page, false); // navigatie uitgeklapt: toon het hele platform
     await page.goto("/");
     await page.waitForLoadState("networkidle").catch(() => {});
-    await pauze(page, 1600);
-    await verkenPagina(page, 0.75, 1800);
-    await pauze(page, 1200);
-  },
-
-  /** Bibliotheek: de documentenlijst als kennisbasis. */
-  "03-bibliotheek": async (page) => {
-    await page.goto("/bibliotheek");
-    await page.waitForLoadState("networkidle").catch(() => {});
-    await pauze(page, 1600);
-    await verkenPagina(page, 0.55, 1500);
-    await pauze(page, 1200);
+    await pauze(page, 2000);
+    await verkenPagina(page, 0.55, 1600);
+    await pauze(page, 1400);
   },
 
   /**
@@ -151,9 +228,13 @@ export const SCENE_ACTIES: Record<string, SceneActie> = {
    * bibliotheek in plaats van een knop en faalt deze scène met een melding.
    */
   "04-ai": async (page) => {
+    await zetMenu(page, true);
     await page.goto("/ai");
     await page.waitForLoadState("networkidle").catch(() => {});
-    await pauze(page, 1200);
+
+    // Ruim landen op het startpunt: dit is een eigen beat in de montage
+    // ("waar werkt u nu aan?" met de drie routes), niet alleen een aanloop.
+    await pauze(page, 3000);
 
     if (!(await klikEerste(page, SELECTORS.ai.doorgrondKaart, 450))) {
       throw new Error(
@@ -161,21 +242,23 @@ export const SCENE_ACTIES: Record<string, SceneActie> = {
           "een recent document in de bibliotheek?"
       );
     }
-    await pauze(page, 1600);
+    await pauze(page, 2600);
 
     // Kiezen wat je terugkrijgt. Twee onderdelen: genoeg om de keuze te laten
     // zien, kort genoeg om het antwoord binnen de scène te houden.
     await klikEerste(page, SELECTORS.ai.sectieSamenvatting, 380);
     await pauze(page, 700);
     await klikEerste(page, SELECTORS.ai.sectieVragen, 380);
-    await pauze(page, 900);
+    await pauze(page, 1100);
 
     if (!(await klikEerste(page, SELECTORS.ai.starten, 420))) {
       throw new Error('Knop "Start →" niet gevonden — SELECTORS.ai.starten bijstellen');
     }
 
-    // Vangnet: als er toch een scopevraag verschijnt, kies het fonds.
-    await klikEerste(page, SELECTORS.ai.scopeFonds, 350, 2_500);
+    // Vangnet: als er toch een scopevraag verschijnt, kies het fonds. Deze
+    // route zou hem niet moeten tonen, dus kort wachten — anders staat de
+    // scène telkens 2,5s dood te wachten op iets dat nooit verschijnt.
+    await klikEerste(page, SELECTORS.ai.scopeFonds, 350, 400);
 
     await page
       .waitForSelector(SELECTORS.ai.invoerBezig, { timeout: 10_000 })
@@ -183,14 +266,14 @@ export const SCENE_ACTIES: Record<string, SceneActie> = {
     await page
       .waitForSelector(SELECTORS.ai.invoerVrij, { timeout: 90_000 })
       .catch(() => {});
-    await pauze(page, 2000);
+    await pauze(page, 1000);
 
     // Antwoord doorlopen en een bron openklikken.
-    await verkenPagina(page, 0.5, 1600);
+    await verkenPagina(page, 0.4, 1000);
     if (await klikKnop(page, SELECTORS.ai.bronPill, 420)) {
-      await pauze(page, 2800);
+      await pauze(page, 1600);
     } else {
-      await pauze(page, 1500);
+      await pauze(page, 900);
     }
   },
 
@@ -203,42 +286,60 @@ export const SCENE_ACTIES: Record<string, SceneActie> = {
    *      genereren — dát is de AI-functionaliteit in context
    */
   "05-vergadering": async (page) => {
+    await zetMenu(page, true);
     await page.goto("/vergaderingen");
     await page.waitForLoadState("networkidle").catch(() => {});
-    await pauze(page, 1300);
+
+    // Drie niveaus, elk lang genoeg om er een eigen fragment uit te knippen:
+    // de vergaderlijst, de vergadering zelf, en het uitgeklapte agendapunt.
+    await pauze(page, 2800);
 
     if (await klikEerste(page, SELECTORS.vergadering.kaart)) {
       await page.waitForLoadState("networkidle").catch(() => {});
-      await pauze(page, 1300);
+      await pauze(page, 2800);
     }
 
-    if (await klikKnop(page, SELECTORS.vergadering.uitklappen, 420)) {
-      await pauze(page, 1500);
-    }
+    // Kern van deze scène: het agendapunt moet open.
+    await klapAgendapuntUit(page);
+    await pauze(page, 2600);
 
     if (await klikKnop(page, SELECTORS.vergadering.leesSamenvatting, 420)) {
-      await pauze(page, 2600);
-      await verkenPagina(page, 0.5, 1600);
+      await pauze(page, 2800);
+      await verkenPagina(page, 0.45, 1400);
     }
 
-    // AI-paneel onder het agendapunt openklappen.
-    if (await klikKnop(page, SELECTORS.vergadering.vraagDoor, 420)) {
-      await pauze(page, 1600);
-
-      // Voorbereiding daadwerkelijk laten opstellen. De knop staat tijdens het
-      // genereren op disabled — dat is het start-/eindsignaal.
-      if (await klikEerste(page, SELECTORS.vergadering.voorbereiding, 420)) {
-        await page
-          .waitForSelector(SELECTORS.vergadering.voorbereidingBezig, { timeout: 8_000 })
-          .catch(() => {});
-        await page
-          .waitForSelector(SELECTORS.vergadering.voorbereidingVrij, { timeout: 90_000 })
-          .catch(() => {});
-        await pauze(page, 2000);
-        await verkenPagina(page, 0.6, 1800);
-      }
+    // AI-paneel onder het agendapunt openklappen. Faalt dit, dan mist de scène
+    // haar kern — dus hard stoppen in plaats van doorlopen.
+    if (!(await klikKnop(page, SELECTORS.vergadering.vraagDoor, 420, 6_000))) {
+      throw new Error(
+        "Knop 'Vraag door over dit agendapunt' niet gevonden. Let op: die knop " +
+          "bevat óók een beschrijvende alinea, dus matchen op de exacte labelzin " +
+          "werkt niet — SELECTORS.vergadering.vraagDoor moet een regex blijven."
+      );
     }
-    await pauze(page, 1400);
+    await pauze(page, 1800);
+
+    // De persoonlijke voorbereiding daadwerkelijk laten opstellen. Dit is het
+    // inhoudelijke hoogtepunt van deze scène: AI-duiding op het agendapunt.
+    if (!(await klikEerste(page, SELECTORS.vergadering.voorbereiding, 420, 6_000))) {
+      throw new Error(
+        "Knop 'Help mij met de voorbereiding' niet gevonden — controleer " +
+          "AgendapuntChat.tsx (de startchip die genereerVoorbereiding aanroept)."
+      );
+    }
+
+    // De knop staat tijdens het genereren op disabled — start-/eindsignaal.
+    await page
+      .waitForSelector(SELECTORS.vergadering.voorbereidingBezig, { timeout: 8_000 })
+      .catch(() => {});
+    await page
+      .waitForSelector(SELECTORS.vergadering.voorbereidingVrij, { timeout: 120_000 })
+      .catch(() => {});
+
+    // Ruim de tijd nemen: dit is het beeld waar de montage uit gaat knippen.
+    await pauze(page, 2500);
+    await verkenPagina(page, 0.55, 1800);
+    await pauze(page, 2500);
   },
 
   /**
@@ -247,9 +348,10 @@ export const SCENE_ACTIES: Record<string, SceneActie> = {
    * /procedures/nieuw, en scrolt door naar het auditspoor.
    */
   "06-proces": async (page) => {
+    await zetMenu(page, true);
     await page.goto("/procedures");
     await page.waitForLoadState("networkidle").catch(() => {});
-    await pauze(page, 1400);
+    await pauze(page, 1000);
 
     if (!(await klikEerste(page, SELECTORS.procedure.kaart))) {
       throw new Error(
@@ -257,10 +359,10 @@ export const SCENE_ACTIES: Record<string, SceneActie> = {
       );
     }
     await page.waitForLoadState("networkidle").catch(() => {});
-    await pauze(page, 2000);
+    await pauze(page, 1500);
 
-    await verkenPagina(page, 0.9, 2200);
-    await scrollNaar(page, 1600, 2000);
-    await pauze(page, 2000);
+    await verkenPagina(page, 0.75, 1800);
+    await scrollNaar(page, 1400, 1600);
+    await pauze(page, 1500);
   },
 };

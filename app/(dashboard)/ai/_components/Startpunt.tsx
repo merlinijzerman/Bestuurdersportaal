@@ -18,6 +18,7 @@ import type {
   DocumentCtx,
 } from "@/core/lib/portaalcontext-afleiding";
 import { heeftEnigeContext } from "@/core/lib/portaalcontext-afleiding";
+import type { Startvraag } from "@/core/lib/startvragen";
 
 function formatDatum(d: string) {
   return new Date(d).toLocaleString("nl-NL", {
@@ -61,12 +62,15 @@ export default function Startpunt({
 }: {
   context: PortaalContext;
   voornaam: string;
-  /** P2 Deel A — vaste, generieke voorbeeldvragen (geen context/koppeling). */
-  voorbeeldvragen: readonly string[];
+  /** P2 Deel A — vaste, generieke voorbeeldvragen (geen context/koppeling).
+   *  Elke vraag draagt een VASTE bron-intentie mee (ingreep 1): de copy is van
+   *  ons, dus de heuristiek hoeft niet te gokken of dit een fonds- of een
+   *  algemene vraag is. Zie core/lib/startvragen.ts. */
+  voorbeeldvragen: readonly Startvraag[];
   /** True zodra de gebruiker op "Een vrije vraag stellen" klikte: dan pas tonen. */
   voorbeeldvragenZichtbaar: boolean;
   onVrijeVraag: () => void;
-  onVoorbeeldvraag: (tekst: string) => void;
+  onVoorbeeldvraag: (startvraag: Startvraag) => void;
   onDocumentVraag: (doc: DocumentCtx) => void;
 }) {
   const { volgendeVergadering, agendapunten, openStappen, recentDocument } =
@@ -227,12 +231,12 @@ export default function Startpunt({
             <div className="flex flex-wrap gap-1.5">
               {voorbeeldvragen.map((v) => (
                 <button
-                  key={v}
+                  key={v.vraag}
                   type="button"
                   onClick={() => onVoorbeeldvraag(v)}
                   className="text-xs text-left border border-line bg-card rounded-full px-3 py-1.5 text-ink hover:border-accent hover:bg-accent/5 transition-colors"
                 >
-                  {v}
+                  {v.vraag}
                 </button>
               ))}
             </div>

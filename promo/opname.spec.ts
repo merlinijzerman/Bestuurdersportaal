@@ -5,7 +5,14 @@
  * Vereist:  `npm run dev` draait op PROMO_BASE_URL (default http://localhost:3000)
  *           en de omgevingsvariabelen PROMO_EMAIL / PROMO_WACHTWOORD.
  *
- * Resultaat: promo/opnames/<scene-id>.webm + promo/opnames/opname-log.json
+ * Resultaat: promo/opnames/<bron-id>.webm + promo/opnames/opname-log.json
+ *
+ * Let op het onderscheid tussen twee id's in promo-teksten.json:
+ *   `id`   — de scène in de MONTAGE (bv. "02-omgeving"); bepaalt de overlay
+ *   `bron` — de OPNAME (bv. "02-overzicht"); bepaalt de sleutel in
+ *            SCENE_ACTIES en de bestandsnaam van de .webm
+ * Ze verschillen omdat de montagevolgorde is herschikt terwijl de klikpaden
+ * hun eigen naam hielden. Ontbreekt `bron`, dan is hij gelijk aan `id`.
  *
  * Ontwerpkeuzes:
  * - Eén browsercontext per scène → hard afgebakende clips, geen knipwerk achteraf.
@@ -78,9 +85,16 @@ test("promo-opname", async () => {
 
   for (const scene of TEKSTEN.scenes) {
     if (scene.type !== "opname") continue;
-    const actie = SCENE_ACTIES[scene.id];
+    const opnameId: string = scene.bron ?? scene.id;
+    const actie = SCENE_ACTIES[opnameId];
     if (!actie) {
-      log.push({ id: scene.id, ok: false, fout: "geen actie gedefinieerd" });
+      log.push({
+        id: opnameId,
+        ok: false,
+        fout:
+          `geen actie gedefinieerd voor "${opnameId}" (scène "${scene.id}"). ` +
+          `Beschikbaar in SCENE_ACTIES: ${Object.keys(SCENE_ACTIES).join(", ")}`,
+      });
       continue;
     }
 
@@ -112,7 +126,7 @@ test("promo-opname", async () => {
     } catch (e) {
       ok = false;
       fout = e instanceof Error ? e.message : String(e);
-      console.warn(`✗ scène ${scene.id}: ${fout}`);
+      console.warn(`✗ scène ${opnameId}: ${fout}`);
     }
 
     const video = page.video();
@@ -120,14 +134,14 @@ test("promo-opname", async () => {
 
     let bestand: string | undefined;
     if (video && ok) {
-      const bron = await video.path();
-      bestand = path.join(OPNAMEDIR, `${scene.id}.webm`);
-      fs.renameSync(bron, bestand);
-      console.log(`✓ scène ${scene.id} → ${path.basename(bestand)}`);
+      const tijdelijk = await video.path();
+      bestand = path.join(OPNAMEDIR, `${opnameId}.webm`);
+      fs.renameSync(tijdelijk, bestand);
+      console.log(`✓ scène ${opnameId} → ${path.basename(bestand)}`);
     } else if (video) {
       await video.delete().catch(() => {});
     }
-    log.push({ id: scene.id, bestand: bestand ? path.basename(bestand) : undefined, ok, fout });
+    log.push({ id: opnameId, bestand: bestand ? path.basename(bestand) : undefined, ok, fout });
   }
 
   await browser.close();
@@ -136,7 +150,7 @@ test("promo-opname", async () => {
   const mislukt = log.filter((r) => !r.ok);
   console.log(`\nKlaar: ${log.length - mislukt.length}/${log.length} scènes opgenomen.`);
   if (mislukt.length) {
-    console.log("Bijstellen in promo/scenes.ts → SELECTORS:");
+    console.log("Bijstellen in promo/scenes.ts:");
     for (const m of mislukt) console.log(`  - ${m.id}: ${m.fout}`);
   }
 });

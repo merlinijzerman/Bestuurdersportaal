@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createServerSupabase } from "@/core/lib/supabase-server";
-import { zoekRelevanteChunksMetMeta, maakContext, haalDocumentChunks, verrijkNotulenChunks, type DocumentChunk, type BronVerwijzing, type RetrievalMeta, type RetrievalFilters } from "@/core/lib/rag";
+import { zoekRelevanteChunksMetMeta, telNietActueleFondstreffers, maakContext, haalDocumentChunks, verrijkNotulenChunks, type DocumentChunk, type BronVerwijzing, type RetrievalMeta, type RetrievalFilters } from "@/core/lib/rag";
 import { heeftReformulatieNodig, reformuleerVraag } from "@/core/lib/query-reformulatie";
 import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
 import { rateLimited } from "@/core/lib/api-errors";
@@ -16,7 +16,7 @@ import {
 import { HAIKU_MODEL } from "@/core/lib/llm-modellen";
 import { weigerAlsModuleUit } from "@/core/lib/module-guard";
 import { valideerScope, type ScopeDocumentRij } from "@/core/lib/document-scope";
-import { bepaalVraagtype, schatTokens, kiesStrategie, maakBatches, bepaalAntwoordmodus, retrievalModusVoor, bepaalInlineMeldingen, AFGEKAPT_MELDING, bronbasisLabel, bepaalBronIntent, moetVerduidelijken, bepaalAutoBronModus, heeftPortaalstandNodig, VERDUIDELIJKINGSVRAAG, VERDUIDELIJKING_OPTIES, ANTWOORDMODUS_LABEL, type Strategie, type Antwoordmodus, type BronModus, type BronIntent, type BronIntentResultaat } from "@/core/lib/vraagtype";
+import { bepaalVraagtype, schatTokens, kiesStrategie, maakBatches, bepaalAntwoordmodus, retrievalModusVoor, retrievalModusVoorVraag, bepaalInlineMeldingen, AFGEKAPT_MELDING, meldingNietVastgesteldeStukken, bronbasisLabel, bepaalBronIntent, moetVerduidelijken, bepaalAutoBronModus, heeftPortaalstandNodig, VERDUIDELIJKINGSVRAAG, VERDUIDELIJKING_OPTIES, ANTWOORDMODUS_LABEL, type Strategie, type Antwoordmodus, type BronModus, type BronIntent, type BronIntentResultaat, type InlineMelding } from "@/core/lib/vraagtype";
 import { getPortaalContext } from "@/core/lib/portaalcontext";
 import { bouwPortaalstandBlok } from "@/core/lib/portaalstand-blok";
 import { bepaalBronsoortprofiel } from "@/core/lib/weeg-bronsoort";
@@ -221,6 +221,12 @@ export async function POST(req: NextRequest) {
       // P2 Deel A — herkomst van een aangeklikte voorbeeldvraag (context|signaal),
       // meegelogd zodat meetbaar is welke generator werkt (criterium 4).
       startvraag_bron?: string;
+      // Ingreep 1/2 — herkomst van de bevestigde bron-intentie (auditspoor).
+      bron_intent_bron?: string;
+      bron_intent_herkomst?: string;
+      // 30-07-2026 — de gebruiker koos expliciet "Neem niet-vastgestelde stukken
+      // mee" na de melding dat de actualiteitsfilter treffers wegnam.
+      neem_niet_vastgestelde_mee?: boolean;
     };
     // Bouw geschiedenis-array. Backwards compat: als alleen `vraag` wordt
     // meegestuurd, behandelen we dat als one-shot conversatie.
@@ -579,6 +585,19 @@ export async function POST(req: NextRequest) {
       body.bron_intent_override === "fonds" || body.bron_intent_override === "algemeen"
         ? body.bron_intent_override
         : undefined;
+    // Ingreep 1/2 (30-07-2026) — herkomst van de override, uitsluitend voor het
+    // auditspoor. Whitelist: nooit vrije tekst uit de body in de log.
+    const INTENT_BRONNEN = ["chip", "startvraag", "herkomst"] as const;
+    const intentBron: (typeof INTENT_BRONNEN)[number] | null =
+      typeof body.bron_intent_bron === "string" &&
+      (INTENT_BRONNEN as readonly string[]).includes(body.bron_intent_bron)
+        ? (body.bron_intent_bron as (typeof INTENT_BRONNEN)[number])
+        : null;
+    const intentHerkomst: string | null =
+      typeof body.bron_intent_herkomst === "string" &&
+      /^[a-z0-9-]{1,40}$/.test(body.bron_intent_herkomst)
+        ? body.bron_intent_herkomst
+        : null;
     const bronIntentResultaat: BronIntentResultaat | null =
       scopeActief || agendapuntModusActief
         ? null
@@ -707,11 +726,22 @@ export async function POST(req: NextRequest) {
     const vandaag = new Date().toISOString().slice(0, 10);
     // Bij een actieve scope én in agendapunt-modus (de gebruiker koos die stukken
     // bewust) laten we de status-/geldigheidsfilter achterwege.
+    // 30-07-2026 — twee aanpassingen op de retrievalmodus:
+    //  (a) Koos de gebruiker "Neem niet-vastgestelde stukken mee" (chip na de
+    //      melding), dan verbreden we naar 'alles': de actualiteitsfilter vervalt
+    //      en concept/ter bespreking/vervallen komen mee. Expliciete keuze, dus
+    //      geen schijnzekerheid — de bronkaarten dragen hun statuslabel.
+    //  (b) Anders bepaalt retrievalModusVoorVraag de modus: een voorstel-/
+    //      conceptvraag die op 'actueel' zou uitkomen wordt 'besluitvorming',
+    //      omdat een nog niet vastgesteld stuk anders per definitie onvindbaar is.
+    const neemNietVastgesteldeMee = body.neem_niet_vastgestelde_mee === true;
     const retrievalFilters: RetrievalFilters | undefined =
       scopeActief || agendapuntModusActief
       ? undefined
       : {
-          modus: retrievalModusVoor(antwoordmodus),
+          modus: neemNietVastgesteldeMee
+            ? "alles"
+            : retrievalModusVoorVraag(antwoordmodus, vraag),
           peildatum: vandaag,
           bronsoortprofiel: bepaalBronsoortprofiel(vraag),
         };
@@ -1052,12 +1082,61 @@ export async function POST(req: NextRequest) {
     // B), dus web_retrieval_actief = false en er komen geen web-bronnen bij.
     const documentSources: AssistantSource[] = bronnen.map(documentBronNaarSource);
     const sourceSamenvattingPre = bouwSourceSamenvatting(documentSources, false);
-    const inlineMeldingenPre = bepaalInlineMeldingen({
-      bronModus: bronModusRetrieval,
-      antwoordmodus,
-      aantalBronnen: bronnen.length,
-      scopeActief,
-    });
+    // ── Schaduwtelling (30-07-2026) ────────────────────────────────────────
+    // Nul treffers onder de actualiteitsfilter betekent NIET automatisch "er is
+    // niets". De harde conceptregel (FO §6 / TO §3.1) haalt alles weg wat niet
+    // 'vastgesteld'/'van_kracht' is, en die rijen zijn hier onzichtbaar. Zonder
+    // deze telling meldt de assistent "geen relevante fondsdocumenten gevonden"
+    // terwijl er een bestuursvoorstel over het onderwerp kan liggen — de
+    // omgekeerde conclusie van de werkelijkheid. Alleen in het nul-treffergeval,
+    // alleen als de filter daadwerkelijk actief WAS, en FTS-only (geen embedding).
+    let nietVastgesteld: { documenten: number; chunks: number; titels: string[] } | null =
+      null;
+    if (
+      !scopeActief &&
+      !agendapuntModusActief &&
+      !transformatieActief &&
+      !neemNietVastgesteldeMee &&
+      bronnen.length === 0 &&
+      retrievalFilters?.modus === "actueel"
+    ) {
+      const telling = await telNietActueleFondstreffers(vraag, fondsId, vandaag);
+      if (telling.documenten > 0) nietVastgesteld = telling;
+    }
+
+    // De verbredings-aanbieding voor de UI: één chip die dezelfde vraag opnieuw
+    // stelt met de actualiteitsfilter uit. Patroon gelijk aan de verduidelijkings-
+    // chip (FO §11a): de gebruiker beslist, het systeem gokt niet.
+    const verbreding = nietVastgesteld
+      ? {
+          type: "niet_vastgesteld" as const,
+          aantal: nietVastgesteld.documenten,
+          titels: nietVastgesteld.titels,
+          label:
+            nietVastgesteld.documenten === 1
+              ? "Neem dit niet-vastgestelde stuk mee"
+              : "Neem deze niet-vastgestelde stukken mee",
+        }
+      : null;
+
+    // Vervang de misleidende "geen fondsdocumenten"-melding door de eerlijke
+    // variant zodra de telling stukken vond. Bewust VERVANGEN, niet aanvullen:
+    // twee meldingen die elkaar tegenspreken is erger dan één.
+    const metNietVastgesteldeMelding = (meldingen: InlineMelding[]): InlineMelding[] => {
+      if (!nietVastgesteld) return meldingen;
+      const vervangen = meldingNietVastgesteldeStukken(nietVastgesteld.documenten);
+      const zonder = meldingen.filter((m) => m.type !== "geen_fondstreffer");
+      return [vervangen, ...zonder];
+    };
+
+    const inlineMeldingenPre = metNietVastgesteldeMelding(
+      bepaalInlineMeldingen({
+        bronModus: bronModusRetrieval,
+        antwoordmodus,
+        aantalBronnen: bronnen.length,
+        scopeActief,
+      })
+    );
 
     // ── Scenario A (besluit 0072) — beslis of live web-retrieval mag draaien ──
     // Deterministische gating (FR-1/FR-4/FR-9): env-vlag aan + ≥1 actieve
@@ -1164,6 +1243,9 @@ export async function POST(req: NextRequest) {
             // onderbouwingspaneel + deterministische inline-meldingen.
             bronbasis,
             inline_meldingen: inlineMeldingenPre,
+            // 30-07-2026 — aanbod om de actualiteitsfilter uit te zetten wanneer die
+            // alle treffers wegnam. null = niet van toepassing.
+            verbreding,
             // Increment I-2 (FO §11a) — automatische bronkeuze: de (verborgen)
             // intentie + gekozen retrieval-modus. Géén zichtbare badge in de
             // chat; uitsluitend voor het paneel "Onderbouwing en bronnen".
@@ -1172,6 +1254,12 @@ export async function POST(req: NextRequest) {
             bron_modus_auto: scopeActief ? null : bronModusRetrieval,
             alleen_fondsdocumenten: alleenFondsdocumenten,
             bron_intent_override: scopeActief ? false : intentOverride !== undefined,
+            // Ingreep 1/2 — wie zette de intentie: de bestuurder (chip), onze eigen
+            // startvraag-copy, of de module-ingang? Plus welke module.
+            bron_intent_bron:
+              scopeActief || intentOverride === undefined ? null : intentBron,
+            bron_intent_herkomst:
+              scopeActief || intentBron !== "herkomst" ? null : intentHerkomst,
             // Contextbesef (besluit 0090) — of de portaalstand is meegewogen; het
             // onderbouwingspaneel toont dit als aparte aanduiding, los van bronnen.
             portaalstand_gebruikt: portaalstandGebruikt,
@@ -1333,13 +1421,15 @@ export async function POST(req: NextRequest) {
           const algemeneKennisMarkers = (
             zichtbaarAntwoord.match(/\[(?:Algemene kennis|Volgens wetgeving)\]/gi) || []
           ).length;
-          const inlineMeldingenFinaal = bepaalInlineMeldingen({
-            bronModus: bronModusRetrieval,
-            antwoordmodus,
-            aantalBronnen: bronnen.length,
-            scopeActief,
-            algemeneKennisMarkers,
-          });
+          const inlineMeldingenFinaal = metNietVastgesteldeMelding(
+            bepaalInlineMeldingen({
+              bronModus: bronModusRetrieval,
+              antwoordmodus,
+              aantalBronnen: bronnen.length,
+              scopeActief,
+              algemeneKennisMarkers,
+            })
+          );
 
           // Afkap-signaal: raakt het antwoord het max_tokens-plafond, dan tonen we
           // dat expliciet i.p.v. het stil af te kappen (relevant sinds de Opus-
@@ -1434,6 +1524,19 @@ export async function POST(req: NextRequest) {
                   },
                 }
               : {}),
+            // 30-07-2026 — hoeveel niet-vastgestelde fondsstukken zijn door de
+            // actualiteitsfilter buiten dit antwoord gebleven, en heeft de gebruiker
+            // ze deze beurt expliciet meegenomen? Zonder dit veld is achteraf niet
+            // te verantwoorden dat er stukken waren die het antwoord niet haalden.
+            ...(nietVastgesteld || neemNietVastgesteldeMee
+              ? {
+                  niet_vastgesteld: {
+                    documenten: nietVastgesteld?.documenten ?? 0,
+                    chunks: nietVastgesteld?.chunks ?? 0,
+                    meegenomen: neemNietVastgesteldeMee,
+                  },
+                }
+              : {}),
             // P2 Deel A — telemetrie: kwam de beurt uit een aangeklikte voorbeeldvraag?
             ...(body.startvraag_bron === "voorbeeldvraag"
               ? { startvraag_bron: body.startvraag_bron }
@@ -1484,6 +1587,17 @@ export async function POST(req: NextRequest) {
                   bron_modus_auto: bronModusRetrieval,
                   alleen_fondsdocumenten: alleenFondsdocumenten,
                   bron_intent_override: intentOverride !== undefined,
+                  // Ingreep 1/2 — herkomst van de override (chip | startvraag |
+                  // herkomst) + de moduleslug bij een module-ingang. Alleen gezet
+                  // als er daadwerkelijk een override was.
+                  ...(intentOverride !== undefined && intentBron
+                    ? {
+                        bron_intent_bron: intentBron,
+                        ...(intentBron === "herkomst" && intentHerkomst
+                          ? { bron_intent_herkomst: intentHerkomst }
+                          : {}),
+                      }
+                    : {}),
                   // Contextbesef (besluit 0090) — herleidbaar of de portaalstand meeging.
                   portaalstand_gebruikt: portaalstandGebruikt,
                 }),
@@ -1507,6 +1621,7 @@ export async function POST(req: NextRequest) {
           send({
             type: "done",
             inline_meldingen: inlineMeldingenFinaal,
+            verbreding,
             // Increment I-3 — de content-afhankelijke model_knowledge-bronnen +
             // bijgewerkte samenvatting voor het paneel "Onderbouwing en bronnen".
             model_kennis: modelKennisSources,

@@ -265,6 +265,76 @@ const ANTWOORDMODUS_PATRONEN: { modus: Antwoordmodus; patronen: RegExp[] }[] = [
   },
 ];
 
+// ============================================================================
+// Voorstel-/conceptvragen — retrievalmodus los van de antwoordmodus (30-07-2026)
+// ----------------------------------------------------------------------------
+// PROBLEEM (geverifieerd). De actualiteitsfilter in de zoek-RPC's laat onder
+// p_modus='actueel' uitsluitend documentstatus 'vastgesteld'/'van_kracht' door —
+// de harde conceptregel (FO §6 / TO §3.1, zie document-status-transities.ts).
+// Een BESTUURSVOORSTEL is per definitie nog niet vastgesteld. Een vraag als
+// "Welke bestuursvoorstellen liggen er voor wijziging van het beleggingsbeleid?"
+// detecteert geen antwoordmodus → 'feitelijk' → retrievalmodus 'actueel' → het
+// voorstel valt VÓÓR de ranking weg. De assistent meldt dan "geen relevante
+// fondsdocumenten gevonden", terwijl het stuk er wél is. Dat is de omgekeerde
+// conclusie van de werkelijkheid en daarmee schadelijker dan een terugvraag.
+//
+// KEUZE. We verschuiven bewust alléén de RETRIEVALMODUS, niet de antwoordmodus.
+// Zou de vraag 'besluitrijpheid' worden, dan verandert ook de promptframing én
+// wordt de Decision Object-besluitregistratie ingespoten (route.ts, gekoppeld aan
+// antwoordmodus === "besluitrijpheid"). Dat is een veel grotere gedragswijziging
+// dan nodig: we willen enkel dat niet-vastgestelde stukken zichtbaar worden. De
+// bronkaarten dragen hun statuslabel (concept/ter bespreking), dus er ontstaat
+// geen schijnzekerheid over de status van wat er ligt.
+//
+// 'besluitvorming' is de retrievalmodus die de actualiteitsfilter laat vallen
+// (de RPC toetst enkel `p_modus is distinct from 'actueel'`) en die semantisch
+// klopt in het auditspoor: de vraag gaat over stukken in besluitvorming.
+// ============================================================================
+
+// Gecureerd; elke toevoeging is een navolgbare keuze. Bewust GEEN kale
+// onderwerpwoorden: het signaal moet over de STAAT van een stuk gaan (voorstel,
+// concept, ter bespreking, "wat ligt er voor"), niet over het onderwerp.
+const VOORSTELVRAAG_PATRONEN: RegExp[] = [
+  // Bewust ZONDER leidende \b: in Nederlandse samenstellingen staat geen
+  // woordgrens vóór het kernwoord (bestuursvoorstel, beleidsvoorstel,
+  // wijzigingsvoorstel). Zelfde overweging als bij de plicht-patronen hieronder.
+  /voorstel(?:len)?\b/,
+  /\bconcept(?:en|stuk|stukken|versie|versies)?\b/,
+  /ter (?:bespreking|besluitvorming|vaststelling)/,
+  /\bligt er\b/,
+  /\bliggen er\b/,
+  /\bwat ligt (?:er )?voor\b/,
+  /nog niet vastgesteld/,
+  /\bin voorbereiding\b/,
+  /agendastuk(?:ken)?\b/,
+];
+
+/**
+ * Vraagt deze vraag naar stukken die (nog) NIET zijn vastgesteld — voorstellen,
+ * concepten, wat er ter besluitvorming voorligt? Pure heuristiek, programmatisch
+ * toetsbaar (lib/vraagtype.sanity.ts).
+ */
+export function isVoorstelvraag(vraag: string): boolean {
+  const g = normaliseer(vraag);
+  return VOORSTELVRAAG_PATRONEN.some((p) => p.test(g));
+}
+
+/**
+ * De retrievalmodus voor DEZE vraag: als basis de modus van de antwoordmodus
+ * (retrievalModusVoor), maar een voorstel-/conceptvraag die anders op 'actueel'
+ * zou uitkomen krijgt 'besluitvorming' — anders is het gevraagde stuk per
+ * definitie onvindbaar. Een expliciet historische of besluitvormingsgerichte
+ * modus blijft ongemoeid (die filteren al niet op actualiteit).
+ */
+export function retrievalModusVoorVraag(
+  modus: Antwoordmodus,
+  vraag: string
+): RetrievalModus {
+  const basis = retrievalModusVoor(modus);
+  if (basis === "actueel" && isVoorstelvraag(vraag)) return "besluitvorming";
+  return basis;
+}
+
 /**
  * Detecteer de antwoordmodus uit de vraag. Default "feitelijk" (alleen bij een
  * herkenbaar signaal wijkt het af). Pure heuristiek; de gebruiker kan de modus
@@ -333,7 +403,11 @@ export type InlineMeldingType =
   | "algemene_kennis_fonds"
   | "interpretatieve_duiding"
   | "onzekerheid_besluit"
-  | "afgekapt";
+  | "afgekapt"
+  // 30-07-2026 — de actualiteitsfilter nam ALLE treffers weg: er zijn wél
+  // fondsstukken over dit onderwerp, maar ze zijn niet vastgesteld. Vervangt
+  // 'geen_fondstreffer', want die melding leidt hier tot de omgekeerde conclusie.
+  | "niet_vastgestelde_stukken";
 
 export interface InlineMelding {
   type: InlineMeldingType;
@@ -357,7 +431,31 @@ const INLINE_MELDING_TEKST: Record<InlineMeldingType, string> = {
     "Dit antwoord weegt besluitvorming en kan aannames en openstaande punten bevatten; zie de onderbouwing.",
   afgekapt:
     "Dit antwoord is afgekapt op de lengtelimiet. Vraag om een vervolg of om het resterende deel.",
+  // Placeholder: de zichtbare tekst is afhankelijk van het AANTAL en wordt
+  // opgebouwd door meldingNietVastgesteldeStukken(). Deze vaste variant wordt
+  // alleen gebruikt als er (onverwacht) geen aantal bekend is.
+  niet_vastgestelde_stukken:
+    "Er zijn wel fondsstukken over dit onderwerp, maar die zijn nog niet vastgesteld en gelden daarom niet als actuele bron.",
 };
+
+/**
+ * Melding bij nul actuele treffers TERWIJL er niet-vastgestelde fondsstukken over
+ * het onderwerp bestaan (30-07-2026). Maakt de blokker expliciet i.p.v. een
+ * misleidende "niets gevonden" (CLAUDE.md: toon vóór een actie wat ontbreekt).
+ * `aantalDocumenten` is het aantal ONDERSCHEIDEN documenten uit de schaduwtelling.
+ */
+export function meldingNietVastgesteldeStukken(
+  aantalDocumenten: number
+): InlineMelding {
+  const stuk = aantalDocumenten === 1 ? "stuk" : "stukken";
+  return {
+    type: "niet_vastgestelde_stukken",
+    tekst:
+      `Geen ACTUELE fondsbron gevonden, maar er ${aantalDocumenten === 1 ? "is" : "zijn"} wel ` +
+      `${aantalDocumenten} ${stuk} over dit onderwerp met de status concept of ter bespreking. ` +
+      "Die gelden niet als actuele bron en zijn daarom buiten dit antwoord gelaten.",
+  };
+}
 
 // Post-stream-melding: wordt door de routes toegevoegd wanneer het antwoord het
 // max_tokens-plafond raakt (stop_reason === "max_tokens"), zodat een afkap nooit

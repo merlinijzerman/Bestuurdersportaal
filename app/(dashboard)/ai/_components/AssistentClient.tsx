@@ -23,7 +23,7 @@ import type {
   PortaalContext,
   DocumentCtx,
 } from "@/core/lib/portaalcontext-afleiding";
-import { GENERIEKE_STARTVRAGEN } from "@/core/lib/startvragen";
+import { GENERIEKE_STARTVRAGEN, type Startvraag } from "@/core/lib/startvragen";
 import { bouwDoorgrondZin, type DoorgrondSectieId } from "@/core/lib/doorgrond";
 
 type Modus = "documenten" | "combineren" | "algemeen";
@@ -80,6 +80,16 @@ interface Bericht {
   inlineMeldingen?: InlineMelding[];
   // Increment I-2 (FO §11a) — verduidelijkingsvraag met chips (geen antwoord).
   verduidelijking?: VerduidelijkingKeuze;
+  // 30-07-2026 — de actualiteitsfilter nam alle treffers weg terwijl er wél
+  // niet-vastgestelde fondsstukken over het onderwerp zijn. Eén chip stelt
+  // dezelfde vraag opnieuw met die filter uit. `vraag` is de oorspronkelijke
+  // vraag, zodat de chip hem letterlijk kan herhalen.
+  verbreding?: {
+    aantal: number;
+    titels: string[];
+    label: string;
+    vraag: string;
+  };
 }
 
 // Actieve documentscope (increment 1). titels op moment van zetten, zodat de
@@ -173,6 +183,16 @@ function dagdeelGroet() {
 // Voortgang tijdens het wachten (besluit 0087): types, reducer en weergave leven
 // in ./Voortgang, gedeeld met de agenda-voorbereiding (AgendapuntChat).
 
+// Ingreep 2 — leesbare labels voor de module-ingang (/ai?herkomst=<slug>). Bewust
+// een vaste tabel: de slug uit de URL wordt nooit als vrije tekst getoond.
+const HERKOMST_LABEL: Record<string, string> = {
+  vergaderingen: "Vergaderingen",
+  risicomatrix: "Risicomatrix",
+  procedures: "Processen",
+  bibliotheek: "Bibliotheek",
+  portaal: "het portaal",
+};
+
 export default function AssistentClient({
   startpuntContext,
 }: {
@@ -246,6 +266,17 @@ export default function AssistentClient({
   // route). Open + het (voorgevulde) document waarop de taak wordt uitgevoerd.
   const [doorgrondOpen, setDoorgrondOpen] = useState(false);
   const [doorgrondDoc, setDoorgrondDoc] = useState<DocumentCtx | null>(null);
+  // Ingreep 2 (30-07-2026) — HERKOMST-INGANG. Wordt de assistent geopend vanuit een
+  // module (/ai?intent=fonds&herkomst=risicomatrix), dan is de scope al bekend: wie
+  // vanuit de risicomatrix een vraag stelt, vraagt naar het eigen fonds. Die kennis
+  // gooien we niet weg om hem daarna met patronen te reconstrueren — we sturen hem
+  // mee als bevestigde bron-intentie, precies zoals een verduidelijkingschip dat
+  // doet. Geldt voor dit gesprek; "Nieuw gesprek" wist hem. Zichtbaar in de header
+  // zodat de bestuurder ziet waaróp geantwoord wordt en het kan wegklikken.
+  const [herkomst, setHerkomst] = useState<{
+    intent: "fonds" | "algemeen";
+    module: string;
+  } | null>(null);
   // P2 Deel A — de voorbeeldvragen verschijnen pas nadat de gebruiker op "Een vrije
   // vraag stellen" klikte (i.p.v. altijd op de lege staat). De vragen zelf zijn een
   // vaste, generieke set (GENERIEKE_STARTVRAGEN) — geen context/query nodig.
@@ -329,9 +360,20 @@ export default function AssistentClient({
   // P2 Deel A — een aangeklikte voorbeeldvraag start meteen (patroon STARTVRAGEN
   // in AgendapuntChat). Het zijn generieke vragen zonder koppeling: gewoon een
   // vrije vraag, met een marker in het auditspoor dat een prefill is gebruikt.
-  function startVoorbeeldvraag(tekst: string) {
+  //
+  // Ingreep 1 (30-07-2026): de startvraag draagt zijn eigen bron-intentie mee, die
+  // we als override meesturen. Zo krijgt een door ONS voorgestelde vraag nooit een
+  // verduidelijkingsvraag terug ("Wilt u dit weten voor uw fonds specifiek, of in
+  // algemene zin?") en wordt een generieke governance-vraag ook niet stil als
+  // fondsvraag geframed. `bronIntentBron` houdt in het auditspoor herleidbaar dat
+  // dit een prefill was en géén keuze van de bestuurder.
+  function startVoorbeeldvraag(startvraag: Startvraag) {
     if (laden) return;
-    stuurBericht(tekst, { startvraagBron: "voorbeeldvraag" });
+    stuurBericht(startvraag.vraag, {
+      startvraagBron: "voorbeeldvraag",
+      bronIntentOverride: startvraag.intent,
+      bronIntentBron: "startvraag",
+    });
   }
 
   // P2 Deel B — open de scherpsteltoestand i.p.v. direct scope + focus. De taak
@@ -633,6 +675,28 @@ export default function AssistentClient({
           console.error("Scope uit ?agendapunt= zetten mislukt:", e);
         }
 
+        // Ingreep 2 — module-ingang: /ai?intent=fonds&herkomst=<module>. Zet de
+        // bevestigde bron-intentie voor dit gesprek. Bewust NA de ?doc=/?agendapunt=-
+        // takken: die zetten een document-scope, en dan negeert de route de
+        // bron-intentie toch (scopeActief ⇒ bronIntentResultaat = null). De
+        // parameter is een gebruikersactie (hij klikte in die module op de knop),
+        // geen heuristiek — daarom mag hij het vertrouwen op "zeker" zetten.
+        try {
+          const params = new URLSearchParams(window.location.search);
+          const intentParam = params.get("intent");
+          if (intentParam === "fonds" || intentParam === "algemeen") {
+            const moduleParam = (params.get("herkomst") || "").slice(0, 40);
+            setHerkomst({
+              intent: intentParam,
+              // Alleen een sobere slug toestaan; de waarde landt in het auditspoor
+              // en (als label) in de UI, dus geen vrije tekst uit de URL.
+              module: /^[a-z0-9-]{1,40}$/.test(moduleParam) ? moduleParam : "portaal",
+            });
+          }
+        } catch (e) {
+          console.error("Bron-intentie uit ?intent= zetten mislukt:", e);
+        }
+
         // Vul het gesprekken-overzicht.
         laadGesprekken();
       }
@@ -658,6 +722,14 @@ export default function AssistentClient({
     scopeOverride?: DocumentScope | null;
     // Increment I-2 (FO §11a) — bevestigde bron-intentie na een verduidelijkingschip.
     bronIntentOverride?: "fonds" | "algemeen";
+    // Waar komt die bevestigde intentie vandaan (ingreep 1/2)? Uitsluitend voor het
+    // auditspoor: "chip" = de bestuurder koos zelf, "startvraag" = prefill uit onze
+    // eigen copy, "herkomst" = de module waaruit de assistent is geopend. Zonder dit
+    // onderscheid staat in de log alleen dat er een override wás, niet van wie.
+    bronIntentBron?: "chip" | "startvraag" | "herkomst";
+    // 30-07-2026 — zet de actualiteitsfilter uit voor deze beurt: neem stukken met
+    // status concept/ter bespreking/vervallen mee. Alleen via de expliciete chip.
+    neemNietVastgesteldeMee?: boolean;
     // Stuurt dezelfde (al getoonde) vraag opnieuw zonder een nieuwe gebruikersbubbel
     // toe te voegen; `basisBerichten` is dan de geschiedenis die op die vraag eindigt.
     geenNieuweVraag?: boolean;
@@ -734,7 +806,14 @@ export default function AssistentClient({
           // Increment I-2 (FO §11a) — geen zichtbare bron-modus meer; alleen de
           // expliciete restrictie + (na een chip) de bevestigde bron-intentie.
           alleen_fondsdocumenten: alleenFondsdocumenten,
-          bron_intent_override: opties?.bronIntentOverride,
+          // Precedentie: een expliciete keuze in DEZE beurt (chip of startvraag)
+          // gaat vóór de herkomst-ingang van het gesprek (ingreep 2).
+          bron_intent_override: opties?.bronIntentOverride ?? herkomst?.intent,
+          // Auditspoor (ingreep 1/2): van wie kwam de bevestigde intentie? Zonder
+          // dit staat er alleen dát er een override was, niet wie hem zette.
+          bron_intent_bron:
+            opties?.bronIntentBron ?? (herkomst ? "herkomst" : undefined),
+          bron_intent_herkomst: herkomst?.module,
           document_scope: effScope
             ? {
                 document_ids: effScope.document_ids,
@@ -766,6 +845,9 @@ export default function AssistentClient({
             : undefined,
           // P2 Deel A — herkomst voorbeeldvraag, meegelogd (criterium 4).
           startvraag_bron: opties?.startvraagBron,
+          // 30-07-2026 — expliciete verbreding na de melding "wel stukken, niet
+          // vastgesteld". Alleen true als de gebruiker de chip aanklikte.
+          neem_niet_vastgestelde_mee: opties?.neemNietVastgesteldeMee === true,
         }),
       });
 
@@ -793,6 +875,8 @@ export default function AssistentClient({
       // conditionele inline-meldingen (FO §11c).
       let onderbouwingData: OnderbouwingMeta | undefined;
       let inlineMeldingenData: InlineMelding[] | undefined;
+      // 30-07-2026 — verbredings-aanbod (niet-vastgestelde stukken meenemen).
+      let verbredingData: Bericht["verbreding"] | undefined;
 
       // Werkt het laatste (AI-)bericht bij, of voegt het toe als het nog niet
       // bestaat. Bronnen worden meegegeven zodra die binnen zijn.
@@ -807,6 +891,7 @@ export default function AssistentClient({
             modus: modusData,
             onderbouwing: onderbouwingData,
             inlineMeldingen: inlineMeldingenData,
+            verbreding: verbredingData,
           };
           return kopie;
         });
@@ -844,6 +929,14 @@ export default function AssistentClient({
           bron_intent_override?: boolean;
           // Contextbesef (besluit 0090) — of de portaalstand is meegewogen.
           portaalstand_gebruikt?: boolean;
+          // 30-07-2026 — de actualiteitsfilter nam alle treffers weg terwijl er wél
+          // niet-vastgestelde fondsstukken zijn: aanbod om ze mee te nemen.
+          verbreding?: {
+            type: "niet_vastgesteld";
+            aantal: number;
+            titels: string[];
+            label: string;
+          } | null;
           // Increment I-3 — uniforme bronvermelding-transparantie.
           web_retrieval_actief?: boolean;
           model_kennis?: { grond: "algemene_kennis" | "wetgeving"; instantie: string | null }[];
@@ -943,6 +1036,12 @@ export default function AssistentClient({
           // Deterministische inline-meldingen (pre-stream); de #4-melding kan in
           // het 'done'-event nog worden aangevuld.
           inlineMeldingenData = evt.inline_meldingen ?? [];
+          // 30-07-2026 — nam de actualiteitsfilter alle treffers weg? Dan biedt de
+          // server één verbredings-chip aan; de vraag bewaren we mee zodat de chip
+          // exact dezelfde vraag opnieuw kan stellen.
+          verbredingData = evt.verbreding
+            ? { ...evt.verbreding, vraag: tekst }
+            : undefined;
         } else if (evt.type === "progress") {
           // Voortgang per bereikte serverfase (besluit 0087) — gedeelde reducer.
           setVoortgang((v) => pasVoortgangToe(v, evt));
@@ -961,6 +1060,7 @@ export default function AssistentClient({
                 modus: modusData,
                 onderbouwing: onderbouwingData,
                 inlineMeldingen: inlineMeldingenData,
+                verbreding: verbredingData,
               },
             ]);
           } else {
@@ -991,6 +1091,13 @@ export default function AssistentClient({
               ...onderbouwingData,
               vervolgvragen: evt.vervolgvragen ?? [],
             };
+          }
+          // 30-07-2026 — definitieve verbredings-aanbieding (kan in 'done' pas
+          // definitief zijn; blijft anders staan zoals in 'meta' gezet).
+          if (evt.verbreding !== undefined) {
+            verbredingData = evt.verbreding
+              ? { ...evt.verbreding, vraag: tekst }
+              : undefined;
           }
           schrijfAi();
         } else if (evt.type === "error") {
@@ -1062,9 +1169,21 @@ export default function AssistentClient({
     const basis = berichten.slice(0, idx); // laat de verduidelijkingsbubbel vallen
     stuurBericht(origineleVraag, {
       bronIntentOverride: intent,
+      bronIntentBron: "chip",
       geenNieuweVraag: true,
       basisBerichten: basis,
     });
+  }
+
+  // 30-07-2026 — de bestuurder koos "Neem niet-vastgestelde stukken mee". We
+  // stellen DEZELFDE vraag opnieuw met de actualiteitsfilter uit. Anders dan bij de
+  // verduidelijkingschip laten we het eerdere antwoord staan: dat antwoord was niet
+  // fout (er is geen actuele bron), het is alleen niet het hele beeld. Zo blijft in
+  // het gesprek zichtbaar dat er eerst niets actueels was — belangrijk voor de
+  // navolgbaarheid van wat de bestuurder heeft gezien.
+  function kiesVerbreding(origineleVraag: string) {
+    if (laden) return;
+    stuurBericht(origineleVraag, { neemNietVastgesteldeMee: true });
   }
 
   // Increment I-1 (FO §11c) — open/sluit het onderbouwingspaneel van één bericht.
@@ -1110,6 +1229,7 @@ export default function AssistentClient({
     setInvoer("");
     setDocumentScope(null);
     setAgendapuntContext(null);
+    setHerkomst(null); // ingreep 2 — de module-ingang gold voor het vorige gesprek
     setVrijeVraagOpen(false);
     sluitMention();
     setHistorieOpen(false);
@@ -1359,6 +1479,38 @@ export default function AssistentClient({
           )}
         </div>
 
+        {/* Ingreep 2 — herkomst-chip. Is de assistent vanuit een module geopend
+            (/ai?intent=fonds&herkomst=…), dan staat de bron-intentie voor dit
+            gesprek vast. Dat maken we zichtbaar én wegklikbaar: de bestuurder mag
+            nooit onwetend zijn over de scope waarop geantwoord wordt (CLAUDE.md,
+            "maak vereisten en blokkers expliciet"), en een verkeerd geraden
+            herkomst moet met één klik terug naar automatisch kunnen. */}
+        {herkomst && (
+          <span
+            className="text-xs text-ink bg-warn-tint border border-line px-2.5 py-1 rounded-md inline-flex items-center gap-1.5"
+            title={
+              herkomst.intent === "fonds"
+                ? `U opende de assistent vanuit ${HERKOMST_LABEL[herkomst.module] ?? "het portaal"}. Vragen worden daarom als fondsvraag behandeld — zonder tussenvraag. Klik op × voor automatische bronkeuze.`
+                : `U opende de assistent vanuit ${HERKOMST_LABEL[herkomst.module] ?? "het portaal"}. Vragen worden als algemene vraag behandeld. Klik op × voor automatische bronkeuze.`
+            }
+          >
+            <span className="font-semibold uppercase tracking-wide text-muted">
+              Vanuit
+            </span>
+            {HERKOMST_LABEL[herkomst.module] ?? "portaal"}
+            <span className="text-muted">·</span>
+            {herkomst.intent === "fonds" ? "uw fonds" : "algemeen"}
+            <button
+              type="button"
+              onClick={() => setHerkomst(null)}
+              aria-label="Herkomst wissen en terug naar automatische bronkeuze"
+              className="text-muted hover:text-ink"
+            >
+              ×
+            </button>
+          </span>
+        )}
+
         {/* Actieve-stand-indicator: de bron-chip draagt de bron-stand al; dit
             governance-signaal (niet op profiel geprioriteerd) niet. */}
         {algemeenPerspectief && (
@@ -1475,6 +1627,33 @@ export default function AssistentClient({
                       {o.label}
                     </button>
                   ))}
+                </div>
+              )}
+
+              {/* 30-07-2026 — verbredingschip: de actualiteitsfilter nam alle
+                  treffers weg terwijl er wél niet-vastgestelde stukken liggen. De
+                  melding staat al bij het antwoord (inline_meldingen); dit is de
+                  handeling die erbij hoort. Titels als hint, geen bronvermelding —
+                  het antwoord is niet op deze stukken gebaseerd. */}
+              {b.rol === "ai" && b.verbreding && (
+                <div className="mt-2">
+                  {b.verbreding.titels.length > 0 && (
+                    <div className="text-xs text-muted mb-1.5">
+                      Niet meegenomen:{" "}
+                      {b.verbreding.titels.map((t) => `«${t}»`).join(", ")}
+                      {b.verbreding.aantal > b.verbreding.titels.length
+                        ? ` en ${b.verbreding.aantal - b.verbreding.titels.length} meer`
+                        : ""}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    disabled={laden}
+                    onClick={() => kiesVerbreding(b.verbreding!.vraag)}
+                    className="text-xs text-ink border border-app-line-strong px-3 py-1.5 rounded-full hover:border-accent hover:bg-warn-tint transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {b.verbreding.label}
+                  </button>
                 </div>
               )}
 

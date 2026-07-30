@@ -1,5 +1,6 @@
 {
-  "_toelichting": "Bron van waarheid voor alle on-screen tekst en scène-timing. Wordt gelezen door scenes.ts (opname) en maak-overlays.mjs (montage). Tekst hier wijzigen = tekst in de video wijzigen; niets dupliceren in code.",
+  "_toelichting": "Bron van waarheid voor scènes, teksten, timing én beeldregie. Gelezen door maak-overlays.mjs (tekst + plan.txt) en montage.sh (fragmenten + uitsnede). Wijzig hier, niet in de code.",
+  "_fragmenten": "Per opnamescène knippen we alleen de betekenisvolle seconden uit de .webm: van/tot in seconden van de ORIGINELE opname. zoom staat overal op 1.0 — het volledige portalscherm in beeld, niets afgesneden (besluit 30-07). Neem je opnieuw op, dan verschuiven deze tijden — herijk met: bash promo/toon-frames.sh",
   "merk": {
     "product": "Bestuurdersportaal",
     "accent": "#5B4FE0",
@@ -8,56 +9,221 @@
     "wit": "#FFFFFF",
     "muted": "#6B7185"
   },
-  "voettekst": "MVP-demo-omgeving · alle gegevens in beeld zijn demodata",
+  "voettekst": "Demonstratieomgeving met fictieve gegevens",
+  "cta": {
+    "knop": "Plan een live demo",
+    "url": "bestuurdersportaal.com"
+  },
   "scenes": [
     {
       "id": "01-opening",
       "type": "kaart",
       "duur": 5,
       "kop": "Waar beheerste AI en\nbesluitvorming elkaar versterken.",
-      "sub": "Eén beveiligde omgeving voor stukken, voorbereiding, besluitvorming en verantwoording."
+      "sub": "Van dossier tot besluit — in één beveiligde omgeving per fonds."
     },
     {
-      "id": "02-overzicht",
+      "id": "02-omgeving",
       "type": "opname",
-      "duurDoel": 6,
-      "kop": "Eén omgeving per fonds",
-      "regel": "Stukken, vergaderingen, processen en risico's bij elkaar — afgeschermd per fonds."
+      "bron": "02-overzicht",
+      "duurDoel": 5,
+      "kop": "Afgeschermd per fonds",
+      "regel": "Eén veilige omgeving voor stukken, vergaderingen en besluiten.",
+      "_let_op": "Volledig beeld. Start op 0,6s: dan staan de Wtp-stuurcijfers (financieringsgraad, vermogen, rendement) én de open procedurestappen in beeld; daarna scrollt de pagina vanzelf door naar de recente activiteit en de governance-banner. Enige scène met de navigatie uitgeklapt.",
+      "fragmenten": [
+        {
+          "van": 0.6,
+          "tot": 5.2,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5
+        }
+      ],
+      "fragmentenKader": [
+        {
+          "van": 1.8,
+          "tot": 6.6,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5
+        }
+      ]
     },
     {
-      "id": "03-bibliotheek",
+      "id": "03-ai",
       "type": "opname",
-      "duurDoel": 6,
-      "kop": "Uw eigen documenten als kennisbasis",
-      "regel": "Uw documenten worden ontsloten en doorzoekbaar gemaakt voor de AI-assistent."
+      "bron": "04-ai",
+      "duurDoel": 9,
+      "kop": "De AI-assistent",
+      "regel": "Een kritische sparringpartner, geen zoekmachine.",
+      "sub": "Werkt met uw eigen documenten — altijd herleidbaar naar de bron.",
+      "_let_op": "Drie beats, de route van voor naar achter: (1) landen op het startpunt van de AI-assistent, (2) 'Een document doorgronden' met het fondsdocument en de gekozen onderdelen, (3) alleen het BEGIN van het antwoord — bronbadge en de eerste alinea. Bewust niet het hele antwoord: dat is een tekstmuur en de kijker leest hem toch niet.",
+      "fragmenten": [
+        {
+          "van": 0.6,
+          "tot": 3.4,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5
+        },
+        {
+          "van": 6.5,
+          "tot": 9.5,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5
+        },
+        {
+          "van": 20.5,
+          "tot": 23.5,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5
+        }
+      ],
+      "fragmentenKader": [
+        {
+          "van": 5.5,
+          "tot": 8.3,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5
+        },
+        {
+          "van": 15.8,
+          "tot": 18.8,
+          "zoom": 1.3,
+          "cx": 0.47,
+          "cy": 0.42
+        },
+        {
+          "van": 25.5,
+          "tot": 28.5,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5
+        }
+      ]
     },
     {
-      "id": "04-ai",
+      "id": "04-vergadering",
       "type": "opname",
-      "duurDoel": 26,
-      "kop": "Sparringpartner, geen zoekmachine",
-      "regel": "De AI-assistent denkt met u mee over uw eigen stukken: aandachtspunten, kritische vragen — altijd met bron."
+      "bron": "05-vergadering",
+      "duurDoel": 9,
+      "kop": "Vergadervoorbereiding",
+      "regel": "Beter voorbereid ieder agendapunt in.",
+      "sub": "Stukken, AI-samenvatting en een persoonlijke voorbereiding per agendapunt.",
+      "_let_op": "Drie beats, de hele route: (1) de vergaderlijst, (2) de vergadering met het uitgeklapte agendapunt en het vergaderstuk, (3) het begin van de persoonlijke voorbereiding. Ook hier bewust afgekapt na een paar zinnen.",
+      "fragmenten": [
+        {
+          "van": 0.8,
+          "tot": 3.8,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5
+        },
+        {
+          "van": 8.5,
+          "tot": 11.5,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5
+        },
+        {
+          "van": 33.0,
+          "tot": 36.0,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5
+        }
+      ],
+      "fragmentenKader": [
+        {
+          "van": 11.8,
+          "tot": 14.8,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5
+        },
+        {
+          "van": 27.0,
+          "tot": 30.0,
+          "zoom": 1.3,
+          "cx": 0.55,
+          "cy": 0.5
+        },
+        {
+          "van": 47.0,
+          "tot": 51.0,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5
+        }
+      ]
     },
     {
-      "id": "05-vergadering",
+      "id": "05-besluit",
       "type": "opname",
-      "duurDoel": 16,
-      "kop": "Voorbereid de vergadering in",
-      "regel": "Stukken per agendapunt, een AI-samenvatting en een privé voorbereiding."
+      "bron": "06-proces",
+      "duurDoel": 9,
+      "kop": "Governance ingebouwd",
+      "regel": "Van voorbereiding tot besluit: iedere stap onderbouwd en vastgelegd.",
+      "sub": "Met een vastgelegd auditspoor.",
+      "_let_op": "Drie beats: (1) de procedurelijst, (2) de fasenlijst met de vereisten voor stap-voltooien, (3) de onderbouwing en de statusovergang. LET OP: beat 2 start pas op 8,0s — tussen ~5 en 7s staat de kop van de detailpagina in beeld met CO-EIGENAARS, en daar staat het e-mailadres van het ingelogde account. Controleer dit na elke nieuwe opname opnieuw.",
+      "fragmenten": [
+        {
+          "van": 0.8,
+          "tot": 3.8,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5
+        },
+        {
+          "van": 8.0,
+          "tot": 11.0,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5
+        },
+        {
+          "van": 11.1,
+          "tot": 13.9,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5
+        }
+      ],
+      "fragmentenKader": [
+        {
+          "van": 0.6,
+          "tot": 3.8,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5
+        },
+        {
+          "van": 6.1,
+          "tot": 8.9,
+          "zoom": 1.3,
+          "cx": 0.44,
+          "cy": 0.45
+        },
+        {
+          "van": 9.4,
+          "tot": 12.5,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5
+        }
+      ]
     },
     {
-      "id": "06-proces",
-      "type": "opname",
-      "duurDoel": 14,
-      "kop": "Governance by design",
-      "regel": "Elk besluit doorloopt een vaste statusgang — met verplichte onderbouwing en een vastgelegd auditspoor."
-    },
-    {
-      "id": "09-slot",
-      "type": "kaart",
-      "duur": 6,
-      "kop": "Bestuurdersportaal",
-      "sub": "Besluitvorming die zichzelf verantwoordt.\n\nDit is een MVP-demo-omgeving met demodata — nog niet productiegeschikt.\nBenieuwd? Neem contact op voor een live demo."
+      "id": "06-slot",
+      "type": "slot",
+      "duur": 7,
+      "kop": "Goed voorbereid.\nZorgvuldig besloten.\nAantoonbaar verantwoord.",
+      "sub": "Ervaar het Bestuurdersportaal."
     }
-  ]
+  ],
+  "_kader": "fragmentenKader wordt alleen gebruikt bij PROMO_LAYOUT=kader. Vaste niveaus: zoom 1.0 = het hele portalscherm past in het venster (niets afgesneden), zoom ~1.45 = één detailniveau. Elke scène gaat overzicht → detail → overzicht terug, zodat de kijker steeds hetzelfde kader herkent."
 }

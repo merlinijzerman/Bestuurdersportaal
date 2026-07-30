@@ -602,6 +602,23 @@ export interface RetrievalMeta {
   // kwam i.p.v. zelf getypt. Telemetrie in het auditspoor; meelift op de bestaande
   // chat-logging, geen nieuwe tabel.
   startvraag_bron?: "voorbeeldvraag";
+  // Ingreep 1/2 (30-07-2026) — HERKOMST van de bevestigde bron-intentie. Het
+  // bestaande `bron_intent_override` is een boolean en zegt alleen DAT de intentie
+  // is voorgezet, niet door wie. Nu er drie bronnen zijn (de bestuurder via een
+  // chip, onze eigen startvraag-copy, of de module waaruit de assistent is geopend)
+  // is dat onderscheid nodig om achteraf te kunnen verantwoorden wie de scope koos.
+  // `bron_intent_herkomst` draagt bij "herkomst" de moduleslug (bv. "risicomatrix").
+  bron_intent_bron?: "chip" | "startvraag" | "herkomst";
+  bron_intent_herkomst?: string;
+  // 30-07-2026 — schaduwtelling: hoeveel NIET-vastgestelde fondsstukken over dit
+  // onderwerp zijn door de actualiteitsfilter buiten het antwoord gebleven, en of
+  // de gebruiker ze daarna expliciet heeft meegenomen. Zonder dit veld is achteraf
+  // niet te zien dat er stukken waren die het antwoord niet hebben gehaald.
+  niet_vastgesteld?: {
+    documenten: number;
+    chunks: number;
+    meegenomen: boolean;
+  };
 }
 
 // Platte rij zoals public.zoek_chunks(...) die teruggeeft (zie migratie
@@ -994,6 +1011,85 @@ async function zoekViaFTS(
     chunks: [],
     meta: { ...bouwMeta("geen", 0, []), filters: fMeta, ...fondsMeta(fondsFilter, 0) },
   };
+}
+
+// ============================================================================
+//  Schaduwtelling: bestaan er NIET-ACTUELE fondsstukken over dit onderwerp?
+//  (30-07-2026)
+// ----------------------------------------------------------------------------
+//  Waarom. Onder p_modus='actueel' filtert de RPC alles weg wat niet
+//  'vastgesteld'/'van_kracht' is (harde conceptregel, FO §6 / TO §3.1). De
+//  gefilterde rijen zijn daarna ONZICHTBAAR voor de aanroeper, dus meldt de
+//  assistent "geen relevante fondsdocumenten gevonden" ook wanneer er wél een
+//  bestuursvoorstel over het onderwerp ligt. Die melding leidt tot de omgekeerde
+//  conclusie van de werkelijkheid. Deze telling maakt het verschil zichtbaar.
+//
+//  Kostenbewust en fail-safe:
+//   • Draait UITSLUITEND in het nul-treffergeval (aanroeper beslist) — precies
+//     het geval waarin we nu een misleidend antwoord geven.
+//   • FTS-ONLY (hybride uit): geen embedding-call, dus één goedkope RPC. FTS is
+//     smaller dan hybride; vindt de telling niets, dan tonen we géén melding.
+//     Een onderschatting leidt dus tot het huidige gedrag, nooit tot een
+//     bewering over stukken die er niet zijn.
+//   • Alleen bronsoort 'fonds': de melding gaat over fondsstukken, niet over de
+//     generieke bibliotheek (die is per definitie 'van_kracht').
+//   • Telt alleen chunks die de actualiteitstoets NIET halen; een treffer die er
+//     wél door zou komen hoort niet in deze melding thuis.
+//  RLS blijft leidend (dezelfde RPC's, SECURITY INVOKER).
+// ============================================================================
+
+/** Statussen die (los van bronstatus) een actuele bron kunnen zijn. Bewust hier
+ *  herhaald i.p.v. geïmporteerd: rag.ts is de retrievallaag en mag niet aan de
+ *  statustransitie-module hangen. Zelfde bron van waarheid als de RPC-clausule
+ *  en ACTUELE_BRON_STATUSSEN in document-status-transities.ts — wijk je hier af,
+ *  dan wijkt de melding af van de filter. */
+const ACTUELE_STATUSSEN_RAG = new Set(["vastgesteld", "van_kracht"]);
+
+/** Zou deze chunk de actualiteitsfilter van de RPC hebben gehaald? */
+function zouActueelZijn(c: DocumentChunk, peildatum: string): boolean {
+  const d = c.documenten;
+  const status = d.documentstatus ?? "";
+  const bronstatus = d.bronstatus ?? "actief";
+  if (!ACTUELE_STATUSSEN_RAG.has(status)) return false;
+  if (bronstatus !== "actief") return false;
+  if (d.geldig_vanaf && d.geldig_vanaf > peildatum) return false;
+  if (d.geldig_tot && d.geldig_tot < peildatum) return false;
+  return true;
+}
+
+export async function telNietActueleFondstreffers(
+  vraag: string,
+  fondsId: string,
+  peildatum?: string
+): Promise<{ documenten: number; chunks: number; titels: string[] }> {
+  const peil = peildatum ?? vandaagISO();
+  try {
+    const { chunks } = await zoekRelevanteChunksMetMeta(
+      vraag,
+      fondsId,
+      12,
+      false, // FTS-only: geen embedding-call
+      undefined,
+      { modus: "alles", bronsoort: ["fonds"], peildatum: peil }
+    );
+    const nietActueel = chunks.filter((c) => !zouActueelZijn(c, peil));
+    const perDocument = new Map<string, string>();
+    for (const c of nietActueel) {
+      if (!perDocument.has(c.document_id))
+        perDocument.set(c.document_id, c.documenten.titel);
+    }
+    return {
+      documenten: perDocument.size,
+      chunks: nietActueel.length,
+      // Maximaal drie titels: genoeg om te herkennen, geen bronvermelding (die
+      // hoort bij een antwoord dat op het stuk is gebaseerd — dit is het niet).
+      titels: [...perDocument.values()].slice(0, 3),
+    };
+  } catch (e) {
+    // Fail-safe: een mislukte telling mag het antwoord nooit blokkeren.
+    console.error("Schaduwtelling niet-actuele fondstreffers mislukt:", e);
+    return { documenten: 0, chunks: 0, titels: [] };
+  }
 }
 
 // Backwards-compatibele wrapper: geeft alleen de chunks terug.

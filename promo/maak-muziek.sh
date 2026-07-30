@@ -11,9 +11,11 @@
 #
 #   1. een akkoordenbed van ZES akkoorden (Am–F–C–G–Em–Dm) die in elkaar
 #      overvloeien — geen herhaling van vier, dus de lus is minder hoorbaar;
-#   2. een zachte arpeggio daarboven: korte, uitdempende tonen in een patroon
-#      van zestien noten, laag in de mix. Die geeft beweging zonder ritme op
-#      te dringen.
+#   2. een heel zachte, trage beweging daarboven: acht tonen binnen een
+#      kwart (geen octaafsprongen), elke ruim 2 seconden één stap, ver terug
+#      in de mix. Bewust traag en smal: een snelle, springerige lijn (de
+#      vorige versie deed 16 noten over een octaaf, elke 0,75s) klinkt al
+#      snel onrustig/"zenuwachtig" in plaats van rustig.
 #
 # Het blijft bewust ingetogen: dit is een bed onder tekstoverlays, geen
 # soundtrack. Voor de versie die naar buiten gaat is een gelicentieerde track
@@ -60,7 +62,7 @@ for akkoord in "${AKKOORDEN[@]}"; do
 [0:a]volume=0.55[a0];[1:a]volume=0.28[a1];[2:a]volume=0.20[a2];\
 [a0][a1][a2]amix=inputs=3:normalize=0,\
 lowpass=f=900,\
-tremolo=f=0.13:d=0.16,\
+tremolo=f=0.13:d=0.09,\
 afade=t=in:st=0:d=3,afade=t=out:st=${uit_st}:d=3[out]" \
     -map "[out]" -ac 2 -ar 44100 "$WERK/akkoord$i.wav"
   i=$((i + 1))
@@ -78,13 +80,13 @@ graph="${graph};[x$((N-1))]atrim=0:${DUUR},asetpts=N/SR/TB[bed]"
 
 # ── Laag 2: arpeggio ────────────────────────────────────────────────────────
 if [ "$ARP" = "1" ]; then
-  echo "› arpeggio"
-  # Zestien noten uit dezelfde toonsoort, oplopend en weer terug — een patroon
-  # dat lang genoeg is om niet als loopje te klinken onder de akkoordwissels.
-  NOTEN=(523.25 659.25 783.99 659.25 587.33 493.88 587.33 440.00 \
-         523.25 659.25 880.00 783.99 659.25 587.33 523.25 493.88)
-  STAP=0.75          # seconden tussen twee noten
-  NOOTLEN=1.6        # klinkt door over de volgende heen
+  echo "› zachte melodische laag"
+  # Acht tonen, smal bereik (kwart: C5–F5), rustig heen-en-weer — geen
+  # oplopend/springend patroon. Traag tempo en lange overlap laten de tonen
+  # in elkaar vloeien tot een zacht "ademen" in plaats van een tikkend loopje.
+  NOTEN=(523.25 587.33 659.25 698.46 659.25 587.33 523.25 493.88)
+  STAP=2.2           # seconden tussen twee noten — traag
+  NOOTLEN=3.6        # ruime overlap, geen "pluk"-ritme meer hoorbaar
 
   ninputs=(); nfilters=""; nmix=""
   j=0
@@ -99,13 +101,13 @@ if [ "$ARP" = "1" ]; then
   patroon=$(awk -v j="$j" -v s="$STAP" 'BEGIN{printf "%.2f", j*s}')
   "$FFMPEG" -nostdin -y -loglevel error "${ninputs[@]}" \
     -filter_complex "${nfilters}${nmix}amix=inputs=${j}:normalize=0,\
-lowpass=f=2200,\
-atrim=0:${patroon},asetpts=N/SR/TB,volume=0.16[arp]" \
+lowpass=f=1600,\
+atrim=0:${patroon},asetpts=N/SR/TB,volume=0.12[arp]" \
     -map "[arp]" -ac 2 -ar 44100 "$WERK/arp.wav"
 
   "$FFMPEG" -nostdin -y -loglevel error \
     -i "$WERK/bed.wav" -stream_loop -1 -i "$WERK/arp.wav" \
-    -filter_complex "[1:a]atrim=0:${DUUR},asetpts=N/SR/TB,volume=0.55[a1];\
+    -filter_complex "[1:a]atrim=0:${DUUR},asetpts=N/SR/TB,volume=0.40[a1];\
 [0:a][a1]amix=inputs=2:normalize=0:duration=first[m]" \
     -map "[m]" -ac 2 -ar 44100 "$WERK/mix.wav"
 else

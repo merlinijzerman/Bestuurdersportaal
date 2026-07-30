@@ -30,6 +30,9 @@ import {
   isPersoonlijkeVraag,
   isStatusgerichteVraag,
   heeftPortaalstandNodig,
+  isVoorstelvraag,
+  retrievalModusVoorVraag,
+  meldingNietVastgesteldeStukken,
 } from "./vraagtype";
 
 let n = 0;
@@ -544,6 +547,75 @@ test("heeftPortaalstandNodig: persoonlijk óf status → true; zuiver algemeen �
   assert.equal(heeftPortaalstandNodig("Wat staat er nog open?"), true);
   assert.equal(heeftPortaalstandNodig("Wat is een dekkingsgraad?"), false); // criterium 6
   assert.equal(heeftPortaalstandNodig("Wat zegt de Wtp over invaren?"), false);
+});
+
+// ── Voorstel-/conceptvragen (30-07-2026) ────────────────────────────────────
+// Achtergrond: onder retrievalmodus 'actueel' filtert de RPC alles weg wat niet
+// 'vastgesteld'/'van_kracht' is (harde conceptregel). Een vraag naar voorstellen
+// zou daardoor per definitie niets vinden. Deze tests borgen dat zulke vragen de
+// filter omzeilen, én dat gewone vragen dat NIET doen (anders komen concepten
+// stil in elk antwoord terecht — precies wat de conceptregel voorkomt).
+test("isVoorstelvraag: voorstel-/conceptsignalen herkend", () => {
+  assert.equal(
+    isVoorstelvraag("Welke bestuursvoorstellen liggen er voor wijzigen beleggingsbeleid?"),
+    true
+  );
+  assert.equal(isVoorstelvraag("Wat ligt er voor ter besluitvorming?"), true);
+  assert.equal(isVoorstelvraag("Zijn er concepten van het transitieplan?"), true);
+  assert.equal(isVoorstelvraag("Welke agendastukken zijn er?"), true);
+  assert.equal(isVoorstelvraag("Wat is nog niet vastgesteld?"), true);
+});
+
+test("isVoorstelvraag: gewone vragen zijn GEEN voorstelvraag", () => {
+  // Geen staat-signaal → de conceptregel blijft gelden.
+  assert.equal(isVoorstelvraag("Wat is de actuele dekkingsgraad van ons fonds?"), false);
+  assert.equal(isVoorstelvraag("Wat houdt de Wtp op hoofdlijnen in?"), false);
+  assert.equal(isVoorstelvraag("Hoe is onze solidariteitsreserve ingericht?"), false);
+  // "conceptueel" mag geen treffer zijn (woordgrens).
+  assert.equal(isVoorstelvraag("Is dit conceptueel houdbaar?"), false);
+});
+
+test("retrievalModusVoorVraag: voorstelvraag verlaat 'actueel', rest ongemoeid", () => {
+  // Feitelijk zou 'actueel' zijn → voorstelvraag wordt 'besluitvorming'.
+  assert.equal(
+    retrievalModusVoorVraag("feitelijk", "Welke bestuursvoorstellen liggen er?"),
+    "besluitvorming"
+  );
+  // Gewone feitelijke vraag blijft 'actueel' (geen gedragswijziging).
+  assert.equal(
+    retrievalModusVoorVraag("feitelijk", "Wat is de actuele dekkingsgraad?"),
+    "actueel"
+  );
+  // Een modus die al niet op actualiteit filtert blijft ongemoeid.
+  assert.equal(
+    retrievalModusVoorVraag("historisch", "Welke voorstellen lagen er destijds?"),
+    "historisch"
+  );
+  assert.equal(
+    retrievalModusVoorVraag("besluitrijpheid", "Is dit voorstel besluitrijp?"),
+    "besluitvorming"
+  );
+  // Gelijk aan de basisfunctie waar geen voorstelsignaal is.
+  for (const m of ["feitelijk", "duiding", "sparring", "bronoverzicht"] as const) {
+    assert.equal(
+      retrievalModusVoorVraag(m, "Wat is de dekkingsgraad?"),
+      retrievalModusVoor(m)
+    );
+  }
+});
+
+test("meldingNietVastgesteldeStukken: aantal en enkelvoud/meervoud kloppen", () => {
+  const een = meldingNietVastgesteldeStukken(1);
+  assert.equal(een.type, "niet_vastgestelde_stukken");
+  assert.ok(een.tekst.includes("1 stuk"), een.tekst);
+  assert.ok(een.tekst.includes("is wel"), een.tekst);
+  const drie = meldingNietVastgesteldeStukken(3);
+  assert.ok(drie.tekst.includes("3 stukken"), drie.tekst);
+  assert.ok(drie.tekst.includes("zijn wel"), drie.tekst);
+  // Nooit suggereren dat er een actuele bron is (schijnzekerheid-guardrail).
+  for (const m of [een, drie]) {
+    assert.ok(/niet als actuele bron/i.test(m.tekst), m.tekst);
+  }
 });
 
 console.log(`\n${n} sanity-tests geslaagd.`);
