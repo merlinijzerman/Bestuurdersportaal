@@ -607,13 +607,54 @@ export async function POST(req: NextRequest) {
     const bronIntent: BronIntent | undefined = bronIntentResultaat?.intent;
 
     // Verduidelijkingstak: twijfel → één SSE-event met de vraag + chips, géén
-    // modelcall en géén governance_log-antwoordregel (er is geen antwoord). De
-    // beslissing om te verduidelijken is puur reproduceerbaar uit de vraag.
+    // modelcall. De beslissing om te verduidelijken is puur reproduceerbaar uit
+    // de vraag.
+    //
+    // WÉL een governance_log-regel (besluit 0092, 30-07-2026 — herziet 0014).
+    // Oorspronkelijk sloeg deze tak de log over met de redenering "er is geen
+    // antwoord". Gevolg in de praktijk: een vraag die in de terugvraag eindigde en
+    // waarbij niet op een chip werd geklikt, stond NERGENS — niet in
+    // `governance_log` (deze tak) en niet in `gesprekken` (de client bewaart alleen
+    // bij gestreamde antwoordtekst). Terwijl het scherm de bestuurder belooft: "Elke
+    // vraag wordt vastgelegd in de Governance Log, inclusief welke bron is gebruikt."
+    // De VRAAG is een gebruikersinteractie met het AI-systeem; dat is wat de
+    // navolgbaarheid (en de AI Act-lijn) vraagt, niet of er een antwoord kwam.
+    // Er draait geen model, dus `model = null` — een modelnaam zou suggereren dat er
+    // gegenereerd is. `antwoord` is de gestelde verduidelijkingsvraag, `bronnen` leeg.
     if (
       !transformatieActief &&
       bronIntentResultaat &&
       moetVerduidelijken(bronIntentResultaat, alleenFondsdocumenten)
     ) {
+      try {
+        await supabase.from("governance_log").insert({
+          gebruiker_id: user.id,
+          gebruiker_naam: profiel?.naam || user.email,
+          fonds_id: fondsId,
+          vraag,
+          antwoord: VERDUIDELIJKINGSVRAAG,
+          bronnen: [],
+          // `modus` kent een CHECK op documenten|combineren|algemeen; we leggen de
+          // modus vast waar de vraag naartoe onderweg was (combineren-vloer, of
+          // documenten bij een expliciete fondsrestrictie) — niet een verzonnen waarde.
+          modus: bepaalAutoBronModus(alleenFondsdocumenten),
+          model: null,
+          retrieval_meta: {
+            // Markeert de regel als een TERUGVRAAG, geen antwoord. Zo is in het log
+            // te onderscheiden en te meten hoe vaak de assistent doorvraagt.
+            verduidelijking: true,
+            geen_modelcall: true,
+            bron_intent: bronIntentResultaat.intent,
+            bron_vertrouwen: bronIntentResultaat.vertrouwen,
+            alleen_fondsdocumenten: alleenFondsdocumenten,
+          },
+        });
+      } catch (e) {
+        // Fail-safe: een mislukte logregel mag de terugvraag niet blokkeren. Wel
+        // zichtbaar in de serverlog, zodat een structureel probleem opvalt.
+        console.error("Governance-log voor verduidelijking mislukt:", e);
+      }
+
       const encoder = new TextEncoder();
       const stream = new ReadableStream<Uint8Array>({
         start(controller) {

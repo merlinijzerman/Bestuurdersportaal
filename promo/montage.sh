@@ -332,20 +332,20 @@ if [ -n "${PROMO_STEM:-}" ] && [ -n "${PROMO_MUZIEK:-}" ] && [ -f "${PROMO_MUZIE
   "$FFMPEG" -nostdin -y -loglevel error -i "$WERK/master-stil.mp4" -i "$PROMO_MUZIEK" -i "$PROMO_STEM" \
     -filter_complex "\
 [1:a]volume=${gain}dB,volume=${PROMO_MUZIEK_VOLUME:-1.0},\
-afade=t=in:st=0:d=1.5,afade=t=out:st=${fade}:d=2.5,aformat=channel_layouts=stereo[muz];\
-[2:a]volume=${stemgain}dB,adelay=${stemvertraging}|${stemvertraging},aformat=channel_layouts=stereo[stem];\
+afade=t=in:st=0:d=1.5,afade=t=out:st=${fade}:d=2.5,apad,aformat=channel_layouts=stereo[muz];\
+[2:a]volume=${stemgain}dB,adelay=${stemvertraging}|${stemvertraging},apad,aformat=channel_layouts=stereo[stem];\
 [stem]asplit=2[stem1][stem2];\
 [muz][stem1]sidechaincompress=threshold=0.03:ratio=12:attack=25:release=450:makeup=1[gedoken];\
-[gedoken][stem2]amix=inputs=2:normalize=0:duration=first[a]" \
-    -map 0:v -map "[a]" -shortest -c:v copy -c:a aac -b:a 192k "$MASTER"
+[gedoken][stem2]amix=inputs=2:normalize=0:duration=longest[a]" \
+    -map 0:v -map "[a]" -t "$TOTAAL" -c:v copy -c:a aac -b:a 192k "$MASTER"
 
 elif [ -n "${PROMO_STEM:-}" ]; then
   # Alleen stem, geen muziek.
   echo "› alleen voice-over, geen muziek"
   "$FFMPEG" -nostdin -y -loglevel error -i "$WERK/master-stil.mp4" -i "$PROMO_STEM" \
-    -filter_complex "[1:a]volume=${stemgain}dB,adelay=${stemvertraging}|${stemvertraging},\
+    -filter_complex "[1:a]volume=${stemgain}dB,adelay=${stemvertraging}|${stemvertraging},apad,\
 aformat=channel_layouts=stereo[a]" \
-    -map 0:v -map "[a]" -shortest -c:v copy -c:a aac -b:a 192k "$MASTER"
+    -map 0:v -map "[a]" -t "$TOTAAL" -c:v copy -c:a aac -b:a 192k "$MASTER"
 
 elif [ -n "${PROMO_MUZIEK:-}" ] && [ -f "${PROMO_MUZIEK}" ]; then
   fade=$(awk -v t="$TOTAAL" 'BEGIN{printf "%.3f", (t-2.5)}')

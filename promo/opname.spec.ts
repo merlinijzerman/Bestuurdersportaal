@@ -33,11 +33,26 @@ const BASE_URL = process.env.PROMO_BASE_URL ?? "http://localhost:3000";
 const EMAIL = process.env.PROMO_EMAIL ?? "";
 const WACHTWOORD = process.env.PROMO_WACHTWOORD ?? "";
 
-/** Opnameformaat. 1440×810 is 16:9; de montage schaalt naar 1920×1080, wat de
- *  UI groter en dus leesbaarder maakt op een telefoon (LinkedIn-feed). */
-const VIEWPORT = { width: 1440, height: 810 };
+/**
+ * Opnameformaat.
+ *
+ * Standaard 1440×810 (16:9); de montage schaalt naar 1920×1080.
+ *
+ * Voor de staande versie neem je apart op bij een SMAL venster:
+ *
+ *   PROMO_VIEWPORT=1080x1200 PROMO_OPNAMEDIR=opnames-9x16 \
+ *     npx playwright test --config=promo/playwright.config.ts
+ *
+ * Dat is beter dan een staande uitsnede uit de brede opname: het portaal is
+ * responsive, dus bij een smal venster herschikt de interface zichzelf en past
+ * hij van nature in een staand kader — zonder dat er iets wordt afgesneden.
+ * Bijkomend: bij 1080 in plaats van 1440 breed wordt de interfacetekst een
+ * derde groter ten opzichte van het beeldkader.
+ */
+const VP = (process.env.PROMO_VIEWPORT ?? "1440x810").split("x").map(Number);
+const VIEWPORT = { width: VP[0] || 1440, height: VP[1] || 810 };
 
-const OPNAMEDIR = path.join(HIER, "opnames");
+const OPNAMEDIR = path.join(HIER, process.env.PROMO_OPNAMEDIR ?? "opnames");
 const AUTHBESTAND = path.join(HIER, ".auth", "staat.json");
 
 test("promo-opname", async () => {
@@ -60,7 +75,7 @@ test("promo-opname", async () => {
   {
     const ctx = await browser.newContext({ baseURL: BASE_URL, viewport: VIEWPORT });
     const page = await ctx.newPage();
-    console.log(`→ opnemen tegen ${BASE_URL}`);
+    console.log(`→ opnemen tegen ${BASE_URL} (${VIEWPORT.width}×${VIEWPORT.height} → ${path.basename(OPNAMEDIR)}/)`);
     const resp = await page.goto("/login");
     if (resp && resp.status() >= 400) {
       throw new Error(

@@ -619,6 +619,12 @@ export interface RetrievalMeta {
     chunks: number;
     meegenomen: boolean;
   };
+  // Besluit 0092 (30-07-2026) — deze logregel is een TERUGVRAAG, geen antwoord: de
+  // assistent vroeg om verduidelijking (fonds of algemeen) en er is géén model
+  // aangeroepen. Maakt de terugvraag herleidbaar én meetbaar (hoe vaak vraagt de
+  // assistent door, en op welke vragen) zonder een tweede logmechanisme.
+  verduidelijking?: boolean;
+  geen_modelcall?: boolean;
 }
 
 // Platte rij zoals public.zoek_chunks(...) die teruggeeft (zie migratie

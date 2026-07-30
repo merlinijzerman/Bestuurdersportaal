@@ -877,6 +877,10 @@ export default function AssistentClient({
       let inlineMeldingenData: InlineMelding[] | undefined;
       // 30-07-2026 — verbredings-aanbod (niet-vastgestelde stukken meenemen).
       let verbredingData: Bericht["verbreding"] | undefined;
+      // Besluit 0092 — de verduidelijkingsbeurt als bewaarbaar bericht. Zonder dit
+      // bleef een vraag die in de terugvraag eindigde nergens staan: `bewaarGesprek`
+      // liep alleen bij gestreamde antwoordtekst, en de server sloeg de logregel over.
+      let verduidelijkingBericht: Bericht | undefined;
 
       // Werkt het laatste (AI-)bericht bij, of voegt het toe als het nog niet
       // bestaat. Bronnen worden meegegeven zodra die binnen zijn.
@@ -982,20 +986,18 @@ export default function AssistentClient({
           verduidelijkingActief = true;
           aiToegevoegd = true;
           setVoortgang(null);
-          setBerichten((prev) => [
-            ...prev,
-            {
-              rol: "ai",
-              tekst:
-                evt.vraag ||
-                "Wilt u dit weten voor uw fonds specifiek, of in algemene zin?",
-              verduidelijking: {
-                vraag: evt.vraag || "",
-                opties: evt.opties ?? [],
-                origineleVraag: tekst,
-              },
+          verduidelijkingBericht = {
+            rol: "ai",
+            tekst:
+              evt.vraag ||
+              "Wilt u dit weten voor uw fonds specifiek, of in algemene zin?",
+            verduidelijking: {
+              vraag: evt.vraag || "",
+              opties: evt.opties ?? [],
+              origineleVraag: tekst,
             },
-          ]);
+          };
+          setBerichten((prev) => [...prev, verduidelijkingBericht!]);
         } else if (evt.type === "meta") {
           bronnenData = evt.bronnen;
           modusData = evt.modus || "combineren";
@@ -1142,6 +1144,13 @@ export default function AssistentClient({
           },
         ];
         await bewaarGesprek(finale, scopeVoorOpslag);
+      } else if (verduidelijkingBericht) {
+        // Besluit 0092 — ook een TERUGVRAAG is een beurt: bewaren zodat de vraag een
+        // refresh overleeft en in de lade "Gesprekken" terugkomt. Klikt de bestuurder
+        // daarna op een chip, dan overschrijft die beurt dezelfde gespreksrij
+        // (`gesprekId` is dan gezet) met de vraag + het echte antwoord — de
+        // verduidelijkingsbubbel verdwijnt dus netjes, geen dubbele beurt.
+        await bewaarGesprek([...conversatie, verduidelijkingBericht], scopeVoorOpslag);
       }
     } catch {
       setBerichten((prev) => [
