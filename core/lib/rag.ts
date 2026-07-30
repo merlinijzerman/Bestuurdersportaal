@@ -1,5 +1,6 @@
 // RAG pipeline: zoek relevante document chunks voor een vraag
 import { createServerSupabase } from "./supabase-server";
+import { bouwTerugvalFtsQuery } from "./fts-terugval";
 import { selecteerChunks } from "./rag-select";
 import { embedTekst, naarVectorLiteral } from "./embeddings";
 import { notulenBronLabel } from "./notulen";
@@ -397,7 +398,16 @@ export interface DocumentChunk {
 // geselecteerd voor de prompt. Wordt insert-only weggeschreven in
 // governance_log.retrieval_meta — geen wijziging aan append-only-garanties.
 export interface RetrievalMeta {
-  methode: "hybride_rrf" | "fts_dutch_ranked" | "fts_plain" | "ilike" | "geen";
+  methode:
+    | "hybride_rrf"
+    | "fts_dutch_ranked"
+    // 30-07-2026 — gerangschikte RPC met een VERSLAPTE OR-query, ingezet nadat de
+    // strikte AND-keten niets opleverde. Zelfde pad en zelfde na-verwerking als
+    // fts_dutch_ranked (inclusief reranker), alleen een bredere query.
+    | "fts_dutch_terugval"
+    | "fts_plain"
+    | "ilike"
+    | "geen";
   opgehaald: number;
   geselecteerd: number;
   chunks: { id: string; document_id: string; rang: number | null }[];
@@ -625,6 +635,14 @@ export interface RetrievalMeta {
   // assistent door, en op welke vragen) zonder een tweede logmechanisme.
   verduidelijking?: boolean;
   geen_modelcall?: boolean;
+  // 30-07-2026 — de verslapte OR-terugval op de Dutch-FTS-arm is ingezet omdat de
+  // strikte AND-keten nul rijen gaf. Legt vast welke termen zijn gebruikt, zodat
+  // achteraf te zien is dat (en waarmee) er breder is gezocht.
+  terugval?: {
+    termen: string[];
+    query: string;
+    versie: string;
+  };
 }
 
 // Platte rij zoals public.zoek_chunks(...) die teruggeeft (zie migratie
@@ -896,6 +914,56 @@ async function zoekViaFTS(
         ...na.extra,
       },
     };
+  }
+
+  // ── Poging 1b: verslapte OR-query op DEZELFDE gerangschikte RPC (30-07-2026) ──
+  // `websearch_to_tsquery('dutch', …)` maakt van een vraagzin een AND-keten. Een
+  // natuurlijke vraag ("documenten met beleggingsbeleid ken je?") eist dan dat één
+  // chunk álle inhoudswoorden bevat, wat zelden lukt. Zonder deze stap viel de
+  // retrieval door naar het ilike-vangnet: géén ranking, géén reranker, treffers
+  // die niet citeerbaar zijn. Op productie-logdata stond bij precies deze vragen
+  // `methode: "ilike"`. Eén extra RPC-aanroep met de inhoudswoorden als OR-keten
+  // houdt de vraag op het gerangschikte pad — inclusief ts_rank_cd, bronsoort-
+  // weging, reranker (R1.3) en relevantie-ondergrens (R1.5).
+  // De strikte query blijft poging 1: precisie waar precisie werkt, recall alleen
+  // waar streng zoeken niets oplevert.
+  const terugval = bouwTerugvalFtsQuery(vraag);
+  if (terugval) {
+    const { data: dataT, error: errorT } = await supabase.rpc("zoek_chunks", {
+      p_query: terugval.query,
+      p_limit: overFetch,
+      p_document_ids: scope,
+      ...rpcFilterParams(filters),
+      p_fonds_id: fondsFilter,
+    });
+
+    if (!errorT && Array.isArray(dataT) && dataT.length > 0) {
+      const gerangschikt = (dataT as ZoekChunkRij[]).map(rijNaarChunk);
+      const bewaakt = handhaafFondsdiscipline(gerangschikt, fondsFilter, peildatum);
+      // Rerank is hier JUIST gewenst: de OR-keten verbreedt de kandidatenset, en de
+      // reranker is precies het instrument dat daar de precisie in terugbrengt.
+      // De rerank draait op de ORIGINELE vraag, niet op de verslapte query — we
+      // willen weten of een chunk de vráág beantwoordt.
+      const na = await naVerwerking(
+        bewaakt.chunks, "fts_dutch_terugval", vraag, filters, maxResults, maxPerDoc,
+        fondsFilter, peildatum, opt, true
+      );
+      return {
+        chunks: na.chunks,
+        meta: {
+          ...bouwMeta("fts_dutch_terugval", bewaakt.chunks.length, na.chunks),
+          filters: fMeta,
+          ...fondsMeta(fondsFilter, bewaakt.gedropt),
+          ...(jargon.length ? { jargon_expansie: jargon } : {}),
+          terugval: {
+            termen: terugval.termen,
+            query: terugval.query,
+            versie: terugval.versie,
+          },
+          ...na.extra,
+        },
+      };
+    }
   }
 
   // Fallback-cascade (ongerangschikt) — vangnet als de RPC niets oplevert.
