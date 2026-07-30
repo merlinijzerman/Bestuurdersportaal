@@ -11,7 +11,7 @@
 //  document (max. 3 chunktreffers) gegroepeerd op procesinstantie (dossier).
 // ============================================================================
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { bronkaartLabels, isVeiligeUrl } from "@/core/lib/bronsoort";
 
 interface Treffer {
@@ -66,10 +66,22 @@ const BRONSOORT_OPTIES: { waarde: Bronsoort; label: string }[] = [
 
 const NIET_GEKOPPELD = "__niet_gekoppeld__";
 
-export default function ZoekenPaneel() {
+export default function ZoekenPaneel({
+  vasteBronsoort,
+}: {
+  /**
+   * Bronsoort die van BUITEN wordt opgelegd (30-07-2026). De bibliotheek kent twee
+   * tabs — Fondsbibliotheek en Generiek — en die tabs bepalen sinds deze wijziging
+   * ook wat je doorzoekt. Is deze prop gezet, dan vervalt de eigen bronsoort-keuze:
+   * twee bedieningselementen die hetzelfde doen leveren alleen verwarring op over
+   * welke van de twee wint. Zonder prop (andere aanroepers) blijft het paneel zich
+   * gedragen zoals voorheen, inclusief de dropdown.
+   */
+  vasteBronsoort?: Bronsoort;
+} = {}) {
   const [q, setQ] = useState("");
   const [modus, setModus] = useState<Modus>("alles");
-  const [bronsoort, setBronsoort] = useState<Bronsoort>("alles");
+  const [bronsoort, setBronsoort] = useState<Bronsoort>(vasteBronsoort ?? "alles");
   const [procesinstantieFilter, setProcesinstantieFilter] = useState<string>("alles");
 
   const [resultaten, setResultaten] = useState<ZoekResultaat[]>([]);
@@ -135,6 +147,18 @@ export default function ZoekenPaneel() {
     },
     []
   );
+
+  // Wisselt de gebruiker van tab, dan verandert `vasteBronsoort` en herhalen we de
+  // lopende zoekopdracht meteen in de andere bibliotheek — zonder dat hij zijn
+  // zoekterm opnieuw hoeft te typen. Staat er nog geen zoekterm, dan zetten we
+  // alleen de scope; er wordt dan niets bevraagd.
+  useEffect(() => {
+    if (vasteBronsoort === undefined || vasteBronsoort === bronsoort) return;
+    setBronsoort(vasteBronsoort);
+    if (gezocht) zoek(q, modus, vasteBronsoort, procesinstantieFilter);
+    // `zoek` is stabiel (useCallback met lege deps); de overige waarden zijn de
+    // huidige filterstand die we ongewijzigd meenemen.
+  }, [vasteBronsoort, bronsoort, gezocht, q, modus, procesinstantieFilter, zoek]);
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -221,20 +245,22 @@ export default function ZoekenPaneel() {
             </div>
           </div>
 
-          <div>
-            <div className="text-xs font-semibold text-muted mb-1">Bronsoort</div>
-            <select
-              value={bronsoort}
-              onChange={(e) => wijzigBronsoort(e.target.value as Bronsoort)}
-              className="border border-line rounded-lg px-3 py-1.5 text-sm outline-none focus:border-accent bg-white"
-            >
-              {BRONSOORT_OPTIES.map((o) => (
-                <option key={o.waarde} value={o.waarde}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          {vasteBronsoort === undefined && (
+            <div>
+              <div className="text-xs font-semibold text-muted mb-1">Bronsoort</div>
+              <select
+                value={bronsoort}
+                onChange={(e) => wijzigBronsoort(e.target.value as Bronsoort)}
+                className="border border-line rounded-lg px-3 py-1.5 text-sm outline-none focus:border-accent bg-white"
+              >
+                {BRONSOORT_OPTIES.map((o) => (
+                  <option key={o.waarde} value={o.waarde}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {procesinstanties.length > 0 && (
             <div>

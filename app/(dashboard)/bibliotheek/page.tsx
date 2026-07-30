@@ -60,7 +60,16 @@ export default function BibliotheekPage() {
   const [actieveTab, setActieveTab] = useState<"generiek" | "fonds">("fonds");
   const [documenten, setDocumenten] = useState<Document[]>([]);
   const [laden, setLaden] = useState(true);
-  const [zoekterm, setZoekterm] = useState("");
+  // Zoekterm PER TAB (30-07-2026). Eén gedeelde term leverde een verwarrende lege
+  // lijst op: je zoekt iets in de Fondsbibliotheek, wisselt naar Generiek en ziet
+  // nul resultaten omdat de term van de andere bibliotheek nog in het veld staat.
+  const [zoektermen, setZoektermen] = useState<Record<"generiek" | "fonds", string>>({
+    fonds: "",
+    generiek: "",
+  });
+  const zoekterm = zoektermen[actieveTab];
+  const setZoekterm = (waarde: string) =>
+    setZoektermen((s) => ({ ...s, [actieveTab]: waarde }));
   const [toonInactief, setToonInactief] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [deactiveerDoc, setDeactiveerDoc] = useState<Document | null>(null);
@@ -249,7 +258,9 @@ export default function BibliotheekPage() {
           <h1 className="font-serif text-xl font-black text-ink">Documentbibliotheek</h1>
           <p className="text-sm text-muted mt-1">
             {weergave === "zoeken"
-              ? "Uitgebreid zoeken in de inhoud van de documenten"
+              ? `Uitgebreid zoeken in de inhoud van ${
+                  actieveTab === "fonds" ? "de fondsdocumenten" : "het generieke kader"
+                }`
               : "Upload en beheer documenten — de kennisbasis voor de AI-assistent"}
           </p>
         </div>
@@ -263,6 +274,26 @@ export default function BibliotheekPage() {
         )}
       </div>
 
+      {/* Tabs — sinds 30-07-2026 sturen ze BEIDE weergaven: in "beheren" bepalen ze
+          welke lijst je ziet, in "zoeken" waarin je zoekt. Daarom staan ze nu buiten
+          de weergave-splitsing. Eén plek waar je kiest met welke bibliotheek je
+          bezig bent, in plaats van een tab hier en een bronsoort-dropdown daar. */}
+      <div className="flex gap-1 bg-app-bg p-1 rounded-xl mb-5 w-fit">
+        {(["fonds", "generiek"] as const).map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActieveTab(tab)}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+              actieveTab === tab
+                ? "bg-white text-ink shadow-sm"
+                : "text-muted hover:text-ink"
+            }`}
+          >
+            {tab === "generiek" ? "🏛️ Generiek (DNB / AFM / PF)" : "🏢 Fondsbibliotheek"}
+          </button>
+        ))}
+      </div>
+
       {/* Uitgebreid zoeken — semantisch zoeken in de documentinhoud. */}
       {weergave === "zoeken" ? (
         <>
@@ -273,7 +304,17 @@ export default function BibliotheekPage() {
           >
             ← Terug naar documenten
           </button>
-          <ZoekenPaneel />
+          <p className="mb-3 text-sm text-muted">
+            U doorzoekt de inhoud van{" "}
+            <span className="font-semibold text-ink">
+              {actieveTab === "fonds"
+                ? "de fondsdocumenten van dit fonds"
+                : "het generieke kader (DNB / AFM / Pensioenfederatie)"}
+            </span>
+            . Wissel hierboven van tab om in de andere bibliotheek te zoeken — uw
+            zoekterm blijft staan.
+          </p>
+          <ZoekenPaneel vasteBronsoort={actieveTab} />
         </>
       ) : (
       <>
@@ -300,22 +341,6 @@ export default function BibliotheekPage() {
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="flex gap-1 bg-app-bg p-1 rounded-xl mb-5 w-fit">
-        {(["fonds", "generiek"] as const).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActieveTab(tab)}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-              actieveTab === tab
-                ? "bg-white text-ink shadow-sm"
-                : "text-muted hover:text-ink"
-            }`}
-          >
-            {tab === "generiek" ? "🏛️ Generiek (DNB / AFM / PF)" : "🏢 Fondsbibliotheek"}
-          </button>
-        ))}
-      </div>
 
       {/* Zoekbalk + toggle */}
       <div className="flex items-center gap-3 mb-4 flex-wrap">

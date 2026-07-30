@@ -57,10 +57,18 @@ if [ "$LAYOUT" = "verticaal" ]; then
   FRW=1080; FRH=1200; VX=0; VY=440
   DOEK_B=1080; DOEK_H=1920
   PUSH="${PROMO_PUSH:-0}"
-  # Ruimere overvloeiers dan liggend. Staand wordt op een telefoon bekeken,
-  # vaak zonder geluid en met de duim al klaar om door te scrollen; een zachte
-  # overgang leest daar als rust, een harde snede als haast.
-  FXF="${PROMO_FRAGMENT_OVERGANG:-0.35}"
+  # Twee soorten overgang, bewust verschillend:
+  #
+  #  TUSSEN SCÈNES een ruime overvloeier (0,50s). Dat is een hoofdstukwissel;
+  #  de tekst is dan al uitgevloeid, dus alleen het beeld lost op.
+  #
+  #  BINNEN EEN SCÈNE vrijwel een harde snede (0,10s). Twee momenten uit
+  #  hetzelfde portaal zijn allebei dichte interfacetekst; die in elkaar laten
+  #  overvloeien geeft geen zachte overgang maar een veeg — tekst over tekst,
+  #  en het oog leest dat als een haperende scroll. Een snede is hier juist
+  #  rustiger, en is bovendien de normale montagegrammatica voor beats binnen
+  #  één scène.
+  FXF="${PROMO_FRAGMENT_OVERGANG:-0.10}"
   XF="${PROMO_OVERGANG:-0.50}"
 elif [ "$LAYOUT" = "kader" ]; then
   OVERLAYS="$HIER/overlays-kader"
