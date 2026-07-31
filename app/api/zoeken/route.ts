@@ -19,6 +19,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
+import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
+import { rateLimited } from "@/core/lib/api-errors";
 import {
   zoekRelevanteChunksMetMeta,
   type DocumentChunk,
@@ -67,6 +69,14 @@ export async function GET(req: NextRequest) {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+
+    // M-06 (review 2026-07-30): deze route doet per aanroep externe
+    // modelcalls en had geen enkele limiet — onbeperkt herhaalbaar door een
+    // geauthenticeerde gebruiker (kosten-DoS).
+    // Fail-closed: bij een storing in de teller is doorlaten juist de duurste
+    // optie (zie core/lib/rate-limit.ts).
+    const limiet = await controleerLimiet(supabase, LIMIETEN.zoeken, { failClosed: true });
+    if (!limiet.toegestaan) return rateLimited("zoeken", limiet.resetAt);
 
     // Increment T4 — resolveer het fonds SERVER-SIDE (uit profiel via RLS), zodat
     // de expliciete fondsfilter meegaat naar de retrieval. Fail-closed: zonder fonds

@@ -15,6 +15,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
+import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
+import { rateLimited } from "@/core/lib/api-errors";
 import { requireCapability } from "@/core/lib/capabilities";
 import { stelSegmentenVoor, type AgendapuntRef } from "@/core/lib/notulen";
 import {
@@ -37,6 +39,14 @@ export async function POST(
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+
+    // M-06 (review 2026-07-30): deze route doet per aanroep externe
+    // modelcalls en had geen enkele limiet — onbeperkt herhaalbaar door een
+    // geauthenticeerde gebruiker (kosten-DoS).
+    // Fail-closed: bij een storing in de teller is doorlaten juist de duurste
+    // optie (zie core/lib/rate-limit.ts).
+    const limiet = await controleerLimiet(supabase, LIMIETEN.segmenteer, { failClosed: true });
+    if (!limiet.toegestaan) return rateLimited("notulen.segmenteer", limiet.resetAt);
 
     if (!(await requireCapability(user.id, "notulen.segment.confirm"))) {
       return NextResponse.json(

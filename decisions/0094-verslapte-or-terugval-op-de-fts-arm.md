@@ -110,6 +110,39 @@ zoeken voor Horizon uit staat** (`fonds_feature_flags.hybride_zoeken` / env
 het klopt is dat een zwaarder kwaliteitspunt dan deze terugval en verdient het een eigen
 besluit.
 
+## Bijstelling 30-07-2026 (na activering van hybride zoeken)
+
+Het openstaande punt hieronder bleek te kloppen: **hybride zoeken stond uit voor
+Horizon**. Na het zetten van `fonds_feature_flags.hybride_zoeken = true` (besluit 0095)
+levert dezelfde vraag een ander resultaat op — gemeten op `governance_log`:
+
+| tijd | vraag | methode | embedding_query_success | uitkomst |
+|---|---|---|---|---|
+| 15:29 | "Welke documenten met beleggingsbeleid ken je?" | `ilike` | — | bestuursvoorstel **niet** gevonden |
+| 17:01 | identiek | `hybride_rrf` | `true` | bestuursvoorstel gevonden, **5 passages** geciteerd |
+
+Identieke vraag, identiek modus-pad (catalogusvraag → `alles`, besluit 0091), enige
+verschil de vectorarm. **De ontbrekende vectorarm was de hoofdoorzaak, niet de
+AND-keten.**
+
+Wat dat voor dit besluit betekent:
+
+- **De aanleiding blijft geldig.** `methode: "ilike"` bij natuurlijke meerwoordsvragen
+  is echt gemeten, en het ilike-pad is nog steeds ongerangschikt, niet rerankbaar en
+  levert niet-citeerbare treffers.
+- **De rol verschuift van hoofdoplossing naar vangnet.** De terugval is nu de derde
+  verdedigingslinie: hij grijpt alleen wanneer zowel de hybride RRF als de strikte
+  FTS-arm niets opleveren. Dat gebeurt minder vaak, maar wanneer het gebeurt is het
+  verschil nog steeds ongerangschikt-ilike versus gerangschikt-met-rerank.
+- **De kosten-batenafweging blijft positief:** één extra RPC, uitsluitend in een geval
+  waarin we nu al niets vonden. Geen embedding, geen modelcall.
+- **Meetwaarde blijft:** het aandeel `fts_dutch_terugval` in het log is een directe
+  indicator voor hoe vaak beide gerangschikte armen tekortschieten.
+
+Deze bijstelling staat hier bewust in plaats van dat de tekst hierboven is herschreven:
+de redenering die tot dit besluit leidde was op dat moment de best beschikbare, en het
+verloop is leerzamer dan een gladgestreken eindversie.
+
 ## Referenties
 
 - Code: `core/lib/fts-terugval.ts`, `core/lib/rag.ts` (`zoekViaFTS`, `naVerwerking`).

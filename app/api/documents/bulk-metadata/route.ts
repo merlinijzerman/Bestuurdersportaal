@@ -16,6 +16,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
+import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
+import { rateLimited } from "@/core/lib/api-errors";
 import { rolHeeftCapability } from "@/core/lib/capabilities";
 import {
   bouwMetadataPlan,
@@ -45,6 +47,12 @@ export async function POST(req: NextRequest) {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+
+    // M-06 (review 2026-07-30): deze route doet per aanroep externe
+    // modelcalls en had geen enkele limiet — onbeperkt herhaalbaar door een
+    // geauthenticeerde gebruiker (kosten-DoS).
+    const limiet = await controleerLimiet(supabase, LIMIETEN.bulk_metadata);
+    if (!limiet.toegestaan) return rateLimited("documents.bulk-metadata", limiet.resetAt);
 
     const body = (await req.json().catch(() => ({}))) as {
       document_ids?: string[];

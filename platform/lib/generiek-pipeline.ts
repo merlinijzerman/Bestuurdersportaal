@@ -36,6 +36,15 @@ export const GENERIEK_PAD_PREFIX = "generiek";
 // supabase/migrations/2026_06_24_storage_quarantaine.sql.
 export const QUARANTAINE_BUCKET = "documenten-quarantaine";
 
+// H-13 (review 2026-07-30): het quarantainepad wordt SERVER-SIDE gegenereerd
+// door curatieUploadUrl als `generiek/<uuid>.<ext>`. De client stuurt het terug
+// bij het afronden van de curatie; daar moet het exact tegen dit patroon worden
+// getoetst. Een `startsWith("generiek/")`-check laat `..`-segmenten door, en de
+// download draait met de service-role — dus een traversal zou een object buiten
+// de quarantainezone kunnen inlezen en als GENERIEK document publiceren.
+export const QUARANTAINE_PAD_PATROON =
+  /^generiek\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(pdf|docx|pptx|xlsx)$/;
+
 export type PipelineResultaat =
   | {
       ok: true;
@@ -46,7 +55,7 @@ export type PipelineResultaat =
     }
   | {
       ok: false;
-      foutcode: "geen_tekst" | "extractie_mislukt";
+      foutcode: "geen_tekst" | "extractie_mislukt" | "chunk_insert_mislukt";
       verwerkingsstatus: "mislukt";
     };
 
@@ -200,12 +209,38 @@ export async function verwerkGeneriekBestand(
     status: embeddings ? "geslaagd" : "overgeslagen", start: t,
   });
 
+  // H-09 (review 2026-07-30): een insertfout werd alleen gelogd, waarna er
+  // onvoorwaardelijk een jobrij `chunking: geslaagd` werd weggeschreven én het
+  // document op `beschikbaar` + `geindexeerd` werd gezet. Het auditspoor was
+  // daarmee aantoonbaar onjuist en een half-geïndexeerd document presenteerde
+  // zich als volledig verwerkt. Nu fail-closed: opruimen, status `mislukt`,
+  // en de fout doorgeven aan de aanroeper.
   const batch = 50;
   for (let i = 0; i < chunkRecords.length; i += batch) {
     const { error: chunkError } = await svc
       .from("document_chunks")
       .insert(chunkRecords.slice(i, i + batch));
-    if (chunkError) console.error("[P1-pipeline] chunk-insert mislukt:", chunkError.message);
+    if (chunkError) {
+      console.error(
+        `[P1-pipeline] chunk-insert mislukt voor document ${documentId} ` +
+          `(batch ${i / batch + 1}):`,
+        chunkError.message
+      );
+      await svc.from("document_chunks").delete().eq("document_id", documentId);
+      await schrijfJob(svc, {
+        documentId, versieId, correlatieId, stap: "chunking",
+        status: "mislukt", start: t, foutcode: "chunk_insert_mislukt",
+      });
+      await svc
+        .from("documenten")
+        .update({ verwerkingsstatus: "mislukt", geindexeerd: false })
+        .eq("id", documentId);
+      return {
+        ok: false,
+        foutcode: "chunk_insert_mislukt",
+        verwerkingsstatus: "mislukt",
+      };
+    }
   }
   await schrijfJob(svc, {
     documentId, versieId, correlatieId, stap: "chunking", status: "geslaagd", start: t,

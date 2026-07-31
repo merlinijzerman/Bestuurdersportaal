@@ -15,7 +15,7 @@
 //  poort. Dit verzwakt de tenant-RLS niet (besluit B-OP5-2).
 // ============================================================================
 
-import { createServiceSupabase } from "@/platform/lib/supabase-service";
+import { withPlatformRead } from "@/platform/lib/platform-wrapper";
 import { huidigePlatformIdentiteit } from "@/platform/lib/platform-auth";
 import OrganisatieprofielClient from "./_components/OrganisatieprofielClient";
 
@@ -36,13 +36,26 @@ export default async function OrganisatieprofielPagina() {
   let profielen: Record<string, unknown>[] = [];
 
   if (magBeheren) {
-    const svc = createServiceSupabase();
-    const [{ data: f }, { data: p }] = await Promise.all([
-      svc.from("fondsen").select("id, naam").order("naam"),
-      svc.from("organisatie_profielen").select(PROFIEL_KOLOMMEN),
-    ]);
-    fondsen = (f ?? []) as { id: string; naam: string }[];
-    profielen = (p ?? []) as unknown as Record<string, unknown>[];
+    // H-15 (review 2026-07-30): dit leest de organisatieprofielen van ÁLLE
+    // fondsen met de service-role — de context die de AI per fonds meekrijgt.
+    // Die cross-tenant inzage liep buiten de auditwrapper om.
+    const geladen = await withPlatformRead(
+      { capability: CAP, handeling: "organisatieprofiel.overzicht.inzien" },
+      async (svc) => {
+        const [{ data: f }, { data: p }] = await Promise.all([
+          svc.from("fondsen").select("id, naam").order("naam"),
+          svc.from("organisatie_profielen").select(PROFIEL_KOLOMMEN),
+        ]);
+        const fondsenUit = (f ?? []) as { id: string; naam: string }[];
+        const profielenUit = (p ?? []) as unknown as Record<string, unknown>[];
+        return {
+          resultaat: { fondsenUit, profielenUit },
+          effect: { fondsen: fondsenUit.length, profielen: profielenUit.length },
+        };
+      }
+    );
+    fondsen = geladen.fondsenUit;
+    profielen = geladen.profielenUit;
   }
 
   return (

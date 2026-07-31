@@ -60,6 +60,16 @@ SQL_T17="supabase/checks/2026_07_19_t17_cross_tenant.sql"
 # AQLab (AQL-1) — provider-globale aqlab_-tabellen: RLS-aan + append-only +
 # synthetic-CHECK + release-beslisregel + deny-by-default (geen tenant-lees/schrijf).
 SQL_AQLAB="supabase/checks/2026_07_10_aqlab_cross_tenant.sql"
+# R1 (review 2026-07-30) — structurele gates op TENANTCORRECTHEID van policies.
+# De T3-gate toetst of een schrijf-policy een WITH CHECK heeft; deze gates
+# toetsen of het PREDIKAAT een tenantgrens bevat. Zonder deze gates kon K-01
+# (decision_dissent zonder fondsclausule) ontstaan én onopgemerkt blijven.
+SQL_R1G="supabase/checks/2026_07_31_r1_structurele_gates.sql"
+# R1 — gedragsbewijs voor de vijf herstelde tenantgrenzen (K-01/H-01/H-02/M-01).
+SQL_R1B="supabase/checks/2026_07_31_r1_tenantgrenzen.sql"
+# Increment G (2026-06-20) — retrieval-filtering op status/bronstatus/geldigheid.
+# Stond buiten CI; toegevoegd n.a.v. reviewbevinding "risico h niet volledig gedekt".
+SQL_G20="supabase/checks/2026_06_20g_retrieval_filtering.sql"
 
 echo "== [1/4] tsc --noEmit --skipLibCheck =="
 ./node_modules/.bin/tsc --noEmit --skipLibCheck
@@ -126,6 +136,15 @@ echo
 echo "-- AQLab (aqlab_: RLS-aan + append-only + synthetic-CHECK + release-beslisregel + deny-by-default) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_AQLAB"
 echo
+echo "-- G20 (retrieval-filtering: status/bronstatus/geldigheidsperiode per modus) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_G20"
+echo
+echo "-- R1-gates (tenantcorrectheid van policies + anon + search_path) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_R1G"
+echo
+echo "-- R1-gedrag (decision_dissent, notificaties, inzage/metadata-log, inbreng) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_R1B"
+echo
 
 echo "============================================================================"
 echo "GROEN: volledige §15 cross-tenant suite geslaagd (app-laag + DB-laag)."
@@ -144,4 +163,7 @@ echo "  T15 stuurinfo tabs 4/5 soli-RPC + eindstand-consistentie + één-bron-ba
 echo "  T16 stuurinfo tabs 6/7 oper/premie-RPC + mutatie-consistentie + één-bron-ultimo (DB-laag)"
 echo "  T17 stuurinfo tab 3 biometrie reeks-isolatie + één-bron-koppeling soli/oper + deny-delete (DB-laag)"
 echo "  AQLab aqlab_ RLS-aan + append-only + synthetic + beslisregel + deny-by-default (DB-laag)"
+echo "  G20  retrieval-filtering status/bronstatus/geldigheid                (DB-laag)"
+echo "  R1   tenantcorrectheid van policies + anon + search_path (gates A-E)  (DB-laag)"
+echo "  R1   gedragsbewijs K-01/H-01/H-02/M-01                                (DB-laag)"
 echo "============================================================================"

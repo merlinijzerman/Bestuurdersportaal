@@ -54,6 +54,27 @@ export async function GET(
     return NextResponse.json({ error: "Document niet gevonden" }, { status: 404 });
   }
 
+  // H-08 (review 2026-07-30) — een gedeactiveerd document mag NIET meer
+  // downloadbaar zijn. `actief` werd hier wél opgehaald maar nooit getoetst,
+  // waardoor deactivatie (PATCH /api/documents/[id], mét reden en actor) een
+  // schijnmaatregel was: wie de document-ID nog had uit een bronvermelding,
+  // deeplink of browserhistorie haalde het origineel gewoon op — en de inzage
+  // werd zelfs als geldige 'inzage' gelogd.
+  //
+  // De AI-laag en alle retrievalpaden filteren al op `actief = true`
+  // (core/lib/document-scope.ts, zoek_chunks(_hybride)); dit trekt de
+  // downloadroute daarmee gelijk. 410 (Gone) i.p.v. 404: het document bestaat,
+  // maar is bewust ingetrokken — dat onderscheid is voor de gebruiker relevant.
+  if (document.actief === false) {
+    return NextResponse.json(
+      {
+        error:
+          "Dit document is ingetrokken en is niet meer in te zien. Neem contact op met de beheerder als u het origineel nodig heeft.",
+      },
+      { status: 410 }
+    );
+  }
+
   if (!document.opslag_pad) {
     return NextResponse.json(
       {
@@ -78,9 +99,12 @@ export async function GET(
     );
   }
 
-  // Inzage loggen — non-blocking, fouten worden alleen geprint. `profiel` is
-  // hierboven al opgehaald (naam + fonds_id) voor de host-afdwinging.
-  await supabase.from("document_inzage").insert({
+  // Inzage loggen — non-blocking, maar de fout wordt WEL gelogd. Voorheen werd
+  // de retourwaarde genegeerd terwijl het commentaar "fouten worden geprint"
+  // beloofde: het inzagelogboek — de enige registratie van wie welk document
+  // inzag — kon dus gaten hebben zonder enig signaal. `profiel` is hierboven al
+  // opgehaald (naam + fonds_id) voor de host-afdwinging.
+  const { error: inzageError } = await supabase.from("document_inzage").insert({
     document_id: document.id,
     document_titel_snapshot: document.titel,
     fonds_id: document.fonds_id,
@@ -88,6 +112,12 @@ export async function GET(
     gebruiker_naam: profiel?.naam ?? null,
     actie: "inzage",
   });
+  if (inzageError) {
+    console.error(
+      `[documents.bestand.GET] inzage-log mislukt voor document ${document.id}:`,
+      inzageError
+    );
+  }
 
   // Bepaal content-type en disposition op basis van bestandstype.
   // Bij ontbrekend type (oude records) vallen we terug op PDF voor backwards

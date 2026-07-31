@@ -47,10 +47,28 @@ console.log("generatie-kern sanity-tests:");
 // ── Gepinde snapshots — GEVROREN toon-/instructieblokken ────────────────────
 // Wijzigt een van deze hashes, dan is de kostbare toon-prompt of de assemblage
 // veranderd. Verifieer dat dit BEWUST is en werk pas dan de pin bij.
+//
+// BIJGEWERKT 31-07-2026 (reviewronde R1). Deze test stond sinds 15-07-2026 rood
+// zonder dat iemand het zag, en omdat `npm run sanity` bij de eerste rode stopt
+// (`|| exit 1`) hebben ALLE suites na deze — 45 stuks, waaronder pii-gate,
+// rate-limit, tenant-enforce, rag-fondsdiscipline en platform-wrapper — twee
+// weken lang niet gedraaid. Twee oorzaken, beide legitieme wijzigingen waarvan
+// alleen de pin niet is bijgewerkt:
+//
+//   1. commit 00b8d68 "Opus 4.8 assistent" (15-07-2026) verving in
+//      NIEUW_STRUCTUUR het verplichte "Antwoordstatus: <X>"-label door lopende
+//      tekst. Bewuste inhoudelijke keuze → hash bijgewerkt.
+//   2. dezelfde en latere commits verhoogden AI_MODEL/MAX_TOKENS. Zie de
+//      parity-test onderaan; ook daar zijn de waarden bijgewerkt.
+//
+// De R1-wijziging aan generatie-kern.ts (SP_BRON_VERTROUWEN, H-10) raakt géén
+// van deze hashes: dat blok wordt pas aan `regels` geplakt wanneer er bronnen in
+// de prompt zitten, en de gepinde assemblages roepen bouwStatischeInstructies
+// rechtstreeks aan. Gecontroleerd: alleen NIEUW_STRUCTUUR kantelt.
 const PIN = {
   TOON_BLOK: "241d3f36844ce4a52b7f0c0bc0c6b0fc1a6b669474b6df3e86e5ce1fbb33af83",
   NIEUW_ROL_GEDRAG: "7bc8d97c2b004ee75eef4f7b3c1f92189888444227127566e458da9768ab0fe4",
-  NIEUW_STRUCTUUR: "c85e5a9ded79ce1b4f1cb6290c539dc311aa4e8f570f85858c089d460f3d0c53",
+  NIEUW_STRUCTUUR: "9ae243d9ac6f4609bcf399b704875d9f207510f7382640fda413b52cb42aff0f",
   NIEUW_TOON: "132afe916deebd1341fd496a41bcb60221fac6b26f2834bb51cedc4a1bc1564a",
   SP_SPARRING_REGELS: "e6aded3c2e569cc83fcfd8b5e63ab6b185f4eb7ad9e0bc0deeb7b84a751c709d",
   VERVOLGVRAGEN_INSTRUCTIE: "c3fc6188b01a6c7c4f9067cbbe64785f6e1fe24ed9260b0766c5fe3ecfb1352b",
@@ -144,9 +162,23 @@ test("splitsVervolgvragen: knipt marker-tail, parset maximaal 3 vragen", () => {
 });
 
 test("model-/budgetconstanten zijn de productiewaarden (parity)", () => {
-  assert.equal(AI_MODEL, "claude-sonnet-4-6");
-  assert.equal(MAX_TOKENS, 3200);
-  assert.equal(MAX_TOKENS_BESTUURLIJK, 4500);
+  // Bijgewerkt 31-07-2026. De oude pins (claude-sonnet-4-6 / 3200 / 4500) waren
+  // achterhaald sinds commit 00b8d68 (15-07-2026) en latere budgetverhogingen.
+  // Ze zijn nooit gevallen omdat de test al eerder in het bestand afbrak.
+  //
+  // AI_MODEL is sinds 00b8d68 overschrijfbaar via een env-var (A/B-testen en
+  // terugschakelen). De pin toetst daarom de INGEBOUWDE standaard; staat de
+  // env-var, dan zegt deze test niets over productie en melden we dat expliciet
+  // in plaats van stilzwijgend te slagen.
+  if (process.env.AI_MODEL) {
+    console.log(
+      `    ⚠ AI_MODEL is overschreven via env (${process.env.AI_MODEL}) — modelpin niet getoetst.`
+    );
+  } else {
+    assert.equal(AI_MODEL, "claude-opus-4-8");
+  }
+  assert.equal(MAX_TOKENS, 5000);
+  assert.equal(MAX_TOKENS_BESTUURLIJK, 8000);
 });
 
 console.log(`\n${n} sanity-tests geslaagd.`);

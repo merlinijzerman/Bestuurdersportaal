@@ -22,11 +22,16 @@ export default async function GovernancePage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  // L-05 (review 2026-07-30): `user!` was de enige plek waar de sessie-aanname
+  // niet lokaal werd herbevestigd. De layout redirect al bij een lege sessie,
+  // maar bij een race (token verloopt tussen layout- en pagina-render) werd dit
+  // een TypeError → foutscherm in plaats van een redirect naar de login.
+  if (!user) return null;
 
   const { data: profiel } = await supabase
     .from("profielen")
     .select("fonds_id, rol")
-    .eq("id", user!.id)
+    .eq("id", user.id)
     .single();
 
   // Het governance-log toont wie welke AI-vraag stelde (persoonsgegevens van

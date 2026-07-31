@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { buildDecisionDossierView } from "@/core/lib/decision";
+import { errorResponse } from "@/core/lib/api-errors";
 
 export async function GET(
   _req: NextRequest,
@@ -31,12 +32,19 @@ export async function GET(
 
     return NextResponse.json({ dossier: view });
   } catch (e) {
-    console.error("Fout in GET /api/decisions/[id]/dossier:", e);
-    const bericht = e instanceof Error ? e.message : "Serverfout";
-    const isNotFound = /niet gevonden/i.test(bericht);
-    return NextResponse.json(
-      { error: bericht },
-      { status: isNotFound ? 404 : 500 }
-    );
+    // M-13 (review 2026-07-30): `e.message` bevatte ruwe PostgREST-meldingen én
+    // interne UUID's en ging rechtstreeks naar de client. Daarmee kon een
+    // gebruiker met een uuid van een ANDER fonds bestaan/niet-bestaan
+    // bevestigen en het schema in kaart brengen — RLS voorkomt het datalek,
+    // niet het metadatalek. De melding blijft nu server-side; alleen de
+    // STATUS wordt nog uit de foutmelding afgeleid.
+    const intern = e instanceof Error ? e.message : "";
+    const isNotFound = /niet gevonden/i.test(intern);
+    return errorResponse("decisions.dossier.GET", e, {
+      status: isNotFound ? 404 : 500,
+      userMessage: isNotFound
+        ? "Dit dossier is niet gevonden of u heeft er geen toegang toe."
+        : undefined,
+    });
   }
 }
