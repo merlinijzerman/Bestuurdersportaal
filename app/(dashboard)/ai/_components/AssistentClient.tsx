@@ -14,8 +14,11 @@ import {
   renderAntwoord,
   Bronkaart,
   AntwoordKopieerKnop,
+  Documentenlijst,
+  leesAntwoordmodus,
   type Bron,
 } from "./AntwoordWeergave";
+import { isDocumentbron } from "@/core/lib/documentlijst";
 import {
   pasVoortgangToe,
   VoortgangWeergave,
@@ -130,21 +133,9 @@ interface GesprekItem {
   actieve_antwoordmodus?: unknown;
 }
 
-// Leest een (mogelijk onbekende) antwoordmodus-waarde terug naar het type of null.
-function leesAntwoordmodus(ruw: unknown): Antwoordmodus | null {
-  const geldig: Antwoordmodus[] = [
-    "feitelijk",
-    "bronoverzicht",
-    "historisch",
-    "duiding",
-    "besluitrijpheid",
-    "sparring",
-    "persoonlijke_voorbereiding",
-  ];
-  return typeof ruw === "string" && (geldig as string[]).includes(ruw)
-    ? (ruw as Antwoordmodus)
-    : null;
-}
+// `leesAntwoordmodus` woont sinds tranche 2B in de gedeelde renderer (zie de
+// import hierboven): de agendapuntchat heeft hem ook nodig, en twee kopieën van
+// de modusnamenlijst zouden vroeg of laat uiteenlopen.
 
 // Leest de jsonb-scope uit een gesprek terug naar de UI-vorm (of null).
 function leesScope(ruw: unknown): DocumentScope | null {
@@ -1244,6 +1235,32 @@ export default function AssistentClient({
     });
   }
 
+  // Besluit 0099 — één conditie voor "de documentlijst staat in het antwoord",
+  // gebruikt door zowel de lijst zelf als de anti-dubbelingsvlag op het paneel.
+  // Ze moeten identiek zijn: zou het paneel de vlag alleen op de modus zetten,
+  // dan claimt het tijdens het streamen, bij een afgebroken antwoord of bij nul
+  // documentbronnen een lijst die er niet staat — én verbergt het tegelijk de
+  // bronkaarten. Precies de schijnzekerheid die de vervangen fallbacktekst
+  // moest voorkomen.
+  function documentlijstZichtbaar(b: Bericht): boolean {
+    if (!b.voltooid) return false;
+    if (leesAntwoordmodus(b.onderbouwing?.antwoordmodus) !== "bronoverzicht") return false;
+    return (b.bronnen ?? []).some(isDocumentbron);
+  }
+
+  // Besluit 0099 — vervolgactie vanuit de documentlijst: zet de bestaande
+  // client-scope en zet de cursor in het invoerveld. Bewust GEEN vraag versturen:
+  // de bestuurder formuleert zelf wat hij wil weten. De server-side validatie
+  // (valideerScope: bestaat, actief, geïndexeerd, RLS-toegang) blijft onverkort
+  // leidend en wordt pas bij het versturen doorlopen; een geweigerd document
+  // geeft daar de bestaande zichtbare fout — nooit een stille terugval.
+  function scopeUitDocumentlijst(documentIds: string[], titels: string[]) {
+    if (laden || documentIds.length === 0) return;
+    setAgendapuntContext(null);
+    setDocumentScope({ document_ids: documentIds, titels, algemene_kennis: true });
+    invoerRef.current?.focus();
+  }
+
   // Increment I-1 (FO §11c) — open/sluit het onderbouwingspaneel van één bericht.
   function togglePaneel(idx: number) {
     setOpenPanelen((s) => {
@@ -1405,8 +1422,19 @@ export default function AssistentClient({
     !documentScope &&
     !agendapuntContext;
 
+  // De shell (core/components/DashboardShell) zet onder `md` een vaste topbalk
+  // van 3.5rem en compenseert die met `pt-14`. `min-h-screen` op de <main> is
+  // border-box, dus die padding valt daarbinnen — maar een kind van `h-screen`
+  // telt er wél bovenop, en het document werd precies 56px te hoog. Trek de balk
+  // er dus af onder `md`.
+  //
+  // Bewust `vh` en niet `dvh`: de <main> eromheen staat op `min-h-screen` (100vh).
+  // Zou dit kind op `dvh` staan, dan houdt die <main> op mobiel met uitgeschoven
+  // browserbalk een resthoogte van (lvh − dvh) over — precies de restscroll die
+  // we hier wegnemen. Eén eenheid in de hele keten. Overstappen op `dvh` kan,
+  // maar dan in DashboardShell én hier tegelijk.
   return (
-    <div className="flex flex-col h-screen">
+    <div className="flex flex-col h-[calc(100vh-3.5rem)] md:h-screen">
       {/* Gesprekken-overzicht (drawer) */}
       {historieOpen && (
         <div className="fixed inset-0 z-[60]" role="dialog" aria-modal="true">
@@ -1635,12 +1663,24 @@ export default function AssistentClient({
           .wrap) omvat zowel de berichten als het startpunt, zodat de bubbels en de
           startpuntkaarten dezelfde linker- en rechterrand delen. De scrollbar blijft
           aan de schermrand (de scrollcontainer houdt flex-1 overflow-y-auto). */}
-      <div className="flex-1 overflow-y-auto p-6">
+      {/* `relative` is functioneel, geen opmaak. De aria-live-melding van
+          "Antwoord kopiëren" (`<span class="sr-only">` in KopieerKnop) is absoluut
+          gepositioneerd en staat in de actiebalk — dus BUITEN `.ai-blok`, dat als
+          enige `position: relative` draagt (globals.css). Zonder gepositioneerde
+          voorouder is haar containing block het viewport: ze ontsnapt aan de clip
+          van deze scrollcontainer en rekt het DOCUMENT op tot de volle hoogte van
+          de gespreksinhoud. Gemeten op een gesprek van 29 berichten: 6.187 px lege
+          scroll, en exact 0 met deze regel. De kopieerknoppen per blok zitten wél
+          in `.ai-blok` en waren nooit het probleem. */}
+      <div className="relative flex-1 overflow-y-auto p-6">
         <div className="mx-auto w-full max-w-[1020px] space-y-5">
         {!toonStartpunt && !scherpstelActief &&
           berichten.map((b, i) => (
           <div key={i} id={`bericht-${i}`} className={b.rol === "gebruiker" ? "flex justify-end" : "flex"}>
-            <div className={b.rol === "gebruiker" ? "max-w-[75%]" : "flex-1"}>
+            {/* `min-w-0` op de AI-kolom: een flex-item krimpt standaard niet onder
+                zijn min-content-breedte. Zonder dit duwt een brede bronkaart (of
+                een lange documenttitel) de hele kolom voorbij de 1020px-maat. */}
+            <div className={b.rol === "gebruiker" ? "max-w-[75%]" : "flex-1 min-w-0"}>
               {/* Inline-meldingen (FO §11c) — alleen bij de zes uitzonderingen,
                   direct boven het antwoord. */}
               {b.rol === "ai" &&
@@ -1656,7 +1696,10 @@ export default function AssistentClient({
               <div
                 className={
                   b.rol === "gebruiker"
-                    ? "bg-accent text-white px-4 py-3 rounded-2xl rounded-tr-sm text-sm leading-relaxed"
+                    ? // De eigen vraag is een rustig blok, geen gekleurd vlak: massief
+                      // violet trok in een lang gesprek meer aandacht dan het antwoord
+                      // eronder. Zebra + hairline houdt de nadruk waar hij hoort.
+                      "bg-app-zebra text-ink border border-app-line px-4 py-3 rounded-2xl rounded-tr-sm text-sm leading-relaxed"
                     : "text-sm leading-relaxed text-ink"
                 }
               >
@@ -1680,6 +1723,21 @@ export default function AssistentClient({
                       </p>
                     ))}
               </div>
+
+              {/* Documentlijst bij antwoordmodus `bronoverzicht` (besluit 0099).
+                  De modus is server-side bepaald en reist mee in de onderbouwing
+                  van dít bericht — er komt geen nieuwe state aan te pas, en de
+                  detectie zelf is niet aangeraakt. */}
+              {b.rol === "ai" && documentlijstZichtbaar(b) && (
+                <Documentenlijst
+                  bronnen={b.bronnen}
+                  onScope={(ids, titels) => scopeUitDocumentlijst(ids, titels)}
+                  ankerIdVoorBron={(j) => `bron-${i}-${j}`}
+                  gehighlightBronIdx={
+                    highlight?.berichtIdx === i ? highlight.bronIdx : null
+                  }
+                />
+              )}
 
               {/* Actiebalk onder het antwoord (besluit 0098) — "Antwoord
                   kopiëren". De kopie draagt altijd de bronnenlijst en de
@@ -1757,24 +1815,40 @@ export default function AssistentClient({
                   daaronder op aan. */}
               {b.rol === "ai" && b.onderbouwing && (
                 <OnderbouwingPaneel
-                  meta={{ ...b.onderbouwing, aantalBronnen: b.bronnen?.length ?? 0 }}
+                  meta={{
+                    ...b.onderbouwing,
+                    aantalBronnen: b.bronnen?.length ?? 0,
+                    bronTitels: (b.bronnen ?? []).map((bron) => bron.titel),
+                  }}
                   open={openPanelen.has(i)}
                   onToggle={() => togglePaneel(i)}
                   ankerId={`onderbouwing-${i}`}
+                  bronKolommen={2}
+                  bronnenInAntwoord={documentlijstZichtbaar(b)}
                 >
-                  {b.bronnen && b.bronnen.length > 0
-                    ? b.bronnen.map((bron, j) => (
-                        <Bronkaart
-                          key={j}
-                          idx={j}
-                          bron={bron}
-                          idVoorScroll={`bron-${i}-${j}`}
-                          gehighlight={
-                            highlight?.berichtIdx === i && highlight?.bronIdx === j
-                          }
-                        />
-                      ))
-                    : null}
+                  {/* Bij een zichtbare documentlijst blijven alléén de bronnen
+                      staan die géén document zijn — vandaag de besluitregistratie.
+                      Die hoort niet in een documentlijst (ander domein, ander
+                      statusbegrip, en haar id is een decision_id), maar mag ook
+                      niet verdwijnen: het is de formeel zwaarste bron. */}
+                  {(() => {
+                    const lijstAan = documentlijstZichtbaar(b);
+                    const zichtbaar = (b.bronnen ?? [])
+                      .map((bron, j) => ({ bron, j }))
+                      .filter(({ bron }) => !lijstAan || !isDocumentbron(bron));
+                    if (zichtbaar.length === 0) return null;
+                    return zichtbaar.map(({ bron, j }) => (
+                      <Bronkaart
+                        key={j}
+                        idx={j}
+                        bron={bron}
+                        idVoorScroll={`bron-${i}-${j}`}
+                        gehighlight={
+                          highlight?.berichtIdx === i && highlight?.bronIdx === j
+                        }
+                      />
+                    ));
+                  })()}
                 </OnderbouwingPaneel>
               )}
 

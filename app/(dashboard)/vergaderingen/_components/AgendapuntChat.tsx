@@ -44,8 +44,11 @@ import {
   renderAntwoord,
   Bronkaart,
   AntwoordKopieerKnop,
+  Documentenlijst,
+  leesAntwoordmodus,
   type Bron,
 } from "../../ai/_components/AntwoordWeergave";
+import { isDocumentbron } from "@/core/lib/documentlijst";
 // Gedeelde gefaseerde statusweergave (besluit 0087), gelijk aan /ai.
 import {
   pasVoortgangToe,
@@ -92,6 +95,28 @@ const STARTVRAGEN = [
 // gewone gebruiker-beurt: zo overleeft het AI-antwoord de welkomst-slice bij
 // init en leest het gesprek terug als een natuurlijke dialoog.
 const VOORBEREIDING_VRAAG = "Stel mijn voorbereiding op voor dit agendapunt.";
+
+// Herstelde gesprekken zijn opgeslagen ná een geslaagde generatie, dus de
+// AI-beurten daarin zijn per definitie voltooid. Gesprekken van vóór besluit
+// 0098 dragen de vlag nog niet; die leiden we af uit de aanwezigheid van
+// `onderbouwing` — die zetten alleen echte antwoorden, geen foutmelding.
+// Identiek aan `herstelVoltooidVlag` in AssistentClient: dezelfde renderer,
+// dus ook hetzelfde kopieergedrag op een hervat gesprek (besluit 0079).
+function herstelVoltooidVlag(lijst: Bericht[]): Bericht[] {
+  return lijst.map((b) =>
+    b.rol === "ai" && b.voltooid === undefined
+      ? { ...b, voltooid: Boolean(b.onderbouwing) }
+      : b
+  );
+}
+
+// Besluit 0099 — één conditie voor "de documentlijst staat in het antwoord",
+// gedeeld door de lijst en de anti-dubbelingsvlag. Identiek aan /ai.
+function documentlijstZichtbaar(b: Bericht): boolean {
+  if (!b.voltooid) return false;
+  if (leesAntwoordmodus(b.onderbouwing?.antwoordmodus) !== "bronoverzicht") return false;
+  return (b.bronnen ?? []).some(isDocumentbron);
+}
 
 export default function AgendapuntChat({
   agendapuntId,
@@ -184,8 +209,9 @@ export default function AgendapuntChat({
             gesprekId.current = item.id as string;
             // Welkomstbericht van de AI-pagina (index 0, rol ai) is puur UI.
             const b = item.berichten as Bericht[];
-            const zonderWelkomst =
-              b.length > 0 && b[0].rol === "ai" ? b.slice(1) : b;
+            const zonderWelkomst = herstelVoltooidVlag(
+              b.length > 0 && b[0].rol === "ai" ? b.slice(1) : b
+            );
             berichtenRef.current = zonderWelkomst;
             setBerichten(zonderWelkomst);
           }
@@ -808,13 +834,17 @@ export default function AgendapuntChat({
             </a>
           </div>
 
-          {/* Berichten */}
+          {/* Berichten. `relative` is functioneel, geen opmaak: zie de toelichting
+              in AssistentClient — de absoluut gepositioneerde aria-live-melding van
+              "Antwoord kopiëren" staat buiten `.ai-blok` en moet door déze container
+              worden geclipt, anders rekt ze de paginahoogte op. */}
           {heeftGesprek && (
-            <div ref={scrollRef} onScroll={bijScroll} className="space-y-2 max-h-96 overflow-y-auto pr-1">
+            <div ref={scrollRef} onScroll={bijScroll} className="relative space-y-2 max-h-96 overflow-y-auto pr-1">
               {berichten.map((b, idx) =>
                 b.rol === "gebruiker" ? (
                   <div key={idx} className="flex justify-end">
-                    <div className="bg-accent text-white text-sm rounded-lg px-3 py-2 max-w-[85%] whitespace-pre-wrap">
+                    {/* Zelfde rustige vraagbubbel als /ai (gedeelde weergave, 0079). */}
+                    <div className="bg-app-zebra text-ink border border-app-line text-sm rounded-lg px-3 py-2 max-w-[85%] whitespace-pre-wrap">
                       {b.tekst}
                     </div>
                   </div>
@@ -846,6 +876,21 @@ export default function AgendapuntChat({
                           : null,
                       )}
                     </div>
+                    {/* Documentlijst bij antwoordmodus `bronoverzicht` (besluit
+                        0099) — zelfde component als /ai. Bewust ZONDER de
+                        scope-vervolgacties: hier ís de scope al vast (de aan het
+                        agendapunt gekoppelde stukken), dus "vraag hierover" zou
+                        die juist versmallen zonder dat de bestuurder dat vraagt. */}
+                    {documentlijstZichtbaar(b) && (
+                      <Documentenlijst
+                        bronnen={b.bronnen}
+                        ankerIdVoorBron={(i) => `bron-${agendapuntId}-${idx}-${i}`}
+                        gehighlightBronIdx={
+                          highlight?.berichtIdx === idx ? highlight.bronIdx : null
+                        }
+                      />
+                    )}
+
                     {/* Actiebalk onder het antwoord — dezelfde helper als /ai,
                         dus dezelfde verplichte bronnenlijst en herkomstregel. */}
                     {b.voltooid && b.tekst.trim().length > 0 && (
@@ -879,25 +924,31 @@ export default function AgendapuntChat({
                         meta={{
                           ...(b.onderbouwing ?? {}),
                           aantalBronnen: b.bronnen?.length ?? 0,
+                          bronTitels: (b.bronnen ?? []).map((bron) => bron.titel),
                         }}
+                        bronnenInAntwoord={documentlijstZichtbaar(b)}
                         open={openBronnen.has(idx)}
                         onToggle={() => toggleBronnen(idx)}
                         ankerId={`onderbouwing-${agendapuntId}-${idx}`}
                       >
-                        {b.bronnen && b.bronnen.length > 0
-                          ? b.bronnen.map((bron, i) => (
-                              <Bronkaart
-                                key={i}
-                                idx={i}
-                                bron={bron}
-                                idVoorScroll={`bron-${agendapuntId}-${idx}-${i}`}
-                                gehighlight={
-                                  highlight?.berichtIdx === idx &&
-                                  highlight?.bronIdx === i
-                                }
-                              />
-                            ))
-                          : null}
+                        {(() => {
+                          const lijstAan = documentlijstZichtbaar(b);
+                          const zichtbaar = (b.bronnen ?? [])
+                            .map((bron, i) => ({ bron, i }))
+                            .filter(({ bron }) => !lijstAan || !isDocumentbron(bron));
+                          if (zichtbaar.length === 0) return null;
+                          return zichtbaar.map(({ bron, i }) => (
+                            <Bronkaart
+                              key={i}
+                              idx={i}
+                              bron={bron}
+                              idVoorScroll={`bron-${agendapuntId}-${idx}-${i}`}
+                              gehighlight={
+                                highlight?.berichtIdx === idx && highlight?.bronIdx === i
+                              }
+                            />
+                          ));
+                        })()}
                       </OnderbouwingPaneel>
                     )}
                     {b.vervolgvragen && b.vervolgvragen.length > 0 && (

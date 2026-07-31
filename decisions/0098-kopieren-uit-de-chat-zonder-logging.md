@@ -59,9 +59,13 @@ passage vandaan komt.** Onder elke kopie staan daarom altijd:
   datum en documentstatus;
 - één **herkomstregel**:
 
-  > *Gekopieerd uit de AI-assistent van \<fonds> in het bestuurdersportaal op
+  > *Gekopieerd uit \<surface> van \<fonds> in het bestuurdersportaal op
   > \<datum>. Door AI samengesteld op basis van de hierboven vermelde bronnen; niet
   > inhoudelijk gecontroleerd en geen bestuurlijk besluit.*
+
+  `\<surface>` is *"de AI-assistent"* op `/ai` en *"de AI-assistent bij een
+  agendapunt"* in de inline agendapuntchat, zodat de lezer weet uit welke context
+  de passage komt.
 
   De fondsnaam komt uit het profiel van de ingelogde gebruiker en wordt in beide
   surfaces meegegeven. Laadt dat profiel niet (best-effort read), dan valt de
@@ -86,11 +90,13 @@ te laten. Dat is niet alleen beleid maar constructie, op drie niveaus:
 ### De bronnenlijst mag nooit een bron ontkennen
 
 De lijst wordt **niet** uitsluitend uit `[Bron N]`-markers afgeleid. Dat was de
-eerste opzet en die was fout: de systeemprompt VERBIEDT die notatie in de
-document-scope-modi (`SP_DOCUMENT_SCOPE_BREED_REGELS` en
-`SP_DOCUMENT_SCOPE_ALG_REGELS`, actief bij dekkingsbrede vragen en bij "document
-doorgronden"), waar het antwoord juist per constructie op één genoemd fondsstuk
-steunt. Een op markers gebaseerde lijst zou daar altijd leeg zijn en de kopie zou
+eerste opzet en die was fout. In de document-scope-modi levert het model geen
+genummerde verwijzingen: `SP_DOCUMENT_SCOPE_BREED_REGELS` (actief bij
+dekkingsbrede vragen en bij "document doorgronden") **verbiedt** de notatie
+letterlijk — *"Gebruik GEEN [Bron N]-notatie"* — en `SP_DOCUMENT_SCOPE_ALG_REGELS`
+schrijft in plaats daarvan paginaverwijzingen *"(pag. X)"* voor, zonder `[Bron N]`
+te noemen. Juist daar steunt het antwoord per constructie op één genoemd
+fondsstuk. Een op markers gebaseerde lijst zou daar altijd leeg zijn en de kopie zou
 de bron actief **ontkennen** — schijnzekerheid in de gevaarlijkste richting.
 Daarom drie gevallen:
 

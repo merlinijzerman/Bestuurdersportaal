@@ -12,6 +12,7 @@
 
 import { type ReactNode } from "react";
 import { normgewichtLabel, isVeiligeUrl } from "@/core/lib/bronsoort";
+import { samenvattingDocumentnamen } from "@/core/lib/bronsamenvatting";
 
 export interface OnderbouwingMeta {
   /** Korte samenvatting van de bronbasis (lib/vraagtype.bronbasisLabel). */
@@ -28,6 +29,12 @@ export interface OnderbouwingMeta {
   algemeneKennis?: boolean | null;
   /** Aantal geraadpleegde bronnen (voor de count-badge). */
   aantalBronnen?: number;
+  /**
+   * Documenttitels van de geraadpleegde bronnen, voor de ingeklapte balk.
+   * Client-side afgeleid uit de bronnen die de caller tóch al heeft — géén extra
+   * veld in de API-payload.
+   */
+  bronTitels?: string[];
   // Increment F (FO §14) — profielsturing. De transparantie dat de VOLGORDE/NADRUK
   // op het persoonlijk profiel is afgestemd staat hier in het controlevlak (niet
   // inline in het antwoord). De feitenbasis/bronnen zijn identiek; alleen ordening
@@ -120,6 +127,20 @@ interface Props {
   open: boolean;
   onToggle: () => void;
   ankerId?: string;
+  /**
+   * Kolommen voor de bronkaarten. 1 (default) voor smalle surfaces zoals de
+   * inline agendapuntchat; /ai geeft 2 — daar is de kolom 1020px breed en werd
+   * één lange lijst onnodig lang.
+   */
+  bronKolommen?: 1 | 2;
+  /**
+   * Anti-dubbeling (besluit 0099): bij antwoordmodus `bronoverzicht` staan de
+   * documenten in het ANTWOORD, niet hier. Het paneel houdt dan alleen de
+   * verantwoording. Zonder deze vlag zou de fallbacktekst "Geen interne
+   * documentbronnen geraadpleegd" verschijnen — feitelijk onjuist, want ze zijn
+   * juist wél geraadpleegd en staan hierboven.
+   */
+  bronnenInAntwoord?: boolean;
   /** De bronkaarten (gerenderd door page). */
   children?: ReactNode;
 }
@@ -138,9 +159,16 @@ export default function OnderbouwingPaneel({
   open,
   onToggle,
   ankerId,
+  bronKolommen = 1,
+  bronnenInAntwoord = false,
   children,
 }: Props) {
   const historischMeegenomen = meta.retrievalModus === "historisch";
+  // Samenvatting in de INGEKLAPTE balk. Bewust geen retrievalmethode: die staat
+  // uitsluitend server-side in retrieval_meta (auditspoor) en zou een
+  // payloaduitbreiding vragen. `bronbasis` zegt in bestuurlijke taal hetzelfde
+  // waar het hier om gaat: waarop steunt dit antwoord.
+  const documentnamen = samenvattingDocumentnamen(meta.bronTitels ?? []);
 
   return (
     <div id={ankerId} className="mt-2">
@@ -156,12 +184,22 @@ export default function OnderbouwingPaneel({
           <span aria-hidden className="text-muted text-xs">
             🔎
           </span>
-          <span className="text-xs font-semibold text-ink">
+          <span className="text-xs font-semibold text-ink flex-shrink-0">
             Onderbouwing en bronnen
           </span>
           {typeof meta.aantalBronnen === "number" && meta.aantalBronnen > 0 && (
-            <span className="text-[11px] text-muted bg-app-bg px-2 py-0.5 rounded-full font-medium">
+            <span className="text-[11px] text-muted bg-app-bg px-2 py-0.5 rounded-full font-medium flex-shrink-0">
               {meta.aantalBronnen}
+            </span>
+          )}
+          {documentnamen && (
+            <span className="text-[11px] text-muted truncate min-w-0">
+              {documentnamen}
+            </span>
+          )}
+          {meta.bronbasis && (
+            <span className="text-[11px] text-muted hidden lg:inline flex-shrink-0">
+              · {meta.bronbasis}
             </span>
           )}
         </span>
@@ -286,13 +324,27 @@ export default function OnderbouwingPaneel({
               ziet welk deel van het antwoord uit fondsdocumenten komt, wat
               algemene kennis is, en (voorbereid) wat uit het web zou komen. */}
 
-          {/* 1) Documentbronnen (RAG) — de bronkaarten komen als children mee. */}
-          {children ? (
+          {/* 1) Documentbronnen (RAG) — de bronkaarten komen als children mee.
+                 Bij `bronoverzicht` staan ze in het antwoord (besluit 0099) en
+                 houdt dit paneel alleen de verantwoording: geen dubbele lijst. */}
+          {bronnenInAntwoord ? (
+            <p className="text-xs text-muted">
+              De gevonden documenten staan als lijst in het antwoord hierboven.
+            </p>
+          ) : children ? (
             <div>
               <div className="text-[11px] font-bold text-muted uppercase tracking-wide mb-2">
                 Documentbronnen
               </div>
-              <div className="space-y-2">{children}</div>
+              <div
+                className={
+                  bronKolommen === 2
+                    ? "grid gap-2 md:grid-cols-2 items-start"
+                    : "space-y-2"
+                }
+              >
+                {children}
+              </div>
             </div>
           ) : (
             <p className="text-xs text-muted">

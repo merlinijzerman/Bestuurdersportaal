@@ -17,6 +17,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BronVerwijzing } from "./rag";
+import { bouwBronfragment } from "./bronfragment";
 
 type Sb = SupabaseClient;
 
@@ -116,7 +117,10 @@ export function opmaakBesluitContext(bronnen: BesluitBron[]): {
       bron: "Decision Object",
       pagina: null,
       paragraaf: null,
-      fragment: b.besluitvraag.substring(0, 150),
+      // Dezelfde citaatregel als de documentbronnen (besluit 0100): deze
+      // verwijzing landt in dezelfde bronkaart en dezelfde hover-preview, dus
+      // een afwijkende afkapping zou hier stil een voorbehoud wegsnijden.
+      fragment: bouwBronfragment(b.besluitvraag),
       heeft_origineel: false,
       documentstatus: b.status,
       bronstatus: "actief",

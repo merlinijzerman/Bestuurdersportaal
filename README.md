@@ -7,7 +7,7 @@
 Deze map bevat **twee dingen tegelijk**:
 
 1. **De codebase** van het Bestuurdersportaal — Next.js 15 (App Router) + Supabase (EU-Frankfurt) + Vercel, met Anthropic (AI-antwoorden), Mistral (embeddings + OCR) en Mailgun (contactnotificaties). Zie `SETUP.md` voor lokaal draaien.
-2. **De werkdocumentatie** die met de code meebeweegt: `HANDOVER.md` (levend masterdocument), `CLAUDE.md` (werkinstructies en guardrails), de `*-ONTWERP.md`-documenten, `decisions/` (34 besluitrecords) en de securityplannen (`SECURITY-ROUTE-A-*.md`).
+2. **De werkdocumentatie** die met de code meebeweegt: `HANDOVER.md` (levend masterdocument), `CLAUDE.md` (werkinstructies en guardrails), de `*-ONTWERP.md`-documenten, `decisions/` (100 besluitrecords) en de securityplannen (`SECURITY-ROUTE-A-*.md`).
 
 **Bron-van-waarheid-hiërarchie** (vastgelegd in `CLAUDE.md`): code + `supabase/migrations/` > `HANDOVER.md` > ontwerpdocumenten. `supabase/schema.sql` is documentatie en mag achterlopen.
 

@@ -6,8 +6,13 @@
 //   1) een legacy merk-hex terugzet (navy #0F2744 / #1A3A5C, gold #C9A84C / #E8D090), of
 //   2) een arbitrary-hex Tailwind-colorclass in JSX gebruikt (bijv. text-[#234E70]).
 //
-// Grijstinten en overige losse hex in geëxporteerde print-CSS (lib/*-html.ts)
-// blijven toegestaan — die vallen buiten de tokenlaag en zijn bewust literal.
+// Grijstinten en overige losse hex in opmaak die naar BUITEN de applicatie gaat
+// blijven toegestaan — die valt buiten de tokenlaag en is bewust literal. Dat
+// zijn vandaag `core/lib/*-html.ts` (print-/export-CSS; sinds de T9-splitsing
+// niet meer `lib/`) en `core/lib/antwoord-klembord.ts` (inline opmaak voor
+// Word/Excel, besluit 0098). De guard blokkeert sowieso alleen legacy-merk-hex
+// en arbitrary-hex-CLASSES, dus zulke literals vallen er automatisch buiten;
+// deze noot houdt alleen de bedoeling expliciet.
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, extname } from "node:path";
 

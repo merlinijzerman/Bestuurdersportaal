@@ -247,10 +247,13 @@ const MARKER_UITLEG: Record<string, string> = {
  *  2. géén genummerde verwijzingen maar wél aangeleverde bronnen → alle bronnen,
  *     met de mededeling dat het antwoord geen genummerde verwijzingen bevat.
  *     Dit is het normale geval bij document-scope en "document doorgronden":
- *     de systeemprompt VERBIEDT daar de [Bron N]-notatie
- *     (`SP_DOCUMENT_SCOPE_BREED_REGELS` / `SP_DOCUMENT_SCOPE_ALG_REGELS`), dus
- *     een lijst die alleen op markers steunt zou daar altijd leeg zijn en het
- *     antwoord ten onrechte als bronloos presenteren;
+ *     `SP_DOCUMENT_SCOPE_BREED_REGELS` VERBIEDT daar de [Bron N]-notatie
+ *     letterlijk ("Gebruik GEEN [Bron N]-notatie"), en
+ *     `SP_DOCUMENT_SCOPE_ALG_REGELS` schrijft in plaats daarvan
+ *     paginaverwijzingen "(pag. X)" voor. In beide gevallen levert het model
+ *     dus geen genummerde verwijzingen, en zou een lijst die alleen op markers
+ *     steunt daar altijd leeg zijn en het antwoord ten onrechte als bronloos
+ *     presenteren;
  *  3. helemaal geen bronnen aangeleverd → dat zeggen, en niet meer dan dat.
  */
 export function bouwBronnenBlok(

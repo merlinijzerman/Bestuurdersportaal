@@ -5,6 +5,7 @@ import { bouwTerugvalFtsQuery } from "./fts-terugval";
 import { selecteerChunks } from "./rag-select";
 import { embedTekst, naarVectorLiteral } from "./embeddings";
 import { notulenBronLabel } from "./notulen";
+import { bouwBronfragment } from "./bronfragment";
 import type { RetrievalModus } from "./vraagtype";
 import { weegBronsoort, type Bronsoortprofiel } from "./weeg-bronsoort";
 import { isStandaardZichtbaarInRag } from "./generiek-curatie";
@@ -379,6 +380,12 @@ export interface DocumentChunk {
     // review-verval-regel in handhaafFondsdiscipline (defense-in-depth náást de
     // T10-RPC-gate). Alleen de T10-RPC en de fallback-selects leveren dit.
     volgende_review?: string | null;
+    // Tranche 2B — soort stuk en bestandsformaat, UITSLUITEND voor de weergave
+    // (de documentlijst bij antwoordmodus `bronoverzicht`). Geen enkel retrieval-,
+    // rangschik- of filterpad leest deze velden. Gevuld door
+    // verrijkDocumentmetadata() ná retrieval; zie daar waarom niet via de select.
+    documenttype?: string | null;
+    bestandstype?: string | null;
   };
   // Increment D — aanwezig zodra de chunk uit een bevestigd notulensegment komt.
   // Gevuld door verrijkNotulenChunks() ná retrieval (de RPC's leveren dit niet);
@@ -700,6 +707,14 @@ export interface BronVerwijzing {
   paragraaf: string | null;
   fragment: string;
   heeft_origineel: boolean;
+  // Tranche 2B — soort stuk (elf waarden, labels in core/lib/document-metadata.ts)
+  // en bestandsformaat (pdf/docx/xlsx/pptx). Beide OPTIONEEL en puur voor de
+  // weergave: `documenttype` is nullable in de database en niet gebackfilld
+  // (metadata-review-queue), `bestandstype` kan ontbreken als de verrijking niets
+  // teruggaf. Een ontbrekende waarde mag nooit een lege chip of gebroken kaart
+  // opleveren — de weergave laat het element dan simpelweg weg.
+  documenttype?: string | null;
+  bestandstype?: string | null;
   // Increment G — bronkaartvelden (status/bronstatus/datum/bronsoort + generiek-
   // metadata). Optioneel: de fallback-cascade levert ze niet.
   documentstatus?: string | null;
@@ -1292,7 +1307,12 @@ export function maakContext(
       bron: doc.bron,
       pagina: chunk.pagina,
       paragraaf: chunk.paragraaf,
-      fragment: chunk.tekst.substring(0, 150) + "...",
+      // Het citaat is sinds tranche 2 het bewijsstuk in de hover-preview op de
+      // pill: afkappen op een zinsgrens i.p.v. blind op 150 tekens, en alleen
+      // een beletselteken als er écht is afgekapt (zie core/lib/bronfragment.ts).
+      // Bewust de KALE chunk-tekst, niet `aangeleverde_passage`: de vindplaats
+      // die erbij staat is die van de treffer-chunk.
+      fragment: bouwBronfragment(chunk.tekst),
       heeft_origineel: !!doc.opslag_pad,
       documentstatus: doc.documentstatus ?? null,
       bronstatus: doc.bronstatus ?? null,
@@ -1302,6 +1322,12 @@ export function maakContext(
       bronorganisatie: doc.bronorganisatie ?? null,
       normgewicht: doc.normgewicht ?? null,
       extern_url: doc.extern_url ?? null,
+      // Tranche 2B — doorgeefvelden voor de documentlijst. Ze staan hier ná de
+      // context-opbouw hierboven en raken die niet: `contextTekst` wordt uit
+      // expliciet benoemde velden gebouwd, het bronnen-array wordt nergens
+      // geserialiseerd. Zie verrijkDocumentmetadata().
+      documenttype: doc.documenttype ?? null,
+      bestandstype: doc.bestandstype ?? null,
     });
   });
 
@@ -1392,6 +1418,100 @@ export async function verrijkNotulenChunks(
   for (const c of chunks) {
     const n = perChunk.get(c.id);
     if (n) c.notulen = n;
+  }
+  return chunks;
+}
+
+// ============================================================================
+//  Tranche 2B — documenttype en bestandstype voor de WEERGAVE
+// ----------------------------------------------------------------------------
+//  Waarom een aparte vervolgquery en niet gewoon twee kolommen in de selects:
+//  het gerangschikte pad loopt via de RPC's `zoek_chunks` en
+//  `zoek_chunks_hybride`, en die hebben een VASTE `returns table`. Een kolom
+//  toevoegen aan een RPC-return vereist `drop function` + `create` — dus een
+//  migratie (zie 2026_07_10_t10, dat om precies die reden droppen moest). De
+//  afspraak voor deze tranche was: geen migratie.
+//
+//  Deze functie zit ná de splitsing in retrieval-paden, op de plek waar RPC,
+//  fallback-cascade, dekkingsbrede scope en parent-context weer samenkomen. Dat
+//  is niet alleen goedkoper dan zeven selects bijhouden — het maakt "geen pad
+//  gemist" ook structureel in plaats van een controle die je elke keer opnieuw
+//  moet doen.
+//
+//  Zelfde patroon als verrijkNotulenChunks() hierboven: één gebatchte query op
+//  de unieke document-id's, RLS-veilig via de anon-client. Een document buiten
+//  het eigen fonds komt niet terug en het veld blijft leeg — nooit een lek,
+//  nooit een gebroken kaart.
+//
+//  HARDE GRENS: deze velden zijn PURE DOORGEEFWAARDEN. Ze mogen niet worden
+//  gelezen door retrieval, ranking, filtering of promptopbouw. De functie draait
+//  ná handhaafFondsdiscipline en ná naVerwerking, en `maakContext()` bouwt de
+//  modelcontext uit expliciet benoemde velden — het bronnen-array gaat nergens
+//  door JSON.stringify.
+// ============================================================================
+/** Rijvorm van de verrijkingsquery. */
+interface DocumentmetadataRij {
+  id: string;
+  fonds_id: string | null;
+  bibliotheek: string | null;
+  documenttype: string | null;
+  bestandstype: string | null;
+  documentdatum: string | null;
+  geldig_tot: string | null;
+  normgewicht: string | null;
+  bronorganisatie: string | null;
+  extern_url: string | null;
+}
+
+export async function verrijkDocumentmetadata(
+  chunks: DocumentChunk[],
+  fondsId: string | null = null
+): Promise<DocumentChunk[]> {
+  if (chunks.length === 0) return chunks;
+  const ids = [...new Set(chunks.map((c) => c.document_id))];
+  const supabase = await createServerSupabase();
+
+  const { data, error } = await supabase
+    .from("documenten")
+    .select(
+      "id, fonds_id, bibliotheek, documenttype, bestandstype, documentdatum, geldig_tot, normgewicht, bronorganisatie, extern_url"
+    )
+    .in("id", ids);
+
+  // Fail-safe: zonder deze metadata valt de weergave netjes terug (geen chip,
+  // geen badge). Een fout mag het antwoord nooit tegenhouden.
+  if (error || !data) {
+    if (error) console.error("verrijkDocumentmetadata fout:", error);
+    return chunks;
+  }
+
+  const perDocument = new Map(
+    (data as DocumentmetadataRij[]).map((d) => [d.id, d])
+  );
+  for (const c of chunks) {
+    const d = perDocument.get(c.document_id);
+    if (!d) continue;
+    // App-guard náást RLS (T4-patroon, decisions/0045): RLS geeft een vreemd
+    // fonds al niet terug, maar mocht er bovenstrooms iets misgaan, dan willen we
+    // zo'n document níét netjes decoreren met een typechip — dan hoort het op te
+    // vallen, niet weg te vallen.
+    if (fondsId && d.fonds_id && d.fonds_id !== fondsId && d.bibliotheek !== "generiek") {
+      continue;
+    }
+    c.documenten.documenttype = d.documenttype ?? null;
+    c.documenten.bestandstype = d.bestandstype ?? null;
+    // De overige velden alleen AANVULLEN. De RPC's leveren ze op het
+    // gerangschikte pad al; overschrijven zou daar niets toevoegen en een
+    // afwijking kunnen maskeren. Op het dekkingsbrede pad ontbreken ze wél —
+    // `haalDocumentChunks` selecteert alleen wat de fondsguard nodig heeft —
+    // en daar vult deze stap ze aan, zodat de documentlijst er niet zonder
+    // status en datum bij staat.
+    const doc = c.documenten;
+    doc.documentdatum ??= d.documentdatum ?? null;
+    doc.geldig_tot ??= d.geldig_tot ?? null;
+    doc.normgewicht ??= d.normgewicht ?? null;
+    doc.bronorganisatie ??= d.bronorganisatie ?? null;
+    doc.extern_url ??= d.extern_url ?? null;
   }
   return chunks;
 }

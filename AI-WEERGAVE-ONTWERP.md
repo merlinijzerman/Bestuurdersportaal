@@ -1,7 +1,9 @@
 # AI-antwoordweergave — Ontwerpdocument
 
-- **Versie:** 0.1 · 31 juli 2026
-- **Status:** Vastgelegd voor tranche 1 (parser-regressienet, tabel- en leesopmaak, kopiëren)
+- **Versie:** 0.3 · 31 juli 2026
+- **Status:** Vastgelegd voor tranche 1 (parser-regressienet, tabel- en leesopmaak, kopiëren),
+  tranche 2A (bronverificatie in de renderlaag — §8) en tranche 2B (documentvraag als
+  documentlijst — §9)
 - **Bron van waarheid:** de code. Dit document beschrijft *wat en waarom*; bij afwijking wint
   `core/lib/antwoord-parser.ts` + `app/(dashboard)/ai/_components/AntwoordWeergave.tsx`.
 
@@ -16,7 +18,8 @@ Het portaal toont AI-antwoorden op twee plekken:
 
 Sinds besluit [`0079`](./decisions/0079-agenda-assistent-gedeelde-weergave.md) delen die
 **exact dezelfde renderer**. Elke wijziging aan de weergave landt dus per definitie op beide
-plekken; ze worden ook op beide plekken getest.
+plekken. Let op: de geautomatiseerde tests zitten allemaal op `core/lib` (bewust — zie §2);
+de surfaces zelf worden handmatig gerookt, en dat moet dan ook op beide.
 
 ## 2. Architectuur — parser en renderer zijn gescheiden
 
@@ -32,6 +35,13 @@ core/lib/antwoord-parser.ts        ← PURE functies, geen React
         ├──────────────► AntwoordWeergave.tsx      → React/JSX (het scherm)
         └──────────────► core/lib/antwoord-klembord.ts → text/html + text/plain (klembord)
 ```
+
+Sinds tranche 2 staan er nog drie pure modules naast: `core/lib/bronfragment.ts` (het citaat
+onder een bronvermelding, gevoed vanuit `rag.ts` en `besluitvorming-bron.ts`),
+`core/lib/bronsamenvatting.ts` (de regel in de ingeklapte onderbouwingsbalk) — beide §8 — en
+`core/lib/documentlijst.ts` (ordening en filtering van de documentlijst, §9). Alle drie om
+dezelfde reden als de parser: het zijn regels die het scherm bepálen, dus horen ze testbaar
+te zijn.
 
 De parser zat tot 31-07-2026 verweven met JSX in het component en had **geen enkele
 geautomatiseerde test**, terwijl hij twee schermen voedt. Hij is uitgetrokken naar
@@ -190,11 +200,22 @@ Zie besluit [`0098`](./decisions/0098-kopieren-uit-de-chat-zonder-logging.md). K
 - alleen een **voltooide** generatie is kopieerbaar — niet tijdens het streamen, niet
   op de welkomsttekst, niet op een foutmelding en niet op een afgebroken antwoord.
 
-## 6. Wat hier bewust NIET in zit
+## 6. Wat hier bewust NIET in zit (tranche 1)
 
-Deze tranche verandert **uitsluitend hoe bestaande data wordt getoond**. Ongewijzigd:
-prompts, systeemprompt-blokken, retrieval, RPC's, filtering vóór retrieval, de zeven
-antwoordmodi en hun detectie, document-scope, RLS, datamodel en migraties.
+**Tranche 1** wijzigt niets aan prompts, systeemprompt-blokken, retrieval, RPC's, filtering
+vóór retrieval, de zeven antwoordmodi en hun detectie, document-scope, RLS, datamodel of
+migraties. Er komt **wél één nieuwe functie bij**: kopiëren — en dat is bovendien het enige
+uitgaande pad zonder registratie (zie `mvp-beperkingen.md` §5). De rest verandert alleen hoe
+bestaande data wordt getoond.
+
+Voor **tranche 2A** geldt dezelfde lijst ongewijzigde onderdelen, met één uitzondering: de
+inhoud van `Bron.fragment` (besluit `0100`, §8.5). Dat is een payloadwijziging — geen
+kolom, geen contract, alleen de waarde.
+
+Voor **tranche 2B** komen daar twee doorgegeven velden bij, `documenttype` en
+`bestandstype` (§9.6), plus de bronkaartvelden die `documentBronnen()` niet vulde. Nog
+steeds geen kolom, geen migratie en geen wijziging aan retrieval, ranking, filtering,
+prompt of antwoordmodusdetectie.
 
 Uitgesteld naar een volgende tranche (visuele referentie
 [`prototypes/ai-assistent-grafische-optimalisatie.html`](./prototypes/ai-assistent-grafische-optimalisatie.html),
@@ -203,12 +224,382 @@ annotaties 4 t/m 8): het hover-fragment op de
 bronkaarten in twee kolommen, en de informatievere ingeklapte onderbouwingsbalk. Die vragen
 óf een payloaduitbreiding (`documenttype`) óf een herziening van de bronkaart zelf.
 
+> **Tranche 2, deelopdracht A (31 juli 2026) heeft hiervan alles gerealiseerd behalve het
+> afgeleide pill-label** — dat vraagt `documenttype` in de payload en hoort daarmee bij
+> deelopdracht B. Zie §8.
+
 ## 7. Referenties
 
 - Besluiten [`0079`](./decisions/0079-agenda-assistent-gedeelde-weergave.md),
   [`0097`](./decisions/0097-tokens-mark-en-app-line-control.md),
-  [`0098`](./decisions/0098-kopieren-uit-de-chat-zonder-logging.md)
+  [`0098`](./decisions/0098-kopieren-uit-de-chat-zonder-logging.md),
+  [`0099`](./decisions/0099-documenten-in-het-antwoord-bij-bronoverzicht.md),
+  [`0100`](./decisions/0100-fragmentlengte-op-zinsgrens.md)
 - ADR 0028 (`[Toelichting agendapunt]`), OP-4 (`[Organisatieprofiel]`), increment I-3
   (instantie op de kennis-pill)
 - Suites: `core/lib/antwoord-parser.sanity.ts`, `core/lib/antwoord-klembord.sanity.ts`,
-  `core/lib/kleurcontrast.sanity.ts`
+  `core/lib/kleurcontrast.sanity.ts`, `core/lib/bronfragment.sanity.ts`,
+  `core/lib/bronsamenvatting.sanity.ts`, `core/lib/documentlijst.sanity.ts`
+- Tranche 2A-modules: `core/lib/bronfragment.ts` (het citaat),
+  `core/lib/bronsamenvatting.ts` (de ingeklapte balk) — zie §8
+- Tranche 2B-module: `core/lib/documentlijst.ts` (ordening en filtering van de
+  documentlijst) — zie §9
+
+## 8. Bronverificatie in de renderlaag (tranche 2A)
+
+Een bewering controleren kostte vier handelingen: paneel openklappen, scrollen, de juiste
+bronkaart zoeken, citaat lezen. Alle benodigde data zat al in de client. Wat er is veranderd:
+
+### 8.1 Hover-preview op de `[Bron N]`-pill
+
+Het native `title`-attribuut is vervangen door een eigen preview (`BronPreview` in
+`AntwoordWeergave.tsx`). `title` voldoet niet aan **WCAG 1.4.13**: hij is niet hoverbaar,
+niet met Escape te sluiten en op sommige platforms te kort zichtbaar. De preview toont
+titel, status, vindplaats, het citaat in een citaatbalk en de benoemde openen-actie.
+
+Twee constructiekeuzes die niet vrijblijvend zijn:
+
+1. **`position: fixed`, geen `absolute`.** Het antwoord staat in béíde surfaces in een
+   scrollcontainer (`/ai`: `flex-1 overflow-y-auto`; agendapuntchat: `max-h-96
+   overflow-y-auto`) en tabellen in `overflow-x-auto`. Een absoluut gepositioneerde preview
+   wordt daar afgeknipt. De coördinaten komen uit `getBoundingClientRect()` en worden
+   herberekend op `scroll` (capture) en `resize`. **Bekende grens:** komt er ooit een
+   `transform`, `filter` of `perspective` op een voorouder, dan wordt díé het containing
+   block en verschuift de preview mee. Vandaag staat die er niet.
+2. **De preview is een sibling van de pill, geen kind.** Er staat een link in, en een `<a>`
+   in een `<button>` is ongeldige HTML die de tabvolgorde breekt. Omdat hij wél in dezelfde
+   wrapper-`<span>` zit, gelden mouseenter/mouseleave en focus voor het geheel — precies wat
+   "hoverbaar" en "persistent" vragen. Sluiten gebeurt met ~150 ms uitstel, zodat de muis de
+   kier van 8 px kan oversteken.
+
+**Dismissible zonder de focus te verplaatsen.** De Escape-handler hangt aan `document`, niet
+aan de wrapper. Een preview die met de muis is geopend heeft namelijk géén focus; een handler
+op de wrapper zou dan nooit vuren en 1.4.13 blijft onvervuld — precies het gebrek waarvoor
+`title` is vervangen. De listener doet bewust geen `stopPropagation`, zodat de Escape van de
+@-mention-typeahead in `AssistentClient` ongemoeid blijft. Focus keert alleen terug naar de
+pill als die er al was.
+
+**De beschrijving staat er altijd, ook dicht.** `aria-describedby` wijst naar een permanente
+`sr-only`-span met titel, status, vindplaats en citaat. Zou het attribuut pas bij het openen
+worden gezet, dan heeft de schermlezer de focusmelding al samengesteld en valt juist het
+citaat weg. De zichtbare preview draagt daarom geen `role="tooltip"` (die rol mag geen
+interactieve inhoud bevatten) en zijn tékst is `aria-hidden`; de openen-link blijft gewoon
+in de tabvolgorde staan.
+
+Een klik op de pill sluit de preview en voert daarna het bestaande gedrag uit (paneel openen
++ scroll + highlight, ongewijzigd). Zonder dat sluiten zou de preview — via de
+scroll-listener — meereizen en de bronkaart afdekken waar net naartoe is gescrold; op touch
+is dat het normale pad, want daar is er geen hover maar wél focus.
+
+**Logging:** hover, focus en klik op de pill worden **niet** vastgelegd — het zijn
+leeshandelingen, geen besluiten. Het **openen van het origineel** wordt wél gelogd, en dat is
+geen nieuw gedrag van deze tranche: de benoemde actie wijst naar de bestaande route
+`/api/documents/<id>/bestand`, die een `document_inzage`-rij schrijft (fonds, gebruiker,
+titel-snapshot, `actie: "inzage"`). Deze tranche voegt daar geen logging aan toe en haalt er
+geen weg.
+
+### 8.2 Ontbrekend fragment — een melding zonder dekkingsclaim
+
+`Bron.fragment` is leeg op twee paden: `documentBronnen()` in `app/api/chat/route.ts` (de
+**dekkingsbrede document-scope**, increment 2 — daar draait `maakContext()` niet en wordt één
+bronkaart per *document* gebouwd in plaats van per chunk; `pagina` en `paragraaf` zijn er óók
+leeg), en een besluitregistratiebron zonder ingevulde besluitvraag
+(`core/lib/besluitvorming-bron.ts`).
+
+Dat gedrag is correct en bewust. Maar een leeg citaat zou suggereren dat er niets te citeren
+valt. Preview en bronkaart tonen daarom: *"Geen losse passage als citaat aangewezen — zie de
+verwijzingen in het antwoord."*
+
+Die formulering doet **bewust geen uitspraak over dekking**. Een eerdere versie zei "het
+volledige document is als bron gebruikt", en dat sprak het antwoord tegen: past een document
+niet in `MAX_BATCHES`, dan zet de route `breedAfgekapt` en instrueert ze het model juist te
+melden dát de dekking gedeeltelijk is. De bronkaart weet dat niet — `breedAfgekapt` reist
+niet mee in de payload — en mag er dus ook niets over beweren.
+
+### 8.3 Geen actuele grondslag, zichtbaar zonder klik
+
+Een pill naar een bron die **geen actuele, vastgestelde grondslag** is, krijgt een
+**gestippelde rand**; dezelfde status staat als tekst in de beschrijving. Kleur is nooit de
+enige drager.
+
+Dat is een **allow-list, geen deny-list**: `ACTUELE_BRON_STATUSSEN` (`vastgesteld`,
+`van_kracht`) — dezelfde twee waarden die `rag.ts` voor de retrieval-filtering gebruikt.
+Alles daarbuiten wordt gemarkeerd. Een
+deny-list van drie conceptstatussen liet de ónderkant van de ladder onbewaakt: `vervangen`,
+`alleen_historisch` en `gearchiveerd` zagen er dan uit als van kracht — juist het geval
+waarin een bestuurder op verouderd beleid vaart. Meegewogen worden ook `bronstatus ≠ actief`
+en een verstreken `geldig_tot`. Dat zijn drie van de vier toetsen van `zouActueelZijn()` in
+`rag.ts`; **`geldig_vanaf` weegt bewust niet mee** — een document dat pas in de toekomst in
+werking treedt wordt door retrieval al weggefilterd en komt hier dus niet als bron langs.
+Kanttekening: de twee waarden staan in twee constanten (`ACTUELE_BRON_STATUSSEN` en
+`ACTUELE_STATUSSEN_RAG`), met dezelfde inhoud; `rag.ts` waarschuwt daar zelf voor.
+
+Twee randgevallen:
+
+- **Onbekende status wordt níét gemarkeerd.** Markeren betekent "let op, niet vastgesteld",
+  en dat is bij ontbrekende data net zo goed een ongefundeerde bewering als het omgekeerde.
+  De beschrijving zegt dan expliciet dat de status niet is meegeleverd. Gevolg: op het
+  dekkingsbrede pad, waar `documentBronnen()` de statusvelden niet vult, ontbreekt het
+  signaal — zie de openstaande punten hieronder.
+- **De besluitregistratie zet een Decision Object-status in het `documentstatus`-veld.** Die
+  hoort in een ander domein thuis (`besloten` is daar de vastgestelde grondslag, niet
+  `vastgesteld`). Zonder aparte behandeling zou de ruwe enum-waarde ("in_onderbouwing") in de
+  beschrijving en het `aria-label` belanden. `statusOordeel()` herkent die bron aan
+  `bron === "Decision Object"` en gebruikt `DECISION_STATUS_LABEL` +
+  `mapDecisionToProcedureStatus`.
+
+### 8.4 Bronkaarten en de ingeklapte balk
+
+De bronkaart is **neutraal** geworden (witte kaart, kleurloze rand); de organisatiekleur zit
+nog uitsluitend in het nummerbolletje. Het fragment staat in een citaatbalk, de chips op één
+rij, en het losse `↗` is een benoemde actie ("Openen op pagina 14"). In `/ai` staan de
+kaarten in twee kolommen (`bronKolommen={2}`), in de agendapuntchat in één — dat is de
+default van de prop.
+
+De kaart is daarbij van `<a>` naar `<div>` gegaan. Dat loste twee dingen op: de openen-actie
+had geen naam, en `BronkaartMeta` rendert bij generieke bronnen een "Externe bron ↗"-link —
+een `<a>` genest in een `<a>`, ongeldige HTML die in schermlezers onvoorspelbaar navigeert.
+Het scroll-anker (`idVoorScroll`) zit ongewijzigd op de buitenste kaart.
+
+Twee kolommen betekent `md:grid-cols-2` — onder `md` blijft het één kolom, ook in `/ai`.
+
+De **ingeklapte** samenvattingsbalk toont nu aantal, documentnamen en `bronbasis` (die
+laatste vanaf `lg`; op smallere schermen zou de balk anders over twee regels breken). De
+documentnamen komen uit `samenvattingDocumentnamen()` in `core/lib/bronsamenvatting.ts` —
+een pure functie in `core/` en niet in het component, zodat de regel getest kan worden
+(`bronsamenvatting.sanity.ts`). Die functie **ontdubbelt**, en dat is wezenlijk, geen
+cosmetiek: één document levert vaak meerdere chunks en dus meerdere bronnen, en zonder
+ontdubbeling zou de balk driemaal dezelfde titel tonen en de indruk wekken dat het antwoord
+op drie stukken steunt. Wat niet past wordt "+N meer", waarbij N **unieke documenten** telt.
+
+Bewust géén retrievalmethode in de balk: die leeft uitsluitend server-side in
+`retrieval_meta` (auditspoor) en tonen zou een payloaduitbreiding vragen. Het paneel blijft
+standaard ingeklapt (Increment I-1, FO §11c).
+
+### 8.5 Fragmentlengte
+
+Zie besluit [`0100`](./decisions/0100-fragmentlengte-op-zinsgrens.md) en
+`core/lib/bronfragment.ts`: afkappen op zinsgrens binnen 300 tekens, terugval op woordgrens,
+en een **afkapmarkering zodra er tekst is weggelaten — ook als het citaat toevallig netjes op
+een punt eindigt**. Dat laatste is een governance-eis, geen typografie: "Het bestuur stelt de
+regeling vast." leest als een compleet citaat, terwijl de weggevallen volgende zin "Deze
+regeling geldt niet voor deelnemers die vóór 2020 zijn uitgetreden." de strekking omkeert.
+Beide reviews vonden dit onafhankelijk van elkaar.
+
+Dit is de enige payloadwijziging van deelopdracht A. Het fragment gaat **niet** naar de
+prompt, dus er zijn geen modelkosten. Gemeten op een echt antwoord met tien bronnen:
+2.928 tekens tegen 1.530 onder de oude regel — **+1.398 bytes**.
+
+De regel geldt op alle paden die een citaat vúllen: `maakContext()` in `core/lib/rag.ts` én
+`opmaakBesluitContext()` in `core/lib/besluitvorming-bron.ts` — anders zou juist de bron met
+het hoogste normgewicht als enige stil afkappen. `documentBronnen()` bouwt óók een
+`BronVerwijzing`, maar laat het fragment bewust leeg (§8.2).
+
+### 8.6 Twee layoutcorrecties die hierbij hoorden
+
+- **De documentscroll op `/ai`.** De pagina kon voorbij het chatvenster scrollen — gemeten op
+  een gesprek van 29 berichten: **6.187 px lege scroll**. Oorzaak: de aria-live-melding van
+  "Antwoord kopiëren" (`<span class="sr-only">` in `KopieerKnop`) is absoluut gepositioneerd
+  en staat in de **actiebalk**, dus buiten `.ai-blok` — dat als enige onvoorwaardelijk
+  `position: relative` draagt (`globals.css`). Zonder gepositioneerde voorouder is haar
+  containing block het viewport: ze ontsnapt aan de clip van de scrollcontainer en rekt het
+  document op tot de volle hoogte van de gespreksinhoud. De kopieerknoppen *per blok* zitten
+  wél in `.ai-blok` en waren nooit het probleem. `position: relative` op beide
+  scrollcontainers brengt de overflow terug naar 0.
+- **De 56 px onder `md`.** `min-h-screen` op de shell-`<main>` is border-box, dus de `pt-14`
+  valt daarbinnen — maar het `h-screen`-kind telde er bovenop. Nu
+  `h-[calc(100vh-3.5rem)] md:h-screen`. Bewust dezelfde eenheid als de `<main>`: zou het kind
+  op `dvh` staan terwijl de `<main>` op `100vh` blijft, dan houdt die op mobiel met
+  uitgeschoven browserbalk een resthoogte van (lvh − dvh) over — precies de restscroll die
+  hier wordt weggenomen. Overstappen op `dvh` kan, maar dan in `DashboardShell` én hier.
+- **`min-w-0` op de AI-kolom.** Een flex-item krimpt niet onder zijn min-content-breedte;
+  zonder dit duwde het tweekolomsraster van de bronkaarten de 1020px-kolom uit.
+
+### 8.7 Openstaand na deelopdracht A
+
+Uit de governance-review, bewust doorgeschoven omdat het payloadwijzigingen zijn en
+deelopdracht A de renderlaag betreft:
+
+- `documentBronnen()` (`app/api/chat/route.ts`) vult de statusvelden niet, dus op het
+  dekkingsbrede pad ontbreekt het statussignaal — óók bij een conceptdocument. Let op de
+  omvang: `haalDocumentChunks()` selecteert `documentstatus` en `bronstatus` wél, maar
+  **niet** `documentdatum`, `geldig_tot`, `normgewicht`, `bronorganisatie` of `extern_url`.
+  Wie dat compleet wil maken, moet ook die select uitbreiden.
+- Het auditspoor kent geen versiemarkering op het fragment: twee logregels met een
+  verschillende afkapregel zijn niet als zodanig herkenbaar. Reconstrueerbaar via de datum
+  van besluit 0100.
+- Een citaat blijft door de applicatie geconstrueerd. De afkapmarkering plus de openen-actie
+  zijn de mitigatie; ontbreekt het origineel (`heeft_origineel = false`), dan is er geen
+  controlepad.
+
+## 9. Documentvraag als documentlijst (tranche 2B)
+
+Bij een vraag als *"welke stukken hebben we over de compensatieregeling?"* **zijn** de
+documenten het antwoord. Ze stonden ingeklapt onder een alinea die de titels in proza
+herhaalde. Zie besluit [`0099`](./decisions/0099-documenten-in-het-antwoord-bij-bronoverzicht.md).
+
+### 9.1 De modus wordt gelezen, niet bepaald
+
+`bronoverzicht` bestond al: server-side bepaald in `core/lib/vraagtype.ts`, meereizend in
+het `meta`-event, en al zichtbaar als rij in het onderbouwingspaneel. De weergave leest
+`onderbouwing.antwoordmodus` van hét bericht — geen nieuwe state, geen API-veld, geen
+tweede plek waar iets over de modus wordt besloten. `ANTWOORDMODUS_PATRONEN`,
+`bepaalAntwoordmodus` en de drempels zijn niet aangeraakt.
+
+De lezer `leesAntwoordmodus()` staat sinds deze tranche in de gedeelde renderer en is
+gebouwd op de bestaande constante `ANTWOORDMODI`. Hij stond eerder als kopie in
+`AssistentClient` mét een hard gecodeerde lijst modusnamen; de agendapuntchat heeft hem
+nu ook nodig, en twee lijsten zouden vroeg of laat uiteenlopen.
+
+### 9.2 Anti-dubbeling
+
+Staan de documenten in het antwoord, dan houdt het paneel alléén de verantwoording. Het
+meldt dat expliciet (`bronnenInAntwoord`) — de bestaande fallbacktekst *"Geen interne
+documentbronnen geraadpleegd"* zou daar feitelijk onjuist zijn: ze zijn juist wél
+geraadpleegd en staan hierboven. Bij elke andere antwoordmodus is de weergave identiek aan
+die na tranche 2A.
+
+### 9.3 Ordening: deterministisch en totaal
+
+`groepeerDocumentbronnen()` in `core/lib/documentlijst.ts`:
+
+1. **Ontdubbelen op `document_id`** — één document levert vaak meerdere chunks en dus
+   meerdere bronvermeldingen. De eerste treffer wint; de bronnenlijst komt in
+   rangschikkingsvolgorde binnen, dus dat is de best scorende passage.
+2. **Groeperen op `documenttype`**, in de canonieke `DOCUMENTTYPEN`-volgorde, met
+   "Type nog niet vastgelegd" altijd achteraan.
+3. **Sorteren** op `documentdatum` aflopend, zonder datum onderaan, met titel en
+   `document_id` als tiebreak.
+
+Stap 3 maakt de ordening **totaal**: zonder die tiebreak zouden twee stukken met dezelfde
+datum van sorteerimplementatie kunnen wisselen, en dan geeft dezelfde bronnenset niet
+gegarandeerd dezelfde lijst. Er staat bewust **geen `localeCompare`** in: de ICU-collatie
+verschilt per Node-build en zou het resultaat onreproduceerbaar maken. `documentdatum`
+wordt lexicografisch vergeleken; dat mag omdat de kolom een `date` is en dus als
+`JJJJ-MM-DD` binnenkomt.
+
+**Waarom niet op `context` (dossier/vergadering/algemeen):** dat zegt wáár een stuk is
+opgeborgen, niet wát voor stuk het is; drie groepen over vier tot tien documenten voegt
+weinig toe; en `context` zit niet in de payload. Eerlijk tegenargument: `context` ís
+gebackfilld en `documenttype` niet — zie §9.5.
+
+### 9.4 Filteren is weergave, scope is een vervolgactie
+
+De chips ("Alle" / "Alleen vastgesteld") werken uitsluitend op de al opgehaalde set. Geen
+fetch, geen nieuwe retrieval, geen wijziging aan de filtering vóór retrieval. De teller
+toont altijd "n van m", zodat zichtbaar blijft hoeveel er is weggefilterd. "Vastgesteld"
+gebruikt dezelfde `ACTUELE_BRON_STATUSSEN` als de pill-markering (§8.3).
+
+"Vraag hierover" en "Vraag over deze N documenten" zetten de bestaande client-scope en
+zetten de cursor in het invoerveld. Ze **versturen niets**: de bestuurder formuleert zelf
+de vraag. De server-side validatie (`valideerScope`) blijft onverkort leidend en draait
+pas bij het versturen; een geweigerd document geeft daar de bestaande zichtbare fout —
+nooit een stille terugval. In de agendapuntchat ontbreken deze knoppen bewust: daar ís de
+scope al vast, en versmallen zonder dat erom gevraagd wordt zou de context stilletjes
+veranderen.
+
+### 9.5 Ontbrekende waarden
+
+`documenttype` is nullable en **niet gebackfilld** zolang de metadata-review-queue niet is
+doorgewerkt; `bestandstype` is `not null` met default `'pdf'` en in de praktijk altijd
+gevuld. Regel: een ontbrekend veld levert **nooit** een lege chip, een lege badge of een
+gebroken kaart — het element blijft simpelweg weg. Eerste live meting op Horizon: één van
+zes documenten had een type; de rest viel in de restgroep en werd op datum geordend.
+
+### 9.6 De payloaduitbreiding
+
+`verrijkDocumentmetadata()` in `core/lib/rag.ts` haalt `documenttype` en `bestandstype` op
+in één gebatchte vervolgquery op de unieke document-id's — patroon van
+`verrijkNotulenChunks()`. Reden: `zoek_chunks` en `zoek_chunks_hybride` hebben een vaste
+`returns table`, en een kolom toevoegen aan een RPC-return vereist `drop function` +
+`create`, dus een migratie.
+
+De functie zit ná de splitsing in retrieval-paden, waar RPC, fallback-cascade,
+dekkingsbrede scope en parent-context samenkomen. Dat maakt "geen pad gemist"
+**structureel** in plaats van een controle die bij elke wijziging opnieuw moet.
+
+De velden zijn pure doorgeefwaarden: nergens gelezen door retrieval, ranking, filtering of
+promptopbouw. De verrijking draait ná `handhaafFondsdiscipline` en ná `naVerwerking`, en
+`maakContext()` bouwt de modelcontext uit expliciet benoemde velden. RLS blijft leidend
+(anon-client); faalt de query, dan valt de weergave netjes terug.
+
+
+### 9.7 Wat de reviews aan B veranderd hebben
+
+Drie bevindingen raakten de verantwoordbaarheid direct en zijn vóór oplevering hersteld:
+
+- **De `[Bron N]`-pill werd een dode verwijzing.** Met de bronkaarten uit het paneel
+  bestonden de ankers `bron-{i}-{j}` niet meer, dus een klik opende een leeg paneel. De
+  documentkaart draagt nu een anker per bronvermelding die naar dat document wijst
+  (`Documentregel.bronnummers`) en licht op bij een klik. Ontdubbeling betekent dat
+  meerdere pills op dezelfde kaart landen — daarom een anker per nummer, niet één per kaart.
+- **Het paneel beweerde iets dat er niet stond.** `bronnenInAntwoord` volgde alleen de
+  modus, terwijl de lijst pas verschijnt bij een voltooid antwoord mét documentbronnen.
+  Tijdens het streamen, bij een afgebroken antwoord en bij nul treffers claimde het paneel
+  dus een lijst die er niet was — én verborg het tegelijk de bronkaarten. Beide surfaces
+  gebruiken nu één gedeelde conditie, `documentlijstZichtbaar()`.
+- **De besluitregistratie is geen document.** `opmaakBesluitContext()` levert bronnen met
+  `bron: "Decision Object"` en een `decision_id` in het `document_id`-veld. In de lijst
+  zouden die de document-scope laten falen op `niet_gevonden` (en dus de héle vervolgvraag
+  blokkeren), en het filter "alleen vastgesteld" zou een `besloten` besluit juist
+  verbergen. Ze zijn nu uitgesloten van de lijst (`isDocumentbron()`) en blijven als
+  bronkaart in het paneel staan — de formeel zwaarste bron mag niet verdwijnen.
+
+Verder aangescherpt: het filter weegt nu dezelfde drieslag als de pill (status, bronstatus,
+verlopen geldigheid) in plaats van alleen `documentstatus`; documenten zónder status worden
+apart geteld ("3 van 6 · 2 zonder status") in plaats van stil weggefilterd; de kaart
+hergebruikt `BronkaartMeta`, zodat normgewicht, bronsoort, bronorganisatie en vooral de
+"Externe bron ↗"-link niet verdwijnen — voor een generiek kader zonder lokaal origineel is
+die link het enige pad naar het stuk; en `documentBronnen()` vult nu ook de bronkaartvelden,
+zodat het dekkingsbrede pad niet als enige zonder status en datum in de lijst staat.
+
+Boven de lijst staat een voorbehoud: *"De stukken die bij deze vraag zijn opgehaald — geen
+uitputtend overzicht van de bibliotheek."* Zonder die regel leest een lijst met groepskoppen
+en aantallen als een inventaris, terwijl het de opbrengst van maximaal `CHUNK_BUDGET`
+chunks is.
+
+### 9.8 Logging bij de documentlijst
+
+Ongewijzigd ten opzichte van §8.1, hier expliciet omdat de lijst tot tien openen-acties per
+antwoord zichtbaar maakt:
+
+- **Filteren** is een leeshandeling en wordt niet vastgelegd.
+- **Het openen van een document** loopt via de bestaande route `/api/documents/<id>/bestand`
+  en schrijft daar een `document_inzage`-rij (fonds, gebruiker, titel-snapshot).
+- **De scope zetten** logt op zichzelf niets; bij de eerstvolgende vraag landt hij in
+  `governance_log.retrieval_meta.scope`, inclusief `algemene_kennis`.
+
+`scopeUitDocumentlijst()` zet `algemene_kennis: true` (zichtbaar als aangevinkte optie op de
+scope-chip) en wist een actieve agendapuntcontext — de vraag gaat immers over dít document,
+niet meer over het agendapunt.
+
+## 10. Visuele rust (tranche 2C)
+
+Drie ingrepen uit de visuele referentie
+[`prototypes/ai-assistent-grafische-optimalisatie.html`](./prototypes/ai-assistent-grafische-optimalisatie.html),
+op verzoek van de opdrachtgever. Alle drie renderlaag; geen nieuwe tokens.
+
+### 10.1 De bronvermelding wordt tekst
+
+De pill droeg alleen een nummer. *"Zoals vastgesteld [3]"* dwingt de lezer het nummer te
+onthouden en elders op te zoeken. De pill toont nu een nummerbolletje **plus** een afgeleid
+label (`pillLabelVoor()` in `core/lib/bronsamenvatting.ts`): bij voorkeur documenttype +
+datum ("Notulen 11-07"), anders de titel, afgekapt op 32 tekens en visueel op 160 px. Het
+nummer blijft staan — dát koppelt de bewering aan de bronkaart en aan het auditspoor.
+
+Zolang `documenttype` niet is gebackfilld valt het label terug op de (soms technische)
+bestandstitel; dat wordt vanzelf beter naarmate de metadata-review-queue vordert.
+
+### 10.2 Rustiger kleur
+
+De pill volgt nu de referentie: `warn-tint` met een rond nummerbolletje in `warn`, in plaats
+van een violet blokje. De accentkleur bleef daardoor gereserveerd voor bediening in plaats
+van voor markeringen in lopende tekst. De gestippelde rand bij een niet-actuele grondslag
+(§8.3) blijft ongewijzigd werken.
+
+### 10.3 De eigen vraag als rustig blok
+
+De vraagbubbel was massief violet en trok in een lang gesprek meer aandacht dan het antwoord
+eronder. Nu `app-zebra` met een hairline — dezelfde behandeling als in de referentie. De
+positie (rechts uitgelijnd) is níét gewijzigd; de referentie zet de vraag links met een
+avatar, maar dat is een layoutkeuze die losstaat van de kleurvraag.

@@ -102,6 +102,7 @@ Verificatie loopt primair via `tsc --noEmit` + de `lib/*.sanity.ts`-checks (pure
 - **Generieke proceduremodule (in ontwerp):** `PROCEDURE-GENERIEK-ONTWERP.md`.
 - **RAG / documentpipeline:** `lib/rag.ts`, `lib/document-extractie.ts`, `app/api/documents/upload/route.ts`.
 - **AI-chat:** `app/api/chat/route.ts`.
+- **AI-antwoordweergave (parser, opmaak, kopiëren):** `core/lib/antwoord-parser.ts`, `core/lib/antwoord-klembord.ts`, `app/(dashboard)/ai/_components/AntwoordWeergave.tsx`, `AI-WEERGAVE-ONTWERP.md`. Eén renderer voor `/ai` én de agendapuntchat (besluit 0079) — een wijziging landt altijd op beide.
 - **Migraties (bron van waarheid voor schema):** `supabase/migrations/`.
 - **Security-status:** `SECURITY-ROUTE-A-PLAN.md`, `SECURITY-ROUTE-A-IMPLEMENTATIE.md`, `lib/api-errors.ts`.
 - **RLS-controlekader + wijzigingsproces (T3):** `T3-RLS-CONTROLEKADER.md` (policy-matrix, §14-checklist, service-role-inventaris, testkader). Elke nieuwe tenant-policy krijgt een `WITH CHECK`; de structurele test `supabase/checks/2026_07_08_t3_cross_tenant.sql` faalt anders.

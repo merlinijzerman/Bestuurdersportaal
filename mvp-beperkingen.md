@@ -1,6 +1,6 @@
 # MVP-beperkingen — Bestuurdersportaal
 
-**Laatst bijgewerkt:** 2026-07-31 (securityreview 30-31 juli: §3 en §4 bijgewerkt; overige tekst per 2026-07-04)
+**Laatst bijgewerkt:** 2026-07-31 (securityreview 30-31 juli: §3 en §4 bijgewerkt; AI-weergave tranche 1: §5 aangevuld met het niet-geregistreerde kopieerpad; overige tekst per 2026-07-04)
 **Doel:** eerlijk overzicht van wat de MVP níét is of níét kan, plus de noodzakelijke stappen richting productiegeschiktheid. Bronnen: feitenrapporten 4 juli 2026, `HANDOVER.md` §Bekende beperkingen, `SECURITY-ROUTE-A-IMPLEMENTATIE.md`, `CODE-REVIEW-2026-07-03.md` (afgekapt), `decisions/`.
 
 ## 1. Functionele beperkingen

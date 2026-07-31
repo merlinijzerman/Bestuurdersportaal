@@ -19,7 +19,7 @@
 //     Eén bronkaart; bij heeft_origineel een <a> naar /api/documents/.../bestand.
 // - type Bron
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import {
   parseerBlokken,
   bronIndexVoor,
@@ -39,7 +39,23 @@ import { bronkaartLabels, normgewichtLabel, isVeiligeUrl } from "@/core/lib/bron
 import {
   DOCUMENT_STATUS_LABEL,
   BRONSTATUS_LABEL,
+  ACTUELE_BRON_STATUSSEN,
 } from "@/core/lib/document-status-transities";
+import {
+  DECISION_STATUS_LABEL,
+  mapDecisionToProcedureStatus,
+  type DecisionStatus,
+} from "@/core/lib/decision-view";
+import {
+  groepeerDocumentbronnen,
+  pasFilterToe,
+  documentIdsVan,
+  documenttypeLabel,
+  type Documentfilter,
+  type Documentregel,
+} from "@/core/lib/documentlijst";
+import { ANTWOORDMODI, type Antwoordmodus } from "@/core/lib/vraagtype";
+import { pillLabelVoor } from "@/core/lib/bronsamenvatting";
 
 export interface Bron {
   document_id: string;
@@ -58,24 +74,17 @@ export interface Bron {
   bronorganisatie?: string | null;
   normgewicht?: string | null;
   extern_url?: string | null;
+  // Tranche 2B — soort stuk en bestandsformaat, voor de documentlijst bij
+  // antwoordmodus `bronoverzicht`. Beide optioneel: `documenttype` is nullable en
+  // niet gebackfilld (metadata-review-queue), en oude, opgeslagen gesprekken
+  // kennen de velden helemaal niet.
+  documenttype?: string | null;
+  bestandstype?: string | null;
 }
 
-const BRONKLEUR: Record<string, string> = {
-  DNB: "bg-err-tint border-err/30",
-  AFM: "bg-accent-tint border-accent/30",
-  Pensioenfederatie: "bg-ok-tint border-ok/30",
-  Intern: "bg-warn-tint border-warn/30",
-  Extern: "bg-warn-tint border-warn/30",
-};
-
-const BRONTEKST: Record<string, string> = {
-  DNB: "text-err-ink",
-  AFM: "text-accent-ink",
-  Pensioenfederatie: "text-ok-ink",
-  Intern: "text-warn-ink",
-  Extern: "text-warn-ink",
-};
-
+// De bronorganisatie draagt nog één kleursignaal: het nummerbolletje. De
+// vlak- en tekstkleuren per organisatie zijn vervallen met de neutrale
+// bronkaart (zie Bronkaart hieronder).
 const BRON_NUMMER_KLEUR: Record<string, string> = {
   DNB: "bg-err text-white",
   AFM: "bg-accent text-white",
@@ -83,6 +92,143 @@ const BRON_NUMMER_KLEUR: Record<string, string> = {
   Intern: "bg-warn text-white",
   Extern: "bg-warn text-white",
 };
+
+// ============================================================
+//  Bronhelpers — gedeeld door de pill, de preview en de bronkaart
+// ============================================================
+// Één afleiding per gegeven, zodat de hover-preview en de bronkaart nooit iets
+// anders beweren over dezelfde bron.
+
+/** Vindplaats binnen het stuk: "Hoofdstuk 3 · pag. 14". Leeg = niet bekend. */
+function vindplaatsVan(bron: Bron): string {
+  return [bron.paragraaf, bron.pagina ? `pag. ${bron.pagina}` : null]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/**
+ * De benoemde openen-actie, of `null` als er geen origineel is. Het
+ * `#page=N`-fragment wordt gehonoreerd door de ingebouwde PDF-viewers van
+ * Chrome/Edge/Firefox; bij Word/Excel (download) wordt het genegeerd.
+ */
+function openenActieVan(bron: Bron): { href: string; label: string } | null {
+  if (!bron.heeft_origineel) return null;
+  return bron.pagina
+    ? {
+        href: `/api/documents/${bron.document_id}/bestand#page=${bron.pagina}`,
+        label: `Openen op pagina ${bron.pagina}`,
+      }
+    : {
+        href: `/api/documents/${bron.document_id}/bestand`,
+        label: "Openen in het document",
+      };
+}
+
+// ── Statusoordeel ────────────────────────────────────────────────────────────
+// Wat de bestuurder moet zien is niet "is dit een concept?" maar "mag ik hier
+// zonder voorbehoud op varen?". Dat is een ALLOW-list, geen deny-list: de
+// codebase kent één definitie van een actuele bron (ACTUELE_BRON_STATUSSEN, en
+// in rag.ts dezelfde twee waarden) en alles daarbuiten — `concept`,
+// `ter_bespreking`, `ter_besluitvorming`, maar óók `vervangen`,
+// `alleen_historisch` en `gearchiveerd` — is géén actuele grondslag.
+//
+// Een deny-list met drie statussen liet de onderkant van de ladder onbewaakt:
+// een vervangen beleidsstuk zag er dan uit als van kracht, en dat is precies het
+// geval waarin een bestuurder op verouderd beleid vaart.
+//
+// BELANGRIJK: een ONBEKENDE status wordt niet gemarkeerd. Markeren betekent
+// "let op, niet vastgesteld", en dat is bij ontbrekende data net zo goed een
+// ongefundeerde bewering als het omgekeerde. In plaats daarvan zegt de preview
+// expliciet dát de status niet is meegeleverd.
+
+/** Fasen waarin een Decision Object een genomen besluit vertegenwoordigt. */
+const BESLOTEN_FASEN = new Set(["besloten", "in_implementatie"]);
+
+/** Bron uit de besluitregistratie (core/lib/besluitvorming-bron.ts). */
+function isBesluitBron(bron: Bron): boolean {
+  return bron.bron === "Decision Object";
+}
+
+interface Statusoordeel {
+  /** Leesbaar statuslabel, of null als de status niet is meegeleverd. */
+  label: string | null;
+  /** Aantoonbaar géén actuele, vastgestelde grondslag → gestippelde rand. */
+  gemarkeerd: boolean;
+  /** Extra tekstuele dragers naast de randstijl (bronstatus, vervallen-datum). */
+  bijzonderheden: string[];
+}
+
+function statusOordeel(bron: Bron): Statusoordeel {
+  const bijzonderheden: string[] = [];
+
+  // De besluitregistratie zet een Decision Object-status in het documentstatus-
+  // veld. Die hoort in een ánder domein thuis: `besloten` is daar de vastgestelde
+  // grondslag, niet `vastgesteld`. Zonder deze tak zou de ruwe enum-waarde
+  // ("in_onderbouwing") in de preview en het aria-label belanden.
+  if (isBesluitBron(bron)) {
+    const status = bron.documentstatus ?? null;
+    if (!status) return { label: null, gemarkeerd: false, bijzonderheden };
+    const label =
+      (DECISION_STATUS_LABEL as Record<string, string>)[status] ?? status;
+    const fase = mapDecisionToProcedureStatus(status as DecisionStatus);
+    return { label, gemarkeerd: !BESLOTEN_FASEN.has(fase), bijzonderheden };
+  }
+
+  const status = bron.documentstatus ?? null;
+  const label = status
+    ? (DOCUMENT_STATUS_LABEL as Record<string, string>)[status] ?? status
+    : null;
+
+  let gemarkeerd =
+    !!status && !(ACTUELE_BRON_STATUSSEN as string[]).includes(status);
+
+  // Bronstatus en vervaldatum maken een bron óók niet-actueel, ook als de
+  // documentstatus 'van_kracht' is. Zie zouActueelZijn() in core/lib/rag.ts:
+  // daar telt dezelfde drieslag voor de retrieval-filtering.
+  if (bron.bronstatus && bron.bronstatus !== "actief") {
+    gemarkeerd = true;
+    bijzonderheden.push(
+      (BRONSTATUS_LABEL as Record<string, string>)[bron.bronstatus] ?? bron.bronstatus
+    );
+  }
+  const labels = bronkaartLabels({
+    bibliotheek: bron.bibliotheek,
+    normgewicht: bron.normgewicht,
+    geldig_tot: bron.geldig_tot,
+  });
+  if (labels.vervallen) {
+    gemarkeerd = true;
+    if (labels.vervallenLabel) bijzonderheden.push(labels.vervallenLabel);
+  }
+
+  return { label, gemarkeerd, bijzonderheden };
+}
+
+/**
+ * Heeft deze bron een citeerbaar fragment? Niet op elk pad. Het dekkingsbrede
+ * document-scope-pad (`documentBronnen()` in app/api/chat/route.ts) bouwt één
+ * bronkaart per DOCUMENT in plaats van per chunk en laat het fragment leeg,
+ * omdat het antwoord tekstueel naar pagina's verwijst; een besluitbron zonder
+ * ingevulde besluitvraag levert eveneens een lege string.
+ *
+ * `?? ""` is geen defensieve tic: `Bron[]` komt via een ongecontroleerde cast uit
+ * `gesprekken.berichten` (jsonb) en uit het SSE-event, dus een oud of
+ * onvolledig bericht kan het veld missen.
+ */
+function heeftFragment(bron: Bron): boolean {
+  return (bron.fragment ?? "").trim().length > 0;
+}
+
+// Bewust ZONDER dekkingsuitspraak. Een eerdere formulering ("het volledige
+// document is als bron gebruikt") sprak het antwoord tegen: bij een document dat
+// niet in MAX_BATCHES past zet de route `breedAfgekapt` en instrueert ze het
+// model juist te melden dát de dekking gedeeltelijk is. De bronkaart mag die
+// tegenspraak niet introduceren — en ze weet het ook niet: `breedAfgekapt` reist
+// niet mee in de payload.
+const GEEN_FRAGMENT_MELDING =
+  "Geen losse passage als citaat aangewezen — zie de verwijzingen in het antwoord.";
+
+const GEEN_STATUS_MELDING = "Status niet meegeleverd bij deze bronvermelding";
 
 // ============================================================
 //  Antwoord-renderer met lichte Markdown + citatiemarkers
@@ -432,6 +578,55 @@ function renderStukken(stukken: InlineStuk[]): ReactNode[] {
   });
 }
 
+// ============================================================
+//  Hover-preview op de [Bron N]-pill
+// ============================================================
+// Verifiëren zonder te scrollen: fragment, vindplaats en een benoemde
+// openen-actie, uit data die al in de client zit. Vervangt het native
+// `title`-attribuut, dat NIET aan WCAG 1.4.13 voldoet (niet hoverbaar, niet met
+// Escape te sluiten, en op sommige platforms te kort zichtbaar).
+//
+// Twee bewuste constructiekeuzes:
+//
+//  1. POSITION: FIXED, niet absolute. Het antwoord staat in beide surfaces in een
+//     scrollcontainer (/ai: `flex-1 overflow-y-auto`; agendapuntchat:
+//     `max-h-96 overflow-y-auto`) en tabellen staan in `overflow-x-auto`. Een
+//     absoluut gepositioneerde preview wordt daar afgeknipt. Er staat vandaag
+//     geen `transform`/`filter`/`perspective` op een voorouder, dus het viewport
+//     blijft het containing block. Zet die daar ooit wél op, dan verschuift deze
+//     preview mee — dat is de bekende grens van deze constructie.
+//  2. DE PREVIEW IS EEN SIBLING VAN DE PILL, geen kind. Er staat een link in, en
+//     een <a> in een <button> is ongeldige HTML en breekt de tabvolgorde. Omdat
+//     hij wél in dezelfde wrapper zit, telt hij voor mouseenter/mouseleave en
+//     voor focus als één geheel — precies wat "hoverbaar" en "persistent" vragen.
+
+const PREVIEW_BREEDTE = 320;
+/** Uitstel bij het wegbewegen, zodat de muis de kier naar de preview kan oversteken. */
+const SLUIT_VERTRAGING_MS = 150;
+/**
+ * Ruimte die boven de pill vrij moet zijn om de preview daar te plaatsen. Ruim
+ * genomen: bij een lange titel plus een citaat van 300 tekens wordt de preview
+ * ongeveer 280px hoog. Past hij niet, dan gaat hij eronder — en `maxHeight` in
+ * de stijl vangt het uitzonderlijke geval af dat hij ook dán niet past.
+ */
+const PREVIEW_RUIMTE_BOVEN = 320;
+
+type PreviewPositie = { left: number; top?: number; bottom?: number };
+
+function berekenPositie(pil: HTMLElement): PreviewPositie {
+  const r = pil.getBoundingClientRect();
+  const breedte = Math.min(PREVIEW_BREEDTE, window.innerWidth - 16);
+  const left = Math.min(
+    Math.max(8, r.left + r.width / 2 - breedte / 2),
+    Math.max(8, window.innerWidth - breedte - 8)
+  );
+  // Boven de pill als daar plek is; anders eronder. Door met `bottom` te ankeren
+  // hoeven we de hoogte van de preview niet vooraf te meten.
+  return r.top > PREVIEW_RUIMTE_BOVEN
+    ? { left, bottom: window.innerHeight - r.top + 8 }
+    : { left, top: r.bottom + 8 };
+}
+
 function BronPill({
   nummer,
   bron,
@@ -443,27 +638,219 @@ function BronPill({
   gehighlight: boolean;
   onClick: () => void;
 }) {
-  const locatie = [bron.paragraaf, bron.pagina && `pag. ${bron.pagina}`]
-    .filter(Boolean)
-    .join(", ");
-  const tooltip =
-    `${bron.bron} — ${bron.titel}` +
-    (locatie ? ` (${locatie})` : "") +
-    `\n\n„${bron.fragment}"` +
-    `\n\nKlik om de bronvermelding hieronder te openen.`;
+  const [positie, setPositie] = useState<PreviewPositie | null>(null);
+  const wrapper = useRef<HTMLSpanElement>(null);
+  const pil = useRef<HTMLButtonElement>(null);
+  const sluitTimer = useRef<number | null>(null);
+  const previewId = useId();
+  const open = positie !== null;
+
+  const annuleerSluiten = () => {
+    if (sluitTimer.current !== null) {
+      window.clearTimeout(sluitTimer.current);
+      sluitTimer.current = null;
+    }
+  };
+
+  const toon = useCallback(() => {
+    annuleerSluiten();
+    if (pil.current) setPositie(berekenPositie(pil.current));
+  }, []);
+
+  const verberg = () => {
+    annuleerSluiten();
+    setPositie(null);
+  };
+
+  const verbergStraks = () => {
+    annuleerSluiten();
+    sluitTimer.current = window.setTimeout(() => setPositie(null), SLUIT_VERTRAGING_MS);
+  };
+
+  useEffect(() => () => annuleerSluiten(), []);
+
+  // Meebewegen met de omringende scrollcontainer én het venster, plus sluiten
+  // zodra de pill uit beeld scrolt (anders blijft de preview los in het venster
+  // hangen). En: WCAG 1.4.13 "dismissible" vraagt dat Escape werkt ZONDER de
+  // focus te verplaatsen — een preview die met de muis is geopend heeft de focus
+  // niet, dus een handler op de wrapper zou dan nooit vuren. Vandaar `document`.
+  // Bewust géén stopPropagation/preventDefault: de @-mention-Escape op de
+  // textarea in AssistentClient moet ongemoeid blijven.
+  useEffect(() => {
+    if (!open) return;
+    const herbereken = () => {
+      if (!pil.current) return;
+      const r = pil.current.getBoundingClientRect();
+      if (r.bottom < 0 || r.top > window.innerHeight) {
+        setPositie(null);
+        return;
+      }
+      setPositie(berekenPositie(pil.current));
+    };
+    const opEscape = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      const focusBinnen = wrapper.current?.contains(document.activeElement);
+      verberg();
+      if (focusBinnen) pil.current?.focus();
+    };
+    window.addEventListener("scroll", herbereken, { capture: true, passive: true });
+    window.addEventListener("resize", herbereken);
+    document.addEventListener("keydown", opEscape);
+    return () => {
+      window.removeEventListener("scroll", herbereken, { capture: true });
+      window.removeEventListener("resize", herbereken);
+      document.removeEventListener("keydown", opEscape);
+    };
+    // `verberg` is stabiel genoeg: hij raakt alleen refs en de setter.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const oordeel = statusOordeel(bron);
+  const label = pillLabelVoor({
+    titel: bron.titel,
+    documentdatum: bron.documentdatum,
+    documenttypeLabel: documenttypeLabel(bron),
+  });
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={tooltip}
-      className={`relative -top-[1px] inline-flex items-center justify-center align-baseline mx-0.5 min-w-[20px] h-[18px] px-1.5 rounded-md text-[10px] font-bold leading-none transition-colors cursor-pointer ${
-        gehighlight
-          ? "bg-accent text-white"
-          : "bg-accent/20 text-ink hover:bg-accent/45 hover:shadow-sm"
-      }`}
+    <span
+      ref={wrapper}
+      className="relative inline-block"
+      onMouseEnter={toon}
+      onMouseLeave={verbergStraks}
+      onFocus={toon}
+      onBlur={(e) => {
+        // Focus die binnen de wrapper blijft (pill → openen-link) sluit niet.
+        if (!wrapper.current?.contains(e.relatedTarget as Node | null)) verberg();
+      }}
     >
-      {nummer}
-    </button>
+      <button
+        ref={pil}
+        type="button"
+        // Klikken betekent "breng me naar de bronkaart". De preview heeft dan zijn
+        // werk gedaan; laten staan zou hem — via de scroll-listener — bovenop de
+        // kaart plaatsen waar zojuist naartoe is gescrold. Op touch is dit het
+        // normale pad: daar is er geen hover, wel focus.
+        onClick={() => {
+          verberg();
+          onClick();
+        }}
+        aria-describedby={previewId}
+        aria-label={`Bron ${nummer}: ${bron.titel}${
+          oordeel.label ? ` (${oordeel.label})` : ""
+        } — toon bronvermelding`}
+        className={`relative -top-[1px] inline-flex items-center align-baseline mx-0.5 h-[20px] gap-1.5 rounded-full border py-0 pl-[3px] pr-2 text-[11px] font-bold leading-none transition-colors cursor-pointer ${
+          // Geen actuele, vastgestelde grondslag → gestippelde rand. Kleur is nooit
+          // de enige drager: dezelfde status staat als tekst in de beschrijving.
+          oordeel.gemarkeerd ? "border-dashed border-warn" : "border-warn/40"
+        } ${
+          gehighlight
+            ? "bg-warn/25 text-warn-ink shadow-sm"
+            : "bg-warn-tint text-warn-ink hover:bg-warn/20"
+        }`}
+      >
+        <span
+          aria-hidden="true"
+          className="grid h-[15px] w-[15px] flex-none place-items-center rounded-full bg-warn text-[9px] text-white"
+        >
+          {nummer}
+        </span>
+        {/* Het afgeleide label maakt van "[3]" een leesbare bronvermelding. Het
+            nummer blijft staan: dát koppelt de bewering aan de bronkaart en aan
+            het auditspoor. Ontbreken titel én documenttype, dan blijft het label
+            leeg en toont de pill alleen het nummer — zoals voorheen. */}
+        {label && (
+          <span className="max-w-[160px] truncate font-semibold">{label}</span>
+        )}
+      </button>
+      {/* De beschrijving staat er ALTIJD, ook dicht. Zou `aria-describedby` pas
+          bij het openen worden gezet, dan heeft de schermlezer de focusmelding al
+          samengesteld en valt juist het citaat — de kern van deze tranche — weg.
+          De zichtbare preview is daarom puur visueel (aria-hidden). */}
+      <span id={previewId} className="sr-only">
+        {beschrijvingVoorSchermlezer(bron, oordeel)}
+      </span>
+      {open && <BronPreview bron={bron} oordeel={oordeel} positie={positie} />}
+    </span>
+  );
+}
+
+/** Wat een schermlezer bij de pill voorleest: dezelfde inhoud als de preview. */
+function beschrijvingVoorSchermlezer(bron: Bron, oordeel: Statusoordeel): string {
+  const delen = [
+    bron.titel,
+    vindplaatsVan(bron),
+    bron.documentdatum ?? "",
+    oordeel.label ?? GEEN_STATUS_MELDING,
+    ...oordeel.bijzonderheden,
+    heeftFragment(bron) ? `Citaat: ${bron.fragment}` : GEEN_FRAGMENT_MELDING,
+  ];
+  return delen.filter(Boolean).join(". ");
+}
+
+function BronPreview({
+  bron,
+  oordeel,
+  positie,
+}: {
+  bron: Bron;
+  oordeel: Statusoordeel;
+  positie: PreviewPositie;
+}) {
+  const openen = openenActieVan(bron);
+  const regel = [
+    vindplaatsVan(bron),
+    bron.documentdatum,
+    oordeel.label ?? GEEN_STATUS_MELDING,
+    ...oordeel.bijzonderheden,
+    bron.bron,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  return (
+    <span
+      // Bewust GEEN role="tooltip": die rol mag geen interactieve inhoud bevatten
+      // en er staat een link in. In plaats daarvan: de tékst is aria-hidden (die
+      // staat al in de sr-only-beschrijving bij de pill, dus zou dubbel klinken),
+      // en de LINK blijft gewoon bereikbaar — pill → openen-link in de tabvolgorde.
+      style={{
+        position: "fixed",
+        left: positie.left,
+        top: positie.top,
+        bottom: positie.bottom,
+        width: Math.min(PREVIEW_BREEDTE, 1000),
+        maxWidth: "calc(100vw - 16px)",
+        maxHeight: "calc(100vh - 16px)",
+      }}
+      className="z-50 block overflow-y-auto rounded-lg border border-app-line-strong bg-app-surface p-3 text-left text-xs font-normal leading-relaxed text-ink shadow-card-hover"
+    >
+      <span aria-hidden="true">
+        <span className="block font-bold">{bron.titel}</span>
+        <span className="mt-0.5 block text-[11px] text-muted">{regel}</span>
+        {heeftFragment(bron) ? (
+          <span className="mt-2 block border-l-2 border-app-line-strong pl-2.5 italic text-muted">
+            „{bron.fragment}&rdquo;
+          </span>
+        ) : (
+          <span className="mt-2 block text-muted">{GEEN_FRAGMENT_MELDING}</span>
+        )}
+      </span>
+      {openen ? (
+        <a
+          href={openen.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-2 block text-[11px] font-bold text-accent-ink hover:underline"
+        >
+          {openen.label} →
+        </a>
+      ) : (
+        <span aria-hidden="true" className="mt-2 block text-[11px] italic text-muted">
+          Origineel niet beschikbaar — alleen tekst voor de AI-assistent
+        </span>
+      )}
+    </span>
   );
 }
 
@@ -532,6 +919,19 @@ function OngeldigeBronPill({ nummer }: { nummer: number }) {
   );
 }
 
+// ============================================================
+//  Bronkaart
+// ============================================================
+// De kaart is NEUTRAAL (witte kaart, kleurloze rand): met twee kaarten naast
+// elkaar maakte een gekleurd vlak per bronorganisatie het blok onrustig, terwijl
+// die kleur al in het nummerbolletje zit. Het fragment krijgt een citaatbalk en
+// het losse `↗` is een benoemde actie geworden ("Openen op pagina 14").
+//
+// De kaart zelf is bewust géén <a> meer. Dat gaf twee problemen: de openen-actie
+// had geen naam (alleen een pijltje), en `BronkaartMeta` rendert bij generieke
+// bronnen een "Externe bron ↗"-link — een <a> genest in een <a>, wat ongeldige
+// HTML is en in schermlezers onvoorspelbaar navigeert. Het anker voor
+// scroll+highlight (`idVoorScroll`) blijft ongewijzigd op de buitenste kaart.
 export function Bronkaart({
   idx,
   bron,
@@ -543,81 +943,349 @@ export function Bronkaart({
   idVoorScroll: string;
   gehighlight: boolean;
 }) {
-  const locatie = [bron.paragraaf, bron.pagina && `pag. ${bron.pagina}`]
-    .filter(Boolean)
-    .join(", ");
+  const vindplaats = vindplaatsVan(bron);
+  const openen = openenActieVan(bron);
 
-  const inhoud = (
-    <>
-      <span
-        className={`flex-shrink-0 w-7 h-7 rounded-md text-[11px] font-bold flex items-center justify-center ${
-          BRON_NUMMER_KLEUR[bron.bron] || "bg-app-line text-white"
-        }`}
-      >
-        {idx + 1}
-      </span>
-      <div className="flex-1 min-w-0">
-        <div
-          className={`font-bold ${BRONTEKST[bron.bron] || "text-ink"}`}
+  return (
+    <div
+      id={idVoorScroll}
+      className={`scroll-mt-24 rounded-xl border bg-app-surface p-3 text-xs transition-all ${
+        gehighlight
+          ? "border-accent ring-2 ring-accent ring-offset-1 shadow-card-hover"
+          : "border-line shadow-card"
+      }`}
+    >
+      <div className="flex items-start gap-2.5">
+        <span
+          className={`flex-shrink-0 w-6 h-6 rounded-full text-[10px] font-bold flex items-center justify-center ${
+            BRON_NUMMER_KLEUR[bron.bron] || "bg-app-line text-white"
+          }`}
         >
-          {bron.bron} — {bron.titel}
-        </div>
-        {locatie && (
-          <div className="text-muted mt-0.5 italic">📍 {locatie}</div>
-        )}
-        <div className="text-muted mt-1 leading-relaxed">
-          „{bron.fragment}"
-        </div>
-        <BronkaartMeta bron={bron} />
-        {!bron.heeft_origineel && (
-          <div className="text-muted mt-1 text-[11px] italic">
-            Origineel niet beschikbaar — alleen tekst voor de AI-assistent
+          {idx + 1}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="font-semibold leading-snug text-ink break-words">
+            {bron.titel}
           </div>
+          <div className="mt-0.5 text-[11px] text-muted">
+            {[bron.bron, vindplaats].filter(Boolean).join(" · ")}
+          </div>
+        </div>
+      </div>
+
+      {heeftFragment(bron) ? (
+        <div className="mt-2 rounded-r-md border-l-2 border-app-line-strong bg-app-zebra px-2.5 py-1.5 leading-relaxed text-ink">
+          „{bron.fragment}&rdquo;
+        </div>
+      ) : (
+        <div className="mt-2 italic text-muted">{GEEN_FRAGMENT_MELDING}</div>
+      )}
+
+      <BronkaartMeta bron={bron} />
+
+      {openen ? (
+        <a
+          href={openen.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-2 inline-block text-[11px] font-bold text-accent-ink hover:underline"
+        >
+          {openen.label} →
+        </a>
+      ) : (
+        <div className="mt-2 text-[11px] italic text-muted">
+          Origineel niet beschikbaar — alleen tekst voor de AI-assistent
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================================
+//  Documentlijst bij antwoordmodus `bronoverzicht` (besluit 0099)
+// ============================================================================
+// Bij "welke stukken hebben we over X?" ZIJN de documenten het antwoord. Ze
+// stonden tot nu toe ingeklapt onder een alinea die de titels in proza herhaalde.
+// Deze lijst promoveert ze naar het antwoord zelf.
+//
+// Drie dingen die deze component NIET doet, en dat is opzet:
+//  - hij bepaalt geen antwoordmodus; die wordt gelezen uit de meta van het
+//    bericht (`onderbouwing.antwoordmodus`) en is server-side vastgesteld;
+//  - hij haalt niets op. De filterchips werken op de al aangeleverde bronnen —
+//    geen fetch, geen nieuwe retrieval, geen wijziging aan de filtering vóór
+//    retrieval. Wat je wegfiltert telt nog steeds mee in "n van m";
+//  - hij zet geen scope door naar de server. "Vraag hierover" vult de bestaande
+//    client-scope en zet de cursor in het invoerveld; de gebruiker formuleert
+//    zelf de vraag en de server-side validatie blijft onverkort leidend.
+
+/**
+ * Leest een (mogelijk onbekende) antwoordmodus-waarde terug naar het type of
+ * null. De waarde komt uit het `meta`-event of, na herladen, uit
+ * `gesprekken.berichten` (jsonb) — dus ongecontroleerd.
+ *
+ * Staat hier en niet in `core/lib/vraagtype.ts`: die module bevat de DETECTIE
+ * (`ANTWOORDMODUS_PATRONEN`, `bepaalAntwoordmodus`) en blijft in deze tranche
+ * ongemoeid. Dit is uitsluitend een lezer, gebouwd op de bestaande constante
+ * `ANTWOORDMODI`, zodat er geen tweede lijst met modusnamen ontstaat die kan
+ * gaan afwijken. Beide surfaces gebruiken deze ene implementatie.
+ */
+export function leesAntwoordmodus(ruw: unknown): Antwoordmodus | null {
+  return typeof ruw === "string" && (ANTWOORDMODI as string[]).includes(ruw)
+    ? (ruw as Antwoordmodus)
+    : null;
+}
+
+/** Bestandstype-badge. Ontbreekt het type, dan verschijnt er niets — geen lege badge. */
+function BestandstypeBadge({ type }: { type?: string | null }) {
+  if (!type || !type.trim()) return null;
+  return (
+    <span className="flex-shrink-0 rounded border border-line bg-app-zebra px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted">
+      {type.trim()}
+    </span>
+  );
+}
+
+export function Documentenlijst({
+  bronnen,
+  onScope,
+  ankerIdVoorBron,
+  gehighlightBronIdx,
+}: {
+  bronnen: Bron[] | undefined;
+  /**
+   * Zet de document-scope voor de volgende vraag. Weglaten = geen
+   * scope-vervolgacties; de agendapuntchat doet dat, want daar ís de scope al
+   * vast (de aan het agendapunt gekoppelde stukken).
+   */
+  onScope?: (documentIds: string[], titels: string[]) => void;
+  /**
+   * Bouwt het scroll-anker voor bronindex `j` (0-gebaseerd) — dezelfde id die de
+   * caller anders op de bronkaart in het paneel zet. Zonder dit zou een klik op
+   * een `[Bron N]`-pill in deze modus nergens landen: de bronkaarten staan hier
+   * niet meer, dus hun ankers bestaan niet.
+   */
+  ankerIdVoorBron?: (bronIdx: number) => string;
+  /** Bronindex die kort oplicht na een klik op een pill. */
+  gehighlightBronIdx?: number | null;
+}) {
+  const [filter, setFilter] = useState<Documentfilter>("alle");
+  // Bij een ander antwoord (of een herladen gesprek) hoort de filterkeuze niet
+  // mee te reizen: de berichten worden op index gerenderd, dus zonder deze reset
+  // blijft "Alleen vastgesteld" plakken op het bericht dat toevallig dezelfde
+  // plek krijgt.
+  useEffect(() => setFilter("alle"), [bronnen]);
+
+  const alleGroepen = groepeerDocumentbronnen(bronnen ?? []);
+  const { groepen, zichtbaar, totaal, zonderStatus } = pasFilterToe(alleGroepen, filter);
+  if (totaal === 0) return null;
+
+  const zichtbareIds = documentIdsVan(groepen);
+  const zichtbareTitels = groepen.flatMap((g) => g.documenten.map((d) => d.titel));
+
+  return (
+    <section className="mt-3" aria-label="Gevonden documenten">
+      <div className="mb-1 flex flex-wrap items-center gap-2">
+        <span className="text-[11px] font-bold uppercase tracking-wide text-muted">
+          Gevonden documenten
+        </span>
+        <span className="text-[11px] text-muted">
+          {zichtbaar} van {totaal} zichtbaar
+          {filter === "vastgesteld" && zonderStatus > 0
+            ? ` · ${zonderStatus} zonder status`
+            : ""}
+        </span>
+        <div className="flex gap-1.5" role="group" aria-label="Filter op status">
+          <FilterChip
+            actief={filter === "alle"}
+            onClick={() => setFilter("alle")}
+            label="Alle"
+          />
+          <FilterChip
+            actief={filter === "vastgesteld"}
+            onClick={() => setFilter("vastgesteld")}
+            label="Alleen vastgesteld"
+          />
+        </div>
+      </div>
+      {/* Geen schijnzekerheid: dit is de opgehaalde set bij déze vraag, niet de
+          inventaris van de bibliotheek. */}
+      <p className="mb-2 text-[11px] italic text-muted">
+        De stukken die bij deze vraag zijn opgehaald — geen uitputtend overzicht van
+        de bibliotheek.
+      </p>
+
+      {groepen.length === 0 ? (
+        <p className="text-xs text-muted">
+          Geen van de gevonden stukken is aantoonbaar vastgesteld of van kracht
+          {zonderStatus > 0
+            ? ` (van ${zonderStatus} is de status niet meegeleverd)`
+            : ""}
+          . Zet het filter op &ldquo;Alle&rdquo; om ze toch te zien.
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {groepen.map((groep) => (
+            <div key={groep.sleutel}>
+              <div className="mb-1.5 text-[11px] font-semibold text-muted">
+                {groep.label}{" "}
+                <span className="font-normal">({groep.documenten.length})</span>
+              </div>
+              <div className="grid gap-2 md:grid-cols-2 items-start">
+                {groep.documenten.map((doc) => (
+                  <Documentkaart
+                    key={doc.document_id}
+                    doc={doc}
+                    ankerIdVoorBron={ankerIdVoorBron}
+                    gehighlight={
+                      typeof gehighlightBronIdx === "number" &&
+                      doc.bronnummers.includes(gehighlightBronIdx + 1)
+                    }
+                    onScope={
+                      onScope ? () => onScope([doc.document_id], [doc.titel]) : undefined
+                    }
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {onScope && zichtbareIds.length > 1 && (
+        <button
+          type="button"
+          onClick={() => onScope(zichtbareIds, zichtbareTitels)}
+          className="mt-3 rounded-full border border-app-line-control px-3 py-1.5 text-xs text-ink transition-colors hover:border-accent hover:bg-warn-tint"
+        >
+          Vraag over deze {zichtbareIds.length} documenten
+        </button>
+      )}
+    </section>
+  );
+}
+
+function FilterChip({
+  actief,
+  onClick,
+  label,
+}: {
+  actief: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={actief}
+      className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold transition-colors ${
+        actief
+          ? "border-accent bg-accent-tint text-accent-ink"
+          : "border-app-line-control text-muted hover:border-accent hover:text-ink"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function Documentkaart({
+  doc,
+  onScope,
+  ankerIdVoorBron,
+  gehighlight,
+}: {
+  doc: Documentregel;
+  onScope?: () => void;
+  ankerIdVoorBron?: (bronIdx: number) => string;
+  gehighlight?: boolean;
+}) {
+  const bron = doc as Bron;
+  const openen = openenActieVan(bron);
+  const typeLabel = documenttypeLabel(doc);
+  const vindplaats = vindplaatsVan(bron);
+  const chip =
+    "rounded border border-line bg-app-zebra px-1.5 py-0.5 text-[10px] text-muted";
+
+  return (
+    <div
+      className={`rounded-xl border bg-app-surface p-3 text-xs transition-all ${
+        gehighlight
+          ? "border-accent ring-2 ring-accent ring-offset-1 shadow-card-hover"
+          : "border-line shadow-card"
+      }`}
+    >
+      {/* Scroll-ankers: één per bronvermelding die naar dit document wijst. Na
+          ontdubbeling wijzen meerdere `[Bron N]`-pills naar dezelfde kaart, en
+          zonder deze ankers zou een klik op zo'n pill nergens landen — de
+          bronkaarten uit het paneel staan er in deze modus immers niet. */}
+      {ankerIdVoorBron &&
+        doc.bronnummers.map((n) => (
+          <span key={n} id={ankerIdVoorBron(n - 1)} className="block scroll-mt-24" />
+        ))}
+
+      <div className="flex items-start gap-2">
+        <BestandstypeBadge type={doc.bestandstype} />
+        <span className="min-w-0 flex-1 font-semibold leading-snug text-ink break-words">
+          {doc.titel}
+        </span>
+      </div>
+
+      <div className="mt-0.5 text-[11px] text-muted">
+        {doc.bron}
+        {doc.bronnummers.length > 1
+          ? ` · ${doc.bronnummers.length} passages`
+          : ""}
+      </div>
+
+      {/* Ontbrekende waarden leveren géén lege chip — het element blijft weg. */}
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        {typeLabel && <span className={chip}>{typeLabel}</span>}
+      </div>
+      {/* Dezelfde metadatastrip als de bronkaart: status, bronstatus, datum,
+          bronsoort, normgewicht, bronorganisatie, "Vervallen per" én de
+          "Externe bron ↗"-link. Die laatste is voor een generiek kader zonder
+          lokaal origineel het énige pad naar het stuk; in deze modus staan de
+          bronkaarten niet meer in het paneel, dus zonder hergebruik zou dat pad
+          verdwijnen. */}
+      <BronkaartMeta bron={bron} />
+
+      {heeftFragment(bron) ? (
+        <div className="mt-2 rounded-r-md border-l-2 border-app-line-strong bg-app-zebra px-2.5 py-1.5 leading-relaxed text-ink">
+          „{doc.fragment}&rdquo;
+          {vindplaats && (
+            <span className="mt-1 block text-[11px] not-italic text-muted">{vindplaats}</span>
+          )}
+        </div>
+      ) : (
+        <div className="mt-2 italic text-muted">{GEEN_FRAGMENT_MELDING}</div>
+      )}
+
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        {openen ? (
+          <a
+            href={openen.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[11px] font-bold text-accent-ink hover:underline"
+          >
+            {openen.label} →
+          </a>
+        ) : (
+          <span className="text-[11px] italic text-muted">
+            Origineel niet beschikbaar — alleen tekst voor de AI-assistent
+          </span>
+        )}
+        {onScope && (
+          <button
+            type="button"
+            onClick={onScope}
+            className="text-[11px] font-bold text-accent-ink hover:underline"
+          >
+            Vraag hierover →
+          </button>
         )}
       </div>
-      {bron.heeft_origineel && (
-        <span className="flex-shrink-0 text-muted group-hover:text-ink transition-colors text-sm leading-none mt-1">
-          ↗
-        </span>
-      )}
-    </>
-  );
-
-  const baseKlasse = `flex items-start gap-2.5 p-2.5 rounded-lg border text-xs transition-all ${
-    BRONKLEUR[bron.bron] || "bg-app-bg border-line"
-  } ${
-    gehighlight
-      ? "ring-2 ring-accent ring-offset-1 shadow-md scale-[1.01]"
-      : ""
-  }`;
-
-  if (bron.heeft_origineel) {
-    // Spring direct naar de pagina als we die weten. De #page=N-fragment wordt
-    // gehonoreerd door de ingebouwde PDF-viewers van Chrome/Edge/Firefox; voor
-    // Word/Excel (download) wordt de fragment genegeerd — geen kwaad.
-    const href = bron.pagina
-      ? `/api/documents/${bron.document_id}/bestand#page=${bron.pagina}`
-      : `/api/documents/${bron.document_id}/bestand`;
-    return (
-      <a
-        id={idVoorScroll}
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-        className={`group ${baseKlasse} hover:border-accent hover:shadow-sm cursor-pointer scroll-mt-24`}
-        title={
-          bron.pagina
-            ? `Origineel openen op pagina ${bron.pagina} (nieuw tabblad)`
-            : "Origineel openen in nieuw tabblad"
-        }
-      >
-        {inhoud}
-      </a>
-    );
-  }
-  return (
-    <div id={idVoorScroll} className={`${baseKlasse} scroll-mt-24`}>
-      {inhoud}
     </div>
   );
 }
@@ -626,10 +1294,9 @@ export function Bronkaart({
 // bronsoort/normgewicht/externe URL/"Vervallen per". Alles optioneel: ontbrekende
 // velden (bv. uit het fallback-pad) worden simpelweg niet getoond.
 function BronkaartMeta({ bron }: { bron: Bron }) {
-  const statusLabel = bron.documentstatus
-    ? (DOCUMENT_STATUS_LABEL as Record<string, string>)[bron.documentstatus] ??
-      bron.documentstatus
-    : null;
+  // Zelfde oordeel als de pill, zodat kaart en pill nooit iets anders beweren —
+  // inclusief de juiste labelset voor een besluitregistratiebron.
+  const statusLabel = statusOordeel(bron).label;
   const bronstatusLabel =
     bron.bronstatus && bron.bronstatus !== "actief"
       ? (BRONSTATUS_LABEL as Record<string, string>)[bron.bronstatus] ?? bron.bronstatus
@@ -649,10 +1316,11 @@ function BronkaartMeta({ bron }: { bron: Bron }) {
     labels.vervallen;
   if (!heeftIets) return null;
 
+  // Zebra i.p.v. wit-op-wit: de bronkaart is sinds deze tranche zelf wit.
   const chip =
-    "text-[10px] px-1.5 py-0.5 rounded border bg-white/70 border-line text-muted";
+    "text-[10px] px-1.5 py-0.5 rounded border bg-app-zebra border-line text-muted";
   return (
-    <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+    <div className="flex flex-wrap items-center gap-1.5 mt-2">
       {labels.isGeneriek && (
         <span className="text-[10px] px-1.5 py-0.5 rounded border bg-accent-tint border-accent/30 text-accent-ink">
           {labels.bronsoortLabel}
@@ -681,8 +1349,7 @@ function BronkaartMeta({ bron }: { bron: Bron }) {
           href={bron.extern_url ?? undefined}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-[10px] px-1.5 py-0.5 rounded border bg-white/70 border-line text-accent-ink hover:underline"
-          onClick={(e) => e.stopPropagation()}
+          className="text-[10px] px-1.5 py-0.5 rounded border bg-app-zebra border-line text-accent-ink hover:underline"
         >
           Externe bron ↗
         </a>

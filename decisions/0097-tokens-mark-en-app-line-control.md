@@ -97,8 +97,9 @@ rapport dat een half jaar later stil onjuist is.
   voor een EXTERN programma (Word/Excel), niet de tokenlaag van de applicatie —
   dezelfde lijn als de print-CSS in `core/lib/*-html.ts`. De guard blokkeert
   alleen legacy-merk-hex en arbitrary-hex-*classes*, dus dit valt er terecht
-  buiten; de uitzondering in de scriptkop noemt echter alleen `lib/*-html.ts` en
-  is daarmee te smal geformuleerd.
+  buiten. De uitzonderingsnoot in `scripts/check-brand-hex.mjs` noemde alleen
+  `lib/*-html.ts` — dubbel verouderd, want die bestanden staan sinds de
+  T9-splitsing in `core/lib/` — en is bij deze tranche bijgewerkt.
 
 ## Referenties
 

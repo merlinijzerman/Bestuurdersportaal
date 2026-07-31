@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createServerSupabase } from "@/core/lib/supabase-server";
-import { zoekRelevanteChunksMetMeta, telNietActueleFondstreffers, maakContext, maakBronSentinel, haalDocumentChunks, verrijkNotulenChunks, type DocumentChunk, type BronVerwijzing, type RetrievalMeta, type RetrievalFilters } from "@/core/lib/rag";
+import { zoekRelevanteChunksMetMeta, telNietActueleFondstreffers, maakContext, maakBronSentinel, haalDocumentChunks, verrijkNotulenChunks, verrijkDocumentmetadata, type DocumentChunk, type BronVerwijzing, type RetrievalMeta, type RetrievalFilters } from "@/core/lib/rag";
 import { heeftReformulatieNodig, reformuleerVraag } from "@/core/lib/query-reformulatie";
 import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
 import { valideerChatInvoer } from "@/core/lib/chat-invoer";
@@ -157,6 +157,22 @@ function documentBronnen(chunks: DocumentChunk[]): BronVerwijzing[] {
       paragraaf: null,
       fragment: "",
       heeft_origineel: !!c.documenten.opslag_pad,
+      // Tranche 2B — doorgeefvelden voor de documentlijst; gevuld door
+      // verrijkDocumentmetadata() vóór deze aanroep.
+      documenttype: c.documenten.documenttype ?? null,
+      bestandstype: c.documenten.bestandstype ?? null,
+      // Óók de bestaande bronkaartvelden. Ze stonden hier niet, waardoor dit pad
+      // als enige geen status, datum of normgewicht toonde — en het filter
+      // "alleen vastgesteld" dus 0 van N gaf terwijl de status alleen niet was
+      // meegestuurd. `haalDocumentChunks` selecteert ze al.
+      documentstatus: c.documenten.documentstatus ?? null,
+      bronstatus: c.documenten.bronstatus ?? null,
+      documentdatum: c.documenten.documentdatum ?? null,
+      geldig_tot: c.documenten.geldig_tot ?? null,
+      bibliotheek: c.documenten.bibliotheek ?? null,
+      bronorganisatie: c.documenten.bronorganisatie ?? null,
+      normgewicht: c.documenten.normgewicht ?? null,
+      extern_url: c.documenten.extern_url ?? null,
     });
   }
   return [...perDoc.values()];
@@ -901,6 +917,11 @@ export async function POST(req: NextRequest) {
       // Increment D — verrijk notulensegment-chunks met vergadering/agendapunt
       // zodat de bronvermelding "Vastgestelde notulen …, agendapunt N — …" klopt.
       chunks = await verrijkNotulenChunks(chunks);
+      // Tranche 2B — documenttype/bestandstype voor de documentlijst bij
+      // antwoordmodus `bronoverzicht`. Bewust hier, ná retrieval, ranking en
+      // fondsdiscipline: het zijn doorgeefvelden voor de WEERGAVE en ze mogen
+      // niets aan de selectie veranderen. Zie verrijkDocumentmetadata().
+      chunks = await verrijkDocumentmetadata(chunks, fondsId);
       const ctx = maakContext(chunks);
       contextTekst = ctx.contextTekst;
       bronnen = ctx.bronnen;
@@ -935,8 +956,10 @@ export async function POST(req: NextRequest) {
     // documentniveau (paginaverwijzingen in de tekst i.p.v. [Bron N]-pills); bij
     // full-document bouwen we de context hier, bij map-reduce in de stream.
     if (breedActief) {
-      chunks = breedChunks;
-      bronnen = documentBronnen(breedChunks);
+      // Zelfde verrijking als op het gerangschikte pad: ook hier bouwen we
+      // bronkaarten, dus ook hier horen documenttype en bestandstype mee.
+      chunks = await verrijkDocumentmetadata(breedChunks, fondsId);
+      bronnen = documentBronnen(chunks);
       if (scopeStrategie === "full_document") {
         contextTekst = breedChunks
           .map((c) => `${locatieLabel(c)}${c.tekst}`)
