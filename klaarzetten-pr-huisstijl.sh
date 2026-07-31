@@ -23,6 +23,14 @@ LOCK="_to_delete/stale-git-locks/index.lock-20260731-142845"
 [[ -f package.json && -d decisions ]] || { echo "✗ Draai dit vanuit de map mvp/."; exit 1; }
 [[ -f "$ADR" ]] || { echo "✗ $ADR ontbreekt. Zet het besluitrecord eerst op die plek neer."; exit 1; }
 
+# Het besluitrecord en de PR-tekst zijn inmiddels op main gecommit (commit
+# "opmaak"). Ze bestaan dus NIET op de huisstijl-branch, en `git checkout` haalt
+# ze straks weg. Daarom eerst wegzetten en na de branchwissel terugzetten.
+BEWAAR="$(mktemp -d)"
+cp "$ADR" "$BEWAAR/adr.md"
+[[ -f PR-huisstijl-d1.md ]] && cp PR-huisstijl-d1.md "$BEWAAR/pr.md"
+trap 'rm -rf "$BEWAAR"' EXIT
+
 if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
   echo "✗ Er staan niet-gecommitte wijzigingen in de werkkopie:"
   git status --short
@@ -33,7 +41,10 @@ fi
 echo "→ naar $BRANCH"
 git checkout "$BRANCH"
 
-# ── 1. besluitrecord in de index ────────────────────────────────────────────
+# ── 1. besluitrecord terugzetten en in de index ─────────────────────────────
+mkdir -p decisions
+cp "$BEWAAR/adr.md" "$ADR"
+[[ -f "$BEWAAR/pr.md" && ! -f PR-huisstijl-d1.md ]] && cp "$BEWAAR/pr.md" PR-huisstijl-d1.md
 git add "$ADR"
 
 # ── 2. index-regel in decisions/README.md, direct onder 0100 ────────────────
