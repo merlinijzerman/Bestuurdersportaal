@@ -5,53 +5,82 @@
 :root {
   /* ── Tokenlaag ── bron van waarheid. RGB-channels voeden zowel Tailwind
      (rgb(var(--x-rgb) / <alpha-value>) → opacity-modifiers werken) als de
-     afgeleide --x kleur voor direct CSS/SVG-gebruik (fill="var(--accent)"). */
+     afgeleide --x kleur voor direct CSS/SVG-gebruik (fill="var(--accent)").
 
-  /* Merk / basis (bron: public.css) */
-  --paper-rgb: 244 245 250;   --paper: rgb(var(--paper-rgb));
-  --ink-rgb: 23 26 40;        --ink: rgb(var(--ink-rgb));
-  --muted-rgb: 100 106 136;   --muted: rgb(var(--muted-rgb));
-  --line-rgb: 228 231 241;    --line: rgb(var(--line-rgb));
-  --accent-rgb: 91 79 224;    --accent: rgb(var(--accent-rgb));   /* primaire interactieve kleur (violet) */
-  --accent-ink-rgb: 68 58 192; --accent-ink: rgb(var(--accent-ink-rgb));
-  --accent-tint-rgb: 238 237 252; --accent-tint: rgb(var(--accent-tint-rgb));
+     Huisstijl tranche 2 — richting D1 "Bestuursblauw": het accent keert terug
+     naar de navy-familie (was violet, besluit 0084). De LICHTE nav-chrome uit
+     dat besluit blijft ongewijzigd; alleen de kleurwaarden verschuiven. Geen
+     component, Tailwind-klasse of pagina is hiervoor aangepast — dat is precies
+     wat deze tokenlaag moet mogelijk maken. Alle contrastafspraken worden
+     nagerekend door core/lib/kleurcontrast.sanity.ts. */
+
+  /* Merk / basis */
+  --paper-rgb: 238 241 246;   --paper: rgb(var(--paper-rgb));
+  --ink-rgb: 18 35 59;        --ink: rgb(var(--ink-rgb));
+  --muted-rgb: 92 107 130;    --muted: rgb(var(--muted-rgb));
+  --line-rgb: 223 229 238;    --line: rgb(var(--line-rgb));
+  --accent-rgb: 27 79 168;    --accent: rgb(var(--accent-rgb));   /* primaire interactieve kleur (navy) */
+  --accent-ink-rgb: 20 57 111; --accent-ink: rgb(var(--accent-ink-rgb));
+  --accent-tint-rgb: 231 238 251; --accent-tint: rgb(var(--accent-tint-rgb));
   --card-rgb: 255 255 255;    --card: rgb(var(--card-rgb));
 
   /* App-surfaces (functioneel, rustiger dan paper onder dichte data) */
-  --app-bg-rgb: 244 245 250;      --app-bg: rgb(var(--app-bg-rgb));
+  --app-bg-rgb: 238 241 246;      --app-bg: rgb(var(--app-bg-rgb));
   --app-surface-rgb: 255 255 255; --app-surface: rgb(var(--app-surface-rgb));
-  --app-line-rgb: 228 231 241;    --app-line: rgb(var(--app-line-rgb));
-  --app-line-strong-rgb: 210 214 230; --app-line-strong: rgb(var(--app-line-strong-rgb));
-  --app-zebra-rgb: 248 249 253;   --app-zebra: rgb(var(--app-zebra-rgb));
+  --app-line-rgb: 223 229 238;    --app-line: rgb(var(--app-line-rgb));
+  --app-line-strong-rgb: 200 210 224; --app-line-strong: rgb(var(--app-line-strong-rgb));
+  --app-zebra-rgb: 247 249 252;   --app-zebra: rgb(var(--app-zebra-rgb));
 
-  /* Navigatie / sidebar + topbar (lichte variant — huisstijl tranche 1, besluit 0084)
-     Lichte chrome-frame; navtekst is donker/ink op licht, accent (violet) markeert
-     het actieve item. Verankering via nav-line (rechterrand) + actief-contrast,
-     omdat een lichte sidebar visueel minder verankert dan een donkere. */
-  --nav-rgb: 251 251 254;        --nav: rgb(var(--nav-rgb));          /* licht nav-vlak */
-  --nav-line-rgb: 228 231 241;   --nav-line: rgb(var(--nav-line-rgb));/* divider/rechterrand */
-  --nav-text-rgb: 90 96 128;     --nav-text: rgb(var(--nav-text-rgb));/* gedempt donker (inactief) */
-  --nav-text-active-rgb: 23 26 40; --nav-text-active: rgb(var(--nav-text-active-rgb)); /* bijna-zwart (actief/brand) */
-  --nav-accent-rgb: 91 79 224;   --nav-accent: rgb(var(--nav-accent-rgb)); /* violet accentlijn/merkvierkant */
-  --nav-active: rgba(91, 79, 224, 0.09);
+  /* Navigatie / sidebar + topbar (lichte variant — besluit 0084, ongewijzigd
+     van opzet). Lichte chrome-frame; navtekst is donker/ink op licht, het
+     accent (nu navy) markeert het actieve item. Verankering via nav-line
+     (rechterrand) + actief-contrast, omdat een lichte sidebar visueel minder
+     verankert dan een donkere. nav-active staat op .10 in plaats van .09: navy
+     op een lichte ondergrond leest zwakker dan het violet dat er stond. */
+  --nav-rgb: 255 255 255;        --nav: rgb(var(--nav-rgb));          /* licht nav-vlak */
+  --nav-line-rgb: 223 229 238;   --nav-line: rgb(var(--nav-line-rgb));/* divider/rechterrand */
+  --nav-text-rgb: 92 107 130;    --nav-text: rgb(var(--nav-text-rgb));/* gedempt donker (inactief) */
+  --nav-text-active-rgb: 18 35 59; --nav-text-active: rgb(var(--nav-text-active-rgb)); /* bijna-zwart (actief/brand) */
+  --nav-accent-rgb: 27 79 168;   --nav-accent: rgb(var(--nav-accent-rgb)); /* navy accentlijn/merkvierkant */
+  --nav-active: rgba(27, 79, 168, 0.10);
 
   /* Semantisch — elk token in drie rollen:
      DEFAULT  = volvlak/icoon/nadruk-tekst (donker, hoog contrast op paper)
      -tint    = zachte badge-/rij-achtergrond (licht, warm afgestemd op paper)
      -ink     = leesbare tekst OP de tint (donkerder dan DEFAULT voor AA) */
-  --ok-rgb: 15 143 96;   --ok: rgb(var(--ok-rgb));
-  --ok-tint-rgb: 228 243 236;  --ok-tint: rgb(var(--ok-tint-rgb));
-  --ok-ink-rgb: 11 115 80;      --ok-ink: rgb(var(--ok-ink-rgb));
-  --err-rgb: 206 61 87;  --err: rgb(var(--err-rgb));
-  --err-tint-rgb: 251 235 238; --err-tint: rgb(var(--err-tint-rgb));
-  --err-ink-rgb: 166 47 69;    --err-ink: rgb(var(--err-ink-rgb));
-  --warn-rgb: 172 116 17;--warn: rgb(var(--warn-rgb));
-  --warn-tint-rgb: 250 241 223; --warn-tint: rgb(var(--warn-tint-rgb));
-  --warn-ink-rgb: 133 90 13;    --warn-ink: rgb(var(--warn-ink-rgb));
+  --ok-rgb: 16 107 70;   --ok: rgb(var(--ok-rgb));
+  --ok-tint-rgb: 234 247 240;  --ok-tint: rgb(var(--ok-tint-rgb));
+  --ok-ink-rgb: 13 90 59;       --ok-ink: rgb(var(--ok-ink-rgb));
+  --err-rgb: 164 39 28;  --err: rgb(var(--err-rgb));
+  --err-tint-rgb: 253 240 238; --err-tint: rgb(var(--err-tint-rgb));
+  --err-ink-rgb: 140 32 23;    --err-ink: rgb(var(--err-ink-rgb));
+  --warn-rgb: 138 90 0;  --warn: rgb(var(--warn-rgb));
+  --warn-tint-rgb: 253 246 230; --warn-tint: rgb(var(--warn-tint-rgb));
+  --warn-ink-rgb: 116 74 0;     --warn-ink: rgb(var(--warn-ink-rgb));
 
-  /* Fase-markering (was paars, nu teal — besluit 0084): "oordeelsvorming"/
-     "in_evaluatie", dissent — een eigen betekenisdragende rol, bewust los van
-     accent (dat zelf violet werd). */
+  /* Fase-markering — "oordeelsvorming"/"in_evaluatie", dissent. ONGEWIJZIGD
+     t.o.v. besluit 0084: teal blijft.
+
+     Bij de paletwissel is overwogen om dit token terug te zetten naar plum (de
+     waarde van vóór 0084), omdat teal en navy allebei in de koele hoek liggen.
+     Nagerekend blijkt dat andersom uit te pakken. Perceptueel verschil (CIELAB
+     ΔE) tussen --accent en --phase, ook onder gesimuleerde kleurenblindheid:
+
+         volvlak (pip/icoon)      normaal   deutan   protan
+           navy vs teal              45,9     34,4     37,0
+           navy vs plum              18,7     24,0     15,1
+         badge-tekst (-ink)
+           accent-ink vs teal-ink    30,8     21,1     23,8
+           accent-ink vs plum-ink    18,2     10,6      5,3   ← praktisch gelijk
+
+     Plum lost het probleem dus niet op maar verergert het; teal scheidt ruim.
+     Luminantiecontrast (1,6:1 voor teal) is hier een misleidende maat: het meet
+     licht/donker, niet kleurverschil.
+
+     Wat WEL blijft staan: --accent-tint en --phase-tint liggen op ΔE ≈ 5 en zijn
+     als badge-áchtergrond niet uit elkaar te houden. Het onderscheid moet dus van
+     de -ink-tekst en van een tweede, niet-kleurgebonden drager komen (label of
+     icoon) — conform besluit 0097. */
   --phase-rgb: 14 124 155;      --phase: rgb(var(--phase-rgb));
   --phase-tint-rgb: 226 240 245; --phase-tint: rgb(var(--phase-tint-rgb));
   --phase-ink-rgb: 10 97 120;   --phase-ink: rgb(var(--phase-ink-rgb));
@@ -60,20 +89,23 @@
      THEMABARE_TOKENS: dit zijn WCAG-afspraken die voor elk fonds gelijk zijn.
 
      --app-line-control — rand van bedieningselementen (knoppen, chips).
-       --app-line-strong (210 214 230) haalt 1,45:1 op wit en voldoet daarmee
+       --app-line-strong (200 210 224) haalt 1,53:1 op wit en voldoet daarmee
        niet aan WCAG 1.4.11 (>= 3:1 voor UI-componenten). Deze waarde haalt
-       3,32:1 op --app-surface en 3,15:1 op --app-zebra. --app-line-strong
+       3,69:1 op --app-surface, 3,50:1 op --app-zebra en 3,26:1 op --app-bg.
+       Bij de paletwissel naar D1 is deze waarde één stap donkerder gezet: de
+       nieuwe --app-bg is donkerder dan de vorige, waardoor de oude waarde daar
+       op 2,93:1 uitkwam en door de 3:1-eis heen zakte. --app-line-strong
        blijft ongewijzigd in gebruik voor decoratieve scheidingen en tabelranden;
        dat zijn geen bedieningselementen en 1.4.11 geldt daar niet.
 
-     --mark — markering in lopende tekst. Ink op mark haalt 14,3:1. Nog GEEN
+     --mark — markering in lopende tekst. Ink op mark haalt 13,1:1. Nog GEEN
        consument: markeren vergt dat iets besluit wát gemarkeerd wordt, en dat
        is een functionele ingreep buiten deze tranche. Het token staat er vooruit
        zodat de toegankelijkheidsafspraak vastligt vóór de eerste class erop
        wordt geschreven. Bij gebruik geldt: kleur is nooit de enige drager —
        een markering krijgt altijd ook een lijn of tekstuele aanduiding. */
-  --mark-rgb: 250 232 190;              --mark: rgb(var(--mark-rgb));
-  --app-line-control-rgb: 134 140 168;  --app-line-control: rgb(var(--app-line-control-rgb));
+  --mark-rgb: 255 233 168;              --mark: rgb(var(--mark-rgb));
+  --app-line-control-rgb: 120 134 156;  --app-line-control: rgb(var(--app-line-control-rgb));
 
   /* Kaart-elevatie (stuurinformatie-opmaak, T17): subtiele dubbele schaduw —
      ink-getint zodat hij op de lichte achtergrond rustig blijft. */
@@ -104,7 +136,9 @@ body {
 }
 .typing-dot {
   width: 7px; height: 7px;
-  background: #5A6B7C;
+  /* Was hardcoded #5A6B7C — een grijsblauw uit de vóór-tokenperiode dat bij een
+     paletwissel stil uit de pas ging lopen. Nu de gedempte teksttoon. */
+  background: var(--muted);
   border-radius: 50%;
   display: inline-block;
   animation: bounce 1.2s infinite;
@@ -121,9 +155,11 @@ body {
 /* MVP-2A: gold-puls bij scroll-naar-statusovergang vanuit de
    klikbare status-pill in DecisionObjectHeader. Visuele bevestiging
    dat de gebruiker op de juiste plek is beland. */
+/* Was hardcoded rgba(35, 78, 112, …) — het navy #234E70 uit de vóór-tokenperiode.
+   Nu via --accent-rgb, zodat de puls het accent van het (fonds)thema volgt. */
 @keyframes status-puls {
-  0%   { box-shadow: 0 0 0 0 rgba(35, 78, 112, 0.55); }
-  100% { box-shadow: 0 0 0 14px rgba(35, 78, 112, 0); }
+  0%   { box-shadow: 0 0 0 0 rgb(var(--accent-rgb) / 0.55); }
+  100% { box-shadow: 0 0 0 14px rgb(var(--accent-rgb) / 0); }
 }
 .status-puls { animation: status-puls 1.6s ease-out 1; }
 
