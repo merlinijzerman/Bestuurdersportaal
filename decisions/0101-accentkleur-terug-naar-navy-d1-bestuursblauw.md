@@ -1,4 +1,4 @@
-# 0101 — Accentkleur terug naar navy (richting D1 "Bestuursblauw")
+# 0101 — Accentkleur terug naar navy, gelijk aan de marketingsite (#234E70)
 
 - **Status:** Geaccepteerd
 - **Datum:** 2026-07-31
@@ -15,9 +15,16 @@ past bij een bestuurdersportaal — een oordeel dat pas te vellen was toen er
 schermen naast elkaar lagen.
 
 Aanleiding voor deze tranche is een door de opdrachtgever aangeleverde
-referentie-HTML met een navy accent op koelblauwe surfaces. Daaruit zijn twee
-paletten uitgewerkt (D1 "Bestuursblauw", D2 "Grafiet & navy") en op drie schermen
-getoond: Home, AI-assistent en Documentbibliotheek. Keuze is gevallen op **D1**.
+referentie-HTML met een navy accent op koelblauwe surfaces. Daaruit zijn drie
+paletten uitgewerkt (D1 "Bestuursblauw", D2 "Grafiet & navy", D3 "Site-blauw") en
+op drie schermen getoond: Home, AI-assistent en Documentbibliotheek.
+
+Keuze is gevallen op **D3**: de surfaces van D1, maar het accent van de
+**marketingsite** — `#234E70`, in `app/(public)/public.css` gedefinieerd als
+`--accent` en gebruikt door `.btn-primary` (de knop "Neem contact op" op
+bestuurdersportaal.com). Dat is het navy van vóór besluit 0084; de site is nooit
+meegegaan in de violette wissel. Daarmee spreken app en site weer dezelfde taal,
+en verdwijnt een merkbreuk die er sinds 0084 zat.
 
 De wijziging is uitgevoerd als **pure token-hercolorering**: alle tokennamen uit
 `app/globals.css` blijven identiek, alleen de waarden verschuiven. Geen component,
@@ -30,9 +37,9 @@ mogelijk maken en meteen de toets of die belofte klopt — hij klopt.
 
 | Token | Was (0084) | Wordt (D1) |
 |---|---|---|
-| `--accent-rgb` | 91 79 224 | **27 79 168** |
-| `--accent-ink-rgb` | 68 58 192 | 20 57 111 |
-| `--accent-tint-rgb` | 238 237 252 | 231 238 251 |
+| `--accent-rgb` | 91 79 224 | **35 78 112** (`#234E70`) |
+| `--accent-ink-rgb` | 68 58 192 | 26 58 84 |
+| `--accent-tint-rgb` | 238 237 252 | 231 237 243 |
 | `--ink-rgb` | 23 26 40 | 18 35 59 |
 | `--muted-rgb` | 100 106 136 | 92 107 130 |
 | `--app-bg-rgb` / `--paper-rgb` | 244 245 250 | 238 241 246 |
@@ -40,36 +47,48 @@ mogelijk maken en meteen de toets of die belofte klopt — hij klopt.
 | `--app-line-strong-rgb` | 210 214 230 | 200 210 224 |
 | `--app-zebra-rgb` | 248 249 253 | 247 249 252 |
 | `--nav-rgb` | 251 251 254 | 255 255 255 |
-| `--nav-active` | rgba(91,79,224,.09) | rgba(27,79,168,**.10**) |
+| `--nav-active` | rgba(91,79,224,.09) | rgba(35,78,112,**.10**) |
 | `--ok` / `--err` / `--warn` | zie diff | dieper, koeler afgestemd |
 | `--mark-rgb` | 250 232 190 | 255 233 168 |
 
 `--nav-active` gaat van .09 naar .10: navy op een licht vlak leest zwakker dan het
 violet dat er stond, en het actieve menu-item mag niet verzwakken.
 
-**2. `--phase` blijft teal — 0084 houdt op dit punt wél stand.**
+Contrast van het nieuwe accent: **8,77:1** op wit (zowel als linkkleur als met wit
+erop op de primaire knop) en 10,02:1 voor `--accent-ink` op `--accent-tint`. Ruim
+AAA, en beter dan zowel het violet (5,77) als het D1-blauw (7,69).
 
-Overwogen is om `--phase` terug te zetten naar plum (de waarde van vóór 0084), op
-de redenering dat teal en navy allebei koel zijn. Nagerekend pakt dat andersom
-uit. Perceptueel verschil (CIELAB ΔE76) tussen `--accent` en `--phase`, ook onder
-gesimuleerde kleurenblindheid (Viénot/Brettel):
+**2. `--phase` blijft teal — maar met een smallere marge dan bij D1, en dat is een
+openstaand punt.**
 
-| | normaal | deuteranopie | protanopie |
-|---|---|---|---|
-| navy vs **teal** — volvlak | 45,9 | 34,4 | 37,0 |
-| navy vs plum — volvlak | 18,7 | 24,0 | 15,1 |
-| `accent-ink` vs **teal-ink** | 30,8 | 21,1 | 23,8 |
-| `accent-ink` vs plum-ink | 18,2 | 10,6 | **5,3** |
+Overwogen is `--phase` terug te zetten naar plum (de waarde van vóór 0084). Dat is
+verworpen: plum ligt nóg dichter bij dit accent dan teal. Perceptueel verschil
+(CIELAB ΔE76) tussen `--accent` en de kandidaten, als **slechtste waarde** over
+normaal zicht, deuteranopie en protanopie:
 
-Plum lost het probleem niet op maar verergert het: bij protanopie is plum-ink
-praktisch niet van accent-ink te onderscheiden. Teal scheidt ruim. **Luminantie-
-contrast is hier een misleidende maat** — het meet licht/donker, niet kleurverschil;
-op die maat leek plum juist beter (1,09 vs 1,60). Dat is de reden dat de eerste
-analyse de verkeerde kant op wees en waarom deze cijfers hier staan vastgelegd.
+| kandidaat voor `--phase` | vs `--accent` | vs `--ok` | vs `--err` | vs `--warn` |
+|---|---|---|---|---|
+| **teal `#0E7C9B`** (huidig) | **15,5** | 41,8 | 58,5 | 73,3 |
+| plum `#654A96` | 14,1 | 51,3 | 75,3 | 89,7 |
+| aubergine `#6B2D5C` | 7,3 | 22,7 | 52,2 | 64,7 |
+| indigo-violet `#5B3FA8` | **30,4** | 69,4 | 91,0 | 106,1 |
 
-Wat blijft staan: `--accent-tint` en `--phase-tint` liggen op ΔE ≈ 5 en zijn als
-badge-**achtergrond** niet te scheiden. Het onderscheid komt van de `-ink`-tekst
-plus een tweede, niet-kleurgebonden drager (label of icoon) — conform 0097.
+Teal blijft staan omdat het van de bestaande opties de beste is en omdat wisselen
+een betekenislaag raakt die verder gaat dan kleur. **Maar:** met het D1-blauw
+(`#1B4FA8`) haalde teal nog 34,4 onder deuteranopie; met dit dovere, groenere navy
+zakt dat naar **15,5**. Het accent en de fase-markering zijn daarmee voor
+gebruikers met een rood-groenstoornis lastig te scheiden. Dat is de **prijs van de
+merkconsistentie met de site** en hij is bewust betaald, niet over het hoofd gezien.
+
+Zolang dit staat, geldt de eis uit 0097 onverkort en strenger dan voorheen: een
+fase-markering draagt **altijd** een tweede, niet-kleurgebonden drager (label of
+icoon). De sanity-suite legt vast dat de twee niet op luminantie te scheiden zijn.
+
+**Openstaand:** de enige geteste kandidaat die wél ruim boven de verwarrings-
+drempel uitkomt, is indigo-violet `#5B3FA8` (30,4 vs accent; 7,72:1 op wit). Dat
+zou het violet uit 0084 terugbrengen — niet als accent maar als fase-kleur. Aan te
+bevelen zodra iemand de consumenten van `--phase` langsloopt; niet in deze tranche
+gedaan omdat het de betekenislaag raakt en een eigen review verdient.
 
 **3. `--app-line-control` verschuift van `134 140 168` naar `120 134 156`.**
 
@@ -128,8 +147,16 @@ pas te lopen.
 
 ## Overwogen alternatieven
 
+- **D1 "Bestuursblauw" (`#1B4FA8`)** — het blauw uit de aangeleverde referentie.
+  Helderder en moderner, en scheidt véél beter van de fase-kleur (ΔE 34,4 onder
+  deuteranopie tegen 15,5 nu). Afgevallen ten gunste van merkconsistentie met de
+  marketingsite. Kort in productie geweest voordat op `#234E70` is overgestapt.
 - **D2 "Grafiet & navy"** — zelfde navy-familie op neutrale, niet-blauwe surfaces.
-  Rustiger onder dichte data; afgevallen omdat D1 dichter bij de referentie ligt.
+  Rustiger onder dichte data; afgevallen omdat D1/D3 dichter bij de referentie liggen.
+- **De warme surfaces van de site meenemen** (`--paper #F6F3EC`, `--ink #191815`,
+  `--line #D8D3C7`) in plaats van alleen het accent. Zou app en site volledig
+  gelijktrekken, maar is een aanzienlijk grotere ingreep onder dichte tabellen en
+  is daarom apart gehouden.
 - **`--phase` terug naar plum** — zie besluit 2 hierboven; verworpen op de cijfers.
 - **`--app-bg` lichter maken** in plaats van `--app-line-control` donkerder, om de
   3:1 te halen. Verworpen: dan schuift de achtergrond weg van de referentie om een
@@ -138,7 +165,8 @@ pas te lopen.
 
 ## Referenties
 
-- `03 Functioneel ontwerp/Designrichtingen portaal/richting-d-bestuursblauw.html` — de mockup (Home / AI / Bibliotheek, D1 ↔ D2)
+- `03 Functioneel ontwerp/Designrichtingen portaal/richting-d-bestuursblauw.html` — de mockup (Home / AI / Bibliotheek, D1 ↔ D2 ↔ D3)
+- `app/(public)/public.css` — `--accent: #234E70`, de bron van de gekozen kleur
 - `03 Functioneel ontwerp/Designrichtingen portaal/richting-d-tokens.html` — tokenblad, contrasttoets en implementatie-impact
 - WCAG 2.1 §1.4.3 (Contrast Minimum) en §1.4.11 (Non-text Contrast)
 - Viénot, Brettel & Mollon (1999) — LMS-projectie voor dichromatische simulatie

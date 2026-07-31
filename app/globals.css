@@ -7,8 +7,13 @@
      (rgb(var(--x-rgb) / <alpha-value>) → opacity-modifiers werken) als de
      afgeleide --x kleur voor direct CSS/SVG-gebruik (fill="var(--accent)").
 
-     Huisstijl tranche 2 — richting D1 "Bestuursblauw": het accent keert terug
-     naar de navy-familie (was violet, besluit 0084). De LICHTE nav-chrome uit
+     Huisstijl tranche 2: het accent keert terug naar de navy-familie (was
+     violet, besluit 0084) en is gelijkgetrokken met de marketingsite —
+     #234E70, hetzelfde token als `--accent` in app/(public)/public.css, de
+     kleur van de knop "Neem contact op". De site is nooit meegegaan in de
+     violette wissel; app en site spreken hiermee weer dezelfde taal. De
+     omliggende surfaces blijven koel (D1); de site gebruikt warme surfaces
+     (--paper #F6F3EC) — dat is een aparte afweging. De LICHTE nav-chrome uit
      dat besluit blijft ongewijzigd; alleen de kleurwaarden verschuiven. Geen
      component, Tailwind-klasse of pagina is hiervoor aangepast — dat is precies
      wat deze tokenlaag moet mogelijk maken. Alle contrastafspraken worden
@@ -19,9 +24,9 @@
   --ink-rgb: 18 35 59;        --ink: rgb(var(--ink-rgb));
   --muted-rgb: 92 107 130;    --muted: rgb(var(--muted-rgb));
   --line-rgb: 223 229 238;    --line: rgb(var(--line-rgb));
-  --accent-rgb: 27 79 168;    --accent: rgb(var(--accent-rgb));   /* primaire interactieve kleur (navy) */
-  --accent-ink-rgb: 20 57 111; --accent-ink: rgb(var(--accent-ink-rgb));
-  --accent-tint-rgb: 231 238 251; --accent-tint: rgb(var(--accent-tint-rgb));
+  --accent-rgb: 35 78 112;    --accent: rgb(var(--accent-rgb));   /* primaire interactieve kleur (navy #234E70) */
+  --accent-ink-rgb: 26 58 84; --accent-ink: rgb(var(--accent-ink-rgb));
+  --accent-tint-rgb: 231 237 243; --accent-tint: rgb(var(--accent-tint-rgb));
   --card-rgb: 255 255 255;    --card: rgb(var(--card-rgb));
 
   /* App-surfaces (functioneel, rustiger dan paper onder dichte data) */
@@ -41,8 +46,8 @@
   --nav-line-rgb: 223 229 238;   --nav-line: rgb(var(--nav-line-rgb));/* divider/rechterrand */
   --nav-text-rgb: 92 107 130;    --nav-text: rgb(var(--nav-text-rgb));/* gedempt donker (inactief) */
   --nav-text-active-rgb: 18 35 59; --nav-text-active: rgb(var(--nav-text-active-rgb)); /* bijna-zwart (actief/brand) */
-  --nav-accent-rgb: 27 79 168;   --nav-accent: rgb(var(--nav-accent-rgb)); /* navy accentlijn/merkvierkant */
-  --nav-active: rgba(27, 79, 168, 0.10);
+  --nav-accent-rgb: 35 78 112;   --nav-accent: rgb(var(--nav-accent-rgb)); /* navy accentlijn/merkvierkant */
+  --nav-active: rgba(35, 78, 112, 0.10);
 
   /* Semantisch — elk token in drie rollen:
      DEFAULT  = volvlak/icoon/nadruk-tekst (donker, hoog contrast op paper)
