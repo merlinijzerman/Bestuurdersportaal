@@ -14,7 +14,7 @@
 //  via de server-actions (acties.ts) achter withPlatform.
 // ============================================================================
 
-import { createPlatformSupabase } from "@/platform/lib/supabase-platform";
+import { withPlatformRead } from "@/platform/lib/platform-wrapper";
 import { huidigePlatformIdentiteit } from "@/platform/lib/platform-auth";
 import {
   PLATFORM_CAPABILITIES,
@@ -74,17 +74,31 @@ export default async function RechtenPagina() {
     );
   }
 
-  const svc = createPlatformSupabase();
-  const [{ data: identiteiten }, { data: grants }] = await Promise.all([
-    svc
-      .from("platform_identities")
-      .select("id, email, naam, actief")
-      .order("naam", { ascending: true }),
-    svc
-      .from("platform_identity_capabilities")
-      .select("identity_id, capability, toegekend_op")
-      .is("ingetrokken_op", null),
-  ]);
+  // H-15 (review 2026-07-30): het rechtenregister toont e-mailadressen van alle
+  // platform-identiteiten en hun actieve capabilities. Inzage liep buiten de
+  // auditwrapper om.
+  const { identiteiten, grants } = await withPlatformRead(
+    {
+      capability: magToekennen ? "platform.capabilities.grant" : "platform.capabilities.revoke",
+      handeling: "rechten.register.inzien",
+    },
+    async (svc) => {
+      const [{ data: ids }, { data: gr }] = await Promise.all([
+        svc
+          .from("platform_identities")
+          .select("id, email, naam, actief")
+          .order("naam", { ascending: true }),
+        svc
+          .from("platform_identity_capabilities")
+          .select("identity_id, capability, toegekend_op")
+          .is("ingetrokken_op", null),
+      ]);
+      return {
+        resultaat: { identiteiten: ids, grants: gr },
+        effect: { identiteiten: (ids ?? []).length, grants: (gr ?? []).length },
+      };
+    }
+  );
 
   const grantsPerId = new Map<string, { capability: string; toegekend_op: string | null }[]>();
   for (const g of (grants ?? []) as { identity_id: string; capability: string; toegekend_op: string | null }[]) {

@@ -149,6 +149,111 @@ export async function withPlatform<T>(
   }
 }
 
+/** Opties voor een geaudit LEESPAD. Bewust smaller dan WithPlatformOpts: bij
+ *  lezen verandert er niets, dus `verwachteScope` heeft geen betekenis — maar
+ *  `doelFondsId` wél, zodat cross-tenant inzage herleidbaar is. */
+export type WithPlatformReadOpts = {
+  capability: PlatformCapability;
+  handeling: string;
+  doelFondsId?: string | null;
+  doelObject?: string | null;
+  bronIp?: string | null;
+};
+
+/**
+ * Geaudit LEESPAD met de service-role-client.
+ *
+ * H-15 (review 2026-07-30). `platform/lib/supabase-platform.ts` stelt als
+ * invariant (a) dat de service-role-client uitsluitend achter de capability- en
+ * auditwrapper wordt aangeroepen. Voor de SCHRIJFkant klopte dat — alle server
+ * actions lopen door `withPlatform`. De LEESkant niet: negen pagina's en één
+ * API-route maakten rechtstreeks een client aan. Daardoor liet het inzien van
+ * álle contactgegevens (naam, e-mail, telefoon, vrije tekst), van alle
+ * tenantgebruikers per fonds en van de organisatieprofielen van álle fondsen
+ * géén enkel spoor na. Forensisch was niet vast te stellen dát het gebeurde, en
+ * de AVG-verantwoordingsplicht (wie zag welke persoonsgegevens) was niet in te
+ * vullen. Bovendien ontbrak in die pagina's de `actief`-check en de live
+ * AAL2-hercheck; die zaten alleen in de layout.
+ *
+ * Verschil met `withPlatform`: géén attempt-event, en de audit is BEST-EFFORT
+ * in plaats van fail-closed. Een leespad mag niet in een 503 eindigen omdat de
+ * auditlog even niet schrijfbaar is — dat maakt de back-office onbruikbaar
+ * terwijl er niets muteert. Elke geslaagde inzage levert wél een result-event
+ * met het feitelijke effect (aantallen/scope, nooit inhoud).
+ *
+ * Gooit `PlatformError` (403) bij weigering, net als `withPlatform`.
+ */
+export async function withPlatformRead<T>(
+  opts: WithPlatformReadOpts,
+  fn: (
+    svc: SupabaseClient,
+    ctx: { identiteit: PlatformIdentiteit; correlatieId: string }
+  ) => Promise<{ resultaat: T; effect?: unknown }>
+): Promise<T> {
+  const correlatieId = randomUUID();
+  const auditOpts: WithPlatformOpts = {
+    capability: opts.capability,
+    handeling: opts.handeling,
+    doelFondsId: opts.doelFondsId ?? null,
+    doelObject: opts.doelObject ?? null,
+    bronIp: opts.bronIp ?? null,
+  };
+
+  const identiteit = await huidigePlatformIdentiteit();
+  if (!identiteit || !identiteit.actief) {
+    await logSecurity({
+      correlatieId,
+      capability: opts.capability,
+      handeling: opts.handeling,
+      doelObject: opts.doelObject ?? null,
+      reden: null,
+      bronIp: opts.bronIp ?? null,
+      foutcode: "no_session_or_inactive",
+    });
+    throw new PlatformError(403, "no_session_or_inactive");
+  }
+
+  if (!(await heeftActueleMFA())) {
+    await logGeweigerd(correlatieId, identiteit, auditOpts, "mfa_required");
+    throw new PlatformError(403, "mfa_required");
+  }
+
+  if (!heeftCapability(identiteit.capabilities, opts.capability)) {
+    await logGeweigerd(correlatieId, identiteit, auditOpts, "capability_denied");
+    throw new PlatformError(403, "capability_denied");
+  }
+
+  try {
+    const svc = createPlatformSupabase();
+    const res = await fn(svc, { identiteit, correlatieId });
+    await logResultGegarandeerd({
+      correlatieId,
+      identityId: identiteit.id,
+      capability: opts.capability,
+      handeling: opts.handeling,
+      doelFondsId: opts.doelFondsId ?? null,
+      doelObject: opts.doelObject ?? null,
+      reden: null,
+      uitkomst: "succes",
+      effect: res.effect ?? null,
+    });
+    return res.resultaat;
+  } catch (e) {
+    await logResultGegarandeerd({
+      correlatieId,
+      identityId: identiteit.id,
+      capability: opts.capability,
+      handeling: opts.handeling,
+      doelFondsId: opts.doelFondsId ?? null,
+      doelObject: opts.doelObject ?? null,
+      reden: null,
+      uitkomst: "fout",
+      foutcode: e instanceof PlatformError ? e.foutcode : "lees_error",
+    });
+    throw e;
+  }
+}
+
 async function logGeweigerd(
   correlatieId: string,
   identiteit: PlatformIdentiteit,

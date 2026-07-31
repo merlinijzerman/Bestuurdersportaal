@@ -43,6 +43,27 @@ export const LIMIETEN = {
   stuurinfo_upload: { endpoint: "stuurinfo_upload", limiet: 20, venster: "1 hour" },
   voorbereiding: { endpoint: "voorbereiding", limiet: 30, venster: "1 hour" },
   besluit_concept: { endpoint: "besluit_concept", limiet: 30, venster: "1 hour" },
+
+  // ── M-06 (review 2026-07-30) — dure routes die géén limiet hadden ────────
+  // Elk van deze routes doet per aanroep externe modelcalls (embedding, OCR,
+  // Haiku-prefix) en was onbeperkt herhaalbaar door een geauthenticeerde
+  // gebruiker. Dat is kosten-DoS, en /api/zoeken is bovendien bereikbaar voor
+  // élke bestuurder zónder rolcheck.
+  //
+  // Zoeken genereert bij hybride retrieval per query een embedding; 60 per
+  // 5 minuten is ruim voor normaal doorzoeken en dempt scriptgebruik.
+  zoeken: { endpoint: "zoeken", limiet: 60, venster: "5 minutes" },
+  // Her-extract is de duurste route van de applicatie: storage-download +
+  // eventueel volledige OCR + tientallen Haiku-calls + embeddings.
+  her_extract: { endpoint: "her_extract", limiet: 10, venster: "1 hour" },
+  // Backfills draaien in batches van 25; 60 per uur laat een volledige
+  // inhaalslag toe zonder onbegrensd te kunnen stapelen.
+  backfill: { endpoint: "backfill", limiet: 60, venster: "1 hour" },
+  // Notulen-segmentatie doet een volledige documentextractie + LLM-call.
+  segmenteer: { endpoint: "segmenteer", limiet: 20, venster: "1 hour" },
+  // Bulk-metadata is begrensd op 200 documenten per call, maar niet op het
+  // aantal calls.
+  bulk_metadata: { endpoint: "bulk_metadata", limiet: 30, venster: "1 hour" },
 } as const satisfies Record<string, Limiet>;
 
 export type LimietBeslissing = {
@@ -66,13 +87,24 @@ type RpcResultaat = {
  * Hergebruikt de meegegeven (geauthenticeerde) Supabase-client uit de route, zodat
  * de functie in de DB de juiste auth.uid() ziet.
  *
- * **Fail-open**: faalt de DB-call, dan laten we het request bewust toe en loggen
- * we de fout. Een rate-limiter mag de hele applicatie niet platleggen bij een
- * tijdelijke DB-storing (conform de risicotabel in SECURITY-ROUTE-A-PLAN.md).
+ * **Fail-open (default)**: faalt de DB-call, dan laten we het request bewust toe
+ * en loggen we de fout. Een rate-limiter mag de hele applicatie niet platleggen
+ * bij een tijdelijke DB-storing (conform de risicotabel in
+ * SECURITY-ROUTE-A-PLAN.md).
+ *
+ * **Fail-closed (`opties.failClosed`)** — H-12 (review 2026-07-30): voor routes
+ * die per aanroep KOSTEN maken bij een externe provider is fail-open de
+ * verkeerde keuze. Juist tijdens een DB-storing (of een aanval die er een
+ * veroorzaakt) verdwijnt dan de enige rem op het aantal modelaanroepen. Het
+ * verschil in schade is asymmetrisch: bij fail-open loopt de rekening door bij
+ * Anthropic/Mistral, bij fail-closed ziet de gebruiker tijdelijk een nette
+ * foutmelding op één functie. Gebruik dit voor chat, zoeken, her-extract,
+ * backfills en segmentatie; laat het uit voor niet-kostende routes.
  */
 export async function controleerLimiet(
   supabase: SupabaseClient,
-  sleutel: Limiet
+  sleutel: Limiet,
+  opties: { failClosed?: boolean } = {}
 ): Promise<LimietBeslissing> {
   const { data, error } = await supabase.rpc("fn_rate_limit_check", {
     p_endpoint: sleutel.endpoint,
@@ -81,6 +113,13 @@ export async function controleerLimiet(
   });
 
   if (error || !data) {
+    if (opties.failClosed) {
+      console.error(
+        `[rate-limit:${sleutel.endpoint}] check mislukt — FAIL-CLOSED (kostendragende route)`,
+        error
+      );
+      return { toegestaan: false, resterend: 0, resetAt: null };
+    }
     // Fail-open: toelaten, maar wel signaleren in de server-logs.
     console.error(`[rate-limit:${sleutel.endpoint}] check mislukt — fail-open`, error);
     return { toegestaan: true, resterend: sleutel.limiet, resetAt: null };

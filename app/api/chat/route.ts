@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createServerSupabase } from "@/core/lib/supabase-server";
-import { zoekRelevanteChunksMetMeta, telNietActueleFondstreffers, maakContext, haalDocumentChunks, verrijkNotulenChunks, type DocumentChunk, type BronVerwijzing, type RetrievalMeta, type RetrievalFilters } from "@/core/lib/rag";
+import { zoekRelevanteChunksMetMeta, telNietActueleFondstreffers, maakContext, maakBronSentinel, haalDocumentChunks, verrijkNotulenChunks, type DocumentChunk, type BronVerwijzing, type RetrievalMeta, type RetrievalFilters } from "@/core/lib/rag";
 import { heeftReformulatieNodig, reformuleerVraag } from "@/core/lib/query-reformulatie";
 import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
+import { valideerChatInvoer } from "@/core/lib/chat-invoer";
 import { rateLimited } from "@/core/lib/api-errors";
 import { beoordeelRouteHostToegang } from "@/core/lib/tenant-route-guard";
 import { hybrideZoekenAan, retrievalVlaggenVoorFonds } from "@/core/lib/fonds-config";
@@ -228,30 +229,21 @@ export async function POST(req: NextRequest) {
       // mee" na de melding dat de actualiteitsfilter treffers wegnam.
       neem_niet_vastgestelde_mee?: boolean;
     };
-    // Bouw geschiedenis-array. Backwards compat: als alleen `vraag` wordt
-    // meegestuurd, behandelen we dat als one-shot conversatie.
-    const messages: ChatBericht[] =
-      body.messages && Array.isArray(body.messages) && body.messages.length > 0
-        ? body.messages
-        : body.vraag
-        ? [{ role: "user", content: body.vraag }]
-        : [];
-
-    if (messages.length === 0) {
+    // ── H-12 (review 2026-07-30): runtime-validatie + harde invoercaps ─────
+    // De historie kwam via een TypeScript-cast binnen en werd nergens op vorm
+    // of lengte gecontroleerd; alleen het laatste bericht werd getoetst. Dat
+    // gaf twee problemen: (a) denial-of-wallet — onbegrensde invoer op een
+    // Opus-model, en (b) guardrail-bypass — een gefabriceerde "assistant"-beurt
+    // kan de instructieset relativeren. Zie core/lib/chat-invoer.ts.
+    const invoer = valideerChatInvoer(body.messages, body.vraag);
+    if (!invoer.ok) {
       return NextResponse.json(
-        { error: "messages of vraag is verplicht" },
-        { status: 400 }
+        { error: invoer.melding, foutcode: invoer.foutcode },
+        { status: invoer.status }
       );
     }
-
-    const laatste = messages[messages.length - 1];
-    if (laatste.role !== "user" || !laatste.content?.trim()) {
-      return NextResponse.json(
-        { error: "Het laatste bericht moet een vraag van de gebruiker zijn" },
-        { status: 400 }
-      );
-    }
-    const vraag = laatste.content.trim();
+    const messages: ChatBericht[] = invoer.messages;
+    const vraag = invoer.vraag;
 
     // Authenticatie
     const supabase = await createServerSupabase();
@@ -265,7 +257,11 @@ export async function POST(req: NextRequest) {
 
     // Rate limiting (WP2): vóór RAG/Anthropic, zodat een loop geen kosten maakt.
     // Moet vóór de SSE-stream gebeuren — een 429 is een gewone JSON-response.
-    const limiet = await controleerLimiet(supabase, LIMIETEN.chat);
+    // H-12: fail-closed. Bij een storing in de teller is doorlaten juist de
+    // duurste optie — dit is de enige rem op het aantal Opus-aanroepen.
+    const limiet = await controleerLimiet(supabase, LIMIETEN.chat, {
+      failClosed: true,
+    });
     if (!limiet.toegestaan) return rateLimited("chat.POST", limiet.resetAt);
 
     // Profiel + fondsnaam ophalen voor persoonlijke context
@@ -802,6 +798,11 @@ export async function POST(req: NextRequest) {
     let chunks: DocumentChunk[] = [];
     let bronnen: BronVerwijzing[] = [];
     let contextTekst = "";
+    // H-10 — afbakening van de bronblokken. Eén sentinel per request: alle
+    // contextblokken in deze prompt dragen dezelfde markering, zodat het model
+    // consistent kan onderscheiden wat door het portaal is aangeleverd.
+    let bronSentinel = maakBronSentinel();
+    let contextGeneutraliseerd = 0;
     let retrievalMeta: RetrievalMeta | null = null;
 
     // Agendapunt-modus (ADR 0028): retrieval alleen als er doorzoekbare gekoppelde
@@ -903,6 +904,11 @@ export async function POST(req: NextRequest) {
       const ctx = maakContext(chunks);
       contextTekst = ctx.contextTekst;
       bronnen = ctx.bronnen;
+      // H-10: de bron-afbakening en het aantal geneutraliseerde bronlabel-
+      // patronen doorgeven aan respectievelijk de systeemprompt en het
+      // auditspoor.
+      bronSentinel = ctx.sentinel;
+      contextGeneutraliseerd = ctx.geneutraliseerd;
 
       // Besluitvorming-modus (Increment G): voeg de Decision Object-
       // besluitregistratie van de relevante procesinstantie(s) toe als LEIDENDE
@@ -1028,7 +1034,8 @@ export async function POST(req: NextRequest) {
       systeemBlokken = bouwSysteemBlokken(
         SP_TRANSFORMATIE_REGELS,
         ctxBestuurder,
-        antwoordmodus
+        antwoordmodus,
+        chunks.length > 0 ? bronSentinel : null
       );
       gebruikersPrompt =
         chunks.length > 0
@@ -1044,7 +1051,8 @@ export async function POST(req: NextRequest) {
       systeemBlokken = bouwSysteemBlokken(
         SP_AGENDAPUNT_REGELS,
         ctxBestuurder,
-        antwoordmodus
+        antwoordmodus,
+        chunks.length > 0 ? bronSentinel : null
       );
       const toelichtingBlok = bouwToelichtingBlok(agendapuntSeed!);
       const stukkenBlok =
@@ -1065,7 +1073,12 @@ export async function POST(req: NextRequest) {
         : breedActief
         ? SP_DOCUMENT_SCOPE_BREED_REGELS
         : SP_DOCUMENT_SCOPE_REGELS;
-      systeemBlokken = bouwSysteemBlokken(scopeRegels, ctxBestuurder);
+      systeemBlokken = bouwSysteemBlokken(
+        scopeRegels,
+        ctxBestuurder,
+        "feitelijk",
+        chunks.length > 0 ? bronSentinel : null
+      );
 
       if (scopeStrategie === "map_reduce") {
         // De gebruikersprompt voor map-reduce wordt in de stream opgebouwd uit de
@@ -1092,7 +1105,8 @@ export async function POST(req: NextRequest) {
       systeemBlokken = bouwSysteemBlokken(
         chunks.length > 0 ? SP_COMBINEREN_REGELS : SP_ALGEMEEN_REGELS,
         ctxBestuurder,
-        antwoordmodus
+        antwoordmodus,
+        chunks.length > 0 ? bronSentinel : null
       );
       gebruikersPrompt =
         chunks.length > 0
@@ -1100,7 +1114,12 @@ export async function POST(req: NextRequest) {
           : `${portaalContextPrefix}Er zijn geen interne documenten gevonden die direct relevant zijn voor deze vraag.\n\nVRAAG: ${vraag}\n\nGebruik je algemene kennis om de vraag zo goed mogelijk te beantwoorden, en markeer claims met [Algemene kennis]. Sluit af met een opmerking dat er geen interne bronnen zijn gevonden.`;
     } else {
       // documenten (strikte modus)
-      systeemBlokken = bouwSysteemBlokken(SP_DOCUMENTEN_REGELS, ctxBestuurder, antwoordmodus);
+      systeemBlokken = bouwSysteemBlokken(
+        SP_DOCUMENTEN_REGELS,
+        ctxBestuurder,
+        antwoordmodus,
+        chunks.length > 0 ? bronSentinel : null
+      );
       gebruikersPrompt =
         chunks.length > 0
           ? `${portaalContextPrefix}BESCHIKBARE BRONNEN:\n\n${contextTekst}\n\n---\n\nVRAAG: ${vraag}`
@@ -1570,6 +1589,15 @@ export async function POST(req: NextRequest) {
             }),
             antwoordmodus,
             transformatie: transformatieActief,
+            // H-12/H-10 — invoer- en promptprovenance (zie RetrievalMeta).
+            invoer: {
+              beurten: messages.length,
+              tekens: invoer.tekens,
+              historie_hash: invoer.historieHash,
+            },
+            ...(contextGeneutraliseerd > 0
+              ? { context_geneutraliseerd: contextGeneutraliseerd }
+              : {}),
             // P2 Deel B (B6/criterium 13) — de zichtbare beurt is korter dan de
             // instructie; leg de parameters vast zodat het antwoord reconstrueerbaar
             // is. Geen nieuw event-type; meelift in retrieval_meta.

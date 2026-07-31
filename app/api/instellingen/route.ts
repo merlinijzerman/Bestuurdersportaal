@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { requireCapability } from "@/core/lib/capabilities";
+import { errorResponse } from "@/core/lib/api-errors";
 import {
   haalFondsConfig,
   haalConfigHistorie,
@@ -132,8 +133,8 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Onbekende of ontbrekende 'type'" }, { status: 400 });
     }
   } catch (e) {
-    console.error("Instellingen POST fout:", e);
-    const bericht = e instanceof Error ? e.message : "Serverfout";
-    return NextResponse.json({ error: bericht }, { status: 500 });
+    // M-13 (review 2026-07-30): `e.message` (incl. Supabase-detail) ging
+    // rechtstreeks naar de client. Nu server-side loggen, generiek antwoorden.
+    return errorResponse("instellingen.POST", e);
   }
 }

@@ -11,7 +11,7 @@
 // De bronkaarten zelf komen als children mee (renderlogica leeft in page).
 
 import { type ReactNode } from "react";
-import { normgewichtLabel } from "@/core/lib/bronsoort";
+import { normgewichtLabel, isVeiligeUrl } from "@/core/lib/bronsoort";
 
 export interface OnderbouwingMeta {
   /** Korte samenvatting van de bronbasis (lib/vraagtype.bronbasisLabel). */
@@ -340,14 +340,21 @@ export default function OnderbouwingPaneel({
                 {meta.webBronnen.map((w, i) => (
                   <li key={i} className="text-xs">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <a
-                        href={w.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-ink underline hover:text-accent"
-                      >
-                        {w.titel}
-                      </a>
+                      {/* L-04: dezelfde rendergate als elders in de app. De URL
+                          komt bij herladen uit gesprekken.berichten (jsonb, door
+                          de gebruiker zelf beschrijfbaar), dus her-valideren. */}
+                      {isVeiligeUrl(w.url) ? (
+                        <a
+                          href={w.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-ink underline hover:text-accent"
+                        >
+                          {w.titel}
+                        </a>
+                      ) : (
+                        <span className="text-ink">{w.titel}</span>
+                      )}
                       {w.normgewicht && (
                         <span className="text-[10px] font-semibold text-muted bg-app-bg px-1.5 py-0.5 rounded">
                           {normgewichtLabel(w.normgewicht)}

@@ -25,7 +25,7 @@ import { revalidatePath } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { withPlatform, PlatformError } from "@/platform/lib/platform-wrapper";
 import type { PlatformIdentiteit } from "@/platform/lib/platform-auth";
-import { valideerUpload } from "@/platform/lib/bestand-validatie";
+import { valideerUpload } from "@/core/lib/bestand-validatie";
 import { bepaalBestandstype } from "@/core/lib/document-extractie";
 import {
   valideerCuratie,
@@ -41,6 +41,7 @@ import {
   STORAGE_BUCKET,
   QUARANTAINE_BUCKET,
   GENERIEK_PAD_PREFIX,
+  QUARANTAINE_PAD_PATROON,
 } from "@/platform/lib/generiek-pipeline";
 import { herindexeerDocument } from "@/core/lib/reindex";
 import { INDEXERING_VERSIE, PREFIX_MODEL, PREFIX_PROMPT_VERSIE } from "@/core/lib/chunk-ingest";
@@ -173,7 +174,17 @@ async function maakGeneriekDocument(
   const pad = (fd.get("quarantaine_pad") as string | null)?.trim() || "";
   const bestandsnaam = (fd.get("bestandsnaam") as string | null) ?? "";
   const mimeType = (fd.get("mime_type") as string | null) ?? "";
-  if (!pad || !pad.startsWith(`${GENERIEK_PAD_PREFIX}/`)) {
+  // H-13 (review 2026-07-30): een `startsWith`-prefixcheck laat `..`-segmenten
+  // door (`generiek/../../documenten/<fondspad>`). storage-js bouwt de URL als
+  // string en `fetch` normaliseert dot-segmenten vóór verzending, waardoor de
+  // SERVICE-ROLE-client een object buiten de quarantainebucket zou kunnen
+  // downloaden — en dat object daarna als GENERIEK document zou worden
+  // gepubliceerd, dus leesbaar voor élke tenant. De afsluitende `remove([pad])`
+  // zou bovendien een vreemd object kunnen verwijderen.
+  //
+  // Het pad wordt server-side gegenereerd door curatieUploadUrl als
+  // `generiek/<uuid>.<ext>`; alleen exact dat patroon is nog toegestaan.
+  if (!pad || !QUARANTAINE_PAD_PATROON.test(pad)) {
     return { ok: false, foutcode: "bestand_ontbreekt", melding: "Geen geüpload bestand gevonden. Upload het bestand opnieuw." };
   }
 
@@ -304,7 +315,9 @@ async function maakUitBuffer(
       melding:
         pipe.foutcode === "geen_tekst"
           ? "Geen tekst gevonden — is dit een gescand bestand zonder tekstlaag?"
-          : "Verwerking mislukt; het document is niet beschikbaar gemaakt.",
+          : pipe.foutcode === "chunk_insert_mislukt"
+            ? "De fragmenten konden niet worden opgeslagen; het document is niet gepubliceerd."
+            : "Verwerking mislukt; het document is niet beschikbaar gemaakt.",
     };
   }
 

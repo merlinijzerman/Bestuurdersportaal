@@ -11,11 +11,13 @@ export default async function NotulenPage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  // L-05 (review 2026-07-30) — zie governance/page.tsx.
+  if (!user) return null;
 
   const { data: profiel } = await supabase
     .from("profielen")
     .select("fonds_id")
-    .eq("id", user!.id)
+    .eq("id", user.id)
     .single();
 
   // Notulendocumenten van het fonds + hun vergadering.

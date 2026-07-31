@@ -10,6 +10,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
+import { errorResponse } from "@/core/lib/api-errors";
 import {
   buildDecisionDossierView,
   ensureDecisionForProcedure,
@@ -40,12 +41,15 @@ export async function GET(
 
     return NextResponse.json({ dossier: view });
   } catch (e) {
-    console.error("Fout in GET /api/procedures/[id]/dossier:", e);
-    const bericht = e instanceof Error ? e.message : "Serverfout";
-    const isNotFound = /niet gevonden/i.test(bericht);
-    return NextResponse.json(
-      { error: bericht },
-      { status: isNotFound ? 404 : 500 }
-    );
+    // M-13 (review 2026-07-30) — zie decisions/[id]/dossier: de ruwe
+    // foutmelding lekte schema- en id-informatie naar de client.
+    const intern = e instanceof Error ? e.message : "";
+    const isNotFound = /niet gevonden/i.test(intern);
+    return errorResponse("procedures.dossier.GET", e, {
+      status: isNotFound ? 404 : 500,
+      userMessage: isNotFound
+        ? "Dit dossier is niet gevonden of u heeft er geen toegang toe."
+        : undefined,
+    });
   }
 }

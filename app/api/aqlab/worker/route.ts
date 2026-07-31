@@ -13,6 +13,7 @@
 // overlappende invocaties zijn veilig.
 // -----------------------------------------------------------------------------
 
+import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceSupabase } from "@/platform/lib/supabase-service";
 import { verwerkBatch } from "@/platform/lib/aqlab/run-orchestrator";
@@ -31,7 +32,16 @@ function geautoriseerd(req: NextRequest): boolean {
   const secret = process.env.CRON_SECRET;
   if (!secret) return false; // fail-closed: geen secret geconfigureerd → geen toegang.
   const auth = req.headers.get("authorization");
-  return auth === `Bearer ${secret}`;
+  if (!auth) return false;
+  // L-02 (review 2026-07-30): constant-time vergelijking. Over HTTP is een
+  // timing-side-channel praktisch niet exploiteerbaar (netwerkjitter ≫ het
+  // verschil), maar `===` op een secret is hygiëne die je niet wilt uitleggen
+  // in een securityreview. timingSafeEqual eist gelijke bufferlengtes, vandaar
+  // de lengtecheck vooraf — die lekt alleen de lengte, niet de inhoud.
+  const verwacht = Buffer.from(`Bearer ${secret}`, "utf8");
+  const gekregen = Buffer.from(auth, "utf8");
+  if (verwacht.length !== gekregen.length) return false;
+  return timingSafeEqual(verwacht, gekregen);
 }
 
 async function draai(req: NextRequest): Promise<NextResponse> {

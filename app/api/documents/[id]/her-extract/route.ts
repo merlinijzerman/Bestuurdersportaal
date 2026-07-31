@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
+import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
+import { rateLimited } from "@/core/lib/api-errors";
 import { bouwChunkRecords } from "@/core/lib/chunk-ingest";
 import {
   diagnoseerExtractie,
@@ -32,6 +34,16 @@ export async function POST(
   if (!user) {
     return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
   }
+
+  // M-06 (review 2026-07-30): deze route doet per aanroep externe modelcalls
+  // (storage-download + eventueel volledige OCR + tientallen Haiku-calls +
+  // embeddings) en had geen enkele limiet — onbeperkt herhaalbaar door elke
+  // voorzitter/beheerder. Fail-closed: bij een storing in de teller is
+  // doorlaten juist de duurste optie (zie core/lib/rate-limit.ts).
+  const limiet = await controleerLimiet(supabase, LIMIETEN.her_extract, {
+    failClosed: true,
+  });
+  if (!limiet.toegestaan) return rateLimited("documents.her-extract", limiet.resetAt);
 
   const { data: profiel } = await supabase
     .from("profielen")
@@ -126,20 +138,20 @@ export async function POST(
     }
   }
 
-  // Bestaande chunks vervangen. Eerst weg (RLS-policy "fonds chunks" dekt
-  // delete én insert), daarna de nieuwe pagina-bewuste chunks inserten.
-  const { error: deleteError } = await supabase
-    .from("document_chunks")
-    .delete()
-    .eq("document_id", id);
-
-  if (deleteError) {
-    console.error("Her-extract: oude chunks verwijderen mislukt:", deleteError);
-    return NextResponse.json(
-      { error: "Kon de bestaande fragmenten niet vervangen." },
-      { status: 500 }
-    );
-  }
+  // ── H-09 (review 2026-07-30): vervanging is nu ATOMAIR ─────────────────
+  // Voorheen werden EERST alle chunks verwijderd en pas daarna de nieuwe
+  // ingevoegd. Faalde die insert (of liep de functie tegen de Vercel-timeout
+  // aan), dan bleef het document chunkloos achter terwijl `geindexeerd` op
+  // `true` bleef staan: permanent onvindbaar, zonder statussignaal en zonder
+  // retry. Herstel vroeg handmatig ingrijpen.
+  //
+  // Nu: het document gaat eerst op `geindexeerd = false` (zodat het tijdens de
+  // vervanging niet als volledig geïndexeerd geldt), daarna worden de nieuwe
+  // chunks opgebouwd, en pas als die klaarstaan wisselen we ze in één keer om.
+  // Bij een fout in de insertfase draaien we terug naar de lege staat en geven
+  // we een expliciete fout — nooit een half-geïndexeerd document dat zich als
+  // volledig presenteert.
+  await supabase.from("documenten").update({ geindexeerd: false }).eq("id", id);
 
   // R1.1 + R1.2 — gedeelde ingest: structuur-bewuste chunking + context-prefix
   // (Haiku) + embedding over de VERRIJKTE tekst. Anders dan voorheen embed de
@@ -152,6 +164,24 @@ export async function POST(
     segmenten: extractie.segmenten,
   });
 
+  // Pas hier — nadat de dure stappen (extractie, OCR, context-prefix,
+  // embeddings) zijn geslaagd — vervangen we de bestaande chunks.
+  const { error: deleteError } = await supabase
+    .from("document_chunks")
+    .delete()
+    .eq("document_id", id);
+
+  if (deleteError) {
+    console.error("Her-extract: oude chunks verwijderen mislukt:", deleteError);
+    // Niets verwijderd, niets ingevoegd: de oude index staat er nog. Alleen
+    // `geindexeerd` terugzetten.
+    await supabase.from("documenten").update({ geindexeerd: true }).eq("id", id);
+    return NextResponse.json(
+      { error: "Kon de bestaande fragmenten niet vervangen." },
+      { status: 500 }
+    );
+  }
+
   const batchGrootte = 50;
   for (let i = 0; i < chunkRecords.length; i += batchGrootte) {
     const batch = chunkRecords.slice(i, i + batchGrootte);
@@ -159,9 +189,21 @@ export async function POST(
       .from("document_chunks")
       .insert(batch);
     if (chunkError) {
-      console.error("Her-extract: chunks opslaan mislukt:", chunkError);
+      console.error(
+        `[her-extract] chunks opslaan mislukt voor document ${id} ` +
+          `(batch ${i / batchGrootte + 1}):`,
+        chunkError
+      );
+      // Fail-closed opruimen: geen deels vervangen index laten staan. Het
+      // document blijft op geindexeerd = false, dus het presenteert zich niet
+      // als volledig verwerkt en kan opnieuw worden geïndexeerd.
+      await supabase.from("document_chunks").delete().eq("document_id", id);
       return NextResponse.json(
-        { error: "Kon de nieuwe fragmenten niet opslaan." },
+        {
+          error:
+            "Kon de nieuwe fragmenten niet opslaan. Het document staat nu als niet-geïndexeerd; probeer de her-indexering opnieuw.",
+          foutcode: "indexering_mislukt",
+        },
         { status: 500 }
       );
     }

@@ -8,11 +8,16 @@
 //  LEESKANT via de service-role-client: contact_aanvragen is voor de anon-key
 //  deny-by-default (geen RLS-leespolicy, FO REQ-PV-042). Dit is read-only
 //  INZICHT — geen businessmutatie — en is gegate op platform.contact.manage.
-//  Zelfde precedent als rechten/page.tsx en lib/platform-auth.ts. Alle MUTATIES
-//  lopen uitsluitend via de server-action (acties.ts) achter withPlatform.
+//  Alle MUTATIES lopen via de server-action (acties.ts) achter withPlatform.
+//
+//  H-15 (review 2026-07-30): de inzage zelf liep vroeger BUITEN de auditwrapper
+//  om. Deze inbox bevat naam, e-mail, telefoon en vrije tekst van bezoekers;
+//  wie die inzag was achteraf niet vast te stellen. De lees-query loopt nu door
+//  withPlatformRead: live AAL2-hercheck, actief-check, capabilitycheck en een
+//  result-event met het aantal ingeziene rijen (geen inhoud).
 // ============================================================================
 
-import { createPlatformSupabase } from "@/platform/lib/supabase-platform";
+import { withPlatformRead, PlatformError } from "@/platform/lib/platform-wrapper";
 import { huidigePlatformIdentiteit } from "@/platform/lib/platform-auth";
 import ContactInboxClient, {
   type ContactAanvraagRij,
@@ -39,15 +44,36 @@ export default async function ContactPagina() {
     );
   }
 
-  const svc = createPlatformSupabase();
-  const { data: rijenRaw } = await svc
-    .from("contact_aanvragen")
-    .select(
-      "id, aangemaakt_op, naam, organisatie, rol, email, telefoon, type_verzoek, bericht, herkomst_pagina, status, notificatie_verzonden, mail_error, opgevolgd_door, afgehandeld_op"
-    )
-    .order("aangemaakt_op", { ascending: false });
-
-  const rijen = (rijenRaw ?? []) as ContactAanvraagRij[];
+  let rijen: ContactAanvraagRij[] = [];
+  try {
+    rijen = await withPlatformRead(
+      { capability: "platform.contact.manage", handeling: "contact.inbox.inzien" },
+      async (svc) => {
+        const { data } = await svc
+          .from("contact_aanvragen")
+          .select(
+            "id, aangemaakt_op, naam, organisatie, rol, email, telefoon, type_verzoek, bericht, herkomst_pagina, status, notificatie_verzonden, mail_error, opgevolgd_door, afgehandeld_op"
+          )
+          .order("aangemaakt_op", { ascending: false });
+        const uit = (data ?? []) as ContactAanvraagRij[];
+        // Effect = aantallen, nooit inhoud (de inbox bevat persoonsgegevens).
+        return { resultaat: uit, effect: { rijen: uit.length } };
+      }
+    );
+  } catch (e) {
+    if (!(e instanceof PlatformError)) throw e;
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="font-serif text-2xl font-bold">Contactaanvragen</h1>
+        </div>
+        <div className="rounded-lg border border-accent/40 bg-accent/10 px-4 py-3 text-sm text-ink">
+          De inbox kon niet worden geopend ({e.foutcode}). Log opnieuw in met
+          tweefactorauthenticatie of neem contact op met een platformbeheerder.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

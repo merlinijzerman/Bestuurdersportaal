@@ -297,7 +297,7 @@ function renderRisicos(items: DecisionDossierView["risks"]): string {
       <tr class="status-${esc(r.status)}">
         <td><pre>${esc(r.beschrijving)}</pre></td>
         <td>${r.categorie ? esc(RISK_CATEGORIE_LABEL[r.categorie]) : "—"}</td>
-        <td>${r.impact ?? "—"} × ${r.kans ?? "—"}</td>
+        <td>${esc(String(r.impact ?? "—"))} × ${esc(String(r.kans ?? "—"))}</td>
         <td>${esc(r.eigenaar_naam ?? "—")}</td>
         <td>${esc(RISK_STATUS_LABEL[r.status])}</td>
         <td><pre>${esc(r.mitigatie ?? "—")}</pre></td>
@@ -512,7 +512,7 @@ function renderStemverslagen(items: StemverslagSummary[]): string {
         ? labelVan(u.winnend_alternatief)
         : "geen eenduidige uitslag";
       const totalenRijen = Object.entries(u.totalen ?? {})
-        .map(([code, n]) => `<li>${esc(labelVan(code))}: ${n}</li>`)
+        .map(([code, n]) => `<li>${esc(labelVan(code))}: ${esc(String(n))}</li>`)
         .join("");
       const perPersoon = (u.per_stemgerechtigde ?? [])
         .map(

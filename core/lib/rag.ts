@@ -1,4 +1,5 @@
 // RAG pipeline: zoek relevante document chunks voor een vraag
+import { neutraliseerBrontekst, maakBronSentinel } from "./bron-afbakening";
 import { createServerSupabase } from "./supabase-server";
 import { bouwTerugvalFtsQuery } from "./fts-terugval";
 import { selecteerChunks } from "./rag-select";
@@ -635,6 +636,22 @@ export interface RetrievalMeta {
   // assistent door, en op welke vragen) zonder een tweede logmechanisme.
   verduidelijking?: boolean;
   geen_modelcall?: boolean;
+  // H-12 (review 2026-07-30) — invoer-provenance. governance_log bewaart alleen
+  // de laatste vraag en het antwoord; wie de historie manipuleerde (bv. een
+  // gefabriceerde "assistant"-beurt om de instructieset te relativeren) was
+  // achteraf niet zichtbaar. `historie_hash` legt vast wélke context tot dit
+  // antwoord leidde zonder de inhoud te dupliceren; `invoer_tekens` maakt
+  // kostenanalyse en misbruikdetectie per fonds mogelijk.
+  invoer?: {
+    beurten: number;
+    tekens: number;
+    historie_hash: string;
+  };
+  // H-10 (review 2026-07-30) — hoeveel bronlabel-achtige patronen zijn
+  // geneutraliseerd in de chunktekst vóórdat die de prompt in ging. >0 betekent
+  // dat een document tekst bevatte die een extra `[Bron N]`-blok of een
+  // scheidingslijn kon simuleren; structureel >0 is een injectiesignaal.
+  context_geneutraliseerd?: number;
   // 30-07-2026 — de verslapte OR-terugval op de Dutch-FTS-arm is ingezet omdat de
   // strikte AND-keten nul rijen gaf. Legt vast welke termen zijn gebruikt, zodat
   // achteraf te zien is dat (en waarmee) er breder is gezocht.
@@ -1184,23 +1201,43 @@ export async function zoekRelevanteChunks(
   return chunks;
 }
 
+// H-10 (review 2026-07-30) — de bron-afbakening en -neutralisatie leven in een
+// eigen, PURE module (core/lib/bron-afbakening.ts): rag.ts trekt de Supabase-
+// client aan en is daardoor niet standalone testbaar, terwijl juist dit deel
+// een eigen regressietest verdient. Hier alleen re-export, zodat aanroepers
+// één importpad houden.
+export { neutraliseerBrontekst, maakBronSentinel };
+
 // Maak een gestructureerde context-string voor Claude
 // `startIndex` (optioneel): laat de [Bron N]-nummering hoger beginnen, zodat een
 // aanroeper eigen bronnen (bv. gekoppelde vergaderstukken in de agendaprep) vóór
 // de bibliotheek-chunks kan nummeren en één doorlopende bronlijst ontstaat.
-export function maakContext(chunks: DocumentChunk[], startIndex = 0): {
+// `sentinel` (optioneel): bron-afbakening met een onvoorspelbare markering. Laat
+// je hem weg, dan wordt er één gegenereerd — maar geef bij een prompt met
+// MEERDERE contextblokken dezelfde sentinel mee, anders sluit het model de
+// blokken niet consistent.
+export function maakContext(
+  chunks: DocumentChunk[],
+  startIndex = 0,
+  sentinel: string = maakBronSentinel()
+): {
   contextTekst: string;
   bronnen: BronVerwijzing[];
+  geneutraliseerd: number;
+  sentinel: string;
 } {
   if (chunks.length === 0) {
     return {
       contextTekst: "Er zijn geen relevante documenten gevonden in de bibliotheek.",
       bronnen: [],
+      geneutraliseerd: 0,
+      sentinel,
     };
   }
 
   const bronnen: BronVerwijzing[] = [];
   const contextDelen: string[] = [];
+  let geneutraliseerdTotaal = 0;
 
   chunks.forEach((chunk, index) => {
     const doc = chunk.documenten;
@@ -1238,9 +1275,15 @@ export function maakContext(chunks: DocumentChunk[], startIndex = 0): {
     // de getoonde locatie die van de treffer-chunk is. De citatie-ANKER (welk
     // document/welke unit) blijft dus exact; de pagina-aanduiding kan de bredere
     // unit onder-specificeren. Alleen achter de parent-vlag; kale chunk = default.
-    const brontekst = chunk.aangeleverde_passage ?? chunk.tekst;
+    const ruweBrontekst = chunk.aangeleverde_passage ?? chunk.tekst;
+    const { tekst: brontekst, geneutraliseerd } = neutraliseerBrontekst(ruweBrontekst);
+    geneutraliseerdTotaal += geneutraliseerd;
+
+    // H-10: elke bron in een eigen, met een onvoorspelbare sentinel afgebakend
+    // blok. Alles tussen de openings- en sluittag is DATA, nooit instructie.
+    const kop = `${bronLabel} ${bronTitel}${bronsoortLabel}${locatie ? ` (${locatie})` : ""}`;
     contextDelen.push(
-      `${bronLabel} ${bronTitel}${bronsoortLabel}${locatie ? ` (${locatie})` : ""}:\n"${brontekst}"`
+      `<bron s="${sentinel}" nr="${startIndex + index + 1}">\n${kop}:\n${brontekst}\n</bron s="${sentinel}">`
     );
 
     bronnen.push({
@@ -1263,8 +1306,10 @@ export function maakContext(chunks: DocumentChunk[], startIndex = 0): {
   });
 
   return {
-    contextTekst: contextDelen.join("\n\n---\n\n"),
+    contextTekst: contextDelen.join("\n\n"),
     bronnen,
+    geneutraliseerd: geneutraliseerdTotaal,
+    sentinel,
   };
 }
 

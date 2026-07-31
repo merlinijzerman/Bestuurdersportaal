@@ -14,7 +14,7 @@
 //  profielinhoud.
 // ============================================================================
 
-import { createPlatformSupabase } from "@/platform/lib/supabase-platform";
+import { withPlatformRead } from "@/platform/lib/platform-wrapper";
 import { huidigePlatformIdentiteit } from "@/platform/lib/platform-auth";
 import GebruikersClient, {
   type FondsOptie,
@@ -61,47 +61,66 @@ export default async function GebruikersPagina({
   }
 
   const { fonds: gekozenFonds } = await searchParams;
-  const svc = createPlatformSupabase();
 
-  const { data: fondsenData } = await svc
-    .from("fondsen")
-    .select("id, naam, slug")
-    .order("naam", { ascending: true });
-  const fondsen: FondsOptie[] = (fondsenData ?? []) as FondsOptie[];
+  // H-15 (review 2026-07-30): deze pagina leest e-mailadressen en laatste-
+  // logins van álle tenantgebruikers per fonds met de service-role. Die inzage
+  // liep buiten de auditwrapper om en liet geen spoor na. Nu geaudit, met het
+  // doelfonds in het event zodat cross-tenant inzage herleidbaar is.
+  const { fondsen, gebruikers, geldigFonds } = await withPlatformRead(
+    {
+      capability: "platform.tenants.manage",
+      handeling: "tenants.gebruikers.inzien",
+      doelFondsId: gekozenFonds ?? null,
+    },
+    async (svc) => {
+      const { data: fondsenData } = await svc
+        .from("fondsen")
+        .select("id, naam, slug")
+        .order("naam", { ascending: true });
+      const alleFondsen: FondsOptie[] = (fondsenData ?? []) as FondsOptie[];
 
-  // Alleen laden als er een GELDIG, expliciet gekozen fonds is (geen default).
-  const geldigFonds = gekozenFonds && fondsen.some((f) => f.id === gekozenFonds) ? gekozenFonds : null;
+      // Alleen laden als er een GELDIG, expliciet gekozen fonds is (geen default).
+      const geldigFonds =
+        gekozenFonds && alleFondsen.some((f) => f.id === gekozenFonds) ? gekozenFonds : null;
 
-  let gebruikers: TenantGebruiker[] = [];
-  if (geldigFonds) {
-    const { data: profielen } = await svc
-      .from("profielen")
-      .select("id, naam, rol, aangemaakt")
-      .eq("fonds_id", geldigFonds)
-      .order("naam", { ascending: true });
+      let rijenUit: TenantGebruiker[] = [];
+      if (geldigFonds) {
+        const { data: profielen } = await svc
+          .from("profielen")
+          .select("id, naam, rol, aangemaakt")
+          .eq("fonds_id", geldigFonds)
+          .order("naam", { ascending: true });
 
-    const rijen = (profielen ?? []) as { id: string; naam: string | null; rol: string | null; aangemaakt: string | null }[];
+        const rijen = (profielen ?? []) as { id: string; naam: string | null; rol: string | null; aangemaakt: string | null }[];
 
-    // Auth-metadata per profiel hydrateren (bounded op fondsgrootte). Bij MVP-
-    // schaal is dit een handvol calls; bij groei is een paginerende listUsers of
-    // een SECURITY DEFINER-RPC de vervolgstap (zie 0083 / openstaande punten).
-    gebruikers = await Promise.all(
-      rijen.map(async (p) => {
-        const { data: authData } = await svc.auth.admin.getUserById(p.id);
-        const u = (authData?.user ?? null) as AuthUserRuntime | null;
-        return {
-          id: p.id,
-          naam: p.naam ?? "",
-          rol: (p.rol ?? "bestuurder") as TenantGebruiker["rol"],
-          email: u?.email ?? "",
-          emailBevestigd: Boolean(u?.email_confirmed_at),
-          laatsteLogin: u?.last_sign_in_at ?? null,
-          geblokkeerd: isGeblokkeerd(u?.banned_until),
-          aangemaakt: p.aangemaakt ?? u?.created_at ?? null,
-        };
-      })
-    );
-  }
+        // Auth-metadata per profiel hydrateren (bounded op fondsgrootte). Bij MVP-
+        // schaal is dit een handvol calls; bij groei is een paginerende listUsers of
+        // een SECURITY DEFINER-RPC de vervolgstap (zie 0083 / openstaande punten).
+        rijenUit = await Promise.all(
+          rijen.map(async (p) => {
+            const { data: authData } = await svc.auth.admin.getUserById(p.id);
+            const u = (authData?.user ?? null) as AuthUserRuntime | null;
+            return {
+              id: p.id,
+              naam: p.naam ?? "",
+              rol: (p.rol ?? "bestuurder") as TenantGebruiker["rol"],
+              email: u?.email ?? "",
+              emailBevestigd: Boolean(u?.email_confirmed_at),
+              laatsteLogin: u?.last_sign_in_at ?? null,
+              geblokkeerd: isGeblokkeerd(u?.banned_until),
+              aangemaakt: p.aangemaakt ?? u?.created_at ?? null,
+            };
+          })
+        );
+      }
+
+      return {
+        resultaat: { fondsen: alleFondsen, gebruikers: rijenUit, geldigFonds },
+        // Effect = aantallen en scope, nooit inhoud (dit zijn persoonsgegevens).
+        effect: { fonds_id: geldigFonds, gebruikers: rijenUit.length },
+      };
+    }
+  );
 
   return (
     <div className="space-y-6">

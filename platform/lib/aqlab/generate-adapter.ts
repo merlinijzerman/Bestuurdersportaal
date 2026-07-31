@@ -129,11 +129,18 @@ export async function genereerViaAdapter(params: AdapterParams): Promise<Adapter
   const reasoningEffort = cfg.reasoningEffort ?? null;
 
   const chunks = fixturesNaarChunks(params.fixtures);
-  const { contextTekst, bronnen } = maakContext(chunks);
+  const { contextTekst, bronnen, sentinel: bronSentinel } = maakContext(chunks);
 
   const ctx = bestuurderContext(params.rol, fondsnaam);
   // Strikte documenten-modus: identiek aan de productie-"documenten"-tak.
-  const systeemBlokken = bouwSysteemBlokken(SP_DOCUMENTEN_REGELS, ctx, "feitelijk");
+  // H-10: identiek aan de productieroute — met bronnen in de prompt gaat de
+  // sentinel mee, zodat het Lab dezelfde guardrails evalueert als productie.
+  const systeemBlokken = bouwSysteemBlokken(
+    SP_DOCUMENTEN_REGELS,
+    ctx,
+    "feitelijk",
+    params.fixtures.length > 0 ? bronSentinel : null
+  );
   const gebruikersPrompt =
     params.fixtures.length > 0
       ? `BESCHIKBARE BRONNEN:\n\n${contextTekst}\n\n---\n\nVRAAG: ${params.vraag}`
