@@ -56,6 +56,25 @@
   --phase-tint-rgb: 226 240 245; --phase-tint: rgb(var(--phase-tint-rgb));
   --phase-ink-rgb: 10 97 120;   --phase-ink: rgb(var(--phase-ink-rgb));
 
+  /* Toegankelijkheid (besluit 0097) — GEEN merkkleuren, dus bewust NIET in
+     THEMABARE_TOKENS: dit zijn WCAG-afspraken die voor elk fonds gelijk zijn.
+
+     --app-line-control — rand van bedieningselementen (knoppen, chips).
+       --app-line-strong (210 214 230) haalt 1,45:1 op wit en voldoet daarmee
+       niet aan WCAG 1.4.11 (>= 3:1 voor UI-componenten). Deze waarde haalt
+       3,32:1 op --app-surface en 3,15:1 op --app-zebra. --app-line-strong
+       blijft ongewijzigd in gebruik voor decoratieve scheidingen en tabelranden;
+       dat zijn geen bedieningselementen en 1.4.11 geldt daar niet.
+
+     --mark — markering in lopende tekst. Ink op mark haalt 14,3:1. Nog GEEN
+       consument: markeren vergt dat iets besluit wát gemarkeerd wordt, en dat
+       is een functionele ingreep buiten deze tranche. Het token staat er vooruit
+       zodat de toegankelijkheidsafspraak vastligt vóór de eerste class erop
+       wordt geschreven. Bij gebruik geldt: kleur is nooit de enige drager —
+       een markering krijgt altijd ook een lijn of tekstuele aanduiding. */
+  --mark-rgb: 250 232 190;              --mark: rgb(var(--mark-rgb));
+  --app-line-control-rgb: 134 140 168;  --app-line-control: rgb(var(--app-line-control-rgb));
+
   /* Kaart-elevatie (stuurinformatie-opmaak, T17): subtiele dubbele schaduw —
      ink-getint zodat hij op de lichte achtergrond rustig blijft. */
   --shadow-card: 0 1px 2px rgb(var(--ink-rgb) / 0.04), 0 10px 26px -18px rgb(var(--ink-rgb) / 0.35);
@@ -222,6 +241,65 @@ body {
   .si-tabel tr.si-totaalrij td:last-child {
     border-bottom-right-radius: 9px;
     border-right: 1px solid var(--app-line);
+  }
+
+  /* Variant ZONDER totaalrij — voor AI-antwoordtabellen. .si-tabel sluit de
+     tabel alleen af via thead (bovenhoeken) en tfoot/.si-totaalrij (onderhoeken
+     + zijranden). Een tabel uit een AI-antwoord heeft geen totaalrij en zou dus
+     open zijkanten en vierkante onderhoeken houden. Bewust een aparte klasse en
+     geen aanpassing van .si-tabel zelf: de bestaande stuurinformatie-tabellen
+     blijven daarmee visueel ongemoeid. */
+  .si-tabel-gesloten tbody td:first-child { border-left: 1px solid var(--line); }
+  .si-tabel-gesloten tbody td:last-child { border-right: 1px solid var(--line); }
+  .si-tabel-gesloten tbody tr:last-child td {
+    border-bottom: 1px solid var(--line);
+  }
+  .si-tabel-gesloten tbody tr:last-child td:first-child { border-bottom-left-radius: 9px; }
+  .si-tabel-gesloten tbody tr:last-child td:last-child { border-bottom-right-radius: 9px; }
+
+  /* ── AI-antwoordweergave (AI-WEERGAVE-ONTWERP.md §4.2) ─────────────────────
+     Leesritme voor de LOPENDE TEKST van een AI-antwoord. Alleen alinea's,
+     lijsten en koppen krijgen deze maat; tabellen, bronkaarten en het
+     onderbouwingspaneel houden de volle kolombreedte. In de smallere
+     agendapuntchat is de container zelf al smaller — max-width laat die dan
+     leidend zijn.
+
+     `68ch` is een typografische maat (68 nullen breed), niet exact 68 tekens.
+
+     tabular-nums staat op de hele leeskolom in plaats van op gedetecteerde
+     getallen: dat is deterministisch (geen heuristiek die soms misgrijpt) en
+     laat bedragen en datums in lopende tekst netjes uitlijnen. */
+  .ai-lees {
+    max-width: 68ch;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Elk antwoordblok zit in een `.ai-blok`-omhulling (zie AntwoordWeergave.tsx):
+     die draagt de leesmaat en positioneert de kopieerknop. */
+  .ai-blok { position: relative; }
+
+  /* Kopje binnen een antwoord met een rustig accentstreepje erboven. Bewust
+     geen zwaardere typografie: het streepje geeft het ritme, niet de puntgrootte. */
+  .ai-kop {
+    font-size: 0.875rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    color: var(--ink);
+    margin: 1.375rem 0 0.5rem;
+  }
+  /* Alleen de kop die het EERSTE blok van een antwoord is, plakt niet tegen de
+     bovenrand. Bewust op de omhulling en niet als `.ai-kop:first-child`: een kop
+     is altijd het eerste kind van zijn eigen blok-omhulling, dus die selector
+     zou élke kop treffen en het kopritme uit §4.2 stilletjes uitschakelen. */
+  .ai-blok:first-child > .ai-kop { margin-top: 0.25rem; }
+  .ai-kop::before {
+    content: "";
+    display: block;
+    width: 26px;
+    height: 2px;
+    background: var(--accent);
+    border-radius: 2px;
+    margin-bottom: 7px;
   }
 
   /* ── Balans ── hairline-regels + gearceerde totaalbalk ─────────────────── */

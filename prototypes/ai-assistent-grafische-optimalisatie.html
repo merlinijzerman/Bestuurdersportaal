@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI-assistent — grafische optimalisatie binnen de huidige functionaliteit</title>
+<style>
+  /* Tokenlaag 1-op-1 uit mvp/app/globals.css (besluit 0084). Geen nieuwe kleuren
+     behalve --app-line-control (rand bedieningselementen, zie punt 9). */
+  :root{
+    --ink:#171a28; --muted:#646a88; --line:#e4e7f1;
+    --accent:#5b4fe0; --accent-ink:#443ac0; --accent-tint:#eeedfc;
+    --card:#fff; --app-bg:#f4f5fa; --app-surface:#fff;
+    --app-line:#e4e7f1; --app-line-strong:#d2d6e6; --app-zebra:#f8f9fd;
+    --app-line-control:#868ca8;
+    --nav:#fbfbfe; --nav-line:#e4e7f1; --nav-text:#5a6080; --nav-text-active:#171a28;
+    --nav-accent:#5b4fe0; --nav-active:rgba(91,79,224,.09);
+    --ok:#0f8f60; --ok-tint:#e4f3ec; --ok-ink:#0b7350;
+    --err:#ce3d57; --err-tint:#fbebee; --err-ink:#a62f45;
+    --warn:#ac7411; --warn-tint:#faf1df; --warn-ink:#855a0d;
+    --phase:#0e7c9b; --phase-tint:#e2f0f5; --phase-ink:#0a6178;
+    --shadow-card:0 1px 2px rgba(23,26,40,.04), 0 10px 26px -18px rgba(23,26,40,.35);
+    --shadow-pop:0 4px 14px rgba(23,26,40,.07), 0 30px 60px -30px rgba(23,26,40,.45);
+    --font-sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --font-serif:Georgia,"Times New Roman",serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--app-bg);color:var(--ink);font-family:var(--font-sans);font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased}
+  a{color:var(--accent-ink);text-decoration:none} a:hover{text-decoration:underline}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+
+  .bar{background:#171a28;color:#dfe7f2;padding:11px 22px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;position:sticky;top:0;z-index:50}
+  .bar .ttl{font-weight:700;font-size:14px}
+  .bar .sub{font-size:12px;color:#a5b2c8}
+  .bar .sp{flex:1}
+  .seg{display:flex;gap:4px;background:#22344c;border-radius:9px;padding:3px}
+  .seg button{border:none;background:transparent;color:#c3cfe0;font-family:inherit;font-size:13px;font-weight:650;padding:6px 14px;border-radius:7px;cursor:pointer}
+  .seg button[aria-pressed="true"]{background:#fff;color:#171a28}
+  .swt{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;cursor:pointer;user-select:none;font-weight:600}
+  .swt input{width:15px;height:15px;accent-color:#8ea8ff}
+
+  .wrap{max-width:1020px;margin:0 auto;padding:22px}
+  .card{background:var(--app-surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow-card);padding:24px 28px}
+  .msg-user{display:flex;gap:11px;margin-bottom:20px}
+  .msg-user .who{width:28px;height:28px;border-radius:50%;flex:none;background:var(--app-zebra);border:1px solid var(--app-line);color:var(--muted);display:grid;place-items:center;font-size:10.5px;font-weight:700}
+  .msg-user .bubble{background:var(--app-zebra);border:1px solid var(--app-line);border-radius:4px 12px 12px 12px;padding:11px 15px;font-weight:500}
+  .ahead{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  .ai-badge{width:28px;height:28px;border-radius:8px;flex:none;background:var(--accent);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:800}
+  .ahead .name{font-weight:700;font-size:13.5px} .ahead .meta{color:var(--muted);font-size:12px}
+
+  /* ══════════════ NU — reconstructie van de huidige renderlaag ══════════════ */
+  #nu .body{font-size:15px}
+  #nu .body h4{font-size:15px;margin:18px 0 8px;font-weight:700}
+  #nu table{width:100%;font-size:14px;border-collapse:collapse;margin:8px 0}
+  #nu th{text-align:left;font-weight:600;color:var(--ink);border-bottom:1px solid var(--line);padding:8px 12px;vertical-align:top}
+  #nu td{padding:8px 12px;vertical-align:top;border-bottom:1px solid rgba(228,231,241,.6)}
+  #nu .pill{display:inline-flex;align-items:center;gap:4px;background:var(--warn-tint);border:1px solid rgba(172,116,17,.3);color:var(--warn-ink);border-radius:6px;padding:1px 6px;font-size:11px;font-weight:700;margin:0 2px}
+  #nu .pill .n{background:var(--warn);color:#fff;width:13px;height:13px;border-radius:3px;display:grid;place-items:center;font-size:8.5px}
+  #nu .bronlijst{margin-top:16px;display:flex;flex-direction:column;gap:8px}
+  #nu .bkaart{display:flex;gap:10px;align-items:flex-start;padding:10px;border-radius:10px;border:1px solid rgba(172,116,17,.3);background:var(--warn-tint);font-size:12px}
+  #nu .bkaart .nr{width:28px;height:28px;border-radius:6px;flex:none;background:var(--warn);color:#fff;display:grid;place-items:center;font-size:11px;font-weight:700}
+  #nu .bkaart .tt{font-weight:700;color:var(--warn-ink)}
+  #nu .bkaart .loc{color:var(--muted);font-style:italic;margin-top:2px}
+  #nu .bkaart .fr{color:var(--muted);margin-top:4px;line-height:1.55}
+  #nu .bkaart .chips{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
+  #nu .bkaart .chip{font-size:10px;padding:1px 6px;border-radius:4px;border:1px solid var(--line);background:rgba(255,255,255,.7);color:var(--muted)}
+
+  /* ══════════════ VOORSTEL — alleen presentatie ══════════════ */
+  #vs .body{font-size:15.5px;line-height:1.62;max-width:68ch}
+  #vs .body h4{font-size:14px;margin:22px 0 8px;font-weight:700;letter-spacing:.01em;color:var(--ink)}
+  #vs .body h4::before{content:"";display:block;width:26px;height:2px;background:var(--accent);border-radius:2px;margin-bottom:7px}
+  #vs .body p{margin:0 0 12px}
+  #vs .body strong{font-weight:700}
+  #vs .body .nummer{font-variant-numeric:tabular-nums}
+
+  /* Tabel: hergebruikt .si-tabel uit globals.css */
+  #vs .tbl-wrap{margin:14px 0 6px;position:relative;overflow-x:auto;max-width:100%}
+  #vs table{width:100%;border-collapse:separate;border-spacing:0;font-size:13px}
+  #vs th{padding:10px 12px;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;background:var(--app-zebra);border-top:1px solid var(--app-line);border-bottom:1.5px solid var(--app-line-strong);text-align:left}
+  #vs th:first-child{border-top-left-radius:9px;border-left:1px solid var(--app-line)}
+  #vs th:last-child{border-top-right-radius:9px;border-right:1px solid var(--app-line)}
+  #vs td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  #vs tbody tr:hover td{background:var(--app-zebra)}
+  #vs tbody tr:last-child td{border-bottom:1px solid var(--app-line)}
+  #vs tbody tr:last-child td:first-child{border-bottom-left-radius:9px;border-left:1px solid var(--app-line)}
+  #vs tbody tr:last-child td:last-child{border-bottom-right-radius:9px;border-right:1px solid var(--app-line)}
+  #vs td:first-child,#vs th:first-child{border-left:1px solid var(--app-line)}
+  #vs td:last-child,#vs th:last-child{border-right:1px solid var(--app-line)}
+  #vs .si-num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+
+  /* Bronpill met hover-fragment */
+  #vs .pill{display:inline-flex;align-items:center;gap:5px;vertical-align:baseline;background:var(--warn-tint);color:var(--warn-ink);border:1px solid rgba(172,116,17,.42);border-radius:20px;padding:0 9px 0 5px;font-size:11px;font-weight:700;line-height:20px;height:20px;margin:0 2px;cursor:pointer;position:relative;font-family:inherit}
+  #vs .pill::after{content:"";position:absolute;inset:-3px -2px;border-radius:20px}
+  #vs .pill .n{background:var(--warn);color:#fff;width:15px;height:15px;border-radius:50%;display:grid;place-items:center;font-size:9px;flex:none}
+  #vs .pill .lb{white-space:nowrap;max-width:160px;overflow:hidden;text-overflow:ellipsis}
+  #vs .pill.concept{border-style:dashed}
+  #vs .pill:hover{background:rgba(172,116,17,.16)}
+  #vs .pop{display:none;position:absolute;bottom:calc(100% + 10px);left:50%;transform:translateX(-50%);width:320px;background:var(--app-surface);border:1px solid var(--app-line-strong);border-radius:10px;box-shadow:var(--shadow-pop);padding:12px 13px;z-index:40;font-size:12px;font-weight:400;line-height:1.5;color:var(--ink);text-align:left;cursor:default;white-space:normal}
+  #vs .pill:hover .pop,#vs .pill:focus-visible .pop{display:block}
+  #vs .pop .pf{font-weight:700;margin-bottom:3px;display:block}
+  #vs .pop .lc{color:var(--muted);font-size:11px;display:block;margin-bottom:6px}
+  #vs .pop .qt{border-left:3px solid var(--warn);padding-left:9px;font-style:italic;color:var(--muted);display:block;margin-bottom:8px}
+  #vs .pop .ln{font-weight:700;color:var(--accent-ink);font-size:11.5px;display:block}
+
+  /* Bronkaarten */
+  #vs .bronlijst{margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  @media(max-width:860px){#vs .bronlijst{grid-template-columns:1fr}}
+  #vs .bkaart{display:block;padding:12px 13px;border-radius:11px;border:1px solid var(--line);background:var(--app-surface);box-shadow:var(--shadow-card);color:inherit}
+  #vs .bkaart:hover{border-color:var(--accent);text-decoration:none}
+  #vs .bkaart .kop{display:flex;gap:9px;align-items:flex-start}
+  #vs .bkaart .nr{width:22px;height:22px;border-radius:50%;flex:none;background:var(--warn);color:#fff;display:grid;place-items:center;font-size:10px;font-weight:700;margin-top:1px}
+  #vs .bkaart .tt{font-size:13.5px;font-weight:650;line-height:1.3;color:var(--ink)}
+  #vs .bkaart .loc{color:var(--muted);font-size:11.5px;margin-top:2px}
+  #vs .bkaart .fr{font-size:12px;color:var(--ink);margin-top:9px;background:var(--app-zebra);border-left:2px solid var(--warn);padding:7px 10px;border-radius:0 7px 7px 0;line-height:1.55}
+  #vs .bkaart .chips{display:flex;gap:5px;margin-top:9px;flex-wrap:wrap;align-items:center}
+  #vs .bkaart .chip{font-size:10px;padding:2px 7px;border-radius:5px;border:1px solid var(--line);background:var(--app-zebra);color:var(--muted);font-weight:600}
+  #vs .bkaart .chip.st{background:var(--warn-tint);border-color:rgba(172,116,17,.3);color:var(--warn-ink)}
+  #vs .bkaart .open{font-size:11.5px;font-weight:700;color:var(--accent-ink);margin-top:9px;display:inline-block}
+
+  details.ob{margin-top:18px;border:1px solid var(--app-line);border-radius:10px;background:var(--app-zebra);overflow:hidden}
+  details.ob[open]{background:var(--app-surface)}
+  summary.ob-bar{list-style:none;cursor:pointer;padding:10px 14px;display:flex;align-items:center;gap:9px;font-size:13px;font-weight:650}
+  summary.ob-bar::-webkit-details-marker{display:none}
+  summary.ob-bar:hover{background:var(--accent-tint)}
+  .chev{color:var(--muted);font-size:11px;transition:transform .18s}
+  details.ob[open] .chev{transform:rotate(90deg)}
+  .ob-bar .cnt{background:var(--accent-tint);color:var(--accent-ink);border:1px solid rgba(91,79,224,.28);border-radius:20px;padding:0 8px;font-size:11px;font-weight:700}
+  .ob-bar .mini{color:var(--muted);font-size:12px;font-weight:400;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ob-bar .meth{font-size:11px;color:var(--muted);font-weight:600}
+  .ob-body{padding:0 14px 14px;border-top:1px solid var(--app-line)}
+  .obrij{display:flex;gap:10px;font-size:12px;padding:7px 0;border-bottom:1px solid var(--line)}
+  .obrij .k{color:var(--muted);width:150px;flex:none;font-weight:600}
+
+  /* Annotaties */
+  .note{display:none;margin:8px 0 14px;border-left:3px solid var(--phase);background:var(--phase-tint);border-radius:0 8px 8px 0;padding:9px 12px;font-size:12.5px;color:var(--ink)}
+  body.annot .note{display:block}
+  .note .tag{display:inline-block;background:var(--phase);color:#fff;border-radius:5px;font-size:10px;font-weight:800;letter-spacing:.04em;padding:1px 7px;margin-right:7px}
+  .note b{color:var(--phase-ink)}
+
+  .lijst{margin-top:20px}
+  .lijst table{width:100%;border-collapse:separate;border-spacing:0;font-size:13px}
+  .lijst th{padding:10px 12px;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;background:var(--app-zebra);border-top:1px solid var(--app-line);border-bottom:1.5px solid var(--app-line-strong);text-align:left}
+  .lijst td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  .k-css{background:var(--ok-tint);border:1px solid rgba(15,143,96,.3);color:var(--ok-ink);font-size:10px;font-weight:800;padding:2px 7px;border-radius:5px;white-space:nowrap}
+  .k-render{background:var(--accent-tint);border:1px solid rgba(91,79,224,.3);color:var(--accent-ink);font-size:10px;font-weight:800;padding:2px 7px;border-radius:5px;white-space:nowrap}
+  .k-payload{background:var(--warn-tint);border:1px solid rgba(172,116,17,.3);color:var(--warn-ink);font-size:10px;font-weight:800;padding:2px 7px;border-radius:5px;white-space:nowrap}
+  code{font-size:12.5px;background:var(--app-zebra);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+  .hidden{display:none!important}
+  .foot{max-width:1020px;margin:0 auto 44px;padding:0 22px;font-size:12px;color:var(--muted)}
+</style>
+</head>
+<body class="annot">
+
+<div class="bar">
+  <div><div class="ttl">Grafische optimalisatie — zelfde antwoord, zelfde data, zelfde functionaliteit</div>
+  <div class="sub">Eén vrij-tekst antwoord met [Bron N]-markers en een markdown-tabel, zoals de assistent dat vandaag produceert.</div></div>
+  <div class="sp"></div>
+  <div class="seg" role="group" aria-label="Weergave">
+    <button id="bNu" aria-pressed="false">Nu</button>
+    <button id="bVs" aria-pressed="true">Voorstel</button>
+  </div>
+  <label class="swt"><input type="checkbox" id="annotSw" checked> Toelichting</label>
+</div>
+
+<div class="wrap">
+
+<!-- ══════════════════ NU ══════════════════ -->
+<section id="nu" class="hidden">
+  <div class="card">
+    <div class="msg-user"><div class="who">MIJ</div><div class="bubble">Wat is de status van het transitieplan en welke besluiten moeten wij als bestuur nog vóór eind Q3 nemen?</div></div>
+    <div class="ahead"><div class="ai-badge">✦</div><div><div class="name">AI-assistent</div><div class="meta">30 jul 2026, 10:42</div></div></div>
+
+    <div class="body">
+      <p>Het concept-transitieplan is op 2 juli 2026 door de begeleidingscommissie akkoord bevonden <span class="pill"><span class="n">1</span>Bron 1</span>. De hoofdlijnen zijn gereed; besluitvorming over de invaarmethodiek is doorgeschoven naar het bestuur. Voor de invaarmethodiek liggen twee uitvoerbare varianten voor — variant A (VBA) en variant B (standaardmethode) — waarbij het bestuur aanvullende gevoeligheidsanalyse wenst <span class="pill"><span class="n">2</span>Bron 2</span>.</p>
+      <h4>Openstaande besluiten</h4>
+      <table>
+        <thead><tr><th>Besluit</th><th>Uiterlijk</th><th>Doorlooptijd</th><th>Afhankelijkheid</th></tr></thead>
+        <tbody>
+          <tr><td>Invaarmethodiek (VBA of standaard)</td><td>18-09-2026</td><td>6 weken</td><td>Gevoeligheidsanalyse actuaris</td></tr>
+          <tr><td>Vaststelling compensatieregeling</td><td>25-09-2026</td><td>4 weken</td><td>Advies verantwoordingsorgaan</td></tr>
+          <tr><td>Goedkeuring communicatiekalender</td><td>30-09-2026</td><td>2 weken</td><td>Geen</td></tr>
+        </tbody>
+      </table>
+      <p>Het verantwoordingsorgaan geeft in de reactie van 9 juli aan op basis van de huidige onderbouwing geen positief advies te kunnen afgeven, en verzoekt om een kwantitatieve uitwerking per cohort <span class="pill"><span class="n">3</span>Bron 3</span>. De uiterste besluitdatum voor de invaarmethodiek is 18-09-2026, met een doorlooptijd van zes weken naar de definitieve datalevering <span class="pill"><span class="n">4</span>Bron 4</span>.</p>
+    </div>
+
+    <div class="bronlijst">
+      <div class="bkaart"><div class="nr">1</div><div>
+        <div class="tt">Intern — Transitieplan 2026 v0.9 (concept)</div>
+        <div class="loc">📍 Hoofdstuk 3, pag. 14</div>
+        <div class="fr">„De commissie stelt vast dat de hoofdlijnen van het plan gereed zijn; besluitvorming over de invaarmethodiek wordt doorgeschoven naar het bestuur."</div>
+        <div class="chips"><span class="chip">Concept</span><span class="chip">02-07-2026</span></div></div><div style="margin-left:auto">↗</div></div>
+      <div class="bkaart"><div class="nr">2</div><div>
+        <div class="tt">Intern — Notulen bestuursvergadering 11-07-2026</div>
+        <div class="loc">📍 Agendapunt 4, pag. 3</div>
+        <div class="fr">„Het bestuur constateert dat variant A (VBA) en variant B (standaardmethode) beide uitvoerbaar zijn, maar wenst aanvullende gevoeligheidsanalyse."</div>
+        <div class="chips"><span class="chip">Concept</span><span class="chip">11-07-2026</span></div></div><div style="margin-left:auto">↗</div></div>
+      <div class="bkaart"><div class="nr">3</div><div>
+        <div class="tt">Intern — Reactie verantwoordingsorgaan compensatie</div>
+        <div class="loc">📍 pag. 2</div>
+        <div class="fr">„Het VO kan op basis van de huidige onderbouwing geen positief advies afgeven en verzoekt om een kwantitatieve uitwerking per cohort."</div>
+        <div class="chips"><span class="chip">Vastgesteld</span><span class="chip">09-07-2026</span></div></div><div style="margin-left:auto">↗</div></div>
+      <div class="bkaart"><div class="nr">4</div><div>
+        <div class="tt">Intern — Implementatieplanning WTP wk 26</div>
+        <div class="loc">📍 Tabblad Mijlpalen</div>
+        <div class="fr">„M-07 · Besluit invaarmethodiek → definitieve datalevering · doorlooptijd 6 weken · uiterste besluitdatum 18-09-2026"</div>
+        <div class="chips"><span class="chip">Vastgesteld</span><span class="chip">29-06-2026</span></div></div><div style="margin-left:auto">↗</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ VOORSTEL ══════════════════ -->
+<section id="vs">
+  <div class="card">
+    <div class="msg-user"><div class="who">MIJ</div><div class="bubble">Wat is de status van het transitieplan en welke besluiten moeten wij als bestuur nog vóór eind Q3 nemen?</div></div>
+    <div class="ahead"><div class="ai-badge">✦</div><div><div class="name">AI-assistent</div><div class="meta">30 jul 2026, 10:42</div></div></div>
+
+    <div class="body">
+      <p>Het concept-transitieplan is op <span class="nummer">2 juli 2026</span> door de begeleidingscommissie akkoord bevonden
+        <button class="pill concept" data-b="1"><span class="n">1</span><span class="lb">Transitieplan v0.9</span>
+          <span class="pop"><span class="pf">Transitieplan 2026 v0.9 — concept</span><span class="lc">Hoofdstuk 3 · pag. 14 · 02-07-2026 · intern</span>
+          <span class="qt">"De commissie stelt vast dat de hoofdlijnen van het plan gereed zijn; besluitvorming over de invaarmethodiek wordt doorgeschoven naar het bestuur."</span>
+          <span class="ln">Openen op pagina 14 →</span></span></button>. De hoofdlijnen zijn gereed; besluitvorming over de invaarmethodiek is doorgeschoven naar het bestuur. Voor de invaarmethodiek liggen twee uitvoerbare varianten voor — variant A (VBA) en variant B (standaardmethode) — waarbij het bestuur <strong>aanvullende gevoeligheidsanalyse</strong> wenst
+        <button class="pill concept" data-b="2"><span class="n">2</span><span class="lb">Notulen 11-07</span>
+          <span class="pop"><span class="pf">Notulen bestuursvergadering 11-07-2026 — concept</span><span class="lc">Agendapunt 4 · pag. 3 · 11-07-2026 · intern</span>
+          <span class="qt">"Het bestuur constateert dat variant A (VBA) en variant B (standaardmethode) beide uitvoerbaar zijn, maar wenst aanvullende gevoeligheidsanalyse."</span>
+          <span class="ln">Openen op pagina 3 →</span></span></button>.</p>
+
+      <div class="note"><span class="tag">1 · 2</span><b>Leesmaat en pilkop.</b> De tekstkolom is begrensd op 68 tekens en de kopjes krijgen een kort accentstreepje. De thread blijft 1020 px breed — alleen de <em>lopende tekst</em> wordt smaller, tabellen niet. Puur CSS in de renderlaag.</div>
+
+      <h4>Openstaande besluiten</h4>
+      <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Besluit</th><th class="si-num">Uiterlijk</th><th class="si-num">Doorlooptijd</th><th>Afhankelijkheid</th></tr></thead>
+        <tbody>
+          <tr><td>Invaarmethodiek (VBA of standaard)</td><td class="si-num">18-09-2026</td><td class="si-num">6 weken</td><td>Gevoeligheidsanalyse actuaris</td></tr>
+          <tr><td>Vaststelling compensatieregeling</td><td class="si-num">25-09-2026</td><td class="si-num">4 weken</td><td>Advies verantwoordingsorgaan</td></tr>
+          <tr><td>Goedkeuring communicatiekalender</td><td class="si-num">30-09-2026</td><td class="si-num">2 weken</td><td>Geen</td></tr>
+        </tbody>
+      </table>
+      </div>
+
+      <div class="note"><span class="tag">3</span><b>Tabel via <code>.si-tabel</code>.</b> Dezelfde markdown-pipe-tabel, maar gerenderd met de opmaakklassen die al in <code>globals.css</code> staan voor stuurinformatie: gearceerde kopregel, afgeronde hoeken, hairlines, hover. Kolommen met alleen datums, bedragen, percentages of "n weken" worden rechts uitgelijnd met <code>tabular-nums</code> — een deterministische regex op de celinhoud, geen modelbeslissing. Wisselen van <code>&lt;table className="w-full text-sm border-collapse"&gt;</code> naar <code>si-tabel</code> is de goedkoopste ingreep met het grootste effect.</div>
+
+      <p>Het verantwoordingsorgaan geeft in de reactie van <span class="nummer">9 juli</span> aan op basis van de huidige onderbouwing <strong>geen positief advies</strong> te kunnen afgeven, en verzoekt om een kwantitatieve uitwerking per cohort
+        <button class="pill" data-b="3"><span class="n">3</span><span class="lb">VO-reactie 09-07</span>
+          <span class="pop"><span class="pf">Reactie verantwoordingsorgaan compensatie</span><span class="lc">pag. 2 · 09-07-2026 · vastgesteld · intern</span>
+          <span class="qt">"Het VO kan op basis van de huidige onderbouwing geen positief advies afgeven en verzoekt om een kwantitatieve uitwerking per cohort."</span>
+          <span class="ln">Openen op pagina 2 →</span></span></button>. De uiterste besluitdatum voor de invaarmethodiek is <span class="nummer">18-09-2026</span>, met een doorlooptijd van zes weken naar de definitieve datalevering
+        <button class="pill" data-b="4"><span class="n">4</span><span class="lb">Planning wk 26</span>
+          <span class="pop"><span class="pf">Implementatieplanning WTP wk 26</span><span class="lc">Tabblad Mijlpalen · 29-06-2026 · vastgesteld · intern</span>
+          <span class="qt">"M-07 · Besluit invaarmethodiek → definitieve datalevering · doorlooptijd 6 weken · uiterste besluitdatum 18-09-2026"</span>
+          <span class="ln">Openen in het document →</span></span></button>.</p>
+
+      <div class="note"><span class="tag">4 · 5 · 6</span><b>De pill doet het werk.</b> Drie dingen, allemaal uit data die al in de client zit (<code>Bron.fragment</code>, <code>pagina</code>, <code>paragraaf</code>, <code>documentdatum</code>, <code>documentstatus</code>):
+        <b>(4)</b> hover toont het letterlijke fragment met vindplaats — verifiëren zonder naar het bronnenblok te scrollen;
+        <b>(5)</b> de pill draagt een afgeleid label in plaats van "Bron 3" — het nummer blijft, dus het label hoeft niet uniek te zijn;
+        <b>(6)</b> een <em>concept</em>-document krijgt een gestippelde rand, met "concept" ook in tekst in de hover. Bron 1 en 2 zijn concept, 3 en 4 vastgesteld — zichtbaar zonder te klikken.</div>
+    </div>
+
+    <details class="ob" open>
+      <summary class="ob-bar"><span class="chev">▶</span><span>Onderbouwing en bronnen</span>
+        <span class="cnt">4</span>
+        <span class="mini">Transitieplan v0.9 · Notulen 11-07 · VO-reactie · Planning wk 26</span>
+        <span class="meth">hybride (FTS + vector)</span></summary>
+      <div class="ob-body">
+        <div class="bronlijst">
+          <a class="bkaart" id="b-1" href="#"><div class="kop"><div class="nr">1</div><div>
+            <div class="tt">Transitieplan 2026 — v0.9</div><div class="loc">Hoofdstuk 3 · pag. 14</div></div></div>
+            <div class="fr">"De commissie stelt vast dat de hoofdlijnen van het plan gereed zijn; besluitvorming over de invaarmethodiek wordt doorgeschoven naar het bestuur."</div>
+            <div class="chips"><span class="chip st">Concept</span><span class="chip">02-07-2026</span><span class="chip">Intern</span></div>
+            <span class="open">Openen op pagina 14 →</span></a>
+          <a class="bkaart" id="b-2" href="#"><div class="kop"><div class="nr">2</div><div>
+            <div class="tt">Notulen bestuursvergadering 11-07-2026</div><div class="loc">Agendapunt 4 · pag. 3</div></div></div>
+            <div class="fr">"Het bestuur constateert dat variant A (VBA) en variant B (standaardmethode) beide uitvoerbaar zijn, maar wenst aanvullende gevoeligheidsanalyse."</div>
+            <div class="chips"><span class="chip st">Concept</span><span class="chip">11-07-2026</span><span class="chip">Intern</span></div>
+            <span class="open">Openen op pagina 3 →</span></a>
+          <a class="bkaart" id="b-3" href="#"><div class="kop"><div class="nr">3</div><div>
+            <div class="tt">Reactie verantwoordingsorgaan — compensatie</div><div class="loc">pag. 2</div></div></div>
+            <div class="fr">"Het VO kan op basis van de huidige onderbouwing geen positief advies afgeven en verzoekt om een kwantitatieve uitwerking per cohort."</div>
+            <div class="chips"><span class="chip">Vastgesteld</span><span class="chip">09-07-2026</span><span class="chip">Intern</span></div>
+            <span class="open">Openen op pagina 2 →</span></a>
+          <a class="bkaart" id="b-4" href="#"><div class="kop"><div class="nr">4</div><div>
+            <div class="tt">Implementatieplanning WTP — wk 26</div><div class="loc">Tabblad Mijlpalen</div></div></div>
+            <div class="fr">"M-07 · Besluit invaarmethodiek → definitieve datalevering · doorlooptijd 6 weken · uiterste besluitdatum 18-09-2026"</div>
+            <div class="chips"><span class="chip">Vastgesteld</span><span class="chip">29-06-2026</span><span class="chip">Intern</span></div>
+            <span class="open">Openen in het document →</span></a>
+        </div>
+        <div style="margin-top:14px">
+          <div class="obrij"><span class="k">Bronbasis</span><span>4 fondsdocumenten binnen uw autorisatie</span></div>
+          <div class="obrij"><span class="k">Retrievalmethode</span><span>Hybride — Dutch FTS + pgvector (RRF)</span></div>
+          <div class="obrij"><span class="k">Peildatum</span><span>30-07-2026 · scope: actueel</span></div>
+          <div class="obrij" style="border-bottom:none"><span class="k">Algemene kennis</span><span>Niet gebruikt</span></div>
+        </div>
+      </div>
+    </details>
+
+    <div class="note"><span class="tag">7 · 8</span><b>Bronnenblok.</b> <b>(7)</b> Twee kolommen in plaats van één lange lijst, en de kaart is wit met een kleurloze rand: het gekleurde vlak per bronorganisatie maakt vier kaarten naast elkaar onrustig, terwijl de kleur al in het nummer zit. Het fragment krijgt een citaatbalk in plaats van aanhalingstekens in grijs, en het pijltje wordt een benoemde actie ("Openen op pagina 14"). <b>(8)</b> De ingeklapte balk toont nu al de documentnamen en de retrievalmethode, zodat u niet hoeft te openen om te zien waar het antwoord op steunt. Alle velden bestaan al in <code>BronkaartMeta</code>.</div>
+  </div>
+
+  <div class="card lijst">
+    <h2 style="font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin:0 0 12px">Wat het raakt — en wat níét</h2>
+    <table>
+      <thead><tr><th style="width:31%">Verbetering</th><th style="width:15%">Laag</th><th>Toelichting</th></tr></thead>
+      <tbody>
+        <tr><td>Tabellen via <code>.si-tabel</code> + rechts uitgelijnde getalkolommen</td><td><span class="k-css">CSS</span></td><td>Klassenwissel in de tabeltak van de parser; de uitlijnregel is een regex op de celinhoud. Grootste effect, kleinste ingreep</td></tr>
+        <tr><td>Leesmaat 68 tekens, kopritme, <code>tabular-nums</code> in lopende tekst</td><td><span class="k-css">CSS</span></td><td>Alleen de tekstkolom versmalt; tabellen en bronnen houden de volle breedte</td></tr>
+        <tr><td>Hover-fragment op de <code>[Bron N]</code>-pill</td><td><span class="k-render">Render</span></td><td><code>Bron.fragment</code>, <code>pagina</code> en <code>paragraaf</code> zitten al in de client — nu alleen zichtbaar in de kaart. Geen server-, prompt- of retrievalwijziging</td></tr>
+        <tr><td>Concept/vastgesteld op de pill (gestippelde rand + tekst in hover)</td><td><span class="k-render">Render</span></td><td><code>Bron.documentstatus</code> is al aanwezig en wordt al in <code>BronkaartMeta</code> getoond</td></tr>
+        <tr><td>Bronkaarten in twee kolommen, citaatbalk, benoemde openen-actie</td><td><span class="k-render">Render</span></td><td>Zelfde velden, andere hiërarchie. Deeplink <code>#page=N</code> bestaat al</td></tr>
+        <tr><td>Ingeklapte balk toont documentnamen + retrievalmethode</td><td><span class="k-render">Render</span></td><td>Blijft ingeklapt conform Increment I-1; alleen de samenvattingsregel wordt informatiever</td></tr>
+        <tr><td>Afgeleid pill-label (documenttype + datum)</td><td><span class="k-payload">Payload</span></td><td><b>Enige uitzondering:</b> <code>documenttype</code> zit nog niet in de <code>Bron</code>-payload. Eén veld meesturen vanuit de bronopbouw; geen gedragswijziging. Zonder dat veld valt het label terug op een afgekapte titel</td></tr>
+        <tr><td>Rand van knoppen en chips op <code>--app-line-control</code></td><td><span class="k-css">CSS</span></td><td><code>--app-line-strong</code> haalt 1,45:1 op wit en voldoet niet aan WCAG 1.4.11 voor bedieningselementen. Eén token erbij</td></tr>
+      </tbody>
+    </table>
+    <div class="note" style="display:block;margin-top:14px"><span class="tag">Grens</span><b>Wat ik bewust heb weggelaten.</b> Geen kernblok, geen "niet in de stukken"-melding, geen "n van m getoond", geen antwoordtype-balk, geen verboden blokken, geen markering in de tekst. Dat zijn allemaal <em>functionele</em> ingrepen: ze vragen dat het model of een validatielaag iets besluit. Wat hierboven staat verandert uitsluitend hoe bestaande data wordt getoond — hetzelfde antwoord, dezelfde bronnen, dezelfde prompts.</div>
+  </div>
+</section>
+</div>
+
+<div class="foot">Reconstructie van de huidige weergave op basis van <code>app/(dashboard)/ai/_components/AntwoordWeergave.tsx</code> en <code>OnderbouwingPaneel.tsx</code>. Fictieve voorbeelddata; kleuren uit <code>app/globals.css</code>.</div>
+
+<script>
+  var nu=document.getElementById('nu'),vs=document.getElementById('vs'),
+      bNu=document.getElementById('bNu'),bVs=document.getElementById('bVs'),sw=document.getElementById('annotSw');
+  function set(v){nu.classList.toggle('hidden',v);vs.classList.toggle('hidden',!v);
+    bVs.setAttribute('aria-pressed',v?'true':'false');bNu.setAttribute('aria-pressed',v?'false':'true');
+    window.scrollTo({top:0,behavior:'smooth'});}
+  bNu.addEventListener('click',function(){set(false)});
+  bVs.addEventListener('click',function(){set(true)});
+  sw.addEventListener('change',function(){document.body.classList.toggle('annot',sw.checked)});
+  document.querySelectorAll('#vs .pill').forEach(function(p){
+    p.addEventListener('click',function(e){e.preventDefault();
+      var t=document.getElementById('b-'+p.dataset.b); if(!t)return;
+      t.scrollIntoView({block:'center',behavior:'smooth'});
+      t.style.transition='box-shadow .2s'; t.style.boxShadow='0 0 0 2px var(--accent)';
+      setTimeout(function(){t.style.boxShadow='var(--shadow-card)'},1400);
+    });
+  });
+</script>
+</body>
+</html>

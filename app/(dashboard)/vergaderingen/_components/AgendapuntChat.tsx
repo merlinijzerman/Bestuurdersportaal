@@ -40,7 +40,12 @@ import {
 // (pills → scroll+highlight), rijk "Onderbouwing en bronnen"-paneel en
 // doorklikbare bronkaarten (naar het origineel). Zie AntwoordWeergave.tsx.
 import OnderbouwingPaneel, { type OnderbouwingMeta } from "../../ai/_components/OnderbouwingPaneel";
-import { renderAntwoord, Bronkaart, type Bron } from "../../ai/_components/AntwoordWeergave";
+import {
+  renderAntwoord,
+  Bronkaart,
+  AntwoordKopieerKnop,
+  type Bron,
+} from "../../ai/_components/AntwoordWeergave";
 // Gedeelde gefaseerde statusweergave (besluit 0087), gelijk aan /ai.
 import {
   pasVoortgangToe,
@@ -68,6 +73,11 @@ interface Bericht {
   // Inhoudelijke vervolgvragen (klikbaar), identiek aan de assistent (/ai): de
   // chat-backend levert ze als aparte array (uit de ###VERVOLGVRAGEN###-marker).
   vervolgvragen?: string[];
+  // Besluit 0098 — alleen een NETJES afgeronde generatie ('done' ontvangen) is
+  // kopieerbaar. Foutmeldingen en afgebroken streams krijgen dus geen
+  // kopieerknop: een herkomstregel onder iets dat geen antwoord is, ondermijnt
+  // precies de geloofwaardigheid van diezelfde regel.
+  voltooid?: boolean;
 }
 
 // Startvragen die het stuk bestuurlijke betekenis geven. De voorbereiding-chip
@@ -108,6 +118,11 @@ export default function AgendapuntChat({
   } | null>(null);
   const highlightTimer = useRef<number | null>(null);
   const [initGedaan, setInitGedaan] = useState(false);
+  // Fondsnaam voor de herkomstregel onder een kopie (besluit 0098). Juist een
+  // kopie uit de agendapuntchat belandt in een vergaderverslag; dat is de plek
+  // waar "van welk fonds" het hardst telt. Leeg tot het profiel geladen is; de
+  // herkomstregel laat de vermelding dan weg.
+  const [fondsNaam, setFondsNaam] = useState<string>("");
 
   const fondsIdRef = useRef<string>("");
   const userIdRef = useRef<string | null>(null);
@@ -144,10 +159,17 @@ export default function AgendapuntChat({
           userIdRef.current = user.id;
           const { data: profiel } = await supabase
             .from("profielen")
-            .select("fonds_id")
+            .select("fonds_id, fondsen(naam)")
             .eq("id", user.id)
             .single();
           if (profiel?.fonds_id) fondsIdRef.current = profiel.fonds_id as string;
+          const fondsenRel = profiel?.fondsen as
+            | { naam: string }
+            | { naam: string }[]
+            | null
+            | undefined;
+          const fondsenObj = Array.isArray(fondsenRel) ? fondsenRel[0] : fondsenRel;
+          if (fondsenObj?.naam) setFondsNaam(fondsenObj.naam);
 
           const { data: bestaand } = await supabase
             .from("gesprekken")
@@ -227,6 +249,10 @@ export default function AgendapuntChat({
       const decoder = new TextDecoder();
       let buffer = "";
       let aiToegevoegd = false;
+      // Zie besluit 0098 §4: `!laden` is niet genoeg — bij een verbindingsfout
+      // zet het finally-blok dat ook op false en zou een afgebroken antwoord een
+      // kopieerknop met volledige herkomstregel krijgen.
+      let voltooid = false;
       let volledig = "";
       let bronnenData: Bron[] | undefined;
       let inlineMeldingenData: InlineMelding[] | undefined;
@@ -242,6 +268,7 @@ export default function AgendapuntChat({
             bronnen: bronnenData,
             inlineMeldingen: inlineMeldingenData,
             onderbouwing: onderbouwingData,
+            voltooid,
           };
           return kopie;
         });
@@ -287,6 +314,7 @@ export default function AgendapuntChat({
             schrijfAi();
           }
         } else if (evt.type === "done") {
+          voltooid = true;
           if (evt.inline_meldingen) inlineMeldingenData = evt.inline_meldingen;
           schrijfAi();
         } else if (evt.type === "error") {
@@ -469,6 +497,10 @@ export default function AgendapuntChat({
       const decoder = new TextDecoder();
       let buffer = "";
       let aiToegevoegd = false;
+      // Zie besluit 0098 §4: `!laden` is niet genoeg — bij een verbindingsfout
+      // zet het finally-blok dat ook op false en zou een afgebroken antwoord een
+      // kopieerknop met volledige herkomstregel krijgen.
+      let voltooid = false;
       let volledig = "";
       let bronnenData: Bron[] | undefined;
       let inlineMeldingenData: InlineMelding[] | undefined;
@@ -486,6 +518,7 @@ export default function AgendapuntChat({
             bronnen: bronnenData,
             inlineMeldingen: inlineMeldingenData,
             onderbouwing: onderbouwingData,
+            voltooid,
           };
           return kopie;
         });
@@ -609,6 +642,7 @@ export default function AgendapuntChat({
           }
         } else if (evt.type === "done") {
           if (verduidelijkingActief) return;
+          voltooid = true;
           if (evt.inline_meldingen) inlineMeldingenData = evt.inline_meldingen;
           if (evt.vervolgvragen) vervolgvragenData = evt.vervolgvragen;
           // Increment I-3 — afgeleide algemene-kennisbronnen + geverifieerde
@@ -799,8 +833,33 @@ export default function AgendapuntChat({
                       </div>
                     )}
                     <div className="text-sm text-ink leading-relaxed">
-                      {renderAntwoord(b.tekst, b.bronnen, idx, highlight, scrollNaarBron)}
+                      {renderAntwoord(
+                        b.tekst,
+                        b.bronnen,
+                        idx,
+                        highlight,
+                        scrollNaarBron,
+                        // Kopieerknoppen alleen op een netjes afgeronde
+                        // generatie (besluit 0098 §4).
+                        b.voltooid
+                          ? { fondsnaam: fondsNaam || null, surface: "agendapunt" }
+                          : null,
+                      )}
                     </div>
+                    {/* Actiebalk onder het antwoord — dezelfde helper als /ai,
+                        dus dezelfde verplichte bronnenlijst en herkomstregel. */}
+                    {b.voltooid && b.tekst.trim().length > 0 && (
+                      <div className="mt-2">
+                        <AntwoordKopieerKnop
+                          tekst={b.tekst}
+                          bronnen={b.bronnen}
+                          herkomst={{
+                            fondsnaam: fondsNaam || null,
+                            surface: "agendapunt",
+                          }}
+                        />
+                      </div>
+                    )}
                     {b.verduidelijking && b.verduidelijking.opties.length > 0 && (
                       <div className="flex gap-2 mt-2">
                         {b.verduidelijking.opties.map((o) => (

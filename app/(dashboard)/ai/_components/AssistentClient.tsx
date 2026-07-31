@@ -10,7 +10,12 @@ import {
   type InlineMelding,
 } from "@/core/lib/vraagtype";
 import OnderbouwingPaneel, { type OnderbouwingMeta } from "./OnderbouwingPaneel";
-import { renderAntwoord, Bronkaart, type Bron } from "./AntwoordWeergave";
+import {
+  renderAntwoord,
+  Bronkaart,
+  AntwoordKopieerKnop,
+  type Bron,
+} from "./AntwoordWeergave";
 import {
   pasVoortgangToe,
   VoortgangWeergave,
@@ -90,6 +95,11 @@ interface Bericht {
     label: string;
     vraag: string;
   };
+  // Besluit 0098 — alleen een NETJES afgeronde generatie ('done' ontvangen) is
+  // kopieerbaar. Welkomsttekst, foutmeldingen en afgebroken streams krijgen dus
+  // geen kopieerknop: een herkomstregel onder iets dat geen antwoord is,
+  // ondermijnt precies de geloofwaardigheid van diezelfde regel.
+  voltooid?: boolean;
 }
 
 // Actieve documentscope (increment 1). titels op moment van zetten, zodat de
@@ -213,6 +223,9 @@ export default function AssistentClient({
   // Voornaam voor de startpunt-aanhef ("Waar werkt u nu aan, {voornaam}?"). Wordt
   // in het profiel-effect gezet; leeg tot dat geladen is (fallback zonder naam).
   const [voornaam, setVoornaam] = useState<string>("");
+  // Fondsnaam voor de herkomstregel onder een kopie (besluit 0098). Leeg tot
+  // het profiel geladen is; de herkomstregel laat de vermelding dan weg.
+  const [fondsNaam, setFondsNaam] = useState<string>("");
   // Increment I-2 (FO §11a) — de zichtbare bron-as is vervangen door automatische
   // bronkeuze. De gebruiker kiest geen bron-modus meer; alleen de expliciete
   // restrictie "Alleen fondsdocumenten" (onder "Aanpassen") blijft over.
@@ -328,6 +341,19 @@ export default function AssistentClient({
     }
   }
 
+  // Herstelde gesprekken (uit de lade of via auto-restore) zijn opgeslagen ná
+  // een geslaagde generatie, dus de AI-beurten daarin zijn per definitie
+  // voltooid. Gesprekken van vóór besluit 0098 dragen de vlag nog niet; die
+  // leiden we af uit de aanwezigheid van `onderbouwing` — die zetten alleen
+  // echte antwoorden, niet de welkomsttekst of een foutmelding.
+  function herstelVoltooidVlag(lijst: Bericht[]): Bericht[] {
+    return lijst.map((b) =>
+      b.rol === "ai" && b.voltooid === undefined
+        ? { ...b, voltooid: Boolean(b.onderbouwing) }
+        : b
+    );
+  }
+
   // Opent een bestaand gesprek in de chat — inclusief de opgeslagen scope (§8),
   // zodat een hervat gesprek herkenbaar "over «titel»" blijft.
   function openGesprek(item: GesprekItem) {
@@ -335,7 +361,7 @@ export default function AssistentClient({
     markeerActiefGesprek(item.id);
     setBerichten(
       Array.isArray(item.berichten) && item.berichten.length > 0
-        ? item.berichten
+        ? herstelVoltooidVlag(item.berichten)
         : welkomstRef.current
         ? [welkomstRef.current]
         : []
@@ -546,6 +572,7 @@ export default function AssistentClient({
         const fondsenObj = Array.isArray(fondsenRel) ? fondsenRel[0] : fondsenRel;
         const fondsnaam =
           fondsenObj?.naam || "uw fonds";
+        if (fondsenObj?.naam) setFondsNaam(fondsenObj.naam);
 
         const groet = dagdeelGroet();
         const personalTekst = voornaam
@@ -580,7 +607,7 @@ export default function AssistentClient({
             const opgeslagen = laatste?.berichten as Bericht[] | undefined;
             if (laatste?.id && Array.isArray(opgeslagen) && opgeslagen.length > 0) {
               markeerActiefGesprek(laatste.id as string);
-              setBerichten(opgeslagen);
+              setBerichten(herstelVoltooidVlag(opgeslagen));
               setDocumentScope(leesScope(laatste.document_scope));
               setAgendapuntContext(leesAgendapuntContext(laatste.document_scope));
               setAntwoordmodus(leesAntwoordmodus(laatste.actieve_antwoordmodus));
@@ -865,6 +892,12 @@ export default function AssistentClient({
       const decoder = new TextDecoder();
       let buffer = "";
       let aiToegevoegd = false;
+      // Is de generatie NETJES afgerond ('done' ontvangen)? Alleen dan mag er
+      // gekopieerd worden (besluit 0098 §4). `!laden` is daarvoor niet genoeg:
+      // bij een verbindingsfout zet het finally-blok `laden` ook op false, en
+      // dan zou een half gestreamd antwoord een kopieerknop krijgen met een
+      // volledige herkomstregel eronder.
+      let voltooid = false;
       let volledig = "";
       let bronnenData: Bron[] | undefined;
       let modusData: Modus = "combineren";
@@ -896,6 +929,7 @@ export default function AssistentClient({
             onderbouwing: onderbouwingData,
             inlineMeldingen: inlineMeldingenData,
             verbreding: verbredingData,
+            voltooid,
           };
           return kopie;
         });
@@ -1071,6 +1105,8 @@ export default function AssistentClient({
         } else if (evt.type === "done") {
           // Bij een verduidelijking is er geen antwoordbubbel om bij te werken.
           if (verduidelijkingActief) return;
+          // Vanaf hier is de generatie netjes afgerond; pas nu mag er gekopieerd.
+          voltooid = true;
           // Definitieve (content-afhankelijke) inline-meldingen, incl. #4.
           if (evt.inline_meldingen) inlineMeldingenData = evt.inline_meldingen;
           // Increment I-3 — de afgeleide model_knowledge-bronnen (algemene kennis
@@ -1625,13 +1661,44 @@ export default function AssistentClient({
                 }
               >
                 {b.rol === "ai"
-                  ? renderAntwoord(b.tekst, b.bronnen, i, highlight, scrollNaarBron)
+                  ? renderAntwoord(
+                      b.tekst,
+                      b.bronnen,
+                      i,
+                      highlight,
+                      scrollNaarBron,
+                      // Kopieerknoppen alleen op een netjes afgeronde generatie:
+                      // een halve kopie met een volledige herkomstregel zou meer
+                      // suggereren dan er staat.
+                      b.voltooid
+                        ? { fondsnaam: fondsNaam || null, surface: "assistent" }
+                        : null,
+                    )
                   : b.tekst.split("\n").map((regel, j) => (
                       <p key={j} className={j > 0 ? "mt-1.5" : ""}>
                         {regel}
                       </p>
                     ))}
               </div>
+
+              {/* Actiebalk onder het antwoord (besluit 0098) — "Antwoord
+                  kopiëren". De kopie draagt altijd de bronnenlijst en de
+                  herkomstregel; die zitten in de helper, niet in deze knop.
+                  Kopiëren wordt bewust NIET gelogd. */}
+              {b.rol === "ai" &&
+                b.voltooid &&
+                b.tekst.trim().length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    <AntwoordKopieerKnop
+                      tekst={b.tekst}
+                      bronnen={b.bronnen}
+                      herkomst={{
+                        fondsnaam: fondsNaam || null,
+                        surface: "assistent",
+                      }}
+                    />
+                  </div>
+                )}
 
               {/* Increment I-2 (FO §11a) — verduidelijkingschips bij een twijfelgeval.
                   Eén klik herstuurt dezelfde vraag met de bevestigde bron-intentie. */}

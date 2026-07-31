@@ -19,13 +19,27 @@
 //     Eén bronkaart; bij heeft_origineel een <a> naar /api/documents/.../bestand.
 // - type Bron
 
-import { type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  parseerBlokken,
+  bronIndexVoor,
+  numeriekeKolommen,
+  type Blok,
+  type InlineDeel,
+  type InlineStuk,
+} from "@/core/lib/antwoord-parser";
+import {
+  bouwKopie,
+  nlDatum,
+  schrijfNaarKlembord,
+  type KopieBron,
+  type KopiePayload,
+} from "@/core/lib/antwoord-klembord";
 import { bronkaartLabels, normgewichtLabel, isVeiligeUrl } from "@/core/lib/bronsoort";
 import {
   DOCUMENT_STATUS_LABEL,
   BRONSTATUS_LABEL,
 } from "@/core/lib/document-status-transities";
-import { detecteerInstantieInTekst } from "@/core/lib/assistant-source";
 
 export interface Bron {
   document_id: string;
@@ -70,248 +84,351 @@ const BRON_NUMMER_KLEUR: Record<string, string> = {
   Extern: "bg-warn text-white",
 };
 
-// Regex pakt alle inline-markeringen in één keer:
-// - [Bron 1], [Bron 12]
-// - [Algemene kennis], [algemene kennis]
-// - [Volgens wetgeving], [volgens wetgeving]
-// - [Toelichting agendapunt] (ADR 0028 — ongevalideerde bestuurs-vrijetekst)
-// - [Organisatieprofiel] (OP-4 — organisatiespecifieke context, geen fondsbron)
-const MARKER_REGEX =
-  /(\[Bron \d+\]|\[Algemene kennis\]|\[Volgens wetgeving\]|\[Toelichting agendapunt\]|\[Organisatieprofiel\])/gi;
-
 // ============================================================
 //  Antwoord-renderer met lichte Markdown + citatiemarkers
 // ============================================================
 // Rendert het AI-antwoord met lichte Markdown-ondersteuning. Blok-niveau:
 // koppen (#..), opsommingen (- / *) en genummerde lijsten (1.), en alinea's.
 // Inline-opmaak (vet/cursief/code) en de citatiemarkers ([Bron N], [Algemene
-// kennis], [Volgens wetgeving]) lopen via parseInline. Bewust een eigen, kleine
-// renderer i.p.v. een externe library: geen extra dependency, volledige controle
-// over de bron-pills, en bestand tegen half-gestreamde (nog niet gesloten)
-// markdown tijdens het streamen.
+// kennis], [Volgens wetgeving]) lopen mee in dezelfde AST. Bewust een eigen,
+// kleine parser i.p.v. een externe library: geen extra dependency, volledige
+// controle over de bron-pills, en bestand tegen half-gestreamde (nog niet
+// gesloten) markdown tijdens het streamen.
+//
+// De PARSER zelf woont sinds deze tranche in core/lib/antwoord-parser.ts (pure
+// functies, testbaar, gedeeld met de kopieerfunctie); dit bestand is nog
+// uitsluitend de React-rendering van de AST die daaruit komt. De key-nummering
+// van de AST (`k`) is die van de oude implementatie, zodat het remount-gedrag
+// tijdens het streamen niet verschuift.
 export function renderAntwoord(
   tekst: string,
   bronnen: Bron[] | undefined,
   berichtIdx: number,
   highlight: { berichtIdx: number; bronIdx: number } | null,
   onBronKlik: (berichtIdx: number, bronIdx: number) => void,
+  /**
+   * Zet de kopieerknop per blok aan. Weglaten (of null) = geen knoppen — zo
+   * blijft een nog stromend antwoord onkopieerbaar, want een halve kopie met
+   * een volledige herkomstregel zou meer suggereren dan er staat.
+   */
+  kopie?: KopieHerkomst | null,
 ) {
-  const regels = tekst.split("\n");
-  const blokken: ReactNode[] = [];
-  let lijstType: "ul" | "ol" | null = null;
-  let lijstItems: string[] = [];
-  let sleutel = 0;
+  const inline = (delen: InlineDeel[]) =>
+    renderInline(delen, bronnen, berichtIdx, highlight, onBronKlik);
 
-  const inline = (s: string) =>
-    parseInline(s, bronnen, berichtIdx, highlight, onBronKlik);
+  // De omhulling staat er ALTIJD, ook zonder kopieerknop: zo is de DOM-structuur
+  // gelijk tijdens en na het streamen. Zou de wrapper pas verschijnen zodra het
+  // antwoord af is, dan wordt op dat moment de hele antwoord-subtree opnieuw
+  // opgebouwd — onnodig werk en een zichtbare hik aan het eind van elk antwoord.
+  //
+  // De LEESMAAT zit op de omhulling en niet op het blok zelf. Zo valt de
+  // kopieerknop (absoluut, rechtsboven) binnen de tekstkolom in plaats van
+  // honderden pixels daarbuiten: in /ai is de container 1020px breed terwijl de
+  // tekst tot 68ch loopt. Tabellen krijgen de maat niet — die houden de volle
+  // breedte.
+  const omhul = (sleutel: number, blok: Blok, inhoud: ReactNode) => (
+    <div
+      key={sleutel}
+      className={`ai-blok group${blok.soort === "tabel" ? "" : " ai-lees"}`}
+    >
+      {inhoud}
+      {kopie && (
+        <KopieerKnop
+          bouw={() => bouwBlokKopie([blok], bronnen, kopie)}
+          label={`${BLOK_LABEL[blok.soort]} kopiëren`}
+          klasse="absolute top-0 right-0"
+        />
+      )}
+    </div>
+  );
 
-  const sluitLijst = () => {
-    if (!lijstType) return;
-    const items = lijstItems.map((it, k) => (
-      <li key={k}>{inline(it)}</li>
-    ));
-    blokken.push(
-      lijstType === "ul" ? (
-        <ul key={sleutel++} className="list-disc pl-5 my-1.5 space-y-0.5">
-          {items}
-        </ul>
-      ) : (
-        <ol key={sleutel++} className="list-decimal pl-5 my-1.5 space-y-0.5">
-          {items}
-        </ol>
-      )
-    );
-    lijstType = null;
-    lijstItems = [];
-  };
+  return parseerBlokken(tekst).map((blok, sleutel) => {
+    switch (blok.soort) {
+      case "lijst":
+        return omhul(
+          sleutel,
+          blok,
+          blok.geordend ? (
+            <ol key={sleutel} className="list-decimal pl-5 my-1.5 space-y-0.5">
+              {blok.items.map((it, k) => (
+                <li key={k}>{inline(it)}</li>
+              ))}
+            </ol>
+          ) : (
+            <ul key={sleutel} className="list-disc pl-5 my-1.5 space-y-0.5">
+              {blok.items.map((it, k) => (
+                <li key={k}>{inline(it)}</li>
+              ))}
+            </ul>
+          ),
+        );
 
-  // Markdown-tabel-herkenning. Een tabel is een pipe-rij ( | a | b | ) gevolgd door
-  // een scheidingsrij ( |---|---| ). Zonder deze afhandeling toonde de AI-tabel als
-  // ruwe pipe-tekst; nu rendert hij als echte tabel binnen de kolom (breed = scroll).
-  const splitCellen = (r: string) =>
-    r
-      .trim()
-      .replace(/^\|/, "")
-      .replace(/\|$/, "")
-      .split("|")
-      .map((c) => c.trim());
-  const isTabelRij = (r: string) => /^\s*\|.*\|\s*$/.test(r);
-  const isScheiding = (r: string) => {
-    if (!isTabelRij(r)) return false;
-    const cellen = splitCellen(r);
-    return cellen.length > 0 && cellen.every((c) => /^:?-{1,}:?$/.test(c));
-  };
-
-  for (let i = 0; i < regels.length; i++) {
-    const regel = regels[i];
-
-    // Tabelblok: kop + scheiding + alle aansluitende pipe-rijen als één <table>.
-    if (
-      isTabelRij(regel) &&
-      i + 1 < regels.length &&
-      isScheiding(regels[i + 1])
-    ) {
-      sluitLijst();
-      const kopCellen = splitCellen(regel);
-      const rijen: string[][] = [];
-      let j = i + 2;
-      while (
-        j < regels.length &&
-        isTabelRij(regels[j]) &&
-        !isScheiding(regels[j])
-      ) {
-        rijen.push(splitCellen(regels[j]));
-        j++;
-      }
-      blokken.push(
-        <div key={sleutel++} className="my-2 overflow-x-auto">
-          <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr>
-                {kopCellen.map((c, ci) => (
-                  <th
-                    key={ci}
-                    className="text-left font-semibold text-ink border-b border-line px-3 py-2 align-top"
-                  >
-                    {inline(c)}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rijen.map((rij, ri) => (
-                <tr key={ri} className="border-b border-line/60 align-top">
-                  {rij.map((c, ci) => (
-                    <td key={ci} className="px-3 py-2 align-top">
+      case "tabel": {
+        // Uitlijning per kolom uit de CELINHOUD (deterministische regex in
+        // core/lib/antwoord-parser). De kopcel volgt de kolom, net als in de
+        // stuurinformatie-tabellen.
+        const numeriek = numeriekeKolommen(blok);
+        return omhul(
+          sleutel,
+          blok,
+          <div key={sleutel} className="my-3 overflow-x-auto">
+            <table className="si-tabel si-tabel-gesloten">
+              <thead>
+                <tr>
+                  {blok.kop.map((c, ci) => (
+                    // .si-tabel zet zelf geen text-align op th; de browser-default
+                    // is center. Alle si-tabel-gebruikers zetten die per th —
+                    // die conventie volgen we hier ook.
+                    <th key={ci} className={numeriek[ci] ? "si-num" : "text-left"}>
                       {inline(c)}
-                    </td>
+                    </th>
                   ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      );
-      i = j - 1; // de for-lus verhoogt i weer
-      continue;
+              </thead>
+              <tbody>
+                {blok.rijen.map((rij, ri) => (
+                  <tr key={ri} className="align-top">
+                    {rij.map((c, ci) => (
+                      <td key={ci} className={numeriek[ci] ? "si-num" : undefined}>
+                        {inline(c)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>,
+        );
+      }
+
+      case "kop":
+        // Een echte kop i.p.v. een vetgedrukte alinea, zodat schermlezers erop
+        // kunnen navigeren. Alle markdown-niveaus (# t/m ######) landen bewust
+        // op h4: de kopniveaus van het model zijn geen documenthiërarchie en
+        // zouden de paginastructuur anders vervuilen.
+        return omhul(
+          sleutel,
+          blok,
+          <h4 key={sleutel} className="ai-kop">
+            {inline(blok.inline)}
+          </h4>,
+        );
+
+      case "alinea":
+        return omhul(
+          sleutel,
+          blok,
+          <p key={sleutel} className={sleutel > 0 ? "mt-1.5" : undefined}>
+            {inline(blok.inline)}
+          </p>,
+        );
     }
-
-    const ul = regel.match(/^\s*[-*]\s+(.*)$/);
-    const ol = regel.match(/^\s*\d+\.\s+(.*)$/);
-    const kop = regel.match(/^(#{1,6})\s+(.*)$/);
-
-    if (ul) {
-      if (lijstType !== "ul") sluitLijst();
-      lijstType = "ul";
-      lijstItems.push(ul[1]);
-      continue;
-    }
-    if (ol) {
-      if (lijstType !== "ol") sluitLijst();
-      lijstType = "ol";
-      lijstItems.push(ol[1]);
-      continue;
-    }
-
-    sluitLijst();
-
-    if (kop) {
-      blokken.push(
-        <p key={sleutel++} className="font-bold text-ink mt-2 mb-1">
-          {inline(kop[2])}
-        </p>
-      );
-      continue;
-    }
-    if (!regel.trim()) continue; // lege regel = alinea-scheiding (spacing via mt)
-
-    blokken.push(
-      <p key={sleutel++} className={blokken.length > 0 ? "mt-1.5" : ""}>
-        {inline(regel)}
-      </p>
-    );
-  }
-  sluitLijst();
-  return blokken;
+  });
 }
 
-function parseInline(
-  regel: string,
+// ============================================================
+//  Kopiëren uit de chat (besluit 0098)
+// ============================================================
+// De kopieerknop is de enige weg naar het klembord en loopt altijd via
+// bouwKopie(), dat de bronnenlijst en de herkomstregel zelf toevoegt. Er is
+// bewust geen variant zonder. Een kopieeractie wordt NIET gelogd: het is geen
+// besluit en geen export naar het dossier. Voeg hier dus ook geen "voor de
+// zekerheid"-logging toe — dat is een expliciet besluit van de opdrachtgever.
+
+/** Waar de kopie vandaan komt; voedt de herkomstregel. */
+export interface KopieHerkomst {
+  fondsnaam?: string | null;
+  surface: "assistent" | "agendapunt";
+}
+
+/** De Bron-payload van de weergave omgezet naar de velden onder een kopie. */
+function bouwBlokKopie(
+  blokken: Blok[],
+  bronnen: Bron[] | undefined,
+  herkomst: KopieHerkomst,
+): KopiePayload {
+  const kopieBronnen: KopieBron[] = (bronnen ?? []).map((b, i) => ({
+    nummer: i + 1,
+    titel: b.titel,
+    bron: b.bron,
+    paragraaf: b.paragraaf,
+    pagina: b.pagina,
+    documentdatum: b.documentdatum,
+    documentstatus: b.documentstatus,
+  }));
+  return bouwKopie(blokken, kopieBronnen, {
+    fondsnaam: herkomst.fondsnaam ?? null,
+    // Bewust hier en niet tijdens het renderen: een datum in de render zou bij
+    // server-rendering een andere waarde geven dan in de browser (hydration).
+    datum: nlDatum(new Date()),
+    surface: herkomst.surface,
+  });
+}
+
+// Onderscheidende knoplabels: met vijftien identieke "Dit blok kopiëren"-knoppen
+// kan een schermlezergebruiker ze niet uit elkaar houden.
+const BLOK_LABEL: Record<string, string> = {
+  alinea: "Deze alinea",
+  kop: "Dit kopje",
+  lijst: "Deze lijst",
+  tabel: "Deze tabel",
+};
+
+const STATUS_TEKST: Record<string, string> = {
+  opmaak: "Gekopieerd, met opmaak en bronvermelding.",
+  tekst: "Gekopieerd als tekst, met bronvermelding. Uw browser ondersteunt geen opgemaakte kopie.",
+  mislukt: "Kopiëren is niet gelukt.",
+};
+
+/**
+ * Kopieerknop. Zichtbaar bij hover én bij toetsenbordfocus (niet alleen hover),
+ * en meldt de uitkomst via een aria-live-gebied zodat een schermlezergebruiker
+ * bevestiging krijgt.
+ */
+function KopieerKnop({
+  bouw,
+  label,
+  klasse = "",
+  toon = "icoon",
+}: {
+  bouw: () => KopiePayload;
+  label: string;
+  klasse?: string;
+  toon?: "icoon" | "tekst";
+}) {
+  const [status, setStatus] = useState<string | null>(null);
+  const timer = useRef<number | null>(null);
+
+  // Timer opruimen bij unmount én bij een volgende klik: anders wist een oudere
+  // timer de status van een nieuwere kopie voortijdig.
+  useEffect(() => () => {
+    if (timer.current !== null) window.clearTimeout(timer.current);
+  }, []);
+
+  const kopieer = () => {
+    // De payload wordt SYNCHROON opgebouwd: Safari verbreekt de
+    // gebruikersgebaar-keten zodra er vóór het schrijven ge-await wordt.
+    const payload = bouw();
+    void schrijfNaarKlembord(payload).then((r) => {
+      setStatus(r);
+      if (timer.current !== null) window.clearTimeout(timer.current);
+      timer.current = window.setTimeout(() => setStatus(null), 4000);
+    });
+  };
+
+  const zichtbaarheid =
+    toon === "icoon"
+      ? "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
+      : "";
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={kopieer}
+        aria-label={label}
+        className={`${klasse} ${zichtbaarheid} inline-flex items-center gap-1 rounded-md border border-app-line-control bg-app-surface px-2 py-1 text-[11px] font-semibold text-muted transition-colors hover:border-accent hover:text-ink`}
+      >
+        <span aria-hidden="true">⧉</span>
+        {toon === "tekst" ? label : null}
+      </button>
+      <span role="status" aria-live="polite" className="sr-only">
+        {status ? STATUS_TEKST[status] : ""}
+      </span>
+    </>
+  );
+}
+
+/**
+ * "Antwoord kopiëren" voor de actiebalk onder een antwoord. Kopieert het hele
+ * antwoord inclusief bronnenlijst en herkomstregel.
+ */
+export function AntwoordKopieerKnop({
+  tekst,
+  bronnen,
+  herkomst,
+}: {
+  tekst: string;
+  bronnen: Bron[] | undefined;
+  herkomst: KopieHerkomst;
+}) {
+  return (
+    <KopieerKnop
+      bouw={() => bouwBlokKopie(parseerBlokken(tekst), bronnen, herkomst)}
+      label="Antwoord kopiëren"
+      toon="tekst"
+    />
+  );
+}
+
+// Rendert de inline-AST van één regel of tabelcel: citatiemarkers worden pills,
+// tekstsegmenten dragen hun eigen inline-markdown (vet/cursief/code).
+function renderInline(
+  delen: InlineDeel[],
   bronnen: Bron[] | undefined,
   berichtIdx: number,
   highlight: { berichtIdx: number; bronIdx: number } | null,
   onBronKlik: (berichtIdx: number, bronIdx: number) => void,
 ) {
-  if (!regel) return null;
-  // Reset regex state per call (g-flag is stateful op het Regexp-object)
-  const regex = new RegExp(MARKER_REGEX.source, "gi");
-  const delen = regel.split(regex);
-  return delen.map((deel, i) => {
-    if (!deel) return null;
-
-    const bronMatch = deel.match(/^\[Bron (\d+)\]$/i);
-    if (bronMatch) {
-      const bronIdx = parseInt(bronMatch[1], 10) - 1;
-      const bron = bronnen?.[bronIdx];
-      if (bron) {
-        return (
-          <BronPill
-            key={i}
-            nummer={bronIdx + 1}
-            bron={bron}
-            gehighlight={
-              highlight?.berichtIdx === berichtIdx &&
-              highlight?.bronIdx === bronIdx
-            }
-            onClick={() => onBronKlik(berichtIdx, bronIdx)}
-          />
-        );
+  if (delen.length === 0) return null;
+  return delen.map((deel) => {
+    switch (deel.soort) {
+      case "bron": {
+        const bronIdx = bronIndexVoor(deel.nummer, bronnen?.length ?? 0);
+        const bron = bronIdx !== null ? bronnen?.[bronIdx] : undefined;
+        if (bron && bronIdx !== null) {
+          return (
+            <BronPill
+              key={deel.k}
+              nummer={bronIdx + 1}
+              bron={bron}
+              gehighlight={
+                highlight?.berichtIdx === berichtIdx &&
+                highlight?.bronIdx === bronIdx
+              }
+              onClick={() => onBronKlik(berichtIdx, bronIdx)}
+            />
+          );
+        }
+        // Bronvermelding-validatie: een citatie die niet aan een aangeleverde
+        // bron te koppelen is, wordt zichtbaar gemarkeerd i.p.v. stil getoond.
+        return <OngeldigeBronPill key={deel.k} nummer={deel.nummer} />;
       }
-      // Bronvermelding-validatie: een citatie die niet aan een aangeleverde
-      // bron te koppelen is, wordt zichtbaar gemarkeerd i.p.v. stil getoond.
-      return <OngeldigeBronPill key={i} nummer={bronIdx + 1} />;
+      case "kennis":
+        return (
+          <KennisPill key={deel.k} label={deel.label} instantie={deel.instantie} />
+        );
+      // ADR 0028 — herkomst uit de agendapunt-toelichting: ongevalideerde
+      // bestuurs-vrijetekst, géén vastgestelde fondsbron. Eigen waarschuwende
+      // styling zodat de niet-vastgestelde herkomst visueel onderscheiden blijft.
+      case "toelichting":
+        return <ToelichtingPill key={deel.k} />;
+      case "organisatieprofiel":
+        return <OrganisatieprofielPill key={deel.k} />;
+      case "tekst":
+        return <span key={deel.k}>{renderStukken(deel.stukken)}</span>;
     }
-    if (/^\[algemene kennis\]$/i.test(deel)) {
-      return <KennisPill key={i} label="Algemene kennis" instantie={detecteerInstantieInTekst(regel)} />;
-    }
-    if (/^\[volgens wetgeving\]$/i.test(deel)) {
-      return <KennisPill key={i} label="Volgens wetgeving" instantie={detecteerInstantieInTekst(regel)} />;
-    }
-    // ADR 0028 — herkomst uit de agendapunt-toelichting: ongevalideerde
-    // bestuurs-vrijetekst, géén vastgestelde fondsbron. Eigen waarschuwende
-    // styling zodat de niet-vastgestelde herkomst visueel onderscheiden blijft.
-    if (/^\[toelichting agendapunt\]$/i.test(deel)) {
-      return <ToelichtingPill key={i} />;
-    }
-    if (/^\[organisatieprofiel\]$/i.test(deel)) {
-      return <OrganisatieprofielPill key={i} />;
-    }
-    // Geen marker → verwerk inline-markdown (vet/cursief/code).
-    return <span key={i}>{parseMarkdownInline(deel)}</span>;
   });
 }
 
 // Inline-markdown voor een tekstsegment zonder citatiemarkers. Subset: **vet**,
-// *cursief* / _cursief_, `code`. Vet wordt vóór cursief gematcht zodat ** niet
-// per ongeluk als twee losse * wordt gelezen.
-function parseMarkdownInline(tekst: string): ReactNode[] {
-  const regex = /(\*\*[^*]+\*\*|`[^`]+`|\*[^*\s][^*]*\*|_[^_\s][^_]*_)/g;
-  return tekst.split(regex).map((stuk, i) => {
-    if (!stuk) return null;
-    if (/^\*\*[^*]+\*\*$/.test(stuk)) {
-      return <strong key={i}>{stuk.slice(2, -2)}</strong>;
+// *cursief* / _cursief_, `code`.
+function renderStukken(stukken: InlineStuk[]): ReactNode[] {
+  return stukken.map((s) => {
+    switch (s.soort) {
+      case "vet":
+        return <strong key={s.k}>{s.tekst}</strong>;
+      case "code":
+        return (
+          <code key={s.k} className="bg-app-bg rounded px-1 py-0.5 text-[0.85em]">
+            {s.tekst}
+          </code>
+        );
+      case "cursief":
+        return <em key={s.k}>{s.tekst}</em>;
+      case "plat":
+        return s.tekst;
     }
-    if (/^`[^`]+`$/.test(stuk)) {
-      return (
-        <code key={i} className="bg-app-bg rounded px-1 py-0.5 text-[0.85em]">
-          {stuk.slice(1, -1)}
-        </code>
-      );
-    }
-    if (/^\*[^*]+\*$/.test(stuk) || /^_[^_]+_$/.test(stuk)) {
-      return <em key={i}>{stuk.slice(1, -1)}</em>;
-    }
-    return stuk;
   });
 }
 

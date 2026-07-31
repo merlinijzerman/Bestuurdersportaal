@@ -24,6 +24,9 @@ Stack (detail in HANDOVER): Next.js 15 App Router + TypeScript strict, Tailwind,
 - **Append-only audit.** `governance_events` (sha256-hash per event) en de `*_log`-tabellen worden nooit ge-UPDATE of -DELETE; triggers blokkeren dit. Elke mutatie logt expliciet na de wijziging.
 - **Human-in-the-loop.** AI signaleert, vat samen en spiegelt — besluit nooit. Elke AI-interactie blijft herleidbaar naar gebruiker, fonds, bron, prompt, output, validatiestatus en tijdstip.
 - **Snapshot-integriteit.** Lopende procedures mogen nooit wijzigen door een latere template- of configwijziging (snapshot-bij-start).
+- **Toets de uitkomst in de database, niet de intentie in de migratie.** Een `revoke`, een policy of een comment in een migratiebestand bewijst niets over productie: er is geen migratierunner en migraties worden handmatig geplakt. De review van 31-07-2026 vond drie objecten die in productie stonden maar in geen enkele migratie, en één maatregel die wél in de code stond maar nooit heeft gewerkt. Draai `supabase/checks/2026_07_31_r1_structurele_gates.sql` (gates A t/m H) na elke policy-, grant- of functiewijziging en na elke Supabase-platformwijziging.
+- **`revoke … from public` is op Supabase niet genoeg.** De default-ACL kent rechten **expliciet aan `anon` en `authenticated`** toe, niet via `PUBLIC`. Schrijf altijd `revoke all on function … from public, anon` en geef daarna gericht terug aan de rol die de aanroeper werkelijk gebruikt. Nieuwe `SECURITY DEFINER`-functies zijn anders ongeauthenticeerd aanroepbaar en omzeilen RLS volledig (bevinding H-18).
+- **`TRUNCATE` valt buiten RLS.** Postgres evalueert daarbij geen enkele policy. Geef dat recht nooit aan `anon` of `authenticated`; het maakt het uitgangspunt "auditdata is niet manipuleerbaar" onhoudbaar.
 - **Governance-logica hoort niet uitsluitend in de frontend.** Kritieke validatie, autorisatie en gating zijn ook server-side of in de DB geborgd, niet alleen in de UI.
 - **UX-principe "maak vereisten en blokkers expliciet":** toon vóór een actie wat nog ontbreekt, niet pas een foutmelding erna.
 
@@ -71,6 +74,9 @@ Doe geen harde juridische, actuariële, fiscale of toezichtclaims zonder bron in
 
 ## Tests
 
+- **`npm run sanity` draait álle suites door** en somt aan het eind op wat rood is; hij stopt niet meer bij de eerste. Die wijziging komt uit bevinding T-01: door een `|| exit 1` hadden 45 suites twee weken niet gedraaid zonder dat iemand het zag. Lees de slotregel, niet alleen de exitcode.
+- **`core/lib/generatie-kern.sanity.ts` pint de toon-systeemprompt op sha256.** Kantelt een hash, dan is de prompt of de assemblage gewijzigd — verifieer dat dit bewust was en werk pas dán de pin bij. Bereken de nieuwe waarde, neem hem niet over uit de foutmelding.
+
 Verificatie loopt primair via `tsc --noEmit` + de `lib/*.sanity.ts`-checks (pure functies, `npm run sanity`) + handmatige smoke-tests. Voor de cross-tenant-isolatie is er sinds T5 een **licht testframework** (`node:test` + `tsx`, geen extra runtime-dep): benoemde §15-tests in `tests/cross-tenant/*.test.ts`. Bij nieuwe businesslogica: voeg tests toe of motiveer expliciet waarom niet. Reken berekeningen waar mogelijk programmatisch na (zie de sanity-tests bij `lib/stemming.ts` als patroon). Geef prioriteit aan sanity-checks voor risicovolle logica: stemming, readiness/gating, procedurestatussen, audit-eventconstructie, permissie-/rolchecks, stuurinformatie-berekeningen en AI-validatiestatussen.
 
 **Verplicht bij elk tenant-pad (host/fonds/RLS/audit/retrieval/storage):** draai de gebundelde §15 cross-tenant suite — `bash scripts/cross-tenant-ci.sh` (tsc + app-laag T1–T14 + DB-laag T3/T4/T6/T7 onder échte RLS, één rood/groen). Dit is HÉT verificatiecommando en draait in CI op elke push (`.github/workflows/rls-cross-tenant.yml`, ephemere Supabase-DB) — **voorlopig niet-blokkerend** (geen branch protection; omzetten naar blokkerende merge-gate = actiepunt bij PGB-onboarding, besluit 0046 "fasering"). Voor de DB-laag lokaal: `supabase start` of een wegwerpbare `TEST_DATABASE_URL`. Zie `T3-RLS-CONTROLEKADER.md` §7–§8.
@@ -83,6 +89,7 @@ Verificatie loopt primair via `tsc --noEmit` + de `lib/*.sanity.ts`-checks (pure
 - Tests toegevoegd, of gemotiveerd niet toegevoegd.
 - UX consistent met bestaande patronen.
 - `tsc --noEmit --skipLibCheck` groen.
+- Bij een wijziging aan policies, grants, `SECURITY DEFINER`-functies of het datamodel: `supabase/checks/2026_07_31_r1_structurele_gates.sql` gedraaid tegen de doeldatabase en schoon (gates A1, A2, B, C, C2, E, F, G, H en D).
 - Bij een niet-triviale feature: ontwerpdoc (`*-ONTWERP.md`) opgesteld of bijgewerkt en de ontwerp-sync-check groen.
 - `HANDOVER.md` release-historie bijgewerkt; bij een besluit een decision-log-entry.
 - **Documentatiehaak (bron van waarheid = deze repo-markdown):** bij een **gate/mijlpaal** of een increment met architectuur-, data-, security- of tenant-impact wordt aansluitend de projectdocumentatie geactualiseerd volgens `00 Overzicht en status/release-template.md` (de `00–09`-markdown én de as-built Word-doc als momentopname). Bij een kleine release volstaat `HANDOVER.md`; de wekelijkse drift-check (`Scheduled/doc-drift-check`) signaleert wanneer een gate-actualisatie openstaat. Werk na een Word-doc-actualisatie de marker in `00 Overzicht en status/doc-actualisatie-log.md` bij.

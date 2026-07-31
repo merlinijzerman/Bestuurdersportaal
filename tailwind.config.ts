@@ -36,8 +36,13 @@ const config: Config = {
           surface: "rgb(var(--app-surface-rgb) / <alpha-value>)",
           line: "rgb(var(--app-line-rgb) / <alpha-value>)",
           "line-strong": "rgb(var(--app-line-strong-rgb) / <alpha-value>)",
+          // Rand van bedieningselementen — WCAG 1.4.11 (>= 3:1). Zie besluit 0097;
+          // line-strong voldoet daar niet aan en blijft decoratief.
+          "line-control": "rgb(var(--app-line-control-rgb) / <alpha-value>)",
           zebra: "rgb(var(--app-zebra-rgb) / <alpha-value>)",
         },
+        // Markering in lopende tekst (toegankelijkheidsafspraak, besluit 0097).
+        mark: "rgb(var(--mark-rgb) / <alpha-value>)",
         nav: {
           DEFAULT: "rgb(var(--nav-rgb) / <alpha-value>)",
           line: "rgb(var(--nav-line-rgb) / <alpha-value>)",

@@ -287,6 +287,57 @@ geïntroduceerd lek de bijbehorende test ROOD maakt — nooit naar main gecommit
 
 ---
 
+## 8b. Opvolging 31-07-2026 — waarom §8 niet volstond, en wat ervoor in de plaats komt
+
+> Toegevoegd na de integrale review van 30-31 juli 2026. Zie `REVIEW-ADDENDUM-2026-07-31.md`
+> voor de volledige bevindingen en `supabase/checks/2026_07_31_r1_structurele_gates.sql`
+> voor de gates.
+
+**De T3-gate toetste of een schrijfpolicy een `WITH CHECK` HÉÉFT, niet of het PREDIKAAT een
+tenantgrens bevat.** Vijf policies passeerden daardoor de gate terwijl ze cross-tenant toegang
+toestonden: `decision_dissent` (K-01), `notificaties` (H-01), `document_inzage` en
+`document_metadata_log` (H-02) en `agendapunt_inbreng` (M-01). Alle vijf zijn hersteld in
+`2026_07_31_r1_rls_tenantgrenzen.sql`.
+
+**Structureel ernstiger: dit controlekader toetst de repository, niet de database.** Drie
+objecten stonden in productie zonder in enige migratie voor te komen — twee wees-policies op
+`document_chunks` (K-02, een ongeauthenticeerd schrijfpad naar de RAG-corpus), de ongeharde
+`profielen`-policy (K-03, zelf-muteerbare `rol` en `fonds_id`) en een handgeschreven
+`reindex_runs`-policy (L-08). Ze bestonden omdat er geen migratierunner is. Een controlekader
+dat migratiebestanden leest, kan dat per definitie niet zien.
+
+**Acht structurele gates vervangen de losse checklist**
+(`supabase/checks/2026_07_31_r1_structurele_gates.sql`, draait in `scripts/cross-tenant-ci.sh`
+en is ook rechtstreeks in de SQL-editor te plakken):
+
+| Gate | Toetst | Ontstaan uit |
+|---|---|---|
+| A1 | Elke tabel met RLS zonder eigen `fonds_id` staat in het register of in de globale lijst | K-01, M-01 |
+| A2 | Lees-/invoegpolicies op die tabellen noemen de parenttabel; mutatiepolicies mogen eigenaarsgebonden zijn | K-01, M-01 |
+| B | Tabellen mét `fonds_id` binden aan fonds of aan `auth.uid()` | §14 |
+| C | Geen SELECT-policy met `qual = 'true'` | §14 |
+| C2 | Geen INSERT/UPDATE/ALL-policy met `with_check = 'true'` | K-02 |
+| D | `anon` ziet nul rijen in de tenanttabellen — gedragstest mét seed, want een lege tabel slaagt vacuüm | §15 |
+| E | Elke `SECURITY DEFINER`-functie heeft een gepind `search_path` | M-04 |
+| F | `anon` heeft nergens schrijfrechten; geen `TRUNCATE`/`REFERENCES`/`TRIGGER` bij `anon` of `authenticated` | O-03 |
+| G | Geen `FOR ALL`-policy zonder `WITH CHECK` — Postgres valt dan terug op `USING` en toetst alleen wélke rij je wijzigt | K-03 |
+| H | `anon` kan geen applicatiefunctie in `public` uitvoeren, op drie publieke RPC's na | H-18 |
+
+**Vier van die tien (C2, F, G, H) komen rechtstreeks voort uit een bevinding die het
+T3-kader niet kón zien.** Het verschil zit hem in wát er getoetst wordt: `pg_policies`,
+`pg_proc`, `pg_default_acl` en `information_schema.role_table_grants` in de dráaiende database
+— niet de migratiebestanden. Dat onderscheid is de blijvende les van deze ronde.
+
+**Twee grenzen van de gates, expliciet:**
+
+- Gate D schrijft (één testfonds, twee documenten, één chunk) binnen `begin … rollback`. Zonder
+  seed zou hij vacuüm slagen. Wil je geen enkele schrijfactie op productie, knip dan gate D eruit
+  en draai de rest; je verliest dan de gedragsbevestiging.
+- De gedragstest `2026_07_31_r1_tenantgrenzen.sql` seedt twee fondsen en drie gebruikers in
+  `auth.users`. Die hoort **niet** op productie maar op een testdatabase via
+  `npm run test:xtenant:ci` — en daarmee is omgevingsscheiding een randvoorwaarde voor het
+  volledig kunnen uitvoeren van dit controlekader.
+
 ## 9. Bevindingen en restrisico's
 
 1. **Append-only wás niet DB-afgedwongen op 4 logtabellen** — opgelost in T3.
@@ -300,3 +351,14 @@ geïntroduceerd lek de bijbehorende test ROOD maakt — nooit naar main gecommit
 3. **Restrisico (geen schijnzekerheid):** `schema.sql` loopt achter voor o.a. `decision_*`,
    `catalogus`, `platform_*`, `tenant_domains` en `maak_profiel`. De migraties zijn
    authoritatief; de banner boven `schema.sql` benoemt dit.
+4. **Restrisico 31-07-2026 — default privileges van `supabase_admin` (bevinding O-03b).**
+   `pg_default_acl` kent voor `public` twee eigenaren. De `postgres`-kant is dichtgezet
+   (`2026_07_31_r6_default_privileges.sql`); de `supabase_admin`-kant geeft nieuwe tabellen nog
+   steeds `anon = arwdDxtm` en nieuwe functies `anon = X`, en `postgres` is geen lid van die rol.
+   Preventie is niet haalbaar met de rechten die dit project heeft; gates F en H zijn de
+   detectie, maar zien het pas nádat het object bestaat. Vastgelegd als geaccepteerd,
+   gedetecteerd-maar-niet-voorkomen risico in besluit `0096`.
+5. **Restrisico — de gates draaien nog niet in CI.** Zolang dat handwerk is, hangt de detectie
+   onder punt 4 af van eraan denken. Bevinding T-01 (een testgate die twee weken rood stond
+   zonder dat iemand het zag) laat zien hoe dat afloopt. Dit is de goedkoopste openstaande
+   maatregel op de hele lijst en het is repo-werk, geen leverancierswerk.

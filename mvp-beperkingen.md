@@ -1,6 +1,6 @@
 # MVP-beperkingen — Bestuurdersportaal
 
-**Laatst bijgewerkt:** 2026-07-04
+**Laatst bijgewerkt:** 2026-07-31 (securityreview 30-31 juli: §3 en §4 bijgewerkt; overige tekst per 2026-07-04)
 **Doel:** eerlijk overzicht van wat de MVP níét is of níét kan, plus de noodzakelijke stappen richting productiegeschiktheid. Bronnen: feitenrapporten 4 juli 2026, `HANDOVER.md` §Bekende beperkingen, `SECURITY-ROUTE-A-IMPLEMENTATIE.md`, `CODE-REVIEW-2026-07-03.md` (afgekapt), `decisions/`.
 
 ## 1. Functionele beperkingen
@@ -36,6 +36,11 @@
 | CSP met `unsafe-inline`/`unsafe-eval` | Next.js-hydratatie-concessie; strikte CSP via nonces = Route B | Bewust geaccepteerd |
 | Open reviewbevindingen 03-07 | 5 van 8 Hoog, 12 Middel, 8 Laag open; governance_log-zwaktes (append-only niet overal afgedwongen; `FOR ALL` zonder `WITH CHECK`) | Open — deels Onbekend |
 | Vercel CVE-branch niet gemerged; HSTS-preload niet ingediend | Kleine open acties | Open |
+| **Default privileges van `supabase_admin` niet te wijzigen** | `pg_default_acl` geeft nieuwe tabellen in `public` nog steeds `anon = arwdDxtm` en nieuwe functies `anon = X`; `postgres` is geen lid van die rol en kan de entry niet aanpassen. Objecten die door `supabase_admin` ontstaan (extensies, Supabase-platformmigraties) krijgen daarmee INSERT voor de publieke anon-key en TRUNCATE terug. Preventie niet haalbaar; gates F en H zijn de detectie | **Geaccepteerd restrisico** — besluit 0096 |
+| **Storage-policy generieke tak nog niet gehard** | `documenten storage lezen`, tak `(storage.foldername(name))[1] = 'generiek'` mist `auth.uid() is not null` (M-02, derde locatie). Alleen handmatig in het Supabase-dashboard aan te passen, niet via migratie | Open |
+| **Decompressiebudget vertrouwt de ZIP-header** | `beoordeelDecompressie` leest de gedeclareerde `uncompressedSize`, die de aanvaller zelf zet. Vangt de gewone zipbom, niet een archief dat klein declareert en bij extractie uitdijt. Harde cap tijdens extractie zou dit sluiten | Open — bekend en begrensd |
+| **`ANTHROPIC_API_KEY` niet geroteerd** | Openstaand sinds de review van 30-07; `git log --all -- .env.vercel-now` nog niet gedraaid | Open |
+| ~~Open reviewbevindingen 03-07 (K1/K2/K3)~~ | Opgevolgd in de ronde van 31-07-2026: K2 en K3 uit die review corresponderen met de nu gedichte bevindingen; `2026_07_03_profielen_rls_hardening.sql` bleek nooit gedraaid en is alsnog toegepast (R3) | Afgerond |
 
 ## 4. Kwaliteitsborging en documentatie
 
@@ -46,6 +51,10 @@
 | **Afgekapte reviewdocumenten** | `CODE-REVIEW-2026-07-03.md` (2.966 bytes) en `BEVINDINGENLOG.md` (455 bytes) eindigen midden in een zin én zijn ongecommit; de volledige restpuntenlijst is nergens compleet gedocumenteerd; genoemde migratie `2026_07_03_security_hardening.sql` ontbreekt | Open — Te valideren |
 | `supabase/schema.sql` loopt achter; geen gegenereerde Supabase-types | Documentatie-/typeschuld | Open |
 | Verouderde documentatie-onderdelen | HANDOVER-secties bevroren snapshots; `.env.example` ontbreekt; tmp-bestanden in repo | Open |
+| **Geen migratierunner; repo en productie lopen niet aantoonbaar gelijk** | Migraties worden handmatig in de SQL-editor geplakt zonder registratie. De review van 31-07 vond drie objecten die in productie stonden maar in geen enkele migratie (K-02, K-03, L-08). "De migratie staat in de repo" bewijst niets over productie | Open — **harde blocker vóór fonds 2** |
+| **Structurele gates draaien nog niet in CI** | `supabase/checks/2026_07_31_r1_structurele_gates.sql` (gates A t/m H) moet handmatig worden gedraaid. Daarmee hangt de detectie van het `supabase_admin`-restrisico af van eraan denken | Open — **P1**, goedkoopste maatregel op de lijst |
+| **Testgate kan stil falen** | `npm run sanity` stopte bij de eerste rode suite; daardoor hebben 45 suites twee weken niet gedraaid zonder dat iemand het zag (bevinding T-01). Het script draait nu alles door en rapporteert aan het eind, maar er is geen CI die het afdwingt | Deels opgelost |
+| **Preview-deploys draaien tegen de productiedatabase** | Er is één Supabase-project. Een preview-omgeving test dus nieuwe code tegen echte productiedata en -policies, en de gedragstest `2026_07_31_r1_tenantgrenzen.sql` (seedt gebruikers in `auth.users`) kan daardoor niet volledig worden uitgevoerd | Open — **blocker vóór fonds 2** |
 
 ## 5. Compliance
 
@@ -56,6 +65,7 @@
 | DPIA alleen als opzet; geen juridische toetsing | B10-checkpoint open vóór productief profielgebruik | Open |
 | Datalekprocedure niet geoperationaliseerd | Map 07 benoemt de actie | Open |
 | Formele AI-Act-classificatie extern te beoordelen | AI-governance-ontwerp is concept | Open |
+| Kopiëren uit de AI-chat wordt niet geregistreerd | Bewust besluit ([`0098`](./decisions/0098-kopieren-uit-de-chat-zonder-logging.md), 31-07-2026): een kopieeractie is geen besluit en geen dossier-export. Gevolg, aanvaard: dit is het **enige uitgaande pad zonder registratie** — een passage kan het portaal verlaten zonder spoor. Tegenmaatregel zit in de kopie zelf (verplichte bronnenlijst + herkomstregel), niet in het auditspoor. Handmatige muisselectie draagt die tegenmaatregel níet | Aanvaard |
 
 ## 6. Noodzakelijke stappen richting productiegeschiktheid
 
