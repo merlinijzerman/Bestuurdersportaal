@@ -16,6 +16,7 @@ import {
   AntwoordKopieerKnop,
   Documentenlijst,
   leesAntwoordmodus,
+  documentlijstZichtbaar,
   type Bron,
 } from "./AntwoordWeergave";
 import { isDocumentbron } from "@/core/lib/documentlijst";
@@ -1235,19 +1236,6 @@ export default function AssistentClient({
     });
   }
 
-  // Besluit 0099 — één conditie voor "de documentlijst staat in het antwoord",
-  // gebruikt door zowel de lijst zelf als de anti-dubbelingsvlag op het paneel.
-  // Ze moeten identiek zijn: zou het paneel de vlag alleen op de modus zetten,
-  // dan claimt het tijdens het streamen, bij een afgebroken antwoord of bij nul
-  // documentbronnen een lijst die er niet staat — én verbergt het tegelijk de
-  // bronkaarten. Precies de schijnzekerheid die de vervangen fallbacktekst
-  // moest voorkomen.
-  function documentlijstZichtbaar(b: Bericht): boolean {
-    if (!b.voltooid) return false;
-    if (leesAntwoordmodus(b.onderbouwing?.antwoordmodus) !== "bronoverzicht") return false;
-    return (b.bronnen ?? []).some(isDocumentbron);
-  }
-
   // Besluit 0099 — vervolgactie vanuit de documentlijst: zet de bestaande
   // client-scope en zet de cursor in het invoerveld. Bewust GEEN vraag versturen:
   // de bestuurder formuleert zelf wat hij wil weten. De server-side validatie
@@ -1698,8 +1686,12 @@ export default function AssistentClient({
                   b.rol === "gebruiker"
                     ? // De eigen vraag is een rustig blok, geen gekleurd vlak: massief
                       // violet trok in een lang gesprek meer aandacht dan het antwoord
-                      // eronder. Zebra + hairline houdt de nadruk waar hij hoort.
-                      "bg-app-zebra text-ink border border-app-line px-4 py-3 rounded-2xl rounded-tr-sm text-sm leading-relaxed"
+                      // eronder. Wél de kaartbehandeling van de rest van de app
+                      // (wit + hairline + schaduw): een tint op de grijze
+                      // app-achtergrond haalt maar 1,03:1 en liet de vraag
+                      // vervagen. De referentie zet de bubbel op een wítte kaart —
+                      // daar werkt zebra wél, hier niet.
+                      "bg-app-surface text-ink border border-line shadow-card px-4 py-3 rounded-2xl rounded-tr-sm text-sm leading-relaxed"
                     : "text-sm leading-relaxed text-ink"
                 }
               >

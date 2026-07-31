@@ -108,6 +108,17 @@ test("zonder titel en zonder type blijft het label leeg — de pill toont dan al
   assert.equal(pillLabelVoor({ titel: "   " }), "");
 });
 
+// `documenttype` is vrije tekst in de database; een waarde buiten de elf
+// toegestane valt terug op zichzelf en kan willekeurig lang zijn.
+test("ook een lang documenttype wordt afgekapt", () => {
+  const uit = pillLabelVoor({
+    documenttypeLabel: "Een buitensporig lang documenttype dat nooit in de labelmap stond",
+    documentdatum: "2026-07-11",
+  });
+  assert.ok(uit.endsWith("…"), uit);
+  assert.ok(uit.length <= 33, `te lang: ${uit.length}`);
+});
+
 test("een onvolledige datum wordt genegeerd, niet half getoond", () => {
   assert.equal(pillLabelVoor({ documenttypeLabel: "Advies", documentdatum: "2026" }), "Advies");
 });

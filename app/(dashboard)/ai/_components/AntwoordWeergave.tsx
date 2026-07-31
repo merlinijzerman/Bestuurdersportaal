@@ -51,6 +51,7 @@ import {
   pasFilterToe,
   documentIdsVan,
   documenttypeLabel,
+  isDocumentbron,
   type Documentfilter,
   type Documentregel,
 } from "@/core/lib/documentlijst";
@@ -261,6 +262,10 @@ export function renderAntwoord(
 ) {
   const inline = (delen: InlineDeel[]) =>
     renderInline(delen, bronnen, berichtIdx, highlight, onBronKlik);
+  // Tabelcellen zijn smal en scrollen horizontaal; daar toont de pill alleen het
+  // nummer (zie BronPill.compact).
+  const inlineCel = (delen: InlineDeel[]) =>
+    renderInline(delen, bronnen, berichtIdx, highlight, onBronKlik, true);
 
   // De omhulling staat er ALTIJD, ook zonder kopieerknop: zo is de DOM-structuur
   // gelijk tijdens en na het streamen. Zou de wrapper pas verschijnen zodra het
@@ -326,7 +331,7 @@ export function renderAntwoord(
                     // is center. Alle si-tabel-gebruikers zetten die per th —
                     // die conventie volgen we hier ook.
                     <th key={ci} className={numeriek[ci] ? "si-num" : "text-left"}>
-                      {inline(c)}
+                      {inlineCel(c)}
                     </th>
                   ))}
                 </tr>
@@ -336,7 +341,7 @@ export function renderAntwoord(
                   <tr key={ri} className="align-top">
                     {rij.map((c, ci) => (
                       <td key={ci} className={numeriek[ci] ? "si-num" : undefined}>
-                        {inline(c)}
+                        {inlineCel(c)}
                       </td>
                     ))}
                   </tr>
@@ -515,6 +520,8 @@ function renderInline(
   berichtIdx: number,
   highlight: { berichtIdx: number; bronIdx: number } | null,
   onBronKlik: (berichtIdx: number, bronIdx: number) => void,
+  /** Tabelcel: pills zonder tekstlabel, anders duwen ze de kolom uit. */
+  compact = false,
 ) {
   if (delen.length === 0) return null;
   return delen.map((deel) => {
@@ -533,6 +540,7 @@ function renderInline(
                 highlight?.bronIdx === bronIdx
               }
               onClick={() => onBronKlik(berichtIdx, bronIdx)}
+              compact={compact}
             />
           );
         }
@@ -632,11 +640,18 @@ function BronPill({
   bron,
   gehighlight,
   onClick,
+  compact = false,
 }: {
   nummer: number;
   bron: Bron;
   gehighlight: boolean;
   onClick: () => void;
+  /**
+   * Alleen het nummer, zonder tekstlabel. Voor tabelcellen: met label wordt de
+   * pill tot ~195px breed en duwt hij de kolom uit — in de smalle agendapuntchat
+   * vrijwel altijd. De hover-preview blijft ook compact volledig werken.
+   */
+  compact?: boolean;
 }) {
   const [positie, setPositie] = useState<PreviewPositie | null>(null);
   const wrapper = useRef<HTMLSpanElement>(null);
@@ -736,22 +751,31 @@ function BronPill({
           onClick();
         }}
         aria-describedby={previewId}
-        aria-label={`Bron ${nummer}: ${bron.titel}${
+        // WCAG 2.5.3: de zichtbare tekst moet in de toegankelijke naam zitten,
+        // anders vindt spraakbediening ("klik Notulen 11-07") de knop niet.
+        aria-label={`Bron ${nummer}${label ? `: ${label}` : ""} — ${bron.titel}${
           oordeel.label ? ` (${oordeel.label})` : ""
         } — toon bronvermelding`}
         className={`relative -top-[1px] inline-flex items-center align-baseline mx-0.5 h-[20px] gap-1.5 rounded-full border py-0 pl-[3px] pr-2 text-[11px] font-bold leading-none transition-colors cursor-pointer ${
           // Geen actuele, vastgestelde grondslag → gestippelde rand. Kleur is nooit
           // de enige drager: dezelfde status staat als tekst in de beschrijving.
-          oordeel.gemarkeerd ? "border-dashed border-warn" : "border-warn/40"
+          oordeel.gemarkeerd
+            ? "border-dashed border-warn"
+            : "border-app-line-control"
         } ${
+          // Dekkende tokens, geen alpha: de twee surfaces hebben een ándere
+          // ondergrond (/ai op app-bg, de agendapuntchat op wit), dus een
+          // doorschijnend vlak levert per surface een ander contrast. Gemeten:
+          // warn-ink op warn-tint 5,40:1 en op mark 5,01:1 — beide boven 4,5:1,
+          // ongeacht wat eronder ligt.
           gehighlight
-            ? "bg-warn/25 text-warn-ink shadow-sm"
-            : "bg-warn-tint text-warn-ink hover:bg-warn/20"
+            ? "bg-mark text-warn-ink shadow-sm"
+            : "bg-warn-tint text-warn-ink hover:bg-mark"
         }`}
       >
         <span
           aria-hidden="true"
-          className="grid h-[15px] w-[15px] flex-none place-items-center rounded-full bg-warn text-[9px] text-white"
+          className="grid h-[15px] w-[15px] flex-none place-items-center rounded-full bg-warn-ink text-[9px] text-white"
         >
           {nummer}
         </span>
@@ -759,7 +783,7 @@ function BronPill({
             nummer blijft staan: dát koppelt de bewering aan de bronkaart en aan
             het auditspoor. Ontbreken titel én documenttype, dan blijft het label
             leeg en toont de pill alleen het nummer — zoals voorheen. */}
-        {label && (
+        {label && !compact && (
           <span className="max-w-[160px] truncate font-semibold">{label}</span>
         )}
       </button>
@@ -1033,6 +1057,31 @@ export function leesAntwoordmodus(ruw: unknown): Antwoordmodus | null {
   return typeof ruw === "string" && (ANTWOORDMODI as string[]).includes(ruw)
     ? (ruw as Antwoordmodus)
     : null;
+}
+
+/**
+ * Staat de documentlijst in het antwoord? Eén implementatie voor béíde surfaces
+ * (besluit 0099).
+ *
+ * De lijst én de anti-dubbelingsvlag op het onderbouwingspaneel moeten op exact
+ * dezelfde voorwaarde afgaan. Zou het paneel alleen de modus volgen, dan claimt
+ * het tijdens het streamen, bij een afgebroken antwoord en bij nul documentbronnen
+ * een lijst die er niet staat — én verbergt het tegelijk de bronkaarten.
+ *
+ * Structureel getypeerd, want de twee surfaces hebben elk hun eigen
+ * `Bericht`-type. Twee kopieën van deze conditie zouden precies het risico lopen
+ * dat `leesAntwoordmodus` hierboven juist wegneemt.
+ */
+export function documentlijstZichtbaar(bericht: {
+  voltooid?: boolean;
+  onderbouwing?: { antwoordmodus?: string | null } | null;
+  bronnen?: Bron[];
+}): boolean {
+  if (!bericht.voltooid) return false;
+  if (leesAntwoordmodus(bericht.onderbouwing?.antwoordmodus) !== "bronoverzicht") {
+    return false;
+  }
+  return (bericht.bronnen ?? []).some(isDocumentbron);
 }
 
 /** Bestandstype-badge. Ontbreekt het type, dan verschijnt er niets — geen lege badge. */

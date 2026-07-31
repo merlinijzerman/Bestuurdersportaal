@@ -1,9 +1,9 @@
 # AI-antwoordweergave — Ontwerpdocument
 
-- **Versie:** 0.3 · 31 juli 2026
+- **Versie:** 0.4 · 31 juli 2026
 - **Status:** Vastgelegd voor tranche 1 (parser-regressienet, tabel- en leesopmaak, kopiëren),
-  tranche 2A (bronverificatie in de renderlaag — §8) en tranche 2B (documentvraag als
-  documentlijst — §9)
+  tranche 2A (bronverificatie in de renderlaag — §8), tranche 2B (documentvraag als
+  documentlijst — §9) en tranche 2C (visuele rust — §10)
 - **Bron van waarheid:** de code. Dit document beschrijft *wat en waarom*; bij afwijking wint
   `core/lib/antwoord-parser.ts` + `app/(dashboard)/ai/_components/AntwoordWeergave.tsx`.
 
@@ -38,7 +38,8 @@ core/lib/antwoord-parser.ts        ← PURE functies, geen React
 
 Sinds tranche 2 staan er nog drie pure modules naast: `core/lib/bronfragment.ts` (het citaat
 onder een bronvermelding, gevoed vanuit `rag.ts` en `besluitvorming-bron.ts`),
-`core/lib/bronsamenvatting.ts` (de regel in de ingeklapte onderbouwingsbalk) — beide §8 — en
+`core/lib/bronsamenvatting.ts` (de regel in de ingeklapte onderbouwingsbalk, §8, én sinds
+2C het afgeleide pill-label, §10.1) en
 `core/lib/documentlijst.ts` (ordening en filtering van de documentlijst, §9). Alle drie om
 dezelfde reden als de parser: het zijn regels die het scherm bepálen, dus horen ze testbaar
 te zijn.
@@ -217,6 +218,9 @@ Voor **tranche 2B** komen daar twee doorgegeven velden bij, `documenttype` en
 steeds geen kolom, geen migratie en geen wijziging aan retrieval, ranking, filtering,
 prompt of antwoordmodusdetectie.
 
+**Tranche 2C** raakt uitsluitend de renderlaag: geen payload, geen nieuwe tokens, geen
+retrieval, geen datamodel. Alleen hoe bestaande data eruitziet (§10).
+
 Uitgesteld naar een volgende tranche (visuele referentie
 [`prototypes/ai-assistent-grafische-optimalisatie.html`](./prototypes/ai-assistent-grafische-optimalisatie.html),
 annotaties 4 t/m 8): het hover-fragment op de
@@ -224,9 +228,10 @@ annotaties 4 t/m 8): het hover-fragment op de
 bronkaarten in twee kolommen, en de informatievere ingeklapte onderbouwingsbalk. Die vragen
 óf een payloaduitbreiding (`documenttype`) óf een herziening van de bronkaart zelf.
 
-> **Tranche 2, deelopdracht A (31 juli 2026) heeft hiervan alles gerealiseerd behalve het
-> afgeleide pill-label** — dat vraagt `documenttype` in de payload en hoort daarmee bij
-> deelopdracht B. Zie §8.
+> **Alles hiervan is inmiddels gerealiseerd:** het hover-fragment, de gestippelde rand en
+> de tweekolomskaarten in tranche 2A (§8), de informatievere balk eveneens in 2A, en het
+> afgeleide pill-label in tranche 2C (§10.1) — dat laatste kon pas nadat 2B `documenttype`
+> in de payload bracht.
 
 ## 7. Referenties
 
@@ -244,6 +249,8 @@ bronkaarten in twee kolommen, en de informatievere ingeklapte onderbouwingsbalk.
   `core/lib/bronsamenvatting.ts` (de ingeklapte balk) — zie §8
 - Tranche 2B-module: `core/lib/documentlijst.ts` (ordening en filtering van de
   documentlijst) — zie §9
+- Tranche 2C: `pillLabelVoor()` in `core/lib/bronsamenvatting.ts` (§10.1); de
+  contrastafspraken van de pill zijn vastgepind in `core/lib/kleurcontrast.sanity.ts`
 
 ## 8. Bronverificatie in de renderlaag (tranche 2A)
 
@@ -338,9 +345,8 @@ Twee randgevallen:
 
 - **Onbekende status wordt níét gemarkeerd.** Markeren betekent "let op, niet vastgesteld",
   en dat is bij ontbrekende data net zo goed een ongefundeerde bewering als het omgekeerde.
-  De beschrijving zegt dan expliciet dat de status niet is meegeleverd. Gevolg: op het
-  dekkingsbrede pad, waar `documentBronnen()` de statusvelden niet vult, ontbreekt het
-  signaal — zie de openstaande punten hieronder.
+  De beschrijving zegt dan expliciet dat de status niet is meegeleverd. Bij het schrijven van
+  2A gold dat nog voor het hele dekkingsbrede pad; tranche 2B heeft dat opgelost — zie §9.7.
 - **De besluitregistratie zet een Decision Object-status in het `documentstatus`-veld.** Die
   hoort in een ander domein thuis (`besloten` is daar de vastgestelde grondslag, niet
   `vastgesteld`). Zonder aparte behandeling zou de ruwe enum-waarde ("in_onderbouwing") in de
@@ -420,11 +426,10 @@ het hoogste normgewicht als enige stil afkappen. `documentBronnen()` bouwt óók
 Uit de governance-review, bewust doorgeschoven omdat het payloadwijzigingen zijn en
 deelopdracht A de renderlaag betreft:
 
-- `documentBronnen()` (`app/api/chat/route.ts`) vult de statusvelden niet, dus op het
-  dekkingsbrede pad ontbreekt het statussignaal — óók bij een conceptdocument. Let op de
-  omvang: `haalDocumentChunks()` selecteert `documentstatus` en `bronstatus` wél, maar
-  **niet** `documentdatum`, `geldig_tot`, `normgewicht`, `bronorganisatie` of `extern_url`.
-  Wie dat compleet wil maken, moet ook die select uitbreiden.
+- ~~`documentBronnen()` vult de statusvelden niet.~~ **Opgelost in tranche 2B** (§9.7):
+  `documentBronnen()` vult ze nu, en `verrijkDocumentmetadata()` vult `documentdatum`,
+  `geldig_tot`, `normgewicht`, `bronorganisatie` en `extern_url` aan — die staan namelijk
+  níét in de select van `haalDocumentChunks()`.
 - Het auditspoor kent geen versiemarkering op het fragment: twee logregels met een
   verschillende afkapregel zijn niet als zodanig herkenbaar. Reconstrueerbaar via de datum
   van besluit 0100.
@@ -514,9 +519,11 @@ in één gebatchte vervolgquery op de unieke document-id's — patroon van
 `returns table`, en een kolom toevoegen aan een RPC-return vereist `drop function` +
 `create`, dus een migratie.
 
-De functie zit ná de splitsing in retrieval-paden, waar RPC, fallback-cascade,
-dekkingsbrede scope en parent-context samenkomen. Dat maakt "geen pad gemist"
-**structureel** in plaats van een controle die bij elke wijziging opnieuw moet.
+De functie zit ná de splitsing in retrieval-paden: RPC, fallback-cascade en parent-context
+komen daar samen, zodat "geen pad gemist" voor die drie structureel is in plaats van een
+controle per select. Eerlijk: het **dekkingsbrede pad heeft een eigen aanroep**
+(`app/api/chat/route.ts`, in de `breedActief`-tak). Er zijn dus twee call-sites, en die
+tweede moet je bij een wijziging bewust meenemen.
 
 De velden zijn pure doorgeefwaarden: nergens gelezen door retrieval, ranking, filtering of
 promptopbouw. De verrijking draait ná `handhaafFondsdiscipline` en ná `naVerwerking`, en

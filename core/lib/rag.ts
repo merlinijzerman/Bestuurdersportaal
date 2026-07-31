@@ -1433,10 +1433,9 @@ export async function verrijkNotulenChunks(
 //  afspraak voor deze tranche was: geen migratie.
 //
 //  Deze functie zit ná de splitsing in retrieval-paden, op de plek waar RPC,
-//  fallback-cascade, dekkingsbrede scope en parent-context weer samenkomen. Dat
-//  is niet alleen goedkoper dan zeven selects bijhouden — het maakt "geen pad
-//  gemist" ook structureel in plaats van een controle die je elke keer opnieuw
-//  moet doen.
+//  fallback-cascade en parent-context weer samenkomen. Dat is goedkoper dan zeven
+//  selects bijhouden. Let op: het DEKKINGSBREDE pad heeft een eigen aanroep in
+//  app/api/chat/route.ts — twee call-sites dus, geen één.
 //
 //  Zelfde patroon als verrijkNotulenChunks() hierboven: één gebatchte query op
 //  de unieke document-id's, RLS-veilig via de anon-client. Een document buiten

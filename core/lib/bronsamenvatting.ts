@@ -78,10 +78,16 @@ export function pillLabelVoor(bron: {
 }): string {
   const typeLabel = bron.documenttypeLabel?.trim() || null;
   const datum = korteDatum(bron.documentdatum);
-  if (typeLabel) return datum ? `${typeLabel} ${datum}` : typeLabel;
-  const titel = (bron.titel ?? "").trim();
-  if (!titel) return "";
-  return titel.length > PILL_LABEL_MAX
-    ? `${titel.slice(0, PILL_LABEL_MAX).trimEnd()}…`
-    : titel;
+  const rauw = typeLabel
+    ? datum
+      ? `${typeLabel} ${datum}`
+      : typeLabel
+    : (bron.titel ?? "").trim();
+  if (!rauw) return "";
+  // De cap geldt voor BEIDE takken. `documenttype` is vrije tekst in de database
+  // en `documenttypeLabel()` valt bij een onbekende waarde terug op de ruwe
+  // waarde — die kan dus willekeurig lang zijn.
+  return rauw.length > PILL_LABEL_MAX
+    ? `${rauw.slice(0, PILL_LABEL_MAX).trimEnd()}…`
+    : rauw;
 }

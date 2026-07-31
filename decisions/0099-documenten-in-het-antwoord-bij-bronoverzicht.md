@@ -128,8 +128,8 @@ tranche was: geen migratie.
 
 Daarom haalt `verrijkDocumentmetadata()` in `core/lib/rag.ts` ze op in één gebatchte
 vervolgquery op de unieke document-id's, precies zoals `verrijkNotulenChunks()` dat al
-deed. Die plek zit ná de splitsing in retrieval-paden, waar RPC, fallback-cascade,
-dekkingsbrede scope en parent-context weer samenkomen. Dat is niet alleen goedkoper dan
+deed. Die plek zit ná de splitsing in retrieval-paden: RPC, fallback-cascade en parent-context
+komen daar samen. Het dekkingsbrede pad heeft een eigen aanroep — twee call-sites dus. Dat is niet alleen goedkoper dan
 zeven selects bijhouden — het maakt "geen pad gemist" **structureel** in plaats van een
 controle die je bij elke wijziging opnieuw moet doen.
 

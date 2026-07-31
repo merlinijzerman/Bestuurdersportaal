@@ -10,7 +10,7 @@ Hiërarchie, van leidend naar afgeleid:
 2. **`HANDOVER.md`** — lopend overzicht van status, architectuur en keuzes.
 3. **`*-ONTWERP.md` / `*-AUDIT.md`** — design-laag ("wat en waarom"), kan achterlopen.
 
-`supabase/schema.sql` is **documentatie en mag achterlopen**; de migraties zijn authoritatief. Verifieer aannames altijd tegen de migraties en de `lib/`-bestanden voordat je erop bouwt.
+`supabase/schema.sql` is **documentatie en mag achterlopen**; de migraties zijn authoritatief. Verifieer aannames altijd tegen de migraties en de `core/lib/`-bestanden voordat je erop bouwt.
 
 ## Productcontext
 
@@ -77,7 +77,7 @@ Doe geen harde juridische, actuariële, fiscale of toezichtclaims zonder bron in
 - **`npm run sanity` draait álle suites door** en somt aan het eind op wat rood is; hij stopt niet meer bij de eerste. Die wijziging komt uit bevinding T-01: door een `|| exit 1` hadden 45 suites twee weken niet gedraaid zonder dat iemand het zag. Lees de slotregel, niet alleen de exitcode.
 - **`core/lib/generatie-kern.sanity.ts` pint de toon-systeemprompt op sha256.** Kantelt een hash, dan is de prompt of de assemblage gewijzigd — verifieer dat dit bewust was en werk pas dán de pin bij. Bereken de nieuwe waarde, neem hem niet over uit de foutmelding.
 
-Verificatie loopt primair via `tsc --noEmit` + de `lib/*.sanity.ts`-checks (pure functies, `npm run sanity`) + handmatige smoke-tests. Voor de cross-tenant-isolatie is er sinds T5 een **licht testframework** (`node:test` + `tsx`, geen extra runtime-dep): benoemde §15-tests in `tests/cross-tenant/*.test.ts`. Bij nieuwe businesslogica: voeg tests toe of motiveer expliciet waarom niet. Reken berekeningen waar mogelijk programmatisch na (zie de sanity-tests bij `lib/stemming.ts` als patroon). Geef prioriteit aan sanity-checks voor risicovolle logica: stemming, readiness/gating, procedurestatussen, audit-eventconstructie, permissie-/rolchecks, stuurinformatie-berekeningen en AI-validatiestatussen.
+Verificatie loopt primair via `tsc --noEmit` + de `core/lib/*.sanity.ts`-checks (pure functies, `npm run sanity`) + handmatige smoke-tests. Voor de cross-tenant-isolatie is er sinds T5 een **licht testframework** (`node:test` + `tsx`, geen extra runtime-dep): benoemde §15-tests in `tests/cross-tenant/*.test.ts`. Bij nieuwe businesslogica: voeg tests toe of motiveer expliciet waarom niet. Reken berekeningen waar mogelijk programmatisch na (zie de sanity-tests bij `core/lib/stemming.ts` als patroon). Geef prioriteit aan sanity-checks voor risicovolle logica: stemming, readiness/gating, procedurestatussen, audit-eventconstructie, permissie-/rolchecks, stuurinformatie-berekeningen en AI-validatiestatussen.
 
 **Verplicht bij elk tenant-pad (host/fonds/RLS/audit/retrieval/storage):** draai de gebundelde §15 cross-tenant suite — `bash scripts/cross-tenant-ci.sh` (tsc + app-laag T1–T14 + DB-laag T3/T4/T6/T7 onder échte RLS, één rood/groen). Dit is HÉT verificatiecommando en draait in CI op elke push (`.github/workflows/rls-cross-tenant.yml`, ephemere Supabase-DB) — **voorlopig niet-blokkerend** (geen branch protection; omzetten naar blokkerende merge-gate = actiepunt bij PGB-onboarding, besluit 0046 "fasering"). Voor de DB-laag lokaal: `supabase start` of een wegwerpbare `TEST_DATABASE_URL`. Zie `T3-RLS-CONTROLEKADER.md` §7–§8.
 
@@ -98,13 +98,13 @@ Verificatie loopt primair via `tsc --noEmit` + de `lib/*.sanity.ts`-checks (pure
 
 - **Status & architectuur:** `HANDOVER.md` (master-index).
 - **Besluitlog (waarom-keuzes):** `decisions/` — zie `decisions/README.md`.
-- **Procedures / Decision Object:** `lib/decision.ts`, `lib/decision-view.ts`, `lib/proces-templates.ts`, `app/(dashboard)/procedures/`, `PROCEDURE-MVP1-ONTWERP.md`.
+- **Procedures / Decision Object:** `core/lib/decision.ts`, `core/lib/decision-view.ts`, `core/lib/proces-templates.ts`, `app/(dashboard)/procedures/`, `PROCEDURE-MVP1-ONTWERP.md`.
 - **Generieke proceduremodule (in ontwerp):** `PROCEDURE-GENERIEK-ONTWERP.md`.
-- **RAG / documentpipeline:** `lib/rag.ts`, `lib/document-extractie.ts`, `app/api/documents/upload/route.ts`.
+- **RAG / documentpipeline:** `core/lib/rag.ts`, `core/lib/document-extractie.ts`, `app/api/documents/upload/route.ts`.
 - **AI-chat:** `app/api/chat/route.ts`.
-- **AI-antwoordweergave (parser, opmaak, kopiëren):** `core/lib/antwoord-parser.ts`, `core/lib/antwoord-klembord.ts`, `app/(dashboard)/ai/_components/AntwoordWeergave.tsx`, `AI-WEERGAVE-ONTWERP.md`. Eén renderer voor `/ai` én de agendapuntchat (besluit 0079) — een wijziging landt altijd op beide.
+- **AI-antwoordweergave (parser, opmaak, kopiëren, bronweergave):** `core/lib/antwoord-parser.ts`, `core/lib/antwoord-klembord.ts`, `core/lib/bronfragment.ts` (het citaat), `core/lib/bronsamenvatting.ts` (balkregel + pill-label), `core/lib/documentlijst.ts` (ordening/filtering documentlijst), `app/(dashboard)/ai/_components/AntwoordWeergave.tsx`, `AI-WEERGAVE-ONTWERP.md`. Eén renderer voor `/ai` én de agendapuntchat (besluit 0079) — een wijziging landt altijd op beide.
 - **Migraties (bron van waarheid voor schema):** `supabase/migrations/`.
-- **Security-status:** `SECURITY-ROUTE-A-PLAN.md`, `SECURITY-ROUTE-A-IMPLEMENTATIE.md`, `lib/api-errors.ts`.
+- **Security-status:** `SECURITY-ROUTE-A-PLAN.md`, `SECURITY-ROUTE-A-IMPLEMENTATIE.md`, `core/lib/api-errors.ts`.
 - **RLS-controlekader + wijzigingsproces (T3):** `T3-RLS-CONTROLEKADER.md` (policy-matrix, §14-checklist, service-role-inventaris, testkader). Elke nieuwe tenant-policy krijgt een `WITH CHECK`; de structurele test `supabase/checks/2026_07_08_t3_cross_tenant.sql` faalt anders.
 
 ## Niet doen zonder expliciet voorstel

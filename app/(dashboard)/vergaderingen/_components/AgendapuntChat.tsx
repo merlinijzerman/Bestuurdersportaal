@@ -46,6 +46,7 @@ import {
   AntwoordKopieerKnop,
   Documentenlijst,
   leesAntwoordmodus,
+  documentlijstZichtbaar,
   type Bron,
 } from "../../ai/_components/AntwoordWeergave";
 import { isDocumentbron } from "@/core/lib/documentlijst";
@@ -108,14 +109,6 @@ function herstelVoltooidVlag(lijst: Bericht[]): Bericht[] {
       ? { ...b, voltooid: Boolean(b.onderbouwing) }
       : b
   );
-}
-
-// Besluit 0099 — één conditie voor "de documentlijst staat in het antwoord",
-// gedeeld door de lijst en de anti-dubbelingsvlag. Identiek aan /ai.
-function documentlijstZichtbaar(b: Bericht): boolean {
-  if (!b.voltooid) return false;
-  if (leesAntwoordmodus(b.onderbouwing?.antwoordmodus) !== "bronoverzicht") return false;
-  return (b.bronnen ?? []).some(isDocumentbron);
 }
 
 export default function AgendapuntChat({
@@ -844,7 +837,7 @@ export default function AgendapuntChat({
                 b.rol === "gebruiker" ? (
                   <div key={idx} className="flex justify-end">
                     {/* Zelfde rustige vraagbubbel als /ai (gedeelde weergave, 0079). */}
-                    <div className="bg-app-zebra text-ink border border-app-line text-sm rounded-lg px-3 py-2 max-w-[85%] whitespace-pre-wrap">
+                    <div className="bg-app-surface text-ink border border-line shadow-card text-sm rounded-lg px-3 py-2 max-w-[85%] whitespace-pre-wrap">
                       {b.tekst}
                     </div>
                   </div>
