@@ -261,16 +261,30 @@ export default function BibliotheekPage() {
               ? `Uitgebreid zoeken in de inhoud van ${
                   actieveTab === "fonds" ? "de fondsdocumenten" : "het generieke kader"
                 }`
-              : "Upload en beheer documenten — de kennisbasis voor de AI-assistent"}
+              : actieveTab === "fonds"
+              ? "Upload en beheer fondsdocumenten — de kennisbasis voor de AI-assistent"
+              : "Centraal gecureerd kader (DNB / AFM / PF) — hier alleen-lezen"}
           </p>
         </div>
-        {weergave === "beheren" && (
+        {/* B13 (31-07-2026): uploaden is uitsluitend een FONDS-actie. Generieke
+            (platform-gecureerde) documenten worden centraal in het beheerportaal
+            (platform-surface, PLATFORM_HOST) beheerd; de tenant is daar read-only.
+            De uploadroute weigerde bibliotheek="generiek" al server-side — deze
+            knop stond alleen nog op de generieke tab en suggereerde onterecht dat
+            je daar kon toevoegen (upload landde stilzwijgend in de fondslijst). */}
+        {weergave === "beheren" && actieveTab === "fonds" && (
           <button
             onClick={() => setUploadOpen(true)}
             className="bg-accent text-white font-semibold px-4 py-2 rounded-lg text-sm hover:bg-accent-ink transition-colors"
           >
             + Document uploaden
           </button>
+        )}
+        {weergave === "beheren" && actieveTab === "generiek" && (
+          <p className="max-w-xs text-xs text-muted sm:text-right">
+            Generieke documenten worden centraal gecureerd door de
+            platformbeheerder en zijn hier alleen-lezen.
+          </p>
         )}
       </div>
 
@@ -282,7 +296,11 @@ export default function BibliotheekPage() {
         {(["fonds", "generiek"] as const).map((tab) => (
           <button
             key={tab}
-            onClick={() => setActieveTab(tab)}
+            onClick={() => {
+              setActieveTab(tab);
+              // Openstaande uploadmodal sluiten bij wissel naar generiek.
+              if (tab === "generiek") setUploadOpen(false);
+            }}
             className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
               actieveTab === tab
                 ? "bg-white text-ink shadow-sm"
@@ -691,8 +709,8 @@ export default function BibliotheekPage() {
         />
       )}
 
-      {/* Upload modal */}
-      {uploadOpen && (
+      {/* Upload modal — alleen op de fondstab (zie B13 hierboven). */}
+      {uploadOpen && actieveTab === "fonds" && (
         <div className="fixed inset-0 bg-accent/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl p-7 w-full max-w-md shadow-xl">
             <div className="flex items-center justify-between flex-wrap gap-2 mb-5">

@@ -55,6 +55,21 @@ const VIEWPORT = { width: VP[0] || 1440, height: VP[1] || 810 };
 const OPNAMEDIR = path.join(HIER, process.env.PROMO_OPNAMEDIR ?? "opnames");
 const AUTHBESTAND = path.join(HIER, ".auth", "staat.json");
 
+/**
+ * Selectief opnieuw opnemen:  PROMO_SCENES=02-overzicht,04-ai
+ *
+ * Leeg (default) = alle scènes, en dan wordt de opnamemap eerst geleegd.
+ * Staat er wél een selectie, dan blijven de overige .webm's staan en worden
+ * alleen de genoemde overschreven. Dat scheelt niet zozeer opnametijd als wel
+ * montagewerk: de fragmenttijden in promo-teksten.json zijn per opname
+ * uitgemeten, dus elke opname die je onnodig vervangt moet opnieuw worden
+ * herijkt. Gebruik de BRON-id (de sleutel in SCENE_ACTIES), niet de scène-id.
+ */
+const ALLEEN = (process.env.PROMO_SCENES ?? "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
 test("promo-opname", async () => {
   test.setTimeout(15 * 60 * 1000);
   if (!EMAIL || !WACHTWOORD) {
@@ -63,8 +78,16 @@ test("promo-opname", async () => {
     );
   }
 
-  fs.rmSync(OPNAMEDIR, { recursive: true, force: true });
-  fs.mkdirSync(OPNAMEDIR, { recursive: true });
+  if (ALLEEN.length) {
+    fs.mkdirSync(OPNAMEDIR, { recursive: true });
+    for (const id of ALLEEN) {
+      fs.rmSync(path.join(OPNAMEDIR, `${id}.webm`), { force: true });
+    }
+    console.log(`→ alleen opnieuw opnemen: ${ALLEEN.join(", ")} (rest blijft staan)`);
+  } else {
+    fs.rmSync(OPNAMEDIR, { recursive: true, force: true });
+    fs.mkdirSync(OPNAMEDIR, { recursive: true });
+  }
   fs.mkdirSync(path.dirname(AUTHBESTAND), { recursive: true });
 
   const browser: Browser = await chromium.launch({
@@ -89,7 +112,26 @@ test("promo-opname", async () => {
     await page.locator('input[type="email"]').fill(EMAIL, { timeout: 15_000 });
     await page.locator('input[type="password"]').fill(WACHTWOORD, { timeout: 15_000 });
     await page.getByRole("button", { name: /inloggen/i }).click();
-    await page.waitForURL((u: URL) => !u.pathname.startsWith("/login"), { timeout: 30_000 });
+    // Blijft de URL op /login staan, dan is dat vrijwel altijd een geweigerde
+    // login en niet een trage server. Een kale time-out wijst dan de verkeerde
+    // kant op, dus lezen we de melding van de pagina zelf uit.
+    try {
+      await page.waitForURL((u: URL) => !u.pathname.startsWith("/login"), { timeout: 30_000 });
+    } catch {
+      const melding = (
+        await page
+          .locator('[role="alert"], [data-fout], .fout, .error')
+          .first()
+          .textContent({ timeout: 2_000 })
+          .catch(() => null)
+      )?.trim();
+      throw new Error(
+        `Inloggen mislukt op ${BASE_URL} met PROMO_EMAIL="${EMAIL}". ` +
+          (melding ? `De pagina meldt: "${melding}". ` : "") +
+          `Controleer of PROMO_EMAIL en PROMO_WACHTWOORD echte inloggegevens van ` +
+          `het demo-account zijn — de URL bleef op /login staan.`
+      );
+    }
     await ctx.storageState({ path: AUTHBESTAND });
     await ctx.close();
     console.log("✓ ingelogd, sessie bewaard");
@@ -101,6 +143,7 @@ test("promo-opname", async () => {
   for (const scene of TEKSTEN.scenes) {
     if (scene.type !== "opname") continue;
     const opnameId: string = scene.bron ?? scene.id;
+    if (ALLEEN.length && !ALLEEN.includes(opnameId)) continue;
     const actie = SCENE_ACTIES[opnameId];
     if (!actie) {
       log.push({
@@ -160,7 +203,12 @@ test("promo-opname", async () => {
   }
 
   await browser.close();
-  fs.writeFileSync(path.join(OPNAMEDIR, "opname-log.json"), JSON.stringify(log, null, 2));
+  // Bij een deelopname beschrijft het log alleen de opnieuw opgenomen scènes;
+  // aparte bestandsnaam, zodat het log van de volledige run intact blijft.
+  fs.writeFileSync(
+    path.join(OPNAMEDIR, ALLEEN.length ? "opname-log-deel.json" : "opname-log.json"),
+    JSON.stringify(log, null, 2)
+  );
 
   const mislukt = log.filter((r) => !r.ok);
   console.log(`\nKlaar: ${log.length - mislukt.length}/${log.length} scènes opgenomen.`);

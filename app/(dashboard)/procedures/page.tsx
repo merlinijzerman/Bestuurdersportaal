@@ -156,15 +156,6 @@ export default async function ProceduresPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {/* Ingreep 2 (30-07-2026) — module-ingang naar de assistent (zie
-              vergaderingen/page.tsx voor de toelichting). */}
-          <Link
-            href="/ai?intent=fonds&herkomst=procedures"
-            className="px-3 py-2 text-sm border border-line rounded-lg hover:border-accent text-ink"
-            title="Open de AI-assistent met de vraag al gericht op uw fonds — zonder tussenvraag over de scope"
-          >
-            Vraag de AI hierover
-          </Link>
           <Link
             href="/procedures/nieuw"
             className="bg-accent text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-accent-ink"

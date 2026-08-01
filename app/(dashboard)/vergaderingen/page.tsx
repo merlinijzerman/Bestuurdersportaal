@@ -64,17 +64,6 @@ export default async function VergaderingenPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {/* Ingreep 2 (30-07-2026) — module-ingang naar de assistent. Wie vanuit
-              de vergaderingen een vraag stelt, vraagt naar het eigen fonds; de
-              intentie gaat daarom mee als bevestigde keuze i.p.v. dat de
-              heuristiek erover moet gokken (en bij twijfel terugvraagt). */}
-          <Link
-            href="/ai?intent=fonds&herkomst=vergaderingen"
-            className="px-3 py-2 text-sm border border-line rounded-lg hover:border-accent text-ink"
-            title="Open de AI-assistent met de vraag al gericht op uw fonds — zonder tussenvraag over de scope"
-          >
-            Vraag de AI hierover
-          </Link>
           <NieuweVergaderingForm />
         </div>
       </div>
