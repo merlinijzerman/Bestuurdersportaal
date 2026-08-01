@@ -126,6 +126,55 @@ function profielRegels(v: ProfielVoorkeuren): string[] {
   return regels;
 }
 
+// ── Schrijfvoorkeuren: van etiket naar instructie (31-07-2026) ───────────────
+// WAAROM: tot nu toe landde de voorkeur als losse woordgroep in de prompt
+// (`antwoordvoorkeur "puntsgewijs", detailniveau "beknopt"`) zonder dat ergens
+// stond wat die waarde betékent. Het model kreeg dus een etiket zonder gedrag,
+// terwijl TOON_BLOK (statisch, uitvoerig, dwingend: "lopende tekst is de
+// standaard, niet bullets") wél concreet was. Resultaat: het wisselen van de
+// voorkeur in het profiel maakte geen zichtbaar verschil in het antwoord.
+// Hieronder krijgt elke toegestane waarde een expliciete gedragsinstructie die,
+// waar nodig, de standaardvorm uit TOON_BLOK bewust overschrijft.
+//
+// GRENS (bestuurlijk/compliance): "beknopt" mag uitweidingen en voorbeelden
+// kosten, NOOIT de bronmarkeringen, de benoemde aannames/onzekerheden of een
+// relevante kanttekening. Kort is een vormkeuze van de lezer; onderbouwing en
+// onzekerheid zijn dat niet.
+//
+// De toegestane waarden zijn server-side gevalideerd in app/api/profiel/route.ts
+// (DETAILNIVEAUS / ANTWOORDVOORKEUREN). Een onbekende waarde valt hier stil
+// terug op géén instructie — nooit op een gok.
+const DETAILNIVEAU_INSTRUCTIE: Record<string, string> = {
+  beknopt:
+    "Detailniveau: BEKNOPT. Kom snel tot de kern en beperk u tot wat nodig is om de vraag te beantwoorden — als richtlijn één tot twee alinea's, en gebruikt u een raamwerk, dan uitsluitend de onderdelen die er werkelijk toe doen. Wat u inkort zijn uitweidingen, voorbeelden en zijpaden. Wat ook in een kort antwoord blijft staan: de inline bronmarkeringen, de aannames en onzekerheden, en een kanttekening die de lezer bestuurlijk nodig heeft.",
+  standaard: "",
+  uitgebreid:
+    "Detailniveau: UITGEBREID. Neem ruimer de tijd: werk de redenering en de afwegingen uit, benoem relevante nuances en varianten, en behandel ook aanpalende punten die voor deze vraag bestuurlijk van belang zijn. Uitgebreid betekent meer diepgang, niet meer herhaling of vulling.",
+};
+
+const ANTWOORDVOORKEUR_INSTRUCTIE: Record<string, string> = {
+  "kern-eerst":
+    "Vorm: KERN EERST. Zet de kernboodschap in de eerste zinnen, vóór de onderbouwing — de lezer moet na twee zinnen weten waar het op neerkomt. Daarna pas de redenering, de nuances en de context.",
+  puntsgewijs:
+    "Vorm: PUNTSGEWIJS. Deze lezer leest liever gestructureerd. U mag hier afwijken van de standaardregel dat lopende tekst boven opsommingen gaat: presenteer de hoofdpunten als korte opsomming. Elk punt bevat een volledige gedachte (geen losse trefwoorden), en de samenhang tussen de punten schrijft u in lopende tekst eromheen — redenering en nuance horen niet in een bullet geperst.",
+  "lopende tekst":
+    "Vorm: LOPENDE TEKST. Schrijf volledig in doorlopende alinea's en vermijd opsommingen, ook waar u die normaal zou gebruiken; giet een vergelijking of reeks liever in een zin dan in een lijst.",
+};
+
+// Bouwt de operationele voorkeurinstructies. Leeg = geen sturing (de natuurlijke
+// stijl uit TOON_BLOK blijft dan ongemoeid).
+export function voorkeurInstructies(v: ProfielVoorkeuren): string[] {
+  const regels: string[] = [];
+  const vorm = v.antwoordvoorkeur ? ANTWOORDVOORKEUR_INSTRUCTIE[v.antwoordvoorkeur] : "";
+  const detail = v.detailniveau ? DETAILNIVEAU_INSTRUCTIE[v.detailniveau] : "";
+  if (vorm) regels.push(vorm);
+  if (detail) regels.push(detail);
+  return regels;
+}
+
+// Korte, leesbare weergave van de gekozen voorkeuren — gebruikt door de
+// agenda-afnemer, die een JSON-structuur oplevert en dus geen vorminstructies
+// voor vrije tekst kan gebruiken.
 function voorkeurRegels(v: ProfielVoorkeuren): string[] {
   const regels: string[] = [];
   if (v.antwoordvoorkeur) regels.push(`antwoordvoorkeur "${v.antwoordvoorkeur}"`);
@@ -154,15 +203,21 @@ export async function bouwProfielsturing(
   if (!v) return null;
 
   const pRegels = profielRegels(v);
-  const vRegels = voorkeurRegels(v);
+  const vInstructies = voorkeurInstructies(v);
   // Niets ingevuld → geen sturing (collectieve weergave is dan de natuurlijke staat).
-  if (pRegels.length === 0 && vRegels.length === 0) return null;
+  if (pRegels.length === 0 && vInstructies.length === 0) return null;
 
   const tekst = `PERSOONLIJK PROFIEL VAN DE LEZER — UITSLUITEND VOOR PRIORITERING, NOOIT VOOR FILTERING.
-Profiel: ${pRegels.join("; ") || "geen specifieke aandachtsgebieden opgegeven"}.${
-    vRegels.length ? ` Voorkeuren: ${vRegels.join(", ")}.` : ""
-  }
-Stem de VOLGORDE en NADRUK van je antwoord hierop af: behandel wat voor deze focusgebieden/expertise relevant is als eerste en het uitgebreidst. Je mag NIETS weglaten, inkorten of verbergen uit de gedeelde feitenbasis — de volledige, collectieve onderbouwing blijft intact en zichtbaar voor iedereen. Verwijs in je antwoord NIET naar dit profiel, naar "algemeen perspectief" of naar het feit dát je op het profiel hebt geprioriteerd — die transparantie regelt de interface apart, in het paneel "Onderbouwing en bronnen". Geef simpelweg het antwoord in de op het profiel afgestemde volgorde, zonder erover te editorialiseren.`;
+Profiel: ${pRegels.join("; ") || "geen specifieke aandachtsgebieden opgegeven"}.
+Stem de VOLGORDE en NADRUK van je antwoord hierop af: behandel wat voor deze focusgebieden/expertise relevant is als eerste en het uitgebreidst. Je mag uit de gedeelde feitenbasis NIETS wegfilteren of verbergen omdat het buiten het profiel van deze lezer valt — de collectieve onderbouwing blijft voor iedereen intact en zichtbaar. Dat gaat over DEKKING, niet over lengte of vorm: hoe uitgebreid en in welke vorm de lezer het antwoord wil, staat hieronder en is zijn eigen keuze. Verwijs in je antwoord NIET naar dit profiel, naar "algemeen perspectief" of naar het feit dát je op het profiel hebt geprioriteerd — die transparantie regelt de interface apart, in het paneel "Onderbouwing en bronnen". Geef simpelweg het antwoord in de op het profiel afgestemde volgorde, zonder erover te editorialiseren.${
+    vInstructies.length
+      ? `
+
+SCHRIJFVOORKEUREN VAN DEZE LEZER — deze gaan VÓÓR de algemene stijlregels waar ze elkaar tegenspreken:
+${vInstructies.map((r) => `- ${r}`).join("\n")}
+Ook hier geldt: de vorm en de lengte veranderen, de feitelijke dekking en de bronvermelding niet.`
+      : ""
+  }`;
 
   return { tekst, aspecten: aspectenVan(v) };
 }

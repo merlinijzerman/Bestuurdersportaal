@@ -92,7 +92,7 @@ else
   FXF="${PROMO_FRAGMENT_OVERGANG:-0.25}"
   XF="${PROMO_OVERGANG:-0.30}"
 fi
-INK="0x171A28"
+INK="0x12233B"
 MAX_VERSNELLING="${PROMO_MAX_VERSNELLING:-1.6}"
 
 FFMPEG="${FFMPEG:-ffmpeg}"
@@ -437,7 +437,12 @@ if [ "$LAYOUT" = "verticaal" ]; then
 else
   variant "1x1"  1080 1080
   variant "4x5"  1080 1350
-  variant "9x16" 1080 1920
+  # 9:16 wordt NIET meer uit de liggende master gesneden. Dat gaf een klein
+  # beeld met dikke balken erboven en eronder; sinds 31-07 is er een aparte
+  # staande opname bij 1080x1200 (PROMO_LAYOUT=verticaal), die het volle kader
+  # vult. Twee bestanden met dezelfde naam maar verschillende kwaliteit leidt
+  # alleen maar tot het verkeerde exemplaar delen.
+  echo "› 9x16 overgeslagen — die komt uit de aparte staande opname"
 fi
 
 echo
