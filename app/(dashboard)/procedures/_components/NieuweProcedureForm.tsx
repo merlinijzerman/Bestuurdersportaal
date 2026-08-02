@@ -4,34 +4,36 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ProcessTemplate } from "@/core/lib/proces-templates";
 
-interface Props {
-  templates: ProcessTemplate[];
+/** Lid van het eigen fonds, aangeleverd door de serverpagina uit vw_fondsleden. */
+export interface Lid {
+  id: string;
+  naam: string;
+  rol: string | null;
 }
 
-export default function NieuweProcedureForm({ templates }: Props) {
+interface Props {
+  templates: ProcessTemplate[];
+  /** Kiesbare co-eigenaars: de fondsleden behalve de ingelogde gebruiker. */
+  leden: Lid[];
+}
+
+export default function NieuweProcedureForm({ templates, leden }: Props) {
   const router = useRouter();
   const [templateCode, setTemplateCode] = useState<string>("");
   const [titel, setTitel] = useState("");
   const [beschrijving, setBeschrijving] = useState("");
   const [deadline, setDeadline] = useState("");
-  const [eigenaarInput, setEigenaarInput] = useState("");
-  const [eigenaren, setEigenaren] = useState<string[]>([]);
+  // Besluit 0102: co-eigenaars worden GEKOZEN uit de fondsleden. Voorheen was dit
+  // een vrij tekstveld, waardoor er e-mailadressen als "naam" in dossiers
+  // belandden die daarna niet meer te corrigeren waren.
+  const [eigenaarIds, setEigenaarIds] = useState<string[]>([]);
   const [bezig, setBezig] = useState(false);
   const [fout, setFout] = useState<string | null>(null);
 
-  function eigenaarToevoegen() {
-    const naam = eigenaarInput.trim();
-    if (!naam) return;
-    if (eigenaren.includes(naam)) {
-      setEigenaarInput("");
-      return;
-    }
-    setEigenaren([...eigenaren, naam]);
-    setEigenaarInput("");
-  }
-
-  function eigenaarVerwijderen(naam: string) {
-    setEigenaren(eigenaren.filter((e) => e !== naam));
+  function eigenaarWissel(id: string) {
+    setEigenaarIds((huidig) =>
+      huidig.includes(id) ? huidig.filter((x) => x !== id) : [...huidig, id]
+    );
   }
 
   async function indienen(e: React.FormEvent) {
@@ -55,7 +57,7 @@ export default function NieuweProcedureForm({ templates }: Props) {
           titel: titel.trim(),
           beschrijving: beschrijving.trim() || null,
           deadline: deadline || null,
-          eigenaren,
+          eigenaar_ids: eigenaarIds,
         }),
       });
       if (!res.ok) {
@@ -144,51 +146,40 @@ export default function NieuweProcedureForm({ templates }: Props) {
         <label className="block text-sm font-medium text-ink mb-1.5">
           Co-eigenaren
         </label>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={eigenaarInput}
-            onChange={(e) => setEigenaarInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                eigenaarToevoegen();
-              }
-            }}
-            placeholder="Naam toevoegen en op Enter drukken"
-            className="flex-1 border border-line rounded-lg px-3 py-2 text-sm focus:border-accent outline-none"
-          />
-          <button
-            type="button"
-            onClick={eigenaarToevoegen}
-            className="px-3 py-2 text-sm border border-line rounded-lg hover:border-accent text-ink"
-          >
-            Toevoegen
-          </button>
-        </div>
-        {eigenaren.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-2">
-            {eigenaren.map((n) => (
-              <span
-                key={n}
-                className="inline-flex items-center gap-1.5 bg-phase-tint text-phase-ink text-xs px-2 py-1 rounded"
-              >
-                {n}
-                <button
-                  type="button"
-                  onClick={() => eigenaarVerwijderen(n)}
-                  className="text-phase-ink hover:text-phase-ink"
-                  aria-label={`Verwijder ${n}`}
+        {leden.length === 0 ? (
+          <p className="text-sm text-muted border border-line rounded-lg px-3 py-2.5">
+            Er zijn geen andere leden van dit fonds beschikbaar om te kiezen. U
+            bent zelf al eigenaar van deze procedure.
+          </p>
+        ) : (
+          <div className="border border-line rounded-lg divide-y divide-line max-h-56 overflow-y-auto">
+            {leden.map((lid) => {
+              const gekozen = eigenaarIds.includes(lid.id);
+              return (
+                <label
+                  key={lid.id}
+                  className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer text-sm ${
+                    gekozen ? "bg-accent-tint" : "hover:bg-app-zebra"
+                  }`}
                 >
-                  ×
-                </button>
-              </span>
-            ))}
+                  <input
+                    type="checkbox"
+                    checked={gekozen}
+                    onChange={() => eigenaarWissel(lid.id)}
+                    className="accent-accent"
+                  />
+                  <span className="flex-1 text-ink">{lid.naam}</span>
+                  {lid.rol && (
+                    <span className="text-xs text-muted capitalize">{lid.rol}</span>
+                  )}
+                </label>
+              );
+            })}
           </div>
         )}
         <p className="text-xs text-muted mt-1">
-          Optioneel: meerdere bestuursleden die samen verantwoordelijk zijn voor
-          deze procedure.
+          Optioneel: bestuursleden die samen met u verantwoordelijk zijn voor
+          deze procedure. U staat er zelf altijd bij.
         </p>
       </div>
 

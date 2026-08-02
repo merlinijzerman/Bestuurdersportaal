@@ -17,7 +17,8 @@ export async function POST(req: NextRequest) {
       titel?: string;
       beschrijving?: string | null;
       deadline?: string | null;
-      eigenaren?: string[];
+      /** Gekozen fondsleden (id's uit vw_fondsleden). Sinds besluit 0102. */
+      eigenaar_ids?: string[];
     };
 
     const templateCode = body.template_code;
@@ -71,18 +72,53 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2. Eigenaars (maker is altijd eigenaar; plus opgegeven namen)
-    const eigenarenNamen = new Set<string>();
-    if (profiel.naam) eigenarenNamen.add(profiel.naam);
-    for (const n of body.eigenaren || []) {
-      if (n.trim()) eigenarenNamen.add(n.trim());
+    // 2. Eigenaars (maker is altijd eigenaar; plus de gekozen fondsleden)
+    //
+    // Besluit 0102: co-eigenaars worden GEKOZEN uit de fondsleden, niet meer
+    // vrij ingetypt. Dat levert een `gebruiker_id` op, waardoor de weergavenaam
+    // voortaan live uit vw_fondsleden komt in plaats van uit een bevroren kopie.
+    // De naam wordt hier alsnog meegeschreven: `gebruiker_naam` is NOT NULL en
+    // maakt deel uit van de primaire sleutel, en hij dient als terugval wanneer
+    // een account later verdwijnt.
+    //
+    // De id's worden server-side gevalideerd tegen vw_fondsleden — die view is
+    // op het eigen fonds gescopet, dus een id van buiten het fonds valt er
+    // vanzelf uit. Nooit vertrouwen op wat de client meestuurt.
+    const gekozenIds = Array.from(
+      new Set((body.eigenaar_ids || []).filter((v) => typeof v === "string" && v))
+    ).filter((v) => v !== user.id);
+
+    const eigenaars: { gebruiker_id: string | null; gebruiker_naam: string }[] = [];
+    if (profiel.naam) {
+      eigenaars.push({ gebruiker_id: user.id, gebruiker_naam: profiel.naam });
     }
-    if (eigenarenNamen.size > 0) {
+    if (gekozenIds.length > 0) {
+      const { data: leden } = await supabase
+        .from("vw_fondsleden")
+        .select("id, naam")
+        .in("id", gekozenIds);
+      for (const lid of (leden || []) as { id: string; naam: string | null }[]) {
+        if (lid.naam?.trim()) {
+          eigenaars.push({ gebruiker_id: lid.id, gebruiker_naam: lid.naam.trim() });
+        }
+      }
+    }
+
+    // `procedure_eigenaars` heeft (procedure_id, gebruiker_naam) als primaire
+    // sleutel. Twee leden met dezelfde weergavenaam zouden de insert laten
+    // klappen en daarmee het aanmaken van de procedure blokkeren; ontdubbelen op
+    // naam voorkomt dat. Het tweede account raakt dan zijn eigenaarschap kwijt —
+    // zichtbaar in de UI, en op te lossen door een van beiden een
+    // onderscheidende weergavenaam te geven.
+    const perNaam = new Map<string, { gebruiker_id: string | null; gebruiker_naam: string }>();
+    for (const e of eigenaars) if (!perNaam.has(e.gebruiker_naam)) perNaam.set(e.gebruiker_naam, e);
+
+    if (perNaam.size > 0) {
       await supabase.from("procedure_eigenaars").insert(
-        Array.from(eigenarenNamen).map((naam) => ({
+        Array.from(perNaam.values()).map((e) => ({
           procedure_id: procedure.id,
-          gebruiker_id: naam === profiel.naam ? user.id : null,
-          gebruiker_naam: naam,
+          gebruiker_id: e.gebruiker_id,
+          gebruiker_naam: e.gebruiker_naam,
         }))
       );
     }
@@ -133,14 +169,20 @@ export async function POST(req: NextRequest) {
         payload: { template: template.naam },
       },
     ];
-    for (const naam of body.eigenaren || []) {
-      if (naam.trim() && naam.trim() !== profiel.naam) {
+    // Auditregel per toegevoegde co-eigenaar. De naam wordt hier bewust WEL
+    // meegeschreven in de payload: procedure_log legt vast wat er op dat moment
+    // gold en is append-only (besluit 0001) — die regels worden dus nooit
+    // achteraf met een nieuwe naam herschreven. Sinds besluit 0102 gaat het
+    // gebruiker_id mee, zodat een latere lezer de persoon kan terugvinden ook
+    // als diens weergavenaam inmiddels is gewijzigd.
+    for (const e of Array.from(perNaam.values())) {
+      if (e.gebruiker_id !== user.id) {
         logEntries.push({
           procedure_id: procedure.id,
           event_type: "eigenaar_toegevoegd",
           actor_id: user.id,
           actor_naam: profiel.naam || null,
-          payload: { naam: naam.trim() },
+          payload: { naam: e.gebruiker_naam, gebruiker_id: e.gebruiker_id },
         });
       }
     }

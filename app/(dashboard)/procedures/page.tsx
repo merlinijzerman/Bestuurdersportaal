@@ -8,6 +8,7 @@ import {
   type DossierStatus,
   type PeriodeType,
 } from "@/core/lib/dossier";
+import { haalFondsleden, weergaveNaam } from "@/core/lib/fondsleden";
 
 interface ProcedureRij {
   id: string;
@@ -117,22 +118,28 @@ export default async function ProceduresPage() {
     }
   }
 
-  // Co-eigenaren ophalen
+  // Co-eigenaren ophalen. De weergavenaam komt live uit vw_fondsleden waar een
+  // account bekend is; anders valt hij terug op de bevroren snapshot. Zie
+  // core/lib/fondsleden.ts voor het waarom.
   const eigenarenPerProc = new Map<string, string[]>();
   if (lijst.length > 0) {
-    const { data: eigenaren } = await supabase
-      .from("procedure_eigenaars")
-      .select("procedure_id, gebruiker_naam")
-      .in(
-        "procedure_id",
-        lijst.map((p) => p.id)
-      );
+    const [{ data: eigenaren }, fondsleden] = await Promise.all([
+      supabase
+        .from("procedure_eigenaars")
+        .select("procedure_id, gebruiker_id, gebruiker_naam")
+        .in(
+          "procedure_id",
+          lijst.map((p) => p.id)
+        ),
+      haalFondsleden(supabase),
+    ]);
     for (const e of (eigenaren || []) as {
       procedure_id: string;
+      gebruiker_id: string | null;
       gebruiker_naam: string;
     }[]) {
       const lijstE = eigenarenPerProc.get(e.procedure_id) ?? [];
-      lijstE.push(e.gebruiker_naam);
+      lijstE.push(weergaveNaam(e.gebruiker_id, e.gebruiker_naam, fondsleden));
       eigenarenPerProc.set(e.procedure_id, lijstE);
     }
   }

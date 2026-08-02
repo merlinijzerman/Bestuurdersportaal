@@ -22,6 +22,7 @@ import {
   buildDecisionDossierView,
   ensureDecisionForProcedure,
 } from "@/core/lib/decision";
+import { haalFondsleden, weergaveNaam, initialen } from "@/core/lib/fondsleden";
 
 // Forceer dynamische rendering: deze page leest live data uit Supabase
 // (decision-state, readiness, evidence) en mag absoluut niet door de
@@ -196,7 +197,7 @@ export default async function ProcedureDetailPage({
         .order("volgorde", { ascending: true }),
       supabase
         .from("procedure_eigenaars")
-        .select("gebruiker_naam")
+        .select("gebruiker_id, gebruiker_naam")
         .eq("procedure_id", id),
       supabase
         .from("procedure_log")
@@ -217,8 +218,12 @@ export default async function ProcedureDetailPage({
     ]);
 
   const stappen = (stappenRes.data || []) as Stap[];
+  // Weergavenaam live uit vw_fondsleden waar een account bekend is; anders de
+  // bevroren snapshot (co-eigenaar zonder account, of view nog niet gemigreerd).
+  const fondsleden = await haalFondsleden(supabase);
   const eigenaren = (eigenarenRes.data || []).map(
-    (e: { gebruiker_naam: string }) => e.gebruiker_naam
+    (e: { gebruiker_id: string | null; gebruiker_naam: string }) =>
+      weergaveNaam(e.gebruiker_id, e.gebruiker_naam, fondsleden)
   );
   const log = (logRes.data || []) as LogEvent[];
   const besluiten = (besluitenRes.data || []) as Besluit[];
@@ -429,13 +434,7 @@ export default async function ProcedureDetailPage({
                     title={n}
                     className="w-8 h-8 rounded-full bg-phase-tint text-phase-ink text-xs flex items-center justify-center font-medium border-2 border-white"
                   >
-                    {n
-                      .split(/\s+/)
-                      .map((w: string) => w[0])
-                      .filter(Boolean)
-                      .slice(0, 2)
-                      .join("")
-                      .toUpperCase()}
+                    {initialen(n)}
                   </div>
                 ))}
                 {eigenaren.length > 3 && (
