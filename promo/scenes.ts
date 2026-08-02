@@ -47,9 +47,20 @@ export const SELECTORS = {
      * antwoord is gebaseerd.
      */
     doorgrondKaart: 'button:has-text("Een document doorgronden")',
-    /** Aan/uit-opties uit core/lib/doorgrond.ts (DOORGROND_SECTIES). */
-    sectieSamenvatting: 'button:has-text("Bestuurlijke aandachtspunten")',
-    sectieVragen: 'button:has-text("Kritische vragen")',
+    /**
+     * Aan/uit-opties uit core/lib/doorgrond.ts (DOORGROND_SECTIES).
+     *
+     * We selecteren op de ONDERTITEL, niet op de kop. "Samenvatting" is een
+     * deelstring van niets op dit paneel, maar wel van knoppen elders in het
+     * portaal ("Lees samenvatting", "Verberg samenvatting"); has-text matcht op
+     * deelstring, dus een kop is een fragiel anker zodra dit paneel ergens
+     * anders wordt hergebruikt. De ondertitels zijn uniek.
+     *
+     * Let op: dit zijn TOGGLES. Bij het openen staat alleen Samenvatting aan.
+     */
+    sectieSamenvatting: 'button:has-text("De kern in tien regels")',
+    sectieAandachtspunten: 'button:has-text("Wat vraagt aandacht of actie van het bestuur")',
+    sectieVragen: 'button:has-text("Drie vragen om in de vergadering te stellen")',
     starten: 'button:has-text("Start →")',
     invoer: 'textarea[placeholder^="Stel een vraag"]',
     /** Tijdens het genereren staat de textarea op disabled. */
@@ -244,12 +255,42 @@ export const SCENE_ACTIES: Record<string, SceneActie> = {
     }
     await pauze(page, 2600);
 
-    // Kiezen wat je terugkrijgt. Twee onderdelen: genoeg om de keuze te laten
-    // zien, kort genoeg om het antwoord binnen de scène te houden.
-    await klikEerste(page, SELECTORS.ai.sectieSamenvatting, 380);
-    await pauze(page, 700);
-    await klikEerste(page, SELECTORS.ai.sectieVragen, 380);
-    await pauze(page, 1100);
+    // Kiezen wat je terugkrijgt.
+    //
+    // PROMO_AI_KEUZE=vragen  → alléén "Kritische vragen". Variant B moet de
+    //   claim "een kritische sparringpartner, geen zoekmachine" bewíjzen met
+    //   wat er in beeld staat; een samenvatting toont precies het tegendeel.
+    // Leeg / anders → het oorspronkelijke pad (samenvatting + aandachtspunten)
+    //   waarop variant A is opgenomen. Niet weggooien: variant A moet
+    //   reproduceerbaar blijven.
+    //
+    // Volgorde is bewust: eerst Kritische vragen AAN, dan pas Samenvatting UIT.
+    // Andersom sta je even op nul geselecteerde onderdelen, en dat kan het
+    // formulier blokkeren.
+    if ((process.env.PROMO_AI_KEUZE ?? "") === "vragen") {
+      if (!(await klikEerste(page, SELECTORS.ai.sectieVragen, 380))) {
+        throw new Error(
+          'Optie "Kritische vragen" niet gevonden — staat de ondertitel nog op ' +
+            '"Drie vragen om in de vergadering te stellen"? Zie SELECTORS.ai.'
+        );
+      }
+      await pauze(page, 1400); // de keuze even laten staan: dit is beat 1 van de scène
+      // BEGINTOESTAND: het paneel opent met TWEE onderdelen aan — Samenvatting
+      // én Bestuurlijke aandachtspunten. (Vastgesteld op de opname van 10:17;
+      // ik ging er eerst van uit dat alleen Samenvatting aanstond, en toen
+      // bleef "aandachtspunten" in het antwoord staan.) Beide moeten dus uit,
+      // anders komt het antwoord op ~40 regels uit en zakken de drie vragen
+      // onder de invoerbalk weg.
+      await klikEerste(page, SELECTORS.ai.sectieSamenvatting, 380);
+      await pauze(page, 500);
+      await klikEerste(page, SELECTORS.ai.sectieAandachtspunten, 380);
+      await pauze(page, 900);
+    } else {
+      await klikEerste(page, SELECTORS.ai.sectieAandachtspunten, 380);
+      await pauze(page, 700);
+      await klikEerste(page, SELECTORS.ai.sectieVragen, 380);
+      await pauze(page, 1100);
+    }
 
     if (!(await klikEerste(page, SELECTORS.ai.starten, 420))) {
       throw new Error('Knop "Start →" niet gevonden — SELECTORS.ai.starten bijstellen');
@@ -268,8 +309,10 @@ export const SCENE_ACTIES: Record<string, SceneActie> = {
       .catch(() => {});
     await pauze(page, 1000);
 
-    // Antwoord doorlopen en een bron openklikken.
-    await verkenPagina(page, 0.4, 1000);
+    // Antwoord doorlopen en een bron openklikken. Bij de vragen-route verder
+    // doorscrollen: de kritische vragen staan onderaan het antwoord, en met
+    // 0,4 viewporthoogte bleven ze half achter de invoerbalk hangen.
+    await verkenPagina(page, (process.env.PROMO_AI_KEUZE ?? "") === "vragen" ? 0.85 : 0.4, 1000);
     if (await klikKnop(page, SELECTORS.ai.bronPill, 420)) {
       await pauze(page, 1600);
     } else {

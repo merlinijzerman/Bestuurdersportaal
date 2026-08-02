@@ -138,7 +138,7 @@ export default function Sidebar({
         <div className={`text-nav-text-active font-bold text-sm leading-snug ${bijInklapVerborgen}`}>
           {fondsNaam || process.env.NEXT_PUBLIC_FONDS_NAAM || "Bestuurdersportaal"}
         </div>
-        <div className={`text-nav-text text-xs mt-0.5 ${bijInklapVerborgen}`}>Bestuurdersportaal MVP</div>
+        <div className={`text-nav-text text-xs mt-0.5 ${bijInklapVerborgen}`}>Demo omgeving</div>
       </div>
 
       {/* Gebruiker — klik opent het eigen profiel (geen los nav-item meer) */}
