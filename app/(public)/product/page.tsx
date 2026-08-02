@@ -182,11 +182,12 @@ export default function ProductPage() {
             en evaluatie. Niet alleen het besluit, maar ook de onderbouwing en de
             opvolging.
           </p>
-          <p className="link-row">
-            <a href="/" className="textlink">
-              Waarom dit een eigen categorie is →
-            </a>
-          </p>
+          {/* De link "Waarom dit een eigen categorie is →" wees naar het
+              onderscheidingsblok op de homepage. Dat blok is per besluit 0103
+              vervallen, waarmee de link een belofte deed die de homepage niet
+              meer waarmaakt. Vervangende differentiatie-copy vraagt volgens dat
+              besluit een apart akkoord, dus hier alleen de link weggehaald —
+              de lede hierboven draagt de boodschap zelf. */}
         </div>
       </section>
 

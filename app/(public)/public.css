@@ -41,6 +41,9 @@
   --scrim-ink: #E7E5DE;
   --scrim-muted: #8E97A3;
   --video-bg: #0E1A2B;
+
+  /* Kaderschaduw onder het telefoonkader — wél thema-afhankelijk: op een
+   * donkere achtergrond is een 10%-zwarte schaduw onzichtbaar. */
   --schaduw: rgba(0, 0, 0, 0.10);
 
   --serif: var(--font-serif), Georgia, serif;
@@ -64,6 +67,7 @@
   --card: #181A1E;
   --err: #E48A94;
   --ok: #6FBF95;
+  --schaduw: rgba(0, 0, 0, 0.45);
 }
 
 .bp-public *,
@@ -585,7 +589,10 @@
   color: var(--accent);
 }
 
-/* cmp (vergelijkingstabel — onderscheidingsblok) */
+/* cmp (vergelijkingstabel). Het onderscheidingsblok op de homepage dat deze
+ * klasse introduceerde is per besluit 0103 vervallen; /governance-ai/eu-ai-act
+ * gebruikt hem nog twee keer met eigen tabellen, inclusief de ≤640px-stapeling
+ * onderaan dit bestand. Niet schrappen. */
 :is(.bp-home, .bp-page) .cmp {
   margin-top: 32px;
   border: 1px solid var(--line);
@@ -838,7 +845,6 @@
 .bp-home .demo .transcriptie summary {
   cursor: pointer;
   color: var(--accent);
-  text-underline-offset: 3px;
 }
 .bp-home .demo .transcriptie p {
   margin-top: 10px;
@@ -859,6 +865,7 @@
 }
 .bp-home .video-licht video {
   height: min(92vh, 1400px);
+  max-height: 100%;
   width: auto;
   max-width: 96vw;
   aspect-ratio: 9 / 16;
@@ -991,14 +998,14 @@
   border-radius: 6px;
   overflow: hidden;
 }
-.bp-page .oprichters .p {
+.bp-page .oprichters .col {
   padding: 30px;
   display: grid;
   grid-template-columns: 96px 1fr;
   gap: 22px;
   align-items: start;
 }
-.bp-page .oprichters .p:first-child {
+.bp-page .oprichters .col:first-child {
   border-right: 1px solid var(--line);
   background: var(--card);
 }
@@ -1110,7 +1117,7 @@
   .bp-page .oprichters {
     grid-template-columns: 1fr;
   }
-  .bp-page .oprichters .p:first-child {
+  .bp-page .oprichters .col:first-child {
     border-right: none;
     border-bottom: 1px solid var(--line);
   }
@@ -1120,6 +1127,14 @@
   :is(.bp-home, .bp-page) section {
     padding: 60px 0;
   }
+  /* Portret boven de tekst in plaats van ernaast: op 375px houdt de vaste
+   * kolom van 96px plus de gap maar ~130px over voor de naam in serif. */
+  .bp-page .oprichters .col {
+    grid-template-columns: 1fr;
+    gap: 18px;
+    padding: 24px;
+  }
+
   /* blocks + steps → één kolom op telefoon */
   :is(.bp-home, .bp-page) .blocks,
   :is(.bp-home, .bp-page) .steps {

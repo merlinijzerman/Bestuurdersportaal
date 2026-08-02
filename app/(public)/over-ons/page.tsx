@@ -113,7 +113,7 @@ export default function OverOnsPage() {
             </p>
           </div>
           <div className="oprichters">
-            <div className="p">
+            <div className="col">
               <div className="portret" aria-hidden="true">
                 RT
               </div>
@@ -127,7 +127,7 @@ export default function OverOnsPage() {
                 </p>
               </div>
             </div>
-            <div className="p">
+            <div className="col">
               <div className="portret" aria-hidden="true">
                 MIJ
               </div>

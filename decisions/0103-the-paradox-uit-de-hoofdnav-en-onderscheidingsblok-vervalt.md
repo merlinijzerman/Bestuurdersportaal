@@ -14,7 +14,8 @@ Ten eerste als afgeleide van The Paradox: een eigen positie in de hoofdnavigatie
 (externe link) plus een tweekolomsblok op de homepage. Voor een bezoeker die het
 moederbedrijf niet kent, kost dat navigatieruimte zonder iets over het product te
 zeggen, terwijl `/over-ons` — de pagina die het eigen verhaal zou moeten dragen —
-bewust *niet* in de nav stond en inhoudelijk nagenoeg leeg was.
+bewust *niet* in de desktopnavigatie stond (wél in het mobiele menu en de footer)
+en inhoudelijk nagenoeg leeg was.
 
 Ten tweede door zich af te zetten tegen andere categorieën. Het
 onderscheidingsblok ("Geen documentportaal. Geen vergadertool. Geen losse
@@ -44,7 +45,9 @@ codebase weg. Dit is een positioneringsbesluit, geen opschoning.
 **3. De promovideo krijgt een eigen sectie op de homepage**, direct onder "Uw
 eigen omgeving" — daar staat de claim ("AI werkt met uw eigen documentatie en
 besluitdossiers, met verwijzing naar de bron") waarvan de video het bewijs is.
-Self-hosted vanuit `public/video/`, geen externe speler, geen autoplay.
+Variant C, montage `promo-9x16-c_10`, 63,3 s; self-hosted vanuit `public/video/`
+als 720×1280 (2,0 MB) met posterframe (36 kB) en een ondertitelspoor. Geen
+externe speler, geen autoplay.
 
 **4. Drie conflicten in de video worden bewust geaccepteerd**, niet stilzwijgend
 overgeslagen. Ze staan hieronder onder Gevolgen.
@@ -104,8 +107,11 @@ overgeslagen. Ze staan hieronder onder Gevolgen.
   herzien toen bleek dat er een bruikbare montage lag (`promo-9x16-c_10`, waarin
   scène 5 echte interactie toont in plaats van stand-in-materiaal).
 - **Externe videoplayer (YouTube/Vimeo)** — verworpen: dat vraagt uitbreiding van
-  `frame-src` én `script-src` in de CSP plus een cookiebanner-afweging, terwijl
-  self-hosting binnen `default-src 'self'` past zonder één regel configuratie.
+  `frame-src` én `script-src` in de CSP plus een cookiebanner-afweging. Self-hosting
+  past binnen `default-src 'self'` zonder de CSP te raken; wél is `next.config.ts`
+  uitgebreid met een `headers()`-regel die `/video/*` een jaar lang `immutable`
+  cachet. Gevolg: **een nieuwe montage moet een nieuwe bestandsnaam krijgen**,
+  anders zien bezoekers de oude video tot de cache verloopt.
 
 ## Referenties
 

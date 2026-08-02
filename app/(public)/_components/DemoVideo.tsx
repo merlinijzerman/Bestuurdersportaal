@@ -6,16 +6,29 @@ import { useCallback, useEffect, useRef, useState } from "react";
 // Bewust homepage-specifiek en niet generiek: /product houdt zijn Voorbeeldflow
 // en krijgt geen video (werkopdracht §2.1, "buiten scope").
 //
-// Toegankelijkheid (WCAG 2.1 AA, REQ-PV-004/062):
-//  - nooit autoplay — de video heeft een gesproken voice-over;
-//  - preload="none" + poster, zodat bij binnenkomst alleen ~37 kB laadt;
-//  - ondertiteling via <track> en daarnaast een uitklapbare transcriptie, zodat
-//    de inhoud ook zonder video en zonder geluid toegankelijk is;
+// Toegankelijkheid (WCAG 2.1 AA, REQ-PV-060):
+//  - nooit autoplay — de video heeft een gesproken voice-over. De vergrote
+//    weergave speelt alleen door als de kleine speler al liep;
+//  - preload="none" + poster, zodat bij binnenkomst alleen ~36 kB laadt;
+//  - ondertiteling via <track>, maar bewust ZONDER `default`: de video draagt
+//    dezelfde tekst al ingebrand in beeld, dus een standaard zichtbaar
+//    ondertitelblok valt daar bovenop en maakt beide slecht leesbaar. Het spoor
+//    blijft aan te zetten via het ondertitelmenu van de speler, en de volledige
+//    tekst staat daarnaast als uitklapbare transcriptie op de pagina — de
+//    inhoud is dus ook zonder video en zonder geluid toegankelijk;
 //  - de vergrote weergave is een echte dialoog: role/aria-modal, Esc, klik
-//    naast de video, focus-trap zolang hij open staat en focus terug naar de
-//    knop na sluiten.
-// De ingebouwde volledig-scherm-knop van de speler blijft daarnaast gewoon
-// werken; daar is geen eigen code voor nodig.
+//    naast de video, focus blijft binnen de dialoog en keert na sluiten terug
+//    naar de knop.
+//
+// De focus wordt vastgehouden met twee sentinels en NIET door Tab af te vangen.
+// Reden: de bediening van een native <video> zit in een shadow root, en
+// document.activeElement wijst dan naar het <video>-element zelf. Een
+// Tab-handler die op activeElement vergelijkt, houdt de speler-knoppen daardoor
+// buiten de tabvolgorde — precies het tegenovergestelde van wat een focus-trap
+// moet doen. Sentinels hebben die kennis niet nodig.
+//
+// De ingebouwde volledig-scherm-knop van de speler blijft gewoon werken; Esc
+// wordt dan aan de fullscreen-exit gelaten en sluit de dialoog niet mee.
 
 const BRON = "/video/promo-9x16.mp4";
 const POSTER = "/video/promo-9x16-poster.jpg";
@@ -33,31 +46,43 @@ const TRANSCRIPTIE = [
   "Elk stuk vooraf samengevat, inbreng direct zichtbaar. Het bestuursbureau zet dit in één handeling klaar.",
   "Het besluit is van het bestuur. Governance is geen extra stap: de onderbouwing legt zichzelf vast.",
   "Goed voorbereid. Zorgvuldig besloten. Aantoonbaar verantwoord.",
-  "Ervaar het Bestuurdersportaal. Demonstratieomgeving met fictieve gegevens.",
+  "Ervaar het Bestuurdersportaal. Demonstratiegegevens.",
 ];
 
 export default function DemoVideo() {
   const [open, setOpen] = useState(false);
   const kleinRef = useRef<HTMLVideoElement>(null);
   const grootRef = useRef<HTMLVideoElement>(null);
-  const dialoogRef = useRef<HTMLDivElement>(null);
   const knopRef = useRef<HTMLButtonElement>(null);
   const sluitRef = useRef<HTMLButtonElement>(null);
+  const liepAlRef = useRef(false);
 
   const sluit = useCallback(() => {
-    grootRef.current?.pause();
+    const groot = grootRef.current;
+    const klein = kleinRef.current;
+    // Kijkpositie terug naar de kleine speler, zodat sluiten geen voortgang kost.
+    if (groot && klein) {
+      try {
+        klein.currentTime = groot.currentTime;
+      } catch {
+        // Seek mag geweigerd worden voordat metadata geladen is.
+      }
+    }
+    groot?.pause();
     setOpen(false);
     knopRef.current?.focus();
   }, []);
 
   function openVergroot() {
     const klein = kleinRef.current;
-    if (klein) klein.pause();
+    liepAlRef.current = !!klein && !klein.paused;
+    klein?.pause();
     setOpen(true);
   }
 
-  // Positie overnemen en afspelen zodra de dialoog in beeld staat; focus naar
-  // de sluitknop zodat toetsenbordbediening meteen binnen de dialoog begint.
+  // Positie overnemen zodra de dialoog in beeld staat, en alleen doorspelen als
+  // de kleine speler al liep. Focus naar de sluitknop, zodat toetsenbord-
+  // bediening binnen de dialoog begint.
   useEffect(() => {
     if (!open) return;
     const groot = grootRef.current;
@@ -66,69 +91,65 @@ export default function DemoVideo() {
       try {
         groot.currentTime = klein.currentTime;
       } catch {
-        // Sommige browsers weigeren een seek voordat metadata geladen is.
+        // Zie hierboven.
       }
-      void groot.play().catch(() => {
-        // Afspelen mag geweigerd worden; de speler heeft eigen bediening.
-      });
+      if (liepAlRef.current) {
+        void groot.play().catch(() => {
+          // Afspelen mag geweigerd worden; de speler heeft eigen bediening.
+        });
+      }
     }
     sluitRef.current?.focus();
   }, [open]);
 
-  // Esc sluit; Tab blijft binnen de dialoog.
+  // Esc sluit — behalve wanneer de speler in volledig scherm staat, want dan is
+  // Esc van de browser en zou de dialoog ongevraagd meesluiten.
   useEffect(() => {
     if (!open) return;
     function opToets(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        sluit();
-        return;
-      }
-      if (e.key !== "Tab") return;
-      const houder = dialoogRef.current;
-      if (!houder) return;
-      const velden = houder.querySelectorAll<HTMLElement>(
-        'button, video, [href], [tabindex]:not([tabindex="-1"])'
-      );
-      if (velden.length === 0) return;
-      const eerste = velden[0];
-      const laatste = velden[velden.length - 1];
-      const actief = document.activeElement;
-      if (e.shiftKey && actief === eerste) {
-        e.preventDefault();
-        laatste.focus();
-      } else if (!e.shiftKey && actief === laatste) {
-        e.preventDefault();
-        eerste.focus();
-      }
+      if (e.key !== "Escape") return;
+      if (document.fullscreenElement) return;
+      e.preventDefault();
+      sluit();
     }
     document.addEventListener("keydown", opToets);
     return () => document.removeEventListener("keydown", opToets);
   }, [open, sluit]);
 
+  // Achtergrond niet laten meescrollen zolang de dialoog open staat.
+  useEffect(() => {
+    if (!open) return;
+    const vorige = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = vorige;
+    };
+  }, [open]);
+
   return (
     <>
-      <figure className="phone">
-        <video
-          ref={kleinRef}
-          controls
-          playsInline
-          preload="none"
-          poster={POSTER}
-          aria-label={OMSCHRIJVING}
-        >
-          <source src={BRON} type="video/mp4" />
-          <track
-            kind="captions"
-            src={ONDERTITELS}
-            srcLang="nl"
-            label="Nederlands"
-            default
-          />
-        </video>
-        <figcaption>
-          Demonstratieomgeving met fictieve gegevens · 1:03
-        </figcaption>
+      <div className="phone">
+        <figure>
+          <video
+            ref={kleinRef}
+            controls
+            playsInline
+            preload="none"
+            poster={POSTER}
+            aria-label={OMSCHRIJVING}
+          >
+            <source src={BRON} type="video/mp4" />
+            <track
+              kind="captions"
+              src={ONDERTITELS}
+              srcLang="nl"
+              label="Nederlands"
+            />
+          </video>
+          <figcaption>
+            Demonstratiegegevens · 1:03
+          </figcaption>
+        </figure>
         <button
           ref={knopRef}
           type="button"
@@ -143,11 +164,10 @@ export default function DemoVideo() {
             <p key={i}>{regel}</p>
           ))}
         </details>
-      </figure>
+      </div>
 
       {open && (
         <div
-          ref={dialoogRef}
           className="video-licht"
           role="dialog"
           aria-modal="true"
@@ -156,6 +176,11 @@ export default function DemoVideo() {
             if (e.target === e.currentTarget) sluit();
           }}
         >
+          <span
+            tabIndex={0}
+            aria-hidden="true"
+            onFocus={() => grootRef.current?.focus()}
+          />
           <button
             ref={sluitRef}
             type="button"
@@ -178,13 +203,17 @@ export default function DemoVideo() {
               src={ONDERTITELS}
               srcLang="nl"
               label="Nederlands"
-              default
             />
           </video>
           <p className="rand">
-            Demonstratieomgeving met fictieve gegevens · staand formaat, vult het
+            Demonstratiegegevens · staand formaat, vult het
             scherm niet volledig
           </p>
+          <span
+            tabIndex={0}
+            aria-hidden="true"
+            onFocus={() => sluitRef.current?.focus()}
+          />
         </div>
       )}
     </>

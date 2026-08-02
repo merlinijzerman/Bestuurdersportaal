@@ -13,7 +13,7 @@ export default function Footer({
         <div className="wrap wide foot-links">
           <a href="/">Home</a>
           <a href="/product">Product</a>
-          <a href="/over-ons">Over ons</a>
+          <a href="/over-ons">Over</a>
           <a href="/contact">Contact</a>
           <a href="/login">Inloggen</a>
           <a href="/privacy">Privacy</a>
@@ -36,7 +36,7 @@ export default function Footer({
           <a href="/voor-wie">Voor wie</a>
           <a href="/sectoren">Sectoren</a>
           <a href="/governance-ai">Governance &amp; AI</a>
-          <a href="/over-ons">Over ons</a>
+          <a href="/over-ons">Over</a>
           <a href="https://the-paradox.com" target="_blank" rel="noopener">
             The Paradox
           </a>
