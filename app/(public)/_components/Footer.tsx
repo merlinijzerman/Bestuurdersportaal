@@ -1,5 +1,6 @@
 // Marketing-footer (server component). variant "full" = volledige footer met
-// route-links (incl. /over-ons, dat niet in de hoofdnav zit — Bouwoverdracht §3);
+// route-links (incl. The Paradox, dat sinds besluit 0103 niet meer in de
+// hoofdnav staat maar hier wél zichtbaar blijft als herkomst);
 // "simple" = compacte linkbalk voor tekstpagina's (privacy, contact).
 export default function Footer({
   variant = "full",

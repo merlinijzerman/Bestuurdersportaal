@@ -3,13 +3,17 @@ import Header from "../_components/Header";
 import Footer from "../_components/Footer";
 import DossierKaart from "../_components/DossierKaart";
 import Flow from "../_components/Flow";
-import Cmp from "../_components/Cmp";
+import DemoVideo from "../_components/DemoVideo";
 import CtaBand from "../_components/CtaBand";
 
-// Homepage — compacte commerciële voorkant (copy v0.2 §1 + onderscheidingsblok
-// §10). Claimdiscipline (contentplan §0.1/§4): veilige werkwoorden, AI
-// ondersteunt maar besluit niet, geen certificerings-/hosting-/encryptieclaims.
-// Primaire CTA overal "Neem contact op" (Bouwoverdracht §1).
+// Homepage — compacte commerciële voorkant (copy v0.2 §1). Claimdiscipline
+// (contentplan §0.1/§4): veilige werkwoorden, AI ondersteunt maar besluit niet,
+// geen certificerings-/hosting-/encryptieclaims. Primaire CTA overal "Neem
+// contact op" (Bouwoverdracht §1).
+//
+// Besluit 0103: het onderscheidingsblok uit copy v0.2 §10 (categorievergelijking
+// met tabel) is van deze pagina verwijderd, en de The Paradox-sectie is ingekort
+// tot kop, alinea en link — het tweekolomsblok staat nu op /over-ons.
 export const metadata: Metadata = {
   title: {
     absolute:
@@ -127,39 +131,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ONDERSCHEIDINGSBLOK (§10) */}
-      <section className="distinct">
-        <div className="wrap">
-          <div className="label">Onderscheid</div>
-          <h2>
-            Geen documentportaal. Geen vergadertool.{" "}
-            <span>Geen losse AI-chat.</span>
-          </h2>
-          <p className="lede">
-            Een eigen besluitomgeving. Bestaande tools beheren documenten, plannen
-            vergaderingen of beantwoorden losse vragen zonder kennis van uw
-            context. Bestuurdersportaal is een organisatiegebonden
-            besluitomgeving, ontworpen rond de volledige besluitcyclus — van
-            voorbereiding en afweging tot besluit, verantwoording, opvolging en
-            evaluatie — en werkt vanuit uw eigen documentatie, dossiers en
-            historie op de plek waar het besluit valt.
-          </p>
-          <Cmp />
-          <p className="cmp-note">
-            Bestuurdersportaal vult het gat tussen documentbeheer, vergaderen,
-            risicobeheersing en AI. Het richt zich op de bestuurlijke afweging
-            zelf: welke informatie is gebruikt, welke risico's en aannames zijn
-            expliciet gemaakt, welk besluit is genomen, welke acties volgen
-            daaruit en hoe kan dit later worden gereconstrueerd?
-          </p>
-          <p className="link-row">
-            <a href="/product" className="textlink">
-              Bekijk hoe het werkt →
-            </a>
-          </p>
-        </div>
-      </section>
-
       {/* DE OPLOSSING — BESLUITCYCLUS */}
       <section>
         <div className="wrap">
@@ -245,6 +216,58 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* ZIE HET IN ACTIE — PROMOVIDEO */}
+      <section>
+        <div className="wrap">
+          <div className="label">Zie het in actie</div>
+          <h2>Van dossier tot besluit, in beeld.</h2>
+          <p className="lede">
+            Een korte rondleiding door de omgeving: hoe documenten, vergaderingen,
+            risico&apos;s en besluiten samenkomen, en hoe de AI-assistent meedenkt
+            op basis van uw eigen fondsdocumenten — met verwijzing naar de bron.
+          </p>
+          <div className="demo">
+            <ul>
+              <li>
+                <span className="ck">—</span>
+                <span>
+                  <b>Overzicht als startpunt</b>: lopende dossiers, agenda en
+                  openstaande punten in één beeld.
+                </span>
+              </li>
+              <li>
+                <span className="ck">—</span>
+                <span>
+                  <b>AI-assistent binnen uw context</b>: samenvattingen,
+                  aandachtspunten en kritische vragen, met verwijzing naar de
+                  bron.
+                </span>
+              </li>
+              <li>
+                <span className="ck">—</span>
+                <span>
+                  <b>Vergadering en besluit</b>: voorbereiding, afweging en
+                  vastlegging in hetzelfde dossier.
+                </span>
+              </li>
+              <li>
+                <span className="ck">—</span>
+                <span>
+                  <b>Elke stap navolgbaar</b>: wie besloot wat, op welke gronden
+                  en met welke bronnen.
+                </span>
+              </li>
+            </ul>
+            <DemoVideo />
+          </div>
+          <p className="link-row">
+            <a href="/product" className="textlink">
+              Bekijk hoe het werkt →
+            </a>
+          </p>
+        </div>
+      </section>
+
       {/* GOVERNANCE-TEASER */}
       <section>
         <div className="wrap">
@@ -296,21 +319,8 @@ export default function HomePage() {
             The Paradox onderzoekt en adviseert over betere besluitvorming in een
             wereld waarin menselijk oordeel en AI steeds meer samenkomen.
             Bestuurdersportaal vertaalt dat gedachtegoed naar een concrete
-            digitale werkomgeving voor de dagelijkse bestuurspraktijk. The Paradox
-            levert het denkkader; Bestuurdersportaal maakt het toepasbaar.
+            digitale werkomgeving voor de dagelijkse bestuurspraktijk.
           </p>
-          <div className="bridge">
-            <div className="col">
-              <div className="tag">Het denkkader</div>
-              <h3>The Paradox</h3>
-              <p>Strategisch onderzoek en advies over mens-AI-besluitvorming.</p>
-            </div>
-            <div className="col">
-              <div className="tag">De besluitpraktijk</div>
-              <h3>Bestuurdersportaal</h3>
-              <p>De omgeving waarin dat denken dagelijks toepasbaar wordt.</p>
-            </div>
-          </div>
           <p className="link-row">
             <a
               href="https://the-paradox.com"

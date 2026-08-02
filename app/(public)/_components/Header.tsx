@@ -20,12 +20,16 @@ export type NavKey =
   | "/over-ons"
   | null;
 
-const NAV: { href: string; label: string; extern?: boolean }[] = [
+// De nav bevat sinds besluit 0103 geen externe links meer: The Paradox is uit
+// de hoofdnavigatie gehaald ten gunste van "Over". De herkomst blijft zichtbaar
+// via de hero-regel op de homepage, de Over-pagina en de footer — daar staat de
+// externe link nog wél.
+const NAV: { href: string; label: string }[] = [
   { href: "/product", label: "Product" },
   { href: "/voor-wie", label: "Voor wie" },
   { href: "/sectoren", label: "Sectoren" },
   { href: "/governance-ai", label: "Governance & AI" },
-  { href: "https://the-paradox.com", label: "The Paradox", extern: true },
+  { href: "/over-ons", label: "Over" },
 ];
 
 export default function Header({
@@ -62,28 +66,16 @@ export default function Header({
             <span className="mark">B</span>Bestuurdersportaal
           </a>
           <nav className="links">
-            {NAV.map((item) =>
-              item.extern ? (
-                <a
-                  key={item.href}
-                  className="navitem"
-                  href={item.href}
-                  target="_blank"
-                  rel="noopener"
-                >
-                  {item.label}
-                </a>
-              ) : (
-                <a
-                  key={item.href}
-                  className="navitem"
-                  href={item.href}
-                  aria-current={actief === item.href ? "page" : undefined}
-                >
-                  {item.label}
-                </a>
-              )
-            )}
+            {NAV.map((item) => (
+              <a
+                key={item.href}
+                className="navitem"
+                href={item.href}
+                aria-current={actief === item.href ? "page" : undefined}
+              >
+                {item.label}
+              </a>
+            ))}
             <a href="/contact" className="btn btn-primary">
               Neem contact op
             </a>

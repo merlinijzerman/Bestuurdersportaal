@@ -1,0 +1,147 @@
+{
+  "_toelichting": "VARIANT B — tweede montage op basis van de review van Robert Timmer (01-08). Losstaand van promo-teksten.json: variant A is akkoord en moet reproduceerbaar blijven. Gelezen door maak-overlays-b.mjs en door montage.sh met PROMO_VARIANT=b PROMO_LAYOUT=verticaal.",
+  "_verhaallijn": "Verantwoordbaarheid opent, AI volgt. De eindclaim van variant A (goed voorbereid → zorgvuldig besloten → aantoonbaar verantwoord) is hier de ruggengraat: de drie woorden lopen als voortgangsspoor bovenin mee. Per scène één opbrengst, niet één functiebeschrijving.",
+  "_uitsnede": "GEEN uitsnede en GEEN markering (besluit 01-08 na het bekijken van de eerste variant-B render). De review vroeg om uitsnedes van 30-45% met een gouden contour op het bewijs-element; in beeld werd dat onrustig — het inzoomen sneed de interface aan en de gele kaders lazen als arcering in plaats van als aanwijzing. Alles staat nu op zoom 1.0, cx/cy 0.5, markering '-', en de push-in staat uit. Variant B onderscheidt zich dus door verhaallijn, kleur, voortgangsspoor en captionvlak — niet door de beeldbehandeling.",
+  "merk": {
+    "product": "Bestuurdersportaal",
+    "accent": "#C8A24B",
+    "accentLicht": "#D9BC77",
+    "accentZacht": "#E8D4A3",
+    "ink": "#0B1F3A",
+    "paper": "#EEF1F6",
+    "wit": "#FFFFFF",
+    "muted": "#8A97AA"
+  },
+  "voettekst": "Demonstratieomgeving met fictieve gegevens",
+  "cta": {
+    "knop": "Plan een live demo",
+    "url": "bestuurdersportaal.com"
+  },
+  "spoor": [
+    "Goed voorbereid",
+    "Zorgvuldig besloten",
+    "Aantoonbaar verantwoord"
+  ],
+  "scenes": [
+    {
+      "id": "01-hook",
+      "type": "kaart",
+      "duur": 4.0,
+      "kop": "Een besluit blijft staan.\nHet bestuur dat het nam, niet.",
+      "sub": "",
+      "_let_op": "Geen UI, geen stockbeeld. De enige structurele claim in de propositie die extern houdbaar is en die geen bestuur kan wegwuiven — hij vraagt geen instemming met een oordeel over de eigen besluitkwaliteit. Onderin een dunne gouden lijn die over de volle 3,5s vult."
+    },
+    {
+      "id": "02-omgeving",
+      "type": "opname",
+      "bron": "02-overzicht",
+      "duurDoel": 4.5,
+      "spoor": 0,
+      "kop": "Stukken, vergaderingen en besluiten op één plek.",
+      "sub": "Per fonds afgeschermd. Geen mailbox meer afzoeken naar de laatste versie.",
+      "_let_op": "Eén shot, ruim: de kijker moet hier nog gevoel voor de omgeving krijgen voordat we in de volgende scènes gaan inknijpen. Gouden contour om de fondsnaam in de kop — dat is het bewijs voor 'afgeschermd per fonds'.",
+      "fragmentenVerticaal": [
+        {
+          "van": 1.1,
+          "tot": 5.7,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5,
+          "markering": "-"
+        }
+      ]
+    },
+    {
+      "id": "03-ai",
+      "type": "opname",
+      "bron": "04-ai",
+      "duurDoel": 8,
+      "spoor": 0,
+      "kop": "Stelt de vragen die u in de vergadering wilt stellen.",
+      "sub": "Uitsluitend op basis van uw eigen fondsdocumenten.",
+      "_let_op": "De belangrijkste correctie uit de review. Variant A claimt 'kritische sparringpartner, geen zoekmachine' en toont vervolgens een samenvatting — dat is precies zoekmachinegedrag. Opname gemaakt met PROMO_AI_KEUZE=vragen, waardoor het antwoord alléén uit de drie kritische vragen bestaat en in één beeld past. Shot 1 = het keuzemoment (Kritische vragen aangevinkt), shot 2 = het antwoord met de bronregel.",
+      "fragmentenVerticaal": [
+        {
+          "van": 16.6,
+          "tot": 19.6,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5,
+          "markering": "-"
+        },
+        {
+          "van": 45.0,
+          "tot": 50.0,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5,
+          "markering": "-"
+        }
+      ]
+    },
+    {
+      "id": "04-vergadering",
+      "type": "opname",
+      "bron": "05-vergadering",
+      "duurDoel": 9,
+      "spoor": 1,
+      "kop": "Elk stuk vooraf samengevat — per agendapunt.",
+      "sub": "Voor het bestuursbureau: agenda, stukken en samenvattingen op één plek.",
+      "_let_op": "AANGEPAST T.O.V. DE REVIEW. Die stelde voor: 'Zes stukken, één briefing'. De demovergadering bevat één agendapunt en één stuk (tellerbalk: Agendapunten 1, Stukken 1, Met AI-samenvatting 1/1, Inbreng vooraf 0), en scène 4 zoomt juist op die balk in. Zes stukken beloven terwijl er één in beeld staat is precies de onverifieerbare claim die we willen vermijden. Wil je het cijfer wél, vul dan eerst de demovergadering. Shot 2 laat de disclaimer 'Automatisch gegenereerd door AI' bewust staan — die versterkt het vertrouwen.",
+      "fragmentenVerticaal": [
+        {
+          "van": 8.0,
+          "tot": 11.5,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5,
+          "markering": "-"
+        },
+        {
+          "van": 16.0,
+          "tot": 21.5,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5,
+          "markering": "-"
+        }
+      ]
+    },
+    {
+      "id": "05-verantwoord",
+      "type": "opname",
+      "bron": "06-proces",
+      "duurDoel": 6,
+      "spoor": 2,
+      "kop": "Het dossier is af op het moment van het besluit.",
+      "sub": "Aannames, alternatieven, risico's en dissent — vastgelegd en onwijzigbaar.",
+      "_let_op": "Twee shots in plaats van de drie uit de review: na de kop met het e-mailadres (6,83-7,33s) blijft er maar 6,0s bruikbaar materiaal over, en drie beats van 2s leest als haastwerk. Shot 1 = de actieve processtap met de vereisten voor stap-voltooien. Shot 2 = het dossierblok met Aannames, Risico's, Voorwaarden, Acties en Dissent, en daaronder het auditspoor. 'Dissent' en 'append-only' zijn de twee woorden waarop een sleutelfunctiehouder blijft hangen; in variant A stonden ze nooit leesbaar in beeld. Wil je het auditspoor als eigen shot met een gouden contour, dan moet 06-proces opnieuw met meer rusttijd onderaan.",
+      "fragmentenVerticaal": [
+        {
+          "van": 7.9,
+          "tot": 10.9,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5,
+          "markering": "-"
+        },
+        {
+          "van": 10.9,
+          "tot": 13.9,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5,
+          "markering": "-"
+        }
+      ]
+    },
+    {
+      "id": "06-slot",
+      "type": "slot",
+      "duur": 6.0,
+      "kop": "Goed voorbereid.\nZorgvuldig besloten.\nAantoonbaar verantwoord.",
+      "sub": "",
+      "_let_op": "6s in plaats van 7. De review rekende voor dat de eindkaart in variant A 17% van de video kostte voor informatie die in 4s staat; die tijd financiert de hook. De drie woorden komen één voor één op, elk met het gouden spoorblokje uit de video."
+    }
+  ]
+}

@@ -45,17 +45,28 @@ OPNAMES="$HIER/opnames"
 # van 1600×900, en de tekst staat bóven en ónder dat venster. Inzoomen gebeurt
 # dan met vaste niveaus (fragmentenKader in promo-teksten.json) in plaats van
 # met een uitsnede over het hele beeld.
+# ── Variant ────────────────────────────────────────────────────────────────
+# PROMO_VARIANT=b bouwt de tweede montage (review Timmer, 01-08): eigen
+# verhaallijn, eigen teksten, navy-en-goud kader, uitsnedes in plaats van hele
+# schermen. Alles krijgt een eigen map met achtervoegsel "-b" zodat variant A
+# ongemoeid blijft — die is akkoord bevonden en moet reproduceerbaar zijn.
+VARIANT="${PROMO_VARIANT:-a}"
+if [ "$VARIANT" = "a" ]; then SUF=""; else SUF="-$VARIANT"; fi
+
 LAYOUT="${PROMO_LAYOUT:-vol}"
 if [ "$LAYOUT" = "verticaal" ]; then
   # Staand 1080×1920, gebouwd uit een APARTE opname bij 1080×1200. Geen
   # uitsnede uit de brede opname: het portaal is responsive, dus bij een smal
   # venster herschikt het zichzelf en wordt er niets afgesneden.
-  OPNAMES="$HIER/opnames-9x16"
-  OVERLAYS="$HIER/overlays-9x16"
-  UIT="$HIER/uit-9x16"
-  WERK="$HIER/.werk-9x16"
+  OPNAMES="$HIER/opnames-9x16$SUF"
+  OVERLAYS="$HIER/overlays-9x16$SUF"
+  UIT="$HIER/uit-9x16$SUF"
+  WERK="$HIER/.werk-9x16$SUF"
   FRW=1080; FRH=1200; VX=0; VY=440
   DOEK_B=1080; DOEK_H=1920
+  # Variant B werkt met uitsnedes; een push-in bovenop een uitsnede snijdt nog
+  # eens extra weg. De trage 1,00 → 1,04 uit de review zit er wel in, maar
+  # bewust klein.
   PUSH="${PROMO_PUSH:-0}"
   # Twee soorten overgang, bewust verschillend:
   #
@@ -92,7 +103,8 @@ else
   FXF="${PROMO_FRAGMENT_OVERGANG:-0.25}"
   XF="${PROMO_OVERGANG:-0.30}"
 fi
-INK="0x12233B"
+if [ "$VARIANT" = "a" ]; then INK="0x12233B"; else INK="0x0B1F3A"; fi
+GOUD="0xC8A24B"
 MAX_VERSNELLING="${PROMO_MAX_VERSNELLING:-1.6}"
 
 FFMPEG="${FFMPEG:-ffmpeg}"
@@ -173,7 +185,12 @@ while IFS= read -r regel; do
   FRAGS=()
   fnr=0
   for ((k=4; k<${#v[@]}; k++)); do
-    IFS=':' read -r van tot zoom cx cy <<< "${v[$k]}"
+    # Zesde veld (optioneel, alleen variant B): de gouden markering rond het
+    # bewijs-element, als "x,y,breedte,hoogte" in UITVOERcoördinaten van het
+    # venster (FRW×FRH) — dus zoals je het op een frame afmeet, ná de uitsnede.
+    # Bewust niet in broncoördinaten: die moet je dan door de crop-berekening
+    # heen rekenen en dat is niet na te kijken op een still.
+    IFS=':' read -r van tot zoom cx cy mk <<< "${v[$k]}"
     # van/tot allebei 0 = hele opname gebruiken (nog niet gekalibreerd)
     if awk -v a="$van" -v b="$tot" 'BEGIN{exit !(a==0 && b==0)}'; then
       van=0; tot="$bronduur"
@@ -220,9 +237,21 @@ while IFS= read -r regel; do
       beweging=""
     fi
 
+    # Gouden markering. Twee kaders over elkaar (2px binnen, 2px buiten met een
+    # halve dekking) leest als één rustige contour in plaats van een harde
+    # rechthoek. Hij komt na een halve seconde op, zodat het oog eerst het
+    # beeld ziet en dán de aanwijzing — andersom voelt het als een pijl.
+    markering=""
+    if [ -n "${mk:-}" ] && [ "$mk" != "-" ]; then
+      IFS=',' read -r mx my mb mh <<< "$mk"
+      mstart="${PROMO_MARKERING_START:-0.55}"
+      markering=",drawbox=x=${mx}:y=${my}:w=${mb}:h=${mh}:color=${GOUD}@0.95:t=3:enable='gte(t\,${mstart})'"
+      markering="${markering},drawbox=x=$((mx-4)):y=$((my-4)):w=$((mb+8)):h=$((mh+8)):color=${GOUD}@0.30:t=2:enable='gte(t\,${mstart})'"
+    fi
+
     fragbestand="$WERK/$id-f$fnr.mp4"
     "$FFMPEG" -nostdin -y -loglevel error -i "$bron" -ss "$van" -t "$lengte" \
-      -vf "scale=${REF_B}:${REF_H}:flags=lanczos,crop=${cw}:${ch}:${cxp}:${cyp},scale=${FRW}:${FRH}:flags=lanczos,fps=30${beweging},\
+      -vf "scale=${REF_B}:${REF_H}:flags=lanczos,crop=${cw}:${ch}:${cxp}:${cyp},scale=${FRW}:${FRH}:flags=lanczos,fps=30${beweging}${markering},\
 format=yuv420p,setsar=1" \
       -an "${ENC[@]}" "$fragbestand"
     FRAGS+=("$fragbestand")

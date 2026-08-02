@@ -1,0 +1,195 @@
+{
+  "_toelichting": "VARIANT C — draaiboek v4 (Timmer/IJzerman, 01-08). Negen scenes, VO-gestuurd. Deze render is de SOUND-OFF versie (export B uit het draaiboek): volledige tweeregelige captions, geen stem, geen muziek. Los van variant A en B; gelezen door maak-overlays-c.mjs en montage.sh met PROMO_VARIANT=c.",
+  "_status": "SKELET. Scene 5 en 6 vragen opnames die nog niet bestaan (bestuurder typt eigen inbreng; teller Inbreng vooraf 0->1). Die staan nu gevuld met het dichtstbijzijnde bestaande materiaal, zodat de opbouw en het tempo te beoordelen zijn.",
+  "merk": {
+    "product": "Bestuurdersportaal",
+    "accent": "#C8A24B",
+    "ink": "#0B1F3A",
+    "paper": "#EEF1F6",
+    "wit": "#FFFFFF",
+    "muted": "#8A97AA"
+  },
+  "vertrouwensregel": "Governance Log actief · afgeschermd per fonds",
+  "voettekst": "Demonstratieomgeving met fictieve gegevens",
+  "cta": {
+    "knop": "Plan een live demo",
+    "url": "bestuurdersportaal.com"
+  },
+  "rail": [
+    "voorstel",
+    "vraag",
+    "tegenspraak",
+    "weging",
+    "vergadering",
+    "besluit",
+    "vastlegging"
+  ],
+  "scenes": [
+    {
+      "id": "01-opening",
+      "type": "kaart",
+      "duur": 5.5,
+      "rail": null,
+      "kop": "Waar beheerste AI en\nbesluitvorming elkaar versterken.",
+      "sub": "Bestuurdersportaal — van dossier tot besluit, in één beveiligde omgeving per fonds.",
+      "_let_op": "5,5s in plaats van 8: de eerste zin is na 4,2s klaar en daarna stond de kaart onnodig te wachten."
+    },
+    {
+      "id": "02-speelt",
+      "type": "opname",
+      "bron": "02-overzicht",
+      "duurDoel": 7.5,
+      "rail": 0,
+      "kop": "Uw fonds, uw stukken, uw processen — op één afgeschermde plek.",
+      "sub": "",
+      "fragmentenVerticaal": [
+        {
+          "van": 1.1,
+          "tot": 9.0,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5,
+          "markering": "-"
+        }
+      ]
+    },
+    {
+      "id": "03-opdracht",
+      "type": "opname",
+      "bron": "04-ai",
+      "duurDoel": 8.6,
+      "rail": 1,
+      "kop": "Een kritische sparringpartner, geen zoekmachine.",
+      "sub": "U kiest niet alleen een samenvatting — u kiest tegenspraak.",
+      "fragmentenVerticaal": [
+        {
+          "van": 12.4,
+          "tot": 21.4,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5,
+          "markering": "-"
+        }
+      ]
+    },
+    {
+      "id": "04-tegenspraak",
+      "type": "opname",
+      "bron": "04-ai",
+      "duurDoel": 9.0,
+      "rail": 2,
+      "kop": "Kritische vragen die het voorstel oproept, maar niet beantwoordt.",
+      "sub": "Elke vraag herleidbaar naar uw eigen fondsdocumenten.",
+      "_herijkt": "02-08: tot 53,5 -> 52,7. De opname 04-ai.webm duurt 52,76s, dus 53,5 viel erbuiten. montage.sh knipte dat stilzwijgend bij met de melding 'valt buiten de opname' en de scene werd 8,66s in plaats van de beoogde 9,0s. Dat verschil van 0,3s liep door de hele rest van de film en verklaarde het grootste deel van de scheefstand bij de overgang rond 51s. duurDoel blijft 9,0: de scene haalt dat niet meer, maar hij wordt daardoor niet versneld (8,66/9,0 ligt onder de drempel van 1,03) en de waarde documenteert nog wat de bedoeling was.",
+      "fragmentenVerticaal": [
+        {
+          "van": 44.0,
+          "tot": 52.7,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5,
+          "markering": "-"
+        }
+      ]
+    },
+    {
+      "id": "05-weegt",
+      "type": "opname",
+      "bron": "05-vergadering",
+      "duurDoel": 7.5,
+      "rail": 3,
+      "kop": "De AI-assistent levert input, geen mening.",
+      "sub": "U formuleert uw eigen inbreng.",
+      "fragmentenVerticaal": [
+        {
+          "van": 10.5,
+          "tot": 18.0,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5,
+          "markering": "-"
+        }
+      ],
+      "_let_op": "Het uitgeklapte agendapunt met MIJN AANTEKENINGEN en INBRENG VOORAF in beeld. Fragment liep eerst 10,8-18,8 en overlapte daarmee scene 6 (8-11,5 en 16-21): twee scenes toonden hetzelfde beeld. Nu strikt gescheiden — deze scene pakt 10,5-18,0, scene 6 pakt 6,6-9,6 en 19,6-24,6. PLAATSHOUDER blijft: de bestuurder typt hier nog niets.",
+      "_woordkeuze": "01-08: materiaal -> input op verzoek. LET OP: de ingesproken stem (stem-c5.mp3) zegt hier nog materiaal. Caption en VO spreken elkaar dus niet tegen qua betekenis, maar zijn niet woordelijk gelijk; §2 van het draaiboek vraagt dat wel. Bij een nieuwe VO-opname regel 5 meenemen."
+    },
+    {
+      "id": "06-vergadering",
+      "type": "opname",
+      "bron": "05-vergadering",
+      "duurDoel": 8.0,
+      "rail": 4,
+      "kop": "Elk stuk vooraf samengevat, inbreng direct zichtbaar.",
+      "sub": "Het bestuursbureau zet dit in één handeling klaar.",
+      "fragmentenVerticaal": [
+        {
+          "van": 6.6,
+          "tot": 9.6,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5,
+          "markering": "-"
+        },
+        {
+          "van": 19.6,
+          "tot": 24.6,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5,
+          "markering": "-"
+        }
+      ],
+      "_let_op": "Shot 1 = de vergaderpagina met de tellerbalk (Agendapunten, Stukken, Met AI-samenvatting, Inbreng vooraf). Shot 2 = de opengeklapte AI-samenvatting. Beide bewust buiten het venster van scene 5, zodat er geen beeld dubbel voorkomt."
+    },
+    {
+      "id": "07-vastlegging",
+      "type": "opname",
+      "bron": "06-proces",
+      "duurDoel": 9.1,
+      "rail": 5,
+      "kop": "Het besluit is van het bestuur. Governance is geen extra stap:",
+      "sub": "de onderbouwing legt zichzelf vast.",
+      "fragmentenVerticaal": [
+        {
+          "van": 7.45,
+          "tot": 13.6,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5,
+          "markering": "-"
+        },
+        {
+          "van": 10.5,
+          "tot": 13.6,
+          "zoom": 1.0,
+          "cx": 0.5,
+          "cy": 0.5,
+          "markering": "-"
+        }
+      ],
+      "_let_op": "Twee fragmenten waarvan het tweede de stilstaande staart herhaalt. 06-proces duurt 13,68s en na de kop met het e-mailadres blijft er 6,1s over — te kort, de overgang naar het eindscherm kwam te snel. De pagina staat stil, dus die seconden overlezen leest als een hold en niet als een hapering. Structureel is de oplossing 06-proces opnieuw opnemen met meer rusttijd onderaan.",
+      "_herijkt": "02-08, in twee stappen en NU GEMETEN AAN DE EINDMONTAGE, niet berekend. Aanleiding: zin 7 van de VO loopt tot 51,02s, terwijl de overvloeier naar de beloftekaart al op 49,65s begon — de laatste 1,3s van de zin over vastlegging klonk over die kaart. Stap 1 was de hold van 1,1s naar 2,6s. Stap 2 bleek nodig omdat de NOMINALE fragmenttijden in dit bestand niet overeenkomen met de werkelijke opnames: ffmpeg knipt op hele frames en 04-ai.webm duurt maar 52,76s, waardoor de film 0,50s voorliep op de berekening. Daarom nu een hold van 3,1s (fragment 2 begint op 10,5) en duurDoel 9,1 — de scene komt uit op 9,06s en draait op x1,000, dus er wordt niet versneld. Gemeten in de uitvoer: de overvloeier 07->08 begint op 50,93s en zin 7 eindigt op 51,02s, een overlap van 0,09s tegen 1,3s eerder. Dat restje ligt binnen de onzekerheid van de -45 dB stiltedrempel waarmee het zinseinde is bepaald en is niet nog een render waard. Onderbouwing bronmateriaal: freezedetect op 06-proces.webm meldt freeze_start 10,28s zonder freeze_end, en frames uit dat venster wijken onderling maximaal 47 dB PSNR af — ruis, geen beweging, dus de hold kan niet als hapering lezen. Keerzijde die je moet weten: van de 9,06s van deze scene staat 6,3s volledig stil. Dat is de prijs van monteren om een te korte opname heen; de structurele oplossing blijft 06-proces opnieuw opnemen."
+    },
+    {
+      "id": "08-belofte",
+      "type": "belofte",
+      "duur": 5.5,
+      "rail": 6,
+      "kop": "Goed voorbereid.\nZorgvuldig besloten.\nAantoonbaar verantwoord.",
+      "sub": "",
+      "_herijkt": "02-08: eerst 5,5 -> 4,0 en daarna terug naar 5,5. Tussenstap bewust vastgelegd omdat de reden ertoe doet. Scene 7 kreeg 1,5s bij; de voice-over is een vooraf geplaatste wav met absolute tijden en schuift niet mee, dus zonder compensatie zou zin 9 (de CTA-zin) 2,7s voor de eindkaart uit gaan lopen. Die 1,5s eerst uit deze kaart halen loste dat op maar maakte de beloftekaart gehaast, en juist hier moet de kijker landen. Definitieve oplossing: de kaart blijft 5,5s en zin 8 en 9 zijn in de stem zelf 1,5s opgeschoven (stem-c-def-v2.wav). LET OP - DEZE WAARDE IS GEKOPPELD AAN DE STEM: 5,5 hoort bij stem-c-def-v2.wav. Bouw je met de oude stem-c-def.wav, zet deze duur dan terug op 4,0, anders loopt de CTA-zin voor de eindkaart uit."
+    },
+    {
+      "id": "09-cta",
+      "type": "slot",
+      "duur": 8.3,
+      "rail": null,
+      "kop": "Ervaar het Bestuurdersportaal.",
+      "sub": ""
+    }
+  ],
+  "_captions": "Definitieve VO-tekst van 01-08, letterlijk overgenomen als captions. Twee wijzigingen t.o.v. draaiboek v4 die je moet weten: scène 2 verloor de tweede zin ('Er ligt een voorstel. Over twintig dagen stemt u erover.') en heeft nu één regel in plaats van twee — daarmee vervalt ook de tijdsdruk die de rest van het verhaal opzette. En scène 5 is 'U weegt, u schrapt, u formuleert uw eigen inbreng' geworden tot alleen 'U formuleert uw eigen inbreng'; het schrappen was juist het detail dat de opname van scène 5 moet laten zien.",
+  "_timing": "Scèneduren afgeleid van de ingesproken versie van 18:09 (63,5s, 8 pauzes van 1,7s+). Elke scène = zijn zin plus ruim een seconde lucht. Scène 7 is de enige die niet meegroeit: 06-proces duurt 13,6s en na de kop met het e-mailadres blijft er 6,1s over. Die zin is daarom ingekort.",
+  "_stem": "DEZE TIJDEN HOREN BIJ stem-c-def-v2.wav (64,49s), NIET bij stem-c-def.wav (63,00s). Bouwen met de verkeerde stem levert een film op die er goed uitziet maar waarin de laatste twee zinnen anderhalve seconde te vroeg vallen. Onderstaande tijden zijn GEMETEN aan de eindmontage van 02-08 (promo-9x16-c, 64,27s), niet berekend — de berekening liep 0,15 a 0,20s voor omdat ffmpeg op hele frames knipt. Werkelijke scèneduren uit montage.sh: 5,50 | 7,50 | 8,60 | 8,66 | 7,46 | 7,83 | 9,06 | 5,50 | 8,30, met 0,50s overvloeier tussen elk paar. Gemeten spraakblokken in de MP4: zin 7 43,52-51,02 | zin 8 53,13-54,27 | zin 9 55,17-60,85. Gemeten overvloeier 07->08: begint 50,93s, midden 51,17s, eindigt 51,40s. Zin 7 loopt daar 0,09s overheen; zin 8 valt volledig binnen de beloftekaart; zin 9 begint 0,98s voor de eindkaart en eindigt 3,4s voor het einde van de film. Herbouw van v2 uit v1: knip op 51,300s (midden in de natuurlijke pauze tussen zin 7 en 8) en voeg 1,500s ruimtetoon in, met gelijk-vermogen overvloeiers van 10ms aan beide lassen. Vulmateriaal uit dezelfde doorlopende opname (51,05-51,55s, 52,80-53,65s en die eerste omgekeerd) — GEEN digitale stilte, want dan valt de ruisvloer van -65 dB anderhalve seconde weg en dat hoor je op een koptelefoon als een gat. Let op bij het knippen: de pauzes tussen zin 7, 8 en 9 zijn ruimtetoon (-65 dB), niet digitale stilte (-91 dB) zoals de andere lassen — die drie zinnen zijn ooit als EEN doorlopend blok geplaatst.",
+  "_kaarten": "01-08: begin- en eindtekst teruggezet op de formulering van variant A, opmaak blijft die van C (navy 0B1F3A, goud, zelfde typografie en marges). De eindkaart krijgt weer de gevulde CTA-knop uit A. LET OP: de ingesproken regels 1 en 9 zeggen nog 'Het besluit is van u...' en 'Zie wat het doet met uw eigen dossiers...'. Beeld en stem herhalen elkaar daar dus niet meer maar vullen elkaar aan — dat is precies wat §2 van het draaiboek voor de VO-versie wil, dus bewust zo gelaten."
+}

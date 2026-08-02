@@ -8,15 +8,16 @@
  *   - :is(.bp-home, .bp-page)    : herbruikbare marketingcomponenten, gedeeld door de
  *                                  homepage (.bp-home) en de subpagina's (.bp-page) —
  *                                  één bron van waarheid, geen duplicatie (besluit 0037).
- *   - .bp-home                   : homepage-eigen secties (hero, probcols, value, own, bridge).
+ *   - .bp-home                   : homepage-eigen secties (hero, probcols, value, own, demo).
  *   - .bp-page                   : subpagina-eigen (phero, crumb).
  *   - .bp-doc                    : tekstpagina's (privacy).
  *   - .bp-contact                : contactpagina (formulier).
  *  --serif/--sans worden gevoed door next/font (var(--font-serif/-sans)).
  *
- *  Responsiveness (Bouwoverdracht §2, twee breakpoints):
+ *  Responsiveness (Bouwoverdracht §2):
  *   - >920px      : volledige desktoplayout.
  *   - 641–920px   : meerkoloms-grids → 2 kolommen; desktopnav → hamburger.
+ *   - ≤880px      : telefoonkader (.demo) en oprichtersblok → 1 kolom.
  *   - ≤640px      : 1 kolom; .cmp-vergelijking → gestapelde kaarten met ::before-labels.
  * ========================================================================== */
 
@@ -29,6 +30,19 @@
   --card: #FBFAF5;
   --err: #B23A48;
   --ok: #2E7D5B;
+
+  /* Vaste tokens voor de vergrote videoweergave. Staan bewust buiten de
+   * themawissel: de overlay is in licht én donker dezelfde donkere scrim, en
+   * --video-bg is de letterbox achter een 9:16-video in een breder kader. */
+  --scrim: rgba(9, 12, 16, 0.92);
+  --scrim-vlak: #1D2530;
+  --scrim-vlak-hover: #27313E;
+  --scrim-lijn: #2F3946;
+  --scrim-ink: #E7E5DE;
+  --scrim-muted: #8E97A3;
+  --video-bg: #0E1A2B;
+  --schaduw: rgba(0, 0, 0, 0.10);
+
   --serif: var(--font-serif), Georgia, serif;
   --sans: var(--font-sans), -apple-system, "Segoe UI", Roboto, sans-serif;
 
@@ -614,18 +628,6 @@
 :is(.bp-home, .bp-page) .cmp tbody tr:last-child td {
   border-bottom: none;
 }
-:is(.bp-home, .bp-page) .cmp tr.spec th {
-  color: var(--accent);
-}
-:is(.bp-home, .bp-page) .cmp tr.spec {
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-}
-:is(.bp-home, .bp-page) .cmp-note {
-  margin-top: 22px;
-  font-size: 15px;
-  color: var(--muted);
-  max-width: 74ch;
-}
 
 /* ============================================================================
  *  Homepage-eigen secties (.bp-home)
@@ -762,48 +764,131 @@
   color: var(--accent);
 }
 
-/* bridge (The Paradox) */
-.bp-home .bridge {
+/* demo (promovideo — "Zie het in actie"). Zelfde tweekolomsopzet als .own:
+ * bullets links, telefoonkader rechts. Het kader krijgt een vaste aspect-ratio
+ * zodat de ruimte al gereserveerd is voordat de poster geladen is (geen CLS). */
+.bp-home .demo {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  margin-top: 34px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  overflow: hidden;
-}
-.bp-home .bridge .col {
-  padding: 30px;
-}
-.bp-home .bridge .col:first-child {
-  border-right: 1px solid var(--line);
-  background: var(--card);
-}
-.bp-home .bridge .tag {
-  font-size: 11px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 12px;
-}
-.bp-home .bridge h3 {
-  font-size: 20px;
-  margin-bottom: 8px;
-}
-.bp-home .bridge p {
-  font-size: 15px;
-  color: var(--muted);
-}
-.bp-home .bridge-quote {
-  font-family: var(--serif);
-  font-size: 22px;
-  line-height: 1.4;
-  max-width: 48ch;
+  grid-template-columns: 1.05fr 0.95fr;
+  gap: 48px;
+  align-items: start;
   margin-top: 30px;
 }
-
-/* distinct kop-accent */
-.bp-home .distinct h2 span {
+.bp-home .demo ul {
+  list-style: none;
+}
+.bp-home .demo li {
+  padding: 16px 0;
+  border-top: 1px solid var(--line);
+  font-size: 15px;
+  display: flex;
+  gap: 12px;
+}
+.bp-home .demo li:first-child {
+  border-top: none;
+}
+.bp-home .demo li .ck {
+  color: var(--accent);
+}
+.bp-home .demo .phone {
+  justify-self: center;
+  width: 100%;
+  max-width: 320px;
+}
+.bp-home .demo .phone video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 9 / 16;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--video-bg);
+  box-shadow: 0 18px 40px var(--schaduw);
+}
+.bp-home .demo .phone figcaption {
+  margin-top: 12px;
+  font-size: 12px;
   color: var(--muted);
+  text-align: center;
+  letter-spacing: 0.02em;
+}
+.bp-home .demo .vergroot {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 12px auto 0;
+  width: 100%;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.bp-home .demo .vergroot:hover {
+  opacity: 0.78;
+}
+.bp-home .demo .transcriptie {
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.bp-home .demo .transcriptie summary {
+  cursor: pointer;
+  color: var(--accent);
+  text-underline-offset: 3px;
+}
+.bp-home .demo .transcriptie p {
+  margin-top: 10px;
+  line-height: 1.55;
+}
+
+/* Vergrote weergave. Bewust in beide thema's dezelfde donkere scrim — een
+ * lichte overlay om een donkere video heen leest als een lichtlek. */
+.bp-home .video-licht {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--scrim);
+  padding: 24px;
+}
+.bp-home .video-licht video {
+  height: min(92vh, 1400px);
+  width: auto;
+  max-width: 96vw;
+  aspect-ratio: 9 / 16;
+  border-radius: 10px;
+  background: var(--video-bg);
+}
+.bp-home .video-licht .sluit {
+  position: absolute;
+  top: 16px;
+  right: 20px;
+  background: var(--scrim-vlak);
+  color: var(--scrim-ink);
+  border: 1px solid var(--scrim-lijn);
+  border-radius: 4px;
+  font: 500 13px/1 var(--sans);
+  padding: 9px 13px;
+  cursor: pointer;
+}
+.bp-home .video-licht .sluit:hover {
+  background: var(--scrim-vlak-hover);
+}
+.bp-home .video-licht .rand {
+  position: absolute;
+  bottom: 18px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  color: var(--scrim-muted);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 /* ============================================================================
@@ -895,6 +980,84 @@
   color: var(--accent);
 }
 
+/* oprichters — tweekolomsblok naar het model van .duo. Het portret is een vast
+ * kader van 96×120 px; nu gevuld met initialen, later met een <img> zonder dat
+ * de layout hoeft te wijzigen. */
+.bp-page .oprichters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin-top: 32px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.bp-page .oprichters .p {
+  padding: 30px;
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 22px;
+  align-items: start;
+}
+.bp-page .oprichters .p:first-child {
+  border-right: 1px solid var(--line);
+  background: var(--card);
+}
+.bp-page .oprichters .portret {
+  width: 96px;
+  height: 120px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--paper);
+  display: grid;
+  place-items: center;
+  text-align: center;
+  font-family: var(--serif);
+  font-size: 26px;
+  color: var(--muted);
+}
+.bp-page .oprichters .portret img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 3px;
+}
+.bp-page .oprichters .rol {
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+.bp-page .oprichters h3 {
+  font-size: 20px;
+  margin-bottom: 10px;
+}
+.bp-page .oprichters p {
+  font-size: 15px;
+  color: var(--muted);
+}
+.bp-page .rolverdeling {
+  margin-top: 22px;
+  font-size: 15px;
+  color: var(--muted);
+  max-width: 68ch;
+}
+
+/* visie — één kernuitspraak in serif, met een kleinere toelichting eronder */
+.bp-page .visie {
+  font-family: var(--serif);
+  font-size: clamp(22px, 2.6vw, 30px);
+  line-height: 1.35;
+  max-width: 30ch;
+  margin-top: 8px;
+}
+.bp-page .visie-bron {
+  margin-top: 20px;
+  font-size: 14px;
+  color: var(--muted);
+  max-width: 62ch;
+}
+
 /* ============================================================================
  *  Responsiveness — twee breakpoints (Bouwoverdracht §2).
  * ========================================================================== */
@@ -920,15 +1083,34 @@
   :is(.bp-home, .bp-page) .duo,
   .bp-home .value,
   .bp-home .own,
-  .bp-home .bridge,
   .bp-home .probcols {
     grid-template-columns: 1fr;
   }
   .bp-home .own li:first-child {
     border-top: 1px solid var(--line);
   }
-  :is(.bp-home, .bp-page) .duo .col:first-child,
-  .bp-home .bridge .col:first-child {
+  :is(.bp-home, .bp-page) .duo .col:first-child {
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+  }
+}
+
+/* Tussenstap op 880px: het telefoonkader en het oprichtersblok hebben eerder
+ * ruimte tekort dan de overige tweekolomsblokken. */
+@media (max-width: 880px) {
+  .bp-home .demo {
+    grid-template-columns: 1fr;
+  }
+  .bp-home .demo .phone {
+    max-width: 300px;
+  }
+  .bp-home .demo li:first-child {
+    border-top: 1px solid var(--line);
+  }
+  .bp-page .oprichters {
+    grid-template-columns: 1fr;
+  }
+  .bp-page .oprichters .p:first-child {
     border-right: none;
     border-bottom: 1px solid var(--line);
   }

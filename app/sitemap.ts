@@ -64,10 +64,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.7,
     },
     {
+      // Sinds besluit 0103 een hoofdnavigatie-item ("Over") met eigen inhoud
+      // (oprichters, werkprincipes, visie) — daarom hoger dan de 0.5/yearly
+      // die paste bij een colofon-achtige pagina.
       url: `${origin}/over-ons`,
       lastModified: nu,
-      changeFrequency: "yearly",
-      priority: 0.5,
+      changeFrequency: "monthly",
+      priority: 0.7,
     },
     {
       url: `${origin}/contact`,
