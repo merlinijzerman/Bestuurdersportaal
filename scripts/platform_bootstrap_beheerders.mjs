@@ -1,0 +1,151 @@
+// ============================================================================
+//  scripts/platform_bootstrap_beheerders.mjs
+//  Stap 1 van de bootstrap: de twee auth-accounts aanmaken via de Supabase
+//  Admin API. Vervangt Deel 1 (route A/B) van
+//  scripts/platform_bootstrap_beheerders.sql. Daarna nog steeds Deel 2 t/m 6 van
+//  dat SQL-script draaien (identiteit + capabilities + audit + verificatie).
+//
+//  WAAROM DIT SCRIPT: de metadata-vlag {"platform": true} MOET meegegeven worden
+//  bij het aanmaken. De trigger bij_registratie → maak_profiel() maakt anders een
+//  tenant-profiel aan, of faalt fail-closed op een ontbrekende fonds_id — en dan
+//  komt het account er helemaal niet.
+//
+//  VEREIST in mvp/.env.local (of in de omgeving):
+//    NEXT_PUBLIC_SUPABASE_URL=...
+//    SUPABASE_SERVICE_ROLE_KEY=...   (Supabase → Project Settings → API)
+//
+//  ⚠️ WIJST .env.local NAAR PRODUCTIE? Deze accounts moeten in het project staan
+//     dat achter beheer.bestuurdersportaal.com hangt. Controleer de URL die het
+//     script afdrukt vóór je bevestigt.
+//
+//  GEBRUIK (vanuit map mvp/):
+//    node scripts/platform_bootstrap_beheerders.mjs            # droogloop
+//    node scripts/platform_bootstrap_beheerders.mjs --uitvoeren # daadwerkelijk
+// ============================================================================
+
+import { createClient } from "@supabase/supabase-js";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
+function laadEnvLocal() {
+  try {
+    const hier = dirname(fileURLToPath(import.meta.url));
+    const inhoud = readFileSync(join(hier, "..", ".env.local"), "utf8");
+    for (const regel of inhoud.split("\n")) {
+      const m = regel.match(/^\s*([A-Z0-9_]+)\s*=\s*(.+?)\s*$/);
+      if (m && !process.env[m[1]]) {
+        process.env[m[1]] = m[2].replace(/^["']|["']$/g, "");
+      }
+    }
+  } catch {
+    /* geen .env.local — dan uit de omgeving */
+  }
+}
+laadEnvLocal();
+
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!SUPABASE_URL || !SERVICE_KEY) {
+  console.error(
+    "Ontbrekende env: NEXT_PUBLIC_SUPABASE_URL en/of SUPABASE_SERVICE_ROLE_KEY."
+  );
+  process.exit(1);
+}
+
+// Startwachtwoord — bewust tijdelijk. Laat beide beheerders dit direct wijzigen.
+const START_WACHTWOORD = "Welkom01";
+
+const BEHEERDERS = [
+  { email: "merlin.ijzerman@the-paradox.com", naam: "Merlin IJzerman" },
+  { email: "robert.timmer@the-paradox.com", naam: "Robert Timmer" },
+];
+
+const UITVOEREN = process.argv.includes("--uitvoeren");
+
+const supabase = createClient(SUPABASE_URL, SERVICE_KEY, {
+  auth: { autoRefreshToken: false, persistSession: false },
+});
+
+/** Zoekt een bestaand auth-account op e-mailadres (paginerend). */
+async function zoekGebruiker(email) {
+  for (let pagina = 1; pagina <= 20; pagina++) {
+    const { data, error } = await supabase.auth.admin.listUsers({
+      page: pagina,
+      perPage: 200,
+    });
+    if (error) throw error;
+    const treffer = data.users.find(
+      (u) => (u.email ?? "").toLowerCase() === email.toLowerCase()
+    );
+    if (treffer) return treffer;
+    if (data.users.length < 200) return null;
+  }
+  return null;
+}
+
+async function main() {
+  console.log(`Project : ${SUPABASE_URL}`);
+  console.log(`Modus   : ${UITVOEREN ? "UITVOEREN" : "droogloop (geen wijzigingen)"}`);
+  console.log("");
+
+  for (const b of BEHEERDERS) {
+    const bestaand = await zoekGebruiker(b.email);
+
+    if (bestaand) {
+      const isPlatform = bestaand.user_metadata?.platform === true;
+      console.log(
+        `• ${b.email} — bestaat al (id ${bestaand.id}), platform-vlag: ${isPlatform}`
+      );
+      if (!isPlatform) {
+        console.log(
+          "  ⚠️ metadata mist {\"platform\": true}. Dit account is waarschijnlijk " +
+            "een tenant-account met profielen-rij; de 3b-guard weigert het dan.\n" +
+            "  → zet de vlag en verwijder de profielen-rij (Deel 1/B3 in de SQL)."
+        );
+        if (UITVOEREN) {
+          const { error } = await supabase.auth.admin.updateUserById(bestaand.id, {
+            user_metadata: { ...bestaand.user_metadata, platform: true, naam: b.naam },
+          });
+          if (error) console.log(`  ✗ metadata bijwerken mislukt: ${error.message}`);
+          else console.log("  ✓ metadata bijgewerkt (platform: true)");
+        }
+      }
+      continue;
+    }
+
+    if (!UITVOEREN) {
+      console.log(`• ${b.email} — zou worden aangemaakt (platform: true, auto-confirm)`);
+      continue;
+    }
+
+    const { data, error } = await supabase.auth.admin.createUser({
+      email: b.email,
+      password: START_WACHTWOORD,
+      email_confirm: true, // geen mailbevestiging nodig
+      user_metadata: { platform: true, naam: b.naam },
+    });
+
+    if (error) {
+      console.log(`• ${b.email} — ✗ mislukt: ${error.message}`);
+      console.log(
+        "  Tip: 'geen fonds_id in user-metadata' betekent dat de platform-vlag " +
+          "niet is meegekomen (maak_profiel is fail-closed)."
+      );
+      continue;
+    }
+    console.log(`• ${b.email} — ✓ aangemaakt (id ${data.user.id})`);
+  }
+
+  console.log("");
+  console.log("Volgende stap: draai Deel 2 t/m 6 van");
+  console.log("scripts/platform_bootstrap_beheerders.sql in de Supabase SQL-editor.");
+  console.log("Daarna inloggen op https://beheer.bestuurdersportaal.com/login");
+  console.log("(wachtwoord → TOTP-enrollment → back-office).");
+}
+
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

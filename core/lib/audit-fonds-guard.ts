@@ -67,18 +67,42 @@ export function controleerChatAuditFondsbron(bron: string): string[] {
     );
   }
 
-  // T8: de governance_log-insert gebruikt de server-side fondsId.
-  const idx = code.indexOf('.from("governance_log").insert(');
-  if (idx === -1) {
-    fouten.push("T8-REGRESSIE: governance_log-insert niet gevonden in de route.");
-  } else {
-    const blok = code.slice(idx, idx + 400);
-    if (!/fonds_id:\s*fondsId\b/.test(blok)) {
-      fouten.push(
-        "T8-REGRESSIE: de governance_log-insert gebruikt niet langer " +
-          "`fonds_id: fondsId` (de server-side afgeleide waarde)."
-      );
-    }
+  // T8: het auditspoor wordt uitsluitend via de definer-RPC geschreven.
+  //
+  // Vóór plateau A stond hier een inspectie van `.from("governance_log")
+  // .insert(` op `fonds_id: fondsId`. Die controle had twee zwakke plekken: zij
+  // keek alleen naar de EERSTE van de twee inserts in de route (de tweede, ná
+  // de stream, was ongedekt), en zij kon per definitie alleen bewaken wat er in
+  // dít bestand stond. Sinds plateau A leidt `schrijf_ai_interactie()` het fonds
+  // en de gebruiker server-side af uit `auth.uid()`; fonds_id is daar geen
+  // parameter meer. Het invariant is daarmee structureel geborgd in plaats van
+  // per aanroeppunt bewaakt — en deze guard bewaakt dat die borging blijft staan.
+  const rpcAanroepen = code.match(/\.rpc\(\s*["']schrijf_ai_interactie["']/g) ?? [];
+  if (rpcAanroepen.length === 0) {
+    fouten.push(
+      "T8-REGRESSIE: geen aanroep van `schrijf_ai_interactie` gevonden in de " +
+        "route — schrijft het auditspoor weer langs een ander pad?"
+    );
+  }
+
+  // Geen enkele directe insert in het auditspoor meer, op geen van beide takken.
+  if (/\.from\(\s*["']governance_log["']\s*\)\s*\.insert\(/.test(code)) {
+    fouten.push(
+      "T8-REGRESSIE: app/api/chat/route.ts doet een DIRECTE insert in " +
+        "governance_log. Het auditspoor loopt sinds plateau A uitsluitend via " +
+        "`schrijf_ai_interactie()`, dat fonds_id en gebruiker_naam server-side " +
+        "afleidt; een directe insert omzeilt die borging."
+    );
+  }
+
+  // En evenmin een directe insert in de inhoudstabel: die hoort in dezelfde
+  // transactie als de spoorregel te ontstaan, anders kan inhoud zonder spoor
+  // (of andersom) achterblijven.
+  if (/\.from\(\s*["']governance_log_inhoud["']\s*\)\s*\.insert\(/.test(code)) {
+    fouten.push(
+      "T8-REGRESSIE: directe insert in governance_log_inhoud — spoor en inhoud " +
+        "moeten in één transactie via `schrijf_ai_interactie()`."
+    );
   }
 
   return fouten;

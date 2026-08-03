@@ -201,8 +201,13 @@ values
   ('55555555-5555-5555-5555-555555555555', 'attempt',
    'platform.observability.read', 'p5.check.seed', null);
 
-insert into public.governance_log (fonds_id, vraag, antwoord, modus)
-values ('44444444-4444-4444-4444-444444444444', 'P5 check', 'P5 check', 'documenten');
+-- Sinds plateau A (2026-08-04) draagt governance_log geen vraag/antwoord meer;
+-- die staan in governance_log_inhoud. De seed gebruikt daarom een vast id en
+-- `model` als herkenbare markering. Wat hier wordt getoetst — de append-only
+-- triggers — is kolomonafhankelijk en dus ongewijzigd.
+insert into public.governance_log (id, fonds_id, modus, model)
+values ('66666666-6666-6666-6666-666666666666',
+        '44444444-4444-4444-4444-444444444444', 'documenten', 'P5 check');
 
 do $$
 declare
@@ -237,7 +242,8 @@ begin
   -- aanraakt (twee extra sleutels in retrieval_meta), dus de belangrijkste.
   gelukt := false;
   begin
-    update public.governance_log set antwoord = 'gewijzigd' where vraag = 'P5 check';
+    update public.governance_log set modus = 'algemeen'
+     where id = '66666666-6666-6666-6666-666666666666';
     gelukt := true;
   exception when others then null;
   end;
@@ -248,7 +254,8 @@ begin
   -- governance_log — DELETE
   gelukt := false;
   begin
-    delete from public.governance_log where vraag = 'P5 check';
+    delete from public.governance_log
+     where id = '66666666-6666-6666-6666-666666666666';
     gelukt := true;
   exception when others then null;
   end;

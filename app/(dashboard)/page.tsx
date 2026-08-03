@@ -66,8 +66,20 @@ function fmtMln(mln: number) {
 
 interface LogItem {
   id: string;
-  vraag: string;
   aangemaakt: string;
+  // Plateau A — de vraagtekst komt uit de gekoppelde inhoudsrij. PostgREST
+  // levert een embedded relatie als object of (bij sommige vormen) als array;
+  // beide worden hieronder afgehandeld. `null` = de gebruiker heeft het gesprek
+  // verwijderd; die regel tonen we niet.
+  governance_log_inhoud?: { vraag: string } | { vraag: string }[] | null;
+}
+
+/** Haalt de vraagtekst uit de embedde inhoudsrij; null als die is verwijderd. */
+function vraagUit(item: LogItem): string | null {
+  const rel = item.governance_log_inhoud;
+  if (!rel) return null;
+  const rij = Array.isArray(rel) ? rel[0] : rel;
+  return rij?.vraag ?? null;
 }
 
 interface DocItem {
@@ -141,9 +153,15 @@ export default async function HomePage() {
     { data: recenteDocs },
     { data: recenteNotificaties },
   ] = await Promise.all([
+    // Plateau A — de vraagtekst staat sinds de scheiding van spoor en inhoud in
+    // governance_log_inhoud, niet meer op governance_log. PostgREST kan hem
+    // embedden via de foreign key (log_id → governance_log.id). Het blijft één
+    // query, en de RLS op beide tabellen doet zijn werk: eigen regels, eigen
+    // inhoud. Is de inhoud verwijderd, dan is de relatie null — die rijen laten
+    // we hieronder weg in plaats van een lege regel te tonen.
     supabase
       .from("governance_log")
-      .select("id, vraag, aangemaakt")
+      .select("id, aangemaakt, governance_log_inhoud(vraag)")
       .eq("gebruiker_id", user.id)
       .order("aangemaakt", { ascending: false })
       .limit(3),
@@ -171,7 +189,11 @@ export default async function HomePage() {
       .limit(5),
   ]);
 
-  const vragen = (recenteVragen || []) as LogItem[];
+  // Verwijderde gesprekken laten een auditregel zonder inhoud achter; die hoort
+  // niet als lege rij in "recente vragen" te verschijnen.
+  const vragen = ((recenteVragen || []) as LogItem[])
+    .map((v) => ({ id: v.id, aangemaakt: v.aangemaakt, vraag: vraagUit(v) }))
+    .filter((v): v is { id: string; aangemaakt: string; vraag: string } => v.vraag !== null);
   const inbreng = (recenteInbreng || []) as InbrengItem[];
   const docs = (recenteDocs || []) as DocItem[];
   const notificaties = (recenteNotificaties || []) as NotifRow[];

@@ -30,6 +30,8 @@ import { bevatPersoonsgegevens } from "@/core/lib/pii-gate";
 import { bouwProfielsturing, type ProfielsturingAspecten } from "@/core/lib/profielsturing";
 import { bouwOrganisatieprofiel } from "@/core/lib/organisatieprofiel";
 import { SP_AGENDAPUNT_REGELS, bouwToelichtingBlok, herkomstString, type AgendapuntSeed } from "@/core/lib/agendapunt-context";
+import { splitsRetrievalMeta } from "@/core/lib/audit-meta";
+import { bouwInhoudZegel } from "@/core/lib/audit-hmac";
 // AQL-2 / spike 1 — de answer-generation-kern (toon-systeemprompt, per-modus
 // instructiesets, system-prompt-builders, model-/budgetconstanten) is verplaatst
 // naar lib/generatie-kern.ts zodat zowel deze streaming-route als het AI Quality
@@ -244,6 +246,14 @@ export async function POST(req: NextRequest) {
       // 30-07-2026 — de gebruiker koos expliciet "Neem niet-vastgestelde stukken
       // mee" na de melding dat de actualiteitsfilter treffers wegnam.
       neem_niet_vastgestelde_mee?: boolean;
+      // Plateau A — het id van het gesprek waarin deze beurt valt. De CLIENT
+      // genereert dit met crypto.randomUUID() vóór de eerste beurt en gebruikt
+      // hetzelfde id als expliciete `id` bij de insert in `gesprekken`. Zonder
+      // die volgorde is de eerste interactie van elk gesprek niet koppelbaar —
+      // de rij in `gesprekken` ontstaat immers pas ná de stream — en daarmee
+      // niet verwijderbaar. Puur correlatie: de waarde wordt niet vertrouwd voor
+      // autorisatie (verwijder_gesprek() toetst het eigenaarschap zelf).
+      gesprek_id?: string;
     };
     // ── H-12 (review 2026-07-30): runtime-validatie + harde invoercaps ─────
     // De historie kwam via een TypeScript-cast binnen en werd nergens op vorm
@@ -627,6 +637,16 @@ export async function POST(req: NextRequest) {
     // de server-side backstop zodat geen enkele clientfout die lus kan herhalen.
     const neemNietVastgesteldeMee = body.neem_niet_vastgestelde_mee === true;
 
+    // Plateau A — correlatie met het gesprek. Alleen een welgevormde UUID gaat
+    // door; een onzinwaarde zou de insert laten falen en daarmee de hele beurt.
+    // Ontbreekt hij, dan wordt de regel niet gekoppeld en is de interactie niet
+    // door de gebruiker te verwijderen — dat is een gemis, geen storing.
+    const gesprekAuditId =
+      typeof body.gesprek_id === "string" &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.gesprek_id)
+        ? body.gesprek_id
+        : null;
+
     // Verduidelijkingstak: twijfel → één SSE-event met de vraag + chips, géén
     // modelcall. De beslissing om te verduidelijken is puur reproduceerbaar uit
     // de vraag.
@@ -649,19 +669,22 @@ export async function POST(req: NextRequest) {
       moetVerduidelijken(bronIntentResultaat, alleenFondsdocumenten)
     ) {
       try {
-        await supabase.from("governance_log").insert({
-          gebruiker_id: user.id,
-          gebruiker_naam: profiel?.naam || user.email,
-          fonds_id: fondsId,
-          vraag,
-          antwoord: VERDUIDELIJKINGSVRAAG,
-          bronnen: [],
+        // Plateau A — spoor en inhoud in één transactie via de definer-RPC.
+        // `fonds_id` en `gebruiker_naam` zijn hier bewust GEEN parameter meer:
+        // de functie leidt ze server-side af uit auth.uid(). Daarmee is het
+        // probleem waar core/lib/audit-fonds-guard.ts tegen beschermde
+        // structureel weg in plaats van per aanroeppunt bewaakt.
+        const zegel = bouwInhoudZegel(vraag, VERDUIDELIJKINGSVRAAG);
+        const { error: logFout } = await supabase.rpc("schrijf_ai_interactie", {
+          p_vraag: vraag,
+          p_antwoord: VERDUIDELIJKINGSVRAAG,
+          p_bronnen: [],
           // `modus` kent een CHECK op documenten|combineren|algemeen; we leggen de
           // modus vast waar de vraag naartoe onderweg was (combineren-vloer, of
           // documenten bij een expliciete fondsrestrictie) — niet een verzonnen waarde.
-          modus: bepaalAutoBronModus(alleenFondsdocumenten),
-          model: null,
-          retrieval_meta: {
+          p_modus: bepaalAutoBronModus(alleenFondsdocumenten),
+          p_model: null,
+          p_retrieval_meta: {
             // Markeert de regel als een TERUGVRAAG, geen antwoord. Zo is in het log
             // te onderscheiden en te meten hoe vaak de assistent doorvraagt.
             verduidelijking: true,
@@ -670,7 +693,14 @@ export async function POST(req: NextRequest) {
             bron_vertrouwen: bronIntentResultaat.vertrouwen,
             alleen_fondsdocumenten: alleenFondsdocumenten,
           },
+          // Deze tak kent geen retrieval, dus ook geen inhoudsdragende meta.
+          p_retrieval_meta_inhoud: {},
+          p_gesprek_audit_id: gesprekAuditId,
+          p_inhoud_hmac: zegel?.inhoud_hmac ?? null,
+          p_hmac_schema_versie: zegel?.hmac_schema_versie ?? null,
+          p_hmac_sleutel_versie: zegel?.hmac_sleutel_versie ?? null,
         });
+        if (logFout) throw logFout;
       } catch (e) {
         // Fail-safe: een mislukte logregel mag de terugvraag niet blokkeren. Wel
         // zichtbaar in de serverlog, zodat een structureel probleem opvalt.
@@ -1775,17 +1805,37 @@ export async function POST(req: NextRequest) {
           };
 
           // Loggen ná voltooiing, met het volledige antwoord.
-          await supabase.from("governance_log").insert({
-            gebruiker_id: user.id,
-            gebruiker_naam: profiel?.naam || user.email,
-            fonds_id: fondsId,
-            vraag,
-            antwoord: zichtbaarAntwoord,
-            bronnen,
-            modus: effectieveModus,
-            model: AI_MODEL,
-            retrieval_meta: teLoggenMeta,
+          //
+          // Plateau A — spoor en inhoud in één transactie. `splitsRetrievalMeta`
+          // haalt de inhoudsdragende sleutels uit de metadata: `zoekvraag` is de
+          // vraag van de gebruiker, `sources[].fragment` is letterlijke
+          // documenttekst. Zonder die splitsing zou de vraag gewoon in het
+          // append-only spoor blijven staan en is het verplaatsen van de
+          // kolommen cosmetisch. `onbekend` blijft hier bewust ongebruikt: een
+          // niet-geclassificeerd veld valt fail-closed naar de inhoud én laat
+          // core/lib/audit-meta.sanity.ts falen — dat is de plek om het te zien,
+          // niet een console.warn in het hete pad.
+          const { spoor: meta_spoor, inhoud: meta_inhoud } =
+            splitsRetrievalMeta(teLoggenMeta);
+          const zegel = bouwInhoudZegel(vraag, zichtbaarAntwoord);
+
+          const { error: logFout } = await supabase.rpc("schrijf_ai_interactie", {
+            p_vraag: vraag,
+            p_antwoord: zichtbaarAntwoord,
+            p_bronnen: bronnen,
+            p_modus: effectieveModus,
+            p_model: AI_MODEL,
+            p_retrieval_meta: meta_spoor,
+            p_retrieval_meta_inhoud: meta_inhoud,
+            p_gesprek_audit_id: gesprekAuditId,
+            p_inhoud_hmac: zegel?.inhoud_hmac ?? null,
+            p_hmac_schema_versie: zegel?.hmac_schema_versie ?? null,
+            p_hmac_sleutel_versie: zegel?.hmac_sleutel_versie ?? null,
           });
+          // Ongewijzigd gedrag: een mislukte logregel valt in de outer catch en
+          // levert de client {type:"error"} in plaats van {type:"done"}. Het
+          // auditspoor is geen bijzaak die stil mag mislukken.
+          if (logFout) throw logFout;
 
           // Stuur de definitieve inline-meldingen mee zodat de UI de #4-melding
           // (content-afhankelijk) kan tonen ná het streamen.

@@ -54,3 +54,37 @@ for (const [naam, lek] of T5_LEKVORMEN) {
     );
   });
 }
+
+// ── Plateau A (2026-08-04) — het auditspoor loopt uitsluitend via de RPC ────
+// `schrijf_ai_interactie()` leidt fonds_id en gebruiker_naam server-side af uit
+// auth.uid(); die zijn er geen parameter meer. Een directe insert zou die
+// borging omzeilen, dus de guard moet hem als T8-regressie melden — óók als de
+// server-side afleiding verderop netjes op zijn plek staat.
+const T8_OMZEILVORMEN: ReadonlyArray<[string, string]> = [
+  ["directe insert in governance_log", '.from("governance_log").insert({ vraag })'],
+  ["idem met single quotes", ".from('governance_log').insert({ vraag })"],
+  ["directe insert in de inhoudstabel", '.from("governance_log_inhoud").insert({ vraag })'],
+];
+
+for (const [naam, omzeiling] of T8_OMZEILVORMEN) {
+  test(`T8 — negatieve controle: guard detecteert omzeiling van de RPC (${naam})`, () => {
+    const bron =
+      "const fondsId = profiel?.fonds_id ?? null;\n" +
+      'await supabase.rpc("schrijf_ai_interactie", {});\n' +
+      `await supabase${omzeiling};\n`;
+    const fouten = controleerChatAuditFondsbron(bron);
+    assert.ok(
+      fouten.some((f) => f.startsWith("T8-REGRESSIE")),
+      `guard zou de omzeiling "${naam}" als T8-regressie moeten melden`
+    );
+  });
+}
+
+test("T8 — negatieve controle: guard mist het ontbreken van de RPC niet", () => {
+  const bron = "const fondsId = profiel?.fonds_id ?? null;\n";
+  const fouten = controleerChatAuditFondsbron(bron);
+  assert.ok(
+    fouten.some((f) => f.includes("schrijf_ai_interactie")),
+    "guard zou moeten melden dat de RPC-aanroep ontbreekt"
+  );
+});

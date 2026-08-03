@@ -1,12 +1,56 @@
+// ============================================================================
+//  /governance — het AI-auditspoor, na plateau A
+// ----------------------------------------------------------------------------
+//  WAT ER IS VERANDERD EN WAAROM. Deze pagina las `governance_log` rechtstreeks
+//  met `select("*")`, gefilterd op fonds. Dat werkte omdat de policy "fonds log"
+//  fondsbreed was: elke beheerder zag de vragen van elke collega, mét de
+//  volledige vraagtekst. Dat is geen rolmodel maar de afwezigheid ervan.
+//
+//  Sinds plateau A:
+//   • De pagina leest via `lees_governance_audit()`. Die RPC schermt af op
+//     capability, projecteert de metadata op basis- of bronniveau, en schrijft
+//     een inzageregel zodra iemand ANDERMANS metadata opvraagt.
+//   • Rol `beheerder` geeft géén toegang meer tot het spoor van collega's. Dat
+//     vraagt een expliciete, tijdelijke capability (`governance_audit_read`),
+//     toegekend door de databank-eigenaar. Zonder die grant toont deze pagina
+//     uitsluitend de eigen regels — dat is het beoogde gedrag, geen storing.
+//   • De vraagtekst is er niet meer. Die leeft in `governance_log_inhoud` en is
+//     door de gebruiker verwijderbaar; `inhoud_aanwezig` maakt zichtbaar DÁT er
+//     is verwijderd (FR-12) zonder de inhoud te ontsluiten.
+//   • Bronnen komen uit de geprojecteerde metadata, niet uit een `bronnen`-
+//     kolom, en alleen met `governance_audit_read_sources`.
+// ============================================================================
+
 import { createServerSupabase } from "@/core/lib/supabase-server";
 
-interface LogRegel {
+interface AuditRegel {
   id: string;
-  gebruiker_naam: string;
-  vraag: string;
-  antwoord: string;
-  bronnen: Array<{ titel: string; bron: string; pagina?: number; paragraaf?: string }>;
+  gebruiker_id: string;
+  gebruiker_naam: string | null;
+  fonds_id: string;
+  modus: string | null;
+  model: string | null;
   aangemaakt: string;
+  inhoud_hmac: string | null;
+  inhoud_aanwezig: boolean;
+  retrieval_meta: RetrievalMetaProjectie | null;
+}
+
+/** Alleen de velden die deze pagina toont; de projectie levert er meer. */
+interface RetrievalMetaProjectie {
+  antwoordmodus?: string;
+  methode?: string;
+  geselecteerd?: number;
+  zwakke_bronbasis?: boolean;
+  verduidelijking?: boolean;
+  duur_model_ms?: number;
+  /** Alleen aanwezig met governance_audit_read_sources. */
+  bronversie_audit?: Array<{
+    document_id: string;
+    bron: string | null;
+    bibliotheek: string | null;
+    documentstatus: string | null;
+  }>;
 }
 
 const BRONKLEUR: Record<string, string> = {
@@ -34,66 +78,96 @@ export default async function GovernancePage() {
     .eq("id", user.id)
     .single();
 
-  // Het governance-log toont wie welke AI-vraag stelde (persoonsgegevens van
-  // bestuurders) en is voorbehouden aan de rol beheerder. Dit is de leidende,
-  // server-side autorisatie; de sidebar-gating is slechts cosmetisch. RLS borgt
-  // daarnaast de fonds-isolatie. NB: alleen-tonen-blokkade, geen mutatie.
-  if (profiel?.rol !== "beheerder") {
-    return (
-      <div className="p-4 sm:p-6 lg:p-7 max-w-3xl">
-        <div className="mb-6">
-          <h1 className="font-serif text-xl font-black text-ink">Governance Log</h1>
-        </div>
-        <div className="rounded-xl border border-warn/30 bg-warn-tint p-4 text-sm text-warn-ink">
-          U heeft geen rechten om het governance-log in te zien. Inzage in het
-          AI-auditspoor is voorbehouden aan de rol <strong>beheerder</strong>.
-        </div>
-      </div>
-    );
-  }
+  const fondsId = profiel?.fonds_id ?? null;
+  if (!fondsId) return null;
 
-  const { data: logRegels } = await supabase
-    .from("governance_log")
-    .select("*")
-    .eq("fonds_id", profiel?.fonds_id || "")
-    .order("aangemaakt", { ascending: false })
-    .limit(50);
+  // De RPC bepaalt zelf wat de aanroeper mag zien: eigen regels altijd, die van
+  // anderen alleen met `governance_audit_read`. De rolcheck die hier stond is
+  // vervallen — rol `beheerder` is geen autorisatie meer voor het auditspoor.
+  //
+  // `p_bronniveau: false` is een bewuste keuze. Bronniveau (document-ID's,
+  // herkomst, objectreferenties) vraagt een motivering, en die hoort van een
+  // mens te komen. Zou deze pagina er automatisch om vragen, dan zou de
+  // applicatie een vaste zin moeten invullen en was de motiveringsplicht een
+  // formaliteit. Bronniveau-inzage loopt daarom via een expliciete aanroep met
+  // een echte reden; een schermontwerp daarvoor valt buiten plateau A.
+  const { data: regels, error } = await supabase.rpc("lees_governance_audit", {
+    p_fonds: fondsId,
+    p_filters: { weergave: "governance-pagina", limiet: 50 },
+    p_motivering: null,
+    p_limiet: 50,
+    p_bronniveau: false,
+  });
+
+  const auditRegels = (regels ?? []) as AuditRegel[];
+  const eigenRegels = auditRegels.filter((r) => r.gebruiker_id === user.id);
+  // Geen enkele regel van een ander → deze gebruiker heeft geen auditcapability.
+  const heeftAuditToegang = auditRegels.length > eigenRegels.length;
 
   return (
     <div className="p-4 sm:p-6 lg:p-7">
       <div className="mb-6">
         <h1 className="font-serif text-xl font-black text-ink">Governance Log</h1>
         <p className="text-sm text-muted mt-1">
-          Alle AI-interacties worden automatisch gelogd voor compliance en traceerbaarheid
+          Elke AI-interactie laat een spoor na: wie, wanneer, in welke modus en
+          met welk model
         </p>
       </div>
+
+      {/* Maak de eigen positie expliciet vóór de lijst, niet als foutmelding
+          erna (UX-principe "toon vereisten en blokkers vooraf"). */}
+      {!heeftAuditToegang && (
+        <div className="rounded-xl border border-warn/30 bg-warn-tint px-4 py-3 mb-6 text-sm text-warn-ink">
+          U ziet hieronder <strong>uitsluitend uw eigen</strong> AI-interacties.
+          Het auditspoor van collega&apos;s inzien vraagt een expliciete,
+          tijdelijke auditbevoegdheid — die is niet aan een rol gekoppeld, maar
+          wordt per persoon en per periode toegekend en vastgelegd.
+        </div>
+      )}
 
       <div className="flex items-start gap-3 bg-accent-tint border border-accent/30 rounded-xl px-4 py-3 mb-6 text-sm text-accent-ink">
         <span>🛡️</span>
         <div>
-          Dit log registreert <strong>elke vraag</strong> gesteld aan de AI-assistent: wie,
-          wanneer, welke bronnen geraadpleegd en welk antwoord gegeven. Het log is onveranderbaar
-          en kan worden geëxporteerd voor toezichthouders.
+          Dit log registreert <strong>dát</strong> er een vraag is gesteld: wie,
+          wanneer, in welke modus en met welk model. De vraag- en antwoordtekst
+          zelf hoort bij de bestuurder en staat hier niet — die kan hij of zij
+          verwijderen zonder dit spoor te breken. Het spoor zelf is
+          onveranderbaar.
+          {heeftAuditToegang && (
+            <>
+              {" "}
+              Uw inzage in het spoor van anderen is vastgelegd.
+            </>
+          )}
         </div>
       </div>
 
-      {!logRegels || logRegels.length === 0 ? (
+      {error && (
+        <div className="rounded-xl border border-err/30 bg-err-tint px-4 py-3 mb-6 text-sm text-err-ink">
+          Het auditspoor kon niet worden geladen.
+        </div>
+      )}
+
+      {auditRegels.length === 0 ? (
         <div className="text-center py-12">
           <div className="text-4xl mb-3">📋</div>
           <h3 className="font-semibold text-ink mb-1">Nog geen AI-interacties</h3>
           <p className="text-sm text-muted">
-            Zodra bestuurders vragen stellen aan de AI, verschijnen die hier.
+            Zodra u vragen stelt aan de AI, verschijnen die hier.
           </p>
         </div>
       ) : (
         <div className="space-y-3">
-          {(logRegels as LogRegel[]).map((log) => {
-            const initials = log.gebruiker_naam
-              ?.split(" ")
-              .map((n: string) => n[0])
-              .join("")
-              .substring(0, 2)
-              .toUpperCase() || "??";
+          {auditRegels.map((log) => {
+            const initials =
+              log.gebruiker_naam
+                ?.split(" ")
+                .map((n: string) => n[0])
+                .join("")
+                .substring(0, 2)
+                .toUpperCase() || "??";
+            const meta = log.retrieval_meta;
+            const bronnen = meta?.bronversie_audit ?? [];
 
             return (
               <div key={log.id} className="bg-white border border-line rounded-xl p-4">
@@ -103,7 +177,7 @@ export default async function GovernancePage() {
                     {initials}
                   </div>
                   <span className="font-semibold text-sm text-ink">
-                    {log.gebruiker_naam}
+                    {log.gebruiker_naam ?? "Onbekend"}
                   </span>
                   <span className="ml-auto text-xs text-muted">
                     {new Date(log.aangemaakt).toLocaleString("nl-NL", {
@@ -116,33 +190,73 @@ export default async function GovernancePage() {
                   </span>
                 </div>
 
-                {/* Vraag */}
-                <div className="bg-app-bg rounded-lg px-3 py-2 text-sm text-ink mb-3">
-                  ❓ „{log.vraag}"
+                {/* Kenmerken van de interactie — het spoor, niet de inhoud. */}
+                <div className="flex flex-wrap gap-2 text-xs mb-3">
+                  {log.modus && (
+                    <span className="bg-app-bg text-muted px-2 py-1 rounded-full">
+                      bron: {log.modus}
+                    </span>
+                  )}
+                  {meta?.antwoordmodus && (
+                    <span className="bg-app-bg text-muted px-2 py-1 rounded-full">
+                      modus: {meta.antwoordmodus}
+                    </span>
+                  )}
+                  <span className="bg-app-bg text-muted px-2 py-1 rounded-full">
+                    model: {log.model ?? "geen (terugvraag)"}
+                  </span>
+                  {typeof meta?.geselecteerd === "number" && (
+                    <span className="bg-app-bg text-muted px-2 py-1 rounded-full">
+                      {meta.geselecteerd} bron
+                      {meta.geselecteerd === 1 ? "" : "nen"} gebruikt
+                    </span>
+                  )}
+                  {meta?.verduidelijking && (
+                    <span className="bg-warn-tint text-warn-ink px-2 py-1 rounded-full">
+                      terugvraag — geen antwoord gegenereerd
+                    </span>
+                  )}
+                  {meta?.zwakke_bronbasis && (
+                    <span className="bg-warn-tint text-warn-ink px-2 py-1 rounded-full">
+                      zwakke bronbasis
+                    </span>
+                  )}
                 </div>
 
-                {/* Bronnen */}
-                {log.bronnen && log.bronnen.length > 0 && (
+                {/* FR-12 — zichtbaar DAT de inhoud is verwijderd, zonder haar te
+                    ontsluiten. Het zegel blijft staan, zodat een voorgelegde
+                    tekst achteraf nog toetsbaar is. */}
+                <div className="text-xs mb-2">
+                  {log.inhoud_aanwezig ? (
+                    <span className="text-muted">
+                      Vraag en antwoord zijn bewaard bij de bestuurder
+                      {log.gebruiker_id === user.id ? " (u)" : ""}.
+                    </span>
+                  ) : (
+                    <span className="text-muted italic">
+                      De inhoud van deze interactie is door de bestuurder
+                      verwijderd. Het spoor blijft
+                      {log.inhoud_hmac ? ", inclusief het integriteitszegel" : ""}.
+                    </span>
+                  )}
+                </div>
+
+                {/* Bronnen — alleen met governance_audit_read_sources, en zonder
+                    documenttekst: identiteit en status, geen fragmenten. */}
+                {bronnen.length > 0 && (
                   <div className="flex flex-wrap gap-2">
-                    {log.bronnen.map((b, j) => (
+                    {bronnen.map((b, j) => (
                       <span
-                        key={j}
+                        key={`${b.document_id}-${j}`}
                         className={`text-xs font-semibold px-2 py-1 rounded-full ${
-                          BRONKLEUR[b.bron] || "bg-app-bg text-muted"
+                          BRONKLEUR[b.bron ?? ""] || "bg-app-bg text-muted"
                         }`}
                       >
-                        {b.bron} — {b.titel.substring(0, 40)}{b.titel.length > 40 ? "…" : ""}
-                        {b.paragraaf ? ` ${b.paragraaf}` : ""}
-                        {b.pagina ? ` pag. ${b.pagina}` : ""}
+                        {b.bron ?? "bron"} — {b.bibliotheek ?? "onbekend"}
+                        {b.documentstatus ? ` · ${b.documentstatus}` : ""}
                       </span>
                     ))}
                   </div>
-                )}
-
-                {log.bronnen?.length === 0 && (
-                  <span className="text-xs text-muted italic">
-                    Geen documentbronnen gevonden voor deze vraag
-                  </span>
                 )}
               </div>
             );
@@ -150,13 +264,18 @@ export default async function GovernancePage() {
         </div>
       )}
 
-      {logRegels && logRegels.length > 0 && (
+      {auditRegels.length > 0 && (
         <div className="mt-5 flex gap-3">
-          <button className="border border-line rounded-lg px-4 py-2 text-sm font-semibold text-muted hover:bg-app-bg transition-colors">
-            📥 Exporteren als CSV
-          </button>
-          <div className="ml-auto text-xs text-muted self-center">
-            {logRegels.length} interacties weergegeven
+          <div className="text-xs text-muted self-center">
+            {auditRegels.length} interactie
+            {auditRegels.length === 1 ? "" : "s"} weergegeven
+            {heeftAuditToegang && (
+              // Deze pagina vraagt bewust géén bronniveau aan: dat vergt een
+              // motivering, en die hoort van een mens te komen in plaats van
+              // door de applicatie te worden ingevuld (besluit 0119).
+              <> · bronverwijzingen bij regels van collega&apos;s vragen een
+                {" "}gemotiveerd, apart verzoek</>
+            )}
           </div>
         </div>
       )}

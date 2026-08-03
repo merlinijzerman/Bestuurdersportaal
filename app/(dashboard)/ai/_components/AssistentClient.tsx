@@ -27,6 +27,7 @@ import {
 import Startpunt from "./Startpunt";
 import DocumentDoorgronden, { type DoorgrondDoc } from "./DocumentDoorgronden";
 import { ACTIEF_GESPREK_SLEUTEL } from "@/core/lib/ai-sessie";
+import { verwijderDialoogTekst, verwijderGesprekViaApi } from "@/core/lib/gesprek-verwijderen";
 import type {
   PortaalContext,
   DocumentCtx,
@@ -246,6 +247,10 @@ export default function AssistentClient({
   // Persistentie (Fase B2): id van het huidige opgeslagen gesprek en de
   // ingelogde gebruiker. Refs i.p.v. state — wijziging hoeft geen re-render.
   const gesprekId = useRef<string | null>(null);
+  // Plateau A — bestaat de rij in `gesprekken` al? Het id wordt sinds plateau A
+  // vóór de eerste beurt gegenereerd, dus `gesprekId.current !== null` betekent
+  // niet langer "staat al in de database".
+  const gesprekBestaatInDb = useRef(false);
   const userIdRef = useRef<string | null>(null);
   // Gepersonaliseerde welkomstboodschap, zodat "nieuw gesprek" altijd een
   // schone start toont (ook nadat een eerder gesprek is geopend).
@@ -323,8 +328,30 @@ export default function AssistentClient({
       /* private mode e.d. — markering is best-effort */
     }
   }
+
+  // Plateau A — het gesprek-id wordt CLIENT-SIDE gemaakt, vóór de eerste beurt.
+  //
+  // Waarom: de chat-route moet elke auditregel aan een gesprek koppelen
+  // (`gesprek_audit_id`), anders is die interactie later niet te verwijderen. De
+  // rij in `gesprekken` ontstond echter pas ná de stream, dus de eerste beurt
+  // van elk gesprek had nooit een id om mee te sturen. Door het id vooraf te
+  // genereren en het straks als expliciete `id` bij de insert te gebruiken, is
+  // elke beurt vanaf de eerste koppelbaar.
+  //
+  // `gesprekBestaatInDb` houdt bij of de rij er al is: het id is nu al gezet,
+  // dus daaraan alleen valt niet meer af te lezen of we moeten inserten of
+  // updaten.
+  function zorgVoorGesprekId(): string {
+    if (!gesprekId.current) {
+      gesprekBestaatInDb.current = false;
+      markeerActiefGesprek(crypto.randomUUID());
+    }
+    return gesprekId.current!;
+  }
+
   function wisActiefGesprek() {
     gesprekId.current = null;
+    gesprekBestaatInDb.current = false;
     try {
       window.sessionStorage.removeItem(ACTIEF_GESPREK_SLEUTEL);
     } catch {
@@ -350,6 +377,7 @@ export default function AssistentClient({
   function openGesprek(item: GesprekItem) {
     if (laden) return;
     markeerActiefGesprek(item.id);
+    gesprekBestaatInDb.current = true;   // komt uit de lijst, staat dus in de DB
     setBerichten(
       Array.isArray(item.berichten) && item.berichten.length > 0
         ? herstelVoltooidVlag(item.berichten)
@@ -435,13 +463,21 @@ export default function AssistentClient({
     });
   }
 
-  // Archiveert een gesprek (soft-delete). governance_log blijft intact. Als het
-  // huidige gesprek wordt gearchiveerd, start een schone weergave.
-  async function archiveerGesprek(id: string) {
-    try {
-      await supabase.from("gesprekken").update({ gearchiveerd: true }).eq("id", id);
-    } catch (e) {
-      console.error("Gesprek archiveren mislukt:", e);
+  // Verwijdert een gesprek DEFINITIEF (plateau A). Vervangt het oude
+  // "archiveren", dat alleen `gearchiveerd = true` zette: de chatinhoud bleef
+  // staan en de auditregels bleven onaangeroerd, terwijl de knop een prullenbak
+  // toonde. Nu gaat de chatinhoud écht weg — inclusief de vraag en het antwoord
+  // bij de gekoppelde auditregels — en blijft alleen het spoor (wie, wanneer,
+  // welke modus) bestaan, met één redactieregel als tegenhanger.
+  //
+  // De route doet niets zelf: `verwijder_gesprek()` regelt eigenaarschap,
+  // volgorde en idempotentie in één transactie. `request_id` maakt een
+  // netwerkretry onschadelijk.
+  async function verwijderGesprek(id: string) {
+    const uitkomst = await verwijderGesprekViaApi(id);
+    if (!uitkomst.ok) {
+      alert(uitkomst.melding);
+      return;
     }
     if (gesprekId.current === id) {
       wisActiefGesprek();
@@ -493,7 +529,10 @@ export default function AssistentClient({
             }
           : null;
 
-      if (gesprekId.current) {
+      // Plateau A — het id is al bepaald vóór de beurt (zorgVoorGesprekId), zodat
+      // de chat-route elke auditregel kon koppelen. Of we inserten of updaten
+      // hangt daarom af van `gesprekBestaatInDb`, niet meer van het id zelf.
+      if (gesprekBestaatInDb.current && gesprekId.current) {
         await supabase
           .from("gesprekken")
           .update({
@@ -504,9 +543,11 @@ export default function AssistentClient({
           })
           .eq("id", gesprekId.current);
       } else {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from("gesprekken")
           .insert({
+            // Expliciet id: hetzelfde dat als gesprek_audit_id is meegestuurd.
+            id: zorgVoorGesprekId(),
             gebruiker_id: uid,
             fonds_id: fondsId,
             titel,
@@ -516,7 +557,10 @@ export default function AssistentClient({
           })
           .select("id")
           .single();
-        if (data?.id) markeerActiefGesprek(data.id as string);
+        if (!error && data?.id) {
+          markeerActiefGesprek(data.id as string);
+          gesprekBestaatInDb.current = true;
+        }
       }
       // Ververs het overzicht zodat nieuwe/bijgewerkte gesprekken bovenaan komen.
       laadGesprekken();
@@ -598,6 +642,7 @@ export default function AssistentClient({
             const opgeslagen = laatste?.berichten as Bericht[] | undefined;
             if (laatste?.id && Array.isArray(opgeslagen) && opgeslagen.length > 0) {
               markeerActiefGesprek(laatste.id as string);
+              gesprekBestaatInDb.current = true;   // net uit de DB gelezen
               setBerichten(herstelVoltooidVlag(opgeslagen));
               setDocumentScope(leesScope(laatste.document_scope));
               setAgendapuntContext(leesAgendapuntContext(laatste.document_scope));
@@ -634,6 +679,7 @@ export default function AssistentClient({
               .maybeSingle();
             if (d?.id && d.actief !== false) {
               gesprekId.current = null;
+              gesprekBestaatInDb.current = false;
               setBerichten([{ rol: "ai", tekst: personalTekst }]);
               setDocumentScope({
                 document_ids: [d.id as string],
@@ -674,6 +720,7 @@ export default function AssistentClient({
                   )
                 : [];
               gesprekId.current = null;
+              gesprekBestaatInDb.current = false;
               setBerichten([{ rol: "ai", tekst: personalTekst }]);
               setAgendapuntContext({
                 id: ap.id as string,
@@ -866,6 +913,12 @@ export default function AssistentClient({
           // 30-07-2026 — expliciete verbreding na de melding "wel stukken, niet
           // vastgesteld". Alleen true als de gebruiker de chip aanklikte.
           neem_niet_vastgestelde_mee: opties?.neemNietVastgesteldeMee === true,
+          // Plateau A — koppelt de auditregel van deze beurt aan dit gesprek,
+          // zodat de gebruiker hem later kan verwijderen. Het id wordt hier
+          // gemaakt als het nog niet bestond; `bewaarGesprek` gebruikt straks
+          // hetzelfde id als expliciete `id` bij de insert. Zonder deze volgorde
+          // zou juist de eerste beurt van elk gesprek onkoppelbaar blijven.
+          gesprek_id: zorgVoorGesprekId(),
         }),
       });
 
@@ -1300,6 +1353,7 @@ export default function AssistentClient({
     // Met het gesprekken-overzicht hoeft "nieuw" niets te wissen: het lopende
     // gesprek blijft gewoon in de lijst staan. We starten enkel een schone chat.
     gesprekId.current = null;
+    gesprekBestaatInDb.current = false;
     setBerichten(welkomstRef.current ? [welkomstRef.current] : []);
     setInvoer("");
     setDocumentScope(null);
@@ -1485,11 +1539,11 @@ export default function AssistentClient({
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (confirm("Dit gesprek archiveren?")) archiveerGesprek(g.id);
+                        if (confirm(verwijderDialoogTekst(g.titel))) verwijderGesprek(g.id);
                       }}
-                      title="Archiveren"
+                      title="Definitief verwijderen"
                       className="opacity-0 group-hover:opacity-100 text-muted hover:text-err-ink text-sm transition-opacity flex-shrink-0"
-                      aria-label="Archiveren"
+                      aria-label="Gesprek definitief verwijderen"
                     >
                       🗑
                     </button>

@@ -87,7 +87,11 @@ declare
     ['risico_maatregelen',        'risicos'],
     ['risico_log',                'risicos'],
     ['stem_uitbrengingen',        'stemmingen'],
-    ['document_chunks',           'documenten']
+    ['document_chunks',           'documenten'],
+    -- Plateau A (2026-08-04): de chatinhoud bij een auditregel. Geen eigen
+    -- fonds_id — de tenantgrens én de auteursgrens komen uit governance_log,
+    -- dat de policy dan ook letterlijk moet noemen.
+    ['governance_log_inhoud',     'governance_log']
   ];
   -- Tabellen zonder fonds_id die BEWUST geen tenantgrens dragen. Elke regel is
   -- een expliciet besluit; zie 2026_07_08_t3_globale_tabellen_register.sql.

@@ -134,10 +134,16 @@ set local role authenticated;
 set local request.jwt.claims to '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}';
 
 -- POSITIEVE controle: A mag in EIGEN fonds schrijven (policy niet over-restrictief).
+--
+-- Sinds plateau A (2026-08-04) draagt governance_log geen `vraag` meer — die
+-- staat in governance_log_inhoud — en eist de insert-policy naast het fonds ook
+-- de auteur (`gebruiker_id = auth.uid()`). De strekking van deze controle is
+-- ongewijzigd: schrijven in het EIGEN fonds moet blijven werken.
 do $$
 begin
-  insert into public.governance_log (fonds_id, vraag)
-  values ('11111111-1111-1111-1111-111111111111', 'eigen-fonds schrijven mag');
+  insert into public.governance_log (fonds_id, gebruiker_id)
+  values ('11111111-1111-1111-1111-111111111111',
+          'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
 exception when others then
   raise exception 'REGRESSIE: eigen-fonds insert in governance_log geweigerd (sqlstate %). Policy te streng.', sqlstate;
 end $$;
@@ -145,8 +151,9 @@ end $$;
 -- NEGATIEF #1 (klasse A, LEIDEND): A mag GEEN governance_log-rij met fonds B injecteren.
 do $$
 begin
-  insert into public.governance_log (fonds_id, vraag)
-  values ('22222222-2222-2222-2222-222222222222', 'LEK-poging cross-tenant audit');
+  insert into public.governance_log (fonds_id, gebruiker_id)
+  values ('22222222-2222-2222-2222-222222222222',
+          'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
   raise exception 'LEK: cross-tenant insert governance_log (fonds B) SLAAGDE — WITH CHECK ontbreekt/werkt niet.';
 exception
   when insufficient_privilege then raise notice 'OK #1: governance_log cross-tenant insert geweigerd (RLS).';
@@ -201,11 +208,14 @@ reset role;
 
 -- NEGATIEF #6 (append-only): een bestaande auditregel is niet muteerbaar.
 --   Seed als eigenaar een governance_log-rij in fonds A, probeer 'm te updaten.
-insert into public.governance_log (id, fonds_id, vraag)
-values ('cccccccc-cccc-cccc-cccc-cccccccccccc','11111111-1111-1111-1111-111111111111','append-only-test');
+--   Sinds plateau A muteren we `modus` in plaats van `antwoord`: die kolom is
+--   naar governance_log_inhoud verhuisd. De trigger die wordt getoetst is
+--   dezelfde (trg_governance_log_no_update, kolomonafhankelijk).
+insert into public.governance_log (id, fonds_id, modus)
+values ('cccccccc-cccc-cccc-cccc-cccccccccccc','11111111-1111-1111-1111-111111111111','documenten');
 do $$
 begin
-  update public.governance_log set antwoord='gemanipuleerd'
+  update public.governance_log set modus='algemeen'
    where id='cccccccc-cccc-cccc-cccc-cccccccccccc';
   raise exception 'LEK: UPDATE op governance_log SLAAGDE — append-only-trigger ontbreekt/werkt niet.';
 exception

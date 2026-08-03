@@ -49,6 +49,7 @@ import {
   type Bron,
 } from "../../ai/_components/AntwoordWeergave";
 import { isDocumentbron } from "@/core/lib/documentlijst";
+import { verwijderDialoogTekst, verwijderGesprekViaApi } from "@/core/lib/gesprek-verwijderen";
 // Gedeelde gefaseerde statusweergave (besluit 0087), gelijk aan /ai.
 import {
   pasVoortgangToe,
@@ -152,6 +153,44 @@ export default function AgendapuntChat({
   const fondsIdRef = useRef<string>("");
   const userIdRef = useRef<string | null>(null);
   const gesprekId = useRef<string | null>(null);
+  // Plateau A — bestaat de rij in `gesprekken` al? Het id wordt sinds plateau A
+  // vóór de eerste beurt gegenereerd, dus een gezet id betekent niet langer
+  // "staat al in de database".
+  const gesprekBestaatInDb = useRef(false);
+
+  // Plateau A — zie de toelichting in AssistentClient: de chat-route moet elke
+  // auditregel aan een gesprek kunnen koppelen, en de rij in `gesprekken`
+  // ontstaat pas ná de stream. Daarom maakt de client het id vooraf.
+  //
+  // Deze component gebruikt bewust GEEN sessionStorage-markering (besluit 0086):
+  // de agendapuntchat herstelt zichzelf via document_scope->agendapunt_context,
+  // niet via de actief-gesprek-sleutel.
+  function zorgVoorGesprekId(): string {
+    if (!gesprekId.current) {
+      gesprekBestaatInDb.current = false;
+      gesprekId.current = crypto.randomUUID();
+    }
+    return gesprekId.current;
+  }
+
+  // Plateau A (A-8) — verwijderen was hier helemaal niet mogelijk, ook niet als
+  // archiveren. Zelfde pad, zelfde dialoogtekst en dezelfde belofte als op /ai:
+  // de chatinhoud gaat weg, het auditspoor blijft, met één redactieregel.
+  async function verwijderDitGesprek() {
+    const id = gesprekId.current;
+    if (!id || !gesprekBestaatInDb.current) return;
+    if (!confirm(verwijderDialoogTekst(titel))) return;
+
+    const uitkomst = await verwijderGesprekViaApi(id);
+    if (!uitkomst.ok) {
+      alert(uitkomst.melding);
+      return;
+    }
+    gesprekId.current = null;
+    gesprekBestaatInDb.current = false;
+    berichtenRef.current = [];
+    setBerichten([]);
+  }
   const eindRef = useRef<HTMLDivElement>(null);
   // Scroll-container + "sticky bottom": tijdens het streamen scrollt de weergave
   // alleen automatisch mee als de gebruiker al (bijna) onderaan staat. Scrollt de
@@ -207,6 +246,7 @@ export default function AgendapuntChat({
           const item = bestaand?.[0];
           if (item && Array.isArray(item.berichten) && item.berichten.length > 0) {
             gesprekId.current = item.id as string;
+            gesprekBestaatInDb.current = true;   // net uit de DB gelezen
             // Welkomstbericht van de AI-pagina (index 0, rol ai) is puur UI.
             const b = item.berichten as Bericht[];
             const zonderWelkomst = herstelVoltooidVlag(
@@ -429,7 +469,10 @@ export default function AgendapuntChat({
         agendapunt_context: { id: agendapuntId, titel },
         gezet_op: new Date().toISOString(),
       };
-      if (gesprekId.current) {
+      // Plateau A — het id is al bepaald vóór de beurt (zorgVoorGesprekId), zodat
+      // de chat-route elke auditregel eraan kon koppelen. Of we inserten of
+      // updaten hangt daarom af van `gesprekBestaatInDb`, niet meer van het id.
+      if (gesprekBestaatInDb.current && gesprekId.current) {
         await supabase
           .from("gesprekken")
           .update({
@@ -439,9 +482,11 @@ export default function AgendapuntChat({
           })
           .eq("id", gesprekId.current);
       } else {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from("gesprekken")
           .insert({
+            // Expliciet id: hetzelfde dat als gesprek_audit_id is meegestuurd.
+            id: zorgVoorGesprekId(),
             gebruiker_id: uid,
             fonds_id: fondsIdRef.current,
             titel: eersteVraag.slice(0, 80),
@@ -450,7 +495,10 @@ export default function AgendapuntChat({
           })
           .select("id")
           .single();
-        if (data?.id) gesprekId.current = data.id as string;
+        if (!error && data?.id) {
+          gesprekId.current = data.id as string;
+          gesprekBestaatInDb.current = true;
+        }
       }
     } catch (e) {
       console.error("Gesprek opslaan mislukt:", e);
@@ -507,6 +555,9 @@ export default function AgendapuntChat({
           transformatie: opties?.transformatie,
           // ADR 0028 — de route haalt de toelichting zelf op onder RLS.
           agendapunt_context: { id: agendapuntId, titel },
+          // Plateau A — koppelt de auditregel van deze beurt aan dit gesprek,
+          // zodat de gebruiker hem later kan verwijderen.
+          gesprek_id: zorgVoorGesprekId(),
         }),
       });
 
@@ -832,6 +883,21 @@ export default function AgendapuntChat({
             >
               Openen in volledige assistent
             </a>
+            {/* Plateau A (A-8) — dezelfde verwijderfunctie als op /ai. Die
+                ontbrak hier volledig: een gesprek dat via een agendapunt was
+                begonnen, was voor de gebruiker onbereikbaar om op te ruimen. */}
+            {heeftGesprek && gesprekBestaatInDb.current && gesprekId.current && (
+              <>
+                {" · "}
+                <button
+                  onClick={verwijderDitGesprek}
+                  className="underline hover:text-err-ink"
+                  title="Definitief verwijderen"
+                >
+                  Gesprek verwijderen
+                </button>
+              </>
+            )}
           </div>
 
           {/* Berichten. `relative` is functioneel, geen opmaak: zie de toelichting
