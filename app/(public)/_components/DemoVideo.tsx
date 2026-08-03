@@ -13,9 +13,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 //  - ondertiteling via <track>, maar bewust ZONDER `default`: de video draagt
 //    dezelfde tekst al ingebrand in beeld, dus een standaard zichtbaar
 //    ondertitelblok valt daar bovenop en maakt beide slecht leesbaar. Het spoor
-//    blijft aan te zetten via het ondertitelmenu van de speler, en de volledige
-//    tekst staat daarnaast als uitklapbare transcriptie op de pagina — de
-//    inhoud is dus ook zonder video en zonder geluid toegankelijk;
+//    blijft aan te zetten via het ondertitelmenu van de speler
+//    (public/video/promo-9x16.nl.vtt). Een uitklapbare transcriptie op de
+//    pagina is er op verzoek van de opdrachtgever uit gehaald (02-08-2026);
+//    het tekstalternatief bestaat daarmee alleen nog als ondertitelspoor plus
+//    de tekst die in beeld staat. Zie openstaande-punten OP-E7;
 //  - de vergrote weergave is een echte dialoog: role/aria-modal, Esc, klik
 //    naast de video, focus blijft binnen de dialoog en keert na sluiten terug
 //    naar de knop.
@@ -34,20 +36,6 @@ const BRON = "/video/promo-9x16.mp4";
 const POSTER = "/video/promo-9x16-poster.jpg";
 const ONDERTITELS = "/video/promo-9x16.nl.vtt";
 const OMSCHRIJVING = "Rondleiding door het Bestuurdersportaal";
-
-// Gelijk aan de gesproken tekst en aan wat er in beeld staat; zie
-// public/video/promo-9x16.nl.vtt voor dezelfde tekst met tijdcodes.
-const TRANSCRIPTIE = [
-  "Waar beheerste AI en besluitvorming elkaar versterken. Bestuurdersportaal — van dossier tot besluit, in één beveiligde omgeving per fonds.",
-  "Uw fonds, uw stukken, uw processen — op één afgeschermde plek.",
-  "Een kritische sparringpartner, geen zoekmachine. U kiest niet alleen een samenvatting — u kiest tegenspraak.",
-  "Kritische vragen die het voorstel oproept, maar niet beantwoordt. Elke vraag herleidbaar naar uw eigen fondsdocumenten.",
-  "De AI-assistent levert input, geen mening. U formuleert uw eigen inbreng.",
-  "Elk stuk vooraf samengevat, inbreng direct zichtbaar. Het bestuursbureau zet dit in één handeling klaar.",
-  "Het besluit is van het bestuur. Governance is geen extra stap: de onderbouwing legt zichzelf vast.",
-  "Goed voorbereid. Zorgvuldig besloten. Aantoonbaar verantwoord.",
-  "Ervaar het Bestuurdersportaal. Demonstratiegegevens.",
-];
 
 export default function DemoVideo() {
   const [open, setOpen] = useState(false);
@@ -158,12 +146,6 @@ export default function DemoVideo() {
         >
           <span aria-hidden="true">⤢</span> Groter bekijken
         </button>
-        <details className="transcriptie">
-          <summary>Lees de transcriptie</summary>
-          {TRANSCRIPTIE.map((regel, i) => (
-            <p key={i}>{regel}</p>
-          ))}
-        </details>
       </div>
 
       {open && (

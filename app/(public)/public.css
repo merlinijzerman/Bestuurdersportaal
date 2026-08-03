@@ -837,19 +837,6 @@
 .bp-home .demo .vergroot:hover {
   opacity: 0.78;
 }
-.bp-home .demo .transcriptie {
-  margin-top: 16px;
-  font-size: 13px;
-  color: var(--muted);
-}
-.bp-home .demo .transcriptie summary {
-  cursor: pointer;
-  color: var(--accent);
-}
-.bp-home .demo .transcriptie p {
-  margin-top: 10px;
-  line-height: 1.55;
-}
 
 /* Vergrote weergave. Bewust in beide thema's dezelfde donkere scrim — een
  * lichte overlay om een donkere video heen leest als een lichtlek. */

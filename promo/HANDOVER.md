@@ -5,13 +5,33 @@ kunnen. De onderbouwing van individuele keuzes staat in de `_let_op`- en
 `_herijkt`-velden in de tekstenbestanden; dit document beschrijft alleen de
 structuur, de commando's en wat er nog open staat.
 
+> **Variant C staat sinds 2 augustus 2026 live op de homepage** (besluit
+> [`0103`](../decisions/0103-the-paradox-uit-de-hoofdnav-en-onderscheidingsblok-vervalt.md)).
+> Gepubliceerde montage: **`promo-9x16-c_10`**, 63,3 s. Op de site staat een
+> webversie van 720×1280 (2,0 MB) als `mvp/public/video/promo-9x16.mp4`, met
+> `promo-9x16-poster.jpg` (36 kB) en `promo-9x16.nl.vtt`.
+>
+> Drie dingen om te weten voordat je opnieuw rendert:
+>
+> 1. **De ondertiteltijden in `promo-teksten-c.json` (`_stem`) kloppen niet met
+>    deze montage.** Dat raster hoort bij `stem-c-def-v2.wav` (64,45 s); de
+>    gepubliceerde film duurt 63,3 s en loopt er ruim een seconde uit. De negen
+>    cues in het `.vtt` zijn daarom gemeten aan de montage zelf, door per
+>    crossfade het frameverschil te bepalen en de eindkaart te pinnen op het
+>    verschijnen van de goudkleurige knop. **Bij elke nieuwe montage opnieuw
+>    meten** — niet overnemen uit de JSON.
+> 2. **`/video/*` staat op `Cache-Control: immutable` voor een jaar**
+>    (`mvp/next.config.ts`). Een nieuwe montage moet dus een **nieuwe
+>    bestandsnaam** krijgen, anders blijven bezoekers de oude video zien.
+> 3. **De CTA in het eindkader botst met de site.** Zie §4a hieronder.
+
 ---
 
 ## 1. Drie varianten, volledig gescheiden
 
 | | Variant A | Variant B | Variant C |
 |---|---|---|---|
-| Status | akkoord | ter beoordeling | in bewerking |
+| Status | akkoord | ter beoordeling | **gepubliceerd** (montage `c_10`, 2 aug 2026) |
 | Verhaallijn | product-eerst | verantwoordbaarheid opent | draaiboek v4, negen scènes |
 | Palet | navy `#12233B` + blauw `#234E70` | navy `#0B1F3A` + goud | navy `#0B1F3A` + goud |
 | Geluid | stem + muziek | alleen muziek | alleen stem |
@@ -163,21 +183,46 @@ van een samenvatting. Variant C heeft dat nodig; A en B niet.
 
 ## 4. Wat er nog moet gebeuren aan variant C
 
-**Blokkerend, in deze volgorde:**
+> **Herijkt op 2 augustus 2026.** Montage `c_10` is gepubliceerd; punt 2 en 3
+> hieronder zijn daarin opgelost — scène 5 toont nu echte interactie (de
+> AI-voorbereiding met bestuurlijke duiding) in plaats van de plaatshouder.
+> Punt 1 en 4 zijn niet nagelopen. Wat hierna volgt is de stand van vóór `c_10`,
+> bewaard omdat de punten bij een volgende opnameronde weer gelden; §4a bevat de
+> lijst die ná publicatie nog openstaat.
+
+**Blokkerend was, in deze volgorde:**
 
 1. **Rol van *Beheerder* naar *Bestuurder*** in het portaal, en het label
    **"Bestuurdersportaal MVP"** uit de demo-build. Beide staan in beeld en
    ondermijnen de boodschap richting bestuurders. Portaalwijziging.
-2. **Klikpad voor scène 5** schrijven in `scenes.ts`: de bestuurder typt een
-   eigen inbreng in het veld *Inbreng vooraf* en neemt zichtbaar één AI-vraag
-   níét over. Dit is volgens het draaiboek het belangrijkste detail van de hele
-   film. Nu staat er een plaatshouder: het beeld toont de velden maar er gebeurt
-   niets, terwijl de stem zegt dat u uw eigen inbreng formuleert.
-3. **Opnameronde** voor `05-vergadering` (scène 5 en 6) en `06-proces`. Die
-   laatste duurt maar 13,6 seconden en dat is te kort — scène 7 draait nu op
-   een herhaalde laatste seconde om de overgang naar het eindscherm niet te
-   abrupt te maken. Neem hem opnieuw op met een paar seconden rust onderaan.
+   *(Niet geverifieerd in `c_10`.)*
+2. ~~**Klikpad voor scène 5**~~ — opgelost in `c_10`.
+3. ~~**Opnameronde** voor `05-vergadering` en `06-proces`~~ — uitgevoerd voor `c_10`.
 4. **Fragmenttijden herijken** na elke opname. Ze verschuiven altijd.
+
+## 4a. Open na publicatie van `c_10`
+
+1. **Het eindkader zegt "Plan een live demo".** De site hanteert overal "Neem
+   contact op" en verbiedt die formulering expliciet (Bouwoverdracht §1 punt 3,
+   letterlijk vastgelegd in `app/(public)/_components/Header.tsx`). Nu de video
+   op de homepage staat, staan beide CTA's in dezelfde viewport. Herstel is een
+   tekstwijziging in `cta.knop` in `promo-teksten-c.json` plus een re-render —
+   maar `promo/opnames-9x16-c/` ontbreekt lokaal, dus `montage.sh` kan niet
+   draaien zonder eerst opnieuw op te nemen. Bewust geaccepteerd in besluit 0103.
+2. **Het palet wijkt af van de huisstijl.** Merkteken en knop zijn goud
+   `#C8A24B` op navy `#0B1F3A`; de site en de app staan sinds besluit
+   [`0101`](../decisions/0101-accentkleur-terug-naar-navy-d1-bestuursblauw.md) op
+   navy `#234E70`. De video is daarmee een campagne-uiting met een eigen palet.
+3. **De preflight op fondsdata is een steekproef, geen volledige controle.**
+   Negen frames verspreid over de film zijn bekeken: alles fictief, fondsnaam
+   consistent *Stichting Pensioenfonds Horizon*, voettekst aanwezig in het
+   eindkader. De frame-voor-frame-sweep uit `promo-script.md` §13 en de
+   OCR-sweep uit §5 hieronder staan nog open vóór externe verspreiding.
+4. **Het bijschrift op de site zegt "Demonstratiegegevens", de video zelf
+   "Demonstratieomgeving met fictieve gegevens".** De lange variant is
+   ingebrand in het eindkader en verandert alleen met een nieuwe render.
+5. **Fragmenttijden en ondertiteltijden herijken** bij elke nieuwe montage —
+   zie het kader bovenaan dit document.
 
 **Openstaand besluit — de beloftekaart ademt niet.**
 
