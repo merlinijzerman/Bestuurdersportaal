@@ -104,6 +104,8 @@ declare
     'platform_capabilities',          -- deny-by-default
     'platform_identity_capabilities', -- deny-by-default
     'platform_event_log',             -- deny-by-default
+    'platform_signaal_config',        -- deny-by-default; drempels/intervallen zijn
+                                      -- platformbreed, niet per fonds (P5, besluit 0105)
     'voorbereidingen',                -- persoonlijk (gebruiker_id = auth.uid())
     'profielen',                      -- eigen rij; fonds_id bestaat wél maar de
                                       -- policy is strikter (zie gate B)

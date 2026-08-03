@@ -4,6 +4,10 @@
     {
       "path": "/api/aqlab/worker",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/platform/monitoring/snapshot",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

@@ -70,6 +70,10 @@ SQL_R1B="supabase/checks/2026_07_31_r1_tenantgrenzen.sql"
 # Increment G (2026-06-20) — retrieval-filtering op status/bronstatus/geldigheid.
 # Stond buiten CI; toegevoegd n.a.v. reviewbevinding "risico h niet volledig gedekt".
 SQL_G20="supabase/checks/2026_06_20g_retrieval_filtering.sql"
+# P5 (2026-08-03) — monitoringtabellen: anon/authenticated zien niets en kunnen
+# niets schrijven, fn_app_error_log is niet anon-aanroepbaar, app_errors is WEL
+# opschoonbaar (geen auditspoor) en platform_event_log blijft append-only.
+SQL_P5="supabase/checks/2026_08_03_p5_monitoring.sql"
 
 echo "== [1/4] tsc --noEmit --skipLibCheck =="
 ./node_modules/.bin/tsc --noEmit --skipLibCheck
@@ -145,6 +149,9 @@ echo
 echo "-- R1-gedrag (decision_dissent, notificaties, inzage/metadata-log, inbreng) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_R1B"
 echo
+echo "-- P5-monitoring (deny-by-default op de drie nieuwe tabellen + retentie mogelijk) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P5"
+echo
 
 echo "============================================================================"
 echo "GROEN: volledige §15 cross-tenant suite geslaagd (app-laag + DB-laag)."
@@ -166,4 +173,5 @@ echo "  AQLab aqlab_ RLS-aan + append-only + synthetic + beslisregel + deny-by-d
 echo "  G20  retrieval-filtering status/bronstatus/geldigheid                (DB-laag)"
 echo "  R1   tenantcorrectheid van policies + anon + search_path (gates A-E)  (DB-laag)"
 echo "  R1   gedragsbewijs K-01/H-01/H-02/M-01                                (DB-laag)"
+echo "  P5   monitoringtabellen deny-by-default + RPC niet-anon + retentie    (DB-laag)"
 echo "============================================================================"

@@ -22,6 +22,7 @@ export default async function PlatformHome() {
   const magContact = caps.includes("platform.contact.manage");
   const magAqlab = caps.includes("platform.aqlab.operate");
   const magGebruikers = caps.includes("platform.tenants.manage");
+  const magObservability = caps.includes("platform.observability.read");
 
   return (
     <div className="space-y-6">
@@ -102,6 +103,14 @@ export default async function PlatformHome() {
               className="inline-flex items-center gap-2 rounded-lg bg-app-bg px-4 py-2 text-sm font-medium text-ink hover:bg-accent/10"
             >
               AI Quality Lab
+            </Link>
+          )}
+          {magObservability && (
+            <Link
+              href="/platform/monitoring"
+              className="inline-flex items-center gap-2 rounded-lg bg-app-bg px-4 py-2 text-sm font-medium text-ink hover:bg-accent/10"
+            >
+              Monitoring
             </Link>
           )}
         </div>

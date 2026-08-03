@@ -11,9 +11,10 @@
 //
 // 2. **Server-side logging blijft volledig.** De originele error wordt naar
 //    `console.error` geschreven met een route-label voor traceerbaarheid in
-//    Vercel-logs. Bij WP7 (Sentry) wordt hier `Sentry.captureException`
-//    toegevoegd — alle routes profiteren dan automatisch zonder verdere code-
-//    wijzigingen.
+//    Vercel-logs. Sinds P5 (2026-08-03) gaat daarnaast een GESANITEERDE,
+//    gestructureerde regel naar `app_errors` — alle routes die deze helper
+//    gebruiken profiteren automatisch, zonder wijziging in de routes zelf.
+//    Dat sluit de openstaande helft van besluit 0005 (WP7 in-stack, geen Sentry).
 //
 // 3. **Eén plek voor consistent gedrag.** Eerder lekten 8+ routes
 //    `error.message` direct in de response. Door alles via deze helper te
@@ -41,14 +42,27 @@
 // ============================================================================
 
 import { NextResponse } from "next/server";
+import { logAppFout } from "./app-fout-schrijf";
+import type { FoutCategorie, FoutSeverity } from "./app-fout";
 
 type ErrorResponseOptions = {
   /** Door naar de gebruiker. Default: generieke Nederlandse melding. */
   userMessage?: string;
   /** HTTP-statuscode. Default: 500. */
   status?: number;
-  /** Aanvullende context die in de server-log meegaat (niet in de response). */
+  /**
+   * Aanvullende context die in de server-log meegaat (niet in de response).
+   * In `app_errors` landen hiervan alleen de SLEUTELS, nooit de waarden.
+   */
   context?: Record<string, unknown>;
+  /**
+   * Overrides voor de foutclassificatie in `app_errors`. Alleen invullen als de
+   * route het beter weet dan de afleiding uit label + status + foutvorm.
+   */
+  categorie?: FoutCategorie;
+  severity?: FoutSeverity;
+  /** Koppelt de foutregel aan een platform_event_log-correlatie, waar van toepassing. */
+  correlatieId?: string | null;
 };
 
 const DEFAULT_USER_MESSAGE =
@@ -77,12 +91,24 @@ export function errorResponse(
 
   // Server-side logging — volledige error gaat naar Vercel-logs.
   // BEWUST geen client-leak: deze regel is alleen voor de operator.
+  // Dit blijft het EERSTE spoor en staat bewust vóór het wegschrijven: een fout
+  // tijdens een DB-storing landt niet in app_errors (aanvaarde schuld, 0005),
+  // maar staat dan nog steeds hier.
   console.error(`[${label}]`, error, opts.context ?? "");
 
-  // Hook voor WP7 (Sentry): zodra @sentry/nextjs is geïnstalleerd kun je
-  // hier `Sentry.captureException(error, { tags: { route: label }, extra: opts.context })`
-  // toevoegen. Alle routes die deze helper gebruiken sturen dan automatisch
-  // exceptions naar Sentry — zonder code-wijziging in de routes zelf.
+  // P5: gesaniteerde, gestructureerde regel naar app_errors. Fire-and-forget —
+  // draait in after(), werpt nooit, en kan deze response niet vertragen of
+  // blokkeren. De sanitatie (welke velden wél en niet mee mogen) staat in
+  // core/lib/app-fout.ts; de negatieve controle in core/lib/app-fout.sanity.ts.
+  logAppFout({
+    label,
+    error,
+    httpStatus: status,
+    categorie: opts.categorie,
+    severity: opts.severity,
+    context: opts.context,
+    correlatieId: opts.correlatieId ?? null,
+  });
 
   return NextResponse.json({ error: userMessage }, { status });
 }
@@ -101,6 +127,10 @@ export function errorResponse(
  */
 export function badRequest(label: string, userMessage: string, status: number = 400): NextResponse {
   console.warn(`[${label}] 400 ${userMessage}`);
+  // BEWUST NIET naar app_errors: dit zijn afgekeurde gebruikersinvoer-gevallen
+  // (75 aanroepen in de codebase, elke verkeerde upload of lege vraag telt mee).
+  // Geen enkel signaal uit deze tranche leest categorie 'validatie', dus het
+  // levert alleen ruis en volume op. Herzien zodra er een validatiesignaal komt.
   return NextResponse.json({ error: userMessage }, { status });
 }
 
@@ -125,6 +155,24 @@ export function rateLimited(label: string, resetAt: Date | null): NextResponse {
   const userMessage = `U heeft te veel verzoeken achter elkaar gedaan. Probeer het ${hint} opnieuw.`;
 
   console.warn(`[${label}] 429 rate limited — reset over ~${secondenTotReset}s`);
+
+  // P5 signaal 5: dit is de enige bron die 90 dagen meegaat voor
+  // rate-limit-incidenten. `rate_limit_events` is dat niet — fn_rate_limit_check
+  // verwijdert verlopen rijen bij elke check (2026_06_10_rate_limiting.sql), dus
+  // historische incidenten zijn daar niet telbaar.
+  //
+  // GEEN BEWIJSMATERIAAL. app_errors is een operationele logtabel: niet
+  // append-only, 90 dagen retentie, met de service-role verwijderbaar
+  // (besluit 0104). Een incident dat meldplichtig kán zijn (art. 33/34) moet
+  // daarom óók een spoor in platform_event_log of governance_log krijgen; deze
+  // regel is een signaal, geen vastlegging.
+  logAppFout({
+    label,
+    error: new Error("rate limit bereikt"),
+    httpStatus: 429,
+    categorie: "rate_limiting",
+    severity: "laag",
+  });
 
   return NextResponse.json(
     { error: userMessage },

@@ -667,6 +667,37 @@ export interface RetrievalMeta {
     query: string;
     versie: string;
   };
+  // ── P5 (03-08-2026) — operationele telemetrie ─────────────────────────────
+  // Voedt signaal 3 (AI-respons-latency p95) en signaal 6 (tokenverbruik per
+  // fonds) uit FO §19. Bewust in dit BESTAANDE jsonb-veld en niet in nieuwe
+  // kolommen: dat scheelt een migratie op een append-only auditlogtabel, en het
+  // voegt geen logregel toe — dezelfde ene insert, twee sleutels meer.
+  //
+  // Optioneel: gesprekken van vóór deze wijziging dragen ze niet, en de
+  // terugvraagtak (verduidelijking, geen modelcall) evenmin. De signaalquery
+  // slaat rijen zonder deze sleutels daarom over in plaats van ze als 0 te tellen.
+  /** Duur van alléén de eindgeneratie: aanroep tot en met finalMessage(). */
+  duur_ms?: number;
+  /**
+   * Totale MODELTIJD van de beurt: de map-reduce-lus én de eindgeneratie. Dit is
+   * de bron voor signaal 3 — `duur_ms` alleen zou een trage map-reduce-beurt als
+   * snel laten meetellen en de p95 omlaag trekken. Retrieval, query-reformulatie
+   * en de reranker vallen hier buiten: het is modeltijd, geen doorlooptijd.
+   */
+  duur_model_ms?: number;
+  /**
+   * Tokenverbruik: eindgeneratie + map-lus, inclusief cache-tokens. Dit is een
+   * ONDERGRENS — reranker, query-reformulatie, server-side web_search en de
+   * AI-routes buiten de assistentchat zitten er niet in. Zie `tokendekking`.
+   */
+  tokens?: { in: number; out: number };
+  /** Maakt expliciet wat er in `tokens` zit en wat niet, per gelogde beurt. */
+  tokendekking?: {
+    map_calls: number;
+    bevat_reranker: boolean;
+    bevat_query_reformulatie: boolean;
+    bevat_web_search: boolean;
+  };
 }
 
 // Platte rij zoals public.zoek_chunks(...) die teruggeeft (zie migratie

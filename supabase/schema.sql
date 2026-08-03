@@ -1864,3 +1864,172 @@ create table if not exists public.fonds_stuurinfo_log (
 -- sleutel in Fase B uitsluitend in het beheer-project leeft (criterium 2).
 -- Resttaak D1b: de tenant-facing aqlab-assurance-routes (app/api/aqlab/assurance*)
 -- gebruiken de service-role nog — apart deelincrement, zelfde RPC-aanpak.
+
+-- ============================================================================
+-- P5/P4-light — monitoringbasis beheer-surface (2026-08-03).
+-- Bron van waarheid: supabase/migrations/2026_08_03_p5_monitoring.sql.
+-- Sluit de openstaande helft van decisions/0005 (rate limiting werd in 2026-06
+-- gebouwd, error-logging niet). Drie nieuwe tabellen, alle drie RLS aan +
+-- BEWUST GEEN POLICY + expliciete revoke (patroon rate_limit_events).
+--
+-- app_errors is NIET append-only en bewust GEEN auditspoor: het is een
+-- operationele logtabel met een bewaartermijn van 90 dagen (besluit 0104), die
+-- door de snapshot-cron wordt opgeschoond. Een append-only-trigger zou die
+-- opschoning onmogelijk maken. De naam draagt daarom geen `_log`-suffix.
+-- ============================================================================
+
+create table if not exists public.app_errors (
+  id               uuid primary key default gen_random_uuid(),
+  tijdstip         timestamptz not null default now(),
+  fonds_id         uuid references public.fondsen(id) on delete set null,
+  label            text not null,
+  categorie        text not null check (categorie in (
+                     'auth_sessie','autorisatie','validatie','upload_bestandsveiligheid',
+                     'extractie_ocr','embedding_indexering','retrieval_ai','rate_limiting',
+                     'database_integriteit','externe_afhankelijkheid')),
+  severity         text not null check (severity in ('laag','middel','hoog','kritiek')),
+  http_status      integer,
+  fouttype         text,
+  foutcode         text,
+  melding_kort     text check (melding_kort is null or char_length(melding_kort) <= 200),
+  context_sleutels text[],   -- alleen SLEUTELS, nooit waarden
+  correlatie_id    uuid,     -- → platform_event_log.correlatie_id (geen FK: daar
+                             --   is correlatie_id niet uniek, de index is op
+                             --   (correlatie_id, fase))
+  -- Herkomst: 'rpc' = door een ingelogde gebruiker aangeleverd (beïnvloedbaar),
+  -- 'service' = server-side geschreven. Zonder dit onderscheid kan een operator
+  -- een gefabriceerde regel niet van een echte onderscheiden.
+  bron             text not null default 'rpc' check (bron in ('rpc','service'))
+);
+
+create index if not exists idx_app_errors_tijd      on public.app_errors (tijdstip desc);
+create index if not exists idx_app_errors_categorie on public.app_errors (categorie, tijdstip desc);
+create index if not exists idx_app_errors_fonds     on public.app_errors (fonds_id, tijdstip desc);
+
+alter table public.app_errors enable row level security;
+revoke all on public.app_errors from anon, authenticated;
+
+create table if not exists public.platform_signal_snapshots (
+  id             uuid primary key default gen_random_uuid(),
+  tijdstip       timestamptz not null default now(),
+  signaal        text not null,
+  fonds_id       uuid references public.fondsen(id) on delete set null,  -- null = platformbreed
+  waarde         numeric,
+  n              integer,
+  status         text not null check (status in ('groen','oranje','rood','onbekend')),
+  drempel_oranje numeric,   -- meegestempeld op meetmoment
+  drempel_rood   numeric,
+  meta           jsonb      -- uitsluitend aggregaten
+);
+
+create index if not exists idx_pss_signaal_fonds_tijd
+  on public.platform_signal_snapshots (signaal, fonds_id, tijdstip desc);
+create index if not exists idx_pss_signaal_tijd
+  on public.platform_signal_snapshots (signaal, tijdstip desc);
+-- Puur op tijdstip: de retentie-DELETE (elke 5 min), het ophalen van de nieuwste
+-- meting per signaal en het trendvenster van het dashboard filteren of sorteren
+-- alleen op deze kolom. De twee indexen hierboven beginnen op `signaal` en helpen
+-- daar niet; zonder deze index zijn dat drie seq scans per cyclus.
+create index if not exists idx_pss_tijd
+  on public.platform_signal_snapshots (tijdstip desc);
+-- Idem voor de retentie-DELETE op app_errors (idx_app_errors_tijd dekt dat al).
+
+alter table public.platform_signal_snapshots enable row level security;
+revoke all on public.platform_signal_snapshots from anon, authenticated;
+
+-- Drempels ALS DATA (besluit 0105) — de haak waar de latere alerting-tranche op
+-- landt. Platformbreed, dus geen fonds_id; geregistreerd in de globaal-array van
+-- supabase/checks/2026_07_31_r1_structurele_gates.sql (gate A1).
+create table if not exists public.platform_signaal_config (
+  signaal          text primary key,
+  label            text not null,
+  eenheid          text not null check (eenheid in
+                     ('percentage','aantal','milliseconden','trend_percentage')),
+  interval_minuten integer not null check (interval_minuten > 0),
+  venster_minuten  integer not null check (venster_minuten >= 0),  -- 0 = momentopname
+  drempel_oranje   numeric,
+  drempel_rood     numeric,
+  richting         text not null check (richting in ('hoger_is_slechter','lager_is_slechter')),
+  n_drempel        integer,   -- null = geen n-drempel; anders suppressie (besluit 0055)
+  actief           boolean not null default true,
+  toelichting      text,
+  bijgewerkt       timestamptz not null default now(),
+  -- Besluit 0055 is geen instelling: de drie gebruikssignalen houden minimaal
+  -- n>=10. De code kent dezelfde vloer in combineerConfig().
+  constraint chk_signaal_n_drempel check (
+    signaal not in ('ai_latency_p95', 'lege_antwoord_ratio', 'tokenverbruik')
+    or (n_drempel is not null and n_drempel >= 10)
+  )
+);
+
+alter table public.platform_signaal_config enable row level security;
+revoke all on public.platform_signaal_config from anon, authenticated;
+
+-- Enige schrijfpad naar app_errors vanaf de gedeelde (tenant/publieke) surface,
+-- die sinds variant C (besluit 0066) geen service-role meer heeft. Volgt het
+-- D1-patroon (besluit 0065). fonds_id wordt SERVER-SIDE uit auth.uid() afgeleid
+-- en is bewust geen parameter. NIET aan anon gegeven (gate H, en geen
+-- internet-facing schrijfpad naar een platformtabel).
+create or replace function public.fn_app_error_log(
+  p_label            text,
+  p_categorie        text,
+  p_severity         text,
+  p_http_status      integer default null,
+  p_fouttype         text    default null,
+  p_foutcode         text    default null,
+  p_melding_kort     text    default null,
+  p_context_sleutels text[]  default null,
+  p_correlatie_id    uuid    default null
+)
+returns void
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_fonds_id uuid;
+  v_limiet   jsonb;
+begin
+  -- Volumeklep: deze functie is via PostgREST rechtstreeks aanroepbaar door elke
+  -- ingelogde gebruiker. Zonder rem kan iemand signaal 5 vervuilen — en een
+  -- detectie-control die de gecontroleerde zelf kan vullen is geen control.
+  begin
+    v_limiet := public.fn_rate_limit_check('app_error_log', 120, interval '1 minute');
+    if v_limiet is not null and (v_limiet->>'toegestaan')::boolean is false then
+      return;
+    end if;
+  exception when others then null;
+  end;
+
+  select p.fonds_id into v_fonds_id
+    from public.profielen p
+   where p.id = auth.uid();
+
+  insert into public.app_errors (
+    fonds_id, label, categorie, severity, http_status,
+    fouttype, foutcode, melding_kort, context_sleutels, correlatie_id, bron
+  ) values (
+    v_fonds_id, left(p_label, 120), p_categorie, p_severity, p_http_status,
+    left(p_fouttype, 80), left(p_foutcode, 40), left(p_melding_kort, 200),
+    -- [1:20] begrenst het aantal, left() per element de lengte.
+    (select array_agg(left(x, 60)) from unnest(p_context_sleutels[1:20]) as x),
+    p_correlatie_id, 'rpc'
+  );
+end;
+$$;
+
+revoke all on function public.fn_app_error_log(text, text, text, integer, text, text, text, text[], uuid)
+  from public, anon;
+grant execute on function public.fn_app_error_log(text, text, text, integer, text, text, text, text[], uuid)
+  to authenticated, service_role;
+
+-- Expliciete grants aan service_role: leunen op de Supabase-default-ACL is
+-- riskant zolang R6 die aan het inperken is, en een strakkere ACL zou de
+-- monitoring STIL laten falen (de leesfouten worden bewust geslikt).
+grant select, insert, delete on public.app_errors                to service_role;
+grant select, insert, delete on public.platform_signal_snapshots to service_role;
+grant select                 on public.platform_signaal_config   to service_role;
+
+-- De seed van platform_signaal_config (acht signalen met hun FO §19-drempels)
+-- staat in de migratie; hier bewust niet herhaald omdat drempels na oplevering
+-- in de SQL-editor mogen worden bijgesteld en schema.sql geen seedbron is.

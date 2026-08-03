@@ -1380,6 +1380,18 @@ export async function POST(req: NextRequest) {
           // wél token-voor-token. De interne calls vallen binnen deze ene
           // gebruikersactie en raken de WP2-rate-limit dus niet (die is bovenaan
           // de route al één keer geteld).
+          // P5 signaal 3 — de TOTALE modelduur van deze beurt, dus INCLUSIEF de
+          // map-reduce-lus hieronder. Die lus doet sequentiële modelaanroepen en
+          // is juist de trage tak; een latencysignaal dat alleen de eindgeneratie
+          // meet, telt zo'n beurt mee met een kunstmatig lage waarde en trekt de
+          // p95 omlaag in precies het geval waarvoor je latencybewaking inricht.
+          // `duur_ms` (verderop) houdt daarnaast de eindgeneratie apart, zodat de
+          // decompositie zichtbaar blijft.
+          const modelStart = Date.now();
+          let mapCalls = 0;
+          let mapTokensIn = 0;
+          let mapTokensUit = 0;
+
           let streamMessages = claudeBerichten;
           if (scopeStrategie === "map_reduce") {
             const titelLabel = scopeTitels[0] ? `«${scopeTitels[0]}»` : "het document";
@@ -1406,6 +1418,11 @@ export async function POST(req: NextRequest) {
                   },
                 ],
               });
+              // P5 signaal 6 — de map-tak verbruikt echte tokens; die apart
+              // bijhouden zodat de teller niet doet alsof ze niet bestaan.
+              mapCalls += 1;
+              mapTokensIn += mapResp.usage?.input_tokens ?? 0;
+              mapTokensUit += mapResp.usage?.output_tokens ?? 0;
               const mapTekst =
                 mapResp.content[0]?.type === "text" ? mapResp.content[0].text.trim() : "";
               if (mapTekst && !/^geen$/i.test(mapTekst)) {
@@ -1458,6 +1475,11 @@ export async function POST(req: NextRequest) {
           if (webTool) {
             (streamParams as { tools?: unknown[] }).tools = [webTool];
           }
+          // P5 signaal 3: duur van de generatie. De provider-adapter meet dit al
+          // (core/lib/llm-providers/anthropic.ts), maar dit pad loopt daar niet
+          // doorheen — het roept de SDK rechtstreeks aan. Meet vanaf de aanroep
+          // tot finalMessage(), dus inclusief wachttijd bij de provider.
+          const generatieStart = Date.now();
           const claudeStream = anthropic.messages.stream(streamParams);
 
           // Stream de zichtbare tekst, maar houd steeds een staart ter grootte van
@@ -1487,6 +1509,7 @@ export async function POST(req: NextRequest) {
           });
 
           const finaleMsg = await claudeStream.finalMessage();
+          const generatieDuurMs = Date.now() - generatieStart;
 
           // Flush de resterende zichtbare staart als de marker nooit kwam.
           if (!markerGezien && verzonden < volledig.length) {
@@ -1711,6 +1734,44 @@ export async function POST(req: NextRequest) {
                   // Contextbesef (besluit 0090) — herleidbaar of de portaalstand meeging.
                   portaalstand_gebruikt: portaalstandGebruikt,
                 }),
+            // P5 — operationele telemetrie voor signaal 3 (latency p95) en
+            // signaal 6 (tokenverbruik per fonds). Sleutels in het BESTAANDE
+            // jsonb-veld: geen migratie, geen extra logregel, geen tweede insert.
+            // Het auditspoor blijft dus onveranderd van vorm.
+            //
+            // WAT DEZE GETALLEN WEL EN NIET DEKKEN — signaal 3 draait op
+            // `duur_model_ms`, niet op `duur_ms`. `duur_ms` meet alleen de
+            // eindgeneratie; bij een map-reduce-beurt staat de trage sequentiële
+            // map-lus dáár volledig buiten, waardoor een 45-secondenbeurt als een
+            // paar seconden zou meetellen en de p95 juist omlaag zou trekken.
+            // `duur_model_ms` omvat de map-lus wél. Buiten beide vallen nog steeds:
+            // retrieval, query-reformulatie en de reranker — het is modeltijd,
+            // geen doorlooptijd van de beurt.
+            //
+            // `tokens` is de som van de eindgeneratie EN de map-lus, inclusief
+            // cache-tokens (zonder `cache_read`/`cache_creation` is `input_tokens`
+            // geen verbruik maar een restpost). Nog steeds NIET meegeteld: de
+            // reranker, query-reformulatie, server-side web_search, en de AI-routes
+            // buiten de assistentchat (voorbereiding, besluit-concept) die
+            // überhaupt niet in governance_log landen. Ondergrens dus, en zo
+            // gelabeld — een onvolledig getal dat als volledig wordt gepresenteerd
+            // is schijnzekerheid.
+            duur_ms: generatieDuurMs,
+            duur_model_ms: Date.now() - modelStart,
+            tokens: {
+              in:
+                (finaleMsg.usage?.input_tokens ?? 0) +
+                (finaleMsg.usage?.cache_creation_input_tokens ?? 0) +
+                (finaleMsg.usage?.cache_read_input_tokens ?? 0) +
+                mapTokensIn,
+              out: (finaleMsg.usage?.output_tokens ?? 0) + mapTokensUit,
+            },
+            tokendekking: {
+              map_calls: mapCalls,
+              bevat_reranker: false,
+              bevat_query_reformulatie: false,
+              bevat_web_search: false,
+            },
           };
 
           // Loggen ná voltooiing, met het volledige antwoord.

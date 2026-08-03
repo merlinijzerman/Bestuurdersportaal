@@ -18,6 +18,7 @@
 // ============================================================================
 
 import type { createServerSupabase } from "@/core/lib/supabase-server";
+import { logAppFout } from "@/core/lib/app-fout-schrijf";
 
 type SupabaseClient = Awaited<ReturnType<typeof createServerSupabase>>;
 
@@ -113,15 +114,31 @@ export async function controleerLimiet(
   });
 
   if (error || !data) {
+    // P5: een mislukte limietcheck is severity HOOG, ongeacht de tak. Dit is
+    // precies het moment waarop de compensating control onder besluit 0005
+    // wegvalt — fail-open laat de rem los, fail-closed breekt een functie. Beide
+    // horen zichtbaar te zijn op het dashboard (signaal 5), niet alleen in een
+    // Vercel-logregel waar niemand naar kijkt.
+    const logFout = (tak: string) =>
+      logAppFout({
+        label: `rate-limit.${sleutel.endpoint}`,
+        error: error ?? new Error("lege respons van fn_rate_limit_check"),
+        categorie: "rate_limiting",
+        severity: "hoog",
+        context: { tak, endpoint: sleutel.endpoint },
+      });
+
     if (opties.failClosed) {
       console.error(
         `[rate-limit:${sleutel.endpoint}] check mislukt — FAIL-CLOSED (kostendragende route)`,
         error
       );
+      logFout("fail_closed");
       return { toegestaan: false, resterend: 0, resetAt: null };
     }
     // Fail-open: toelaten, maar wel signaleren in de server-logs.
     console.error(`[rate-limit:${sleutel.endpoint}] check mislukt — fail-open`, error);
+    logFout("fail_open");
     return { toegestaan: true, resterend: sleutel.limiet, resetAt: null };
   }
 
