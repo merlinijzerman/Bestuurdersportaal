@@ -100,9 +100,18 @@ export default async function GovernancePage() {
   });
 
   const auditRegels = (regels ?? []) as AuditRegel[];
-  const eigenRegels = auditRegels.filter((r) => r.gebruiker_id === user.id);
-  // Geen enkele regel van een ander → deze gebruiker heeft geen auditcapability.
-  const heeftAuditToegang = auditRegels.length > eigenRegels.length;
+
+  // Vraag de capability RECHTSTREEKS op in plaats van hem uit de data af te
+  // leiden. De eerdere versie deed `auditRegels.length > eigenRegels.length` —
+  // "zie ik regels van een ander, dan heb ik blijkbaar toegang". Dat is onjuist
+  // zodra de houder de enige is die vragen heeft gesteld: dan is er niets van
+  // een ander te zien en meldde de pagina ten onrechte dat de bevoegdheid
+  // ontbrak. Geconstateerd in productie, 04-08-2026.
+  //
+  // `mag_audit()` is `stable` en al aan `authenticated` gegund; deze extra
+  // aanroep kost niets en schrijft geen inzageregel.
+  const { data: magAudit } = await supabase.rpc("mag_audit", { p_fonds: fondsId });
+  const heeftAuditToegang = magAudit === true;
 
   return (
     <div className="p-4 sm:p-6 lg:p-7">
