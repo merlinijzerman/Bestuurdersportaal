@@ -155,22 +155,12 @@ begin
   raise notice 'OK 5: deny-by-default intact; geen direct DELETE-pad.';
 end $$;
 
--- ── 6. AC-2 — geen chatinhoud meer in het auditspoor ──────────────────────
-do $$
-declare n int;
-begin
-  select count(*) into n from information_schema.columns
-   where table_schema='public' and table_name='governance_log'
-     and column_name in ('vraag','antwoord','bronnen');
-  if n <> 0 then
-    raise exception
-      'AC-2 NIET GEHAALD: governance_log heeft nog % kolom(men) met chatinhoud. '
-      'Draai de contract-migratie 2026_08_04_a3_governance_log_contract.sql — '
-      'maar pas nadat code v1 aantoonbaar naar governance_log_inhoud schrijft en '
-      'er een geverifieerde kopie is.', n;
-  end if;
-  raise notice 'OK 6 (AC-2): governance_log draagt geen vraag/antwoord/bronnen meer.';
-end $$;
+-- NB — de AC-2-check (geen chatinhoud meer in het auditspoor) staat BEWUST
+-- helemaal onderaan, ná de gedragstests. Tussen de code-deploy en de
+-- contract-migratie A3 is die controle per definitie rood, en dan zou hij hier
+-- de batch afbreken en al het echte werk hieronder overslaan. Als laatste stap
+-- meldt hij hooguit "de eindtoestand is nog niet bereikt", zonder iets te
+-- blokkeren.
 
 -- ════════════════════════════════════════════════════════════════════════════
 --  DEEL 2 — GEDRAG (seed als eigenaar, impersonatie, rollback)
@@ -184,9 +174,13 @@ begin;
 --   user D (dddd…) — auditor met governance_audit_read, fonds A → AC-5
 --   user E (eeee…) — auditor met read + read_sources, fonds A   → AC-5, AC-6
 --   user B (bbbb…) — ander fonds                                → tenantgrens
-insert into public.fondsen (id, naam)
-values ('11111111-1111-1111-1111-111111111111', 'A-check Fonds A'),
-       ('22222222-2222-2222-2222-222222222222', 'A-check Fonds B');
+-- `slug` is `text unique not null` en heeft geen default. De oudere check-suites
+-- (t3 t/m t17) laten hem weg — die dateren van vóór de kolom; de nieuwere
+-- (r1_tenantgrenzen, r1_structurele_gates, p5_monitoring) geven hem wél mee.
+-- Dit volgt de nieuwe conventie.
+insert into public.fondsen (id, naam, slug)
+values ('11111111-1111-1111-1111-111111111111', 'A-check Fonds A', 'a-check-fonds-a'),
+       ('22222222-2222-2222-2222-222222222222', 'A-check Fonds B', 'a-check-fonds-b');
 
 insert into auth.users (id, aud, role, email, raw_user_meta_data, created_at, updated_at)
 values
@@ -363,10 +357,10 @@ begin
   v_json := v_meta::text;
 
   -- Basisniveau: geen bron-ID's, geen objectreferenties, geen inhoud.
-  if v_meta ? 'chunks' then
+  if jsonb_exists(v_meta, 'chunks') then
     raise exception 'LEK (AC-5): auditor zonder read_sources ziet chunk-ID''s.';
   end if;
-  if (v_meta->'scope') ? 'document_ids' then
+  if jsonb_exists(v_meta->'scope', 'document_ids') then
     raise exception 'LEK (AC-5): auditor zonder read_sources ziet scope.document_ids.';
   end if;
   if v_json like '%GEHEIME VRAAG%' then
@@ -455,7 +449,7 @@ begin
   select r.retrieval_meta into v_meta
     from public.lees_governance_audit('11111111-1111-1111-1111-111111111111') r
    where r.id = '10000000-0000-0000-0000-000000000001';
-  if v_meta ? 'chunks' then
+  if jsonb_exists(v_meta, 'chunks') then
     raise exception
       'LEK (AC-6): bronniveau werd toegekend zonder expliciet verzoek en zonder motivering.';
   end if;
@@ -474,7 +468,7 @@ begin
    where r.id = '10000000-0000-0000-0000-000000000001';
   v_json := v_meta::text;
 
-  if not (v_meta ? 'chunks') then
+  if not jsonb_exists(v_meta, 'chunks') then
     raise exception 'REGRESSIE (AC-5): auditor MET read_sources ziet de chunk-ID''s niet.';
   end if;
   if v_json like '%GEHEIME VRAAG%' or v_json like '%GEHEIME TITEL%' or v_json like '%HASHGEHEIM%' then
@@ -486,10 +480,19 @@ begin
   if n_na <= n_voor then
     raise exception 'REGRESSIE (AC-6): bronniveau-inzage schreef geen inzageregel.';
   end if;
-  select i.bronniveau and i.motivering = 'jaarcontrole 2026' into v_gelogd
-    from public.governance_audit_inzage i
-   order by i.tijdstip desc limit 1;
-  if not coalesce(v_gelogd, false) then
+  -- NIET `order by tijdstip desc limit 1`: `tijdstip` heeft `default now()`, en
+  -- now() is de TRANSACTIEstarttijd — binnen deze suite krijgen alle
+  -- inzageregels dus hetzelfde tijdstip en is "de laatste" niet bepaald. Toets
+  -- daarom op het BESTAAN van de regel die deze aanroep hoort te hebben
+  -- geschreven; dat is bovendien preciezer dan "de nieuwste".
+  select exists (
+    select 1 from public.governance_audit_inzage i
+     where i.gebruiker_id = auth.uid()
+       and i.fonds_id     = '11111111-1111-1111-1111-111111111111'
+       and i.bronniveau
+       and i.motivering   = 'jaarcontrole 2026'
+  ) into v_gelogd;
+  if not v_gelogd then
     raise exception 'REGRESSIE (AC-6): de inzageregel legt bronniveau/motivering niet vast.';
   end if;
 
@@ -580,7 +583,7 @@ begin
   if v_naam is distinct from 'Auteur A' then
     raise exception 'REGRESSIE: gebruiker_naam niet server-side afgeleid (kreeg %).', v_naam;
   end if;
-  if v_meta ? 'zoekvraag' then
+  if jsonb_exists(v_meta, 'zoekvraag') then
     raise exception 'LEK: de zoekvraag belandde in governance_log.retrieval_meta.';
   end if;
   if not exists (select 1 from public.governance_log_inhoud where log_id = v_id) then
@@ -620,4 +623,26 @@ rollback;
 do $$
 begin
   raise notice 'Plateau A rol-/capabilitysuite doorlopen. Elke OK-regel hierboven is een geslaagde controle; bij een fout was de batch afgebroken.';
+end $$;
+
+-- ── AC-2 — geen chatinhoud meer in het auditspoor (ALS LAATSTE) ────────────
+-- Deze staat expres helemaal onderaan. Tussen de code-deploy en de
+-- contract-migratie A3 is hij per definitie rood; bovenaan zou hij dan alles
+-- hierboven blokkeren. Nu meldt hij alleen dat de eindtoestand nog niet is
+-- bereikt, nádat de rest van de suite zijn werk heeft gedaan.
+do $$
+declare n int;
+begin
+  select count(*) into n from information_schema.columns
+   where table_schema='public' and table_name='governance_log'
+     and column_name in ('vraag','antwoord','bronnen');
+  if n <> 0 then
+    raise exception
+      'AC-2 NOG NIET GEHAALD (verwacht zolang A3 niet is gedraaid): governance_log '
+      'heeft nog % kolom(men) met chatinhoud. Alle controles hierboven zijn wél '
+      'doorlopen. Draai 2026_08_04_a3_governance_log_contract.sql zodra code v1 '
+      'aantoonbaar naar governance_log_inhoud schrijft en er een geverifieerde '
+      'kopie is.', n;
+  end if;
+  raise notice 'OK AC-2: governance_log draagt geen vraag/antwoord/bronnen meer.';
 end $$;
