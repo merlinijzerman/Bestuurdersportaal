@@ -195,4 +195,64 @@ check("lege input → lege output, gedropt 0", () => {
   assert.equal(r.gedropt, 0);
 });
 
+// ── handhaafFondsdiscipline: regel 4 — actualiteitspariteit fonds (B-02) ─────
+const PEIL = "2026-08-05";
+
+check("regel4: fonds concept + modus 'actueel' → gedropt", () => {
+  const chunks = [
+    chunk("concept", { bibliotheek: "fonds", fonds_id: FONDS_A, documentstatus: "concept", bronstatus: "actief" }),
+  ];
+  const r = handhaafFondsdiscipline(chunks, FONDS_A, PEIL, "actueel");
+  assert.equal(r.chunks.length, 0);
+  assert.equal(r.gedropt, 1);
+});
+
+check("regel4: fonds concept + modus 'besluitvorming' → behouden (geen regressie)", () => {
+  const chunks = [
+    chunk("concept", { bibliotheek: "fonds", fonds_id: FONDS_A, documentstatus: "concept", bronstatus: "actief" }),
+  ];
+  const r = handhaafFondsdiscipline(chunks, FONDS_A, PEIL, "besluitvorming");
+  assert.equal(r.chunks.length, 1);
+  assert.equal(r.gedropt, 0);
+});
+
+check("regel4: fonds concept + géén modus → behouden (default, geen regressie)", () => {
+  const chunks = [
+    chunk("concept", { bibliotheek: "fonds", fonds_id: FONDS_A, documentstatus: "concept", bronstatus: "actief" }),
+  ];
+  const r = handhaafFondsdiscipline(chunks, FONDS_A, PEIL);
+  assert.equal(r.chunks.length, 1);
+  assert.equal(r.gedropt, 0);
+});
+
+check("regel4: fonds vastgesteld + actief + modus 'actueel' → behouden", () => {
+  const chunks = [
+    chunk("vast", { bibliotheek: "fonds", fonds_id: FONDS_A, documentstatus: "vastgesteld", bronstatus: "actief" }),
+  ];
+  const r = handhaafFondsdiscipline(chunks, FONDS_A, PEIL, "actueel");
+  assert.equal(r.chunks.length, 1);
+  assert.equal(r.gedropt, 0);
+});
+
+check("regel4: fonds vastgesteld + geldig_tot verstreken + modus 'actueel' → gedropt", () => {
+  const chunks = [
+    chunk("verlopen", {
+      bibliotheek: "fonds", fonds_id: FONDS_A,
+      documentstatus: "vastgesteld", bronstatus: "actief", geldig_tot: "2020-01-01",
+    }),
+  ];
+  const r = handhaafFondsdiscipline(chunks, FONDS_A, PEIL, "actueel");
+  assert.equal(r.chunks.length, 0);
+  assert.equal(r.gedropt, 1);
+});
+
+check("regel4: generiek onder modus 'actueel' blijft door regel 2 geregeld (published behouden)", () => {
+  const chunks = [
+    chunk("gen", { bibliotheek: "generiek", documentstatus: "van_kracht", bronstatus: "actief" }),
+  ];
+  const r = handhaafFondsdiscipline(chunks, FONDS_A, PEIL, "actueel");
+  assert.equal(r.chunks.length, 1);
+  assert.equal(r.gedropt, 0);
+});
+
 console.log(`\n${n} sanity-tests geslaagd.`);

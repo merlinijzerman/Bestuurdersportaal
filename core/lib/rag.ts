@@ -93,12 +93,24 @@ function vandaagISO(): string {
 //      VERSTREKEN verplichte review (volgende_review < peildatum) telt niet meer
 //      als actuele bron. Spiegelt de T10-RPC-gate; borgt de fallbackpaden. NULL
 //      volgende_review = niet afgedwongen (backward-compat).
+//   4. Actualiteitspariteit fonds (B-02, 2026-08-05): onder modus 'actueel' valt
+//      een niet-actueel FONDSdocument (zouActueelZijn=false) hier alsnog af. De
+//      RPC's + PostgREST-fallback filteren fonds-docs al in de query op de actuele-
+//      bron-definitie; generiek kreeg die filter bovendien als tweede laag in deze
+//      guard (regel 2+3), fonds niet. Regel 4 maakt de defense-in-depth symmetrisch.
+//      Alleen actief bij modus==='actueel' → geen effect op besluitvorming/
+//      historisch/alles (die tonen niet-vastgestelde stukken bewust). Non-regressief:
+//      in normale werking dropt dit niets extra's (de query verwijderde ze al); het
+//      bijt alleen als laag 1 zou falen (defense-in-depth).
 // fondsFilter=null → regel 1 wordt overgeslagen (RLS-only, geen regressie);
 // regel 2+3 blijven gelden (fonds-onafhankelijk). peildatum default = vandaag.
+// modus afwezig/≠'actueel' → regel 4 slaapt (geen gedragswijziging voor callers
+// die geen modus meegeven, o.a. de expliciete document-scope- en reflectiepaden).
 export function handhaafFondsdiscipline(
   chunks: DocumentChunk[],
   fondsFilter: string | null,
-  peildatum: string = vandaagISO()
+  peildatum: string = vandaagISO(),
+  modus?: RetrievalModus
 ): { chunks: DocumentChunk[]; gedropt: number } {
   const behouden = chunks.filter((c) => {
     const generiek = c.documenten.bibliotheek === "generiek";
@@ -110,6 +122,9 @@ export function handhaafFondsdiscipline(
     }
     if (generiek && isReviewVerlopen(c.documenten.volgende_review, peildatum)) {
       return false; // regel 3 — verlopen review (T10)
+    }
+    if (modus === "actueel" && !generiek && !zouActueelZijn(c, peildatum)) {
+      return false; // regel 4 — niet-actueel fondsdocument onder modus 'actueel' (B-02)
     }
     return true;
   });
@@ -888,7 +903,7 @@ export async function zoekRelevanteChunksMetMeta(
     const gerangschikt = (data as ZoekChunkRij[]).map(rijNaarChunk);
     // T4 — app-guard náást de RPC: dropt (theoretische) cross-tenant/niet-published
     // lekken en telt ze, zodat een falen van RLS+RPC zichtbaar wordt in de meta.
-    const bewaakt = handhaafFondsdiscipline(gerangschikt, fondsFilter, peildatum);
+    const bewaakt = handhaafFondsdiscipline(gerangschikt, fondsFilter, peildatum, filters?.modus);
     // R1.3 (rerank op dit sterke pad) → R1.5 (drempel/ilike) → weeg → R1.6 (parent).
     const na = await naVerwerking(
       bewaakt.chunks, "hybride_rrf", vraag, filters, maxResults, maxPerDoc,
@@ -961,7 +976,7 @@ async function zoekViaFTS(
 
   if (!error && Array.isArray(data) && data.length > 0) {
     const gerangschikt = (data as ZoekChunkRij[]).map(rijNaarChunk);
-    const bewaakt = handhaafFondsdiscipline(gerangschikt, fondsFilter, peildatum);
+    const bewaakt = handhaafFondsdiscipline(gerangschikt, fondsFilter, peildatum, filters?.modus);
     // R1.3 rerank (sterk pad) → R1.5 drempel → weeg → R1.6 parent.
     const na = await naVerwerking(
       bewaakt.chunks, "fts_dutch_ranked", vraag, filters, maxResults, maxPerDoc,
@@ -1002,7 +1017,7 @@ async function zoekViaFTS(
 
     if (!errorT && Array.isArray(dataT) && dataT.length > 0) {
       const gerangschikt = (dataT as ZoekChunkRij[]).map(rijNaarChunk);
-      const bewaakt = handhaafFondsdiscipline(gerangschikt, fondsFilter, peildatum);
+      const bewaakt = handhaafFondsdiscipline(gerangschikt, fondsFilter, peildatum, filters?.modus);
       // Rerank is hier JUIST gewenst: de OR-keten verbreedt de kandidatenset, en de
       // reranker is precies het instrument dat daar de precisie in terugbrengt.
       // De rerank draait op de ORIGINELE vraag, niet op de verslapte query — we
@@ -1078,7 +1093,7 @@ async function zoekViaFTS(
 
     if (!error2 && data2 && data2.length > 0) {
       const gevonden = data2 as unknown as DocumentChunk[];
-      const bewaakt = handhaafFondsdiscipline(gevonden, fondsFilter, peildatum);
+      const bewaakt = handhaafFondsdiscipline(gevonden, fondsFilter, peildatum, filters?.modus);
       // Geen rerank op dit vangnet (plainto=AND, zwakke kandidaten); wél R1.5/R1.6.
       const na = await naVerwerking(
         bewaakt.chunks, "fts_plain", vraag, filters, maxResults, maxPerDoc,
@@ -1124,7 +1139,7 @@ async function zoekViaFTS(
 
     if (data3 && data3.length > 0) {
       const gevonden = data3 as unknown as DocumentChunk[];
-      const bewaakt = handhaafFondsdiscipline(gevonden, fondsFilter, peildatum);
+      const bewaakt = handhaafFondsdiscipline(gevonden, fondsFilter, peildatum, filters?.modus);
       // R1.5 (b1): ilike-treffers zijn nooit citeerbaar → naVerwerking haalt ze
       // uit de prompt-set (achter de RELEVANTIE_DREMPEL-vlag) en logt ze als
       // mogelijk_gerelateerd. Geen rerank op dit laatste vangnet.
