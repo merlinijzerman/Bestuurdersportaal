@@ -160,6 +160,11 @@ begin
 end;
 $f$;
 
+-- H-18 / Gate H: op Supabase kent de default-ACL EXECUTE expliciet aan anon toe.
+-- Een trigger-functie hoeft door NIEMAND direct aanroepbaar te zijn (de trigger
+-- vuurt ongeacht EXECUTE-rechten), dus we trekken het recht volledig in.
+revoke all on function public.fn_export_log_immutable() from public, anon;
+
 drop trigger if exists trg_export_log_no_update on public.governance_export_log;
 create trigger trg_export_log_no_update
   before update on public.governance_export_log
@@ -257,6 +262,10 @@ begin
 
   if has_function_privilege('anon', 'public.log_word_export(uuid, text, text, jsonb)', 'EXECUTE') then
     raise exception 'T2-verificatie: anon heeft EXECUTE op log_word_export (H-18)';
+  end if;
+
+  if has_function_privilege('anon', 'public.fn_export_log_immutable()', 'EXECUTE') then
+    raise exception 'T2-verificatie: anon heeft EXECUTE op fn_export_log_immutable (H-18/Gate H)';
   end if;
 
   -- meta_projectie moet `bureau` nu als bron-sleutel behouden.
