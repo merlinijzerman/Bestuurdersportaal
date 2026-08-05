@@ -27,6 +27,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
+import { isBureauRol, BUREAU_WEIGERING } from "@/core/lib/bureau-gate";
 
 const ZICHTBAARHEID = [
   "prive",
@@ -104,6 +105,15 @@ export async function POST(
       .maybeSingle();
     const isPrivileged =
       profiel?.rol === "voorzitter" || profiel?.rol === "beheerder";
+
+    // T1 bureau-rol (§5.3): geen dissent vastleggen, in geen enkele
+    // zichtbaarheidsvorm. Zonder deze check zou het bureau langs de tak
+    // `bestuurder_id = auth.uid()` in de RLS-schrijfpolicy binnenkomen — die tak
+    // is met migratie 2026_08_05_bestuursbureau_rol.sql dichtgezet; dit is de
+    // leesbare tegenhanger.
+    if (isBureauRol(profiel?.rol)) {
+      return NextResponse.json({ error: BUREAU_WEIGERING.dissent }, { status: 403 });
+    }
 
     if (body.formeel_vastgesteld && !isPrivileged) {
       return NextResponse.json(

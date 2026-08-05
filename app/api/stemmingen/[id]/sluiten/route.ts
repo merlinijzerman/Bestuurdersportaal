@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { notifyUser } from "@/core/lib/notifications";
+import { isBureauRol, BUREAU_WEIGERING } from "@/core/lib/bureau-gate";
 import {
   berekenUitslag,
   uitslagSamenvatting,
@@ -69,6 +70,11 @@ export async function POST(
       .eq("id", user.id)
       .maybeSingle();
     const rol = (profiel as { rol?: string } | null)?.rol;
+    // T1 bureau-rol (§5.3): geen stemronde sluiten. Vóór de starter-tak, om
+    // dezelfde reden als bij het openen (zie /api/stemmingen POST).
+    if (isBureauRol(rol)) {
+      return NextResponse.json({ error: BUREAU_WEIGERING.stemronde }, { status: 403 });
+    }
     const isPrivileged = rol === "voorzitter" || rol === "beheerder";
     if (st.geopend_door !== user.id && !isPrivileged) {
       return NextResponse.json(

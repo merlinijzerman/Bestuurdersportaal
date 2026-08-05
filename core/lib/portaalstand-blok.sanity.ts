@@ -19,7 +19,14 @@ console.log("portaalstand-blok sanity-tests:");
 
 const leeg: PortaalContext = {
   volgendeVergadering: null,
-  agendapunten: { totaal: 0, zonderEigenInbreng: 0, eersteZonderInbreng: null },
+  agendapunten: {
+    maatstaf: "eigen_inbreng",
+    totaal: 0,
+    zonderEigenInbreng: 0,
+    eersteZonderInbreng: null,
+    zonderGekoppeldStuk: 0,
+    eersteZonderStuk: null,
+  },
   openStappen: [],
   recentDocument: null,
 };
@@ -37,9 +44,12 @@ test("volledige stand → benoemde regels + label + instructie", () => {
       locatie: null,
     },
     agendapunten: {
+      maatstaf: "eigen_inbreng",
       totaal: 4,
       zonderEigenInbreng: 2,
       eersteZonderInbreng: { id: "a1", titel: "Beleggingsbeleid" },
+      zonderGekoppeldStuk: 0,
+      eersteZonderStuk: null,
     },
     openStappen: [
       {
@@ -100,6 +110,63 @@ test("alleen vergadering, 0 agendapunten → geen inbreng-regel", () => {
   });
   assert.ok(blok.includes("«Extra overleg»"));
   assert.ok(!blok.includes("zonder uw eigen inbreng"));
+});
+
+// ── T1 bureau-rol (ontwerp §6.6) ────────────────────────────────────────────
+// De promptregel volgt de maatstaf uit de context. Zonder deze tak zou de
+// assistent tegen een bureaugebruiker spreken over "uw eigen inbreng" — een
+// uiting die het bureau niet doet en (sinds migratie 2026_08_05) niet kan zien.
+test("bureau-maatstaf → regel over gekoppelde stukken, niet over eigen inbreng", () => {
+  const blok = bouwPortaalstandBlok({
+    ...leeg,
+    volgendeVergadering: {
+      id: "v1",
+      titel: "Bestuursvergadering september",
+      datum: "2026-09-02T13:00:00.000Z",
+      locatie: null,
+    },
+    agendapunten: {
+      maatstaf: "gekoppeld_stuk",
+      totaal: 5,
+      zonderEigenInbreng: 0,
+      eersteZonderInbreng: null,
+      zonderGekoppeldStuk: 3,
+      eersteZonderStuk: { id: "a4", titel: "Herstelplan" },
+    },
+  });
+  assert.ok(blok.includes("Agendapunten zonder gekoppeld stuk: 3 van 5"));
+  assert.ok(blok.includes("«Herstelplan»"));
+  assert.ok(!blok.includes("zonder uw eigen inbreng"));
+});
+
+// Nulgrens G23: de bestaande regel is byte-voor-byte ongewijzigd voor de
+// bestuurlijke rollen. Kantelt deze assertie, dan is de promptregel voor
+// bestuurder/voorzitter/beheerder gewijzigd en dat is per definitie een
+// doorbraak van de nulgrens.
+test("nulgrens: de bestuurdersregel is letterlijk ongewijzigd", () => {
+  const blok = bouwPortaalstandBlok({
+    ...leeg,
+    volgendeVergadering: {
+      id: "v1",
+      titel: "Bestuursvergadering september",
+      datum: "2026-09-02T13:00:00.000Z",
+      locatie: null,
+    },
+    agendapunten: {
+      maatstaf: "eigen_inbreng",
+      totaal: 5,
+      zonderEigenInbreng: 3,
+      eersteZonderInbreng: { id: "a4", titel: "Herstelplan" },
+      zonderGekoppeldStuk: 0,
+      eersteZonderStuk: null,
+    },
+  });
+  assert.ok(
+    blok.includes(
+      "- Agendapunten zonder uw eigen inbreng: 3 van 5; eerstvolgende «Herstelplan»"
+    )
+  );
+  assert.ok(!blok.includes("gekoppeld stuk"));
 });
 
 console.log(`\n${n} sanity-tests geslaagd.`);

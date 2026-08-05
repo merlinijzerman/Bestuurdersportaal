@@ -52,6 +52,14 @@ interface Props {
   huidigeGebruikerId: string;
   magStarten: boolean; // voorzitter/beheerder/aanmaker
   magSluiten: boolean; // starter/voorzitter/beheerder — server toetst opnieuw
+  /** T1 bureau-rol (§5.3): `bestuursbureau` neemt niet deel aan de besluitvorming
+   *  en brengt dus geen stem uit — ook niet bij volmacht, en daarmee ook geen
+   *  dissent (de dissent-dialoog hangt aan een uitgebrachte tegenstem). De ronde,
+   *  de voortgang en de uitslag blijven wél zichtbaar: dat is bestuurlijke
+   *  informatie die in de notulen belandt en die het bureau nodig heeft.
+   *  Default `true`, zodat bestaande aanroepers ongewijzigd blijven werken.
+   *  Server toetst opnieuw (POST /api/stemmingen/[id]/stemmen), en RLS hard. */
+  magStemmen?: boolean;
   bestuursleden: Bestuurslid[];
   totaalBestuursleden: number;
 }
@@ -65,6 +73,7 @@ export default function StemrondeBlok({
   huidigeGebruikerId,
   magStarten,
   magSluiten,
+  magStemmen = true,
   bestuursleden,
   totaalBestuursleden,
 }: Props) {
@@ -101,6 +110,7 @@ export default function StemrondeBlok({
           stemmen={stemmen}
           huidigeGebruikerId={huidigeGebruikerId}
           magSluiten={magSluiten}
+          magStemmen={magStemmen}
           bestuursleden={bestuursleden}
           totaalBestuursleden={totaalBestuursleden}
         />
@@ -110,6 +120,7 @@ export default function StemrondeBlok({
         <StemUitslagWeergave
           stemming={stemming}
           decisionGekoppeld={decisionGekoppeld}
+          magStemmen={magStemmen}
         />
       )}
 
@@ -151,6 +162,7 @@ function StemPaneel({
   stemmen,
   huidigeGebruikerId,
   magSluiten,
+  magStemmen,
   bestuursleden,
   totaalBestuursleden,
 }: {
@@ -158,6 +170,7 @@ function StemPaneel({
   stemmen: StemData[];
   huidigeGebruikerId: string;
   magSluiten: boolean;
+  magStemmen: boolean;
   bestuursleden: Bestuurslid[];
   totaalBestuursleden: number;
 }) {
@@ -321,46 +334,61 @@ function StemPaneel({
     <div className="space-y-3">
       <div className="text-sm font-medium text-ink">{stemming.vraag}</div>
 
+      {/* T1 bureau-rol (§5.3, FR-6/FR-7): geen stem, en geen zicht op individueel
+          stemgedrag of de tussenstand — `stem_uitbrengingen` is voor deze rol
+          RLS-afgeschermd, dus de live totalen zouden hier 0 tonen en daarmee
+          actief misleiden. De uitslag ná sluiting komt uit `stemmingen` en blijft
+          wél zichtbaar (StemUitslagWeergave). */}
+      {!magStemmen && (
+        <div className="bg-white border border-line rounded-lg p-3 text-xs text-muted leading-relaxed">
+          Deze stemronde loopt. Het bestuursbureau neemt niet deel aan de
+          besluitvorming; individueel stemgedrag en de tussenstand zijn daarom niet
+          zichtbaar. De uitslag verschijnt zodra de stemronde is gesloten.
+        </div>
+      )}
+
       {/* Eigen stem */}
-      <div className="bg-white border border-line rounded-lg p-3 space-y-2">
-        <div className="text-[11px] font-semibold text-muted uppercase tracking-wide">
-          {eigenStem ? "Uw stem (wijzigbaar tot sluiting)" : "Breng uw stem uit"}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {stemming.alternatieven.map((a) => (
+      {magStemmen && (
+        <div className="bg-white border border-line rounded-lg p-3 space-y-2">
+          <div className="text-[11px] font-semibold text-muted uppercase tracking-wide">
+            {eigenStem ? "Uw stem (wijzigbaar tot sluiting)" : "Breng uw stem uit"}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {stemming.alternatieven.map((a) => (
+              <button
+                key={a.code}
+                onClick={() => setKeuze(a.code)}
+                className={`text-sm px-3 py-1.5 rounded-lg border transition-colors ${
+                  keuze === a.code
+                    ? "bg-accent text-white border-accent"
+                    : "bg-white text-ink border-app-line-strong hover:border-accent"
+                }`}
+              >
+                {a.label}
+              </button>
+            ))}
+          </div>
+          <textarea
+            rows={2}
+            value={motivering}
+            onChange={(e) => setMotivering(e.target.value)}
+            placeholder="Optionele motivering…"
+            className="w-full text-xs border border-line rounded px-2 py-1.5 focus:border-accent outline-none resize-none bg-app-bg"
+          />
+          <div className="flex justify-end">
             <button
-              key={a.code}
-              onClick={() => setKeuze(a.code)}
-              className={`text-sm px-3 py-1.5 rounded-lg border transition-colors ${
-                keuze === a.code
-                  ? "bg-accent text-white border-accent"
-                  : "bg-white text-ink border-app-line-strong hover:border-accent"
-              }`}
+              onClick={stem}
+              disabled={!keuze || bezig}
+              className="bg-accent text-white text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-accent-ink disabled:opacity-40"
             >
-              {a.label}
+              {bezig ? "Bezig…" : eigenStem ? "Stem bijwerken" : "Stem uitbrengen"}
             </button>
-          ))}
+          </div>
         </div>
-        <textarea
-          rows={2}
-          value={motivering}
-          onChange={(e) => setMotivering(e.target.value)}
-          placeholder="Optionele motivering…"
-          className="w-full text-xs border border-line rounded px-2 py-1.5 focus:border-accent outline-none resize-none bg-app-bg"
-        />
-        <div className="flex justify-end">
-          <button
-            onClick={stem}
-            disabled={!keuze || bezig}
-            className="bg-accent text-white text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-accent-ink disabled:opacity-40"
-          >
-            {bezig ? "Bezig…" : eigenStem ? "Stem bijwerken" : "Stem uitbrengen"}
-          </button>
-        </div>
-      </div>
+      )}
 
       {/* Volmacht */}
-      {!volmachtModus ? (
+      {magStemmen && (!volmachtModus ? (
         beschikbareVolmachtgevers.length > 0 && (
           <button
             onClick={() => setVolmachtModus(true)}
@@ -433,13 +461,15 @@ function StemPaneel({
             </button>
           </div>
         </div>
-      )}
+      ))}
 
       {/* Live totalen */}
-      <LiveTotalen uitslag={liveUitslag} alternatieven={stemming.alternatieven} />
+      {magStemmen && (
+        <LiveTotalen uitslag={liveUitslag} alternatieven={stemming.alternatieven} />
+      )}
 
       {/* Uitgebrachte stemmen (open = transparant) */}
-      {stemmen.length > 0 && (
+      {magStemmen && stemmen.length > 0 && (
         <details className="text-xs text-muted">
           <summary className="cursor-pointer font-medium hover:text-ink">
             Uitgebrachte stemmen ({stemmen.length})
@@ -571,9 +601,14 @@ function LiveTotalen({
 function StemUitslagWeergave({
   stemming,
   decisionGekoppeld,
+  magStemmen,
 }: {
   stemming: StemmingData;
   decisionGekoppeld: boolean;
+  /** T1 bureau-rol: `false` verbergt het per-persoonsblok. De uitslag zelf
+   *  (totalen, quorum, meerderheid, winnaar) blijft zichtbaar — dat is de
+   *  bestuurlijke informatie die in de notulen belandt. */
+  magStemmen: boolean;
 }) {
   const uitslag = stemming.uitslag;
   if (!uitslag) {
@@ -614,8 +649,14 @@ function StemUitslagWeergave({
         </div>
       )}
 
-      {/* Per-persoon */}
-      {uitslag.per_stemgerechtigde.length > 0 && (
+      {/* Per-persoon. T1 bureau-rol (FR-4/G9): `stemmingen.uitslag` bevat een
+          BEVROREN kopie van het individuele stemgedrag (naam, keuze, motivering),
+          en die tabel is voor het bureau bewust leesbaar omdat de uitslag in de
+          notulen hoort. Deze gate haalt het per-persoonsblok weg. LET OP: dit is
+          klasse D (UI), geen klasse H — de jsonb blijft via PostgREST leesbaar met
+          de eigen anon-key. De structurele afscherming is een openstaand punt
+          (OP-T1-7); zie decisions/0128. */}
+      {magStemmen && uitslag.per_stemgerechtigde.length > 0 && (
         <details className="text-xs text-muted">
           <summary className="cursor-pointer font-medium hover:text-ink">
             Stemmen per bestuurslid ({uitslag.per_stemgerechtigde.length})

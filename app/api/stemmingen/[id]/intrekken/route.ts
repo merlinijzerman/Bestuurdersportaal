@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { notifyUser } from "@/core/lib/notifications";
+import { isBureauRol, BUREAU_WEIGERING } from "@/core/lib/bureau-gate";
 
 const REDEN_MIN = 10;
 
@@ -68,6 +69,10 @@ export async function POST(
       .eq("id", user.id)
       .maybeSingle();
     const rol = (profiel as { rol?: string } | null)?.rol;
+    // T1 bureau-rol (§5.3): geen stemronde intrekken. Vóór de starter-tak.
+    if (isBureauRol(rol)) {
+      return NextResponse.json({ error: BUREAU_WEIGERING.stemronde }, { status: 403 });
+    }
     const isPrivileged = rol === "voorzitter" || rol === "beheerder";
     if (st.geopend_door !== user.id && !isPrivileged) {
       return NextResponse.json(

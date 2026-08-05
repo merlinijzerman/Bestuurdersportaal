@@ -167,9 +167,11 @@ export async function gebruikerAanmaken(input: {
           };
         }
 
-        // Rol zetten alléén als hoger dan de default 'bestuurder' (B-4). Service-
-        // role → de bevriezing-trigger raakt dit niet. Scope op fonds = defense
-        // in depth (nooit een profiel van een ander fonds raken).
+        // Rol zetten alléén als hij afwijkt van de default 'bestuurder' (B-4).
+        // Service-role → de bevriezing-trigger raakt dit niet. Scope op fonds =
+        // defense in depth (nooit een profiel van een ander fonds raken).
+        // NB sinds T1 is 'bestuursbureau' geen HOGERE rol maar een zijtak; het
+        // loopt langs hetzelfde pad omdat het simpelweg ≠ de default is.
         let rolGezet = true;
         let rolFout: string | null = null;
         if (rol !== "bestuurder") {

@@ -7,8 +7,16 @@
 //  puur, veilig te importeren in een client component).
 // ============================================================================
 
-/** Rol-whitelist = de profielen.rol-CHECK (DB is de backstop, P3B-4). */
-export const TENANT_ROLLEN = ["bestuurder", "voorzitter", "beheerder"] as const;
+/** Rol-whitelist = de profielen.rol-CHECK (DB is de backstop, P3B-4).
+ *  2026-08-05 (T1, besluit 0128): `bestuursbureau` toegevoegd. Deze lijst en de
+ *  CHECK in migratie 2026_08_05_bestuursbureau_rol.sql moeten synchroon blijven;
+ *  tests/cross-tenant/p3b-gebruikersbeheer.test.ts bewaakt die drift. */
+export const TENANT_ROLLEN = [
+  "bestuurder",
+  "voorzitter",
+  "beheerder",
+  "bestuursbureau",
+] as const;
 export type TenantRol = (typeof TENANT_ROLLEN)[number];
 
 /** Ondergrens wachtwoordsterkte (B-3: lengte-eis, geen verdere hardening). */
@@ -19,6 +27,7 @@ export const ROL_LABEL: Record<TenantRol, string> = {
   bestuurder: "Bestuurder",
   voorzitter: "Voorzitter",
   beheerder: "Beheerder",
+  bestuursbureau: "Bestuursbureau",
 };
 
 export type GebruikersResultaat =

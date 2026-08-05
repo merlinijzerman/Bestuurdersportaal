@@ -12,6 +12,7 @@ import assert from "node:assert/strict";
 // `server-only` laadt en niet los onder tsx draait).
 import {
   telEigenInbreng,
+  telZonderGekoppeldStuk,
   startpuntKaarten,
   heeftEnigeContext,
   type PortaalContext,
@@ -72,10 +73,61 @@ check("lege agendapuntlijst → 0/0/null (geen crash)", () => {
   assert.equal(t.eersteZonderInbreng, null);
 });
 
+// ── telZonderGekoppeldStuk: de bureau-maatstaf (T1, ontwerp §6.6) ──────────
+// De bureau-kaart vervangt "zonder uw inbreng" door "zonder gekoppeld stuk". Dat
+// is geen cosmetiek: met de RLS-afscherming uit migratie 2026_08_05 zou de eerste
+// maatstaf voor deze rol stelselmatig "alle agendapunten" tonen.
+check("bureau-maatstaf: geen enkel stuk gekoppeld → alle punten open", () => {
+  const t = telZonderGekoppeldStuk(AP, []);
+  assert.equal(t.maatstaf, "gekoppeld_stuk");
+  assert.equal(t.totaal, 3);
+  assert.equal(t.zonderGekoppeldStuk, 3);
+  assert.deepEqual(t.eersteZonderStuk, { id: "a1", titel: "Beleggingsbeleid" });
+});
+
+check("bureau-maatstaf: eerste punt heeft een stuk → eerste open punt schuift op", () => {
+  const t = telZonderGekoppeldStuk(AP, ["a1"]);
+  assert.equal(t.zonderGekoppeldStuk, 2);
+  assert.deepEqual(t.eersteZonderStuk, { id: "a2", titel: "Jaarrekening" });
+});
+
+check("bureau-maatstaf: meerdere stukken op één punt tellen als één", () => {
+  // De query levert één rij per DOCUMENT, dus dubbele agendapunt_id's zijn normaal.
+  const t = telZonderGekoppeldStuk(AP, ["a1", "a1", "a1"]);
+  assert.equal(t.zonderGekoppeldStuk, 2);
+});
+
+check("bureau-maatstaf: alles gekoppeld → 0 open, geen deeplink-doel", () => {
+  const t = telZonderGekoppeldStuk(AP, ["a1", "a2", "a3"]);
+  assert.equal(t.zonderGekoppeldStuk, 0);
+  assert.equal(t.eersteZonderStuk, null);
+});
+
+check("de twee maatstaven vervuilen elkaars velden niet", () => {
+  // Elke telling vult alleen de velden van de eigen maatstaf. Zou dat schuiven,
+  // dan zou een kaart of promptregel stil de verkeerde teller tonen.
+  const inbreng = telEigenInbreng(AP, []);
+  assert.equal(inbreng.maatstaf, "eigen_inbreng");
+  assert.equal(inbreng.zonderGekoppeldStuk, 0);
+  assert.equal(inbreng.eersteZonderStuk, null);
+
+  const stuk = telZonderGekoppeldStuk(AP, []);
+  assert.equal(stuk.maatstaf, "gekoppeld_stuk");
+  assert.equal(stuk.zonderEigenInbreng, 0);
+  assert.equal(stuk.eersteZonderInbreng, null);
+});
+
 // ── startpuntKaarten: lege kaarten weglaten ─────────────────────────────────
 const LEEG: PortaalContext = {
   volgendeVergadering: null,
-  agendapunten: { totaal: 0, zonderEigenInbreng: 0, eersteZonderInbreng: null },
+  agendapunten: {
+    maatstaf: "eigen_inbreng",
+    totaal: 0,
+    zonderEigenInbreng: 0,
+    eersteZonderInbreng: null,
+    zonderGekoppeldStuk: 0,
+    eersteZonderStuk: null,
+  },
   openStappen: [],
   recentDocument: null,
 };
@@ -97,7 +149,14 @@ check("alleen vergadering → alleen die kaart", () => {
 check("alle drie aanwezig → drie kaarten in vaste volgorde", () => {
   const ctx: PortaalContext = {
     volgendeVergadering: { id: "v1", titel: "Bestuur", datum: "2026-08-01", locatie: "Zeist" },
-    agendapunten: { totaal: 2, zonderEigenInbreng: 1, eersteZonderInbreng: { id: "a2", titel: "X" } },
+    agendapunten: {
+      maatstaf: "eigen_inbreng",
+      totaal: 2,
+      zonderEigenInbreng: 1,
+      eersteZonderInbreng: { id: "a2", titel: "X" },
+      zonderGekoppeldStuk: 0,
+      eersteZonderStuk: null,
+    },
     openStappen: [
       { id: "s1", naam: "Stap", deadline: null, procedure_id: "p1", procedure_titel: "Proc" },
     ],

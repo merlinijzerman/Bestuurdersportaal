@@ -1224,6 +1224,12 @@ export async function POST(req: NextRequest) {
         userId: user.id,
         fondsId,
         gebruikerNaam: profiel?.naam ?? null,
+        // T1 bureau-rol (§6.6): zonder de rol valt de afleiding terug op de
+        // bestuurdersmaatstaf, en die telt agendapunten zonder EIGEN inbreng.
+        // Voor `bestuursbureau` levert die query sinds migratie 2026_08_05 nul
+        // rijen, dus de promptregel zou "zonder uw eigen inbreng: N van N"
+        // melden — precies de misleiding die de maatstaf moest wegnemen.
+        rol: (profiel as { rol?: string | null } | null)?.rol ?? null,
       });
       portaalstandBlok = bouwPortaalstandBlok(stand);
       // Fondsbrede module-context (risico's/procedures) ook buiten agendapunt-modus,

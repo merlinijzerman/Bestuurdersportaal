@@ -17,13 +17,37 @@ export interface VergaderingCtx {
   locatie: string | null;
 }
 
+/**
+ * Welke maatstaf de agendapunt-telling gebruikt (T1 bureau-rol, ontwerp §6.6).
+ *
+ * `eigen_inbreng` — de bestuurdersstand, ongewijzigd: hoeveel punten wachten nog
+ *   op de eigen inbreng van de ingelogde gebruiker (besluit 0085).
+ * `gekoppeld_stuk` — de bureau-variant. Voor `bestuursbureau` is de eerste
+ *   maatstaf betekenisloos én misleidend: het bureau plaatst geen inbreng, en
+ *   sinds migratie 2026_08_05_bestuursbureau_rol.sql leest het geen inbrengrijen,
+ *   dus de teller zou altijd "alle agendapunten" tonen. In plaats daarvan telt de
+ *   kaart wat voor het bureau wél betekenis heeft: agendapunten van de
+ *   eerstvolgende vergadering waaraan nog geen stuk is gekoppeld.
+ */
+export type AgendapuntMaatstaf = "eigen_inbreng" | "gekoppeld_stuk";
+
 export interface AgendapuntTelling {
+  /** Welke van de twee tellingen hieronder betekenis draagt. */
+  maatstaf: AgendapuntMaatstaf;
   /** Aantal agendapunten in de eerstvolgende vergadering. */
   totaal: number;
-  /** Aantal daarvan waarop de INGELOGDE gebruiker zelf nog geen inbreng plaatste. */
+  /** Aantal daarvan waarop de INGELOGDE gebruiker zelf nog geen inbreng plaatste.
+   *  Alleen betekenisvol bij maatstaf `eigen_inbreng`; anders 0. */
   zonderEigenInbreng: number;
-  /** Het eerste agendapunt zonder eigen inbreng — deeplink-doel voor "voorbereiden". */
+  /** Het eerste agendapunt zonder eigen inbreng — deeplink-doel voor "voorbereiden".
+   *  Alleen betekenisvol bij maatstaf `eigen_inbreng`; anders null. */
   eersteZonderInbreng: { id: string; titel: string } | null;
+  /** Aantal agendapunten zonder gekoppeld stuk.
+   *  Alleen betekenisvol bij maatstaf `gekoppeld_stuk`; anders 0. */
+  zonderGekoppeldStuk: number;
+  /** Het eerste agendapunt zonder gekoppeld stuk — deeplink-doel voor het bureau.
+   *  Alleen betekenisvol bij maatstaf `gekoppeld_stuk`; anders null. */
+  eersteZonderStuk: { id: string; titel: string } | null;
 }
 
 export interface OpenStapCtx {
@@ -65,9 +89,39 @@ export function telEigenInbreng(
   const zonder = agendapunten.filter((a) => !inbrengSet.has(a.id));
   const eerste = zonder[0];
   return {
+    maatstaf: "eigen_inbreng",
     totaal: agendapunten.length,
     zonderEigenInbreng: zonder.length,
     eersteZonderInbreng: eerste ? { id: eerste.id, titel: eerste.titel } : null,
+    zonderGekoppeldStuk: 0,
+    eersteZonderStuk: null,
+  };
+}
+
+/**
+ * Bureau-variant van de telling (T1, ontwerp §6.6). Telt, gegeven de
+ * agendapunten van de eerstvolgende vergadering en de agendapunt-id's waaraan
+ * ten minste één stuk is gekoppeld, hoeveel punten nog zonder stuk zijn en welk
+ * punt het eerste zo'n punt is (deeplink-doel).
+ *
+ * Spiegelbeeld van `telEigenInbreng` — bewust een aparte functie in plaats van
+ * een vlag: de twee tellingen meten iets wezenlijk anders en horen los
+ * narekenbaar te zijn. Puur: geen DB.
+ */
+export function telZonderGekoppeldStuk(
+  agendapunten: readonly { id: string; titel: string }[],
+  agendapuntIdsMetStuk: readonly string[]
+): AgendapuntTelling {
+  const metStuk = new Set(agendapuntIdsMetStuk);
+  const zonder = agendapunten.filter((a) => !metStuk.has(a.id));
+  const eerste = zonder[0];
+  return {
+    maatstaf: "gekoppeld_stuk",
+    totaal: agendapunten.length,
+    zonderEigenInbreng: 0,
+    eersteZonderInbreng: null,
+    zonderGekoppeldStuk: zonder.length,
+    eersteZonderStuk: eerste ? { id: eerste.id, titel: eerste.titel } : null,
   };
 }
 

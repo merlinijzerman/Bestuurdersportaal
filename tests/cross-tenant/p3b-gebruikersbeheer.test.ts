@@ -25,10 +25,17 @@ import {
   valideerAanmaakBasis,
 } from "../../app/(platform)/platform/(beveiligd)/gebruikers/gedeeld";
 
-// De whitelist MOET gelijk blijven aan de profielen.rol-CHECK
-// (schema.sql: rol in ('bestuurder','voorzitter','beheerder')). Drift hier zou
+// De whitelist MOET gelijk blijven aan de profielen.rol-CHECK. Drift hier zou
 // betekenen dat de UI/action een rol toelaat die de DB-CHECK weigert (of andersom).
-const ROL_CHECK_WAARDEN = ["bestuurder", "voorzitter", "beheerder"];
+// 2026-08-05 (T1, besluit 0128): vierde waarde 'bestuursbureau', toegevoegd in
+// migratie 2026_08_05_bestuursbureau_rol.sql — die migratie is de bron, deze
+// lijst de spiegel.
+const ROL_CHECK_WAARDEN = [
+  "bestuurder",
+  "voorzitter",
+  "beheerder",
+  "bestuursbureau",
+];
 
 const GELDIG = {
   fondsId: "11111111-1111-1111-1111-111111111111",

@@ -20,6 +20,8 @@ const ROL_LABEL: Record<string, string> = {
   bestuurder: "bestuurslid",
   voorzitter: "voorzitter van het bestuur",
   beheerder: "beheerder",
+  // T1 bureau-rol: anders valt de begroeting terug op "bestuurslid".
+  bestuursbureau: "medewerker bestuursbureau",
 };
 
 function dagdeelGroet() {
@@ -138,10 +140,17 @@ export default async function HomePage() {
     userId: user.id,
     fondsId: profiel?.fonds_id || "",
     gebruikerNaam: profiel?.naam ?? null,
+    rol: profiel?.rol ?? null,
   });
   const volgendeVergadering = ctx.volgendeVergadering;
   const totaalAgendapunten = ctx.agendapunten.totaal;
-  const agendapuntenZonderInbreng = ctx.agendapunten.zonderEigenInbreng;
+  // T1 bureau-rol (§6.6): voor `bestuursbureau` telt de kaart agendapunten
+  // zonder gekoppeld stuk in plaats van zonder eigen inbreng. Welke maatstaf
+  // geldt staat in de context zelf, server-side afgeleid uit de rol.
+  const opStuk = ctx.agendapunten.maatstaf === "gekoppeld_stuk";
+  const agendapuntenOpen = opStuk
+    ? ctx.agendapunten.zonderGekoppeldStuk
+    : ctx.agendapunten.zonderEigenInbreng;
 
   // Mijn recente activiteit + meldingen (iteratie 3-A)
   // We laden alle 4 streams parallel zodat de homepage zo snel mogelijk
@@ -361,18 +370,20 @@ export default async function HomePage() {
                 <div className="flex items-start gap-2.5">
                   <span
                     className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${
-                      agendapuntenZonderInbreng > 0 ? "bg-warn" : "bg-ok"
+                      agendapuntenOpen > 0 ? "bg-warn" : "bg-ok"
                     }`}
                   />
                   <div className="text-sm text-ink">
-                    {agendapuntenZonderInbreng > 0 ? (
+                    {agendapuntenOpen > 0 ? (
                       <>
                         Op{" "}
                         <span className="font-medium text-ink">
-                          {agendapuntenZonderInbreng}
+                          {agendapuntenOpen}
                         </span>{" "}
-                        van de {totaalAgendapunten} agendapunten heeft u nog geen
-                        inbreng geplaatst.{" "}
+                        van de {totaalAgendapunten} agendapunten{" "}
+                        {opStuk
+                          ? "is nog geen stuk gekoppeld."
+                          : "heeft u nog geen inbreng geplaatst."}{" "}
                         <Link
                           href={`/vergaderingen/${volgendeVergadering.id}`}
                           className="text-ink hover:text-accent font-medium"
@@ -380,6 +391,8 @@ export default async function HomePage() {
                           Bekijken →
                         </Link>
                       </>
+                    ) : opStuk ? (
+                      <>Alle agendapunten hebben een gekoppeld stuk.</>
                     ) : (
                       <>U heeft op alle agendapunten al inbreng geplaatst — fijn voorbereid.</>
                     )}

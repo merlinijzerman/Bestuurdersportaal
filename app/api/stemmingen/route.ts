@@ -7,6 +7,7 @@ import {
   type Alternatief,
   type VereisteMeerderheid,
 } from "@/core/lib/stemming";
+import { isBureauRol, BUREAU_WEIGERING } from "@/core/lib/bureau-gate";
 
 const TOEGESTANE_MEERDERHEDEN: VereisteMeerderheid[] = [
   "gewone",
@@ -101,6 +102,12 @@ export async function POST(req: NextRequest) {
       .eq("id", user.id)
       .maybeSingle();
     const rol = (profiel as { rol?: string } | null)?.rol;
+    // T1 bureau-rol (§5.3): geen stemronde openen. Deze check moet VÓÓR de
+    // aanmaker-tak: het bureau bouwt in de praktijk de agenda en is dus vaak
+    // `aangemaakt_door`, waardoor het anders langs die tak alsnog binnenkomt.
+    if (isBureauRol(rol)) {
+      return NextResponse.json({ error: BUREAU_WEIGERING.stemronde }, { status: 403 });
+    }
     const isPrivileged = rol === "voorzitter" || rol === "beheerder";
     const isAanmaker = ap.aangemaakt_door === user.id;
     if (!isPrivileged && !isAanmaker) {

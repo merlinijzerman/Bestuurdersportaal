@@ -20,6 +20,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { notifyUser } from "@/core/lib/notifications";
+import { isBureauRol, BUREAU_WEIGERING } from "@/core/lib/bureau-gate";
 
 const ZICHTBAARHEID = [
   "prive",
@@ -90,6 +91,13 @@ export async function PATCH(
     const isAuteur = huidig.bestuurder_id === user.id;
     const isPrivileged =
       profiel?.rol === "voorzitter" || profiel?.rol === "beheerder";
+
+    // T1 bureau-rol (§5.3): geen dissent vastleggen of wijzigen. Het bureau kan
+    // geen auteur zijn (de POST is geweigerd), maar een rolwijziging achteraf zou
+    // de auteur-tak anders alsnog openen.
+    if (isBureauRol(profiel?.rol)) {
+      return NextResponse.json({ error: BUREAU_WEIGERING.dissent }, { status: 403 });
+    }
 
     if (!isAuteur && !isPrivileged) {
       return NextResponse.json(
@@ -319,6 +327,11 @@ export async function DELETE(
     const isAuteur = huidig.bestuurder_id === user.id;
     const isPrivileged =
       profiel?.rol === "voorzitter" || profiel?.rol === "beheerder";
+
+    // T1 bureau-rol (§5.3): geen dissent intrekken. Zie de PATCH hierboven.
+    if (isBureauRol(profiel?.rol)) {
+      return NextResponse.json({ error: BUREAU_WEIGERING.dissent }, { status: 403 });
+    }
 
     if (!isAuteur && !isPrivileged) {
       return NextResponse.json(

@@ -42,7 +42,10 @@ create table if not exists public.profielen (
   id          uuid primary key references auth.users(id) on delete cascade,
   fonds_id    uuid references public.fondsen(id),
   naam        text,
-  rol         text check (rol in ('bestuurder','voorzitter','beheerder')) default 'bestuurder',
+  -- 2026-08-05 (T1 bureau-rol, besluit 0128, migratie 2026_08_05_bestuursbureau_rol.sql):
+  -- vierde waarde 'bestuursbureau'. Default blijft 'bestuurder' — maak_profiel()
+  -- zet de rol niet; verhoging loopt via het service-role-pad (P3-B).
+  rol         text check (rol in ('bestuurder','voorzitter','beheerder','bestuursbureau')) default 'bestuurder',
   aangemaakt  timestamptz default now(),
   -- Increment F (FO §14, migratie 2026_06_22_profiel.sql) — persoonlijk
   -- bestuurdersprofiel. Strikt zelfbeheerd (besluit 0017): alleen de persoon zelf
@@ -532,6 +535,15 @@ create table if not exists public.classificatie_voorstellen (
 create index if not exists idx_chunks_zoek on public.document_chunks using gin(zoek_vector);
 create index if not exists idx_chunks_document on public.document_chunks(document_id);
 
+-- 2026-08-05 (C1 / PvA vectorless-hybride B-03): indexen op de denorm-filtervelden
+-- voor schaalbare gefilterde/vectorless retrieval. Migratie
+-- supabase/migrations/2026_08_05_c1_retrieval_denorm_indexen.sql (op productie
+-- gedraaid + geverifieerd 2026-08-05). Puur additief, idempotent, geen reindex. Besluit 0127.
+create index if not exists idx_chunks_status_geldig on public.document_chunks (documentstatus, bronstatus, geldig_vanaf, geldig_tot);
+create index if not exists idx_chunks_procesinstantie on public.document_chunks (procesinstantie_id);
+create index if not exists idx_chunks_documentdatum on public.document_chunks (documentdatum);
+create index if not exists idx_documenten_fonds_status on public.documenten (fonds_id, status, actief);
+
 -- RAG-retrieval met relevantie-sortering (ts_rank_cd). supabase-js .textSearch()
 -- kan niet ORDER BY ts_rank_cd(...), daarom gebeurt het ranken hier in de DB.
 -- SECURITY INVOKER: RLS op document_chunks/documenten dwingt tenant-isolatie af.
@@ -847,6 +859,13 @@ create policy "fonds agendapunten" on public.agendapunten
     )
   );
 
+-- 2026-08-05 (T1 bureau-rol, migratie 2026_08_05_bestuursbureau_rol.sql): alle vier
+-- de policies dragen de rol-uitsluiting `is distinct from 'bestuursbureau'`. Inbreng
+-- is een bestuurlijke uiting; ondersteuning leest die niet mee en plaatst die niet
+-- (ontwerp §5.3/§5.4, guardrail G9). NULL-veilig: `is distinct from` i.p.v. `<>`,
+-- zodat een profiel met rol IS NULL zich exact gedraagt als vóór de wijziging.
+-- De INSERT-tenantgrens (agendapunten -> vergaderingen.fonds_id) komt uit
+-- 2026_07_31_r1_rls_tenantgrenzen.sql (bevinding M-01); schema.sql liep daarop achter.
 create policy "fonds inbreng lezen" on public.agendapunt_inbreng
   for select using (
     agendapunt_id in (
@@ -854,18 +873,36 @@ create policy "fonds inbreng lezen" on public.agendapunt_inbreng
       join public.vergaderingen v on v.id = ap.vergadering_id
       where v.fonds_id = (select fonds_id from public.profielen where id = auth.uid())
     )
+    and (select rol from public.profielen where id = auth.uid()) is distinct from 'bestuursbureau'
   );
 
 create policy "eigen inbreng schrijven" on public.agendapunt_inbreng
-  for insert with check (gebruiker_id = auth.uid());
+  for insert with check (
+    gebruiker_id = auth.uid()
+    and agendapunt_id in (
+      select ap.id from public.agendapunten ap
+      join public.vergaderingen v on v.id = ap.vergadering_id
+      where v.fonds_id = (select fonds_id from public.profielen where id = auth.uid())
+    )
+    and (select rol from public.profielen where id = auth.uid()) is distinct from 'bestuursbureau'
+  );
 
 create policy "eigen inbreng wijzigen" on public.agendapunt_inbreng
   for update
-  using (gebruiker_id = auth.uid())
-  with check (gebruiker_id = auth.uid());
+  using (
+    gebruiker_id = auth.uid()
+    and (select rol from public.profielen where id = auth.uid()) is distinct from 'bestuursbureau'
+  )
+  with check (
+    gebruiker_id = auth.uid()
+    and (select rol from public.profielen where id = auth.uid()) is distinct from 'bestuursbureau'
+  );
 
 create policy "eigen inbreng verwijderen" on public.agendapunt_inbreng
-  for delete using (gebruiker_id = auth.uid());
+  for delete using (
+    gebruiker_id = auth.uid()
+    and (select rol from public.profielen where id = auth.uid()) is distinct from 'bestuursbureau'
+  );
 
 -- ── 11. Risicomatrix ────────────────────────────────────────
 create table if not exists public.risicos (

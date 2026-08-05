@@ -32,6 +32,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { beoordeelRouteHostToegang } from "@/core/lib/tenant-route-guard";
+import { isBureauRol } from "@/core/lib/bureau-gate";
 import { buildDecisionDossierView } from "@/core/lib/decision";
 import { renderAuditdossierHtml } from "@/core/lib/auditdossier-html";
 import type {
@@ -83,7 +84,7 @@ export async function GET(
     // actor-naam in audit-event + HTML-footer. Gedrag-neutraal zolang enforce uit.
     const { data: profiel } = await supabase
       .from("profielen")
-      .select("naam, fonds_id")
+      .select("naam, fonds_id, rol")
       .eq("id", user.id)
       .maybeSingle();
     const hostOordeel = await beoordeelRouteHostToegang({
@@ -94,6 +95,23 @@ export async function GET(
     if (!hostOordeel.toegestaan) {
       return NextResponse.json(
         { error: "Dit webadres hoort niet bij uw fonds." },
+        { status: 403 }
+      );
+    }
+
+    // T1 bureau-rol (FR-4/G9): het auditdossier rendert `stemmingen.uitslag`
+    // inclusief `per_stemgerechtigde` — naam, keuze en motivering per bestuurslid.
+    // Dat is precies het individuele stemgedrag dat migratie
+    // 2026_08_05_bestuursbureau_rol.sql voor deze rol afschermt op
+    // `stem_uitbrengingen`. Zonder deze gate is de export een omweg om het alsnog
+    // te lezen. De onderliggende jsonb blijft via PostgREST bereikbaar; de
+    // structurele afscherming is openstaand punt OP-T1-7.
+    if (isBureauRol((profiel as { rol?: string | null } | null)?.rol)) {
+      return NextResponse.json(
+        {
+          error:
+            "Het auditdossier bevat het stemgedrag per bestuurslid en is daarom niet beschikbaar voor het bestuursbureau.",
+        },
         { status: 403 }
       );
     }

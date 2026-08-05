@@ -12,6 +12,7 @@ import StemrondeBlok, {
   type StemData,
   type Bestuurslid,
 } from "./StemrondeBlok";
+import { isBureauRol } from "@/core/lib/bureau-gate";
 
 export interface Stuk {
   id: string;
@@ -170,7 +171,12 @@ export default function AgendapuntKaart({
   const isPrivileged = huidigeRol === "voorzitter" || huidigeRol === "beheerder";
   const magBewerken = isEigenaar || isPrivileged;
   const isVerwijderd = !!punt.verwijderd_op;
-  const magStemmingStarten = isPrivileged || isEigenaar;
+  // T1 bureau-rol (§5.3/§5.5). UI-gating is cosmetisch; de weigering staat in RLS
+  // (2026_08_05_bestuursbureau_rol.sql) én in de routes (core/lib/bureau-gate.ts).
+  // Het bureau bouwt de agenda en is dus vaak `aangemaakt_door` — zonder de
+  // !isBureau-term zou het via de eigenaar-tak alsnog een stemronde kunnen openen.
+  const isBureau = isBureauRol(huidigeRol);
+  const magStemmingStarten = !isBureau && (isPrivileged || isEigenaar);
   const aantalBijdragers = punt.inbreng.length; // voorbereidingen tellen ook mee, maar die zijn privé per gebruiker — server-side wordt het echte aantal getoetst
 
   async function verschuif(richting: "omhoog" | "omlaag") {
@@ -320,7 +326,11 @@ export default function AgendapuntKaart({
               punt.tijdsduur_minuten ? `${punt.tijdsduur_minuten} min` : null,
               punt.verantwoordelijke,
               `${punt.stukken.length} ${punt.stukken.length === 1 ? "stuk" : "stukken"}`,
-              `${punt.inbreng.length} ${punt.inbreng.length === 1 ? "inbreng" : "inbrengen"}`,
+              // Voor het bureau levert de RLS 0 inbrengrijen. "0 inbrengen" zou
+              // suggereren dat er geen inbreng ís — precies wat FR-6 verbiedt.
+              isBureau
+                ? "inbreng afgeschermd"
+                : `${punt.inbreng.length} ${punt.inbreng.length === 1 ? "inbreng" : "inbrengen"}`,
             ]
               .filter(Boolean)
               .join(" · ")}
@@ -414,6 +424,7 @@ export default function AgendapuntKaart({
             verantwoordelijke: punt.verantwoordelijke,
           }}
           aantalBijdragers={aantalBijdragers}
+          bijdragenAfgeschermd={isBureau}
           komendeVergaderingen={komendeVergaderingen}
         />
       )}
@@ -435,9 +446,10 @@ export default function AgendapuntKaart({
               huidigeGebruikerId={huidigeGebruikerId}
               magStarten={magStemmingStarten}
               magSluiten={
-                isPrivileged ||
-                stemming?.geopend_door === huidigeGebruikerId
+                !isBureau &&
+                (isPrivileged || stemming?.geopend_door === huidigeGebruikerId)
               }
+              magStemmen={!isBureau}
               bestuursleden={bestuursleden}
               totaalBestuursleden={totaalBestuursleden}
             />
@@ -491,13 +503,21 @@ export default function AgendapuntKaart({
           <div>
             <div className="flex items-baseline justify-between mb-2">
               <div className="text-xs font-semibold text-muted uppercase tracking-wide">
-                Inbreng vooraf ({punt.inbreng.length})
+                Inbreng vooraf{isBureau ? "" : ` (${punt.inbreng.length})`}
               </div>
               <span className="text-[11px] text-muted">
-                zichtbaar voor alle bestuursleden
+                {isBureau ? "afgeschermd" : "zichtbaar voor alle bestuursleden"}
               </span>
             </div>
-            {punt.inbreng.length > 0 && (
+            {/* FR-6 — het paneel verzwijgt niet dát er afgeschermde informatie is.
+                Een lege lijst zou onterecht suggereren dat er geen inbreng ís;
+                voor het bureau levert de RLS immers altijd 0 rijen. */}
+            {isBureau && (
+              <div className="bg-app-bg border border-line rounded-lg px-3 py-2.5 text-sm text-muted leading-relaxed">
+                Inbreng van bestuursleden is niet zichtbaar voor het bestuursbureau.
+              </div>
+            )}
+            {!isBureau && punt.inbreng.length > 0 && (
               <div className="space-y-2 mb-3">
                 {punt.inbreng.map((i) => {
                   const kl = avatarKleur(i.gebruiker_id);
@@ -539,22 +559,27 @@ export default function AgendapuntKaart({
               </div>
             )}
 
-            <div className="flex gap-2 items-end">
-              <textarea
-                value={inbrengTekst}
-                onChange={(e) => setInbrengTekst(e.target.value)}
-                placeholder="Wat wil je vooraf inbrengen voor de discussie van dit punt?"
-                rows={2}
-                className="flex-1 border border-line rounded-lg px-3 py-2 text-sm bg-app-bg outline-none focus:border-accent resize-none"
-              />
-              <button
-                onClick={plaatsInbreng}
-                disabled={inbrengBezig || !inbrengTekst.trim()}
-                className="bg-accent text-white text-sm font-medium px-3 py-2 rounded-lg hover:bg-accent hover:text-ink transition-colors disabled:opacity-40 disabled:cursor-not-allowed self-stretch"
-              >
-                {inbrengBezig ? "..." : "Plaats"}
-              </button>
-            </div>
+            {/* Inbreng is een bestuurlijke uiting; het bureau ondersteunt en
+                spreekt niet mee (§5.3). POST /api/inbreng weigert dit ook
+                server-side, en de RLS-policy "eigen inbreng schrijven" hard. */}
+            {!isBureau && (
+              <div className="flex gap-2 items-end">
+                <textarea
+                  value={inbrengTekst}
+                  onChange={(e) => setInbrengTekst(e.target.value)}
+                  placeholder="Wat wil je vooraf inbrengen voor de discussie van dit punt?"
+                  rows={2}
+                  className="flex-1 border border-line rounded-lg px-3 py-2 text-sm bg-app-bg outline-none focus:border-accent resize-none"
+                />
+                <button
+                  onClick={plaatsInbreng}
+                  disabled={inbrengBezig || !inbrengTekst.trim()}
+                  className="bg-accent text-white text-sm font-medium px-3 py-2 rounded-lg hover:bg-accent hover:text-ink transition-colors disabled:opacity-40 disabled:cursor-not-allowed self-stretch"
+                >
+                  {inbrengBezig ? "..." : "Plaats"}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

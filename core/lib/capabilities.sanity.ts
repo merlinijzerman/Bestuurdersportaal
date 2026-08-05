@@ -43,8 +43,8 @@ test("null/undefined rol is veilig (geen capability)", () => {
   assert.equal(rolHeeftCapability(undefined, "catalog.manage"), false);
 });
 
-test("alle drie de bekende rollen staan in de mapping", () => {
-  for (const rol of ["beheerder", "voorzitter", "bestuurder"]) {
+test("alle vier de bekende rollen staan in de mapping", () => {
+  for (const rol of ["beheerder", "voorzitter", "bestuurder", "bestuursbureau"]) {
     assert.ok(rol in ROL_CAPABILITIES, `${rol} ontbreekt in mapping`);
   }
 });
@@ -117,10 +117,117 @@ test("bestuurder draagt GEEN notulen.segment.confirm (server-side gating)", () =
 });
 
 // ── Increment F — profile.manage.own (strikt zelfbeheer, besluit 0017) ─────
-test("alle drie de rollen dragen profile.manage.own (eigen profiel beheren)", () => {
-  for (const rol of ["beheerder", "voorzitter", "bestuurder"]) {
+test("alle vier de rollen dragen profile.manage.own (eigen profiel beheren)", () => {
+  for (const rol of ["beheerder", "voorzitter", "bestuurder", "bestuursbureau"]) {
     assert.equal(rolHeeftCapability(rol, "profile.manage.own"), true, `${rol} profile.manage.own`);
   }
+});
+
+// ── T1 bureau-rol (ontwerp §5.2, besluit 0128) ─────────────────────────────
+// De mapping van `bestuursbureau` is een governance-afspraak met het fonds, geen
+// implementatiedetail. Daarom exact gepind: wat erin zit én wat er bewust NIET in
+// zit. Wijzigt iemand de rij, dan faalt dit als signaal om §5.2 opnieuw te wegen.
+const BUREAU_WEL = [
+  "documents.metadata.update",
+  "documents.status.change",
+  "documents.bronstatus.change",
+  "profile.manage.own",
+  "stuurinformatie.view",
+  "klantbeeld.view",
+  "ai.deskresearch",
+  "ai.stukvoorbereiding",
+] as const;
+
+const BUREAU_NIET = [
+  "metadata.review",
+  "classification.review",
+  "notulen.segment.confirm",
+  "dossiers.manage",
+  "catalog.manage",
+  "organisation.profile.manage",
+  "fonds.config.manage",
+  "stuurinformatie.manage",
+  "generic.library.manage",
+] as const;
+
+test("bestuursbureau draagt exact de capabilities uit ontwerp §5.2", () => {
+  assert.deepEqual(
+    [...ROL_CAPABILITIES.bestuursbureau].sort(),
+    [...BUREAU_WEL].sort(),
+    "de rij bestuursbureau wijkt af van §5.2"
+  );
+});
+
+test("bestuursbureau draagt géén van de negen uitgesloten capabilities", () => {
+  for (const cap of BUREAU_NIET) {
+    assert.equal(
+      rolHeeftCapability("bestuursbureau", cap),
+      false,
+      `bestuursbureau mag ${cap} niet dragen (§5.3)`
+    );
+  }
+});
+
+// De twee nieuwe capabilities zijn in T1 BEWUST alleen gedefinieerd en toegekend,
+// niet bedraad. Ze horen aan geen enkele andere rol te hangen — anders zou een
+// latere bedrading (T2 / deskresearch-ticket) het gedrag van een bestaande rol
+// wijzigen en de nulgrens G23 breken.
+test("ai.deskresearch en ai.stukvoorbereiding hangen uitsluitend aan bestuursbureau", () => {
+  for (const [rol, caps] of Object.entries(ROL_CAPABILITIES)) {
+    const heeftBureauCaps =
+      (caps as string[]).includes("ai.deskresearch") ||
+      (caps as string[]).includes("ai.stukvoorbereiding");
+    assert.equal(
+      heeftBureauCaps,
+      rol === "bestuursbureau",
+      `${rol} hoort de ai.*-bureaucapabilities ${rol === "bestuursbureau" ? "wél" : "niet"} te dragen`
+    );
+  }
+});
+
+// ── Nulgrens G23 — bewijs in code ──────────────────────────────────────────
+// De bureau-rol is additief. De capability-sets van de drie bestaande rollen zijn
+// hier letterlijk gepind: wijzigt er één, dan is dat per definitie een doorbraak
+// van de nulgrens en faalt deze test luid in plaats van stil.
+test("nulgrens: de capability-sets van de drie bestaande rollen zijn ongewijzigd", () => {
+  assert.deepEqual([...ROL_CAPABILITIES.beheerder].sort(), [
+    "catalog.manage",
+    "classification.review",
+    "documents.bronstatus.change",
+    "documents.metadata.update",
+    "documents.status.change",
+    "dossiers.manage",
+    "fonds.config.manage",
+    "klantbeeld.view",
+    "metadata.review",
+    "notulen.segment.confirm",
+    "organisation.profile.manage",
+    "profile.manage.own",
+    "stuurinformatie.manage",
+    "stuurinformatie.view",
+  ]);
+  assert.deepEqual([...ROL_CAPABILITIES.voorzitter].sort(), [
+    "classification.review",
+    "documents.bronstatus.change",
+    "documents.metadata.update",
+    "documents.status.change",
+    "dossiers.manage",
+    "fonds.config.manage",
+    "klantbeeld.view",
+    "metadata.review",
+    "notulen.segment.confirm",
+    "profile.manage.own",
+    "stuurinformatie.manage",
+    "stuurinformatie.view",
+  ]);
+  assert.deepEqual([...ROL_CAPABILITIES.bestuurder].sort(), [
+    "documents.bronstatus.change",
+    "documents.metadata.update",
+    "documents.status.change",
+    "klantbeeld.view",
+    "profile.manage.own",
+    "stuurinformatie.view",
+  ]);
 });
 
 test("er bestaat GEEN profile.manage.all in de mapping (geen beheerder-override)", () => {

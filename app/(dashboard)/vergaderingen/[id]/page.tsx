@@ -1,4 +1,5 @@
 import { createServerSupabase } from "@/core/lib/supabase-server";
+import { isBureauRol } from "@/core/lib/bureau-gate";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import NieuwAgendapuntForm from "../_components/NieuwAgendapuntForm";
@@ -296,7 +297,13 @@ export default async function VergaderingDetailPage({
           <Stat label="Agendapunten" value={agendapunten.length} />
           <Stat label="Stukken" value={totaalStukken} />
           <Stat label="Met AI-samenvatting" value={`${totaalSamengevat} / ${totaalStukken}`} />
-          <Stat label="Inbreng vooraf" value={totaalInbreng} />
+          {/* T1 bureau-rol (FR-6): voor `bestuursbureau` levert de RLS 0
+              inbrengrijen, dus "0" zou hier suggereren dat er geen inbreng ís.
+              Zelfde correctie als in AgendapuntKaart. */}
+          <Stat
+            label="Inbreng vooraf"
+            value={isBureauRol(huidigeRol) ? "afgeschermd" : totaalInbreng}
+          />
         </div>
       </div>
 

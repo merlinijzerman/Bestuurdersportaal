@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { notifyAgendapuntBijdragers } from "@/core/lib/notifications";
+import { isBureauRol } from "@/core/lib/bureau-gate";
 
 const TOEGESTANE_CATEGORIEEN = [
   "beeldvorming",
@@ -265,6 +266,12 @@ export async function PATCH(
           .eq("agendapunt_id", id),
       ]);
       motiveringVereist = (inbrengCount ?? 0) + (voorbCount ?? 0) > 0;
+      // T1 bureau-rol — FAIL-SAFE. Deze telling loopt over de RLS-client, en
+      // sinds 2026_08_05_bestuursbureau_rol.sql leest `bestuursbureau` nul
+      // inbrengrijen. Zonder deze regel zou de motiveringseis voor die rol stil
+      // verdwijnen precies wanneer er wél bijdragen zijn. Wie de bijdragen niet
+      // kan zien, motiveert altijd.
+      if (isBureauRol(profiel?.rol)) motiveringVereist = true;
     }
 
     const motivering = (body.motivering ?? "").trim();

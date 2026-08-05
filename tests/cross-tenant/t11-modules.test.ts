@@ -30,8 +30,11 @@ const lees = (...p: string[]) => readFileSync(join(hier, "..", "..", ...p), "utf
 
 // ── (1) Beschikbaarheid ≠ autorisatie ───────────────────────────────────────
 
-test("T11 — alle bestuurdersrollen dragen de view-capabilities (aggregaat, geen PII → breed leesrecht)", () => {
-  for (const rol of ["beheerder", "voorzitter", "bestuurder"]) {
+test("T11 — alle fondsrollen dragen de view-capabilities (aggregaat, geen PII → breed leesrecht)", () => {
+  // 2026-08-05 (T1): `bestuursbureau` erbij. Stuurinformatie en klantbeeld
+  // verwerken uitsluitend aggregaatdata zonder deelnemer-PII, dus het leesrecht
+  // is bewust breed (ontwerp §5.2).
+  for (const rol of ["beheerder", "voorzitter", "bestuurder", "bestuursbureau"]) {
     assert.equal(rolHeeftCapability(rol, "stuurinformatie.view"), true, `${rol} stuurinformatie.view`);
     assert.equal(rolHeeftCapability(rol, "klantbeeld.view"), true, `${rol} klantbeeld.view`);
   }

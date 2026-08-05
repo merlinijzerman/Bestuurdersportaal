@@ -26,6 +26,11 @@ interface Props {
   dissents: DissentItem[];
   currentUserId: string | null;
   currentUserIsPrivileged: boolean;
+  /** T1 bureau-rol (§5.3): `bestuursbureau` legt geen dissent vast. Het paneel
+   *  blijft leesbaar (formele dissent en minderheidsnotities horen in de
+   *  verantwoording), maar de aanmaakknop vervalt. De routes weigeren dit
+   *  server-side en de RLS-policy "dissent zichtbaarheid write" hard. */
+  currentUserIsBureau?: boolean;
 }
 
 const ZICHTBAARHEID_VOOR_BESTUURDER: DissentZichtbaarheid[] = [
@@ -58,6 +63,7 @@ export default function DissentPaneel({
   dissents,
   currentUserId,
   currentUserIsPrivileged,
+  currentUserIsBureau = false,
 }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -162,19 +168,25 @@ export default function DissentPaneel({
             dossier landen.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            setOpen((o) => !o);
-            setFout(null);
-          }}
-          className="text-xs text-ink hover:underline whitespace-nowrap"
-        >
-          {open ? "Sluiten" : "+ Nieuwe notitie"}
-        </button>
+        {currentUserIsBureau ? (
+          <span className="text-xs text-muted whitespace-nowrap">
+            Alleen inzage
+          </span>
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              setOpen((o) => !o);
+              setFout(null);
+            }}
+            className="text-xs text-ink hover:underline whitespace-nowrap"
+          >
+            {open ? "Sluiten" : "+ Nieuwe notitie"}
+          </button>
+        )}
       </div>
 
-      {open && (
+      {open && !currentUserIsBureau && (
         <div className="mb-4 border border-line rounded-lg p-4 bg-app-bg/50 space-y-3">
           <Veldgroep label="Standpunt *">
             <textarea

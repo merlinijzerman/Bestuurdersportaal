@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { notifyUser } from "@/core/lib/notifications";
 import type { Alternatief } from "@/core/lib/stemming";
+import { isBureauRol, BUREAU_WEIGERING } from "@/core/lib/bureau-gate";
 
 // ============================================================
 //  POST /api/stemmingen/[id]/stemmen — breng een stem uit of wijzig 'm.
@@ -69,6 +70,18 @@ export async function POST(
         { error: "Deze stemronde is gesloten of ingetrokken" },
         { status: 400 }
       );
+    }
+
+    // T1 bureau-rol (§5.3): geen stem uitbrengen, ook niet bij volmacht. Deze
+    // route had tot nu toe geen rolgate; de harde weigering staat in de
+    // RLS-policy "fonds stem insert".
+    const { data: eigenProfiel } = await supabase
+      .from("profielen")
+      .select("rol")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (isBureauRol((eigenProfiel as { rol?: string } | null)?.rol)) {
+      return NextResponse.json({ error: BUREAU_WEIGERING.stemmen }, { status: 403 });
     }
 
     // Keuze valideren tegen alternatieven

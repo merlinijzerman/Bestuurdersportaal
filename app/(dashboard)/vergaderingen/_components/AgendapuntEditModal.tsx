@@ -35,6 +35,11 @@ interface Props {
   onClose: () => void;
   punt: AgendapuntEditData;
   aantalBijdragers: number; // som van inbreng + voorbereidingen
+  /** T1 bureau-rol: voor `bestuursbureau` levert de RLS 0 inbrengrijen, dus
+   *  `aantalBijdragers` is voor die rol geen betrouwbaar signaal. De motivering
+   *  wordt dan onvoorwaardelijk vereist — je kunt niet zien of er bijdragen zijn,
+   *  dus ga ervan uit dat ze er zijn. De route doet hetzelfde (fail-safe). */
+  bijdragenAfgeschermd?: boolean;
   komendeVergaderingen: KomendeVergadering[]; // exclusief huidige
 }
 
@@ -43,6 +48,7 @@ export default function AgendapuntEditModal({
   onClose,
   punt,
   aantalBijdragers,
+  bijdragenAfgeschermd = false,
   komendeVergaderingen,
 }: Props) {
   const router = useRouter();
@@ -83,7 +89,7 @@ export default function AgendapuntEditModal({
     huidigeVerant !== (punt.verantwoordelijke ?? null) ||
     vergaderingId !== punt.vergadering_id;
 
-  const motiveringVereist = aantalBijdragers > 0;
+  const motiveringVereist = aantalBijdragers > 0 || bijdragenAfgeschermd;
   const motiveringOk = !motiveringVereist || motivering.trim().length >= MOTIVERING_MIN;
 
   async function opslaan() {
@@ -159,11 +165,19 @@ export default function AgendapuntEditModal({
                 <div className="text-sm font-semibold text-ink">
                   Agendapunt bewerken
                 </div>
-                {aantalBijdragers > 0 && (
+                {aantalBijdragers > 0 && !bijdragenAfgeschermd && (
                   <div className="text-[11px] text-warn-ink mt-0.5">
                     Let op: er staan al {aantalBijdragers}{" "}
                     {aantalBijdragers === 1 ? "bijdrage" : "bijdragen"} op dit punt.
                     Een motivering is verplicht — bijdragers ontvangen een notificatie.
+                  </div>
+                )}
+                {bijdragenAfgeschermd && (
+                  <div className="text-[11px] text-warn-ink mt-0.5">
+                    Inbreng van bestuursleden is voor het bestuursbureau niet
+                    zichtbaar. Er kunnen dus bijdragen op dit punt staan — een
+                    motivering is daarom altijd verplicht. Uw motivering wordt
+                    vastgelegd in het wijzigingslog van dit agendapunt.
                   </div>
                 )}
               </div>

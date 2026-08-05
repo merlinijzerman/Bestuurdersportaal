@@ -25,8 +25,10 @@ import "server-only";
 import { cache } from "react";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { haalFondsSessie } from "@/core/lib/fonds-sessie";
+import { isBureauRol } from "@/core/lib/bureau-gate";
 import {
   telEigenInbreng,
+  telZonderGekoppeldStuk,
   type PortaalContext,
   type AgendapuntTelling,
   type VergaderingCtx,
@@ -38,6 +40,7 @@ import {
 export type {
   PortaalContext,
   AgendapuntTelling,
+  AgendapuntMaatstaf,
   VergaderingCtx,
   OpenStapCtx,
   DocumentCtx,
@@ -45,6 +48,7 @@ export type {
 } from "@/core/lib/portaalcontext-afleiding";
 export {
   telEigenInbreng,
+  telZonderGekoppeldStuk,
   startpuntKaarten,
   heeftEnigeContext,
 } from "@/core/lib/portaalcontext-afleiding";
@@ -56,6 +60,10 @@ export interface PortaalContextInput {
   userId: string;
   fondsId: string;
   gebruikerNaam: string | null;
+  /** T1 bureau-rol: bepaalt welke maatstaf de agendapuntkaart gebruikt (§6.6).
+   *  Optioneel zodat bestaande call-sites zonder rol ongewijzigd blijven werken;
+   *  ontbreekt hij, dan valt de afleiding terug op de bestuurdersstand. */
+  rol?: string | null;
 }
 
 /**
@@ -74,13 +82,16 @@ export const getPortaalContext = cache(
     let userId: string;
     let fondsId: string;
     let gebruikerNaam: string | null;
+    let rol: string | null;
 
     if (input) {
       ({ userId, fondsId, gebruikerNaam } = input);
+      rol = input.rol ?? null;
     } else {
       const sessie = await haalFondsSessie();
       userId = sessie.userId;
       fondsId = sessie.fondsId;
+      rol = sessie.rol;
       const { data: profiel } = await supabase
         .from("profielen")
         .select("naam")
@@ -88,6 +99,7 @@ export const getPortaalContext = cache(
         .single();
       gebruikerNaam = (profiel?.naam as string | null) ?? null;
     }
+    const isBureau = isBureauRol(rol);
 
     const nu = new Date().toISOString();
 
@@ -102,29 +114,57 @@ export const getPortaalContext = cache(
     const volgendeVergadering =
       (vergaderingenRaw?.[0] as VergaderingCtx | undefined) ?? null;
 
-    // Agendapunten van die vergadering + eigen-inbreng-telling.
-    let agendapunten: AgendapuntTelling = telEigenInbreng([], []);
+    // Agendapunten van die vergadering.
+    //
+    // Twee maatstaven (T1, ontwerp §6.6). Voor de bestuurlijke rollen: hoeveel
+    // punten wachten nog op de EIGEN inbreng (besluit 0085, ongewijzigd). Voor
+    // `bestuursbureau`: hoeveel punten missen nog een gekoppeld stuk. Die tweede
+    // tak bestaat omdat de eerste voor het bureau actief zou misleiden — het
+    // plaatst geen inbreng en leest sinds migratie 2026_08_05 geen inbrengrijen,
+    // dus de teller zou stelselmatig "alle agendapunten" tonen.
+    let agendapunten: AgendapuntTelling = isBureau
+      ? telZonderGekoppeldStuk([], [])
+      : telEigenInbreng([], []);
     if (volgendeVergadering) {
       const { data: apRaw } = await supabase
         .from("agendapunten")
         .select("id, titel")
         .eq("vergadering_id", volgendeVergadering.id);
       const apList = (apRaw || []) as { id: string; titel: string }[];
-      let eigenIds: string[] = [];
-      if (apList.length > 0) {
-        const { data: mijnInbreng } = await supabase
-          .from("agendapunt_inbreng")
-          .select("agendapunt_id")
-          .eq("gebruiker_id", userId)
-          .in(
-            "agendapunt_id",
-            apList.map((a) => a.id)
+
+      if (isBureau) {
+        let metStukIds: string[] = [];
+        if (apList.length > 0) {
+          const { data: stukken } = await supabase
+            .from("documenten")
+            .select("agendapunt_id")
+            .eq("actief", true)
+            .in(
+              "agendapunt_id",
+              apList.map((a) => a.id)
+            );
+          metStukIds = (stukken || [])
+            .map((d: { agendapunt_id: string | null }) => d.agendapunt_id)
+            .filter((x): x is string => !!x);
+        }
+        agendapunten = telZonderGekoppeldStuk(apList, metStukIds);
+      } else {
+        let eigenIds: string[] = [];
+        if (apList.length > 0) {
+          const { data: mijnInbreng } = await supabase
+            .from("agendapunt_inbreng")
+            .select("agendapunt_id")
+            .eq("gebruiker_id", userId)
+            .in(
+              "agendapunt_id",
+              apList.map((a) => a.id)
+            );
+          eigenIds = (mijnInbreng || []).map(
+            (i: { agendapunt_id: string }) => i.agendapunt_id
           );
-        eigenIds = (mijnInbreng || []).map(
-          (i: { agendapunt_id: string }) => i.agendapunt_id
-        );
+        }
+        agendapunten = telEigenInbreng(apList, eigenIds);
       }
-      agendapunten = telEigenInbreng(apList, eigenIds);
     }
 
     // Eigen open procedurestappen (co-eigenaar via gebruiker_id ∪ gebruiker_naam).

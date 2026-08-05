@@ -82,11 +82,24 @@ export function bouwPortaalstandBlok(stand: PortaalContext): string {
     );
     const ap = stand.agendapunten;
     if (ap.totaal > 0) {
-      const eerste = ap.eersteZonderInbreng;
-      regels.push(
-        `- Agendapunten zonder uw eigen inbreng: ${ap.zonderEigenInbreng} van ${ap.totaal}` +
-          (eerste ? `; eerstvolgende «${eerste.titel}»` : "")
-      );
+      // T1 bureau-rol (§6.6): bij maatstaf `gekoppeld_stuk` telt de context iets
+      // anders, dus zegt de promptregel ook iets anders. Zonder deze tak zou de
+      // assistent tegen een bureaugebruiker over "uw eigen inbreng" spreken —
+      // een uiting die het bureau niet doet en niet kan zien. De bestaande regel
+      // (maatstaf `eigen_inbreng`) blijft byte-voor-byte gelijk: nulgrens G23.
+      if (ap.maatstaf === "gekoppeld_stuk") {
+        const eerste = ap.eersteZonderStuk;
+        regels.push(
+          `- Agendapunten zonder gekoppeld stuk: ${ap.zonderGekoppeldStuk} van ${ap.totaal}` +
+            (eerste ? `; eerstvolgende «${eerste.titel}»` : "")
+        );
+      } else {
+        const eerste = ap.eersteZonderInbreng;
+        regels.push(
+          `- Agendapunten zonder uw eigen inbreng: ${ap.zonderEigenInbreng} van ${ap.totaal}` +
+            (eerste ? `; eerstvolgende «${eerste.titel}»` : "")
+        );
+      }
     }
   }
 

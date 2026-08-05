@@ -43,6 +43,8 @@ interface Props {
   dissents: DissentItem[];
   currentUserId: string;
   currentUserIsPrivileged: boolean;
+  /** T1 bureau-rol: doorgegeven aan DissentPaneel (§5.3, geen dissent vastleggen). */
+  currentUserIsBureau?: boolean;
 }
 
 // ----------------------------------------------------------
@@ -173,6 +175,7 @@ export default function OnderbouwingsPaneel({
   dissents,
   currentUserId,
   currentUserIsPrivileged,
+  currentUserIsBureau = false,
 }: Props) {
   const [actief, setActief] = useState<TabId>("aannames");
 
@@ -263,6 +266,7 @@ export default function OnderbouwingsPaneel({
             dissents={dissents}
             currentUserId={currentUserId}
             currentUserIsPrivileged={currentUserIsPrivileged}
+            currentUserIsBureau={currentUserIsBureau}
           />
         )}
       </div>

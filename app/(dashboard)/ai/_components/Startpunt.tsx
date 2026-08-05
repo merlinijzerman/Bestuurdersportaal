@@ -78,11 +78,23 @@ export default function Startpunt({
   const eersteStap = openStappen[0] ?? null;
   const heeftContext = heeftEnigeContext(context);
 
-  // Deeplink-doel voor "Een agendapunt voorbereiden": het eerste agendapunt
-  // zonder eigen inbreng, met het bestaande anker (AgendapuntKaart id).
+  // T1 bureau-rol (§6.6): de kaart meet voor `bestuursbureau` iets anders —
+  // agendapunten zonder gekoppeld stuk in plaats van zonder eigen inbreng. Welke
+  // maatstaf geldt komt uit de context (server-side afgeleid uit de rol), niet
+  // uit een aparte prop; zo kan het scherm er niet naast zitten.
+  const opStuk = agendapunten.maatstaf === "gekoppeld_stuk";
+  const eersteOpenPunt = opStuk
+    ? agendapunten.eersteZonderStuk
+    : agendapunten.eersteZonderInbreng;
+  const aantalOpen = opStuk
+    ? agendapunten.zonderGekoppeldStuk
+    : agendapunten.zonderEigenInbreng;
+
+  // Deeplink-doel voor "Een agendapunt voorbereiden": het eerste nog openstaande
+  // agendapunt, met het bestaande anker (AgendapuntKaart id).
   const voorbereidHref = volgendeVergadering
-    ? agendapunten.eersteZonderInbreng
-      ? `/vergaderingen/${volgendeVergadering.id}#agendapunt-${agendapunten.eersteZonderInbreng.id}`
+    ? eersteOpenPunt
+      ? `/vergaderingen/${volgendeVergadering.id}#agendapunt-${eersteOpenPunt.id}`
       : `/vergaderingen/${volgendeVergadering.id}`
     : "/vergaderingen";
 
@@ -124,13 +136,17 @@ export default function Startpunt({
                   <div className="text-xs mt-2 flex items-center gap-1.5">
                     <span
                       className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                        agendapunten.zonderEigenInbreng > 0 ? "bg-warn" : "bg-ok"
+                        aantalOpen > 0 ? "bg-warn" : "bg-ok"
                       }`}
                     />
                     <span className="text-ink">
-                      {agendapunten.zonderEigenInbreng > 0
-                        ? `Op ${agendapunten.zonderEigenInbreng} van ${agendapunten.totaal} punten nog geen inbreng`
-                        : "U heeft op alle punten inbreng geplaatst"}
+                      {opStuk
+                        ? aantalOpen > 0
+                          ? `Op ${aantalOpen} van ${agendapunten.totaal} punten nog geen stuk gekoppeld`
+                          : "Alle punten hebben een gekoppeld stuk"
+                        : aantalOpen > 0
+                          ? `Op ${aantalOpen} van ${agendapunten.totaal} punten nog geen inbreng`
+                          : "U heeft op alle punten inbreng geplaatst"}
                     </span>
                   </div>
                 )}
@@ -188,8 +204,8 @@ export default function Startpunt({
             titel="Een agendapunt voorbereiden"
             subtitel={
               volgendeVergadering
-                ? agendapunten.eersteZonderInbreng
-                  ? `«${agendapunten.eersteZonderInbreng.titel}»`
+                ? eersteOpenPunt
+                  ? `«${eersteOpenPunt.titel}»`
                   : "Naar de komende vergadering"
                 : "Bekijk de vergaderingen"
             }

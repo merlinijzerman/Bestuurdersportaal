@@ -63,7 +63,21 @@ export type Capability =
   // (analoog aan fonds.config.manage) — consistent met de bestaande RLS-
   // schrijfpolicy op de fonds_stuurinfo_*-tabellen (voorzitter/beheerder,
   // WITH CHECK), die deze rolgate op DB-niveau dubbelt.
-  | "stuurinformatie.manage";
+  | "stuurinformatie.manage"
+  // T1 bureau-rol (plateau A, ontwerp §5.2, besluit 0128) — de twee capabilities
+  // die het bureau-gedrag van de assistent afgrenzen. In T1 zijn ze WEL aan de rol
+  // toegekend maar NOG NIET BEDRAAD: geen enkele route of prompt leest ze uit, dus
+  // ze sturen vandaag geen functionaliteit aan. Ze bestaan nu al zodat de latere
+  // tickets erop kunnen gaten zonder de rolstructuur opnieuw te openen, en zodat
+  // een fonds bureau-gedrag los van de rol kan toekennen.
+  //  • ai.deskresearch      → gate op het webpad (guardrail G6/FR-14a). De globale
+  //    vlag WEB_RETRIEVAL_ACTIEF wordt dán een systeemVOORWAARDE en deze capability
+  //    de daadwerkelijke gate — anders wijzigt live web-retrieval het gedrag van
+  //    álle rollen en breekt de nulgrens G23. Bedrading: deskresearch-ticket (T4).
+  //  • ai.stukvoorbereiding → gate op de producerende taken + Word-export
+  //    (guardrails G2/G15). Bedrading: T2.
+  | "ai.deskresearch"
+  | "ai.stukvoorbereiding";
 
 /** Rol → toegekende capabilities. Bron-van-waarheid voor autorisatie in v2.
  *  `dossiers.manage` (TO §5: secretariaat/governance/admin) dekt het handmatig
@@ -118,6 +132,40 @@ export const ROL_CAPABILITIES: Record<string, Capability[]> = {
     "profile.manage.own",
     "stuurinformatie.view",
     "klantbeeld.view",
+  ],
+  // T1 bureau-rol (ontwerp §5.2, besluit 0128). GEEN trap op de bestaande ladder
+  // maar een zijtak: op documentbeheer even ruim als een bestuurder, op alle
+  // beoordelende en beherende handelingen strikt smaller.
+  //
+  // WEL, en waarom:
+  //  • documents.metadata.update / status.change / bronstatus.change — het bureau
+  //    doet in de praktijk het documentbeheer. Dit is RAG-BEÏNVLOEDEND
+  //    (documentstatus bepaalt welke versie de assistent als actueel behandelt);
+  //    toegekend op grond van besluitpunt B-2, dat in decisions/0128 is vastgelegd.
+  //    Terugdraaien = deze drie regels verwijderen, verder niets.
+  //  • profile.manage.own — strikt zelfbeheer, ongewijzigd voor iedereen (besluit 0017).
+  //  • stuurinformatie.view / klantbeeld.view — aggregaatdata, geen deelnemer-PII.
+  //  • ai.deskresearch / ai.stukvoorbereiding — nieuw, nog niet bedraad (zie boven).
+  //
+  // NIET, en waarom (§5.3): metadata.review, classification.review en
+  // notulen.segment.confirm zijn beoordelende governance-handelingen — bevestigen
+  // is vaststellen, en het bureau stelt voor terwijl het bestuur bevestigt.
+  // dossiers.manage is een bestuurlijke handeling. catalog.manage,
+  // organisation.profile.manage, fonds.config.manage en stuurinformatie.manage
+  // vallen onder "geen beheerrechten" (richtinggevende keuze opdrachtgever).
+  //
+  // NB Wat het bureau NIET mag DOEN — stemmen, inbrengen, dissent vastleggen —
+  // hangt niet aan een capability maar aan RLS + routechecks; er bestaat geen
+  // voting.*/meetings.*-capability. Zie migratie 2026_08_05_bestuursbureau_rol.sql.
+  bestuursbureau: [
+    "documents.metadata.update",
+    "documents.status.change",
+    "documents.bronstatus.change",
+    "profile.manage.own",
+    "stuurinformatie.view",
+    "klantbeeld.view",
+    "ai.deskresearch",
+    "ai.stukvoorbereiding",
   ],
 };
 

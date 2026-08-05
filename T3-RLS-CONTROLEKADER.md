@@ -77,6 +77,37 @@ Gesplitste of reeds-`with check`-policies: `documenten`, `document_chunks`, `ges
 `fondsen`, `procedure_requirements`, `gremia`, `expertises`, `kritische_focusgebieden`,
 `documenten` (generieke bibliotheek), `document_inzage`, `document_metadata_log`.
 
+### 1d. ROLgrens toegevoegd in T1 bureau-rol (11 policies, 2026-08-05)
+
+> Migratie `2026_08_05_bestuursbureau_rol.sql`, besluit [`0128`](./decisions/0128-tenant-rol-bestuursbureau.md).
+> **Dit is een andere as dan de rest van dit kader.** §1a–§1c gaan over de TENANTgrens
+> (fonds A vs. fonds B). Deze elf policies dragen daarnaast een ROLgrens *binnen* één fonds.
+> Dat was nodig omdat RLS hier op `fonds_id` isoleert en niet op rol: de nieuwe tenant-rol
+> `bestuursbureau` zou anders alle inbreng en al het individuele stemgedrag van het eigen
+> fonds lezen, én kunnen stemmen, inbrengen en dissent vastleggen.
+
+Alle elf zijn `<bestaand predicaat> AND (select rol from public.profielen where id = auth.uid())
+is distinct from 'bestuursbureau'`. Het bestaande predicaat is letterlijk ongewijzigd, dus voor
+`bestuurder`/`voorzitter`/`beheerder` is het evaluatieresultaat per definitie identiek (nulgrens G23).
+`is distinct from` en niet `<>`: `profielen.rol` is nullable, en `<>` zou een profiel met
+`rol IS NULL` onzichtbaar maken.
+
+| Tabel | Policies | Waarom |
+|---|---|---|
+| `agendapunt_inbreng` | `fonds inbreng lezen` (SELECT), `eigen inbreng schrijven` (INSERT), `eigen inbreng wijzigen` (UPDATE), `eigen inbreng verwijderen` (DELETE) | Inbreng is een bestuurlijke uiting; ondersteuning leest die niet mee en plaatst die niet (G9) |
+| `stem_uitbrengingen` | `fonds stem select`, `fonds stem insert`, `fonds stem update`, `fonds stem delete` | Individueel stemgedrag (G9) |
+| `stemmingen` | `fonds stemmingen insert`, `fonds stemmingen update` | Geen stemronde openen, wijzigen of sluiten |
+| `decision_dissent` | `dissent zichtbaarheid write` (ALL) | Geen dissent vastleggen — de tak `bestuurder_id = auth.uid()` stond hier open |
+
+**Bewust NIET afgeschermd:** `"fonds stemmingen select"` — de stemronde en de uitslag zijn
+bestuurlijke informatie die in de notulen belandt en die het bureau nodig heeft. En
+`"dissent zichtbaarheid select"` — het bureau valt daar in de niet-privileged tak en ziet alleen
+formele dissent en minderheidsnotities, die per definitie in de verantwoording thuishoren.
+
+**Gedragsbewijs:** `supabase/checks/2026_08_05_bb_rolgrenzen.sql` (draait mee in
+`scripts/cross-tenant-ci.sh`), inclusief een positieve tegenhanger per afscherming — een suite die
+alles blokkeert zou anders óók groen zijn.
+
 ---
 
 ## 2. §14-checklist — status per punt (T3-scope)

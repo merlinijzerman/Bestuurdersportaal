@@ -68,6 +68,9 @@ export default function Sidebar({
     voorzitter: "Voorzitter bestuur",
     bestuurder: "Bestuurslid",
     beheerder: "Beheerder",
+    // T1 bureau-rol: zonder deze regel zou de fallback op regel ~161
+    // "Bestuurslid" tonen, en dat is voor het bureau feitelijk onjuist.
+    bestuursbureau: "Bestuursbureau",
   };
 
   // Manifest-filter (T8): toon alleen modules die voor dit fonds beschikbaar zijn.

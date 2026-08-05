@@ -74,6 +74,12 @@ SQL_G20="supabase/checks/2026_06_20g_retrieval_filtering.sql"
 # niets schrijven, fn_app_error_log is niet anon-aanroepbaar, app_errors is WEL
 # opschoonbaar (geen auditspoor) en platform_event_log blijft append-only.
 SQL_P5="supabase/checks/2026_08_03_p5_monitoring.sql"
+# T1 bureau-rol (2026-08-05) — ROLgrens BINNEN één fonds, niet tussen fondsen.
+# RLS isoleert hier op fonds_id en niet op rol, dus de afscherming van
+# `bestuursbureau` (geen inbreng, geen stemgedrag, niet stemmen/inbrengen/dissent)
+# is een actieve predicaat-uitbreiding en geen vanzelfsprekendheid. Inclusief
+# nulgrens G23: bestuurder en voorzitter gedragen zich exact als daarvoor.
+SQL_BB="supabase/checks/2026_08_05_bb_rolgrenzen.sql"
 
 echo "== [1/4] tsc --noEmit --skipLibCheck =="
 ./node_modules/.bin/tsc --noEmit --skipLibCheck
@@ -152,6 +158,9 @@ echo
 echo "-- P5-monitoring (deny-by-default op de drie nieuwe tabellen + retentie mogelijk) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P5"
 echo
+echo "-- BB-rolgrenzen (bestuursbureau: 0 rijen inbreng/stemgedrag, geen schrijfpad, nulgrens G23) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_BB"
+echo
 
 echo "============================================================================"
 echo "GROEN: volledige §15 cross-tenant suite geslaagd (app-laag + DB-laag)."
@@ -174,4 +183,5 @@ echo "  G20  retrieval-filtering status/bronstatus/geldigheid                (DB
 echo "  R1   tenantcorrectheid van policies + anon + search_path (gates A-E)  (DB-laag)"
 echo "  R1   gedragsbewijs K-01/H-01/H-02/M-01                                (DB-laag)"
 echo "  P5   monitoringtabellen deny-by-default + RPC niet-anon + retentie    (DB-laag)"
+echo "  BB   rolgrenzen bestuursbureau + nulgrens G23                          (DB-laag)"
 echo "============================================================================"

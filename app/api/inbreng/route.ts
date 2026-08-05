@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { notifyUser } from "@/core/lib/notifications";
+import { isBureauRol, BUREAU_WEIGERING } from "@/core/lib/bureau-gate";
 
 export async function POST(req: NextRequest) {
   try {
@@ -27,9 +28,16 @@ export async function POST(req: NextRequest) {
 
     const { data: profiel } = await supabase
       .from("profielen")
-      .select("naam, fonds_id")
+      .select("naam, fonds_id, rol")
       .eq("id", user.id)
       .single();
+
+    // T1 bureau-rol (§5.3): geen inbreng. De harde weigering staat in de
+    // RLS-policy "eigen inbreng schrijven"; deze check levert een leesbare
+    // melding in plaats van een kale insert-fout.
+    if (isBureauRol(profiel?.rol)) {
+      return NextResponse.json({ error: BUREAU_WEIGERING.inbreng }, { status: 403 });
+    }
 
     const { data, error } = await supabase
       .from("agendapunt_inbreng")

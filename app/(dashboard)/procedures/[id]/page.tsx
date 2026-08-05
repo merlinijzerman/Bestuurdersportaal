@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { templateLabel } from "@/core/lib/proces-templates";
+import { isBureauRol } from "@/core/lib/bureau-gate";
 import {
   DOSSIER_STATUS_LABEL,
   dossierStatusKleur,
@@ -187,6 +188,9 @@ export default async function ProcedureDetailPage({
     .single();
   const currentUserIsPrivileged =
     profiel?.rol === "voorzitter" || profiel?.rol === "beheerder";
+  // T1 bureau-rol (§5.3): geen dissent vastleggen. UI-cosmetica; de weigering
+  // staat in de dissent-routes en in de RLS-schrijfpolicy.
+  const currentUserIsBureau = isBureauRol(profiel?.rol);
 
   const [stappenRes, eigenarenRes, logRes, besluitenRes, vergaderingenRes] =
     await Promise.all([
@@ -757,6 +761,7 @@ export default async function ProcedureDetailPage({
               dissents={dossier.dissent}
               currentUserId={user.id}
               currentUserIsPrivileged={currentUserIsPrivileged}
+              currentUserIsBureau={currentUserIsBureau}
             />
 
             <UitklapbaarPaneel
