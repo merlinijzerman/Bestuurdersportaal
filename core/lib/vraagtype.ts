@@ -653,8 +653,20 @@ export function bepaalVervolgacties(
   // perspectief-lenzen (duiding/kritische vragen) en de lengte-acties. Bij een
   // ALGEMENE vraag dragen de inhoudelijke B1-vervolgvragen (los, in de UI) de
   // "wat nu"-suggesties; de generieke transformatieknoppen voelden daar aangeplakt.
-  documentGericht = false
+  documentGericht = false,
+  // Plateau B / G1 — tijdens een actieve reflectieflow verdwijnen ALLE
+  // vervolgacties. "Stel kritische vragen" duwt de bestuurder een richting in
+  // die hij juist zelf aan het bepalen is; "maak korter" en "maak concreter"
+  // slaan nergens op bij een verdiepingsvraag over zijn eigen twijfel. De
+  // reflectie heeft haar eigen, gelabelde vervolgstap.
+  //
+  // De waarde komt van de SERVER (gesprek_reflectie_state via
+  // /api/reflectie/transitie), niet uit clientstate: de flowstatus is
+  // server-controlled (besluit 0110).
+  reflectieActief = false
 ): Vervolgactie[] {
+  if (reflectieActief) return [];
+
   const acties: Vervolgactie[] = [];
   const g = normaliseer(vraag);
   const besluit = isBesluitvormingsgericht(vraag, antwoordmodus);

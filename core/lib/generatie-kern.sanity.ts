@@ -20,6 +20,8 @@ import {
   NIEUW_STRUCTUUR,
   NIEUW_TOON,
   SP_SPARRING_REGELS,
+  SP_REFLECTIE_REGELS,
+  SP_REFLECTIE_CONCEPT_REGELS,
   VERVOLGVRAGEN_INSTRUCTIE,
   VERVOLGVRAGEN_MARKER,
   SP_COMBINEREN_REGELS,
@@ -72,6 +74,13 @@ const PIN = {
   NIEUW_TOON: "132afe916deebd1341fd496a41bcb60221fac6b26f2834bb51cedc4a1bc1564a",
   SP_SPARRING_REGELS: "e6aded3c2e569cc83fcfd8b5e63ab6b185f4eb7ad9e0bc0deeb7b84a751c709d",
   VERVOLGVRAGEN_INSTRUCTIE: "c3fc6188b01a6c7c4f9067cbbe64785f6e1fe24ed9260b0766c5fe3ecfb1352b",
+  // Plateau B (05-08-2026) — nieuw, additief. Deze twee blokken bepalen of de
+  // reflectiefunctie de twijfel van de bestuurder scherper maakt of juist
+  // overneemt; ze horen daarom net zo hard vastgepind als de toon-prompt. Ze
+  // raken géén van de bestaande hashes: SP_REFLECTIE_* wordt als `regels`
+  // meegegeven aan bouwSysteemBlokken en vervangt niets.
+  SP_REFLECTIE_REGELS: "b4823c89991bbc49d0e238a58430e3bbfa018bc03b89bd263f52b72dd462593a",
+  SP_REFLECTIE_CONCEPT_REGELS: "d39b574a9edb4603ff87d82f17c29549649b2f608e4ad53d1f8fcad2b0c7efbc",
   static_feitelijk_combineren: "720677da5a653ce08bbe08e051dad1c065a8246c7fa9964ef23d1b16e004cb6e",
   static_sparring_combineren: "bf11b83970b44857951fa520b51022b92968f6d59875e975a5665e5120c14118",
   dyn_block: "d6e01afa0bc092b7efbc8701fad58af73808ae3e3ee0c719de20366630f5c4d7",
@@ -91,6 +100,45 @@ test("toon-/instructieblokken byte-identiek aan gepinde snapshot", () => {
   assert.equal(sha(NIEUW_TOON), PIN.NIEUW_TOON);
   assert.equal(sha(SP_SPARRING_REGELS), PIN.SP_SPARRING_REGELS);
   assert.equal(sha(VERVOLGVRAGEN_INSTRUCTIE), PIN.VERVOLGVRAGEN_INSTRUCTIE);
+  assert.equal(sha(SP_REFLECTIE_REGELS), PIN.SP_REFLECTIE_REGELS);
+  assert.equal(sha(SP_REFLECTIE_CONCEPT_REGELS), PIN.SP_REFLECTIE_CONCEPT_REGELS);
+});
+
+test("plateau B: de reflectieprompt stuurt niet en diagnosticeert niet", () => {
+  // Inhoudelijke vangrails bovenop de hash. De hash zegt "er is iets veranderd";
+  // deze test zegt wát er niet mag veranderen. Zonder dit zou een herformulering
+  // die de pin netjes bijwerkt de kern stilzwijgend kunnen verschuiven.
+  const reflectie = SP_REFLECTIE_REGELS.toLowerCase();
+
+  // Het expliciete verbod op duiden van de twijfel (v1.0 §9.5) staat erin.
+  assert.ok(reflectie.includes("diagnosticeert niet"));
+  assert.ok(reflectie.includes("u adviseert niet"));
+  assert.ok(reflectie.includes("één verdiepingsvraag per beurt"));
+  // De drie-deling uit FR-34 staat er letterlijk in.
+  assert.ok(reflectie.includes("wat u inbrengt"));
+  assert.ok(reflectie.includes("wat al vaststond"));
+  assert.ok(reflectie.includes("mogelijke onderzoeksvraag"));
+  // FR-55: zonder bronnen geen verzonnen dossiercontext.
+  assert.ok(reflectie.includes("verzint geen dossiercontext"));
+  // Besluit 0112: het model benoemt de reflectie niet als proces en meet niets.
+  assert.ok(reflectie.includes("hoe vaak of hoe goed"));
+
+  // FR-21: het concept voegt geen oordeel of interpretatie toe.
+  const concept = SP_REFLECTIE_CONCEPT_REGELS.toLowerCase();
+  assert.ok(concept.includes("geen nieuwe interpretatie"));
+  assert.ok(concept.includes("geen oordeel"));
+  assert.ok(concept.includes("uw reflectie, in concept"));
+  // AC-26: de vaste slotzin, die expliciet zegt dat er GEEN aparte notitie komt.
+  assert.ok(
+    SP_REFLECTIE_CONCEPT_REGELS.includes(
+      "Met deze keuze wordt geen afzonderlijke reflectienotitie aangemaakt."
+    )
+  );
+  // En geen van de verboden labels uit besluit 0113 sluipt via de prompt binnen.
+  for (const verboden of ["niet opslaan", "niets bewaren", "alleen voor mij bewaren"]) {
+    assert.equal(reflectie.includes(verboden), false, verboden);
+    assert.equal(concept.includes(verboden), false, verboden);
+  }
 });
 
 test("bouwStatischeInstructies-assemblage byte-identiek (feitelijk + sparring)", () => {

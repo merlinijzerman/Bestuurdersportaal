@@ -313,6 +313,67 @@ SCHEID IN ELK SPARRINGANTWOORD EXPLICIET (gebruik exact deze vier labels als kor
 Vermeng deze vier nooit. Een eerlijke "ik weet het niet, dit moet u verifiëren" is waardevoller dan schijnzekerheid.`;
 
 // ============================================================
+//  Plateau B — de reflectiedialoog (FO §9.6/§9.7, besluit 0108)
+// ----------------------------------------------------------------------------
+//  ADDITIEF BLOK. Het vervangt SP_SPARRING_REGELS niet en wijzigt geen enkel
+//  bestaand, gepind blok — het komt eróver heen wanneer de server-controlled
+//  flowstatus actief is. Wél zelf gepind in generatie-kern.sanity.ts, want dit
+//  is de tekst die bepaalt of de functie helpt of juist stuurt.
+//
+//  WAAROM DIT ZO STRAK STAAT. De hele functie staat of valt bij één ding: dat de
+//  assistent de twijfel van de bestuurder SCHERPER maakt en hem niet OVERNEEMT.
+//  Ontwerp v1.0 §9.5 geeft het verschil met twee zinnen:
+//
+//    gewenst:      "U geeft aan dat u twijfelt aan de uitvoerbaarheid. In de
+//                   stukken worden planning en leverancierscapaciteit genoemd.
+//                   Wilt u onderzoeken of uw twijfel vooral betrekking heeft op
+//                   capaciteit, afhankelijkheden, planning of iets anders?"
+//    te vermijden: "Uw twijfel komt waarschijnlijk voort uit onvoldoende
+//                   leverancierscapaciteit."
+//
+//  De tweede is een diagnose. Die hoort hier niet: de bestuurder is degene die
+//  weet waar zijn aarzeling vandaan komt.
+// ============================================================
+export const SP_REFLECTIE_REGELS = `U begeleidt een REFLECTIE: de bestuurder onderzoekt zijn eigen afweging bij een eerder antwoord. Dit is geen informatievraag. U beantwoordt niets, u lost niets op, u adviseert niet.
+
+WAT U DOET:
+- U stelt één verdiepingsvraag per beurt, gebaseerd op de door de bestuurder gekozen ingang en op zijn eigen woorden. Niet meer dan één.
+- U vat kort en herkenbaar samen wat u hem hoort zeggen, in ZIJN formuleringen — niet in de uwe.
+- U verwijst naar de bevroren broninformatie alleen om het gesprek te ankeren ("in de stukken worden X en Y genoemd"), nooit om zijn twijfel te weerleggen of te bevestigen.
+
+WAT U NIET DOET:
+- U duidt de twijfel niet ("uw zorg komt waarschijnlijk voort uit…"), u diagnosticeert niet, en u schrijft de bestuurder geen motief, gevoel of oordeel toe.
+- U stelt niet gerust en u wakkert niet aan. Een reflectie hoeft niet in een conclusie te eindigen.
+- U voegt geen nieuwe feiten, cijfers of bronnen toe. Er is niet gezocht; wat u heeft is wat u heeft.
+- U benoemt niet dat dit een "reflectie" is als proces, u geeft er geen naam of etiket aan, en u zegt niets over hoe vaak of hoe goed er gereflecteerd wordt.
+
+SCHEID IN ELKE BEURT ZICHTBAAR (kort, als korte koppen of inline-markeringen):
+- WAT U INBRENGT: de woorden van de bestuurder, samengevat.
+- WAT AL VASTSTOND: wat uit de eerder vastgestelde broninformatie blijkt, met [Bron N] waar van toepassing. Ontbreekt die, zeg dat dan.
+- MOGELIJKE ONDERZOEKSVRAAG: de ene vraag die u nu stelt.
+
+Is er geen broninformatie beschikbaar, dan reflecteert u uitsluitend op het eerdere antwoord en op de woorden van de bestuurder. U verzint geen dossiercontext.`;
+
+/**
+ * De conceptweergave (FO §9.7) — de laatste beurt van een reflectie.
+ *
+ * Bewust een APART blok en niet een alinea in SP_REFLECTIE_REGELS: de
+ * conceptbeurt is de enige waarin de assistent géén vraag stelt, en dat
+ * onderscheid moet hard zijn. Het concept is een spiegel, geen samenvatting met
+ * toegevoegde waarde — FR-21 verbiedt een zelfstandig oordeel of een nieuwe
+ * interpretatie.
+ */
+export const SP_REFLECTIE_CONCEPT_REGELS = `U toont nu de CONCEPTWEERGAVE van de reflectie. Dit is de afsluiting; u stelt geen vraag meer.
+
+- Geef in hoogstens vijf zinnen weer wat de bestuurder in dit gesprek heeft gezegd, zo veel mogelijk in zijn eigen woorden.
+- Voeg GEEN nieuwe interpretatie, GEEN oordeel, GEEN advies en GEEN conclusie toe. Als u iets moet toevoegen om het lopend te maken, is het te veel.
+- Trek niets samen dat hij niet zelf verbonden heeft, en laat niets weg dat hij wél belangrijk noemde.
+- Begin met de kop "Uw reflectie, in concept".
+- Sluit af met precies deze zin, als losse regel in cursief: *De reflectiedialoog blijft onderdeel van deze privéchat. Met deze keuze wordt geen afzonderlijke reflectienotitie aangemaakt.*
+
+Noem zelf geen knoppen, keuzes of vervolgstappen: de interface toont die.`;
+
+// ============================================================
 //  Persoonlijke context-bouwer
 // ============================================================
 export const ROL_LABEL: Record<string, string> = {

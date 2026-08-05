@@ -1406,6 +1406,51 @@ export async function haalDocumentChunks(
   return handhaafFondsdiscipline(chunks, fondsFilter).chunks;
 }
 
+// ── Plateau B / G3 — de bevroren reflectiebronset ──────────────────────────
+// Tijdens een actieve reflectieflow wordt er GEEN retrieval gedaan (FR-54): geen
+// embedding, geen RPC, geen FTS, geen PostgREST-terugval. Retrieval op een zin
+// als "ik maak mij zorgen over gepensioneerden" levert willekeurige treffers die
+// vervolgens als bron worden getóónd — schijnzekerheid bovenop een twijfel.
+//
+// In plaats daarvan worden precies de chunks opgehaald die bij het oorspronkelijke
+// antwoord zijn gebruikt, op ID. Deterministisch: geen ranking, geen selectie,
+// geen drempel. Dat is strenger dan het filter dat het technisch ontwerp §6.3
+// voorstelt (`p_document_ids` op de retrieval-RPC's): een filter kan worden
+// omzeild door een pad dat de RPC niet gebruikt, deze aanpak niet — want er
+// draait geen enkel retrievalpad.
+//
+// De fonds-discipline geldt onverkort (T4, besluit 0045). Dat is hier geen
+// formaliteit: de bronset komt uit een logregel die dagen oud kan zijn. Is een
+// document intussen ingetrokken, van fonds gewisseld of over zijn verplichte
+// review heen, dan valt het hier alsnog af — de bevriezing bevriest de SELECTIE,
+// niet de toegang.
+export async function haalBevrorenChunks(
+  chunkIds: string[],
+  fondsId: string | null = null
+): Promise<DocumentChunk[]> {
+  if (chunkIds.length === 0) return [];
+  const supabase = await createServerSupabase();
+  const { data, error } = await supabase
+    .from("document_chunks")
+    .select(
+      `id, document_id, tekst, pagina, paragraaf, chunk_index,
+       documenten!inner(titel, bron, bibliotheek, opslag_pad, fonds_id, documentstatus:status, bronstatus, volgende_review)`
+    )
+    .in("id", chunkIds)
+    .eq("documenten.actief", true)
+    .order("document_id", { ascending: true })
+    .order("chunk_index", { ascending: true })
+    .limit(200); // een bronset is de top-N van één antwoord, nooit een heel dossier
+
+  if (error || !data) {
+    console.error("haalBevrorenChunks fout:", error);
+    return [];
+  }
+  const chunks = data as unknown as DocumentChunk[];
+  const fondsFilter = fondsId && fondsId.length > 0 ? fondsId : null;
+  return handhaafFondsdiscipline(chunks, fondsFilter).chunks;
+}
+
 // Increment D — verrijk opgehaalde chunks met de vergadering/agendapunt van hun
 // bevestigde notulensegment, zodat maakContext de bronvermelding "Vastgestelde
 // notulen [verg], agendapunt N — [titel]" kan renderen. De retrieval-RPC's

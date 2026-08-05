@@ -360,6 +360,35 @@ test("vervolgacties: DOCUMENTGERICHTE vraag → behoud duiding + kritische vrage
   assert.ok(t.includes("maak_concreter"));
 });
 
+test("G1 (plateau B): tijdens een actieve reflectieflow zijn er GEEN vervolgacties", () => {
+  // De rijkste set die de functie kan opleveren — documentgericht, historisch én
+  // besluitvormingsgericht — moet leeg worden zodra reflectieActief aanstaat.
+  const zonder = bepaalVervolgacties(
+    "Is dit voorstel besluitrijp gezien het beleid in het verleden?",
+    "besluitrijpheid",
+    true,
+    true,
+    false
+  );
+  assert.ok(zonder.length > 0, "voorwaarde: zonder reflectie zijn er wél acties");
+
+  const met = bepaalVervolgacties(
+    "Is dit voorstel besluitrijp gezien het beleid in het verleden?",
+    "besluitrijpheid",
+    true,
+    true,
+    true
+  );
+  assert.deepEqual(met, []);
+
+  // De default is false: bestaande aanroepers (die de parameter niet meegeven)
+  // houden hun huidige gedrag.
+  assert.deepEqual(
+    bepaalVervolgacties("Is dit voorstel besluitrijp?", "besluitrijpheid", true, true),
+    bepaalVervolgacties("Is dit voorstel besluitrijp?", "besluitrijpheid", true, true, false)
+  );
+});
+
 test("vervolgacties: historisch signaal → tijdlijn + eerdere besluiten", () => {
   const a = bepaalVervolgacties("Wat was het beleid in het verleden?", "historisch", true);
   const t = a.map((x) => x.type);

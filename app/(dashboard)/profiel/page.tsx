@@ -128,6 +128,9 @@ export default function ProfielPage() {
   const [antwoordvoorkeur, setAntwoordvoorkeur] = useState<string>("");
   const [standaardAiModus, setStandaardAiModus] = useState<string>("");
   const [detailniveau, setDetailniveau] = useState<string>("");
+  // Plateau B / B-6 (FR-15) — permanente opt-out voor de PROACTIEVE
+  // reflectie-uitnodiging. Default aan; strikt zelfbeheerd (besluit 0017).
+  const [reflectieUitnodiging, setReflectieUitnodiging] = useState(true);
   const [secundaire, setSecundaire] = useState<string[]>([]);
   const [gekozenGremia, setGekozenGremia] = useState<string[]>([]);
   const [gekozenFocus, setGekozenFocus] = useState<string[]>([]);
@@ -161,6 +164,7 @@ export default function ProfielPage() {
               antwoordvoorkeur: string | null;
               standaard_ai_modus: string | null;
               detailniveau: string | null;
+              reflectie_uitnodiging: boolean | null;
             };
             secundaire_expertise_ids: string[];
             gremium_ids: string[];
@@ -181,6 +185,9 @@ export default function ProfielPage() {
           setAntwoordvoorkeur(data.profiel.antwoordvoorkeur ?? "");
           setStandaardAiModus(data.profiel.standaard_ai_modus ?? "");
           setDetailniveau(data.profiel.detailniveau ?? "");
+          // Ontbreekt de waarde (migratie nog niet gedraaid), dan tonen we de
+          // schakelaar als "aan" — dat is ook de kolom-default.
+          setReflectieUitnodiging(data.profiel.reflectie_uitnodiging !== false);
           setSecundaire((data.secundaire_expertise_ids ?? []).filter((id) => expIds.has(id)));
           setGekozenGremia((data.gremium_ids ?? []).filter((id) => gremIds.has(id)));
           const geldigeFocus = (data.focusgebied_ids ?? []).filter((id) => focusIds.has(id));
@@ -230,6 +237,7 @@ export default function ProfielPage() {
           antwoordvoorkeur: antwoordvoorkeur || null,
           standaard_ai_modus: standaardAiModus || null,
           detailniveau: detailniveau || null,
+          reflectie_uitnodiging: reflectieUitnodiging,
           secundaire_expertise_ids: secundaire,
           gremium_ids: gekozenGremia,
           focusgebied_ids: gekozenFocus,
@@ -387,6 +395,36 @@ export default function ProfielPage() {
                 ))}
               </select>
             </div>
+          </div>
+
+          {/* ── Plateau B / B-6 — permanente opt-out (FR-15) ──────────────────
+              Bewust een checkbox en geen "aan/uit"-toggle met gevolgen elders:
+              hij regelt precies één ding, en de tekst zegt óók wat hij NIET
+              uitzet. De handmatige actie "Reflecteer op dit antwoord" blijft
+              altijd bereikbaar (v1.0 §9.1 A) — zou dit vinkje die ook uitzetten,
+              dan zou de bestuurder de functie kwijtraken terwijl hij alleen van
+              het aanbieden af wilde. */}
+          <div className="mt-4 pt-4 border-t border-line">
+            <label className="flex items-start gap-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={reflectieUitnodiging}
+                onChange={(e) => setReflectieUitnodiging(e.target.checked)}
+                className="mt-0.5"
+              />
+              <span>
+                <span className="block text-sm font-medium text-ink">
+                  Bied reflectie actief aan
+                </span>
+                <span className="block text-xs text-muted mt-0.5">
+                  De assistent vraagt op enkele momenten of u nog iets wilt
+                  toetsen voordat u uw oordeel vormt. Zet u dit uit, dan verdwijnt
+                  alleen die vraag — u kunt zelf altijd op een antwoord
+                  reflecteren. Er wordt niet vastgelegd of, hoe vaak of waarover u
+                  reflecteert.
+                </span>
+              </span>
+            </label>
           </div>
         </section>
 

@@ -26,7 +26,21 @@ import {
 } from "./Voortgang";
 import Startpunt from "./Startpunt";
 import DocumentDoorgronden, { type DoorgrondDoc } from "./DocumentDoorgronden";
-import { ACTIEF_GESPREK_SLEUTEL } from "@/core/lib/ai-sessie";
+import {
+  ACTIEF_GESPREK_SLEUTEL,
+  reflectieUitnodigingGetoond,
+  markeerReflectieUitnodiging,
+} from "@/core/lib/ai-sessie";
+// Plateau B — de reflectiedialoog. De flowstatus is server-controlled; deze
+// module levert alleen de labels, de type-guards en de weergavehulp.
+import {
+  INGANG_LABEL,
+  isActief as isReflectieActief,
+  type ReflectieStatus,
+  type ReflectieIngang,
+} from "@/core/lib/reflectie-flow";
+import ReflectieKaart from "@/core/components/ReflectieKaart";
+import ReflectieInvoer from "@/core/components/ReflectieInvoer";
 import { verwijderDialoogTekst, verwijderGesprekViaApi } from "@/core/lib/gesprek-verwijderen";
 import type {
   PortaalContext,
@@ -104,6 +118,14 @@ interface Bericht {
   // geen kopieerknop: een herkomstregel onder iets dat geen antwoord is,
   // ondermijnt precies de geloofwaardigheid van diezelfde regel.
   voltooid?: boolean;
+  // Plateau B — het id van de auditregel van dít antwoord. Nodig om de bronset
+  // te bevriezen wanneer de bestuurder op dit antwoord gaat reflecteren: de
+  // server valideert dat de logregel van deze gebruiker én dit gesprek is.
+  // Puur correlatie, geen autorisatie — en het verdwijnt met het gesprek.
+  //
+  // Het staat op ELK antwoord, niet alleen op de gereflecteerde: het is geen
+  // markering dat er gereflecteerd is (besluit 0112).
+  logId?: string;
 }
 
 // Actieve documentscope (increment 1). titels op moment van zetten, zodat de
@@ -233,6 +255,20 @@ export default function AssistentClient({
   // globale balk. De hybride-schakelaar is uit de eindgebruikers-UI gehaald
   // (I-1): de per-fonds instelling (default aan) blijft server-side leidend.
   const [antwoordmodus, setAntwoordmodus] = useState<Antwoordmodus | null>(null);
+  // ── Plateau B — de reflectiedialoog ───────────────────────────────────────
+  // De status komt van de SERVER (gesprek_reflectie_state via
+  // /api/reflectie/transitie) en wordt hier alleen weergegeven. De client
+  // bepaalt hem nooit zelf: dat is de kern van besluit 0110 en van AC-18.
+  const [reflectieStatus, setReflectieStatus] =
+    useState<ReflectieStatus>("niet_actief");
+  // De uitnodiging is een TIJDELIJKE UI-KAART, geen bericht (FR-50, besluit
+  // 0109). Ze staat daarom in componentstate en nergens anders — wegklikken
+  // raakt `gesprekken.berichten` niet en schrijft geen auditregel.
+  const [uitnodigingZichtbaar, setUitnodigingZichtbaar] = useState(false);
+  // Permanente opt-out uit het profiel (FR-15). Default aan; pas als het profiel
+  // geladen is kan hij uit staan. Zolang we het niet weten tonen we niets —
+  // liever geen uitnodiging dan een uitnodiging aan wie hem heeft uitgezet.
+  const [uitnodigingToegestaan, setUitnodigingToegestaan] = useState(false);
   // Welke onderbouwingspanelen open staan (per bericht-index). Default dicht.
   const [openPanelen, setOpenPanelen] = useState<Set<number>>(new Set());
   const [highlight, setHighlight] = useState<{
@@ -389,6 +425,10 @@ export default function AssistentClient({
     setAgendapuntContext(leesAgendapuntContext(item.document_scope));
     setAntwoordmodus(leesAntwoordmodus(item.actieve_antwoordmodus));
     setHistorieOpen(false);
+    // Plateau B / AC-23 — de flowstatus hoort bij dít gesprek, niet bij het
+    // vorige. Zonder deze reset zou een reflectie uit gesprek A doorlopen in
+    // gesprek B en zouden G1-G4 daar ten onrechte gelden.
+    void herstelReflectieStatus(item.id);
   }
 
   // ── Startpunt-taken (P1, besluit 0085) — routeren/scope-zetten, GEEN nieuwe
@@ -592,10 +632,18 @@ export default function AssistentClient({
         userIdRef.current = user.id;
         const { data } = await supabase
           .from("profielen")
-          .select("fonds_id, naam, rol, standaard_ai_modus, fondsen(naam)")
+          .select(
+            "fonds_id, naam, rol, standaard_ai_modus, reflectie_uitnodiging, fondsen(naam)"
+          )
           .eq("id", user.id)
           .single();
         if (data?.fonds_id) setFondsId(data.fonds_id);
+        // Plateau B / B-6 — de permanente opt-out (FR-15). Strikt zelfbeheerd
+        // (besluit 0017): dit veld staat op de eigen profielrij en niemand
+        // anders kan het zetten. Ontbreekt de kolom (migratie nog niet gedraaid)
+        // of is de waarde onbekend, dan blijft de uitnodiging UIT — liever geen
+        // uitnodiging dan een uitnodiging aan wie hem heeft weggezet.
+        setUitnodigingToegestaan(data?.reflectie_uitnodiging === true);
 
         const voornaam = (data?.naam as string | null)?.split(" ")[0] || "";
         setVoornaam(voornaam);
@@ -647,6 +695,11 @@ export default function AssistentClient({
               setDocumentScope(leesScope(laatste.document_scope));
               setAgendapuntContext(leesAgendapuntContext(laatste.document_scope));
               setAntwoordmodus(leesAntwoordmodus(laatste.actieve_antwoordmodus));
+              // Plateau B / AC-23 — de flowstatus herstellen na een refresh.
+              // Er wordt NOOIT automatisch een bericht verstuurd; we halen
+              // alleen de status op. De server past zelf de fail-safe toe (24
+              // uur), dus bij twijfel komt hier `niet_actief` terug.
+              void herstelReflectieStatus(laatste.id as string);
               hersteld = true;
             } else {
               // Markering wees naar een gearchiveerd/verwijderd gesprek → opruimen.
@@ -815,6 +868,12 @@ export default function AssistentClient({
     // een puur PER-TURN retrieval-override is (vervolgacties) en de bewaarde
     // gespreksscope juist NIET mag wijzigen.
     persistScope?: DocumentScope | null;
+    // Plateau B — deze beurt komt uit het GELABELDE reflectie-invoerveld, niet
+    // uit de normale invoerbalk. Het onderscheid volgt uitsluitend uit het
+    // invoerkanaal; er wordt nooit op inhoud geclassificeerd (FR-56).
+    reflectieAntwoord?: boolean;
+    // De gekozen reflectie-ingang + de logregel waarvan de bronset bevriest.
+    reflectieStart?: { ingang: ReflectieIngang; bronsetLogId: string | null };
   }
 
   async function stuurBericht(vraag?: string, opties?: StuurOpties) {
@@ -919,6 +978,19 @@ export default function AssistentClient({
           // hetzelfde id als expliciete `id` bij de insert. Zonder deze volgorde
           // zou juist de eerste beurt van elk gesprek onkoppelbaar blijven.
           gesprek_id: zorgVoorGesprekId(),
+          // ── Plateau B — signalen over het gebruikte invoerkanaal ──────────
+          // Dit zijn SIGNALEN, geen waarheden. De route vraagt op basis hiervan
+          // een transitie aan bij reflectie_transitie(), die valideert tegen de
+          // opnieuw uitgelezen serverstatus. Past de gevraagde overgang niet,
+          // dan wordt deze beurt gewoon als normale chatbeurt afgehandeld —
+          // een client kan zich dus geen reflectie toe-eigenen (FR-67).
+          reflectie_antwoord: opties?.reflectieAntwoord === true,
+          reflectie_start: opties?.reflectieStart
+            ? {
+                ingang: opties.reflectieStart.ingang,
+                bronset_log_id: opties.reflectieStart.bronsetLogId ?? undefined,
+              }
+            : undefined,
         }),
       });
 
@@ -954,6 +1026,8 @@ export default function AssistentClient({
       let inlineMeldingenData: InlineMelding[] | undefined;
       // 30-07-2026 — verbredings-aanbod (niet-vastgestelde stukken meenemen).
       let verbredingData: Bericht["verbreding"] | undefined;
+      // Plateau B — het id van de auditregel van dit antwoord (uit 'done').
+      let logIdData: string | undefined;
       // Besluit 0092 — de verduidelijkingsbeurt als bewaarbaar bericht. Zonder dit
       // bleef een vraag die in de terugvraag eindigde nergens staan: `bewaarGesprek`
       // liep alleen bij gestreamde antwoordtekst, en de server sloeg de logregel over.
@@ -974,6 +1048,7 @@ export default function AssistentClient({
             inlineMeldingen: inlineMeldingenData,
             verbreding: verbredingData,
             voltooid,
+            logId: logIdData,
           };
           return kopie;
         });
@@ -1050,6 +1125,10 @@ export default function AssistentClient({
           // B1 / scope-split — documentgericht (meta) + vervolgvragen (done).
           document_gericht?: boolean;
           vervolgvragen?: string[];
+          // Plateau B — het id van de auditregel van deze beurt, en de
+          // server-controlled reflectiestatus. Beide komen in het 'done'-event.
+          log_id?: string | null;
+          reflectie?: { status?: string; beurt?: number; heeft_bronset?: boolean };
         };
         try {
           evt = JSON.parse(regel);
@@ -1181,6 +1260,18 @@ export default function AssistentClient({
               ? { ...evt.verbreding, vraag: tekst }
               : undefined;
           }
+          // ── Plateau B ────────────────────────────────────────────────────
+          // Het id van de auditregel, zodat een latere reflectie op dít antwoord
+          // de juiste bronset kan bevriezen.
+          if (typeof evt.log_id === "string") logIdData = evt.log_id;
+          // De server-controlled flowstatus. Hij komt hiervandaan en nergens
+          // anders: de client leidt hem niet af uit wat hij zojuist verstuurde.
+          if (evt.reflectie?.status) {
+            const nieuweStatus = evt.reflectie.status as ReflectieStatus;
+            setReflectieStatus(nieuweStatus);
+            // Loopt er een reflectie, dan is de uitnodiging niet aan de orde.
+            if (nieuweStatus !== "niet_actief") setUitnodigingZichtbaar(false);
+          }
           schrijfAi();
         } else if (evt.type === "error") {
           if (!aiToegevoegd) {
@@ -1221,9 +1312,15 @@ export default function AssistentClient({
             modus: modusData,
             onderbouwing: onderbouwingData,
             inlineMeldingen: inlineMeldingenData,
+            logId: logIdData,
           },
         ];
         await bewaarGesprek(finale, scopeVoorOpslag);
+
+        // ── Plateau B / B-2 — de proactieve uitnodiging ────────────────────
+        // Nadrukkelijk PAS hier: het antwoord is af en bewaard. De uitnodiging
+        // onderbreekt niets en blokkeert niets; wie hem negeert mist niets.
+        overweegUitnodiging(onderbouwingData, opties);
       } else if (verduidelijkingBericht) {
         // Besluit 0092 — ook een TERUGVRAAG is een beurt: bewaren zodat de vraag een
         // refresh overleeft en in de lade "Gesprekken" terugkomt. Klikt de bestuurder
@@ -1242,6 +1339,127 @@ export default function AssistentClient({
       setAntwoordGestart(false);
       setVoortgang(null);
     }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  Plateau B — de reflectiedialoog
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * De flowstatus opnieuw ophalen bij het openen of herstellen van een gesprek
+   * (FR-57, AC-23). Er wordt nooit automatisch een bericht verstuurd — dit is
+   * puur een leesactie. De server past de fail-safe (24 uur) zelf toe; bij
+   * twijfel komt `niet_actief` terug, en dat is ook de uitkomst bij elke fout.
+   */
+  async function herstelReflectieStatus(id: string) {
+    setUitnodigingZichtbaar(false);
+    try {
+      const res = await fetch(
+        `/api/reflectie/transitie?gesprek_id=${encodeURIComponent(id)}`
+      );
+      const data = await res.json().catch(() => null);
+      setReflectieStatus(res.ok && data?.status ? data.status : "niet_actief");
+    } catch {
+      setReflectieStatus("niet_actief");
+    }
+  }
+
+  /**
+   * Mag er nú een PROACTIEVE uitnodiging verschijnen? (FR-14, T1-T5 uit v1.0 §9.1)
+   *
+   * Vier voorwaarden, alle vier hard:
+   *   1. de permanente opt-out staat niet aan (uit het profiel, FR-15);
+   *   2. er loopt nog geen reflectie;
+   *   3. deze beurt is een van de triggermomenten;
+   *   4. in deze browsersessie is voor deze context nog niet uitgenodigd
+   *      (sessionStorage, besluit 0121 — géén databaseopslag).
+   *
+   * ⚠ T3 en T4 zijn een AANNAME. Ontwerp v1.0 §9.1 spreekt van "na een
+   * vergelijking van alternatieven — taak voltooid" en "een risico- of
+   * evenwichtigheidsanalyse — als zodanig geclassificeerd", maar er is geen
+   * takenregister in deze codebase. Het dichtstbijzijnde deterministische
+   * signaal is de gebruikte antwoordmodus. Dit is precies wat de gebruikerstoets
+   * uit besluit 0122 moet bevestigen; het staat als openstaand punt genoteerd.
+   */
+  function overweegUitnodiging(
+    onderbouwing: OnderbouwingMeta | undefined,
+    opties?: StuurOpties
+  ) {
+    if (!uitnodigingToegestaan) return;              // 1 — permanente opt-out
+    if (reflectieStatus !== "niet_actief") return;   // 2 — er loopt er al een
+    if (opties?.reflectieAntwoord || opties?.reflectieStart) return;
+    if (opties?.transformatie) {
+      // T3 — "werk uit richting besluitvorming" is de enige transformatie die
+      // als vergelijking van alternatieven telt. De overige (korter, concreter,
+      // feitelijker) zijn opmaakacties en verdienen geen uitnodiging.
+      if (opties.antwoordmodusOverride !== "besluitrijpheid") return;
+    } else {
+      // T2 — besluitrijpheidsanalyse; T4 — risico-/evenwichtigheidsanalyse
+      // (sparringmodus is de bestaande classificatie die daar het dichtst bij
+      // komt).
+      const modus = leesAntwoordmodus(onderbouwing?.antwoordmodus);
+      if (modus !== "besluitrijpheid" && modus !== "sparring") return;
+    }
+
+    const context = gesprekId.current;
+    if (!context) return;
+    if (reflectieUitnodigingGetoond(context)) return; // 4 — één per sessie
+    markeerReflectieUitnodiging(context);
+    setUitnodigingZichtbaar(true);
+  }
+
+  /**
+   * Eén transitie aanvragen die NIET aan een chatbeurt hangt (afronden,
+   * afbreken). De server is leidend: wat hij teruggeeft is de nieuwe status,
+   * ook als dat iets anders is dan we vroegen.
+   */
+  async function vraagTransitie(actie: "afronden" | "afbreken") {
+    const id = gesprekId.current;
+    if (!id) return;
+    try {
+      const res = await fetch("/api/reflectie/transitie", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ gesprek_id: id, actie }),
+      });
+      const data = await res.json().catch(() => null);
+      // Ook bij een geweigerde overgang (409) valt de UI terug op niet_actief:
+      // de reflectie vasthouden terwijl de server hem niet kent is de enige
+      // uitkomst die de gebruiker echt klem zet.
+      setReflectieStatus(res.ok && data?.status ? data.status : "niet_actief");
+    } catch {
+      setReflectieStatus("niet_actief");
+    }
+  }
+
+  /**
+   * De bestuurder koos een reflectie-ingang. PAS hier begint de dialoog: de
+   * keuze wordt een gewoon gebruikersbericht in de chat, en vanaf dat moment
+   * loopt alles via het normale chatpad (besluit 0108, FR-REF-1).
+   *
+   * De bronset bevriest op het LAATSTE voltooide antwoord — dat is het antwoord
+   * waaronder de kaart staat.
+   */
+  function startReflectie(ingang: ReflectieIngang) {
+    if (laden) return;
+    setUitnodigingZichtbaar(false);
+    const laatsteAntwoord = [...berichten].reverse().find((b) => b.rol === "ai");
+    stuurBericht(INGANG_LABEL[ingang], {
+      reflectieStart: { ingang, bronsetLogId: laatsteAntwoord?.logId ?? null },
+    });
+  }
+
+  /**
+   * De uitnodiging wegklikken of "Geen aanvullende reflectie" kiezen.
+   *
+   * Dit slaat NIETS op: geen chatbericht, geen databasewaarde, geen auditregel
+   * (FR-50, AC-15). De keuze betekent ook niets — geen instemming, geen
+   * geruststelling, geen besluitrijpheid (FR-22). De sessionStorage-markering is
+   * al bij het TONEN gezet, niet hier: anders zou het wegklikken zelf de
+   * registratie zijn die we vermijden.
+   */
+  function sluitUitnodiging() {
+    setUitnodigingZichtbaar(false);
   }
 
   // Increment I-2 (FO §11a) — de bestuurder koos een verduidelijkingschip. We
@@ -1362,6 +1580,9 @@ export default function AssistentClient({
     setVrijeVraagOpen(false);
     sluitMention();
     setHistorieOpen(false);
+    // Plateau B — een schone chat begint zonder reflectie en zonder kaart.
+    setReflectieStatus("niet_actief");
+    setUitnodigingZichtbaar(false);
   }
 
   // ── @-mention-typeahead op documenttitels ──────────────────────────────────
@@ -1949,7 +2170,13 @@ export default function AssistentClient({
                     vorigeVraag,
                     am,
                     !!b.bronnen?.length,
-                    b.onderbouwing?.documentGericht === true
+                    b.onderbouwing?.documentGericht === true,
+                    // G1 (plateau B) — tijdens een actieve reflectieflow geen
+                    // vervolgacties. "Stel kritische vragen" duwt de bestuurder
+                    // een richting in die hij juist zelf aan het bepalen is;
+                    // "maak korter" slaat nergens op bij een verdiepingsvraag
+                    // over zijn eigen twijfel. De status komt van de server.
+                    isReflectieActief(reflectieStatus)
                   );
                   if (acties.length === 0) return null;
                   return (
@@ -1967,6 +2194,65 @@ export default function AssistentClient({
                     </div>
                   );
                 })()}
+
+              {/* ── Plateau B — de reflectiefunctie, onder het LAATSTE antwoord ──
+                  Twee dingen, die elkaar uitsluiten:
+
+                  1. de permanent beschikbare gebruikersactie + de tijdelijke
+                     uitnodigingskaart (B-2), zolang er geen reflectie loopt;
+                  2. het gelabelde reflectie-invoerveld / de conceptkeuze (B-3),
+                     zodra de flow actief is.
+
+                  De kaart is GEEN chatbericht (FR-50): ze staat in de render,
+                  niet in `berichten`, en verdwijnt met een klik zonder spoor. */}
+              {b.rol === "ai" &&
+                b.onderbouwing &&
+                i === berichten.length - 1 &&
+                !laden && (
+                  <>
+                    {!isReflectieActief(reflectieStatus) && (
+                      <>
+                        {uitnodigingZichtbaar ? (
+                          <ReflectieKaart
+                            onKies={startReflectie}
+                            onSluit={sluitUitnodiging}
+                            bezig={laden}
+                          />
+                        ) : (
+                          /* De PERMANENT beschikbare actie (v1.0 §9.1 A):
+                             rustig, niet-prominent, altijd bereikbaar en niet
+                             meegeteld in enige frequentiebegrenzing. */
+                          <button
+                            type="button"
+                            onClick={() => setUitnodigingZichtbaar(true)}
+                            className="mt-2 text-xs text-muted hover:text-ink transition-colors"
+                          >
+                            Reflecteer op dit antwoord
+                          </button>
+                        )}
+                      </>
+                    )}
+
+                    {isReflectieActief(reflectieStatus) && (
+                      <ReflectieInvoer
+                        status={reflectieStatus}
+                        bezig={laden}
+                        onAntwoord={(t) =>
+                          stuurBericht(t, { reflectieAntwoord: true })
+                        }
+                        onAfronden={() => vraagTransitie("afronden")}
+                        onAanpassen={() => {
+                          // "Aanpassen" is geen transitie: de bestuurder
+                          // herformuleert en het concept wordt opnieuw getoond.
+                          // De status blijft `conceptweergave`.
+                          setUitnodigingZichtbaar(false);
+                          invoerRef.current?.focus();
+                        }}
+                        onAfbreken={() => vraagTransitie("afbreken")}
+                      />
+                    )}
+                  </>
+                )}
             </div>
           </div>
         ))}

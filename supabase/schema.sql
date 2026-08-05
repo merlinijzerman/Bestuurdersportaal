@@ -53,7 +53,14 @@ create table if not exists public.profielen (
   primaire_expertise_id  uuid,
   antwoordvoorkeur       text,  -- 'kern-eerst' | 'puntsgewijs' | 'lopende tekst' (app-validatie)
   standaard_ai_modus     text,  -- voorselectie AI-antwoordmodus (lib/vraagtype ANTWOORDMODI)
-  detailniveau           text   -- 'beknopt' | 'standaard' | 'uitgebreid' (app-validatie)
+  detailniveau           text,  -- 'beknopt' | 'standaard' | 'uitgebreid' (app-validatie)
+  -- Plateau B / B-6 (migratie 2026_08_05_b6_reflectie_optout.sql, besluit 0126).
+  -- Permanente opt-out voor de PROACTIEVE reflectie-uitnodiging (FR-15). Zet dit
+  -- de functie niet uit: de handmatige actie "Reflecteer op dit antwoord" blijft
+  -- altijd bereikbaar. De frequentiebegrenzing per browsersessie staat bewust in
+  -- sessionStorage en niet hier (besluit 0121) — een teller in de database zou
+  -- zichtbaar maken hoe vaak iemand is aangespoord, en dat is gedragsregistratie.
+  reflectie_uitnodiging  boolean not null default true
 );
 
 -- Increment F — koppel-/audittabellen (volledige definitie in
@@ -619,6 +626,27 @@ alter table public.gesprekken add column if not exists actieve_antwoordmodus tex
 create index if not exists idx_gesprek_gebruiker
   on public.gesprekken(gebruiker_id, bijgewerkt desc)
   where gearchiveerd = false;
+
+-- ── 5b-bis. Reflectieflowstatus (plateau B, migratie 2026_08_05_b1) ─────────
+-- Server-controlled status van de reflectiedialoog (besluit 0110). Eén rij per
+-- gesprek, AUTEUR-ONLY leesbaar, en muteerbaar UITSLUITEND via de definer-functie
+-- public.reflectie_transitie() — de tabel heeft bewust géén insert/update/delete-
+-- policy. Waarom een aparte tabel en geen kolom op `gesprekken`: die wordt
+-- client-side beschreven met de anon-key en de gebruiker heeft UPDATE-recht op de
+-- eigen rij, en RLS werkt op rij- niet op kolomniveau.
+--
+-- ⚠ Dit is de ENIGE plek waar staat dát er gereflecteerd wordt (besluit 0112).
+-- Geen waarde in `governance_log.modus`, geen sleutel in `retrieval_meta`, geen
+-- fondsbreed leesbare projectie. `on delete cascade` vanaf `gesprekken` zorgt dat
+-- verwijder_gesprek() de status meeneemt (AC-24).
+--
+-- Migraties authoritatief; hier alleen documentatie.
+--   gesprek_reflectie_state(gesprek_id pk → gesprekken on delete cascade,
+--                           gebruiker_id, fonds_id, status, ingang, beurt,
+--                           bronset_log_id (geen FK), reflectie_bronset_versie,
+--                           gestart_op, bijgewerkt_op)
+--   reflectie_transitie(uuid, text, text, uuid)  — security definer, de enige schrijfweg
+--   reflectie_bronset_hash(jsonb)                — spiegel van core/lib/bronset.ts
 
 -- ── 5c. Fase C fundament: vector-embeddings (additief) ──────
 -- Semantische vector-search náást FTS. Zie migratie

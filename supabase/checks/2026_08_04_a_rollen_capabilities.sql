@@ -98,8 +98,8 @@ declare r record; fouten text := '';
 begin
   for r in
     select p.oid, p.proname, p.prosecdef, p.proconfig
-      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-     where n.nspname = 'public'
+      from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
+     where ns.nspname = 'public'
        and p.proname in ('mag_audit','mag_audit_bronnen','mag_audit_redacties',
                          'meta_projectie','meta_basisniveau','meta_bronniveau',
                          'lees_governance_audit','schrijf_ai_interactie',
@@ -117,8 +117,8 @@ begin
     end if;
   end loop;
 
-  if not exists (select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
-                  where n.nspname='public' and p.proname='verwijder_gesprek') then
+  if not exists (select 1 from pg_proc p join pg_namespace ns on ns.oid=p.pronamespace
+                  where ns.nspname='public' and p.proname='verwijder_gesprek') then
     fouten := fouten || '  - verwijder_gesprek() bestaat niet (migratie A2 niet gedraaid?)'||chr(10);
   end if;
 

@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createServerSupabase } from "@/core/lib/supabase-server";
-import { zoekRelevanteChunksMetMeta, telNietActueleFondstreffers, maakContext, maakBronSentinel, haalDocumentChunks, verrijkNotulenChunks, verrijkDocumentmetadata, type DocumentChunk, type BronVerwijzing, type RetrievalMeta, type RetrievalFilters } from "@/core/lib/rag";
+import { zoekRelevanteChunksMetMeta, telNietActueleFondstreffers, maakContext, maakBronSentinel, haalDocumentChunks, haalBevrorenChunks, verrijkNotulenChunks, verrijkDocumentmetadata, type DocumentChunk, type BronVerwijzing, type RetrievalMeta, type RetrievalFilters } from "@/core/lib/rag";
+// Plateau B — de reflectieflow. `isActief` heet hier `isReflectieActief` omdat
+// `actief` in deze route al een half dozijn andere betekenissen heeft.
+import { effectieveStatus, isActief as isReflectieActief, moetNaarConcept, isReflectieIngang, type ReflectieStatus, type ReflectieActie } from "@/core/lib/reflectie-flow";
+import { bepaalBronset } from "@/core/lib/bronset";
 import { heeftReformulatieNodig, reformuleerVraag } from "@/core/lib/query-reformulatie";
 import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
 import { valideerChatInvoer } from "@/core/lib/chat-invoer";
@@ -53,6 +57,8 @@ import {
   SP_DOCUMENT_SCOPE_BREED_REGELS,
   SP_DOCUMENT_SCOPE_ALG_REGELS,
   SP_TRANSFORMATIE_REGELS,
+  SP_REFLECTIE_REGELS,
+  SP_REFLECTIE_CONCEPT_REGELS,
   SP_MAP_EXTRACTIE,
   SP_WEB_REGELS,
   ROL_LABEL,
@@ -254,6 +260,22 @@ export async function POST(req: NextRequest) {
       // niet verwijderbaar. Puur correlatie: de waarde wordt niet vertrouwd voor
       // autorisatie (verwijder_gesprek() toetst het eigenaarschap zelf).
       gesprek_id?: string;
+      // ── Plateau B — de reflectiedialoog ────────────────────────────────────
+      // `reflectie_antwoord` = deze beurt komt uit het GELABELDE reflectie-
+      // invoerveld, niet uit de normale invoerbalk. Het onderscheid volgt
+      // uitsluitend uit het invoerkanaal; er wordt nooit op inhoud
+      // geclassificeerd (FR-56).
+      //
+      // Dit is een SIGNAAL, geen waarheid. De route vraagt de transitie aan bij
+      // reflectie_transitie(), die valideert tegen de opnieuw uitgelezen status.
+      // Staat de flow op `niet_actief`, dan faalt die aanroep en wordt de beurt
+      // gewoon als normale chatbeurt afgehandeld — een client kan zich dus geen
+      // reflectie toe-eigenen (FR-67).
+      reflectie_antwoord?: boolean;
+      // De reflectie-ingang bij het STARTEN van een flow, plus het id van de
+      // logregel waarvan de bronset wordt bevroren. De RPC toetst zelf dat die
+      // logregel van deze gebruiker én dit gesprek is (AC-18).
+      reflectie_start?: { ingang?: string; bronset_log_id?: string };
     };
     // ── H-12 (review 2026-07-30): runtime-validatie + harde invoercaps ─────
     // De historie kwam via een TypeScript-cast binnen en werd nergens op vorm
@@ -647,6 +669,94 @@ export async function POST(req: NextRequest) {
         ? body.gesprek_id
         : null;
 
+    // ── Plateau B — de reflectieflowstatus, SERVER-SIDE bepaald ─────────────
+    // Vier gedragswijzigingen (G1-G4) hangen aan de vraag "loopt er nu een
+    // reflectie?". Dat antwoord komt uit `gesprek_reflectie_state` via de
+    // definer-RPC, nooit uit de request-body: de client stuurt hooguit een
+    // SIGNAAL over het gebruikte invoerkanaal, en de RPC valideert dat tegen de
+    // opnieuw uitgelezen actuele status (FR-67, besluit 0110).
+    //
+    // Drie gevallen:
+    //   a. `reflectie_start`  — de gebruiker koos een reflectie-ingang. De RPC
+    //      bevriest de bronset van het antwoord waarop wordt gereflecteerd.
+    //   b. `reflectie_antwoord` — antwoord uit het gelabelde veld: beurt omhoog.
+    //   c. anders — een gewone vraag via de normale invoerbalk. Die BEËINDIGT
+    //      een lopende reflectie (FR-56); `afbreken` is een no-op wanneer er
+    //      niets liep en maakt dan ook geen rij aan.
+    //
+    // ⚠ Er wordt hier NIETS gelogd (besluit 0112). Geen reflectiewaarde in
+    // `modus`, geen sleutel in `retrieval_meta`, geen aparte auditregel. De
+    // chatberichten die uit de reflectie voortkomen gaan door exact hetzelfde
+    // logpad als elke andere beurt (FR-18).
+    let reflectieStatus: ReflectieStatus = "niet_actief";
+    let reflectieBeurt = 0;
+    let reflectieBronsetChunkIds: string[] = [];
+
+    if (gesprekAuditId) {
+      const startIngang = isReflectieIngang(body.reflectie_start?.ingang)
+        ? body.reflectie_start.ingang
+        : null;
+      const startBronsetLogId =
+        typeof body.reflectie_start?.bronset_log_id === "string" &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          body.reflectie_start.bronset_log_id
+        )
+          ? body.reflectie_start.bronset_log_id
+          : null;
+
+      const actie: ReflectieActie = startIngang
+        ? "start"
+        : body.reflectie_antwoord === true
+        ? "antwoord"
+        : "afbreken";
+
+      const { data: flowRij, error: flowFout } = await supabase.rpc("reflectie_transitie", {
+        p_gesprek_id: gesprekAuditId,
+        p_actie: actie,
+        p_ingang: startIngang,
+        p_bronset_log_id: startBronsetLogId,
+      });
+
+      if (flowFout) {
+        // Fail-safe naar `niet_actief`: een geweigerde of mislukte transitie mag
+        // nooit tot gevolg hebben dat de beurt in reflectiemodus wordt
+        // afgehandeld. De beurt loopt dan gewoon als normale chatbeurt door —
+        // dat is het gedrag van vóór plateau B en dus altijd veilig.
+        console.error("Reflectietransitie geweigerd of mislukt:", flowFout.message);
+      } else if (flowRij) {
+        const rij = flowRij as {
+          status?: string;
+          beurt?: number;
+          bronset_log_id?: string | null;
+          bijgewerkt_op?: string | null;
+        };
+        reflectieStatus = effectieveStatus(
+          rij.status as ReflectieStatus | null,
+          rij.bijgewerkt_op ? Date.parse(rij.bijgewerkt_op) : null,
+          Date.now()
+        );
+        reflectieBeurt = typeof rij.beurt === "number" ? rij.beurt : 0;
+
+        // G3 — de bevroren bronset ophalen. De chunk-ID's komen uit dezelfde
+        // logregel die de RPC op eigenaarschap én gesprek heeft gevalideerd; de
+        // client levert ze niet aan. Geen bronset = geen bronnen: de assistent
+        // reflecteert dan uitsluitend op het antwoord en de woorden van de
+        // gebruiker (FR-55).
+        if (isReflectieActief(reflectieStatus) && rij.bronset_log_id) {
+          const { data: logRij } = await supabase
+            .from("governance_log")
+            .select("retrieval_meta")
+            .eq("id", rij.bronset_log_id)
+            .maybeSingle();
+          reflectieBronsetChunkIds = bepaalBronset(
+            (logRij as { retrieval_meta?: unknown } | null)?.retrieval_meta
+          ).chunkIds;
+        }
+      }
+    }
+
+    const reflectieActief = isReflectieActief(reflectieStatus);
+
     // Verduidelijkingstak: twijfel → één SSE-event met de vraag + chips, géén
     // modelcall. De beslissing om te verduidelijken is puur reproduceerbaar uit
     // de vraag.
@@ -662,7 +772,15 @@ export async function POST(req: NextRequest) {
     // navolgbaarheid (en de AI Act-lijn) vraagt, niet of er een antwoord kwam.
     // Er draait geen model, dus `model = null` — een modelnaam zou suggereren dat er
     // gegenereerd is. `antwoord` is de gestelde verduidelijkingsvraag, `bronnen` leeg.
+    //
+    // G2 (plateau B) — tijdens een actieve reflectieflow slaan we deze tak over
+    // en wordt `moetVerduidelijken` niet aangeroepen. De terugvraag stelt
+    // "Wilt u dit weten voor uw fonds specifiek, of in algemene zin?" — een
+    // zinnige vraag bij een informatievraag, een absurde bij "ik twijfel of de
+    // planning klopt". De gebruiker is dan geen antwoord aan het zoeken maar
+    // zijn eigen oordeel aan het vormen.
     if (
+      !reflectieActief &&
       !transformatieActief &&
       !neemNietVastgesteldeMee &&
       bronIntentResultaat &&
@@ -769,7 +887,10 @@ export async function POST(req: NextRequest) {
     let breedBatches: DocumentChunk[][] = [];
     let breedAfgekapt = false;
 
-    if (scopeActief && !transformatieActief) {
+    // G3 (plateau B) — een dekkingsbrede strategie is tijdens een reflectie per
+    // definitie fout: de bronset is bevroren op de top-N van één antwoord, niet
+    // op een heel document.
+    if (scopeActief && !transformatieActief && !reflectieActief) {
       // Doorgronden forceert breed: de secties zijn dekkingsbreed, ook als de
       // korte zichtbare zin geen breed-signaalwoord bevat (bv. alleen "Afwijkingen").
       if (bepaalVraagtype(vraag) === "breed" || doorgrondActief) {
@@ -808,9 +929,22 @@ export async function POST(req: NextRequest) {
     // weergave §11c): de afwijking wordt niet meer als globale wissel-melding
     // getoond maar — waar relevant — als conditionele inline-melding bij het
     // antwoord (interpretatieve duiding/besluitvorming).
+    //
+    // G4 (plateau B) — tijdens een actieve reflectieflow wordt de automatische
+    // modusdetectie OVERGESLAGEN. `bepaalAntwoordmodus` is een regex-heuristiek
+    // met een zichtbare wisselmelding als bijeffect; die zou tijdens een
+    // reflectie op de woorden van de gebruiker gaan reageren en de toon per
+    // beurt laten verspringen. De modus staat vast op `sparring`: dat is de
+    // bestaande modus die het dichtst bij spiegelen ligt — meedenken zonder te
+    // concluderen. Er wordt geen nieuwe moduswaarde geïntroduceerd, ook niet in
+    // het auditspoor (besluit 0112, AC-17).
     const vastgezetteModus: Antwoordmodus | null = body.actieve_antwoordmodus ?? null;
-    const gedetecteerdeModus: Antwoordmodus = bepaalAntwoordmodus(vraag);
-    const antwoordmodus: Antwoordmodus = vastgezetteModus ?? gedetecteerdeModus;
+    const gedetecteerdeModus: Antwoordmodus = reflectieActief
+      ? "sparring"
+      : bepaalAntwoordmodus(vraag);
+    const antwoordmodus: Antwoordmodus = reflectieActief
+      ? "sparring"
+      : vastgezetteModus ?? gedetecteerdeModus;
 
     // Retrieval-filters volgen de antwoordmodus (peildatum = vandaag) + de
     // bronsoort-weging volgt het vraagtype. Bij een ACTIEVE document-scope laten
@@ -851,10 +985,48 @@ export async function POST(req: NextRequest) {
     let contextGeneutraliseerd = 0;
     let retrievalMeta: RetrievalMeta | null = null;
 
+    // ── G3 (plateau B) — de bevroren reflectiebronset ───────────────────────
+    // Tijdens een actieve reflectieflow draait er GEEN retrieval: geen embedding,
+    // geen RPC, geen FTS, geen PostgREST-terugval, geen reranker. Dat is
+    // strenger dan het filter uit technisch ontwerp §6.3 (`p_document_ids` op de
+    // retrieval-RPC's): een filter borgt alleen de paden die het kent, terwijl
+    // deze aanpak élk pad borgt — ze draaien geen van alle (FR-54, AC-19, AC-20).
+    //
+    // In plaats daarvan worden precies de chunks van het oorspronkelijke antwoord
+    // opgehaald, op ID. Is er geen bronset (een antwoord uit algemene kennis),
+    // dan blijft de context leeg en reflecteert de assistent uitsluitend op het
+    // antwoord en de woorden van de gebruiker — hij verzint geen dossiercontext
+    // en haalt geen bronnen op (FR-55, AC-21).
+    if (reflectieActief) {
+      if (reflectieBronsetChunkIds.length > 0) {
+        chunks = await haalBevrorenChunks(reflectieBronsetChunkIds, fondsId);
+        chunks = await verrijkNotulenChunks(chunks);
+        chunks = await verrijkDocumentmetadata(chunks, fondsId);
+        const ctx = maakContext(chunks);
+        contextTekst = ctx.contextTekst;
+        bronnen = ctx.bronnen;
+        bronSentinel = ctx.sentinel;
+        contextGeneutraliseerd = ctx.geneutraliseerd;
+      }
+      // `retrieval_meta` krijgt bewust GEEN reflectiesleutel (besluit 0112,
+      // AC-17). Wat er staat is precies wat er gebeurde: er is niet gezocht.
+      // `methode: "geen"` is de bestaande waarde daarvoor en verraadt niets —
+      // een antwoord uit algemene kennis levert hem ook op.
+      retrievalMeta = {
+        methode: "geen",
+        opgehaald: chunks.length,
+        geselecteerd: chunks.length,
+        chunks: chunks.map((c) => ({ id: c.id, document_id: c.document_id, rang: null })),
+        toegepaste_fonds_filter: fondsId ?? null,
+        namespace_conventie: "bibliotheek",
+        fondsdiscipline_gedropt: 0,
+      };
+    }
+
     // Agendapunt-modus (ADR 0028): retrieval alleen als er doorzoekbare gekoppelde
     // stukken zijn. Zonder stukken halen we niets op — de toelichting is dan de
     // enige context (geen brede bibliotheek-retrieval, ticket §2.2).
-    const moetRetrieven = !breedActief && (
+    const moetRetrieven = !reflectieActief && !breedActief && (
       agendapuntModusActief
         ? agendapuntMetStukken
         : scopeActief || bronModusRetrieval === "documenten" || bronModusRetrieval === "combineren"
@@ -1074,7 +1246,36 @@ export async function POST(req: NextRequest) {
     let systeemBlokken: Anthropic.Messages.TextBlockParam[];
     let gebruikersPrompt: string;
 
-    if (transformatieActief) {
+    if (reflectieActief) {
+      // ── Plateau B — de reflectiebeurt ─────────────────────────────────────
+      // Staat VOORAAN in de keten: een actieve reflectie overschrijft elke
+      // andere prompt-tak. Een scope-, agendapunt- of transformatiebeurt kan
+      // per definitie niet tegelijk een reflectiebeurt zijn — het invoerkanaal
+      // is een ander (FR-56).
+      //
+      // Twee vormen: verdiepingsvraag of conceptweergave. Welke van de twee het
+      // is, bepaalt de SERVER uit de flowstatus — niet het model en niet de
+      // client. Bij het bereikte beurtplafond is het altijd het concept.
+      const toonConcept =
+        reflectieStatus === "conceptweergave" ||
+        moetNaarConcept(reflectieStatus, reflectieBeurt);
+
+      systeemBlokken = bouwSysteemBlokken(
+        toonConcept ? SP_REFLECTIE_CONCEPT_REGELS : SP_REFLECTIE_REGELS,
+        ctxBestuurder,
+        antwoordmodus,
+        chunks.length > 0 ? bronSentinel : null
+      );
+
+      const bronBlok =
+        chunks.length > 0
+          ? `EERDER VASTGESTELDE BRONINFORMATIE (bevroren bij de start van deze reflectie; er is niet opnieuw gezocht):\n\n${contextTekst}\n\n---\n\n`
+          : `(Bij het antwoord waarop wordt gereflecteerd zijn geen bronnen gebruikt. Reflecteer uitsluitend op dat antwoord en op de woorden van de bestuurder.)\n\n---\n\n`;
+
+      gebruikersPrompt = toonConcept
+        ? `${bronBlok}De bestuurder heeft hierboven in dit gesprek zijn afweging verwoord. Zijn laatste inbreng: ${vraag}\n\nToon nu de conceptweergave.`
+        : `${bronBlok}INBRENG VAN DE BESTUURDER: ${vraag}`;
+    } else if (transformatieActief) {
       // Herschrijf-intent (FO §13): bewerk het vorige antwoord (staat al in de
       // historie van claudeBerichten). Géén strict-document-weigering; wel
       // grounding (geen nieuwe fondsfeiten). Eventuele gescoopte fragmenten gaan
@@ -1819,7 +2020,7 @@ export async function POST(req: NextRequest) {
             splitsRetrievalMeta(teLoggenMeta);
           const zegel = bouwInhoudZegel(vraag, zichtbaarAntwoord);
 
-          const { error: logFout } = await supabase.rpc("schrijf_ai_interactie", {
+          const { data: logId, error: logFout } = await supabase.rpc("schrijf_ai_interactie", {
             p_vraag: vraag,
             p_antwoord: zichtbaarAntwoord,
             p_bronnen: bronnen,
@@ -1836,6 +2037,37 @@ export async function POST(req: NextRequest) {
           // levert de client {type:"error"} in plaats van {type:"done"}. Het
           // auditspoor is geen bijzaak die stil mag mislukken.
           if (logFout) throw logFout;
+
+          // ── Plateau B — de flow naar de conceptweergave brengen ───────────
+          // De beurt hierboven TOONDE het concept; de status moet dat nu ook
+          // zeggen, anders wordt een klik op "Klopt" (actie `afronden`) door de
+          // RPC geweigerd. Bewust PAS hier: de status volgt wat er werkelijk is
+          // gebeurd, niet wat er zou gaan gebeuren. Mislukt dit, dan blijft de
+          // flow op de verdiepingsstatus staan en kan de gebruiker de reflectie
+          // afbreken — geen verlies, wel zichtbaar in de serverlog.
+          if (
+            gesprekAuditId &&
+            isReflectieActief(reflectieStatus) &&
+            reflectieStatus !== "conceptweergave" &&
+            moetNaarConcept(reflectieStatus, reflectieBeurt)
+          ) {
+            const { data: naConcept, error: conceptFout } = await supabase.rpc(
+              "reflectie_transitie",
+              {
+                p_gesprek_id: gesprekAuditId,
+                p_actie: "concept",
+                p_ingang: null,
+                p_bronset_log_id: null,
+              }
+            );
+            if (conceptFout) {
+              console.error("Overgang naar conceptweergave mislukt:", conceptFout.message);
+            } else if (naConcept) {
+              const rij = naConcept as { status?: string; beurt?: number };
+              if (rij.status) reflectieStatus = rij.status as ReflectieStatus;
+              if (typeof rij.beurt === "number") reflectieBeurt = rij.beurt;
+            }
+          }
 
           // Stuur de definitieve inline-meldingen mee zodat de UI de #4-melding
           // (content-afhankelijk) kan tonen ná het streamen.
@@ -1854,6 +2086,22 @@ export async function POST(req: NextRequest) {
             // B1 — inhoudelijke vervolgvragen op basis van het antwoord (kunnen
             // leeg zijn). De UI toont ze als klikbare chips ná de onderbouwing.
             vervolgvragen,
+            // ── Plateau B ──────────────────────────────────────────────────
+            // Het id van de zojuist geschreven auditregel. De client bewaart het
+            // bij het antwoord en geeft het terug als `bronset_log_id` wanneer de
+            // gebruiker op dít antwoord gaat reflecteren; de RPC bevriest dan de
+            // bronset. Het is de eigen regel van de auteur — dezelfde afweging
+            // als bij `gesprek_audit_id` — en geeft geen toegang tot inhoud:
+            // `reflectie_transitie` accepteert alleen een regel van dezelfde
+            // gebruiker én hetzelfde gesprek.
+            log_id: logId ?? null,
+            // De server-controlled flowstatus. De client conditioneert hierop
+            // G1 (vervolgacties) en de weergave; hij bepaalt hem nooit zelf.
+            reflectie: {
+              status: reflectieStatus,
+              beurt: reflectieBeurt,
+              heeft_bronset: reflectieBronsetChunkIds.length > 0,
+            },
           });
         } catch (streamFout) {
           console.error("Chat stream fout:", streamFout);

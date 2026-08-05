@@ -50,6 +50,21 @@ import {
 } from "../../ai/_components/AntwoordWeergave";
 import { isDocumentbron } from "@/core/lib/documentlijst";
 import { verwijderDialoogTekst, verwijderGesprekViaApi } from "@/core/lib/gesprek-verwijderen";
+// Plateau B — de reflectiedialoog. Zelfde componenten en dezelfde
+// server-controlled status als /ai; besluit 0079-lijn (één weergave, twee
+// ingangen) geldt hier onverkort.
+import {
+  reflectieUitnodigingGetoond,
+  markeerReflectieUitnodiging,
+} from "@/core/lib/ai-sessie";
+import {
+  INGANG_LABEL,
+  isActief as isReflectieActief,
+  type ReflectieStatus,
+  type ReflectieIngang,
+} from "@/core/lib/reflectie-flow";
+import ReflectieKaart from "@/core/components/ReflectieKaart";
+import ReflectieInvoer from "@/core/components/ReflectieInvoer";
 // Gedeelde gefaseerde statusweergave (besluit 0087), gelijk aan /ai.
 import {
   pasVoortgangToe,
@@ -82,6 +97,10 @@ interface Bericht {
   // kopieerknop: een herkomstregel onder iets dat geen antwoord is, ondermijnt
   // precies de geloofwaardigheid van diezelfde regel.
   voltooid?: boolean;
+  // Plateau B — het id van de auditregel van dít antwoord, nodig om de bronset
+  // te bevriezen bij een reflectie. Staat op elk antwoord en is dus géén
+  // markering dat er gereflecteerd is (besluit 0112).
+  logId?: string;
 }
 
 // Startvragen die het stuk bestuurlijke betekenis geven. De voorbereiding-chip
@@ -149,6 +168,14 @@ export default function AgendapuntChat({
   // waar "van welk fonds" het hardst telt. Leeg tot het profiel geladen is; de
   // herkomstregel laat de vermelding dan weg.
   const [fondsNaam, setFondsNaam] = useState<string>("");
+  // ── Plateau B — de reflectiedialoog ───────────────────────────────────────
+  // Identiek aan /ai: de status komt van de SERVER (gesprek_reflectie_state) en
+  // wordt hier alleen weergegeven. De uitnodiging is een tijdelijke UI-kaart en
+  // géén chatbericht (FR-50, besluit 0109).
+  const [reflectieStatus, setReflectieStatus] =
+    useState<ReflectieStatus>("niet_actief");
+  const [uitnodigingZichtbaar, setUitnodigingZichtbaar] = useState(false);
+  const [uitnodigingToegestaan, setUitnodigingToegestaan] = useState(false);
 
   const fondsIdRef = useRef<string>("");
   const userIdRef = useRef<string | null>(null);
@@ -223,10 +250,13 @@ export default function AgendapuntChat({
           userIdRef.current = user.id;
           const { data: profiel } = await supabase
             .from("profielen")
-            .select("fonds_id, fondsen(naam)")
+            .select("fonds_id, reflectie_uitnodiging, fondsen(naam)")
             .eq("id", user.id)
             .single();
           if (profiel?.fonds_id) fondsIdRef.current = profiel.fonds_id as string;
+          // Plateau B / B-6 — de permanente opt-out (FR-15). Ontbreekt de kolom
+          // of de waarde, dan blijft de uitnodiging uit.
+          setUitnodigingToegestaan(profiel?.reflectie_uitnodiging === true);
           const fondsenRel = profiel?.fondsen as
             | { naam: string }
             | { naam: string }[]
@@ -247,6 +277,10 @@ export default function AgendapuntChat({
           if (item && Array.isArray(item.berichten) && item.berichten.length > 0) {
             gesprekId.current = item.id as string;
             gesprekBestaatInDb.current = true;   // net uit de DB gelezen
+            // Plateau B / AC-23 — de flowstatus hoort bij dít gesprek. De server
+            // past de fail-safe (24 uur) toe; bij twijfel komt niet_actief terug
+            // en wordt er nooit automatisch een bericht verstuurd.
+            void herstelReflectieStatus(item.id as string);
             // Welkomstbericht van de AI-pagina (index 0, rol ai) is puur UI.
             const b = item.berichten as Bericht[];
             const zonderWelkomst = herstelVoltooidVlag(
@@ -513,6 +547,10 @@ export default function AgendapuntChat({
     // antwoordmodus en/of een transformatie van het vorige antwoord.
     antwoordmodusOverride?: Antwoordmodus | null;
     transformatie?: boolean;
+    // Plateau B — deze beurt komt uit het GELABELDE reflectie-invoerveld, niet
+    // uit de normale invoerbalk (FR-56). Nooit een classificatie op inhoud.
+    reflectieAntwoord?: boolean;
+    reflectieStart?: { ingang: ReflectieIngang; bronsetLogId: string | null };
   }
 
   async function stuurBericht(vraag?: string, opties?: StuurOpties) {
@@ -558,6 +596,16 @@ export default function AgendapuntChat({
           // Plateau A — koppelt de auditregel van deze beurt aan dit gesprek,
           // zodat de gebruiker hem later kan verwijderen.
           gesprek_id: zorgVoorGesprekId(),
+          // Plateau B — signalen over het invoerkanaal; de server valideert ze
+          // tegen de opnieuw uitgelezen flowstatus (FR-67). Past de gevraagde
+          // overgang niet, dan is dit gewoon een normale chatbeurt.
+          reflectie_antwoord: opties?.reflectieAntwoord === true,
+          reflectie_start: opties?.reflectieStart
+            ? {
+                ingang: opties.reflectieStart.ingang,
+                bronset_log_id: opties.reflectieStart.bronsetLogId ?? undefined,
+              }
+            : undefined,
         }),
       });
 
@@ -584,6 +632,8 @@ export default function AgendapuntChat({
       let onderbouwingData: OnderbouwingMeta | undefined;
       let vervolgvragenData: string[] | undefined;
       let verduidelijkingActief = false;
+      // Plateau B — het id van de auditregel van dit antwoord (uit 'done').
+      let logIdData: string | undefined;
 
       const schrijfAi = () => {
         setBerichten((prev) => {
@@ -596,6 +646,7 @@ export default function AgendapuntChat({
             inlineMeldingen: inlineMeldingenData,
             onderbouwing: onderbouwingData,
             voltooid,
+            logId: logIdData,
           };
           return kopie;
         });
@@ -650,6 +701,9 @@ export default function AgendapuntChat({
             peildatum: string | null;
           } | null;
           document_gericht?: boolean;
+          // Plateau B — auditregel-id en de server-controlled reflectiestatus.
+          log_id?: string | null;
+          reflectie?: { status?: string; beurt?: number; heeft_bronset?: boolean };
         };
         try {
           evt = JSON.parse(regel);
@@ -733,6 +787,14 @@ export default function AgendapuntChat({
               webBronnen: evt.web_bronnen ?? onderbouwingData.webBronnen ?? [],
             };
           }
+          // Plateau B — het auditregel-id (voor de bronsetbevriezing) en de
+          // server-controlled flowstatus.
+          if (typeof evt.log_id === "string") logIdData = evt.log_id;
+          if (evt.reflectie?.status) {
+            const nieuweStatus = evt.reflectie.status as ReflectieStatus;
+            setReflectieStatus(nieuweStatus);
+            if (nieuweStatus !== "niet_actief") setUitnodigingZichtbaar(false);
+          }
           schrijfAi();
         } else if (evt.type === "error") {
           if (!aiToegevoegd) {
@@ -770,10 +832,18 @@ export default function AgendapuntChat({
             inlineMeldingen: inlineMeldingenData,
             onderbouwing: onderbouwingData,
             vervolgvragen: vervolgvragenData,
+            logId: logIdData,
           },
         ];
         setBerichten(finale);
         bewaarGesprek(finale);
+
+        // ── Plateau B / B-2 — de proactieve uitnodiging (T4) ───────────────
+        // In de agendapuntchat is T4 het relevante moment: een risico- of
+        // evenwichtigheidsanalyse bij een agendapunt. T1 (na een afgeronde
+        // voorbereiding) en T5 (vlak vóór het aanmaken van inbreng) horen bij de
+        // omliggende schermen en vallen buiten deze component.
+        overweegUitnodiging(onderbouwingData, opties);
       }
     } catch {
       setBerichten((prev) => [
@@ -784,6 +854,81 @@ export default function AgendapuntChat({
       setLaden(false);
       setVoortgang(null);
     }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  Plateau B — de reflectiedialoog (identiek gedrag aan /ai)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /** De flowstatus opnieuw ophalen bij het openen van een gesprek (AC-23). */
+  async function herstelReflectieStatus(id: string) {
+    setUitnodigingZichtbaar(false);
+    try {
+      const res = await fetch(
+        `/api/reflectie/transitie?gesprek_id=${encodeURIComponent(id)}`
+      );
+      const data = await res.json().catch(() => null);
+      setReflectieStatus(res.ok && data?.status ? data.status : "niet_actief");
+    } catch {
+      setReflectieStatus("niet_actief");
+    }
+  }
+
+  /**
+   * Mag er nú een proactieve uitnodiging verschijnen? Zie de uitgebreide
+   * toelichting in AssistentClient.tsx; hier geldt alleen T4 (risico-/
+   * evenwichtigheidsanalyse), omdat een agendapuntchat per definitie geen
+   * bibliotheekbrede besluitrijpheidsanalyse is.
+   *
+   * ⚠ T4 leunt op de antwoordmodus als classificatie — een aanname, want er is
+   * geen takenregister. Te bevestigen in de gebruikerstoets (besluit 0122).
+   */
+  function overweegUitnodiging(
+    onderbouwing: OnderbouwingMeta | undefined,
+    opties?: StuurOpties
+  ) {
+    if (!uitnodigingToegestaan) return;
+    if (reflectieStatus !== "niet_actief") return;
+    if (opties?.reflectieAntwoord || opties?.reflectieStart) return;
+    const modus = leesAntwoordmodus(onderbouwing?.antwoordmodus);
+    if (modus !== "sparring" && modus !== "besluitrijpheid") return;
+
+    const context = gesprekId.current;
+    if (!context) return;
+    if (reflectieUitnodigingGetoond(context)) return;
+    markeerReflectieUitnodiging(context);
+    setUitnodigingZichtbaar(true);
+  }
+
+  /** Eén transitie die niet aan een chatbeurt hangt (afronden, afbreken). */
+  async function vraagTransitie(actie: "afronden" | "afbreken") {
+    const id = gesprekId.current;
+    if (!id) return;
+    try {
+      const res = await fetch("/api/reflectie/transitie", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ gesprek_id: id, actie }),
+      });
+      const data = await res.json().catch(() => null);
+      setReflectieStatus(res.ok && data?.status ? data.status : "niet_actief");
+    } catch {
+      setReflectieStatus("niet_actief");
+    }
+  }
+
+  /**
+   * De bestuurder koos een reflectie-ingang. Vanaf hier is alles gewone chat:
+   * de keuze wordt een gebruikersbericht, de bronset van het laatste antwoord
+   * bevriest (besluit 0108/0111, FR-REF-1).
+   */
+  function startReflectie(ingang: ReflectieIngang) {
+    if (laden) return;
+    setUitnodigingZichtbaar(false);
+    const laatsteAntwoord = [...berichten].reverse().find((b) => b.rol === "ai");
+    void stuurBericht(INGANG_LABEL[ingang], {
+      reflectieStart: { ingang, bronsetLogId: laatsteAntwoord?.logId ?? null },
+    });
   }
 
   // Chipkeuze na een verduidelijkingsvraag: verwijder de verduidelijkingsbubbel
@@ -1042,7 +1187,10 @@ export default function AgendapuntChat({
                           vorigeVraag,
                           bepaalAntwoordmodus(vorigeVraag),
                           !!b.bronnen?.length,
-                          true // de agenda is altijd stukgericht
+                          true, // de agenda is altijd stukgericht
+                          // G1 (plateau B) — geen vervolgacties tijdens een
+                          // actieve reflectieflow; de status komt van de server.
+                          isReflectieActief(reflectieStatus)
                         );
                         if (acties.length === 0) return null;
                         return (
@@ -1060,6 +1208,49 @@ export default function AgendapuntChat({
                           </div>
                         );
                       })()}
+
+                    {/* ── Plateau B — reflectie onder het LAATSTE antwoord ──
+                        De uitnodiging is componentstate, geen chatbericht
+                        (FR-50): wegklikken raakt `gesprekken.berichten` niet en
+                        schrijft geen auditregel. */}
+                    {b.rol === "ai" &&
+                      idx === berichten.length - 1 &&
+                      !laden && (
+                        <>
+                          {!isReflectieActief(reflectieStatus) &&
+                            (uitnodigingZichtbaar ? (
+                              <ReflectieKaart
+                                onKies={startReflectie}
+                                onSluit={() => setUitnodigingZichtbaar(false)}
+                                bezig={laden}
+                              />
+                            ) : (
+                              /* De permanent beschikbare actie (v1.0 §9.1 A):
+                                 rustig, altijd bereikbaar, telt niet mee in de
+                                 frequentiebegrenzing. */
+                              <button
+                                type="button"
+                                onClick={() => setUitnodigingZichtbaar(true)}
+                                className="mt-2 text-xs text-muted hover:text-ink transition-colors"
+                              >
+                                Reflecteer op dit antwoord
+                              </button>
+                            ))}
+
+                          {isReflectieActief(reflectieStatus) && (
+                            <ReflectieInvoer
+                              status={reflectieStatus}
+                              bezig={laden}
+                              onAntwoord={(t) =>
+                                void stuurBericht(t, { reflectieAntwoord: true })
+                              }
+                              onAfronden={() => vraagTransitie("afronden")}
+                              onAanpassen={() => setUitnodigingZichtbaar(false)}
+                              onAfbreken={() => vraagTransitie("afbreken")}
+                            />
+                          )}
+                        </>
+                      )}
                   </div>
                 )
               )}

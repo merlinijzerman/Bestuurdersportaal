@@ -21,6 +21,7 @@ import {
   META_BRON,
   META_INHOUD,
   META_BEKEND,
+  SUB_NIVEAUS,
   niveauVan,
   splitsRetrievalMeta,
   projecteerSpoorMeta,
@@ -341,6 +342,92 @@ test("lege of onbruikbare invoer levert lege objecten op", () => {
     assert.deepEqual(onbekend, []);
     assert.deepEqual(projecteerSpoorMeta(invoer, true), {});
   }
+});
+
+// ── Plateau B / AC-17 — geen reflectiemarkering, nergens ────────────────────
+test("AC-17: geen enkele allowlist bevat een reflectiesleutel", () => {
+  // Besluit 0112: er bestaat geen tabel, kolom of rij die registreert dát een
+  // interactie een reflectie was. Het auditspoor is — ook na 0119 — leesbaar
+  // voor houders van een auditcapability; een reflectiemarkering maakt dan
+  // zichtbaar dat een specifieke bestuurder op een specifiek moment twijfelde
+  // over een specifiek onderwerp. Dat is precies het chilling effect dat de
+  // functie moet wegnemen.
+  //
+  // Deze test is de vangrail bij uitbreiding. Wie ooit "even" een vlag toevoegt
+  // om te kunnen meten hoe vaak er gereflecteerd wordt, loopt hier stuk. Dat er
+  // géén bruikbaarheidsmeting is, is een bewust aanvaarde beperking (0112);
+  // bijstellen gebeurt via de gebruikerstoets (0122), niet via telemetrie.
+  const VERBODEN = [
+    "reflectie",
+    "reflectief",
+    "reflection",
+    "is_reflectie",
+    "reflectie_actief",
+    "reflectie_status",
+    "reflectie_ingang",
+    "reflectie_beurt",
+    "bronset",
+    "reflectie_bronset_versie",
+  ];
+
+  const alleSleutels: string[] = [
+    ...META_BASIS,
+    ...META_BRON,
+    ...META_INHOUD,
+    ...Object.keys(SUB_NIVEAUS),
+    ...Object.values(SUB_NIVEAUS).flatMap((s) => [...(s.bron ?? []), ...(s.inhoud ?? [])]),
+  ];
+
+  for (const sleutel of alleSleutels) {
+    for (const verboden of VERBODEN) {
+      assert.equal(
+        sleutel.toLowerCase().includes(verboden),
+        false,
+        `allowlist bevat "${sleutel}" — dat lijkt op een reflectiemarkering (besluit 0112)`
+      );
+    }
+  }
+
+  // En de fail-closed kant: zou zo'n sleutel tóch worden meegestuurd, dan valt
+  // hij naar `inhoud` (verwijderbaar mét het gesprek) EN wordt hij als onbekend
+  // gerapporteerd, zodat test 1 hierboven faalt.
+  const metMarkering = splitsRetrievalMeta({
+    methode: "geen",
+    reflectie_actief: true,
+    reflectie_bronset_versie: "abc123",
+  });
+  assert.deepEqual(metMarkering.spoor, { methode: "geen" });
+  assert.deepEqual(metMarkering.onbekend.sort(), [
+    "reflectie_actief",
+    "reflectie_bronset_versie",
+  ]);
+  // Ook bij het LEZEN komt zo'n sleutel nooit door de projectie heen — ook niet
+  // voor een auditor met bronniveau, en ook niet uit een historische rij.
+  for (const metBron of [false, true]) {
+    const uit = projecteerSpoorMeta(
+      { methode: "geen", reflectie_actief: true, reflectie_bronset_versie: "abc123" },
+      metBron
+    );
+    assert.deepEqual(uit, { methode: "geen" });
+  }
+});
+
+test("AC-17: de reflectiebeurt zelf levert alleen bestaande, neutrale sleutels", () => {
+  // De vorm die app/api/chat/route.ts tijdens een actieve reflectieflow in
+  // retrieval_meta zet. Er staat niets in wat verraadt dát dit een reflectie was:
+  // `methode: "geen"` produceert ook een antwoord uit algemene kennis.
+  const reflectieMeta = {
+    methode: "geen",
+    opgehaald: 3,
+    geselecteerd: 3,
+    chunks: [{ id: "c1", document_id: "d1", rang: null }],
+    toegepaste_fonds_filter: "f1",
+    namespace_conventie: "bibliotheek",
+    fondsdiscipline_gedropt: 0,
+  };
+  const { onbekend, inhoud } = splitsRetrievalMeta(reflectieMeta);
+  assert.deepEqual(onbekend, [], "geen onbekende sleutels");
+  assert.deepEqual(inhoud, {}, "een reflectiebeurt schrijft geen inhoudsleutels");
 });
 
 console.log(`\n${n} sanity-tests geslaagd (audit-meta).`);

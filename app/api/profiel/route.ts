@@ -39,6 +39,10 @@ interface PatchBody {
   secundaire_expertise_ids?: string[];
   gremium_ids?: string[];
   focusgebied_ids?: string[];
+  // Plateau B / B-6 (FR-15) — permanente opt-out voor de PROACTIEVE
+  // reflectie-uitnodiging. Ontbreekt het veld, dan blijft de voorkeur
+  // ongewijzigd: de RPC krijgt dan null en laat de kolom staan.
+  reflectie_uitnodiging?: boolean;
 }
 
 function schoonTekst(waarde: string | null | undefined): string | null {
@@ -64,7 +68,7 @@ export async function GET() {
     const { data: profiel } = await supabase
       .from("profielen")
       .select(
-        "id, naam, rol, fonds_id, bestuurlijke_rol, primaire_expertise_id, antwoordvoorkeur, standaard_ai_modus, detailniveau"
+        "id, naam, rol, fonds_id, bestuurlijke_rol, primaire_expertise_id, antwoordvoorkeur, standaard_ai_modus, detailniveau, reflectie_uitnodiging"
       )
       .eq("id", user.id)
       .single();
@@ -195,6 +199,14 @@ export async function PATCH(req: NextRequest) {
       p_secundaire_expertise_ids: secundaire,
       p_gremium_ids: gremia,
       p_focusgebied_ids: focus,
+      // Plateau B / B-6 — alleen een expliciete boolean wijzigt de voorkeur;
+      // alles anders (afwezig, null, een string) laat hem staan. Zo kan een
+      // profielopslag die niets met reflectie te maken heeft de opt-out niet
+      // per ongeluk terugzetten.
+      p_reflectie_uitnodiging:
+        typeof body.reflectie_uitnodiging === "boolean"
+          ? body.reflectie_uitnodiging
+          : null,
     });
     if (rpcFout) {
       console.error("Profiel opslaan (RPC) fout:", rpcFout);
