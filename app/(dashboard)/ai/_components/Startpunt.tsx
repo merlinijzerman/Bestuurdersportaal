@@ -59,6 +59,8 @@ export default function Startpunt({
   onVrijeVraag,
   onVoorbeeldvraag,
   onDocumentVraag,
+  magStukVoorbereiden = false,
+  onStukVoorbereiden,
 }: {
   context: PortaalContext;
   voornaam: string;
@@ -72,6 +74,10 @@ export default function Startpunt({
   onVrijeVraag: () => void;
   onVoorbeeldvraag: (startvraag: Startvraag) => void;
   onDocumentVraag: (doc: DocumentCtx) => void;
+  /** T2 — houder van ai.stukvoorbereiding? Bepaalt (cosmetisch) of de bureau-
+   *  taakkaart verschijnt; de echte gate zit server-side. */
+  magStukVoorbereiden?: boolean;
+  onStukVoorbereiden?: () => void;
 }) {
   const { volgendeVergadering, agendapunten, openStappen, recentDocument } =
     context;
@@ -235,6 +241,18 @@ export default function Startpunt({
             subtitel="Typ direct uw vraag, of kies een voorbeeld"
             onClick={onVrijeVraag}
           />
+
+          {/* 4. T2 — bureau-stand: een stuk voorbereiden. Alleen voor houders van
+              ai.stukvoorbereiding (bestuursbureau). Server-side gegate; deze kaart
+              is cosmetisch. */}
+          {magStukVoorbereiden && onStukVoorbereiden && (
+            <TaakKnop
+              icoon="✎"
+              titel="Een stuk voorbereiden"
+              subtitel="Concept voor een oplegger, notitie of memo"
+              onClick={onStukVoorbereiden}
+            />
+          )}
         </div>
 
         {/* P2 Deel A — vaste, generieke voorbeeldvragen. Verschijnen PAS nadat de

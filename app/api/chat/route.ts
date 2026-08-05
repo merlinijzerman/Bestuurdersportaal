@@ -71,6 +71,15 @@ import {
   bouwDoorgrondInstructie,
   type DoorgrondSectieId,
 } from "@/core/lib/doorgrond";
+import {
+  STUK_PROMPTVARIANT,
+  SLOTSECTIE,
+  bouwStukInstructie,
+  isStuksoort,
+  stuksoortDef,
+  type Stuksoort,
+} from "@/core/lib/stukvoorbereiding";
+import { rolHeeftCapability } from "@/core/lib/capabilities";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -243,6 +252,12 @@ export async function POST(req: NextRequest) {
       // samen en legt de parameters vast in retrieval_meta (B6). `vorige_document_id`
       // hoort óók in `document_scope.document_ids` te staan (retrieval van beide).
       doorgrond?: { secties?: string[]; vorige_document_id?: string };
+      // T2 — bureau-stand "Een stuk voorbereiden". De client kiest een stuksoort;
+      // de route stelt hieruit server-side de instructie samen (in de
+      // GEBRUIKERSPROMPT) en past de bureau-toon toe — maar UITSLUITEND wanneer de
+      // sessie de capability ai.stukvoorbereiding draagt (G2/FR-21). Zonder die
+      // capability wordt dit veld genegeerd: geen instructie, geen bureau-toon.
+      stukvoorbereiding?: { stuksoort?: string };
       // P2 Deel A — herkomst van een aangeklikte voorbeeldvraag (context|signaal),
       // meegelogd zodat meetbaar is welke generator werkt (criterium 4).
       startvraag_bron?: string;
@@ -607,6 +622,24 @@ export async function POST(req: NextRequest) {
     const doorgrondVorigeTitel = doorgrondVorigeId
       ? scopeTitelPerId.get(doorgrondVorigeId) ?? null
       : null;
+
+    // ── T2 — bureau-stand "Een stuk voorbereiden" ───────────────────────────
+    // Server-side capability-gate (G2/FR-21): zonder ai.stukvoorbereiding wordt
+    // de taak volledig genegeerd — de instructie wordt niet samengesteld en de
+    // bureau-toon niet toegepast, ook niet bij een geknutseld request. De rol
+    // staat al in `profiel`; we toetsen met de PURE mapping (geen extra DB-call).
+    // Net als doorgrond vereist de taak een document-scope: de geselecteerde
+    // stukken leveren de bronnen ([Bron N]) waarop het concept steunt.
+    const stukCapability = rolHeeftCapability(
+      (profiel as { rol?: string | null } | null)?.rol,
+      "ai.stukvoorbereiding"
+    );
+    const stukSoort: Stuksoort | null =
+      isStuksoort(body.stukvoorbereiding?.stuksoort)
+        ? body.stukvoorbereiding!.stuksoort as Stuksoort
+        : null;
+    const stukActief = stukCapability && stukSoort !== null && scopeActief;
+    const stukInstructie = stukActief ? bouwStukInstructie(stukSoort!) : null;
 
     // ── Transformatie-vervolgactie (FO §13) ─────────────────────────────────
     // De beurt bewerkt het vorige antwoord (herschrijf-intent). Vereist dat er
@@ -1321,6 +1354,35 @@ export async function POST(req: NextRequest) {
           : "\n\n(Er zijn geen doorzoekbare stukken aan dit agendapunt gekoppeld; baseer uw antwoord op de toelichting en, waar passend, uw algemene kennis.)";
       // Module-context (risico's/procedures) na de stukken — zie opbouw hierboven.
       gebruikersPrompt = `${toelichtingBlok}${stukkenBlok}${modulesBlok}\n\n---\n\nVRAAG: ${vraag}`;
+    } else if (stukActief) {
+      // ── T2 — bureau-stand "Een stuk voorbereiden" ───────────────────────────
+      // Staat vóór de generieke scope-tak zodat de bureau-behandeling wint (de
+      // taak vereist een scope, dus zonder deze tak zou de beurt als gewone
+      // document-scope-vraag lopen). Twee dingen zijn hier anders dan elders:
+      //  1. BUREAU-TOON: bouwSysteemBlokken krijgt bureauToon=true → TOON_BLOK_BUREAU
+      //     i.p.v. TOON_BLOK. Dit is de ENIGE plek waar die vlag true is; overal
+      //     anders blijft hij default false (nulgrens G23).
+      //  2. De samengestelde stuk-instructie staat in de GEBRUIKERSPROMPT (niet in
+      //     SP_* — CLAUDE.md-guardrail), inclusief de verruiming (voorstel van het
+      //     bureau, geen besluit) en de niet-uitzetbare slotsectie (G3/G8/G13).
+      // Basis: de strikte documentenregels (alleen [Bron N] uit de geselecteerde
+      // stukken, niets verzinnen) — dat dwingt G8 af: gaten worden NIET met
+      // algemene kennis gedicht maar onder "Aannames en open punten" benoemd.
+      const stukTitelLabel =
+        scopeTitels.length > 0 ? scopeTitels.map((t) => `«${t}»`).join(", ") : null;
+      systeemBlokken = bouwSysteemBlokken(
+        SP_DOCUMENTEN_REGELS,
+        ctxBestuurder,
+        "feitelijk",
+        chunks.length > 0 ? bronSentinel : null,
+        true // bureauToon
+      );
+      gebruikersPrompt =
+        chunks.length > 0
+          ? `BESCHIKBARE BRONNEN${
+              stukTitelLabel ? ` UIT ${stukTitelLabel}` : ""
+            }:\n\n${contextTekst}\n\n---\n\n${stukInstructie}`
+          : `In de geselecteerde stukken zijn geen doorzoekbare passages gevonden.\n\n${stukInstructie}\n\nU beschikt niet over bronnen; benoem dat expliciet onder "Aannames en open punten" en verzin geen fondsspecifieke feiten.`;
     } else if (scopeActief) {
       // Strict-document gedrag overschrijft de gekozen modus. De regels hangen af
       // van opt-in algemene kennis (drie-deling) en van breed vs. specifiek.
@@ -1891,6 +1953,24 @@ export async function POST(req: NextRequest) {
                     document_ids: scopeDocumentIds ?? [],
                     vorige_document_id: doorgrondVorigeId,
                     promptvariant: DOORGROND_PROMPTVARIANT,
+                  },
+                }
+              : {}),
+            // T2 (FR-12, ontwerp §6.4) — de bureau-stand reconstrueerbaar: de
+            // zichtbare beurt is korter dan de instructie. Geclassificeerd als
+            // `bron` in audit-meta.ts (taak-/sectie-identiteit, geen tekst).
+            ...(stukActief && stukSoort
+              ? {
+                  bureau: {
+                    taak: "stukvoorbereiding" as const,
+                    stuksoort: stukSoort,
+                    secties: [
+                      ...(stuksoortDef(stukSoort)?.secties ?? []),
+                      SLOTSECTIE,
+                    ],
+                    bronbereik: ["fonds" as const],
+                    promptvariant: STUK_PROMPTVARIANT,
+                    rol_context: "bestuursbureau" as const,
                   },
                 }
               : {}),

@@ -49,8 +49,13 @@ export interface KopieContext {
   fondsnaam?: string | null;
   /** Datum van kopiëren, al geformatteerd (bijv. "31-07-2026"). */
   datum: string;
-  /** Waar de kopie vandaan komt — bepaalt de formulering van de herkomstregel. */
-  surface: "assistent" | "agendapunt";
+  /**
+   * Waar de kopie vandaan komt — bepaalt de formulering van de herkomstregel.
+   * `"bureau"` (T2, ontwerp §6.4) is de Word-export van een AI-ondersteund
+   * voorbereid stuk; die draagt de bureau-variant met een eigen, stabiel anker
+   * (HERKOMST_ANKER_BUREAU) zodat de docx-schrijffunctie kan weigeren zonder.
+   */
+  surface: "assistent" | "agendapunt" | "bureau";
 }
 
 // Merkteken zodat een KopiePayload alleen door bouwKopie() gemaakt kan worden.
@@ -302,17 +307,38 @@ export function bouwBronnenBlok(
 export const HERKOMST_ANKER = "Gekopieerd uit ";
 
 /**
+ * Vast beginstuk van de BUREAU-variant (T2, ontwerp §6.4). Eigen anker omdat een
+ * export niet met "Gekopieerd uit" opent; de docx-schrijffunctie controleert op
+ * dit anker vóór ze het bestand afgeeft (zelfde constructiepatroon als 0098).
+ */
+export const HERKOMST_ANKER_BUREAU =
+  "Voorbereid met de AI-assistent van het bestuursbureau";
+
+/**
  * De herkomstregel. Geen instelling, geen per-fonds configuratie.
  * `heeftBronnen` stuurt alleen de FORMULERING: zonder bronnen mag er niet staan
  * dat het antwoord op "de hierboven vermelde bronnen" steunt, want daarboven
  * staat er dan geen.
  */
 export function herkomstRegel(ctx: KopieContext, heeftBronnen: boolean): string {
+  const fonds = ctx.fondsnaam ? ` van ${ctx.fondsnaam}` : "";
+
+  // Bureau-variant (§6.4): een als-fondsstuk vormgegeven export. Andere opening
+  // ("Voorbereid met…") en de expliciete kwalificatie "Concepttekst".
+  if (ctx.surface === "bureau") {
+    const basis = heeftBronnen
+      ? ", op basis van de hieronder vermelde bronnen"
+      : ", zonder fondsdocument als bron";
+    return (
+      `${HERKOMST_ANKER_BUREAU}${fonds} in het bestuurdersportaal op ${ctx.datum}` +
+      `${basis}. Concepttekst — niet inhoudelijk gecontroleerd en geen bestuurlijk besluit.`
+    );
+  }
+
   const waar =
     ctx.surface === "agendapunt"
       ? "de AI-assistent bij een agendapunt"
       : "de AI-assistent";
-  const fonds = ctx.fondsnaam ? ` van ${ctx.fondsnaam}` : "";
   const basis = heeftBronnen
     ? "Door AI samengesteld op basis van de hierboven vermelde bronnen"
     : "Door AI samengesteld zonder fondsdocument als bron";

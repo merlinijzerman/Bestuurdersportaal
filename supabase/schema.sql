@@ -609,6 +609,27 @@ create index if not exists idx_log_fonds on public.governance_log(fonds_id);
 create index if not exists idx_log_gebruiker on public.governance_log(gebruiker_id);
 create index if not exists idx_log_tijd on public.governance_log(aangemaakt desc);
 
+-- ── 5a-bis. Word-export-log (T2/B-4, migratie 2026_08_05_t2_bureau_stukvoorbereiding.sql) ──
+-- Aparte, append-only logtabel voor Word-exports uit de bureau-stand. Bewust NIET
+-- in governance_log (een export is geen vraag/antwoord-interactie; meeliften zou
+-- de interactie- en P5-telemetrie vervuilen). GEEN documenttekst — die staat al in
+-- het interactielog. Schrijven kan uitsluitend via de definer-RPC log_word_export()
+-- (gebruiker/fonds server-side, rol-backstop bestuursbureau); update/delete zijn
+-- door triggers geblokkeerd (append-only). Lezen: eigen fonds + governance_audit_read
+-- (mag_audit).
+create table if not exists public.governance_export_log (
+  id                uuid primary key default uuid_generate_v4(),
+  gebruiker_id      uuid references auth.users(id),
+  gebruiker_naam    text,
+  fonds_id          uuid references public.fondsen(id),
+  gesprek_audit_id  uuid,                 -- geen FK (analoog aan governance_log.gesprek_audit_id)
+  taak              text not null default 'stukvoorbereiding',
+  stuksoort         text,
+  promptvariant     text,
+  bronnen           jsonb not null default '[]',  -- bronidentiteit, geen documenttekst
+  aangemaakt        timestamptz default now()
+);
+
 -- ── 5b. Persistente AI-gesprekken (Fase B2) ─────────────────
 -- Gebruikersgerichte opslag zodat een gesprek een refresh overleeft. Bewust
 -- losgekoppeld van governance_log (dat blijft het append-only auditspoor).
@@ -755,6 +776,10 @@ create index if not exists idx_inbreng_punt on public.agendapunt_inbreng(agendap
 alter table public.documenten add column if not exists agendapunt_id uuid references public.agendapunten(id) on delete set null;
 alter table public.documenten add column if not exists samenvatting_ai text;
 alter table public.documenten add column if not exists samengevat_op timestamptz;
+-- T2/B-6 (migratie 2026_08_05_t2_bureau_stukvoorbereiding.sql) — zelfverklaarde
+-- markering dat een stuk AI-ondersteund is voorbereid (bureau-stand). Zichtbaar
+-- voor het bestuur op de agendapuntkaart.
+alter table public.documenten add column if not exists ai_ondersteund_voorbereid boolean not null default false;
 
 create index if not exists idx_doc_agendapunt on public.documenten(agendapunt_id);
 

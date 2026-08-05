@@ -13,6 +13,7 @@ import StemrondeBlok, {
   type Bestuurslid,
 } from "./StemrondeBlok";
 import { isBureauRol } from "@/core/lib/bureau-gate";
+import { rolHeeftCapability } from "@/core/lib/capabilities-map";
 
 export interface Stuk {
   id: string;
@@ -23,6 +24,8 @@ export interface Stuk {
   samenvatting_ai: string | null;
   samengevat_op: string | null;
   opslag_pad: string | null;
+  // T2/B-6 — zelfverklaarde markering dat dit stuk AI-ondersteund is voorbereid.
+  ai_ondersteund_voorbereid: boolean;
 }
 
 const STUK_BADGE: Record<NonNullable<Stuk["bestandstype"]>, { label: string; kleur: string }> = {
@@ -177,6 +180,9 @@ export default function AgendapuntKaart({
   // !isBureau-term zou het via de eigenaar-tak alsnog een stemronde kunnen openen.
   const isBureau = isBureauRol(huidigeRol);
   const magStemmingStarten = !isBureau && (isPrivileged || isEigenaar);
+  // T2/B-6 — wie documentmetadata mag bijwerken, mag de markering zetten. Het
+  // bureau doet in de praktijk het documentbeheer; server-side gegate in de route.
+  const magMarkeren = rolHeeftCapability(huidigeRol, "documents.metadata.update");
   const aantalBijdragers = punt.inbreng.length; // voorbereidingen tellen ook mee, maar die zijn privé per gebruiker — server-side wordt het echte aantal getoetst
 
   async function verschuif(richting: "omhoog" | "omlaag") {
@@ -462,7 +468,7 @@ export default function AgendapuntKaart({
             </div>
             <div className="space-y-2">
               {punt.stukken.map((s) => (
-                <StukKaart key={s.id} stuk={s} />
+                <StukKaart key={s.id} stuk={s} magMarkeren={magMarkeren} />
               ))}
               <label
                 className={`flex items-center gap-2 text-xs border border-dashed border-app-line-strong rounded-lg px-3 py-2 hover:border-accent transition-colors ${
@@ -587,9 +593,30 @@ export default function AgendapuntKaart({
   );
 }
 
-function StukKaart({ stuk }: { stuk: Stuk }) {
+function StukKaart({ stuk, magMarkeren }: { stuk: Stuk; magMarkeren: boolean }) {
   const [open, setOpen] = useState(false);
+  // T2/B-6 — lokale weergave van de markering; optimistisch bij een toggle.
+  const [gemarkeerd, setGemarkeerd] = useState(stuk.ai_ondersteund_voorbereid);
+  const [markeerBezig, setMarkeerBezig] = useState(false);
   const samenvatting = parseSamenvatting(stuk.samenvatting_ai);
+
+  async function toggleMarkering() {
+    const nieuw = !gemarkeerd;
+    setMarkeerBezig(true);
+    setGemarkeerd(nieuw); // optimistisch
+    try {
+      const res = await fetch(`/api/documents/${stuk.id}/ai-markering`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ markering: nieuw }),
+      });
+      if (!res.ok) setGemarkeerd(!nieuw); // terugdraaien bij fout
+    } catch {
+      setGemarkeerd(!nieuw);
+    } finally {
+      setMarkeerBezig(false);
+    }
+  }
   const badge = STUK_BADGE[stuk.bestandstype ?? "pdf"];
   const eenheid = stuk.bestandstype === "xlsx" ? "tabbladen" : "pagina's";
   const kanInzien = !!stuk.opslag_pad;
@@ -637,8 +664,31 @@ function StukKaart({ stuk }: { stuk: Stuk }) {
             {!stuk.samenvatting_ai ? " · samenvatting wordt nog gegenereerd" : ""}
             {!kanInzien ? " · origineel niet beschikbaar" : ""}
           </div>
+          {/* T2/B-6 — markering "AI-ondersteund voorbereid" voor het bestuur. */}
+          {gemarkeerd && (
+            <span
+              className="inline-flex items-center gap-1 mt-1.5 text-[10px] font-semibold text-accent-ink bg-accent-tint rounded-full px-2 py-0.5"
+              title="Dit stuk is met AI-ondersteuning voorbereid door het bestuursbureau."
+            >
+              ✎ AI-ondersteund voorbereid
+            </span>
+          )}
         </div>
         </div>
+        {/* T2/B-6 — het markeren zelf (zelfverklaard, klasse D). Alleen zichtbaar
+            voor wie documentmetadata mag bijwerken; server-side gegate. */}
+        {magMarkeren && (
+          <button
+            type="button"
+            onClick={toggleMarkering}
+            disabled={markeerBezig}
+            className="mt-2 text-[11px] text-muted hover:text-accent-ink disabled:opacity-50"
+          >
+            {gemarkeerd
+              ? "Markering ‘AI-ondersteund voorbereid’ verwijderen"
+              : "Markeer als AI-ondersteund voorbereid"}
+          </button>
+        )}
         {snippet && (
           <p className="text-[13px] leading-snug text-ink/70 mt-2 line-clamp-2">
             {snippet}

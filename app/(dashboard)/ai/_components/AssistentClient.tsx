@@ -26,6 +26,9 @@ import {
 } from "./Voortgang";
 import Startpunt from "./Startpunt";
 import DocumentDoorgronden, { type DoorgrondDoc } from "./DocumentDoorgronden";
+import StukVoorbereiden from "./StukVoorbereiden";
+import { rolHeeftCapability } from "@/core/lib/capabilities-map";
+import { bouwStukZin, type Stuksoort } from "@/core/lib/stukvoorbereiding";
 import {
   ACTIEF_GESPREK_SLEUTEL,
   reflectieUitnodigingGetoond,
@@ -311,6 +314,17 @@ export default function AssistentClient({
   // route). Open + het (voorgevulde) document waarop de taak wordt uitgevoerd.
   const [doorgrondOpen, setDoorgrondOpen] = useState(false);
   const [doorgrondDoc, setDoorgrondDoc] = useState<DocumentCtx | null>(null);
+  // T2 — bureau-stand "Een stuk voorbereiden". `rol` bepaalt (cosmetisch) of de
+  // taakkaart verschijnt; de echte gate zit server-side (route + RPC). `stukOpen`
+  // is de scherpsteltoestand; `stukContext` onthoudt de stuksoort + het onderwerp
+  // zodat de Word-export weet wat te exporteren.
+  const [rol, setRol] = useState<string | null>(null);
+  const [stukOpen, setStukOpen] = useState(false);
+  const [stukContext, setStukContext] = useState<{
+    stuksoort: Stuksoort;
+    onderwerp: string;
+  } | null>(null);
+  const [stukExportBezig, setStukExportBezig] = useState<number | null>(null);
   // Ingreep 2 (30-07-2026) — HERKOMST-INGANG. Wordt de assistent geopend vanuit een
   // module (/ai?intent=fonds&herkomst=risicomatrix), dan is de scope al bekend: wie
   // vanuit de risicomatrix een vraag stelt, vraagt naar het eigen fonds. Die kennis
@@ -503,6 +517,96 @@ export default function AssistentClient({
     });
   }
 
+  // T2 — bureau-stand. Open de scherpsteltoestand voor "Een stuk voorbereiden".
+  const magStukVoorbereiden = rolHeeftCapability(rol, "ai.stukvoorbereiding");
+  function startStukVraag() {
+    if (laden) return;
+    setVrijeVraagOpen(false);
+    setStukOpen(true);
+  }
+
+  // "Start" in de stuk-scherpstel: schone start, scope op de geselecteerde
+  // stukken (leveren de bronnen), en één leesbare gebruikersbeurt. De instructie,
+  // de bureau-toon en het auditspoor (retrieval_meta.bureau) komen server-side.
+  function startStukVoorbereiden(
+    stuksoort: Stuksoort,
+    onderwerp: string,
+    documenten: DoorgrondDoc[]
+  ) {
+    if (laden || documenten.length === 0) return;
+    wisActiefGesprek();
+    setBerichten(welkomstRef.current ? [welkomstRef.current] : []);
+    setAgendapuntContext(null);
+    const scope: DocumentScope = {
+      document_ids: documenten.map((d) => d.id),
+      titels: documenten.map((d) => d.titel),
+    };
+    setDocumentScope(scope);
+    setStukOpen(false);
+    // Onthoud de stuk-context zodat de Word-export weet wat te exporteren.
+    setStukContext({ stuksoort, onderwerp: onderwerp.trim() });
+    const zin = bouwStukZin(stuksoort, onderwerp);
+    void stuurBericht(zin, {
+      scopeOverride: scope,
+      persistScope: scope,
+      stukvoorbereiding: { stuksoort },
+    });
+  }
+
+  // T2 — Word-export van een (bureau-)antwoord. Server-side: capability-gate +
+  // append-only logging (B-4). De browser ontvangt het .docx als download.
+  async function exporteerNaarWord(bericht: Bericht, idx: number) {
+    if (!stukContext) return;
+    setStukExportBezig(idx);
+    try {
+      const bronnen = (bericht.bronnen ?? []).map((b, i) => ({
+        nummer: i + 1,
+        titel: b.titel,
+        bron: b.bron,
+        paragraaf: b.paragraaf,
+        pagina: b.pagina,
+        documentdatum: b.documentdatum,
+        documentstatus: b.documentstatus,
+      }));
+      const res = await fetch("/api/ai/stuk-export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          antwoord: bericht.tekst,
+          bronnen,
+          stuksoort: stukContext.stuksoort,
+          onderwerp: stukContext.onderwerp,
+          gesprek_id: gesprekId.current ?? undefined,
+        }),
+      });
+      if (!res.ok) {
+        const melding = await res
+          .json()
+          .then((j) => (j as { error?: string }).error)
+          .catch(() => null);
+        alert(melding || "De Word-export is niet gelukt.");
+        return;
+      }
+      const blob = await res.blob();
+      const naam =
+        res.headers
+          .get("Content-Disposition")
+          ?.match(/filename="([^"]+)"/)?.[1] || "stuk.docx";
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = naam;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert("De Word-export is niet gelukt.");
+    } finally {
+      setStukExportBezig(null);
+    }
+  }
+
   // Verwijdert een gesprek DEFINITIEF (plateau A). Vervangt het oude
   // "archiveren", dat alleen `gearchiveerd = true` zette: de chatinhoud bleef
   // staan en de auditregels bleven onaangeroerd, terwijl de knop een prullenbak
@@ -638,6 +742,9 @@ export default function AssistentClient({
           .eq("id", user.id)
           .single();
         if (data?.fonds_id) setFondsId(data.fonds_id);
+        // T2 — rol vasthouden voor de (cosmetische) zichtbaarheid van de
+        // bureau-taakkaart. Autorisatie blijft server-side.
+        setRol((data?.rol as string | null) ?? null);
         // Plateau B / B-6 — de permanente opt-out (FR-15). Strikt zelfbeheerd
         // (besluit 0017): dit veld staat op de eigen profielrij en niemand
         // anders kan het zetten. Ontbreekt de kolom (migratie nog niet gedraaid)
@@ -859,6 +966,9 @@ export default function AssistentClient({
     // de eerdere versie). De route stelt hieruit de instructie samen en logt de
     // parameters; de zichtbare beurt blijft de korte zin.
     doorgrond?: { secties: DoorgrondSectieId[]; vorigeId: string | null };
+    // T2 — bureau-stand: de gekozen stuksoort. De route bouwt hieruit de
+    // instructie + past de bureau-toon toe, maar alleen met de capability.
+    stukvoorbereiding?: { stuksoort: Stuksoort };
     // P2 Deel A — markeert dat deze beurt uit een aangeklikte voorbeeldvraag komt
     // (telemetrie in het auditspoor; onderscheidt prefill van zelf getypt).
     startvraagBron?: "voorbeeldvraag";
@@ -966,6 +1076,11 @@ export default function AssistentClient({
                 secties: opties.doorgrond.secties,
                 vorige_document_id: opties.doorgrond.vorigeId ?? undefined,
               }
+            : undefined,
+          // T2 — bureau-stand "Een stuk voorbereiden". De route negeert dit veld
+          // zonder de capability ai.stukvoorbereiding (server-side gate).
+          stukvoorbereiding: opties?.stukvoorbereiding
+            ? { stuksoort: opties.stukvoorbereiding.stuksoort }
             : undefined,
           // P2 Deel A — herkomst voorbeeldvraag, meegelogd (criterium 4).
           startvraag_bron: opties?.startvraagBron,
@@ -1690,7 +1805,7 @@ export default function AssistentClient({
   // editoriale aanhef) i.p.v. de begroetingsbubbel; zodra er een vraag loopt,
   // verschijnt de reguliere chat. De doorgrond-scherpstel (P2 Deel B) neemt de
   // lege staat tijdelijk over: dan tonen we noch het startpunt, noch de chat.
-  const scherpstelActief = doorgrondOpen && !!doorgrondDoc;
+  const scherpstelActief = (doorgrondOpen && !!doorgrondDoc) || stukOpen;
   const toonStartpunt =
     !scherpstelActief &&
     berichten.length <= 1 &&
@@ -2030,6 +2145,20 @@ export default function AssistentClient({
                         surface: "assistent",
                       }}
                     />
+                    {/* T2 — Word-export. Alleen bij een bureau-stuk-gesprek
+                        (stukContext gezet) én met de capability. Server-side
+                        gebouwd + append-only gelogd (B-4); de knop start alleen
+                        de download. */}
+                    {magStukVoorbereiden && stukContext && (
+                      <button
+                        type="button"
+                        disabled={stukExportBezig === i}
+                        onClick={() => void exporteerNaarWord(b, i)}
+                        className="text-xs text-ink border border-line rounded-lg px-3 py-1.5 hover:border-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {stukExportBezig === i ? "Word maken…" : "Download als Word"}
+                      </button>
+                    )}
                   </div>
                 )}
 
@@ -2278,11 +2407,13 @@ export default function AssistentClient({
               onVrijeVraag={startVrijeVraag}
               onVoorbeeldvraag={startVoorbeeldvraag}
               onDocumentVraag={startDocumentVraag}
+              magStukVoorbereiden={magStukVoorbereiden}
+              onStukVoorbereiden={startStukVraag}
             />
           )}
           {/* P2 Deel B — "een document doorgronden": scherpsteltoestand binnen /ai
               (geen route). Neemt de lege staat over; Annuleren keert terug. */}
-          {scherpstelActief && (
+          {doorgrondOpen && !!doorgrondDoc && (
             <DocumentDoorgronden
               initieelDoc={{ id: doorgrondDoc!.id, titel: doorgrondDoc!.titel }}
               laden={laden}
@@ -2293,6 +2424,15 @@ export default function AssistentClient({
                 setDoorgrondOpen(false);
                 setDoorgrondDoc(null);
               }}
+            />
+          )}
+          {/* T2 — "een stuk voorbereiden": bureau-scherpsteltoestand binnen /ai. */}
+          {stukOpen && (
+            <StukVoorbereiden
+              laden={laden}
+              zoekDocumenten={zoekDocumenten}
+              onStart={startStukVoorbereiden}
+              onAnnuleren={() => setStukOpen(false)}
             />
           )}
         </div>

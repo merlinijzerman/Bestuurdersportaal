@@ -16,12 +16,14 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
   TOON_BLOK,
+  TOON_BLOK_BUREAU,
   NIEUW_ROL_GEDRAG,
   NIEUW_STRUCTUUR,
   NIEUW_TOON,
   SP_SPARRING_REGELS,
   SP_REFLECTIE_REGELS,
   SP_REFLECTIE_CONCEPT_REGELS,
+  SP_DOCUMENTEN_REGELS,
   VERVOLGVRAGEN_INSTRUCTIE,
   VERVOLGVRAGEN_MARKER,
   SP_COMBINEREN_REGELS,
@@ -84,6 +86,13 @@ const PIN = {
   static_feitelijk_combineren: "720677da5a653ce08bbe08e051dad1c065a8246c7fa9964ef23d1b16e004cb6e",
   static_sparring_combineren: "bf11b83970b44857951fa520b51022b92968f6d59875e975a5665e5120c14118",
   dyn_block: "d6e01afa0bc092b7efbc8701fad58af73808ae3e3ee0c719de20366630f5c4d7",
+  // T2 (05-08-2026) — nieuw, additief. De bureau-toonfamilie en haar assemblage.
+  // Deze pins raken GEEN van de bestaande hashes: TOON_BLOK_BUREAU is een nieuwe
+  // constante en de bureau-assemblage wordt alleen bereikt met bureauToon=true,
+  // dat geen enkele bestaande call-site meegeeft. Dat de zeven pins hierboven
+  // groen blijven, is exact het nulgrens-bewijs G23/FR-9a.
+  TOON_BLOK_BUREAU: "338b8984da6e80f66cdb702887add05256729765c4dc4df6884102a8be32962e",
+  static_bureau_documenten: "b5224895a0cd3e4353f7a24417b38c28e213aa429c1892bf04266f543c894beb",
 } as const;
 
 const CTX: BestuurderContext = {
@@ -139,6 +148,59 @@ test("plateau B: de reflectieprompt stuurt niet en diagnosticeert niet", () => {
     assert.equal(reflectie.includes(verboden), false, verboden);
     assert.equal(concept.includes(verboden), false, verboden);
   }
+});
+
+test("T2 bureau-toon: TOON_BLOK_BUREAU + assemblage gepind, en nulgrens intact", () => {
+  // De nieuwe toonfamilie is gepind ...
+  assert.equal(sha(TOON_BLOK_BUREAU), PIN.TOON_BLOK_BUREAU, "TOON_BLOK_BUREAU is gewijzigd");
+  assert.equal(
+    sha(bouwStatischeInstructies(SP_DOCUMENTEN_REGELS, "feitelijk", true)),
+    PIN.static_bureau_documenten
+  );
+  // ... en de bureau-assemblage eindigt op TOON_BLOK_BUREAU i.p.v. TOON_BLOK.
+  assert.equal(
+    bouwStatischeInstructies(SP_DOCUMENTEN_REGELS, "feitelijk", true),
+    `${SP_DOCUMENTEN_REGELS}\n\n${TOON_BLOK_BUREAU}`
+  );
+  // NULGRENS (G23): met bureauToon weggelaten óf false is de uitvoer identiek aan
+  // voorheen — TOON_BLOK, niet de bureau-variant. Zo kan de vlag het gedrag van
+  // bestaande rollen niet raken.
+  assert.equal(
+    bouwStatischeInstructies(SP_DOCUMENTEN_REGELS, "feitelijk", false),
+    bouwStatischeInstructies(SP_DOCUMENTEN_REGELS, "feitelijk")
+  );
+  assert.equal(
+    bouwStatischeInstructies(SP_DOCUMENTEN_REGELS, "feitelijk"),
+    `${SP_DOCUMENTEN_REGELS}\n\n${TOON_BLOK}`
+  );
+  // bureauToon WINT van elke andere toon, ongeacht de modus én ongeacht de
+  // globale BESTUURLIJKE_STIJL-vlag (die anders bovenaan zou kortsluiten en
+  // TOON_BLOK_BUREAU stil zou verdringen). De bureau-taak forceert 'feitelijk',
+  // maar het invariant moet hard zijn: bureauToon ⇒ regels + TOON_BLOK_BUREAU.
+  for (const m of ["feitelijk", "sparring", "duiding"] as const) {
+    assert.equal(
+      bouwStatischeInstructies(SP_COMBINEREN_REGELS, m, true),
+      `${SP_COMBINEREN_REGELS}\n\n${TOON_BLOK_BUREAU}`,
+      `bureauToon=true moet TOON_BLOK_BUREAU geven, ook bij modus ${m}`
+    );
+  }
+});
+
+test("T2 bureau-toon: register gelijk, maar koppen-norm + expliciete slotafsluiting", () => {
+  const b = TOON_BLOK_BUREAU;
+  const lower = b.toLowerCase();
+  // Register ongewijzigd: u-vorm, geen ambtelijke floskels.
+  assert.ok(lower.includes('spreek met "u"'));
+  assert.ok(lower.includes("hierbij delen wij u mede"));
+  // De drie afwijkingen van de bestuurdersstand (ontwerp §6.1).
+  assert.ok(lower.includes("koppen is hier de norm"));
+  assert.ok(lower.includes("concept"));
+  assert.ok(lower.includes("aannames en open punten"));
+  // De verruiming: voorstel van het bureau, nooit als besluit/eigen oordeel.
+  assert.ok(lower.includes("voorstel ván het bureau áán het bestuur"));
+  assert.ok(lower.includes("nooit als besluit"));
+  // Anti-fabricage blijft expliciet.
+  assert.ok(lower.includes("verzin niets"));
 });
 
 test("bouwStatischeInstructies-assemblage byte-identiek (feitelijk + sparring)", () => {

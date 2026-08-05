@@ -126,6 +126,10 @@ export const META_BRON = [
   "besluitbronnen",
   "mogelijk_gerelateerd",
   "doorgrond",
+  // T2 — bureau-stand ("Een stuk voorbereiden"). Draagt taak/stuksoort/secties/
+  // bronbereik/promptvariant/rol_context: taak- en sectie-IDENTITEIT, géén
+  // documenttekst en géén gebruikersvraag. Zelfde niveau als `doorgrond`.
+  "bureau",
   "herkomst",
 ] as const;
 

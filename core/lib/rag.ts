@@ -631,6 +631,20 @@ export interface RetrievalMeta {
     vorige_document_id: string | null;
     promptvariant: string;
   };
+  // T2 — de bureau-stand ("Een stuk voorbereiden"). Zelfde motivering als
+  // `doorgrond`: de zichtbare beurt is korter dan de samengestelde instructie, dus
+  // zonder deze parameters is het antwoord achteraf niet reconstrueerbaar (FR-12,
+  // ontwerp §6.4). Append-only, geen nieuw event-type; geclassificeerd als `bron`
+  // in core/lib/audit-meta.ts (taak-/sectie-identiteit, géén documenttekst).
+  // `bronbereik` is in T2 "fonds"/"generiek"; "web" volgt met deskresearch (T4).
+  bureau?: {
+    taak: "stukvoorbereiding";
+    stuksoort: "oplegger" | "bestuursnotitie" | "memo" | "toelichting" | null;
+    secties: string[];
+    bronbereik: ("fonds" | "generiek" | "web")[];
+    promptvariant: string;
+    rol_context: "bestuursbureau";
+  };
   // P2 Deel A — markeert dat de beurt uit een aangeklikte (generieke) voorbeeldvraag
   // kwam i.p.v. zelf getypt. Telemetrie in het auditspoor; meelift op de bestaande
   // chat-logging, geen nieuwe tabel.

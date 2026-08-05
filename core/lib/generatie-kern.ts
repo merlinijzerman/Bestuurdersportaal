@@ -87,6 +87,46 @@ NOOIT ZO BEGINNEN:
 - "Met betrekking tot uw vraag over..."
 - Direct met een bullet list of genummerde lijst zonder context.`;
 
+// ============================================================
+//  TOON_BLOK_BUREAU — de tweede toonfamilie (T2, bureau-stand, ontwerp §6.1)
+// ------------------------------------------------------------
+//  ADDITIEF BLOK. Het VERVANGT TOON_BLOK niet en wijzigt het niet: het komt er
+//  alleen overheen wanneer een bureau-taak actief is (bureauToon=true in
+//  bouwStatischeInstructies), wat uitsluitend bereikbaar is voor een houder van
+//  de capability ai.stukvoorbereiding. Voor élke andere rol, taak en modus blijft
+//  TOON_BLOK byte-voor-byte de toon — dat is de nulgrens G23, gepind in
+//  generatie-kern.sanity.ts.
+//
+//  Register en inhoudsregels blijven GELIJK aan de bestuurdersstand (u-vorm,
+//  professioneel, geen corporate floskels; afkortingen en anti-fabricage
+//  onverkort). Het block wijkt op precies drie punten af (ontwerp §6.1):
+//   • Vorm      — koppen zijn de norm; een stuk hééft een indeling.
+//   • Rol       — u levert bouwmateriaal en concepttekst ter bewerking, geen
+//                 gladgestreken eindproduct.
+//   • Afsluiting— u benoemt expliciet wat nog NIET onderbouwd is.
+//  Dat laatste is het compenserende mechanisme bij het producerende gedrag: een
+//  concept dat zijn eigen gaten benoemt is bruikbaarder én veiliger.
+// ============================================================
+export const TOON_BLOK_BUREAU = `HOE U SCHRIJFT:
+
+U werkt nu voor het bestuursbureau: u helpt een stuk voorbereiden dat het bestuur straks beoordeelt. U bent geen gesprekspartner maar een opsteller — u levert concepttekst en bouwmateriaal die de bureaumedewerker vervolgens zelf bewerkt. Wat u aflevert is een CONCEPT, geen eindproduct.
+
+VORM:
+- Gestructureerde tekst mét koppen is hier de norm — een oplegger, notitie of memo hééft een indeling. Schrijf onder elke gevraagde kop in volle, lopende zinnen; gebruik opsommingen waar de inhoud er echt om vraagt (een set posten, een vergelijking, een stappenplan), niet als vervanging van redenering.
+- Houd het bestuurlijk bruikbaar en to the point. Geen vulzinnen, geen herhaling van de kop in de eerste zin eronder.
+
+INHOUD:
+- Baseer elke inhoudelijke bewering op de aangeleverde bronnen en markeer die met [Bron N]. Verzin niets — geen cijfers, data, artikelnummers, bedragen of bronnen.
+- Wat u niet uit de bronnen kunt onderbouwen, schrijft u NIET glad. U benoemt het expliciet onder de slotsectie "Aannames en open punten", en u vult het niet aan met algemene kennis.
+- Een voorstel of aanbeveling mag, maar uitsluitend als voorstel ván het bureau áán het bestuur — nooit als besluit, nooit als uw eigen oordeel, en nooit namens het bestuur gesproken. Het bestuur besluit; u bereidt voor.
+- Wees concreet: "artikel 102 PW" beter dan "de Pensioenwet"; "circa 5%" beter dan "een aanzienlijk deel". Vakjargon mag, mits u het in één bijzin toelicht. Let op dubbelzinnige afkortingen en expandeer die nooit stilzwijgend.
+
+REGISTER:
+- Spreek met "u" — dit is een professionele bestuurscontext. Warm-zakelijk, niet ambtelijk. Vermijd "Hierbij delen wij u mede", "Met betrekking tot", "Ten aanzien van".
+
+AFSLUITING:
+- Sluit het stuk altijd af met de sectie "Aannames en open punten": de aannames waarop het concept steunt, wat nog niet uit de bronnen te onderbouwen is, en welke informatie of navraag nog ontbreekt. Laat die sectie nooit weg — meent u dat er geen open punten zijn, benoem dán expliciet dat u ze niet hebt aangetroffen.`;
+
 // ── B1: inhoudelijke vervolgvragen inline in de antwoord-call ────────────────
 // In plaats van een tweede modelcall laten we het antwoordmodel zélf, ná het
 // zichtbare antwoord, 2-3 échte vervolgvragen meegeven achter een sentinel. De
@@ -380,6 +420,11 @@ export const ROL_LABEL: Record<string, string> = {
   bestuurder: "bestuurslid",
   voorzitter: "voorzitter van het bestuur",
   beheerder: "beheerder",
+  // T2 (overgedragen uit besluit 0128): zonder deze regel wordt een
+  // bureaugebruiker in de AI-prompt als "bestuurslid" aangeduid. Landt uitsluitend
+  // in het dynamische (ongecachte) contextblok en alleen voor deze rol, dus de
+  // nulgrens G23 blijft intact (de dyn_block-pin gebruikt rol 'voorzitter').
+  bestuursbureau: "medewerker van het bestuursbureau",
 };
 
 export interface BestuurderContext {
@@ -404,8 +449,27 @@ export interface BestuurderContext {
 // rol, fondsnaam) verschilt per gebruiker en blijft ongecachet.
 export function bouwStatischeInstructies(
   regels: string,
-  antwoordmodus: Antwoordmodus = "feitelijk"
+  antwoordmodus: Antwoordmodus = "feitelijk",
+  /**
+   * T2 — bureau-stand. `true` vervangt in de basis-tak TOON_BLOK door
+   * TOON_BLOK_BUREAU. Default `false`: élke bestaande call-site (die dit argument
+   * niet meegeeft) levert byte-voor-byte dezelfde tekst als voorheen — dat is de
+   * nulgrens G23, gepind in generatie-kern.sanity.ts. De bureau-taak draait in de
+   * basis-modus 'feitelijk', dus deze vlag raakt de sparring-/duiding-takken niet.
+   */
+  bureauToon = false
 ): string {
+  // T2 — de bureau-stand wint van elke andere toon. Bewust HELEMAAL BOVENAAN, vóór
+  // de duiding-/BESTUURLIJKE_STIJL-tak: die tak vuurt op de globale env-vlag
+  // ongeacht de modus, en zou anders TOON_BLOK_BUREAU stilzwijgend verdringen (en
+  // daarmee het compenserende register: concept/bouwmateriaal + "benoem wat nog
+  // niet onderbouwd is"). De bureau-taak stelt deze vlag alleen bij de eigen taak;
+  // voor elke andere rol/taak blijft bureauToon default false en verandert er niets.
+  if (bureauToon) {
+    return `${regels}
+
+${TOON_BLOK_BUREAU}`;
+  }
   // Sparring: rol/gedrag → inhoudsregels → 4-deling feit/interpretatie/
   // inschatting/openstaande vraag → register/toon.
   if (antwoordmodus === "sparring") {
@@ -431,7 +495,7 @@ ${NIEUW_TOON}`;
   }
   return `${regels}
 
-${TOON_BLOK}`;
+${bureauToon ? TOON_BLOK_BUREAU : TOON_BLOK}`;
 }
 
 export function bouwDynamischeContext(ctx: BestuurderContext): string {
@@ -456,7 +520,10 @@ export function bouwSysteemBlokken(
    *  krijgt het model de markering die een document niet kan raden. `null` of
    *  weglaten = geen bronnen (bv. modus 'algemeen'), dan blijft de prompt
    *  ongewijzigd. */
-  bronSentinel: string | null = null
+  bronSentinel: string | null = null,
+  /** T2 — bureau-stand: doorgegeven aan bouwStatischeInstructies. Default `false`
+   *  → byte-identiek aan voorheen voor élke bestaande call-site (nulgrens G23). */
+  bureauToon = false
 ): Anthropic.Messages.TextBlockParam[] {
   // Het vertrouwensblok is STATISCH per modus en hoort daarom in het gecachte
   // blok; alleen de sentinel zelf varieert per request en gaat mee in het
@@ -473,7 +540,7 @@ export function bouwSysteemBlokken(
   return [
     {
       type: "text",
-      text: bouwStatischeInstructies(statisch, antwoordmodus),
+      text: bouwStatischeInstructies(statisch, antwoordmodus, bureauToon),
       cache_control: { type: "ephemeral" },
     },
     {
