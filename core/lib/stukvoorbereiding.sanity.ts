@@ -17,6 +17,7 @@ import {
   stuksoortDef,
   bouwStukZin,
   bouwStukInstructie,
+  extraheerStukBlok,
   type Stuksoort,
 } from "./stukvoorbereiding";
 
@@ -110,6 +111,62 @@ check("bouwStukZin is kort, benoemt stuksoort en onderwerp", () => {
 
 check("promptvariant is de gepinde waarde", () => {
   assert.equal(STUK_PROMPTVARIANT, "bureau_stuk_v1");
+});
+
+// ── T5 A3/A5: kaal stuk + afbakening voor de export ─────────────────────────
+check("de instructie verbiedt conversationele omlijsting en een eigen titel", () => {
+  const instr = bouwStukInstructie("bestuursnotitie");
+  assert.ok(/UITSLUITEND het stuk zelf/.test(instr), instr);
+  assert.ok(/géén begroeting, inleiding, aanhef of/.test(instr), instr);
+  assert.ok(/eigen titelregel/.test(instr), instr);
+  assert.ok(/geen afsluitende vraag/.test(instr), instr);
+});
+
+check("extraheerStukBlok knipt een lead-in vóór de eerste kop weg", () => {
+  const ruw = [
+    "Graag, Merlin. Hieronder de herschreven notitie.",
+    "",
+    "## Samenvatting",
+    "De kern van het voorstel.",
+    "",
+    "## Aannames en open punten",
+    "- De renteaanname is nog niet bevestigd.",
+  ].join("\n");
+  const blok = extraheerStukBlok(ruw);
+  assert.ok(!blok.includes("Graag, Merlin"), blok);
+  assert.ok(blok.startsWith("## Samenvatting"), blok);
+  assert.ok(blok.includes("Aannames en open punten"), blok);
+});
+
+check("extraheerStukBlok knipt een conversationele afsluiting ná het stuk weg", () => {
+  const ruw = [
+    "## Kern",
+    "De inhoud van het memo.",
+    "",
+    "## Aannames en open punten",
+    "- Nog te verifiëren bij de uitvoerder.",
+    "",
+    "Een paar keuzes wil ik graag aan u voorleggen. Wilt u dat ik het compacter maak?",
+  ].join("\n");
+  const blok = extraheerStukBlok(ruw);
+  assert.ok(!blok.includes("Een paar keuzes"), blok);
+  assert.ok(!blok.includes("Wilt u dat ik"), blok);
+  assert.ok(blok.trimEnd().endsWith("bij de uitvoerder."), blok);
+});
+
+check("extraheerStukBlok laat een schoon stuk (koppen/lijsten/tabel) ongemoeid", () => {
+  const schoon = [
+    "## Samenvatting",
+    "De kern.",
+    "",
+    "| A | B |",
+    "| --- | --- |",
+    "| 1 | 2 |",
+    "",
+    "## Aannames en open punten",
+    "- Openstaand punt.",
+  ].join("\n");
+  assert.equal(extraheerStukBlok(schoon), schoon.trim());
 });
 
 console.log(`\n${n} sanity-tests geslaagd.`);

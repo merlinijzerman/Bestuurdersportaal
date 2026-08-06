@@ -4,7 +4,7 @@
 - **Datum:** 2026-08-05
 - **Betrokkenen:** Merlin (opdrachtgever), Claude (analyse & uitvoering)
 - **Werkopdracht:** T2, plateau A — `04 Technische inrichting/Bestuurdersportaal - Werkopdracht T2 - Bureau-assistent produceren en Word-export v1.0.md`
-- **Ontwerp:** `03 Functioneel ontwerp/Bestuurdersportaal - Rol Bestuursbureau ontwerp v0.1.md` (inhoud v0.3), §6 / §6.3 / §6.4 / §7.7 / §9
+- **Ontwerp:** `03 Functioneel ontwerp/Bestuurdersportaal - Rol Bestuursbureau ontwerp v0.3.md` (hernoemd van v0.1 bij T3), §6 / §6.3 / §6.4 / §7.7 / §9
 - **Bouwt op:** [`0128`](./0128-tenant-rol-bestuursbureau.md) (rol + capabilities, T1), [`0098`](./0098-kopieren-uit-de-chat-zonder-logging.md) (herkomst als constructie), [`0079`](./0079-agenda-assistent-gedeelde-weergave.md) (geen tweede renderer), [`0089`](./0089-ai-taken-p2-voorbeeldvragen-en-document-doorgronden.md) (AI-taken-patroon)
 
 ## Context

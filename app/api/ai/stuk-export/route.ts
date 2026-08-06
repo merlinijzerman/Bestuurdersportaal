@@ -19,7 +19,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { rolHeeftCapability } from "@/core/lib/capabilities";
 import { weigerAlsModuleUit } from "@/core/lib/module-guard";
-import { isStuksoort, stuksoortDef, STUK_PROMPTVARIANT } from "@/core/lib/stukvoorbereiding";
+import {
+  isStuksoort,
+  stuksoortDef,
+  STUK_PROMPTVARIANT,
+  extraheerStukBlok,
+} from "@/core/lib/stukvoorbereiding";
 import { bouwDocx, type DocxStukContext } from "@/core/lib/antwoord-docx";
 import { nlDatum, type KopieBron } from "@/core/lib/antwoord-klembord";
 
@@ -84,12 +89,19 @@ export async function POST(req: NextRequest) {
       gesprek_id?: unknown;
     };
 
-    const antwoord = typeof body.antwoord === "string" ? body.antwoord : "";
-    if (!antwoord.trim()) {
+    const ruwAntwoord = typeof body.antwoord === "string" ? body.antwoord : "";
+    if (!ruwAntwoord.trim()) {
       return NextResponse.json({ error: "Geen inhoud om te exporteren." }, { status: 400 });
     }
-    if (antwoord.length > MAX_ANTWOORD) {
+    if (ruwAntwoord.length > MAX_ANTWOORD) {
       return NextResponse.json({ error: "Inhoud te groot voor export." }, { status: 413 });
+    }
+    // T5 A5: het document bevat uitsluitend het stuk — géén conversationele in- of
+    // uitleiding. De producerende taak levert het stuk al kaal; dit is de
+    // afdwingende vangnetlaag vóór de bouw.
+    const antwoord = extraheerStukBlok(ruwAntwoord);
+    if (!antwoord.trim()) {
+      return NextResponse.json({ error: "Geen inhoud om te exporteren." }, { status: 400 });
     }
     if (!isStuksoort(body.stuksoort)) {
       return NextResponse.json({ error: "Onbekende stuksoort." }, { status: 400 });

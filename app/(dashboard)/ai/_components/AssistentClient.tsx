@@ -228,7 +228,7 @@ export default function AssistentClient({
   const [berichten, setBerichten] = useState<Bericht[]>([
     {
       rol: "ai",
-      tekst: `Welkom terug. Ik ben uw AI-assistent voor het bestuurdersportaal.\n\nElke vraag wordt vastgelegd in de Governance Log, inclusief welke bron is gebruikt.`,
+      tekst: `Welkom terug. Ik ben uw AI-assistent voor het bestuurdersportaal.\n\nU spreekt hier met een AI-assistent; controleer belangrijke informatie altijd bij de vermelde bron.`,
     },
   ]);
   const [invoer, setInvoer] = useState("");
@@ -282,6 +282,11 @@ export default function AssistentClient({
   // worden gescrold (begin van de vraag bovenaan), i.p.v. mee te schuiven naar
   // de onderkant/bronnen tijdens het streamen.
   const scrollDoel = useRef<number | null>(null);
+  // T5 C2 — bij het OPENEN van een bestaand gesprek start de weergave onderaan,
+  // bij het laatste bericht (niet bovenaan). Losstaand van scrollDoel (dat na het
+  // versturen van een vraag naar de top van díe vraag scrollt); deze eenmalige
+  // vlag scrollt naar de onderkant van het laatste bericht, zonder animatie.
+  const scrollNaarOnder = useRef<boolean>(false);
   const highlightTimer = useRef<number | null>(null);
   // Persistentie (Fase B2): id van het huidige opgeslagen gesprek en de
   // ingelogde gebruiker. Refs i.p.v. state — wijziging hoeft geen re-render.
@@ -428,6 +433,9 @@ export default function AssistentClient({
     if (laden) return;
     markeerActiefGesprek(item.id);
     gesprekBestaatInDb.current = true;   // komt uit de lijst, staat dus in de DB
+    // T5 C2 — een geopend gesprek start onderaan bij het laatste bericht.
+    scrollNaarOnder.current =
+      Array.isArray(item.berichten) && item.berichten.length > 0;
     setBerichten(
       Array.isArray(item.berichten) && item.berichten.length > 0
         ? herstelVoltooidVlag(item.berichten)
@@ -533,19 +541,31 @@ export default function AssistentClient({
     onderwerp: string,
     documenten: DoorgrondDoc[]
   ) {
-    if (laden || documenten.length === 0) return;
+    // T5 B1: een bron is niet langer verplicht. Zonder gekozen stukken start de
+    // bronloze variant (concept-skelet, variant iii); mét stukken de bron-
+    // onderbouwde variant (i). Een lege beurt (bronloos zonder onderwerp) laten
+    // we niet starten — de scherpstel dwingt dat al af, dit is de backstop.
+    const bronloos = documenten.length === 0;
+    if (laden || (bronloos && !onderwerp.trim())) return;
     wisActiefGesprek();
     setBerichten(welkomstRef.current ? [welkomstRef.current] : []);
     setAgendapuntContext(null);
-    const scope: DocumentScope = {
-      document_ids: documenten.map((d) => d.id),
-      titels: documenten.map((d) => d.titel),
-    };
+    // Bij de bronloze variant is er geen document-scope: de server draait dan de
+    // concept-skelet-tak. Bij de bron-variant leveren de stukken de bronnen.
+    const scope: DocumentScope | null = bronloos
+      ? null
+      : {
+          document_ids: documenten.map((d) => d.id),
+          titels: documenten.map((d) => d.titel),
+        };
     setDocumentScope(scope);
     setStukOpen(false);
     // Onthoud de stuk-context zodat de Word-export weet wat te exporteren.
     setStukContext({ stuksoort, onderwerp: onderwerp.trim() });
     const zin = bouwStukZin(stuksoort, onderwerp);
+    // Expliciet `null` (niet undefined) meegeven: stuurBericht valt bij undefined
+    // terug op de — nog niet gecommitte — documentScope-state; null betekent
+    // ondubbelzinnig "geen scope" en stuurt de server de bronloze bureau-tak in.
     void stuurBericht(zin, {
       scopeOverride: scope,
       persistScope: scope,
@@ -766,8 +786,8 @@ export default function AssistentClient({
 
         const groet = dagdeelGroet();
         const personalTekst = voornaam
-          ? `${groet} ${voornaam}, fijn u te zien.\n\nIk help u graag met vragen rondom ${fondsnaam}.\n\nElke vraag wordt vastgelegd in de Governance Log, inclusief welke bron is gebruikt.`
-          : `${groet}. Ik help u graag met vragen rondom ${fondsnaam}.\n\nElke vraag wordt vastgelegd in de Governance Log.`;
+          ? `${groet} ${voornaam}, fijn u te zien.\n\nIk help u graag met vragen rondom ${fondsnaam}.\n\nU spreekt hier met een AI-assistent; controleer belangrijke informatie altijd bij de vermelde bron.`
+          : `${groet}. Ik help u graag met vragen rondom ${fondsnaam}.\n\nU spreekt hier met een AI-assistent; controleer belangrijke informatie altijd bij de vermelde bron.`;
 
         welkomstRef.current = { rol: "ai", tekst: personalTekst };
 
@@ -798,6 +818,8 @@ export default function AssistentClient({
             if (laatste?.id && Array.isArray(opgeslagen) && opgeslagen.length > 0) {
               markeerActiefGesprek(laatste.id as string);
               gesprekBestaatInDb.current = true;   // net uit de DB gelezen
+              // T5 C2 — na een refresh het herstelde gesprek onderaan tonen.
+              scrollNaarOnder.current = true;
               setBerichten(herstelVoltooidVlag(opgeslagen));
               setDocumentScope(leesScope(laatste.document_scope));
               setAgendapuntContext(leesAgendapuntContext(laatste.document_scope));
@@ -929,6 +951,20 @@ export default function AssistentClient({
   }, []);
 
   useEffect(() => {
+    // T5 C2 — een zojuist geopend bestaand gesprek start onderaan bij het laatste
+    // bericht. Wint van scrollDoel (dat hoort bij een verstuurde vraag) en scrollt
+    // zonder animatie direct naar de onderkant.
+    if (scrollNaarOnder.current) {
+      const idx = berichten.length - 1;
+      if (idx >= 0) {
+        document
+          .getElementById(`bericht-${idx}`)
+          ?.scrollIntoView({ behavior: "auto", block: "end" });
+      }
+      scrollNaarOnder.current = false;
+      scrollDoel.current = null;
+      return;
+    }
     // Scroll alleen wanneer er een nieuw doel is gezet (na het versturen van een
     // vraag) — niet bij elk gestreamd token. Daardoor blijft de weergave aan het
     // begin van het antwoord staan in plaats van mee te schieten naar onderen.
@@ -1908,7 +1944,11 @@ export default function AssistentClient({
           losse kopbalken (topbar h-14 + brongebruik + antwoordmodus, ~200px chrome). */}
       <div className="bg-card border-b border-line px-7 py-2.5 flex items-center gap-x-3 gap-y-2 flex-wrap">
         <span className="font-bold text-ink">AI Assistent</span>
-        <span className="bg-ok-tint text-ok-ink text-xs font-semibold px-2.5 py-1 rounded-full">
+        <span
+          className="bg-ok-tint text-ok-ink text-xs font-semibold px-2.5 py-1 rounded-full cursor-help"
+          title="Elke vraag wordt vastgelegd in de Governance Log, inclusief welke bron is gebruikt."
+          aria-label="Governance logging actief. Elke vraag wordt vastgelegd in de Governance Log, inclusief welke bron is gebruikt."
+        >
           ● Governance logging actief
         </span>
 

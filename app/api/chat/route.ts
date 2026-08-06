@@ -21,7 +21,7 @@ import {
 import { HAIKU_MODEL } from "@/core/lib/llm-modellen";
 import { weigerAlsModuleUit } from "@/core/lib/module-guard";
 import { valideerScope, type ScopeDocumentRij } from "@/core/lib/document-scope";
-import { bepaalVraagtype, schatTokens, kiesStrategie, maakBatches, bepaalAntwoordmodus, retrievalModusVoor, retrievalModusVoorVraag, bepaalInlineMeldingen, AFGEKAPT_MELDING, meldingNietVastgesteldeStukken, bronbasisLabel, bepaalBronIntent, moetVerduidelijken, bepaalAutoBronModus, heeftPortaalstandNodig, VERDUIDELIJKINGSVRAAG, VERDUIDELIJKING_OPTIES, ANTWOORDMODUS_LABEL, type Strategie, type Antwoordmodus, type BronModus, type BronIntent, type BronIntentResultaat, type InlineMelding } from "@/core/lib/vraagtype";
+import { bepaalVraagtype, schatTokens, kiesStrategie, maakBatches, bepaalAntwoordmodus, retrievalModusVoor, retrievalModusVoorVraag, bepaalInlineMeldingen, AFGEKAPT_MELDING, meldingNietVastgesteldeStukken, bronbasisLabel, bepaalBronIntent, moetVerduidelijken, isKorteBevestiging, bepaalAutoBronModus, heeftPortaalstandNodig, VERDUIDELIJKINGSVRAAG, VERDUIDELIJKING_OPTIES, ANTWOORDMODUS_LABEL, type Strategie, type Antwoordmodus, type BronModus, type BronIntent, type BronIntentResultaat, type InlineMelding } from "@/core/lib/vraagtype";
 import { getPortaalContext } from "@/core/lib/portaalcontext";
 import { bouwPortaalstandBlok } from "@/core/lib/portaalstand-blok";
 import { bepaalBronsoortprofiel } from "@/core/lib/weeg-bronsoort";
@@ -51,6 +51,7 @@ import {
   VERVOLGVRAGEN_INSTRUCTIE,
   splitsVervolgvragen,
   SP_DOCUMENTEN_REGELS,
+  SP_BUREAU_BRONLOOS_REGELS,
   SP_ALGEMEEN_REGELS,
   SP_COMBINEREN_REGELS,
   SP_DOCUMENT_SCOPE_REGELS,
@@ -638,7 +639,12 @@ export async function POST(req: NextRequest) {
       isStuksoort(body.stukvoorbereiding?.stuksoort)
         ? body.stukvoorbereiding!.stuksoort as Stuksoort
         : null;
-    const stukActief = stukCapability && stukSoort !== null && scopeActief;
+    // T5 B1: de taak vereist niet langer een document-scope. Kiest de bureau-
+    // medewerker gekoppelde stukken, dan draait het bron-onderbouwde concept
+    // (variant i); kiest hij géén stukken, dan een bronloos concept-SKELET
+    // (variant iii). De capability blijft de harde gate (G2/FR-21).
+    const stukActief = stukCapability && stukSoort !== null;
+    const bronloosBureau = stukActief && !scopeActief;
     const stukInstructie = stukActief ? bouwStukInstructie(stukSoort!) : null;
 
     // ── Transformatie-vervolgactie (FO §13) ─────────────────────────────────
@@ -675,11 +681,25 @@ export async function POST(req: NextRequest) {
       /^[a-z0-9-]{1,40}$/.test(body.bron_intent_herkomst)
         ? body.bron_intent_herkomst
         : null;
+    // T5 C3 — een korte bevestiging ("ja graag", "doe maar") die ná een assistent-
+    // beurt komt, is geen nieuwe ankerloze vraag en mag de verduidelijkingsvraag
+    // niet uitlokken. Vereist een eerder assistent-antwoord in de historie (dezelfde
+    // signaalbron als transformatieActief), anders is het een openingszin en geldt
+    // de normale classificatie.
+    const bevestigingNaAntwoord = heeftVorigAntwoord && isKorteBevestiging(vraag);
     const bronIntentResultaat: BronIntentResultaat | null =
-      scopeActief || agendapuntModusActief
+      // T5 B1: een bronloze bureau-taak is inherent een opsteltaak, geen fonds-/
+      // algemeen-vraag — de verduidelijkingsvraag ("voor uw fonds / algemene zin")
+      // hoort daar niet te vuren. Net als bij een actieve scope: geen intent-tak.
+      scopeActief || agendapuntModusActief || bronloosBureau
         ? null
         : intentOverride
         ? { intent: intentOverride, vertrouwen: "zeker" }
+        : bevestigingNaAntwoord
+        ? // T5 C3: een korte bevestiging ("ja graag") ná een assistent-beurt is
+          // geen nieuwe ankerloze vraag. Zet de intentie op "zeker" zodat de
+          // verduidelijkingsvraag niet vuurt; fondsgericht (nooit stil algemeen).
+          { intent: "fonds", vertrouwen: "zeker" }
         : bepaalBronIntent(vraag);
     const bronIntent: BronIntent | undefined = bronIntentResultaat?.intent;
 
@@ -1059,7 +1079,7 @@ export async function POST(req: NextRequest) {
     // Agendapunt-modus (ADR 0028): retrieval alleen als er doorzoekbare gekoppelde
     // stukken zijn. Zonder stukken halen we niets op — de toelichting is dan de
     // enige context (geen brede bibliotheek-retrieval, ticket §2.2).
-    const moetRetrieven = !reflectieActief && !breedActief && (
+    const moetRetrieven = !reflectieActief && !breedActief && !bronloosBureau && (
       agendapuntModusActief
         ? agendapuntMetStukken
         : scopeActief || bronModusRetrieval === "documenten" || bronModusRetrieval === "combineren"
@@ -1368,21 +1388,40 @@ export async function POST(req: NextRequest) {
       // Basis: de strikte documentenregels (alleen [Bron N] uit de geselecteerde
       // stukken, niets verzinnen) — dat dwingt G8 af: gaten worden NIET met
       // algemene kennis gedicht maar onder "Aannames en open punten" benoemd.
-      const stukTitelLabel =
-        scopeTitels.length > 0 ? scopeTitels.map((t) => `«${t}»`).join(", ") : null;
-      systeemBlokken = bouwSysteemBlokken(
-        SP_DOCUMENTEN_REGELS,
-        ctxBestuurder,
-        "feitelijk",
-        chunks.length > 0 ? bronSentinel : null,
-        true // bureauToon
-      );
-      gebruikersPrompt =
-        chunks.length > 0
-          ? `BESCHIKBARE BRONNEN${
-              stukTitelLabel ? ` UIT ${stukTitelLabel}` : ""
-            }:\n\n${contextTekst}\n\n---\n\n${stukInstructie}`
-          : `In de geselecteerde stukken zijn geen doorzoekbare passages gevonden.\n\n${stukInstructie}\n\nU beschikt niet over bronnen; benoem dat expliciet onder "Aannames en open punten" en verzin geen fondsspecifieke feiten.`;
+      if (bronloosBureau) {
+        // T5 B1 — variant (iii): geen bron gekozen. De basis-tak is de bronloze
+        // regelset (concept-SKELET, anti-fabricage onverkort); TOON_BLOK_BUREAU
+        // komt eroverheen (bureauToon). Er is niet gezocht (moetRetrieven=false),
+        // dus geen bronblokken en geen sentinel.
+        systeemBlokken = bouwSysteemBlokken(
+          SP_BUREAU_BRONLOOS_REGELS,
+          ctxBestuurder,
+          "feitelijk",
+          null,
+          true // bureauToon
+        );
+        gebruikersPrompt =
+          `U stelt dit stuk op ZONDER aangeleverde fondsdocumenten — lever een ` +
+          `concept-SKELET, geen afgeronde notitie.\n\n${stukInstructie}\n\n` +
+          `Verzin geen fondsspecifieke feiten of bronnen. Alles wat voor dit fonds ` +
+          `nog moet worden ingevuld of opgevraagd, zet u onder "Aannames en open punten".`;
+      } else {
+        const stukTitelLabel =
+          scopeTitels.length > 0 ? scopeTitels.map((t) => `«${t}»`).join(", ") : null;
+        systeemBlokken = bouwSysteemBlokken(
+          SP_DOCUMENTEN_REGELS,
+          ctxBestuurder,
+          "feitelijk",
+          chunks.length > 0 ? bronSentinel : null,
+          true // bureauToon
+        );
+        gebruikersPrompt =
+          chunks.length > 0
+            ? `BESCHIKBARE BRONNEN${
+                stukTitelLabel ? ` UIT ${stukTitelLabel}` : ""
+              }:\n\n${contextTekst}\n\n---\n\n${stukInstructie}`
+            : `In de geselecteerde stukken zijn geen doorzoekbare passages gevonden.\n\n${stukInstructie}\n\nU beschikt niet over bronnen; benoem dat expliciet onder "Aannames en open punten" en verzin geen fondsspecifieke feiten.`;
+      }
     } else if (scopeActief) {
       // Strict-document gedrag overschrijft de gekozen modus. De regels hangen af
       // van opt-in algemene kennis (drie-deling) en van breed vs. specifiek.
@@ -1968,7 +2007,10 @@ export async function POST(req: NextRequest) {
                       ...(stuksoortDef(stukSoort)?.secties ?? []),
                       SLOTSECTIE,
                     ],
-                    bronbereik: ["fonds" as const],
+                    // T5 B1: bronloos concept-skelet (variant iii) heeft geen
+                    // fondsbron; leg dat vast zodat de log het onderscheid draagt.
+                    bronbereik: bronloosBureau ? ([] as const) : (["fonds"] as const),
+                    bron_aanwezig: !bronloosBureau,
                     promptvariant: STUK_PROMPTVARIANT,
                     rol_context: "bestuursbureau" as const,
                   },

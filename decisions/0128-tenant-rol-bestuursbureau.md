@@ -4,7 +4,7 @@
 - **Datum:** 2026-08-05
 - **Betrokkenen:** Merlin (opdrachtgever), Claude (analyse & uitvoering)
 - **Werkopdracht:** T1, plateau A — `04 Technische inrichting/Bestuurdersportaal - Werkopdracht T1 - Rol Bestuursbureau (rol, rechten en afscherming) v1.1.md`
-- **Ontwerp:** `03 Functioneel ontwerp/Bestuurdersportaal - Rol Bestuursbureau ontwerp v0.1.md` (inhoud v0.3)
+- **Ontwerp:** `03 Functioneel ontwerp/Bestuurdersportaal - Rol Bestuursbureau ontwerp v0.3.md` (hernoemd van v0.1 bij T3)
 
 ## Context
 

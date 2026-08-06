@@ -13,6 +13,7 @@
 
 import { headers } from "next/headers";
 import type { AssuranceView } from "@/core/lib/aqlab/assurance-core";
+import { bouwGuardrailkaderView } from "@/core/lib/aqlab/guardrailkader-view";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +43,86 @@ function Regel({ label, waarde }: { label: string; waarde: React.ReactNode }) {
     <div className="flex items-start justify-between gap-4 py-1.5 border-b border-line/60 last:border-0">
       <span className="text-sm text-muted">{label}</span>
       <span className="text-sm font-semibold text-ink text-right">{waarde}</span>
+    </div>
+  );
+}
+
+// Guardrailkader-sectie (T3, FR-19). Read-only, product-breed, gevoed door het
+// canonieke register core/lib/guardrailkader.ts — geen DB, geen service-role.
+// Toont per guardrail de handhavingsklasse en of hij geautomatiseerd is geborgd
+// (H/D) of via de evalset wordt afgetekend (M). Alleen metadata, nooit ruwe output.
+function Guardrailkader() {
+  const kader = bouwGuardrailkaderView();
+  return (
+    <div className="mt-8">
+      <h2 className="font-serif text-lg font-black text-ink mb-1">{kader.titel}</h2>
+      <p className="text-sm text-muted mb-3">{kader.inleiding}</p>
+
+      <div
+        className={`rounded-xl border px-4 py-3 mb-4 text-sm ${
+          kader.kernregelGroen
+            ? "border-ok/30 bg-ok-tint text-ok-ink"
+            : "border-err/30 bg-err-tint text-err-ink"
+        }`}
+      >
+        <strong className="block mb-0.5">
+          {kader.kernregelGroen ? "✓ Kernregel geborgd" : "⚠ Kernregel niet geborgd"}
+        </strong>
+        {kader.kernregelTekst}
+        <div className="mt-2 text-xs text-ink/80">
+          {kader.totaal} guardrails · {kader.aantalGeautomatiseerd} geautomatiseerd geborgd (H/D) ·{" "}
+          {kader.aantalViaEvalset} af te tekenen via de evalset (M, menselijk) · producerende bureau-promptvariant{" "}
+          <span className="font-mono">{kader.promptvariant}</span>
+        </div>
+      </div>
+
+      <div className="bg-white border border-line rounded-xl overflow-x-auto">
+        <table className="w-full text-sm min-w-[640px]">
+          <thead>
+            <tr className="text-left text-xs text-muted border-b border-line">
+              <th className="font-semibold px-3 py-2">#</th>
+              <th className="font-semibold px-3 py-2">Guardrail</th>
+              <th className="font-semibold px-3 py-2 whitespace-nowrap">Geldt voor</th>
+              <th className="font-semibold px-3 py-2">Klasse</th>
+              <th className="font-semibold px-3 py-2 whitespace-nowrap">Toetsing</th>
+            </tr>
+          </thead>
+          <tbody>
+            {kader.rijen.map((r) => (
+              <tr key={r.id} className="border-b border-line/60 last:border-0 align-top">
+                <td className="px-3 py-2 font-mono text-xs text-muted whitespace-nowrap">{r.id}</td>
+                <td className="px-3 py-2 text-ink">
+                  {r.omschrijving}
+                  {r.restrisico && (
+                    <span className="block mt-0.5 text-xs text-warn-ink">
+                      Aanvaard restrisico: {r.restrisico}
+                    </span>
+                  )}
+                </td>
+                <td className="px-3 py-2 text-muted whitespace-nowrap">{r.rollenLabel}</td>
+                <td className="px-3 py-2 font-mono text-xs text-ink whitespace-nowrap">{r.klasseLabel}</td>
+                <td className="px-3 py-2 whitespace-nowrap">
+                  <span
+                    className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                      r.borging === "Geautomatiseerd geborgd"
+                        ? "bg-ok-tint text-ok-ink"
+                        : "bg-accent-tint text-accent-ink"
+                    }`}
+                  >
+                    {r.borging}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <p className="mt-2 text-xs text-muted italic">
+        Klasse H/D wordt via geautomatiseerde tests geborgd; klasse M wordt per release met
+        menselijke aftekening in de evalset getoetst — die aftekening staat gepland en is nog
+        niet voltooid. Het kader is de onderlegger bij de DPIA (ontwerp §7.3/§7.8).
+      </p>
     </div>
   );
 }
@@ -155,6 +236,10 @@ export default async function AssurancePage() {
           ))}
         </div>
       )}
+
+      {/* AI-gebruikskader — guardrailtoetsing (T3, FR-19). Product-breed en altijd
+          zichtbaar, onafhankelijk van de feature-tegels hierboven. */}
+      <Guardrailkader />
     </div>
   );
 }

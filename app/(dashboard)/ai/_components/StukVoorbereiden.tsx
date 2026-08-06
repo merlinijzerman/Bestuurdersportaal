@@ -28,12 +28,44 @@ export default function StukVoorbereiden({
   onStart: (stuksoort: Stuksoort, onderwerp: string, documenten: DoorgrondDoc[]) => void;
   onAnnuleren: () => void;
 }) {
+  // T5 B1 — drie vertrekpunten. Een bron is niet langer verplicht.
+  //  (i)   fondsdocumenten — het concept steunt op gekozen stukken ([Bron N]).
+  //  (ii)  deskresearch    — volgt met T4 (compliance-gated), nu nog niet actief.
+  //  (iii) onderwerp       — alleen een onderwerp → een bronloos concept-SKELET.
+  type Vertrekpunt = "fondsdocumenten" | "deskresearch" | "onderwerp";
+  const [vertrekpunt, setVertrekpunt] = useState<Vertrekpunt>("fondsdocumenten");
   const [stuksoort, setStuksoort] = useState<Stuksoort>("bestuursnotitie");
   const [onderwerp, setOnderwerp] = useState("");
   const [documenten, setDocumenten] = useState<DoorgrondDoc[]>([]);
   const [kiezerOpen, setKiezerOpen] = useState(false);
   const [zoekterm, setZoekterm] = useState("");
   const [suggesties, setSuggesties] = useState<DoorgrondDoc[]>([]);
+
+  const VERTREKPUNTEN: {
+    id: Vertrekpunt;
+    titel: string;
+    hint: string;
+    beschikbaar: boolean;
+  }[] = [
+    {
+      id: "fondsdocumenten",
+      titel: "Fondsdocumenten",
+      hint: "Het concept steunt op gekozen stukken; elke bewering krijgt een bronverwijzing.",
+      beschikbaar: true,
+    },
+    {
+      id: "onderwerp",
+      titel: "Alleen een onderwerp",
+      hint: "Een raamwerk zonder bron: alles wat nog moet worden onderbouwd komt onder “Aannames en open punten”.",
+      beschikbaar: true,
+    },
+    {
+      id: "deskresearch",
+      titel: "Deskresearch-resultaat",
+      hint: "Binnenkort — voortbouwen op een deskresearch (volgt met de deskresearch-module).",
+      beschikbaar: false,
+    },
+  ];
 
   // Documentkiezer — hergebruikt dezelfde suggestiebron als de @-mention.
   useEffect(() => {
@@ -57,7 +89,30 @@ export default function StukVoorbereiden({
     );
   }
 
-  const magStarten = documenten.length > 0 && !laden;
+  // Startvoorwaarde per vertrekpunt: fondsdocumenten vereist ≥1 stuk; alleen-een-
+  // onderwerp vereist een ingevuld onderwerp; deskresearch is nog niet actief.
+  const bronloos = vertrekpunt === "onderwerp";
+  const magStarten =
+    !laden &&
+    (vertrekpunt === "fondsdocumenten"
+      ? documenten.length > 0
+      : vertrekpunt === "onderwerp"
+      ? onderwerp.trim().length > 0
+      : false);
+
+  const stukLabel = STUKSOORTEN.find((s) => s.id === stuksoort)!.titel.toLowerCase();
+  const recapTekst =
+    vertrekpunt === "deskresearch"
+      ? "Kies een ander vertrekpunt — voortbouwen op deskresearch volgt binnenkort."
+      : vertrekpunt === "onderwerp"
+      ? onderwerp.trim().length === 0
+        ? "Vul een onderwerp in — ik lever dan een concept-skelet zonder bron."
+        : `Ik stel een concept-${stukLabel} op als raamwerk (zonder bron): alles wat nog onderbouwing vergt komt onder “Aannames en open punten”.`
+      : documenten.length === 0
+      ? "Kies minstens één bronstuk — het concept steunt op de aangeleverde bronnen."
+      : `Ik stel een concept-${stukLabel} op, op basis van ${documenten.length} ${
+          documenten.length === 1 ? "stuk" : "stukken"
+        }.`;
 
   return (
     <div className="pb-3 pt-1 space-y-4">
@@ -90,6 +145,62 @@ export default function StukVoorbereiden({
       </p>
 
       <div className="border border-line rounded-2xl bg-card divide-y divide-line">
+        {/* ── Vertrekpunt (T5 B1) ── */}
+        <div className="p-4">
+          <h3 className="text-sm font-semibold text-ink">Waarop baseert u het stuk?</h3>
+          <p className="text-xs text-muted mt-0.5">Een bron is niet verplicht</p>
+          <div className="mt-3 space-y-2">
+            {VERTREKPUNTEN.map((v) => {
+              const aan = v.id === vertrekpunt;
+              return (
+                <button
+                  key={v.id}
+                  type="button"
+                  disabled={!v.beschikbaar}
+                  onClick={() => {
+                    if (!v.beschikbaar) return;
+                    setVertrekpunt(v.id);
+                    // Wisselen wég van 'fondsdocumenten' leegt de bronselectie: een
+                    // verborgen, blijven-hangend stuk zou de parent anders de
+                    // bron-variant laten draaien terwijl de UI een bronloos skelet
+                    // belooft (auditspoor + gedrag zouden uiteenlopen).
+                    if (v.id !== "fondsdocumenten") {
+                      setDocumenten([]);
+                      setKiezerOpen(false);
+                    }
+                  }}
+                  aria-pressed={aan}
+                  className={`w-full text-left flex items-start gap-3 border rounded-xl p-3 transition-colors ${
+                    aan
+                      ? "border-accent bg-accent/5"
+                      : "border-line hover:border-accent"
+                  } ${!v.beschikbaar ? "opacity-55 cursor-not-allowed hover:border-line" : ""}`}
+                >
+                  <span
+                    className={`w-5 h-5 flex-shrink-0 rounded-full border flex items-center justify-center text-[11px] text-white ${
+                      aan ? "bg-accent border-accent" : "border-app-line-strong bg-card"
+                    }`}
+                    aria-hidden
+                  >
+                    {aan ? "✓" : ""}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-ink">{v.titel}</span>
+                      {!v.beschikbaar && (
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted border border-line rounded px-1.5 py-0.5">
+                          Binnenkort
+                        </span>
+                      )}
+                    </span>
+                    <span className="block text-xs text-muted mt-0.5">{v.hint}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* ── Stuksoort ── */}
         <div className="p-4">
           <h3 className="text-sm font-semibold text-ink">Soort stuk</h3>
@@ -137,7 +248,8 @@ export default function StukVoorbereiden({
           />
         </div>
 
-        {/* ── Bronstukken ── */}
+        {/* ── Bronstukken (alleen bij vertrekpunt 'fondsdocumenten') ── */}
+        {vertrekpunt === "fondsdocumenten" && (
         <div className="p-4">
           <h3 className="text-sm font-semibold text-ink">Bronstukken</h3>
           <p className="text-xs text-muted mt-0.5">
@@ -222,6 +334,7 @@ export default function StukVoorbereiden({
             </div>
           )}
         </div>
+        )}
       </div>
 
       {/* ── Recap ── */}
@@ -229,18 +342,13 @@ export default function StukVoorbereiden({
         <div className="text-[11px] font-semibold text-muted uppercase tracking-wide">
           Wat ik ga doen
         </div>
-        <p className="text-sm text-ink mt-2">
-          {documenten.length === 0
-            ? "Kies minstens één bronstuk — het concept steunt op de aangeleverde bronnen."
-            : `Ik stel een concept-${STUKSOORTEN.find((s) => s.id === stuksoort)!.titel.toLowerCase()} op, op basis van ${documenten.length} ${
-                documenten.length === 1 ? "stuk" : "stukken"
-              }.`}
-        </p>
+        <p className="text-sm text-ink mt-2">{recapTekst}</p>
         <div className="h-px bg-line my-3.5" />
         <p className="text-xs text-muted leading-relaxed">
-          Het concept verschijnt in dit gesprek. De vraag, de gebruikte bronnen en
-          het antwoord worden vastgelegd in de Governance Log. U kunt het concept
-          daarna exporteren naar Word; die export wordt apart geregistreerd.
+          Het concept verschijnt in dit gesprek. De vraag
+          {bronloos ? "" : ", de gebruikte bronnen"} en het antwoord worden
+          vastgelegd in de Governance Log. U kunt het concept daarna exporteren naar
+          Word; die export wordt apart geregistreerd.
         </p>
         <p className="text-xs text-muted mt-2 italic">
           Zo verschijnt uw vraag: “{bouwStukZin(stuksoort, onderwerp)}”
@@ -249,7 +357,7 @@ export default function StukVoorbereiden({
           <button
             type="button"
             disabled={!magStarten}
-            onClick={() => onStart(stuksoort, onderwerp, documenten)}
+            onClick={() => onStart(stuksoort, onderwerp, bronloos ? [] : documenten)}
             className="w-full text-center bg-accent text-white font-semibold rounded-xl px-4 py-2.5 hover:bg-accent-ink transition-colors disabled:opacity-45 disabled:cursor-not-allowed"
           >
             Start →

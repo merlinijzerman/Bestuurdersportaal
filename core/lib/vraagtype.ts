@@ -953,6 +953,38 @@ export function moetVerduidelijken(
   return resultaat.vertrouwen === "onzeker" && !alleenFondsdocumenten;
 }
 
+// KORTE BEVESTIGING (T5 C3) → een inhoudsloze instemming/voortzetting ("ja",
+// "ja graag", "doe maar", "prima", "akkoord", "graag") die ná een assistent-
+// beurt komt. Zo'n turn draagt geen eigen bron-intentie: hem als een nieuwe,
+// ankerloze vraag classificeren levert ten onrechte de verduidelijkingsvraag op
+// ("voor uw fonds / algemene zin"), terwijl de gebruiker net een voorstel
+// bevestigde. De route zet de intentie dan voort i.p.v. opnieuw te vragen.
+//
+// Bewust STRIKT: alleen korte turns die (vrijwel) volledig uit een bevestigings-
+// formule bestaan. Een echte vraag met "ja" erin ("ja, maar hoe zit het met de
+// dekkingsgraad?") is geen bevestiging en moet gewoon geclassificeerd worden.
+const BEVESTIGING_PATRONEN: RegExp[] = [
+  /^ja(\s*,?\s*(graag|zeker|prima|hoor|klopt|dat( is)? goed|doe (dat|maar)|ga (uw|je) gang))?$/,
+  /^(doe|ga) (maar|dat|door|verder|uw gang|je gang)$/,
+  /^(graag|prima|akkoord|goed|oké|oke|ok|okay|prima zo|klopt|precies|inderdaad|top|mooi|uitstekend)$/,
+  /^(dat (is )?goed|dat lijkt me (goed|prima)|lijkt me (goed|prima)|is goed)$/,
+  /^(graag|ja) (gedaan|die|deze|dat)$/,
+];
+
+/**
+ * Is deze turn een korte bevestiging/voortzetting zonder eigen inhoud (T5 C3)?
+ * Puur en herbruikbaar; genormaliseerd (lowercase, leestekens/whitespace
+ * geneutraliseerd). Een korte lengtegrens voorkomt dat een langere zin die
+ * toevallig met "ja" opent als bevestiging telt.
+ */
+export function isKorteBevestiging(vraag: string): boolean {
+  const g = normaliseer(vraag)
+    .replace(/[.!…]+$/g, "")
+    .trim();
+  if (!g || g.length > 40) return false;
+  return BEVESTIGING_PATRONEN.some((p) => p.test(g));
+}
+
 /**
  * De AUTO bron-modus voor retrieval. Design A "combineren-vloer": tenzij de
  * gebruiker expliciet beperkt tot fondsdocumenten, halen we altijd op

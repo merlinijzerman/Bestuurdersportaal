@@ -156,8 +156,54 @@ export function bouwStukInstructie(stuksoort: Stuksoort): string {
     `aangeleverde bronnen kunt onderbouwen, zet u onder "${SLOTSECTIE}"; vul dat ` +
     `niet in met algemene kennis. De sectie "${SLOTSECTIE}" laat u nooit weg, ook ` +
     `niet als u meent dat er geen open punten zijn — benoem dat dan expliciet. ` +
-    `Houd het geheel bestuurlijk bruikbaar en to the point.`
+    `Houd het geheel bestuurlijk bruikbaar en to the point.` +
+    // T5 A3/A5: het stuk is een afgebakend document, geen chatbeurt. Geen
+    // conversationele omlijsting en geen eigen titel — de titel staat al in de
+    // exportkop, en de interface toont zelf vervolgacties.
+    `\n\nLever UITSLUITEND het stuk zelf op, als afgebakend document. Begin direct ` +
+    `met de eerste kop hierboven; schrijf géén begroeting, inleiding, aanhef of ` +
+    `eigen titelregel ervóór. Sluit af met "${SLOTSECTIE}" en schrijf daarná niets ` +
+    `meer — geen afsluitende vraag, geen aanbod om het korter of anders te maken. ` +
+    `Eventuele vervolgacties toont de interface zelf.`
   );
+}
+
+// ── Afbakening voor de Word-export (T5 A5) ────────────────────────────────────
+// De export mag uitsluitend het stuk bevatten, geen conversationele in-/uitleiding.
+// De instructie hierboven laat het model het stuk al kaal opleveren; deze pure
+// functie is de afdwingende vangnetlaag: ze knipt een eventuele lead-in vóór de
+// eerste kop weg en een conversationele afsluiting ná de inhoud. Ze raakt koppen,
+// opsommingen en tabellen nooit aan (die zijn per definitie het stuk).
+
+/** Herkent een conversationele afsluitingsregel (aanbod/vraag ná het stuk). */
+const OUTRO_PATROON =
+  /^(een paar keuzes|wilt u|zal ik\b|wil ik\b|hieronder (de|het|volgt)|graag,|met vriendelijke groet|laat (het )?mij|hopelijk)/i;
+
+export function extraheerStukBlok(antwoord: string): string {
+  const regels = antwoord.split("\n");
+
+  // Start: de eerste markdown-kop. Alles ervóór is een conversationele lead-in.
+  const start = regels.findIndex((r) => /^#{1,6}\s+\S/.test(r.trim()));
+  const kern = start > 0 ? regels.slice(start) : regels.slice();
+
+  // Einde: knip trailing conversationele alinea's (die het OUTRO-patroon volgen).
+  // We scannen van onderaf; een kop/opsomming/tabel/genummerd item stopt het
+  // knippen direct — dat is inhoud, geen gesprekstekst.
+  let einde = kern.length;
+  for (let i = kern.length - 1; i >= 0; i--) {
+    const t = kern[i].trim();
+    if (!t) continue;
+    if (/^#{1,6}\s/.test(t) || /^[-*•]\s/.test(t) || t.startsWith("|") || /^\d+[.)]\s/.test(t)) {
+      break;
+    }
+    if (OUTRO_PATROON.test(t)) {
+      einde = i;
+      continue;
+    }
+    break;
+  }
+
+  return kern.slice(0, einde).join("\n").trim();
 }
 
 /** Korte, per-sectie sturende zin. Houdt het model bij de bedoeling van de kop. */

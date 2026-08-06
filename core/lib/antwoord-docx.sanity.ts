@@ -77,13 +77,29 @@ async function main() {
     assert.ok(xml.includes('<w:jc w:val="right"/>'));
   });
 
-  check("[Bron N] staat als letterlijke tekst in het document", () => {
-    assert.ok(xml.includes("[Bron 1]"), "de citatiemarker is niet letterlijk aanwezig");
+  check("T5 A1: de tabel draagt een tblGrid met vaste kolombreedtes (DXA)", () => {
+    assert.ok(xml.includes("<w:tblGrid>"), "geen tblGrid — ongeldige OOXML, kolombreedtes onbepaald");
+    assert.ok(xml.includes("<w:gridCol w:w="), "geen gridCol-kolombreedte");
+    // Tabel- én celbreedte in DXA i.p.v. type=auto.
+    assert.ok(xml.includes('w:type="dxa"'), "tabel/cel niet in DXA vastgezet");
+    assert.ok(!xml.includes('w:type="auto"'), "tabel gebruikt nog type=auto (onbepaalde breedte)");
   });
 
-  check("de verplichte bronnenlijst staat in het document", () => {
+  check("T5 A4: een gekoppelde [Bron N] wordt een hooggeplaatst lijstnummer (superscript)", () => {
+    assert.ok(
+      xml.includes('<w:vertAlign w:val="superscript"/>'),
+      "geen superscript-citatie — scriptie-stijl ontbreekt"
+    );
+    // De letterlijke [Bron N]-notatie hoort NIET meer in de tekst te staan voor
+    // een gekoppelde bron; het cijfer is nu de citatie.
+    assert.ok(!xml.includes("[Bron 1]"), "gekoppelde citatie staat nog als letterlijke [Bron N]");
+  });
+
+  check("de verplichte bronnenlijst staat in het document (genummerd, cijfer = lijstnummer)", () => {
     assert.ok(xml.includes("Bronnen:"));
     assert.ok(xml.includes("Beleggingsplan 2026"));
+    // Scriptie-stijl: de lijstregel draagt geen [Bron N]-prefix meer.
+    assert.ok(!xml.includes("[Bron 1] · "), "bronnenlijst draagt nog de [Bron N]-prefix");
   });
 
   check("de verplichte bureau-herkomstregel staat in het document", () => {
@@ -95,6 +111,27 @@ async function main() {
   check("titel en koppen dragen Word-stijlen", () => {
     assert.ok(xml.includes('w:pStyle w:val="Title"'));
     assert.ok(xml.includes('w:pStyle w:val="Heading2"'));
+  });
+
+  check("T5 A2: een losse markdown-scheidingslijn (---) belandt niet als tekst", () => {
+    const metStreep = ["## Kop", "Alinea een.", "", "---", "", "Alinea twee."].join("\n");
+    const xml3 = bouwDocxDocumentXml(parseerBlokken(metStreep), [], {
+      titel: "Test",
+      datum: "05-08-2026",
+      surface: "bureau",
+      fondsnaam: null,
+    });
+    // De inhoudelijke alinea's blijven; de kale --- verdwijnt.
+    assert.ok(xml3.includes("Alinea een.") && xml3.includes("Alinea twee."));
+    assert.ok(
+      !xml3.includes("<w:t xml:space=\"preserve\">---</w:t>"),
+      "de --- is als letterlijke alinea in het document beland"
+    );
+  });
+
+  check("T5 A3: precies één Title-paragraaf (geen tweede titel)", () => {
+    const aantalTitels = (xml.match(/w:pStyle w:val="Title"/g) || []).length;
+    assert.equal(aantalTitels, 1, "verwacht precies één Title-paragraaf");
   });
 
   check("bestandsnaam is opgeschoond en eindigt op .docx", () => {

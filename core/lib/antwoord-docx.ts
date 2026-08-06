@@ -27,6 +27,7 @@ import {
 } from "./antwoord-parser";
 import {
   bouwBronnenBlok,
+  bronOrdinaal,
   herkomstRegel,
   HERKOMST_ANKER_BUREAU,
   type KopieBron,
@@ -50,22 +51,30 @@ function esc(s: string): string {
     .replace(/'/g, "&apos;");
 }
 
-/** Eén tekstrun met optionele vet/cursief. `xml:space="preserve"` behoudt spaties. */
-function run(tekst: string, opts?: { vet?: boolean; cursief?: boolean; code?: boolean }): string {
+/** Eén tekstrun met optionele opmaak. `xml:space="preserve"` behoudt spaties. */
+function run(
+  tekst: string,
+  opts?: { vet?: boolean; cursief?: boolean; code?: boolean; superscript?: boolean }
+): string {
   const rpr: string[] = [];
   if (opts?.vet) rpr.push("<w:b/>");
   if (opts?.cursief) rpr.push("<w:i/>");
   if (opts?.code) rpr.push('<w:rFonts w:ascii="Consolas" w:hAnsi="Consolas"/>');
+  if (opts?.superscript) rpr.push('<w:vertAlign w:val="superscript"/>');
   const rprXml = rpr.length ? `<w:rPr>${rpr.join("")}</w:rPr>` : "";
   return `<w:r>${rprXml}<w:t xml:space="preserve">${esc(tekst)}</w:t></w:r>`;
 }
 
 /**
- * Inline-AST → een reeks runs. De citatiemarkers worden als LETTERLIJKE TEKST
- * meegeschreven ("[Bron 3]"), niet als opmaakobject — in Word moet zichtbaar
- * blijven waar een bewering vandaan komt (conform 0098 en de klembord-export).
+ * Inline-AST → een reeks runs. Citaties worden scriptie-stijl gerenderd (T5 A4):
+ * een gekoppelde `[Bron N]` wordt een hooggeplaatst cijfer (superscript) waarvan
+ * het getal het LIJSTNUMMER is uit de bronnenlijst achteraan — via de gedeelde
+ * `bronOrdinaal`-map (0079: dezelfde interpretatie als het klembord). Een
+ * dangling `[Bron N]` (geen match) krijgt geen ordinaal en blijft letterlijk,
+ * zodat de waarschuwing onderaan klopt. De interne [Bron N]-koppeling en de
+ * citaatvalidatie (op de ruwe modeltekst) blijven hierdoor ongemoeid.
  */
-function inlineRuns(delen: InlineDeel[]): string {
+function inlineRuns(delen: InlineDeel[], ordinaal: Map<number, number>): string {
   return delen
     .map((d) => {
       switch (d.soort) {
@@ -79,8 +88,10 @@ function inlineRuns(delen: InlineDeel[]): string {
               })
             )
             .join("");
-        case "bron":
-          return run(`[Bron ${d.nummer}]`);
+        case "bron": {
+          const nr = ordinaal.get(d.nummer);
+          return nr ? run(String(nr), { superscript: true }) : run(`[Bron ${d.nummer}]`);
+        }
         case "kennis":
           return run(`[${d.label}]`);
         case "toelichting":
@@ -115,37 +126,58 @@ function kopStijl(niveau: number): string {
   return niveau <= 1 ? "Heading1" : "Heading2";
 }
 
-function blokNaarXml(blok: Blok): string {
+// Bruikbare contentbreedte in DXA (twips): A4-pagina 11906 minus de linker- en
+// rechtermarge (elk 1417, zie SECT_PR). Tabellen en kolommen worden op deze
+// breedte vastgezet zodat Word niet zelf hoeft te schatten (T5 A1).
+const CONTENT_BREEDTE_DXA = 11906 - 1417 * 2; // = 9072
+
+/** Kolombreedtes (DXA) die samen exact de contentbreedte vullen; rest bij de laatste. */
+function kolomBreedtes(aantal: number): number[] {
+  if (aantal <= 0) return [];
+  const basis = Math.floor(CONTENT_BREEDTE_DXA / aantal);
+  const breedtes = Array<number>(aantal).fill(basis);
+  breedtes[aantal - 1] = CONTENT_BREEDTE_DXA - basis * (aantal - 1);
+  return breedtes;
+}
+
+function blokNaarXml(blok: Blok, ordinaal: Map<number, number>): string {
   switch (blok.soort) {
     case "alinea":
-      return paragraaf(inlineRuns(blok.inline));
+      return paragraaf(inlineRuns(blok.inline, ordinaal));
     case "kop":
-      return paragraaf(inlineRuns(blok.inline), { stijl: kopStijl(blok.niveau) });
+      return paragraaf(inlineRuns(blok.inline, ordinaal), { stijl: kopStijl(blok.niveau) });
     case "lijst":
       // Word-nummering vergt een numbering.xml-part; voor de bureau-stand volstaat
       // een leesbaar prefix per item (bullet of nummer) in een eigen paragraaf.
       return blok.items
         .map((it, i) => {
           const prefix = blok.geordend ? `${i + 1}. ` : "• ";
-          return paragraaf(run(prefix) + inlineRuns(it), { stijl: "Lijst" });
+          return paragraaf(run(prefix) + inlineRuns(it, ordinaal), { stijl: "Lijst" });
         })
         .join("");
     case "tabel": {
       const numeriek = numeriekeKolommen(blok);
-      const kopRij = `<w:tr>${blok.kop
-        .map((c, ci) => tabelCel(inlineRuns(c), numeriek[ci], true))
-        .join("")}</w:tr>`;
+      // T5 A1: expliciete tabelbreedte + tblGrid met vaste kolombreedtes (DXA).
+      // Zonder tblGrid is de OOXML ongeldig; Word repareert dan stil en de
+      // kolombreedtes blijven onbepaald. We tellen de kolommen op de breedste rij.
+      const kolommen = Math.max(
+        blok.kop.length,
+        ...blok.rijen.map((r) => r.length),
+        1,
+      );
+      const breedtes = kolomBreedtes(kolommen);
+      const tblGrid = `<w:tblGrid>${breedtes
+        .map((w) => `<w:gridCol w:w="${w}"/>`)
+        .join("")}</w:tblGrid>`;
+      const cel = (c: InlineDeel[], ci: number, kop: boolean) =>
+        tabelCel(inlineRuns(c, ordinaal), numeriek[ci], kop, breedtes[ci] ?? breedtes[0]);
+      const kopRij = `<w:tr>${blok.kop.map((c, ci) => cel(c, ci, true)).join("")}</w:tr>`;
       const rijen = blok.rijen
-        .map(
-          (rij) =>
-            `<w:tr>${rij
-              .map((c, ci) => tabelCel(inlineRuns(c), numeriek[ci], false))
-              .join("")}</w:tr>`
-        )
+        .map((rij) => `<w:tr>${rij.map((c, ci) => cel(c, ci, false)).join("")}</w:tr>`)
         .join("");
       return (
-        `<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/>${TBL_BORDERS}</w:tblPr>` +
-        `${kopRij}${rijen}</w:tbl>` +
+        `<w:tbl><w:tblPr><w:tblW w:w="${CONTENT_BREEDTE_DXA}" w:type="dxa"/>${TBL_BORDERS}</w:tblPr>` +
+        `${tblGrid}${kopRij}${rijen}</w:tbl>` +
         // Een lege alinea ná de tabel: Word vereist een paragraaf tussen een tabel
         // en het sectie-einde/een volgende tabel, anders opent het bestand met een
         // reparatievraag.
@@ -158,11 +190,12 @@ function blokNaarXml(blok: Blok): string {
 /**
  * Eén tabelcel. Rechtse uitlijning volgt de deterministische kolomdetectie uit de
  * parser (numeriekeKolommen). Kopcellen krijgen een grijze vulling én vette runs.
+ * De celbreedte (DXA) sluit aan op de bijbehorende tblGrid-kolom (T5 A1).
  */
-function tabelCel(runs: string, rechts: boolean, kop: boolean): string {
+function tabelCel(runs: string, rechts: boolean, kop: boolean, breedteDxa: number): string {
   const pprXml = rechts ? '<w:pPr><w:jc w:val="right"/></w:pPr>' : "";
   const shading = kop ? '<w:shd w:val="clear" w:color="auto" w:fill="F2F4F9"/>' : "";
-  const tcpr = `<w:tcPr><w:tcW w:w="0" w:type="auto"/>${shading}</w:tcPr>`;
+  const tcpr = `<w:tcPr><w:tcW w:w="${breedteDxa}" w:type="dxa"/>${shading}</w:tcPr>`;
   // Kopcel: vet elke run door een rPr-prefix in te voegen (de runs bevatten nog
   // geen rPr aan het begin; celinhoud is platte/gemarkeerde tekst).
   const inhoud = kop ? runs.replace(/<w:r>(?!<w:rPr>)/g, "<w:r><w:rPr><w:b/></w:rPr>") : runs;
@@ -233,16 +266,18 @@ export function bouwDocxDocumentXml(
   ctx: DocxStukContext
 ): string {
   const bron = bouwBronnenBlok(blokken, alleBronnen);
+  const ordinaal = bronOrdinaal(blokken, alleBronnen);
   const herkomst = herkomstRegel(ctx, bron.regels.length > 0);
 
   const delen: string[] = [];
 
-  // 1. Titel + datum.
+  // 1. Titel + datum. De titel is de ENIGE titel: de producerende taak levert het
+  // stuk zonder eigen titelregel (T5 A3/A5), zodat er geen tweede titel ontstaat.
   delen.push(paragraaf(run(ctx.titel), { stijl: "Title" }));
   delen.push(tekstParagraaf(ctx.datum));
 
   // 2. De inhoud (koppen, alinea's, lijsten, echte tabellen).
-  for (const b of blokken) delen.push(blokNaarXml(b));
+  for (const b of blokken) delen.push(blokNaarXml(b, ordinaal));
 
   // 3. Bronnenlijst (of de mededeling dat er geen bronnen zijn).
   if (bron.kop) {

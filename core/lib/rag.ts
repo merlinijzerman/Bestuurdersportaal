@@ -642,6 +642,9 @@ export interface RetrievalMeta {
     stuksoort: "oplegger" | "bestuursnotitie" | "memo" | "toelichting" | null;
     secties: string[];
     bronbereik: ("fonds" | "generiek" | "web")[];
+    // T5 B1: false bij het bronloze concept-skelet (variant iii, geen
+    // fondsdocument gekozen); true bij het bron-onderbouwde concept (variant i).
+    bron_aanwezig?: boolean;
     promptvariant: string;
     rol_context: "bestuursbureau";
   };

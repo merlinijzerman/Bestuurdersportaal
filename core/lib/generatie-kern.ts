@@ -176,6 +176,24 @@ REGELS VAN INHOUD:
 - Wees concreet over paragraaf- en paginanummers waar beschikbaar — die staan tussen haakjes bij elk bron-label.
 - Als de bronnen het antwoord niet (volledig) bevatten, zeg dat eerlijk in een natuurlijke zin — niet als sjabloon. Een suggestie wat voor document zou helpen mag, maar dwing dat niet af.`;
 
+// ============================================================
+//  T5 B1 — bureau-stand ZONDER aangeleverde bron (concept-skelet).
+// ------------------------------------------------------------
+//  De taak "Een stuk voorbereiden" hoeft niet langer een inputdocument. Kiest de
+//  bureaumedewerker geen bronstukken (variant iii, "alleen een onderwerp"), dan
+//  levert de assistent een RAAMWERK: de vaste secties als structuur, met alles wat
+//  niet te onderbouwen is expliciet onder "Aannames en open punten". Anti-fabricage
+//  blijft onverkort: geen verzonnen fondsfeiten, geen [Bron N]. Deze regelset is de
+//  basis-tak; TOON_BLOK_BUREAU (bureauToon) komt eroverheen (zelfde als variant i).
+// ============================================================
+export const SP_BUREAU_BRONLOOS_REGELS = `U stelt dit concept op ZONDER aangeleverde fondsdocumenten. Er zijn geen interne bronnen; dit wordt daarmee een RAAMWERK ter bewerking, geen afgeronde notitie.
+
+REGELS VAN INHOUD:
+- Verzin GEEN fondsspecifieke feiten: geen cijfers, bedragen, data, artikelnummers, dossiernamen, percentages of bronnen. Gebruik NOOIT de notatie [Bron N] — er zijn geen genummerde bronnen aangeleverd.
+- Bouw de gevraagde secties als structuur: benoem per sectie welke informatie nodig is en welke afwegingen het bestuur zou moeten maken, in algemene, niet-fondsspecifieke bewoordingen.
+- Algemene kennis over pensioenfondsbestuur, governance en wet- en regelgeving mag als kadering, mits herkenbaar als algemeen (niet als vastgesteld fondsfeit) en zonder een verzonnen vindplaats, titel of paginanummer.
+- Alles wat voor dít fonds nog moet worden ingevuld, opgevraagd of onderbouwd, zet u expliciet onder "Aannames en open punten". Bij een bronloos concept is dat de belangrijkste sectie: wees daar concreet over welke stukken en gegevens nog nodig zijn.`;
+
 export const SP_ALGEMEEN_REGELS = `U beantwoordt vragen op basis van uw algemene kennis over Nederlandse pensioenwetgeving, pensioenadministratie, governance, beleggen, risico-management en de Wet toekomst pensioenen (Wtp).
 
 REGELS VAN INHOUD:

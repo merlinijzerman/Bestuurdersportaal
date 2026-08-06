@@ -488,6 +488,20 @@ export default function AgendapuntChat({
     if (el && volgtBodemRef.current) el.scrollTop = el.scrollHeight;
   }, [berichten, laden]);
 
+  // T5 C2 — bij het openen van een bestaande vergaderingchat start de weergave
+  // onderaan bij het laatste bericht. Het meescroll-effect hierboven staat achter
+  // `if (!laden) return` en vuurt dus niet op de init-load; deze eenmalige scroll
+  // ná de init zet de lezer direct onderaan (berichtenRef vermijdt een her-run
+  // tijdens het streamen).
+  useEffect(() => {
+    if (!initGedaan) return;
+    const el = scrollRef.current;
+    if (el && berichtenRef.current.length > 0) {
+      el.scrollTop = el.scrollHeight;
+      volgtBodemRef.current = true;
+    }
+  }, [initGedaan]);
+
   // Opslag — zelfde payload-vorm als de AI-pagina (Fase B2 + ADR 0028), zodat
   // gesprekken uitwisselbaar blijven tussen beide instappunten.
   async function bewaarGesprek(finale: Bericht[]) {

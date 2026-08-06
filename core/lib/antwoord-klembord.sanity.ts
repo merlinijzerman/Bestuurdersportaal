@@ -242,11 +242,31 @@ test("de niet-genummerde markers krijgen een legenda, alleen voor wat voorkomt",
 
 // ── Formaten ─────────────────────────────────────────────────────────────────
 
-test("[Bron N] blijft als LETTERLIJKE TEKST staan in beide formaten", () => {
+test("T5 A4: een gekoppelde [Bron N] wordt scriptie-stijl (superscript / [ordinaal])", () => {
   const p = bouwKopieVanTekst("Zoals vastgesteld [Bron 1] en [Bron 2].", BRONNEN, CTX);
-  assert.ok(p.tekst.includes("Zoals vastgesteld [Bron 1] en [Bron 2]."), p.tekst);
-  assert.ok(p.html.includes("[Bron 1]"), p.html);
-  assert.ok(p.html.includes("[Bron 2]"), p.html);
+  // text/plain: platte-tekst-terugval met het LIJSTNUMMER, niet [Bron N].
+  assert.ok(p.tekst.includes("Zoals vastgesteld [1] en [2]."), p.tekst);
+  assert.ok(!p.tekst.includes("[Bron 1]") && !p.tekst.includes("[Bron 2]"), p.tekst);
+  // text/html: hooggeplaatst cijfer.
+  assert.ok(p.html.includes("<sup>1</sup>") && p.html.includes("<sup>2</sup>"), p.html);
+  // De genummerde bronnenlijst draagt geen [Bron N]-prefix meer (cijfer = lijstnr).
+  assert.ok(p.tekst.includes("1. Intern — Transitieplan 2026 v0.9"), p.tekst);
+  assert.ok(p.tekst.includes("2. Intern — Notulen bestuursvergadering"), p.tekst);
+});
+
+test("T5 A4: het inline cijfer volgt de LIJSTvolgorde, niet het ruwe bron-nummer", () => {
+  // Eerst [Bron 2] geciteerd, dan [Bron 1]: lijst = [2, 1], dus ordinaal 2→1, 1→2.
+  const p = bouwKopieVanTekst("Eerst [Bron 2], dan [Bron 1].", BRONNEN, CTX);
+  assert.ok(p.tekst.includes("Eerst [1], dan [2]."), p.tekst);
+  assert.ok(p.tekst.includes("1. Intern — Notulen bestuursvergadering"), p.tekst);
+  assert.ok(p.tekst.includes("2. Intern — Transitieplan 2026 v0.9"), p.tekst);
+});
+
+test("T5 A4: een dangling [Bron N] houdt géén ordinaal en blijft letterlijk", () => {
+  const p = bouwKopieVanTekst("Geldig [Bron 1] en dangling [Bron 9].", BRONNEN, CTX);
+  assert.ok(p.tekst.includes("Geldig [1]"), p.tekst);
+  assert.ok(p.tekst.includes("[Bron 9]"), "dangling verwijzing moet zichtbaar blijven");
+  assert.ok(p.html.includes("<sup>1</sup>"), p.html);
 });
 
 test("de overige herkomstmarkers blijven eveneens staan", () => {

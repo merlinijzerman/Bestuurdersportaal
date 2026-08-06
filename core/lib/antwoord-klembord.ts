@@ -82,11 +82,15 @@ function escapeHtml(s: string): string {
 }
 
 /**
- * Inline-AST naar HTML. De citatiemarkers worden als LETTERLIJKE TEKST
- * meegeschreven ("[Bron 3]"), niet als pill: in Word moet zichtbaar blijven
- * waar een bewering vandaan komt.
+ * Inline-AST naar HTML. De citatiemarkers worden scriptie-stijl gerenderd: een
+ * `[Bron N]` wordt een hooggeplaatst cijfer (`<sup>`) waarvan het getal het
+ * LIJSTNUMMER is uit de bronnenlijst achteraan (T5 A4) — niet het ruwe
+ * bron-nummer. Zo is inline zichtbaar waar een bewering vandaan komt én sluit
+ * het cijfer aan op de genummerde lijst. Een [Bron N] die niet aan een bron te
+ * koppelen is (dangling), krijgt geen ordinaal en blijft als letterlijke
+ * `[Bron N]` staan, zodat de waarschuwing eronder klopt.
  */
-function inlineNaarHtml(delen: InlineDeel[]): string {
+function inlineNaarHtml(delen: InlineDeel[], ordinaal: Map<number, number>): string {
   return delen
     .map((d) => {
       switch (d.soort) {
@@ -100,8 +104,10 @@ function inlineNaarHtml(delen: InlineDeel[]): string {
               return t;
             })
             .join("");
-        case "bron":
-          return escapeHtml(`[Bron ${d.nummer}]`);
+        case "bron": {
+          const nr = ordinaal.get(d.nummer);
+          return nr ? `<sup>${nr}</sup>` : escapeHtml(`[Bron ${d.nummer}]`);
+        }
         case "kennis":
           return escapeHtml(`[${d.label}]`);
         case "toelichting":
@@ -113,20 +119,48 @@ function inlineNaarHtml(delen: InlineDeel[]): string {
     .join("");
 }
 
+/**
+ * Inline-AST naar PLATTE tekst voor het klembord (Excel/Word-plaintekst). Spiegelt
+ * `celTekst` uit de parser, met één verschil: een gekoppelde `[Bron N]` wordt de
+ * platte-tekst-terugval `[ordinaal]` (T5 A4). celTekst zelf blijft ongewijzigd —
+ * dat voedt de kolomuitlijning en mag niet verschuiven.
+ */
+function inlineNaarTekst(delen: InlineDeel[], ordinaal: Map<number, number>): string {
+  return delen
+    .map((d) => {
+      switch (d.soort) {
+        case "tekst":
+          return d.stukken.map((s) => s.tekst).join("");
+        case "bron": {
+          const nr = ordinaal.get(d.nummer);
+          return nr ? `[${nr}]` : `[Bron ${d.nummer}]`;
+        }
+        case "kennis":
+          return `[${d.label}]`;
+        case "toelichting":
+          return "[Toelichting agendapunt]";
+        case "organisatieprofiel":
+          return "[Organisatieprofiel]";
+      }
+    })
+    .join("");
+}
+
 // Losse hex is hier bewust literal: dit is geëxporteerde opmaak voor een extern
 // programma (Word/Excel), niet de tokenlaag van de applicatie. Zelfde lijn als
 // de print-CSS in core/lib/*-html.ts.
 const TH_STIJL = "border:1px solid #c8ccd8;background:#f2f4f9;padding:6px 9px;font-weight:700;";
 const TD_STIJL = "border:1px solid #c8ccd8;padding:6px 9px;vertical-align:top;";
 
-function blokNaarHtml(blok: Blok): string {
+function blokNaarHtml(blok: Blok, ordinaal: Map<number, number>): string {
+  const inline = (d: InlineDeel[]) => inlineNaarHtml(d, ordinaal);
   switch (blok.soort) {
     case "alinea":
-      return `<p>${inlineNaarHtml(blok.inline)}</p>`;
+      return `<p>${inline(blok.inline)}</p>`;
     case "kop":
-      return `<p><strong>${inlineNaarHtml(blok.inline)}</strong></p>`;
+      return `<p><strong>${inline(blok.inline)}</strong></p>`;
     case "lijst": {
-      const items = blok.items.map((it) => `<li>${inlineNaarHtml(it)}</li>`).join("");
+      const items = blok.items.map((it) => `<li>${inline(it)}</li>`).join("");
       return blok.geordend ? `<ol>${items}</ol>` : `<ul>${items}</ul>`;
     }
     case "tabel": {
@@ -136,13 +170,13 @@ function blokNaarHtml(blok: Blok): string {
       const uitlijning = (ci: number) =>
         numeriek[ci] ? "text-align:right;" : "text-align:left;";
       const kop = blok.kop
-        .map((c, ci) => `<th style="${TH_STIJL}${uitlijning(ci)}">${inlineNaarHtml(c)}</th>`)
+        .map((c, ci) => `<th style="${TH_STIJL}${uitlijning(ci)}">${inline(c)}</th>`)
         .join("");
       const rijen = blok.rijen
         .map(
           (rij) =>
             `<tr>${rij
-              .map((c, ci) => `<td style="${TD_STIJL}${uitlijning(ci)}">${inlineNaarHtml(c)}</td>`)
+              .map((c, ci) => `<td style="${TD_STIJL}${uitlijning(ci)}">${inline(c)}</td>`)
               .join("")}</tr>`,
         )
         .join("");
@@ -151,20 +185,21 @@ function blokNaarHtml(blok: Blok): string {
   }
 }
 
-function blokNaarTekst(blok: Blok): string {
+function blokNaarTekst(blok: Blok, ordinaal: Map<number, number>): string {
+  const inline = (d: InlineDeel[]) => inlineNaarTekst(d, ordinaal);
   switch (blok.soort) {
     case "alinea":
-      return celTekst(blok.inline);
+      return inline(blok.inline);
     case "kop":
-      return celTekst(blok.inline);
+      return inline(blok.inline);
     case "lijst":
       return blok.items
-        .map((it, i) => (blok.geordend ? `${i + 1}. ${celTekst(it)}` : `- ${celTekst(it)}`))
+        .map((it, i) => (blok.geordend ? `${i + 1}. ${inline(it)}` : `- ${inline(it)}`))
         .join("\n");
     case "tabel": {
       // TABS tussen de cellen — Excel leest dat als kolommen.
-      const regels = [blok.kop.map(celTekst).join("\t")];
-      for (const rij of blok.rijen) regels.push(rij.map(celTekst).join("\t"));
+      const regels = [blok.kop.map(inline).join("\t")];
+      for (const rij of blok.rijen) regels.push(rij.map(inline).join("\t"));
       return regels.join("\n");
     }
   }
@@ -191,8 +226,34 @@ export function geciteerdeBronnen(blokken: Blok[]): number[] {
   return gezien;
 }
 
-/** Eén regel per bron: titel — vindplaats — datum — documentstatus. */
-export function bronRegel(b: KopieBron): string {
+/**
+ * Ordinaal per geciteerd bron-nummer: de POSITIE in de bronnenlijst (1-based),
+ * niet het ruwe `[Bron N]`-nummer (T5 A4). Dit is de gedeelde "één interpretatie"
+ * (0079) die zowel de Word-export als het klembord gebruiken, zodat het inline
+ * hooggeplaatste cijfer exact het lijstnummer is. De volgorde is identiek aan de
+ * lijst die bouwBronnenBlok bouwt: eerste-voorkomen-volgorde, gefilterd op
+ * bronnen die daadwerkelijk aan een aangeleverde bron te koppelen zijn. Een
+ * dangling `[Bron N]` (geen match) krijgt bewust géén ordinaal.
+ */
+export function bronOrdinaal(
+  blokken: Blok[],
+  alleBronnen: KopieBron[],
+): Map<number, number> {
+  const gekoppeld = geciteerdeBronnen(blokken).filter((nr) =>
+    alleBronnen.some((b) => b.nummer === nr),
+  );
+  const map = new Map<number, number>();
+  gekoppeld.forEach((nr, i) => map.set(nr, i + 1));
+  return map;
+}
+
+/**
+ * Eén regel per bron: titel — vindplaats — datum — documentstatus. `toonMarker`
+ * bepaalt of de regel met `[Bron N]` opent: in de scriptie-stijl bronnenlijst
+ * (T5 A4) is het LIJSTNUMMER de citatie, dus daar vervalt de marker; in de
+ * "gebruikte stukken"-lijst (geen inline citaties) blijft hij informatief.
+ */
+export function bronRegel(b: KopieBron, toonMarker = true): string {
   const vindplaats = [b.paragraaf, b.pagina ? `pag. ${b.pagina}` : null]
     .filter(Boolean)
     .join(", ");
@@ -200,7 +261,7 @@ export function bronRegel(b: KopieBron): string {
     ? ((DOCUMENT_STATUS_LABEL as Record<string, string>)[b.documentstatus] ?? b.documentstatus)
     : null;
   const delen = [
-    `[Bron ${b.nummer}]`,
+    toonMarker ? `[Bron ${b.nummer}]` : null,
     [b.bron, b.titel].filter(Boolean).join(" — "),
     vindplaats || null,
     b.documentdatum || null,
@@ -264,7 +325,15 @@ const MARKER_UITLEG: Record<string, string> = {
 export function bouwBronnenBlok(
   blokken: Blok[],
   alleBronnen: KopieBron[],
-): { kop: string | null; regels: string[]; mededeling: string | null; waarschuwing: string | null } {
+): {
+  kop: string | null;
+  regels: string[];
+  mededeling: string | null;
+  waarschuwing: string | null;
+  /** Scriptie-stijl (T5 A4): de lijst is genummerd en het lijstnummer IS de
+   *  citatie (inline hooggeplaatst cijfer). Alleen waar. bij gekoppelde [Bron N]. */
+  scriptie: boolean;
+} {
   const nummers = geciteerdeBronnen(blokken);
   const gekoppeld = nummers
     .map((nr) => alleBronnen.find((b) => b.nummer === nr))
@@ -285,14 +354,23 @@ export function bouwBronnenBlok(
       : null;
 
   if (gekoppeld.length > 0) {
-    return { kop: "Bronnen:", regels: gekoppeld.map(bronRegel), mededeling: null, waarschuwing };
+    // Scriptie-stijl (T5 A4): het lijstnummer is de citatie, dus zonder de
+    // [Bron N]-prefix per regel (die zou dubbelen met het inline superscript).
+    return {
+      kop: "Bronnen:",
+      regels: gekoppeld.map((b) => bronRegel(b, false)),
+      mededeling: null,
+      waarschuwing,
+      scriptie: true,
+    };
   }
   if (alleBronnen.length > 0) {
     return {
       kop: "Gebruikte stukken bij dit antwoord (het antwoord bevat geen genummerde verwijzingen):",
-      regels: alleBronnen.map(bronRegel),
+      regels: alleBronnen.map((b) => bronRegel(b)),
       mededeling: null,
       waarschuwing,
+      scriptie: false,
     };
   }
   return {
@@ -300,6 +378,7 @@ export function bouwBronnenBlok(
     regels: [],
     mededeling: "Bij dit antwoord zijn geen fondsdocumenten als bron aangeleverd.",
     waarschuwing,
+    scriptie: false,
   };
 }
 
@@ -361,15 +440,26 @@ export function bouwKopie(
   ctx: KopieContext,
 ): KopiePayload {
   const bron = bouwBronnenBlok(blokken, alleBronnen);
+  const ordinaal = bronOrdinaal(blokken, alleBronnen);
   const legenda = geciteerdeMarkers(blokken)
     .filter((m) => MARKER_UITLEG[m])
     .map((m) => `[${m}] = ${MARKER_UITLEG[m]}`);
   const herkomst = herkomstRegel(ctx, bron.regels.length > 0);
 
+  // De genummerde bronnenlijst voor platte tekst. In scriptie-stijl (T5 A4) is
+  // het lijstnummer de citatie; platte tekst kent geen <ol>, dus nummeren we
+  // hier expliciet ("1. …") zodat het inline `[1]` een lijstregel heeft om naar
+  // te wijzen. De "gebruikte stukken"-lijst blijft ongenummerd (geen citaties).
+  const bronRegelsTekst = bron.scriptie
+    ? bron.regels.map((r, i) => `${i + 1}. ${r}`)
+    : bron.regels;
+
   // ── text/plain ──
-  const tekstDelen = blokken.map(blokNaarTekst).filter((s) => s.length > 0);
+  const tekstDelen = blokken
+    .map((b) => blokNaarTekst(b, ordinaal))
+    .filter((s) => s.length > 0);
   const tekstBronnen = bron.kop
-    ? [bron.kop, ...bron.regels].join("\n")
+    ? [bron.kop, ...bronRegelsTekst].join("\n")
     : (bron.mededeling ?? "");
   const tekst = [
     tekstDelen.join("\n\n"),
@@ -382,7 +472,7 @@ export function bouwKopie(
     .join("\n\n");
 
   // ── text/html ──
-  const htmlDelen = blokken.map(blokNaarHtml).join("");
+  const htmlDelen = blokken.map((b) => blokNaarHtml(b, ordinaal)).join("");
   const htmlBronnen = bron.kop
     ? `<p><strong>${escapeHtml(bron.kop)}</strong></p><ol>${bron.regels
         .map((r) => `<li>${escapeHtml(r)}</li>`)

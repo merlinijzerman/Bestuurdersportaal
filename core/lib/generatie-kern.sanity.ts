@@ -24,6 +24,7 @@ import {
   SP_REFLECTIE_REGELS,
   SP_REFLECTIE_CONCEPT_REGELS,
   SP_DOCUMENTEN_REGELS,
+  SP_BUREAU_BRONLOOS_REGELS,
   VERVOLGVRAGEN_INSTRUCTIE,
   VERVOLGVRAGEN_MARKER,
   SP_COMBINEREN_REGELS,
@@ -289,6 +290,16 @@ test("model-/budgetconstanten zijn de productiewaarden (parity)", () => {
   }
   assert.equal(MAX_TOKENS, 5000);
   assert.equal(MAX_TOKENS_BESTUURLIJK, 8000);
+});
+
+// ── T5 B1 — bronloze bureau-regelset (concept-skelet) ───────────────────────
+test("SP_BUREAU_BRONLOOS_REGELS borgt anti-fabricage en de open-punten-sectie", () => {
+  const r = SP_BUREAU_BRONLOOS_REGELS;
+  // Geen verzonnen feiten, geen [Bron N], en de open-punten-sectie is de kern.
+  assert.ok(/RAAMWERK/.test(r), r);
+  assert.ok(/Verzin GEEN fondsspecifieke feiten/.test(r), r);
+  assert.ok(/NOOIT de notatie \[Bron N\]/.test(r), r);
+  assert.ok(/Aannames en open punten/.test(r), r);
 });
 
 console.log(`\n${n} sanity-tests geslaagd.`);

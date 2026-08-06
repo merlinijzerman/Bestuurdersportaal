@@ -560,4 +560,22 @@ test("ragged rijen: ontbrekende cellen tellen niet mee voor de kolom", () => {
   assert.deepEqual(numeriekeKolommen(t), [false, true]);
 });
 
+test("T5 A2: een losse scheidingslijn (---/***/___) levert geen blok op", () => {
+  for (const teken of ["---", "***", "___", "----", "* * *".replace(/ /g, "")]) {
+    assert.deepEqual(parseerBlokken(teken), [], `'${teken}' hoort te verdwijnen`);
+  }
+  // Tussen alinea's verdwijnt de streep, de tekst eromheen blijft twee alinea's.
+  const b = parseerBlokken("Eerste.\n\n---\n\nTweede.");
+  assert.equal(b.length, 2);
+  assert.equal(b[0].soort, "alinea");
+  assert.equal(b[1].soort, "alinea");
+});
+
+test("T5 A2: een tabel-scheidingsrij (|---|---|) blijft gewoon een tabel", () => {
+  // De thematic-break-detectie mag de tabelherkenning niet kapen.
+  const b = parseerBlokken("| A | B |\n|---|---|\n| 1 | 2 |");
+  assert.equal(b.length, 1);
+  assert.equal(b[0].soort, "tabel");
+});
+
 console.log(`\n${n} sanity-tests geslaagd.`);

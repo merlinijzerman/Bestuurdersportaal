@@ -25,6 +25,7 @@ import {
   ZICHTBARE_ANTWOORDMODI,
   bepaalBronIntent,
   moetVerduidelijken,
+  isKorteBevestiging,
   bepaalAutoBronModus,
   VERDUIDELIJKING_OPTIES,
   isPersoonlijkeVraag,
@@ -440,6 +441,41 @@ test("verduidelijken: alleen bij onzeker zonder fondsrestrictie", () => {
     moetVerduidelijken({ intent: "algemeen", vertrouwen: "zeker" }, false),
     false
   );
+});
+
+// ── T5 C3: korte bevestiging onderdrukt de verduidelijkingsvraag ──
+test("isKorteBevestiging herkent inhoudsloze instemming/voortzetting", () => {
+  for (const v of [
+    "ja",
+    "Ja graag",
+    "ja graag.",
+    "Ja, graag",
+    "doe maar",
+    "Doe maar!",
+    "ga door",
+    "graag",
+    "prima",
+    "Akkoord",
+    "oké",
+    "dat is goed",
+    "lijkt me goed",
+    "inderdaad",
+  ]) {
+    assert.equal(isKorteBevestiging(v), true, `verwacht bevestiging: ${v}`);
+  }
+});
+
+test("isKorteBevestiging laat echte vragen en langere turns ongemoeid", () => {
+  for (const v of [
+    "Ja, maar hoe zit het met de dekkingsgraad?",
+    "Wat is ons beleggingsbeleid?",
+    "Kun je dat toelichten voor de Wtp?",
+    "graag een overzicht van de risico's per kwartaal alstublieft", // >40 tekens
+    "nee",
+    "",
+  ]) {
+    assert.equal(isKorteBevestiging(v), false, `mag geen bevestiging zijn: ${v}`);
+  }
 });
 
 // ── Chip-opties: precies de twee bevestigingen ──

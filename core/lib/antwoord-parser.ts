@@ -323,6 +323,18 @@ export function parseerBlokken(tekst: string): Blok[] {
       continue;
     }
 
+    // Thematic break (---, ***, ___): een markdown-scheidingslijn. De parser
+    // kende die niet, waardoor een losse '---' als letterlijke alinea in scherm,
+    // klembord én Word-export belandde (T5 A2). Een scheidingslijn draagt geen
+    // inhoud; we slaan hem over (en sluiten een lopende lijst netjes af). Bewust
+    // de niet-gespatieerde vorm: '- - -' zou botsen met een opsommingsteken.
+    // De tabel-scheidingsrij (|---|---|) is hierboven al afgehandeld en bevat
+    // pipes, dus die matcht deze test niet.
+    if (/^\s*([-*_])\1{2,}\s*$/.test(regel)) {
+      sluitLijst();
+      continue;
+    }
+
     const ul = regel.match(/^\s*[-*]\s+(.*)$/);
     const ol = regel.match(/^\s*\d+\.\s+(.*)$/);
     const kop = regel.match(/^(#{1,6})\s+(.*)$/);
