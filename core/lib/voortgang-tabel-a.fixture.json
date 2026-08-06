@@ -1,0 +1,17 @@
+{
+  "beschrijving": "Tabel-A retrieval-uitkomsten voor de B2-anti-constant-test (besluit 0138 / M6). Per tabel-A-vraag (WERKOPDRACHT-RETRIEVAL-RECALL.md) het aantal UNIEKE documenten en het aantal GESELECTEERDE passages, zoals gemeten via de draaiende app. De retrieval-keten leunt op de Next-request-context (createServerSupabase → cookies) en kan niet standalone draaien; daarom zijn deze getallen via de dev-server (/api/chat, intent 'fonds') vastgelegd op het demofonds Stichting Pensioenfonds Horizon.",
+  "capture_protocol": "1) start de dev-server; 2) log in als demo-bestuurder; 3) stel elke vraag met bron_intent_override 'fonds' (of via de chip 'Voor mijn fonds'); 4) lees per vraag de retrieval-voortgangsregel 'uit N documenten — M passages geselecteerd' (uniekeDocumenten = new Set(res.meta.chunks.map(c => c.document_id)).size, geselecteerd = res.meta.geselecteerd); 5) vul uniekeDocumenten + geselecteerd in en zet vastgelegd op de datum. Herhaal na een substantiële wijziging aan retrieval/CHUNK_BUDGET/indexering.",
+  "vastgelegd": "2026-08-06 (demofonds Horizon, dev-server capture)",
+  "items": [
+    { "vraag": "Wat is er te vinden over pensioneren?", "uniekeDocumenten": 4, "geselecteerd": 10 },
+    { "vraag": "Wanneer kan ik met pensioen gaan?", "uniekeDocumenten": 1, "geselecteerd": 1 },
+    { "vraag": "Kan ik eerder met pensioen?", "uniekeDocumenten": 3, "geselecteerd": 8 },
+    { "vraag": "Wat gebeurt er bij pensionering?", "uniekeDocumenten": 7, "geselecteerd": 10 },
+    { "vraag": "Hoe werkt deeltijdpensioen?", "uniekeDocumenten": 3, "geselecteerd": 10 },
+    { "vraag": "Kan ik mijn pensioen uitstellen?", "uniekeDocumenten": 1, "geselecteerd": 1 },
+    { "vraag": "Kan ik partnerpensioen omzetten in ouderdomspensioen?", "uniekeDocumenten": 2, "geselecteerd": 9 },
+    { "vraag": "Kan ik eerst een hoger en daarna een lager pensioen krijgen?", "uniekeDocumenten": 2, "geselecteerd": 10 },
+    { "vraag": "Wat staat er in het reglement over stoppen met werken?", "uniekeDocumenten": 5, "geselecteerd": 10 },
+    { "vraag": "Welke hoofdstukken kent het pensioenreglement?", "uniekeDocumenten": 5, "geselecteerd": 10 }
+  ]
+}

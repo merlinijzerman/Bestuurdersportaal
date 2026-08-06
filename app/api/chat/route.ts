@@ -11,11 +11,10 @@ import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
 import { valideerChatInvoer } from "@/core/lib/chat-invoer";
 import { rateLimited } from "@/core/lib/api-errors";
 import { beoordeelRouteHostToegang } from "@/core/lib/tenant-route-guard";
-import { hybrideZoekenAan, retrievalVlaggenVoorFonds } from "@/core/lib/fonds-config";
+import { hybrideZoekenAan, retrievalVlaggenVoorFonds, bronkeuzeModusVoorFonds } from "@/core/lib/fonds-config";
 import {
   VOORTGANG_LABEL,
   retrievalUitkomst,
-  rerankUitkomst,
   webUitkomst,
 } from "@/core/lib/voortgang";
 import { HAIKU_MODEL } from "@/core/lib/llm-modellen";
@@ -268,6 +267,13 @@ export async function POST(req: NextRequest) {
       // 30-07-2026 — de gebruiker koos expliciet "Neem niet-vastgestelde stukken
       // mee" na de melding dat de actualiteitsfilter treffers wegnam.
       neem_niet_vastgestelde_mee?: boolean;
+      // Besluit 0137 (antwoord-eerst) — de client klikte een bronkeuze-chip ónder
+      // een fondsgericht antwoord ("liever in algemene zin?"). Bevat het log-id van
+      // dat eerste antwoord (uit het 'done'-event), zodat de hergegenereerde beurt
+      // in het auditspoor naar de eerste verwijst (bronkeuze_herzien). De bevestigde
+      // intentie reist mee via bron_intent_override; dit veld is uitsluitend de
+      // audit-koppeling. Puur correlatie — geen FK, niet vertrouwd voor autorisatie.
+      bronkeuze_vorige_log_id?: string;
       // Plateau A — het id van het gesprek waarin deze beurt valt. De CLIENT
       // genereert dit met crypto.randomUUID() vóór de eerste beurt en gebruikt
       // hetzelfde id als expliciete `id` bij de insert in `gesprekken`. Zonder
@@ -712,6 +718,18 @@ export async function POST(req: NextRequest) {
     // de server-side backstop zodat geen enkele clientfout die lus kan herhalen.
     const neemNietVastgesteldeMee = body.neem_niet_vastgestelde_mee === true;
 
+    // Besluit 0137 (antwoord-eerst) — de audit-koppeling naar het eerste antwoord
+    // wanneer de bestuurder een bronkeuze-chip klikt. Alleen een welgevormde UUID
+    // gaat door; een onzinwaarde wordt genegeerd (de koppeling ontbreekt dan, geen
+    // storing). Dit veld ONDERSCHEIDT een bronkeuze-herziening van de gewone
+    // verduidelijkingschip/startvraag/herkomst-override: alleen bij aanwezigheid
+    // krijgt de hergegenereerde regel `bronkeuze_herzien = true`.
+    const bronkeuzeVorigeLogId =
+      typeof body.bronkeuze_vorige_log_id === "string" &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.bronkeuze_vorige_log_id)
+        ? body.bronkeuze_vorige_log_id
+        : null;
+
     // Plateau A — correlatie met het gesprek. Alleen een welgevormde UUID gaat
     // door; een onzinwaarde zou de insert laten falen en daarmee de hele beurt.
     // Ontbreekt hij, dan wordt de regel niet gekoppeld en is de interactie niet
@@ -810,6 +828,37 @@ export async function POST(req: NextRequest) {
 
     const reflectieActief = isReflectieActief(reflectieStatus);
 
+    // ── Bronkeuze-modus (FO §11a, besluit 0137 — herziet 0014) ──────────────
+    // Hoe gaat de assistent om met een ONZEKERE bron-intentie?
+    //   blokkerend (DEFAULT) — de terugvraag vóór het antwoord (geaccordeerd 0014);
+    //   antwoord_eerst       — fondsgericht antwoorden, de twee keuzes als chips
+    //                          ónder het antwoord (niet-blokkerend);
+    //   uit                  — geen wedervraag, geen chips (vangnetstand).
+    // Fail-safe naar blokkerend bij een ontbrekende fondsId (theoretisch),
+    // leesfout of ongeldige vlagwaarde (in bronkeuzeModusVoorFonds afgehandeld):
+    // nooit stil naar het nieuwe gedrag. Read ná de reflectietak, net als de
+    // verduidelijkingstak zelf — een reflectiebeurt kent geen bronkeuze.
+    const bronkeuzeModus = fondsId
+      ? await bronkeuzeModusVoorFonds(fondsId)
+      : "blokkerend";
+
+    // "Moet er verduidelijkt worden?" is ONAFHANKELIJK van de modus: alle bestaande
+    // vangrails blijven gelden (scope/agendapunt/bureau → bronIntentResultaat is
+    // null; reflectie/transformatie/verbreding; en de fondsrestrictie via
+    // moetVerduidelijken). De modus bepaalt alleen wát er met die twijfel gebeurt.
+    const moetVerduidelijkenNu =
+      !reflectieActief &&
+      !transformatieActief &&
+      !neemNietVastgesteldeMee &&
+      bronIntentResultaat !== null &&
+      moetVerduidelijken(bronIntentResultaat, alleenFondsdocumenten);
+
+    // antwoord_eerst: géén blokkerende terugvraag, maar dóórlopen met de bestaande
+    // fondsgerichte onzekere intentie en de twee keuzes als chip-AANBOD ónder het
+    // antwoord. uit: geen tak, geen chips (de fondsgerichte fallback blijft staan).
+    // Alleen blokkerend behoudt de vroege return hieronder.
+    const bronkeuzeAanbod = moetVerduidelijkenNu && bronkeuzeModus === "antwoord_eerst";
+
     // Verduidelijkingstak: twijfel → één SSE-event met de vraag + chips, géén
     // modelcall. De beslissing om te verduidelijken is puur reproduceerbaar uit
     // de vraag.
@@ -832,13 +881,10 @@ export async function POST(req: NextRequest) {
     // zinnige vraag bij een informatievraag, een absurde bij "ik twijfel of de
     // planning klopt". De gebruiker is dan geen antwoord aan het zoeken maar
     // zijn eigen oordeel aan het vormen.
-    if (
-      !reflectieActief &&
-      !transformatieActief &&
-      !neemNietVastgesteldeMee &&
-      bronIntentResultaat &&
-      moetVerduidelijken(bronIntentResultaat, alleenFondsdocumenten)
-    ) {
+    // Alleen `blokkerend` retourneert vroeg met de terugvraag. Bij `antwoord_eerst`
+    // en `uit` loopt de beurt door (fondsgericht); antwoord_eerst biedt de chips
+    // ónder het antwoord aan (meta-event bronkeuze_aanbod).
+    if (moetVerduidelijkenNu && bronkeuzeModus === "blokkerend") {
       try {
         // Plateau A — spoor en inhoud in één transactie via de definer-RPC.
         // `fonds_id` en `gebruiker_naam` zijn hier bewust GEEN parameter meer:
@@ -1135,7 +1181,11 @@ export async function POST(req: NextRequest) {
         hybrideAan,
         scopeDocumentIds,
         retrievalFilters,
-        retrievalVlaggen
+        // Besluit 0139 (M-R3): bij een geherformuleerde zoekvraag geven we de
+        // ORIGINELE vraag mee, zodat de hybride retrieval een extra poging met
+        // de originele vraag draait en fuseert (reformulatie voegt alleen recall
+        // toe, nooit minder). Niet-geherformuleerd → ongewijzigd gedrag.
+        gereformuleerd ? { ...retrievalVlaggen, origineleVraag: vraag } : retrievalVlaggen
       );
       chunks = res.chunks;
       retrievalMeta = {
@@ -1144,22 +1194,21 @@ export async function POST(req: NextRequest) {
         gereformuleerd,
         body_fonds_id_genegeerd: bodyFondsAfwijkend,
       };
+      // Besluit 0138 (addendum op 0087) — één betekenisvolle retrieval-regel i.p.v.
+      // een constante. `res.meta.opgehaald` was het ophaalplafond (CHUNK_BUDGET·3) en
+      // varieerde nauwelijks; we tonen nu het aantal UNIEKE documenten en het aantal
+      // DAADWERKELIJK geselecteerde passages. De reranker-uitkomst is hierin
+      // opgenomen (geen aparte, van-een-vlag-afhankelijke rerank-regel meer): met
+      // rerank aan is `geselecteerd` het aantal ná de drempel, met rerank uit het
+      // aantal ná weging/selectie — de regel klopt dus in beide standen.
+      const uniekeDocumenten = new Set(res.meta.chunks.map((c) => c.document_id)).size;
       send({
         type: "progress",
         fase: "retrieval",
         status: "klaar",
         label: VOORTGANG_LABEL.retrieval,
-        uitkomst: retrievalUitkomst(res.meta.opgehaald),
+        uitkomst: retrievalUitkomst(uniekeDocumenten, res.meta.geselecteerd),
       });
-      if (retrievalVlaggen.rerank) {
-        send({
-          type: "progress",
-          fase: "rerank",
-          status: "klaar",
-          label: VOORTGANG_LABEL.rerank,
-          uitkomst: rerankUitkomst(res.meta.geselecteerd),
-        });
-      }
       // Auditspoor (§9): leg de scope vast waarop deze vraag is beperkt.
       if (scopeActief) {
         retrievalMeta.scope = {
@@ -1649,6 +1698,13 @@ export async function POST(req: NextRequest) {
             modus: effectieveModus,
             transformatie: transformatieActief,
             chunks_gevonden: chunks.length,
+            // Besluit 0139 (M-R4) — de zoekvraag waarop DAADWERKELIJK is gezocht en
+            // of die is herschreven. Voorheen alleen server-side in governance_log;
+            // nu ook naar het onderbouwingspaneel, zodat de bestuurder zelf ziet
+            // waarop gezocht is (transparantie + reproduceerbaarheid). Alleen
+            // getoond bij gereformuleerd = true; anders verandert de weergave niet.
+            zoekvraag: retrievalMeta?.zoekvraag ?? null,
+            gereformuleerd: retrievalMeta?.gereformuleerd ?? false,
             // "Documentgericht" = de vraag ging over een specifiek stuk (strict
             // document-scope) of een agendapunt met stukken. Bepaalt in de UI welke
             // vervolgacties (duiding/kritische vragen) blijven staan naast de B1-
@@ -1702,6 +1758,13 @@ export async function POST(req: NextRequest) {
             // Contextbesef (besluit 0090) — of de portaalstand is meegewogen; het
             // onderbouwingspaneel toont dit als aparte aanduiding, los van bronnen.
             portaalstand_gebruikt: portaalstandGebruikt,
+            // Besluit 0137 (antwoord-eerst) — de niet-blokkerende bronkeuze. Bij
+            // `antwoord_eerst` én een onzekere intentie reizen de twee keuzes mee als
+            // AANBOD (geen gestelde vraag): de client rendert ze als chips ónder het
+            // antwoord. null = niet van toepassing (blokkerend/uit, of geen twijfel).
+            bronkeuze_aanbod: bronkeuzeAanbod
+              ? { opties: VERDUIDELIJKING_OPTIES }
+              : null,
             // Increment I-3 — uniform bronmodel voor het paneel "Onderbouwing en
             // bronnen". Documentbronnen zijn nu bekend; model_knowledge én de
             // (Scenario A) webbronnen hangen van de antwoordinhoud af en volgen in
@@ -2092,6 +2155,21 @@ export async function POST(req: NextRequest) {
                     : {}),
                   // Contextbesef (besluit 0090) — herleidbaar of de portaalstand meeging.
                   portaalstand_gebruikt: portaalstandGebruikt,
+                  // Besluit 0137 (antwoord-eerst) — twee markers, additief in het
+                  // BESTAANDE jsonb-veld (geen migratie, geen RPC-wijziging):
+                  //  (a) bronkeuze_aanbod = dit fondsgerichte antwoord droeg de
+                  //      niet-blokkerende chips (de bestuurder kón corrigeren);
+                  //  (b) bronkeuze_herzien + _vorige_log_id = dit antwoord is de
+                  //      hergeneratie ná een chipklik; de verwijzing maakt navolgbaar
+                  //      wélke van de twee antwoorden bedoeld is en in welke volgorde
+                  //      ze zijn getoond (M-B5). Beide regels blijven append-only staan.
+                  ...(bronkeuzeAanbod ? { bronkeuze_aanbod: true } : {}),
+                  ...(bronkeuzeVorigeLogId
+                    ? {
+                        bronkeuze_herzien: true,
+                        bronkeuze_vorige_log_id: bronkeuzeVorigeLogId,
+                      }
+                    : {}),
                 }),
             // P5 — operationele telemetrie voor signaal 3 (latency p95) en
             // signaal 6 (tokenverbruik per fonds). Sleutels in het BESTAANDE

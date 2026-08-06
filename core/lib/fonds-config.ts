@@ -24,9 +24,15 @@ import {
   bouwThemingCss,
   brandingUitTokens,
   flagAlsBoolean,
+  resolveBronkeuzeModus,
+  type BronkeuzeModus,
   type ThemaTokenKey,
   type JsonWaarde,
 } from "@/core/lib/fonds-config-core";
+
+// Re-export zodat consumenten (route) het type naast de async resolver kunnen
+// betrekken uit deze server-laag; de definitie leeft in fonds-config-core.
+export type { BronkeuzeModus };
 
 type Actor = { id: string; naam: string | null };
 type ConfigType = "theming" | "manifest" | "flag" | "override";
@@ -159,6 +165,30 @@ export async function hybrideZoekenAan(fondsId: string): Promise<boolean> {
   const flag = await haalFlag(fondsId, "hybride_zoeken");
   if (flag === undefined) return process.env.HYBRID_SEARCH === "on";
   return flagAlsBoolean(flag);
+}
+
+// ── Bronkeuze-modus (FO §11a, besluit 0137 — herziet 0014) ──────────────────
+// Bepaalt hoe de assistent omgaat met een ONZEKERE bron-intentie (geen fonds-/
+// generiek-anker):
+//   blokkerend      — de terugvraag vóór het antwoord (geaccordeerd gedrag 0014);
+//   antwoord_eerst  — fondsgericht antwoorden en de twee keuzes als chips ónder
+//                     het antwoord aanbieden (niet-blokkerend);
+//   uit             — geen wedervraag, geen chips (vangnetstand).
+// DEFAULT = blokkerend: zolang de flag niet expliciet is gezet, verandert er
+// niets. Onbekende/ongeldige waarde ⇒ blokkerend (fail-safe naar het geaccordeerde
+// gedrag, nóóit stil naar het nieuwe). Per fonds omkeerbaar, landt in het
+// config-auditspoor (fn_fonds_config_capture). Patroon = hybrideZoekenAan. De pure
+// resolutie/validatie staat in fonds-config-core.ts (programmatisch toetsbaar).
+export async function bronkeuzeModusVoorFonds(fondsId: string): Promise<BronkeuzeModus> {
+  let flag: JsonWaarde | undefined;
+  try {
+    flag = await haalFlag(fondsId, "bronkeuze_modus");
+  } catch (e) {
+    // Fail-safe: een leesfout mag nooit stil naar het nieuwe gedrag kantelen.
+    console.error("bronkeuze_modus lezen mislukt; fail-safe naar 'blokkerend':", e);
+    return "blokkerend";
+  }
+  return resolveBronkeuzeModus(flag, process.env.BRONKEUZE_MODUS);
 }
 
 // R1.3–R1.6 — retrieval-kwaliteitsvlaggen per fonds (reranker, relevantie-drempel,

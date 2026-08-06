@@ -840,6 +840,27 @@ const FONDS_INTENT_PATRONEN: RegExp[] = [
   /\bhet bestuur\b/,
   /\bdit fonds\b/,
   /\beigen (?:beleid|fonds|stukken|regeling)/,
+  // ── Portaalobjecten (besluit 0137, M-B4) → per definitie fondsspecifiek ──
+  // Een besluit, agendapunt, notulen, vergadering, actiepunt/actie, (bestuurs)-
+  // voorstel, risicomatrix of jaarplan verwijst naar de eigen inhoud van dít fonds;
+  // zulke portaalvragen horen niet in de twijfelbak (0091: 17 van 18 vielen er wél
+  // in). Bewust ZONDER leidende \b — in Nederlandse samenstellingen staat geen
+  // woordgrens vóór het kernwoord (bestuursbesluit, bestuursvergadering,
+  // bestuursvoorstel). Bewust de OBJECT-woorden, GÉÉN kale onderwerpwoorden (risico,
+  // stuk, premie): die zijn te breed en zouden algemene begripsvragen ten onrechte
+  // fondsgericht kaderen. Geverifieerd: verandert geen enkele van de bestaande 54
+  // meetsetuitkomsten (bronkeuze-classificatie.sanity). Vergt her-accordering.
+  /besluit/,
+  /agendapunt/,
+  /notulen/,
+  /vergadering/,
+  /actiepunt/,
+  /\bacties?\b/,
+  // /voorstel(?:len)?\b/ zonder leidende \b dekt óók "bestuursvoorstel",
+  // "beleidsvoorstel", "wijzigingsvoorstel" — geen aparte samenstelling nodig.
+  /voorstel(?:len)?\b/,
+  /risicomatrix/,
+  /jaarplan/,
 ];
 
 // PERSOONLIJKE ANKERS (contextbesef, besluit 0090) → de vraag gaat over de EIGEN

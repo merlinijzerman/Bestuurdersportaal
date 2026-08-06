@@ -1,5 +1,7 @@
 # 0087 — AI-voortgang zichtbaar: stream eerder open, foutcontract verschuift, voortgang niet gelogd
 
+> **Addendum [`0138`](./0138-voortgangsteller-betekenisvol-rerankfase-samengevoegd.md) (2026-08-06):** de retrieval-voortgangsregel toonde een **constante** ("30 passages gevonden" = ophaalplafond) i.p.v. een meting. De regel is vervangen door *"uit N documenten — M passages geselecteerd"* en de **aparte zichtbare rerankfase is samengevoegd in de retrievalfase** (die was hier een expliciet deelbesluit). De overige 0087-keuzes (stream eerder open, foutcontract, voortgang niet gelogd) blijven ongewijzigd.
+
 - **Status:** Geaccepteerd
 - **Datum:** 2026-07-28
 - **Betrokkenen:** Merlin (opdrachtgever/PO), Claude (bouw)

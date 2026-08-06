@@ -1,5 +1,7 @@
 # 0014 — Increment I-2: automatische bronkeuze (Design A + verduidelijking bij twijfel)
 
+> **Deels herzien door [`0137`](./0137-bronkeuze-antwoord-eerst-niet-blokkerend.md) (2026-08-06):** de **blokkerende** verduidelijkingsvraag bij twijfel is niet langer per definitie blokkerend, maar per fonds configureerbaar (`bronkeuze_modus`, default `blokkerend` = dit besluit). De overige keuzes uit 0014 (fondsgerichte fallback, combineren-vloer, nul-tolerantie schijnzekerheid, meetset-gating) blijven ongewijzigd.
+
 - **Status:** Geaccepteerd
 - **Datum:** 2026-06-22
 - **Betrokkenen:** Merlin (opdrachtgever/bestuurder, compliance-sign-off), Claude Code (uitvoering)

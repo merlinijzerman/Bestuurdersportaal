@@ -8,23 +8,65 @@
 //
 //  De beslissing "is reformulatie nodig?" is een PURE functie (geen SDK-imports,
 //  deterministisch testbaar, zelfde discipline als lib/rag-select.ts). De
-//  reformulatie zelf doet een lichte Haiku-call; de Anthropic-client wordt als
+//  reformulatie zelf doet een lichte modelcall op het sterke rewrite-model
+//  (REWRITE_MODEL in app/api/chat/route.ts); de Anthropic-client wordt als
 //  parameter meegegeven (dependency injection) zodat deze module zelf niets
-//  instantieert.
+//  instantieert. De call draait op temperature:0 (reproduceerbare retrieval,
+//  besluit 0139): dezelfde vraag + historie levert dezelfde zoekvraag.
 // ============================================================
 
 import type Anthropic from "@anthropic-ai/sdk";
 
 // Nederlandse verwijswoorden die sterk wijzen op afhankelijkheid van eerdere
 // context (anafora). Lowercase, als hele woorden gematcht.
+//
+// Besluit 0139 (reproduceerbare retrieval): "het" is HIER verwijderd — het is
+// verreweg meestal een lidwoord ("het reglement"), geen anafoor, en liet elke
+// achtwoordige vraag met een lidwoord onterecht herformuleren. De aanwijzende
+// voornaamwoorden dat/die/dit/deze staan NIET meer in deze vlakke set maar
+// worden POSITIONEEL beoordeeld (zie DEMONSTRATIEVEN + isDeterminatorContext):
+// "deze regeling" is een determinator (geen reformulatie), "kun je dat
+// toelichten?" is een anafoor (wel reformulatie).
 const VERWIJSWOORDEN = new Set([
-  "dat", "die", "dit", "deze", "diens", "hun",
-  "hij", "zij", "ze", "het", "hem", "haar",
+  "diens", "hun",
+  "hij", "zij", "ze", "hem", "haar",
   "daar", "daarvan", "daarover", "daaruit", "daarmee", "daarbij", "daartoe",
   "hier", "hiervan", "hierover", "hieruit", "hiermee", "hierbij",
   "ervan", "erover", "ermee", "erbij", "eruit",
   "zo", "zulke", "dergelijke", "diezelfde", "datzelfde",
 ]);
+
+// Aanwijzende voornaamwoorden: anafoor (→ reformuleren) wanneer ze ALLEENSTAAND
+// zijn of gevolgd worden door een functiewoord/werkwoord ("dat toelichten",
+// "dit ook", "hoe zit dat"); determinator (→ negeren) wanneer ze direct gevolgd
+// worden door een waarschijnlijk zelfstandig naamwoord ("deze regeling", "dat
+// reglement"). Zie isDeterminatorContext.
+const DEMONSTRATIEVEN = new Set(["dat", "die", "dit", "deze"]);
+
+// Signalen dat het woord NÁ een demonstratief een zelfstandig naamwoord is
+// (→ demonstratief = determinator). Geen POS-tagger; een pragmatische benadering
+// die de meetset in query-reformulatie.sanity.ts dekt.
+const NOMEN_SUFFIXEN = ["ing", "heid", "tie", "teit", "iteit", "schap", "ment", "eling", "age", "sel"];
+const DOMEIN_NOMINA = new Set([
+  "reglement", "regeling", "bestuur", "besluit", "document", "stuk", "beleid",
+  "fonds", "dossier", "verslag", "notulen", "agenda", "rapport", "deelnemer",
+]);
+// Functiewoorden die nooit het hoofd van een nominale groep zijn: staan ze ná
+// een demonstratief, dan is dat demonstratief anaforisch ("dat met", "dit ook").
+const FUNCTIEWOORDEN_NA = new Set([
+  "met", "ook", "voor", "van", "in", "op", "aan", "bij", "om", "te", "en",
+  "of", "maar", "is", "was", "wordt", "werd", "zijn", "heeft", "had", "dan",
+]);
+
+// Beoordeelt of het woord ná een demonstratief dat demonstratief tot
+// DETERMINATOR maakt (waarschijnlijk een zelfstandig naamwoord erachter).
+// Alleenstaand of gevolgd door een functiewoord → geen determinator = anafoor.
+function isDeterminatorContext(volgend: string | undefined): boolean {
+  if (!volgend) return false;
+  if (FUNCTIEWOORDEN_NA.has(volgend)) return false;
+  if (DOMEIN_NOMINA.has(volgend)) return true;
+  return NOMEN_SUFFIXEN.some((s) => volgend.length > s.length + 1 && volgend.endsWith(s));
+}
 
 // Voegwoorden/openers waarmee een vervolgvraag vaak begint.
 const VERVOLG_OPENERS = [
@@ -42,7 +84,15 @@ function genormaliseerdeWoorden(tekst: string): string[] {
 
 // PURE: bepaalt of een vraag waarschijnlijk context uit het gesprek nodig heeft.
 // Conservatief: zonder historie nooit reformuleren; met historie alleen als de
-// vraag kort is, met een verwijswoord begint/bevat, of met een voegwoord opent.
+// vraag met een vervolg-opener opent, een (niet-determinerend) verwijswoord
+// bevat, of een anaforisch aanwijzend voornaamwoord bevat.
+//
+// Besluit 0139: de losse regel "kort (<=5 woorden) → altijd reformuleren" is
+// GESCHRAPT. Kort ≠ contextafhankelijk ("Wat zijn onze strategische
+// doelstellingen?" is vijf woorden en volledig zelfstandig). Echte
+// vervolgvragen ("Waarom?", "Kun je dat toelichten?") vuren nu via de opener-
+// of demonstratief-regel; de meetset in query-reformulatie.sanity.ts borgt dat
+// geen enkele echte anafoor wegvalt.
 export function heeftReformulatieNodig(
   vraag: string,
   heeftHistorie: boolean
@@ -54,14 +104,19 @@ export function heeftReformulatieNodig(
 
   const woorden = genormaliseerdeWoorden(vraag);
 
-  // Korte vragen leunen bijna altijd op eerdere context.
-  if (woorden.length <= 5) return true;
-
-  // Begint met een typische vervolg-opener.
+  // Begint met een typische vervolg-opener ("en ", "waarom", …).
   if (VERVOLG_OPENERS.some((o) => schoon.startsWith(o))) return true;
 
-  // Bevat een verwijswoord (anafora).
+  // Bevat een positie-onafhankelijk verwijswoord (anafora).
   if (woorden.some((w) => VERWIJSWOORDEN.has(w))) return true;
+
+  // Bevat een aanwijzend voornaamwoord in ANAFORISCH gebruik (niet als
+  // determinator vóór een zelfstandig naamwoord).
+  for (let i = 0; i < woorden.length; i++) {
+    if (DEMONSTRATIEVEN.has(woorden[i]) && !isDeterminatorContext(woorden[i + 1])) {
+      return true;
+    }
+  }
 
   return false;
 }
@@ -109,6 +164,10 @@ export async function reformuleerVraag(
     const response = await client.messages.create({
       model,
       max_tokens: 150,
+      // Besluit 0139 — reproduceerbare retrieval: zonder temperature levert
+      // dezelfde vraag + historie twee verschillende zoekvragen (incident
+      // 06-08 15:29/15:34). temperature:0 maakt de herschrijving deterministisch.
+      temperature: 0,
       system: REFORMULATIE_SYSTEEM,
       messages: [
         {

@@ -3,8 +3,9 @@
 //  AUTOMATISCHE bronkeuze (FO v1.3 §11a).
 // ----------------------------------------------------------------------------
 //  Bestuurlijke vragen met een door gebruiker/compliance GEACCORDEERD label
-//  (basis: 40 vragen, sign-off 2026-06-22; uitbreidingen 41-46 wettelijke-plicht
-//  en 47-54 persoonlijk/status contextbesef, besluit 0090). Dit is de
+//  (basis: 40 vragen, sign-off 2026-06-22; uitbreidingen 41-46 wettelijke-plicht,
+//  47-54 persoonlijk/status contextbesef (besluit 0090), en 55-72 portaalobjecten
+//  (besluit 0137, M-B4 — HER-ACCORDERING VÓÓR PRODUCTIE OPENSTAAND)). Dit is de
 //  bron-van-waarheid waartegen de pure
 //  classificatie (lib/vraagtype.ts → bepaalBronIntent) wordt geijkt en
 //  bewaakt — zie de runner lib/bronkeuze-classificatie.sanity.ts met de
@@ -112,4 +113,37 @@ export const BRONKEUZE_MEETSET: MeetsetVraag[] = [
   // "moet ik WETEN" = kennisvraag (lookahead sluit het uit) + "zorgplicht"/plicht.
   { id: 53, label: "algemeen", vraag: "Wat moet ik weten over de zorgplicht?", toelichting: '"moet ik weten" uitgesloten; "zorgplicht" → algemeen' },
   { id: 54, label: "algemeen", vraag: "Wat betekent invaren in de Wtp?", toelichting: '"wat betekent"/"Wtp", geen persoonlijk anker' },
+
+  // ── Uitbreiding 2026-08-06 (besluit 0137, M-B4) — PORTAALOBJECT-vragen ──
+  // De geaccordeerde set bevatte géén portaalobject-vragen (besluiten, agendapunten,
+  // notulen, vergaderingen, voorstellen, risicomatrix, acties, jaarplan), terwijl in
+  // echt gebruik 17 van 18 zulke vragen in de twijfelbak vielen (0091). Een
+  // portaalobject verwijst per definitie naar de eigen inhoud van dít fonds; met de
+  // FONDS_INTENT-uitbreiding classificeren die nu als 'fonds'/zeker. Contrastief
+  // geborgd: (a) object-woord ÉN generiek → 'gecombineerd' (het object-woord forceert
+  // dus niet blind 'fonds'); (b) een VERBVORM ("besloten") of een KAAL onderwerpwoord
+  // ("risico's", zónder "matrix") blijft terugvragen — bewijs dat de patronen niet te
+  // breed zijn. Onder de bronkeuze-modus 'antwoord_eerst' (0137) materialiseert een
+  // 'mag-terugvragen'-uitkomst als de niet-blokkerende chip ónder het antwoord.
+  // Vergt her-accordering door compliance vóór productie (0070/0091).
+  { id: 55, label: "fonds", vraag: "Welke besluiten zijn er genomen over het beleggingsbeleid?", toelichting: 'object "besluit"' },
+  { id: 56, label: "fonds", vraag: "Toon de laatste bestuursbesluiten.", toelichting: 'samenstelling "bestuursbesluit" (geen leidende \\b)' },
+  { id: 57, label: "fonds", vraag: "Welke agendapunten staan er op de komende vergadering?", toelichting: 'object "agendapunt"/"vergadering"' },
+  { id: 58, label: "fonds", vraag: "Wat zijn de openstaande agendapunten?", toelichting: 'object "agendapunt"' },
+  { id: 59, label: "fonds", vraag: "Wat staat er in de notulen van de vorige vergadering?", toelichting: 'object "notulen"/"vergadering"' },
+  { id: 60, label: "fonds", vraag: "Vat de notulen van de junivergadering samen.", toelichting: 'object "notulen"/"vergadering"' },
+  { id: 61, label: "fonds", vraag: "Is er een bestuursvoorstel over het beleggingsbeleid?", toelichting: 'object "bestuursvoorstel"/"voorstel"' },
+  { id: 62, label: "fonds", vraag: "Welke voorstellen liggen er ter besluitvorming?", toelichting: 'object "voorstel"/"besluit"' },
+  { id: 63, label: "fonds", vraag: "Welke risico's staan er in de risicomatrix?", toelichting: 'object "risicomatrix"' },
+  { id: 64, label: "fonds", vraag: "Welke acties staan er nog open?", toelichting: 'object "acties"' },
+  { id: 65, label: "fonds", vraag: "Wat moet er nog gebeuren voor de bestuursvergadering?", toelichting: 'object "vergadering"' },
+  { id: 66, label: "fonds", vraag: "Wat staat er in het jaarplan?", toelichting: 'object "jaarplan"' },
+  { id: 67, label: "fonds", vraag: "Welk agendapunt gaat over de uitbesteding?", toelichting: 'object "agendapunt"' },
+  { id: 68, label: "fonds", vraag: "Welke actiepunten heb ik nog?", toelichting: 'object "actiepunt"' },
+  // Contrastief: object-woord ÉN generiek → gecombineerd (niet blind fonds).
+  { id: 69, label: "gecombineerd", vraag: "Welke besluiten moet een pensioenfondsbestuur wettelijk registreren?", toelichting: '"besluit" + "wettelijk" → gecombineerd' },
+  { id: 70, label: "gecombineerd", vraag: "Wat moet er volgens de wet in de notulen staan?", toelichting: '"notulen" + "de wet" → gecombineerd' },
+  // Contrastief: verbvorm en kaal onderwerpwoord blijven terugvragen (patronen niet te breed).
+  { id: 71, label: "mag-terugvragen", vraag: "Wat is er besloten over de premie?", toelichting: '"besloten" (verbvorm) ≠ "besluit"; geen anker' },
+  { id: 72, label: "mag-terugvragen", vraag: "Hoe zit het met de risico's?", toelichting: 'kaal "risico\'s" (geen "matrix"); geen anker' },
 ];

@@ -17,7 +17,6 @@
 export type VoortgangFase =
   | "reformulatie"
   | "retrieval"
-  | "rerank"
   | "web"
   | "analyse"
   | "generatie";
@@ -26,7 +25,6 @@ export type VoortgangFase =
 export const VOORTGANG_VOLGORDE: readonly VoortgangFase[] = [
   "reformulatie",
   "retrieval",
-  "rerank",
   "web",
   "analyse",
   "generatie",
@@ -36,7 +34,6 @@ export const VOORTGANG_VOLGORDE: readonly VoortgangFase[] = [
 export const VOORTGANG_LABEL: Record<VoortgangFase, string> = {
   reformulatie: "Uw vraag wordt in context geplaatst",
   retrieval: "Fondsdocumenten worden doorzocht",
-  rerank: "Meest relevante passages worden gekozen",
   web: "Toegestane externe bronnen worden voorbereid",
   analyse: "Document wordt geanalyseerd",
   generatie: "Antwoord wordt opgesteld",
@@ -47,10 +44,11 @@ export interface VoortgangVlaggen {
   /** History-aware reformulatie-stap op het sterke model daadwerkelijk uitgevoerd
    *  (ongeacht of de herschreven vraag afweek — de stap kostte hoe dan ook tijd). */
   reformulatieActief: boolean;
-  /** RAG-retrieval uitgevoerd (bibliotheek-modi of targeted scope). */
+  /** RAG-retrieval uitgevoerd (bibliotheek-modi of targeted scope). De reranker is
+   *  GEEN aparte zichtbare fase meer (besluit 0138 — addendum op 0087): zijn uitkomst
+   *  telt mee in de betekenisvolle retrieval-regel (aantal geselecteerde passages),
+   *  niet in een aparte stap die van een default-uit-vlag afhing. */
   retrievalActief: boolean;
-  /** Reranker toegepast (fondsvlag rerank aan én er is geretrieved). */
-  rerankActief: boolean;
   /** Live web-retrieval toegestaan/voorbereid voor deze vraag. */
   webActief: boolean;
   /** Brede documentanalyse (map-reduce) draait. */
@@ -66,7 +64,6 @@ export function bepaalZichtbareFasen(v: VoortgangVlaggen): VoortgangFase[] {
   const fasen: VoortgangFase[] = [];
   if (v.reformulatieActief) fasen.push("reformulatie");
   if (v.retrievalActief) fasen.push("retrieval");
-  if (v.rerankActief) fasen.push("rerank");
   if (v.webActief) fasen.push("web");
   if (v.analyseActief) fasen.push("analyse");
   fasen.push("generatie");
@@ -75,14 +72,35 @@ export function bepaalZichtbareFasen(v: VoortgangVlaggen): VoortgangFase[] {
 
 // ── Uitkomst-formatters (aantallen uit de werkelijke verwerking) ────────────
 
-/** "18 passages gevonden" — het aantal opgehaalde passages na retrieval. */
-export function retrievalUitkomst(opgehaald: number): string {
-  return `${opgehaald} ${opgehaald === 1 ? "passage" : "passages"} gevonden`;
+/** Extra signalen die de retrieval-regel kan dragen. `ftsArmLeeg` = de lexicale
+ *  zoekarm leverde niets op (M5-haakje); de reducer/route zet dit uit de meta. */
+export interface RetrievalUitkomstOpties {
+  ftsArmLeeg?: boolean;
 }
 
-/** "6 relevant bevonden" — na reranken/drempel. Nul is expliciet zichtbaar. */
-export function rerankUitkomst(geselecteerd: number): string {
-  return `${geselecteerd} relevant bevonden`;
+/**
+ * "uit 4 documenten — 8 passages geselecteerd" (besluit 0138 — addendum op 0087).
+ *
+ * VERVANGT het oude "N passages gevonden", dat een CONSTANTE was: `opgehaald` is het
+ * ophaalplafond (CHUNK_BUDGET·3, hooguit verlaagd door fondsdiscipline) en varieert
+ * dus nauwelijks. Deze regel toont wat bestuurlijk betekenis heeft — het aantal
+ * UNIEKE documenten en het aantal DAADWERKELIJK geselecteerde passages — en klopt in
+ * beide reranker-standen: met rerank aan is `geselecteerd` het aantal ná de drempel,
+ * met rerank uit het aantal ná weging/selectie. Nul is in beide getallen expliciet
+ * zichtbaar (geen schijnzekerheid). Optioneel een M5-notitie als de lexicale arm
+ * leeg was.
+ */
+export function retrievalUitkomst(
+  documenten: number,
+  geselecteerd: number,
+  opties: RetrievalUitkomstOpties = {}
+): string {
+  const docLabel = documenten === 1 ? "document" : "documenten";
+  const passLabel = geselecteerd === 1 ? "passage" : "passages";
+  const basis = `uit ${documenten} ${docLabel} — ${geselecteerd} ${passLabel} geselecteerd`;
+  // M5-haakje: maak zichtbaar dat de lexicale zoekarm niets opleverde (bv. bij een
+  // vraag die semantisch wél, maar op trefwoord niet matchte).
+  return opties.ftsArmLeeg ? `${basis} · lexicale zoekarm leeg` : basis;
 }
 
 /** "3 externe bronnen toegestaan" — aantal actieve whitelist-domeinen. */

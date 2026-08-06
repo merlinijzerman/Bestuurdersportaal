@@ -23,6 +23,13 @@ export interface OnderbouwingMeta {
   antwoordmodus?: string | null;
   /** Retrieval-scope: 'actueel' | 'historisch' | 'besluitvorming' | 'alles'. */
   retrievalModus?: string | null;
+  // Besluit 0139 (M-R4) — de zoekvraag waarop daadwerkelijk is gezocht en of die
+  // door de history-aware reformulatie is herschreven. Alleen tonen bij
+  // `gereformuleerd = true`; anders verandert de weergave niet.
+  /** De (mogelijk herschreven) zoekvraag waarop is gezocht. */
+  zoekvraag?: string | null;
+  /** Of de vraag is herschreven tot een zelfstandige zoekvraag. */
+  gereformuleerd?: boolean;
   /** Peildatum waarop de actuele-bron-filtering is toegepast. */
   peildatum?: string | null;
   /** Of er (ook) algemene kennis is gebruikt. */
@@ -252,6 +259,24 @@ export default function OnderbouwingPaneel({
               waarde={historischMeegenomen ? "Meegenomen" : "Niet meegenomen"}
             />
             {meta.peildatum && <Rij label="Peildatum" waarde={meta.peildatum} />}
+            {/* Besluit 0139 (M-R4) — bij een herschreven vervolgvraag tonen we de
+                zoekvraag waarop daadwerkelijk is gezocht. Zo is voor de bestuurder
+                zichtbaar en reproduceerbaar waarop de bronnen zijn gevonden. */}
+            {meta.gereformuleerd && meta.zoekvraag && (
+              <Rij
+                label="Gezochte zoekvraag"
+                waarde={
+                  <>
+                    “{meta.zoekvraag}”
+                    <span className="text-muted">
+                      {" "}
+                      — uw vervolgvraag is voor het zoeken herschreven tot een
+                      zelfstandige zoekvraag.
+                    </span>
+                  </>
+                }
+              />
+            )}
             {meta.profielsturing === "actief" && (
               <Rij
                 label="Persoonlijk profiel"

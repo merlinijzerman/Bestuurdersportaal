@@ -116,6 +116,18 @@ interface Bericht {
     label: string;
     vraag: string;
   };
+  // Besluit 0137 (antwoord-eerst) — dit fondsgerichte antwoord kwam uit een
+  // ONZEKERE bron-intentie; in plaats van de blokkerende terugvraag biedt de
+  // assistent de twee keuzes als chips ÓNDER het antwoord aan. Een klik hergenereert
+  // dezelfde vraag met de bevestigde intentie (bron_intent_override + vertrouwen
+  // "zeker"), waarbij het eerste antwoord blijft staan (navolgbaarheid, M-B5).
+  // `origineleVraag` herhaalt de vraag letterlijk. Live-only, net als `verbreding`:
+  // de bronbasis-melding (die het schijnzekerheidsrisico afdekt) staat in
+  // `onderbouwing` en overleeft wél een refresh.
+  bronkeuzeAanbod?: {
+    opties: { intent: "fonds" | "algemeen"; label: string }[];
+    origineleVraag: string;
+  };
   // Besluit 0098 — alleen een NETJES afgeronde generatie ('done' ontvangen) is
   // kopieerbaar. Welkomsttekst, foutmeldingen en afgebroken streams krijgen dus
   // geen kopieerknop: een herkomstregel onder iets dat geen antwoord is,
@@ -991,6 +1003,10 @@ export default function AssistentClient({
     // 30-07-2026 — zet de actualiteitsfilter uit voor deze beurt: neem stukken met
     // status concept/ter bespreking/vervallen mee. Alleen via de expliciete chip.
     neemNietVastgesteldeMee?: boolean;
+    // Besluit 0137 (antwoord-eerst) — het log-id van het eerste (fondsgerichte)
+    // antwoord waar de bestuurder een bronkeuze-chip onder klikte. Uitsluitend voor
+    // de audit-koppeling (bronkeuze_herzien); reist mee met de hergegenereerde beurt.
+    bronkeuzeVorigeLogId?: string;
     // Stuurt dezelfde (al getoonde) vraag opnieuw zonder een nieuwe gebruikersbubbel
     // toe te voegen; `basisBerichten` is dan de geschiedenis die op die vraag eindigt.
     geenNieuweVraag?: boolean;
@@ -1123,6 +1139,9 @@ export default function AssistentClient({
           // 30-07-2026 — expliciete verbreding na de melding "wel stukken, niet
           // vastgesteld". Alleen true als de gebruiker de chip aanklikte.
           neem_niet_vastgestelde_mee: opties?.neemNietVastgesteldeMee === true,
+          // Besluit 0137 (antwoord-eerst) — koppelt de hergegenereerde beurt na een
+          // bronkeuze-chipklik aan het eerste antwoord (auditspoor: bronkeuze_herzien).
+          bronkeuze_vorige_log_id: opties?.bronkeuzeVorigeLogId,
           // Plateau A — koppelt de auditregel van deze beurt aan dit gesprek,
           // zodat de gebruiker hem later kan verwijderen. Het id wordt hier
           // gemaakt als het nog niet bestond; `bewaarGesprek` gebruikt straks
@@ -1177,6 +1196,8 @@ export default function AssistentClient({
       let inlineMeldingenData: InlineMelding[] | undefined;
       // 30-07-2026 — verbredings-aanbod (niet-vastgestelde stukken meenemen).
       let verbredingData: Bericht["verbreding"] | undefined;
+      // Besluit 0137 — niet-blokkerend bronkeuze-aanbod (chips ónder het antwoord).
+      let bronkeuzeAanbodData: Bericht["bronkeuzeAanbod"] | undefined;
       // Plateau B — het id van de auditregel van dit antwoord (uit 'done').
       let logIdData: string | undefined;
       // Besluit 0092 — de verduidelijkingsbeurt als bewaarbaar bericht. Zonder dit
@@ -1198,6 +1219,7 @@ export default function AssistentClient({
             onderbouwing: onderbouwingData,
             inlineMeldingen: inlineMeldingenData,
             verbreding: verbredingData,
+            bronkeuzeAanbod: bronkeuzeAanbodData,
             voltooid,
             logId: logIdData,
           };
@@ -1225,6 +1247,10 @@ export default function AssistentClient({
           peildatum?: string | null;
           bronbasis?: string | null;
           retrieval_modus?: string | null;
+          // Besluit 0139 (M-R4) — de zoekvraag waarop daadwerkelijk is gezocht en
+          // of die is herschreven (voor het onderbouwingspaneel).
+          zoekvraag?: string | null;
+          gereformuleerd?: boolean;
           inline_meldingen?: InlineMelding[];
           // Increment I-2 — verduidelijkingsevent (vraag + chips).
           vraag?: string;
@@ -1244,6 +1270,11 @@ export default function AssistentClient({
             aantal: number;
             titels: string[];
             label: string;
+          } | null;
+          // Besluit 0137 (antwoord-eerst) — niet-blokkerend bronkeuze-aanbod: de
+          // twee keuzes als chips ónder het fondsgerichte antwoord. null = n.v.t.
+          bronkeuze_aanbod?: {
+            opties: { intent: "fonds" | "algemeen"; label: string }[];
           } | null;
           // Increment I-3 — uniforme bronvermelding-transparantie.
           web_retrieval_actief?: boolean;
@@ -1317,6 +1348,9 @@ export default function AssistentClient({
             antwoordmodusLabel: evt.antwoordmodus_label ?? evt.antwoordmodus ?? null,
             antwoordmodus: evt.antwoordmodus ?? null,
             retrievalModus: evt.retrieval_modus ?? null,
+            // Besluit 0139 (M-R4) — gebruikte zoekvraag; alleen getoond bij reformulatie.
+            zoekvraag: evt.zoekvraag ?? null,
+            gereformuleerd: evt.gereformuleerd ?? false,
             peildatum: evt.peildatum ?? null,
             algemeneKennis: evt.bronbasis
               ? /algemene kennis/i.test(evt.bronbasis)
@@ -1352,6 +1386,12 @@ export default function AssistentClient({
           verbredingData = evt.verbreding
             ? { ...evt.verbreding, vraag: tekst }
             : undefined;
+          // Besluit 0137 — bood de server (bij modus antwoord_eerst) een
+          // niet-blokkerend bronkeuze-aanbod aan? De originele vraag bewaren we mee
+          // zodat een chipklik dezelfde vraag letterlijk hergenereert.
+          bronkeuzeAanbodData = evt.bronkeuze_aanbod
+            ? { opties: evt.bronkeuze_aanbod.opties, origineleVraag: tekst }
+            : undefined;
         } else if (evt.type === "progress") {
           // Voortgang per bereikte serverfase (besluit 0087) — gedeelde reducer.
           setVoortgang((v) => pasVoortgangToe(v, evt));
@@ -1371,6 +1411,7 @@ export default function AssistentClient({
                 onderbouwing: onderbouwingData,
                 inlineMeldingen: inlineMeldingenData,
                 verbreding: verbredingData,
+                bronkeuzeAanbod: bronkeuzeAanbodData,
               },
             ]);
           } else {
@@ -1654,6 +1695,26 @@ export default function AssistentClient({
       neemNietVastgesteldeMee: true,
       bronIntentOverride: bronIntent === "algemeen" ? "algemeen" : "fonds",
       bronIntentBron: "chip",
+    });
+  }
+
+  // Besluit 0137 (antwoord-eerst) — de bestuurder klikte een bronkeuze-chip ónder
+  // een fondsgericht antwoord ("liever in algemene zin?" / "voor mijn fonds").
+  // Hergegenereerd met de bevestigde intentie (bron_intent_override → vertrouwen
+  // "zeker", precies het bestaande herstelpad). Net als bij kiesVerbreding laten we
+  // het eerste antwoord STAAN: dat antwoord ís aan de bestuurder getoond en kan zijn
+  // overgenomen — beide beurten horen in het gesprek en in het auditspoor (M-B5).
+  // `vorigeLogId` koppelt de nieuwe beurt aan de eerste (retrieval_meta.bronkeuze_herzien).
+  function kiesBronkeuze(
+    intent: "fonds" | "algemeen",
+    origineleVraag: string,
+    vorigeLogId: string | undefined
+  ) {
+    if (laden) return;
+    stuurBericht(origineleVraag, {
+      bronIntentOverride: intent,
+      bronIntentBron: "chip",
+      bronkeuzeVorigeLogId: vorigeLogId,
     });
   }
 
@@ -2250,6 +2311,39 @@ export default function AssistentClient({
                   >
                     {b.verbreding.label}
                   </button>
+                </div>
+              )}
+
+              {/* Besluit 0137 (antwoord-eerst) — niet-blokkerend bronkeuze-aanbod.
+                  Het antwoord is fondsgericht gegeven (onzekere intentie); de
+                  bestuurder ziet dát die keuze is gemaakt en kan hem corrigeren,
+                  zonder vooraf onderbroken te zijn. De bronbasis-melding staat al
+                  bij het antwoord (onderbouwing) en dekt het schijnzekerheidsrisico;
+                  deze chips VERVANGEN die melding niet, ze vullen hem aan. */}
+              {b.rol === "ai" && b.bronkeuzeAanbod && (
+                <div className="mt-2">
+                  <div className="text-xs text-muted mb-1.5">
+                    Dit antwoord gaat uit van uw fonds — liever in algemene zin?
+                  </div>
+                  <div className="flex gap-2 flex-wrap">
+                    {b.bronkeuzeAanbod.opties.map((o) => (
+                      <button
+                        key={o.intent}
+                        type="button"
+                        disabled={laden}
+                        onClick={() =>
+                          kiesBronkeuze(
+                            o.intent,
+                            b.bronkeuzeAanbod!.origineleVraag,
+                            b.logId
+                          )
+                        }
+                        className="text-xs text-ink border border-app-line-strong px-3 py-1.5 rounded-full hover:border-accent hover:bg-warn-tint transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        {o.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
 

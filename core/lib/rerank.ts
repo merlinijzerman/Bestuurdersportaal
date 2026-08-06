@@ -176,6 +176,10 @@ export async function rerankChunks<T extends { id: string }>(
     const call = c.create({
       model,
       max_tokens: 1024,
+      // Besluit 0139 — reproduceerbare retrieval: de rerank ordent de
+      // bronselectie en moet daarom deterministisch zijn. (De reranker staat nu
+      // uit; dit borgt determinisme vóórdat M3 uit de recall-opdracht hem aanzet.)
+      temperature: 0,
       system: SP_RERANK,
       messages: [
         {

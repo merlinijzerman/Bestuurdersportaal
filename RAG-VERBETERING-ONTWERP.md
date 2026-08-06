@@ -67,6 +67,16 @@ Per fragment genereert `lib/chunk-ingest.ts` (`genereerPrefix`, model Haiku) é�
 
 Gebouwd vóór dit increment: `pgvector` náást FTS in dezelfde Supabase-database (RLS blijft gelden), gefuseerd via Reciprocal Rank Fusion (`zoek_chunks_hybride`, k=60, `security invoker`). **Geen externe vector-database**. De R1.1/R1.2-verrijking versterkt beide armen van deze fusie zonder het RRF-algoritme zelf te wijzigen.
 
+### Fase 4 — reproduceerbare retrieval (determinisme-eis, besluit 0139, 2026-08-06)
+
+**Eis:** dezelfde vraag in dezelfde gespreksdraad levert dezelfde zoekvraag en dezelfde bronnenset. Aanleiding: eenzelfde vraag gaf binnen één draad twee verschillende bronnensets, doordat de history-aware reformulatie een gesamplede modelcall zónder `temperature` was (zie [`decisions/0139`](./decisions/0139-reproduceerbare-retrieval-determinisme.md)).
+
+- **Reformulatie-conditie (`heeftReformulatieNodig`).** Reformuleer wanneer een vraag *werkelijk* niet zelfstandig te begrijpen is — niet wanneer hij kort is of een lidwoord bevat. De `<= 5`-woordenregel is geschrapt; `het` is uit `VERWIJSWOORDEN`; de aanwijzende voornaamwoorden `dat/die/dit/deze` worden **positioneel** beoordeeld (determinator vóór een zelfstandig naamwoord → géén reformulatie; alleenstaand of vóór een functiewoord/werkwoord → wél). Meetset in `query-reformulatie.sanity.ts` (valse-reformulatie 5/6 → 0/6, alle echte anafora behouden).
+- **Niet-destructief fusiepad (M-R3).** Bij een geherformuleerde vraag draait de hybride retrieval een **extra poging met de originele vraag** en fuseert de kandidatensets (union op chunk-id, beste RRF-rang wint). Eén generiek "extra retrievalpoging"-mechanisme (`fuseerHybridePogingen` + `gedeeldeHybrideParams`, harde bovengrens `MAX_HYBRIDE_POGINGEN = 3`), waarin de M1-FTS-terugval uit `WERKOPDRACHT-RETRIEVAL-RECALL.md` als derde poging inhaakt. Elke poging deelt `p_fonds_id`/modus/filters per constructie identiek — fondsdiscipline blijft hard. Verworpen alternatief: gesplitste armen (origineel→FTS, herschreven→vector).
+- **Determinisme-eis op de RPC.** `temperature: 0` op elke modelcall in de retrievalketen (reformulatie, rerank, context-prefix); deterministische tiebreaker `, dc.id` op de drie sorteringen in `zoek_chunks_hybride`. Arm-herkomst (`fts_rang`/`vec_rang`) en poging-herkomst in `retrieval_meta`. **`hnsw.ef_search = 100` op de functie-`SET`-clausule is uitgesteld**: Supabase weigert dit voor de migratie-rol (`ERROR 42501`); ef_search blijft 40 (apart openstaand punt, zie 0139).
+
+Dit is de **meetbasis** onder `WERKOPDRACHT-RETRIEVAL-RECALL.md` en `WERKOPDRACHT-ANTWOORDLENGTE.md`: zolang dezelfde vraag verschillende zoekvragen kan opleveren, meten hun acceptatiecriteria ruis.
+
 ## RLS / security-impact
 
 - Nieuwe functie is `SECURITY INVOKER`; RLS op `document_chunks` en `documenten` blijft de tenant-isolatie afdwingen. Te verifiëren: een gebruiker van fonds A kan via de RPC geen chunks van fonds B ophalen.
@@ -83,6 +93,8 @@ Gebouwd vóór dit increment: `pgvector` náást FTS in dezelfde Supabase-databa
 Eén idempotente migratie `supabase/migrations/2026_05_30_rag_ranking.sql`: `create or replace function zoek_chunks(...)` + `alter table governance_log add column if not exists retrieval_meta jsonb`. Eerst in Supabase draaien, dán code-deploy. `schema.sql` als documentatie bijgewerkt.
 
 **R1.1/R1.2:** [`2026_06_24_rag_structuur_contextueel.sql`](./supabase/migrations/2026_06_24_rag_structuur_contextueel.sql) (+ `_ROLLBACK`) voegt nullable kolommen `structuur_type`, `structuur_label`, `context_prefix`, `prefix_model`, `indexering_versie` toe op `document_chunks`, herbouwt de generated `zoek_vector` als `to_tsvector('dutch', coalesce(context_prefix || ' ', '') || tekst)`, en maakt de `reindex_runs`-provenancetabel met RLS per `fonds_id`. Migratie-eerst, dán code-deploy. `schema.sql` als documentatie bijgewerkt.
+
+**Fase 4 (besluit 0139):** [`2026_08_06_r_retrieval_determinisme_tiebreaker_efsearch.sql`](./supabase/migrations/2026_08_06_r_retrieval_determinisme_tiebreaker_efsearch.sql) (+ `_ROLLBACK`) hercreëert `zoek_chunks_hybride` met een deterministische tiebreaker (`, dc.id`) op de drie sorteringen. (`set hnsw.ef_search = 100` op de functie was beoogd maar wordt door Supabase geweigerd — `ERROR 42501` — en is uitgesteld; ef_search blijft 40.) **Signatuur ongewijzigd**; alleen de body. `security invoker` behouden, de volledige T4/T10 + Increment G-filterset in beide armen letterlijk overgenomen. `drop function` reset de ACL → de migratie herstelt het r7-patroon expliciet (`revoke … from public, anon` + `grant execute … to authenticated, service_role`; bevinding H-18). Handmatig in de SQL-editor te draaien; verificatie via `pg_proc` (tiebreaker + `proconfig`) en de structurele gates in het bestand zelf.
 
 ## Kostenraming (R1.2 re-index)
 

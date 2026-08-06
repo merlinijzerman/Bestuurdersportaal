@@ -116,3 +116,32 @@ export function flagAlsBoolean(waarde: unknown): boolean {
   if (typeof waarde === "number") return waarde !== 0;
   return false;
 }
+
+// ── Bronkeuze-modus (FO §11a, besluit 0137 — herziet 0014) ──────────────────
+// Hoe gaat de assistent om met een ONZEKERE bron-intentie? De PURE resolutie
+// (validatie + fail-safe) staat hier zodat ze programmatisch toetsbaar is
+// (bronkeuze-modus.sanity.ts); de async flag-read leeft in fonds-config.ts.
+export type BronkeuzeModus = "blokkerend" | "antwoord_eerst" | "uit";
+
+export const BRONKEUZE_MODI: readonly BronkeuzeModus[] = [
+  "blokkerend",
+  "antwoord_eerst",
+  "uit",
+];
+
+/** Valideert een ruwe (jsonb/env) waarde tegen de drie toegestane modi; anders null. */
+export function alsBronkeuzeModus(waarde: unknown): BronkeuzeModus | null {
+  return typeof waarde === "string" &&
+    (BRONKEUZE_MODI as readonly string[]).includes(waarde)
+    ? (waarde as BronkeuzeModus)
+    : null;
+}
+
+/**
+ * Resolutie-orde: fonds-flag → env-default → 'blokkerend'. Onbekende/ongeldige
+ * waarde (op beide niveaus) valt fail-safe terug op 'blokkerend' — nóóit stil naar
+ * het nieuwe gedrag (CLAUDE.md-guardrail: geen stille gedragswijziging per tenant).
+ */
+export function resolveBronkeuzeModus(flag: unknown, env: unknown): BronkeuzeModus {
+  return alsBronkeuzeModus(flag) ?? alsBronkeuzeModus(env) ?? "blokkerend";
+}

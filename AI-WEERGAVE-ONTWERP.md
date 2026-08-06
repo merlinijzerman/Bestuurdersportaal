@@ -603,3 +603,44 @@ De vraagbubbel was massief violet en trok in een lang gesprek meer aandacht dan 
 eronder. Nu `app-zebra` met een hairline — dezelfde behandeling als in de referentie. De
 positie (rechts uitgelijnd) is níét gewijzigd; de referentie zet de vraag links met een
 avatar, maar dat is een layoutkeuze die losstaat van de kleurvraag.
+
+## 11. Voortgangsregels tijdens het wachten (besluit 0087 + 0138)
+
+Tussen het versturen van een vraag en de eerste letter van het antwoord toont de assistent
+per bereikte serverfase een afgeronde regel (✓ + uitkomst) plus de actieve fase als lopende
+regel. De labels zijn statisch; **alleen de aantallen komen uit de werkelijke verwerking**
+(geen timers, geen geschatte percentages). Een fase verschijnt alléén als de bijbehorende
+serverstap draait — overgeslagen stappen worden weggelaten, niet grijs getoond (geen
+schijnzekerheid). Bron: `core/lib/voortgang.ts` (fase-afleiding + formatters), `Voortgang.tsx`
+(weergave), emissie in `app/api/chat/route.ts`.
+
+**De retrieval-regel (herzien 2026-08-06, besluit 0138 — addendum op 0087).** Tot 0138 toonde
+de enige zichtbare teller *"Fondsdocumenten worden doorzocht — 30 passages gevonden"*. Dat
+getal was een **constante**: het ophaalplafond (`CHUNK_BUDGET·3`), geen relevantiemaat. De
+regel luidt nu:
+
+> Fondsdocumenten worden doorzocht — **uit N documenten — M passages geselecteerd**
+
+met N = aantal **unieke documenten** waaruit passages zijn geselecteerd, en M = aantal
+**daadwerkelijk geselecteerde** passages. Beide zijn bestuurlijk betekenisvol en variëren per
+vraag. De regel klopt in **beide** reranker-standen (met rerank aan is M het aantal ná de
+drempel; met rerank uit ná weging/selectie). Optioneel — wanneer M5 dat bedraadt — draagt de
+regel de notitie *"· lexicale zoekarm leeg"* als de lexicale arm niets opleverde.
+
+**De rerankfase is geen aparte zichtbare stap meer.** In 0087 was "Meest relevante passages
+worden gekozen" een eigen fase, maar die verscheen alleen bij `rerank=on` (default uit) en
+toonde anders niets. De reranker-uitkomst is nu opgenomen in de ene retrieval-regel
+(hierboven); de aparte fase vervalt. De reranker zelf draait ongewijzigd — alleen de
+voortgangsweergave is samengevoegd.
+
+**Consistentie met het onderbouwingspaneel.** Het aantal geselecteerde passages (M) strookt
+met de som van `· {n} passages` die `AntwoordWeergave.tsx` per document toont, zolang
+parent-retrieval uit staat (default). Wijkt het bewust af (parent-verrijking telt in het
+paneel wél mee), dan hoort dat in de labeling zichtbaar te zijn — twee getallen die elkaar
+tegenspreken is erger dan één dat niets zegt.
+
+**Regressiewaarborg (B2).** `core/lib/voortgang.sanity.ts` toetst niet alleen de formattering
+maar ook dat de regel over de tien tabel-A-vragen (`WERKOPDRACHT-RETRIEVAL-RECALL.md`)
+**varieert** — op een vastgelegde fixture van echte retrieval-uitkomsten
+(`voortgang-tabel-a.fixture.json`). De test faalt zodra de teller over die vragen dezelfde
+waarde geeft; zo kan een constante nooit opnieuw ongemerkt als meting worden gepresenteerd.

@@ -552,6 +552,11 @@ create index if not exists idx_documenten_fonds_status on public.documenten (fon
 -- VÓÓR ranking. Zie migratie 2026_06_10_document_scope.sql. De zustertfunctie
 -- public.zoek_chunks_hybride (FTS+vector via RRF) heeft dezelfde scope-param in
 -- beide armen — staat niet in dit documentatiebestand, zie die migratie.
+-- Besluit 0139 (migratie 2026_08_06_r_retrieval_determinisme_tiebreaker_efsearch.sql,
+-- AUTHORITATIEF): zoek_chunks_hybride kreeg een deterministische tiebreaker (, dc.id)
+-- op de drie sorteringen; signatuur ongewijzigd. Zorgt dat identieke aanroepen
+-- identieke bronnensets geven. (`set hnsw.ef_search = 100` op de functie was beoogd
+-- maar wordt door Supabase geweigerd, ERROR 42501 — uitgesteld; ef_search blijft 40.)
 --
 -- NB (increment T4, migratie 2026_07_08_t4_retrieval_fondsfilter.sql — AUTHORITATIEF;
 -- dit documentatieblok loopt op dat punt achter): beide RPC's hebben een extra

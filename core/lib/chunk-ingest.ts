@@ -143,6 +143,10 @@ async function genereerPrefix(
     const response = await anthropic.messages.create({
       model: PREFIX_MODEL,
       max_tokens: 120,
+      // Besluit 0139 — reproduceerbare retrieval: de context-prefix bepaalt mee
+      // wat geëmbed/geïndexeerd wordt. temperature:0 maakt een her-extractie van
+      // dezelfde chunk reproduceerbaar (raakt de index, niet de live query).
+      temperature: 0,
       system: SP_PREFIX,
       messages: [
         {

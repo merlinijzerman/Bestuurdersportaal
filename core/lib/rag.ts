@@ -206,6 +206,12 @@ export interface RetrievalOpties {
   parentRetrieval?: boolean; // R1.6 small-to-big
   drempelWaarde?: number; // R1.5 b2-drempel op de rerankscore (0–100)
   rerankClient?: RerankClient; // injectie voor hermetische tests
+  // Besluit 0139 (M-R3) — de OORSPRONKELIJKE gebruikersvraag, meegegeven wanneer
+  // `vraag` een geherformuleerde zoekvraag is. Is deze gezet en wijkt hij af, dan
+  // draait de hybride retrieval een EXTRA poging met de originele vraag en fuseert
+  // de kandidatensets, zodat een (mogelijk verkeerde) reformulatie alleen recall
+  // kan TOEVOEGEN, nooit wegnemen. Leeg/gelijk → geen extra poging (huidig gedrag).
+  origineleVraag?: string;
 }
 
 // Conservatieve default-drempel (R1.5 b2): kandidaten met een rerankscore < 20
@@ -371,6 +377,13 @@ export interface DocumentChunk {
   chunk_index: number;
   // Relevantie-score uit ts_rank_cd; null bij fallback-zoekpaden zonder ranking.
   rang?: number | null;
+  // Besluit 0139 — RRF-arm-rangen (1-based) waaruit deze chunk kwam: fts_rang =
+  // positie in de lexicale arm, vec_rang = positie in de vector-arm; null = niet
+  // in die arm gevonden. Alleen de hybride RPC levert ze (overige paden laten ze
+  // weg). Voedt retrieval_meta zodat bij een incident zichtbaar is uit welke arm
+  // een fragment kwam en of een arm dood was.
+  fts_rang?: number | null;
+  vec_rang?: number | null;
   documenten: {
     titel: string;
     bron: string;
@@ -433,7 +446,14 @@ export interface RetrievalMeta {
     | "geen";
   opgehaald: number;
   geselecteerd: number;
-  chunks: { id: string; document_id: string; rang: number | null }[];
+  chunks: {
+    id: string;
+    document_id: string;
+    rang: number | null;
+    // Besluit 0139 — arm-herkomst per chunk (null = niet in die arm / niet-hybride pad).
+    fts_rang?: number | null;
+    vec_rang?: number | null;
+  }[];
   // ── Increment T4 — expliciete fonds-discipline (defense-in-depth náást RLS) ──
   // De server-side geresolveerde fondsfilter die op DIT pad is toegepast (null =
   // RLS-only, geen expliciete filter meegegeven). `namespace_conventie` legt vast
@@ -468,6 +488,21 @@ export interface RetrievalMeta {
   // optioneel zodat bestaande aanroepers ongemoeid blijven.
   zoekvraag?: string;
   gereformuleerd?: boolean;
+  // Besluit 0139 (M-R3) — reproduceerbare, niet-destructieve retrieval. Per
+  // hybride poging (primair + evt. augmentaties zoals de originele-vraag-poging
+  // en, later, de M1-FTS-terugval) de gebruikte query en het aantal rijen;
+  // `overgeslagen` = de poging werd niet gedraaid (bovengrens of embedding-fout).
+  // `poging_herkomst` legt per GESELECTEERDE chunk vast wélke poging hem leverde.
+  // Zo is achteraf zichtbaar of een reformulatie- of terugvalpoging het resultaat
+  // bepaalde — zonder de fondsdiscipline te versoepelen (elke poging deelt de
+  // fonds-/modus-/filterparameters identiek).
+  retrieval_pogingen?: {
+    naam: string;
+    query: string;
+    rijen: number | null;
+    overgeslagen?: boolean;
+  }[];
+  poging_herkomst?: Record<string, string>;
   // Bronvermelding-validatie: aantal [Bron N]-citaties in het antwoord en
   // hoeveel daarvan niet naar een aangeleverde bron verwijzen (dangling).
   citaties?: { totaal: number; ongeldig: number };
@@ -746,6 +781,10 @@ interface ZoekChunkRij {
   bibliotheek: string;
   opslag_pad: string | null;
   rang: number;
+  // Besluit 0139 — arm-rangen uit de hybride RPC (row_number per arm; null als de
+  // chunk niet in die arm zat). Alleen zoek_chunks_hybride levert deze kolommen.
+  fts_rang?: number | null;
+  vec_rang?: number | null;
   // Increment T4 — fonds van de bron (NULL = generiek). Alleen de T4-RPC levert dit.
   fonds_id?: string | null;
   // Increment G — denorm-velden uit de uitgebreide RPC-return.
@@ -800,6 +839,8 @@ function rijNaarChunk(r: ZoekChunkRij): DocumentChunk {
     paragraaf: r.paragraaf,
     chunk_index: r.chunk_index,
     rang: r.rang,
+    fts_rang: r.fts_rang ?? null,
+    vec_rang: r.vec_rang ?? null,
     documenten: {
       titel: r.titel,
       bron: r.bron,
@@ -833,6 +874,9 @@ function bouwMeta(
       id: c.id,
       document_id: c.document_id,
       rang: c.rang ?? null,
+      // Besluit 0139 — arm-herkomst mee in het auditspoor.
+      fts_rang: c.fts_rang ?? null,
+      vec_rang: c.vec_rang ?? null,
     })),
     // T4 — minimale bronversie-audit over de daadwerkelijk geselecteerde chunks.
     bronversie_audit: geselecteerd.map((c) => ({
@@ -845,6 +889,66 @@ function bouwMeta(
       documentdatum: c.documenten.documentdatum ?? null,
     })),
   };
+}
+
+// ── Besluit 0139 (M-R3) — generiek "extra retrievalpoging"-mechanisme ────────
+// Harde bovengrens op het aantal hybride RPC-aanroepen per beurt: 1 basispoging
+// + maximaal 2 augmentaties (de M-R3 originele-vraag-poging en, later, de M1-
+// FTS-terugval uit de recall-opdracht). Eén plek, geen losse takken: elke extra
+// poging draait dezelfde RPC met IDENTIEKE fonds-/modus-/filterparameters en
+// alleen een afwijkende query/embedding, en wordt hier gefuseerd.
+const MAX_HYBRIDE_POGINGEN = 3;
+
+export interface HybridePogingResultaat {
+  naam: string;
+  chunks: DocumentChunk[];
+}
+
+// Bouwt het GEDEELDE RPC-parameterblok dat elke hybride poging identiek gebruikt.
+// Eén bron: zo kan een extra poging (M-R3/M1) de fonds-/modus-/filtergrens per
+// constructie niet versoepelen — p_fonds_id en alle filters zitten hier vast.
+// Alleen p_query/p_embedding worden per poging toegevoegd (zie draaiHybridePoging).
+export function gedeeldeHybrideParams(
+  overFetch: number,
+  scope: string[] | null,
+  filters: RetrievalFilters | undefined,
+  fondsFilter: string | null
+): Record<string, unknown> {
+  return {
+    p_limit: overFetch,
+    p_document_ids: scope,
+    ...rpcFilterParams(filters),
+    p_fonds_id: fondsFilter,
+  };
+}
+
+// Fuseert de kandidatensets van meerdere hybride pogingen: union op chunk-id,
+// waarbij per chunk de poging met de BESTE (hoogste) RRF-rang wint. Zo kan een
+// extra poging alleen recall TOEVOEGEN, nooit wegnemen. Determinisme: gesorteerd
+// op rang aflopend met chunk-id als tiebreaker (app-laag-pendant van de SQL-
+// tiebreaker), zodat gelijke scores nooit een niet-deterministische volgorde
+// geven. Geeft ook per chunk-id terug welke poging hem leverde (auditherkomst).
+export function fuseerHybridePogingen(pogingen: HybridePogingResultaat[]): {
+  chunks: DocumentChunk[];
+  herkomstPerId: Record<string, string>;
+} {
+  const besteChunk = new Map<string, DocumentChunk>();
+  const besteRang = new Map<string, number>();
+  const herkomstPerId: Record<string, string> = {};
+  for (const { naam, chunks } of pogingen) {
+    for (const c of chunks) {
+      const r = c.rang ?? -Infinity;
+      if (!besteChunk.has(c.id) || r > (besteRang.get(c.id) ?? -Infinity)) {
+        besteChunk.set(c.id, c);
+        besteRang.set(c.id, r);
+        herkomstPerId[c.id] = naam;
+      }
+    }
+  }
+  const chunks = [...besteChunk.values()].sort(
+    (a, b) => (b.rang ?? -Infinity) - (a.rang ?? -Infinity) || a.id.localeCompare(b.id)
+  );
+  return { chunks, herkomstPerId };
 }
 
 // Hoofdingang: kiest tussen hybride retrieval (Fase C, achter de flag) en de
@@ -903,50 +1007,115 @@ export async function zoekRelevanteChunksMetMeta(
   // R1.4 — FTS-arm (evt.) jargon-verbreed; de vectorquery blijft de originele vraag.
   const { ftsQuery, jargon } = ftsQueryVoor(vraag, opt);
 
-  // RRF-RPC: FTS + vector versmolten (SECURITY INVOKER → RLS blijft gelden).
-  // p_document_ids = scope vóór de fusion (null = hele bibliotheek).
-  // Increment G — retrieval-filters worden vóór de fusion in beide armen toegepast.
-  // Increment T4 — p_fonds_id dwingt de fondsgrens al in de RPC af (kan niet omzeild).
-  const { data, error } = await supabase.rpc("zoek_chunks_hybride", {
-    p_query: ftsQuery,
-    p_embedding: naarVectorLiteral(vector),
-    p_limit: overFetch,
-    p_document_ids: scope,
-    ...rpcFilterParams(filters),
-    p_fonds_id: fondsFilter,
-  });
+  // Gedeelde RPC-parameters — IDENTIEK voor ELKE poging (één bron, zie
+  // gedeeldeHybrideParams). Increment T4/T10 + Increment G: p_fonds_id, de modus-/
+  // peildatum- en overige filters gaan in beide armen vóór de fusion mee; een extra
+  // poging (M-R3/M1) kan de fondsgrens of modusfilter per constructie niet
+  // versoepelen. Alleen p_query/p_embedding verschillen (zie draaiHybridePoging).
+  const gedeeldeRpcParams = gedeeldeHybrideParams(overFetch, scope, filters, fondsFilter);
 
-  if (!error && Array.isArray(data) && data.length > 0) {
-    const gerangschikt = (data as ZoekChunkRij[]).map(rijNaarChunk);
-    // T4 — app-guard náást de RPC: dropt (theoretische) cross-tenant/niet-published
-    // lekken en telt ze, zodat een falen van RLS+RPC zichtbaar wordt in de meta.
-    const bewaakt = handhaafFondsdiscipline(gerangschikt, fondsFilter, peildatum, filters?.modus);
-    // R1.3 (rerank op dit sterke pad) → R1.5 (drempel/ilike) → weeg → R1.6 (parent).
-    const na = await naVerwerking(
-      bewaakt.chunks, "hybride_rrf", vraag, filters, maxResults, maxPerDoc,
-      fondsFilter, peildatum, opt, true
-    );
+  // Eén hybride RPC-poging. Geeft de gerangschikte chunks terug, of null bij een
+  // RPC-fout (≠ leeg resultaat, dat is een lege array). SECURITY INVOKER → RLS
+  // blijft gelden; p_document_ids scoopt vóór de fusion.
+  async function draaiHybridePoging(
+    ftsQ: string,
+    emb: number[]
+  ): Promise<DocumentChunk[] | null> {
+    const { data, error } = await supabase.rpc("zoek_chunks_hybride", {
+      p_query: ftsQ,
+      p_embedding: naarVectorLiteral(emb),
+      ...gedeeldeRpcParams,
+    });
+    if (error) {
+      console.error("Hybride RPC-fout:", error);
+      return null;
+    }
+    return Array.isArray(data) ? (data as ZoekChunkRij[]).map(rijNaarChunk) : [];
+  }
+
+  const pogingen: HybridePogingResultaat[] = [];
+  const pogingMeta: NonNullable<RetrievalMeta["retrieval_pogingen"]> = [];
+
+  // Poging 1 (primair): de (mogelijk geherformuleerde) vraag.
+  const primair = await draaiHybridePoging(ftsQuery, vector);
+  if (primair === null) {
+    // RPC faalde → terugval op FTS (embedding lukte wél).
+    const r = await zoekViaFTS(vraag, maxResults, scope, filters, fondsFilter, opt);
     return {
-      chunks: na.chunks,
+      chunks: r.chunks,
+      meta: { ...r.meta, embedding_query_success: true, fallback_reason: "rpc_error" },
+    };
+  }
+  pogingen.push({ naam: "primair", chunks: primair });
+  pogingMeta.push({ naam: "primair", query: ftsQuery, rijen: primair.length });
+
+  // Poging 2 (M-R3): bij een geherformuleerde vraag draaien we OOK de originele
+  // vraag en fuseren, zodat de reformulatie alleen recall kan toevoegen. Faalt de
+  // embedding van de originele vraag, dan blijft de primaire poging staan
+  // (non-destructief). De M1-FTS-terugval uit de recall-opdracht komt later als
+  // derde poging op exact deze plek erbij (zelfde bovengrens, zelfde fusie).
+  const origineel = opties?.origineleVraag?.trim();
+  if (origineel && origineel !== vraag.trim()) {
+    if (pogingen.length < MAX_HYBRIDE_POGINGEN) {
+      const { ftsQuery: origFts } = ftsQueryVoor(origineel, opt);
+      try {
+        const origVec = await embedTekst(origineel);
+        const origChunks = await draaiHybridePoging(origFts, origVec);
+        if (origChunks === null) {
+          pogingMeta.push({ naam: "origineel", query: origFts, rijen: null });
+        } else {
+          pogingen.push({ naam: "origineel", chunks: origChunks });
+          pogingMeta.push({ naam: "origineel", query: origFts, rijen: origChunks.length });
+        }
+      } catch (e) {
+        console.error("Hybride: embedding originele vraag mislukt (M-R3), primair blijft:", e);
+        pogingMeta.push({ naam: "origineel", query: origFts, rijen: null, overgeslagen: true });
+      }
+    } else {
+      pogingMeta.push({ naam: "origineel", query: origineel, rijen: null, overgeslagen: true });
+    }
+  }
+
+  // Fusie van alle pogingen (union op id, beste RRF-rang wint, deterministisch).
+  const { chunks: gefuseerd, herkomstPerId } = fuseerHybridePogingen(pogingen);
+
+  if (gefuseerd.length === 0) {
+    // Geen enkele poging leverde treffers → terugval op FTS (embedding lukte wél).
+    const r = await zoekViaFTS(vraag, maxResults, scope, filters, fondsFilter, opt);
+    return {
+      chunks: r.chunks,
       meta: {
-        ...bouwMeta("hybride_rrf", bewaakt.chunks.length, na.chunks),
+        ...r.meta,
         embedding_query_success: true,
-        filters: metaFilters(filters),
-        ...fondsMeta(fondsFilter, bewaakt.gedropt),
-        ...(jargon.length ? { jargon_expansie: jargon } : {}),
-        ...na.extra,
+        fallback_reason: "geen_hybride_treffers",
+        retrieval_pogingen: pogingMeta,
       },
     };
   }
 
-  // RPC faalde of leeg → terugval op FTS (embedding lukte wél).
-  const r = await zoekViaFTS(vraag, maxResults, scope, filters, fondsFilter, opt);
+  // T4 — app-guard náást de RPC: dropt (theoretische) cross-tenant/niet-published
+  // lekken en telt ze, zodat een falen van RLS+RPC zichtbaar wordt in de meta.
+  // Draait over de GEFUSEERDE set, dus ook over de originele-vraag-poging.
+  const bewaakt = handhaafFondsdiscipline(gefuseerd, fondsFilter, peildatum, filters?.modus);
+  // R1.3 (rerank op dit sterke pad) → R1.5 (drempel/ilike) → weeg → R1.6 (parent).
+  const na = await naVerwerking(
+    bewaakt.chunks, "hybride_rrf", vraag, filters, maxResults, maxPerDoc,
+    fondsFilter, peildatum, opt, true
+  );
   return {
-    chunks: r.chunks,
+    chunks: na.chunks,
     meta: {
-      ...r.meta,
+      ...bouwMeta("hybride_rrf", bewaakt.chunks.length, na.chunks),
       embedding_query_success: true,
-      fallback_reason: error ? "rpc_error" : "geen_hybride_treffers",
+      filters: metaFilters(filters),
+      ...fondsMeta(fondsFilter, bewaakt.gedropt),
+      ...(jargon.length ? { jargon_expansie: jargon } : {}),
+      retrieval_pogingen: pogingMeta,
+      // Herkomst per GESELECTEERDE chunk: welke poging leverde hem (audit).
+      poging_herkomst: Object.fromEntries(
+        na.chunks.map((c) => [c.id, herkomstPerId[c.id] ?? "primair"])
+      ),
+      ...na.extra,
     },
   };
 }
