@@ -14,6 +14,10 @@ interface Document {
   bestandstype: "pdf" | "docx" | "xlsx" | null;
   paginas: number | null;
   geindexeerd: boolean;
+  // Besluit 0020/0134 — audit: is dit document via tekstherkenning ontsloten?
+  // Zichtbaar maken is bewust: OCR maakt fouten, en een bestuurder die een getal
+  // overneemt moet kunnen zien dat er een herkenningsstap tussen bron en citaat zit.
+  ocr_toegepast: boolean | null;
   aangemaakt: string;
   actief: boolean;
   opslag_pad: string | null;
@@ -128,7 +132,11 @@ export default function BibliotheekPage() {
     const data = await res.json();
 
     if (data.success) {
-      setUploadBericht(`✅ ${data.bericht}`);
+      // Besluit 0134: een PDF zonder tekstlaag is wél opgeslagen, maar nog niet
+      // doorzoekbaar. Geen ✅ — dat zou "klaar" suggereren terwijl er een
+      // handeling openstaat (guardrail: geen schijnzekerheid).
+      const openVervolgstap = data.status === "tekstherkenning_nodig";
+      setUploadBericht(`${openVervolgstap ? "⚠️" : "✅"} ${data.bericht}`);
       haalDocumenten();
       setUploadOpen(false);
       setUploadForm({ titel: "", bron: "DNB", bibliotheek: "fonds" });
@@ -438,6 +446,18 @@ export default function BibliotheekPage() {
             const kanInzien = !!doc.opslag_pad;
             const isGeneriek = doc.bibliotheek === "generiek";
             const labels = bronkaartLabels(doc);
+            // Besluit 0134 — een actief, niet-geïndexeerd document is niet
+            // doorzoekbaar. Bij een PDF is de oorzaak vrijwel altijd een
+            // ontbrekende tekstlaag (scan) en is tekstherkenning de remedie;
+            // bij een eerder mislukte her-indexering is dat óók de juiste knop.
+            // Bij andere bestandstypen tonen we neutraal wát er aan de hand is
+            // in plaats van een oorzaak te suggereren die we niet kennen.
+            // Generieke documenten uitgesloten: die zijn voor tenants read-only
+            // (B13) en de her-indexeerknop is er bewust verborgen. Een badge die
+            // naar een menu-item wijst dat er niet is, is erger dan geen badge.
+            const nietDoorzoekbaar = !inactief && !doc.geindexeerd && !isGeneriek;
+            const tekstherkenningNodig =
+              nietDoorzoekbaar && doc.bestandstype === "pdf" && kanInzien;
             return (
               <div
                 key={doc.id}
@@ -509,6 +529,30 @@ export default function BibliotheekPage() {
                         ✓ Geïndexeerd
                       </span>
                     )}
+                    {doc.ocr_toegepast && !inactief && (
+                      <span
+                        className="px-2 py-0.5 rounded-full bg-app-bg text-muted font-semibold"
+                        title="De tekst van dit document is via tekstherkenning (OCR) uit een scan gehaald. Controleer overgenomen getallen tegen het origineel."
+                      >
+                        Via tekstherkenning
+                      </span>
+                    )}
+                    {tekstherkenningNodig && (
+                      <span
+                        className="px-2 py-0.5 rounded-full bg-warn-tint text-warn-ink font-semibold"
+                        title="Deze PDF bevat geen tekstlaag — vermoedelijk een scan. Kies in het menu 'Tekstherkenning uitvoeren' om het document alsnog doorzoekbaar te maken."
+                      >
+                        Tekstherkenning nodig
+                      </span>
+                    )}
+                    {nietDoorzoekbaar && !tekstherkenningNodig && (
+                      <span
+                        className="px-2 py-0.5 rounded-full bg-warn-tint text-warn-ink font-semibold"
+                        title="Dit document is nog niet geïndexeerd en wordt daarom niet door de assistent gevonden."
+                      >
+                        Nog niet doorzoekbaar
+                      </span>
+                    )}
                     {doc.status && !inactief && (
                       <span className="px-2 py-0.5 rounded-full bg-app-bg text-muted font-semibold">
                         {doc.status}
@@ -539,6 +583,13 @@ export default function BibliotheekPage() {
                   {inactief && doc.deactivatie_reden && (
                     <div className="text-xs text-muted mt-1 italic">
                       Reden: {doc.deactivatie_reden}
+                    </div>
+                  )}
+                  {tekstherkenningNodig && (
+                    <div className="text-xs text-muted mt-1 italic">
+                      Geen tekstlaag gevonden — de assistent kan dit document nog
+                      niet doorzoeken. Een voorzitter of beheerder kan in het menu
+                      &quot;Tekstherkenning uitvoeren&quot; kiezen.
                     </div>
                   )}
                 </div>
@@ -609,11 +660,19 @@ export default function BibliotheekPage() {
                             }}
                             disabled={herindexId === doc.id}
                             className="w-full text-left px-4 py-2 text-sm text-ink hover:bg-app-bg disabled:opacity-50"
-                            title="Origineel opnieuw door de extractie-pipeline halen: structuur-bewuste fragmenten + verbeterde (contextuele) zoekindex (voorzitter/beheerder)"
+                            title={
+                              tekstherkenningNodig
+                                ? "Tekstherkenning (OCR) op het origineel uitvoeren en het document alsnog doorzoekbaar maken (voorzitter/beheerder). Kan enkele minuten duren."
+                                : "Origineel opnieuw door de extractie-pipeline halen: structuur-bewuste fragmenten + verbeterde (contextuele) zoekindex (voorzitter/beheerder)"
+                            }
                           >
                             {herindexId === doc.id
-                              ? "Bezig met her-indexeren..."
-                              : "Her-indexeren"}
+                              ? tekstherkenningNodig
+                                ? "Bezig met tekstherkenning..."
+                                : "Bezig met her-indexeren..."
+                              : tekstherkenningNodig
+                                ? "Tekstherkenning uitvoeren"
+                                : "Her-indexeren"}
                           </button>
                         )}
                         {!isGeneriek &&

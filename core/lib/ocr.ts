@@ -182,6 +182,33 @@ export async function ocrPdfNaarResultaat(
 export interface ExtractieResultaatMetOcr extends ExtractieResultaat {
   ocrToegepast: boolean;
   ocrEngine: string | null;
+  // Gezet wanneer OCR wél nodig was maar BEWUST niet is uitgevoerd. Zo kan de
+  // aanroeper het verschil zien tussen "geen OCR nodig" en "OCR overgeslagen",
+  // en een eerlijke melding geven i.p.v. een leeg resultaat te presenteren als
+  // een geslaagde extractie (besluit 0134).
+  ocrOvergeslagen?: "te_veel_paginas";
+}
+
+// Pure beslislaag voor de paginagrens (besluit 0134), apart getest in
+// lib/ocr.sanity.ts. Twee bewuste "ja"-gevallen:
+//   • géén grens meegegeven → bulk-/scriptpad zonder requesttimeout;
+//   • ONBEKEND paginaaantal → niet blokkeren op een gegeven dat we niet hebben.
+//     De AbortController-timeout en de maxDuration blijven dan de vangrail.
+export function magOcrDraaien(
+  aantalPaginas: number | null | undefined,
+  maxOcrPaginas?: number
+): boolean {
+  if (maxOcrPaginas == null) return true;
+  if (aantalPaginas == null) return true;
+  return aantalPaginas <= maxOcrPaginas;
+}
+
+// Opties voor de gecombineerde extractie.
+export interface OcrFallbackOpties {
+  // Bovengrens op het aantal pagina's dat synchroon door OCR mag. Boven deze
+  // grens wordt OCR overgeslagen i.p.v. uitgevoerd — de aanroeper beslist wat
+  // dat betekent. Weglaten = geen grens (bulk-/scriptpad, geen requesttimeout).
+  maxOcrPaginas?: number;
 }
 
 // Hoofdingang voor ingest: probeer eerst de goedkope tekstlaag-extractie en val
@@ -189,16 +216,31 @@ export interface ExtractieResultaatMetOcr extends ExtractieResultaat {
 // dan geven we het oorspronkelijke (lege) resultaat terug — de aanroeper houdt
 // zo zijn bestaande "geen tekst gevonden"-afhandeling. Wordt nu gebruikt door de
 // her-extract-route; bedoeld als gedeeld pad dat ook het bulk-migratiescript
-// (apart ticket #12) gaat hergebruiken. De upload-route blijft bewust ongewijzigd
-// (besluit 0020 §Gevolgen: live synchrone OCR pas na timeout-analyse).
+// (apart ticket #12) gaat hergebruiken. De upload-route roept dit pad bewust
+// NIET aan (besluit 0020 §Gevolgen: geen live synchrone OCR op het high-volume
+// uploadpad); die route detecteert alleen dát OCR nodig is en laat de beheerder
+// de her-extractie starten (besluit 0134).
 export async function extractTekstMetOcrFallback(
   buffer: Buffer,
-  bestandstype: Bestandstype
+  bestandstype: Bestandstype,
+  opties: OcrFallbackOpties = {}
 ): Promise<ExtractieResultaatMetOcr> {
   const basis = await extractTekst(buffer, bestandstype);
 
   if (!heeftOcrNodig(basis, bestandstype)) {
     return { ...basis, ocrToegepast: false, ocrEngine: null };
+  }
+
+  // Paginagrens (besluit 0134): OCR is de duurste stap in de keten en de enige
+  // die per pagina extern werk doet. Boven de grens slaan we hem over in plaats
+  // van hem halverwege te laten afbreken.
+  if (!magOcrDraaien(basis.aantalPaginas, opties.maxOcrPaginas)) {
+    return {
+      ...basis,
+      ocrToegepast: false,
+      ocrEngine: null,
+      ocrOvergeslagen: "te_veel_paginas",
+    };
   }
 
   try {

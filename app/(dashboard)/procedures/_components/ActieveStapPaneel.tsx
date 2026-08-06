@@ -13,6 +13,7 @@ import type {
 } from "../[id]/page";
 import VereistenStrook from "./VereistenStrook";
 import BibliotheekPicker from "./BibliotheekPicker";
+import { STATUS_TEKSTHERKENNING_NODIG } from "@/core/lib/ingest-caps";
 
 interface Props {
   procedureId: string;
@@ -85,6 +86,10 @@ export default function ActieveStapPaneel({
   const [conceptHint, setConceptHint] = useState<string | null>(null);
   const [bezig, setBezig] = useState<string | null>(null);
   const [fout, setFout] = useState<string | null>(null);
+  // Niet-blokkerende waarschuwing: de handeling is geslaagd, maar er staat een
+  // vervolgstap open. Bewust gescheiden van `fout` — dat blok is rood en zegt
+  // "er is iets misgegaan", wat hier niet klopt.
+  const [melding, setMelding] = useState<string | null>(null);
 
   const voldaanCount = checklist.filter((c) => c.voldaan).length;
   const totaalCount = checklist.length;
@@ -134,6 +139,7 @@ export default function ActieveStapPaneel({
   async function bewijsToevoegen(e: React.FormEvent) {
     e.preventDefault();
     setFout(null);
+    setMelding(null);
     const titel = bewijsTitel.trim();
     if (!titel) {
       setFout("Titel is verplicht.");
@@ -166,7 +172,28 @@ export default function ActieveStapPaneel({
           );
         }
         const upJson = await upRes.json();
-        documentId = upJson.document?.id ?? upJson.id ?? null;
+        // 06-08-2026: hier stond `upJson.document?.id ?? upJson.id`, maar
+        // /api/documents/upload geeft `document_id` terug. Beide takken waren
+        // dus altijd undefined → `documentId` bleef null en het bewijsstuk werd
+        // zonder koppeling opgeslagen. Het bestand belandde wél in de
+        // bibliotheek, dus er was geen zichtbare fout: het dossier miste stil
+        // de verwijzing naar het onderliggende stuk.
+        documentId = upJson.document_id ?? null;
+        if (!documentId) {
+          throw new Error(
+            "Het bestand is geüpload, maar de koppeling aan dit bewijsstuk is niet gelukt. Koppel het stuk handmatig via 'Kies uit bibliotheek'."
+          );
+        }
+        // Besluit 0134: een PDF zonder tekstlaag wordt bewaard maar is nog niet
+        // doorzoekbaar. Het bewijsstuk is wél correct gekoppeld en in te zien,
+        // maar de assistent vindt er niets in. Dat expliciet melden — een stil
+        // onvindbaar bewijsstuk is precies het soort schijnzekerheid dat een
+        // dossier onbetrouwbaar maakt.
+        if (upJson.status === STATUS_TEKSTHERKENNING_NODIG) {
+          setMelding(
+            "Het bestand is gekoppeld, maar bevat geen tekstlaag — de assistent kan het nog niet doorzoeken. Voer in de bibliotheek 'Tekstherkenning uitvoeren' uit op dit stuk."
+          );
+        }
       }
 
       const res = await fetch(`/api/procedures/${procedureId}/bewijs`, {
@@ -797,6 +824,12 @@ export default function ActieveStapPaneel({
       {fout && (
         <div className="mt-3 text-sm text-err-ink bg-err-tint border border-err/30 rounded-lg px-3 py-2">
           {fout}
+        </div>
+      )}
+
+      {melding && (
+        <div className="mt-3 text-sm text-warn-ink bg-warn-tint border border-warn/30 rounded-lg px-3 py-2">
+          {melding}
         </div>
       )}
 

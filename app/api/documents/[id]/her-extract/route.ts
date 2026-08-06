@@ -9,6 +9,22 @@ import {
   type Bestandstype,
 } from "@/core/lib/document-extractie";
 import { extractTekstMetOcrFallback } from "@/core/lib/ocr";
+import {
+  FOUTCODE_OCR_TE_VEEL_PAGINAS,
+  MAX_OCR_PAGINAS_SYNCHROON,
+  ocrPaginaCapMelding,
+} from "@/core/lib/ingest-caps";
+
+// Deze route doet per aanroep de duurste keten die het portaal kent: storage-
+// download → eventueel volledige OCR (Mistral, tot 3 pogingen × 60 s) → per
+// chunk een context-prefix (Haiku) → embeddings. Zonder expliciete grens draait
+// hij op de Vercel-default en breekt een grote scan halverwege af.
+//
+// Zelfde mitigatie als besluit 0023 voor de generieke curatiepagina; vereist het
+// Vercel Pro-plan + fluid compute (bevestigd aanwezig). De paginacap hieronder
+// (besluit 0134) is de tweede, hardere grens: maxDuration voorkomt afbreken,
+// de cap voorkomt dat we er überhaupt tegenaan lopen.
+export const maxDuration = 300;
 
 // POST /api/documents/[id]/her-extract
 //
@@ -109,7 +125,13 @@ export async function POST(
   // de tekst-drempel hieronder dat gracieus af.
   let extractie;
   try {
-    extractie = await extractTekstMetOcrFallback(buffer, bestandstype);
+    extractie = await extractTekstMetOcrFallback(buffer, bestandstype, {
+      // Paginacap (besluit 0134). Bewust hier en niet vóór de download: pas ná
+      // de goedkope tekstlaag-extractie weten we of OCR überhaupt nodig is. Een
+      // groot document mét tekstlaag mag gewoon her-geïndexeerd worden — de
+      // grens geldt alleen voor de OCR-stap.
+      maxOcrPaginas: MAX_OCR_PAGINAS_SYNCHROON,
+    });
   } catch (error) {
     console.error(`Her-extract: extractie ${bestandstype} mislukt:`, error);
     return NextResponse.json(
@@ -118,7 +140,28 @@ export async function POST(
     );
   }
 
-  if (!extractie.tekst || extractie.tekst.trim().length < 100) {
+  const teWeinigTekst = !extractie.tekst || extractie.tekst.trim().length < 100;
+
+  // Volgorde is bewust: de paginacap mag alleen blokkeren als er ook géén
+  // bruikbare tekst is. `heeftOcrNodig` slaat namelijk óók aan op een dunne
+  // maar echte tekstlaag (bijlagenboek, tekeningenbundel, presentatie-export).
+  // Zou de cap dáár hard weigeren, dan kan zo'n document van meer dan
+  // MAX_OCR_PAGINAS_SYNCHROON pagina's via geen enkel pad meer geïndexeerd
+  // worden — een regressie ten opzichte van het oude gedrag, waar een mislukte
+  // of overgeslagen OCR gewoon terugviel op de basistekst.
+  if (teWeinigTekst && extractie.ocrOvergeslagen === "te_veel_paginas") {
+    return NextResponse.json(
+      {
+        error: ocrPaginaCapMelding(
+          extractie.aantalPaginas ?? MAX_OCR_PAGINAS_SYNCHROON
+        ),
+        foutcode: FOUTCODE_OCR_TE_VEEL_PAGINAS,
+      },
+      { status: 413 }
+    );
+  }
+
+  if (teWeinigTekst) {
     return NextResponse.json(
       {
         error:

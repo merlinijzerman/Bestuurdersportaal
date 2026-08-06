@@ -4,15 +4,21 @@ import { createServerSupabase } from "@/core/lib/supabase-server";
 import { bouwChunkRecords } from "@/core/lib/chunk-ingest";
 import { maakChunksUitSegmenten } from "@/core/lib/chunking";
 import {
+  FOUTCODE_OCR_TE_VEEL_PAGINAS,
   IngestCapError,
+  MAX_OCR_PAGINAS_SYNCHROON,
+  STATUS_TEKSTHERKENNING_NODIG,
   chunkCapMelding,
+  ocrPaginaCapMelding,
   overschrijdtChunkCap,
+  tekstherkenningNodigMelding,
 } from "@/core/lib/ingest-caps";
 import {
   CONTENT_TYPE_PER_BESTANDSTYPE,
   diagnoseerExtractie,
   extractTekst,
 } from "@/core/lib/document-extractie";
+import { heeftOcrNodig } from "@/core/lib/ocr";
 import {
   valideerUpload,
   logNaam,
@@ -303,10 +309,73 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!extractie.tekst || extractie.tekst.trim().length < 100) {
+    // ── Tekstherkenning nodig? (besluit 0134) ─────────────────────────────
+    // Tot 06-08-2026 weigerde deze route een PDF zonder tekstlaag hard met een
+    // 400 en het advies "OCR het zelf en upload opnieuw". Gevolg: de bestaande
+    // OCR-capaciteit op /api/documents/[id]/her-extract was voor een fonds
+    // ONBEREIKBAAR — zonder documentrij is er niets om te her-extracten.
+    //
+    // Twee wijzigingen, samen één ingreep:
+    //  1. Het CRITERIUM is nu `heeftOcrNodig()` (< 50 betekenisvolle tekens per
+    //     PAGINA, lib/ocr.ts) in plaats van "< 100 tekens in het HELE document".
+    //     Die oude drempel liet een scan van 120 pagina's met 150 tekens losse
+    //     tekst gewoon door: die werd als praktisch leeg document geïndexeerd,
+    //     zónder signaal. Dat stille faalpad is hiermee dicht.
+    //  2. Het GEDRAG is bewaren in plaats van weigeren: het document wordt
+    //     aangemaakt (actief, geindexeerd = false) en het origineel gaat naar
+    //     Storage, zodat de beheerder in de bibliotheek "Tekstherkenning
+    //     uitvoeren" kan kiezen. Zie de vervolgtak verderop in deze route.
+    //
+    // OCR blijft hier bewust UIT (besluit 0020): dit is het high-volume pad en
+    // zet geen maxDuration. Alleen PDF — DOCX/XLSX/PPTX hebben per definitie een
+    // tekstlaag, daar helpt OCR niet en blijft de bestaande weigering staan.
+    const ocrNodig = heeftOcrNodig(extractie, bestandstype);
+
+    // Paginacap óók hier controleren, niet alleen op het her-extractpad. Zonder
+    // deze check bewaren we een scan van 120 pagina's met de belofte
+    // "kies Tekstherkenning uitvoeren", terwijl her-extract die knop
+    // gegarandeerd met 413 weigert — en heruploaden stuit op de dedup (409).
+    // Dat is een doodlopende straat: precies de schijnzekerheid die dit
+    // besluit wil wegnemen. Liever nu eerlijk weigeren.
+    if (
+      ocrNodig &&
+      extractie.aantalPaginas != null &&
+      extractie.aantalPaginas > MAX_OCR_PAGINAS_SYNCHROON
+    ) {
+      return NextResponse.json(
+        {
+          error: ocrPaginaCapMelding(extractie.aantalPaginas),
+          foutcode: FOUTCODE_OCR_TE_VEEL_PAGINAS,
+        },
+        { status: 413 }
+      );
+    }
+
+    // Vergaderstukken blijven buiten de bewaartak. Een stuk bij een agendapunt
+    // krijgt een AI-samenvatting die het bestuur gebruikt om zich voor te
+    // bereiden; die stap wordt in de bewaartak overgeslagen en her-extract
+    // genereert géén samenvatting. Het stuk zou dan permanent
+    // "samenvatting wordt nog gegenereerd" tonen in de vergaderkaart — een
+    // stille onwaarheid op precies het pad waar bestuurders op vertrouwen.
+    // Op dit pad dus de bestaande harde weigering, met een route naar de fix.
+    if (ocrNodig && agendapunt_id) {
+      return NextResponse.json(
+        {
+          error:
+            "Dit stuk bevat geen tekstlaag — het is vermoedelijk een scan. " +
+            "Upload het eerst in de bibliotheek, voer daar 'Tekstherkenning " +
+            "uitvoeren' uit, en koppel het daarna aan dit agendapunt. Zo krijgt " +
+            "het stuk ook een AI-samenvatting.",
+          foutcode: STATUS_TEKSTHERKENNING_NODIG,
+        },
+        { status: 400 }
+      );
+    }
+
+    if (!ocrNodig && (!extractie.tekst || extractie.tekst.trim().length < 100)) {
       const melding =
         bestandstype === "pdf"
-          ? "Kon geen tekst uit deze PDF halen — het is vermoedelijk een gescand document zonder tekstlaag. Maak het bestand eerst doorzoekbaar (bijv. via Acrobat 'Tekstherkenning' of Preview 'Exporteer als PDF met OCR') en upload opnieuw."
+          ? "Kon geen bruikbare tekst uit deze PDF halen. Controleer of het bestand niet beschadigd of beveiligd is."
           : `Het ${bestandstype.toUpperCase()}-bestand lijkt geen tekstuele inhoud te bevatten.`;
       return NextResponse.json({ error: melding }, { status: 400 });
     }
@@ -315,15 +384,19 @@ export async function POST(req: NextRequest) {
     // een documentrij aanmaken of de dure prefix-/embedding-stap starten. Boven
     // de cap timet het synchrone indexeerpad; weiger dan met een duidelijke
     // melding i.p.v. een stille mislukking. Geen wees-documentrij.
-    const geplandeChunks = maakChunksUitSegmenten(extractie.segmenten);
-    if (overschrijdtChunkCap(geplandeChunks.length)) {
-      return NextResponse.json(
-        {
-          error: chunkCapMelding(geplandeChunks.length),
-          foutcode: "bestand_te_groot_voor_rag",
-        },
-        { status: 413 }
-      );
+    // Overgeslagen bij een OCR-kandidaat: daar is nog geen bruikbare tekst en
+    // dus geen zinvolle chunktelling; de cap geldt straks bij de her-extractie.
+    if (!ocrNodig) {
+      const geplandeChunks = maakChunksUitSegmenten(extractie.segmenten);
+      if (overschrijdtChunkCap(geplandeChunks.length)) {
+        return NextResponse.json(
+          {
+            error: chunkCapMelding(geplandeChunks.length),
+            foutcode: "bestand_te_groot_voor_rag",
+          },
+          { status: 413 }
+        );
+      }
     }
 
     // Diagnostiek: log waarschuwingen als de extractie er verdacht uitziet.
@@ -413,13 +486,104 @@ export async function POST(req: NextRequest) {
 
     if (storageError) {
       console.error("Fout bij opslaan bestand in Storage:", storageError);
-      // Niet fataal — chunks worden alsnog aangemaakt zodat RAG blijft werken.
-      // De inzage-knop wordt op de bibliotheek-pagina onzichtbaar voor dit doc.
+      // Normaal pad: niet fataal — chunks worden alsnog aangemaakt zodat RAG
+      // blijft werken. De inzage-knop wordt op de bibliotheek-pagina onzichtbaar
+      // voor dit doc.
+      //
+      // OCR-kandidaat: WÉL fataal (besluit 0134). Zonder `opslag_pad` geeft
+      // her-extract een 410 ("origineel niet beschikbaar") en is het document
+      // onherstelbaar: er is geen tekst én geen origineel om alsnog te
+      // herkennen. Dan liever opruimen en eerlijk falen dan een wees-rij die
+      // permanent op "Tekstherkenning nodig" blijft staan.
+      if (ocrNodig) {
+        const { error: opruimError } = await supabase
+          .from("documenten")
+          .delete()
+          .eq("id", document.id);
+        // Slaagt het opruimen niet, dan blijft er een rij staan die nooit
+        // doorzoekbaar kan worden én die bij een nieuwe poging de dedup op
+        // `bestand_hash` triggert (409). Dan liever zeggen wat er echt aan de
+        // hand is dan "probeer het opnieuw" — dat zou tweemaal onwaar zijn.
+        if (opruimError) {
+          console.error(
+            `[documents.upload] opruimen na storage-fout mislukt voor ${document.id}:`,
+            opruimError
+          );
+          return NextResponse.json(
+            {
+              error:
+                "Het origineel kon niet worden opgeslagen en het half " +
+                "aangemaakte document kon niet worden opgeruimd. Neem contact " +
+                "op met de beheerder; het document is niet bruikbaar.",
+              foutcode: "origineel_opslaan_mislukt",
+            },
+            { status: 500 }
+          );
+        }
+        return NextResponse.json(
+          {
+            error:
+              "Het origineel kon niet worden opgeslagen. Omdat deze PDF geen " +
+              "tekstlaag heeft, is het document zonder origineel onbruikbaar — " +
+              "het is daarom niet bewaard. Probeer het opnieuw.",
+            foutcode: "origineel_opslaan_mislukt",
+          },
+          { status: 500 }
+        );
+      }
     } else {
-      await supabase
+      const { error: padError } = await supabase
         .from("documenten")
         .update({ opslag_pad: opslagPad })
         .eq("id", document.id);
+
+      // Op het normale pad is dit niet dragend (het document is doorzoekbaar,
+      // alleen de inzage-knop ontbreekt). Bij een OCR-kandidaat wél: zonder
+      // `opslag_pad` geeft her-extract een 410 en is het document permanent
+      // onherstelbaar. Dus daar dezelfde fail-closed behandeling.
+      if (padError) {
+        console.error(
+          `[documents.upload] opslag_pad zetten mislukt voor ${document.id}:`,
+          padError
+        );
+        if (ocrNodig) {
+          await supabase.from("documenten").delete().eq("id", document.id);
+          return NextResponse.json(
+            {
+              error:
+                "Het document kon niet volledig worden vastgelegd. Omdat deze " +
+                "PDF geen tekstlaag heeft, is het zonder verwijzing naar het " +
+                "origineel onbruikbaar — het is daarom niet bewaard. Probeer " +
+                "het opnieuw.",
+              foutcode: "origineel_opslaan_mislukt",
+            },
+            { status: 500 }
+          );
+        }
+      }
+    }
+
+    // ── Vervolgtak OCR-kandidaat (besluit 0134) ───────────────────────────
+    // Het document is bewaard mét origineel, maar er is nog geen bruikbare
+    // tekst. Chunking, context-prefix, embedding én de AI-samenvatting worden
+    // overgeslagen — die zouden op lege of onzin-tekst draaien en kosten geld.
+    // `geindexeerd` blijft false; de bibliotheek toont "Tekstherkenning nodig"
+    // en biedt de beheerder de her-extractie met OCR-fallback aan.
+    //
+    // Bewust `success: true`: de upload IS geslaagd. `status` maakt de open
+    // vervolgstap expliciet, zodat de UI geen "✅ klaar" suggereert.
+    if (ocrNodig) {
+      return NextResponse.json({
+        success: true,
+        status: STATUS_TEKSTHERKENNING_NODIG,
+        document_id: document.id,
+        titel,
+        bestandstype,
+        paginas: extractie.aantalPaginas,
+        chunks_aangemaakt: 0,
+        samenvatting_aangemaakt: false,
+        bericht: tekstherkenningNodigMelding(titel),
+      });
     }
 
     // R1.1 + R1.2 — gedeelde ingest: structuur-bewuste chunking + context-prefix
