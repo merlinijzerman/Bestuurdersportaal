@@ -98,7 +98,19 @@ export default function Sidebar({
     >
       {/* Logo — brandbaar via fonds-theming (T8): logo-url wint, dan logo-letter,
           anders de default "P". Cosmetisch; geen autorisatiebetekenis. De
-          inklap-hamburger (md-only) klapt de sidebar smal/breed. */}
+          inklap-hamburger (md-only) klapt de sidebar smal/breed.
+
+          06-08-2026: fondslogo's zijn in de praktijk WOORDMERKEN met een brede
+          verhouding (gemeten 1,8:1 tot 3,8:1) en overwegend donkere kleuren.
+          In de vierkante tegel van 40x40 px met achtergrond --nav-accent werden
+          ze onleesbaar; één fonds had bovendien vrijwel dezelfde navy als de
+          tegel, waardoor het logo volledig wegviel. Daarom rendert een logo
+          uitgeklapt nu in een BREDE, TRANSPARANTE STROOK: het logo staat
+          direct op het nav-vlak en lijnt uit met de fondsnaam eronder.
+
+          De vierkante tegel blijft bestaan voor twee gevallen: geen logo (dan
+          de letter — Horizon ongewijzigd) en de INGEKLAPTE zijbalk, waar een
+          brede strook simpelweg niet past. */}
       <div
         className={`border-b border-nav-line ${
           ingeklapt ? "px-5 py-6 md:px-0 md:py-4" : "px-5 py-6"
@@ -113,14 +125,51 @@ export default function Sidebar({
             ingeklapt ? "md:flex-col-reverse md:gap-2 md:mb-0" : "justify-between"
           }`}
         >
-          <div className="w-10 h-10 bg-nav-accent rounded-xl flex items-center justify-center font-black text-lg text-white overflow-hidden flex-shrink-0">
-            {logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={logoUrl} alt="" aria-hidden="true" className="w-full h-full object-contain" />
-            ) : (
-              logoLetter || "P"
-            )}
-          </div>
+          {logoUrl ? (
+            <>
+              {/* Uitgeklapt: brede strook, TRANSPARANT — het logo staat direct
+                  op het nav-vlak. Een eigen witte achtergrond met randje leverde
+                  op de lichte nav van het basispalet een zichtbaar kader in een
+                  kader op; zonder achtergrond lijnt het logo bovendien uit met
+                  de fondsnaam eronder.
+
+                  LET OP bij een donker nav-thema: fondslogo's zijn overwegend
+                  donker, dus zonder lichte ondergrond vallen ze dan weg. Wie
+                  `nav-rgb` overschrijft naar een donkere waarde, levert een
+                  lichte logovariant aan of zet hier een ondergrond terug.
+
+                  `alt=""` + aria-hidden: de fondsnaam staat er als tekst onder,
+                  dus het logo is decoratief en zou anders dubbel worden
+                  voorgelezen. */}
+              <div
+                className={`h-11 flex-1 min-w-0 mr-2 flex items-center ${
+                  ingeklapt ? "md:hidden" : ""
+                }`}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={logoUrl}
+                  alt=""
+                  aria-hidden="true"
+                  className="max-h-7 max-w-full object-contain"
+                />
+              </div>
+              {/* Ingeklapt (md): terug naar de vierkante tegel met de letter —
+                  een woordmerk van 14 px breed is zinloos. Op mobiel is de
+                  zijbalk een lade op volle breedte, dus daar blijft de strook
+                  staan; vandaar `hidden md:flex` (zelfde regel als
+                  bijInklapVerborgen elders in dit bestand). */}
+              {ingeklapt && (
+                <div className="hidden md:flex w-10 h-10 bg-nav-accent rounded-xl items-center justify-center font-black text-lg text-white overflow-hidden flex-shrink-0">
+                  {logoLetter || "P"}
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="w-10 h-10 bg-nav-accent rounded-xl flex items-center justify-center font-black text-lg text-white overflow-hidden flex-shrink-0">
+              {logoLetter || "P"}
+            </div>
+          )}
           <button
             type="button"
             onClick={onToggleInklap}
