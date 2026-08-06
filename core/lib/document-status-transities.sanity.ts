@@ -20,6 +20,7 @@ import {
   vindTransitie,
   isActueleBronStatus,
   toegestaneVervolgstatussen,
+  toegestaneIngestStatussen,
   magBronstatusOvergaan,
   bronstatusRedenVerplicht,
   bronstatusRagImpact,
@@ -38,6 +39,9 @@ console.log("document-status-transitie sanity-tests:");
 // ── Toegestane overgangen (TO §3.1) ───────────────────────────────────
 const TOEGESTAAN: Array<[DocumentStatus | "upload", DocumentStatus]> = [
   ["upload", "concept"],
+  // Ingest-verklaringen (besluit 0136) — aparte herkomst, geen ketensprong.
+  ["upload", "vastgesteld"],
+  ["upload", "van_kracht"],
   ["concept", "ter_bespreking"],
   ["ter_bespreking", "ter_besluitvorming"],
   ["ter_besluitvorming", "vastgesteld"],
@@ -186,6 +190,57 @@ test("bronstatus no-op is geen overgang", () => {
   for (const b of BRONSTATUSSEN) {
     assert.equal(magBronstatusOvergaan(b, b), false);
   }
+});
+
+// ── Statusverklaring bij ingest (besluit 0136) ────────────────────────────
+
+test("ingest-verklaring kan alleen naar vastgesteld of van_kracht", () => {
+  const toegestaan = toegestaneIngestStatussen();
+  assert.deepEqual([...toegestaan].sort(), ["van_kracht", "vastgesteld"]);
+  // `concept` is de default en hoort GEEN verklaring te zijn — anders zou de
+  // UI hem als keuze tonen en suggereren dat er iets verklaard wordt.
+  assert.ok(!toegestaan.includes("concept"));
+});
+
+test("ingest-verklaring levert een ACTUELE bron op", () => {
+  // De hele reden van dit pad: het document moet daarna vindbaar zijn in de
+  // default retrievalmodus. Zou dit ooit false worden, dan is het pad zinloos.
+  for (const naar of toegestaneIngestStatussen()) {
+    assert.equal(isActueleBronStatus(naar), true);
+    assert.equal(vindTransitie("upload", naar)?.bruikbaarInActueleRagNaOvergang, true);
+  }
+});
+
+test("ingest-verklaring vraagt ALTIJD een reden", () => {
+  // Zonder redenplicht is dit een stille sprong langs de bestuurlijke keten.
+  // De reden is wat het auditspoor eerlijk houdt.
+  for (const naar of toegestaneIngestStatussen()) {
+    assert.equal(redenVerplicht("upload", naar), true);
+  }
+  // De gewone upload (naar concept) verklaart niets en vraagt dus geen reden.
+  assert.equal(redenVerplicht("upload", "concept"), false);
+});
+
+test("ingest-verklaring vraagt de statuswijzig-capability, niet 'upload'", () => {
+  for (const naar of toegestaneIngestStatussen()) {
+    assert.equal(vereisteCapability("upload", naar), "documents.status.change");
+  }
+  assert.equal(vereisteCapability("upload", "concept"), "upload");
+});
+
+test("REGRESSIEPIN: de keten vanuit concept is NIET verruimd", () => {
+  // Kern van besluit 0136: de ingest-verklaring is een aparte herkomst, geen
+  // sprong binnen de keten. Wordt dit ooit toegestaan, dan kan een document
+  // dat al ín besluitvorming is stilzwijgend actuele bron worden.
+  assert.equal(magOvergaan("concept", "vastgesteld"), false);
+  assert.equal(magOvergaan("concept", "van_kracht"), false);
+  assert.equal(magOvergaan("ter_bespreking", "vastgesteld"), false);
+  assert.equal(magOvergaan("ter_bespreking", "van_kracht"), false);
+  assert.equal(magOvergaan("ter_besluitvorming", "van_kracht"), false);
+  // En de conceptregel zelf blijft overeind.
+  assert.equal(isActueleBronStatus("concept"), false);
+  assert.equal(isActueleBronStatus("ter_bespreking"), false);
+  assert.equal(isActueleBronStatus("ter_besluitvorming"), false);
 });
 
 console.log(`\n${n} sanity-tests geslaagd.`);

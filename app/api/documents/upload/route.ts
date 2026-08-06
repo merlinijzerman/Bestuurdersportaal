@@ -20,6 +20,14 @@ import {
 } from "@/core/lib/document-extractie";
 import { heeftOcrNodig } from "@/core/lib/ocr";
 import {
+  magOvergaan,
+  redenVerplicht,
+  toegestaneIngestStatussen,
+  vereisteCapability,
+  type DocumentStatus,
+} from "@/core/lib/document-status-transities";
+import { requireCapability, type Capability } from "@/core/lib/capabilities";
+import {
   valideerUpload,
   logNaam,
   MAX_BESTAND_BYTES,
@@ -159,7 +167,7 @@ export async function POST(req: NextRequest) {
 
     const { data: profiel } = await supabase
       .from("profielen")
-      .select("fonds_id, rol")
+      .select("fonds_id, rol, naam")
       .eq("id", user.id)
       .single();
 
@@ -216,6 +224,62 @@ export async function POST(req: NextRequest) {
         { error: "Verplichte velden ontbreken: bestand, bibliotheek, bron, titel" },
         { status: 400 }
       );
+    }
+
+    // -- Statusverklaring bij ingest (besluit 0136) ------------------------
+    // Zonder verklaring blijft het gedrag ongewijzigd: de DB-default zet
+    // `concept` en het document is geen actuele bron. Met verklaring legt de
+    // uploader vast dat het stuk BUITEN het portaal al is vastgesteld -- dat is
+    // eerlijker dan het door de bestuurlijke keten duwen en zo drie overgangen
+    // te fabriceren die nooit hebben plaatsgevonden.
+    //
+    // Drie poorten, alle server-side: (1) de status moet in de transitietabel
+    // staan als toegestane ingest-status, (2) de rol moet de capability uit die
+    // tabel hebben, (3) de reden is verplicht als de tabel dat zegt.
+    const gevraagdeStatus = (formData.get("status") as string)?.trim() || null;
+    const statusReden = (formData.get("status_reden") as string)?.trim() || null;
+    let ingestStatus: DocumentStatus | null = null;
+
+    if (gevraagdeStatus && gevraagdeStatus !== "concept") {
+      const doelStatus = gevraagdeStatus as DocumentStatus;
+      if (!magOvergaan("upload", doelStatus)) {
+        return NextResponse.json(
+          {
+            error:
+              `Status "${gevraagdeStatus}" kan niet bij aanlevering worden verklaard. ` +
+              `Toegestaan: ${toegestaneIngestStatussen().join(", ")}.`,
+            foutcode: "status_bij_ingest_ongeldig",
+          },
+          { status: 400 }
+        );
+      }
+      const cap = vereisteCapability("upload", doelStatus);
+      if (
+        cap &&
+        cap !== "upload" &&
+        !(await requireCapability(user.id, cap as Capability))
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "Onvoldoende rechten om bij aanlevering een status te verklaren. " +
+              "Upload als concept en laat een beheerder of voorzitter de status zetten.",
+          },
+          { status: 403 }
+        );
+      }
+      if (redenVerplicht("upload", doelStatus) && !statusReden) {
+        return NextResponse.json(
+          {
+            error:
+              "Geef een reden bij de statusverklaring -- bijvoorbeeld waar en wanneer " +
+              "het stuk is vastgesteld. Die reden landt in het auditlog.",
+            foutcode: "status_reden_ontbreekt",
+          },
+          { status: 400 }
+        );
+      }
+      ingestStatus = doelStatus;
     }
 
     // ── H-07 (review 2026-07-30): fail-closed uploadvalidatie ──────────────
@@ -459,6 +523,10 @@ export async function POST(req: NextRequest) {
         geindexeerd: false,
         agendapunt_id,
         vergadering_id,
+        // Besluit 0136: alleen zetten als de uploader een status heeft
+        // verklaard. Anders weglaten, zodat de DB-default `concept` blijft
+        // gelden -- dat pad is expliciet ongewijzigd.
+        ...(ingestStatus ? { status: ingestStatus } : {}),
       })
       .select()
       .single();
@@ -560,6 +628,39 @@ export async function POST(req: NextRequest) {
             { status: 500 }
           );
         }
+      }
+    }
+
+    // -- Auditregel bij een statusverklaring (besluit 0136) ----------------
+    // Append-only spoor in document_metadata_log, in dezelfde vorm als de
+    // metadata-PATCH gebruikt. `oude_waarde` is bewust 'upload': er wás geen
+    // vorige status, dit is de herkomst. Zo is in het log te zien dat de status
+    // bij aanlevering is verklaard en niet via de bestuurlijke keten is
+    // gelopen -- precies het onderscheid waar dit besluit om draait.
+    //
+    // Best-effort: een mislukt auditlog mag een geslaagde upload niet
+    // terugdraaien, maar moet wel zichtbaar zijn in de logs.
+    if (ingestStatus) {
+      const { error: auditFout } = await supabase
+        .from("document_metadata_log")
+        .insert({
+          document_id: document.id,
+          document_titel_snapshot: titel,
+          fonds_id: profiel.fonds_id,
+          gewijzigd_door: user.id,
+          gewijzigd_door_naam: profiel.naam ?? null,
+          veld_naam: "status",
+          oude_waarde: "upload",
+          nieuwe_waarde: ingestStatus,
+          wijzig_reden: statusReden,
+          wijzig_type: "status",
+          rag_impact: true,
+        });
+      if (auditFout) {
+        console.error(
+          `[documents.upload] auditlog statusverklaring mislukt voor ${document.id}:`,
+          auditFout
+        );
       }
     }
 

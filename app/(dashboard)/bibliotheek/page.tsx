@@ -92,6 +92,9 @@ export default function BibliotheekPage() {
     titel: "",
     bron: "DNB",
     bibliotheek: "fonds",
+    // Besluit 0136 — statusverklaring bij aanlevering. Leeg = concept (default).
+    status: "",
+    statusReden: "",
   });
 
   useEffect(() => {
@@ -124,6 +127,10 @@ export default function BibliotheekPage() {
     formData.append("titel", uploadForm.titel);
     formData.append("bron", uploadForm.bron);
     formData.append("bibliotheek", uploadForm.bibliotheek);
+    if (uploadForm.status) {
+      formData.append("status", uploadForm.status);
+      formData.append("status_reden", uploadForm.statusReden);
+    }
 
     const res = await fetch("/api/documents/upload", {
       method: "POST",
@@ -139,7 +146,13 @@ export default function BibliotheekPage() {
       setUploadBericht(`${openVervolgstap ? "⚠️" : "✅"} ${data.bericht}`);
       haalDocumenten();
       setUploadOpen(false);
-      setUploadForm({ titel: "", bron: "DNB", bibliotheek: "fonds" });
+      setUploadForm({
+        titel: "",
+        bron: "DNB",
+        bibliotheek: "fonds",
+        status: "",
+        statusReden: "",
+      });
     } else {
       setUploadBericht(`❌ ${data.error}`);
     }
@@ -821,6 +834,58 @@ export default function BibliotheekPage() {
                   ))}
                 </select>
               </div>
+              {/* Besluit 0136 — statusverklaring bij aanlevering. De keten
+                  concept -> ter bespreking -> ter besluitvorming -> vastgesteld
+                  modelleert een stuk dat IN het portaal ontstaat. Een reglement
+                  of jaarverslag is buiten het portaal al vastgesteld; dat hier
+                  verklaren is eerlijker dan achteraf drie overgangen doorlopen
+                  die nooit hebben plaatsgevonden. Server-side gevalideerd tegen
+                  dezelfde transitietabel (rechten + redenplicht). */}
+              <div>
+                <label className="block text-sm font-semibold text-ink mb-1">
+                  Status bij aanlevering
+                </label>
+                <select
+                  value={uploadForm.status}
+                  onChange={(e) =>
+                    setUploadForm({ ...uploadForm, status: e.target.value })
+                  }
+                  className="w-full border border-line rounded-lg px-3 py-2 text-sm outline-none"
+                >
+                  <option value="">Concept — nog geen actuele bron</option>
+                  <option value="vastgesteld">
+                    Vastgesteld — buiten het portaal vastgesteld
+                  </option>
+                  <option value="van_kracht">
+                    Van kracht — buiten het portaal geldend
+                  </option>
+                </select>
+                <p className="text-[11px] text-muted mt-1">
+                  Alleen &quot;vastgesteld&quot; en &quot;van kracht&quot; tellen
+                  als actuele bron voor de assistent. Laat op concept staan als
+                  het stuk nog in besluitvorming is.
+                </p>
+              </div>
+              {uploadForm.status && (
+                <div>
+                  <label className="block text-sm font-semibold text-ink mb-1">
+                    Reden <span className="font-normal text-muted">(verplicht)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={uploadForm.statusReden}
+                    onChange={(e) =>
+                      setUploadForm({ ...uploadForm, statusReden: e.target.value })
+                    }
+                    placeholder="bijv. vastgesteld in bestuursvergadering 12-03-2026"
+                    className="w-full border border-line rounded-lg px-3 py-2 text-sm outline-none focus:border-accent"
+                    required
+                  />
+                  <p className="text-[11px] text-muted mt-1">
+                    Deze reden landt in het auditlog bij het document.
+                  </p>
+                </div>
+              )}
               {/* B13: tenants uploaden uitsluitend naar de fondsbibliotheek.
                   Generieke (platform-gecureerde) documenten worden centraal beheerd. */}
               <p className="text-[11px] text-muted -mt-1">

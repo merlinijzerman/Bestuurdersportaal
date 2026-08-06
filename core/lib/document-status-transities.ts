@@ -154,7 +154,48 @@ export const STATUS_TRANSITIES: StatusTransitie[] = [
     redenplicht: false,
     herindexering: true,
     bruikbaarInActueleRagNaOvergang: false,
-    toelichting: "Upload start altijd als concept; nooit actuele bron.",
+    toelichting:
+      "Upload zonder statusverklaring start als concept; nooit actuele bron.",
+  },
+  // ── Ingest van een REEDS BUITEN HET PORTAAL VASTGESTELD document ──────────
+  // Besluit 0136. De keten concept -> ter_bespreking -> ter_besluitvorming ->
+  // vastgesteld modelleert een document dat IN het portaal ontstaat en via
+  // bestuurlijke besluitvorming rijpt. Een pensioenreglement of jaarverslag dat
+  // je uploadt, is buiten het portaal al vastgesteld; dat door die keten duwen
+  // laat in document_metadata_log een spoor achter van bestuurlijke overgangen
+  // die nooit hebben plaatsgevonden. Voor de aantoonbaarheid is dat slechter,
+  // niet beter: je fabriceert een besluitvormingsgeschiedenis.
+  //
+  // Daarom een aparte, expliciete ingest-verklaring. Bewust zo vormgegeven:
+  //   - alleen vanaf de pseudo-herkomst `upload` -- de keten vanuit `concept`
+  //     blijft ongemoeid, er ontstaat geen sprong binnen de keten;
+  //   - redenplicht = true: de uploader verklaart WAAROM dit al vastgesteld is
+  //     (bv. "vastgesteld in bestuursvergadering 12-03-2026, buiten portaal");
+  //   - capability documents.status.change, dus niet elke uploader mag dit.
+  // De DB-trigger raakt dit pad niet (`before update of status`), maar de
+  // SQL-spiegel fn_document_status_transitie krijgt dezelfde rijen zodat de
+  // tweeling 1-op-1 blijft -- zie migratie 2026_08_06_status_bij_ingest.sql.
+  {
+    van: "upload",
+    naar: "vastgesteld",
+    toegestaan: true,
+    capability: "documents.status.change",
+    redenplicht: true,
+    herindexering: true,
+    bruikbaarInActueleRagNaOvergang: true,
+    toelichting:
+      "Ingest van een buiten het portaal vastgesteld document; reden verplicht.",
+  },
+  {
+    van: "upload",
+    naar: "van_kracht",
+    toegestaan: true,
+    capability: "documents.status.change",
+    redenplicht: true,
+    herindexering: true,
+    bruikbaarInActueleRagNaOvergang: true,
+    toelichting:
+      "Ingest van een buiten het portaal geldend document; reden verplicht.",
   },
   {
     van: "concept",
@@ -290,6 +331,17 @@ export function vereisteCapability(
   naar: DocumentStatus
 ): TransitieCapability | null {
   return vindTransitie(van, naar)?.capability ?? null;
+}
+
+/**
+ * Statussen die bij UPLOAD direct verklaard mogen worden (besluit 0136).
+ * `concept` staat hier bewust NIET bij: dat is de default en vergt geen
+ * verklaring. Alles hier vraagt een reden en de capability uit de tabel.
+ */
+export function toegestaneIngestStatussen(): DocumentStatus[] {
+  return STATUS_TRANSITIES.filter(
+    (t) => t.van === "upload" && t.toegestaan && t.naar !== "concept"
+  ).map((t) => t.naar);
 }
 
 /** Toegestane vervolgstatussen vanuit een huidige status (voor UI: toon
