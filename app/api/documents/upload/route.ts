@@ -13,6 +13,15 @@ import {
   vereisteCapability,
   type DocumentStatus,
 } from "@/core/lib/document-status-transities";
+// Besluit 0140 — classificatie bij aanlevering (documenttype + bronstatus).
+// Puur, gedeeld met de UI, en getest in document-ingest-classificatie.sanity.ts.
+import {
+  beoordeelIngestBronstatus,
+  beoordeelIngestDocumenttype,
+  VEREISTE_BRONSTATUS_CAPABILITY,
+} from "@/core/lib/document-ingest-classificatie";
+import type { Documenttype } from "@/core/lib/document-metadata";
+import type { Bronstatus } from "@/core/lib/document-status-transities";
 import { requireCapability, type Capability } from "@/core/lib/capabilities";
 import {
   valideerUpload,
@@ -46,6 +55,11 @@ type MetadataUitkomst =
       vergadering_id: string | null;
       ingestStatus: DocumentStatus | null;
       statusReden: string | null;
+      // Besluit 0140 — classificatie bij aanlevering.
+      documenttype: Documenttype | null;
+      bronstatus: Bronstatus | null;
+      bronstatusReden: string | null;
+      bronstatusRagImpact: boolean;
     }
   | { ok: false; response: NextResponse };
 
@@ -61,6 +75,9 @@ async function valideerUploadMetadata(
     titel?: string | null;
     status?: string | null;
     status_reden?: string | null;
+    documenttype?: string | null;
+    bronstatus?: string | null;
+    bronstatus_reden?: string | null;
   }
 ): Promise<MetadataUitkomst> {
   const agendapunt_id = raw.agendapunt_id || null;
@@ -153,6 +170,59 @@ async function valideerUploadMetadata(
     ingestStatus = doelStatus;
   }
 
+  // -- Classificatie bij aanlevering (besluit 0140) ---------------------------
+  // Documenttype is verplicht op het BIBLIOTHEEK-pad en optioneel wanneer de
+  // upload uit een andere context komt (vergaderstuk bij een agendapunt,
+  // bewijsstuk bij een processtap). Die stromen tonen de vraag niet, en er
+  // automatisch "bijlage" van maken zou een classificatie verzinnen die we niet
+  // kennen. Zie de toelichting in document-ingest-classificatie.ts.
+  const typeUitkomst = beoordeelIngestDocumenttype(raw.documenttype, {
+    verplicht: !agendapunt_id,
+  });
+  if (!typeUitkomst.ok) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: typeUitkomst.melding, foutcode: typeUitkomst.foutcode },
+        { status: 400 }
+      ),
+    };
+  }
+
+  // Bronstatus loopt door DEZELFDE transitietabel als een latere wijziging, met
+  // dezelfde capability. Zonder deze poort zou upload een achterdeur zijn om de
+  // bronstatus-governance te omzeilen.
+  const bronstatusUitkomst = beoordeelIngestBronstatus(
+    raw.bronstatus,
+    raw.bronstatus_reden
+  );
+  if (!bronstatusUitkomst.ok) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: bronstatusUitkomst.melding, foutcode: bronstatusUitkomst.foutcode },
+        { status: 400 }
+      ),
+    };
+  }
+  if (
+    bronstatusUitkomst.bronstatus &&
+    !(await requireCapability(userId, VEREISTE_BRONSTATUS_CAPABILITY as Capability))
+  ) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        {
+          error:
+            "Onvoldoende rechten om bij aanlevering een bronstatus te verklaren. " +
+            "Upload zonder bronstatus en laat een beheerder of voorzitter hem zetten.",
+          foutcode: "bronstatus_capability_ontbreekt",
+        },
+        { status: 403 }
+      ),
+    };
+  }
+
   // Stuk bij een agendapunt: vergadering_id afleiden. De trigger
   // fn_document_agendapunt_vergadering_check eist gelijkheid (en niet NULL).
   let vergadering_id: string | null = null;
@@ -183,6 +253,11 @@ async function valideerUploadMetadata(
     vergadering_id,
     ingestStatus,
     statusReden,
+    documenttype: typeUitkomst.documenttype,
+    bronstatus: bronstatusUitkomst.bronstatus,
+    bronstatusReden:
+      (typeof raw.bronstatus_reden === "string" ? raw.bronstatus_reden.trim() : "") || null,
+    bronstatusRagImpact: bronstatusUitkomst.ragImpact,
   };
 }
 
@@ -264,6 +339,9 @@ async function initUpload(req: NextRequest, body: Record<string, unknown>) {
       titel: body.titel as string | null,
       status: body.status as string | null,
       status_reden: body.status_reden as string | null,
+      documenttype: body.documenttype as string | null,
+      bronstatus: body.bronstatus as string | null,
+      bronstatus_reden: body.bronstatus_reden as string | null,
     });
     if (!meta.ok) return meta.response;
 
@@ -342,6 +420,9 @@ async function completeUpload(req: NextRequest, body: Record<string, unknown>) {
       titel: body.titel as string | null,
       status: body.status as string | null,
       status_reden: body.status_reden as string | null,
+      documenttype: body.documenttype as string | null,
+      bronstatus: body.bronstatus as string | null,
+      bronstatus_reden: body.bronstatus_reden as string | null,
     });
     if (!meta.ok) return meta.response;
 
@@ -444,6 +525,12 @@ async function completeUpload(req: NextRequest, body: Record<string, unknown>) {
         agendapunt_id: meta.agendapunt_id,
         vergadering_id: meta.vergadering_id,
         ...(meta.ingestStatus ? { status: meta.ingestStatus } : {}),
+        // Besluit 0140. Beide alleen meesturen als ze zijn verklaard: een
+        // ontbrekend documenttype blijft NULL (restgroep "Zonder type") en een
+        // ontbrekende bronstatus blijft NULL (≡ actief). Zo verandert er niets
+        // aan het gedrag van de stromen die deze velden niet aanleveren.
+        ...(meta.documenttype ? { documenttype: meta.documenttype } : {}),
+        ...(meta.bronstatus ? { bronstatus: meta.bronstatus } : {}),
       })
       .select()
       .single();
@@ -469,24 +556,59 @@ async function completeUpload(req: NextRequest, body: Record<string, unknown>) {
       );
     }
 
-    // -- Auditregel bij een statusverklaring (besluit 0136), best-effort --------
+    // -- Auditregels bij een verklaring bij aanlevering, best-effort -----------
+    // Statusverklaring: besluit 0136. Documenttype en bronstatus: besluit 0140.
+    // Alle drie dragen `oude_waarde = 'upload'` — dát is het onderscheidende
+    // kenmerk waaraan je in het log ziet dat de waarde bij AANLEVERING is
+    // verklaard en niet later is gewijzigd.
+    const auditRegels: Array<{
+      veld_naam: string;
+      nieuwe_waarde: string;
+      wijzig_reden: string | null;
+      wijzig_type: string;
+      rag_impact: boolean;
+    }> = [];
     if (meta.ingestStatus) {
+      auditRegels.push({
+        veld_naam: "status",
+        nieuwe_waarde: meta.ingestStatus,
+        wijzig_reden: meta.statusReden,
+        wijzig_type: "status",
+        rag_impact: true,
+      });
+    }
+    if (meta.documenttype) {
+      auditRegels.push({
+        veld_naam: "documenttype",
+        nieuwe_waarde: meta.documenttype,
+        wijzig_reden: null,
+        wijzig_type: "metadata",
+        // documenttype staat in RAG_IMPACT_VELDEN (document-metadata.ts).
+        rag_impact: true,
+      });
+    }
+    if (meta.bronstatus) {
+      auditRegels.push({
+        veld_naam: "bronstatus",
+        nieuwe_waarde: meta.bronstatus,
+        wijzig_reden: meta.bronstatusReden,
+        wijzig_type: "bronstatus",
+        rag_impact: meta.bronstatusRagImpact,
+      });
+    }
+    for (const regel of auditRegels) {
       const { error: auditFout } = await supabase.from("document_metadata_log").insert({
         document_id: document.id,
         document_titel_snapshot: meta.titel,
         fonds_id: profiel.fonds_id,
         gewijzigd_door: user.id,
         gewijzigd_door_naam: profiel.naam ?? null,
-        veld_naam: "status",
         oude_waarde: "upload",
-        nieuwe_waarde: meta.ingestStatus,
-        wijzig_reden: meta.statusReden,
-        wijzig_type: "status",
-        rag_impact: true,
+        ...regel,
       });
       if (auditFout) {
         console.error(
-          `[documents.upload] auditlog statusverklaring mislukt voor ${document.id}:`,
+          `[documents.upload] auditlog ${regel.veld_naam} mislukt voor ${document.id}:`,
           auditFout
         );
       }

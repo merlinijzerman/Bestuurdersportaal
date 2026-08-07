@@ -33,6 +33,12 @@ export interface UploadMetadata {
   agendapunt_id?: string | null;
   status?: string | null;
   status_reden?: string | null;
+  // Besluit 0140 — classificatie bij aanlevering. Beide optioneel: de
+  // vergaderstuk- en bewijsstukstroom leveren ze niet aan en houden daarmee
+  // exact het gedrag van vóór 0140. Server-side blijft leidend.
+  documenttype?: string | null;
+  bronstatus?: string | null;
+  bronstatus_reden?: string | null;
 }
 
 export interface UploadResultaat {

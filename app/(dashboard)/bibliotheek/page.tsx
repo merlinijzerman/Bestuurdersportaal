@@ -1,9 +1,19 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { Fragment, useState, useEffect, useRef } from "react";
 import DocumentMetadataModal from "@/core/components/DocumentMetadataModal";
 import { bronkaartLabels } from "@/core/lib/bronsoort";
 import { DOCUMENTTYPEN, DOCUMENTTYPE_LABEL } from "@/core/lib/document-metadata";
 import { uploadDocument } from "@/core/lib/document-upload-client";
+// Besluit 0140 — bijzonderheden en classificatie bij aanlevering leven in pure,
+// geteste modules; deze pagina rendert ze alleen.
+import {
+  bepaalBijzonderheden,
+  telBijzonderheden,
+  PIPELINE_STATUSSEN,
+  type Bijzonderheid,
+} from "@/core/lib/document-bijzonderheden";
+import { INGEST_BRONSTATUSSEN } from "@/core/lib/document-ingest-classificatie";
+import { BRONSTATUS_LABEL } from "@/core/lib/document-status-transities";
 import ZoekenPaneel from "./_components/ZoekenPaneel";
 
 interface Document {
@@ -39,40 +49,42 @@ interface Document {
   geldig_tot: string | null;
 }
 
-// Pipeline-statussen waarin een document nog asynchroon wordt verwerkt (F3/F4).
-// `beschikbaar` valt hier bewust buiten (dan is geindexeerd true = doorzoekbaar).
-const PIPELINE_STATUSSEN = [
-  "ontvangen",
-  "gevalideerd",
-  "gescand",
-  "extractie",
-  "chunking",
-  "embedding",
-];
-
-// Boven deze leeftijd toont een nog-verwerkend document een eerlijker tekst
-// (§4b verstoring 11): "duurt langer dan verwacht".
-const VERWERKING_TRAAG_MS = 15 * 60 * 1000;
-
 const TYPE_LABEL: Record<NonNullable<Document["bestandstype"]>, string> = {
   pdf: "PDF",
   docx: "Word",
   xlsx: "Excel",
 };
 
-const TYPE_KLEUR: Record<NonNullable<Document["bestandstype"]>, string> = {
-  pdf: "bg-err-tint text-err-ink",
-  docx: "bg-accent-tint text-accent-ink",
-  xlsx: "bg-ok-tint text-ok-ink",
-};
+// Besluit 0140 — het bestandstype staat vooraan als vaste kolom en is bewust
+// KLEURLOOS. De eerdere kleur-per-type (PDF rood, Word blauw, Excel groen) gaf
+// drie extra kleuren in een rij waarin de kleur nodig is voor de bijzonderheden.
+// Het blokje bakent de kolom af; de tekst doet het werk.
+const TYPE_BLOK =
+  "inline-flex items-center justify-center min-w-[46px] h-5 rounded border " +
+  "border-app-line-strong bg-app-zebra text-[9.5px] font-bold tracking-wider text-muted";
 
+// Groepsvolgorde op de generieke tab (betekenisvol, niet alfabetisch).
 const BRONNEN = ["DNB", "AFM", "Pensioenfederatie", "Intern", "Extern"];
-const BRONKLEUR: Record<string, string> = {
-  DNB: "bg-err-tint text-err-ink",
-  AFM: "bg-accent-tint text-accent-ink",
-  Pensioenfederatie: "bg-ok-tint text-ok-ink",
-  Intern: "bg-warn-tint text-warn-ink",
-  Extern: "bg-warn-tint text-warn-ink",
+
+// Volgorde in het uploadformulier — een tenant-upload is per definitie een
+// fondsdocument, dus Intern staat vooraan en is de default (besluit 0140).
+// DNB/AFM/PF blijven kiesbaar: een fonds ontvangt wel degelijk een
+// fondsspecifieke toezichtbrief. Generieke (platform-gecureerde) documenten
+// lopen niet via deze route (B13).
+const UPLOAD_BRONNEN = ["Intern", "Extern", "DNB", "AFM", "Pensioenfederatie"];
+
+// Hoeveel documenten een groep in rust toont. Bewust "toon er meer" en geen
+// paginering: zoeken en filteren werken over de HELE groep, en de groepskop
+// blijft de volledige telling tonen, zodat je nooit denkt dat je alles ziet.
+const GROEP_STAP = 25;
+
+/** Kleur per soort bijzonderheid. De stip draagt de kleur, de tekst blijft
+ *  gedempt — dat houdt een tabel met tientallen rijen rustig. Vorm is de
+ *  tweede, niet-kleurgebonden drager (besluit 0097). */
+const SOORT_STIP: Record<Bijzonderheid["soort"], string> = {
+  fout: "bg-err rotate-45 rounded-[2px]",
+  let_op: "bg-warn rounded-full",
+  audit: "bg-phase rounded-[2px]",
 };
 
 export default function BibliotheekPage() {
@@ -107,14 +119,39 @@ export default function BibliotheekPage() {
   const [uploadBericht, setUploadBericht] = useState("");
   const bestandRef = useRef<HTMLInputElement>(null);
 
+  // Besluit 0140 — hoeveel documenten er per groep zijn uitgeklapt ("toon er
+  // meer"). Afwezig = de standaardstap. Gaat bewust op groepsleutel en niet op
+  // index: bij zoeken/filteren verschuift de volgorde, de sleutel niet.
+  const [zichtbaarPerGroep, setZichtbaarPerGroep] = useState<Record<string, number>>({});
+
   const [uploadForm, setUploadForm] = useState({
     titel: "",
-    bron: "DNB",
+    // Besluit 0140 — default Intern i.p.v. DNB. De oude default botste met B13:
+    // generieke DNB/AFM/PF-documenten worden centraal gecureerd en kunnen niet
+    // via deze route worden aangeleverd.
+    bron: "Intern",
     bibliotheek: "fonds",
+    // Besluit 0140 — verplicht op dit pad; ruimt de restgroep "Zonder type" op.
+    documenttype: "",
     // Besluit 0136 — statusverklaring bij aanlevering. Leeg = concept (default).
     status: "",
     statusReden: "",
+    // Besluit 0140 — bronstatusverklaring bij aanlevering. Leeg = actief.
+    bronstatus: "",
+    bronstatusReden: "",
   });
+
+  /** Het lege formulier — één definitie, gebruikt bij reset na een upload. */
+  const LEEG_UPLOADFORM = {
+    titel: "",
+    bron: "Intern",
+    bibliotheek: "fonds",
+    documenttype: "",
+    status: "",
+    statusReden: "",
+    bronstatus: "",
+    bronstatusReden: "",
+  };
 
   useEffect(() => {
     haalDocumenten();
@@ -146,7 +183,7 @@ export default function BibliotheekPage() {
       (d) =>
         d.actief &&
         !d.geindexeerd &&
-        PIPELINE_STATUSSEN.includes(d.verwerkingsstatus ?? "")
+        (PIPELINE_STATUSSEN as readonly string[]).includes(d.verwerkingsstatus ?? "")
     );
     if (!inVerwerking) {
       pollRondes.current = 0;
@@ -175,8 +212,15 @@ export default function BibliotheekPage() {
         titel: uploadForm.titel,
         bron: uploadForm.bron,
         bibliotheek: uploadForm.bibliotheek,
+        documenttype: uploadForm.documenttype,
         ...(uploadForm.status
           ? { status: uploadForm.status, status_reden: uploadForm.statusReden }
+          : {}),
+        ...(uploadForm.bronstatus
+          ? {
+              bronstatus: uploadForm.bronstatus,
+              bronstatus_reden: uploadForm.bronstatusReden,
+            }
           : {}),
       });
 
@@ -187,13 +231,7 @@ export default function BibliotheekPage() {
         setUploadBericht(`${icoon} ${res.bericht ?? ""}`);
         haalDocumenten();
         setUploadOpen(false);
-        setUploadForm({
-          titel: "",
-          bron: "DNB",
-          bibliotheek: "fonds",
-          status: "",
-          statusReden: "",
-        });
+        setUploadForm(LEEG_UPLOADFORM);
       } else {
         setUploadBericht(
           `❌ ${res.error ?? "Uploaden is niet gelukt. Probeer het opnieuw of neem contact op met de beheerder."}`
@@ -343,6 +381,44 @@ export default function BibliotheekPage() {
     if (zonder) groepen.push({ key: "__zonder__", label: "Zonder type", docs: zonder });
     return groepen;
   }
+
+  // Besluit 0140 — wat betekent de gekozen status/bronstatus voor de assistent?
+  // Afgeleid uit dezelfde regel die de retrieval hanteert: alleen `vastgesteld`
+  // en `van_kracht` zijn actuele-bron-statussen (ACTUELE_BRON_STATUSSEN), en
+  // bronstatus kan dat alsnog uitzetten. Bewust hier en niet in de tokenlaag:
+  // dit is tekst, geen kleur.
+  const uploadGevolg: { toon: "ok" | "warn" | "neutraal"; tekst: string } = (() => {
+    if (uploadForm.bronstatus === "uitgesloten") {
+      return {
+        toon: "warn",
+        tekst:
+          "Dit document wordt bewaard en is vindbaar in de bibliotheek, maar de assistent gebruikt het nooit als bron.",
+      };
+    }
+    if (uploadForm.bronstatus === "historisch") {
+      return {
+        toon: "warn",
+        tekst:
+          "Dit document blijft doorzoekbaar voor historisch onderzoek, maar telt niet mee als actuele bron. De assistent citeert het niet als geldend.",
+      };
+    }
+    if (uploadForm.status === "van_kracht" || uploadForm.status === "vastgesteld") {
+      return {
+        toon: "ok",
+        tekst:
+          "Dit document wordt na verwerking doorzoekbaar en kan door de assistent worden geciteerd als actuele bron.",
+      };
+    }
+    return {
+      toon: "neutraal",
+      tekst:
+        "Concept — dit document wordt wél geïndexeerd, maar geldt niet als actuele bron. De assistent citeert het niet als geldend.",
+    };
+  })();
+
+  // Aantal kolommen in de tabel — de kolom "Bron" bestaat alleen op de generieke
+  // tab. Groepskoppen en de "toon er meer"-rij spannen hierover.
+  const kolomAantal = actieveTab === "generiek" ? 8 : 7;
 
   return (
     <div className="p-4 sm:p-6 lg:p-7">
@@ -499,234 +575,213 @@ export default function BibliotheekPage() {
           </p>
         </div>
       ) : (
-        <div className="space-y-4">
+        /* Besluit 0140 — tabelweergave. Vaste kolomposities in plaats van een
+           badgerij: het oog leert waar de datum staat en kan hele kolommen
+           aflopen. De kolom "Bijzonderheden" is in rust LEEG; dat lege veld is
+           het punt, want daardoor springt een afwijking eruit. */
+        <div className="overflow-hidden rounded-xl border border-line bg-app-surface shadow-card">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-app-zebra text-left text-[10.5px] font-bold uppercase tracking-wider text-muted">
+                <th className="w-[64px] whitespace-nowrap border-b-[1.5px] border-app-line-strong px-3 py-2.5">
+                  Type
+                </th>
+                <th className="border-b-[1.5px] border-app-line-strong px-3 py-2.5">
+                  Document
+                </th>
+                {/* Bron staat alleen op de GENERIEKE tab. In de fondsbibliotheek
+                    is vrijwel alles "Intern" — een kolom die bij 90% van de
+                    rijen hetzelfde zegt kost breedte en levert niets op. Op de
+                    generieke tab varieert hij wél (DNB/AFM/PF) en is hij juist
+                    de meest informatieve kolom. */}
+                {actieveTab === "generiek" && (
+                  <th className="w-[104px] whitespace-nowrap border-b-[1.5px] border-app-line-strong px-3 py-2.5">
+                    Bron
+                  </th>
+                )}
+                <th className="w-[110px] whitespace-nowrap border-b-[1.5px] border-app-line-strong px-3 py-2.5">
+                  Bronstatus
+                </th>
+                <th className="w-[86px] whitespace-nowrap border-b-[1.5px] border-app-line-strong px-3 py-2.5 text-right">
+                  Omvang
+                </th>
+                <th className="w-[104px] whitespace-nowrap border-b-[1.5px] border-app-line-strong px-3 py-2.5 text-right">
+                  Toegevoegd
+                </th>
+                <th className="w-[210px] border-b-[1.5px] border-app-line-strong px-3 py-2.5">
+                  Bijzonderheden
+                </th>
+                <th className="w-[44px] border-b-[1.5px] border-app-line-strong px-3 py-2.5" />
+              </tr>
+            </thead>
+            <tbody>
           {groepeer(gefilterd).map((groep) => {
             const groepKey = `${actieveTab}:${groep.key}`;
             const open = !ingeklapteGroepen.has(groepKey);
+            const zichtbaar = zichtbaarPerGroep[groepKey] ?? GROEP_STAP;
+            const getoond = open ? groep.docs.slice(0, zichtbaar) : [];
+            const rest = groep.docs.length - getoond.length;
+            const samenvatting = telBijzonderheden(groep.docs);
             return (
-              <div key={groepKey}>
-                <button
-                  type="button"
-                  onClick={() => toggleGroep(groepKey)}
-                  className="flex items-center gap-2 w-full text-left mb-2"
-                >
-                  <span
-                    className={`text-muted text-[10px] transition-transform ${
-                      open ? "rotate-90" : ""
-                    }`}
-                  >
-                    ▶
-                  </span>
-                  <span className="text-sm font-bold text-ink">
-                    {groep.label}
-                  </span>
-                  <span className="rounded-full bg-app-bg px-2 py-0.5 text-xs font-semibold text-muted">
-                    {groep.docs.length}
-                  </span>
-                </button>
-                {open && (
-                  <div className="space-y-2">
-                    {groep.docs.map((doc) => {
+              <Fragment key={groepKey}>
+                <tr>
+                  <td colSpan={kolomAantal} className="border-b border-app-line-strong bg-app-bg p-0">
+                    <button
+                      type="button"
+                      onClick={() => toggleGroep(groepKey)}
+                      aria-expanded={open}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-bold uppercase tracking-wider text-muted transition-colors hover:bg-accent-tint hover:text-accent-ink"
+                    >
+                      <span
+                        className={`text-[9px] transition-transform ${open ? "" : "-rotate-90"}`}
+                      >
+                        ▼
+                      </span>
+                      {groep.label}
+                      <span className="rounded-full border border-line bg-app-surface px-2 py-0.5 text-[10.5px] font-semibold normal-case tracking-normal">
+                        {groep.docs.length}
+                      </span>
+                      {/* Zonder deze samenvatting verbergt inklappen precies de
+                          informatie die je zoekt: je klapt een groep dicht en
+                          mist dat daar een niet-verwerkt document in zit. */}
+                      <span className="ml-auto flex items-center gap-1.5 text-[11.5px] font-medium normal-case tracking-normal text-muted">
+                        <span
+                          className={`h-[7px] w-[7px] shrink-0 ${
+                            samenvatting.zwaarste
+                              ? SOORT_STIP[samenvatting.zwaarste]
+                              : "rounded-full bg-ok"
+                          }`}
+                        />
+                        {samenvatting.met > 0
+                          ? `${samenvatting.met} met bijzonderheden`
+                          : "geen bijzonderheden"}
+                      </span>
+                    </button>
+                  </td>
+                </tr>
+                {getoond.map((doc) => {
             const inactief = !doc.actief;
             const kanInzien = !!doc.opslag_pad;
             const isGeneriek = doc.bibliotheek === "generiek";
             const labels = bronkaartLabels(doc);
-            // Besluit 0134 — een actief, niet-geïndexeerd document is niet
-            // doorzoekbaar. Bij een PDF is de oorzaak vrijwel altijd een
-            // ontbrekende tekstlaag (scan) en is tekstherkenning de remedie;
-            // bij een eerder mislukte her-indexering is dat óók de juiste knop.
-            // Bij andere bestandstypen tonen we neutraal wát er aan de hand is
-            // in plaats van een oorzaak te suggereren die we niet kennen.
-            // Generieke documenten uitgesloten: die zijn voor tenants read-only
-            // (B13) en de her-indexeerknop is er bewust verborgen. Een badge die
-            // naar een menu-item wijst dat er niet is, is erger dan geen badge.
-            // Async ingest (F3/F4): onderscheid "wordt verwerkt" en "mislukt" van
-            // de OCR-/niet-doorzoekbaar-toestanden, die geen pipeline-status dragen.
-            const inVerwerking =
-              !inactief &&
-              !doc.geindexeerd &&
-              PIPELINE_STATUSSEN.includes(doc.verwerkingsstatus ?? "");
-            const verwerkingTraag =
-              inVerwerking &&
-              Date.now() - new Date(doc.aangemaakt).getTime() > VERWERKING_TRAAG_MS;
+            // Besluit 0140 — de bijzonderheden komen uit één pure, geteste
+            // functie (core/lib/document-bijzonderheden.ts). Hier stond eerder
+            // een reeks booleans met onderlinge uitsluitingen; precies het soort
+            // logica dat stil verkeerd gaat zodra er een pipeline-status bijkomt.
+            const bijzonderheden = bepaalBijzonderheden(doc);
+            // Twee afgeleiden die het MENU nog nodig heeft (niet de rij).
             const verwerkingMislukt = !inactief && doc.verwerkingsstatus === "mislukt";
-            const verwerkingGeweigerd =
-              !inactief &&
-              (doc.verwerkingsstatus === "geweigerd" ||
-                doc.verwerkingsstatus === "gequarantineerd");
-            const nietDoorzoekbaar =
-              !inactief &&
-              !doc.geindexeerd &&
-              !isGeneriek &&
-              !inVerwerking &&
-              !verwerkingMislukt &&
-              !verwerkingGeweigerd;
-            const tekstherkenningNodig =
-              nietDoorzoekbaar && doc.bestandstype === "pdf" && kanInzien;
+            const tekstherkenningNodig = bijzonderheden.some(
+              (b) => b.sleutel === "geen_tekstlaag"
+            );
             return (
-              <div
+              <tr
                 key={doc.id}
-                className={`relative bg-white border rounded-xl p-4 flex items-center gap-4 transition-colors ${
-                  inactief
-                    ? "border-line opacity-70"
-                    : "border-line hover:border-accent"
+                className={`transition-colors hover:bg-app-zebra ${
+                  inactief ? "opacity-70" : ""
                 }`}
               >
-                <div className="w-10 h-10 bg-app-bg rounded-lg flex items-center justify-center text-xl flex-shrink-0">
-                  📋
-                </div>
-                <div className="flex-1 min-w-0">
+                <td className="border-b border-line px-3 py-2">
+                  {doc.bestandstype ? (
+                    <span className={TYPE_BLOK}>{TYPE_LABEL[doc.bestandstype]}</span>
+                  ) : (
+                    <span className={TYPE_BLOK}>—</span>
+                  )}
+                </td>
+
+                <td className="min-w-0 border-b border-line px-3 py-2">
                   {kanInzien && !inactief ? (
                     <a
                       href={`/api/documents/${doc.id}/bestand`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="font-semibold text-ink text-sm truncate hover:text-accent transition-colors block"
+                      className="block truncate font-semibold text-ink transition-colors hover:text-accent hover:underline"
                       title="Origineel openen of downloaden"
                     >
                       {doc.titel}
                     </a>
                   ) : (
                     <div
-                      className={`font-semibold text-sm truncate ${
-                        inactief ? "text-muted" : "text-ink"
+                      className={`truncate font-semibold ${
+                        inactief ? "text-muted line-through" : "text-ink"
                       }`}
+                      title={
+                        kanInzien
+                          ? undefined
+                          : "Origineel niet beschikbaar — vóór mei 2026 geüpload"
+                      }
                     >
                       {doc.titel}
                     </div>
                   )}
-                  <div className="flex items-center gap-2 mt-1 text-xs text-muted flex-wrap">
-                    <span
-                      className={`px-2 py-0.5 rounded-full font-semibold ${
-                        BRONKLEUR[doc.bron] || "bg-app-bg text-muted"
-                      }`}
-                    >
-                      {doc.bron}
-                    </span>
-                    {doc.bestandstype && (
-                      <span
-                        className={`px-2 py-0.5 rounded-full font-semibold ${TYPE_KLEUR[doc.bestandstype]}`}
-                      >
-                        {TYPE_LABEL[doc.bestandstype]}
-                      </span>
-                    )}
-                    {isGeneriek && (
-                      <span className="px-2 py-0.5 rounded-full bg-accent-tint text-accent-ink font-semibold border border-accent/30">
+                  {/* Bronsoort en vervallen-markering horen bij de IDENTITEIT van
+                      een generiek document (welk kader, nog geldend?) en niet bij
+                      de bijzonderheden. Ze staan daarom onder de titel en niet in
+                      de signaalkolom. */}
+                  {isGeneriek && (
+                    <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted">
+                      <span className="rounded-full border border-accent/30 bg-accent-tint px-2 py-0.5 font-semibold text-accent-ink">
                         {labels.bronsoortLabel}
                       </span>
-                    )}
-                    {isGeneriek && labels.vervallen && (
-                      <span className="px-2 py-0.5 rounded-full bg-err-tint text-err-ink font-semibold border border-err/30">
-                        {labels.vervallenLabel}
-                      </span>
-                    )}
-                    {doc.paginas && (
-                      <span>
-                        {doc.paginas}{" "}
-                        {doc.bestandstype === "xlsx" ? "tabbladen" : "pag."}
-                      </span>
-                    )}
-                    <span>
-                      {new Date(doc.aangemaakt).toLocaleDateString("nl-NL")}
-                    </span>
-                    {doc.geindexeerd && !inactief && (
-                      <span className="text-ok-ink font-semibold">
-                        ✓ Geïndexeerd
-                      </span>
-                    )}
-                    {inVerwerking && (
-                      <span
-                        className="px-2 py-0.5 rounded-full bg-warn-tint text-warn-ink font-semibold"
-                        title={
-                          verwerkingTraag
-                            ? "De verwerking duurt langer dan verwacht. Neem contact op met de beheerder als dit aanhoudt."
-                            : "Dit document wordt nu verwerkt en is binnen enkele minuten doorzoekbaar."
-                        }
-                      >
-                        ⏳ {verwerkingTraag ? "Verwerken — duurt langer dan verwacht" : "Verwerken…"}
-                      </span>
-                    )}
-                    {verwerkingMislukt && (
-                      <span
-                        className="px-2 py-0.5 rounded-full bg-err-tint text-err-ink font-semibold"
-                        title="De verwerking is mislukt. Een voorzitter of beheerder kan 'Opnieuw verwerken' kiezen."
-                      >
-                        Verwerking mislukt
-                      </span>
-                    )}
-                    {verwerkingGeweigerd && (
-                      <span
-                        className="px-2 py-0.5 rounded-full bg-err-tint text-err-ink font-semibold"
-                        title="Dit bestand is bij de veiligheidscontrole afgewezen en is niet doorzoekbaar."
-                      >
-                        Geweigerd
-                      </span>
-                    )}
-                    {doc.ocr_toegepast && !inactief && (
-                      <span
-                        className="px-2 py-0.5 rounded-full bg-app-bg text-muted font-semibold"
-                        title="De tekst van dit document is via tekstherkenning (OCR) uit een scan gehaald. Controleer overgenomen getallen tegen het origineel."
-                      >
-                        Via tekstherkenning
-                      </span>
-                    )}
-                    {tekstherkenningNodig && (
-                      <span
-                        className="px-2 py-0.5 rounded-full bg-warn-tint text-warn-ink font-semibold"
-                        title="Deze PDF bevat geen tekstlaag — vermoedelijk een scan. Kies in het menu 'Tekstherkenning uitvoeren' om het document alsnog doorzoekbaar te maken."
-                      >
-                        Tekstherkenning nodig
-                      </span>
-                    )}
-                    {nietDoorzoekbaar && !tekstherkenningNodig && (
-                      <span
-                        className="px-2 py-0.5 rounded-full bg-warn-tint text-warn-ink font-semibold"
-                        title="Dit document is nog niet geïndexeerd en wordt daarom niet door de assistent gevonden."
-                      >
-                        Nog niet doorzoekbaar
-                      </span>
-                    )}
-                    {doc.status && !inactief && (
-                      <span className="px-2 py-0.5 rounded-full bg-app-bg text-muted font-semibold">
-                        {doc.status}
-                      </span>
-                    )}
-                    {doc.metadata_review_status === "te_controleren" && !inactief && (
-                      <span className="px-2 py-0.5 rounded-full bg-warn-tint text-warn-ink font-semibold">
-                        Nog niet verrijkt
-                      </span>
-                    )}
-                    {inactief && (
-                      <span
-                        className="px-2 py-0.5 rounded-full bg-err-tint text-err-ink font-semibold"
-                        title={doc.deactivatie_reden ?? undefined}
-                      >
-                        Gedeactiveerd
-                      </span>
-                    )}
-                    {!kanInzien && !inactief && (
-                      <span
-                        className="text-muted"
-                        title="Origineel niet beschikbaar — vóór mei 2026 geüpload"
-                      >
-                        Origineel niet beschikbaar
-                      </span>
-                    )}
-                  </div>
-                  {inactief && doc.deactivatie_reden && (
-                    <div className="text-xs text-muted mt-1 italic">
-                      Reden: {doc.deactivatie_reden}
+                      {labels.vervallen && (
+                        <span className="rounded-full border border-err/30 bg-err-tint px-2 py-0.5 font-semibold text-err-ink">
+                          {labels.vervallenLabel}
+                        </span>
+                      )}
                     </div>
                   )}
-                  {tekstherkenningNodig && (
-                    <div className="text-xs text-muted mt-1 italic">
-                      Geen tekstlaag gevonden — de assistent kan dit document nog
-                      niet doorzoeken. Een voorzitter of beheerder kan in het menu
-                      &quot;Tekstherkenning uitvoeren&quot; kiezen.
-                    </div>
-                  )}
-                </div>
+                </td>
 
+                {actieveTab === "generiek" && (
+                  <td className="whitespace-nowrap border-b border-line px-3 py-2 text-[12px] text-muted">
+                    {doc.bron}
+                  </td>
+                )}
+
+                {/* Bronstatus: NULL ≡ actief (migratie 2026_06_18 §2d). "Actief"
+                    is de normale toestand en blijft daarom gedempt; een afwijking
+                    krijgt een pill zodat hij opvalt. */}
+                <td className="whitespace-nowrap border-b border-line px-3 py-2">
+                  {doc.bronstatus && doc.bronstatus !== "actief" ? (
+                    <span className="inline-flex h-5 items-center rounded-full bg-app-bg px-2 text-[10.5px] font-semibold text-muted">
+                      {BRONSTATUS_LABEL[
+                        doc.bronstatus as keyof typeof BRONSTATUS_LABEL
+                      ] ?? doc.bronstatus}
+                    </span>
+                  ) : (
+                    <span className="text-[12px] text-muted">Actief</span>
+                  )}
+                </td>
+
+                <td className="whitespace-nowrap border-b border-line px-3 py-2 text-right text-[12px] tabular-nums text-muted">
+                  {doc.paginas
+                    ? `${doc.paginas} ${doc.bestandstype === "xlsx" ? "tabbladen" : "pag."}`
+                    : "—"}
+                </td>
+
+                <td className="whitespace-nowrap border-b border-line px-3 py-2 text-right text-[12px] tabular-nums text-muted">
+                  {new Date(doc.aangemaakt).toLocaleDateString("nl-NL")}
+                </td>
+
+                {/* In rust leeg. Dat is het uitgangspunt van 0140: alleen
+                    afwijkingen krijgen beeldoppervlak. De kleur zit in de stip,
+                    niet in de tekst — dat houdt een lange tabel rustig. */}
+                <td className="border-b border-line px-3 py-2">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    {bijzonderheden.map((b) => (
+                      <span
+                        key={b.sleutel}
+                        title={b.toelichting}
+                        className="inline-flex items-center gap-1.5 whitespace-nowrap text-[12px] text-muted"
+                      >
+                        <span className={`h-[7px] w-[7px] shrink-0 ${SOORT_STIP[b.soort]}`} />
+                        {b.label}
+                      </span>
+                    ))}
+                  </div>
+                </td>
+
+                <td className="border-b border-line px-1 py-2 text-center">
                 {/* Kebab-menu */}
                 <div className="relative flex-shrink-0">
                   <button
@@ -744,7 +799,7 @@ export default function BibliotheekPage() {
                         className="fixed inset-0 z-10"
                         onClick={() => setOpenMenuId(null)}
                       />
-                      <div className="absolute right-0 top-9 z-20 bg-white border border-line rounded-lg shadow-lg py-1 min-w-[180px]">
+                      <div className="absolute right-0 top-9 z-20 min-w-[180px] rounded-lg border border-line bg-app-surface py-1 shadow-lg">
                         {!inactief && (
                           <button
                             onClick={() => {
@@ -850,14 +905,77 @@ export default function BibliotheekPage() {
                     </>
                   )}
                 </div>
-              </div>
+                </td>
+              </tr>
             );
-                    })}
-                  </div>
+                })}
+                {/* "Toon er meer" — geen paginering (besluit 0140). De telling
+                    hierboven blijft de VOLLEDIGE groep tonen, zodat je nooit
+                    denkt dat je alles ziet terwijl dat niet zo is. */}
+                {open && rest > 0 && (
+                  <tr>
+                    <td
+                      colSpan={kolomAantal}
+                      className="border-b border-app-line-strong bg-app-zebra px-3 py-2"
+                    >
+                      <div className="flex flex-wrap items-center gap-3 text-[12px] text-muted">
+                        <span>
+                          {getoond.length} van {groep.docs.length} getoond
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setZichtbaarPerGroep((s) => ({
+                              ...s,
+                              [groepKey]: zichtbaar + GROEP_STAP,
+                            }))
+                          }
+                          className="rounded-lg border border-app-line-control bg-app-surface px-3 py-1 text-[12px] font-semibold text-accent-ink transition-colors hover:bg-app-zebra"
+                        >
+                          Toon volgende {Math.min(GROEP_STAP, rest)}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setZichtbaarPerGroep((s) => ({
+                              ...s,
+                              [groepKey]: groep.docs.length,
+                            }))
+                          }
+                          className="rounded-lg border border-app-line-control bg-app-surface px-3 py-1 text-[12px] font-semibold text-accent-ink transition-colors hover:bg-app-zebra"
+                        >
+                          Toon alle {groep.docs.length}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
                 )}
-              </div>
+                {open && rest <= 0 && zichtbaar > GROEP_STAP && (
+                  <tr>
+                    <td
+                      colSpan={kolomAantal}
+                      className="border-b border-app-line-strong bg-app-zebra px-3 py-2"
+                    >
+                      <div className="flex flex-wrap items-center gap-3 text-[12px] text-muted">
+                        <span>Alle {groep.docs.length} documenten getoond</span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setZichtbaarPerGroep((s) => ({ ...s, [groepKey]: GROEP_STAP }))
+                          }
+                          className="rounded-lg border border-app-line-control bg-app-surface px-3 py-1 text-[12px] font-semibold text-accent-ink transition-colors hover:bg-app-zebra"
+                        >
+                          Weer inkorten
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
             );
           })}
+            </tbody>
+          </table>
         </div>
       )}
       </>
@@ -957,17 +1075,48 @@ export default function BibliotheekPage() {
                   required
                 />
               </div>
-              <div>
-                <label className="block text-sm font-semibold text-ink mb-1">Bron</label>
-                <select
-                  value={uploadForm.bron}
-                  onChange={(e) => setUploadForm({ ...uploadForm, bron: e.target.value })}
-                  className="w-full border border-line rounded-lg px-3 py-2 text-sm outline-none"
-                >
-                  {BRONNEN.map((b) => (
-                    <option key={b} value={b}>{b}</option>
-                  ))}
-                </select>
+              {/* Besluit 0140 — twee velden naast elkaar: waar komt het vandaan
+                  en wat voor stuk is het. Samen de classificatie. */}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="block text-sm font-semibold text-ink mb-1">Bron</label>
+                  <select
+                    value={uploadForm.bron}
+                    onChange={(e) => setUploadForm({ ...uploadForm, bron: e.target.value })}
+                    className="w-full border border-line rounded-lg px-3 py-2 text-sm outline-none focus:border-accent"
+                  >
+                    {UPLOAD_BRONNEN.map((b) => (
+                      <option key={b} value={b}>{b}</option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-muted mt-1">
+                    Standaard <span className="font-semibold">Intern</span> — een upload
+                    vanuit het fonds is per definitie een fondsdocument.
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-ink mb-1">
+                    Documenttype <span className="text-err-ink">*</span>
+                  </label>
+                  <select
+                    value={uploadForm.documenttype}
+                    onChange={(e) =>
+                      setUploadForm({ ...uploadForm, documenttype: e.target.value })
+                    }
+                    required
+                    className="w-full border border-line rounded-lg px-3 py-2 text-sm outline-none focus:border-accent"
+                  >
+                    <option value="">— kies een type —</option>
+                    {DOCUMENTTYPEN.map((t) => (
+                      <option key={t} value={t}>
+                        {DOCUMENTTYPE_LABEL[t]}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-muted mt-1">
+                    Bepaalt de groep in de bibliotheek. Server-side verplicht op dit pad.
+                  </p>
+                </div>
               </div>
               {/* Besluit 0136 — statusverklaring bij aanlevering. De keten
                   concept -> ter bespreking -> ter besluitvorming -> vastgesteld
@@ -1021,6 +1170,55 @@ export default function BibliotheekPage() {
                   </p>
                 </div>
               )}
+              {/* Besluit 0140 — bronstatus bij aanlevering. Dit is GEEN cosmetisch
+                  veld: `bronstatus` NULL betekent in document-status-transities.ts
+                  hetzelfde als `actief`. Een archiefstuk dat als "van kracht" werd
+                  aangeleverd, werd daarmee stilzwijgend een ACTUELE bron voor de
+                  assistent. Server-side loopt dit door dezelfde transitietabel en
+                  capability als een latere wijziging. */}
+              <div>
+                <label className="block text-sm font-semibold text-ink mb-1">
+                  Bronstatus
+                </label>
+                <select
+                  value={uploadForm.bronstatus}
+                  onChange={(e) =>
+                    setUploadForm({ ...uploadForm, bronstatus: e.target.value })
+                  }
+                  className="w-full border border-line rounded-lg px-3 py-2 text-sm outline-none focus:border-accent"
+                >
+                  <option value="">Actief — mag als bron worden gebruikt (standaard)</option>
+                  {INGEST_BRONSTATUSSEN.map((b) => (
+                    <option key={b} value={b}>
+                      {BRONSTATUS_LABEL[b]} —{" "}
+                      {b === "historisch"
+                        ? "bewaren, niet meer als actuele bron"
+                        : "nooit als bron gebruiken"}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-muted mt-1">
+                  Laadt u een archiefstuk? Kies dan{" "}
+                  <span className="font-semibold">Historisch</span> — anders kan de
+                  assistent het als geldende bron citeren.
+                </p>
+              </div>
+
+              {/* UX-principe "maak vereisten en blokkers expliciet": toon vóór de
+                  actie wat de keuze betekent, niet pas een foutmelding erna. Dit is
+                  de enige vraag die de uploader werkelijk heeft. */}
+              <div
+                className={`rounded-lg px-3 py-2 text-[11.5px] ${
+                  uploadGevolg.toon === "ok"
+                    ? "bg-ok-tint text-ok-ink"
+                    : uploadGevolg.toon === "warn"
+                      ? "bg-warn-tint text-warn-ink"
+                      : "bg-app-bg text-muted"
+                }`}
+              >
+                {uploadGevolg.tekst}
+              </div>
+
               {/* B13: tenants uploaden uitsluitend naar de fondsbibliotheek.
                   Generieke (platform-gecureerde) documenten worden centraal beheerd. */}
               <p className="text-[11px] text-muted -mt-1">
