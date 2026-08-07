@@ -57,6 +57,35 @@ export function uploadTeGrootMelding(bytes: number): string {
   );
 }
 
+// Absolute bovengrens van een upload (gecomprimeerd bestand). Enige bron van
+// waarheid; bestand-validatie.ts re-exporteert deze waarde. Bewust in dit pure,
+// client-veilige module zodat de F7-client-helper (direct-to-storage) de grens
+// kent zónder de node-only validatiecode (JSZip/crypto) te importeren.
+export const MAX_BESTAND_BYTES = 25 * 1024 * 1024;
+
+// Gebruikersmelding wanneer een bestand boven de absolute grens (MAX_BESTAND_BYTES)
+// uitkomt. F7: dit is nu de énige groottegrens die de client vooraf toont — de
+// synchrone 4,5 MB-payloadgrens is opgeheven doordat het bestand rechtstreeks
+// naar Storage gaat.
+export function bestandTeGrootMelding(bytes: number): string {
+  const mb = (n: number) => (n / 1024 / 1024).toFixed(1).replace(".", ",");
+  return (
+    `Dit bestand is ${mb(bytes)} MB. De maximale bestandsgrootte is ` +
+    `${mb(MAX_BESTAND_BYTES)} MB. Splits het document of comprimeer het.`
+  );
+}
+
+// F7: leidt het logische bestandstype af uit de bestandsnaam-extensie. Puur en
+// client-veilig — gebruikt door de client-helper (padkeuze) én de init-route.
+// De inhoudelijke autoriteit blijft valideerUpload (magic bytes/OOXML) in de
+// complete-route; deze functie kiest alleen het opslagpad-achtervoegsel.
+export function toegestaneUploadExtensie(
+  naam: string
+): "pdf" | "docx" | "pptx" | "xlsx" | null {
+  const m = naam.toLowerCase().match(/\.(pdf|docx|pptx|xlsx)$/);
+  return m ? (m[1] as "pdf" | "docx" | "pptx" | "xlsx") : null;
+}
+
 // Maximaal aantal DATArijen per xlsx-tabblad (exclusief kopregel). Een tabblad
 // hierboven is vrijwel zeker een dataset i.p.v. een leesbaar document.
 export const MAX_XLSX_RIJEN_PER_TABBLAD = 5000;

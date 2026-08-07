@@ -13,6 +13,7 @@ import StemrondeBlok, {
   type Bestuurslid,
 } from "./StemrondeBlok";
 import { isBureauRol } from "@/core/lib/bureau-gate";
+import { uploadDocument } from "@/core/lib/document-upload-client";
 import { rolHeeftCapability } from "@/core/lib/capabilities-map";
 
 export interface Stuk {
@@ -284,17 +285,14 @@ export default function AgendapuntKaart({
     setUploadBezig(true);
     setUploadFout(null);
     try {
-      const formData = new FormData();
-      formData.append("bestand", file);
-      formData.append("agendapunt_id", punt.id);
-      formData.append("titel", file.name.replace(/\.(pdf|docx|xlsx)$/i, ""));
-      const res = await fetch("/api/documents/upload", {
-        method: "POST",
-        body: formData,
+      // F7: direct-to-storage. bron/bibliotheek volgen server-side uit het
+      // agendapunt (bron='Intern', bibliotheek='fonds').
+      const res = await uploadDocument(file, {
+        agendapunt_id: punt.id,
+        titel: file.name.replace(/\.(pdf|docx|pptx|xlsx)$/i, ""),
       });
-      const data = await res.json();
       if (!res.ok) {
-        setUploadFout(data.error || "Upload mislukt");
+        setUploadFout(res.error ?? "Upload mislukt");
         return;
       }
       router.refresh();

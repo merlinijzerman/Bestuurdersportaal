@@ -20,6 +20,9 @@ import {
   ocrPaginaCapMelding,
   tekstherkenningNodigMelding,
   xlsxRijenMelding,
+  MAX_BESTAND_BYTES,
+  toegestaneUploadExtensie,
+  bestandTeGrootMelding,
 } from "./ingest-caps";
 
 let n = 0;
@@ -99,6 +102,38 @@ check("tekstherkenning-melding is een BEWAAR-melding, geen foutmelding", () => {
 check("statuscode tekstherkenning is stabiel (UI keyt hierop)", () => {
   assert.equal(STATUS_TEKSTHERKENNING_NODIG, "tekstherkenning_nodig");
   assert.equal(FOUTCODE_OCR_TE_VEEL_PAGINAS, "ocr_te_veel_paginas");
+});
+
+// ── F7 direct-to-storage: pad-extensie + groottegrens ──────────────────────
+check("toegestaneUploadExtensie herkent de vier ondersteunde types (case-insensitief)", () => {
+  assert.equal(toegestaneUploadExtensie("Jaarverslag 2025.pdf"), "pdf");
+  assert.equal(toegestaneUploadExtensie("Notitie.DOCX"), "docx");
+  assert.equal(toegestaneUploadExtensie("Deck.pptx"), "pptx");
+  assert.equal(toegestaneUploadExtensie("Cijfers.xlsx"), "xlsx");
+});
+
+check("toegestaneUploadExtensie weigert onbekende/ontbrekende extensies", () => {
+  assert.equal(toegestaneUploadExtensie("virus.exe"), null);
+  assert.equal(toegestaneUploadExtensie("geen-extensie"), null);
+  assert.equal(toegestaneUploadExtensie("archief.pdf.zip"), null);
+  // Dubbel puntje mag niet meetellen als geldige extensie ergens middenin.
+  assert.equal(toegestaneUploadExtensie("rapport.pdf.bak"), null);
+});
+
+check("toegestaneUploadExtensie werkt ook op een opslagpad (autoriteit in complete)", () => {
+  assert.equal(
+    toegestaneUploadExtensie("11111111-1111-1111-1111-111111111111/abc.pdf"),
+    "pdf"
+  );
+});
+
+check("MAX_BESTAND_BYTES is 25 MB en de te-groot-melding noemt de grens + handeling", () => {
+  assert.equal(MAX_BESTAND_BYTES, 25 * 1024 * 1024);
+  const m = bestandTeGrootMelding(30 * 1024 * 1024);
+  assert.ok(m.includes("30,0"));
+  assert.ok(m.includes("25,0"));
+  // Geen doodlopende straat: bied een uitweg (splitsen/comprimeren).
+  assert.ok(/splits|comprimeer/i.test(m));
 });
 
 console.log(`\n${n} sanity-tests geslaagd.`);

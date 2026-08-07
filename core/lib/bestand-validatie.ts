@@ -39,10 +39,12 @@ import {
   CONTENT_TYPE_PER_BESTANDSTYPE,
   type Bestandstype,
 } from "./document-extractie";
-
-// 25 MB. Ruim voor sectorbrede beleidsdocumenten/presentaties; dempt
+// Groottegrens leeft in het pure ingest-caps-module (client-veilig, één bron van
+// waarheid). Hier alleen re-exporteren zodat bestaande importers ongewijzigd
+// blijven. 25 MB — ruim voor sectorbrede beleidsdocumenten/presentaties; dempt
 // resource-uitputting door extreem grote uploads (fail-closed boven de grens).
-export const MAX_BESTAND_BYTES = 25 * 1024 * 1024;
+import { MAX_BESTAND_BYTES } from "./ingest-caps";
+export { MAX_BESTAND_BYTES };
 
 // ── Decompressiebudget (zip bomb) ──────────────────────────────────────────
 // H-07: MAX_BESTAND_BYTES geldt op het GECOMPRIMEERDE bestand. Een OOXML-

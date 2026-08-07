@@ -60,6 +60,17 @@ const BACKOFF_SEC = [30, 120, 480]; // §4b verstoring 1 (30s → 2m → 8m)
 // batch-code blijft staan; zet dit op true zodra het volume het live-budget raakt.
 const BATCH_BAAN_AAN = false;
 
+// ── Orphan-sweep (F7 direct-to-storage) ─────────────────────────────────────
+// Bij direct-to-storage upload de browser eerst het bestand, en pas de
+// complete-stap maakt de documentrij. Een afgebroken of afgekeurde upload laat
+// dus een origineel in 'documenten' achter zónder documentrij. De app-surface
+// heeft geen service-role en mag niet uit Storage verwijderen (Variant C); de
+// worker (beheer, wél service-role) ruimt die wezen op. Alleen objecten ouder
+// dan de drempel (een jonge upload kan nog tussen upload en complete zitten).
+const ORPHAN_MIN_LEEFTIJD_MS = 60 * 60 * 1000; // 1 uur
+const ORPHAN_FONDS_LIMIET = 100; // fonds-mappen per sweep
+const ORPHAN_OBJECT_LIMIET = 200; // te verwijderen objecten per sweep
+
 // Job-rij zoals documenten_claim_ingest_jobs die teruggeeft (relevante velden).
 interface IngestJob {
   id: string;
@@ -94,6 +105,7 @@ export interface IngestWorkerResultaat {
   bezig: number;
   overgeslagen: number;
   mislukt: number;
+  verweesd_opgeruimd: number;
 }
 
 const nu = () => new Date().toISOString();
@@ -111,6 +123,7 @@ export async function draaiIngestWorker(
     bezig: 0,
     overgeslagen: 0,
     mislukt: 0,
+    verweesd_opgeruimd: 0,
   };
 
   // 1. Reaper: enqueue documenten die klaarstaan maar (nog) geen open job hebben.
@@ -136,7 +149,68 @@ export async function draaiIngestWorker(
       }
     }
   }
+
+  // 3. Orphan-sweep (F7): ruim verweesde originelen op van afgebroken/afgekeurde
+  // direct-to-storage-uploads. Best-effort; een fout mag de invocatie niet vellen.
+  try {
+    res.verweesd_opgeruimd = await ruimVerweesdeOriginelenOp(svc);
+  } catch (e) {
+    console.error("[ingest-worker] orphan-sweep faalde:", e);
+  }
   return res;
+}
+
+// ── Orphan-sweep ────────────────────────────────────────────────────────────
+// Verwijdert originelen in de 'documenten'-bucket zonder bijbehorende
+// documentrij (afgebroken/afgekeurde F7-uploads). Alleen objecten ouder dan de
+// drempel — een jong object kan nog tussen de directe upload en de complete-stap
+// zitten. 'generiek/' (platform-gecureerd) wordt overgeslagen. Objecten van
+// gedeactiveerde documenten blijven staan: die hebben nog een documentrij.
+async function ruimVerweesdeOriginelenOp(svc: SupabaseClient): Promise<number> {
+  const { data: topLevel, error } = await svc.storage
+    .from("documenten")
+    .list("", { limit: ORPHAN_FONDS_LIMIET });
+  if (error || !topLevel) return 0;
+
+  const drempel = Date.now() - ORPHAN_MIN_LEEFTIJD_MS;
+  const kandidaten: string[] = [];
+  for (const map of topLevel) {
+    // Mappen hebben id === null; alleen fonds-mappen, niet 'generiek'.
+    if (map.id !== null || map.name === "generiek") continue;
+    if (kandidaten.length >= ORPHAN_OBJECT_LIMIET) break;
+    const { data: objecten } = await svc.storage
+      .from("documenten")
+      .list(map.name, { limit: ORPHAN_OBJECT_LIMIET });
+    if (!objecten) continue;
+    for (const obj of objecten) {
+      if (obj.id === null) continue; // geen sub-mappen verwachten
+      const gemaakt = obj.created_at ? Date.parse(obj.created_at) : Date.now();
+      if (gemaakt > drempel) continue; // te jong → mogelijk nog in-flight
+      kandidaten.push(`${map.name}/${obj.name}`);
+      if (kandidaten.length >= ORPHAN_OBJECT_LIMIET) break;
+    }
+  }
+  if (kandidaten.length === 0) return 0;
+
+  // Welke kandidaatpaden hebben (nog) een documentrij? Die NIET verwijderen —
+  // ongeacht actief/gedeactiveerd. De rest is echt verweesd.
+  const { data: rijen } = await svc
+    .from("documenten")
+    .select("opslag_pad")
+    .in("opslag_pad", kandidaten);
+  const bekend = new Set((rijen ?? []).map((r) => r.opslag_pad as string));
+  const wees = kandidaten.filter((p) => !bekend.has(p));
+  if (wees.length === 0) return 0;
+
+  const { error: rmErr } = await svc.storage.from("documenten").remove(wees);
+  if (rmErr) {
+    console.error("[ingest-worker] orphan-sweep remove mislukt:", rmErr.message);
+    return 0;
+  }
+  console.log(
+    JSON.stringify({ tag: "ingest-meting", fase: "orphan-sweep", verwijderd: wees.length })
+  );
+  return wees.length;
 }
 
 // ── Reaper (§4b verstoring 5, reaper-only enqueue) ──────────────────────────

@@ -3,10 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import DocumentMetadataModal from "@/core/components/DocumentMetadataModal";
 import { bronkaartLabels } from "@/core/lib/bronsoort";
 import { DOCUMENTTYPEN, DOCUMENTTYPE_LABEL } from "@/core/lib/document-metadata";
-import {
-  MAX_UPLOAD_BYTES_SYNCHROON,
-  uploadTeGrootMelding,
-} from "@/core/lib/ingest-caps";
+import { uploadDocument } from "@/core/lib/document-upload-client";
 import ZoekenPaneel from "./_components/ZoekenPaneel";
 
 interface Document {
@@ -168,62 +165,26 @@ export default function BibliotheekPage() {
     const bestand = bestandRef.current?.files?.[0];
     if (!bestand) return;
 
-    // F0.5 — maak de blokker vooraf expliciet (guardrail "toon vóór een actie
-    // wat ontbreekt, niet pas een foutmelding erna"). Een bestand boven de
-    // synchrone payloadgrens bereikt de server niet: Vercel weigert de request
-    // op platformniveau (413 FUNCTION_PAYLOAD_TOO_LARGE) zónder body. Zonder
-    // deze check gooit res.json() hieronder en bleef de knop eeuwig draaien.
-    if (bestand.size > MAX_UPLOAD_BYTES_SYNCHROON) {
-      setUploadBericht(`❌ ${uploadTeGrootMelding(bestand.size)}`);
-      return;
-    }
-
     setUploaden(true);
     setUploadBericht("");
 
-    const formData = new FormData();
-    formData.append("bestand", bestand);
-    formData.append("titel", uploadForm.titel);
-    formData.append("bron", uploadForm.bron);
-    formData.append("bibliotheek", uploadForm.bibliotheek);
-    if (uploadForm.status) {
-      formData.append("status", uploadForm.status);
-      formData.append("status_reden", uploadForm.statusReden);
-    }
-
     try {
-      const res = await fetch("/api/documents/upload", {
-        method: "POST",
-        body: formData,
+      // F7: direct-to-storage. De helper doet init → directe upload → complete
+      // en handhaaft de groottegrens (nu MAX_BESTAND_BYTES; de 4,5 MB-muur is weg).
+      const res = await uploadDocument(bestand, {
+        titel: uploadForm.titel,
+        bron: uploadForm.bron,
+        bibliotheek: uploadForm.bibliotheek,
+        ...(uploadForm.status
+          ? { status: uploadForm.status, status_reden: uploadForm.statusReden }
+          : {}),
       });
 
-      // F0.5 — een platform-413 (of elke andere niet-JSON-respons) levert geen
-      // JSON terug; res.json() zou dan gooien en de foutafhandeling overslaan.
-      // Parse defensief en val terug op een begrijpelijke melding.
-      let data: {
-        success?: boolean;
-        status?: string;
-        bericht?: string;
-        error?: string;
-      } | null = null;
-      try {
-        data = await res.json();
-      } catch {
-        data = null;
-      }
-
-      if (data?.success) {
-        // Besluit 0134: een PDF zonder tekstlaag is wél opgeslagen, maar nog niet
-        // doorzoekbaar. F3: een async-verwerkt document is óók nog niet klaar.
-        // Geen ✅ in die gevallen — dat zou "klaar" suggereren terwijl er nog een
-        // stap openstaat (guardrail: geen schijnzekerheid).
-        const icoon =
-          data.status === "tekstherkenning_nodig"
-            ? "⚠️"
-            : data.status === "verwerken"
-              ? "⏳"
-              : "✅";
-        setUploadBericht(`${icoon} ${data.bericht ?? ""}`);
+      if (res.ok) {
+        // F3: een async-verwerkt document is nog niet doorzoekbaar — geen ✅ dat
+        // "klaar" suggereert (guardrail: geen schijnzekerheid).
+        const icoon = res.status === "verwerken" ? "⏳" : "✅";
+        setUploadBericht(`${icoon} ${res.bericht ?? ""}`);
         haalDocumenten();
         setUploadOpen(false);
         setUploadForm({
@@ -233,13 +194,9 @@ export default function BibliotheekPage() {
           status: "",
           statusReden: "",
         });
-      } else if (data?.error) {
-        setUploadBericht(`❌ ${data.error}`);
-      } else if (res.status === 413) {
-        setUploadBericht(`❌ ${uploadTeGrootMelding(bestand.size)}`);
       } else {
         setUploadBericht(
-          "❌ Uploaden is niet gelukt. Probeer het opnieuw of neem contact op met de beheerder."
+          `❌ ${res.error ?? "Uploaden is niet gelukt. Probeer het opnieuw of neem contact op met de beheerder."}`
         );
       }
     } catch {

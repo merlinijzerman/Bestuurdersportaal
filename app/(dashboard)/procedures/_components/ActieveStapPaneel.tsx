@@ -13,7 +13,7 @@ import type {
 } from "../[id]/page";
 import VereistenStrook from "./VereistenStrook";
 import BibliotheekPicker from "./BibliotheekPicker";
-import { STATUS_TEKSTHERKENNING_NODIG } from "@/core/lib/ingest-caps";
+import { uploadDocument } from "@/core/lib/document-upload-client";
 
 interface Props {
   procedureId: string;
@@ -156,44 +156,29 @@ export default function ActieveStapPaneel({
       // bestandstype automatisch afgeleid.
       let documentId: string | null = bewijsBibliotheekId;
       if (!documentId && bewijsBestand) {
-        const fd = new FormData();
-        fd.append("bestand", bewijsBestand);
-        fd.append("bibliotheek", "fonds");
-        fd.append("bron", "Intern");
-        fd.append("titel", titel);
-        const upRes = await fetch("/api/documents/upload", {
-          method: "POST",
-          body: fd,
+        // F7: direct-to-storage via de gedeelde helper. Het stuk komt in de
+        // fonds-bibliotheek (bron='Intern') en wordt async verwerkt.
+        const up = await uploadDocument(bewijsBestand, {
+          bibliotheek: "fonds",
+          bron: "Intern",
+          titel,
         });
-        if (!upRes.ok) {
-          const upErr = await upRes.json().catch(() => ({}));
-          throw new Error(
-            upErr.error || "Upload van bewijsbestand mislukt"
-          );
+        if (!up.ok) {
+          throw new Error(up.error ?? "Upload van bewijsbestand mislukt");
         }
-        const upJson = await upRes.json();
-        // 06-08-2026: hier stond `upJson.document?.id ?? upJson.id`, maar
-        // /api/documents/upload geeft `document_id` terug. Beide takken waren
-        // dus altijd undefined → `documentId` bleef null en het bewijsstuk werd
-        // zonder koppeling opgeslagen. Het bestand belandde wél in de
-        // bibliotheek, dus er was geen zichtbare fout: het dossier miste stil
-        // de verwijzing naar het onderliggende stuk.
-        documentId = upJson.document_id ?? null;
+        // 06-08-2026: de route geeft `document_id` terug — daar koppelen we op.
+        documentId = up.document_id ?? null;
         if (!documentId) {
           throw new Error(
             "Het bestand is geüpload, maar de koppeling aan dit bewijsstuk is niet gelukt. Koppel het stuk handmatig via 'Kies uit bibliotheek'."
           );
         }
-        // Besluit 0134: een PDF zonder tekstlaag wordt bewaard maar is nog niet
-        // doorzoekbaar. Het bewijsstuk is wél correct gekoppeld en in te zien,
-        // maar de assistent vindt er niets in. Dat expliciet melden — een stil
-        // onvindbaar bewijsstuk is precies het soort schijnzekerheid dat een
-        // dossier onbetrouwbaar maakt.
-        if (upJson.status === STATUS_TEKSTHERKENNING_NODIG) {
-          setMelding(
-            "Het bestand is gekoppeld, maar bevat geen tekstlaag — de assistent kan het nog niet doorzoeken. Voer in de bibliotheek 'Tekstherkenning uitvoeren' uit op dit stuk."
-          );
-        }
+        // F6/F7: het bewijsstuk wordt async verwerkt (incl. automatische OCR) en
+        // is nog niet direct doorzoekbaar — dat expliciet melden (geen
+        // schijnzekerheid: een stil onvindbaar bewijsstuk ondermijnt het dossier).
+        setMelding(
+          "Het bestand is gekoppeld en wordt nu verwerkt; het is binnen enkele minuten doorzoekbaar."
+        );
       }
 
       const res = await fetch(`/api/procedures/${procedureId}/bewijs`, {

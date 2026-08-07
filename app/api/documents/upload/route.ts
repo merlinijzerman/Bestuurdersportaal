@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
-// F6: extractie/OCR/chunking/caps/samenvatting draaien nu in de async worker
-// (platform/lib/ingest-orchestrator). Het request valideert + slaat op + registreert.
-import { CONTENT_TYPE_PER_BESTANDSTYPE } from "@/core/lib/document-extractie";
+// F6: extractie/OCR/chunking/caps/samenvatting draaien in de async worker
+// (platform/lib/ingest-orchestrator). F7 (direct-to-storage): het bestand gaat
+// rechtstreeks browser→Storage (langs de Vercel-body-limiet heen); deze route
+// gate't de metadata (init) en valideert+registreert het geüploade object
+// (complete). Zie core/lib/document-upload-client.ts voor de client-kant.
 import {
   magOvergaan,
   redenVerplicht,
@@ -17,35 +19,197 @@ import {
   logNaam,
   MAX_BESTAND_BYTES,
 } from "@/core/lib/bestand-validatie";
+import { toegestaneUploadExtensie } from "@/core/lib/ingest-caps";
 import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
 import { badRequest, rateLimited } from "@/core/lib/api-errors";
 import { beoordeelRouteHostToegang } from "@/core/lib/tenant-route-guard";
 
+type ServerSupabase = Awaited<ReturnType<typeof createServerSupabase>>;
+
 // Strip de bestandsextensie van de naam — werkt voor alle ondersteunde types.
 function stripExtensie(naam: string): string {
-  return naam.replace(/\.(pdf|docx|xlsx)$/i, "");
+  return naam.replace(/\.(pdf|docx|pptx|xlsx)$/i, "");
+}
+
+// ── Gedeelde metadata-poort (init én complete) ─────────────────────────────
+// F7: init gate't vóór de upload (geen verspilde upload bij een blokkade),
+// maar complete maakt de documentrij en MOET daarom dezelfde poorten opnieuw
+// draaien — nooit vertrouwen dat de client init eerlijk doorliep. Alle checks
+// server-side (guardrail). Retourneert genormaliseerde velden of een respons.
+type MetadataUitkomst =
+  | {
+      ok: true;
+      bibliotheek: string;
+      bron: string;
+      titel: string;
+      agendapunt_id: string | null;
+      vergadering_id: string | null;
+      ingestStatus: DocumentStatus | null;
+      statusReden: string | null;
+    }
+  | { ok: false; response: NextResponse };
+
+async function valideerUploadMetadata(
+  supabase: ServerSupabase,
+  userId: string,
+  fondsId: string,
+  raw: {
+    bestandsnaam: string;
+    agendapunt_id?: string | null;
+    bibliotheek?: string | null;
+    bron?: string | null;
+    titel?: string | null;
+    status?: string | null;
+    status_reden?: string | null;
+  }
+): Promise<MetadataUitkomst> {
+  const agendapunt_id = raw.agendapunt_id || null;
+  let bibliotheek = raw.bibliotheek || null;
+  let bron = raw.bron || null;
+  let titel = raw.titel || null;
+
+  // Wanneer dit een vergaderstuk is, zijn standaardwaarden voldoende.
+  if (agendapunt_id) {
+    bibliotheek = bibliotheek || "fonds";
+    bron = bron || "Intern";
+    titel = titel || (raw.bestandsnaam ? stripExtensie(raw.bestandsnaam) : "Vergaderstuk");
+  }
+
+  // B13: generieke (platform-gecureerde) documenten mogen NIET via de tenant-
+  // uploadroute worden aangemaakt. Default = 'fonds'; server-side leidend.
+  if (bibliotheek === "generiek") {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        {
+          error:
+            "Generieke (platform-gecureerde) documenten kunnen niet door fondsen worden geüpload. Upload dit als fondsdocument.",
+        },
+        { status: 403 }
+      ),
+    };
+  }
+  bibliotheek = bibliotheek || "fonds";
+
+  if (!bibliotheek || !bron || !titel) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: "Verplichte velden ontbreken: bibliotheek, bron, titel" },
+        { status: 400 }
+      ),
+    };
+  }
+
+  // -- Statusverklaring bij ingest (besluit 0136), drie server-side poorten ---
+  const gevraagdeStatus = raw.status?.trim() || null;
+  const statusReden = raw.status_reden?.trim() || null;
+  let ingestStatus: DocumentStatus | null = null;
+
+  if (gevraagdeStatus && gevraagdeStatus !== "concept") {
+    const doelStatus = gevraagdeStatus as DocumentStatus;
+    if (!magOvergaan("upload", doelStatus)) {
+      return {
+        ok: false,
+        response: NextResponse.json(
+          {
+            error:
+              `Status "${gevraagdeStatus}" kan niet bij aanlevering worden verklaard. ` +
+              `Toegestaan: ${toegestaneIngestStatussen().join(", ")}.`,
+            foutcode: "status_bij_ingest_ongeldig",
+          },
+          { status: 400 }
+        ),
+      };
+    }
+    const cap = vereisteCapability("upload", doelStatus);
+    if (cap && cap !== "upload" && !(await requireCapability(userId, cap as Capability))) {
+      return {
+        ok: false,
+        response: NextResponse.json(
+          {
+            error:
+              "Onvoldoende rechten om bij aanlevering een status te verklaren. " +
+              "Upload als concept en laat een beheerder of voorzitter de status zetten.",
+          },
+          { status: 403 }
+        ),
+      };
+    }
+    if (redenVerplicht("upload", doelStatus) && !statusReden) {
+      return {
+        ok: false,
+        response: NextResponse.json(
+          {
+            error:
+              "Geef een reden bij de statusverklaring -- bijvoorbeeld waar en wanneer " +
+              "het stuk is vastgesteld. Die reden landt in het auditlog.",
+            foutcode: "status_reden_ontbreekt",
+          },
+          { status: 400 }
+        ),
+      };
+    }
+    ingestStatus = doelStatus;
+  }
+
+  // Stuk bij een agendapunt: vergadering_id afleiden. De trigger
+  // fn_document_agendapunt_vergadering_check eist gelijkheid (en niet NULL).
+  let vergadering_id: string | null = null;
+  if (agendapunt_id) {
+    const { data: agendapuntRij, error: agendapuntError } = await supabase
+      .from("agendapunten")
+      .select("vergadering_id")
+      .eq("id", agendapunt_id)
+      .single();
+    if (agendapuntError || !agendapuntRij) {
+      return {
+        ok: false,
+        response: NextResponse.json(
+          { error: "Agendapunt niet gevonden of geen toegang" },
+          { status: 400 }
+        ),
+      };
+    }
+    vergadering_id = agendapuntRij.vergadering_id;
+  }
+
+  return {
+    ok: true,
+    bibliotheek,
+    bron,
+    titel,
+    agendapunt_id,
+    vergadering_id,
+    ingestStatus,
+    statusReden,
+  };
 }
 
 export async function POST(req: NextRequest) {
-  // F0.1 (bouwticket async-ingest v2.1) — nulmeting-instrumentatie. Eén
-  // correlatie-id per ingest (koppelt straks aan document_processing_jobs en
-  // platform_event_log.correlatie_id) plus fase-timers. Puur observationeel;
-  // verandert het verwerkingsgedrag niet. Logt alleen metadata/tellingen — geen
-  // fondsinhoud, geen documenttitel.
-  const correlatieId = randomUUID();
-  const tStart = Date.now();
-  let validatieMs = 0;
+  let body: Record<string, unknown>;
+  try {
+    body = (await req.json()) as Record<string, unknown>;
+  } catch {
+    return NextResponse.json(
+      { error: "Ongeldige aanvraag (verwacht JSON)." },
+      { status: 400 }
+    );
+  }
+  const mode = body.mode === "complete" ? "complete" : "init";
+  return mode === "complete" ? completeUpload(req, body) : initUpload(req, body);
+}
+
+// ── init: gate de metadata + wijs een opslagpad toe (nog geen bestand/rij) ──
+async function initUpload(req: NextRequest, body: Record<string, unknown>) {
   try {
     const supabase = await createServerSupabase();
-
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
 
-    // Rate limiting (WP2): vóór het inlezen/extraheren van het bestand.
+    // Rate limiting (WP2): op de init-stap — de gate vóór de eigenlijke upload.
     const limiet = await controleerLimiet(supabase, LIMIETEN.upload);
     if (!limiet.toegestaan) return rateLimited("documents.upload", limiet.resetAt);
 
@@ -54,130 +218,26 @@ export async function POST(req: NextRequest) {
       .select("fonds_id, rol, naam")
       .eq("id", user.id)
       .single();
-
-    if (!profiel?.fonds_id) {
+    if (!profiel?.fonds_id)
       return NextResponse.json({ error: "Geen fonds gekoppeld" }, { status: 400 });
-    }
 
-    // T1.3 — host↔fonds-afdwinging (defense-in-depth náást RLS), vóór het inlezen/
-    // opslaan van het bestand. Observe + fail-closed onder TENANT_ENFORCE=on;
-    // gedrag-neutraal zolang enforce uit staat.
     const hostOordeel = await beoordeelRouteHostToegang({
       sessieFondsId: profiel.fonds_id,
       gebruikerId: user.id,
-      label: "documents.upload.POST",
+      label: "documents.upload.init",
     });
-    if (!hostOordeel.toegestaan) {
+    if (!hostOordeel.toegestaan)
       return NextResponse.json(
         { error: "Dit webadres hoort niet bij uw fonds." },
         { status: 403 }
       );
-    }
 
-    const formData = await req.formData();
-    const bestand = formData.get("bestand") as File;
-    const agendapunt_id = (formData.get("agendapunt_id") as string) || null;
-    let bibliotheek = (formData.get("bibliotheek") as string) || null;
-    let bron = (formData.get("bron") as string) || null;
-    let titel = (formData.get("titel") as string) || null;
+    const bestandsnaam = String(body.bestandsnaam ?? "");
+    const grootte = Number(body.grootte ?? 0);
 
-    // Wanneer dit een vergaderstuk is, zijn standaardwaarden voldoende
-    if (agendapunt_id) {
-      bibliotheek = bibliotheek || "fonds";
-      bron = bron || "Intern";
-      titel = titel || (bestand?.name ? stripExtensie(bestand.name) : "Vergaderstuk");
-    }
-
-    // B13: generieke (platform-gecureerde) documenten mogen NIET via de tenant-
-    // uploadroute worden aangemaakt. Tenants zijn read-only op generiek; curatie
-    // loopt interim via service-role/seed (Increment P1 levert de platform-UI).
-    // Default = 'fonds'. Server-side leidend; RLS is de tweede verdedigingslinie.
-    if (bibliotheek === "generiek") {
-      return NextResponse.json(
-        {
-          error:
-            "Generieke (platform-gecureerde) documenten kunnen niet door fondsen worden geüpload. Upload dit als fondsdocument.",
-        },
-        { status: 403 }
-      );
-    }
-    bibliotheek = bibliotheek || "fonds";
-
-    if (!bestand || !bibliotheek || !bron || !titel) {
-      return NextResponse.json(
-        { error: "Verplichte velden ontbreken: bestand, bibliotheek, bron, titel" },
-        { status: 400 }
-      );
-    }
-
-    // -- Statusverklaring bij ingest (besluit 0136) ------------------------
-    // Zonder verklaring blijft het gedrag ongewijzigd: de DB-default zet
-    // `concept` en het document is geen actuele bron. Met verklaring legt de
-    // uploader vast dat het stuk BUITEN het portaal al is vastgesteld -- dat is
-    // eerlijker dan het door de bestuurlijke keten duwen en zo drie overgangen
-    // te fabriceren die nooit hebben plaatsgevonden.
-    //
-    // Drie poorten, alle server-side: (1) de status moet in de transitietabel
-    // staan als toegestane ingest-status, (2) de rol moet de capability uit die
-    // tabel hebben, (3) de reden is verplicht als de tabel dat zegt.
-    const gevraagdeStatus = (formData.get("status") as string)?.trim() || null;
-    const statusReden = (formData.get("status_reden") as string)?.trim() || null;
-    let ingestStatus: DocumentStatus | null = null;
-
-    if (gevraagdeStatus && gevraagdeStatus !== "concept") {
-      const doelStatus = gevraagdeStatus as DocumentStatus;
-      if (!magOvergaan("upload", doelStatus)) {
-        return NextResponse.json(
-          {
-            error:
-              `Status "${gevraagdeStatus}" kan niet bij aanlevering worden verklaard. ` +
-              `Toegestaan: ${toegestaneIngestStatussen().join(", ")}.`,
-            foutcode: "status_bij_ingest_ongeldig",
-          },
-          { status: 400 }
-        );
-      }
-      const cap = vereisteCapability("upload", doelStatus);
-      if (
-        cap &&
-        cap !== "upload" &&
-        !(await requireCapability(user.id, cap as Capability))
-      ) {
-        return NextResponse.json(
-          {
-            error:
-              "Onvoldoende rechten om bij aanlevering een status te verklaren. " +
-              "Upload als concept en laat een beheerder of voorzitter de status zetten.",
-          },
-          { status: 403 }
-        );
-      }
-      if (redenVerplicht("upload", doelStatus) && !statusReden) {
-        return NextResponse.json(
-          {
-            error:
-              "Geef een reden bij de statusverklaring -- bijvoorbeeld waar en wanneer " +
-              "het stuk is vastgesteld. Die reden landt in het auditlog.",
-            foutcode: "status_reden_ontbreekt",
-          },
-          { status: 400 }
-        );
-      }
-      ingestStatus = doelStatus;
-    }
-
-    // ── H-07 (review 2026-07-30): fail-closed uploadvalidatie ──────────────
-    // Deze route deed alleen een extensie-/MIME-controle. De volledige poort
-    // (core/lib/bestand-validatie.ts) werd uitsluitend door de generieke
-    // curatie gebruikt — de strengste laag zat dus op het pad met het laagste
-    // volume, terwijl ALLE fondsdocumenten hier binnenkomen.
-    //
-    // Volgorde is bewust: eerst de aangekondigde grootte (`bestand.size`,
-    // gratis uit de multipart-header) zodat we een te groot bestand weigeren
-    // vóórdat het volledig in het geheugen wordt gelezen. Daarna pas de
-    // inhoudelijke poort: magic bytes, OOXML-subtype, decompressiebudget
-    // (zip bomb), naam-normalisatie en de inhoudshash voor deduplicatie.
-    if (bestand.size > MAX_BESTAND_BYTES) {
+    // Aangekondigde grootte (client) — weiger een te groot bestand vóór de upload.
+    // De echte bytecontrole gebeurt in complete op het gedownloade object.
+    if (grootte > MAX_BESTAND_BYTES) {
       return badRequest(
         "documents.upload",
         `Het bestand is groter dan ${Math.round(MAX_BESTAND_BYTES / 1024 / 1024)} MB.`,
@@ -185,24 +245,142 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Lees binnen één keer in het geheugen — voor MVP-volume acceptabel, en
-    // begrensd door de check hierboven.
-    const bytes = await bestand.arrayBuffer();
-    const buffer = Buffer.from(bytes);
+    const ext = toegestaneUploadExtensie(bestandsnaam);
+    if (!ext) {
+      return NextResponse.json(
+        {
+          error: "Bestandstype niet ondersteund (alleen PDF, Word, PowerPoint of Excel).",
+          foutcode: "type_niet_ondersteund",
+        },
+        { status: 400 }
+      );
+    }
+
+    const meta = await valideerUploadMetadata(supabase, user.id, profiel.fonds_id, {
+      bestandsnaam,
+      agendapunt_id: body.agendapunt_id as string | null,
+      bibliotheek: body.bibliotheek as string | null,
+      bron: body.bron as string | null,
+      titel: body.titel as string | null,
+      status: body.status as string | null,
+      status_reden: body.status_reden as string | null,
+    });
+    if (!meta.ok) return meta.response;
+
+    // Pad-conventie: <fonds_uuid>/<document_uuid>.<ext>. De storage-INSERT-policy
+    // dwingt af dat de foldernaam het eigen fonds_id is; de client mint niets zelf.
+    const document_id = randomUUID();
+    const opslag_pad = `${profiel.fonds_id}/${document_id}.${ext}`;
+
+    return NextResponse.json({ document_id, opslag_pad });
+  } catch (error) {
+    console.error("Upload-init fout:", error);
+    return NextResponse.json(
+      { error: "Er is een fout opgetreden bij het voorbereiden van de upload." },
+      { status: 500 }
+    );
+  }
+}
+
+// ── complete: valideer het geüploade object + registreer de documentrij ─────
+async function completeUpload(req: NextRequest, body: Record<string, unknown>) {
+  // F0.1 — nulmeting-instrumentatie (metadata/tellingen, geen fondsinhoud/titel).
+  const correlatieId = randomUUID();
+  const tStart = Date.now();
+  let validatieMs = 0;
+  try {
+    const supabase = await createServerSupabase();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+
+    const { data: profiel } = await supabase
+      .from("profielen")
+      .select("fonds_id, rol, naam")
+      .eq("id", user.id)
+      .single();
+    if (!profiel?.fonds_id)
+      return NextResponse.json({ error: "Geen fonds gekoppeld" }, { status: 400 });
+
+    const hostOordeel = await beoordeelRouteHostToegang({
+      sessieFondsId: profiel.fonds_id,
+      gebruikerId: user.id,
+      label: "documents.upload.complete",
+    });
+    if (!hostOordeel.toegestaan)
+      return NextResponse.json(
+        { error: "Dit webadres hoort niet bij uw fonds." },
+        { status: 403 }
+      );
+
+    const document_id = String(body.document_id ?? "");
+    const opslag_pad = String(body.opslag_pad ?? "");
+    const bestandsnaam = String(body.bestandsnaam ?? "");
+    const mimeType = String(body.mimeType ?? "");
+
+    // Pad-autoriteit: het pad MOET exact <eigen fonds_id>/<document_id>.<ext> zijn.
+    // Zo kan een client geen ander fonds-pad of losse uuid registreren; RLS is de
+    // tweede linie (SELECT/INSERT-policies op het fondspad).
+    const ext = toegestaneUploadExtensie(opslag_pad);
+    if (
+      !document_id ||
+      !ext ||
+      opslag_pad !== `${profiel.fonds_id}/${document_id}.${ext}`
+    ) {
+      return NextResponse.json(
+        { error: "Ongeldig opslagpad voor deze upload.", foutcode: "opslagpad_ongeldig" },
+        { status: 400 }
+      );
+    }
+
+    const meta = await valideerUploadMetadata(supabase, user.id, profiel.fonds_id, {
+      bestandsnaam,
+      agendapunt_id: body.agendapunt_id as string | null,
+      bibliotheek: body.bibliotheek as string | null,
+      bron: body.bron as string | null,
+      titel: body.titel as string | null,
+      status: body.status as string | null,
+      status_reden: body.status_reden as string | null,
+    });
+    if (!meta.ok) return meta.response;
+
+    // Het object staat al in Storage (browser→Storage, RLS-afgedwongen). Haal het
+    // server-side op — géén request-body-limiet — en draai de VOLLEDIGE validatie
+    // (magic bytes, OOXML-subtype, zip-bom-budget, hash) vóórdat er een rij komt.
+    const { data: blob, error: dlErr } = await supabase.storage
+      .from("documenten")
+      .download(opslag_pad);
+    if (dlErr || !blob) {
+      return NextResponse.json(
+        {
+          error:
+            "Het geüploade bestand is niet gevonden. Probeer de upload opnieuw.",
+          foutcode: "origineel_ontbreekt",
+        },
+        { status: 400 }
+      );
+    }
+    const buffer = Buffer.from(await blob.arrayBuffer());
+
+    // Vangnet naast de bucket-limiet (file_size_limit) en de client-check.
+    if (buffer.length > MAX_BESTAND_BYTES) {
+      return badRequest(
+        "documents.upload",
+        `Het bestand is groter dan ${Math.round(MAX_BESTAND_BYTES / 1024 / 1024)} MB.`,
+        413
+      );
+    }
 
     const tValidatie = Date.now();
-    const validatie = await valideerUpload({
-      naam: bestand.name,
-      mimeType: bestand.type,
-      buffer,
-    });
+    const validatie = await valideerUpload({ naam: bestandsnaam, mimeType, buffer });
     validatieMs = Date.now() - tValidatie;
     if (!validatie.ok) {
       console.warn(
-        `[documents.upload] geweigerd (${validatie.foutcode}) voor ${logNaam(bestand.name)}`
+        `[documents.upload] geweigerd (${validatie.foutcode}) voor ${logNaam(bestandsnaam)}`
       );
-      // 413 voor grootte-/decompressiegrenzen (payload te groot), 400 voor de
-      // rest — zodat de UI het onderscheid kan maken, net als bij de chunk-cap.
+      // Het afgekeurde object blijft als wees achter en wordt door de worker-
+      // orphan-sweep opgeruimd (geen service-role op deze app-surface).
       const status =
         validatie.foutcode === "te_groot" || validatie.foutcode === "decompressie_cap"
           ? 413
@@ -213,12 +391,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const bestandstype = validatie.bestandstype;
-    const veiligeBestandsnaam = validatie.veiligeNaam;
+    // De pad-extensie moet bij het gesnifte type passen. valideerUpload leidt het
+    // type uit dezelfde bestandsnaam af, dus dit is een belt-and-braces-check.
+    if (validatie.bestandstype !== ext) {
+      return NextResponse.json(
+        {
+          error: "De bestandsextensie past niet bij de inhoud van het bestand.",
+          foutcode: "extensie_inhoud_mismatch",
+        },
+        { status: 400 }
+      );
+    }
 
-    // Deduplicatie op inhoudshash binnen het eigen fonds. Zonder deze check
-    // levert tienmaal hetzelfde document tien documentrijen, tien keer chunks,
-    // tien keer embeddingkosten én dubbele treffers in de retrieval.
+    // Deduplicatie op inhoudshash binnen het eigen fonds.
     const { data: bestaand } = await supabase
       .from("documenten")
       .select("id, titel")
@@ -237,65 +422,46 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ── F6: extractie/OCR/caps/samenvatting VERHUISD naar de worker ────────
-    // Het request registreert alleen nog (validatie + opslag + documentrij) en
-    // retourneert binnen seconden. De async worker downloadt het origineel uit
-    // Storage, extraheert (met OCR-fallback, hogere cap), handhaaft de chunk-cap,
-    // genereert de AI-samenvatting van een vergaderstuk en bouwt de index. Zo is
-    // een document van willekeurige omvang niet langer aan de 300s-requesttijd
-    // gebonden. `verwerkingsstatus='ontvangen'` + geen chunks is het signaal
-    // waarop de worker-reaper het document oppikt.
-
-    // Stuk bij een agendapunt: vergadering_id afleiden uit het agendapunt. De
-    // trigger fn_document_agendapunt_vergadering_check eist dat vergadering_id
-    // gelijk is aan de vergadering van het agendapunt (en dus niet NULL).
-    let vergadering_id: string | null = null;
-    if (agendapunt_id) {
-      const { data: agendapuntRij, error: agendapuntError } = await supabase
-        .from("agendapunten")
-        .select("vergadering_id")
-        .eq("id", agendapunt_id)
-        .single();
-      if (agendapuntError || !agendapuntRij) {
-        return NextResponse.json(
-          { error: "Agendapunt niet gevonden of geen toegang" },
-          { status: 400 }
-        );
-      }
-      vergadering_id = agendapuntRij.vergadering_id;
-    }
-
+    // Eén insert met opslag_pad ÉN verwerkingsstatus='ontvangen' (het reaper-
+    // signaal). Atomair: de worker-reaper ziet het document nooit zonder
+    // opslag_pad. `id` = de in init gemunte uuid, zodat rij en object matchen.
     const { data: document, error: docError } = await supabase
       .from("documenten")
       .insert({
-        // B13: deze tenant-route levert uitsluitend fondsdocumenten (generiek is
-        // hierboven met 403 geweigerd), dus altijd het eigen fonds_id.
+        id: document_id,
         fonds_id: profiel.fonds_id,
-        bibliotheek,
-        bron,
-        titel,
-        bestandsnaam: veiligeBestandsnaam,
+        bibliotheek: meta.bibliotheek,
+        bron: meta.bron,
+        titel: meta.titel,
+        bestandsnaam: validatie.veiligeNaam,
         bestand_hash: validatie.hash,
-        bestandstype,
-        // F6: paginas zet de worker ná extractie. Nu nog onbekend.
+        bestandstype: validatie.bestandstype,
         paginas: null,
         opgeslagen_door: user.id,
         geindexeerd: false,
-        // F6: verwerkingsstatus blijft NULL tot het origineel in Storage staat
-        // (zie de opslag_pad-update hieronder). Anders zou de worker-reaper het
-        // document kunnen oppakken vóórdat opslag_pad gezet is en het ten onrechte
-        // als mislukt markeren (geen origineel).
-        agendapunt_id,
-        vergadering_id,
-        // Besluit 0136: alleen zetten als de uploader een status heeft
-        // verklaard. Anders weglaten, zodat de DB-default `concept` blijft
-        // gelden -- dat pad is expliciet ongewijzigd.
-        ...(ingestStatus ? { status: ingestStatus } : {}),
+        opslag_pad,
+        verwerkingsstatus: "ontvangen",
+        agendapunt_id: meta.agendapunt_id,
+        vergadering_id: meta.vergadering_id,
+        ...(meta.ingestStatus ? { status: meta.ingestStatus } : {}),
       })
       .select()
       .single();
 
     if (docError || !document) {
+      // 23505 = dit document_id bestaat al (dubbele complete-aanroep). Idempotent
+      // behandelen: de eerste aanroep heeft de rij al gemaakt.
+      if (docError?.code === "23505") {
+        return NextResponse.json({
+          success: true,
+          status: "verwerken",
+          document_id,
+          titel: meta.titel,
+          bestandstype: validatie.bestandstype,
+          bericht:
+            "Document geüpload. Het wordt nu verwerkt en is binnen enkele minuten doorzoekbaar.",
+        });
+      }
       console.error("Fout bij opslaan document:", docError);
       return NextResponse.json(
         { error: "Kon document niet opslaan in database" },
@@ -303,85 +469,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Origineel-bestand opslaan in Supabase Storage (bucket "documenten").
-    // Pad-conventie: <fonds_uuid>/<document_uuid>.<bestandstype>. B13: deze route
-    // schrijft alleen naar het eigen fonds-pad; het generiek/-pad is voor tenants
-    // read-only (storage-policy 2026_06_20e) en wordt via service-role gecureerd.
-    const opslagPad = `${profiel.fonds_id}/${document.id}.${bestandstype}`;
-
-    const { error: storageError } = await supabase.storage
-      .from("documenten")
-      .upload(opslagPad, buffer, {
-        contentType: CONTENT_TYPE_PER_BESTANDSTYPE[bestandstype],
-        upsert: false,
+    // -- Auditregel bij een statusverklaring (besluit 0136), best-effort --------
+    if (meta.ingestStatus) {
+      const { error: auditFout } = await supabase.from("document_metadata_log").insert({
+        document_id: document.id,
+        document_titel_snapshot: meta.titel,
+        fonds_id: profiel.fonds_id,
+        gewijzigd_door: user.id,
+        gewijzigd_door_naam: profiel.naam ?? null,
+        veld_naam: "status",
+        oude_waarde: "upload",
+        nieuwe_waarde: meta.ingestStatus,
+        wijzig_reden: meta.statusReden,
+        wijzig_type: "status",
+        rag_impact: true,
       });
-
-    if (storageError) {
-      // F6: het origineel is nu ALTIJD dragend — de worker extraheert eruit.
-      // Zonder origineel is het document onbruikbaar; opruimen en eerlijk falen.
-      console.error("Fout bij opslaan bestand in Storage:", storageError);
-      await supabase.from("documenten").delete().eq("id", document.id);
-      return NextResponse.json(
-        {
-          error:
-            "Het origineel kon niet worden opgeslagen; het document is niet " +
-            "bewaard. Probeer het opnieuw.",
-          foutcode: "origineel_opslaan_mislukt",
-        },
-        { status: 500 }
-      );
-    }
-
-    // Nu het origineel in Storage staat: opslag_pad zetten ÉN het document
-    // vrijgeven voor de worker-reaper (verwerkingsstatus='ontvangen'). Eén update,
-    // zodat de reaper het document nooit zonder opslag_pad ziet.
-    const { error: padError } = await supabase
-      .from("documenten")
-      .update({ opslag_pad: opslagPad, verwerkingsstatus: "ontvangen" })
-      .eq("id", document.id);
-    if (padError) {
-      // F6: zonder opslag_pad kan de worker niet extraheren → onbruikbaar.
-      console.error(
-        `[documents.upload] opslag_pad zetten mislukt voor ${document.id}:`,
-        padError
-      );
-      await supabase.from("documenten").delete().eq("id", document.id);
-      return NextResponse.json(
-        {
-          error:
-            "Het document kon niet volledig worden vastgelegd; het is niet " +
-            "bewaard. Probeer het opnieuw.",
-          foutcode: "origineel_opslaan_mislukt",
-        },
-        { status: 500 }
-      );
-    }
-
-    // -- Auditregel bij een statusverklaring (besluit 0136) ----------------
-    // Append-only spoor in document_metadata_log, in dezelfde vorm als de
-    // metadata-PATCH gebruikt. `oude_waarde` is bewust 'upload': er wás geen
-    // vorige status, dit is de herkomst. Zo is in het log te zien dat de status
-    // bij aanlevering is verklaard en niet via de bestuurlijke keten is
-    // gelopen -- precies het onderscheid waar dit besluit om draait.
-    //
-    // Best-effort: een mislukt auditlog mag een geslaagde upload niet
-    // terugdraaien, maar moet wel zichtbaar zijn in de logs.
-    if (ingestStatus) {
-      const { error: auditFout } = await supabase
-        .from("document_metadata_log")
-        .insert({
-          document_id: document.id,
-          document_titel_snapshot: titel,
-          fonds_id: profiel.fonds_id,
-          gewijzigd_door: user.id,
-          gewijzigd_door_naam: profiel.naam ?? null,
-          veld_naam: "status",
-          oude_waarde: "upload",
-          nieuwe_waarde: ingestStatus,
-          wijzig_reden: statusReden,
-          wijzig_type: "status",
-          rag_impact: true,
-        });
       if (auditFout) {
         console.error(
           `[documents.upload] auditlog statusverklaring mislukt voor ${document.id}:`,
@@ -390,17 +492,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ── F6: het request registreert alleen; de worker doet de rest ─────────
-    // Kale chunks, prefix, embedding, AI-samenvatting én OCR gebeuren nu in de
-    // async worker, die het origineel uit Storage haalt. Het request is klaar:
-    // `verwerkingsstatus='ontvangen'` (in de insert gezet) is het reaper-signaal;
-    // `geindexeerd` blijft false tot de worker de invariant haalt (nul chunks met
-    // embedding is null). Ook een scan zonder tekstlaag hoeft niet meer manueel
-    // "Tekstherkenning uitvoeren": de worker OCRt automatisch (tot MAX_OCR_PAGINAS).
-
-    // F0.1: request-zijde meting — bewijst dat de bevestiging binnen seconden
-    // komt (acceptatiecriterium 2). De worker logt de verwerkingsfasen apart.
-    // Uitsluitend metadata — geen fondsinhoud, geen titel.
+    // F0.1: request-zijde meting (metadata only).
     console.log(
       JSON.stringify({
         tag: "ingest-meting",
@@ -408,37 +500,31 @@ export async function POST(req: NextRequest) {
         correlatie_id: correlatieId,
         document_id: document.id,
         fonds_id: profiel.fonds_id,
-        bestandstype,
-        agendapunt: !!agendapunt_id,
+        bestandstype: validatie.bestandstype,
+        agendapunt: !!meta.agendapunt_id,
         status: "verwerken",
-        duur_ms: {
-          validatie: validatieMs,
-          totaal: Date.now() - tStart,
-        },
+        duur_ms: { validatie: validatieMs, totaal: Date.now() - tStart },
       })
     );
 
-    // Eerlijke melding (geen schijnzekerheid): opgeslagen en in verwerking, nog
-    // niet doorzoekbaar. `status:'verwerken'` stuurt de UI (F5) naar de
-    // "Verwerken…"-badge en polling.
     return NextResponse.json({
       success: true,
       status: "verwerken",
       document_id: document.id,
-      titel,
-      bestandstype,
+      titel: meta.titel,
+      bestandstype: validatie.bestandstype,
       bericht:
-        "Document geüpload. Het wordt nu verwerkt en is binnen enkele minuten " +
-        "doorzoekbaar.",
+        "Document geüpload. Het wordt nu verwerkt en is binnen enkele minuten doorzoekbaar.",
     });
   } catch (error) {
-    console.error("Upload fout:", error);
+    console.error("Upload-complete fout:", error);
     return NextResponse.json(
       { error: "Er is een fout opgetreden bij het uploaden." },
       { status: 500 }
     );
   }
 }
+
 
 // Haal lijst van documenten op
 export async function GET(req: NextRequest) {
