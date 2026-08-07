@@ -47,8 +47,18 @@ const MAX_INGEST_RETRIES = 3;
 const LIVE_PREFIX_CONCURRENTIE = 8; // live-baan; ~30% van het Haiku-RPM (§7)
 const VERRIJK_LIMIET = 200; // chunks per verrijk-/embed-ronde
 const REAPER_LIMIET = 50; // documenten per invocatie te enqueuen
-const BATCH_LEASE_SECONDS = 3600; // batch-baan: een batch kan tot 1u draaien
+// Batch-baan poll-interval: KORTER dan de cron (60s), zodat de worker de Message
+// Batch elke cyclus opnieuw pollt en afrondt zodra die klaar is. (De batch zelf
+// heeft z'n eigen 24u-venster aan Anthropic-kant; deze lease is alleen ons
+// re-poll-ritme — NIET de max batch-duur.)
+const BATCH_POLL_SECONDS = 45;
 const BACKOFF_SEC = [30, 120, 480]; // §4b verstoring 1 (30s → 2m → 8m)
+
+// Batch-baan (Message Batches API, besluit D) AAN/UIT. Uit gezet voor de MVP:
+// bij Scale tier (10K RPM Haiku) is het live-budget ruim genoeg, en de live-baan
+// levert bibliotheekdocumenten in minuten i.p.v. de batch-latency (tot ~1u). De
+// batch-code blijft staan; zet dit op true zodra het volume het live-budget raakt.
+const BATCH_BAAN_AAN = false;
 
 // Job-rij zoals documenten_claim_ingest_jobs die teruggeeft (relevante velden).
 interface IngestJob {
@@ -223,7 +233,9 @@ async function verwerkJob(
   // EMBEDDING-fase. Als het tijdbudget al op is na de (dure) extractie: yield,
   // een volgende invocatie doet de embedding.
   if (Date.now() >= deadline) return await yieldJob(svc, job);
-  const liveBaan = document.agendapunt_id != null;
+  // Live-baan voor stukken bij een agendapunt (voorrang/snelheid) én — zolang de
+  // batch-baan uit staat — voor alle documenten (MVP-keuze, zie BATCH_BAAN_AAN).
+  const liveBaan = !BATCH_BAAN_AAN || document.agendapunt_id != null;
   return liveBaan
     ? await verwerkLive(svc, job, document, deadline)
     : await verwerkBatch(svc, job, document, deadline);
@@ -391,7 +403,7 @@ async function verwerkBatch(
     if (st === "bezig") {
       await svc
         .from("document_processing_jobs")
-        .update({ lease_expires_at: leaseTijd(BATCH_LEASE_SECONDS) })
+        .update({ lease_expires_at: leaseTijd(BATCH_POLL_SECONDS) })
         .eq("id", job.id);
       return "bezig";
     }
@@ -409,7 +421,7 @@ async function verwerkBatch(
     if (start.soort === "gestart") {
       await svc
         .from("document_processing_jobs")
-        .update({ extern_batch_id: start.externBatchId, lease_expires_at: leaseTijd(BATCH_LEASE_SECONDS) })
+        .update({ extern_batch_id: start.externBatchId, lease_expires_at: leaseTijd(BATCH_POLL_SECONDS) })
         .eq("id", job.id);
       return "bezig";
     }
