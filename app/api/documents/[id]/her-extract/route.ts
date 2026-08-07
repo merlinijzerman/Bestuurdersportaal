@@ -201,11 +201,12 @@ export async function POST(
   // her-index nu óók (gedeeld pad), zodat een her-geïndexeerd document meteen
   // contextueel zoekbaar is en niet op de losse embeddings-backfill hoeft te
   // wachten. `tekst` blijft het originele fragment (weergaveveld).
-  const { records: chunkRecords, aantalChunks } = await bouwChunkRecords({
-    documentId: id,
-    titel: document.titel,
-    segmenten: extractie.segmenten,
-  });
+  const { records: chunkRecords, aantalChunks, embeddingsGelukt } =
+    await bouwChunkRecords({
+      documentId: id,
+      titel: document.titel,
+      segmenten: extractie.segmenten,
+    });
 
   // Pas hier — nadat de dure stappen (extractie, OCR, context-prefix,
   // embeddings) zijn geslaagd — vervangen we de bestaande chunks.
@@ -255,10 +256,14 @@ export async function POST(
   // Audit-velden (ocr_toegepast/ocr_engine, besluit 0020) gevouwen in dezelfde
   // update. Best-effort: draait de migratie 2026_06_22x_ocr_audit nog niet, dan
   // breekt de her-extract niet — we loggen en gaan door.
+  // F0.2 (bouwticket async-ingest v2.1): invariant geldt óók hier — geindexeerd
+  // uitsluitend true als de embeddings volledig zijn gevuld. Viel de
+  // embedding-API om, dan zijn de chunks zónder vector opgeslagen en blijft
+  // geindexeerd false (FTS werkt, de backfill vult de vectoren later aan).
   const { error: updateError } = await supabase
     .from("documenten")
     .update({
-      geindexeerd: true,
+      geindexeerd: embeddingsGelukt,
       paginas: extractie.aantalPaginas,
       ocr_toegepast: extractie.ocrToegepast,
       ocr_engine: extractie.ocrEngine,

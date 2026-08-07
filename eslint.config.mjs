@@ -71,6 +71,16 @@ export default [
       ecmaVersion: "latest",
       sourceType: "module",
     },
+    // F0.6 (bouwticket async-ingest v2.1): `no-unreachable` als harde regel.
+    // Aanleiding: in embeddings-backfill/route.ts stond een rate-limitcheck ná
+    // een `return` binnen een if-blok — nooit uitgevoerd, terwijl een comment
+    // claimde dat bevinding M-06 was opgelost. `tsc` ziet dit niet en de
+    // boundary-only config laadde geen ruleset die het ving. Dit is een
+    // KERN-ESLint-regel (geen plugin nodig) en draait dus mee in
+    // `npm run lint:boundaries`.
+    rules: {
+      "no-unreachable": "error",
+    },
   },
 
   // core/ — mag niet uit fondsen/* en niet uit platform/*.

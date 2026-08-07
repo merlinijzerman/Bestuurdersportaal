@@ -26,7 +26,21 @@ export interface Stuk {
   opslag_pad: string | null;
   // T2/B-6 — zelfverklaarde markering dat dit stuk AI-ondersteund is voorbereid.
   ai_ondersteund_voorbereid: boolean;
+  // Async ingest (F3/F4): tot het stuk doorzoekbaar is, staat het nog in de
+  // pipeline. De samenvatting is wél direct beschikbaar (synchroon bij upload).
+  geindexeerd: boolean;
+  verwerkingsstatus: string | null;
 }
+
+// Pipeline-statussen waarin een stuk nog asynchroon wordt verwerkt (F3/F4).
+const STUK_PIPELINE_STATUSSEN = [
+  "ontvangen",
+  "gevalideerd",
+  "gescand",
+  "extractie",
+  "chunking",
+  "embedding",
+];
 
 const STUK_BADGE: Record<NonNullable<Stuk["bestandstype"]>, { label: string; kleur: string }> = {
   pdf: { label: "PDF", kleur: "text-err-ink" },
@@ -620,6 +634,12 @@ function StukKaart({ stuk, magMarkeren }: { stuk: Stuk; magMarkeren: boolean }) 
   const badge = STUK_BADGE[stuk.bestandstype ?? "pdf"];
   const eenheid = stuk.bestandstype === "xlsx" ? "tabbladen" : "pagina's";
   const kanInzien = !!stuk.opslag_pad;
+  // Async ingest: het stuk is al zichtbaar en (bij een agendapunt) samengevat,
+  // maar pas ná de worker doorzoekbaar in de chat. Maak dat herkenbaar.
+  const inVerwerking =
+    !stuk.geindexeerd &&
+    STUK_PIPELINE_STATUSSEN.includes(stuk.verwerkingsstatus ?? "");
+  const verwerkingMislukt = stuk.verwerkingsstatus === "mislukt";
   const snippetBron = samenvatting
     ? samenvatting.gevraagd_besluit ||
       samenvatting.aanleiding ||
@@ -662,6 +682,8 @@ function StukKaart({ stuk, magMarkeren }: { stuk: Stuk; magMarkeren: boolean }) 
           <div className="text-[11px] text-muted mt-0.5">
             {stuk.paginas ? `${stuk.paginas} ${eenheid}` : badge.label}
             {!stuk.samenvatting_ai ? " · samenvatting wordt nog gegenereerd" : ""}
+            {inVerwerking ? " · ⏳ wordt verwerkt (nog niet doorzoekbaar)" : ""}
+            {verwerkingMislukt ? " · ⚠️ verwerking mislukt" : ""}
             {!kanInzien ? " · origineel niet beschikbaar" : ""}
           </div>
           {/* T2/B-6 — markering "AI-ondersteund voorbereid" voor het bestuur. */}

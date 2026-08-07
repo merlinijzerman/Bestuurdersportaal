@@ -28,15 +28,19 @@ export async function POST(_req: NextRequest) {
     } = await supabase.auth.getUser();
     if (!user) {
       return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+    }
 
     // M-06 (review 2026-07-30): deze route doet per aanroep externe
     // modelcalls en had geen enkele limiet — onbeperkt herhaalbaar door een
     // geauthenticeerde gebruiker (kosten-DoS).
     // Fail-closed: bij een storing in de teller is doorlaten juist de duurste
     // optie (zie core/lib/rate-limit.ts).
+    // F0.6 (bouwticket async-ingest v2.1): dit blok stond eerder BINNEN het
+    // `if (!user)`-blok, ná de return — dus onbereikbaar (dode code). De limiet
+    // gold daardoor nooit. Nu op dezelfde plek als her-extract/reindex-backfill:
+    // direct ná de sessiecheck.
     const limiet = await controleerLimiet(supabase, LIMIETEN.backfill, { failClosed: true });
     if (!limiet.toegestaan) return rateLimited("documents.embeddings-backfill", limiet.resetAt);
-    }
 
     const { data: profiel } = await supabase
       .from("profielen")

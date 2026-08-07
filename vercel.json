@@ -6,6 +6,10 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/internal/ingest-worker",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/platform/monitoring/snapshot",
       "schedule": "*/5 * * * *"
     }

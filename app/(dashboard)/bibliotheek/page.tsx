@@ -3,6 +3,10 @@ import { useState, useEffect, useRef } from "react";
 import DocumentMetadataModal from "@/core/components/DocumentMetadataModal";
 import { bronkaartLabels } from "@/core/lib/bronsoort";
 import { DOCUMENTTYPEN, DOCUMENTTYPE_LABEL } from "@/core/lib/document-metadata";
+import {
+  MAX_UPLOAD_BYTES_SYNCHROON,
+  uploadTeGrootMelding,
+} from "@/core/lib/ingest-caps";
 import ZoekenPaneel from "./_components/ZoekenPaneel";
 
 interface Document {
@@ -14,6 +18,9 @@ interface Document {
   bestandstype: "pdf" | "docx" | "xlsx" | null;
   paginas: number | null;
   geindexeerd: boolean;
+  // Async ingest (F3/F4): de pipeline-status waar de UI "Verwerken…"/"Mislukt"
+  // uit afleidt. `null` = geen async-pipeline (bv. oud document of OCR-kandidaat).
+  verwerkingsstatus: string | null;
   // Besluit 0020/0134 — audit: is dit document via tekstherkenning ontsloten?
   // Zichtbaar maken is bewust: OCR maakt fouten, en een bestuurder die een getal
   // overneemt moet kunnen zien dat er een herkenningsstap tussen bron en citaat zit.
@@ -34,6 +41,21 @@ interface Document {
   normgewicht: string | null;
   geldig_tot: string | null;
 }
+
+// Pipeline-statussen waarin een document nog asynchroon wordt verwerkt (F3/F4).
+// `beschikbaar` valt hier bewust buiten (dan is geindexeerd true = doorzoekbaar).
+const PIPELINE_STATUSSEN = [
+  "ontvangen",
+  "gevalideerd",
+  "gescand",
+  "extractie",
+  "chunking",
+  "embedding",
+];
+
+// Boven deze leeftijd toont een nog-verwerkend document een eerlijker tekst
+// (§4b verstoring 11): "duurt langer dan verwacht".
+const VERWERKING_TRAAG_MS = 15 * 60 * 1000;
 
 const TYPE_LABEL: Record<NonNullable<Document["bestandstype"]>, string> = {
   pdf: "PDF",
@@ -106,18 +128,55 @@ export default function BibliotheekPage() {
     }
   }, []);
 
-  async function haalDocumenten() {
-    setLaden(true);
-    const res = await fetch("/api/documents/upload");
-    const data = await res.json();
-    setDocumenten(data.documenten || []);
-    setLaden(false);
+  async function haalDocumenten(stil = false) {
+    if (!stil) setLaden(true);
+    try {
+      const res = await fetch("/api/documents/upload");
+      const data = await res.json().catch(() => ({}));
+      setDocumenten(data.documenten || []);
+    } finally {
+      if (!stil) setLaden(false);
+    }
   }
+
+  // Polling zolang er documenten in verwerking zijn (F5). Stopt vanzelf zodra de
+  // worker ze afrondt (geindexeerd) of markeert als mislukt, en heeft een harde
+  // bovengrens op het aantal rondes zodat een vastgelopen document niet eeuwig
+  // pollt (dat wordt door de "duurt langer dan verwacht"-tekst afgevangen).
+  const pollRondes = useRef(0);
+  useEffect(() => {
+    const inVerwerking = documenten.some(
+      (d) =>
+        d.actief &&
+        !d.geindexeerd &&
+        PIPELINE_STATUSSEN.includes(d.verwerkingsstatus ?? "")
+    );
+    if (!inVerwerking) {
+      pollRondes.current = 0;
+      return;
+    }
+    if (pollRondes.current >= 40) return; // ~3,5 min bij 5s
+    const t = setTimeout(() => {
+      pollRondes.current += 1;
+      haalDocumenten(true);
+    }, 5000);
+    return () => clearTimeout(t);
+  }, [documenten]);
 
   async function handleUpload(e: React.FormEvent) {
     e.preventDefault();
     const bestand = bestandRef.current?.files?.[0];
     if (!bestand) return;
+
+    // F0.5 — maak de blokker vooraf expliciet (guardrail "toon vóór een actie
+    // wat ontbreekt, niet pas een foutmelding erna"). Een bestand boven de
+    // synchrone payloadgrens bereikt de server niet: Vercel weigert de request
+    // op platformniveau (413 FUNCTION_PAYLOAD_TOO_LARGE) zónder body. Zonder
+    // deze check gooit res.json() hieronder en bleef de knop eeuwig draaien.
+    if (bestand.size > MAX_UPLOAD_BYTES_SYNCHROON) {
+      setUploadBericht(`❌ ${uploadTeGrootMelding(bestand.size)}`);
+      return;
+    }
 
     setUploaden(true);
     setUploadBericht("");
@@ -132,31 +191,65 @@ export default function BibliotheekPage() {
       formData.append("status_reden", uploadForm.statusReden);
     }
 
-    const res = await fetch("/api/documents/upload", {
-      method: "POST",
-      body: formData,
-    });
-    const data = await res.json();
-
-    if (data.success) {
-      // Besluit 0134: een PDF zonder tekstlaag is wél opgeslagen, maar nog niet
-      // doorzoekbaar. Geen ✅ — dat zou "klaar" suggereren terwijl er een
-      // handeling openstaat (guardrail: geen schijnzekerheid).
-      const openVervolgstap = data.status === "tekstherkenning_nodig";
-      setUploadBericht(`${openVervolgstap ? "⚠️" : "✅"} ${data.bericht}`);
-      haalDocumenten();
-      setUploadOpen(false);
-      setUploadForm({
-        titel: "",
-        bron: "DNB",
-        bibliotheek: "fonds",
-        status: "",
-        statusReden: "",
+    try {
+      const res = await fetch("/api/documents/upload", {
+        method: "POST",
+        body: formData,
       });
-    } else {
-      setUploadBericht(`❌ ${data.error}`);
+
+      // F0.5 — een platform-413 (of elke andere niet-JSON-respons) levert geen
+      // JSON terug; res.json() zou dan gooien en de foutafhandeling overslaan.
+      // Parse defensief en val terug op een begrijpelijke melding.
+      let data: {
+        success?: boolean;
+        status?: string;
+        bericht?: string;
+        error?: string;
+      } | null = null;
+      try {
+        data = await res.json();
+      } catch {
+        data = null;
+      }
+
+      if (data?.success) {
+        // Besluit 0134: een PDF zonder tekstlaag is wél opgeslagen, maar nog niet
+        // doorzoekbaar. F3: een async-verwerkt document is óók nog niet klaar.
+        // Geen ✅ in die gevallen — dat zou "klaar" suggereren terwijl er nog een
+        // stap openstaat (guardrail: geen schijnzekerheid).
+        const icoon =
+          data.status === "tekstherkenning_nodig"
+            ? "⚠️"
+            : data.status === "verwerken"
+              ? "⏳"
+              : "✅";
+        setUploadBericht(`${icoon} ${data.bericht ?? ""}`);
+        haalDocumenten();
+        setUploadOpen(false);
+        setUploadForm({
+          titel: "",
+          bron: "DNB",
+          bibliotheek: "fonds",
+          status: "",
+          statusReden: "",
+        });
+      } else if (data?.error) {
+        setUploadBericht(`❌ ${data.error}`);
+      } else if (res.status === 413) {
+        setUploadBericht(`❌ ${uploadTeGrootMelding(bestand.size)}`);
+      } else {
+        setUploadBericht(
+          "❌ Uploaden is niet gelukt. Probeer het opnieuw of neem contact op met de beheerder."
+        );
+      }
+    } catch {
+      // Netwerkfout of afgebroken verbinding.
+      setUploadBericht(
+        "❌ Uploaden is niet gelukt door een verbindingsprobleem. Probeer het opnieuw."
+      );
+    } finally {
+      setUploaden(false);
     }
-    setUploaden(false);
   }
 
   async function deactiveer(doc: Document, reden: string) {
@@ -211,6 +304,26 @@ export default function BibliotheekPage() {
       return;
     }
     setUploadBericht(`✅ ${data.bericht || "Document opnieuw geïndexeerd."}`);
+    haalDocumenten();
+  }
+
+  // Opnieuw verwerken (F5): een async-mislukt document terug de pipeline in. Zet
+  // de verwerkingsstatus server-side terug op 'embedding'; de worker-reaper pikt
+  // het daarna op. Geen synchrone her-extractie — de chunks staan er al, alleen
+  // de embeddings ontbreken. Server beperkt dit tot voorzitter/beheerder.
+  async function herverwerk(doc: Document) {
+    setHerindexId(doc.id);
+    setUploadBericht("");
+    const res = await fetch(`/api/documents/${doc.id}/opnieuw-verwerken`, {
+      method: "POST",
+    });
+    const data = await res.json().catch(() => ({}));
+    setHerindexId(null);
+    if (!res.ok) {
+      alert(data?.error || "Opnieuw verwerken is niet gelukt.");
+      return;
+    }
+    setUploadBericht("⏳ Het document wordt opnieuw verwerkt.");
     haalDocumenten();
   }
 
@@ -468,7 +581,27 @@ export default function BibliotheekPage() {
             // Generieke documenten uitgesloten: die zijn voor tenants read-only
             // (B13) en de her-indexeerknop is er bewust verborgen. Een badge die
             // naar een menu-item wijst dat er niet is, is erger dan geen badge.
-            const nietDoorzoekbaar = !inactief && !doc.geindexeerd && !isGeneriek;
+            // Async ingest (F3/F4): onderscheid "wordt verwerkt" en "mislukt" van
+            // de OCR-/niet-doorzoekbaar-toestanden, die geen pipeline-status dragen.
+            const inVerwerking =
+              !inactief &&
+              !doc.geindexeerd &&
+              PIPELINE_STATUSSEN.includes(doc.verwerkingsstatus ?? "");
+            const verwerkingTraag =
+              inVerwerking &&
+              Date.now() - new Date(doc.aangemaakt).getTime() > VERWERKING_TRAAG_MS;
+            const verwerkingMislukt = !inactief && doc.verwerkingsstatus === "mislukt";
+            const verwerkingGeweigerd =
+              !inactief &&
+              (doc.verwerkingsstatus === "geweigerd" ||
+                doc.verwerkingsstatus === "gequarantineerd");
+            const nietDoorzoekbaar =
+              !inactief &&
+              !doc.geindexeerd &&
+              !isGeneriek &&
+              !inVerwerking &&
+              !verwerkingMislukt &&
+              !verwerkingGeweigerd;
             const tekstherkenningNodig =
               nietDoorzoekbaar && doc.bestandstype === "pdf" && kanInzien;
             return (
@@ -540,6 +673,34 @@ export default function BibliotheekPage() {
                     {doc.geindexeerd && !inactief && (
                       <span className="text-ok-ink font-semibold">
                         ✓ Geïndexeerd
+                      </span>
+                    )}
+                    {inVerwerking && (
+                      <span
+                        className="px-2 py-0.5 rounded-full bg-warn-tint text-warn-ink font-semibold"
+                        title={
+                          verwerkingTraag
+                            ? "De verwerking duurt langer dan verwacht. Neem contact op met de beheerder als dit aanhoudt."
+                            : "Dit document wordt nu verwerkt en is binnen enkele minuten doorzoekbaar."
+                        }
+                      >
+                        ⏳ {verwerkingTraag ? "Verwerken — duurt langer dan verwacht" : "Verwerken…"}
+                      </span>
+                    )}
+                    {verwerkingMislukt && (
+                      <span
+                        className="px-2 py-0.5 rounded-full bg-err-tint text-err-ink font-semibold"
+                        title="De verwerking is mislukt. Een voorzitter of beheerder kan 'Opnieuw verwerken' kiezen."
+                      >
+                        Verwerking mislukt
+                      </span>
+                    )}
+                    {verwerkingGeweigerd && (
+                      <span
+                        className="px-2 py-0.5 rounded-full bg-err-tint text-err-ink font-semibold"
+                        title="Dit bestand is bij de veiligheidscontrole afgewezen en is niet doorzoekbaar."
+                      >
+                        Geweigerd
                       </span>
                     )}
                     {doc.ocr_toegepast && !inactief && (
@@ -686,6 +847,21 @@ export default function BibliotheekPage() {
                               : tekstherkenningNodig
                                 ? "Tekstherkenning uitvoeren"
                                 : "Her-indexeren"}
+                          </button>
+                        )}
+                        {!inactief && !isGeneriek && verwerkingMislukt && (
+                          <button
+                            onClick={() => {
+                              herverwerk(doc);
+                              setOpenMenuId(null);
+                            }}
+                            disabled={herindexId === doc.id}
+                            className="w-full text-left px-4 py-2 text-sm text-ink hover:bg-app-bg disabled:opacity-50"
+                            title="De verwerking is mislukt. Zet het document opnieuw in de verwerkingswachtrij (voorzitter/beheerder)."
+                          >
+                            {herindexId === doc.id
+                              ? "Bezig..."
+                              : "Opnieuw verwerken"}
                           </button>
                         )}
                         {!isGeneriek &&

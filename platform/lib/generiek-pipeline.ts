@@ -247,10 +247,20 @@ export async function verwerkGeneriekBestand(
   });
 
   // ── Indexering klaar → beschikbaar ───────────────────────────────────────
+  // F0.2 (bouwticket async-ingest v2.1): invariant geldt overal. Deze pipeline
+  // schreef hierboven al eerlijk een jobrij `embedding: overgeslagen` weg als de
+  // embeddings omvielen, maar zette het document daarna tóch op
+  // `beschikbaar` + `geindexeerd = true` — een tegenspraak met het eigen
+  // auditspoor. Nu volgt de documentstatus de werkelijkheid: `geindexeerd` en
+  // `beschikbaar` uitsluitend bij volledig gevulde embeddings; anders blijft het
+  // op `embedding` staan (FTS werkt, de vectoren worden later aangevuld).
   t = new Date().toISOString();
   await svc
     .from("documenten")
-    .update({ verwerkingsstatus: "beschikbaar", geindexeerd: true })
+    .update({
+      verwerkingsstatus: embeddings ? "beschikbaar" : "embedding",
+      geindexeerd: embeddings,
+    })
     .eq("id", documentId);
   await schrijfJob(svc, {
     documentId, versieId, correlatieId, stap: "indexering", status: "geslaagd", start: t,

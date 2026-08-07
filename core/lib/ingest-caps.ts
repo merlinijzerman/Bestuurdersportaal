@@ -22,10 +22,40 @@
 //  De drempelwaarden zijn werkhypotheses — kalibreer op echte documenten.
 // ============================================================================
 
-// Maximaal aantal tekstfragmenten (chunks) dat we per document synchroon
-// indexeren. Boven deze grens timet het embedding-/prefixpad de Vercel-functie.
-// Fase 2 (async worker) heft deze grens later op voor legitieme grote stukken.
-export const MAX_CHUNKS_PER_DOCUMENT = 1500;
+// Maximaal aantal tekstfragmenten (chunks) per document. Sinds F6 doet de async
+// worker de verrijking (geen synchrone Vercel-timeout meer), dus de grens is
+// opgehoogd; hij blijft staan als kosten-/misbruikrem (een document hierboven is
+// vrijwel zeker een dataset, geen leesbaar stuk). Werkhypothese; kalibreer op
+// echte documenten en op het Mistral-tokenbudget (§8b).
+export const MAX_CHUNKS_PER_DOCUMENT = 20000;
+
+// Maximaal aantal pagina's dat de ASYNC worker door OCR haalt (F6). Anders dan
+// het synchrone pad (MAX_OCR_PAGINAS_SYNCHROON) kent de worker geen 300s-timeout;
+// deze grens is een kosten-/misbruikrem, niet een tijdrem. Werkhypothese 200.
+export const MAX_OCR_PAGINAS = 200;
+
+// Werkelijke bovengrens van de SYNCHRONE upload-route (fase 2a). Vercel weigert
+// een serverless-request-body boven ~4,5 MB op PLATFORMNIVEAU
+// (FUNCTION_PAYLOAD_TOO_LARGE) — vóórdat de functie draait. Er komt dan geen
+// validatie, geen documentrij en geen logregel; de eigen 25 MB-controle
+// (MAX_BESTAND_BYTES in bestand-validatie.ts) is op dit pad onbereikbaar.
+// Daarom weigert de client een te groot bestand VOORAF met een eerlijke melding
+// (F0.5), zodat de gebruiker geen eeuwige spinner ziet op een 413 zonder body.
+// F7 (direct-to-storage) heft deze grens op; herijk hem daar samen met de
+// client-side controle. Bewust dit module (puur, client-veilig, geen node-deps).
+export const MAX_UPLOAD_BYTES_SYNCHROON = Math.floor(4.5 * 1024 * 1024);
+
+// Gebruikersmelding wanneer een bestand de synchrone payloadgrens overschrijdt.
+export function uploadTeGrootMelding(bytes: number): string {
+  const mb = (n: number) => (n / 1024 / 1024).toFixed(1).replace(".", ",");
+  return (
+    `Dit bestand is ${mb(bytes)} MB. Grote bestanden (boven ${mb(
+      MAX_UPLOAD_BYTES_SYNCHROON
+    )} MB) kunnen op dit moment nog niet in één keer worden geüpload; het ` +
+    `verzoek bereikt de server dan niet. Splits het document voorlopig in ` +
+    `kleinere delen, of neem contact op met de beheerder.`
+  );
+}
 
 // Maximaal aantal DATArijen per xlsx-tabblad (exclusief kopregel). Een tabblad
 // hierboven is vrijwel zeker een dataset i.p.v. een leesbaar document.
