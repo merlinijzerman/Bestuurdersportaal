@@ -19,7 +19,13 @@
 // ============================================================================
 
 import assert from "node:assert/strict";
-import { resolveBronkeuzeModus, type BronkeuzeModus } from "./fonds-config-core";
+import {
+  resolveBronkeuzeModus,
+  resolveBronkeuzeModusMetHerkomst,
+  alsBronkeuzeModus,
+  BRONKEUZE_MODI,
+  type BronkeuzeModus,
+} from "./fonds-config-core";
 import {
   bepaalAutoBronModus,
   bepaalAntwoordmodus,
@@ -116,6 +122,53 @@ for (const v of ankerloos) {
   check(
     `"${v}" — retrievalmodus volgt uit vraag/antwoordmodus (actueel), niet uit intent`,
     retrievalModusVoorVraag(bepaalAntwoordmodus(v), v) === "actueel" && bepaalAutoBronModus(false) === "combineren"
+  );
+}
+
+// ── (c) Route-validatie + herkomst (besluit 0137, beheerscherm) ─────────────
+console.log("\nbronkeuze-modus — (c) route-validatie + herkomst:\n");
+
+// De /api/instellingen-flag-poort weigert een ongeldige waarde (400) i.p.v. een
+// stille terugval — dit spiegelt de check `!alsBronkeuzeModus(body.waarde)`.
+for (const geldig of BRONKEUZE_MODI) {
+  check(`"${geldig}" wordt geaccepteerd`, alsBronkeuzeModus(geldig) === geldig);
+}
+for (const ongeldig of ["antwoord_erst", "", "aan", "true", " uit"]) {
+  check(
+    `"${ongeldig}" wordt geweigerd (geen stille terugval)`,
+    alsBronkeuzeModus(ongeldig) === null
+  );
+}
+check(
+  "niet-string waarde wordt geweigerd",
+  alsBronkeuzeModus(1 as unknown) === null && alsBronkeuzeModus(null) === null
+);
+
+// Herkomst: fonds → env → default, zoals het beheerscherm toont.
+{
+  const f = resolveBronkeuzeModusMetHerkomst("antwoord_eerst", "uit");
+  check(
+    "herkomst 'fonds' als de fonds-vlag geldig is (wint van env)",
+    f.herkomst === "fonds" && f.modus === "antwoord_eerst"
+  );
+  const e = resolveBronkeuzeModusMetHerkomst(null, "antwoord_eerst");
+  check(
+    "herkomst 'env' als alleen de env-default geldig is",
+    e.herkomst === "env" && e.modus === "antwoord_eerst"
+  );
+  const d = resolveBronkeuzeModusMetHerkomst(null, undefined);
+  check(
+    "herkomst 'default' + fail-safe 'blokkerend' als beide ontbreken",
+    d.herkomst === "default" && d.modus === "blokkerend"
+  );
+  const t = resolveBronkeuzeModusMetHerkomst("typo", "ook_typo");
+  check(
+    "ongeldige waarden op beide niveaus → default/blokkerend",
+    t.herkomst === "default" && t.modus === "blokkerend"
+  );
+  check(
+    "resolveBronkeuzeModus == metHerkomst.modus (geen tweede volgorde-lijst)",
+    resolveBronkeuzeModus("antwoord_eerst", null) === f.modus
   );
 }
 

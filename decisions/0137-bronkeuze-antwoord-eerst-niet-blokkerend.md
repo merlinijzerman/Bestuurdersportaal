@@ -161,6 +161,18 @@ meetset labelt zulke vragen daarom nog steeds `mag-terugvragen` — het label be
   niet pas bij een vlag-flip. Dit is bewust (M0.2 groen) en exact waarom de her-
   accordering **vóór deploy** moet — niet pas vóór de productie-vlag. Zie het scherpere
   openstaande punt hieronder en OP-C3.
+- **Bedienbaar in het beheerscherm (07-08-2026).** De drieweg-vlag was tot nu toe
+  alleen via de database te zetten — waardoor de vangnetstand `uit` onbereikbaar was op
+  het moment dat je hem nodig hebt. `ConfigBeheer.tsx` toont hem nu onder "Feature flags"
+  als driewegkeuze (*Vraag vooraf* / *Antwoord eerst* / *Altijd fondsgericht*), geschreven
+  via het bestaande geversioneerde, append-only flag-pad. `/api/instellingen` valideert de
+  waarde server-side voor déze key (`alsBronkeuzeModus` → 400 bij een typfout, geen stille
+  terugval) en geeft in de GET de **effectieve modus + herkomst** (fonds → env → default),
+  zodat een lege fonds-vlag niet als "uit" leest. **Geen gedragswijziging aan de assistent**
+  (`chat/route.ts` ongemoeid); de fail-safe blijft `blokkerend` op beide niveaus. Pure
+  resolutie hergebruikt via `resolveBronkeuzeModusMetHerkomst` in `fonds-config-core.ts`
+  (geen tweede volgorde-lijst). De compliance-her-accordering hieronder blijft de gate om
+  `antwoord_eerst` bij een fonds met echte bestuurders aan te zetten.
 
 ## Openstaand
 

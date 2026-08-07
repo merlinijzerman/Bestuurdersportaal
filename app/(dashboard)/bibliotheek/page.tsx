@@ -243,11 +243,13 @@ export default function BibliotheekPage() {
     haalDocumenten();
   }
 
-  // Her-indexeren: haalt het origineel opnieuw door de extractie-pipeline en
-  // vervangt de chunks. Sinds R1.1/R1.2 levert dat structuur-bewuste fragmenten
-  // (artikel/§/definitie/tabel blijven heel) én een contextuele zoekindex
-  // (context-prefix + verrijkte embedding/FTS); de getoonde brontekst blijft
-  // ongewijzigd. Server beperkt dit tot voorzitter/beheerder.
+  // Her-indexeren: zet het document terug de async pipeline in. De worker haalt
+  // het origineel opnieuw uit Storage, her-extraheert (OCR tot 200 pagina's, geen
+  // requesttimeout) en vervangt de chunks idempotent — sinds R1.1/R1.2 met
+  // structuur-bewuste fragmenten en een contextuele zoekindex; de getoonde
+  // brontekst blijft ongewijzigd. Geen ✅ (nog niet klaar): het document gaat op
+  // "Verwerken…" en wordt door de polling gevolgd. Server beperkt dit tot
+  // voorzitter/beheerder.
   async function herindexeer(doc: Document) {
     setHerindexId(doc.id);
     setUploadBericht("");
@@ -260,7 +262,7 @@ export default function BibliotheekPage() {
       alert(data?.error || "Her-indexeren is niet gelukt.");
       return;
     }
-    setUploadBericht(`✅ ${data.bericht || "Document opnieuw geïndexeerd."}`);
+    setUploadBericht(`⏳ ${data.bericht || "Het document wordt opnieuw geïndexeerd."}`);
     haalDocumenten();
   }
 

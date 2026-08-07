@@ -13,6 +13,7 @@
 // ============================================================================
 
 import { useCallback, useEffect, useState } from "react";
+import type { BronkeuzeModus, BronkeuzeHerkomst } from "@/core/lib/fonds-config-core";
 
 type ModuleRij = { key: string; label: string; beschikbaar: boolean };
 type HistorieRij = {
@@ -26,12 +27,54 @@ type HistorieRij = {
 type InstellingenData = {
   mag_beheren: boolean;
   hybride_zoeken: boolean;
+  // Besluit 0137: effectieve bronkeuze-modus + herkomst (fonds → env → default).
+  bronkeuze_modus: {
+    effectief: BronkeuzeModus;
+    herkomst: BronkeuzeHerkomst;
+    fonds_waarde: BronkeuzeModus | null;
+  };
   theming: Record<string, string>;
   modules: ModuleRij[];
   flags: Record<string, unknown>;
   overrides: Record<string, string>;
   historie: HistorieRij[];
 };
+
+// Besluit 0137 — de drie standen van de bronkeuze-vlag, met de labels/uitleg uit
+// de werkopdracht. Eén control voor precies deze vlag (geen generieke flag-editor).
+const BRONKEUZE_OPTIES: { waarde: BronkeuzeModus; label: string; uitleg: string }[] = [
+  {
+    waarde: "blokkerend",
+    label: "Vraag vooraf",
+    uitleg:
+      "De assistent vraagt eerst of u het voor uw fonds of in algemene zin wilt weten.",
+  },
+  {
+    waarde: "antwoord_eerst",
+    label: "Antwoord eerst",
+    uitleg:
+      "De assistent antwoordt fondsgericht en biedt de keuze aan ónder het antwoord.",
+  },
+  {
+    waarde: "uit",
+    label: "Altijd fondsgericht",
+    uitleg: "Geen vraag en geen keuze; altijd het eigen fonds.",
+  },
+];
+
+function bronkeuzeLabel(modus: string): string {
+  return BRONKEUZE_OPTIES.find((o) => o.waarde === modus)?.label ?? modus;
+}
+
+// Herkomst expliciet maken: een lege fonds-vlag mag niet lijken alsof er "niets"
+// staat terwijl een env-default of de fail-safe geldt (geen schijnzekerheid).
+function bronkeuzeHerkomstTekst(b: InstellingenData["bronkeuze_modus"]): string {
+  const label = bronkeuzeLabel(b.effectief);
+  if (b.herkomst === "fonds") return `Ingesteld voor dit fonds: ${label}.`;
+  if (b.herkomst === "env")
+    return `Volgt de platformstandaard: ${label}. Kies een stand om dit voor uw fonds vast te zetten.`;
+  return `Standaard: ${label}. Kies een stand om dit voor uw fonds vast te zetten.`;
+}
 
 // Themabare tokens (spiegelt de allowlist in lib/fonds-config-core.ts). RGB-tokens
 // verwachten een kanaal-triple "r g b" (0–255); letter/url zijn vrije tekst binnen
@@ -244,6 +287,51 @@ export default function ConfigBeheer() {
           >
             {data.hybride_zoeken ? "Uitzetten" : "Aanzetten"}
           </button>
+        </div>
+
+        {/* ── Bronkeuze-modus (besluit 0137) — driewegvlag, direct instelbaar ── */}
+        <div className="mt-3 rounded-lg border border-line bg-white px-4 py-3">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-sm text-ink">Bronkeuze in de assistent</span>
+            <span className="text-xs text-muted">bronkeuze_modus</span>
+          </div>
+          <div className="mt-2 flex flex-col gap-1.5">
+            {BRONKEUZE_OPTIES.map((opt) => {
+              const actief = data.bronkeuze_modus.effectief === opt.waarde;
+              return (
+                <button
+                  key={opt.waarde}
+                  onClick={() =>
+                    schrijf(
+                      { type: "flag", key: "bronkeuze_modus", waarde: opt.waarde },
+                      `Bronkeuze-modus op "${opt.label}" gezet.`
+                    )
+                  }
+                  disabled={bezig !== null}
+                  className={`text-left rounded-lg border px-3 py-2 transition-colors disabled:opacity-50 ${
+                    actief
+                      ? "border-accent bg-accent/10"
+                      : "border-line hover:bg-app-bg"
+                  }`}
+                >
+                  <span className="flex items-center gap-2 text-sm text-ink">
+                    <span
+                      className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full border ${
+                        actief ? "border-accent bg-accent" : "border-app-line-strong"
+                      }`}
+                    />
+                    {opt.label}
+                  </span>
+                  <span className="mt-0.5 block pl-[1.125rem] text-xs text-muted">
+                    {opt.uitleg}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-2 text-xs text-muted">
+            {bronkeuzeHerkomstTekst(data.bronkeuze_modus)}
+          </p>
         </div>
       </section>
 

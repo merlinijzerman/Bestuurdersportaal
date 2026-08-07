@@ -14,6 +14,10 @@ import {
 } from "@/core/lib/fonds-config";
 import { isModuleKey, beheerbareModules } from "@/core/lib/module-registry";
 import type { JsonWaarde } from "@/core/lib/fonds-config-core";
+import {
+  alsBronkeuzeModus,
+  resolveBronkeuzeModusMetHerkomst,
+} from "@/core/lib/fonds-config-core";
 
 // ============================================================
 //  /api/instellingen — fonds-configuratielaag (T8, generalisatie).
@@ -53,9 +57,25 @@ export async function GET() {
     const config = await haalFondsConfig(profiel.fonds_id);
     const historie = await haalConfigHistorie(profiel.fonds_id, 50);
 
+    // Besluit 0137: het beheerscherm moet de EFFECTIEVE bronkeuze-modus én de
+    // herkomst tonen (fonds → env → default), niet alleen de ruwe fonds-vlag —
+    // anders lijkt een lege vlag "uit" terwijl een env-default geldt (schijnzekerheid).
+    const bronkeuzeVlag = config.flags.get("bronkeuze_modus") ?? null;
+    const bronkeuze = resolveBronkeuzeModusMetHerkomst(
+      bronkeuzeVlag,
+      process.env.BRONKEUZE_MODUS
+    );
+
     return NextResponse.json({
       mag_beheren: magBeheren,
       hybride_zoeken: await hybrideZoekenAan(profiel.fonds_id),
+      bronkeuze_modus: {
+        effectief: bronkeuze.modus,
+        herkomst: bronkeuze.herkomst,
+        // De ruwe fonds-vlag (null = niet gezet), zodat de UI de radio kan vullen
+        // en "volgt de platformstandaard" kan tonen bij afwezigheid.
+        fonds_waarde: alsBronkeuzeModus(bronkeuzeVlag),
+      },
       theming: config.themingTokens,
       // Beheerbare modules met effectieve beschikbaarheid (registry ⊕ manifest).
       modules: beheerbareModules().map((m) => ({
@@ -99,6 +119,21 @@ export async function POST(req: NextRequest) {
       case "flag": {
         if (typeof body.key !== "string" || body.key.length === 0)
           return NextResponse.json({ error: "key (string) vereist" }, { status: 400 });
+        // Besluit 0137: bronkeuze_modus is een driewegvlag met een fail-safe. Een
+        // typfout ("antwoord_erst") valt zonder deze check STIL terug op
+        // 'blokkerend' — geen fout, geen signaal, terwijl de beheerder denkt dat
+        // hij iets heeft omgezet. Valideer daarom déze key expliciet tegen de
+        // toegestane modi; overige keys behouden hun generieke jsonb-gedrag.
+        if (body.key === "bronkeuze_modus" && !alsBronkeuzeModus(body.waarde)) {
+          return NextResponse.json(
+            {
+              error:
+                'Ongeldige bronkeuze-modus. Kies "blokkerend", "antwoord_eerst" of "uit".',
+              foutcode: "bronkeuze_modus_ongeldig",
+            },
+            { status: 400 }
+          );
+        }
         // waarde is jsonb-generiek; accepteer boolean/string/number/null.
         const { versie } = await schrijfFlag(
           fondsId, body.key, (body.waarde ?? null) as JsonWaarde, actor

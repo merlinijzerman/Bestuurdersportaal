@@ -137,11 +137,30 @@ export function alsBronkeuzeModus(waarde: unknown): BronkeuzeModus | null {
     : null;
 }
 
+/** Waar de effectieve modus vandaan komt: de fonds-vlag, de env-default, of de
+ * ingebouwde fail-safe. Het beheerscherm toont dit zodat een lege fonds-vlag niet
+ * de indruk wekt dat er "niets is ingesteld" terwijl een env-default geldt. */
+export type BronkeuzeHerkomst = "fonds" | "env" | "default";
+
 /**
- * Resolutie-orde: fonds-flag → env-default → 'blokkerend'. Onbekende/ongeldige
- * waarde (op beide niveaus) valt fail-safe terug op 'blokkerend' — nóóit stil naar
- * het nieuwe gedrag (CLAUDE.md-guardrail: geen stille gedragswijziging per tenant).
+ * Resolutie-orde: fonds-flag → env-default → 'blokkerend', mét herkomst. Onbekende/
+ * ongeldige waarde (op beide niveaus) valt fail-safe terug op 'blokkerend' — nóóit
+ * stil naar het nieuwe gedrag (CLAUDE.md-guardrail: geen stille gedragswijziging
+ * per tenant). Dit is de énige resolutie-implementatie; resolveBronkeuzeModus leunt
+ * erop, zodat er geen tweede volgorde-lijst ontstaat.
  */
+export function resolveBronkeuzeModusMetHerkomst(
+  flag: unknown,
+  env: unknown
+): { modus: BronkeuzeModus; herkomst: BronkeuzeHerkomst } {
+  const uitFonds = alsBronkeuzeModus(flag);
+  if (uitFonds) return { modus: uitFonds, herkomst: "fonds" };
+  const uitEnv = alsBronkeuzeModus(env);
+  if (uitEnv) return { modus: uitEnv, herkomst: "env" };
+  return { modus: "blokkerend", herkomst: "default" };
+}
+
+/** Zoals hierboven, maar alleen de modus (bestaande aanroepers ongewijzigd). */
 export function resolveBronkeuzeModus(flag: unknown, env: unknown): BronkeuzeModus {
-  return alsBronkeuzeModus(flag) ?? alsBronkeuzeModus(env) ?? "blokkerend";
+  return resolveBronkeuzeModusMetHerkomst(flag, env).modus;
 }

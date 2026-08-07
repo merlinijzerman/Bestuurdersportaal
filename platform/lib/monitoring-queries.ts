@@ -165,9 +165,18 @@ async function meetUptime(ctx: MetingContext): Promise<Meting[]> {
 
 // ── Signaal 1 — Embedding-/indexeringsfouten ────────────────────────────────
 async function meetEmbeddingFouten(ctx: MetingContext): Promise<Meting[]> {
+  // Ingest-faalratio: van de jobs die in het venster TERMINAAL werden, welk
+  // aandeel is 'mislukt'. Bewust GÉÉN stap-filter: sinds F4/F6 draagt één job de
+  // hele keten (extractie→embedding) en blijft `stap` op de instapfase staan. Een
+  // embedding-fout op een extractie-entry-job zou met een stap-filter onzichtbaar
+  // blijven — precies de blinde monitor die FO §18.2 uitsluit. Venster op `eind`
+  // (wanneer de job klaar was), niet op instroom. Noemer = geslaagd + mislukt;
+  // 'overgeslagen' (gedeactiveerd) en 'geweigerd' (bewuste cap/OCR-weigering) zijn
+  // geen fouten en blijven er dus buiten.
   const jobs = await leesJobs(ctx.svc, {
-    stappen: ["embedding", "indexering"],
+    statussen: ["geslaagd", "mislukt"],
     sinds: sindsIso(ctx),
+    sindsVeld: "eind",
   });
   const fondsPerDocument = await fondsVoorDocumenten(
     ctx.svc,
@@ -185,10 +194,13 @@ async function meetEmbeddingFouten(ctx: MetingContext): Promise<Meting[]> {
   return alsRatio(teller);
 }
 
-// ── Signaal 2 — Extractie-/OCR-achterstand (momentopname) ───────────────────
+// ── Signaal 2 — Ingest-achterstand (momentopname) ───────────────────────────
 async function meetExtractieAchterstand(ctx: MetingContext): Promise<Meting[]> {
+  // Openstaande ingest-jobs (wachtend|bezig) = de achterstand op dit moment.
+  // Geen stap-filter: in het single-job-model heeft een document dat nog niet
+  // klaar is precies één open job, ongeacht of het in de extractie- of de
+  // embedding-fase zit. Zo telt de achterstand elk vastzittend/wachtend document.
   const jobs = await leesJobs(ctx.svc, {
-    stappen: ["extractie", "ocr"],
     statussen: ["wachtend", "bezig"],
   });
   const fondsPerDocument = await fondsVoorDocumenten(
@@ -478,14 +490,22 @@ type JobRij = { document_id: string; status: string };
 
 async function leesJobs(
   svc: SupabaseClient,
-  opties: { stappen: string[]; statussen?: string[]; sinds?: string }
+  opties: {
+    stappen?: string[];
+    statussen?: string[];
+    sinds?: string;
+    // Op welk tijdveld het venster filtert. 'eind' voor terminale metingen
+    // (wanneer een job KLAAR was), 'aangemaakt' voor instroom. Default 'aangemaakt'.
+    sindsVeld?: "aangemaakt" | "eind";
+  }
 ): Promise<JobRij[]> {
-  let query = svc
-    .from("document_processing_jobs")
-    .select("document_id, status")
-    .in("stap", opties.stappen);
+  let query = svc.from("document_processing_jobs").select("document_id, status");
+  // Sinds F4/F6 draagt ÉÉN job de hele keten (extractie→embedding); `stap` is
+  // alleen de instapfase (auditspoor), niet de actuele fase. Stap-filteren is
+  // daarom bewust optioneel — de ingest-signalen filteren op STATUS, niet op stap.
+  if (opties.stappen) query = query.in("stap", opties.stappen);
   if (opties.statussen) query = query.in("status", opties.statussen);
-  if (opties.sinds) query = query.gte("aangemaakt", opties.sinds);
+  if (opties.sinds) query = query.gte(opties.sindsVeld ?? "aangemaakt", opties.sinds);
 
   const { data, error } = await query.limit(LEESLIMIET);
   if (error) throw error;

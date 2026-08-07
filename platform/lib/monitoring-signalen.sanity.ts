@@ -340,8 +340,16 @@ test("combineerConfig — dekkingsvoorbehoud komt uit de code, niet uit de datab
 });
 
 test("elk signaal met een onvolledige dekking draagt een voorbehoud", () => {
-  // Deze drie meten aantoonbaar niet alles; dat mag nooit stilzwijgend zijn.
-  for (const id of ["tokenverbruik", "ai_latency_p95", "audit_volledigheid"] as SignaalId[]) {
+  // Deze meten aantoonbaar niet alles; dat mag nooit stilzwijgend zijn. De twee
+  // ingest-signalen dragen sinds het single-job-model (F4/F6) een voorbehoud: één
+  // job draagt de hele keten, dus per-fase-uitsplitsing kan niet.
+  for (const id of [
+    "tokenverbruik",
+    "ai_latency_p95",
+    "audit_volledigheid",
+    "embedding_indexering_fouten",
+    "extractie_achterstand",
+  ] as SignaalId[]) {
     const v = SIGNAAL_REGISTRY[id].dekkingsvoorbehoud;
     assert.ok(v && v.length > 20, `${id} mist een dekkingsvoorbehoud`);
   }

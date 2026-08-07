@@ -112,13 +112,14 @@ export const SIGNAAL_REGISTRY: Record<SignaalId, SignaalConfig> = {
     nDrempel: null,
     actief: true,
     toelichting:
-      "Aandeel mislukte embedding-/indexeringsjobs t.o.v. alle jobs in die stappen.",
+      "Aandeel mislukte ingest-jobs t.o.v. alle in het venster afgeronde jobs (geslaagd + mislukt).",
     platformbreed: false,
-    dekkingsvoorbehoud: null,
+    dekkingsvoorbehoud:
+      "Eén ingest-job draagt de hele keten (extractie→embedding), dus een uitsplitsing per fase is niet mogelijk; dit is de totale faalratio. Bewuste weigeringen (cap/OCR) en overgeslagen jobs (document gedeactiveerd) tellen niet als fout.",
   },
   extractie_achterstand: {
     signaal: "extractie_achterstand",
-    label: "Extractie-/OCR-achterstand",
+    label: "Ingest-achterstand (wachtrij)",
     eenheid: "aantal",
     intervalMinuten: 15,
     vensterMinuten: 0,
@@ -128,9 +129,10 @@ export const SIGNAAL_REGISTRY: Record<SignaalId, SignaalConfig> = {
     nDrempel: null,
     actief: true,
     toelichting:
-      "Momentopname: jobs in stap extractie/ocr met status wachtend of bezig.",
+      "Momentopname: openstaande ingest-jobs (status wachtend of bezig).",
     platformbreed: false,
-    dekkingsvoorbehoud: null,
+    dekkingsvoorbehoud:
+      "Telt elk document met een open job; in het single-job-model is er geen aparte extractie- of embedding-wachtrij, dus dit is de gehele ingest-achterstand, niet alleen extractie/OCR.",
   },
   rate_limit_incidenten: {
     signaal: "rate_limit_incidenten",
