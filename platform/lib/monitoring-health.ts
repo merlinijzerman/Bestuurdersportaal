@@ -24,6 +24,7 @@
 
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { parseHosts, klassificeerNetwerkfout } from "./monitoring-health-core";
 
 export type ComponentStatus = "groen" | "oranje" | "rood" | "onbekend";
 
@@ -114,9 +115,15 @@ function checkBackOffice(): ComponentUitkomst {
 }
 
 // ── 2. Tenant-app (het ANDERE Vercel-project) ───────────────────────────────
+// Een liveness-probe wil weten of de app érgens op zijn domein HTTP beantwoordt.
+// APP_HOST mag een komma-lijst zijn (apex + www); we proberen ELKE host en zijn
+// groen zodra één 2xx geeft. Pas als geen enkele host lukt is de component rood —
+// dán met een GECLASSIFICEERDE reden (dns-/tls-/verbinding-/time-out) i.p.v. het
+// nietszeggende "onbereikbaar". Zo markeert een onbereikbare apex de app niet
+// onterecht als down zolang www antwoordt, en is een échte storing meteen te duiden.
 async function checkTenantApp(): Promise<ComponentUitkomst> {
-  const host = eersteHost(process.env.APP_HOST);
-  if (!host) {
+  const hosts = parseHosts(process.env.APP_HOST);
+  if (hosts.length === 0) {
     // Zonder APP_HOST kunnen we niets meten. Dat is 'onbekend', niet 'groen' —
     // een blinde monitor mag nooit als "alles in orde" lezen (FO §18.2).
     return {
@@ -126,11 +133,28 @@ async function checkTenantApp(): Promise<ComponentUitkomst> {
       reden: "APP_HOST niet geconfigureerd",
     };
   }
-  return meet("tenant_app", async () => {
-    const res = await fetchMetTimeout(`https://${host}/api/healthz/ping`);
-    if (!res.ok) return { ok: false, reden: `status ${res.status}` };
-    return { ok: true, reden: null };
-  });
+  let reden = "onbereikbaar";
+  for (const host of hosts) {
+    const start = Date.now();
+    try {
+      const res = await fetchMetTimeout(`https://${host}/api/healthz/ping`);
+      if (res.ok) {
+        const duur = Date.now() - start;
+        return uitkomst(
+          "tenant_app",
+          duur > TRAAG_MS ? "oranje" : "groen",
+          duur,
+          duur > TRAAG_MS ? "traag" : null
+        );
+      }
+      // Antwoord mét foutstatus: onthoud het en probeer de volgende host.
+      reden = `status ${res.status}`;
+    } catch (e) {
+      // Geen antwoord (gooit): classificeer de oorzaak, probeer de volgende host.
+      reden = klassificeerNetwerkfout(e);
+    }
+  }
+  return uitkomst("tenant_app", "rood", null, reden);
 }
 
 // ── 3. Supabase-connectiviteit ──────────────────────────────────────────────
@@ -315,9 +339,3 @@ async function fetchMetTimeout(url: string, init?: RequestInit): Promise<Respons
   }
 }
 
-/** APP_HOST mag een komma-lijst zijn (apex + www); de eerste is de kanonieke. */
-function eersteHost(waarde: string | undefined): string | null {
-  if (!waarde) return null;
-  const host = waarde.split(",")[0]?.trim();
-  return host && host.length > 0 ? host : null;
-}
