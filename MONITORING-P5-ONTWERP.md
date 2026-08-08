@@ -1,6 +1,6 @@
 # Monitoringbasis beheer-surface (P5 + P4-light) — Ontwerpdocument
 
-> **Status**: 1.0 — opgeleverd 2026-08-03
+> **Status**: 1.1 — §8.1 (driedelig dashboard, blok A+D) toegevoegd 2026-08-08; basis 1.0 opgeleverd 2026-08-03
 > **Scope**: platform-back-office (`beheer.bestuurdersportaal.com`, route-groep `(platform)`)
 > **Herkomst**: werkopdracht "monitoringbasis beheer-surface" v0.3; FO Increment P §12/§17/§18/§19/§20.1; TO Increment P §9
 > **Leidend besluit**: `decisions/0005` — monitoring in-stack, geen Sentry. Deze tranche lost de tot nu toe openstaande helft daarvan in.
@@ -104,7 +104,7 @@ Acht van de negentien uit FO §19: die waarvan de bron ná deze tranche bestaat.
 | # | Signaal | Bron | Interval | Venster | Oranje / rood | n-drempel |
 |---|---|---|---|---|---|---|
 | 7 | Uptime kernfunctionaliteit | healthchecks (§6) | 5 min | 24 u | <99,5 / <99 % | — |
-| 2 | Extractie-/OCR-achterstand | `document_processing_jobs` | 15 min | momentopname | >10 / >50 | — |
+| 2 | Ingest-achterstand (wachtrij) | `document_processing_jobs` | 15 min | momentopname | >10 / >50 | — |
 | 1 | Embedding-/indexeringsfouten | `document_processing_jobs` (+ `app_errors`) | 15 min | 60 min | >2 / >5 % | — |
 | 5 | Rate-limit-incidenten | `app_errors` (categorie `rate_limiting`) | 15 min | 24 u | >20 / >40 per dag | — |
 | 3 | AI-modellatency p95 | `governance_log.retrieval_meta.duur_model_ms` | 60 min | 24 u | >5 / >10 s | n<10 |
@@ -179,6 +179,18 @@ Dit is bevinding **T-01** in ontwerpvorm: `npm run sanity` stopte destijds bij d
 
 Dubbele check, zoals op de contact-inbox: een vriendelijke voorcheck met uitleg, plus de échte server-side afdwinging binnen `withPlatformRead` (live AAL2-hercheck, actief-check, capabilitycheck) die ook een result-event schrijft — met alleen tellingen als `effect`, nooit meetwaarden of fondsnamen.
 
+### 8.1 Drie lagen (P4-light tranche B, 2026-08-08)
+
+De oorspronkelijke opzet rendeerde **één kaart per signaal per fonds** — 8 kaarten bij één fonds, 29 bij vier, zonder filter, samenvatting of sortering op ernst. Dat is vervangen door een **driedelig dashboard** (voorstel herontwerp §4; besluiten [`0141`](./decisions/0141-monitoring-aggregatie-uitsluitend-op-statussen.md) en [`0142`](./decisions/0142-monitoring-leeslimiet-uitdunnen-en-periode-bovengrens.md)):
+
+1. **Ketenstatusbalk** — één platformbrede uitspraak (In orde / Aandacht / Verstoord / Onbekend) plus vier domeintegels (Beschikbaarheid · Verwerking · AI-kwaliteit · Beveiliging en audit), elk met de slechtste status en het aantal afwijkende én onbekende metingen. De balk **negeert het fondsfilter en de periodekeuze**: hij gaat over "nu". Tegels zijn klikbaar als domeinfilter.
+2. **Filterbare signaaltabel** — één rij per signaal, ongeacht het aantal fondsen. Bij "Alle fondsen" de slechtste status over de fondsen, een verdelingsindicator met tekstueel equivalent en de naam van het slechtst scorende fonds; bij een gekozen fonds de waarde van dát fonds. Sortering op ernst (standaard) of domein, plus een "alleen afwijkingen"-schakelaar en een periodekeuze **24 uur / 7 dagen** (standaard 7 dagen).
+3. **Detail per rij** (uitklap, geen aparte pagina) — grote trendlijn, meetdefinitie, venster, meegestempelde drempels, dekkingsbadge + dekkingsvoorbehoud, de volledige `meta`, betekenisregel, eigenaar en opvolgactie, de uitsplitsing per fonds en een periodesamenvatting (aandeel in orde, overschrijdingen, langste afwijking, onbekend). Voor percentiel- en trendsignalen toont die samenvatting de hoogste + mediane snapshot, nooit een percentiel over percentielen.
+
+**Architectuur.** De server leest één keer (binnen `withPlatformRead`); het fonds-, periode- en domeinfilter draaien in een client component en veroorzaken dus **geen extra auditpaar per klik** — het `effect` blijft `{signalen, snapshotrijen}`, zonder fondsnaam of meetwaarde. De aggregatie- en samenvattingslogica leeft als pure functies in `monitoring-signalen.ts` (`aggregeerStatus`, `samenvattingPerDomein`, `vatPeriodeSamen`, `kiesSlechtsteMeting`, `dunTrendUit`), met negatieve controles in de sanity. De trend wordt server-side tot ± 1 punt/uur uitgedund zodat de client-payload begrensd blijft; `trendAfgekapt` en het werkelijk gedekte aantal dagen blijven zichtbaar (besluit `0142`).
+
+**Vijf code-only registryvelden** vullen de nieuwe lagen: `domein`, `betekenis`, `eigenaar`, `opvolgactie` en `dekkingsniveau` — eigenschappen van de meetdefinitie of van de organisatieafspraak, door `combineerConfig()` genegeerd als ze uit de database zouden komen (negatieve controle in de sanity), net als `platformbreed` en `dekkingsvoorbehoud`.
+
 **Kleur is nooit de enige drager** (besluiten `0097` en `0101`). Elke status draagt drie onafhankelijke signalen: kleur (via de bestaande `ok`/`warn`/`err`-tokens), woord ("In orde" / "Aandacht" / "Verstoord" / "Onbekend") en vorm (vinkje / uitroepteken / kruis / streepjes, elk in een eigen omtrek). Er is een legenda.
 
 **Aggregaat-first.** Geen individu-herleidbaar gegeven. Signalen die op gebruikersgedrag leunen dragen de n-drempel n<10 uit besluit `0055` — hergebruikt uit `core/lib/suppressie.ts`, geen zelfverzonnen waarde — en tonen dan "onderdrukt" met status onbekend.
@@ -243,7 +255,7 @@ Drie nieuwe tabellen, alle drie RLS aan + **bewust geen policy** + expliciete `r
 ## 12. Verificatie
 
 - `./node_modules/.bin/tsc --noEmit --skipLibCheck` — exit 0
-- `npm run sanity` — "Alle sanity-suites groen" (inclusief 32 nieuwe `app-fout`-tests met zes negatieve controles, en 44 `monitoring-signalen`-tests)
+- `npm run sanity` — "Alle sanity-suites groen" (inclusief de `app-fout`-tests met zes negatieve controles, en de `monitoring-signalen`-suite; die laatste is met blok A+D uitgebreid met de aggregatie-, periodesamenvatting- en code-only-negatieve controles)
 - `npm run lint:colors`, `npm run lint:boundaries` — schoon
 - `bash scripts/cross-tenant-ci.sh` — app-laag groen (136 tests); de DB-laag draait in CI met een test-DB
 - `supabase/checks/2026_07_31_r1_structurele_gates.sql` — handmatig tegen de doeldatabase, ná de migratie

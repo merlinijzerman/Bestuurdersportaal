@@ -15,7 +15,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   SIGNAAL_REGISTRY,
   SIGNAAL_VOLGORDE,
+  clientVeiligeWaarde,
   combineerConfig,
+  dunTrendUit,
   isOnderdruktDoorNDrempel,
   isSignaalId,
   maskeerTrendwaarde,
@@ -64,12 +66,25 @@ export type MonitoringOverzicht = {
   leesfout: boolean;
   /** True als de trend is afgekapt op de leeslimiet; de grafiek dekt dan minder dagen. */
   trendAfgekapt: boolean;
+  /**
+   * Hoeveel dagen de trend WERKELIJK dekt (nieuwste − oudste gelezen rij), naar
+   * boven afgerond. Bij een afgekapte query is dit minder dan de gevraagde
+   * periode; het dashboard toont dít getal in plaats van de belofte (blok D3).
+   */
+  gedekteDagen: number;
 };
 
-/** Hoeveel dagen trend het dashboard toont. */
+/** Hoeveel dagen trend het dashboard maximaal toont (de langste periodekeuze). */
 const TREND_DAGEN = 7;
-/** Bovengrens op de leesquery; ruim boven een week aan snapshots. */
-const LEESLIMIET = 4000;
+/**
+ * Bovengrens op de leesquery. Ruim gekozen zodat een week aan snapshots over
+ * meerdere fondsen niet stil wordt afgekapt: uptime schrijft 288 rijen/dag, elk
+ * fonds ± 456 (vier kwartier- en drie uursignalen), dus 7 dagen bij vier fondsen
+ * ≈ 14.800 rijen. Dit is een SERVER-side leescap; de payload naar de client wordt
+ * NIET hierdoor bepaald maar door de uurlijkse uitdunning (`dunTrendUit`). Wordt
+ * dit krap, dan is een SQL-view de volgende stap — niet een nóg hogere limiet.
+ */
+const LEESLIMIET = 20000;
 
 /**
  * Haalt het volledige overzicht op: laatste stand + trend per signaal per fonds.
@@ -118,9 +133,10 @@ export async function haalMonitoringOverzicht(
   const leesfout = !!snapshotRes.error;
   const ruweRijen = leesfout ? [] : ((snapshotRes.data ?? []) as Rij[]);
   // Stille afkapping is precies wat de meetlaag weigert; de leeslaag hoort dat
-  // niet alsnog te doen. Bij ~744 snapshotrijen per dag per fonds raakt een
-  // venster van zeven dagen de limiet al bij twee fondsen, en dan toont de
-  // trendlijn ongemerkt minder dagen dan hij belooft.
+  // niet alsnog te doen. Raakt de query de (ruime) leescap tóch, dan is de trend
+  // afgekapt en dekt hij minder dan de gevraagde periode — het dashboard toont
+  // dan `gedekteDagen` in plaats van de belofte, en deze vlag blijft de melding
+  // aansturen.
   const trendAfgekapt = ruweRijen.length >= LEESLIMIET;
   const rijen = ruweRijen.filter((r) => isSignaalId(r.signaal));
 
@@ -154,8 +170,31 @@ export async function haalMonitoringOverzicht(
     for (const [, groepRijen] of groepen) {
       const laatst = groepRijen[0];
       if (!laatst) continue;
-      const waarde = naarGetal(laatst.waarde);
       const statusBijMeting = naarStatus(laatst.status);
+      const status = statusVoorWeergave(statusBijMeting, laatst.tijdstip, config, nu);
+      const onderdrukt = isOnderdruktDoorNDrempel(laatst.n, config);
+
+      // CLIENT-VEILIGHEID. De tabel is een client component; een onderdrukte
+      // waarde mag de payload dus niet in. Zonder deze maskering zou de ruwe
+      // waarde meegeserialiseerd worden ook al toont het scherm "onderdrukt".
+      // Dezelfde belofte als bij de trend (maskeerTrendwaarde), nu op de laatste
+      // stand — suppressie toepassen vóórdat de data de client bereikt
+      // (core/lib/suppressie.ts schrijft dit patroon voor). Via een pure functie
+      // zodat de invariant "onderdrukt ⇒ waarde null" in de sanity vastligt.
+      const waarde = clientVeiligeWaarde(naarGetal(laatst.waarde), onderdrukt);
+
+      // Oplopend voor de grafiek (de query gaf aflopend), per punt gemaskeerd, en
+      // dan uitgedund tot ≤1 punt/uur. SUPPRESSIE HOORT HIER, NIET IN DE FORMATTER:
+      // de trendlijn krijgt álle historische punten en het aria-label spreekt de
+      // waarde letterlijk uit — een punt met n<10 mag daar niet in belanden. De
+      // uitdunning begrenst de client-payload zonder de laatste stand te raken
+      // (die komt uit `laatst`, niet uit deze reeks).
+      const trend = dunTrendUit(
+        [...groepRijen].reverse().map((r) => ({
+          tijdstip: r.tijdstip,
+          waarde: maskeerTrendwaarde(naarGetal(r.waarde), r.n, config),
+        }))
+      );
 
       signalen.push({
         signaal,
@@ -164,33 +203,31 @@ export async function haalMonitoringOverzicht(
         fondsNaam: laatst.fonds_id ? fondsNamen.get(laatst.fonds_id) ?? null : null,
         waarde,
         n: laatst.n,
-        status: statusVoorWeergave(statusBijMeting, laatst.tijdstip, config, nu),
+        status,
         statusBijMeting,
         laatsteMeting: laatst.tijdstip,
-        verouderd: statusVoorWeergave(statusBijMeting, laatst.tijdstip, config, nu) !== statusBijMeting,
-        onderdrukt: isOnderdruktDoorNDrempel(laatst.n, config),
+        verouderd: status !== statusBijMeting,
+        onderdrukt,
         drempelOranje: naarGetal(laatst.drempel_oranje),
         drempelRood: naarGetal(laatst.drempel_rood),
         meta: laatst.meta,
-        // Oplopend voor de grafiek; de query gaf aflopend terug.
-        //
-        // SUPPRESSIE HOORT HIER, NIET IN DE FORMATTER. De kaart toont
-        // "onderdrukt" op basis van de laatste meting, maar de trendlijn krijgt
-        // álle historische punten. Zonder deze maskering zou een punt met n<10
-        // gewoon geplot worden — en het aria-label van de grafiek spreekt de
-        // waarde zelfs letterlijk uit. De pagina belooft de gebruiker dat
-        // gebruikssignalen onder de n-drempel worden onderdrukt; die belofte mag
-        // niet in dezelfde component sneuvelen. core/lib/suppressie.ts schrijft
-        // dit patroon ook voor: toepassen vóórdat de data de client bereikt.
-        trend: [...groepRijen].reverse().map((r) => ({
-          tijdstip: r.tijdstip,
-          waarde: maskeerTrendwaarde(naarGetal(r.waarde), r.n, config),
-        })),
+        trend,
       });
     }
   }
 
   const laatsteSnapshot = rijen.length > 0 ? rijen[0]?.tijdstip ?? null : null;
+
+  // Werkelijk gedekte periode: nieuwste − oudste gelezen rij. Bij afkapping is dit
+  // minder dan TREND_DAGEN; het dashboard toont dít getal, niet de belofte.
+  let gedekteDagen = 0;
+  if (rijen.length > 0) {
+    const nieuwste = new Date(rijen[0]!.tijdstip).getTime();
+    const oudste = new Date(rijen[rijen.length - 1]!.tijdstip).getTime();
+    if (Number.isFinite(nieuwste) && Number.isFinite(oudste)) {
+      gedekteDagen = Math.max(1, Math.ceil((nieuwste - oudste) / (24 * 60 * 60_000)));
+    }
+  }
 
   return {
     signalen,
@@ -198,6 +235,7 @@ export async function haalMonitoringOverzicht(
     gelezenRijen: rijen.length,
     leesfout,
     trendAfgekapt,
+    gedekteDagen,
   };
 }
 

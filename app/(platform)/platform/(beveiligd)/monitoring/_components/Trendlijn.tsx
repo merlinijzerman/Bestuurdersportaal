@@ -25,21 +25,31 @@ const KLEUR: Record<SignaalStatus, string> = {
   onbekend: "var(--app-line-control)",
 };
 
-const BREEDTE = 260;
-const HOOGTE = 56;
-const MARGE = { links: 4, rechts: 4, boven: 6, onder: 6 };
-
+/**
+ * `sparkline` is de compacte variant voor in de tabelrij: kleiner, zonder
+ * drempelbanden en zonder tekstregel. Dit is een PROP, geen tweede component
+ * (CLAUDE.md verbiedt een tweede visualisatie zonder aanleiding).
+ */
 export default function Trendlijn({
   punten,
   status,
   drempelOranje,
   drempelRood,
+  variant = "vol",
 }: {
   punten: TrendPunt[];
   status: SignaalStatus;
   drempelOranje: number | null;
   drempelRood: number | null;
+  variant?: "vol" | "sparkline";
 }) {
+  const compact = variant === "sparkline";
+  const BREEDTE = compact ? 120 : 260;
+  const HOOGTE = compact ? 28 : 56;
+  const MARGE = compact
+    ? { links: 2, rechts: 2, boven: 3, onder: 3 }
+    : { links: 4, rechts: 4, boven: 6, onder: 6 };
+
   const waarden = punten
     .map((p) => p.waarde)
     .filter((w): w is number => w !== null && Number.isFinite(w));
@@ -47,6 +57,13 @@ export default function Trendlijn({
   if (waarden.length < 2) {
     // Eén of nul metingen is geen trend. Dat expliciet zeggen is eerlijker dan
     // een vlakke lijn tekenen die stabiliteit suggereert.
+    if (compact) {
+      return (
+        <span className="text-xs text-ink/40" aria-label="Nog geen trend beschikbaar">
+          &mdash;
+        </span>
+      );
+    }
     return (
       <p className="text-xs text-ink/50">
         {waarden.length === 0
@@ -86,7 +103,7 @@ export default function Trendlijn({
       role="img"
       aria-label={`Verloop van ${waarden.length} metingen; laatste waarde ${laatste}.`}
     >
-      {drempelRood !== null && drempelRood >= min && drempelRood <= max && (
+      {!compact && drempelRood !== null && drempelRood >= min && drempelRood <= max && (
         <line
           x1={MARGE.links}
           x2={BREEDTE - MARGE.rechts}
@@ -98,7 +115,7 @@ export default function Trendlijn({
           opacity={0.5}
         />
       )}
-      {drempelOranje !== null && drempelOranje >= min && drempelOranje <= max && (
+      {!compact && drempelOranje !== null && drempelOranje >= min && drempelOranje <= max && (
         <line
           x1={MARGE.links}
           x2={BREEDTE - MARGE.rechts}

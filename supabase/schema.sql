@@ -190,13 +190,15 @@ create unique index if not exists tenant_domains_host_idx
   on public.tenant_domains (host);
 -- RLS aan, deny-by-default: GEEN policy (bewuste globale tabel, RLS-hardening 0040).
 alter table public.tenant_domains enable row level security;
--- Seed (T1.3, besluit 0042): pilothost Horizon, via fondsen.slug i.p.v. UUID.
--- Migratie 2026_07_08_tenant_domains_seed.sql. Fail-closed afdwinging staat achter
--- env TENANT_ENFORCE=on (alleen productie, pas ná seed + observatie-gate).
-insert into public.tenant_domains (host, fonds_id, actief)
-select 'horizon.bestuurdersportaal.com', f.id, true
-from public.fondsen f where f.slug = 'horizon'
-on conflict (host) do nothing;
+-- Seed (T1.3, besluit 0042): pilothost horizon.bestuurdersportaal.com was geseed via
+-- 2026_07_08_tenant_domains_seed.sql, maar is op 07-08-2026 VERWIJDERD
+-- (2026_08_07_tenant_domains_horizon_verwijderen.sql, besluit 0135-opruiming): die host
+-- is nooit in gebruik genomen (DNS→Vercel zonder cert) en Horizon draait op de bridge-host
+-- hieronder. Fail-closed afdwinging staat achter env TENANT_ENFORCE=on (alleen productie).
+-- insert into public.tenant_domains (host, fonds_id, actief)
+-- select 'horizon.bestuurdersportaal.com', f.id, true
+-- from public.fondsen f where f.slug = 'horizon'
+-- on conflict (host) do nothing;
 -- Transitionele bridge (besluit 0043): de gedeelde app-host resolveert óók naar
 -- Horizon zolang single-tenant. Migratie 2026_07_08_tenant_domains_bridge_app_host.sql.
 -- VERWIJDEREN (rollback) vóór het onboarden van een tweede fonds.

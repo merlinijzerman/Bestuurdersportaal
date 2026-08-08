@@ -19,23 +19,35 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { SUPPRESSIE_DREMPEL } from "@/core/lib/suppressie";
 import {
+  DOMEIN_VOLGORDE,
   SIGNAAL_REGISTRY,
   SIGNAAL_VOLGORDE,
   VEROUDERINGSFACTOR,
+  aggregeerStatus,
   bepaalStatus,
+  clientVeiligeWaarde,
   combineerConfig,
+  dunTrendUit,
   isOnderdruktDoorNDrempel,
   isSignaalId,
   isVerouderd,
+  kiesSlechtsteMeting,
   maskeerTrendwaarde,
   moetDraaien,
   p95,
   percentiel,
+  piekEnMediaan,
+  samenvattingPerDomein,
   statusVoorWeergave,
+  toonPiekInPeriode,
   trendPercentage,
+  vatPeriodeSamen,
+  type Domein,
   type SignaalConfig,
   type SignaalId,
+  type SignaalStatus,
 } from "./monitoring-signalen";
+import { beschrijfDrempels } from "./monitoring-format";
 
 let n = 0;
 function test(naam: string, fn: () => void) {
@@ -435,6 +447,181 @@ test("registry en migratie-seed dekken dezelfde acht signalen met dezelfde dremp
       `${cfg.signaal}: n_drempel wijkt af`
     );
   }
+});
+
+// ── Code-only velden (blok B1/B2, acceptatie 12) ────────────────────────────
+
+test("elk signaal draagt de vijf code-only velden, niet-leeg", () => {
+  const niveaus = ["volledig", "gedeeltelijk", "indicatief", "niet_in_werking"];
+  for (const [id, cfg] of Object.entries(SIGNAAL_REGISTRY)) {
+    assert.ok(DOMEIN_VOLGORDE.includes(cfg.domein), `${id}: onbekend domein`);
+    assert.ok(cfg.betekenis.length > 10, `${id}: betekenisregel ontbreekt/te kort`);
+    assert.ok(cfg.eigenaar.length > 0, `${id}: eigenaar leeg`);
+    assert.ok(cfg.opvolgactie.length > 20, `${id}: opvolgactie leeg/te kort`);
+    assert.ok(niveaus.includes(cfg.dekkingsniveau), `${id}: ongeldig dekkingsniveau`);
+  }
+});
+
+test("NEGATIEVE CONTROLE (acceptatie 12): code-only velden komen ALTIJD uit de code", () => {
+  // Een configrij die probeert domein/eigenaar/opvolgactie/dekkingsniveau te
+  // overschrijven, wordt genegeerd: combineerConfig leest die sleutels niet.
+  const indringer = {
+    signaal: "uptime_kern",
+    domein: "verwerking",
+    betekenis: "iets heel anders",
+    eigenaar: "Indringer",
+    opvolgactie: "doe maar niks",
+    dekkingsniveau: "niet_in_werking",
+  } as unknown as Parameters<typeof combineerConfig>[1];
+  const cfg = combineerConfig("uptime_kern", indringer);
+  const basis = SIGNAAL_REGISTRY.uptime_kern;
+  assert.equal(cfg.domein, basis.domein, "domein moet uit de code komen");
+  assert.equal(cfg.betekenis, basis.betekenis, "betekenis moet uit de code komen");
+  assert.equal(cfg.eigenaar, basis.eigenaar, "eigenaar moet uit de code komen");
+  assert.equal(cfg.opvolgactie, basis.opvolgactie, "opvolgactie moet uit de code komen");
+  assert.equal(cfg.dekkingsniveau, basis.dekkingsniveau, "dekkingsniveau moet uit de code komen");
+});
+
+// ── Aggregatie over statussen (architectuurpunt 3 en 4) ─────────────────────
+
+test("aggregeerStatus — slechtste wint, lege lijst is onbekend", () => {
+  assert.equal(aggregeerStatus([]), "onbekend");
+  assert.equal(aggregeerStatus(["groen", "groen", "groen"]), "groen");
+  assert.equal(aggregeerStatus(["groen", "oranje"]), "oranje");
+  assert.equal(aggregeerStatus(["oranje", "rood"]), "rood");
+  // rood > oranje > onbekend > groen
+  assert.equal(aggregeerStatus(["rood", "onbekend", "oranje", "groen"]), "rood");
+});
+
+test("aggregeerStatus — onbekend maakt nooit groener (architectuurpunt 4)", () => {
+  assert.equal(aggregeerStatus(["groen", "groen", "onbekend"]), "onbekend");
+  assert.equal(aggregeerStatus(["onbekend", "oranje"]), "oranje");
+});
+
+test("NEGATIEVE CONTROLE (acceptatie 11): aggregatie is status-only, nooit over waarden", () => {
+  // aggregeerStatus en samenvattingPerDomein nemen UITSLUITEND SignaalStatus in;
+  // er is geen parameter waarlangs een getal de aggregatie in kan. Zou er ergens
+  // een waarde-optelling zijn, dan zou n=6 + n=6 → n=12 de n-drempel omzeilen.
+  // Twee onderdrukte (onbekend) metingen leveren onbekend, niet plots een getal.
+  assert.equal(aggregeerStatus(["onbekend", "onbekend"]), "onbekend");
+  const metingen = [
+    { domein: "verwerking" as Domein, status: "groen" as SignaalStatus },
+    { domein: "verwerking" as Domein, status: "groen" as SignaalStatus },
+  ];
+  const sam = samenvattingPerDomein(metingen);
+  assert.equal(sam.verwerking.slechtste, "groen");
+  assert.equal(sam.verwerking.afwijkend, 0);
+  assert.equal(sam.verwerking.totaal, 2);
+});
+
+test("samenvattingPerDomein — afwijkend en onbekend apart geteld", () => {
+  const metingen = [
+    { domein: "verwerking" as Domein, status: "rood" as SignaalStatus },
+    { domein: "verwerking" as Domein, status: "oranje" as SignaalStatus },
+    { domein: "verwerking" as Domein, status: "onbekend" as SignaalStatus },
+    { domein: "verwerking" as Domein, status: "groen" as SignaalStatus },
+  ];
+  const sam = samenvattingPerDomein(metingen);
+  assert.equal(sam.verwerking.slechtste, "rood");
+  assert.equal(sam.verwerking.afwijkend, 2, "rood + oranje");
+  assert.equal(sam.verwerking.onbekend, 1);
+  assert.equal(sam.verwerking.totaal, 4);
+  for (const d of DOMEIN_VOLGORDE) assert.ok(sam[d], `domein ${d} ontbreekt in het resultaat`);
+  assert.equal(sam.beschikbaarheid.totaal, 0, "leeg domein bestaat met totaal 0");
+});
+
+// ── Drempeltekst (acceptatie 13) ─────────────────────────────────────────────
+
+test("beschrijfDrempels — 'onder' bij lager_is_slechter, 'vanaf' bij hoger", () => {
+  const uptime = beschrijfDrempels(99.5, 99, "lager_is_slechter", "percentage");
+  assert.ok(uptime.includes("aandacht onder 99,5%"), `kreeg: ${uptime}`);
+  assert.ok(!uptime.includes("vanaf"), "lager_is_slechter mag geen 'vanaf' tonen");
+  const fouten = beschrijfDrempels(2, 5, "hoger_is_slechter", "percentage");
+  assert.ok(fouten.includes("aandacht vanaf 2%"), `kreeg: ${fouten}`);
+  assert.ok(fouten.includes("verstoord vanaf 5%"), `kreeg: ${fouten}`);
+  assert.equal(beschrijfDrempels(null, null, "hoger_is_slechter", "aantal"), "niet ingesteld");
+});
+
+// ── Periodesamenvatting (blok D2, architectuurpunt 13) ──────────────────────
+
+test("vatPeriodeSamen — NEGATIEVE CONTROLE: maskeren verhoogt aandeel-in-orde niet", () => {
+  const cfg = SIGNAAL_REGISTRY.embedding_indexering_fouten; // oranje ≥2, rood ≥5
+  const vol = [0, 0, 0, 0, 6, 6, 6, 6].map((w) => ({ waarde: w }));
+  const s1 = vatPeriodeSamen(vol, cfg);
+  assert.equal(s1.aandeelInOrde, 0.5);
+  assert.equal(s1.overschrijdingen, 4);
+  // Maskeer de vier verstoorde punten → onbekend, niet in orde; noemer blijft 8.
+  const gemaskeerd = [0, 0, 0, 0, null, null, null, null].map((w) => ({ waarde: w as number | null }));
+  const s2 = vatPeriodeSamen(gemaskeerd, cfg);
+  assert.ok(
+    (s2.aandeelInOrde ?? 0) <= (s1.aandeelInOrde ?? 0),
+    `maskeren mag de score niet verhogen: ${s2.aandeelInOrde} > ${s1.aandeelInOrde}`
+  );
+  assert.equal(s2.aandeelInOrde, 0.5, "4 groen / 8 totaal — onbekend blijft in de noemer");
+  assert.equal(s2.onbekend, 4);
+  assert.equal(s2.overschrijdingen, 0);
+});
+
+test("vatPeriodeSamen — langste aaneengesloten afwijking, onbekend breekt de reeks", () => {
+  const cfg = SIGNAAL_REGISTRY.embedding_indexering_fouten;
+  const reeks = [6, 6, 0, 6, 6, 6, 0].map((w) => ({ waarde: w }));
+  const s = vatPeriodeSamen(reeks, cfg);
+  assert.equal(s.langsteAfwijking, 3);
+  assert.equal(s.overschrijdingen, 5);
+  const metGat = [6, 6, null, 6].map((w) => ({ waarde: w as number | null }));
+  assert.equal(vatPeriodeSamen(metGat, cfg).langsteAfwijking, 2, "onbekend breekt de reeks");
+  assert.equal(vatPeriodeSamen([], cfg).aandeelInOrde, null, "lege periode → null");
+});
+
+// ── Uitdunning en piek/mediaan (blok D3 en acceptatie 29) ───────────────────
+
+test("dunTrendUit — ten hoogste één punt per uur, het laatste, chronologisch", () => {
+  const punten = [
+    { tijdstip: "2026-08-08T10:00:00.000Z", waarde: 1 },
+    { tijdstip: "2026-08-08T10:15:00.000Z", waarde: 2 },
+    { tijdstip: "2026-08-08T10:45:00.000Z", waarde: 3 },
+    { tijdstip: "2026-08-08T11:05:00.000Z", waarde: 4 },
+    { tijdstip: "2026-08-08T11:59:00.000Z", waarde: 5 },
+  ];
+  const uit = dunTrendUit(punten);
+  assert.equal(uit.length, 2, "twee klokuren → twee punten");
+  assert.equal(uit[0]?.waarde, 3, "laatste van het 10-uur");
+  assert.equal(uit[1]?.waarde, 5, "laatste van het 11-uur");
+  assert.equal(uit[uit.length - 1]?.tijdstip, "2026-08-08T11:59:00.000Z", "recentste punt blijft behouden");
+});
+
+test("piekEnMediaan / toonPiekInPeriode — hoogste + mediane snapshot, geen periode-percentiel", () => {
+  assert.deepEqual(piekEnMediaan([]), { hoogste: null, mediaan: null });
+  assert.deepEqual(piekEnMediaan([null, null]), { hoogste: null, mediaan: null });
+  const pm = piekEnMediaan([30, 10, 20]);
+  assert.equal(pm.hoogste, 30);
+  assert.equal(pm.mediaan, 20);
+  assert.equal(toonPiekInPeriode(SIGNAAL_REGISTRY.ai_latency_p95), true, "p95 → piek+mediaan");
+  assert.equal(toonPiekInPeriode(SIGNAAL_REGISTRY.tokenverbruik), true, "trendpercentage → piek+mediaan");
+  assert.equal(toonPiekInPeriode(SIGNAAL_REGISTRY.uptime_kern), false);
+  assert.equal(toonPiekInPeriode(SIGNAAL_REGISTRY.extractie_achterstand), false);
+});
+
+test("kiesSlechtsteMeting — slechtste wint, tie-break op fondsnaam (acceptatie 6)", () => {
+  assert.equal(kiesSlechtsteMeting([]), null);
+  const groep = [
+    { status: "groen" as SignaalStatus, fondsNaam: "Zephyr" },
+    { status: "rood" as SignaalStatus, fondsNaam: "Beta" },
+    { status: "rood" as SignaalStatus, fondsNaam: "Alfa" },
+  ];
+  // Twee keer rood → laagste naam (Alfa) wint, deterministisch.
+  assert.equal(kiesSlechtsteMeting(groep)?.fondsNaam, "Alfa");
+  // Volgorde van de invoer mag niets uitmaken.
+  assert.equal(kiesSlechtsteMeting([...groep].reverse())?.fondsNaam, "Alfa");
+});
+
+test("clientVeiligeWaarde — onderdrukt maskeert de laatste stand naar null (client-veiligheid)", () => {
+  // Borgt dat een refactor de maskering vóór serialisatie niet stil terugdraait:
+  // een onderdrukt signaal mag nooit met een ruwe waarde de client-payload halen.
+  assert.equal(clientVeiligeWaarde(3.4, true), null);
+  assert.equal(clientVeiligeWaarde(0, true), null);
+  assert.equal(clientVeiligeWaarde(3.4, false), 3.4);
+  assert.equal(clientVeiligeWaarde(null, false), null);
 });
 
 console.log(`\n${n} monitoring-signalen sanity-tests geslaagd (incl. driftcheck op de seed).`);

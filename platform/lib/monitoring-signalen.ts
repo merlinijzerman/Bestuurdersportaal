@@ -45,6 +45,49 @@ export type SignaalStatus = "groen" | "oranje" | "rood" | "onbekend";
 export type Richting = "hoger_is_slechter" | "lager_is_slechter";
 export type Eenheid = "percentage" | "aantal" | "milliseconden" | "trend_percentage";
 
+/**
+ * De vier ketendomeinen van de statusbalk (voorstel §4, laag 1). CODE-ONLY: een
+ * domein is een eigenschap van de meetdefinitie, geen instelling.
+ */
+export type Domein =
+  | "beschikbaarheid"
+  | "verwerking"
+  | "ai_kwaliteit"
+  | "beveiliging_audit";
+
+export const DOMEIN_LABEL: Record<Domein, string> = {
+  beschikbaarheid: "Beschikbaarheid",
+  verwerking: "Verwerking",
+  ai_kwaliteit: "AI-kwaliteit",
+  beveiliging_audit: "Beveiliging en audit",
+};
+
+/** Vaste weergavevolgorde van de domeintegels. */
+export const DOMEIN_VOLGORDE: Domein[] = [
+  "beschikbaarheid",
+  "verwerking",
+  "ai_kwaliteit",
+  "beveiliging_audit",
+];
+
+/**
+ * Dekkingsbadge (voorstel §4.1 regel 7). CODE-ONLY. `niet_in_werking` is
+ * gereserveerd voor signalen waarvan de bron een stub is — die mogen nooit groen
+ * tonen. Het bestaande `dekkingsvoorbehoud` blijft de TEKST; dit is de BADGE.
+ */
+export type Dekkingsniveau =
+  | "volledig"
+  | "gedeeltelijk"
+  | "indicatief"
+  | "niet_in_werking";
+
+export const DEKKINGSNIVEAU_LABEL: Record<Dekkingsniveau, string> = {
+  volledig: "Volledig",
+  gedeeltelijk: "Gedeeltelijke dekking",
+  indicatief: "Indicatief",
+  niet_in_werking: "Niet in werking",
+};
+
 export type SignaalConfig = {
   signaal: SignaalId;
   label: string;
@@ -69,6 +112,24 @@ export type SignaalConfig = {
    * zonder review, zonder auditregel.
    */
   dekkingsvoorbehoud: string | null;
+
+  // ── Vijf CODE-ONLY velden (voorstel §4.1, §5.1) ────────────────────────────
+  //  Alle vijf zijn eigenschappen van de meetdefinitie of van de
+  //  organisatieafspraak, geen instellingen. `combineerConfig()` leest ze NOOIT
+  //  uit de database — precies zoals `platformbreed` en `dekkingsvoorbehoud`.
+  //  Een eigenaar of opvolgactie die met één SQL-update leeg te maken is, is geen
+  //  afspraak; een domein dat verschuift zonder deploy maakt de statusbalk onbetrouwbaar.
+
+  /** In welke domeintegel van de ketenstatusbalk dit signaal telt. */
+  domein: Domein;
+  /** Eén zin in bestuurstaal: wat er aan de hand is (regel 1). */
+  betekenis: string;
+  /** Wie het oppakt bij een afwijking (regel 6). Organisatieafspraak. */
+  eigenaar: string;
+  /** Wat je doet bij rood (regel 6). Organisatieafspraak. */
+  opvolgactie: string;
+  /** De dekkingsbadge in de tabel (regel 7); de tekst blijft `dekkingsvoorbehoud`. */
+  dekkingsniveau: Dekkingsniveau;
 };
 
 /**
@@ -77,6 +138,30 @@ export type SignaalConfig = {
  * genoeg om een echt stilgevallen cron binnen redelijke tijd zichtbaar te maken.
  */
 export const VEROUDERINGSFACTOR = 2.5;
+
+/**
+ * Eigenaar per domein — organisatieafspraak (voorstel §4.1 regel 6, werkopdracht
+ * §3-punt 8). Eén bron per domein, zodat twee signalen in hetzelfde domein niet
+ * uiteen kunnen lopen. CODE-ONLY; niet via de configtabel te wijzigen.
+ */
+const EIGENAAR: Record<Domein, string> = {
+  beschikbaarheid: "Platformbeheer",
+  verwerking: "Beheer documentketen",
+  ai_kwaliteit: "AI-beheer",
+  beveiliging_audit: "Platformbeheer en compliance",
+};
+
+/** Opvolgactie bij rood per domein (werkopdracht §3-punt 8). CODE-ONLY. */
+const OPVOLGACTIE: Record<Domein, string> = {
+  beschikbaarheid:
+    "Componentuitsplitsing openen en de storingsroute van de rode component volgen; bij meer dan 15 minuten impact het incident vastleggen.",
+  verwerking:
+    "Controleren of de verwerkingsworker draait; bij aanhoudende achterstand handmatig herverwerken en het fonds informeren dat recente stukken nog niet vindbaar zijn.",
+  ai_kwaliteit:
+    "Vaststellen of het aan curatie (geen actueel document) of aan retrieval/model ligt; bij curatie een actie richting het fonds.",
+  beveiliging_audit:
+    "Elke waarneming afzonderlijk nagaan; bij fail-open of een auditgat het incident vastleggen en beoordelen of melding nodig is.",
+};
 
 /**
  * De acht signalen van deze tranche (FO §19 nrs. 1-7 en 14). Deze waarden zijn
@@ -99,6 +184,11 @@ export const SIGNAAL_REGISTRY: Record<SignaalId, SignaalConfig> = {
       "Aandeel healthcheck-runs zonder rode component. Traag (oranje) en onbekend tellen niet als storing.",
     platformbreed: true,
     dekkingsvoorbehoud: null,
+    domein: "beschikbaarheid",
+    betekenis: "Of de kernfuncties van het platform bereikbaar zijn.",
+    eigenaar: EIGENAAR.beschikbaarheid,
+    opvolgactie: OPVOLGACTIE.beschikbaarheid,
+    dekkingsniveau: "volledig",
   },
   embedding_indexering_fouten: {
     signaal: "embedding_indexering_fouten",
@@ -116,6 +206,11 @@ export const SIGNAAL_REGISTRY: Record<SignaalId, SignaalConfig> = {
     platformbreed: false,
     dekkingsvoorbehoud:
       "Eén ingest-job draagt de hele keten (extractie→embedding), dus een uitsplitsing per fase is niet mogelijk; dit is de totale faalratio. Bewuste weigeringen (cap/OCR) en overgeslagen jobs (document gedeactiveerd) tellen niet als fout.",
+    domein: "verwerking",
+    betekenis: "Welk deel van de aangeboden documenten niet verwerkt kan worden.",
+    eigenaar: EIGENAAR.verwerking,
+    opvolgactie: OPVOLGACTIE.verwerking,
+    dekkingsniveau: "gedeeltelijk",
   },
   extractie_achterstand: {
     signaal: "extractie_achterstand",
@@ -133,6 +228,11 @@ export const SIGNAAL_REGISTRY: Record<SignaalId, SignaalConfig> = {
     platformbreed: false,
     dekkingsvoorbehoud:
       "Telt elk document met een open job; in het single-job-model is er geen aparte extractie- of embedding-wachtrij, dus dit is de gehele ingest-achterstand, niet alleen extractie/OCR.",
+    domein: "verwerking",
+    betekenis: "Hoeveel documenten nog wachten op verwerking.",
+    eigenaar: EIGENAAR.verwerking,
+    opvolgactie: OPVOLGACTIE.verwerking,
+    dekkingsniveau: "gedeeltelijk",
   },
   rate_limit_incidenten: {
     signaal: "rate_limit_incidenten",
@@ -149,6 +249,11 @@ export const SIGNAAL_REGISTRY: Record<SignaalId, SignaalConfig> = {
       "Foutregels met categorie rate_limiting: 429-responses plus mislukte limietchecks (fail-open).",
     platformbreed: false,
     dekkingsvoorbehoud: "Telt 429-responses en mislukte limietchecks samen; de mislukte checks (fail-open) staan apart in meta.",
+    domein: "beveiliging_audit",
+    betekenis: "Hoe vaak verzoeken zijn afgeremd om overbelasting te voorkomen.",
+    eigenaar: EIGENAAR.beveiliging_audit,
+    opvolgactie: OPVOLGACTIE.beveiliging_audit,
+    dekkingsniveau: "gedeeltelijk",
   },
   audit_volledigheid: {
     signaal: "audit_volledigheid",
@@ -165,6 +270,11 @@ export const SIGNAAL_REGISTRY: Record<SignaalId, SignaalConfig> = {
       "Attempt-events zonder bijbehorend result-event, ouder dan 5 minuten. Alleen het AANTAL; doorklik vergt platform.logs.read (P6).",
     platformbreed: false,
     dekkingsvoorbehoud: "Alleen het aantal; doorklik naar de logregels vereist platform.logs.read (P6).",
+    domein: "beveiliging_audit",
+    betekenis: "Of elke handeling een volledig spoor in het auditlogboek achterlaat.",
+    eigenaar: EIGENAAR.beveiliging_audit,
+    opvolgactie: OPVOLGACTIE.beveiliging_audit,
+    dekkingsniveau: "volledig",
   },
   ai_latency_p95: {
     signaal: "ai_latency_p95",
@@ -181,6 +291,11 @@ export const SIGNAAL_REGISTRY: Record<SignaalId, SignaalConfig> = {
       "p95 van de modeltijd per gesprek (map-lus + eindgeneratie). Geen doorlooptijd van de beurt.",
     platformbreed: false,
     dekkingsvoorbehoud: "Modeltijd van de assistentchat (map-lus + eindgeneratie). Retrieval, query-reformulatie en reranker vallen erbuiten, net als de AI-routes voorbereiding en besluit-concept.",
+    domein: "ai_kwaliteit",
+    betekenis: "Hoe snel de AI-assistent antwoord geeft.",
+    eigenaar: EIGENAAR.ai_kwaliteit,
+    opvolgactie: OPVOLGACTIE.ai_kwaliteit,
+    dekkingsniveau: "gedeeltelijk",
   },
   lege_antwoord_ratio: {
     signaal: "lege_antwoord_ratio",
@@ -197,6 +312,11 @@ export const SIGNAAL_REGISTRY: Record<SignaalId, SignaalConfig> = {
       "Aandeel antwoorden met geselecteerd = 0 of zwakke_bronbasis = true; terugvragen tellen niet mee.",
     platformbreed: false,
     dekkingsvoorbehoud: null,
+    domein: "ai_kwaliteit",
+    betekenis: "Hoe vaak de AI geen bruikbaar antwoord kon geven.",
+    eigenaar: EIGENAAR.ai_kwaliteit,
+    opvolgactie: OPVOLGACTIE.ai_kwaliteit,
+    dekkingsniveau: "volledig",
   },
   tokenverbruik: {
     signaal: "tokenverbruik",
@@ -213,6 +333,11 @@ export const SIGNAAL_REGISTRY: Record<SignaalId, SignaalConfig> = {
       "Procentuele stijging t.o.v. het voortschrijdend daggemiddelde van de basisperiode. Ondergrens — zie het dekkingsvoorbehoud.",
     platformbreed: false,
     dekkingsvoorbehoud: "Ondergrens: eindgeneratie + map-lus incl. cachetokens. NIET meegeteld: reranker, query-reformulatie, web_search, en de AI-routes voorbereiding en besluit-concept (die loggen niet in governance_log).",
+    domein: "ai_kwaliteit",
+    betekenis: "Of het AI-verbruik sterk afwijkt van wat gebruikelijk is.",
+    eigenaar: EIGENAAR.ai_kwaliteit,
+    opvolgactie: OPVOLGACTIE.ai_kwaliteit,
+    dekkingsniveau: "indicatief",
   },
 };
 
@@ -402,6 +527,212 @@ export function p95(waarden: number[]): number | null {
 export function trendPercentage(huidig: number, basis: number): number | null {
   if (!Number.isFinite(huidig) || !Number.isFinite(basis) || basis <= 0) return null;
   return ((huidig - basis) / basis) * 100;
+}
+
+// ── Aggregatie over STATUSSEN (voorstel §4, laag 1) ──────────────────────────
+//  HARDE REGEL: er wordt NOOIT over waarden geaggregeerd, alleen over statussen.
+//  Waarden optellen over fondsen omzeilt de n-drempel (besluit 0055): twee
+//  fondsen met n=6 worden samen n=12 en de suppressie is uitgehold, terwijl het
+//  dashboard blijft beweren dat de drempel geldt. Deze functies nemen daarom
+//  UITSLUITEND SignaalStatus in — geen getallen. De sanity legt dat als negatieve
+//  controle vast.
+
+/** Ernstvolgorde: rood > oranje > onbekend > groen. `onbekend` maakt nooit groener. */
+const ERNST: Record<SignaalStatus, number> = { groen: 0, onbekend: 1, oranje: 2, rood: 3 };
+
+/**
+ * Slechtste status wint. Een lege lijst is `onbekend` (er valt niets te zeggen),
+ * nooit groen — een groen aggregaat op afwezigheid is de klassieke dashboardleugen.
+ */
+export function aggregeerStatus(statussen: SignaalStatus[]): SignaalStatus {
+  if (statussen.length === 0) return "onbekend";
+  return statussen.reduce(
+    (slechtste, s) => (ERNST[s] > ERNST[slechtste] ? s : slechtste),
+    "groen" as SignaalStatus
+  );
+}
+
+export type DomeinSamenvatting = {
+  slechtste: SignaalStatus;
+  /** Aantal metingen dat aandacht vraagt of verstoord is (oranje + rood). */
+  afwijkend: number;
+  /** Aantal metingen zonder geldige uitkomst (verouderd of onderdrukt). */
+  onbekend: number;
+  /** Totaal aantal metingen in dit domein — de noemer bij "2 van 12". */
+  totaal: number;
+};
+
+/**
+ * Vat de metingen (één per signaal × fonds) samen per domein: de slechtste status
+ * en het aantal afwijkende én onbekende metingen apart geteld. `onbekend` telt
+ * NOOIT als groen; het verschijnt in zijn eigen teller, niet in de noemer van
+ * "in orde".
+ */
+export function samenvattingPerDomein(
+  metingen: Array<{ domein: Domein; status: SignaalStatus }>
+): Record<Domein, DomeinSamenvatting> {
+  const statussenPerDomein = new Map<Domein, SignaalStatus[]>();
+  const uit = {} as Record<Domein, DomeinSamenvatting>;
+  for (const d of DOMEIN_VOLGORDE) {
+    statussenPerDomein.set(d, []);
+    uit[d] = { slechtste: "onbekend", afwijkend: 0, onbekend: 0, totaal: 0 };
+  }
+
+  for (const m of metingen) {
+    statussenPerDomein.get(m.domein)?.push(m.status);
+    const bak = uit[m.domein];
+    bak.totaal += 1;
+    if (m.status === "rood" || m.status === "oranje") bak.afwijkend += 1;
+    else if (m.status === "onbekend") bak.onbekend += 1;
+  }
+  for (const d of DOMEIN_VOLGORDE) uit[d].slechtste = aggregeerStatus(statussenPerDomein.get(d) ?? []);
+  return uit;
+}
+
+/**
+ * Kiest DETERMINISTISCH de slechtst scorende meting uit een groep fondsen (bij
+ * "Alle fondsen"). Slechtste status wint; bij gelijke status wint de laagste
+ * fondsnaam (lexicografisch, nl). Zonder die tie-break zou het getoonde fonds
+ * tussen renders kunnen wisselen (architectuurpunt 5, acceptatie 6).
+ */
+export function kiesSlechtsteMeting<
+  T extends { status: SignaalStatus; fondsNaam: string | null }
+>(metingen: T[]): T | null {
+  if (metingen.length === 0) return null;
+  return (
+    [...metingen].sort((a, b) => {
+      const d = ERNST[b.status] - ERNST[a.status];
+      if (d !== 0) return d;
+      return (a.fondsNaam ?? "").localeCompare(b.fondsNaam ?? "", "nl");
+    })[0] ?? null
+  );
+}
+
+// ── Periodesamenvatting (blok D2) ────────────────────────────────────────────
+
+export type PeriodeSamenvatting = {
+  /**
+   * Aandeel metingen in orde over ALLE punten in de periode — de noemer bevat óók
+   * de onbekende punten. Onderdrukte en verouderde punten tellen als onbekend,
+   * niet als in orde; anders levert een week met een stilgevallen cron een
+   * prachtige score. null als de periode geen enkel punt bevat.
+   */
+  aandeelInOrde: number | null;
+  /** Aantal punten boven een drempel (oranje of rood). */
+  overschrijdingen: number;
+  /** Langste aaneengesloten reeks afwijkende punten. */
+  langsteAfwijking: number;
+  /** Aantal punten zonder geldige uitkomst (gemaskeerd of verouderd). */
+  onbekend: number;
+  /** Totaal aantal punten in de periode. */
+  totaal: number;
+};
+
+/**
+ * Periodesamenvatting per rij. PURE en programmatisch na te rekenen, want de
+ * kernregel — onderdrukt/verouderd telt als onbekend, niet als in orde — mag niet
+ * in componentlogica leven.
+ *
+ * `aandeelInOrde` deelt door het TOTAAL (incl. onbekend), niet door de geldige
+ * punten. Zou de noemer alleen de geldige punten zijn, dan zou het maskeren van
+ * een slecht punt de score juist omhoog duwen. Nu kan maskeren de score alleen
+ * gelijk houden of verlagen — de negatieve controle in de sanity bewijst dat.
+ */
+export function vatPeriodeSamen(
+  trend: Array<{ waarde: number | null }>,
+  config: SignaalConfig
+): PeriodeSamenvatting {
+  let inOrde = 0;
+  let overschrijdingen = 0;
+  let onbekend = 0;
+  let langsteAfwijking = 0;
+  let huidigeReeks = 0;
+
+  for (const punt of trend) {
+    // Een gemaskeerd punt (waarde null) is per definitie onbekend. Een niet-null
+    // punt heeft de suppressie al overleefd, dus de status volgt puur uit de
+    // drempels — n = config.nDrempel laat de n-controle in bepaalStatus slagen.
+    const status =
+      punt.waarde === null
+        ? ("onbekend" as SignaalStatus)
+        : bepaalStatus(punt.waarde, config.nDrempel, config);
+
+    if (status === "groen") {
+      inOrde += 1;
+      huidigeReeks = 0;
+    } else if (status === "oranje" || status === "rood") {
+      overschrijdingen += 1;
+      huidigeReeks += 1;
+      if (huidigeReeks > langsteAfwijking) langsteAfwijking = huidigeReeks;
+    } else {
+      onbekend += 1;
+      huidigeReeks = 0;
+    }
+  }
+
+  return {
+    aandeelInOrde: trend.length === 0 ? null : inOrde / trend.length,
+    overschrijdingen,
+    langsteAfwijking,
+    onbekend,
+    totaal: trend.length,
+  };
+}
+
+/**
+ * Client-veilige laatste waarde. Onder suppressie (n<n-drempel) mag de ruwe
+ * waarde de client-payload niet bereiken — de tabel is een client component, dus
+ * alles wat de leeslaag teruggeeft wordt geserialiseerd naar de browser. Aparte
+ * pure functie zodat een latere refactor deze maskering niet stil kan terugdraaien
+ * (negatieve controle in de sanity). Zusje van `maskeerTrendwaarde`, maar voor de
+ * laatste stand in plaats van een trendpunt.
+ */
+export function clientVeiligeWaarde(waarde: number | null, onderdrukt: boolean): number | null {
+  return onderdrukt ? null : waarde;
+}
+
+export type PiekMediaan = { hoogste: number | null; mediaan: number | null };
+
+/**
+ * Hoogste en mediane snapshotwaarde over een reeks. Voor percentiel- en
+ * trendsignalen (…_p95, tokenverbruik) is er GEEN geldige "waarde over de
+ * periode": je zou percentielen middelen of trendpercentages optellen. De
+ * samenvatting toont dan de hoogste en de mediane snapshot, expliciet gelabeld
+ * (acceptatie 29) — niet een verzonnen periode-percentiel.
+ */
+export function piekEnMediaan(waarden: Array<number | null>): PiekMediaan {
+  const geldig = waarden
+    .filter((w): w is number => w !== null && Number.isFinite(w))
+    .sort((a, b) => a - b);
+  if (geldig.length === 0) return { hoogste: null, mediaan: null };
+  const midden = Math.floor((geldig.length - 1) / 2);
+  return { hoogste: geldig[geldig.length - 1] ?? null, mediaan: geldig[midden] ?? null };
+}
+
+/**
+ * True als de periodesamenvatting voor dit signaal GEEN representatieve
+ * periodewaarde mag tonen maar de hoogste + mediane snapshot: percentielsignalen
+ * (…_p95) en trendsignalen (trend_percentage). Afgeleid uit de eenheid en de
+ * signaalnaam — geen apart configveld nodig.
+ */
+export function toonPiekInPeriode(config: SignaalConfig): boolean {
+  return config.eenheid === "trend_percentage" || config.signaal.endsWith("_p95");
+}
+
+/**
+ * Dunt een chronologische reeks trendpunten uit tot ten hoogste één punt per
+ * klokuur — het LAATSTE punt in elk uur. Zo blijft de payload naar de client
+ * begrensd (7 dagen → ≤168 punten/reeks) zonder de leeslimiet te verhogen en
+ * zonder databaseobject (blok D3, architectuurpunt 12). De laatste stand per
+ * signaal komt NIET uit deze reeks maar uit de nieuwste ruwe rij, dus uitdunnen
+ * raakt het stoplicht niet.
+ */
+export function dunTrendUit<T extends { tijdstip: string }>(punten: T[]): T[] {
+  const perUur = new Map<string, T>();
+  // "2026-08-08T14" — jaar t/m uur. Punten worden verondersteld chronologisch
+  // (oplopend); een Map behoudt de invoegvolgorde en de laatste per uur wint.
+  for (const punt of punten) perUur.set(punt.tijdstip.slice(0, 13), punt);
+  return [...perUur.values()];
 }
 
 // ── Interne helpers ─────────────────────────────────────────────────────────
