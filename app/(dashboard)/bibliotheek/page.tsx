@@ -1,7 +1,6 @@
 "use client";
 import { Fragment, useState, useEffect, useRef } from "react";
 import DocumentMetadataModal from "@/core/components/DocumentMetadataModal";
-import { bronkaartLabels } from "@/core/lib/bronsoort";
 import { DOCUMENTTYPEN, DOCUMENTTYPE_LABEL } from "@/core/lib/document-metadata";
 import { uploadDocument } from "@/core/lib/document-upload-client";
 // Besluit 0140 — bijzonderheden en classificatie bij aanlevering leven in pure,
@@ -579,11 +578,15 @@ export default function BibliotheekPage() {
            badgerij: het oog leert waar de datum staat en kan hele kolommen
            aflopen. De kolom "Bijzonderheden" is in rust LEEG; dat lege veld is
            het punt, want daardoor springt een afwijking eruit. */
-        <div className="overflow-hidden rounded-xl border border-line bg-app-surface shadow-card">
-          <table className="w-full text-sm">
+        <div className="overflow-x-auto rounded-xl border border-line bg-app-surface shadow-card">
+          {/* `table-fixed` is essentieel: zonder dat verbreedt de browser de
+              titelkolom op de langste titel, duwt hij de rechterkolommen buiten
+              beeld en werkt `truncate` niet. Met vaste layout houden alle rijen
+              dezelfde kolomgrenzen en kapt de titel netjes af. */}
+          <table className="w-full min-w-[860px] table-fixed text-sm">
             <thead>
-              <tr className="bg-app-zebra text-left text-[10.5px] font-bold uppercase tracking-wider text-muted">
-                <th className="w-[64px] whitespace-nowrap border-b-[1.5px] border-app-line-strong px-3 py-2.5">
+              <tr className="bg-app-zebra text-left align-middle text-[10.5px] font-bold uppercase tracking-wider text-muted">
+                <th className="w-[62px] whitespace-nowrap border-b-[1.5px] border-app-line-strong px-3 py-2.5">
                   Type
                 </th>
                 <th className="border-b-[1.5px] border-app-line-strong px-3 py-2.5">
@@ -595,23 +598,23 @@ export default function BibliotheekPage() {
                     generieke tab varieert hij wél (DNB/AFM/PF) en is hij juist
                     de meest informatieve kolom. */}
                 {actieveTab === "generiek" && (
-                  <th className="w-[104px] whitespace-nowrap border-b-[1.5px] border-app-line-strong px-3 py-2.5">
+                  <th className="w-[86px] whitespace-nowrap border-b-[1.5px] border-app-line-strong px-3 py-2.5">
                     Bron
                   </th>
                 )}
-                <th className="w-[110px] whitespace-nowrap border-b-[1.5px] border-app-line-strong px-3 py-2.5">
+                <th className="w-[92px] whitespace-nowrap border-b-[1.5px] border-app-line-strong px-3 py-2.5">
                   Bronstatus
                 </th>
-                <th className="w-[86px] whitespace-nowrap border-b-[1.5px] border-app-line-strong px-3 py-2.5 text-right">
+                <th className="w-[78px] whitespace-nowrap border-b-[1.5px] border-app-line-strong px-3 py-2.5 text-right">
                   Omvang
                 </th>
-                <th className="w-[104px] whitespace-nowrap border-b-[1.5px] border-app-line-strong px-3 py-2.5 text-right">
+                <th className="w-[100px] whitespace-nowrap border-b-[1.5px] border-app-line-strong px-3 py-2.5 text-right">
                   Toegevoegd
                 </th>
-                <th className="w-[210px] border-b-[1.5px] border-app-line-strong px-3 py-2.5">
+                <th className="w-[196px] border-b-[1.5px] border-app-line-strong px-3 py-2.5">
                   Bijzonderheden
                 </th>
-                <th className="w-[44px] border-b-[1.5px] border-app-line-strong px-3 py-2.5" />
+                <th className="w-[40px] border-b-[1.5px] border-app-line-strong px-2 py-2.5" />
               </tr>
             </thead>
             <tbody>
@@ -663,7 +666,6 @@ export default function BibliotheekPage() {
             const inactief = !doc.actief;
             const kanInzien = !!doc.opslag_pad;
             const isGeneriek = doc.bibliotheek === "generiek";
-            const labels = bronkaartLabels(doc);
             // Besluit 0140 — de bijzonderheden komen uit één pure, geteste
             // functie (core/lib/document-bijzonderheden.ts). Hier stond eerder
             // een reeks booleans met onderlinge uitsluitingen; precies het soort
@@ -677,7 +679,7 @@ export default function BibliotheekPage() {
             return (
               <tr
                 key={doc.id}
-                className={`transition-colors hover:bg-app-zebra ${
+                className={`align-middle transition-colors hover:bg-app-zebra ${
                   inactief ? "opacity-70" : ""
                 }`}
               >
@@ -689,14 +691,17 @@ export default function BibliotheekPage() {
                   )}
                 </td>
 
-                <td className="min-w-0 border-b border-line px-3 py-2">
+                {/* `max-w-0` is de standaardtruc om `truncate` te laten werken in
+                    een `table-fixed`: zonder dat groeit de cel mee met de inhoud
+                    en wordt er niets afgekapt. */}
+                <td className="max-w-0 border-b border-line px-3 py-2">
                   {kanInzien && !inactief ? (
                     <a
                       href={`/api/documents/${doc.id}/bestand`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="block truncate font-semibold text-ink transition-colors hover:text-accent hover:underline"
-                      title="Origineel openen of downloaden"
+                      title={doc.titel}
                     >
                       {doc.titel}
                     </a>
@@ -707,27 +712,11 @@ export default function BibliotheekPage() {
                       }`}
                       title={
                         kanInzien
-                          ? undefined
-                          : "Origineel niet beschikbaar — vóór mei 2026 geüpload"
+                          ? doc.titel
+                          : `${doc.titel} — origineel niet beschikbaar (vóór mei 2026 geüpload)`
                       }
                     >
                       {doc.titel}
-                    </div>
-                  )}
-                  {/* Bronsoort en vervallen-markering horen bij de IDENTITEIT van
-                      een generiek document (welk kader, nog geldend?) en niet bij
-                      de bijzonderheden. Ze staan daarom onder de titel en niet in
-                      de signaalkolom. */}
-                  {isGeneriek && (
-                    <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted">
-                      <span className="rounded-full border border-accent/30 bg-accent-tint px-2 py-0.5 font-semibold text-accent-ink">
-                        {labels.bronsoortLabel}
-                      </span>
-                      {labels.vervallen && (
-                        <span className="rounded-full border border-err/30 bg-err-tint px-2 py-0.5 font-semibold text-err-ink">
-                          {labels.vervallenLabel}
-                        </span>
-                      )}
                     </div>
                   )}
                 </td>
@@ -781,7 +770,7 @@ export default function BibliotheekPage() {
                   </div>
                 </td>
 
-                <td className="border-b border-line px-1 py-2 text-center">
+                <td className="border-b border-line px-2 py-2 text-center align-middle">
                 {/* Kebab-menu */}
                 <div className="relative flex-shrink-0">
                   <button

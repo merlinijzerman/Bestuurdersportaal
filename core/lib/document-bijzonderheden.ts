@@ -42,6 +42,8 @@
 //  zodat de traag-drempel deterministisch testbaar is.
 // ============================================================================
 
+import { isVervallen } from "./bronsoort";
+
 /** Pipeline-statussen waarin een document nog asynchroon wordt verwerkt (F3/F4).
  *  `beschikbaar` valt hier bewust buiten: dan is `geindexeerd` de waarheid. */
 export const PIPELINE_STATUSSEN = [
@@ -73,6 +75,7 @@ export interface Bijzonderheid {
     | "niet_doorzoekbaar"
     | "type_ontbreekt"
     | "metadata_onvolledig"
+    | "vervallen"
     | "tekstherkenning";
   label: string;
   soort: BijzonderheidSoort;
@@ -94,6 +97,8 @@ export interface DocumentToestand {
   documenttype: string | null;
   metadata_review_status: string | null;
   deactivatie_reden: string | null;
+  /** Geldigheidsgrens van een generiek kaderdocument (ISO YYYY-MM-DD). */
+  geldig_tot: string | null;
   /** ISO-tijdstip van aanmaak — voor de traag-drempel. */
   aangemaakt: string;
 }
@@ -226,6 +231,19 @@ export function bepaalBijzonderheden(
       toelichting:
         "Een of meer metadatavelden (status, bronstatus, context of datums) ontbreken " +
         "of zijn onzeker. Aan te vullen via het reviewscherm.",
+    });
+  }
+
+  // Vervallen kaderdocument. Stond eerder als losse badge ONDER de titel; dat
+  // maakte elke generieke rij twee regels hoog en zette een levensloop-signaal
+  // op een plek waar de rest van de rij identiteit toont. Het hoort bij de
+  // bijzonderheden: het is een afwijking, en er hoort een handeling bij.
+  if (isGeneriek && isVervallen(doc.geldig_tot, new Date(nu))) {
+    uit.push({
+      sleutel: "vervallen",
+      label: "Vervallen",
+      soort: "fout",
+      toelichting: `Dit kaderdocument is vervallen per ${doc.geldig_tot}. Het wordt centraal beheerd; controleer of er een opvolger is.`,
     });
   }
 

@@ -76,6 +76,8 @@ const EVENT_LABEL: Record<string, string> = {
   maatregel_toegevoegd: "Maatregel toegevoegd",
   maatregel_status_gewijzigd: "Maatregelstatus gewijzigd",
   risico_gesloten: "Risico gesloten",
+  // Besluit 0141 — wijziging van een bestaand risico.
+  risico_gewijzigd: "Risico gewijzigd",
 };
 
 export default async function RisicoDetailPage({
@@ -157,7 +159,24 @@ export default async function RisicoDetailPage({
           )}
         </div>
 
-        {!isGesloten && <RisicoActies risicoId={risico.id} />}
+        {!isGesloten && (
+          <RisicoActies
+            risicoId={risico.id}
+            risico={{
+              id: risico.id,
+              titel: risico.titel,
+              toelichting: risico.toelichting,
+              categorie: risico.categorie,
+              kans: risico.kans,
+              impact: risico.impact,
+              niveau: risico.niveau,
+              niveau_handmatig: !!risico.niveau_handmatig,
+              type_risico: risico.type_risico,
+              eigenaar_naam: risico.eigenaar_naam,
+              volgende_beoordeling: risico.volgende_beoordeling,
+            }}
+          />
+        )}
       </div>
 
       {/* K/I/niveau strook */}
@@ -370,6 +389,21 @@ function formatPayload(eventType: string, payload: Record<string, unknown>): str
   }
   if (eventType === "risico_gesloten" && payload.motivering) {
     return String(payload.motivering);
+  }
+  // Besluit 0141 — een wijziging draagt de gewijzigde velden (leesbare labels)
+  // en, als de weging is geraakt, de verplichte motivering. Zonder die twee is
+  // een logregel "Risico gewijzigd" waardeloos voor de vraag waaróm iets
+  // verschoof.
+  if (eventType === "risico_gewijzigd") {
+    const labels = Array.isArray(payload.veld_labels)
+      ? (payload.veld_labels as unknown[]).map(String)
+      : Array.isArray(payload.velden)
+        ? (payload.velden as unknown[]).map(String)
+        : [];
+    const delen: string[] = [];
+    if (labels.length > 0) delen.push(labels.join(", "));
+    if (payload.motivering) delen.push(String(payload.motivering));
+    return delen.join(" — ");
   }
   return "";
 }

@@ -1,32 +1,20 @@
 import { createServerSupabase } from "@/core/lib/supabase-server";
-import Link from "next/link";
 import NieuweVergaderingForm from "./_components/NieuweVergaderingForm";
+import VergaderingenLijst, {
+  type VergaderingRij,
+} from "./_components/VergaderingenLijst";
 
-interface Vergadering {
-  id: string;
-  titel: string;
-  datum: string;
-  locatie: string | null;
-  status: "gepland" | "in_voorbereiding" | "afgerond";
-  aangemaakt: string;
-}
-
-const STATUS_BADGE: Record<string, { bg: string; text: string; label: string }> = {
-  gepland: { bg: "bg-accent-tint", text: "text-accent-ink", label: "Gepland" },
-  in_voorbereiding: { bg: "bg-warn-tint", text: "text-warn-ink", label: "In voorbereiding" },
-  afgerond: { bg: "bg-app-bg", text: "text-muted", label: "Afgerond" },
-};
-
-function formatDatum(d: string) {
-  return new Date(d).toLocaleString("nl-NL", {
-    weekday: "short",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+// ============================================================================
+//  Vergaderingenoverzicht — besluit 0141
+// ----------------------------------------------------------------------------
+//  Deze pagina haalt de data server-side op (RLS, geen extra roundtrip) en laat
+//  de weergave over aan een client-component: archiveren en het uitklapbare
+//  archiefblok vragen interactie.
+//
+//  De sortering en de driedeling komen uit core/lib/vergadering-archief.ts, niet
+//  uit een query. Eén plek, met sanity-tests, zodat een gearchiveerde
+//  vergadering nooit óók bij "komend" of "afgelopen" kan opduiken.
+// ============================================================================
 
 export default async function VergaderingenPage() {
   const supabase = await createServerSupabase();
@@ -43,23 +31,18 @@ export default async function VergaderingenPage() {
 
   const { data: vergaderingen } = await supabase
     .from("vergaderingen")
-    .select("*")
+    .select("id, titel, datum, locatie, status, gearchiveerd_op")
     .eq("fonds_id", profiel?.fonds_id || "")
     .order("datum", { ascending: false });
 
-  const lijst = (vergaderingen || []) as Vergadering[];
-  const nu = new Date();
-  const komend = lijst
-    .filter((v) => new Date(v.datum) >= nu)
-    .sort((a, b) => new Date(a.datum).getTime() - new Date(b.datum).getTime());
-  const afgelopen = lijst.filter((v) => new Date(v.datum) < nu);
+  const lijst = (vergaderingen || []) as VergaderingRij[];
 
   return (
-    <div className="p-4 sm:p-6 lg:p-7 space-y-6">
-      <div className="flex items-end justify-between flex-wrap gap-3">
+    <div className="space-y-6 p-4 sm:p-6 lg:p-7">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-serif text-ink text-xl font-bold">Vergaderingen</h1>
-          <p className="text-muted text-sm mt-0.5">
+          <h1 className="font-serif text-xl font-bold text-ink">Vergaderingen</h1>
+          <p className="mt-0.5 text-sm text-muted">
             Plan, agendeer en bereid bestuursvergaderingen voor.
           </p>
         </div>
@@ -68,68 +51,7 @@ export default async function VergaderingenPage() {
         </div>
       </div>
 
-      <section>
-        <div className="text-xs font-bold text-muted uppercase tracking-wider mb-3">
-          Komend ({komend.length})
-        </div>
-        {komend.length === 0 ? (
-          <div className="bg-white border border-dashed border-app-line-strong rounded-xl p-8 text-center text-sm text-muted">
-            Nog geen geplande vergaderingen. Maak hierboven een nieuwe vergadering aan.
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {komend.map((v) => (
-              <VergaderingKaart key={v.id} v={v} />
-            ))}
-          </div>
-        )}
-      </section>
-
-      {afgelopen.length > 0 && (
-        <section>
-          <div className="text-xs font-bold text-muted uppercase tracking-wider mb-3">
-            Afgelopen ({afgelopen.length})
-          </div>
-          <div className="space-y-2">
-            {afgelopen.slice(0, 10).map((v) => (
-              <VergaderingKaart key={v.id} v={v} variant="afgelopen" />
-            ))}
-          </div>
-        </section>
-      )}
+      <VergaderingenLijst lijst={lijst} />
     </div>
-  );
-}
-
-function VergaderingKaart({
-  v,
-  variant,
-}: {
-  v: Vergadering;
-  variant?: "afgelopen";
-}) {
-  const badge = STATUS_BADGE[v.status] || STATUS_BADGE.in_voorbereiding;
-  return (
-    <Link
-      href={`/vergaderingen/${v.id}`}
-      className={`block bg-white border border-line rounded-xl p-4 hover:border-accent transition-colors ${
-        variant === "afgelopen" ? "opacity-75" : ""
-      }`}
-    >
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="min-w-0">
-          <div className="font-semibold text-ink text-sm">{v.titel}</div>
-          <div className="text-xs text-muted mt-1">
-            {formatDatum(v.datum)}
-            {v.locatie ? ` · ${v.locatie}` : ""}
-          </div>
-        </div>
-        <span
-          className={`text-xs font-medium px-2.5 py-1 rounded-md ${badge.bg} ${badge.text}`}
-        >
-          {badge.label}
-        </span>
-      </div>
-    </Link>
   );
 }

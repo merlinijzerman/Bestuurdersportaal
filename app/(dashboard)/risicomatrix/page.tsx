@@ -10,6 +10,10 @@ import {
   NIVEAU_OMSCHRIJVING,
   TYPE_LABEL,
 } from "@/core/lib/risico-config";
+// Besluit 0141 — de heatmap is klikbaar (schaling) en de zijpanelen zijn
+// uitklapbaar; beide vragen state en leven daarom als client-component.
+import Heatmap from "./_components/Heatmap";
+import ZijpaneelBlok from "./_components/ZijpaneelBlok";
 
 interface RisicoRij {
   id: string;
@@ -90,7 +94,7 @@ export default async function RisicomatrixPage() {
                 Kans &times; Impact heatmap
               </h2>
               <p className="text-xs text-muted mt-0.5">
-                Klik een risico-pil aan voor details.
+                Klik een cel aan om de risico&apos;s erin te tonen.
               </p>
             </div>
             <div className="text-xs text-muted">
@@ -100,11 +104,12 @@ export default async function RisicomatrixPage() {
           <Heatmap risicos={lijst} />
         </div>
 
-        <aside className="col-span-12 lg:col-span-4 space-y-4">
-          <div className="bg-white border border-line rounded-xl p-5">
-            <h3 className="text-xs uppercase tracking-wide text-muted font-semibold mb-3">
-              Legenda risiconiveau
-            </h3>
+        <aside className="col-span-12 lg:col-span-4 space-y-3">
+          {/* Legenda staat standaard DICHT: het is naslag die je één keer leest,
+              maar die permanent ruimte innam naast de visual die je elke keer
+              bekijkt. De verdeling staat open — dat zijn cijfers die je wél elke
+              keer wilt zien. */}
+          <ZijpaneelBlok titel="Legenda risiconiveau" samenvatting="Hoog · Middel · Laag">
             <div className="space-y-3">
               {(["hoog", "middel", "laag"] as NiveauSlug[]).map((n) => (
                 <div key={n} className="flex items-start gap-3">
@@ -124,12 +129,13 @@ export default async function RisicomatrixPage() {
                 </div>
               ))}
             </div>
-          </div>
+          </ZijpaneelBlok>
 
-          <div className="bg-white border border-line rounded-xl p-5">
-            <h3 className="text-xs uppercase tracking-wide text-muted font-semibold mb-3">
-              Verdeling
-            </h3>
+          <ZijpaneelBlok
+            titel="Verdeling"
+            standaardOpen
+            samenvatting={`${tellers.hoog} hoog · ${tellers.middel} middel · ${tellers.laag} laag`}
+          >
             <div className="space-y-2">
               {(["hoog", "middel", "laag"] as NiveauSlug[]).map((n) => (
                 <div key={n} className="flex items-center gap-3">
@@ -154,7 +160,7 @@ export default async function RisicomatrixPage() {
                 <span>{tellers.tijdelijk} van {lijst.length}</span>
               </div>
             </div>
-          </div>
+          </ZijpaneelBlok>
         </aside>
       </div>
 
@@ -220,86 +226,3 @@ export default async function RisicomatrixPage() {
     </div>
   );
 }
-
-// Heatmap component — Server Component, geen state nodig
-function Heatmap({ risicos }: { risicos: RisicoRij[] }) {
-  // Bouw cellen-matrix [impact][kans] = risicos[]
-  const cellen: RisicoRij[][][] = Array.from({ length: 5 }, () =>
-    Array.from({ length: 5 }, () => [])
-  );
-  for (const r of risicos) {
-    const i = Math.min(Math.max(r.impact, 1), 5) - 1;
-    const k = Math.min(Math.max(r.kans, 1), 5) - 1;
-    cellen[i][k].push(r);
-  }
-
-  // Niveau per cel afgeleid op basis van som
-  function celNiveau(k: number, i: number): NiveauSlug {
-    const sum = k + i + 2; // k en i zijn 0-based hier
-    if (sum <= 4) return "laag";
-    if (sum <= 7) return "middel";
-    return "hoog";
-  }
-
-  return (
-    <div className="relative">
-      <div className="grid grid-cols-[60px_repeat(5,1fr)] gap-1.5">
-        <div />
-        {[1, 2, 3, 4, 5].map((k) => (
-          <div
-            key={`hdr-${k}`}
-            className="text-[10px] uppercase tracking-wide text-muted text-center pb-1 font-semibold"
-          >
-            K{k}
-          </div>
-        ))}
-        {[5, 4, 3, 2, 1].map((iLabel) => {
-          const iIdx = iLabel - 1; // index in cellen array
-          return (
-            <div className="contents" key={`row-${iLabel}`}>
-              <div className="text-[10px] uppercase tracking-wide text-muted text-right pr-2 self-center font-semibold">
-                I{iLabel}
-              </div>
-              {[0, 1, 2, 3, 4].map((kIdx) => {
-                const niveau = celNiveau(kIdx, iIdx);
-                const items = cellen[iIdx][kIdx];
-                return (
-                  <div
-                    key={`cell-${iLabel}-${kIdx + 1}`}
-                    className={`rounded h-20 p-1.5 border ${NIVEAU_KLEUREN[niveau].cellBg} ${NIVEAU_KLEUREN[niveau].cellBorder} space-y-1 overflow-hidden`}
-                  >
-                    {items.slice(0, 2).map((r) => (
-                      <Link
-                        key={r.id}
-                        href={`/risicomatrix/${r.id}`}
-                        className={`block text-[10px] font-medium px-1.5 py-1 rounded leading-tight truncate ${
-                          niveau === "hoog"
-                            ? "bg-err text-err-ink hover:bg-err"
-                            : niveau === "middel"
-                              ? "bg-warn text-warn-ink hover:bg-warn"
-                              : "bg-ok text-ok-ink hover:bg-ok"
-                        }`}
-                        title={r.titel}
-                      >
-                        {r.titel}
-                      </Link>
-                    ))}
-                    {items.length > 2 && (
-                      <div className="text-[10px] text-muted px-1.5">
-                        + {items.length - 2} meer
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          );
-        })}
-      </div>
-      <div className="text-center text-[10px] uppercase tracking-widest text-muted font-semibold mt-3">
-        Kans →
-      </div>
-    </div>
-  );
-}
-

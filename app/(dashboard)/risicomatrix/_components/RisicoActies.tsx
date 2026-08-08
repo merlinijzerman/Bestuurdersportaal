@@ -2,13 +2,17 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import RisicoEditModal, { type RisicoBewerkbaar } from "./RisicoEditModal";
 
 interface Props {
   risicoId: string;
+  /** Besluit 0141 — de huidige waarden, voor de bewerkmodal. */
+  risico: RisicoBewerkbaar;
 }
 
-export default function RisicoActies({ risicoId }: Props) {
+export default function RisicoActies({ risicoId, risico }: Props) {
   const router = useRouter();
+  const [toonBewerken, setToonBewerken] = useState(false);
   const [toonSluiten, setToonSluiten] = useState(false);
   const [motivering, setMotivering] = useState("");
   const [bezig, setBezig] = useState(false);
@@ -41,14 +45,28 @@ export default function RisicoActies({ risicoId }: Props) {
 
   if (!toonSluiten) {
     return (
-      <div className="flex items-center gap-2">
-        <button
-          onClick={() => setToonSluiten(true)}
-          className="px-3 py-2 text-sm border border-line rounded-lg hover:border-err/30 text-err-ink"
-        >
-          Risico sluiten
-        </button>
-      </div>
+      <>
+        <div className="flex items-center gap-2">
+          {/* Besluit 0141 — tot dan kon een risico alleen worden aangemaakt en
+              gesloten. Een verkeerd ingeschatte kans was daarmee onherstelbaar:
+              sluiten en opnieuw aanmaken knipt de geschiedenis in tweeën. */}
+          <button
+            onClick={() => setToonBewerken(true)}
+            className="px-3 py-2 text-sm border border-app-line-control rounded-lg hover:border-accent text-accent-ink font-semibold"
+          >
+            Bewerken
+          </button>
+          <button
+            onClick={() => setToonSluiten(true)}
+            className="px-3 py-2 text-sm border border-line rounded-lg hover:border-err/30 text-err-ink"
+          >
+            Risico sluiten
+          </button>
+        </div>
+        {toonBewerken && (
+          <RisicoEditModal risico={risico} onSluiten={() => setToonBewerken(false)} />
+        )}
+      </>
     );
   }
 

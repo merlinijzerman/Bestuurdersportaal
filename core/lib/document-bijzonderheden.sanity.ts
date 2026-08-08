@@ -50,6 +50,7 @@ function doc(over: Partial<DocumentToestand> = {}): DocumentToestand {
     documenttype: "beleid",
     metadata_review_status: "gecontroleerd",
     deactivatie_reden: null,
+    geldig_tot: null,
     aangemaakt: RECENT,
     ...over,
   };
@@ -153,6 +154,23 @@ test("generieke documenten krijgen geen 'Type ontbreekt' (centraal gecureerd)", 
   assert.deepEqual(s, []);
 });
 
+// ── Vervallen kaderdocument ─────────────────────────────────────────────────
+
+test("een vervallen generiek kaderdocument meldt 'Vervallen'", () => {
+  const s = sleutels(doc({ bibliotheek: "generiek", geldig_tot: "2025-01-01" }));
+  assert.deepEqual(s, ["vervallen"]);
+});
+
+test("geldig_tot in de toekomst is niet vervallen", () => {
+  const s = sleutels(doc({ bibliotheek: "generiek", geldig_tot: "2099-01-01" }));
+  assert.deepEqual(s, []);
+});
+
+test("een FONDSdocument met geldig_tot krijgt geen vervallen-melding (alleen kaders)", () => {
+  const s = sleutels(doc({ bibliotheek: "fonds", geldig_tot: "2025-01-01" }));
+  assert.deepEqual(s, []);
+});
+
 // ── Auditmarkering ──────────────────────────────────────────────────────────
 
 test("tekstherkenning blijft zichtbaar bij een verder gaaf document (besluit 0020/0134)", () => {
@@ -202,6 +220,7 @@ test("geen enkel label bevat een oordeel of datamodel-jargon", () => {
     doc({ documenttype: null }),
     doc({ metadata_review_status: "te_controleren" }),
     doc({ ocr_toegepast: true }),
+    doc({ bibliotheek: "generiek", geldig_tot: "2025-01-01" }),
   ];
   for (const d of alle) {
     for (const b of bepaalBijzonderheden(d, NU)) {
