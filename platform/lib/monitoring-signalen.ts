@@ -35,7 +35,10 @@ export type SignaalId =
   | "uptime_kern"
   | "embedding_indexering_fouten"
   | "extractie_achterstand"
+  | "ingest_stilstand"
+  | "ingest_doorlooptijd_p95"
   | "rate_limit_incidenten"
+  | "rate_limit_fail_open"
   | "audit_volledigheid"
   | "ai_latency_p95"
   | "lege_antwoord_ratio"
@@ -234,6 +237,57 @@ export const SIGNAAL_REGISTRY: Record<SignaalId, SignaalConfig> = {
     opvolgactie: OPVOLGACTIE.verwerking,
     dekkingsniveau: "gedeeltelijk",
   },
+  ingest_stilstand: {
+    signaal: "ingest_stilstand",
+    label: "Ingest-stilstand (oudste openstaande job)",
+    eenheid: "milliseconden",
+    intervalMinuten: 15,
+    vensterMinuten: 0,
+    // 30 min / 120 min, opgeslagen in ms. 30 sluit aan op HANGEND_MINUTEN in
+    // monitoring-health.ts; géén nieuwe eenheidswaarde (architectuurpunt 9).
+    drempelOranje: 1_800_000,
+    drempelRood: 7_200_000,
+    richting: "hoger_is_slechter",
+    nDrempel: null,
+    actief: true,
+    toelichting:
+      "Momentopname: de leeftijd van de oudste openstaande ingest-job (wachtend of bezig). Een lege wachtrij is groen — niets te doen is een gezonde toestand.",
+    platformbreed: false,
+    dekkingsvoorbehoud:
+      "Detecteert een stilgevallen verwerkingsworker onafhankelijk van het aantal wachtende documenten: één document dat drie dagen blijft staan is even alarmerend als tien. Meet de leeftijd sinds `aangemaakt`, niet de rekentijd.",
+    domein: "verwerking",
+    betekenis: "Of documenten te lang op verwerking blijven wachten.",
+    eigenaar: EIGENAAR.verwerking,
+    opvolgactie: OPVOLGACTIE.verwerking,
+    dekkingsniveau: "volledig",
+  },
+  ingest_doorlooptijd_p95: {
+    signaal: "ingest_doorlooptijd_p95",
+    label: "Ingest-doorlooptijd (p95)",
+    eenheid: "milliseconden",
+    intervalMinuten: 60,
+    vensterMinuten: 1440,
+    // Richtwaarden 30 min / 2 u (in ms), te kalibreren via de configtabel na een
+    // week meten — FO §19 stelt drempels expliciet als richtwaarden.
+    drempelOranje: 1_800_000,
+    drempelRood: 7_200_000,
+    richting: "hoger_is_slechter",
+    // GEEN privacy-n-drempel: C3 leunt op documenten, niet op bestuurders
+    // (besluit 0055 niet van toepassing). De BETEKENISdrempel (n<5 → geen
+    // percentiel) zit in de meetfunctie met een eigen reden in meta.
+    nDrempel: null,
+    actief: true,
+    toelichting:
+      "p95 van de tijd tussen aanmaken en afronden van ingest-jobs over 24 uur (eind − aangemaakt, inclusief wachttijd).",
+    platformbreed: false,
+    dekkingsvoorbehoud:
+      "Meet de ketenduur (eind − aangemaakt) inclusief wachttijd in de wachtrij, niet alleen de rekentijd. Op het generieke-bibliotheekpad bestaan per-stap-jobs, op het fondspad één job voor de hele keten; een uitsplitsing per fase is daarom niet platformbreed beschikbaar. Onder vijf afgeronde jobs geen percentiel — te weinig waarnemingen. Aggregeert op document-, niet op bestuurderniveau (besluit 0055 niet van toepassing).",
+    domein: "verwerking",
+    betekenis: "Hoe lang een document erover doet om doorzoekbaar te worden.",
+    eigenaar: EIGENAAR.verwerking,
+    opvolgactie: OPVOLGACTIE.verwerking,
+    dekkingsniveau: "gedeeltelijk",
+  },
   rate_limit_incidenten: {
     signaal: "rate_limit_incidenten",
     label: "Rate-limit-incidenten",
@@ -246,11 +300,35 @@ export const SIGNAAL_REGISTRY: Record<SignaalId, SignaalConfig> = {
     nDrempel: null,
     actief: true,
     toelichting:
-      "Foutregels met categorie rate_limiting: 429-responses plus mislukte limietchecks (fail-open).",
+      "429-responses in 24 uur: verzoeken die zijn afgeremd (de rem wérkte). Mislukte limietchecks staan apart in rate_limit_fail_open.",
     platformbreed: false,
-    dekkingsvoorbehoud: "Telt 429-responses en mislukte limietchecks samen; de mislukte checks (fail-open) staan apart in meta.",
+    dekkingsvoorbehoud: "Telt sinds definitie_versie 2 uitsluitend 429-responses (de rem wérkte). Historische snapshots vóór de omschakeling telden ook fail-open mee; de trend van zeven dagen heelt die breuk vanzelf.",
     domein: "beveiliging_audit",
     betekenis: "Hoe vaak verzoeken zijn afgeremd om overbelasting te voorkomen.",
+    eigenaar: EIGENAAR.beveiliging_audit,
+    opvolgactie: OPVOLGACTIE.beveiliging_audit,
+    dekkingsniveau: "gedeeltelijk",
+  },
+  rate_limit_fail_open: {
+    signaal: "rate_limit_fail_open",
+    label: "Rate-limit fail-open (limietcheck uitgevallen)",
+    eenheid: "aantal",
+    intervalMinuten: 15,
+    vensterMinuten: 1440,
+    // Eén is al aandacht, twee verstoord: fail-open is de ernstige variant en mag
+    // niet in de ruis van de 429's verdwijnen (voorstel §4.1 regel 4).
+    drempelOranje: 1,
+    drempelRood: 2,
+    richting: "hoger_is_slechter",
+    nDrempel: null,
+    actief: true,
+    toelichting:
+      "Aantal mislukte limietchecks in 24 uur: de rem viel wég (fail-open). Het tegenovergestelde van een 429, waar de rem juist wérkte.",
+    platformbreed: false,
+    dekkingsvoorbehoud:
+      "De ernstige tegenhanger van rate_limit_incidenten: bij fail-open werd een verzoek NIET afgeremd doordat de limietcheck zelf faalde. Zelfde bron (app_errors, categorie rate_limiting, severity hoog).",
+    domein: "beveiliging_audit",
+    betekenis: "Of de snelheidsbegrenzing zelf is uitgevallen.",
     eigenaar: EIGENAAR.beveiliging_audit,
     opvolgactie: OPVOLGACTIE.beveiliging_audit,
     dekkingsniveau: "gedeeltelijk",
@@ -346,7 +424,10 @@ export const SIGNAAL_VOLGORDE: SignaalId[] = [
   "uptime_kern",
   "extractie_achterstand",
   "embedding_indexering_fouten",
+  "ingest_stilstand",
+  "ingest_doorlooptijd_p95",
   "rate_limit_incidenten",
+  "rate_limit_fail_open",
   "ai_latency_p95",
   "lege_antwoord_ratio",
   "tokenverbruik",
@@ -520,6 +601,44 @@ export function p95(waarden: number[]): number | null {
 }
 
 /**
+ * Doorlooptijden (eind − aangemaakt) en rekentijden (eind − start) uit een reeks
+ * ingest-jobs, met de randgevallen die een p95 stil zouden vervalsen expliciet
+ * eruit gefilterd (architectuurpunt 11, MONITORING-P5-ONTWERP §13):
+ *   - status 'overgeslagen' — niet verwerkt, hoort niet in de doorlooptijd;
+ *   - jobs zonder `start`, `eind` of `aangemaakt` — `Number(null) === 0` zou
+ *     anders een doorlooptijd van "nu − 1970" of 0 opleveren;
+ *   - negatieve duur (klok-anomalie).
+ * De DOORLOOPTIJD is de ketenduur INCLUSIEF wachttijd (besluit 0144), niet de
+ * rekentijd; die laatste komt apart terug voor de decompositie in meta.
+ * Pure functie zodat de definitie programmatisch na te rekenen is.
+ */
+export function ingestDuren(
+  jobs: Array<{
+    aangemaakt: string | null;
+    start: string | null;
+    eind: string | null;
+    status?: string;
+  }>
+): { doorloop: number[]; rekentijd: number[] } {
+  const doorloop: number[] = [];
+  const rekentijd: number[] = [];
+  for (const job of jobs) {
+    if (job.status === "overgeslagen") continue;
+    if (!job.aangemaakt || !job.eind || !job.start) continue;
+    const a = new Date(job.aangemaakt).getTime();
+    const e = new Date(job.eind).getTime();
+    const s = new Date(job.start).getTime();
+    if (!Number.isFinite(a) || !Number.isFinite(e) || !Number.isFinite(s)) continue;
+    const d = e - a;
+    if (d < 0) continue;
+    doorloop.push(d);
+    const r = e - s;
+    if (r >= 0) rekentijd.push(r);
+  }
+  return { doorloop, rekentijd };
+}
+
+/**
  * Procentuele afwijking van `huidig` t.o.v. `basis` (signaal 6).
  * Basis 0 geeft null: "oneindig procent meer dan niets" is geen bruikbaar
  * signaal, en 0 zou suggereren dat er niets aan de hand is.
@@ -689,6 +808,34 @@ export function vatPeriodeSamen(
  */
 export function clientVeiligeWaarde(waarde: number | null, onderdrukt: boolean): number | null {
   return onderdrukt ? null : waarde;
+}
+
+/**
+ * Sleutels die NOOIT in de naar-client geserialiseerde `meta` mogen belanden:
+ * identificatoren en individu-/document-herleidbare velden. Vandaag draagt geen
+ * enkele meetfunctie zo'n sleutel (alles is een telling of duur), maar `meta`
+ * gaat ongefilterd naar de client — dus een toekomstig signaal dat per ongeluk
+ * een `document_id` of een titel in `meta` zet, zou stil lekken. Deze denylist
+ * maakt "meta = alleen aggregaten" een afgedwongen invariant in plaats van een
+ * discipline-afspraak (audit-evidence-review R1).
+ */
+const META_DENYLIST =
+  /(_id$|^id$|titel|naam|e[-_]?mail|bsn|correlatie|prompt|vraag|antwoord|fragment|inhoud)/i;
+
+export function isVeiligeMetaSleutel(sleutel: string): boolean {
+  return !META_DENYLIST.test(sleutel);
+}
+
+/** Schoont `meta` vóór serialisatie naar de client: houdt alleen veilige sleutels. */
+export function scrubMeta(
+  meta: Record<string, unknown> | null
+): Record<string, unknown> | null {
+  if (!meta) return null;
+  const uit: Record<string, unknown> = {};
+  for (const [sleutel, waarde] of Object.entries(meta)) {
+    if (isVeiligeMetaSleutel(sleutel)) uit[sleutel] = waarde;
+  }
+  return uit;
 }
 
 export type PiekMediaan = { hoogste: number | null; mediaan: number | null };

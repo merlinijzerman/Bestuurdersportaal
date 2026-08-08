@@ -18,6 +18,7 @@ import {
   clientVeiligeWaarde,
   combineerConfig,
   dunTrendUit,
+  scrubMeta,
   isOnderdruktDoorNDrempel,
   isSignaalId,
   maskeerTrendwaarde,
@@ -210,7 +211,9 @@ export async function haalMonitoringOverzicht(
         onderdrukt,
         drempelOranje: naarGetal(laatst.drempel_oranje),
         drempelRood: naarGetal(laatst.drempel_rood),
-        meta: laatst.meta,
+        // Meta wordt geschoond vóór serialisatie naar de client: alleen aggregaat-
+        // sleutels, nooit een identificator of individu-/document-herleidbaar veld.
+        meta: scrubMeta(laatst.meta),
         trend,
       });
     }

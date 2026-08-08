@@ -34,6 +34,7 @@ import {
   type ComponentUitkomst,
 } from "@/platform/lib/monitoring-health";
 import {
+  ingestDuren,
   p95,
   trendPercentage,
   type SignaalConfig,
@@ -72,6 +73,14 @@ const AUDIT_GRACE_MINUTEN = 5;
  */
 const MIN_BASISDAGEN = 7;
 
+/**
+ * BETEKENISdrempel voor de doorlooptijd-p95: onder dit aantal afgeronde jobs is
+ * een p95 "de traagste van drie", geen percentiel. Bewust GEEN privacydrempel
+ * (besluit 0055): C3 leunt op documenten, niet op bestuurders. De UI toont hier
+ * een andere reden dan bij een n<10-onderdrukking (architectuurpunt 10).
+ */
+const MIN_P95_JOBS = 5;
+
 export type MetingContext = {
   svc: SupabaseClient;
   config: SignaalConfig;
@@ -92,8 +101,14 @@ export async function meetSignaal(
       return meetEmbeddingFouten(ctx);
     case "extractie_achterstand":
       return meetExtractieAchterstand(ctx);
+    case "ingest_stilstand":
+      return meetIngestStilstand(ctx);
+    case "ingest_doorlooptijd_p95":
+      return meetIngestDoorlooptijdP95(ctx);
     case "rate_limit_incidenten":
       return meetRateLimitIncidenten(ctx);
+    case "rate_limit_fail_open":
+      return meetRateLimitFailOpen(ctx);
     case "audit_volledigheid":
       return meetAuditVolledigheid(ctx);
     case "ai_latency_p95":
@@ -173,6 +188,194 @@ async function meetEmbeddingFouten(ctx: MetingContext): Promise<Meting[]> {
   // (wanneer de job klaar was), niet op instroom. Noemer = geslaagd + mislukt;
   // 'overgeslagen' (gedeactiveerd) en 'geweigerd' (bewuste cap/OCR-weigering) zijn
   // geen fouten en blijven er dus buiten.
+  // Ook 'overgeslagen' meelezen voor de uitsplitsing in de detaillaag; de faalratio
+  // telt hem NIET mee (noemer = geslaagd + mislukt), maar het getal hoort wél
+  // zichtbaar te zijn (blok C1).
+  const jobs = await leesJobs(ctx.svc, {
+    statussen: ["geslaagd", "mislukt", "overgeslagen"],
+    sinds: sindsIso(ctx),
+    sindsVeld: "eind",
+  });
+  const fondsPerDocument = await fondsVoorDocumenten(
+    ctx.svc,
+    jobs.map((j) => j.document_id)
+  );
+
+  type Bak = { geslaagd: number; mislukt: number; overgeslagen: number; metRetry: number };
+  const perFonds = new Map<string | null, Bak>();
+  for (const id of ctx.fondsIds)
+    perFonds.set(id, { geslaagd: 0, mislukt: 0, overgeslagen: 0, metRetry: 0 });
+
+  for (const job of jobs) {
+    const fondsId = fondsPerDocument.get(job.document_id) ?? null;
+    const bak =
+      perFonds.get(fondsId) ?? { geslaagd: 0, mislukt: 0, overgeslagen: 0, metRetry: 0 };
+    if (job.status === "geslaagd") bak.geslaagd += 1;
+    else if (job.status === "mislukt") bak.mislukt += 1;
+    else if (job.status === "overgeslagen") bak.overgeslagen += 1;
+    if ((job.retry_count ?? 0) > 0) bak.metRetry += 1;
+    perFonds.set(fondsId, bak);
+  }
+
+  return [...perFonds.entries()].map(([fondsId, bak]) => {
+    // Noemer = afgeronde jobs (geslaagd + mislukt); dit is óók het getal dat de
+    // waarderegel toont ("2 van 58"). Bewaren in meta i.p.v. weggooien na de deling.
+    const noemer = bak.geslaagd + bak.mislukt;
+    return {
+      fondsId,
+      waarde: noemer === 0 ? null : (bak.mislukt / noemer) * 100,
+      n: noemer,
+      meta: {
+        geslaagd: bak.geslaagd,
+        mislukt: bak.mislukt,
+        overgeslagen: bak.overgeslagen,
+        met_retry: bak.metRetry,
+        verwerkt_in_venster: noemer,
+      },
+    };
+  });
+}
+
+// ── Signaal 2 — Ingest-achterstand (momentopname) ───────────────────────────
+async function meetExtractieAchterstand(ctx: MetingContext): Promise<Meting[]> {
+  // Openstaande ingest-jobs (wachtend|bezig) = de achterstand op dit moment.
+  // Geen stap-filter: in het single-job-model heeft een document dat nog niet
+  // klaar is precies één open job, ongeacht of het in de extractie- of de
+  // embedding-fase zit. Zo telt de achterstand elk vastzittend/wachtend document.
+  const openJobs = await leesJobs(ctx.svc, { statussen: ["wachtend", "bezig"] });
+  // Doorvoer: afgeronde jobs (geslaagd + mislukt) in de afgelopen 24 uur — als
+  // tweede regel bij de wachtrij ("14 wachtend · 58 verwerkt in 24 u", blok C1).
+  const sinds24u = new Date(ctx.nu.getTime() - 24 * 60 * 60_000).toISOString();
+  const doorvoerJobs = await leesJobs(ctx.svc, {
+    statussen: ["geslaagd", "mislukt"],
+    sinds: sinds24u,
+    sindsVeld: "eind",
+  });
+  const fondsPerDocument = await fondsVoorDocumenten(
+    ctx.svc,
+    [...openJobs, ...doorvoerJobs].map((j) => j.document_id)
+  );
+
+  const open = new Map<string | null, number>();
+  const doorvoer = new Map<string | null, number>();
+  for (const id of ctx.fondsIds) {
+    open.set(id, 0);
+    doorvoer.set(id, 0);
+  }
+  for (const job of openJobs) {
+    const f = fondsPerDocument.get(job.document_id) ?? null;
+    open.set(f, (open.get(f) ?? 0) + 1);
+  }
+  for (const job of doorvoerJobs) {
+    const f = fondsPerDocument.get(job.document_id) ?? null;
+    doorvoer.set(f, (doorvoer.get(f) ?? 0) + 1);
+  }
+
+  const fondsen = new Set<string | null>([...open.keys(), ...doorvoer.keys()]);
+  return [...fondsen].map((fondsId) => ({
+    fondsId,
+    waarde: open.get(fondsId) ?? 0,
+    n: null,
+    meta: { doorvoer_24u: doorvoer.get(fondsId) ?? 0 },
+  }));
+}
+
+// ── Signaal 5 + fail-open — Rate-limit (twee tegengestelde grootheden) ───────
+//  Bron is app_errors, NIET rate_limit_events: fn_rate_limit_check verwijdert
+//  verlopen rijen bij elke check, dus daar valt niets historisch te tellen.
+//
+//  Twee gebeurtenissen die het TEGENOVERGESTELDE betekenen, sinds blok B in twee
+//  signalen gesplitst (voorstel §4.1 regel 4):
+//    * een 429  = de rem WERKTE  → rate_limit_incidenten (drempels 20/40)
+//    * een fail-open (severity hoog) = de rem VIEL WEG → rate_limit_fail_open (1/2)
+//  Eén getal met beide erin zou de drie fail-opens — het enige echt alarmerende
+//  geval — in de ruis van de 429's laten verdwijnen.
+
+type RateLimitRij = { fonds_id: string | null; severity: string | null; http_status: number | null };
+
+async function leesRateLimiting(
+  ctx: MetingContext
+): Promise<{ rijen: RateLimitRij[]; afgekapt: boolean }> {
+  const { data, error } = await ctx.svc
+    .from("app_errors")
+    .select("fonds_id, severity, http_status")
+    .eq("categorie", "rate_limiting")
+    .gte("tijdstip", sindsIso(ctx))
+    .order("tijdstip", { ascending: false })
+    .limit(LEESLIMIET);
+  if (error) throw error;
+  const rijen = (data ?? []) as RateLimitRij[];
+  return { rijen, afgekapt: rijen.length >= LEESLIMIET };
+}
+
+// Sinds definitie_versie 2 telt dit UITSLUITEND 429-responses (de rem wérkte).
+// Historische snapshots dragen de oude, bredere definitie; de trend van zeven
+// dagen heelt de breuk. De omschakeldatum staat vast in decisions/0143.
+async function meetRateLimitIncidenten(ctx: MetingContext): Promise<Meting[]> {
+  const { rijen, afgekapt } = await leesRateLimiting(ctx);
+  const teller = nieuweTeller(ctx.fondsIds);
+  for (const rij of rijen) {
+    if (rij.http_status === 429) pak(teller, rij.fonds_id).raak += 1;
+  }
+  return alsAantal(teller, afgekapt).map((m) => ({ ...m, meta: { definitie_versie: 2 } }));
+}
+
+// De ernstige tegenhanger: mislukte limietchecks (severity 'hoog' = fail-open).
+async function meetRateLimitFailOpen(ctx: MetingContext): Promise<Meting[]> {
+  const { rijen, afgekapt } = await leesRateLimiting(ctx);
+  const teller = nieuweTeller(ctx.fondsIds);
+  for (const rij of rijen) {
+    if (rij.severity === "hoog") pak(teller, rij.fonds_id).raak += 1;
+  }
+  return alsAantal(teller, afgekapt);
+}
+
+// ── Blok C — Ingest-stilstand en -doorlooptijd (bron: document_processing_jobs) ─
+//  Geen nieuwe bron en geen wijziging aan de verwerkingsketen: de tijdstempels
+//  bestaan al. leesJobs levert ze sinds blok C mee.
+
+//  ingest_stilstand — de leeftijd van de OUDSTE openstaande job per fonds. Dicht
+//  het detectiegat: een stilgevallen worker is anders onzichtbaar zolang er < 10
+//  documenten wachten. Lege wachtrij = leeftijd 0 = GROEN, niet onbekend.
+async function meetIngestStilstand(ctx: MetingContext): Promise<Meting[]> {
+  const jobs = await leesJobs(ctx.svc, { statussen: ["wachtend", "bezig"] });
+  const fondsPerDocument = await fondsVoorDocumenten(
+    ctx.svc,
+    jobs.map((j) => j.document_id)
+  );
+
+  type Bak = { oudsteMs: number | null; open: number };
+  const perFonds = new Map<string | null, Bak>();
+  for (const id of ctx.fondsIds) perFonds.set(id, { oudsteMs: null, open: 0 });
+
+  for (const job of jobs) {
+    if (!job.aangemaakt) continue;
+    const t = new Date(job.aangemaakt).getTime();
+    if (!Number.isFinite(t)) continue;
+    const fondsId = fondsPerDocument.get(job.document_id) ?? null;
+    const bak = perFonds.get(fondsId) ?? { oudsteMs: null, open: 0 };
+    if (bak.oudsteMs === null || t < bak.oudsteMs) bak.oudsteMs = t;
+    bak.open += 1;
+    perFonds.set(fondsId, bak);
+  }
+
+  return [...perFonds.entries()].map(([fondsId, bak]) => ({
+    fondsId,
+    // Lege wachtrij → 0 (groen). Anders de leeftijd van de oudste openstaande job.
+    waarde: bak.oudsteMs === null ? 0 : Math.max(0, ctx.nu.getTime() - bak.oudsteMs),
+    n: null,
+    meta: { openstaande_jobs: bak.open },
+  }));
+}
+
+//  ingest_doorlooptijd_p95 — p95 van (eind − aangemaakt) over afgeronde jobs in
+//  24 u, per fonds. Meet de KETENDUUR inclusief wachttijd (besluit 0144), niet de
+//  rekentijd; die laatste gaat als tweede getal in meta. Randgevallen die een p95
+//  stil vervalsen worden expliciet gefilterd (architectuurpunt 11): jobs zonder
+//  start, zonder eind/aangemaakt, en status 'overgeslagen' (niet in de statusset).
+//  Onder vijf afgeronde jobs geen percentiel — dat is een BETEKENISdrempel met een
+//  eigen reden in meta, géén privacy-onderdrukking (besluit 0055 niet van toepassing).
+async function meetIngestDoorlooptijdP95(ctx: MetingContext): Promise<Meting[]> {
   const jobs = await leesJobs(ctx.svc, {
     statussen: ["geslaagd", "mislukt"],
     sinds: sindsIso(ctx),
@@ -183,82 +386,43 @@ async function meetEmbeddingFouten(ctx: MetingContext): Promise<Meting[]> {
     jobs.map((j) => j.document_id)
   );
 
-  const teller = nieuweTeller(ctx.fondsIds);
+  // Jobs per fonds groeperen; de filtering en het verschil (eind − aangemaakt vs
+  // eind − start) doet de pure `ingestDuren` — zo is de definitie in de sanity
+  // vastgelegd in plaats van in deze query.
+  const jobsPerFonds = new Map<string | null, JobRij[]>();
+  for (const id of ctx.fondsIds) jobsPerFonds.set(id, []);
   for (const job of jobs) {
     const fondsId = fondsPerDocument.get(job.document_id) ?? null;
-    const bak = pak(teller, fondsId);
-    bak.totaal += 1;
-    if (job.status === "mislukt") bak.raak += 1;
+    const lijst = jobsPerFonds.get(fondsId) ?? [];
+    lijst.push(job);
+    jobsPerFonds.set(fondsId, lijst);
   }
 
-  return alsRatio(teller);
-}
-
-// ── Signaal 2 — Ingest-achterstand (momentopname) ───────────────────────────
-async function meetExtractieAchterstand(ctx: MetingContext): Promise<Meting[]> {
-  // Openstaande ingest-jobs (wachtend|bezig) = de achterstand op dit moment.
-  // Geen stap-filter: in het single-job-model heeft een document dat nog niet
-  // klaar is precies één open job, ongeacht of het in de extractie- of de
-  // embedding-fase zit. Zo telt de achterstand elk vastzittend/wachtend document.
-  const jobs = await leesJobs(ctx.svc, {
-    statussen: ["wachtend", "bezig"],
-  });
-  const fondsPerDocument = await fondsVoorDocumenten(
-    ctx.svc,
-    jobs.map((j) => j.document_id)
-  );
-
-  const teller = nieuweTeller(ctx.fondsIds);
-  for (const job of jobs) {
-    pak(teller, fondsPerDocument.get(job.document_id) ?? null).raak += 1;
-  }
-
-  return alsAantal(teller);
-}
-
-// ── Signaal 5 — Rate-limit-incidenten ───────────────────────────────────────
-//  Bron is app_errors, NIET rate_limit_events: fn_rate_limit_check verwijdert
-//  verlopen rijen bij elke check, dus daar valt niets historisch te tellen.
-async function meetRateLimitIncidenten(ctx: MetingContext): Promise<Meting[]> {
-  const { data, error } = await ctx.svc
-    .from("app_errors")
-    .select("fonds_id, severity, http_status")
-    .eq("categorie", "rate_limiting")
-    .gte("tijdstip", sindsIso(ctx))
-    .order("tijdstip", { ascending: false })
-    .limit(LEESLIMIET);
-  if (error) throw error;
-
-  const rijen = (data ?? []) as Array<{
-    fonds_id: string | null;
-    severity: string | null;
-    http_status: number | null;
-  }>;
-  const afgekapt = rijen.length >= LEESLIMIET;
-
-  const teller = nieuweTeller(ctx.fondsIds);
-  // Twee soorten gebeurtenissen, en ze betekenen het TEGENOVERGESTELDE:
-  //   * een 429 = de rem werkte (severity laag);
-  //   * een mislukte limietcheck = de rem viel weg (severity hoog, fail-open).
-  // Met drempels van 20/40 per dag domineren de 429's, en zouden drie fail-opens
-  // — het enige echt alarmerende geval — in de ruis verdwijnen. Ze worden daarom
-  // apart geteld en in `meta` zichtbaar gemaakt.
-  const faalOpen = new Map<string | null, number>();
-  for (const rij of rijen) {
-    pak(teller, rij.fonds_id).raak += 1;
-    if (rij.severity === "hoog") {
-      faalOpen.set(rij.fonds_id, (faalOpen.get(rij.fonds_id) ?? 0) + 1);
+  return [...jobsPerFonds.entries()].map(([fondsId, lijst]) => {
+    const { doorloop, rekentijd } = ingestDuren(lijst);
+    if (doorloop.length < MIN_P95_JOBS) {
+      return {
+        fondsId,
+        waarde: null,
+        n: doorloop.length,
+        meta: {
+          reden: "te weinig waarnemingen voor een percentiel",
+          afgeronde_jobs: doorloop.length,
+        },
+      };
     }
-  }
-
-  return alsAantal(teller, afgekapt).map((m) => ({
-    ...m,
-    meta: {
-      limietchecks_mislukt: faalOpen.get(m.fondsId) ?? 0,
-      toelichting:
-        "Waarde telt alle rate-limit-gebeurtenissen. limietchecks_mislukt is de deelverzameling waarin de rem zelf uitviel (fail-open) — dat is de ernstige variant.",
-    },
-  }));
+    return {
+      fondsId,
+      waarde: p95(doorloop),
+      n: doorloop.length,
+      meta: {
+        afgeronde_jobs: doorloop.length,
+        // Decompositie: alleen de rekentijd (eind − start), zodat de wachttijd
+        // zichtbaar is als het verschil met de doorlooptijd hierboven.
+        rekentijd_p95_ms: p95(rekentijd),
+      },
+    };
+  });
 }
 
 // ── Signaal 14 — Audit-volledigheid (attempt zonder result) ─────────────────
@@ -486,7 +650,17 @@ function sindsIso(ctx: MetingContext): string {
   return new Date(ctx.nu.getTime() - minuten * 60_000).toISOString();
 }
 
-type JobRij = { document_id: string; status: string };
+type JobRij = {
+  document_id: string;
+  status: string;
+  // Sinds blok C ook de tijdstempels: doorlooptijd (eind − aangemaakt), rekentijd
+  // (eind − start) en de leeftijd van openstaande jobs zijn hiermee meetbaar
+  // ZONDER migratie of wijziging aan de verwerkingsketen — de kolommen bestaan al.
+  aangemaakt: string | null;
+  start: string | null;
+  eind: string | null;
+  retry_count: number | null;
+};
 
 async function leesJobs(
   svc: SupabaseClient,
@@ -499,7 +673,9 @@ async function leesJobs(
     sindsVeld?: "aangemaakt" | "eind";
   }
 ): Promise<JobRij[]> {
-  let query = svc.from("document_processing_jobs").select("document_id, status");
+  let query = svc
+    .from("document_processing_jobs")
+    .select("document_id, status, aangemaakt, start, eind, retry_count");
   // Sinds F4/F6 draagt ÉÉN job de hele keten (extractie→embedding); `stap` is
   // alleen de instapfase (auditspoor), niet de actuele fase. Stap-filteren is
   // daarom bewust optioneel — de ingest-signalen filteren op STATUS, niet op stap.

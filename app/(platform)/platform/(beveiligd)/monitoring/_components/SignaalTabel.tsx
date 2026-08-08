@@ -26,7 +26,7 @@ import {
   type SignaalId,
   type SignaalStatus,
 } from "@/platform/lib/monitoring-signalen";
-import { formatteerWaarde } from "@/platform/lib/monitoring-format";
+import { formatteerVenster, formatteerWaarde } from "@/platform/lib/monitoring-format";
 import Stoplicht from "./Stoplicht";
 import Trendlijn from "./Trendlijn";
 import Ketenstatus from "./Ketenstatus";
@@ -242,9 +242,9 @@ function RijKop({
     : rij.verouderd
       ? "niet recent gemeten"
       : rij.status === "onbekend"
-        ? "geen recente meting"
+        ? redenUitMeta(rij.meta) ?? "geen recente meting"
         : duding(rij.status);
-  const context = tokenContext(rij);
+  const context = signaalContext(rij);
 
   return (
     <button
@@ -430,15 +430,45 @@ function beschrijfVerdeling(v: Verdeling): string {
   return delen.join(", ") || "geen fondsen";
 }
 
-/** Absoluut verbruik naast het trendpercentage bij tokenverbruik (regel 3, acceptatie 15). */
-function tokenContext(rij: Rij): string | null {
-  if (rij.signaal !== "tokenverbruik" || !rij.meta) return null;
-  const abs = rij.meta.tokens_laatste_24u;
-  const gem = rij.meta.daggemiddelde_basisperiode;
-  if (typeof abs !== "number") return null;
-  const delen = [`${abs.toLocaleString("nl-NL")} tokens (24 u)`];
-  if (typeof gem === "number") delen.push(`daggem. ${gem.toLocaleString("nl-NL")}`);
-  return delen.join(" · ");
+/**
+ * Contextregel onder de waarde. Nooit een relatief getal zonder zijn absolute
+ * basis (regel 3): bij tokenverbruik het absolute verbruik naast het
+ * trendpercentage; bij het faalpercentage de noemer; bij de wachtrij de doorvoer.
+ */
+function signaalContext(rij: Rij): string | null {
+  const meta = rij.meta;
+  if (!meta) return null;
+
+  if (rij.signaal === "tokenverbruik") {
+    const abs = meta.tokens_laatste_24u;
+    const gem = meta.daggemiddelde_basisperiode;
+    if (typeof abs !== "number") return null;
+    const delen = [`${abs.toLocaleString("nl-NL")} tokens (24 u)`];
+    if (typeof gem === "number") delen.push(`daggem. ${gem.toLocaleString("nl-NL")}`);
+    return delen.join(" · ");
+  }
+
+  // Het faalpercentage toont zijn noemer: "2 van 58 verwerkte documenten (1 uur)".
+  if (rij.signaal === "embedding_indexering_fouten") {
+    const mislukt = meta.mislukt;
+    if (typeof mislukt !== "number" || rij.n === null || rij.n === 0) return null;
+    return `${mislukt} van ${rij.n} verwerkte documenten (${formatteerVenster(rij.config.vensterMinuten)})`;
+  }
+
+  // De wachtrij toont naast de stand de doorvoer over 24 uur.
+  if (rij.signaal === "extractie_achterstand") {
+    const doorvoer = meta.doorvoer_24u;
+    if (typeof doorvoer !== "number") return null;
+    return `${doorvoer} verwerkt in 24 u`;
+  }
+
+  return null;
+}
+
+/** Reden voor een onbekend-status uit meta (bv. de betekenisdrempel bij p95). */
+function redenUitMeta(meta: Record<string, unknown> | null): string | null {
+  const reden = meta?.reden;
+  return typeof reden === "string" && reden.length > 0 ? reden : null;
 }
 
 function snijdLaatste24u(trend: TrendPunt[], anker: string | null): TrendPunt[] {

@@ -1,6 +1,6 @@
 # Monitoringbasis beheer-surface (P5 + P4-light) — Ontwerpdocument
 
-> **Status**: 1.1 — §8.1 (driedelig dashboard, blok A+D) toegevoegd 2026-08-08; basis 1.0 opgeleverd 2026-08-03
+> **Status**: 1.2 — §5 op elf signalen (blok B+C) en §8.1 (driedelig dashboard, blok A+D), 2026-08-08; basis 1.0 opgeleverd 2026-08-03
 > **Scope**: platform-back-office (`beheer.bestuurdersportaal.com`, route-groep `(platform)`)
 > **Herkomst**: werkopdracht "monitoringbasis beheer-surface" v0.3; FO Increment P §12/§17/§18/§19/§20.1; TO Increment P §9
 > **Leidend besluit**: `decisions/0005` — monitoring in-stack, geen Sentry. Deze tranche lost de tot nu toe openstaande helft daarvan in.
@@ -99,18 +99,23 @@ Contextwaarden gaan nooit mee: alleen `Object.keys(context)`.
 
 ## 5. Signaalset
 
-Acht van de negentien uit FO §19: die waarvan de bron ná deze tranche bestaat.
+Elf signalen na blok B/C (2026-08-08): de acht uit FO §19 waarvan de bron bestaat, plus drie meetdefinities op tabellen die al gevuld worden — het fail-open-getal (blok B) en de doorvoer/doorlooptijd van de documentketen (blok C). Geen nieuwe bron, geen wijziging aan de verwerkingsketen.
 
 | # | Signaal | Bron | Interval | Venster | Oranje / rood | n-drempel |
 |---|---|---|---|---|---|---|
 | 7 | Uptime kernfunctionaliteit | healthchecks (§6) | 5 min | 24 u | <99,5 / <99 % | — |
 | 2 | Ingest-achterstand (wachtrij) | `document_processing_jobs` | 15 min | momentopname | >10 / >50 | — |
+| C2 | Ingest-stilstand (oudste openstaande job) | `document_processing_jobs` (`aangemaakt`) | 15 min | momentopname | ≥30 min / ≥120 min | — |
+| C3 | Ingest-doorlooptijd p95 | `document_processing_jobs` (`eind − aangemaakt`) | 60 min | 24 u | >30 min / >2 u | ≥5 jobs\* |
 | 1 | Embedding-/indexeringsfouten | `document_processing_jobs` (+ `app_errors`) | 15 min | 60 min | >2 / >5 % | — |
-| 5 | Rate-limit-incidenten | `app_errors` (categorie `rate_limiting`) | 15 min | 24 u | >20 / >40 per dag | — |
+| 5 | Rate-limit-incidenten (429) | `app_errors` (categorie `rate_limiting`, `http_status 429`) | 15 min | 24 u | >20 / >40 per dag | — |
+| B3 | Rate-limit fail-open | `app_errors` (`rate_limiting`, severity hoog) | 15 min | 24 u | ≥1 / ≥2 | — |
 | 3 | AI-modellatency p95 | `governance_log.retrieval_meta.duur_model_ms` | 60 min | 24 u | >5 / >10 s | n<10 |
 | 4 | Lege-antwoord-ratio | `governance_log.retrieval_meta` | 60 min | 24 u | >15 / >30 % | n<10 |
 | 6 | Tokenverbruik per fonds | `governance_log.retrieval_meta.tokens` | 60 min | 24 u | +50 / +100 % t.o.v. 7-daags gemiddelde | n<10 |
 | 14 | Audit-volledigheid | `platform_event_log` (attempt zonder result) | 15 min | 24 u | ≥1 / ≥5 | — |
+
+De twee tijdsduursignalen (C2/C3) slaan op in **milliseconden** — géén nieuwe eenheidswaarde, de CHECK op `eenheid` blijft ongewijzigd (architectuurpunt 9); de formatter maakt er `30 min` / `2 u` van. \*De drempel bij C3 is een **betekenis**drempel, geen privacydrempel: onder vijf afgeronde jobs is een p95 de traagste van vijf, geen percentiel (besluit `0144`, los van `0055`). C2 kent geen drempel: een lege wachtrij is groen, niet onbekend. De drie richtwaarden bij C3 worden na een week meten via de configtabel bijgesteld, niet via een deploy.
 
 ### 5.1 Definities die niet impliciet mochten blijven
 

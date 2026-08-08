@@ -28,6 +28,7 @@ import {
   clientVeiligeWaarde,
   combineerConfig,
   dunTrendUit,
+  ingestDuren,
   isOnderdruktDoorNDrempel,
   isSignaalId,
   isVerouderd,
@@ -38,6 +39,7 @@ import {
   percentiel,
   piekEnMediaan,
   samenvattingPerDomein,
+  scrubMeta,
   statusVoorWeergave,
   toonPiekInPeriode,
   trendPercentage,
@@ -47,7 +49,7 @@ import {
   type SignaalId,
   type SignaalStatus,
 } from "./monitoring-signalen";
-import { beschrijfDrempels } from "./monitoring-format";
+import { beschrijfDrempels, formatteerTijdsduur } from "./monitoring-format";
 
 let n = 0;
 function test(naam: string, fn: () => void) {
@@ -63,14 +65,14 @@ console.log("monitoring-signalen sanity-tests:");
 
 // ── Registry ────────────────────────────────────────────────────────────────
 
-test("registry bevat precies de acht signalen van deze tranche", () => {
+test("registry bevat precies de elf signalen (acht basis + drie uit blok B/C)", () => {
   const ids = Object.keys(SIGNAAL_REGISTRY);
-  assert.equal(ids.length, 8, `verwacht 8 signalen, kreeg ${ids.length}`);
+  assert.equal(ids.length, 11, `verwacht 11 signalen, kreeg ${ids.length}`);
 });
 
 test("de dashboardvolgorde dekt elk signaal precies één keer", () => {
-  assert.equal(SIGNAAL_VOLGORDE.length, 8);
-  assert.equal(new Set(SIGNAAL_VOLGORDE).size, 8, "dubbele entry in de volgorde");
+  assert.equal(SIGNAAL_VOLGORDE.length, 11);
+  assert.equal(new Set(SIGNAAL_VOLGORDE).size, 11, "dubbele entry in de volgorde");
   for (const id of SIGNAAL_VOLGORDE) {
     assert.ok(SIGNAAL_REGISTRY[id], `${id} staat niet in de registry`);
   }
@@ -420,13 +422,21 @@ test("trend + status: een verdubbeling t.o.v. het weekgemiddelde is rood", () =>
 //  de seed. Zo'n belofte hoort afgedwongen te worden, anders is het een wens:
 //  bij de reviewronde bleek precies deze drift al te zijn ontstaan.
 
-test("registry en migratie-seed dekken dezelfde acht signalen met dezelfde drempels", () => {
-  const pad = new URL("../../supabase/migrations/2026_08_03_p5_monitoring.sql", import.meta.url);
-  const sql = readFileSync(pad, "utf8");
-
-  const start = sql.indexOf("insert into public.platform_signaal_config");
-  assert.ok(start > 0, "seed-blok niet gevonden in de migratie");
-  const blok = sql.slice(start, sql.indexOf("on conflict (signaal)", start));
+test("registry en migratie-seed dekken dezelfde elf signalen met dezelfde drempels", () => {
+  // De seed is over TWEE migraties verdeeld: de acht basissignalen in de P5-migratie
+  // en de drie uit blok B/C in de P4b-seed. Zonder beide mee te lezen zou deze check
+  // breken op precies de drie signalen die deze tranche toevoegt.
+  const migraties = [
+    "../../supabase/migrations/2026_08_03_p5_monitoring.sql",
+    "../../supabase/migrations/2026_08_08_p4b_signalen_seed.sql",
+  ];
+  let blok = "";
+  for (const rel of migraties) {
+    const sql = readFileSync(new URL(rel, import.meta.url), "utf8");
+    const start = sql.indexOf("insert into public.platform_signaal_config");
+    assert.ok(start > 0, `seed-blok niet gevonden in ${rel}`);
+    blok += sql.slice(start, sql.indexOf("on conflict (signaal)", start)) + "\n";
+  }
 
   for (const cfg of Object.values(SIGNAAL_REGISTRY)) {
     const regel = new RegExp(
@@ -622,6 +632,96 @@ test("clientVeiligeWaarde — onderdrukt maskeert de laatste stand naar null (cl
   assert.equal(clientVeiligeWaarde(0, true), null);
   assert.equal(clientVeiligeWaarde(3.4, false), 3.4);
   assert.equal(clientVeiligeWaarde(null, false), null);
+});
+
+// ── Tijdsduurformatter (blok C, acceptatie 26) ──────────────────────────────
+
+test("formatteerTijdsduur — leesbaar op de grenzen, opslag blijft in ms", () => {
+  assert.equal(formatteerTijdsduur(999), "999 ms");
+  assert.equal(formatteerTijdsduur(1000), "1 s");
+  assert.equal(formatteerTijdsduur(90_000), "1 min 30 s");
+  assert.equal(formatteerTijdsduur(3_600_000), "1 u"); // 60 min
+  assert.equal(formatteerTijdsduur(7_500_000), "2 u 5 min"); // 125 min
+  // Drempels van de nieuwe signalen, opgeslagen in ms:
+  assert.equal(formatteerTijdsduur(1_800_000), "30 min");
+  assert.equal(formatteerTijdsduur(7_200_000), "2 u");
+});
+
+// ── Ingest-doorlooptijd: eind − aangemaakt, met randgevallen (acceptatie 23/24) ─
+
+test("ingestDuren — doorlooptijd volgt de WACHTTIJD, niet alleen de rekentijd (acceptatie 23)", () => {
+  // Lange wachttijd (aangemaakt 10:00, start 11:00), korte rekentijd (eind 11:05).
+  const { doorloop, rekentijd } = ingestDuren([
+    {
+      aangemaakt: "2026-08-08T10:00:00.000Z",
+      start: "2026-08-08T11:00:00.000Z",
+      eind: "2026-08-08T11:05:00.000Z",
+    },
+  ]);
+  assert.equal(doorloop[0], 65 * 60_000, "doorlooptijd = eind − aangemaakt = 65 min");
+  assert.equal(rekentijd[0], 5 * 60_000, "rekentijd = eind − start = 5 min");
+});
+
+test("ingestDuren — NEGATIEVE CONTROLE: overgeslagen, geen start en null-tijden tellen niet (acceptatie 24)", () => {
+  const { doorloop } = ingestDuren([
+    // geldig
+    { aangemaakt: "2026-08-08T10:00:00.000Z", start: "2026-08-08T10:01:00.000Z", eind: "2026-08-08T10:10:00.000Z" },
+    // overgeslagen → uit
+    { aangemaakt: "2026-08-08T10:00:00.000Z", start: "2026-08-08T10:01:00.000Z", eind: "2026-08-08T10:10:00.000Z", status: "overgeslagen" },
+    // geen start → uit (Number(null)===0-faalvorm)
+    { aangemaakt: "2026-08-08T10:00:00.000Z", start: null, eind: "2026-08-08T10:10:00.000Z" },
+    // geen eind → uit
+    { aangemaakt: "2026-08-08T10:00:00.000Z", start: "2026-08-08T10:01:00.000Z", eind: null },
+    // negatieve duur (klok-anomalie) → uit
+    { aangemaakt: "2026-08-08T10:10:00.000Z", start: "2026-08-08T10:01:00.000Z", eind: "2026-08-08T10:00:00.000Z" },
+  ]);
+  assert.equal(doorloop.length, 1, "alleen de ene geldige job telt mee");
+  assert.equal(doorloop[0], 10 * 60_000);
+});
+
+test("scrubMeta — verwijdert herleidbare sleutels, houdt de aggregaten (audit-evidence R1)", () => {
+  assert.equal(scrubMeta(null), null);
+  const vervuild = {
+    afgeronde_jobs: 3,
+    document_id: "abc-123",
+    titel: "Notulen bestuur maart",
+    gebruiker_naam: "J. Jansen",
+    email: "j@fonds.nl",
+    correlatie_id: "x",
+    geslaagd: 5,
+  };
+  assert.deepEqual(Object.keys(scrubMeta(vervuild)!).sort(), ["afgeronde_jobs", "geslaagd"]);
+
+  // NEGATIEVE CONTROLE: elke meta-sleutel die de meetfuncties vandaag écht
+  // schrijven moet de scrub overleven — anders breekt de weergave stil.
+  const echteSleutels = {
+    beschikbaar: true,
+    componenten_onbekend: 0,
+    waargenomen_runs: 1,
+    verwachte_runs: 288,
+    componenten: [],
+    definitie: "x",
+    definitie_versie: 2,
+    tokens_laatste_24u: 1000,
+    daggemiddelde_basisperiode: 900,
+    basisdagen: 7,
+    reden: "te weinig waarnemingen voor een percentiel",
+    geslaagd: 5,
+    mislukt: 2,
+    overgeslagen: 1,
+    met_retry: 0,
+    verwerkt_in_venster: 7,
+    doorvoer_24u: 58,
+    openstaande_jobs: 3,
+    afgeronde_jobs: 12,
+    rekentijd_p95_ms: 1234,
+    limietchecks_mislukt: 0,
+  };
+  assert.equal(
+    Object.keys(scrubMeta(echteSleutels)!).length,
+    Object.keys(echteSleutels).length,
+    "een bestaande aggregaat-sleutel mag niet worden weggefilterd"
+  );
 });
 
 console.log(`\n${n} monitoring-signalen sanity-tests geslaagd (incl. driftcheck op de seed).`);
