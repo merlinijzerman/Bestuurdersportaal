@@ -6,7 +6,7 @@ import RisicoEditModal, { type RisicoBewerkbaar } from "./RisicoEditModal";
 
 interface Props {
   risicoId: string;
-  /** Besluit 0141 — de huidige waarden, voor de bewerkmodal. */
+  /** Besluit 0145 — de huidige waarden, voor de bewerkmodal. */
   risico: RisicoBewerkbaar;
 }
 
@@ -47,7 +47,7 @@ export default function RisicoActies({ risicoId, risico }: Props) {
     return (
       <>
         <div className="flex items-center gap-2">
-          {/* Besluit 0141 — tot dan kon een risico alleen worden aangemaakt en
+          {/* Besluit 0145 — tot dan kon een risico alleen worden aangemaakt en
               gesloten. Een verkeerd ingeschatte kans was daarmee onherstelbaar:
               sluiten en opnieuw aanmaken knipt de geschiedenis in tweeën. */}
           <button

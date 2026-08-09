@@ -1,5 +1,5 @@
 -- ============================================================================
---  ROLLBACK van 2026_08_07_vergadering_archiveren.sql (besluit 0141)
+--  ROLLBACK van 2026_08_07_vergadering_archiveren.sql (besluit 0145)
 -- ----------------------------------------------------------------------------
 --  LET OP — dataverlies. Het droppen van `gearchiveerd_op`/`gearchiveerd_door`
 --  wist wélke vergaderingen gearchiveerd waren en door wie. Die informatie is

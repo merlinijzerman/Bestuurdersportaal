@@ -8,9 +8,9 @@ import {
 } from "@/core/lib/risico-wijziging";
 
 // ============================================================================
-//  PATCH /api/risicos/[id] — een bestaand risico wijzigen (besluit 0141)
+//  PATCH /api/risicos/[id] — een bestaand risico wijzigen (besluit 0145)
 // ----------------------------------------------------------------------------
-//  Tot 0141 kon een risico alleen worden AANGEMAAKT en GESLOTEN. Een verkeerd
+//  Tot 0145 kon een risico alleen worden AANGEMAAKT en GESLOTEN. Een verkeerd
 //  ingeschatte kans of een gewijzigde titel was daarmee onherstelbaar: de enige
 //  uitweg was sluiten en opnieuw aanmaken, wat de geschiedenis van dat risico
 //  in tweeën knipt en het logboek onbruikbaar maakt voor de vraag "hoe heeft dit

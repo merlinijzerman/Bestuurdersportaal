@@ -10,7 +10,7 @@ import {
 } from "@/core/lib/vergadering-archief";
 
 // ============================================================================
-//  VergaderingenLijst — besluit 0141
+//  VergaderingenLijst — besluit 0145
 // ----------------------------------------------------------------------------
 //  De lijst stond eerder volledig in de server-component. Archiveren en het
 //  uitklapbare archiefblok vragen interactie, dus de WEERGAVE verhuist hierheen;

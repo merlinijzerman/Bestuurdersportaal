@@ -731,10 +731,22 @@ create table if not exists public.vergaderingen (
   aangemaakt      timestamptz default now(),
   -- Wijzig-audit vergaderkop (migratie 2026_07_20_vergadering_wijzigen.sql)
   gewijzigd_op    timestamptz,
-  gewijzigd_door  uuid references auth.users(id) on delete set null
+  gewijzigd_door  uuid references auth.users(id) on delete set null,
+  -- Handmatig archiveren (besluit 0145, migratie 2026_08_07_vergadering_archiveren.sql).
+  -- BEWUST GEEN vierde statuswaarde: `status` modelleert de voortgang van de
+  -- voorbereiding, archivering de zichtbaarheid in de lijst. Als vierde
+  -- statuswaarde zou een afgeronde vergadering bij archivering verliezen dát ze
+  -- afgerond was. NULL = staat in de gewone lijst.
+  gearchiveerd_op   timestamptz,
+  gearchiveerd_door uuid references auth.users(id) on delete set null
 );
 
 create index if not exists idx_verg_fonds_datum on public.vergaderingen(fonds_id, datum desc);
+-- Partiële index: de gewone lijst vraagt vrijwel altijd om de NIET-gearchiveerde
+-- vergaderingen; deze index groeit dus niet mee met het archief.
+create index if not exists idx_verg_fonds_actief
+  on public.vergaderingen(fonds_id, datum desc)
+  where gearchiveerd_op is null;
 
 -- Append-only mutatie-log voor de vergaderkop (titel/locatie/datum).
 -- Apart van governance_events (besluit-gericht) en agendapunt_log; RLS
@@ -743,7 +755,14 @@ create index if not exists idx_verg_fonds_datum on public.vergaderingen(fonds_id
 create table if not exists public.vergadering_log (
   id             uuid primary key default uuid_generate_v4(),
   vergadering_id uuid not null references public.vergaderingen(id) on delete cascade,
-  event_type     text not null check (event_type in ('vergadering_gewijzigd')),
+  -- Besluit 0145 — archiveren krijgt EIGEN eventtypes en lift niet mee op
+  -- 'vergadering_gewijzigd'; anders is "de kop is aangepast" in het log niet te
+  -- onderscheiden van "de vergadering is uit de lijst gehaald".
+  event_type     text not null check (event_type in (
+                   'vergadering_gewijzigd',
+                   'vergadering_gearchiveerd',
+                   'vergadering_gedearchiveerd'
+                 )),
   actor_id       uuid not null references auth.users(id) on delete set null,
   payload        jsonb not null default '{}',
   aangemaakt     timestamptz not null default now()

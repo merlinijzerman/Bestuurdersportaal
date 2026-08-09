@@ -1,5 +1,5 @@
 -- ============================================================================
---  Migratie 2026-08-07 — Handmatig archiveren van vergaderingen (besluit 0141)
+--  Migratie 2026-08-07 — Handmatig archiveren van vergaderingen (besluit 0145)
 -- ----------------------------------------------------------------------------
 --  Aanleiding: de vergaderingenlijst toonde `afgelopen.slice(0, 10)` — een
 --  STILLE cap. Vergadering 11 en verder waren onvindbaar op die pagina, zonder
@@ -34,7 +34,7 @@ alter table public.vergaderingen
   add column if not exists gearchiveerd_door uuid references auth.users(id) on delete set null;
 
 comment on column public.vergaderingen.gearchiveerd_op is
-  'Besluit 0141 — handmatig archiveren. NULL = staat in de gewone lijst. Losstaand van `status`, die de voorbereidingsvoortgang modelleert.';
+  'Besluit 0145 — handmatig archiveren. NULL = staat in de gewone lijst. Losstaand van `status`, die de voorbereidingsvoortgang modelleert.';
 
 -- Partiële index: de gewone lijst vraagt vrijwel altijd om de NIET-gearchiveerde
 -- vergaderingen. Een partiële index blijft klein en groeit niet mee met het

@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 // ============================================================================
-//  ZijpaneelBlok — besluit 0141
+//  ZijpaneelBlok — besluit 0145
 // ----------------------------------------------------------------------------
 //  Uitklapbaar paneel voor de legenda en de verdeling naast de heatmap. Die
 //  twee blokken zijn naslag: je leest ze één keer en daarna nemen ze permanent

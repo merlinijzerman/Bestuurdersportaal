@@ -15,9 +15,9 @@ import {
 import { WEEGVELDEN, RISICO_VELD_LABEL } from "@/core/lib/risico-wijziging";
 
 // ============================================================================
-//  RisicoEditModal — besluit 0141
+//  RisicoEditModal — besluit 0145
 // ----------------------------------------------------------------------------
-//  Tot 0141 kon een risico alleen worden aangemaakt en gesloten. Een verkeerd
+//  Tot 0145 kon een risico alleen worden aangemaakt en gesloten. Een verkeerd
 //  ingeschatte kans was daarmee onherstelbaar: sluiten en opnieuw aanmaken knipt
 //  de geschiedenis van dat risico in tweeën.
 //

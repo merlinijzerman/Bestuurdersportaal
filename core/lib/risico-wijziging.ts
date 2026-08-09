@@ -1,5 +1,5 @@
 // ============================================================================
-//  core/lib/risico-wijziging.ts — besluit 0141
+//  core/lib/risico-wijziging.ts — besluit 0145
 // ----------------------------------------------------------------------------
 //  Het wijzigen van een bestaand risico. Puur (geen I/O), gedeeld door de PATCH-
 //  route en de bewerkmodal, getest in risico-wijziging.sanity.ts.

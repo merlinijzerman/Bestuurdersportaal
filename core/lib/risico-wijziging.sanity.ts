@@ -1,5 +1,5 @@
 // ============================================================
-//  Sanity-tests voor het wijzigen van een risico (besluit 0141).
+//  Sanity-tests voor het wijzigen van een risico (besluit 0145).
 //
 //  Wat hier bevroren wordt:
 //   • Redenplicht geldt op kans/impact/niveau/niveau_handmatig en NERGENS

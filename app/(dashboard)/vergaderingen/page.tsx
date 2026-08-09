@@ -5,7 +5,7 @@ import VergaderingenLijst, {
 } from "./_components/VergaderingenLijst";
 
 // ============================================================================
-//  Vergaderingenoverzicht — besluit 0141
+//  Vergaderingenoverzicht — besluit 0145
 // ----------------------------------------------------------------------------
 //  Deze pagina haalt de data server-side op (RLS, geen extra roundtrip) en laat
 //  de weergave over aan een client-component: archiveren en het uitklapbare

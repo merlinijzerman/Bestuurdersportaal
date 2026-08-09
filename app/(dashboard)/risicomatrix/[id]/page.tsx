@@ -76,7 +76,7 @@ const EVENT_LABEL: Record<string, string> = {
   maatregel_toegevoegd: "Maatregel toegevoegd",
   maatregel_status_gewijzigd: "Maatregelstatus gewijzigd",
   risico_gesloten: "Risico gesloten",
-  // Besluit 0141 — wijziging van een bestaand risico.
+  // Besluit 0145 — wijziging van een bestaand risico.
   risico_gewijzigd: "Risico gewijzigd",
 };
 
@@ -390,7 +390,7 @@ function formatPayload(eventType: string, payload: Record<string, unknown>): str
   if (eventType === "risico_gesloten" && payload.motivering) {
     return String(payload.motivering);
   }
-  // Besluit 0141 — een wijziging draagt de gewijzigde velden (leesbare labels)
+  // Besluit 0145 — een wijziging draagt de gewijzigde velden (leesbare labels)
   // en, als de weging is geraakt, de verplichte motivering. Zonder die twee is
   // een logregel "Risico gewijzigd" waardeloos voor de vraag waaróm iets
   // verschoof.

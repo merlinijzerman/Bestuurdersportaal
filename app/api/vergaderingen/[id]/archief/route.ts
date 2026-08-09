@@ -8,7 +8,7 @@ import {
 // ============================================================================
 //  POST /api/vergaderingen/[id]/archief   { actie: "archiveren"|"terughalen" }
 // ----------------------------------------------------------------------------
-//  Besluit 0141 — handmatig archiveren van een vergadering.
+//  Besluit 0145 — handmatig archiveren van een vergadering.
 //
 //  WAAROM EEN EIGEN ROUTE EN GEEN VELD IN DE BESTAANDE PATCH
 //  ---------------------------------------------------------

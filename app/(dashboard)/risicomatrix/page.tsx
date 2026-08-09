@@ -10,7 +10,7 @@ import {
   NIVEAU_OMSCHRIJVING,
   TYPE_LABEL,
 } from "@/core/lib/risico-config";
-// Besluit 0141 — de heatmap is klikbaar (schaling) en de zijpanelen zijn
+// Besluit 0145 — de heatmap is klikbaar (schaling) en de zijpanelen zijn
 // uitklapbaar; beide vragen state en leven daarom als client-component.
 import Heatmap from "./_components/Heatmap";
 import ZijpaneelBlok from "./_components/ZijpaneelBlok";

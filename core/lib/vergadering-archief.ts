@@ -1,5 +1,5 @@
 // ============================================================================
-//  core/lib/vergadering-archief.ts — besluit 0141
+//  core/lib/vergadering-archief.ts — besluit 0145
 // ----------------------------------------------------------------------------
 //  Handmatig archiveren van een vergadering. Puur (geen I/O), gedeeld door de
 //  route en de UI, getest in vergadering-archief.sanity.ts.

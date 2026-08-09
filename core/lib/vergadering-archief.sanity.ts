@@ -1,5 +1,5 @@
 // ============================================================
-//  Sanity-tests voor het archiveren van vergaderingen (besluit 0141).
+//  Sanity-tests voor het archiveren van vergaderingen (besluit 0145).
 //
 //  Wat hier bevroren wordt:
 //   • Archiveren mag pas ná de vergaderdatum — de grens is strikt.
