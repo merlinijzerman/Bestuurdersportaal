@@ -62,7 +62,20 @@ export async function GET(
       .order("aangemaakt_op", { ascending: false });
     const afschriften = (rows ?? []) as AfschriftRow[];
 
-    // Verouderingsberekening: alle gebeurtenistijden van het proces één keer ophalen.
+    // Verouderingsberekening: de tijden van de SUBSTANTIËLE gebeurtenissen van
+    // het proces. Meta-gebeurtenissen — het aanmaken/downloaden/intrekken van een
+    // afschrift zelf, en de snelle auditdossier-export — zijn géén dossierwijziging
+    // en mogen de "sindsdien N"-teller niet vervuilen. Zonder deze uitsluiting
+    // toont een vers gegenereerd afschrift meteen "verouderd — 2 gebeurtenissen"
+    // (namelijk z'n eigen afschrift_aangemaakt + afschrift_gereed).
+    const META_EVENTS = new Set([
+      "afschrift_aangemaakt",
+      "afschrift_gereed",
+      "afschrift_mislukt",
+      "afschrift_gedownload",
+      "afschrift_ingetrokken",
+      "auditdossier_geexporteerd",
+    ]);
     let alleTijden: number[] = [];
     if (afschriften.some((a) => a.versie === "actueel" && a.status === "gereed")) {
       const { data: decRows } = await supabase
@@ -72,14 +85,16 @@ export async function GET(
       const decisionIds = (decRows ?? []).map((r) => r.id as string);
       const [{ data: evRows }, { data: logRows }] = await Promise.all([
         decisionIds.length
-          ? supabase.from("governance_events").select("tijdstip").in("decision_id", decisionIds)
-          : Promise.resolve({ data: [] as { tijdstip: string }[] }),
-        supabase.from("procedure_log").select("tijdstip").eq("procedure_id", procedureId),
+          ? supabase.from("governance_events").select("tijdstip, event_type").in("decision_id", decisionIds)
+          : Promise.resolve({ data: [] as { tijdstip: string; event_type: string }[] }),
+        supabase.from("procedure_log").select("tijdstip, event_type").eq("procedure_id", procedureId),
       ]);
       alleTijden = [
-        ...((evRows ?? []) as { tijdstip: string }[]),
-        ...((logRows ?? []) as { tijdstip: string }[]),
-      ].map((r) => Date.parse(r.tijdstip));
+        ...((evRows ?? []) as { tijdstip: string; event_type: string }[]),
+        ...((logRows ?? []) as { tijdstip: string; event_type: string }[]),
+      ]
+        .filter((r) => !META_EVENTS.has(r.event_type))
+        .map((r) => Date.parse(r.tijdstip));
     }
 
     const leden = await haalFondsleden(supabase);

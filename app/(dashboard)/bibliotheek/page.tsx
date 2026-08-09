@@ -1,5 +1,6 @@
 "use client";
 import { Fragment, useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import DocumentMetadataModal from "@/core/components/DocumentMetadataModal";
 import { DOCUMENTTYPEN, DOCUMENTTYPE_LABEL } from "@/core/lib/document-metadata";
 import { uploadDocument } from "@/core/lib/document-upload-client";
@@ -106,6 +107,28 @@ export default function BibliotheekPage() {
     setZoektermen((s) => ({ ...s, [actieveTab]: waarde }));
   const [toonInactief, setToonInactief] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  // Positie van het kebab-menu. Het menu wordt via een portal in <body>
+  // gerenderd (fixed), zodat het niet langer door de horizontaal scrollende
+  // tabelcontainer (`overflow-x-auto`) wordt afgekapt. Bij openen berekenen we
+  // de plek t.o.v. de knop; onderaan het scherm klapt het naar boven open.
+  const [menuPos, setMenuPos] = useState<{
+    left: number;
+    top: number | null;
+    bottom: number | null;
+  } | null>(null);
+  // Een fixed-gepositioneerd menu volgt de knop niet mee bij scrollen; sluit het
+  // daarom zodra er gescrolld (ook binnen de tabelcontainer, vandaar capture) of
+  // geresized wordt, zodat het nooit losgekoppeld blijft zweven.
+  useEffect(() => {
+    if (openMenuId === null) return;
+    const sluit = () => setOpenMenuId(null);
+    window.addEventListener("scroll", sluit, true);
+    window.addEventListener("resize", sluit);
+    return () => {
+      window.removeEventListener("scroll", sluit, true);
+      window.removeEventListener("resize", sluit);
+    };
+  }, [openMenuId]);
   const [deactiveerDoc, setDeactiveerDoc] = useState<Document | null>(null);
   const [deactiveerReden, setDeactiveerReden] = useState("");
   const [actieBezig, setActieBezig] = useState(false);
@@ -475,7 +498,7 @@ export default function BibliotheekPage() {
                 : "text-muted hover:text-ink"
             }`}
           >
-            {tab === "generiek" ? "🏛️ Generiek (DNB / AFM / PF)" : "🏢 Fondsbibliotheek"}
+            {tab === "generiek" ? "🏛️ Sectorbibliotheek" : "🏢 Fondsbibliotheek"}
           </button>
         ))}
       </div>
@@ -774,21 +797,59 @@ export default function BibliotheekPage() {
                 {/* Kebab-menu */}
                 <div className="relative flex-shrink-0">
                   <button
-                    onClick={() =>
-                      setOpenMenuId(openMenuId === doc.id ? null : doc.id)
-                    }
+                    onClick={(e) => {
+                      if (openMenuId === doc.id) {
+                        setOpenMenuId(null);
+                        return;
+                      }
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      const MENU_W = 200;
+                      const SCHATTING_H = 260;
+                      const marge = 8;
+                      const left = Math.max(
+                        marge,
+                        Math.min(
+                          rect.right - MENU_W,
+                          window.innerWidth - MENU_W - marge
+                        )
+                      );
+                      const naarBoven =
+                        rect.bottom + SCHATTING_H > window.innerHeight &&
+                        rect.top > SCHATTING_H;
+                      setMenuPos(
+                        naarBoven
+                          ? {
+                              left,
+                              top: null,
+                              bottom: window.innerHeight - rect.top + 4,
+                            }
+                          : { left, top: rect.bottom + 4, bottom: null }
+                      );
+                      setOpenMenuId(doc.id);
+                    }}
                     className="w-8 h-8 rounded-lg hover:bg-app-bg flex items-center justify-center text-muted text-lg"
                     aria-label="Acties"
                   >
                     ⋮
                   </button>
-                  {openMenuId === doc.id && (
+                  {openMenuId === doc.id &&
+                    menuPos &&
+                    typeof document !== "undefined" &&
+                    createPortal(
                     <>
                       <div
-                        className="fixed inset-0 z-10"
+                        className="fixed inset-0 z-40"
                         onClick={() => setOpenMenuId(null)}
                       />
-                      <div className="absolute right-0 top-9 z-20 min-w-[180px] rounded-lg border border-line bg-app-surface py-1 shadow-lg">
+                      <div
+                        className="fixed z-50 min-w-[190px] max-w-[calc(100vw-16px)] overflow-y-auto rounded-lg border border-line bg-app-surface py-1 shadow-lg"
+                        style={{
+                          left: menuPos.left,
+                          top: menuPos.top ?? undefined,
+                          bottom: menuPos.bottom ?? undefined,
+                          maxHeight: "calc(100vh - 24px)",
+                        }}
+                      >
                         {!inactief && (
                           <button
                             onClick={() => {
@@ -891,7 +952,8 @@ export default function BibliotheekPage() {
                             </button>
                           ))}
                       </div>
-                    </>
+                    </>,
+                    document.body
                   )}
                 </div>
                 </td>

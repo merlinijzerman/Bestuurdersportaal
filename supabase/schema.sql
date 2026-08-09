@@ -2149,3 +2149,59 @@ grant select                 on public.platform_signaal_config   to service_role
 -- De seed van platform_signaal_config (acht signalen met hun FO §19-drempels)
 -- staat in de migratie; hier bewust niet herhaald omdat drempels na oplevering
 -- in de SQL-editor mogen worden bijgesteld en schema.sql geen seedbron is.
+
+-- ============================================================
+--  T6 — Auditdossier-afschriften (procedure_afschriften)
+-- ============================================================
+-- Permanent vastgelegde, gezipte auditbundels per proces (besluit 0146). Eigen
+-- tabel + eigen private bucket, BEWUST buiten `documenten` zodat een auditzip met
+-- stemgedrag/dissent nooit de RAG-index in lekt (besluit 0147).
+--
+-- Documentatie — AUTHORITATIEF zijn de migraties:
+--   2026_08_09_procedure_afschriften.sql          (tabel + RLS + claim-RPC + bucket)
+--   2026_08_09_procedure_afschriften_hardening.sql (grants + kolom-freeze-trigger)
+--   2026_08_09_afschrift_ai_tekst.sql             (fase 2: ai_leeswijzer_tekst)
+-- RLS: deny-by-default per fonds_id (gespiegelde WITH CHECK). SELECT toont ook de
+-- bureau-rol; INSERT/UPDATE + storage-lezen sluiten 'bestuursbureau' uit. GEEN
+-- delete-policy (+ no-delete-trigger). Kolom-freeze: user-sessies mogen na INSERT
+-- alleen ingetrokken_* wijzigen; de service-role-worker (auth.uid() IS NULL) bouwt.
+create table if not exists public.procedure_afschriften (
+  id                      uuid primary key default gen_random_uuid(),
+  procedure_id            uuid not null references public.procedures(id) on delete cascade,
+  fonds_id                uuid not null references public.fondsen(id) on delete cascade,
+  versie                  text not null check (versie in ('actueel','besluitmoment')),
+  trigger_status          text,
+  aanleiding              text,
+  status                  text not null default 'bezig' check (status in ('bezig','gereed','mislukt')),
+  poging                  integer not null default 0,      -- jobmodel: crash-reclaim-teller
+  lease_tot               timestamptz,                     -- claim-lease + crash-recovery-klok
+  laatste_fout            text,
+  opslag_pad              text,                            -- <fonds_id>/<procedure_id>/<afschrift_id>.zip
+  sha256                  text,
+  bytes                   bigint,
+  bestandsaantal          integer,
+  bevat_stemgedrag        boolean not null default false,
+  gebouwd_onder_rol       text,                            -- gezichtshoek (ADR-5/0149)
+  uitgesloten_items       jsonb not null default '[]'::jsonb,
+  waarschuwingen          jsonb not null default '[]'::jsonb,
+  dossier_stand_event_id  uuid,                            -- verouderingsanker (provenance)
+  dossier_stand_op        timestamptz,                     -- verouderingsanker (tijdstip)
+  ai_leeswijzer           boolean not null default false,  -- fase 2
+  ai_leeswijzer_tekst     jsonb,                           -- fase 2: vastgestelde §2–4
+  ai_model                text,
+  ai_promptversie         text,
+  ai_tekst_hash           text,
+  ai_vastgesteld_door     uuid references auth.users(id) on delete set null,
+  ai_vastgesteld_op       timestamptz,
+  ingetrokken_op          timestamptz,
+  ingetrokken_door        uuid references auth.users(id) on delete set null,
+  ingetrokken_reden       text,
+  aangemaakt_op           timestamptz not null default now(),
+  aangemaakt_door         uuid references auth.users(id) on delete set null,
+  -- Reviewstap-borging (fase 2): 'gereed' vereist een vaststelling bij AI-tekst.
+  constraint afschrift_gereed_vereist_vaststelling check (
+    status <> 'gereed' or ai_leeswijzer = false or ai_vastgesteld_door is not null
+  )
+);
+-- Private bucket 'afschriften' (public=false, file_size_limit 150 MB) + storage-
+-- policies leven in de migratie; schema.sql is geen bron voor storage-config.

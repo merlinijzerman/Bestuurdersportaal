@@ -59,7 +59,7 @@ Download = toegang tot het proces (RLS) **én** niet-bureaurol. De bureau-rol zi
 - **Worker:** `platform/lib/afschrift-orchestrator.ts` + `app/api/internal/afschrift-worker/route.ts`.
 - **API:** `app/api/procedures/[id]/afschrift/route.ts` (+ `afschriften/…` lijst/download/intrekken).
 - **UI:** `app/(dashboard)/procedures/_components/AfschriftenPaneel.tsx` + `StapPaneel.tsx` (stapinzage) + de procespagina.
-- **Tests:** `core/lib/afschrift-*.sanity.ts` + `afschrift-guardrail.sanity.ts` (41 tests), `tests/cross-tenant/afschrift-toegang.test.ts` (9 tests).
+- **Tests:** `core/lib/afschrift-*.sanity.ts` (deterministische libs) + `afschrift-guardrail.sanity.ts` (12 guardrail-tests), `tests/cross-tenant/afschrift-toegang.test.ts` (9 tests). `npm run sanity` + `next build` groen.
 
 ## Fase 2 — AI-leeswijzer (besluit [[decisions/0150]])
 

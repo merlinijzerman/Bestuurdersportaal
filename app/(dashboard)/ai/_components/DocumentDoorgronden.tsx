@@ -27,6 +27,10 @@ import {
 export interface DoorgrondDoc {
   id: string;
   titel: string;
+  // Datum van toevoegen (documenten.aangemaakt). Optioneel: `initieelDoc` en de
+  // vorige-versie-lookup leveren hem niet, de kiezer-suggesties (zoekDocumenten)
+  // wél — daar tonen en sorteren we erop.
+  aangemaakt?: string | null;
 }
 
 export default function DocumentDoorgronden({
@@ -149,9 +153,9 @@ export default function DocumentDoorgronden({
       </p>
 
       <div className="border border-line rounded-2xl bg-card divide-y divide-line">
-        {/* ── Context ── */}
+        {/* ── Document ── */}
         <div className="p-4">
-          <h3 className="text-sm font-semibold text-ink">Context</h3>
+          <h3 className="text-sm font-semibold text-ink">Document</h3>
           <p className="text-xs text-muted mt-0.5">Waarop deze taak wordt uitgevoerd</p>
 
           {!kiezerOpen ? (
@@ -193,7 +197,15 @@ export default function DocumentDoorgronden({
                     Geen document met deze titel gevonden.
                   </div>
                 ) : (
-                  suggesties.map((s) => (
+                  // Meest recent toegevoegd bovenaan. De bron levert al gesorteerd
+                  // aan; deze sort borgt de volgorde ook als dat ooit verandert.
+                  [...suggesties]
+                    .sort((a, b) => {
+                      const ta = a.aangemaakt ? new Date(a.aangemaakt).getTime() : 0;
+                      const tb = b.aangemaakt ? new Date(b.aangemaakt).getTime() : 0;
+                      return tb - ta;
+                    })
+                    .map((s) => (
                     <button
                       key={s.id}
                       type="button"
@@ -203,6 +215,12 @@ export default function DocumentDoorgronden({
                       }`}
                     >
                       <span className="block text-sm text-ink truncate">{s.titel}</span>
+                      {s.aangemaakt && (
+                        <span className="block text-xs text-muted mt-0.5">
+                          Toegevoegd{" "}
+                          {new Date(s.aangemaakt).toLocaleDateString("nl-NL")}
+                        </span>
+                      )}
                     </button>
                   ))
                 )}
