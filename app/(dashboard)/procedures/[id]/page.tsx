@@ -11,7 +11,7 @@ import {
   type PeriodeType,
 } from "@/core/lib/dossier";
 import DossierTijdlijn from "../_components/DossierTijdlijn";
-import ActieveStapPaneel from "../_components/ActieveStapPaneel";
+import StapPaneel from "../_components/StapPaneel";
 import DecisionObjectHeader from "../_components/DecisionObjectHeader";
 import ClassificatiePanel from "../_components/ClassificatiePanel";
 import OnderbouwingsPaneel from "../_components/OnderbouwingsPaneel";
@@ -19,6 +19,8 @@ import StatusOvergangPaneel from "../_components/StatusOvergangPaneel";
 import UitklapbaarPaneel from "../_components/UitklapbaarPaneel";
 import DossierStatusStrip from "../_components/DossierStatusStrip";
 import ProcedureMetadataEdit from "../_components/ProcedureMetadataEdit";
+import AfschriftenPaneel from "../_components/AfschriftenPaneel";
+import { auditEventLabel } from "@/core/lib/audit-labels";
 import {
   buildDecisionDossierView,
   ensureDecisionForProcedure,
@@ -60,6 +62,7 @@ export interface Stap {
   eigenaar_naam: string | null;
   deadline: string | null;
   voltooid_op: string | null;
+  voltooid_door: string | null;
 }
 
 export interface ChecklistItem {
@@ -142,16 +145,18 @@ function formatDatumTijd(d: string) {
   });
 }
 
-const EVENT_LABEL: Record<string, string> = {
-  procedure_aangemaakt: "Procedure aangemaakt",
-  eigenaar_toegevoegd: "Co-eigenaar toegevoegd",
-  stap_gestart: "Stap gestart",
-  stap_voltooid: "Stap voltooid",
-  checklistitem_voldaan: "Checklist-item afgevinkt",
-  checklistitem_geopend: "Checklist-item ongedaan gemaakt",
-  bewijs_toegevoegd: "Bewijsstuk toegevoegd",
-  besluit_vastgelegd: "Besluit vastgelegd",
-};
+// F2: labels voor béíde auditsporen komen nu uit core/lib/audit-labels
+// (auditEventLabel), zodat UI en export dezelfde taal spreken.
+interface SamengevoegdEvent {
+  id: string;
+  spoor: "proces" | "besluit";
+  event_type: string;
+  actor_naam: string | null;
+  tijdstip: string;
+  besluitCode: string | null;
+  hash: string | null;
+  proces_payload: Record<string, unknown> | null;
+}
 
 function dagenTot(deadline: string): number {
   const dl = new Date(deadline);
@@ -161,10 +166,13 @@ function dagenTot(deadline: string): number {
 
 export default async function ProcedureDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ stap?: string }>;
 }) {
   const { id } = await params;
+  const { stap: stapParam } = await searchParams;
   const supabase = await createServerSupabase();
 
   const {
@@ -321,6 +329,27 @@ export default async function ProcedureDetailPage({
   const afgerondAantal = stappen.filter((s) => s.status === "afgerond").length;
   const totaalStappen = stappen.length;
 
+  // T6-1A: welke stap staat in het rechterpaneel? Selectie via ?stap=<id>
+  // (server-first, past bij het force-dynamic + router.refresh()-patroon).
+  // Default = de actieve stap; ontbreekt die, dan de laatst afgeronde; anders
+  // de eerste stap. Alleen de actieve stap is bewerkbaar — al het andere is
+  // leesmodus (inzage in afgeronde/nog niet gestarte stappen).
+  const laatstAfgerondeStap = [...stappen]
+    .reverse()
+    .find((s) => s.status === "afgerond");
+  const geselecteerdeStap =
+    stappen.find((s) => s.id === stapParam) ??
+    actieveStap ??
+    laatstAfgerondeStap ??
+    stappen[0] ??
+    null;
+  const geselecteerdeIsBewerkbaar =
+    geselecteerdeStap != null && geselecteerdeStap.status === "actief";
+  const geselecteerdeVoltooidDoorNaam =
+    geselecteerdeStap?.voltooid_door
+      ? fondsleden.get(geselecteerdeStap.voltooid_door)?.naam ?? null
+      : null;
+
   // Decision Object — lazy auto-upgrade voor procedures zonder dossier.
   // Faalt deze stap (RLS / DB-fout), dan tonen we het dossier-blok niet
   // maar blijft de rest van de pagina werken.
@@ -338,6 +367,33 @@ export default async function ProcedureDetailPage({
   } catch (e) {
     console.error("Dossier laden mislukt:", e);
   }
+
+  // F2: het audit-trail-paneel toont voortaan BEIDE auditsporen. procedure_log
+  // (spoor 'proces') werd al getoond; governance_events (spoor 'besluit', mét
+  // hash) — aannames, risico's, dissent, statusovergangen — bleef onzichtbaar.
+  // Hier samengevoegd op tijdstip (aflopend) via de gedeelde labelmap.
+  const auditTrail: SamengevoegdEvent[] = [
+    ...log.map((e) => ({
+      id: `p-${e.id}`,
+      spoor: "proces" as const,
+      event_type: e.event_type,
+      actor_naam: e.actor_naam,
+      tijdstip: e.tijdstip,
+      besluitCode: null,
+      hash: null,
+      proces_payload: e.payload,
+    })),
+    ...(dossier?.events ?? []).map((e) => ({
+      id: `b-${e.id}`,
+      spoor: "besluit" as const,
+      event_type: e.event_type,
+      actor_naam: e.actor_naam,
+      tijdstip: e.tijdstip,
+      besluitCode: dossier?.decision.besluit_code ?? null,
+      hash: e.hash,
+      proces_payload: null,
+    })),
+  ].sort((a, b) => (a.tijdstip < b.tijdstip ? 1 : -1));
 
   return (
     <div className="p-4 sm:p-6 lg:p-7 space-y-6">
@@ -535,74 +591,92 @@ export default async function ProcedureDetailPage({
             <div className="text-xs uppercase tracking-wide text-muted font-semibold mb-4">
               Procesfasen
             </div>
+            {/* T6-1A: elke fase is aanklikbaar en opent de stap in het
+                rechterpaneel (leesmodus voor niet-actieve stappen). De
+                actieve fase houdt haar accent-markering; de geselecteerde
+                fase krijgt een ring zodat zichtbaar is wat je bekijkt. */}
             <ol className="space-y-1">
               {stappen.map((s, idx) => {
                 const isLast = idx === stappen.length - 1;
-                if (s.status === "afgerond") {
-                  return (
-                    <li key={s.id} className="relative pl-9 py-2.5">
-                      <div className="absolute left-0 top-3 w-6 h-6 rounded-full bg-ok text-white flex items-center justify-center text-xs font-bold">
-                        ✓
-                      </div>
-                      {!isLast && (
-                        <div className="absolute left-3 top-9 bottom-0 w-px bg-ok" />
-                      )}
-                      <div className="text-sm font-medium text-ink">
-                        {s.naam}
-                      </div>
-                      <div className="text-xs text-muted mt-0.5">
-                        {s.voltooid_op
-                          ? `Afgerond ${formatDatumKort(s.voltooid_op)}`
-                          : "Afgerond"}
-                      </div>
-                    </li>
-                  );
-                }
-                if (s.status === "actief") {
-                  return (
-                    <li
-                      key={s.id}
-                      className="relative pl-9 py-2.5 bg-warn-tint -mx-3 px-3 rounded-lg"
-                    >
-                      <div className="absolute left-3 top-3 w-6 h-6 rounded-full bg-accent border-2 border-accent text-ink flex items-center justify-center text-xs font-bold ring-4 ring-warn/30">
-                        {s.volgorde}
-                      </div>
-                      {!isLast && (
-                        <div className="absolute left-6 top-9 bottom-0 w-px bg-app-line" />
-                      )}
-                      <div className="text-sm font-semibold text-ink ml-6">
-                        {s.naam}
-                      </div>
-                      <div className="text-xs text-warn-ink font-medium mt-0.5 ml-6">
-                        Actief
-                        {s.deadline
-                          ? ` — deadline ${formatDatumKort(s.deadline)}`
-                          : ""}
-                      </div>
-                    </li>
-                  );
-                }
+                const geselecteerd = s.id === geselecteerdeStap?.id;
+                const isActief = s.status === "actief";
+                const isAfgerond = s.status === "afgerond";
                 return (
-                  <li key={s.id} className="relative pl-9 py-2.5">
-                    <div className="absolute left-0 top-3 w-6 h-6 rounded-full bg-app-bg border-2 border-app-line-strong text-muted flex items-center justify-center text-xs font-medium">
-                      {s.volgorde}
-                    </div>
-                    {!isLast && (
-                      <div className="absolute left-3 top-9 bottom-0 w-px bg-app-line" />
-                    )}
-                    <div className="text-sm font-medium text-muted">
-                      {s.naam}
-                    </div>
-                    {s.vereist_besluit && (
-                      <div className="text-xs text-warn-ink mt-0.5">
-                        Vereist formeel besluit
+                  <li key={s.id}>
+                    <Link
+                      href={`?stap=${s.id}`}
+                      scroll={false}
+                      replace
+                      aria-current={geselecteerd ? "step" : undefined}
+                      className={`relative block -mx-3 px-3 pl-9 py-2.5 rounded-lg transition-colors ${
+                        isActief
+                          ? "bg-warn-tint"
+                          : geselecteerd
+                            ? "bg-app-bg ring-1 ring-app-line-strong"
+                            : "hover:bg-app-bg/70"
+                      }`}
+                    >
+                      {isAfgerond ? (
+                        <div className="absolute left-3 top-3 w-6 h-6 rounded-full bg-ok text-white flex items-center justify-center text-xs font-bold">
+                          ✓
+                        </div>
+                      ) : isActief ? (
+                        <div className="absolute left-3 top-3 w-6 h-6 rounded-full bg-accent border-2 border-accent text-ink flex items-center justify-center text-xs font-bold ring-4 ring-warn/30">
+                          {s.volgorde}
+                        </div>
+                      ) : (
+                        <div className="absolute left-3 top-3 w-6 h-6 rounded-full bg-app-bg border-2 border-app-line-strong text-muted flex items-center justify-center text-xs font-medium">
+                          {s.volgorde}
+                        </div>
+                      )}
+                      {!isLast && (
+                        <div
+                          className={`absolute left-6 top-9 bottom-0 w-px ${
+                            isAfgerond ? "bg-ok" : "bg-app-line"
+                          }`}
+                        />
+                      )}
+                      <div className="ml-6">
+                        <div
+                          className={`text-sm ${
+                            isActief
+                              ? "font-semibold text-ink"
+                              : isAfgerond
+                                ? "font-medium text-ink"
+                                : "font-medium text-muted"
+                          }`}
+                        >
+                          {s.naam}
+                        </div>
+                        {isAfgerond && (
+                          <div className="text-xs text-muted mt-0.5">
+                            {s.voltooid_op
+                              ? `Afgerond ${formatDatumKort(s.voltooid_op)}`
+                              : "Afgerond"}
+                          </div>
+                        )}
+                        {isActief && (
+                          <div className="text-xs text-warn-ink font-medium mt-0.5">
+                            Actief
+                            {s.deadline
+                              ? ` — deadline ${formatDatumKort(s.deadline)}`
+                              : ""}
+                          </div>
+                        )}
+                        {s.status === "open" && s.vereist_besluit && (
+                          <div className="text-xs text-warn-ink mt-0.5">
+                            Vereist formeel besluit
+                          </div>
+                        )}
+                        {s.status === "open" &&
+                          !s.vereist_besluit &&
+                          s.geschatte_dagen && (
+                            <div className="text-xs text-muted mt-0.5">
+                              Geschat {s.geschatte_dagen} dagen
+                            </div>
+                          )}
                       </div>
-                    )}
-                    {!s.vereist_besluit && s.geschatte_dagen && (
-                      <div className="text-xs text-muted mt-0.5">
-                        Geschat {s.geschatte_dagen} dagen
-                      </div>
-                    )}
+                    </Link>
                   </li>
                 );
               })}
@@ -612,20 +686,37 @@ export default async function ProcedureDetailPage({
 
         {/* Active step + log */}
         <div className="col-span-12 lg:col-span-8 space-y-5">
-          {actieveStap ? (
-            <ActieveStapPaneel
+          {procedure.status === "afgerond" && (
+            <div className="bg-ok-tint border border-ok/30 rounded-xl p-4">
+              <div className="text-sm font-semibold text-ok-ink">
+                Procedure is afgerond
+              </div>
+              <div className="text-xs text-ok-ink mt-1">
+                Afgerond op{" "}
+                {procedure.afgerond_op
+                  ? formatDatum(procedure.afgerond_op)
+                  : "(datum onbekend)"}
+                . Alle stappen zijn voltooid — je bekijkt ze hieronder in
+                leesmodus.
+              </div>
+            </div>
+          )}
+          {geselecteerdeStap ? (
+            <StapPaneel
               procedureId={procedure.id}
-              stap={actieveStap}
+              stap={geselecteerdeStap}
+              alleenLezen={!geselecteerdeIsBewerkbaar}
+              voltooidDoorNaam={geselecteerdeVoltooidDoorNaam}
               checklist={checklist.filter(
-                (c) => c.stap_id === actieveStap.id
+                (c) => c.stap_id === geselecteerdeStap.id
               )}
-              bewijs={bewijs.filter((b) => b.stap_id === actieveStap.id)}
+              bewijs={bewijs.filter((b) => b.stap_id === geselecteerdeStap.id)}
               besluit={
-                besluiten.find((b) => b.stap_id === actieveStap.id) ?? null
+                besluiten.find((b) => b.stap_id === geselecteerdeStap.id) ?? null
               }
               komendeVergaderingen={komendeVergaderingen}
               gekoppeldeAgendapunten={gekoppeldeAgendapunten.filter(
-                (a) => a.procedure_stap_id === actieveStap.id
+                (a) => a.procedure_stap_id === geselecteerdeStap.id
               )}
               documentRequirements={
                 // 1D-4: documenttype-opties voor de bewijs-tag —
@@ -638,7 +729,7 @@ export default async function ProcedureDetailPage({
                           .filter(
                             (e) =>
                               e.requirement_type === "document" &&
-                              e.stap_volgorde === actieveStap.volgorde &&
+                              e.stap_volgorde === geselecteerdeStap.volgorde &&
                               e.documenttype !== null
                           )
                           .map((e) => [
@@ -650,23 +741,9 @@ export default async function ProcedureDetailPage({
                   : []
               }
             />
-          ) : procedure.status === "afgerond" ? (
-            <div className="bg-ok-tint border border-ok/30 rounded-xl p-5">
-              <div className="text-sm font-semibold text-ok-ink">
-                Procedure is afgerond
-              </div>
-              <div className="text-xs text-ok-ink mt-1">
-                Afgerond op{" "}
-                {procedure.afgerond_op
-                  ? formatDatum(procedure.afgerond_op)
-                  : "(datum onbekend)"}
-                . Alle stappen zijn voltooid.
-              </div>
-            </div>
           ) : (
             <div className="bg-app-bg border border-line rounded-xl p-5 text-sm text-muted">
-              Geen actieve stap. Markeer een open stap als actief om door te
-              gaan.
+              Deze procedure heeft nog geen stappen.
             </div>
           )}
 
@@ -779,35 +856,46 @@ export default async function ProcedureDetailPage({
 
             <UitklapbaarPaneel
               titel="Audit-trail"
-              count={log.length}
+              count={auditTrail.length}
               status="neutraal"
-              samenvatting={`${log.length} append-only event${log.length === 1 ? "" : "s"}`}
+              samenvatting={`${auditTrail.length} append-only event${auditTrail.length === 1 ? "" : "s"} · proces + besluit`}
             >
               <div className="bg-white border border-line rounded-xl p-5">
-                {log.length === 0 ? (
+                {auditTrail.length === 0 ? (
                   <div className="text-sm text-muted italic">
                     Nog geen events.
                   </div>
                 ) : (
                   <ol className="space-y-3 text-sm">
-                    {log.map((e) => (
+                    {auditTrail.map((e) => (
                       <li key={e.id} className="flex gap-3">
-                        <div className="w-2 h-2 rounded-full bg-app-line mt-1.5 flex-shrink-0" />
+                        <div
+                          className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${
+                            e.spoor === "besluit" ? "bg-ok" : "bg-app-line"
+                          }`}
+                          title={e.spoor === "besluit" ? "Besluitniveau" : "Procesniveau"}
+                        />
                         <div className="flex-1">
                           <div className="text-ink">
                             <span className="font-medium">
-                              {EVENT_LABEL[e.event_type] || e.event_type}
+                              {auditEventLabel(e.event_type)}
                             </span>
-                            {e.payload && Object.keys(e.payload).length > 0 && (
+                            {e.besluitCode && (
+                              <span className="text-[11px] text-ok-ink bg-ok-tint px-1.5 py-0.5 rounded ml-1.5">
+                                {e.besluitCode}
+                              </span>
+                            )}
+                            {e.proces_payload && Object.keys(e.proces_payload).length > 0 && (
                               <span className="text-muted">
                                 {" "}
-                                — {formatPayload(e.event_type, e.payload)}
+                                — {formatPayload(e.event_type, e.proces_payload)}
                               </span>
                             )}
                           </div>
                           <div className="text-xs text-muted mt-0.5">
                             {formatDatumTijd(e.tijdstip)}
                             {e.actor_naam ? ` · door ${e.actor_naam}` : ""}
+                            {e.hash ? ` · ${e.hash.slice(0, 8)}` : ""}
                           </div>
                         </div>
                       </li>
@@ -815,6 +903,19 @@ export default async function ProcedureDetailPage({
                   </ol>
                 )}
               </div>
+            </UitklapbaarPaneel>
+
+            {/* T6 E1: Afschriften — direct ónder Audit-trail (het spoor en wat
+                daarvan is meegegeven horen bij elkaar). */}
+            <UitklapbaarPaneel
+              titel="Afschriften"
+              status="neutraal"
+              samenvatting="Vastgelegde, downloadbare auditbundels van dit proces"
+            >
+              <AfschriftenPaneel
+                procedureId={procedure.id}
+                currentUserIsBureau={currentUserIsBureau}
+              />
             </UitklapbaarPaneel>
           </div>
         </div>

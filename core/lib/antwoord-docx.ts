@@ -8,8 +8,10 @@
 // (antwoord-klembord). Alleen het uitvoerformaat verschilt: WordprocessingML in
 // plaats van text/html.
 //
-// Een .docx is een zip van XML-parts. We bouwen die met de reeds aanwezige
-// dependency `jszip` — geen nieuwe runtime-dep, geen zware docx-library.
+// De laag-niveau OOXML-mechaniek (esc/run/paragraaf/tabel/zip) leeft sinds T6 in
+// `docx-primitieven.ts` — één gedeelde OOXML-laag, twee documenttypen (0079 naar
+// de geest). Dit bestand houdt alleen z'n eigen stijlen, de parser-koppeling en
+// het verplichte bureau-herkomstanker.
 //
 // ── Waarom de herkomstregel ook hier CONSTRUCTIE is (0098-patroon) ──────────
 // Net als bouwKopie() zet deze module de bronnenlijst én de herkomstregel zélf;
@@ -18,7 +20,6 @@
 // zip pas nadat dat anker aantoonbaar in de document-XML staat. Zo is de garantie
 // uit ontwerp §6.4/§9 geen afspraak maar een controle op het moment van schrijven.
 
-import JSZip from "jszip";
 import {
   numeriekeKolommen,
   parseerBlokken,
@@ -33,37 +34,19 @@ import {
   type KopieBron,
   type KopieContext,
 } from "./antwoord-klembord";
-
-// ── XML-escaping ─────────────────────────────────────────────────────────────
-
-// XML 1.0 verbiedt de meeste control-tekens; alleen TAB (\t), LF (\n) en CR (\r)
-// zijn toegestaan. De antwoordtekst en het onderwerp zijn client-aangeleverd, dus
-// één losse NUL of verticale tab zou anders een niet-welgevormde document.xml
-// opleveren en Word tot een reparatievraag dwingen. We strippen ze vóór het escapen.
-function esc(s: string): string {
-  return s
-    // eslint-disable-next-line no-control-regex
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
-}
-
-/** Eén tekstrun met optionele opmaak. `xml:space="preserve"` behoudt spaties. */
-function run(
-  tekst: string,
-  opts?: { vet?: boolean; cursief?: boolean; code?: boolean; superscript?: boolean }
-): string {
-  const rpr: string[] = [];
-  if (opts?.vet) rpr.push("<w:b/>");
-  if (opts?.cursief) rpr.push("<w:i/>");
-  if (opts?.code) rpr.push('<w:rFonts w:ascii="Consolas" w:hAnsi="Consolas"/>');
-  if (opts?.superscript) rpr.push('<w:vertAlign w:val="superscript"/>');
-  const rprXml = rpr.length ? `<w:rPr>${rpr.join("")}</w:rPr>` : "";
-  return `<w:r>${rprXml}<w:t xml:space="preserve">${esc(tekst)}</w:t></w:r>`;
-}
+import {
+  esc,
+  run,
+  paragraaf,
+  tekstParagraaf,
+  kopStijl,
+  CONTENT_BREEDTE_DXA,
+  kolomBreedtes,
+  tabelCel,
+  TBL_BORDERS,
+  zipDocx,
+  veiligeBestandsnaamKern,
+} from "./docx-primitieven";
 
 /**
  * Inline-AST → een reeks runs. Citaties worden scriptie-stijl gerenderd (T5 A4):
@@ -103,43 +86,6 @@ function inlineRuns(delen: InlineDeel[], ordinaal: Map<number, number>): string 
     .join("");
 }
 
-/** Een alinea/kop-paragraaf met een optionele stijl en uitlijning. */
-function paragraaf(
-  inhoud: string,
-  opts?: { stijl?: string; rechts?: boolean }
-): string {
-  const ppr: string[] = [];
-  if (opts?.stijl) ppr.push(`<w:pStyle w:val="${opts.stijl}"/>`);
-  if (opts?.rechts) ppr.push('<w:jc w:val="right"/>');
-  const pprXml = ppr.length ? `<w:pPr>${ppr.join("")}</w:pPr>` : "";
-  return `<w:p>${pprXml}${inhoud}</w:p>`;
-}
-
-/** Platte-tekst-paragraaf (escapet zelf), voor bronnenlijst/herkomst. */
-function tekstParagraaf(tekst: string, opts?: { stijl?: string; cursief?: boolean }): string {
-  return paragraaf(run(tekst, { cursief: opts?.cursief }), { stijl: opts?.stijl });
-}
-
-// Markdown-kopniveau → Word-stijl. Niveau 1 → Heading1, 2+ → Heading2 (dieper
-// nesten kent de bureau-stand niet).
-function kopStijl(niveau: number): string {
-  return niveau <= 1 ? "Heading1" : "Heading2";
-}
-
-// Bruikbare contentbreedte in DXA (twips): A4-pagina 11906 minus de linker- en
-// rechtermarge (elk 1417, zie SECT_PR). Tabellen en kolommen worden op deze
-// breedte vastgezet zodat Word niet zelf hoeft te schatten (T5 A1).
-const CONTENT_BREEDTE_DXA = 11906 - 1417 * 2; // = 9072
-
-/** Kolombreedtes (DXA) die samen exact de contentbreedte vullen; rest bij de laatste. */
-function kolomBreedtes(aantal: number): number[] {
-  if (aantal <= 0) return [];
-  const basis = Math.floor(CONTENT_BREEDTE_DXA / aantal);
-  const breedtes = Array<number>(aantal).fill(basis);
-  breedtes[aantal - 1] = CONTENT_BREEDTE_DXA - basis * (aantal - 1);
-  return breedtes;
-}
-
 function blokNaarXml(blok: Blok, ordinaal: Map<number, number>): string {
   switch (blok.soort) {
     case "alinea":
@@ -170,7 +116,11 @@ function blokNaarXml(blok: Blok, ordinaal: Map<number, number>): string {
         .map((w) => `<w:gridCol w:w="${w}"/>`)
         .join("")}</w:tblGrid>`;
       const cel = (c: InlineDeel[], ci: number, kop: boolean) =>
-        tabelCel(inlineRuns(c, ordinaal), numeriek[ci], kop, breedtes[ci] ?? breedtes[0]);
+        tabelCel(inlineRuns(c, ordinaal), {
+          rechts: numeriek[ci],
+          kop,
+          breedteDxa: breedtes[ci] ?? breedtes[0],
+        });
       const kopRij = `<w:tr>${blok.kop.map((c, ci) => cel(c, ci, true)).join("")}</w:tr>`;
       const rijen = blok.rijen
         .map((rij) => `<w:tr>${rij.map((c, ci) => cel(c, ci, false)).join("")}</w:tr>`)
@@ -187,48 +137,7 @@ function blokNaarXml(blok: Blok, ordinaal: Map<number, number>): string {
   }
 }
 
-/**
- * Eén tabelcel. Rechtse uitlijning volgt de deterministische kolomdetectie uit de
- * parser (numeriekeKolommen). Kopcellen krijgen een grijze vulling én vette runs.
- * De celbreedte (DXA) sluit aan op de bijbehorende tblGrid-kolom (T5 A1).
- */
-function tabelCel(runs: string, rechts: boolean, kop: boolean, breedteDxa: number): string {
-  const pprXml = rechts ? '<w:pPr><w:jc w:val="right"/></w:pPr>' : "";
-  const shading = kop ? '<w:shd w:val="clear" w:color="auto" w:fill="F2F4F9"/>' : "";
-  const tcpr = `<w:tcPr><w:tcW w:w="${breedteDxa}" w:type="dxa"/>${shading}</w:tcPr>`;
-  // Kopcel: vet elke run door een rPr-prefix in te voegen (de runs bevatten nog
-  // geen rPr aan het begin; celinhoud is platte/gemarkeerde tekst).
-  const inhoud = kop ? runs.replace(/<w:r>(?!<w:rPr>)/g, "<w:r><w:rPr><w:b/></w:rPr>") : runs;
-  const paragraafInhoud = inhoud || run("");
-  return `<w:tc>${tcpr}<w:p>${pprXml}${paragraafInhoud}</w:p></w:tc>`;
-}
-
-// ── OOXML-parts ──────────────────────────────────────────────────────────────
-
-const CONTENT_TYPES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-<Default Extension="xml" ContentType="application/xml"/>
-<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
-<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
-</Types>`;
-
-const RELS = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
-</Relationships>`;
-
-const DOC_RELS = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
-</Relationships>`;
-
-const TBL_BORDERS =
-  '<w:tblBorders>' +
-  ['top', 'left', 'bottom', 'right', 'insideH', 'insideV']
-    .map((z) => `<w:${z} w:val="single" w:sz="4" w:space="0" w:color="C8CCD8"/>`)
-    .join('') +
-  '</w:tblBorders>';
+// ── Documentspecifieke stijlen + sectie ──────────────────────────────────────
 
 const STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
@@ -321,21 +230,13 @@ export interface DocxPayload {
 
 /** Maakt een veilige .docx-bestandsnaam uit de titel. */
 export function docxBestandsnaam(titel: string): string {
-  const kern =
-    titel
-      .normalize("NFD")
-      .replace(/[̀-ͯ]/g, "")
-      .replace(/[^a-zA-Z0-9 _-]/g, "")
-      .trim()
-      .replace(/\s+/g, "-")
-      .slice(0, 80) || "stuk";
-  return `${kern}.docx`;
+  return `${veiligeBestandsnaamKern(titel)}.docx`;
 }
 
 /**
  * Bouwt de volledige .docx als bytes. Parseert de antwoordtekst met dezelfde
  * parser als de weergave (géén tweede renderer), bouwt de document-XML (die de
- * herkomst-sluis passeert) en zipt de OOXML-parts met jszip.
+ * herkomst-sluis passeert) en zipt de OOXML-parts met de gedeelde zip-helper.
  */
 export async function bouwDocx(
   antwoord: string,
@@ -344,19 +245,7 @@ export async function bouwDocx(
 ): Promise<DocxPayload> {
   const blokken = parseerBlokken(antwoord);
   const documentXml = bouwDocxDocumentXml(blokken, alleBronnen, ctx);
-
-  const zip = new JSZip();
-  zip.file("[Content_Types].xml", CONTENT_TYPES);
-  zip.file("_rels/.rels", RELS);
-  zip.file("word/document.xml", documentXml);
-  zip.file("word/_rels/document.xml.rels", DOC_RELS);
-  zip.file("word/styles.xml", STYLES);
-
-  const bytes = await zip.generateAsync({
-    type: "uint8array",
-    mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  });
-
+  const bytes = await zipDocx(documentXml, STYLES);
   return {
     bytes,
     bestandsnaam: docxBestandsnaam(ctx.titel),

@@ -26,6 +26,13 @@ interface Props {
   /** 1D-4: documenttype-opties voor de bewijs-tag, afgeleid uit de
       requirements voor deze stap. Leeg array → vrij invoeren. */
   documentRequirements?: { documenttype: string; label: string }[];
+  /** T6-1A: leesmodus voor afgeronde of nog niet gestarte stappen. Alle
+      mutatie-acties blijven zichtbaar maar zijn uitgeschakeld (niet verborgen —
+      zo is duidelijk dat je inziet, niet bewerkt). Alleen de actieve stap is
+      bewerkbaar. */
+  alleenLezen?: boolean;
+  /** T6-1A: naam van wie de stap heeft afgerond, voor de leesmodus-kop. */
+  voltooidDoorNaam?: string | null;
 }
 
 function formatDatumKort(d: string) {
@@ -36,7 +43,7 @@ function formatDatumKort(d: string) {
   });
 }
 
-export default function ActieveStapPaneel({
+export default function StapPaneel({
   procedureId,
   stap,
   checklist: initieelChecklist,
@@ -45,6 +52,8 @@ export default function ActieveStapPaneel({
   komendeVergaderingen,
   gekoppeldeAgendapunten,
   documentRequirements = [],
+  alleenLezen = false,
+  voltooidDoorNaam = null,
 }: Props) {
   const router = useRouter();
   const [checklist, setChecklist] = useState<ChecklistItem[]>(initieelChecklist);
@@ -102,6 +111,7 @@ export default function ActieveStapPaneel({
     (!stap.vereist_besluit || besluit !== null);
 
   async function checklistToggle(item: ChecklistItem) {
+    if (alleenLezen) return;
     setFout(null);
     const nieuw = !item.voldaan;
     // Optimistic
@@ -138,6 +148,7 @@ export default function ActieveStapPaneel({
 
   async function bewijsToevoegen(e: React.FormEvent) {
     e.preventDefault();
+    if (alleenLezen) return;
     setFout(null);
     setMelding(null);
     const titel = bewijsTitel.trim();
@@ -215,6 +226,7 @@ export default function ActieveStapPaneel({
 
   async function besluitVastleggen(e: React.FormEvent) {
     e.preventDefault();
+    if (alleenLezen) return;
     setFout(null);
     const formulering = besluitFormulering.trim();
     if (!formulering) {
@@ -254,6 +266,7 @@ export default function ActieveStapPaneel({
 
   async function vergaderingKoppelen(e: React.FormEvent) {
     e.preventDefault();
+    if (alleenLezen) return;
     setFout(null);
     if (!vergaderingKeuze) {
       setFout("Kies een vergadering.");
@@ -284,6 +297,7 @@ export default function ActieveStapPaneel({
   }
 
   async function besluitConceptOphalen() {
+    if (alleenLezen) return;
     setFout(null);
     setConceptHint(null);
     setBezig("concept");
@@ -321,6 +335,7 @@ export default function ActieveStapPaneel({
   }
 
   async function stapVoltooien() {
+    if (alleenLezen) return;
     setFout(null);
     setBezig("voltooien");
     try {
@@ -348,12 +363,33 @@ export default function ActieveStapPaneel({
     <div className="bg-white border border-line rounded-xl p-6">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="flex-1 min-w-0">
-          <div className="text-xs uppercase tracking-wide text-warn-ink font-semibold">
-            Actieve stap
+          <div
+            className={`text-xs uppercase tracking-wide font-semibold ${
+              alleenLezen
+                ? stap.status === "afgerond"
+                  ? "text-ok-ink"
+                  : "text-muted"
+                : "text-warn-ink"
+            }`}
+          >
+            {alleenLezen
+              ? stap.status === "afgerond"
+                ? "Afgeronde stap — alleen-lezen"
+                : "Nog niet gestarte stap — alleen-lezen"
+              : "Actieve stap"}
           </div>
           <h2 className="text-lg font-semibold text-ink mt-1">
             {stap.volgorde} — {stap.naam}
           </h2>
+          {alleenLezen && stap.status === "afgerond" && (
+            <p className="text-xs text-muted mt-1">
+              Afgerond
+              {stap.voltooid_op
+                ? ` op ${formatDatumKort(stap.voltooid_op)}`
+                : ""}
+              {voltooidDoorNaam ? ` door ${voltooidDoorNaam}` : ""}
+            </p>
+          )}
           {stap.beschrijving && (
             <p className="text-sm text-muted mt-1.5">{stap.beschrijving}</p>
           )}
@@ -367,6 +403,11 @@ export default function ActieveStapPaneel({
           {stap.eigenaar_naam && <div className="mt-1">{stap.eigenaar_naam}</div>}
         </div>
       </div>
+
+      {/* T6-1A: in leesmodus schakelt de fieldset alle formuliercontrols
+          (inputs, textareas, selects, knoppen) native uit — zichtbaar maar
+          niet bedienbaar. Navigatielinks (agendapunten) blijven werken. */}
+      <fieldset disabled={alleenLezen} className="min-w-0 border-0 p-0 m-0">
 
       {/* Checklist */}
       <div className="mt-6">
@@ -873,6 +914,8 @@ export default function ActieveStapPaneel({
           }
         />
       </div>
+
+      </fieldset>
 
       {/* 3-D: Bibliotheek-picker modal — overlays op de hele pagina,
           sluit zichzelf bij selectie of klik buiten. */}
