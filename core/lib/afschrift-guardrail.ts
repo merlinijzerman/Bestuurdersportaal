@@ -97,13 +97,16 @@ export function eigennamenIn(tekst: string): string[] {
   for (const code of tekst.match(/\b[A-Za-z]+[-–][A-Za-z0-9-]*\d[A-Za-z0-9-]*\b/g) ?? []) {
     uit.add(code);
   }
-  // Hoofdletterwoorden, met zinsbegin-detectie.
-  const re = /([.!?]\s+|^|\n)?([A-ZÀ-Ý][a-zà-ÿ'’]{2,})/g;
+  // Hoofdletterwoorden, met POSITIE-gebaseerde zinsbegin-detectie: een woord aan
+  // het begin van de tekst of vlak na een zinsafsluiter (./!/?) of een newline is
+  // grammaticaal een hoofdletter, geen eigennaam.
+  const re = /[A-ZÀ-Ý][a-zà-ÿ'’]{2,}/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(tekst)) !== null) {
-    const zinsBegin = Boolean(m[1]);
-    const woord = m[2];
-    if (zinsBegin) continue; // grammaticale hoofdletter
+    const voor = tekst.slice(0, m.index);
+    const zinsBegin = m.index === 0 || /[.!?]\s*$/.test(voor) || /\n\s*$/.test(voor);
+    const woord = m[0];
+    if (zinsBegin) continue;
     if (NL_VEILIGE_WOORDEN.has(woord.toLowerCase())) continue;
     uit.add(woord);
   }
