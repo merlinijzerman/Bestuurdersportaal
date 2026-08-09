@@ -102,6 +102,7 @@ export default function DossierStatusStrip({
         <AuditExportKnop
           decisionId={decision.id}
           heeftSnapshot={heeftSnapshot}
+          afschriftAnker="afschriften"
         />
         <a
           href={`#${statusOvergangAnker}`}

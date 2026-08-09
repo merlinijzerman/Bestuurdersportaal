@@ -1,6 +1,6 @@
-# Auditdossier-afschrift (T6) — ontwerp (as-built, fase 1)
+# Auditdossier-afschrift (T6) — ontwerp (as-built, fase 1 + 2)
 
-> Bron van waarheid blijft de code + `supabase/migrations/`. Dit document beschrijft *wat en waarom* van de afschrift-module. Fase 2 (AI-leeswijzer) is voorbereid maar nog niet gebouwd.
+> Bron van waarheid blijft de code + `supabase/migrations/`. Dit document beschrijft *wat en waarom* van de afschrift-module. Fase 1 (deterministische bundel) en fase 2 (AI-leeswijzer) zijn beide gebouwd.
 
 ## Doel
 
@@ -59,10 +59,18 @@ Download = toegang tot het proces (RLS) **én** niet-bureaurol. De bureau-rol zi
 - **Worker:** `platform/lib/afschrift-orchestrator.ts` + `app/api/internal/afschrift-worker/route.ts`.
 - **API:** `app/api/procedures/[id]/afschrift/route.ts` (+ `afschriften/…` lijst/download/intrekken).
 - **UI:** `app/(dashboard)/procedures/_components/AfschriftenPaneel.tsx` + `StapPaneel.tsx` (stapinzage) + de procespagina.
-- **Tests:** `core/lib/afschrift-*.sanity.ts` (33 tests), `tests/cross-tenant/afschrift-toegang.test.ts` (8 tests).
+- **Tests:** `core/lib/afschrift-*.sanity.ts` + `afschrift-guardrail.sanity.ts` (41 tests), `tests/cross-tenant/afschrift-toegang.test.ts` (9 tests).
+
+## Fase 2 — AI-leeswijzer (besluit [[decisions/0150]])
+
+- **Concept-route** `POST /afschrift/concept` (user-RLS + bureau-403 + rate-limit `afschrift_concept`): bouwt de feitenkaart, roept Anthropic (`claude-sonnet-4-5`) aan op **uitsluitend de feitenkaart**, en past de **guardrail** toe.
+- **Guardrail** `core/lib/afschrift-guardrail.ts`: elke datum/getal/eigennaam in de §2–4-tekst moet in de feitenkaart voorkomen; anders weigeren → sjabloon. Lege key / call-fout / afkeuring → sjabloon, nooit een fout naar de gebruiker.
+- **Reviewstap:** bewerkbaar tussenscherm (concept tonen → redigeren → "Vaststellen en afschrift aanmaken"). De vastgestelde tekst (`ai_leeswijzer_tekst`, migratie `2026_08_09_afschrift_ai_tekst.sql`) gaat naar de worker; de DB-CHECK borgt dat `gereed` vaststelling vereist bij AI-tekst.
+- **Herkomst:** §6 draagt bij een AI-leeswijzer het herkomstblok; het statuskader wisselt. §1/§5/§6 blijven deterministisch — een diff fase1↔fase2 raakt alleen §2–4 + statuskader.
+- **Export-UX:** de bestaande "Exporteer auditdossier"-knop houdt de snelle HTML/JSON-export én kreeg een actie "Volledig dossier vastleggen (afschrift) →" die het Afschriften-paneel opent.
 
 ## Openstaand
 
-- Fase 2 (AI-leeswijzer §2–4 + guardrail + vaststelling, ADR-4/0150).
 - DB-laag cross-tenant SQL-check onder échte RLS (`supabase/checks/`), en de handmatige bundelverificatie na deploy.
 - AVG/bewaartermijn (privacyfunctionaris), fondssjabloon leeswijzer (afhankelijk van T5-A6).
+- `ai-governance-reviewer` op laag C (aanbevolen vóór merge van fase 2).

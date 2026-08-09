@@ -23,6 +23,7 @@ const lees = (...p: string[]) => readFileSync(join(hier, "..", "..", ...p), "utf
 
 const USER_ROUTES: { pad: string[]; wat: string }[] = [
   { pad: ["app", "api", "procedures", "[id]", "afschrift", "route.ts"], wat: "aanmaken" },
+  { pad: ["app", "api", "procedures", "[id]", "afschrift", "concept", "route.ts"], wat: "concept (fase 2)" },
   { pad: ["app", "api", "procedures", "[id]", "afschriften", "route.ts"], wat: "lijst" },
   { pad: ["app", "api", "procedures", "[id]", "afschriften", "[afschriftId]", "download", "route.ts"], wat: "download" },
   { pad: ["app", "api", "procedures", "[id]", "afschriften", "[afschriftId]", "route.ts"], wat: "intrekken" },
@@ -46,12 +47,13 @@ test("AFS-1 — elke user-route gebruikt createServerSupabase (RLS), niet de ser
 
 // ── (2) Bureau-gate op genereren én downloaden (ontwerpbeslissing 4) ────────
 
-test("AFS-2 — aanmaken en downloaden weigeren de bureau-rol server-side met 403", () => {
-  for (const naam of ["afschrift", "download"]) {
-    const pad =
-      naam === "afschrift"
-        ? ["app", "api", "procedures", "[id]", "afschrift", "route.ts"]
-        : ["app", "api", "procedures", "[id]", "afschriften", "[afschriftId]", "download", "route.ts"];
+test("AFS-2 — aanmaken, concept en downloaden weigeren de bureau-rol server-side met 403", () => {
+  const routes: Record<string, string[]> = {
+    afschrift: ["app", "api", "procedures", "[id]", "afschrift", "route.ts"],
+    concept: ["app", "api", "procedures", "[id]", "afschrift", "concept", "route.ts"],
+    download: ["app", "api", "procedures", "[id]", "afschriften", "[afschriftId]", "download", "route.ts"],
+  };
+  for (const [naam, pad] of Object.entries(routes)) {
     const bron = lees(...pad);
     assert.ok(bron.includes("isBureauRol("), `${naam}: bureau-gate ontbreekt`);
     assert.match(
@@ -60,6 +62,15 @@ test("AFS-2 — aanmaken en downloaden weigeren de bureau-rol server-side met 40
       `${naam}: weigert niet met 403`
     );
   }
+});
+
+test("AFS-9 — de concept-route valt terug op het sjabloon bij lege key/guardrail (geen fout naar gebruiker)", () => {
+  const bron = lees("app", "api", "procedures", "[id]", "afschrift", "concept", "route.ts");
+  assert.ok(bron.includes("bouwSjabloonProza"), "geen sjabloonterugval");
+  assert.ok(bron.includes("toetsLeeswijzerTegenFeitenkaart"), "guardrail niet toegepast");
+  assert.ok(bron.includes("process.env.ANTHROPIC_API_KEY"), "geen lege-key-afhandeling");
+  // Bij lege key: sjabloon + aiGebruikt=false, geen throw.
+  assert.match(bron, /!process\.env\.ANTHROPIC_API_KEY[\s\S]{0,200}?aiGebruikt: false/);
 });
 
 // ── (3) De host↔fonds-guard staat op de muterende/gevoelige routes ──────────

@@ -44,6 +44,10 @@ export const LIMIETEN = {
   stuurinfo_upload: { endpoint: "stuurinfo_upload", limiet: 20, venster: "1 hour" },
   voorbereiding: { endpoint: "voorbereiding", limiet: 30, venster: "1 hour" },
   besluit_concept: { endpoint: "besluit_concept", limiet: 30, venster: "1 hour" },
+  // T6 fase 2 — conceptleeswijzer voor het auditdossier-afschrift: één
+  // Anthropic-call per aanroep op de feitenkaart. 20/uur is ruim voor
+  // herhaald genereren/redigeren.
+  afschrift_concept: { endpoint: "afschrift_concept", limiet: 20, venster: "1 hour" },
 
   // ── M-06 (review 2026-07-30) — dure routes die géén limiet hadden ────────
   // Elk van deze routes doet per aanroep externe modelcalls (embedding, OCR,

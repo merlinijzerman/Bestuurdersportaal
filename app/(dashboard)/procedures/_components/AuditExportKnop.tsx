@@ -16,6 +16,10 @@ interface Props {
       één snapshot bestaat. Default true (de UI laat 'm zien; bij
       ontbreken geeft de API een nette 404 terug). */
   heeftSnapshot?: boolean;
+  /** T6: anker van het Afschriften-paneel. Gezet ⇒ toon onderin de dropdown
+      de actie "Volledig dossier vastleggen (afschrift)" die daarnaartoe springt.
+      De snelle HTML/JSON-export (per besluit, geen vastlegging) blijft bestaan. */
+  afschriftAnker?: string;
 }
 
 interface Optie {
@@ -29,6 +33,9 @@ interface Optie {
   hint?: string;
 }
 
+// JSON-inzage bewust verwijderd (verzoek 2026-08-09): een bestuurder heeft geen
+// machine-JSON nodig, en het volledige, machine-leesbare dossier zit in het
+// afschrift (MANIFEST.json + 03_Auditlog.json). Hier alleen de snelle HTML-inzage.
 const BASIS_OPTIES: Optie[] = [
   {
     label: "HTML — actuele toestand",
@@ -36,13 +43,6 @@ const BASIS_OPTIES: Optie[] = [
     formaat: "html",
     doel: "_blank",
     hint: "Print-vriendelijk, opent in nieuw tabblad",
-  },
-  {
-    label: "JSON — actuele toestand",
-    versie: "actueel",
-    formaat: "json",
-    doel: "download",
-    hint: "Download voor archief of machine-consumption",
   },
 ];
 
@@ -54,17 +54,12 @@ const SNAPSHOT_OPTIES: Optie[] = [
     doel: "_blank",
     hint: "Bevroren toestand bij besluitvorming",
   },
-  {
-    label: "JSON — besluitmoment-snapshot",
-    versie: "besluitmoment",
-    formaat: "json",
-    doel: "download",
-  },
 ];
 
 export default function AuditExportKnop({
   decisionId,
   heeftSnapshot = true,
+  afschriftAnker,
 }: Props) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -131,6 +126,22 @@ export default function AuditExportKnop({
               );
             })}
           </ul>
+          {/* T6: het volledige, procesbrede dossier als permanent vastgelegde
+              bundel — een aparte, zwaardere actie dan de snelle export hierboven. */}
+          {afschriftAnker && (
+            <a
+              href={`#${afschriftAnker}`}
+              onClick={() => setOpen(false)}
+              className="block px-3 py-2.5 border-t border-line bg-app-bg hover:bg-app-line/40 text-left"
+            >
+              <div className="text-sm font-medium text-accent-ink">
+                Volledig dossier vastleggen (afschrift) →
+              </div>
+              <div className="text-[11px] text-muted mt-0.5">
+                Hele proces als permanente, gezipte bundel met leeswijzer
+              </div>
+            </a>
+          )}
           {!heeftSnapshot && (
             <div className="px-3 py-2 text-[11px] text-muted italic border-t border-line bg-app-bg">
               Snapshot-versies verschijnen zodra er een audit-snapshot is

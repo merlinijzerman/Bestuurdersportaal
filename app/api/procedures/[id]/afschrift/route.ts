@@ -13,6 +13,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { beoordeelRouteHostToegang } from "@/core/lib/tenant-route-guard";
 import { isBureauRol } from "@/core/lib/bureau-gate";
+import { sha256Hex } from "@/core/lib/afschrift-manifest";
+import { AFSCHRIFT_AI_MODEL, AFSCHRIFT_PROMPTVERSIE } from "@/core/lib/afschrift-ai-config";
 
 export const dynamic = "force-dynamic";
 
@@ -71,12 +73,35 @@ export async function POST(
     const body = (await req.json().catch(() => ({}))) as {
       aanleiding?: unknown;
       versie?: unknown;
+      leeswijzerTekst?: unknown;
+      aiLeeswijzer?: unknown;
     };
     const aanleiding =
       typeof body.aanleiding === "string" && body.aanleiding.trim()
         ? body.aanleiding.trim().slice(0, 2000)
         : null;
     const versie: Versie = body.versie === "besluitmoment" ? "besluitmoment" : "actueel";
+
+    // Fase 2: optionele vastgestelde leeswijzertekst (§2–4). Ontbreekt die, dan
+    // bouwt de worker het deterministische sjabloon (fase-1-gedrag).
+    const lw = body.leeswijzerTekst as
+      | { hoeVerlopen?: unknown; watVastgelegd?: unknown; bijzonderheden?: unknown }
+      | null
+      | undefined;
+    const leeswijzerTekst =
+      lw && typeof lw.hoeVerlopen === "string" && typeof lw.watVastgelegd === "string" && typeof lw.bijzonderheden === "string"
+        ? {
+            hoeVerlopen: lw.hoeVerlopen.slice(0, 8000),
+            watVastgelegd: lw.watVastgelegd.slice(0, 8000),
+            bijzonderheden: lw.bijzonderheden.slice(0, 8000),
+          }
+        : null;
+    const aiLeeswijzer = leeswijzerTekst !== null && body.aiLeeswijzer === true;
+    // Provenance SERVER-SIDE (AI-governance-review M2): model/promptversie komen
+    // uit de gedeelde config, niet uit de client-body — anders is het herkomstblok
+    // in §6 spoofbaar.
+    const aiModel = aiLeeswijzer ? AFSCHRIFT_AI_MODEL : null;
+    const aiPromptversie = aiLeeswijzer ? AFSCHRIFT_PROMPTVERSIE : null;
 
     // Verouderingsanker: laatste governance-event van de besluiten van dit proces
     // + laatste procedure_log-regel. dossier_stand_op = het laatste bekende moment.
@@ -124,6 +149,18 @@ export async function POST(
         dossier_stand_event_id: dossierStandEventId,
         dossier_stand_op: dossierStandOp,
         aangemaakt_door: user.id,
+        // Fase 2: de door de gebruiker vastgestelde leeswijzer (§2–4). Ook bij
+        // een sjabloon-terugval (aiLeeswijzer=false) bewaren we de — mogelijk
+        // geredigeerde — tekst, zodat wat de gebruiker zag ook in de bundel komt.
+        ai_leeswijzer: aiLeeswijzer,
+        ai_leeswijzer_tekst: leeswijzerTekst,
+        ai_model: aiModel,
+        ai_promptversie: aiPromptversie,
+        ai_tekst_hash: leeswijzerTekst ? sha256Hex(JSON.stringify(leeswijzerTekst)) : null,
+        // De vaststelling (mens-in-de-lus) leggen we vast zodra er een tekst is
+        // vastgesteld — de CHECK-constraint eist dit bij ai_leeswijzer=true.
+        ai_vastgesteld_door: leeswijzerTekst ? user.id : null,
+        ai_vastgesteld_op: leeswijzerTekst ? new Date().toISOString() : null,
       })
       .select("id")
       .single();

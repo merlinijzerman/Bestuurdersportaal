@@ -910,6 +910,7 @@ export default async function ProcedureDetailPage({
             <UitklapbaarPaneel
               titel="Afschriften"
               status="neutraal"
+              ankerId="afschriften"
               samenvatting="Vastgelegde, downloadbare auditbundels van dit proces"
             >
               <AfschriftenPaneel

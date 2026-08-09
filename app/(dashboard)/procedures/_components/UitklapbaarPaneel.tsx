@@ -16,7 +16,7 @@
 //     <AannamesPaneel … />
 //   </UitklapbaarPaneel>
 
-import { useState, type ReactNode } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 
 export type PaneelStatus = "voldoet" | "aandacht" | "neutraal";
 
@@ -67,6 +67,21 @@ export default function UitklapbaarPaneel({
   children,
 }: Props) {
   const [open, setOpen] = useState(defaultOpen);
+
+  // Open het paneel wanneer er via een #anker naartoe wordt genavigeerd (bv.
+  // vanuit de export-knop "Volledig dossier"), en scroll het in beeld.
+  useEffect(() => {
+    if (!ankerId) return;
+    const check = () => {
+      if (window.location.hash === `#${ankerId}`) {
+        setOpen(true);
+        document.getElementById(ankerId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    };
+    check();
+    window.addEventListener("hashchange", check);
+    return () => window.removeEventListener("hashchange", check);
+  }, [ankerId]);
 
   return (
     <div id={ankerId}>

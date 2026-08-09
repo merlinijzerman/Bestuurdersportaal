@@ -50,6 +50,10 @@ export default function AfschriftenPaneel({
   const [aanleiding, setAanleiding] = useState("");
   const [versie, setVersie] = useState<"actueel" | "besluitmoment">("actueel");
   const [bezig, setBezig] = useState(false);
+  // Fase 2: conceptleeswijzer-tussenscherm.
+  const [concept, setConcept] = useState<{ hoeVerlopen: string; watVastgelegd: string; bijzonderheden: string } | null>(null);
+  const [conceptMeta, setConceptMeta] = useState<{ aiGebruikt: boolean; model: string | null; promptversie: string | null; reden?: string } | null>(null);
+  const [conceptBezig, setConceptBezig] = useState(false);
   const [intrekId, setIntrekId] = useState<string | null>(null);
   const [intrekReden, setIntrekReden] = useState("");
   const [traag, setTraag] = useState(false);
@@ -95,21 +99,57 @@ export default function AfschriftenPaneel({
     };
   }, [laadLijst]);
 
-  async function afschriftAanmaken() {
+  // Stap 1: conceptleeswijzer opstellen (AI op de feitenkaart, of sjabloon).
+  async function conceptOpstellen() {
+    setConceptBezig(true);
+    setFout(null);
+    try {
+      const res = await fetch(`/api/procedures/${procedureId}/afschrift/concept`, { method: "POST" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Concept opstellen mislukt.");
+      }
+      const data = (await res.json()) as {
+        tekst: { hoeVerlopen: string; watVastgelegd: string; bijzonderheden: string };
+        aiGebruikt: boolean;
+        model: string | null;
+        promptversie: string | null;
+        reden?: string;
+      };
+      setConcept(data.tekst);
+      setConceptMeta({ aiGebruikt: data.aiGebruikt, model: data.model, promptversie: data.promptversie, reden: data.reden });
+    } catch (e) {
+      setFout(e instanceof Error ? e.message : "Concept opstellen mislukt.");
+    } finally {
+      setConceptBezig(false);
+    }
+  }
+
+  // Stap 2: de (geredigeerde) leeswijzer vaststellen en het afschrift bouwen.
+  async function vaststellenEnAanmaken() {
+    if (!concept || !conceptMeta) return;
     setBezig(true);
     setFout(null);
     try {
       const res = await fetch(`/api/procedures/${procedureId}/afschrift`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ aanleiding: aanleiding.trim() || null, versie }),
+        body: JSON.stringify({
+          aanleiding: aanleiding.trim() || null,
+          versie,
+          leeswijzerTekst: concept,
+          // aiLeeswijzer geeft door dat AI de basis was; model/promptversie leidt
+          // de server zelf af (provenance niet client-gestuurd).
+          aiLeeswijzer: conceptMeta.aiGebruikt,
+        }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || "Aanmaken mislukt.");
       }
       setAanleiding("");
-      // Poll-budget resetten zodat de nieuwe bouw weer gevolgd wordt.
+      setConcept(null);
+      setConceptMeta(null);
       pollCount.current = 0;
       setTraag(false);
       await laadLijst();
@@ -145,8 +185,8 @@ export default function AfschriftenPaneel({
 
   return (
     <div className="bg-white border border-line rounded-xl p-5 space-y-4">
-      {/* Genereerflow */}
-      {!currentUserIsBureau && (
+      {/* Genereerflow — tweetraps: invoer → conceptleeswijzer → vaststellen */}
+      {!currentUserIsBureau && concept === null && (
         <div className="border border-line rounded-lg p-3 bg-app-bg space-y-2">
           <div className="text-xs uppercase tracking-wide text-muted font-semibold">
             Nieuw afschrift
@@ -168,16 +208,77 @@ export default function AfschriftenPaneel({
               <option value="besluitmoment">Besluitmoment (bevroren snapshot)</option>
             </select>
             <button
-              onClick={afschriftAanmaken}
-              disabled={bezig}
+              onClick={conceptOpstellen}
+              disabled={conceptBezig}
               className="text-xs px-3 py-1.5 bg-accent text-white rounded hover:bg-accent-ink disabled:opacity-50"
             >
-              {bezig ? "Bezig…" : "Afschrift aanmaken"}
+              {conceptBezig ? "Concept opstellen…" : "Concept leeswijzer opstellen →"}
             </button>
           </div>
           <p className="text-[11px] text-muted">
-            Het afschrift wordt op de achtergrond gebouwd en verschijnt hieronder zodra het gereed is.
+            Je stelt eerst de begeleidende leeswijzer op, bekijkt en redigeert die, en stelt hem
+            dan vast. Daarna wordt het afschrift op de achtergrond gebouwd.
           </p>
+        </div>
+      )}
+
+      {/* Conceptleeswijzer — bewerkbaar tussenscherm (fase 2, G4) */}
+      {!currentUserIsBureau && concept !== null && conceptMeta !== null && (
+        <div className="border border-accent/40 rounded-lg p-3 bg-white space-y-3">
+          <div className="flex items-start justify-between gap-2 flex-wrap">
+            <div className="text-xs uppercase tracking-wide text-accent-ink font-semibold">
+              Conceptleeswijzer — bekijk en redigeer
+            </div>
+            <span
+              className={`text-[11px] px-2 py-0.5 rounded ${
+                conceptMeta.aiGebruikt
+                  ? "bg-accent-tint text-accent-ink"
+                  : "bg-app-bg border border-line text-muted"
+              }`}
+            >
+              {conceptMeta.aiGebruikt ? "Voorbereid met AI" : "Deterministisch sjabloon"}
+            </span>
+          </div>
+          {conceptMeta.reden && (
+            <p className="text-[11px] text-muted italic">{conceptMeta.reden}</p>
+          )}
+          <p className="text-[11px] text-muted">
+            Deze tekst is <strong>toelichtend en niet-authoritatief</strong>. Leidend blijven de
+            brondocumenten en het auditdossier. Wat je hier vaststelt, komt in de bundel.
+          </p>
+
+          {([
+            ["hoeVerlopen", "2. Hoe het proces is verlopen"],
+            ["watVastgelegd", "3. Wat is vastgelegd"],
+            ["bijzonderheden", "4. Bijzonderheden en afwijkingen"],
+          ] as const).map(([veld, label]) => (
+            <div key={veld}>
+              <label className="block text-[11px] font-semibold text-ink mb-1">{label}</label>
+              <textarea
+                rows={4}
+                value={concept[veld]}
+                onChange={(e) => setConcept({ ...concept, [veld]: e.target.value })}
+                className="w-full border border-line rounded px-2 py-1.5 text-sm focus:border-accent outline-none resize-y"
+              />
+            </div>
+          ))}
+
+          <div className="flex items-center justify-end gap-2 pt-1">
+            <button
+              onClick={() => { setConcept(null); setConceptMeta(null); }}
+              disabled={bezig}
+              className="text-xs px-3 py-1.5 border border-line rounded hover:border-accent disabled:opacity-50"
+            >
+              Opnieuw
+            </button>
+            <button
+              onClick={vaststellenEnAanmaken}
+              disabled={bezig}
+              className="text-xs px-3 py-1.5 bg-accent text-white rounded hover:bg-accent-ink disabled:opacity-50"
+            >
+              {bezig ? "Bezig…" : "Vaststellen en afschrift aanmaken"}
+            </button>
+          </div>
         </div>
       )}
 

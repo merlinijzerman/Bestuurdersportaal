@@ -54,6 +54,13 @@ interface AfschriftRow {
   gebouwd_onder_rol: string | null;
   aangemaakt_op: string;
   aangemaakt_door: string | null;
+  // Fase 2 — de vastgestelde AI/sjabloon-leeswijzer (§2–4) + herkomst.
+  ai_leeswijzer: boolean;
+  ai_leeswijzer_tekst: { hoeVerlopen: string; watVastgelegd: string; bijzonderheden: string } | null;
+  ai_model: string | null;
+  ai_promptversie: string | null;
+  ai_tekst_hash: string | null;
+  ai_vastgesteld_op: string | null;
 }
 
 interface WorkerResultaat {
@@ -232,6 +239,20 @@ async function bouwEnBewaarAfschrift(svc: SupabaseClient, row: AfschriftRow): Pr
     gebouwdOnderRol: row.gebouwd_onder_rol,
     generatorVersie: GENERATOR_VERSIE,
   };
+  // Fase 2: vastgestelde leeswijzer (§2–4) + herkomstblok. Leeg ⇒ sjabloon.
+  const proza = row.ai_leeswijzer_tekst ?? null;
+  const herkomst =
+    row.ai_leeswijzer && row.ai_leeswijzer_tekst
+      ? {
+          model: row.ai_model ?? "onbekend",
+          promptversie: row.ai_promptversie ?? "onbekend",
+          gegenereerdOp: row.aangemaakt_op,
+          tekstHash: row.ai_tekst_hash ?? "",
+          vastgesteldDoor: aanvragerNaam ?? "onbekend",
+          vastgesteldOp: row.ai_vastgesteld_op ?? row.aangemaakt_op,
+        }
+      : null;
+
   const bron: AfschriftBron = { context, decisions, procedureLog };
   const resultaat = await bouwBundel({
     bron,
@@ -240,6 +261,8 @@ async function bouwEnBewaarAfschrift(svc: SupabaseClient, row: AfschriftRow): Pr
     bijlagen,
     besluitvragen,
     extraWaarschuwingen,
+    proza,
+    herkomst,
   });
 
   // ── 5. Opslaan (pad = <fonds_id>/<procedure_id>/<afschrift_id>.zip) ─────────

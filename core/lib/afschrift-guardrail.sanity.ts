@@ -3,9 +3,10 @@
 //
 //  De guardrail is de compliance-borging van laag C: hij WEIGERT AI-tekst met
 //  een datum/getal/eigennaam die niet in de feitenkaart voorkomt (AC fase-2 1).
-//  Deze tests borgen dat faithful tekst wordt geaccepteerd en dat verzonnen
-//  feiten (jaartal, getal, naam) worden gevangen — zonder dat legitieme
-//  besluitcodes of het procesonderwerp vals-positief worden afgekeurd.
+//  Deze tests borgen dat faithful tekst wordt geaccepteerd én dat de bypasses
+//  uit de AI-governance-review gevangen worden: voluit geschreven getallen (C1),
+//  verzonnen volledige datums (C2), hoofdletterafkortingen (H1), en eigennamen
+//  aan het zinsbegin (H2) — zonder vals-positieven op codes/onderwerp/maanden.
 //
 //  Geen testframework; standalone. Uitvoeren: npx tsx core/lib/afschrift-guardrail.sanity.ts
 // ============================================================
@@ -65,56 +66,77 @@ test("faithful tekst met alleen feitenkaart-feiten wordt geaccepteerd", () => {
 });
 
 test("een verzonnen jaartal (2019) wordt geweigerd", () => {
-  const r = toetsLeeswijzerTegenFeitenkaart(
-    "Het beleid loopt al sinds 2019 en is nu herzien.",
-    fk()
-  );
+  const r = toetsLeeswijzerTegenFeitenkaart("Het beleid loopt al sinds 2019 en is nu herzien.", fk());
   assert.equal(r.ok, false);
   assert.ok(r.overtredingen.some((o) => o.includes('"2019"')));
 });
 
-test("een verzonnen getal (12 aannames i.p.v. 7) wordt geweigerd", () => {
+test("een verzonnen getal in cijfers (12 aannames) wordt geweigerd", () => {
   const r = toetsLeeswijzerTegenFeitenkaart("Er zijn 12 aannames vastgelegd.", fk());
   assert.equal(r.ok, false);
   assert.ok(r.overtredingen.some((o) => o.includes('"12"')));
 });
 
-test("een verzonnen eigennaam (Jan Jansen) wordt geweigerd", () => {
+test("C1 — een VOLUIT geschreven verzonnen getal (twaalf) wordt geweigerd", () => {
+  const r = toetsLeeswijzerTegenFeitenkaart("Er zijn twaalf aannames vastgelegd.", fk());
+  assert.equal(r.ok, false, "voluit geschreven getal moet ook gevangen worden");
+  assert.ok(r.overtredingen.some((o) => o.toLowerCase().includes("twaalf")));
+});
+
+test("C2 — een verzonnen VOLLEDIGE datum (5 mei 2026) wordt geweigerd", () => {
+  // 5, mei en 2026 komen elk los in de feitenkaart voor, maar niet als deze datum.
+  const r = toetsLeeswijzerTegenFeitenkaart("Het besluit is genomen op 5 mei 2026.", fk());
+  assert.equal(r.ok, false, "hele datum moet kloppen, niet alleen de losse cijfers");
+  assert.ok(r.overtredingen.some((o) => o.includes("5 mei 2026")));
+});
+
+test("H1 — een hoofdletterafkorting buiten de feitenkaart (DNB) wordt geweigerd", () => {
+  const r = toetsLeeswijzerTegenFeitenkaart("DNB keurde de wijziging goed.", fk());
+  assert.equal(r.ok, false);
+  assert.ok(r.overtredingen.some((o) => o.includes("DNB")));
+});
+
+test("H2 — een eigennaam aan het ZINSBEGIN (Jansen) wordt geweigerd", () => {
   const r = toetsLeeswijzerTegenFeitenkaart(
-    "Het besluit is genomen op voordracht van Jan Jansen.",
+    "De onderbouwing is vastgelegd. Jansen adviseerde het bestuur.",
     fk()
   );
+  assert.equal(r.ok, false, "een naam aan het zinsbegin mag niet ongezien passeren");
+  assert.ok(r.overtredingen.some((o) => o.toLowerCase().includes("jansen")));
+});
+
+test("een verzonnen eigennaam mid-zin (Jan Jansen) wordt geweigerd", () => {
+  const r = toetsLeeswijzerTegenFeitenkaart("Het besluit is genomen op voordracht van Jan Jansen.", fk());
   assert.equal(r.ok, false);
   assert.ok(r.overtredingen.some((o) => o.toLowerCase().includes("jansen")));
 });
 
 test("een legitieme besluitcode uit de feitenkaart is GEEN overtreding", () => {
-  const namen = eigennamenIn("Zie besluit B-2026-001 voor de onderbouwing.");
-  assert.ok(namen.includes("B-2026-001"), "code moet als kandidaat herkend worden");
+  const { codes } = eigennamenIn("Zie besluit B-2026-001 voor de onderbouwing.");
+  assert.ok(codes.includes("B-2026-001"), "code moet als kandidaat herkend worden");
   const r = toetsLeeswijzerTegenFeitenkaart("Zie besluit B-2026-001 voor de onderbouwing.", fk());
   assert.ok(r.ok, `code uit de feitenkaart mag niet vals-positief zijn: ${r.overtredingen.join("; ")}`);
 });
 
 test("woorden uit het procesonderwerp (Beleggingsbeleid) zijn geen overtreding", () => {
   const r = toetsLeeswijzerTegenFeitenkaart(
-    "De Wijziging van het Beleggingsbeleid is zorgvuldig gedocumenteerd.",
+    "De Wijziging van het Beleggingsbeleid is gedocumenteerd.",
     fk()
   );
-  // "Wijziging" en "Beleggingsbeleid" komen in procedureTitel voor.
   assert.ok(r.ok, `verwacht ok, kreeg: ${r.overtredingen.join("; ")}`);
 });
 
-test("zinsbegin-hoofdletters worden niet als eigennaam aangezien", () => {
-  const namen = eigennamenIn("Het proces verliep goed. De fase was afgerond. Vervolgens sloot men af.");
-  assert.deepEqual(namen, [], `zinsbegin-woorden mogen niet gemarkeerd worden, kreeg: ${namen.join(", ")}`);
+test("veilige zinsbegin-vocabulaire (De/Het/Vervolgens) is geen eigennaam", () => {
+  const { namen } = eigennamenIn("Het proces verliep. De fase was afgerond. Vervolgens sloot men af.");
+  assert.deepEqual(namen, [], `veilige woorden mogen niet gemarkeerd worden, kreeg: ${namen.join(", ")}`);
 });
 
-test("maandnamen zijn toegestane vocabulaire, ook mid-zin", () => {
+test("maandnamen zonder dag zijn toegestane vocabulaire", () => {
   const r = toetsLeeswijzerTegenFeitenkaart(
     "In maart 2026 begon de onderbouwing en in april 2026 werd besloten.",
     fk()
   );
-  assert.ok(r.ok, `maanden mogen niet als eigennaam falen: ${r.overtredingen.join("; ")}`);
+  assert.ok(r.ok, `maanden mogen niet als eigennaam/datum falen: ${r.overtredingen.join("; ")}`);
 });
 
 console.log(`\nafschrift-guardrail: ${n} tests groen.`);
