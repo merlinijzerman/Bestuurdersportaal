@@ -19,7 +19,8 @@ export const dynamic = "force-dynamic";
 // Bureau-rol-weigering: het afschrift bevat de bundel mét stemgedrag per
 // bestuurslid (stemmingen.uitslag), precies wat 2026_08_05_bestuursbureau_rol
 // voor deze rol afschermt. Zelfde boodschap als de auditdossier-route.
-export const AFSCHRIFT_BUREAU_WEIGERING =
+// LET OP: niet exporteren — Next.js weigert onbekende route-exports bij `next build`.
+const AFSCHRIFT_BUREAU_WEIGERING =
   "Het afschrift bevat het auditdossier met stemgedrag per bestuurslid en is daarom niet beschikbaar voor het bestuursbureau.";
 
 type Versie = "actueel" | "besluitmoment";
