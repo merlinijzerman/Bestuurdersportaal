@@ -426,6 +426,17 @@ export default async function ProcedureDetailPage({
         />
       )}
 
+      {/* Besluit 0151 — instap naar de AI-assistent in de context van dit dossier.
+          Opent /ai met een module-scope (proces); de reikwijdte + fase komen als
+          benoemde context mee en de gekoppelde bewijsstukken worden doorzocht. */}
+      <Link
+        href={`/ai?proces=${procedure.id}`}
+        className="inline-flex items-center gap-2 rounded-xl border border-accent bg-accent/5 px-4 py-2 text-sm font-semibold text-accent hover:bg-accent/10 transition-colors"
+      >
+        <span aria-hidden>✨</span>
+        Bespreek dit proces met de AI
+      </Link>
+
       {/* Header */}
       <div>
         <div className="flex items-center gap-2 mb-2 flex-wrap">

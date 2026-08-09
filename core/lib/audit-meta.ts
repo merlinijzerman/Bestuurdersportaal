@@ -107,12 +107,18 @@ export const META_BASIS = [
   "duur_model_ms",
   "tokens",
   "tokendekking",
+  // Besluit 0151 — TTFT-telemetrie (criterium 11).
+  "ttft_ms",
   // gemengde objecten: hun bron-/inhoudsleutels worden door SUB_NIVEAUS afgesplitst
   "scope",
   "invoer",
   "filters",
   "web",
   "markeringen",
+  // Besluit 0151 — module-scope: soort/validatie/blok_tekens zijn basis, de
+  // sleutels (procedure_id/risico_id/bron_ids) worden door SUB_NIVEAUS naar `bron`
+  // afgesplitst.
+  "module_scope",
 ] as const;
 
 /**
@@ -160,6 +166,9 @@ export const META_INHOUD = [
 export const SUB_NIVEAUS: Record<string, { bron?: string[]; inhoud?: string[] }> = {
   // document_ids = identiteit; titels = documenttitels (inhoud)
   scope: { bron: ["document_ids"], inhoud: ["titels"] },
+  // besluit 0151 — objectreferenties (procedure/risico) + gebruikte bron-ids zijn
+  // identiteit; soort/validatie/blok_tekens blijven basis (telemetrie/status)
+  module_scope: { bron: ["procedure_id", "risico_id", "bron_ids"] },
   // beurten/tekens zijn telemetrie; historie_hash is een vingerafdruk van de
   // gespreksinhoud en hoort daarom bij het verwijderbare deel
   invoer: { inhoud: ["historie_hash"] },

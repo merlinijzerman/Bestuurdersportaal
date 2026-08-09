@@ -528,6 +528,21 @@ export interface RetrievalMeta {
     batches?: number;
     afgekapt?: boolean;
   };
+  // Besluit 0151 — AI-modulecontext. Aanwezig zodra een vraag in de context van een
+  // module (procesdossier, risicomatrix of één risico) is gesteld. `procedure_id`/
+  // `risico_id`/`bron_ids` zijn IDENTITEIT (audit-meta: `bron`); `blok_tekens` en
+  // `validatie` zijn telemetrie/status (`basis`). Geen documenttekst.
+  module_scope?: {
+    soort: "proces" | "risicomatrix" | "risico";
+    procedure_id?: string;
+    risico_id?: string;
+    validatie: "ok";
+    bron_ids?: string[];
+    blok_tekens?: number;
+  };
+  // Besluit 0151 (criterium 11) — tijd tot eerste zichtbare token (ms), voor de
+  // token-/latentiemeting per module-scope-soort.
+  ttft_ms?: number;
   // Increment G — de toegepaste retrieval-filters (status/bronstatus/modus/
   // peildatum/bronsoort/procesinstantie). Append-only auditspoor (test #6).
   filters?: {

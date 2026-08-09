@@ -152,6 +152,17 @@ interface DocumentScope {
   algemene_kennis?: boolean;
 }
 
+// Besluit 0151 — AI-modulecontext. De client houdt alleen de sleutel + een label
+// voor de chip bij; de server resolveert de inhoud onder RLS. `risicomatrix` is de
+// enige risico-ingang; `risico` ontstaat door in de chat in te zoomen (verdiep-chip).
+interface ModuleScope {
+  soort: "proces" | "risicomatrix" | "risico";
+  procedure_id?: string;
+  risico_id?: string;
+  // Alleen voor de chip/onderbouwing; niet naar de server (die kent de titel al).
+  label: string;
+}
+
 // Eén suggestie in de @-mention-typeahead.
 interface DocSuggestie {
   id: string;
@@ -323,6 +334,11 @@ export default function AssistentClient({
   // toelichting wordt per beurt server-side opgehaald aan de hand van dit id.
   const [agendapuntContext, setAgendapuntContext] =
     useState<AgendapuntContext | null>(null);
+  // Besluit 0151 — module-scope (procesdossier / risicomatrix / één risico) +
+  // de risico's van het fonds voor de "verdiep dit risico"-chips (RLS-lijst,
+  // alleen id+titel; de inhoud komt server-side per beurt).
+  const [moduleScope, setModuleScope] = useState<ModuleScope | null>(null);
+  const [risicoLijst, setRisicoLijst] = useState<{ id: string; titel: string }[]>([]);
   // @-mention-typeahead op documenttitels.
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionQuery, setMentionQuery] = useState("");
@@ -934,6 +950,53 @@ export default function AssistentClient({
           console.error("Scope uit ?agendapunt= zetten mislukt:", e);
         }
 
+        // Besluit 0151 — module-scope-ingang. /ai?proces=<id> opent de chat in de
+        // context van dat dossier; /ai?risicomatrix=1 in de context van de hele
+        // risicomatrix (de enige risico-ingang). De inhoud resolveert de server
+        // per beurt onder RLS; hier zetten we alleen de sleutel + een label voor de
+        // chip. Een nieuw gesprek starten zodat de scope niet over een bestaand
+        // gesprek heen valt (gelijk aan ?doc=/?agendapunt=).
+        try {
+          const params = new URLSearchParams(window.location.search);
+          const procesParam = params.get("proces");
+          const risicomatrixParam = params.get("risicomatrix");
+          if (procesParam) {
+            const { data: p } = await supabase
+              .from("procedures")
+              .select("id, titel")
+              .eq("id", procesParam)
+              .maybeSingle();
+            if (p?.id) {
+              gesprekId.current = null;
+              gesprekBestaatInDb.current = false;
+              setBerichten([{ rol: "ai", tekst: personalTekst }]);
+              setModuleScope({
+                soort: "proces",
+                procedure_id: p.id as string,
+                label: (p.titel as string) || "dit proces",
+              });
+            }
+          } else if (risicomatrixParam) {
+            gesprekId.current = null;
+            gesprekBestaatInDb.current = false;
+            setBerichten([{ rol: "ai", tekst: personalTekst }]);
+            setModuleScope({ soort: "risicomatrix", label: "de risicomatrix" });
+            // De risico's van het fonds voor de "verdiep dit risico"-chips (RLS).
+            const { data: rs } = await supabase
+              .from("risicos")
+              .select("id, titel")
+              .eq("status", "actief")
+              .order("niveau", { ascending: false });
+            setRisicoLijst(
+              (rs ?? [])
+                .filter((r): r is { id: string; titel: string } => typeof r?.id === "string")
+                .map((r) => ({ id: r.id, titel: r.titel || "risico" }))
+            );
+          }
+        } catch (e) {
+          console.error("Module-scope uit ?proces=/?risicomatrix= zetten mislukt:", e);
+        }
+
         // Ingreep 2 — module-ingang: /ai?intent=fonds&herkomst=<module>. Zet de
         // bevestigde bron-intentie voor dit gesprek. Bewust NA de ?doc=/?agendapunt=-
         // takken: die zetten een document-scope, en dan negeert de route de
@@ -1121,6 +1184,18 @@ export default function AssistentClient({
           agendapunt_context: agendapuntContext
             ? { id: agendapuntContext.id, titel: agendapuntContext.titel }
             : undefined,
+          // Besluit 0151 — module-scope: alleen de sleutel; de route resolveert de
+          // inhoud onder RLS en zet daarbij (net als document_scope) de intent-
+          // heuristiek uit. De client-titel wordt niet vertrouwd voor de prompt.
+          module_scope: moduleScope
+            ? {
+                soort: moduleScope.soort,
+                ...(moduleScope.procedure_id
+                  ? { procedure_id: moduleScope.procedure_id }
+                  : {}),
+                ...(moduleScope.risico_id ? { risico_id: moduleScope.risico_id } : {}),
+              }
+            : undefined,
           // P2 Deel B — de doorgrond-parameters; de route stelt hieruit de
           // instructie samen en logt ze in retrieval_meta (criterium 13).
           doorgrond: opties?.doorgrond
@@ -1263,6 +1338,14 @@ export default function AssistentClient({
           bron_intent_override?: boolean;
           // Contextbesef (besluit 0090) — of de portaalstand is meegewogen.
           portaalstand_gebruikt?: boolean;
+          // Besluit 0151 — de actieve module-scope (proces/risicomatrix/risico) voor
+          // het onderbouwingspaneel, onderscheiden van documentbronnen.
+          module_scope?: {
+            soort: "proces" | "risicomatrix" | "risico";
+            procedure_id?: string;
+            risico_id?: string;
+            bron_ids?: string[];
+          } | null;
           // 30-07-2026 — de actualiteitsfilter nam alle treffers weg terwijl er wél
           // niet-vastgestelde fondsstukken zijn: aanbod om ze mee te nemen.
           verbreding?: {
@@ -1363,6 +1446,13 @@ export default function AssistentClient({
             bronIntentOverride: evt.bron_intent_override ?? null,
             // Contextbesef (besluit 0090) — portaalstand als aparte aanduiding.
             portaalstandGebruikt: evt.portaalstand_gebruikt ?? null,
+            // Besluit 0151 — de gebruikte module-scope, apart van documentbronnen.
+            moduleScope: evt.module_scope
+              ? {
+                  soort: evt.module_scope.soort,
+                  bronnen: evt.module_scope.bron_ids?.length ?? 0,
+                }
+              : null,
             // Increment I-3 — web-retrieval is (nog) niet actief (Scenario B); de
             // model_knowledge-bronnen volgen in het 'done'-event (content-afhankelijk).
             webRetrievalActief: evt.web_retrieval_actief ?? false,
@@ -1788,6 +1878,9 @@ export default function AssistentClient({
     setInvoer("");
     setDocumentScope(null);
     setAgendapuntContext(null);
+    // Besluit 0151 — de module-scope + verdiep-lijst golden voor het vorige gesprek.
+    setModuleScope(null);
+    setRisicoLijst([]);
     setHerkomst(null); // ingreep 2 — de module-ingang gold voor het vorige gesprek
     setVrijeVraagOpen(false);
     sluitMention();
@@ -1907,7 +2000,10 @@ export default function AssistentClient({
     !scherpstelActief &&
     berichten.length <= 1 &&
     !documentScope &&
-    !agendapuntContext;
+    !agendapuntContext &&
+    // Besluit 0151 — bij een actieve module-scope tonen we direct het chatvenster
+    // (met scope-chip), niet het generieke startpunt.
+    !moduleScope;
 
   // De shell (core/components/DashboardShell) zet onder `md` een vaste topbalk
   // van 3.5rem en compenseert die met `pt-14`. `min-h-screen` op de <main> is
@@ -2602,6 +2698,80 @@ export default function AssistentClient({
                 </button>
               ))
             )}
+          </div>
+        )}
+
+        {/* Besluit 0151 — module-scope-chip + "verdiep dit risico"-chips. De scope
+            is zichtbaar als scope (onderscheiden van documentbronnen). Bij de
+            risicomatrix/één-risico kan de bestuurder in de chat inzoomen op één
+            risico; "hele risicomatrix" brengt de brede blik terug. */}
+        {moduleScope && (
+          <div className="mb-2 flex flex-col gap-2">
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="inline-flex items-center gap-2 max-w-full bg-accent-tint border border-accent/30 text-accent-ink text-xs rounded-full pl-3 pr-2 py-1">
+                <span className="truncate">
+                  {moduleScope.soort === "proces"
+                    ? `Proces: «${moduleScope.label}»`
+                    : moduleScope.soort === "risico"
+                      ? `Risico: «${moduleScope.label}»`
+                      : "Risicomatrix"}
+                </span>
+                <button
+                  onClick={() => {
+                    setModuleScope(null);
+                    setRisicoLijst([]);
+                  }}
+                  className="shrink-0 w-4 h-4 rounded-full bg-accent hover:bg-accent text-accent-ink flex items-center justify-center"
+                  aria-label="Modulecontext wissen"
+                  title="Context wissen — niet langer over deze module vragen"
+                >
+                  ✕
+                </button>
+              </span>
+              {moduleScope.soort === "risico" && (
+                <button
+                  onClick={() =>
+                    setModuleScope({ soort: "risicomatrix", label: "de risicomatrix" })
+                  }
+                  className="text-xs text-accent hover:text-accent-ink underline underline-offset-2"
+                >
+                  ← hele risicomatrix
+                </button>
+              )}
+            </div>
+            {/* Inzoomen op één risico (verdieping). Alleen bij een actieve risico-
+                scope en zolang de fondslijst is geladen. */}
+            {(moduleScope.soort === "risicomatrix" || moduleScope.soort === "risico") &&
+              risicoLijst.length > 0 && (
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[11px] text-muted">Verdiep:</span>
+                  {risicoLijst.map((r) => {
+                    const actief =
+                      moduleScope.soort === "risico" && moduleScope.risico_id === r.id;
+                    return (
+                      <button
+                        key={r.id}
+                        onClick={() =>
+                          setModuleScope({
+                            soort: "risico",
+                            risico_id: r.id,
+                            label: r.titel,
+                          })
+                        }
+                        aria-pressed={actief}
+                        className={`text-[11px] rounded-full px-2.5 py-1 border transition-colors ${
+                          actief
+                            ? "bg-accent text-white border-accent"
+                            : "border-line text-ink hover:border-accent"
+                        }`}
+                        title={`Inzoomen op «${r.titel}»`}
+                      >
+                        {r.titel.length > 34 ? `${r.titel.slice(0, 34)}…` : r.titel}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
           </div>
         )}
 

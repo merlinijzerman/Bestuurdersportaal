@@ -20,6 +20,21 @@ import {
 import { HAIKU_MODEL } from "@/core/lib/llm-modellen";
 import { weigerAlsModuleUit } from "@/core/lib/module-guard";
 import { valideerScope, type ScopeDocumentRij } from "@/core/lib/document-scope";
+import {
+  parseModuleScope,
+  bouwRisicomatrixBlok,
+  bouwRisicoBlok,
+  bouwProcesBlok,
+  type ModuleScope,
+  type ModuleScopeSoort,
+  type RisicoRij,
+  type RisicoLogRij,
+  type MaatregelRij,
+  type DecisionRij,
+  type StapRij,
+  type RequirementRij,
+  type BewijsRij,
+} from "@/core/lib/module-scope";
 import { bepaalVraagtype, schatTokens, kiesStrategie, maakBatches, bepaalAntwoordmodus, retrievalModusVoor, retrievalModusVoorVraag, bepaalInlineMeldingen, AFGEKAPT_MELDING, meldingNietVastgesteldeStukken, bronbasisLabel, bepaalBronIntent, moetVerduidelijken, isKorteBevestiging, bepaalAutoBronModus, heeftPortaalstandNodig, VERDUIDELIJKINGSVRAAG, VERDUIDELIJKING_OPTIES, ANTWOORDMODUS_LABEL, type Strategie, type Antwoordmodus, type BronModus, type BronIntent, type BronIntentResultaat, type InlineMelding } from "@/core/lib/vraagtype";
 import { getPortaalContext } from "@/core/lib/portaalcontext";
 import { bouwPortaalstandBlok } from "@/core/lib/portaalstand-blok";
@@ -298,6 +313,15 @@ export async function POST(req: NextRequest) {
       // logregel waarvan de bronset wordt bevroren. De RPC toetst zelf dat die
       // logregel van deze gebruiker én dit gesprek is (AC-18).
       reflectie_start?: { ingang?: string; bronset_log_id?: string };
+      // Besluit 0151 — AI-modulecontext. De client stuurt ALLEEN de sleutel; de
+      // server resolveert de inhoud onder RLS. Drie soorten: een procesdossier,
+      // de fondsbrede risicomatrix, of de verdieping op één risico. Net als een
+      // document_scope zet een geldige module_scope de intent-heuristiek uit.
+      module_scope?: {
+        soort?: string;
+        procedure_id?: string;
+        risico_id?: string;
+      };
     };
     // ── H-12 (review 2026-07-30): runtime-validatie + harde invoercaps ─────
     // De historie kwam via een TypeScript-cast binnen en werd nergens op vorm
@@ -596,10 +620,234 @@ export async function POST(req: NextRequest) {
       for (const d of gevonden) scopeTitelPerId.set(d.id, d.titel);
     }
 
-    // scopeActief = STRICT document-scope. Agendapunt-modus gebruikt de scope-ids
-    // wél voor retrieval, maar nooit voor strict-document gedrag (ADR 0028).
+    // ── Module-scope (besluit 0151) — server-side resolutie onder RLS ────────
+    // De client stuurt alleen de sleutel; de inhoud wordt hier onder RLS
+    // opgebouwd. Een id van een ander fonds valt door RLS weg en wordt GEWEIGERD
+    // (400) — nooit een stille terugval. De `risicomatrix`-soort kent geen id en
+    // is altijd geldig (leeg fonds → expliciet "geen risico's", geen weigering).
+    // Een geldige module-scope zet — net als document_scope — de intent-heuristiek
+    // uit (moduleScopeActief hieronder). Het contextblok reist als BENOEMDE tekst
+    // mee via portaalContextPrefix; de instructie zit ín het blok (sha256-pin
+    // ongewijzigd). Proces is een HYBRIDE: het blok geeft reikwijdte/fase, en de
+    // gekoppelde bewijsstukken worden — net als agendapunt-modus (ADR 0028), niet
+    // strict-document — als retrieval-scope ([Bron N]) gezet.
+    const moduleScope: ModuleScope | null = parseModuleScope(body.module_scope);
+    let moduleScopeBlok = "";
+    let moduleScopeSoort: ModuleScopeSoort | null = null;
+    let procesModusActief = false;
+    let procesMetStukken = false;
+    let moduleScopeBronIds: string[] = [];
+    // Sleutel (procedure_id/risico_id) voor het auditspoor (module_scope-meta).
+    let moduleScopeSleutel: { procedure_id?: string; risico_id?: string } = {};
+
+    if (moduleScope) {
+      moduleScopeSoort = moduleScope.soort;
+
+      if (moduleScope.soort === "risicomatrix") {
+        // Fondsbreed: alle risico's (RLS) + de recentste weging-/sluitregels.
+        const { data: risicoRows } = await supabase
+          .from("risicos")
+          .select(
+            "id, categorie, titel, toelichting, kans, impact, niveau, type_risico, status, eigenaar_naam, volgende_beoordeling, gesloten_op, sluit_motivering"
+          )
+          .eq("fonds_id", fondsId)
+          .order("niveau", { ascending: false });
+        const risicos = (risicoRows ?? []) as RisicoRij[];
+        const titelPerId = new Map(risicos.map((r) => [r.id, r.titel]));
+        let logs: RisicoLogRij[] = [];
+        if (risicos.length > 0) {
+          const { data: logRows } = await supabase
+            .from("risico_log")
+            .select("risico_id, event_type, payload, actor_naam, tijdstip")
+            .in("risico_id", Array.from(titelPerId.keys()))
+            .order("tijdstip", { ascending: false })
+            .limit(80);
+          logs = (logRows ?? []).map((l) => ({
+            risico_id: l.risico_id as string,
+            risico_titel: titelPerId.get(l.risico_id as string) ?? "risico",
+            event_type: l.event_type as string,
+            payload: l.payload,
+            actor_naam: (l.actor_naam as string | null) ?? null,
+            tijdstip: (l.tijdstip as string | null) ?? null,
+          }));
+        }
+        moduleScopeBlok = bouwRisicomatrixBlok(risicos, logs);
+      } else if (moduleScope.soort === "risico") {
+        // Verdieping op één risico. RLS-weigering bij een vreemd-fonds-id.
+        const { data: r } = await supabase
+          .from("risicos")
+          .select(
+            "id, categorie, titel, toelichting, kans, impact, niveau, type_risico, status, eigenaar_naam, volgende_beoordeling, gesloten_op, sluit_motivering"
+          )
+          .eq("id", moduleScope.risico_id)
+          .maybeSingle();
+        if (!r?.id) {
+          // Manipulatiesignaal (vgl. de body.fonds_id-lijn): een risico-id dat onder
+          // RLS niets teruggeeft is ofwel verwijderd ofwel van een ander fonds.
+          console.warn(
+            `[0151] module_scope risico_id (${moduleScope.risico_id}) niet gevonden onder RLS — geweigerd (gebruiker ${user.id}, fonds ${fondsId}).`
+          );
+          return NextResponse.json(
+            { error: "Het gekozen risico is niet gevonden of u heeft er geen toegang toe." },
+            { status: 400 }
+          );
+        }
+        const risico = r as RisicoRij;
+        const [{ data: logRows }, { data: maatregelRows }] = await Promise.all([
+          supabase
+            .from("risico_log")
+            .select("risico_id, event_type, payload, actor_naam, tijdstip")
+            .eq("risico_id", risico.id)
+            .order("tijdstip", { ascending: false }),
+          supabase
+            .from("risico_maatregelen")
+            .select("beschrijving, status, verantwoordelijke, volgorde")
+            .eq("risico_id", risico.id)
+            .order("volgorde", { ascending: true }),
+        ]);
+        const logs: RisicoLogRij[] = (logRows ?? []).map((l) => ({
+          risico_id: l.risico_id as string,
+          risico_titel: risico.titel,
+          event_type: l.event_type as string,
+          payload: l.payload,
+          actor_naam: (l.actor_naam as string | null) ?? null,
+          tijdstip: (l.tijdstip as string | null) ?? null,
+        }));
+        const maatregelen = (maatregelRows ?? []) as MaatregelRij[];
+        moduleScopeBlok = bouwRisicoBlok(risico, logs, maatregelen);
+        moduleScopeSleutel = { risico_id: risico.id };
+      } else if (moduleScope.soort === "proces") {
+        // Reikwijdte/fase uit het Decision Object + de gekoppelde bewijsstukken.
+        const { data: proc } = await supabase
+          .from("procedures")
+          .select("id, titel, status, template_code, beschrijving, decision_id")
+          .eq("id", moduleScope.procedure_id)
+          .maybeSingle();
+        if (!proc?.id) {
+          console.warn(
+            `[0151] module_scope procedure_id (${moduleScope.procedure_id}) niet gevonden onder RLS — geweigerd (gebruiker ${user.id}, fonds ${fondsId}).`
+          );
+          return NextResponse.json(
+            { error: "Het gekozen proces is niet gevonden of u heeft er geen toegang toe." },
+            { status: 400 }
+          );
+        }
+        // Decision Object (via decision_id, anders via procedure_id) onder RLS.
+        let decisionRij: DecisionRij | null = null;
+        const decisionQuery = supabase
+          .from("decision_objects")
+          .select(
+            "besluitvraag, aanleiding, scope, governance_orgaan, complexiteit, risiconiveau, mandaatgevoelig, toezichtgevoelig, beleidsafwijking, ai_risicoklasse, status"
+          );
+        const { data: decisionRow } = proc.decision_id
+          ? await decisionQuery.eq("id", proc.decision_id as string).maybeSingle()
+          : await decisionQuery.eq("procedure_id", proc.id).eq("is_primary_decision", true).maybeSingle();
+        if (decisionRow) decisionRij = decisionRow as DecisionRij;
+
+        // Stappen → huidige stap + stap-ids voor de bewijsstukken.
+        const { data: stapRows } = await supabase
+          .from("procedure_stappen")
+          .select("id, volgorde, naam, beschrijving, status")
+          .eq("procedure_id", proc.id)
+          .order("volgorde", { ascending: true });
+        const stappen = (stapRows ?? []) as {
+          id: string;
+          volgorde: number;
+          naam: string;
+          beschrijving: string | null;
+          status: string;
+        }[];
+        const huidigeStapRij =
+          stappen.find((s) => s.status === "actief") ??
+          stappen.find((s) => s.status !== "afgerond") ??
+          null;
+        const huidigeStap: StapRij | null = huidigeStapRij
+          ? {
+              volgorde: huidigeStapRij.volgorde,
+              naam: huidigeStapRij.naam,
+              beschrijving: huidigeStapRij.beschrijving,
+              status: huidigeStapRij.status,
+            }
+          : null;
+
+        // Requirements van de huidige stap (template-niveau; neutraal weergegeven,
+        // geen vervuld/niet-vervuld-oordeel — dat vergt de readiness-engine).
+        let requirements: RequirementRij[] = [];
+        if (proc.template_code && huidigeStap) {
+          const { data: reqRows } = await supabase
+            .from("procedure_requirements")
+            .select("label, requirement_type, verplicht, blokkerend")
+            .eq("template_code", proc.template_code as string)
+            .eq("stap_volgorde", huidigeStap.volgorde);
+          requirements = (reqRows ?? []) as RequirementRij[];
+        }
+
+        // Bewijsstukken per stap → document-scope voor de retrieval ([Bron N]).
+        const stapIds = stappen.map((s) => s.id);
+        let bewijs: BewijsRij[] = [];
+        if (stapIds.length > 0) {
+          const { data: bewijsRows } = await supabase
+            .from("procedure_bewijs")
+            .select("document_id, titel, documenttype")
+            .in("stap_id", stapIds);
+          bewijs = (bewijsRows ?? []) as BewijsRij[];
+        }
+        // Alleen de geïndexeerde, actieve stukken zijn doorzoekbaar; alleen die
+        // vullen de retrieval-scope (geen stille terugval naar de bibliotheek).
+        const bewijsDocIds = Array.from(
+          new Set(bewijs.map((b) => b.document_id).filter((id): id is string => !!id))
+        );
+        let bewijsVoorBlok: BewijsRij[] = [];
+        if (bewijsDocIds.length > 0) {
+          const [{ data: docRows }, { data: chunkRows }] = await Promise.all([
+            supabase
+              .from("documenten")
+              .select("id, titel, actief, geindexeerd")
+              .in("id", bewijsDocIds),
+            supabase.from("document_chunks").select("document_id").in("document_id", bewijsDocIds).limit(2000),
+          ]);
+          const metChunks = new Set((chunkRows ?? []).map((c) => c.document_id as string));
+          const geldigeDocs = (docRows ?? []).filter(
+            (d) => d.actief !== false && d.geindexeerd === true && metChunks.has(d.id as string)
+          );
+          moduleScopeBronIds = geldigeDocs.map((d) => d.id as string);
+          const geldigeSet = new Set(moduleScopeBronIds);
+          bewijsVoorBlok = bewijs.filter((b) => b.document_id && geldigeSet.has(b.document_id));
+        }
+        procesMetStukken = moduleScopeBronIds.length > 0;
+        procesModusActief = true;
+        if (procesMetStukken) {
+          // Retrieval beperken tot de gekoppelde stukken (niet strict-document).
+          scopeDocumentIds = moduleScopeBronIds;
+        }
+        moduleScopeBlok = bouwProcesBlok({
+          procedure: {
+            id: proc.id as string,
+            titel: (proc.titel as string) || "dit proces",
+            status: (proc.status as string) || "",
+            template_code: (proc.template_code as string | null) ?? null,
+            beschrijving: (proc.beschrijving as string | null) ?? null,
+          },
+          decision: decisionRij,
+          huidigeStap,
+          requirements,
+          bewijs: bewijsVoorBlok,
+          heeftBronnen: procesMetStukken,
+        });
+        moduleScopeSleutel = { procedure_id: proc.id as string };
+      }
+    }
+    // Een geldige module-scope is actief zodra er een blok is gebouwd.
+    const moduleScopeActief = moduleScopeBlok.length > 0;
+
+    // scopeActief = STRICT document-scope. Agendapunt-modus én proces-modus
+    // gebruiken de scope-ids wél voor retrieval, maar nooit voor strict-document
+    // gedrag (ADR 0028 / besluit 0151).
     const scopeActief =
-      !agendapuntModusActief && !!scopeDocumentIds && scopeDocumentIds.length > 0;
+      !agendapuntModusActief &&
+      !procesModusActief &&
+      !!scopeDocumentIds &&
+      scopeDocumentIds.length > 0;
     // Agendapunt-modus mét doorzoekbare gekoppelde stukken: retrieval beperkt tot
     // die stukken ([Bron N]); zonder stukken halen we niets op (toelichting-only).
     const agendapuntMetStukken =
@@ -697,7 +945,9 @@ export async function POST(req: NextRequest) {
       // T5 B1: een bronloze bureau-taak is inherent een opsteltaak, geen fonds-/
       // algemeen-vraag — de verduidelijkingsvraag ("voor uw fonds / algemene zin")
       // hoort daar niet te vuren. Net als bij een actieve scope: geen intent-tak.
-      scopeActief || agendapuntModusActief || bronloosBureau
+      // Besluit 0151: een expliciete module-scope zet de heuristiek óók uit — de
+      // scope is expliciet, dus de assistent hoeft niet te raden (criterium 3).
+      scopeActief || agendapuntModusActief || bronloosBureau || moduleScopeActief
         ? null
         : intentOverride
         ? { intent: intentOverride, vertrouwen: "zeker" }
@@ -827,6 +1077,32 @@ export async function POST(req: NextRequest) {
     }
 
     const reflectieActief = isReflectieActief(reflectieStatus);
+
+    // ── Besluit 0151 — module-scope "in effect" ─────────────────────────────
+    // Het module-contextblok reist alléén mee in de gewone chat-takken
+    // (algemeen/combineren/documenten via portaalContextPrefix). Een hoger-
+    // prioritaire modus (reflectie/transformatie/agendapunt/bureau-stuk/strict
+    // document-scope) wint de prompt-tak en gebruikt de prefix NIET. Omdat een
+    // module-gesprek `module_scope` elke beurt meestuurt — óók bij een
+    // transformatie-vervolgactie — mag het auditspoor de modulecontext alleen als
+    // "gebruikt" loggen wanneer hij daadwerkelijk is geïnjecteerd. Dit is die ene
+    // bron van waarheid voor prompt-injectie, retrieval-effect én logging.
+    const moduleScopeInPrompt =
+      moduleScopeActief &&
+      !reflectieActief &&
+      !transformatieActief &&
+      !agendapuntModusActief &&
+      !stukActief &&
+      !scopeActief;
+    // Proces-modus stuurt de retrieval (scope tot de bewijsstukken) alléén wanneer
+    // de modulecontext ook echt in de prompt landt — anders zou een transformatie-
+    // beurt stil op de bewijsstukken gaan retrieven.
+    const procesModusInPrompt = procesModusActief && moduleScopeInPrompt;
+    if (procesModusActief && !moduleScopeInPrompt) {
+      // Een hoger-prioritaire modus wint deze beurt; laat de proces-retrievalscope
+      // niet stil meelekken (de bewijsstukken waren alleen voor het procesblok).
+      scopeDocumentIds = undefined;
+    }
 
     // ── Bronkeuze-modus (FO §11a, besluit 0137 — herziet 0014) ──────────────
     // Hoe gaat de assistent om met een ONZEKERE bron-intentie?
@@ -1061,7 +1337,7 @@ export async function POST(req: NextRequest) {
     //      conceptvraag die op 'actueel' zou uitkomen wordt 'besluitvorming',
     //      omdat een nog niet vastgesteld stuk anders per definitie onvindbaar is.
     const retrievalFilters: RetrievalFilters | undefined =
-      scopeActief || agendapuntModusActief
+      scopeActief || agendapuntModusActief || procesModusInPrompt
       ? undefined
       : {
           modus: neemNietVastgesteldeMee
@@ -1122,12 +1398,15 @@ export async function POST(req: NextRequest) {
       };
     }
 
-    // Agendapunt-modus (ADR 0028): retrieval alleen als er doorzoekbare gekoppelde
-    // stukken zijn. Zonder stukken halen we niets op — de toelichting is dan de
-    // enige context (geen brede bibliotheek-retrieval, ticket §2.2).
+    // Agendapunt-modus (ADR 0028) en proces-modus (besluit 0151): retrieval alleen
+    // als er doorzoekbare gekoppelde stukken zijn. Zonder stukken halen we niets op
+    // — het contextblok is dan de enige context (geen brede bibliotheek-retrieval,
+    // criterium 5: nooit een stille terugval naar de hele bibliotheek).
     const moetRetrieven = !reflectieActief && !breedActief && !bronloosBureau && (
       agendapuntModusActief
         ? agendapuntMetStukken
+        : procesModusInPrompt
+        ? procesMetStukken
         : scopeActief || bronModusRetrieval === "documenten" || bronModusRetrieval === "combineren"
     );
     if (moetRetrieven) {
@@ -1320,6 +1599,10 @@ export async function POST(req: NextRequest) {
       !scopeActief &&
       !agendapuntModusActief &&
       !transformatieActief &&
+      // Besluit 0151: bij een expliciete module-scope is het focusblok de context;
+      // dan gaat de persoonlijke portaalstand + het generieke fondsbrede modulesBlok
+      // niet óók mee (kosten/ruis, en de scope is bewust specifiek).
+      !moduleScopeActief &&
       heeftPortaalstandNodig(vraag);
     if (portaalstandNodig) {
       const stand = await getPortaalContext({
@@ -1342,11 +1625,16 @@ export async function POST(req: NextRequest) {
     const portaalstandGebruikt = portaalstandBlok.length > 0;
 
     // Compacte context-prefix voor de gewone chat-takken (algemeen/combineren/
-    // documenten): de portaalstand + fondsbrede modules vóór de vraag, gelabeld en
-    // met een scheidingslijn. Leeg bij een zuiver algemene vraag → geen prefix.
-    const portaalDelen = [portaalstandBlok, modulesBlok.trim()].filter(
-      (s) => s.length > 0
-    );
+    // documenten): de portaalstand + fondsbrede modules + (besluit 0151) het
+    // module-scope-focusblok vóór de vraag, gelabeld en met een scheidingslijn.
+    // Leeg bij een zuiver algemene vraag → geen prefix. Het module-scope-blok draagt
+    // zijn eigen instructie (signaleren/spiegelen), dus de toon-systeemprompt blijft
+    // byte-identiek.
+    const portaalDelen = [
+      portaalstandBlok,
+      modulesBlok.trim(),
+      moduleScopeInPrompt ? moduleScopeBlok : "",
+    ].filter((s) => s.length > 0);
     const portaalContextPrefix =
       portaalDelen.length > 0 ? `${portaalDelen.join("\n\n")}\n\n---\n\n` : "";
 
@@ -1547,6 +1835,25 @@ export async function POST(req: NextRequest) {
       ? "documenten"
       : promptModus;
 
+    // ── Besluit 0151 — module-scope-meta (chip + onderbouwingspaneel + audit) ──
+    // De sleutel (procedure_id/risico_id) en de gebruikte bron-ids zijn IDENTITEIT
+    // (bron), begrensd tot wat de sessie onder RLS al mocht zien; blok_tekens is
+    // telemetrie voor de tokenmeting (criterium 11). Titels reizen niet mee: de
+    // client kent ze al uit de module-ingang en rendert de chip zelf.
+    // Alleen loggen als "gebruikt" wanneer het blok daadwerkelijk in de prompt zat
+    // (moduleScopeInPrompt) — een module-gesprek stuurt de scope óók mee bij een
+    // transformatie-/reflectiebeurt, en dan hoort het auditspoor niet te claimen dat
+    // de modulecontext meewoog.
+    const moduleScopeMeta = moduleScopeInPrompt
+      ? {
+          soort: moduleScopeSoort!,
+          ...moduleScopeSleutel,
+          validatie: "ok" as const,
+          ...(moduleScopeBronIds.length > 0 ? { bron_ids: moduleScopeBronIds } : {}),
+          blok_tekens: moduleScopeBlok.length,
+        }
+      : null;
+
     // ── Increment I-1 (FO §11c) — rustige weergave ──────────────────────────
     // Bronbasis-samenvatting voor het paneel "Onderbouwing en bronnen" en het
     // auditspoor (§11d). Inline-meldingen pre-stream: deterministisch op basis
@@ -1709,7 +2016,7 @@ export async function POST(req: NextRequest) {
             // document-scope) of een agendapunt met stukken. Bepaalt in de UI welke
             // vervolgacties (duiding/kritische vragen) blijven staan naast de B1-
             // vervolgvragen. Reist mee in de onderbouwing zodat het na herladen klopt.
-            document_gericht: scopeActief || agendapuntModusActief,
+            document_gericht: scopeActief || agendapuntModusActief || procesModusInPrompt,
             scope: scopeActief
               ? {
                   document_ids: scopeDocumentIds,
@@ -1717,6 +2024,9 @@ export async function POST(req: NextRequest) {
                   strategie: scopeStrategie,
                 }
               : null,
+            // Besluit 0151 — de actieve module-scope voor de scope-chip en het
+            // onderbouwingspaneel (onderscheiden van documentbronnen). null = geen.
+            module_scope: moduleScopeMeta,
             // Increment G/I-1 — actieve antwoordmodus + label voor het paneel
             // "Onderbouwing en bronnen" (rustige weergave §11c).
             antwoordmodus,
@@ -1883,6 +2193,11 @@ export async function POST(req: NextRequest) {
           const generatieStart = Date.now();
           const claudeStream = anthropic.messages.stream(streamParams);
 
+          // Besluit 0151 (criterium 11) — tijd tot eerste zichtbare token (TTFT).
+          // Gemeten vanaf de generatie-aanroep tot het eerste delta; per module-
+          // scope-soort te vergelijken met een beurt zónder scope.
+          let ttftMs: number | null = null;
+
           // Stream de zichtbare tekst, maar houd steeds een staart ter grootte van
           // de marker achter: zo lekt "###VERVOLGVRAGEN###" nooit naar de client,
           // ook niet als de marker over twee deltas heen arriveert. Zodra de marker
@@ -1890,6 +2205,7 @@ export async function POST(req: NextRequest) {
           let verzonden = 0;
           let markerGezien = false;
           claudeStream.on("text", (delta) => {
+            if (ttftMs === null) ttftMs = Date.now() - generatieStart;
             volledig += delta;
             if (markerGezien) return;
             const idx = volledig.indexOf(VERVOLGVRAGEN_MARKER);
@@ -2036,6 +2352,11 @@ export async function POST(req: NextRequest) {
             }),
             antwoordmodus,
             transformatie: transformatieActief,
+            // Besluit 0151 — module-scope in het auditspoor: soort + sleutel +
+            // gebruikte bron-ids + validatiestatus, zodat de beurt reconstrueerbaar
+            // is (criterium 8). `ttft_ms` = tijd tot eerste token (criterium 11).
+            ...(moduleScopeMeta ? { module_scope: moduleScopeMeta } : {}),
+            ...(ttftMs !== null ? { ttft_ms: ttftMs } : {}),
             // H-12/H-10 — invoer- en promptprovenance (zie RetrievalMeta).
             invoer: {
               beurten: messages.length,

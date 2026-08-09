@@ -81,6 +81,13 @@ export interface OnderbouwingMeta {
   // documentbronnen (transparantielijn besluit 0071).
   /** Of de eigen portaalstand als context is meegewogen. */
   portaalstandGebruikt?: boolean | null;
+  // Besluit 0151 — de module-scope (procesdossier / risicomatrix / één risico) als
+  // aparte aanduiding, onderscheiden van documentbronnen (transparantielijn 0071).
+  /** De actieve modulecontext + hoeveel gekoppelde stukken de retrieval voedden. */
+  moduleScope?: {
+    soort: "proces" | "risicomatrix" | "risico";
+    bronnen: number;
+  } | null;
   // Increment I-3 — uniforme bronvermelding-transparantie. De model_knowledge-
   // herkomst (algemene kennis uit het taalmodel, met de genoemde instantie), en
   // de web-laag die VOORBEREID is maar nog niet gevuld (Scenario B).
@@ -309,6 +316,30 @@ export default function OnderbouwingPaneel({
                       Uw eerstvolgende processtap, de komende vergadering en
                       agendapunten zonder uw inbreng — geen documentbron, maar de
                       actuele stand uit het portaal.
+                    </span>
+                  </>
+                }
+              />
+            )}
+            {meta.moduleScope && (
+              <Rij
+                label="Modulecontext"
+                waarde={
+                  <>
+                    {meta.moduleScope.soort === "proces"
+                      ? "Meegewogen als de stand van dit procesdossier"
+                      : meta.moduleScope.soort === "risico"
+                        ? "Meegewogen als de geregistreerde stand van dit risico"
+                        : "Meegewogen als de geregistreerde stand van de risicomatrix"}
+                    {meta.moduleScope.soort === "proces" && meta.moduleScope.bronnen > 0
+                      ? ` — ${meta.moduleScope.bronnen} gekoppeld ${
+                          meta.moduleScope.bronnen === 1 ? "stuk" : "stukken"
+                        } doorzocht.`
+                      : "."}
+                    <span className="text-muted">
+                      {" "}
+                      Objectcontext uit het portaal — geen documentbron, maar de
+                      geregistreerde stand van de module (onder RLS opgehaald).
                     </span>
                   </>
                 }

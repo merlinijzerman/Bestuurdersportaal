@@ -272,6 +272,51 @@ test("gemengde objecten worden per subsleutel gesplitst", () => {
   assert.deepEqual(inhoud.invoer, { historie_hash: "abc123" });
 });
 
+test("besluit 0151 — module_scope: sleutels naar bron, status/telemetrie op basis", () => {
+  const { spoor, inhoud } = splitsRetrievalMeta({
+    methode: "geen",
+    opgehaald: 0,
+    geselecteerd: 0,
+    chunks: [],
+    ttft_ms: 812,
+    module_scope: {
+      soort: "proces",
+      procedure_id: "p1",
+      bron_ids: ["d1", "d2"],
+      validatie: "ok",
+      blok_tekens: 640,
+    },
+  } as unknown as Parameters<typeof splitsRetrievalMeta>[0]);
+  const ms = spoor.module_scope as Record<string, unknown>;
+  // Objectreferenties (identiteit) staan op bronniveau — niet op basis.
+  assert.equal(ms.procedure_id, "p1");
+  assert.deepEqual(ms.bron_ids, ["d1", "d2"]);
+  // Soort/validatie/blok_tekens blijven basis (telemetrie/status).
+  assert.equal(ms.soort, "proces");
+  assert.equal(ms.validatie, "ok");
+  assert.equal(ms.blok_tekens, 640);
+  // ttft_ms is top-level telemetrie (basis), geen inhoud.
+  assert.equal(spoor.ttft_ms, 812);
+  // Geen module_scope-inhoudsleutels: er reist geen documenttekst mee.
+  assert.equal("module_scope" in inhoud, false);
+});
+
+// De bronprojectie mag de objectreferenties tonen; de basisprojectie niet.
+test("besluit 0151 — module_scope: procedure_id alleen zichtbaar op bronniveau", () => {
+  const { spoor } = splitsRetrievalMeta({
+    methode: "geen",
+    opgehaald: 0,
+    geselecteerd: 0,
+    chunks: [],
+    module_scope: { soort: "risico", risico_id: "r1", validatie: "ok" },
+  } as unknown as Parameters<typeof splitsRetrievalMeta>[0]);
+  const basis = projecteerSpoorMeta(spoor, false) as { module_scope?: Record<string, unknown> };
+  const bron = projecteerSpoorMeta(spoor, true) as { module_scope?: Record<string, unknown> };
+  assert.equal(basis.module_scope?.risico_id, undefined);
+  assert.equal(basis.module_scope?.soort, "risico");
+  assert.equal(bron.module_scope?.risico_id, "r1");
+});
+
 test("bronidentiteit blijft in het spoor (verwijderbaar is alleen inhoud)", () => {
   const { spoor } = splitsRetrievalMeta(VOLLEDIGE_META);
   for (const sleutel of ["chunks", "bronversie_audit", "besluitbronnen", "doorgrond"]) {
