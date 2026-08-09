@@ -4,6 +4,8 @@
 - **Datum:** 2026-07-30
 - **Betrokkenen:** opdrachtgever (Merlin IJzerman), Claude (uitvoering)
 
+> **Addendum (9 augustus 2026) — naamswijziging label.** Het zichtbare tablabel **"Generiek (DNB / AFM / PF)" heet sindsdien "Sectorbibliotheek"**. De besluittekst hieronder is ongewijzigd bewaard als historisch record; waar "Generiek" als tabnaam staat, lees "Sectorbibliotheek". De **interne codewaarde `generiek`** (kolom `bibliotheek`, `Record<"generiek"|"fonds">`, routes en RLS) is **niet** gewijzigd — puur een UI-label.
+
 ## Context
 
 De Documentbibliotheek kent twee bibliotheken — **Fondsbibliotheek** en **Generiek

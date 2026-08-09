@@ -5,17 +5,6 @@ import Link from "next/link";
 import NotificatiesBlok from "./_components/NotificatiesBlok";
 import type { NotificatieType } from "@/core/lib/notifications";
 
-// ============================================================
-//  Demo-KPI's — zelfde cijfers als de Stuurinformatiepagina,
-//  hier compact getoond als "snelle blik" op de homepage.
-// ============================================================
-const KPI = {
-  financieringsgraad: { huidig: 102.4, deltaPP: 0.3 },
-  solidariteitsreserve: { percentage: 2.4, target: 5.0 },
-  vermogen: { mln: 98400, deltaYTDmln: 1700 },
-  rendementYTD: { fonds: 6.8, benchmark: 6.4 },
-};
-
 const ROL_LABEL: Record<string, string> = {
   bestuurder: "bestuurslid",
   voorzitter: "voorzitter van het bestuur",
@@ -60,10 +49,6 @@ function formatRelatief(d: string) {
   if (dag === 1) return "gisteren";
   if (dag < 7) return `${dag} dagen geleden`;
   return dt.toLocaleDateString("nl-NL", { day: "numeric", month: "short" });
-}
-
-function fmtMln(mln: number) {
-  return mln >= 1000 ? `${(mln / 1000).toFixed(1).replace(".", ",")} mld` : `${mln.toLocaleString("nl-NL")} mln`;
 }
 
 interface LogItem {
@@ -246,40 +231,12 @@ export default async function HomePage() {
             </div>
           </div>
           <Link
-            href="/dashboard"
+            href="/vergaderingen"
             className="text-xs text-ink border border-line px-3 py-1.5 rounded-lg hover:border-accent transition-colors"
           >
-            Open volledige stuurinformatie →
+            Naar de vergaderingen →
           </Link>
         </div>
-      </div>
-
-      {/* Compacte KPI-strook */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <KpiCard
-          label="Financieringsgraad"
-          waarde={`${KPI.financieringsgraad.huidig.toFixed(1).replace(".", ",")}%`}
-          extra={`+${KPI.financieringsgraad.deltaPP} pp t.o.v. Q4`}
-          extraKleur="text-ok-ink"
-        />
-        <KpiCard
-          label="Solidariteitsreserve"
-          waarde={`${KPI.solidariteitsreserve.percentage.toFixed(1).replace(".", ",")}%`}
-          extra={`target ${KPI.solidariteitsreserve.target.toFixed(0)}%`}
-          extraKleur="text-muted"
-        />
-        <KpiCard
-          label="Vermogen"
-          waarde={`€ ${fmtMln(KPI.vermogen.mln)}`}
-          extra={`+${(KPI.vermogen.deltaYTDmln / 1000).toFixed(1).replace(".", ",")} mld YTD`}
-          extraKleur="text-ok-ink"
-        />
-        <KpiCard
-          label="Rendement YTD"
-          waarde={`+${KPI.rendementYTD.fonds.toFixed(1).replace(".", ",")}%`}
-          extra={`benchmark +${KPI.rendementYTD.benchmark.toFixed(1).replace(".", ",")}%`}
-          extraKleur="text-muted"
-        />
       </div>
 
       {/* Mijn open procedure-stappen */}
@@ -491,26 +448,6 @@ export default async function HomePage() {
           en zijn traceerbaar inclusief de gebruikte modus en bronvermeldingen.
         </div>
       </div>
-    </div>
-  );
-}
-
-function KpiCard({
-  label,
-  waarde,
-  extra,
-  extraKleur,
-}: {
-  label: string;
-  waarde: string;
-  extra: string;
-  extraKleur: string;
-}) {
-  return (
-    <div className="bg-white rounded-xl border border-line p-4">
-      <div className="text-xs text-muted">{label}</div>
-      <div className="text-2xl font-bold text-ink mt-1">{waarde}</div>
-      <div className={`text-xs mt-1 ${extraKleur}`}>{extra}</div>
     </div>
   );
 }
