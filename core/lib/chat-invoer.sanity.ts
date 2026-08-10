@@ -11,6 +11,7 @@ import {
   valideerChatInvoer,
   historieHash,
   MAX_BEURT_TEKENS,
+  MAX_ASSISTANT_BEURT_TEKENS,
   MAX_HISTORIE_TEKENS,
   MAX_BEURTEN,
 } from "./chat-invoer";
@@ -73,7 +74,7 @@ check("null-beurt wordt geweigerd", () => {
 });
 
 // ── Caps ────────────────────────────────────────────────────────────────
-check("te lange beurt levert 413", () => {
+check("te lange USER-beurt levert 413 (H-12, krappe cap blijft)", () => {
   const r = valideerChatInvoer(
     [{ role: "user", content: "x".repeat(MAX_BEURT_TEKENS + 1) }],
     undefined
@@ -81,6 +82,38 @@ check("te lange beurt levert 413", () => {
   assert.equal(r.ok, false);
   if (!r.ok) {
     assert.equal(r.foutcode, "beurt_te_lang");
+    assert.equal(r.status, 413);
+  }
+});
+
+// Regressie (2026-08-10): een gegenereerd lang memo-antwoord dat als historie
+// terugkomt mag de vervolgvraag NIET breken. Dit was het defect: de assistent
+// bood zelf een vervolgvraag aan die vervolgens doodliep met "upload een
+// document", terwijl de gebruiker niets had geplakt.
+check("lang assistent-antwoord in de historie blokkeert de vervolgvraag NIET", () => {
+  const memo = "m".repeat(MAX_BEURT_TEKENS + 5_000); // 13.000 tekens: > user-cap, < assistent-cap
+  const r = valideerChatInvoer(
+    [
+      { role: "user", content: "Stel een memo op over het partnerbegrip." },
+      { role: "assistant", content: memo },
+      { role: "user", content: "Kunt u de impact-uitvraag aan de uitvoerder concreet uitwerken?" },
+    ],
+    undefined
+  );
+  assert.equal(r.ok, true);
+});
+
+check("bovenmatig lang assistent-antwoord levert antwoord_te_lang (413)", () => {
+  const r = valideerChatInvoer(
+    [
+      { role: "assistant", content: "x".repeat(MAX_ASSISTANT_BEURT_TEKENS + 1) },
+      { role: "user", content: "Vervolgvraag?" },
+    ],
+    undefined
+  );
+  assert.equal(r.ok, false);
+  if (!r.ok) {
+    assert.equal(r.foutcode, "antwoord_te_lang");
     assert.equal(r.status, 413);
   }
 });
