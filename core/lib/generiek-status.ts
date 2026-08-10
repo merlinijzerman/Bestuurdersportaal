@@ -51,13 +51,12 @@ function isPublished(v: GeneriekStatusVelden): boolean {
   return status === "van_kracht" && bronstatus === "actief";
 }
 
-// Mapping (documentair, geen kolom):
+// Mapping (documentair, geen kolom). Documentstatus = 5 waarden na besluit 0154:
 //   published  ≡ status='van_kracht' AND coalesce(bronstatus,'actief')='actief'  (0045)
 //   withdrawn  ≡ actief teruggetrokken: status='gearchiveerd' OF bronstatus='uitgesloten'
-//   deprecated ≡ verouderd maar leesbaar als historie: status IN
-//                ('vervangen','alleen_historisch') OF bronstatus='historisch'
-//   draft      ≡ al het overige (concept/ter_bespreking/ter_besluitvorming/
-//                vastgesteld) — nog niet gepubliceerd.
+//   deprecated ≡ verouderd maar leesbaar als historie: status='historisch'
+//                (merge van het oude vervangen/alleen_historisch) OF bronstatus='historisch'
+//   draft      ≡ al het overige (concept/vastgesteld) — nog niet gepubliceerd.
 // Volgorde is belangrijk: published eerst (de gate), dan withdrawn (hardste
 // uitsluiting), dan deprecated, anders draft.
 export function generiekGeldigheidsstatus(
@@ -69,11 +68,7 @@ export function generiekGeldigheidsstatus(
   const bronstatus = v.bronstatus ?? "actief";
 
   if (status === "gearchiveerd" || bronstatus === "uitgesloten") return "withdrawn";
-  if (
-    status === "vervangen" ||
-    status === "alleen_historisch" ||
-    bronstatus === "historisch"
-  ) {
+  if (status === "historisch" || bronstatus === "historisch") {
     return "deprecated";
   }
   return "draft";

@@ -39,11 +39,12 @@ export function isGeldigRegelingstype(w: unknown): w is Regelingstype {
 
 // ── Status-/bronstatus-subset dat via curatie zelf gezet mag worden ─────────
 // Laag 2 (status) en laag 3 (bronstatus) kennen meer waarden; voor generieke
-// curatie zijn alleen deze zinvol. Vervangen/alleen_historisch lopen via de
-// REPLACE-actie (statustransitie), niet via vrije metadata-edit.
+// curatie zijn alleen deze zinvol. `historisch` (0154: merge van het oude
+// vervangen/alleen_historisch) loopt via de REPLACE-actie (statustransitie),
+// niet via vrije metadata-edit.
 export const GENERIEKE_DOCUMENTSTATUS = [
   "van_kracht",
-  "alleen_historisch",
+  "historisch",
   "gearchiveerd",
 ] as const;
 export type GeneriekeDocumentstatus = (typeof GENERIEKE_DOCUMENTSTATUS)[number];

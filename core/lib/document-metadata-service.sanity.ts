@@ -77,25 +77,26 @@ test("geldig normgewicht wordt geaccepteerd (beschrijvend, geen RAG-impact)", ()
   assert.equal(plan.wijzigingen[0].rag_impact, false);
 });
 
-test("ongeldige statusovergang (sprong) wordt geweigerd", () => {
+test("ongeldige statusovergang wordt geweigerd", () => {
+  // concept → van_kracht kan niet in één stap (van_kracht alleen vanaf vastgesteld).
   const plan = bouwMetadataPlan(
-    doc({ status: "concept" }),
-    { status: "vastgesteld" },
+    doc({ status: "concept", documenttype: "beleid" }),
+    { status: "van_kracht", reden: "x" },
     ALLE_CAPS
   );
   assert.equal(plan.ok, false);
   assert.ok(plan.fouten.some((f) => f.includes("Ongeldige statusovergang")));
 });
 
-test("vaststellen vereist een reden", () => {
+test("vaststellen (concept → vastgesteld) vereist een reden", () => {
   const zonder = bouwMetadataPlan(
-    doc({ status: "ter_besluitvorming" }),
+    doc({ status: "concept" }),
     { status: "vastgesteld" },
     ALLE_CAPS
   );
   assert.equal(zonder.ok, false);
   const met = bouwMetadataPlan(
-    doc({ status: "ter_besluitvorming" }),
+    doc({ status: "concept" }),
     { status: "vastgesteld", reden: "Bestuursbesluit 2026-06" },
     ALLE_CAPS
   );
@@ -103,20 +104,16 @@ test("vaststellen vereist een reden", () => {
   assert.equal(met.wijzigingen[0].redenplicht, true);
 });
 
-test("van_kracht → vervangen vereist vervangen_door", () => {
-  const zonder = bouwMetadataPlan(
-    doc({ status: "van_kracht" }),
-    { status: "vervangen", reden: "nieuwe versie" },
+test("van_kracht → historisch mag zonder vervangen_door (optioneel), met reden", () => {
+  const zonderReden = bouwMetadataPlan(
+    doc({ status: "van_kracht", documenttype: "beleid" }),
+    { status: "historisch" },
     ALLE_CAPS
   );
-  assert.equal(zonder.ok, false);
+  assert.equal(zonderReden.ok, false); // reden verplicht
   const met = bouwMetadataPlan(
-    doc({ status: "van_kracht" }),
-    {
-      status: "vervangen",
-      reden: "nieuwe versie",
-      vervangen_door_document_id: "doc-2",
-    },
+    doc({ status: "van_kracht", documenttype: "beleid" }),
+    { status: "historisch", reden: "opgevolgd door nieuwe versie" },
     ALLE_CAPS
   );
   assert.equal(met.ok, true);
@@ -125,7 +122,7 @@ test("van_kracht → vervangen vereist vervangen_door", () => {
 test("statuswijziging zonder capability wordt geweigerd", () => {
   const plan = bouwMetadataPlan(
     doc({ status: "concept" }),
-    { status: "ter_bespreking" },
+    { status: "vastgesteld", reden: "x" },
     { metadataUpdate: true, statusChange: false, bronstatusChange: false }
   );
   assert.equal(plan.ok, false);

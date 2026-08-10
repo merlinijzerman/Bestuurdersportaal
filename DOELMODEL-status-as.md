@@ -146,6 +146,7 @@ group by fonds_id;
 - **Statusmachine:** `core/lib/document-status-transities.ts` (documentstatus- én bronstatus-transities) + de **DB-trigger-spiegel** `fn_document_status_transitie` — dubbel bijwerken.
 - **Ingest:** het 0140-pad (`document-ingest-classificatie.ts`, `upload/route.ts`) — de bronstatus-verklaring vervalt, de `rag_uitgesloten`-toggle komt erbij.
 - **Weergave:** `core/lib/generiek-status.ts` (status→displaymapping), documentlijst/bibliotheek-UI, metadata-PATCH.
+- **Generieke-content-levenscyclus (T6/T10) — hoort bij de 0153-track (aanvulling 2026-08-09):** de generieke-bibliotheekstatus wordt **afgeleid** uit `status` + `bronstatus` via `fn_generiek_geldigheidsstatus` (migratie `2026_07_10_t10_generiek_transitiepoort.sql`): "deprecated" = `bronstatus='historisch'`, "withdrawn" = `bronstatus='uitgesloten'`. Bronstatus droppen (0153) vergt dus herontwerp van die afleiding + `trg_generiek_status_overgang`/`fn_generiek_transitie` en de platform-curatie-acties/UI (`app/(platform)/.../generieke-bibliotheek/`). Deze surface stond hier oorspronkelijk niet in en verklaart de fase-splitsing 2A/2B in de werkopdracht.
 - **Tests:** alle `*status*.sanity.ts` + de RAG-regressie (SQL-02) opnieuw ijken.
 
 ## 10. Gefaseerde uitrol & relatie tot de besluiten

@@ -56,26 +56,35 @@ Additief en terugdraaibaar; levert het grootste deel van de gevoelde eenvoud en 
 
 ---
 
-## FASE 2 — Status-as structureel (spoor B, ná de verificatiequery)
+> **Gesplitst (besluit plansessie 2026-08-09):** tijdens de bouw bleek `bronstatus` óók de generieke-content-levenscyclus te dragen (T6/T10: `fn_generiek_geldigheidsstatus`, `trg_generiek_status_overgang`, `fn_generiek_transitie`, platform-curatie-UI) — dat viel buiten doelmodel §9. Daarom: **2A (documentstatus, 0154) nu**, **2B (bronstatus, 0153) als eigen track ná een impact-inventaris**. Reden: de coupling van 0153 met de platform-curatie is sterker dan die tussen 0153 en 0154; 0154 is mechanisch en laag-risico.
 
-Destructieve migratie; alleen ná de verificatiequery (impactanalyse §8 + doelmodel §8) en op een geklonede database getest. Besluiten 0153 + 0154 **samen** implementeren (gedeelde RPC-poort en transitietabel).
+### FASE 2A — Documentstatus 8→5 (0154), nu
 
-**2.1 Verificatie vooraf.** Draai de populatie-/bereikbaarheidsquery: 0 lezers van `ter_bespreking`/`ter_besluitvorming` op documentniveau; `van_kracht_niet_normatief`; `bronstatus`-onafhankelijkheid. Los mapping-signalen op.
+Destructieve migratie; ná de verificatiequery en op een kloon getest. `bronstatus` blijft in deze fase ongemoeid.
 
-**2.2 Documentstatus 8→5 (0154).** CHECK → `{concept, vastgesteld, van_kracht, historisch, gearchiveerd}`; transitietabel + **DB-trigger-spiegel** herzien; **nieuwe transitie `vastgesteld → historisch`**; "sprong verboden" vervalt; `van_kracht` via `mag_van_kracht`. Mapping: `ter_bespreking`/`ter_besluitvorming → concept`; `vervangen`/`alleen_historisch → historisch` (`vervangen_door` behouden).
+**2A.1 Verificatie vooraf.** Populatie-/bereikbaarheidsquery: 0 lezers van `ter_bespreking`/`ter_besluitvorming` op documentniveau; `van_kracht_niet_normatief`. Los mapping-signalen op.
 
-**2.3 Bronstatus → `rag_uitgesloten` (0153).** `documenten` krijgt `rag_uitgesloten boolean`; `bronstatus` (+ chunk-denorm) vervalt; bronstatus-transities eruit; nieuwe capability `documents.rag.exclude` (redenplicht + auditregel). Mapping: `uitgesloten → rag_uitgesloten=true`; `historisch → documentstatus historisch`; overige default.
+**2A.2 Documentstatus 8→5.** CHECK → `{concept, vastgesteld, van_kracht, historisch, gearchiveerd}`; transitietabel + **DB-trigger-spiegel** herzien; **nieuwe transitie `vastgesteld → historisch`**; "sprong verboden" vervalt; `van_kracht` via `mag_van_kracht`. Mapping: `ter_bespreking`/`ter_besluitvorming → concept`; `vervangen`/`alleen_historisch → historisch` (`vervangen_door` behouden).
 
-**2.4 RPC-poort herzien.** Onvoorwaardelijk in alle modi: `d.actief = true AND coalesce(rag_uitgesloten,false)=false AND documentstatus <> 'gearchiveerd'`. Actueel-poort: `documentstatus in ('vastgesteld','van_kracht')` + NULL-veilig geldigheidsvenster (ongewijzigd t.o.v. nu). `bronstatus='actief'`-eis eruit. `rag.ts` (`isPubliceerbaar`, `ACTUELE_BRON_STATUSSEN`, `zouActueelZijn`) + `generiek-status.ts` bijwerken.
+**2A.3 RPC-poort (documentstatus-kant).** Voeg `AND documentstatus <> 'gearchiveerd'` toe aan de onvoorwaardelijke poort. De actueel-set-namen (`vastgesteld`/`van_kracht`) wijzigen niet; de `bronstatus='actief'`-eis blíjft hier nog staan (verwijdering in 2B). `generiek-status.ts` en `fn_generiek_geldigheidsstatus` alleen op hun **status-input** remappen (bronstatus ongemoeid).
 
-**2.5 Rapportage-retire.** "Vorige rapportage → `documentstatus historisch`" via de nieuwe transitie (human-in-the-loop: kies de op te volgen rapportage; auditregel).
+**2A.4 Rapportage-retire.** "Vorige rapportage → `documentstatus historisch`" via de nieuwe transitie (human-in-the-loop; auditregel). Sluit het interim-restrisico van fase 1.
 
-**Acceptatie fase 2:**
-1. **RAG-bereik-diff:** per document + AQLab-testset before/after (actueel/historisch/uitgesloten), elke delta verklaard, **nul onverklaarde verschuivingen**.
-2. Een terminaal-vastgesteld type kan naar `historisch` (nieuwe transitie) én naar `gearchiveerd`.
-3. `rag_uitgesloten=true` weert een document in **alle** modi.
-4. `gearchiveerd` is in geen enkele modus vindbaar (universele poort).
-5. Transitietabel en DB-trigger-spiegel 1-op-1; alle status-sanity's groen; SQL-02-regressie opnieuw geijkt.
+**Acceptatie 2A:** RAG-bereik-diff (documentstatus-scope) met verklaarde delta; `vastgesteld → historisch` werkt; `gearchiveerd` in geen modus vindbaar; transitietabel + trigger-spiegel 1-op-1; status-sanity's + SQL-02 groen.
+
+### FASE 2B — Bronstatus → `rag_uitgesloten` (0153), eigen track
+
+Start **ná** de impact-inventaris (`IMPACT-0153-generieke-levenscyclus.md`). Gate-zwaar: raakt tenant-documenten én de platform-curatie.
+
+**2B.1 Impact-inventaris.** Precieze surface van de generieke-content-levenscyclus (bestanden, DB-trigger, gates) opleveren en aftekenen vóór de bouw.
+
+**2B.2 `rag_uitgesloten` + capability.** `documenten` krijgt `rag_uitgesloten boolean`; nieuwe capability `documents.rag.exclude` (redenplicht + auditregel). `bronstatus` (+ chunk-denorm) en de bronstatus-transities vervallen.
+
+**2B.3 Generieke-content-levenscyclus herbedraden (T6/T10).** `fn_generiek_geldigheidsstatus(status, bronstatus)` herontwerpen naar de nieuwe velden (deprecated → documentstatus `historisch`, withdrawn → `rag_uitgesloten`); `trg_generiek_status_overgang`/`fn_generiek_transitie` en de platform-curatie-acties/UI (`app/(platform)/.../generieke-bibliotheek/`) ombouwen.
+
+**2B.4 RPC-poort (bronstatus-kant).** `bronstatus='actief'`-eis eruit; `rag_uitgesloten=false` onvoorwaardelijk in alle modi. `rag.ts` (`isPubliceerbaar`, `ACTUELE_BRON_STATUSSEN`, `zouActueelZijn`). Mapping: `uitgesloten → rag_uitgesloten=true`; `historisch → documentstatus historisch`; overige default.
+
+**Acceptatie 2B:** RAG-bereik-diff (incl. generieke bibliotheek) met verklaarde delta, **nul onverklaarde verschuivingen**; `rag_uitgesloten=true` weert in **alle** modi; de generieke displaystatus (withdrawn/deprecated) is before/after gelijk; structurele gates schoon.
 
 ---
 

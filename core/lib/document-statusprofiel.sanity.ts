@@ -66,15 +66,12 @@ test("filter laat van_kracht staan voor een normatief type", () => {
   assert.deepEqual(uit, ["vastgesteld", "van_kracht"]);
 });
 
-test("filter raakt UITSLUITEND van_kracht — additief", () => {
-  // Alle overige statussen in de huidige 8-waarden-set blijven ongemoeid.
+test("filter raakt UITSLUITEND van_kracht — alle overige statussen blijven", () => {
+  // De 5-waarden-set (0154); alleen van_kracht wordt door het profiel geweerd.
   const basis: DocumentStatus[] = [
     "concept",
-    "ter_bespreking",
-    "ter_besluitvorming",
     "vastgesteld",
-    "vervangen",
-    "alleen_historisch",
+    "historisch",
     "gearchiveerd",
   ];
   assert.deepEqual(toegestaneStatussenVoorType(basis, "memo"), basis);

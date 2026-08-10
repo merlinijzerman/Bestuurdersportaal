@@ -1,12 +1,17 @@
 // ============================================================
-//  Sanity-tests voor de statustransitiespec (Increment C, GATE).
+//  Sanity-tests voor de statustransitiespec (GATE).
 //
-//  Dekt elke toegestane/verboden overgang uit TO §3.1, de harde
-//  conceptregel (conceptdoc met bronstatus=actief is GEEN actuele bron),
-//  redenplicht, RAG-bruikbaarheid en de bronstatus-as.
+//  Model na besluit 0154 / DOELMODEL-status-as: documentstatus = 5 waarden
+//  {concept, vastgesteld, van_kracht, historisch, gearchiveerd}. De rijpingsketen
+//  (ter_bespreking/ter_besluitvorming) en de aparte afvoerstatussen
+//  (vervangen/alleen_historisch) zijn vervallen; `historisch` is hun merge en
+//  `concept → vastgesteld` is nu toegestaan ("sprong verboden" vervalt).
+//
+//  De bronstatus-as bestaat in deze tussenstap nog (wordt in besluit 0153
+//  vervangen door `rag_uitgesloten`); die tests blijven zolang de laag er is.
 //
 //  Geen testframework in de repo; standalone met assert.
-//  Uitvoeren: npx tsx lib/document-status-transities.sanity.ts
+//  Uitvoeren: npx tsx core/lib/document-status-transities.sanity.ts
 // ============================================================
 
 import assert from "node:assert/strict";
@@ -36,21 +41,23 @@ function test(naam: string, fn: () => void) {
 
 console.log("document-status-transitie sanity-tests:");
 
-// ── Toegestane overgangen (TO §3.1) ───────────────────────────────────
+// ── Toegestane overgangen (DOELMODEL §4) ──────────────────────────────
 const TOEGESTAAN: Array<[DocumentStatus | "upload", DocumentStatus]> = [
   ["upload", "concept"],
-  // Ingest-verklaringen (besluit 0136) — aparte herkomst, geen ketensprong.
+  // Ingest-verklaringen (besluit 0136) — aparte herkomst.
   ["upload", "vastgesteld"],
   ["upload", "van_kracht"],
-  ["concept", "ter_bespreking"],
-  ["ter_bespreking", "ter_besluitvorming"],
-  ["ter_besluitvorming", "vastgesteld"],
+  // Portaal-keten zonder tussenstaten (0154).
+  ["concept", "vastgesteld"],
   ["vastgesteld", "van_kracht"],
-  ["van_kracht", "vervangen"],
-  ["van_kracht", "alleen_historisch"],
+  // Afvoeren naar historisch (merge van vervangen + alleen_historisch).
+  ["vastgesteld", "historisch"],
+  ["van_kracht", "historisch"],
+  // Archiveren vanaf elke levende status.
   ["concept", "gearchiveerd"],
+  ["vastgesteld", "gearchiveerd"],
   ["van_kracht", "gearchiveerd"],
-  ["vervangen", "gearchiveerd"],
+  ["historisch", "gearchiveerd"],
 ];
 
 test("alle gespecificeerde overgangen zijn toegestaan", () => {
@@ -60,14 +67,14 @@ test("alle gespecificeerde overgangen zijn toegestaan", () => {
 });
 
 // ── Verboden overgangen ───────────────────────────────────────────────
-test("sprong concept → vastgesteld is verboden", () => {
-  assert.equal(magOvergaan("concept", "vastgesteld"), false);
+test("concept → van_kracht is verboden (van_kracht alleen vanaf vastgesteld/upload)", () => {
+  assert.equal(magOvergaan("concept", "van_kracht"), false);
 });
 
-test("terug vervangen → van_kracht niet via normale flow", () => {
-  assert.equal(magOvergaan("vervangen", "van_kracht"), false);
+test("terug historisch → van_kracht niet via normale flow", () => {
+  assert.equal(magOvergaan("historisch", "van_kracht"), false);
   // wel benoemd in de tabel (admin-herstel), maar toegestaan=false
-  assert.equal(vindTransitie("vervangen", "van_kracht")?.viaAdminHerstel, true);
+  assert.equal(vindTransitie("historisch", "van_kracht")?.viaAdminHerstel, true);
 });
 
 test("no-op (van === naar) is geen toegestane overgang", () => {
@@ -77,65 +84,59 @@ test("no-op (van === naar) is geen toegestane overgang", () => {
 });
 
 test("niet-genoemde overgangen zijn impliciet verboden", () => {
-  // Een greep uit onzinnige overgangen die niet in de tabel staan.
   assert.equal(magOvergaan("vastgesteld", "concept"), false);
-  assert.equal(magOvergaan("ter_bespreking", "van_kracht"), false);
-  assert.equal(magOvergaan("alleen_historisch", "vastgesteld"), false);
+  assert.equal(magOvergaan("historisch", "vastgesteld"), false);
   assert.equal(magOvergaan("gearchiveerd", "van_kracht"), false);
+  assert.equal(magOvergaan("concept", "historisch"), false); // niet in de tabel
 });
 
-// ── Harde conceptregel ────────────────────────────────────────────────
-test("conceptregel: concept/ter_bespreking/ter_besluitvorming nooit actuele bron", () => {
+// ── Harde conceptregel + actuele-bron-statussen ───────────────────────
+test("conceptregel: concept is nooit een actuele bron", () => {
   assert.equal(isActueleBronStatus("concept"), false);
-  assert.equal(isActueleBronStatus("ter_bespreking"), false);
-  assert.equal(isActueleBronStatus("ter_besluitvorming"), false);
 });
 
-test("conceptregel: alleen vastgesteld + van_kracht zijn actuele-bron-statussen", () => {
+test("alleen vastgesteld + van_kracht zijn actuele-bron-statussen", () => {
   assert.equal(isActueleBronStatus("vastgesteld"), true);
   assert.equal(isActueleBronStatus("van_kracht"), true);
-  // de overige (vervangen/alleen_historisch/gearchiveerd) zijn dat niet
-  assert.equal(isActueleBronStatus("vervangen"), false);
-  assert.equal(isActueleBronStatus("alleen_historisch"), false);
+  assert.equal(isActueleBronStatus("historisch"), false);
   assert.equal(isActueleBronStatus("gearchiveerd"), false);
 });
 
-test("conceptregel matcht de transitie-vlag voor alle concept-overgangen", () => {
-  // Elke overgang waarvan de DOELstatus een concept-status is, mag nooit
-  // bruikbaarInActueleRagNaOvergang=true hebben.
-  const conceptStatussen: DocumentStatus[] = [
-    "concept",
-    "ter_bespreking",
-    "ter_besluitvorming",
-  ];
+test("een overgang naar concept mag nooit actueel-bruikbaar zijn", () => {
   for (const t of STATUS_TRANSITIES) {
-    if (conceptStatussen.includes(t.naar)) {
+    if (t.naar === "concept") {
       assert.equal(
         t.bruikbaarInActueleRagNaOvergang,
         false,
         `${t.van} → ${t.naar} mag niet actueel bruikbaar zijn`
       );
     }
+    // historisch/gearchiveerd zijn eveneens nooit actueel bruikbaar.
+    if (t.naar === "historisch" || t.naar === "gearchiveerd") {
+      assert.equal(t.bruikbaarInActueleRagNaOvergang, false);
+    }
   }
 });
 
 // ── Redenplicht ───────────────────────────────────────────────────────
 test("redenplicht op governance-kritieke overgangen", () => {
-  assert.equal(redenVerplicht("ter_besluitvorming", "vastgesteld"), true);
-  assert.equal(redenVerplicht("van_kracht", "vervangen"), true);
-  assert.equal(redenVerplicht("van_kracht", "alleen_historisch"), true);
+  assert.equal(redenVerplicht("concept", "vastgesteld"), true);
+  assert.equal(redenVerplicht("vastgesteld", "historisch"), true);
+  assert.equal(redenVerplicht("van_kracht", "historisch"), true);
   assert.equal(redenVerplicht("van_kracht", "gearchiveerd"), true);
 });
 
-test("geen redenplicht op de lichte overgangen", () => {
-  assert.equal(redenVerplicht("concept", "ter_bespreking"), false);
-  assert.equal(redenVerplicht("ter_bespreking", "ter_besluitvorming"), false);
+test("geen redenplicht op de lichte overgang vastgesteld → van_kracht", () => {
   assert.equal(redenVerplicht("vastgesteld", "van_kracht"), false);
 });
 
-test("van_kracht → vervangen vereist vervangen_door", () => {
-  assert.equal(
-    vindTransitie("van_kracht", "vervangen")?.vereistVervangenDoor,
+test("de historisch-overgangen vereisen GEEN vervangen_door meer (optioneel)", () => {
+  assert.notEqual(
+    vindTransitie("vastgesteld", "historisch")?.vereistVervangenDoor,
+    true
+  );
+  assert.notEqual(
+    vindTransitie("van_kracht", "historisch")?.vereistVervangenDoor,
     true
   );
 });
@@ -144,34 +145,32 @@ test("van_kracht → vervangen vereist vervangen_door", () => {
 test("statusovergangen vereisen documents.status.change (behalve upload)", () => {
   assert.equal(vereisteCapability("upload", "concept"), "upload");
   assert.equal(
-    vereisteCapability("ter_besluitvorming", "vastgesteld"),
+    vereisteCapability("concept", "vastgesteld"),
     "documents.status.change"
   );
   assert.equal(
-    vereisteCapability("van_kracht", "vervangen"),
+    vereisteCapability("van_kracht", "historisch"),
     "documents.status.change"
-  );
-});
-
-test("concept → ter_bespreking is ook door uploader-eigen toegestaan", () => {
-  assert.equal(
-    vindTransitie("concept", "ter_bespreking")?.uploaderEigenToegestaan,
-    true
   );
 });
 
 // ── Toegestane vervolgstatussen (UI: vereisten vooraf) ─────────────────
 test("toegestaneVervolgstatussen geeft alleen toegestane doelen", () => {
-  const vanaf = toegestaneVervolgstatussen("van_kracht");
   assert.deepEqual(
-    [...vanaf].sort(),
-    ["alleen_historisch", "gearchiveerd", "vervangen"].sort()
+    [...toegestaneVervolgstatussen("van_kracht")].sort(),
+    ["gearchiveerd", "historisch"].sort()
   );
-  // concept kan naar ter_bespreking of gearchiveerd, niet naar vastgesteld
-  assert.ok(!toegestaneVervolgstatussen("concept").includes("vastgesteld"));
+  assert.deepEqual(
+    [...toegestaneVervolgstatussen("concept")].sort(),
+    ["gearchiveerd", "vastgesteld"].sort()
+  );
+  assert.deepEqual(
+    [...toegestaneVervolgstatussen("vastgesteld")].sort(),
+    ["gearchiveerd", "historisch", "van_kracht"].sort()
+  );
 });
 
-// ── Bronstatus-as ─────────────────────────────────────────────────────
+// ── Bronstatus-as (bestaat nog tot besluit 0153) ──────────────────────
 test("bronstatus historisch/uitgesloten → actief vereist reden + RAG-impact", () => {
   assert.equal(magBronstatusOvergaan("historisch", "actief"), true);
   assert.equal(bronstatusRedenVerplicht("historisch", "actief"), true);
@@ -193,31 +192,23 @@ test("bronstatus no-op is geen overgang", () => {
 });
 
 // ── Statusverklaring bij ingest (besluit 0136) ────────────────────────────
-
 test("ingest-verklaring kan alleen naar vastgesteld of van_kracht", () => {
   const toegestaan = toegestaneIngestStatussen();
   assert.deepEqual([...toegestaan].sort(), ["van_kracht", "vastgesteld"]);
-  // `concept` is de default en hoort GEEN verklaring te zijn — anders zou de
-  // UI hem als keuze tonen en suggereren dat er iets verklaard wordt.
   assert.ok(!toegestaan.includes("concept"));
 });
 
 test("ingest-verklaring levert een ACTUELE bron op", () => {
-  // De hele reden van dit pad: het document moet daarna vindbaar zijn in de
-  // default retrievalmodus. Zou dit ooit false worden, dan is het pad zinloos.
   for (const naar of toegestaneIngestStatussen()) {
     assert.equal(isActueleBronStatus(naar), true);
     assert.equal(vindTransitie("upload", naar)?.bruikbaarInActueleRagNaOvergang, true);
   }
 });
 
-test("ingest-verklaring vraagt ALTIJD een reden", () => {
-  // Zonder redenplicht is dit een stille sprong langs de bestuurlijke keten.
-  // De reden is wat het auditspoor eerlijk houdt.
+test("ingest-verklaring vraagt ALTIJD een reden; gewone upload niet", () => {
   for (const naar of toegestaneIngestStatussen()) {
     assert.equal(redenVerplicht("upload", naar), true);
   }
-  // De gewone upload (naar concept) verklaart niets en vraagt dus geen reden.
   assert.equal(redenVerplicht("upload", "concept"), false);
 });
 
@@ -228,19 +219,14 @@ test("ingest-verklaring vraagt de statuswijzig-capability, niet 'upload'", () =>
   assert.equal(vereisteCapability("upload", "concept"), "upload");
 });
 
-test("REGRESSIEPIN: de keten vanuit concept is NIET verruimd", () => {
-  // Kern van besluit 0136: de ingest-verklaring is een aparte herkomst, geen
-  // sprong binnen de keten. Wordt dit ooit toegestaan, dan kan een document
-  // dat al ín besluitvorming is stilzwijgend actuele bron worden.
-  assert.equal(magOvergaan("concept", "vastgesteld"), false);
-  assert.equal(magOvergaan("concept", "van_kracht"), false);
-  assert.equal(magOvergaan("ter_bespreking", "vastgesteld"), false);
-  assert.equal(magOvergaan("ter_bespreking", "van_kracht"), false);
-  assert.equal(magOvergaan("ter_besluitvorming", "van_kracht"), false);
-  // En de conceptregel zelf blijft overeind.
+test("REGRESSIEPIN: concept → vastgesteld is NU toegestaan (0154), geen sprong meer", () => {
+  // De 'sprong verboden'-regel is vervallen omdat er geen tussenstaten meer zijn.
+  assert.equal(magOvergaan("concept", "vastgesteld"), true);
+  // Maar de conceptregel zelf blijft: een concept is nooit een actuele bron
+  // (het wordt dat pas ná de vaststelling).
   assert.equal(isActueleBronStatus("concept"), false);
-  assert.equal(isActueleBronStatus("ter_bespreking"), false);
-  assert.equal(isActueleBronStatus("ter_besluitvorming"), false);
+  // En van_kracht blijft onbereikbaar vanuit concept in één stap.
+  assert.equal(magOvergaan("concept", "van_kracht"), false);
 });
 
 console.log(`\n${n} sanity-tests geslaagd.`);

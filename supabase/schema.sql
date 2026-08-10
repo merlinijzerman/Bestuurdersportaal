@@ -277,8 +277,7 @@ create table if not exists public.documenten (
                    'beleid','besluit','besluitdocument','besluitregistratie',
                    'bestuursvoorstel','notulen','advies','memo','analyse','rapportage','bijlage','overig')),
   status         text check (status in (
-                   'concept','ter_bespreking','ter_besluitvorming','vastgesteld',
-                   'van_kracht','vervangen','alleen_historisch','gearchiveerd')),
+                   'concept','vastgesteld','van_kracht','historisch','gearchiveerd')),
   -- bronstatus NULL ≡ "actief" tijdens de overgang (Increment C backfill);
   -- strikte filtering komt in Increment G.
   bronstatus     text check (bronstatus in (

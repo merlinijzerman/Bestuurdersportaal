@@ -58,12 +58,9 @@ function generiekeChunk(
 
 const ALLE_STATUS = [
   "concept",
-  "ter_bespreking",
-  "ter_besluitvorming",
   "vastgesteld",
   "van_kracht",
-  "vervangen",
-  "alleen_historisch",
+  "historisch",
   "gearchiveerd",
   null,
 ];
@@ -103,15 +100,14 @@ check("withdrawn ≡ gearchiveerd OF bronstatus='uitgesloten'", () => {
 });
 
 // ── 4. deprecated = verouderd maar leesbaar als historie ─────────────────────
-check("deprecated ≡ vervangen/alleen_historisch OF bronstatus='historisch'", () => {
-  assert.equal(generiekGeldigheidsstatus({ status: "vervangen", bronstatus: "actief" }), "deprecated");
-  assert.equal(generiekGeldigheidsstatus({ status: "alleen_historisch", bronstatus: "actief" }), "deprecated");
+check("deprecated ≡ status='historisch' OF bronstatus='historisch'", () => {
+  assert.equal(generiekGeldigheidsstatus({ status: "historisch", bronstatus: "actief" }), "deprecated");
   assert.equal(generiekGeldigheidsstatus({ status: "vastgesteld", bronstatus: "historisch" }), "deprecated");
 });
 
 // ── 5. draft = al het overige (nog niet gepubliceerd) ────────────────────────
-check("draft ≡ concept/ter_bespreking/ter_besluitvorming/vastgesteld (nog niet published)", () => {
-  for (const status of ["concept", "ter_bespreking", "ter_besluitvorming", "vastgesteld", null]) {
+check("draft ≡ concept/vastgesteld (nog niet published)", () => {
+  for (const status of ["concept", "vastgesteld", null]) {
     assert.equal(generiekGeldigheidsstatus({ status, bronstatus: "actief" }), "draft");
   }
 });

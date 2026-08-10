@@ -27,7 +27,7 @@ De documentstatus gaat naar **vijf waarden**: `concept`, `vastgesteld`, `van_kra
 
 Governancebetekenis (vastgelegd om misbruik te voorkomen): `historisch` = institutioneel geheugen, vindbaar; `gearchiveerd` = administratief bewaard, niet als context; `rag_uitgesloten` = zichtbaar voor mensen, niet voor AI.
 
-Onderligger: `DOELMODEL-status-as v0.2`. Samen te implementeren met besluit 0153 (bronstatus).
+Onderligger: `DOELMODEL-status-as v0.2`. **Gaat vóór 0153 (2026-08-09):** aanvankelijk samen gepland, maar 0153 (bronstatus) bleek de generieke-content-levenscyclus (T6/T10) te dragen en is losgetrokken tot een eigen track. 0154 is mechanisch (naam-remap van tussen-/eindstaten) en laag-risico; `bronstatus` blijft in deze migratie ongemoeid en de RPC-poort houdt voorlopig zijn `bronstatus='actief'`-eis (verwijderd in 0153).
 
 ## Overwogen alternatieven
 

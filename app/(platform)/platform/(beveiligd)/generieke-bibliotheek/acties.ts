@@ -581,7 +581,7 @@ export async function curatieDepreceren(documentId: string, reden: string): Prom
         const nieuwGeldigTot = huidig.geldig_tot ?? vandaag;
         const { error: updErr } = await svc
           .from("documenten")
-          .update({ status: "alleen_historisch", bronstatus: "historisch", geldig_tot: nieuwGeldigTot })
+          .update({ status: "historisch", bronstatus: "historisch", geldig_tot: nieuwGeldigTot })
           .eq("id", documentId);
         if (updErr) {
           return {
@@ -591,7 +591,7 @@ export async function curatieDepreceren(documentId: string, reden: string): Prom
         }
 
         await logMetadata(svc, documentId, huidig.titel, identiteit, redenTrim, [
-          { veld_naam: "status", oude_waarde: huidig.status, nieuwe_waarde: "alleen_historisch", wijzig_type: "status", rag_impact: true },
+          { veld_naam: "status", oude_waarde: huidig.status, nieuwe_waarde: "historisch", wijzig_type: "status", rag_impact: true },
           { veld_naam: "bronstatus", oude_waarde: huidig.bronstatus, nieuwe_waarde: "historisch", wijzig_type: "bronstatus", rag_impact: true },
           { veld_naam: "geldig_tot", oude_waarde: huidig.geldig_tot, nieuwe_waarde: nieuwGeldigTot, wijzig_type: "metadata", rag_impact: true },
         ]);
@@ -887,7 +887,7 @@ export async function curatieVervangen(oudId: string, fd: FormData): Promise<Cur
           .from("documenten")
           .update({
             vervangen_door_document_id: nieuw.documentId,
-            status: "alleen_historisch",
+            status: "historisch",
             bronstatus: "historisch",
             geldig_tot: vandaag,
           })
@@ -899,7 +899,7 @@ export async function curatieVervangen(oudId: string, fd: FormData): Promise<Cur
 
         await logMetadata(svc, oudId, oud.titel, identiteit, "Vervangen door nieuwe versie", [
           { veld_naam: "vervangen_door_document_id", oude_waarde: null, nieuwe_waarde: nieuw.documentId, wijzig_type: "koppeling", rag_impact: false },
-          { veld_naam: "status", oude_waarde: oud.status, nieuwe_waarde: "alleen_historisch", wijzig_type: "status", rag_impact: true },
+          { veld_naam: "status", oude_waarde: oud.status, nieuwe_waarde: "historisch", wijzig_type: "status", rag_impact: true },
           { veld_naam: "bronstatus", oude_waarde: oud.bronstatus, nieuwe_waarde: "historisch", wijzig_type: "bronstatus", rag_impact: true },
         ]);
         revalidatePath(LIJST_PAD);

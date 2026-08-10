@@ -25,35 +25,31 @@
 
 // ── Statuswaarden (laag 2 + laag 3) ───────────────────────────────────
 
+// Besluit 0154 / DOELMODEL-status-as §2: documentstatus van 8 naar 5 waarden.
+// `concept` absorbeert de oude tussenstaten (ter_bespreking/ter_besluitvorming);
+// `historisch` is de merge van (vervangen/alleen_historisch). Het opgeslagen
+// token blijft `vastgesteld` — het per-type zichtbare label komt uit het
+// statusprofiel (document-statusprofiel.ts).
 export type DocumentStatus =
   | "concept"
-  | "ter_bespreking"
-  | "ter_besluitvorming"
   | "vastgesteld"
   | "van_kracht"
-  | "vervangen"
-  | "alleen_historisch"
+  | "historisch"
   | "gearchiveerd";
 
 export const DOCUMENT_STATUSSEN: DocumentStatus[] = [
   "concept",
-  "ter_bespreking",
-  "ter_besluitvorming",
   "vastgesteld",
   "van_kracht",
-  "vervangen",
-  "alleen_historisch",
+  "historisch",
   "gearchiveerd",
 ];
 
 export const DOCUMENT_STATUS_LABEL: Record<DocumentStatus, string> = {
   concept: "Concept",
-  ter_bespreking: "Ter bespreking",
-  ter_besluitvorming: "Ter besluitvorming",
   vastgesteld: "Vastgesteld",
   van_kracht: "Van kracht",
-  vervangen: "Vervangen",
-  alleen_historisch: "Alleen historisch",
+  historisch: "Historisch",
   gearchiveerd: "Gearchiveerd",
 };
 
@@ -137,12 +133,9 @@ export interface StatusTransitie {
  */
 const ARCHIVEERBARE_BRONNEN: DocumentStatus[] = [
   "concept",
-  "ter_bespreking",
-  "ter_besluitvorming",
   "vastgesteld",
   "van_kracht",
-  "vervangen",
-  "alleen_historisch",
+  "historisch",
 ];
 
 export const STATUS_TRANSITIES: StatusTransitie[] = [
@@ -158,23 +151,12 @@ export const STATUS_TRANSITIES: StatusTransitie[] = [
       "Upload zonder statusverklaring start als concept; nooit actuele bron.",
   },
   // ── Ingest van een REEDS BUITEN HET PORTAAL VASTGESTELD document ──────────
-  // Besluit 0136. De keten concept -> ter_bespreking -> ter_besluitvorming ->
-  // vastgesteld modelleert een document dat IN het portaal ontstaat en via
-  // bestuurlijke besluitvorming rijpt. Een pensioenreglement of jaarverslag dat
-  // je uploadt, is buiten het portaal al vastgesteld; dat door die keten duwen
-  // laat in document_metadata_log een spoor achter van bestuurlijke overgangen
-  // die nooit hebben plaatsgevonden. Voor de aantoonbaarheid is dat slechter,
-  // niet beter: je fabriceert een besluitvormingsgeschiedenis.
-  //
-  // Daarom een aparte, expliciete ingest-verklaring. Bewust zo vormgegeven:
-  //   - alleen vanaf de pseudo-herkomst `upload` -- de keten vanuit `concept`
-  //     blijft ongemoeid, er ontstaat geen sprong binnen de keten;
-  //   - redenplicht = true: de uploader verklaart WAAROM dit al vastgesteld is
-  //     (bv. "vastgesteld in bestuursvergadering 12-03-2026, buiten portaal");
-  //   - capability documents.status.change, dus niet elke uploader mag dit.
-  // De DB-trigger raakt dit pad niet (`before update of status`), maar de
-  // SQL-spiegel fn_document_status_transitie krijgt dezelfde rijen zodat de
-  // tweeling 1-op-1 blijft -- zie migratie 2026_08_06_status_bij_ingest.sql.
+  // Besluit 0136. Een pensioenreglement of jaarverslag dat je uploadt, is buiten
+  // het portaal al vastgesteld; dat verklaar je bij aanlevering (redenplicht),
+  // in plaats van een besluitvormingsgeschiedenis te fabriceren. Alleen vanaf de
+  // pseudo-herkomst `upload`. `upload -> van_kracht` mag alleen voor de
+  // normatieve cluster; dat statusprofiel wordt server-side afgedwongen
+  // (document-statusprofiel.ts), niet in deze transitietabel.
   {
     van: "upload",
     naar: "vastgesteld",
@@ -195,39 +177,21 @@ export const STATUS_TRANSITIES: StatusTransitie[] = [
     herindexering: true,
     bruikbaarInActueleRagNaOvergang: true,
     toelichting:
-      "Ingest van een buiten het portaal geldend document; reden verplicht.",
+      "Ingest van een buiten het portaal geldend document; reden verplicht. Alleen normatief (statusprofiel).",
   },
+  // ── Portaal-keten (0154: geen tussenstaten meer) ─────────────────────────
+  // De rijpingsketen concept -> ter_bespreking -> ter_besluitvorming is
+  // vervallen; de besluitvormingsfase leeft op de dossier-/procedurestatus. Een
+  // conceptdocument kan nu direct worden vastgesteld ("sprong verboden" vervalt).
   {
     van: "concept",
-    naar: "ter_bespreking",
-    toegestaan: true,
-    capability: "documents.status.change",
-    uploaderEigenToegestaan: true,
-    redenplicht: false,
-    herindexering: true,
-    bruikbaarInActueleRagNaOvergang: false,
-    toelichting: "Conceptregel: nooit actuele bron.",
-  },
-  {
-    van: "ter_bespreking",
-    naar: "ter_besluitvorming",
-    toegestaan: true,
-    capability: "documents.status.change",
-    redenplicht: false,
-    herindexering: true,
-    bruikbaarInActueleRagNaOvergang: false,
-    toelichting: "Conceptregel: nooit actuele bron.",
-  },
-  {
-    van: "ter_besluitvorming",
     naar: "vastgesteld",
     toegestaan: true,
     capability: "documents.status.change",
     redenplicht: true,
     herindexering: true,
     bruikbaarInActueleRagNaOvergang: true,
-    toelichting:
-      "Vaststelling: bronstatus actief_na_vaststelling wordt nu effectief actief (mits geldigheid).",
+    toelichting: "Vaststelling in het portaal; reden verplicht.",
   },
   {
     van: "vastgesteld",
@@ -237,26 +201,32 @@ export const STATUS_TRANSITIES: StatusTransitie[] = [
     redenplicht: false,
     herindexering: true,
     bruikbaarInActueleRagNaOvergang: true,
+    toelichting: "Geldende norm; alleen normatief (statusprofiel).",
   },
+  // ── Afvoeren naar historisch (merge van vervangen + alleen_historisch) ────
+  // `vervangen_door_document_id` is OPTIONEEL (0154/DOELMODEL §4): gebruik het om
+  // de opvolger vast te leggen, maar het is geen harde eis meer.
   {
-    van: "van_kracht",
-    naar: "vervangen",
-    toegestaan: true,
-    capability: "documents.status.change",
-    redenplicht: true,
-    vereistVervangenDoor: true,
-    herindexering: true,
-    bruikbaarInActueleRagNaOvergang: false,
-    toelichting: "Alleen nog historisch bruikbaar.",
-  },
-  {
-    van: "van_kracht",
-    naar: "alleen_historisch",
+    van: "vastgesteld",
+    naar: "historisch",
     toegestaan: true,
     capability: "documents.status.change",
     redenplicht: true,
     herindexering: true,
     bruikbaarInActueleRagNaOvergang: false,
+    toelichting:
+      "Afvoeren van een terminaal-vastgesteld stuk; blijft historisch-vindbaar. vervangen_door optioneel.",
+  },
+  {
+    van: "van_kracht",
+    naar: "historisch",
+    toegestaan: true,
+    capability: "documents.status.change",
+    redenplicht: true,
+    herindexering: true,
+    bruikbaarInActueleRagNaOvergang: false,
+    toelichting:
+      "Geldende norm afgevoerd; blijft historisch-vindbaar. vervangen_door optioneel.",
   },
   // * → gearchiveerd (uitgevouwen per bronstatus)
   ...ARCHIVEERBARE_BRONNEN.map(
@@ -270,9 +240,10 @@ export const STATUS_TRANSITIES: StatusTransitie[] = [
       bruikbaarInActueleRagNaOvergang: false,
     })
   ),
-  // Expliciet verboden, maar benoemd (documentatie + testdekking):
+  // Expliciet verboden, maar benoemd (documentatie + testdekking): een
+  // afgevoerd document keert niet via de normale flow terug naar actueel.
   {
-    van: "vervangen",
+    van: "historisch",
     naar: "van_kracht",
     toegestaan: false,
     capability: "admin",
@@ -281,16 +252,6 @@ export const STATUS_TRANSITIES: StatusTransitie[] = [
     herindexering: true,
     bruikbaarInActueleRagNaOvergang: false,
     toelichting: "Niet via normale flow; uitsluitend admin-herstel.",
-  },
-  {
-    van: "concept",
-    naar: "vastgesteld",
-    toegestaan: false,
-    capability: null,
-    redenplicht: false,
-    herindexering: false,
-    bruikbaarInActueleRagNaOvergang: false,
-    toelichting: "Sprong verboden: geen overslaan van tussenstatussen.",
   },
 ];
 

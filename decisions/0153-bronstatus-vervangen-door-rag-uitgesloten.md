@@ -21,7 +21,7 @@ De **bronstatus-as vervalt** en wordt vervangen door één eigenschap **`rag_uit
 - `actief_na_vaststelling` → vervalt (de documentstatus-poort dekt het);
 - `actief`/NULL → default.
 
-Onderligger: `DOELMODEL-status-as v0.2`. Gezamenlijk geïmplementeerd met besluit 0154 (documentstatus), want ze delen de RPC-poort en de transitietabel.
+Onderligger: `DOELMODEL-status-as v0.2`. **Gesplitst van 0154 (2026-08-09):** aanvankelijk samen gepland, maar tijdens de bouw bleek `bronstatus` ook de generieke-content-levenscyclus (T6/T10) te dragen. 0154 (documentstatus) gaat daarom vóór als mechanische, laag-risico migratie; deze 0153-track volgt apart, ná een impact-inventaris, en neemt de generieke-levenscyclus expliciet mee.
 
 ## Overwogen alternatieven
 
@@ -36,6 +36,7 @@ Onderligger: `DOELMODEL-status-as v0.2`. Gezamenlijk geïmplementeerd met beslui
 - **Statusmachine:** de bronstatus-transities in `document-status-transities.ts` + de DB-trigger-spiegel vervallen; nieuwe capability `documents.rag.exclude` voor de toggle (met redenplicht + auditregel).
 - **Ingest (0140):** de bronstatus-verklaring bij upload vervalt; de `rag_uitgesloten`-toggle komt in de plaats (capability-gated).
 - **Retrieval:** `rag.ts` (`isPubliceerbaar` → `status ∈ {vastgesteld,van_kracht} && !rag_uitgesloten`).
+- **Generieke-content-levenscyclus (T6/T10) — in scope van deze track:** `fn_generiek_geldigheidsstatus(status, bronstatus)` leidt de generieke-bibliotheekstatus af uit bronstatus (deprecated=`historisch`, withdrawn=`uitgesloten`). Herontwerpen naar de nieuwe velden, plus `trg_generiek_status_overgang`/`fn_generiek_transitie` (migratie `2026_07_10_t10`) en de platform-curatie-acties/UI (`app/(platform)/.../generieke-bibliotheek/`). Deze surface stond niet in doelmodel §9 en is de reden voor de fase-splitsing en de voorafgaande impact-inventaris (`IMPACT-0153-generieke-levenscyclus.md`).
 - **Verplichte bewijsvoering:** before/after **RAG-bereik-diff** (actueel/historisch/uitgesloten per document + AQLab-testset) met verklaarde delta — nul onverklaarde verschuivingen.
 - **Restrisico (aanvaard):** de migratie is onomkeerbaar; test op een kloon vóór productie. Eigenaar: Technical & Security Owner.
 
