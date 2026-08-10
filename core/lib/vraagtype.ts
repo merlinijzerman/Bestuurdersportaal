@@ -326,6 +326,57 @@ export function isVoorstelvraag(vraag: string): boolean {
   return VOORSTELVRAAG_PATRONEN.some((p) => p.test(g));
 }
 
+// ============================================================================
+// Opsteltaak-detectie (B1, 2026-08-10) — register-correctie bij opsteltaken.
+// ----------------------------------------------------------------------------
+// Vraagt de bestuurder om een STUK te PRODUCEREN (memo, notitie, oplegger, brief,
+// nota, concept, voorstel), dan hoort het antwoord in het opsteller-register te
+// staan — het document richt zich tot de lezer (het bestuur), niet tot de
+// opdrachtgever ("uw signaal is terecht"/"goede vraag"). De route geeft dit als
+// `opstelToon` door aan bouwSysteemBlokken; het ontsluit GEEN bevoegdheid (anders
+// dan de bureau-stand) — het corrigeert alleen de toon.
+//
+// Bewust STRENG: een producerend werkwoord ÉN een documentsoort moeten beide
+// aanwezig zijn. Zo blijft "wat staat er in de notitie?" (vraag ÓVER een stuk)
+// buiten schot, terwijl "stel een memo op" / "schrijf een notitie" wél vuren.
+// ============================================================================
+
+// Producerende intentie: een werkwoord dat om het maken van een stuk vraagt.
+const OPSTEL_INTENTIE_PATRONEN: RegExp[] = [
+  /\bopstell?en\b/, // opstellen / opstelen (typo-tolerant)
+  /\bopgesteld\b/,
+  /\bschrijf\b/,
+  /\bschrijven\b/,
+  /\bformuleer\b/,
+  /\bformuleren\b/,
+  /\bstel\b[^.?!]{0,40}\bop\b/, // "stel ... op"
+  /\bmaak\b[^.?!]{0,40}\b(memo|notitie|oplegger|brief|nota|concept|voorstel)\b/,
+];
+
+// Documentsoort. 'voorstel' bewust zonder leidende \b (samenstellingen als
+// bestuursvoorstel/beleidsvoorstel), gelijk aan VOORSTELVRAAG_PATRONEN. Bewust
+// GEEN kaal "stuk" — te generiek, zou met een producerend werkwoord vals vuren.
+const OPSTEL_DOCUMENT_PATRONEN: RegExp[] = [
+  /\b(memo|memorandum|notitie|oplegger|aanbiedingsbrief|brief|nota)\b/,
+  /\bconcept(?:memo|notitie|versie)?\b/,
+  /voorstel(?:len)?\b/,
+  /\b(bestuursstuk|agendastuk)\b/,
+];
+
+/**
+ * Vraagt deze vraag om het OPSTELLEN van een stuk (memo/notitie/oplegger/brief/
+ * nota/concept/voorstel)? Vereist zowel een producerend werkwoord als een
+ * documentsoort — "wat staat er in de notitie?" is dus géén opsteltaak. Pure
+ * heuristiek, programmatisch toetsbaar (lib/vraagtype.sanity.ts).
+ */
+export function isOpsteltaak(vraag: string): boolean {
+  const g = normaliseer(vraag);
+  return (
+    OPSTEL_INTENTIE_PATRONEN.some((p) => p.test(g)) &&
+    OPSTEL_DOCUMENT_PATRONEN.some((p) => p.test(g))
+  );
+}
+
 /**
  * De retrievalmodus voor DEZE vraag: als basis de modus van de antwoordmodus
  * (retrievalModusVoor), maar een voorstel-/conceptvraag die anders op 'actueel'

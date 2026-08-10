@@ -17,6 +17,7 @@ import { createHash } from "node:crypto";
 import {
   TOON_BLOK,
   TOON_BLOK_BUREAU,
+  TOON_BLOK_OPSTELLER,
   NIEUW_ROL_GEDRAG,
   NIEUW_STRUCTUUR,
   NIEUW_TOON,
@@ -94,6 +95,12 @@ const PIN = {
   // groen blijven, is exact het nulgrens-bewijs G23/FR-9a.
   TOON_BLOK_BUREAU: "338b8984da6e80f66cdb702887add05256729765c4dc4df6884102a8be32962e",
   static_bureau_documenten: "b5224895a0cd3e4353f7a24417b38c28e213aa429c1892bf04266f543c894beb",
+  // B1 (2026-08-10) — nieuw, additief. Het opsteller-register en zijn assemblage.
+  // Raakt GEEN bestaande hash: TOON_BLOK_OPSTELLER is een nieuwe constante en de
+  // opsteller-assemblage wordt alleen bereikt met opstelToon=true, dat geen enkele
+  // bestaande call-site meegeeft (nulgrens G23, net als de bureau-toon).
+  TOON_BLOK_OPSTELLER: "03e63c966c0cd1502d96a6c30b48276bf8415f79fc3de584bb409303b6f1e7b0",
+  static_opsteller_documenten: "2f46fb3145a45c1fc78b0a0a0a229a9dace8f4154b2e3dadcb19f11f003a275f",
 } as const;
 
 const CTX: BestuurderContext = {
@@ -202,6 +209,50 @@ test("T2 bureau-toon: register gelijk, maar koppen-norm + expliciete slotafsluit
   assert.ok(lower.includes("nooit als besluit"));
   // Anti-fabricage blijft expliciet.
   assert.ok(lower.includes("verzin niets"));
+});
+
+test("B1 opsteltaak-toon: TOON_BLOK_OPSTELLER + assemblage gepind, nulgrens intact", () => {
+  assert.equal(sha(TOON_BLOK_OPSTELLER), PIN.TOON_BLOK_OPSTELLER, "TOON_BLOK_OPSTELLER is gewijzigd");
+  // De opsteller-assemblage eindigt op TOON_BLOK_OPSTELLER i.p.v. TOON_BLOK.
+  assert.equal(
+    sha(bouwStatischeInstructies(SP_DOCUMENTEN_REGELS, "feitelijk", false, true)),
+    PIN.static_opsteller_documenten
+  );
+  assert.equal(
+    bouwStatischeInstructies(SP_DOCUMENTEN_REGELS, "feitelijk", false, true),
+    `${SP_DOCUMENTEN_REGELS}\n\n${TOON_BLOK_OPSTELLER}`
+  );
+  // NULGRENS (G23): met opstelToon weggelaten óf false is de uitvoer identiek aan
+  // voorheen — TOON_BLOK, niet het opsteller-register.
+  assert.equal(
+    bouwStatischeInstructies(SP_DOCUMENTEN_REGELS, "feitelijk", false, false),
+    bouwStatischeInstructies(SP_DOCUMENTEN_REGELS, "feitelijk")
+  );
+  // Rangorde: bureauToon WINT van opstelToon; opstelToon wint van sparring/duiding.
+  assert.equal(
+    bouwStatischeInstructies(SP_COMBINEREN_REGELS, "feitelijk", true, true),
+    `${SP_COMBINEREN_REGELS}\n\n${TOON_BLOK_BUREAU}`,
+    "bureauToon moet winnen van opstelToon"
+  );
+  for (const m of ["feitelijk", "sparring", "duiding"] as const) {
+    assert.equal(
+      bouwStatischeInstructies(SP_COMBINEREN_REGELS, m, false, true),
+      `${SP_COMBINEREN_REGELS}\n\n${TOON_BLOK_OPSTELLER}`,
+      `opstelToon=true moet TOON_BLOK_OPSTELLER geven, ook bij modus ${m}`
+    );
+  }
+});
+
+test("B1 opsteltaak-toon: anti-affirmatie + adressering aan de lezer staan erin", () => {
+  const lower = TOON_BLOK_OPSTELLER.toLowerCase();
+  // De kern van de fix: het stuk richt zich tot de lezer, niet tot de opdrachtgever.
+  assert.ok(lower.includes("richt zich tot de beoogde lezer"));
+  assert.ok(lower.includes("uw signaal is terecht")); // het verboden voorbeeld staat erin
+  assert.ok(lower.includes("goede vraag"));
+  assert.ok(lower.includes("begin met de probleemstelling"));
+  // Register blijft u-vorm/warm-zakelijk; geen ambtelijke floskels; concept.
+  assert.ok(lower.includes("hierbij delen wij u mede"));
+  assert.ok(lower.includes("concept"));
 });
 
 test("bouwStatischeInstructies-assemblage byte-identiek (feitelijk + sparring)", () => {

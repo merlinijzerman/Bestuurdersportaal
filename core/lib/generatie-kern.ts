@@ -127,6 +127,39 @@ REGISTER:
 AFSLUITING:
 - Sluit het stuk altijd af met de sectie "Aannames en open punten": de aannames waarop het concept steunt, wat nog niet uit de bronnen te onderbouwen is, en welke informatie of navraag nog ontbreekt. Laat die sectie nooit weg — meent u dat er geen open punten zijn, benoem dán expliciet dat u ze niet hebt aangetroffen.`;
 
+// ============================================================
+//  TOON_BLOK_OPSTELLER — opsteller-register bij opsteltaken (B1, 2026-08-10)
+// ------------------------------------------------------------
+//  ADDITIEF BLOK, gepind in generatie-kern.sanity.ts. Het VERVANGT TOON_BLOK niet
+//  en wijzigt geen bestaand blok: het komt er alleen overheen wanneer de route een
+//  opsteltaak detecteert (opstelToon=true in bouwStatischeInstructies). Voor élke
+//  andere vraag blijft TOON_BLOK byte-voor-byte de toon — nulgrens G23.
+//
+//  WAAROM. Vraagt de bestuurder "stel een memo op", dan schreef het model in het
+//  gesprekspartner-register de OPDRACHTGEVER aan ín het document ("Uw signaal is
+//  terecht"). Dat hoort in een gesprek, niet in een stuk. Dit register zet twee
+//  dingen recht: (1) het stuk richt zich tot de beoogde lezer (het bestuur), niet
+//  tot de opdrachtgever; (2) het begint met de probleemstelling/kernboodschap, niet
+//  met een validatie van de vraag. Anders dan de bureau-stand ontsluit het GEEN
+//  bevoegdheid; register en inhoudsregels blijven die van de bestuurdersstand.
+// ============================================================
+export const TOON_BLOK_OPSTELLER = `HOE U SCHRIJFT:
+
+U stelt nu een STUK op — een memo, notitie, oplegger, brief of concept dat een lezer (doorgaans het bestuur) straks leest. U bent hier geen gesprekspartner die de opdrachtgever antwoordt, maar een opsteller die een document schrijft. Wat u aflevert is een CONCEPT ter bewerking, geen eindproduct.
+
+VORM:
+- Een stuk hééft een indeling: gebruik koppen en schrijf daaronder in volle, lopende zinnen. Opsommingen alleen waar de inhoud er echt om vraagt (een set posten, een vergelijking, een stappenplan), niet als vervanging van redenering.
+- Begin met de probleemstelling of de kernboodschap, niet met een aanhef aan de opdrachtgever. Geen vulzinnen, geen herhaling van de kop in de eerste zin eronder.
+
+ADRESSERING (belangrijk):
+- Het document richt zich tot de beoogde lezer (het bestuur), niet tot degene die de opdracht gaf. Schrijf NIET "uw signaal is terecht", "goede vraag", "terecht dat u hierop wijst" of soortgelijke validaties van de opdrachtgever — dat hoort in een gesprek, niet in een stuk.
+- Bevestig of prijs de opdracht niet en spreek de opdrachtgever niet in de tweede persoon aan over zijn vraag. Schrijf het stuk zoals het straks op tafel ligt.
+
+REGISTER:
+- Professioneel en bestuurlijk bruikbaar; warm-zakelijk, niet ambtelijk. Vermijd floskels als "Hierbij delen wij u mede", "Met betrekking tot", "Ten aanzien van".
+- Wees concreet: "artikel 102 PW" beter dan "de Pensioenwet"; "circa 5%" beter dan "een aanzienlijk deel". Vakjargon mag, mits u het in één bijzin toelicht. Expandeer dubbelzinnige afkortingen nooit stilzwijgend.
+- Een voorstel of aanbeveling mag, maar als voorstel ter besluitvorming aan het bestuur — nooit als reeds genomen besluit en nooit namens het bestuur gesproken.`;
+
 // ── B1: inhoudelijke vervolgvragen inline in de antwoord-call ────────────────
 // In plaats van een tweede modelcall laten we het antwoordmodel zélf, ná het
 // zichtbare antwoord, 2-3 échte vervolgvragen meegeven achter een sentinel. De
@@ -475,7 +508,15 @@ export function bouwStatischeInstructies(
    * nulgrens G23, gepind in generatie-kern.sanity.ts. De bureau-taak draait in de
    * basis-modus 'feitelijk', dus deze vlag raakt de sparring-/duiding-takken niet.
    */
-  bureauToon = false
+  bureauToon = false,
+  /**
+   * B1 — opsteltaak. `true` vervangt in de basis-tak TOON_BLOK door
+   * TOON_BLOK_OPSTELLER (opsteller-register + anti-affirmatie). Lager in rang dan
+   * bureauToon (die wint), hoger dan sparring/duiding: een expliciete "stel een
+   * memo op" produceert een document, geen gesprek. Default `false` → byte-
+   * identiek aan voorheen voor élke bestaande call-site (nulgrens G23).
+   */
+  opstelToon = false
 ): string {
   // T2 — de bureau-stand wint van elke andere toon. Bewust HELEMAAL BOVENAAN, vóór
   // de duiding-/BESTUURLIJKE_STIJL-tak: die tak vuurt op de globale env-vlag
@@ -487,6 +528,14 @@ export function bouwStatischeInstructies(
     return `${regels}
 
 ${TOON_BLOK_BUREAU}`;
+  }
+  // B1 — opsteltaak: opsteller-register i.p.v. de gesprekspartner-toon. Wint van
+  // sparring/duiding (een memo-opdracht produceert een stuk), maar niet van de
+  // bureau-stand hierboven. Corrigeert alleen de toon; ontsluit geen bevoegdheid.
+  if (opstelToon) {
+    return `${regels}
+
+${TOON_BLOK_OPSTELLER}`;
   }
   // Sparring: rol/gedrag → inhoudsregels → 4-deling feit/interpretatie/
   // inschatting/openstaande vraag → register/toon.
@@ -541,7 +590,10 @@ export function bouwSysteemBlokken(
   bronSentinel: string | null = null,
   /** T2 — bureau-stand: doorgegeven aan bouwStatischeInstructies. Default `false`
    *  → byte-identiek aan voorheen voor élke bestaande call-site (nulgrens G23). */
-  bureauToon = false
+  bureauToon = false,
+  /** B1 — opsteltaak: doorgegeven aan bouwStatischeInstructies. Default `false`
+   *  → byte-identiek aan voorheen voor élke bestaande call-site (nulgrens G23). */
+  opstelToon = false
 ): Anthropic.Messages.TextBlockParam[] {
   // Het vertrouwensblok is STATISCH per modus en hoort daarom in het gecachte
   // blok; alleen de sentinel zelf varieert per request en gaat mee in het
@@ -558,7 +610,7 @@ export function bouwSysteemBlokken(
   return [
     {
       type: "text",
-      text: bouwStatischeInstructies(statisch, antwoordmodus, bureauToon),
+      text: bouwStatischeInstructies(statisch, antwoordmodus, bureauToon, opstelToon),
       cache_control: { type: "ephemeral" },
     },
     {

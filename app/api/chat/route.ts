@@ -35,7 +35,7 @@ import {
   type RequirementRij,
   type BewijsRij,
 } from "@/core/lib/module-scope";
-import { bepaalVraagtype, schatTokens, kiesStrategie, maakBatches, bepaalAntwoordmodus, retrievalModusVoor, retrievalModusVoorVraag, bepaalInlineMeldingen, AFGEKAPT_MELDING, meldingNietVastgesteldeStukken, bronbasisLabel, bepaalBronIntent, moetVerduidelijken, isKorteBevestiging, bepaalAutoBronModus, heeftPortaalstandNodig, VERDUIDELIJKINGSVRAAG, VERDUIDELIJKING_OPTIES, ANTWOORDMODUS_LABEL, type Strategie, type Antwoordmodus, type BronModus, type BronIntent, type BronIntentResultaat, type InlineMelding } from "@/core/lib/vraagtype";
+import { bepaalVraagtype, schatTokens, kiesStrategie, maakBatches, bepaalAntwoordmodus, retrievalModusVoor, retrievalModusVoorVraag, isOpsteltaak, bepaalInlineMeldingen, AFGEKAPT_MELDING, meldingNietVastgesteldeStukken, bronbasisLabel, bepaalBronIntent, moetVerduidelijken, isKorteBevestiging, bepaalAutoBronModus, heeftPortaalstandNodig, VERDUIDELIJKINGSVRAAG, VERDUIDELIJKING_OPTIES, ANTWOORDMODUS_LABEL, type Strategie, type Antwoordmodus, type BronModus, type BronIntent, type BronIntentResultaat, type InlineMelding } from "@/core/lib/vraagtype";
 import { getPortaalContext } from "@/core/lib/portaalcontext";
 import { bouwPortaalstandBlok } from "@/core/lib/portaalstand-blok";
 import { bepaalBronsoortprofiel } from "@/core/lib/weeg-bronsoort";
@@ -338,6 +338,10 @@ export async function POST(req: NextRequest) {
     }
     const messages: ChatBericht[] = invoer.messages;
     const vraag = invoer.vraag;
+    // B1: opsteltaak-detectie → opsteller-register (TOON_BLOK_OPSTELLER) i.p.v. de
+    // gesprekspartner-toon op de normale antwoord-takken (algemeen/combineren/
+    // documenten). Corrigeert alleen de toon; ontsluit geen bevoegdheid.
+    const opstelTaak = isOpsteltaak(vraag);
 
     // Authenticatie
     const supabase = await createServerSupabase();
@@ -1793,7 +1797,7 @@ export async function POST(req: NextRequest) {
             : `In het document ${titelLabel} zijn geen passages gevonden die op deze vraag aansluiten.\n\nVRAAG: ${vraag}\n\nAls het antwoord niet in dit document staat, antwoord dan letterlijk: "Dit is niet in dit document aangetroffen." Verzin geen antwoord en vul niet aan uit andere bronnen of algemene kennis.`;
       }
     } else if (promptModus === "algemeen") {
-      systeemBlokken = bouwSysteemBlokken(SP_ALGEMEEN_REGELS, ctxBestuurder, antwoordmodus);
+      systeemBlokken = bouwSysteemBlokken(SP_ALGEMEEN_REGELS, ctxBestuurder, antwoordmodus, null, false, opstelTaak);
       gebruikersPrompt = `${portaalContextPrefix}VRAAG: ${vraag}`;
     } else if (promptModus === "combineren") {
       // Bij nul interne treffers valt het antwoord terug op algemene kennis. Gebruik
@@ -1804,7 +1808,9 @@ export async function POST(req: NextRequest) {
         chunks.length > 0 ? SP_COMBINEREN_REGELS : SP_ALGEMEEN_REGELS,
         ctxBestuurder,
         antwoordmodus,
-        chunks.length > 0 ? bronSentinel : null
+        chunks.length > 0 ? bronSentinel : null,
+        false,
+        opstelTaak
       );
       gebruikersPrompt =
         chunks.length > 0
@@ -1816,7 +1822,9 @@ export async function POST(req: NextRequest) {
         SP_DOCUMENTEN_REGELS,
         ctxBestuurder,
         antwoordmodus,
-        chunks.length > 0 ? bronSentinel : null
+        chunks.length > 0 ? bronSentinel : null,
+        false,
+        opstelTaak
       );
       gebruikersPrompt =
         chunks.length > 0

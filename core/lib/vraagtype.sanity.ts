@@ -32,6 +32,7 @@ import {
   isStatusgerichteVraag,
   heeftPortaalstandNodig,
   isVoorstelvraag,
+  isOpsteltaak,
   retrievalModusVoorVraag,
   meldingNietVastgesteldeStukken,
 } from "./vraagtype";
@@ -697,6 +698,33 @@ test("meldingNietVastgesteldeStukken: aantal en enkelvoud/meervoud kloppen", () 
   // Nooit suggereren dat er een actuele bron is (schijnzekerheid-guardrail).
   for (const m of [een, drie]) {
     assert.ok(/niet als actuele bron/i.test(m.tekst), m.tekst);
+  }
+});
+
+// ── B1: opsteltaak-detectie (register-correctie) ────────────────────────────
+test("isOpsteltaak vuurt op een producerend werkwoord + documentsoort", () => {
+  for (const v of [
+    "Stel een memo op over het partnerbegrip",
+    "Kun je een notitie schrijven voor het bestuur?",
+    "Schrijf een oplegger bij dit agendapunt",
+    "Maak een memo over de dekkingsgraad",
+    "Formuleer een bestuursvoorstel voor wijziging van het beleggingsbeleid",
+    "Stel een concept-memo op",
+  ]) {
+    assert.equal(isOpsteltaak(v), true, v);
+  }
+});
+
+test("isOpsteltaak blijft uit bij vragen ÓVER een stuk of zonder documentsoort", () => {
+  for (const v of [
+    "Wat staat er in de notitie over het partnerbegrip?",
+    "Vat de memo samen",
+    "Welke bestuursvoorstellen liggen er voor?", // voorstelvraag, geen opsteltaak
+    "Geef bestuurlijke duiding",
+    "Kunt u de impact-uitvraag aan de uitvoerder concreet uitwerken?",
+    "Leg de dekkingsgraad uit",
+  ]) {
+    assert.equal(isOpsteltaak(v), false, v);
   }
 });
 
