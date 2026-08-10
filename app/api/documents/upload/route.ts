@@ -23,6 +23,7 @@ import {
 } from "@/core/lib/document-ingest-classificatie";
 import type { Documenttype, DocumentContext } from "@/core/lib/document-metadata";
 import { magVanKracht, NORMATIEVE_DOCUMENTTYPEN } from "@/core/lib/document-statusprofiel";
+import { beoordeelRapportageRetire } from "@/core/lib/document-rapportage-retire";
 import type { Bronstatus } from "@/core/lib/document-status-transities";
 import { requireCapability, type Capability } from "@/core/lib/capabilities";
 import {
@@ -41,6 +42,15 @@ type ServerSupabase = Awaited<ReturnType<typeof createServerSupabase>>;
 function stripExtensie(naam: string): string {
   return naam.replace(/\.(pdf|docx|pptx|xlsx)$/i, "");
 }
+
+// Werkopdracht 2.5 — gevalideerde retire-gegevens die van de poort naar de
+// uitvoering (completeUpload) reizen.
+type RapportageRetireInfo = {
+  voorgangerId: string;
+  voorgangerOudeStatus: DocumentStatus;
+  voorgangerTitel: string;
+  reden: string;
+};
 
 // ── Gedeelde metadata-poort (init én complete) ─────────────────────────────
 // F7: init gate't vóór de upload (geen verspilde upload bij een blokkade),
@@ -67,6 +77,12 @@ type MetadataUitkomst =
       bronstatus: Bronstatus | null;
       bronstatusReden: string | null;
       bronstatusRagImpact: boolean;
+      // Werkopdracht 2.5 — rapportage-retire: de gekozen voorganger die bij
+      // aanlevering van deze (actuele) rapportage naar `historisch` gaat.
+      retire: RapportageRetireInfo | null;
+      // Retire kon in de complete-fase niet (meer) — de upload slaagt wél; dit is
+      // de melding die aan de gebruiker teruggaat.
+      retireWaarschuwing: string | null;
     }
   | { ok: false; response: NextResponse };
 
@@ -74,6 +90,7 @@ async function valideerUploadMetadata(
   supabase: ServerSupabase,
   userId: string,
   fondsId: string,
+  fase: "init" | "complete",
   raw: {
     bestandsnaam: string;
     agendapunt_id?: string | null;
@@ -86,6 +103,8 @@ async function valideerUploadMetadata(
     documentdatum?: string | null;
     bronstatus?: string | null;
     bronstatus_reden?: string | null;
+    vervangt_rapportage_id?: string | null;
+    retire_reden?: string | null;
   }
 ): Promise<MetadataUitkomst> {
   const agendapunt_id = raw.agendapunt_id || null;
@@ -297,6 +316,105 @@ async function valideerUploadMetadata(
   // vergadering_id).
   const context: DocumentContext = vergadering_id ? "vergadering" : "algemeen";
 
+  // -- Rapportage-retire (werkopdracht 2.5) -----------------------------------
+  // Bij het aanleveren van een NIEUWE, actuele rapportage kan de uploader de op
+  // te volgen rapportage kiezen; die gaat dan → historisch. Puur additief op het
+  // 5-waarden-statusmodel (0154).
+  //
+  // FASE-verschil: in `init` is een retire-fout een BLOKKER (400 vóór de upload,
+  // UX-guardrail). In `complete` is het bestand al direct-to-storage geland;
+  // dan mag een retire-fout de geslaagde upload NIET kelderen — hij degradeert
+  // naar een waarschuwing (de retire wordt overgeslagen).
+  let retire: RapportageRetireInfo | null = null;
+  let retireWaarschuwing: string | null = null;
+  const vervangtId =
+    typeof raw.vervangt_rapportage_id === "string"
+      ? raw.vervangt_rapportage_id.trim() || null
+      : null;
+  if (vervangtId) {
+    const uitkomst = await (async (): Promise<
+      | { soort: "ok"; retire: RapportageRetireInfo }
+      | { soort: "fout"; melding: string; foutcode: string }
+    > => {
+      if (typeUitkomst.documenttype !== "rapportage") {
+        return {
+          soort: "fout",
+          melding: "Een voorganger afvoeren kan alleen bij het aanleveren van een rapportage.",
+          foutcode: "retire_geen_rapportage",
+        };
+      }
+      if (ingestStatus !== "vastgesteld" && ingestStatus !== "van_kracht") {
+        return {
+          soort: "fout",
+          melding:
+            "Verklaar de nieuwe rapportage als 'vastgesteld' of 'van kracht' om de vorige af te voeren.",
+          foutcode: "retire_nieuwe_niet_actueel",
+        };
+      }
+      const { data: voorganger } = await supabase
+        .from("documenten")
+        .select("id, fonds_id, documenttype, status, titel, actief")
+        .eq("id", vervangtId)
+        .maybeSingle();
+      if (!voorganger || voorganger.fonds_id !== fondsId || voorganger.actief === false) {
+        return {
+          soort: "fout",
+          melding: "De gekozen voorgaande rapportage is niet gevonden in dit fonds.",
+          foutcode: "retire_voorganger_onbekend",
+        };
+      }
+      const voorgangerStatus = (voorganger.status as DocumentStatus) ?? null;
+      const beoordeling = beoordeelRapportageRetire({
+        nieuwDocumenttype: typeUitkomst.documenttype,
+        voorgangerDocumenttype: (voorganger.documenttype as Documenttype) ?? null,
+        voorgangerStatus,
+      });
+      if (!beoordeling.ok) {
+        return { soort: "fout", melding: beoordeling.melding, foutcode: beoordeling.foutcode };
+      }
+      // Defense-in-depth: expliciete capability-check op de retire-transitie zelf,
+      // náást de impliciete afdwinging via de ingest-statuspoort. Divergeert de
+      // vereiste capability ooit (bv. admin-only afvoer), dan blijft dit sluitend.
+      const retireCap = vereisteCapability(voorgangerStatus as DocumentStatus, "historisch");
+      if (
+        retireCap &&
+        retireCap !== "upload" &&
+        !(await requireCapability(userId, retireCap as Capability))
+      ) {
+        return {
+          soort: "fout",
+          melding: "Onvoldoende rechten om de vorige rapportage af te voeren (documents.status.change).",
+          foutcode: "retire_capability_ontbreekt",
+        };
+      }
+      const opgegevenReden =
+        typeof raw.retire_reden === "string" ? raw.retire_reden.trim() : "";
+      return {
+        soort: "ok",
+        retire: {
+          voorgangerId: voorganger.id as string,
+          voorgangerOudeStatus: voorgangerStatus as DocumentStatus,
+          voorgangerTitel: (voorganger.titel as string) ?? "",
+          reden: opgegevenReden || `Opgevolgd door nieuwe rapportage: ${titel}`,
+        },
+      };
+    })();
+
+    if (uitkomst.soort === "ok") {
+      retire = uitkomst.retire;
+    } else if (fase === "init") {
+      return {
+        ok: false,
+        response: NextResponse.json(
+          { error: uitkomst.melding, foutcode: uitkomst.foutcode },
+          { status: 400 }
+        ),
+      };
+    } else {
+      retireWaarschuwing = ` Let op: de vorige rapportage is niet afgevoerd — ${uitkomst.melding} Voer die eventueel handmatig af via 'Metadata bewerken'.`;
+    }
+  }
+
   return {
     ok: true,
     bibliotheek,
@@ -313,6 +431,8 @@ async function valideerUploadMetadata(
     bronstatusReden:
       (typeof raw.bronstatus_reden === "string" ? raw.bronstatus_reden.trim() : "") || null,
     bronstatusRagImpact: bronstatusUitkomst.ragImpact,
+    retire,
+    retireWaarschuwing,
   };
 }
 
@@ -386,7 +506,7 @@ async function initUpload(req: NextRequest, body: Record<string, unknown>) {
       );
     }
 
-    const meta = await valideerUploadMetadata(supabase, user.id, profiel.fonds_id, {
+    const meta = await valideerUploadMetadata(supabase, user.id, profiel.fonds_id, "init", {
       bestandsnaam,
       agendapunt_id: body.agendapunt_id as string | null,
       bibliotheek: body.bibliotheek as string | null,
@@ -398,6 +518,8 @@ async function initUpload(req: NextRequest, body: Record<string, unknown>) {
       documentdatum: body.documentdatum as string | null,
       bronstatus: body.bronstatus as string | null,
       bronstatus_reden: body.bronstatus_reden as string | null,
+      vervangt_rapportage_id: body.vervangt_rapportage_id as string | null,
+      retire_reden: body.retire_reden as string | null,
     });
     if (!meta.ok) return meta.response;
 
@@ -468,7 +590,7 @@ async function completeUpload(req: NextRequest, body: Record<string, unknown>) {
       );
     }
 
-    const meta = await valideerUploadMetadata(supabase, user.id, profiel.fonds_id, {
+    const meta = await valideerUploadMetadata(supabase, user.id, profiel.fonds_id, "complete", {
       bestandsnaam,
       agendapunt_id: body.agendapunt_id as string | null,
       bibliotheek: body.bibliotheek as string | null,
@@ -480,6 +602,8 @@ async function completeUpload(req: NextRequest, body: Record<string, unknown>) {
       documentdatum: body.documentdatum as string | null,
       bronstatus: body.bronstatus as string | null,
       bronstatus_reden: body.bronstatus_reden as string | null,
+      vervangt_rapportage_id: body.vervangt_rapportage_id as string | null,
+      retire_reden: body.retire_reden as string | null,
     });
     if (!meta.ok) return meta.response;
 
@@ -592,6 +716,9 @@ async function completeUpload(req: NextRequest, body: Record<string, unknown>) {
         // aan het gedrag van de stromen die deze velden niet aanleveren.
         ...(meta.documenttype ? { documenttype: meta.documenttype } : {}),
         ...(meta.bronstatus ? { bronstatus: meta.bronstatus } : {}),
+        // Werkopdracht 2.5 — `vervangt_document_id` wordt bewust NIET hier gezet,
+        // maar pas ná een geslaagde retire (hieronder), zodat de FK-koppeling
+        // symmetrisch is: geen claim op een vervanging die niet plaatsvond.
       })
       .select()
       .single();
@@ -675,6 +802,82 @@ async function completeUpload(req: NextRequest, body: Record<string, unknown>) {
       }
     }
 
+    // -- Rapportage-retire (werkopdracht 2.5), best-effort ----------------------
+    // De gekozen voorganger → historisch (blijft historisch-vindbaar, valt uit
+    // 'actueel'), daarna symmetrisch de vervangt/vervangen_door-FK's + auditregel.
+    // De update draagt een STATUSGUARD (`.eq("status", verwachte)`) zodat een
+    // race (de voorganger is tussen validatie en nu al afgevoerd/gewijzigd) 0
+    // rijen raakt i.p.v. stil `historisch→historisch` te schrijven met een valse
+    // auditregel. De DB-trigger valideert de overgang; de chunk-denorm schuift
+    // mee. Faalt/mist de retire, dan blokkeert dat de geslaagde upload niet — er
+    // gaat een waarschuwing terug. (Audit blijft best-effort, gelijk aan de
+    // ingest-auditregels hierboven, 0136/0140.)
+    let retireWaarschuwing: string | null = meta.retireWaarschuwing;
+    if (meta.retire) {
+      const { data: geraakt, error: retireFout } = await supabase
+        .from("documenten")
+        .update({
+          status: "historisch",
+          vervangen_door_document_id: document.id,
+        })
+        .eq("id", meta.retire.voorgangerId)
+        // Statusguard: alleen afvoeren vanuit de gevalideerde actuele status.
+        .eq("status", meta.retire.voorgangerOudeStatus)
+        .select("id");
+      if (retireFout || !geraakt || geraakt.length === 0) {
+        if (retireFout) {
+          console.error(
+            `[documents.upload] rapportage-retire mislukt voor voorganger ${meta.retire.voorgangerId}:`,
+            retireFout
+          );
+        }
+        retireWaarschuwing =
+          " Let op: de vorige rapportage kon niet worden afgevoerd (mogelijk inmiddels gewijzigd) — voer die handmatig af via 'Metadata bewerken'.";
+      } else {
+        // Symmetrische FK op de NIEUWE rapportage — pas nu de retire vaststaat.
+        await supabase
+          .from("documenten")
+          .update({ vervangt_document_id: meta.retire.voorgangerId })
+          .eq("id", document.id);
+        for (const regel of [
+          {
+            veld_naam: "status",
+            oude_waarde: meta.retire.voorgangerOudeStatus as string | null,
+            nieuwe_waarde: "historisch",
+            wijzig_type: "status",
+            rag_impact: true,
+          },
+          {
+            veld_naam: "vervangen_door_document_id",
+            // De statusguard bevestigt dat de voorganger nog actueel (niet eerder
+            // afgevoerd) was; zijn vervangen_door was dus null.
+            oude_waarde: null as string | null,
+            nieuwe_waarde: document.id,
+            wijzig_type: "koppeling",
+            rag_impact: false,
+          },
+        ]) {
+          const { error: retireAuditFout } = await supabase
+            .from("document_metadata_log")
+            .insert({
+              document_id: meta.retire.voorgangerId,
+              document_titel_snapshot: meta.retire.voorgangerTitel,
+              fonds_id: profiel.fonds_id,
+              gewijzigd_door: user.id,
+              gewijzigd_door_naam: profiel.naam ?? null,
+              wijzig_reden: meta.retire.reden,
+              ...regel,
+            });
+          if (retireAuditFout) {
+            console.error(
+              `[documents.upload] retire-auditlog ${regel.veld_naam} mislukt voor ${meta.retire.voorgangerId}:`,
+              retireAuditFout
+            );
+          }
+        }
+      }
+    }
+
     // F0.1: request-zijde meting (metadata only).
     console.log(
       JSON.stringify({
@@ -690,6 +893,11 @@ async function completeUpload(req: NextRequest, body: Record<string, unknown>) {
       })
     );
 
+    const retireNoot =
+      meta.retire && !retireWaarschuwing
+        ? ` De vorige rapportage "${meta.retire.voorgangerTitel}" is afgevoerd naar historisch.`
+        : retireWaarschuwing ?? "";
+
     return NextResponse.json({
       success: true,
       status: "verwerken",
@@ -697,7 +905,8 @@ async function completeUpload(req: NextRequest, body: Record<string, unknown>) {
       titel: meta.titel,
       bestandstype: validatie.bestandstype,
       bericht:
-        "Document geüpload. Het wordt nu verwerkt en is binnen enkele minuten doorzoekbaar.",
+        "Document geüpload. Het wordt nu verwerkt en is binnen enkele minuten doorzoekbaar." +
+        retireNoot,
     });
   } catch (error) {
     console.error("Upload-complete fout:", error);

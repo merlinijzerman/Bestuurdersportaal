@@ -42,6 +42,10 @@ export interface UploadMetadata {
   documentdatum?: string | null;
   bronstatus?: string | null;
   bronstatus_reden?: string | null;
+  // Werkopdracht 2.5 — rapportage-retire: de op te volgen rapportage die bij
+  // aanlevering → historisch gaat, en de reden voor die afvoer.
+  vervangt_rapportage_id?: string | null;
+  retire_reden?: string | null;
 }
 
 export interface UploadResultaat {

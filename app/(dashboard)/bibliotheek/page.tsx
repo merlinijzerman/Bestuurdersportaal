@@ -11,6 +11,7 @@ import {
   magVanKracht,
   statusLabelVoorType,
 } from "@/core/lib/document-statusprofiel";
+import { isActueleRapportageVoorganger } from "@/core/lib/document-rapportage-retire";
 import { uploadDocument } from "@/core/lib/document-upload-client";
 // Besluit 0140 — bijzonderheden en classificatie bij aanlevering leven in pure,
 // geteste modules; deze pagina rendert ze alleen.
@@ -171,6 +172,9 @@ export default function BibliotheekPage() {
     // Besluit 0140 — bronstatusverklaring bij aanlevering. Leeg = actief.
     bronstatus: "",
     bronstatusReden: "",
+    // Werkopdracht 2.5 — rapportage-retire: de op te volgen rapportage die → historisch gaat.
+    retireRapportageId: "",
+    retireReden: "",
   });
 
   /** Het lege formulier — één definitie, gebruikt bij reset na een upload. */
@@ -184,6 +188,8 @@ export default function BibliotheekPage() {
     statusReden: "",
     bronstatus: "",
     bronstatusReden: "",
+    retireRapportageId: "",
+    retireReden: "",
   };
 
   useEffect(() => {
@@ -251,6 +257,14 @@ export default function BibliotheekPage() {
           : {}),
         ...(uploadForm.status
           ? { status: uploadForm.status, status_reden: uploadForm.statusReden }
+          : {}),
+        ...(uploadForm.retireRapportageId
+          ? {
+              vervangt_rapportage_id: uploadForm.retireRapportageId,
+              ...(uploadForm.retireReden.trim()
+                ? { retire_reden: uploadForm.retireReden.trim() }
+                : {}),
+            }
           : {}),
         ...(uploadForm.bronstatus
           ? {
@@ -1153,6 +1167,9 @@ export default function BibliotheekPage() {
                         ...uploadForm,
                         documenttype: nieuwType,
                         ...(resetStatus ? { status: "", statusReden: "" } : {}),
+                        // Retire-picker is rapportage-specifiek: bij elke
+                        // typewissel de keuze wissen (werkopdracht 2.5).
+                        ...(nieuwType === "rapportage" ? {} : { retireRapportageId: "" }),
                       });
                     }}
                     required
@@ -1206,9 +1223,18 @@ export default function BibliotheekPage() {
                 </label>
                 <select
                   value={uploadForm.status}
-                  onChange={(e) =>
-                    setUploadForm({ ...uploadForm, status: e.target.value })
-                  }
+                  onChange={(e) => {
+                    const nieuweStatus = e.target.value;
+                    // De retire-picker geldt alleen als de nieuwe rapportage
+                    // actueel wordt; valt de status daarbuiten, wis de keuze.
+                    const blijftActueel =
+                      nieuweStatus === "vastgesteld" || nieuweStatus === "van_kracht";
+                    setUploadForm({
+                      ...uploadForm,
+                      status: nieuweStatus,
+                      ...(blijftActueel ? {} : { retireRapportageId: "" }),
+                    });
+                  }}
                   className="w-full border border-line rounded-lg px-3 py-2 text-sm outline-none"
                 >
                   <option value="">Concept — nog geen actuele bron</option>
@@ -1254,6 +1280,66 @@ export default function BibliotheekPage() {
                   </p>
                 </div>
               )}
+              {/* Werkopdracht 2.5 — rapportage-retire. Alleen zichtbaar als je een
+                  NIEUWE, actuele rapportage aanlevert: kies optioneel de vorige
+                  rapportage, die dan → historisch gaat (niet meer actueel, wel
+                  vindbaar). Human-in-the-loop: jij kiest, het systeem raadt niet. */}
+              {uploadForm.documenttype === "rapportage" &&
+                (uploadForm.status === "vastgesteld" ||
+                  uploadForm.status === "van_kracht") &&
+                (() => {
+                  const kandidaten = documenten.filter(
+                    (d) =>
+                      d.bibliotheek === "fonds" &&
+                      d.actief &&
+                      d.documenttype === "rapportage" &&
+                      isActueleRapportageVoorganger(
+                        d.status as Parameters<typeof isActueleRapportageVoorganger>[0]
+                      )
+                  );
+                  if (kandidaten.length === 0) return null;
+                  return (
+                    <div>
+                      <label className="block text-sm font-semibold text-ink mb-1">
+                        Vervangt eerdere rapportage{" "}
+                        <span className="font-normal text-muted">(optioneel)</span>
+                      </label>
+                      <select
+                        value={uploadForm.retireRapportageId}
+                        onChange={(e) =>
+                          setUploadForm({
+                            ...uploadForm,
+                            retireRapportageId: e.target.value,
+                          })
+                        }
+                        className="w-full border border-line rounded-lg px-3 py-2 text-sm bg-white outline-none focus:border-accent"
+                      >
+                        <option value="">— geen; laat vorige rapportages staan —</option>
+                        {kandidaten.map((d) => (
+                          <option key={d.id} value={d.id}>
+                            {d.titel}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-[11px] text-muted mt-1">
+                        De gekozen rapportage wordt afgevoerd naar{" "}
+                        <span className="font-semibold">historisch</span> — niet meer
+                        actueel voor de assistent, wel vindbaar als historie. Met auditregel.
+                      </p>
+                      {uploadForm.retireRapportageId && (
+                        <input
+                          type="text"
+                          value={uploadForm.retireReden}
+                          onChange={(e) =>
+                            setUploadForm({ ...uploadForm, retireReden: e.target.value })
+                          }
+                          placeholder="Reden afvoer (optioneel; standaard: opgevolgd door deze rapportage)"
+                          className="mt-2 w-full border border-line rounded-lg px-3 py-2 text-sm outline-none focus:border-accent"
+                        />
+                      )}
+                    </div>
+                  );
+                })()}
               {/* Werkopdracht 1.6 — bronstatus uit de standaard-invoer, achter een
                   ingeklapte "Geavanceerd"-sectie. De default (leeg ≡ actief) blijft
                   en de control blijft bereikbaar; fase 2 (besluit 0153) vervangt
