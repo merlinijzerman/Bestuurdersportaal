@@ -123,6 +123,29 @@ export function bouwStukZin(stuksoort: Stuksoort, onderwerp: string): string {
     : `Bereid een ${naam} voor.`;
 }
 
+/**
+ * Keert bouwStukZin() om: herkent de openingszin van een stuk-voorbereiden-gesprek
+ * ("Bereid een <soort> voor over «<onderwerp>»." of "Bereid een <soort> voor.") en
+ * levert stuksoort + onderwerp terug, of `null` als de zin geen stuk-opdracht is.
+ *
+ * WAAROM (2026-08-10). De Word-exportknop in de AI-assistent hing op vluchtige
+ * client-state (`stukContext`), die alléén bij het live starten van een stuk werd
+ * gezet en NIET werd hersteld bij het heropenen of herladen van een stuk-gesprek —
+ * waardoor de export daar verdween. Door de context uit de openingszin te herleiden
+ * herstelt de UI hem zonder extra opslag. Puur en programmatisch toetsbaar
+ * (stukvoorbereiding.sanity.ts): rond-reist met bouwStukZin.
+ */
+export function parseStukZin(
+  tekst: string
+): { stuksoort: Stuksoort; onderwerp: string } | null {
+  const m = tekst.trim().match(/^Bereid een (.+?) voor(?: over «([^»]*)»)?\.?$/);
+  if (!m) return null;
+  const naam = m[1].toLowerCase();
+  const def = STUKSOORTEN.find((d) => d.titel.toLowerCase() === naam);
+  if (!def) return null;
+  return { stuksoort: def.id, onderwerp: (m[2] ?? "").trim() };
+}
+
 // ── Samengestelde instructie (server, gebruikersprompt) ───────────────────────
 
 /**

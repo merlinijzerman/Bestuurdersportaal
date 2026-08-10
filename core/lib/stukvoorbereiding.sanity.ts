@@ -16,6 +16,7 @@ import {
   isStuksoort,
   stuksoortDef,
   bouwStukZin,
+  parseStukZin,
   bouwStukInstructie,
   extraheerStukBlok,
   type Stuksoort,
@@ -167,6 +168,34 @@ check("extraheerStukBlok laat een schoon stuk (koppen/lijsten/tabel) ongemoeid",
     "- Openstaand punt.",
   ].join("\n");
   assert.equal(extraheerStukBlok(schoon), schoon.trim());
+});
+
+// ── parseStukZin: herstelt de stuk-context bij heropenen (Word-export) ──────
+check("parseStukZin rond-reist met bouwStukZin voor elke stuksoort + onderwerp", () => {
+  for (const s of ALLE) {
+    const p = parseStukZin(bouwStukZin(s, "Partnerbegrip Pensioenreglement 2026"));
+    assert.ok(p, `geen match voor ${s}`);
+    assert.equal(p!.stuksoort, s);
+    assert.equal(p!.onderwerp, "Partnerbegrip Pensioenreglement 2026");
+  }
+});
+
+check("parseStukZin herkent de onderwerploze variant", () => {
+  const p = parseStukZin(bouwStukZin("memo", ""));
+  assert.ok(p);
+  assert.equal(p!.stuksoort, "memo");
+  assert.equal(p!.onderwerp, "");
+});
+
+check("parseStukZin geeft null bij een gewone vraag (geen stuk-opdracht)", () => {
+  for (const v of [
+    "Wat staat er in de notitie over het partnerbegrip?",
+    "Geef bestuurlijke duiding",
+    "Bereid een borrel voor over «X».", // 'borrel' is geen stuksoort
+    "",
+  ]) {
+    assert.equal(parseStukZin(v), null, v);
+  }
 });
 
 console.log(`\n${n} sanity-tests geslaagd.`);

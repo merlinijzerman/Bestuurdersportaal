@@ -28,7 +28,7 @@ import Startpunt from "./Startpunt";
 import DocumentDoorgronden, { type DoorgrondDoc } from "./DocumentDoorgronden";
 import StukVoorbereiden from "./StukVoorbereiden";
 import { rolHeeftCapability } from "@/core/lib/capabilities-map";
-import { bouwStukZin, type Stuksoort } from "@/core/lib/stukvoorbereiding";
+import { bouwStukZin, parseStukZin, type Stuksoort } from "@/core/lib/stukvoorbereiding";
 import {
   ACTIEF_GESPREK_SLEUTEL,
   reflectieUitnodigingGetoond,
@@ -221,6 +221,24 @@ function leesAgendapuntContext(ruw: unknown): AgendapuntContext | null {
   return { id, titel: typeof titel === "string" && titel ? titel : "dit agendapunt" };
 }
 
+
+// B2-vervolg (2026-08-10) — herstelt de stuk-context van een heropend/herladen
+// bureau-stuk-gesprek uit de openingszin, zodat de Word-export weer beschikbaar is
+// (die hing op vluchtige sessie-state en verdween bij heropenen/herladen). Levert
+// null als het gesprek geen stuk-opdracht is → dan geen exportknop (correct).
+function stukContextUitBerichten(
+  berichten: unknown
+): { stuksoort: Stuksoort; onderwerp: string } | null {
+  if (!Array.isArray(berichten)) return null;
+  const eerste = berichten.find(
+    (b): b is Bericht =>
+      !!b &&
+      typeof b === "object" &&
+      (b as { rol?: unknown }).rol === "gebruiker" &&
+      typeof (b as { tekst?: unknown }).tekst === "string"
+  );
+  return eerste ? parseStukZin(eerste.tekst) : null;
+}
 
 function dagdeelGroet() {
   const u = new Date().getHours();
@@ -474,6 +492,9 @@ export default function AssistentClient({
     setDocumentScope(leesScope(item.document_scope));
     setAgendapuntContext(leesAgendapuntContext(item.document_scope));
     setAntwoordmodus(leesAntwoordmodus(item.actieve_antwoordmodus));
+    // B2-vervolg: herstel de stuk-context, zodat de Word-export beschikbaar is op
+    // een heropend stuk-gesprek (en cleart hem voor een niet-stuk-gesprek).
+    setStukContext(stukContextUitBerichten(item.berichten));
     setHistorieOpen(false);
     // Plateau B / AC-23 — de flowstatus hoort bij dít gesprek, niet bij het
     // vorige. Zonder deze reset zou een reflectie uit gesprek A doorlopen in
@@ -852,6 +873,8 @@ export default function AssistentClient({
               setDocumentScope(leesScope(laatste.document_scope));
               setAgendapuntContext(leesAgendapuntContext(laatste.document_scope));
               setAntwoordmodus(leesAntwoordmodus(laatste.actieve_antwoordmodus));
+              // B2-vervolg: herstel de stuk-context na een refresh (Word-export).
+              setStukContext(stukContextUitBerichten(opgeslagen));
               // Plateau B / AC-23 — de flowstatus herstellen na een refresh.
               // Er wordt NOOIT automatisch een bericht verstuurd; we halen
               // alleen de status op. De server past zelf de fail-safe toe (24
