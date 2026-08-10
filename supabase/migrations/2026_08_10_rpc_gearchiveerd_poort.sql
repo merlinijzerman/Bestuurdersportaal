@@ -127,6 +127,9 @@ as $$
   limit greatest(p_limit, 1);
 $$;
 
+comment on function public.zoek_chunks(text, int, uuid[], text[], text[], uuid[], text, date, text[], uuid) is
+  'RAG-retrieval (ts_rank_cd) met documentscope + Increment G-filters + T4 expliciete fondsfilter en published-only generiek (van_kracht+actief), aangevuld met de T10 review-verval-gate (volgende_review >= p_peildatum OR NULL) en (0154 §3) de universele gearchiveerd-uitsluiting. Filter is ADDITIEF op RLS (defense-in-depth). Returnt d.fonds_id + d.volgende_review. SECURITY INVOKER: RLS blijft primair. Defaults = huidig gedrag.';
+
 revoke all on function public.zoek_chunks(text, int, uuid[], text[], text[], uuid[], text, date, text[], uuid) from public, anon;
 grant execute on function public.zoek_chunks(text, int, uuid[], text[], text[], uuid[], text, date, text[], uuid) to authenticated, service_role;
 
@@ -274,6 +277,9 @@ as $$
   order by s.rrf desc, dc.id
   limit p_limit;
 $$;
+
+comment on function public.zoek_chunks_hybride(text, vector, int, int, int, uuid[], text[], text[], uuid[], text, date, text[], uuid) is
+  'Hybride RAG-retrieval (FTS+vector via RRF) met documentscope + Increment G-filters + T4 fondsfilter + published-only generiek + T10 review-verval-gate, in BEIDE armen vóór de fusion, aangevuld met (0154 §3) de universele gearchiveerd-uitsluiting in beide armen. Besluit 0139: deterministische tiebreaker (, dc.id) op alle order-by-clausules. hnsw.ef_search NIET op de functie gezet (Supabase weigert dit, 42501) — blijft default 40, apart belegd. Additief op RLS (defense-in-depth). SECURITY INVOKER: RLS blijft primair. Defaults = huidig gedrag.';
 
 revoke all on function public.zoek_chunks_hybride(text, vector, int, int, int, uuid[], text[], text[], uuid[], text, date, text[], uuid) from public, anon;
 grant execute on function public.zoek_chunks_hybride(text, vector, int, int, int, uuid[], text[], text[], uuid[], text, date, text[], uuid) to authenticated, service_role;
