@@ -95,7 +95,6 @@ export interface DocumentToestand {
   ocr_toegepast: boolean | null;
   opslag_pad: string | null;
   documenttype: string | null;
-  metadata_review_status: string | null;
   deactivatie_reden: string | null;
   /** Geldigheidsgrens van een generiek kaderdocument (ISO YYYY-MM-DD). */
   geldig_tot: string | null;
@@ -209,11 +208,10 @@ export function bepaalBijzonderheden(
     }
   }
 
-  // Twee ONDERSCHEIDEN meldingen, bewust niet samengevoegd. `documenttype`
-  // ontbreekt is concreet en zelf op te lossen; `metadata_review_status` dekt
-  // méér dan alleen het type (context, datums, bronstatus). Ze op één label
-  // gooien zou een claim doen die we niet kunnen waarmaken — dan staat er
-  // "Type ontbreekt" bij een document dat wél een type heeft.
+  // `documenttype` ontbreekt is een concreet, zelf op te lossen signaal (het
+  // document valt in de groep "Zonder type"). De bredere "metadata onvolledig"-
+  // melding leunde op de metadata-reviewworkflow, die is verwijderd (besluit
+  // 0152) — die bijzonderheid vervalt daarmee.
   if (!doc.documenttype && !isGeneriek) {
     uit.push({
       sleutel: "type_ontbreekt",
@@ -222,15 +220,6 @@ export function bepaalBijzonderheden(
       toelichting:
         "Er is geen documenttype gezet; het document staat daarom in de groep " +
         '"Zonder type". Aan te vullen via "Metadata bewerken".',
-    });
-  } else if (doc.metadata_review_status === "te_controleren") {
-    uit.push({
-      sleutel: "metadata_onvolledig",
-      label: "Metadata onvolledig",
-      soort: "let_op",
-      toelichting:
-        "Een of meer metadatavelden (status, bronstatus, context of datums) ontbreken " +
-        "of zijn onzeker. Aan te vullen via het reviewscherm.",
     });
   }
 

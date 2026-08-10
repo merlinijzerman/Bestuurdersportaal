@@ -116,6 +116,82 @@ export function beoordeelIngestDocumenttype(
   return { ok: true, documenttype: waarde };
 }
 
+/**
+ * Client-side pre-submit blokker voor het bewijs-uploadpad (processtroom).
+ *
+ * Reproduceert de serverpoort (`beoordeelIngestDocumenttype` met `verplicht`)
+ * VÓÓR de submit, zodat de gebruiker de blokker vooraf ziet in plaats van een
+ * 400 achteraf — UX-guardrail "maak vereisten en blokkers expliciet". Hergebruikt
+ * bewust `beoordeelIngestDocumenttype`, zodat client en server niet uit elkaar
+ * kunnen lopen.
+ *
+ * Een bewijsstuk hangt nooit aan een agendapunt, dus de serverpoort maakt
+ * `documenttype` verplicht (`verplicht: !agendapunt_id` met agendapunt_id=null)
+ * zodra er een NIEUW bestand wordt geüpload. Bij "kies uit bibliotheek" (een
+ * bestaand document) wordt niets geüpload en geldt de eis niet — dat document
+ * heeft zijn type al.
+ *
+ * Retourneert de blokkermelding, of `null` als er niets blokkeert.
+ */
+export function bewijsUploadDocumenttypeBlokker(opties: {
+  heeftNieuwBestand: boolean;
+  documenttype: unknown;
+}): string | null {
+  if (!opties.heeftNieuwBestand) return null;
+  const uitkomst = beoordeelIngestDocumenttype(opties.documenttype, {
+    verplicht: true,
+  });
+  return uitkomst.ok ? null : uitkomst.melding;
+}
+
+// ── Documentdatum ─────────────────────────────────────────────────────────────
+
+const ISO_DATUM = /^\d{4}-\d{2}-\d{2}$/;
+
+export type DocumentdatumUitkomst =
+  | { ok: true; documentdatum: string }
+  | { ok: false; foutcode: string; melding: string };
+
+/**
+ * Beoordeelt de documentdatum bij aanlevering (werkopdracht 1.4 + 1.5).
+ *
+ * - `rapportage` VEREIST een documentdatum: de periodedatum is betekenisvol
+ *   (een kwartaal-/jaarrapportage zonder datum is niet in de tijd te plaatsen),
+ *   dus géén stille default → 400 `documentdatum_ontbreekt`.
+ * - Alle andere types: documentdatum is optioneel; leeg → default op de
+ *   uploaddatum (`vandaag`, editeerbaar achteraf in de metadata-modal).
+ *
+ * `vandaag` wordt geïnjecteerd (YYYY-MM-DD) zodat de functie puur/testbaar
+ * blijft. Een niet-lege waarde moet ISO-datum (YYYY-MM-DD) zijn.
+ */
+export function beoordeelIngestDocumentdatum(
+  documenttype: Documenttype | null,
+  raw: unknown,
+  vandaag: string
+): DocumentdatumUitkomst {
+  const waarde = typeof raw === "string" ? raw.trim() : "";
+  if (!waarde) {
+    if (documenttype === "rapportage") {
+      return {
+        ok: false,
+        foutcode: "documentdatum_ontbreekt",
+        melding:
+          "Een rapportage vereist een documentdatum — de periode of vaststellingsdatum " +
+          "waarop de rapportage betrekking heeft. Zonder datum is ze niet in de tijd te plaatsen.",
+      };
+    }
+    return { ok: true, documentdatum: vandaag };
+  }
+  if (!ISO_DATUM.test(waarde)) {
+    return {
+      ok: false,
+      foutcode: "documentdatum_ongeldig",
+      melding: `Ongeldige documentdatum "${waarde}" (verwacht formaat JJJJ-MM-DD).`,
+    };
+  }
+  return { ok: true, documentdatum: waarde };
+}
+
 // ── Bronstatus ──────────────────────────────────────────────────────────────
 
 export type BronstatusUitkomst =

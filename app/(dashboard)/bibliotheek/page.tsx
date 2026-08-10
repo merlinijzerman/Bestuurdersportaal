@@ -2,7 +2,15 @@
 import { Fragment, useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import DocumentMetadataModal from "@/core/components/DocumentMetadataModal";
-import { DOCUMENTTYPEN, DOCUMENTTYPE_LABEL } from "@/core/lib/document-metadata";
+import {
+  DOCUMENTTYPEN,
+  DOCUMENTTYPE_LABEL,
+  type Documenttype,
+} from "@/core/lib/document-metadata";
+import {
+  magVanKracht,
+  statusLabelVoorType,
+} from "@/core/lib/document-statusprofiel";
 import { uploadDocument } from "@/core/lib/document-upload-client";
 // Besluit 0140 — bijzonderheden en classificatie bij aanlevering leven in pure,
 // geteste modules; deze pagina rendert ze alleen.
@@ -41,7 +49,6 @@ interface Document {
   documenttype: string | null;
   status: string | null;
   bronstatus: string | null;
-  metadata_review_status: string | null;
   // Increment C+/B13 — bronsoort (generiek = platform-gecureerd, read-only)
   bronorganisatie: string | null;
   extern_url: string | null;
@@ -155,6 +162,9 @@ export default function BibliotheekPage() {
     bibliotheek: "fonds",
     // Besluit 0140 — verplicht op dit pad; ruimt de restgroep "Zonder type" op.
     documenttype: "",
+    // Werkopdracht 1.4 — documentdatum. Verplicht bij rapportage; anders leeg
+    // (de server defaultt op de uploaddatum).
+    documentdatum: "",
     // Besluit 0136 — statusverklaring bij aanlevering. Leeg = concept (default).
     status: "",
     statusReden: "",
@@ -169,6 +179,7 @@ export default function BibliotheekPage() {
     bron: "Intern",
     bibliotheek: "fonds",
     documenttype: "",
+    documentdatum: "",
     status: "",
     statusReden: "",
     bronstatus: "",
@@ -235,6 +246,9 @@ export default function BibliotheekPage() {
         bron: uploadForm.bron,
         bibliotheek: uploadForm.bibliotheek,
         documenttype: uploadForm.documenttype,
+        ...(uploadForm.documentdatum
+          ? { documentdatum: uploadForm.documentdatum }
+          : {}),
         ...(uploadForm.status
           ? { status: uploadForm.status, status_reden: uploadForm.statusReden }
           : {}),
@@ -355,11 +369,6 @@ export default function BibliotheekPage() {
 
   const aantalInactief = documenten.filter(
     (d) => d.bibliotheek === actieveTab && !d.actief
-  ).length;
-
-  // Increment C — documenten die nog niet zijn verrijkt (review-queue).
-  const aantalTeVerrijken = documenten.filter(
-    (d) => d.bibliotheek === actieveTab && d.metadata_review_status === "te_controleren"
   ).length;
 
   function toggleGroep(key: string) {
@@ -532,24 +541,6 @@ export default function BibliotheekPage() {
           {uploadBericht}
         </div>
       )}
-
-      {/* Increment C — review-banner: nog niet verrijkte documenten */}
-      {aantalTeVerrijken > 0 && (
-        <div className="mb-4 flex items-center justify-between flex-wrap gap-4 rounded-lg border border-warn/30 bg-warn-tint px-4 py-3">
-          <div className="text-sm text-warn-ink">
-            <span className="font-semibold">{aantalTeVerrijken}</span>{" "}
-            {aantalTeVerrijken === 1 ? "document is" : "documenten zijn"} nog niet
-            verrijkt (status/bronstatus/context ontbreken of zijn onzeker).
-          </div>
-          <a
-            href="/beheer"
-            className="shrink-0 rounded-lg bg-warn px-3 py-1.5 text-sm font-semibold text-white hover:bg-warn"
-          >
-            Naar review →
-          </a>
-        </div>
-      )}
-
 
       {/* Zoekbalk + toggle */}
       <div className="flex items-center gap-3 mb-4 flex-wrap">
@@ -1151,9 +1142,19 @@ export default function BibliotheekPage() {
                   </label>
                   <select
                     value={uploadForm.documenttype}
-                    onChange={(e) =>
-                      setUploadForm({ ...uploadForm, documenttype: e.target.value })
-                    }
+                    onChange={(e) => {
+                      const nieuwType = e.target.value;
+                      // Statusprofiel (1.3): valt 'van kracht' weg voor het nieuwe
+                      // type, dan de al gekozen status terugzetten naar concept.
+                      const resetStatus =
+                        uploadForm.status === "van_kracht" &&
+                        !magVanKracht(nieuwType as Documenttype);
+                      setUploadForm({
+                        ...uploadForm,
+                        documenttype: nieuwType,
+                        ...(resetStatus ? { status: "", statusReden: "" } : {}),
+                      });
+                    }}
                     required
                     className="w-full border border-line rounded-lg px-3 py-2 text-sm outline-none focus:border-accent"
                   >
@@ -1169,6 +1170,29 @@ export default function BibliotheekPage() {
                   </p>
                 </div>
               </div>
+              {/* Werkopdracht 1.4 — documentdatum. Verplicht bij rapportage (de
+                  periodedatum is betekenisvol); voor andere types optioneel,
+                  waar leeg = de uploaddatum. UX-guardrail: het vereiste vooraf
+                  tonen, niet als 400 achteraf. */}
+              {uploadForm.documenttype === "rapportage" && (
+                <div>
+                  <label className="block text-sm font-semibold text-ink mb-1">
+                    Documentdatum <span className="text-err-ink">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={uploadForm.documentdatum}
+                    onChange={(e) =>
+                      setUploadForm({ ...uploadForm, documentdatum: e.target.value })
+                    }
+                    required
+                    className="w-full border border-line rounded-lg px-3 py-2 text-sm outline-none focus:border-accent"
+                  />
+                  <p className="text-[11px] text-muted mt-1">
+                    De periode of vaststellingsdatum waarop de rapportage betrekking heeft.
+                  </p>
+                </div>
+              )}
               {/* Besluit 0136 — statusverklaring bij aanlevering. De keten
                   concept -> ter bespreking -> ter besluitvorming -> vastgesteld
                   modelleert een stuk dat IN het portaal ontstaat. Een reglement
@@ -1189,11 +1213,20 @@ export default function BibliotheekPage() {
                 >
                   <option value="">Concept — nog geen actuele bron</option>
                   <option value="vastgesteld">
-                    Vastgesteld — buiten het portaal vastgesteld
+                    {statusLabelVoorType(
+                      "vastgesteld",
+                      (uploadForm.documenttype as Documenttype) || null
+                    )}{" "}
+                    — buiten het portaal vastgesteld
                   </option>
-                  <option value="van_kracht">
-                    Van kracht — buiten het portaal geldend
-                  </option>
+                  {/* Statusprofiel (1.3): 'van kracht' alleen bij de normatieve
+                      cluster (beleid/besluit/besluitdocument/besluitregistratie). */}
+                  {!!uploadForm.documenttype &&
+                    magVanKracht(uploadForm.documenttype as Documenttype) && (
+                      <option value="van_kracht">
+                        Van kracht — buiten het portaal geldend
+                      </option>
+                    )}
                 </select>
                 <p className="text-[11px] text-muted mt-1">
                   Alleen &quot;vastgesteld&quot; en &quot;van kracht&quot; tellen
@@ -1221,39 +1254,42 @@ export default function BibliotheekPage() {
                   </p>
                 </div>
               )}
-              {/* Besluit 0140 — bronstatus bij aanlevering. Dit is GEEN cosmetisch
-                  veld: `bronstatus` NULL betekent in document-status-transities.ts
-                  hetzelfde als `actief`. Een archiefstuk dat als "van kracht" werd
-                  aangeleverd, werd daarmee stilzwijgend een ACTUELE bron voor de
-                  assistent. Server-side loopt dit door dezelfde transitietabel en
-                  capability als een latere wijziging. */}
-              <div>
-                <label className="block text-sm font-semibold text-ink mb-1">
-                  Bronstatus
-                </label>
-                <select
-                  value={uploadForm.bronstatus}
-                  onChange={(e) =>
-                    setUploadForm({ ...uploadForm, bronstatus: e.target.value })
-                  }
-                  className="w-full border border-line rounded-lg px-3 py-2 text-sm outline-none focus:border-accent"
-                >
-                  <option value="">Actief — mag als bron worden gebruikt (standaard)</option>
-                  {INGEST_BRONSTATUSSEN.map((b) => (
-                    <option key={b} value={b}>
-                      {BRONSTATUS_LABEL[b]} —{" "}
-                      {b === "historisch"
-                        ? "bewaren, niet meer als actuele bron"
-                        : "nooit als bron gebruiken"}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-[11px] text-muted mt-1">
-                  Laadt u een archiefstuk? Kies dan{" "}
-                  <span className="font-semibold">Historisch</span> — anders kan de
-                  assistent het als geldende bron citeren.
-                </p>
-              </div>
+              {/* Werkopdracht 1.6 — bronstatus uit de standaard-invoer, achter een
+                  ingeklapte "Geavanceerd"-sectie. De default (leeg ≡ actief) blijft
+                  en de control blijft bereikbaar; fase 2 (besluit 0153) vervangt
+                  deze as door `rag_uitgesloten`. Besluit 0140 blijft de server-side
+                  poort: `bronstatus` NULL ≡ `actief`, dus een archiefstuk dat als
+                  "van kracht" wordt aangeleverd kan een actuele bron worden — wie
+                  dat wil voorkomen kiest hier Historisch. */}
+              <details className="border border-line rounded-lg">
+                <summary className="cursor-pointer select-none px-3 py-2 text-sm font-semibold text-ink">
+                  Geavanceerd — bronstatus
+                </summary>
+                <div className="px-3 pb-3 pt-1">
+                  <select
+                    value={uploadForm.bronstatus}
+                    onChange={(e) =>
+                      setUploadForm({ ...uploadForm, bronstatus: e.target.value })
+                    }
+                    className="w-full border border-line rounded-lg px-3 py-2 text-sm outline-none focus:border-accent"
+                  >
+                    <option value="">Actief — mag als bron worden gebruikt (standaard)</option>
+                    {INGEST_BRONSTATUSSEN.map((b) => (
+                      <option key={b} value={b}>
+                        {BRONSTATUS_LABEL[b]} —{" "}
+                        {b === "historisch"
+                          ? "bewaren, niet meer als actuele bron"
+                          : "nooit als bron gebruiken"}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-muted mt-1">
+                    Laadt u een archiefstuk? Kies dan{" "}
+                    <span className="font-semibold">Historisch</span> — anders kan de
+                    assistent het als geldende bron citeren.
+                  </p>
+                </div>
+              </details>
 
               {/* UX-principe "maak vereisten en blokkers expliciet": toon vóór de
                   actie wat de keuze betekent, niet pas een foutmelding erna. Dit is

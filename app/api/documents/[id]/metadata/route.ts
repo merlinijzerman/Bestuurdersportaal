@@ -27,7 +27,7 @@ import { valideerContext } from "@/core/lib/document-metadata";
 export const dynamic = "force-dynamic";
 
 const METADATA_SELECT =
-  "id, titel, fonds_id, actief, opgeslagen_door, context, procesinstantie_id, vergadering_id, agendapunt_id, documenttype, status, bronstatus, documentdatum, geldig_vanaf, geldig_tot, vervangt_document_id, vervangen_door_document_id, metadata_te_controleren, metadata_review_status, metadata_gecontroleerd_door, metadata_gecontroleerd_op, bibliotheek, bronorganisatie, extern_url, normgewicht";
+  "id, titel, fonds_id, actief, opgeslagen_door, context, procesinstantie_id, vergadering_id, agendapunt_id, documenttype, status, bronstatus, documentdatum, geldig_vanaf, geldig_tot, vervangt_document_id, vervangen_door_document_id, bibliotheek, bronorganisatie, extern_url, normgewicht";
 
 async function leesCapabilities(
   supabase: Awaited<ReturnType<typeof createServerSupabase>>,
@@ -106,7 +106,6 @@ export async function PATCH(
 
     const body = (await req.json().catch(() => ({}))) as MetadataVerzoek & {
       preview?: boolean;
-      markeer_gecontroleerd?: boolean;
     };
 
     const { data: document, error: leesFout } = await supabase
@@ -118,21 +117,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Document niet gevonden" }, { status: 404 });
     }
 
-    const { rol, naam, caps } = await leesCapabilities(supabase, user.id);
-
-    // Het afronden van een review (markeer_gecontroleerd) is een eigen
-    // beheeractie en vereist de capability metadata.review — net als de queue-
-    // route. Server-side leidend; voorkomt dat documents.metadata.update alleen
-    // al een review kan afsluiten.
-    if (
-      body.markeer_gecontroleerd &&
-      !rolHeeftCapability(rol, "metadata.review")
-    ) {
-      return NextResponse.json(
-        { error: "Geen rechten om een review af te ronden (metadata.review)" },
-        { status: 403 }
-      );
-    }
+    const { naam, caps } = await leesCapabilities(supabase, user.id);
 
     const huidig: HuidigDocument = {
       status: document.status,
@@ -172,7 +157,7 @@ export async function PATCH(
         { status: isPermissie ? 403 : 400 }
       );
     }
-    if (plan.wijzigingen.length === 0 && !body.markeer_gecontroleerd) {
+    if (plan.wijzigingen.length === 0) {
       return NextResponse.json({ error: "Geen wijzigingen meegegeven" }, { status: 400 });
     }
 
@@ -180,12 +165,6 @@ export async function PATCH(
     const update: Record<string, unknown> = {};
     for (const w of plan.wijzigingen) {
       update[w.veld] = (body as Record<string, unknown>)[w.veld] ?? null;
-    }
-    if (body.markeer_gecontroleerd) {
-      update.metadata_te_controleren = false;
-      update.metadata_review_status = "gecontroleerd";
-      update.metadata_gecontroleerd_door = user.id;
-      update.metadata_gecontroleerd_op = new Date().toISOString();
     }
 
     if (Object.keys(update).length > 0) {
@@ -199,7 +178,7 @@ export async function PATCH(
       }
     }
 
-    // ── Append-only auditlog: één record per gewijzigd veld + review-beoordeling ──
+    // ── Append-only auditlog: één record per gewijzigd veld ──
     const reden = body.reden?.trim() || null;
     const basis = {
       document_id: id,
@@ -217,19 +196,6 @@ export async function PATCH(
       wijzig_type: w.wijzig_type,
       rag_impact: w.rag_impact,
     }));
-    // Review-afronding is óók een auditbare bestuurshandeling — log haar als
-    // expliciet record, ook als er geen andere veldwijziging is.
-    if (body.markeer_gecontroleerd) {
-      logRijen.push({
-        ...basis,
-        veld_naam: "metadata_review_status",
-        oude_waarde: document.metadata_review_status,
-        nieuwe_waarde: "gecontroleerd",
-        wijzig_reden: reden,
-        wijzig_type: "metadata",
-        rag_impact: false,
-      });
-    }
     if (logRijen.length > 0) {
       const { error: logFout } = await supabase
         .from("document_metadata_log")
@@ -241,19 +207,6 @@ export async function PATCH(
           { status: 500 }
         );
       }
-    }
-
-    // ── Review-queue bijwerken als het document is gecontroleerd ──
-    if (body.markeer_gecontroleerd && document.fonds_id) {
-      await supabase
-        .from("document_metadata_review_queue")
-        .update({
-          status: "gecontroleerd",
-          beoordeeld_door: user.id,
-          beoordeeld_op: new Date().toISOString(),
-        })
-        .eq("document_id", id)
-        .in("status", ["open", "in_behandeling"]);
     }
 
     return NextResponse.json({

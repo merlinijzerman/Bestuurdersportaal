@@ -14,6 +14,8 @@ import type {
 import VereistenStrook from "./VereistenStrook";
 import BibliotheekPicker from "./BibliotheekPicker";
 import { uploadDocument } from "@/core/lib/document-upload-client";
+import { DOCUMENTTYPEN, DOCUMENTTYPE_LABEL } from "@/core/lib/document-metadata";
+import { bewijsUploadDocumenttypeBlokker } from "@/core/lib/document-ingest-classificatie";
 
 interface Props {
   procedureId: string;
@@ -76,6 +78,13 @@ export default function StapPaneel({
   // 1D-4: file-upload + documenttype-tag op het bewijsformulier.
   const [bewijsBestand, setBewijsBestand] = useState<File | null>(null);
   const [bewijsDocumenttype, setBewijsDocumenttype] = useState("");
+  // Optie B (werkopdracht 1.2): een LOS metadata-documenttype voor het nieuw te
+  // uploaden bestand, náást de readiness-tag `bewijsDocumenttype`. Dit is de
+  // classificatie die de documentbibliotheek/RAG gebruikt (beleid/besluit/…);
+  // de readiness-tag zegt iets anders (welk soort bewijs de stap vraagt). Alleen
+  // relevant bij een nieuwe upload — een bestaand bibliotheekdocument heeft al
+  // een type.
+  const [bewijsMetadataType, setBewijsMetadataType] = useState("");
   // 3-D: bibliotheek-picker — kiezen uit bestaande documenten i.p.v. uploaden.
   // Houdt de uploadflow ongewijzigd; deze state is exclusief actief.
   const [bewijsBibliotheekId, setBewijsBibliotheekId] = useState<string | null>(null);
@@ -156,6 +165,17 @@ export default function StapPaneel({
       setFout("Titel is verplicht.");
       return;
     }
+    // Optie B / 0140-regressiefix: bij een nieuwe upload in de processtroom is
+    // een documenttype verplicht. Toon de blokker VÓÓR de submit (UX-guardrail)
+    // i.p.v. de 400 die de uploadroute anders geeft.
+    const typeBlokker = bewijsUploadDocumenttypeBlokker({
+      heeftNieuwBestand: !bewijsBibliotheekId && !!bewijsBestand,
+      documenttype: bewijsMetadataType,
+    });
+    if (typeBlokker) {
+      setFout(typeBlokker);
+      return;
+    }
     setBezig("bewijs");
     try {
       // 3-D: drie bronnen voor `document_id`:
@@ -173,6 +193,7 @@ export default function StapPaneel({
           bibliotheek: "fonds",
           bron: "Intern",
           titel,
+          documenttype: bewijsMetadataType || null,
         });
         if (!up.ok) {
           throw new Error(up.error ?? "Upload van bewijsbestand mislukt");
@@ -213,6 +234,7 @@ export default function StapPaneel({
       setBewijsBeschrijving("");
       setBewijsBestand(null);
       setBewijsDocumenttype("");
+      setBewijsMetadataType("");
       setBewijsBibliotheekId(null);
       setBewijsBibliotheekTitel("");
       setBewijsForm(false);
@@ -673,10 +695,36 @@ export default function StapPaneel({
                     className="block w-full text-xs text-ink file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-accent file:text-white file:text-xs hover:file:bg-accent-ink"
                   />
                   {bewijsBestand && (
-                    <p className="text-[11px] text-muted mt-1">
-                      Geselecteerd: <span className="font-medium">{bewijsBestand.name}</span>
-                      {" — "}wordt geüpload naar de documentbibliotheek bij vastleggen.
-                    </p>
+                    <>
+                      <p className="text-[11px] text-muted mt-1">
+                        Geselecteerd: <span className="font-medium">{bewijsBestand.name}</span>
+                        {" — "}wordt geüpload naar de documentbibliotheek bij vastleggen.
+                      </p>
+                      {/* Optie B (werkopdracht 1.2): metadata-documenttype voor het
+                          nieuw geüploade stuk. Verplicht in de processtroom — de
+                          bibliotheek/RAG classificeert erop. Los van de
+                          readiness-tag hierboven. */}
+                      <div className="mt-2">
+                        <label className="block text-[11px] uppercase tracking-wide text-muted font-semibold mb-1">
+                          Documenttype <span className="text-err-ink">*</span>
+                        </label>
+                        <select
+                          value={bewijsMetadataType}
+                          onChange={(e) => setBewijsMetadataType(e.target.value)}
+                          className="w-full border border-line rounded px-2 py-1.5 text-sm bg-white focus:border-accent outline-none"
+                        >
+                          <option value="">— kies een documenttype —</option>
+                          {DOCUMENTTYPEN.map((t) => (
+                            <option key={t} value={t}>
+                              {DOCUMENTTYPE_LABEL[t]}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-[11px] text-muted mt-1">
+                          Waar de bibliotheek en de assistent het stuk op indelen.
+                        </p>
+                      </div>
+                    </>
                   )}
                 </>
               )}

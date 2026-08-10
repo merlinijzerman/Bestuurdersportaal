@@ -188,4 +188,60 @@ test("geen wijziging (zelfde waarde) levert geen auditrecord", () => {
   assert.equal(plan.wijzigingen.length, 0);
 });
 
+// ── Statusprofiel: van_kracht alleen voor de normatieve cluster (1.3) ────────
+
+test("van_kracht op een normatief type (beleid) is toegestaan", () => {
+  const plan = bouwMetadataPlan(
+    doc({ status: "vastgesteld", documenttype: "beleid" }),
+    { status: "van_kracht", reden: "geldend per 2026" },
+    ALLE_CAPS
+  );
+  assert.equal(plan.ok, true);
+  assert.ok(plan.wijzigingen.some((w) => w.veld === "status"));
+});
+
+test("van_kracht op een niet-normatief type (rapportage) wordt geweigerd", () => {
+  const plan = bouwMetadataPlan(
+    doc({ status: "vastgesteld", documenttype: "rapportage" }),
+    { status: "van_kracht", reden: "x" },
+    ALLE_CAPS
+  );
+  assert.equal(plan.ok, false);
+  assert.ok(plan.fouten.some((f) => f.includes("van kracht")));
+});
+
+test("REGRESSIE: type-only wijziging naar niet-normatief op een van_kracht-document wordt geweigerd", () => {
+  // Zonder statuswijziging wordt de statuswijzig-tak niet doorlopen; de guard
+  // moet dan alsnog voorkomen dat een niet-normatief stuk op van_kracht blijft.
+  const plan = bouwMetadataPlan(
+    doc({ status: "van_kracht", documenttype: "beleid" }),
+    { documenttype: "rapportage", reden: "herclassificatie" },
+    ALLE_CAPS
+  );
+  assert.equal(plan.ok, false);
+  assert.ok(plan.fouten.some((f) => f.includes("van kracht")));
+});
+
+test("type-only wijziging naar een ander NORMATIEF type op een van_kracht-document mag", () => {
+  const plan = bouwMetadataPlan(
+    doc({ status: "van_kracht", documenttype: "beleid" }),
+    { documenttype: "besluit" },
+    ALLE_CAPS
+  );
+  assert.equal(plan.ok, true);
+  assert.ok(plan.wijzigingen.some((w) => w.veld === "documenttype"));
+});
+
+test("van_kracht toetst het VOORGESTELDE type in hetzelfde verzoek", () => {
+  // Type wijzigt van beleid → rapportage in hetzelfde verzoek; dan mag de
+  // gelijktijdige van_kracht-zet niet meer.
+  const plan = bouwMetadataPlan(
+    doc({ status: "vastgesteld", documenttype: "beleid" }),
+    { status: "van_kracht", documenttype: "rapportage", reden: "x" },
+    ALLE_CAPS
+  );
+  assert.equal(plan.ok, false);
+  assert.ok(plan.fouten.some((f) => f.includes("van kracht")));
+});
+
 console.log(`\n${n} sanity-tests geslaagd.`);

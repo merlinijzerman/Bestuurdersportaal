@@ -34,6 +34,7 @@ import {
   type MetadataVeld,
 } from "./document-metadata";
 import { isGeldigNormgewicht, NORMGEWICHTEN, isVeiligeUrl } from "./bronsoort";
+import { magVanKracht, NORMATIEVE_DOCUMENTTYPEN } from "./document-statusprofiel";
 
 /** Huidige, relevante documentstaat (uit de DB gelezen). */
 export interface HuidigDocument {
@@ -150,10 +151,45 @@ export function bouwMetadataPlan(
   };
   const blokkers = valideerContext(proposed);
 
+  // Voorgesteld documenttype (voor het statusprofiel bij een van_kracht-zet).
+  const proposedDocumenttype =
+    verzoek.documenttype !== undefined
+      ? verzoek.documenttype
+      : huidig.documenttype;
+
+  // Statusprofiel (werkopdracht 1.3, DOELMODEL §5) — TYPE-ONLY pad: een reeds
+  // `van_kracht` document mag zijn type niet naar een niet-normatieve waarde
+  // wijzigen zónder de status mee te veranderen. Anders wordt de statuswijzig-
+  // tak hieronder niet doorlopen en zou een niet-normatief stuk op `van_kracht`
+  // achterblijven — precies de invariant die het profiel borgt. Deze guard is
+  // gescopet op `verzoek.status === undefined`, zodat het status-wijzigpad zijn
+  // eigen (identieke) toets houdt zonder dubbele foutmelding.
+  if (
+    verzoek.status === undefined &&
+    huidig.status === "van_kracht" &&
+    verzoek.documenttype !== undefined &&
+    !magVanKracht(proposedDocumenttype)
+  ) {
+    fouten.push(
+      `Documenttype '${proposedDocumenttype ?? "onbekend"}' kan niet worden gezet ` +
+        `terwijl het document de status 'van kracht' heeft: die status is alleen ` +
+        `toegestaan voor normatieve documenttypen (${NORMATIEVE_DOCUMENTTYPEN.join(", ")}). ` +
+        `Zet de status eerst terug.`
+    );
+  }
+
   // ── Statuswijziging (laag 2) ──
   if (verzoek.status !== undefined && verzoek.status !== huidig.status) {
     if (!caps.statusChange) {
       fouten.push("Geen rechten om de documentstatus te wijzigen (documents.status.change).");
+    } else if (verzoek.status === "van_kracht" && !magVanKracht(proposedDocumenttype)) {
+      // Statusprofiel (werkopdracht 1.3, DOELMODEL §5): 'van kracht' is een
+      // geldende NORM en alleen toegestaan voor de normatieve cluster.
+      fouten.push(
+        `Status 'van kracht' is alleen toegestaan voor normatieve documenttypen ` +
+          `(${NORMATIEVE_DOCUMENTTYPEN.join(", ")}); ` +
+          `'${proposedDocumenttype ?? "onbekend"}' hoort daar niet bij.`
+      );
     } else if (huidig.status === null) {
       // legacy zonder status → eerste expliciete zet toegestaan (geen transitie).
       wijzigingen.push({

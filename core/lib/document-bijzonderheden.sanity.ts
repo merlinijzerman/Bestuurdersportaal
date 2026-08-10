@@ -48,7 +48,6 @@ function doc(over: Partial<DocumentToestand> = {}): DocumentToestand {
     ocr_toegepast: false,
     opslag_pad: "fonds/abc.pdf",
     documenttype: "beleid",
-    metadata_review_status: "gecontroleerd",
     deactivatie_reden: null,
     geldig_tot: null,
     aangemaakt: RECENT,
@@ -139,15 +138,14 @@ test("generieke documenten krijgen geen niet-doorzoekbaar-melding (B13: read-onl
 
 // ── Type vs. metadata: bewust onderscheiden ─────────────────────────────────
 
-test("ontbrekend documenttype meldt 'Type ontbreekt', niet 'Metadata onvolledig'", () => {
-  const s = sleutels(doc({ documenttype: null, metadata_review_status: "te_controleren" }));
+test("ontbrekend documenttype meldt 'Type ontbreekt'", () => {
+  const s = sleutels(doc({ documenttype: null }));
   assert.deepEqual(s, ["type_ontbreekt"]);
 });
 
-test("een document mét type maar met openstaande review meldt 'Metadata onvolledig'", () => {
-  const s = sleutels(doc({ metadata_review_status: "te_controleren" }));
-  assert.deepEqual(s, ["metadata_onvolledig"]);
-});
+// De bredere "Metadata onvolledig"-melding leunde op de metadata-reviewworkflow
+// (metadata_review_status), die is verwijderd (besluit 0152). Daarmee vervalt
+// die bijzonderheid; alleen "Type ontbreekt" (op !documenttype) blijft.
 
 test("generieke documenten krijgen geen 'Type ontbreekt' (centraal gecureerd)", () => {
   const s = sleutels(doc({ bibliotheek: "generiek", documenttype: null }));
@@ -183,8 +181,8 @@ test("tekstherkenning blijft zichtbaar bij een verder gaaf document (besluit 002
 });
 
 test("de auditmarkering staat achteraan, ná wat een handeling vraagt", () => {
-  const s = sleutels(doc({ ocr_toegepast: true, metadata_review_status: "te_controleren" }));
-  assert.deepEqual(s, ["metadata_onvolledig", "tekstherkenning"]);
+  const s = sleutels(doc({ ocr_toegepast: true, documenttype: null }));
+  assert.deepEqual(s, ["type_ontbreekt", "tekstherkenning"]);
 });
 
 // ── Traag-drempel ───────────────────────────────────────────────────────────
@@ -218,7 +216,6 @@ test("geen enkel label bevat een oordeel of datamodel-jargon", () => {
     doc({ geindexeerd: false, verwerkingsstatus: null }),
     doc({ geindexeerd: false, verwerkingsstatus: null, opslag_pad: null }),
     doc({ documenttype: null }),
-    doc({ metadata_review_status: "te_controleren" }),
     doc({ ocr_toegepast: true }),
     doc({ bibliotheek: "generiek", geldig_tot: "2025-01-01" }),
   ];

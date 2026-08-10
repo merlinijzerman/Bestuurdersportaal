@@ -275,7 +275,7 @@ create table if not exists public.documenten (
   vergadering_id uuid references public.vergaderingen(id) on delete set null,
   documenttype   text check (documenttype in (
                    'beleid','besluit','besluitdocument','besluitregistratie',
-                   'bestuursvoorstel','notulen','advies','memo','analyse','bijlage','overig')),
+                   'bestuursvoorstel','notulen','advies','memo','analyse','rapportage','bijlage','overig')),
   status         text check (status in (
                    'concept','ter_bespreking','ter_besluitvorming','vastgesteld',
                    'van_kracht','vervangen','alleen_historisch','gearchiveerd')),

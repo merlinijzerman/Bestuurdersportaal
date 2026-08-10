@@ -37,6 +37,9 @@ export interface UploadMetadata {
   // vergaderstuk- en bewijsstukstroom leveren ze niet aan en houden daarmee
   // exact het gedrag van vóór 0140. Server-side blijft leidend.
   documenttype?: string | null;
+  // Werkopdracht 1.4/1.5 — documentdatum: verplicht bij rapportage, anders
+  // defaultt de server op de uploaddatum. Optioneel meesturen.
+  documentdatum?: string | null;
   bronstatus?: string | null;
   bronstatus_reden?: string | null;
 }

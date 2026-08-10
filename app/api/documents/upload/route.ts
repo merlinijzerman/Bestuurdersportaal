@@ -18,9 +18,11 @@ import {
 import {
   beoordeelIngestBronstatus,
   beoordeelIngestDocumenttype,
+  beoordeelIngestDocumentdatum,
   VEREISTE_BRONSTATUS_CAPABILITY,
 } from "@/core/lib/document-ingest-classificatie";
-import type { Documenttype } from "@/core/lib/document-metadata";
+import type { Documenttype, DocumentContext } from "@/core/lib/document-metadata";
+import { magVanKracht, NORMATIEVE_DOCUMENTTYPEN } from "@/core/lib/document-statusprofiel";
 import type { Bronstatus } from "@/core/lib/document-status-transities";
 import { requireCapability, type Capability } from "@/core/lib/capabilities";
 import {
@@ -53,6 +55,11 @@ type MetadataUitkomst =
       titel: string;
       agendapunt_id: string | null;
       vergadering_id: string | null;
+      // Werkopdracht 1.5 — afgeleide context (niet meer door de client gevraagd).
+      context: DocumentContext;
+      // Werkopdracht 1.4/1.5 — documentdatum: verplicht bij rapportage, anders
+      // default op de uploaddatum.
+      documentdatum: string;
       ingestStatus: DocumentStatus | null;
       statusReden: string | null;
       // Besluit 0140 — classificatie bij aanlevering.
@@ -76,6 +83,7 @@ async function valideerUploadMetadata(
     status?: string | null;
     status_reden?: string | null;
     documenttype?: string | null;
+    documentdatum?: string | null;
     bronstatus?: string | null;
     bronstatus_reden?: string | null;
   }
@@ -189,6 +197,42 @@ async function valideerUploadMetadata(
     };
   }
 
+  // Statusprofiel (werkopdracht 1.3, DOELMODEL §5): 'van kracht' is een geldende
+  // NORM en mag alleen bij de normatieve cluster worden verklaard. Server-side
+  // leidend, náást de UI-filter. Beide velden zijn hier bekend.
+  if (ingestStatus === "van_kracht" && !magVanKracht(typeUitkomst.documenttype)) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        {
+          error:
+            `Status 'van kracht' is alleen toegestaan voor normatieve documenttypen ` +
+            `(${NORMATIEVE_DOCUMENTTYPEN.join(", ")}). Kies 'vastgesteld' of pas het type aan.`,
+          foutcode: "van_kracht_niet_toegestaan_voor_type",
+        },
+        { status: 400 }
+      ),
+    };
+  }
+
+  // -- Documentdatum (werkopdracht 1.4/1.5) -----------------------------------
+  // Rapportage vereist een documentdatum; andere types defaulten op vandaag.
+  const vandaag = new Date().toISOString().slice(0, 10);
+  const datumUitkomst = beoordeelIngestDocumentdatum(
+    typeUitkomst.documenttype,
+    raw.documentdatum,
+    vandaag
+  );
+  if (!datumUitkomst.ok) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: datumUitkomst.melding, foutcode: datumUitkomst.foutcode },
+        { status: 400 }
+      ),
+    };
+  }
+
   // Bronstatus loopt door DEZELFDE transitietabel als een latere wijziging, met
   // dezelfde capability. Zonder deze poort zou upload een achterdeur zijn om de
   // bronstatus-governance te omzeilen.
@@ -244,6 +288,15 @@ async function valideerUploadMetadata(
     vergadering_id = agendapuntRij.vergadering_id;
   }
 
+  // Werkopdracht 1.5 — context volledig AFLEIDEN uit de FK-koppelingen i.p.v.
+  // door de client laten aanleveren. Op dit uploadpad is alleen de
+  // vergadering-koppeling beschikbaar (agendapunt → vergadering); de
+  // dossier-/procesinstantiekoppeling ontstaat later via een aparte join en is
+  // hier dus geen invoer. Vandaar: vergadering_id → 'vergadering', anders
+  // 'algemeen'. Voldoet aan de context-CHECK-constraints (vergadering vereist
+  // vergadering_id).
+  const context: DocumentContext = vergadering_id ? "vergadering" : "algemeen";
+
   return {
     ok: true,
     bibliotheek,
@@ -251,6 +304,8 @@ async function valideerUploadMetadata(
     titel,
     agendapunt_id,
     vergadering_id,
+    context,
+    documentdatum: datumUitkomst.documentdatum,
     ingestStatus,
     statusReden,
     documenttype: typeUitkomst.documenttype,
@@ -340,6 +395,7 @@ async function initUpload(req: NextRequest, body: Record<string, unknown>) {
       status: body.status as string | null,
       status_reden: body.status_reden as string | null,
       documenttype: body.documenttype as string | null,
+      documentdatum: body.documentdatum as string | null,
       bronstatus: body.bronstatus as string | null,
       bronstatus_reden: body.bronstatus_reden as string | null,
     });
@@ -421,6 +477,7 @@ async function completeUpload(req: NextRequest, body: Record<string, unknown>) {
       status: body.status as string | null,
       status_reden: body.status_reden as string | null,
       documenttype: body.documenttype as string | null,
+      documentdatum: body.documentdatum as string | null,
       bronstatus: body.bronstatus as string | null,
       bronstatus_reden: body.bronstatus_reden as string | null,
     });
@@ -524,6 +581,10 @@ async function completeUpload(req: NextRequest, body: Record<string, unknown>) {
         verwerkingsstatus: "ontvangen",
         agendapunt_id: meta.agendapunt_id,
         vergadering_id: meta.vergadering_id,
+        // Werkopdracht 1.5 — afgeleide context (niet meer client-aangeleverd) en
+        // 1.4/1.5 — documentdatum (rapportage verplicht, anders uploaddatum).
+        context: meta.context,
+        documentdatum: meta.documentdatum,
         ...(meta.ingestStatus ? { status: meta.ingestStatus } : {}),
         // Besluit 0140. Beide alleen meesturen als ze zijn verklaard: een
         // ontbrekend documenttype blijft NULL (restgroep "Zonder type") en een

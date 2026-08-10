@@ -41,6 +41,7 @@ export type Documenttype =
   | "advies"
   | "memo"
   | "analyse"
+  | "rapportage"
   | "bijlage"
   | "overig";
 
@@ -54,6 +55,7 @@ export const DOCUMENTTYPEN: Documenttype[] = [
   "advies",
   "memo",
   "analyse",
+  "rapportage",
   "bijlage",
   "overig",
 ];
@@ -68,45 +70,15 @@ export const DOCUMENTTYPE_LABEL: Record<Documenttype, string> = {
   advies: "Advies",
   memo: "Memo",
   analyse: "Analyse",
+  rapportage: "Rapportage",
   bijlage: "Bijlage",
   overig: "Overig",
 };
 
-// ── Metadata-review-status (FO §7 / TO §2.4) ───────────────────────────
-
-export type MetadataReviewStatus =
-  | "niet_nodig"
-  | "te_controleren"
-  | "gecontroleerd"
-  | "afgewezen";
-
-export const METADATA_REVIEW_STATUSSEN: MetadataReviewStatus[] = [
-  "niet_nodig",
-  "te_controleren",
-  "gecontroleerd",
-  "afgewezen",
-];
-
-export const METADATA_REVIEW_STATUS_LABEL: Record<MetadataReviewStatus, string> =
-  {
-    niet_nodig: "Niet nodig",
-    te_controleren: "Nog niet verrijkt",
-    gecontroleerd: "Gecontroleerd",
-    afgewezen: "Afgewezen",
-  };
-
-/** Redenen waarom een document in de review-queue staat (TO §2.4). */
-export type ReviewQueueReden =
-  | "backfill"
-  | "ontbrekende_metadata"
-  | "onzekere_status"
-  | "handmatig";
-
-export type ReviewQueueStatus =
-  | "open"
-  | "in_behandeling"
-  | "gecontroleerd"
-  | "afgewezen";
+// Besluit 0152 — de metadata-reviewworkflow is verwijderd. De review-status-
+// en review-queue-types (`MetadataReviewStatus`, `ReviewQueue*`) leefden hier
+// en zijn vervallen. De metadata-WIJZIGINGS-audit (`document_metadata_log`)
+// blijft ongemoeid — dát is het bewijs dat metadata niet zomaar wijzigt.
 
 // ── Contextvalidatie (FO §6, ook server-side afgedwongen) ──────────────
 

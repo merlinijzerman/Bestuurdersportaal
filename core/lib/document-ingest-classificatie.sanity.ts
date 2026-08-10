@@ -23,6 +23,8 @@ import {
   VEREISTE_BRONSTATUS_CAPABILITY,
   beoordeelIngestBronstatus,
   beoordeelIngestDocumenttype,
+  beoordeelIngestDocumentdatum,
+  bewijsUploadDocumenttypeBlokker,
   isGeldigDocumenttype,
 } from "./document-ingest-classificatie";
 import { DOCUMENTTYPEN } from "./document-metadata";
@@ -159,6 +161,77 @@ test("niet verplicht + leeg → null, geen verzonnen classificatie", () => {
 test("witruimte telt als leeg", () => {
   const r = beoordeelIngestDocumenttype("   ", { verplicht: true });
   assert.equal(r.ok, false);
+});
+
+// ── Bewijs-upload blokker (processtroom, besluit 0140-regressiefix) ──────────
+
+test("REGRESSIE: nieuw bewijsbestand zonder documenttype wordt geblokkeerd", () => {
+  // Reproduceert de 400 `documenttype_ontbreekt` die de uploadroute geeft voor
+  // een bewijsstuk (geen agendapunt → verplicht), maar dan VÓÓR de submit. Dit
+  // is de bug uit de werkopdracht: StapPaneel uploadde zonder documenttype.
+  const blokker = bewijsUploadDocumenttypeBlokker({
+    heeftNieuwBestand: true,
+    documenttype: "",
+  });
+  assert.notEqual(blokker, null);
+  assert.match(blokker as string, /documenttype/i);
+});
+
+test("een geldig documenttype heft de blokker op (de fix)", () => {
+  const blokker = bewijsUploadDocumenttypeBlokker({
+    heeftNieuwBestand: true,
+    documenttype: "rapportage",
+  });
+  assert.equal(blokker, null);
+});
+
+test("geen nieuw bestand (kies uit bibliotheek) → geen blokker", () => {
+  // Een bestaand document heeft zijn type al; er wordt niets geüpload.
+  const blokker = bewijsUploadDocumenttypeBlokker({
+    heeftNieuwBestand: false,
+    documenttype: "",
+  });
+  assert.equal(blokker, null);
+});
+
+test("onbekend documenttype bij bewijs-upload wordt geblokkeerd", () => {
+  const blokker = bewijsUploadDocumenttypeBlokker({
+    heeftNieuwBestand: true,
+    documenttype: "jaarrekening",
+  });
+  assert.notEqual(blokker, null);
+});
+
+// ── Documentdatum (werkopdracht 1.4 + 1.5) ──────────────────────────────────
+
+test("rapportage zonder documentdatum wordt geweigerd", () => {
+  const r = beoordeelIngestDocumentdatum("rapportage", "", "2026-08-09");
+  assert.equal(r.ok, false);
+  if (!r.ok) assert.equal(r.foutcode, "documentdatum_ontbreekt");
+});
+
+test("rapportage MET documentdatum wordt geaccepteerd", () => {
+  const r = beoordeelIngestDocumentdatum("rapportage", "2026-06-30", "2026-08-09");
+  assert.equal(r.ok, true);
+  if (r.ok) assert.equal(r.documentdatum, "2026-06-30");
+});
+
+test("ander type zonder datum → default op de uploaddatum", () => {
+  const r = beoordeelIngestDocumentdatum("beleid", "", "2026-08-09");
+  assert.equal(r.ok, true);
+  if (r.ok) assert.equal(r.documentdatum, "2026-08-09");
+});
+
+test("geen type (null) zonder datum → default op de uploaddatum", () => {
+  const r = beoordeelIngestDocumentdatum(null, "", "2026-08-09");
+  assert.equal(r.ok, true);
+  if (r.ok) assert.equal(r.documentdatum, "2026-08-09");
+});
+
+test("een ongeldig datumformaat wordt geweigerd", () => {
+  const r = beoordeelIngestDocumentdatum("beleid", "30-06-2026", "2026-08-09");
+  assert.equal(r.ok, false);
+  if (!r.ok) assert.equal(r.foutcode, "documentdatum_ongeldig");
 });
 
 console.log(`\n${n} sanity-tests geslaagd.\n`);

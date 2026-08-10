@@ -4,9 +4,10 @@
 //  DocumentMetadataModal — Increment C
 //
 //  Metadata corrigeren/verrijken zonder herupload (FO §7). Toont
-//  contextvereisten + RAG-impact VOORAF (preview), dwingt reden af waar
-//  vereist (de server is leidend; deze UI is begeleiding) en kan een
-//  document als "gecontroleerd" markeren (haalt het uit de review-queue).
+//  contextvereisten + RAG-impact VOORAF (preview) en dwingt reden af waar
+//  vereist (de server is leidend; deze UI is begeleiding). De
+//  metadata-reviewworkflow is verwijderd (besluit 0152); elke wijziging landt
+//  wél append-only in document_metadata_log.
 // ============================================================
 
 import { useCallback, useEffect, useState } from "react";
@@ -26,6 +27,10 @@ import {
   type Bronstatus,
 } from "@/core/lib/document-status-transities";
 import { bronkaartLabels, normgewichtLabel, isVeiligeUrl } from "@/core/lib/bronsoort";
+import {
+  toegestaneStatussenVoorType,
+  statusLabelVoorType,
+} from "@/core/lib/document-statusprofiel";
 
 interface MetadataDoc {
   id: string;
@@ -40,7 +45,6 @@ interface MetadataDoc {
   documentdatum: string | null;
   geldig_vanaf: string | null;
   geldig_tot: string | null;
-  metadata_review_status: string | null;
   // Increment C+/B13 — bronsoort. Generiek = platform-gecureerd, read-only voor tenants.
   bibliotheek: string | null;
   bronorganisatie: string | null;
@@ -111,17 +115,14 @@ export default function DocumentMetadataModal({
     return v;
   }
 
-  async function opslaan(markeerGecontroleerd = false) {
+  async function opslaan() {
     setBezig(true);
     setFout(null);
     try {
       const res = await fetch(`/api/documents/${documentId}/metadata`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...bouwVerzoek(),
-          markeer_gecontroleerd: markeerGecontroleerd,
-        }),
+        body: JSON.stringify(bouwVerzoek()),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -138,9 +139,19 @@ export default function DocumentMetadataModal({
     }
   }
 
-  const statusOpties: DocumentStatus[] = doc?.status
+  // Statusprofiel (1.3): 'van kracht' alleen voor de normatieve cluster,
+  // getoetst tegen het (mogelijk zojuist gewijzigde) type in het formulier. De
+  // HUIDIGE status blijft altijd zichtbaar — anders zou een bestaande waarde
+  // onselecteerbaar worden (server-side blijft leidend bij opslaan).
+  const gekozenType = (form.documenttype as Documenttype) || null;
+  const statusBasis: DocumentStatus[] = doc?.status
     ? [doc.status, ...vervolgstatussen]
     : (Object.keys(DOCUMENT_STATUS_LABEL) as DocumentStatus[]);
+  const gefilterd = toegestaneStatussenVoorType(statusBasis, gekozenType);
+  const statusOpties: DocumentStatus[] =
+    doc?.status && !gefilterd.includes(doc.status)
+      ? [doc.status, ...gefilterd]
+      : gefilterd;
 
   // B13: generieke (platform-gecureerde) documenten zijn read-only voor tenants.
   // RLS blokkeert schrijven hoe dan ook; deze gate maakt dat in de UI expliciet
@@ -249,7 +260,7 @@ export default function DocumentMetadataModal({
                   <option value="">— geen —</option>
                   {[...new Set(statusOpties)].map((s) => (
                     <option key={s} value={s}>
-                      {DOCUMENT_STATUS_LABEL[s]}
+                      {statusLabelVoorType(s, gekozenType)}
                     </option>
                   ))}
                 </select>
@@ -306,19 +317,11 @@ export default function DocumentMetadataModal({
 
             <div className="flex flex-wrap gap-3 pt-2">
               <button
-                onClick={() => opslaan(false)}
+                onClick={() => opslaan()}
                 disabled={bezig}
                 className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-ink disabled:opacity-50"
               >
                 {bezig ? "Bezig…" : "Opslaan"}
-              </button>
-              <button
-                onClick={() => opslaan(true)}
-                disabled={bezig}
-                className="rounded-lg bg-ok px-4 py-2 text-sm font-semibold text-white hover:bg-ok disabled:opacity-50"
-                title="Opslaan en uit de review-queue halen"
-              >
-                Opslaan + gecontroleerd
               </button>
             </div>
           </div>

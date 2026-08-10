@@ -54,7 +54,7 @@ async function jsonFetch(url: string, init?: RequestInit) {
 }
 
 export default function BeheerClient() {
-  const [tab, setTab] = useState<"catalogus" | "organen" | "review">("catalogus");
+  const [tab, setTab] = useState<"catalogus" | "organen" | "classificatie">("catalogus");
   const [procesmodellen, setProcesmodellen] = useState<Procesmodel[]>([]);
   const [gremia, setGremia] = useState<Organ[]>([]);
   const [expertises, setExpertises] = useState<Organ[]>([]);
@@ -221,7 +221,7 @@ export default function BeheerClient() {
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-line mb-6">
-        {(["catalogus", "organen", "review"] as const).map((t) => (
+        {(["catalogus", "organen", "classificatie"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -235,7 +235,7 @@ export default function BeheerClient() {
               ? "Procescatalogus"
               : t === "organen"
               ? "Organen"
-              : "Te beoordelen"}
+              : "Procesclassificatie"}
           </button>
         ))}
       </div>
@@ -245,8 +245,8 @@ export default function BeheerClient() {
           {fout}
         </div>
       )}
-      {tab === "review" ? (
-        <ReviewHub />
+      {tab === "classificatie" ? (
+        <ProcesclassificatieHub />
       ) : laden ? (
         <div className="text-muted text-sm">Laden…</div>
       ) : tab === "catalogus" ? (
@@ -269,31 +269,12 @@ export default function BeheerClient() {
   );
 }
 
-// ── Generieke "Te beoordelen"-hub ───────────────────────────────────────────
-// stream=metadata (increment C). Increment E hangt hier een tweede stream
-// (AI-procesclassificatie) naast i.p.v. een tweede scherm.
-type ReviewItem = {
-  id: string;
-  document_id: string;
-  reden: string;
-  status: string;
-  aangemaakt: string;
-  opmerking: string | null;
-  documenten: {
-    id: string;
-    titel: string;
-    bibliotheek: string;
-    bron: string;
-    context: string | null;
-    documenttype: string | null;
-    status: string | null;
-    bronstatus: string | null;
-    documentdatum: string | null;
-    metadata_review_status: string | null;
-  } | null;
-};
+// ── Procesclassificatie-hub (Increment E) ───────────────────────────────────
+// De metadata-reviewworkflow (stream=metadata) is verwijderd (besluit 0152);
+// wat resteert is de AI-procesclassificatie — een ánder mechanisme (decision
+// 0010) met een eigen datamodel en eigen schrijf-routes.
 
-// Increment E — classificatievoorstel-item (stream=classificatie).
+// Increment E — classificatievoorstel-item.
 type ClassificatieItem = {
   id: string;
   document_id: string;
@@ -316,19 +297,6 @@ type ClassificatieItem = {
   } | null;
 };
 
-const REVIEW_STREAMS = [
-  { key: "metadata", label: "Metadata" },
-  { key: "classificatie", label: "Procesclassificatie" },
-] as const;
-type ReviewStream = (typeof REVIEW_STREAMS)[number]["key"];
-
-const REDEN_LABEL: Record<string, string> = {
-  backfill: "Backfill (nog niet verrijkt)",
-  ontbrekende_metadata: "Ontbrekende metadata",
-  onzekere_status: "Onzekere status",
-  handmatig: "Handmatig toegevoegd",
-};
-
 const CONFIDENCE_BADGE: Record<string, string> = {
   hoog: "bg-ok-tint text-ok-ink",
   middel: "bg-warn-tint text-warn-ink",
@@ -336,9 +304,7 @@ const CONFIDENCE_BADGE: Record<string, string> = {
   geen_match: "bg-app-bg text-muted",
 };
 
-function ReviewHub() {
-  const [stream, setStream] = useState<ReviewStream>("metadata");
-  const [items, setItems] = useState<ReviewItem[]>([]);
+function ProcesclassificatieHub() {
   const [classItems, setClassItems] = useState<ClassificatieItem[]>([]);
   const [tellingen, setTellingen] = useState<Record<string, number>>({});
   const [statusFilter, setStatusFilter] = useState<string>("open");
@@ -350,48 +316,21 @@ function ReviewHub() {
     setLaden(true);
     setFout(null);
     try {
-      const params = new URLSearchParams({ stream });
+      const params = new URLSearchParams();
       if (statusFilter) params.set("status", statusFilter);
-      const data = await jsonFetch(`/api/metadata-review/queue?${params}`);
-      if (stream === "classificatie") {
-        setClassItems(data.items ?? []);
-        setItems([]);
-      } else {
-        setItems(data.items ?? []);
-        setClassItems([]);
-      }
+      const data = await jsonFetch(`/api/classificatie/queue?${params}`);
+      setClassItems(data.items ?? []);
       setTellingen(data.tellingen ?? {});
     } catch (err) {
       setFout(err instanceof Error ? err.message : "Laden mislukt");
     } finally {
       setLaden(false);
     }
-  }, [stream, statusFilter]);
+  }, [statusFilter]);
 
   useEffect(() => {
     laad();
   }, [laad]);
-
-  // Stream wisselen: zet een passend default statusfilter.
-  function kiesStream(s: ReviewStream) {
-    setStream(s);
-    setStatusFilter("open");
-  }
-
-  async function beoordeelMetadata(documentId: string, actie: string) {
-    setBezig(documentId);
-    try {
-      await jsonFetch("/api/metadata-review/queue", {
-        method: "POST",
-        body: JSON.stringify({ document_id: documentId, actie }),
-      });
-      await laad();
-    } catch (err) {
-      setFout(err instanceof Error ? err.message : "Bijwerken mislukt");
-    } finally {
-      setBezig(null);
-    }
-  }
 
   // Classificatie-acties lopen via de classificatie-specifieke routes.
   async function classificatieActie(
@@ -414,48 +353,18 @@ function ReviewHub() {
     }
   }
 
-  const statusOpties =
-    stream === "classificatie"
-      ? [
-          ["open", "Open"],
-          ["auto_toegepast", "Auto-gekoppeld"],
-          ["bevestigd", "Bevestigd"],
-          ["afgewezen", "Afgewezen"],
-          ["teruggedraaid", "Teruggedraaid"],
-          ["", "Alle"],
-        ]
-      : [
-          ["open", "Open"],
-          ["in_behandeling", "In behandeling"],
-          ["gecontroleerd", "Gecontroleerd"],
-          ["afgewezen", "Afgewezen"],
-          ["", "Alle"],
-        ];
+  const statusOpties: [string, string][] = [
+    ["open", "Open"],
+    ["auto_toegepast", "Auto-gekoppeld"],
+    ["bevestigd", "Bevestigd"],
+    ["afgewezen", "Afgewezen"],
+    ["teruggedraaid", "Teruggedraaid"],
+    ["", "Alle"],
+  ];
 
   return (
     <div>
-      {/* Stream-tabs: metadata (C) + procesclassificatie (E), één hub */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex gap-1">
-          {REVIEW_STREAMS.map((s) => (
-            <button
-              key={s.key}
-              onClick={() => kiesStream(s.key)}
-              className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                stream === s.key
-                  ? "bg-accent text-white"
-                  : "bg-app-bg text-muted hover:bg-app-line"
-              }`}
-            >
-              {s.label}
-              {stream === s.key && tellingen.open ? (
-                <span className="ml-1.5 rounded-full bg-accent text-ink px-1.5">
-                  {tellingen.open}
-                </span>
-              ) : null}
-            </button>
-          ))}
-        </div>
+      <div className="flex items-center justify-end mb-4">
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
@@ -470,9 +379,9 @@ function ReviewHub() {
       </div>
 
       <p className="text-sm text-muted mb-4">
-        {stream === "classificatie"
-          ? "AI-procesclassificatie. Bij hoge zekerheid is het document automatisch gekoppeld (terugdraaibaar); bij middelmatige zekerheid bevestig je het voorstel. Expliciet gekoppelde documenten worden nooit omgehangen."
-          : "Documenten die nog niet zijn verrijkt of een onzekere status hebben. Open het document in de bibliotheek om de metadata te corrigeren; markeer het hier als gecontroleerd zodra de metadata klopt."}
+        AI-procesclassificatie. Bij hoge zekerheid is het document automatisch
+        gekoppeld (terugdraaibaar); bij middelmatige zekerheid bevestig je het
+        voorstel. Expliciet gekoppelde documenten worden nooit omgehangen.
       </p>
 
       {fout && (
@@ -483,12 +392,11 @@ function ReviewHub() {
 
       {laden ? (
         <div className="text-muted text-sm">Laden…</div>
-      ) : stream === "classificatie" ? (
-        classItems.length === 0 ? (
-          <div className="rounded-xl border border-ok/30 bg-ok-tint p-4 text-sm text-ok-ink">
-            Geen classificatievoorstellen in deze status.
-          </div>
-        ) : (
+      ) : classItems.length === 0 ? (
+        <div className="rounded-xl border border-ok/30 bg-ok-tint p-4 text-sm text-ok-ink">
+          Geen classificatievoorstellen in deze status.
+        </div>
+      ) : (
           <div className="space-y-2">
             {classItems.map((it) => (
               <div
@@ -555,55 +463,7 @@ function ReviewHub() {
             ))}
           </div>
         )
-      ) : items.length === 0 ? (
-        <div className="rounded-xl border border-ok/30 bg-ok-tint p-4 text-sm text-ok-ink">
-          Niets te beoordelen in deze stream — de queue is leeg.
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {items.map((it) => (
-            <div
-              key={it.id}
-              className="rounded-xl border border-line bg-white p-4 flex items-center gap-3"
-            >
-              <div className="flex-1 min-w-0">
-                <div className="font-semibold text-ink truncate">
-                  {it.documenten?.titel ?? "(document verwijderd)"}
-                </div>
-                <div className="text-xs text-muted">
-                  {REDEN_LABEL[it.reden] ?? it.reden}
-                  {it.documenten?.documenttype ? ` · ${it.documenten.documenttype}` : ""}
-                  {it.documenten?.status ? ` · ${it.documenten.status}` : " · geen status"}
-                </div>
-              </div>
-              <a
-                href="/bibliotheek"
-                className="shrink-0 rounded-lg border border-app-line-strong px-3 py-1.5 text-sm text-ink hover:bg-app-bg"
-              >
-                Naar bibliotheek
-              </a>
-              {it.status !== "gecontroleerd" && (
-                <button
-                  onClick={() => beoordeelMetadata(it.document_id, "gecontroleerd")}
-                  disabled={bezig === it.document_id}
-                  className="shrink-0 rounded-lg bg-ok px-3 py-1.5 text-sm font-semibold text-white hover:bg-ok disabled:opacity-50"
-                >
-                  Gecontroleerd
-                </button>
-              )}
-              {it.status === "open" && (
-                <button
-                  onClick={() => beoordeelMetadata(it.document_id, "afgewezen")}
-                  disabled={bezig === it.document_id}
-                  className="shrink-0 rounded-lg border border-app-line-strong px-3 py-1.5 text-sm text-ink hover:bg-app-bg disabled:opacity-50"
-                >
-                  Afwijzen
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+      }
     </div>
   );
 }
