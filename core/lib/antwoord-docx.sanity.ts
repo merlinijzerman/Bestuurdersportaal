@@ -4,8 +4,10 @@
 //  Geen testframework; standalone met assert.
 //  Uitvoeren: npx tsx core/lib/antwoord-docx.sanity.ts
 //  Verifieert: geldige OOXML-structuur, ECHTE tabellen (w:tbl, geen losse
-//  regels), [Bron N] als letterlijke tekst, de verplichte bronnenlijst, en dat de
-//  schrijffunctie een document zonder herkomstanker weigert (FR-16/17, §6.4/§9).
+//  regels), ECHTE lijsten (w:numPr + numbering.xml), de gedeelde huisstijl
+//  (accent + document-lettertype), [Bron N] als letterlijke tekst, de verplichte
+//  bronnenlijst, en dat de schrijffunctie een document zonder herkomstanker
+//  weigert (FR-16/17, §6.4/§9).
 // ============================================================
 
 import assert from "node:assert/strict";
@@ -14,10 +16,12 @@ import {
   bouwDocx,
   bouwDocxDocumentXml,
   docxBestandsnaam,
+  telGeordendeLijsten,
   type DocxStukContext,
 } from "./antwoord-docx";
 import { parseerBlokken } from "./antwoord-parser";
 import { HERKOMST_ANKER_BUREAU, type KopieBron } from "./antwoord-klembord";
+import { ACCENT_BESTUURSBLAUW } from "./docx-primitieven";
 
 let n = 0;
 function check(naam: string, fn: () => void | Promise<void>) {
@@ -54,6 +58,10 @@ const ANTWOORD = [
   "",
   "## Aannames en open punten",
   "- De renteaanname is nog niet bevestigd.",
+  "",
+  "## Stappen",
+  "1. Toets de aanname.",
+  "2. Leg voor aan het bestuur.",
 ].join("\n");
 
 async function main() {
@@ -83,6 +91,21 @@ async function main() {
     // Tabel- én celbreedte in DXA i.p.v. type=auto.
     assert.ok(xml.includes('w:type="dxa"'), "tabel/cel niet in DXA vastgezet");
     assert.ok(!xml.includes('w:type="auto"'), "tabel gebruikt nog type=auto (onbepaalde breedte)");
+  });
+
+  check("B2: opsommingen/nummeringen worden ECHTE Word-lijsten (w:numPr), geen letterlijke prefixes", () => {
+    assert.ok(xml.includes("<w:numPr>"), "geen w:numPr — lijst is niet als echte lijst gerenderd");
+    assert.ok(
+      !xml.includes('<w:t xml:space="preserve">• </w:t>'),
+      "letterlijke bullet-prefix staat nog in de tekst"
+    );
+    // Een geordende lijst krijgt een eigen numId (>=2); de bullet gebruikt numId 1.
+    assert.ok(xml.includes('<w:numId w:val="2"/>'), "geordende lijst heeft geen eigen numId (herstart)");
+  });
+
+  check("telGeordendeLijsten telt de geordende lijsten (voor de numbering-definities)", () => {
+    assert.equal(telGeordendeLijsten(parseerBlokken(ANTWOORD)), 1);
+    assert.equal(telGeordendeLijsten(parseerBlokken("- a\n- b")), 0);
   });
 
   check("T5 A4: een gekoppelde [Bron N] wordt een hooggeplaatst lijstnummer (superscript)", () => {
@@ -142,7 +165,7 @@ async function main() {
     assert.ok(docxBestandsnaam("").endsWith(".docx"));
   });
 
-  await checkAsync("bouwDocx levert een geldige zip met de vijf OOXML-parts", async () => {
+  await checkAsync("bouwDocx levert een geldige zip met de OOXML-parts (incl. numbering + huisstijl)", async () => {
     const payload = await bouwDocx(ANTWOORD, BRONNEN, CTX);
     assert.ok(payload.bytes.length > 0);
     // PK-zip-magic.
@@ -158,6 +181,14 @@ async function main() {
     ]) {
       assert.ok(zip.file(part), `part ontbreekt in de zip: ${part}`);
     }
+    // B2: het numbering-part (echte lijsten) én de gedeelde huisstijl in styles.xml.
+    assert.ok(zip.file("word/numbering.xml"), "numbering.xml-part ontbreekt (echte lijsten)");
+    const stylesXml = await zip.file("word/styles.xml")!.async("string");
+    assert.ok(stylesXml.includes("<w:docDefaults>"), "geen docDefaults — document-lettertype ontbreekt");
+    assert.ok(stylesXml.includes(ACCENT_BESTUURSBLAUW), "accentkleur ontbreekt in de gedeelde stijlen");
+    // Content-type + relationship voor het numbering-part correct meegezipt.
+    const ct = await zip.file("[Content_Types].xml")!.async("string");
+    assert.ok(ct.includes("numbering.xml"), "numbering.xml niet in [Content_Types].xml");
     assert.equal(payload.bestandsnaam.endsWith(".docx"), true);
   });
 

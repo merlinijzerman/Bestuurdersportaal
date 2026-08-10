@@ -8,11 +8,29 @@
 // export brengt z'n eigen stijlen mee. Alleen de mechaniek is gedeeld.
 //
 // Een .docx is een zip van XML-parts; we bouwen die met het reeds aanwezige
-// `jszip`. Behoud van gedrag: de functiebodies zijn identiek aan de T2-versie,
-// zodat de bestaande antwoord-docx-output byte-voor-byte gelijk blijft.
+// `jszip`.
+//
+// ── Gedeelde stijllaag (B2, 2026-08-10) ─────────────────────────────────────
+// De AI-antwoord-export (antwoord-docx) leverde kale documenten: geen accent-
+// kleur, geen document-lettertype (Word viel terug op zijn default) en nep-
+// lijsten (letterlijke "• "/"1. " zonder numbering.xml). De opmaakbouwstenen
+// staan daarom nu hier: `ACCENT_BESTUURSBLAUW`, `BODY_FONT`, `bouwStylesXml()`
+// en `maakNumberingXml()`/`lijstItemParagraaf()`. Zo delen beide exportpaden
+// dezelfde huisstijl in plaats van elk hun eigen kopie (afschrift-export kan
+// `bouwStylesXml()` overnemen; dat is een no-op op de opmaak — zelfde accent).
 // ============================================================================
 
 import JSZip from "jszip";
+
+// ── Huisstijl (gedeeld) ──────────────────────────────────────────────────────
+/** D1-bestuursblauw (besluit 0101). Eén accentkleur voor titels, koppen en
+ *  lijstmarkeringen in de Word-exports. Config-inhaakplek voor de portal-
+ *  accentkleur (gelijk aan de afschrift-export, `afschrift-docx.ts` ACCENT). */
+export const ACCENT_BESTUURSBLAUW = "1F3A5F";
+
+/** Eén documentlettertype via `docDefaults`, zodat Word niet terugvalt op zijn
+ *  eigen default (de grootste "generieke" factor in de kale export). */
+export const BODY_FONT = "Calibri";
 
 // ── XML-escaping ─────────────────────────────────────────────────────────────
 // XML 1.0 verbiedt de meeste control-tekens; alleen TAB/LF/CR zijn toegestaan.
@@ -85,6 +103,80 @@ export function tekstParagraaf(
 /** Markdown-kopniveau → Word-stijl. Niveau 1 → Heading1, 2+ → Heading2. */
 export function kopStijl(niveau: number): string {
   return niveau <= 1 ? "Heading1" : "Heading2";
+}
+
+// ── Lijsten (echte Word-nummering) ───────────────────────────────────────────
+// Word-nummering vergt een `numbering.xml`-part; een lijst-item verwijst er via
+// `w:numPr` naar. numId 1 = opsomming (bullet, gedeeld). Geordende lijsten
+// krijgen elk een eigen numId (2, 3, …) zodat de nummering per lijst bij 1
+// herstart (via `startOverride` in `maakNumberingXml`).
+export const BULLET_NUM_ID = 1;
+
+/** Eén lijst-item-paragraaf die naar de nummering (numId) verwijst. De inspring
+ *  en de markering komen uit de `numbering.xml`-definitie. */
+export function lijstItemParagraaf(inhoud: string, numId: number): string {
+  return (
+    `<w:p><w:pPr><w:spacing w:after="60"/>` +
+    `<w:numPr><w:ilvl w:val="0"/><w:numId w:val="${numId}"/></w:numPr>` +
+    `</w:pPr>${inhoud}</w:p>`
+  );
+}
+
+/**
+ * Bouwt het `numbering.xml`-part: één bullet-definitie (numId 1) plus `aantal-
+ * Geordend` decimale definities (numId 2..N+1), elk met een `startOverride`
+ * zodat iedere geordende lijst opnieuw bij 1 begint.
+ */
+export function maakNumberingXml(aantalGeordend: number): string {
+  const geordend = Array.from({ length: Math.max(0, aantalGeordend) }, (_, i) =>
+    `<w:num w:numId="${i + 2}"><w:abstractNumId w:val="1"/>` +
+    `<w:lvlOverride w:ilvl="0"><w:startOverride w:val="1"/></w:lvlOverride></w:num>`
+  ).join("");
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+    `<w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="1"/>` +
+    `<w:numFmt w:val="bullet"/><w:lvlText w:val="•"/><w:lvlJc w:val="left"/>` +
+    `<w:pPr><w:ind w:left="360" w:hanging="240"/></w:pPr>` +
+    `<w:rPr><w:rFonts w:ascii="${BODY_FONT}" w:hAnsi="${BODY_FONT}"/><w:color w:val="${ACCENT_BESTUURSBLAUW}"/></w:rPr>` +
+    `</w:lvl></w:abstractNum>` +
+    `<w:abstractNum w:abstractNumId="1"><w:lvl w:ilvl="0"><w:start w:val="1"/>` +
+    `<w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/><w:lvlJc w:val="left"/>` +
+    `<w:pPr><w:ind w:left="420" w:hanging="280"/></w:pPr>` +
+    `<w:rPr><w:b/><w:color w:val="${ACCENT_BESTUURSBLAUW}"/></w:rPr>` +
+    `</w:lvl></w:abstractNum>` +
+    `<w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>` +
+    geordend +
+    `</w:numbering>`
+  );
+}
+
+// ── Gedeelde stijl-XML (styles.xml) ──────────────────────────────────────────
+/**
+ * Bouwt de `styles.xml` met de gedeelde huisstijl: één document-lettertype via
+ * `docDefaults`, en accentkleur op Title/Heading. Stijl-id's blijven identiek
+ * (Normal/Title/Heading1/Heading2/Lijst/Herkomst) zodat bestaande verwijzingen
+ * ongemoeid blijven. De `Lijst`-stijl draagt alleen nog spacing; de inspring
+ * van echte lijsten komt uit `numbering.xml`.
+ */
+export function bouwStylesXml(): string {
+  const F = BODY_FONT;
+  const A = ACCENT_BESTUURSBLAUW;
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+    `<w:docDefaults><w:rPrDefault><w:rPr>` +
+    `<w:rFonts w:ascii="${F}" w:hAnsi="${F}" w:cs="${F}"/>` +
+    `<w:sz w:val="21"/><w:szCs w:val="21"/><w:color w:val="242830"/>` +
+    `</w:rPr></w:rPrDefault></w:docDefaults>` +
+    `<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:pPr><w:spacing w:after="120" w:line="276" w:lineRule="auto"/></w:pPr></w:style>` +
+    `<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:after="240"/></w:pPr><w:rPr><w:b/><w:sz w:val="40"/><w:color w:val="${A}"/></w:rPr></w:style>` +
+    `<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:spacing w:before="240" w:after="60"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr><w:b/><w:sz w:val="30"/><w:color w:val="${A}"/></w:rPr></w:style>` +
+    `<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:spacing w:before="200" w:after="40"/><w:outlineLvl w:val="1"/></w:pPr><w:rPr><w:b/><w:sz w:val="26"/><w:color w:val="${A}"/></w:rPr></w:style>` +
+    `<w:style w:type="paragraph" w:styleId="Lijst"><w:name w:val="Lijst"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:after="40"/></w:pPr></w:style>` +
+    `<w:style w:type="paragraph" w:styleId="Herkomst"><w:name w:val="Herkomst"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:before="240"/></w:pPr><w:rPr><w:i/><w:color w:val="555555"/></w:rPr></w:style>` +
+    `</w:styles>`
+  );
 }
 
 // ── Tabellen ─────────────────────────────────────────────────────────────────
@@ -185,14 +277,38 @@ export const DOC_RELS = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
 </Relationships>`;
 
-/** Pakt de vijf OOXML-parts (met de meegegeven styles + document-XML) tot .docx-bytes. */
-export async function zipDocx(documentXml: string, stylesXml: string): Promise<Uint8Array> {
+// Content-type-override en relationship voor het optionele numbering-part. Los
+// gehouden zodat de basis-constanten (die de afschrift-export importeert)
+// ongewijzigd blijven; ze worden alleen ingevoegd wanneer er nummering is.
+const NUMBERING_CT_OVERRIDE =
+  '<Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>';
+const NUMBERING_REL =
+  '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>';
+
+/**
+ * Pakt de OOXML-parts (met de meegegeven styles + document-XML) tot .docx-bytes.
+ * Wanneer `numberingXml` is meegegeven, wordt het `numbering.xml`-part toegevoegd
+ * en worden de content-types/relationships daarvoor uitgebreid (de basis-
+ * constanten blijven ongemoeid, zodat de afschrift-export niet meebeweegt).
+ */
+export async function zipDocx(
+  documentXml: string,
+  stylesXml: string,
+  numberingXml?: string
+): Promise<Uint8Array> {
   const zip = new JSZip();
-  zip.file("[Content_Types].xml", CONTENT_TYPES);
+  const contentTypes = numberingXml
+    ? CONTENT_TYPES.replace("</Types>", `${NUMBERING_CT_OVERRIDE}</Types>`)
+    : CONTENT_TYPES;
+  const docRels = numberingXml
+    ? DOC_RELS.replace("</Relationships>", `${NUMBERING_REL}</Relationships>`)
+    : DOC_RELS;
+  zip.file("[Content_Types].xml", contentTypes);
   zip.file("_rels/.rels", RELS);
   zip.file("word/document.xml", documentXml);
-  zip.file("word/_rels/document.xml.rels", DOC_RELS);
+  zip.file("word/_rels/document.xml.rels", docRels);
   zip.file("word/styles.xml", stylesXml);
+  if (numberingXml) zip.file("word/numbering.xml", numberingXml);
   return zip.generateAsync({
     type: "uint8array",
     mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",

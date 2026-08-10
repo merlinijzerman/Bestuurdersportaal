@@ -8,10 +8,11 @@
 // (antwoord-klembord). Alleen het uitvoerformaat verschilt: WordprocessingML in
 // plaats van text/html.
 //
-// De laag-niveau OOXML-mechaniek (esc/run/paragraaf/tabel/zip) leeft sinds T6 in
-// `docx-primitieven.ts` — één gedeelde OOXML-laag, twee documenttypen (0079 naar
-// de geest). Dit bestand houdt alleen z'n eigen stijlen, de parser-koppeling en
-// het verplichte bureau-herkomstanker.
+// De laag-niveau OOXML-mechaniek (esc/run/paragraaf/tabel/zip) én sinds B2
+// (2026-08-10) de gedeelde stijllaag (accent, document-lettertype, echte lijsten)
+// leven in `docx-primitieven.ts` — één gedeelde OOXML-laag, twee documenttypen
+// (0079 naar de geest). Dit bestand houdt de parser-koppeling, het verplichte
+// bureau-herkomstanker en de documentopbouw.
 //
 // ── Waarom de herkomstregel ook hier CONSTRUCTIE is (0098-patroon) ──────────
 // Net als bouwKopie() zet deze module de bronnenlijst én de herkomstregel zélf;
@@ -46,7 +47,24 @@ import {
   TBL_BORDERS,
   zipDocx,
   veiligeBestandsnaamKern,
+  bouwStylesXml,
+  maakNumberingXml,
+  lijstItemParagraaf,
+  BULLET_NUM_ID,
 } from "./docx-primitieven";
+
+/** Mutabele nummering-teller: elke geordende lijst krijgt een eigen numId zodat
+ *  de nummering per lijst bij 1 herstart (numId 1 is de gedeelde bullet). */
+interface NummerStaat {
+  volgendeGeordendeNumId: number;
+}
+
+/** Telt de geordende lijsten in de AST; bepaalt hoeveel decimale nummer-
+ *  definities `numbering.xml` moet bevatten (numId 2..N+1). Loopt in dezelfde
+ *  volgorde als `bouwDocxDocumentXml`, zodat de numId's exact overeenkomen. */
+export function telGeordendeLijsten(blokken: Blok[]): number {
+  return blokken.filter((b) => b.soort === "lijst" && b.geordend).length;
+}
 
 /**
  * Inline-AST → een reeks runs. Citaties worden scriptie-stijl gerenderd (T5 A4):
@@ -86,21 +104,20 @@ function inlineRuns(delen: InlineDeel[], ordinaal: Map<number, number>): string 
     .join("");
 }
 
-function blokNaarXml(blok: Blok, ordinaal: Map<number, number>): string {
+function blokNaarXml(blok: Blok, ordinaal: Map<number, number>, num: NummerStaat): string {
   switch (blok.soort) {
     case "alinea":
       return paragraaf(inlineRuns(blok.inline, ordinaal));
     case "kop":
       return paragraaf(inlineRuns(blok.inline, ordinaal), { stijl: kopStijl(blok.niveau) });
-    case "lijst":
-      // Word-nummering vergt een numbering.xml-part; voor de bureau-stand volstaat
-      // een leesbaar prefix per item (bullet of nummer) in een eigen paragraaf.
+    case "lijst": {
+      // Echte Word-nummering via numbering.xml (B2): bullets delen numId 1;
+      // elke geordende lijst krijgt een eigen numId zodat hij bij 1 herstart.
+      const numId = blok.geordend ? num.volgendeGeordendeNumId++ : BULLET_NUM_ID;
       return blok.items
-        .map((it, i) => {
-          const prefix = blok.geordend ? `${i + 1}. ` : "• ";
-          return paragraaf(run(prefix) + inlineRuns(it, ordinaal), { stijl: "Lijst" });
-        })
+        .map((it) => lijstItemParagraaf(inlineRuns(it, ordinaal), numId))
         .join("");
+    }
     case "tabel": {
       const numeriek = numeriekeKolommen(blok);
       // T5 A1: expliciete tabelbreedte + tblGrid met vaste kolombreedtes (DXA).
@@ -137,17 +154,9 @@ function blokNaarXml(blok: Blok, ordinaal: Map<number, number>): string {
   }
 }
 
-// ── Documentspecifieke stijlen + sectie ──────────────────────────────────────
-
-const STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:pPr><w:spacing w:after="120" w:line="276" w:lineRule="auto"/></w:pPr></w:style>
-<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:after="240"/></w:pPr><w:rPr><w:b/><w:sz w:val="40"/></w:rPr></w:style>
-<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:spacing w:before="240" w:after="60"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr><w:b/><w:sz w:val="30"/></w:rPr></w:style>
-<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:spacing w:before="200" w:after="40"/><w:outlineLvl w:val="1"/></w:pPr><w:rPr><w:b/><w:sz w:val="26"/></w:rPr></w:style>
-<w:style w:type="paragraph" w:styleId="Lijst"><w:name w:val="Lijst"/><w:basedOn w:val="Normal"/><w:pPr><w:ind w:left="360"/><w:spacing w:after="40"/></w:pPr></w:style>
-<w:style w:type="paragraph" w:styleId="Herkomst"><w:name w:val="Herkomst"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:before="240"/></w:pPr><w:rPr><w:i/><w:color w:val="555555"/></w:rPr></w:style>
-</w:styles>`;
+// ── Documentspecifieke sectie ─────────────────────────────────────────────────
+// De stijlen (Title/Heading/Lijst/Herkomst + document-lettertype + accent) komen
+// sinds B2 uit de gedeelde `bouwStylesXml()` in docx-primitieven.
 
 const SECT_PR =
   '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/>' +
@@ -179,16 +188,19 @@ export function bouwDocxDocumentXml(
   const herkomst = herkomstRegel(ctx, bron.regels.length > 0);
 
   const delen: string[] = [];
+  const num: NummerStaat = { volgendeGeordendeNumId: 2 };
 
   // 1. Titel + datum. De titel is de ENIGE titel: de producerende taak levert het
   // stuk zonder eigen titelregel (T5 A3/A5), zodat er geen tweede titel ontstaat.
   delen.push(paragraaf(run(ctx.titel), { stijl: "Title" }));
   delen.push(tekstParagraaf(ctx.datum));
 
-  // 2. De inhoud (koppen, alinea's, lijsten, echte tabellen).
-  for (const b of blokken) delen.push(blokNaarXml(b, ordinaal));
+  // 2. De inhoud (koppen, alinea's, echte lijsten, echte tabellen).
+  for (const b of blokken) delen.push(blokNaarXml(b, ordinaal, num));
 
-  // 3. Bronnenlijst (of de mededeling dat er geen bronnen zijn).
+  // 3. Bronnenlijst (of de mededeling dat er geen bronnen zijn). Bewust een
+  // eenvoudige, platte genummerde lijst (geen numbering.xml): de bronregels zijn
+  // altijd 1..N en dragen geen inhoudelijke opsomming.
   if (bron.kop) {
     delen.push(paragraaf(run(bron.kop), { stijl: "Heading2" }));
     bron.regels.forEach((r, i) =>
@@ -236,7 +248,8 @@ export function docxBestandsnaam(titel: string): string {
 /**
  * Bouwt de volledige .docx als bytes. Parseert de antwoordtekst met dezelfde
  * parser als de weergave (géén tweede renderer), bouwt de document-XML (die de
- * herkomst-sluis passeert) en zipt de OOXML-parts met de gedeelde zip-helper.
+ * herkomst-sluis passeert), stelt de gedeelde stijlen en de nummering samen en
+ * zipt de OOXML-parts met de gedeelde zip-helper.
  */
 export async function bouwDocx(
   antwoord: string,
@@ -245,7 +258,8 @@ export async function bouwDocx(
 ): Promise<DocxPayload> {
   const blokken = parseerBlokken(antwoord);
   const documentXml = bouwDocxDocumentXml(blokken, alleBronnen, ctx);
-  const bytes = await zipDocx(documentXml, STYLES);
+  const numberingXml = maakNumberingXml(telGeordendeLijsten(blokken));
+  const bytes = await zipDocx(documentXml, bouwStylesXml(), numberingXml);
   return {
     bytes,
     bestandsnaam: docxBestandsnaam(ctx.titel),
