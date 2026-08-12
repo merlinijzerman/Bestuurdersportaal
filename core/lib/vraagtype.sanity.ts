@@ -641,6 +641,66 @@ test("isVoorstelvraag: gewone vragen zijn GEEN voorstelvraag", () => {
   assert.equal(isVoorstelvraag("Is dit conceptueel houdbaar?"), false);
 });
 
+// ── 12-08-2026 — de samenstellingsbug en het vergaderstuk-vocabulaire ───────
+// Aanleiding: conceptvergaderstukken werden niet gevonden, zelfs niet als er
+// expliciet naar werd gevraagd. Twee oorzaken zaten in DEZE lijst.
+//
+//   1. De sluitende \b achter een vaste suffixlijst brak op Nederlandse
+//      samenstellingen: "conceptnotulen" matchte niet, "conceptstuk" wel.
+//   2. Vergaderstuk-vocabulaire ontbrak volledig, terwijl juist die stukken
+//      per constructie op status 'concept' blijven staan.
+test("isVoorstelvraag: conceptsamenstellingen worden herkend (regressie 12-08-2026)", () => {
+  for (const v of [
+    "Wat staat er in de conceptnotulen over de dekkingsgraad?",
+    "Laat de conceptbegroting 2027 zien",
+    "Wat zegt het conceptjaarverslag over de uitvoeringskosten?",
+    "Is er een conceptbeleidsplan?",
+    "Geef de conceptrapportage van Q2",
+    "Wat staat er in de concept-notulen?",
+    "Welke conceptversies zijn er van het transitieplan?",
+  ]) {
+    assert.equal(isVoorstelvraag(v), true, `zou een voorstelvraag moeten zijn: ${v}`);
+  }
+});
+
+test("isVoorstelvraag: vergaderstuk-vocabulaire wordt herkend (12-08-2026)", () => {
+  for (const v of [
+    "Welke vergaderstukken liggen er voor donderdag?",
+    "Wat staat er in de oplegnotitie bij agendapunt 4?",
+    "Zijn er bestuursstukken over de premiedekkingsgraad?",
+    "Wat is er geagendeerd voor de komende vergadering?",
+    "Wat staat er op de agenda?",
+    "Welke stukken voor de komende vergadering zijn er al?",
+  ]) {
+    assert.equal(isVoorstelvraag(v), true, `zou een voorstelvraag moeten zijn: ${v}`);
+  }
+});
+
+// De grens blijft staan: de open staart op 'concept' mag NIET het denkkader-
+// woord opslokken, en een gewone inhoudelijke vraag blijft onder 'actueel'.
+test("isVoorstelvraag: de open concept-staart slokt 'conceptueel' niet op", () => {
+  assert.equal(isVoorstelvraag("Is dit conceptueel houdbaar?"), false);
+  assert.equal(isVoorstelvraag("Wat is het conceptuele kader achter de Wtp?"), false);
+  assert.equal(isVoorstelvraag("Hoe conceptualiseren we het risicoraamwerk?"), false);
+  // Geen staat-signaal → ongewijzigd gedrag.
+  assert.equal(isVoorstelvraag("Wat is de premiedekkingsgraad per 1 juli?"), false);
+  assert.equal(isVoorstelvraag("Hoe verloopt de uitvoering van het herstelplan?"), false);
+});
+
+test("retrievalModusVoorVraag: conceptvergaderstuk-vraag verlaat 'actueel'", () => {
+  // Dit is het gedrag waar het om begonnen was: onder 'actueel' filtert de RPC
+  // op documentstatus in ('vastgesteld','van_kracht') en is een conceptstuk per
+  // definitie onvindbaar — ook als de gebruiker er letterlijk naar vraagt.
+  assert.equal(
+    retrievalModusVoorVraag("feitelijk", "Wat staat er in de conceptnotulen van juni?"),
+    "besluitvorming"
+  );
+  assert.equal(
+    retrievalModusVoorVraag("feitelijk", "Welke vergaderstukken liggen er voor donderdag?"),
+    "besluitvorming"
+  );
+});
+
 test("retrievalModusVoorVraag: voorstelvraag verlaat 'actueel', rest ongemoeid", () => {
   // Feitelijk zou 'actueel' zijn → voorstelvraag wordt 'besluitvorming'.
   assert.equal(

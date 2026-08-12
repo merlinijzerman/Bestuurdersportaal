@@ -69,9 +69,10 @@ import {
   SP_BUREAU_BRONLOOS_REGELS,
   SP_ALGEMEEN_REGELS,
   SP_COMBINEREN_REGELS,
-  SP_DOCUMENT_SCOPE_REGELS,
+  SP_DOCUMENT_PRIMAIR_REGELS,
+  SP_DOCUMENT_PRIMAIR_ALG_REGELS,
   SP_DOCUMENT_SCOPE_BREED_REGELS,
-  SP_DOCUMENT_SCOPE_ALG_REGELS,
+  SP_DOCUMENT_BREED_ALG_REGELS,
   SP_TRANSFORMATIE_REGELS,
   SP_REFLECTIE_REGELS,
   SP_REFLECTIE_CONCEPT_REGELS,
@@ -107,6 +108,12 @@ const anthropic = new Anthropic({
 // leven in lib/generatie-kern.ts en worden hierboven geïmporteerd — één gedeelde
 // kern voor route én Lab.
 const CHUNK_BUDGET = 10;
+// 12-08-2026 — budget voor het AANVULLENDE spoor bij een primair document.
+// Bewust een eigen budget bovenop CHUNK_BUDGET in plaats van een verdeling
+// binnen dat budget: zo houdt het gekozen hoofddocument exact de ruimte die het
+// vóór deze wijziging had en kan de verbreding de dekking van dat stuk per
+// constructie niet verslechteren. De prompt groeit met hooguit 5 passages.
+const AANVULLEND_BUDGET = 5;
 // History-aware query-reformulatie (Fase B1). Bewust op het sterke model: de
 // rewrite bepaalt wat de retrieval ophaalt, dus fouten hier (bv. dubbelzinnige
 // afkortingen verkeerd expanderen) vergiftigen álle downstream-resultaten. De
@@ -1437,18 +1444,34 @@ export async function POST(req: NextRequest) {
     //  (b) Anders bepaalt retrievalModusVoorVraag de modus: een voorstel-/
     //      conceptvraag die op 'actueel' zou uitkomen wordt 'besluitvorming',
     //      omdat een nog niet vastgesteld stuk anders per definitie onvindbaar is.
+    // 12-08-2026 — `scopeActief` staat hier NIET meer bij. Een gekozen document
+    // sluit de bibliotheek niet langer af, dus het AANVULLENDE spoor doorzoekt
+    // de rest van de bibliotheek en moet daarbij gewoon de status-/actualiteits-
+    // filter dragen — anders komen historische en niet-vastgestelde stukken
+    // ongefilterd mee. Het HOOFDDOCUMENT zelf blijft vrijgesteld: het primaire
+    // spoor hieronder krijgt `undefined` mee, exact zoals vóór deze wijziging.
+    // Zonder die vrijstelling zou een bewust gekozen CONCEPT-vergaderstuk door
+    // modus 'actueel' uit zijn eigen antwoord wegvallen.
+    // De filters zoals ze voor een GEWONE bibliotheekvraag gelden. Sinds
+    // 12-08-2026 apart benoemd, omdat ze op twee plaatsen nodig zijn: als de
+    // filters van het enige spoor (gewone vraag), én als de filters van het
+    // AANVULLENDE spoor in de primaire modi. Het primaire materiaal — het
+    // gekozen document of de aan een agendapunt gekoppelde stukken — is er
+    // bewust van vrijgesteld.
+    const bibliotheekFilters: RetrievalFilters = {
+      modus: neemNietVastgesteldeMee
+        ? "alles"
+        : retrievalModusVoorVraag(antwoordmodus, vraag),
+      peildatum: vandaag,
+      bronsoortprofiel: bepaalBronsoortprofiel(vraag),
+      // T4 — regime-demotie op basis van het geldende fondsregime.
+      primairRegime: fondsRegime,
+    };
+
     const retrievalFilters: RetrievalFilters | undefined =
-      scopeActief || agendapuntModusActief || procesModusInPrompt
+      agendapuntModusActief || procesModusInPrompt
       ? undefined
-      : {
-          modus: neemNietVastgesteldeMee
-            ? "alles"
-            : retrievalModusVoorVraag(antwoordmodus, vraag),
-          peildatum: vandaag,
-          bronsoortprofiel: bepaalBronsoortprofiel(vraag),
-          // T4 — regime-demotie op basis van het geldende fondsregime.
-          primairRegime: fondsRegime,
-        };
+      : bibliotheekFilters;
 
     // RAG-zoeken: voor de bibliotheek-modi, of bij een actieve scope met een
     // SPECIFIEKE vraag (targeted). Brede scope-vragen halen hieronder hun chunks
@@ -1556,22 +1579,115 @@ export async function POST(req: NextRequest) {
       // De reranker draait BINNEN deze call; we melden 'rerank' daarom als een
       // afgeronde stap ná de retrieval (alleen als de fondsvlag rerank aan staat).
       send({ type: "progress", fase: "retrieval", status: "bezig", label: VOORTGANG_LABEL.retrieval });
-      const res = await zoekRelevanteChunksMetMeta(
-        zoekVraag,
-        fondsId,
-        CHUNK_BUDGET,
-        hybrideAan,
-        scopeDocumentIds,
-        retrievalFilters,
-        // Besluit 0139 (M-R3): bij een geherformuleerde zoekvraag geven we de
-        // ORIGINELE vraag mee, zodat de hybride retrieval een extra poging met
-        // de originele vraag draait en fuseert (reformulatie voegt alleen recall
-        // toe, nooit minder). Niet-geherformuleerd → ongewijzigd gedrag.
-        gereformuleerd ? { ...retrievalVlaggen, origineleVraag: vraag } : retrievalVlaggen
+      // Besluit 0139 (M-R3): bij een geherformuleerde zoekvraag geven we de
+      // ORIGINELE vraag mee, zodat de hybride retrieval een extra poging met de
+      // originele vraag draait en fuseert (reformulatie voegt alleen recall toe,
+      // nooit minder). Niet-geherformuleerd → ongewijzigd gedrag.
+      const retrievalOpties = gereformuleerd
+        ? { ...retrievalVlaggen, origineleVraag: vraag }
+        : retrievalVlaggen;
+
+      // ── 12-08-2026 — tweesporen-retrieval bij een primair document ────────
+      // Een documentselectie was tot nu toe een HARDE afbakening: de RPC's
+      // kregen p_document_ids mee en de bibliotheek was fysiek onbereikbaar.
+      // Dat maakte vergelijken en duiden onmogelijk. Nu:
+      //
+      //   Spoor A (primair) — byte-identiek aan het gedrag van vóór deze
+      //     wijziging: scope = het gekozen document, filters = undefined. De
+      //     gebruiker koos dat stuk bewust, dus géén status-/actualiteitsfilter.
+      //     Hierdoor kan een gekozen CONCEPT-vergaderstuk niet alsnog uit zijn
+      //     eigen antwoord vallen zodra het aanvullende spoor onder modus
+      //     'actueel' draait.
+      //   Spoor B (aanvullend) — de rest van de bibliotheek, mét de normale
+      //     filters, met een EIGEN budget. Puur additief: het kan primaire
+      //     treffers niet verdringen. Zelfde principe als fuseerHybridePogingen
+      //     (rag.ts): een extra poging voegt recall toe, neemt nooit weg.
+      //
+      // Beide sporen draaien parallel — wandkloktijd is die van het traagste
+      // spoor, niet de som. De kosten verdubbelen wél op dit pad (tweede
+      // embedding + tweede rerank-call); bewuste afweging.
+      // UITBREIDING 12-08-2026 — de primaire modus geldt ook in AGENDAPUNT-modus
+      // (ADR 0028). Daar waren de gekoppelde stukken tot nu toe een harde
+      // afbakening, met hetzelfde gevolg als bij de bibliotheek: "hoe verhoudt
+      // dit voorstel zich tot het beleid dat we vorig jaar vaststelden?" was
+      // onbeantwoordbaar, terwijl dat bij vergadervoorbereiding bijna de
+      // standaardvraag is. De gekoppelde stukken blijven het primaire materiaal;
+      // de bibliotheek komt er aanvullend en herkenbaar gescheiden bij.
+      //
+      // Proces-modus (besluit 0151) blijft BEWUST hard afgebakend: daar zijn de
+      // bewijsstukken van een procedure de bron, en snapshot-integriteit weegt
+      // daar zwaarder dan bredere duiding.
+      const primairPadActief = scopeActief || agendapuntMetStukken;
+      const primaireIds = new Set<string>(
+        primairPadActief ? scopeDocumentIds ?? [] : []
       );
-      chunks = res.chunks;
+      const [res, resAanvullend] = await Promise.all([
+        zoekRelevanteChunksMetMeta(
+          zoekVraag,
+          fondsId,
+          CHUNK_BUDGET,
+          hybrideAan,
+          scopeDocumentIds,
+          // Spoor A draagt géén filters in de primaire modi. In agendapunt-modus
+          // was `retrievalFilters` daar al `undefined`; dit is dus geen
+          // gedragswijziging, alleen expliciet gemaakt.
+          primairPadActief ? undefined : retrievalFilters,
+          retrievalOpties
+        ),
+        primairPadActief
+          ? zoekRelevanteChunksMetMeta(
+              zoekVraag,
+              fondsId,
+              AANVULLEND_BUDGET,
+              hybrideAan,
+              undefined,
+              // Altijd de bibliotheekfilters, óók in agendapunt-modus waar het
+              // primaire spoor ongefilterd draait. Zonder dit zou de hele
+              // bibliotheek inclusief historische stukken ongefilterd meekomen.
+              bibliotheekFilters,
+              retrievalOpties
+            )
+          : Promise.resolve(null),
+      ]);
+
+      // Het hoofddocument zit al in spoor A; overlap eruit zodat een passage
+      // nooit twee bronnummers krijgt.
+      const aanvullendeChunks = (resAanvullend?.chunks ?? []).filter(
+        (c) => !primaireIds.has(c.document_id)
+      );
+      // Volgorde is betekenisdragend: het hoofddocument krijgt de laagste
+      // bronnummers, de aanvullende bronnen komen erachter.
+      chunks = [...res.chunks, ...aanvullendeChunks];
       retrievalMeta = {
         ...res.meta,
+        // De promptset is de SOM van beide sporen. `chunks` voedt de bronset-hash
+        // en daarmee de bevroren reflectiebronset (core/lib/bronset.ts,
+        // bepaalBronset). Stond hier alleen spoor A in, dan zou een reflectie op
+        // dit antwoord de aanvullende bronnen niet terugzien terwijl ze wél in
+        // het antwoord zijn gebruikt — en zou de TS-hash afwijken van de
+        // SQL-spiegel in reflectie_transitie().
+        chunks: [
+          ...res.meta.chunks,
+          ...aanvullendeChunks.map((c) => ({
+            id: c.id,
+            document_id: c.document_id,
+            rang: c.rang ?? null,
+          })),
+        ],
+        opgehaald: res.meta.opgehaald + (resAanvullend?.meta.opgehaald ?? 0),
+        geselecteerd: res.meta.geselecteerd + aanvullendeChunks.length,
+        // Wat de verbreding daadwerkelijk toevoegde. Alleen aanwezig als er een
+        // aanvullend spoor draaide; geldt voor /ai én de agendapuntchat.
+        ...(resAanvullend
+          ? {
+              aanvullend: {
+                chunks: aanvullendeChunks.length,
+                documenten: new Set(
+                  aanvullendeChunks.map((c) => c.document_id)
+                ).size,
+              },
+            }
+          : {}),
         zoekvraag: zoekVraag,
         gereformuleerd,
         body_fonds_id_genegeerd: bodyFondsAfwijkend,
@@ -1583,13 +1699,17 @@ export async function POST(req: NextRequest) {
       // opgenomen (geen aparte, van-een-vlag-afhankelijke rerank-regel meer): met
       // rerank aan is `geselecteerd` het aantal ná de drempel, met rerank uit het
       // aantal ná weging/selectie — de regel klopt dus in beide standen.
-      const uniekeDocumenten = new Set(res.meta.chunks.map((c) => c.document_id)).size;
+      // Telt over BEIDE sporen: de bestuurder ziet "3 documenten, 12 passages"
+      // en dat moet overeenkomen met wat er daadwerkelijk in de prompt staat.
+      const uniekeDocumenten = new Set(
+        retrievalMeta.chunks.map((c) => c.document_id)
+      ).size;
       send({
         type: "progress",
         fase: "retrieval",
         status: "klaar",
         label: VOORTGANG_LABEL.retrieval,
-        uitkomst: retrievalUitkomst(uniekeDocumenten, res.meta.geselecteerd),
+        uitkomst: retrievalUitkomst(uniekeDocumenten, retrievalMeta.geselecteerd),
       });
       // Auditspoor (§9): leg de scope vast waarop deze vraag is beperkt.
       if (scopeActief) {
@@ -1598,6 +1718,10 @@ export async function POST(req: NextRequest) {
           titels: scopeTitels,
           strategie: "targeted",
           algemene_kennis: algemeneKennis,
+          // 12-08-2026 — leg vast dat het gekozen stuk het ONDERWERP was en niet
+          // de afbakening. Wat de verbreding toevoegde staat in
+          // retrievalMeta.aanvullend (top-level, geldt ook voor agendapunt-modus).
+          modus: "primair",
         };
       }
       // Increment D — verrijk notulensegment-chunks met vergadering/agendapunt
@@ -1608,7 +1732,19 @@ export async function POST(req: NextRequest) {
       // fondsdiscipline: het zijn doorgeefvelden voor de WEERGAVE en ze mogen
       // niets aan de selectie veranderen. Zie verrijkDocumentmetadata().
       chunks = await verrijkDocumentmetadata(chunks, fondsId);
-      const ctx = maakContext(chunks);
+      // primaireIds → herkomstmarkering [hoofddocument]/[aanvullend uit de
+      // bibliotheek] in de bronkop; `vandaag` → geldigheidsdeel van het
+      // statuslabel. Zonder scope is primaireIds leeg en verandert er niets.
+      const ctx = maakContext(
+        chunks,
+        0,
+        undefined,
+        primaireIds,
+        vandaag,
+        // In agendapunt-modus is het primaire materiaal niet één gekozen stuk
+        // maar de set gekoppelde stukken; "[gekoppeld stuk]" leest daar correcter.
+        agendapuntModusActief ? " [gekoppeld stuk]" : " [hoofddocument]"
+      );
       contextTekst = ctx.contextTekst;
       bronnen = ctx.bronnen;
       // H-10: de bron-afbakening en het aantal geneutraliseerde bronlabel-
@@ -1835,7 +1971,7 @@ export async function POST(req: NextRequest) {
       const toelichtingBlok = bouwToelichtingBlok(agendapuntSeed!);
       const stukkenBlok =
         chunks.length > 0
-          ? `\n\n=== GEKOPPELDE STUKKEN BIJ DIT AGENDAPUNT ===\n\n${contextTekst}`
+          ? `\n\n=== BRONNEN BIJ DIT AGENDAPUNT ===\nDe aan dit agendapunt gekoppelde stukken zijn gemarkeerd met [gekoppeld stuk]. Bronnen met [aanvullend uit de bibliotheek] komen uit andere stukken van het fonds en zijn er ter duiding en vergelijking bij gezocht.\n\n${contextTekst}`
           : "\n\n(Er zijn geen doorzoekbare stukken aan dit agendapunt gekoppeld; baseer uw antwoord op de toelichting en, waar passend, uw algemene kennis.)";
       // Module-context (risico's/procedures) na de stukken — zie opbouw hierboven.
       gebruikersPrompt = `${toelichtingBlok}${stukkenBlok}${modulesBlok}\n\n---\n\nVRAAG: ${vraag}`;
@@ -1894,11 +2030,18 @@ export async function POST(req: NextRequest) {
         scopeTitels.length === 1
           ? `«${scopeTitels[0]}»`
           : scopeTitels.map((t) => `«${t}»`).join(", ");
-      const scopeRegels = algemeneKennis
-        ? SP_DOCUMENT_SCOPE_ALG_REGELS
-        : breedActief
-        ? SP_DOCUMENT_SCOPE_BREED_REGELS
-        : SP_DOCUMENT_SCOPE_REGELS;
+      // 12-08-2026 — het BREDE pad (doorgronden/samenvatten) laadt het volledige
+      // document en draait geen retrieval; daar bestaan dus geen aanvullende
+      // bibliotheekbronnen en blijft de bestaande instructie staan. Het targeted
+      // pad krijgt de primaire-modus: hoofddocument leidend, bibliotheek
+      // aanvullend en herkenbaar gescheiden.
+      const scopeRegels = breedActief
+        ? algemeneKennis
+          ? SP_DOCUMENT_BREED_ALG_REGELS
+          : SP_DOCUMENT_SCOPE_BREED_REGELS
+        : algemeneKennis
+        ? SP_DOCUMENT_PRIMAIR_ALG_REGELS
+        : SP_DOCUMENT_PRIMAIR_REGELS;
       systeemBlokken = bouwSysteemBlokken(
         scopeRegels,
         ctxBestuurder,
@@ -1917,8 +2060,8 @@ export async function POST(req: NextRequest) {
         // targeted (increment 1): top-N fragmenten.
         gebruikersPrompt =
           chunks.length > 0
-            ? `BESCHIKBARE FRAGMENTEN UIT HET DOCUMENT ${titelLabel}:\n\n${contextTekst}\n\n---\n\nVRAAG: ${vraag}\n\nBeantwoord de vraag uitsluitend op basis van bovenstaande fragmenten. Staat het antwoord er niet in, zeg dan letterlijk: "Dit is niet in dit document aangetroffen."`
-            : `In het document ${titelLabel} zijn geen passages gevonden die op deze vraag aansluiten.\n\nVRAAG: ${vraag}\n\nAls het antwoord niet in dit document staat, antwoord dan letterlijk: "Dit is niet in dit document aangetroffen." Verzin geen antwoord en vul niet aan uit andere bronnen of algemene kennis.`;
+            ? `HOOFDDOCUMENT: ${titelLabel}\n\nBESCHIKBARE BRONNEN — het gekozen stuk is gemarkeerd met [hoofddocument]; bronnen met [aanvullend uit de bibliotheek] komen uit andere stukken:\n\n${contextTekst}\n\n---\n\nVRAAG: ${vraag}\n\nBeantwoord de vraag met ${titelLabel} als onderwerp. Gebruik aanvullende bronnen om te duiden, te vergelijken of aan te vullen, en maak in de lopende tekst zichtbaar wanneer u dat doet. Staat iets niet in het hoofddocument, benoem dat dan expliciet — ook als een aanvullende bron het antwoord wél geeft.`
+            : `Er zijn geen passages gevonden die op deze vraag aansluiten — niet in het hoofddocument ${titelLabel} en niet in de rest van de bibliotheek.\n\nVRAAG: ${vraag}\n\nZeg expliciet dat hierover niets in de beschikbare stukken staat. Verzin geen antwoord en vul niet aan uit uw algemene kennis.`;
       }
     } else if (promptModus === "algemeen") {
       systeemBlokken = bouwSysteemBlokken(SP_ALGEMEEN_REGELS, ctxBestuurder, antwoordmodus, null, false, opstelTaak);
@@ -2019,12 +2162,19 @@ export async function POST(req: NextRequest) {
     const fondsTreffers = chunks.filter(
       (c) => c.documenten.bibliotheek !== "generiek"
     ).length;
+    // CORRECTIE 12-08-2026 — `fondsTreffers === 0` is hier weggehaald. Die
+    // drempel maakte de telling in de praktijk onbereikbaar: leverde de
+    // retrieval één vastgesteld fondsstuk op, dan bleef een conceptstuk over
+    // exact hetzelfde onderwerp onzichtbaar én onvermeld, en was de
+    // verbredingschip niet te bereiken. Precies de dagelijkse klacht. De telling
+    // draait nu zodra de actualiteitsfilter actief is; de MELDING blijft wél
+    // voorbehouden aan het nul-treffers-geval (zie metNietVastgesteldeMelding),
+    // zodat er geen tweede melding onder een geslaagd antwoord verschijnt.
     if (
       !scopeActief &&
       !agendapuntModusActief &&
       !transformatieActief &&
       !neemNietVastgesteldeMee &&
-      fondsTreffers === 0 &&
       retrievalFilters?.modus === "actueel"
     ) {
       const telling = await telNietActueleFondstreffers(vraag, fondsId, vandaag);
@@ -2051,6 +2201,12 @@ export async function POST(req: NextRequest) {
     // twee meldingen die elkaar tegenspreken is erger dan één.
     const metNietVastgesteldeMelding = (meldingen: InlineMelding[]): InlineMelding[] => {
       if (!nietVastgesteld) return meldingen;
+      // 12-08-2026 — de telling draait nu ook als er wél fondstreffers waren
+      // (zodat de verbredingschip bereikbaar is). De VERVANGENDE melding hoort
+      // dan niet: er is geen "geen fondsdocumenten"-melding om te vervangen, en
+      // een extra melding onder een geslaagd antwoord is ruis. De chip alleen
+      // volstaat: die biedt de keuze zonder een oordeel te vellen.
+      if (fondsTreffers > 0) return meldingen;
       const vervangen = meldingNietVastgesteldeStukken(nietVastgesteld.documenten);
       const zonder = meldingen.filter((m) => m.type !== "geen_fondstreffer");
       return [vervangen, ...zonder];

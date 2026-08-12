@@ -111,12 +111,23 @@ export async function POST(
 
     // RAG over bibliotheek (vaste diepte sinds 06-07: de aparte snel/grondig-
     // keuze is vervallen, doorvragen in het gesprek compenseert).
-    // Increment G — alleen de ACTUELE bron, peildatum = vandaag.
+    //
+    // CORRECTIE 12-08-2026 — modus was hier hard `actueel`, en dat filterde in de
+    // RPC op `documentstatus in ('vastgesteld','van_kracht')`. Een vergader-
+    // VOORBEREIDING gaat per definitie over stukken die nog VOORliggen; het pad
+    // sloot dus precies het materiaal uit waar het voor bedoeld is. Vergaderstukken
+    // krijgen bij ingest bovendien de DB-default status 'concept' en waren hier
+    // daarmee per constructie onvindbaar. `besluitvorming` laat de actualiteits-
+    // filter vallen en klopt semantisch in het auditspoor: de vraag gaat over
+    // stukken in besluitvorming. De statuslabels in de bronkop (maakContext →
+    // documentstatus-label.ts) dragen de nuance, zodat een concept niet als
+    // geldend beleid in de voorbereiding terechtkomt.
+    const vandaagISO = new Date().toISOString().slice(0, 10);
     const ragQuery = `${agendapunt.titel} ${agendapunt.beschrijving ?? ""}`.trim();
     const chunks = await verrijkNotulenChunks(
       await zoekRelevanteChunks(ragQuery, profiel.fonds_id, 10, {
-        modus: "actueel",
-        peildatum: new Date().toISOString().slice(0, 10),
+        modus: "besluitvorming",
+        peildatum: vandaagISO,
       })
     );
     // ── H-11 (review 2026-07-30) ──────────────────────────────────────────
@@ -137,7 +148,7 @@ export async function POST(
       bronnen: bibBronnen,
       sentinel: bronSentinel,
       geneutraliseerd: contextGeneutraliseerd,
-    } = maakContext(chunks, aantalStukken);
+    } = maakContext(chunks, aantalStukken, undefined, null, vandaagISO);
     if (contextGeneutraliseerd > 0) {
       // H-10: structureel >0 is een injectiesignaal in de aangeleverde stukken.
       console.warn(

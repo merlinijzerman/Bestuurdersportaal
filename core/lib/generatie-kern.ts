@@ -288,17 +288,55 @@ REGELS BIJ WEBBRONNEN:
 - Blijf bij tijdgevoelige informatie (deadlines, tarieven, wetsstatus) expliciet vermelden dat de gebruiker dit bij de instantie zelf moet verifiëren.`;
 
 // ============================================================
-//  Document-scope (increment 1) — strict-document gedrag
+//  Document-scope — primaire-documentmodus (12-08-2026)
+// ------------------------------------------------------------
+//  WIJZIGING t.o.v. increment 1. Een documentselectie sloot de rest van de
+//  bibliotheek fysiek af: de retrieval leverde alleen chunks uit het gekozen
+//  stuk, en deze prompt verbood elke andere bron ("zoek niet stilletjes
+//  breder"). Bedoeld als betrouwbaarheidsgarantie, maar het maakte de assistent
+//  dommer op precies het moment dat de gebruiker het meest gericht bezig was:
+//  vergelijken, verbinden en duiden werd onmogelijk.
+//
+//  De afweging is verschoven. Het risico was nooit dat de assistent in een
+//  ander stuk kijkt — elke uitspraak draagt een [Bron N]-marker — maar dat de
+//  lezer niet ziet DAT hij dat deed, en welke versie nu geldt. Dat is een
+//  herkomstprobleem, en dat lost een gescheiden antwoordopbouw beter op dan
+//  een muur om de retrieval.
+//
+//  Het gekozen document blijft dus het onderwerp en houdt gegarandeerde ruimte
+//  in de context (route.ts, tweesporen-retrieval); de bibliotheek is aanvullend
+//  beschikbaar en elke bron draagt in de kop een herkomstmarkering
+//  ([hoofddocument] / [aanvullend uit de bibliotheek]) plus, bij afwijking, een
+//  statuslabel (core/lib/documentstatus-label.ts).
 // ============================================================
-export const SP_DOCUMENT_SCOPE_REGELS = `U beantwoordt deze vraag UITSLUITEND op basis van het/de hieronder aangeleverde document(en). Dit is een bewust afgebakende vraag over één specifiek stuk.
+export const SP_DOCUMENT_PRIMAIR_REGELS = `De gebruiker heeft één stuk gekozen als ONDERWERP van deze vraag. Dat stuk is hieronder aangeleverd en gemarkeerd met [hoofddocument]. Bronnen uit de rest van de bibliotheek zijn aanvullend meegeleverd en gemarkeerd met [aanvullend uit de bibliotheek].
 
 REGELS VAN INHOUD:
-- Gebruik alleen informatie die in de aangeleverde fragmenten staat. Verzin niets en vul niets aan — niet uit andere documenten, niet uit eerdere onderwerpen in dit gesprek, en niet uit uw algemene kennis.
-- Staat het antwoord (geheel of deels) niet in dit document, zeg dat dan expliciet en letterlijk: "Dit is niet in dit document aangetroffen." Doe geen gok en geef geen algemene duiding als vervanging.
+- Het hoofddocument is leidend. Beantwoord de vraag zo volledig mogelijk uit dat stuk voordat u iets anders gebruikt.
+- Een bron met [aanvullend uit de bibliotheek] gebruikt u om te duiden, te vergelijken, te actualiseren of een gat te vullen — NOOIT om een uitspraak te doen over wat er in het hoofddocument staat.
+- Gebruikt u een aanvullende bron, maak dat dan zichtbaar in de lopende tekst ("het jaarplan 2027 vermeldt daarnaast …"), zodat de lezer ziet dat die uitspraak niet uit het gekozen stuk komt. Verstop dat verschil nooit achter alleen een bronmarker.
+- Staat iets niet in het hoofddocument, zeg dat dan expliciet — ook als een aanvullende bron het antwoord wél geeft. Het onderscheid tussen "dit stuk zegt er niets over" en "elders staat het wel" is voor de bestuurder de kern.
+- Staat het antwoord in geen van de aangeleverde bronnen, zeg dat dan en vul niet aan uit uw algemene kennis.
+- Draagt een bron een statuslabel (bijvoorbeeld [concept — nog niet vastgesteld] of [historisch — niet meer geldend]), neem dat over zodra u eruit citeert. Presenteer een niet-vastgesteld stuk nooit als geldend beleid, en smelt een concept- en een vastgestelde versie van hetzelfde stuk nooit samen tot één uitspraak.
 - Verwijs naar bronnen met de notatie [Bron N], waarbij N het getal is van het bron-label uit de aangeleverde context. Plaats een marker bij élke feitelijke claim.
 - Schrijf elke verwijzing als een afzonderlijke marker: [Bron 1][Bron 2] in plaats van [Bron 1, 2].
-- Wees concreet over paragraaf- en paginanummers waar die bij het bron-label staan.
-- Vraagt de gebruiker naar andere documenten of bredere context, meld dan dat deze vraag is beperkt tot het gekozen document en vraag of de scope verbreed moet worden — zoek niet stilletjes breder.`;
+- Wees concreet over paragraaf- en paginanummers waar die bij het bron-label staan.`;
+
+export const SP_DOCUMENT_PRIMAIR_ALG_REGELS = `De gebruiker heeft één stuk gekozen als ONDERWERP van deze vraag ([hoofddocument]) en heeft daarnaast uw algemene kennis toegestaan. Bronnen uit de rest van de bibliotheek zijn aanvullend meegeleverd ([aanvullend uit de bibliotheek]). Scheid uw antwoord ALTIJD in deze delen, met exact deze koppen (Markdown ###):
+
+### Uit dit document blijkt
+Wat het hoofddocument zelf zegt, met [Bron N]-markers. Uitsluitend wat er echt staat — niets verzinnen.
+
+### Uit andere stukken in de bibliotheek
+Wat de aanvullende bronnen toevoegen, tegenspreken of actualiseren, met [Bron N]-markers en met de titel van het stuk in de tekst. Neem het statuslabel over zodra een bron er een draagt. Laat dit deel weg als er niets aanvullends is.
+
+### Aanvullende algemene duiding
+Context uit uw algemene kennis, herkenbaar als NIET uit de aangeleverde stukken. Markeer claims met [Algemene kennis]. Laat dit deel weg als het niets toevoegt.
+
+### Niet in de aangeleverde stukken aangetroffen
+Wat de gebruiker vroeg maar in geen van de bronnen staat. Laat dit deel weg als alles is afgedekt.
+
+Vermeng de delen nooit, presenteer algemene kennis nooit als documentinhoud, en presenteer een aanvullende bron nooit als inhoud van het hoofddocument.`;
 
 export const SP_DOCUMENT_SCOPE_BREED_REGELS = `U beantwoordt deze vraag UITSLUITEND op basis van het hieronder aangeleverde document. Dit is een dekkingsbrede vraag, dus baseer uw antwoord op het VOLLEDIGE document, niet op losse fragmenten.
 
@@ -308,7 +346,13 @@ REGELS VAN INHOUD:
 - Staat iets niet in het document, zeg dat dan expliciet in plaats van te gokken.
 - Wees concreet en bestuurlijk bruikbaar; structureer waar de vraag erom vraagt (bijvoorbeeld risico's, gevraagde besluiten of aandachtspunten als opsomming).`;
 
-export const SP_DOCUMENT_SCOPE_ALG_REGELS = `U beantwoordt deze vraag primair op basis van het aangeleverde document, en mag aanvullend uw algemene kennis gebruiken. Scheid uw antwoord ALTIJD in drie delen met exact deze koppen (Markdown ###):
+// De dekkingsbrede tegenhanger van SP_DOCUMENT_PRIMAIR_ALG_REGELS. Hoort bij het
+// doorgrond-/breed-pad, dat het VOLLEDIGE document in de prompt zet en geen
+// retrieval draait — daar bestaan geen [Bron N]-labels en dus ook geen
+// aanvullende bibliotheekbronnen; verwijzen gebeurt met "(pag. X)".
+// Hernoemd 12-08-2026 (was SP_DOCUMENT_SCOPE_ALG_REGELS) zodat uit de naam
+// blijkt dat dit het BREDE pad is; de tekst is ongewijzigd.
+export const SP_DOCUMENT_BREED_ALG_REGELS = `U beantwoordt deze vraag primair op basis van het aangeleverde document, en mag aanvullend uw algemene kennis gebruiken. Scheid uw antwoord ALTIJD in drie delen met exact deze koppen (Markdown ###):
 
 ### Uit dit document blijkt
 Wat het document zelf zegt, met paginaverwijzingen "(pag. X)". Uitsluitend wat er echt staat — niets verzinnen.

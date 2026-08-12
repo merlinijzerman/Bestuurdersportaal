@@ -89,7 +89,7 @@ test("elke kopie draagt een bronnenblok — ook zonder enkele bronverwijzing", (
 test("REGRESSIE: zonder [Bron N] maar MET aangeleverde bronnen wordt de bron niet ontkend", () => {
   // Dit is het gewone geval bij document-scope en "document doorgronden": de
   // SP_DOCUMENT_SCOPE_BREED_REGELS VERBIEDT daar de [Bron N]-notatie letterlijk
-  // en SP_DOCUMENT_SCOPE_ALG_REGELS schrijft "(pag. X)" voor; in beide gevallen
+  // en SP_DOCUMENT_BREED_ALG_REGELS schrijft "(pag. X)" voor; in beide gevallen
   // levert het model geen genummerde verwijzingen. Een bronnenlijst die alleen
   // op markers steunt zou daar dus altijd leeg zijn — en het
   // antwoord ten onrechte als bronloos presenteren terwijl het per constructie

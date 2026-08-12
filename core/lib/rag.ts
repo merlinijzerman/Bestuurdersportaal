@@ -10,6 +10,7 @@ import {
 import { embedTekst, naarVectorLiteral } from "./embeddings";
 import { notulenBronLabel } from "./notulen";
 import { bouwBronfragment } from "./bronfragment";
+import { statuslabelVoorBron } from "./documentstatus-label";
 import type { RetrievalModus } from "./vraagtype";
 import {
   weegBronsoort,
@@ -687,6 +688,13 @@ export interface RetrievalMeta {
     titels: string[];
     strategie: "targeted" | "full_document" | "map_reduce";
     algemene_kennis: boolean;
+    // 12-08-2026 — primaire-documentmodus. `modus: "primair"` legt vast dat het
+    // gekozen document het ONDERWERP was en niet de afbakening; de twee tellers
+    // zeggen hoeveel de verbreding daadwerkelijk toevoegde. Zonder die getallen
+    // is achteraf niet te zien of een antwoord op het gekozen stuk stond of
+    // grotendeels op de rest van de bibliotheek. Optioneel: het brede pad
+    // (doorgronden) zet ze niet.
+    modus?: "primair";
     // Increment 2: bij dekkingsbrede strategieën — hoeveel chunks verwerkt en
     // (bij map-reduce) in hoeveel batches; afgekapt = dekking gedeeltelijk.
     verwerkte_chunks?: number;
@@ -705,6 +713,12 @@ export interface RetrievalMeta {
     bron_ids?: string[];
     blok_tekens?: number;
   };
+  // 12-08-2026 — wat het AANVULLENDE spoor toevoegde bovenop het primaire
+  // materiaal (gekozen document op /ai, gekoppelde stukken in agendapunt-modus).
+  // Zonder deze twee getallen is achteraf niet te zien of een antwoord op het
+  // primaire materiaal stond of grotendeels op de rest van de bibliotheek.
+  // Afwezig = er draaide geen aanvullend spoor.
+  aanvullend?: { chunks: number; documenten: number };
   // Besluit 0151 (criterium 11) — tijd tot eerste zichtbare token (ms), voor de
   // token-/latentiemeting per module-scope-soort.
   ttft_ms?: number;
@@ -1680,7 +1694,20 @@ export { neutraliseerBrontekst, maakBronSentinel };
 export function maakContext(
   chunks: DocumentChunk[],
   startIndex = 0,
-  sentinel: string = maakBronSentinel()
+  sentinel: string = maakBronSentinel(),
+  // 12-08-2026 — primaire-documentmodus. Is er een door de gebruiker gekozen
+  // hoofddocument, dan krijgt elke bron in de kop een herkomstmarkering, zodat
+  // het model (en daarmee de lezer) ziet welke uitspraak uit het gekozen stuk
+  // komt en welke uit de rest van de bibliotheek. Leeg/afwezig = geen enkele
+  // markering, exact het gedrag van vóór deze wijziging.
+  primaireDocumentIds?: ReadonlySet<string> | null,
+  // Peildatum voor het geldigheidsdeel van het statuslabel. Zonder peildatum
+  // doet het label géén uitspraak over verlopen geldigheid (geen schijnzekerheid).
+  peildatum?: string,
+  // Het label voor een PRIMAIRE bron. Op /ai is dat het door de gebruiker
+  // gekozen stuk ("hoofddocument"); in agendapunt-modus zijn het de aan het
+  // agendapunt gekoppelde stukken, en dan leest "[gekoppeld stuk]" correcter.
+  primairLabel: string = " [hoofddocument]"
 ): {
   contextTekst: string;
   bronnen: BronVerwijzing[];
@@ -1742,7 +1769,29 @@ export function maakContext(
 
     // H-10: elke bron in een eigen, met een onvoorspelbare sentinel afgebakend
     // blok. Alles tussen de openings- en sluittag is DATA, nooit instructie.
-    const kop = `${bronLabel} ${bronTitel}${bronsoortLabel}${locatie ? ` (${locatie})` : ""}`;
+    // 12-08-2026 — statuslabel. Tot nu toe reisde de documentstatus alleen mee
+    // naar de bronkaart in de UI en niet naar de prompt; het model kon dus niet
+    // zien dat een aangeleverde bron nog niet was vastgesteld. Met de bredere
+    // retrieval van deze release is dit label het verschil tussen bruikbare
+    // duiding en versieverwarring. Enige bron: core/lib/documentstatus-label.ts.
+    const statusLabel = statuslabelVoorBron(
+      {
+        documentstatus: doc.documentstatus,
+        bronstatus: doc.bronstatus,
+        geldig_tot: doc.geldig_tot,
+      },
+      peildatum
+    );
+
+    // Herkomstmarkering in de primaire-documentmodus (zie de parameter hierboven).
+    const herkomstLabel =
+      primaireDocumentIds && primaireDocumentIds.size > 0
+        ? primaireDocumentIds.has(chunk.document_id)
+          ? primairLabel
+          : " [aanvullend uit de bibliotheek]"
+        : "";
+
+    const kop = `${bronLabel} ${bronTitel}${bronsoortLabel}${statusLabel}${herkomstLabel}${locatie ? ` (${locatie})` : ""}`;
     contextDelen.push(
       `<bron s="${sentinel}" nr="${startIndex + index + 1}">\n${kop}:\n${brontekst}\n</bron s="${sentinel}">`
     );

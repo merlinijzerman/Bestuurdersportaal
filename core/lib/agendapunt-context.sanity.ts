@@ -69,6 +69,13 @@ check("regels scheiden de drie herkomsten expliciet", () => {
   assert.ok(SP_AGENDAPUNT_REGELS.includes(TOELICHTING_LABEL));
   assert.ok(SP_AGENDAPUNT_REGELS.includes("[Bron N]"));
   assert.ok(SP_AGENDAPUNT_REGELS.includes("[Algemene kennis]"));
+  // 12-08-2026 — sinds de primaire modus ook in agendapunt-modus geldt, moet de
+  // prompt het onderscheid tussen gekoppelde stukken en aanvullende
+  // bibliotheekbronnen benoemen, plus de statuslabels. Zonder die twee zou een
+  // conceptvergaderstuk als geldend beleid kunnen worden gepresenteerd.
+  assert.ok(SP_AGENDAPUNT_REGELS.includes("[gekoppeld stuk]"));
+  assert.ok(SP_AGENDAPUNT_REGELS.includes("[aanvullend uit de bibliotheek]"));
+  assert.ok(SP_AGENDAPUNT_REGELS.includes("[concept — nog niet vastgesteld]"));
   // De regels verbieden expliciet [Bron N] voor de toelichting.
   assert.ok(/NOOIT \[Bron N\]/i.test(SP_AGENDAPUNT_REGELS) ||
     SP_AGENDAPUNT_REGELS.includes("Gebruik hiervoor NOOIT [Bron N]"));

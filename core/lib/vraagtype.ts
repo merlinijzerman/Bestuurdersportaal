@@ -306,14 +306,39 @@ const VOORSTELVRAAG_PATRONEN: RegExp[] = [
   // woordgrens vóór het kernwoord (bestuursvoorstel, beleidsvoorstel,
   // wijzigingsvoorstel). Zelfde overweging als bij de plicht-patronen hieronder.
   /voorstel(?:len)?\b/,
-  /\bconcept(?:en|stuk|stukken|versie|versies)?\b/,
-  /ter (?:bespreking|besluitvorming|vaststelling)/,
+  // CORRECTIE 12-08-2026. De sluitende \b stond direct achter een VASTE
+  // suffixlijst, en in Nederlandse samenstellingen staat er geen woordgrens ná
+  // het kernwoord. "conceptnotulen", "conceptbegroting", "conceptjaarverslag",
+  // "conceptbeleidsplan" en "conceptrapportage" matchten dus NIET, terwijl
+  // "concept", "concepten" en "conceptstuk" dat wél deden. Dat verklaart het
+  // "soms wel, meestal niet"-gedrag bij expliciet vragen naar een conceptstuk:
+  // dezelfde vraag viel wel of niet binnen de filter, puur op woordvorm.
+  // Nu een open staart, met een negatieve lookahead voor conceptueel/
+  // conceptualiseren — die gaan over een denkkader, niet over de staat van een
+  // stuk (die grens wordt in vraagtype.sanity.ts vastgehouden).
+  /\bconcept(?!ueel|uele|ualis)\w*/,
+  /ter (?:bespreking|besluitvorming|vaststelling|advisering)/,
   /\bligt er\b/,
   /\bliggen er\b/,
   /\bwat ligt (?:er )?voor\b/,
   /nog niet vastgesteld/,
   /\bin voorbereiding\b/,
   /agendastuk(?:ken)?\b/,
+  // TOEVOEGING 12-08-2026 — vergaderstuk-vocabulaire. Een vergaderstuk is geen
+  // aparte entiteit maar een rij in `documenten` met agendapunt_id/vergadering_id,
+  // en het vergaderstuk-uploadpad levert geen `status` mee → DB-default 'concept'
+  // (zie app/api/documents/upload/route.ts). Vergaderstukken zijn daarmee PER
+  // CONSTRUCTIE onvindbaar onder modus 'actueel', terwijl wie ernaar vraagt
+  // vrijwel nooit het woord "concept" gebruikt. Deze woorden gaan alle over de
+  // STAAT van een stuk (het ligt voor), niet over een onderwerp — de gecureerde
+  // lijn hierboven blijft dus gelden.
+  /vergaderstuk(?:ken)?\b/,
+  /bestuursstuk(?:ken)?\b/,
+  /\bopleg(?:ger|gers|notitie|notities|memo)\b/,
+  /\bter agendering\b/,
+  /\bgeagendeerd\b/,
+  /\bop de agenda\b/,
+  /\bstukken voor de (?:komende |volgende |aanstaande )?vergadering\b/,
 ];
 
 /**

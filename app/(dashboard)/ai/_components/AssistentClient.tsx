@@ -362,6 +362,18 @@ export default function AssistentClient({
   const [historieOpen, setHistorieOpen] = useState(false);
   // Document-scope (increment 1): beperkt de vraag tot één specifiek stuk.
   const [documentScope, setDocumentScope] = useState<DocumentScope | null>(null);
+  // ── Werkstand "stukken in voorbereiding" (12-08-2026) ─────────────────────
+  // Zet de actualiteitsfilter uit voor élke vraag in dit gesprek: concept- en
+  // nog niet vastgestelde stukken komen mee. Het serverveld hiervoor
+  // (neem_niet_vastgestelde_mee) bestond al, maar was alleen bereikbaar via een
+  // chip die pas verscheen als de retrieval NUL fondstreffers had — bij een
+  // vergadervoorbereiding dus vrijwel nooit. Vergaderstukken krijgen bij ingest
+  // de DB-default status 'concept' en zijn daarmee per constructie onvindbaar
+  // onder de standaardmodus; deze stand is de expliciete uitweg.
+  //
+  // Bewust een STAND en geen gok: het systeem hoeft niet uit de woordkeuze af te
+  // leiden of iemand een vergadering voorbereidt, de gebruiker zegt het.
+  const [voorbereidingsstand, setVoorbereidingsstand] = useState(false);
   // Agendapunt-modus (ADR 0028): de vraag is geframed door een agendapunt; de
   // toelichting wordt per beurt server-side opgehaald aan de hand van dit id.
   const [agendapuntContext, setAgendapuntContext] =
@@ -1267,7 +1279,10 @@ export default function AssistentClient({
           startvraag_bron: opties?.startvraagBron,
           // 30-07-2026 — expliciete verbreding na de melding "wel stukken, niet
           // vastgesteld". Alleen true als de gebruiker de chip aanklikte.
-          neem_niet_vastgestelde_mee: opties?.neemNietVastgesteldeMee === true,
+          // De chip (per beurt) OF de werkstand (heel het gesprek). Beide zetten
+          // hetzelfde serverveld; de chip blijft werken zoals hij deed.
+          neem_niet_vastgestelde_mee:
+            opties?.neemNietVastgesteldeMee === true || voorbereidingsstand,
           // Besluit 0137 (antwoord-eerst) — koppelt de hergegenereerde beurt na een
           // bronkeuze-chipklik aan het eerste antwoord (auditspoor: bronkeuze_herzien).
           bronkeuze_vorige_log_id: opties?.bronkeuzeVorigeLogId,
@@ -2961,7 +2976,7 @@ export default function AssistentClient({
           <div className="mb-2 flex items-center gap-3 flex-wrap">
             <span className="inline-flex items-center gap-2 max-w-full bg-warn-tint border border-warn/30 text-warn-ink text-xs rounded-full pl-3 pr-2 py-1">
               <span className="truncate">
-                Je vraagt nu over: «{documentScope.titels[0] || "dit document"}»
+                Onderwerp: «{documentScope.titels[0] || "dit document"}»
                 {documentScope.document_ids.length > 1
                   ? ` +${documentScope.document_ids.length - 1}`
                   : ""}
@@ -2970,14 +2985,14 @@ export default function AssistentClient({
                 onClick={() => setDocumentScope(null)}
                 className="shrink-0 w-4 h-4 rounded-full bg-warn hover:bg-warn text-warn-ink flex items-center justify-center"
                 aria-label="Documentscope wissen"
-                title="Scope wissen — weer de hele bibliotheek bevragen"
+                title="Onderwerp wissen — weer zonder hoofddocument vragen"
               >
                 ✕
               </button>
             </span>
             <label
               className="inline-flex items-center gap-1.5 text-xs text-muted cursor-pointer"
-              title="Standaard antwoordt de AI strikt uit dit document. Aan: ook algemene kennis, in drie gescheiden delen."
+              title="Het gekozen stuk is het onderwerp; de rest van de bibliotheek blijft beschikbaar als aanvulling. Aan: ook algemene kennis van het model, in gescheiden delen."
             >
               <input
                 type="checkbox"
@@ -2995,6 +3010,30 @@ export default function AssistentClient({
             </label>
           </div>
         )}
+
+        {/* Werkstand "stukken in voorbereiding" — zie de state hierboven. Bewust
+            hier, direct boven het invoerveld: het is een stand die geldt voor de
+            volgende vraag, geen instelling die je in een menu zoekt. */}
+        <div className="mb-2 flex items-center gap-2">
+          <label
+            className="inline-flex items-center gap-1.5 text-xs text-muted cursor-pointer"
+            title="Aan: stukken die nog niet zijn vastgesteld (concepten, vergaderstukken, stukken die ter besluitvorming voorliggen) worden meegenomen in het antwoord. Ze blijven herkenbaar aan hun statuslabel."
+          >
+            <input
+              type="checkbox"
+              checked={voorbereidingsstand}
+              onChange={(e) => setVoorbereidingsstand(e.target.checked)}
+              className="accent-accent"
+              disabled={laden}
+            />
+            Stukken in voorbereiding meenemen
+          </label>
+          {voorbereidingsstand && (
+            <span className="text-[11px] text-warn-ink bg-warn-tint border border-warn/30 rounded-full px-2 py-0.5">
+              concepten worden meegenomen
+            </span>
+          )}
+        </div>
 
         <div className="flex gap-3">
           <textarea

@@ -315,7 +315,7 @@ const MARKER_UITLEG: Record<string, string> = {
  *     Dit is het normale geval bij document-scope en "document doorgronden":
  *     `SP_DOCUMENT_SCOPE_BREED_REGELS` VERBIEDT daar de [Bron N]-notatie
  *     letterlijk ("Gebruik GEEN [Bron N]-notatie"), en
- *     `SP_DOCUMENT_SCOPE_ALG_REGELS` schrijft in plaats daarvan
+ *     `SP_DOCUMENT_BREED_ALG_REGELS` schrijft in plaats daarvan
  *     paginaverwijzingen "(pag. X)" voor. In beide gevallen levert het model
  *     dus geen genummerde verwijzingen, en zou een lijst die alleen op markers
  *     steunt daar altijd leeg zijn en het antwoord ten onrechte als bronloos
