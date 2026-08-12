@@ -137,6 +137,37 @@ GEBRUIK VAN DIT PROFIEL:
   return { tekst, aspecten: aspectenVan(p) };
 }
 
+// ── T4 Regime-borging (Deel B) — prompt-blok B6 ──────────────────────────────
+// Labelt bronnen uit een NIET-geldend wettelijk regime als extern kader, zónder
+// een verplichte verificatievraag (anders dan de organisatieprofiel-CONFLICTREGEL
+// hierboven). Complementair aan de regime-DEMOTIE in de retrieval (lib/weeg-regime
+// + lib/rag): de weging zet niet-geldend regime lager; dit blok borgt dat wat tóch
+// in de context belandt niet als geldend recht wordt gepresenteerd.
+//
+// De software stelt de juridische kwalificatie NIET zelf vast: `fondsRegime` komt
+// uit de compliance-beheerde data (fondsen.primair_wettelijk_regime). Alleen een
+// SPECIFIEK regime (pw/wvb) levert een blok; beide/algemeen/NULL → null (geen blok,
+// geen demotie).
+const REGIME_NAAM: Record<"pw" | "wvb", string> = {
+  pw: "Pensioenwet",
+  wvb: "Wet verplichte beroepspensioenregeling (Wvb)",
+};
+
+export function bouwRegimeKaderBlok(
+  fondsRegime: string | null | undefined
+): string | null {
+  if (fondsRegime !== "pw" && fondsRegime !== "wvb") return null;
+  const geldend = REGIME_NAAM[fondsRegime];
+  const ander = REGIME_NAAM[fondsRegime === "pw" ? "wvb" : "pw"];
+  return `=== WETTELIJK REGIME (geldend kader voor dit fonds) ===
+Het geldende wettelijk regime voor dit fonds is de ${geldend}. Bronnen die tot een ander wettelijk regime behoren (${ander}) zijn voor dit fonds een EXTERN kader — geen geldend recht.
+
+GEBRUIK:
+- Behandel de ${geldend} als het leidende wettelijk kader voor dit fonds.
+- Baseer je een bewering (mede) op een bron uit het andere regime (${ander}), label die bron dan expliciet als "[extern kader — niet geldend recht voor dit fonds]" en gebruik haar uitsluitend als aanvullend of vergelijkend kader — nooit als de geldende juridische basis.
+- Stel hierover GEEN verplichte verificatievraag; de labeling volstaat. Benoem feitelijk waar het externe kader afwijkt van het geldende regime.`;
+}
+
 // ── Gemaksfunctie: ophalen + bouwen in één stap (voor OP-3) ───────────────────
 // Retourneert null bij ontbrekend of leeg profiel; anders het blok + aspecten.
 // De afnemer (route) zet op basis hiervan retrieval_meta.organisatieprofiel op

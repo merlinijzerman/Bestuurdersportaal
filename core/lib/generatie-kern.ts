@@ -489,6 +489,11 @@ export interface BestuurderContext {
   // Landt, net als profielsturing, uitsluitend in het dynamische (ongecachte)
   // contextblok — nooit in de gecachte toon-systeemprompt en nooit in retrieval.
   organisatieprofiel?: string | null;
+  // T4 Regime-borging (Deel B) — prompt-blok B6: labelt bronnen uit een niet-
+  // geldend wettelijk regime als extern kader. Landt, net als organisatieprofiel,
+  // uitsluitend in het dynamische (ongecachte) contextblok — nooit in de gecachte
+  // toon-systeemprompt en nooit in retrieval. null/afwezig = geen blok.
+  regimeKader?: string | null;
   voornaam: string;
   volledigeNaam: string;
   rolLabel: string;
@@ -571,6 +576,9 @@ export function bouwDynamischeContext(ctx: BestuurderContext): string {
 JE SPREEKT NU MET: ${ctx.volledigeNaam} (${ctx.rolLabel}). U mag de voornaam "${ctx.voornaam}" gebruiken in uw antwoord — sporadisch, alleen waar het natuurlijk past.`;
   const blokken = [basis];
   if (ctx.organisatieprofiel) blokken.push(ctx.organisatieprofiel);
+  // T4 — regime-kader (B6) direct na het organisatieprofiel: beide sturen hoe
+  // bronnen behandeld worden. Alleen aanwezig bij een specifiek fondsregime.
+  if (ctx.regimeKader) blokken.push(ctx.regimeKader);
   if (ctx.profielsturing) blokken.push(ctx.profielsturing);
   return blokken.join("\n\n");
 }

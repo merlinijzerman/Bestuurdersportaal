@@ -46,7 +46,7 @@ import { haalActieveWhitelist } from "@/core/lib/web-whitelist-data";
 import { beoordeelWebGate, buildWebSearchTool, extractWebResultaten, bouwWebbronnen, bevraagdeDomeinen } from "@/core/lib/web-retrieval";
 import { bevatPersoonsgegevens } from "@/core/lib/pii-gate";
 import { bouwProfielsturing, type ProfielsturingAspecten } from "@/core/lib/profielsturing";
-import { bouwOrganisatieprofiel } from "@/core/lib/organisatieprofiel";
+import { bouwOrganisatieprofiel, bouwRegimeKaderBlok } from "@/core/lib/organisatieprofiel";
 import { SP_AGENDAPUNT_REGELS, bouwToelichtingBlok, herkomstString, type AgendapuntSeed } from "@/core/lib/agendapunt-context";
 import { splitsRetrievalMeta } from "@/core/lib/audit-meta";
 import { bouwInhoudZegel } from "@/core/lib/audit-hmac";
@@ -365,7 +365,9 @@ export async function POST(req: NextRequest) {
     // Profiel + fondsnaam ophalen voor persoonlijke context
     const { data: profiel } = await supabase
       .from("profielen")
-      .select("naam, rol, fonds_id, fondsen(naam)")
+      // T4 — het geldende wettelijk regime van het fonds meelezen (fonds-niveau,
+      // geen PII). Stuurt de regime-demotie in de retrieval (RetrievalFilters).
+      .select("naam, rol, fonds_id, fondsen(naam, primair_wettelijk_regime)")
       .eq("id", user.id)
       .single();
 
@@ -419,11 +421,18 @@ export async function POST(req: NextRequest) {
     }
 
     const fondsenRel = profiel?.fondsen as
-      | { naam: string }
-      | { naam: string }[]
+      | { naam: string; primair_wettelijk_regime?: string | null }
+      | { naam: string; primair_wettelijk_regime?: string | null }[]
       | null
       | undefined;
     const fondsenObj = Array.isArray(fondsenRel) ? fondsenRel[0] : fondsenRel;
+    // T4 — het geldende regime (pw/wvb/beide/algemeen; NULL ≡ algemeen → geen
+    // demotie). Alleen een specifiek regime (pw/wvb) leidt tot demotie; de weging
+    // (lib/weeg-regime) no-opt op de rest, dus doorgeven-zoals-is is veilig.
+    const fondsRegime =
+      (fondsenObj?.primair_wettelijk_regime ?? undefined) as
+        | RetrievalFilters["primairRegime"]
+        | undefined;
 
     const volledigeNaam = profiel?.naam || user.email || "een bestuurslid";
     const voornaam = volledigeNaam.split(" ")[0] || volledigeNaam;
@@ -477,6 +486,11 @@ export async function POST(req: NextRequest) {
         organisatieprofielAspecten = orgProfiel.aspecten;
       }
     }
+
+    // T4 Regime-borging (Deel B) — prompt-blok B6. Onafhankelijk van het
+    // organisatieprofiel (een fonds met een specifiek regime maar leeg profiel
+    // krijgt B6 wél). null bij beide/algemeen/NULL-regime → geen blok.
+    ctxBestuurder.regimeKader = bouwRegimeKaderBlok(fondsRegime);
 
     // ── ADR 0028 — agendapunt-modus: toelichting als seed-context ────────────
     // De route haalt titel + toelichting zélf op via RLS. Een vreemd-fonds-id
@@ -1349,6 +1363,8 @@ export async function POST(req: NextRequest) {
             : retrievalModusVoorVraag(antwoordmodus, vraag),
           peildatum: vandaag,
           bronsoortprofiel: bepaalBronsoortprofiel(vraag),
+          // T4 — regime-demotie op basis van het geldende fondsregime.
+          primairRegime: fondsRegime,
         };
 
     // RAG-zoeken: voor de bibliotheek-modi, of bij een actieve scope met een

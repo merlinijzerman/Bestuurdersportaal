@@ -28,7 +28,31 @@ create table if not exists public.fondsen (
   id          uuid primary key default uuid_generate_v4(),
   naam        text not null,
   slug        text unique not null,
-  aangemaakt  timestamptz default now()
+  aangemaakt  timestamptz default now(),
+  -- T4 Regime-borging (migratie 2026_08_12_t4_regime_borging.sql). Compliance/
+  -- platform-beheerd (NIET tenant-writable — de tenant-routes raken fondsen niet).
+  -- fondstype = beheerde fondsclassificatie; primair_wettelijk_regime = het
+  -- GELDENDE wettelijk regime (leest de retrieval voor de regime-demotie).
+  -- NULL primair_wettelijk_regime ≡ 'algemeen' → geen demotie.
+  fondstype                text
+    check (fondstype is null or fondstype in ('bedrijfstak','onderneming','beroeps','apf','algemeen')),
+  primair_wettelijk_regime text
+    check (primair_wettelijk_regime is null or primair_wettelijk_regime in ('pw','wvb','beide','algemeen'))
+);
+
+-- T4 — beheerde mapping fondstype → primair_wettelijk_regime (juridische
+-- kwalificatie in DATA, niet in code). Compliance-eigenaar. Seed = voorstel
+-- (bevestigd_door_compliance markeert bevestiging). Retrieval leest het
+-- authoritatieve fondsen.primair_wettelijk_regime, niet deze tabel. RLS: lezen
+-- voor authenticated (using true), schrijven alleen via service-role.
+create table if not exists public.wettelijk_regime_per_fondstype (
+  fondstype                 text primary key
+    check (fondstype in ('bedrijfstak','onderneming','beroeps','apf','algemeen')),
+  primair_wettelijk_regime  text not null
+    check (primair_wettelijk_regime in ('pw','wvb','beide','algemeen')),
+  toelichting               text,
+  bevestigd_door_compliance boolean not null default false,
+  aangemaakt                timestamptz not null default now()
 );
 
 -- Voeg een standaard fonds in
@@ -294,6 +318,12 @@ create table if not exists public.documenten (
   extern_url      text,
   normgewicht     text check (normgewicht is null or normgewicht in
                    ('bindend','toezichtverwachting','sector_guidance','informatief','onbekend')),
+  -- T4 Regime-borging (migratie 2026_08_12). Documentfacet: het wettelijk regime
+  -- van de bron (compliance-curatie; alleen zinvol voor bibliotheek='generiek').
+  -- NULL ≡ 'algemeen' (cross-cutting) → nooit gedemoveerd. Gedenorm. naar
+  -- document_chunks via fn_chunk_denorm; voedt de regime-demotie (lib/weeg-regime).
+  wettelijk_regime text check (wettelijk_regime is null or wettelijk_regime in
+                   ('pw','wvb','beide','algemeen')),
   metadata_te_controleren    boolean not null default false,
   metadata_review_status     text not null default 'niet_nodig'
                    check (metadata_review_status in ('niet_nodig','te_controleren','gecontroleerd','afgewezen')),
@@ -509,6 +539,10 @@ create table if not exists public.document_chunks (
   bronorganisatie text,
   normgewicht     text,
   extern_url      text,
+  -- T4 Regime-borging (migratie 2026_08_12) — regime-denorm van documenten.
+  -- wettelijk_regime via dezelfde fn_chunk_denorm; voedt de app-side regime-demotie
+  -- (lib/weeg-regime). Geen index (niet in de RPC-WHERE gefilterd).
+  wettelijk_regime text,
   -- Increment D — markeert een segmentchunk (vs. whole-document-chunk = null).
   -- Volledige definitie in 2026_06_20d_notulen_segmenten.sql.
   notulen_segment_id uuid references public.notulen_segmenten(id) on delete cascade

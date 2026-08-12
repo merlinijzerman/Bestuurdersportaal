@@ -16,6 +16,7 @@ import {
   bouwOrganisatieprofielBlok,
   type Organisatieprofiel,
 } from "@/core/lib/organisatieprofiel";
+import AutoGrowTextarea from "@/core/components/AutoGrowTextarea";
 
 const MAX_STRATEGISCH = 600;
 
@@ -193,12 +194,12 @@ export default function OrganisatieprofielTab() {
             {FEIT_VELDEN.map((v) => (
               <div key={v.key}>
                 <label className="block text-sm font-medium text-ink mb-1">{v.label}</label>
-                <input
-                  type="text"
+                <AutoGrowTextarea
+                  minRows={2}
                   value={form[v.key]}
                   disabled={leesModus}
                   onChange={(e) => wijzig(v.key, e.target.value)}
-                  className="w-full border border-app-line-strong rounded-lg px-3 py-2 text-sm disabled:bg-app-bg disabled:text-muted"
+                  className="w-full border border-app-line-strong rounded-lg px-3 py-2 text-sm leading-relaxed disabled:bg-app-bg disabled:text-muted"
                 />
               </div>
             ))}
@@ -219,12 +220,12 @@ export default function OrganisatieprofielTab() {
                       {lengte}/{MAX_STRATEGISCH}
                     </span>
                   </div>
-                  <textarea
+                  <AutoGrowTextarea
+                    minRows={3}
                     value={form[v.key]}
                     disabled={leesModus}
                     onChange={(e) => wijzig(v.key, e.target.value)}
-                    rows={3}
-                    className={`w-full rounded-lg border px-3 py-2 text-sm disabled:bg-app-bg disabled:text-muted ${
+                    className={`w-full rounded-lg border px-3 py-2 text-sm leading-relaxed disabled:bg-app-bg disabled:text-muted ${
                       over ? "border-err" : "border-app-line-strong"
                     }`}
                   />
@@ -289,7 +290,7 @@ export default function OrganisatieprofielTab() {
             Preview — wat de AI meekrijgt
           </h3>
           {preview ? (
-            <pre className="max-h-[70vh] overflow-auto whitespace-pre-wrap rounded-xl border border-phase/30 bg-phase-tint/40 p-4 text-xs text-phase-ink">
+            <pre className="max-h-[70vh] overflow-auto whitespace-pre-wrap rounded-xl border border-phase/30 bg-phase-tint/40 p-4 text-xs leading-relaxed text-phase-ink">
               {preview.tekst}
             </pre>
           ) : (

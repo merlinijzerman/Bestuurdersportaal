@@ -16,6 +16,7 @@ import {
   constraintsVoorProfiel,
   type Bronsoortprofiel,
 } from "./weeg-bronsoort";
+import { weegRegime, type Regime } from "./weeg-regime";
 import { isStandaardZichtbaarInRag } from "./generiek-curatie";
 import { isReviewVerlopen } from "./generiek-status";
 import type { AssistantSource, AssistantSourceSamenvatting } from "./assistant-source";
@@ -41,6 +42,12 @@ export interface RetrievalFilters {
   // kandidatenset vóór de top-N-selectie zodat de primaire bronsoort vóór de
   // aanvullende komt. Geen harde uitsluiting (anders dan p_bronsoort hierboven).
   bronsoortprofiel?: Bronsoortprofiel;
+  // T4 Regime-borging (Deel B) — het GELDENDE wettelijk regime van het fonds
+  // (fondsen.primair_wettelijk_regime; NULL/beide/algemeen = geen demotie). Stuurt
+  // de regime-demotie (lib/weeg-regime) ná de bronsoort-weging: chunks met het
+  // tegengestelde regime zakken naar onderaan. GEEN harde uitsluiting (anders dan
+  // p_bronsoort): een gedemoveerd regime blijft als aanvullend extern kader.
+  primairRegime?: Regime;
   // Increment P1 (§8.3 #6, herzien 2026-06-26) — generieke documenten met een
   // ZWAK normgewicht (alleen 'onbekend'/NULL; 'informatief' niet meer) worden
   // NIET standaard in RAG getoond. Zet deze vlag op true wanneer de gebruiker er
@@ -198,7 +205,8 @@ function weegEnSelecteer(
   filters: RetrievalFilters | undefined,
   maxResults: number,
   maxPerDoc: number,
-  constraintsAan: boolean
+  constraintsAan: boolean,
+  regimeAan: boolean
 ): { chunks: DocumentChunk[]; diagnostiek: SelectieDiagnostiek } {
   const profiel = filters?.bronsoortprofiel;
   const libVan = (c: DocumentChunk) => c.documenten.bibliotheek;
@@ -208,11 +216,20 @@ function weegEnSelecteer(
   const zichtbaarSet = new Set(zichtbaar);
 
   // weging (bronsoort) — herordent alleen; behoudt de relevantievolgorde binnen groep.
-  const gewogen = profiel
+  const bronGewogen = profiel
     ? weegBronsoort(zichtbaar, libVan, profiel)
     : zichtbaar;
 
-  // [gereserveerd: regime-demotie (T4) — plek in de volgorde bewust vrijgehouden]
+  // T4 regime-demotie — de gereserveerde plek: ná de bronsoort-weging, vóór de
+  // representatie-constraints. Demoveert chunks met een NIET-geldend (tegengesteld)
+  // regime naar onderaan; `beide`/`algemeen`/NULL nooit. Geen harde uitsluiting.
+  // weegRegime is een no-op als het fonds geen specifiek regime heeft, dus met
+  // REGIME_WEGING uit óf een leeg/cross-cutting fondsregime is dit gedrag-neutraal.
+  const regimeDemoveert =
+    regimeAan && (filters?.primairRegime === "pw" || filters?.primairRegime === "wvb");
+  const gewogen = regimeDemoveert
+    ? weegRegime(bronGewogen, (c) => c.documenten.wettelijk_regime, filters?.primairRegime)
+    : bronGewogen;
 
   // representatie-constraints → dedup → budget-afkap. De effectieve constraints
   // worden ALTIJD gelogd, ook bij flag-uit (alle minima 0 = huidig gedrag).
@@ -226,10 +243,12 @@ function weegEnSelecteer(
   const gekozenSet = new Set(trace.gekozen);
   const redenVanGewogen = new Map(gewogen.map((c, i) => [c, trace.redenen[i]] as const));
 
-  // Contrafeitelijke selectie op de PRE-weging volgorde: alleen zinvol als de
-  // weging daadwerkelijk demoveert (fonds/generiek; 'gecombineerd' herordent niet).
+  // Contrafeitelijke selectie op de PRE-weging volgorde: zinvol zodra de weging
+  // daadwerkelijk demoveert — bronsoort (fonds/generiek; 'gecombineerd' herordent
+  // niet) óf regime. `zichtbaar` is de volgorde zónder beide weging-stappen, zodat
+  // een chunk die enkel door de weging afvalt op reden "weging" landt (niet budget).
   let zonderWegingSet: Set<DocumentChunk> | null = null;
-  if (profiel === "fonds" || profiel === "generiek") {
+  if (profiel === "fonds" || profiel === "generiek" || regimeDemoveert) {
     const cf = constraintsAan
       ? selecteerMetConstraintsMetTrace(zichtbaar, constraints, libVan)
       : selecteerChunksMetTrace(zichtbaar, maxResults, maxPerDoc);
@@ -323,6 +342,7 @@ export interface RetrievalOpties {
   jargonExpansie?: boolean; // R1.4 FTS-jargonexpansie
   parentRetrieval?: boolean; // R1.6 small-to-big
   representatieConstraints?: boolean; // T1 representatie-constraintlaag (bibliotheek/bron-minima)
+  regimeWeging?: boolean; // T4 regime-demotie (weegRegime); env-default REGIME_WEGING (AAN, tenzij "off")
   drempelWaarde?: number; // R1.5 b2-drempel op de rerankscore (0–100)
   rerankClient?: RerankClient; // injectie voor hermetische tests
   // Besluit 0139 (M-R3) — de OORSPRONKELIJKE gebruikersvraag, meegegeven wanneer
@@ -344,6 +364,7 @@ type VolledigeOpties = {
   jargonExpansie: boolean;
   parentRetrieval: boolean;
   representatieConstraints: boolean;
+  regimeWeging: boolean;
   drempelWaarde: number;
   rerankClient?: RerankClient;
 };
@@ -356,6 +377,10 @@ function volledigeOpties(o?: RetrievalOpties): VolledigeOpties {
     parentRetrieval: o?.parentRetrieval ?? process.env.PARENT_RETRIEVAL === "on",
     representatieConstraints:
       o?.representatieConstraints ?? process.env.REPRESENTATIE_CONSTRAINTS === "on",
+    // T4 — default AAN (besluit: flag default aan). Gedrag-neutraal zolang de
+    // facetdata leeg is (NULL ≡ algemeen → geen demotie) of het fonds geen
+    // specifiek regime heeft. Zet REGIME_WEGING=off om de demotie uit te zetten.
+    regimeWeging: o?.regimeWeging ?? process.env.REGIME_WEGING !== "off",
     drempelWaarde: o?.drempelWaarde ?? DEFAULT_RELEVANTIE_DREMPEL,
     rerankClient: o?.rerankClient,
   };
@@ -471,7 +496,8 @@ async function naVerwerking(
     filters,
     maxResults,
     maxPerDoc,
-    opties.representatieConstraints
+    opties.representatieConstraints,
+    opties.regimeWeging
   );
   let geselecteerd = sel.chunks;
   extra.selectie = sel.diagnostiek.selectie;
@@ -538,6 +564,11 @@ export interface DocumentChunk {
     bronorganisatie?: string | null;
     normgewicht?: string | null;
     extern_url?: string | null;
+    // T4 Regime-borging — het wettelijk regime van de bron (pw/wvb/beide/algemeen;
+    // NULL ≡ algemeen). Gedenormaliseerd op document_chunks (fn_chunk_denorm) en uit
+    // de RPC-return; voedt de regime-demotie (weegRegime) en de prompt-labeling B6.
+    // De fallback-cascade levert dit niet (undefined ≡ algemeen → geen demotie).
+    wettelijk_regime?: string | null;
     // Increment T10 — verplichte reviewdatum van de (generieke) bron. Voedt de
     // review-verval-regel in handhaafFondsdiscipline (defense-in-depth náást de
     // T10-RPC-gate). Alleen de T10-RPC en de fallback-selects leveren dit.
@@ -979,6 +1010,8 @@ interface ZoekChunkRij {
   extern_url?: string | null;
   // Increment T10 — reviewdatum uit de RPC-return (d.volgende_review).
   volgende_review?: string | null;
+  // T4 Regime-borging — regime-facet uit de RPC-return (dc.wettelijk_regime).
+  wettelijk_regime?: string | null;
 }
 
 export interface BronVerwijzing {
@@ -1037,6 +1070,7 @@ function rijNaarChunk(r: ZoekChunkRij): DocumentChunk {
       normgewicht: r.normgewicht ?? null,
       extern_url: r.extern_url ?? null,
       volgende_review: r.volgende_review ?? null,
+      wettelijk_regime: r.wettelijk_regime ?? null,
     },
   };
 }
