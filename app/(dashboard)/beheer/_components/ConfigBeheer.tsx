@@ -27,6 +27,8 @@ type HistorieRij = {
 type InstellingenData = {
   mag_beheren: boolean;
   hybride_zoeken: boolean;
+  // T1/T2 — effectieve stand van de representatie-constraintlaag (fonds → env).
+  representatie_constraints: boolean;
   // Besluit 0137: effectieve bronkeuze-modus + herkomst (fonds → env → default).
   bronkeuze_modus: {
     effectief: BronkeuzeModus;
@@ -286,6 +288,36 @@ export default function ConfigBeheer() {
             className="rounded-lg border border-app-line-strong px-3 py-1 text-sm text-ink hover:bg-app-bg disabled:opacity-50"
           >
             {data.hybride_zoeken ? "Uitzetten" : "Aanzetten"}
+          </button>
+        </div>
+
+        {/* ── Representatie-constraints (T1/T2) ─────────────────────────────── */}
+        <div className="mt-3 flex items-center gap-3 rounded-lg border border-line bg-white px-4 py-2.5">
+          <div className="flex-1">
+            <span className="text-sm text-ink">Representatie-constraints</span>
+            <span className="ml-2 text-xs text-muted">representatie_constraints</span>
+            <p className="mt-0.5 text-xs text-muted">
+              Garandeert bij een gecombineerde vraag minimaal één fonds- én één
+              generieke bron vóór de budget-afkap (begrip×wet-vragen).
+            </p>
+          </div>
+          <button
+            onClick={() =>
+              schrijf(
+                {
+                  type: "flag",
+                  key: "representatie_constraints",
+                  waarde: !data.representatie_constraints,
+                },
+                `Representatie-constraints ${
+                  data.representatie_constraints ? "uitgezet" : "aangezet"
+                }.`
+              )
+            }
+            disabled={bezig !== null}
+            className="rounded-lg border border-app-line-strong px-3 py-1 text-sm text-ink hover:bg-app-bg disabled:opacity-50"
+          >
+            {data.representatie_constraints ? "Uitzetten" : "Aanzetten"}
           </button>
         </div>
 

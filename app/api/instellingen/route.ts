@@ -6,6 +6,7 @@ import {
   haalFondsConfig,
   haalConfigHistorie,
   hybrideZoekenAan,
+  representatieConstraintsAan,
   schrijfFlag,
   schrijfManifestModule,
   schrijfTheming,
@@ -69,6 +70,7 @@ export async function GET() {
     return NextResponse.json({
       mag_beheren: magBeheren,
       hybride_zoeken: await hybrideZoekenAan(profiel.fonds_id),
+      representatie_constraints: await representatieConstraintsAan(profiel.fonds_id),
       bronkeuze_modus: {
         effectief: bronkeuze.modus,
         herkomst: bronkeuze.herkomst,

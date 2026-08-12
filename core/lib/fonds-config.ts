@@ -167,6 +167,17 @@ export async function hybrideZoekenAan(fondsId: string): Promise<boolean> {
   return flagAlsBoolean(flag);
 }
 
+/** Effectieve stand van de T1-representatie-constraintlaag voor dit fonds
+ *  (fonds-flag leidend, anders env-default REPRESENTATIE_CONSTRAINTS). Zelfde
+ *  patroon als hybrideZoekenAan; los aanroepbaar voor het beheerscherm zodat de
+ *  toggle de effectieve waarde toont. De retrieval zelf leest dezelfde vlag via
+ *  retrievalVlaggenVoorFonds (gebundeld); beide resolven identiek. */
+export async function representatieConstraintsAan(fondsId: string): Promise<boolean> {
+  const flag = await haalFlag(fondsId, "representatie_constraints");
+  if (flag === undefined) return process.env.REPRESENTATIE_CONSTRAINTS === "on";
+  return flagAlsBoolean(flag);
+}
+
 // ── Bronkeuze-modus (FO §11a, besluit 0137 — herziet 0014) ──────────────────
 // Bepaalt hoe de assistent omgaat met een ONZEKERE bron-intentie (geen fonds-/
 // generiek-anker):

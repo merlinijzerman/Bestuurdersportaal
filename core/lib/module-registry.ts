@@ -102,14 +102,16 @@ export const MODULE_REGISTRY: Record<ModuleKey, ModuleDef> = {
     key: "governance", label: "Governance Log", href: "/governance", section: "Beheer",
     icon: "◎", rolVereist: "beheerder", defaultActief: true, manifestBeheerbaar: false,
   },
-  // AQL-4 scherm 9 — read-only assurance-view (kwaliteitsborging AI). Zichtbaar
-  // voor ÁLLE fondsrollen (geen rolVereist), read-only. Kern-audit-infrastructuur
-  // (manifestBeheerbaar=false): een fonds sluit zich niet per ongeluk uit van de
-  // assurance/audit-inzage. NB langste-pad-match maakt /governance/assurance deze
-  // module (niet 'governance').
+  // AQL-4 scherm 9 — read-only assurance-view (kwaliteitsborging AI). In het NAV
+  // alleen voor de beheerder getoond (rolVereist='beheerder'): in de MVP voegt de
+  // view voor niet-beheerders nog niets toe (2026-08-12). Dit is louter UI-
+  // cosmetica (zie §9-randvoorwaarde hierboven) — de echte gate blijft server-side
+  // in /api/aqlab/assurance; de route zelf verandert niet. Kern-audit-infra
+  // (manifestBeheerbaar=false): een fonds kan zich niet per ongeluk uitsluiten.
+  // NB langste-pad-match maakt /governance/assurance deze module (niet 'governance').
   assurance: {
     key: "assurance", label: "Kwaliteitsborging AI", href: "/governance/assurance", section: "Beheer",
-    icon: "◇", defaultActief: true, manifestBeheerbaar: false,
+    icon: "◇", rolVereist: "beheerder", defaultActief: true, manifestBeheerbaar: false,
   },
 };
 
