@@ -203,6 +203,7 @@ export interface RetrievalVlaggen {
   relevantieDrempel: boolean;
   jargonExpansie: boolean;
   parentRetrieval: boolean;
+  representatieConstraints: boolean;
   drempelWaarde?: number;
 }
 
@@ -217,6 +218,7 @@ export async function retrievalVlaggenVoorFonds(fondsId: string): Promise<Retrie
       "relevantie_drempel",
       "jargon_expansie",
       "parent_retrieval",
+      "representatie_constraints",
       "relevantie_drempel_waarde",
     ]);
 
@@ -234,6 +236,7 @@ export async function retrievalVlaggenVoorFonds(fondsId: string): Promise<Retrie
     relevantieDrempel: vlag("relevantie_drempel", "RELEVANTIE_DREMPEL"),
     jargonExpansie: vlag("jargon_expansie", "JARGON_EXPANSIE"),
     parentRetrieval: vlag("parent_retrieval", "PARENT_RETRIEVAL"),
+    representatieConstraints: vlag("representatie_constraints", "REPRESENTATIE_CONSTRAINTS"),
     drempelWaarde,
   };
 }

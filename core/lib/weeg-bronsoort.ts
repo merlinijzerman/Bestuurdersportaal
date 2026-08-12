@@ -15,6 +15,7 @@
 // ============================================================================
 
 import type { Bronsoort } from "./bronsoort";
+import type { RepresentatieConstraints } from "./rag-select";
 
 /**
  * Welke bronsoort is PRIMAIR voor deze vraag?
@@ -103,4 +104,57 @@ export function weegBronsoort<T>(
     .map((item, index) => ({ item, index, p: prioriteit(bibliotheekVan(item), profiel) }))
     .sort((a, b) => (a.p - b.p) || (a.index - b.index)) // stabiel op originele index
     .map((x) => x.item);
+}
+
+// ── T1 — Afleiding van representatie-constraints uit het bronsoortprofiel ─────
+//  De weging (weegBronsoort) herordent alleen; ze garandeert geen minimum-
+//  representatie. Deze afleiding vertaalt het profiel naar de deterministische
+//  constraints die selecteerMetConstraints (lib/rag-select.ts) afdwingt VÓÓR de
+//  budget-afkap. De classificatie stuurt zo de constraints aan; de constraints
+//  doen het werk (de classificatie is niet langer zelf de oplossing).
+
+/** Profiel dat constraints stuurt. Bronsoortprofiel + de vergelijkmodus (T5).
+ *  "vergelijking" is nog geen retrieval-modus in productie; het veld is hier
+ *  voorbereid zodat T5 alleen de afleiding hoeft aan te zetten. */
+export type RepresentatieProfiel = Bronsoortprofiel | "vergelijking";
+
+/** Budget/plafonds die uit de aanroeper komen (maxResults/maxPerDoc) plus het
+ *  per-bron-quotum q voor de vergelijkmodus (T5; default 1). */
+export interface ConstraintBudget {
+  maxTotal: number;
+  maxPerSource: number;
+  vergelijkMin?: number;
+}
+
+/**
+ * Leid de representatie-constraints af uit het profiel:
+ *   generiek/undefined → geen quotum (fondsMin 0)  — zuiver generieke vraag.
+ *   fonds              → fondsMin 1.
+ *   gecombineerd       → fondsMin 1 + generiekMin 1.
+ *   vergelijking       → perSourceMin q  (T5; toepassing volgt daar).
+ * De basis (alle minima 0) reproduceert exact het huidige selecteerChunks-gedrag,
+ * zodat de flag-uit-toestand non-regressief is.
+ */
+export function constraintsVoorProfiel(
+  profiel: RepresentatieProfiel | undefined,
+  budget: ConstraintBudget
+): RepresentatieConstraints {
+  const basis: RepresentatieConstraints = {
+    fondsMin: 0,
+    generiekMin: 0,
+    perSourceMin: 0,
+    maxPerSource: budget.maxPerSource,
+    maxTotal: budget.maxTotal,
+  };
+  switch (profiel) {
+    case "fonds":
+      return { ...basis, fondsMin: 1 };
+    case "gecombineerd":
+      return { ...basis, fondsMin: 1, generiekMin: 1 };
+    case "vergelijking":
+      return { ...basis, perSourceMin: budget.vergelijkMin ?? 1 };
+    case "generiek":
+    default:
+      return basis;
+  }
 }

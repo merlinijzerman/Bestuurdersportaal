@@ -71,3 +71,123 @@ export function selecteerChunks<T extends SelecteerbareChunk>(
 
   return gekozen;
 }
+
+// ── T1 — Representatie-constraintlaag (flag REPRESENTATIE_CONSTRAINTS) ────────
+//  De gepoolde ranking + vaste budget-afkap (selecteerChunks) kan een hele
+//  bronsoort onder het budget drukken (partnerbegrip-casus: 0 fondsbronnen onder
+//  een generieke ranking). Deze laag garandeert deterministisch een minimum-
+//  representatie per bibliotheek/bron VÓÓR de budget-afkap. Blijft puur & zonder
+//  Supabase; de constraints worden elders afgeleid (weeg-bronsoort.constraintsVoorProfiel).
+//
+//  Conventie (spiegelt weeg-bronsoort.weegBronsoort): bibliotheek === "generiek"
+//  is de generieke groep; al het overige telt als fonds.
+
+/** Gegarandeerde minima + plafonds voor de selectie. Alle minima 0 =
+ *  gedragsequivalent aan selecteerChunks (huidig gedrag). */
+export interface RepresentatieConstraints {
+  /** Minimum aantal fonds-chunks (bibliotheek !== "generiek"). */
+  fondsMin: number;
+  /** Minimum aantal generieke chunks (bibliotheek === "generiek"). */
+  generiekMin: number;
+  /** Minimum per afzonderlijke bron/document. T1: voorbereid (default 0, inert);
+   *  toepassing in de vergelijkmodus (T5). */
+  perSourceMin: number;
+  /** Plafond per bron/document (≡ maxPerDocument in selecteerChunks). */
+  maxPerSource: number;
+  /** Budget-afkap: totaal aantal chunks dat de prompt in gaat (≡ maxResults). */
+  maxTotal: number;
+}
+
+// De "generiek"-groep is expliciet die label-waarde; al het andere = fonds. Zo
+// vallen NULL/onbekende bibliotheek-waarden aan de fonds-kant (het portaal is
+// fondsgericht), consistent met weegBronsoort/prioriteit.
+function isGeneriekeLib(bibliotheek: string | null | undefined): boolean {
+  return bibliotheek === "generiek";
+}
+
+/**
+ * Selecteer chunks met gegarandeerde representatie-minima vóór de budget-afkap.
+ * Puur & deterministisch, faalt NOOIT: is een minimum niet haalbaar (te weinig
+ * kandidaten of alles dedup/maxPerSource-geblokkeerd), dan gaat de selectie door
+ * met wat er is — geen exception (signalering volgt in T3).
+ *
+ * Bewerkingsvolgorde binnen deze functie:
+ *   1) reserveer slots tot de minima (fonds/generiek, daarna per-bron) gehaald
+ *      zijn, in rangvolgorde binnen elke groep;
+ *   2) vul het resterende budget (maxTotal) op globale rang;
+ *   in beide fasen gelden maxPerSource én dedup (Jaccard ≥ dedupDrempel).
+ * De uitvoer behoudt de inkomende (rang-/weging-)volgorde.
+ *
+ * `bibliotheekVan` ontkoppelt de helper van de chunk-vorm (DocumentChunk nest
+ * bibliotheek onder `documenten`), net als weegBronsoort.
+ */
+export function selecteerMetConstraints<T extends SelecteerbareChunk>(
+  chunks: T[],
+  constraints: RepresentatieConstraints,
+  bibliotheekVan: (chunk: T) => string | null | undefined,
+  dedupDrempel = 0.85
+): T[] {
+  const { fondsMin, generiekMin, perSourceMin, maxPerSource, maxTotal } = constraints;
+
+  const gekozen = new Set<number>(); // indices in `chunks`
+  const perDoc = new Map<string, number>();
+  const woordSets: Set<string>[] = [];
+
+  // Probeer de chunk op index i toe te voegen. Respecteert de budget-afkap,
+  // maxPerSource en dedup — exact dezelfde poortvolgorde als selecteerChunks,
+  // zodat de dedup-uitkomst identiek is (een op maxPerSource afgewezen chunk
+  // belandt niet in woordSets). True = toegevoegd.
+  const probeerToevoegen = (i: number): boolean => {
+    if (gekozen.size >= maxTotal) return false;
+    if (gekozen.has(i)) return false;
+    const chunk = chunks[i];
+    const aantalDoc = perDoc.get(chunk.document_id) ?? 0;
+    if (aantalDoc >= maxPerSource) return false;
+    const ws = woordSet(chunk.tekst);
+    if (woordSets.some((b) => jaccard(ws, b) >= dedupDrempel)) return false;
+    gekozen.add(i);
+    perDoc.set(chunk.document_id, aantalDoc + 1);
+    woordSets.push(ws);
+    return true;
+  };
+
+  // Reserveer tot `doel` chunks die aan `predicate` voldoen zijn gekozen. Telt
+  // reeds-gekozen chunks (uit een vorige reserveringsronde) mee; loopt in
+  // rangvolgorde. Stopt zodra het doel of de budget-afkap is bereikt.
+  const reserveer = (predicate: (chunk: T) => boolean, doel: number): void => {
+    if (doel <= 0) return;
+    let gehaald = 0;
+    for (const i of gekozen) if (predicate(chunks[i])) gehaald++;
+    for (let i = 0; i < chunks.length && gehaald < doel && gekozen.size < maxTotal; i++) {
+      if (gekozen.has(i)) continue;
+      if (!predicate(chunks[i])) continue;
+      if (probeerToevoegen(i)) gehaald++;
+    }
+  };
+
+  // 1a) representatie-minima per bibliotheek (fonds vóór generiek: het portaal is
+  //     fondsgericht, dus bij krap budget wint de fonds-verplichting).
+  reserveer((c) => !isGeneriekeLib(bibliotheekVan(c)), fondsMin);
+  reserveer((c) => isGeneriekeLib(bibliotheekVan(c)), generiekMin);
+
+  // 1b) per-bron minimum (T5-voorbereiding; perSourceMin=0 → volledig inert).
+  //     Bronnen in volgorde van eerste voorkomen (= rang), zodat de reservering
+  //     deterministisch en rang-geordend is.
+  if (perSourceMin > 0) {
+    const gezien = new Set<string>();
+    for (let i = 0; i < chunks.length; i++) {
+      const docId = chunks[i].document_id;
+      if (gezien.has(docId)) continue;
+      gezien.add(docId);
+      reserveer((c) => c.document_id === docId, perSourceMin);
+    }
+  }
+
+  // 2) vul het resterende budget op globale rang.
+  for (let i = 0; i < chunks.length && gekozen.size < maxTotal; i++) {
+    probeerToevoegen(i);
+  }
+
+  // Uitvoer in inkomende (rang-/weging-)volgorde.
+  return [...gekozen].sort((a, b) => a - b).map((i) => chunks[i]);
+}

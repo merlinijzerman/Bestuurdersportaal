@@ -147,3 +147,36 @@ export const BRONKEUZE_MEETSET: MeetsetVraag[] = [
   { id: 71, label: "mag-terugvragen", vraag: "Wat is er besloten over de premie?", toelichting: '"besloten" (verbvorm) ≠ "besluit"; geen anker' },
   { id: 72, label: "mag-terugvragen", vraag: "Hoe zit het met de risico's?", toelichting: 'kaal "risico\'s" (geen "matrix"); geen anker' },
 ];
+
+// ── T1-NULMETING (2026-08-11, beslisnotitie v0.4 Deel A) — "begrip × wettelijke
+//    toets" — HER-ACCORDERING VÓÓR PRODUCTIE OPENSTAAND ────────────────────────
+//  BEWUST NIET opgenomen in BRONKEUZE_MEETSET en NIET door de classificatie-
+//  runner (lib/bronkeuze-classificatie.sanity.ts) geëvalueerd: dit is een
+//  NULMETING, geen geaccordeerd label. Deze vragen combineren een (impliciet
+//  fondsspecifiek) begrip met een wettelijke toets — het gewenste label is
+//  `gecombineerd`, maar de HUIDIGE classifier landt op `algemeen`/generiek
+//  (partnerbegrip-casus: 7 generieke citaties, 0 fondsbronnen). T1 levert het
+//  MECHANISME (representatie-constraints); T2 verfijnt de classifier (contrast-
+//  patroon → `gecombineerd`) zodat de JUISTE constraints worden gekozen. Pas met
+//  T1 + T2 samen is deze set end-to-end opgelost. Het `label`-veld = het GEWENSTE
+//  eindlabel (nulmeting-doel), niet de huidige uitkomst.
+//
+//  Compliance: nog te her-accorderen (meetset-first, zie ticket-DoD). Zodra T2
+//  landt en compliance tekent, verhuizen de geaccordeerde items naar
+//  BRONKEUZE_MEETSET en gaan ze mee in de pass/fail-drempels.
+export const BRONKEUZE_NULMETING_T1: MeetsetVraag[] = [
+  { id: 73, label: "gecombineerd", vraag: "Valt een samenwonende partner onder ons partnerbegrip volgens de Pensioenwet?", toelichting: "partnerbegrip (fondsspecifiek) × wettelijke toets; nu → algemeen" },
+  { id: 74, label: "gecombineerd", vraag: "Is ons partnerbegrip in lijn met de wettelijke definitie van partner?", toelichting: "eigen begrip × wet; nu → algemeen" },
+  { id: 75, label: "gecombineerd", vraag: "Voldoet onze definitie van arbeidsongeschiktheid aan de wettelijke eisen?", toelichting: "begrip × wettelijke eis; nu → algemeen" },
+  { id: 76, label: "gecombineerd", vraag: "Sluit ons begrip van gemoedsbezwaarde aan bij de Pensioenwet?", toelichting: "begrip × wet; nu → algemeen" },
+  { id: 77, label: "gecombineerd", vraag: "Hoe verhoudt onze uitleg van het begrip pensioengevend salaris zich tot de fiscale grenzen?", toelichting: "begrip × fiscaal kader; nu → algemeen" },
+  { id: 78, label: "gecombineerd", vraag: "Is ons begrip van scheiding en verevening consistent met de Wet verevening pensioenrechten?", toelichting: "begrip × specifieke wet; nu → algemeen" },
+  { id: 79, label: "gecombineerd", vraag: "Voldoet onze definitie van wezenpensioen aan de wettelijke leeftijdsgrenzen?", toelichting: "begrip × wettelijke grens; nu → algemeen" },
+  { id: 80, label: "gecombineerd", vraag: "Past ons begrip van deeltijdpensioen binnen de fiscale spelregels?", toelichting: "begrip × fiscaal; nu → algemeen" },
+  { id: 81, label: "gecombineerd", vraag: "Sluit ons hanteren van de AOW-franchise aan bij de wettelijke minimumfranchise?", toelichting: "begrip × wettelijk minimum; nu → algemeen" },
+  { id: 82, label: "gecombineerd", vraag: "Is onze uitleg van het nabestaandenpensioen op risicobasis in lijn met de Wtp?", toelichting: "begrip × Wtp-toets; nu → algemeen" },
+  { id: 83, label: "gecombineerd", vraag: "Voldoet ons begrip van de pensioenrichtleeftijd aan de wettelijke koppeling aan de AOW-leeftijd?", toelichting: "begrip × wettelijke koppeling; nu → algemeen" },
+  { id: 84, label: "gecombineerd", vraag: "Hoe verhoudt onze definitie van waardeoverdracht zich tot het wettelijke recht op waardeoverdracht?", toelichting: "begrip × wettelijk recht; nu → algemeen" },
+  { id: 85, label: "gecombineerd", vraag: "Is ons begrip van de afkoopgrens gelijk aan de wettelijke afkoopgrens voor kleine pensioenen?", toelichting: "begrip × wettelijke grens; nu → algemeen" },
+  { id: 86, label: "gecombineerd", vraag: "Sluit onze hantering van het begrip gewezen deelnemer aan bij de definitie in de Pensioenwet?", toelichting: "begrip × wettelijke definitie; nu → algemeen" },
+];

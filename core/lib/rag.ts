@@ -2,12 +2,16 @@
 import { neutraliseerBrontekst, maakBronSentinel } from "./bron-afbakening";
 import { createServerSupabase } from "./supabase-server";
 import { bouwTerugvalFtsQuery } from "./fts-terugval";
-import { selecteerChunks } from "./rag-select";
+import { selecteerChunks, selecteerMetConstraints } from "./rag-select";
 import { embedTekst, naarVectorLiteral } from "./embeddings";
 import { notulenBronLabel } from "./notulen";
 import { bouwBronfragment } from "./bronfragment";
 import type { RetrievalModus } from "./vraagtype";
-import { weegBronsoort, type Bronsoortprofiel } from "./weeg-bronsoort";
+import {
+  weegBronsoort,
+  constraintsVoorProfiel,
+  type Bronsoortprofiel,
+} from "./weeg-bronsoort";
 import { isStandaardZichtbaarInRag } from "./generiek-curatie";
 import { isReviewVerlopen } from "./generiek-status";
 import type { AssistantSource, AssistantSourceSamenvatting } from "./assistant-source";
@@ -146,20 +150,40 @@ function fondsMeta(
 }
 
 // Past de bronsoort-weging toe (indien een profiel is gezet) en knipt dan terug
-// tot de prompt-set. De weging gebeurt VÓÓR selecteerChunks — dat behoudt de
+// tot de prompt-set. De weging gebeurt VÓÓR de selectie — dat behoudt de
 // inkomende volgorde, dus de boost werkt door in welke chunks de top-N halen.
 // §8.3 #6-uitsluiting draait als eerste, zodat zwakke generieke chunks geen
 // prompt-plek bezetten die anders naar een fonds-/sterke bron was gegaan.
+//
+// Expliciete bewerkingsvolgorde (T1 — vastgelegd in code + comment):
+//   filters → weging (bronsoort) → [gereserveerd: regime-demotie, T4]
+//           → representatie-constraints → dedup → budget-afkap (maxTotal/maxPerSource)
+// De weging herordent alleen; ze garandeert geen minimum-representatie. Met de
+// flag REPRESENTATIE_CONSTRAINTS aan dwingt selecteerMetConstraints een gegarandeerd
+// minimum per bibliotheek/bron af (dedup + budget-afkap zitten in diezelfde pass).
+// Flag uit → exact het huidige selecteerChunks-gedrag (dedup + budget in één pass).
 function weegEnSelecteer(
   gerangschikt: DocumentChunk[],
   filters: RetrievalFilters | undefined,
   maxResults: number,
-  maxPerDoc: number
+  maxPerDoc: number,
+  constraintsAan: boolean
 ): DocumentChunk[] {
+  // filters
   const zichtbaar = filterZwakkeGeneriek(gerangschikt, filters);
+  // weging (bronsoort)
   const gewogen = filters?.bronsoortprofiel
     ? weegBronsoort(zichtbaar, (c) => c.documenten.bibliotheek, filters.bronsoortprofiel)
     : zichtbaar;
+  // [gereserveerd: regime-demotie (T4) — plek in de volgorde bewust vrijgehouden]
+  // representatie-constraints → dedup → budget-afkap
+  if (constraintsAan) {
+    const constraints = constraintsVoorProfiel(filters?.bronsoortprofiel, {
+      maxTotal: maxResults,
+      maxPerSource: maxPerDoc,
+    });
+    return selecteerMetConstraints(gewogen, constraints, (c) => c.documenten.bibliotheek);
+  }
   return selecteerChunks(gewogen, maxResults, maxPerDoc);
 }
 
@@ -204,6 +228,7 @@ export interface RetrievalOpties {
   relevantieDrempel?: boolean; // R1.5 ilike-uitsluiting (b1) + scoredrempel (b2)
   jargonExpansie?: boolean; // R1.4 FTS-jargonexpansie
   parentRetrieval?: boolean; // R1.6 small-to-big
+  representatieConstraints?: boolean; // T1 representatie-constraintlaag (bibliotheek/bron-minima)
   drempelWaarde?: number; // R1.5 b2-drempel op de rerankscore (0–100)
   rerankClient?: RerankClient; // injectie voor hermetische tests
   // Besluit 0139 (M-R3) — de OORSPRONKELIJKE gebruikersvraag, meegegeven wanneer
@@ -224,6 +249,7 @@ type VolledigeOpties = {
   relevantieDrempel: boolean;
   jargonExpansie: boolean;
   parentRetrieval: boolean;
+  representatieConstraints: boolean;
   drempelWaarde: number;
   rerankClient?: RerankClient;
 };
@@ -234,6 +260,8 @@ function volledigeOpties(o?: RetrievalOpties): VolledigeOpties {
     relevantieDrempel: o?.relevantieDrempel ?? process.env.RELEVANTIE_DREMPEL === "on",
     jargonExpansie: o?.jargonExpansie ?? process.env.JARGON_EXPANSIE === "on",
     parentRetrieval: o?.parentRetrieval ?? process.env.PARENT_RETRIEVAL === "on",
+    representatieConstraints:
+      o?.representatieConstraints ?? process.env.REPRESENTATIE_CONSTRAINTS === "on",
     drempelWaarde: o?.drempelWaarde ?? DEFAULT_RELEVANTIE_DREMPEL,
     rerankClient: o?.rerankClient,
   };
@@ -340,8 +368,15 @@ async function naVerwerking(
     kandidaten = behouden;
   }
 
-  // Bronsoort-weging + dedup + top-N (ongewijzigd; werkt op de nieuwe volgorde).
-  let geselecteerd = weegEnSelecteer(kandidaten, filters, maxResults, maxPerDoc);
+  // Bronsoort-weging (+ evt. representatie-constraints) + dedup + top-N; werkt op
+  // de nieuwe volgorde. De constraint-laag staat achter opties.representatieConstraints.
+  let geselecteerd = weegEnSelecteer(
+    kandidaten,
+    filters,
+    maxResults,
+    maxPerDoc,
+    opties.representatieConstraints
+  );
 
   // B1 — ilike-treffers zijn NOOIT citeerbaar: uit de prompt-set gehaald, alleen
   // als audit vastgelegd. Leeg resultaat valt op het bestaande geen-treffers-pad.
