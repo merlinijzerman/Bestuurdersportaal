@@ -849,6 +849,13 @@ const GENERIEK_INTENT_PATRONEN: RegExp[] = [
   /\bpensioenwet\b/,
   /\bde wet\b/,
   /\bwet\b/,
+  // T2 (beslisnotitie v0.4 Deel A) — fiscaal kader is óók een generiek/extern
+  // signaal: de begrip×toets-casus toetst een reglementair begrip soms aan de
+  // FISCALE grenzen ("… binnen de fiscale spelregels", "… tot de fiscale
+  // grenzen"), niet aan een 'wet'-woord. Zonder dit landde de intent op "fonds"
+  // i.p.v. "gecombineerd"; nu blijft de promptframing (Wvb/fiscaal kader ÉN
+  // reglement) consistent met de weeg-constraints (weeg-bronsoort.ts).
+  /fiscaal|fiscale/,
   /\bwtp\b/,
   /wet toekomst pensioenen/,
   /\bsector(?:breed|norm|guidance)?\b/,
@@ -891,6 +898,14 @@ const FONDS_INTENT_PATRONEN: RegExp[] = [
   /\bhet bestuur\b/,
   /\bdit fonds\b/,
   /\beigen (?:beleid|fonds|stukken|regeling)/,
+  // T2 (beslisnotitie v0.4 Deel A) — ankerloze contrastvariant "het/de huidige
+  // [begrip]" ("hoe verhoudt het huidige partnerbegrip zich tot de Pensioenwet?").
+  // Telt als fonds-anker zodat de intent (framing) GELIJK loopt met het
+  // bronsoortprofiel (weeg-bronsoort.ts): daar is "het/de huidige" óók een
+  // fonds-signaal, dus zonder deze regel zouden constraints (gecombineerd) en
+  // framing (algemeen) uiteenlopen op precies deze vragen. Geen leidende bare
+  // "huidige": vereist "het"/"de" ervoor, zodat "huidige rente" e.d. niet vuurt.
+  /\b(?:het|de) huidige\b/,
   // ── Portaalobjecten (besluit 0137, M-B4) → per definitie fondsspecifiek ──
   // Een besluit, agendapunt, notulen, vergadering, actiepunt/actie, (bestuurs)-
   // voorstel, risicomatrix of jaarplan verwijst naar de eigen inhoud van dít fonds;

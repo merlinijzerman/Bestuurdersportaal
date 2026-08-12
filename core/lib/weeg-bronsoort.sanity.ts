@@ -44,6 +44,48 @@ test("dubbel signaal → gecombineerd", () => {
   );
 });
 
+// ── T2 — begrip × wettelijke/fiscale toets (contrast) → gecombineerd ─────────
+// De "begrip×toets"-casus (beslisnotitie v0.4 Deel A): een reglementair begrip
+// getoetst aan een wettelijk/fiscaal kader. Vóór T2 landde dit op "generiek"
+// (kaal "ons" ontbrak) of "fonds" (kaal "wet"/fiscaal ontbrak) → 0 fondsbronnen.
+test("T2 begrip×wet-contrast → gecombineerd", () => {
+  // Gemelde casus (kaal "ons" + Pensioenwet):
+  assert.equal(
+    bepaalBronsoortprofiel("Valt een samenwonende partner onder ons partnerbegrip volgens de Pensioenwet?"),
+    "gecombineerd"
+  );
+  assert.equal(
+    bepaalBronsoortprofiel("Is ons partnerbegrip in lijn met de wettelijke definitie van partner?"),
+    "gecombineerd"
+  );
+  // Fiscaal kader (geen 'wet'-woord):
+  assert.equal(
+    bepaalBronsoortprofiel("Hoe verhoudt onze uitleg van pensioengevend salaris zich tot de fiscale grenzen?"),
+    "gecombineerd"
+  );
+  // Kaal "wet" (Wet verevening pensioenrechten):
+  assert.equal(
+    bepaalBronsoortprofiel("Is ons begrip van scheiding en verevening consistent met de Wet verevening pensioenrechten?"),
+    "gecombineerd"
+  );
+  // Ankerloze contrastvariant ("het huidige [begrip]", zonder ons/onze):
+  assert.equal(
+    bepaalBronsoortprofiel("Hoe verhoudt het huidige partnerbegrip zich tot de Pensioenwet?"),
+    "gecombineerd"
+  );
+});
+test("T2 negatieve controls — zuiver generiek/fonds ongewijzigd", () => {
+  // Zuiver generiek (wettelijk kader, geen fonds-anker) blijft generiek:
+  assert.equal(
+    bepaalBronsoortprofiel("Wat schrijft de Pensioenwet voor over partnerschap?"),
+    "generiek"
+  );
+  // Zuiver fonds (eigen begrip, geen wettelijke toets) blijft fonds:
+  assert.equal(bepaalBronsoortprofiel("Wat staat er in ons partnerbegrip?"), "fonds");
+  // "het huidige …" zonder generiek kader blijft fonds (geen valse generiek):
+  assert.equal(bepaalBronsoortprofiel("Wat is het huidige partnerbegrip binnen ons fonds?"), "fonds");
+});
+
 // ── Weging ──
 type C = { id: string; bib: string | null };
 const bibVan = (c: C) => c.bib;

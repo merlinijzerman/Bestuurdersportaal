@@ -46,6 +46,16 @@ const GENERIEK_PATRONEN: RegExp[] = [
   /extern(?:e)? kader/,
   /\bnorm(?:en|kader)?\b/,
   /algemeen(?:e)? (?:kader|praktijk)/,
+  // ── T2 (beslisnotitie v0.4 Deel A) — wettelijk/fiscaal kader ────────────────
+  // De "begrip × wettelijke toets"-casus ("… volgens de Wet verevening
+  // pensioenrechten", "… binnen de fiscale grenzen") gaf géén generiek-signaal:
+  // GENERIEK_PATRONEN kende alleen /\bpensioenwet\b/ en /\bwettelijk/, geen kale
+  // /\bwet\b/ en geen fiscaal. Hierdoor landde het profiel op "fonds" i.p.v.
+  // "gecombineerd". Toevoeging spiegelt de reeds-geijkte GENERIEK_INTENT_PATRONEN
+  // (vraagtype.ts), zodat weging én promptframing hetzelfde kader zien.
+  /\bde wet\b/,
+  /\bwet\b/,
+  /fiscaal|fiscale/,
 ];
 
 // Signaalwoorden voor een FONDS-specifieke vraag.
@@ -58,6 +68,19 @@ const FONDS_PATRONEN: RegExp[] = [
   /\bintern(?:e)?\b/,
   /\beigen (?:beleid|fonds|stukken)/,
   /\bons portaal\b/,
+  // ── T2 (beslisnotitie v0.4 Deel A) — reglementair begrip als fonds-anker ────
+  // Een reglementair begrip ("ons partnerbegrip", "ons begrip van …", "het
+  // huidige partnerbegrip") verwijst naar de eigen definitiekeuze van dít fonds.
+  // FONDS_PATRONEN kende /\bonze\b/ maar géén kale /\bons\b/, waardoor "ons
+  // partnerbegrip / ons begrip / ons hanteren" het fonds-signaal misten en de
+  // begrip×wet-casus als "generiek" classificeerde (0 fondsbronnen). Kale /\bons\b/
+  // spiegelt de geijkte FONDS_INTENT_PATRONEN (vraagtype.ts). "het/de huidige"
+  // vangt de ankerloze contrastvariant ("hoe verhoudt het huidige partnerbegrip
+  // zich tot de Pensioenwet?"). Bewust GEEN kale "begrip"/"partnerbegrip": een
+  // zuivere definitievraag ("wat is een partnerbegrip?") mag geen fonds-anker
+  // krijgen (conservatieve keuze, meetset-first).
+  /\bons\b/,
+  /\b(?:het|de) huidige\b/,
 ];
 
 /** Detecteer het bronsoortprofiel. Default "fonds": het portaal is

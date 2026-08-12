@@ -164,6 +164,15 @@ export const BRONKEUZE_MEETSET: MeetsetVraag[] = [
 //  Compliance: nog te her-accorderen (meetset-first, zie ticket-DoD). Zodra T2
 //  landt en compliance tekent, verhuizen de geaccordeerde items naar
 //  BRONKEUZE_MEETSET en gaan ze mee in de pass/fail-drempels.
+//
+//  ── STATUS NA T2 (2026-08-12) ────────────────────────────────────────────────
+//  T2 GELAND. bepaalBronsoortprofiel (weeg-bronsoort.ts, stuurt de constraints) +
+//  bepaalBronIntent (vraagtype.ts, stuurt de framing) classificeren nu ALLE
+//  onderstaande items als `gecombineerd`/zeker — nagerekend in
+//  weeg-bronsoort.sanity.ts (contrast + negatieve controls). De "nu → algemeen"-
+//  toelichtingen beschrijven dus de NULMETING (vóór T2), niet meer de uitkomst.
+//  Items 87-89 zijn de ankerloze contrastvarianten (zonder ons/onze) die de
+//  robuustheidsgrens markeren. De set blijft NON-graded tot compliance tekent.
 export const BRONKEUZE_NULMETING_T1: MeetsetVraag[] = [
   { id: 73, label: "gecombineerd", vraag: "Valt een samenwonende partner onder ons partnerbegrip volgens de Pensioenwet?", toelichting: "partnerbegrip (fondsspecifiek) × wettelijke toets; nu → algemeen" },
   { id: 74, label: "gecombineerd", vraag: "Is ons partnerbegrip in lijn met de wettelijke definitie van partner?", toelichting: "eigen begrip × wet; nu → algemeen" },
@@ -179,4 +188,10 @@ export const BRONKEUZE_NULMETING_T1: MeetsetVraag[] = [
   { id: 84, label: "gecombineerd", vraag: "Hoe verhoudt onze definitie van waardeoverdracht zich tot het wettelijke recht op waardeoverdracht?", toelichting: "begrip × wettelijk recht; nu → algemeen" },
   { id: 85, label: "gecombineerd", vraag: "Is ons begrip van de afkoopgrens gelijk aan de wettelijke afkoopgrens voor kleine pensioenen?", toelichting: "begrip × wettelijke grens; nu → algemeen" },
   { id: 86, label: "gecombineerd", vraag: "Sluit onze hantering van het begrip gewezen deelnemer aan bij de definitie in de Pensioenwet?", toelichting: "begrip × wettelijke definitie; nu → algemeen" },
+  // ── T2-uitbreiding (2026-08-12) — ANKERLOZE contrastvarianten (geen ons/onze) ──
+  // Robuustheidsgrens: "het huidige [begrip]" telt als fonds-anker (weeg +
+  // vraagtype), dus deze halen `gecombineerd` zónder bezittelijk voornaamwoord.
+  { id: 87, label: "gecombineerd", vraag: "Hoe verhoudt het huidige partnerbegrip zich tot de Pensioenwet?", toelichting: "'het huidige [begrip]' (ankerloos) × Pensioenwet" },
+  { id: 88, label: "gecombineerd", vraag: "Sluit de huidige definitie van arbeidsongeschiktheid aan bij de wettelijke eisen?", toelichting: "'de huidige [definitie]' (ankerloos) × wettelijke eis" },
+  { id: 89, label: "gecombineerd", vraag: "Past het huidige begrip van deeltijdpensioen binnen de fiscale grenzen?", toelichting: "'het huidige [begrip]' (ankerloos) × fiscaal kader" },
 ];
