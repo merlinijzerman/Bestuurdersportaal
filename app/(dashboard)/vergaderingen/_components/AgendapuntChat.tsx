@@ -63,7 +63,9 @@ import {
   type ReflectieStatus,
   type ReflectieIngang,
 } from "@/core/lib/reflectie-flow";
-import ReflectieKaart from "@/core/components/ReflectieKaart";
+import ReflectieKaart, {
+  REFLECTIE_VRAAG_BESLUITMOMENT,
+} from "@/core/components/ReflectieKaart";
 import ReflectieInvoer from "@/core/components/ReflectieInvoer";
 // Gedeelde gefaseerde statusweergave (besluit 0087), gelijk aan /ai.
 import {
@@ -175,6 +177,11 @@ export default function AgendapuntChat({
   const [reflectieStatus, setReflectieStatus] =
     useState<ReflectieStatus>("niet_actief");
   const [uitnodigingZichtbaar, setUitnodigingZichtbaar] = useState(false);
+  // B-opt tranche 1c — besluitmoment-variant van de openingsvraag bij een
+  // proactieve trigger; de permanent beschikbare actie blijft de standaardvraag.
+  const [uitnodigingBesluitmoment, setUitnodigingBesluitmoment] = useState(false);
+  // B-opt tranche 1a — eigen laatste reflectieantwoord, voor de Aanpassen-flow.
+  const [laatsteReflectieAntwoord, setLaatsteReflectieAntwoord] = useState("");
   const [uitnodigingToegestaan, setUitnodigingToegestaan] = useState(false);
 
   const fondsIdRef = useRef<string>("");
@@ -564,6 +571,9 @@ export default function AgendapuntChat({
     // Plateau B — deze beurt komt uit het GELABELDE reflectie-invoerveld, niet
     // uit de normale invoerbalk (FR-56). Nooit een classificatie op inhoud.
     reflectieAntwoord?: boolean;
+    // B-opt tranche 1a — herformuleren vanuit de conceptweergave (knop
+    // "Aanpassen"): blijft in conceptweergave, beurt onveranderd.
+    reflectieHerformuleren?: boolean;
     reflectieStart?: { ingang: ReflectieIngang; bronsetLogId: string | null };
   }
 
@@ -614,6 +624,7 @@ export default function AgendapuntChat({
           // tegen de opnieuw uitgelezen flowstatus (FR-67). Past de gevraagde
           // overgang niet, dan is dit gewoon een normale chatbeurt.
           reflectie_antwoord: opties?.reflectieAntwoord === true,
+          reflectie_herformuleren: opties?.reflectieHerformuleren === true,
           reflectie_start: opties?.reflectieStart
             ? {
                 ingang: opties.reflectieStart.ingang,
@@ -877,6 +888,10 @@ export default function AgendapuntChat({
   /** De flowstatus opnieuw ophalen bij het openen van een gesprek (AC-23). */
   async function herstelReflectieStatus(id: string) {
     setUitnodigingZichtbaar(false);
+    setUitnodigingBesluitmoment(false);
+    // B-opt 1a — voorvultekst van "Aanpassen" is niet persistent en hoort bij het
+    // gesprek waarin hij is getypt; bij herstel niet meenemen (code-review).
+    setLaatsteReflectieAntwoord("");
     try {
       const res = await fetch(
         `/api/reflectie/transitie?gesprek_id=${encodeURIComponent(id)}`
@@ -890,12 +905,14 @@ export default function AgendapuntChat({
 
   /**
    * Mag er nú een proactieve uitnodiging verschijnen? Zie de uitgebreide
-   * toelichting in AssistentClient.tsx; hier geldt alleen T4 (risico-/
-   * evenwichtigheidsanalyse), omdat een agendapuntchat per definitie geen
-   * bibliotheekbrede besluitrijpheidsanalyse is.
+   * toelichting in AssistentClient.tsx.
    *
-   * ⚠ T4 leunt op de antwoordmodus als classificatie — een aanname, want er is
-   * geen takenregister. Te bevestigen in de gebruikerstoets (besluit 0122).
+   * ⚠ B-opt tranche 1b — de `sparring`-proxy is vervallen (H-3); alleen
+   * `besluitrijpheid` blijft over. In de agendapuntchat is dat een zeldzamer
+   * signaal dan in /ai, dus de proactieve uitnodiging verschijnt hier minder
+   * vaak; de permanent beschikbare actie "Reflecteer op dit antwoord" blijft
+   * altijd bereikbaar. Dat `besluitrijpheid` het triggersignaal is, blijft een
+   * aanname (geen takenregister) — te bevestigen in de gebruikerstoets (0122).
    */
   function overweegUitnodiging(
     onderbouwing: OnderbouwingMeta | undefined,
@@ -903,14 +920,21 @@ export default function AgendapuntChat({
   ) {
     if (!uitnodigingToegestaan) return;
     if (reflectieStatus !== "niet_actief") return;
-    if (opties?.reflectieAntwoord || opties?.reflectieStart) return;
+    if (
+      opties?.reflectieAntwoord ||
+      opties?.reflectieStart ||
+      opties?.reflectieHerformuleren
+    )
+      return;
     const modus = leesAntwoordmodus(onderbouwing?.antwoordmodus);
-    if (modus !== "sparring" && modus !== "besluitrijpheid") return;
+    if (modus !== "besluitrijpheid") return;
 
     const context = gesprekId.current;
     if (!context) return;
     if (reflectieUitnodigingGetoond(context)) return;
     markeerReflectieUitnodiging(context);
+    // B-opt tranche 1c — de overgebleven trigger is een besluitrijpheidsmoment.
+    setUitnodigingBesluitmoment(true);
     setUitnodigingZichtbaar(true);
   }
 
@@ -1234,6 +1258,11 @@ export default function AgendapuntChat({
                           {!isReflectieActief(reflectieStatus) &&
                             (uitnodigingZichtbaar ? (
                               <ReflectieKaart
+                                vraag={
+                                  uitnodigingBesluitmoment
+                                    ? REFLECTIE_VRAAG_BESLUITMOMENT
+                                    : undefined
+                                }
                                 onKies={startReflectie}
                                 onSluit={() => setUitnodigingZichtbaar(false)}
                                 bezig={laden}
@@ -1241,10 +1270,14 @@ export default function AgendapuntChat({
                             ) : (
                               /* De permanent beschikbare actie (v1.0 §9.1 A):
                                  rustig, altijd bereikbaar, telt niet mee in de
-                                 frequentiebegrenzing. */
+                                 frequentiebegrenzing. Zelf gekozen ⇒
+                                 standaardvraag, geen besluitmoment-variant. */
                               <button
                                 type="button"
-                                onClick={() => setUitnodigingZichtbaar(true)}
+                                onClick={() => {
+                                  setUitnodigingBesluitmoment(false);
+                                  setUitnodigingZichtbaar(true);
+                                }}
                                 className="mt-2 text-xs text-muted hover:text-ink transition-colors"
                               >
                                 Reflecteer op dit antwoord
@@ -1255,11 +1288,21 @@ export default function AgendapuntChat({
                             <ReflectieInvoer
                               status={reflectieStatus}
                               bezig={laden}
-                              onAntwoord={(t) =>
-                                void stuurBericht(t, { reflectieAntwoord: true })
-                              }
+                              laatsteAntwoord={laatsteReflectieAntwoord}
+                              onAntwoord={(t) => {
+                                setLaatsteReflectieAntwoord(t);
+                                void stuurBericht(t, { reflectieAntwoord: true });
+                              }}
                               onAfronden={() => vraagTransitie("afronden")}
-                              onAanpassen={() => setUitnodigingZichtbaar(false)}
+                              onHerformuleren={(t) => {
+                                // B-opt tranche 1a — herformuleren blijft in
+                                // conceptweergave; het concept wordt opnieuw
+                                // opgebouwd met deze eigen inbreng.
+                                setLaatsteReflectieAntwoord(t);
+                                void stuurBericht(t, {
+                                  reflectieHerformuleren: true,
+                                });
+                              }}
                               onAfbreken={() => vraagTransitie("afbreken")}
                             />
                           )}

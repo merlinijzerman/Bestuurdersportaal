@@ -6,8 +6,8 @@
 //
 //   1. De VOLLEDIGE transitietabel — elke geldige overgang slaagt en, wat meer
 //      zegt, elke andere combinatie van (status, actie) faalt. Die tweede helft
-//      is uitputtend: 7 statussen × 5 acties = 35 combinaties, waarvan er 15
-//      geldig zijn. De overige 20 moeten hard geweigerd worden (AC-18).
+//      is uitputtend: 7 statussen × 6 acties = 42 combinaties, waarvan er 15
+//      geldig zijn. De overige 27 moeten hard geweigerd worden (AC-18).
 //   2. De fail-safe: een status ouder dan FAILSAFE_UREN telt niet meer, en bij
 //      elke vorm van twijfel is het antwoord `niet_actief` (AC-23).
 //   3. De beurtregel: bij beurt >= MAX_BEURTEN is `conceptweergave` verplicht.
@@ -65,6 +65,7 @@ const GELDIG: ReadonlyArray<[ReflectieStatus, ReflectieActie, ReflectieStatus[]]
   ["verdieping_1", "concept", ["conceptweergave"]],
   ["verdieping_2", "concept", ["conceptweergave"]],
   ["verdieping_3", "concept", ["conceptweergave"]],
+  ["conceptweergave", "herformuleren", ["conceptweergave"]],
   ["conceptweergave", "afronden", ["afgerond"]],
   ["ingang_gekozen", "afbreken", ["niet_actief"]],
   ["verdieping_1", "afbreken", ["niet_actief"]],
@@ -107,9 +108,9 @@ test("elke NIET-geldige (status, actie)-combinatie wordt geweigerd", () => {
       geweigerd++;
     }
   }
-  // 7 statussen × 5 acties = 35; 14 rijen geldig ⇒ 21 ongeldig.
+  // 7 statussen × 6 acties = 42; 15 rijen geldig ⇒ 27 ongeldig.
   assert.equal(geweigerd, REFLECTIE_STATUSSEN.length * REFLECTIE_ACTIES.length - GELDIG.length);
-  assert.equal(geweigerd, 21);
+  assert.equal(geweigerd, 27);
 });
 
 test("het beurtplafond: geen vierde verdiepingsantwoord", () => {
@@ -130,6 +131,26 @@ test("het beurtplafond: geen vierde verdiepingsantwoord", () => {
   }
   assert.equal(status, "verdieping_3");
   assert.equal(volgendeNaAntwoord(status, MAX_BEURTEN + 1), null);
+});
+
+test("B-opt 1a: herformuleren is een zelf-lus, uitsluitend vanuit conceptweergave", () => {
+  // De belofte van de knop "Aanpassen": blijven in conceptweergave, geen extra
+  // beurt. Op transitieniveau is dat exact één toegestane overgang.
+  assert.deepEqual(
+    [...toegestaneDoelen("conceptweergave", "herformuleren")],
+    ["conceptweergave"]
+  );
+  assert.equal(magTransitie("conceptweergave", "herformuleren", "conceptweergave"), true);
+  // Vanuit elke andere status is herformuleren ongeldig — het is geen
+  // verdiepingsactie en kan de bevroren bronset of de beurt niet aanraken.
+  for (const s of REFLECTIE_STATUSSEN) {
+    if (s === "conceptweergave") continue;
+    assert.equal(magTransitie(s, "herformuleren"), false, `herformuleren vanuit ${s}`);
+  }
+  // Herformuleren verhoogt de beurt niet: het is geen `antwoord`. De beurt-borging
+  // zelf zit in reflectie_transitie() (SQL), maar hier borgen we dat de actie geen
+  // antwoord-overgang meelift.
+  assert.equal(volgendeNaAntwoord("conceptweergave", 1), null);
 });
 
 test("AC-18: de vijf pogingen uit het acceptatiecriterium falen alle vijf", () => {
@@ -266,6 +287,7 @@ test("type-guards weigeren invoer van buiten", () => {
   assert.equal(isReflectieStatus(null), false);
   assert.equal(isReflectieStatus(42), false);
   assert.equal(isReflectieActie("afbreken"), true);
+  assert.equal(isReflectieActie("herformuleren"), true);
   assert.equal(isReflectieActie("verwijderen"), false);
   assert.equal(isReflectieIngang("onderbouwing"), true);
   assert.equal(isReflectieIngang("geen_aanvullende_reflectie"), false);

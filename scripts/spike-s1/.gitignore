@@ -1,0 +1,7 @@
+# Ruwe testdocumenten = ECHTE fondsdata → nooit committen.
+data/
+
+# Meetuitvoer bevat evidence-strings uit die documenten → ook niet committen.
+output/
+
+# Wél in versiebeheer: golden_set.json, golden_set.EXAMPLE.json en de scripts.

@@ -42,7 +42,9 @@ import {
   type ReflectieStatus,
   type ReflectieIngang,
 } from "@/core/lib/reflectie-flow";
-import ReflectieKaart from "@/core/components/ReflectieKaart";
+import ReflectieKaart, {
+  REFLECTIE_VRAAG_BESLUITMOMENT,
+} from "@/core/components/ReflectieKaart";
 import ReflectieInvoer from "@/core/components/ReflectieInvoer";
 import { verwijderDialoogTekst, verwijderGesprekViaApi } from "@/core/lib/gesprek-verwijderen";
 import type {
@@ -309,6 +311,14 @@ export default function AssistentClient({
   // 0109). Ze staat daarom in componentstate en nergens anders — wegklikken
   // raakt `gesprekken.berichten` niet en schrijft geen auditregel.
   const [uitnodigingZichtbaar, setUitnodigingZichtbaar] = useState(false);
+  // B-opt tranche 1c — is de PROACTIEVE uitnodiging een besluitmoment? Zo ja, dan
+  // de besluitmoment-variant van de openingsvraag. De permanent beschikbare actie
+  // ("Reflecteer op dit antwoord") is dat niet: die kiest de bestuurder zelf op
+  // een willekeurig antwoord, dus daar blijft de standaardvraag staan.
+  const [uitnodigingBesluitmoment, setUitnodigingBesluitmoment] = useState(false);
+  // B-opt tranche 1a — het eigen laatste reflectieantwoord, om het herformuleer-
+  // veld ("Aanpassen") mee voor te vullen. Nooit de AI-tekst van het concept.
+  const [laatsteReflectieAntwoord, setLaatsteReflectieAntwoord] = useState("");
   // Permanente opt-out uit het profiel (FR-15). Default aan; pas als het profiel
   // geladen is kan hij uit staan. Zolang we het niet weten tonen we niets —
   // liever geen uitnodiging dan een uitnodiging aan wie hem heeft uitgezet.
@@ -1120,6 +1130,10 @@ export default function AssistentClient({
     // uit de normale invoerbalk. Het onderscheid volgt uitsluitend uit het
     // invoerkanaal; er wordt nooit op inhoud geclassificeerd (FR-56).
     reflectieAntwoord?: boolean;
+    // B-opt tranche 1a — deze beurt is een HERFORMULERING vanuit de
+    // conceptweergave (knop "Aanpassen"). Stuurt actie `herformuleren`; de status
+    // blijft conceptweergave en de beurt verandert niet.
+    reflectieHerformuleren?: boolean;
     // De gekozen reflectie-ingang + de logregel waarvan de bronset bevriest.
     reflectieStart?: { ingang: ReflectieIngang; bronsetLogId: string | null };
   }
@@ -1253,6 +1267,7 @@ export default function AssistentClient({
           // dan wordt deze beurt gewoon als normale chatbeurt afgehandeld —
           // een client kan zich dus geen reflectie toe-eigenen (FR-67).
           reflectie_antwoord: opties?.reflectieAntwoord === true,
+          reflectie_herformuleren: opties?.reflectieHerformuleren === true,
           reflectie_start: opties?.reflectieStart
             ? {
                 ingang: opties.reflectieStart.ingang,
@@ -1658,6 +1673,12 @@ export default function AssistentClient({
    */
   async function herstelReflectieStatus(id: string) {
     setUitnodigingZichtbaar(false);
+    setUitnodigingBesluitmoment(false);
+    // B-opt 1a — de voorvultekst van "Aanpassen" is niet persistent en hoort bij
+    // het gesprek waarin hij is getypt. Bij het herstellen van een (ander)
+    // gesprek is die eigen tekst niet beschikbaar; dan liever een leeg veld dan
+    // de tekst uit een vorig gesprek. Zie code-review B-opt tranche 1.
+    setLaatsteReflectieAntwoord("");
     try {
       const res = await fetch(
         `/api/reflectie/transitie?gesprek_id=${encodeURIComponent(id)}`
@@ -1692,24 +1713,32 @@ export default function AssistentClient({
   ) {
     if (!uitnodigingToegestaan) return;              // 1 — permanente opt-out
     if (reflectieStatus !== "niet_actief") return;   // 2 — er loopt er al een
-    if (opties?.reflectieAntwoord || opties?.reflectieStart) return;
+    if (
+      opties?.reflectieAntwoord ||
+      opties?.reflectieStart ||
+      opties?.reflectieHerformuleren
+    )
+      return;
     if (opties?.transformatie) {
       // T3 — "werk uit richting besluitvorming" is de enige transformatie die
       // als vergelijking van alternatieven telt. De overige (korter, concreter,
       // feitelijker) zijn opmaakacties en verdienen geen uitnodiging.
       if (opties.antwoordmodusOverride !== "besluitrijpheid") return;
     } else {
-      // T2 — besluitrijpheidsanalyse; T4 — risico-/evenwichtigheidsanalyse
-      // (sparringmodus is de bestaande classificatie die daar het dichtst bij
-      // komt).
+      // T2 — besluitrijpheidsanalyse. B-opt tranche 1b: de `sparring`-proxy is
+      // vervallen — die vuurde te breed en was de meest waarschijnlijke oorzaak
+      // van "verschijnt te vaak" (H-3). Alleen `besluitrijpheid` blijft over.
       const modus = leesAntwoordmodus(onderbouwing?.antwoordmodus);
-      if (modus !== "besluitrijpheid" && modus !== "sparring") return;
+      if (modus !== "besluitrijpheid") return;
     }
 
     const context = gesprekId.current;
     if (!context) return;
     if (reflectieUitnodigingGetoond(context)) return; // 4 — één per sessie
     markeerReflectieUitnodiging(context);
+    // B-opt tranche 1c — elke overgebleven proactieve trigger (T2/T3) is een
+    // besluitrijpheidsmoment; toon dus de besluitmoment-variant van de vraag.
+    setUitnodigingBesluitmoment(true);
     setUitnodigingZichtbaar(true);
   }
 
@@ -1911,6 +1940,11 @@ export default function AssistentClient({
     // Plateau B — een schone chat begint zonder reflectie en zonder kaart.
     setReflectieStatus("niet_actief");
     setUitnodigingZichtbaar(false);
+    setUitnodigingBesluitmoment(false);
+    // B-opt 1a — de voorvultekst van "Aanpassen" hoort bij het vorige gesprek;
+    // nooit meenemen naar een nieuw gesprek (het moet de EIGEN woorden van dít
+    // gesprek zijn).
+    setLaatsteReflectieAntwoord("");
   }
 
   // ── @-mention-typeahead op documenttitels ──────────────────────────────────
@@ -2596,6 +2630,11 @@ export default function AssistentClient({
                       <>
                         {uitnodigingZichtbaar ? (
                           <ReflectieKaart
+                            vraag={
+                              uitnodigingBesluitmoment
+                                ? REFLECTIE_VRAAG_BESLUITMOMENT
+                                : undefined
+                            }
                             onKies={startReflectie}
                             onSluit={sluitUitnodiging}
                             bezig={laden}
@@ -2603,10 +2642,15 @@ export default function AssistentClient({
                         ) : (
                           /* De PERMANENT beschikbare actie (v1.0 §9.1 A):
                              rustig, niet-prominent, altijd bereikbaar en niet
-                             meegeteld in enige frequentiebegrenzing. */
+                             meegeteld in enige frequentiebegrenzing. Zelf gekozen
+                             op een willekeurig antwoord ⇒ standaardvraag, geen
+                             besluitmoment-variant. */
                           <button
                             type="button"
-                            onClick={() => setUitnodigingZichtbaar(true)}
+                            onClick={() => {
+                              setUitnodigingBesluitmoment(false);
+                              setUitnodigingZichtbaar(true);
+                            }}
                             className="mt-2 text-xs text-muted hover:text-ink transition-colors"
                           >
                             Reflecteer op dit antwoord
@@ -2619,16 +2663,19 @@ export default function AssistentClient({
                       <ReflectieInvoer
                         status={reflectieStatus}
                         bezig={laden}
-                        onAntwoord={(t) =>
-                          stuurBericht(t, { reflectieAntwoord: true })
-                        }
+                        laatsteAntwoord={laatsteReflectieAntwoord}
+                        onAntwoord={(t) => {
+                          setLaatsteReflectieAntwoord(t);
+                          stuurBericht(t, { reflectieAntwoord: true });
+                        }}
                         onAfronden={() => vraagTransitie("afronden")}
-                        onAanpassen={() => {
-                          // "Aanpassen" is geen transitie: de bestuurder
-                          // herformuleert en het concept wordt opnieuw getoond.
-                          // De status blijft `conceptweergave`.
-                          setUitnodigingZichtbaar(false);
-                          invoerRef.current?.focus();
+                        onHerformuleren={(t) => {
+                          // B-opt tranche 1a — de bestuurder scherpt zijn eigen
+                          // overweging aan. Actie `herformuleren`: blijft in
+                          // conceptweergave, beurt onveranderd; het concept wordt
+                          // opnieuw opgebouwd met deze inbreng.
+                          setLaatsteReflectieAntwoord(t);
+                          stuurBericht(t, { reflectieHerformuleren: true });
                         }}
                         onAfbreken={() => vraagTransitie("afbreken")}
                       />

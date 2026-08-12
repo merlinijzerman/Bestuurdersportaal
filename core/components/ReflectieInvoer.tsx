@@ -33,8 +33,20 @@ interface Props {
   onAntwoord: (tekst: string) => void;
   /** "Klopt" of "Afronden zonder aparte notitie" — beide ronden de flow af. */
   onAfronden: () => void;
-  /** "Aanpassen" — de gebruiker herformuleert; blijft in conceptweergave. */
-  onAanpassen: () => void;
+  /**
+   * "Aanpassen" — de bestuurder herformuleert zijn EIGEN overweging (B-opt
+   * tranche 1a). Het reflectieveld heropent, voorgevuld met zijn laatste
+   * antwoord; de tekst gaat als `herformuleren`-beurt naar de chatroute en de
+   * status blijft `conceptweergave`. Nadrukkelijk NIET de normale invoerbalk:
+   * die zou de reflectie beëindigen (FR-56).
+   */
+  onHerformuleren: (tekst: string) => void;
+  /**
+   * Het eigen laatste antwoord van de bestuurder, om het herformuleerveld mee
+   * voor te vullen. Nooit de AI-tekst van het concept — anders bewerkt hij
+   * modelformuleringen en wordt het langzaam de tekst van het model.
+   */
+  laatsteAntwoord?: string;
   /** De reflectie beëindigen zonder af te ronden ("terug naar het gesprek"). */
   onAfbreken: () => void;
   bezig?: boolean;
@@ -44,16 +56,89 @@ export default function ReflectieInvoer({
   status,
   onAntwoord,
   onAfronden,
-  onAanpassen,
+  onHerformuleren,
+  laatsteAntwoord = "",
   onAfbreken,
   bezig = false,
 }: Props) {
   const [tekst, setTekst] = useState("");
+  // Lokale sub-stand van de conceptweergave: toont het herformuleerveld i.p.v.
+  // de drie afrondknoppen. Bewust lokaal — het is een vluchtige UI-keuze die
+  // niets mag opslaan (besluit 0112). Bij het verlaten van `conceptweergave`
+  // (afronden/afbreken) unmount dit blok en valt de stand vanzelf terug.
+  const [aanpassen, setAanpassen] = useState(false);
 
   if (status === "niet_actief") return null;
 
-  // ── Conceptweergave: de drie labels, geen invoerveld ──────────────────────
+  // ── Conceptweergave ───────────────────────────────────────────────────────
   if (status === "conceptweergave") {
+    // Sub-stand "Aanpassen": het gelabelde reflectieveld, voorgevuld met het
+    // eigen laatste antwoord. Versturen stuurt een `herformuleren`-beurt; de
+    // status blijft conceptweergave en de beurt verandert niet (B-opt 1a).
+    if (aanpassen) {
+      const verstuurHerformulering = () => {
+        const schoon = tekst.trim();
+        if (!schoon || bezig) return;
+        setAanpassen(false);
+        setTekst("");
+        onHerformuleren(schoon);
+      };
+      return (
+        <div className="mt-3 rounded-lg border border-line bg-card px-4 py-3">
+          <label
+            htmlFor="reflectie-herformuleren"
+            className="block text-xs font-medium text-ink"
+          >
+            Vul aan of herformuleer uw overweging
+          </label>
+          <textarea
+            id="reflectie-herformuleren"
+            value={tekst}
+            onChange={(e) => setTekst(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                verstuurHerformulering();
+              }
+            }}
+            disabled={bezig}
+            rows={3}
+            autoFocus
+            placeholder="In uw eigen woorden — het concept wordt hierna opnieuw opgebouwd."
+            className="mt-1.5 w-full resize-none rounded-md border border-line bg-surface px-3 py-2 text-sm text-ink placeholder:text-muted focus:border-accent focus:outline-none disabled:opacity-40"
+          />
+          <div className="mt-2 flex items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={verstuurHerformulering}
+              disabled={bezig || tekst.trim().length === 0}
+              className="text-xs text-ink bg-surface border border-line rounded-full px-3 py-1 hover:border-accent hover:bg-warn-tint disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Versturen
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAanpassen(false);
+                setTekst("");
+              }}
+              disabled={bezig}
+              className="text-xs text-muted hover:text-ink disabled:opacity-40 transition-colors"
+            >
+              Annuleren
+            </button>
+          </div>
+          {/* Dezelfde blokker-vooraf als in de verdiepingsfase: de normale
+              invoerbalk beëindigt de reflectie, dit veld niet. */}
+          <p className="mt-2 text-[11px] leading-snug text-muted">
+            Stelt u hieronder een gewone vraag in de invoerbalk, dan wordt de
+            reflectie afgerond en behandeld als een normale beurt.
+          </p>
+        </div>
+      );
+    }
+
+    // Standaard: de drie afrondlabels, geen invoerveld.
     return (
       <div className="mt-3 rounded-lg border border-line bg-card px-4 py-3">
         <div className="flex flex-wrap gap-1.5">
@@ -67,7 +152,13 @@ export default function ReflectieInvoer({
           </button>
           <button
             type="button"
-            onClick={onAanpassen}
+            onClick={() => {
+              // "Aanpassen" opent het EIGEN reflectieveld, voorgevuld met de
+              // eigen laatste inbreng — niet de chatbalk (dat brak de belofte,
+              // H-1). Geen transitie: die volgt pas bij Versturen.
+              setTekst(laatsteAntwoord);
+              setAanpassen(true);
+            }}
             disabled={bezig}
             className="text-xs text-ink bg-surface border border-line rounded-full px-3 py-1 hover:border-accent hover:bg-warn-tint disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >

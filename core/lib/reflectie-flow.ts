@@ -49,6 +49,13 @@ export const REFLECTIE_ACTIES = [
   "concept",
   "afronden",
   "afbreken",
+  // B-opt tranche 1a (besluit "herformuleren als expliciete transitie"): de
+  // bestuurder scherpt vanuit de conceptweergave zijn EIGEN tekst aan. Blijft in
+  // `conceptweergave` en verhoogt de beurt NIET — het is geen extra
+  // verdiepingsvraag maar dezelfde overweging opnieuw verwoord. De normale
+  // invoerbalk blijft de reflectie beëindigen (FR-56); dit is het aparte pad dat
+  // de belofte van de knop "Aanpassen" waarmaakt.
+  "herformuleren",
 ] as const;
 
 export type ReflectieActie = (typeof REFLECTIE_ACTIES)[number];
@@ -193,6 +200,12 @@ const TRANSITIES: ReadonlyArray<{
   { van: "verdieping_1", actie: "concept", naar: ["conceptweergave"] },
   { van: "verdieping_2", actie: "concept", naar: ["conceptweergave"] },
   { van: "verdieping_3", actie: "concept", naar: ["conceptweergave"] },
+  // `herformuleren` is een zelf-lus op de conceptweergave (B-opt tranche 1a): de
+  // bestuurder herformuleert zijn eigen overweging, waarna het concept opnieuw
+  // wordt opgebouwd. De status blijft `conceptweergave` en de beurt verandert
+  // niet — het is geen nieuwe verdiepingsvraag. Enkel vanuit `conceptweergave`
+  // toegestaan; vanuit elke andere status valt hij door naar ongeldige_transitie.
+  { van: "conceptweergave", actie: "herformuleren", naar: ["conceptweergave"] },
   { van: "conceptweergave", actie: "afronden", naar: ["afgerond"] },
   // Afbreken kan vanuit elke status waarin de flow leeft. Wordt óók getriggerd
   // door een gewone chatbeurt via de normale invoerbalk (FR-56).

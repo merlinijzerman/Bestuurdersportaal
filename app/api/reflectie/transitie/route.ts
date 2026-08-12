@@ -68,6 +68,15 @@ function naarAntwoord(rij: StateRij | null): StatusAntwoord {
   }
   const bijgewerkt =
     typeof rij.bijgewerkt_op === "string" ? Date.parse(rij.bijgewerkt_op) : null;
+  // B-opt tranche 1d — `laatsteBerichtIsReflectie` wordt hier BEWUST niet
+  // meegegeven en valt terug op de default `true`. De tweede FR-57-voorwaarde
+  // ("het laatste bericht is geen reflectiebericht") is namelijk al upstream
+  // afgedwongen: elke gewone beurt via de normale invoerbalk laat de chatroute
+  // `afbreken` sturen, wat de flow op `niet_actief` zet. Deze statusroute leest
+  // dus nooit een status die door een tussentijds niet-reflectiebericht ongeldig
+  // zou moeten zijn — alleen de tijdgebonden fail-safe is hier nog relevant. De
+  // parameter blijft bestaan voor toekomstige aanroepers die dat signaal wél
+  // hebben; hij is niet dood, alleen op dit pad niet nodig.
   const status = effectieveStatus(
     rij.status as ReflectieStatus | null,
     Number.isNaN(bijgewerkt) ? null : bijgewerkt,

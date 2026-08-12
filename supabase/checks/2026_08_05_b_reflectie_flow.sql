@@ -548,13 +548,42 @@ begin
   raise notice 'OK 18f: beurt 1→2→3, vierde antwoord geweigerd, bronset onveranderd.';
 end $$;
 
--- ── De rest van de flow: concept → afronden → terug naar niet_actief ──────
+-- ── AC-18g — herformuleren (B-opt tranche 1a) ─────────────────────────────
+-- De actie `herformuleren` blijft in conceptweergave, verhoogt de beurt NIET en
+-- laat de bevroren bronset en de ingang ongemoeid. Vanuit elke andere status is
+-- hij ongeldig — en dan met 'ongeldige_transitie', NIET 'ongeldige_actie': de
+-- actie bestaat, alleen de overgang niet.
 do $$
 declare r public.gesprek_reflectie_state;
 begin
+  -- Herformuleren vanuit een verdiepingsstatus (nu: verdieping_3) moet falen op
+  -- de TRANSITIE, niet op de actie-allowlist. Zou de allowlist hem afwijzen, dan
+  -- was de nieuwe actie nooit geïnstalleerd.
+  begin
+    perform public.reflectie_transitie('a0000000-0000-0000-0000-00000000000a','herformuleren',null,null);
+    raise exception 'LEK: herformuleren werd vanuit verdieping_3 geaccepteerd.';
+  exception when others then
+    if sqlstate = 'P0001' and sqlerrm like 'LEK:%' then raise; end if;
+    if sqlerrm like '%ongeldige_actie%' then
+      raise exception 'HERFORMULEREN FAALT: actie niet geïnstalleerd (kreeg ongeldige_actie i.p.v. ongeldige_transitie).';
+    end if;
+  end;
+
+  -- Naar de conceptweergave.
   r := public.reflectie_transitie('a0000000-0000-0000-0000-00000000000a','concept',null,null);
   if r.status <> 'conceptweergave' then
     raise exception 'CONCEPT FAALT: status is %.', r.status;
+  end if;
+
+  -- Herformuleren: blijft conceptweergave, beurt onveranderd (3), en ingang +
+  -- bevroren bronset onaangeroerd.
+  r := public.reflectie_transitie('a0000000-0000-0000-0000-00000000000a','herformuleren',null,null);
+  if r.status <> 'conceptweergave' or r.beurt <> 3 then
+    raise exception 'HERFORMULEREN FAALT: verwacht conceptweergave/3, kreeg %/%.', r.status, r.beurt;
+  end if;
+  if r.ingang <> 'onderbouwing'
+     or r.bronset_log_id <> '10000000-0000-0000-0000-000000000001' then
+    raise exception 'HERFORMULEREN FAALT: ingang of bronset gewijzigd (%, %).', r.ingang, r.bronset_log_id;
   end if;
 
   r := public.reflectie_transitie('a0000000-0000-0000-0000-00000000000a','afronden',null,null);
@@ -571,7 +600,16 @@ begin
      or r.reflectie_bronset_versie is not null then
     raise exception 'AFBREKEN FAALT: ingang of bronset bleef staan na het beëindigen.';
   end if;
-  raise notice 'OK flow: concept → afgerond → niet_actief; ingang en bronset gewist.';
+
+  -- Herformuleren vanuit niet_actief is ongeldig (geen conceptweergave).
+  begin
+    perform public.reflectie_transitie('a0000000-0000-0000-0000-00000000000a','herformuleren',null,null);
+    raise exception 'LEK: herformuleren werd vanuit niet_actief geaccepteerd.';
+  exception when others then
+    if sqlstate = 'P0001' and sqlerrm like 'LEK:%' then raise; end if;
+  end;
+
+  raise notice 'OK 18g/flow: herformuleren blijft conceptweergave (beurt/bronset onveranderd); concept → afgerond → niet_actief.';
 end $$;
 
 -- ── Een gewone chatbeurt maakt GEEN statusrij aan ─────────────────────────

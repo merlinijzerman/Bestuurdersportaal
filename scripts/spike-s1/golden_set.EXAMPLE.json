@@ -1,0 +1,39 @@
+[
+  {
+    "document": "transitieplan_v4.pdf",
+    "concept": "solidariteitsreserve.bovengrens",
+    "type": "percentage",
+    "value_normalized": 0.06,
+    "page": 37,
+    "section": "7.4 Solidariteitsreserve",
+    "evidence": "De bovengrens van de solidariteitsreserve bedraagt 6,0%"
+  },
+  {
+    "document": "transitieplan_v4.pdf",
+    "concept": "transitiedatum",
+    "type": "date",
+    "value_normalized": "2028-01-01",
+    "page": 4,
+    "section": "2. Kern van het transitieplan",
+    "evidence": "De transitie vindt plaats per 1 januari 2028."
+  },
+  {
+    "document": "pensioenreglement_2026.pdf",
+    "concept": "franchise",
+    "type": "amount",
+    "value_normalized": 17545,
+    "currency": "EUR",
+    "page": 12,
+    "section": "Artikel 5 — Pensioengevend salaris",
+    "evidence": "De franchise bedraagt € 17.545 per jaar."
+  },
+  {
+    "document": "implementatieplan.pdf",
+    "concept": "invaarmethodiek",
+    "type": "policy_choice",
+    "value_normalized": "standaard",
+    "page": 21,
+    "section": "6.2 Invaren",
+    "evidence": "Het bestuur kiest voor de standaardmethode voor het invaren van bestaande aanspraken."
+  }
+]

@@ -309,6 +309,13 @@ export async function POST(req: NextRequest) {
       // gewoon als normale chatbeurt afgehandeld — een client kan zich dus geen
       // reflectie toe-eigenen (FR-67).
       reflectie_antwoord?: boolean;
+      // B-opt tranche 1a — deze beurt is een HERFORMULERING vanuit de
+      // conceptweergave: de bestuurder scherpt zijn eigen overweging aan. Ook een
+      // signaal, geen waarheid — de RPC weigert `herformuleren` buiten
+      // `conceptweergave`, en dan wordt de beurt gewoon als normale chatbeurt
+      // afgehandeld (afbreken). Sluit `reflectie_antwoord` uit: de client stuurt
+      // er precies één van beide.
+      reflectie_herformuleren?: boolean;
       // De reflectie-ingang bij het STARTEN van een flow, plus het id van de
       // logregel waarvan de bronset wordt bevroren. De RPC toetst zelf dat die
       // logregel van deze gebruiker én dit gesprek is (AC-18).
@@ -1047,6 +1054,11 @@ export async function POST(req: NextRequest) {
         ? "start"
         : body.reflectie_antwoord === true
         ? "antwoord"
+        : // B-opt tranche 1a — herformuleren blijft in conceptweergave en
+          // verhoogt de beurt niet. De RPC weigert hem buiten die status, waarna
+          // de beurt als gewone chatbeurt (afbreken) doorloopt.
+        body.reflectie_herformuleren === true
+        ? "herformuleren"
         : "afbreken";
 
       const { data: flowRij, error: flowFout } = await supabase.rpc("reflectie_transitie", {
