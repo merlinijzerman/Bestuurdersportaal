@@ -11,6 +11,8 @@ import assert from "node:assert/strict";
 import {
   selecteerChunks,
   selecteerMetConstraints,
+  selecteerChunksMetTrace,
+  selecteerMetConstraintsMetTrace,
   jaccard,
   woordSet,
   type SelecteerbareChunk,
@@ -192,6 +194,60 @@ check("constraint-selectie behoudt inkomende (rang-)volgorde in de uitvoer", () 
   // fonds wordt gereserveerd (index 2) maar de uitvoer staat in inkomende volgorde.
   const uit = selecteerMetConstraints(input, constraints({ fondsMin: 1, maxTotal: 2 }), libVan);
   assert.deepEqual(uit.map((c) => c.id), ["g1", "f1"]);
+});
+
+// ── T3 — drop-reden-trace ────────────────────────────────────────────────────
+
+check("trace: gekozen is identiek aan selecteerChunks (delegatie)", () => {
+  const input = [
+    chunk("a", "d1", "eerste fragment over premie inning discipline werkgevers"),
+    chunk("b", "d1", "tweede fragment over dekking beleggingen rendement obligaties"),
+    chunk("c", "d1", "derde fragment over governance toezicht naleving compliance"),
+    chunk("d", "d2", "fragment uit een tweede document over actuariele aannames"),
+  ];
+  const trace = selecteerChunksMetTrace(input, 8, 2);
+  assert.deepEqual(trace.gekozen.map((c) => c.id), selecteerChunks(input, 8, 2).map((c) => c.id));
+  assert.equal(trace.redenen.length, input.length);
+});
+
+check("trace onderscheidt budget, quotum en dedup", () => {
+  const input = [
+    chunk("a", "d1", "eerste fragment over premie inning discipline werkgevers"),
+    chunk("b", "d1", "tweede fragment over dekking beleggingen rendement obligaties"),
+    // c is quotum-afval: d1 heeft dan al 2 chunks (maxPerDocument=2).
+    chunk("c", "d1", "derde fragment over governance toezicht naleving compliance"),
+    // d is een near-duplicate van a → dedup.
+    chunk("d", "d3", "eerste fragment over premie inning discipline werkgevers"),
+    chunk("e", "d4", "fragment uit een vierde document over uitbesteding dienstverlening"),
+    // f valt buiten het budget (maxResults=3 al vol vóór f).
+    chunk("f", "d5", "zesde fragment over communicatie deelnemers pensioenoverzicht jaarlijks"),
+  ];
+  const { gekozen, redenen } = selecteerChunksMetTrace(input, 3, 2);
+  const redenVan = (id: string) => redenen[input.findIndex((c) => c.id === id)];
+  assert.deepEqual(gekozen.map((c) => c.id), ["a", "b", "e"]);
+  assert.equal(redenVan("a"), null); // geselecteerd
+  assert.equal(redenVan("c"), "quotum");
+  assert.equal(redenVan("d"), "dedup");
+  assert.equal(redenVan("f"), "budget");
+});
+
+check("constraint-trace: gekozen identiek + redenen even lang als input", () => {
+  const input = [
+    lchunk("f1", "d1", "fondsbron over eigen beleggingsbeleid en dekkingsgraad horizon", "fonds"),
+    lchunk("g1", "d2", "generieke dnb guidance over prudent person en risicohouding", "generiek"),
+    lchunk("f2", "d3", "tweede fondsbron over premiebeleid en financiering horizon", "fonds"),
+  ];
+  const c = constraints({ fondsMin: 1, generiekMin: 1, maxTotal: 2 });
+  const trace = selecteerMetConstraintsMetTrace(input, c, libVan);
+  assert.deepEqual(
+    trace.gekozen.map((x) => x.id),
+    selecteerMetConstraints(input, c, libVan).map((x) => x.id)
+  );
+  assert.equal(trace.redenen.length, input.length);
+  // Bij maxTotal 2 valt precies één kandidaat af, met reden budget of quotum.
+  const afval = trace.redenen.filter((r) => r !== null);
+  assert.equal(afval.length, 1);
+  assert.ok(afval[0] === "budget" || afval[0] === "quotum");
 });
 
 console.log(`\n${n} sanity-tests geslaagd.`);

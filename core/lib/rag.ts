@@ -2,7 +2,11 @@
 import { neutraliseerBrontekst, maakBronSentinel } from "./bron-afbakening";
 import { createServerSupabase } from "./supabase-server";
 import { bouwTerugvalFtsQuery } from "./fts-terugval";
-import { selecteerChunks, selecteerMetConstraints } from "./rag-select";
+import {
+  selecteerChunksMetTrace,
+  selecteerMetConstraintsMetTrace,
+  type RepresentatieConstraints,
+} from "./rag-select";
 import { embedTekst, naarVectorLiteral } from "./embeddings";
 import { notulenBronLabel } from "./notulen";
 import { bouwBronfragment } from "./bronfragment";
@@ -162,29 +166,119 @@ function fondsMeta(
 // flag REPRESENTATIE_CONSTRAINTS aan dwingt selecteerMetConstraints een gegarandeerd
 // minimum per bibliotheek/bron af (dedup + budget-afkap zitten in diezelfde pass).
 // Flag uit → exact het huidige selecteerChunks-gedrag (dedup + budget in één pass).
+//
+// T3 — naast de gekozen set geeft deze functie de selectie-diagnostiek terug:
+// de actieve constraints, de kandidatenset vóór selectie en per kandidaat waarom
+// hij wel/niet in het antwoord zat (weging/zwak_generiek/quotum/dedup/budget).
+// De reden `weging` wordt hier bepaald met een contrafeitelijke selectie op de
+// PRE-weging volgorde: een budget-drop die zónder de weging wél was geselecteerd,
+// is aantoonbaar door de bronsoort-demotie afgevallen (geen overclaim).
+
+/** Terminale reden waarom een opgehaalde kandidaat niet in het antwoord zat. */
+export type SelectieAfvalReden =
+  | "weging"
+  | "zwak_generiek"
+  | "quotum"
+  | "dedup"
+  | "budget";
+
+/** Selectie-diagnostiek voor retrieval_meta (T3). `selectie` is basis-niveau
+ *  (telemetrie, geen identiteit); `selectie_kandidaten` draagt bronidentiteit. */
+export interface SelectieDiagnostiek {
+  selectie: NonNullable<RetrievalMeta["selectie"]>;
+  selectie_kandidaten: NonNullable<RetrievalMeta["selectie_kandidaten"]>;
+}
+
+function isGeneriek(c: DocumentChunk): boolean {
+  return c.documenten.bibliotheek === "generiek";
+}
+
 function weegEnSelecteer(
   gerangschikt: DocumentChunk[],
   filters: RetrievalFilters | undefined,
   maxResults: number,
   maxPerDoc: number,
   constraintsAan: boolean
-): DocumentChunk[] {
-  // filters
+): { chunks: DocumentChunk[]; diagnostiek: SelectieDiagnostiek } {
+  const profiel = filters?.bronsoortprofiel;
+  const libVan = (c: DocumentChunk) => c.documenten.bibliotheek;
+
+  // filters — §8.3 #6: zwakke generieke chunks vallen vóór de selectie af.
   const zichtbaar = filterZwakkeGeneriek(gerangschikt, filters);
-  // weging (bronsoort)
-  const gewogen = filters?.bronsoortprofiel
-    ? weegBronsoort(zichtbaar, (c) => c.documenten.bibliotheek, filters.bronsoortprofiel)
+  const zichtbaarSet = new Set(zichtbaar);
+
+  // weging (bronsoort) — herordent alleen; behoudt de relevantievolgorde binnen groep.
+  const gewogen = profiel
+    ? weegBronsoort(zichtbaar, libVan, profiel)
     : zichtbaar;
+
   // [gereserveerd: regime-demotie (T4) — plek in de volgorde bewust vrijgehouden]
-  // representatie-constraints → dedup → budget-afkap
-  if (constraintsAan) {
-    const constraints = constraintsVoorProfiel(filters?.bronsoortprofiel, {
-      maxTotal: maxResults,
-      maxPerSource: maxPerDoc,
-    });
-    return selecteerMetConstraints(gewogen, constraints, (c) => c.documenten.bibliotheek);
+
+  // representatie-constraints → dedup → budget-afkap. De effectieve constraints
+  // worden ALTIJD gelogd, ook bij flag-uit (alle minima 0 = huidig gedrag).
+  const constraints: RepresentatieConstraints = constraintsAan
+    ? constraintsVoorProfiel(profiel, { maxTotal: maxResults, maxPerSource: maxPerDoc })
+    : { fondsMin: 0, generiekMin: 0, perSourceMin: 0, maxPerSource: maxPerDoc, maxTotal: maxResults };
+
+  const trace = constraintsAan
+    ? selecteerMetConstraintsMetTrace(gewogen, constraints, libVan)
+    : selecteerChunksMetTrace(gewogen, maxResults, maxPerDoc);
+  const gekozenSet = new Set(trace.gekozen);
+  const redenVanGewogen = new Map(gewogen.map((c, i) => [c, trace.redenen[i]] as const));
+
+  // Contrafeitelijke selectie op de PRE-weging volgorde: alleen zinvol als de
+  // weging daadwerkelijk demoveert (fonds/generiek; 'gecombineerd' herordent niet).
+  let zonderWegingSet: Set<DocumentChunk> | null = null;
+  if (profiel === "fonds" || profiel === "generiek") {
+    const cf = constraintsAan
+      ? selecteerMetConstraintsMetTrace(zichtbaar, constraints, libVan)
+      : selecteerChunksMetTrace(zichtbaar, maxResults, maxPerDoc);
+    zonderWegingSet = new Set(cf.gekozen);
   }
-  return selecteerChunks(gewogen, maxResults, maxPerDoc);
+
+  // Kandidatenset vóór selectie = de volledige input van deze stap (incl. de
+  // zwak_generiek-drops), zodat "opgehaald maar afgevallen" zichtbaar is.
+  const telling: Record<SelectieAfvalReden, number> = {
+    weging: 0,
+    zwak_generiek: 0,
+    quotum: 0,
+    dedup: 0,
+    budget: 0,
+  };
+  const perBib = { fonds: 0, generiek: 0 };
+
+  const kandidaten = gerangschikt.map((c) => {
+    const bibliotheek = c.documenten.bibliotheek;
+    const rang = c.rang ?? null;
+    if (gekozenSet.has(c)) {
+      if (isGeneriek(c)) perBib.generiek++;
+      else perBib.fonds++;
+      return { document_id: c.document_id, bibliotheek, rang, status: "geselecteerd" as const };
+    }
+    let reden: SelectieAfvalReden;
+    if (!zichtbaarSet.has(c)) {
+      reden = "zwak_generiek";
+    } else {
+      const r = redenVanGewogen.get(c) ?? "budget";
+      reden = r === "budget" && zonderWegingSet?.has(c) ? "weging" : r;
+    }
+    telling[reden]++;
+    return { document_id: c.document_id, bibliotheek, rang, status: "afgevallen" as const, reden };
+  });
+
+  return {
+    chunks: trace.gekozen,
+    diagnostiek: {
+      selectie: {
+        intent: profiel ?? null,
+        regime: filters?.modus ?? "alles",
+        constraints,
+        geselecteerd_per_bibliotheek: perBib,
+        afgevallen_telling: telling,
+      },
+      selectie_kandidaten: kandidaten,
+    },
+  };
 }
 
 // Bouwt het RPC-parameterblok voor de filters. Alleen gezette velden worden
@@ -370,13 +464,18 @@ async function naVerwerking(
 
   // Bronsoort-weging (+ evt. representatie-constraints) + dedup + top-N; werkt op
   // de nieuwe volgorde. De constraint-laag staat achter opties.representatieConstraints.
-  let geselecteerd = weegEnSelecteer(
+  // T3 — de selectie-diagnostiek (constraints + kandidaten + drop-redenen) reflecteert
+  // deze weeg+select-stap; hij wordt additief in retrieval_meta vastgelegd.
+  const sel = weegEnSelecteer(
     kandidaten,
     filters,
     maxResults,
     maxPerDoc,
     opties.representatieConstraints
   );
+  let geselecteerd = sel.chunks;
+  extra.selectie = sel.diagnostiek.selectie;
+  extra.selectie_kandidaten = sel.diagnostiek.selectie_kandidaten;
 
   // B1 — ilike-treffers zijn NOOIT citeerbaar: uit de prompt-set gehaald, alleen
   // als audit vastgelegd. Leeg resultaat valt op het bestaande geen-treffers-pad.
@@ -703,6 +802,37 @@ export interface RetrievalMeta {
   // R1.6 — parent-retrieval: hoeveel treffers zijn uitgebreid met hun structuur-
   // unit, hoeveel vielen terug op de kale chunk, en het totale tekstbudget.
   parent?: ParentMeta;
+  // ── T3 — selectie-diagnostiek (weeg+select-stap) ────────────────────────────
+  // Maakt "opgehaald maar afgevallen" te onderscheiden van "nooit opgehaald".
+  // `selectie` is operationele telemetrie (BASIS: geen identiteit): de actieve
+  // intent/regime, de afgedwongen representatie-constraints en de tellingen van
+  // wat is geselecteerd (per bibliotheek) resp. afgevallen (per reden). De
+  // effectieve constraints worden ook bij flag-uit gelogd (alle minima 0).
+  // `regime` spiegelt de retrieval-modus (ook in `filters.modus`), hier bewust
+  // herhaald zodat de selectie-context in één object zelfstandig leesbaar is.
+  selectie?: {
+    intent: Bronsoortprofiel | null;
+    regime: RetrievalModus;
+    constraints: RepresentatieConstraints;
+    geselecteerd_per_bibliotheek: { fonds: number; generiek: number };
+    afgevallen_telling: {
+      weging: number;
+      zwak_generiek: number;
+      quotum: number;
+      dedup: number;
+      budget: number;
+    };
+  };
+  // De kandidatenset vóór selectie: per kandidaat de bron-identiteit + rang en of
+  // hij is geselecteerd of (met welke reden) is afgevallen. Draagt bronidentiteit
+  // (document_id/bibliotheek) → BRON-niveau, net als `chunks`/`bronversie_audit`.
+  selectie_kandidaten?: {
+    document_id: string;
+    bibliotheek: string;
+    rang: number | null;
+    status: "geselecteerd" | "afgevallen";
+    reden?: "weging" | "zwak_generiek" | "quotum" | "dedup" | "budget";
+  }[];
   // P2 Deel B — "een document doorgronden": de parameters van de samengestelde
   // instructie volledig in het auditspoor (B6 / criterium 13). De zichtbare
   // gebruikersbeurt is korter dan de instructie die het model kreeg; zonder deze

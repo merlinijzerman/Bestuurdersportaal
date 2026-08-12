@@ -175,6 +175,18 @@ const VOLLEDIGE_META: Record<string, unknown> = {
     bevat_query_reformulatie: false,
     bevat_web_search: false,
   },
+  // T3 — selectie-diagnostiek: telemetrie (basis) + kandidaten (bron).
+  selectie: {
+    intent: "fonds",
+    regime: "actueel",
+    constraints: { fondsMin: 1, generiekMin: 0, perSourceMin: 0, maxPerSource: 3, maxTotal: 8 },
+    geselecteerd_per_bibliotheek: { fonds: 4, generiek: 1 },
+    afgevallen_telling: { weging: 2, zwak_generiek: 1, quotum: 1, dedup: 1, budget: 3 },
+  },
+  selectie_kandidaten: [
+    { document_id: "d1", bibliotheek: "fonds", rang: 1, status: "geselecteerd" },
+    { document_id: "d2", bibliotheek: "generiek", rang: 9, status: "afgevallen", reden: "weging" },
+  ],
 };
 
 console.log("audit-meta sanity-tests:");
@@ -361,6 +373,29 @@ test("bronniveau toont de bron-ID's wél", () => {
   assert.equal(bron.herkomst, "agendapunt:a1");
   assert.deepEqual((bron.scope as Record<string, unknown>).document_ids, ["d1"]);
   assert.deepEqual((bron.filters as Record<string, unknown>).procesinstantie_ids, ["p1"]);
+});
+
+test("T3 — selectie is basis, selectie_kandidaten is bron", () => {
+  // De tellingen/constraints (telemetrie) blijven zichtbaar op basisniveau; de
+  // kandidatenlijst met bron-ID's alleen op bronniveau. Geen van beide is inhoud.
+  const { spoor, inhoud } = splitsRetrievalMeta(VOLLEDIGE_META);
+  assert.equal("selectie" in inhoud, false);
+  assert.equal("selectie_kandidaten" in inhoud, false);
+  assert.equal(niveauVan("selectie"), "basis");
+  assert.equal(niveauVan("selectie_kandidaten"), "bron");
+
+  const basis = projecteerSpoorMeta(spoor, false);
+  assert.equal("selectie_kandidaten" in basis, false, "kandidaten (bron-ID's) niet op basisniveau");
+  assert.deepEqual((basis.selectie as Record<string, unknown>).afgevallen_telling, {
+    weging: 2,
+    zwak_generiek: 1,
+    quotum: 1,
+    dedup: 1,
+    budget: 3,
+  });
+
+  const bron = projecteerSpoorMeta(spoor, true);
+  assert.equal(Array.isArray(bron.selectie_kandidaten), true);
 });
 
 test("een rij van vóór plateau A wordt bij het lezen alsnog ontdaan van inhoud", () => {

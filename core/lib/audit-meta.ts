@@ -109,6 +109,10 @@ export const META_BASIS = [
   "tokendekking",
   // Besluit 0151 — TTFT-telemetrie (criterium 11).
   "ttft_ms",
+  // T3 — selectie-diagnostiek: intent/regime, de afgedwongen representatie-
+  // constraints en de geselecteerd-/afgevallen-tellingen. Pure telemetrie, geen
+  // documentidentiteit (die zit in `selectie_kandidaten` op bron-niveau).
+  "selectie",
   // gemengde objecten: hun bron-/inhoudsleutels worden door SUB_NIVEAUS afgesplitst
   "scope",
   "invoer",
@@ -137,6 +141,10 @@ export const META_BRON = [
   // documenttekst en géén gebruikersvraag. Zelfde niveau als `doorgrond`.
   "bureau",
   "herkomst",
+  // T3 — kandidatenset vóór selectie: per kandidaat document_id + bibliotheek +
+  // rang + status/reden. BronIDENTITEIT, geen documenttekst; zelfde niveau als
+  // `chunks`/`bronversie_audit`. De tellingen staan los op basis-niveau (`selectie`).
+  "selectie_kandidaten",
 ] as const;
 
 /**

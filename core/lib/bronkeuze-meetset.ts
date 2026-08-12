@@ -4,8 +4,10 @@
 // ----------------------------------------------------------------------------
 //  Bestuurlijke vragen met een door gebruiker/compliance GEACCORDEERD label
 //  (basis: 40 vragen, sign-off 2026-06-22; uitbreidingen 41-46 wettelijke-plicht,
-//  47-54 persoonlijk/status contextbesef (besluit 0090), en 55-72 portaalobjecten
-//  (besluit 0137, M-B4 — HER-ACCORDERING VÓÓR PRODUCTIE OPENSTAAND)). Dit is de
+//  47-54 persoonlijk/status contextbesef (besluit 0090), 55-72 portaalobjecten
+//  (besluit 0137, M-B4 — HER-ACCORDERING VÓÓR PRODUCTIE OPENSTAAND), en 73-86
+//  "begrip × wettelijke/fiscale toets" (bronselectie T1/T2, besluiten 0159/0160,
+//  sign-off 2026-08-12)). Dit is de
 //  bron-van-waarheid waartegen de pure
 //  classificatie (lib/vraagtype.ts → bepaalBronIntent) wordt geijkt en
 //  bewaakt — zie de runner lib/bronkeuze-classificatie.sanity.ts met de
@@ -146,49 +148,43 @@ export const BRONKEUZE_MEETSET: MeetsetVraag[] = [
   // Contrastief: verbvorm en kaal onderwerpwoord blijven terugvragen (patronen niet te breed).
   { id: 71, label: "mag-terugvragen", vraag: "Wat is er besloten over de premie?", toelichting: '"besloten" (verbvorm) ≠ "besluit"; geen anker' },
   { id: 72, label: "mag-terugvragen", vraag: "Hoe zit het met de risico's?", toelichting: 'kaal "risico\'s" (geen "matrix"); geen anker' },
+
+  // ── Uitbreiding 2026-08-12 (bronselectie T1/T2, besluiten 0159/0160) —
+  //    "begrip × wettelijke/fiscale toets" — GEACCORDEERD 2026-08-12 ──
+  // Afgestudeerd vanuit BRONKEUZE_NULMETING_T1 nadat T2 landde en compliance de
+  // set tekende. Een reglementair begrip (partnerbegrip, eigen definitie/uitleg/
+  // hantering) getoetst aan een wettelijk of fiscaal kader → `gecombineerd`: het
+  // antwoord citeert zowel het fondsreglement als de wet/fiscale grens. Deze items
+  // tellen nu mee in de pass/fail-drempels (bronkeuze-classificatie.sanity.ts).
+  { id: 73, label: "gecombineerd", vraag: "Valt een samenwonende partner onder ons partnerbegrip volgens de Pensioenwet?", toelichting: "eigen partnerbegrip × Pensioenwet" },
+  { id: 74, label: "gecombineerd", vraag: "Is ons partnerbegrip in lijn met de wettelijke definitie van partner?", toelichting: "eigen begrip × wettelijke definitie" },
+  { id: 75, label: "gecombineerd", vraag: "Voldoet onze definitie van arbeidsongeschiktheid aan de wettelijke eisen?", toelichting: "eigen definitie × wettelijke eis" },
+  { id: 76, label: "gecombineerd", vraag: "Sluit ons begrip van gemoedsbezwaarde aan bij de Pensioenwet?", toelichting: "eigen begrip × Pensioenwet" },
+  { id: 77, label: "gecombineerd", vraag: "Hoe verhoudt onze uitleg van het begrip pensioengevend salaris zich tot de fiscale grenzen?", toelichting: "eigen uitleg × fiscaal kader" },
+  { id: 78, label: "gecombineerd", vraag: "Is ons begrip van scheiding en verevening consistent met de Wet verevening pensioenrechten?", toelichting: "eigen begrip × specifieke wet" },
+  { id: 79, label: "gecombineerd", vraag: "Voldoet onze definitie van wezenpensioen aan de wettelijke leeftijdsgrenzen?", toelichting: "eigen definitie × wettelijke grens" },
+  { id: 80, label: "gecombineerd", vraag: "Past ons begrip van deeltijdpensioen binnen de fiscale spelregels?", toelichting: "eigen begrip × fiscaal kader" },
+  { id: 81, label: "gecombineerd", vraag: "Sluit ons hanteren van de AOW-franchise aan bij de wettelijke minimumfranchise?", toelichting: "eigen hantering × wettelijk minimum" },
+  { id: 82, label: "gecombineerd", vraag: "Is onze uitleg van het nabestaandenpensioen op risicobasis in lijn met de Wtp?", toelichting: "eigen uitleg × Wtp-toets" },
+  { id: 83, label: "gecombineerd", vraag: "Voldoet ons begrip van de pensioenrichtleeftijd aan de wettelijke koppeling aan de AOW-leeftijd?", toelichting: "eigen begrip × wettelijke koppeling" },
+  { id: 84, label: "gecombineerd", vraag: "Hoe verhoudt onze definitie van waardeoverdracht zich tot het wettelijke recht op waardeoverdracht?", toelichting: "eigen definitie × wettelijk recht" },
+  { id: 85, label: "gecombineerd", vraag: "Is ons begrip van de afkoopgrens gelijk aan de wettelijke afkoopgrens voor kleine pensioenen?", toelichting: "eigen begrip × wettelijke grens" },
+  { id: 86, label: "gecombineerd", vraag: "Sluit onze hantering van het begrip gewezen deelnemer aan bij de definitie in de Pensioenwet?", toelichting: "eigen hantering × wettelijke definitie" },
 ];
 
-// ── T1-NULMETING (2026-08-11, beslisnotitie v0.4 Deel A) — "begrip × wettelijke
-//    toets" — HER-ACCORDERING VÓÓR PRODUCTIE OPENSTAAND ────────────────────────
-//  BEWUST NIET opgenomen in BRONKEUZE_MEETSET en NIET door de classificatie-
-//  runner (lib/bronkeuze-classificatie.sanity.ts) geëvalueerd: dit is een
-//  NULMETING, geen geaccordeerd label. Deze vragen combineren een (impliciet
-//  fondsspecifiek) begrip met een wettelijke toets — het gewenste label is
-//  `gecombineerd`, maar de HUIDIGE classifier landt op `algemeen`/generiek
-//  (partnerbegrip-casus: 7 generieke citaties, 0 fondsbronnen). T1 levert het
-//  MECHANISME (representatie-constraints); T2 verfijnt de classifier (contrast-
-//  patroon → `gecombineerd`) zodat de JUISTE constraints worden gekozen. Pas met
-//  T1 + T2 samen is deze set end-to-end opgelost. Het `label`-veld = het GEWENSTE
-//  eindlabel (nulmeting-doel), niet de huidige uitkomst.
-//
-//  Compliance: nog te her-accorderen (meetset-first, zie ticket-DoD). Zodra T2
-//  landt en compliance tekent, verhuizen de geaccordeerde items naar
-//  BRONKEUZE_MEETSET en gaan ze mee in de pass/fail-drempels.
-//
-//  ── STATUS NA T2 (2026-08-12) ────────────────────────────────────────────────
-//  T2 GELAND. bepaalBronsoortprofiel (weeg-bronsoort.ts, stuurt de constraints) +
-//  bepaalBronIntent (vraagtype.ts, stuurt de framing) classificeren nu ALLE
-//  onderstaande items als `gecombineerd`/zeker — nagerekend in
-//  weeg-bronsoort.sanity.ts (contrast + negatieve controls). De "nu → algemeen"-
-//  toelichtingen beschrijven dus de NULMETING (vóór T2), niet meer de uitkomst.
-//  Items 87-89 zijn de ankerloze contrastvarianten (zonder ons/onze) die de
-//  robuustheidsgrens markeren. De set blijft NON-graded tot compliance tekent.
+// ── NULMETING-RESTANT (bronselectie T1/T2) — ankerloze contrastvarianten ──────
+//  De 14 "begrip × wettelijke/fiscale toets"-vragen (id 73-86) zijn op 2026-08-12
+//  door compliance geaccordeerd en AFGESTUDEERD naar BRONKEUZE_MEETSET hierboven;
+//  ze tellen nu mee in de pass/fail-drempels. Wat hier RESTEERT (id 87-89) zijn de
+//  ankerloze contrastvarianten (zonder ons/onze, met "het/de huidige") die T2
+//  toevoegde als robuustheidsgrens. Die zijn NOG NIET apart geaccordeerd en blijven
+//  daarom NON-graded: BEWUST NIET in BRONKEUZE_MEETSET en NIET door de
+//  classificatie-runner geëvalueerd. Het `label`-veld = het gewenste eindlabel.
+//  Beide classifiers geven ze inmiddels `gecombineerd`/zeker (nagerekend in
+//  weeg-bronsoort.sanity.ts); toevoegen aan de graded set kan zodra compliance ook
+//  deze varianten tekent.
 export const BRONKEUZE_NULMETING_T1: MeetsetVraag[] = [
-  { id: 73, label: "gecombineerd", vraag: "Valt een samenwonende partner onder ons partnerbegrip volgens de Pensioenwet?", toelichting: "partnerbegrip (fondsspecifiek) × wettelijke toets; nu → algemeen" },
-  { id: 74, label: "gecombineerd", vraag: "Is ons partnerbegrip in lijn met de wettelijke definitie van partner?", toelichting: "eigen begrip × wet; nu → algemeen" },
-  { id: 75, label: "gecombineerd", vraag: "Voldoet onze definitie van arbeidsongeschiktheid aan de wettelijke eisen?", toelichting: "begrip × wettelijke eis; nu → algemeen" },
-  { id: 76, label: "gecombineerd", vraag: "Sluit ons begrip van gemoedsbezwaarde aan bij de Pensioenwet?", toelichting: "begrip × wet; nu → algemeen" },
-  { id: 77, label: "gecombineerd", vraag: "Hoe verhoudt onze uitleg van het begrip pensioengevend salaris zich tot de fiscale grenzen?", toelichting: "begrip × fiscaal kader; nu → algemeen" },
-  { id: 78, label: "gecombineerd", vraag: "Is ons begrip van scheiding en verevening consistent met de Wet verevening pensioenrechten?", toelichting: "begrip × specifieke wet; nu → algemeen" },
-  { id: 79, label: "gecombineerd", vraag: "Voldoet onze definitie van wezenpensioen aan de wettelijke leeftijdsgrenzen?", toelichting: "begrip × wettelijke grens; nu → algemeen" },
-  { id: 80, label: "gecombineerd", vraag: "Past ons begrip van deeltijdpensioen binnen de fiscale spelregels?", toelichting: "begrip × fiscaal; nu → algemeen" },
-  { id: 81, label: "gecombineerd", vraag: "Sluit ons hanteren van de AOW-franchise aan bij de wettelijke minimumfranchise?", toelichting: "begrip × wettelijk minimum; nu → algemeen" },
-  { id: 82, label: "gecombineerd", vraag: "Is onze uitleg van het nabestaandenpensioen op risicobasis in lijn met de Wtp?", toelichting: "begrip × Wtp-toets; nu → algemeen" },
-  { id: 83, label: "gecombineerd", vraag: "Voldoet ons begrip van de pensioenrichtleeftijd aan de wettelijke koppeling aan de AOW-leeftijd?", toelichting: "begrip × wettelijke koppeling; nu → algemeen" },
-  { id: 84, label: "gecombineerd", vraag: "Hoe verhoudt onze definitie van waardeoverdracht zich tot het wettelijke recht op waardeoverdracht?", toelichting: "begrip × wettelijk recht; nu → algemeen" },
-  { id: 85, label: "gecombineerd", vraag: "Is ons begrip van de afkoopgrens gelijk aan de wettelijke afkoopgrens voor kleine pensioenen?", toelichting: "begrip × wettelijke grens; nu → algemeen" },
-  { id: 86, label: "gecombineerd", vraag: "Sluit onze hantering van het begrip gewezen deelnemer aan bij de definitie in de Pensioenwet?", toelichting: "begrip × wettelijke definitie; nu → algemeen" },
-  // ── T2-uitbreiding (2026-08-12) — ANKERLOZE contrastvarianten (geen ons/onze) ──
+  // ── ANKERLOZE contrastvarianten (geen ons/onze) ──
   // Robuustheidsgrens: "het huidige [begrip]" telt als fonds-anker (weeg +
   // vraagtype), dus deze halen `gecombineerd` zónder bezittelijk voornaamwoord.
   { id: 87, label: "gecombineerd", vraag: "Hoe verhoudt het huidige partnerbegrip zich tot de Pensioenwet?", toelichting: "'het huidige [begrip]' (ankerloos) × Pensioenwet" },
