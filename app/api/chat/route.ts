@@ -367,7 +367,12 @@ export async function POST(req: NextRequest) {
     // gaf twee problemen: (a) denial-of-wallet — onbegrensde invoer op een
     // Opus-model, en (b) guardrail-bypass — een gefabriceerde "assistant"-beurt
     // kan de instructieset relativeren. Zie core/lib/chat-invoer.ts.
-    const invoer = valideerChatInvoer(body.messages, body.vraag);
+    // B-opt tranche 2d/4a — "Nog een stap verdiepen" en "Wat pleit er tegen?"
+    // laten de assistent de volgende vraag stellen zonder nieuwe gebruikersbeurt;
+    // de historie eindigt dan bewust op de conceptweergave (assistentbeurt).
+    const reflectieVervolg =
+      body.reflectie_verdiepen === true || body.reflectie_tegenperspectief === true;
+    const invoer = valideerChatInvoer(body.messages, body.vraag, { reflectieVervolg });
     if (!invoer.ok) {
       return NextResponse.json(
         { error: invoer.melding, foutcode: invoer.foutcode },

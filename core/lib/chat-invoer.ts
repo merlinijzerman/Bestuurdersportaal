@@ -120,10 +120,17 @@ export function historieHash(messages: ChatBericht[]): string {
  * @param ruweMessages  `body.messages` — van het type `unknown`, want de client
  *                      bepaalt de payload volledig.
  * @param ruweVraag     `body.vraag` — backwards-compat pad voor één losse vraag.
+ * @param opties        `reflectieVervolg`: deze beurt is "Nog een stap verdiepen"
+ *                      of "Wat pleit er tegen?" (B-opt tranche 2d/4a) — de
+ *                      assistent stelt de volgende vraag ZONDER nieuwe
+ *                      gebruikersbeurt. De historie eindigt dan bewust op een
+ *                      assistentbeurt (de conceptweergave); de "laatste beurt is
+ *                      een gebruikersvraag"-eis geldt daar niet.
  */
 export function valideerChatInvoer(
   ruweMessages: unknown,
-  ruweVraag: unknown
+  ruweVraag: unknown,
+  opties?: { reflectieVervolg?: boolean }
 ): InvoerResultaat {
   // 1. Bepaal de bron: volledige historie, of het one-shot-pad.
   let kandidaten: unknown[];
@@ -205,21 +212,37 @@ export function valideerChatInvoer(
     };
   }
 
-  // 5. De laatste beurt moet een niet-lege vraag van de gebruiker zijn.
+  // 5. De laatste beurt moet een niet-lege vraag van de gebruiker zijn —
+  //    BEHALVE bij een reflectie-vervolgactie (verdiepen/tegenperspectief), waar
+  //    de assistent de volgende verdiepingsvraag stelt zonder nieuwe
+  //    gebruikersbeurt. De historie eindigt dan op de conceptweergave.
   const laatste = messages[messages.length - 1];
-  if (laatste.role !== "user" || laatste.content.trim().length === 0) {
+  if (!opties?.reflectieVervolg) {
+    if (laatste.role !== "user" || laatste.content.trim().length === 0) {
+      return {
+        ok: false,
+        foutcode: "laatste_geen_vraag",
+        melding: "Het laatste bericht moet een vraag van de gebruiker zijn",
+        status: 400,
+      };
+    }
     return {
-      ok: false,
-      foutcode: "laatste_geen_vraag",
-      melding: "Het laatste bericht moet een vraag van de gebruiker zijn",
-      status: 400,
+      ok: true,
+      messages,
+      vraag: laatste.content.trim(),
+      tekens,
+      historieHash: historieHash(messages),
     };
   }
 
+  // Reflectie-vervolg: neem de laatste GEBRUIKERSbeurt als context-`vraag` (voor
+  // het auditspoor). De route gebruikt voor deze paden een vaste instructie, niet
+  // deze vraag; er wordt geen nieuwe gebruikersbeurt getoond.
+  const laatsteUser = [...messages].reverse().find((m) => m.role === "user");
   return {
     ok: true,
     messages,
-    vraag: laatste.content.trim(),
+    vraag: (laatsteUser?.content ?? "").trim(),
     tekens,
     historieHash: historieHash(messages),
   };

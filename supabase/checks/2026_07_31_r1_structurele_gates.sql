@@ -116,13 +116,18 @@ declare
     'gremia',                         -- hybride template/fonds (fonds_id nullable)
     'expertises',
     'kritische_focusgebieden',
-    'wettelijk_regime_per_fondstype'  -- codelijst fondstype→wettelijk regime (T4,
+    'wettelijk_regime_per_fondstype', -- codelijst fondstype→wettelijk regime (T4,
                                       -- besluit 0162): juridische kwalificatie in
                                       -- DATA, geen tenantinhoud, geen PII;
                                       -- `for select using(true)`, service-role
                                       -- schrijft. Global-by-design (T3-register-
                                       -- patroon); ontbrak in deze lijst omdat de
                                       -- T4-migratie is opgeleverd zonder gate-run.
+    'concepts'                        -- canonieke conceptcatalogus (T7): sectorbrede,
+                                      -- platform-globale codelijst, geen fonds_id,
+                                      -- geen PII, geen tenantinhoud. `for select
+                                      -- using(true)` naar authenticated, service-role
+                                      -- schrijft (catalogus-eigenaar). Global-by-design.
   ];
 begin
   -- A1. Elke tabel met RLS die géén eigen fonds_id heeft moet in het register
@@ -276,7 +281,10 @@ declare
   --    `for select using(true)` naar authenticated, service-role schrijft.
   --    Global-by-design (T3-register-patroon); ontbrak hier omdat de T4-migratie
   --    is opgeleverd zonder gate-run (zelfde OP-C5-patroon als bij gate A1).
-  select_allow text[] := array['fondsen', 'wettelijk_regime_per_fondstype'];
+  --  • concepts                       — canonieke conceptcatalogus (T7): sectorbrede
+  --    codelijst, geen fonds_id/PII/tenantinhoud; `for select using(true)` naar
+  --    authenticated, service-role schrijft (catalogus-eigenaar). Global-by-design.
+  select_allow text[] := array['fondsen', 'wettelijk_regime_per_fondstype', 'concepts'];
 begin
   for r in
     select p.tablename, p.policyname, p.qual

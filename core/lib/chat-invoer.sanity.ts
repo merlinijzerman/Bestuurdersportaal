@@ -161,6 +161,36 @@ check("lege laatste vraag wordt geweigerd", () => {
   if (!r.ok) assert.equal(r.foutcode, "laatste_geen_vraag");
 });
 
+// B-opt tranche 2d/4a — "Nog een stap verdiepen" / "Wat pleit er tegen?" laten de
+// assistent de volgende vraag stellen zonder nieuwe gebruikersbeurt; de historie
+// eindigt dan op de conceptweergave (assistentbeurt). Met reflectieVervolg mag dat.
+check("reflectie-vervolg: assistent-laatste toegestaan, vraag = laatste gebruikersbeurt", () => {
+  const r = valideerChatInvoer(
+    [
+      { role: "user", content: "Ik twijfel" },
+      { role: "assistant", content: "U twijfelt. Waar zit die vooral, of ergens anders?" },
+      { role: "user", content: "Mijn twijfel zit bij de aannames." },
+      { role: "assistant", content: "Uw reflectie, in concept …" },
+    ],
+    undefined,
+    { reflectieVervolg: true }
+  );
+  assert.equal(r.ok, true);
+  if (r.ok) assert.equal(r.vraag, "Mijn twijfel zit bij de aannames.");
+});
+
+check("zonder reflectieVervolg blijft assistent-laatste geweigerd", () => {
+  const r = valideerChatInvoer(
+    [
+      { role: "user", content: "Ik twijfel" },
+      { role: "assistant", content: "Uw reflectie, in concept …" },
+    ],
+    undefined
+  );
+  assert.equal(r.ok, false);
+  if (!r.ok) assert.equal(r.foutcode, "laatste_geen_vraag");
+});
+
 check("geen invoer levert 400", () => {
   const r = valideerChatInvoer(undefined, undefined);
   assert.equal(r.ok, false);

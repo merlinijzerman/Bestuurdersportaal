@@ -2238,3 +2238,39 @@ create table if not exists public.procedure_afschriften (
 );
 -- Private bucket 'afschriften' (public=false, file_size_limit 150 MB) + storage-
 -- policies leven in de migratie; schema.sql is geen bron voor storage-config.
+
+-- ── T7 — Semantische laag + reproduceerbaarheid ─────────────────────────────
+-- Migratie 2026_08_12_t7_semantische_laag.sql is authoritatief; dit is
+-- documentatie. Getypeerde, aan een canoniek concept gebonden "semantic units"
+-- voor documentvergelijking (epic Documentvergelijking, Fase 1), plus
+-- reproduceerbare extractie-/vergelijkingsruns en menselijke oordelen.
+--
+-- SCHRIJFPAD (besluit T7): de pijplijn-tabellen (concepts, semantic_units,
+-- extraction_run, comparison_run) worden UITSLUITEND door de service-role
+-- beschreven; authenticated is read-only (RLS-select op eigen fonds; concepts
+-- globaal leesbaar). difference_judgements is gebruiker-geschreven (INSERT met
+-- WITH CHECK op auteur + fonds), auteur-scoped + private-aware leesbaar.
+--
+--  concepts (platform-globaal, geen fonds_id; `for select using(true)`, service-
+--    role schrijft — catalogus-eigenaar). uq_concepts_id_type (id, type) dient als
+--    doel voor de denorm-lock hieronder. In de global-lijst + gate-C allowlist van
+--    de structurele gates. ⚠ Governance: catalogus-eigenaar vóór productie benoemen.
+--  extraction_run (fonds_id) — append-only provenance-header (model/prompt/versie/
+--    catalog_version) per extractie; T8 schrijft de rij één keer bij afronding.
+--  comparison_run (fonds_id) — append-only header; comparison_results komt in T5.
+--  semantic_units (fonds_id, document_id, chunk_id→document_chunks, concept_id→
+--    concepts) — NIET append-only (her-extractie mag vervangen). `type` is via
+--    composite-FK (concept_id, type)→concepts(id, type) gelockt aan concept.type;
+--    een CHECK dwingt de juiste value_*-kolom af (percentage/amount→value_num,
+--    date→value_date, policy_choice→value_text); evidence is verplicht + niet-leeg.
+--    Indexen: (fonds_id, document_id), (concept_id), (document_id, concept_id),
+--    (extraction_run_id).
+--  difference_judgements (fonds_id, finding_key, user_id→profielen) — append-only,
+--    voedt T10. Lezen: user_id=auth.uid() OF (private=false EN eigen fonds).
+--    Promotie (promoted_to_dossier) wordt in T10 een NIEUWE rij, geen UPDATE.
+--    Index: (fonds_id, finding_key), (user_id).
+--
+-- Append-only op extraction_run/comparison_run/difference_judgements via de
+-- gedeelde public.fn_log_append_only() before-update/delete-triggers + het
+-- ontbreken van UPDATE/DELETE-grants. Puur additief: geen bestaande tabel/policy
+-- gewijzigd; geen app-gedrag verandert tot T8 schrijft.
