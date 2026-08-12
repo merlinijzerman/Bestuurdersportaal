@@ -1002,6 +1002,47 @@ export function Bronkaart({
 }
 
 // ============================================================================
+//  Lichte bronweergave tijdens reflectie (B-opt tranche 2f, ANTWOORDPAD §4)
+// ----------------------------------------------------------------------------
+//  Een reflectiebeurt is visueel lichter dan een regulier antwoord: geen volle
+//  bronbalk en geen onderbouwingspaneel. Bevat de beurt wél een dossieruitspraak
+//  ([Bron N]), dan één gedempte regel die uitklapt naar de bestaande bronkaarten.
+//
+//  ⚠ UITSLUITEND WEERGAVE. De beurt wordt onveranderd gelogd als gewone
+//  chatbeurt, met dezelfde bronvermeldingen, zónder enige markering dat het
+//  reflectie betrof (besluit 0112). Deze component raakt geen enkel logpad; wie
+//  hier "de logging meeneemt", raakt het auditspoor. Gedeeld door /ai én de
+//  agendapuntchat (besluit 0079).
+// ============================================================================
+
+export function LichteReflectieBron({
+  open,
+  onToggle,
+  children,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="mt-2">
+      <div className="text-xs text-muted flex items-center gap-2 flex-wrap">
+        <span>Zelfde bronbasis als het eerdere antwoord</span>
+        <span aria-hidden="true">·</span>
+        <button
+          type="button"
+          onClick={onToggle}
+          className="text-muted hover:text-ink underline-offset-2 hover:underline"
+        >
+          {open ? "Bronnen verbergen" : "Bronnen bekijken"}
+        </button>
+      </div>
+      {open && <div className="mt-2 flex flex-col gap-2">{children}</div>}
+    </div>
+  );
+}
+
+// ============================================================================
 //  Documentlijst bij antwoordmodus `bronoverzicht` (besluit 0099)
 // ============================================================================
 // Bij "welke stukken hebben we over X?" ZIJN de documenten het antwoord. Ze

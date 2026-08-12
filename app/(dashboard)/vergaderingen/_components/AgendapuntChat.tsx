@@ -43,6 +43,7 @@ import OnderbouwingPaneel, { type OnderbouwingMeta } from "../../ai/_components/
 import {
   renderAntwoord,
   Bronkaart,
+  LichteReflectieBron,
   AntwoordKopieerKnop,
   Documentenlijst,
   leesAntwoordmodus,
@@ -182,6 +183,9 @@ export default function AgendapuntChat({
   const [uitnodigingBesluitmoment, setUitnodigingBesluitmoment] = useState(false);
   // B-opt tranche 1a — eigen laatste reflectieantwoord, voor de Aanpassen-flow.
   const [laatsteReflectieAntwoord, setLaatsteReflectieAntwoord] = useState("");
+  // B-opt tranche 2d — huidige beurt (server-side); bepaalt of "Nog een stap
+  // verdiepen" nog zichtbaar is.
+  const [reflectieBeurt, setReflectieBeurt] = useState(0);
   const [uitnodigingToegestaan, setUitnodigingToegestaan] = useState(false);
 
   const fondsIdRef = useRef<string>("");
@@ -574,12 +578,23 @@ export default function AgendapuntChat({
     // B-opt tranche 1a — herformuleren vanuit de conceptweergave (knop
     // "Aanpassen"): blijft in conceptweergave, beurt onveranderd.
     reflectieHerformuleren?: boolean;
+    // B-opt tranche 2d — "Nog een stap verdiepen": één extra verdiepingsvraag,
+    // zonder zichtbare gebruikersbeurt.
+    reflectieVerdiepen?: boolean;
+    // B-opt tranche 4a — "Wat pleit er tegen?": tegenperspectief.
+    reflectieTegenperspectief?: boolean;
     reflectieStart?: { ingang: ReflectieIngang; bronsetLogId: string | null };
   }
 
   async function stuurBericht(vraag?: string, opties?: StuurOpties) {
     const tekst = (vraag ?? invoer).trim();
-    if (!tekst || laden) return;
+    // "Nog een stap verdiepen" en "Wat pleit er tegen?" hebben geen
+    // gebruikerstekst (B-opt tranche 2d/4a).
+    if (
+      (!tekst && !opties?.reflectieVerdiepen && !opties?.reflectieTegenperspectief) ||
+      laden
+    )
+      return;
     setInvoer("");
     setLaden(true);
     setAntwoordGestart(false);
@@ -625,6 +640,8 @@ export default function AgendapuntChat({
           // overgang niet, dan is dit gewoon een normale chatbeurt.
           reflectie_antwoord: opties?.reflectieAntwoord === true,
           reflectie_herformuleren: opties?.reflectieHerformuleren === true,
+          reflectie_verdiepen: opties?.reflectieVerdiepen === true,
+          reflectie_tegenperspectief: opties?.reflectieTegenperspectief === true,
           reflectie_start: opties?.reflectieStart
             ? {
                 ingang: opties.reflectieStart.ingang,
@@ -818,6 +835,7 @@ export default function AgendapuntChat({
           if (evt.reflectie?.status) {
             const nieuweStatus = evt.reflectie.status as ReflectieStatus;
             setReflectieStatus(nieuweStatus);
+            if (typeof evt.reflectie.beurt === "number") setReflectieBeurt(evt.reflectie.beurt);
             if (nieuweStatus !== "niet_actief") setUitnodigingZichtbaar(false);
           }
           schrijfAi();
@@ -898,8 +916,10 @@ export default function AgendapuntChat({
       );
       const data = await res.json().catch(() => null);
       setReflectieStatus(res.ok && data?.status ? data.status : "niet_actief");
+      setReflectieBeurt(res.ok && typeof data?.beurt === "number" ? data.beurt : 0);
     } catch {
       setReflectieStatus("niet_actief");
+      setReflectieBeurt(0);
     }
   }
 
@@ -923,7 +943,9 @@ export default function AgendapuntChat({
     if (
       opties?.reflectieAntwoord ||
       opties?.reflectieStart ||
-      opties?.reflectieHerformuleren
+      opties?.reflectieHerformuleren ||
+      opties?.reflectieVerdiepen ||
+      opties?.reflectieTegenperspectief
     )
       return;
     const modus = leesAntwoordmodus(onderbouwing?.antwoordmodus);
@@ -950,8 +972,10 @@ export default function AgendapuntChat({
       });
       const data = await res.json().catch(() => null);
       setReflectieStatus(res.ok && data?.status ? data.status : "niet_actief");
+      setReflectieBeurt(res.ok && typeof data?.beurt === "number" ? data.beurt : 0);
     } catch {
       setReflectieStatus("niet_actief");
+      setReflectieBeurt(0);
     }
   }
 
@@ -1168,7 +1192,32 @@ export default function AgendapuntChat({
                         ))}
                       </div>
                     )}
-                    {(b.onderbouwing || (b.bronnen && b.bronnen.length > 0)) && (
+                    {/* B-opt tranche 2f — lichte bronweergave op de huidige
+                        reflectiebeurt (ANTWOORDPAD §4). Alleen bij een
+                        dossieruitspraak ([Bron N]); afgeleid uit de live status,
+                        nooit uit een opgeslagen markering (0112). Weergave-only. */}
+                    {idx === berichten.length - 1 &&
+                      isReflectieActief(reflectieStatus) &&
+                      /\[Bron\s*\d/i.test(b.tekst ?? "") && (
+                        <LichteReflectieBron
+                          open={openBronnen.has(idx)}
+                          onToggle={() => toggleBronnen(idx)}
+                        >
+                          {(b.bronnen ?? []).map((bron, i) => (
+                            <Bronkaart
+                              key={i}
+                              idx={i}
+                              bron={bron}
+                              idVoorScroll={`bron-${agendapuntId}-${idx}-${i}`}
+                              gehighlight={
+                                highlight?.berichtIdx === idx && highlight?.bronIdx === i
+                              }
+                            />
+                          ))}
+                        </LichteReflectieBron>
+                      )}
+                    {(b.onderbouwing || (b.bronnen && b.bronnen.length > 0)) &&
+                      !(idx === berichten.length - 1 && isReflectieActief(reflectieStatus)) && (
                       <OnderbouwingPaneel
                         meta={{
                           ...(b.onderbouwing ?? {}),
@@ -1200,7 +1249,11 @@ export default function AgendapuntChat({
                         })()}
                       </OnderbouwingPaneel>
                     )}
-                    {b.vervolgvragen && b.vervolgvragen.length > 0 && (
+                    {b.vervolgvragen &&
+                      b.vervolgvragen.length > 0 &&
+                      // B-opt tranche 2f — geen inhoudelijke vervolgvragen op de
+                      // huidige reflectiebeurt (die maken er weer een analyse van).
+                      !(idx === berichten.length - 1 && isReflectieActief(reflectieStatus)) && (
                       <div className="mt-2 flex flex-wrap gap-1.5">
                         {b.vervolgvragen.map((v, vi) => (
                           <button
@@ -1287,6 +1340,7 @@ export default function AgendapuntChat({
                           {isReflectieActief(reflectieStatus) && (
                             <ReflectieInvoer
                               status={reflectieStatus}
+                              beurt={reflectieBeurt}
                               bezig={laden}
                               laatsteAntwoord={laatsteReflectieAntwoord}
                               onAntwoord={(t) => {
@@ -1294,6 +1348,18 @@ export default function AgendapuntChat({
                                 void stuurBericht(t, { reflectieAntwoord: true });
                               }}
                               onAfronden={() => vraagTransitie("afronden")}
+                              onVerdiepen={() =>
+                                void stuurBericht(undefined, {
+                                  reflectieVerdiepen: true,
+                                  geenNieuweVraag: true,
+                                })
+                              }
+                              onTegenperspectief={() =>
+                                void stuurBericht(undefined, {
+                                  reflectieTegenperspectief: true,
+                                  geenNieuweVraag: true,
+                                })
+                              }
                               onHerformuleren={(t) => {
                                 // B-opt tranche 1a — herformuleren blijft in
                                 // conceptweergave; het concept wordt opnieuw

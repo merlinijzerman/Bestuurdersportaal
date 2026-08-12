@@ -4,16 +4,16 @@
 //  Draai:  ./node_modules/.bin/tsx scripts/spike-s1/report.ts
 //  Leest output/units.json + golden_set.json, berekent de metrieken (measure.ts)
 //  en schrijft scripts/spike-s1/output/meetrapport.md met:
-//   - cijfers per concept en per type,
-//   - een G1-oordeel per concepttype + overall go/no-go-advies,
-//   - een lijst faalpatronen (met de echte tekst) als input voor T7/T8.
+//   - cijfers per concept en per type (document×concept-granulariteit),
+//   - een G1-oordeel per concept + overall go/no-go-advies,
+//   - faalpatronen (met de echte tekst) als input voor T7/T8.
 // ============================================================================
 
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Unit, GoldenUnit } from "./types";
-import { computeMetrieken, G1, type CelMetriek, type BeoordeeldeUnit } from "./measure";
+import { computeMetrieken, G1, type CelMetriek } from "./measure";
 
 const HIER = dirname(fileURLToPath(import.meta.url));
 
@@ -24,10 +24,10 @@ function pct(x: number | null): string {
 function rij(naam: string, c: CelMetriek, metG1: boolean): string {
   const g1 = metG1 ? ` | ${c.g1_green ? "🟢 groen" : "🔴 rood"}` : "";
   return (
-    `| ${naam} | ${c.golden_total} | ${c.extracted_total} | ${pct(c.recall)} | ` +
+    `| ${naam} | ${c.golden_cells} | ${c.extracted_total} | ${pct(c.recall)} | ` +
     `**${pct(c.binding_precision)}** | ${pct(c.misbinding_rate)} | ${pct(
-      c.value_accuracy
-    )} | ${pct(c.evidence_accuracy)}${g1} |`
+      c.evidence_accuracy
+    )} | ${c.correct}/${c.misbound}/${c.spurious}${g1} |`
   );
 }
 
@@ -59,39 +59,40 @@ function main() {
   L.push("# S1 — Meetrapport: extractie + conceptbinding\n");
   L.push(
     `> Gegenereerd door \`report.ts\`. Bron: ${units.length} geëxtraheerde unit(s) ` +
-      `uit ${documenten.length} document(en), ${golden.length} golden unit(s).\n`
+      `uit ${documenten.length} document(en); golden op documentniveau ` +
+      `(${golden.length} document×concept-cellen).\n`
+  );
+  L.push(
+    "**Granulariteit:** document × concept. Per cel is er één canonieke waarde + " +
+      "een distractor-lijst. `C/M/S` = CORRECT / MISBOUND / SPURIOUS. Op dit niveau " +
+      "valt waarde-accuraatheid samen met binding-precision (één juiste waarde per cel).\n"
   );
   L.push(
     `**G1-drempels** (precision-first): bindings-precision ≥ ${pct(
       G1.binding_precision
-    )}, waarde-accuraatheid ≥ ${pct(G1.value_accuracy)}, bron-accuraatheid ≥ ${pct(
-      G1.evidence_accuracy
-    )}. Recall wordt gerapporteerd, geen harde drempel.\n`
+    )}, bron-accuraatheid ≥ ${pct(G1.evidence_accuracy)}. Recall wordt gerapporteerd, ` +
+      "geen harde drempel.\n"
   );
 
   // ── Per concept ──
   L.push("## Per concept\n");
-  L.push(
-    "| concept | #golden | #extract | recall | bind-precision | misbinding | waarde | bron | G1 |"
-  );
-  L.push("|---|--:|--:|--:|--:|--:|--:|--:|:--:|");
+  L.push("| concept | #cellen | #extract | recall | bind-precision | misbinding | bron | C/M/S | G1 |");
+  L.push("|---|--:|--:|--:|--:|--:|--:|:--:|:--:|");
   for (const [naam, c] of Object.entries(m.perConcept)) L.push(rij(naam, c, true));
   L.push("");
 
   // ── Per type ──
   L.push("## Per type\n");
-  L.push(
-    "| type | #golden | #extract | recall | bind-precision | misbinding | waarde | bron | G1 |"
-  );
-  L.push("|---|--:|--:|--:|--:|--:|--:|--:|:--:|");
+  L.push("| type | #cellen | #extract | recall | bind-precision | misbinding | bron | C/M/S | G1 |");
+  L.push("|---|--:|--:|--:|--:|--:|--:|:--:|:--:|");
   for (const [t, c] of Object.entries(m.perType))
-    if (c.golden_total > 0 || c.extracted_total > 0) L.push(rij(t, c, true));
+    if (c.golden_cells > 0 || c.extracted_total > 0) L.push(rij(t, c, true));
   L.push("");
 
   // ── Overall ──
   L.push("## Overall\n");
-  L.push("| | #golden | #extract | recall | bind-precision | misbinding | waarde | bron |");
-  L.push("|---|--:|--:|--:|--:|--:|--:|--:|");
+  L.push("| | #cellen | #extract | recall | bind-precision | misbinding | bron | C/M/S |");
+  L.push("|---|--:|--:|--:|--:|--:|--:|:--:|");
   L.push(rij("alles", m.overall, false));
   L.push("");
 
@@ -118,21 +119,17 @@ function main() {
     L.push(
       "**Advies: G1 GROEN (door naar T7/T8).** Er is een levensvatbare, betrouwbare " +
         "subset: minimaal één schoon numeriek/datum-concept haalt de drempels. Bouw de " +
-        "start-catalogus met de groene concepten; stel de rode uit tot na extractie-" +
-        "verbetering."
+        "start-catalogus met de groene concepten; stel de rode uit tot na extractie-/" +
+        "normalisatie-verbetering."
     );
   } else {
     L.push(
       "**Advies: G1 ROOD.** Zelfs de schone numerieke/datum-concepten halen de bindings-" +
-        "precision niet. Los eerst de extractie/binding op (normalisatie, disambiguatie, " +
-        "menselijke reviewstap) vóór T7/T8."
+        "precision niet. Los eerst extractie/normalisatie/disambiguatie op (evt. menselijke " +
+        "reviewstap) vóór T7/T8."
     );
   }
-  L.push(
-    "\n> Let op: de golden set kan onvolledig zijn; UNMATCHED-extracties tellen tegen " +
-      "precision maar kunnen ook gemiste golden-labels zijn. Loop de faalpatronen na " +
-      "vóór het definitieve oordeel.\n"
-  );
+  L.push("");
 
   // ── Faalpatronen ──
   L.push("## Faalpatronen (input voor T7/T8)\n");
@@ -140,24 +137,24 @@ function main() {
   const misbound = m.beoordeeld.filter((u) => u.status === "MISBOUND");
   faalBlok(
     L,
-    "🔴 Foutbindingen (waarde aan verkeerd concept — de gevaarlijke fout)",
+    "🔴 Foutbindingen (distractor aan concept gebonden — de gevaarlijke fout)",
     misbound,
     (u) =>
-      `\`${u.concept}\` ⟵ hoort bij \`${u.misbound_naar}\` · ${u.document} p${u.page} · ` +
-      `waarde \`${u.value_raw}\` · "${knip(u.evidence)}"`
+      `\`${u.concept}\` · ${u.document} · bond distractor \`${JSON.stringify(
+        u.matched_distractor
+      )}\` i.p.v. canoniek \`${JSON.stringify(u.golden_canonical)}\` · raw \`${u.value_raw}\` · ` +
+      `"${knip(u.evidence)}"`
   );
 
-  const waardeFout = m.beoordeeld.filter(
-    (u) => u.status === "CORRECT" && u.value_ok === false
-  );
+  const spurious = m.beoordeeld.filter((u) => u.status === "SPURIOUS");
   faalBlok(
     L,
-    "🟠 Waarde-fouten (correct gebonden, foute genormaliseerde waarde)",
-    waardeFout,
+    "🟠 Spurious (waarde noch canoniek noch bekende distractor — norm-fout/afgeleide/hallucinatie)",
+    spurious,
     (u) =>
-      `\`${u.concept}\` · ${u.document} p${u.page} · geëxtraheerd \`${JSON.stringify(
+      `\`${u.concept}\` · ${u.document} · raw \`${u.value_raw}\` → norm \`${JSON.stringify(
         u.value_normalized
-      )}\` vs golden \`${JSON.stringify(u.golden_value)}\` · raw \`${u.value_raw}\``
+      )}\`${u.norm_ok ? "" : " (norm faalde)"} · "${knip(u.evidence)}"`
   );
 
   const evidenceFout = m.beoordeeld.filter((u) => !u.evidence_ok);
@@ -168,24 +165,13 @@ function main() {
     (u) => `\`${u.concept}\` · ${u.document} p${u.page} · "${knip(u.evidence)}"`
   );
 
-  const unmatched = m.beoordeeld.filter((u) => u.status === "UNMATCHED");
   faalBlok(
     L,
-    "⚪ Zonder golden-match (hallucinatie óf gemist golden-label — handmatig triëren)",
-    unmatched,
-    (u) =>
-      `\`${u.concept}\` · ${u.document} p${u.page} · waarde \`${u.value_raw}\` · ` +
-      `"${knip(u.evidence)}"`
-  );
-
-  faalBlok(
-    L,
-    "🔵 Gemiste golden units (recall-verlies — niet gevonden door extractie)",
-    m.gemistGolden,
+    "🔵 Gemiste cellen (geen CORRECTe extractie — recall-verlies)",
+    m.gemisteCellen,
     (g) =>
-      `\`${g.concept}\` · ${g.document} p${g.page} · waarde \`${JSON.stringify(
-        g.value_normalized
-      )}\` · "${knip(g.evidence)}"`
+      `\`${g.concept}\` · ${g.document}${g.status ? ` [${g.status}]` : ""} · ` +
+      `canoniek \`${JSON.stringify(g.canonical)}\``
   );
 
   const uit = join(HIER, "output", "meetrapport.md");
@@ -193,7 +179,8 @@ function main() {
   console.log(`Meetrapport geschreven → ${uit}`);
   console.log(
     `Samenvatting: ${groen.length}/${Object.keys(m.perConcept).length} concepten G1-groen; ` +
-      `overall bind-precision ${pct(m.overall.binding_precision)}.`
+      `overall bind-precision ${pct(m.overall.binding_precision)}, ` +
+      `misbinding ${pct(m.overall.misbinding_rate)}.`
   );
 }
 
@@ -208,8 +195,8 @@ function faalBlok<T>(
     L.push("_geen_\n");
     return;
   }
-  for (const it of items.slice(0, 40)) L.push(`- ${render(it)}`);
-  if (items.length > 40) L.push(`- … en nog ${items.length - 40} meer`);
+  for (const it of items.slice(0, 50)) L.push(`- ${render(it)}`);
+  if (items.length > 50) L.push(`- … en nog ${items.length - 50} meer`);
   L.push("");
 }
 

@@ -24,6 +24,7 @@ import {
   SP_SPARRING_REGELS,
   SP_REFLECTIE_REGELS,
   SP_REFLECTIE_CONCEPT_REGELS,
+  SP_REFLECTIE_TEGENPERSPECTIEF,
   SP_DOCUMENTEN_REGELS,
   SP_BUREAU_BRONLOOS_REGELS,
   VERVOLGVRAGEN_INSTRUCTIE,
@@ -83,8 +84,18 @@ const PIN = {
   // overneemt; ze horen daarom net zo hard vastgepind als de toon-prompt. Ze
   // raken géén van de bestaande hashes: SP_REFLECTIE_* wordt als `regels`
   // meegegeven aan bouwSysteemBlokken en vervangt niets.
-  SP_REFLECTIE_REGELS: "b4823c89991bbc49d0e238a58430e3bbfa018bc03b89bd263f52b72dd462593a",
-  SP_REFLECTIE_CONCEPT_REGELS: "d39b574a9edb4603ff87d82f17c29549649b2f608e4ad53d1f8fcad2b0c7efbc",
+  // B-opt tranche 3 (besluit 0167): attributieplicht i.p.v. de drie vaste
+  // rubrieken; vorm-van-de-beurt-regels (≤60 woorden, geen koppen), verplichte
+  // uitweg en de blocklist worden machinaal geborgd door reflectie-richtingen.ts.
+  // Nieuwe hash, vers berekend.
+  SP_REFLECTIE_REGELS: "a49eb8ef7e7306e85f07ba340b12896210d02b733a92c39e29b405a3e17f959d",
+  // B-opt tranche 2e (besluit 0163-reeks): het conceptformat naar drie kopjes
+  // (Uw overweging / Wat hierover al vaststond / Wat u nog wilde toetsen), twee
+  // voorwaardelijk, tweede persoon. Nieuwe hash, vers berekend.
+  SP_REFLECTIE_CONCEPT_REGELS: "9ef446503ebbc6a81ec6f24e904231096d525daf89b75dbf72e709b67b924005",
+  // B-opt tranche 4a (besluit 0168): het tegenperspectief-blok — u vraagt om het
+  // tegenargument, u levert het niet. Nieuw, additief; raakt geen bestaande hash.
+  SP_REFLECTIE_TEGENPERSPECTIEF: "985c93fa72c732266485db1f31b57066a453e37fe27d462263fe16c130735406",
   static_feitelijk_combineren: "720677da5a653ce08bbe08e051dad1c065a8246c7fa9964ef23d1b16e004cb6e",
   static_sparring_combineren: "bf11b83970b44857951fa520b51022b92968f6d59875e975a5665e5120c14118",
   dyn_block: "d6e01afa0bc092b7efbc8701fad58af73808ae3e3ee0c719de20366630f5c4d7",
@@ -119,6 +130,7 @@ test("toon-/instructieblokken byte-identiek aan gepinde snapshot", () => {
   assert.equal(sha(VERVOLGVRAGEN_INSTRUCTIE), PIN.VERVOLGVRAGEN_INSTRUCTIE);
   assert.equal(sha(SP_REFLECTIE_REGELS), PIN.SP_REFLECTIE_REGELS);
   assert.equal(sha(SP_REFLECTIE_CONCEPT_REGELS), PIN.SP_REFLECTIE_CONCEPT_REGELS);
+  assert.equal(sha(SP_REFLECTIE_TEGENPERSPECTIEF), PIN.SP_REFLECTIE_TEGENPERSPECTIEF);
 });
 
 test("plateau B: de reflectieprompt stuurt niet en diagnosticeert niet", () => {
@@ -130,21 +142,38 @@ test("plateau B: de reflectieprompt stuurt niet en diagnosticeert niet", () => {
   // Het expliciete verbod op duiden van de twijfel (v1.0 §9.5) staat erin.
   assert.ok(reflectie.includes("diagnosticeert niet"));
   assert.ok(reflectie.includes("u adviseert niet"));
-  assert.ok(reflectie.includes("één verdiepingsvraag per beurt"));
-  // De drie-deling uit FR-34 staat er letterlijk in.
-  assert.ok(reflectie.includes("wat u inbrengt"));
-  assert.ok(reflectie.includes("wat al vaststond"));
-  assert.ok(reflectie.includes("mogelijke onderzoeksvraag"));
+  assert.ok(reflectie.includes("precies één verdiepingsvraag"));
+  // B-opt tranche 3 (besluit 0167): de drie vaste rubrieken zijn VERVANGEN door
+  // attributieplicht — de kern is dat een eigen constatering van de assistent
+  // niet bestaat, en dat de beurt geen koppen/rubrieken draagt.
+  assert.ok(reflectie.includes("een eigen constatering van u bestaat niet"));
+  assert.ok(reflectie.includes("geen koppen"));
+  assert.ok(reflectie.includes("in de stukken"));
+  // De oude rubrieken mogen NIET meer voorkomen — anders is de vervanging niet af.
+  assert.equal(reflectie.includes("wat u inbrengt"), false);
+  assert.equal(reflectie.includes("mogelijke onderzoeksvraag"), false);
   // FR-55: zonder bronnen geen verzonnen dossiercontext.
   assert.ok(reflectie.includes("verzint geen dossiercontext"));
-  // Besluit 0112: het model benoemt de reflectie niet als proces en meet niets.
-  assert.ok(reflectie.includes("hoe vaak of hoe goed"));
+  // Besluit 0112: het model benoemt de reflectie niet als proces en legt de
+  // werkwijze niet uit (meet niets, geeft er geen etiket aan).
+  assert.ok(reflectie.includes("legt de werkwijze niet uit"));
 
   // FR-21: het concept voegt geen oordeel of interpretatie toe.
   const concept = SP_REFLECTIE_CONCEPT_REGELS.toLowerCase();
   assert.ok(concept.includes("geen nieuwe interpretatie"));
   assert.ok(concept.includes("geen oordeel"));
   assert.ok(concept.includes("uw reflectie, in concept"));
+  // B-opt tranche 2e: de drie kopjes van het nieuwe format staan er letterlijk,
+  // twee ervan expliciet voorwaardelijk, en de spiegel is in de tweede persoon.
+  assert.ok(concept.includes("uw overweging"));
+  assert.ok(concept.includes("wat hierover al vaststond"));
+  assert.ok(concept.includes("wat u nog wilde toetsen"));
+  assert.ok(concept.includes("tweede persoon"));
+  // B-opt tranche 4a-review: ook het (ongevalideerde, gestreamde) concept mag
+  // geen uitspraak doen over de bronherkomst zonder de server-injectie.
+  assert.ok(concept.includes("waar het eerdere antwoord zijn informatie vandaan haalde"));
+  // De twee bron-/vraag-secties zijn voorwaardelijk ("laat deze sectie ... weg").
+  assert.ok(concept.includes("laat deze sectie anders volledig weg"));
   // AC-26: de vaste slotzin, die expliciet zegt dat er GEEN aparte notitie komt.
   assert.ok(
     SP_REFLECTIE_CONCEPT_REGELS.includes(
@@ -156,6 +185,14 @@ test("plateau B: de reflectieprompt stuurt niet en diagnosticeert niet", () => {
     assert.equal(reflectie.includes(verboden), false, verboden);
     assert.equal(concept.includes(verboden), false, verboden);
   }
+
+  // B-opt tranche 4a (besluit 0168): het tegenperspectief VRAAGT om het
+  // tegenargument en LEVERT het niet — de kern die het governancerisico afdekt.
+  const tegen = SP_REFLECTIE_TEGENPERSPECTIEF.toLowerCase();
+  assert.ok(tegen.includes("u vraagt om het tegenargument; u levert het niet"));
+  assert.ok(tegen.includes("u formuleert dat argument niet voor hem"));
+  assert.ok(tegen.includes("u neemt geen positie in"));
+  assert.ok(tegen.includes("construeert geen argument dat daar niet staat"));
 });
 
 test("T2 bureau-toon: TOON_BLOK_BUREAU + assemblage gepind, en nulgrens intact", () => {

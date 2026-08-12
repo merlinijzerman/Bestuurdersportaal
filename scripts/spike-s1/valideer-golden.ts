@@ -48,10 +48,9 @@ data.forEach((r, i) => {
   }
   const rec = r as Record<string, unknown>;
 
-  for (const veld of ["document", "concept", "type", "value_normalized", "evidence"]) {
+  for (const veld of ["document", "concept", "type", "canonical", "distractors"]) {
     if (!(veld in rec)) fouten.push(`${p} mist verplicht veld "${veld}"`);
   }
-  if (!("page" in rec)) fouten.push(`${p} mist veld "page" (mag null zijn)`);
 
   const concept = rec.concept as string;
   const def = conceptDef(concept);
@@ -65,26 +64,30 @@ data.forEach((r, i) => {
     fouten.push(`${p} type "${rec.type}" past niet bij concept "${concept}" (verwacht ${def.type})`);
   }
 
-  const v = rec.value_normalized;
-  if (def) {
+  // Toets canonical + elke distractor tegen de typeregels.
+  const toetsWaarde = (v: unknown, label: string) => {
+    if (!def) return;
     if (def.type === "percentage" || def.type === "amount") {
-      if (typeof v !== "number") fouten.push(`${p} value_normalized moet number zijn (${def.type})`);
+      if (typeof v !== "number") fouten.push(`${p} ${label} moet number zijn (${def.type})`);
     } else if (def.type === "date") {
       if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(v))
-        fouten.push(`${p} value_normalized moet ISO-datum (YYYY-MM-DD) zijn`);
+        fouten.push(`${p} ${label} moet ISO-datum (YYYY-MM-DD) zijn`);
     } else if (def.type === "policy_choice") {
       const toegestaan = (def.enums ?? []).map((e) => e.waarde);
       if (typeof v !== "string" || !toegestaan.includes(v))
-        fouten.push(`${p} value_normalized "${String(v)}" niet in enum [${toegestaan.join(", ")}]`);
+        fouten.push(`${p} ${label} "${String(v)}" niet in enum [${toegestaan.join(", ")}]`);
     }
-    if (def.type === "amount" && rec.currency == null)
-      waarschuwingen.push(`${p} amount zonder currency — voeg "currency": "EUR" toe`);
+  };
+  toetsWaarde(rec.canonical, "canonical");
+  if (!Array.isArray(rec.distractors)) {
+    fouten.push(`${p} distractors moet een array zijn`);
+  } else {
+    rec.distractors.forEach((d, j) => toetsWaarde(d, `distractors[${j}]`));
+    if ((rec.distractors as unknown[]).some((d) => JSON.stringify(d) === JSON.stringify(rec.canonical)))
+      fouten.push(`${p} canonical staat óók in distractors (tegenstrijdig)`);
   }
-
-  if (rec.page != null && typeof rec.page !== "number")
-    fouten.push(`${p} page moet number of null zijn`);
-  if (typeof rec.evidence !== "string" || (rec.evidence as string).trim().length < 3)
-    fouten.push(`${p} evidence ontbreekt of is te kort`);
+  if (def && def.type === "amount" && rec.currency == null)
+    waarschuwingen.push(`${p} amount zonder currency — voeg "currency": "EUR" toe`);
 });
 
 console.log(`Gecontroleerd: ${data.length} record(s) in ${pad}`);

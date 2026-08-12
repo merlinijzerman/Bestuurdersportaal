@@ -56,6 +56,13 @@ export const REFLECTIE_ACTIES = [
   // invoerbalk blijft de reflectie beëindigen (FR-56); dit is het aparte pad dat
   // de belofte van de knop "Aanpassen" waarmaakt.
   "herformuleren",
+  // B-opt tranche 2d (besluit "één verdiepingsvraag als standaard; verdieping op
+  // initiatief van de bestuurder"): vanuit de conceptweergave vraagt de
+  // bestuurder met "Nog een stap verdiepen" om één extra vraag. Keert terug naar
+  // de verdiepingsstatus die bij de huidige beurt hoort, zodat de volgende
+  // `antwoord` correct doortelt. Server-side geweigerd bij beurt >= 3 — het
+  // beurtplafond blijft een hard vangnet, ook nu het geen stuurmiddel meer is.
+  "verdiepen",
 ] as const;
 
 export type ReflectieActie = (typeof REFLECTIE_ACTIES)[number];
@@ -68,55 +75,87 @@ export type ReflectieActie = (typeof REFLECTIE_ACTIES)[number];
  * "Geen aanvullende reflectie" staat hier bewust NIET tussen: die keuze slaat de
  * functie over en wordt nergens opgeslagen (FR-22). Ze is geen waarde.
  */
+// B-opt tranche 2a (besluit "vier reflectie-ingangen in plaats van acht"): de
+// acht ingangen vroegen de bestuurder zijn aarzeling te classificeren vóórdat hij
+// hem had verwoord, en overlapten. Nu vier bredere ingangen; de fijnmazigheid
+// keert terug als verdiepings-*richting* binnen guardrails (tranche 3), niet als
+// aparte knop. Volgorde bewust: drie varianten van "hier klopt iets nog niet",
+// daarna de positieve — zo is met één blik zichtbaar dat de functie niet alleen
+// voor bezwaar is.
 export const REFLECTIE_INGANGEN = [
-  "informatie_ontbreekt",
-  "onderbouwing",
-  "uitvoeringsrisico",
-  "evenwichtigheid",
-  "alternatief",
-  "uitlegbaarheid",
-  "niet_te_plaatsen",
-  "overtuiging",
+  "mis_iets",
+  "twijfel",
+  "risico",
+  "overtuigt",
 ] as const;
 
 export type ReflectieIngang = (typeof REFLECTIE_INGANGEN)[number];
 
-/** Labels van de ingangen, letterlijk uit v1.0 §9.3. */
+/** Labels van de vier ingangen, letterlijk uit VOORSTEL §B. */
 export const INGANG_LABEL: Record<ReflectieIngang, string> = {
-  informatie_ontbreekt: "Ik mis informatie",
-  onderbouwing: "Ik twijfel aan de onderbouwing",
-  uitvoeringsrisico: "Ik zie een uitvoeringsrisico",
-  evenwichtigheid: "Ik twijfel aan de evenwichtigheid",
-  alternatief: "Ik mis een serieus alternatief",
-  uitlegbaarheid: "Ik vind dit moeilijk uitlegbaar",
-  niet_te_plaatsen: "Er klopt iets niet, maar ik kan het nog niet plaatsen",
-  overtuiging: "Ik wil vastleggen wat mij juist overtuigt",
+  mis_iets: "Ik mis iets",
+  twijfel: "Ik twijfel",
+  risico: "Ik zie een risico",
+  overtuigt: "Dit overtuigt mij",
 };
 
 /**
- * De verdiepingsvraag per ingang (v1.0 §9.6). De assistent stelt hem in eigen
- * woorden; deze tekst is de deterministische val-terug én het anker voor de
- * toon. Er wordt nooit op inhoud geclassificeerd — de ingang bepaalt de vraag.
+ * Eén regel subtekst onder elk label (VOORSTEL §B). Bij vier ingangen is die
+ * subtekst geen luxe maar noodzaak: hij is de plek waar het onderscheid tussen
+ * "Ik twijfel" en "Ik zie een risico" zichtbaar wordt. Geen iconen (FR-22).
+ */
+export const INGANG_SUBTEKST: Record<ReflectieIngang, string> = {
+  mis_iets:
+    "Informatie, onderbouwing, een perspectief of een alternatief dat u hier niet terugziet",
+  twijfel:
+    "Aan de redenering, de aannames, de evenwichtigheid — of aan iets dat u nog niet kunt plaatsen",
+  risico: "Een gevolg, een afhankelijkheid of een uitkomst die u zorgen baart",
+  overtuigt: "U wilt vastleggen wat uw vertrouwen hier draagt",
+};
+
+/**
+ * De DETERMINISTISCHE verdiepingsvraag per ingang — de val-terug (VOORSTEL §D):
+ * faalt de adaptieve vraagkeuze of de validatie (tranche 3), dan valt de functie
+ * terug op deze vaste vraag. De huidige garantie is daarmee de ondergrens, niet
+ * het maximum. Er wordt nooit op inhoud geclassificeerd — de ingang bepaalt de
+ * val-terugvraag. Formuleringen uit ANTWOORDPAD §2 ("A — zonder context").
  */
 export const INGANG_VERDIEPING: Record<ReflectieIngang, string> = {
-  informatie_ontbreekt:
-    "Welke informatie ontbreekt om een oordeel te kunnen vormen?",
-  onderbouwing: "Gaat het om bronnen, cijfers, aannames of de redenering?",
-  uitvoeringsrisico:
-    "Zit dit in capaciteit, techniek, proces, leverancier of planning?",
-  evenwichtigheid:
-    "Welke groep of welk belang krijgt mogelijk onvoldoende gewicht?",
-  alternatief: "Welk alternatief zou nog onderzocht moeten worden?",
-  uitlegbaarheid: "Aan wie, en op welk onderdeel?",
-  niet_te_plaatsen:
-    "Welke ervaring, passage of mogelijke uitkomst roept dit op?",
-  overtuiging: "Welk argument of gegeven geeft juist vertrouwen?",
+  mis_iets: "Wat ontbreekt voor u om hier een oordeel over te kunnen vormen?",
+  twijfel:
+    "Waar zit uw twijfel vooral: in de feiten, de aannames, de redenering — of ergens anders?",
+  risico: "Welk gevolg of welke afhankelijkheid baart u hier vooral zorgen?",
+  overtuigt: "Wat weegt hier voor u het zwaarst?",
+};
+
+/**
+ * Mapping van de ACHT oude ingangwaarden naar de VIER nieuwe (VOORSTEL §B,
+ * "Herkomst"). Leidend voor de datamapping in de migratie én bevroren in de
+ * sanitytest, zodat code en migratie niet uiteenlopen. `risico` blijft bestaan
+ * (besluit 0164: het verwijdercriterium is niet getoetst, dus de veilige default).
+ */
+export const INGANG_MAPPING_OUD_NAAR_NIEUW: Record<string, ReflectieIngang> = {
+  informatie_ontbreekt: "mis_iets",
+  alternatief: "mis_iets",
+  onderbouwing: "twijfel",
+  evenwichtigheid: "twijfel",
+  uitlegbaarheid: "twijfel",
+  niet_te_plaatsen: "twijfel",
+  uitvoeringsrisico: "risico",
+  overtuiging: "overtuigt",
 };
 
 /**
  * Bij `niet_te_plaatsen` drie optionele open vragen waarvan de gebruiker er één
  * kiest (v1.0 §9.6). De derde gebruikt een pre-mortemtechniek. Het stellen
  * ervan is geen aanwijzing dat er een probleem is.
+ *
+ * ⚠ B-opt tranche 2: de ingang `niet_te_plaatsen` bestaat niet meer als aparte
+ * knop (hij mapt op `twijfel`, besluit 0165). Deze premortemvragen zijn bewust
+ * BEHOUDEN: ze zijn het inhoudelijk sterkste onderdeel van de functie (VOORSTEL
+ * §B, nuance 2) en keren terug als verdiepings-richting `niet_pluis` onder
+ * `twijfel` in de adaptieve vraagkeuze (tranche 3, core/lib/reflectie-richtingen.ts).
+ * Tot die richting ze inzet, worden ze alleen door hun eigen sanitytest geraakt.
  */
 export const NIET_TE_PLAATSEN_VRAGEN = [
   "Wat zou er moeten kloppen om dit besluit wél navolgbaar te maken?",
@@ -206,6 +245,12 @@ const TRANSITIES: ReadonlyArray<{
   // niet — het is geen nieuwe verdiepingsvraag. Enkel vanuit `conceptweergave`
   // toegestaan; vanuit elke andere status valt hij door naar ongeldige_transitie.
   { van: "conceptweergave", actie: "herformuleren", naar: ["conceptweergave"] },
+  // B-opt tranche 2d: "Nog een stap verdiepen" keert terug naar de
+  // verdiepingsstatus die bij de huidige beurt hoort (verdieping_1 bij beurt 1,
+  // verdieping_2 bij beurt 2), zodat het volgende antwoord doortelt naar
+  // verdieping_2 resp. verdieping_3. Bij beurt 3 weigert de RPC (beurtplafond);
+  // daarom komt `verdieping_3` hier niet voor als doel.
+  { van: "conceptweergave", actie: "verdiepen", naar: ["verdieping_1", "verdieping_2"] },
   { van: "conceptweergave", actie: "afronden", naar: ["afgerond"] },
   // Afbreken kan vanuit elke status waarin de flow leeft. Wordt óók getriggerd
   // door een gewone chatbeurt via de normale invoerbalk (FR-56).

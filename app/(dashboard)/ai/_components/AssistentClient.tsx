@@ -13,6 +13,7 @@ import OnderbouwingPaneel, { type OnderbouwingMeta } from "./OnderbouwingPaneel"
 import {
   renderAntwoord,
   Bronkaart,
+  LichteReflectieBron,
   AntwoordKopieerKnop,
   Documentenlijst,
   leesAntwoordmodus,
@@ -319,6 +320,9 @@ export default function AssistentClient({
   // B-opt tranche 1a — het eigen laatste reflectieantwoord, om het herformuleer-
   // veld ("Aanpassen") mee voor te vullen. Nooit de AI-tekst van het concept.
   const [laatsteReflectieAntwoord, setLaatsteReflectieAntwoord] = useState("");
+  // B-opt tranche 2d — de huidige beurt; bepaalt of "Nog een stap verdiepen" nog
+  // zichtbaar is. Komt server-side mee in het done-event; nooit zelf afgeleid.
+  const [reflectieBeurt, setReflectieBeurt] = useState(0);
   // Permanente opt-out uit het profiel (FR-15). Default aan; pas als het profiel
   // geladen is kan hij uit staan. Zolang we het niet weten tonen we niets —
   // liever geen uitnodiging dan een uitnodiging aan wie hem heeft uitgezet.
@@ -1134,13 +1138,26 @@ export default function AssistentClient({
     // conceptweergave (knop "Aanpassen"). Stuurt actie `herformuleren`; de status
     // blijft conceptweergave en de beurt verandert niet.
     reflectieHerformuleren?: boolean;
+    // B-opt tranche 2d — "Nog een stap verdiepen": vraagt om één extra
+    // verdiepingsvraag. Geen zichtbare gebruikersbeurt (geenNieuweVraag).
+    reflectieVerdiepen?: boolean;
+    // B-opt tranche 4a — "Wat pleit er tegen?": tegenperspectief, zelfde
+    // transitie als verdiepen, andere promptvariant.
+    reflectieTegenperspectief?: boolean;
     // De gekozen reflectie-ingang + de logregel waarvan de bronset bevriest.
     reflectieStart?: { ingang: ReflectieIngang; bronsetLogId: string | null };
   }
 
   async function stuurBericht(vraag?: string, opties?: StuurOpties) {
     const tekst = vraag || invoer.trim();
-    if (!tekst || laden) return;
+    // "Nog een stap verdiepen" en "Wat pleit er tegen?" hebben geen
+    // gebruikerstekst: de assistent stelt de volgende vraag. Anders blijft de
+    // lege-invoer-guard staan.
+    if (
+      (!tekst && !opties?.reflectieVerdiepen && !opties?.reflectieTegenperspectief) ||
+      laden
+    )
+      return;
     setInvoer("");
     setVrijeVraagOpen(false);
     setLaden(true);
@@ -1268,6 +1285,8 @@ export default function AssistentClient({
           // een client kan zich dus geen reflectie toe-eigenen (FR-67).
           reflectie_antwoord: opties?.reflectieAntwoord === true,
           reflectie_herformuleren: opties?.reflectieHerformuleren === true,
+          reflectie_verdiepen: opties?.reflectieVerdiepen === true,
+          reflectie_tegenperspectief: opties?.reflectieTegenperspectief === true,
           reflectie_start: opties?.reflectieStart
             ? {
                 ingang: opties.reflectieStart.ingang,
@@ -1589,6 +1608,7 @@ export default function AssistentClient({
           if (evt.reflectie?.status) {
             const nieuweStatus = evt.reflectie.status as ReflectieStatus;
             setReflectieStatus(nieuweStatus);
+            if (typeof evt.reflectie.beurt === "number") setReflectieBeurt(evt.reflectie.beurt);
             // Loopt er een reflectie, dan is de uitnodiging niet aan de orde.
             if (nieuweStatus !== "niet_actief") setUitnodigingZichtbaar(false);
           }
@@ -1685,8 +1705,10 @@ export default function AssistentClient({
       );
       const data = await res.json().catch(() => null);
       setReflectieStatus(res.ok && data?.status ? data.status : "niet_actief");
+      setReflectieBeurt(res.ok && typeof data?.beurt === "number" ? data.beurt : 0);
     } catch {
       setReflectieStatus("niet_actief");
+      setReflectieBeurt(0);
     }
   }
 
@@ -1716,7 +1738,9 @@ export default function AssistentClient({
     if (
       opties?.reflectieAntwoord ||
       opties?.reflectieStart ||
-      opties?.reflectieHerformuleren
+      opties?.reflectieHerformuleren ||
+      opties?.reflectieVerdiepen ||
+      opties?.reflectieTegenperspectief
     )
       return;
     if (opties?.transformatie) {
@@ -1761,8 +1785,10 @@ export default function AssistentClient({
       // de reflectie vasthouden terwijl de server hem niet kent is de enige
       // uitkomst die de gebruiker echt klem zet.
       setReflectieStatus(res.ok && data?.status ? data.status : "niet_actief");
+      setReflectieBeurt(res.ok && typeof data?.beurt === "number" ? data.beurt : 0);
     } catch {
       setReflectieStatus("niet_actief");
+      setReflectieBeurt(0);
     }
   }
 
@@ -1939,6 +1965,7 @@ export default function AssistentClient({
     setHistorieOpen(false);
     // Plateau B — een schone chat begint zonder reflectie en zonder kaart.
     setReflectieStatus("niet_actief");
+    setReflectieBeurt(0);
     setUitnodigingZichtbaar(false);
     setUitnodigingBesluitmoment(false);
     // B-opt 1a — de voorvultekst van "Aanpassen" hoort bij het vorige gesprek;
@@ -2500,11 +2527,43 @@ export default function AssistentClient({
                 </div>
               )}
 
+              {/* B-opt tranche 2f — lichte bronweergave tijdens reflectie
+                  (ANTWOORDPAD §4). Alleen op de HUIDIGE reflectiebeurt (de laatste
+                  AI-beurt terwijl de flow loopt); afgeleid uit de live status,
+                  nooit uit een opgeslagen markering (besluit 0112). Bevat de beurt
+                  een dossieruitspraak ([Bron N]), dan één gedempte regel die
+                  uitklapt; anders niets. */}
+              {b.rol === "ai" &&
+                b.onderbouwing &&
+                i === berichten.length - 1 &&
+                isReflectieActief(reflectieStatus) &&
+                /\[Bron\s*\d/i.test(b.tekst ?? "") && (
+                  <LichteReflectieBron
+                    open={openPanelen.has(i)}
+                    onToggle={() => togglePaneel(i)}
+                  >
+                    {(b.bronnen ?? []).map((bron, j) => (
+                      <Bronkaart
+                        key={j}
+                        idx={j}
+                        bron={bron}
+                        idVoorScroll={`bron-${i}-${j}`}
+                        gehighlight={
+                          highlight?.berichtIdx === i && highlight?.bronIdx === j
+                        }
+                      />
+                    ))}
+                  </LichteReflectieBron>
+                )}
+
               {/* Onderbouwing en bronnen (FO §11c) — standaard ingeklapt.
                   Staat bewust vóór de vervolgacties: het antwoord staat zo
                   direct naast zijn bronnen, en de vervolgvragen sluiten daar
-                  daaronder op aan. */}
-              {b.rol === "ai" && b.onderbouwing && (
+                  daaronder op aan. Niet tijdens de huidige reflectiebeurt: die
+                  krijgt de lichte weergave hierboven. */}
+              {b.rol === "ai" &&
+                b.onderbouwing &&
+                !(i === berichten.length - 1 && isReflectieActief(reflectieStatus)) && (
                 <OnderbouwingPaneel
                   meta={{
                     ...b.onderbouwing,
@@ -2549,7 +2608,12 @@ export default function AssistentClient({
               {b.rol === "ai" &&
                 b.onderbouwing?.vervolgvragen &&
                 b.onderbouwing.vervolgvragen.length > 0 &&
-                !(laden && i === berichten.length - 1) && (
+                !(laden && i === berichten.length - 1) &&
+                // B-opt tranche 2f — tijdens de huidige reflectiebeurt geen
+                // inhoudelijke vervolgvragen: die maken van de reflectie weer een
+                // analyse (de server stuurt ze op een reflectiebeurt niet uit,
+                // maar we zetten het hier expliciet dicht).
+                !(i === berichten.length - 1 && isReflectieActief(reflectieStatus)) && (
                   <div className="mt-3">
                     <div className="text-[11px] font-semibold text-muted uppercase tracking-wide mb-1.5">
                       Vervolgvragen
@@ -2662,6 +2726,7 @@ export default function AssistentClient({
                     {isReflectieActief(reflectieStatus) && (
                       <ReflectieInvoer
                         status={reflectieStatus}
+                        beurt={reflectieBeurt}
                         bezig={laden}
                         laatsteAntwoord={laatsteReflectieAntwoord}
                         onAntwoord={(t) => {
@@ -2669,6 +2734,22 @@ export default function AssistentClient({
                           stuurBericht(t, { reflectieAntwoord: true });
                         }}
                         onAfronden={() => vraagTransitie("afronden")}
+                        onVerdiepen={() =>
+                          // Geen zichtbare gebruikersbeurt: de assistent stelt
+                          // de volgende verdiepingsvraag (B-opt tranche 2d).
+                          stuurBericht(undefined, {
+                            reflectieVerdiepen: true,
+                            geenNieuweVraag: true,
+                          })
+                        }
+                        onTegenperspectief={() =>
+                          // B-opt tranche 4a — tegenperspectief-vraag, geen
+                          // zichtbare gebruikersbeurt.
+                          stuurBericht(undefined, {
+                            reflectieTegenperspectief: true,
+                            geenNieuweVraag: true,
+                          })
+                        }
                         onHerformuleren={(t) => {
                           // B-opt tranche 1a — de bestuurder scherpt zijn eigen
                           // overweging aan. Actie `herformuleren`: blijft in

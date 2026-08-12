@@ -71,6 +71,8 @@ export const CONCEPTEN: ConceptDef[] = [
           "value based",
           "value-based",
           "collectieve waardering",
+          "standaard", // kaal (bv. value_raw "standaardmethode" of config "STD")
+          "std",
         ],
       },
       {
@@ -81,6 +83,7 @@ export const CONCEPTEN: ConceptDef[] = [
           "individueel invaren",
           "individuele toerekening",
           "individuele waardering",
+          "individueel", // kaal (bv. config-token "INDIVIDUEEL")
         ],
       },
     ],
@@ -106,13 +109,42 @@ const MISLUKT = (note: string): NormResultaat => ({
   note,
 });
 
-// ── percentage: "6,0%" → 0.06 ──────────────────────────────────────
+// Uitgeschreven Nederlandse hoofdtelwoorden (0–100) — de oracle test o.a.
+// "zes procent". Bewust beperkt tot enkelvoudige woorden; samengestelde
+// getallen ("drieënzestig") vallen buiten scope en worden een gemeten faalpunt.
+const WOORDGETAL: Record<string, number> = {
+  nul: 0, een: 1, één: 1, twee: 2, drie: 3, vier: 4, vijf: 5, zes: 6,
+  zeven: 7, acht: 8, negen: 9, tien: 10, elf: 11, twaalf: 12, dertien: 13,
+  veertien: 14, vijftien: 15, zestien: 16, zeventien: 17, achttien: 18,
+  negentien: 19, twintig: 20, dertig: 30, veertig: 40, vijftig: 50,
+  zestig: 60, zeventig: 70, tachtig: 80, negentig: 90, honderd: 100,
+};
+
+// ── percentage: "6,0%" → 0.06, ook "zes procent" → 0.06 ─────────────
 export function normaliseerPercentage(raw: string): NormResultaat {
   const m = raw.match(/(-?\d+(?:[.,]\d+)?)\s*(?:%|procent|pct)/i);
-  if (!m) return MISLUKT("geen percentage-token gevonden");
-  const getal = parseFloat(m[1].replace(",", "."));
-  if (Number.isNaN(getal)) return MISLUKT(`onparsebaar getal: ${m[1]}`);
-  return { ok: true, value: getal / 100, currency: null };
+  if (m) {
+    const getal = parseFloat(m[1].replace(",", "."));
+    if (Number.isNaN(getal)) return MISLUKT(`onparsebaar getal: ${m[1]}`);
+    return { ok: true, value: getal / 100, currency: null };
+  }
+  // Uitgeschreven: "<woord> procent".
+  const w = raw.toLowerCase().match(/([a-zà-ÿ]+)\s*(?:%|procent|pct)/);
+  if (w && w[1] in WOORDGETAL)
+    return { ok: true, value: WOORDGETAL[w[1]] / 100, currency: null };
+  // Kaal getal zonder %-teken (de oracle noemt "0,06" en "0.06" als geldige
+  // bovengrens-vormen). Een getal ≤ 1 is al een fractie (0,06 → 0.06); een getal
+  // > 1 en ≤ 100 is een percentage (6 → 0.06).
+  const b = raw.match(/-?\d+(?:[.,]\d+)?/);
+  if (b) {
+    const n = parseFloat(b[0].replace(",", "."));
+    if (!Number.isNaN(n)) {
+      if (n > 0 && n <= 1) return { ok: true, value: n, currency: null };
+      if (n > 1 && n <= 100)
+        return { ok: true, value: n / 100, currency: null, note: "kaal getal geïnterpreteerd als percentage" };
+    }
+  }
+  return MISLUKT("geen percentage-token gevonden");
 }
 
 const MAANDEN: Record<string, number> = {
@@ -163,13 +195,17 @@ export function normaliseerDatum(raw: string): NormResultaat {
 }
 
 // ── amount: "€ 17.545" → 17545 (+ currency) ─────────────────────────
+// Ondersteunt punt- én spatie-duizendtallen ("17.545", "17 545"), komma-
+// decimalen ("1.234.567,89") en schaalwoorden ("501 miljoen"). De oracle test
+// "17 545 euro" (spatie) expliciet — een naïeve parser leest daar "17".
 export function normaliseerBedrag(raw: string): NormResultaat {
   const currency = /€|eur/i.test(raw) ? "EUR" : null;
+  const schaal = /miljard/i.test(raw) ? 1e9 : /miljoen/i.test(raw) ? 1e6 : 1;
 
-  // Pak de eerste getal-cluster (cijfers met . en , als scheidingstekens).
-  const m = raw.match(/-?\d[\d.,]*\d|\d/);
+  // Pak de eerste getal-cluster; spatie/NBSP tellen als duizendtal-scheiding.
+  const m = raw.match(/-?\d[\d.,  ]*\d|\d/);
   if (!m) return MISLUKT("geen getal in bedrag gevonden");
-  let cluster = m[0];
+  let cluster = m[0].replace(/[  ]/g, ""); // spaties = duizendtal → weg
 
   const heeftPunt = cluster.includes(".");
   const heeftKomma = cluster.includes(",");
@@ -191,27 +227,35 @@ export function normaliseerBedrag(raw: string): NormResultaat {
 
   const getal = parseFloat(cluster);
   if (Number.isNaN(getal)) return MISLUKT(`onparsebaar bedrag: ${m[0]}`);
-  return { ok: true, value: getal, currency };
+  return { ok: true, value: getal * schaal, currency };
 }
 
 // ── policy_choice: tekst → enum-waarde ──────────────────────────────
-// Gebruikt zowel de door het model geleverde value_raw als de evidence-zin,
-// omdat de enum-keuze vaak alleen uit de omliggende zin blijkt.
+// Eerst op de door het model geleverde value_raw (dat is de waarde die het
+// model ALS de keuze aanwijst); pas als raw niets oplevert vallen we terug op de
+// evidence-zin. Reden: de evidence bevat vaak óók het andere enum-woord in een
+// ONTKENNING ("de individuele methode wordt niet toegepast") — dat mag geen
+// valse ambiguïteit veroorzaken. De negatie-afhandeling zelf blijft een bekend
+// faalpunt (zie meetrapport) en is doelbewust niet in deze normaliser gebouwd.
 export function normaliseerPolicy(
   def: ConceptDef,
   raw: string,
   evidence: string
 ): NormResultaat {
-  const hooiberg = `${raw} ${evidence}`.toLowerCase();
-  const treffers = (def.enums ?? []).filter((e) =>
-    e.trefwoorden.some((t) => hooiberg.includes(t))
-  );
-  if (treffers.length === 1)
-    return { ok: true, value: treffers[0].waarde, currency: null };
-  if (treffers.length > 1)
-    return MISLUKT(
-      `meerdere enum-waarden herkend (${treffers.map((t) => t.waarde).join(", ")}) — ambigu`
-    );
+  const matchIn = (tekst: string) => {
+    const h = tekst.toLowerCase();
+    return (def.enums ?? []).filter((e) => e.trefwoorden.some((t) => h.includes(t)));
+  };
+  for (const bron of [raw, evidence]) {
+    const treffers = matchIn(bron);
+    if (treffers.length === 1)
+      return { ok: true, value: treffers[0].waarde, currency: null };
+    if (treffers.length > 1)
+      return MISLUKT(
+        `meerdere enum-waarden herkend (${treffers.map((t) => t.waarde).join(", ")}) — ambigu`
+      );
+    // 0 treffers in raw → door naar evidence.
+  }
   return MISLUKT("geen enum-trefwoord herkend");
 }
 

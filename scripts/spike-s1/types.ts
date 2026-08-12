@@ -26,15 +26,19 @@ export interface Unit {
   model_confidence: "hoog" | "midden" | "laag";
 }
 
-// Eén record uit de golden set (ground truth). Zie README.md §Golden set voor
-// het schema en golden_set.EXAMPLE.json voor een ingevuld voorbeeld.
+// Eén golden-record op DOCUMENT×CONCEPT-niveau (ground truth). De NovaWerk-oracle
+// is document-niveau: per (document, concept) de canonieke waarde die dat
+// document noemt + de distractor-waarden die aanwezig zijn maar NIET aan dit
+// concept horen (signaleringsgrens, foutieve testdata, ondergrens, andere
+// grootheid). CORRECT = het model bindt `canonical`; MISBOUND = het model bindt
+// een waarde uit `distractors` (de gevaarlijke fout). Zie README.md §Golden set.
 export interface GoldenUnit {
   document: string;
   concept: string;
   type: ConceptType;
-  value_normalized: number | string;
-  currency?: string | null;
-  page: number | null;
-  section: string | null;
-  evidence: string;
+  canonical: number | string; // verwachte genormaliseerde waarde in dit document
+  currency?: string | null; // alleen amount
+  distractors: (number | string)[]; // genormaliseerde waarden die NIET gebonden mogen worden
+  status?: string; // bv. "definitief" | "werkdocument" | "vervallen concept"
+  authority_rank?: number; // gezag-rang uit de oracle (informatief)
 }

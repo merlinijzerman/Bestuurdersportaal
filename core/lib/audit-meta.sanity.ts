@@ -456,6 +456,9 @@ test("AC-17: geen enkele allowlist bevat een reflectiesleutel", () => {
     "reflectie_beurt",
     "bronset",
     "reflectie_bronset_versie",
+    // B-opt tranche 3 (besluit 0167, guardrail 2): de vraagkeuze-RICHTING mag de
+    // request niet verlaten — nooit in een allowlist, dus nooit in het auditspoor.
+    "richting",
   ];
 
   const alleSleutels: string[] = [

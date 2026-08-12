@@ -4,7 +4,8 @@ import { createServerSupabase } from "@/core/lib/supabase-server";
 import { zoekRelevanteChunksMetMeta, telNietActueleFondstreffers, maakContext, maakBronSentinel, haalDocumentChunks, haalBevrorenChunks, verrijkNotulenChunks, verrijkDocumentmetadata, type DocumentChunk, type BronVerwijzing, type RetrievalMeta, type RetrievalFilters } from "@/core/lib/rag";
 // Plateau B — de reflectieflow. `isActief` heet hier `isReflectieActief` omdat
 // `actief` in deze route al een half dozijn andere betekenissen heeft.
-import { effectieveStatus, isActief as isReflectieActief, moetNaarConcept, isReflectieIngang, type ReflectieStatus, type ReflectieActie } from "@/core/lib/reflectie-flow";
+import { effectieveStatus, isActief as isReflectieActief, isReflectieIngang, type ReflectieStatus, type ReflectieActie, type ReflectieIngang } from "@/core/lib/reflectie-flow";
+import { valideerVerdiepingsvraag, standaardVraag, tegenperspectiefVraag } from "@/core/lib/reflectie-richtingen";
 import { bepaalBronset } from "@/core/lib/bronset";
 import { heeftReformulatieNodig, reformuleerVraag } from "@/core/lib/query-reformulatie";
 import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
@@ -74,6 +75,7 @@ import {
   SP_TRANSFORMATIE_REGELS,
   SP_REFLECTIE_REGELS,
   SP_REFLECTIE_CONCEPT_REGELS,
+  SP_REFLECTIE_TEGENPERSPECTIEF,
   SP_MAP_EXTRACTIE,
   SP_WEB_REGELS,
   ROL_LABEL,
@@ -172,6 +174,27 @@ function locatieLabel(c: DocumentChunk): string {
     .filter(Boolean)
     .join(", ");
   return loc ? `[${loc}] ` : "";
+}
+
+// ── B-opt tranche 3d — samenstelling van het oorspronkelijke antwoord ────────
+// Leidt de feitelijke bronsamenstelling af uit `retrieval_meta.source_summary`
+// van de logregel waarop wordt gereflecteerd. Puur afgeleid, geen nieuwe opslag.
+// Retourneert de exacte zin voor de prompt, of null wanneer niets bruikbaars is
+// vastgesteld (dan mag het model niets over de herkomst zeggen — AC-R7).
+function leidSamenstellingAf(retrievalMeta: unknown): string | null {
+  if (!retrievalMeta || typeof retrievalMeta !== "object") return null;
+  const ss = (retrievalMeta as { source_summary?: unknown }).source_summary;
+  if (!ss || typeof ss !== "object") return null;
+  const s = ss as { documenten?: unknown; web?: unknown; model_kennis?: unknown };
+  const doc = typeof s.documenten === "number" ? s.documenten : 0;
+  const web = typeof s.web === "number" ? s.web : 0;
+  const model = typeof s.model_kennis === "number" ? s.model_kennis : 0;
+  if (doc > 0 && web > 0) return "uw stukken en geverifieerde webbronnen";
+  if (doc > 0 && model > 0) return "uw stukken en algemene kennis van het model";
+  if (doc > 0) return "alleen uw stukken";
+  if (web > 0) return "geverifieerde webbronnen";
+  if (model > 0) return "alleen algemene kennis van het model";
+  return null;
 }
 
 // Bouwt één bronkaart per gescoopt document (i.p.v. per chunk). Voor de brede
@@ -316,6 +339,14 @@ export async function POST(req: NextRequest) {
       // afgehandeld (afbreken). Sluit `reflectie_antwoord` uit: de client stuurt
       // er precies één van beide.
       reflectie_herformuleren?: boolean;
+      // B-opt tranche 2d — "Nog een stap verdiepen": de bestuurder vraagt vanuit
+      // de conceptweergave om één extra verdiepingsvraag. Signaal; de RPC keert
+      // terug naar verdieping_{beurt} en weigert bij het beurtplafond.
+      reflectie_verdiepen?: boolean;
+      // B-opt tranche 4a — "Wat pleit er tegen?": zelfde transitie als verdiepen
+      // (conceptweergave → verdieping_{beurt}), maar een andere promptvariant. De
+      // assistent VRAAGT om het tegenargument, hij levert het niet.
+      reflectie_tegenperspectief?: boolean;
       // De reflectie-ingang bij het STARTEN van een flow, plus het id van de
       // logregel waarvan de bronset wordt bevroren. De RPC toetst zelf dat die
       // logregel van deze gebruiker én dit gesprek is (AC-18).
@@ -1037,6 +1068,24 @@ export async function POST(req: NextRequest) {
     let reflectieStatus: ReflectieStatus = "niet_actief";
     let reflectieBeurt = 0;
     let reflectieBronsetChunkIds: string[] = [];
+    // B-opt tranche 3 — de gekozen ingang (voor de deterministische terugval bij
+    // een afgekeurde verdiepingsvraag) en de FEITELIJKE samenstelling van het
+    // oorspronkelijke antwoord (§3d): alleen wanneer de server die meegeeft, mag
+    // het model iets over de herkomst zeggen (AC-R7). `null` = niet meegeven.
+    let reflectieIngang: ReflectieIngang | null = null;
+    let reflectieSamenstelling: string | null = null;
+    // B-opt tranche 2c/2d — de gevraagde actie is buiten dit blok nodig om te
+    // bepalen wat de beurt toont (concept ná elk antwoord, verdiepingsvraag bij
+    // `verdiepen`) en of ná de generatie naar de conceptweergave getransiteerd
+    // moet worden. Default `afbreken`: geen actief reflectiesignaal.
+    let reflectieActie: ReflectieActie = "afbreken";
+    // B-opt tranche 3b — de verdiepingsvraag (niet het concept) wordt gebufferd,
+    // gevalideerd en dan getoond i.p.v. gestreamd (guardrail 6). Gezet in de
+    // reflectie-prompttak; gelezen in het streampad.
+    let bufferReflectievraag = false;
+    // B-opt tranche 4a — deze verdiepingsbeurt is een TEGENPERSPECTIEF ("Wat pleit
+    // er tegen?"): andere promptvariant en een andere deterministische terugval.
+    let reflectieTegenperspectief = false;
 
     if (gesprekAuditId) {
       const startIngang = isReflectieIngang(body.reflectie_start?.ingang)
@@ -1059,7 +1108,16 @@ export async function POST(req: NextRequest) {
           // de beurt als gewone chatbeurt (afbreken) doorloopt.
         body.reflectie_herformuleren === true
         ? "herformuleren"
+        : // B-opt tranche 2d — "Nog een stap verdiepen": vraagt om één nieuwe
+          // verdiepingsvraag. De RPC keert terug naar verdieping_{beurt} en
+          // weigert bij beurt >= 3.
+        body.reflectie_verdiepen === true || body.reflectie_tegenperspectief === true
+        ? "verdiepen"
         : "afbreken";
+      reflectieActie = actie;
+      // Tegenperspectief loopt via dezelfde `verdiepen`-transitie; alleen de
+      // promptvariant verschilt (tranche 4a).
+      reflectieTegenperspectief = body.reflectie_tegenperspectief === true;
 
       const { data: flowRij, error: flowFout } = await supabase.rpc("reflectie_transitie", {
         p_gesprek_id: gesprekAuditId,
@@ -1078,6 +1136,7 @@ export async function POST(req: NextRequest) {
         const rij = flowRij as {
           status?: string;
           beurt?: number;
+          ingang?: string | null;
           bronset_log_id?: string | null;
           bijgewerkt_op?: string | null;
         };
@@ -1087,6 +1146,7 @@ export async function POST(req: NextRequest) {
           Date.now()
         );
         reflectieBeurt = typeof rij.beurt === "number" ? rij.beurt : 0;
+        reflectieIngang = isReflectieIngang(rij.ingang) ? rij.ingang : null;
 
         // G3 — de bevroren bronset ophalen. De chunk-ID's komen uit dezelfde
         // logregel die de RPC op eigenaarschap én gesprek heeft gevalideerd; de
@@ -1099,9 +1159,15 @@ export async function POST(req: NextRequest) {
             .select("retrieval_meta")
             .eq("id", rij.bronset_log_id)
             .maybeSingle();
-          reflectieBronsetChunkIds = bepaalBronset(
-            (logRij as { retrieval_meta?: unknown } | null)?.retrieval_meta
-          ).chunkIds;
+          const meta = (logRij as { retrieval_meta?: unknown } | null)?.retrieval_meta;
+          reflectieBronsetChunkIds = bepaalBronset(meta).chunkIds;
+          // ── B-opt tranche 3d — feitelijke bronsamenstelling meegeven ────────
+          // Route B uit ANTWOORDPAD §0.2: de server geeft de samenstelling van het
+          // OORSPRONKELIJKE antwoord feitelijk mee (afgeleid uit source_summary in
+          // dezelfde logregel), zodat een uitspraak over herkomst wáár is en niet
+          // een gok van het model. Geen nieuwe opslag. Zonder deze regel verbiedt
+          // de prompt (en AC-R7) elke herkomstuitspraak.
+          reflectieSamenstelling = leidSamenstellingAf(meta);
         }
       }
     }
@@ -1682,26 +1748,51 @@ export async function POST(req: NextRequest) {
       // is een ander (FR-56).
       //
       // Twee vormen: verdiepingsvraag of conceptweergave. Welke van de twee het
-      // is, bepaalt de SERVER uit de flowstatus — niet het model en niet de
-      // client. Bij het bereikte beurtplafond is het altijd het concept.
+      // is, bepaalt de SERVER uit de GEVRAAGDE ACTIE — niet het model en niet de
+      // client. B-opt tranche 2c: het concept verschijnt ná ELK reflectieantwoord
+      // (en na een herformulering), niet meer alleen bij het bereikte plafond.
+      // `verdiepen` (tranche 2d) vraagt juist om één nieuwe verdiepingsvraag.
       const toonConcept =
-        reflectieStatus === "conceptweergave" ||
-        moetNaarConcept(reflectieStatus, reflectieBeurt);
+        reflectieActie === "antwoord" || reflectieActie === "herformuleren";
+      const isVerdiepen = reflectieActie === "verdiepen";
+      // Guardrail 6: de verdiepingsvraag (start of verdiepen) wordt niet gestreamd
+      // maar gebufferd + gevalideerd. Het concept mag wél streamen.
+      bufferReflectievraag = !toonConcept;
+
+      // B-opt tranche 4a: bij een tegenperspectief-beurt plakken we het kleine
+      // tegenperspectief-blok achter de reguliere reflectieregels.
+      const reflectieRegels = toonConcept
+        ? SP_REFLECTIE_CONCEPT_REGELS
+        : reflectieTegenperspectief
+        ? `${SP_REFLECTIE_REGELS}\n\n${SP_REFLECTIE_TEGENPERSPECTIEF}`
+        : SP_REFLECTIE_REGELS;
 
       systeemBlokken = bouwSysteemBlokken(
-        toonConcept ? SP_REFLECTIE_CONCEPT_REGELS : SP_REFLECTIE_REGELS,
+        reflectieRegels,
         ctxBestuurder,
         antwoordmodus,
         chunks.length > 0 ? bronSentinel : null
       );
 
+      // B-opt tranche 3d — de feitelijke samenstelling, direct boven het bronblok
+      // en uitsluitend wanneer de server haar heeft vastgesteld. Ontbreekt deze
+      // regel, dan verbiedt SP_REFLECTIE_REGELS elke uitspraak over herkomst.
+      const samenstellingBlok = reflectieSamenstelling
+        ? `SAMENSTELLING VAN HET EERDERE ANTWOORD: ${reflectieSamenstelling}.\nU mag dit noemen; u mag het niet aanvullen of afleiden.\n\n`
+        : "";
+
       const bronBlok =
-        chunks.length > 0
+        samenstellingBlok +
+        (chunks.length > 0
           ? `EERDER VASTGESTELDE BRONINFORMATIE (bevroren bij de start van deze reflectie; er is niet opnieuw gezocht):\n\n${contextTekst}\n\n---\n\n`
-          : `(Bij het antwoord waarop wordt gereflecteerd zijn geen bronnen gebruikt. Reflecteer uitsluitend op dat antwoord en op de woorden van de bestuurder.)\n\n---\n\n`;
+          : `(Bij het antwoord waarop wordt gereflecteerd zijn geen bronnen gebruikt. Reflecteer uitsluitend op dat antwoord en op de woorden van de bestuurder.)\n\n---\n\n`);
 
       gebruikersPrompt = toonConcept
         ? `${bronBlok}De bestuurder heeft hierboven in dit gesprek zijn afweging verwoord. Zijn laatste inbreng: ${vraag}\n\nToon nu de conceptweergave.`
+        : reflectieTegenperspectief
+        ? `${bronBlok}De bestuurder vraagt om een tegenperspectief. Stel op basis van dit gesprek precies één open vraag die hem uitnodigt zélf het sterkste tegenargument te benoemen. U levert het argument niet.`
+        : isVerdiepen
+        ? `${bronBlok}De bestuurder wil nog een stap verdiepen op zijn reflectie. Stel op basis van dit gesprek precies één nieuwe, aansluitende verdiepingsvraag — geen samenvatting, geen concept, geen conclusie.`
         : `${bronBlok}INBRENG VAN DE BESTUURDER: ${vraag}`;
     } else if (transformatieActief) {
       // Herschrijf-intent (FO §13): bewerk het vorige antwoord (staat al in de
@@ -2196,7 +2287,15 @@ export async function POST(req: NextRequest) {
           // B1 — vraag het model om inline vervolgvragen, behalve bij een
           // transformatie-actie (die herschrijft juist het vorige antwoord; daar
           // horen geen nieuwe vervolgvragen bij, dat zou de keten laten uitdijen).
-          const metVervolgvragen = !transformatieActief;
+          //
+          // ⚠ B-opt tranche 2f/3b: óók NIET tijdens een reflectiebeurt. Anders
+          // krijgt het model de ###VERVOLGVRAGEN###-marker-instructie, en die tail
+          // (a) lekt rauw naar de gebruiker in het gebufferde verdiepingspad — dat
+          // pad kent het stream-markervangnet niet — of (b) laat de gevalideerde
+          // adaptieve vraag stil terugvallen op de deterministische vraag. Reflectie
+          // toont per ontwerp geen inhoudelijke vervolgvragen (ANTWOORDPAD §4);
+          // beide clients rekenen daar expliciet op.
+          const metVervolgvragen = !transformatieActief && !reflectieActief;
           // Scenario A — voeg het webbronnen-instructieblok toe wanneer de
           // web_search-tool voor dit antwoord is ingeschakeld (injection-sandboxing,
           // weging, citatieplicht, geen PII in de zoekopdracht).
@@ -2243,6 +2342,9 @@ export async function POST(req: NextRequest) {
           claudeStream.on("text", (delta) => {
             if (ttftMs === null) ttftMs = Date.now() - generatieStart;
             volledig += delta;
+            // B-opt tranche 3b — de verdiepingsvraag wordt niet gestreamd: accumuleer
+            // alleen, valideer straks ná finalMessage en toon dan in één keer.
+            if (bufferReflectievraag) return;
             if (markerGezien) return;
             const idx = volledig.indexOf(VERVOLGVRAGEN_MARKER);
             if (idx !== -1) {
@@ -2264,8 +2366,41 @@ export async function POST(req: NextRequest) {
           const finaleMsg = await claudeStream.finalMessage();
           const generatieDuurMs = Date.now() - generatieStart;
 
-          // Flush de resterende zichtbare staart als de marker nooit kwam.
-          if (!markerGezien && verzonden < volledig.length) {
+          if (bufferReflectievraag) {
+            // ── B-opt tranche 3b — genereren → valideren → tonen (guardrail 6) ──
+            // `volledig` is compleet maar er is nog niets verzonden. Valideer tegen
+            // de vormeisen (AC-R1 t/m R7); faalt de vraag, dan de DETERMINISTISCHE
+            // terugval per ingang (guardrail 5). De richting zelf verlaat de server
+            // nooit (guardrail 2): we bufferen alleen de zichtbare vraag.
+            const bevrorenBronNummers =
+              reflectieBronsetChunkIds.length > 0
+                ? Array.from({ length: chunks.length }, (_, k) => k + 1)
+                : [];
+            // Defensief: knip een eventuele ###VERVOLGVRAGEN###-tail weg vóór de
+            // validatie en het tonen. Met de reflectie-uitsluiting hierboven mag
+            // die marker niet meer voorkomen; dit voorkomt dat hij ooit rauw naar
+            // de bestuurder lekt of de vraag onterecht doet terugvallen.
+            const kandidaat = volledig.split(VERVOLGVRAGEN_MARKER)[0].trim();
+            const uitkomst = valideerVerdiepingsvraag(kandidaat, {
+              bevrorenBronNummers,
+              samenstellingMeegegeven: reflectieSamenstelling !== null,
+            });
+            const terugvalVraag = reflectieTegenperspectief
+              ? tegenperspectiefVraag(reflectieIngang ?? "twijfel")
+              : standaardVraag(reflectieIngang ?? "twijfel");
+            const definitief =
+              uitkomst.ok && kandidaat.length > 0 ? kandidaat : terugvalVraag;
+            if (!uitkomst.ok) {
+              console.warn(
+                "Reflectie-verdiepingsvraag afgekeurd, deterministische terugval:",
+                uitkomst.reden
+              );
+            }
+            volledig = definitief;
+            send({ type: "delta", text: definitief });
+            verzonden = definitief.length;
+          } else if (!markerGezien && verzonden < volledig.length) {
+            // Flush de resterende zichtbare staart als de marker nooit kwam.
             send({ type: "delta", text: volledig.slice(verzonden) });
             verzonden = volledig.length;
           }
@@ -2608,11 +2743,17 @@ export async function POST(req: NextRequest) {
           // gebeurd, niet wat er zou gaan gebeuren. Mislukt dit, dan blijft de
           // flow op de verdiepingsstatus staan en kan de gebruiker de reflectie
           // afbreken — geen verlies, wel zichtbaar in de serverlog.
+          //
+          // B-opt tranche 2c: dit gebeurt ná ELK reflectieantwoord (de beurt die
+          // zojuist het concept toonde was een `antwoord`), niet meer alleen bij
+          // het bereikte beurtplafond. `verdiepen`/`herformuleren` transiteren
+          // hier niet: die tonen respectievelijk een verdiepingsvraag of blijven
+          // al in de conceptweergave.
           if (
             gesprekAuditId &&
+            reflectieActie === "antwoord" &&
             isReflectieActief(reflectieStatus) &&
-            reflectieStatus !== "conceptweergave" &&
-            moetNaarConcept(reflectieStatus, reflectieBeurt)
+            reflectieStatus !== "conceptweergave"
           ) {
             const { data: naConcept, error: conceptFout } = await supabase.rpc(
               "reflectie_transitie",

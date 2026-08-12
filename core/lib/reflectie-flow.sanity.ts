@@ -6,8 +6,8 @@
 //
 //   1. De VOLLEDIGE transitietabel — elke geldige overgang slaagt en, wat meer
 //      zegt, elke andere combinatie van (status, actie) faalt. Die tweede helft
-//      is uitputtend: 7 statussen × 6 acties = 42 combinaties, waarvan er 15
-//      geldig zijn. De overige 27 moeten hard geweigerd worden (AC-18).
+//      is uitputtend: 7 statussen × 7 acties = 49 combinaties, waarvan er 16
+//      geldig zijn. De overige 33 moeten hard geweigerd worden (AC-18).
 //   2. De fail-safe: een status ouder dan FAILSAFE_UREN telt niet meer, en bij
 //      elke vorm van twijfel is het antwoord `niet_actief` (AC-23).
 //   3. De beurtregel: bij beurt >= MAX_BEURTEN is `conceptweergave` verplicht.
@@ -27,7 +27,9 @@ import {
   REFLECTIE_ACTIES,
   REFLECTIE_INGANGEN,
   INGANG_LABEL,
+  INGANG_SUBTEKST,
   INGANG_VERDIEPING,
+  INGANG_MAPPING_OUD_NAAR_NIEUW,
   NIET_TE_PLAATSEN_VRAGEN,
   AFRONDLABELS,
   VERBODEN_LABELS,
@@ -66,6 +68,7 @@ const GELDIG: ReadonlyArray<[ReflectieStatus, ReflectieActie, ReflectieStatus[]]
   ["verdieping_2", "concept", ["conceptweergave"]],
   ["verdieping_3", "concept", ["conceptweergave"]],
   ["conceptweergave", "herformuleren", ["conceptweergave"]],
+  ["conceptweergave", "verdiepen", ["verdieping_1", "verdieping_2"]],
   ["conceptweergave", "afronden", ["afgerond"]],
   ["ingang_gekozen", "afbreken", ["niet_actief"]],
   ["verdieping_1", "afbreken", ["niet_actief"]],
@@ -108,9 +111,9 @@ test("elke NIET-geldige (status, actie)-combinatie wordt geweigerd", () => {
       geweigerd++;
     }
   }
-  // 7 statussen × 6 acties = 42; 15 rijen geldig ⇒ 27 ongeldig.
+  // 7 statussen × 7 acties = 49; 16 rijen geldig ⇒ 33 ongeldig.
   assert.equal(geweigerd, REFLECTIE_STATUSSEN.length * REFLECTIE_ACTIES.length - GELDIG.length);
-  assert.equal(geweigerd, 27);
+  assert.equal(geweigerd, 33);
 });
 
 test("het beurtplafond: geen vierde verdiepingsantwoord", () => {
@@ -151,6 +154,46 @@ test("B-opt 1a: herformuleren is een zelf-lus, uitsluitend vanuit conceptweergav
   // zelf zit in reflectie_transitie() (SQL), maar hier borgen we dat de actie geen
   // antwoord-overgang meelift.
   assert.equal(volgendeNaAntwoord("conceptweergave", 1), null);
+});
+
+test("B-opt 2d: verdiepen keert vanuit conceptweergave terug naar een verdiepingsstatus", () => {
+  // "Nog een stap verdiepen": alleen vanuit conceptweergave, en naar verdieping_1
+  // of verdieping_2 (verdieping_3 niet — daar zou het beurtplafond al bereikt zijn;
+  // de RPC weigert verdiepen bij beurt >= 3).
+  assert.deepEqual(
+    [...toegestaneDoelen("conceptweergave", "verdiepen")],
+    ["verdieping_1", "verdieping_2"]
+  );
+  assert.equal(magTransitie("conceptweergave", "verdiepen", "verdieping_1"), true);
+  assert.equal(magTransitie("conceptweergave", "verdiepen", "verdieping_2"), true);
+  assert.equal(magTransitie("conceptweergave", "verdiepen", "verdieping_3"), false);
+  for (const s of REFLECTIE_STATUSSEN) {
+    if (s === "conceptweergave") continue;
+    assert.equal(magTransitie(s, "verdiepen"), false, `verdiepen vanuit ${s}`);
+  }
+});
+
+test("B-opt 2b: elke oude ingangwaarde mapt op precies één nieuwe ingang", () => {
+  const oud = [
+    "informatie_ontbreekt", "onderbouwing", "uitvoeringsrisico", "evenwichtigheid",
+    "alternatief", "uitlegbaarheid", "niet_te_plaatsen", "overtuiging",
+  ];
+  assert.equal(Object.keys(INGANG_MAPPING_OUD_NAAR_NIEUW).length, 8);
+  for (const k of oud) {
+    const nieuw = INGANG_MAPPING_OUD_NAAR_NIEUW[k];
+    assert.ok(nieuw, `oude ingang ${k} heeft geen mapping`);
+    assert.ok(
+      (REFLECTIE_INGANGEN as readonly string[]).includes(nieuw),
+      `mapping van ${k} → ${nieuw} is geen geldige nieuwe ingang`
+    );
+  }
+  // Elke nieuwe ingang wordt door minstens één oude waarde geraakt (dekking).
+  for (const nieuw of REFLECTIE_INGANGEN) {
+    assert.ok(
+      Object.values(INGANG_MAPPING_OUD_NAAR_NIEUW).includes(nieuw),
+      `nieuwe ingang ${nieuw} komt in geen enkele mapping voor`
+    );
+  }
 });
 
 test("AC-18: de vijf pogingen uit het acceptatiecriterium falen alle vijf", () => {
@@ -249,6 +292,7 @@ test("AC-26: geen enkel zichtbaar label bevat een verboden term", () => {
   const zichtbaar: string[] = [
     ...AFRONDLABELS,
     ...Object.values(INGANG_LABEL),
+    ...Object.values(INGANG_SUBTEKST),
     ...Object.values(INGANG_VERDIEPING),
     ...NIET_TE_PLAATSEN_VRAGEN,
   ];
@@ -263,11 +307,13 @@ test("AC-26: geen enkel zichtbaar label bevat een verboden term", () => {
   }
 });
 
-test("elke ingang heeft een label en een verdiepingsvraag", () => {
-  assert.equal(REFLECTIE_INGANGEN.length, 8);
+test("elke ingang heeft een label, een subtekst en een verdiepingsvraag", () => {
+  assert.equal(REFLECTIE_INGANGEN.length, 4);
   for (const ingang of REFLECTIE_INGANGEN) {
     assert.equal(typeof INGANG_LABEL[ingang], "string");
     assert.ok(INGANG_LABEL[ingang].length > 0, ingang);
+    assert.equal(typeof INGANG_SUBTEKST[ingang], "string");
+    assert.ok(INGANG_SUBTEKST[ingang].length > 0, ingang);
     assert.equal(typeof INGANG_VERDIEPING[ingang], "string");
     assert.ok(INGANG_VERDIEPING[ingang].length > 0, ingang);
   }
@@ -288,8 +334,10 @@ test("type-guards weigeren invoer van buiten", () => {
   assert.equal(isReflectieStatus(42), false);
   assert.equal(isReflectieActie("afbreken"), true);
   assert.equal(isReflectieActie("herformuleren"), true);
+  assert.equal(isReflectieActie("verdiepen"), true);
   assert.equal(isReflectieActie("verwijderen"), false);
-  assert.equal(isReflectieIngang("onderbouwing"), true);
+  assert.equal(isReflectieIngang("twijfel"), true);
+  assert.equal(isReflectieIngang("onderbouwing"), false); // oude waarde bestaat niet meer
   assert.equal(isReflectieIngang("geen_aanvullende_reflectie"), false);
   assert.equal(isReflectieIngang(""), false);
 });

@@ -31,6 +31,7 @@
 import {
   REFLECTIE_INGANGEN,
   INGANG_LABEL,
+  INGANG_SUBTEKST,
   type ReflectieIngang,
 } from "@/core/lib/reflectie-flow";
 
@@ -82,16 +83,26 @@ export default function ReflectieKaart({
         </button>
       </div>
 
-      <div className="mt-3 flex flex-wrap gap-1.5">
+      {/* B-opt tranche 2a — vier brede knoppen onder elkaar, elk met label plus
+          een subtekst in text-muted. De subtekst doet het werk dat een icoon zou
+          moeten doen, en preciezer: hij is de plek waar het onderscheid tussen
+          "Ik twijfel" en "Ik zie een risico" zichtbaar wordt (VOORSTEL §B). Geen
+          iconen, geen kleuraccent, geen badge — de kaart mag niet duwen (FR-22). */}
+      <div className="mt-3 flex flex-col gap-2">
         {REFLECTIE_INGANGEN.map((ingang) => (
           <button
             key={ingang}
             type="button"
             onClick={() => onKies(ingang)}
             disabled={bezig}
-            className="text-xs text-ink bg-surface border border-line rounded-full px-3 py-1 hover:border-accent hover:bg-warn-tint disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="text-left w-full bg-surface border border-line rounded-lg px-3.5 py-2.5 hover:border-accent hover:bg-warn-tint disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
-            {INGANG_LABEL[ingang]}
+            <span className="block text-sm text-ink font-medium">
+              {INGANG_LABEL[ingang]}
+            </span>
+            <span className="block mt-0.5 text-xs leading-snug text-muted">
+              {INGANG_SUBTEKST[ingang]}
+            </span>
           </button>
         ))}
       </div>
@@ -104,6 +115,11 @@ export default function ReflectieKaart({
       >
         Geen aanvullende reflectie
       </button>
+
+      {/* Een verkeerd gekozen ingang mag niets kosten (VOORSTEL §B). */}
+      <p className="mt-2 text-[11px] leading-snug text-muted">
+        Een andere ingang kiezen kan altijd — u zit nergens aan vast.
+      </p>
 
       {/* De belofte die de hele functie draagt, en die volgens de gebruikerstoets
           (criterium B2) door élke deelnemer correct moet worden benoemd. Ze staat

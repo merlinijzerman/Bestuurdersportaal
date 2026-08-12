@@ -115,7 +115,14 @@ declare
                                       -- policy is strikter (zie gate B)
     'gremia',                         -- hybride template/fonds (fonds_id nullable)
     'expertises',
-    'kritische_focusgebieden'
+    'kritische_focusgebieden',
+    'wettelijk_regime_per_fondstype'  -- codelijst fondstype→wettelijk regime (T4,
+                                      -- besluit 0162): juridische kwalificatie in
+                                      -- DATA, geen tenantinhoud, geen PII;
+                                      -- `for select using(true)`, service-role
+                                      -- schrijft. Global-by-design (T3-register-
+                                      -- patroon); ontbrak in deze lijst omdat de
+                                      -- T4-migratie is opgeleverd zonder gate-run.
   ];
 begin
   -- A1. Elke tabel met RLS die géén eigen fonds_id heeft moet in het register
@@ -263,7 +270,13 @@ declare
   r record;
   offenders text := '';
   -- Bewust open leesbaar (gedocumenteerd besluit).
-  select_allow text[] := array['fondsen'];
+  --  • fondsen                        — lijst van fondsen, geen tenantinhoud
+  --  • wettelijk_regime_per_fondstype — codelijst fondstype→regime (T4, besluit
+  --    0162): juridische kwalificatie in DATA, geen PII, geen tenantinhoud;
+  --    `for select using(true)` naar authenticated, service-role schrijft.
+  --    Global-by-design (T3-register-patroon); ontbrak hier omdat de T4-migratie
+  --    is opgeleverd zonder gate-run (zelfde OP-C5-patroon als bij gate A1).
+  select_allow text[] := array['fondsen', 'wettelijk_regime_per_fondstype'];
 begin
   for r in
     select p.tablename, p.policyname, p.qual

@@ -25,14 +25,28 @@
 // ============================================================================
 
 import { useState } from "react";
-import { AFRONDLABELS, type ReflectieStatus } from "@/core/lib/reflectie-flow";
+import { AFRONDLABELS, MAX_BEURTEN, type ReflectieStatus } from "@/core/lib/reflectie-flow";
 
 interface Props {
   status: ReflectieStatus;
+  /** De huidige beurt; bepaalt of "Nog een stap verdiepen" nog zichtbaar is. */
+  beurt: number;
   /** Antwoord op de verdiepingsvraag. Gaat als reflectiebeurt naar de chatroute. */
   onAntwoord: (tekst: string) => void;
   /** "Klopt" of "Afronden zonder aparte notitie" — beide ronden de flow af. */
   onAfronden: () => void;
+  /**
+   * "Nog een stap verdiepen" (B-opt tranche 2d) — de bestuurder vraagt vanuit de
+   * conceptweergave om één extra verdiepingsvraag. Verdwijnt bij het beurtplafond;
+   * de RPC weigert de transitie dan óók, dus dit is geen enige waarborg.
+   */
+  onVerdiepen: () => void;
+  /**
+   * "Wat pleit er tegen?" (B-opt tranche 4a) — de bestuurder vraagt om een
+   * tegenperspectief. Zelfde transitie/beurtplafond als verdiepen; de assistent
+   * vraagt om het tegenargument, hij levert het niet.
+   */
+  onTegenperspectief: () => void;
   /**
    * "Aanpassen" — de bestuurder herformuleert zijn EIGEN overweging (B-opt
    * tranche 1a). Het reflectieveld heropent, voorgevuld met zijn laatste
@@ -54,10 +68,13 @@ interface Props {
 
 export default function ReflectieInvoer({
   status,
+  beurt,
   onAntwoord,
   onAfronden,
   onHerformuleren,
   laatsteAntwoord = "",
+  onVerdiepen,
+  onTegenperspectief,
   onAfbreken,
   bezig = false,
 }: Props) {
@@ -164,6 +181,31 @@ export default function ReflectieInvoer({
           >
             {AFRONDLABELS[1]}
           </button>
+          {/* B-opt tranche 2d — "Nog een stap verdiepen": alleen zolang het
+              beurtplafond niet is bereikt. De RPC weigert de transitie óók bij
+              beurt >= 3, dus deze verborgen knop is niet de enige waarborg. */}
+          {beurt < MAX_BEURTEN && (
+            <button
+              type="button"
+              onClick={onVerdiepen}
+              disabled={bezig}
+              className="text-xs text-ink bg-surface border border-line rounded-full px-3 py-1 hover:border-accent hover:bg-warn-tint disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Nog een stap verdiepen
+            </button>
+          )}
+          {/* B-opt tranche 4a — "Wat pleit er tegen?": tegenperspectief op
+              initiatief van de bestuurder, zelfde beurtplafond als verdiepen. */}
+          {beurt < MAX_BEURTEN && (
+            <button
+              type="button"
+              onClick={onTegenperspectief}
+              disabled={bezig}
+              className="text-xs text-ink bg-surface border border-line rounded-full px-3 py-1 hover:border-accent hover:bg-warn-tint disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Wat pleit er tegen?
+            </button>
+          )}
           <button
             type="button"
             onClick={onAfronden}

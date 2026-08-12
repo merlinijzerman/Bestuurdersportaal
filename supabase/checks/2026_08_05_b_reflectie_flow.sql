@@ -244,6 +244,33 @@ begin
   raise notice 'OK 6: geen reflectiemarkering buiten de statustabel en de opt-out (AC-17).';
 end $$;
 
+-- ── 6b. De CHECK-constraints op status én ingang bestaan allebei ──────────
+-- Regressievangnet (B-opt tranche 2b): de ingang-CHECK wordt bij de 8→4-migratie
+-- gedropt en herbouwd via een DO-block. Matcht dat block per ongeluk óók de
+-- status-CHECK (die de literal 'ingang_gekozen' bevat), dan verdwijnt die stil.
+-- Deze check faalt luid als een van beide CHECKs ontbreekt.
+do $$
+declare v_status boolean; v_ingang boolean;
+begin
+  select
+    bool_or(pg_get_constraintdef(con.oid) ilike '%status%'
+            and pg_get_constraintdef(con.oid) ilike '%ingang_gekozen%'),
+    bool_or(con.conkey = array[(select attnum from pg_attribute
+              where attrelid = 'public.gesprek_reflectie_state'::regclass
+                and attname = 'ingang' and not attisdropped)])
+    into v_status, v_ingang
+    from pg_constraint con
+   where con.conrelid = 'public.gesprek_reflectie_state'::regclass
+     and con.contype = 'c';
+  if v_status is not true then
+    raise exception 'CHECK-REGRESSIE: de status-CHECK op gesprek_reflectie_state ontbreekt (gedropt door een te brede DO-block?).';
+  end if;
+  if v_ingang is not true then
+    raise exception 'CHECK-REGRESSIE: de ingang-CHECK op gesprek_reflectie_state ontbreekt.';
+  end if;
+  raise notice 'OK 6b: status- én ingang-CHECK bestaan allebei.';
+end $$;
+
 -- ── 7. De bronsethash komt overeen met de TypeScript-spiegel ──────────────
 -- Twee implementaties van dezelfde hash die uiteenlopen, lopen STIL uiteen. De
 -- verwachte waarde is berekend en vastgepind in core/lib/bronset.sanity.ts.
@@ -406,7 +433,7 @@ do $$
 begin
   begin
     perform public.reflectie_transitie(
-      'a0000000-0000-0000-0000-00000000000a', 'start', 'onderbouwing',
+      'a0000000-0000-0000-0000-00000000000a', 'start', 'twijfel',
       '10000000-0000-0000-0000-000000000002');   -- ander gesprek van A
     raise exception 'LEK: bronset uit een ander gesprek werd geaccepteerd.';
   exception when others then
@@ -415,7 +442,7 @@ begin
 
   begin
     perform public.reflectie_transitie(
-      'a0000000-0000-0000-0000-00000000000a', 'start', 'onderbouwing',
+      'a0000000-0000-0000-0000-00000000000a', 'start', 'twijfel',
       '10000000-0000-0000-0000-000000000003');   -- logregel van collega C
     raise exception 'LEK: bronset van een andere gebruiker werd geaccepteerd.';
   exception when others then
@@ -431,7 +458,7 @@ do $$
 begin
   begin
     perform public.reflectie_transitie(
-      'c0000000-0000-0000-0000-00000000000c', 'start', 'onderbouwing', null);
+      'c0000000-0000-0000-0000-00000000000c', 'start', 'twijfel', null);
     raise exception 'LEK: A kon de reflectiestatus van C wijzigen.';
   exception when others then
     if sqlstate = 'P0001' and sqlerrm like 'LEK:%' then raise; end if;
@@ -444,7 +471,7 @@ do $$
 declare r public.gesprek_reflectie_state;
 begin
   r := public.reflectie_transitie(
-         'a0000000-0000-0000-0000-00000000000a', 'start', 'onderbouwing',
+         'a0000000-0000-0000-0000-00000000000a', 'start', 'twijfel',
          '10000000-0000-0000-0000-000000000001');
   if r.status <> 'ingang_gekozen' then
     raise exception 'START FAALT: status is % in plaats van ingang_gekozen.', r.status;
@@ -455,8 +482,8 @@ begin
   if r.reflectie_bronset_versie is null then
     raise exception 'START FAALT: de bronset is niet bevroren terwijl de logregel chunks heeft.';
   end if;
-  if r.ingang <> 'onderbouwing' then
-    raise exception 'START FAALT: ingang is % in plaats van onderbouwing.', r.ingang;
+  if r.ingang <> 'twijfel' then
+    raise exception 'START FAALT: ingang is % in plaats van twijfel.', r.ingang;
   end if;
   raise notice 'OK start: ingang_gekozen, beurt 0, bronset bevroren (%).',
                left(r.reflectie_bronset_versie, 12) || '…';
@@ -485,7 +512,7 @@ begin
   -- Opnieuw starten terwijl de flow loopt zou de bevroren bronset vervangen.
   begin
     perform public.reflectie_transitie(
-      'a0000000-0000-0000-0000-00000000000a', 'start', 'evenwichtigheid', null);
+      'a0000000-0000-0000-0000-00000000000a', 'start', 'twijfel', null);
     raise exception 'LEK: opnieuw starten tijdens een lopende flow slaagde.';
   exception when others then
     if sqlstate = 'P0001' and sqlerrm like 'LEK:%' then raise; end if;
@@ -537,7 +564,7 @@ begin
   select count(*) into n from public.gesprek_reflectie_state
    where gesprek_id = 'a0000000-0000-0000-0000-00000000000a'
      and bronset_log_id = '10000000-0000-0000-0000-000000000001'
-     and ingang = 'onderbouwing';
+     and ingang = 'twijfel';
   if n <> 1 then
     raise exception 'BEVRIEZING FAALT: de bronset of de ingang is tijdens de flow gewijzigd.';
   end if;
@@ -581,7 +608,7 @@ begin
   if r.status <> 'conceptweergave' or r.beurt <> 3 then
     raise exception 'HERFORMULEREN FAALT: verwacht conceptweergave/3, kreeg %/%.', r.status, r.beurt;
   end if;
-  if r.ingang <> 'onderbouwing'
+  if r.ingang <> 'twijfel'
      or r.bronset_log_id <> '10000000-0000-0000-0000-000000000001' then
     raise exception 'HERFORMULEREN FAALT: ingang of bronset gewijzigd (%, %).', r.ingang, r.bronset_log_id;
   end if;
@@ -612,6 +639,68 @@ begin
   raise notice 'OK 18g/flow: herformuleren blijft conceptweergave (beurt/bronset onveranderd); concept → afgerond → niet_actief.';
 end $$;
 
+-- ── AC-18h — verdiepen (B-opt tranche 2d) ─────────────────────────────────
+-- "Nog een stap verdiepen": vanuit conceptweergave terug naar verdieping_{beurt},
+-- zodat het volgende antwoord doortelt. Verdiepen zelf verhoogt de beurt niet;
+-- server-side geweigerd bij beurt >= 3 (het beurtplafond blijft een vangnet).
+do $$
+declare r public.gesprek_reflectie_state;
+begin
+  -- Verse flow op gesprek a (staat op niet_actief na 18g). Nieuwe ingangwaarde.
+  r := public.reflectie_transitie('a0000000-0000-0000-0000-00000000000a','start','twijfel',null);
+  if r.status <> 'ingang_gekozen' then
+    raise exception 'VERDIEPEN-SETUP FAALT: status is %.', r.status;
+  end if;
+
+  -- verdiepen mag NIET vanuit ingang_gekozen (alleen vanuit conceptweergave).
+  begin
+    perform public.reflectie_transitie('a0000000-0000-0000-0000-00000000000a','verdiepen',null,null);
+    raise exception 'LEK: verdiepen werd vanuit ingang_gekozen geaccepteerd.';
+  exception when others then
+    if sqlstate = 'P0001' and sqlerrm like 'LEK:%' then raise; end if;
+  end;
+
+  -- antwoord 1 → verdieping_1/1 → concept → conceptweergave/1.
+  r := public.reflectie_transitie('a0000000-0000-0000-0000-00000000000a','antwoord',null,null);
+  if r.status <> 'verdieping_1' or r.beurt <> 1 then raise exception 'VERDIEPEN FAALT (a): %/%.', r.status, r.beurt; end if;
+  r := public.reflectie_transitie('a0000000-0000-0000-0000-00000000000a','concept',null,null);
+  if r.status <> 'conceptweergave' or r.beurt <> 1 then raise exception 'VERDIEPEN FAALT (b): %/%.', r.status, r.beurt; end if;
+
+  -- verdiepen bij beurt 1 → verdieping_1, beurt onveranderd.
+  r := public.reflectie_transitie('a0000000-0000-0000-0000-00000000000a','verdiepen',null,null);
+  if r.status <> 'verdieping_1' or r.beurt <> 1 then
+    raise exception 'VERDIEPEN FAALT (c): verwacht verdieping_1/1, kreeg %/%.', r.status, r.beurt;
+  end if;
+
+  -- Het volgende antwoord telt door naar verdieping_2/2.
+  r := public.reflectie_transitie('a0000000-0000-0000-0000-00000000000a','antwoord',null,null);
+  if r.status <> 'verdieping_2' or r.beurt <> 2 then raise exception 'VERDIEPEN FAALT (d): %/%.', r.status, r.beurt; end if;
+  r := public.reflectie_transitie('a0000000-0000-0000-0000-00000000000a','concept',null,null);
+  if r.status <> 'conceptweergave' or r.beurt <> 2 then raise exception 'VERDIEPEN FAALT (e): %/%.', r.status, r.beurt; end if;
+
+  -- verdiepen bij beurt 2 → verdieping_2.
+  r := public.reflectie_transitie('a0000000-0000-0000-0000-00000000000a','verdiepen',null,null);
+  if r.status <> 'verdieping_2' or r.beurt <> 2 then raise exception 'VERDIEPEN FAALT (f): %/%.', r.status, r.beurt; end if;
+
+  -- antwoord → verdieping_3/3 → concept → conceptweergave/3.
+  r := public.reflectie_transitie('a0000000-0000-0000-0000-00000000000a','antwoord',null,null);
+  if r.status <> 'verdieping_3' or r.beurt <> 3 then raise exception 'VERDIEPEN FAALT (g): %/%.', r.status, r.beurt; end if;
+  r := public.reflectie_transitie('a0000000-0000-0000-0000-00000000000a','concept',null,null);
+  if r.status <> 'conceptweergave' or r.beurt <> 3 then raise exception 'VERDIEPEN FAALT (h): %/%.', r.status, r.beurt; end if;
+
+  -- verdiepen bij beurt 3 → geweigerd (beurtplafond blijft hard).
+  begin
+    perform public.reflectie_transitie('a0000000-0000-0000-0000-00000000000a','verdiepen',null,null);
+    raise exception 'LEK: verdiepen bij beurt 3 werd geaccepteerd.';
+  exception when others then
+    if sqlstate = 'P0001' and sqlerrm like 'LEK:%' then raise; end if;
+  end;
+
+  -- Opruimen zodat de rest van de suite met een schone gesprek-a start.
+  perform public.reflectie_transitie('a0000000-0000-0000-0000-00000000000a','afbreken',null,null);
+  raise notice 'OK 18h: verdiepen ↔ verdieping_{beurt}, doortelling tot het plafond, verdiepen bij beurt 3 geweigerd.';
+end $$;
+
 -- ── Een gewone chatbeurt maakt GEEN statusrij aan ─────────────────────────
 -- De chatroute roept bij elke normale beurt `afbreken` aan. Zou dat een rij
 -- aanmaken, dan zou elk gesprek waarin nooit is gereflecteerd tóch een rij in
@@ -635,7 +724,7 @@ do $$
 declare r public.gesprek_reflectie_state;
 begin
   r := public.reflectie_transitie(
-         'a0000000-0000-0000-0000-00000000000b', 'start', 'niet_te_plaatsen', null);
+         'a0000000-0000-0000-0000-00000000000b', 'start', 'twijfel', null);
   if r.status <> 'ingang_gekozen' then
     raise exception 'START-ZONDER-BRONSET FAALT: status is %.', r.status;
   end if;
@@ -758,7 +847,7 @@ values ('f0000000-0000-0000-0000-00000000000f','ffffffff-ffff-ffff-ffff-ffffffff
 
 set local role authenticated;
 set local request.jwt.claims to '{"sub":"ffffffff-ffff-ffff-ffff-ffffffffffff"}';
-select public.reflectie_transitie('f0000000-0000-0000-0000-00000000000f','start','onderbouwing',null);
+select public.reflectie_transitie('f0000000-0000-0000-0000-00000000000f','start','twijfel',null);
 
 reset role;
 update public.gesprek_reflectie_state
@@ -782,7 +871,7 @@ begin
   end;
 
   -- En opnieuw starten mág dan wél — de flow is immers vervallen.
-  r := public.reflectie_transitie('f0000000-0000-0000-0000-00000000000f','start','alternatief',null);
+  r := public.reflectie_transitie('f0000000-0000-0000-0000-00000000000f','start','twijfel',null);
   if r.status <> 'ingang_gekozen' or r.beurt <> 0 then
     raise exception 'FAIL-SAFE FAALT: opnieuw starten na verval gaf %/%.', r.status, r.beurt;
   end if;

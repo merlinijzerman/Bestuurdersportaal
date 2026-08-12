@@ -1,9 +1,16 @@
 // ============================================================================
 //  measure.ts — match geëxtraheerde units tegen de golden set → metrieken.
 // ----------------------------------------------------------------------------
-//  Kernmetriek is BINDINGS-PRECISION (van wat als concept X geëxtraheerd is:
-//  welk deel is écht X). Precision boven recall: een FOUTBINDING (waarde aan het
-//  verkeerde concept) is de gevaarlijke fout. Zie README.md §Meting.
+//  Granulariteit = DOCUMENT × CONCEPT (de NovaWerk-oracle is document-niveau).
+//  Per (document, concept) is er één canonieke waarde + een lijst distractors.
+//  Elke geëxtraheerde unit voor dat (document, concept) is:
+//    CORRECT   — waarde == canonical
+//    MISBOUND  — waarde == een distractor  (de gevaarlijke fout)
+//    SPURIOUS  — iets anders (norm-fout, afgeleide grootheid, hallucinatie)
+//
+//  Kernmetriek = BINDINGS-PRECISION (correct / geëxtraheerd). Op documentniveau
+//  valt "waarde-accuraatheid" samen met binding-precision: er is één juiste
+//  waarde per (document, concept), dus een correcte binding ís de juiste waarde.
 //
 //  Draaibaar als CLI (print samenvatting) én importeerbaar door report.ts.
 // ============================================================================
@@ -13,36 +20,37 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ConceptType, Unit, GoldenUnit } from "./types";
 import { CONCEPTEN } from "./concepts";
-import { jaccard } from "./tekst";
 
 const HIER = dirname(fileURLToPath(import.meta.url));
 
-// Drempels voor het co-loceren van een geëxtraheerde unit met een golden unit.
-const JACCARD_MIN = 0.5; // evidence-overlap
-const PAGINA_TOLERANTIE = 1; // paginanummers mogen ±1 afwijken
-
-export type Status = "CORRECT" | "MISBOUND" | "UNMATCHED";
+export type Status = "CORRECT" | "MISBOUND" | "SPURIOUS";
 
 // Geëxtraheerde unit verrijkt met matchresultaat.
 export interface BeoordeeldeUnit extends Unit {
   status: Status;
-  misbound_naar: string | null; // concept waaraan de waarde eigenlijk hoort
-  value_ok: boolean | null; // alleen zinvol bij CORRECT
-  golden_value: number | string | null; // waarde van de gepaarde golden unit
+  golden_canonical: number | string | null; // canonieke waarde van dit (doc, concept)
+  matched_distractor: number | string | null; // welke distractor geraakt (bij MISBOUND)
+}
+
+// Eén (document, concept)-cel die geen enkele CORRECTe extractie kreeg.
+export interface GemisteCel {
+  document: string;
+  concept: string;
+  type: ConceptType;
+  canonical: number | string;
+  status?: string;
 }
 
 export interface CelMetriek {
-  golden_total: number;
+  golden_cells: number; // aantal (document, concept)-cellen
+  cells_recalled: number;
   extracted_total: number;
   correct: number;
   misbound: number;
-  unmatched: number;
+  spurious: number;
   recall: number | null;
   binding_precision: number | null;
   misbinding_rate: number | null;
-  value_checked: number;
-  value_correct: number;
-  value_accuracy: number | null;
   evidence_accuracy: number | null;
   g1_green: boolean;
 }
@@ -52,27 +60,16 @@ export interface Metrieken {
   perType: Record<string, CelMetriek>;
   overall: CelMetriek;
   beoordeeld: BeoordeeldeUnit[];
-  gemistGolden: GoldenUnit[]; // golden units zonder enige co-locerende extractie
+  gemisteCellen: GemisteCel[];
 }
 
+// G1-poort. Op documentniveau vallen binding-precision en waarde-accuraatheid
+// samen; de gate gebruikt daarom binding-precision + bron-accuraatheid.
 export const G1 = {
   binding_precision: 0.9,
-  value_accuracy: 0.95,
+  value_accuracy: 0.95, // informatief; == binding_precision op documentniveau
   evidence_accuracy: 0.9,
 };
-
-function paginaCompatibel(a: number | null, b: number | null): boolean {
-  if (a == null || b == null) return true; // geen pagina-concept (bv. docx)
-  return Math.abs(a - b) <= PAGINA_TOLERANTIE;
-}
-
-function coLoceert(e: Unit, g: GoldenUnit): boolean {
-  return (
-    e.document === g.document &&
-    paginaCompatibel(e.page, g.page) &&
-    jaccard(e.evidence, g.evidence) >= JACCARD_MIN
-  );
-}
 
 function waardenGelijk(
   type: ConceptType,
@@ -85,7 +82,10 @@ function waardenGelijk(
   if (type === "percentage" || type === "amount") {
     if (typeof eVal !== "number" || typeof gVal !== "number") return false;
     const gelijk = Math.abs(eVal - gVal) <= Math.max(1e-9, 1e-6 * Math.abs(gVal));
-    if (type === "amount" && gCur != null) return gelijk && eCur === gCur;
+    // Currency: alleen een TEGENSPRAAK telt (bv. USD vs EUR). Een onbekende
+    // (null) currency aan de extractiekant faalt een numeriek correct bedrag
+    // niet — value_raw "17545" mist het €-teken maar is wel het juiste bedrag.
+    if (type === "amount" && gCur != null && eCur != null) return gelijk && eCur === gCur;
     return gelijk;
   }
   // date (ISO) en policy_choice (enum): string-exact.
@@ -94,37 +94,22 @@ function waardenGelijk(
 
 function leegCel(): CelMetriek {
   return {
-    golden_total: 0,
+    golden_cells: 0,
+    cells_recalled: 0,
     extracted_total: 0,
     correct: 0,
     misbound: 0,
-    unmatched: 0,
+    spurious: 0,
     recall: null,
     binding_precision: null,
     misbinding_rate: null,
-    value_checked: 0,
-    value_correct: 0,
-    value_accuracy: null,
     evidence_accuracy: null,
     g1_green: false,
   };
 }
 
-// Verdicht ruwe tellingen tot ratio's + G1-oordeel. `recall` en
-// `evidence_accuracy` worden vóór deze aanroep apart gezet (zie compute); hier
-// alleen binding-precision, misbinding-rate, value-accuracy en het G1-oordeel.
-function sluitCel(c: CelMetriek): CelMetriek {
-  const noemer = c.correct + c.misbound + c.unmatched;
-  c.binding_precision = noemer > 0 ? c.correct / noemer : null;
-  c.misbinding_rate =
-    c.extracted_total > 0 ? c.misbound / c.extracted_total : null;
-  c.value_accuracy =
-    c.value_checked > 0 ? c.value_correct / c.value_checked : null;
-  c.g1_green =
-    (c.binding_precision ?? 0) >= G1.binding_precision &&
-    (c.value_accuracy ?? 0) >= G1.value_accuracy &&
-    (c.evidence_accuracy ?? 0) >= G1.evidence_accuracy;
-  return c;
+function sleutel(doc: string, concept: string): string {
+  return `${doc}∥${concept}`;
 }
 
 export function computeMetrieken(
@@ -135,25 +120,27 @@ export function computeMetrieken(
   const perType: Record<string, CelMetriek> = {};
   const overall = leegCel();
   const beoordeeld: BeoordeeldeUnit[] = [];
+  const gemisteCellen: GemisteCel[] = [];
 
   for (const def of CONCEPTEN)
     perConcept[def.concept] = { ...leegCel(), type: def.type };
   for (const t of ["percentage", "date", "amount", "policy_choice"])
     perType[t] = leegCel();
 
-  // Evidence-teller apart bijhouden (leegCel zet evidence_accuracy op null).
-  const evOk: Record<string, number> = {};
-  const bump = (k: string) => (evOk[k] = (evOk[k] ?? 0) + 1);
-
-  // ── Golden-tellingen ──
+  // Golden per (document, concept) indexeren.
+  const goldenIndex = new Map<string, GoldenUnit>();
   for (const g of golden) {
-    if (perConcept[g.concept]) perConcept[g.concept].golden_total++;
-    if (perType[g.type]) perType[g.type].golden_total++;
-    overall.golden_total++;
+    goldenIndex.set(sleutel(g.document, g.concept), g);
+    if (perConcept[g.concept]) perConcept[g.concept].golden_cells++;
+    if (perType[g.type]) perType[g.type].golden_cells++;
+    overall.golden_cells++;
   }
 
-  // ── Classificeer elke geëxtraheerde unit ──
-  const gemistGolden: GoldenUnit[] = [];
+  // Evidence-teller apart (per concept / type / overall).
+  const evOk: Record<string, number> = {};
+  const bumpEv = (k: string) => (evOk[k] = (evOk[k] ?? 0) + 1);
+  // Bijhouden welke (document, concept)-cellen ≥1 CORRECTe unit kregen.
+  const cellRecalled = new Set<string>();
 
   for (const e of units) {
     const type = e.type;
@@ -163,113 +150,89 @@ export function computeMetrieken(
     if (tcel) tcel.extracted_total++;
     overall.extracted_total++;
     if (e.evidence_ok) {
-      bump(`c:${e.concept}`);
-      bump(`t:${type}`);
-      bump("overall");
+      bumpEv(`c:${e.concept}`);
+      bumpEv(`t:${type}`);
+      bumpEv("overall");
     }
 
-    // Zoek golden units van HETZELFDE concept die co-loceren.
-    const zelfde = golden
-      .filter((g) => g.concept === e.concept && coLoceert(e, g))
-      .sort((a, b) => jaccard(e.evidence, b.evidence) - jaccard(e.evidence, a.evidence));
+    const g = goldenIndex.get(sleutel(e.document, e.concept));
+    let status: Status = "SPURIOUS";
+    let canonical: number | string | null = null;
+    let matchedDistractor: number | string | null = null;
 
-    let status: Status;
-    let misboundNaar: string | null = null;
-    let valueOk: boolean | null = null;
-    let goldenValue: number | string | null = null;
-
-    if (zelfde.length > 0) {
-      status = "CORRECT";
-      const g = zelfde[0];
-      goldenValue = g.value_normalized;
-      valueOk = waardenGelijk(type, e.value_normalized, e.currency, g.value_normalized, g.currency);
-      if (cel) {
-        cel.correct++;
-        cel.value_checked++;
-        if (valueOk) cel.value_correct++;
-      }
-      if (tcel) {
-        tcel.correct++;
-        tcel.value_checked++;
-        if (valueOk) tcel.value_correct++;
-      }
-      overall.correct++;
-      overall.value_checked++;
-      if (valueOk) overall.value_correct++;
-    } else {
-      // Co-loceert de waarde met een ANDER concept? → foutbinding.
-      const ander = golden.find(
-        (g) =>
-          g.concept !== e.concept &&
-          coLoceert(e, g) &&
-          waardenGelijk(g.type, e.value_normalized, e.currency, g.value_normalized, g.currency)
-      );
-      if (ander) {
-        status = "MISBOUND";
-        misboundNaar = ander.concept;
-        goldenValue = ander.value_normalized;
-        if (cel) cel.misbound++;
-        if (tcel) tcel.misbound++;
-        overall.misbound++;
+    if (g) {
+      canonical = g.canonical;
+      if (waardenGelijk(type, e.value_normalized, e.currency, g.canonical, g.currency)) {
+        status = "CORRECT";
+        cellRecalled.add(sleutel(e.document, e.concept));
       } else {
-        status = "UNMATCHED";
-        if (cel) cel.unmatched++;
-        if (tcel) tcel.unmatched++;
-        overall.unmatched++;
+        const d = g.distractors.find((dv) =>
+          waardenGelijk(type, e.value_normalized, e.currency, dv, null)
+        );
+        if (d != null) {
+          status = "MISBOUND";
+          matchedDistractor = d;
+        }
       }
+    }
+
+    if (status === "CORRECT") {
+      if (cel) cel.correct++;
+      if (tcel) tcel.correct++;
+      overall.correct++;
+    } else if (status === "MISBOUND") {
+      if (cel) cel.misbound++;
+      if (tcel) tcel.misbound++;
+      overall.misbound++;
+    } else {
+      if (cel) cel.spurious++;
+      if (tcel) tcel.spurious++;
+      overall.spurious++;
     }
 
     beoordeeld.push({
       ...e,
       status,
-      misbound_naar: misboundNaar,
-      value_ok: valueOk,
-      golden_value: goldenValue,
+      golden_canonical: canonical,
+      matched_distractor: matchedDistractor,
     });
   }
 
-  // ── Recall: welke golden units zijn door ≥1 CORRECTe extractie gedekt? ──
-  // Per golden unit één keer tellen — `correct` kan bij dubbele extracties >
-  // golden_total worden, dus recall wordt op golden-niveau apart geteld.
-  const recallHits: Record<string, number> = {};
+  // Recall per cel + lijst gemiste cellen.
   for (const g of golden) {
-    const gedekt = beoordeeld.some(
-      (e) => e.status === "CORRECT" && e.concept === g.concept && coLoceert(e, g)
-    );
-    if (gedekt) {
-      recallHits[`c:${g.concept}`] = (recallHits[`c:${g.concept}`] ?? 0) + 1;
-      recallHits[`t:${g.type}`] = (recallHits[`t:${g.type}`] ?? 0) + 1;
-      recallHits["overall"] = (recallHits["overall"] ?? 0) + 1;
+    if (cellRecalled.has(sleutel(g.document, g.concept))) {
+      if (perConcept[g.concept]) perConcept[g.concept].cells_recalled++;
+      if (perType[g.type]) perType[g.type].cells_recalled++;
+      overall.cells_recalled++;
     } else {
-      gemistGolden.push(g);
+      gemisteCellen.push({
+        document: g.document,
+        concept: g.concept,
+        type: g.type,
+        canonical: g.canonical,
+        status: g.status,
+      });
     }
   }
 
-  // ── Sluit cellen af (ratio's + G1) ──
-  const zetEvidence = (c: CelMetriek, key: string) => {
+  // Ratio's + G1 afsluiten.
+  const sluit = (c: CelMetriek, evKey: string) => {
+    c.recall = c.golden_cells > 0 ? c.cells_recalled / c.golden_cells : null;
+    c.binding_precision =
+      c.extracted_total > 0 ? c.correct / c.extracted_total : null;
+    c.misbinding_rate =
+      c.extracted_total > 0 ? c.misbound / c.extracted_total : null;
     c.evidence_accuracy =
-      c.extracted_total > 0 ? (evOk[key] ?? 0) / c.extracted_total : null;
+      c.extracted_total > 0 ? (evOk[evKey] ?? 0) / c.extracted_total : null;
+    c.g1_green =
+      (c.binding_precision ?? 0) >= G1.binding_precision &&
+      (c.evidence_accuracy ?? 0) >= G1.evidence_accuracy;
   };
-  const zetRecall = (c: CelMetriek, key: string) => {
-    c.recall = c.golden_total > 0 ? (recallHits[key] ?? 0) / c.golden_total : null;
-  };
+  for (const def of CONCEPTEN) sluit(perConcept[def.concept], `c:${def.concept}`);
+  for (const t of Object.keys(perType)) sluit(perType[t], `t:${t}`);
+  sluit(overall, "overall");
 
-  for (const def of CONCEPTEN) {
-    const c = perConcept[def.concept];
-    zetEvidence(c, `c:${def.concept}`);
-    sluitCel(c);
-    zetRecall(c, `c:${def.concept}`);
-  }
-  for (const t of Object.keys(perType)) {
-    zetEvidence(perType[t], `t:${t}`);
-    sluitCel(perType[t]);
-    zetRecall(perType[t], `t:${t}`);
-  }
-  zetEvidence(overall, "overall");
-  sluitCel(overall);
-  zetRecall(overall, "overall");
-
-  return { perConcept, perType, overall, beoordeeld, gemistGolden };
+  return { perConcept, perType, overall, beoordeeld, gemisteCellen };
 }
 
 // ── CLI: print een korte samenvatting ──────────────────────────────
@@ -289,9 +252,7 @@ function main() {
     ? JSON.parse(readFileSync(goldenPad, "utf8"))
     : [];
   if (golden.length === 0) {
-    console.error(
-      "golden_set.json is leeg — zonder ground truth kan er niet gemeten worden."
-    );
+    console.error("golden_set.json is leeg — zonder ground truth kan er niet gemeten worden.");
     process.exit(1);
   }
 
@@ -301,19 +262,17 @@ function main() {
     console.log(
       `  ${naam} [${c.type}]  recall=${pct(c.recall)} bind-prec=${pct(
         c.binding_precision
-      )} misbind=${pct(c.misbinding_rate)} value=${pct(c.value_accuracy)} evid=${pct(
-        c.evidence_accuracy
-      )}  G1=${c.g1_green ? "GROEN" : "rood"}`
+      )} misbind=${pct(c.misbinding_rate)} evid=${pct(c.evidence_accuracy)}  ` +
+        `(C${c.correct}/M${c.misbound}/S${c.spurious})  G1=${c.g1_green ? "GROEN" : "rood"}`
     );
   }
   console.log(
-    `\nOverall: bind-prec=${pct(m.overall.binding_precision)} value=${pct(
-      m.overall.value_accuracy
-    )} evid=${pct(m.overall.evidence_accuracy)}`
+    `\nOverall: bind-prec=${pct(m.overall.binding_precision)} misbind=${pct(
+      m.overall.misbinding_rate
+    )} evid=${pct(m.overall.evidence_accuracy)} recall=${pct(m.overall.recall)}`
   );
 }
 
-// Alleen draaien als dit bestand direct wordt uitgevoerd (niet bij import).
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   main();
 }
