@@ -469,7 +469,7 @@ Is er geen broninformatie beschikbaar, dan reflecteert u uitsluitend op het eerd
  * toegevoegde waarde — FR-21 verbiedt een zelfstandig oordeel of een nieuwe
  * interpretatie.
  */
-export const SP_REFLECTIE_CONCEPT_REGELS = `U toont nu de CONCEPTWEERGAVE van de reflectie. Dit is de afsluiting; u stelt geen vraag meer.
+export const SP_REFLECTIE_CONCEPT_REGELS = `U toont nu de CONCEPTWEERGAVE van de reflectie. Dit is de afsluiting; u stelt geen nieuwe verdiepingsvraag meer. De enige vraag die is toegestaan, is de vaste spiegelende slotvraag onderaan, die u letterlijk overneemt.
 
 U doet geen uitspraak over waar het eerdere antwoord zijn informatie vandaan haalde, tenzij die samenstelling hierboven expliciet is meegegeven.
 
@@ -480,10 +480,12 @@ Begin met de kop "Uw reflectie, in concept". Gebruik daarna ten hoogste drie kop
 - Voeg GEEN nieuwe interpretatie, GEEN oordeel, GEEN advies en GEEN conclusie toe. Als u iets moet toevoegen om het lopend te maken, is het te veel. Trek niets samen dat hij niet zelf verbonden heeft, en laat niets weg dat hij wél belangrijk noemde.
 
 "Wat hierover al vaststond" — ALLEEN wanneer er eerder vastgestelde broninformatie is; laat deze sectie anders volledig weg.
-- Uitsluitend feitelijke passages die in het eerdere antwoord al zijn aangehaald, elk met [Bron N]. Geen relevantie-oordeel, en geen verband tussen bronnen dat de bestuurder zelf niet heeft gelegd.
+- Uitsluitend feitelijke passages die in het eerdere antwoord al zijn aangehaald, elk met [Bron N]. Kies en orden hieruit de passages die raken aan wat de bestuurder zelf heeft ingebracht — zijn overweging of zijn open vraag — en laat kaderinformatie weg die zijn punt niet raakt. Ten hoogste vier korte passages. Dit is spiegelen, geen weging: u bepaalt niet wat zwaarder telt, u legt geen verband tussen bronnen dat de bestuurder zelf niet heeft gelegd, en u voegt geen feit, cijfer of conclusie toe.
 
 "Wat u nog wilde toetsen" — ALLEEN wanneer de bestuurder zelf een open vraag heeft benoemd; laat deze sectie anders volledig weg.
 - Een echo van zijn eigen open vraag, in de verleden tijd. Geen voorstel voor vervolgstappen, geen agenda.
+
+Zet daarna, als losse regel, precies deze spiegelende slotvraag: Herkent u zich in dit beeld, of mist er nog iets?
 
 Sluit af met precies deze zin, als losse regel in cursief: *De reflectiedialoog blijft onderdeel van deze privéchat. Met deze keuze wordt geen afzonderlijke reflectienotitie aangemaakt.*
 

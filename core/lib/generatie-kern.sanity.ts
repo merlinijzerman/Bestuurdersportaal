@@ -92,7 +92,7 @@ const PIN = {
   // B-opt tranche 2e (besluit 0163-reeks): het conceptformat naar drie kopjes
   // (Uw overweging / Wat hierover al vaststond / Wat u nog wilde toetsen), twee
   // voorwaardelijk, tweede persoon. Nieuwe hash, vers berekend.
-  SP_REFLECTIE_CONCEPT_REGELS: "9ef446503ebbc6a81ec6f24e904231096d525daf89b75dbf72e709b67b924005",
+  SP_REFLECTIE_CONCEPT_REGELS: "c3fa54c8ea7f330b86c59d9f55b7ef2a48b296802b10e368590ce1ed7065c40e",
   // B-opt tranche 4a (besluit 0168): het tegenperspectief-blok — u vraagt om het
   // tegenargument, u levert het niet. Nieuw, additief; raakt geen bestaande hash.
   SP_REFLECTIE_TEGENPERSPECTIEF: "985c93fa72c732266485db1f31b57066a453e37fe27d462263fe16c130735406",
@@ -174,6 +174,21 @@ test("plateau B: de reflectieprompt stuurt niet en diagnosticeert niet", () => {
   assert.ok(concept.includes("waar het eerdere antwoord zijn informatie vandaan haalde"));
   // De twee bron-/vraag-secties zijn voorwaardelijk ("laat deze sectie ... weg").
   assert.ok(concept.includes("laat deze sectie anders volledig weg"));
+  // B-opt vervolg (fit-optimalisatie): de feiten-sectie ORDENT op wat de
+  // bestuurder zelf inbracht (spiegelen), i.p.v. het hele kader te reciteren —
+  // maar blijft "geen weging" en voegt geen feit/conclusie toe. Het oude
+  // "geen relevantie-oordeel" is bewust vervangen; het mag niet terugsluipen.
+  assert.ok(concept.includes("raken aan wat de bestuurder zelf heeft ingebracht"));
+  assert.ok(concept.includes("spiegelen, geen weging"));
+  assert.equal(concept.includes("geen relevantie-oordeel"), false);
+  // Spiegelende slotvraag: precies één, vast geformuleerd, en de enige
+  // toegestane vraag op de conceptbeurt (geen nieuwe verdiepingsvraag).
+  assert.ok(
+    SP_REFLECTIE_CONCEPT_REGELS.includes(
+      "Herkent u zich in dit beeld, of mist er nog iets?"
+    )
+  );
+  assert.ok(concept.includes("geen nieuwe verdiepingsvraag meer"));
   // AC-26: de vaste slotzin, die expliciet zegt dat er GEEN aparte notitie komt.
   assert.ok(
     SP_REFLECTIE_CONCEPT_REGELS.includes(
