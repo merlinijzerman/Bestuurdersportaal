@@ -77,6 +77,17 @@ Gebouwd vóór dit increment: `pgvector` náást FTS in dezelfde Supabase-databa
 
 Dit is de **meetbasis** onder `WERKOPDRACHT-RETRIEVAL-RECALL.md` en `WERKOPDRACHT-ANTWOORDLENGTE.md`: zolang dezelfde vraag verschillende zoekvragen kan opleveren, meten hun acceptatiecriteria ruis.
 
+### Fase 5 — representatie-constraintlaag (Epic bronselectie T1, 2026-08-12)
+
+**Probleem:** de selectie was één gepoolde ranking met een vaste afkap. Onder een "generiek" geclassificeerde vraag drukt de bronsoort-weging fondsdocumenten categorisch naar achteren, waarna ze onder `maxResults` vallen (partnerbegrip-casus: 7 generieke citaties, 0 fondsbronnen). Er was geen mechanisme dat een minimumrepresentatie per bibliotheek/bron garandeert; de classificatie was zélf de beoogde oplossing.
+
+- **Constraint-laag (`selecteerMetConstraints`, `core/lib/rag-select.ts`).** Puur & deterministisch, geen Supabase. Reserveert in rangvolgorde slots tot de minima per bibliotheek/bron gehaald zijn (dedup + `maxPerSource` gelden binnen die reservering), vult daarna het resterende budget op globale rang, en behoudt de inkomende volgorde in de uitvoer. **Faalt nooit:** een onhaalbaar minimum → door met wat er is. Bij nulminima **bit-identiek** aan `selecteerChunks` (geborgd in sanity), zodat de flag-uit-toestand non-regressief is.
+- **Constraint-object** `{ fondsMin, generiekMin, perSourceMin, maxPerSource, maxTotal }`, afgeleid uit het `bronsoortprofiel` (`constraintsVoorProfiel`, `core/lib/weeg-bronsoort.ts`): `generiek`/undefined → `fondsMin 0` · `fonds` → `fondsMin 1` · `gecombineerd` → `fondsMin 1 + generiekMin 1` · `vergelijking` → `perSourceMin q` (voorbereid, toepassing in T5).
+- **Expliciete bewerkingsvolgorde** (code + comment in `weegEnSelecteer`): `filters → weging (bronsoort) → [gereserveerd: regime-demotie, T4] → representatie-constraints → dedup → budget-afkap`. De T4-plek is bewust vrijgehouden.
+- **Feature-flag `REPRESENTATIE_CONSTRAINTS`** (env + per-fonds via `fonds_feature_flags`), **default uit = huidig gedrag**. Geresolveerd in het bestaande R1.3–R1.6-vlaggenspoor (`retrievalVlaggenVoorFonds` → `RetrievalOpties` → `naVerwerking`), dus de chat-route bedraadt automatisch mee.
+- **Scope-afbakening.** Classifier-verfijning (contrastpatroon → `gecombineerd`) is **T2** — gepaird: de partnerbegrip-casus classificeert nu nog als `generiek`, dus pas met T1 + T2 samen is die end-to-end opgelost. Auditlog-uitbreiding in `retrieval_meta` → **T3**. Regime-weging → **T4**. Vergelijkmodus + alignment op `perSourceMin` → **T5**.
+- **Nulmeting (meetset-first).** `BRONKEUZE_NULMETING_T1` in `core/lib/bronkeuze-meetset.ts` — 14 "begrip × wettelijke toets"-vragen (incl. partnerbegrip), bewust in een **apart export** dat de classificatie-runner níét als pass/fail evalueert (het zijn nulmeting-doellabels, geen geaccordeerde uitkomsten). Her-accordering door compliance vóór productie is openstaand. Zie [`decisions/0159`](./decisions/0159-representatie-constraintlaag-bronselectie.md).
+
 ## RLS / security-impact
 
 - Nieuwe functie is `SECURITY INVOKER`; RLS op `document_chunks` en `documenten` blijft de tenant-isolatie afdwingen. Te verifiëren: een gebruiker van fonds A kan via de RPC geen chunks van fonds B ophalen.
@@ -106,6 +117,7 @@ Ruwe orde-grootte — **te verifiëren tegen de actuele tarieven**; de operator 
 - `tsc --noEmit --skipLibCheck` groen.
 - Handmatige toetsing online door gebruiker; `retrieval_meta` in `governance_log` als inzicht-instrument.
 - **R1.1:** `lib/chunking.sanity.ts` (9 tests groen) borgt de structuur-grenzen — geen samenvloeiing van artikelen, samenhangende/gescheiden definities, ondeelbare markdown-tabel, en geen regressie op lopende tekst. Subagent-reviews (RLS / audit-evidence / code / ontwerp-sync) gedraaid; de code-review-blocker (niet-terminerende backfill bij `mislukt`) is opgelost via het `r1-overgeslagen`-stempel + een stop-bij-`mislukt` in beide client-lussen.
+- **Fase 5 (T1):** `rag-select.sanity.ts` uitgebreid met quota-cases (`gecombineerd` forceert ≥1 fonds + ≥1 generiek, `fonds` ≥1 fonds, `generiek` forceert géén fonds, onhaalbaar minimum faalt niet, `perSourceMin` reserveert per bron, `maxPerSource` gerespecteerd, volgorde-behoud) én de non-regressie-borg **nulminima ≡ `selecteerChunks`**; `weeg-bronsoort.sanity.ts` met de afleiding per profiel. Volledige `npm run sanity` groen; `tsc --noEmit --skipLibCheck` exit 0.
 
 ## Openstaande risico's
 
