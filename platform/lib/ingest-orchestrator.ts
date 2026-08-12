@@ -37,6 +37,7 @@ import {
   IngestCapError,
 } from "@/core/lib/ingest-caps";
 import { genereerSamenvatting } from "@/core/lib/samenvatting";
+import { verwerkSemantischeExtractieJob } from "@/platform/lib/semantische-extractie-job";
 
 // ── Tunable constanten (§8b — stem af ná de dashboard-verificaties) ─────────
 const TIJDBUDGET_MS = 240_000; // ruim binnen maxDuration 300s
@@ -278,6 +279,13 @@ async function verwerkJob(
   job: IngestJob,
   deadline: number
 ): Promise<Uitkomst> {
+  // T8 — semantische-extractie-jobs lopen langs een eigen handler (eigen document-
+  // laadpad, geen verwerkingsstatus-/embedding-semantiek). Zelfde claim-RPC en
+  // Uitkomst-buckets, dus de teller/back-off van de worker blijven ongewijzigd.
+  if (job.stap === "semantische_extractie") {
+    return await verwerkSemantischeExtractieJob(svc, job, deadline);
+  }
+
   const { data: doc, error } = await svc
     .from("documenten")
     .select("id, titel, agendapunt_id, actief, opslag_pad, bestandstype, verwerkingsstatus")
