@@ -103,6 +103,9 @@ export interface Bewijs {
   beschrijving: string | null;
   toegevoegd_op: string;
   toegevoegd_door_naam: string | null;
+  // WO-2-vervolg: null → vooraf opgegeven ("Nog te leveren"); later te koppelen.
+  document_id: string | null;
+  toegevoegd_door: string | null;
 }
 
 export interface Besluit {
@@ -401,6 +404,19 @@ export default async function ProcedureDetailPage({
   // vlag en bewijslast-dekking worden UI-afgeleid uit de stap-status en de
   // evidence-unie (template + instantie, D7c) die het dossier al levert.
   const fasen = await laadFasen(supabase, procedure.template_code);
+  // Per-proces fase-toelichting (los van de gedeelde D8-beschrijving). Faalt de
+  // tabel (migratie nog niet gedraaid), dan blijft de rail werken zonder.
+  const faseToelichtingMap = new Map<string, string | null>();
+  const { data: toelichtingRows } = await supabase
+    .from("procedure_fase_toelichting")
+    .select("fase_code, toelichting")
+    .eq("procedure_id", id);
+  for (const r of (toelichtingRows ?? []) as {
+    fase_code: string;
+    toelichting: string | null;
+  }[]) {
+    faseToelichtingMap.set(r.fase_code, r.toelichting);
+  }
   // Evidence per stap-volgorde (leeg als het dossier niet laadde).
   const evidence = dossier?.evidence ?? [];
   const stappenPerFase = new Map<string, Stap[]>();
@@ -432,6 +448,7 @@ export default async function ProcedureDetailPage({
       titel,
       beschrijving,
       is_override,
+      toelichting: faseToelichtingMap.get(fase_code) ?? null,
       status,
       dekking: bewijslastDekking(ev),
       aandacht: faseAandacht(status, stappenInFase, ev),
@@ -724,6 +741,8 @@ export default async function ProcedureDetailPage({
             <FaseRail
               fasen={faseGroepen}
               geselecteerdeStapId={geselecteerdeStap?.id ?? null}
+              procedureId={procedure.id}
+              kanBeheren={currentUserIsPrivileged}
             />
           </div>
         </div>
@@ -751,6 +770,7 @@ export default async function ProcedureDetailPage({
               stap={geselecteerdeStap}
               alleenLezen={!geselecteerdeIsBewerkbaar}
               kanBeheren={currentUserIsPrivileged}
+              currentUserId={user.id}
               voltooidDoorNaam={geselecteerdeVoltooidDoorNaam}
               checklist={checklist.filter(
                 (c) => c.stap_id === geselecteerdeStap.id

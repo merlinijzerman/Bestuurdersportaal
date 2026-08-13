@@ -11,7 +11,6 @@ import type {
   KomendeVergadering,
   GekoppeldAgendapunt,
 } from "../[id]/page";
-import VereistenStrook from "./VereistenStrook";
 import BibliotheekPicker from "./BibliotheekPicker";
 import { uploadDocument } from "@/core/lib/document-upload-client";
 import { DOCUMENTTYPEN, DOCUMENTTYPE_LABEL } from "@/core/lib/document-metadata";
@@ -39,6 +38,9 @@ interface Props {
       afgeronde stap heropenen? Alleen voorzitter/beheerder. Dit is een
       UI-signaal — de harde gate zit server-side in de routes. */
   kanBeheren?: boolean;
+  /** Id van de ingelogde gebruiker — bepaalt of de verwijder-knop op een
+      eigen bewijsstuk zichtbaar is (server-side check blijft leidend). */
+  currentUserId?: string;
 }
 
 function formatDatumKort(d: string) {
@@ -61,6 +63,7 @@ export default function StapPaneel({
   alleenLezen = false,
   voltooidDoorNaam = null,
   kanBeheren = false,
+  currentUserId = "",
 }: Props) {
   const router = useRouter();
   const [checklist, setChecklist] = useState<ChecklistItem[]>(initieelChecklist);
@@ -120,6 +123,8 @@ export default function StapPaneel({
   // WO-2 (§4.3): een afgeronde stap heropenen (met verplichte motivering).
   const [heropenForm, setHeropenForm] = useState(false);
   const [heropenMotivering, setHeropenMotivering] = useState("");
+  // WO-2-vervolg: welk (titel-only) bewijsstuk koppelen we aan een document?
+  const [koppelDoelId, setKoppelDoelId] = useState<string | null>(null);
 
   const voldaanCount = checklist.filter((c) => c.voldaan).length;
   const totaalCount = checklist.length;
@@ -463,6 +468,57 @@ export default function StapPaneel({
       router.refresh();
     } catch (err: unknown) {
       setFout(err instanceof Error ? err.message : "Heropenen mislukt");
+    } finally {
+      setBezig(null);
+    }
+  }
+
+  // WO-2-vervolg: een bewijsstuk verwijderen (indiener of voorzitter/beheerder;
+  // server-side gegate + append-only gelogd).
+  async function bewijsVerwijderen(bewijsId: string) {
+    if (alleenLezen) return;
+    setFout(null);
+    setBezig(`bewijs-del-${bewijsId}`);
+    try {
+      const res = await fetch(
+        `/api/procedures/${procedureId}/bewijs/${bewijsId}`,
+        { method: "DELETE" }
+      );
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Verwijderen mislukt");
+      }
+      setBewijs((huidig) => huidig.filter((b) => b.id !== bewijsId));
+      router.refresh();
+    } catch (err: unknown) {
+      setFout(err instanceof Error ? err.message : "Verwijderen mislukt");
+    } finally {
+      setBezig(null);
+    }
+  }
+
+  // WO-2-vervolg: een document koppelen aan een vooraf opgegeven bewijsstuk.
+  async function bewijsKoppelen(bewijsId: string, documentId: string) {
+    if (alleenLezen) return;
+    setFout(null);
+    setBezig(`bewijs-koppel-${bewijsId}`);
+    try {
+      const res = await fetch(
+        `/api/procedures/${procedureId}/bewijs/${bewijsId}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ document_id: documentId }),
+        }
+      );
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Koppelen mislukt");
+      }
+      setKoppelDoelId(null);
+      router.refresh();
+    } catch (err: unknown) {
+      setFout(err instanceof Error ? err.message : "Koppelen mislukt");
     } finally {
       setBezig(null);
     }
@@ -955,36 +1011,84 @@ export default function StapPaneel({
 
         {bewijs.length === 0 ? (
           <div className="text-sm text-muted italic">
-            Nog geen bewijsstukken bij deze stap.
+            Nog geen bewijsstukken bij deze stap. Voeg er een toe — je kunt een
+            stuk ook <span className="not-italic font-medium">vooraf opgeven</span>{" "}
+            (alleen een naam, bv. “Transitieplan”) en er later een document aan
+            koppelen.
           </div>
         ) : (
           <div className="space-y-2">
-            {bewijs.map((b) => (
-              <div
-                key={b.id}
-                className="flex items-start gap-3 p-3 border border-line rounded-lg"
-              >
-                <div className="w-9 h-10 bg-err-tint text-err-ink rounded flex items-center justify-center text-[10px] font-bold flex-shrink-0">
-                  PDF
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-ink">
-                    {b.titel}
+            {bewijs.map((b) => {
+              const gepland = !b.document_id;
+              const magVerwijderen =
+                kanBeheren ||
+                (!!currentUserId && b.toegevoegd_door === currentUserId);
+              return (
+                <div
+                  key={b.id}
+                  className="flex items-start gap-3 p-3 border border-line rounded-lg"
+                >
+                  <div
+                    className={`w-9 h-10 rounded flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${
+                      gepland
+                        ? "bg-app-bg text-muted border border-dashed border-app-line-strong"
+                        : "bg-err-tint text-err-ink"
+                    }`}
+                  >
+                    {gepland ? "—" : "PDF"}
                   </div>
-                  {b.beschrijving && (
-                    <div className="text-xs text-muted mt-0.5 whitespace-pre-line">
-                      {b.beschrijving}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-ink flex items-center gap-2 flex-wrap">
+                      {b.titel}
+                      {gepland && (
+                        <span className="text-[10px] uppercase tracking-wide text-warn-ink bg-warn-tint border border-warn/30 px-1.5 py-0.5 rounded">
+                          Nog te leveren
+                        </span>
+                      )}
                     </div>
-                  )}
-                  <div className="text-xs text-muted mt-1">
-                    {b.toegevoegd_door_naam
-                      ? `Toegevoegd door ${b.toegevoegd_door_naam}`
-                      : "Toegevoegd"}{" "}
-                    · {formatDatumKort(b.toegevoegd_op)}
+                    {b.beschrijving && (
+                      <div className="text-xs text-muted mt-0.5 whitespace-pre-line">
+                        {b.beschrijving}
+                      </div>
+                    )}
+                    <div className="text-xs text-muted mt-1">
+                      {b.toegevoegd_door_naam
+                        ? `Toegevoegd door ${b.toegevoegd_door_naam}`
+                        : "Toegevoegd"}{" "}
+                      · {formatDatumKort(b.toegevoegd_op)}
+                    </div>
+                    {!alleenLezen && (gepland || magVerwijderen) && (
+                      <div className="flex items-center gap-3 mt-2">
+                        {gepland && (
+                          <button
+                            type="button"
+                            onClick={() => setKoppelDoelId(b.id)}
+                            disabled={bezig === `bewijs-koppel-${b.id}`}
+                            className="text-xs text-accent hover:underline disabled:opacity-50"
+                          >
+                            {bezig === `bewijs-koppel-${b.id}`
+                              ? "Bezig…"
+                              : "Document koppelen"}
+                          </button>
+                        )}
+                        {magVerwijderen && (
+                          <button
+                            type="button"
+                            onClick={() => bewijsVerwijderen(b.id)}
+                            disabled={bezig === `bewijs-del-${b.id}`}
+                            className="text-xs text-err-ink hover:underline disabled:opacity-50"
+                          >
+                            {bezig === `bewijs-del-${b.id}`
+                              ? "Bezig…"
+                              : "Verwijderen"}
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -1112,60 +1216,36 @@ export default function StapPaneel({
         </div>
       )}
 
-      {/* Voltooien — vereisten-strook (1D-4) maakt blokkers expliciet
-          conform het overkoepelende ontwerpprincipe. */}
-      <div className="mt-6 pt-5 border-t border-line">
-        <VereistenStrook
-          titel="Vereisten voor stap-voltooien"
-          vereisten={[
-            {
-              label: `${voldaanCount} van ${totaalCount} checklist-items voldaan`,
-              voldaan: allesVoldaan,
-              hint: !allesVoldaan
-                ? `Nog ${totaalCount - voldaanCount} item${totaalCount - voldaanCount === 1 ? "" : "s"} af te vinken`
-                : null,
-            },
-            ...(bewijsVereist > 0
-              ? [
-                  {
-                    label: heeftBewijs
-                      ? `${bewijs.length} bewijsstuk${bewijs.length === 1 ? "" : "ken"} toegevoegd`
-                      : "Bewijsstuk vereist",
-                    voldaan: heeftBewijs,
-                    hint: !heeftBewijs
-                      ? `${bewijsVereist} checklist-item${bewijsVereist === 1 ? "" : "s"} vraagt om bewijs`
-                      : null,
-                  },
+      {/* Voltooien — alleen de knop; wat nog ontbreekt staat als tooltip.
+          De blokkers zelf zijn hierboven al zichtbaar (checklist, bewijs,
+          besluit), dus de aparte vereisten-strook eronder was dubbel en druk. */}
+      <div className="mt-6 pt-5 border-t border-line flex items-center justify-end">
+        <button
+          onClick={stapVoltooien}
+          disabled={!kanVoltooien || bezig === "voltooien"}
+          title={
+            kanVoltooien
+              ? "Alle vereisten voldaan"
+              : `Nog nodig: ${[
+                  !allesVoldaan
+                    ? `${totaalCount - voldaanCount} checklist-item${
+                        totaalCount - voldaanCount === 1 ? "" : "s"
+                      }`
+                    : null,
+                  bewijsVereist > 0 && !heeftBewijs ? "bewijsstuk" : null,
+                  stap.vereist_besluit && !besluit ? "besluit" : null,
                 ]
-              : []),
-            ...(stap.vereist_besluit
-              ? [
-                  {
-                    label: besluit ? "Besluit vastgelegd" : "Besluit ontbreekt",
-                    voldaan: besluit !== null,
-                    hint: !besluit
-                      ? "Formuleer + motiveer het besluit hierboven"
-                      : null,
-                  },
-                ]
-              : []),
-          ]}
-          actie={
-            <div className="flex items-center justify-end gap-3">
-              <button
-                onClick={stapVoltooien}
-                disabled={!kanVoltooien || bezig === "voltooien"}
-                className={`px-4 py-2 text-sm rounded-lg font-medium ${
-                  kanVoltooien
-                    ? "bg-accent text-white hover:bg-accent-ink"
-                    : "bg-app-line text-muted cursor-not-allowed"
-                }`}
-              >
-                {bezig === "voltooien" ? "Bezig…" : "Stap voltooien"}
-              </button>
-            </div>
+                  .filter(Boolean)
+                  .join(" · ")}`
           }
-        />
+          className={`px-4 py-2 text-sm rounded-lg font-medium ${
+            kanVoltooien
+              ? "bg-accent text-white hover:bg-accent-ink"
+              : "bg-app-line text-muted cursor-not-allowed"
+          }`}
+        >
+          {bezig === "voltooien" ? "Bezig…" : "Stap voltooien"}
+        </button>
       </div>
 
       </fieldset>
@@ -1187,6 +1267,18 @@ export default function StapPaneel({
             }
           }}
           onClose={() => setPickerOpen(false)}
+        />
+      )}
+
+      {/* WO-2-vervolg: picker om een document te koppelen aan een vooraf
+          opgegeven ("Nog te leveren") bewijsstuk. */}
+      {koppelDoelId && (
+        <BibliotheekPicker
+          onSelect={(id) => {
+            const doelId = koppelDoelId;
+            if (doelId) bewijsKoppelen(doelId, id);
+          }}
+          onClose={() => setKoppelDoelId(null)}
         />
       )}
     </div>

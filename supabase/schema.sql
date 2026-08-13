@@ -1182,6 +1182,20 @@ create table if not exists public.procedure_bewijs (
 
 create index if not exists idx_bewijs_stap on public.procedure_bewijs(stap_id, toegevoegd_op desc);
 
+-- Per-proces bestuurlijke toelichting per fase (WO-2-vervolg, migratie
+-- 2026_08_14). Los van de gedeelde D8-fasebeschrijving. Eigen fonds_id →
+-- fonds-RLS (Gate B); schrijven voorzitter/beheerder.
+create table if not exists public.procedure_fase_toelichting (
+  id             uuid primary key default uuid_generate_v4(),
+  procedure_id   uuid not null references public.procedures(id) on delete cascade,
+  fase_code      text not null,
+  toelichting    text,
+  fonds_id       uuid not null references public.fondsen(id) on delete cascade,
+  aangepast_door uuid references auth.users(id) on delete set null,
+  aangepast_op   timestamptz default now(),
+  unique (procedure_id, fase_code)
+);
+
 create table if not exists public.procedure_besluiten (
   id                    uuid primary key default uuid_generate_v4(),
   procedure_id          uuid not null references public.procedures(id) on delete cascade,

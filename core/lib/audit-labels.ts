@@ -24,8 +24,11 @@ export const AUDIT_EVENT_LABEL: Record<string, string> = {
   checklistitem_voldaan: "Checklist-item afgevinkt",
   checklistitem_geopend: "Checklist-item ongedaan gemaakt",
   bewijs_toegevoegd: "Bewijsstuk toegevoegd",
+  bewijs_document_gekoppeld: "Document aan bewijsstuk gekoppeld",
+  bewijs_verwijderd: "Bewijsstuk verwijderd",
   besluit_vastgelegd: "Besluit vastgelegd",
   procedure_metadata_gewijzigd: "Proceskenmerken gewijzigd",
+  fase_toelichting_bijgewerkt: "Fase-toelichting bijgewerkt",
   agendapunt_gekoppeld: "Agendapunt gekoppeld",
 
   // ── Besluitniveau (governance_events) ──
