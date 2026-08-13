@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { notifyUser } from "@/core/lib/notifications";
+import {
+  herberekenActiveerbaarheid,
+  alleStappenAfgerond,
+  type StapActivatieState,
+} from "@/core/lib/procedure-activatie";
 
 export async function PATCH(
   req: NextRequest,
@@ -45,13 +50,26 @@ export async function PATCH(
     }
 
     if (body.status === "afgerond") {
+      // D6: alleen een actieve of heropende stap kan worden afgerond. Een
+      // geblokkeerde (of legacy 'open') stap direct afronden zou de
+      // afhankelijkheidsgate server-side omzeilen — de CHECK-superset dwingt
+      // legale overgangen niet af, dus dat gebeurt hier.
+      if (stap.status !== "actief" && stap.status !== "heropend") {
+        return NextResponse.json(
+          { error: "Alleen een actieve of heropende stap kan worden afgerond" },
+          { status: 400 }
+        );
+      }
       // Voor 'afgerond': controleer dat alle checklist-items voldaan zijn
       // en dat eventueel vereist besluit is vastgelegd
       const { data: checklistRijen } = await supabase
         .from("procedure_checklist")
-        .select("voldaan, bewijs_vereist")
+        .select("voldaan, bewijs_vereist, actief")
         .eq("stap_id", stapId);
-      const checklist = checklistRijen || [];
+      // D7: soft-gedeactiveerde checklist-items tellen niet mee voor afronden.
+      const checklist = (checklistRijen || []).filter(
+        (c: { actief?: boolean | null }) => c.actief !== false
+      );
       const allesVoldaan = checklist.every(
         (c: { voldaan: boolean }) => c.voldaan
       );
@@ -114,30 +132,28 @@ export async function PATCH(
         payload: { stap: stap.naam },
       });
 
-      // Volgende stap activeren — of procedure afronden
-      const { data: volgendeStap } = await supabase
+      // ── D6: activeerbaarheid herberekenen — of procedure afronden ──
+      // Laad alle stappen ná het afronden van deze stap. `stap` is hierboven
+      // al op 'afgerond' gezet, dus de query reflecteert de nieuwe toestand.
+      const { data: alleStappenRows } = await supabase
         .from("procedure_stappen")
-        .select("id, naam")
-        .eq("procedure_id", id)
-        .gt("volgorde", stap.volgorde)
-        .order("volgorde", { ascending: true })
-        .limit(1)
-        .maybeSingle();
+        .select("id, volgorde, naam, status, blokkerende_afhankelijkheden")
+        .eq("procedure_id", id);
+      const alleStappen = (alleStappenRows ?? []) as Array<{
+        id: string;
+        volgorde: number;
+        naam: string;
+        status: StapActivatieState["status"];
+        blokkerende_afhankelijkheden: number[] | null;
+      }>;
+      const activatieState: StapActivatieState[] = alleStappen.map((s) => ({
+        volgorde: s.volgorde,
+        status: s.status,
+        blokkerende_afhankelijkheden: s.blokkerende_afhankelijkheden ?? [],
+      }));
 
-      if (volgendeStap) {
-        await supabase
-          .from("procedure_stappen")
-          .update({ status: "actief" })
-          .eq("id", volgendeStap.id);
-        await supabase.from("procedure_log").insert({
-          procedure_id: id,
-          event_type: "stap_gestart",
-          actor_id: user.id,
-          actor_naam: profiel?.naam || null,
-          payload: { stap: volgendeStap.naam },
-        });
-      } else {
-        // Geen volgende stap — procedure is klaar
+      if (alleStappenAfgerond(activatieState)) {
+        // Alle stappen afgerond — procedure is klaar.
         await supabase
           .from("procedures")
           .update({
@@ -147,8 +163,6 @@ export async function PATCH(
           .eq("id", id);
 
         // ── Iteratie 3-A: notificatie naar de procedure-starter ──
-        // De gestart_door krijgt een melding dat zijn procedure klaar is —
-        // handig als hij niet zelf de laatste stap voltooide.
         const { data: proc } = await supabase
           .from("procedures")
           .select("titel, gestart_door, fonds_id")
@@ -171,6 +185,44 @@ export async function PATCH(
               actor_naam: profiel?.naam || null,
             }
           );
+        }
+      } else if (activatieState.some((s) => s.status === "geblokkeerd")) {
+        // Parallel model (engine v2): activeer elke stap die door dit afronden
+        // activeerbaar is geworden. Geen "volgende op volgorde" meer.
+        const teActiveren = herberekenActiveerbaarheid(activatieState);
+        for (const volg of teActiveren) {
+          const doel = alleStappen.find((s) => s.volgorde === volg);
+          if (!doel) continue;
+          await supabase
+            .from("procedure_stappen")
+            .update({ status: "actief" })
+            .eq("id", doel.id);
+          await supabase.from("procedure_log").insert({
+            procedure_id: id,
+            event_type: "stap_gestart",
+            actor_id: user.id,
+            actor_naam: profiel?.naam || null,
+            payload: { stap: doel.naam },
+          });
+        }
+      } else {
+        // Legacy sequentieel pad: activeer de eerstvolgende 'open' stap op
+        // volgorde (gedrag van vóór engine v2, voor lopende procedures).
+        const volgende = alleStappen
+          .filter((s) => s.status === "open" && s.volgorde > stap.volgorde)
+          .sort((a, b) => a.volgorde - b.volgorde)[0];
+        if (volgende) {
+          await supabase
+            .from("procedure_stappen")
+            .update({ status: "actief" })
+            .eq("id", volgende.id);
+          await supabase.from("procedure_log").insert({
+            procedure_id: id,
+            event_type: "stap_gestart",
+            actor_id: user.id,
+            actor_naam: profiel?.naam || null,
+            payload: { stap: volgende.naam },
+          });
         }
       }
 

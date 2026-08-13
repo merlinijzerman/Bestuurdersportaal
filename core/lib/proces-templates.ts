@@ -1,7 +1,18 @@
+import invaarDefinitieJson from "../../definities/pensioenfondsen/pf_wtp_invaarbesluit@2.0.0.json";
+import {
+  definitieNaarProcessTemplate,
+  type ProcedureDefinitie,
+} from "./procedure-definitie";
+
 // Procestemplates — bron-van-waarheid voor de standaard procesflows.
 // In iteratie 1 leven templates hier in code; bij het starten van een
 // procedure wordt een snapshot in de database opgeslagen, zodat lopende
 // procedures niet veranderen als de template later wordt aangepast.
+//
+// Sinds de proceduremodule-engine v2 (D6/D8) kan een template ook uit een
+// canonieke JSON-definitie komen (zie procedure-definitie.ts). De
+// invaarprocedure `pf_wtp_invaarbesluit@2.0.0` wordt onderaan dit bestand
+// via die weg geregistreerd zodat `vindTemplate` haar kan snapshotten.
 
 export interface ProcessTemplateChecklistItem {
   volgorde: number;
@@ -16,6 +27,12 @@ export interface ProcessTemplateStap {
   vereist_besluit: boolean;
   geschatte_dagen: number;
   checklist: ProcessTemplateChecklistItem[];
+  // D8: koppeling stap → fase (fase_code uit de definitie). Optioneel:
+  // de klassieke code-templates hieronder kennen (nog) geen fasen.
+  fase_code?: string;
+  // D6: stap-volgordes die eerst `afgerond` moeten zijn vóór deze stap
+  // activeerbaar is. Leeg/afwezig = geen gate (parallel-by-default).
+  blokkerende_afhankelijkheden?: number[];
 }
 
 export interface ProcessTemplate {
@@ -619,6 +636,17 @@ export const TEMPLATES: ProcessTemplate[] = [
   },
 ];
 
+// ── Invaarprocedure (canonieke JSON-definitie, proceduremodule-engine v2) ──
+// De rijke definitie leeft als data in definities/pensioenfondsen/ en wordt
+// hier op het ProcessTemplate-contract gemapt zodat de startroute haar
+// (incl. fase_code + blokkerende_afhankelijkheden) kan snapshotten. De
+// requirements gaan niet mee — die leven globaal in `procedure_requirements`.
+TEMPLATES.push(
+  definitieNaarProcessTemplate(
+    invaarDefinitieJson as unknown as ProcedureDefinitie
+  )
+);
+
 export function vindTemplate(code: string): ProcessTemplate | undefined {
   return TEMPLATES.find((t) => t.code === code);
 }
@@ -635,7 +663,9 @@ export const PROCEDURE_STATUS_LABEL: Record<string, string> = {
 };
 
 export const STAP_STATUS_LABEL: Record<string, string> = {
-  open: "Open",
+  open: "Open", // legacy (sequentieel model)
+  geblokkeerd: "Geblokkeerd", // D6: wacht op een afhankelijkheid
   actief: "Actief",
   afgerond: "Afgerond",
+  heropend: "Heropend", // D6: teruggezet voor herziening (telt als actief)
 };

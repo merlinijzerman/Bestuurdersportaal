@@ -26,6 +26,8 @@ import {
   type VoortgangUI,
 } from "./Voortgang";
 import Startpunt from "./Startpunt";
+import VergelijkResultaatWeergave from "./VergelijkResultaatWeergave";
+import type { VergelijkResultaat } from "@/core/lib/vergelijk-types";
 import DocumentDoorgronden, { type DoorgrondDoc } from "./DocumentDoorgronden";
 import StukVoorbereiden from "./StukVoorbereiden";
 import { rolHeeftCapability } from "@/core/lib/capabilities-map";
@@ -109,6 +111,16 @@ interface Bericht {
   inlineMeldingen?: InlineMelding[];
   // Increment I-2 (FO §11a) — verduidelijkingsvraag met chips (geen antwoord).
   verduidelijking?: VerduidelijkingKeuze;
+  // T5 — een vergelijkresultaat (side-by-side per dimensie). Rendert via
+  // VergelijkResultaatWeergave i.p.v. de gewone antwoordtekst.
+  vergelijking?: VergelijkResultaat;
+  // T5 — vergelijkvraag met twee mogelijke doelbronnen: een gerichte verduidelijking.
+  vergelijkingVerduidelijking?: {
+    bronHint: string | null;
+    doelHint: string | null;
+    bronKandidaten: { id: string; titel: string }[];
+    doelKandidaten: { id: string; titel: string }[];
+  };
   // 30-07-2026 — de actualiteitsfilter nam alle treffers weg terwijl er wél
   // niet-vastgestelde fondsstukken over het onderwerp zijn. Eén chip stelt
   // dezelfde vraag opnieuw met die filter uit. `vraag` is de oorspronkelijke
@@ -1466,6 +1478,12 @@ export default function AssistentClient({
           // server-controlled reflectiestatus. Beide komen in het 'done'-event.
           log_id?: string | null;
           reflectie?: { status?: string; beurt?: number; heeft_bronset?: boolean };
+          // T5 — vergelijkmodus-events.
+          resultaat?: VergelijkResultaat;
+          bronHint?: string | null;
+          doelHint?: string | null;
+          bronKandidaten?: { id: string; titel: string }[];
+          doelKandidaten?: { id: string; titel: string }[];
         };
         try {
           evt = JSON.parse(regel);
@@ -1489,6 +1507,38 @@ export default function AssistentClient({
               vraag: evt.vraag || "",
               opties: evt.opties ?? [],
               origineleVraag: tekst,
+            },
+          };
+          setBerichten((prev) => [...prev, verduidelijkingBericht!]);
+        } else if (evt.type === "vergelijking") {
+          // T5 — vergelijkresultaat: geen antwoordbubbel maar de side-by-side
+          // component. Hergebruikt het verduidelijking-spoor (geen 'done'-
+          // overschrijving + dezelfde persistentie van de beurt).
+          verduidelijkingActief = true;
+          aiToegevoegd = true;
+          setVoortgang(null);
+          if (evt.resultaat) {
+            verduidelijkingBericht = {
+              rol: "ai",
+              tekst: "Vergelijking",
+              vergelijking: evt.resultaat,
+              voltooid: true,
+            };
+            setBerichten((prev) => [...prev, verduidelijkingBericht!]);
+          }
+        } else if (evt.type === "vergelijking_verduidelijking") {
+          // T5 — twee mogelijke doelbronnen: een gerichte verduidelijking i.p.v. gokken.
+          verduidelijkingActief = true;
+          aiToegevoegd = true;
+          setVoortgang(null);
+          verduidelijkingBericht = {
+            rol: "ai",
+            tekst: "Welke documenten wilt u vergelijken?",
+            vergelijkingVerduidelijking: {
+              bronHint: evt.bronHint ?? null,
+              doelHint: evt.doelHint ?? null,
+              bronKandidaten: evt.bronKandidaten ?? [],
+              doelKandidaten: evt.doelKandidaten ?? [],
             },
           };
           setBerichten((prev) => [...prev, verduidelijkingBericht!]);
@@ -2474,6 +2524,54 @@ export default function AssistentClient({
                       {o.label}
                     </button>
                   ))}
+                </div>
+              )}
+
+              {/* T5 — vergelijkresultaat: side-by-side per dimensie. De component
+                  toont alleen (geen vergelijk-logica in de UI). De reflectie-hook
+                  (T10) prefilt de composer met een startzin bij de bevinding. */}
+              {b.rol === "ai" && b.vergelijking && (
+                <div className="mt-2">
+                  <VergelijkResultaatWeergave
+                    resultaat={b.vergelijking}
+                    onReageer={(f) =>
+                      setInvoer(
+                        `Ik wil reageren op de bevinding "${f.dimensie}" (bron: ${
+                          f.bron.value ?? "—"
+                        } / doel: ${f.doel.value ?? "—"}): `
+                      )
+                    }
+                  />
+                </div>
+              )}
+
+              {/* T5 — vergelijkvraag met twee mogelijke doelbronnen: gerichte
+                  verduidelijking via kandidaat-paren (nooit gokken). Eén klik
+                  prefilt de composer met een eenduidige vergelijkvraag. */}
+              {b.rol === "ai" && b.vergelijkingVerduidelijking && (
+                <div className="mt-2">
+                  <p className="text-xs text-muted mb-1.5">
+                    Welke documenten bedoelt u? Kies een combinatie:
+                  </p>
+                  <div className="flex gap-2 flex-wrap">
+                    {b.vergelijkingVerduidelijking.bronKandidaten
+                      .flatMap((bron) =>
+                        b.vergelijkingVerduidelijking!.doelKandidaten
+                          .filter((doel) => doel.id !== bron.id)
+                          .map((doel) => ({ bron, doel }))
+                      )
+                      .slice(0, 4)
+                      .map(({ bron, doel }) => (
+                        <button
+                          key={`${bron.id}-${doel.id}`}
+                          disabled={laden}
+                          onClick={() => setInvoer(`Vergelijk ${bron.titel} met ${doel.titel}`)}
+                          className="text-xs text-ink border border-app-line-strong px-3 py-1.5 rounded-full hover:border-accent hover:bg-warn-tint transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          {bron.titel} ↔ {doel.titel}
+                        </button>
+                      ))}
+                  </div>
                 </div>
               )}
 

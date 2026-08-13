@@ -51,6 +51,12 @@ import { bouwOrganisatieprofiel, bouwRegimeKaderBlok } from "@/core/lib/organisa
 import { SP_AGENDAPUNT_REGELS, bouwToelichtingBlok, herkomstString, type AgendapuntSeed } from "@/core/lib/agendapunt-context";
 import { splitsRetrievalMeta } from "@/core/lib/audit-meta";
 import { bouwInhoudZegel } from "@/core/lib/audit-hmac";
+// T5 — Vergelijkmodus. De logica zit volledig in core/lib/vergelijk-* (los
+// testbaar); deze route is enkel de confidence-gated ingang + governance-logging.
+import { bepaalVergelijkIntent, koppelDocumenten, type DocumentRef } from "@/core/lib/vergelijk-intent";
+import { vergelijkmodusAan } from "@/core/lib/vergelijk-config";
+import { voerVergelijkingUit } from "@/core/lib/vergelijk-kern";
+import { productieDeps, VERGELIJK_VERSIES, VERGELIJK_MODEL } from "@/core/lib/vergelijk-productie";
 // AQL-2 / spike 1 — de answer-generation-kern (toon-systeemprompt, per-modus
 // instructiesets, system-prompt-builders, model-/budgetconstanten) is verplaatst
 // naar lib/generatie-kern.ts zodat zowel deze streaming-route als het AI Quality
@@ -1268,6 +1274,102 @@ export async function POST(req: NextRequest) {
     // Alleen `blokkerend` retourneert vroeg met de terugvraag. Bij `antwoord_eerst`
     // en `uit` loopt de beurt door (fondsgericht); antwoord_eerst biedt de chips
     // ónder het antwoord aan (meta-event bronkeuze_aanbod).
+    // ── T5 — Vergelijkmodus (confidence-gated, achter VERGELIJKMODUS) ────────
+    // Een expliciete vergelijkvraag ("vergelijk X met Y") pre-empt de bron-
+    // verduidelijking: eenduidig → direct de service draaien en het resultaat als
+    // {type:"vergelijking"} streamen; twee mogelijke doelbronnen → een gerichte
+    // {type:"vergelijking_verduidelijking"} (nooit gokken). Flag uit → deze tak doet
+    // niets en de chat verloopt exact als voorheen (terugdraaibaarheid). fondsId is
+    // hier al server-side afgeleid en non-null (guard hierboven).
+    const vergelijkIntent = vergelijkmodusAan()
+      ? bepaalVergelijkIntent(vraag)
+      : { isVergelijk: false, bronHint: null, doelHint: null, vertrouwen: "onzeker" as const };
+    if (vergelijkIntent.isVergelijk) {
+      const streamHeaders = {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+      };
+      const stuurStream = (payload: unknown) => {
+        const encoder = new TextEncoder();
+        return new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "done" })}\n\n`));
+            controller.close();
+          },
+        });
+      };
+
+      // Kandidaat-documenten binnen het eigen fonds (RLS scoping).
+      const { data: docRijen } = await supabase
+        .from("documenten")
+        .select("id, titel")
+        // "niet expliciet inactief" — NULL ≡ actief (spiegelt de ingest/extractie-job,
+        // die alleen op actief===false overslaat). `.eq(true)` zou NULL-docs droppen.
+        .not("actief", "is", false);
+      const documenten: DocumentRef[] = (docRijen ?? []).map((d) => ({ id: d.id, titel: d.titel }));
+      const koppeling = koppelDocumenten(vergelijkIntent.bronHint, vergelijkIntent.doelHint, documenten);
+
+      if (koppeling.eenduidig && koppeling.bron && koppeling.doel) {
+        const resultaat = await voerVergelijkingUit(
+          {
+            mode: "symmetrisch",
+            bronDocumentId: koppeling.bron.id,
+            doelDocumentId: koppeling.doel.id,
+            versies: VERGELIJK_VERSIES,
+          },
+          productieDeps({ supabase, fondsId })
+        );
+
+        // Governance-logging: een vergelijking is een AI-interactie (verplicht spoor,
+        // reproduceerbaar via comparison_run). Fail-safe: een mislukte logregel mag
+        // het resultaat niet blokkeren, wel zichtbaar in de serverlog.
+        try {
+          const samenvatting =
+            `Vergelijking ${koppeling.bron.titel} ↔ ${koppeling.doel.titel}: ` +
+            `${resultaat.findings.length} bevinding(en) over ${resultaat.dimensies.length} dimensie(s).`;
+          const zegel = bouwInhoudZegel(vraag, samenvatting);
+          await supabase.rpc("schrijf_ai_interactie", {
+            p_vraag: vraag,
+            p_antwoord: samenvatting,
+            p_bronnen: [],
+            p_modus: "documenten",
+            p_model: VERGELIJK_MODEL,
+            p_retrieval_meta: {
+              vergelijkmodus: true,
+              comparison_run_id: resultaat.comparison_run_id,
+              bron_document_id: koppeling.bron.id,
+              doel_document_id: koppeling.doel.id,
+              aantal_findings: resultaat.findings.length,
+              dimensies: resultaat.dimensies.map((d) => d.key),
+            },
+            p_retrieval_meta_inhoud: {},
+            p_gesprek_audit_id: gesprekAuditId,
+            p_inhoud_hmac: zegel?.inhoud_hmac ?? null,
+            p_hmac_schema_versie: zegel?.hmac_schema_versie ?? null,
+            p_hmac_sleutel_versie: zegel?.hmac_sleutel_versie ?? null,
+          });
+        } catch (e) {
+          console.error("Governance-log voor vergelijking mislukt:", e);
+        }
+
+        return new Response(stuurStream({ type: "vergelijking", resultaat }), { headers: streamHeaders });
+      }
+
+      // Niet eenduidig → gerichte verduidelijking met de kandidaten (nooit gokken).
+      return new Response(
+        stuurStream({
+          type: "vergelijking_verduidelijking",
+          bronHint: vergelijkIntent.bronHint,
+          doelHint: vergelijkIntent.doelHint,
+          bronKandidaten: koppeling.bronKandidaten.slice(0, 5),
+          doelKandidaten: koppeling.doelKandidaten.slice(0, 5),
+        }),
+        { headers: streamHeaders }
+      );
+    }
+
     if (moetVerduidelijkenNu && bronkeuzeModus === "blokkerend") {
       try {
         // Plateau A — spoor en inhoud in één transactie via de definer-RPC.

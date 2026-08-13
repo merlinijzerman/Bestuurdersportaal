@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { vindTemplate } from "@/core/lib/proces-templates";
+import { beginStatussen } from "@/core/lib/procedure-activatie";
 
 export async function POST(req: NextRequest) {
   try {
@@ -124,8 +125,32 @@ export async function POST(req: NextRequest) {
     }
 
     // 3. Stappen + checklist snapshot
-    // Eerste stap meteen op 'actief', rest op 'open'
+    //
+    // Engine v2 (D6): een template die afhankelijkheden declareert
+    // (blokkerende_afhankelijkheden gezet, ook al is dat een lege lijst) draait
+    // op het PARALLELLE model — elke stap zonder onvervulde afhankelijkheid
+    // start 'actief', de rest 'geblokkeerd'. Een parallelle procedure zonder
+    // gates start dus met alle stappen 'actief'. Klassieke code-templates (geen
+    // afhankelijkheden gedeclareerd) behouden het oude sequentiële gedrag:
+    // stap 1 'actief', de rest legacy 'open' (snapshot-integriteit).
+    const parallelModel = template.stappen.some((s) =>
+      Array.isArray(s.blokkerende_afhankelijkheden)
+    );
+    const beginStatus = parallelModel
+      ? beginStatussen(
+          template.stappen.map((s) => ({
+            volgorde: s.volgorde,
+            blokkerende_afhankelijkheden: s.blokkerende_afhankelijkheden ?? [],
+          }))
+        )
+      : null;
+
     for (const tStap of template.stappen) {
+      const status = beginStatus
+        ? beginStatus.get(tStap.volgorde) ?? "geblokkeerd"
+        : tStap.volgorde === 1
+          ? "actief"
+          : "open";
       const { data: stap } = await supabase
         .from("procedure_stappen")
         .insert({
@@ -135,7 +160,9 @@ export async function POST(req: NextRequest) {
           beschrijving: tStap.beschrijving,
           vereist_besluit: tStap.vereist_besluit,
           geschatte_dagen: tStap.geschatte_dagen,
-          status: tStap.volgorde === 1 ? "actief" : "open",
+          status,
+          blokkerende_afhankelijkheden: tStap.blokkerende_afhankelijkheden ?? [],
+          fase_code: tStap.fase_code ?? null,
         })
         .select()
         .single();
@@ -186,12 +213,22 @@ export async function POST(req: NextRequest) {
         });
       }
     }
+    // Bij het parallelle model kunnen meerdere stappen tegelijk starten;
+    // leg vast welke (i.p.v. alleen stap 1) zodat het logboek de werkelijkheid
+    // dekt.
+    const actieveStapNamen = parallelModel
+      ? template.stappen
+          .filter((s) => beginStatus!.get(s.volgorde) === "actief")
+          .map((s) => s.naam)
+      : [template.stappen[0]?.naam ?? ""];
     logEntries.push({
       procedure_id: procedure.id,
       event_type: "stap_gestart",
       actor_id: user.id,
       actor_naam: profiel.naam || null,
-      payload: { stap: template.stappen[0]?.naam ?? "" },
+      payload: parallelModel
+        ? { parallel: true, actieve_stappen: actieveStapNamen }
+        : { stap: actieveStapNamen[0] },
     });
     await supabase.from("procedure_log").insert(logEntries);
 

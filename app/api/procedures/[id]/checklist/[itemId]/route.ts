@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
+import { ensureDecisionForProcedure } from "@/core/lib/decision";
 
 export async function PATCH(
   req: NextRequest,
@@ -15,24 +16,30 @@ export async function PATCH(
       return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
     }
 
-    const body = (await req.json()) as { voldaan?: boolean; opmerking?: string };
-    if (typeof body.voldaan !== "boolean") {
+    const body = (await req.json()) as {
+      voldaan?: boolean;
+      opmerking?: string;
+      // D7: soft-deactivate/heractivering van een checklist-item.
+      actief?: boolean;
+    };
+    // Ofwel het bestaande voldaan-pad, ofwel het D7 actief-pad.
+    if (typeof body.actief !== "boolean" && typeof body.voldaan !== "boolean") {
       return NextResponse.json(
-        { error: "voldaan (boolean) is verplicht" },
+        { error: "voldaan of actief (boolean) is verplicht" },
         { status: 400 }
       );
     }
 
     const { data: profiel } = await supabase
       .from("profielen")
-      .select("naam")
+      .select("naam, rol")
       .eq("id", user.id)
       .single();
 
     // Haal item + stap op voor logging
     const { data: item } = await supabase
       .from("procedure_checklist")
-      .select("label, voldaan, stap_id, procedure_stappen(naam, procedure_id)")
+      .select("label, voldaan, bron, actief, stap_id, procedure_stappen(naam, procedure_id)")
       .eq("id", itemId)
       .single();
     if (!item) {
@@ -51,6 +58,65 @@ export async function PATCH(
     if (!stap || stap.procedure_id !== id) {
       return NextResponse.json(
         { error: "Item hoort niet bij deze procedure" },
+        { status: 400 }
+      );
+    }
+
+    // ── D7: soft-deactivate/heractivering (governance-gelogd) ──
+    // Voorbehouden aan voorzitter/beheerder; append-only (actief=false i.p.v.
+    // verwijderen). De 'voldaan'-toggle hieronder blijft vrij voor elk lid.
+    if (typeof body.actief === "boolean") {
+      if (!["voorzitter", "beheerder"].includes(profiel?.rol ?? "")) {
+        return NextResponse.json(
+          {
+            error:
+              "Alleen voorzitter of beheerder kan een checklist-item (de)activeren",
+          },
+          { status: 403 }
+        );
+      }
+      const { error: deFout } = await supabase
+        .from("procedure_checklist")
+        .update({ actief: body.actief })
+        .eq("id", itemId);
+      if (deFout) {
+        console.error("Checklist (de)activeren fout:", deFout);
+        return NextResponse.json({ error: "Wijzigen mislukt" }, { status: 500 });
+      }
+      const { decision_id } = await ensureDecisionForProcedure(supabase, id);
+      const { error: evFout } = await supabase.from("governance_events").insert({
+        decision_id,
+        event_type: body.actief
+          ? "checklistitem_geheractiveerd"
+          : "checklistitem_gedeactiveerd",
+        actor_id: user.id,
+        actor_naam: profiel?.naam ?? null,
+        object_type: "procedure_checklist",
+        object_id: itemId,
+        oude_waarde: { actief: item.actief, bron: item.bron },
+        nieuwe_waarde: { actief: body.actief, label: item.label },
+      });
+      // Append-only: zonder audit-rij niet traceerbaar → fail closed.
+      if (evFout) {
+        console.error("Checklist (de)activatie niet gelogd:", evFout);
+        return NextResponse.json({ error: "Wijziging niet gelogd" }, { status: 500 });
+      }
+      await supabase.from("procedure_log").insert({
+        procedure_id: id,
+        event_type: body.actief
+          ? "checklistitem_geheractiveerd"
+          : "checklistitem_gedeactiveerd",
+        actor_id: user.id,
+        actor_naam: profiel?.naam || null,
+        payload: { stap: stap.naam, item: item.label },
+      });
+      return NextResponse.json({ ok: true });
+    }
+
+    // Vanaf hier het bestaande voldaan-pad (elk lid mag togglen).
+    if (typeof body.voldaan !== "boolean") {
+      return NextResponse.json(
+        { error: "voldaan (boolean) is verplicht" },
         { status: 400 }
       );
     }

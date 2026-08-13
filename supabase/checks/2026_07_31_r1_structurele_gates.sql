@@ -98,6 +98,13 @@ declare
   globaal text[] := array[
     'fondsen',                        -- lijst van fondsen, geen tenantinhoud
     'procedure_requirements',         -- globale templateconfiguratie
+    'procedure_template_fasen',       -- globale fase-defaults per template_code
+                                      -- (D8): gedeelde toelichtende content, geen
+                                      -- fonds_id, geen PII. `for select using
+                                      -- (auth.uid() is not null)`, beheerder schrijft.
+                                      -- De fonds-override leeft in de aparte,
+                                      -- fonds-gescopete tabel
+                                      -- procedure_fase_beschrijving_override.
     'bron_whitelist',                 -- platformbrede bronnenlijst
     'bron_whitelist_log',             -- deny-by-default
     'contact_aanvragen',              -- deny-by-default (publiek schrijfpad via RPC)

@@ -39,7 +39,13 @@ export type DecisionStatus =
 
 export type ProcedureStatus = "in_uitvoering" | "wacht_op_besluit" | "afgerond";
 
-export type StapStatus = "open" | "actief" | "afgerond";
+// D6 (engine v2): 'geblokkeerd' en 'heropend' toegevoegd; legacy 'open' behouden.
+export type StapStatus =
+  | "open"
+  | "geblokkeerd"
+  | "actief"
+  | "afgerond"
+  | "heropend";
 
 export type Vertrouwelijkheid =
   | "publiek"
@@ -130,7 +136,11 @@ export type RequirementType =
   | "mandate_check"
   | "kpi"
   | "evaluation"
-  | "dissent_review";
+  | "dissent_review"
+  // Uitbreidingen proceduremodule v2 (D7): DNB/AFM-indiening en
+  // medezeggenschap/afstemming. Readiness-/evidence-afhandeling: als 'document'.
+  | "external_submission"
+  | "consultation";
 
 export interface ReadinessOntbrekend {
   requirement_type: RequirementType;

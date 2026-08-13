@@ -2250,6 +2250,10 @@ create table if not exists public.procedure_afschriften (
 -- beschreven; authenticated is read-only (RLS-select op eigen fonds; concepts
 -- globaal leesbaar). difference_judgements is gebruiker-geschreven (INSERT met
 -- WITH CHECK op auteur + fonds), auteur-scoped + private-aware leesbaar.
+-- comparison_run + comparison_results (T5) hebben GEEN authenticated INSERT-grant:
+-- schrijven loopt via de SECURITY DEFINER-RPC fn_schrijf_vergelijking (fonds_id
+-- server-side uit auth.uid()), zodat de interactieve chat op de app-surface (zonder
+-- service-role, Variant-C) toch un-forgeable provenance kan wegschrijven.
 --
 --  concepts (platform-globaal, geen fonds_id; `for select using(true)`, service-
 --    role schrijft — catalogus-eigenaar). uq_concepts_id_type (id, type) dient als
@@ -2257,7 +2261,14 @@ create table if not exists public.procedure_afschriften (
 --    de structurele gates. ⚠ Governance: catalogus-eigenaar vóór productie benoemen.
 --  extraction_run (fonds_id) — append-only provenance-header (model/prompt/versie/
 --    catalog_version) per extractie; T8 schrijft de rij één keer bij afronding.
---  comparison_run (fonds_id) — append-only header; comparison_results komt in T5.
+--  comparison_run (fonds_id) — append-only header (mode/model/prompt/comparator).
+--  comparison_results (comparison_run_id→comparison_run, fonds_id, bron/doel_
+--    document_id→documenten, concept_id→concepts) — T5, append-only, één rij per
+--    bevinding. Draagt UITSLUITEND ruwe verschillen: verschil_type_ruw ∈ gelijk|
+--    verschilt|alleen_bron|alleen_doel + method ∈ deterministisch|llm (géén
+--    bestuurlijke classificatie/materialiteit — dat is T9). finding_key koppelt aan
+--    difference_judgements (T10). Schrijven alleen via fn_schrijf_vergelijking
+--    (DEFINER). Indexen: (comparison_run_id), (fonds_id, finding_key).
 --  semantic_units (fonds_id, document_id, chunk_id→document_chunks, concept_id→
 --    concepts) — NIET append-only (her-extractie mag vervangen). `type` is via
 --    composite-FK (concept_id, type)→concepts(id, type) gelockt aan concept.type;

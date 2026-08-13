@@ -255,7 +255,10 @@ export async function buildDecisionDossierView(
     .eq("procedure_id", procedure.id)
     .order("volgorde", { ascending: true });
   const steps = (stappenRows ?? []) as ProcedureStep[];
-  const currentStep = steps.find((s) => s.status === "actief") ?? null;
+  // D6: 'heropend' telt als actief. Bij meerdere parallel-actieve stappen is
+  // dit de eerste; de volledige weergave van alle actieve stappen is WO-2.
+  const currentStep =
+    steps.find((s) => s.status === "actief" || s.status === "heropend") ?? null;
 
   // 4. Decision-children.
   const [
@@ -480,6 +483,49 @@ async function buildEvidenceLijst(
     .eq("template_code", ctx.procedure.template_code);
   const requirements = (reqRows ?? []) as ProcedureRequirementRow[];
 
+  // D7: unie met ACTIEVE instantie-requirements (decision-scoped). Template-
+  // en instantie-rijen zijn disjuncte records → geen dubbeltelling. Spiegelt
+  // de UNION in fn_decision_readiness_check.
+  const { data: instRows } = await supabase
+    .from("procedure_requirement_instance")
+    .select(
+      "id, stap_volgorde, requirement_type, label, documenttype, veld_pad, verplicht, blokkerend, min_aantal, vereist_validatie_domein"
+    )
+    .eq("decision_id", ctx.decisionId)
+    .eq("actief", true);
+  const instanceRequirements: ProcedureRequirementRow[] = (
+    (instRows ?? []) as Array<{
+      id: string;
+      stap_volgorde: number;
+      requirement_type: RequirementType;
+      label: string;
+      documenttype: string | null;
+      veld_pad: string | null;
+      verplicht: boolean | null;
+      blokkerend: boolean | null;
+      min_aantal: number | null;
+      vereist_validatie_domein: AIValidatieDomein | null;
+    }>
+  ).map((r) => ({
+    id: r.id,
+    template_code: "",
+    stap_volgorde: r.stap_volgorde,
+    requirement_type: r.requirement_type,
+    label: r.label,
+    documenttype: r.documenttype,
+    veld_pad: r.veld_pad,
+    verplicht: r.verplicht ?? true,
+    blokkerend: r.blokkerend ?? false,
+    triggert_bij_complexiteit: null,
+    triggert_bij_risiconiveau: null,
+    triggert_bij_mandaatgevoelig: null,
+    triggert_bij_toezichtgevoelig: null,
+    vereist_validatie_domein: r.vereist_validatie_domein,
+    min_aantal: r.min_aantal ?? 1,
+  }));
+
+  const alleRequirements = [...requirements, ...instanceRequirements];
+
   // Bewijsstukken voor alle stappen van deze procedure.
   const stapIds = ctx.steps.map((s) => s.id);
   const bewijsByStap = new Map<string, ProcedureBewijsRow[]>();
@@ -500,9 +546,10 @@ async function buildEvidenceLijst(
 
   const evidence: EvidenceItem[] = [];
 
-  for (const req of requirements) {
+  for (const req of alleRequirements) {
     // Conditionele activatie: dezelfde semantiek als
     // fn_decision_readiness_check (AND tussen velden, OR binnen array).
+    // Instantie-requirements hebben geen triggers → altijd actief.
     if (
       req.triggert_bij_complexiteit &&
       !req.triggert_bij_complexiteit.includes(ctx.decision.complexiteit)
@@ -534,6 +581,11 @@ async function buildEvidenceLijst(
     let bronTitel: string | null = null;
 
     switch (req.requirement_type) {
+      // external_submission (DNB/AFM-indiening) en consultation (hoorrecht/
+      // advies) delen de document-afhandeling: een matchend bewijsstuk op de
+      // stap. Spiegelt v_type in fn_decision_readiness_check.
+      case "external_submission":
+      case "consultation":
       case "document": {
         const stap = stapByVolgorde.get(req.stap_volgorde);
         const bewijzen = stap ? bewijsByStap.get(stap.id) ?? [] : [];
