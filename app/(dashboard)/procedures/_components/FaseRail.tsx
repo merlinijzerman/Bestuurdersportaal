@@ -1,14 +1,15 @@
 "use client";
 
-// Procesfasen-accordeon (WO-3) — schone fase-accordeon in het linkerpaneel.
+// Procesfasen-accordeon (WO-3) — schone, neutrale fase-accordeon in het
+// linkerpaneel, in de kleuren van het hoofdmenu (nav-tokens).
 //
-// De rail toont per hoofdfase (D8) een rustige kop: romeins cijfer-badge,
-// naam + aantal stappen, status-pill, chevron, en een linkerrand-accent voor de
-// aandachtsvlag. GEEN beschrijvings-/toelichtingsblokken in het linkerpaneel —
-// die verhuizen naar de fase-weergave rechts (WO-3). Klik op een fasekop → klapt
-// de fase open én toont rechts de fasebeschrijving (`?fase=`); klik op een stap →
-// het stapscherm (`?stap=`). Parallel-by-default: meerdere stappen kunnen tegelijk
-// 'actief'/'heropend' zijn.
+// Bewust rustig: geen statuskleur op elke stap. De accordeon is neutraal; alléén
+// de GESELECTEERDE stap (of fase) wordt gehighlight met de hoofdmenu-highlight
+// (bg-nav-active + navy cirkel). Kleur is gereserveerd voor een échte
+// aandachtsvlag (rood/oranje linkerrand + stip) — daar verdient kleur zijn plek.
+// GEEN beschrijvings-/toelichtingsblokken in het linkerpaneel; die staan in de
+// fase-weergave rechts. Klik op een fasekop → fase-weergave (`?fase=`); klik op
+// een stap → het stapscherm (`?stap=`). Parallel-by-default.
 
 import { useState } from "react";
 import Link from "next/link";
@@ -34,26 +35,24 @@ export interface FaseGroep {
   stappen: Stap[];
 }
 
+// Neutrale status-pill in hoofdmenu-stijl; alleen 'afgerond' krijgt een subtiele
+// tint zodat de afgeronde staat leesbaar blijft (status = woord + subtiele vorm).
 const STATUS_PILL: Record<FaseStatus, string> = {
-  afgerond: "bg-ok-tint text-ok-ink border border-ok/30",
-  in_behandeling: "bg-warn-tint text-warn-ink border border-warn/30",
-  nog_niet_begonnen: "bg-app-bg text-muted border border-line",
+  afgerond: "bg-ok-tint text-ok-ink border border-ok/20",
+  in_behandeling: "bg-app-bg text-nav-text border border-nav-line",
+  nog_niet_begonnen: "bg-app-bg text-nav-text border border-nav-line",
 };
 
-const BADGE_KLEUR: Record<FaseStatus, string> = {
-  afgerond: "bg-ok-tint text-ok-ink",
-  in_behandeling: "bg-warn-tint text-warn-ink",
-  nog_niet_begonnen: "bg-app-bg text-muted",
-};
+// Neutrale romeins-badge (hoofdmenu-stijl); de status leest af aan de pill + de
+// (optionele) aandachtsstip, niet aan de badgekleur.
+const BADGE = "bg-app-bg text-nav-text border border-nav-line";
 
-// Linkerrand-accent: aandacht wint (rood/oranje), anders duidt de rand de
-// fase-status (in behandeling = accent). Zo blijft status = kleur én woord
-// (de pill) én vorm (de rand), conform besluit 0097/0101.
-function randKleur(status: FaseStatus, aandacht: AandachtNiveau): string {
+// Linkerrand: alléén een kleur bij een échte aandachtsvlag (rood/oranje); anders
+// transparant zodat de rail rustig blijft (behoudt de uitlijning).
+function randKleur(aandacht: AandachtNiveau): string {
   if (aandacht === "rood") return "border-err";
   if (aandacht === "oranje") return "border-warn";
-  if (status === "in_behandeling") return "border-accent";
-  return "border-line";
+  return "border-transparent";
 }
 
 function isActiefAchtig(s: Stap): boolean {
@@ -89,41 +88,30 @@ function StapItem({
         replace
         aria-current={geselecteerd ? "step" : undefined}
         className={`relative block -mx-3 px-3 pl-9 py-2 rounded-lg transition-colors ${
-          isActief
-            ? "bg-warn-tint"
-            : geselecteerd
-              ? "bg-app-bg ring-1 ring-app-line-strong"
-              : "hover:bg-app-bg/70"
+          geselecteerd ? "bg-nav-active" : "hover:bg-nav-line/50"
         }`}
       >
-        {isAfgerond ? (
-          <div className="absolute left-3 top-2.5 w-6 h-6 rounded-full bg-ok text-white flex items-center justify-center text-xs font-bold">
-            ✓
-          </div>
-        ) : isActief ? (
-          <div className="absolute left-3 top-2.5 w-6 h-6 rounded-full bg-accent border-2 border-accent text-white flex items-center justify-center text-xs font-bold ring-4 ring-warn/30">
-            {s.volgorde}
-          </div>
-        ) : (
-          <div className="absolute left-3 top-2.5 w-6 h-6 rounded-full bg-app-bg border-2 border-app-line-strong text-muted flex items-center justify-center text-xs font-medium">
-            {s.volgorde}
-          </div>
-        )}
+        {/* Neutrale cirkel; alleen de geselecteerde stap krijgt de navy vulling. */}
+        <div
+          className={`absolute left-3 top-2.5 w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold ${
+            geselecteerd
+              ? "bg-nav-accent text-white"
+              : "bg-app-bg border border-nav-line text-nav-text"
+          }`}
+        >
+          {isAfgerond ? "✓" : s.volgorde}
+        </div>
         {!isLaatste && (
-          <div
-            className={`absolute left-6 top-8 bottom-0 w-px ${
-              isAfgerond ? "bg-ok" : "bg-app-line"
-            }`}
-          />
+          <div className="absolute left-6 top-8 bottom-0 w-px bg-nav-line" />
         )}
         <div className="ml-6">
           <div
             className={`text-sm ${
-              isActief
-                ? "font-semibold text-ink"
-                : isAfgerond
-                  ? "font-medium text-ink"
-                  : "font-medium text-muted"
+              geselecteerd
+                ? "font-semibold text-nav-text-active"
+                : isAfgerond || isActief
+                  ? "text-ink"
+                  : "text-nav-text"
             }`}
           >
             {s.naam}
@@ -136,28 +124,28 @@ function StapItem({
           )}
 
           {isAfgerond && (
-            <div className="text-xs text-muted mt-0.5">
+            <div className="text-xs text-nav-text mt-0.5">
               {s.voltooid_op
                 ? `Afgerond ${formatDatumKort(s.voltooid_op)}`
                 : "Afgerond"}
             </div>
           )}
           {isActief && (
-            <div className="text-xs text-warn-ink font-medium mt-0.5">
+            <div className="text-xs text-nav-text mt-0.5">
               {isHeropend ? "Heropend" : "Actief"}
               {s.deadline ? ` — deadline ${formatDatumKort(s.deadline)}` : ""}
             </div>
           )}
           {isGeblokkeerd && (
-            <div className="text-xs text-muted mt-0.5">Wacht op eerdere stap</div>
+            <div className="text-xs text-nav-text mt-0.5">Wacht op eerdere stap</div>
           )}
           {s.status === "open" && s.vereist_besluit && (
-            <div className="text-xs text-warn-ink mt-0.5">
+            <div className="text-xs text-nav-text mt-0.5">
               Vereist formeel besluit
             </div>
           )}
           {s.status === "open" && !s.vereist_besluit && s.geschatte_dagen && (
-            <div className="text-xs text-muted mt-0.5">
+            <div className="text-xs text-nav-text mt-0.5">
               Geschat {s.geschatte_dagen} dagen
             </div>
           )}
@@ -178,19 +166,12 @@ export default function FaseRail({
   geselecteerdeFaseCode: string | null;
 }) {
   const router = useRouter();
-  // Standaard open: fasen met een actieve/heropende stap, met de geselecteerde
-  // stap, of de fase die rechts in fase-weergave staat. De rest ingeklapt.
-  // Manueel togglen blijft daarna leidend.
+  // Standaard ingeklapt — het scherm opent rustig (werkopdracht). Alleen de fase
+  // die rechts in fase-weergave staat, staat open. Manueel togglen blijft daarna
+  // leidend.
   const [open, setOpen] = useState<Set<string>>(() => {
     const s = new Set<string>();
-    for (const f of fasen) {
-      const heeftActief = f.stappen.some(isActiefAchtig);
-      const heeftSelectie =
-        geselecteerdeStapId != null &&
-        f.stappen.some((st) => st.id === geselecteerdeStapId);
-      if (heeftActief || heeftSelectie || f.fase_code === geselecteerdeFaseCode)
-        s.add(f.fase_code);
-    }
+    if (geselecteerdeFaseCode) s.add(geselecteerdeFaseCode);
     return s;
   });
 
@@ -218,7 +199,6 @@ export default function FaseRail({
           <div
             key={f.fase_code}
             className={`rounded-lg overflow-hidden border-l-[3px] ${randKleur(
-              f.status,
               f.aandacht
             )}`}
           >
@@ -227,13 +207,11 @@ export default function FaseRail({
               onClick={() => openFase(f.fase_code)}
               aria-expanded={isOpen}
               className={`w-full text-left px-2.5 py-2.5 flex items-center gap-2.5 transition-colors ${
-                isGeselecteerd ? "bg-accent-tint" : "hover:bg-app-bg/60"
+                isGeselecteerd ? "bg-nav-active" : "hover:bg-nav-line/50"
               }`}
             >
               <span
-                className={`w-7 h-7 rounded-md flex items-center justify-center text-[11px] font-bold shrink-0 ${
-                  BADGE_KLEUR[f.status]
-                }`}
+                className={`w-7 h-7 rounded-md flex items-center justify-center text-[11px] font-bold shrink-0 ${BADGE}`}
               >
                 {f.fase_code}
               </span>
@@ -251,11 +229,11 @@ export default function FaseRail({
                       }
                     />
                   )}
-                  <span className="block text-sm font-semibold text-ink leading-tight truncate">
+                  <span className="block text-sm font-semibold text-nav-text-active leading-tight">
                     {f.titel}
                   </span>
                 </span>
-                <span className="block text-[11px] text-muted mt-0.5">
+                <span className="block text-[11px] text-nav-text mt-0.5">
                   {f.stappen.length} stap{f.stappen.length === 1 ? "" : "pen"}
                   {actiefCount > 0 ? ` · ${actiefCount} actief` : ""}
                 </span>
@@ -269,7 +247,7 @@ export default function FaseRail({
               </span>
               <span
                 aria-hidden
-                className={`text-muted text-xs shrink-0 transition-transform ${
+                className={`text-nav-text text-xs shrink-0 transition-transform ${
                   isOpen ? "rotate-180" : ""
                 }`}
               >

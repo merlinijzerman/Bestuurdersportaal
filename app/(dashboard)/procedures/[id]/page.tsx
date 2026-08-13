@@ -10,7 +10,6 @@ import {
   type DossierStatus,
   type PeriodeType,
 } from "@/core/lib/dossier";
-import DossierTijdlijn from "../_components/DossierTijdlijn";
 import StapPaneel from "../_components/StapPaneel";
 import FaseRail, { type FaseGroep } from "../_components/FaseRail";
 import FaseWeergave from "../_components/FaseWeergave";
@@ -290,19 +289,13 @@ export default async function ProcedureDetailPage({
   const bewijs = (bewijsRes.data || []) as Bewijs[];
 
   // Effectieve dossierstatus (afgeleid uit primair Decision Object, of
-  // fallback op procedures.status) + dossierbreed gekoppelde documenten.
-  const [statusViewRes, dossierDocsRes] = await Promise.all([
-    supabase
-      .from("vw_dossier_status")
-      .select("dossierstatus, sublabel, afgeleid_van_decision")
-      .eq("procedure_id", id)
-      .maybeSingle(),
-    supabase
-      .from("documenten")
-      .select("id, titel")
-      .eq("procesinstantie_id", id),
-  ]);
-  const statusView = statusViewRes.data as {
+  // fallback op procedures.status).
+  const { data: statusViewData } = await supabase
+    .from("vw_dossier_status")
+    .select("dossierstatus, sublabel, afgeleid_van_decision")
+    .eq("procedure_id", id)
+    .maybeSingle();
+  const statusView = statusViewData as {
     dossierstatus: DossierStatus | null;
     sublabel: string | null;
     afgeleid_van_decision: boolean;
@@ -310,10 +303,6 @@ export default async function ProcedureDetailPage({
   const dossierstatus: DossierStatus | null =
     statusView?.dossierstatus ?? (procedure.status as DossierStatus);
   const dossierSublabel = statusView?.sublabel ?? null;
-  const dossierDocumenten = (dossierDocsRes.data || []) as {
-    id: string;
-    titel: string;
-  }[];
   const periodeLabel = procedure.periode_type
     ? `${PERIODE_TYPE_LABEL[procedure.periode_type]}${
         procedure.periode_jaar ? ` ${procedure.periode_jaar}` : ""
@@ -710,30 +699,9 @@ export default async function ProcedureDetailPage({
         </div>
       </div>
 
-      {/* Dossier-tijdlijn: zes generieke fases met stappen + gekoppelde
-          documenten onder de juiste fase (acceptatiecriterium 2). */}
-      <DossierTijdlijn
-        stappen={stappen.map((s) => ({
-          id: s.id,
-          volgorde: s.volgorde,
-          naam: s.naam,
-          // De tijdlijn kent het oudere drieluik open/actief/afgerond; map de
-          // engine-v2-statussen daarop (heropend telt als actief, geblokkeerd
-          // als open).
-          status:
-            s.status === "afgerond"
-              ? ("afgerond" as const)
-              : s.status === "actief" || s.status === "heropend"
-                ? ("actief" as const)
-                : ("open" as const),
-        }))}
-        bewijs={bewijs.map((b) => ({
-          id: b.id,
-          stap_id: b.stap_id,
-          titel: b.titel,
-        }))}
-        dossierDocumenten={dossierDocumenten}
-      />
+      {/* WO-3: de "Dossier-tijdlijn" (generieke Oriëntatie/Analyse/Advies-fases)
+          is verwijderd — die taxonomie botste met de I–VI-procesfasen van de
+          fase-accordeon hieronder. */}
 
       {/* Body */}
       <div className="grid grid-cols-12 gap-5">

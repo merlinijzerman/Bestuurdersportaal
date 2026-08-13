@@ -24,10 +24,12 @@ interface Props {
   kanBeheren: boolean;
 }
 
+// Neutrale status-pill in hoofdmenu-stijl; alleen 'afgerond' krijgt een subtiele
+// tint (consistent met de fase-accordeon).
 const STATUS_PILL: Record<FaseStatus, string> = {
-  afgerond: "text-ok-ink bg-ok-tint border border-ok/30",
-  in_behandeling: "text-warn-ink bg-warn-tint border border-warn/30",
-  nog_niet_begonnen: "text-muted bg-app-bg border border-line",
+  afgerond: "text-ok-ink bg-ok-tint border border-ok/20",
+  in_behandeling: "text-nav-text bg-app-bg border border-nav-line",
+  nog_niet_begonnen: "text-nav-text bg-app-bg border border-nav-line",
 };
 
 export default function FaseWeergave({
