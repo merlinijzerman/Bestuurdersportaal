@@ -109,6 +109,18 @@ exception
   when others then if sqlstate='42501' then raise notice 'OK #1: directe INSERT op comparison_results geweigerd.'; else raise; end if;
 end $$;
 
+-- #1b: A mag ook GEEN directe INSERT op comparison_run (de header-tabel; schrijven
+-- alleen via de DEFINER-functie). Dekt de tweede helft van de scope-claim boven.
+do $$
+begin
+  insert into public.comparison_run (fonds_id, mode, model, prompt_version, comparator_version)
+  values ('11111111-1111-1111-1111-111111111111','symmetrisch','opus','pv1','cmp1');
+  raise exception 'LEK #1b: authenticated schreef direct in comparison_run — geen INSERT-grant verwacht.';
+exception
+  when insufficient_privilege then raise notice 'OK #1b: directe INSERT op comparison_run geweigerd.';
+  when others then if sqlstate='42501' then raise notice 'OK #1b: directe INSERT op comparison_run geweigerd.'; else raise; end if;
+end $$;
+
 -- #2 (schrijfpad + server-side fonds): A schrijft via de functie een symmetrische
 -- vergelijking (bron v3 → doel v4). De geschreven rijen dragen fonds A.
 do $$
@@ -203,6 +215,6 @@ end $$;
 rollback;
 
 -- ============================================================================
--- Groen als psql exit 0 gaf en je de "OK #1..#6"-notices + de DEEL 1-OK's zag.
+-- Groen als psql exit 0 gaf en je de "OK #1/#1b/#2..#6"-notices + de DEEL 1-OK's zag.
 -- Elke "LEK:"/"FAALT" doet raise exception → non-zero exit → CI faalt.
 -- ============================================================================

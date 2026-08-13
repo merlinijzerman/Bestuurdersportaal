@@ -12,6 +12,9 @@ import {
 } from "@/core/lib/dossier";
 import DossierTijdlijn from "../_components/DossierTijdlijn";
 import StapPaneel from "../_components/StapPaneel";
+import FaseRail, { type FaseGroep } from "../_components/FaseRail";
+import StapRequirementsPaneel from "../_components/StapRequirementsPaneel";
+import VereisteToevoegen from "../_components/VereisteToevoegen";
 import DecisionObjectHeader from "../_components/DecisionObjectHeader";
 import ClassificatiePanel from "../_components/ClassificatiePanel";
 import OnderbouwingsPaneel from "../_components/OnderbouwingsPaneel";
@@ -25,6 +28,12 @@ import {
   buildDecisionDossierView,
   ensureDecisionForProcedure,
 } from "@/core/lib/decision";
+import { laadFasen } from "@/core/lib/procedure-fasen";
+import {
+  faseStatus,
+  faseAandacht,
+  bewijslastDekking,
+} from "@/core/lib/procedure-fase-status";
 import { haalFondsleden, weergaveNaam, initialen } from "@/core/lib/fondsleden";
 
 // Forceer dynamische rendering: deze page leest live data uit Supabase
@@ -58,11 +67,19 @@ export interface Stap {
   beschrijving: string | null;
   vereist_besluit: boolean;
   geschatte_dagen: number | null;
-  status: "open" | "actief" | "afgerond";
+  // Engine v2 (D6): parallel-by-default statusmodel. 'open' is de legacy-waarde
+  // (bestaande sequentiële procedures); nieuwe procedures gebruiken
+  // 'geblokkeerd' voor nog-niet-activeerbare stappen. 'heropend' telt als actief.
+  status: "open" | "geblokkeerd" | "actief" | "afgerond" | "heropend";
   eigenaar_naam: string | null;
   deadline: string | null;
   voltooid_op: string | null;
   voltooid_door: string | null;
+  // Engine v2 (D6/D8): meegesnapshot bij start.
+  fase_code: string | null;
+  blokkerende_afhankelijkheden: number[];
+  herbevestiging_nodig: boolean;
+  heropend_op: string | null;
 }
 
 export interface ChecklistItem {
@@ -74,6 +91,9 @@ export interface ChecklistItem {
   voldaan: boolean;
   voldaan_op: string | null;
   voldaan_door_naam: string | null;
+  // WO-2 (D7): herkomst — 'handmatig' voor een tijdens de looptijd toegevoegd
+  // punt (zichtbaar gemaakt voor audit-transparantie).
+  bron?: "template" | "handmatig";
 }
 
 export interface Bewijs {
@@ -325,7 +345,13 @@ export default async function ProcedureDetailPage({
     }
   }
 
-  const actieveStap = stappen.find((s) => s.status === "actief");
+  // D6: parallel-by-default — er kunnen meerdere stappen tegelijk actief zijn.
+  // 'heropend' telt als actief (§4.3). Voor de meta-strook nemen we de eerste
+  // actieve als representatief; de rail toont ze allemaal.
+  const actieveStappen = stappen.filter(
+    (s) => s.status === "actief" || s.status === "heropend"
+  );
+  const actieveStap = actieveStappen[0] ?? null;
   const afgerondAantal = stappen.filter((s) => s.status === "afgerond").length;
   const totaalStappen = stappen.length;
 
@@ -344,7 +370,9 @@ export default async function ProcedureDetailPage({
     stappen[0] ??
     null;
   const geselecteerdeIsBewerkbaar =
-    geselecteerdeStap != null && geselecteerdeStap.status === "actief";
+    geselecteerdeStap != null &&
+    (geselecteerdeStap.status === "actief" ||
+      geselecteerdeStap.status === "heropend");
   const geselecteerdeVoltooidDoorNaam =
     geselecteerdeStap?.voltooid_door
       ? fondsleden.get(geselecteerdeStap.voltooid_door)?.naam ?? null
@@ -366,6 +394,67 @@ export default async function ProcedureDetailPage({
     });
   } catch (e) {
     console.error("Dossier laden mislukt:", e);
+  }
+
+  // WO-2 (§7 + §7.1): procesfasen-rail. De fasen (D8) komen uit de definitie
+  // met een per fonds overschrijfbare beschrijving; de fase-status, aandachts-
+  // vlag en bewijslast-dekking worden UI-afgeleid uit de stap-status en de
+  // evidence-unie (template + instantie, D7c) die het dossier al levert.
+  const fasen = await laadFasen(supabase, procedure.template_code);
+  // Evidence per stap-volgorde (leeg als het dossier niet laadde).
+  const evidence = dossier?.evidence ?? [];
+  const stappenPerFase = new Map<string, Stap[]>();
+  const ongegroepeerdeStappen: Stap[] = [];
+  for (const s of stappen) {
+    if (s.fase_code && fasen.some((f) => f.fase_code === s.fase_code)) {
+      const lijst = stappenPerFase.get(s.fase_code) ?? [];
+      lijst.push(s);
+      stappenPerFase.set(s.fase_code, lijst);
+    } else {
+      ongegroepeerdeStappen.push(s);
+    }
+  }
+  const evidenceVoorStappen = (stappenInFase: Stap[]) => {
+    const volgordes = new Set(stappenInFase.map((s) => s.volgorde));
+    return evidence.filter((e) => volgordes.has(e.stap_volgorde));
+  };
+  const bouwGroep = (
+    fase_code: string,
+    titel: string,
+    beschrijving: string | null,
+    is_override: boolean,
+    stappenInFase: Stap[]
+  ): FaseGroep => {
+    const ev = evidenceVoorStappen(stappenInFase);
+    const status = faseStatus(stappenInFase);
+    return {
+      fase_code,
+      titel,
+      beschrijving,
+      is_override,
+      status,
+      dekking: bewijslastDekking(ev),
+      aandacht: faseAandacht(status, stappenInFase, ev),
+      stappen: stappenInFase,
+    };
+  };
+  const faseGroepen: FaseGroep[] = fasen
+    .map((f) =>
+      bouwGroep(
+        f.fase_code,
+        f.titel,
+        f.beschrijving,
+        f.is_override,
+        stappenPerFase.get(f.fase_code) ?? []
+      )
+    )
+    // Fasen zonder stappen tonen we niet (defensief; hoort niet voor te komen).
+    .filter((g) => g.stappen.length > 0);
+  // Stappen zonder (bekende) fase — fail-safe zichtbaar houden, niet verbergen.
+  if (ongegroepeerdeStappen.length > 0) {
+    faseGroepen.push(
+      bouwGroep("—", "Overige stappen", null, false, ongegroepeerdeStappen)
+    );
   }
 
   // F2: het audit-trail-paneel toont voortaan BEIDE auditsporen. procedure_log
@@ -526,9 +615,7 @@ export default async function ProcedureDetailPage({
             Voortgang
           </div>
           <div className="text-sm text-ink mt-2 font-medium">
-            Stap{" "}
-            {Math.min(afgerondAantal + (actieveStap ? 1 : 0), totaalStappen)} van{" "}
-            {totaalStappen}
+            {afgerondAantal} van {totaalStappen} afgerond
           </div>
           <div className="w-full h-1.5 bg-app-bg rounded-full overflow-hidden mt-1.5">
             <div
@@ -542,6 +629,15 @@ export default async function ProcedureDetailPage({
               }}
             />
           </div>
+          {actieveStappen.length > 0 && (
+            <div className="text-xs text-muted mt-1">
+              {actieveStappen.length === 1
+                ? "1 stap actief"
+                : `${actieveStappen.length} stappen lopen parallel (${actieveStappen
+                    .map((s) => s.volgorde)
+                    .join("·")})`}
+            </div>
+          )}
         </div>
         <div>
           <div className="text-xs uppercase tracking-wide text-muted font-semibold">
@@ -584,7 +680,15 @@ export default async function ProcedureDetailPage({
           id: s.id,
           volgorde: s.volgorde,
           naam: s.naam,
-          status: s.status,
+          // De tijdlijn kent het oudere drieluik open/actief/afgerond; map de
+          // engine-v2-statussen daarop (heropend telt als actief, geblokkeerd
+          // als open).
+          status:
+            s.status === "afgerond"
+              ? ("afgerond" as const)
+              : s.status === "actief" || s.status === "heropend"
+                ? ("actief" as const)
+                : ("open" as const),
         }))}
         bewijs={bewijs.map((b) => ({
           id: b.id,
@@ -599,99 +703,28 @@ export default async function ProcedureDetailPage({
         {/* Step rail */}
         <div className="col-span-12 lg:col-span-4">
           <div className="bg-white border border-line rounded-xl p-5 sticky top-4">
-            <div className="text-xs uppercase tracking-wide text-muted font-semibold mb-4">
-              Procesfasen
+            <div className="flex items-center justify-between mb-4">
+              <div className="text-xs uppercase tracking-wide text-muted font-semibold">
+                Procesfasen
+              </div>
+              <div className="text-[11px] text-muted">
+                {totaalStappen} stappen · {faseGroepen.length} fasen
+              </div>
             </div>
-            {/* T6-1A: elke fase is aanklikbaar en opent de stap in het
-                rechterpaneel (leesmodus voor niet-actieve stappen). De
-                actieve fase houdt haar accent-markering; de geselecteerde
-                fase krijgt een ring zodat zichtbaar is wat je bekijkt. */}
-            <ol className="space-y-1">
-              {stappen.map((s, idx) => {
-                const isLast = idx === stappen.length - 1;
-                const geselecteerd = s.id === geselecteerdeStap?.id;
-                const isActief = s.status === "actief";
-                const isAfgerond = s.status === "afgerond";
-                return (
-                  <li key={s.id}>
-                    <Link
-                      href={`?stap=${s.id}`}
-                      scroll={false}
-                      replace
-                      aria-current={geselecteerd ? "step" : undefined}
-                      className={`relative block -mx-3 px-3 pl-9 py-2.5 rounded-lg transition-colors ${
-                        isActief
-                          ? "bg-warn-tint"
-                          : geselecteerd
-                            ? "bg-app-bg ring-1 ring-app-line-strong"
-                            : "hover:bg-app-bg/70"
-                      }`}
-                    >
-                      {isAfgerond ? (
-                        <div className="absolute left-3 top-3 w-6 h-6 rounded-full bg-ok text-white flex items-center justify-center text-xs font-bold">
-                          ✓
-                        </div>
-                      ) : isActief ? (
-                        <div className="absolute left-3 top-3 w-6 h-6 rounded-full bg-accent border-2 border-accent text-ink flex items-center justify-center text-xs font-bold ring-4 ring-warn/30">
-                          {s.volgorde}
-                        </div>
-                      ) : (
-                        <div className="absolute left-3 top-3 w-6 h-6 rounded-full bg-app-bg border-2 border-app-line-strong text-muted flex items-center justify-center text-xs font-medium">
-                          {s.volgorde}
-                        </div>
-                      )}
-                      {!isLast && (
-                        <div
-                          className={`absolute left-6 top-9 bottom-0 w-px ${
-                            isAfgerond ? "bg-ok" : "bg-app-line"
-                          }`}
-                        />
-                      )}
-                      <div className="ml-6">
-                        <div
-                          className={`text-sm ${
-                            isActief
-                              ? "font-semibold text-ink"
-                              : isAfgerond
-                                ? "font-medium text-ink"
-                                : "font-medium text-muted"
-                          }`}
-                        >
-                          {s.naam}
-                        </div>
-                        {isAfgerond && (
-                          <div className="text-xs text-muted mt-0.5">
-                            {s.voltooid_op
-                              ? `Afgerond ${formatDatumKort(s.voltooid_op)}`
-                              : "Afgerond"}
-                          </div>
-                        )}
-                        {isActief && (
-                          <div className="text-xs text-warn-ink font-medium mt-0.5">
-                            Actief
-                            {s.deadline
-                              ? ` — deadline ${formatDatumKort(s.deadline)}`
-                              : ""}
-                          </div>
-                        )}
-                        {s.status === "open" && s.vereist_besluit && (
-                          <div className="text-xs text-warn-ink mt-0.5">
-                            Vereist formeel besluit
-                          </div>
-                        )}
-                        {s.status === "open" &&
-                          !s.vereist_besluit &&
-                          s.geschatte_dagen && (
-                            <div className="text-xs text-muted mt-0.5">
-                              Geschat {s.geschatte_dagen} dagen
-                            </div>
-                          )}
-                      </div>
-                    </Link>
-                  </li>
-                );
-              })}
-            </ol>
+            {actieveStappen.length > 1 && (
+              <p className="text-[11px] text-muted mb-3 leading-snug">
+                {actieveStappen.length} stappen lopen parallel — dit proces kent
+                geen vaste volgorde; fasen kunnen tegelijk lopen.
+              </p>
+            )}
+            {/* WO-2 (§7): fasen-rail met per-fase status-pill + bewijslast-
+                dekkingsmeter en meerdere gelijktijdig actieve stappen. Elke
+                stap opent in het rechterpaneel (leesmodus voor niet-actieve
+                stappen). */}
+            <FaseRail
+              fasen={faseGroepen}
+              geselecteerdeStapId={geselecteerdeStap?.id ?? null}
+            />
           </div>
         </div>
 
@@ -717,6 +750,7 @@ export default async function ProcedureDetailPage({
               procedureId={procedure.id}
               stap={geselecteerdeStap}
               alleenLezen={!geselecteerdeIsBewerkbaar}
+              kanBeheren={currentUserIsPrivileged}
               voltooidDoorNaam={geselecteerdeVoltooidDoorNaam}
               checklist={checklist.filter(
                 (c) => c.stap_id === geselecteerdeStap.id
@@ -755,6 +789,32 @@ export default async function ProcedureDetailPage({
           ) : (
             <div className="bg-app-bg border border-line rounded-xl p-5 text-sm text-muted">
               Deze procedure heeft nog geen stappen.
+            </div>
+          )}
+
+          {/* WO-2 (D7): vereiste bewijslast voor de geselecteerde stap
+              (readiness-unie template + instantie) + de affordance om een
+              instantie-vereiste toe te voegen. AI-validatie valt buiten deze
+              tranche, dus aiOutputs bewust leeg. */}
+          {geselecteerdeStap && dossier && (
+            <div className="space-y-3">
+              <StapRequirementsPaneel
+                decisionId={dossier.decision.id}
+                step={geselecteerdeStap}
+                evidence={dossier.evidence}
+                aiOutputs={[]}
+              />
+              {/* Toevoeg-affordance alleen bij capability (voorzitter/beheerder);
+                  anders geen (lege) kaart tonen. Server-side gate blijft leidend. */}
+              {currentUserIsPrivileged && (
+                <div className="bg-white border border-line rounded-xl p-5">
+                  <VereisteToevoegen
+                    procedureId={procedure.id}
+                    stapVolgorde={geselecteerdeStap.volgorde}
+                    kanBeheren={currentUserIsPrivileged}
+                  />
+                </div>
+              )}
             </div>
           )}
 

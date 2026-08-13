@@ -218,7 +218,7 @@ Het snapshot-pattern blijft heilig; lopende procedures veranderen niet mee met t
 
 ### 7.1 Afgeleide fase-status (UI, voor het totaaloverzicht)
 
-Omdat er geen sequentiële cursor meer is (parallel-by-default), wordt "waar staat een fase / een procedure" **afgeleid** uit de onderliggende staat — niet uit volgorde. Deze afleiding is **UI-laag** (client-side uit de data die §7 al levert); ze introduceert geen nieuwe tabellen. Visuele referentie: `MOCKUP-processen-overzicht-v0.1.html` (totaaloverzicht) en de detail-rail in `MOCKUP-invaarprocedure-portaalstijl-v0.2.html`.
+Omdat er geen sequentiële cursor meer is (parallel-by-default), wordt "waar staat een fase / een procedure" **afgeleid** uit de onderliggende staat — niet uit volgorde. Deze afleiding is **UI-laag** (in de presentatielaag/RSC-server-render uit de data die §7 al levert — geen browser-only berekening, geen server-side aggregatie: die is OB-E5); ze introduceert geen nieuwe tabellen. De pure afleidingsfuncties leven in `core/lib/procedure-fase-status.ts` (sanity-getest). Visuele referentie: `MOCKUP-processen-overzicht-v0.1.html` (totaaloverzicht) en de detail-rail in `MOCKUP-invaarprocedure-portaalstijl-v0.2.html`.
 
 **Fase-status** per fase F met stappen S_F (gebruikt `fase_code` + stap-`status` uit §4):
 - **Afgerond** — alle stappen in S_F zijn `afgerond`.
@@ -229,9 +229,11 @@ Omdat er geen sequentiële cursor meer is (parallel-by-default), wordt "waar sta
 - **Rood** — een verplichte **blokkerende** vereiste in F is niet sluitend terwijl F in behandeling is, óf een tijdkritische termijn in F is overschreden.
 - **Oranje** — een stap in F is `heropend`/`herbevestiging_nodig`, óf een verplichte (niet-blokkerende) vereiste ontbreekt, óf een termijn nadert (< drempel).
 
+*Implementatienoot (WO-2):* het **rework-signaal** (`heropend`/`herbevestiging_nodig`) vuurt ongeacht de fase-status — ook op een afgeronde fase, want een heropening slaat juist vaak op een reeds afgeronde stap; anders zou de stip op de fasestrip en de tekst in de tellerregel uiteenlopen. De **bewijslast-condities** (rood/oranje) worden alleen op een fase *in behandeling* geëvalueerd: een nog niet begonnen fase heeft nog geen bewijslast en licht niet op.
+
 **Bewijslast-dekking** per fase = # verplichte vereisten met status *volledig* ÷ # verplichte vereisten (template-actief + instantie-actief, §5.3), als percentage.
 
-**Portfolio-aggregatie** (lijstpagina): *Lopend* = procedures in uitvoering · *Met aandacht* = ≥1 fase met aandachtsvlag · *Tijdkritisch* = ≥1 rode termijnvlag · *Besluitrijp* = readiness-niveau *besluitrijp* voldoet.
+**Portfolio-aggregatie** (lijstpagina): *Lopend* = procedures in uitvoering · *Met aandacht* = ≥1 fase met aandachtsvlag · *Tijdkritisch* = ≥1 rode aandachtsvlag (zolang termijnen-als-data ontbreken telt dit de ontbrekende blokkerende bewijslast; de termijn-component volgt bij review O2) · *Besluitrijp* = readiness-niveau *besluitrijp* voldoet.
 
 Kanttekeningen: de **termijn**-condities leunen op termijnen-als-data (review O2) — tot die er zijn, tonen de vlaggen alleen heropend/ontbrekende-bewijslast. De afleiding is deterministisch en fondsonafhankelijk; alleen de naderings-drempel is desgewenst instelbaar. Als de portfolio-aggregatie over veel procedures traag wordt, is een server-side helper een latere optimalisatie (geen blokker; OB-E5).
 

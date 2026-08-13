@@ -35,6 +35,10 @@ interface Props {
   alleenLezen?: boolean;
   /** T6-1A: naam van wie de stap heeft afgerond, voor de leesmodus-kop. */
   voltooidDoorNaam?: string | null;
+  /** WO-2 (D7/§5.4): mag deze gebruiker checklistpunten toevoegen en een
+      afgeronde stap heropenen? Alleen voorzitter/beheerder. Dit is een
+      UI-signaal — de harde gate zit server-side in de routes. */
+  kanBeheren?: boolean;
 }
 
 function formatDatumKort(d: string) {
@@ -56,6 +60,7 @@ export default function StapPaneel({
   documentRequirements = [],
   alleenLezen = false,
   voltooidDoorNaam = null,
+  kanBeheren = false,
 }: Props) {
   const router = useRouter();
   const [checklist, setChecklist] = useState<ChecklistItem[]>(initieelChecklist);
@@ -108,6 +113,13 @@ export default function StapPaneel({
   // vervolgstap open. Bewust gescheiden van `fout` — dat blok is rood en zegt
   // "er is iets misgegaan", wat hier niet klopt.
   const [melding, setMelding] = useState<string | null>(null);
+  // WO-2 (D7): handmatig checklistpunt toevoegen aan een lopende stap.
+  const [checklistForm, setChecklistForm] = useState(false);
+  const [checklistLabel, setChecklistLabel] = useState("");
+  const [checklistBewijsVereist, setChecklistBewijsVereist] = useState(false);
+  // WO-2 (§4.3): een afgeronde stap heropenen (met verplichte motivering).
+  const [heropenForm, setHeropenForm] = useState(false);
+  const [heropenMotivering, setHeropenMotivering] = useState("");
 
   const voldaanCount = checklist.filter((c) => c.voldaan).length;
   const totaalCount = checklist.length;
@@ -381,6 +393,81 @@ export default function StapPaneel({
     }
   }
 
+  // WO-2 (D7): handmatig checklistpunt toevoegen. Server-side gegate op
+  // voorzitter/beheerder; de UI toont de affordance alleen bij die rollen.
+  async function checklistToevoegen(e: React.FormEvent) {
+    e.preventDefault();
+    if (alleenLezen || !kanBeheren) return;
+    setFout(null);
+    const label = checklistLabel.trim();
+    if (!label) {
+      setFout("Omschrijving van het checklistpunt is verplicht.");
+      return;
+    }
+    setBezig("checklist-toevoegen");
+    try {
+      const res = await fetch(`/api/procedures/${procedureId}/checklist`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          stap_id: stap.id,
+          label,
+          bewijs_vereist: checklistBewijsVereist,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Toevoegen mislukt");
+      }
+      const data = await res.json();
+      if (data.item) setChecklist([...checklist, data.item as ChecklistItem]);
+      setChecklistLabel("");
+      setChecklistBewijsVereist(false);
+      setChecklistForm(false);
+      router.refresh();
+    } catch (err: unknown) {
+      setFout(err instanceof Error ? err.message : "Toevoegen mislukt");
+    } finally {
+      setBezig(null);
+    }
+  }
+
+  // WO-2 (§4.3): een afgeronde stap heropenen. Motivering is verplicht; de
+  // heropening wordt append-only gelogd en afhankelijke afgeronde stappen
+  // krijgen server-side `herbevestiging_nodig`. Server-side gegate.
+  async function stapHeropenen(e: React.FormEvent) {
+    e.preventDefault();
+    if (!kanBeheren) return;
+    setFout(null);
+    const motivering = heropenMotivering.trim();
+    if (!motivering) {
+      setFout("Motivering voor het heropenen is verplicht.");
+      return;
+    }
+    setBezig("heropenen");
+    try {
+      const res = await fetch(
+        `/api/procedures/${procedureId}/stappen/${stap.id}/heropenen`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ motivering }),
+        }
+      );
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Heropenen mislukt");
+      }
+      setHeropenMotivering("");
+      setHeropenForm(false);
+      router.refresh();
+    } catch (err: unknown) {
+      setFout(err instanceof Error ? err.message : "Heropenen mislukt");
+    } finally {
+      setBezig(null);
+    }
+  }
+
   return (
     <div className="bg-white border border-line rounded-xl p-6">
       <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -426,6 +513,63 @@ export default function StapPaneel({
         </div>
       </div>
 
+      {/* WO-2 (§4.3): heropenen van een afgeronde stap. Bewust BUITEN de
+          leesmodus-fieldset (die alles disabled) — heropenen is juist de
+          handeling die op een afgeronde stap hoort. Alleen voor
+          voorzitter/beheerder; motivering verplicht; server-side gegate en
+          append-only gelogd. Afhankelijke afgeronde stappen krijgen dan
+          `herbevestiging_nodig`. */}
+      {stap.status === "afgerond" && kanBeheren && (
+        <div className="mt-4 pt-4 border-t border-line">
+          {!heropenForm ? (
+            <button
+              type="button"
+              onClick={() => setHeropenForm(true)}
+              className="text-xs px-3 py-1.5 border border-warn/40 text-warn-ink bg-warn-tint rounded-lg hover:border-warn"
+            >
+              ↺ Stap heropenen
+            </button>
+          ) : (
+            <form onSubmit={stapHeropenen} className="space-y-2">
+              <label className="block text-[11px] uppercase tracking-wide text-muted font-semibold">
+                Motivering voor het heropenen <span className="text-err-ink">*</span>
+              </label>
+              <textarea
+                rows={2}
+                value={heropenMotivering}
+                onChange={(e) => setHeropenMotivering(e.target.value)}
+                placeholder="Bv.: heropend na verduidelijkingsvraag DNB over de evenwichtigheidstoets."
+                className="w-full border border-line rounded px-2 py-1.5 text-sm focus:border-accent outline-none resize-none"
+              />
+              <p className="text-[11px] text-muted">
+                Het bestuurlijk oordeel krijgt een nieuwe versie; de eerdere
+                afronding blijft in het spoor. Gerelateerde afgeronde stappen
+                worden gemarkeerd met “herbevestiging nodig”.
+              </p>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHeropenForm(false);
+                    setHeropenMotivering("");
+                  }}
+                  className="text-xs px-3 py-1.5 border border-line rounded hover:border-accent"
+                >
+                  Annuleren
+                </button>
+                <button
+                  type="submit"
+                  disabled={bezig === "heropenen"}
+                  className="text-xs px-3 py-1.5 bg-warn text-white rounded hover:brightness-110 disabled:opacity-50"
+                >
+                  {bezig === "heropenen" ? "Bezig…" : "Heropenen"}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      )}
+
       {/* T6-1A: in leesmodus schakelt de fieldset alle formuliercontrols
           (inputs, textareas, selects, knoppen) native uit — zichtbaar maar
           niet bedienbaar. Navigatielinks (agendapunten) blijven werken. */}
@@ -433,9 +577,65 @@ export default function StapPaneel({
 
       {/* Checklist */}
       <div className="mt-6">
-        <div className="text-xs uppercase tracking-wide text-muted font-semibold mb-3">
-          Checklist
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-xs uppercase tracking-wide text-muted font-semibold">
+            Checklist
+          </div>
+          {/* WO-2 (D7): handmatig checklistpunt toevoegen — alleen actieve stap
+              (niet leesmodus) en alleen voorzitter/beheerder. */}
+          {kanBeheren && !alleenLezen && (
+            <button
+              type="button"
+              onClick={() => setChecklistForm(!checklistForm)}
+              className="text-xs text-ink hover:underline"
+            >
+              {checklistForm ? "Annuleren" : "+ Checklistpunt toevoegen"}
+            </button>
+          )}
         </div>
+        {checklistForm && kanBeheren && !alleenLezen && (
+          <form
+            onSubmit={checklistToevoegen}
+            className="mb-3 p-3 border border-accent/40 bg-accent-tint rounded-lg space-y-2"
+          >
+            <input
+              type="text"
+              value={checklistLabel}
+              onChange={(e) => setChecklistLabel(e.target.value)}
+              placeholder="Nieuw checklistpunt, bv. 'Toets keuzebegeleiding op begrijpelijkheid'"
+              className="w-full border border-line rounded px-2 py-1.5 text-sm focus:border-accent outline-none bg-white"
+            />
+            <label className="flex items-center gap-2 text-xs text-ink">
+              <input
+                type="checkbox"
+                checked={checklistBewijsVereist}
+                onChange={(e) => setChecklistBewijsVereist(e.target.checked)}
+                className="accent-accent w-4 h-4 rounded"
+              />
+              Bewijs vereist
+            </label>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setChecklistForm(false);
+                  setChecklistLabel("");
+                  setChecklistBewijsVereist(false);
+                }}
+                className="text-xs px-3 py-1.5 border border-line rounded hover:border-accent bg-white"
+              >
+                Annuleren
+              </button>
+              <button
+                type="submit"
+                disabled={bezig === "checklist-toevoegen"}
+                className="text-xs px-3 py-1.5 bg-accent text-white rounded hover:bg-accent-ink disabled:opacity-50"
+              >
+                {bezig === "checklist-toevoegen" ? "Bezig…" : "Toevoegen"}
+              </button>
+            </div>
+          </form>
+        )}
         {checklist.length === 0 ? (
           <div className="text-sm text-muted italic">
             Geen checklist-items.
@@ -459,11 +659,16 @@ export default function StapPaneel({
                 />
                 <div className="flex-1">
                   <div
-                    className={`text-sm ${
+                    className={`text-sm flex items-center gap-2 flex-wrap ${
                       c.voldaan ? "text-muted line-through" : "text-ink"
                     }`}
                   >
                     {c.label}
+                    {c.bron === "handmatig" && (
+                      <span className="text-[10px] uppercase tracking-wide text-phase-ink bg-phase-tint border border-phase/30 px-1.5 py-0.5 rounded no-underline">
+                        Handmatig
+                      </span>
+                    )}
                   </div>
                   {c.voldaan && c.voldaan_op && (
                     <div className="text-xs text-muted mt-0.5">

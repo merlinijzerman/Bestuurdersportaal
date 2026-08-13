@@ -43,6 +43,7 @@ chat/route.ts  ──intentie──▶  /api/vergelijk ──▶ vergelijk-kern 
 | `app/api/vergelijk/route.ts` | service-endpoint (auth, tenant-poorten, delegatie) |
 | `app/api/chat/route.ts` | confidence-gated ingang + governance-logging (additieve tak) |
 | `app/(dashboard)/ai/_components/VergelijkResultaatWeergave.tsx` | gedeelde resultaat-component |
+| `app/(dashboard)/ai/_components/AssistentClient.tsx` | consumeert de SSE-events `vergelijking` / `vergelijking_verduidelijking` en rendert de component |
 
 ## Werking
 
@@ -64,8 +65,12 @@ chat/route.ts  ──intentie──▶  /api/vergelijk ──▶ vergelijk-kern 
    kern zelf af uit aanwezigheid; alleen `gelijk`/`verschilt` is een LLM-oordeel.
 6. **Findings + persistentie**: stabiele `finding_key`, evidence-links, wegschrijven via
    `fn_schrijf_vergelijking` (`comparison_run` + `comparison_results`).
-7. **Rendering**: `VergelijkResultaatWeergave` toont side-by-side per dimensie met
-   evidence-links en een reflectie-hook (T10) per finding.
+7. **Rendering**: de chat-route streamt het resultaat als SSE-event
+   `{type:"vergelijking", resultaat}` (eenduidig) óf `{type:"vergelijking_verduidelijking",
+   bron/doelKandidaten}` (twee mogelijke doelbronnen). `AssistentClient.tsx` consumeert
+   die events en rendert `VergelijkResultaatWeergave` — side-by-side per dimensie met
+   evidence-links en een reflectie-hook (T10) per finding. De UI bevat geen
+   vergelijk-logica (alleen weergave + het prefillen van de composer bij de hooks).
 
 ## Kernbesluiten (zie decision 0173)
 

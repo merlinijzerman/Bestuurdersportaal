@@ -1,6 +1,6 @@
 # 0173 — T5 vergelijkmodus: DEFINER-schrijfpad, self-gating deterministisch pad, geen prompt-regelset
 
-- **Status:** Geaccepteerd
+- **Status:** Geaccepteerd (impl.)
 - **Datum:** 2026-08-13
 - **Betrokkenen:** Merlin (product/architectuur), Claude Code (uitvoering)
 
