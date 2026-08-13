@@ -13,8 +13,7 @@ import {
 import DossierTijdlijn from "../_components/DossierTijdlijn";
 import StapPaneel from "../_components/StapPaneel";
 import FaseRail, { type FaseGroep } from "../_components/FaseRail";
-import StapRequirementsPaneel from "../_components/StapRequirementsPaneel";
-import VereisteToevoegen from "../_components/VereisteToevoegen";
+import FaseWeergave from "../_components/FaseWeergave";
 import DecisionObjectHeader from "../_components/DecisionObjectHeader";
 import ClassificatiePanel from "../_components/ClassificatiePanel";
 import OnderbouwingsPaneel from "../_components/OnderbouwingsPaneel";
@@ -35,6 +34,7 @@ import {
   bewijslastDekking,
 } from "@/core/lib/procedure-fase-status";
 import { haalFondsleden, weergaveNaam, initialen } from "@/core/lib/fondsleden";
+import { kiesWeergave } from "@/core/lib/procedure-detail-weergave";
 
 // Forceer dynamische rendering: deze page leest live data uit Supabase
 // (decision-state, readiness, evidence) en mag absoluut niet door de
@@ -94,6 +94,9 @@ export interface ChecklistItem {
   // WO-2 (D7): herkomst — 'handmatig' voor een tijdens de looptijd toegevoegd
   // punt (zichtbaar gemaakt voor audit-transparantie).
   bron?: "template" | "handmatig";
+  // WO-3: per-checklistpunt toelichting. De kolom bestaat nog niet in de DB
+  // (OB-E10, aparte data-WO); tot dan undefined → UI toont "nog geen toelichting".
+  toelichting?: string | null;
 }
 
 export interface Bewijs {
@@ -192,10 +195,10 @@ export default async function ProcedureDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ stap?: string }>;
+  searchParams: Promise<{ stap?: string; fase?: string }>;
 }) {
   const { id } = await params;
-  const { stap: stapParam } = await searchParams;
+  const { stap: stapParam, fase: faseParam } = await searchParams;
   const supabase = await createServerSupabase();
 
   const {
@@ -363,23 +366,15 @@ export default async function ProcedureDetailPage({
   // Default = de actieve stap; ontbreekt die, dan de laatst afgeronde; anders
   // de eerste stap. Alleen de actieve stap is bewerkbaar — al het andere is
   // leesmodus (inzage in afgeronde/nog niet gestarte stappen).
+  // Default-stap voor de rechter-weergave (als er geen geldige ?stap/?fase is):
+  // de actieve stap, anders de laatst afgeronde, anders de eerste stap.
+  // De uiteindelijke weergavekeuze (stap- vs fase-weergave) valt ná faseGroepen,
+  // omdat de fase-codes daaruit de guard voor ?fase vormen.
   const laatstAfgerondeStap = [...stappen]
     .reverse()
     .find((s) => s.status === "afgerond");
-  const geselecteerdeStap =
-    stappen.find((s) => s.id === stapParam) ??
-    actieveStap ??
-    laatstAfgerondeStap ??
-    stappen[0] ??
-    null;
-  const geselecteerdeIsBewerkbaar =
-    geselecteerdeStap != null &&
-    (geselecteerdeStap.status === "actief" ||
-      geselecteerdeStap.status === "heropend");
-  const geselecteerdeVoltooidDoorNaam =
-    geselecteerdeStap?.voltooid_door
-      ? fondsleden.get(geselecteerdeStap.voltooid_door)?.naam ?? null
-      : null;
+  const defaultStapId =
+    (actieveStap ?? laatstAfgerondeStap ?? stappen[0])?.id ?? null;
 
   // Decision Object — lazy auto-upgrade voor procedures zonder dossier.
   // Faalt deze stap (RLS / DB-fout), dan tonen we het dossier-blok niet
@@ -473,6 +468,31 @@ export default async function ProcedureDetailPage({
       bouwGroep("—", "Overige stappen", null, false, ongegroepeerdeStappen)
     );
   }
+
+  // WO-3: rechter-weergavekeuze. ?stap wint > ?fase > default-stap. In fase-
+  // modus staat rechts alléén de fasebeschrijving; in stap-modus het stapscherm.
+  const weergave = kiesWeergave({
+    stapParam,
+    faseParam,
+    geldigeStapIds: stappen.map((s) => s.id),
+    geldigeFaseCodes: faseGroepen.map((f) => f.fase_code),
+    defaultStapId,
+  });
+  const geselecteerdeStap =
+    weergave.modus === "stap"
+      ? stappen.find((s) => s.id === weergave.stapId) ?? null
+      : null;
+  const geselecteerdeFase =
+    weergave.modus === "fase"
+      ? faseGroepen.find((f) => f.fase_code === weergave.faseCode) ?? null
+      : null;
+  const geselecteerdeIsBewerkbaar =
+    geselecteerdeStap != null &&
+    (geselecteerdeStap.status === "actief" ||
+      geselecteerdeStap.status === "heropend");
+  const geselecteerdeVoltooidDoorNaam = geselecteerdeStap?.voltooid_door
+    ? fondsleden.get(geselecteerdeStap.voltooid_door)?.naam ?? null
+    : null;
 
   // F2: het audit-trail-paneel toont voortaan BEIDE auditsporen. procedure_log
   // (spoor 'proces') werd al getoond; governance_events (spoor 'besluit', mét
@@ -734,15 +754,13 @@ export default async function ProcedureDetailPage({
                 geen vaste volgorde; fasen kunnen tegelijk lopen.
               </p>
             )}
-            {/* WO-2 (§7): fasen-rail met per-fase status-pill + bewijslast-
-                dekkingsmeter en meerdere gelijktijdig actieve stappen. Elke
-                stap opent in het rechterpaneel (leesmodus voor niet-actieve
-                stappen). */}
+            {/* WO-3: schone fase-accordeon. Klik op een fasekop → fase-weergave
+                rechts (?fase); klik op een stap → stapscherm (?stap). Geen
+                beschrijvings-/toelichtingsblokken in het linkerpaneel. */}
             <FaseRail
               fasen={faseGroepen}
               geselecteerdeStapId={geselecteerdeStap?.id ?? null}
-              procedureId={procedure.id}
-              kanBeheren={currentUserIsPrivileged}
+              geselecteerdeFaseCode={geselecteerdeFase?.fase_code ?? null}
             />
           </div>
         </div>
@@ -764,7 +782,19 @@ export default async function ProcedureDetailPage({
               </div>
             </div>
           )}
-          {geselecteerdeStap ? (
+          {geselecteerdeFase ? (
+            /* WO-3: fase-weergave — alléén de fasebeschrijving (D8), bewerkbaar
+               door voorzitter/beheerder. Geen stapscherm. */
+            <FaseWeergave
+              procedureId={procedure.id}
+              faseCode={geselecteerdeFase.fase_code}
+              titel={geselecteerdeFase.titel}
+              status={geselecteerdeFase.status}
+              beschrijving={geselecteerdeFase.beschrijving}
+              isOverride={geselecteerdeFase.is_override}
+              kanBeheren={currentUserIsPrivileged}
+            />
+          ) : geselecteerdeStap ? (
             <StapPaneel
               procedureId={procedure.id}
               stap={geselecteerdeStap}
@@ -772,6 +802,7 @@ export default async function ProcedureDetailPage({
               kanBeheren={currentUserIsPrivileged}
               currentUserId={user.id}
               voltooidDoorNaam={geselecteerdeVoltooidDoorNaam}
+              evidence={dossier?.evidence ?? []}
               checklist={checklist.filter(
                 (c) => c.stap_id === geselecteerdeStap.id
               )}
@@ -812,34 +843,12 @@ export default async function ProcedureDetailPage({
             </div>
           )}
 
-          {/* WO-2 (D7): vereiste bewijslast voor de geselecteerde stap
-              (readiness-unie template + instantie) + de affordance om een
-              instantie-vereiste toe te voegen. AI-validatie valt buiten deze
-              tranche, dus aiOutputs bewust leeg. */}
-          {geselecteerdeStap && dossier && (
-            <div className="space-y-3">
-              <StapRequirementsPaneel
-                decisionId={dossier.decision.id}
-                step={geselecteerdeStap}
-                evidence={dossier.evidence}
-                aiOutputs={[]}
-              />
-              {/* Toevoeg-affordance alleen bij capability (voorzitter/beheerder);
-                  anders geen (lege) kaart tonen. Server-side gate blijft leidend. */}
-              {currentUserIsPrivileged && (
-                <div className="bg-white border border-line rounded-xl p-5">
-                  <VereisteToevoegen
-                    procedureId={procedure.id}
-                    stapVolgorde={geselecteerdeStap.volgorde}
-                    kanBeheren={currentUserIsPrivileged}
-                  />
-                </div>
-              )}
-            </div>
-          )}
+          {/* WO-3: de vereiste bewijslast (readiness-unie) en de affordance om
+              een instantie-vereiste toe te voegen zitten nu in de Bewijsstukken-
+              sectie van StapPaneel (vereist-gedreven), niet meer als los paneel. */}
 
-          {/* Besluiten — als er vastgelegd zijn */}
-          {besluiten.length > 0 && (
+          {/* Besluiten — als er vastgelegd zijn (alleen in stap-weergave) */}
+          {geselecteerdeStap && besluiten.length > 0 && (
             <div className="bg-white border border-line rounded-xl p-5">
               <h3 className="text-sm font-semibold text-ink mb-3">
                 Vastgelegde besluiten

@@ -29,6 +29,8 @@ export const AUDIT_EVENT_LABEL: Record<string, string> = {
   besluit_vastgelegd: "Besluit vastgelegd",
   procedure_metadata_gewijzigd: "Proceskenmerken gewijzigd",
   fase_toelichting_bijgewerkt: "Fase-toelichting bijgewerkt",
+  fase_beschrijving_bijgewerkt: "Fasebeschrijving bijgewerkt",
+  stap_toelichting_bijgewerkt: "Staptoelichting bijgewerkt",
   agendapunt_gekoppeld: "Agendapunt gekoppeld",
 
   // ── Besluitniveau (governance_events) ──

@@ -1,19 +1,19 @@
 "use client";
 
-// Procesfasen-rail (WO-2, §7) — accordion van de hoofdfasen (D8).
+// Procesfasen-accordeon (WO-3) — schone fase-accordeon in het linkerpaneel.
 //
-// De rail toont compact de hoofdfasen; per fase een kop met status-pill +
-// bewijslast-dekkingsmeter + aandachtsstip. Uitklappen toont de fase-
-// beschrijving (toelichting) en de stappen. Parallel-by-default: meerdere
-// stappen kunnen tegelijk 'actief'/'heropend' zijn. Fasen met werk-in-uitvoering
-// (of met de geselecteerde stap) staan standaard open; de rest ingeklapt zodat
-// de rail rustig blijft.
+// De rail toont per hoofdfase (D8) een rustige kop: romeins cijfer-badge,
+// naam + aantal stappen, status-pill, chevron, en een linkerrand-accent voor de
+// aandachtsvlag. GEEN beschrijvings-/toelichtingsblokken in het linkerpaneel —
+// die verhuizen naar de fase-weergave rechts (WO-3). Klik op een fasekop → klapt
+// de fase open én toont rechts de fasebeschrijving (`?fase=`); klik op een stap →
+// het stapscherm (`?stap=`). Parallel-by-default: meerdere stappen kunnen tegelijk
+// 'actief'/'heropend' zijn.
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { Stap } from "../[id]/page";
-import FaseBeschrijving from "./FaseBeschrijving";
-import FaseToelichting from "./FaseToelichting";
 import {
   FASE_STATUS_LABEL,
   type FaseStatus,
@@ -36,14 +36,24 @@ export interface FaseGroep {
 
 const STATUS_PILL: Record<FaseStatus, string> = {
   afgerond: "bg-ok-tint text-ok-ink border border-ok/30",
-  in_behandeling: "bg-accent-tint text-accent-ink border border-accent/30",
+  in_behandeling: "bg-warn-tint text-warn-ink border border-warn/30",
   nog_niet_begonnen: "bg-app-bg text-muted border border-line",
 };
 
-function meterKleur(pct: number): string {
-  if (pct >= 100) return "bg-ok";
-  if (pct <= 0) return "bg-err";
-  return "bg-warn";
+const BADGE_KLEUR: Record<FaseStatus, string> = {
+  afgerond: "bg-ok-tint text-ok-ink",
+  in_behandeling: "bg-warn-tint text-warn-ink",
+  nog_niet_begonnen: "bg-app-bg text-muted",
+};
+
+// Linkerrand-accent: aandacht wint (rood/oranje), anders duidt de rand de
+// fase-status (in behandeling = accent). Zo blijft status = kleur én woord
+// (de pill) én vorm (de rand), conform besluit 0097/0101.
+function randKleur(status: FaseStatus, aandacht: AandachtNiveau): string {
+  if (aandacht === "rood") return "border-err";
+  if (aandacht === "oranje") return "border-warn";
+  if (status === "in_behandeling") return "border-accent";
+  return "border-line";
 }
 
 function isActiefAchtig(s: Stap): boolean {
@@ -160,16 +170,17 @@ function StapItem({
 export default function FaseRail({
   fasen,
   geselecteerdeStapId,
-  procedureId,
-  kanBeheren,
+  geselecteerdeFaseCode,
 }: {
   fasen: FaseGroep[];
   geselecteerdeStapId: string | null;
-  procedureId: string;
-  kanBeheren: boolean;
+  /** Code van de fase die rechts in fase-weergave staat (of null). */
+  geselecteerdeFaseCode: string | null;
 }) {
-  // Standaard open: fasen met een actieve/heropende stap of met de
-  // geselecteerde stap. De rest ingeklapt. Manueel togglen blijft daarna leidend.
+  const router = useRouter();
+  // Standaard open: fasen met een actieve/heropende stap, met de geselecteerde
+  // stap, of de fase die rechts in fase-weergave staat. De rest ingeklapt.
+  // Manueel togglen blijft daarna leidend.
   const [open, setOpen] = useState<Set<string>>(() => {
     const s = new Set<string>();
     for (const f of fasen) {
@@ -177,37 +188,57 @@ export default function FaseRail({
       const heeftSelectie =
         geselecteerdeStapId != null &&
         f.stappen.some((st) => st.id === geselecteerdeStapId);
-      if (heeftActief || heeftSelectie) s.add(f.fase_code);
+      if (heeftActief || heeftSelectie || f.fase_code === geselecteerdeFaseCode)
+        s.add(f.fase_code);
     }
     return s;
   });
 
-  const toggle = (code: string) =>
+  // Klik op de fasekop: klap de fase open/dicht én toon rechts de
+  // fasebeschrijving (matcht de mockup: één klik doet beide).
+  const openFase = (code: string) => {
     setOpen((prev) => {
       const n = new Set(prev);
       if (n.has(code)) n.delete(code);
       else n.add(code);
       return n;
     });
+    // replace (niet push) — consistent met de stap-links (<Link replace>); zo
+    // vervuilt het heen-en-weer klikken tussen fasen de history niet.
+    router.replace(`?fase=${code}`, { scroll: false });
+  };
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-1">
       {fasen.map((f) => {
         const isOpen = open.has(f.fase_code);
+        const isGeselecteerd = f.fase_code === geselecteerdeFaseCode;
         const actiefCount = f.stappen.filter(isActiefAchtig).length;
         return (
           <div
             key={f.fase_code}
-            className="border border-line rounded-lg overflow-hidden"
+            className={`rounded-lg overflow-hidden border-l-[3px] ${randKleur(
+              f.status,
+              f.aandacht
+            )}`}
           >
             <button
               type="button"
-              onClick={() => toggle(f.fase_code)}
+              onClick={() => openFase(f.fase_code)}
               aria-expanded={isOpen}
-              className="w-full text-left px-3 py-2.5 hover:bg-app-bg/60 transition-colors"
+              className={`w-full text-left px-2.5 py-2.5 flex items-center gap-2.5 transition-colors ${
+                isGeselecteerd ? "bg-accent-tint" : "hover:bg-app-bg/60"
+              }`}
             >
-              <div className="flex items-center justify-between gap-2">
-                <div className="text-[10px] uppercase tracking-widest text-muted font-bold flex items-center gap-1.5 min-w-0">
+              <span
+                className={`w-7 h-7 rounded-md flex items-center justify-center text-[11px] font-bold shrink-0 ${
+                  BADGE_KLEUR[f.status]
+                }`}
+              >
+                {f.fase_code}
+              </span>
+              <span className="flex-1 min-w-0">
+                <span className="flex items-center gap-1.5">
                   {f.aandacht !== "geen" && (
                     <span
                       className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
@@ -220,58 +251,34 @@ export default function FaseRail({
                       }
                     />
                   )}
-                  <span className="truncate">
-                    {f.fase_code} · {f.titel}
+                  <span className="block text-sm font-semibold text-ink leading-tight truncate">
+                    {f.titel}
                   </span>
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <span
-                    className={`text-[9px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded whitespace-nowrap ${STATUS_PILL[f.status]}`}
-                  >
-                    {FASE_STATUS_LABEL[f.status]}
-                  </span>
-                  <span
-                    aria-hidden
-                    className={`text-muted text-xs transition-transform ${
-                      isOpen ? "rotate-180" : ""
-                    }`}
-                  >
-                    ▾
-                  </span>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 mt-1.5">
-                {f.dekking.verplicht > 0 && (
-                  <div
-                    className="flex-1 h-1 bg-app-bg rounded-full overflow-hidden"
-                    title={`${f.dekking.sluitend} van ${f.dekking.verplicht} verplichte vereisten sluitend`}
-                  >
-                    <div
-                      className={`h-full ${meterKleur(f.dekking.pct)}`}
-                      style={{ width: `${f.dekking.pct}%` }}
-                    />
-                  </div>
-                )}
-                <span className="text-[9px] text-muted whitespace-nowrap">
+                </span>
+                <span className="block text-[11px] text-muted mt-0.5">
                   {f.stappen.length} stap{f.stappen.length === 1 ? "" : "pen"}
                   {actiefCount > 0 ? ` · ${actiefCount} actief` : ""}
-                  {f.dekking.verplicht > 0 ? ` · ${f.dekking.pct}% bewijslast` : ""}
                 </span>
-              </div>
+              </span>
+              <span
+                className={`text-[10px] font-semibold rounded-full px-2 py-0.5 shrink-0 whitespace-nowrap ${
+                  STATUS_PILL[f.status]
+                }`}
+              >
+                {FASE_STATUS_LABEL[f.status]}
+              </span>
+              <span
+                aria-hidden
+                className={`text-muted text-xs shrink-0 transition-transform ${
+                  isOpen ? "rotate-180" : ""
+                }`}
+              >
+                ▾
+              </span>
             </button>
 
             {isOpen && (
-              <div className="px-3 pb-3 pt-2 border-t border-line space-y-2">
-                <FaseBeschrijving
-                  beschrijving={f.beschrijving}
-                  isOverride={f.is_override}
-                />
-                <FaseToelichting
-                  procedureId={procedureId}
-                  faseCode={f.fase_code}
-                  initieel={f.toelichting}
-                  kanBeheren={kanBeheren}
-                />
+              <div className="px-3 pb-3 pt-1">
                 <ol className="space-y-1">
                   {f.stappen.map((s, idx) => (
                     <StapItem

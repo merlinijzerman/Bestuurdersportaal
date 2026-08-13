@@ -8,6 +8,8 @@
 
 ## Revisielog
 
+**v0.3 (2026-08-13)** — WO-3 (UI-herinrichting Processen-detail). De D8-fasebeschrijving is uit de linker fasen-rail gehaald naar een **aparte fase-weergave** rechts (`FaseWeergave.tsx`, geopend via `?fase=`) met een echt bewerkpad: `POST /api/procedures/[id]/fase-beschrijving` schrijft `procedure_fase_beschrijving_override` (leeg opslaan = override wissen → terugval op de generieke default), server-side gegate op rol **voorzitter/beheerder**, append-only gelogd in **`procedure_log`** (`event_type: fase_beschrijving_bijgewerkt`). De rail (`FaseRail.tsx`) is een schone fase-accordeon (badge/titel/stap-count/status-pill/aandachtsrand) zónder beschrijvings-/toelichtingsblokken. §6-governance en §7 hieronder hierop bijgewerkt (gate = rol, log = `procedure_log`, **niet** `fonds_config_log`/`fonds.config.manage`). Nieuw datagat **OB-E10**: checklistitem-/bewijsstuk-`toelichting` bestaat alleen in de standaardset-JSON, niet in de DB (aparte, kleine data-WO — buiten de UI-scope).
+
 **v0.2 (2026-08-13)** — geïmplementeerd in WO-1 (besluit [`0174`](decisions/0174-proceduremodule-engine-v2-D6-D7-D8.md)). Vier gedwongen aanpassingen na codeverificatie (het ontwerp liep hierop vóór op de werkelijkheid):
 - **B1** — Er zijn géén template-tabellen (`procedure_templates`/`procedure_template_stappen` bestaan niet; templates leven als code/JSON, requirements op `template_code`). Daarom: geen `alter procedure_template_stappen`; de D8-tabellen (`procedure_template_fasen`, `procedure_fase_beschrijving_override`) zijn op **`template_code`** gesleuteld i.p.v. `template_id`; `blokkerende_afhankelijkheden`/`fase_code` leven in de JSON-definitie en worden bij start meegesnapshot op `procedure_stappen`.
 - **B2** — `voltooid_op` hergebruikt i.p.v. een nieuwe `afgerond_op` (§4.1); die kolom bestond al.
@@ -203,7 +205,7 @@ create table if not exists public.procedure_fase_beschrijving_override (
 
 Leeslogica (fail-safe): `beschrijving := coalesce(override[fonds, fase], template.generieke_beschrijving)`. Ontbreekt een override, dan de gedeelde default.
 
-Governance: bewerken van een override gegate op `fonds.config.manage` (beheerder/voorzitter), append-only gelogd in `fonds_config_log`. Een fasebeschrijving is **pure content** — wijzigen raakt stappen, checklist, bewijslast of activatie niet.
+Governance: bewerken van een override via `POST /api/procedures/[id]/fase-beschrijving` (WO-3), server-side gegate op rol **voorzitter/beheerder** (de RLS-policies op `procedure_fase_beschrijving_override` zijn defense-in-depth); `template_code` en `fonds_id` worden server-side uit de procedure afgeleid, nooit uit de request. Leeg opslaan verwijdert de override → terugval op de generieke default. Append-only gelogd in **`procedure_log`** (`event_type: fase_beschrijving_bijgewerkt`). Een fasebeschrijving is **pure content** — wijzigen raakt stappen, checklist, bewijslast of activatie niet.
 
 ---
 

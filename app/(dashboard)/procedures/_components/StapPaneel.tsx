@@ -11,16 +11,45 @@ import type {
   KomendeVergadering,
   GekoppeldAgendapunt,
 } from "../[id]/page";
+import type { EvidenceItem } from "@/core/lib/decision-view";
 import BibliotheekPicker from "./BibliotheekPicker";
+import VereisteToevoegen from "./VereisteToevoegen";
 import { uploadDocument } from "@/core/lib/document-upload-client";
 import { DOCUMENTTYPEN, DOCUMENTTYPE_LABEL } from "@/core/lib/document-metadata";
 import { bewijsUploadDocumenttypeBlokker } from "@/core/lib/document-ingest-classificatie";
+import {
+  checklistSamenvatting,
+  bewijsstukkenSamenvatting,
+  vergaderingenSamenvatting,
+} from "@/core/lib/procedure-detail-weergave";
+
+// WO-3: de Bewijsstukken-sectie is vereist-gedreven (evidence-unie template +
+// instantie) i.p.v. een losse lijst opgevoerde stukken; het vroegere
+// StapRequirementsPaneel gaat hierin op. AI-validatie (AIValidatieBlok) valt
+// buiten deze tranche.
+const REQUIREMENT_LABELS: Record<string, string> = {
+  document: "Document",
+  field: "Veld",
+  assumption: "Aanname",
+  risk: "Risico",
+  ai_validation: "AI-validatie",
+  approval: "Goedkeuring",
+  mandate_check: "Mandaatcheck",
+  kpi: "KPI",
+  evaluation: "Evaluatie",
+  dissent_review: "Dissent-review",
+  external_submission: "Externe indiening",
+  consultation: "Consultatie",
+};
 
 interface Props {
   procedureId: string;
   stap: Stap;
   checklist: ChecklistItem[];
   bewijs: Bewijs[];
+  /** WO-3: gevraagde bewijslast voor deze stap (readiness-unie); vervangt het
+      losse requirements-paneel. Wordt hier op stap_volgorde gefilterd. */
+  evidence: EvidenceItem[];
   besluit: Besluit | null;
   komendeVergaderingen: KomendeVergadering[];
   gekoppeldeAgendapunten: GekoppeldAgendapunt[];
@@ -51,11 +80,272 @@ function formatDatumKort(d: string) {
   });
 }
 
+// ── Ingeklapte sectie (WO-3) ─────────────────────────────────────────────────
+// Checklist / Bewijsstukken / Vergaderingen openen standaard ingeklapt met een
+// samenvatting in de kop. `open`/`onToggle` zijn controlled zodat de "+ toevoegen"-
+// affordance de sectie tegelijk kan openklappen.
+function Sectie({
+  titel,
+  samenvatting,
+  open,
+  onToggle,
+  addLabel,
+  onAdd,
+  children,
+}: {
+  titel: string;
+  samenvatting: string;
+  open: boolean;
+  onToggle: () => void;
+  addLabel?: string;
+  onAdd?: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="mt-6">
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={onToggle}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onToggle();
+          }
+        }}
+        className="flex items-center gap-2 cursor-pointer select-none"
+      >
+        <div className="text-[11px] uppercase tracking-wide text-muted font-semibold">
+          {titel}
+        </div>
+        <span className="text-[11px] text-muted">· {samenvatting}</span>
+        <span className="ml-auto flex items-center gap-3">
+          {addLabel && onAdd && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onAdd();
+              }}
+              className="text-xs text-accent hover:underline"
+            >
+              {addLabel}
+            </button>
+          )}
+          <span
+            aria-hidden
+            className={`text-muted text-xs transition-transform ${
+              open ? "" : "-rotate-90"
+            }`}
+          >
+            ▾
+          </span>
+        </span>
+      </div>
+      {open && <div className="mt-3">{children}</div>}
+    </div>
+  );
+}
+
+// ── Uitklapbaar checklistpunt (WO-3) ─────────────────────────────────────────
+// De toelichting per checklistpunt bestaat nog niet als data (OB-E10, aparte
+// data-WO); tot dan toont de body de eerlijke lege staat. Bewerken van de
+// toelichting volgt met die data-WO — daarom hier bewust geen dode edit-knop.
+function ChecklistRij({
+  c,
+  alleenLezen,
+  onToggle,
+}: {
+  c: ChecklistItem;
+  alleenLezen: boolean;
+  onToggle: (c: ChecklistItem) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div
+      className={`bg-white border rounded-lg ${
+        c.voldaan ? "border-line" : "border-line hover:border-accent"
+      }`}
+    >
+      <div className="flex items-start gap-3 p-3">
+        <input
+          type="checkbox"
+          checked={c.voldaan}
+          disabled={alleenLezen}
+          onChange={() => onToggle(c)}
+          className="mt-0.5 accent-accent w-4 h-4 rounded"
+        />
+        <div className="flex-1 min-w-0">
+          <div
+            className={`text-sm flex items-center gap-2 flex-wrap ${
+              c.voldaan ? "text-muted line-through" : "text-ink"
+            }`}
+          >
+            {c.label}
+            {c.bron === "handmatig" && (
+              <span className="text-[10px] uppercase tracking-wide text-phase-ink bg-phase-tint border border-phase/30 px-1.5 py-0.5 rounded no-underline">
+                Handmatig
+              </span>
+            )}
+          </div>
+          {c.voldaan && c.voldaan_op && (
+            <div className="text-xs text-muted mt-0.5">
+              Afgevinkt {formatDatumKort(c.voldaan_op)}
+              {c.voldaan_door_naam ? ` · ${c.voldaan_door_naam}` : ""}
+            </div>
+          )}
+        </div>
+        {c.bewijs_vereist && !c.voldaan && (
+          <span className="text-[11px] text-warn-ink bg-warn-tint px-2 py-0.5 rounded font-medium whitespace-nowrap">
+            Bewijs vereist
+          </span>
+        )}
+        {/* role=button i.p.v. <button> zodat inzien óók in leesmodus werkt
+            (een <button> in de disabled fieldset zou niet klikbaar zijn). */}
+        <span
+          role="button"
+          tabIndex={0}
+          onClick={() => setOpen((o) => !o)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              setOpen((o) => !o);
+            }
+          }}
+          aria-expanded={open}
+          className="text-[11px] text-muted hover:text-accent shrink-0 inline-flex items-center gap-1 cursor-pointer"
+        >
+          Toelichting
+          <span
+            aria-hidden
+            className={`text-xs transition-transform ${open ? "" : "-rotate-90"}`}
+          >
+            ▾
+          </span>
+        </span>
+      </div>
+      {open && (
+        <div className="px-3 pb-3">
+          <div className="bg-app-bg border border-line rounded-md p-3">
+            <div className="text-[11px] uppercase tracking-wide text-muted font-semibold mb-1">
+              Toelichting
+            </div>
+            {c.toelichting ? (
+              <p className="text-[13px] text-muted whitespace-pre-line">
+                {c.toelichting}
+              </p>
+            ) : (
+              <p className="text-[13px] text-muted italic">
+                Nog geen toelichting bij dit checklistpunt.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Uitklapbaar bewijsstuk / vereiste (WO-3) ─────────────────────────────────
+// Vereist-gedreven rij (evidence). Toelichting per vereiste bestaat nog niet als
+// data (OB-E10). "Opvoeren" hergebruikt het bestaande bewijs-formulier.
+function BewijsstukRij({
+  r,
+  alleenLezen,
+  onOpvoeren,
+}: {
+  r: EvidenceItem;
+  alleenLezen: boolean;
+  onOpvoeren: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="border border-line rounded-lg">
+      <div className="flex items-center gap-3 p-3">
+        <span className="text-[10px] uppercase tracking-wide text-muted font-semibold w-24 shrink-0">
+          {REQUIREMENT_LABELS[r.requirement_type] ?? r.requirement_type}
+        </span>
+        <div className="flex-1 text-sm text-ink min-w-0">
+          {r.label}
+          {r.blokkerend && !r.vervuld && (
+            <span className="text-[10px] text-err-ink bg-err-tint border border-err/30 rounded px-1.5 py-0.5 ml-1 font-medium">
+              blokkerend
+            </span>
+          )}
+        </div>
+        {/* role=button i.p.v. <button> zodat inzien óók in leesmodus werkt. */}
+        <span
+          role="button"
+          tabIndex={0}
+          onClick={() => setOpen((o) => !o)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              setOpen((o) => !o);
+            }
+          }}
+          aria-expanded={open}
+          className="text-[11px] text-muted hover:text-accent shrink-0 inline-flex items-center gap-1 cursor-pointer"
+        >
+          Toelichting
+          <span
+            aria-hidden
+            className={`text-xs transition-transform ${open ? "" : "-rotate-90"}`}
+          >
+            ▾
+          </span>
+        </span>
+        {r.vervuld ? (
+          <span className="text-[11px] text-ok-ink font-medium shrink-0 whitespace-nowrap">
+            ✓ Opgevoerd
+          </span>
+        ) : alleenLezen ? (
+          <span className="text-[11px] text-muted shrink-0 whitespace-nowrap">
+            Nog op te voeren
+          </span>
+        ) : (
+          <button
+            type="button"
+            onClick={onOpvoeren}
+            className="text-[11px] text-accent hover:underline shrink-0 whitespace-nowrap"
+          >
+            Opvoeren
+          </button>
+        )}
+      </div>
+      {open && (
+        <div className="px-3 pb-3">
+          <div className="bg-app-bg border border-line rounded-md p-3">
+            <div className="text-[11px] uppercase tracking-wide text-muted font-semibold mb-1">
+              Toelichting
+            </div>
+            <p className="text-[13px] text-muted italic">
+              Nog geen toelichting bij dit bewijsstuk.
+            </p>
+            {r.vervuld && r.bron_titel && (
+              <p className="text-[13px] text-ok-ink mt-2">
+                Opgevoerd: {r.bron_titel}
+              </p>
+            )}
+            {!r.vervuld && r.documenttype && (
+              <p className="text-[13px] text-muted mt-2">
+                Vereist documenttype:{" "}
+                <span className="font-mono text-ink">{r.documenttype}</span>
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function StapPaneel({
   procedureId,
   stap,
   checklist: initieelChecklist,
   bewijs: initieelBewijs,
+  evidence,
   besluit,
   komendeVergaderingen,
   gekoppeldeAgendapunten,
@@ -125,6 +415,22 @@ export default function StapPaneel({
   const [heropenMotivering, setHeropenMotivering] = useState("");
   // WO-2-vervolg: welk (titel-only) bewijsstuk koppelen we aan een document?
   const [koppelDoelId, setKoppelDoelId] = useState<string | null>(null);
+  // WO-3: ingeklapte secties (controlled zodat "+ toevoegen" ze kan openklappen).
+  const [checklistOpen, setChecklistOpen] = useState(false);
+  const [bewijsOpen, setBewijsOpen] = useState(false);
+  const [vergaderingOpen, setVergaderingOpen] = useState(false);
+  // WO-3: stap-toelichting (onder de titel) bewerken.
+  const [toelichtingBewerken, setToelichtingBewerken] = useState(false);
+  const [toelichtingWaarde, setToelichtingWaarde] = useState(
+    stap.beschrijving ?? ""
+  );
+  useEffect(() => {
+    setToelichtingWaarde(stap.beschrijving ?? "");
+  }, [stap.beschrijving]);
+
+  const stapEvidence = evidence.filter(
+    (e) => e.stap_volgorde === stap.volgorde
+  );
 
   const voldaanCount = checklist.filter((c) => c.voldaan).length;
   const totaalCount = checklist.length;
@@ -524,6 +830,44 @@ export default function StapPaneel({
     }
   }
 
+  // WO-3: stap-toelichting opslaan (schrijft procedure_stappen.beschrijving).
+  // Buiten de leesmodus-fieldset zodat een voorzitter/beheerder een toelichting
+  // ook op een afgeronde stap kan corrigeren. Server-side gegate.
+  async function toelichtingOpslaan() {
+    if (!kanBeheren) return;
+    setFout(null);
+    setBezig("toelichting");
+    try {
+      const res = await fetch(
+        `/api/procedures/${procedureId}/stappen/${stap.id}/toelichting`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ toelichting: toelichtingWaarde.trim() || null }),
+        }
+      );
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Opslaan mislukt");
+      }
+      setToelichtingBewerken(false);
+      router.refresh();
+    } catch (err: unknown) {
+      setFout(err instanceof Error ? err.message : "Opslaan mislukt");
+    } finally {
+      setBezig(null);
+    }
+  }
+
+  // "Opvoeren" bij een vereiste opent het bewijs-formulier, voorgevuld met de
+  // vereiste als titel + documenttype-tag.
+  function opvoerenVanuitVereiste(r: EvidenceItem) {
+    setBewijsOpen(true);
+    setBewijsForm(true);
+    if (!bewijsTitel.trim()) setBewijsTitel(r.label);
+    if (r.documenttype) setBewijsDocumenttype(r.documenttype);
+  }
+
   return (
     <div className="bg-white border border-line rounded-xl p-6">
       <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -555,9 +899,6 @@ export default function StapPaneel({
               {voltooidDoorNaam ? ` door ${voltooidDoorNaam}` : ""}
             </p>
           )}
-          {stap.beschrijving && (
-            <p className="text-sm text-muted mt-1.5">{stap.beschrijving}</p>
-          )}
         </div>
         <div className="text-right text-xs text-muted flex-shrink-0">
           {stap.deadline && (
@@ -567,6 +908,64 @@ export default function StapPaneel({
           )}
           {stap.eigenaar_naam && <div className="mt-1">{stap.eigenaar_naam}</div>}
         </div>
+      </div>
+
+      {/* WO-3: toelichting onder de staptitel (schrijft procedure_stappen.
+          beschrijving). Bewerkbaar door voorzitter/beheerder — bewust BUITEN de
+          leesmodus-fieldset zodat ook een afgeronde stap gecorrigeerd kan worden. */}
+      <div className="mt-3">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-[11px] uppercase tracking-wide text-muted font-semibold">
+            Toelichting
+          </span>
+          {kanBeheren && !toelichtingBewerken && (
+            <button
+              type="button"
+              onClick={() => {
+                setToelichtingWaarde(stap.beschrijving ?? "");
+                setToelichtingBewerken(true);
+              }}
+              className="text-xs text-accent hover:underline"
+            >
+              Wijzigen
+            </button>
+          )}
+        </div>
+        {toelichtingBewerken ? (
+          <div className="space-y-2">
+            <textarea
+              rows={3}
+              maxLength={4000}
+              value={toelichtingWaarde}
+              onChange={(e) => setToelichtingWaarde(e.target.value)}
+              placeholder="Bestuurlijke toelichting bij deze stap."
+              className="w-full border border-line rounded px-2 py-1.5 text-sm focus:border-accent outline-none resize-none"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setToelichtingBewerken(false)}
+                className="text-xs px-3 py-1.5 border border-line rounded hover:border-accent"
+              >
+                Annuleren
+              </button>
+              <button
+                type="button"
+                onClick={toelichtingOpslaan}
+                disabled={bezig === "toelichting"}
+                className="text-xs px-3 py-1.5 bg-accent text-white rounded hover:bg-accent-ink disabled:opacity-50"
+              >
+                {bezig === "toelichting" ? "Bezig…" : "Opslaan"}
+              </button>
+            </div>
+          </div>
+        ) : stap.beschrijving ? (
+          <p className="text-sm text-muted max-w-2xl">{stap.beschrijving}</p>
+        ) : (
+          <p className="text-sm text-muted italic">
+            Nog geen toelichting bij deze stap.
+          </p>
+        )}
       </div>
 
       {/* WO-2 (§4.3): heropenen van een afgeronde stap. Bewust BUITEN de
@@ -631,24 +1030,24 @@ export default function StapPaneel({
           niet bedienbaar. Navigatielinks (agendapunten) blijven werken. */}
       <fieldset disabled={alleenLezen} className="min-w-0 border-0 p-0 m-0">
 
-      {/* Checklist */}
-      <div className="mt-6">
-        <div className="flex items-center justify-between mb-3">
-          <div className="text-xs uppercase tracking-wide text-muted font-semibold">
-            Checklist
-          </div>
-          {/* WO-2 (D7): handmatig checklistpunt toevoegen — alleen actieve stap
-              (niet leesmodus) en alleen voorzitter/beheerder. */}
-          {kanBeheren && !alleenLezen && (
-            <button
-              type="button"
-              onClick={() => setChecklistForm(!checklistForm)}
-              className="text-xs text-ink hover:underline"
-            >
-              {checklistForm ? "Annuleren" : "+ Checklistpunt toevoegen"}
-            </button>
-          )}
-        </div>
+      {/* Checklist — WO-3: ingeklapt met samenvatting; items uitklapbaar. */}
+      <Sectie
+        titel="Checklist"
+        samenvatting={checklistSamenvatting(checklist)}
+        open={checklistOpen}
+        onToggle={() => setChecklistOpen((o) => !o)}
+        addLabel={
+          kanBeheren && !alleenLezen ? "+ Checklistpunt toevoegen" : undefined
+        }
+        onAdd={
+          kanBeheren && !alleenLezen
+            ? () => {
+                setChecklistOpen(true);
+                setChecklistForm((f) => !f);
+              }
+            : undefined
+        }
+      >
         {checklistForm && kanBeheren && !alleenLezen && (
           <form
             onSubmit={checklistToevoegen}
@@ -693,176 +1092,39 @@ export default function StapPaneel({
           </form>
         )}
         {checklist.length === 0 ? (
-          <div className="text-sm text-muted italic">
-            Geen checklist-items.
-          </div>
+          <div className="text-sm text-muted italic">Geen checklist-items.</div>
         ) : (
           <div className="space-y-2">
             {checklist.map((c) => (
-              <label
+              <ChecklistRij
                 key={c.id}
-                className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer ${
-                  c.voldaan
-                    ? "bg-app-bg"
-                    : "bg-white border border-line hover:border-accent"
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={c.voldaan}
-                  onChange={() => checklistToggle(c)}
-                  className="mt-0.5 accent-accent w-4 h-4 rounded"
-                />
-                <div className="flex-1">
-                  <div
-                    className={`text-sm flex items-center gap-2 flex-wrap ${
-                      c.voldaan ? "text-muted line-through" : "text-ink"
-                    }`}
-                  >
-                    {c.label}
-                    {c.bron === "handmatig" && (
-                      <span className="text-[10px] uppercase tracking-wide text-phase-ink bg-phase-tint border border-phase/30 px-1.5 py-0.5 rounded no-underline">
-                        Handmatig
-                      </span>
-                    )}
-                  </div>
-                  {c.voldaan && c.voldaan_op && (
-                    <div className="text-xs text-muted mt-0.5">
-                      Afgevinkt {formatDatumKort(c.voldaan_op)}
-                      {c.voldaan_door_naam ? ` · ${c.voldaan_door_naam}` : ""}
-                    </div>
-                  )}
-                </div>
-                {c.bewijs_vereist && !c.voldaan && (
-                  <span className="text-[11px] text-warn-ink bg-warn-tint px-2 py-0.5 rounded font-medium">
-                    Bewijs vereist
-                  </span>
-                )}
-              </label>
+                c={c}
+                alleenLezen={alleenLezen}
+                onToggle={checklistToggle}
+              />
             ))}
           </div>
         )}
-      </div>
+      </Sectie>
 
-      {/* Vergaderingen */}
-      <div className="mt-6">
-        <div className="flex items-center justify-between mb-3">
-          <div className="text-xs uppercase tracking-wide text-muted font-semibold">
-            Vergaderingen
-          </div>
-          {!vergaderingForm && komendeVergaderingen.length > 0 && (
-            <button
-              onClick={() => setVergaderingForm(true)}
-              className="text-xs text-ink hover:underline"
-            >
-              + Voeg toe aan vergadering
-            </button>
-          )}
-        </div>
-
-        {gekoppeldeAgendapunten.length === 0 && !vergaderingForm && (
-          <div className="text-sm text-muted italic">
-            Deze stap staat (nog) niet op een vergader-agenda.
-          </div>
-        )}
-
-        {gekoppeldeAgendapunten.length > 0 && (
-          <div className="space-y-2 mb-3">
-            {gekoppeldeAgendapunten.map((a) => (
-              <Link
-                key={a.id}
-                href={`/vergaderingen/${a.vergadering_id}`}
-                className="flex items-center gap-3 p-3 border border-line rounded-lg hover:border-accent"
-              >
-                <div className="w-9 h-10 bg-accent-tint text-accent-ink rounded flex items-center justify-center text-[10px] font-bold flex-shrink-0">
-                  AGENDA
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-ink truncate">
-                    {a.titel}
-                  </div>
-                  <div className="text-xs text-muted mt-0.5">
-                    {a.vergadering_titel}
-                    {a.vergadering_datum
-                      ? ` · ${formatDatumKort(a.vergadering_datum)}`
-                      : ""}
-                  </div>
-                </div>
-                <span className="text-xs text-ink hover:underline">
-                  Open →
-                </span>
-              </Link>
-            ))}
-          </div>
-        )}
-
-        {vergaderingForm && (
-          <form
-            onSubmit={vergaderingKoppelen}
-            className="p-3 border border-line rounded-lg bg-app-bg space-y-2"
-          >
-            <select
-              value={vergaderingKeuze}
-              onChange={(e) => setVergaderingKeuze(e.target.value)}
-              className="w-full border border-line rounded px-2 py-1.5 text-sm focus:border-accent outline-none bg-white"
-            >
-              <option value="">— Kies een komende vergadering —</option>
-              {komendeVergaderingen.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.titel} — {formatDatumKort(v.datum)}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-muted">
-              Er wordt automatisch een agendapunt aangemaakt met de stap-titel
-              als onderwerp en categorie {stap.vereist_besluit ? "Besluitvorming" : "Oordeelsvorming"}.
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setVergaderingForm(false);
-                  setVergaderingKeuze("");
-                }}
-                className="text-xs px-3 py-1.5 border border-line rounded hover:border-accent"
-              >
-                Annuleren
-              </button>
-              <button
-                type="submit"
-                disabled={bezig === "vergadering"}
-                className="text-xs px-3 py-1.5 bg-accent text-white rounded hover:bg-accent-ink disabled:opacity-50"
-              >
-                {bezig === "vergadering" ? "Bezig…" : "Koppelen"}
-              </button>
-            </div>
-          </form>
-        )}
-
-        {komendeVergaderingen.length === 0 && (
-          <p className="text-xs text-muted mt-1">
-            Geen komende vergaderingen om aan te koppelen.{" "}
-            <Link href="/vergaderingen" className="text-ink underline">
-              Plan eerst een vergadering →
-            </Link>
-          </p>
-        )}
-      </div>
-
-      {/* Bewijs */}
-      <div className="mt-6">
-        <div className="flex items-center justify-between mb-3">
-          <div className="text-xs uppercase tracking-wide text-muted font-semibold">
-            Bewijsstukken
-          </div>
-          <button
-            onClick={() => setBewijsForm(!bewijsForm)}
-            className="text-xs text-ink hover:underline"
-          >
-            {bewijsForm ? "Annuleren" : "+ Toevoegen"}
-          </button>
-        </div>
-
+      {/* Bewijsstukken — WO-3: vereist-gedreven (evidence-unie), ingeklapt.
+          Elk item uitklapbaar; "Opvoeren" hergebruikt het bewijs-formulier.
+          Daaronder de reeds opgevoerde stukken (koppelen/verwijderen). */}
+      <Sectie
+        titel="Bewijsstukken"
+        samenvatting={bewijsstukkenSamenvatting(stapEvidence)}
+        open={bewijsOpen}
+        onToggle={() => setBewijsOpen((o) => !o)}
+        addLabel={!alleenLezen ? "+ Bewijsstuk toevoegen" : undefined}
+        onAdd={
+          !alleenLezen
+            ? () => {
+                setBewijsOpen(true);
+                setBewijsForm((f) => !f);
+              }
+            : undefined
+        }
+      >
         {bewijsForm && (
           <form
             onSubmit={bewijsToevoegen}
@@ -1009,89 +1271,226 @@ export default function StapPaneel({
           </form>
         )}
 
-        {bewijs.length === 0 ? (
-          <div className="text-sm text-muted italic">
-            Nog geen bewijsstukken bij deze stap. Voeg er een toe — je kunt een
-            stuk ook <span className="not-italic font-medium">vooraf opgeven</span>{" "}
-            (alleen een naam, bv. “Transitieplan”) en er later een document aan
-            koppelen.
+        {/* Vereist-gedreven lijst (de gevraagde bewijslast voor deze stap). */}
+        {stapEvidence.length > 0 ? (
+          <div className="space-y-2">
+            {stapEvidence.map((r, i) => (
+              <BewijsstukRij
+                key={`${r.requirement_type}-${r.label}-${i}`}
+                r={r}
+                alleenLezen={alleenLezen}
+                onOpvoeren={() => opvoerenVanuitVereiste(r)}
+              />
+            ))}
           </div>
         ) : (
-          <div className="space-y-2">
-            {bewijs.map((b) => {
-              const gepland = !b.document_id;
-              const magVerwijderen =
-                kanBeheren ||
-                (!!currentUserId && b.toegevoegd_door === currentUserId);
-              return (
-                <div
-                  key={b.id}
-                  className="flex items-start gap-3 p-3 border border-line rounded-lg"
-                >
-                  <div
-                    className={`w-9 h-10 rounded flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${
-                      gepland
-                        ? "bg-app-bg text-muted border border-dashed border-app-line-strong"
-                        : "bg-err-tint text-err-ink"
-                    }`}
-                  >
-                    {gepland ? "—" : "PDF"}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-ink flex items-center gap-2 flex-wrap">
-                      {b.titel}
-                      {gepland && (
-                        <span className="text-[10px] uppercase tracking-wide text-warn-ink bg-warn-tint border border-warn/30 px-1.5 py-0.5 rounded">
-                          Nog te leveren
-                        </span>
-                      )}
-                    </div>
-                    {b.beschrijving && (
-                      <div className="text-xs text-muted mt-0.5 whitespace-pre-line">
-                        {b.beschrijving}
-                      </div>
-                    )}
-                    <div className="text-xs text-muted mt-1">
-                      {b.toegevoegd_door_naam
-                        ? `Toegevoegd door ${b.toegevoegd_door_naam}`
-                        : "Toegevoegd"}{" "}
-                      · {formatDatumKort(b.toegevoegd_op)}
-                    </div>
-                    {!alleenLezen && (gepland || magVerwijderen) && (
-                      <div className="flex items-center gap-3 mt-2">
-                        {gepland && (
-                          <button
-                            type="button"
-                            onClick={() => setKoppelDoelId(b.id)}
-                            disabled={bezig === `bewijs-koppel-${b.id}`}
-                            className="text-xs text-accent hover:underline disabled:opacity-50"
-                          >
-                            {bezig === `bewijs-koppel-${b.id}`
-                              ? "Bezig…"
-                              : "Document koppelen"}
-                          </button>
-                        )}
-                        {magVerwijderen && (
-                          <button
-                            type="button"
-                            onClick={() => bewijsVerwijderen(b.id)}
-                            disabled={bezig === `bewijs-del-${b.id}`}
-                            className="text-xs text-err-ink hover:underline disabled:opacity-50"
-                          >
-                            {bezig === `bewijs-del-${b.id}`
-                              ? "Bezig…"
-                              : "Verwijderen"}
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+          <div className="text-sm text-muted italic">
+            Geen formele bewijslast gedefinieerd voor deze stap.
           </div>
         )}
-      </div>
+
+        {/* Reeds opgevoerde stukken (koppelen/verwijderen blijven hier). */}
+        {bewijs.length > 0 && (
+          <div className="mt-4 pt-3 border-t border-line">
+            <div className="text-[11px] uppercase tracking-wide text-muted font-semibold mb-2">
+              Opgevoerde stukken
+            </div>
+            <div className="space-y-2">
+              {bewijs.map((b) => {
+                const gepland = !b.document_id;
+                const magVerwijderen =
+                  kanBeheren ||
+                  (!!currentUserId && b.toegevoegd_door === currentUserId);
+                return (
+                  <div
+                    key={b.id}
+                    className="flex items-start gap-3 p-3 border border-line rounded-lg"
+                  >
+                    <div
+                      className={`w-9 h-10 rounded flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${
+                        gepland
+                          ? "bg-app-bg text-muted border border-dashed border-app-line-strong"
+                          : "bg-err-tint text-err-ink"
+                      }`}
+                    >
+                      {gepland ? "—" : "PDF"}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-ink flex items-center gap-2 flex-wrap">
+                        {b.titel}
+                        {gepland && (
+                          <span className="text-[10px] uppercase tracking-wide text-warn-ink bg-warn-tint border border-warn/30 px-1.5 py-0.5 rounded">
+                            Nog te leveren
+                          </span>
+                        )}
+                      </div>
+                      {b.beschrijving && (
+                        <div className="text-xs text-muted mt-0.5 whitespace-pre-line">
+                          {b.beschrijving}
+                        </div>
+                      )}
+                      <div className="text-xs text-muted mt-1">
+                        {b.toegevoegd_door_naam
+                          ? `Toegevoegd door ${b.toegevoegd_door_naam}`
+                          : "Toegevoegd"}{" "}
+                        · {formatDatumKort(b.toegevoegd_op)}
+                      </div>
+                      {!alleenLezen && (gepland || magVerwijderen) && (
+                        <div className="flex items-center gap-3 mt-2">
+                          {gepland && (
+                            <button
+                              type="button"
+                              onClick={() => setKoppelDoelId(b.id)}
+                              disabled={bezig === `bewijs-koppel-${b.id}`}
+                              className="text-xs text-accent hover:underline disabled:opacity-50"
+                            >
+                              {bezig === `bewijs-koppel-${b.id}`
+                                ? "Bezig…"
+                                : "Document koppelen"}
+                            </button>
+                          )}
+                          {magVerwijderen && (
+                            <button
+                              type="button"
+                              onClick={() => bewijsVerwijderen(b.id)}
+                              disabled={bezig === `bewijs-del-${b.id}`}
+                              className="text-xs text-err-ink hover:underline disabled:opacity-50"
+                            >
+                              {bezig === `bewijs-del-${b.id}`
+                                ? "Bezig…"
+                                : "Verwijderen"}
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* WO-2 (D7): een instantie-bewijslasttype toevoegen aan deze lopende
+            stap. Rendert alleen bij voorzitter/beheerder (VereisteToevoegen
+            geeft anders null terug); de harde gate zit server-side. */}
+        {!alleenLezen && (
+          <div className="mt-3">
+            <VereisteToevoegen
+              procedureId={procedureId}
+              stapVolgorde={stap.volgorde}
+              kanBeheren={kanBeheren}
+            />
+          </div>
+        )}
+      </Sectie>
+
+      {/* Vergaderingen — WO-3: ingeklapt met samenvatting. */}
+      <Sectie
+        titel="Vergaderingen"
+        samenvatting={vergaderingenSamenvatting(gekoppeldeAgendapunten.length)}
+        open={vergaderingOpen}
+        onToggle={() => setVergaderingOpen((o) => !o)}
+        addLabel={
+          !alleenLezen && komendeVergaderingen.length > 0
+            ? "+ Voeg toe aan vergadering"
+            : undefined
+        }
+        onAdd={
+          !alleenLezen && komendeVergaderingen.length > 0
+            ? () => {
+                setVergaderingOpen(true);
+                setVergaderingForm(true);
+              }
+            : undefined
+        }
+      >
+        {gekoppeldeAgendapunten.length === 0 && !vergaderingForm && (
+          <div className="text-sm text-muted italic">
+            Deze stap staat (nog) niet op een vergader-agenda.
+          </div>
+        )}
+
+        {gekoppeldeAgendapunten.length > 0 && (
+          <div className="space-y-2 mb-3">
+            {gekoppeldeAgendapunten.map((a) => (
+              <Link
+                key={a.id}
+                href={`/vergaderingen/${a.vergadering_id}`}
+                className="flex items-center gap-3 p-3 border border-line rounded-lg hover:border-accent"
+              >
+                <div className="w-9 h-10 bg-accent-tint text-accent-ink rounded flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+                  AGENDA
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-ink truncate">
+                    {a.titel}
+                  </div>
+                  <div className="text-xs text-muted mt-0.5">
+                    {a.vergadering_titel}
+                    {a.vergadering_datum
+                      ? ` · ${formatDatumKort(a.vergadering_datum)}`
+                      : ""}
+                  </div>
+                </div>
+                <span className="text-xs text-ink hover:underline">Open →</span>
+              </Link>
+            ))}
+          </div>
+        )}
+
+        {vergaderingForm && (
+          <form
+            onSubmit={vergaderingKoppelen}
+            className="p-3 border border-line rounded-lg bg-app-bg space-y-2"
+          >
+            <select
+              value={vergaderingKeuze}
+              onChange={(e) => setVergaderingKeuze(e.target.value)}
+              className="w-full border border-line rounded px-2 py-1.5 text-sm focus:border-accent outline-none bg-white"
+            >
+              <option value="">— Kies een komende vergadering —</option>
+              {komendeVergaderingen.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.titel} — {formatDatumKort(v.datum)}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-muted">
+              Er wordt automatisch een agendapunt aangemaakt met de stap-titel
+              als onderwerp en categorie {stap.vereist_besluit ? "Besluitvorming" : "Oordeelsvorming"}.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setVergaderingForm(false);
+                  setVergaderingKeuze("");
+                }}
+                className="text-xs px-3 py-1.5 border border-line rounded hover:border-accent"
+              >
+                Annuleren
+              </button>
+              <button
+                type="submit"
+                disabled={bezig === "vergadering"}
+                className="text-xs px-3 py-1.5 bg-accent text-white rounded hover:bg-accent-ink disabled:opacity-50"
+              >
+                {bezig === "vergadering" ? "Bezig…" : "Koppelen"}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {komendeVergaderingen.length === 0 && (
+          <p className="text-xs text-muted mt-1">
+            Geen komende vergaderingen om aan te koppelen.{" "}
+            <Link href="/vergaderingen" className="text-ink underline">
+              Plan eerst een vergadering →
+            </Link>
+          </p>
+        )}
+      </Sectie>
 
       {/* Besluit (alleen op stappen die dat vereisen) */}
       {stap.vereist_besluit && (
@@ -1217,8 +1616,7 @@ export default function StapPaneel({
       )}
 
       {/* Voltooien — alleen de knop; wat nog ontbreekt staat als tooltip.
-          De blokkers zelf zijn hierboven al zichtbaar (checklist, bewijs,
-          besluit), dus de aparte vereisten-strook eronder was dubbel en druk. */}
+          De blokkers zelf staan hierboven (checklist, bewijs, besluit). */}
       <div className="mt-6 pt-5 border-t border-line flex items-center justify-end">
         <button
           onClick={stapVoltooien}
