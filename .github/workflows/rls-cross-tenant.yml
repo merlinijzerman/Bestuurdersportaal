@@ -49,16 +49,14 @@ jobs:
       - name: Dependencies installeren
         run: npm ci
 
-      # Supabase CLI: geen release-tag-pin. De release-tags van de CLI zijn
-      # `v2.110.0-beta.*` (snel bewegend, veelal pre-releases); een verzonnen
-      # nummer als `2.30.4` bestaat niet en breekt de setup-stap. De representa-
-      # tiviteit die besluit 0046 (validatiepunt 1) eist — Postgres major 14 +
-      # pgvector 0.8.0 — is GEPIND in supabase/config.toml ([db] major_version),
-      # niet via de CLI-release. Zonder `version` installeert de action de
-      # laatste release. Wil je strikte CLI-reproduceerbaarheid: zet hier een
-      # bestaande stabiele tag (https://github.com/supabase/cli/releases).
+      # Pin op dezelfde CLI waarmee de Preview-baseline is geëxporteerd en de
+      # lokale PG17-replay is bewezen. Zonder expliciete input leidde de action
+      # in CI ten onrechte 2.20.3 af uit het lockfile; die versie kent
+      # db.major_version=17 nog niet.
       - name: Supabase CLI opzetten
         uses: supabase/setup-cli@v1
+        with:
+          version: 2.114.0
 
       - name: Ephemere Supabase-stack starten (Postgres + auth + storage)
         # Nieuwere CLI-versies passen migrations/* automatisch toe tijdens
