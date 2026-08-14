@@ -35,9 +35,9 @@
 begin;
 
 -- ── Seed als tabel-eigenaar (RLS omzeild). Vaste UUID's voor de test. ────────
-insert into public.fondsen (id, naam) values
-  ('61111111-1111-1111-1111-111111111111', 'T16 Fonds A'),
-  ('62222222-2222-2222-2222-222222222222', 'T16 Fonds B');
+insert into public.fondsen (id, naam, slug) values
+  ('61111111-1111-1111-1111-111111111111', 'T16 Fonds A', 't16-fonds-a'),
+  ('62222222-2222-2222-2222-222222222222', 'T16 Fonds B', 't16-fonds-b');
 
 insert into auth.users (id, aud, role, email, raw_user_meta_data, created_at, updated_at)
 values
@@ -73,6 +73,17 @@ insert into public.fonds_stuurinfo_reserve
   ('62222222-2222-2222-2222-222222222222', '2026Q2', 'operationele_reserve', 'Operationele reserve',  4.0, 0.4, 3),
   ('62222222-2222-2222-2222-222222222222', '2026Q2', 'compensatiedepot',     'Compensatiedepot',     18.0, 1.8, 8);
 
+-- Sinds T17 telt de operationele save de afgeleide risicoresultaten mee. Voor
+-- Q2 zijn alle drie premiebronnen en beide toegekende dekkingen verplicht.
+-- Resultaat PP/WZP + AO/PVI = (1,1-0,3) + (0,1+1,0-0,4) = 1,5.
+insert into public.fonds_stuurinfo_reeks
+  (fonds_id, periode, reeks_key, punt_key, label, volgorde, waarde) values
+  ('61111111-1111-1111-1111-111111111111', '2026Q2', 'premie_component', 'risico_ppwzp',     'Risicopremie PP/WZP', 1,  1.1),
+  ('61111111-1111-1111-1111-111111111111', '2026Q2', 'premie_component', 'risico_aop',       'Risicopremie AOP',    2,  0.1),
+  ('61111111-1111-1111-1111-111111111111', '2026Q2', 'premie_component', 'risico_pvi',       'Risicopremie PVI',    3,  1.0),
+  ('61111111-1111-1111-1111-111111111111', '2026Q2', 'risicodekking',     'ppwzp_toegekend', 'Toegekende PP/WZP',  1, -0.3),
+  ('61111111-1111-1111-1111-111111111111', '2026Q2', 'risicodekking',     'aopvi_toegekend', 'Toegekende AO/PVI',  2, -0.4);
+
 -- ════════════════════════════════════════════════════════════════════════════
 -- T16a — RPC-rolgate: bestuurder → weigering (beide RPC's).
 -- ════════════════════════════════════════════════════════════════════════════
@@ -86,7 +97,7 @@ begin
   begin
     perform public.stuurinfo_operationeel_opslaan(
       '2026Q2', 'handmatig',
-      '{"premie_kostenopslag":0,"beschermingsrendement":-0.1,"overrendement":1.3,"gemist_rendement_twk":0.1,"twk_invaar":0.2,"verrekening_reserves":0.2,"overig":0.1,"kosten":-0.8}'::jsonb,
+      '{"premie_kostenopslag":0,"beschermingsrendement":-0.1,"overrendement":1.3,"gemist_rendement_twk":0.1,"twk_invaar":0.2,"verrekening_reserves":0.2,"overig":-1.4,"kosten":-0.8}'::jsonb,
       8.0, 6.0, 12.0,
       '{"uitvoeringskosten":1.9,"vermogensbeheer":0.9,"bestuur_overig":0.3}'::jsonb,
       '{"uitvoeringskosten":2.1,"vermogensbeheer":1.0,"bestuur_overig":0.2}'::jsonb);
@@ -124,10 +135,10 @@ set local request.jwt.claims to '{"sub":"6aaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}'
 do $$
 declare n_mut int; n_kosten int; n_kpi int; n_log int; r record;
 begin
-  -- Mutaties sluiten exact: 8,0 + 1,0 = 9,0 = reservestand.
+  -- Mutaties sluiten exact: 8,0 - 0,5 + 1,5 risicoresultaat = 9,0.
   perform public.stuurinfo_operationeel_opslaan(
     '2026Q2', 'handmatig',
-    '{"premie_kostenopslag":0,"beschermingsrendement":-0.1,"overrendement":1.3,"gemist_rendement_twk":0.1,"twk_invaar":0.2,"verrekening_reserves":0.2,"overig":0.1,"kosten":-0.8}'::jsonb,
+    '{"premie_kostenopslag":0,"beschermingsrendement":-0.1,"overrendement":1.3,"gemist_rendement_twk":0.1,"twk_invaar":0.2,"verrekening_reserves":0.2,"overig":-1.4,"kosten":-0.8}'::jsonb,
     8.0, 6.0, 12.0,
     '{"uitvoeringskosten":1.9,"vermogensbeheer":0.9,"bestuur_overig":0.3}'::jsonb,
     '{"uitvoeringskosten":2.1,"vermogensbeheer":1.0,"bestuur_overig":0.2}'::jsonb);

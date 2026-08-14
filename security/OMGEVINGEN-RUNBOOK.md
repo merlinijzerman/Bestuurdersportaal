@@ -1,7 +1,8 @@
 # Runbook Preview/Productie-scheiding
 
-- **Status:** technische Preview-livegang groen; testaccounts, volledige
-  Auth-flow en Preview-eigen AI-sleutels/quota nog open
+- **Status:** technische Preview-livegang en tenant-/hostmatrix groen;
+  volledige Auth-callbackcontrole, Preview-eigen AI-sleutels/quota en formele
+  mergeblokkade nog open
 - **Datum:** 2026-08-14
 - **Actueel besluit:** [`0177`](../decisions/0177-app-blijft-productie-preview-ernaast-en-beheer-gescheiden.md),
   voortbouwend op [`0175`](../decisions/0175-preview-productie-scheiding.md) en
@@ -208,14 +209,14 @@ punten groen zijn:
 - [x] uitsluitend synthetische testdata zolang de aparte dataresidentie-/providerpoort niet is goedgekeurd;
 - [x] vaste Preview-markering zichtbaar op alle relevante routes;
 - [ ] Productie-login en callbacks verwijzen nergens naar Preview, en omgekeerd;
-- [ ] Productie-`app.* → Horizon`-mapping aantoonbaar ongewijzigd;
+- [x] Productie-`app.* → Horizon`-mapping aantoonbaar ongewijzigd;
 - [x] Preview-`app.preview.* → sandboxtenant`-mapping aanwezig;
 - [x] drie exacte `<slug>.preview.* → previewfonds`-mappings aanwezig;
 - [ ] iedere previewgebruiker bereikt alleen het eigen previewfonds;
-- [ ] onbekende previewhost en tenantmismatch falen gesloten;
+- [x] onbekende previewhost en tenantmismatch falen gesloten;
 - [ ] `beheer.*` en `beheer.preview.*` hebben tegengestelde, niet-overlappende
       Supabase-/service-role-scopes;
-- [ ] volledige technische testset en auth/browser-smokes groen;
+- [x] volledige technische testset en uitgevoerde login-/route-browser-smokes groen;
 - [ ] rollbackgegevens vastgelegd en verantwoordelijke beschikbaar.
 
 ## Uitvoeringsbewijs 2026-08-14
@@ -229,8 +230,9 @@ punten groen zijn:
 - Eindtelling vóór testaccounts: `auth.users=0`, `storage.objects=0`,
   `documenten=0`, `document_chunks=0`.
 - Lint, productiebuild, alle sanity-suites en 183 cross-tenanttests: groen.
-- GitHub-branch `preview` volgt commit `51cb2ab`; de Vercel-environments van app
-  en beheer volgen exact deze branch en zijn beide `Ready`.
+- GitHub-branch `preview` volgt commit `3e5f205`; Productie volgt `main` op
+  `e4b6110`. Beide commits hebben dezelfde applicatie-inhoud en de Vercel-
+  releases zijn `Ready`.
 - De vier apphosts en `beheer.preview.*` zijn gekoppeld aan `preview-stable`;
   Vercel rapporteert geldige DNS-configuratie zonder aanvullende Cloudflare-
   wijziging.
@@ -240,3 +242,15 @@ punten groen zijn:
 - Een onbekende Previewhost krijgt geen geldige TLS-/projectroute. De bestaande
   vijf Productiehosts blijven ongewijzigd naar hun bestaande loginroutes
   verwijzen.
+- Ingelogde browser-smokes waren groen op Meridiaan, PH&C, Huisartsen en
+  Preview-beheer. Een Meridiaan-sessie op de PGB-host werd fail-closed geweigerd
+  met `Geen toegang op dit adres`; er is geen testdata aangemaakt.
+- De geautomatiseerde Preview-matrix `P1–P6` controleert exact vier seedhosts,
+  afwezigheid van Productie-/Horizonhosts, alle twaalf vreemde-tenantcombinaties,
+  onbekende hosts, niet-uitschakelbare Preview-enforcement en scheiding van app-
+  en beheerroutes. De app-laag telt na uitbreiding 189/189 groene tests.
+- Productiegrants zijn live least-privilege hersteld: `fn_chunk_denorm` is niet
+  uitvoerbaar door `anon` en `fn_document_agendapunt_validatie` alleen door
+  `service_role`. De corresponderende migratie staat in de repository.
+- De actuele sluitingsstatus, CI-checknamen en resterende risico's staan in
+  [`SPRINT-1-BEWIJS-2026-08-14.md`](./SPRINT-1-BEWIJS-2026-08-14.md).

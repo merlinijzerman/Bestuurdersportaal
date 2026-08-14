@@ -43,6 +43,10 @@ next-env.d.ts
 # --- Vercel ---
 .vercel
 
+# --- Lokale Supabase CLI-koppeling (projectref/pooler-metadata) ---
+supabase/.temp/
+supabase/.branches/
+
 # --- Test coverage ---
 coverage/
 .env*
