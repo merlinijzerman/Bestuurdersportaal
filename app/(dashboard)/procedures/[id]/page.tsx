@@ -654,15 +654,6 @@ export default async function ProcedureDetailPage({
               }}
             />
           </div>
-          {actieveStappen.length > 0 && (
-            <div className="text-xs text-muted mt-1">
-              {actieveStappen.length === 1
-                ? "1 stap actief"
-                : `${actieveStappen.length} stappen lopen parallel (${actieveStappen
-                    .map((s) => s.volgorde)
-                    .join("·")})`}
-            </div>
-          )}
         </div>
         <div>
           <div className="text-xs uppercase tracking-wide text-muted font-semibold">
@@ -715,12 +706,6 @@ export default async function ProcedureDetailPage({
                 {totaalStappen} stappen · {faseGroepen.length} fasen
               </div>
             </div>
-            {actieveStappen.length > 1 && (
-              <p className="text-[11px] text-muted mb-3 leading-snug">
-                {actieveStappen.length} stappen lopen parallel — dit proces kent
-                geen vaste volgorde; fasen kunnen tegelijk lopen.
-              </p>
-            )}
             {/* WO-3: schone fase-accordeon. Klik op een fasekop → fase-weergave
                 rechts (?fase); klik op een stap → stapscherm (?stap). Geen
                 beschrijvings-/toelichtingsblokken in het linkerpaneel. */}

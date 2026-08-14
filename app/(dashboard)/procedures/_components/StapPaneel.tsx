@@ -893,7 +893,7 @@ export default function StapPaneel({
                 : "Nog niet gestarte stap — alleen-lezen"
               : "Actieve stap"}
           </div>
-          <h2 className="text-lg font-semibold text-ink mt-1">
+          <h2 className="text-base font-semibold text-ink mt-1">
             {stap.volgorde} — {stap.naam}
           </h2>
           {alleenLezen && stap.status === "afgerond" && (
@@ -966,7 +966,7 @@ export default function StapPaneel({
             </div>
           </div>
         ) : stap.beschrijving ? (
-          <p className="text-sm text-muted max-w-2xl">{stap.beschrijving}</p>
+          <p className="text-[13px] text-muted max-w-2xl">{stap.beschrijving}</p>
         ) : (
           <p className="text-sm text-muted italic">
             Nog geen toelichting bij deze stap.

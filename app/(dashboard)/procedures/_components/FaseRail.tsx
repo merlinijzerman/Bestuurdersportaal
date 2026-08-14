@@ -194,7 +194,6 @@ export default function FaseRail({
       {fasen.map((f) => {
         const isOpen = open.has(f.fase_code);
         const isGeselecteerd = f.fase_code === geselecteerdeFaseCode;
-        const actiefCount = f.stappen.filter(isActiefAchtig).length;
         return (
           <div
             key={f.fase_code}
@@ -235,16 +234,19 @@ export default function FaseRail({
                 </span>
                 <span className="block text-[11px] text-nav-text mt-0.5">
                   {f.stappen.length} stap{f.stappen.length === 1 ? "" : "pen"}
-                  {actiefCount > 0 ? ` · ${actiefCount} actief` : ""}
                 </span>
               </span>
-              <span
-                className={`text-[10px] font-semibold rounded-full px-2 py-0.5 shrink-0 whitespace-nowrap ${
-                  STATUS_PILL[f.status]
-                }`}
-              >
-                {FASE_STATUS_LABEL[f.status]}
-              </span>
+              {/* Alleen de afgeronde staat als pill; 'In behandeling' laten we
+                  weg voor een rustige rail (aandacht = de linkerrand/stip). */}
+              {f.status === "afgerond" && (
+                <span
+                  className={`text-[10px] font-semibold rounded-full px-2 py-0.5 shrink-0 whitespace-nowrap ${
+                    STATUS_PILL.afgerond
+                  }`}
+                >
+                  {FASE_STATUS_LABEL.afgerond}
+                </span>
+              )}
               <span
                 aria-hidden
                 className={`text-nav-text text-xs shrink-0 transition-transform ${
