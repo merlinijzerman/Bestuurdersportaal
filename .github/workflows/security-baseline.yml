@@ -44,7 +44,9 @@ jobs:
         run: npm run lint:boundaries
 
       - name: Kleur- en themaborging
-        run: npm run lint:colors
+        run: |
+          npm run lint:colors
+          npm run lint:fondsthema
 
       - name: Typecheck
         run: npm run typecheck

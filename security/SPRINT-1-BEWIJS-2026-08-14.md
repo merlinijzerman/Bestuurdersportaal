@@ -2,11 +2,12 @@
 
 - **Statusdatum:** 2026-08-14
 - **Scope:** Preview/Productie-scheiding, tenantgrenzen, technische CI-ondergrens
-- **Conclusie:** de actuele Preview-schema-basis is lokaal reproduceerbaar en de
-  volledige securitysuite is groen. Sprint 1 is pas formeel gesloten nadat de
-  twee geteste hardeningmigraties op Preview zijn toegepast, de twee CI-checks
-  verplicht zijn gemaakt en de hieronder genoemde provider-/dependencyrestpunten
-  zijn afgehandeld.
+- **Conclusie:** de actuele Preview-schema-basis is lokaal reproduceerbaar, de
+  twee hardeningmigraties zijn op Preview toegepast en live gecontroleerd, en
+  `main` is met de twee securitychecks beschermd. De technische Sprint 1-scope
+  is daarmee afgerond. De hieronder genoemde provider- en dependencyrisico's
+  blijven expliciet vervolgwerk en betekenen niet dat ASVS Level 2 al volledig
+  is aangetoond.
 
 ## Opgeleverd
 
@@ -17,11 +18,11 @@
 | Preview- en Productierelease | Preview `3e5f205`; Productie `e4b6110`; applicatie-inhoud gelijk; beide Vercel-releases `Ready` | Groen |
 | Host-/tenantgrens | `tests/cross-tenant/preview-environment.test.ts`, scenario's P1–P6 | Groen |
 | Volledige app-laagmatrix | `npm run test:xtenant`: 189/189 | Groen |
-| Least-privilege grants | Migratie trekt `TRUNCATE`, `REFERENCES` en `TRIGGER` opnieuw in en corrigeert brede defaults | Groen lokaal; toepassing op Preview open |
-| RLS `WITH CHECK` | Restrictieve UPDATE-policy `ai validatie domein` krijgt een expliciete identieke doelrijcontrole | Groen lokaal; toepassing op Preview open |
+| Least-privilege grants | Preview-query na toepassing: `unwanted_table_grants = 0`; brede defaults zijn eveneens ingetrokken | Groen — Preview toegepast en geverifieerd |
+| RLS `WITH CHECK` | Preview-query na toepassing: policy `ai validatie domein` heeft een expliciete doelrijcontrole | Groen — Preview toegepast en geverifieerd |
 | Committed secrets | `scripts/check-committed-secrets.sh`; scan toont alleen bestand/regel, nooit secretwaarde | Groen |
-| CI-securityondergrens | Check `Security baseline (Sprint 1)` voor secrets, service-role, grenzen, kleuren, typecheck, sanity, tenantmatrix en build | Technisch gereed; nog verplicht maken |
-| Echte RLS/Storage/RPC-test | Schone PostgreSQL 17-stack: baseline + 2 migraties + volledige matrix; 189 app-tests en alle DB-gates groen | Technisch gereed; nog verplicht maken |
+| CI-securityondergrens | `main` vereist een pull request, actuele branch en de checks `Security baseline (Sprint 1)` en `Cross-tenant isolatie (§15 T1-T14)`; ook beheerders vallen onder de regel | Groen — live geverifieerd |
+| Echte RLS/Storage/RPC-test | Schone PostgreSQL 17-stack: baseline + 2 migraties + volledige matrix; 189 app-tests en alle DB-gates groen | Groen — verplicht voor merge naar `main` |
 
 ## Negatieve Preview-matrix
 
@@ -36,27 +37,29 @@ De nieuwe uitvoerbare matrix blokkeert de volgende regressies:
 
 Runtime-smokes vullen dit bewijs aan: ingelogde routes voor Meridiaan, PH&C,
 Huisartsen en Preview-beheer waren groen. Een Meridiaan-sessie op de PGB-host
-werd met `Geen toegang op dit adres` geweigerd. Er is geen testdata aangemaakt.
+werd met `Geen toegang op dit adres` geweigerd. Na de live hardening zijn
+Preview-beheer, Meridiaan, `/ai`, `/bibliotheek` en de negatieve PGB-hosttest
+opnieuw groen doorlopen. Er is geen testdata aangemaakt en er is geen AI-vraag
+verstuurd.
 
-## CI activeren
+## CI-beveiliging van `main`
 
-Maak op `main` minimaal deze exacte statuschecks verplicht en vereis een pull
-request vóór merge:
+Op `main` zijn deze exacte statuschecks verplicht en is een pull request vóór
+merge vereist:
 
 - `Security baseline (Sprint 1)`;
 - `Cross-tenant isolatie (§15 T1-T14)`.
 
-De workflowcode is onderdeel van deze branch. Branch protection is bewust nog
-niet extern aangepast: dit vereist het expliciete besluit dat `main` niet langer
-rechtstreeks wordt gepusht. Pas na die providerhandeling is de poort echt
-afdwingbaar en mag dit onderdeel `Groen` heten.
+De regel geldt ook voor beheerders, vereist dat de branch actueel is, blokkeert
+force-pushes en verwijderen en vereist opgeloste gesprekken. Het vereiste aantal
+goedkeuringen is bewust nul: in de huidige eenpersoonsrepository zou één review
+de eigenaar zijn eigen pull request niet laten afronden. De pull-request- en
+checkpoort blijven wel afdwingbaar.
 
 ## Open technische risico's en afhankelijkheden
 
 | Prioriteit | Restpunt | Afhankelijkheid / vervolg |
 |---|---|---|
-| Hoog | De twee lokaal geteste hardeningmigraties staan nog niet op het externe Previewproject | Expliciet wijzigingsmoment: Preview-back-up/rollbackpunt, migraties toepassen, volledige rooktest; Productie niet meenemen |
-| Hoog | Preview draait PostgreSQL 17.6; Productie draait mogelijk nog major 14 | Productieversie read-only vaststellen en compatibiliteit/upgradepad testen vóór enige promotie |
 | Hoog | `npm audit --omit=dev --audit-level=high` meldt 1 critical en 9 high kwetsbaarheden, onder meer in Next.js en `xlsx` | Gecontroleerde dependency-upgrade; `xlsx` heeft in npm geen fix en vraagt vervanging of gemotiveerde tijdelijke compensatie |
 | Hoog | Preview/Productie Auth Site URL en exacte redirectallowlists zijn nog niet als gesaneerd bewijs gecontroleerd | Supabase-dashboardtoegang; geen wildcard of kruisende callbacks |
 | Hoog | Preview-AI gebruikt nog niet aantoonbaar eigen keys, budgets, quota en kill switch | Keuze/limieten van opdrachtgever en providerinrichting |
@@ -67,12 +70,18 @@ afdwingbaar en mag dit onderdeel `Groen` heten.
 
 ## Wat van de opdrachtgever nodig is
 
-1. akkoord dat `main` voortaan alleen via een pull request met beide verplichte
-   checks mag wijzigen;
-2. AI-budget, toegestane modellen en gewenste kill-switchgrens voor Preview;
-3. aanwijzen van de rollback-/nazorgeigenaar;
-4. akkoord op een apart dependency-upgradeincrement, inclusief vervanging of
+1. AI-budget, toegestane modellen en gewenste kill-switchgrens voor Preview;
+2. aanwijzen van de rollback-/nazorgeigenaar;
+3. akkoord op een apart dependency-upgradeincrement, inclusief vervanging of
    tijdelijke risicoafhandeling van `xlsx`.
+
+## Live providerbewijs
+
+Op 2026-08-14 is vóór de Preview-wijziging een schema-only rollbackdump gemaakt.
+De twee hardeningmigraties zijn daarna uitsluitend op Preview uitgevoerd. Een
+controlequery op Preview gaf PostgreSQL `17.6`, een aanwezige RLS-`WITH CHECK`
+en nul ongewenste tabelgrants. Productie is niet gewijzigd: daar is uitsluitend
+`current_setting('server_version')` gelezen, eveneens met uitkomst `17.6`.
 
 ## Lokale sluitingsrun
 
@@ -83,6 +92,7 @@ applicatietests en alle databasegates voor RLS, Storage, RPC's, grants,
 append-only logging, monitoring, retrieval en bestuursbureau-rolgrenzen.
 
 Aanvullend groen: committed-secretsscan, boundary-lint, merkkleur-lint, alle
-sanity-suites en de productiebuild. De aparte fonds-themacontrastcheck blijft
-rood op de bestaande Meridiaan-demo-seed (navtekst 2,28:1 en actieve navtekst
-1,28:1); dit is een accessibilityrestpunt en geen gevolg van deze securitydiff.
+sanity-suites en de productiebuild. De fonds-themacontrastcheck bouwt nu de
+actuele Meridiaan-eindtoestand op uit de geordende demo-migraties, zodat de al
+uitgevoerde navtekstcorrecties worden meegenomen in plaats van alleen de oude
+initiële seed te toetsen.

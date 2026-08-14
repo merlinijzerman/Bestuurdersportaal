@@ -16,7 +16,7 @@
 //  De echte fondswaarden staan in Supabase (public.fonds_theming.tokens, jsonb),
 //  niet in deze repo. Dit script leest daarom uit een JSON-bestand of stdin:
 //
-//    node scripts/toets-fondsthema.mjs                 # de demo-seed uit migrations/
+//    node scripts/toets-fondsthema.mjs                 # actuele demo-migraties
 //    node scripts/toets-fondsthema.mjs themas.json     # eigen export
 //    psql ... -c "copy (select ...) to stdout" | node scripts/toets-fondsthema.mjs -
 //
@@ -75,10 +75,20 @@ const parse = (s) => s.trim().split(/\s+/).map(Number);
 
 // ── themabronnen ────────────────────────────────────────────────────────────
 function uitDemoSeed() {
-  const sql = readFileSync(join(process.cwd(), "supabase", "migrations", "2026_07_09_t8_demo_fonds_seed.sql"), "utf8");
   const tokens = {};
-  for (const [, k, v] of sql.matchAll(/'([a-z-]+-rgb)',\s*'([\d ]+)'/g)) tokens[k] = v;
-  return Object.keys(tokens).length ? { "Meridiaan (demo-seed)": tokens } : {};
+  // Bouw dezelfde eindtoestand op als Supabase: de seed, gevolgd door de
+  // latere Meridiaan-correcties in migratievolgorde. Alleen de seed lezen gaf
+  // een vals-negatieve contrastmelding voor inmiddels gecorrigeerde navtekst.
+  const migraties = [
+    "2026_07_09_t8_demo_fonds_seed.sql",
+    "2026_07_28_huisstijl_t1_meridiaan_nav_text.sql",
+    "2026_07_28_meridiaan_nav_line.sql",
+  ];
+  for (const bestand of migraties) {
+    const sql = readFileSync(join(process.cwd(), "supabase", "migrations", bestand), "utf8");
+    for (const [, k, v] of sql.matchAll(/'([a-z-]+-rgb)',\s*'([\d ]+)'/g)) tokens[k] = v;
+  }
+  return Object.keys(tokens).length ? { "Meridiaan (actuele demo-migraties)": tokens } : {};
 }
 const arg = process.argv[2];
 const themas = !arg
