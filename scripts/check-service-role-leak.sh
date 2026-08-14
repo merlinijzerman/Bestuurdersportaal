@@ -26,15 +26,21 @@ echo "[1/3] SUPABASE_SERVICE_ROLE_KEY alleen in de server-only platform-laag…"
 # (app/publiek) surface GEEN service-role meer (host-resolutie + contact + assurance
 # lopen via anon + SECURITY DEFINER-RPC's); supabase-service.ts is naar platform/lib
 # verhuisd — dus uitsluitend platform/lib/.* + scripts/.
-toegestaan_regex='^(platform/lib/.*\.ts|scripts/.*)$'
+#
+# Zoek bewust naar een UITVOERBARE process.env-toegang, niet naar de losse naam.
+# De oude tekstzoeker markeerde ook documentatiecomments en negatieve tests als
+# geheimlek. Dat maakte de gate rood zonder dat de sleutel ooit werd ingelezen.
+toegestaan_regex='^(platform/lib/.*\.(ts|tsx|js|mjs)|scripts/.*)$'
 while IFS= read -r bestand; do
   [ -z "$bestand" ] && continue
   if ! [[ "$bestand" =~ $toegestaan_regex ]]; then
     melding "SUPABASE_SERVICE_ROLE_KEY in onverwacht bestand: $bestand"
   fi
-done < <(grep -rl --include='*.ts' --include='*.tsx' \
-           --exclude-dir=node_modules --exclude-dir=.next \
-           'SUPABASE_SERVICE_ROLE_KEY' . 2>/dev/null | sed 's|^\./||')
+done < <(rg -l \
+           --glob '*.ts' --glob '*.tsx' --glob '*.js' --glob '*.mjs' \
+           --glob '!node_modules/**' --glob '!.next/**' --glob '!_to_delete/**' \
+           'process\.env(\.SUPABASE_SERVICE_ROLE_KEY|\[[^]]*SUPABASE_SERVICE_ROLE_KEY)' \
+           . 2>/dev/null | sed 's|^\./||' || true)
 
 echo "[2/3] platform/lib/supabase-platform.ts begint met import \"server-only\"…"
 if [ -f platform/lib/supabase-platform.ts ]; then

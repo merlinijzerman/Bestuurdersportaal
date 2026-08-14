@@ -25,6 +25,7 @@ const FONDS_INACTIEF = "33333333-3333-3333-3333-333333333333";
 const domains: ReadonlyArray<TenantDomain> = [
   { host: "horizon.nl", fondsId: FONDS_A, actief: true },
   { host: "fonds-b.nl", fondsId: FONDS_B, actief: true },
+  { host: "fonds-b.preview.bestuurdersportaal.com", fondsId: FONDS_B, actief: true },
   { host: "oud.nl", fondsId: FONDS_INACTIEF, actief: false },
 ];
 
@@ -34,6 +35,23 @@ test("exacte match → juiste fondsId", () => {
     type: "gevonden",
     fondsId: FONDS_A,
   });
+});
+
+test("fondsgerichte previewhost met genest subdomein resolveert exact", () => {
+  assert.deepEqual(
+    bepaalFondsContext({
+      host: "fonds-b.preview.bestuurdersportaal.com",
+      domains,
+    }),
+    { type: "gevonden", fondsId: FONDS_B }
+  );
+  assert.deepEqual(
+    bepaalFondsContext({
+      host: "onbekend.preview.bestuurdersportaal.com",
+      domains,
+    }),
+    { type: "onbekend" }
+  );
 });
 
 // ── Host-normalisatie: www., hoofdletters, poort → zelfde match als kaal ─────

@@ -6,9 +6,8 @@
 // ============================================================================
 
 import Link from "next/link";
-import { huidigePlatformIdentiteit } from "@/platform/lib/platform-auth";
-import { createServiceSupabase } from "@/platform/lib/supabase-service";
-import { haalPromoveerbareRuns, haalTestsets } from "@/platform/lib/aqlab/console-lees";
+import { PlatformError } from "@/platform/lib/platform-wrapper";
+import { leesAqlabPromotie } from "@/platform/lib/aqlab/platform-lees";
 import { promoveerActie } from "../acties";
 
 export const dynamic = "force-dynamic";
@@ -20,17 +19,20 @@ export default async function PromoveerPagina({
   searchParams: Promise<{ run?: string; ontbreekt?: string; fout?: string }>;
 }) {
   const { run, ontbreekt, fout } = await searchParams;
-  const identiteit = await huidigePlatformIdentiteit();
-  if (!(identiteit?.capabilities ?? []).includes(CAP)) {
-    return (
-      <div className="rounded-xl border border-line bg-white p-5">
-        <p className="text-sm text-ink/70">Geen toegang. Vereist: <code className="font-mono text-xs">{CAP}</code>.</p>
-      </div>
-    );
+  let data;
+  try {
+    data = await leesAqlabPromotie();
+  } catch (e) {
+    if (e instanceof PlatformError && e.status === 403) {
+      return (
+        <div className="rounded-xl border border-line bg-white p-5">
+          <p className="text-sm text-ink/70">Geen toegang. Vereist: <code className="font-mono text-xs">{CAP}</code>.</p>
+        </div>
+      );
+    }
+    throw e;
   }
-
-  const svc = createServiceSupabase();
-  const [runs, testsets] = await Promise.all([haalPromoveerbareRuns(svc), haalTestsets(svc)]);
+  const { runs, testsets } = data;
   const geselecteerd = run ?? runs[0]?.id ?? "";
 
   return (

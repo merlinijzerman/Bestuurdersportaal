@@ -80,6 +80,23 @@ test("AC-B4: padprefix matcht binnen pad, weigert buiten pad op zelfde domein", 
   const wl = [entry({ domein: "voorbeeld.nl", matchtype: "padprefix", pad: "/pensioen" })];
   assert.ok(matchWhitelist("https://voorbeeld.nl/pensioen/regeling", wl));
   assert.equal(matchWhitelist("https://voorbeeld.nl/belastingen/2026", wl), null);
+  assert.equal(
+    matchWhitelist("https://voorbeeld.nl/pensioen-malware", wl),
+    null,
+    "prefix moet op een volledig padsegment eindigen"
+  );
+  assert.equal(
+    matchWhitelist("https://voorbeeld.nl/pensioenen", wl),
+    null,
+    "een langer look-alike-pad mag niet matchen"
+  );
+});
+
+test("AC-B4: trailing slash in padprefix heeft dezelfde segmentsemantiek", () => {
+  const wl = [entry({ domein: "voorbeeld.nl", matchtype: "padprefix", pad: "/pensioen/" })];
+  assert.ok(matchWhitelist("https://voorbeeld.nl/pensioen", wl));
+  assert.ok(matchWhitelist("https://voorbeeld.nl/pensioen/regeling", wl));
+  assert.equal(matchWhitelist("https://voorbeeld.nl/pensioen-malware", wl), null);
 });
 
 test("meest specifieke match wint (padprefix boven domein)", () => {

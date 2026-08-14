@@ -33,8 +33,8 @@ test("isPlatformHost faalt veilig bij ontbrekende config/host", () => {
 
 // Concrete vastgelegde hosts (env-waarden, NIET hardcoded in code):
 //   productie MARKETING_HOST = bestuurdersportaal.com (incl. www.)
-//   productie APP_HOST       = app.bestuurdersportaal.com
 //   productie PLATFORM_HOST  = beheer.bestuurdersportaal.com
+//   preview APP_HOST         = app.* + exacte <slug>.preview.*-hosts
 const MARKETING = "bestuurdersportaal.com";
 const APP = "app.bestuurdersportaal.com";
 const PLATFORM = "beheer.bestuurdersportaal.com";
@@ -50,6 +50,22 @@ test("surface: apex én www. → marketing", () => {
 test("surface: app-host → app, beheer-host → platform", () => {
   assert.equal(bepaalSurface({ host: "app.bestuurdersportaal.com", ...env }), "app");
   assert.equal(bepaalSurface({ host: "beheer.bestuurdersportaal.com", ...env }), "platform");
+});
+
+test("surface: APP_HOST-lijst ondersteunt fondsgerichte previewhosts", () => {
+  const previewHosts = [
+    "app.bestuurdersportaal.com",
+    "pgb.preview.bestuurdersportaal.com",
+    "phenc.preview.bestuurdersportaal.com",
+    "huisartsenpensioen.preview.bestuurdersportaal.com",
+  ].join(",");
+
+  for (const host of previewHosts.split(",")) {
+    assert.equal(
+      bepaalSurface({ host, marketingHost: MARKETING, appHost: previewHosts }),
+      "app"
+    );
+  }
 });
 
 test("surface: MARKETING_HOST mag een komma-lijst zijn (apex + www expliciet)", () => {

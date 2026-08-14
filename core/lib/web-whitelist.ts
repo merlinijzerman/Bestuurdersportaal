@@ -89,8 +89,13 @@ function entryMatcht(entry: WhitelistEntry, host: string, pathname: string): boo
       if (!(isZelfdeDomein || isSubdomein)) return false;
       const prefix = (entry.pad ?? "").trim();
       if (!prefix) return false;
-      const p = prefix.startsWith("/") ? prefix : "/" + prefix;
-      return pathname === p || pathname.startsWith(p.endsWith("/") ? p : p + "/") || pathname.startsWith(p);
+      // Normaliseer de afsluitende slash en match uitsluitend een volledig
+      // padsegment. Een prefix `/pensioen` mag dus wel `/pensioen/regeling`
+      // toelaten, maar nooit `/pensioen-malware`. De eerdere laatste
+      // `pathname.startsWith(p)` maakte die grens alsnog ongedaan.
+      const metSlash = prefix.startsWith("/") ? prefix : "/" + prefix;
+      const p = metSlash.length > 1 ? metSlash.replace(/\/+$/, "") : metSlash;
+      return p === "/" || pathname === p || pathname.startsWith(p + "/");
     }
     default:
       return false;

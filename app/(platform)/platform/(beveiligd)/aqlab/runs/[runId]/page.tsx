@@ -7,14 +7,13 @@
 // ============================================================================
 
 import Link from "next/link";
-import { huidigePlatformIdentiteit } from "@/platform/lib/platform-auth";
-import { createServiceSupabase } from "@/platform/lib/supabase-service";
-import { haalRunDetail, haalVergelijking, haalRunPerformance, type OutputMetScores, type ScoreRij } from "@/platform/lib/aqlab/console-lees";
+import { type OutputMetScores, type ScoreRij } from "@/platform/lib/aqlab/console-lees";
+import { PlatformError } from "@/platform/lib/platform-wrapper";
+import { leesAqlabRun } from "@/platform/lib/aqlab/platform-lees";
 import PerformanceVergelijkingBlok from "./performance-vergelijking-blok";
 import { criteriumByKey } from "@/platform/lib/aqlab/criteria";
 import { HARDE_BLOKKADE_CHECKS } from "@/platform/lib/aqlab/checks/index";
 import { annuleerRunActie, humanReviewActie } from "../../acties";
-import { haalReleaseConsole } from "@/platform/lib/aqlab/release";
 import RegressieBlok from "./regressie-blok";
 import ReleaseBlok from "./release-blok";
 import VergelijkingBlok, { type VergelijkingItem } from "./vergelijking-blok";
@@ -253,24 +252,25 @@ export default async function AqlabRunPagina({
 }) {
   const { runId } = await params;
   const sp = await searchParams;
-  const identiteit = await huidigePlatformIdentiteit();
-  const caps = identiteit?.capabilities ?? [];
-  if (!caps.includes(CAP)) {
-    return (
-      <div className="rounded-xl border border-line bg-white p-5">
-        <p className="text-sm text-ink/70">
-          Geen toegang. Vereist: <code className="font-mono text-xs">{CAP}</code>.
-        </p>
-      </div>
-    );
+  let data;
+  try {
+    data = await leesAqlabRun(runId);
+  } catch (e) {
+    if (e instanceof PlatformError && e.status === 403) {
+      return (
+        <div className="rounded-xl border border-line bg-white p-5">
+          <p className="text-sm text-ink/70">
+            Geen toegang. Vereist: <code className="font-mono text-xs">{CAP}</code>.
+          </p>
+        </div>
+      );
+    }
+    throw e;
   }
+  const { run, outputs, vergelijking, baselinePerformance, releaseContext, capabilities: caps } = data;
   const magReviewen = caps.includes(CAP_REVIEW);
 
-  const svc = createServiceSupabase();
-  const { run, outputs } = await haalRunDetail(svc, runId);
-
   // Scherm 4: baseline-vs-challenger vergelijking (indien baseline gezet).
-  const vergelijking = run?.baseline_run_id ? await haalVergelijking(svc, runId) : null;
   const vergelijkingItems: VergelijkingItem[] = (vergelijking?.paren ?? []).map((p) => ({
     test_case_id: p.test_case_id,
     code: p.code,
@@ -298,8 +298,8 @@ export default async function AqlabRunPagina({
   const regressie = run.aggregatie?.regressie ?? null;
   const consistencyMap = run.aggregatie?.consistency ?? {};
   // Baseline-performance meeladen voor de vergelijkende weergave (scherm 6).
-  const baselinePerf = run.baseline_run_id ? await haalRunPerformance(svc, run.baseline_run_id) : null;
-  const releaseCtx = await haalReleaseConsole(svc, runId);
+  const baselinePerf = baselinePerformance;
+  const releaseCtx = releaseContext;
   const magGovern = caps.includes(CAP_GOVERN);
 
   // Consistentie-overzicht per testcase (of ad-hoc): groepeer de outputs → iteraties.

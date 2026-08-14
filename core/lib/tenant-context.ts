@@ -14,7 +14,11 @@
 import "server-only";
 import { haalTenantDomainVoorHost } from "@/core/lib/tenant-domains";
 import { bepaalFondsContext, type FondsResolutie } from "@/core/lib/tenant-host";
-import { beoordeelToegang, type ToegangsOordeel } from "@/core/lib/tenant-enforce";
+import {
+  beoordeelToegang,
+  tenantEnforceVoorOmgeving,
+  type ToegangsOordeel,
+} from "@/core/lib/tenant-enforce";
 
 /** Resolveert de fondscontext voor een request-host. `host` levert de caller aan
  *  uit de server-context (bv. `(await headers()).get("host")`). Fail-closed:
@@ -27,11 +31,16 @@ export async function haalFondsContext(
   return bepaalFondsContext({ host, domains: rij ? [rij] : [] });
 }
 
-/** Env-schakelaar (besluit 0042): fail-closed afdwinging staat alleen aan bij
- *  `TENANT_ENFORCE=on`. Per-omgeving in Vercel te zetten — productie pas ná de
- *  seed- en observatie-gate; preview/staging laten uit om lockout te voorkomen. */
+/** Fail-closed omgevingscontract. Productie en Preview kunnen de tenantgrens
+ *  niet meer via een ontbrekende/foute env-var uitschakelen. Lokaal blijft
+ *  `TENANT_ENFORCE=on` beschikbaar om dezelfde harde poort te testen. */
 export function tenantEnforceAan(): boolean {
-  return process.env.TENANT_ENFORCE === "on";
+  return tenantEnforceVoorOmgeving({
+    tenantEnforce: process.env.TENANT_ENFORCE,
+    vercelEnv: process.env.VERCEL_ENV,
+    vercelTargetEnv: process.env.VERCEL_TARGET_ENV,
+    deployTarget: process.env.DEPLOY_TARGET,
+  });
 }
 
 /** Resolveert de host én beoordeelt in één keer of het request door mag. De

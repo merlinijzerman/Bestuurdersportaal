@@ -7,9 +7,8 @@
 // -----------------------------------------------------------------------------
 
 import Link from "next/link";
-import { huidigePlatformIdentiteit } from "@/platform/lib/platform-auth";
-import { createServiceSupabase } from "@/platform/lib/supabase-service";
-import { haalKwaliteitDashboard } from "@/platform/lib/aqlab/dashboard-lees";
+import { PlatformError } from "@/platform/lib/platform-wrapper";
+import { leesAqlabDashboard } from "@/platform/lib/aqlab/platform-lees";
 
 export const dynamic = "force-dynamic";
 
@@ -32,17 +31,19 @@ function Metric({ label, waarde, wat, hoe, niet }: { label: string; waarde: Reac
 }
 
 export default async function KwaliteitDashboard() {
-  const identiteit = await huidigePlatformIdentiteit();
-  if (!identiteit?.capabilities.includes(CAP)) {
-    return (
-      <div className="rounded-xl border border-line bg-white p-5">
-        <p className="text-sm text-ink/70">Geen toegang. Vereist: <code className="font-mono text-xs">{CAP}</code>.</p>
-      </div>
-    );
+  let rijen;
+  try {
+    rijen = await leesAqlabDashboard();
+  } catch (e) {
+    if (e instanceof PlatformError && e.status === 403) {
+      return (
+        <div className="rounded-xl border border-line bg-white p-5">
+          <p className="text-sm text-ink/70">Geen toegang. Vereist: <code className="font-mono text-xs">{CAP}</code>.</p>
+        </div>
+      );
+    }
+    throw e;
   }
-
-  const svc = createServiceSupabase();
-  const rijen = await haalKwaliteitDashboard(svc);
 
   return (
     <div className="space-y-6">
