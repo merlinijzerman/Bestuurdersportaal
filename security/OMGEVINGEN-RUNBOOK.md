@@ -1,7 +1,7 @@
 # Runbook Preview/Productie-scheiding
 
-- **Status:** database-inrichting en structurele gates groen; domeinkoppeling,
-  Preview-AI-sleutels en live-smokes nog open
+- **Status:** technische Preview-livegang groen; testaccounts, volledige
+  Auth-flow en Preview-eigen AI-sleutels/quota nog open
 - **Datum:** 2026-08-14
 - **Actueel besluit:** [`0177`](../decisions/0177-app-blijft-productie-preview-ernaast-en-beheer-gescheiden.md),
   voortbouwend op [`0175`](../decisions/0175-preview-productie-scheiding.md) en
@@ -206,7 +206,7 @@ punten groen zijn:
 - [ ] Preview-AI aan met aparte keys, quota per gebruiker/fonds, budgetalerts en kill switch;
 - [ ] echte e-mail uit/sink;
 - [x] uitsluitend synthetische testdata zolang de aparte dataresidentie-/providerpoort niet is goedgekeurd;
-- [ ] vaste Preview-markering zichtbaar op alle relevante routes;
+- [x] vaste Preview-markering zichtbaar op alle relevante routes;
 - [ ] Productie-login en callbacks verwijzen nergens naar Preview, en omgekeerd;
 - [ ] Productie-`app.* → Horizon`-mapping aantoonbaar ongewijzigd;
 - [x] Preview-`app.preview.* → sandboxtenant`-mapping aanwezig;
@@ -229,3 +229,14 @@ punten groen zijn:
 - Eindtelling vóór testaccounts: `auth.users=0`, `storage.objects=0`,
   `documenten=0`, `document_chunks=0`.
 - Lint, productiebuild, alle sanity-suites en 183 cross-tenanttests: groen.
+- GitHub-branch `preview` volgt commit `51cb2ab`; de Vercel-environments van app
+  en beheer volgen exact deze branch en zijn beide `Ready`.
+- De vier apphosts en `beheer.preview.*` zijn gekoppeld aan `preview-stable`;
+  Vercel rapporteert geldige DNS-configuratie zonder aanvullende Cloudflare-
+  wijziging.
+- Anoniem leveren alle vijf Previewhosts een `302` naar `vercel.com/sso-api`.
+  Ingelogd routeren de vier apphosts naar `/login`, beheer naar
+  `/platform/login`, telkens met de vaste Preview-markering.
+- Een onbekende Previewhost krijgt geen geldige TLS-/projectroute. De bestaande
+  vijf Productiehosts blijven ongewijzigd naar hun bestaande loginroutes
+  verwijzen.
