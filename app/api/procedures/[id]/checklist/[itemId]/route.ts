@@ -21,6 +21,8 @@ export async function PATCH(
       opmerking?: string;
       // D7: soft-deactivate/heractivering van een checklist-item.
       actief?: boolean;
+      // WO-3-vervolg: verplichte toelichting bij verwijderen (deactiveren).
+      reden?: string;
     };
     // Ofwel het bestaande voldaan-pad, ofwel het D7 actief-pad.
     if (typeof body.actief !== "boolean" && typeof body.voldaan !== "boolean") {
@@ -75,6 +77,15 @@ export async function PATCH(
           { status: 403 }
         );
       }
+      // WO-3-vervolg: verwijderen (deactiveren) vereist een toelichting — nooit
+      // stil (spiegelt REQ-006 bij de bewijslast). Heractiveren mag zonder.
+      const reden = body.reden?.trim() || null;
+      if (body.actief === false && !reden) {
+        return NextResponse.json(
+          { error: "Een toelichting is verplicht bij het verwijderen" },
+          { status: 400 }
+        );
+      }
       const { error: deFout } = await supabase
         .from("procedure_checklist")
         .update({ actief: body.actief })
@@ -93,8 +104,9 @@ export async function PATCH(
         actor_naam: profiel?.naam ?? null,
         object_type: "procedure_checklist",
         object_id: itemId,
+        reden,
         oude_waarde: { actief: item.actief, bron: item.bron },
-        nieuwe_waarde: { actief: body.actief, label: item.label },
+        nieuwe_waarde: { actief: body.actief, label: item.label, reden },
       });
       // Append-only: zonder audit-rij niet traceerbaar → fail closed.
       if (evFout) {
@@ -108,7 +120,7 @@ export async function PATCH(
           : "checklistitem_gedeactiveerd",
         actor_id: user.id,
         actor_naam: profiel?.naam || null,
-        payload: { stap: stap.naam, item: item.label },
+        payload: { stap: stap.naam, item: item.label, reden },
       });
       return NextResponse.json({ ok: true });
     }

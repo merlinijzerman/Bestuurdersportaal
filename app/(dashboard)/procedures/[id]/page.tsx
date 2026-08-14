@@ -93,9 +93,10 @@ export interface ChecklistItem {
   // WO-2 (D7): herkomst — 'handmatig' voor een tijdens de looptijd toegevoegd
   // punt (zichtbaar gemaakt voor audit-transparantie).
   bron?: "template" | "handmatig";
-  // WO-3: per-checklistpunt toelichting. De kolom bestaat nog niet in de DB
-  // (OB-E10, aparte data-WO); tot dan undefined → UI toont "nog geen toelichting".
+  // WO-3: per-checklistpunt toelichting (OB-E10; kolom bestaat sinds 14-08).
   toelichting?: string | null;
+  // D7: soft-deactivate. `actief === false` = verwijderd (uit beeld gehaald).
+  actief?: boolean;
 }
 
 export interface Bewijs {
@@ -756,7 +757,7 @@ export default async function ProcedureDetailPage({
               voltooidDoorNaam={geselecteerdeVoltooidDoorNaam}
               evidence={dossier?.evidence ?? []}
               checklist={checklist.filter(
-                (c) => c.stap_id === geselecteerdeStap.id
+                (c) => c.stap_id === geselecteerdeStap.id && c.actief !== false
               )}
               bewijs={bewijs.filter((b) => b.stap_id === geselecteerdeStap.id)}
               besluit={

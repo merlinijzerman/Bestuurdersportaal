@@ -463,6 +463,13 @@ interface ProcedureRequirementRow {
   toelichting: string | null;
 }
 
+// WO-3-vervolg: requirement + herkomst (template vs. instantie) voor de
+// evidence-laag, zodat de UI weet welk verwijderpad geldt.
+type MergedRequirement = ProcedureRequirementRow & {
+  bron: "template" | "instance";
+  instance_id: string | null;
+};
+
 interface ProcedureBewijsRow {
   id: string;
   stap_id: string;
@@ -483,7 +490,35 @@ async function buildEvidenceLijst(
     .from("procedure_requirements")
     .select("*")
     .eq("template_code", ctx.procedure.template_code);
-  const requirements = (reqRows ?? []) as ProcedureRequirementRow[];
+
+  // WO-3-vervolg: per-proces uitsluitingen (overlay). Deze markeren een
+  // TEMPLATE-vereiste als niet van toepassing voor DIT decision — de generieke
+  // set blijft onaangeroerd. Match op (stap_volgorde, requirement_type, label),
+  // spiegelt het NOT EXISTS in fn_decision_readiness_check.
+  const { data: uitslRows } = await supabase
+    .from("procedure_requirement_uitsluiting")
+    .select("stap_volgorde, requirement_type, match_sleutel")
+    .eq("decision_id", ctx.decisionId)
+    .eq("actief", true);
+  const uitgesloten = new Set(
+    ((uitslRows ?? []) as Array<{
+      stap_volgorde: number;
+      requirement_type: string;
+      match_sleutel: string;
+    }>).map(
+      (u) => `${u.stap_volgorde}|${u.requirement_type}|${u.match_sleutel}`
+    )
+  );
+  // Identiteit = coalesce(documenttype, label) — spiegelt de unieke index van
+  // procedure_requirements en het NOT EXISTS in fn_decision_readiness_check.
+  const requirements: MergedRequirement[] = ((reqRows ?? []) as ProcedureRequirementRow[])
+    .filter(
+      (r) =>
+        !uitgesloten.has(
+          `${r.stap_volgorde}|${r.requirement_type}|${r.documenttype ?? r.label}`
+        )
+    )
+    .map((r) => ({ ...r, bron: "template" as const, instance_id: null }));
 
   // D7: unie met ACTIEVE instantie-requirements (decision-scoped). Template-
   // en instantie-rijen zijn disjuncte records → geen dubbeltelling. Spiegelt
@@ -495,7 +530,7 @@ async function buildEvidenceLijst(
     )
     .eq("decision_id", ctx.decisionId)
     .eq("actief", true);
-  const instanceRequirements: ProcedureRequirementRow[] = (
+  const instanceRequirements: MergedRequirement[] = (
     (instRows ?? []) as Array<{
       id: string;
       stap_volgorde: number;
@@ -526,9 +561,14 @@ async function buildEvidenceLijst(
     min_aantal: r.min_aantal ?? 1,
     // Instantie-requirements dragen (nog) geen toelichting.
     toelichting: null,
+    bron: "instance" as const,
+    instance_id: r.id,
   }));
 
-  const alleRequirements = [...requirements, ...instanceRequirements];
+  const alleRequirements: MergedRequirement[] = [
+    ...requirements,
+    ...instanceRequirements,
+  ];
 
   // Bewijsstukken voor alle stappen van deze procedure.
   const stapIds = ctx.steps.map((s) => s.id);
@@ -774,6 +814,8 @@ async function buildEvidenceLijst(
       bron_type: bron,
       bron_id: bronId,
       bron_titel: bronTitel,
+      bron: req.bron,
+      instance_id: req.instance_id,
     });
   }
 

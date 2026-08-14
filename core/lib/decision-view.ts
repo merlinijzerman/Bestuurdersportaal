@@ -186,6 +186,11 @@ export interface EvidenceItem {
   bron_type: "procedure_bewijs" | "ai_output" | "assumption" | "risk" | "condition" | "evaluation" | "governance_event" | null;
   bron_id: string | null;
   bron_titel: string | null;
+  // WO-3-vervolg: herkomst van de vereiste — 'template' (generieke set,
+  // per-proces uit te sluiten via de overlay) of 'instance' (zelf toegevoegd,
+  // te deactiveren). `instance_id` is de rij-id bij een instantie-vereiste.
+  bron: "template" | "instance";
+  instance_id: string | null;
 }
 
 // ── Decision-children ─────────────────────────────────────────────────

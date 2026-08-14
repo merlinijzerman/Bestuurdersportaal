@@ -31,6 +31,9 @@ export const AUDIT_EVENT_LABEL: Record<string, string> = {
   fase_toelichting_bijgewerkt: "Fase-toelichting bijgewerkt",
   fase_beschrijving_bijgewerkt: "Fasebeschrijving bijgewerkt",
   stap_toelichting_bijgewerkt: "Staptoelichting bijgewerkt",
+  checklistitem_gedeactiveerd: "Checklistpunt verwijderd",
+  checklistitem_geheractiveerd: "Checklistpunt teruggezet",
+  requirement_uitgesloten: "Bewijsstuk uitgesloten (dit proces)",
   agendapunt_gekoppeld: "Agendapunt gekoppeld",
 
   // ── Besluitniveau (governance_events) ──

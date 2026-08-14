@@ -8,6 +8,8 @@
 
 ## Revisielog
 
+**v0.4 (2026-08-14)** — Per-proces **verwijderen** van checklist- en bewijslastitems (met verplichte toelichting). Naast het *toevoegen* (D7) kan een voorzitter/beheerder nu per lopende procedure items verwijderen. Handmatige instantie-items: bestaande soft-deactivate (`procedure_requirement_instance.actief=false`). **Template-vereisten** (de generieke set): verwijderen is een **per-proces overlay** via de nieuwe tabel `procedure_requirement_uitsluiting` — de generieke `procedure_requirements`-set wordt **nooit** gemuteerd. `fn_decision_readiness_check` en `buildEvidenceLijst` trekken de overlay af met een `NOT EXISTS` (match op `decision_id`+`stap_volgorde`+`requirement_type`+`label`). Checklist-verwijdering loopt via `procedure_checklist.actief`. Zie §5.5; datadictionary §32; OB-E12/OB-E13 bijgewerkt.
+
 **v0.3 (2026-08-13)** — WO-3 (UI-herinrichting Processen-detail). De D8-fasebeschrijving is uit de linker fasen-rail gehaald naar een **aparte fase-weergave** rechts (`FaseWeergave.tsx`, geopend via `?fase=`) met een echt bewerkpad: `POST /api/procedures/[id]/fase-beschrijving` schrijft `procedure_fase_beschrijving_override` (leeg opslaan = override wissen → terugval op de generieke default), server-side gegate op rol **voorzitter/beheerder**, append-only gelogd in **`procedure_log`** (`event_type: fase_beschrijving_bijgewerkt`). De rail (`FaseRail.tsx`) is een schone fase-accordeon (badge/titel/stap-count/status-pill/aandachtsrand) zónder beschrijvings-/toelichtingsblokken. §6-governance en §7 hieronder hierop bijgewerkt (gate = rol, log = `procedure_log`, **niet** `fonds_config_log`/`fonds.config.manage`). Nieuw datagat **OB-E10**: checklistitem-/bewijsstuk-`toelichting` bestaat alleen in de standaardset-JSON, niet in de DB (aparte, kleine data-WO — buiten de UI-scope).
 
 **v0.2 (2026-08-13)** — geïmplementeerd in WO-1 (besluit [`0174`](decisions/0174-proceduremodule-engine-v2-D6-D7-D8.md)). Vier gedwongen aanpassingen na codeverificatie (het ontwerp liep hierop vóór op de werkelijkheid):
@@ -171,6 +173,34 @@ Zonder deze unie bestaat een handmatig toegevoegde eis wel in beeld maar telt hi
 - Elke mutatie schrijft een `governance_event` (wie/wat/wanneer/motivering) en zet `governance_event_id`.
 - Een **blokkerende** vereiste deactiveren kan alleen via de bestaande override-mechaniek **met verplichte motivering** (REQ-006); nooit stil.
 - RLS: `procedure_requirement_instance` en de nieuwe kolommen vallen onder de fonds-RLS (`fonds_id` server-side afgeleid, nooit uit de request). De structurele gates moeten schoon draaien (policies/grants).
+
+### 5.5 Per-proces uitsluiting van template-vereisten (overlay, v0.4)
+
+Toevoegen (§5.2) en soft-deactivate dekken *handmatige* items. Een **template-vereiste** (generieke set in `procedure_requirements`, gesleuteld op `template_code`, gedeeld door álle fondsen en procedures) mag echter **niet** in-place worden verwijderd of gedeactiveerd: dat zou de gedeelde bron muteren. Verwijderen-per-proces gebeurt daarom als **overlay**, niet als mutatie.
+
+```sql
+create table if not exists public.procedure_requirement_uitsluiting (
+  id                  uuid primary key default uuid_generate_v4(),
+  decision_id         uuid not null references public.decision_objects(id) on delete cascade,
+  fonds_id            uuid not null references public.fondsen(id),   -- tenant-scoping (RLS)
+  stap_volgorde       int  not null,
+  requirement_type    text not null,   -- zelfde enum-superset als procedure_requirements
+  label               text not null,   -- weergave/audit
+  match_sleutel       text not null,   -- coalesce(documenttype, label): identiteit van de template-vereiste
+  reden               text not null,   -- verplichte toelichting (nooit stil)
+  actief              boolean not null default true,
+  governance_event_id uuid references public.governance_events(id),
+  uitgesloten_door    uuid references auth.users(id),
+  uitgesloten_op      timestamptz default now(),
+  unique (decision_id, stap_volgorde, requirement_type, match_sleutel)
+);
+```
+
+**Invariant: de generieke set blijft onaangeroerd.** `procedure_requirements` wordt bij een verwijdering nooit ge-UPDATE of -DELETE; de uitsluiting leeft uitsluitend per `decision_id` in de overlay. Een ander fonds of een nieuwe procedure op dezelfde template ziet de template-vereiste onverkort; heractiveren = `actief=false` op de overlay-rij.
+
+**Readiness-consumptie (verfijnt §5.3).** `fn_decision_readiness_check` en `buildEvidenceLijst` lezen de UNION van (template-requirements **minus de actieve overlay-uitsluitingen voor deze `decision_id`**) plus de actieve instantie-requirements. De aftrek is een `NOT EXISTS` op `procedure_requirement_uitsluiting` (match op `decision_id`, `stap_volgorde`, `requirement_type`, en `match_sleutel = coalesce(documenttype, label)` — gelijk aan de unieke index van `procedure_requirements`), **alléén in de template-arm** (instantie-items kennen hun eigen `actief`-vlag).
+
+**Governance en RLS** (spiegelt §5.4): uitsluiten gegate op **voorzitter/beheerder**; verplichte `reden`; elke mutatie schrijft één `governance_event` en zet `governance_event_id`; append-only (fonds-RLS + `WITH CHECK`, `fonds_id` server-side afgeleid). De readiness-functie herstelt na `create or replace` zijn grants (Gate H).
 
 ---
 

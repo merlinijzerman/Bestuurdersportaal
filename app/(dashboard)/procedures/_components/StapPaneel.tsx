@@ -154,13 +154,21 @@ function Sectie({
 function ChecklistRij({
   c,
   alleenLezen,
+  kanBeheren,
   onToggle,
+  onVerwijderen,
+  bezigDel,
 }: {
   c: ChecklistItem;
   alleenLezen: boolean;
+  kanBeheren: boolean;
   onToggle: (c: ChecklistItem) => void;
+  onVerwijderen: (c: ChecklistItem, reden: string) => void;
+  bezigDel: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [verwijderOpen, setVerwijderOpen] = useState(false);
+  const [reden, setReden] = useState("");
   return (
     <div
       className={`bg-white border rounded-lg ${
@@ -240,6 +248,59 @@ function ChecklistRij({
               </p>
             )}
           </div>
+
+          {/* Verwijderen (soft-deactivate, append-only) — alleen voorzitter/
+              beheerder, met verplichte toelichting. */}
+          {kanBeheren && !alleenLezen && (
+            <div className="mt-2">
+              {!verwijderOpen ? (
+                <button
+                  type="button"
+                  onClick={() => setVerwijderOpen(true)}
+                  className="text-[11px] text-err-ink hover:underline"
+                >
+                  Checklistpunt verwijderen
+                </button>
+              ) : (
+                <div className="space-y-2 border border-err/30 bg-err-tint rounded-md p-2.5">
+                  <label className="block text-[11px] uppercase tracking-wide text-err-ink font-semibold">
+                    Toelichting bij verwijderen <span aria-hidden>*</span>
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={reden}
+                    onChange={(e) => setReden(e.target.value)}
+                    placeholder="Waarom is dit checklistpunt niet van toepassing?"
+                    className="w-full border border-line rounded px-2 py-1.5 text-sm focus:border-accent outline-none resize-none bg-white"
+                  />
+                  <p className="text-[11px] text-muted">
+                    Het punt wordt uit beeld gehaald (append-only, gelogd) — geen
+                    harde verwijdering.
+                  </p>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setVerwijderOpen(false);
+                        setReden("");
+                      }}
+                      className="text-xs px-3 py-1.5 border border-line rounded hover:border-accent bg-white"
+                    >
+                      Annuleren
+                    </button>
+                    <button
+                      type="button"
+                      disabled={bezigDel || !reden.trim()}
+                      onClick={() => onVerwijderen(c, reden.trim())}
+                      className="text-xs px-3 py-1.5 bg-err text-white rounded hover:brightness-110 disabled:opacity-50"
+                    >
+                      {bezigDel ? "Bezig…" : "Verwijderen"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -252,13 +313,21 @@ function ChecklistRij({
 function BewijsstukRij({
   r,
   alleenLezen,
+  kanBeheren,
   onOpvoeren,
+  onVerwijderen,
+  bezigDel,
 }: {
   r: EvidenceItem;
   alleenLezen: boolean;
+  kanBeheren: boolean;
   onOpvoeren: () => void;
+  onVerwijderen: (r: EvidenceItem, reden: string) => void;
+  bezigDel: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [verwijderOpen, setVerwijderOpen] = useState(false);
+  const [reden, setReden] = useState("");
   return (
     <div className="border border-line rounded-lg">
       <div className="flex items-center gap-3 p-3">
@@ -340,6 +409,62 @@ function BewijsstukRij({
               </p>
             )}
           </div>
+
+          {/* Verwijderen — standaardset-vereiste: per-proces uitsluiten (de
+              generieke set blijft onaangeroerd); zelf-toegevoegde vereiste:
+              soft-deactivate. Beide met verplichte toelichting, gegate op
+              voorzitter/beheerder. */}
+          {kanBeheren && !alleenLezen && (
+            <div className="mt-2">
+              {!verwijderOpen ? (
+                <button
+                  type="button"
+                  onClick={() => setVerwijderOpen(true)}
+                  className="text-[11px] text-err-ink hover:underline"
+                >
+                  Bewijsstuk verwijderen
+                </button>
+              ) : (
+                <div className="space-y-2 border border-err/30 bg-err-tint rounded-md p-2.5">
+                  <label className="block text-[11px] uppercase tracking-wide text-err-ink font-semibold">
+                    Toelichting bij verwijderen <span aria-hidden>*</span>
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={reden}
+                    onChange={(e) => setReden(e.target.value)}
+                    placeholder="Waarom is dit bewijsstuk niet van toepassing voor dit proces?"
+                    className="w-full border border-line rounded px-2 py-1.5 text-sm focus:border-accent outline-none resize-none bg-white"
+                  />
+                  <p className="text-[11px] text-muted">
+                    {r.bron === "template"
+                      ? "Alleen voor dít proces uitgesloten — de generieke set blijft onaangeroerd. Append-only, gelogd en terug te draaien."
+                      : "Deze zelf toegevoegde vereiste wordt gedeactiveerd (append-only, gelogd)."}
+                  </p>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setVerwijderOpen(false);
+                        setReden("");
+                      }}
+                      className="text-xs px-3 py-1.5 border border-line rounded hover:border-accent bg-white"
+                    >
+                      Annuleren
+                    </button>
+                    <button
+                      type="button"
+                      disabled={bezigDel || !reden.trim()}
+                      onClick={() => onVerwijderen(r, reden.trim())}
+                      className="text-xs px-3 py-1.5 bg-err text-white rounded hover:brightness-110 disabled:opacity-50"
+                    >
+                      {bezigDel ? "Bezig…" : "Verwijderen"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -481,6 +606,35 @@ export default function StapPaneel({
         huidig.map((c) => (c.id === item.id ? item : c))
       );
       setFout("Kon checklist-item niet bijwerken.");
+    }
+  }
+
+  // WO-3-vervolg: checklistpunt verwijderen = soft-deactivate (actief=false),
+  // append-only, met verplichte toelichting. Server-side gegate op
+  // voorzitter/beheerder. Het punt verdwijnt uit beeld (blijft in het spoor).
+  async function checklistVerwijderen(item: ChecklistItem, reden: string) {
+    if (alleenLezen || !kanBeheren) return;
+    setFout(null);
+    setBezig(`checklist-del-${item.id}`);
+    try {
+      const res = await fetch(
+        `/api/procedures/${procedureId}/checklist/${item.id}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ actief: false, reden }),
+        }
+      );
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Verwijderen mislukt");
+      }
+      setChecklist((huidig) => huidig.filter((c) => c.id !== item.id));
+      router.refresh();
+    } catch (err: unknown) {
+      setFout(err instanceof Error ? err.message : "Verwijderen mislukt");
+    } finally {
+      setBezig(null);
     }
   }
 
@@ -874,6 +1028,52 @@ export default function StapPaneel({
     if (r.documenttype) setBewijsDocumenttype(r.documenttype);
   }
 
+  // WO-3-vervolg: een vereiste verwijderen. Standaardset (bron='template') →
+  // per-proces uitsluiten (generieke set onaangeroerd); zelf toegevoegd
+  // (bron='instance') → soft-deactivate. Beide met verplichte toelichting.
+  const reqDelKey = (r: EvidenceItem) =>
+    `req-del-${r.bron}-${r.instance_id ?? ""}-${r.stap_volgorde}-${r.label}`;
+  async function bewijsstukVerwijderen(r: EvidenceItem, reden: string) {
+    if (alleenLezen || !kanBeheren) return;
+    setFout(null);
+    setBezig(reqDelKey(r));
+    try {
+      const res =
+        r.bron === "instance" && r.instance_id
+          ? await fetch(
+              `/api/procedures/${procedureId}/requirements/${r.instance_id}`,
+              {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ actief: false, motivering: reden }),
+              }
+            )
+          : await fetch(
+              `/api/procedures/${procedureId}/requirements/uitsluiten`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  stap_volgorde: r.stap_volgorde,
+                  requirement_type: r.requirement_type,
+                  label: r.label,
+                  documenttype: r.documenttype,
+                  reden,
+                }),
+              }
+            );
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Verwijderen mislukt");
+      }
+      router.refresh();
+    } catch (err: unknown) {
+      setFout(err instanceof Error ? err.message : "Verwijderen mislukt");
+    } finally {
+      setBezig(null);
+    }
+  }
+
   return (
     <div className="bg-white border border-line rounded-xl p-6">
       <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -1106,7 +1306,10 @@ export default function StapPaneel({
                 key={c.id}
                 c={c}
                 alleenLezen={alleenLezen}
+                kanBeheren={kanBeheren}
                 onToggle={checklistToggle}
+                onVerwijderen={checklistVerwijderen}
+                bezigDel={bezig === `checklist-del-${c.id}`}
               />
             ))}
           </div>
@@ -1285,7 +1488,10 @@ export default function StapPaneel({
                 key={`${r.requirement_type}-${r.label}-${i}`}
                 r={r}
                 alleenLezen={alleenLezen}
+                kanBeheren={kanBeheren}
                 onOpvoeren={() => opvoerenVanuitVereiste(r)}
+                onVerwijderen={bewijsstukVerwijderen}
+                bezigDel={bezig === reqDelKey(r)}
               />
             ))}
           </div>
