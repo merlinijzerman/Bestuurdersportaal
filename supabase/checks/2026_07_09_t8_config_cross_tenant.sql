@@ -30,9 +30,9 @@
 begin;
 
 -- ── Seed als tabel-eigenaar (RLS omzeild). Vaste UUID's voor de test. ────────
-insert into public.fondsen (id, naam) values
-  ('11111111-1111-1111-1111-111111111111', 'T8 Fonds A'),
-  ('22222222-2222-2222-2222-222222222222', 'T8 Fonds B');
+insert into public.fondsen (id, naam, slug) values
+  ('11111111-1111-1111-1111-111111111111', 'T8 Fonds A', 't8-fonds-a'),
+  ('22222222-2222-2222-2222-222222222222', 'T8 Fonds B', 't8-fonds-b');
 
 insert into auth.users (id, aud, role, email, raw_user_meta_data, created_at, updated_at)
 values
@@ -153,10 +153,15 @@ end $$;
 -- ════════════════════════════════════════════════════════════════════════════
 -- T8e — Append-only: fonds_config_log UPDATE/DELETE worden geblokkeerd.
 --       We schrijven eerst een eigen (fonds A) auditregel, dan proberen we die
---       te muteren/verwijderen — beide moeten falen op de append-only-trigger.
+--       te muteren/verwijderen — RLS raakt nul rijen of de append-only-trigger
+--       werpt een exception. Beide uitkomsten zijn fail-closed.
 -- ════════════════════════════════════════════════════════════════════════════
 do $$
-declare v_id uuid; upd_geblokkeerd boolean := false; del_geblokkeerd boolean := false;
+declare
+  v_id uuid;
+  geraakt int;
+  upd_geblokkeerd boolean := false;
+  del_geblokkeerd boolean := false;
 begin
   -- Aparte probe-sleutel: de theming/tokens/versie=1-logregel bestaat al (door de
   -- trigger uit T8c) en zou botsen op de UNIQUE-constraint.
@@ -167,8 +172,10 @@ begin
 
   begin
     update public.fonds_config_log set versie = 99 where id = v_id;
+    get diagnostics geraakt = row_count;
+    upd_geblokkeerd := geraakt = 0;
   exception when others then
-    upd_geblokkeerd := true; -- verwacht: fn_log_append_only raise exception
+    upd_geblokkeerd := true;
   end;
   if not upd_geblokkeerd then
     raise exception 'LEK T8e: UPDATE op fonds_config_log toegestaan (append-only geschonden).';
@@ -176,14 +183,16 @@ begin
 
   begin
     delete from public.fonds_config_log where id = v_id;
+    get diagnostics geraakt = row_count;
+    del_geblokkeerd := geraakt = 0;
   exception when others then
-    del_geblokkeerd := true; -- verwacht: fn_log_append_only raise exception
+    del_geblokkeerd := true;
   end;
   if not del_geblokkeerd then
     raise exception 'LEK T8e: DELETE op fonds_config_log toegestaan (append-only geschonden).';
   end if;
 
-  raise notice 'OK T8e: UPDATE en DELETE op fonds_config_log geblokkeerd (append-only).';
+  raise notice 'OK T8e: UPDATE en DELETE op fonds_config_log geblokkeerd (RLS/append-only).';
 end $$;
 
 -- ════════════════════════════════════════════════════════════════════════════

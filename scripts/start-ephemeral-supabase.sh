@@ -27,4 +27,10 @@ if [ ! -d "$migraties" ]; then
 fi
 
 mv "$migraties" "$tijdelijk/migrations"
-supabase start
+if command -v supabase >/dev/null 2>&1; then
+  supabase start
+else
+  # Lokale ontwikkelmachine: gebruik een actuele, tijdelijke CLI zonder de
+  # package-lock of applicatie-afhankelijkheden te wijzigen.
+  npx --yes supabase@latest start
+fi

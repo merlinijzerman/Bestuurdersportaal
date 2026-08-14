@@ -29,9 +29,9 @@
 begin;
 
 -- ── Seed als tabel-eigenaar (RLS omzeild). Vaste UUID's voor de test. ────────
-insert into public.fondsen (id, naam) values
-  ('11111111-1111-1111-1111-111111111111', 'VW Fonds A'),
-  ('22222222-2222-2222-2222-222222222222', 'VW Fonds B');
+insert into public.fondsen (id, naam, slug) values
+  ('11111111-1111-1111-1111-111111111111', 'VW Fonds A', 'vw-fonds-a'),
+  ('22222222-2222-2222-2222-222222222222', 'VW Fonds B', 'vw-fonds-b');
 
 insert into auth.users (id, aud, role, email, raw_user_meta_data, created_at, updated_at)
 values

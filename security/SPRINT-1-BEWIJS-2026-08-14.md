@@ -2,22 +2,26 @@
 
 - **Statusdatum:** 2026-08-14
 - **Scope:** Preview/Productie-scheiding, tenantgrenzen, technische CI-ondergrens
-- **Conclusie:** de code- en omgevingsbasis is aantoonbaar verbeterd, maar Sprint
-  1 is pas formeel gesloten nadat de twee CI-statuschecks verplicht zijn gemaakt
-  en de hieronder genoemde provider-/dependencyrestpunten zijn afgehandeld.
+- **Conclusie:** de actuele Preview-schema-basis is lokaal reproduceerbaar en de
+  volledige securitysuite is groen. Sprint 1 is pas formeel gesloten nadat de
+  twee geteste hardeningmigraties op Preview zijn toegepast, de twee CI-checks
+  verplicht zijn gemaakt en de hieronder genoemde provider-/dependencyrestpunten
+  zijn afgehandeld.
 
 ## Opgeleverd
 
 | Onderdeel | Bewijs | Status |
 |---|---|---|
-| Gescheiden Preview-Supabase | Schoon Previewproject, 148 migraties, eigen Auth/DB/Storage/secrets en vier synthetische tenants | Groen |
+| Gescheiden Preview-Supabase | Previewproject `bestuurdersportaal-preview` (`swviwoytzvaqypieqgji`) is onderscheiden van Productie (`aebwiufuegsiwhwpdrfb`); CLI-link staat op Preview | Groen |
+| Reproduceerbare Preview-baseline | Schema-only export van `public`, aparte Auth-hook en private Storage-bucket/policy-config; geen tabeldata, gebruikers, objecten of secrets | Groen — lokaal vanaf nul bewezen |
 | Preview- en Productierelease | Preview `3e5f205`; Productie `e4b6110`; applicatie-inhoud gelijk; beide Vercel-releases `Ready` | Groen |
 | Host-/tenantgrens | `tests/cross-tenant/preview-environment.test.ts`, scenario's P1–P6 | Groen |
 | Volledige app-laagmatrix | `npm run test:xtenant`: 189/189 | Groen |
-| Least-privilege grants | Late-recreate hardening in Preview en correctie van twee Productiefuncties | Groen |
+| Least-privilege grants | Migratie trekt `TRUNCATE`, `REFERENCES` en `TRIGGER` opnieuw in en corrigeert brede defaults | Groen lokaal; toepassing op Preview open |
+| RLS `WITH CHECK` | Restrictieve UPDATE-policy `ai validatie domein` krijgt een expliciete identieke doelrijcontrole | Groen lokaal; toepassing op Preview open |
 | Committed secrets | `scripts/check-committed-secrets.sh`; scan toont alleen bestand/regel, nooit secretwaarde | Groen |
 | CI-securityondergrens | Check `Security baseline (Sprint 1)` voor secrets, service-role, grenzen, kleuren, typecheck, sanity, tenantmatrix en build | Technisch gereed; nog verplicht maken |
-| Echte RLS/Storage/RPC-test | Check `Cross-tenant isolatie (§15 T1-T14)` met ephemere Supabase-stack | Technisch gereed; nog verplicht maken |
+| Echte RLS/Storage/RPC-test | Schone PostgreSQL 17-stack: baseline + 2 migraties + volledige matrix; 189 app-tests en alle DB-gates groen | Technisch gereed; nog verplicht maken |
 
 ## Negatieve Preview-matrix
 
@@ -51,6 +55,8 @@ afdwingbaar en mag dit onderdeel `Groen` heten.
 
 | Prioriteit | Restpunt | Afhankelijkheid / vervolg |
 |---|---|---|
+| Hoog | De twee lokaal geteste hardeningmigraties staan nog niet op het externe Previewproject | Expliciet wijzigingsmoment: Preview-back-up/rollbackpunt, migraties toepassen, volledige rooktest; Productie niet meenemen |
+| Hoog | Preview draait PostgreSQL 17.6; Productie draait mogelijk nog major 14 | Productieversie read-only vaststellen en compatibiliteit/upgradepad testen vóór enige promotie |
 | Hoog | `npm audit --omit=dev --audit-level=high` meldt 1 critical en 9 high kwetsbaarheden, onder meer in Next.js en `xlsx` | Gecontroleerde dependency-upgrade; `xlsx` heeft in npm geen fix en vraagt vervanging of gemotiveerde tijdelijke compensatie |
 | Hoog | Preview/Productie Auth Site URL en exacte redirectallowlists zijn nog niet als gesaneerd bewijs gecontroleerd | Supabase-dashboardtoegang; geen wildcard of kruisende callbacks |
 | Hoog | Preview-AI gebruikt nog niet aantoonbaar eigen keys, budgets, quota en kill switch | Keuze/limieten van opdrachtgever en providerinrichting |
@@ -67,3 +73,16 @@ afdwingbaar en mag dit onderdeel `Groen` heten.
 3. aanwijzen van de rollback-/nazorgeigenaar;
 4. akkoord op een apart dependency-upgradeincrement, inclusief vervanging of
    tijdelijke risicoafhandeling van `xlsx`.
+
+## Lokale sluitingsrun
+
+Op 2026-08-14 is een lege lokale Supabase-stack op PostgreSQL 17.6 opgebouwd uit
+`supabase/baseline/`, gevolgd door uitsluitend de twee post-baselinemigraties.
+Daarna slaagde `scripts/cross-tenant-ci.sh` volledig: typecheck, 189/189
+applicatietests en alle databasegates voor RLS, Storage, RPC's, grants,
+append-only logging, monitoring, retrieval en bestuursbureau-rolgrenzen.
+
+Aanvullend groen: committed-secretsscan, boundary-lint, merkkleur-lint, alle
+sanity-suites en de productiebuild. De aparte fonds-themacontrastcheck blijft
+rood op de bestaande Meridiaan-demo-seed (navtekst 2,28:1 en actieve navtekst
+1,28:1); dit is een accessibilityrestpunt en geen gevolg van deze securitydiff.
