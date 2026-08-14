@@ -371,8 +371,8 @@ create table if not exists public.documenten (
     check (context <> 'dossier' or procesinstantie_id is not null),
   constraint documenten_context_vergadering_check
     check (context <> 'vergadering' or vergadering_id is not null),
-  constraint documenten_agendapunt_vergadering_check
-    check (agendapunt_id is null or vergadering_id is not null),
+  -- De agendapunt-kolom en bijbehorende context-CHECK worden pas toegevoegd
+  -- nadat public.agendapunten bestaat (sectie 9 + migratie 2026_06_18).
   -- Increment T6 (migratie 2026_07_09 authoritatief) — namespace-invariant
   -- (besluit 0045, doorgeschoven naar T6): generiek ⇒ fonds_id NULL, fonds ⇒
   -- fonds_id NOT NULL. Hardt de classificatie waarop de read-only-RLS en de
