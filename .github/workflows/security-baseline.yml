@@ -56,4 +56,10 @@ jobs:
         run: npm run test:xtenant
 
       - name: Productiebuild
+        env:
+          # Alleen build-time vormwaarden. Geen echte omgeving, sleutel of
+          # netwerktoegang; voorkomt dat statische login-prerendering faalt
+          # voordat Next.js de applicatiecode heeft kunnen verifiëren.
+          NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-anon-key
         run: npm run build
