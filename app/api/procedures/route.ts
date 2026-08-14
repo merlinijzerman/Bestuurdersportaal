@@ -174,6 +174,7 @@ export async function POST(req: NextRequest) {
             volgorde: item.volgorde,
             label: item.label,
             bewijs_vereist: item.bewijs_vereist,
+            toelichting: item.toelichting ?? null,
             voldaan: false,
           }))
         );

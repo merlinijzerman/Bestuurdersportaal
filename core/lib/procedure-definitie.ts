@@ -47,6 +47,8 @@ export type DefinitieRequirementType = (typeof REQUIREMENT_TYPES)[number];
 export interface DefinitieRequirement {
   requirement_type: DefinitieRequirementType;
   label: string;
+  /** OB-E10: bestuurlijke toelichting bij dit bewijsstuk (standaardset). */
+  toelichting?: string | null;
   documenttype?: string | null;
   veld_pad?: string | null;
   verplicht: boolean;
@@ -63,6 +65,8 @@ export interface DefinitieRequirement {
 export interface DefinitieChecklistItem {
   label: string;
   bewijs_vereist: boolean;
+  /** OB-E10: toelichting bij dit checklistpunt (standaardset). */
+  toelichting?: string | null;
 }
 
 export interface DefinitieStap {
@@ -316,6 +320,7 @@ export function definitieNaarProcessTemplate(def: ProcedureDefinitie): ProcessTe
         volgorde: i + 1,
         label: c.label,
         bewijs_vereist: c.bewijs_vereist,
+        toelichting: c.toelichting ?? null,
       })),
     }));
 

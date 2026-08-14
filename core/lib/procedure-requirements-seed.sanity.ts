@@ -24,9 +24,11 @@ function check(naam: string, fn: () => void) {
 }
 
 const hier = dirname(fileURLToPath(import.meta.url));
+// OB-E10: de gezaghebbende seed is nu 2026_08_14 (standaardset-bewijslast +
+// toelichting). De 2026_08_13-seed is historisch (idempotent gesuperseded).
 const migratiePad = join(
   hier,
-  "../../supabase/migrations/2026_08_13_invaar_requirements_seed.sql"
+  "../../supabase/migrations/2026_08_14_invaar_requirements_seed_v2.sql"
 );
 
 const START = "-- <<GEGENEREERD_UIT_DEFINITIE>>";

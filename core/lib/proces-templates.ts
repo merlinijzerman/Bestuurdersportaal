@@ -18,6 +18,8 @@ export interface ProcessTemplateChecklistItem {
   volgorde: number;
   label: string;
   bewijs_vereist: boolean;
+  /** OB-E10: toelichting bij dit checklistpunt (meegesnapshot bij start). */
+  toelichting?: string | null;
 }
 
 export interface ProcessTemplateStap {

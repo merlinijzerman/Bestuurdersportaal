@@ -512,12 +512,22 @@ export default async function ProcedureDetailPage({
 
   return (
     <div className="p-4 sm:p-6 lg:p-7 space-y-6">
-      <Link
-        href="/procedures"
-        className="text-sm text-muted hover:text-ink inline-flex items-center gap-1"
-      >
-        ← Terug naar procedures
-      </Link>
+      {/* Top-bar: terug-link links, AI-instap rechts (besluit 0151). */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <Link
+          href="/procedures"
+          className="text-sm text-muted hover:text-ink inline-flex items-center gap-1"
+        >
+          ← Terug naar procedures
+        </Link>
+        <Link
+          href={`/ai?proces=${procedure.id}`}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-accent/40 bg-accent/5 px-3 py-1.5 text-sm font-medium text-accent hover:bg-accent/10 transition-colors"
+        >
+          <span aria-hidden>✨</span>
+          Bespreek dit proces met de AI
+        </Link>
+      </div>
 
       {/* Decision Object — boven de procedure-header zodat het dossier
           duidelijk leidend is en de procedure secundair (workflow). */}
@@ -540,17 +550,6 @@ export default async function ProcedureDetailPage({
           heeftSnapshot={dossier.snapshots.length > 0}
         />
       )}
-
-      {/* Besluit 0151 — instap naar de AI-assistent in de context van dit dossier.
-          Opent /ai met een module-scope (proces); de reikwijdte + fase komen als
-          benoemde context mee en de gekoppelde bewijsstukken worden doorzocht. */}
-      <Link
-        href={`/ai?proces=${procedure.id}`}
-        className="inline-flex items-center gap-2 rounded-xl border border-accent bg-accent/5 px-4 py-2 text-sm font-semibold text-accent hover:bg-accent/10 transition-colors"
-      >
-        <span aria-hidden>✨</span>
-        Bespreek dit proces met de AI
-      </Link>
 
       {/* Header */}
       <div>
@@ -583,7 +582,7 @@ export default async function ProcedureDetailPage({
           )}
         </div>
         <div className="flex items-start justify-between flex-wrap gap-3">
-          <h1 className="font-serif text-ink text-2xl font-semibold">
+          <h1 className="font-serif text-ink text-xl font-bold">
             {procedure.titel}
           </h1>
           <ProcedureMetadataEdit

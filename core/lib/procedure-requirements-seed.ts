@@ -31,7 +31,7 @@ export function genereerRequirementsSeed(def: ProcedureDefinitie): string {
         `  (${sqlStr(def.code)}, ${stap.volgorde}, ${sqlStr(r.requirement_type)}, ` +
           `${sqlStr(r.label)}, ${sqlStr(r.documenttype ?? null)}, ${sqlStr(r.veld_pad ?? null)}, ` +
           `${sqlBool(r.verplicht)}, ${sqlBool(r.blokkerend)}, ${sqlInt(r.min_aantal ?? 1)}, ` +
-          `${sqlStr(r.vereist_validatie_domein ?? null)})`
+          `${sqlStr(r.vereist_validatie_domein ?? null)}, ${sqlStr(r.toelichting ?? null)})`
       );
     }
   }
@@ -46,7 +46,8 @@ export function genereerRequirementsSeed(def: ProcedureDefinitie): string {
     `\n\n` +
     `insert into public.procedure_requirements\n` +
     `  (template_code, stap_volgorde, requirement_type, label, documenttype,\n` +
-    `   veld_pad, verplicht, blokkerend, min_aantal, vereist_validatie_domein)\n` +
+    `   veld_pad, verplicht, blokkerend, min_aantal, vereist_validatie_domein,\n` +
+    `   toelichting)\n` +
     `values\n` +
     rows.join(",\n") +
     `;`

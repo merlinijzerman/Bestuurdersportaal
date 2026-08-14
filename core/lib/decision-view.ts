@@ -174,6 +174,8 @@ export interface EvidenceItem {
   requirement_type: RequirementType;
   stap_volgorde: number;
   label: string;
+  // OB-E10: bestuurlijke toelichting bij dit bewijsstuk (uit de definitie).
+  toelichting: string | null;
   documenttype: string | null;
   verplicht: boolean;
   blokkerend: boolean;

@@ -459,6 +459,8 @@ interface ProcedureRequirementRow {
   // Phase 1C-uitbreiding: vervangt label-regex (zie review-issues 4 + 5)
   vereist_validatie_domein: AIValidatieDomein | null;
   min_aantal: number;
+  // OB-E10: toelichting bij het bewijsstuk (uit de definitie/standaardset).
+  toelichting: string | null;
 }
 
 interface ProcedureBewijsRow {
@@ -522,6 +524,8 @@ async function buildEvidenceLijst(
     triggert_bij_toezichtgevoelig: null,
     vereist_validatie_domein: r.vereist_validatie_domein,
     min_aantal: r.min_aantal ?? 1,
+    // Instantie-requirements dragen (nog) geen toelichting.
+    toelichting: null,
   }));
 
   const alleRequirements = [...requirements, ...instanceRequirements];
@@ -762,6 +766,7 @@ async function buildEvidenceLijst(
       requirement_type: req.requirement_type,
       stap_volgorde: req.stap_volgorde,
       label: req.label,
+      toelichting: req.toelichting,
       documenttype: req.documenttype,
       verplicht: req.verplicht,
       blokkerend: req.blokkerend,

@@ -319,9 +319,15 @@ function BewijsstukRij({
             <div className="text-[11px] uppercase tracking-wide text-muted font-semibold mb-1">
               Toelichting
             </div>
-            <p className="text-[13px] text-muted italic">
-              Nog geen toelichting bij dit bewijsstuk.
-            </p>
+            {r.toelichting ? (
+              <p className="text-[13px] text-muted whitespace-pre-line">
+                {r.toelichting}
+              </p>
+            ) : (
+              <p className="text-[13px] text-muted italic">
+                Nog geen toelichting bij dit bewijsstuk.
+              </p>
+            )}
             {r.vervuld && r.bron_titel && (
               <p className="text-[13px] text-ok-ink mt-2">
                 Opgevoerd: {r.bron_titel}

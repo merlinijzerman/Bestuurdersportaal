@@ -65,12 +65,16 @@ check("elke stap-fase_code bestaat in fasen[]", () => {
   }
 });
 
-check("de twee uitbreidingstypes komen in de definitie voor", () => {
+check("gebruikte requirement-types zijn geldig (incl. external_submission)", () => {
   const types = new Set(
     invaar.stappen.flatMap((s) => s.requirements.map((r) => r.requirement_type))
   );
+  // OB-E10: de bewijslast volgt sinds 2026-08-14 de standaardset. Die gebruikt
+  // wél `external_submission` (DNB/AFM-indiening), maar modelleert hoorrecht/
+  // afstemming via de CHECKLIST i.p.v. een `consultation`-requirement — dat type
+  // blijft een geldige enum-waarde (o.a. voor instantie-requirements), maar komt
+  // in deze definitie niet meer voor.
   assert.ok(types.has("external_submission"), "external_submission ontbreekt");
-  assert.ok(types.has("consultation"), "consultation ontbreekt");
   // en alle gebruikte types zitten in de toegestane set
   for (const t of types) {
     assert.ok(
@@ -138,9 +142,15 @@ check("afhankelijkheid naar niet-bestaande stap wordt gedetecteerd", () => {
 
 check("field zonder veld_pad wordt gedetecteerd", () => {
   const d = kloon();
-  const fieldReq = d.stappen[0].requirements.find((r) => r.requirement_type === "field");
-  assert.ok(fieldReq, "testfixture verwacht een field-requirement in stap 1");
-  fieldReq!.veld_pad = null;
+  // OB-E10: de standaardset-definitie gebruikt zelf geen field-requirements
+  // meer; injecteer er een (zonder veld_pad) om de validatorregel te toetsen.
+  d.stappen[0].requirements.push({
+    requirement_type: "field",
+    label: "Testveld",
+    veld_pad: null,
+    verplicht: true,
+    blokkerend: false,
+  });
   const fouten = valideerDefinitie(d);
   assert.ok(fouten.some((f) => f.includes("veld_pad")));
 });
