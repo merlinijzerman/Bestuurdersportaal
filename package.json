@@ -11,6 +11,8 @@
     "lint:colors": "node scripts/check-brand-hex.mjs",
     "lint:fondsthema": "node scripts/toets-fondsthema.mjs",
     "lint:boundaries": "eslint core platform fondsen app --no-error-on-unmatched-pattern",
+    "typecheck": "tsc --noEmit --skipLibCheck",
+    "security:secrets": "bash scripts/check-committed-secrets.sh",
     "sanity": "rood=\"\"; for f in core/lib/*.sanity.ts platform/lib/*.sanity.ts; do echo \"> $f\"; ./node_modules/.bin/tsx \"$f\" || rood=\"$rood\\n  - $f\"; done; if [ -n \"$rood\" ]; then printf \"\\nSANITY ROOD in:%b\\n\" \"$rood\"; exit 1; else printf \"\\nAlle sanity-suites groen.\\n\"; fi",
     "aqlab:seed": "tsx platform/lib/aqlab/seed/cli.ts",
     "aqlab:seed:apply": "tsx platform/lib/aqlab/seed/cli.ts --apply",
