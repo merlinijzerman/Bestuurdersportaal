@@ -1,9 +1,10 @@
 "use client";
 
-// Compacte status-strip onder de Decision Object banner. Toont in één
-// regel: huidige status, eerstvolgende readiness-horde + aantal
-// ontbrekende items, en een knop die naar het status-overgang-paneel
-// scrolt zodat de gebruiker daar direct mee aan de slag kan.
+// Compacte status-strip. Regel 1: huidige status, eerstvolgende readiness-horde
+// + aantal ontbrekende items, en knoppen (export + statusovergang). Regel 2: een
+// compacte classificatie-strook + een eventuele "besluitvraag nog aan te
+// vullen"-nudge. Die twee zijn hierheen verplaatst nadat de losse Decision
+// Object-header boven de pagina is verwijderd, zodat de sturing zichtbaar blijft.
 
 import {
   type DecisionObject,
@@ -12,6 +13,8 @@ import {
   DECISION_STATUS_LABEL,
   READINESS_LABEL,
   READINESS_VOLGORDE,
+  COMPLEXITEIT_LABEL,
+  RISICONIVEAU_LABEL,
 } from "@/core/lib/decision-view";
 import AuditExportKnop from "./AuditExportKnop";
 
@@ -24,6 +27,12 @@ interface Props {
       'snapshot besluitmoment'-optie in het exportmenu zichtbaar is. */
   heeftSnapshot?: boolean;
 }
+
+const RISICO_KLEUREN: Record<string, string> = {
+  laag: "bg-ok-tint text-ok-ink border-ok/30",
+  middel: "bg-warn-tint text-warn-ink border-warn/30",
+  hoog: "bg-err-tint text-err-ink border-err/30",
+};
 
 function statusKleur(status: DecisionObject["status"]): string {
   if (
@@ -60,56 +69,106 @@ export default function DossierStatusStrip({
   const ontbrekendCount = eersteOnvolledig
     ? readiness[eersteOnvolledig].ontbrekend.length
     : 0;
+  const isPlaceholder = decision.besluitvraag.startsWith(
+    "Aanvullen na auto-upgrade"
+  );
 
   return (
-    <div className="bg-white border border-line rounded-xl px-5 py-3 flex items-center justify-between gap-4 flex-wrap">
-      <div className="flex items-center gap-3 flex-wrap">
-        <span className="text-[11px] uppercase tracking-wide text-muted font-semibold">
-          Status
+    <div className="bg-white border border-line rounded-xl px-5 py-3 space-y-2">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="text-[11px] uppercase tracking-wide text-muted font-semibold">
+            Status
+          </span>
+          <span
+            className={`text-[11px] font-medium uppercase tracking-wide border px-2 py-0.5 rounded ${statusKleur(
+              decision.status
+            )}`}
+          >
+            {DECISION_STATUS_LABEL[decision.status]}
+          </span>
+          <span aria-hidden className="text-muted">
+            ·
+          </span>
+          {eersteOnvolledig ? (
+            <>
+              <span className="text-xs text-ink">
+                <span className="text-muted">Volgende horde:</span>{" "}
+                <span className="font-medium text-ink">
+                  {READINESS_LABEL[eersteOnvolledig]}
+                </span>
+              </span>
+              {ontbrekendCount > 0 && (
+                <span className="text-[11px] text-warn-ink bg-warn-tint border border-warn/30 px-2 py-0.5 rounded">
+                  {ontbrekendCount} ontbrekend
+                  {ontbrekendCount === 1 ? "" : "e items"}
+                </span>
+              )}
+            </>
+          ) : (
+            <span className="text-xs text-ok-ink font-medium">
+              Alle readiness-niveaus voldoen
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <AuditExportKnop
+            decisionId={decision.id}
+            heeftSnapshot={heeftSnapshot}
+            afschriftAnker="afschriften"
+          />
+          <a
+            href={`#${statusOvergangAnker}`}
+            className="text-xs font-medium text-white bg-accent hover:bg-accent-ink px-3 py-1.5 rounded-md whitespace-nowrap"
+          >
+            Statusovergang →
+          </a>
+        </div>
+      </div>
+
+      {/* Compacte classificatie + evt. nudge (verplaatst uit de verwijderde
+          Decision Object-header, zodat deze sturing zichtbaar blijft). */}
+      <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-line">
+        <span className="text-[10px] uppercase tracking-wide text-muted font-semibold">
+          Classificatie
+        </span>
+        <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-app-bg border border-line text-ink">
+          {COMPLEXITEIT_LABEL[decision.complexiteit]}
         </span>
         <span
-          className={`text-[11px] font-medium uppercase tracking-wide border px-2 py-0.5 rounded ${statusKleur(
-            decision.status
-          )}`}
+          className={`px-2 py-0.5 rounded text-[11px] font-medium border ${
+            RISICO_KLEUREN[decision.risiconiveau]
+          }`}
         >
-          {DECISION_STATUS_LABEL[decision.status]}
+          Risico {RISICONIVEAU_LABEL[decision.risiconiveau]}
         </span>
-        <span aria-hidden className="text-muted">
-          ·
-        </span>
-        {eersteOnvolledig ? (
-          <>
-            <span className="text-xs text-ink">
-              <span className="text-muted">Volgende horde:</span>{" "}
-              <span className="font-medium text-ink">
-                {READINESS_LABEL[eersteOnvolledig]}
-              </span>
-            </span>
-            {ontbrekendCount > 0 && (
-              <span className="text-[11px] text-warn-ink bg-warn-tint border border-warn/30 px-2 py-0.5 rounded">
-                {ontbrekendCount} ontbrekend
-                {ontbrekendCount === 1 ? "" : "e items"}
-              </span>
-            )}
-          </>
-        ) : (
-          <span className="text-xs text-ok-ink font-medium">
-            Alle readiness-niveaus voldoen
+        {decision.mandaatgevoelig && (
+          <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-phase-tint text-phase-ink border border-phase/30">
+            Mandaatgevoelig
           </span>
         )}
-      </div>
-      <div className="flex items-center gap-2">
-        <AuditExportKnop
-          decisionId={decision.id}
-          heeftSnapshot={heeftSnapshot}
-          afschriftAnker="afschriften"
-        />
-        <a
-          href={`#${statusOvergangAnker}`}
-          className="text-xs font-medium text-white bg-accent hover:bg-accent-ink px-3 py-1.5 rounded-md whitespace-nowrap"
+        {decision.toezichtgevoelig && (
+          <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-err-tint text-err-ink border border-err/30">
+            Toezichtgevoelig
+          </span>
+        )}
+        {decision.beleidsafwijking && (
+          <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-warn-tint text-warn-ink border border-warn/30">
+            Beleidsafwijking
+          </span>
+        )}
+        <span
+          className={`px-2 py-0.5 rounded text-[11px] font-medium border ${
+            RISICO_KLEUREN[decision.ai_risicoklasse]
+          }`}
         >
-          Statusovergang →
-        </a>
+          AI-risico {RISICONIVEAU_LABEL[decision.ai_risicoklasse]}
+        </span>
+        {isPlaceholder && (
+          <span className="ml-auto text-[11px] text-warn-ink bg-warn-tint border border-warn/30 px-2 py-0.5 rounded font-medium">
+            ⚠ Besluitvraag nog aan te vullen
+          </span>
+        )}
       </div>
     </div>
   );

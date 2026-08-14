@@ -13,11 +13,11 @@ import {
 import StapPaneel from "../_components/StapPaneel";
 import FaseRail, { type FaseGroep } from "../_components/FaseRail";
 import FaseWeergave from "../_components/FaseWeergave";
-import DecisionObjectHeader from "../_components/DecisionObjectHeader";
 import ClassificatiePanel from "../_components/ClassificatiePanel";
 import OnderbouwingsPaneel from "../_components/OnderbouwingsPaneel";
 import StatusOvergangPaneel from "../_components/StatusOvergangPaneel";
 import UitklapbaarPaneel from "../_components/UitklapbaarPaneel";
+import DossierSectie from "../_components/DossierSectie";
 import DossierStatusStrip from "../_components/DossierStatusStrip";
 import ProcedureMetadataEdit from "../_components/ProcedureMetadataEdit";
 import AfschriftenPaneel from "../_components/AfschriftenPaneel";
@@ -530,28 +530,6 @@ export default async function ProcedureDetailPage({
         </Link>
       </div>
 
-      {/* Decision Object — boven de procedure-header zodat het dossier
-          duidelijk leidend is en de procedure secundair (workflow). */}
-      {dossier && (
-        <DecisionObjectHeader
-          decision={dossier.decision}
-          autoUpgraded={dossier.auto_upgraded}
-        />
-      )}
-
-      {/* Compacte dossier-status-strip onder de banner: huidige status,
-          eerstvolgende readiness-horde, en een knop naar het uitklapbare
-          status-overgang-paneel onderin. Voorkomt dat de gebruiker eerst
-          het hele dossier moet doorscrollen om te weten waar het staat. */}
-      {dossier && (
-        <DossierStatusStrip
-          decision={dossier.decision}
-          readiness={dossier.readiness}
-          statusOvergangAnker="status-overgang"
-          heeftSnapshot={dossier.snapshots.length > 0}
-        />
-      )}
-
       {/* Header */}
       <div>
         <div className="flex items-center gap-2 mb-2 flex-wrap">
@@ -689,6 +667,18 @@ export default async function ProcedureDetailPage({
           </div>
         </div>
       </div>
+
+      {/* Statusbalk — onder de meta-strook (co-eigenaars), verplaatst op
+          verzoek. Huidige status, eerstvolgende readiness-horde, classificatie
+          en de knoppen export/statusovergang. */}
+      {dossier && (
+        <DossierStatusStrip
+          decision={dossier.decision}
+          readiness={dossier.readiness}
+          statusOvergangAnker="status-overgang"
+          heeftSnapshot={dossier.snapshots.length > 0}
+        />
+      )}
 
       {/* WO-3: de "Dossier-tijdlijn" (generieke Oriëntatie/Analyse/Advies-fases)
           is verwijderd — die taxonomie botste met de I–VI-procesfasen van de
@@ -853,11 +843,7 @@ export default async function ProcedureDetailPage({
           heeft; deze blokken zijn voor reflectie en bijwerken van het
           besluitdossier. Klik op een paneel-header om uit te klappen. */}
       {dossier && (
-        <div>
-          <h2 className="text-xs uppercase tracking-wide text-muted font-semibold mb-3">
-            Dossier
-          </h2>
-          <div className="space-y-2">
+        <DossierSectie>
             <UitklapbaarPaneel
               titel="Classificatie & onderbouwing"
               status={
@@ -897,7 +883,6 @@ export default async function ProcedureDetailPage({
             <UitklapbaarPaneel
               titel="Statusovergang"
               ankerId="status-overgang"
-              defaultOpen
               samenvatting="Door naar volgende fase, met readiness-check + override"
             >
               <StatusOvergangPaneel
@@ -971,8 +956,7 @@ export default async function ProcedureDetailPage({
                 currentUserIsBureau={currentUserIsBureau}
               />
             </UitklapbaarPaneel>
-          </div>
-        </div>
+        </DossierSectie>
       )}
     </div>
   );

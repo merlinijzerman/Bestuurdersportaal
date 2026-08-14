@@ -47,14 +47,6 @@ const STATUS_PILL: Record<FaseStatus, string> = {
 // (optionele) aandachtsstip, niet aan de badgekleur.
 const BADGE = "bg-app-bg text-nav-text border border-nav-line";
 
-// Linkerrand: alléén een kleur bij een échte aandachtsvlag (rood/oranje); anders
-// transparant zodat de rail rustig blijft (behoudt de uitlijning).
-function randKleur(aandacht: AandachtNiveau): string {
-  if (aandacht === "rood") return "border-err";
-  if (aandacht === "oranje") return "border-warn";
-  return "border-transparent";
-}
-
 function isActiefAchtig(s: Stap): boolean {
   return s.status === "actief" || s.status === "heropend";
 }
@@ -197,9 +189,7 @@ export default function FaseRail({
         return (
           <div
             key={f.fase_code}
-            className={`rounded-lg overflow-hidden border-l-[3px] ${randKleur(
-              f.aandacht
-            )}`}
+            className="rounded-lg overflow-hidden"
           >
             <button
               type="button"
@@ -215,29 +205,34 @@ export default function FaseRail({
                 {f.fase_code}
               </span>
               <span className="flex-1 min-w-0">
-                <span className="flex items-center gap-1.5">
-                  {f.aandacht !== "geen" && (
-                    <span
-                      className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                        f.aandacht === "rood" ? "bg-err" : "bg-warn"
-                      }`}
-                      title={
-                        f.aandacht === "rood"
-                          ? "Aandacht: verplichte blokkerende bewijslast ontbreekt"
-                          : "Aandacht: heropend of verplichte bewijslast ontbreekt"
-                      }
-                    />
-                  )}
-                  <span className="block text-sm font-semibold text-nav-text-active leading-tight">
-                    {f.titel}
-                  </span>
+                <span className="block text-sm font-semibold text-nav-text-active leading-tight">
+                  {f.titel}
                 </span>
                 <span className="block text-[11px] text-nav-text mt-0.5">
                   {f.stappen.length} stap{f.stappen.length === 1 ? "" : "pen"}
                 </span>
               </span>
+              {/* Aandachtsvlag als compacte pill (kleur + woord + vorm, besluit
+                  0097/0101). De gekleurde linkerrand is bewust weggehaald voor
+                  een rustiger rail; de pill draagt het signaal. */}
+              {f.aandacht !== "geen" && (
+                <span
+                  className={`text-[10px] font-semibold uppercase tracking-wide rounded-full px-2 py-0.5 shrink-0 whitespace-nowrap border ${
+                    f.aandacht === "rood"
+                      ? "text-err-ink bg-err-tint border-err/30"
+                      : "text-warn-ink bg-warn-tint border-warn/30"
+                  }`}
+                  title={
+                    f.aandacht === "rood"
+                      ? "Aandacht: verplichte blokkerende bewijslast ontbreekt of termijn overschreden"
+                      : "Aandacht: heropend of verplichte bewijslast ontbreekt"
+                  }
+                >
+                  Aandacht
+                </span>
+              )}
               {/* Alleen de afgeronde staat als pill; 'In behandeling' laten we
-                  weg voor een rustige rail (aandacht = de linkerrand/stip). */}
+                  weg voor een rustige rail (aandacht = de pill hierboven). */}
               {f.status === "afgerond" && (
                 <span
                   className={`text-[10px] font-semibold rounded-full px-2 py-0.5 shrink-0 whitespace-nowrap ${
