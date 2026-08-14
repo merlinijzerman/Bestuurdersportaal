@@ -12,7 +12,7 @@ import type {
   GekoppeldAgendapunt,
 } from "../[id]/page";
 import type { EvidenceItem } from "@/core/lib/decision-view";
-import BibliotheekPicker from "./BibliotheekPicker";
+import BibliotheekPicker from "@/core/components/BibliotheekPicker";
 import VereisteToevoegen from "./VereisteToevoegen";
 import { uploadDocument } from "@/core/lib/document-upload-client";
 import { DOCUMENTTYPEN, DOCUMENTTYPE_LABEL } from "@/core/lib/document-metadata";

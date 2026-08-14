@@ -1,0 +1,234 @@
+// ============================================================
+//  GET/POST/DELETE /api/documents/[id]/agendapunten
+//
+//  Non-destructieve vergaderkoppelingen (spiegelt de procesinstanties-route,
+//  Increment C). De PRIMAIRE vergaderkoppeling blijft documenten.agendapunt_id /
+//  vergadering_id (+ context='vergadering'); die verhuist het document naar de
+//  vergadercontext. Deze n-op-n koppeling laat een bibliotheekdocument aan
+//  meerdere agendapunten hangen ZONDER zijn context/classificatie te wijzigen,
+//  via document_agendapunten met:
+//   * document niet-generiek (DB-trigger fn_document_agendapunt_validatie),
+//   * vergadering_id afgeleid uit + horend bij het agendapunt,
+//   * fondsconsistentie document = vergadering = koppeling,
+//   * secundair <> primair (documenten.agendapunt_id),
+//   * uniek (document_id, agendapunt_id).
+//
+//  Capability documents.metadata.update; tenant-isolatie via RLS. De DB-
+//  triggers zijn de laatste verdedigingslinie; hier vangen we hun excepties
+//  netjes af naar leesbare foutmeldingen.
+// ============================================================
+
+import { NextRequest, NextResponse } from "next/server";
+import { createServerSupabase } from "@/core/lib/supabase-server";
+import { requireCapability } from "@/core/lib/capabilities";
+
+export const dynamic = "force-dynamic";
+
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const supabase = await createServerSupabase();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+
+    const { data, error } = await supabase
+      .from("document_agendapunten")
+      .select(
+        "id, agendapunt_id, vergadering_id, aangemaakt, agendapunten(id, titel), vergaderingen(id, titel, datum)"
+      )
+      .eq("document_id", id)
+      .order("aangemaakt", { ascending: true });
+    if (error) {
+      return NextResponse.json({ error: "Ophalen mislukt" }, { status: 500 });
+    }
+    return NextResponse.json({ koppelingen: data ?? [] });
+  } catch (e) {
+    console.error("Fout in GET .../agendapunten:", e);
+    return NextResponse.json({ error: "Serverfout" }, { status: 500 });
+  }
+}
+
+export async function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const supabase = await createServerSupabase();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+
+    if (!(await requireCapability(user.id, "documents.metadata.update"))) {
+      return NextResponse.json(
+        { error: "Geen rechten om koppelingen te beheren (documents.metadata.update)" },
+        { status: 403 }
+      );
+    }
+
+    const body = (await req.json().catch(() => ({}))) as {
+      agendapunt_id?: string;
+    };
+    if (!body.agendapunt_id) {
+      return NextResponse.json({ error: "agendapunt_id ontbreekt" }, { status: 400 });
+    }
+
+    const { data: document } = await supabase
+      .from("documenten")
+      .select("id, fonds_id, titel")
+      .eq("id", id)
+      .maybeSingle();
+    if (!document) {
+      return NextResponse.json({ error: "Document niet gevonden" }, { status: 404 });
+    }
+    if (!document.fonds_id) {
+      return NextResponse.json(
+        { error: "Een generiek document kan geen vergaderkoppeling krijgen." },
+        { status: 422 }
+      );
+    }
+
+    // vergadering_id afgeleid uit het agendapunt (gedenormaliseerd opgeslagen;
+    // de DB-trigger dwingt de consistentie nogmaals af).
+    const { data: agendapunt } = await supabase
+      .from("agendapunten")
+      .select("id, vergadering_id")
+      .eq("id", body.agendapunt_id)
+      .maybeSingle();
+    if (!agendapunt || !agendapunt.vergadering_id) {
+      return NextResponse.json(
+        { error: "Agendapunt niet gevonden of niet aan een vergadering gekoppeld." },
+        { status: 404 }
+      );
+    }
+
+    const { error } = await supabase.from("document_agendapunten").insert({
+      fonds_id: document.fonds_id,
+      document_id: id,
+      agendapunt_id: body.agendapunt_id,
+      vergadering_id: agendapunt.vergadering_id,
+      aangemaakt_door: user.id,
+    });
+    if (error) {
+      console.error("Koppeling-insert fout:", error);
+      // 23505 = uniek-schending; P0001 = bewuste, leesbare plpgsql-trigger-
+      // melding (generiek, fondsconsistentie, verkeerde vergadering, secundair =
+      // primair). Andere codes: generieke melding, geen interne DB-details lekken.
+      const melding =
+        error.code === "23505"
+          ? "Dit document is al aan dit agendapunt gekoppeld."
+          : error.code === "P0001"
+          ? error.message
+          : "Koppelen mislukt — controleer of de koppeling geldig is (zelfde fonds, niet gelijk aan de primaire koppeling).";
+      return NextResponse.json({ error: melding }, { status: 422 });
+    }
+
+    const { data: profiel } = await supabase
+      .from("profielen")
+      .select("naam")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    // Auditspoor (append-only).
+    await supabase.from("document_metadata_log").insert({
+      document_id: id,
+      document_titel_snapshot: document.titel,
+      fonds_id: document.fonds_id,
+      gewijzigd_door: user.id,
+      gewijzigd_door_naam: profiel?.naam ?? null,
+      veld_naam: "gekoppeld_agendapunt",
+      oude_waarde: null,
+      nieuwe_waarde: body.agendapunt_id,
+      wijzig_type: "koppeling",
+      rag_impact: true,
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (e) {
+    console.error("Fout in POST .../agendapunten:", e);
+    return NextResponse.json({ error: "Serverfout" }, { status: 500 });
+  }
+}
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const supabase = await createServerSupabase();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+
+    if (!(await requireCapability(user.id, "documents.metadata.update"))) {
+      return NextResponse.json(
+        { error: "Geen rechten om koppelingen te beheren (documents.metadata.update)" },
+        { status: 403 }
+      );
+    }
+
+    const body = (await req.json().catch(() => ({}))) as {
+      agendapunt_id?: string;
+    };
+    if (!body.agendapunt_id) {
+      return NextResponse.json({ error: "agendapunt_id ontbreekt" }, { status: 400 });
+    }
+
+    const { data: document } = await supabase
+      .from("documenten")
+      .select("fonds_id, titel")
+      .eq("id", id)
+      .maybeSingle();
+
+    // .select() geeft de daadwerkelijk verwijderde rijen terug -> log alleen
+    // bij een echte ontkoppeling (geen spook-auditrecords bij 0 matches).
+    const { data: verwijderd, error } = await supabase
+      .from("document_agendapunten")
+      .delete()
+      .eq("document_id", id)
+      .eq("agendapunt_id", body.agendapunt_id)
+      .select("id");
+    if (error) {
+      console.error("Ontkoppelen fout:", error);
+      return NextResponse.json({ error: "Ontkoppelen mislukt" }, { status: 500 });
+    }
+    if (!verwijderd || verwijderd.length === 0) {
+      return NextResponse.json(
+        { error: "Geen bestaande vergaderkoppeling gevonden om te verwijderen." },
+        { status: 404 }
+      );
+    }
+
+    const { data: profiel } = await supabase
+      .from("profielen")
+      .select("naam")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    await supabase.from("document_metadata_log").insert({
+      document_id: id,
+      document_titel_snapshot: document?.titel ?? null,
+      fonds_id: document?.fonds_id ?? null,
+      gewijzigd_door: user.id,
+      gewijzigd_door_naam: profiel?.naam ?? null,
+      veld_naam: "gekoppeld_agendapunt",
+      oude_waarde: body.agendapunt_id,
+      nieuwe_waarde: null,
+      wijzig_type: "koppeling",
+      rag_impact: true,
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (e) {
+    console.error("Fout in DELETE .../agendapunten:", e);
+    return NextResponse.json({ error: "Serverfout" }, { status: 500 });
+  }
+}
