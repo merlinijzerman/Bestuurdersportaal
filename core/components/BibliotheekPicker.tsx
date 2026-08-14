@@ -1,18 +1,20 @@
 "use client";
 
 // ============================================================
-//  BibliotheekPicker — Iteratie 3-D (2026-05-18)
+//  BibliotheekPicker — gedeelde documentkiezer (verplaatst naar core, 2026-08-14)
 //
-//  Modal waarin de gebruiker een bestaand document uit de
-//  bibliotheek selecteert om aan een bewijsstuk te koppelen.
+//  Generieke modal waarin de gebruiker een BESTAAND document uit de
+//  bibliotheek zoekt en selecteert, zonder duplicaat aan te maken.
+//  Roept onSelect(id, titel) aan en sluit daarna. De AANROEPER bepaalt
+//  wat de koppeling doet (bewijsstuk bij een proces, of een agendapunt
+//  bij een vergadering) — deze component is contextvrij.
 //
-//  Aanvulling op de bestaande file-upload-route in het bewijs-form
-//  (1D-4): nu kun je naast nieuw uploaden ook een bestaand stuk
-//  (DNB-leidraad, eerder besluitdocument, beleidstuk) hergebruiken
-//  zonder duplicaat in de bibliotheek te creëren.
+//  Oorspronkelijk procedures/_components/BibliotheekPicker (iteratie 3-D,
+//  2026-05-18); naar core verplaatst zodat ook de vergaderkant hem hergebruikt.
 //
-//  Gebruikt /api/documents/upload?... als list-endpoint (de GET-
-//  variant geeft de fonds-documenten terug, gefilterd via RLS).
+//  Gebruikt /api/documents/upload als list-endpoint (de GET-variant geeft
+//  de fonds-documenten terug, gefilterd via RLS). Zoeken is client-side op
+//  titel; server-side search is een latere uitbreiding.
 // ============================================================
 
 import { useEffect, useState } from "react";

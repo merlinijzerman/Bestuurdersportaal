@@ -113,6 +113,7 @@ export default async function VergaderingDetailPage({
     { data: voorbereidingenRaw },
     { data: stemmingenRaw },
     { data: bestuursledenRaw },
+    { data: koppelingenRaw },
   ] = await Promise.all([
     agendapuntIds.length > 0
       ? supabase
@@ -146,11 +147,37 @@ export default async function VergaderingDetailPage({
       .select("id, naam")
       .eq("fonds_id", v.fonds_id)
       .in("rol", ["bestuurder", "voorzitter"]),
+    // Non-destructieve vergaderkoppelingen (document_agendapunten): bestaande
+    // bibliotheekdocumenten die aan een agendapunt zijn gekoppeld zonder kopie.
+    agendapuntIds.length > 0
+      ? supabase
+          .from("document_agendapunten")
+          .select("document_id, agendapunt_id")
+          .in("agendapunt_id", agendapuntIds)
+      : Promise.resolve({ data: [] }),
   ]);
 
   const stukken = (stukkenRaw || []) as (Stuk & { agendapunt_id: string })[];
   const inbreng = (inbrengRaw || []) as (Inbreng & { agendapunt_id: string })[];
   const voorbereidingen = (voorbereidingenRaw || []) as Voorbereiding[];
+
+  // Secundaire (non-destructieve) vergaderkoppelingen: haal de gekoppelde
+  // bibliotheekdocumenten op en zet ze klaar per agendapunt. Het brondocument
+  // blijft ongemoeid; hier tonen we het alleen óók onder het agendapunt.
+  const koppelingen = (koppelingenRaw || []) as {
+    document_id: string;
+    agendapunt_id: string;
+  }[];
+  const gekoppeldeDocIds = [...new Set(koppelingen.map((k) => k.document_id))];
+  let gekoppeldeDocs: Stuk[] = [];
+  if (gekoppeldeDocIds.length > 0) {
+    const { data: gekoppeldeRaw } = await supabase
+      .from("documenten")
+      .select("id, titel, bestandsnaam, bestandstype, paginas, samenvatting_ai, samengevat_op, opslag_pad, ai_ondersteund_voorbereid, geindexeerd, verwerkingsstatus")
+      .in("id", gekoppeldeDocIds);
+    gekoppeldeDocs = (gekoppeldeRaw || []) as Stuk[];
+  }
+  const gekoppeldeDocMap = new Map(gekoppeldeDocs.map((d) => [d.id, d]));
 
   // ── Stemmingen: kies per agendapunt de relevante stemming (open eerst,
   //    anders meest recente) en haal stemmen op voor open stemmingen. ──
@@ -212,11 +239,23 @@ export default async function VergaderingDetailPage({
   }
 
   const agendapunten: Agendapunt[] = (agendapuntenRaw || []).map(
-    (a: Omit<Agendapunt, "stukken" | "inbreng">) => ({
-      ...a,
-      stukken: stukken.filter((s) => s.agendapunt_id === a.id),
-      inbreng: inbreng.filter((i) => i.agendapunt_id === a.id),
-    })
+    (a: Omit<Agendapunt, "stukken" | "inbreng">) => {
+      const primair = stukken.filter((s) => s.agendapunt_id === a.id);
+      const primaireIds = new Set(primair.map((s) => s.id));
+      // Gekoppelde stukken die niet al primair onder dit agendapunt hangen.
+      const secundair: Stuk[] = koppelingen
+        .filter(
+          (k) => k.agendapunt_id === a.id && !primaireIds.has(k.document_id)
+        )
+        .map((k) => gekoppeldeDocMap.get(k.document_id))
+        .filter((d): d is Stuk => !!d)
+        .map((d) => ({ ...d, gekoppeld: true }));
+      return {
+        ...a,
+        stukken: [...primair, ...secundair],
+        inbreng: inbreng.filter((i) => i.agendapunt_id === a.id),
+      };
+    }
   );
 
   // Voor de volgorde-pijltjes: bepaal per actieve kaart wat vorige/volgende is.

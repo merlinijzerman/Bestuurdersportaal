@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import VoorbereidingsBlok, {
   type Voorbereiding,
@@ -13,8 +13,9 @@ import StemrondeBlok, {
   type Bestuurslid,
 } from "./StemrondeBlok";
 import { isBureauRol } from "@/core/lib/bureau-gate";
-import { uploadDocument } from "@/core/lib/document-upload-client";
 import { rolHeeftCapability } from "@/core/lib/capabilities-map";
+import DocumentUploadModal from "@/core/components/DocumentUploadModal";
+import BibliotheekPicker from "@/core/components/BibliotheekPicker";
 
 export interface Stuk {
   id: string;
@@ -31,6 +32,10 @@ export interface Stuk {
   // pipeline. De samenvatting is wél direct beschikbaar (synchroon bij upload).
   geindexeerd: boolean;
   verwerkingsstatus: string | null;
+  // Non-destructieve vergaderkoppeling (document_agendapunten): true = dit stuk
+  // is een BESTAAND bibliotheekdocument dat aan dit agendapunt is gekoppeld,
+  // niet primair hier geüpload. Ontkoppelen raakt het brondocument niet.
+  gekoppeld?: boolean;
 }
 
 // Pipeline-statussen waarin een stuk nog asynchroon wordt verwerkt (F3/F4).
@@ -178,11 +183,12 @@ export default function AgendapuntKaart({
   const [open, setOpen] = useState(false);
   const [inbrengTekst, setInbrengTekst] = useState("");
   const [inbrengBezig, setInbrengBezig] = useState(false);
-  const [uploadBezig, setUploadBezig] = useState(false);
   const [uploadFout, setUploadFout] = useState<string | null>(null);
+  const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [koppelBezig, setKoppelBezig] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [volgordeBezig, setVolgordeBezig] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
 
   const badge = CATEGORIE_BADGE[punt.categorie];
   const isEigenaar = punt.aangemaakt_door === huidigeGebruikerId;
@@ -281,26 +287,54 @@ export default function AgendapuntKaart({
     }
   }
 
-  async function uploadStuk(file: File) {
-    setUploadBezig(true);
+  // Non-destructieve vergaderkoppeling: koppel een BESTAAND bibliotheekdocument
+  // aan dit agendapunt (document_agendapunten). Het brondocument blijft een
+  // bibliotheekdocument; alleen de koppeling ontstaat. Capability
+  // documents.metadata.update wordt server-side afgedwongen.
+  async function koppelBestaand(documentId: string) {
+    setKoppelBezig(true);
     setUploadFout(null);
     try {
-      // F7: direct-to-storage. bron/bibliotheek volgen server-side uit het
-      // agendapunt (bron='Intern', bibliotheek='fonds').
-      const res = await uploadDocument(file, {
-        agendapunt_id: punt.id,
-        titel: file.name.replace(/\.(pdf|docx|pptx|xlsx)$/i, ""),
+      const res = await fetch(`/api/documents/${documentId}/agendapunten`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agendapunt_id: punt.id }),
       });
       if (!res.ok) {
-        setUploadFout(res.error ?? "Upload mislukt");
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        setUploadFout(data.error || "Koppelen mislukt");
         return;
       }
       router.refresh();
     } catch {
-      setUploadFout("Verbindingsfout tijdens upload");
+      setUploadFout("Verbindingsfout tijdens koppelen");
     } finally {
-      setUploadBezig(false);
-      if (fileRef.current) fileRef.current.value = "";
+      setKoppelBezig(false);
+    }
+  }
+
+  async function ontkoppelStuk(documentId: string) {
+    if (!confirm("Dit gekoppelde stuk ontkoppelen van dit agendapunt? Het document blijft in de bibliotheek staan.")) {
+      return;
+    }
+    setKoppelBezig(true);
+    setUploadFout(null);
+    try {
+      const res = await fetch(`/api/documents/${documentId}/agendapunten`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agendapunt_id: punt.id }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        setUploadFout(data.error || "Ontkoppelen mislukt");
+        return;
+      }
+      router.refresh();
+    } catch {
+      setUploadFout("Verbindingsfout tijdens ontkoppelen");
+    } finally {
+      setKoppelBezig(false);
     }
   }
 
@@ -447,6 +481,22 @@ export default function AgendapuntKaart({
         />
       )}
 
+      {uploadModalOpen && (
+        <DocumentUploadModal
+          modalTitel="Nieuw stuk toevoegen"
+          agendapuntId={punt.id}
+          voetnoot="Dit stuk wordt aan dit agendapunt gekoppeld en in de fondsbibliotheek opgeslagen."
+          onClose={() => setUploadModalOpen(false)}
+          onUploaded={() => router.refresh()}
+        />
+      )}
+      {pickerOpen && (
+        <BibliotheekPicker
+          onSelect={(id) => koppelBestaand(id)}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
+
       {open && !isVerwijderd && (
         <div className="px-4 pb-4 pl-12 space-y-4 border-t border-line pt-4">
           {punt.beschrijving && (
@@ -480,28 +530,43 @@ export default function AgendapuntKaart({
             </div>
             <div className="space-y-2">
               {punt.stukken.map((s) => (
-                <StukKaart key={s.id} stuk={s} magMarkeren={magMarkeren} />
-              ))}
-              <label
-                className={`flex items-center gap-2 text-xs border border-dashed border-app-line-strong rounded-lg px-3 py-2 hover:border-accent transition-colors ${
-                  uploadBezig ? "opacity-50 cursor-wait" : "cursor-pointer text-muted"
-                }`}
-              >
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept=".pdf,.docx,.xlsx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                  className="hidden"
-                  disabled={uploadBezig}
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) uploadStuk(f);
-                  }}
+                <StukKaart
+                  key={s.id}
+                  stuk={s}
+                  magMarkeren={magMarkeren}
+                  onOntkoppelen={magMarkeren ? ontkoppelStuk : undefined}
                 />
-                {uploadBezig
-                  ? "Bezig met uploaden en samenvatten..."
-                  : "+ Stuk toevoegen — PDF, Word of Excel (AI-samenvatting volgt automatisch)"}
-              </label>
+              ))}
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setUploadModalOpen(true)}
+                  className="flex items-center gap-2 text-xs border border-dashed border-app-line-strong rounded-lg px-3 py-2 text-muted hover:border-accent hover:text-accent-ink transition-colors"
+                >
+                  + Nieuw stuk uploaden
+                </button>
+                {magMarkeren && (
+                  <button
+                    type="button"
+                    onClick={() => setPickerOpen(true)}
+                    disabled={koppelBezig}
+                    className="flex items-center gap-2 text-xs border border-line rounded-lg px-3 py-2 text-muted hover:border-accent hover:text-accent-ink transition-colors disabled:opacity-50"
+                  >
+                    {koppelBezig ? "Bezig…" : "Koppel bestaand stuk"}
+                  </button>
+                )}
+              </div>
+              <p className="text-[11px] text-muted">
+                <span className="font-medium">Nieuw stuk</span>: uploaden met metadata
+                (documenttype, status) — AI-samenvatting volgt automatisch.
+                {magMarkeren ? (
+                  <>
+                    {" "}
+                    <span className="font-medium">Bestaand stuk</span>: zoek in de
+                    bibliotheek en koppel zonder duplicaat.
+                  </>
+                ) : null}
+              </p>
               {uploadFout && <div className="text-xs text-err-ink">{uploadFout}</div>}
             </div>
           </div>
@@ -605,7 +670,15 @@ export default function AgendapuntKaart({
   );
 }
 
-function StukKaart({ stuk, magMarkeren }: { stuk: Stuk; magMarkeren: boolean }) {
+function StukKaart({
+  stuk,
+  magMarkeren,
+  onOntkoppelen,
+}: {
+  stuk: Stuk;
+  magMarkeren: boolean;
+  onOntkoppelen?: (documentId: string) => void;
+}) {
   const [open, setOpen] = useState(false);
   // T2/B-6 — lokale weergave van de markering; optimistisch bij een toggle.
   const [gemarkeerd, setGemarkeerd] = useState(stuk.ai_ondersteund_voorbereid);
@@ -684,6 +757,16 @@ function StukKaart({ stuk, magMarkeren }: { stuk: Stuk; magMarkeren: boolean }) 
             {verwerkingMislukt ? " · ⚠️ verwerking mislukt" : ""}
             {!kanInzien ? " · origineel niet beschikbaar" : ""}
           </div>
+          {/* Non-destructieve vergaderkoppeling: dit stuk is een bestaand
+              bibliotheekdocument dat aan dit agendapunt is gekoppeld. */}
+          {stuk.gekoppeld && (
+            <span
+              className="inline-flex items-center gap-1 mt-1.5 mr-1.5 text-[10px] font-semibold text-phase-ink bg-phase-tint rounded-full px-2 py-0.5"
+              title="Bestaand bibliotheekdocument, gekoppeld aan dit agendapunt (geen kopie)."
+            >
+              🔗 Gekoppeld uit bibliotheek
+            </span>
+          )}
           {/* T2/B-6 — markering "AI-ondersteund voorbereid" voor het bestuur. */}
           {gemarkeerd && (
             <span
@@ -707,6 +790,15 @@ function StukKaart({ stuk, magMarkeren }: { stuk: Stuk; magMarkeren: boolean }) 
             {gemarkeerd
               ? "Markering ‘AI-ondersteund voorbereid’ verwijderen"
               : "Markeer als AI-ondersteund voorbereid"}
+          </button>
+        )}
+        {stuk.gekoppeld && onOntkoppelen && (
+          <button
+            type="button"
+            onClick={() => onOntkoppelen(stuk.id)}
+            className="mt-2 ml-3 text-[11px] text-muted hover:text-err-ink"
+          >
+            Ontkoppelen van dit agendapunt
           </button>
         )}
         {snippet && (

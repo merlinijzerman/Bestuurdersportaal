@@ -2,26 +2,24 @@
 import { Fragment, useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import DocumentMetadataModal from "@/core/components/DocumentMetadataModal";
+import DocumentUploadModal, {
+  type RetireKandidaat,
+} from "@/core/components/DocumentUploadModal";
 import {
   DOCUMENTTYPEN,
   DOCUMENTTYPE_LABEL,
-  type Documenttype,
 } from "@/core/lib/document-metadata";
-import {
-  magVanKracht,
-  statusLabelVoorType,
-} from "@/core/lib/document-statusprofiel";
 import { isActueleRapportageVoorganger } from "@/core/lib/document-rapportage-retire";
-import { uploadDocument } from "@/core/lib/document-upload-client";
 // Besluit 0140 — bijzonderheden en classificatie bij aanlevering leven in pure,
-// geteste modules; deze pagina rendert ze alleen.
+// geteste modules; deze pagina rendert ze alleen. Het uploadformulier zelf is
+// geëxtraheerd naar core/components/DocumentUploadModal (herbruikbaar in proces
+// en vergadering).
 import {
   bepaalBijzonderheden,
   telBijzonderheden,
   PIPELINE_STATUSSEN,
   type Bijzonderheid,
 } from "@/core/lib/document-bijzonderheden";
-import { INGEST_BRONSTATUSSEN } from "@/core/lib/document-ingest-classificatie";
 import { BRONSTATUS_LABEL } from "@/core/lib/document-status-transities";
 import ZoekenPaneel from "./_components/ZoekenPaneel";
 
@@ -73,13 +71,6 @@ const TYPE_BLOK =
 
 // Groepsvolgorde op de generieke tab (betekenisvol, niet alfabetisch).
 const BRONNEN = ["DNB", "AFM", "Pensioenfederatie", "Intern", "Extern"];
-
-// Volgorde in het uploadformulier — een tenant-upload is per definitie een
-// fondsdocument, dus Intern staat vooraan en is de default (besluit 0140).
-// DNB/AFM/PF blijven kiesbaar: een fonds ontvangt wel degelijk een
-// fondsspecifieke toezichtbrief. Generieke (platform-gecureerde) documenten
-// lopen niet via deze route (B13).
-const UPLOAD_BRONNEN = ["Intern", "Extern", "DNB", "AFM", "Pensioenfederatie"];
 
 // Hoeveel documenten een groep in rust toont. Bewust "toon er meer" en geen
 // paginering: zoeken en filteren werken over de HELE groep, en de groepskop
@@ -145,52 +136,12 @@ export default function BibliotheekPage() {
   // Welke clustergroepen zijn ingeklapt. Leeg = alles uitgeklapt (voorkeur gebruiker).
   const [ingeklapteGroepen, setIngeklapteGroepen] = useState<Set<string>>(new Set());
   const [uploadOpen, setUploadOpen] = useState(false);
-  const [uploaden, setUploaden] = useState(false);
   const [uploadBericht, setUploadBericht] = useState("");
-  const bestandRef = useRef<HTMLInputElement>(null);
 
   // Besluit 0140 — hoeveel documenten er per groep zijn uitgeklapt ("toon er
   // meer"). Afwezig = de standaardstap. Gaat bewust op groepsleutel en niet op
   // index: bij zoeken/filteren verschuift de volgorde, de sleutel niet.
   const [zichtbaarPerGroep, setZichtbaarPerGroep] = useState<Record<string, number>>({});
-
-  const [uploadForm, setUploadForm] = useState({
-    titel: "",
-    // Besluit 0140 — default Intern i.p.v. DNB. De oude default botste met B13:
-    // generieke DNB/AFM/PF-documenten worden centraal gecureerd en kunnen niet
-    // via deze route worden aangeleverd.
-    bron: "Intern",
-    bibliotheek: "fonds",
-    // Besluit 0140 — verplicht op dit pad; ruimt de restgroep "Zonder type" op.
-    documenttype: "",
-    // Werkopdracht 1.4 — documentdatum. Verplicht bij rapportage; anders leeg
-    // (de server defaultt op de uploaddatum).
-    documentdatum: "",
-    // Besluit 0136 — statusverklaring bij aanlevering. Leeg = concept (default).
-    status: "",
-    statusReden: "",
-    // Besluit 0140 — bronstatusverklaring bij aanlevering. Leeg = actief.
-    bronstatus: "",
-    bronstatusReden: "",
-    // Werkopdracht 2.5 — rapportage-retire: de op te volgen rapportage die → historisch gaat.
-    retireRapportageId: "",
-    retireReden: "",
-  });
-
-  /** Het lege formulier — één definitie, gebruikt bij reset na een upload. */
-  const LEEG_UPLOADFORM = {
-    titel: "",
-    bron: "Intern",
-    bibliotheek: "fonds",
-    documenttype: "",
-    documentdatum: "",
-    status: "",
-    statusReden: "",
-    bronstatus: "",
-    bronstatusReden: "",
-    retireRapportageId: "",
-    retireReden: "",
-  };
 
   useEffect(() => {
     haalDocumenten();
@@ -236,65 +187,13 @@ export default function BibliotheekPage() {
     return () => clearTimeout(t);
   }, [documenten]);
 
-  async function handleUpload(e: React.FormEvent) {
-    e.preventDefault();
-    const bestand = bestandRef.current?.files?.[0];
-    if (!bestand) return;
-
-    setUploaden(true);
-    setUploadBericht("");
-
-    try {
-      // F7: direct-to-storage. De helper doet init → directe upload → complete
-      // en handhaaft de groottegrens (nu MAX_BESTAND_BYTES; de 4,5 MB-muur is weg).
-      const res = await uploadDocument(bestand, {
-        titel: uploadForm.titel,
-        bron: uploadForm.bron,
-        bibliotheek: uploadForm.bibliotheek,
-        documenttype: uploadForm.documenttype,
-        ...(uploadForm.documentdatum
-          ? { documentdatum: uploadForm.documentdatum }
-          : {}),
-        ...(uploadForm.status
-          ? { status: uploadForm.status, status_reden: uploadForm.statusReden }
-          : {}),
-        ...(uploadForm.retireRapportageId
-          ? {
-              vervangt_rapportage_id: uploadForm.retireRapportageId,
-              ...(uploadForm.retireReden.trim()
-                ? { retire_reden: uploadForm.retireReden.trim() }
-                : {}),
-            }
-          : {}),
-        ...(uploadForm.bronstatus
-          ? {
-              bronstatus: uploadForm.bronstatus,
-              bronstatus_reden: uploadForm.bronstatusReden,
-            }
-          : {}),
-      });
-
-      if (res.ok) {
-        // F3: een async-verwerkt document is nog niet doorzoekbaar — geen ✅ dat
-        // "klaar" suggereert (guardrail: geen schijnzekerheid).
-        const icoon = res.status === "verwerken" ? "⏳" : "✅";
-        setUploadBericht(`${icoon} ${res.bericht ?? ""}`);
-        haalDocumenten();
-        setUploadOpen(false);
-        setUploadForm(LEEG_UPLOADFORM);
-      } else {
-        setUploadBericht(
-          `❌ ${res.error ?? "Uploaden is niet gelukt. Probeer het opnieuw of neem contact op met de beheerder."}`
-        );
-      }
-    } catch {
-      // Netwerkfout of afgebroken verbinding.
-      setUploadBericht(
-        "❌ Uploaden is niet gelukt door een verbindingsprobleem. Probeer het opnieuw."
-      );
-    } finally {
-      setUploaden(false);
-    }
+  // F3: een async-verwerkt document is nog niet doorzoekbaar — geen ✅ dat
+  // "klaar" suggereert (guardrail: geen schijnzekerheid). De upload zelf loopt
+  // nu via de gedeelde DocumentUploadModal; deze callback vangt het resultaat.
+  function naUpload(res: { status?: string; bericht?: string }) {
+    const icoon = res.status === "verwerken" ? "⏳" : "✅";
+    setUploadBericht(`${icoon} ${res.bericht ?? ""}`);
+    haalDocumenten();
   }
 
   async function deactiveer(doc: Document, reden: string) {
@@ -427,39 +326,20 @@ export default function BibliotheekPage() {
     return groepen;
   }
 
-  // Besluit 0140 — wat betekent de gekozen status/bronstatus voor de assistent?
-  // Afgeleid uit dezelfde regel die de retrieval hanteert: alleen `vastgesteld`
-  // en `van_kracht` zijn actuele-bron-statussen (ACTUELE_BRON_STATUSSEN), en
-  // bronstatus kan dat alsnog uitzetten. Bewust hier en niet in de tokenlaag:
-  // dit is tekst, geen kleur.
-  const uploadGevolg: { toon: "ok" | "warn" | "neutraal"; tekst: string } = (() => {
-    if (uploadForm.bronstatus === "uitgesloten") {
-      return {
-        toon: "warn",
-        tekst:
-          "Dit document wordt bewaard en is vindbaar in de bibliotheek, maar de assistent gebruikt het nooit als bron.",
-      };
-    }
-    if (uploadForm.bronstatus === "historisch") {
-      return {
-        toon: "warn",
-        tekst:
-          "Dit document blijft doorzoekbaar voor historisch onderzoek, maar telt niet mee als actuele bron. De assistent citeert het niet als geldend.",
-      };
-    }
-    if (uploadForm.status === "van_kracht" || uploadForm.status === "vastgesteld") {
-      return {
-        toon: "ok",
-        tekst:
-          "Dit document wordt na verwerking doorzoekbaar en kan door de assistent worden geciteerd als actuele bron.",
-      };
-    }
-    return {
-      toon: "neutraal",
-      tekst:
-        "Concept — dit document wordt wél geïndexeerd, maar geldt niet als actuele bron. De assistent citeert het niet als geldend.",
-    };
-  })();
+  // Rapportage-retire-kandidaten voor de uploadmodal: actieve fondsrapportages
+  // die een actuele voorganger kunnen zijn. De modal toont de picker alleen bij
+  // een nieuwe, actuele rapportage.
+  const retireKandidaten: RetireKandidaat[] = documenten
+    .filter(
+      (d) =>
+        d.bibliotheek === "fonds" &&
+        d.actief &&
+        d.documenttype === "rapportage" &&
+        isActueleRapportageVoorganger(
+          d.status as Parameters<typeof isActueleRapportageVoorganger>[0]
+        )
+    )
+    .map((d) => ({ id: d.id, titel: d.titel }));
 
   // Aantal kolommen in de tabel — de kolom "Bron" bestaat alleen op de generieke
   // tab. Groepskoppen en de "toon er meer"-rij spannen hierover.
@@ -1090,336 +970,15 @@ export default function BibliotheekPage() {
         />
       )}
 
-      {/* Upload modal — alleen op de fondstab (zie B13 hierboven). */}
+      {/* Upload modal (gedeelde component, besluit 0140) — alleen op de
+          fondstab (B13). Het volledige metadatapalet zit nu in
+          core/components/DocumentUploadModal, gedeeld met proces en vergadering. */}
       {uploadOpen && actieveTab === "fonds" && (
-        <div className="fixed inset-0 bg-accent/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-7 w-full max-w-md shadow-xl">
-            <div className="flex items-center justify-between flex-wrap gap-2 mb-5">
-              <h2 className="text-lg font-bold text-ink">Document uploaden</h2>
-              <button
-                onClick={() => setUploadOpen(false)}
-                className="text-muted hover:text-ink"
-              >
-                ✕
-              </button>
-            </div>
-            <form onSubmit={handleUpload} className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-ink mb-1">
-                  Bestand
-                </label>
-                <input
-                  ref={bestandRef}
-                  type="file"
-                  accept=".pdf,.docx,.xlsx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                  required
-                  className="w-full border border-line rounded-lg px-3 py-2 text-sm"
-                />
-                <p className="text-[11px] text-muted mt-1">
-                  PDF, Word (.docx) of Excel (.xlsx). Gescande PDF&apos;s eerst
-                  doorzoekbaar maken via Acrobat/Preview.
-                </p>
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-ink mb-1">Titel</label>
-                <input
-                  type="text"
-                  value={uploadForm.titel}
-                  onChange={(e) => setUploadForm({ ...uploadForm, titel: e.target.value })}
-                  placeholder="bijv. DNB Leidraad Deskundigheid 2024"
-                  className="w-full border border-line rounded-lg px-3 py-2 text-sm outline-none focus:border-accent"
-                  required
-                />
-              </div>
-              {/* Besluit 0140 — twee velden naast elkaar: waar komt het vandaan
-                  en wat voor stuk is het. Samen de classificatie. */}
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="block text-sm font-semibold text-ink mb-1">Bron</label>
-                  <select
-                    value={uploadForm.bron}
-                    onChange={(e) => setUploadForm({ ...uploadForm, bron: e.target.value })}
-                    className="w-full border border-line rounded-lg px-3 py-2 text-sm outline-none focus:border-accent"
-                  >
-                    {UPLOAD_BRONNEN.map((b) => (
-                      <option key={b} value={b}>{b}</option>
-                    ))}
-                  </select>
-                  <p className="text-[11px] text-muted mt-1">
-                    Standaard <span className="font-semibold">Intern</span> — een upload
-                    vanuit het fonds is per definitie een fondsdocument.
-                  </p>
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-ink mb-1">
-                    Documenttype <span className="text-err-ink">*</span>
-                  </label>
-                  <select
-                    value={uploadForm.documenttype}
-                    onChange={(e) => {
-                      const nieuwType = e.target.value;
-                      // Statusprofiel (1.3): valt 'van kracht' weg voor het nieuwe
-                      // type, dan de al gekozen status terugzetten naar concept.
-                      const resetStatus =
-                        uploadForm.status === "van_kracht" &&
-                        !magVanKracht(nieuwType as Documenttype);
-                      setUploadForm({
-                        ...uploadForm,
-                        documenttype: nieuwType,
-                        ...(resetStatus ? { status: "", statusReden: "" } : {}),
-                        // Retire-picker is rapportage-specifiek: bij elke
-                        // typewissel de keuze wissen (werkopdracht 2.5).
-                        ...(nieuwType === "rapportage" ? {} : { retireRapportageId: "" }),
-                      });
-                    }}
-                    required
-                    className="w-full border border-line rounded-lg px-3 py-2 text-sm outline-none focus:border-accent"
-                  >
-                    <option value="">— kies een type —</option>
-                    {DOCUMENTTYPEN.map((t) => (
-                      <option key={t} value={t}>
-                        {DOCUMENTTYPE_LABEL[t]}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-[11px] text-muted mt-1">
-                    Bepaalt de groep in de bibliotheek. Server-side verplicht op dit pad.
-                  </p>
-                </div>
-              </div>
-              {/* Werkopdracht 1.4 — documentdatum. Verplicht bij rapportage (de
-                  periodedatum is betekenisvol); voor andere types optioneel,
-                  waar leeg = de uploaddatum. UX-guardrail: het vereiste vooraf
-                  tonen, niet als 400 achteraf. */}
-              {uploadForm.documenttype === "rapportage" && (
-                <div>
-                  <label className="block text-sm font-semibold text-ink mb-1">
-                    Documentdatum <span className="text-err-ink">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    value={uploadForm.documentdatum}
-                    onChange={(e) =>
-                      setUploadForm({ ...uploadForm, documentdatum: e.target.value })
-                    }
-                    required
-                    className="w-full border border-line rounded-lg px-3 py-2 text-sm outline-none focus:border-accent"
-                  />
-                  <p className="text-[11px] text-muted mt-1">
-                    De periode of vaststellingsdatum waarop de rapportage betrekking heeft.
-                  </p>
-                </div>
-              )}
-              {/* Besluit 0136 — statusverklaring bij aanlevering. De keten
-                  concept -> ter bespreking -> ter besluitvorming -> vastgesteld
-                  modelleert een stuk dat IN het portaal ontstaat. Een reglement
-                  of jaarverslag is buiten het portaal al vastgesteld; dat hier
-                  verklaren is eerlijker dan achteraf drie overgangen doorlopen
-                  die nooit hebben plaatsgevonden. Server-side gevalideerd tegen
-                  dezelfde transitietabel (rechten + redenplicht). */}
-              <div>
-                <label className="block text-sm font-semibold text-ink mb-1">
-                  Status bij aanlevering
-                </label>
-                <select
-                  value={uploadForm.status}
-                  onChange={(e) => {
-                    const nieuweStatus = e.target.value;
-                    // De retire-picker geldt alleen als de nieuwe rapportage
-                    // actueel wordt; valt de status daarbuiten, wis de keuze.
-                    const blijftActueel =
-                      nieuweStatus === "vastgesteld" || nieuweStatus === "van_kracht";
-                    setUploadForm({
-                      ...uploadForm,
-                      status: nieuweStatus,
-                      ...(blijftActueel ? {} : { retireRapportageId: "" }),
-                    });
-                  }}
-                  className="w-full border border-line rounded-lg px-3 py-2 text-sm outline-none"
-                >
-                  <option value="">Concept — nog geen actuele bron</option>
-                  <option value="vastgesteld">
-                    {statusLabelVoorType(
-                      "vastgesteld",
-                      (uploadForm.documenttype as Documenttype) || null
-                    )}{" "}
-                    — buiten het portaal vastgesteld
-                  </option>
-                  {/* Statusprofiel (1.3): 'van kracht' alleen bij de normatieve
-                      cluster (beleid/besluit/besluitdocument/besluitregistratie). */}
-                  {!!uploadForm.documenttype &&
-                    magVanKracht(uploadForm.documenttype as Documenttype) && (
-                      <option value="van_kracht">
-                        Van kracht — buiten het portaal geldend
-                      </option>
-                    )}
-                </select>
-                <p className="text-[11px] text-muted mt-1">
-                  Alleen &quot;vastgesteld&quot; en &quot;van kracht&quot; tellen
-                  als actuele bron voor de assistent. Laat op concept staan als
-                  het stuk nog in besluitvorming is.
-                </p>
-              </div>
-              {uploadForm.status && (
-                <div>
-                  <label className="block text-sm font-semibold text-ink mb-1">
-                    Reden <span className="font-normal text-muted">(verplicht)</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={uploadForm.statusReden}
-                    onChange={(e) =>
-                      setUploadForm({ ...uploadForm, statusReden: e.target.value })
-                    }
-                    placeholder="bijv. vastgesteld in bestuursvergadering 12-03-2026"
-                    className="w-full border border-line rounded-lg px-3 py-2 text-sm outline-none focus:border-accent"
-                    required
-                  />
-                  <p className="text-[11px] text-muted mt-1">
-                    Deze reden landt in het auditlog bij het document.
-                  </p>
-                </div>
-              )}
-              {/* Werkopdracht 2.5 — rapportage-retire. Alleen zichtbaar als je een
-                  NIEUWE, actuele rapportage aanlevert: kies optioneel de vorige
-                  rapportage, die dan → historisch gaat (niet meer actueel, wel
-                  vindbaar). Human-in-the-loop: jij kiest, het systeem raadt niet. */}
-              {uploadForm.documenttype === "rapportage" &&
-                (uploadForm.status === "vastgesteld" ||
-                  uploadForm.status === "van_kracht") &&
-                (() => {
-                  const kandidaten = documenten.filter(
-                    (d) =>
-                      d.bibliotheek === "fonds" &&
-                      d.actief &&
-                      d.documenttype === "rapportage" &&
-                      isActueleRapportageVoorganger(
-                        d.status as Parameters<typeof isActueleRapportageVoorganger>[0]
-                      )
-                  );
-                  if (kandidaten.length === 0) return null;
-                  return (
-                    <div>
-                      <label className="block text-sm font-semibold text-ink mb-1">
-                        Vervangt eerdere rapportage{" "}
-                        <span className="font-normal text-muted">(optioneel)</span>
-                      </label>
-                      <select
-                        value={uploadForm.retireRapportageId}
-                        onChange={(e) =>
-                          setUploadForm({
-                            ...uploadForm,
-                            retireRapportageId: e.target.value,
-                          })
-                        }
-                        className="w-full border border-line rounded-lg px-3 py-2 text-sm bg-white outline-none focus:border-accent"
-                      >
-                        <option value="">— geen; laat vorige rapportages staan —</option>
-                        {kandidaten.map((d) => (
-                          <option key={d.id} value={d.id}>
-                            {d.titel}
-                          </option>
-                        ))}
-                      </select>
-                      <p className="text-[11px] text-muted mt-1">
-                        De gekozen rapportage wordt afgevoerd naar{" "}
-                        <span className="font-semibold">historisch</span> — niet meer
-                        actueel voor de assistent, wel vindbaar als historie. Met auditregel.
-                      </p>
-                      {uploadForm.retireRapportageId && (
-                        <input
-                          type="text"
-                          value={uploadForm.retireReden}
-                          onChange={(e) =>
-                            setUploadForm({ ...uploadForm, retireReden: e.target.value })
-                          }
-                          placeholder="Reden afvoer (optioneel; standaard: opgevolgd door deze rapportage)"
-                          className="mt-2 w-full border border-line rounded-lg px-3 py-2 text-sm outline-none focus:border-accent"
-                        />
-                      )}
-                    </div>
-                  );
-                })()}
-              {/* Werkopdracht 1.6 — bronstatus uit de standaard-invoer, achter een
-                  ingeklapte "Geavanceerd"-sectie. De default (leeg ≡ actief) blijft
-                  en de control blijft bereikbaar; fase 2 (besluit 0153) vervangt
-                  deze as door `rag_uitgesloten`. Besluit 0140 blijft de server-side
-                  poort: `bronstatus` NULL ≡ `actief`, dus een archiefstuk dat als
-                  "van kracht" wordt aangeleverd kan een actuele bron worden — wie
-                  dat wil voorkomen kiest hier Historisch. */}
-              <details className="border border-line rounded-lg">
-                <summary className="cursor-pointer select-none px-3 py-2 text-sm font-semibold text-ink">
-                  Geavanceerd — bronstatus
-                </summary>
-                <div className="px-3 pb-3 pt-1">
-                  <select
-                    value={uploadForm.bronstatus}
-                    onChange={(e) =>
-                      setUploadForm({ ...uploadForm, bronstatus: e.target.value })
-                    }
-                    className="w-full border border-line rounded-lg px-3 py-2 text-sm outline-none focus:border-accent"
-                  >
-                    <option value="">Actief — mag als bron worden gebruikt (standaard)</option>
-                    {INGEST_BRONSTATUSSEN.map((b) => (
-                      <option key={b} value={b}>
-                        {BRONSTATUS_LABEL[b]} —{" "}
-                        {b === "historisch"
-                          ? "bewaren, niet meer als actuele bron"
-                          : "nooit als bron gebruiken"}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-[11px] text-muted mt-1">
-                    Laadt u een archiefstuk? Kies dan{" "}
-                    <span className="font-semibold">Historisch</span> — anders kan de
-                    assistent het als geldende bron citeren.
-                  </p>
-                </div>
-              </details>
-
-              {/* UX-principe "maak vereisten en blokkers expliciet": toon vóór de
-                  actie wat de keuze betekent, niet pas een foutmelding erna. Dit is
-                  de enige vraag die de uploader werkelijk heeft. */}
-              <div
-                className={`rounded-lg px-3 py-2 text-[11.5px] ${
-                  uploadGevolg.toon === "ok"
-                    ? "bg-ok-tint text-ok-ink"
-                    : uploadGevolg.toon === "warn"
-                      ? "bg-warn-tint text-warn-ink"
-                      : "bg-app-bg text-muted"
-                }`}
-              >
-                {uploadGevolg.tekst}
-              </div>
-
-              {/* B13: tenants uploaden uitsluitend naar de fondsbibliotheek.
-                  Generieke (platform-gecureerde) documenten worden centraal beheerd. */}
-              <p className="text-[11px] text-muted -mt-1">
-                Dit document wordt opgeslagen in de <span className="font-semibold">fondsbibliotheek</span>.
-                Generieke (DNB/AFM/PF) documenten worden centraal beheerd en zijn alleen-lezen.
-              </p>
-              {uploadBericht && (
-                <div className="text-sm text-err-ink">{uploadBericht}</div>
-              )}
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setUploadOpen(false)}
-                  className="flex-1 border border-line rounded-lg py-2.5 text-sm font-semibold text-muted hover:bg-app-bg"
-                >
-                  Annuleren
-                </button>
-                <button
-                  type="submit"
-                  disabled={uploaden}
-                  className="flex-1 bg-accent text-white rounded-lg py-2.5 text-sm font-semibold hover:bg-accent-ink disabled:opacity-50"
-                >
-                  {uploaden ? "Verwerken..." : "Uploaden & indexeren"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <DocumentUploadModal
+          onClose={() => setUploadOpen(false)}
+          onUploaded={naUpload}
+          retireKandidaten={retireKandidaten}
+        />
       )}
     </div>
   );
