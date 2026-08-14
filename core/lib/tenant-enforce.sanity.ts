@@ -7,7 +7,7 @@
 // ============================================================================
 
 import assert from "node:assert/strict";
-import { beoordeelToegang } from "./tenant-enforce";
+import { beoordeelToegang, tenantEnforceVoorOmgeving } from "./tenant-enforce";
 import type { FondsResolutie } from "./tenant-host";
 
 const gevonden = (fondsId: string): FondsResolutie => ({ type: "gevonden", fondsId });
@@ -21,6 +21,31 @@ function test(naam: string, fn: () => void) {
 }
 
 console.log("tenant-enforce sanity-tests:");
+
+test("productie en preview zijn altijd fail-closed, ook bij ontbrekende of foute vlag", () => {
+  assert.equal(tenantEnforceVoorOmgeving({ vercelEnv: "production" }), true);
+  assert.equal(
+    tenantEnforceVoorOmgeving({ vercelEnv: "preview", tenantEnforce: "off" }),
+    true
+  );
+  assert.equal(
+    tenantEnforceVoorOmgeving({ vercelTargetEnv: "preview", tenantEnforce: "" }),
+    true
+  );
+  assert.equal(
+    tenantEnforceVoorOmgeving({ deployTarget: "staging", tenantEnforce: "off" }),
+    true
+  );
+});
+
+test("alleen lokaal kan observe expliciet uit blijven", () => {
+  assert.equal(tenantEnforceVoorOmgeving({ tenantEnforce: "off" }), false);
+  assert.equal(tenantEnforceVoorOmgeving({ tenantEnforce: "on" }), true);
+  assert.equal(
+    tenantEnforceVoorOmgeving({ vercelEnv: "development", tenantEnforce: "off" }),
+    false
+  );
+});
 
 test("enforce uit → altijd toegestaan (observe-fase, ook bij mismatch)", () => {
   assert.deepEqual(

@@ -22,6 +22,28 @@ export type ToegangsOordeel =
   | { toegestaan: true }
   | { toegestaan: false; reden: EnforceReden };
 
+/**
+ * Bepaalt of host↔fonds-afdwinging actief moet zijn voor een deployment.
+ *
+ * Productie en elke Vercel preview/custom-preview zijn altijd fail-closed,
+ * óók als TENANT_ENFORCE ontbreekt of per ongeluk op `off` staat. Alleen lokaal
+ * kan de expliciete schakelaar nog voor een observe-run worden gebruikt. Dit
+ * voorkomt dat een configuratiefout een beveiligingsgrens stil uitschakelt.
+ */
+export function tenantEnforceVoorOmgeving(args: {
+  tenantEnforce?: string | null;
+  vercelEnv?: string | null;
+  vercelTargetEnv?: string | null;
+  deployTarget?: string | null;
+}): boolean {
+  const norm = (v: string | null | undefined) => v?.trim().toLowerCase() ?? "";
+  const omgevingen = [args.vercelEnv, args.vercelTargetEnv, args.deployTarget].map(norm);
+  const beschermd = omgevingen.some((v) =>
+    v === "production" || v === "preview" || v === "staging"
+  );
+  return beschermd || norm(args.tenantEnforce) === "on";
+}
+
 /** Beoordeelt of een request door mag op basis van de host-resolutie en de
  *  server-geverifieerde sessie-fonds. Fail-closed alleen bij `enforce=true`:
  *  - `enforce=false` → altijd toegestaan (observe-fase T1.2, ongewijzigd);

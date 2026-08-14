@@ -90,25 +90,25 @@ test("BB-3 — de twee nieuwe capabilities hangen aan géén andere rol", () => 
   }
 });
 
-test("BB-4 — de twee nieuwe capabilities zijn NIET bedraad (T1-scope)", () => {
-  // Zodra een route of prompt erop gaat gaten, hoort dat in T2 / het
-  // deskresearch-ticket te gebeuren mét eval en besluit. Vindt deze test ze
-  // eerder terug in de app, dan is de scopegrens stilletjes verschoven.
-  const capsBestand = lees("core", "lib", "capabilities.ts");
+test("BB-4 — de twee AI-capabilities zijn server-side bedraad (T2/T4)", () => {
+  // De pure mapping verhuisde na T1 naar capabilities-map.ts. De twee
+  // capabilities zijn inmiddels bewust bedraad: stukvoorbereiding en live
+  // deskresearch moeten beide in de serverroute op de sessierol worden getoetst.
+  const capsBestand = lees("core", "lib", "capabilities-map.ts");
   assert.ok(capsBestand.includes("ai.deskresearch"), "capability moet gedefinieerd zijn");
   assert.ok(capsBestand.includes("ai.stukvoorbereiding"), "capability moet gedefinieerd zijn");
 
-  for (const cap of ["ai.deskresearch", "ai.stukvoorbereiding"]) {
-    for (const bestand of [
-      ["app", "api", "chat", "route.ts"],
-      ["core", "lib", "generatie-kern.ts"],
-    ]) {
-      assert.ok(
-        !lees(...bestand).includes(cap),
-        `${cap} wordt al gebruikt in ${bestand.join("/")} — dat hoort in T2, niet in T1`
-      );
-    }
-  }
+  const chatRoute = lees("app", "api", "chat", "route.ts");
+  assert.match(
+    chatRoute,
+    /rolHeeftCapability\([\s\S]{0,180}?"ai\.stukvoorbereiding"/,
+    "stukvoorbereiding mist de server-side capability-gate"
+  );
+  assert.match(
+    chatRoute,
+    /rolHeeftCapability\([\s\S]{0,180}?"ai\.deskresearch"/,
+    "deskresearch mist de server-side capability-gate"
+  );
 });
 
 // ── (2) NULGRENS G23 — de drie bestaande rollen zijn ongewijzigd ───────────
@@ -221,7 +221,7 @@ test("BB-9 — de rol wordt via het bestaande service-role-pad gezet, niet via d
 
 // ── (4) Module-zichtbaarheid (§5.5) ────────────────────────────────────────
 
-test("BB-10 — Catalogus & organen en Governance Log zijn onzichtbaar voor het bureau", () => {
+test("BB-10 — beheer-, governance- en assurance-modules zijn onzichtbaar voor het bureau", () => {
   // De sidebar filtert op strikte gelijkheid: `!item.rolVereist || item.rolVereist === rol`.
   // Beide modules dragen rolVereist 'beheerder' en vallen daarmee vanzelf weg —
   // §5.5 vraagt hier dus GEEN codewijziging. Deze test legt dat vast, zodat een
@@ -234,6 +234,7 @@ test("BB-10 — Catalogus & organen en Governance Log zijn onzichtbaar voor het 
   const bureau = zichtbaar("bestuursbureau");
   assert.ok(!bureau.includes("beheer"), "Catalogus & organen mag niet zichtbaar zijn");
   assert.ok(!bureau.includes("governance"), "Governance Log mag niet zichtbaar zijn");
+  assert.ok(!bureau.includes("assurance"), "Kwaliteitsborging AI is beheerder-only");
 
   // En de kernmodules die §5.5 wél toekent:
   const kern = [
@@ -246,7 +247,6 @@ test("BB-10 — Catalogus & organen en Governance Log zijn onzichtbaar voor het 
     "risicomatrix",
     "stuurinformatie",
     "klantbeeld",
-    "assurance",
   ] as const;
   for (const key of kern) {
     assert.ok(bureau.includes(key), `${key} hoort zichtbaar te zijn voor het bureau`);
@@ -256,7 +256,7 @@ test("BB-10 — Catalogus & organen en Governance Log zijn onzichtbaar voor het 
 test("BB-11 — nulgrens: de rolVereist-waarden zelf zijn ongewijzigd", () => {
   assert.equal(MODULE_REGISTRY.beheer.rolVereist, "beheerder");
   assert.equal(MODULE_REGISTRY.governance.rolVereist, "beheerder");
-  assert.equal(MODULE_REGISTRY.assurance.rolVereist, undefined);
+  assert.equal(MODULE_REGISTRY.assurance.rolVereist, "beheerder");
   // Geen enkele module mag een bureau-specifieke rolgate krijgen: rolVereist is
   // UI-cosmetica en nooit de autorisatielaag (module-registry kopregel).
   for (const m of alleModules()) {

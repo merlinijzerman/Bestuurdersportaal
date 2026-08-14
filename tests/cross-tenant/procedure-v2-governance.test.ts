@@ -74,7 +74,10 @@ test("D7 readiness-unie: buildEvidenceLijst leest actieve instantie-requirements
   assert.match(decisionLib, /\.eq\("actief",\s*true\)/);
   // De unie mag geen dubbeltelling geven: template + instance worden
   // geconcateneerd (disjuncte rijen), niet gededupliceerd weg.
-  assert.match(decisionLib, /alleRequirements\s*=\s*\[\s*\.\.\.requirements,\s*\.\.\.instanceRequirements\s*\]/);
+  assert.match(
+    decisionLib,
+    /alleRequirements\s*:\s*MergedRequirement\[\]\s*=\s*\[\s*\.\.\.requirements,\s*\.\.\.instanceRequirements,?\s*\]/
+  );
 });
 
 test("D7 readiness-migratie: UNION ALL van template + instantie én grant-herstel (Gate H)", () => {

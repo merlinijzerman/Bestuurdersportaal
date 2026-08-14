@@ -8,18 +8,14 @@ import type { NextConfig } from "next";
 // zetten. Iedere header heeft een specifieke pen-test-bevinding die hij
 // voorkomt — zie comments per regel.
 //
-// CSP-keuze (zie SECURITY-ROUTE-A-PLAN.md §3.WP1 "Let op CSP"): `unsafe-inline`
-// en `unsafe-eval` in script-src zijn een tijdelijke concessie omdat Next.js
-// inline scripts gebruikt voor hydratatie. Strikt CSP via nonces hoort in
-// Route B. Voor Route A is dit een evidence-based "good enough".
+// CSP-keuze: `unsafe-inline` blijft tijdelijk nodig voor Next.js-hydratatie en
+// twee expliciete theme/hash-init-scripts. `unsafe-eval` is uitsluitend in de
+// lokale Next.js-devruntime toegestaan; productie en preview krijgen hem niet.
+// Strikt CSP via request-nonces blijft een afzonderlijke vervolgstap.
 //
 // connect-src whitelist:
 // - 'self'                           → eigen API-routes
 // - https://*.supabase.co            → Supabase REST + Auth
-// - https://api.anthropic.com        → AI-calls vanuit server (niet vanuit
-//                                       browser, maar Next.js fetches uit
-//                                       Server Components komen ook op de
-//                                       client-CSP terecht via inline scripts)
 // - https://*.vercel-insights.com    → Vercel Web Analytics + Speed Insights
 //
 // Custom domain: per gebruikersvoorkeur (mei 2026) alleen Vercel-default URL
@@ -31,17 +27,30 @@ import type { NextConfig } from "next";
 // widget-script + de challenge-iframe + de widget-callbacks komen van
 // challenges.cloudflare.com — daarom toegevoegd aan script-src, frame-src en
 // connect-src. De serverside siteverify is een server-fetch (niet CSP-onderworpen).
+const scriptSrc = [
+  "'self'",
+  "'unsafe-inline'",
+  ...(process.env.NODE_ENV === "development" ? ["'unsafe-eval'"] : []),
+  "https://*.vercel-insights.com",
+  "https://challenges.cloudflare.com",
+].join(" ");
+
 const cspDirectives = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.vercel-insights.com https://challenges.cloudflare.com",
+  `script-src ${scriptSrc}`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
-  "connect-src 'self' https://*.supabase.co https://api.anthropic.com https://*.vercel-insights.com https://challenges.cloudflare.com",
+  "connect-src 'self' https://*.supabase.co https://*.vercel-insights.com https://challenges.cloudflare.com",
+  "media-src 'self' blob:",
+  "worker-src 'self' blob:",
   "frame-src 'self' https://challenges.cloudflare.com",
   "frame-ancestors 'none'",
+  "object-src 'none'",
+  "manifest-src 'self'",
   "base-uri 'self'",
   "form-action 'self'",
+  "upgrade-insecure-requests",
 ].join("; ");
 
 const securityHeaders = [

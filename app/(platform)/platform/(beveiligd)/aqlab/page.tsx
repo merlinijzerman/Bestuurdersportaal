@@ -6,18 +6,10 @@
 // ============================================================================
 
 import Link from "next/link";
-import { huidigePlatformIdentiteit } from "@/platform/lib/platform-auth";
-import { createServiceSupabase } from "@/platform/lib/supabase-service";
-import {
-  lijstRuns,
-  haalTestsets,
-  haalTestcases,
-  haalTestsetTellingen,
-  haalProductieBaseline,
-  haalFixtures,
-} from "@/platform/lib/aqlab/console-lees";
+import { PlatformError } from "@/platform/lib/platform-wrapper";
+import { leesAqlabConsole } from "@/platform/lib/aqlab/platform-lees";
 import { AQLAB_TOEGESTANE_MODELLEN } from "@/core/lib/aqlab/modellen";
-import RunSamenstellenForm, { type BaselineProp } from "./run-samenstellen-form";
+import RunSamenstellenForm from "./run-samenstellen-form";
 
 export const dynamic = "force-dynamic";
 
@@ -32,38 +24,24 @@ const STATUS_KLEUR: Record<string, string> = {
 };
 
 export default async function AqlabConsole() {
-  const identiteit = await huidigePlatformIdentiteit();
-  const mag = (identiteit?.capabilities ?? []).includes(CAP);
-
-  if (!mag) {
-    return (
-      <div className="rounded-xl border border-line bg-white p-5">
-        <h1 className="font-serif text-2xl font-bold">AI Quality Lab</h1>
-        <p className="mt-2 text-sm text-ink/70">
-          U hebt geen toegang tot het Lab. Vereist: <code className="font-mono text-xs">{CAP}</code>.
-          Vraag toekenning aan bij een platformbeheerder (vier-ogen, geaudit).
-        </p>
-      </div>
-    );
+  let data;
+  try {
+    data = await leesAqlabConsole();
+  } catch (e) {
+    if (e instanceof PlatformError && e.status === 403) {
+      return (
+        <div className="rounded-xl border border-line bg-white p-5">
+          <h1 className="font-serif text-2xl font-bold">AI Quality Lab</h1>
+          <p className="mt-2 text-sm text-ink/70">
+            U hebt geen toegang tot het Lab. Vereist: <code className="font-mono text-xs">{CAP}</code>.
+            Vraag toekenning aan bij een platformbeheerder (vier-ogen, geaudit).
+          </p>
+        </div>
+      );
+    }
+    throw e;
   }
-
-  const svc = createServiceSupabase();
-  const [runs, testsets, testcases, testsetTellingen, fixtures] = await Promise.all([
-    lijstRuns(svc),
-    haalTestsets(svc),
-    haalTestcases(svc),
-    haalTestsetTellingen(svc),
-    haalFixtures(svc),
-  ]);
-
-  // Vaste productie-baseline per testset (laatst vrijgegeven variant).
-  const baselineParen = await Promise.all(
-    testsets.map(async (t) => [t.id, await haalProductieBaseline(svc, t.id)] as const)
-  );
-  const baselines: Record<string, BaselineProp> = {};
-  for (const [id, b] of baselineParen) {
-    if (b) baselines[id] = b;
-  }
+  const { runs, testsets, testcases, testsetTellingen, fixtures, baselines } = data;
 
   return (
     <div className="space-y-6">

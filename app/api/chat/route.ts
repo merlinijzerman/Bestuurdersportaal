@@ -2331,11 +2331,21 @@ export async function POST(req: NextRequest) {
     // server-side afgeleid; de PII-gate blokkeert de uitgaande zoekvraag bij
     // persoons-/fondsgegevens (AVG). Alles hierna is no-op bij WEB_RETRIEVAL_ACTIEF=false.
     const webBronsoortprofiel = bepaalBronsoortprofiel(vraag);
+    // T4/G2 — live deskresearch is een expliciete bestuursbureau-capability.
+    // De client kan deze poort niet beïnvloeden: de rol komt uit het onder RLS
+    // geladen profiel. Zonder capability lezen we zelfs de whitelist niet en
+    // wordt er nooit een extern webtool aan het model aangeboden.
+    const deskresearchCapability = rolHeeftCapability(
+      (profiel as { rol?: string | null } | null)?.rol,
+      "ai.deskresearch"
+    );
     const whitelistEntries =
-      WEB_RETRIEVAL_ACTIEF && !scopeActief ? await haalActieveWhitelist(supabase) : [];
+      WEB_RETRIEVAL_ACTIEF && deskresearchCapability && !scopeActief
+        ? await haalActieveWhitelist(supabase)
+        : [];
     const piiUitkomst = bevatPersoonsgegevens(vraag, [fondsnaam]);
     const webGate = beoordeelWebGate({
-      vlagAan: WEB_RETRIEVAL_ACTIEF,
+      vlagAan: WEB_RETRIEVAL_ACTIEF && deskresearchCapability,
       aantalActieveEntries: whitelistEntries.length,
       scopeActief,
       bronsoortprofiel: webBronsoortprofiel,
