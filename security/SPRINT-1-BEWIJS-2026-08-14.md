@@ -3,8 +3,8 @@
 - **Statusdatum:** 2026-08-14
 - **Scope:** Preview/Productie-scheiding, tenantgrenzen, technische CI-ondergrens
 - **Conclusie:** de actuele Preview-schema-basis is lokaal reproduceerbaar, de
-  twee hardeningmigraties zijn op Preview toegepast en live gecontroleerd, en
-  `main` is met de twee securitychecks beschermd. De technische Sprint 1-scope
+  twee hardeningmigraties zijn op Preview én Productie toegepast en live
+  gecontroleerd, en `main` is met de twee securitychecks beschermd. De technische Sprint 1-scope
   is daarmee afgerond. De hieronder genoemde provider- en dependencyrisico's
   blijven expliciet vervolgwerk en betekenen niet dat ASVS Level 2 al volledig
   is aangetoond.
@@ -15,11 +15,11 @@
 |---|---|---|
 | Gescheiden Preview-Supabase | Previewproject `bestuurdersportaal-preview` (`swviwoytzvaqypieqgji`) is onderscheiden van Productie (`aebwiufuegsiwhwpdrfb`); CLI-link staat op Preview | Groen |
 | Reproduceerbare Preview-baseline | Schema-only export van `public`, aparte Auth-hook en private Storage-bucket/policy-config; geen tabeldata, gebruikers, objecten of secrets | Groen — lokaal vanaf nul bewezen |
-| Preview- en Productierelease | Preview `3e5f205`; Productie `e4b6110`; applicatie-inhoud gelijk; beide Vercel-releases `Ready` | Groen |
+| Preview- en Productierelease | Sprint 1 is via PR #3 gemergd als `c3ce517`; beide Vercel-productiedeployments rapporteerden `success` | Groen |
 | Host-/tenantgrens | `tests/cross-tenant/preview-environment.test.ts`, scenario's P1–P6 | Groen |
 | Volledige app-laagmatrix | `npm run test:xtenant`: 189/189 | Groen |
-| Least-privilege grants | Preview-query na toepassing: `unwanted_table_grants = 0`; brede defaults zijn eveneens ingetrokken | Groen — Preview toegepast en geverifieerd |
-| RLS `WITH CHECK` | Preview-query na toepassing: policy `ai validatie domein` heeft een expliciete doelrijcontrole | Groen — Preview toegepast en geverifieerd |
+| Least-privilege grants | Preview en Productie: `unwanted_table_grants = 0`; applicatiemigratierol `postgres` heeft geen brede defaults | Groen voor bestaande en door applicatiemigraties aangemaakte tabellen; provider-default apart geregistreerd |
+| RLS `WITH CHECK` | Preview en Productie: policy `ai validatie domein` heeft een expliciete doelrijcontrole | Groen — beide omgevingen toegepast en geverifieerd |
 | Committed secrets | `scripts/check-committed-secrets.sh`; scan toont alleen bestand/regel, nooit secretwaarde | Groen |
 | CI-securityondergrens | `main` vereist een pull request, actuele branch en de checks `Security baseline (Sprint 1)` en `Cross-tenant isolatie (§15 T1-T14)`; ook beheerders vallen onder de regel | Groen — live geverifieerd |
 | Echte RLS/Storage/RPC-test | Schone PostgreSQL 17-stack: baseline + 2 migraties + volledige matrix; 189 app-tests en alle DB-gates groen | Groen — verplicht voor merge naar `main` |
@@ -67,6 +67,7 @@ checkpoort blijven wel afdwingbaar.
 | Midden | `beheer.*` en `beheer.preview.*` zijn conceptueel gescheiden, maar tegengestelde service-role-scopes zijn nog niet volledig live bewezen | Vercel-/Supabase-envscope export zonder secretwaarden |
 | Midden | Volledige positieve login/reset/logout-smoke per Previewfonds ontbreekt als herhaalbaar bewijs | Auth-callbackcontrole en geldige testaccounts |
 | Midden | Rollbackstappen bestaan, maar verantwoordelijke en 24-uurs nazorg zijn nog niet formeel toegewezen | Opdrachtgever wijst eigenaar aan |
+| Midden | Supabase houdt negen brede standaard-ACL's voor tabellen onder providerrol `supabase_admin`; projectrol `postgres` is geen lid en kan deze niet wijzigen | Bestaande tabellen blijven op nul ongewenste grants; driftcheck na provider-/dashboardwijzigingen en expliciete revoke in elke applicatiemigratie |
 
 ## Wat van de opdrachtgever nodig is
 
@@ -78,10 +79,27 @@ checkpoort blijven wel afdwingbaar.
 ## Live providerbewijs
 
 Op 2026-08-14 is vóór de Preview-wijziging een schema-only rollbackdump gemaakt.
-De twee hardeningmigraties zijn daarna uitsluitend op Preview uitgevoerd. Een
-controlequery op Preview gaf PostgreSQL `17.6`, een aanwezige RLS-`WITH CHECK`
-en nul ongewenste tabelgrants. Productie is niet gewijzigd: daar is uitsluitend
-`current_setting('server_version')` gelezen, eveneens met uitkomst `17.6`.
+De twee hardeningmigraties zijn eerst op Preview uitgevoerd. Een controlequery
+gaf PostgreSQL `17.6`, een aanwezige RLS-`WITH CHECK` en nul ongewenste
+tabelgrants.
+
+Na de groene Preview-, CI- en Vercelcontroles is voor Productie een gerichte
+preflight en rollback vastgelegd. De preflight gaf PostgreSQL `17.6`, nul
+ongewenste actuele tabelgrants en een nog ontbrekende `WITH CHECK`. Dezelfde twee
+transacties zijn daarna op Productie toegepast. De nacontrole gaf:
+
+- `ai_policy_with_check = true`;
+- `unwanted_table_grants = 0`;
+- negen resterende provider-defaults, uitsluitend eigendom van
+  `supabase_admin`; `postgres` kan deze providerrol niet overnemen;
+- publieke app-health `200 {"ok":true}`;
+- beheer-health zonder sessie correct `401 Niet geautoriseerd`;
+- beide loginpagina's laden zonder fout.
+
+Er is geen tabeldata gewijzigd. De productie-ingreep bestond uit de policy-
+vervanging en het intrekken van rechten/defaults voor zover de projectrol die
+bezit. De provider-defaults gelden als expliciet restrisico en niet als actuele
+tabelgrant.
 
 ## Lokale sluitingsrun
 
