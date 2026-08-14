@@ -3,10 +3,11 @@
 // Procesfasen-accordeon (WO-3) — schone, neutrale fase-accordeon in het
 // linkerpaneel, in de kleuren van het hoofdmenu (nav-tokens).
 //
-// Bewust rustig: geen statuskleur op elke stap. De accordeon is neutraal; alléén
-// de GESELECTEERDE stap (of fase) wordt gehighlight met de hoofdmenu-highlight
-// (bg-nav-active + navy cirkel). Kleur is gereserveerd voor een échte
-// aandachtsvlag (rood/oranje linkerrand + stip) — daar verdient kleur zijn plek.
+// Bewust rustig: geen statuskleur op elke stap en géén aandacht-indicator op de
+// fasen (bewust weggehaald om de rail rustig te houden; de aandacht-afleiding
+// blijft in de data bestaan voor het portfolio-overzicht). De accordeon is
+// neutraal; alléén de GESELECTEERDE stap (of fase) wordt gehighlight met de
+// hoofdmenu-highlight (bg-nav-active + navy cirkel).
 // GEEN beschrijvings-/toelichtingsblokken in het linkerpaneel; die staan in de
 // fase-weergave rechts. Klik op een fasekop → fase-weergave (`?fase=`); klik op
 // een stap → het stapscherm (`?stap=`). Parallel-by-default.
@@ -43,8 +44,8 @@ const STATUS_PILL: Record<FaseStatus, string> = {
   nog_niet_begonnen: "bg-app-bg text-nav-text border border-nav-line",
 };
 
-// Neutrale romeins-badge (hoofdmenu-stijl); de status leest af aan de pill + de
-// (optionele) aandachtsstip, niet aan de badgekleur.
+// Neutrale romeins-badge (hoofdmenu-stijl); de status leest af aan de afgerond-
+// pill, niet aan de badgekleur.
 const BADGE = "bg-app-bg text-nav-text border border-nav-line";
 
 function isActiefAchtig(s: Stap): boolean {
@@ -212,27 +213,9 @@ export default function FaseRail({
                   {f.stappen.length} stap{f.stappen.length === 1 ? "" : "pen"}
                 </span>
               </span>
-              {/* Aandachtsvlag als compacte pill (kleur + woord + vorm, besluit
-                  0097/0101). De gekleurde linkerrand is bewust weggehaald voor
-                  een rustiger rail; de pill draagt het signaal. */}
-              {f.aandacht !== "geen" && (
-                <span
-                  className={`text-[10px] font-semibold uppercase tracking-wide rounded-full px-2 py-0.5 shrink-0 whitespace-nowrap border ${
-                    f.aandacht === "rood"
-                      ? "text-err-ink bg-err-tint border-err/30"
-                      : "text-warn-ink bg-warn-tint border-warn/30"
-                  }`}
-                  title={
-                    f.aandacht === "rood"
-                      ? "Aandacht: verplichte blokkerende bewijslast ontbreekt of termijn overschreden"
-                      : "Aandacht: heropend of verplichte bewijslast ontbreekt"
-                  }
-                >
-                  Aandacht
-                </span>
-              )}
-              {/* Alleen de afgeronde staat als pill; 'In behandeling' laten we
-                  weg voor een rustige rail (aandacht = de pill hierboven). */}
+              {/* Alleen de afgeronde staat als pill; 'In behandeling' en de
+                  aandachtsvlag laten we bewust weg voor een rustige rail. De
+                  aandacht-afleiding blijft wel bestaan (portfolio-overzicht). */}
               {f.status === "afgerond" && (
                 <span
                   className={`text-[10px] font-semibold rounded-full px-2 py-0.5 shrink-0 whitespace-nowrap ${
