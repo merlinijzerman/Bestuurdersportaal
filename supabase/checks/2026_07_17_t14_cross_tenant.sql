@@ -36,9 +36,9 @@
 begin;
 
 -- ── Seed als tabel-eigenaar (RLS omzeild). Vaste UUID's voor de test. ────────
-insert into public.fondsen (id, naam) values
-  ('41111111-1111-1111-1111-111111111111', 'T14 Fonds A'),
-  ('42222222-2222-2222-2222-222222222222', 'T14 Fonds B');
+insert into public.fondsen (id, naam, slug) values
+  ('41111111-1111-1111-1111-111111111111', 'T14 Fonds A', 't14-fonds-a'),
+  ('42222222-2222-2222-2222-222222222222', 'T14 Fonds B', 't14-fonds-b');
 
 insert into auth.users (id, aud, role, email, raw_user_meta_data, created_at, updated_at)
 values
@@ -137,6 +137,7 @@ begin
   end if;
   select * into regel from public.fonds_stuurinfo_log
    where fonds_id = '41111111-1111-1111-1111-111111111111' and tabel = 'reserve'
+     and oude_waarde is not null
    order by aangemaakt desc, id desc limit 1;
   if (regel.oude_waarde->>'stand')::numeric is distinct from 40
      or (regel.nieuwe_waarde->>'stand')::numeric is distinct from 41 then

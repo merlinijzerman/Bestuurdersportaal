@@ -30,9 +30,9 @@ begin;
 -- ── Seed als tabel-eigenaar (RLS omzeild). Vaste UUID's voor de test. ────────
 --   Fonds A = 11111111-...  user A = aaaa...
 --   Fonds B = 22222222-...  user B = bbbb...
-insert into public.fondsen (id, naam)
-values ('11111111-1111-1111-1111-111111111111', 'T4 Testfonds A'),
-       ('22222222-2222-2222-2222-222222222222', 'T4 Testfonds B');
+insert into public.fondsen (id, naam, slug)
+values ('11111111-1111-1111-1111-111111111111', 'T4 Testfonds A', 't4-testfonds-a'),
+       ('22222222-2222-2222-2222-222222222222', 'T4 Testfonds B', 't4-testfonds-b');
 
 insert into auth.users (id, aud, role, email, raw_user_meta_data, created_at, updated_at)
 values

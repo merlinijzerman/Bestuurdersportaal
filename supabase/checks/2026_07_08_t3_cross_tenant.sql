@@ -100,9 +100,9 @@ begin;
 -- Seed als tabel-eigenaar (RLS omzeild). Vaste UUID's voor de test.
 --   Fonds A = 11111111-...  user A = aaaa...
 --   Fonds B = 22222222-...  user B = bbbb...
-insert into public.fondsen (id, naam)
-values ('11111111-1111-1111-1111-111111111111', 'T3 Testfonds A'),
-       ('22222222-2222-2222-2222-222222222222', 'T3 Testfonds B');
+insert into public.fondsen (id, naam, slug)
+values ('11111111-1111-1111-1111-111111111111', 'T3 Testfonds A', 't3-testfonds-a'),
+       ('22222222-2222-2222-2222-222222222222', 'T3 Testfonds B', 't3-testfonds-b');
 
 -- auth.users-insert vuurt trigger maak_profiel() → maakt profielen-rij met het
 -- fonds uit raw_user_meta_data.fonds_id (migratie 2026_07_08). Zo ontstaan de
