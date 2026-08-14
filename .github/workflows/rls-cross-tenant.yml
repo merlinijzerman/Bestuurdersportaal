@@ -69,7 +69,11 @@ jobs:
         uses: supabase/setup-cli@v1
 
       - name: Ephemere Supabase-stack starten (Postgres + auth + storage)
-        run: supabase start
+        # Nieuwere CLI-versies passen migrations/* automatisch toe tijdens
+        # `start`. Deze repo gebruikt daarna bewust zijn eigen baselinevolgorde;
+        # de wrapper houdt de historische map daarom alleen tijdens boot buiten
+        # beeld en zet haar via een trap altijd terug.
+        run: bash scripts/start-ephemeral-supabase.sh
 
       - name: Volledige §15 cross-tenant suite (app-laag + DB-laag)
         env:
