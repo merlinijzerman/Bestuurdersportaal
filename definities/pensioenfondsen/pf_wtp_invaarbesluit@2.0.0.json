@@ -1,13 +1,12 @@
 {
   "code": "pf_wtp_invaarbesluit",
   "versie": "2.0.0",
-  "naam": "Wtp-invaarbesluit (uitgebreid) — bestuurlijke keten",
+  "naam": "Wtp-invaarbesluit — bestuurlijke keten",
   "sector": "pensioenfondsen",
-  "fonds_variant": "SPH",
   "profiel_type": "beleidswijziging",
   "korte_omschrijving": "Volledige bestuurlijke keten voor het invaren onder de Wtp: van opdrachtaanvaarding en beoordelingskader, via onderbouwing, evenwichtigheid en communicatie/keuzebegeleiding, naar besluitvorming, DNB/AFM-toezicht, go/no-go, omzetting en nazorg.",
-  "context": "Fonds: SPH (beroepspensioenfonds). Opdracht van de beroepspensioenvereniging; flexibele premieregeling met risicodelingsreserve; beoogde transitiedatum 1-1-2028.",
-  "aanleiding": "Wettelijke Wtp-transitie; transitieplan beroepspensioenvereniging (12-12-2024, geactualiseerd 25-9-2025)",
+  "context": "Generieke bestuurlijke keten voor het invaren onder de Wet toekomst pensioenen. Per fonds aanpasbaar (opdrachtgever, regelingtype, transitiedatum, organenstructuur) — in het portaal via aanpasbare checklist, bewijslast en toelichtingen.",
+  "aanleiding": "Wettelijke Wtp-transitie; transitieplan van sociale partners of beroepspensioenvereniging.",
   "frequentie": "eenmalig / incidenteel",
   "eigenaar_rol": "voorzitter",
   "regelgeving": [
@@ -67,7 +66,7 @@
     {
       "volgorde": 1,
       "naam": "Opdracht ontvangen en duiden",
-      "beschrijving": "Is de opdracht van de beroepspensioenvereniging voldoende duidelijk én kunnen wij die beheerst en evenwichtig uitvoeren? Opdrachtaanvaarding is een expliciet (voorgenomen) besluit.",
+      "beschrijving": "Is de opdracht van de sociale partners of beroepspensioenvereniging voldoende duidelijk én kunnen wij die beheerst en evenwichtig uitvoeren? Opdrachtaanvaarding is een expliciet (voorgenomen) besluit.",
       "fase_code": "I",
       "fase_type": "intake",
       "vereist_besluit": true,
@@ -202,7 +201,7 @@
     {
       "volgorde": 3,
       "naam": "Uitvoerbaarheid en beheersing beoordelen",
-      "beschrijving": "Kunnen fonds, PUO en keten de FPR en het invaren aantoonbaar beheerst uitvoeren? Expliciet eigenaarschap op ketenregie, escalatie en uitstelscenario. Doorlopend spoor → stap 11.",
+      "beschrijving": "Kunnen fonds, PUO en keten de nieuwe regeling en het invaren aantoonbaar beheerst uitvoeren? Expliciet eigenaarschap op ketenregie, escalatie en uitstelscenario. Doorlopend spoor → stap 11.",
       "fase_code": "II",
       "fase_type": "analyse",
       "vereist_besluit": false,
@@ -386,7 +385,7 @@
     {
       "volgorde": 5,
       "naam": "Transitie-effecten en evenwichtigheid beoordelen",
-      "beschrijving": "Welke groepen worden geraakt, en waarom is het geheel evenwichtig? Netto-profijt, FPR-toedeling/lifecycle, vulling risicodelingsreserve, compensatiebesluit + financieringsbron. Voedt stap 7.",
+      "beschrijving": "Welke groepen worden geraakt, en waarom is het geheel evenwichtig? Netto-profijt, vermogenstoedeling, vulling van de solidariteits-/risicodelingsreserve, compensatiebesluit + financieringsbron. Voedt stap 7.",
       "fase_code": "II",
       "fase_type": "analyse",
       "vereist_besluit": false,
@@ -482,7 +481,7 @@
     {
       "volgorde": 6,
       "naam": "Communicatiestrategie, keuzebegeleiding en deelnemersimpact beoordelen",
-      "beschrijving": "Kunnen deelnemers de keuze en persoonlijke gevolgen correct en realistisch begrijpen — én de FPR-keuzes verantwoord maken? Keuzebegeleiding/zorgplicht als apart thema. Communicatiemoment ①. Doorlopend spoor → 10 → 12.",
+      "beschrijving": "Kunnen deelnemers de keuze en persoonlijke gevolgen correct en realistisch begrijpen — én relevante keuzes verantwoord maken? Keuzebegeleiding/zorgplicht als apart thema. Communicatiemoment ①. Doorlopend spoor → 10 → 12.",
       "fase_code": "II",
       "fase_type": "consultatie",
       "vereist_besluit": false,
@@ -640,7 +639,7 @@
     {
       "volgorde": 8,
       "naam": "Fondsorganen en intern toezicht doorlopen",
-      "beschrijving": "Hebben medezeggenschap en intern toezicht tijdig, met voldoende informatie, aantoonbaar invloed gehad? Route volgens het beroepspensioenfonds-regime; hoorrecht voor VO/gewezen deelnemers/gepensioneerden.",
+      "beschrijving": "Hebben medezeggenschap en intern toezicht tijdig, met voldoende informatie, aantoonbaar invloed gehad? Route volgens het geldende bestuursmodel en fondsregime; hoorrecht voor VO/gewezen deelnemers/gepensioneerden.",
       "fase_code": "III",
       "fase_type": "consultatie",
       "vereist_besluit": false,
@@ -727,7 +726,7 @@
     {
       "volgorde": 9,
       "naam": "Invaarmelding en toezichtbeoordeling",
-      "beschrijving": "Is het dossier volledig, consistent en verdedigbaar richting DNB en AFM, en zijn bevindingen beheerst? Tijdkritisch: indiening ruim vóór 1-1-2028. Iteratielus → 4/5/6.",
+      "beschrijving": "Is het dossier volledig, consistent en verdedigbaar richting DNB en AFM, en zijn bevindingen beheerst? Tijdkritisch: indiening ruim vóór de transitiedatum. Iteratielus → 4/5/6.",
       "fase_code": "IV",
       "fase_type": "externe_indiening",
       "vereist_besluit": false,
@@ -895,7 +894,7 @@
     {
       "volgorde": 11,
       "naam": "Gereedheid bewaken en finale go/no-go",
-      "beschrijving": "Zijn alle vooraf bepaalde criteria nog steeds vervuld om daadwerkelijk in te varen? Tijdkritisch, kort vóór 1-1-2028. Volgt logisch op 9·10 via de readiness-ladder.",
+      "beschrijving": "Zijn alle vooraf bepaalde criteria nog steeds vervuld om daadwerkelijk in te varen? Tijdkritisch, kort vóór de transitiedatum. Volgt logisch op 9·10 via de readiness-ladder.",
       "fase_code": "V",
       "fase_type": "besluitvorming",
       "vereist_besluit": true,
