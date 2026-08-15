@@ -73,6 +73,14 @@ export default async function PlatformHome() {
               Bronnen-whitelist
             </Link>
           )}
+          {magConfig && (
+            <Link
+              href="/platform/licenties"
+              className="inline-flex items-center gap-2 rounded-lg bg-app-bg px-4 py-2 text-sm font-medium text-ink hover:bg-accent/10"
+            >
+              Licenties
+            </Link>
+          )}
           {magGebruikers && (
             <Link
               href="/platform/gebruikers"
