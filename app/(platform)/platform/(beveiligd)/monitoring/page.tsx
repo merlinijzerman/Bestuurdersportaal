@@ -28,9 +28,11 @@ import {
   haalMonitoringOverzicht,
   type MonitoringOverzicht,
 } from "@/platform/lib/monitoring-lees";
-import { SUPPRESSIE_DREMPEL } from "@/core/lib/suppressie";
-import { StoplichtLegenda } from "./_components/Stoplicht";
-import SignaalTabel from "./_components/SignaalTabel";
+import {
+  haalVerbruikBundelOverzicht,
+  type VerbruikBundelOverzicht,
+} from "@/platform/lib/verbruik-bundel-lees";
+import MonitoringWeergave from "./_components/MonitoringWeergave";
 
 export const dynamic = "force-dynamic";
 
@@ -52,19 +54,29 @@ export default async function MonitoringPagina() {
   }
 
   let overzicht: MonitoringOverzicht;
+  let verbruik: VerbruikBundelOverzicht;
   try {
-    overzicht = await withPlatformRead(
+    const uit = await withPlatformRead(
       { capability: CAPABILITY, handeling: "monitoring.dashboard.inzien" },
       async (svc) => {
-        const uit = await haalMonitoringOverzicht(svc);
+        // ÉÉN server-lezing voor beide subtabs (signalen + verbruik & bundel):
+        // zo blijft er precies één attempt/result-paar met TELLINGEN als effect.
+        const signalen = await haalMonitoringOverzicht(svc);
+        const verbruikBundel = await haalVerbruikBundelOverzicht(svc);
         // Effect = tellingen, nooit meetwaarden of fondsnamen. Ongewijzigd t.o.v.
-        // de kaartweergave: het fondsfilter gaat het auditspoor NIET in.
+        // de kaartweergave: het fonds-/periodefilter gaat het auditspoor NIET in.
         return {
-          resultaat: uit,
-          effect: { signalen: uit.signalen.length, snapshotrijen: uit.gelezenRijen },
+          resultaat: { signalen, verbruikBundel },
+          effect: {
+            signalen: signalen.signalen.length,
+            snapshotrijen: signalen.gelezenRijen,
+            verbruikrijen: verbruikBundel.gelezenRijen,
+          },
         };
       }
     );
+    overzicht = uit.signalen;
+    verbruik = uit.verbruikBundel;
   } catch (e) {
     if (!(e instanceof PlatformError)) throw e;
     return (
@@ -77,33 +89,9 @@ export default async function MonitoringPagina() {
     );
   }
 
-  const verouderd = overzicht.signalen.filter((s) => s.verouderd).length;
-
   return (
     <Omhulsel>
-      <MonitorStatus
-        laatste={overzicht.laatsteSnapshot}
-        verouderd={verouderd}
-        leesfout={overzicht.leesfout}
-        trendAfgekapt={overzicht.trendAfgekapt}
-        gedekteDagen={overzicht.gedekteDagen}
-      />
-
-      <StoplichtLegenda />
-
-      <SignaalTabel
-        signalen={overzicht.signalen}
-        trendAfgekapt={overzicht.trendAfgekapt}
-        gedekteDagen={overzicht.gedekteDagen}
-        leesfout={overzicht.leesfout}
-      />
-
-      <p className="text-xs text-ink/50">
-        Alle waarden zijn aggregaten. Signalen die op gebruik leunen worden
-        onderdrukt bij minder dan {SUPPRESSIE_DREMPEL} waarnemingen
-        (besluit 0055). Er is in deze fase géén alerting: rode drempels sturen
-        geen bericht — kijk hier, of stel alerting als aparte tranche in.
-      </p>
+      <MonitoringWeergave overzicht={overzicht} verbruik={verbruik} />
     </Omhulsel>
   );
 }
@@ -123,80 +111,4 @@ function Omhulsel({ children }: { children: React.ReactNode }) {
       {children}
     </div>
   );
-}
-
-/** De monitor over de monitor: leeft de snapshot-job nog? Blijft VÓÓR de balk staan. */
-function MonitorStatus({
-  laatste,
-  verouderd,
-  leesfout,
-  trendAfgekapt,
-  gedekteDagen,
-}: {
-  laatste: string | null;
-  verouderd: number;
-  leesfout: boolean;
-  trendAfgekapt: boolean;
-  gedekteDagen: number;
-}) {
-  // Een leesfout is iets ANDERS dan "nog nooit gemeten". Die twee door elkaar
-  // halen levert een verkeerde diagnose, met stelligheid gebracht: de operator
-  // gaat de cron controleren terwijl de meting gewoon niet gelezen kon worden.
-  if (leesfout) {
-    return (
-      <div className="rounded-lg border border-err/30 bg-err-tint px-4 py-3 text-sm text-err-ink">
-        <strong>De monitoringgegevens konden niet worden gelezen.</strong> De
-        metingen hieronder zijn daarom niet actueel — dit zegt niets over de
-        gezondheid van de keten, alleen dat het dashboard er niet bij kan.
-        Controleer de databaseverbinding van het beheer-project.
-      </div>
-    );
-  }
-  if (!laatste) {
-    return (
-      <div className="rounded-lg border border-warn/30 bg-warn-tint px-4 py-3 text-sm text-warn-ink">
-        <strong>Er is nog nooit gemeten.</strong> De snapshot-job heeft geen enkele
-        meting geschreven. Controleer of de cron draait in het beheer-project
-        (<code className="font-mono">/api/platform/monitoring/snapshot</code>) en of{" "}
-        <code className="font-mono">CRON_SECRET</code> is gezet. Zolang dit zo is,
-        zegt geen enkel signaal hieronder iets.
-      </div>
-    );
-  }
-  return (
-    <div className="rounded-xl border border-line bg-white p-4 text-sm">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <span className="text-ink/70">Laatste meting</span>
-        <span className="font-medium text-ink">{formatteerTijd(laatste)}</span>
-      </div>
-      {trendAfgekapt && (
-        <p className="mt-2 text-xs text-ink/60">
-          De trendlijnen zijn afgekapt op de leeslimiet en dekken{" "}
-          {gedekteDagen} {gedekteDagen === 1 ? "dag" : "dagen"} in plaats van de
-          gevraagde periode. De laatste stand per signaal klopt wel.
-        </p>
-      )}
-      {verouderd > 0 && (
-        <p className="mt-2 text-xs text-warn-ink">
-          {verouderd === 1
-            ? "Eén signaal is niet recent gemeten en staat daarom op Onbekend"
-            : `${verouderd} signalen zijn niet recent gemeten en staan daarom op Onbekend`}{" "}
-          &mdash; niet op groen. Een stilgevallen meting is geen bewijs dat het goed gaat.
-        </p>
-      )}
-    </div>
-  );
-}
-
-function formatteerTijd(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "onbekend";
-  return d.toLocaleString("nl-NL", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Europe/Amsterdam",
-  });
 }
