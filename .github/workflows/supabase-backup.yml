@@ -1,0 +1,94 @@
+name: Supabase-productieback-up
+
+on:
+  schedule:
+    - cron: "30 1 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-productieback-up
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    name: Database dump naar Backblaze B2
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production-backup
+    env:
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.B2_APPLICATION_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.B2_APPLICATION_KEY }}
+      AWS_DEFAULT_REGION: eu-central-003
+      B2_BUCKET_NAME: ${{ vars.B2_BUCKET_NAME }}
+      B2_S3_ENDPOINT: ${{ vars.B2_S3_ENDPOINT }}
+
+    steps:
+      - name: Supabase CLI installeren
+        uses: supabase/setup-cli@v2.1.1
+        with:
+          version: 2.101.0
+          github-token: ${{ github.token }}
+
+      - name: Veilige databaseverbinding opbouwen
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ENCODED_PASSWORD="$(python3 -c 'import os, urllib.parse; print(urllib.parse.quote(os.environ["SUPABASE_DB_PASSWORD"], safe=""))')"
+          echo "::add-mask::$ENCODED_PASSWORD"
+          SUPABASE_DB_URL="postgresql://postgres.aebwiufuegsiwhwpdrfb:${ENCODED_PASSWORD}@aws-1-eu-north-1.pooler.supabase.com:5432/postgres"
+          echo "::add-mask::$SUPABASE_DB_URL"
+          echo "SUPABASE_DB_URL=$SUPABASE_DB_URL" >> "$GITHUB_ENV"
+
+      - name: Alleen-lezen verbinding controleren
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -Atc "select 1")" = "1"
+
+      - name: Rollen, schema en data exporteren
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          BACKUP_TIMESTAMP="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
+          BACKUP_DIR="$RUNNER_TEMP/supabase-backup-$BACKUP_TIMESTAMP"
+          ARCHIVE_NAME="bestuurdersportaal-supabase-$BACKUP_TIMESTAMP.tar.gz"
+          ARCHIVE_PATH="$RUNNER_TEMP/$ARCHIVE_NAME"
+          mkdir -p "$BACKUP_DIR"
+
+          supabase db dump --db-url "$SUPABASE_DB_URL" -f "$BACKUP_DIR/roles.sql" --role-only
+          supabase db dump --db-url "$SUPABASE_DB_URL" -f "$BACKUP_DIR/schema.sql"
+          supabase db dump --db-url "$SUPABASE_DB_URL" -f "$BACKUP_DIR/data.sql" --data-only --use-copy
+
+          cat > "$BACKUP_DIR/metadata.txt" <<EOF
+          created_utc=$BACKUP_TIMESTAMP
+          source_project=aebwiufuegsiwhwpdrfb
+          format=supabase-cli-logical-dump
+          cli_version=2.101.0
+          contents=roles.sql,schema.sql,data.sql
+          EOF
+
+          tar -C "$BACKUP_DIR" -czf "$ARCHIVE_PATH" .
+          sha256sum "$ARCHIVE_PATH" > "$ARCHIVE_PATH.sha256"
+          OBJECT_PREFIX="supabase/$(date -u +%Y)/$(date -u +%m)/$(date -u +%d)"
+          echo "ARCHIVE_NAME=$ARCHIVE_NAME" >> "$GITHUB_ENV"
+          echo "ARCHIVE_PATH=$ARCHIVE_PATH" >> "$GITHUB_ENV"
+          echo "OBJECT_PREFIX=$OBJECT_PREFIX" >> "$GITHUB_ENV"
+
+      - name: Back-up naar Backblaze B2 uploaden
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          aws s3api put-object --endpoint-url "$B2_S3_ENDPOINT" --bucket "$B2_BUCKET_NAME" --key "$OBJECT_PREFIX/$ARCHIVE_NAME" --body "$ARCHIVE_PATH" --only-show-errors
+          aws s3api put-object --endpoint-url "$B2_S3_ENDPOINT" --bucket "$B2_BUCKET_NAME" --key "$OBJECT_PREFIX/$ARCHIVE_NAME.sha256" --body "$ARCHIVE_PATH.sha256" --only-show-errors
+          echo "Back-up succesvol opgeslagen: s3://$B2_BUCKET_NAME/$OBJECT_PREFIX/$ARCHIVE_NAME" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Tijdelijke bestanden verwijderen
+        if: always()
+        shell: bash
+        run: |
+          find "$RUNNER_TEMP" -maxdepth 1 -type f -name "bestuurdersportaal-supabase-*.tar.gz*" -delete
+          find "$RUNNER_TEMP" -maxdepth 1 -type d -name "supabase-backup-*" -exec rm -rf {} +
