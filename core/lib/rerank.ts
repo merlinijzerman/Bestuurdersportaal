@@ -22,7 +22,8 @@
 //  de Anthropic-client is injecteerbaar voor hermetische tests.
 // ============================================================================
 
-import Anthropic from "@anthropic-ai/sdk";
+import type Anthropic from "@anthropic-ai/sdk";
+import { bewaakteAnthropic, isPoortGesloten, type PoortContext } from "./ai-poort";
 import { HAIKU_MODEL } from "./llm-modellen";
 
 // Tijdsbudget voor de rerank-call. Bewust krap: de rerank staat in het kritieke
@@ -48,13 +49,11 @@ Geen toelichting, geen extra tekst.`;
 /** Injecteerbare, minimale Anthropic-client (hermetische tests). */
 export type RerankClient = Pick<Anthropic["messages"], "create">;
 
-let gedeeldeClient: Anthropic | null = null;
-function client(): RerankClient {
-  if (!gedeeldeClient) {
-    gedeeldeClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
-  }
-  return gedeeldeClient.messages;
-}
+// AI-BEGRENZING (besluit 0180). Geen eigen client meer: de call loopt door de
+// centrale poort. Blijft de poort dicht, dan valt de reranker terug op de
+// RRF-volgorde — precies het bestaande fail-safe gedrag. Dat mag hier stil,
+// omdat de rerank alleen de VOLGORDE van al gevonden bronnen bijstelt en het
+// antwoord dus niet smaller maakt; de reden landt wel in RerankMeta.
 
 export interface RerankMeta {
   methode: "haiku_listwise";
@@ -71,6 +70,13 @@ export interface RerankOpties {
   client?: RerankClient;
   timeoutMs?: number;
   model?: string;
+  /**
+   * AI-BEGRENZING (besluit 0180). Verplicht op het productiepad; alleen bij een
+   * geïnjecteerde `client` (hermetische tests) mag hij ontbreken. Zonder beide
+   * valt de reranker terug op de RRF-volgorde in plaats van een ongemeten call
+   * te doen.
+   */
+  poort?: PoortContext;
 }
 
 // ── Zuivere kern ─────────────────────────────────────────────────────────────
@@ -165,7 +171,12 @@ export async function rerankChunks<T extends { id: string }>(
     .join("\n\n");
 
   const timeoutMs = opties?.timeoutMs ?? RERANK_TIMEOUT_MS;
-  const c = opties?.client ?? client();
+  const c = opties?.client ?? null;
+  // Zonder injecteerbare client (productiepad) is een poortcontext verplicht:
+  // anders zou hier een ongemeten providercall ontstaan.
+  if (!c && !opties?.poort) {
+    return metFallback(kandidaten, "geen_poortcontext", model);
+  }
 
   let ruw: string;
   // Timer-handle buiten de try zodat we hem in `finally` altijd opruimen: wint de
@@ -173,7 +184,7 @@ export async function rerankChunks<T extends { id: string }>(
   // de event loop bezig (dangling teardown-latency op het kritieke chatpad).
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const call = c.create({
+    const params = {
       model,
       max_tokens: 1024,
       // Besluit 0139 — reproduceerbare retrieval: de rerank ordent de
@@ -187,14 +198,21 @@ export async function rerankChunks<T extends { id: string }>(
           content: `Zoekvraag: ${zoekvraag}\n\nFragmenten:\n${genummerd}\n\nJSON:`,
         },
       ],
-    });
+    } satisfies Anthropic.Messages.MessageCreateParamsNonStreaming;
+    const call = c
+      ? c.create(params)
+      : bewaakteAnthropic(opties!.poort!, model, (anthropic) => anthropic.messages.create(params));
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(() => reject(new Error("rerank_timeout")), timeoutMs);
     });
     const response = await Promise.race([call, timeout]);
     ruw = response.content[0]?.type === "text" ? response.content[0].text : "";
   } catch (e) {
-    const reden = e instanceof Error && e.message === "rerank_timeout" ? "timeout" : "api_error";
+    const reden = isPoortGesloten(e)
+      ? `poort_dicht:${e.reden}`
+      : e instanceof Error && e.message === "rerank_timeout"
+        ? "timeout"
+        : "api_error";
     console.error("[rerank] fallback naar RRF-volgorde:", e);
     return metFallback(kandidaten, reden, model);
   } finally {

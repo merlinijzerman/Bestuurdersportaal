@@ -1,12 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
+import { bewaakteAnthropic } from "@/core/lib/ai-poort";
+import {
+  preflight,
+  preflightRespons,
+  rondAf,
+  sleutelUitRequest,
+  vingerafdruk,
+} from "@/core/lib/ai-preflight";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
-import { rateLimited } from "@/core/lib/api-errors";
+import { rateLimited, badRequest } from "@/core/lib/api-errors";
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY!,
-});
+// AI-BEGRENZING (besluit 0180): geen eigen client; de call loopt door de poort.
+// Het model stond hier INLINE hardgecodeerd in de aanroep — precies de
+// modelconfig-drift die core/lib/llm-modellen.ts moest voorkomen. Nu één
+// constante; de allowlist in de database is de beslissende laag.
+const BESLUIT_MODEL = "claude-sonnet-4-5";
 
 const SYSTEM_PROMPT = `U bent een ervaren bestuurssecretaris bij een Nederlands pensioenfonds.
 
@@ -42,7 +51,10 @@ export async function POST(
     }
 
     // Rate limiting (WP2): vóór de Anthropic-call.
-    const limiet = await controleerLimiet(supabase, LIMIETEN.besluit_concept);
+    // Besluit 0180: fail-closed op dit kostendragende pad. Drempel ongewijzigd.
+    const limiet = await controleerLimiet(supabase, LIMIETEN.besluit_concept, {
+      failClosed: true,
+    });
     if (!limiet.toegestaan) return rateLimited("procedures.besluit-concept", limiet.resetAt);
 
     // Verifieer stap + procedure (RLS doet de fonds-check)
@@ -152,12 +164,34 @@ export async function POST(
 
     const userMessage = contextRegels.filter(Boolean).join("\n");
 
-    const respons = await anthropic.messages.create({
-      model: "claude-sonnet-4-5",
+    // AI-BEGRENZING (besluit 0180): één conceptbesluit = één AI-actie.
+    const aiPoort = { supabase, label: "procedures.besluit-concept" };
+    const idempotentie = sleutelUitRequest(req, "besluit_concept");
+    if (!idempotentie) {
+      return badRequest(
+        "procedures.besluit-concept",
+        "Verzoek mist een geldige Idempotency-Key. Vernieuw de pagina en probeer het opnieuw."
+      );
+    }
+    const pf = await preflight(supabase, {
+      actietype: "besluit_concept",
+      provider: "anthropic",
+      model: BESLUIT_MODEL,
+      idempotentie,
+      vingerafdruk: vingerafdruk({ stapId, lengte: userMessage.length }),
+    });
+    const aiBlokkade = preflightRespons("procedures.besluit-concept", pf);
+    if (aiBlokkade) return aiBlokkade;
+    const aiActieId = pf.uitkomst === "nieuw" ? pf.actieId : null;
+
+    const respons = await bewaakteAnthropic(aiPoort, BESLUIT_MODEL, (client) =>
+      client.messages.create({
+      model: BESLUIT_MODEL,
       max_tokens: 1000,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: userMessage }],
-    });
+      })
+    );
 
     // Pak de tekst uit het antwoord en parse JSON
     const blok = respons.content.find((c) => c.type === "text");
@@ -184,6 +218,7 @@ export async function POST(
       );
     }
 
+    await rondAf(supabase, aiActieId, "voltooid", `procedure_stap:${stapId}`);
     return NextResponse.json({
       formulering: concept.formulering ?? "",
       motivering: concept.motivering ?? "",

@@ -12,12 +12,18 @@
 // -----------------------------------------------------------------------------
 
 import { NextRequest, NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
+import { bewaakteAnthropic } from "@/core/lib/ai-poort";
+import {
+  preflight,
+  rondAf,
+  sleutelUitRequest,
+  vingerafdruk,
+} from "@/core/lib/ai-preflight";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { beoordeelRouteHostToegang } from "@/core/lib/tenant-route-guard";
 import { isBureauRol } from "@/core/lib/bureau-gate";
 import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
-import { rateLimited } from "@/core/lib/api-errors";
+import { rateLimited, badRequest } from "@/core/lib/api-errors";
 import { buildDecisionDossierView } from "@/core/lib/decision";
 import type { DecisionDossierView } from "@/core/lib/decision-view";
 import { bouwFeitenkaart } from "@/core/lib/afschrift-feitenkaart";
@@ -122,7 +128,10 @@ export async function POST(
       );
     }
 
-    const limiet = await controleerLimiet(supabase, LIMIETEN.afschrift_concept);
+    // Besluit 0180: fail-closed op dit kostendragende pad. Drempel ongewijzigd.
+    const limiet = await controleerLimiet(supabase, LIMIETEN.afschrift_concept, {
+      failClosed: true,
+    });
     if (!limiet.toegestaan) return rateLimited("procedures.afschrift-concept", limiet.resetAt);
 
     const feitenkaart = await bouwFeitenkaartVoorProces(supabase, procedureId);
@@ -144,14 +153,47 @@ export async function POST(
       });
     }
 
+    // AI-BEGRENZING (besluit 0180): één conceptleeswijzer = één AI-actie.
+    // Blokkeert de begrenzing, dan valt deze route terug op het DETERMINISTISCHE
+    // sjabloon — dat bestaat hier al als volwaardig alternatief, dus een
+    // gestopte AI hoeft de gebruiker niets te kosten.
+    const idempotentie = sleutelUitRequest(req, "afschrift_concept");
+    if (!idempotentie) {
+      return badRequest(
+        "procedures.afschrift-concept",
+        "Verzoek mist een geldige Idempotency-Key. Vernieuw de pagina en probeer het opnieuw."
+      );
+    }
+    const pf = await preflight(supabase, {
+      actietype: "afschrift_concept",
+      provider: "anthropic",
+      model: AFSCHRIFT_AI_MODEL,
+      idempotentie,
+      vingerafdruk: vingerafdruk({ procedureId }),
+    });
+    if (pf.uitkomst !== "nieuw") {
+      return NextResponse.json({
+        tekst: sjabloon,
+        aiGebruikt: false,
+        model: AFSCHRIFT_AI_MODEL,
+        promptversie: AFSCHRIFT_PROMPTVERSIE,
+        reden:
+          "AI-generatie is op dit moment niet beschikbaar; deterministisch sjabloon gebruikt.",
+      });
+    }
+    const aiActieId = pf.actieId;
+
     try {
-      const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-      const respons = await anthropic.messages.create({
+      const respons = await bewaakteAnthropic(
+        { supabase, label: "procedures.afschrift-concept" },
+        AFSCHRIFT_AI_MODEL,
+        (client) => client.messages.create({
         model: AFSCHRIFT_AI_MODEL,
         max_tokens: 1500,
         system: SYSTEM_PROMPT,
         messages: [{ role: "user", content: JSON.stringify(feitenkaart) }],
-      });
+        })
+      );
       const blok = respons.content.find((c) => c.type === "text");
       const ruw = blok && blok.type === "text" ? blok.text : "";
       const schoon = ruw.replace(/^```json\s*/i, "").replace(/```\s*$/i, "").trim();
@@ -181,6 +223,7 @@ export async function POST(
         });
       }
 
+      await rondAf(supabase, aiActieId, "voltooid", `procedure:${procedureId}`);
       return NextResponse.json({
         tekst,
         aiGebruikt: true,

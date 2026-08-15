@@ -8,6 +8,7 @@ import {
   type RepresentatieConstraints,
 } from "./rag-select";
 import { embedTekst, naarVectorLiteral } from "./embeddings";
+import { isPoortGesloten } from "./ai-poort";
 import { notulenBronLabel } from "./notulen";
 import { bouwBronfragment } from "./bronfragment";
 import { statuslabelVoorBron } from "./documentstatus-label";
@@ -460,7 +461,13 @@ async function naVerwerking(
       zoekvraag,
       kandidaten,
       (c) => verrijkTekst(prefixMap.get(c.id), c.tekst),
-      { client: opties.rerankClient }
+      {
+        client: opties.rerankClient,
+        // AI-BEGRENZING (besluit 0180). Zonder geïnjecteerde testclient loopt de
+        // reranker door de poort; is die dicht, dan valt hij terug op de
+        // RRF-volgorde in plaats van een ongemeten call te doen.
+        poort: { supabase: await createServerSupabase(), label: "rag.rerank" },
+      }
     );
     kandidaten = r.chunks;
     extra.rerank = r.meta;
@@ -649,6 +656,11 @@ export interface RetrievalMeta {
   // FTS, waarom — zodat een stille terugval zichtbaar is in het auditspoor.
   embedding_query_success?: boolean;
   fallback_reason?: string;
+  // AI-begrenzing (besluit 0180). Gezet zodra een kill switch het antwoord heeft
+  // beïnvloed — vandaag alleen `mistral_gestopt`: de vector-arm lag stil en het
+  // antwoord leunt uitsluitend op full-text search. Staat in het auditspoor
+  // zodat achteraf verklaarbaar is waarom een antwoord smaller was dan normaal.
+  ai_begrenzing?: string;
   // History-aware reformulatie (Fase B1). De vraag waarop daadwerkelijk is
   // gezocht, en of die afwijkt van de oorspronkelijke gebruikersvraag. Beide
   // optioneel zodat bestaande aanroepers ongemoeid blijven.
@@ -1220,15 +1232,34 @@ export async function zoekRelevanteChunksMetMeta(
   const maxPerDoc = Math.max(3, Math.ceil(maxResults / 2));
 
   // Embed de (al door B1 geherformuleerde) vraag. Faalt dat → FTS-fallback.
+  //
+  // AI-BEGRENZING (besluit 0180). Staat de Mistral-kill-switch uit, dan gooit de
+  // poort hier. Het routecontract is dan bewust GEEN foutmelding maar een
+  // functionele terugval op full-text search — de assistent blijft antwoorden,
+  // alleen zonder vector-arm. Dat mag uitsluitend omdat het ZICHTBAAR gebeurt:
+  // `ai_begrenzing` landt in retrieval_meta en de weergave meldt dat de
+  // semantische zoekarm uit staat. Stil degraderen zou een zwakker antwoord als
+  // normaal presenteren, en dat is precies wat het huisprincipe "maak vereisten
+  // en blokkers expliciet" verbiedt.
   let vector: number[];
   try {
-    vector = await embedTekst(vraag);
+    vector = await embedTekst({ supabase, label: "rag.hybride" }, vraag);
   } catch (e) {
-    console.error("Hybride: query-embedding mislukt, terugval op FTS:", e);
+    const gestopt = isPoortGesloten(e);
+    if (gestopt) {
+      console.warn(`Hybride: Mistral-poort dicht (${e.reden}) — terugval op FTS.`);
+    } else {
+      console.error("Hybride: query-embedding mislukt, terugval op FTS:", e);
+    }
     const r = await zoekViaFTS(vraag, maxResults, scope, filters, fondsFilter, opt);
     return {
       chunks: r.chunks,
-      meta: { ...r.meta, embedding_query_success: false, fallback_reason: "embedding_error" },
+      meta: {
+        ...r.meta,
+        embedding_query_success: false,
+        fallback_reason: gestopt ? "mistral_gestopt" : "embedding_error",
+        ...(gestopt ? { ai_begrenzing: "mistral_gestopt" } : {}),
+      },
     };
   }
 
@@ -1287,7 +1318,7 @@ export async function zoekRelevanteChunksMetMeta(
     if (pogingen.length < MAX_HYBRIDE_POGINGEN) {
       const { ftsQuery: origFts } = ftsQueryVoor(origineel, opt);
       try {
-        const origVec = await embedTekst(origineel);
+        const origVec = await embedTekst({ supabase, label: "rag.hybride.origineel" }, origineel);
         const origChunks = await draaiHybridePoging(origFts, origVec);
         if (origChunks === null) {
           pogingMeta.push({ naam: "origineel", query: origFts, rijen: null });

@@ -130,11 +130,24 @@ declare
                                       -- schrijft. Global-by-design (T3-register-
                                       -- patroon); ontbrak in deze lijst omdat de
                                       -- T4-migratie is opgeleverd zonder gate-run.
-    'concepts'                        -- canonieke conceptcatalogus (T7): sectorbrede,
+    'concepts',                       -- canonieke conceptcatalogus (T7): sectorbrede,
                                       -- platform-globale codelijst, geen fonds_id,
                                       -- geen PII, geen tenantinhoud. `for select
                                       -- using(true)` naar authenticated, service-role
                                       -- schrijft (catalogus-eigenaar). Global-by-design.
+    -- AI-begrenzing (besluit 0180). Zes platformbrede configuratie- en
+    -- besluittabellen, alle deny-by-default (RLS aan, geen policy, revoke voor
+    -- anon én authenticated). Ze dragen bewust geen fonds_id: quota, kill
+    -- switches en de modelallowlist gelden voor de HELE omgeving, en een
+    -- heractiveringsverzoek is een platformhandeling, geen fondsgegeven.
+    -- De twee tabellen die wél per fonds meten — ai_actie en ai_verbruik_log —
+    -- hebben een eigen fonds_id en worden door gate A1 overgeslagen.
+    'ai_config_versie',               -- deny-by-default; CAS-teller voor vier ogen
+    'ai_quota_config',                -- deny-by-default; de vier maandquota als data
+    'ai_model_allowlist',             -- deny-by-default; toegestane modellen + venster
+    'ai_kill_switch',                 -- deny-by-default; de vier schakelaars
+    'ai_heractivering_verzoek',       -- deny-by-default + append-only
+    'ai_heractivering_besluit'        -- deny-by-default + append-only
   ];
 begin
   -- A1. Elke tabel met RLS die géén eigen fonds_id heeft moet in het register

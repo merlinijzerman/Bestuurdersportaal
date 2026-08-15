@@ -9,6 +9,7 @@ import type { ModelProvider, ProviderRequest, ProviderResultaat } from "./types"
 import { genereerAnthropic, type AnthropicStreamClient } from "./anthropic";
 import { genereerOpenAI } from "./openai";
 import { genereerMistral } from "./mistral";
+import type { PoortContext } from "../ai-poort";
 
 export type { ModelProvider, ProviderRequest, ProviderResultaat } from "./types";
 export { systeemBlokkenNaarTekst } from "./types";
@@ -19,6 +20,12 @@ export interface ProviderOpties {
   anthropicClient?: AnthropicStreamClient;
   /** Injecteerbare fetch (hermetische tests voor OpenAI/Mistral). */
   fetchImpl?: typeof fetch;
+  /**
+   * AI-BEGRENZING (besluit 0180). Verplicht op het productiepad: elke adapter
+   * toetst hiermee live de kill switch en de modelallowlist. Alleen met een
+   * geïnjecteerde client/fetch (hermetische tests) mag hij ontbreken.
+   */
+  poort?: PoortContext;
 }
 
 /**
@@ -33,11 +40,11 @@ export async function genereerViaProvider(
 ): Promise<ProviderResultaat> {
   switch (provider) {
     case "openai":
-      return genereerOpenAI(req, { fetchImpl: opts?.fetchImpl });
+      return genereerOpenAI(req, { fetchImpl: opts?.fetchImpl, poort: opts?.poort });
     case "mistral":
-      return genereerMistral(req, { fetchImpl: opts?.fetchImpl });
+      return genereerMistral(req, { fetchImpl: opts?.fetchImpl, poort: opts?.poort });
     case "anthropic":
     default:
-      return genereerAnthropic(req, opts?.anthropicClient);
+      return genereerAnthropic(req, opts?.anthropicClient, opts?.poort);
   }
 }

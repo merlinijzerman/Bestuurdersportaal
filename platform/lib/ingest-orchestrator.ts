@@ -37,6 +37,11 @@ import {
   IngestCapError,
 } from "@/core/lib/ingest-caps";
 import { genereerSamenvatting } from "@/core/lib/samenvatting";
+import {
+  preflightSysteem,
+  systeemSleutel,
+  vingerafdruk,
+} from "@/core/lib/ai-preflight";
 import { verwerkSemantischeExtractieJob } from "@/platform/lib/semantische-extractie-job";
 
 // ── Tunable constanten (§8b — stem af ná de dashboard-verificaties) ─────────
@@ -347,11 +352,51 @@ async function extracteerEnChunk(
   const buffer = Buffer.from(await blob.arrayBuffer());
   const bestandstype = (doc.bestandstype ?? "pdf") as Bestandstype;
 
+  // AI-BEGRENZING (besluit 0180). Eén document-ingest is ÉÉN AI-actie, ongeacht
+  // hoeveel modelcalls (samenvatting, tientallen prefixes, embeddings) eruit
+  // voortkomen. Het fonds komt van de job-rij, niet van een sessie; er is hier
+  // geen gebruiker om tegen af te rekenen. De reservering staat vóór de eerste
+  // providercall en is idempotent op (job, stap): een hervatte job na een
+  // backoff reserveert niet opnieuw zolang dezelfde poging loopt.
+  const ingestPf = await preflightSysteem(svc, {
+    actietype: "document_ingest",
+    fondsId: job.fonds_id ?? null,
+    provider: "anthropic",
+    idempotentie: systeemSleutel(job.id, "document_ingest", (job.retry_count ?? 0) + 1),
+    vingerafdruk: vingerafdruk({ documentId: doc.id, opslagPad: doc.opslag_pad }),
+  });
+  if (ingestPf.uitkomst === "geweigerd") {
+    // Quotum op of kill switch om: parkeren, niet mislukken. Een geweigerde
+    // ingest is een beleidsuitkomst en mag de retries van deze job niet
+    // opbranden — volgende maand of na heractivering kan hij gewoon door.
+    return await markeerGeweigerd(svc, job, doc.id, `ai_begrenzing_${ingestPf.reden}`);
+  }
+  if (ingestPf.uitkomst === "onbereikbaar") {
+    return await backoff(svc, job, "ai_preflight_onbereikbaar");
+  }
+
+  const poort = { supabase: svc, label: "ingest-worker" };
+
   // Extractie met OCR-fallback (async, hogere OCR-cap dan het oude sync-pad).
   let extractie;
   try {
     extractie = await extractTekstMetOcrFallback(buffer, bestandstype, {
       maxOcrPaginas: MAX_OCR_PAGINAS,
+      poort,
+      // OCR-pagina's zijn een EIGEN grootheid met een eigen fondsquotum. Elke
+      // poging reserveert opnieuw: Mistral factureert een retry ook opnieuw.
+      reserveerOcr: async (paginas, poging) => {
+        const uitkomst = await preflightSysteem(svc, {
+          actietype: "ocr",
+          fondsId: job.fonds_id ?? null,
+          provider: "mistral",
+          model: "mistral-ocr-latest",
+          ocrPaginas: paginas,
+          idempotentie: systeemSleutel(job.id, "ocr", poging),
+          vingerafdruk: vingerafdruk({ documentId: doc.id, paginas }),
+        });
+        return uitkomst.uitkomst === "nieuw";
+      },
     });
   } catch (e) {
     if (e instanceof IngestCapError) {
@@ -365,6 +410,13 @@ async function extracteerEnChunk(
   if (!extractie.tekst || extractie.tekst.trim().length < 100) {
     if (extractie.ocrOvergeslagen === "te_veel_paginas") {
       return await markeerGeweigerd(svc, job, doc.id, "ocr_te_veel_paginas");
+    }
+    // AI-BEGRENZING: OCR is overgeslagen omdat het paginaquotum op was, de
+    // Mistral-schakelaar uit stond of het paginaaantal niet vast te stellen was.
+    // Dat zijn geen extractiefouten maar beleids-/dataconditie-uitkomsten; het
+    // document parkeert met een verklaarbare code in plaats van als "mislukt".
+    if (extractie.ocrOvergeslagen) {
+      return await markeerGeweigerd(svc, job, doc.id, `ocr_${extractie.ocrOvergeslagen}`);
     }
     return await markeerMislukt(svc, job, doc.id, "geen_bruikbare_tekst");
   }
@@ -396,7 +448,7 @@ async function extracteerEnChunk(
   // vóór de verrijking. Best-effort — een mislukte samenvatting blokkeert de
   // ingest niet.
   if (doc.agendapunt_id) {
-    const samenvatting = await genereerSamenvatting(extractie.tekst);
+    const samenvatting = await genereerSamenvatting(poort, extractie.tekst);
     if (samenvatting) {
       await svc
         .from("documenten")

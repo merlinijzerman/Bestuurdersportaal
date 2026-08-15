@@ -69,6 +69,19 @@ export const LIMIETEN = {
   // Bulk-metadata is begrensd op 200 documenten per call, maar niet op het
   // aantal calls.
   bulk_metadata: { endpoint: "bulk_metadata", limiet: 30, venster: "1 hour" },
+
+  // ── Besluit 0180 (AI-begrenzing) — twee resterende gaten ─────────────────
+  // Deze twee entries zijn NIEUW; er is geen bestaande drempel gewijzigd. Bij
+  // de inventarisatie voor de AI-begrenzing bleken dit de laatste twee
+  // kostendragende routes zonder enige burstlimiet.
+  //
+  // /api/vergelijk is daarvan verreweg de duurste: per aanroep N × Opus (één
+  // per vergelijkdimensie) plus 2N Mistral-embeddings. Zonder deze limiet kan
+  // één gebruiker zijn hele maandquotum in een minuut op de duurste route
+  // verbranden — het maandquotum begrenst de HOEVEELHEID, niet het TEMPO.
+  vergelijk: { endpoint: "vergelijk", limiet: 10, venster: "1 hour" },
+  // Notulensegment bevestigen doet Mistral-embeddings over de segmentchunks.
+  notulen_bevestig: { endpoint: "notulen_bevestig", limiet: 60, venster: "1 hour" },
 } as const satisfies Record<string, Limiet>;
 
 export type LimietBeslissing = {

@@ -13,7 +13,8 @@
 // ============================================================================
 
 import "server-only";
-import Anthropic from "@anthropic-ai/sdk";
+import type Anthropic from "@anthropic-ai/sdk";
+import { bewaakteAnthropic, type PoortContext } from "./ai-poort";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { AI_MODEL } from "./generatie-kern";
 import { HAIKU_MODEL } from "./llm-modellen";
@@ -40,11 +41,11 @@ export const VERGELIJK_MODEL = AI_MODEL;
 const MAX_PASSAGES_PER_ZIJDE = 4;
 const MAX_EXTRA_DIMENSIES = 6;
 
-let _client: Anthropic | null = null;
-function anthropic(): Anthropic {
-  if (!_client) _client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
-  return _client;
-}
+// AI-BEGRENZING (besluit 0180). Geen eigen client: beide modelcalls lopen door
+// de centrale poort, die vlak vóór elke call de kill switch en de allowlist
+// toetst. Het quotum is al gereserveerd door /api/vergelijk (of, als de chat de
+// vergelijking oproept, door de chatactie zelf) — één vergelijking is één
+// AI-actie, ook al doet hij N modelcalls.
 
 // ── Retrieval per (document, dimensie) ───────────────────────────────────────
 // Scope op één document → gebalanceerd per bron (elke zijde krijgt een eigen budget,
@@ -115,6 +116,7 @@ const DIM_TOOL: Anthropic.Tool = {
 };
 
 async function haalExtraDimensies(
+  poort: PoortContext,
   fondsId: string,
   bronDocumentId: string,
   doelDocumentId: string,
@@ -131,7 +133,8 @@ async function haalExtraDimensies(
     const tekstDoel = doel.chunks.map((c) => c.aangeleverde_passage ?? c.tekst).join("\n---\n").slice(0, 8000);
     const bekend = catalogus.map((d) => d.key).join(", ") || "(geen)";
 
-    const resp = await anthropic().messages.create({
+    const resp = await bewaakteAnthropic(poort, HAIKU_MODEL, (anthropic) =>
+      anthropic.messages.create({
       model: HAIKU_MODEL,
       max_tokens: 512,
       temperature: 0,
@@ -150,7 +153,8 @@ async function haalExtraDimensies(
             `DOCUMENT B (doel):\n"""\n${tekstDoel}\n"""`,
         },
       ],
-    });
+      })
+    );
     const blok = resp.content.find((b) => b.type === "tool_use");
     if (!blok || blok.type !== "tool_use") return [];
     const input = blok.input as { dimensies?: { key?: string; label?: string }[] };
@@ -191,7 +195,7 @@ function nummerPassages(passages: PassageLite[]): string {
   return passages.map((p, i) => `[${i + 1}${p.page != null ? `, p.${p.page}` : ""}] ${p.tekst}`).join("\n\n");
 }
 
-async function vergelijkWaardeLLM(input: {
+async function vergelijkWaardeLLM(poort: PoortContext, input: {
   dimensie: Dimensie;
   passagesBron: PassageLite[];
   passagesDoel: PassageLite[];
@@ -202,7 +206,8 @@ async function vergelijkWaardeLLM(input: {
     doel_value: null, doel_evidence: null, doel_page: null, gelijk: false,
   };
   try {
-    const resp = await anthropic().messages.create({
+    const resp = await bewaakteAnthropic(poort, VERGELIJK_MODEL, (anthropic) =>
+      anthropic.messages.create({
       model: VERGELIJK_MODEL,
       max_tokens: 700,
       temperature: 0,
@@ -221,7 +226,8 @@ async function vergelijkWaardeLLM(input: {
             `DOCUMENT B (doel):\n${nummerPassages(passagesDoel)}`,
         },
       ],
-    });
+      })
+    );
     const blok = resp.content.find((b) => b.type === "tool_use");
     if (!blok || blok.type !== "tool_use") return leeg;
     const r = blok.input as Partial<LLMVergelijkUitkomst>;
@@ -292,13 +298,14 @@ async function persisteer(supabase: SupabaseClient, inv: PersisteerInvoer): Prom
 // ── Deps-fabriek ─────────────────────────────────────────────────────────────
 export function productieDeps(ctx: { supabase: SupabaseClient; fondsId: string }): VergelijkDeps {
   const { supabase, fondsId } = ctx;
+  const poort = { supabase, label: "vergelijk" };
   return {
     leesConcepten: () => leesConcepten(supabase),
     leesSemanticUnits: (documentId) => leesSemanticUnits(supabase, documentId),
     bepaalExtraDimensies: ({ bronDocumentId, doelDocumentId, catalogus }) =>
-      haalExtraDimensies(fondsId, bronDocumentId, doelDocumentId, catalogus),
+      haalExtraDimensies(poort, fondsId, bronDocumentId, doelDocumentId, catalogus),
     retrieveerPassages: (documentId, dimensie) => haalPassages(fondsId, documentId, dimensie),
-    vergelijkWaardeLLM,
+    vergelijkWaardeLLM: (input) => vergelijkWaardeLLM(poort, input),
     persisteer: (inv) => persisteer(supabase, inv),
     deterministischVertrouwd: deterministischVertrouwd(),
   };

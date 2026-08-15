@@ -16,6 +16,7 @@
 
 import type { ProviderRequest, ProviderResultaat } from "./types";
 import { systeemBlokkenNaarTekst } from "./types";
+import { poortCheck, type PoortContext } from "../ai-poort";
 
 // Base-URL als config-punt (EU-swap). Trailing slashes worden genormaliseerd.
 export const OPENAI_BASE_URL = (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/+$/, "");
@@ -33,7 +34,7 @@ interface OpenAIChatResponse {
 
 export async function genereerOpenAI(
   req: ProviderRequest,
-  opts?: { fetchImpl?: typeof fetch }
+  opts?: { fetchImpl?: typeof fetch; poort?: PoortContext }
 ): Promise<ProviderResultaat> {
   const doFetch = opts?.fetchImpl ?? fetch;
   // Bij een geïnjecteerde fetch (hermetische tests) is geen echte key nodig; in
@@ -67,6 +68,16 @@ export async function genereerOpenAI(
         ...(typeof req.temperature === "number" ? { temperature: req.temperature } : {}),
         ...(typeof req.topP === "number" ? { top_p: req.topP } : {}),
       };
+
+  // AI-BEGRENZING (besluit 0180). Poort vóór de eerste poging; de retrylus
+  // hieronder herhaalt hetzelfde verzoek en valt binnen dezelfde toestemming.
+  // Zonder geïnjecteerde fetch (productiepad) is een poortcontext verplicht.
+  if (!opts?.fetchImpl) {
+    if (!opts?.poort) {
+      throw new Error("openai: poortcontext ontbreekt (AI-begrenzing, besluit 0180)");
+    }
+    await poortCheck(opts.poort, "openai", req.model);
+  }
 
   const start = Date.now();
   for (let poging = 0; poging <= MAX_RETRIES; poging++) {
