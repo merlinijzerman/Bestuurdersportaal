@@ -82,8 +82,8 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          aws s3api put-object --endpoint-url "$B2_S3_ENDPOINT" --bucket "$B2_BUCKET_NAME" --key "$OBJECT_PREFIX/$ARCHIVE_NAME" --body "$ARCHIVE_PATH" --only-show-errors
-          aws s3api put-object --endpoint-url "$B2_S3_ENDPOINT" --bucket "$B2_BUCKET_NAME" --key "$OBJECT_PREFIX/$ARCHIVE_NAME.sha256" --body "$ARCHIVE_PATH.sha256" --only-show-errors
+          aws s3api put-object --endpoint-url "$B2_S3_ENDPOINT" --bucket "$B2_BUCKET_NAME" --key "$OBJECT_PREFIX/$ARCHIVE_NAME" --body "$ARCHIVE_PATH"
+          aws s3api put-object --endpoint-url "$B2_S3_ENDPOINT" --bucket "$B2_BUCKET_NAME" --key "$OBJECT_PREFIX/$ARCHIVE_NAME.sha256" --body "$ARCHIVE_PATH.sha256"
           echo "Back-up succesvol opgeslagen: s3://$B2_BUCKET_NAME/$OBJECT_PREFIX/$ARCHIVE_NAME" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Tijdelijke bestanden verwijderen
