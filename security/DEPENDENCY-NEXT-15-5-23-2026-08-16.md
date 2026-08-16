@@ -69,8 +69,11 @@ binnen npm geen beschikbare fix en vraagt een afzonderlijk vervangingsbesluit.
   en rendert daarom op `/login` de app-surface. Deze URL is niet geschikt voor
   de functionele beheer-smoke; dat is een bekende configuratiebeperking en geen
   regressie door deze dependencytranche;
-- vaste Preview-branch `preview` is op commit `1a497c7` gezet; de vaste app- en
-  beheer-deployments en alle branchchecks zijn groen;
+- vaste Preview-branch `preview` is na een gecontroleerde fast-forward op commit
+  `7d7d7b2` gezet; de vaste app- en beheerdeployments en alle branchchecks zijn
+  groen. Eén dubbele Security-baselinerun faalde eerst uitsluitend op een
+  tijdelijke downloadfout bij `fonts.gstatic.com`; de herstart op dezelfde
+  commit is volledig groen, inclusief productiebuild;
 - verse login op de eigen fondsgerichte host is groen voor PH&C (bestuurslid)
   en Huisartsen (bestuursbureau). PGB is conform de testafspraak overgeslagen;
 - beheer-Preview is met de bestaande AAL2-sessie bereikbaar; startpagina,
@@ -85,13 +88,16 @@ binnen npm geen beschikbare fix en vraagt een afzonderlijk vervangingsbesluit.
 - de async indexeringsstatus bleef tijdens meerdere hercontroles `Nog in
   verwerking`. Aanlevering en opslag zijn bewezen, maar de workerdoorloop en
   doorzoekbaarheid blijven daarom nog open;
-- de begrensde AI-call is vóór providergebruik fail-closed geweigerd met
-  `Verzoek mist een geldige Idempotency-Key`. De ontbrekende clientheader is in
-  deze branch hersteld en lokaal regressiegetest; de functionele hertest volgt
-  na deployment op de vaste Previewbranch;
-- de Word-export kon daardoor niet worden bereikt: er is geen nieuw
-  bureauantwoord om te exporteren en de vijf bestaande gesprekken zijn vrije
-  vragen zonder Word-exportactie.
+- de idempotentiefix is functioneel groen op de vaste Huisartsen-Previewhost:
+  exact één begrensde AI-call vanuit de bestuursbureauflow `Een stuk
+  voorbereiden` → `Alleen een onderwerp` → `Memo` is volledig afgerond. De
+  eerdere 400-melding bleef weg, het synthetische gesprek is opgeslagen en de
+  teller ging van vijf naar zes gesprekken;
+- de aansluitende Word-export is groen: de knop `Download als Word` riep de
+  serverroute zonder zichtbare fout of consolefout aan en het DOCX-bestand is in
+  de lokale downloadmap ontvangen. De browserbesturing zelf ving het
+  download-event niet af; de ontvangst is daarom door de controleur in de lokale
+  map bevestigd.
 
 De lokale Preview-testcredentials zijn uitsluitend rechtstreeks uit het
 git-uitgesloten bestand `.env.preview-tests.local` gebruikt en nergens gelogd of
@@ -101,9 +107,7 @@ gestopt en verwijderd.
 
 ## Resterende poort
 
-1. deploy de idempotentiefix naar de vaste Previewbranch en herhaal exact één
-   begrensde AI-call plus de daaropvolgende Word-export;
-2. bewijs dat de async ingestworker het synthetische document van `Nog in
+1. bewijs dat de async ingestworker het synthetische document van `Nog in
    verwerking` naar doorzoekbaar brengt;
-3. merge pas na die groene Preview-smokes en een expliciet akkoord;
-4. behandel Next 16 en de vervanging van `xlsx` als afzonderlijke tranches.
+2. merge pas na de workercontrole en een expliciet akkoord;
+3. behandel Next 16 en de vervanging van `xlsx` als afzonderlijke tranches.
