@@ -4,7 +4,8 @@
 - **Basis:** `origin/main` op `2a5da5b`
 - **Branch:** `codex/next-15-5-23`
 - **Scope:** uitsluitend de laatste patchrelease binnen Next.js 15.5
-- **Omgevingen gewijzigd:** geen; lokaal getest, niet gedeployed
+- **Omgevingen gewijzigd:** geen vaste omgeving; lokaal getest en via tijdelijke
+  Vercel PR-deployments gecontroleerd
 
 ## Wijziging
 
@@ -47,6 +48,16 @@ binnen npm geen beschikbare fix en vraagt een afzonderlijk vervangingsbesluit.
   `/platform/login` is op de app-surface fail-closed `404`;
 - lokale productieruntime op de platform-surface: `/login` rendert de
   MFA-verplichte platformlogin zonder browserwaarschuwingen.
+- GitHub PR #13: alle verplichte en aanvullende checks groen, waaronder
+  `Security baseline (Sprint 1)`, `Cross-tenant isolatie (§15 T1-T14)`,
+  `Code-scheiding`, `lint-colors` en beide Vercel-deployments;
+- tijdelijke app-PR-preview: `/login` rendert de app-login met zichtbare
+  `PREVIEW · GEEN PRODUCTIEOMGEVING`-markering;
+- tijdelijke beheer-PR-preview: de generieke Vercel Preview-environment bevat
+  niet de fonds-/beheergerichte configuratie van de vaste Preview-environment
+  en rendert daarom op `/login` de app-surface. Deze URL is niet geschikt voor
+  de functionele beheer-smoke; dat is een bekende configuratiebeperking en geen
+  regressie door deze dependencytranche.
 
 Er zijn tijdens de runtimesmokes geen echte provider-, Preview- of
 Productiecredentials gebruikt. De tijdelijke servers en Supabase-stack zijn na
@@ -54,8 +65,7 @@ de tests gestopt en verwijderd.
 
 ## Resterende poort
 
-1. commit en push deze geïsoleerde branch;
-2. laat de verplichte GitHub-checks draaien;
-3. deploy naar Preview en smoke login, upload/export en één begrensde AI-call;
-4. merge pas na groene checks en Preview-smoke;
-5. behandel Next 16 en de vervanging van `xlsx` als afzonderlijke tranches.
+1. voer de functionele login-, upload/export- en begrensde AI-smoke uit op de
+   vaste Preview-environment, waar de juiste gescheiden configuratie actief is;
+2. merge pas na die Preview-smoke en een expliciet akkoord;
+3. behandel Next 16 en de vervanging van `xlsx` als afzonderlijke tranches.
