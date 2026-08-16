@@ -62,7 +62,11 @@ Level 1/2-vereiste uit de canonieke CSV als afzonderlijke bewijsregel opnemen.
 - tenant enforcement fail-closed voor Production, Preview en Staging;
 - CSP: geen `unsafe-eval` buiten development en kleinere `connect-src`;
 - AQLab-service-role-reads achter één AAL2/capability/audit-wrapper;
-- TypeScript, sanity, boundary-, kleur- en cross-tenant-tests als ondergrens.
+- TypeScript, sanity, boundary-, kleur- en cross-tenant-tests als ondergrens;
+- één gepinde CI-status `Security baseline (Sprint 1)` plus een committed-
+  secretsscan; de aparte ephemere RLS/Storage/RPC-status blijft daarnaast bestaan;
+- een uitvoerbare Preview-/Productiematrix voor exacte seedhosts, twaalf vreemde-
+  tenantcombinaties, onbekende hosts, enforcement en app/beheer-scheiding.
 
 Dit pakket verlaagt risico, maar bewijst nog niet alle corresponderende ASVS-
 vereisten. Providerinstellingen en runtime-negatieve tests blijven nodig.
@@ -132,16 +136,21 @@ Deze commando's moeten op elke wijziging slagen:
 
 ```bash
 bash scripts/check-service-role-leak.sh
+bash scripts/check-committed-secrets.sh
 npm run lint:boundaries
 npm run lint:colors
 npm run sanity
 npm run test:xtenant
-npx tsc --noEmit --skipLibCheck
+npm run typecheck
 npm run build
 ```
 
-Aan te vullen in S3/S4: dependency review/SBOM, secret scanning, SAST en tests
-tegen een tijdelijke Supabase-omgeving met echte RLS/Storage/RPC-evaluatie.
+De tijdelijke Supabase-omgeving met echte RLS/Storage/RPC-evaluatie draait al in
+`Cross-tenant isolatie (§15 T1-T14)`. Committed-secretsscan is aanwezig; een
+provider-side historiescan blijft aanvullend nodig. Aan te vullen in S3/S4:
+dependency review/SBOM en volwaardige SAST. De dependencygate wordt pas
+blokkerend na herstel/baselining van de op 2026-08-14 gevonden 1 critical en 9
+high productiedependencymeldingen; zie het Sprint 1-sluitingsbewijs.
 
 ## Rapportage en definitie van gereed
 

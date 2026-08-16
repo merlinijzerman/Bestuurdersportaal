@@ -1,0 +1,67 @@
+name: security-baseline
+
+# Eén stabiele status voor de Sprint 1-securityondergrens. Deze job kan in
+# branch protection als verplichte check worden geselecteerd zonder zeven losse
+# workflowstappen te hoeven beheren. De ephemere DB/RLS-suite blijft daarnaast
+# de afzonderlijke verplichte check `Cross-tenant isolatie (§15 T1-T14)`.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-baseline-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  security-baseline:
+    # Naam gepind voor branch protection; niet wijzigen zonder de regel mee te
+    # wijzigen.
+    name: Security baseline (Sprint 1)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Node opzetten
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Dependencies installeren
+        run: npm ci
+
+      - name: Committed-secretsscan
+        run: bash scripts/check-committed-secrets.sh
+
+      - name: Service-role-lekcheck
+        run: bash scripts/check-service-role-leak.sh
+
+      - name: Codegrenzen
+        run: npm run lint:boundaries
+
+      - name: Kleur- en themaborging
+        run: |
+          npm run lint:colors
+          npm run lint:fondsthema
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Sanitytests
+        run: npm run sanity
+
+      - name: Negatieve tenant- en omgevingsmatrix (app-laag)
+        run: npm run test:xtenant
+
+      - name: Productiebuild
+        env:
+          # Alleen build-time vormwaarden. Geen echte omgeving, sleutel of
+          # netwerktoegang; voorkomt dat statische login-prerendering faalt
+          # voordat Next.js de applicatiecode heeft kunnen verifiëren.
+          NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+        run: npm run build

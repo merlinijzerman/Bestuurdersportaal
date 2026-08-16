@@ -20,6 +20,9 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   boundaries:
     # Gepinde check-naam voor branch protection "required status check".
