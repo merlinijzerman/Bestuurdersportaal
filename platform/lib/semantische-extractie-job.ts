@@ -23,7 +23,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { HAIKU_MODEL } from "@/core/lib/llm-modellen";
 import {
   extraheerUnits,
-  haikuVoorkomenExtractor,
+  maakHaikuVoorkomenExtractor,
   type VoorkomenExtractor,
 } from "@/core/lib/semantische-extractie";
 import {
@@ -160,12 +160,15 @@ async function backoff(svc: SupabaseClient, job: SemJob, foutcode: string): Prom
 
 // ── Verwerking ───────────────────────────────────────────────────────────────
 // Aangeroepen door de ingest-worker-dispatch voor job.stap==='semantische_extractie'.
-// De extractor is injecteerbaar voor tests; productie gebruikt haikuVoorkomenExtractor.
+// De extractor is injecteerbaar voor tests. Productie bouwt hem uit de
+// poortcontext (besluit 0180): elke tool-call loopt dan langs de kill switch en
+// de modelallowlist. Er is bewust GEEN default meer — een vergeten argument zou
+// anders een ongemeten providercall opleveren.
 export async function verwerkSemantischeExtractieJob(
   svc: SupabaseClient,
   job: SemJob,
   _deadline: number,
-  extractor: VoorkomenExtractor = haikuVoorkomenExtractor
+  extractor?: VoorkomenExtractor
 ): Promise<SemantischeUitkomst> {
   // Defensieve flag-poort (naast de enqueue): flag uit → niets doen.
   if (!semantischeExtractieAan()) {
@@ -229,7 +232,12 @@ export async function verwerkSemantischeExtractieJob(
   // 6. Extractie van alleen de te-extraheren chunks.
   let nieuweUnits: KandidaatUnit[];
   try {
-    const r = await extraheerUnits(teExtraheren, concepten, doc.status, extractor);
+    const r = await extraheerUnits(
+      teExtraheren,
+      concepten,
+      doc.status,
+      extractor ?? maakHaikuVoorkomenExtractor({ supabase: svc, label: "semantische-extractie" })
+    );
     nieuweUnits = r.units;
   } catch (e) {
     console.error(`[semantische-extractie-job] extractie mislukt (doc ${doc.id}):`, (e as Error).message);

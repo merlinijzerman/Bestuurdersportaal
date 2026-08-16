@@ -3,6 +3,14 @@ import { createServerSupabase } from "@/core/lib/supabase-server";
 import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
 import { rateLimited } from "@/core/lib/api-errors";
 import { embedTeksten, embedTekst, naarVectorLiteral, EMBED_MODEL } from "@/core/lib/embeddings";
+import { badRequest } from "@/core/lib/api-errors";
+import {
+  preflight,
+  preflightRespons,
+  rondAf,
+  sleutelUitRequest,
+  vingerafdruk,
+} from "@/core/lib/ai-preflight";
 
 // ============================================================
 //  POST /api/documents/embeddings-backfill
@@ -20,7 +28,7 @@ import { embedTeksten, embedTekst, naarVectorLiteral, EMBED_MODEL } from "@/core
 // (embeddings + losse updates per chunk). De client roept herhaaldelijk aan.
 const BATCH = 25;
 
-export async function POST(_req: NextRequest) {
+export async function POST(req: NextRequest) {
   try {
     const supabase = await createServerSupabase();
     const {
@@ -49,6 +57,18 @@ export async function POST(_req: NextRequest) {
       .single();
     if (!profiel || !["voorzitter", "beheerder"].includes(profiel.rol)) {
       return NextResponse.json({ error: "Onvoldoende rechten" }, { status: 403 });
+    }
+
+    // AI-BEGRENZING (besluit 0180). Eén backfill-aanroep = één AI-actie,
+    // ongeacht hoeveel embedding-batches eruit voortkomen. De client draait deze
+    // route in een lus tot de voorraad op is; elke lusstap reserveert dus, wat
+    // klopt: elke stap is een eigen kostendragende handeling.
+    const idempotentie = sleutelUitRequest(req, "embeddings_backfill");
+    if (!idempotentie) {
+      return badRequest(
+        "documents.embeddings-backfill",
+        "Verzoek mist een geldige Idempotency-Key. Vernieuw de pagina en probeer het opnieuw."
+      );
     }
 
     // Eén batch nog-niet-verwerkte chunks. "Verwerkt" = heeft een embedding OF
@@ -104,8 +124,20 @@ export async function POST(_req: NextRequest) {
     // Probeer de batch in één keer; lukt dat niet (één dwarsliggende chunk laat
     // de hele batch falen), val dan terug op chunk-voor-chunk zodat de goede wél
     // worden verwerkt en alleen de echte probleemgevallen worden overgeslagen.
+    const pf = await preflight(supabase, {
+      actietype: "embeddings_backfill",
+      provider: "mistral",
+      model: EMBED_MODEL,
+      idempotentie,
+      vingerafdruk: vingerafdruk({ ids: teEmbedden.map((c) => c.id) }),
+    });
+    const blokkade = preflightRespons("documents.embeddings-backfill", pf);
+    if (blokkade) return blokkade;
+    const actieId = pf.uitkomst === "nieuw" ? pf.actieId : null;
+    const poort = { supabase, label: "documents.embeddings-backfill" };
+
     try {
-      const vectoren = await embedTeksten(teEmbedden.map((c) => c.tekst as string));
+      const vectoren = await embedTeksten(poort, teEmbedden.map((c) => c.tekst as string));
       for (let i = 0; i < teEmbedden.length; i++) {
         await bewaar(teEmbedden[i].id as string, vectoren[i]);
       }
@@ -113,7 +145,7 @@ export async function POST(_req: NextRequest) {
       console.error("Backfill: batch mislukt, val terug op per chunk:", batchFout);
       for (const c of teEmbedden) {
         try {
-          const vector = await embedTekst(c.tekst as string);
+          const vector = await embedTekst(poort, c.tekst as string);
           await bewaar(c.id as string, vector);
         } catch (chunkFout) {
           console.error(`Backfill: chunk ${c.id} overgeslagen:`, chunkFout);
@@ -134,6 +166,7 @@ export async function POST(_req: NextRequest) {
       .is("embedding_model", null);
 
     const resterend = count ?? 0;
+    await rondAf(supabase, actieId, "voltooid");
     return NextResponse.json({
       verwerkt,
       overgeslagen,

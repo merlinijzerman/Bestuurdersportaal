@@ -15,7 +15,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { beoordeelRouteHostToegang } from "@/core/lib/tenant-route-guard";
 import { weigerAlsModuleUit } from "@/core/lib/module-guard";
-import { errorResponse } from "@/core/lib/api-errors";
+import { errorResponse, badRequest, rateLimited } from "@/core/lib/api-errors";
+import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
+import {
+  preflight,
+  preflightRespons,
+  rondAf,
+  sleutelUitRequest,
+  vingerafdruk,
+} from "@/core/lib/ai-preflight";
 import { vergelijkmodusAan } from "@/core/lib/vergelijk-config";
 import { voerVergelijkingUit } from "@/core/lib/vergelijk-kern";
 import { productieDeps, VERGELIJK_VERSIES } from "@/core/lib/vergelijk-productie";
@@ -85,6 +93,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const moduleWeigering = await weigerAlsModuleUit(fondsId, "ai");
     if (moduleWeigering) return moduleWeigering;
 
+    // 5a. Burstlimiet. Deze route had er als enige kostendragende route géén
+    //     (besluit 0180): per aanroep N × Opus plus 2N embeddings. Het
+    //     maandquotum hieronder begrenst de HOEVEELHEID, niet het TEMPO — zonder
+    //     deze limiet kan één gebruiker zijn hele maandtegoed in een minuut op
+    //     de duurste route verbranden. Fail-closed.
+    const limiet = await controleerLimiet(supabase, LIMIETEN.vergelijk, { failClosed: true });
+    if (!limiet.toegestaan) return rateLimited("vergelijk.POST", limiet.resetAt);
+
     // 6. Documenten moeten binnen het eigen fonds bestaan (expliciete blokker vóór de
     //    dure service; RLS + de DEFINER-RPC-guard borgen tenant-isolatie daarnaast).
     const { data: docs } = await supabase
@@ -99,18 +115,52 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // 7. Delegeren naar de service (alle logica zit daar).
-    const resultaat = await voerVergelijkingUit(
-      {
-        mode: "symmetrisch",
-        bronDocumentId: bronId,
-        doelDocumentId: doelId,
-        extraDimensies,
-        versies: VERGELIJK_VERSIES,
-      },
-      productieDeps({ supabase, fondsId })
-    );
+    // 6a. AI-preflight (besluit 0180). Eén vergelijking = één AI-actie, ook al
+    //     doet de service N modelcalls (één per dimensie) plus 2N embeddings.
+    const idempotentie = sleutelUitRequest(req, "vergelijken");
+    if (!idempotentie) {
+      return badRequest(
+        "vergelijk.POST",
+        "Verzoek mist een geldige Idempotency-Key. Vernieuw de pagina en probeer het opnieuw."
+      );
+    }
+    const pf = await preflight(supabase, {
+      actietype: "vergelijken",
+      provider: "anthropic",
+      model: VERGELIJK_VERSIES.model,
+      idempotentie,
+      vingerafdruk: vingerafdruk({ bronId, doelId, extraDimensies: extraDimensies ?? null }),
+    });
+    const blokkade = preflightRespons("vergelijk.POST", pf);
+    if (blokkade) return blokkade;
+    const actieId = pf.uitkomst === "nieuw" ? pf.actieId : null;
 
+    // 7. Delegeren naar de service (alle logica zit daar).
+    let resultaat;
+    try {
+      resultaat = await voerVergelijkingUit(
+        {
+          mode: "symmetrisch",
+          bronDocumentId: bronId,
+          doelDocumentId: doelId,
+          extraDimensies,
+          versies: VERGELIJK_VERSIES,
+        },
+        productieDeps({ supabase, fondsId })
+      );
+    } catch (e) {
+      // Reservering blijft staan: het verbruik is gemaakt. Alleen de
+      // levenscyclus gaat op `mislukt`.
+      await rondAf(supabase, actieId, "mislukt");
+      throw e;
+    }
+
+    await rondAf(
+      supabase,
+      actieId,
+      "voltooid",
+      resultaat.comparison_run_id ? `comparison_run:${resultaat.comparison_run_id}` : null
+    );
     return NextResponse.json(resultaat);
   } catch (error) {
     return errorResponse("vergelijk.POST", error);

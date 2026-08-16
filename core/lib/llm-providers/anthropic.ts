@@ -10,21 +10,25 @@
 // lib/aqlab/smoke.ts levert een stream-vormige stub.
 // -----------------------------------------------------------------------------
 
-import Anthropic from "@anthropic-ai/sdk";
+import type Anthropic from "@anthropic-ai/sdk";
+import { bewaakteAnthropicStream, type PoortContext } from "../ai-poort";
 import type { ProviderRequest, ProviderResultaat } from "./types";
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY!,
-});
+// AI-BEGRENZING (besluit 0180). Geen eigen client: de AQLab-adapter draait op
+// dezelfde poort als het productiepad. Het Lab gebruikt synthetische data, maar
+// kost echt geld en moet dus even hard door de kill switch en de allowlist.
 
 /** Injecteerbare, stream-vormige client (default = de gedeelde productie-client). */
 export type AnthropicStreamClient = Pick<Anthropic["messages"], "stream">;
 
 export async function genereerAnthropic(
   req: ProviderRequest,
-  client?: AnthropicStreamClient
+  client?: AnthropicStreamClient,
+  poort?: PoortContext
 ): Promise<ProviderResultaat> {
-  const streamer = client ?? anthropic.messages;
+  if (!client && !poort) {
+    throw new Error("genereerAnthropic: poortcontext ontbreekt (AI-begrenzing, besluit 0180)");
+  }
 
   // Alleen expliciet gezette waarden meesturen; anders neemt de provider-default
   // het over (identiek aan de streaming-route, die temperature/top_p niet zet).
@@ -40,7 +44,9 @@ export async function genereerAnthropic(
   };
 
   const start = Date.now();
-  const stream = streamer.stream(callParams);
+  const stream = client
+    ? client.stream(callParams)
+    : await bewaakteAnthropicStream(poort!, req.model, (a) => a.messages.stream(callParams));
   const finalMessage = await stream.finalMessage();
   const latency_ms = Date.now() - start;
 

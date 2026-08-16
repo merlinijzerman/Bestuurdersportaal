@@ -81,6 +81,17 @@ export default async function PlatformHome() {
               Licenties
             </Link>
           )}
+          {/* AI-begrenzing (besluit 0180). Zichtbaar vanaf leesrecht; de
+              bediening binnen de module vraagt om security.operate of
+              config.manage en toont per handeling wat déze beheerder mag. */}
+          {magObservability && (
+            <Link
+              href="/platform/ai-begrenzing"
+              className="inline-flex items-center gap-2 rounded-lg bg-app-bg px-4 py-2 text-sm font-medium text-ink hover:bg-accent/10"
+            >
+              AI-begrenzing
+            </Link>
+          )}
           {magGebruikers && (
             <Link
               href="/platform/gebruikers"

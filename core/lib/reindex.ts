@@ -21,7 +21,22 @@
 
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { extractTekstMetOcrFallback } from "./ocr";
+import { extractTekstMetOcrFallback, type OcrReservering } from "./ocr";
+
+/**
+ * Bovengrens op het aantal OCR-pagina's per her-indexering (besluit 0180).
+ * Dit pad kende tot nu toe géén cap — `magOcrDraaien` kreeg geen grens mee en
+ * gaf dan onvoorwaardelijk `true` terug, waardoor een PDF van willekeurige
+ * omvang integraal naar de provider ging. Gelijkgetrokken met de worker
+ * (MAX_OCR_PAGINAS in platform/lib/ingest-orchestrator.ts).
+ */
+const MAX_OCR_PAGINAS_HERINDEX = 200;
+
+/** Optionele begrenzing; zonder reserveerOcr blijft alleen de paginacap over. */
+export interface HerindexBegrenzing {
+  maxOcrPaginas?: number;
+  reserveerOcr?: OcrReservering;
+}
 import { bouwChunkRecords, INDEXERING_VERSIE } from "./chunk-ingest";
 import { ONDERSTEUNDE_TYPES, type Bestandstype } from "./document-extractie";
 
@@ -66,7 +81,8 @@ async function markeerOvergeslagen(
 
 export async function herindexeerDocument(
   client: SupabaseClient,
-  doc: HerindexDocument
+  doc: HerindexDocument,
+  begrenzing?: HerindexBegrenzing
 ): Promise<HerindexResultaat> {
   // Geen origineel → niet structuur-her-chunkbaar. Stempel als overgeslagen.
   if (!doc.opslag_pad) {
@@ -92,7 +108,16 @@ export async function herindexeerDocument(
   const buffer = Buffer.from(await bestand.arrayBuffer());
   let extractie;
   try {
-    extractie = await extractTekstMetOcrFallback(buffer, bestandstype);
+    // AI-BEGRENZING (besluit 0180). Dit pad had GEEN paginacap: een PDF van
+    // willekeurige omvang ging integraal naar de OCR-provider. De cap staat er
+    // nu, en met een reserveringsfunctie worden de pagina's vóór verzending
+    // geboekt op het fondsquotum — per poging, want een retry wordt opnieuw
+    // gefactureerd.
+    extractie = await extractTekstMetOcrFallback(buffer, bestandstype, {
+      maxOcrPaginas: begrenzing?.maxOcrPaginas ?? MAX_OCR_PAGINAS_HERINDEX,
+      poort: { supabase: client, label: "reindex" },
+      reserveerOcr: begrenzing?.reserveerOcr,
+    });
   } catch (e) {
     console.error(`[reindex] extractie mislukt voor ${doc.id}:`, e);
     return { status: "mislukt", aantalChunks: 0, embeddingsGelukt: false, reden: "extractie_mislukt" };
@@ -109,6 +134,7 @@ export async function herindexeerDocument(
     documentId: doc.id,
     titel: doc.titel,
     segmenten: extractie.segmenten,
+    poort: { supabase: client, label: "reindex" },
   });
 
   // Bestaande chunks vervangen: delete dan insert (RLS-policy "fonds chunks"
