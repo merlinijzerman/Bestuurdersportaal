@@ -7,7 +7,19 @@
 //
 //  Model: `mistral-embed` → 1024 dimensies, exact passend op de kolom
 //  document_chunks.embedding vector(1024). Geen dimensiereductie nodig.
+//
+//  AI-BEGRENZING (besluit 0180). Elke batch loopt door core/lib/ai-poort: de
+//  Mistral-kill-switch en de modelallowlist worden LIVE getoetst, vlak vóór het
+//  verzoek. De poortcontext is een VERPLICHTE parameter en geen optie met een
+//  stille default — een embedding zonder poort zou een ongemeten providercall
+//  zijn, en dat is precies wat dit increment uitsluit.
+//
+//  Let op de rolverdeling: deze module toetst de SCHAKELAAR, niet het quotum.
+//  Het maandquotum wordt één keer per logische actie gereserveerd door de
+//  aanroepende route (core/lib/ai-preflight), niet per embedding-batch.
 // ============================================================
+
+import { bewaakteProviderCall, type PoortContext } from "./ai-poort";
 
 const EMBED_URL = "https://api.mistral.ai/v1/embeddings";
 
@@ -44,10 +56,17 @@ export interface EmbedStats {
 
 // Embed één batch (≤ MAX_BATCH teksten), met retry/backoff op rate limits (429)
 // en tijdelijke serverfouten (5xx). Andere fouten falen direct.
-async function embedBatch(teksten: string[], stats?: EmbedStats): Promise<number[][]> {
+async function embedBatch(
+  ctx: PoortContext,
+  teksten: string[],
+  stats?: EmbedStats
+): Promise<number[][]> {
   const key = process.env.MISTRAL_API_KEY;
   if (!key) throw new Error("MISTRAL_API_KEY ontbreekt in de omgeving");
 
+  // Poort vóór de eerste poging. De retrylus hieronder herhaalt hetzelfde
+  // verzoek na een 429/5xx; die pogingen vallen binnen dezelfde toestemming.
+  return bewaakteProviderCall(ctx, "mistral", EMBED_MODEL, async () => {
   for (let poging = 0; poging <= MAX_RETRIES; poging++) {
     const res = await fetch(EMBED_URL, {
       method: "POST",
@@ -75,6 +94,7 @@ async function embedBatch(teksten: string[], stats?: EmbedStats): Promise<number
     throw new Error(`Mistral embeddings ${res.status}`);
   }
   throw new Error("Mistral embeddings: max retries overschreden");
+  });
 }
 
 // Embed een willekeurig aantal teksten; splitst automatisch in batches die
@@ -82,6 +102,7 @@ async function embedBatch(teksten: string[], stats?: EmbedStats): Promise<number
 // lange tekst gaat alleen in zijn eigen batch (chunks zijn normaal ~800 tekens,
 // ruim onder de per-document-limiet). Gebruikt bij ingest en backfill.
 export async function embedTeksten(
+  ctx: PoortContext,
   teksten: string[],
   stats?: EmbedStats
 ): Promise<number[][]> {
@@ -99,14 +120,14 @@ export async function embedTeksten(
       batch.push(teksten[i]);
       i++;
     }
-    resultaat.push(...(await embedBatch(batch, stats)));
+    resultaat.push(...(await embedBatch(ctx, batch, stats)));
   }
   return resultaat;
 }
 
 // Eén tekst embedden (bijv. een zoekvraag bij retrieval).
-export async function embedTekst(tekst: string): Promise<number[]> {
-  const [vector] = await embedTeksten([tekst]);
+export async function embedTekst(ctx: PoortContext, tekst: string): Promise<number[]> {
+  const [vector] = await embedTeksten(ctx, [tekst]);
   return vector;
 }
 

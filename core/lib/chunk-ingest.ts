@@ -33,8 +33,9 @@
 // ============================================================================
 
 import "server-only";
-import Anthropic from "@anthropic-ai/sdk";
+import type Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { bewaakteAnthropic, isPoortGesloten, type PoortContext } from "./ai-poort";
 import { type ChunkMetLocatie } from "./chunking";
 import {
   embedTeksten,
@@ -85,16 +86,11 @@ const SCHRIJF_CONCURRENTIE = 8;
 // het fragment te situeren, begrensd tegen kosten.
 const PREFIX_INPUT_MAX = 1200;
 
-// Lazy-init: de Anthropic-client pas bij het eerste prefix-verzoek construeren.
-// Zo gooit importeren van deze module niet als ANTHROPIC_API_KEY ontbreekt (o.a.
-// tests/tooling), en blijft de dure client uit de goedkope paden.
-let _anthropic: Anthropic | null = null;
-function anthropicClient(): Anthropic {
-  if (!_anthropic) {
-    _anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
-  }
-  return _anthropic;
-}
+// AI-BEGRENZING (besluit 0180). De eigen lazy Anthropic-client is vervangen door
+// de centrale poort in core/lib/ai-poort: die bouwt de enige client en toetst
+// vlak vóór elke call de kill switch en de modelallowlist. Eén ingest-document
+// is één gereserveerde AI-actie; de tientallen prefix-calls daarbinnen tellen
+// niet apart mee voor het quotum, maar lopen wél elk langs de poort.
 
 export interface BouwChunksMetingen {
   chunkingMs: number;
@@ -116,6 +112,10 @@ export interface BouwChunksOpties {
   documentId: string;
   titel: string;
   segmenten: TekstSegment[];
+  // AI-BEGRENZING (besluit 0180). Verplicht: elke prefix- en embeddingcall in
+  // dit pad loopt hierlangs. Geen optioneel veld met stille default — dat zou
+  // een ongemeten providercall mogelijk maken.
+  poort: PoortContext;
   // R1.2 — context-prefixes genereren via Haiku. Default true. Op false (of bij
   // ontbrekende ANTHROPIC_API_KEY) val je terug op baseline: geen prefix, embed
   // over `tekst`. zoek_vector blijft dan baseline (prefix NULL).
@@ -193,15 +193,20 @@ function prefixUitBericht(bericht: Anthropic.Messages.Message): string | null {
 }
 
 async function genereerPrefix(
+  poort: PoortContext,
   titel: string,
   chunk: PrefixInvoer
 ): Promise<string | null> {
   try {
-    const response = await anthropicClient().messages.create(
-      bouwPrefixRequestParams(titel, chunk)
+    const response = await bewaakteAnthropic(poort, HAIKU_MODEL, (anthropic) =>
+      anthropic.messages.create(bouwPrefixRequestParams(titel, chunk))
     );
     return prefixUitBericht(response);
   } catch (e) {
+    // Een gesloten poort is geen storing maar een besluit: laat hem doorgaan
+    // naar de aanroeper zodat de ingest-stap netjes parkeert in plaats van het
+    // document zonder prefixes af te ronden alsof dat de bedoeling was.
+    if (isPoortGesloten(e)) throw e;
     console.error("[chunk-ingest] context-prefix mislukt voor één fragment:", e);
     return null;
   }
@@ -213,6 +218,7 @@ async function genereerPrefix(
 // (−36% calls op het corpus, meting §0c-7). Geeft een array even lang als
 // `chunks` terug; per positie de (mogelijk gedeelde) prefix of null.
 async function genereerPrefixesPerUnit(
+  poort: PoortContext,
   titel: string,
   chunks: PrefixInvoer[],
   concurrentie: number
@@ -232,7 +238,7 @@ async function genereerPrefixesPerUnit(
     while (volgende < groepen.length) {
       const idx = volgende++;
       const [sleutel, chunkIndex] = groepen[idx];
-      prefixVanGroep.set(sleutel, await genereerPrefix(titel, chunks[chunkIndex]));
+      prefixVanGroep.set(sleutel, await genereerPrefix(poort, titel, chunks[chunkIndex]));
     }
   }
   await Promise.all(
@@ -261,6 +267,7 @@ interface VerrijkingResultaat {
 // beide externe stappen: faalt de prefix, dan baseline voor die chunk; faalt de
 // embedding-API, dan embeddingsGelukt=false en alle literals null.
 async function genereerVerrijking(
+  poort: PoortContext,
   titel: string,
   chunks: PrefixInvoer[],
   metPrefix: boolean,
@@ -270,7 +277,7 @@ async function genereerVerrijking(
 
   const tPrefix = Date.now();
   const prefixes = prefixAan
-    ? await genereerPrefixesPerUnit(titel, chunks, prefixConcurrentie)
+    ? await genereerPrefixesPerUnit(poort, titel, chunks, prefixConcurrentie)
     : (new Array(chunks.length).fill(null) as (string | null)[]);
   const prefixMs = Date.now() - tPrefix;
   const aantalPrefixes = prefixes.filter((p) => p != null).length;
@@ -282,7 +289,7 @@ async function genereerVerrijking(
   const embedStats: EmbedStats = { retries: 0, rate429: 0 };
   const tEmbed = Date.now();
   try {
-    const vectoren = await embedTeksten(verrijkt, embedStats);
+    const vectoren = await embedTeksten(poort, verrijkt, embedStats);
     if (vectoren.length === chunks.length) {
       embeddingLiterals = vectoren.map((v) => naarVectorLiteral(v));
       embeddingsGelukt = true;
@@ -318,6 +325,7 @@ export async function bouwChunkRecords(
     documentId,
     titel,
     segmenten,
+    poort,
     metPrefix = true,
     indexeringVersie = INDEXERING_VERSIE,
     prefixConcurrentie = PREFIX_CONCURRENTIE,
@@ -331,7 +339,7 @@ export async function bouwChunkRecords(
   });
   const chunkingMs = Date.now() - tChunk;
 
-  const v = await genereerVerrijking(titel, records, metPrefix, prefixConcurrentie);
+  const v = await genereerVerrijking(poort, titel, records, metPrefix, prefixConcurrentie);
   records.forEach((rec, i) => {
     rec.context_prefix = v.prefixes[i];
     rec.prefix_model = v.prefixes[i] != null ? PREFIX_MODEL : null;
@@ -441,7 +449,7 @@ export async function verrijkChunks(
     structuur_label: r.structuur_label ?? null,
   }));
 
-  const v = await genereerVerrijking(titel, chunks, metPrefix, prefixConcurrentie);
+  const v = await genereerVerrijking({ supabase }, titel, chunks, metPrefix, prefixConcurrentie);
 
   let verwerkt = 0;
   const tSchrijf = Date.now();
@@ -574,7 +582,9 @@ export async function startPrefixBatch(
     }));
   if (requests.length === 0) return { soort: "leeg" }; // alle prefixes al gezet
   try {
-    const batch = await anthropicClient().messages.batches.create({ requests });
+    const batch = await bewaakteAnthropic({ supabase }, HAIKU_MODEL, (anthropic) =>
+      anthropic.messages.batches.create({ requests })
+    );
     return { soort: "gestart", externBatchId: batch.id, aantalRequests: requests.length };
   } catch (e) {
     console.error("[chunk-ingest] prefix-batch aanmaken mislukt:", e);
@@ -596,7 +606,9 @@ export async function pasPrefixBatchToe(
 ): Promise<PrefixBatchStatus> {
   let batch: Anthropic.Messages.MessageBatch;
   try {
-    batch = await anthropicClient().messages.batches.retrieve(externBatchId);
+    batch = await bewaakteAnthropic({ supabase }, HAIKU_MODEL, (anthropic) =>
+      anthropic.messages.batches.retrieve(externBatchId)
+    );
   } catch (e) {
     console.error("[chunk-ingest] prefix-batch ophalen mislukt:", e);
     return "fout";
@@ -606,7 +618,10 @@ export async function pasPrefixBatchToe(
   const prefixVanCustomId = new Map<string, string | null>();
   let verlopen = 0;
   try {
-    for await (const item of await anthropicClient().messages.batches.results(externBatchId)) {
+    const resultaten = await bewaakteAnthropic({ supabase }, HAIKU_MODEL, (anthropic) =>
+      anthropic.messages.batches.results(externBatchId)
+    );
+    for await (const item of resultaten) {
       const res = item.result;
       if (res.type === "succeeded") {
         prefixVanCustomId.set(item.custom_id, prefixUitBericht(res.message));
@@ -697,7 +712,7 @@ export async function embedBestaandeChunks(
   let embeddingsGelukt = false;
   const tEmbed = Date.now();
   try {
-    vectoren = await embedTeksten(verrijkt, embedStats);
+    vectoren = await embedTeksten({ supabase }, verrijkt, embedStats);
     embeddingsGelukt = vectoren.length === rijen.length;
   } catch (e) {
     console.error("[chunk-ingest] embedBestaandeChunks: embeddings mislukt:", e);

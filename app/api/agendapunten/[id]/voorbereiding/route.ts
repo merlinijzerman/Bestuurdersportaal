@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
+import { bewaakteAnthropicStream } from "@/core/lib/ai-poort";
+import {
+  preflight,
+  preflightRespons,
+  rondAf,
+  sleutelUitRequest,
+  vingerafdruk,
+} from "@/core/lib/ai-preflight";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { zoekRelevanteChunks, maakContext, neutraliseerBrontekst, verrijkNotulenChunks } from "@/core/lib/rag";
 import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
-import { rateLimited } from "@/core/lib/api-errors";
+import { rateLimited, badRequest } from "@/core/lib/api-errors";
 import { bouwProfielsturingAgenda } from "@/core/lib/profielsturing";
 import { bouwOrganisatieprofiel } from "@/core/lib/organisatieprofiel";
 // Eén gedeelde modelconstante (env-overschrijfbaar) i.p.v. een eigen hardcoded
@@ -12,9 +19,8 @@ import { bouwOrganisatieprofiel } from "@/core/lib/organisatieprofiel";
 import { AI_MODEL } from "@/core/lib/generatie-kern";
 import { AFGEKAPT_MELDING } from "@/core/lib/vraagtype";
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY!,
-});
+// AI-BEGRENZING (besluit 0180): geen eigen client; de generatie loopt door de
+// centrale poort, die live de kill switch en de modelallowlist toetst.
 
 // ============================================================
 //  Voorbereiding als gespreksopener (06-07, herziening FO duiding)
@@ -66,7 +72,12 @@ export async function POST(
     }
 
     // Rate limiting (WP2): vóór de RAG-/Anthropic-call.
-    const limiet = await controleerLimiet(supabase, LIMIETEN.voorbereiding);
+    // Besluit 0180: fail-closed. Dit is een kostendragend pad (Opus-stream +
+    // embeddings + rerank); valt de teller weg, dan is doorlaten duurder dan
+    // weigeren. De drempel zelf (30/uur) is ongewijzigd.
+    const limiet = await controleerLimiet(supabase, LIMIETEN.voorbereiding, {
+      failClosed: true,
+    });
     if (!limiet.toegestaan) return rateLimited("agendapunten.voorbereiding", limiet.resetAt);
 
     // Profiel + fonds-context
@@ -81,6 +92,27 @@ export async function POST(
         { status: 400 }
       );
     }
+
+    // AI-BEGRENZING (besluit 0180). Eén voorbereiding = één AI-actie, inclusief
+    // de retrieval-embeddings en de reranker die eronder hangen.
+    const aiPoort = { supabase, label: "agendapunten.voorbereiding" };
+    const idempotentie = sleutelUitRequest(req, "agendapunt_voorbereiding");
+    if (!idempotentie) {
+      return badRequest(
+        "agendapunten.voorbereiding",
+        "Verzoek mist een geldige Idempotency-Key. Vernieuw de pagina en probeer het opnieuw."
+      );
+    }
+    const pf = await preflight(supabase, {
+      actietype: "agendapunt_voorbereiding",
+      provider: "anthropic",
+      model: AI_MODEL,
+      idempotentie,
+      vingerafdruk: vingerafdruk({ agendapunt: id }),
+    });
+    const aiBlokkade = preflightRespons("agendapunten.voorbereiding", pf);
+    if (aiBlokkade) return aiBlokkade;
+    const aiActieId = pf.uitkomst === "nieuw" ? pf.actieId : null;
 
     // Increment F (FO §14) — profielgestuurde NADRUK: prioriteren, niet inperken.
     const profielsturing = await bouwProfielsturingAgenda(supabase, user.id);
@@ -302,7 +334,8 @@ export async function POST(
           send({ type: "meta", bronnen, inline_meldingen: inlineMeldingen });
 
           let volledig = "";
-          const claudeStream = anthropic.messages.stream({
+          const claudeStream = await bewaakteAnthropicStream(aiPoort, AI_MODEL, (client) =>
+            client.messages.stream({
             model: AI_MODEL,
             // 5000 (was 3500): na de overstap naar Opus 4.8 (besluit 0067) schrijft
             // het model uitgebreider en liep de voorbereiding tegen de limiet aan
@@ -314,7 +347,8 @@ export async function POST(
               { type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } },
             ],
             messages: [{ role: "user", content: userParts.join("\n") }],
-          });
+            })
+          );
           claudeStream.on("text", (delta) => {
             volledig += delta;
             send({ type: "delta", text: delta });
@@ -340,8 +374,12 @@ export async function POST(
           } else {
             send({ type: "done" });
           }
+          // AI-begrenzing (besluit 0180): levenscyclus sluiten. Het verbruik is
+          // bij de reservering geboekt en blijft staan.
+          await rondAf(supabase, aiActieId, "voltooid", `agendapunt:${id}`);
         } catch (e) {
           console.error("Fout in voorbereiding-streamen:", e);
+          await rondAf(supabase, aiActieId, "mislukt");
           send({ type: "error", error: "Serverfout" });
         } finally {
           controller.close();

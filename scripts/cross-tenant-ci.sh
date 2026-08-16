@@ -65,6 +65,14 @@ SQL_AQLAB="supabase/checks/2026_07_10_aqlab_cross_tenant.sql"
 # toetsen of het PREDIKAAT een tenantgrens bevat. Zonder deze gates kon K-01
 # (decision_dissent zonder fondsclausule) ontstaan én onopgemerkt blijven.
 SQL_R1G="supabase/checks/2026_07_31_r1_structurele_gates.sql"
+# AI-begrenzing (2026-08-16, besluit 0180) — quota, kill switch en modelallowlist.
+# Deny-by-default op acht tabellen, append-only verbruikslog, en het gedrag uit de
+# acceptatiematrix: idempotentie zonder tweede providercall, quotumgrenzen per
+# gebruiker/fonds/platform, OCR als eigen grootheid, en vier-ogenheractivering
+# waarbij zelfgoedkeuring OOK buiten de UI om onmogelijk is.
+# NB: race-veiligheid staat bewust NIET hier — dat vergt twee echt gelijktijdige
+# verbindingen; zie scripts/ai-quota-race.sh.
+SQL_AIB="supabase/checks/2026_08_16_ai_begrenzing.sql"
 # R1 — gedragsbewijs voor de vijf herstelde tenantgrenzen (K-01/H-01/H-02/M-01).
 SQL_R1B="supabase/checks/2026_07_31_r1_tenantgrenzen.sql"
 # Increment G (2026-06-20) — retrieval-filtering op status/bronstatus/geldigheid.
@@ -161,9 +169,13 @@ echo
 echo "-- BB-rolgrenzen (bestuursbureau: 0 rijen inbreng/stemgedrag, geen schrijfpad, nulgrens G23) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_BB"
 echo
+echo "-- AI-begrenzing (quota, kill switch, modelallowlist, vier-ogenheractivering) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_AIB"
+echo
 
 echo "============================================================================"
 echo "GROEN: volledige §15 cross-tenant suite geslaagd (app-laag + DB-laag)."
+echo "  AI-beg quota/kill switch/vier ogen            (DB-laag; race apart)"
 echo "  T1–T4  host→fonds + fail-closed enforce      (app-laag)"
 echo "  T5/T8  auditfonds server-side afgeleid        (app-laag guard + DB append-only)"
 echo "  T9/T10 platform-routing surface-isolatie      (app-laag)"

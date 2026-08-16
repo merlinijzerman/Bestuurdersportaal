@@ -20,6 +20,15 @@ import { createServerSupabase } from "@/core/lib/supabase-server";
 import { requireCapability } from "@/core/lib/capabilities";
 import { maakChunksUitSegmenten } from "@/core/lib/rag";
 import { embedTeksten, naarVectorLiteral, EMBED_MODEL } from "@/core/lib/embeddings";
+import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
+import { rateLimited, badRequest } from "@/core/lib/api-errors";
+import {
+  preflight,
+  preflightRespons,
+  rondAf,
+  sleutelUitRequest,
+  vingerafdruk,
+} from "@/core/lib/ai-preflight";
 
 export const dynamic = "force-dynamic";
 
@@ -43,8 +52,27 @@ export async function POST(
       );
     }
 
+    // AI-BEGRENZING (besluit 0180). Deze route riep Mistral-embeddings aan
+    // ZONDER enige burstlimiet — als enige kostendragende route naast
+    // /api/vergelijk. Limiet toegevoegd (nieuwe entry, geen bestaande drempel
+    // gewijzigd) en fail-closed, want dit is een betaald pad.
+    const limiet = await controleerLimiet(supabase, LIMIETEN.notulen_bevestig, {
+      failClosed: true,
+    });
+    if (!limiet.toegestaan) return rateLimited("notulen.bevestig.POST", limiet.resetAt);
+
     const body = await req.json().catch(() => ({}));
     const reden: string | null = body?.reden?.trim?.() || null;
+
+    // Idempotentie: verplichte header per gebruikersactie. Zonder sleutel is er
+    // geen bescherming tegen een dubbele reservering bij een retry.
+    const idempotentie = sleutelUitRequest(req, "notulen_bevestig");
+    if (!idempotentie) {
+      return badRequest(
+        "notulen.bevestig.POST",
+        "Verzoek mist een geldige Idempotency-Key. Vernieuw de pagina en probeer het opnieuw."
+      );
+    }
 
     // Segment laden (RLS: eigen fonds).
     const { data: segment, error: segError } = await supabase
@@ -106,9 +134,25 @@ export async function POST(
       embedding_model: null,
     }));
 
+    // Reserveren vóór de eerste providercall. Eén bevestiging = één AI-actie,
+    // ongeacht hoeveel embedding-batches eruit voortkomen.
+    const pf = await preflight(supabase, {
+      actietype: "notulen_bevestig",
+      provider: "mistral",
+      model: EMBED_MODEL,
+      idempotentie,
+      vingerafdruk: vingerafdruk({ segment: id, chunks: chunks.length }),
+    });
+    const blokkade = preflightRespons("notulen.bevestig.POST", pf);
+    if (blokkade) return blokkade;
+    const actieId = pf.uitkomst === "nieuw" ? pf.actieId : null;
+
     // Best-effort embeddings (graceful degradation: zonder vector blijft FTS werken).
     try {
-      const vectoren = await embedTeksten(chunks.map((c) => c.tekst));
+      const vectoren = await embedTeksten(
+        { supabase, label: "notulen.bevestig" },
+        chunks.map((c) => c.tekst)
+      );
       if (vectoren.length === chunkPayload.length) {
         chunkPayload.forEach((rec, i) => {
           rec.embedding = naarVectorLiteral(vectoren[i]);
@@ -127,11 +171,16 @@ export async function POST(
     });
     if (rpcError) {
       console.error("Bevestig: indexering (RPC) mislukt:", rpcError);
+      // De reservering blijft staan: het verbruik is al gemaakt, ook al liep de
+      // opslag daarna stuk. Alleen de levenscyclus gaat op `mislukt`.
+      await rondAf(supabase, actieId, "mislukt");
       return NextResponse.json({ error: "Bevestigen/indexeren mislukt." }, { status: 500 });
     }
 
     // Afgeleide indexeer-vlag (idempotent, cosmetisch).
     await supabase.from("documenten").update({ geindexeerd: true }).eq("id", document.id);
+
+    await rondAf(supabase, actieId, "voltooid", `notulen_segment:${id}`);
 
     return NextResponse.json({
       success: true,

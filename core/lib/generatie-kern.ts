@@ -772,6 +772,8 @@ export interface GenereerAntwoordParams {
   client?: Pick<Anthropic["messages"], "stream">;
   /** Optioneel: injecteer fetch voor de OpenAI/Mistral-adapters (hermetische tests). */
   fetchImpl?: typeof fetch;
+  /** AI-BEGRENZING (besluit 0180): poortcontext voor de live kill switch. */
+  poort?: import("@/core/lib/ai-poort").PoortContext;
 }
 
 export interface GenereerAntwoordResultaat {
@@ -812,6 +814,7 @@ export async function genereerAntwoord(
     bronnenAantal = 0,
     client,
     fetchImpl,
+    poort,
   } = params;
 
   const streamSysteem = metVervolgvragen
@@ -839,6 +842,7 @@ export async function genereerAntwoord(
   const providerResultaat = await genereerViaProvider(provider, req, {
     anthropicClient: client,
     fetchImpl,
+    poort,
   });
   const volledig = providerResultaat.tekst;
   const latency_ms = providerResultaat.latency_ms;

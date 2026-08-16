@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
+import type Anthropic from "@anthropic-ai/sdk";
+import { bewaakteAnthropic, bewaakteAnthropicStream } from "@/core/lib/ai-poort";
+import {
+  preflight,
+  preflightRespons,
+  rondAf,
+  sleutelUitRequest,
+  vingerafdruk,
+} from "@/core/lib/ai-preflight";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { zoekRelevanteChunksMetMeta, telNietActueleFondstreffers, maakContext, maakBronSentinel, haalDocumentChunks, haalBevrorenChunks, verrijkNotulenChunks, verrijkDocumentmetadata, type DocumentChunk, type BronVerwijzing, type RetrievalMeta, type RetrievalFilters } from "@/core/lib/rag";
 // Plateau B — de reflectieflow. `isActief` heet hier `isReflectieActief` omdat
@@ -10,7 +18,7 @@ import { bepaalBronset } from "@/core/lib/bronset";
 import { heeftReformulatieNodig, reformuleerVraag } from "@/core/lib/query-reformulatie";
 import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
 import { valideerChatInvoer } from "@/core/lib/chat-invoer";
-import { rateLimited } from "@/core/lib/api-errors";
+import { rateLimited, badRequest } from "@/core/lib/api-errors";
 import { beoordeelRouteHostToegang } from "@/core/lib/tenant-route-guard";
 import { hybrideZoekenAan, retrievalVlaggenVoorFonds, bronkeuzeModusVoorFonds } from "@/core/lib/fonds-config";
 import {
@@ -105,9 +113,11 @@ import {
 } from "@/core/lib/stukvoorbereiding";
 import { rolHeeftCapability } from "@/core/lib/capabilities";
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY!,
-});
+// AI-BEGRENZING (besluit 0180). Geen module-level client meer: elke van de vijf
+// soorten providercalls in deze route (Opus-stream, Haiku-mapstap,
+// Sonnet-reformulatie, Mistral-embeddings via de retrieval, Haiku-reranker)
+// loopt door de centrale poort, die LIVE de kill switch en de modelallowlist
+// toetst. Het maandquotum wordt één keer per chatvraag gereserveerd.
 
 // Centrale instellingen voor de RETRIEVAL-voorbewerking. De answer-generation-
 // constanten (AI_MODEL, MAX_TOKENS, MAX_TOKENS_BESTUURLIJK, BESTUURLIJKE_STIJL)
@@ -460,6 +470,36 @@ export async function POST(req: NextRequest) {
     // nooit. fondsId is server-side afgeleid (profiel), nooit uit de body.
     const moduleWeigering = await weigerAlsModuleUit(fondsId, "ai");
     if (moduleWeigering) return moduleWeigering;
+
+    // ── AI-begrenzing (besluit 0180) ────────────────────────────────────────
+    // Eén chatvraag = ÉÉN AI-actie, ongeacht hoeveel modelcalls eruit
+    // voortkomen (Opus-stream + tot twaalf Haiku-mapstappen + reformulatie +
+    // embeddings + reranker). Reserveren gebeurt hier, vóór de eerste
+    // providercall; de poort hieronder draait daarna per afzonderlijke call.
+    const aiPoort = { supabase, label: "chat.POST" };
+    const idempotentie = sleutelUitRequest(req, "chat");
+    if (!idempotentie) {
+      return badRequest(
+        "chat.POST",
+        "Verzoek mist een geldige Idempotency-Key. Vernieuw de pagina en probeer het opnieuw."
+      );
+    }
+    const pf = await preflight(supabase, {
+      actietype: "chat",
+      provider: "anthropic",
+      model: AI_MODEL,
+      idempotentie,
+      // De vingerafdruk bindt de sleutel aan de INHOUD: dezelfde sleutel met een
+      // andere vraag wordt geweigerd, zodat een hergebruikte sleutel geen
+      // gratis kanaal wordt.
+      vingerafdruk: vingerafdruk({
+        vraag: body.vraag ?? null,
+        berichten: body.messages?.length ?? 0,
+      }),
+    });
+    const aiBlokkade = preflightRespons("chat.POST", pf);
+    if (aiBlokkade) return aiBlokkade;
+    const aiActieId = pf.uitkomst === "nieuw" ? pf.actieId : null;
 
     // Increment T4 — manipulatie-signaal: de client MAG body.fonds_id nog meesturen
     // (backwards-compat), maar hij wordt genegeerd. Wijkt hij af van de server-side
@@ -1664,11 +1704,8 @@ export async function POST(req: NextRequest) {
         // Voortgang (besluit 0087): de reformulatie draait op het STERKE model en
         // is meestal het grootste stille-tijd-blok. Melden vóór en na de call.
         send({ type: "progress", fase: "reformulatie", status: "bezig", label: VOORTGANG_LABEL.reformulatie });
-        const herschreven = await reformuleerVraag(
-          anthropic,
-          priorBeurten,
-          vraag,
-          REWRITE_MODEL
+        const herschreven = await bewaakteAnthropic(aiPoort, REWRITE_MODEL, (client) =>
+          reformuleerVraag(client, priorBeurten, vraag, REWRITE_MODEL)
         );
         if (herschreven.trim() && herschreven.trim() !== vraag.trim()) {
           zoekVraag = herschreven.trim();
@@ -2518,7 +2555,8 @@ export async function POST(req: NextRequest) {
               const batchTekst = breedBatches[i]
                 .map((c) => `${locatieLabel(c)}${c.tekst}`)
                 .join("\n\n");
-              const mapResp = await anthropic.messages.create({
+              const mapResp = await bewaakteAnthropic(aiPoort, MAP_MODEL, (client) =>
+                client.messages.create({
                 model: MAP_MODEL,
                 max_tokens: 1200,
                 system: SP_MAP_EXTRACTIE,
@@ -2528,7 +2566,8 @@ export async function POST(req: NextRequest) {
                     content: `VRAAG: ${vraag}\n\nDOCUMENTDEEL ${i + 1}/${breedBatches.length} uit ${titelLabel}:\n\n${batchTekst}`,
                   },
                 ],
-              });
+                })
+              );
               // P5 signaal 6 — de map-tak verbruikt echte tokens; die apart
               // bijhouden zodat de teller niet doet alsof ze niet bestaan.
               mapCalls += 1;
@@ -2599,7 +2638,9 @@ export async function POST(req: NextRequest) {
           // doorheen — het roept de SDK rechtstreeks aan. Meet vanaf de aanroep
           // tot finalMessage(), dus inclusief wachttijd bij de provider.
           const generatieStart = Date.now();
-          const claudeStream = anthropic.messages.stream(streamParams);
+          const claudeStream = await bewaakteAnthropicStream(aiPoort, AI_MODEL, (client) =>
+            client.messages.stream(streamParams)
+          );
 
           // Besluit 0151 (criterium 11) — tijd tot eerste zichtbare token (TTFT).
           // Gemeten vanaf de generatie-aanroep tot het eerste delta; per module-
@@ -3008,6 +3049,18 @@ export async function POST(req: NextRequest) {
           // levert de client {type:"error"} in plaats van {type:"done"}. Het
           // auditspoor is geen bijzaak die stil mag mislukken.
           if (logFout) throw logFout;
+
+          // AI-begrenzing (besluit 0180): de actie is afgerond. Het VERBRUIK
+          // verandert hier niet — dat is bij de reservering geboekt en blijft
+          // staan. Alleen de levenscyclus sluit, met een verwijzing naar de
+          // governance_log-regel zodat een herhaald verzoek met dezelfde
+          // idempotentiesleutel het bestaande antwoord kan terugvinden.
+          await rondAf(
+            supabase,
+            aiActieId,
+            "voltooid",
+            logId ? `governance_log:${logId}` : null
+          );
 
           // ── Plateau B — de flow naar de conceptweergave brengen ───────────
           // De beurt hierboven TOONDE het concept; de status moet dat nu ook

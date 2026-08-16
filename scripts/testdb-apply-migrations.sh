@@ -14,6 +14,9 @@
 #    • EERST: supabase/baseline/2026_08_14_preview_public.sql.
 #    • DAN  : alleen migraties die alfabetisch NA BASELINE_CUTOFF vallen.
 #    • NIET: *_ROLLBACK.sql (terugdraai-scripts, geen forward-migratie).
+#    • NIET: *_seed_preview.sql (omgeving-specifiek bewijs/configuratie; CI
+#            gebruikt een schone baseline en mag geen historische Preview-data
+#            of Preview-quota aannemen).
 #    • NIET: supabase/checks/*   (dat zijn de testsuites zelf, niet het schema).
 #
 #  Draait tegen een EPHEMERE test-DB (Supabase CLI in CI, of een lokale
@@ -69,7 +72,8 @@ fi
 # zowel op macOS Bash 3.2 als op de nieuwere Bash van de CI-runner.
 MIGRATIES=()
 while IFS= read -r f; do
-  if [[ "$(basename "$f")" > "$BASELINE_CUTOFF" ]]; then
+  naam="$(basename "$f")"
+  if [[ "$naam" > "$BASELINE_CUTOFF" && "$naam" != *_seed_preview.sql ]]; then
     MIGRATIES+=("$f")
   fi
 done < <(find "$MIGRATIE_DIR" -maxdepth 1 -name '*.sql' ! -name '*_ROLLBACK.sql' | LC_ALL=C sort)

@@ -14,6 +14,7 @@
 
 import type { ProviderRequest, ProviderResultaat } from "./types";
 import { systeemBlokkenNaarTekst } from "./types";
+import { poortCheck, type PoortContext } from "../ai-poort";
 
 export const MISTRAL_CHAT_URL = (process.env.MISTRAL_CHAT_URL || "https://api.mistral.ai/v1/chat/completions").replace(/\/+$/, "");
 
@@ -30,7 +31,7 @@ interface MistralChatResponse {
 
 export async function genereerMistral(
   req: ProviderRequest,
-  opts?: { fetchImpl?: typeof fetch }
+  opts?: { fetchImpl?: typeof fetch; poort?: PoortContext }
 ): Promise<ProviderResultaat> {
   const doFetch = opts?.fetchImpl ?? fetch;
   // Bij een geïnjecteerde fetch (hermetische tests) is geen echte key nodig; in
@@ -48,6 +49,16 @@ export async function genereerMistral(
     ...(typeof req.temperature === "number" ? { temperature: req.temperature } : {}),
     ...(typeof req.topP === "number" ? { top_p: req.topP } : {}),
   };
+
+  // AI-BEGRENZING (besluit 0180). Poort vóór de eerste poging; de retrylus
+  // hieronder herhaalt hetzelfde verzoek en valt binnen dezelfde toestemming.
+  // Zonder geïnjecteerde fetch (productiepad) is een poortcontext verplicht.
+  if (!opts?.fetchImpl) {
+    if (!opts?.poort) {
+      throw new Error("mistral: poortcontext ontbreekt (AI-begrenzing, besluit 0180)");
+    }
+    await poortCheck(opts.poort, "mistral", req.model);
+  }
 
   const start = Date.now();
   for (let poging = 0; poging <= MAX_RETRIES; poging++) {
