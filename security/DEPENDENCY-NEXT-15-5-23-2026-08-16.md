@@ -64,9 +64,16 @@ binnen npm geen beschikbare fix en vraagt een afzonderlijk vervangingsbesluit.
   en Huisartsen (bestuursbureau). PGB is conform de testafspraak overgeslagen;
 - beheer-Preview is met de bestaande AAL2-sessie bereikbaar; startpagina,
   rechten, monitoring en AI-begrenzing renderen op de juiste platform-surface;
-- uploadformulier op Huisartsen rendert en accepteert de synthetische metadata.
-  Het koppelen van het lokale DOCX-bestand is nog niet uitgevoerd, omdat in de
-  gebruikte Chrome-extensie `Allow access to file URLs` uitstaat;
+- upload op Huisartsen is groen voor aanlevering en opslag: het synthetische
+  DOCX-bestand `Synthetische Next 15.5.23 Preview-smoke 2026-08-16` staat als
+  `Overig`, bronstatus `Actief`, uitsluitend in de Huisartsen-fondsbibliotheek.
+  De applicatie gaf de succesmelding en een fondsgebonden downloadroute; de
+  browserconsole bleef foutvrij. De lokale bestandskeuze is handmatig afgerond
+  nadat `Allow access to file URLs` voor de ChatGPT Chrome-extensie was
+  geactiveerd;
+- de async indexeringsstatus bleef tijdens meerdere hercontroles `Nog in
+  verwerking`. Aanlevering en opslag zijn bewezen, maar de workerdoorloop en
+  doorzoekbaarheid blijven daarom nog open;
 - de begrensde AI-call is vóór providergebruik fail-closed geweigerd met
   `Verzoek mist een geldige Idempotency-Key`. De server vereist deze header,
   maar `AssistentClient.tsx` stuurt hem niet mee. Dit is een functionele blocker
@@ -85,8 +92,8 @@ gestopt en verwijderd.
 
 1. voeg in de AI-client per logisch verzoek een geldige `Idempotency-Key` toe en
    borg retrygedrag met een regressietest;
-2. activeer voor de ChatGPT Chrome-extensie tijdelijk toegang tot lokale
-   bestands-URL's en rond de synthetische upload af;
+2. bewijs dat de async ingestworker het synthetische document van `Nog in
+   verwerking` naar doorzoekbaar brengt;
 3. herhaal daarna exact één begrensde AI-call en de daaropvolgende Word-export;
 4. merge pas na die groene Preview-smokes en een expliciet akkoord;
 5. behandel Next 16 en de vervanging van `xlsx` als afzonderlijke tranches.
