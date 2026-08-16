@@ -115,6 +115,8 @@ declare
     'platform_capabilities',          -- deny-by-default
     'platform_identity_capabilities', -- deny-by-default
     'platform_event_log',             -- deny-by-default
+    'platform_event_chain_state',     -- één platformbrede, intern vergrendelde ketenkop
+    'platform_event_fork_declarations', -- append-only verklaringen van historische forks
     'platform_signaal_config',        -- deny-by-default; drempels/intervallen zijn
                                       -- platformbreed, niet per fonds (P5, besluit 0105)
     'voorbereidingen',                -- persoonlijk (gebruiker_id = auth.uid())
