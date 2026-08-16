@@ -57,15 +57,36 @@ binnen npm geen beschikbare fix en vraagt een afzonderlijk vervangingsbesluit.
   niet de fonds-/beheergerichte configuratie van de vaste Preview-environment
   en rendert daarom op `/login` de app-surface. Deze URL is niet geschikt voor
   de functionele beheer-smoke; dat is een bekende configuratiebeperking en geen
-  regressie door deze dependencytranche.
+  regressie door deze dependencytranche;
+- vaste Preview-branch `preview` is op commit `1a497c7` gezet; de vaste app- en
+  beheer-deployments en alle branchchecks zijn groen;
+- verse login op de eigen fondsgerichte host is groen voor PH&C (bestuurslid)
+  en Huisartsen (bestuursbureau). PGB is conform de testafspraak overgeslagen;
+- beheer-Preview is met de bestaande AAL2-sessie bereikbaar; startpagina,
+  rechten, monitoring en AI-begrenzing renderen op de juiste platform-surface;
+- uploadformulier op Huisartsen rendert en accepteert de synthetische metadata.
+  Het koppelen van het lokale DOCX-bestand is nog niet uitgevoerd, omdat in de
+  gebruikte Chrome-extensie `Allow access to file URLs` uitstaat;
+- de begrensde AI-call is vóór providergebruik fail-closed geweigerd met
+  `Verzoek mist een geldige Idempotency-Key`. De server vereist deze header,
+  maar `AssistentClient.tsx` stuurt hem niet mee. Dit is een functionele blocker
+  in de bestaande Previewcode en geen aantoonbare Next.js-regressie;
+- de Word-export kon daardoor niet worden bereikt: er is geen nieuw
+  bureauantwoord om te exporteren en de vijf bestaande gesprekken zijn vrije
+  vragen zonder Word-exportactie.
 
-Er zijn tijdens de runtimesmokes geen echte provider-, Preview- of
-Productiecredentials gebruikt. De tijdelijke servers en Supabase-stack zijn na
-de tests gestopt en verwijderd.
+De lokale Preview-testcredentials zijn uitsluitend rechtstreeks uit het
+git-uitgesloten bestand `.env.preview-tests.local` gebruikt en nergens gelogd of
+in bewijs opgenomen. Er zijn geen provider- of Productiecredentials bekeken of
+gebruikt. De tijdelijke servers en Supabase-stack zijn na de lokale tests
+gestopt en verwijderd.
 
 ## Resterende poort
 
-1. voer de functionele login-, upload/export- en begrensde AI-smoke uit op de
-   vaste Preview-environment, waar de juiste gescheiden configuratie actief is;
-2. merge pas na die Preview-smoke en een expliciet akkoord;
-3. behandel Next 16 en de vervanging van `xlsx` als afzonderlijke tranches.
+1. voeg in de AI-client per logisch verzoek een geldige `Idempotency-Key` toe en
+   borg retrygedrag met een regressietest;
+2. activeer voor de ChatGPT Chrome-extensie tijdelijk toegang tot lokale
+   bestands-URL's en rond de synthetische upload af;
+3. herhaal daarna exact één begrensde AI-call en de daaropvolgende Word-export;
+4. merge pas na die groene Preview-smokes en een expliciet akkoord;
+5. behandel Next 16 en de vervanging van `xlsx` als afzonderlijke tranches.
