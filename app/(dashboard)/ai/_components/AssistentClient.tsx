@@ -56,6 +56,7 @@ import type {
 } from "@/core/lib/portaalcontext-afleiding";
 import { GENERIEKE_STARTVRAGEN, type Startvraag } from "@/core/lib/startvragen";
 import { bouwDoorgrondZin, type DoorgrondSectieId } from "@/core/lib/doorgrond";
+import { maakIdempotentVerzoek } from "@/core/lib/idempotency-key";
 
 type Modus = "documenten" | "combineren" | "algemeen";
 
@@ -1223,10 +1224,15 @@ export default function AssistentClient({
 
     setAntwoordGestart(false);
 
+    // Eén sleutel per logische gebruikersactie. Als dezelfde fetch door de
+    // transportlaag opnieuw wordt aangeboden, blijven request en header gelijk;
+    // een volgende aanroep van stuurBericht krijgt een nieuwe sleutel.
+    const idempotentVerzoek = maakIdempotentVerzoek();
+
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: idempotentVerzoek.headers({ "Content-Type": "application/json" }),
         body: JSON.stringify({
           messages,
           fonds_id: fondsId,

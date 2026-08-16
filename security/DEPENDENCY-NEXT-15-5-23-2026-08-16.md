@@ -15,6 +15,13 @@ platformgebonden `@next/swc-*`-pakketten. Er zijn geen overrides,
 `npm audit fix --force`, React-upgrades of overige dependency-upgrades
 toegepast.
 
+Na de eerste vaste Preview-smoke is bovendien de functionele blocker in het
+chatpad hersteld: `AssistentClient` maakt nu per logische gebruikersactie één
+client-side idempotentiecontext en stuurt de sleutel als `Idempotency-Key` mee.
+Een eventuele transportretry vanuit dezelfde context behoudt de sleutel; een
+nieuwe gebruikersactie krijgt een nieuwe UUID. De server blijft fail-closed en
+maakt bij een ontbrekende of ongeldige header geen eigen vervangende sleutel.
+
 ## Audituitkomst
 
 Commando:
@@ -38,7 +45,11 @@ binnen npm geen beschikbare fix en vraagt een afzonderlijk vervangingsbesluit.
 - `npm ci`: groen;
 - `npm run typecheck`: groen;
 - `npm run sanity`: alle suites groen, inclusief Preview-AI-quota en kill switch;
-- `npm run build`: groen met lokale, onbruikbare Supabase-testwaarden;
+- `npm run build`: groen met de bestaande lokale omgevingsconfiguratie; waarden
+  zijn niet gelogd of naar de worktree gekopieerd;
+- `core/lib/idempotency-key.sanity.ts`: **3/3 groen** — sleutelbehoud binnen één
+  logische actie, een nieuwe sleutel voor een nieuwe actie en compatibiliteit
+  met de servervalidatie;
 - app-laag cross-tenant: **196/196 groen**;
 - volledige `scripts/cross-tenant-ci.sh` tegen de met Supabase CLI `2.114.0`
   gestarte Postgres 17-wegwerpstack: groen, inclusief migratiereplay, RLS,
@@ -75,9 +86,9 @@ binnen npm geen beschikbare fix en vraagt een afzonderlijk vervangingsbesluit.
   verwerking`. Aanlevering en opslag zijn bewezen, maar de workerdoorloop en
   doorzoekbaarheid blijven daarom nog open;
 - de begrensde AI-call is vóór providergebruik fail-closed geweigerd met
-  `Verzoek mist een geldige Idempotency-Key`. De server vereist deze header,
-  maar `AssistentClient.tsx` stuurt hem niet mee. Dit is een functionele blocker
-  in de bestaande Previewcode en geen aantoonbare Next.js-regressie;
+  `Verzoek mist een geldige Idempotency-Key`. De ontbrekende clientheader is in
+  deze branch hersteld en lokaal regressiegetest; de functionele hertest volgt
+  na deployment op de vaste Previewbranch;
 - de Word-export kon daardoor niet worden bereikt: er is geen nieuw
   bureauantwoord om te exporteren en de vijf bestaande gesprekken zijn vrije
   vragen zonder Word-exportactie.
@@ -90,10 +101,9 @@ gestopt en verwijderd.
 
 ## Resterende poort
 
-1. voeg in de AI-client per logisch verzoek een geldige `Idempotency-Key` toe en
-   borg retrygedrag met een regressietest;
+1. deploy de idempotentiefix naar de vaste Previewbranch en herhaal exact één
+   begrensde AI-call plus de daaropvolgende Word-export;
 2. bewijs dat de async ingestworker het synthetische document van `Nog in
    verwerking` naar doorzoekbaar brengt;
-3. herhaal daarna exact één begrensde AI-call en de daaropvolgende Word-export;
-4. merge pas na die groene Preview-smokes en een expliciet akkoord;
-5. behandel Next 16 en de vervanging van `xlsx` als afzonderlijke tranches.
+3. merge pas na die groene Preview-smokes en een expliciet akkoord;
+4. behandel Next 16 en de vervanging van `xlsx` als afzonderlijke tranches.
