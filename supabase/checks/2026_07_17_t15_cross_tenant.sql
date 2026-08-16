@@ -34,9 +34,9 @@
 begin;
 
 -- ── Seed als tabel-eigenaar (RLS omzeild). Vaste UUID's voor de test. ────────
-insert into public.fondsen (id, naam) values
-  ('51111111-1111-1111-1111-111111111111', 'T15 Fonds A'),
-  ('52222222-2222-2222-2222-222222222222', 'T15 Fonds B');
+insert into public.fondsen (id, naam, slug) values
+  ('51111111-1111-1111-1111-111111111111', 'T15 Fonds A', 't15-fonds-a'),
+  ('52222222-2222-2222-2222-222222222222', 'T15 Fonds B', 't15-fonds-b');
 
 insert into auth.users (id, aud, role, email, raw_user_meta_data, created_at, updated_at)
 values
@@ -62,6 +62,18 @@ insert into public.fonds_stuurinfo_reserve
   ('51111111-1111-1111-1111-111111111111', '2026Q1', 'solidariteitsreserve', 'Solidariteitsreserve', 68, 3.0, 1.5, 5.0, 1),
   ('51111111-1111-1111-1111-111111111111', '2026Q2', 'solidariteitsreserve', 'Solidariteitsreserve', 78, 3.3, 1.5, 5.0, 1);
 
+-- Netto langleven is sinds T17 één afgeleide bron uit tab 3. Seed Q2 voor de
+-- happy paths en Q3 zodat de ontbrekende reserve (niet de bronvalidatie) wordt
+-- getest. Netto Q2 = -0,6; Q3 = 0.
+insert into public.fonds_stuurinfo_reeks
+  (fonds_id, periode, reeks_key, punt_key, label, volgorde, waarde) values
+  ('51111111-1111-1111-1111-111111111111', '2026Q2', 'langleven', 'micro',   'Micro-langleven', 1, -0.8),
+  ('51111111-1111-1111-1111-111111111111', '2026Q2', 'langleven', 'macro',   'Macro-langleven', 2, -1.2),
+  ('51111111-1111-1111-1111-111111111111', '2026Q2', 'langleven', 'vrijval', 'Vrijval',         3,  1.4),
+  ('51111111-1111-1111-1111-111111111111', '2026Q3', 'langleven', 'micro',   'Micro-langleven', 1,  0.0),
+  ('51111111-1111-1111-1111-111111111111', '2026Q3', 'langleven', 'macro',   'Macro-langleven', 2,  0.0),
+  ('51111111-1111-1111-1111-111111111111', '2026Q3', 'langleven', 'vrijval', 'Vrijval',         3,  0.0);
+
 -- Fonds B: één periode + soli-rij (mag door niets van A geraakt worden).
 insert into public.fonds_stuurinfo_periode (fonds_id, periode, peildatum, bron, volgorde) values
   ('52222222-2222-2222-2222-222222222222', '2026Q2', date '2026-06-30', 'test', 8106);
@@ -81,7 +93,7 @@ begin
   begin
     perform public.stuurinfo_soli_opslaan(
       '2026Q2', 'handmatig',
-      '{"premie":1.1,"rendement":4.6,"micro_langleven":-0.6,"overrendementsbijdrage":4.9}'::jsonb,
+      '{"premie":1.1,"rendement":4.6,"overrendementsbijdrage":4.9}'::jsonb,
       0, 1.5, 5.0);
     gelukt := true;
   exception when insufficient_privilege then
@@ -105,7 +117,7 @@ begin
   -- Grenzen bewust gewijzigd (1,5→2,0 / 5,0→6,0) om de update te bewijzen.
   perform public.stuurinfo_soli_opslaan(
     '2026Q2', 'handmatig',
-    '{"premie":1.1,"rendement":4.6,"micro_langleven":-0.6,"overrendementsbijdrage":4.9}'::jsonb,
+    '{"premie":1.1,"rendement":4.6,"overrendementsbijdrage":4.9}'::jsonb,
     0, 2.0, 6.0);
 
   select count(*) into n_reeks from public.fonds_stuurinfo_reeks
@@ -114,7 +126,7 @@ begin
   select count(*) into n_kpi from public.fonds_stuurinfo_kpi
    where fonds_id = '51111111-1111-1111-1111-111111111111' and periode = '2026Q2'
      and kpi_key = 'soli_uitdeling';
-  if n_reeks <> 4 or n_kpi <> 1 then
+  if n_reeks <> 3 or n_kpi <> 1 then
     raise exception 'REGRESSIE T15b: RPC-save incompleet (vulling=%, uitdeling-kpi=%).', n_reeks, n_kpi;
   end if;
 
@@ -130,12 +142,12 @@ begin
       r.stand, r.pct_waarde;
   end if;
 
-  -- Elke write gelogd met actor + bron (4 reeks + 1 kpi + 1 reserve-update).
+  -- Elke write gelogd met actor + bron (3 reeks + 1 kpi + 1 reserve-update).
   select count(*) into n_log from public.fonds_stuurinfo_log
    where fonds_id = '51111111-1111-1111-1111-111111111111' and periode = '2026Q2'
      and gebruiker_id = '5aaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' and invoer_bron = 'handmatig';
-  if n_log < 6 then
-    raise exception 'REGRESSIE T15b: verwacht >= 6 logregels (4 vulling + uitdeling + grenzen), gevonden %.', n_log;
+  if n_log < 5 then
+    raise exception 'REGRESSIE T15b: verwacht >= 5 logregels (3 vulling + uitdeling + grenzen), gevonden %.', n_log;
   end if;
   raise notice 'OK T15b: soli-save compleet; grenzen-update raakt alleen de band; volledig gelogd.';
 end $$;
@@ -150,7 +162,7 @@ begin
     -- 68 + (1,1+4,6−0,6+3,9) − 0 = 77 ≠ 78 → hard geweigerd.
     perform public.stuurinfo_soli_opslaan(
       '2026Q2', 'handmatig',
-      '{"premie":1.1,"rendement":4.6,"micro_langleven":-0.6,"overrendementsbijdrage":3.9}'::jsonb,
+      '{"premie":1.1,"rendement":4.6,"overrendementsbijdrage":3.9}'::jsonb,
       0, 2.0, 6.0);
     gelukt := true;
   exception when others then
@@ -173,7 +185,7 @@ begin
   begin
     perform public.stuurinfo_soli_opslaan(
       '2026Q3', 'handmatig',
-      '{"premie":1,"rendement":1,"micro_langleven":0,"overrendementsbijdrage":1}'::jsonb,
+      '{"premie":1,"rendement":1,"overrendementsbijdrage":1}'::jsonb,
       0, 1.5, 5.0);
     gelukt := true;
   exception when others then
@@ -219,7 +231,7 @@ begin
   begin
     perform public.stuurinfo_soli_opslaan(
       '2026Q2', 'handmatig',
-      '{"premie":1.1,"rendement":4.6,"micro_langleven":-0.6,"eindstand":4.9}'::jsonb,
+      '{"premie":1.1,"rendement":4.6,"eindstand":4.9}'::jsonb,
       0, 2.0, 6.0);
     gelukt := true;
   exception when others then
@@ -235,7 +247,7 @@ begin
   begin
     perform public.stuurinfo_soli_opslaan(
       '2026Q2', 'handmatig',
-      '{"premie":null,"rendement":10.0,"micro_langleven":-0.6,"overrendementsbijdrage":0.6}'::jsonb,
+      '{"premie":null,"rendement":10.0,"overrendementsbijdrage":0.6}'::jsonb,
       0, 2.0, 6.0);
     gelukt := true;
   exception when others then

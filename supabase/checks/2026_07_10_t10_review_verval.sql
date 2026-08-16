@@ -23,8 +23,8 @@
 
 begin;
 
-insert into public.fondsen (id, naam)
-values ('11111111-1111-1111-1111-111111111111', 'T10 Testfonds A');
+insert into public.fondsen (id, naam, slug)
+values ('11111111-1111-1111-1111-111111111111', 'T10 Testfonds A', 't10-testfonds-a');
 
 insert into auth.users (id, aud, role, email, raw_user_meta_data, created_at, updated_at)
 values
@@ -141,9 +141,9 @@ begin
       raise notice 'OK P1a: withdrawn→published geweigerd (%).', sqlerrm;
   end;
 
-  -- Geldig: published → deprecated (van_kracht+actief → alleen_historisch+historisch).
+  -- Geldig: published → deprecated (van_kracht+actief → historisch+historisch).
   update public.documenten
-     set status='alleen_historisch', bronstatus='historisch'
+     set status='historisch', bronstatus='historisch'
    where id='09000000-0000-0000-0000-0000000000a3';
   if (select public.fn_generiek_geldigheidsstatus(status, bronstatus)
         from public.documenten where id='09000000-0000-0000-0000-0000000000a3') <> 'deprecated' then

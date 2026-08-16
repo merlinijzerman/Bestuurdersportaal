@@ -172,9 +172,9 @@ insert into public.profielen (id, naam, rol, fonds_id) values
   ('b3333333-3333-3333-3333-333333333333','B1','bestuurder','a2222222-2222-2222-2222-222222222222')
 on conflict (id) do update set fonds_id = excluded.fonds_id, naam = excluded.naam;
 
-insert into public.platform_identities (id, email) values
-  ('c1111111-1111-1111-1111-111111111111','xtest-merlin@example.invalid'),
-  ('c2222222-2222-2222-2222-222222222222','xtest-robert@example.invalid')
+insert into public.platform_identities (id, email, naam) values
+  ('c1111111-1111-1111-1111-111111111111','xtest-merlin@example.invalid','Merlin test'),
+  ('c2222222-2222-2222-2222-222222222222','xtest-robert@example.invalid','Robert test')
 on conflict (id) do nothing;
 
 -- Ruime quota als vertrekpunt; per test verlaagd waar nodig.

@@ -509,6 +509,11 @@ end $$;
 -- Quorumtelling: het bureau telt NIET mee, en de telling voor de bestaande
 -- rollen is daardoor ongewijzigd. Dit is een applicatiefilter
 -- (`rol in ('bestuurder','voorzitter')`), hier nagerekend op de data.
+-- Tel als eigenaar: onder de nog actieve authenticated-impersonatie ziet RLS
+-- terecht alleen het eigen profiel en zou deze fixture de quorumlogica niet
+-- maar de profiel-leespolicy meten.
+reset role;
+
 do $$
 declare n int;
 begin

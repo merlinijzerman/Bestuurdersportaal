@@ -26,6 +26,10 @@
 
 begin;
 
+-- Self-seeding: een schone CI-database bevat bewust geen demo-fonds.
+insert into public.fondsen (id, naam, slug)
+values ('6f000000-0000-0000-0000-000000000001', 'Retrieval filter testfonds', 'retrieval-filter-testfonds');
+
 do $$
 declare
   v_fonds   uuid;
@@ -38,7 +42,7 @@ declare
   d_concept     uuid; -- concept + bronstatus actief                  → actueel UIT (#3/#10)
   d_hist        uuid; -- van_kracht + bronstatus historisch           → actueel UIT (#1)
   d_uitg        uuid; -- van_kracht + bronstatus uitgesloten          → actueel UIT (#2)
-  d_verv        uuid; -- vervangen + bronstatus actief                → actueel UIT (documentstatus)
+  d_verv        uuid; -- historisch + bronstatus actief               → actueel UIT (documentstatus)
   d_verlopen    uuid; -- van_kracht + geldig_tot < peil               → actueel UIT (#11)
   d_toekomst    uuid; -- van_kracht + geldig_vanaf > peil             → actueel UIT (#11)
   d_periode     uuid; -- vastgesteld + geldig 2026-01-01..2026-12-31  → actueel IN  (#11)
@@ -50,11 +54,9 @@ declare
   v_filt    uuid[];
   fails     int := 0;
 begin
-  -- pak een bestaand fonds (demo: Horizon); generieke docs krijgen fonds_id NULL.
-  select id into v_fonds from public.fondsen order by aangemaakt nulls last limit 1;
-  if v_fonds is null then
-    raise exception 'Geen fonds gevonden — seed/demo-data ontbreekt.';
-  end if;
+  -- Gebruik uitsluitend het synthetische testfonds; generieke docs krijgen
+  -- fonds_id NULL.
+  v_fonds := '6f000000-0000-0000-0000-000000000001';
 
   -- ── seed documenten (status/bronstatus/geldigheid expliciet) ───────────────
   insert into public.documenten (fonds_id, bibliotheek, bron, titel, status, bronstatus, geldig_vanaf, geldig_tot)
@@ -68,7 +70,7 @@ begin
   insert into public.documenten (fonds_id, bibliotheek, bron, titel, status, bronstatus, geldig_vanaf, geldig_tot)
   values (v_fonds,'fonds','Intern','G-seed uitgesloten','van_kracht','uitgesloten', null, null) returning id into d_uitg;
   insert into public.documenten (fonds_id, bibliotheek, bron, titel, status, bronstatus, geldig_vanaf, geldig_tot)
-  values (v_fonds,'fonds','Intern','G-seed vervangen','vervangen','actief', null, null) returning id into d_verv;
+  values (v_fonds,'fonds','Intern','G-seed historische status','historisch','actief', null, null) returning id into d_verv;
   insert into public.documenten (fonds_id, bibliotheek, bron, titel, status, bronstatus, geldig_vanaf, geldig_tot)
   values (v_fonds,'fonds','Intern','G-seed verlopen','van_kracht','actief', date '2025-01-01', date '2026-01-01') returning id into d_verlopen;
   insert into public.documenten (fonds_id, bibliotheek, bron, titel, status, bronstatus, geldig_vanaf, geldig_tot)
@@ -104,16 +106,16 @@ begin
   if not (d_kracht = any(v_alles)) then fails:=fails+1; raise notice 'FAIL #9b NULL-bronstatus weg in alles (retrieval gebroken)'; else raise notice 'OK   #9b NULL-bronstatus zichtbaar in alles'; end if;
   -- vastgesteld/actief IS actueel
   if not (d_vast = any(v_actueel)) then fails:=fails+1; raise notice 'FAIL vastgesteld/actief niet in actueel'; else raise notice 'OK   vastgesteld/actief in actueel'; end if;
-  -- vervangen niet actueel
-  if not (d_verv <> all(v_actueel)) then fails:=fails+1; raise notice 'FAIL vervangen lekt in actueel'; else raise notice 'OK   vervangen niet in actueel'; end if;
+  -- documentstatus historisch niet actueel
+  if not (d_verv <> all(v_actueel)) then fails:=fails+1; raise notice 'FAIL documentstatus historisch lekt in actueel'; else raise notice 'OK   documentstatus historisch niet in actueel'; end if;
   -- #11 verlopen (geldig_tot < peil) en toekomst (geldig_vanaf > peil) eruit; geldige periode erin
   if not (d_verlopen <> all(v_actueel)) then fails:=fails+1; raise notice 'FAIL #11 verlopen lekt in actueel'; else raise notice 'OK   #11 verlopen niet in actueel'; end if;
   if not (d_toekomst <> all(v_actueel)) then fails:=fails+1; raise notice 'FAIL #11 nog-niet-geldig lekt in actueel'; else raise notice 'OK   #11 nog-niet-geldig niet in actueel'; end if;
   if not (d_periode = any(v_actueel)) then fails:=fails+1; raise notice 'FAIL #11 geldige periode niet in actueel'; else raise notice 'OK   #11 geldige periode in actueel'; end if;
   -- defaults = huidig gedrag: 'alles' levert alle 10 seed-docs
   if not (array_length(v_alles,1) >= 10) then fails:=fails+1; raise notice 'FAIL alles-default filtert (verwacht >=10, kreeg %)', coalesce(array_length(v_alles,1),0); else raise notice 'OK   alles-default = huidig gedrag (% docs)', array_length(v_alles,1); end if;
-  -- #4 historisch-modus toont oude/vervangen (geen actueel-restrictie)
-  if not (d_hist = any(v_hist) and d_verv = any(v_hist)) then fails:=fails+1; raise notice 'FAIL #4 historisch-modus mist oude/vervangen'; else raise notice 'OK   #4 historisch-modus toont oude/vervangen'; end if;
+  -- #4 historisch-modus toont oude bronnen/documenten (geen actueel-restrictie)
+  if not (d_hist = any(v_hist) and d_verv = any(v_hist)) then fails:=fails+1; raise notice 'FAIL #4 historisch-modus mist historische bronnen/documenten'; else raise notice 'OK   #4 historisch-modus toont historische bronnen/documenten'; end if;
 
   -- orthogonale filters
   select array_agg(distinct document_id) into v_filt

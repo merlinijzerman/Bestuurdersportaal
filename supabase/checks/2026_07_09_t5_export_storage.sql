@@ -107,9 +107,9 @@ begin;
 -- Seed als tabel-eigenaar (RLS omzeild). Vaste UUID's, gelijk aan de T3-suite.
 --   Fonds A = 11111111-...  user A = aaaa...
 --   Fonds B = 22222222-...  user B = bbbb...
-insert into public.fondsen (id, naam)
-values ('11111111-1111-1111-1111-111111111111', 'T5 Testfonds A'),
-       ('22222222-2222-2222-2222-222222222222', 'T5 Testfonds B');
+insert into public.fondsen (id, naam, slug)
+values ('11111111-1111-1111-1111-111111111111', 'T5 Testfonds A', 't5-testfonds-a'),
+       ('22222222-2222-2222-2222-222222222222', 'T5 Testfonds B', 't5-testfonds-b');
 
 -- auth.users-insert vuurt trigger maak_profiel() → tenant-profielen met het juiste fonds.
 insert into auth.users (id, aud, role, email, raw_user_meta_data, created_at, updated_at)
