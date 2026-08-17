@@ -53,6 +53,7 @@ const CONFIG = {
   downloadTotaalTimeoutMs: 120_000,
   downloadIdleTimeoutMs: 20_000,
   scanTotaalTimeoutMs: 180_000,
+  clamdStartWachtMs: 30_000,
 };
 
 if (
@@ -150,7 +151,12 @@ async function behandelScan(req, res) {
     return json(res, 401, { code: "niet_geautoriseerd" });
   }
 
-  if (!clamdGereed()) {
+  // De health-check en de scan kunnen door Vercel op verschillende, gelijktijdig
+  // koud startende instances landen. Een succesvolle /health is daarom geen
+  // garantie dat déze instance clamd al geladen heeft. Houd de echte scan
+  // begrensd open; zo kan deze instance na de gebruikelijke ~15 s koude start
+  // alsnog veilig scannen in plaats van een zinloze retrylus te veroorzaken.
+  if (!(await wachtOpClamd(CONFIG.clamdStartWachtMs))) {
     res.setHeader("Retry-After", "5");
     return json(res, 503, { code: "scanner_start_op" });
   }
@@ -189,6 +195,14 @@ async function behandelScan(req, res) {
 
 function clamdGereed() {
   return existsSync(CONFIG.clamdSocket);
+}
+
+async function wachtOpClamd(maxWachtMs) {
+  const deadline = Date.now() + maxWachtMs;
+  while (!clamdGereed() && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  return clamdGereed();
 }
 
 /**

@@ -463,6 +463,7 @@ create table if not exists public.document_processing_jobs (
   eind          timestamptz,
   foutcode      text,
   retry_count   integer not null default 0,
+  claim_count   integer not null default 0 check (claim_count >= 0),
   worker_id     text,
   correlatie_id uuid,
   aangemaakt    timestamptz not null default now()

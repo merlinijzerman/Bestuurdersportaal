@@ -21,6 +21,7 @@
 // ============================================================================
 
 import "server-only";
+import { timingSafeEqual } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   verrijkChunks,
@@ -43,6 +44,11 @@ import {
   vingerafdruk,
 } from "@/core/lib/ai-preflight";
 import { verwerkSemantischeExtractieJob } from "@/platform/lib/semantische-extractie-job";
+import { valideerUpload } from "@/core/lib/bestand-validatie";
+import { CONTENT_TYPE_PER_BESTANDSTYPE } from "@/core/lib/document-extractie";
+import { leesScannerHealth, scanSignedUrl } from "@/platform/lib/malware-scan-client";
+import { signatureOordeel } from "@/core/lib/malware-scan-beleid";
+import { heeftSchoonScanbewijs } from "@/core/lib/document-scan-poort";
 
 // ── Tunable constanten (§8b — stem af ná de dashboard-verificaties) ─────────
 const TIJDBUDGET_MS = 240_000; // ruim binnen maxDuration 300s
@@ -50,6 +56,8 @@ const LEASE_SECONDS = 600; // > tijdbudget, zodat een tweede worker niet dubbelt
 const CLAIM_LIMIET = 4; // jobs per claim-ronde
 const MAX_PER_FONDS = 3; // eerlijke verdeling per invocatie
 const MAX_INGEST_RETRIES = 3;
+const MAX_VEROUDERDE_SIGNATURE_RETRIES = 12;
+const VEROUDERDE_SIGNATURE_BACKOFF_SEC = 15 * 60;
 const LIVE_PREFIX_CONCURRENTIE = 8; // live-baan; ~30% van het Haiku-RPM (§7)
 const VERRIJK_LIMIET = 200; // chunks per verrijk-/embed-ronde
 const REAPER_LIMIET = 50; // documenten per invocatie te enqueuen
@@ -84,6 +92,7 @@ interface IngestJob {
   stap: string;
   status: string;
   retry_count: number | null;
+  claim_count: number | null;
   extern_batch_id: string | null;
   fonds_id: string | null;
 }
@@ -94,6 +103,14 @@ interface DocumentRij {
   agendapunt_id: string | null;
   actief: boolean;
   opslag_pad: string | null;
+  quarantaine_pad: string | null;
+  bestand_hash: string | null;
+  scan_resultaat: Record<string, unknown> | null;
+  bibliotheek: string | null;
+  bestandsnaam: string | null;
+  opgeslagen_door: string | null;
+  vervangt_na_scan_document_id: string | null;
+  vervangt_na_scan_reden: string | null;
   bestandstype: string | null;
   verwerkingsstatus: string | null;
 }
@@ -119,7 +136,7 @@ const leaseTijd = (sec: number) => new Date(Date.now() + sec * 1000).toISOString
 
 export async function draaiIngestWorker(
   svc: SupabaseClient,
-  opts: { workerId: string }
+  opts: { workerId: string; oidcToken?: string | null }
 ): Promise<IngestWorkerResultaat> {
   const deadline = Date.now() + TIJDBUDGET_MS;
   const res: IngestWorkerResultaat = {
@@ -143,7 +160,7 @@ export async function draaiIngestWorker(
     for (const job of jobs) {
       if (Date.now() >= deadline) break;
       try {
-        const uitkomst = await verwerkJob(svc, job, deadline);
+        const uitkomst = await verwerkJob(svc, job, deadline, opts.oidcToken ?? null);
         res[uitkomst] += 1;
       } catch (e) {
         // Poison-job-isolatie (§4b verstoring 4): één kapotte job laat nooit de
@@ -159,11 +176,71 @@ export async function draaiIngestWorker(
   // 3. Orphan-sweep (F7): ruim verweesde originelen op van afgebroken/afgekeurde
   // direct-to-storage-uploads. Best-effort; een fout mag de invocatie niet vellen.
   try {
-    res.verweesd_opgeruimd = await ruimVerweesdeOriginelenOp(svc);
+    res.verweesd_opgeruimd =
+      (await ruimVerweesdeOriginelenOp(svc)) +
+      (await ruimVerweesdeQuarantaineUploadsOp(svc)) +
+      (await ruimGepromoveerdeQuarantaineOp(svc));
   } catch (e) {
     console.error("[ingest-worker] orphan-sweep faalde:", e);
   }
   return res;
+}
+
+async function ruimGepromoveerdeQuarantaineOp(svc: SupabaseClient): Promise<number> {
+  const { data: rijen, error } = await svc.from("documenten")
+    .select("id, quarantaine_pad, opslag_pad, verwerkingsstatus")
+    .not("quarantaine_pad", "is", null)
+    .not("opslag_pad", "is", null)
+    .neq("verwerkingsstatus", "gequarantineerd")
+    .limit(ORPHAN_OBJECT_LIMIET);
+  if (error || !rijen?.length) return 0;
+  let verwijderd = 0;
+  for (const rij of rijen) {
+    const pad = rij.quarantaine_pad as string;
+    const { error: rmErr } = await svc.storage.from("documenten-quarantaine").remove([pad]);
+    if (rmErr) continue;
+    const { data: geraakt } = await svc.from("documenten").update({ quarantaine_pad: null })
+      .eq("id", rij.id).eq("quarantaine_pad", pad).select("id");
+    if (geraakt?.length) verwijderd += 1;
+  }
+  return verwijderd;
+}
+
+// Afgebroken direct-to-quarantine-uploads hebben nog geen documentenrij. Bewaar
+// bekende paden (dus ook besmette bestanden) en verwijder alleen oude wezen.
+async function ruimVerweesdeQuarantaineUploadsOp(svc: SupabaseClient): Promise<number> {
+  const { data: topLevel, error } = await svc.storage
+    .from("documenten-quarantaine")
+    .list("", { limit: ORPHAN_FONDS_LIMIET });
+  if (error || !topLevel) return 0;
+
+  const drempel = Date.now() - ORPHAN_MIN_LEEFTIJD_MS;
+  const kandidaten: string[] = [];
+  for (const map of topLevel) {
+    if (map.id !== null || kandidaten.length >= ORPHAN_OBJECT_LIMIET) continue;
+    const { data: objecten } = await svc.storage
+      .from("documenten-quarantaine")
+      .list(map.name, { limit: ORPHAN_OBJECT_LIMIET });
+    if (!objecten) continue;
+    for (const obj of objecten) {
+      if (obj.id === null) continue;
+      const gemaakt = obj.created_at ? Date.parse(obj.created_at) : Date.now();
+      if (gemaakt > drempel) continue;
+      kandidaten.push(`${map.name}/${obj.name}`);
+      if (kandidaten.length >= ORPHAN_OBJECT_LIMIET) break;
+    }
+  }
+  if (kandidaten.length === 0) return 0;
+
+  const { data: rijen } = await svc.from("documenten")
+    .select("quarantaine_pad")
+    .in("quarantaine_pad", kandidaten);
+  const bekend = new Set((rijen ?? []).map((r) => r.quarantaine_pad as string));
+  const wees = kandidaten.filter((pad) => !bekend.has(pad));
+  if (wees.length === 0) return 0;
+  const { error: rmErr } = await svc.storage.from("documenten-quarantaine").remove(wees);
+  if (rmErr) return 0;
+  return wees.length;
 }
 
 // ── Orphan-sweep ────────────────────────────────────────────────────────────
@@ -227,7 +304,7 @@ async function ruimVerweesdeOriginelenOp(svc: SupabaseClient): Promise<number> {
 async function reaper(svc: SupabaseClient): Promise<number> {
   const { data: kandidaten, error } = await svc
     .from("documenten")
-    .select("id, fonds_id, verwerkingsstatus")
+    .select("id, fonds_id, verwerkingsstatus, quarantaine_pad, opslag_pad")
     .in("verwerkingsstatus", NEEDS_WORK_STATUSSEN)
     .eq("geindexeerd", false)
     .eq("actief", true)
@@ -245,7 +322,9 @@ async function reaper(svc: SupabaseClient): Promise<number> {
   let n = 0;
   for (const d of kandidaten) {
     if (heeftJob.has(d.id as string)) continue;
-    const stap = d.verwerkingsstatus === "embedding" ? "embedding" : "extractie";
+    const stap = d.quarantaine_pad && !d.opslag_pad
+      ? "scan"
+      : d.verwerkingsstatus === "embedding" ? "embedding" : "extractie";
     const { error: insErr } = await svc.from("document_processing_jobs").insert({
       document_id: d.id,
       fonds_id: d.fonds_id,
@@ -282,7 +361,8 @@ type Uitkomst = "afgerond" | "bezig" | "overgeslagen" | "mislukt";
 async function verwerkJob(
   svc: SupabaseClient,
   job: IngestJob,
-  deadline: number
+  deadline: number,
+  oidcToken: string | null
 ): Promise<Uitkomst> {
   // T8 — semantische-extractie-jobs lopen langs een eigen handler (eigen document-
   // laadpad, geen verwerkingsstatus-/embedding-semantiek). Zelfde claim-RPC en
@@ -293,7 +373,7 @@ async function verwerkJob(
 
   const { data: doc, error } = await svc
     .from("documenten")
-    .select("id, titel, agendapunt_id, actief, opslag_pad, bestandstype, verwerkingsstatus")
+    .select("id, titel, agendapunt_id, actief, opslag_pad, quarantaine_pad, bestand_hash, scan_resultaat, bibliotheek, bestandsnaam, bestandstype, verwerkingsstatus, opgeslagen_door, vervangt_na_scan_document_id, vervangt_na_scan_reden")
     .eq("id", job.document_id)
     .single();
   if (error || !doc) throw new Error(`document ${job.document_id} niet gevonden`);
@@ -308,10 +388,23 @@ async function verwerkJob(
     return "overgeslagen";
   }
 
+  if (document.quarantaine_pad && !document.opslag_pad) {
+    return await scanEnPromoveer(svc, job, document, oidcToken);
+  }
+
   // EXTRACTIE-fase (F6): download uit Storage → extractie (+OCR) → kale chunks →
   // AI-samenvatting → verwerkingsstatus='embedding'. Alleen als het document nog
   // vóór de embedding-fase staat.
   if (EXTRACTIE_STATUSSEN.includes(document.verwerkingsstatus ?? "")) {
+    // Expliciete parserpoort. De storagepromotie is al hash-gebonden, maar deze
+    // tweede controle maakt dat een foutieve status/transitie nooit alsnog
+    // ongescande bytes aan xlsx/unpdf/mammoth voert.
+    if (
+      process.env.WP3_MALWARESCAN_AAN === "true" &&
+      !heeftSchoonScanbewijs(document)
+    ) {
+      return await backoff(svc, job, "scanbewijs_ontbreekt");
+    }
     const r = await extracteerEnChunk(svc, job, document);
     if (r !== "door") return r; // mislukt / geweigerd / backoff → klaar voor nu
     document.verwerkingsstatus = "embedding";
@@ -328,6 +421,184 @@ async function verwerkJob(
     : await verwerkBatch(svc, job, document, deadline);
 }
 
+// ── WP3: quarantaine → validatie → scan → promotie ─────────────────────────
+async function scanEnPromoveer(
+  svc: SupabaseClient,
+  job: IngestJob,
+  doc: DocumentRij,
+  oidcToken: string | null
+): Promise<Uitkomst> {
+  if (!doc.quarantaine_pad || !doc.bestandstype || !doc.bestandsnaam) {
+    return await markeerMislukt(svc, job, doc.id, "quarantaine_metadata_ontbreekt");
+  }
+
+  const { data: blob, error: dlErr } = await svc.storage
+    .from("documenten-quarantaine")
+    .download(doc.quarantaine_pad);
+  if (dlErr || !blob) return await backoff(svc, job, "quarantaine_download");
+  const buffer = Buffer.from(await blob.arrayBuffer());
+  const validatie = await valideerUpload({
+    naam: doc.bestandsnaam,
+    mimeType: CONTENT_TYPE_PER_BESTANDSTYPE[doc.bestandstype as Bestandstype] ?? "",
+    buffer,
+  });
+  if (!validatie.ok) {
+    await verwijderQuarantaine(svc, doc.id, doc.quarantaine_pad);
+    return await markeerGeweigerd(svc, job, doc.id, validatie.foutcode);
+  }
+  if (validatie.bestandstype !== doc.bestandstype) {
+    await verwijderQuarantaine(svc, doc.id, doc.quarantaine_pad);
+    return await markeerGeweigerd(svc, job, doc.id, "extensie_inhoud_mismatch");
+  }
+
+  const dupQuery = svc
+    .from("documenten")
+    .select("id")
+    .eq("bestand_hash", validatie.hash)
+    .eq("actief", true)
+    .neq("id", doc.id);
+  const { data: duplicaat } = doc.bibliotheek === "generiek"
+    ? await dupQuery.eq("bibliotheek", "generiek").limit(1).maybeSingle()
+    : await dupQuery.eq("fonds_id", job.fonds_id).limit(1).maybeSingle();
+  if (duplicaat) {
+    await verwijderQuarantaine(svc, doc.id, doc.quarantaine_pad);
+    return await markeerGeweigerd(svc, job, doc.id, "duplicaat");
+  }
+
+  if (!oidcToken) return await backoff(svc, job, "scanner_oidc_ontbreekt");
+  const health = await leesScannerHealth(oidcToken);
+  if (!health) return await backoff(svc, job, "scanner_onbereikbaar");
+  if (signatureOordeel(health) === "verouderd") {
+    return await backoffVerouderdeSignatures(svc, job);
+  }
+  const { data: signed, error: signErr } = await svc.storage
+    .from("documenten-quarantaine")
+    .createSignedUrl(doc.quarantaine_pad, 90);
+  if (signErr || !signed?.signedUrl) return await backoff(svc, job, "signed_url_mislukt");
+
+  const scan = await scanSignedUrl({ signedUrl: signed.signedUrl, oidcToken });
+  // Nooit de signed URL of de bestandsnaam in scan_resultaat/logs opnemen.
+  await svc.from("documenten").update({ scan_resultaat: scan }).eq("id", doc.id);
+  if (scan.verdict === "scanner_unreachable" || scan.verdict === "error") {
+    return await backoff(svc, job, scan.code ?? "scanner_onbereikbaar");
+  }
+  if (scan.verdict === "stale_definitions") {
+    return await backoffVerouderdeSignatures(svc, job);
+  }
+  if (scan.verdict === "infected" || scan.verdict === "policy_blocked") {
+    await svc.from("document_processing_jobs").update({
+      status: "mislukt", eind: nu(), foutcode: scan.verdict,
+    }).eq("id", job.id);
+    await svc.from("documenten").update({
+      bestand_hash: validatie.hash,
+      verwerkingsstatus: "gequarantineerd",
+    }).eq("id", doc.id);
+    return "mislukt";
+  }
+  if (scan.verdict !== "clean") return await backoff(svc, job, "scanner_verdict_onbekend");
+  if (!gelijkeHash(scan.sha256, validatie.hash)) {
+    return await securityConflict(svc, job, doc.id, "hash_mismatch");
+  }
+  if (scan.deploymentId !== health.deploymentId) {
+    return await backoff(svc, job, "scanner_deployment_gewijzigd");
+  }
+
+  const doelpad = doc.bibliotheek === "generiek"
+    ? `generiek/${doc.id}.${validatie.bestandstype}`
+    : `${job.fonds_id}/${doc.id}.${validatie.bestandstype}`;
+  const { error: uploadErr } = await svc.storage.from("documenten").upload(doelpad, buffer, {
+    contentType: CONTENT_TYPE_PER_BESTANDSTYPE[validatie.bestandstype],
+    upsert: false,
+  });
+  if (uploadErr) {
+    // Crash-window: doel kan door een vorige poging al zijn geschreven.
+    const { data: bestaand } = await svc.storage.from("documenten").download(doelpad);
+    if (!bestaand) return await securityConflict(svc, job, doc.id, "promotie_conflict");
+    const bestaandOordeel = await valideerUpload({
+      naam: doc.bestandsnaam,
+      mimeType: CONTENT_TYPE_PER_BESTANDSTYPE[validatie.bestandstype],
+      buffer: Buffer.from(await bestaand.arrayBuffer()),
+    });
+    if (!bestaandOordeel.ok || !gelijkeHash(bestaandOordeel.hash, validatie.hash)) {
+      return await securityConflict(svc, job, doc.id, "promotie_conflict");
+    }
+  }
+
+  const { data: geraakt, error: updateErr } = await svc.from("documenten").update({
+    opslag_pad: doelpad,
+    bestand_hash: validatie.hash,
+    bestandstype: validatie.bestandstype,
+    mime_gedetecteerd: validatie.mimeGedetecteerd,
+    verwerkingsstatus: "gescand",
+  }).eq("id", doc.id).is("opslag_pad", null).eq("quarantaine_pad", doc.quarantaine_pad).select("id");
+  if (updateErr) return await backoff(svc, job, "promotie_db_update");
+  if (!geraakt || geraakt.length === 0) {
+    const { data: huidig } = await svc.from("documenten")
+      .select("opslag_pad, quarantaine_pad, bestand_hash, scan_resultaat, verwerkingsstatus")
+      .eq("id", doc.id).maybeSingle();
+    const scanHash = (huidig?.scan_resultaat as { sha256?: string } | null)?.sha256;
+    if (huidig?.opslag_pad !== doelpad || huidig?.bestand_hash !== validatie.hash ||
+        scanHash !== validatie.hash || huidig?.verwerkingsstatus !== "gescand") {
+      return await securityConflict(svc, job, doc.id, "promotie_conflict");
+    }
+  }
+
+  // Vervanging pas nu: de nieuwe bytes zijn schoon en duurzaam gepromoveerd.
+  if (doc.vervangt_na_scan_document_id) {
+    const { data: oud } = await svc.from("documenten").update({
+      status: "historisch", vervangen_door_document_id: doc.id,
+    }).eq("id", doc.vervangt_na_scan_document_id).neq("status", "historisch").select("id");
+    if (oud && oud.length > 0) {
+      await svc.from("document_metadata_log").insert({
+        document_id: doc.vervangt_na_scan_document_id,
+        document_titel_snapshot: doc.titel,
+        fonds_id: job.fonds_id,
+        gewijzigd_door: doc.opgeslagen_door,
+        gewijzigd_door_naam: null,
+        veld_naam: "status",
+        oude_waarde: "actueel",
+        nieuwe_waarde: "historisch",
+        wijzig_reden: doc.vervangt_na_scan_reden ?? "Vervangen na geslaagde malwarescan",
+        wijzig_type: "status",
+        rag_impact: true,
+      });
+      await svc.from("documenten").update({
+        vervangt_document_id: doc.vervangt_na_scan_document_id,
+        vervangt_na_scan_document_id: null,
+        vervangt_na_scan_reden: null,
+      }).eq("id", doc.id);
+    }
+  }
+
+  await verwijderQuarantaine(svc, doc.id, doc.quarantaine_pad, doelpad);
+  // Extractie krijgt een eigen invocatie en begint nooit in dezelfde crash-window.
+  return await yieldJob(svc, job);
+}
+
+async function verwijderQuarantaine(
+  svc: SupabaseClient, documentId: string, pad: string, verwachtDoelpad?: string
+): Promise<void> {
+  const { error } = await svc.storage.from("documenten-quarantaine").remove([pad]);
+  if (error) return;
+  let q = svc.from("documenten").update({ quarantaine_pad: null })
+    .eq("id", documentId).eq("quarantaine_pad", pad);
+  if (verwachtDoelpad) q = q.eq("opslag_pad", verwachtDoelpad);
+  await q;
+}
+
+function gelijkeHash(a: string, b: string): boolean {
+  if (!/^[a-f0-9]{64}$/.test(a) || !/^[a-f0-9]{64}$/.test(b)) return false;
+  return timingSafeEqual(Buffer.from(a, "hex"), Buffer.from(b, "hex"));
+}
+
+async function securityConflict(
+  svc: SupabaseClient, job: IngestJob, documentId: string, foutcode: string
+): Promise<Uitkomst> {
+  await svc.from("document_processing_jobs").update({ status: "mislukt", foutcode, eind: nu() }).eq("id", job.id);
+  await svc.from("documenten").update({ verwerkingsstatus: "gequarantineerd" }).eq("id", documentId);
+  return "mislukt";
+}
+
 // ── Extractie-fase (F6) ──────────────────────────────────────────────────────
 // Retourneert "door" wanneer het document klaar is voor de embedding-fase, of een
 // terminale/backoff-Uitkomst.
@@ -336,6 +607,9 @@ async function extracteerEnChunk(
   job: IngestJob,
   doc: DocumentRij
 ): Promise<Uitkomst | "door"> {
+  if (doc.quarantaine_pad && !doc.opslag_pad) {
+    return await backoff(svc, job, "quarantaine_niet_afgerond");
+  }
   if (!doc.opslag_pad) {
     // Zonder origineel is er niets te extraheren — permanente fout.
     return await markeerMislukt(svc, job, doc.id, "geen_origineel");
@@ -638,8 +912,33 @@ async function backoff(
   const sec = BACKOFF_SEC[Math.min(nieuweRetry - 1, BACKOFF_SEC.length - 1)];
   await svc
     .from("document_processing_jobs")
-    .update({ status: "bezig", retry_count: nieuweRetry, foutcode, lease_expires_at: leaseTijd(sec) })
+    .update({
+      status: "bezig", retry_count: nieuweRetry, claim_count: 0,
+      foutcode, lease_expires_at: leaseTijd(sec),
+    })
     .eq("id", job.id);
+  return "bezig";
+}
+
+async function backoffVerouderdeSignatures(
+  svc: SupabaseClient,
+  job: IngestJob
+): Promise<Uitkomst> {
+  const nieuweRetry = (job.retry_count ?? 0) + 1;
+  if (nieuweRetry > MAX_VEROUDERDE_SIGNATURE_RETRIES) {
+    await svc.from("document_processing_jobs").update({
+      status: "mislukt", retry_count: nieuweRetry,
+      foutcode: "signatures_verouderd", eind: nu(),
+    }).eq("id", job.id);
+    await svc.from("documenten").update({ verwerkingsstatus: "mislukt" })
+      .eq("id", job.document_id);
+    return "mislukt";
+  }
+  await svc.from("document_processing_jobs").update({
+    status: "bezig", retry_count: nieuweRetry, claim_count: 0,
+    foutcode: "signatures_verouderd",
+    lease_expires_at: leaseTijd(VEROUDERDE_SIGNATURE_BACKOFF_SEC),
+  }).eq("id", job.id);
   return "bezig";
 }
 
@@ -648,7 +947,7 @@ async function backoff(
 async function yieldJob(svc: SupabaseClient, job: IngestJob): Promise<Uitkomst> {
   await svc
     .from("document_processing_jobs")
-    .update({ status: "wachtend", lease_expires_at: null })
+    .update({ status: "wachtend", lease_expires_at: null, claim_count: 0 })
     .eq("id", job.id);
   return "bezig";
 }

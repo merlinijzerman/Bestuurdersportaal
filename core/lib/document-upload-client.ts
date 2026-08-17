@@ -101,8 +101,11 @@ export async function uploadDocument(
   });
   const initJson = await veiligJson(initRes);
   const document_id = initJson?.document_id as string | undefined;
+  const bucket = initJson?.bucket as string | undefined;
   const opslag_pad = initJson?.opslag_pad as string | undefined;
-  if (!initRes.ok || !document_id || !opslag_pad) {
+  const quarantaine_pad = initJson?.quarantaine_pad as string | undefined;
+  const uploadPad = quarantaine_pad ?? opslag_pad;
+  if (!initRes.ok || !document_id || !uploadPad || !bucket) {
     return {
       ok: false,
       error: (initJson?.error as string) ?? "Voorbereiden van de upload mislukt.",
@@ -114,8 +117,8 @@ export async function uploadDocument(
   // 3. Directe upload naar Storage (eigen sessie, RLS-afgedwongen op het fondspad).
   const supabase = createClient();
   const { error: upErr } = await supabase.storage
-    .from("documenten")
-    .upload(opslag_pad, file, {
+    .from(bucket)
+    .upload(uploadPad, file, {
       contentType: file.type || undefined,
       upsert: false,
     });
@@ -134,7 +137,7 @@ export async function uploadDocument(
     body: JSON.stringify({
       mode: "complete",
       document_id,
-      opslag_pad,
+      ...(quarantaine_pad ? { quarantaine_pad } : { opslag_pad }),
       bestandsnaam: file.name,
       mimeType: file.type,
       ...meta,

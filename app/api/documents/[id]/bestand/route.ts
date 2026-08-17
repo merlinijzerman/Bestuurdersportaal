@@ -5,9 +5,10 @@ import {
   CONTENT_TYPE_PER_BESTANDSTYPE,
   type Bestandstype,
 } from "@/core/lib/document-extractie";
+import { heeftSchoonScanbewijs } from "@/core/lib/document-scan-poort";
 
 // GET /api/documents/[id]/bestand
-// Streamt het originele bestand inline (PDF) of als download (Word/Excel).
+// Levert het originele bestand uitsluitend als download.
 // RLS op documenten zorgt al voor toegangscontrole; we voegen alleen het
 // inzage-logregeltje toe.
 export async function GET(
@@ -46,7 +47,7 @@ export async function GET(
 
   const { data: document, error: docError } = await supabase
     .from("documenten")
-    .select("id, titel, fonds_id, opslag_pad, bestandsnaam, bestandstype, actief")
+    .select("id, titel, fonds_id, opslag_pad, bestandsnaam, bestandstype, actief, verwerkingsstatus, bestand_hash, scan_resultaat")
     .eq("id", id)
     .single();
 
@@ -72,6 +73,19 @@ export async function GET(
           "Dit document is ingetrokken en is niet meer in te zien. Neem contact op met de beheerder als u het origineel nodig heeft.",
       },
       { status: 410 }
+    );
+  }
+
+  // WP3 wordt per omgeving geactiveerd. Zodra de schakelaar aan staat is alleen
+  // een volledig verwerkt document met een positief, hash-gebonden verdict
+  // downloadbaar. Null/onbekend/scannerfout is dus nooit impliciet schoon.
+  if (
+    process.env.WP3_MALWARESCAN_AAN === "true" &&
+    (document.verwerkingsstatus !== "beschikbaar" || !heeftSchoonScanbewijs(document))
+  ) {
+    return NextResponse.json(
+      { error: "Dit document is nog niet veilig beschikbaar." },
+      { status: 403 }
     );
   }
 
@@ -119,14 +133,11 @@ export async function GET(
     );
   }
 
-  // Bepaal content-type en disposition op basis van bestandstype.
+  // Bepaal content-type op basis van bestandstype.
   // Bij ontbrekend type (oude records) vallen we terug op PDF voor backwards
   // compatibility met al opgeslagen bestanden.
   const bestandstype = (document.bestandstype as Bestandstype) || "pdf";
   const contentType = CONTENT_TYPE_PER_BESTANDSTYPE[bestandstype];
-  // PDF kan inline in de browser worden getoond; Word/Excel forceren we als download
-  // omdat browsers die toch niet kunnen renderen.
-  const disposition = bestandstype === "pdf" ? "inline" : "attachment";
   const filename =
     document.bestandsnaam || `${document.titel}.${bestandstype}`;
 
@@ -136,7 +147,8 @@ export async function GET(
     status: 200,
     headers: {
       "Content-Type": contentType,
-      "Content-Disposition": `${disposition}; filename="${encodeURIComponent(filename)}"`,
+      "Content-Disposition": `attachment; filename="${encodeURIComponent(filename)}"`,
+      "X-Content-Type-Options": "nosniff",
       "Cache-Control": "private, max-age=0, no-store",
     },
   });

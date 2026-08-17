@@ -711,6 +711,8 @@ function StukKaart({
     !stuk.geindexeerd &&
     STUK_PIPELINE_STATUSSEN.includes(stuk.verwerkingsstatus ?? "");
   const verwerkingMislukt = stuk.verwerkingsstatus === "mislukt";
+  const beveiligingGeweigerd = stuk.verwerkingsstatus === "geweigerd";
+  const beveiligingGeblokkeerd = stuk.verwerkingsstatus === "gequarantineerd";
   const snippetBron = samenvatting
     ? samenvatting.gevraagd_besluit ||
       samenvatting.aanleiding ||
@@ -755,6 +757,8 @@ function StukKaart({
             {!stuk.samenvatting_ai ? " · samenvatting wordt nog gegenereerd" : ""}
             {inVerwerking ? " · ⏳ wordt verwerkt (nog niet doorzoekbaar)" : ""}
             {verwerkingMislukt ? " · ⚠️ verwerking mislukt" : ""}
+            {beveiligingGeweigerd ? " · ⚠️ bestand niet geaccepteerd" : ""}
+            {beveiligingGeblokkeerd ? " · 🛡️ geblokkeerd door beveiligingscontrole" : ""}
             {!kanInzien ? " · origineel niet beschikbaar" : ""}
           </div>
           {/* Non-destructieve vergaderkoppeling: dit stuk is een bestaand

@@ -153,7 +153,10 @@ async function backoff(svc: SupabaseClient, job: SemJob, foutcode: string): Prom
   const sec = BACKOFF_SEC[Math.min(nieuweRetry - 1, BACKOFF_SEC.length - 1)];
   await svc
     .from("document_processing_jobs")
-    .update({ status: "bezig", retry_count: nieuweRetry, foutcode, lease_expires_at: leaseTijd(sec) })
+    .update({
+      status: "bezig", retry_count: nieuweRetry, claim_count: 0,
+      foutcode, lease_expires_at: leaseTijd(sec),
+    })
     .eq("id", job.id);
   return "bezig";
 }

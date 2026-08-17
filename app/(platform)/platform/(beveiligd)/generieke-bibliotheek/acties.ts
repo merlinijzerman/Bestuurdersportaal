@@ -37,7 +37,6 @@ import {
   generiekTransitieRedenplicht,
 } from "@/core/lib/generiek-status";
 import {
-  verwerkGeneriekBestand,
   STORAGE_BUCKET,
   QUARANTAINE_BUCKET,
   GENERIEK_PAD_PREFIX,
@@ -188,24 +187,17 @@ async function maakGeneriekDocument(
     return { ok: false, foutcode: "bestand_ontbreekt", melding: "Geen geüpload bestand gevonden. Upload het bestand opnieuw." };
   }
 
-  try {
-    const { data: blob, error: dlErr } = await svc.storage.from(QUARANTAINE_BUCKET).download(pad);
-    if (dlErr || !blob) {
-      return { ok: false, foutcode: "download_mislukt", melding: "Het geüploade bestand kon niet worden opgehaald. Upload het opnieuw." };
-    }
-    const buffer = Buffer.from(await blob.arrayBuffer());
-
-    return await maakUitBuffer(svc, identiteit, correlatieId, fd, versieVan, {
-      buffer,
-      naam: bestandsnaam,
-      mimeType,
-    });
-  } finally {
-    // Cleanup: de quarantaine-kopie is na promotie naar 'documenten' overbodig.
-    // Best-effort — een opruimfout mag het resultaat niet beïnvloeden.
-    const { error: rmErr } = await svc.storage.from(QUARANTAINE_BUCKET).remove([pad]);
-    if (rmErr) console.error("[P1] quarantaine-opruimen mislukt:", rmErr.message);
+  const { data: blob, error: dlErr } = await svc.storage.from(QUARANTAINE_BUCKET).download(pad);
+  if (dlErr || !blob) {
+    return { ok: false, foutcode: "download_mislukt", melding: "Het geüploade bestand kon niet worden opgehaald. Upload het opnieuw." };
   }
+  const resultaat = await maakUitBuffer(svc, identiteit, correlatieId, fd, versieVan, {
+    buffer: Buffer.from(await blob.arrayBuffer()), naam: bestandsnaam, mimeType, quarantainePad: pad,
+  });
+  // Alleen afgewezen invoer opruimen. Een geaccepteerd object moet blijven tot
+  // de asynchrone scanner het schoon heeft verklaard en gepromoveerd.
+  if (!resultaat.ok) await svc.storage.from(QUARANTAINE_BUCKET).remove([pad]);
+  return resultaat;
 }
 
 async function maakUitBuffer(
@@ -214,7 +206,7 @@ async function maakUitBuffer(
   correlatieId: string,
   fd: FormData,
   versieVan: string | null | undefined,
-  bron: { buffer: Buffer; naam: string; mimeType: string }
+  bron: { buffer: Buffer; naam: string; mimeType: string; quarantainePad: string }
 ): Promise<MaakResultaat> {
   const buffer = bron.buffer;
 
@@ -271,7 +263,9 @@ async function maakUitBuffer(
       bestandsnaam: val.veiligeNaam,
       bestand_hash: val.hash,
       mime_gedetecteerd: val.mimeGedetecteerd,
-      scan_resultaat: { scan: "uitgesteld_wp3" },
+      scan_resultaat: null,
+      quarantaine_pad: bron.quarantainePad,
+      opslag_pad: null,
       verwerkingsstatus: "gevalideerd",
       opgeslagen_door: identiteit.id,
       geindexeerd: false,
@@ -299,27 +293,13 @@ async function maakUitBuffer(
     correlatie_id: correlatieId,
   });
 
-  const pipe = await verwerkGeneriekBestand(svc, {
-    documentId: doc.id,
-    versieId: versieVan ?? null,
-    titel: meta.titel,
-    buffer,
-    bestandstype: val.bestandstype,
-    correlatieId,
+  await svc.from("document_processing_jobs").insert({
+    document_id: doc.id,
+    versie_id: versieVan ?? null,
+    stap: "scan",
+    status: "wachtend",
+    correlatie_id: correlatieId,
   });
-
-  if (!pipe.ok) {
-    return {
-      ok: false,
-      foutcode: pipe.foutcode,
-      melding:
-        pipe.foutcode === "geen_tekst"
-          ? "Geen tekst gevonden — is dit een gescand bestand zonder tekstlaag?"
-          : pipe.foutcode === "chunk_insert_mislukt"
-            ? "De fragmenten konden niet worden opgeslagen; het document is niet gepubliceerd."
-            : "Verwerking mislukt; het document is niet beschikbaar gemaakt.",
-    };
-  }
 
   await logMetadata(svc, doc.id, meta.titel, identiteit, null, [
     {
@@ -331,7 +311,7 @@ async function maakUitBuffer(
     },
   ]);
 
-  return { ok: true, documentId: doc.id, chunks: pipe.chunks, paginas: pipe.paginas };
+  return { ok: true, documentId: doc.id, chunks: 0, paginas: null };
 }
 
 // ── 0. UPLOAD-SLOT (signed upload URL naar de quarantainezone) ──────────────
@@ -414,9 +394,9 @@ export async function curatieAanmaken(fd: FormData): Promise<CuratieResultaat> {
           resultaat: {
             ok: true,
             documentId: r.documentId,
-            bericht: `Generiek document gecureerd: ${r.chunks} fragmenten beschikbaar.`,
+            bericht: "Generiek document ontvangen en in beveiligingscontrole.",
           },
-          effect: { document_id: r.documentId, chunks: r.chunks, paginas: r.paginas, verwerkingsstatus: "beschikbaar" },
+          effect: { document_id: r.documentId, chunks: 0, paginas: null, verwerkingsstatus: "gevalideerd" },
         };
       }
     );

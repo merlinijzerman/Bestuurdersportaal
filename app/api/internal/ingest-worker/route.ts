@@ -45,45 +45,14 @@ async function draai(req: NextRequest): Promise<NextResponse> {
   if (!geautoriseerd(req)) {
     return NextResponse.json({ error: "Niet geautoriseerd" }, { status: 401 });
   }
-  // W0-probe voor WP3. Tijdelijk: verwijderen zodra Preview én één echte
-  // productie-croninvocatie zijn beoordeeld. Logt nooit het token zelf.
-  try {
-    const oidc = req.headers.get("x-vercel-oidc-token");
-    let claims: Record<string, unknown> = {};
-    if (oidc) {
-      const payload = oidc.split(".")[1];
-      if (payload) {
-        const { iss, aud, sub, owner_id, project_id, environment, exp, iat } = JSON.parse(
-          Buffer.from(payload, "base64url").toString("utf8")
-        );
-        claims = {
-          iss,
-          aud,
-          sub,
-          owner_id,
-          project_id,
-          environment,
-          levensduur_s:
-            typeof exp === "number" && typeof iat === "number" ? exp - iat : null,
-        };
-      }
-    }
-    console.log(
-      JSON.stringify({
-        tag: "wp3-oidc-probe",
-        trigger: req.headers.get("user-agent") === "vercel-cron/1.0" ? "cron" : "handmatig",
-        aanwezig: Boolean(oidc),
-        ...claims,
-      })
-    );
-  } catch {
-    console.log(JSON.stringify({ tag: "wp3-oidc-probe", aanwezig: false, fout: "onleesbaar" }));
-  }
   try {
     const svc = createServiceSupabase();
     // Werker-id draagt de starttijd zodat het auditspoor invocaties onderscheidt.
     const workerId = `ingest-cron-${Date.now()}`;
-    const resultaat = await draaiIngestWorker(svc, { workerId });
+    const resultaat = await draaiIngestWorker(svc, {
+      workerId,
+      oidcToken: req.headers.get("x-vercel-oidc-token"),
+    });
     // Heartbeat + telemetrie (F0.1-lijn): één gestructureerde regel per invocatie.
     console.log(JSON.stringify({ tag: "ingest-worker", worker_id: workerId, ...resultaat }));
     return NextResponse.json({ ok: true, ...resultaat });

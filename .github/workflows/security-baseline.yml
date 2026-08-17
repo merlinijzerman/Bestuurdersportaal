@@ -54,6 +54,11 @@ jobs:
       - name: Sanitytests
         run: npm run sanity
 
+      - name: Malwarescanner-tests
+        run: |
+          npm ci --prefix scanner
+          npm test --prefix scanner
+
       - name: Negatieve tenant- en omgevingsmatrix (app-laag)
         run: npm run test:xtenant
 

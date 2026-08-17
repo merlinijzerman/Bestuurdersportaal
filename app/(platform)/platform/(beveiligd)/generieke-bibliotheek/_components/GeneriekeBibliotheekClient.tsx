@@ -100,6 +100,16 @@ const LEEG_FORM = {
 };
 type FormState = typeof LEEG_FORM;
 
+function veiligeVerwerkingsstatus(status: string | null): string {
+  if (["ontvangen", "gevalideerd", "gescand"].includes(status ?? "")) {
+    return "Beveiligingscontrole bezig";
+  }
+  if (status === "geweigerd") return "Bestand niet geaccepteerd";
+  if (status === "gequarantineerd") return "Geblokkeerd door beveiligingscontrole";
+  if (status === "mislukt") return "Verwerking tijdelijk niet beschikbaar";
+  return status ?? "—";
+}
+
 function docNaarForm(d: GeneriekDocument): FormState {
   return {
     titel: d.titel ?? "",
@@ -725,7 +735,7 @@ export default function GeneriekeBibliotheekClient({
                       <div className="mt-0.5 text-xs text-ink/50">{d.volgende_review}</div>
                     )}
                   </td>
-                  <td className="px-4 py-2">{d.verwerkingsstatus ?? "—"}</td>
+                  <td className="px-4 py-2">{veiligeVerwerkingsstatus(d.verwerkingsstatus)}</td>
                   <td className="px-4 py-2">
                     <div className="flex flex-wrap justify-end gap-x-3 gap-y-1 whitespace-nowrap text-xs">
                       {d.opslag_pad && (
