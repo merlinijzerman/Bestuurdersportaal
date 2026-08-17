@@ -1,0 +1,144 @@
+name: Platform-configuratie-inventaris
+
+on:
+  schedule:
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: platform-configuratie-inventaris
+  cancel-in-progress: false
+
+jobs:
+  inventory:
+    name: Niet-geheime Supabase/Vercel-inventaris naar B2
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production-backup
+    env:
+      SUPABASE_PROJECT_REF: aebwiufuegsiwhwpdrfb
+      SUPABASE_MANAGEMENT_API_TOKEN: ${{ secrets.SUPABASE_MANAGEMENT_API_TOKEN }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_PROJECT_IDS: ${{ vars.VERCEL_PROJECT_IDS }}
+      VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.B2_APPLICATION_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.B2_APPLICATION_KEY }}
+      AWS_DEFAULT_REGION: eu-central-003
+      AWS_RETRY_MODE: standard
+      AWS_MAX_ATTEMPTS: "10"
+      B2_BUCKET_NAME: ${{ vars.B2_BUCKET_NAME }}
+      B2_S3_ENDPOINT: ${{ vars.B2_S3_ENDPOINT }}
+
+    steps:
+      - name: Repository ophalen
+        uses: actions/checkout@v4.2.2
+
+      - name: Node.js instellen
+        uses: actions/setup-node@v4.4.0
+        with:
+          node-version: 22
+
+      - name: Inventarisinputs fail-closed controleren
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          for command in aws node python3 sha256sum; do
+            command -v "$command" >/dev/null || { echo "Ontbrekend commando: $command" >&2; exit 1; }
+          done
+          for variable in SUPABASE_MANAGEMENT_API_TOKEN VERCEL_TOKEN VERCEL_PROJECT_IDS B2_BUCKET_NAME B2_S3_ENDPOINT; do
+            test -n "${!variable:-}" || { echo "Ontbrekende inventarisinput: $variable" >&2; exit 1; }
+          done
+          test -f scripts/capture-platform-inventory.mjs
+
+      - name: Platforminventaris maken
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          INVENTORY_TIMESTAMP="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
+          INVENTORY_PATH="$RUNNER_TEMP/platform-inventory-$INVENTORY_TIMESTAMP.json"
+          node scripts/capture-platform-inventory.mjs --output "$INVENTORY_PATH"
+          sha256sum "$INVENTORY_PATH" > "$INVENTORY_PATH.sha256"
+          echo "INVENTORY_TIMESTAMP=$INVENTORY_TIMESTAMP" >> "$GITHUB_ENV"
+          echo "INVENTORY_PATH=$INVENTORY_PATH" >> "$GITHUB_ENV"
+
+      - name: Inventaris naar B2 uploaden
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          INVENTORY_KEY="platform-inventory/$(date -u +%Y)/$(date -u +%m)/$(date -u +%d)/platform-inventory-$INVENTORY_TIMESTAMP.json"
+          CHECKSUM_KEY="$INVENTORY_KEY.sha256"
+          MARKER_KEY="backup-status/platform-inventory/$(date -u +%Y)/$(date -u +%m)/$(date -u +%d)/manifest-$INVENTORY_TIMESTAMP.json"
+          MARKER_PATH="$RUNNER_TEMP/platform-inventory-marker-$INVENTORY_TIMESTAMP.json"
+
+          python3 - "$INVENTORY_PATH" "$MARKER_PATH" "$INVENTORY_KEY" "$CHECKSUM_KEY" "$MARKER_KEY" <<'PY'
+          import hashlib
+          import json
+          import pathlib
+          import sys
+
+          inventory_path, marker_path, inventory_key, checksum_key, marker_key = sys.argv[1:]
+          inventory = json.loads(pathlib.Path(inventory_path).read_text())
+          digest = hashlib.sha256(pathlib.Path(inventory_path).read_bytes()).hexdigest()
+          marker = {
+              "schema_version": 1,
+              "status": inventory["status"],
+              "created_utc": inventory["captured_utc"],
+              "source_project": inventory["source_project"],
+              "inventory_key": inventory_key,
+              "checksum_key": checksum_key,
+              "bytes": pathlib.Path(inventory_path).stat().st_size,
+              "sha256": digest,
+              "coverage": inventory["coverage"],
+              "completion_marker": marker_key,
+          }
+          pathlib.Path(marker_path).write_text(json.dumps(marker, indent=2) + "\n")
+          pathlib.Path(marker_path + ".sha256").write_text(
+              hashlib.sha256(pathlib.Path(marker_path).read_bytes()).hexdigest() +
+              "  " + pathlib.Path(marker_path).name + "\n"
+          )
+          PY
+
+          upload_with_retry() {
+            local source="$1"
+            local key="$2"
+            local attempt
+            for attempt in 1 2 3 4 5; do
+              if aws s3 cp "$source" "s3://$B2_BUCKET_NAME/$key" --endpoint-url "$B2_S3_ENDPOINT" --only-show-errors --no-progress; then
+                return 0
+              fi
+              if [ "$attempt" -lt 5 ]; then sleep $((2 ** (attempt - 1))); fi
+            done
+            echo "B2-upload inventaris mislukt: $key" >&2
+            return 1
+          }
+
+          verify_size() {
+            local source="$1"
+            local key="$2"
+            local expected actual
+            expected="$(stat -c '%s' "$source")"
+            actual="$(aws s3api head-object --endpoint-url "$B2_S3_ENDPOINT" --bucket "$B2_BUCKET_NAME" --key "$key" --query ContentLength --output text)"
+            test "$actual" = "$expected" || { echo "B2-grootte wijkt af voor $key" >&2; exit 1; }
+          }
+
+          upload_with_retry "$INVENTORY_PATH" "$INVENTORY_KEY"
+          upload_with_retry "$INVENTORY_PATH.sha256" "$CHECKSUM_KEY"
+          upload_with_retry "$MARKER_PATH" "$MARKER_KEY"
+          upload_with_retry "$MARKER_PATH.sha256" "$MARKER_KEY.sha256"
+          verify_size "$INVENTORY_PATH" "$INVENTORY_KEY"
+          verify_size "$INVENTORY_PATH.sha256" "$CHECKSUM_KEY"
+          verify_size "$MARKER_PATH" "$MARKER_KEY"
+          verify_size "$MARKER_PATH.sha256" "$MARKER_KEY.sha256"
+
+          echo "Platforminventaris compleet opgeslagen in B2: $INVENTORY_KEY" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Tijdelijke bestanden verwijderen
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          rm -f "$RUNNER_TEMP"/platform-inventory-*.json "$RUNNER_TEMP"/platform-inventory-*.json.sha256
