@@ -25,7 +25,37 @@ import {
   type TekstSegment,
 } from "./document-extractie";
 
+import { poortCheck, isPoortGesloten, type PoortContext } from "./ai-poort";
+
 const OCR_URL = "https://api.mistral.ai/v1/ocr";
+
+/**
+ * Reserveert OCR-pagina's vóór verzending (besluit 0180, FR-2).
+ *
+ * @param paginas Het aantal pagina's dat WERKELIJK aan de provider wordt
+ *                aangeboden — niet het aantal pagina's van het document als de
+ *                tekstlaag al genoeg opleverde.
+ * @param poging  1-based volgnummer; elke retry reserveert opnieuw, want de
+ *                provider factureert die ook opnieuw.
+ * @returns       false als het quotum op is; de aanroeper slaat OCR dan over.
+ */
+export type OcrReservering = (paginas: number, poging: number) => Promise<boolean>;
+
+/** OCR is bewust niet uitgevoerd. Draagt de reden, zodat de melding eerlijk is. */
+export class OcrGeweigerdError extends Error {
+  readonly reden: OcrOvergeslagenReden;
+  constructor(reden: OcrOvergeslagenReden) {
+    super(`OCR geweigerd: ${reden}`);
+    this.name = "OcrGeweigerdError";
+    this.reden = reden;
+  }
+}
+
+export type OcrOvergeslagenReden =
+  | "te_veel_paginas"
+  | "quotum_bereikt"
+  | "paginas_onbekend"
+  | "provider_gestopt";
 
 // Centrale config — bij wisselen van engine ook de audit-waarde aanpassen.
 export const OCR_PROVIDER = "mistral";
@@ -95,7 +125,10 @@ interface MistralOcrResponse {
 // ExtractieResultaat terug (één segment per pagina, pagina = index + 1).
 // Retry/backoff op 429 en 5xx, gelijk aan embeddings.ts.
 export async function ocrPdfNaarResultaat(
-  buffer: Buffer
+  buffer: Buffer,
+  poort?: PoortContext,
+  reserveer?: OcrReservering,
+  aantalPaginas?: number | null
 ): Promise<ExtractieResultaat> {
   const key = process.env.MISTRAL_API_KEY;
   if (!key) throw new Error("MISTRAL_API_KEY ontbreekt in de omgeving");
@@ -108,6 +141,25 @@ export async function ocrPdfNaarResultaat(
   });
 
   for (let poging = 0; poging <= MAX_RETRIES; poging++) {
+    // AI-BEGRENZING (besluit 0180). ELKE poging reserveert opnieuw: Mistral
+    // factureert een herhaalde OCR-aanroep ook opnieuw, dus één reservering
+    // voor alle pogingen zou het verbruik structureel te laag schatten. En de
+    // poort draait hier per poging mee, zodat een stop halverwege de retrylus
+    // de volgende poging blokkeert in plaats van hem toch te versturen.
+    if (reserveer) {
+      const paginas = aantalPaginas ?? null;
+      if (paginas == null) {
+        throw new OcrGeweigerdError("paginas_onbekend");
+      }
+      const toegestaan = await reserveer(paginas, poging + 1);
+      if (!toegestaan) {
+        throw new OcrGeweigerdError(poging === 0 ? "quotum_bereikt" : "quotum_bereikt");
+      }
+    }
+    if (poort) {
+      await poortCheck(poort, "mistral", OCR_MODEL);
+    }
+
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), OCR_TIMEOUT_MS);
 
@@ -186,7 +238,7 @@ export interface ExtractieResultaatMetOcr extends ExtractieResultaat {
   // aanroeper het verschil zien tussen "geen OCR nodig" en "OCR overgeslagen",
   // en een eerlijke melding geven i.p.v. een leeg resultaat te presenteren als
   // een geslaagde extractie (besluit 0134).
-  ocrOvergeslagen?: "te_veel_paginas";
+  ocrOvergeslagen?: OcrOvergeslagenReden;
 }
 
 // Pure beslislaag voor de paginagrens (besluit 0134), apart getest in
@@ -194,10 +246,18 @@ export interface ExtractieResultaatMetOcr extends ExtractieResultaat {
 //   • géén grens meegegeven → bulk-/scriptpad zonder requesttimeout;
 //   • ONBEKEND paginaaantal → niet blokkeren op een gegeven dat we niet hebben.
 //     De AbortController-timeout en de maxDuration blijven dan de vangrail.
+//
+// AI-BEGRENZING (besluit 0180): zodra er een paginaquotum wordt gereserveerd,
+// kantelen beide "ja"-gevallen naar NEE. Je kunt geen pagina's reserveren die je
+// niet kunt tellen, en een pad zonder grens zou het fondsquotum ongemerkt
+// leegtrekken. `reserveringVereist` maakt dat expliciet in plaats van het stil
+// te veranderen voor de bestaande bulkpaden.
 export function magOcrDraaien(
   aantalPaginas: number | null | undefined,
-  maxOcrPaginas?: number
+  maxOcrPaginas?: number,
+  reserveringVereist = false
 ): boolean {
+  if (reserveringVereist && aantalPaginas == null) return false;
   if (maxOcrPaginas == null) return true;
   if (aantalPaginas == null) return true;
   return aantalPaginas <= maxOcrPaginas;
@@ -209,6 +269,11 @@ export interface OcrFallbackOpties {
   // grens wordt OCR overgeslagen i.p.v. uitgevoerd — de aanroeper beslist wat
   // dat betekent. Weglaten = geen grens (bulk-/scriptpad, geen requesttimeout).
   maxOcrPaginas?: number;
+  // AI-BEGRENZING (besluit 0180). Poortcontext voor de live Mistral-kill-switch
+  // en de reserveringsfunctie voor het OCR-paginaquotum. Beide horen samen te
+  // gaan: wie reserveert, moet ook gepoort worden.
+  poort?: PoortContext;
+  reserveerOcr?: OcrReservering;
 }
 
 // Hoofdingang voor ingest: probeer eerst de goedkope tekstlaag-extractie en val
@@ -234,17 +299,28 @@ export async function extractTekstMetOcrFallback(
   // Paginagrens (besluit 0134): OCR is de duurste stap in de keten en de enige
   // die per pagina extern werk doet. Boven de grens slaan we hem over in plaats
   // van hem halverwege te laten afbreken.
-  if (!magOcrDraaien(basis.aantalPaginas, opties.maxOcrPaginas)) {
+  //
+  // AI-BEGRENZING (besluit 0180): met een reserveringsfunctie is een ONBEKEND
+  // paginaaantal geen reden meer om door te gaan maar om te stoppen — je kunt
+  // niet reserveren wat je niet kunt tellen.
+  const moetReserveren = Boolean(opties.reserveerOcr);
+  if (!magOcrDraaien(basis.aantalPaginas, opties.maxOcrPaginas, moetReserveren)) {
     return {
       ...basis,
       ocrToegepast: false,
       ocrEngine: null,
-      ocrOvergeslagen: "te_veel_paginas",
+      ocrOvergeslagen:
+        moetReserveren && basis.aantalPaginas == null ? "paginas_onbekend" : "te_veel_paginas",
     };
   }
 
   try {
-    const ocr = await ocrPdfNaarResultaat(buffer);
+    const ocr = await ocrPdfNaarResultaat(
+      buffer,
+      opties.poort,
+      opties.reserveerOcr,
+      basis.aantalPaginas
+    );
     // Alleen overnemen als OCR daadwerkelijk meer tekst opleverde dan de
     // (vrijwel lege) tekstlaag — anders is het corrupt/onleesbaar en heeft
     // de OCR-poging geen waarde toegevoegd.
@@ -253,6 +329,18 @@ export async function extractTekstMetOcrFallback(
     }
     return { ...basis, ocrToegepast: false, ocrEngine: null };
   } catch (error) {
+    // Een BEGRENZING is geen storing. Quotum op, poort dicht of pagina's
+    // onbekend: dat zijn verklaarbare uitkomsten die de aanroeper eerlijk moet
+    // kunnen tonen ("OCR overgeslagen omdat het maandquotum bereikt is"), niet
+    // wegmoffelen als een mislukte extractie.
+    if (error instanceof OcrGeweigerdError) {
+      console.warn(`[OCR] Overgeslagen wegens begrenzing: ${error.reden}`);
+      return { ...basis, ocrToegepast: false, ocrEngine: null, ocrOvergeslagen: error.reden };
+    }
+    if (isPoortGesloten(error)) {
+      console.warn(`[OCR] Overgeslagen: Mistral-poort dicht (${error.reden}).`);
+      return { ...basis, ocrToegepast: false, ocrEngine: null, ocrOvergeslagen: "provider_gestopt" };
+    }
     console.error(
       `[OCR] Fallback mislukt — origineel (lege) resultaat behouden:`,
       error instanceof Error ? error.message : error

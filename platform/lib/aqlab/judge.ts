@@ -18,7 +18,8 @@
 //   - no_forbidden_claim            → {pass:bool, violated:string[]}
 // -----------------------------------------------------------------------------
 
-import Anthropic from "@anthropic-ai/sdk";
+import type Anthropic from "@anthropic-ai/sdk";
+import { bewaakteAnthropic, type PoortContext } from "@/core/lib/ai-poort";
 
 /** Apart gepind judge-model (≠ generatiemodel, anti-self-grading). */
 export const JUDGE_MODEL = "claude-opus-4-8";
@@ -183,13 +184,9 @@ export type JudgeClient = {
   messages: Pick<Anthropic["messages"], "create">;
 };
 
-let gedeeldeClient: Anthropic | null = null;
-function defaultClient(): Anthropic {
-  if (!gedeeldeClient) {
-    gedeeldeClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
-  }
-  return gedeeldeClient;
-}
+// AI-BEGRENZING (besluit 0180). Geen eigen client: de judge-call loopt door de
+// centrale poort. AQLab draait op synthetische data maar kost wél echt geld, en
+// het judge-model is Opus — juist dat pad mag niet buiten de begrenzing vallen.
 
 /**
  * Beoordeelt één judge-criterium met het apart gepinde judge-model.
@@ -199,16 +196,21 @@ function defaultClient(): Anthropic {
 export async function beoordeelMetJudge(
   criterium: JudgeCriterium,
   input: JudgeInput,
-  client?: JudgeClient
+  client?: JudgeClient,
+  poort?: PoortContext
 ): Promise<JudgeResultaat> {
-  const c = client ?? defaultClient();
   const prompt = bouwJudgePrompt(criterium, input);
+  // Zonder injecteerbare client (productiepad) is een poortcontext verplicht.
+  if (!client && !poort) return normaliseerJudgeOutput(criterium, null);
   try {
-    const resp = await c.messages.create({
+    const params = {
       model: JUDGE_MODEL,
       max_tokens: JUDGE_MAX_TOKENS,
-      messages: [{ role: "user", content: prompt }],
-    });
+      messages: [{ role: "user" as const, content: prompt }],
+    };
+    const resp = client
+      ? await client.messages.create(params)
+      : await bewaakteAnthropic(poort!, JUDGE_MODEL, (a) => a.messages.create(params));
     const tekst = resp.content
       .map((b) => (b.type === "text" ? b.text : ""))
       .join("")

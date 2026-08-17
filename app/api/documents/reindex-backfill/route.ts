@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
+import { badRequest } from "@/core/lib/api-errors";
+import {
+  preflight,
+  preflightRespons,
+  preflightSysteem,
+  rondAf,
+  sleutelUitRequest,
+  systeemSleutel,
+  vingerafdruk,
+} from "@/core/lib/ai-preflight";
 import { rateLimited } from "@/core/lib/api-errors";
 import { herindexeerDocument } from "@/core/lib/reindex";
 import { INDEXERING_VERSIE, PREFIX_MODEL, PREFIX_PROMPT_VERSIE } from "@/core/lib/chunk-ingest";
@@ -23,7 +33,7 @@ import { INDEXERING_VERSIE, PREFIX_MODEL, PREFIX_PROMPT_VERSIE } from "@/core/li
 //  het eigen fonds. `tekst` wordt nooit aangeraakt (omkeerbaar).
 // ============================================================================
 
-export async function POST(_req: NextRequest) {
+export async function POST(req: NextRequest) {
   try {
     const supabase = await createServerSupabase();
     const {
@@ -96,7 +106,41 @@ export async function POST(_req: NextRequest) {
       return NextResponse.json({ error: "Document niet gevonden" }, { status: 500 });
     }
 
-    const res = await herindexeerDocument(supabase, doc);
+    // AI-BEGRENZING (besluit 0180). Eén her-indexering = één AI-actie
+    // (OCR + tientallen Haiku-prefixes + embeddings). De OCR-pagina's daarbinnen
+    // zijn een eigen grootheid met een eigen quotum en worden per poging
+    // gereserveerd, vlak vóór verzending.
+    const idempotentie = sleutelUitRequest(req, "reindex_backfill");
+    if (!idempotentie) {
+      return badRequest(
+        "documents.reindex-backfill",
+        "Verzoek mist een geldige Idempotency-Key. Vernieuw de pagina en probeer het opnieuw."
+      );
+    }
+    const pf = await preflight(supabase, {
+      actietype: "reindex_backfill",
+      provider: "anthropic",
+      idempotentie,
+      vingerafdruk: vingerafdruk({ documentId: doc.id }),
+    });
+    const blokkade = preflightRespons("documents.reindex-backfill", pf);
+    if (blokkade) return blokkade;
+    const actieId = pf.uitkomst === "nieuw" ? pf.actieId : null;
+
+    const res = await herindexeerDocument(supabase, doc, {
+      reserveerOcr: async (paginas, poging) => {
+        const uitkomst = await preflight(supabase, {
+          actietype: "ocr",
+          provider: "mistral",
+          model: "mistral-ocr-latest",
+          ocrPaginas: paginas,
+          idempotentie: systeemSleutel(doc.id, "ocr_reindex", poging),
+          vingerafdruk: vingerafdruk({ documentId: doc.id, paginas }),
+        });
+        return uitkomst.uitkomst === "nieuw";
+      },
+    });
+    await rondAf(supabase, actieId, res.status === "mislukt" ? "mislukt" : "voltooid");
 
     // Per-run provenance (lichte registratie). Best-effort: een logfout mag de
     // re-index niet breken. fonds_id = eigen fonds (RLS-policy "fonds reindex_runs").

@@ -180,6 +180,101 @@ export function rateLimited(label: string, resetAt: Date | null): NextResponse {
   );
 }
 
+/**
+ * HTTP 429 voor een bereikt MAANDQUOTUM (AI-begrenzing, besluit 0180).
+ *
+ * Bewust een eigen helper naast `rateLimited()`: een burstlimiet en een
+ * maandquotum voelen voor de gebruiker totaal anders. "Probeer het over 30
+ * seconden opnieuw" is bij een vol maandtegoed misleidend — daarom een eigen
+ * tekst en een `Retry-After` die tot de eerste van de volgende kalendermaand
+ * loopt.
+ *
+ * De melding noemt NOOIT tellerstanden van andere gebruikers of fondsen, en
+ * evenmin welke grens precies is geraakt op een manier die iets over andere
+ * tenants prijsgeeft (FR-1).
+ *
+ * @param bereik Welk tegoed op is, in gebruikerstaal.
+ */
+export function quotumBereikt(
+  label: string,
+  bereik: "gebruiker" | "fonds" | "platform" | "ocr",
+  resetSeconden: number | null
+): NextResponse {
+  const seconden = resetSeconden && resetSeconden > 0 ? resetSeconden : 3600;
+
+  const tekst: Record<typeof bereik, string> = {
+    gebruiker:
+      "U heeft uw maandtegoed voor AI-functies gebruikt. Volgende maand staat het weer open.",
+    fonds:
+      "Het maandtegoed voor AI-functies van uw fonds is bereikt. Volgende maand staat het weer open.",
+    platform:
+      "Het maandtegoed voor AI-functies van deze omgeving is bereikt. Volgende maand staat het weer open.",
+    ocr: "Het maandtegoed voor tekstherkenning van uw fonds is bereikt. Volgende maand staat het weer open.",
+  };
+
+  console.warn(`[${label}] 429 quotum bereikt (${bereik}) — reset over ~${seconden}s`);
+  logAppFout({
+    label,
+    error: new Error(`ai-quotum bereikt: ${bereik}`),
+    httpStatus: 429,
+    categorie: "rate_limiting",
+    severity: "laag",
+  });
+
+  return NextResponse.json(
+    { error: tekst[bereik] },
+    { status: 429, headers: { "Retry-After": String(seconden) } }
+  );
+}
+
+/**
+ * HTTP 503 wanneer de AI-begrenzing een call tegenhoudt: een kill switch staat
+ * uit, het model staat niet (meer) op de allowlist, of de begrenzing zelf is
+ * onbereikbaar en het pad valt fail-closed dicht.
+ *
+ * De respons is gesaniteerd: geen providernaam, geen configuratie, geen
+ * modelstring. Dat de AI tijdelijk uit staat is genoeg voor de gebruiker; het
+ * waaróm hoort in het beheerscherm en het auditspoor, niet in een API-antwoord.
+ */
+export function aiGeblokkeerd(label: string, interneReden: string): NextResponse {
+  console.warn(`[${label}] 503 ai-begrenzing: ${interneReden}`);
+  // `retrieval_ai` is de bestaande categorie voor het AI-domein (FO §18.1); de
+  // CHECK op app_errors.categorie kent geen eigen waarde voor de begrenzing en
+  // dat is het niet waard om een migratie voor te doen.
+  logAppFout({
+    label,
+    error: new Error(`ai-begrenzing blokkeert: ${interneReden}`),
+    httpStatus: 503,
+    categorie: "retrieval_ai",
+    severity: "middel",
+  });
+
+  return NextResponse.json(
+    {
+      error:
+        "De AI-functies zijn op dit moment uitgeschakeld. Neem contact op met uw beheerder als dit onverwacht is.",
+    },
+    { status: 503 }
+  );
+}
+
+/**
+ * HTTP 409 bij een duplicaat: dezelfde actie loopt al, of dezelfde
+ * idempotentiesleutel wordt hergebruikt voor andere inhoud. In beide gevallen
+ * gaat er GEEN providercall uit — dat is precies het punt.
+ */
+export function duplicaatVerzoek(label: string, conflict: boolean): NextResponse {
+  console.warn(`[${label}] 409 ${conflict ? "sleutelconflict" : "actie loopt al"}`);
+  return NextResponse.json(
+    {
+      error: conflict
+        ? "Dit verzoek kon niet worden verwerkt. Vernieuw de pagina en probeer het opnieuw."
+        : "Deze actie loopt al. Wacht tot hij klaar is.",
+    },
+    { status: 409 }
+  );
+}
+
 /** Maakt een korte NL-tijdshint ("over circa 3 minuten") van een aantal seconden. */
 function formatteerResetHint(seconden: number): string {
   if (seconden <= 90) {

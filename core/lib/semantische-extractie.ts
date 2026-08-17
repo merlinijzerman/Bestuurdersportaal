@@ -15,7 +15,8 @@
 // ============================================================================
 
 import "server-only";
-import Anthropic from "@anthropic-ai/sdk";
+import type Anthropic from "@anthropic-ai/sdk";
+import { bewaakteAnthropic, type PoortContext } from "./ai-poort";
 import { HAIKU_MODEL } from "./llm-modellen";
 import {
   bouwKandidaatUnits,
@@ -80,15 +81,14 @@ export type VoorkomenExtractor = (
   conceptOmschrijving: string
 ) => Promise<RawVoorkomen[]>;
 
-let _client: Anthropic | null = null;
-function anthropic(): Anthropic {
-  if (!_client) _client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
-  return _client;
-}
-
-// De echte extractor: één geforceerde Haiku-tool-call, defensief geparst.
-export const haikuVoorkomenExtractor: VoorkomenExtractor = async (fragment, conceptOmschrijving) => {
-  const resp = await anthropic().messages.create({
+// AI-BEGRENZING (besluit 0180). De extractor is een FABRIEK geworden: hij krijgt
+// de poortcontext mee en elke tool-call loopt daar doorheen. De extractie draait
+// in de ingest-worker, waar het quotum al is gereserveerd; hier wordt alleen de
+// kill switch en de modelallowlist getoetst — live, per call.
+export function maakHaikuVoorkomenExtractor(poort: PoortContext): VoorkomenExtractor {
+  return async (fragment, conceptOmschrijving) => {
+  const resp = await bewaakteAnthropic(poort, HAIKU_MODEL, (anthropic) =>
+    anthropic.messages.create({
     model: HAIKU_MODEL,
     max_tokens: 1024,
     temperature: 0, // reproduceerbaarheid (besluit 0139-lijn)
@@ -101,12 +101,14 @@ export const haikuVoorkomenExtractor: VoorkomenExtractor = async (fragment, conc
         content: `Doelconcept:\n${conceptOmschrijving}\n\nTekst:\n"""\n${fragment}\n"""`,
       },
     ],
-  });
+    })
+  );
   const blok = resp.content.find((b) => b.type === "tool_use");
   if (!blok || blok.type !== "tool_use") return [];
   const input = blok.input as { voorkomens?: RawVoorkomen[] };
   return Array.isArray(input.voorkomens) ? input.voorkomens : [];
-};
+  };
+}
 
 export interface ExtractieMeting {
   calls: number;
@@ -120,7 +122,10 @@ export async function extraheerUnits(
   chunks: BronChunk[],
   concepten: ActiefConcept[],
   documentStatus: string | null,
-  extractor: VoorkomenExtractor = haikuVoorkomenExtractor
+  // Geen default-extractor meer: de aanroeper MOET er een meegeven, en de enige
+  // productie-implementatie is maakHaikuVoorkomenExtractor(poort). Zo kan er
+  // geen ongemeten providercall ontstaan door het argument te vergeten.
+  extractor: VoorkomenExtractor
 ): Promise<{ units: KandidaatUnit[]; meting: ExtractieMeting }> {
   const kandidaten: KandidaatUnit[] = [];
   const meting: ExtractieMeting = { calls: 0, callFouten: 0 };

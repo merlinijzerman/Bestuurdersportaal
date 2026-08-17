@@ -23,6 +23,11 @@ import { genereerViaAdapter, type FixtureContext, type AdapterModelConfig } from
 import { evalueerOutput, type CriteriumScore } from "./evaluation-engine";
 import { beoordeelMetJudge, type JudgeCriterium, type JudgeInput } from "./judge";
 import { fixtureTekst } from "./fixtures";
+import {
+  preflightSysteem,
+  systeemSleutel,
+  vingerafdruk,
+} from "@/core/lib/ai-preflight";
 import type { TestcaseSpec } from "./checks/index";
 import {
   berekenConsistentie,
@@ -295,8 +300,30 @@ async function verwerkJob(
   const modelConfig = await laadModelConfig(svc, run.model_configuration_id);
   const fixtures = await laadFixtures(svc, spec.required_source_ids ?? []);
 
+  // AI-BEGRENZING (besluit 0180). AQLab draait op synthetische data maar kost
+  // echt geld — generatie én een Opus-judge. Eén job = één AI-actie,
+  // platformbreed (geen fonds). Weigert de begrenzing, dan draait deze job
+  // niet; dat is een beleidsuitkomst, geen storing.
+  const aiPoort = { supabase: svc, label: "aqlab.run" };
+  const aiPf = await preflightSysteem(svc, {
+    actietype: "aqlab_run",
+    fondsId: null,
+    // Provider en model komen uit de runconfiguratie en zijn dus CALLER-SUPPLIED.
+    // Juist daarom gaan ze door de preflight: de allowlist in de database is de
+    // beslissende laag, niet de AQLab-registry.
+    provider: (modelConfig.provider ?? "anthropic") as "anthropic" | "mistral" | "openai",
+    model: modelConfig.model ?? null,
+    idempotentie: systeemSleutel(job.id, "aqlab_run", 1),
+    vingerafdruk: vingerafdruk({ jobId: job.id }),
+  });
+  if (aiPf.uitkomst !== "nieuw") {
+    throw new Error(
+      `aqlab_ai_begrenzing: ${aiPf.uitkomst === "geweigerd" ? aiPf.reden : aiPf.uitkomst}`
+    );
+  }
+
   // Generatie via de productiekern.
-  const gen = await genereerViaAdapter({ vraag, rol, fixtures, modelConfig });
+  const gen = await genereerViaAdapter({ vraag, rol, fixtures, modelConfig, poort: aiPoort });
 
   // Evaluatie.
   const evalResultaat = await evalueerOutput(
@@ -311,7 +338,7 @@ async function verwerkJob(
       reviewVerplicht,
     },
     judgeEnabled
-      ? { judge: (c: JudgeCriterium, inp: JudgeInput) => beoordeelMetJudge(c, inp) }
+      ? { judge: (c: JudgeCriterium, inp: JudgeInput) => beoordeelMetJudge(c, inp, undefined, aiPoort) }
       : {}
   );
 

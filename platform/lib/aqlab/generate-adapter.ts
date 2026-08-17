@@ -65,6 +65,8 @@ export interface AdapterParams {
   client?: GenereerAntwoordParams["client"];
   /** Injecteerbare fetch voor de OpenAI/Mistral-adapters (hermetische provider-pariteitstest). */
   fetchImpl?: GenereerAntwoordParams["fetchImpl"];
+  /** AI-BEGRENZING (besluit 0180): poortcontext, verplicht op het productiepad. */
+  poort?: GenereerAntwoordParams["poort"];
 }
 
 export interface AdapterResultaat {
@@ -160,6 +162,7 @@ export async function genereerViaAdapter(params: AdapterParams): Promise<Adapter
     bronnenAantal: bronnen.length,
     client: params.client,
     fetchImpl: params.fetchImpl,
+    poort: params.poort,
   });
 
   // snapshot_hash: sha256 over de gebruikte, canonieke fixture-teksten.

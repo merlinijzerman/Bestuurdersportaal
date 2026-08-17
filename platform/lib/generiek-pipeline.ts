@@ -25,6 +25,17 @@ import {
   type Bestandstype,
 } from "../../core/lib/document-extractie";
 import { extractTekstMetOcrFallback } from "../../core/lib/ocr";
+import {
+  preflightSysteem,
+  systeemSleutel,
+  vingerafdruk,
+} from "../../core/lib/ai-preflight";
+
+// AI-BEGRENZING (besluit 0180). Dit pad kende GEEN paginacap: `magOcrDraaien`
+// kreeg geen grens mee en gaf dan onvoorwaardelijk `true` terug, waardoor een
+// gescande PDF van willekeurige omvang integraal naar de OCR-provider ging.
+// Gelijkgetrokken met de ingest-worker.
+const MAX_OCR_PAGINAS_GENERIEK = 200;
 import { bouwChunkRecords } from "../../core/lib/chunk-ingest";
 
 export const STORAGE_BUCKET = "documenten";
@@ -139,7 +150,26 @@ export async function verwerkGeneriekBestand(
   await zetStatus(svc, documentId, "extractie");
   let extractie;
   try {
-    extractie = await extractTekstMetOcrFallback(buffer, bestandstype);
+    extractie = await extractTekstMetOcrFallback(buffer, bestandstype, {
+      maxOcrPaginas: MAX_OCR_PAGINAS_GENERIEK,
+      poort: { supabase: svc, label: "generiek-pipeline" },
+      // Generieke documenten horen bij geen enkel fonds; hun OCR-pagina's
+      // tellen daarom in een eigen platformbrede bucket (actietype
+      // ocr_generiek) tegen dezelfde grens. Elke poging reserveert opnieuw —
+      // de provider factureert een retry ook opnieuw.
+      reserveerOcr: async (paginas, poging) => {
+        const uitkomst = await preflightSysteem(svc, {
+          actietype: "ocr_generiek",
+          fondsId: null,
+          provider: "mistral",
+          model: "mistral-ocr-latest",
+          ocrPaginas: paginas,
+          idempotentie: systeemSleutel(documentId, "ocr_generiek", poging),
+          vingerafdruk: vingerafdruk({ documentId, versieId, paginas }),
+        });
+        return uitkomst.uitkomst === "nieuw";
+      },
+    });
   } catch (e) {
     await schrijfJob(svc, {
       documentId, versieId, correlatieId, stap: "extractie", status: "mislukt",
@@ -203,7 +233,12 @@ export async function verwerkGeneriekBestand(
   await zetStatus(svc, documentId, "chunking");
   await zetStatus(svc, documentId, "embedding");
   const { records: chunkRecords, aantalChunks, embeddingsGelukt: embeddings } =
-    await bouwChunkRecords({ documentId, titel, segmenten: extractie.segmenten });
+    await bouwChunkRecords({
+      documentId,
+      titel,
+      segmenten: extractie.segmenten,
+      poort: { supabase: svc, label: "generiek-pipeline" },
+    });
   await schrijfJob(svc, {
     documentId, versieId, correlatieId, stap: "embedding",
     status: embeddings ? "geslaagd" : "overgeslagen", start: t,

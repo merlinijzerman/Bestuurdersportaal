@@ -10,6 +10,25 @@
 //    MISTRAL_API_KEY=xxx node scripts/test-embeddings.mjs
 // ============================================================
 
+// ⚠ AI-BEGRENZING (besluit 0180) — DIT SCRIPT VALT BUITEN DE BEGRENZING.
+//  Het draait handmatig vanaf een werkplek, zonder servercontext en zonder
+//  sessie: de maandquota, de kill switch en de modelallowlist kunnen hier
+//  technisch niet worden afgedwongen. Het verbruik telt NIET mee in
+//  ai_verbruik_log en een gestopte Mistral houdt dit script niet tegen; de
+//  enige rem is de financiële providerlimiet.
+//
+//  Draai het daarom alleen bewust, met:
+//      AI_BEGRENZING_BEWUST_OMZEILD=1 node scripts/<naam>.mjs
+//  Geregistreerd restrisico; eigenaar Merlin.
+if (process.env.AI_BEGRENZING_BEWUST_OMZEILD !== "1") {
+  console.error(
+    "✗ Geweigerd: dit script omzeilt de AI-begrenzing (besluit 0180).\n" +
+      "  Zet AI_BEGRENZING_BEWUST_OMZEILD=1 om te bevestigen dat dit bewust is."
+  );
+  process.exit(1);
+}
+
+
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";

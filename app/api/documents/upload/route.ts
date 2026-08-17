@@ -460,7 +460,12 @@ async function initUpload(req: NextRequest, body: Record<string, unknown>) {
     if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
 
     // Rate limiting (WP2): op de init-stap — de gate vóór de eigenlijke upload.
-    const limiet = await controleerLimiet(supabase, LIMIETEN.upload);
+    // Besluit 0180: fail-closed. Een upload zet de asynchrone ingest in gang en
+    // is daarmee kostendragend, ook al doet deze route zelf geen providercall.
+    // Drempel ongewijzigd.
+    const limiet = await controleerLimiet(supabase, LIMIETEN.upload, {
+      failClosed: true,
+    });
     if (!limiet.toegestaan) return rateLimited("documents.upload", limiet.resetAt);
 
     const { data: profiel } = await supabase
