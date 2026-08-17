@@ -40,7 +40,10 @@ test("Storage-back-up haalt alle objecten recursief op en schrijft hashes", asyn
           },
         ]), { headers: { "content-type": "application/json" } });
       }
-      if (target.pathname === "/storage/v1/object/download/documenten/fonds/rapport.pdf") {
+      if (target.pathname === "/storage/v1/object/authenticated/documenten/fonds/rapport.pdf") {
+        const headers = new Headers(init.headers);
+        assert.equal(headers.get("apikey"), "test-key");
+        assert.equal(headers.get("authorization"), "Bearer test-key");
         return response("test-bytes", {
           headers: { "content-length": "10", "content-type": "application/pdf" },
         });
@@ -64,6 +67,7 @@ test("Storage-back-up haalt alle objecten recursief op en schrijft hashes", asyn
     const stored = await readFile(path.join(outputDir, "documenten", "fonds", "rapport.pdf"), "utf8");
     assert.equal(stored, "test-bytes");
     assert.ok(calls.includes("POST /storage/v1/object/list/documenten"));
+    assert.ok(calls.includes("GET /storage/v1/object/authenticated/documenten/fonds/rapport.pdf"));
   } finally {
     globalThis.fetch = originalFetch;
     await rm(outputDir, { recursive: true, force: true });
