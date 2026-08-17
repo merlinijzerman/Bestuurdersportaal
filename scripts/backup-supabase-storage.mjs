@@ -156,7 +156,7 @@ async function listPrefix(baseUrl, serviceRoleKey, bucket, prefix = "") {
 
 function objectDownloadUrl(baseUrl, bucket, objectName) {
   const encodedPath = objectName.split("/").map((part) => encodeURIComponent(part)).join("/");
-  return apiUrl(baseUrl, `/storage/v1/object/download/${encodeURIComponent(bucket)}/${encodedPath}`);
+  return apiUrl(baseUrl, `/storage/v1/object/authenticated/${encodeURIComponent(bucket)}/${encodedPath}`);
 }
 
 async function downloadObject(baseUrl, serviceRoleKey, bucket, object, outputDir) {
