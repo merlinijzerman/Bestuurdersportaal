@@ -94,8 +94,19 @@ echo "Bewijswerkmap: $WORKDIR"
 restore_file() {
   local label="$1"
   local file="$2"
+  local restore_role="${3:-}"
   echo "Restore: $label"
-  psql "$TARGET_DB_URL" --single-transaction -v ON_ERROR_STOP=1 -f "$WORKDIR/$file"
+  if [ -n "$restore_role" ]; then
+    case "$restore_role" in
+      supabase_auth_admin|supabase_storage_admin) ;;
+      *) echo "Restore stopt: niet-toegestane managed rol: $restore_role" >&2; exit 1 ;;
+    esac
+    psql "$TARGET_DB_URL" --single-transaction -v ON_ERROR_STOP=1 \
+      -c "SET LOCAL ROLE $restore_role;" \
+      -f "$WORKDIR/$file"
+  else
+    psql "$TARGET_DB_URL" --single-transaction -v ON_ERROR_STOP=1 -f "$WORKDIR/$file"
+  fi
 }
 
 # pg_dump --disable-triggers emits ALTER TABLE ... TRIGGER ALL statements.
@@ -118,8 +129,8 @@ node scripts/prepare-supabase-managed-data-restore.mjs \
 # restored before public data because profielen and audit rows reference it.
 psql "$TARGET_DB_URL" -v ON_ERROR_STOP=1 -f "$WORKDIR/roles.sql"
 restore_file "public schema" "schema.sql"
-restore_file "Auth-data" "auth-data.restore.sql"
-restore_file "Storage-metadata" "storage-data.restore.sql"
+restore_file "Auth-data" "auth-data.restore.sql" "supabase_auth_admin"
+restore_file "Storage-metadata" "storage-data.restore.sql" "supabase_storage_admin"
 restore_file "public data" "data.sql"
 restore_file "managed Auth/Storage customizations" "managed-customizations.sql"
 
