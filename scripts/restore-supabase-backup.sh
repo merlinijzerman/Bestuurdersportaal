@@ -125,13 +125,32 @@ node scripts/prepare-supabase-managed-data-restore.mjs \
   --input "$WORKDIR/storage-data.sql" \
   --output "$WORKDIR/storage-data.restore.sql"
 
-# Managed schemas already exist in a new Supabase project. Auth data must be
-# restored before public data because profielen and audit rows reference it.
-psql "$TARGET_DB_URL" -v ON_ERROR_STOP=1 -f "$WORKDIR/roles.sql"
-restore_file "public schema" "schema.sql"
-restore_file "Auth-data" "auth-data.restore.sql" "supabase_auth_admin"
-restore_file "Storage-metadata" "storage-data.restore.sql" "supabase_storage_admin"
-restore_file "public data" "data.sql"
+# The Supabase CLI data-only dump is the supported, combined restore source for
+# public, Auth and Storage data. Prove those managed tables are present before
+# the first target mutation; a partial dump must fail closed.
+for required_copy in \
+  'auth[^[:alnum:]_]+users' \
+  'auth[^[:alnum:]_]+identities' \
+  'storage[^[:alnum:]_]+buckets' \
+  'storage[^[:alnum:]_]+objects'
+do
+  grep -Eiq "^COPY .*${required_copy}.* FROM stdin;$" "$WORKDIR/data.sql" || {
+    echo "Restore stopt: data.sql mist vereiste COPY voor $required_copy." >&2
+    exit 1
+  }
+done
+
+# Follow Supabase's documented logical restore sequence in one transaction.
+# session_replication_role=replica suppresses managed triggers while preserving
+# the target project's managed schemas and ownership.
+psql "$TARGET_DB_URL" \
+  --single-transaction \
+  -v ON_ERROR_STOP=1 \
+  -f "$WORKDIR/roles.sql" \
+  -f "$WORKDIR/schema.sql" \
+  -c "SET session_replication_role = replica;" \
+  -f "$WORKDIR/data.sql"
+
 restore_file "managed Auth/Storage customizations" "managed-customizations.sql"
 
 FINISHED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
