@@ -29,6 +29,7 @@ import { requireCapability, type Capability } from "@/core/lib/capabilities";
 import {
   valideerUpload,
   logNaam,
+  normaliseerBestandsnaam,
   MAX_BESTAND_BYTES,
 } from "@/core/lib/bestand-validatie";
 import { toegestaneUploadExtensie } from "@/core/lib/ingest-caps";
@@ -37,6 +38,7 @@ import { badRequest, rateLimited } from "@/core/lib/api-errors";
 import { beoordeelRouteHostToegang } from "@/core/lib/tenant-route-guard";
 
 type ServerSupabase = Awaited<ReturnType<typeof createServerSupabase>>;
+const malwareScanAan = () => process.env.WP3_MALWARESCAN_AAN === "true";
 
 // Strip de bestandsextensie van de naam — werkt voor alle ondersteunde types.
 function stripExtensie(naam: string): string {
@@ -531,9 +533,12 @@ async function initUpload(req: NextRequest, body: Record<string, unknown>) {
     // Pad-conventie: <fonds_uuid>/<document_uuid>.<ext>. De storage-INSERT-policy
     // dwingt af dat de foldernaam het eigen fonds_id is; de client mint niets zelf.
     const document_id = randomUUID();
-    const opslag_pad = `${profiel.fonds_id}/${document_id}.${ext}`;
-
-    return NextResponse.json({ document_id, opslag_pad });
+    const pad = `${profiel.fonds_id}/${document_id}.${ext}`;
+    return NextResponse.json(
+      malwareScanAan()
+        ? { document_id, quarantaine_pad: pad, bucket: "documenten-quarantaine" }
+        : { document_id, opslag_pad: pad, bucket: "documenten" }
+    );
   } catch (error) {
     console.error("Upload-init fout:", error);
     return NextResponse.json(
@@ -576,18 +581,21 @@ async function completeUpload(req: NextRequest, body: Record<string, unknown>) {
       );
 
     const document_id = String(body.document_id ?? "");
+    const scanIngeschakeld = malwareScanAan();
     const opslag_pad = String(body.opslag_pad ?? "");
+    const quarantaine_pad = String(body.quarantaine_pad ?? "");
+    const aangeleverdPad = scanIngeschakeld ? quarantaine_pad : opslag_pad;
     const bestandsnaam = String(body.bestandsnaam ?? "");
     const mimeType = String(body.mimeType ?? "");
 
     // Pad-autoriteit: het pad MOET exact <eigen fonds_id>/<document_id>.<ext> zijn.
     // Zo kan een client geen ander fonds-pad of losse uuid registreren; RLS is de
     // tweede linie (SELECT/INSERT-policies op het fondspad).
-    const ext = toegestaneUploadExtensie(opslag_pad);
+    const ext = toegestaneUploadExtensie(aangeleverdPad);
     if (
       !document_id ||
       !ext ||
-      opslag_pad !== `${profiel.fonds_id}/${document_id}.${ext}`
+      aangeleverdPad !== `${profiel.fonds_id}/${document_id}.${ext}`
     ) {
       return NextResponse.json(
         { error: "Ongeldig opslagpad voor deze upload.", foutcode: "opslagpad_ongeldig" },
@@ -612,81 +620,45 @@ async function completeUpload(req: NextRequest, body: Record<string, unknown>) {
     });
     if (!meta.ok) return meta.response;
 
-    // Het object staat al in Storage (browser→Storage, RLS-afgedwongen). Haal het
-    // server-side op — géén request-body-limiet — en draai de VOLLEDIGE validatie
-    // (magic bytes, OOXML-subtype, zip-bom-budget, hash) vóórdat er een rij komt.
-    const { data: blob, error: dlErr } = await supabase.storage
-      .from("documenten")
-      .download(opslag_pad);
-    if (dlErr || !blob) {
-      return NextResponse.json(
-        {
-          error:
-            "Het geüploade bestand is niet gevonden. Probeer de upload opnieuw.",
-          foutcode: "origineel_ontbreekt",
-        },
-        { status: 400 }
-      );
-    }
-    const buffer = Buffer.from(await blob.arrayBuffer());
-
-    // Vangnet naast de bucket-limiet (file_size_limit) en de client-check.
-    if (buffer.length > MAX_BESTAND_BYTES) {
-      return badRequest(
-        "documents.upload",
-        `Het bestand is groter dan ${Math.round(MAX_BESTAND_BYTES / 1024 / 1024)} MB.`,
-        413
-      );
-    }
-
-    const tValidatie = Date.now();
-    const validatie = await valideerUpload({ naam: bestandsnaam, mimeType, buffer });
-    validatieMs = Date.now() - tValidatie;
-    if (!validatie.ok) {
-      console.warn(
-        `[documents.upload] geweigerd (${validatie.foutcode}) voor ${logNaam(bestandsnaam)}`
-      );
-      // Het afgekeurde object blijft als wees achter en wordt door de worker-
-      // orphan-sweep opgeruimd (geen service-role op deze app-surface).
-      const status =
-        validatie.foutcode === "te_groot" || validatie.foutcode === "decompressie_cap"
-          ? 413
-          : 400;
-      return NextResponse.json(
-        { error: validatie.melding, foutcode: validatie.foutcode },
-        { status }
-      );
-    }
-
-    // De pad-extensie moet bij het gesnifte type passen. valideerUpload leidt het
-    // type uit dezelfde bestandsnaam af, dus dit is een belt-and-braces-check.
-    if (validatie.bestandstype !== ext) {
-      return NextResponse.json(
-        {
-          error: "De bestandsextensie past niet bij de inhoud van het bestand.",
-          foutcode: "extensie_inhoud_mismatch",
-        },
-        { status: 400 }
-      );
-    }
-
-    // Deduplicatie op inhoudshash binnen het eigen fonds.
-    const { data: bestaand } = await supabase
-      .from("documenten")
-      .select("id, titel")
-      .eq("fonds_id", profiel.fonds_id)
-      .eq("bestand_hash", validatie.hash)
-      .eq("actief", true)
-      .maybeSingle();
-    if (bestaand) {
-      return NextResponse.json(
-        {
-          error: `Dit bestand is al eerder geüpload als "${bestaand.titel}".`,
-          foutcode: "duplicaat",
-          document_id: bestaand.id,
-        },
-        { status: 409 }
-      );
+    let gevalideerd: { bestandstype: string; veiligeNaam: string; hash: string } | null = null;
+    if (!scanIngeschakeld) {
+      // Legacy-pad zolang de rolloutflag uit staat. In de WP3-stroom kan deze
+      // app-surface de quarantaine bewust niet lezen; de worker doet dit werk.
+      const { data: blob, error: dlErr } = await supabase.storage
+        .from("documenten")
+        .download(opslag_pad);
+      if (dlErr || !blob) {
+        return NextResponse.json(
+          { error: "Het geüploade bestand is niet gevonden. Probeer de upload opnieuw.", foutcode: "origineel_ontbreekt" },
+          { status: 400 }
+        );
+      }
+      const buffer = Buffer.from(await blob.arrayBuffer());
+      if (buffer.length > MAX_BESTAND_BYTES) {
+        return badRequest("documents.upload", `Het bestand is groter dan ${Math.round(MAX_BESTAND_BYTES / 1024 / 1024)} MB.`, 413);
+      }
+      const tValidatie = Date.now();
+      const validatie = await valideerUpload({ naam: bestandsnaam, mimeType, buffer });
+      validatieMs = Date.now() - tValidatie;
+      if (!validatie.ok) {
+        console.warn(`[documents.upload] geweigerd (${validatie.foutcode}) voor ${logNaam(bestandsnaam)}`);
+        const status = validatie.foutcode === "te_groot" || validatie.foutcode === "decompressie_cap" ? 413 : 400;
+        return NextResponse.json({ error: validatie.melding, foutcode: validatie.foutcode }, { status });
+      }
+      if (validatie.bestandstype !== ext) {
+        return NextResponse.json({ error: "De bestandsextensie past niet bij de inhoud van het bestand.", foutcode: "extensie_inhoud_mismatch" }, { status: 400 });
+      }
+      const { data: bestaand } = await supabase
+        .from("documenten")
+        .select("id, titel")
+        .eq("fonds_id", profiel.fonds_id)
+        .eq("bestand_hash", validatie.hash)
+        .eq("actief", true)
+        .maybeSingle();
+      if (bestaand) {
+        return NextResponse.json({ error: `Dit bestand is al eerder geüpload als "${bestaand.titel}".`, foutcode: "duplicaat", document_id: bestaand.id }, { status: 409 });
+      }
+      gevalideerd = validatie;
     }
 
     // Eén insert met opslag_pad ÉN verwerkingsstatus='ontvangen' (het reaper-
@@ -700,13 +672,14 @@ async function completeUpload(req: NextRequest, body: Record<string, unknown>) {
         bibliotheek: meta.bibliotheek,
         bron: meta.bron,
         titel: meta.titel,
-        bestandsnaam: validatie.veiligeNaam,
-        bestand_hash: validatie.hash,
-        bestandstype: validatie.bestandstype,
+        bestandsnaam: gevalideerd?.veiligeNaam ?? normaliseerBestandsnaam(bestandsnaam),
+        bestand_hash: gevalideerd?.hash ?? null,
+        bestandstype: gevalideerd?.bestandstype ?? ext,
         paginas: null,
         opgeslagen_door: user.id,
         geindexeerd: false,
-        opslag_pad,
+        opslag_pad: scanIngeschakeld ? null : opslag_pad,
+        quarantaine_pad: scanIngeschakeld ? quarantaine_pad : null,
         verwerkingsstatus: "ontvangen",
         agendapunt_id: meta.agendapunt_id,
         vergadering_id: meta.vergadering_id,
@@ -721,6 +694,9 @@ async function completeUpload(req: NextRequest, body: Record<string, unknown>) {
         // aan het gedrag van de stromen die deze velden niet aanleveren.
         ...(meta.documenttype ? { documenttype: meta.documenttype } : {}),
         ...(meta.bronstatus ? { bronstatus: meta.bronstatus } : {}),
+        ...(scanIngeschakeld && meta.retire
+          ? { vervangt_na_scan_document_id: meta.retire.voorgangerId, vervangt_na_scan_reden: meta.retire.reden }
+          : {}),
         // Werkopdracht 2.5 — `vervangt_document_id` wordt bewust NIET hier gezet,
         // maar pas ná een geslaagde retire (hieronder), zodat de FK-koppeling
         // symmetrisch is: geen claim op een vervanging die niet plaatsvond.
@@ -737,7 +713,7 @@ async function completeUpload(req: NextRequest, body: Record<string, unknown>) {
           status: "verwerken",
           document_id,
           titel: meta.titel,
-          bestandstype: validatie.bestandstype,
+          bestandstype: gevalideerd?.bestandstype ?? ext,
           bericht:
             "Document geüpload. Het wordt nu verwerkt en is binnen enkele minuten doorzoekbaar.",
         });
@@ -818,7 +794,7 @@ async function completeUpload(req: NextRequest, body: Record<string, unknown>) {
     // gaat een waarschuwing terug. (Audit blijft best-effort, gelijk aan de
     // ingest-auditregels hierboven, 0136/0140.)
     let retireWaarschuwing: string | null = meta.retireWaarschuwing;
-    if (meta.retire) {
+    if (meta.retire && !scanIngeschakeld) {
       const { data: geraakt, error: retireFout } = await supabase
         .from("documenten")
         .update({
@@ -891,15 +867,16 @@ async function completeUpload(req: NextRequest, body: Record<string, unknown>) {
         correlatie_id: correlatieId,
         document_id: document.id,
         fonds_id: profiel.fonds_id,
-        bestandstype: validatie.bestandstype,
+        bestandstype: gevalideerd?.bestandstype ?? ext,
         agendapunt: !!meta.agendapunt_id,
         status: "verwerken",
         duur_ms: { validatie: validatieMs, totaal: Date.now() - tStart },
       })
     );
 
-    const retireNoot =
-      meta.retire && !retireWaarschuwing
+    const retireNoot = scanIngeschakeld && meta.retire
+      ? " De vorige rapportage wordt pas na de beveiligingscontrole afgevoerd."
+      : meta.retire && !retireWaarschuwing
         ? ` De vorige rapportage "${meta.retire.voorgangerTitel}" is afgevoerd naar historisch.`
         : retireWaarschuwing ?? "";
 
@@ -908,7 +885,7 @@ async function completeUpload(req: NextRequest, body: Record<string, unknown>) {
       status: "verwerken",
       document_id: document.id,
       titel: meta.titel,
-      bestandstype: validatie.bestandstype,
+      bestandstype: gevalideerd?.bestandstype ?? ext,
       bericht:
         "Document geüpload. Het wordt nu verwerkt en is binnen enkele minuten doorzoekbaar." +
         retireNoot,

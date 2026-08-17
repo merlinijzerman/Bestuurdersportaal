@@ -83,7 +83,10 @@ async function draai(req: NextRequest): Promise<NextResponse> {
     const svc = createServiceSupabase();
     // Werker-id draagt de starttijd zodat het auditspoor invocaties onderscheidt.
     const workerId = `ingest-cron-${Date.now()}`;
-    const resultaat = await draaiIngestWorker(svc, { workerId });
+    const resultaat = await draaiIngestWorker(svc, {
+      workerId,
+      oidcToken: req.headers.get("x-vercel-oidc-token"),
+    });
     // Heartbeat + telemetrie (F0.1-lijn): één gestructureerde regel per invocatie.
     console.log(JSON.stringify({ tag: "ingest-worker", worker_id: workerId, ...resultaat }));
     return NextResponse.json({ ok: true, ...resultaat });
