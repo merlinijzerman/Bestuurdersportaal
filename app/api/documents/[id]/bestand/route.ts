@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { beoordeelRouteHostToegang } from "@/core/lib/tenant-route-guard";
 import {
-  CONTENT_TYPE_PER_BESTANDSTYPE,
-  type Bestandstype,
-} from "@/core/lib/document-extractie";
+  bepaalBestandsnaam,
+  bepaalContentType,
+  normaliseerBestandstype,
+} from "@/core/lib/document-download-headers";
 import { heeftSchoonScanbewijs } from "@/core/lib/document-scan-poort";
 
 // GET /api/documents/[id]/bestand
@@ -133,13 +134,33 @@ export async function GET(
     );
   }
 
-  // Bepaal content-type op basis van bestandstype.
-  // Bij ontbrekend type (oude records) vallen we terug op PDF voor backwards
-  // compatibility met al opgeslagen bestanden.
-  const bestandstype = (document.bestandstype as Bestandstype) || "pdf";
-  const contentType = CONTENT_TYPE_PER_BESTANDSTYPE[bestandstype];
-  const filename =
-    document.bestandsnaam || `${document.titel}.${bestandstype}`;
+  // Bepaal content-type op basis van bestandstype — fail-closed (WP4, 17-08-2026).
+  //
+  // De vorige regel was `(document.bestandstype as Bestandstype) || "pdf"`, met
+  // twee scherpe randen. (a) Een LEEG of null type werd stilzwijgend
+  // `application/pdf`: de browser kreeg te horen dat willekeurige bytes een PDF
+  // zijn, op onze eigen origin. (b) Een ongeldig maar niet-leeg type (drift in
+  // de kolom, een handmatige insert) viel buiten de lookup en leverde
+  // `contentType === undefined` — dan gaat er een respons uit met de letterlijke
+  // header `Content-Type: undefined`, en bepaalt de client zelf maar wat het is.
+  //
+  // Nu: alleen een waarde die écht in de enum zit krijgt zijn eigen content-type;
+  // al het andere wordt `application/octet-stream`. Dat is het type dat niets
+  // belooft — de browser rendert het niet, hij bewaart het. Samen met de
+  // onvoorwaardelijke `attachment` hieronder en `nosniff` is er dan geen pad meer
+  // waarin onbekende bytes als een renderbaar formaat op onze origin landen.
+  const ruwType = document.bestandstype;
+  const bestandstype = normaliseerBestandstype(ruwType);
+  const contentType = bepaalContentType(ruwType);
+  if (!bestandstype) {
+    // Geen blokkade — het origineel blijft ophaalbaar — maar wel een spoor: een
+    // document zonder geldig bestandstype is een datakwaliteitsprobleem dat
+    // anders onzichtbaar blijft omdat de download gewoon werkt.
+    console.warn(
+      `[documents.bestand.GET] document ${document.id} heeft geen geldig bestandstype (${JSON.stringify(ruwType)}); geserveerd als application/octet-stream`
+    );
+  }
+  const filename = bepaalBestandsnaam(document.bestandsnaam, document.titel, ruwType);
 
   const arrayBuffer = await bestand.arrayBuffer();
 

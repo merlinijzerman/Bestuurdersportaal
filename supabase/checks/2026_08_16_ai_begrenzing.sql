@@ -156,7 +156,7 @@ insert into public.fondsen (id, naam, slug) values
   ('a1111111-1111-1111-1111-111111111111','Testfonds A','xtest-a'),
   ('a2222222-2222-2222-2222-222222222222','Testfonds B','xtest-b');
 
-insert into auth.users (id, email, raw_user_meta_data) values
+insert into auth.users (id, email, raw_app_meta_data) values
   ('b1111111-1111-1111-1111-111111111111','xtest-a1@example.invalid',
      jsonb_build_object('naam','A1','fonds_id','a1111111-1111-1111-1111-111111111111')),
   ('b2222222-2222-2222-2222-222222222222','xtest-a2@example.invalid',

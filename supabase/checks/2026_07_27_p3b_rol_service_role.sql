@@ -35,7 +35,7 @@ begin
 
   -- Profiel ontstaat op 'bestuurder' via de trigger (metadata zonder rol, B-4).
   v_user := gen_random_uuid();
-  insert into auth.users (id, instance_id, aud, role, email, raw_user_meta_data)
+  insert into auth.users (id, instance_id, aud, role, email, raw_app_meta_data)
   values (v_user, '00000000-0000-0000-0000-000000000000', 'authenticated',
           'authenticated', 'p3b@example.test',
           jsonb_build_object('naam', 'P3B Bestuurder', 'fonds_id', v_fonds::text));

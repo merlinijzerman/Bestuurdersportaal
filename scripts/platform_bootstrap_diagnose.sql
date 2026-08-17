@@ -58,7 +58,10 @@ select
      where i.user_id = u.id and i.provider = 'email')     as identity_email,
   (u.banned_until is not null and u.banned_until > now()) as geblokkeerd,
   (u.deleted_at is not null)                              as verwijderd,
-  u.raw_user_meta_data->>'platform'                       as meta_platform,
+  -- WP1 (17-08-2026): app_platform is gezaghebbend; user_platform_oud staat
+  -- ernaast zodat een account met alleen de oude conventie opvalt.
+  u.raw_app_meta_data->>'platform'                        as app_platform,
+  u.raw_user_meta_data->>'platform'                       as user_platform_oud,
   (select count(*) from public.profielen p
      where p.id = u.id)                                   as heeft_profiel,
   (select count(*) from public.platform_identities pi
@@ -79,7 +82,8 @@ left join auth.users u on lower(u.email) = lower(d.email);
 -- Vangt typefouten en het +platform-alias uit de eerdere bootstrap.
 select id, email, created_at,
        email_confirmed_at is not null as bevestigd,
-       raw_user_meta_data->>'platform' as meta_platform
+       raw_app_meta_data->>'platform'  as app_platform,
+       raw_user_meta_data->>'platform' as user_platform_oud
 from auth.users
 where email ilike '%ijzerman%' or email ilike '%timmer%' or email ilike '%paradox%'
 order by created_at desc;

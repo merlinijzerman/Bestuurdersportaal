@@ -26,7 +26,7 @@ begin;
 insert into public.fondsen (id, naam, slug)
 values ('11111111-1111-1111-1111-111111111111', 'T10 Testfonds A', 't10-testfonds-a');
 
-insert into auth.users (id, aud, role, email, raw_user_meta_data, created_at, updated_at)
+insert into auth.users (id, aud, role, email, raw_app_meta_data, created_at, updated_at)
 values
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','authenticated','authenticated','t10-a@test.local',
    '{"naam":"Test A","fonds_id":"11111111-1111-1111-1111-111111111111"}', now(), now());

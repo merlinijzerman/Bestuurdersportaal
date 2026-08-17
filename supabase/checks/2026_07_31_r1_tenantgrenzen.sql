@@ -39,7 +39,7 @@ insert into public.fondsen (id, naam, slug)
 values ('44444444-4444-4444-4444-444444444444', 'R1 Testfonds A', 'r1-test-a'),
        ('55555555-5555-5555-5555-555555555555', 'R1 Testfonds B', 'r1-test-b');
 
-insert into auth.users (id, aud, role, email, raw_user_meta_data, created_at, updated_at)
+insert into auth.users (id, aud, role, email, raw_app_meta_data, created_at, updated_at)
 values
   ('a4a4a4a4-a4a4-a4a4-a4a4-a4a4a4a4a4a4','authenticated','authenticated','r1-a@test.local',
    '{"naam":"R1 A","fonds_id":"44444444-4444-4444-4444-444444444444"}', now(), now()),
