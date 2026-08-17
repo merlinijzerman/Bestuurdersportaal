@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import test from "node:test";
 
-import { captureInventory, extractVercelEnvironmentNames, sanitizeForInventory } from "./capture-platform-inventory.mjs";
+import { captureInventory, extractVercelEnvironmentNames, sanitizeForInventory, summarizeInventoryFailures } from "./capture-platform-inventory.mjs";
 
 test("platform-inventory verwijdert secretachtige velden recursief", () => {
   const result = sanitizeForInventory({
@@ -16,6 +16,19 @@ test("platform-inventory verwijdert secretachtige velden recursief", () => {
     nested: { enabled: true },
     list: [{ name: "google" }],
   });
+});
+
+test("platform-inventory logt alleen component en HTTP-status", () => {
+  const result = summarizeInventoryFailures([
+    { component: "supabase.auth", error: "Supabase auth gaf HTTP 403 met gevoelig detail" },
+    { component: "supabase.functions", error: "netwerkfout met gevoelig detail" },
+  ]);
+
+  assert.deepEqual(result, [
+    { component: "supabase.auth", http_status: 403 },
+    { component: "supabase.functions", http_status: null },
+  ]);
+  assert.equal(JSON.stringify(result).includes("gevoelig detail"), false);
 });
 
 test("platform-inventory neemt alleen Vercel-variabelenamen over", () => {

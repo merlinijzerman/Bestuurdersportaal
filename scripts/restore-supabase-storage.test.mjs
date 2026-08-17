@@ -97,3 +97,48 @@ test("Storage-restore wijst bron- en doelproject met dezelfde ref af", async () 
     await rm(inputDir, { recursive: true, force: true });
   }
 });
+
+test("Storage-restore verifieert private objecten via de geauthenticeerde route", async () => {
+  const inputDir = await createFixture();
+  const originalFetch = globalThis.fetch;
+  const previousRef = process.env.TARGET_PROJECT_REF;
+  const calls = [];
+  process.env.TARGET_PROJECT_REF = "restore-oefening";
+  try {
+    globalThis.fetch = async (url, init = {}) => {
+      const target = new URL(url);
+      const method = init.method ?? "GET";
+      calls.push(`${method} ${target.pathname}`);
+      const headers = new Headers(init.headers);
+      assert.equal(headers.get("apikey"), "service-role-test");
+      assert.equal(headers.get("authorization"), "Bearer service-role-test");
+
+      if (method === "POST" && target.pathname === "/storage/v1/bucket") {
+        return Response.json({ id: "documenten" });
+      }
+      if (method === "POST" && target.pathname === "/storage/v1/object/documenten/2026/voorbeeld.txt") {
+        return new Response(null, { status: 200 });
+      }
+      if (method === "GET" && target.pathname === "/storage/v1/object/authenticated/documenten/2026/voorbeeld.txt") {
+        return new Response("document-inhoud\n", {
+          headers: { "content-type": "text/plain", "content-length": "16" },
+        });
+      }
+      throw new Error(`Onverwachte mock-request: ${method} ${target.pathname}`);
+    };
+
+    const result = await restoreStorage({
+      baseUrl: "https://restore-oefening.supabase.co",
+      serviceRoleKey: "service-role-test",
+      inputDir,
+    });
+
+    assert.equal(result.object_count, 1);
+    assert.ok(calls.includes("GET /storage/v1/object/authenticated/documenten/2026/voorbeeld.txt"));
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousRef === undefined) delete process.env.TARGET_PROJECT_REF;
+    else process.env.TARGET_PROJECT_REF = previousRef;
+    await rm(inputDir, { recursive: true, force: true });
+  }
+});

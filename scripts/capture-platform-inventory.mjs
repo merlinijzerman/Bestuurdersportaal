@@ -52,6 +52,16 @@ export function sanitizeForInventory(value, key = "") {
   return value;
 }
 
+export function summarizeInventoryFailures(failures) {
+  return failures.map((failure) => {
+    const statusMatch = String(failure.error ?? "").match(/\bHTTP (\d{3})\b/);
+    return {
+      component: failure.component,
+      http_status: statusMatch ? Number(statusMatch[1]) : null,
+    };
+  });
+}
+
 export function extractVercelEnvironmentNames(body) {
   const entries = Array.isArray(body?.envs) ? body.envs : [];
   return entries.map((entry) => ({
@@ -223,7 +233,7 @@ async function main() {
   });
   await mkdir(path.dirname(outputPath), { recursive: true });
   await writeFile(outputPath, `${JSON.stringify(inventory, null, 2)}\n`, { mode: 0o600 });
-  process.stdout.write(`${JSON.stringify({ status: inventory.status, failure_count: inventory.failures.length })}\n`);
+  process.stdout.write(`${JSON.stringify({ status: inventory.status, failure_count: inventory.failures.length, failures: summarizeInventoryFailures(inventory.failures) })}\n`);
   if (inventory.status !== "complete") process.exitCode = 1;
 }
 
