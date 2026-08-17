@@ -113,10 +113,10 @@ async function captureSupabase(projectRef, token) {
     auth: "/config/auth",
     storage: "/config/storage",
     realtime: "/config/realtime",
-    postgrest: "/config/postgrest",
+    postgrest: "/postgrest",
     postgres: "/config/database/postgres",
     pooler: "/config/database/pooler",
-    ssl_enforcement: "/config/ssl-enforcement",
+    ssl_enforcement: "/ssl-enforcement",
     functions: "/functions",
   };
   const result = {};
