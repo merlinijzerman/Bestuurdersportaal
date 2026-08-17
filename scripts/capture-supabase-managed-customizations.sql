@@ -1,7 +1,9 @@
 \set ON_ERROR_STOP on
+\set QUIET 1
 \pset format unaligned
 \pset tuples_only on
 \pset pager off
+\set QUIET 0
 
 select '-- Supabase managed-schema customizations; generated at restore time.';
 select '-- This file contains no row data; Auth and Storage data are exported separately.';
