@@ -49,6 +49,7 @@ import { CONTENT_TYPE_PER_BESTANDSTYPE } from "@/core/lib/document-extractie";
 import { leesScannerHealth, scanSignedUrl } from "@/platform/lib/malware-scan-client";
 import { signatureOordeel } from "@/core/lib/malware-scan-beleid";
 import { heeftSchoonScanbewijs } from "@/core/lib/document-scan-poort";
+import { isProviderAuthenticatieFout } from "@/core/lib/provider-fout";
 
 // ── Tunable constanten (§8b — stem af ná de dashboard-verificaties) ─────────
 const TIJDBUDGET_MS = 240_000; // ruim binnen maxDuration 300s
@@ -167,8 +168,16 @@ export async function draaiIngestWorker(
         // hele invocatie vallen. Behandel als tijdelijk (backoff → uiteindelijk
         // mislukt boven het retry-plafond).
         console.error(`[ingest-worker] job ${job.id} (doc ${job.document_id}) faalde:`, e);
-        await backoff(svc, job, "onverwachte_fout");
-        res.bezig += 1;
+        if (isProviderAuthenticatieFout(e)) {
+          // Configuratiefout: retries maken alleen opnieuw kosten en dezelfde
+          // sleutel blijft binnen deze deployment ongeldig. Markeer direct
+          // zichtbaar als mislukt; na herstel kan de gebruiker herverwerken.
+          await markeerMislukt(svc, job, job.document_id, "provider_authenticatie");
+          res.mislukt += 1;
+        } else {
+          await backoff(svc, job, "onverwachte_fout");
+          res.bezig += 1;
+        }
       }
     }
   }
@@ -755,7 +764,10 @@ async function markeerMislukt(
     .from("document_processing_jobs")
     .update({ status: "mislukt", foutcode, eind: nu() })
     .eq("id", job.id);
-  await svc.from("documenten").update({ verwerkingsstatus: "mislukt" }).eq("id", documentId);
+  await svc
+    .from("documenten")
+    .update({ verwerkingsstatus: "mislukt", geindexeerd: false })
+    .eq("id", documentId);
   return "mislukt";
 }
 
@@ -790,6 +802,7 @@ async function verwerkLive(
       titel: doc.titel,
       prefixConcurrentie: LIVE_PREFIX_CONCURRENTIE,
       limiet: VERRIJK_LIMIET,
+      prefixFailClosed: true,
     });
     if (r.resterend === 0) return await finaliseer(svc, job, doc.id);
     if (r.verwerkt === 0) return await backoff(svc, job, "provider_tijdelijk");
