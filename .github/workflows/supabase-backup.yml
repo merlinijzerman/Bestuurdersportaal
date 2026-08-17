@@ -49,6 +49,19 @@ jobs:
           version: 2.114.0
           github-token: ${{ github.token }}
 
+      - name: PostgreSQL 17-client installeren
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo install -d -m 0755 /usr/share/postgresql-common/pgdg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo gpg --dearmor --yes -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
       - name: Back-upinputs fail-closed controleren
         shell: bash
         run: |
@@ -78,6 +91,17 @@ jobs:
         run: |
           set -Eeuo pipefail
           test "$(psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -Atc "select 1")" = "1"
+          SERVER_VERSION_NUM="$(psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -Atc "show server_version_num")"
+          case "$SERVER_VERSION_NUM" in
+            ''|*[!0-9]*) echo "Ongeldige server_version_num: $SERVER_VERSION_NUM" >&2; exit 1 ;;
+          esac
+          SERVER_MAJOR="$((SERVER_VERSION_NUM / 10000))"
+          PG_DUMP_MAJOR="$(pg_dump --version | awk '{split($3, version, "."); print version[1]}')"
+          PSQL_MAJOR="$(psql --version | awk '{split($3, version, "."); print version[1]}')"
+          test "$SERVER_MAJOR" = "17" || { echo "Onverwachte PostgreSQL-servermajor: $SERVER_MAJOR (verwacht 17)" >&2; exit 1; }
+          test "$PG_DUMP_MAJOR" = "$SERVER_MAJOR" || { echo "pg_dump-major $PG_DUMP_MAJOR wijkt af van servermajor $SERVER_MAJOR" >&2; exit 1; }
+          test "$PSQL_MAJOR" = "$SERVER_MAJOR" || { echo "psql-major $PSQL_MAJOR wijkt af van servermajor $SERVER_MAJOR" >&2; exit 1; }
+          echo "PostgreSQL client/server-major gevalideerd: $SERVER_MAJOR"
           test "$SUPABASE_PROJECT_REF" = "aebwiufuegsiwhwpdrfb"
 
       - name: Database, Auth en Storage-metadata exporteren
