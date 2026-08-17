@@ -1,0 +1,373 @@
+name: Supabase restore-oefening
+run-name: Restore-oefening naar ${{ inputs.target_project_ref }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_project_ref:
+        description: Project-ref van een nieuw en leeg tijdelijk Supabase-project
+        required: true
+        type: string
+      backup_marker_key:
+        description: B2-objectkey van een complete backup-status-manifest
+        required: true
+        type: string
+      confirmation:
+        description: Typ exact RESTORE_TO_EMPTY_PROJECT
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-restore-drill
+  cancel-in-progress: false
+
+jobs:
+  restore-drill:
+    name: Volledige database- en Storage-restore
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    environment: production-backup
+    env:
+      SOURCE_PROJECT_REF: aebwiufuegsiwhwpdrfb
+      TARGET_PROJECT_REF: ${{ inputs.target_project_ref }}
+      TARGET_SUPABASE_URL: https://${{ inputs.target_project_ref }}.supabase.co
+      TARGET_DB_URL: ${{ secrets.RESTORE_TARGET_DB_URL }}
+      TARGET_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.RESTORE_TARGET_SUPABASE_SERVICE_ROLE_KEY }}
+      BACKUP_MARKER_KEY: ${{ inputs.backup_marker_key }}
+      RESTORE_CONFIRMATION: ${{ inputs.confirmation }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.B2_READONLY_APPLICATION_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.B2_READONLY_APPLICATION_KEY }}
+      AWS_DEFAULT_REGION: eu-central-003
+      AWS_RETRY_MODE: standard
+      AWS_MAX_ATTEMPTS: "10"
+      B2_BUCKET_NAME: ${{ vars.B2_BUCKET_NAME }}
+      B2_S3_ENDPOINT: ${{ vars.B2_S3_ENDPOINT }}
+
+    steps:
+      - name: Repository ophalen
+        uses: actions/checkout@v4.2.2
+
+      - name: Node.js instellen
+        uses: actions/setup-node@v4.4.0
+        with:
+          node-version: 22
+
+      - name: PostgreSQL 17-client installeren
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo install -d -m 0755 /usr/share/postgresql-common/pgdg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo gpg --dearmor --yes -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+
+      - name: Restore-validator testen
+        shell: bash
+        run: node --test scripts/verify-supabase-restore.test.mjs
+
+      - name: Inputs fail-closed controleren
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$RESTORE_CONFIRMATION" = "RESTORE_TO_EMPTY_PROJECT" || {
+            echo "Restore stopt: confirmation is niet exact RESTORE_TO_EMPTY_PROJECT." >&2
+            exit 1
+          }
+          test "$TARGET_PROJECT_REF" != "$SOURCE_PROJECT_REF" || {
+            echo "Restore stopt: bron- en doelproject zijn gelijk." >&2
+            exit 1
+          }
+          [[ "$TARGET_PROJECT_REF" =~ ^[a-z]{20}$ ]] || {
+            echo "Restore stopt: target_project_ref heeft niet het verwachte formaat." >&2
+            exit 1
+          }
+          [[ "$BACKUP_MARKER_KEY" =~ ^backup-status/[0-9]{4}/[0-9]{2}/[0-9]{2}/manifest-[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z\.json$ ]] || {
+            echo "Restore stopt: backup_marker_key heeft niet het verwachte formaat." >&2
+            exit 1
+          }
+          for command in aws node psql sha256sum tar; do
+            command -v "$command" >/dev/null || { echo "Ontbrekend commando: $command" >&2; exit 1; }
+          done
+          for variable in TARGET_DB_URL TARGET_SUPABASE_SERVICE_ROLE_KEY B2_BUCKET_NAME B2_S3_ENDPOINT; do
+            test -n "${!variable:-}" || { echo "Ontbrekende restore-input: $variable" >&2; exit 1; }
+          done
+          test -f scripts/restore-supabase-backup.sh
+          test -f scripts/restore-supabase-storage.mjs
+          test -f scripts/create-backup-validation.sql
+          test -f scripts/verify-supabase-restore.mjs
+
+          python3 - "$TARGET_DB_URL" "$TARGET_PROJECT_REF" <<'PY'
+          import sys
+          from urllib.parse import urlsplit
+
+          url, project_ref = sys.argv[1:]
+          parsed = urlsplit(url)
+          if parsed.scheme not in {"postgres", "postgresql"}:
+              raise SystemExit("TARGET_DB_URL heeft geen Postgres-schema")
+          if project_ref not in (parsed.hostname or "") and project_ref not in (parsed.username or ""):
+              raise SystemExit("TARGET_DB_URL verwijst niet aantoonbaar naar TARGET_PROJECT_REF")
+          if parsed.path != "/postgres":
+              raise SystemExit("TARGET_DB_URL verwijst niet naar database postgres")
+          PY
+
+          node <<'NODE'
+          const token = process.env.TARGET_SUPABASE_SERVICE_ROLE_KEY;
+          const parts = token.split(".");
+          if (parts.length !== 3) throw new Error("Service-role-key is geen JWT");
+          const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
+          if (payload.ref !== process.env.TARGET_PROJECT_REF || payload.role !== "service_role") {
+            throw new Error("Service-role-key hoort niet aantoonbaar bij het doelproject");
+          }
+          NODE
+
+          DRILL_ROOT="$RUNNER_TEMP/supabase-restore-drill-$GITHUB_RUN_ID"
+          mkdir -p "$DRILL_ROOT"
+          chmod 700 "$DRILL_ROOT"
+          echo "DRILL_ROOT=$DRILL_ROOT" >> "$GITHUB_ENV"
+
+      - name: Leeg doelproject aantoonbaar controleren
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(psql "$TARGET_DB_URL" -v ON_ERROR_STOP=1 -Atc "select 1")" = "1"
+          TARGET_PRECHECK_PATH="$DRILL_ROOT/target-precheck.json"
+          psql "$TARGET_DB_URL" -v ON_ERROR_STOP=1 -Atc "
+            select json_build_object(
+              'public_tables', (
+                select count(*) from information_schema.tables
+                where table_schema = 'public' and table_type = 'BASE TABLE'
+              ),
+              'auth_users', (select count(*) from auth.users),
+              'storage_buckets', (select count(*) from storage.buckets),
+              'storage_objects', (select count(*) from storage.objects)
+            )::text;
+          " > "$TARGET_PRECHECK_PATH"
+          python3 - "$TARGET_PRECHECK_PATH" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          values = json.loads(pathlib.Path(sys.argv[1]).read_text())
+          expected = {"public_tables": 0, "auth_users": 0, "storage_buckets": 0, "storage_objects": 0}
+          if values != expected:
+              raise SystemExit(f"Restore stopt: doelproject is niet leeg: {values}")
+          PY
+          echo "Doelproject is aantoonbaar leeg." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Completion marker downloaden en valideren
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          MARKER_NAME="$(basename "$BACKUP_MARKER_KEY")"
+          MARKER_PATH="$DRILL_ROOT/$MARKER_NAME"
+          aws s3 cp "s3://$B2_BUCKET_NAME/$BACKUP_MARKER_KEY" "$MARKER_PATH" \
+            --endpoint-url "$B2_S3_ENDPOINT" --only-show-errors --no-progress
+          aws s3 cp "s3://$B2_BUCKET_NAME/$BACKUP_MARKER_KEY.sha256" "$MARKER_PATH.sha256" \
+            --endpoint-url "$B2_S3_ENDPOINT" --only-show-errors --no-progress
+          (cd "$DRILL_ROOT" && sha256sum -c "$MARKER_NAME.sha256")
+
+          python3 - "$MARKER_PATH" <<'PY'
+          import json
+          import os
+          import pathlib
+          import re
+          import sys
+
+          marker_path = pathlib.Path(sys.argv[1])
+          manifest = json.loads(marker_path.read_text())
+          if manifest.get("schema_version") != 2 or manifest.get("status") != "complete":
+              raise SystemExit("Marker is niet een complete schema_version 2-back-up")
+          if manifest.get("source_project") != os.environ["SOURCE_PROJECT_REF"]:
+              raise SystemExit("Marker hoort niet bij het verwachte bronproject")
+          if manifest.get("completion_marker") != os.environ["BACKUP_MARKER_KEY"]:
+              raise SystemExit("completion_marker wijkt af van de gekozen marker")
+
+          required_coverage = [
+              "public_database_schema_and_data",
+              "auth_data",
+              "storage_metadata",
+              "managed_auth_storage_customizations",
+              "physical_storage_objects",
+          ]
+          coverage = manifest.get("coverage", {})
+          if any(coverage.get(name) is not True for name in required_coverage):
+              raise SystemExit("Marker meldt onvolledige database/Auth/Storage-dekking")
+
+          expected_buckets = sorted(["documenten", "documenten-quarantaine", "afschriften", "aqlab-audit"])
+          storage = manifest.get("storage", {})
+          if sorted(storage.get("buckets", [])) != expected_buckets:
+              raise SystemExit("Marker dekt niet exact de vier afgesproken Storage-buckets")
+
+          archive_pattern = re.compile(
+              r"^supabase/\d{4}/\d{2}/\d{2}/bestuurdersportaal-(database|storage)-"
+              r"\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z\.tar\.gz$"
+          )
+
+          def validate_artifact(section, expected_kind):
+              item = manifest.get(section)
+              if not isinstance(item, dict):
+                  raise SystemExit(f"{section} ontbreekt in marker")
+              key = item.get("archive_key", "")
+              match = archive_pattern.fullmatch(key)
+              if not match or match.group(1) != expected_kind:
+                  raise SystemExit(f"Ongeldige {section}.archive_key")
+              if item.get("checksum_key") != key + ".sha256":
+                  raise SystemExit(f"Ongeldige {section}.checksum_key")
+              size = item.get("bytes")
+              checksum = item.get("sha256")
+              if not isinstance(size, int) or size <= 0:
+                  raise SystemExit(f"Ongeldige {section}.bytes")
+              if not isinstance(checksum, str) or not re.fullmatch(r"[0-9a-f]{64}", checksum):
+                  raise SystemExit(f"Ongeldige {section}.sha256")
+              return key, item["checksum_key"], size, checksum
+
+          db_key, db_checksum_key, db_bytes, db_sha = validate_artifact("database", "database")
+          storage_key, storage_checksum_key, storage_bytes, storage_sha = validate_artifact("storage", "storage")
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              for name, value in [
+                  ("MARKER_PATH", marker_path),
+                  ("DB_KEY", db_key),
+                  ("DB_CHECKSUM_KEY", db_checksum_key),
+                  ("DB_BYTES", db_bytes),
+                  ("DB_SHA256", db_sha),
+                  ("STORAGE_KEY", storage_key),
+                  ("STORAGE_CHECKSUM_KEY", storage_checksum_key),
+                  ("STORAGE_BYTES", storage_bytes),
+                  ("STORAGE_SHA256", storage_sha),
+              ]:
+                  env.write(f"{name}={value}\n")
+          PY
+
+      - name: Back-uparchieven read-only ophalen en controleren
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          DB_ARCHIVE_PATH="$DRILL_ROOT/$(basename "$DB_KEY")"
+          STORAGE_ARCHIVE_PATH="$DRILL_ROOT/$(basename "$STORAGE_KEY")"
+          aws s3 cp "s3://$B2_BUCKET_NAME/$DB_KEY" "$DB_ARCHIVE_PATH" \
+            --endpoint-url "$B2_S3_ENDPOINT" --only-show-errors --no-progress
+          aws s3 cp "s3://$B2_BUCKET_NAME/$DB_CHECKSUM_KEY" "$DB_ARCHIVE_PATH.sha256" \
+            --endpoint-url "$B2_S3_ENDPOINT" --only-show-errors --no-progress
+          aws s3 cp "s3://$B2_BUCKET_NAME/$STORAGE_KEY" "$STORAGE_ARCHIVE_PATH" \
+            --endpoint-url "$B2_S3_ENDPOINT" --only-show-errors --no-progress
+          aws s3 cp "s3://$B2_BUCKET_NAME/$STORAGE_CHECKSUM_KEY" "$STORAGE_ARCHIVE_PATH.sha256" \
+            --endpoint-url "$B2_S3_ENDPOINT" --only-show-errors --no-progress
+
+          (cd "$DRILL_ROOT" && sha256sum -c "$(basename "$DB_ARCHIVE_PATH").sha256")
+          (cd "$DRILL_ROOT" && sha256sum -c "$(basename "$STORAGE_ARCHIVE_PATH").sha256")
+          test "$(stat -c '%s' "$DB_ARCHIVE_PATH")" = "$DB_BYTES"
+          test "$(sha256sum "$DB_ARCHIVE_PATH" | awk '{print $1}')" = "$DB_SHA256"
+          test "$(stat -c '%s' "$STORAGE_ARCHIVE_PATH")" = "$STORAGE_BYTES"
+          test "$(sha256sum "$STORAGE_ARCHIVE_PATH" | awk '{print $1}')" = "$STORAGE_SHA256"
+
+          echo "DB_ARCHIVE_PATH=$DB_ARCHIVE_PATH" >> "$GITHUB_ENV"
+          echo "STORAGE_ARCHIVE_PATH=$STORAGE_ARCHIVE_PATH" >> "$GITHUB_ENV"
+
+      - name: Database herstellen
+        shell: bash
+        env:
+          TARGET_IS_EMPTY_CONFIRMED: "YES"
+        run: |
+          set -Eeuo pipefail
+          RESTORE_WORKDIR="$DRILL_ROOT/database"
+          export RESTORE_WORKDIR
+          bash scripts/restore-supabase-backup.sh "$DB_ARCHIVE_PATH"
+          echo "DB_RESTORE_DIR=$RESTORE_WORKDIR" >> "$GITHUB_ENV"
+
+      - name: Storage-archief veilig uitpakken
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          STORAGE_RESTORE_DIR="$DRILL_ROOT/storage"
+          mkdir -p "$STORAGE_RESTORE_DIR"
+          python3 - "$STORAGE_ARCHIVE_PATH" <<'PY'
+          import pathlib
+          import sys
+          import tarfile
+
+          archive = sys.argv[1]
+          with tarfile.open(archive, "r:gz") as handle:
+              for member in handle:
+                  path = pathlib.PurePosixPath(member.name)
+                  if path.is_absolute() or ".." in path.parts:
+                      raise SystemExit(f"Onveilig pad in Storage-archief: {member.name}")
+                  if not (member.isfile() or member.isdir()):
+                      raise SystemExit(f"Onveilig niet-regulier bestand in Storage-archief: {member.name}")
+          PY
+          tar -xzf "$STORAGE_ARCHIVE_PATH" -C "$STORAGE_RESTORE_DIR"
+          test -s "$STORAGE_RESTORE_DIR/storage-manifest.json"
+          echo "STORAGE_RESTORE_DIR=$STORAGE_RESTORE_DIR" >> "$GITHUB_ENV"
+
+      - name: Fysieke Storage-objecten herstellen en per object verifiëren
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node scripts/restore-supabase-storage.mjs --input-dir "$STORAGE_RESTORE_DIR"
+
+      - name: Database- en Storage-dekking exact vergelijken
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          TARGET_VALIDATION_PATH="$DRILL_ROOT/target-validation.json"
+          RESTORE_EVIDENCE_PATH="$DRILL_ROOT/restore-verification.json"
+          psql "$TARGET_DB_URL" -v ON_ERROR_STOP=1 -f scripts/create-backup-validation.sql > "$TARGET_VALIDATION_PATH"
+          node scripts/verify-supabase-restore.mjs \
+            --source "$DB_RESTORE_DIR/database-validation.json" \
+            --target "$TARGET_VALIDATION_PATH" \
+            --storage-manifest "$STORAGE_RESTORE_DIR/storage-manifest.json" \
+            > "$RESTORE_EVIDENCE_PATH"
+          echo "TARGET_VALIDATION_PATH=$TARGET_VALIDATION_PATH" >> "$GITHUB_ENV"
+          echo "RESTORE_EVIDENCE_PATH=$RESTORE_EVIDENCE_PATH" >> "$GITHUB_ENV"
+
+      - name: Restorebewijs samenvatten
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node <<'NODE'
+          const fs = require("node:fs");
+          const evidence = JSON.parse(fs.readFileSync(process.env.RESTORE_EVIDENCE_PATH, "utf8"));
+          const marker = JSON.parse(fs.readFileSync(process.env.MARKER_PATH, "utf8"));
+          const lines = [
+            "## Volledige Supabase-restore groen",
+            "",
+            `- Bronproject: \`${marker.source_project}\``,
+            `- Tijdelijk doelproject: \`${process.env.TARGET_PROJECT_REF}\``,
+            `- Completion marker: \`${process.env.BACKUP_MARKER_KEY}\``,
+            `- PostgreSQL-major: ${evidence.postgres_major}`,
+            `- Auth-users / identities: ${evidence.auth_users} / ${evidence.auth_identities}`,
+            `- Storage-buckets / objecten / bytes: ${evidence.storage_buckets} / ${evidence.storage_objects} / ${evidence.storage_total_bytes}`,
+            `- Kritieke publieke tabellen: \`${JSON.stringify(evidence.critical_public_counts)}\``,
+            "- Fysieke Storage-objecten zijn na upload per object opnieuw gedownload en met SHA-256 gecontroleerd.",
+          ];
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${lines.join("\n")}\n`);
+          NODE
+
+      - name: Veilig restorebewijs bewaren
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: supabase-restore-evidence-${{ github.run_id }}
+          retention-days: 30
+          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/supabase-restore-drill-${{ github.run_id }}/target-precheck.json
+            ${{ runner.temp }}/supabase-restore-drill-${{ github.run_id }}/manifest-*.json
+            ${{ runner.temp }}/supabase-restore-drill-${{ github.run_id }}/database/database-validation.json
+            ${{ runner.temp }}/supabase-restore-drill-${{ github.run_id }}/storage/storage-manifest.json
+            ${{ runner.temp }}/supabase-restore-drill-${{ github.run_id }}/target-validation.json
+            ${{ runner.temp }}/supabase-restore-drill-${{ github.run_id }}/restore-verification.json
+
+      - name: Tijdelijke runnerbestanden verwijderen
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          find "$RUNNER_TEMP" -maxdepth 1 -type d -name "supabase-restore-drill-$GITHUB_RUN_ID" -exec rm -rf {} +
