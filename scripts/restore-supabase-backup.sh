@@ -124,6 +124,13 @@ do
   }
 done
 
+# Older backup artifacts may contain the three informational lines emitted by
+# psql's formatting commands. Prepare a restore-only copy that removes exactly
+# those known lines and rejects unknown variants.
+node scripts/prepare-supabase-managed-customizations.mjs \
+  --input "$WORKDIR/managed-customizations.sql" \
+  --output "$WORKDIR/managed-customizations.restore.sql"
+
 # Follow Supabase's documented logical restore sequence in one transaction.
 # session_replication_role=replica suppresses managed triggers while preserving
 # the target project's managed schemas and ownership.
@@ -135,7 +142,7 @@ psql "$TARGET_DB_URL" \
   -c "SET session_replication_role = replica;" \
   -f "$WORKDIR/data.sql"
 
-restore_file "managed Auth/Storage customizations" "managed-customizations.sql"
+restore_file "managed Auth/Storage customizations" "managed-customizations.restore.sql"
 
 FINISHED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo "Restore database groen: $FINISHED_AT"
