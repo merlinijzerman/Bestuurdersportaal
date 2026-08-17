@@ -1,0 +1,103 @@
+# =============================================================================
+#  scanner/Dockerfile.vercel — ClamAV-scanner als Vercel Container Function.
+# -----------------------------------------------------------------------------
+#  Vercel detecteert dit bestand in de projectroot, bouwt de image, plaatst hem
+#  in Vercel Container Registry en serveert hem als autoscalende Function.
+#
+#  ENGINEVERSIE IS GEPIND OP EEN CONCRETE PATCHVERSIE. ClamAV 1.4 is de huidige
+#  LTS-lijn (drie jaar beveiligingspatches, plus een jaar signature-toegang);
+#  1.5 is non-LTS en krijgt na de volgende release nog maar enkele maanden
+#  patches. Zie docs.clamav.net/faq/faq-eol.html. Een zwevende `1.4`-tag is
+#  bewust niet gebruikt: de image moet reproduceerbaar zijn.
+#
+#  SIGNATURES WORDEN IN DE BUILD GEBAKKEN, niet bij het opstarten opgehaald.
+#  De dagelijkse verversing is daarmee een redeploy (Deploy Hook met
+#  ?buildCache=false), wat atomair is en met Vercel-rollback terug te draaien.
+#  De EICAR-poort hieronder zorgt dat een defecte signatureset de build laat
+#  falen in plaats van live te gaan.
+# =============================================================================
+
+# ── Stap 1: applicatie-afhankelijkheden ──────────────────────────────────────
+# Aparte stap zodat npm (groot) niet in de uiteindelijke image belandt.
+FROM node:22-trixie-slim AS deps
+WORKDIR /app
+COPY package.json package-lock.json* ./
+RUN npm ci --omit=dev --no-audit --no-fund
+
+# ── Stap 2: runtime ──────────────────────────────────────────────────────────
+FROM clamav/clamav:1.4.6_base-debian13-slim AS runtime
+
+# Node-binary uit de officiële image overnemen in plaats van via apt: dat geeft
+# een gepinde Node 22 zonder npm en zonder apt-cachelagen in de image.
+COPY --from=deps /usr/local/bin/node /usr/local/bin/node
+
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY src ./src
+COPY clamd.conf /etc/clamav/clamd.conf
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+
+# ── Signatures ophalen + EICAR-poort ────────────────────────────────────────
+# Alles in één RUN, zodat een gefaalde poort ook echt de build breekt en er geen
+# laag met halve signatures achterblijft.
+#
+# De EICAR-teststring staat base64-gecodeerd om te voorkomen dat de letterlijke
+# handtekening in de repository en in build-logs terechtkomt (en daar
+# virusscanners van ontwikkelaars laat afgaan).
+RUN set -eux; \
+    freshclam --foreground --stdout; \
+    \
+    # Poort 1 — de databases moeten geldig en leesbaar zijn voor de engine.
+    sigtool --info /var/lib/clamav/daily.cvd  > /dev/null; \
+    sigtool --info /var/lib/clamav/main.cvd   > /dev/null; \
+    \
+    # Poort 2 — EICAR MOET gedetecteerd worden. clamscan geeft exitcode 1 bij
+    # een vondst; elke andere uitkomst (0 = schoon, 2 = fout) breekt de build.
+    # `|| ec=$?` is nodig omdat `set -e` anders al afbreekt op die exitcode 1
+    # voordat we hem kunnen beoordelen.
+    echo 'WDVPIVAlQEFQWzRcUFpYNTQoUF4pN0NDKTd9JEVJQ0FSLVNUQU5EQVJELUFOVElWSVJVUy1URVNULUZJTEUhJEgrSCo=' \
+      | base64 -d > /tmp/liveness.bin; \
+    ec=0; clamscan --stdout --no-summary /tmp/liveness.bin || ec=$?; \
+    if [ "$ec" -ne 1 ]; then echo "EICAR-POORT GEFAALD (exitcode $ec) — build afgebroken"; exit 1; fi; \
+    echo "EICAR-poort geslaagd"; \
+    \
+    # Poort 3 — een schoon controlebestand moet schoon blijven; slaat de engine
+    # daar aan, dan deugt de signatureset niet.
+    printf 'Dit is een schoon controlebestand voor de buildpoort.\n' > /tmp/controle.txt; \
+    ec=0; clamscan --stdout --no-summary /tmp/controle.txt || ec=$?; \
+    if [ "$ec" -ne 0 ]; then echo "CONTROLEBESTAND-POORT GEFAALD (exitcode $ec)"; exit 1; fi; \
+    \
+    # Poort 4 — elke sleutel in clamd.conf moet in DEZE engineversie bestaan.
+    # clamd parseert de configuratie vóór het laden van de databases en meldt
+    # een onbekende sleutel als "Parse error / Unknown option". We kappen het
+    # starten daarna af: de dure databaselaadfase hoeft hier niet te draaien,
+    # de parse is wat we willen bewijzen.
+    mkdir -p /tmp/clamd; \
+    timeout 25 clamd --config-file=/etc/clamav/clamd.conf --foreground > /tmp/clamd-start.log 2>&1 || true; \
+    if grep -qiE 'unknown option|parse error|can.t open/parse' /tmp/clamd-start.log; then \
+      echo "CLAMD-CONFIGPOORT GEFAALD:"; cat /tmp/clamd-start.log; exit 1; \
+    fi; \
+    echo "clamd-configpoort geslaagd"; \
+    \
+    # Herkomstgegevens vastleggen voor /health. Deze waarden zijn later niet
+    # meer af te leiden uit de draaiende container.
+    mkdir -p /app/herkomst; \
+    clamscan --version > /app/herkomst/engine.txt; \
+    sigtool --info /var/lib/clamav/daily.cvd | tr -d '\r' > /app/herkomst/daily.txt; \
+    date -u +%Y-%m-%dT%H:%M:%SZ > /app/herkomst/gebouwd-op.txt; \
+    \
+    rm -f /tmp/liveness.bin /tmp/controle.txt; \
+    chmod +x /usr/local/bin/entrypoint.sh; \
+    chown -R clamav:clamav /var/lib/clamav /app/herkomst
+
+# ── Niet-root draaien ────────────────────────────────────────────────────────
+# De scanner verwerkt doelbewust onbetrouwbare bestanden; een exploit in een
+# parser mag geen rootproces opleveren.
+RUN mkdir -p /tmp/clamd && chown clamav:clamav /tmp/clamd
+USER clamav
+
+# Vercel geeft de poort via PORT door; 80 is de standaard.
+ENV PORT=80
+EXPOSE 80
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
