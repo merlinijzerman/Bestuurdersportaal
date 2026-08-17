@@ -1,0 +1,370 @@
+name: Supabase-back-upbewaking
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+  workflow_run:
+    workflows:
+      - Supabase-productieback-up
+      - Platform-configuratie-inventaris
+    types:
+      - completed
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  failure-alert:
+    name: Alert bij mislukte workflow
+    if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: production-backup
+    env:
+      BACKUP_ALERT_WEBHOOK_URL: ${{ secrets.BACKUP_ALERT_WEBHOOK_URL }}
+      ALERT_SEVERITY: critical
+      ALERT_REASON: ${{ format('workflow {0} mislukt', github.event.workflow_run.name) }}
+      ALERT_DETAILS: ${{ format('Workflow {0} eindigde met status {1}.', github.event.workflow_run.name, github.event.workflow_run.conclusion) }}
+      ALERT_RUN_URL: ${{ github.event.workflow_run.html_url }}
+    steps:
+      - name: Repository ophalen
+        uses: actions/checkout@v4.2.2
+
+      - name: Node.js instellen
+        uses: actions/setup-node@v4.4.0
+        with:
+          node-version: 22
+
+      - name: Mislukte run alarmeren
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -n "${BACKUP_ALERT_WEBHOOK_URL:-}" || {
+            echo "BACKUP_ALERT_WEBHOOK_URL ontbreekt; failure-alerting is niet geconfigureerd." >&2
+            exit 1
+          }
+          node scripts/send-backup-alert.mjs
+
+  freshness-alert:
+    name: Back-upouderdom en B2-compleetheid controleren
+    if: ${{ github.event_name != 'workflow_run' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production-backup
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.B2_READONLY_APPLICATION_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.B2_READONLY_APPLICATION_KEY }}
+      AWS_DEFAULT_REGION: eu-central-003
+      AWS_RETRY_MODE: standard
+      AWS_MAX_ATTEMPTS: "10"
+      B2_BUCKET_NAME: ${{ vars.B2_BUCKET_NAME }}
+      B2_S3_ENDPOINT: ${{ vars.B2_S3_ENDPOINT }}
+      BACKUP_ALERT_WEBHOOK_URL: ${{ secrets.BACKUP_ALERT_WEBHOOK_URL }}
+    steps:
+      - name: Repository ophalen
+        uses: actions/checkout@v4.2.2
+
+      - name: Node.js instellen
+        uses: actions/setup-node@v4.4.0
+        with:
+          node-version: 22
+
+      - name: B2-instellingen controleren
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          for variable in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY B2_BUCKET_NAME B2_S3_ENDPOINT BACKUP_ALERT_WEBHOOK_URL; do
+            test -n "${!variable:-}" || { echo "Ontbrekende watchdog-input: $variable" >&2; exit 1; }
+          done
+
+      - name: Laatste complete marker vinden
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          STATUS_LIST="$RUNNER_TEMP/status-list.json"
+          aws s3api list-objects-v2 \
+            --endpoint-url "$B2_S3_ENDPOINT" \
+            --bucket "$B2_BUCKET_NAME" \
+            --prefix backup-status/ \
+            --output json > "$STATUS_LIST"
+          LATEST_KEY="$(python3 - "$STATUS_LIST" <<'PY'
+          import json
+          import sys
+          entries = json.load(open(sys.argv[1], encoding="utf-8")).get("Contents") or []
+          candidates = [
+              item for item in entries
+              if item.get("Key", "").endswith(".json")
+              and not item.get("Key", "").endswith(".sha256")
+              and "/platform-inventory/" not in item.get("Key", "")
+          ]
+          candidates.sort(key=lambda item: item.get("LastModified", ""))
+          print(candidates[-1]["Key"] if candidates else "")
+          PY
+          )"
+          if [ -z "$LATEST_KEY" ]; then
+            export ALERT_SEVERITY=critical
+            export ALERT_REASON="geen complete Supabase-back-up gevonden"
+            export ALERT_DETAILS="B2 bevat geen backup-status/*.json completion marker."
+            node scripts/send-backup-alert.mjs
+            exit 1
+          fi
+          echo "LATEST_KEY=$LATEST_KEY" >> "$GITHUB_ENV"
+
+      - name: Completion marker en ouderdom controleren
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          MARKER="$RUNNER_TEMP/latest-backup.json"
+          MARKER_HASH="$RUNNER_TEMP/latest-backup.json.sha256"
+          aws s3api get-object --endpoint-url "$B2_S3_ENDPOINT" --bucket "$B2_BUCKET_NAME" --key "$LATEST_KEY" "$MARKER" >/dev/null || {
+            export ALERT_SEVERITY=critical
+            export ALERT_REASON="completion marker kan niet worden gelezen"
+            export ALERT_DETAILS="B2-object $LATEST_KEY is niet leesbaar."
+            node scripts/send-backup-alert.mjs
+            exit 1
+          }
+          aws s3api get-object --endpoint-url "$B2_S3_ENDPOINT" --bucket "$B2_BUCKET_NAME" --key "$LATEST_KEY.sha256" "$MARKER_HASH" >/dev/null || {
+            export ALERT_SEVERITY=critical
+            export ALERT_REASON="checksum van completion marker ontbreekt"
+            export ALERT_DETAILS="B2-object $LATEST_KEY.sha256 ontbreekt."
+            node scripts/send-backup-alert.mjs
+            exit 1
+          }
+          EXPECTED_HASH="$(awk '{print $1}' "$MARKER_HASH")"
+          ACTUAL_HASH="$(sha256sum "$MARKER" | awk '{print $1}')"
+          test "$EXPECTED_HASH" = "$ACTUAL_HASH" || {
+            export ALERT_SEVERITY=critical
+            export ALERT_REASON="checksum van completion marker wijkt af"
+            export ALERT_DETAILS="B2-object $LATEST_KEY is gewijzigd of beschadigd."
+            node scripts/send-backup-alert.mjs
+            exit 1
+          }
+
+          CHECK_RESULT="$(python3 - "$MARKER" <<'PY'
+          import json
+          import sys
+          from datetime import datetime, timezone
+
+          try:
+              marker = json.load(open(sys.argv[1], encoding="utf-8"))
+              created = datetime.fromisoformat(marker["created_utc"].replace("Z", "+00:00"))
+              age_hours = (datetime.now(timezone.utc) - created).total_seconds() / 3600
+              required = [
+                  marker["database"]["archive_key"],
+                  marker["database"]["checksum_key"],
+                  marker["storage"]["archive_key"],
+                  marker["storage"]["checksum_key"],
+              ]
+              coverage = marker.get("coverage", {})
+              if marker.get("status") != "complete":
+                  print("critical|completion marker heeft geen status complete|" + str(marker.get("status")))
+              elif age_hours < -1:
+                  print("critical|completion marker ligt in de toekomst|%.2f uur" % age_hours)
+              elif age_hours > 48:
+                  print("critical|laatste complete back-up is ouder dan 48 uur|%.2f uur" % age_hours)
+              elif age_hours > 26:
+                  print("warning|laatste complete back-up is ouder dan 26 uur|%.2f uur" % age_hours)
+              elif not all(coverage.get(key) is True for key in ("auth_data", "storage_metadata", "physical_storage_objects")):
+                  print("critical|back-upmanifest meldt onvolledige Auth/Storage-dekking|" + json.dumps(coverage, sort_keys=True))
+              else:
+                  print("ok|back-up is actueel en compleet|%.2f uur; objecten=%s" % (age_hours, marker["storage"]["object_count"]))
+              with open(sys.argv[1] + ".keys", "w", encoding="utf-8") as output:
+                  output.write("\n".join(required) + "\n")
+          except Exception as error:
+              print("critical|completion marker is ongeldig|%s" % type(error).__name__)
+          PY
+          )"
+          STATUS="${CHECK_RESULT%%|*}"
+          REST="${CHECK_RESULT#*|}"
+          REASON="${REST%%|*}"
+          DETAILS="${REST#*|}"
+          if [ "$STATUS" = "ok" ]; then
+            echo "Back-upwatchdog groen: $REASON · $DETAILS" >> "$GITHUB_STEP_SUMMARY"
+          else
+            export ALERT_SEVERITY="$STATUS"
+            export ALERT_REASON="$REASON"
+            export ALERT_DETAILS="$DETAILS"
+            node scripts/send-backup-alert.mjs
+            exit 1
+          fi
+
+      - name: Gerefereerde B2-objecten bestaan
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          while IFS= read -r key; do
+            [ -n "$key" ] || continue
+            aws s3api head-object --endpoint-url "$B2_S3_ENDPOINT" --bucket "$B2_BUCKET_NAME" --key "$key" >/dev/null || {
+              export ALERT_SEVERITY=critical
+              export ALERT_REASON="gerefereerd B2-object ontbreekt"
+              export ALERT_DETAILS="B2-object $key ontbreekt volgens de laatste completion marker."
+              node scripts/send-backup-alert.mjs
+              exit 1
+            }
+          done < "$RUNNER_TEMP/latest-backup.json.keys"
+          echo "Alle door de completion marker gerefereerde B2-objecten bestaan." >> "$GITHUB_STEP_SUMMARY"
+
+  inventory-freshness-alert:
+    name: Configuratie-inventaris en B2-compleetheid controleren
+    if: ${{ github.event_name != 'workflow_run' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production-backup
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.B2_READONLY_APPLICATION_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.B2_READONLY_APPLICATION_KEY }}
+      AWS_DEFAULT_REGION: eu-central-003
+      AWS_RETRY_MODE: standard
+      AWS_MAX_ATTEMPTS: "10"
+      B2_BUCKET_NAME: ${{ vars.B2_BUCKET_NAME }}
+      B2_S3_ENDPOINT: ${{ vars.B2_S3_ENDPOINT }}
+      BACKUP_ALERT_WEBHOOK_URL: ${{ secrets.BACKUP_ALERT_WEBHOOK_URL }}
+    steps:
+      - name: Repository ophalen
+        uses: actions/checkout@v4.2.2
+
+      - name: Node.js instellen
+        uses: actions/setup-node@v4.4.0
+        with:
+          node-version: 22
+
+      - name: Inventariswatchdog-inputs controleren
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          for variable in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY B2_BUCKET_NAME B2_S3_ENDPOINT BACKUP_ALERT_WEBHOOK_URL; do
+            test -n "${!variable:-}" || { echo "Ontbrekende inventariswatchdog-input: $variable" >&2; exit 1; }
+          done
+
+      - name: Laatste configuratie-inventaris vinden
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          STATUS_LIST="$RUNNER_TEMP/inventory-status-list.json"
+          aws s3api list-objects-v2 \
+            --endpoint-url "$B2_S3_ENDPOINT" \
+            --bucket "$B2_BUCKET_NAME" \
+            --prefix backup-status/platform-inventory/ \
+            --output json > "$STATUS_LIST"
+          LATEST_KEY="$(python3 - "$STATUS_LIST" <<'PY'
+          import json
+          import sys
+          entries = json.load(open(sys.argv[1], encoding="utf-8")).get("Contents") or []
+          candidates = [
+              item for item in entries
+              if item.get("Key", "").endswith(".json") and not item.get("Key", "").endswith(".sha256")
+          ]
+          candidates.sort(key=lambda item: item.get("LastModified", ""))
+          print(candidates[-1]["Key"] if candidates else "")
+          PY
+          )"
+          if [ -z "$LATEST_KEY" ]; then
+            export ALERT_SEVERITY=critical
+            export ALERT_REASON="geen configuratie-inventaris gevonden"
+            export ALERT_DETAILS="B2 bevat geen backup-status/platform-inventory/*.json completion marker."
+            node scripts/send-backup-alert.mjs
+            exit 1
+          fi
+          echo "LATEST_INVENTORY_KEY=$LATEST_KEY" >> "$GITHUB_ENV"
+
+      - name: Inventarismarker, checksum en ouderdom controleren
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          MARKER="$RUNNER_TEMP/latest-platform-inventory.json"
+          MARKER_HASH="$RUNNER_TEMP/latest-platform-inventory.json.sha256"
+          aws s3api get-object --endpoint-url "$B2_S3_ENDPOINT" --bucket "$B2_BUCKET_NAME" --key "$LATEST_INVENTORY_KEY" "$MARKER" >/dev/null || {
+            export ALERT_SEVERITY=critical
+            export ALERT_REASON="configuratie-inventaris kan niet worden gelezen"
+            export ALERT_DETAILS="B2-object $LATEST_INVENTORY_KEY is niet leesbaar."
+            node scripts/send-backup-alert.mjs
+            exit 1
+          }
+          aws s3api get-object --endpoint-url "$B2_S3_ENDPOINT" --bucket "$B2_BUCKET_NAME" --key "$LATEST_INVENTORY_KEY.sha256" "$MARKER_HASH" >/dev/null || {
+            export ALERT_SEVERITY=critical
+            export ALERT_REASON="checksum van configuratie-inventaris ontbreekt"
+            export ALERT_DETAILS="B2-object $LATEST_INVENTORY_KEY.sha256 ontbreekt."
+            node scripts/send-backup-alert.mjs
+            exit 1
+          }
+          EXPECTED_HASH="$(awk '{print $1}' "$MARKER_HASH")"
+          ACTUAL_HASH="$(sha256sum "$MARKER" | awk '{print $1}')"
+          test "$EXPECTED_HASH" = "$ACTUAL_HASH" || {
+            export ALERT_SEVERITY=critical
+            export ALERT_REASON="checksum van configuratie-inventaris wijkt af"
+            export ALERT_DETAILS="B2-object $LATEST_INVENTORY_KEY is gewijzigd of beschadigd."
+            node scripts/send-backup-alert.mjs
+            exit 1
+          }
+
+          CHECK_RESULT="$(python3 - "$MARKER" <<'PY'
+          import json
+          import sys
+          from datetime import datetime, timezone
+
+          try:
+              marker = json.load(open(sys.argv[1], encoding="utf-8"))
+              created = datetime.fromisoformat(marker["created_utc"].replace("Z", "+00:00"))
+              age_days = (datetime.now(timezone.utc) - created).total_seconds() / 86400
+              required = (
+                  "supabase_project_config",
+                  "supabase_auth_config",
+                  "supabase_storage_config",
+                  "supabase_database_config",
+                  "vercel_project_config",
+                  "vercel_environment_variable_names",
+              )
+              coverage = marker.get("coverage", {})
+              missing = [key for key in required if coverage.get(key) is not True]
+              if marker.get("status") != "complete":
+                  print("critical|configuratie-inventaris is niet compleet|" + str(marker.get("status")))
+              elif age_days < -0.05:
+                  print("critical|configuratie-inventaris ligt in de toekomst|%.2f dagen" % age_days)
+              elif missing:
+                  print("critical|configuratie-inventaris mist verplichte dekking|" + ",".join(missing))
+              elif age_days > 14:
+                  print("critical|configuratie-inventaris is ouder dan 14 dagen|%.2f dagen" % age_days)
+              elif age_days > 8:
+                  print("warning|configuratie-inventaris is ouder dan 8 dagen|%.2f dagen" % age_days)
+              else:
+                  print("ok|configuratie-inventaris actueel|%.2f dagen" % age_days)
+          except Exception as error:
+              print("critical|configuratie-inventaris is ongeldig|%s" % type(error).__name__)
+          PY
+          )"
+          STATUS="${CHECK_RESULT%%|*}"
+          REST="${CHECK_RESULT#*|}"
+          REASON="${REST%%|*}"
+          DETAILS="${REST#*|}"
+          if [ "$STATUS" = "ok" ]; then
+            echo "Configuratie-inventariswatchdog groen: $REASON · $DETAILS" >> "$GITHUB_STEP_SUMMARY"
+          else
+            export ALERT_SEVERITY="$STATUS"
+            export ALERT_REASON="$REASON"
+            export ALERT_DETAILS="$DETAILS"
+            node scripts/send-backup-alert.mjs
+            exit 1
+          fi
+
+      - name: Gerefereerde inventarisobjecten bestaan
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          INVENTORY_KEY="$(python3 - "$RUNNER_TEMP/latest-platform-inventory.json" <<'PY'
+          import json
+          import sys
+          marker = json.load(open(sys.argv[1], encoding="utf-8"))
+          print(marker["inventory_key"])
+          PY
+          )"
+          for key in "$INVENTORY_KEY" "$INVENTORY_KEY.sha256"; do
+            aws s3api head-object --endpoint-url "$B2_S3_ENDPOINT" --bucket "$B2_BUCKET_NAME" --key "$key" >/dev/null || {
+              export ALERT_SEVERITY=critical
+              export ALERT_REASON="gerefereerd configuratie-inventarisobject ontbreekt"
+              export ALERT_DETAILS="B2-object $key ontbreekt volgens de laatste inventarismarker."
+              node scripts/send-backup-alert.mjs
+              exit 1
+            }
+          done
