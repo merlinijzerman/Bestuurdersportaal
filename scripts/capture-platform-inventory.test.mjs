@@ -50,6 +50,38 @@ test("platform-inventory neemt alleen Vercel-variabelenamen over", () => {
   assert.equal(JSON.stringify(result).includes("niet-in-inventory"), false);
 });
 
+test("platform-inventory gebruikt actuele Supabase Management API-routes", async () => {
+  const originalFetch = globalThis.fetch;
+  const requestedPaths = [];
+  try {
+    globalThis.fetch = async (url) => {
+      const target = new URL(url);
+      if (target.hostname === "api.supabase.com") {
+        requestedPaths.push(target.pathname);
+        return Response.json({});
+      }
+      if (target.pathname.endsWith("/env")) return Response.json({ envs: [] });
+      if (target.hostname === "api.vercel.com") return Response.json({});
+      throw new Error(`Onverwachte mock-request: ${url}`);
+    };
+
+    const inventory = await captureInventory({
+      projectRef: "aebwiufuegsiwhwpdrfb",
+      supabaseManagementToken: "test-token",
+      vercelProjectIds: ["bestuurdersportaal"],
+      vercelToken: "test-token",
+    });
+
+    assert.equal(inventory.status, "complete");
+    assert.ok(requestedPaths.includes("/v1/projects/aebwiufuegsiwhwpdrfb/postgrest"));
+    assert.ok(requestedPaths.includes("/v1/projects/aebwiufuegsiwhwpdrfb/ssl-enforcement"));
+    assert.equal(requestedPaths.some((pathname) => pathname.endsWith("/config/postgrest")), false);
+    assert.equal(requestedPaths.some((pathname) => pathname.endsWith("/config/ssl-enforcement")), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("platform-inventory publiceert alleen een complete inventaris", async () => {
   const originalFetch = globalThis.fetch;
   try {
