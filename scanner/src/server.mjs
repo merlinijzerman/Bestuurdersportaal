@@ -17,6 +17,7 @@
 import http from "node:http";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { beoordeelBronUrl } from "./bron-url.mjs";
 import { maakOidcVerifier } from "./oidc.mjs";
 import { openInstream } from "./clamd.mjs";
@@ -127,7 +128,8 @@ let scanBezig = false;
 const server = http.createServer(async (req, res) => {
   try {
     if (req.method === "GET" && req.url === "/health") {
-      return json(res, 200, herkomst);
+      const ready = clamdGereed();
+      return json(res, ready ? 200 : 503, { ...herkomst, ready });
     }
     if (req.method === "POST" && req.url === "/scan") {
       return await behandelScan(req, res);
@@ -146,6 +148,11 @@ async function behandelScan(req, res) {
   if (!oordeel.ok) {
     console.warn(JSON.stringify({ tag: "scanner", fase: "auth-geweigerd", code: oordeel.code }));
     return json(res, 401, { code: "niet_geautoriseerd" });
+  }
+
+  if (!clamdGereed()) {
+    res.setHeader("Retry-After", "5");
+    return json(res, 503, { code: "scanner_start_op" });
   }
 
   const body = await leesJsonBody(req);
@@ -178,6 +185,10 @@ async function behandelScan(req, res) {
   } finally {
     scanBezig = false;
   }
+}
+
+function clamdGereed() {
+  return existsSync(CONFIG.clamdSocket);
 }
 
 /**

@@ -19,28 +19,11 @@ echo '{"tag":"scanner","fase":"clamd-start"}'
 clamd --config-file=/etc/clamav/clamd.conf &
 CLAMD_PID=$!
 
-# Wachten tot de socket bestaat. Geen vaste sleep: de laadtijd verschilt per
-# instance en per signatureset. De bovengrens is ruim, maar eindig — hangt clamd
-# vast, dan sterft de container zichtbaar in plaats van stil onbruikbaar te zijn.
-WACHT=0
-while [ ! -S "$SOCKET" ]; do
-  if ! kill -0 "$CLAMD_PID" 2>/dev/null; then
-    echo '{"tag":"scanner","fase":"clamd-gestorven"}' >&2
-    exit 1
-  fi
-  if [ "$WACHT" -ge 180 ]; then
-    echo '{"tag":"scanner","fase":"clamd-timeout"}' >&2
-    exit 1
-  fi
-  sleep 1
-  WACHT=$((WACHT + 1))
-done
-echo "{\"tag\":\"scanner\",\"fase\":\"clamd-gereed\",\"laadtijd_s\":$WACHT}"
-
-# Start ook de HTTP-laag als kind van deze PID-1-shell. Zo kan dezelfde ouder
-# beide processen bewaken en opruimen. `wait` vanuit een achtergrond-subshell is
-# hier bewust niet bruikbaar: die subshell is niet de ouder van clamd en kan dus
-# niet betrouwbaar op diens PID wachten.
+# Vercel eist dat een container binnen 15 seconden op $PORT luistert. clamd kan
+# bij een koude start langer nodig hebben om de signatures te laden. Start de
+# HTTP-laag daarom direct; /health antwoordt 503 totdat de clamd-socket bestaat.
+# Zo ziet het platform een levende container zonder dat we de scanner te vroeg
+# als gereed presenteren.
 node /app/src/server.mjs &
 HTTP_PID=$!
 
@@ -52,9 +35,32 @@ stop_kinderen() {
   wait "$CLAMD_PID" 2>/dev/null || true
 }
 
-# Vercel geeft bij scale-in SIGTERM en vervolgens een korte grace-periode. Geef
-# die door aan beide kinderen en wacht tot ze echt gestopt zijn.
 trap 'stop_kinderen; exit 0' TERM INT
+
+# Wachten tot de socket bestaat. Geen vaste sleep: de laadtijd verschilt per
+# instance en per signatureset. De bovengrens is ruim, maar eindig — hangt clamd
+# vast, dan sterft de container zichtbaar in plaats van stil onbruikbaar te zijn.
+WACHT=0
+while [ ! -S "$SOCKET" ]; do
+  if ! kill -0 "$CLAMD_PID" 2>/dev/null; then
+    echo '{"tag":"scanner","fase":"clamd-gestorven"}' >&2
+    stop_kinderen
+    exit 1
+  fi
+  if ! kill -0 "$HTTP_PID" 2>/dev/null; then
+    echo '{"tag":"scanner","fase":"http-gestorven-tijdens-start"}' >&2
+    stop_kinderen
+    exit 1
+  fi
+  if [ "$WACHT" -ge 180 ]; then
+    echo '{"tag":"scanner","fase":"clamd-timeout"}' >&2
+    stop_kinderen
+    exit 1
+  fi
+  sleep 1
+  WACHT=$((WACHT + 1))
+done
+echo "{\"tag\":\"scanner\",\"fase\":\"clamd-gereed\",\"laadtijd_s\":$WACHT}"
 
 # POSIX-sh heeft niet overal `wait -n`. Een korte kill-0-lus bewaakt daarom beide
 # kinderen zonder shellspecifieke uitbreidingen. Sterft één proces onverwacht,
