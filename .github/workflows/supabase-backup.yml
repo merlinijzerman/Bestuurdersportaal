@@ -123,7 +123,7 @@ jobs:
           supabase db dump --db-url "$SUPABASE_DB_URL" -f "$DB_DIR/data.sql" --data-only --use-copy -x "storage.buckets_vectors" -x "storage.vector_indexes"
           pg_dump "$SUPABASE_DB_URL" --data-only --schema=auth --no-owner --no-privileges --disable-triggers -f "$DB_DIR/auth-data.sql"
           pg_dump "$SUPABASE_DB_URL" --data-only --schema=storage --no-owner --no-privileges --disable-triggers -T "storage.buckets_vectors" -T "storage.vector_indexes" -f "$DB_DIR/storage-data.sql"
-          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f scripts/capture-supabase-managed-customizations.sql > "$DB_DIR/managed-customizations.sql"
+          psql "$SUPABASE_DB_URL" -X -qAt -v ON_ERROR_STOP=1 -f scripts/capture-supabase-managed-customizations.sql > "$DB_DIR/managed-customizations.sql"
           psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f scripts/create-backup-validation.sql > "$DB_DIR/database-validation.json"
 
           cat > "$DB_DIR/metadata.txt" <<EOF
