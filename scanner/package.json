@@ -1,0 +1,17 @@
+{
+  "name": "bestuurdersportaal-scanner",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Geïsoleerde ClamAV-malwarescanner (Route A WP3). Eigen Vercel-project, geen langlevende credentials.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test \"test/*.test.mjs\"",
+    "test:w0:prepare": "node test/corpus/genereer.mjs && mkdir -p test/harness/certs && openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj /CN=abc123xyz.supabase.co -addext subjectAltName=DNS:abc123xyz.supabase.co -keyout test/harness/certs/sleutel.pem -out test/harness/certs/cert.pem"
+  },
+  "dependencies": {
+    "jose": "^6.1.0"
+  }
+}
