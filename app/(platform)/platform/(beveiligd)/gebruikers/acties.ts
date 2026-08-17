@@ -130,11 +130,23 @@ export async function gebruikerAanmaken(input: {
 
         // createUser: metadata ZONDER rol (B-4). email_confirm:true → geen SMTP.
         // Het wachtwoord gaat UITSLUITEND hierheen; nooit naar log/effect/melding.
+        //
+        // WP1 (17-08-2026): het fonds gaat naar `app_metadata`, niet naar
+        // `user_metadata`. `maak_profiel()` leest sindsdien uitsluitend
+        // `raw_app_meta_data->>'fonds_id'`. Dat is geen cosmetische verhuizing:
+        // `user_metadata` is het veld dat een client zelf vult via
+        // `supabase.auth.signUp({ options: { data } })` met de publieke anon-key,
+        // en de trigger kon dat pad niet onderscheiden van dít pad. `app_metadata`
+        // is alleen via de service-role te zetten — dus alleen hier, achter
+        // capability `platform.tenants.manage` + live AAL2 + twee-fasen-audit.
+        //
+        // `naam` blijft in user_metadata: presentatie, geen privilege.
         const { data: aangemaakt, error: maakFout } = await svc.auth.admin.createUser({
           email,
           password: wachtwoord,
           email_confirm: true,
-          user_metadata: { naam, fonds_id: input.fondsId },
+          user_metadata: { naam },
+          app_metadata: { fonds_id: input.fondsId },
         });
 
         if (maakFout) {

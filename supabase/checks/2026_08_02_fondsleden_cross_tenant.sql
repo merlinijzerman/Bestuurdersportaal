@@ -33,7 +33,7 @@ insert into public.fondsen (id, naam, slug) values
   ('11111111-1111-1111-1111-111111111111', 'VW Fonds A', 'vw-fonds-a'),
   ('22222222-2222-2222-2222-222222222222', 'VW Fonds B', 'vw-fonds-b');
 
-insert into auth.users (id, aud, role, email, raw_user_meta_data, created_at, updated_at)
+insert into auth.users (id, aud, role, email, raw_app_meta_data, created_at, updated_at)
 values
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','authenticated','authenticated','vw-a1@test.local',
    '{"naam":"Anna Aalders","fonds_id":"11111111-1111-1111-1111-111111111111"}', now(), now()),

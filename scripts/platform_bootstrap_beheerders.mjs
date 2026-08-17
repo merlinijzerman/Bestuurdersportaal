@@ -94,22 +94,36 @@ async function main() {
     const bestaand = await zoekGebruiker(b.email);
 
     if (bestaand) {
-      const isPlatform = bestaand.user_metadata?.platform === true;
+      // WP1 (17-08-2026): de platform-vlag staat in app_metadata, niet in
+      // user_metadata. user_metadata is client-schrijfbaar via signUp(); een
+      // privilege-bit hoort daar niet. `app_metadata` is alleen met de
+      // service-role te zetten — dus alleen vanuit dit script.
+      const isPlatform = bestaand.app_metadata?.platform === true;
+      const oudeVlagInUserMeta = bestaand.user_metadata?.platform === true;
       console.log(
-        `• ${b.email} — bestaat al (id ${bestaand.id}), platform-vlag: ${isPlatform}`
+        `• ${b.email} — bestaat al (id ${bestaand.id}), platform-vlag (app_metadata): ${isPlatform}`
       );
+      if (oudeVlagInUserMeta && !isPlatform) {
+        console.log(
+          "  ⚠️ dit account draagt de OUDE conventie: platform-vlag in user_metadata.\n" +
+            "  → wordt hieronder naar app_metadata getild. De vlag in user_metadata\n" +
+            "    blijft staan als historisch spoor; maak_profiel negeert hem niet maar\n" +
+            "    WEIGERT erop, en dat raakt alleen nieuwe inserts."
+        );
+      }
       if (!isPlatform) {
         console.log(
-          "  ⚠️ metadata mist {\"platform\": true}. Dit account is waarschijnlijk " +
+          "  ⚠️ app_metadata mist {\"platform\": true}. Dit account is waarschijnlijk " +
             "een tenant-account met profielen-rij; de 3b-guard weigert het dan.\n" +
             "  → zet de vlag en verwijder de profielen-rij (Deel 1/B3 in de SQL)."
         );
         if (UITVOEREN) {
           const { error } = await supabase.auth.admin.updateUserById(bestaand.id, {
-            user_metadata: { ...bestaand.user_metadata, platform: true, naam: b.naam },
+            app_metadata: { ...bestaand.app_metadata, platform: true },
+            user_metadata: { ...bestaand.user_metadata, naam: b.naam },
           });
           if (error) console.log(`  ✗ metadata bijwerken mislukt: ${error.message}`);
-          else console.log("  ✓ metadata bijgewerkt (platform: true)");
+          else console.log("  ✓ app_metadata bijgewerkt (platform: true)");
         }
       }
       continue;
@@ -124,14 +138,16 @@ async function main() {
       email: b.email,
       password: START_WACHTWOORD,
       email_confirm: true, // geen mailbevestiging nodig
-      user_metadata: { platform: true, naam: b.naam },
+      // WP1: platform-vlag in app_metadata (server-only), naam in user_metadata.
+      user_metadata: { naam: b.naam },
+      app_metadata: { platform: true },
     });
 
     if (error) {
       console.log(`• ${b.email} — ✗ mislukt: ${error.message}`);
       console.log(
-        "  Tip: 'geen fonds_id in user-metadata' betekent dat de platform-vlag " +
-          "niet is meegekomen (maak_profiel is fail-closed)."
+        "  Tip: 'geen fonds_id in app-metadata' betekent dat de platform-vlag " +
+          "niet is meegekomen in app_metadata (maak_profiel is fail-closed)."
       );
       continue;
     }

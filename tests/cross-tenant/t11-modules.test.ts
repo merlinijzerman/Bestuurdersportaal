@@ -64,6 +64,7 @@ const MODULE_PAGINAS = [
   "app/(dashboard)/klantbeeld/deelnemers/page.tsx",
   "app/(dashboard)/klantbeeld/deelnemers/cohorten/page.tsx",
   "app/(dashboard)/klantbeeld/werkgevers/page.tsx",
+  "app/(dashboard)/beheer/page.tsx",
 ];
 
 test("T11 — elke module-pagina roept de server-guard vereisModuleToegang() aan", () => {
@@ -74,6 +75,15 @@ test("T11 — elke module-pagina roept de server-guard vereisModuleToegang() aan
       `${pad} zou de server-side module-guard moeten aanroepen (beschikbaarheid + capability)`
     );
   }
+});
+
+test("T11 — de beheerhub vereist server-side catalog.manage", () => {
+  const src = lees("app/(dashboard)/beheer/page.tsx");
+  assert.match(
+    src,
+    /vereisModuleToegang\("beheer",\s*"catalog\.manage"\)/,
+    "de beheerhub mag niet alleen op cosmetische rolverberging vertrouwen"
+  );
 });
 
 test("T11 — de pagina-guard weigert server-side met notFound() (geen UI-only verberging)", () => {

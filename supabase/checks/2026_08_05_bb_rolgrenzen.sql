@@ -190,7 +190,7 @@ begin;
 insert into public.fondsen (id, naam, slug)
 values ('bb000000-0000-0000-0000-0000000000f1', 'BB Testfonds', 'bb-testfonds');
 
-insert into auth.users (id, aud, role, email, raw_user_meta_data, created_at, updated_at)
+insert into auth.users (id, aud, role, email, raw_app_meta_data, created_at, updated_at)
 values
   ('bb000001-0000-0000-0000-000000000001','authenticated','authenticated','bb-bestuurder@test.local',
    '{"naam":"BB Bestuurder","fonds_id":"bb000000-0000-0000-0000-0000000000f1"}', now(), now()),

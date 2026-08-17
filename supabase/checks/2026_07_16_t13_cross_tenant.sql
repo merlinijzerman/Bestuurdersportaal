@@ -32,7 +32,7 @@ insert into public.fondsen (id, naam, slug) values
   ('31111111-1111-1111-1111-111111111111', 'T13 Fonds A', 't13-fonds-a'),
   ('32222222-2222-2222-2222-222222222222', 'T13 Fonds B', 't13-fonds-b');
 
-insert into auth.users (id, aud, role, email, raw_user_meta_data, created_at, updated_at)
+insert into auth.users (id, aud, role, email, raw_app_meta_data, created_at, updated_at)
 values
   ('3aaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','authenticated','authenticated','t13-a-beheer@test.local',
    '{"naam":"A Beheerder","fonds_id":"31111111-1111-1111-1111-111111111111"}', now(), now()),

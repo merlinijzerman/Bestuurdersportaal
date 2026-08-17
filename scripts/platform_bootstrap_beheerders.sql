@@ -20,9 +20,13 @@
 --      enrollment: wachtwoord → TOTP-secret uitlezen → code → binnen.
 --      Het TOTP-secret wordt als tekst getoond (geen QR-library).
 --   3. GEEN TENANT-PROFIEL. De trigger bij_registratie → maak_profiel() maakt bij
---      elke nieuwe auth-user een profielen-rij, TENZIJ raw_user_meta_data
+--      elke nieuwe auth-user een profielen-rij, TENZIJ raw_APP_meta_data
 --      {"platform": true} bevat. Zonder die vlag faalt de insert bovendien
 --      fail-closed (geen fonds_id). Metadata is dus VERPLICHT — zie Deel 1.
+--      LET OP (WP1, 17-08-2026): de vlag verhuisde van raw_user_meta_data naar
+--      raw_app_meta_data. user-metadata is client-schrijfbaar via signUp() met
+--      de publieke anon-key; een privilege-bit hoort daar niet. maak_profiel
+--      WEIGERT sindsdien een platform-vlag in user-metadata expliciet.
 --   4. WACHTWOORD. 'Welkom01' is bewust een STARTwachtwoord. Zie de notitie
 --      onderaan (Deel 7) — laat beide beheerders dit direct wijzigen.
 -- ============================================================================
@@ -91,8 +95,10 @@ select
   d.email,
   crypt('Welkom01', gen_salt('bf')),
   now(),
-  '{"provider":"email","providers":["email"]}'::jsonb,
-  jsonb_build_object('platform', true, 'naam', d.naam),
+  -- WP1: platform-vlag in app-metadata (server-only), naam in user-metadata.
+  '{"provider":"email","providers":["email"]}'::jsonb
+    || jsonb_build_object('platform', true),
+  jsonb_build_object('naam', d.naam),
   now(), now()
 from (values
   ('merlin.ijzerman@the-paradox.com', 'Merlin IJzerman'),
