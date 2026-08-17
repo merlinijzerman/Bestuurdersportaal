@@ -46,6 +46,10 @@ import {
 import { HAIKU_MODEL } from "./llm-modellen";
 import type { TekstSegment } from "./document-extractie";
 import {
+  isProviderAuthenticatieFout,
+  zijnVereistePrefixesVolledig,
+} from "./provider-fout";
+import {
   INDEXERING_VERSIE,
   bepaalPrefixGroepen,
   bouwChunkRecordsZonderVerrijking,
@@ -207,7 +211,10 @@ async function genereerPrefix(
     // naar de aanroeper zodat de ingest-stap netjes parkeert in plaats van het
     // document zonder prefixes af te ronden alsof dat de bedoeling was.
     if (isPoortGesloten(e)) throw e;
-    console.error("[chunk-ingest] context-prefix mislukt voor één fragment:", e);
+    // Een ongeldige of ingetrokken sleutel herstelt niet per fragment. Laat die
+    // fout door naar de worker: één logregel, direct een zichtbare mislukte
+    // verwerking en geen honderden identieke 401's.
+    if (isProviderAuthenticatieFout(e)) throw e;
     return null;
   }
 }
@@ -254,6 +261,7 @@ interface VerrijkingResultaat {
   prefixes: (string | null)[];
   embeddingLiterals: (string | null)[]; // vector-literal per chunk, of null bij fout
   aantalPrefixes: number;
+  prefixesVolledig: boolean;
   embeddingsGelukt: boolean;
   prefixMs: number;
   embeddingMs: number;
@@ -263,15 +271,16 @@ interface VerrijkingResultaat {
 
 // Gedeelde kern: genereer prefixes (per unit) + embeddings over de verrijkte
 // tekst voor een reeks chunks. Puur functioneel t.o.v. opslag — de caller past
-// het resultaat toe (op een ChunkRecord[] of via een DB-update). Best-effort op
-// beide externe stappen: faalt de prefix, dan baseline voor die chunk; faalt de
-// embedding-API, dan embeddingsGelukt=false en alle literals null.
+// het resultaat toe (op een ChunkRecord[] of via een DB-update). Synchrone paden
+// behouden hun best-effort baseline; het async workerpad zet prefixFailClosed
+// en publiceert dan pas embeddings wanneer alle vereiste prefixes er zijn.
 async function genereerVerrijking(
   poort: PoortContext,
   titel: string,
   chunks: PrefixInvoer[],
   metPrefix: boolean,
-  prefixConcurrentie: number
+  prefixConcurrentie: number,
+  prefixFailClosed = false
 ): Promise<VerrijkingResultaat> {
   const prefixAan = metPrefix && !!process.env.ANTHROPIC_API_KEY;
 
@@ -281,6 +290,36 @@ async function genereerVerrijking(
     : (new Array(chunks.length).fill(null) as (string | null)[]);
   const prefixMs = Date.now() - tPrefix;
   const aantalPrefixes = prefixes.filter((p) => p != null).length;
+  const prefixesVolledig = zijnVereistePrefixesVolledig({
+    metPrefix,
+    keyBeschikbaar: prefixAan,
+    aantalPrefixes,
+    aantalChunks: chunks.length,
+  });
+
+  if (!prefixesVolledig) {
+    console.error(
+      `[chunk-ingest] context-prefix onvolledig: ${chunks.length - aantalPrefixes}/${chunks.length} chunks zonder prefix`
+    );
+  }
+
+  // In het async ingestpad is een prefix onderdeel van de indexatiepoort. Bij
+  // een tijdelijke providerfout blijven de kale chunks staan en probeert de
+  // begrensde worker-backoff opnieuw; er worden dus geen baseline-embeddings
+  // gepubliceerd terwijl de UI ten onrechte "beschikbaar" toont.
+  if (prefixFailClosed && !prefixesVolledig) {
+    return {
+      prefixes,
+      embeddingLiterals: new Array(chunks.length).fill(null),
+      aantalPrefixes,
+      prefixesVolledig,
+      embeddingsGelukt: false,
+      prefixMs,
+      embeddingMs: 0,
+      embeddingRetries: 0,
+      embeddingRate429: 0,
+    };
+  }
 
   const verrijkt = chunks.map((c, i) => verrijkTekst(prefixes[i], c.tekst));
 
@@ -306,6 +345,7 @@ async function genereerVerrijking(
     prefixes,
     embeddingLiterals,
     aantalPrefixes,
+    prefixesVolledig,
     embeddingsGelukt,
     prefixMs,
     embeddingMs,
@@ -371,12 +411,15 @@ export interface VerrijkChunksOpties {
   prefixConcurrentie?: number;
   // Max chunks per aanroep (tijdbudget van de worker-invocatie). Default 200.
   limiet?: number;
+  /** Async publicatiepoort: zonder volledige prefixes geen embeddings schrijven. */
+  prefixFailClosed?: boolean;
 }
 
 export interface VerrijkChunksResultaat {
   verwerkt: number; // chunks die in deze ronde een embedding kregen
   resterend: number; // chunks met embedding is null ná deze ronde
   aantalPrefixes: number;
+  prefixesVolledig: boolean;
   embeddingsGelukt: boolean;
   metingen: Omit<BouwChunksMetingen, "chunkingMs"> & { schrijfMs: number };
 }
@@ -411,12 +454,14 @@ export async function verrijkChunks(
     metPrefix = true,
     prefixConcurrentie = PREFIX_CONCURRENTIE,
     limiet = 200,
+    prefixFailClosed = false,
   } = opties;
 
   const leeg: VerrijkChunksResultaat = {
     verwerkt: 0,
     resterend: 0,
     aantalPrefixes: 0,
+    prefixesVolledig: true,
     embeddingsGelukt: true,
     metingen: {
       prefixMs: 0,
@@ -449,7 +494,14 @@ export async function verrijkChunks(
     structuur_label: r.structuur_label ?? null,
   }));
 
-  const v = await genereerVerrijking({ supabase }, titel, chunks, metPrefix, prefixConcurrentie);
+  const v = await genereerVerrijking(
+    { supabase },
+    titel,
+    chunks,
+    metPrefix,
+    prefixConcurrentie,
+    prefixFailClosed
+  );
 
   let verwerkt = 0;
   const tSchrijf = Date.now();
@@ -500,6 +552,7 @@ export async function verrijkChunks(
     verwerkt,
     resterend: count ?? 0,
     aantalPrefixes: v.aantalPrefixes,
+    prefixesVolledig: v.prefixesVolledig,
     embeddingsGelukt: v.embeddingsGelukt,
     metingen: {
       prefixMs: v.prefixMs,
@@ -587,6 +640,7 @@ export async function startPrefixBatch(
     );
     return { soort: "gestart", externBatchId: batch.id, aantalRequests: requests.length };
   } catch (e) {
+    if (isProviderAuthenticatieFout(e)) throw e;
     console.error("[chunk-ingest] prefix-batch aanmaken mislukt:", e);
     return { soort: "fout" };
   }
@@ -610,6 +664,7 @@ export async function pasPrefixBatchToe(
       anthropic.messages.batches.retrieve(externBatchId)
     );
   } catch (e) {
+    if (isProviderAuthenticatieFout(e)) throw e;
     console.error("[chunk-ingest] prefix-batch ophalen mislukt:", e);
     return "fout";
   }
@@ -633,6 +688,7 @@ export async function pasPrefixBatchToe(
       }
     }
   } catch (e) {
+    if (isProviderAuthenticatieFout(e)) throw e;
     console.error("[chunk-ingest] prefix-batch resultaten lezen mislukt:", e);
     return "fout";
   }
@@ -674,6 +730,19 @@ export async function pasPrefixBatchToe(
       schrijver()
     )
   );
+
+  const { count: zonderPrefix } = await supabase
+    .from("document_chunks")
+    .select("id", { count: "exact", head: true })
+    .eq("document_id", documentId)
+    .is("embedding", null)
+    .is("context_prefix", null);
+  if ((zonderPrefix ?? 0) > 0) {
+    console.error(
+      `[chunk-ingest] prefix-batch onvolledig: ${zonderPrefix} chunks zonder prefix`
+    );
+    return "fout";
+  }
   return "klaar";
 }
 
@@ -705,6 +774,14 @@ export async function embedBestaandeChunks(
   };
   const rijen = await leesKaleChunks(supabase, documentId, limiet);
   if (rijen.length === 0) return leeg;
+
+  const zonderPrefix = rijen.filter((r) => r.context_prefix == null).length;
+  if (zonderPrefix > 0) {
+    console.error(
+      `[chunk-ingest] embed-batch geblokkeerd: ${zonderPrefix}/${rijen.length} chunks zonder prefix`
+    );
+    return { ...leeg, resterend: rijen.length, embeddingsGelukt: false };
+  }
 
   const verrijkt = rijen.map((r) => verrijkTekst(r.context_prefix, r.tekst));
   const embedStats: EmbedStats = { retries: 0, rate429: 0 };
