@@ -109,22 +109,6 @@ restore_file() {
   fi
 }
 
-# pg_dump --disable-triggers emits ALTER TABLE ... TRIGGER ALL statements.
-# Supabase intentionally keeps managed Auth/Storage table ownership on its
-# service roles, so a normal project postgres connection cannot execute those
-# statements. Prepare a restore-only copy that removes exactly those generated
-# toggles and refuses any unexpected trigger DDL. The original evidence remains
-# untouched. Dumps without these generated toggles pass through the
-# preparation byte-for-byte.
-node scripts/prepare-supabase-managed-data-restore.mjs \
-  --schema auth \
-  --input "$WORKDIR/auth-data.sql" \
-  --output "$WORKDIR/auth-data.restore.sql"
-node scripts/prepare-supabase-managed-data-restore.mjs \
-  --schema storage \
-  --input "$WORKDIR/storage-data.sql" \
-  --output "$WORKDIR/storage-data.restore.sql"
-
 # The Supabase CLI data-only dump is the supported, combined restore source for
 # public, Auth and Storage data. Prove those managed tables are present before
 # the first target mutation; a partial dump must fail closed.
