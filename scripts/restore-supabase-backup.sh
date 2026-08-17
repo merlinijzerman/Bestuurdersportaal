@@ -103,8 +103,8 @@ restore_file() {
 # service roles, so a normal project postgres connection cannot execute those
 # statements. Prepare a restore-only copy that removes exactly those generated
 # toggles and refuses any unexpected trigger DDL. The original evidence remains
-# untouched. Future dumps no longer request --disable-triggers, and therefore
-# pass through this preparation byte-for-byte.
+# untouched. Dumps without these generated toggles pass through the
+# preparation byte-for-byte.
 node scripts/prepare-supabase-managed-data-restore.mjs \
   --schema auth \
   --input "$WORKDIR/auth-data.sql" \
