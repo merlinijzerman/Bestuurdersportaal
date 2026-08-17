@@ -70,3 +70,13 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-anon-key
         run: npm run build
+
+      # WP5-5b. De service-role-lekcheck hierboven toetst de BRON; deze stap
+      # toetst wat er feitelijk in de gebouwde bundle staat — de enige plek waar
+      # een pen-tester kijkt. Moet ná de build draaien en met dezelfde anon-key,
+      # want die waarde is de positieve sentinel: wordt hij niet in .next/static
+      # teruggevonden, dan heeft de scan niets gelezen en faalt de stap.
+      - name: Buildoutput-sleutelcheck
+        env:
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+        run: node scripts/check-bundle-secrets.mjs

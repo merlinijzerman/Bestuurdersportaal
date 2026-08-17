@@ -78,7 +78,7 @@ values ('11111111-1111-1111-1111-111111111111','T5 Testfonds A','t5-fonds-a'),
        ('22222222-2222-2222-2222-222222222222','T5 Testfonds B','t5-fonds-b');
 
 -- 2 users via de auth-trigger maak_profiel(): A in fonds A, B in fonds B.
-insert into auth.users (id, aud, role, email, raw_user_meta_data, created_at, updated_at)
+insert into auth.users (id, aud, role, email, raw_app_meta_data, created_at, updated_at)
 values
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','authenticated','authenticated','t5-a@test.local',
    '{"naam":"Test A","fonds_id":"11111111-1111-1111-1111-111111111111"}', now(), now()),

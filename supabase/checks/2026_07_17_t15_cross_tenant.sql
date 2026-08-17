@@ -38,7 +38,7 @@ insert into public.fondsen (id, naam, slug) values
   ('51111111-1111-1111-1111-111111111111', 'T15 Fonds A', 't15-fonds-a'),
   ('52222222-2222-2222-2222-222222222222', 'T15 Fonds B', 't15-fonds-b');
 
-insert into auth.users (id, aud, role, email, raw_user_meta_data, created_at, updated_at)
+insert into auth.users (id, aud, role, email, raw_app_meta_data, created_at, updated_at)
 values
   ('5aaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','authenticated','authenticated','t15-a-beheer@test.local',
    '{"naam":"A Beheerder","fonds_id":"51111111-1111-1111-1111-111111111111"}', now(), now()),

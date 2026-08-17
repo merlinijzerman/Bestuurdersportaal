@@ -75,6 +75,14 @@ SQL_R1G="supabase/checks/2026_07_31_r1_structurele_gates.sql"
 SQL_AIB="supabase/checks/2026_08_16_ai_begrenzing.sql"
 # R1 — gedragsbewijs voor de vijf herstelde tenantgrenzen (K-01/H-01/H-02/M-01).
 SQL_R1B="supabase/checks/2026_07_31_r1_tenantgrenzen.sql"
+# maak_profiel — deterministische fondstoewijzing (T2/R1) plus, sinds 17-08-2026,
+# de grens tegen zelfregistratie (PT-1): het fonds komt uit app-metadata, en
+# fonds_id of platform in USER-metadata wordt geweigerd.
+#
+# Dit bestand bestond al sinds 08-07-2026 maar draaide NERGENS: scripts/g2-evidence.sh
+# controleerde alleen dat het bestánd bestaat. Een test die niet draait is geen test —
+# precies bevinding P1-4. Vandaar hier.
+SQL_MP="supabase/checks/2026_07_08_maak_profiel_deterministisch.sql"
 # Increment G (2026-06-20) — retrieval-filtering op status/bronstatus/geldigheid.
 # Stond buiten CI; toegevoegd n.a.v. reviewbevinding "risico h niet volledig gedekt".
 SQL_G20="supabase/checks/2026_06_20g_retrieval_filtering.sql"
@@ -163,6 +171,9 @@ echo
 echo "-- R1-gedrag (decision_dissent, notificaties, inzage/metadata-log, inbreng) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_R1B"
 echo
+echo "-- maak_profiel (deterministisch fonds + zelfregistratiegrens PT-1) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_MP"
+echo
 echo "-- P5-monitoring (deny-by-default op de drie nieuwe tabellen + retentie mogelijk) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P5"
 echo
@@ -194,6 +205,7 @@ echo "  AQLab aqlab_ RLS-aan + append-only + synthetic + beslisregel + deny-by-d
 echo "  G20  retrieval-filtering status/bronstatus/geldigheid                (DB-laag)"
 echo "  R1   tenantcorrectheid van policies + anon + search_path (gates A-E)  (DB-laag)"
 echo "  R1   gedragsbewijs K-01/H-01/H-02/M-01                                (DB-laag)"
+echo "  MP   maak_profiel deterministisch fonds + zelfregistratiegrens PT-1   (DB-laag)"
 echo "  P5   monitoringtabellen deny-by-default + RPC niet-anon + retentie    (DB-laag)"
 echo "  BB   rolgrenzen bestuursbureau + nulgrens G23                          (DB-laag)"
 echo "============================================================================"

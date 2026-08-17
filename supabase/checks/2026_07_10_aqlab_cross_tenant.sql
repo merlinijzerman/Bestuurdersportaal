@@ -74,7 +74,7 @@ begin;
 -- Tenant-fonds + user (via auth-trigger maak_profiel) om deny-by-default te toetsen.
 insert into public.fondsen (id, naam, slug)
 values ('33333333-3333-3333-3333-333333333333', 'AQLab Testfonds', 'aqlab-testfonds');
-insert into auth.users (id, aud, role, email, raw_user_meta_data, created_at, updated_at)
+insert into auth.users (id, aud, role, email, raw_app_meta_data, created_at, updated_at)
 values ('33333333-cccc-cccc-cccc-cccccccccccc','authenticated','authenticated','aqlab-x@test.local',
         '{"naam":"AQLab X","fonds_id":"33333333-3333-3333-3333-333333333333"}', now(), now());
 

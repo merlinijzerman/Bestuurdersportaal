@@ -534,12 +534,144 @@ begin
 end $$;
 
 -- ╔════════════════════════════════════════════════════════════════════════╗
+-- ║ GATE D1 — policies op storage.objects hebben een echte auth-binding     ║
+-- ╚════════════════════════════════════════════════════════════════════════╝
+-- WAAROM DEZE GATE ER NIET WAS, EN WAT DAT KOSTTE (WP2, 17-08-2026).
+-- Gates A1, A2, B, C, C2 en G filteren allemaal op `schemaname = 'public'`.
+-- Geen enkele gate keek ooit naar storage.objects. Daardoor kon de policy
+-- `documenten storage lezen` twee weken zonder TO-clausule en zonder
+-- auth.uid()-toets blijven staan — ongeauthenticeerd leesbaar via de publieke
+-- anon-key — terwijl de volledige gateset groen rapporteerde. De bevinding was
+-- op 31-07 zelfs schriftelijk benoemd (2026_07_31_r1_rls_tenantgrenzen.sql
+-- r. 279-282) en verdween alsnog uit beeld. Een gate die een hele klasse
+-- objecten niet ziet, geeft geen zekerheid maar de schijn ervan.
+--
+-- COMMAND-AWARE. Een policy zonder auth.uid() in `qual` is niet per definitie
+-- fout: een INSERT-policy hééft geen `qual`, die heeft `with_check`. Een grove
+-- regel op alleen `qual` zou elke legitieme schrijfpolicy ten onrechte rood
+-- maken en daarmee zichzelf onbruikbaar. Daarom per commando:
+--
+--     SELECT, DELETE  → qual
+--     INSERT          → with_check
+--     UPDATE, ALL     → qual én with_check
+--
+-- ROLLEN. pg_policies.roles is `{public}` wanneer de TO-clausule ontbreekt.
+-- Op Supabase is `public` inclusief `anon`, dus dat telt als publiek. NULL
+-- wordt defensief net zo behandeld.
+--
+-- WAT DEZE GATE NIET KAN. De predicaattoets is tekstueel: hij ziet DÁT er
+-- `auth.uid()` in de expressie staat, niet of ELKE tak eraan gebonden is. De
+-- bevinding die deze gate motiveerde is daar zelf het voorbeeld van — de oude
+-- leespolicy bevatte `auth.uid()` in de fondstak terwijl juist de `generiek`-tak
+-- ongebonden was. Wat die policy hier tegenhoudt is de ROLGRENS, niet het
+-- predicaat. Lees de predicaattoets dus als ondergrens, niet als bewijs; een
+-- nieuwe policy met een ongebonden OR-tak én `to authenticated` komt hier
+-- doorheen. Voor dat laatste is de gedragstest (gate D) de vangnetlaag.
+do $$
+declare
+  r        record;
+  fouten   text := '';
+  ontbreekt text;
+  -- Gedateerde uitzondering, bewust smal en met naam. Deze policy heeft
+  -- `to authenticated` maar GEEN gebruikers- of fondsbinding in het predicaat:
+  -- elke ingelogde gebruiker kan een vrijgegeven auditexport van een WILLEKEURIG
+  -- fonds lezen. De fondsbinding zit uitsluitend in de applicatielaag
+  -- (magFondsAuditExportZien). Dat is een openstaande bevinding (17-08-2026),
+  -- geen ontwerpkeuze — hij staat hier zodat de gate bruikbaar blijft zonder de
+  -- regel zelf te verzwakken. Verwijder deze uitzondering zodra de policy een
+  -- eigen fondsgrens heeft; laat hem niet stilzwijgend staan.
+  uitzonderingen text[] := array['aqlab-audit fonds-download vrijgegeven'];
+begin
+  for r in
+    select policyname,
+           upper(cmd) as cmd,
+           coalesce(roles::text, '{public}') as roles,
+           coalesce(qual, '')       as qual,
+           coalesce(with_check, '') as with_check
+      from pg_policies
+     where schemaname = 'storage'
+       and tablename  = 'objects'
+     order by policyname
+  loop
+    -- (a) rolgrens
+    if r.roles is null
+       or r.roles like '%public%'
+       or r.roles like '%anon%' then
+      fouten := fouten || format(
+        '  - %s (%s): roles = %s — zonder TO-clausule geldt de policy voor anon%s',
+        r.policyname, r.cmd, r.roles, chr(10));
+    end if;
+
+    -- (b) auth-predicaat op de expressie die voor dít commando telt
+    ontbreekt := '';
+    if r.cmd in ('SELECT', 'DELETE') then
+      if position('auth.uid()' in r.qual) = 0 then ontbreekt := 'qual'; end if;
+    elsif r.cmd = 'INSERT' then
+      if position('auth.uid()' in r.with_check) = 0 then ontbreekt := 'with_check'; end if;
+    elsif r.cmd in ('UPDATE', 'ALL') then
+      if position('auth.uid()' in r.qual) = 0 then ontbreekt := 'qual'; end if;
+      if position('auth.uid()' in r.with_check) = 0 then
+        ontbreekt := case when ontbreekt = '' then 'with_check' else ontbreekt || ' + with_check' end;
+      end if;
+    end if;
+
+    if ontbreekt <> '' then
+      if r.policyname = any (uitzonderingen) then
+        -- Luidruchtig, elke run opnieuw: een uitzondering die niemand meer ziet
+        -- is een uitzondering die permanent wordt.
+        raise notice 'GATE D1 UITZONDERING: % (%) heeft geen auth.uid() in % — bekende openstaande bevinding (geen fondsgrens in de policy, alleen in de applicatielaag).',
+                     r.policyname, r.cmd, ontbreekt;
+      else
+        fouten := fouten || format(
+          '  - %s (%s): geen auth.uid() in %s%s',
+          r.policyname, r.cmd, ontbreekt, chr(10));
+      end if;
+    end if;
+  end loop;
+
+  -- De uitzonderingslijst mag niet stilletjes verouderen: staat er een naam op
+  -- die niet meer bestaat, dan is de lijst niet opgeruimd en verbergt hij
+  -- mogelijk een volgende policy met dezelfde naam.
+  for r in
+    select unnest(uitzonderingen) as naam
+  loop
+    if not exists (
+      select 1 from pg_policies
+       where schemaname = 'storage' and tablename = 'objects'
+         and policyname = r.naam
+    ) then
+      fouten := fouten || format(
+        '  - uitzonderingslijst noemt onbekende policy %s — lijst opruimen%s',
+        r.naam, chr(10));
+    end if;
+  end loop;
+
+  -- Sentinel: nul policies betekent hier niet "schoon" maar "niets getoetst".
+  -- De vier eigen policies (documenten lezen/schrijven, afschriften, aqlab)
+  -- horen te bestaan; ontbreken ze, dan draait de gate tegen een database
+  -- zonder onze storage-configuratie en zegt een groene uitslag niets.
+  if (select count(*) from pg_policies
+       where schemaname = 'storage' and tablename = 'objects') = 0 then
+    raise exception 'GATE D1 FAALT: geen enkele policy op storage.objects gevonden — storage-baseline niet toegepast, er is niets getoetst.';
+  end if;
+
+  if fouten <> '' then
+    raise exception E'GATE D1 FAALT: storage.objects-policies zonder sluitende auth-binding:\n%', fouten;
+  end if;
+  raise notice 'GATE D1 OK: elke policy op storage.objects is rolgebonden en heeft auth.uid() op de juiste expressie.';
+end $$;
+
+-- ╔════════════════════════════════════════════════════════════════════════╗
 -- ║ GATE D — de rol `anon` ziet geen tenantdata (gedragstest, met seed)     ║
 -- ╚════════════════════════════════════════════════════════════════════════╝
 -- Zonder seed zou deze test vacuüm slagen: een lege tabel levert altijd 0.
 -- Daarom eerst als eigenaar één fondsdocument én één generiek document
 -- seeden, en pas daarna als `anon` tellen. Alles in één transactie met
 -- rollback.
+--
+-- Sinds 17-08-2026 seedt deze gate ook storage.objects: D1 hierboven toetst de
+-- VORM van de policy, dit toetst het GEDRAG. Beide zijn nodig — een policy kan
+-- er correct uitzien en toch rijen prijsgeven, en andersom.
 begin;
 
 -- `slug` is NOT NULL UNIQUE (schema.sql r.30); zonder waarde faalt de seed op
@@ -559,6 +691,15 @@ values ('30000000-0000-0000-0000-000000000002',
 insert into public.document_chunks (document_id, tekst, chunk_index)
 values ('30000000-0000-0000-0000-000000000002', 'R1 generieke chunktekst', 0);
 
+-- Storage-seed (17-08-2026). Padconventie: <fonds_uuid>/<doc>.pdf voor
+-- fondsmateriaal en generiek/<doc>.pdf voor de gedeelde bibliotheek. Juist die
+-- generieke tak was ongeauthenticeerd leesbaar; zonder een object ONDER dat pad
+-- zou deze gedragstest vacuüm slagen.
+insert into storage.objects (bucket_id, name)
+values
+  ('documenten', '33333333-3333-3333-3333-333333333333/r1-fonds.pdf'),
+  ('documenten', 'generiek/r1-generiek.pdf');
+
 set local role anon;
 
 do $$
@@ -566,20 +707,32 @@ declare
   n_doc      int;
   n_chunk    int;
   n_fondsen  int;
+  n_storage  int;
+  n_generiek int;
   fouten     text := '';
 begin
   select count(*) into n_doc     from public.documenten;
   select count(*) into n_chunk   from public.document_chunks;
   select count(*) into n_fondsen from public.fondsen;
+  select count(*) into n_storage
+    from storage.objects where bucket_id = 'documenten';
+  select count(*) into n_generiek
+    from storage.objects
+   where bucket_id = 'documenten'
+     and (storage.foldername(name))[1] = 'generiek';
 
   if n_doc   <> 0 then fouten := fouten || format('  - documenten: %s rijen zichtbaar voor anon%s', n_doc, chr(10)); end if;
   if n_chunk <> 0 then fouten := fouten || format('  - document_chunks: %s rijen zichtbaar voor anon%s', n_chunk, chr(10)); end if;
   if n_fondsen <> 0 then fouten := fouten || format('  - fondsen: %s rijen zichtbaar voor anon (observatie O-01)%s', n_fondsen, chr(10)); end if;
+  -- De generieke telling apart, omdat dát de feitelijke bevinding was: een
+  -- generieke uitslag "0 storage-rijen" verbergt niet welke tak lekte.
+  if n_generiek <> 0 then fouten := fouten || format('  - storage.objects generiek/: %s objecten zichtbaar voor anon (PT-2)%s', n_generiek, chr(10)); end if;
+  if n_storage <> 0 then fouten := fouten || format('  - storage.objects bucket documenten: %s objecten zichtbaar voor anon%s', n_storage, chr(10)); end if;
 
   if fouten <> '' then
     raise exception E'GATE D FAALT: de publieke anon-key ziet tenantdata:\n%', fouten;
   end if;
-  raise notice 'GATE D OK: anon ziet geen documenten, chunks of fondsen.';
+  raise notice 'GATE D OK: anon ziet geen documenten, chunks, fondsen of storage-objecten.';
 end $$;
 
 reset role;

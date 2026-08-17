@@ -31,16 +31,54 @@ echo "[1/3] SUPABASE_SERVICE_ROLE_KEY alleen in de server-only platform-laag…"
 # De oude tekstzoeker markeerde ook documentatiecomments en negatieve tests als
 # geheimlek. Dat maakte de gate rood zonder dat de sleutel ooit werd ingelezen.
 toegestaan_regex='^(platform/lib/.*\.(ts|tsx|js|mjs)|scripts/.*)$'
+
+# FAIL-CLOSED (WP5-5b). Deze stap stond met `rg … || true` in de pijplijn: op een
+# runner zonder ripgrep gaf hij nul treffers én exit 0, en meldde de gate dus
+# "schoon" terwijl er niets was doorzocht. Een securitygate die groen wordt van
+# een ontbrekende tool is erger dan geen gate. Daarom nu: rg als het kan, anders
+# een gelijkwaardige grep-terugval, en als beide ontbreken een harde fout.
+zoek_service_role_env() {
+  local patroon='process\.env(\.SUPABASE_SERVICE_ROLE_KEY|\[[^]]*SUPABASE_SERVICE_ROLE_KEY)'
+  local rc
+  if command -v rg >/dev/null 2>&1; then
+    rg -l \
+      --glob '*.ts' --glob '*.tsx' --glob '*.js' --glob '*.mjs' \
+      --glob '!node_modules/**' --glob '!.next/**' --glob '!_to_delete/**' \
+      "$patroon" . 2>/dev/null | sed 's|^\./||'
+    rc=${PIPESTATUS[0]}
+  else
+    echo "  (ripgrep ontbreekt — terugval op grep)" >&2
+    grep -rlE --include='*.ts' --include='*.tsx' --include='*.js' --include='*.mjs' \
+      --exclude-dir=node_modules --exclude-dir=.next --exclude-dir=_to_delete \
+      "$patroon" . 2>/dev/null | sed 's|^\./||'
+    rc=${PIPESTATUS[0]}
+  fi
+  # 0 = treffers, 1 = geen treffers (beide geldig). Alles daarboven is een
+  # gereedschapsfout en mag NOOIT als "schoon" doorgaan.
+  if [ "$rc" -gt 1 ]; then
+    echo "  GEREEDSCHAPSFOUT: zoekopdracht faalde met exitcode $rc — scan niet uitgevoerd." >&2
+    return 2
+  fi
+  return 0
+}
+
+treffers="$(zoek_service_role_env)" || {
+  melding "stap [1/3] kon niet worden uitgevoerd (zie gereedschapsfout hierboven)"
+  treffers=""
+}
 while IFS= read -r bestand; do
   [ -z "$bestand" ] && continue
   if ! [[ "$bestand" =~ $toegestaan_regex ]]; then
     melding "SUPABASE_SERVICE_ROLE_KEY in onverwacht bestand: $bestand"
   fi
-done < <(rg -l \
-           --glob '*.ts' --glob '*.tsx' --glob '*.js' --glob '*.mjs' \
-           --glob '!node_modules/**' --glob '!.next/**' --glob '!_to_delete/**' \
-           'process\.env(\.SUPABASE_SERVICE_ROLE_KEY|\[[^]]*SUPABASE_SERVICE_ROLE_KEY)' \
-           . 2>/dev/null | sed 's|^\./||' || true)
+done <<< "$treffers"
+
+# Positieve controle (sentinel) op de bronscan zelf: de service-role-laag MOET
+# gevonden worden. Levert de zoekopdracht nul bestanden op, dan is niet bewezen
+# dat er schoon is — dan is bewezen dat er niet is gezocht.
+if ! printf '%s\n' "$treffers" | grep -qE '^platform/lib/'; then
+  melding "sentinel mist: geen enkel platform/lib-bestand leest SUPABASE_SERVICE_ROLE_KEY — de scan doorzocht kennelijk niets"
+fi
 
 echo "[2/3] platform/lib/supabase-platform.ts begint met import \"server-only\"…"
 if [ -f platform/lib/supabase-platform.ts ]; then

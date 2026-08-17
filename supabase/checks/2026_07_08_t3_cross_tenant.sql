@@ -107,7 +107,7 @@ values ('11111111-1111-1111-1111-111111111111', 'T3 Testfonds A', 't3-testfonds-
 -- auth.users-insert vuurt trigger maak_profiel() → maakt profielen-rij met het
 -- fonds uit raw_user_meta_data.fonds_id (migratie 2026_07_08). Zo ontstaan de
 -- tenant-profielen zonder ze handmatig te seeden.
-insert into auth.users (id, aud, role, email, raw_user_meta_data, created_at, updated_at)
+insert into auth.users (id, aud, role, email, raw_app_meta_data, created_at, updated_at)
 values
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','authenticated','authenticated','t3-a@test.local',
    '{"naam":"Test A","fonds_id":"11111111-1111-1111-1111-111111111111"}', now(), now()),

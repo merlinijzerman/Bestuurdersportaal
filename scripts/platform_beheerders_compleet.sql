@@ -54,10 +54,17 @@ begin
     if v_user_id is null then
       v_user_id := gen_random_uuid();
 
-      -- raw_user_meta_data.platform = true is VERPLICHT: de trigger
-      -- bij_registratie → maak_profiel() is fail-closed en gooit anders een
-      -- exception op de ontbrekende fonds_id, waardoor de hele insert terugrolt.
-      -- Dat is precies waarom de "Add user"-dialog faalt.
+      -- raw_APP_meta_data.platform = true is VERPLICHT (WP1, 17-08-2026): de
+      -- trigger bij_registratie → maak_profiel() is fail-closed en gooit anders
+      -- een exception op de ontbrekende fonds_id, waardoor de hele insert
+      -- terugrolt. Dat is precies waarom de "Add user"-dialog faalt.
+      --
+      -- De vlag stond tot 17-08-2026 in raw_user_meta_data. Dat veld is
+      -- client-schrijfbaar via supabase.auth.signUp({options:{data}}) met de
+      -- publieke anon-key; een privilege-bit hoort daar niet. Sinds WP1 leest
+      -- maak_profiel uitsluitend raw_app_meta_data, en WEIGERT hij een
+      -- platform-vlag in user-metadata expliciet.
+      --
       -- De lege strings voorkomen dat GoTrue later struikelt over NULL-tokens
       -- ("converting NULL to string is unsupported").
       insert into auth.users (
@@ -72,8 +79,11 @@ begin
         lower(d.email),
         crypt('Welkom01', gen_salt('bf')),
         now(),
-        '{"provider":"email","providers":["email"]}'::jsonb,
-        jsonb_build_object('platform', true, 'naam', d.naam),
+        -- app-metadata: provider-info ÉN de platform-vlag (server-only veld).
+        '{"provider":"email","providers":["email"]}'::jsonb
+          || jsonb_build_object('platform', true),
+        -- user-metadata: alleen presentatie.
+        jsonb_build_object('naam', d.naam),
         now(), now(),
         '', '', '', '', '', '', '', ''
       );
@@ -83,8 +93,11 @@ begin
       update auth.users
          set encrypted_password = crypt('Welkom01', gen_salt('bf')),
              email_confirmed_at = coalesce(email_confirmed_at, now()),
+             -- WP1: platform-vlag naar app-metadata; naam blijft presentatie.
+             raw_app_meta_data  = coalesce(raw_app_meta_data, '{}'::jsonb)
+                                  || jsonb_build_object('platform', true),
              raw_user_meta_data = coalesce(raw_user_meta_data, '{}'::jsonb)
-                                  || jsonb_build_object('platform', true, 'naam', d.naam),
+                                  || jsonb_build_object('naam', d.naam),
              banned_until       = null,
              updated_at         = now()
        where id = v_user_id;
@@ -188,15 +201,21 @@ end $$;
 -- ============================================================================
 -- Verwacht per rij:
 --   wachtwoord_klopt = true      email_bevestigd = true    identity_email = 1
---   meta_platform    = true      heeft_profiel   = 0       platform_actief = true
+--   app_platform     = true      heeft_profiel   = 0       platform_actief = true
 --   actieve_caps     = caps_in_db (nu 15)
+--
+-- WP1 (17-08-2026): `app_platform` is de gezaghebbende vlag. `user_platform`
+-- staat er alleen naast om drift zichtbaar te maken — een account dat nog
+-- uitsluitend de oude conventie draagt, valt zo op in plaats van stilzwijgend
+-- goed te lijken.
 select
   u.email,
   (u.encrypted_password = crypt('Welkom01', u.encrypted_password)) as wachtwoord_klopt,
   (u.email_confirmed_at is not null)                               as email_bevestigd,
   (select count(*) from auth.identities i
      where i.user_id = u.id and i.provider = 'email')              as identity_email,
-  u.raw_user_meta_data->>'platform'                                as meta_platform,
+  u.raw_app_meta_data->>'platform'                                 as app_platform,
+  u.raw_user_meta_data->>'platform'                                as user_platform_oud,
   (select count(*) from public.profielen p where p.id = u.id)      as heeft_profiel,
   (select pi.actief from public.platform_identities pi where pi.id = u.id) as platform_actief,
   (select count(*) from public.platform_identity_capabilities c

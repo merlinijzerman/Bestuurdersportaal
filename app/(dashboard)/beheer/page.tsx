@@ -1,31 +1,20 @@
 import Link from "next/link";
-import { createServerSupabase } from "@/core/lib/supabase-server";
 import { requireCapability } from "@/core/lib/capabilities";
+import { vereisModuleToegang } from "@/core/lib/module-gate-page";
 import BeheerClient from "./_components/BeheerClient";
 import ConfigBeheer from "./_components/ConfigBeheer";
 
-// Beheer-sectie: procescatalogus + organen + import. UI-gating op rol is
-// cosmetisch; de autorisatie zit server-side in de API (catalog.manage).
+// Beheer-sectie: procescatalogus + organen + import. De hub zelf is
+// server-side gegate op catalog.manage; de API-routes blijven daarnaast
+// afzonderlijk capability- en RLS-gated.
 export default async function BeheerPage() {
-  const supabase = await createServerSupabase();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
-
-  const { data: profiel } = await supabase
-    .from("profielen")
-    .select("rol")
-    .eq("id", user.id)
-    .single();
-
-  const magBeheren = profiel?.rol === "beheerder";
+  const sessie = await vereisModuleToegang("beheer", "catalog.manage");
   // Fonds-configuratie volgt de capability (beheerder ÉN voorzitter dragen
-  // fonds.config.manage) i.p.v. een hardcoded rol; consistent met de API-gate.
-  const magConfigBeheren = await requireCapability(user.id, "fonds.config.manage");
+  // fonds.config.manage) en blijft ook op de hub server-side getoetst.
+  const magConfigBeheren = await requireCapability(sessie.userId, "fonds.config.manage");
   // Stuurinformatie-invoer (T14): eigen sub-scherm, capability-gated
-  // (stuurinformatie.manage; UI-zichtbaarheid is cosmetisch — API + RLS gelden).
-  const magStuurinfoInvoeren = await requireCapability(user.id, "stuurinformatie.manage");
+  // (stuurinformatie.manage; API + RLS blijven de echte schrijfrand).
+  const magStuurinfoInvoeren = await requireCapability(sessie.userId, "stuurinformatie.manage");
 
   return (
     <div className="p-8 max-w-6xl mx-auto w-full">
@@ -54,14 +43,7 @@ export default async function BeheerPage() {
         </Link>
       )}
 
-      {!magBeheren ? (
-        <div className="rounded-xl border border-warn/30 bg-warn-tint p-4 text-warn-ink text-sm">
-          U heeft geen beheerrechten. Catalogus- en organenbeheer is voorbehouden
-          aan de rol <strong>beheerder</strong>.
-        </div>
-      ) : (
-        <BeheerClient />
-      )}
+      <BeheerClient />
 
       {/* Fonds-configuratie (T8): huisstijl, modules, feature flags + historie.
           Gegate op de capability fonds.config.manage (beheerder + voorzitter);
