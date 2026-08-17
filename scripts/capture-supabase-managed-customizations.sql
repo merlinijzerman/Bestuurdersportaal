@@ -8,27 +8,10 @@
 select '-- Supabase managed-schema customizations; generated at restore time.';
 select '-- This file contains no row data; Auth and Storage data are exported separately.';
 
--- Custom functions in managed schemas. pg_get_functiondef emits CREATE OR REPLACE.
-select pg_get_functiondef(p.oid) || E'\n'
-from pg_proc p
-join pg_namespace n on n.oid = p.pronamespace
-where n.nspname in ('auth', 'storage')
-  and p.prokind in ('f', 'p')
-order by n.nspname, p.proname, p.oid;
-
--- Preserve RLS state for managed tables without copying the managed table DDL.
-select format(
-  'alter table %I.%I %s row level security;',
-  n.nspname,
-  c.relname,
-  case when c.relforcerowsecurity then 'force' else 'enable' end
-)
-from pg_class c
-join pg_namespace n on n.oid = c.relnamespace
-where n.nspname in ('auth', 'storage')
-  and c.relkind in ('r', 'p')
-  and c.relrowsecurity
-order by n.nspname, c.relname;
+-- A new Supabase project owns and initializes the functions and default RLS
+-- state in auth/storage. Do not copy those managed internals. Project functions
+-- live in application schemas and are already covered by schema.sql. Only the
+-- project-defined policies and non-internal triggers below are portable.
 
 -- Policies are emitted as drop/create so a new Supabase project can apply the
 -- exact captured state after its managed schemas already exist.
