@@ -48,6 +48,7 @@ import { valideerUpload } from "@/core/lib/bestand-validatie";
 import { CONTENT_TYPE_PER_BESTANDSTYPE } from "@/core/lib/document-extractie";
 import { leesScannerHealth, scanSignedUrl } from "@/platform/lib/malware-scan-client";
 import { signatureOordeel } from "@/core/lib/malware-scan-beleid";
+import { heeftSchoonScanbewijs } from "@/core/lib/document-scan-poort";
 
 // ── Tunable constanten (§8b — stem af ná de dashboard-verificaties) ─────────
 const TIJDBUDGET_MS = 240_000; // ruim binnen maxDuration 300s
@@ -91,6 +92,7 @@ interface IngestJob {
   stap: string;
   status: string;
   retry_count: number | null;
+  claim_count: number | null;
   extern_batch_id: string | null;
   fonds_id: string | null;
 }
@@ -394,6 +396,15 @@ async function verwerkJob(
   // AI-samenvatting → verwerkingsstatus='embedding'. Alleen als het document nog
   // vóór de embedding-fase staat.
   if (EXTRACTIE_STATUSSEN.includes(document.verwerkingsstatus ?? "")) {
+    // Expliciete parserpoort. De storagepromotie is al hash-gebonden, maar deze
+    // tweede controle maakt dat een foutieve status/transitie nooit alsnog
+    // ongescande bytes aan xlsx/unpdf/mammoth voert.
+    if (
+      process.env.WP3_MALWARESCAN_AAN === "true" &&
+      !heeftSchoonScanbewijs(document)
+    ) {
+      return await backoff(svc, job, "scanbewijs_ontbreekt");
+    }
     const r = await extracteerEnChunk(svc, job, document);
     if (r !== "door") return r; // mislukt / geweigerd / backoff → klaar voor nu
     document.verwerkingsstatus = "embedding";
@@ -901,7 +912,10 @@ async function backoff(
   const sec = BACKOFF_SEC[Math.min(nieuweRetry - 1, BACKOFF_SEC.length - 1)];
   await svc
     .from("document_processing_jobs")
-    .update({ status: "bezig", retry_count: nieuweRetry, foutcode, lease_expires_at: leaseTijd(sec) })
+    .update({
+      status: "bezig", retry_count: nieuweRetry, claim_count: 0,
+      foutcode, lease_expires_at: leaseTijd(sec),
+    })
     .eq("id", job.id);
   return "bezig";
 }
@@ -921,7 +935,7 @@ async function backoffVerouderdeSignatures(
     return "mislukt";
   }
   await svc.from("document_processing_jobs").update({
-    status: "bezig", retry_count: nieuweRetry,
+    status: "bezig", retry_count: nieuweRetry, claim_count: 0,
     foutcode: "signatures_verouderd",
     lease_expires_at: leaseTijd(VEROUDERDE_SIGNATURE_BACKOFF_SEC),
   }).eq("id", job.id);
@@ -933,7 +947,7 @@ async function backoffVerouderdeSignatures(
 async function yieldJob(svc: SupabaseClient, job: IngestJob): Promise<Uitkomst> {
   await svc
     .from("document_processing_jobs")
-    .update({ status: "wachtend", lease_expires_at: null })
+    .update({ status: "wachtend", lease_expires_at: null, claim_count: 0 })
     .eq("id", job.id);
   return "bezig";
 }

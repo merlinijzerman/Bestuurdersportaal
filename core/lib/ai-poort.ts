@@ -118,7 +118,11 @@ let _anthropic: Anthropic | null = null;
  */
 function client(): Anthropic {
   if (!_anthropic) {
-    _anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    _anthropic = new Anthropic({
+      apiKey: process.env.ANTHROPIC_API_KEY,
+      timeout: 60_000,
+      maxRetries: 1,
+    });
   }
   return _anthropic;
 }
