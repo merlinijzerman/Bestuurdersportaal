@@ -115,7 +115,7 @@ async function verifyObject(baseUrl, serviceRoleKey, bucket, objectName, expecte
   const response = await request(
     baseUrl,
     serviceRoleKey,
-    `/storage/v1/object/download/${encodeURIComponent(bucket)}/${encodedPath}`,
+    `/storage/v1/object/authenticated/${encodeURIComponent(bucket)}/${encodedPath}`,
     {},
     `Storage-verificatie ${bucket}/${objectName}`,
   );
