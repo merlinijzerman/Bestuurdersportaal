@@ -72,7 +72,10 @@ jobs:
 
       - name: Restore-validator testen
         shell: bash
-        run: node --test scripts/verify-supabase-restore.test.mjs
+        run: |
+          node --test \
+            scripts/prepare-supabase-managed-data-restore.test.mjs \
+            scripts/verify-supabase-restore.test.mjs
 
       - name: Inputs fail-closed controleren
         shell: bash

@@ -98,12 +98,28 @@ restore_file() {
   psql "$TARGET_DB_URL" --single-transaction -v ON_ERROR_STOP=1 -f "$WORKDIR/$file"
 }
 
+# pg_dump --disable-triggers emits ALTER TABLE ... TRIGGER ALL statements.
+# Supabase intentionally keeps managed Auth/Storage table ownership on its
+# service roles, so a normal project postgres connection cannot execute those
+# statements. Prepare a restore-only copy that removes exactly those generated
+# toggles and refuses any unexpected trigger DDL. The original evidence remains
+# untouched. Dumps without these generated toggles pass through the
+# preparation byte-for-byte.
+node scripts/prepare-supabase-managed-data-restore.mjs \
+  --schema auth \
+  --input "$WORKDIR/auth-data.sql" \
+  --output "$WORKDIR/auth-data.restore.sql"
+node scripts/prepare-supabase-managed-data-restore.mjs \
+  --schema storage \
+  --input "$WORKDIR/storage-data.sql" \
+  --output "$WORKDIR/storage-data.restore.sql"
+
 # Managed schemas already exist in a new Supabase project. Auth data must be
 # restored before public data because profielen and audit rows reference it.
 psql "$TARGET_DB_URL" -v ON_ERROR_STOP=1 -f "$WORKDIR/roles.sql"
 restore_file "public schema" "schema.sql"
-restore_file "Auth-data" "auth-data.sql"
-restore_file "Storage-metadata" "storage-data.sql"
+restore_file "Auth-data" "auth-data.restore.sql"
+restore_file "Storage-metadata" "storage-data.restore.sql"
 restore_file "public data" "data.sql"
 restore_file "managed Auth/Storage customizations" "managed-customizations.sql"
 
