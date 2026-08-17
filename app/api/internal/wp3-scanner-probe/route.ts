@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
   for (let poging = 0; poging < 4; poging += 1) {
     const health = await fetch(new URL("/health", basis), {
       cache: "no-store",
-      headers: { "x-vercel-oidc-token": oidc },
+      headers: { "x-vercel-trusted-oidc-idp-token": oidc },
       signal: AbortSignal.timeout(10_000),
     });
     healthStatus = health.status;
@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
     headers: {
       authorization: `Bearer ${oidc}`,
       "content-type": "application/json",
-      "x-vercel-oidc-token": oidc,
+      "x-vercel-trusted-oidc-idp-token": oidc,
     },
     body: JSON.stringify({
       signedUrl:
