@@ -20,6 +20,8 @@
     "aqlab:smoke": "tsx platform/lib/aqlab/smoke.ts",
     "test:xtenant": "node --import tsx --test tests/cross-tenant/*.test.ts",
     "test:xtenant:ci": "bash scripts/cross-tenant-ci.sh",
+    "test:backup-storage": "node --test scripts/backup-supabase-storage.test.mjs scripts/restore-supabase-storage.test.mjs",
+    "test:platform-inventory": "node --test scripts/capture-platform-inventory.test.mjs",
     "prepare": "git config core.hooksPath scripts/hooks || true"
   },
   "dependencies": {
