@@ -124,9 +124,10 @@ do
   }
 done
 
-# Older backup artifacts may contain the three informational lines emitted by
-# psql's formatting commands. Prepare a restore-only copy that removes exactly
-# those known lines and rejects unknown variants.
+# Older artifacts may contain psql chatter plus Supabase-owned functions and
+# default RLS state. Prepare a restore-only copy that retains portable project
+# policies/triggers, removes only recognized managed output, and rejects unknown
+# psql status variants.
 node scripts/prepare-supabase-managed-customizations.mjs \
   --input "$WORKDIR/managed-customizations.sql" \
   --output "$WORKDIR/managed-customizations.restore.sql"
