@@ -54,11 +54,11 @@ summarize_download_error() {
   else
     last_error_category="provider-error"
   fi
-  last_error="$(tr '\\n' ' ' < "$error_path" 2>/dev/null \
+  last_error="$(tr '\n' ' ' < "$error_path" 2>/dev/null \
     | sed -E \
         -e 's#s3://[^[:space:]]+#s3://[REDACTED_OBJECT]#g' \
         -e 's#https?://[^[:space:]]+#https://[REDACTED_ENDPOINT]#g' \
-        -e 's/(AWS_SECRET_ACCESS_KEY|AWS_ACCESS_KEY_ID|AWS_SESSION_TOKEN)([=:])[[:space:]]*[^[:space:]]+/\\1\\2[REDACTED]/g' \
+        -e 's/(AWS_SECRET_ACCESS_KEY|AWS_ACCESS_KEY_ID|AWS_SESSION_TOKEN)([=:])[[:space:]]*[^[:space:]]+/\1\2[REDACTED]/g' \
     | cut -c1-600 || true)"
 }
 
