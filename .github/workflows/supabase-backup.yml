@@ -74,6 +74,7 @@ jobs:
           done
           test -f scripts/backup-supabase-storage.mjs
           test -f scripts/capture-supabase-managed-customizations.sql
+          test -f scripts/prepare-supabase-managed-customizations.mjs
           test -f scripts/create-backup-validation.sql
 
       - name: Veilige databaseverbinding opbouwen
@@ -109,45 +110,54 @@ jobs:
         run: |
           set -Eeuo pipefail
           umask 077
-          BACKUP_TIMESTAMP="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
+          BACKUP_CREATED_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          BACKUP_TIMESTAMP="${BACKUP_CREATED_UTC//:/-}"
           BACKUP_ROOT="$RUNNER_TEMP/supabase-backup-$BACKUP_TIMESTAMP"
           DB_DIR="$BACKUP_ROOT/database"
           STORAGE_DIR="$BACKUP_ROOT/storage"
           mkdir -p "$DB_DIR" "$STORAGE_DIR"
 
-          # The Supabase CLI deliberately excludes managed schemas from its
-          # normal dump. Keep the public dump and managed data separate so the
-          # restore target can initialize its own managed schemas first.
+          # The supported Supabase data dump contains public, Auth and Storage
+          # data. Do not create redundant auth-data.sql/storage-data.sql copies:
+          # data.sql is the single restore contract for all row data.
           supabase db dump --db-url "$SUPABASE_DB_URL" -f "$DB_DIR/roles.sql" --role-only
           supabase db dump --db-url "$SUPABASE_DB_URL" -f "$DB_DIR/schema.sql"
           supabase db dump --db-url "$SUPABASE_DB_URL" -f "$DB_DIR/data.sql" --data-only --use-copy -x "storage.buckets_vectors" -x "storage.vector_indexes"
-          pg_dump "$SUPABASE_DB_URL" --data-only --schema=auth --no-owner --no-privileges --disable-triggers -f "$DB_DIR/auth-data.sql"
-          pg_dump "$SUPABASE_DB_URL" --data-only --schema=storage --no-owner --no-privileges --disable-triggers -T "storage.buckets_vectors" -T "storage.vector_indexes" -f "$DB_DIR/storage-data.sql"
-          psql "$SUPABASE_DB_URL" -X -qAt -v ON_ERROR_STOP=1 -f scripts/capture-supabase-managed-customizations.sql > "$DB_DIR/managed-customizations.sql"
+          psql "$SUPABASE_DB_URL" -X -qAt -v ON_ERROR_STOP=1 -f scripts/capture-supabase-managed-customizations.sql > "$DB_DIR/managed-customizations.raw.sql"
+          node scripts/prepare-supabase-managed-customizations.mjs \
+            --input "$DB_DIR/managed-customizations.raw.sql" \
+            --output "$DB_DIR/managed-customizations.sql" \
+            --manifest "$DB_DIR/managed-customizations-manifest.json"
+          rm "$DB_DIR/managed-customizations.raw.sql"
           psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f scripts/create-backup-validation.sql > "$DB_DIR/database-validation.json"
 
           cat > "$DB_DIR/metadata.txt" <<EOF
-          created_utc=$BACKUP_TIMESTAMP
+          created_utc=$BACKUP_CREATED_UTC
           source_project=$SUPABASE_PROJECT_REF
-          format=supabase-cli-logical-dump-plus-managed-data
+          format=supabase-cli-logical-dump-plus-portable-customizations
+          restore_contract_version=2
           cli_version=2.114.0
-          contents=roles.sql,schema.sql,data.sql,auth-data.sql,storage-data.sql,managed-customizations.sql,database-validation.json
+          contents=roles.sql,schema.sql,data.sql,managed-customizations.sql,managed-customizations-manifest.json,database-validation.json
           physical_storage_archive=separate
           EOF
 
-          for file in roles.sql schema.sql data.sql auth-data.sql storage-data.sql managed-customizations.sql database-validation.json metadata.txt; do
+          for file in roles.sql schema.sql data.sql managed-customizations.sql managed-customizations-manifest.json database-validation.json metadata.txt; do
             test -s "$DB_DIR/$file" || { echo "Leeg of ontbrekend databasebestand: $file" >&2; exit 1; }
           done
-          grep -Eq 'auth\.(users|identities)' "$DB_DIR/auth-data.sql" || {
-            echo "Auth-data.sql bevat geen herkenbare Auth-tabellen; back-up stopt." >&2
-            exit 1
-          }
-          grep -Eq 'storage\.(buckets|objects)' "$DB_DIR/storage-data.sql" || {
-            echo "Storage-data.sql bevat geen herkenbare Storage-tabellen; back-up stopt." >&2
-            exit 1
-          }
+          for required_copy in \
+            'auth[^[:alnum:]_]+users' \
+            'auth[^[:alnum:]_]+identities' \
+            'storage[^[:alnum:]_]+buckets' \
+            'storage[^[:alnum:]_]+objects'
+          do
+            grep -Eiq "^COPY .*${required_copy}.* FROM stdin;$" "$DB_DIR/data.sql" || {
+              echo "data.sql mist vereiste COPY voor $required_copy; back-up stopt." >&2
+              exit 1
+            }
+          done
 
           echo "BACKUP_TIMESTAMP=$BACKUP_TIMESTAMP" >> "$GITHUB_ENV"
+          echo "BACKUP_CREATED_UTC=$BACKUP_CREATED_UTC" >> "$GITHUB_ENV"
           echo "BACKUP_ROOT=$BACKUP_ROOT" >> "$GITHUB_ENV"
           echo "DB_DIR=$DB_DIR" >> "$GITHUB_ENV"
           echo "STORAGE_DIR=$STORAGE_DIR" >> "$GITHUB_ENV"
@@ -183,15 +193,16 @@ jobs:
           STATUS_PATH="$BACKUP_ROOT/manifest-$BACKUP_TIMESTAMP.json"
           export OBJECT_PREFIX STATUS_KEY
 
-          python3 - "$DB_ARCHIVE_PATH" "$STORAGE_ARCHIVE_PATH" "$DB_ARCHIVE_PATH.sha256" "$STORAGE_ARCHIVE_PATH.sha256" "$STORAGE_DIR/storage-manifest.json" "$STATUS_PATH" <<'PY'
+          python3 - "$DB_ARCHIVE_PATH" "$STORAGE_ARCHIVE_PATH" "$DB_ARCHIVE_PATH.sha256" "$STORAGE_ARCHIVE_PATH.sha256" "$STORAGE_DIR/storage-manifest.json" "$DB_DIR/managed-customizations-manifest.json" "$STATUS_PATH" <<'PY'
           import hashlib
           import json
           import os
           import pathlib
           import sys
 
-          db_archive, storage_archive, db_hash, storage_hash, storage_manifest_path, status_path = sys.argv[1:]
+          db_archive, storage_archive, db_hash, storage_hash, storage_manifest_path, customizations_manifest_path, status_path = sys.argv[1:]
           timestamp = os.environ["BACKUP_TIMESTAMP"]
+          created_utc = os.environ["BACKUP_CREATED_UTC"]
           prefix = os.environ["OBJECT_PREFIX"] if "OBJECT_PREFIX" in os.environ else f"supabase/{timestamp[:4]}/{timestamp[5:7]}/{timestamp[8:10]}"
           status_key = os.environ["STATUS_KEY"]
 
@@ -203,17 +214,20 @@ jobs:
               return digest.hexdigest()
 
           storage = json.loads(pathlib.Path(storage_manifest_path).read_text())
+          customizations = json.loads(pathlib.Path(customizations_manifest_path).read_text())
           manifest = {
               "schema_version": 2,
               "status": "complete",
-              "created_utc": timestamp,
+              "created_utc": created_utc,
               "source_project": os.environ["SUPABASE_PROJECT_REF"],
               "database": {
+                  "restore_contract_version": 2,
                   "archive_key": f"{prefix}/{pathlib.Path(db_archive).name}",
                   "checksum_key": f"{prefix}/{pathlib.Path(db_archive).name}.sha256",
                   "bytes": pathlib.Path(db_archive).stat().st_size,
                   "sha256": checksum(db_archive),
-                  "contents": ["roles.sql", "schema.sql", "data.sql", "auth-data.sql", "storage-data.sql", "managed-customizations.sql", "database-validation.json", "metadata.txt"],
+                  "contents": ["roles.sql", "schema.sql", "data.sql", "managed-customizations.sql", "managed-customizations-manifest.json", "database-validation.json", "metadata.txt"],
+                  "managed_customizations": customizations,
               },
               "storage": {
                   "archive_key": f"{prefix}/{pathlib.Path(storage_archive).name}",
@@ -306,9 +320,9 @@ jobs:
           verify_size_with_retry "$STATUS_PATH.sha256" "$STATUS_KEY.sha256"
 
           echo "Back-up volledig opgeslagen en geverifieerd:" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Database: \\`s3://$B2_BUCKET_NAME/$OBJECT_PREFIX/$DB_ARCHIVE_NAME\\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Storage: \\`s3://$B2_BUCKET_NAME/$OBJECT_PREFIX/$STORAGE_ARCHIVE_NAME\\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Completion marker: \\`s3://$B2_BUCKET_NAME/$STATUS_KEY\\`" >> "$GITHUB_STEP_SUMMARY"
+          printf -- '- Database: `%s`\n' "s3://$B2_BUCKET_NAME/$OBJECT_PREFIX/$DB_ARCHIVE_NAME" >> "$GITHUB_STEP_SUMMARY"
+          printf -- '- Storage: `%s`\n' "s3://$B2_BUCKET_NAME/$OBJECT_PREFIX/$STORAGE_ARCHIVE_NAME" >> "$GITHUB_STEP_SUMMARY"
+          printf -- '- Completion marker: `%s`\n' "s3://$B2_BUCKET_NAME/$STATUS_KEY" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Tijdelijke bestanden verwijderen
         if: always()
