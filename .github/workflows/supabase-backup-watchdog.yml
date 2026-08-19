@@ -211,9 +211,20 @@ jobs:
           import sys
           from datetime import datetime, timezone
 
+          def parse_created_utc(value):
+              try:
+                  created = datetime.fromisoformat(value.replace("Z", "+00:00"))
+              except ValueError:
+                  # Contract-v2 marker 2026-08-19T06-49-24Z was produced before
+                  # created_utc was separated from the filesystem-safe timestamp.
+                  created = datetime.strptime(value, "%Y-%m-%dT%H-%M-%SZ").replace(tzinfo=timezone.utc)
+              if created.tzinfo is None:
+                  raise ValueError("created_utc moet een tijdzone bevatten")
+              return created.astimezone(timezone.utc)
+
           try:
               marker = json.load(open(sys.argv[1], encoding="utf-8"))
-              created = datetime.fromisoformat(marker["created_utc"].replace("Z", "+00:00"))
+              created = parse_created_utc(marker["created_utc"])
               age_hours = (datetime.now(timezone.utc) - created).total_seconds() / 3600
               required = [
                   marker["database"]["archive_key"],
