@@ -72,6 +72,8 @@ test("kosteloze preflight is main-only, versleuteld, herhaalbaar en ruimt altijd
   assert.match(runner, /RESTORE_SQLSTATE/);
   assert.match(runner, /database-validation\.restore\.json/);
   assert.match(runner, /managed_customizations_prepare/);
+  assert.match(runner, /storage-diagnostic\.json/);
+  assert.match(runner, /STORAGE_HTTP_STATUS/);
 });
 
 test("captured triggers kwalificeren de vooraf gecontroleerde public-functie", async () => {

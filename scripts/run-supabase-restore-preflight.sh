@@ -162,7 +162,37 @@ PY
 
   if ! node scripts/restore-supabase-storage.mjs --input-dir "$STORAGE_RESTORE_DIR" \
     >"$ITERATION_ROOT/storage-restore.json" 2>"$ITERATION_ROOT/storage-restore.log"; then
-    echo "Preflight stopt: fysieke Storage-restore/verificatie faalt (iteratie $iteration); de versleutelde detailoutput wordt vernietigd." >&2
+    STORAGE_PHASE="$(sed -n 's/^STORAGE_PHASE=\(local_archive\|bucket_create\|bucket_update\|object_resume_check\|object_upload\|object_verify\)$/\1/p' "$ITERATION_ROOT/storage-restore.log" | tail -n 1)"
+    STORAGE_HTTP_STATUS="$(sed -n 's/^STORAGE_HTTP_STATUS=\([1-5][0-9][0-9]\|unknown\)$/\1/p' "$ITERATION_ROOT/storage-restore.log" | tail -n 1)"
+    STORAGE_PHASE="${STORAGE_PHASE:-local_archive}"
+    STORAGE_HTTP_STATUS="${STORAGE_HTTP_STATUS:-unknown}"
+    python3 - "$EVIDENCE_DIR/storage-diagnostic.json" "$iteration" "$STORAGE_PHASE" "$STORAGE_HTTP_STATUS" <<'PY'
+import json
+import pathlib
+import re
+import sys
+from datetime import datetime, timezone
+
+path, iteration, phase, http_status = sys.argv[1:]
+allowed_phases = {
+    "local_archive", "bucket_create", "bucket_update", "object_resume_check",
+    "object_upload", "object_verify",
+}
+if phase not in allowed_phases:
+    phase = "unknown"
+if http_status != "unknown" and not re.fullmatch(r"[1-5][0-9]{2}", http_status):
+    http_status = "unknown"
+pathlib.Path(path).write_text(json.dumps({
+    "schema_version": 1,
+    "status": "storage-restore-failed",
+    "created_utc": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    "iteration": int(iteration),
+    "phase": phase,
+    "http_status": http_status,
+    "contains_bucket_or_object_names": False,
+}, indent=2) + "\n")
+PY
+    echo "Preflight stopt: fysieke Storage-restore/verificatie faalt (iteratie $iteration, fase $STORAGE_PHASE, HTTP $STORAGE_HTTP_STATUS); de versleutelde detailoutput wordt vernietigd." >&2
     exit 1
   fi
 
