@@ -11,6 +11,10 @@ async function workflow(name) {
   return text;
 }
 
+async function script(name) {
+  return readFile(path.join(repositoryRoot, "scripts", name), "utf8");
+}
+
 test("watchdog controleert B2 ook zonder webhook en isoleert de configuratiefout", async () => {
   const text = await workflow("supabase-backup-watchdog.yml");
   assert.match(text, /^  synthetic-alert-delivery:/m);
@@ -31,6 +35,12 @@ test("back-up publiceert restorecontract 2 zonder redundante managed datafiles",
   assert.doesNotMatch(text, /pg_dump .*storage-data\.sql/);
   assert.doesNotMatch(text, /echo "- (?:Database|Storage|Completion marker): \\\\`/);
   assert.match(text, /printf -- '- Database: `%s`/);
+});
+
+test("captured triggers kwalificeren de vooraf gecontroleerde public-functie", async () => {
+  const text = await script("capture-supabase-managed-customizations.sql");
+  assert.match(text, /function_namespace\.nspname = 'public'/);
+  assert.match(text, /regexp_replace\([\s\S]*pg_get_triggerdef\(t\.oid\)[\s\S]*EXECUTE FUNCTION %I\.%I\(/);
 });
 
 test("alle backup- en restoreworkflows behouden de vereiste YAML-basisstructuur", async () => {

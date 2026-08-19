@@ -58,7 +58,16 @@ select format(
   c.relname
 )
 || E'\n'
-|| pg_get_triggerdef(t.oid)
+|| regexp_replace(
+  pg_get_triggerdef(t.oid),
+  'EXECUTE (FUNCTION|PROCEDURE) [^(]+[(]',
+  format(
+    'EXECUTE FUNCTION %I.%I(',
+    function_namespace.nspname,
+    trigger_function.proname
+  ),
+  'i'
+)
 || ';'
 from pg_trigger t
 join pg_class c on c.oid = t.tgrelid
