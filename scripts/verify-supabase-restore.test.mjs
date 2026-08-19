@@ -113,6 +113,25 @@ test("accepteert een expliciete lege Storage-bucket naast de databasegroepering"
   assert.equal(result.storage_objects, 3);
 });
 
+test("accepteert uitsluitend de expliciet toegestane nieuwe Auth-trigger", () => {
+  const data = fixture();
+  data.target.triggers.push({
+    schema: "auth",
+    table: "users",
+    name: "bij_app_metadata",
+    sha256: "6".repeat(64),
+  });
+
+  assert.equal(
+    verifyRestore({ ...data, allowedAdditionalTriggers: ["auth.users.bij_app_metadata"] }).trigger_count,
+    2,
+  );
+  assert.throws(
+    () => verifyRestore({ ...data, allowedAdditionalTriggers: ["auth.users.andere_trigger"] }),
+    /triggerdefinities/,
+  );
+});
+
 test("weigert een verschil in kritieke databasetellingen", () => {
   const data = fixture();
   data.target.auth_users += 1;

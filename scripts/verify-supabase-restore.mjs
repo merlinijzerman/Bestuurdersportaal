@@ -110,6 +110,14 @@ function normalizeObjectHashes(value, label) {
   return normalized;
 }
 
+function normalizeAllowedAdditionalTriggers(value) {
+  if (value === undefined) return new Set();
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string" || !/^[^.]+\.[^.]+\.[^.]+$/.test(item))) {
+    fail("toegestane aanvullende triggers zijn ongeldig");
+  }
+  return new Set(value);
+}
+
 function compareCount(source, target, field) {
   const expected = requireCount(source[field], `bron.${field}`);
   const actual = requireCount(target[field], `doel.${field}`);
@@ -194,7 +202,7 @@ function manifestBucketCounts(storage) {
   return normalizeCountMap(counts, "storage.objects_by_bucket");
 }
 
-export function verifyRestore({ source, target, storage }) {
+export function verifyRestore({ source, target, storage, allowedAdditionalTriggers }) {
   requireObject(source, "bronvalidatie");
   requireObject(target, "doelvalidatie");
   requireObject(storage, "storage-manifest");
@@ -234,7 +242,22 @@ export function verifyRestore({ source, target, storage }) {
 
   const sourceTriggers = normalizeObjectHashes(source.triggers, "bron.triggers");
   const targetTriggers = normalizeObjectHashes(target.triggers, "doel.triggers");
-  if (JSON.stringify(targetTriggers) !== JSON.stringify(sourceTriggers)) {
+  const allowedTriggers = normalizeAllowedAdditionalTriggers(allowedAdditionalTriggers);
+  const sourceTriggerNames = new Set(sourceTriggers.map((item) => `${item.schema}.${item.table}.${item.name}`));
+  const targetTriggerNames = new Set(targetTriggers.map((item) => `${item.schema}.${item.table}.${item.name}`));
+  const unexpectedTargetTriggers = targetTriggers.filter(
+    (item) => !sourceTriggerNames.has(`${item.schema}.${item.table}.${item.name}`)
+      && !allowedTriggers.has(`${item.schema}.${item.table}.${item.name}`),
+  );
+  const sourceOnlyTargetTriggers = targetTriggers.filter((item) => sourceTriggerNames.has(`${item.schema}.${item.table}.${item.name}`));
+  const missingSourceTriggers = sourceTriggers.filter(
+    (item) => !targetTriggerNames.has(`${item.schema}.${item.table}.${item.name}`),
+  );
+  if (
+    unexpectedTargetTriggers.length
+    || missingSourceTriggers.length
+    || JSON.stringify(sourceOnlyTargetTriggers) !== JSON.stringify(sourceTriggers)
+  ) {
     fail("triggerdefinities/hashes wijken af", "triggers");
   }
 
@@ -298,6 +321,9 @@ async function main() {
     source: await readJson(args.get("source"), "source"),
     target: await readJson(args.get("target"), "target"),
     storage: await readJson(args.get("storage-manifest"), "storage-manifest"),
+    allowedAdditionalTriggers: args.has("allow-additional-trigger")
+      ? [args.get("allow-additional-trigger")]
+      : undefined,
   });
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 }
