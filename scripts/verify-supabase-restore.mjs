@@ -163,17 +163,24 @@ function manifestBucketCounts(storage) {
   }
 
   const counts = {};
+  const bucketIds = new Set();
   let objectCount = 0;
   let totalBytes = 0;
   for (const bucket of storage.buckets) {
     requireObject(bucket, "storage.bucket");
     if (typeof bucket.id !== "string" || !bucket.id) fail("storage.bucket.id ontbreekt");
-    if (Object.hasOwn(counts, bucket.id)) fail(`storage bevat dubbele bucket ${bucket.id}`);
+    if (bucketIds.has(bucket.id)) fail(`storage bevat dubbele bucket ${bucket.id}`);
+    bucketIds.add(bucket.id);
     if (!Array.isArray(bucket.objects)) fail(`storage.${bucket.id}.objects is geen lijst`);
     const bucketObjects = requireCount(bucket.object_count, `storage.${bucket.id}.object_count`);
     const bucketBytes = requireCount(bucket.total_bytes, `storage.${bucket.id}.total_bytes`);
     if (bucketObjects !== bucket.objects.length) fail(`storage.${bucket.id}.object_count klopt niet met objects`);
-    counts[bucket.id] = bucketObjects;
+    // De SQL-bron groepeert storage.objects. Een bucket zonder objectrijen komt
+    // daarom niet in die map voor, terwijl het fysieke manifest de lege bucket
+    // wel expliciet met object_count 0 bevat. Normaliseer beide representaties
+    // naar dezelfde niet-lege bucketmap; bucket_count hieronder blijft alle
+    // buckets afzonderlijk en exact controleren.
+    if (bucketObjects > 0) counts[bucket.id] = bucketObjects;
     objectCount += bucketObjects;
     totalBytes += bucketBytes;
   }
