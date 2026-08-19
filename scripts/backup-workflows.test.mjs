@@ -110,6 +110,14 @@ test("managed restore scheidt keys, hervat exact, test Auth/RLS/app en lekt geen
   assert.match(text, /platform_inventory_marker_key/);
   assert.match(text, /EXPECTED_CHECKSUM_NAME="platform-inventory-marker-\$\{INVENTORY_MARKER_NAME#manifest-\}"/);
   assert.doesNotMatch(text, /basename "\$INVENTORY_MARKER_PATH" \| sed 's\/\^platform-\/\/'/);
+  const markerStep = text.indexOf("- name: Niet-geheime Auth-inventarismarker ophalen en valideren");
+  const inventoryStep = text.indexOf("- name: Niet-geheime Auth-inventaris ophalen en valideren");
+  const archiveStep = text.indexOf("- name: Exacte backup-archieven binnen LUKS ophalen");
+  assert.notEqual(markerStep, -1);
+  assert.ok(markerStep < inventoryStep && inventoryStep < archiveStep);
+  assert.match(text.slice(markerStep, inventoryStep), /env\.write\(f"INVENTORY_KEY=/);
+  assert.doesNotMatch(text.slice(markerStep, inventoryStep), /INVENTORY_PATH=/);
+  assert.match(text.slice(inventoryStep, archiveStep), /INVENTORY_PATH="\$DRILL_ROOT/);
   assert.match(text, /verify-supabase-managed-keys\.mjs/);
   assert.match(text, /verify-supabase-auth-config\.mjs/);
   assert.match(text, /verify-supabase-managed-functional\.mjs setup/);
