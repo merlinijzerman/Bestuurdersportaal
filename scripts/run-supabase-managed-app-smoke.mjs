@@ -125,8 +125,11 @@ async function main() {
     smokeStage = "login_form";
     await page.getByLabel("E-mailadres").fill(own.email);
     await page.getByLabel("Wachtwoord").fill(own.password);
-    smokeStage = "login_submit_button";
-    await page.getByRole("button", { name: "Inloggen" }).click();
+    const loginButton = page.locator('form button[type="submit"]');
+    smokeStage = "login_submit_button_visible";
+    await loginButton.waitFor({ state: "visible", timeout: 45_000 });
+    smokeStage = "login_submit_button_click";
+    await loginButton.click({ timeout: 45_000 });
     smokeStage = "login_redirect";
     await page.waitForURL((url) => url.pathname === "/", { timeout: 45_000 });
     smokeStage = "dashboard";
