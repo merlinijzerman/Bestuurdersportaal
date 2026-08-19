@@ -108,6 +108,8 @@ test("managed restore scheidt keys, hervat exact, test Auth/RLS/app en lekt geen
   assert.match(text, /RESTORE_TARGET_SUPABASE_CLIENT_KEY/);
   assert.doesNotMatch(text, /secrets\.RESTORE_TARGET_SUPABASE_SERVICE_ROLE_KEY/);
   assert.match(text, /platform_inventory_marker_key/);
+  assert.match(text, /EXPECTED_CHECKSUM_NAME="platform-inventory-marker-\$\{INVENTORY_MARKER_NAME#manifest-\}"/);
+  assert.doesNotMatch(text, /basename "\$INVENTORY_MARKER_PATH" \| sed 's\/\^platform-\/\/'/);
   assert.match(text, /verify-supabase-managed-keys\.mjs/);
   assert.match(text, /verify-supabase-auth-config\.mjs/);
   assert.match(text, /verify-supabase-managed-functional\.mjs setup/);
