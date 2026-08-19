@@ -40,6 +40,28 @@ cleanup_download_state() {
 }
 trap cleanup_download_state EXIT
 
+last_error=""
+last_error_category="unknown"
+summarize_download_error() {
+  if grep -qiE 'AccessDenied|InvalidAccessKeyId|SignatureDoesNotMatch|ExpiredToken' "$error_path"; then
+    last_error_category="credentials-or-permissions"
+  elif grep -qiE 'NoSuchBucket|NoSuchKey|NotFound' "$error_path"; then
+    last_error_category="object-not-found"
+  elif grep -qiE 'Could not connect|timed out|timeout|Connection' "$error_path"; then
+    last_error_category="network-or-timeout"
+  elif grep -qiE 'PermanentRedirect|endpoint' "$error_path"; then
+    last_error_category="endpoint"
+  else
+    last_error_category="provider-error"
+  fi
+  last_error="$(tr '\\n' ' ' < "$error_path" 2>/dev/null \
+    | sed -E \
+        -e 's#s3://[^[:space:]]+#s3://[REDACTED_OBJECT]#g' \
+        -e 's#https?://[^[:space:]]+#https://[REDACTED_ENDPOINT]#g' \
+        -e 's/(AWS_SECRET_ACCESS_KEY|AWS_ACCESS_KEY_ID|AWS_SESSION_TOKEN)([=:])[[:space:]]*[^[:space:]]+/\\1\\2[REDACTED]/g' \
+    | cut -c1-600 || true)"
+}
+
 for ((attempt = 1; attempt <= max_attempts; attempt++)); do
   rm -f -- "$destination" "$partial_path" "$error_path"
 
@@ -59,7 +81,12 @@ for ((attempt = 1; attempt <= max_attempts; attempt++)); do
       mv -- "$partial_path" "$destination"
       rm -f -- "$error_path"
       exit 0
+    else
+      last_error_category="integrity"
+      last_error="Downloaded object failed the configured byte or SHA-256 validation."
     fi
+  else
+    summarize_download_error
   fi
 
   rm -f -- "$destination" "$partial_path" "$error_path"
@@ -70,4 +97,10 @@ for ((attempt = 1; attempt <= max_attempts; attempt++)); do
 done
 
 echo "B2-download definitief mislukt na $max_attempts gecontroleerde pogingen." >&2
+echo "B2-foutcategorie: $last_error_category" >&2
+if [ -n "$last_error" ]; then
+  echo "B2-foutdetail: $last_error" >&2
+else
+  echo "B2-foutdetail: geen providerfout beschikbaar." >&2
+fi
 exit 1
