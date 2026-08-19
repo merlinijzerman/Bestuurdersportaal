@@ -1,6 +1,6 @@
 # P0 — back-upketen, Storage en restore
 
-**Status:** kosteloze codegates gereed; B2-bewijs en managed restore nog af te tekenen
+**Status:** B2-bewijs groen; versleutelde restorepreflight en managed restore nog af te tekenen
 **Datum:** 2026-08-19
 **Eigenaar:** technisch beheer / incidentleider
 
@@ -205,6 +205,27 @@ Voer vóór een managed restore minimaal uit:
 Een lokale kopie met productiegegevens hoort uitsluitend in tijdelijke,
 versleutelde opslag op een gecontroleerde runner/omgeving. Neem geen secrets of
 rij-inhoud op in logs, artifacts, issues of fixtures.
+
+De workflow `.github/workflows/supabase-restore-preflight.yml` automatiseert
+deze poort zonder een Supabase-cloudproject aan te maken. Start hem uitsluitend
+vanaf `main` met de exacte contract-v2-marker en bevestiging
+`PREFLIGHT_ON_ENCRYPTED_EPHEMERAL_RUNNER`. De workflow:
+
+1. gebruikt alleen de prefix-beperkte B2-read-only sleutel;
+2. plaatst archieven, tijdelijke logs én Docker/PostgreSQL op één nieuw
+   LUKS2-volume met een eenmalige sleutel;
+3. valideert marker, checksums, restorecontract en Storage dry-run vóór herstel;
+4. start tweemaal een schone lokale Supabase-stack met PostgreSQL 17;
+5. herstelt en vergelijkt database/Auth/Storage, inhoudshashes, policies,
+   triggers en ieder opnieuw gedownload fysiek object;
+6. publiceert alleen een niet-gevoelig `go-no-go.json` en `cleanup.json`;
+7. stopt de stack, ontkoppelt LUKS en verwijdert het versleutelde backingbestand
+   in een `always()`-stap.
+
+Een groene preflight is alleen `go-for-managed-review`: Auth-providersecrets,
+functionele canary-/RLS-/appsmokes en verschillen met Supabase Cloud blijven
+expliciete managed gates. De workflow mag daarom nooit automatisch de managed
+restoreworkflow starten.
 
 ### Acceptatiepoorten
 

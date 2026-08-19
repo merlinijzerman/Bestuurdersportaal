@@ -47,6 +47,24 @@ test("watchdog accepteert zowel ISO-tijd als het bestaande contract-v2 manifest"
   assert.match(text, /created = parse_created_utc\(marker\["created_utc"\]\)/);
 });
 
+test("kosteloze preflight is main-only, versleuteld, herhaalbaar en ruimt altijd op", async () => {
+  const text = await workflow("supabase-restore-preflight.yml");
+  assert.match(text, /if: github\.ref == 'refs\/heads\/main'/);
+  assert.match(text, /B2_READONLY_APPLICATION_KEY_ID/);
+  assert.match(text, /cryptsetup luksFormat/);
+  assert.match(text, /"data-root": \$data_root/);
+  assert.match(text, /run: bash scripts\/run-supabase-restore-preflight\.sh/);
+  assert.match(text, /Versleutelde productiegegevens aantoonbaar vernietigen[\s\S]*?if: always\(\)/);
+  assert.doesNotMatch(text, /RESTORE_TARGET_DB_URL|RESTORE_TARGET_SUPABASE_SERVICE_ROLE_KEY/);
+
+  const runner = await script("run-supabase-restore-preflight.sh");
+  assert.match(runner, /for iteration in 1 2; do/);
+  assert.match(runner, /supabase stop --no-backup/);
+  assert.match(runner, /--dry-run/);
+  assert.match(runner, /cmp --silent/);
+  assert.match(runner, /physical_objects_redownloaded_and_hashed: true/);
+});
+
 test("captured triggers kwalificeren de vooraf gecontroleerde public-functie", async () => {
   const text = await script("capture-supabase-managed-customizations.sql");
   assert.match(text, /function_namespace\.nspname = 'public'/);
@@ -57,6 +75,7 @@ test("alle backup- en restoreworkflows behouden de vereiste YAML-basisstructuur"
   for (const name of [
     "supabase-backup.yml",
     "supabase-backup-watchdog.yml",
+    "supabase-restore-preflight.yml",
     "supabase-restore-drill.yml",
     "platform-inventory.yml",
   ]) {

@@ -1,0 +1,346 @@
+name: Supabase restorepreflight
+run-name: Kosteloze preflight van ${{ inputs.backup_marker_key }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      backup_marker_key:
+        description: B2-objectkey van een complete contract-v2-marker
+        required: true
+        type: string
+      confirmation:
+        description: Typ exact PREFLIGHT_ON_ENCRYPTED_EPHEMERAL_RUNNER
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-restore-preflight
+  cancel-in-progress: false
+
+jobs:
+  restore-preflight:
+    name: Tweemaal herstellen op versleutelde wegwerprunner
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    environment: production-backup
+    env:
+      SOURCE_PROJECT_REF: aebwiufuegsiwhwpdrfb
+      BACKUP_MARKER_KEY: ${{ inputs.backup_marker_key }}
+      PREFLIGHT_CONFIRMATION: ${{ inputs.confirmation }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.B2_READONLY_APPLICATION_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.B2_READONLY_APPLICATION_KEY }}
+      AWS_DEFAULT_REGION: eu-central-003
+      AWS_RETRY_MODE: standard
+      AWS_MAX_ATTEMPTS: "10"
+      B2_BUCKET_NAME: ${{ vars.B2_BUCKET_NAME }}
+      B2_S3_ENDPOINT: ${{ vars.B2_S3_ENDPOINT }}
+    steps:
+      - name: Repository ophalen
+        uses: actions/checkout@v4.2.2
+
+      - name: Node.js instellen
+        uses: actions/setup-node@v4.4.0
+        with:
+          node-version: 22
+
+      - name: Supabase CLI gepind instellen
+        uses: supabase/setup-cli@v2.1.1
+        with:
+          version: 2.114.0
+          github-token: ${{ github.token }}
+
+      - name: PostgreSQL 17-client en volumeversleuteling installeren
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo install -d -m 0755 /usr/share/postgresql-common/pgdg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo gpg --dearmor --yes -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update -o Acquire::Retries=3
+          sudo apt-get install -y --no-install-recommends cryptsetup postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+
+      - name: Inputs en read-only B2-configuratie fail-closed controleren
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$PREFLIGHT_CONFIRMATION" = "PREFLIGHT_ON_ENCRYPTED_EPHEMERAL_RUNNER" || {
+            echo "Preflight stopt: confirmation is niet exact PREFLIGHT_ON_ENCRYPTED_EPHEMERAL_RUNNER." >&2
+            exit 1
+          }
+          [[ "$BACKUP_MARKER_KEY" =~ ^backup-status/[0-9]{4}/[0-9]{2}/[0-9]{2}/manifest-[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z\.json$ ]] || {
+            echo "Preflight stopt: backup_marker_key heeft niet het verwachte formaat." >&2
+            exit 1
+          }
+          for variable in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY B2_BUCKET_NAME B2_S3_ENDPOINT; do
+            test -n "${!variable:-}" || { echo "Ontbrekende preflight-input: $variable" >&2; exit 1; }
+          done
+          for command in aws cryptsetup docker jq node openssl psql python3 sha256sum supabase tar; do
+            command -v "$command" >/dev/null || { echo "Ontbrekend preflightcommando: $command" >&2; exit 1; }
+          done
+          test -f scripts/run-supabase-restore-preflight.sh
+          test -f scripts/restore-supabase-backup.sh
+          test -f scripts/restore-supabase-storage.mjs
+          test -f scripts/verify-supabase-restore.mjs
+
+      - name: LUKS-volume voor archieven, logs en Docker inrichten
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          LUKS_FILE="$RUNNER_TEMP/bp-restore-preflight-$GITHUB_RUN_ID.luks"
+          MAPPER_NAME="bp-preflight-$GITHUB_RUN_ID"
+          SECURE_ROOT="/mnt/bp-restore-preflight-$GITHUB_RUN_ID"
+          EVIDENCE_DIR="$RUNNER_TEMP/bp-restore-preflight-evidence-$GITHUB_RUN_ID"
+          {
+            echo "LUKS_FILE=$LUKS_FILE"
+            echo "MAPPER_NAME=$MAPPER_NAME"
+            echo "PREFLIGHT_ROOT=$SECURE_ROOT"
+            echo "EVIDENCE_DIR=$EVIDENCE_DIR"
+          } >> "$GITHUB_ENV"
+
+          install -m 0600 /dev/null "$LUKS_FILE"
+          truncate -s 11G "$LUKS_FILE"
+          LUKS_KEY="$(openssl rand -hex 64)"
+          echo "::add-mask::$LUKS_KEY"
+          printf '%s' "$LUKS_KEY" | sudo cryptsetup luksFormat \
+            --type luks2 --batch-mode --key-file=- "$LUKS_FILE"
+          printf '%s' "$LUKS_KEY" | sudo cryptsetup open \
+            --key-file=- "$LUKS_FILE" "$MAPPER_NAME"
+          unset LUKS_KEY
+
+          sudo mkfs.ext4 -q "/dev/mapper/$MAPPER_NAME"
+          sudo mkdir -p "$SECURE_ROOT"
+          sudo mount -o noatime,nodev,nosuid "/dev/mapper/$MAPPER_NAME" "$SECURE_ROOT"
+          sudo chown "$USER:$USER" "$SECURE_ROOT"
+          chmod 700 "$SECURE_ROOT"
+          mkdir -p "$SECURE_ROOT/docker" "$EVIDENCE_DIR"
+
+          sudo systemctl stop docker
+          if sudo test -f /etc/docker/daemon.json; then
+            sudo cat /etc/docker/daemon.json > "$RUNNER_TEMP/docker-daemon.json"
+          else
+            echo '{}' > "$RUNNER_TEMP/docker-daemon.json"
+          fi
+          jq --arg data_root "$SECURE_ROOT/docker" \
+            '. + {"data-root": $data_root}' "$RUNNER_TEMP/docker-daemon.json" \
+            > "$RUNNER_TEMP/docker-daemon-secure.json"
+          sudo install -m 0644 "$RUNNER_TEMP/docker-daemon-secure.json" /etc/docker/daemon.json
+          sudo systemctl start docker
+          test "$(docker info --format '{{.DockerRootDir}}')" = "$SECURE_ROOT/docker"
+          sudo cryptsetup status "$MAPPER_NAME" | grep -q 'type:.*LUKS2'
+          echo "Versleuteld wegwerpvolume actief; Docker en alle productiearchieven blijven binnen LUKS." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Restorecode en fail-closed validators testen
+        shell: bash
+        run: npm run test:backup-restore
+
+      - name: Completion marker read-only ophalen en valideren
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          MARKER_NAME="$(basename "$BACKUP_MARKER_KEY")"
+          MARKER_PATH="$PREFLIGHT_ROOT/$MARKER_NAME"
+          aws s3 cp "s3://$B2_BUCKET_NAME/$BACKUP_MARKER_KEY" "$MARKER_PATH" \
+            --endpoint-url "$B2_S3_ENDPOINT" --only-show-errors --no-progress
+          aws s3 cp "s3://$B2_BUCKET_NAME/$BACKUP_MARKER_KEY.sha256" "$MARKER_PATH.sha256" \
+            --endpoint-url "$B2_S3_ENDPOINT" --only-show-errors --no-progress
+          (cd "$PREFLIGHT_ROOT" && sha256sum -c "$MARKER_NAME.sha256")
+
+          python3 - "$MARKER_PATH" <<'PY'
+          import json
+          import os
+          import pathlib
+          import re
+          import sys
+
+          marker_path = pathlib.Path(sys.argv[1])
+          marker = json.loads(marker_path.read_text())
+          if marker.get("schema_version") != 2 or marker.get("status") != "complete":
+              raise SystemExit("Marker is niet een complete schema_version 2-back-up")
+          if marker.get("source_project") != os.environ["SOURCE_PROJECT_REF"]:
+              raise SystemExit("Marker hoort niet bij het verwachte bronproject")
+          if marker.get("completion_marker") != os.environ["BACKUP_MARKER_KEY"]:
+              raise SystemExit("completion_marker wijkt af van de gekozen marker")
+
+          required_coverage = (
+              "public_database_schema_and_data",
+              "auth_data",
+              "storage_metadata",
+              "managed_auth_storage_customizations",
+              "physical_storage_objects",
+          )
+          coverage = marker.get("coverage", {})
+          if any(coverage.get(name) is not True for name in required_coverage):
+              raise SystemExit("Marker meldt onvolledige database/Auth/Storage-dekking")
+          expected_buckets = {"documenten", "documenten-quarantaine", "afschriften", "aqlab-audit"}
+          if set(marker.get("storage", {}).get("buckets", [])) != expected_buckets:
+              raise SystemExit("Marker dekt niet exact de vier afgesproken Storage-buckets")
+
+          archive_pattern = re.compile(
+              r"^supabase/\d{4}/\d{2}/\d{2}/bestuurdersportaal-(database|storage)-"
+              r"\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z\.tar\.gz$"
+          )
+          def validate_artifact(section, expected_kind):
+              item = marker.get(section, {})
+              key = item.get("archive_key", "")
+              match = archive_pattern.fullmatch(key)
+              if not match or match.group(1) != expected_kind:
+                  raise SystemExit(f"Ongeldige {section}.archive_key")
+              if item.get("checksum_key") != key + ".sha256":
+                  raise SystemExit(f"Ongeldige {section}.checksum_key")
+              if not isinstance(item.get("bytes"), int) or item["bytes"] <= 0:
+                  raise SystemExit(f"Ongeldige {section}.bytes")
+              if not re.fullmatch(r"[0-9a-f]{64}", item.get("sha256", "")):
+                  raise SystemExit(f"Ongeldige {section}.sha256")
+              return key, item["checksum_key"], item["bytes"], item["sha256"]
+
+          db_key, db_checksum_key, db_bytes, db_sha = validate_artifact("database", "database")
+          storage_key, storage_checksum_key, storage_bytes, storage_sha = validate_artifact("storage", "storage")
+          database = marker["database"]
+          expected_contents = {
+              "roles.sql", "schema.sql", "data.sql", "managed-customizations.sql",
+              "managed-customizations-manifest.json", "database-validation.json", "metadata.txt",
+          }
+          if database.get("restore_contract_version") != 2 or set(database.get("contents", [])) != expected_contents:
+              raise SystemExit("Databasearchief heeft niet exact restorecontract 2")
+          customizations = database.get("managed_customizations", {})
+          if customizations.get("schema_version") != 1 or not re.fullmatch(r"[0-9a-f]{64}", customizations.get("sql_sha256", "")):
+              raise SystemExit("Managed-customizations manifest is ongeldig")
+          if any(not isinstance(customizations.get(kind), list) for kind in ("policies", "triggers")):
+              raise SystemExit("Managed-customizations policies/triggers ontbreken")
+
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              for name, value in (
+                  ("MARKER_PATH", marker_path),
+                  ("DB_KEY", db_key),
+                  ("DB_CHECKSUM_KEY", db_checksum_key),
+                  ("DB_BYTES", db_bytes),
+                  ("DB_SHA256", db_sha),
+                  ("STORAGE_KEY", storage_key),
+                  ("STORAGE_CHECKSUM_KEY", storage_checksum_key),
+                  ("STORAGE_BYTES", storage_bytes),
+                  ("STORAGE_SHA256", storage_sha),
+              ):
+                  env.write(f"{name}={value}\n")
+          PY
+
+      - name: Exacte B2-archieven read-only ophalen en controleren
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          DB_ARCHIVE_PATH="$PREFLIGHT_ROOT/$(basename "$DB_KEY")"
+          STORAGE_ARCHIVE_PATH="$PREFLIGHT_ROOT/$(basename "$STORAGE_KEY")"
+          aws s3 cp "s3://$B2_BUCKET_NAME/$DB_KEY" "$DB_ARCHIVE_PATH" \
+            --endpoint-url "$B2_S3_ENDPOINT" --only-show-errors --no-progress
+          aws s3 cp "s3://$B2_BUCKET_NAME/$DB_CHECKSUM_KEY" "$DB_ARCHIVE_PATH.sha256" \
+            --endpoint-url "$B2_S3_ENDPOINT" --only-show-errors --no-progress
+          aws s3 cp "s3://$B2_BUCKET_NAME/$STORAGE_KEY" "$STORAGE_ARCHIVE_PATH" \
+            --endpoint-url "$B2_S3_ENDPOINT" --only-show-errors --no-progress
+          aws s3 cp "s3://$B2_BUCKET_NAME/$STORAGE_CHECKSUM_KEY" "$STORAGE_ARCHIVE_PATH.sha256" \
+            --endpoint-url "$B2_S3_ENDPOINT" --only-show-errors --no-progress
+
+          (cd "$PREFLIGHT_ROOT" && sha256sum -c "$(basename "$DB_ARCHIVE_PATH").sha256")
+          (cd "$PREFLIGHT_ROOT" && sha256sum -c "$(basename "$STORAGE_ARCHIVE_PATH").sha256")
+          test "$(stat -c '%s' "$DB_ARCHIVE_PATH")" = "$DB_BYTES"
+          test "$(sha256sum "$DB_ARCHIVE_PATH" | awk '{print $1}')" = "$DB_SHA256"
+          test "$(stat -c '%s' "$STORAGE_ARCHIVE_PATH")" = "$STORAGE_BYTES"
+          test "$(sha256sum "$STORAGE_ARCHIVE_PATH" | awk '{print $1}')" = "$STORAGE_SHA256"
+          {
+            echo "DB_ARCHIVE_PATH=$DB_ARCHIVE_PATH"
+            echo "STORAGE_ARCHIVE_PATH=$STORAGE_ARCHIVE_PATH"
+          } >> "$GITHUB_ENV"
+
+      - name: Tweemaal schoon herstellen en inhoudelijk valideren
+        shell: bash
+        run: bash scripts/run-supabase-restore-preflight.sh
+
+      - name: Alleen niet-gevoelig go-no-go-bewijs vrijgeven
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          install -m 0600 "$PREFLIGHT_ROOT/go-no-go.json" "$EVIDENCE_DIR/go-no-go.json"
+          node --input-type=module - <<'NODE'
+          import { readFile, appendFile } from "node:fs/promises";
+          const report = JSON.parse(await readFile(`${process.env.EVIDENCE_DIR}/go-no-go.json`, "utf8"));
+          const lines = [
+            "## Kosteloze restorepreflight groen",
+            "",
+            `- Completion marker: \`${report.backup_marker_key}\``,
+            `- Schone restore-iteraties: ${report.clean_restore_iterations}`,
+            `- PostgreSQL-major: ${report.postgres_major}`,
+            `- Auth users / identities: ${report.auth_users} / ${report.auth_identities}`,
+            `- Storage buckets / objecten / bytes: ${report.storage_buckets} / ${report.storage_objects} / ${report.storage_total_bytes}`,
+            `- Inhoudshashes gelijk: ${report.content_hashes_verified ? "ja" : "nee"}`,
+            `- Policies / triggers exact gelijk: ${report.policy_count} / ${report.trigger_count}`,
+            "- Alle fysieke objecten zijn per iteratie opnieuw gedownload en met SHA-256 gecontroleerd.",
+            "- Een managed Supabase-oefening blijft geblokkeerd tot expliciete kostenautorisatie.",
+          ];
+          await appendFile(process.env.GITHUB_STEP_SUMMARY, `${lines.join("\n")}\n`);
+          NODE
+
+      - name: Versleutelde productiegegevens aantoonbaar vernietigen
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          cleanup_ok=true
+          if command -v supabase >/dev/null 2>&1 && [ -n "${PREFLIGHT_ROOT:-}" ]; then
+            supabase stop --no-backup >/dev/null 2>&1 || true
+          fi
+          sudo systemctl stop docker >/dev/null 2>&1 || true
+          if [ -n "${PREFLIGHT_ROOT:-}" ] && mountpoint -q "$PREFLIGHT_ROOT"; then
+            sudo umount "$PREFLIGHT_ROOT" || cleanup_ok=false
+          fi
+          if [ -n "${MAPPER_NAME:-}" ] && sudo cryptsetup status "$MAPPER_NAME" >/dev/null 2>&1; then
+            sudo cryptsetup close "$MAPPER_NAME" || cleanup_ok=false
+          fi
+          if [ -n "${LUKS_FILE:-}" ] && [ -f "$LUKS_FILE" ]; then
+            sudo rm -f "$LUKS_FILE" || cleanup_ok=false
+          fi
+          if [ -n "${PREFLIGHT_ROOT:-}" ] && mountpoint -q "$PREFLIGHT_ROOT"; then cleanup_ok=false; fi
+          if [ -n "${MAPPER_NAME:-}" ] && [ -e "/dev/mapper/$MAPPER_NAME" ]; then cleanup_ok=false; fi
+          if [ -n "${LUKS_FILE:-}" ] && [ -e "$LUKS_FILE" ]; then cleanup_ok=false; fi
+
+          EVIDENCE_DIR="${EVIDENCE_DIR:-$RUNNER_TEMP/bp-restore-preflight-evidence-$GITHUB_RUN_ID}"
+          mkdir -p "$EVIDENCE_DIR"
+          CLEANUP_STATUS="failed"
+          if [ "$cleanup_ok" = true ]; then CLEANUP_STATUS="complete"; fi
+          python3 - "$EVIDENCE_DIR/cleanup.json" "$CLEANUP_STATUS" <<'PY'
+          import json
+          import pathlib
+          import sys
+          from datetime import datetime, timezone
+
+          pathlib.Path(sys.argv[1]).write_text(json.dumps({
+              "schema_version": 1,
+              "status": sys.argv[2],
+              "completed_utc": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+              "supabase_stack_stopped": True,
+              "encrypted_volume_unmounted": sys.argv[2] == "complete",
+              "luks_mapping_closed": sys.argv[2] == "complete",
+              "encrypted_backing_file_removed": sys.argv[2] == "complete",
+          }, indent=2) + "\n")
+          PY
+          if [ "$cleanup_ok" != true ]; then
+            echo "Cleanup van het versleutelde preflightvolume is niet volledig." >&2
+            exit 1
+          fi
+          echo "Versleutelde preflightdata, Docker-volume en tijdelijke sleutels zijn vernietigd." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Niet-gevoelig preflight- en cleanupbewijs bewaren
+        if: always()
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: supabase-restore-preflight-${{ github.run_id }}
+          retention-days: 30
+          if-no-files-found: warn
+          path: ${{ runner.temp }}/bp-restore-preflight-evidence-${{ github.run_id }}/*.json
