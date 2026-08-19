@@ -3,7 +3,7 @@
 - **Status:** Geaccepteerd
 - **Datum:** 2026-08-06
 - **Betrokkenen:** Merlin (opdrachtgever/bestuurder), Claude (uitvoering/advies)
-- **Relatie:** herziet de reikwijdte van [`0043`](./0043-tenant-domains-bridge-app-host.md) (transitionele app-host-bridge) en van de guardrail in `supabase/migrations/2026_07_09_t8_demo_fonds_seed.sql`. Bouwt voort op [`0040`](./0040-tenant-model-bridge-ready-pool.md) (tenant-model), [`0041`](./0041-tenant-resolver-observe.md)/[`0042`](./0042-tenant-enforce-fail-closed.md) (resolver + enforce) en [`0029`](./0029-drie-host-classes.md)/[`0030`](./0030-login-op-app-host.md) (drie surfaces).
+- **Relatie:** herziet de reikwijdte van [`0043`](./0043-tenant-domains-bridge-app-host.md) (transitionele app-host-bridge) en van de guardrail in `supabase/seeds/schema/2026_07_09_t8_demo_fonds_seed.sql`. Bouwt voort op [`0040`](./0040-tenant-model-bridge-ready-pool.md) (tenant-model), [`0041`](./0041-tenant-resolver-observe.md)/[`0042`](./0042-tenant-enforce-fail-closed.md) (resolver + enforce) en [`0029`](./0029-drie-host-classes.md)/[`0030`](./0030-login-op-app-host.md) (drie surfaces).
 
 ## Context
 
@@ -85,7 +85,7 @@ Hotlinken zou overigens ook los van de CSP onwenselijk zijn: elke paginaweergave
 - `supabase/migrations/2026_08_06_demo_fondsen_bootstrap.sql` (+ ROLLBACK)
 - `supabase/migrations/2026_08_06_tenant_domains_demo_fondsen.sql` (+ ROLLBACK)
 - `supabase/migrations/2026_07_08_tenant_domains_bridge_app_host.sql` (rij blijft staan)
-- `supabase/migrations/2026_07_09_t8_demo_fonds_seed.sql` (guardrail-tekst; faalt de themetoets)
+- `supabase/seeds/schema/2026_07_09_t8_demo_fonds_seed.sql` (guardrail-tekst; faalt de themetoets)
 - `core/lib/platform-host.ts` (`bepaalSurface`, `hostSet`), `middleware.ts` (redirect-bug)
 - `scripts/toets-fondsthema.mjs` (themetoets)
 - `04 Technische inrichting/Bestuurdersportaal - DNS-runbook subdomeinbeheer (variant B) v0.2.md`

@@ -4,7 +4,7 @@
 - **Datum:** 2026-08-08
 - **Omschakeldatum (definitie_versie 2):** 2026-08-08 (de P4b-deploy)
 - **Betrokkenen:** Merlin IJzerman (product/opdrachtgever)
-- **Raakt:** `platform/lib/monitoring-queries.ts` (`meetRateLimitIncidenten`, nieuw `meetRateLimitFailOpen`), `platform/lib/monitoring-signalen.ts`, `supabase/migrations/2026_08_08_p4b_signalen_seed.sql`
+- **Raakt:** `platform/lib/monitoring-queries.ts` (`meetRateLimitIncidenten`, nieuw `meetRateLimitFailOpen`), `platform/lib/monitoring-signalen.ts`, `supabase/seeds/schema/2026_08_08_p4b_signalen_seed.sql`
 
 ## Context
 

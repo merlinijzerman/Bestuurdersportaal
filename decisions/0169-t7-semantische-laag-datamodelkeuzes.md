@@ -82,7 +82,7 @@ werkopdracht volgden.
 
 ## Referenties
 
-- Migratie: [`supabase/migrations/2026_08_12_t7_semantische_laag.sql`](../supabase/migrations/2026_08_12_t7_semantische_laag.sql) + [`_ROLLBACK`](../supabase/migrations/2026_08_12_t7_semantische_laag_ROLLBACK.sql)
+- Migratie: [`supabase/migrations/2026_08_12_t7_semantische_laag.sql`](../supabase/migrations/2026_08_12_t7_semantische_laag.sql) + [`_ROLLBACK`](../supabase/rollbacks/2026_08_12_t7_semantische_laag_ROLLBACK.sql)
 - Gedragstoets: [`supabase/checks/2026_08_12_t7_semantische_laag.sql`](../supabase/checks/2026_08_12_t7_semantische_laag.sql)
 - Structurele gates (aangepast): [`supabase/checks/2026_07_31_r1_structurele_gates.sql`](../supabase/checks/2026_07_31_r1_structurele_gates.sql)
 - Eerdere besluiten: [`0007`](./0007-fondsconsistentie-composite-fk-vs-trigger.md) (composite-FK), [`0066`](./0066-variant-c-cutover-optie-1.md) (service-role-isolatie), [`0112`](./0112-geen-reflectiemarkering-in-enige-registratie.md) (privacylijn), [`0040`](./0040-bridge-ready-pool-standaard-dedicated-isolatie-premium.md) (RLS-hardening/tenant-model)

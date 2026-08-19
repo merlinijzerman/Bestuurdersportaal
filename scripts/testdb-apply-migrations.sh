@@ -13,11 +13,14 @@
 #  Wat wél/niet wordt toegepast:
 #    • EERST: supabase/baseline/2026_08_14_preview_public.sql.
 #    • DAN  : alleen migraties die alfabetisch NA BASELINE_CUTOFF vallen.
-#    • NIET: *_ROLLBACK.sql (terugdraai-scripts, geen forward-migratie).
-#    • NIET: *_seed_preview.sql (omgeving-specifiek bewijs/configuratie; CI
-#            gebruikt een schone baseline en mag geen historische Preview-data
-#            of Preview-quota aannemen).
 #    • NIET: supabase/checks/*   (dat zijn de testsuites zelf, niet het schema).
+#
+#  Sinds de mapherindeling (ontwerpnotitie migratieproces v2.1, fase 1) bevat
+#  supabase/migrations/ UITSLUITEND echte forward-migraties. Terugdraai-scripts
+#  staan in supabase/rollbacks/, omgevingsseeds in supabase/seeds/preview/ en
+#  schema-seeds in supabase/seeds/schema/. De naamfilters die hier stonden zijn
+#  daarmee overbodig: de mapindeling dwingt de invariant af in plaats van een
+#  filterregel die iemand kan vergeten. De guard hieronder bewaakt dat.
 #
 #  Draait tegen een EPHEMERE test-DB (Supabase CLI in CI, of een lokale
 #  wegwerp-DB). NOOIT tegen productie: elke migratie muteert het schema.
@@ -33,6 +36,9 @@ cd "$(dirname "$0")/.."
 
 DB_URL="${TEST_DATABASE_URL:-${DATABASE_URL:-}}"
 MIGRATIE_DIR="supabase/migrations"
+ROLLBACK_DIR="supabase/rollbacks"
+SEED_PREVIEW_DIR="supabase/seeds/preview"
+SEED_SCHEMA_DIR="supabase/seeds/schema"
 BASELINE="supabase/baseline/2026_08_14_preview_public.sql"
 BASELINE_AUTH_HOOKS="supabase/baseline/2026_08_14_auth_hooks.sql"
 BASELINE_STORAGE="supabase/baseline/2026_08_14_storage_custom.sql"
@@ -68,15 +74,28 @@ if [ ! -f "$BASELINE_STORAGE" ]; then
   exit 1
 fi
 
+# Guard (fase 1, ontwerpnotitie migratieproces v2.1): migrations/ mag geen
+# rollback- of seedbestand bevatten. Dit is de runtime-tegenhanger van de
+# CI-check; hij faalt vroeg en met een bruikbare boodschap in plaats van een
+# rollback halverwege de replay toe te passen.
+ONGELDIG="$(find "$MIGRATIE_DIR" -maxdepth 1 -name '*.sql' \
+  \( -name '*ROLLBACK*' -o -name '*seed*' \) | LC_ALL=C sort)"
+if [ -n "$ONGELDIG" ]; then
+  echo "FOUT: $MIGRATIE_DIR bevat rollback- of seedbestanden:" >&2
+  echo "$ONGELDIG" | sed 's/^/  /' >&2
+  echo "Verplaats ze naar $ROLLBACK_DIR, $SEED_PREVIEW_DIR of $SEED_SCHEMA_DIR." >&2
+  exit 1
+fi
+
 # Verzamel alleen forward-migraties ná het baseline-cutoff. De while-vorm werkt
 # zowel op macOS Bash 3.2 als op de nieuwere Bash van de CI-runner.
 MIGRATIES=()
 while IFS= read -r f; do
   naam="$(basename "$f")"
-  if [[ "$naam" > "$BASELINE_CUTOFF" && "$naam" != *_seed_preview.sql ]]; then
+  if [[ "$naam" > "$BASELINE_CUTOFF" ]]; then
     MIGRATIES+=("$f")
   fi
-done < <(find "$MIGRATIE_DIR" -maxdepth 1 -name '*.sql' ! -name '*_ROLLBACK.sql' | LC_ALL=C sort)
+done < <(find "$MIGRATIE_DIR" -maxdepth 1 -name '*.sql' | LC_ALL=C sort)
 
 echo "Extensies voor de Preview-baseline gereedmaken…"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -q <<'SQL'
@@ -102,4 +121,4 @@ if [ "${#MIGRATIES[@]}" -gt 0 ]; then
 fi
 
 echo
-echo "OK: baseline + ${#MIGRATIES[@]} post-baseline-migraties toegepast (ROLLBACK-scripts en checks/ overgeslagen)."
+echo "OK: baseline + ${#MIGRATIES[@]} post-baseline-migraties toegepast (rollbacks/, seeds/ en checks/ liggen buiten migrations/)."
