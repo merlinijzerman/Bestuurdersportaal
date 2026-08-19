@@ -73,6 +73,52 @@ const VOLLEDIGE_META: Record<string, unknown> = {
     batches: 2,
     afgekapt: false,
   },
+  vraagrouter: {
+    versie: "vraagrouter-v2.0",
+    taak: "volledigheidstoets",
+    scope: "geselecteerd_document",
+    dekking: "volledig_document",
+    bewijsniveau: "uitputtend",
+    vertrouwen: 0.96,
+    signalen: ["volledig"],
+    bron: "deterministisch",
+  },
+  vraagrouter_uitvoering: {
+    router_ms: 14,
+    modelrouter: {
+      toegepast: false,
+      model: null,
+      duur_ms: 0,
+      tokens_in: 0,
+      tokens_uit: 0,
+      uitkomst: "overgeslagen",
+    },
+  },
+  analyseplan: {
+    kader: "algemeen_controleplan_niet_juridisch_volledig",
+    criteria: [
+      { id: "effecten", herkomst: "standaard_analyseplan" },
+      { id: "evenwichtigheid", herkomst: "standaard_analyseplan" },
+    ],
+  },
+  documentdekking: {
+    modus: "volledig",
+    geselecteerde_passages: 40,
+    totaal_passages: 40,
+    verwerkte_passages: 40,
+    totaal_batches: 2,
+    verwerkte_batches: 2,
+    volledig: true,
+    afkapredenen: [],
+    pagina_dekking: { verwerkt: 42, totaal: 42 },
+    sectie_dekking: { verwerkt: 18, totaal: 18 },
+  },
+  volledige_analyse: {
+    aangeboden: true,
+    uitgevoerd: false,
+    vorige_log_id: "log1",
+    document_id: "d1",
+  },
   filters: {
     modus: "actueel",
     peildatum: "2026-08-04",
@@ -327,6 +373,35 @@ test("besluit 0151 — module_scope: procedure_id alleen zichtbaar op bronniveau
   assert.equal(basis.module_scope?.risico_id, undefined);
   assert.equal(basis.module_scope?.soort, "risico");
   assert.equal(bron.module_scope?.risico_id, "r1");
+});
+
+test("vraagrouter/dekking zijn basis; analyse-id's alleen zichtbaar op bronniveau", () => {
+  const { spoor, inhoud } = splitsRetrievalMeta(VOLLEDIGE_META);
+  assert.equal("vraagrouter" in inhoud, false);
+  assert.equal("vraagrouter_uitvoering" in inhoud, false);
+  assert.equal("analyseplan" in inhoud, false);
+  assert.equal("documentdekking" in inhoud, false);
+  assert.equal("volledige_analyse" in inhoud, false);
+
+  const basis = projecteerSpoorMeta(spoor, false);
+  assert.equal((basis.vraagrouter as Record<string, unknown>).taak, "volledigheidstoets");
+  assert.equal(
+    (basis.vraagrouter_uitvoering as Record<string, unknown>).router_ms,
+    14
+  );
+  assert.equal(
+    (basis.analyseplan as { criteria: unknown[] }).criteria.length,
+    2
+  );
+  assert.equal((basis.documentdekking as Record<string, unknown>).volledig, true);
+  assert.deepEqual(basis.volledige_analyse, {
+    aangeboden: true,
+    uitgevoerd: false,
+  });
+
+  const bron = projecteerSpoorMeta(spoor, true);
+  assert.equal((bron.volledige_analyse as Record<string, unknown>).vorige_log_id, "log1");
+  assert.equal((bron.volledige_analyse as Record<string, unknown>).document_id, "d1");
 });
 
 test("bronidentiteit blijft in het spoor (verwijderbaar is alleen inhoud)", () => {

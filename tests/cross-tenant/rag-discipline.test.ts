@@ -27,6 +27,7 @@ import {
   type DocumentChunk,
 } from "../../core/lib/rag";
 import { verrijkMetParents, type SiblingRij } from "../../core/lib/parent-context";
+import { resolveerGenoemdDocument } from "../../core/lib/vraagrouter";
 
 const FONDS_A = "11111111-1111-1111-1111-111111111111";
 const FONDS_B = "22222222-2222-2222-2222-222222222222";
@@ -101,6 +102,18 @@ test("T14 — deprecated/withdrawn generiek telt niet als actuele bron", () => {
   const r = handhaafFondsdiscipline([gearchiveerd, uitgesloten], FONDS_A);
   assert.equal(r.chunks.length, 0);
   assert.equal(r.gedropt, 2);
+});
+
+test("T14a — genoemde documentscope kan alleen uit de RLS-zichtbare set komen", () => {
+  // De chatroute geeft uitsluitend de onder RLS opgehaalde titels aan de pure
+  // resolver. Die resolver genereert geen id en kan dus nooit het weggelaten
+  // vreemd-fondsdocument kiezen, ook niet bij een letterlijke titelmatch.
+  const zichtbaarVoorA = [{ id: "doc-a", titel: "Transitieplan fonds A" }];
+  const uitkomst = resolveerGenoemdDocument(
+    "Toets de Geheime ALM-studie van fonds B volledig",
+    zichtbaarVoorA
+  );
+  assert.deepEqual(uitkomst, { status: "geen" });
 });
 
 // ── T15 — parent-retrieval sibling-fetch respecteert de fondsgrens ───────────

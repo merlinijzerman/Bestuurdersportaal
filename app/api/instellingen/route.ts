@@ -6,6 +6,7 @@ import {
   haalFondsConfig,
   haalConfigHistorie,
   hybrideZoekenAan,
+  vraagrouterVlaggenVoorFonds,
   representatieConstraintsAan,
   schrijfFlag,
   schrijfManifestModule,
@@ -66,6 +67,7 @@ export async function GET() {
       bronkeuzeVlag,
       process.env.BRONKEUZE_MODUS
     );
+    const vraagrouterVlaggen = await vraagrouterVlaggenVoorFonds(profiel.fonds_id);
 
     return NextResponse.json({
       mag_beheren: magBeheren,
@@ -77,6 +79,15 @@ export async function GET() {
         // De ruwe fonds-vlag (null = niet gezet), zodat de UI de radio kan vullen
         // en "volgt de platformstandaard" kan tonen bij afwezigheid.
         fonds_waarde: alsBronkeuzeModus(bronkeuzeVlag),
+      },
+      // Besluit 0184 — toon de EFFECTIEVE standen. De twee afhankelijke
+      // functies zijn server-side altijd uit als de basisrouter uitstaat, ook
+      // wanneer hun ruwe fondswaarde nog true is. `flags` hieronder bevat die
+      // ruwe waarde zodat de UI dit verschil expliciet kan maken.
+      vraagrouter_flags: {
+        vraagrouter_v2: vraagrouterVlaggen.routerV2,
+        vraagrouter_model: vraagrouterVlaggen.modelrouter,
+        volledige_analyse_vervolg: vraagrouterVlaggen.volledigeAnalyseVervolg,
       },
       theming: config.themingTokens,
       // Beheerbare modules met effectieve beschikbaarheid (registry ⊕ manifest).

@@ -22,6 +22,9 @@ import { weegRegime, type Regime } from "./weeg-regime";
 import { isStandaardZichtbaarInRag } from "./generiek-curatie";
 import { isReviewVerlopen } from "./generiek-status";
 import type { AssistantSource, AssistantSourceSamenvatting } from "./assistant-source";
+import type { Vraagroute } from "./vraagrouter";
+import type { ModelrouterMeta } from "./vraagrouter-model";
+import type { DocumentDekking } from "./document-dekking";
 // R1.3–R1.6 retrieval-kwaliteitsbundel. Elk onderdeel draait achter een eigen
 // vlag (zie RetrievalOpties) en heeft een eigen fail-safe; defaults reproduceren
 // het huidige gedrag. jargon-expansie is puur; rerank/parent-context hebben een
@@ -712,6 +715,30 @@ export interface RetrievalMeta {
     verwerkte_chunks?: number;
     batches?: number;
     afgekapt?: boolean;
+  };
+  /** M1–M4 — gevalideerde, reproduceerbare routerbeslissing (geen vrije tekst). */
+  vraagrouter?: Vraagroute;
+  /** M4/M9 — code-gedreven routermeting; geen vrije fouttekst of vraaginhoud. */
+  vraagrouter_uitvoering?: {
+    router_ms: number;
+    modelrouter: ModelrouterMeta;
+  };
+  /** M5/M9 — het gebruikte algemene analyseplan, uitsluitend gesloten ids. */
+  analyseplan?: {
+    kader: "algemeen_controleplan_niet_juridisch_volledig";
+    criteria: {
+      id: string;
+      herkomst: "standaard_analyseplan" | "gebruikersvraag";
+    }[];
+  };
+  /** M6 — code-gedreven bewijs van welke passages/batches echt zijn verwerkt. */
+  documentdekking?: DocumentDekking;
+  /** M7 — aanbod/uitvoering van de expliciete volledige-analysevervolgactie. */
+  volledige_analyse?: {
+    aangeboden: boolean;
+    uitgevoerd: boolean;
+    vorige_log_id?: string;
+    document_id?: string;
   };
   // Besluit 0151 — AI-modulecontext. Aanwezig zodra een vraag in de context van een
   // module (procesdossier, risicomatrix of één risico) is gesteld. `procedure_id`/
@@ -1865,40 +1892,130 @@ export function maakContext(
   };
 }
 
-// Haalt ALLE chunks van de gescopete document(en) op, geordend op document en
-// chunk-index — voor de dekkingsbrede strategieën van increment 2 (full-document
-// en map-reduce). Géén ranking: bij een samenvatting/beoordeling wil je het
-// volledige document, niet de top-N. RLS blijft leidend (anon-client); de
-// scope-filter (`.in("document_id", …)`) is een AND bovenop de fonds-isolatie.
+// Haalt alle technisch toegestane chunks van de gescopete document(en) op,
+// geordend op document en chunk-index — voor full-document en map-reduce. Géén
+// ranking. Het resultaat draagt een exact count-/afkapsignaal: "volledig" mag
+// nooit meer worden afgeleid uit alleen het aantal teruggegeven rijen.
 // Increment T4 — `fondsId` (server-side geresolveerd; body genegeerd) dwingt de
 // fonds-discipline ook op dit dekkingsbrede pad af. Dit pad loopt NIET via de RPC
 // (met p_fonds_id), dus de app-guard (handhaafFondsdiscipline) is hier de enige
 // expliciete laag náást RLS. De select levert daarom fonds_id + document-/bronstatus.
+export const VOLLEDIGE_DOCUMENT_CHUNK_CAP = 5000;
+const VOLLEDIGE_DOCUMENT_PAGINA = 1000;
+
+export interface DocumentChunkOphaalresultaat {
+  chunks: DocumentChunk[];
+  totaal_chunks: number | null;
+  opgehaalde_chunks: number;
+  volledig: boolean;
+  afkapreden: "chunk_cap" | "retrieval_fout" | null;
+  fondsdiscipline_gedropt: number;
+}
+
+/** Exacte, RLS-begrensde telling zonder documenttekst op te halen. */
+export async function telDocumentChunks(documentIds: string[]): Promise<number | null> {
+  if (documentIds.length === 0) return 0;
+  const supabase = await createServerSupabase();
+  const { count, error } = await supabase
+    .from("document_chunks")
+    .select("id", { count: "exact", head: true })
+    .in("document_id", documentIds);
+  if (error) {
+    console.error("telDocumentChunks fout:", error);
+    return null;
+  }
+  return typeof count === "number" ? count : null;
+}
+
+export async function haalDocumentChunksMetDekking(
+  documentIds: string[],
+  fondsId: string | null = null
+): Promise<DocumentChunkOphaalresultaat> {
+  if (documentIds.length === 0) {
+    return {
+      chunks: [],
+      totaal_chunks: 0,
+      opgehaalde_chunks: 0,
+      volledig: false,
+      afkapreden: null,
+      fondsdiscipline_gedropt: 0,
+    };
+  }
+  const supabase = await createServerSupabase();
+  const { count, error: countFout } = await supabase
+    .from("document_chunks")
+    .select("id", { count: "exact", head: true })
+    .in("document_id", documentIds);
+  if (countFout) {
+    console.error("haalDocumentChunks count-fout:", countFout);
+    return {
+      chunks: [],
+      totaal_chunks: null,
+      opgehaalde_chunks: 0,
+      volledig: false,
+      afkapreden: "retrieval_fout",
+      fondsdiscipline_gedropt: 0,
+    };
+  }
+
+  const totaal = typeof count === "number" ? count : null;
+  const teLezen = Math.min(totaal ?? VOLLEDIGE_DOCUMENT_CHUNK_CAP, VOLLEDIGE_DOCUMENT_CHUNK_CAP);
+  const rijen: DocumentChunk[] = [];
+  for (let offset = 0; offset < teLezen; offset += VOLLEDIGE_DOCUMENT_PAGINA) {
+    const einde = Math.min(offset + VOLLEDIGE_DOCUMENT_PAGINA, teLezen) - 1;
+    const { data, error } = await supabase
+      .from("document_chunks")
+      .select(
+        `id, document_id, tekst, pagina, paragraaf, chunk_index,
+         documenten!inner(titel, bron, bibliotheek, opslag_pad, fonds_id, documentstatus:status, bronstatus, volgende_review)`
+      )
+      .in("document_id", documentIds)
+      .eq("documenten.actief", true)
+      .order("document_id", { ascending: true })
+      .order("chunk_index", { ascending: true })
+      .range(offset, einde);
+    if (error || !data) {
+      console.error("haalDocumentChunks pagina-fout:", error);
+      const fondsFilter = fondsId && fondsId.length > 0 ? fondsId : null;
+      const bewaakt = handhaafFondsdiscipline(rijen, fondsFilter);
+      return {
+        chunks: bewaakt.chunks,
+        totaal_chunks: totaal,
+        opgehaalde_chunks: bewaakt.chunks.length,
+        volledig: false,
+        afkapreden: "retrieval_fout",
+        fondsdiscipline_gedropt: bewaakt.gedropt,
+      };
+    }
+    rijen.push(...(data as unknown as DocumentChunk[]));
+    if (data.length < einde - offset + 1) break;
+  }
+
+  const fondsFilter = fondsId && fondsId.length > 0 ? fondsId : null;
+  const bewaakt = handhaafFondsdiscipline(rijen, fondsFilter);
+  const capBereikt = totaal !== null && totaal > VOLLEDIGE_DOCUMENT_CHUNK_CAP;
+  const volledig =
+    totaal !== null &&
+    totaal > 0 &&
+    bewaakt.gedropt === 0 &&
+    bewaakt.chunks.length === totaal &&
+    !capBereikt;
+  return {
+    chunks: bewaakt.chunks,
+    totaal_chunks: totaal,
+    opgehaalde_chunks: bewaakt.chunks.length,
+    volledig,
+    afkapreden: capBereikt ? "chunk_cap" : null,
+    fondsdiscipline_gedropt: bewaakt.gedropt,
+  };
+}
+
+/** Backwards-compatible wrapper voor bestaande aanroepers die alleen rijen nodig hebben. */
 export async function haalDocumentChunks(
   documentIds: string[],
   fondsId: string | null = null
 ): Promise<DocumentChunk[]> {
-  if (documentIds.length === 0) return [];
-  const supabase = await createServerSupabase();
-  const { data, error } = await supabase
-    .from("document_chunks")
-    .select(
-      `id, document_id, tekst, pagina, paragraaf, chunk_index,
-       documenten!inner(titel, bron, bibliotheek, opslag_pad, fonds_id, documentstatus:status, bronstatus, volgende_review)`
-    )
-    .in("document_id", documentIds)
-    .eq("documenten.actief", true)
-    .order("document_id", { ascending: true })
-    .order("chunk_index", { ascending: true })
-    .limit(5000); // veiligheidsplafond tegen extreem grote documenten
-
-  if (error || !data) {
-    console.error("haalDocumentChunks fout:", error);
-    return [];
-  }
-  const chunks = data as unknown as DocumentChunk[];
-  const fondsFilter = fondsId && fondsId.length > 0 ? fondsId : null;
-  return handhaafFondsdiscipline(chunks, fondsFilter).chunks;
+  return (await haalDocumentChunksMetDekking(documentIds, fondsId)).chunks;
 }
 
 // ── Plateau B / G3 — de bevroren reflectiebronset ──────────────────────────

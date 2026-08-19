@@ -101,6 +101,14 @@ interface VerduidelijkingKeuze {
   origineleVraag: string;
 }
 
+interface VolledigeAnalyseAanbod {
+  origineel_log_id: string;
+  document_id: string;
+  document_titel: string;
+  originele_vraag: string;
+  label: string;
+}
+
 interface Bericht {
   rol: "gebruiker" | "ai";
   tekst: string;
@@ -144,6 +152,8 @@ interface Bericht {
     opties: { intent: "fonds" | "algemeen"; label: string }[];
     origineleVraag: string;
   };
+  // M7 — server-gevalideerde opschaling van targeted naar volledige dekking.
+  volledigeAnalyseAanbod?: VolledigeAnalyseAanbod;
   // Besluit 0098 — alleen een NETJES afgeronde generatie ('done' ontvangen) is
   // kopieerbaar. Welkomsttekst, foutmeldingen en afgebroken streams krijgen dus
   // geen kopieerknop: een herkomstregel onder iets dat geen antwoord is,
@@ -1171,6 +1181,13 @@ export default function AssistentClient({
     reflectieTegenperspectief?: boolean;
     // De gekozen reflectie-ingang + de logregel waarvan de bronset bevriest.
     reflectieStart?: { ingang: ReflectieIngang; bronsetLogId: string | null };
+    /** M7 — koppeling naar het targeted antwoord dat dit aanbod voortbracht. */
+    volledigeAnalyse?: {
+      origineelLogId: string;
+      documentId: string;
+    };
+    /** Zichtbare actietekst; de server ontvangt voor de analyse de originele vraag. */
+    weergaveTekst?: string;
   }
 
   async function stuurBericht(vraag?: string, opties?: StuurOpties) {
@@ -1206,7 +1223,10 @@ export default function AssistentClient({
     // oorspronkelijke vraag; we voegen geen tweede gebruikersbubbel toe en wissen
     // tegelijk de verduidelijkingsbubbel uit de weergave.
     const basis = opties?.basisBerichten ?? berichten;
-    const nieuw: Bericht = { rol: "gebruiker", tekst };
+    const nieuw: Bericht = {
+      rol: "gebruiker",
+      tekst: opties?.weergaveTekst ?? tekst,
+    };
     const conversatie = opties?.geenNieuweVraag ? basis : [...basis, nieuw];
     setBerichten(conversatie);
     // Scroll het zojuist gestelde bericht naar boven, zodat het antwoord eronder
@@ -1221,6 +1241,11 @@ export default function AssistentClient({
         role: b.rol === "gebruiker" ? ("user" as const) : ("assistant" as const),
         content: b.tekst,
       }));
+    // Bij een volledige-analyseactie ziet de gebruiker een korte actietekst,
+    // terwijl de server de oorspronkelijke inhoudelijke vraag opnieuw uitvoert.
+    if (opties?.weergaveTekst && !opties.geenNieuweVraag && messages.length > 0) {
+      messages[messages.length - 1] = { role: "user", content: tekst };
+    }
 
     setAntwoordGestart(false);
 
@@ -1326,6 +1351,12 @@ export default function AssistentClient({
                 bronset_log_id: opties.reflectieStart.bronsetLogId ?? undefined,
               }
             : undefined,
+          volledige_analyse: opties?.volledigeAnalyse
+            ? {
+                origineel_log_id: opties.volledigeAnalyse.origineelLogId,
+                document_id: opties.volledigeAnalyse.documentId,
+              }
+            : undefined,
         }),
       });
 
@@ -1363,6 +1394,7 @@ export default function AssistentClient({
       let verbredingData: Bericht["verbreding"] | undefined;
       // Besluit 0137 — niet-blokkerend bronkeuze-aanbod (chips ónder het antwoord).
       let bronkeuzeAanbodData: Bericht["bronkeuzeAanbod"] | undefined;
+      let volledigeAnalyseAanbodData: Bericht["volledigeAnalyseAanbod"] | undefined;
       // Plateau B — het id van de auditregel van dit antwoord (uit 'done').
       let logIdData: string | undefined;
       // Besluit 0092 — de verduidelijkingsbeurt als bewaarbaar bericht. Zonder dit
@@ -1385,6 +1417,7 @@ export default function AssistentClient({
             inlineMeldingen: inlineMeldingenData,
             verbreding: verbredingData,
             bronkeuzeAanbod: bronkeuzeAanbodData,
+            volledigeAnalyseAanbod: volledigeAnalyseAanbodData,
             voltooid,
             logId: logIdData,
           };
@@ -1480,6 +1513,9 @@ export default function AssistentClient({
           // B1 / scope-split — documentgericht (meta) + vervolgvragen (done).
           document_gericht?: boolean;
           vervolgvragen?: string[];
+          documentdekking?: OnderbouwingMeta["documentdekking"];
+          vraagrouter?: OnderbouwingMeta["vraagrouter"];
+          volledige_analyse_aanbod?: VolledigeAnalyseAanbod | null;
           // Plateau B — het id van de auditregel van deze beurt, en de
           // server-controlled reflectiestatus. Beide komen in het 'done'-event.
           log_id?: string | null;
@@ -1594,6 +1630,8 @@ export default function AssistentClient({
             // vervolgacties (duiding/kritische vragen) blijven staan.
             documentGericht: evt.document_gericht ?? null,
             vervolgvragen: [],
+            documentdekking: evt.documentdekking ?? null,
+            vraagrouter: evt.vraagrouter ?? null,
           };
           // Deterministische inline-meldingen (pre-stream); de #4-melding kan in
           // het 'done'-event nog worden aangevuld.
@@ -1630,6 +1668,7 @@ export default function AssistentClient({
                 inlineMeldingen: inlineMeldingenData,
                 verbreding: verbredingData,
                 bronkeuzeAanbod: bronkeuzeAanbodData,
+                volledigeAnalyseAanbod: volledigeAnalyseAanbodData,
               },
             ]);
           } else {
@@ -1661,8 +1700,13 @@ export default function AssistentClient({
             onderbouwingData = {
               ...onderbouwingData,
               vervolgvragen: evt.vervolgvragen ?? [],
+              documentdekking:
+                evt.documentdekking ?? onderbouwingData.documentdekking ?? null,
+              vraagrouter: evt.vraagrouter ?? onderbouwingData.vraagrouter ?? null,
             };
           }
+          volledigeAnalyseAanbodData =
+            evt.volledige_analyse_aanbod ?? undefined;
           // 30-07-2026 — definitieve verbredings-aanbieding (kan in 'done' pas
           // definitief zijn; blijft anders staan zoals in 'meta' gezet).
           if (evt.verbreding !== undefined) {
@@ -1723,6 +1767,7 @@ export default function AssistentClient({
             modus: modusData,
             onderbouwing: onderbouwingData,
             inlineMeldingen: inlineMeldingenData,
+            volledigeAnalyseAanbod: volledigeAnalyseAanbodData,
             logId: logIdData,
           },
         ];
@@ -1954,6 +1999,27 @@ export default function AssistentClient({
       bronIntentOverride: intent,
       bronIntentBron: "chip",
       bronkeuzeVorigeLogId: vorigeLogId,
+    });
+  }
+
+  // M7 — expliciete opschaling na een targeted antwoord. De server valideert
+  // opnieuw dat het aanbod bij deze gebruiker, dit fonds, deze vraag en precies
+  // dit document hoort; de ids uit de client zijn dus alleen correlatiesleutels.
+  function kiesVolledigeAnalyse(aanbod: VolledigeAnalyseAanbod) {
+    if (laden) return;
+    const scope: DocumentScope = {
+      document_ids: [aanbod.document_id],
+      titels: [aanbod.document_titel],
+      algemene_kennis: false,
+    };
+    stuurBericht(aanbod.originele_vraag, {
+      volledigeAnalyse: {
+        origineelLogId: aanbod.origineel_log_id,
+        documentId: aanbod.document_id,
+      },
+      weergaveTekst: `Volledige analyse uitvoeren voor «${aanbod.document_titel}»`,
+      scopeOverride: scope,
+      persistScope: scope,
     });
   }
 
@@ -2643,6 +2709,25 @@ export default function AssistentClient({
                       </button>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* M7 — de targeted beantwoording blijft staan. Alleen een
+                  expliciete klik start een tweede, aantoonbaar bredere analyse;
+                  de kosten-/wachttijdmelding staat daarom direct bij de actie. */}
+              {b.rol === "ai" && b.volledigeAnalyseAanbod && (
+                <div className="mt-3 rounded-lg border border-line bg-card px-3 py-2.5">
+                  <p className="text-xs text-muted mb-2">
+                    Dit kan langer duren en meer AI-verbruik veroorzaken.
+                  </p>
+                  <button
+                    type="button"
+                    disabled={laden}
+                    onClick={() => kiesVolledigeAnalyse(b.volledigeAnalyseAanbod!)}
+                    className="text-xs text-ink border border-app-line-strong px-3 py-1.5 rounded-full hover:border-accent hover:bg-warn-tint transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {b.volledigeAnalyseAanbod.label}
+                  </button>
                 </div>
               )}
 

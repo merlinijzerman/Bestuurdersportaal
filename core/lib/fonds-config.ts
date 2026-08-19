@@ -202,6 +202,48 @@ export async function bronkeuzeModusVoorFonds(fondsId: string): Promise<Bronkeuz
   return resolveBronkeuzeModus(flag, process.env.BRONKEUZE_MODUS);
 }
 
+// ── Betrouwbare vraagrouter (M9) ────────────────────────────────────────────
+// Drie losse schakelaars zodat de deterministische router, de optionele
+// modelverfijning en de zichtbare volledige-analyseactie onafhankelijk kunnen
+// worden gecanaryd en teruggedraaid. Ontbrekende flags zijn default UIT; alleen
+// een expliciete fondswaarde of env-default activeert gedrag.
+export interface VraagrouterVlaggen {
+  routerV2: boolean;
+  modelrouter: boolean;
+  volledigeAnalyseVervolg: boolean;
+}
+
+export async function vraagrouterVlaggenVoorFonds(
+  fondsId: string
+): Promise<VraagrouterVlaggen> {
+  const supabase = await createServerSupabase();
+  const { data, error } = await supabase
+    .from("fonds_feature_flags")
+    .select("flag_key, waarde")
+    .eq("fonds_id", fondsId)
+    .in("flag_key", [
+      "vraagrouter_v2",
+      "vraagrouter_model",
+      "volledige_analyse_vervolg",
+    ]);
+  if (error) {
+    console.error("Vraagrouterflags lezen mislukt; fail-safe allemaal uit:", error.message);
+    return { routerV2: false, modelrouter: false, volledigeAnalyseVervolg: false };
+  }
+  const m = new Map<string, JsonWaarde>();
+  for (const r of data ?? []) m.set(r.flag_key, r.waarde as JsonWaarde);
+  const vlag = (key: string, envKey: string): boolean =>
+    m.has(key) ? flagAlsBoolean(m.get(key)) : process.env[envKey] === "on";
+  const routerV2 = vlag("vraagrouter_v2", "VRAAGROUTER_V2");
+  return {
+    routerV2,
+    // Afhankelijke functies kunnen nooit buiten de hoofdrouter om activeren.
+    modelrouter: routerV2 && vlag("vraagrouter_model", "VRAAGROUTER_MODEL"),
+    volledigeAnalyseVervolg:
+      routerV2 && vlag("volledige_analyse_vervolg", "VOLLEDIGE_ANALYSE_VERVOLG"),
+  };
+}
+
 // R1.3–R1.6 — retrieval-kwaliteitsvlaggen per fonds (reranker, relevantie-drempel,
 // jargonexpansie, parent-retrieval) + de instelbare drempelwaarde. Elke vlag valt
 // terug op zijn env-default als er geen fonds-flag is gezet — zo blijft het gedrag

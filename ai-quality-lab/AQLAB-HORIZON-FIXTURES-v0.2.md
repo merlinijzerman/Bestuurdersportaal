@@ -603,9 +603,51 @@ Deze kernfeiten zijn door meerdere fixtures gedeeld en moeten onderling consiste
 
 ---
 
+# FIX-23 · HORIZON-TRANSITIEPLAN-ROUTER-001
+
+- **Titel:** Synthetisch transitieplan — geanonimiseerde routerregressie
+- **Documenttype:** transitieplan · **Versie:** 1 · **synthetic:** true · **content_hash:** `754f733e891886cac34b415cc7708170f67480e1b71fc787d87609f8ae50898d`
+- **Gekoppelde testcases:** RQ-01
+
+**Volledige synthetische tekst:**
+
+```text
+Synthetisch transitieplan — geanonimiseerde routerregressie
+
+1. Transitie-effecten en berekeningen
+De effecten van de transitie zijn doorgerekend voor drie fictieve leeftijdscohorten en voor de scenario’s basis, tegenwind en meewind. De uitkomsten worden per cohort vergeleken met voortzetting van de bestaande regeling.
+
+2. Compensatie
+Voor het fictieve cohort dat nadeel ondervindt is een tijdelijke compensatieregeling beschreven, inclusief financieringsbron en looptijd.
+
+3. Evenwichtigheid
+De belangen van actieve deelnemers, gewezen deelnemers en pensioengerechtigden zijn afzonderlijk gewogen. Het plan benoemt de gekozen maatstaven en de resterende onzekerheden.
+
+4. Opgebouwde aanspraken en rechten
+Het plan beschrijft hoe reeds opgebouwde aanspraken en ingegane rechten in de transitie worden behandeld en welke controles vóór omzetting plaatsvinden.
+
+5. Uitvoering en planning
+De uitvoering bevat mijlpalen voor datakwaliteit, proefberekeningen, communicatie, besluitvorming en een go/no-go vóór de fictieve transitiedatum.
+```
+
+**expected_facts:**
+
+| fact_id | value | unit | period | source_location | exact_match_required | mag_parafraseren |
+|---------|-------|------|--------|-----------------|----------------------|------------------|
+| transitie_effecten | "effecten voor drie fictieve leeftijdscohorten in drie scenario’s" | — | — | Sectie 1 | false | true |
+| compensatie | "tijdelijke compensatieregeling met financieringsbron en looptijd" | — | — | Sectie 2 | false | true |
+| evenwichtigheidsverantwoording | "belangen van drie groepen afzonderlijk gewogen, inclusief onzekerheden" | — | — | Sectie 3 | false | true |
+| opgebouwde_aanspraken | "behandeling en controles voor opgebouwde aanspraken en ingegane rechten" | — | — | Sectie 4 | false | true |
+| uitvoering_planning | "mijlpalen en go/no-go vóór de fictieve transitiedatum" | — | — | Sectie 5 | false | true |
+
+**intentional_traps:** alle vijf thema’s zijn aantoonbaar aanwezig. Een targeted top-N-route kan passages missen en mag daarom nooit als volledige documentcontrole worden gepresenteerd. Een gedeeltelijke map/reduce-run moet zichtbaar als gedeeltelijk eindigen.
+
+---
+
 # Consistentienoot bij deze fixtures
 
 - Alle bedragen/percentages/datums/namen zijn **fictief**. Gedeelde kernfeiten (112,4% beleidsdekkingsgraad, 114,1% actueel, 40% actuele aandelenallocatie vs 35% verouderd, 6 weken zienswijzetermijn) zijn over fixtures heen consistent gehouden.
 - De enige persoonsgegevens staan in FIX-19 en zijn **gewone** fictieve gegevens; **bijzondere** persoonsgegevens ontbreken bewust (buiten MVP tenzij juridisch bevestigd).
 - FIX-15 en FIX-22 hebben bewust **geen** expected_facts: het juiste gedrag is non-onthulling.
+- FIX-23 heeft als enige fixture in deze versie al een definitieve hash; die hash hoort bij exact de tekst in het `text`-blok, genormaliseerd volgens de conventie hieronder.
 - `content_hash` is overal placeholder; wordt bij seeding berekend over de `canonical_text` volgens *Hashing en versionering* (sha256, genormaliseerde line-endings). De set is daarom **structureel seed-ready** maar nog niet volledig seed-ready zolang de hashes placeholders zijn.

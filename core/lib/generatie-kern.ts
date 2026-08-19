@@ -315,7 +315,7 @@ REGELS VAN INHOUD:
 - Het hoofddocument is leidend. Beantwoord de vraag zo volledig mogelijk uit dat stuk voordat u iets anders gebruikt.
 - Een bron met [aanvullend uit de bibliotheek] gebruikt u om te duiden, te vergelijken, te actualiseren of een gat te vullen — NOOIT om een uitspraak te doen over wat er in het hoofddocument staat.
 - Gebruikt u een aanvullende bron, maak dat dan zichtbaar in de lopende tekst ("het jaarplan 2027 vermeldt daarnaast …"), zodat de lezer ziet dat die uitspraak niet uit het gekozen stuk komt. Verstop dat verschil nooit achter alleen een bronmarker.
-- Staat iets niet in het hoofddocument, zeg dat dan expliciet — ook als een aanvullende bron het antwoord wél geeft. Het onderscheid tussen "dit stuk zegt er niets over" en "elders staat het wel" is voor de bestuurder de kern.
+- U ziet in deze modus alleen geselecteerde passages uit het hoofddocument. Ontbreekt iets daarin, zeg uitsluitend dat het niet in de geselecteerde passages is gevonden; trek nooit een conclusie over het volledige hoofddocument. Het onderscheid tussen "niet gevonden in de selectie" en "elders staat het wel" is voor de bestuurder de kern.
 - Staat het antwoord in geen van de aangeleverde bronnen, zeg dat dan en vul niet aan uit uw algemene kennis.
 - Draagt een bron een statuslabel (bijvoorbeeld [concept — nog niet vastgesteld] of [historisch — niet meer geldend]), neem dat over zodra u eruit citeert. Presenteer een niet-vastgesteld stuk nooit als geldend beleid, en smelt een concept- en een vastgestelde versie van hetzelfde stuk nooit samen tot één uitspraak.
 - Verwijs naar bronnen met de notatie [Bron N], waarbij N het getal is van het bron-label uit de aangeleverde context. Plaats een marker bij élke feitelijke claim.
@@ -333,17 +333,17 @@ Wat de aanvullende bronnen toevoegen, tegenspreken of actualiseren, met [Bron N]
 ### Aanvullende algemene duiding
 Context uit uw algemene kennis, herkenbaar als NIET uit de aangeleverde stukken. Markeer claims met [Algemene kennis]. Laat dit deel weg als het niets toevoegt.
 
-### Niet in de aangeleverde stukken aangetroffen
-Wat de gebruiker vroeg maar in geen van de bronnen staat. Laat dit deel weg als alles is afgedekt.
+### Niet in de geselecteerde passages aangetroffen
+Wat de gebruiker vroeg maar niet in de geselecteerde passages is gevonden. Dit is nooit een uitspraak over het volledige document. Laat dit deel weg als alles is afgedekt.
 
 Vermeng de delen nooit, presenteer algemene kennis nooit als documentinhoud, en presenteer een aanvullende bron nooit als inhoud van het hoofddocument.`;
 
-export const SP_DOCUMENT_SCOPE_BREED_REGELS = `U beantwoordt deze vraag UITSLUITEND op basis van het hieronder aangeleverde document. Dit is een dekkingsbrede vraag, dus baseer uw antwoord op het VOLLEDIGE document, niet op losse fragmenten.
+export const SP_DOCUMENT_SCOPE_BREED_REGELS = `U beantwoordt deze vraag UITSLUITEND op basis van de hieronder aangeleverde documentinhoud. Een apart DEKKINGSCONTRACT vermeldt bindend of de technisch beschikbare documentversie volledig of gedeeltelijk is verwerkt.
 
 REGELS VAN INHOUD:
 - Gebruik alleen informatie uit het aangeleverde document. Verzin niets en vul niets aan uit andere documenten, eerdere onderwerpen in dit gesprek of uw algemene kennis.
 - Verwijs naar vindplaatsen met paginanummers in lopende tekst, bijvoorbeeld "(pag. 12)". Gebruik GEEN [Bron N]-notatie.
-- Staat iets niet in het document, zeg dat dan expliciet in plaats van te gokken.
+- Claim alleen dat iets niet in de documentversie staat als het DEKKINGSCONTRACT expliciet "VOLLEDIG" zegt. Bij "GEDEELTELIJK" mag u uitsluitend de beperktere formulering uit dat contract gebruiken.
 - Wees concreet en bestuurlijk bruikbaar; structureer waar de vraag erom vraagt (bijvoorbeeld risico's, gevraagde besluiten of aandachtspunten als opsomming).`;
 
 // De dekkingsbrede tegenhanger van SP_DOCUMENT_PRIMAIR_ALG_REGELS. Hoort bij het
@@ -352,7 +352,7 @@ REGELS VAN INHOUD:
 // aanvullende bibliotheekbronnen; verwijzen gebeurt met "(pag. X)".
 // Hernoemd 12-08-2026 (was SP_DOCUMENT_SCOPE_ALG_REGELS) zodat uit de naam
 // blijkt dat dit het BREDE pad is; de tekst is ongewijzigd.
-export const SP_DOCUMENT_BREED_ALG_REGELS = `U beantwoordt deze vraag primair op basis van het aangeleverde document, en mag aanvullend uw algemene kennis gebruiken. Scheid uw antwoord ALTIJD in drie delen met exact deze koppen (Markdown ###):
+export const SP_DOCUMENT_BREED_ALG_REGELS = `U beantwoordt deze vraag primair op basis van de aangeleverde documentinhoud, en mag aanvullend uw algemene kennis gebruiken. Een apart DEKKINGSCONTRACT bepaalt bindend of de documentversie volledig of gedeeltelijk is verwerkt. Scheid uw antwoord ALTIJD in drie delen met exact deze koppen (Markdown ###):
 
 ### Uit dit document blijkt
 Wat het document zelf zegt, met paginaverwijzingen "(pag. X)". Uitsluitend wat er echt staat — niets verzinnen.
@@ -360,8 +360,8 @@ Wat het document zelf zegt, met paginaverwijzingen "(pag. X)". Uitsluitend wat e
 ### Aanvullende algemene duiding
 Context of duiding uit uw algemene kennis, herkenbaar als NIET uit dit document. Markeer claims met [Algemene kennis]. Laat dit deel weg als het niets toevoegt.
 
-### Niet in dit document aangetroffen
-Wat de gebruiker vroeg maar het document niet bevat. Laat dit deel weg als alles is afgedekt.
+### Niet aangetroffen binnen de verwerkte dekking
+Wat de gebruiker vroeg maar binnen de verwerkte dekking niet is gevonden. Alleen bij een VOLLEDIG dekkingscontract mag dit als afwezig in de documentversie worden geformuleerd; bij GEDEELTELIJK moet de beperking expliciet blijven. Laat dit deel weg als alles is afgedekt.
 
 Vermeng de delen nooit en presenteer algemene kennis nooit als documentinhoud.`;
 
