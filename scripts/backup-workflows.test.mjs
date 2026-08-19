@@ -120,6 +120,16 @@ test("managed restore scheidt keys, hervat exact, test Auth/RLS/app en lekt geen
   assert.match(text.slice(inventoryStep, archiveStep), /INVENTORY_PATH="\$DRILL_ROOT/);
   assert.match(text.slice(inventoryStep, archiveStep), /verify-portable-checksum\.mjs/);
   assert.doesNotMatch(text.slice(inventoryStep, archiveStep), /sha256sum -c/);
+  assert.match(text, /scripts\/download-b2-object-with-retry\.sh/);
+  const downloadInvocations = text.slice(markerStep).split("\n").filter(
+    (line) => line.trim() === "scripts/download-b2-object-with-retry.sh \\",
+  );
+  assert.equal(downloadInvocations.length, 8);
+  assert.equal((text.match(/scripts\/download-b2-object-with-retry\.sh/g) || []).length, 11);
+  assert.doesNotMatch(text, /aws s3 cp/);
+  assert.match(text.slice(inventoryStep, archiveStep), /"\$INVENTORY_BYTES" "\$INVENTORY_SHA256"/);
+  assert.match(text.slice(archiveStep), /"\$DB_BYTES" "\$DB_SHA256"/);
+  assert.match(text.slice(archiveStep), /"\$STORAGE_BYTES" "\$STORAGE_SHA256"/);
   assert.equal(
     (text.match(/--source "\$DB_SOURCE_DIR\/database-validation\.restore\.json"/g) || []).length,
     2,
