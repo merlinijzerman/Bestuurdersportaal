@@ -229,6 +229,19 @@ async function createCanary(admin, fixture, runId, ordinal) {
   });
   assertNoError(error, "canary_create");
   if (!UUID_PATTERN.test(data?.user?.id ?? "")) fail("canary_create_contract");
+
+  // GoTrue does not reliably expose app_metadata during the createUser()
+  // insert trigger. Persist it through the explicit service-role update so
+  // the deferred `bij_app_metadata` trigger can provision the profile.
+  const { error: metadataError } = await admin.auth.admin.updateUserById(data.user.id, {
+    app_metadata: {
+      ...(data.user.app_metadata ?? {}),
+      fonds_id: fixture.fonds_id,
+      [CANARY_FLAG]: true,
+      restore_drill_run_id: runId,
+    },
+  });
+  assertNoError(metadataError, "canary_metadata_update");
   return {
     user_id: data.user.id,
     email,
