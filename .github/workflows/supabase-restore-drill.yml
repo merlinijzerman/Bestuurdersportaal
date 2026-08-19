@@ -132,6 +132,7 @@ jobs:
             scripts/restore-supabase-backup.sh \
             scripts/restore-supabase-storage-with-metadata.sh \
             scripts/create-backup-validation.sql \
+            scripts/normalize-supabase-validation-json.mjs \
             scripts/verify-supabase-restore.mjs \
             scripts/verify-supabase-managed-keys.mjs \
             scripts/verify-supabase-auth-config.mjs \
@@ -503,12 +504,15 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
+          TARGET_VALIDATION_RAW_PATH="$DRILL_ROOT/target-validation.raw"
           TARGET_VALIDATION_PATH="$DRILL_ROOT/target-validation.json"
           TECHNICAL_EVIDENCE_PATH="$DRILL_ROOT/technical-evidence.json"
-          psql "$TARGET_DB_URL" -X -v ON_ERROR_STOP=1 -f scripts/create-backup-validation.sql \
-            > "$TARGET_VALIDATION_PATH"
+          psql "$TARGET_DB_URL" -X -qAt -v ON_ERROR_STOP=1 -f scripts/create-backup-validation.sql \
+            > "$TARGET_VALIDATION_RAW_PATH"
+          node scripts/normalize-supabase-validation-json.mjs \
+            --input "$TARGET_VALIDATION_RAW_PATH" --output "$TARGET_VALIDATION_PATH"
           node scripts/verify-supabase-restore.mjs \
-            --source "$DB_SOURCE_DIR/database-validation.json" \
+            --source "$DB_SOURCE_DIR/database-validation.restore.json" \
             --target "$TARGET_VALIDATION_PATH" \
             --storage-manifest "$STORAGE_RESTORE_DIR/storage-manifest.json" \
             > "$TECHNICAL_EVIDENCE_PATH"
@@ -601,12 +605,15 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
+          FINAL_TARGET_VALIDATION_RAW_PATH="$DRILL_ROOT/final-target-validation.raw"
           FINAL_TARGET_VALIDATION_PATH="$DRILL_ROOT/final-target-validation.json"
           FINAL_TECHNICAL_EVIDENCE_PATH="$DRILL_ROOT/final-technical-evidence.json"
-          psql "$TARGET_DB_URL" -X -v ON_ERROR_STOP=1 -f scripts/create-backup-validation.sql \
-            > "$FINAL_TARGET_VALIDATION_PATH"
+          psql "$TARGET_DB_URL" -X -qAt -v ON_ERROR_STOP=1 -f scripts/create-backup-validation.sql \
+            > "$FINAL_TARGET_VALIDATION_RAW_PATH"
+          node scripts/normalize-supabase-validation-json.mjs \
+            --input "$FINAL_TARGET_VALIDATION_RAW_PATH" --output "$FINAL_TARGET_VALIDATION_PATH"
           node scripts/verify-supabase-restore.mjs \
-            --source "$DB_SOURCE_DIR/database-validation.json" \
+            --source "$DB_SOURCE_DIR/database-validation.restore.json" \
             --target "$FINAL_TARGET_VALIDATION_PATH" \
             --storage-manifest "$STORAGE_RESTORE_DIR/storage-manifest.json" \
             > "$FINAL_TECHNICAL_EVIDENCE_PATH"

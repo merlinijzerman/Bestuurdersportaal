@@ -120,6 +120,21 @@ test("managed restore scheidt keys, hervat exact, test Auth/RLS/app en lekt geen
   assert.match(text.slice(inventoryStep, archiveStep), /INVENTORY_PATH="\$DRILL_ROOT/);
   assert.match(text.slice(inventoryStep, archiveStep), /verify-portable-checksum\.mjs/);
   assert.doesNotMatch(text.slice(inventoryStep, archiveStep), /sha256sum -c/);
+  assert.equal(
+    (text.match(/--source "\$DB_SOURCE_DIR\/database-validation\.restore\.json"/g) || []).length,
+    2,
+  );
+  assert.doesNotMatch(text, /--source "\$DB_SOURCE_DIR\/database-validation\.json"/);
+  assert.equal(
+    (text.match(/psql "\$TARGET_DB_URL" -X -qAt -v ON_ERROR_STOP=1 -f scripts\/create-backup-validation\.sql/g) || []).length,
+    2,
+  );
+  assert.equal(
+    (text.match(/node scripts\/normalize-supabase-validation-json\.mjs/g) || []).length,
+    2,
+  );
+  assert.match(text, /TARGET_VALIDATION_RAW_PATH="\$DRILL_ROOT\/target-validation\.raw"/);
+  assert.match(text, /FINAL_TARGET_VALIDATION_RAW_PATH="\$DRILL_ROOT\/final-target-validation\.raw"/);
   assert.match(text, /verify-supabase-managed-keys\.mjs/);
   assert.match(text, /verify-supabase-auth-config\.mjs/);
   assert.match(text, /verify-supabase-managed-functional\.mjs setup/);
