@@ -9,7 +9,7 @@ import {
   vingerafdruk,
 } from "@/core/lib/ai-preflight";
 import { createServerSupabase } from "@/core/lib/supabase-server";
-import { zoekRelevanteChunksMetMeta, telNietActueleFondstreffers, maakContext, maakBronSentinel, haalDocumentChunks, haalBevrorenChunks, verrijkNotulenChunks, verrijkDocumentmetadata, type DocumentChunk, type BronVerwijzing, type RetrievalMeta, type RetrievalFilters } from "@/core/lib/rag";
+import { zoekRelevanteChunksMetMeta, telNietActueleFondstreffers, maakContext, maakBronSentinel, haalDocumentChunksMetDekking, telDocumentChunks, VOLLEDIGE_DOCUMENT_CHUNK_CAP, haalBevrorenChunks, verrijkNotulenChunks, verrijkDocumentmetadata, type DocumentChunk, type DocumentChunkOphaalresultaat, type BronVerwijzing, type RetrievalMeta, type RetrievalFilters } from "@/core/lib/rag";
 // Plateau B — de reflectieflow. `isActief` heet hier `isReflectieActief` omdat
 // `actief` in deze route al een half dozijn andere betekenissen heeft.
 import { effectieveStatus, isActief as isReflectieActief, isReflectieIngang, type ReflectieStatus, type ReflectieActie, type ReflectieIngang } from "@/core/lib/reflectie-flow";
@@ -20,7 +20,7 @@ import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
 import { valideerChatInvoer } from "@/core/lib/chat-invoer";
 import { rateLimited, badRequest } from "@/core/lib/api-errors";
 import { beoordeelRouteHostToegang } from "@/core/lib/tenant-route-guard";
-import { hybrideZoekenAan, retrievalVlaggenVoorFonds, bronkeuzeModusVoorFonds } from "@/core/lib/fonds-config";
+import { hybrideZoekenAan, retrievalVlaggenVoorFonds, bronkeuzeModusVoorFonds, vraagrouterVlaggenVoorFonds } from "@/core/lib/fonds-config";
 import {
   VOORTGANG_LABEL,
   retrievalUitkomst,
@@ -112,6 +112,24 @@ import {
   type Stuksoort,
 } from "@/core/lib/stukvoorbereiding";
 import { rolHeeftCapability } from "@/core/lib/capabilities";
+import {
+  bouwAnalyseplan,
+  formatteerAnalyseplan,
+  resolveerGenoemdDocument,
+  routeerVraag,
+  type Vraagroute,
+  type VraagScope,
+} from "@/core/lib/vraagrouter";
+import { verfijnVraagrouteMetModel } from "@/core/lib/vraagrouter-model";
+import {
+  bredeDekking,
+  dekkingsInstructie,
+  finaliseerRouteMetDekking,
+  gerichteDekking,
+  magVolledigeAnalyseAanbieden,
+  type DekkingsAfkapreden,
+  type DocumentDekking,
+} from "@/core/lib/document-dekking";
 
 // AI-BEGRENZING (besluit 0180). Geen module-level client meer: elke van de vijf
 // soorten providercalls in deze route (Opus-stream, Haiku-mapstap,
@@ -145,7 +163,32 @@ const VOLLEDIG_DOC_TOKEN_DREMPEL = 48000;
 // Tokenbudget per map-batch en harde bovengrens op het aantal batches
 // (kostenbewaking — voorkomt kostenrunaway bij extreem grote documenten).
 const MAP_BATCH_TOKENS = 16000;
-const MAX_BATCHES = 12;
+const MAX_BATCHES = 8;
+const MAP_CONCURRENCY = 2;
+const MAP_CALL_TIMEOUT_MS = 20_000;
+const MAP_FASE_TIMEOUT_MS = 60_000;
+const VOLLEDIGE_ANALYSE_GENERATIE_TIMEOUT_MS = 45_000;
+// Conservatieve preflight voor het aanbod: bij 800 tekens/chunk komt 640 chunks
+// overeen met het harde mapbudget van 8 × 16k tokens.
+const MAX_VOLLEDIGE_ANALYSE_PASSAGES = 640;
+
+function telDekkingslocaties(chunks: DocumentChunk[]): {
+  paginas: number;
+  secties: number;
+} {
+  return {
+    paginas: new Set(
+      chunks
+        .map((chunk) => chunk.pagina)
+        .filter((pagina): pagina is number => typeof pagina === "number")
+    ).size,
+    secties: new Set(
+      chunks
+        .map((chunk) => chunk.paragraaf?.trim())
+        .filter((sectie): sectie is string => !!sectie)
+    ).size,
+  };
+}
 // Goedkoop/snel model voor de extractieve map-stap; het sterke AI_MODEL doet de
 // reduce-stap (kwaliteit van het eindantwoord).
 const MAP_MODEL = HAIKU_MODEL;
@@ -383,6 +426,12 @@ export async function POST(req: NextRequest) {
         procedure_id?: string;
         risico_id?: string;
       };
+      // M7 — expliciete vervolgactie vanuit een eerder targeted antwoord. De
+      // server valideert eigenaar, fonds, originele vraag en document opnieuw.
+      volledige_analyse?: {
+        origineel_log_id?: string;
+        document_id?: string;
+      };
     };
     // ── H-12 (review 2026-07-30): runtime-validatie + harde invoercaps ─────
     // De historie kwam via een TypeScript-cast binnen en werd nergens op vorm
@@ -471,6 +520,93 @@ export async function POST(req: NextRequest) {
     const moduleWeigering = await weigerAlsModuleUit(fondsId, "ai");
     if (moduleWeigering) return moduleWeigering;
 
+    // M9 — per-fonds rollout. Alle drie default uit; afhankelijke functies
+    // kunnen nooit buiten de hoofdrouter om activeren.
+    const vraagrouterVlaggen = await vraagrouterVlaggenVoorFonds(fondsId);
+
+    // M7 — valideer een expliciete volledige-analysevervolgactie vóór er quota
+    // wordt gereserveerd of een provider wordt aangeroepen. Beide tabellen staan
+    // onder RLS; de expliciete gebruiker-/fondsfilters zijn defense-in-depth.
+    let volledigeAnalyseUitgevoerd = false;
+    let volledigeAnalyseVorigeLogId: string | null = null;
+    let volledigeAnalyseDocumentId: string | null = null;
+    if (body.volledige_analyse) {
+      if (!vraagrouterVlaggen.volledigeAnalyseVervolg) {
+        return NextResponse.json(
+          { error: "De volledige-analysefunctie is voor dit fonds niet actief." },
+          { status: 400 }
+        );
+      }
+      const vorigId =
+        typeof body.volledige_analyse.origineel_log_id === "string" &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          body.volledige_analyse.origineel_log_id
+        )
+          ? body.volledige_analyse.origineel_log_id
+          : null;
+      const documentId =
+        typeof body.volledige_analyse.document_id === "string" &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          body.volledige_analyse.document_id
+        )
+          ? body.volledige_analyse.document_id
+          : null;
+      if (!vorigId || !documentId) {
+        return NextResponse.json(
+          { error: "De verwijzing naar de eerdere analyse is ongeldig." },
+          { status: 400 }
+        );
+      }
+      const [{ data: vorigSpoor }, { data: vorigeInhoud }] = await Promise.all([
+        supabase
+          .from("governance_log")
+          .select("id, gebruiker_id, fonds_id, retrieval_meta")
+          .eq("id", vorigId)
+          .eq("gebruiker_id", user.id)
+          .eq("fonds_id", fondsId)
+          .maybeSingle(),
+        supabase
+          .from("governance_log_inhoud")
+          .select("log_id, vraag")
+          .eq("log_id", vorigId)
+          .maybeSingle(),
+      ]);
+      const vorigMeta =
+        vorigSpoor?.retrieval_meta && typeof vorigSpoor.retrieval_meta === "object"
+          ? (vorigSpoor.retrieval_meta as Record<string, unknown>)
+          : {};
+      const vorigScope =
+        vorigMeta.scope && typeof vorigMeta.scope === "object"
+          ? (vorigMeta.scope as Record<string, unknown>)
+          : {};
+      const vorigeVolledigeAnalyse =
+        vorigMeta.volledige_analyse && typeof vorigMeta.volledige_analyse === "object"
+          ? (vorigMeta.volledige_analyse as Record<string, unknown>)
+          : {};
+      const vorigeIds = Array.isArray(vorigScope.document_ids)
+        ? vorigScope.document_ids.filter((id): id is string => typeof id === "string")
+        : [];
+      const origineleVraag =
+        typeof vorigeInhoud?.vraag === "string" ? vorigeInhoud.vraag.trim() : "";
+      const geldigVervolg =
+        !!vorigSpoor?.id &&
+        origineleVraag.length > 0 &&
+        origineleVraag === vraag.trim() &&
+        vorigScope.strategie === "targeted" &&
+        vorigeIds.length === 1 &&
+        vorigeIds[0] === documentId &&
+        vorigeVolledigeAnalyse.aangeboden === true;
+      if (!geldigVervolg) {
+        return NextResponse.json(
+          { error: "Deze volledige analyse hoort niet bij een geldig eerder antwoord." },
+          { status: 400 }
+        );
+      }
+      volledigeAnalyseUitgevoerd = true;
+      volledigeAnalyseVorigeLogId = vorigId;
+      volledigeAnalyseDocumentId = documentId;
+    }
+
     // ── AI-begrenzing (besluit 0180) ────────────────────────────────────────
     // Eén chatvraag = ÉÉN AI-actie, ongeacht hoeveel modelcalls eruit
     // voortkomen (Opus-stream + tot twaalf Haiku-mapstappen + reformulatie +
@@ -495,6 +631,8 @@ export async function POST(req: NextRequest) {
       vingerafdruk: vingerafdruk({
         vraag: body.vraag ?? null,
         berichten: body.messages?.length ?? 0,
+        volledige_analyse_log_id: volledigeAnalyseVorigeLogId,
+        volledige_analyse_document_id: volledigeAnalyseDocumentId,
       }),
     });
     const aiBlokkade = preflightRespons("chat.POST", pf);
@@ -674,9 +812,78 @@ export async function POST(req: NextRequest) {
     // De client mag document_id's meesturen, maar de server valideert altijd
     // (§7): bestaat, actief, toegang (RLS), geïndexeerd. Faalt een check, dan een
     // concrete melding — nooit een stille terugval naar de hele bibliotheek.
-    const gevraagdeScopeIds = (body.document_scope?.document_ids ?? []).filter(
-      (id) => typeof id === "string" && id.length > 0
-    );
+    let scopeHerkomst: VraagScope = "fondscollectie";
+    let gevraagdeScopeIds = volledigeAnalyseDocumentId
+      ? [volledigeAnalyseDocumentId]
+      : (body.document_scope?.document_ids ?? []).filter(
+          (id) => typeof id === "string" && id.length > 0
+        );
+    if (gevraagdeScopeIds.length > 0) scopeHerkomst = "geselecteerd_document";
+
+    // M3 — een letterlijk genoemd document mag alleen automatisch scope worden
+    // als precies één actief/geïndexeerd/toegankelijk document onder RLS past.
+    // Bij meerdere kandidaten vragen we gericht te kiezen; nooit gokken.
+    if (
+      vraagrouterVlaggen.routerV2 &&
+      gevraagdeScopeIds.length === 0 &&
+      !agendapuntModusActief
+    ) {
+      // Lees de volledige onder RLS toegankelijke titelset gepagineerd. Een
+      // vaste `.limit(500)` kan bij 501+ documenten ten onrechte "uniek" zeggen
+      // terwijl een tweede gelijknamig document buiten de eerste pagina valt.
+      // Boven de defensieve cap leiden we daarom géén scope af (veilig targeted).
+      const benoembareRijen: { id: string; titel: string }[] = [];
+      const titelPagina = 1000;
+      const titelCap = 5000;
+      let titelsetCompleet = true;
+      for (let vanaf = 0; vanaf < titelCap; vanaf += titelPagina) {
+        const { data: pagina, error: titelFout } = await supabase
+          .from("documenten")
+          .select("id, titel")
+          .not("actief", "is", false)
+          .eq("geindexeerd", true)
+          .order("id", { ascending: true })
+          .range(vanaf, vanaf + titelPagina - 1);
+        if (titelFout) {
+          titelsetCompleet = false;
+          break;
+        }
+        benoembareRijen.push(
+          ...(pagina ?? []).map((d) => ({
+            id: d.id as string,
+            titel: (d.titel as string) || "(zonder titel)",
+          }))
+        );
+        if ((pagina?.length ?? 0) < titelPagina) break;
+        if (vanaf + titelPagina >= titelCap) titelsetCompleet = false;
+      }
+      const naamResultaat = resolveerGenoemdDocument(
+        vraag,
+        titelsetCompleet ? benoembareRijen : []
+      );
+      if (naamResultaat.status === "meerdere") {
+        return NextResponse.json(
+          {
+            error:
+              "Meerdere documenten passen bij deze naam: " +
+              naamResultaat.kandidaten.map((d) => `«${d.titel}»`).join(", ") +
+              ". Kies het bedoelde document via @ of de documentlijst.",
+          },
+          { status: 400 }
+        );
+      }
+      if (naamResultaat.status === "eenduidig") {
+        const { data: eersteChunk } = await supabase
+          .from("document_chunks")
+          .select("document_id")
+          .eq("document_id", naamResultaat.document.id)
+          .limit(1);
+        if ((eersteChunk?.length ?? 0) > 0) {
+          gevraagdeScopeIds = [naamResultaat.document.id];
+          scopeHerkomst = "genoemd_document";
+        }
+      }
+    }
     let scopeDocumentIds: string[] | undefined;
     let scopeTitels: string[] = [];
     // Titel per (server-gevalideerd) scope-id — bron voor het "Afwijkingen"-label
@@ -1232,6 +1439,73 @@ export async function POST(req: NextRequest) {
 
     const reflectieActief = isReflectieActief(reflectieStatus);
 
+    // M1–M5 — één gesloten routebesluit. Reflectie/transformatie/bureau hebben
+    // eigen, hoger-prioritaire contracten en blijven daarom buiten vraagrouter v2.
+    let vraagRoute: Vraagroute | null = null;
+    let vraagrouterUitvoering: RetrievalMeta["vraagrouter_uitvoering"] | null = null;
+    if (
+      vraagrouterVlaggen.routerV2 &&
+      !reflectieActief &&
+      !transformatieActief &&
+      !stukActief
+    ) {
+      const routerStart = Date.now();
+      const routeScope: VraagScope = agendapuntModusActief
+        ? "agendapuntstukken"
+        : scopeActief
+        ? scopeHerkomst
+        : alleenFondsdocumenten
+        ? "fondscollectie"
+        : "fonds_plus_algemeen_kader";
+      const basisRoute = routeerVraag(vraag, {
+        scope: routeScope,
+        // Alleen strict/named document-scope ontsluit volledige dekking. Een
+        // agendapunt of fondscollectie wordt niet stil volledig gemap-reduced.
+        documentAantal: scopeActief ? scopeDocumentIds?.length ?? 0 : 0,
+        forceerVolledig: volledigeAnalyseUitgevoerd || doorgrondActief,
+      });
+      if (volledigeAnalyseUitgevoerd || doorgrondActief) {
+        vraagRoute = {
+          ...basisRoute,
+          bron: volledigeAnalyseUitgevoerd
+            ? "expliciete_vervolgactie"
+            : "deterministisch",
+          signalen: [
+            ...new Set([
+              ...basisRoute.signalen,
+              volledigeAnalyseUitgevoerd
+                ? "expliciete_volledige_analyse"
+                : "doorgrond_forceert_volledig",
+            ]),
+          ],
+        };
+        vraagrouterUitvoering = {
+          router_ms: Date.now() - routerStart,
+          modelrouter: {
+            toegepast: false,
+            model: null,
+            duur_ms: 0,
+            tokens_in: 0,
+            tokens_uit: 0,
+            uitkomst: "overgeslagen",
+          },
+        };
+      } else {
+        const verfijnd = await verfijnVraagrouteMetModel({
+          vraag,
+          basis: basisRoute,
+          documentAantal: scopeActief ? scopeDocumentIds?.length ?? 0 : 0,
+          actief: vraagrouterVlaggen.modelrouter,
+          poort: aiPoort,
+        });
+        vraagRoute = verfijnd.route;
+        vraagrouterUitvoering = {
+          router_ms: Date.now() - routerStart,
+          modelrouter: verfijnd.meta,
+        };
+      }
+    }
+
     // ── Besluit 0151 — module-scope "in effect" ─────────────────────────────
     // Het module-contextblok reist alléén mee in de gewone chat-takken
     // (algemeen/combineren/documenten via portaalContextPrefix). Een hoger-
@@ -1510,7 +1784,23 @@ export async function POST(req: NextRequest) {
     let scopeStrategie: Strategie = "targeted";
     let breedChunks: DocumentChunk[] = [];
     let breedBatches: DocumentChunk[][] = [];
+    let breedTotaalBatches = 0;
     let breedAfgekapt = false;
+    let breedOphaalresultaat: DocumentChunkOphaalresultaat | null = null;
+    let documentDekking: DocumentDekking = gerichteDekking(0);
+    let totaalPassagesVoorAanbod: number | null = null;
+    const analyseCriteria = vraagRoute ? bouwAnalyseplan(vraagRoute, vraag) : [];
+    const analyseplanTekst = formatteerAnalyseplan(analyseCriteria);
+    const analyseplanMeta: RetrievalMeta["analyseplan"] | undefined =
+      analyseCriteria.length > 0
+        ? {
+            kader: "algemeen_controleplan_niet_juridisch_volledig",
+            criteria: analyseCriteria.map((criterium) => ({
+              id: criterium.id,
+              herkomst: criterium.herkomst,
+            })),
+          }
+        : undefined;
 
     // G3 (plateau B) — een dekkingsbrede strategie is tijdens een reflectie per
     // definitie fout: de bronset is bevroren op de top-N van één antwoord, niet
@@ -1518,22 +1808,65 @@ export async function POST(req: NextRequest) {
     if (scopeActief && !transformatieActief && !reflectieActief) {
       // Doorgronden forceert breed: de secties zijn dekkingsbreed, ook als de
       // korte zichtbare zin geen breed-signaalwoord bevat (bv. alleen "Afwijkingen").
-      if (bepaalVraagtype(vraag) === "breed" || doorgrondActief) {
+      const vraagtBredeDekking = vraagRoute
+        ? vraagRoute.dekking !== "targeted"
+        : bepaalVraagtype(vraag) === "breed";
+      if (vraagtBredeDekking || doorgrondActief) {
         // T4 — geef de server-side fonds mee: dit dekkingsbrede pad loopt niet via
         // de RPC (met p_fonds_id), dus de app-guard in haalDocumentChunks is hier de
         // enige expliciete fonds-laag náást RLS.
-        breedChunks = await haalDocumentChunks(scopeDocumentIds!, fondsId);
-        const totaalTekst = breedChunks.map((c) => c.tekst).join("\n\n");
-        scopeStrategie = kiesStrategie(
-          "breed",
-          schatTokens(totaalTekst),
-          VOLLEDIG_DOC_TOKEN_DREMPEL
+        breedOphaalresultaat = await haalDocumentChunksMetDekking(
+          scopeDocumentIds!,
+          fondsId
         );
+        breedChunks = breedOphaalresultaat.chunks;
+        const totaalTekst = breedChunks.map((c) => c.tekst).join("\n\n");
+        // Full-document is alleen toegestaan als de count en alle opgehaalde
+        // rijen aantoonbaar sluiten. Bij cap/fout gaat het altijd via map-reduce
+        // en blijft de dekking zichtbaar gedeeltelijk.
+        scopeStrategie =
+          breedOphaalresultaat.volledig &&
+          schatTokens(totaalTekst) <= VOLLEDIG_DOC_TOKEN_DREMPEL
+            ? "full_document"
+            : "map_reduce";
         if (scopeStrategie === "map_reduce") {
+          const volledigBatchplan = maakBatches(
+            breedChunks,
+            MAP_BATCH_TOKENS,
+            Number.MAX_SAFE_INTEGER
+          );
           const r = maakBatches(breedChunks, MAP_BATCH_TOKENS, MAX_BATCHES);
           breedBatches = r.batches;
-          breedAfgekapt = r.afgekapt;
+          breedTotaalBatches = volledigBatchplan.batches.length;
+          breedAfgekapt = !breedOphaalresultaat.volledig || r.afgekapt;
         }
+        const ophaalRedenen: DekkingsAfkapreden[] = breedOphaalresultaat.afkapreden
+          ? [breedOphaalresultaat.afkapreden]
+          : [];
+        const alleLocaties = telDekkingslocaties(breedChunks);
+        const locatieTotalenBekend = breedOphaalresultaat.volledig;
+        documentDekking =
+          scopeStrategie === "full_document"
+            ? bredeDekking({
+                totaalPassages: breedOphaalresultaat.totaal_chunks,
+                verwerktePassages: breedChunks.length,
+                afkapredenen: ophaalRedenen,
+                verwerktePaginas: alleLocaties.paginas,
+                totaalPaginas: locatieTotalenBekend ? alleLocaties.paginas : null,
+                verwerkteSecties: alleLocaties.secties,
+                totaalSecties: locatieTotalenBekend ? alleLocaties.secties : null,
+              })
+            : bredeDekking({
+                totaalPassages: breedOphaalresultaat.totaal_chunks,
+                verwerktePassages: 0,
+                totaalBatches: breedTotaalBatches,
+                verwerkteBatches: 0,
+                afkapredenen: ophaalRedenen,
+                verwerktePaginas: 0,
+                totaalPaginas: locatieTotalenBekend ? alleLocaties.paginas : null,
+                verwerkteSecties: 0,
+                totaalSecties: locatieTotalenBekend ? alleLocaties.secties : null,
+              });
       }
     }
     const breedActief =
@@ -1913,6 +2246,22 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // M6 — targeted betekent uitsluitend de daadwerkelijk geselecteerde promptset.
+    // Voor de mogelijke vervolgactie tellen we het document zonder tekst op te
+    // halen; dit verandert de retrieval niet.
+    if (!breedActief) {
+      documentDekking = gerichteDekking(
+        retrievalMeta?.geselecteerd ?? chunks.length
+      );
+      if (
+        vraagrouterVlaggen.volledigeAnalyseVervolg &&
+        scopeActief &&
+        (scopeDocumentIds?.length ?? 0) === 1
+      ) {
+        totaalPassagesVoorAanbod = await telDocumentChunks(scopeDocumentIds!);
+      }
+    }
+
     // Dekkingsbrede scope (increment 2): volledige documentdekking. Bronnen op
     // documentniveau (paginaverwijzingen in de tekst i.p.v. [Bron N]-pills); bij
     // full-document bouwen we de context hier, bij map-reduce in de stream.
@@ -1945,6 +2294,28 @@ export async function POST(req: NextRequest) {
           batches: scopeStrategie === "map_reduce" ? breedBatches.length : undefined,
           afgekapt: scopeStrategie === "map_reduce" ? breedAfgekapt : undefined,
         },
+      };
+    }
+
+    // Eerste versie voor meta-event/prompt. De maplus actualiseert verwerkte
+    // batches/passages verderop vóór logging en het definitieve done-event.
+    if (retrievalMeta && vraagRoute) {
+      vraagRoute = finaliseerRouteMetDekking(vraagRoute, documentDekking);
+      retrievalMeta.vraagrouter = vraagRoute;
+      if (vraagrouterUitvoering) {
+        retrievalMeta.vraagrouter_uitvoering = vraagrouterUitvoering;
+      }
+      if (analyseplanMeta) retrievalMeta.analyseplan = analyseplanMeta;
+      retrievalMeta.documentdekking = documentDekking;
+      retrievalMeta.volledige_analyse = {
+        aangeboden: false,
+        uitgevoerd: volledigeAnalyseUitgevoerd,
+        ...(volledigeAnalyseVorigeLogId
+          ? { vorige_log_id: volledigeAnalyseVorigeLogId }
+          : {}),
+        ...(volledigeAnalyseDocumentId
+          ? { document_id: volledigeAnalyseDocumentId }
+          : {}),
       };
     }
 
@@ -2194,13 +2565,15 @@ export async function POST(req: NextRequest) {
         gebruikersPrompt = "";
       } else if (breedActief) {
         // full-document: volledige documenttekst in de prompt.
-        gebruikersPrompt = `VOLLEDIGE INHOUD VAN HET DOCUMENT ${titelLabel}:\n\n${contextTekst}\n\n---\n\nVRAAG: ${vraagVoorPrompt}`;
+        gebruikersPrompt = `VOLLEDIGE INHOUD VAN HET DOCUMENT ${titelLabel}:\n\n${contextTekst}\n\n---\n\nVRAAG: ${vraagVoorPrompt}${
+          analyseplanTekst ? `\n\n${analyseplanTekst}` : ""
+        }`;
       } else {
         // targeted (increment 1): top-N fragmenten.
         gebruikersPrompt =
           chunks.length > 0
-            ? `HOOFDDOCUMENT: ${titelLabel}\n\nBESCHIKBARE BRONNEN — het gekozen stuk is gemarkeerd met [hoofddocument]; bronnen met [aanvullend uit de bibliotheek] komen uit andere stukken:\n\n${contextTekst}\n\n---\n\nVRAAG: ${vraag}\n\nBeantwoord de vraag met ${titelLabel} als onderwerp. Gebruik aanvullende bronnen om te duiden, te vergelijken of aan te vullen, en maak in de lopende tekst zichtbaar wanneer u dat doet. Staat iets niet in het hoofddocument, benoem dat dan expliciet — ook als een aanvullende bron het antwoord wél geeft.`
-            : `Er zijn geen passages gevonden die op deze vraag aansluiten — niet in het hoofddocument ${titelLabel} en niet in de rest van de bibliotheek.\n\nVRAAG: ${vraag}\n\nZeg expliciet dat hierover niets in de beschikbare stukken staat. Verzin geen antwoord en vul niet aan uit uw algemene kennis.`;
+            ? `HOOFDDOCUMENT: ${titelLabel}\n\nBESCHIKBARE BRONNEN — het gekozen stuk is gemarkeerd met [hoofddocument]; bronnen met [aanvullend uit de bibliotheek] komen uit andere stukken:\n\n${contextTekst}\n\n---\n\nVRAAG: ${vraag}\n\nBeantwoord de vraag met ${titelLabel} als onderwerp. Gebruik aanvullende bronnen om te duiden, te vergelijken of aan te vullen, en maak in de lopende tekst zichtbaar wanneer u dat doet. U zag alleen geselecteerde passages. Ontbreekt het antwoord daarin, formuleer exact: "Niet gevonden in de geselecteerde passages. Dit is geen uitspraak over het volledige document."`
+            : `Voor deze vraag zijn geen passages geselecteerd uit het hoofddocument ${titelLabel} of uit de aanvullende bibliotheek.\n\nVRAAG: ${vraag}\n\nFormuleer exact: "Niet gevonden in de geselecteerde passages. Dit is geen uitspraak over het volledige document." Verzin geen antwoord en vul niet aan uit uw algemene kennis.`;
       }
     } else if (promptModus === "algemeen") {
       systeemBlokken = bouwSysteemBlokken(SP_ALGEMEEN_REGELS, ctxBestuurder, antwoordmodus, null, false, opstelTaak);
@@ -2461,6 +2834,18 @@ export async function POST(req: NextRequest) {
                   strategie: scopeStrategie,
                 }
               : null,
+            // M6/M8 — code-gedreven dekking; geen modeltekst en geen geschat
+            // percentage. Map-reduce wordt in `done` met de echte batchuitkomst
+            // geactualiseerd.
+            documentdekking: vraagRoute ? documentDekking : null,
+            vraagrouter: vraagRoute
+              ? {
+                  taak: vraagRoute.taak,
+                  scope: vraagRoute.scope,
+                  dekking: vraagRoute.dekking,
+                  bewijsniveau: vraagRoute.bewijsniveau,
+                }
+              : null,
             // Besluit 0151 — de actieve module-scope voor de scope-chip en het
             // onderbouwingspaneel (onderscheiden van documentbronnen). null = geen.
             module_scope: moduleScopeMeta,
@@ -2543,49 +2928,153 @@ export async function POST(req: NextRequest) {
           let streamMessages = claudeBerichten;
           if (scopeStrategie === "map_reduce") {
             const titelLabel = scopeTitels[0] ? `«${scopeTitels[0]}»` : "het document";
-            const deelanalyses: string[] = [];
-            for (let i = 0; i < breedBatches.length; i++) {
-              send({
-                type: "progress",
-                fase: "analyse",
-                label: VOORTGANG_LABEL.analyse,
-                batch: i + 1,
-                totaal: breedBatches.length,
-              });
-              const batchTekst = breedBatches[i]
-                .map((c) => `${locatieLabel(c)}${c.tekst}`)
-                .join("\n\n");
-              const mapResp = await bewaakteAnthropic(aiPoort, MAP_MODEL, (client) =>
-                client.messages.create({
-                model: MAP_MODEL,
-                max_tokens: 1200,
-                system: SP_MAP_EXTRACTIE,
-                messages: [
-                  {
-                    role: "user",
-                    content: `VRAAG: ${vraag}\n\nDOCUMENTDEEL ${i + 1}/${breedBatches.length} uit ${titelLabel}:\n\n${batchTekst}`,
-                  },
-                ],
-                })
+            type MapResultaat = {
+              index: number;
+              tekst: string;
+              tokensIn: number;
+              tokensUit: number;
+              chunks: number;
+              ok: boolean;
+              timeout: boolean;
+            };
+            const resultaten: Array<MapResultaat | undefined> = new Array(
+              breedBatches.length
+            );
+            let volgendeBatch = 0;
+            const mapAbort = new AbortController();
+            const mapFaseTimer = setTimeout(
+              () => mapAbort.abort(),
+              MAP_FASE_TIMEOUT_MS
+            );
+            const worker = async () => {
+              for (;;) {
+                const i = volgendeBatch++;
+                if (i >= breedBatches.length) return;
+                send({
+                  type: "progress",
+                  fase: "analyse",
+                  label: VOORTGANG_LABEL.analyse,
+                  batch: i + 1,
+                  totaal: breedBatches.length,
+                });
+                const batchTekst = breedBatches[i]
+                  .map((c) => `${locatieLabel(c)}${c.tekst}`)
+                  .join("\n\n");
+                mapCalls += 1;
+                try {
+                  const mapResp = await bewaakteAnthropic(aiPoort, MAP_MODEL, (client) =>
+                    client.messages.create(
+                      {
+                        model: MAP_MODEL,
+                        max_tokens: 1200,
+                        temperature: 0,
+                        system: SP_MAP_EXTRACTIE,
+                        messages: [
+                          {
+                            role: "user",
+                            content: `VRAAG: ${vraag}\n\n${
+                              analyseplanTekst ? `${analyseplanTekst}\n\n` : ""
+                            }DOCUMENTDEEL ${i + 1}/${breedBatches.length} uit ${titelLabel}:\n\n${batchTekst}`,
+                          },
+                        ],
+                      },
+                      { timeout: MAP_CALL_TIMEOUT_MS, signal: mapAbort.signal }
+                    )
+                  );
+                  const tekst =
+                    mapResp.content[0]?.type === "text"
+                      ? mapResp.content[0].text.trim()
+                      : "";
+                  resultaten[i] = {
+                    index: i,
+                    tekst,
+                    tokensIn: mapResp.usage?.input_tokens ?? 0,
+                    tokensUit: mapResp.usage?.output_tokens ?? 0,
+                    chunks: breedBatches[i].length,
+                    ok: true,
+                    timeout: false,
+                  };
+                } catch (error) {
+                  console.error(`Map-batch ${i + 1} mislukt:`, error);
+                  resultaten[i] = {
+                    index: i,
+                    tekst: "",
+                    tokensIn: 0,
+                    tokensUit: 0,
+                    chunks: 0,
+                    ok: false,
+                    timeout: mapAbort.signal.aborted,
+                  };
+                }
+              }
+            };
+            try {
+              await Promise.all(
+                Array.from(
+                  { length: Math.min(MAP_CONCURRENCY, Math.max(1, breedBatches.length)) },
+                  () => worker()
+                )
               );
-              // P5 signaal 6 — de map-tak verbruikt echte tokens; die apart
-              // bijhouden zodat de teller niet doet alsof ze niet bestaan.
-              mapCalls += 1;
-              mapTokensIn += mapResp.usage?.input_tokens ?? 0;
-              mapTokensUit += mapResp.usage?.output_tokens ?? 0;
-              const mapTekst =
-                mapResp.content[0]?.type === "text" ? mapResp.content[0].text.trim() : "";
-              if (mapTekst && !/^geen$/i.test(mapTekst)) {
-                deelanalyses.push(`— Deel ${i + 1}:\n${mapTekst}`);
+            } finally {
+              clearTimeout(mapFaseTimer);
+            }
+
+            const geslaagd = resultaten.filter(
+              (r): r is MapResultaat => !!r?.ok
+            );
+            const mislukt = resultaten.filter((r) => r && !r.ok) as MapResultaat[];
+            mapTokensIn = geslaagd.reduce((som, r) => som + r.tokensIn, 0);
+            mapTokensUit = geslaagd.reduce((som, r) => som + r.tokensUit, 0);
+            const deelanalyses = geslaagd
+              .filter((r) => r.tekst && !/^geen$/i.test(r.tekst))
+              .sort((a, b) => a.index - b.index)
+              .map((r) => `— Deel ${r.index + 1}:\n${r.tekst}`);
+            const afkapredenen: DekkingsAfkapreden[] = [];
+            if (breedOphaalresultaat?.afkapreden) {
+              afkapredenen.push(breedOphaalresultaat.afkapreden);
+            }
+            if (breedAfgekapt && !breedOphaalresultaat?.afkapreden) {
+              afkapredenen.push("batch_cap");
+            }
+            if (mislukt.some((r) => r.timeout)) afkapredenen.push("batch_timeout");
+            if (mislukt.some((r) => !r.timeout)) afkapredenen.push("batch_fout");
+            const verwerkteChunks = geslaagd.flatMap(
+              (resultaat) => breedBatches[resultaat.index] ?? []
+            );
+            const verwerkteLocaties = telDekkingslocaties(verwerkteChunks);
+            const alleLocaties = telDekkingslocaties(breedChunks);
+            const locatieTotalenBekend = breedOphaalresultaat?.volledig === true;
+            documentDekking = bredeDekking({
+              totaalPassages: breedOphaalresultaat?.totaal_chunks ?? null,
+              verwerktePassages: geslaagd.reduce((som, r) => som + r.chunks, 0),
+              totaalBatches: breedTotaalBatches,
+              verwerkteBatches: geslaagd.length,
+              afkapredenen,
+              verwerktePaginas: verwerkteLocaties.paginas,
+              totaalPaginas: locatieTotalenBekend ? alleLocaties.paginas : null,
+              verwerkteSecties: verwerkteLocaties.secties,
+              totaalSecties: locatieTotalenBekend ? alleLocaties.secties : null,
+            });
+            breedAfgekapt = !documentDekking.volledig;
+            if (vraagRoute) vraagRoute = finaliseerRouteMetDekking(vraagRoute, documentDekking);
+            if (retrievalMeta) {
+              retrievalMeta.documentdekking = documentDekking;
+              if (vraagRoute) retrievalMeta.vraagrouter = vraagRoute;
+              if (retrievalMeta.scope) {
+                retrievalMeta.scope.verwerkte_chunks = documentDekking.verwerkte_passages;
+                retrievalMeta.scope.batches = documentDekking.verwerkte_batches ?? 0;
+                retrievalMeta.scope.afgekapt = !documentDekking.volledig;
               }
             }
 
-            const dekkingNoot = breedAfgekapt
-              ? "\n\nLET OP: het document was te groot om volledig te verwerken; alleen de eerste delen zijn meegenomen. Meld in het antwoord dat de dekking gedeeltelijk is."
-              : "";
+            const dekkingNoot = documentDekking.volledig
+              ? ""
+              : "\n\nDe verwerking was gedeeltelijk. Trek geen conclusie over ontbrekende inhoud in het volledige document.";
             const reducePrompt = `DEELANALYSES VAN HET DOCUMENT ${titelLabel} (${breedBatches.length} delen):\n\n${
               deelanalyses.join("\n\n") || "(geen relevante passages aangetroffen in het document)"
-            }\n\n---\n\nVRAAG: ${vraagVoorPrompt}\n\nStel op basis van bovenstaande deelanalyses één samenhangend antwoord op het document op. Gebruik paginaverwijzingen "(pag. X)" waar die in de deelanalyses staan.${dekkingNoot}`;
+            }\n\n---\n\nVRAAG: ${vraagVoorPrompt}${
+              analyseplanTekst ? `\n\n${analyseplanTekst}` : ""
+            }\n\nStel op basis van bovenstaande deelanalyses één samenhangend antwoord op het document op. Gebruik paginaverwijzingen "(pag. X)" waar die in de deelanalyses staan.${dekkingNoot}`;
 
             streamMessages = [{ role: "user" as const, content: reducePrompt }];
           }
@@ -2617,6 +3106,14 @@ export async function POST(req: NextRequest) {
           const streamSysteem = [
             ...systeemBlokken,
             ...webBlok,
+            ...(scopeActief && !transformatieActief && !reflectieActief
+              ? [
+                  {
+                    type: "text" as const,
+                    text: dekkingsInstructie(documentDekking),
+                  },
+                ]
+              : []),
             ...(metVervolgvragen
               ? [{ type: "text" as const, text: VERVOLGVRAGEN_INSTRUCTIE }]
               : []),
@@ -2639,7 +3136,11 @@ export async function POST(req: NextRequest) {
           // tot finalMessage(), dus inclusief wachttijd bij de provider.
           const generatieStart = Date.now();
           const claudeStream = await bewaakteAnthropicStream(aiPoort, AI_MODEL, (client) =>
-            client.messages.stream(streamParams)
+            scopeStrategie === "targeted"
+              ? client.messages.stream(streamParams)
+              : client.messages.stream(streamParams, {
+                  timeout: VOLLEDIGE_ANALYSE_GENERATIE_TIMEOUT_MS,
+                })
           );
 
           // Besluit 0151 (criterium 11) — tijd tot eerste zichtbare token (TTFT).
@@ -2825,6 +3326,39 @@ export async function POST(req: NextRequest) {
             algemeneKennisMarkers
           );
 
+          // M6/M7 — finaliseer ná eventuele mapfouten en beslis daarna pas of de
+          // bewuste opschaling mag worden aangeboden. Het auditspoor legt vast dát
+          // het aanbod is getoond; het done-event vult er na de insert het log-id bij.
+          if (vraagRoute) vraagRoute = finaliseerRouteMetDekking(vraagRoute, documentDekking);
+          const volledigeAnalyseWordtAangeboden =
+            !!vraagRoute &&
+            !volledigeAnalyseUitgevoerd &&
+            magVolledigeAnalyseAanbieden({
+              route: vraagRoute,
+              dekking: documentDekking,
+              documentIds: scopeDocumentIds ?? [],
+              totaalPassages: totaalPassagesVoorAanbod,
+              maximaalPassages: Math.min(
+                VOLLEDIGE_DOCUMENT_CHUNK_CAP,
+                MAX_VOLLEDIGE_ANALYSE_PASSAGES
+              ),
+              actief: vraagrouterVlaggen.volledigeAnalyseVervolg,
+            });
+          if (retrievalMeta && vraagRoute) {
+            retrievalMeta.vraagrouter = vraagRoute;
+            retrievalMeta.documentdekking = documentDekking;
+            retrievalMeta.volledige_analyse = {
+              aangeboden: volledigeAnalyseWordtAangeboden,
+              uitgevoerd: volledigeAnalyseUitgevoerd,
+              ...(volledigeAnalyseVorigeLogId
+                ? { vorige_log_id: volledigeAnalyseVorigeLogId }
+                : {}),
+              ...(volledigeAnalyseDocumentId
+                ? { document_id: volledigeAnalyseDocumentId }
+                : {}),
+            };
+          }
+
           // Increment G/I-1 — de actieve antwoordmodus, bronbasis en getoonde
           // inline-meldingen horen altijd in het auditspoor (B10, §11d), óók in
           // modus 'algemeen' (geen retrieval → nog geen retrievalMeta).
@@ -2835,6 +3369,26 @@ export async function POST(req: NextRequest) {
               geselecteerd: 0,
               chunks: [],
             }),
+            ...(vraagRoute
+              ? {
+                  vraagrouter: vraagRoute,
+                  ...(vraagrouterUitvoering
+                    ? { vraagrouter_uitvoering: vraagrouterUitvoering }
+                    : {}),
+                  ...(analyseplanMeta ? { analyseplan: analyseplanMeta } : {}),
+                  documentdekking: documentDekking,
+                  volledige_analyse: {
+                    aangeboden: volledigeAnalyseWordtAangeboden,
+                    uitgevoerd: volledigeAnalyseUitgevoerd,
+                    ...(volledigeAnalyseVorigeLogId
+                      ? { vorige_log_id: volledigeAnalyseVorigeLogId }
+                      : {}),
+                    ...(volledigeAnalyseDocumentId
+                      ? { document_id: volledigeAnalyseDocumentId }
+                      : {}),
+                  },
+                }
+              : {}),
             antwoordmodus,
             transformatie: transformatieActief,
             // Besluit 0151 — module-scope in het auditspoor: soort + sleutel +
@@ -3105,6 +3659,25 @@ export async function POST(req: NextRequest) {
             type: "done",
             inline_meldingen: inlineMeldingenFinaal,
             verbreding,
+            documentdekking: vraagRoute ? documentDekking : null,
+            vraagrouter: vraagRoute
+              ? {
+                  taak: vraagRoute.taak,
+                  scope: vraagRoute.scope,
+                  dekking: vraagRoute.dekking,
+                  bewijsniveau: vraagRoute.bewijsniveau,
+                }
+              : null,
+            volledige_analyse_aanbod:
+              volledigeAnalyseWordtAangeboden && logId && scopeDocumentIds?.[0]
+                ? {
+                    origineel_log_id: logId,
+                    document_id: scopeDocumentIds[0],
+                    document_titel: scopeTitels[0] ?? "het document",
+                    originele_vraag: vraag,
+                    label: "Volledige analyse uitvoeren",
+                  }
+                : null,
             // Increment I-3 — de content-afhankelijke model_knowledge-bronnen +
             // bijgewerkte samenvatting voor het paneel "Onderbouwing en bronnen".
             model_kennis: modelKennisSources,

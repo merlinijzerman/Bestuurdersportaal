@@ -10,8 +10,44 @@ const EXACT_COUNT_FIELDS = [
   "storage_objects",
 ];
 
-function fail(message) {
-  throw new Error(`Restore-validatie mislukt: ${message}`);
+const VALIDATION_CATEGORIES = new Set([
+  "contract",
+  "postgres_major",
+  "count_auth_users",
+  "count_auth_identities",
+  "count_storage_buckets",
+  "count_storage_objects",
+  "count_storage_by_bucket",
+  "count_critical_public",
+  "content_auth_users",
+  "content_auth_identities",
+  "content_storage_buckets",
+  "content_storage_objects",
+  "content_critical_public",
+  "policies",
+  "triggers",
+  "extensions",
+  "storage_manifest",
+]);
+
+class RestoreValidationError extends Error {
+  constructor(message, category) {
+    super(`Restore-validatie mislukt: ${message}`);
+    this.name = "RestoreValidationError";
+    this.category = category;
+  }
+}
+
+function fail(message, category = "contract") {
+  throw new RestoreValidationError(message, VALIDATION_CATEGORIES.has(category) ? category : "contract");
+}
+
+export function restoreValidationDiagnostic(error) {
+  return {
+    category: error instanceof RestoreValidationError && VALIDATION_CATEGORIES.has(error.category)
+      ? error.category
+      : "unknown",
+  };
 }
 
 function requireObject(value, label) {
@@ -74,19 +110,51 @@ function normalizeObjectHashes(value, label) {
   return normalized;
 }
 
+function normalizeAllowedAdditionalTriggers(value) {
+  if (value === undefined) return new Set();
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string" || !/^[^.]+\.[^.]+\.[^.]+$/.test(item))) {
+    fail("toegestane aanvullende triggers zijn ongeldig");
+  }
+  return new Set(value);
+}
+
 function compareCount(source, target, field) {
   const expected = requireCount(source[field], `bron.${field}`);
   const actual = requireCount(target[field], `doel.${field}`);
-  if (actual !== expected) fail(`${field}: verwacht ${expected}, aangetroffen ${actual}`);
+  if (actual !== expected) fail(`${field}: verwacht ${expected}, aangetroffen ${actual}`, `count_${field}`);
 }
 
-function compareCountMap(sourceValue, targetValue, label) {
+function compareCountMap(sourceValue, targetValue, label, category = "contract") {
   const expected = normalizeCountMap(sourceValue, `bron.${label}`);
   const actual = normalizeCountMap(targetValue, `doel.${label}`);
   if (JSON.stringify(actual) !== JSON.stringify(expected)) {
-    fail(`${label} wijkt af (verwacht ${JSON.stringify(expected)}, aangetroffen ${JSON.stringify(actual)})`);
+    fail(`${label} wijkt af (verwacht ${JSON.stringify(expected)}, aangetroffen ${JSON.stringify(actual)})`, category);
   }
   return expected;
+}
+
+function compareContentHashes(sourceValue, targetValue) {
+  const source = normalizeHashTree(sourceValue, "bron.content_sha256");
+  const target = normalizeHashTree(targetValue, "doel.content_sha256");
+  const sections = [
+    "auth_users",
+    "auth_identities",
+    "storage_buckets",
+    "storage_objects",
+    "critical_public",
+  ];
+  const sortedSections = [...sections].sort();
+  if (
+    JSON.stringify(Object.keys(source).sort()) !== JSON.stringify(sortedSections)
+    || JSON.stringify(Object.keys(target).sort()) !== JSON.stringify(sortedSections)
+  ) {
+    fail("inhoudshashes hebben niet de verplichte database/Auth/Storage-structuur");
+  }
+  for (const section of sections) {
+    if (JSON.stringify(target[section]) !== JSON.stringify(source[section])) {
+      fail(`inhoudshashes van ${section} wijken af`, `content_${section}`);
+    }
+  }
 }
 
 function postgresMajor(value, label) {
@@ -103,17 +171,24 @@ function manifestBucketCounts(storage) {
   }
 
   const counts = {};
+  const bucketIds = new Set();
   let objectCount = 0;
   let totalBytes = 0;
   for (const bucket of storage.buckets) {
     requireObject(bucket, "storage.bucket");
     if (typeof bucket.id !== "string" || !bucket.id) fail("storage.bucket.id ontbreekt");
-    if (Object.hasOwn(counts, bucket.id)) fail(`storage bevat dubbele bucket ${bucket.id}`);
+    if (bucketIds.has(bucket.id)) fail(`storage bevat dubbele bucket ${bucket.id}`);
+    bucketIds.add(bucket.id);
     if (!Array.isArray(bucket.objects)) fail(`storage.${bucket.id}.objects is geen lijst`);
     const bucketObjects = requireCount(bucket.object_count, `storage.${bucket.id}.object_count`);
     const bucketBytes = requireCount(bucket.total_bytes, `storage.${bucket.id}.total_bytes`);
     if (bucketObjects !== bucket.objects.length) fail(`storage.${bucket.id}.object_count klopt niet met objects`);
-    counts[bucket.id] = bucketObjects;
+    // De SQL-bron groepeert storage.objects. Een bucket zonder objectrijen komt
+    // daarom niet in die map voor, terwijl het fysieke manifest de lege bucket
+    // wel expliciet met object_count 0 bevat. Normaliseer beide representaties
+    // naar dezelfde niet-lege bucketmap; bucket_count hieronder blijft alle
+    // buckets afzonderlijk en exact controleren.
+    if (bucketObjects > 0) counts[bucket.id] = bucketObjects;
     objectCount += bucketObjects;
     totalBytes += bucketBytes;
   }
@@ -127,7 +202,7 @@ function manifestBucketCounts(storage) {
   return normalizeCountMap(counts, "storage.objects_by_bucket");
 }
 
-export function verifyRestore({ source, target, storage }) {
+export function verifyRestore({ source, target, storage, allowedAdditionalTriggers }) {
   requireObject(source, "bronvalidatie");
   requireObject(target, "doelvalidatie");
   requireObject(storage, "storage-manifest");
@@ -140,7 +215,7 @@ export function verifyRestore({ source, target, storage }) {
   const sourceMajor = postgresMajor(source.postgres_version, "bron.postgres_version");
   const targetMajor = postgresMajor(target.postgres_version, "doel.postgres_version");
   if (sourceMajor !== 17 || targetMajor !== sourceMajor) {
-    fail(`PostgreSQL-major wijkt af (bron ${sourceMajor}, doel ${targetMajor}, verwacht 17)`);
+    fail(`PostgreSQL-major wijkt af (bron ${sourceMajor}, doel ${targetMajor}, verwacht 17)`, "postgres_major");
   }
 
   for (const field of EXACT_COUNT_FIELDS) compareCount(source, target, field);
@@ -148,36 +223,58 @@ export function verifyRestore({ source, target, storage }) {
     source.storage_objects_by_bucket,
     target.storage_objects_by_bucket,
     "storage_objects_by_bucket",
+    "count_storage_by_bucket",
   );
-  compareCountMap(source.critical_public_counts, target.critical_public_counts, "critical_public_counts");
+  compareCountMap(
+    source.critical_public_counts,
+    target.critical_public_counts,
+    "critical_public_counts",
+    "count_critical_public",
+  );
 
-  const sourceContentHashes = normalizeHashTree(source.content_sha256, "bron.content_sha256");
-  const targetContentHashes = normalizeHashTree(target.content_sha256, "doel.content_sha256");
-  if (JSON.stringify(targetContentHashes) !== JSON.stringify(sourceContentHashes)) {
-    fail("inhoudshashes van database/Auth/Storage wijken af");
-  }
+  compareContentHashes(source.content_sha256, target.content_sha256);
 
   const sourcePolicies = normalizeObjectHashes(source.policies, "bron.policies");
   const targetPolicies = normalizeObjectHashes(target.policies, "doel.policies");
-  if (JSON.stringify(targetPolicies) !== JSON.stringify(sourcePolicies)) fail("policydefinities/hashes wijken af");
+  if (JSON.stringify(targetPolicies) !== JSON.stringify(sourcePolicies)) {
+    fail("policydefinities/hashes wijken af", "policies");
+  }
 
   const sourceTriggers = normalizeObjectHashes(source.triggers, "bron.triggers");
   const targetTriggers = normalizeObjectHashes(target.triggers, "doel.triggers");
-  if (JSON.stringify(targetTriggers) !== JSON.stringify(sourceTriggers)) fail("triggerdefinities/hashes wijken af");
+  const allowedTriggers = normalizeAllowedAdditionalTriggers(allowedAdditionalTriggers);
+  const sourceTriggerNames = new Set(sourceTriggers.map((item) => `${item.schema}.${item.table}.${item.name}`));
+  const targetTriggerNames = new Set(targetTriggers.map((item) => `${item.schema}.${item.table}.${item.name}`));
+  const unexpectedTargetTriggers = targetTriggers.filter(
+    (item) => !sourceTriggerNames.has(`${item.schema}.${item.table}.${item.name}`)
+      && !allowedTriggers.has(`${item.schema}.${item.table}.${item.name}`),
+  );
+  const sourceOnlyTargetTriggers = targetTriggers.filter((item) => sourceTriggerNames.has(`${item.schema}.${item.table}.${item.name}`));
+  const missingSourceTriggers = sourceTriggers.filter(
+    (item) => !targetTriggerNames.has(`${item.schema}.${item.table}.${item.name}`),
+  );
+  if (
+    unexpectedTargetTriggers.length
+    || missingSourceTriggers.length
+    || JSON.stringify(sourceOnlyTargetTriggers) !== JSON.stringify(sourceTriggers)
+  ) {
+    fail("triggerdefinities/hashes wijken af", "triggers");
+  }
 
   const sourceExtensions = normalizeStringSet(source.extensions, "bron.extensions");
   const targetExtensions = new Set(normalizeStringSet(target.extensions, "doel.extensions"));
   const missingExtensions = sourceExtensions.filter((extension) => !targetExtensions.has(extension));
-  if (missingExtensions.length) fail(`doel mist extensies: ${missingExtensions.join(", ")}`);
+  if (missingExtensions.length) fail(`doel mist extensies: ${missingExtensions.join(", ")}`, "extensions");
 
   const manifestCounts = manifestBucketCounts(storage);
   if (JSON.stringify(manifestCounts) !== JSON.stringify(storageCounts)) {
     fail(
       `Storage-manifest wijkt af van databasevalidatie (manifest ${JSON.stringify(manifestCounts)}, database ${JSON.stringify(storageCounts)})`,
+      "storage_manifest",
     );
   }
   if (storage.bucket_count !== source.storage_buckets || storage.object_count !== source.storage_objects) {
-    fail("Storage-manifest dekt niet exact alle Storage-metadata uit de bron");
+    fail("Storage-manifest dekt niet exact alle Storage-metadata uit de bron", "storage_manifest");
   }
 
   return {
@@ -224,12 +321,17 @@ async function main() {
     source: await readJson(args.get("source"), "source"),
     target: await readJson(args.get("target"), "target"),
     storage: await readJson(args.get("storage-manifest"), "storage-manifest"),
+    allowedAdditionalTriggers: args.has("allow-additional-trigger")
+      ? [args.get("allow-additional-trigger")]
+      : undefined,
   });
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((error) => {
+    const diagnostic = restoreValidationDiagnostic(error);
+    process.stderr.write(`VALIDATION_CATEGORY=${diagnostic.category}\n`);
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
     process.exitCode = 1;
   });

@@ -1,6 +1,6 @@
 # MVP-beperkingen — Bestuurdersportaal
 
-**Laatst bijgewerkt:** 2026-07-31 (securityreview 30-31 juli: §3 en §4 bijgewerkt; AI-weergave tranche 1: §5 aangevuld met het niet-geregistreerde kopieerpad; overige tekst per 2026-07-04)
+**Laatst bijgewerkt:** 2026-08-17 (vraagrouter/documentdekking en gefaseerde uitrol toegevoegd; overige tekst behoudt de eerder vermelde peildata)
 **Doel:** eerlijk overzicht van wat de MVP níét is of níét kan, plus de noodzakelijke stappen richting productiegeschiktheid. Bronnen: feitenrapporten 4 juli 2026, `HANDOVER.md` §Bekende beperkingen, `SECURITY-ROUTE-A-IMPLEMENTATIE.md`, `CODE-REVIEW-2026-07-03.md` (afgekapt), `decisions/`.
 
 ## 1. Functionele beperkingen
@@ -15,6 +15,7 @@
 | OCR niet in tenant-upload | Beeld-only PDF's worden in de tenantroute geweigerd; OCR alleen op her-extract-/curatiepad | Bewust (0020/0023) |
 | Voorzitter bereikt document-review-UI niet | Rechten server-side aanwezig; blokkade is UI-gating van `/beheer` | Open (fix: aparte `/review`-route) |
 | Geen web-retrieval | Besluit 0019 open; AI kent alleen fondsdocumenten + generieke bibliotheek + modelkennis | Openstaande keuze |
+| **Vraagrouter en volledige analyse nog niet productie-gevalideerd** | De deterministische router, dekkingslabels en begrensde map/reduce zijn geïmplementeerd achter default-off flags. Preview moet nog 5/5 RQ-01, latency/tokens/foutpercentage, auditprojectie en flag-rollback aantonen. De volledige-analysecap is technisch (8 batches/640 passages) en geen garantie op volledige verwerking van elk zeer groot document | Open — harde go/no-go vóór productie-activatie |
 
 ## 2. Infrastructurele en operationele beperkingen
 
@@ -55,6 +56,7 @@
 | **Structurele gates draaien nog niet in CI** | `supabase/checks/2026_07_31_r1_structurele_gates.sql` (gates A t/m H) moet handmatig worden gedraaid. Daarmee hangt de detectie van het `supabase_admin`-restrisico af van eraan denken | Open — **P1**, goedkoopste maatregel op de lijst |
 | **Testgate kan stil falen** | `npm run sanity` stopte bij de eerste rode suite; daardoor hebben 45 suites twee weken niet gedraaid zonder dat iemand het zag (bevinding T-01). Het script draait nu alles door en rapporteert aan het eind, maar er is geen CI die het afdwingt | Deels opgelost |
 | **Preview-deploys draaien tegen de productiedatabase** | Er is één Supabase-project. Een preview-omgeving test dus nieuwe code tegen echte productiedata en -policies, en de gedragstest `2026_07_31_r1_tenantgrenzen.sql` (seedt gebruikers in `auth.users`) kan daardoor niet volledig worden uitgevoerd | Open — **blocker vóór fonds 2** |
+| **Geen aggregatiedashboard voor router/dekkingsmetingen** | De gesloten route-, dekking-, batch-, fout- en modelroutermetadata wordt per beurt gelogd, maar een operationele fondsbrede aggregatie en alertgrenzen zijn nog niet ingericht. Preview-meting gebeurt eerst via gecontroleerde queries/exports | Open — productievoorwaarde voor brede uitrol |
 
 ## 5. Compliance
 

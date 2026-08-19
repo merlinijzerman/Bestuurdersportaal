@@ -9,6 +9,33 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 const MAX_REQUEST_ATTEMPTS = 4;
+const RETRYABLE_HTTP_STATUSES = new Set([408, 425, 429]);
+const STORAGE_DIAGNOSTIC_PHASES = new Set([
+  "local_archive",
+  "bucket_read",
+  "bucket_create",
+  "bucket_update",
+  "object_resume_check",
+  "object_upload",
+  "object_verify",
+]);
+
+class StorageRestoreRequestError extends Error {
+  constructor(message, { phase, httpStatus }) {
+    super(message);
+    this.name = "StorageRestoreRequestError";
+    this.phase = phase;
+    this.httpStatus = httpStatus;
+  }
+}
+
+export function storageRestoreDiagnostic(error) {
+  const phase = STORAGE_DIAGNOSTIC_PHASES.has(error?.phase) ? error.phase : "local_archive";
+  const httpStatus = Number.isInteger(error?.httpStatus) && error.httpStatus >= 100 && error.httpStatus <= 599
+    ? String(error.httpStatus)
+    : "unknown";
+  return { phase, httpStatus };
+}
 
 function requiredEnv(name) {
   const value = process.env[name]?.trim();
@@ -58,27 +85,49 @@ function sleep(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-async function request(baseUrl, serviceRoleKey, pathname, init, description, maxAttempts = MAX_REQUEST_ATTEMPTS) {
+export function storageAdminHeaders(key) {
+  if (/^sb_publishable_/.test(key)) {
+    throw new Error("Een publishable key mag niet voor Storage-beheer worden gebruikt");
+  }
+  if (/^sb_secret_[A-Za-z0-9_-]{16,}$/.test(key)) return { apikey: key };
+  return { apikey: key, Authorization: `Bearer ${key}` };
+}
+
+async function request(
+  baseUrl,
+  serviceRoleKey,
+  pathname,
+  init,
+  description,
+  phase,
+  maxAttempts = MAX_REQUEST_ATTEMPTS,
+) {
   let lastError;
+  let lastStatus;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
       const response = await fetch(apiUrl(baseUrl, pathname), {
         ...init,
         headers: {
-          apikey: serviceRoleKey,
-          Authorization: `Bearer ${serviceRoleKey}`,
           ...(init?.headers ?? {}),
+          ...storageAdminHeaders(serviceRoleKey),
         },
       });
       if (response.ok) return response;
+      lastStatus = response.status;
       lastError = new Error(`${description} gaf HTTP ${response.status}`);
       await response.body?.cancel();
+      if (response.status < 500 && !RETRYABLE_HTTP_STATUSES.has(response.status)) break;
     } catch (error) {
+      lastStatus = undefined;
       lastError = error instanceof Error ? error : new Error(String(error));
     }
     if (attempt < maxAttempts) await sleep(500 * 2 ** (attempt - 1));
   }
-  throw new Error(`${description} mislukt na ${maxAttempts} pogingen: ${lastError?.message}`);
+  throw new StorageRestoreRequestError(
+    `${description} mislukt na ${maxAttempts} pogingen: ${lastError?.message}`,
+    { phase, httpStatus: lastStatus },
+  );
 }
 
 function hashFile(filePath) {
@@ -109,6 +158,7 @@ async function uploadObject(baseUrl, serviceRoleKey, bucket, objectName, filePat
           body: createReadStream(filePath),
         },
         `Storage-upload ${bucket}/${objectName}`,
+        "object_upload",
         1,
       );
       await response.body?.cancel();
@@ -120,7 +170,15 @@ async function uploadObject(baseUrl, serviceRoleKey, bucket, objectName, filePat
   }
 }
 
-async function verifyObject(baseUrl, serviceRoleKey, bucket, objectName, expectedHash, maxAttempts = MAX_REQUEST_ATTEMPTS) {
+async function verifyObject(
+  baseUrl,
+  serviceRoleKey,
+  bucket,
+  objectName,
+  expectedHash,
+  phase = "object_verify",
+  maxAttempts = MAX_REQUEST_ATTEMPTS,
+) {
   const encodedPath = objectName.split("/").map((part) => encodeURIComponent(part)).join("/");
   const response = await request(
     baseUrl,
@@ -128,6 +186,7 @@ async function verifyObject(baseUrl, serviceRoleKey, bucket, objectName, expecte
     `/storage/v1/object/authenticated/${encodeURIComponent(bucket)}/${encodedPath}`,
     {},
     `Storage-verificatie ${bucket}/${objectName}`,
+    phase,
     maxAttempts,
   );
   if (!response.body) throw new Error(`Storage-verificatie ${bucket}/${objectName} heeft geen body`);
@@ -146,25 +205,24 @@ async function verifyObject(baseUrl, serviceRoleKey, bucket, objectName, expecte
 }
 
 async function ensureBucket(baseUrl, serviceRoleKey, bucket) {
-  const response = await request(
-    baseUrl,
-    serviceRoleKey,
-    "/storage/v1/bucket",
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        id: bucket.id,
-        name: bucket.name,
-        public: bucket.public,
-        file_size_limit: bucket.file_size_limit,
-        allowed_mime_types: bucket.allowed_mime_types,
-      }),
-    },
-    `Storage-bucket ${bucket.id} aanmaken`,
-  ).catch(async (error) => {
-    if (!String(error.message).includes("HTTP 409")) throw error;
-    return request(
+  let exists = true;
+  try {
+    const discoveryResponse = await request(
+      baseUrl,
+      serviceRoleKey,
+      `/storage/v1/bucket/${encodeURIComponent(bucket.id)}`,
+      {},
+      `Storage-bucket ${bucket.id} opzoeken`,
+      "bucket_read",
+    );
+    await discoveryResponse.body?.cancel();
+  } catch (error) {
+    if (!(error instanceof StorageRestoreRequestError) || error.httpStatus !== 404) throw error;
+    exists = false;
+  }
+
+  const response = exists
+    ? await request(
       baseUrl,
       serviceRoleKey,
       `/storage/v1/bucket/${encodeURIComponent(bucket.id)}`,
@@ -172,15 +230,32 @@ async function ensureBucket(baseUrl, serviceRoleKey, bucket) {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          name: bucket.name,
           public: bucket.public,
-          file_size_limit: bucket.file_size_limit,
-          allowed_mime_types: bucket.allowed_mime_types,
+          fileSizeLimit: bucket.file_size_limit,
+          allowedMimeTypes: bucket.allowed_mime_types,
         }),
       },
       `Storage-bucket ${bucket.id} bijwerken`,
+      "bucket_update",
+    )
+    : await request(
+      baseUrl,
+      serviceRoleKey,
+      "/storage/v1/bucket",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          id: bucket.id,
+          name: bucket.name,
+          public: bucket.public,
+          fileSizeLimit: bucket.file_size_limit,
+          allowedMimeTypes: bucket.allowed_mime_types,
+        }),
+      },
+      `Storage-bucket ${bucket.id} aanmaken`,
+      "bucket_create",
     );
-  });
   await response.body?.cancel();
 }
 
@@ -243,7 +318,15 @@ export async function restoreStorage({ baseUrl, serviceRoleKey, inputDir, dryRun
       if (!dryRun) {
         if (resume) {
           try {
-            await verifyObject(baseUrl, serviceRoleKey, bucket.id, objectName, object.sha256, 1);
+            await verifyObject(
+              baseUrl,
+              serviceRoleKey,
+              bucket.id,
+              objectName,
+              object.sha256,
+              "object_resume_check",
+              1,
+            );
             skipped += 1;
             processed += 1;
             continue;
@@ -277,9 +360,14 @@ async function main() {
   const dryRun = args.has("dry-run");
   const verify = !args.has("no-verify");
   const resume = !args.has("no-resume");
+  const adminKey = process.env.TARGET_SUPABASE_ADMIN_KEY?.trim();
+  const legacyKey = process.env.TARGET_SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (adminKey && legacyKey && adminKey !== legacyKey) {
+    throw new Error("TARGET_SUPABASE_ADMIN_KEY en legacy service-role-input verschillen");
+  }
   const result = await restoreStorage({
     baseUrl: requiredEnv("TARGET_SUPABASE_URL"),
-    serviceRoleKey: dryRun ? (process.env.TARGET_SUPABASE_SERVICE_ROLE_KEY ?? "dry-run") : requiredEnv("TARGET_SUPABASE_SERVICE_ROLE_KEY"),
+    serviceRoleKey: dryRun ? (adminKey || legacyKey || "dry-run") : (adminKey || legacyKey || requiredEnv("TARGET_SUPABASE_ADMIN_KEY")),
     inputDir,
     dryRun,
     verify,
@@ -290,7 +378,13 @@ async function main() {
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((error) => {
-    process.stderr.write(`Storage-restore mislukt: ${error instanceof Error ? error.message : String(error)}\n`);
+    const diagnostic = storageRestoreDiagnostic(error);
+    process.stderr.write(`STORAGE_PHASE=${diagnostic.phase}\n`);
+    process.stderr.write(`STORAGE_HTTP_STATUS=${diagnostic.httpStatus}\n`);
+    // Object- en bucketnamen kunnen productiedata zijn. Houd de concrete fout
+    // in-process en geef buiten het versleutelde volume alleen de allowlisted
+    // fase en HTTP-status vrij.
+    process.stderr.write("Storage-restore mislukt; objectdetails zijn afgeschermd.\n");
     process.exitCode = 1;
   });
 }

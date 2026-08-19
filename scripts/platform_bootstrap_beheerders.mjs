@@ -5,10 +5,11 @@
 //  scripts/platform_bootstrap_beheerders.sql. Daarna nog steeds Deel 2 t/m 6 van
 //  dat SQL-script draaien (identiteit + capabilities + audit + verificatie).
 //
-//  WAAROM DIT SCRIPT: de metadata-vlag {"platform": true} MOET meegegeven worden
-//  bij het aanmaken. De trigger bij_registratie → maak_profiel() maakt anders een
-//  tenant-profiel aan, of faalt fail-closed op een ontbrekende fonds_id — en dan
-//  komt het account er helemaal niet.
+//  WAAROM DIT SCRIPT: de metadata-vlag {"platform": true} MOET via app_metadata
+//  worden vastgelegd. GoTrue maakt app_metadata bij createUser() niet
+//  betrouwbaar beschikbaar aan de inserttrigger; daarom volgt hieronder een
+//  expliciete service-role update. De trigger bij_app_metadata voorkomt daarna
+//  een tenant-profiel.
 //
 //  VEREIST in mvp/.env.local (of in de omgeving):
 //    NEXT_PUBLIC_SUPABASE_URL=...
@@ -149,6 +150,15 @@ async function main() {
         "  Tip: 'geen fonds_id in app-metadata' betekent dat de platform-vlag " +
           "niet is meegekomen in app_metadata (maak_profiel is fail-closed)."
       );
+      continue;
+    }
+    const { data: bijgewerkt, error: metadataError } = await supabase.auth.admin.updateUserById(
+      data.user.id,
+      { app_metadata: { ...(data.user.app_metadata ?? {}), platform: true } },
+    );
+    if (metadataError || bijgewerkt?.user?.app_metadata?.platform !== true) {
+      console.log(`• ${b.email} — ✗ app_metadata kon niet veilig worden vastgelegd`);
+      await supabase.auth.admin.deleteUser(data.user.id);
       continue;
     }
     console.log(`• ${b.email} — ✓ aangemaakt (id ${data.user.id})`);

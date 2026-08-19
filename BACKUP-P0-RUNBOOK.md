@@ -1,6 +1,6 @@
 # P0 — back-upketen, Storage en restore
 
-**Status:** kosteloze codegates gereed; B2-bewijs en managed restore nog af te tekenen
+**Status:** B2-bewijs en versleutelde kosteloze restorepreflight groen; managed database en Storage hersteld, functionele verificatie nog te hervatten
 **Datum:** 2026-08-19
 **Eigenaar:** technisch beheer / incidentleider
 
@@ -44,6 +44,22 @@ Secrets:
   platforminventaris; nooit in een artefact of log opnemen
 - `VERCEL_TOKEN` — read-only Vercel-token voor project- en variabelenameninventaris
 
+Aanvullend, uitsluitend voor één afzonderlijk geautoriseerde managed
+restore-oefening op het tijdelijke doelproject:
+
+- `RESTORE_TARGET_DB_URL`
+- `RESTORE_TARGET_SUPABASE_ADMIN_KEY` — óf `sb_secret_…`, óf een legacy
+  `service_role`-JWT van exact het doelproject
+- `RESTORE_TARGET_SUPABASE_CLIENT_KEY` — óf `sb_publishable_…`, óf een legacy
+  `anon`-JWT van exact het doelproject
+
+De admin- en clientkey moeten verschillend zijn. Een publishable/anon-key wordt
+nooit voor beheer, usercreatie of Storage-restore gebruikt. Nieuwe opaque keys
+gaan als `apikey`; alleen de legacy service-role-JWT wordt daarnaast als Bearer
+gebruikt. `SUPABASE_MANAGEMENT_API_TOKEN` leest tijdens deze oefening uitsluitend
+de Auth-config van het tijdelijke doel om die met de niet-geheime broninventaris
+te vergelijken.
+
 Variables:
 
 - `B2_BUCKET_NAME`
@@ -65,6 +81,10 @@ tokens of documentinhoud.
 
 - Iedere B2-upload gebruikt AWS-retries plus vijf expliciete uploadpogingen met
   exponentiële wachttijd.
+- Iedere managed B2-download gebruikt maximaal drie expliciete pogingen. Een
+  incomplete of inhoudelijk afwijkende tijdelijke download wordt vóór de volgende
+  poging verwijderd, blijft uitsluitend op LUKS-opslag en wordt pas atomisch als
+  bruikbaar bestand vrijgegeven nadat de verwachte lengte en SHA-256 kloppen.
 - De `backup-status/.../manifest-*.json` completion marker wordt pas na alle
   uploads en lokale controles geüpload.
 - `supabase-backup-watchdog.yml` draait iedere zes uur. De B2-jobs controleren,
@@ -174,7 +194,7 @@ Controleer lokaal per object de SHA-256 en upload daarna naar de nieuwe buckets:
 ```bash
 export TARGET_SUPABASE_URL='https://<DOELREF>.supabase.co'
 export TARGET_PROJECT_REF='<DOELREF>'
-export TARGET_SUPABASE_SERVICE_ROLE_KEY='<tijdelijke-doelsleutel>'
+export TARGET_SUPABASE_ADMIN_KEY='<sb_secret_… of legacy service-role-JWT>'
 
 node scripts/restore-supabase-storage.mjs \
   --input-dir "$STORAGE_DIR"
@@ -206,6 +226,95 @@ Een lokale kopie met productiegegevens hoort uitsluitend in tijdelijke,
 versleutelde opslag op een gecontroleerde runner/omgeving. Neem geen secrets of
 rij-inhoud op in logs, artifacts, issues of fixtures.
 
+De fysieke Storage-restore vertaalt de databasevelden uit het manifest
+(`file_size_limit`, `allowed_mime_types`) expliciet naar het camelCase-contract
+van de Storage-API (`fileSizeLimit`, `allowedMimeTypes`). Omdat de database-
+restore de bucketmetadata al terugzet, leest de fysieke restore iedere bucket
+eerst en werkt zij een bestaande bucket bij; alleen een expliciete 404 leidt tot
+aanmaken. Bij een fout mag alleen
+de allowlisted restorefase en de numerieke HTTP-status buiten het versleutelde
+volume als diagnostisch bewijs worden bewaard; bucket- en objectnamen blijven
+op het vernietigde volume.
+
+De workflow `.github/workflows/supabase-restore-preflight.yml` automatiseert
+deze poort zonder een Supabase-cloudproject aan te maken. Start hem uitsluitend
+vanaf `main` met de exacte contract-v2-marker en bevestiging
+`PREFLIGHT_ON_ENCRYPTED_EPHEMERAL_RUNNER`. De workflow:
+
+1. gebruikt alleen de prefix-beperkte B2-read-only sleutel;
+2. plaatst archieven, tijdelijke logs én Docker/PostgreSQL op één nieuw
+   LUKS2-volume met een eenmalige sleutel;
+3. valideert marker, checksums, restorecontract en Storage dry-run vóór herstel;
+4. start tweemaal een schone lokale Supabase-stack met PostgreSQL 17;
+5. herstelt en vergelijkt database/Auth/Storage, inhoudshashes, policies,
+   triggers en ieder opnieuw gedownload fysiek object;
+6. publiceert alleen een niet-gevoelig `go-no-go.json` en `cleanup.json`; bij
+   een databasefout bevat `restore-diagnostic.json` uitsluitend iteratie,
+   restorefase en SQLSTATE, nooit SQL-tekst of rijwaarden;
+7. stopt de stack, ontkoppelt LUKS en verwijdert het versleutelde backingbestand
+   in een `always()`-stap.
+
+Een groene preflight is alleen `go-for-managed-review`: Auth-providersecrets,
+functionele canary-/RLS-/appsmokes en verschillen met Supabase Cloud blijven
+expliciete managed gates. De workflow mag daarom nooit automatisch de managed
+restoreworkflow starten.
+
+### Managed restoreworkflow
+
+`.github/workflows/supabase-restore-drill.yml` maakt zelf geen project aan en
+verwijdert ook geen project. Start de workflow alleen na projectspecifieke
+autorisatie en uitsluitend vanaf `main`, met:
+
+1. de project-ref van het ene tijdelijke doel;
+2. de exacte contract-v2 `backup_marker_key`;
+3. de exacte complete `platform_inventory_marker_key` onder
+   `backup-status/platform-inventory/`;
+4. bevestiging `RESTORE_TO_EMPTY_PROJECT`.
+
+De eerste run accepteert alleen een aantoonbaar leeg doel. Als databaseherstel
+al atomisch is geslaagd en Storage of verificatie later faalt, blijft in een
+afgeschermd databaseschema een state met bronref, doelref, marker en
+databasechecksum staan. Een retry mag uitsluitend met alle vier exact dezelfde
+waarden op hetzelfde doel verder. Een niet-leeg doel zonder die state, een ander
+doelproject of een andere back-up wordt fail-closed geweigerd. Storage wordt bij
+een retry idempotent hervat; de database wordt niet opnieuw geladen. De state
+wordt pas na alle technische, functionele en cleanupchecks verwijderd.
+
+Een tijdelijke afgebroken B2-stream verandert deze binding niet. Hervat na een
+groene retryfix op exact hetzelfde doelproject; maak geen vervangend project aan.
+De workflow verwijdert iedere partiële download binnen LUKS en probeert een
+object maximaal drie keer, waarna hij fail-closed stopt.
+
+De managed workflow voert aanvullend uit:
+
+- vergelijking van allowlisted Auth-provider-, login-, sessie-, MFA- en
+  wachtwoordinstellingen; secretvelden worden niet opgehaald of gelogd;
+- twee tijdelijke gemarkeerde canary-users in verschillende fondsen, aangemaakt
+  met de adminkey, gevolgd door echte e-mail/wachtwoordlogin met de clientkey;
+- positieve eigen-profiel/document/Storage-tests en negatieve profiel-,
+  document- en privé-Storagetests over de tenantgrens via beide user-JWT's;
+- een lokale Chrome-smoke tegen de herstelde managed backend voor Home/dashboard,
+  Documentbibliotheek/API en een geautoriseerde privédownload; het document van
+  de andere tenant moet via dezelfde appsessie 404 geven;
+- verwijdering van canary-users en hun tijdelijke inzageregels, gevolgd door een
+  tweede exacte database/Auth/Storage-validatie tegen de bron.
+
+Alle archieven, manifests, databasequeryresultaten, canarygegevens,
+app-build/cache/logs en browserprofielen staan op een nieuw LUKS2-volume op de
+ephemere runner. Een `always()`-stap ontkoppelt het volume, sluit de mapping en
+verwijdert het versleutelde backingbestand. Alleen
+`managed-restore-evidence.json` met tellingen/booleans en `cleanup.json` worden
+buiten LUKS geplaatst en als artifact bewaard. Geen namen, e-mailadressen,
+user-/document-ID's, objectpaden, hashes, rijwaarden of volledig Storage-manifest
+verlaten het versleutelde volume.
+
+Bestaande contract-v2-archieven kunnen vóór het JSON-document de drie standaard
+`psql`-statusregels voor outputformaat, tuples-only en pager bevatten. De restore
+maakt daarvoor uitsluitend binnen de versleutelde werkmap een genormaliseerde
+kopie. Alleen die drie exacte, unieke regels vóór het JSON-object zijn toegestaan;
+onbekende, dubbele of later voorkomende statusregels stoppen de restore fail-closed.
+Nieuwe back-ups schrijven het validatiebestand direct in quiet/unaligned vorm.
+
 ### Acceptatiepoorten
 
 - [ ] B2-archive en checksum groen.
@@ -225,8 +334,9 @@ rij-inhoud op in logs, artifacts, issues of fixtures.
 - [ ] Read-only B2-sleutel, doelproject en lokale Productiekopieën zijn na
   aftekening verwijderd of vernietigd volgens het privacybeleid.
 
-De cloudrestore is nog niet end-to-end groen bewezen. Maak of start hiervoor
-geen betaald doelproject zonder de hierboven beschreven afzonderlijke
+De cloudrestore is nog niet end-to-end groen bewezen en deze hardening heeft
+geen managed project aangemaakt of restore gestart. Maak of start hiervoor geen
+betaald doelproject zonder de hierboven beschreven afzonderlijke
 kostenautorisatie. Een lokale dry-run of database-restore bewijst niet dat Auth,
 Storage, RLS en de uitwijkdeploy in Supabase Cloud werken.
 
@@ -235,5 +345,5 @@ Storage, RLS en de uitwijkdeploy in Supabase Cloud werken.
 ```bash
 npm run test:backup-storage
 npm run test:backup-restore
-node --input-type=module -e 'import fs from "node:fs"; import yaml from "js-yaml"; for (const file of [".github/workflows/supabase-backup.yml", ".github/workflows/supabase-backup-watchdog.yml"]) yaml.load(fs.readFileSync(file, "utf8")); console.log("workflow YAML groen")'
+node --input-type=module -e 'import fs from "node:fs"; import yaml from "js-yaml"; for (const file of [".github/workflows/supabase-backup.yml", ".github/workflows/supabase-backup-watchdog.yml", ".github/workflows/supabase-restore-preflight.yml", ".github/workflows/supabase-restore-drill.yml", ".github/workflows/platform-inventory.yml"]) yaml.load(fs.readFileSync(file, "utf8")); console.log("workflow YAML groen")'
 ```

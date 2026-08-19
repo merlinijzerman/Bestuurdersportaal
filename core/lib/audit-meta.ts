@@ -123,6 +123,14 @@ export const META_BASIS = [
   // sleutels (procedure_id/risico_id/bron_ids) worden door SUB_NIVEAUS naar `bron`
   // afgesplitst.
   "module_scope",
+  // Vraagrouter v2 — gesloten enums/scores en aantoonbare dekkingscijfers.
+  // `volledige_analyse` is gemengd: status blijft basis; document-/log-id gaan
+  // via SUB_NIVEAUS alleen naar het bronniveau.
+  "vraagrouter",
+  "vraagrouter_uitvoering",
+  "analyseplan",
+  "documentdekking",
+  "volledige_analyse",
 ] as const;
 
 /**
@@ -177,6 +185,7 @@ export const SUB_NIVEAUS: Record<string, { bron?: string[]; inhoud?: string[] }>
   // besluit 0151 — objectreferenties (procedure/risico) + gebruikte bron-ids zijn
   // identiteit; soort/validatie/blok_tekens blijven basis (telemetrie/status)
   module_scope: { bron: ["procedure_id", "risico_id", "bron_ids"] },
+  volledige_analyse: { bron: ["vorige_log_id", "document_id"] },
   // beurten/tekens zijn telemetrie; historie_hash is een vingerafdruk van de
   // gespreksinhoud en hoort daarom bij het verwijderbare deel
   invoer: { inhoud: ["historie_hash"] },

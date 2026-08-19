@@ -19,10 +19,12 @@
 --      (/login op de platform-host → rewrite /platform/login) doet zelf de
 --      enrollment: wachtwoord → TOTP-secret uitlezen → code → binnen.
 --      Het TOTP-secret wordt als tekst getoond (geen QR-library).
---   3. GEEN TENANT-PROFIEL. De trigger bij_registratie → maak_profiel() maakt bij
---      elke nieuwe auth-user een profielen-rij, TENZIJ raw_APP_meta_data
---      {"platform": true} bevat. Zonder die vlag faalt de insert bovendien
---      fail-closed (geen fonds_id). Metadata is dus VERPLICHT — zie Deel 1.
+--   3. GEEN TENANT-PROFIEL. De trigger bij_registratie → maak_profiel() maakt
+--      een profielen-rij wanneer raw_APP_meta_data.fonds_id aanwezig is,
+--      TENZIJ raw_APP_meta_data {"platform": true} bevat. Via de Admin API
+--      wordt app_metadata in een tweede service-role-update gezet; daarvoor
+--      bestaat ook trigger bij_app_metadata. Zonder app_metadata blijft een
+--      account bewust profiel-loos.
 --      LET OP (WP1, 17-08-2026): de vlag verhuisde van raw_user_meta_data naar
 --      raw_app_meta_data. user-metadata is client-schrijfbaar via signUp() met
 --      de publieke anon-key; een privilege-bit hoort daar niet. maak_profiel

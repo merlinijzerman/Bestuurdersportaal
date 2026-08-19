@@ -35,6 +35,13 @@ type InstellingenData = {
     herkomst: BronkeuzeHerkomst;
     fonds_waarde: BronkeuzeModus | null;
   };
+  // Besluit 0184 — effectieve standen, dus inclusief de server-side
+  // afhankelijkheid van de twee vervolgvlaggen op vraagrouter_v2.
+  vraagrouter_flags: {
+    vraagrouter_v2: boolean;
+    vraagrouter_model: boolean;
+    volledige_analyse_vervolg: boolean;
+  };
   theming: Record<string, string>;
   modules: ModuleRij[];
   flags: Record<string, unknown>;
@@ -63,6 +70,43 @@ const BRONKEUZE_OPTIES: { waarde: BronkeuzeModus; label: string; uitleg: string 
     uitleg: "Geen vraag en geen keuze; altijd het eigen fonds.",
   },
 ];
+
+type VraagrouterFlagKey = keyof InstellingenData["vraagrouter_flags"];
+
+const VRAAGROUTER_FLAGS: {
+  key: VraagrouterFlagKey;
+  label: string;
+  uitleg: string;
+  afhankelijkVanRouter: boolean;
+}[] = [
+  {
+    key: "vraagrouter_v2",
+    label: "Betrouwbare vraagrouter",
+    uitleg:
+      "Maakt onderscheid tussen gericht zoeken, volledige documentanalyse en gedeeltelijke dekking.",
+    afhankelijkVanRouter: false,
+  },
+  {
+    key: "volledige_analyse_vervolg",
+    label: "Volledige analyse als vervolgactie",
+    uitleg:
+      "Biedt bij één geschikt document een bewuste, mogelijk langere volledige heranalyse aan.",
+    afhankelijkVanRouter: true,
+  },
+  {
+    key: "vraagrouter_model",
+    label: "Modelrouter bij twijfel",
+    uitleg:
+      "Laat alleen in de ambiguïteitsband een klein model adviseren; scope en toegang blijven codegedreven.",
+    afhankelijkVanRouter: true,
+  },
+];
+
+function flagAlsBoolean(waarde: unknown): boolean {
+  if (waarde === true || waarde === 1) return true;
+  if (typeof waarde !== "string") return false;
+  return ["true", "1", "on", "aan", "yes"].includes(waarde.toLowerCase());
+}
 
 function bronkeuzeLabel(modus: string): string {
   return BRONKEUZE_OPTIES.find((o) => o.waarde === modus)?.label ?? modus;
@@ -319,6 +363,60 @@ export default function ConfigBeheer() {
           >
             {data.representatie_constraints ? "Uitzetten" : "Aanzetten"}
           </button>
+        </div>
+
+        {/* ── Vraagrouter/dekking (besluit 0184) ─────────────────────────── */}
+        <div className="mt-3 rounded-lg border border-line bg-white px-4 py-3">
+          <div>
+            <h3 className="text-sm font-medium text-ink">Vraagrouter en documentdekking</h3>
+            <p className="mt-0.5 text-xs text-muted">
+              Rol gefaseerd uit: eerst de basisrouter, daarna eventueel de volledige
+              vervolgactie. Laat de modelrouter uit totdat de Preview-meting meerwaarde
+              aantoont. Iedere wijziging wordt geversioneerd en audit-gelogd.
+            </p>
+          </div>
+          <div className="mt-3 space-y-2">
+            {VRAAGROUTER_FLAGS.map((flag) => {
+              const effectief = data.vraagrouter_flags[flag.key];
+              const fondsWaarde = flagAlsBoolean(data.flags[flag.key]);
+              const geblokkeerd =
+                flag.afhankelijkVanRouter && !data.vraagrouter_flags.vraagrouter_v2;
+              return (
+                <div
+                  key={flag.key}
+                  className="flex items-center gap-3 rounded-lg border border-line bg-app-bg/40 px-3 py-2.5"
+                >
+                  <div className="flex-1">
+                    <span className="text-sm text-ink">{flag.label}</span>
+                    <span className="ml-2 text-xs text-muted">{flag.key}</span>
+                    <p className="mt-0.5 text-xs text-muted">{flag.uitleg}</p>
+                    {geblokkeerd && fondsWaarde && (
+                      <p className="mt-1 text-xs text-warn-ink">
+                        Voor dit fonds ingesteld op aan, maar effectief geblokkeerd zolang
+                        de basisrouter uitstaat.
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    onClick={() =>
+                      schrijf(
+                        { type: "flag", key: flag.key, waarde: !effectief },
+                        `${flag.label} ${effectief ? "uitgezet" : "aangezet"}.`
+                      )
+                    }
+                    disabled={bezig !== null || geblokkeerd}
+                    className="rounded-lg border border-app-line-strong px-3 py-1 text-sm text-ink hover:bg-white disabled:opacity-50"
+                  >
+                    {effectief ? "Uitzetten" : "Aanzetten"}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          <p className="mt-2 text-xs text-muted">
+            De afhankelijke functies kunnen technisch nooit buiten de basisrouter om
+            activeren. Uitzetten van de basisrouter is daarom de eerste rollbackactie.
+          </p>
         </div>
 
         {/* ── Bronkeuze-modus (besluit 0137) — driewegvlag, direct instelbaar ── */}
