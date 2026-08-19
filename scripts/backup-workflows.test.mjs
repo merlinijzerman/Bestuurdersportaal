@@ -189,6 +189,24 @@ test("managed restore scheidt keys, hervat exact, test Auth/RLS/app en lekt geen
   assert.doesNotMatch(stateSql, /bestuurdersportaal_restore_private\.resume_state/);
 });
 
+test("Auth-configuratiediagnose is main-only, read-only en publiceert geen waarden", async () => {
+  const text = await workflow("supabase-auth-config-diagnosis.yml");
+  assert.match(text, /if: github\.ref == 'refs\/heads\/main'/);
+  assert.match(text, /DIAGNOSE_READ_ONLY/);
+  assert.match(text, /B2_READONLY_APPLICATION_KEY_ID/);
+  assert.match(text, /verify-portable-checksum\.mjs/);
+  assert.match(text, /diagnose-supabase-auth-config\.mjs/);
+  assert.match(text, /auth-config-diagnostic-\$\{\{ github\.run_id \}\}/);
+  assert.match(text, /actions\/upload-artifact@v4\.6\.2/);
+  assert.doesNotMatch(text, /TARGET_DB_URL|TARGET_SUPABASE_ADMIN_KEY|restore-supabase-backup|restore-supabase-storage|update-supabase-managed-restore-state|psql /);
+  assert.doesNotMatch(text, /supabase db push|supabase start|supabase stop/);
+
+  const diagnostic = await script("diagnose-supabase-auth-config.mjs");
+  assert.match(diagnostic, /mismatch_category|mismatchCategory/);
+  assert.match(diagnostic, /secret_values_compared: false/);
+  assert.doesNotMatch(diagnostic, /console\.log\(.*target|JSON\.stringify\(target/);
+});
+
 test("captured triggers kwalificeren de vooraf gecontroleerde public-functie", async () => {
   const text = await script("capture-supabase-managed-customizations.sql");
   assert.match(text, /function_namespace\.nspname = 'public'/);
@@ -201,6 +219,7 @@ test("alle backup- en restoreworkflows behouden de vereiste YAML-basisstructuur"
     "supabase-backup-watchdog.yml",
     "supabase-restore-preflight.yml",
     "supabase-restore-drill.yml",
+    "supabase-auth-config-diagnosis.yml",
     "platform-inventory.yml",
   ]) {
     const text = await workflow(name);
