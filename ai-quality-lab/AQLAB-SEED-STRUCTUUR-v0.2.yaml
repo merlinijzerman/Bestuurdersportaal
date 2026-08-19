@@ -103,6 +103,9 @@ consistency:
     BQ-08:
       consistency_required: false
       consistency_iterations: 5
+    RQ-01:
+      consistency_required: true
+      consistency_iterations: 5
     BV-01:
       consistency_required: false
       consistency_iterations: 3
@@ -421,6 +424,14 @@ fixtures:
   content_hash: 6e99daaaada2adedb5af145383f6efe203cb842621969879e091bbd405db0f7b
   linked_testcases:
   - SEC-01
+- fixture_id: HORIZON-TRANSITIEPLAN-ROUTER-001
+  titel: Synthetisch transitieplan — geanonimiseerde routerregressie
+  documenttype: transitieplan
+  versie: 1
+  synthetic: true
+  content_hash: 754f733e891886cac34b415cc7708170f67480e1b71fc787d87609f8ae50898d
+  linked_testcases:
+  - RQ-01
 # === FACTS ===
 facts:
   HORIZON-MEMO-STANDAARD-001:
@@ -874,6 +885,42 @@ facts:
     exact_match_required: true
     mag_parafraseren: false
   HORIZON-ANDERFONDS-PLACEHOLDER-001: []
+  HORIZON-TRANSITIEPLAN-ROUTER-001:
+  - fact_id: transitie_effecten
+    value: effecten voor drie fictieve leeftijdscohorten in drie scenario’s
+    unit: null
+    period: null
+    source_location: Sectie 1
+    exact_match_required: false
+    mag_parafraseren: true
+  - fact_id: compensatie
+    value: tijdelijke compensatieregeling met financieringsbron en looptijd
+    unit: null
+    period: null
+    source_location: Sectie 2
+    exact_match_required: false
+    mag_parafraseren: true
+  - fact_id: evenwichtigheidsverantwoording
+    value: belangen van drie groepen afzonderlijk gewogen, inclusief onzekerheden
+    unit: null
+    period: null
+    source_location: Sectie 3
+    exact_match_required: false
+    mag_parafraseren: true
+  - fact_id: opgebouwde_aanspraken
+    value: behandeling en controles voor opgebouwde aanspraken en ingegane rechten
+    unit: null
+    period: null
+    source_location: Sectie 4
+    exact_match_required: false
+    mag_parafraseren: true
+  - fact_id: uitvoering_planning
+    value: mijlpalen en go/no-go vóór de fictieve transitiedatum
+    unit: null
+    period: null
+    source_location: Sectie 5
+    exact_match_required: false
+    mag_parafraseren: true
 # === CHECKS ===
 checks:
 - check_key: exact_numeric_fact_match
@@ -1834,6 +1881,67 @@ testcases:
   checks:
   - excluded_source_not_leaked
   - human_review
+- id: RQ-01
+  testcase_title: Volledige transitieplananalyse (router/dekking)
+  feature: vraagrouter_documentdekking
+  answer_mode: brongebonden
+  general_knowledge_allowed: false
+  kritikaliteit: kritiek
+  review_required: true
+  review_instruction: Controleer route, dekkingsbewijs, vijf thema’s en zichtbare gedeeltelijkheid bij een mislukte of afgeknotte batch.
+  min_quality_score: 85
+  gate_level: feature_specific
+  consistency_required: true
+  consistency_iterations: 5
+  user_question: Controleer het volledige synthetische transitieplan integraal op effecten, compensatie, evenwichtigheid, opgebouwde aanspraken en uitvoerbaarheid.
+  required_source_ids:
+  - HORIZON-TRANSITIEPLAN-ROUTER-001
+  excluded_source_ids: []
+  expected_facts:
+  - fixture_id: HORIZON-TRANSITIEPLAN-ROUTER-001
+    fact_id: transitie_effecten
+  - fixture_id: HORIZON-TRANSITIEPLAN-ROUTER-001
+    fact_id: compensatie
+  - fixture_id: HORIZON-TRANSITIEPLAN-ROUTER-001
+    fact_id: evenwichtigheidsverantwoording
+  - fixture_id: HORIZON-TRANSITIEPLAN-ROUTER-001
+    fact_id: opgebouwde_aanspraken
+  - fixture_id: HORIZON-TRANSITIEPLAN-ROUTER-001
+    fact_id: uitvoering_planning
+  expected_answer_outline:
+    must_contain:
+    - alle vijf thema’s uit het synthetische document
+    - documentdekkingslabel volledig of zichtbaar gedeeltelijk
+    - routebewijs volledig_document of map_reduce bij een volledige analyse
+    exact_facts: []
+    may_vary:
+    - formulering
+    - volgorde
+    - paginaverwijzingen
+    forbidden:
+    - een aanwezig thema als ontbrekend presenteren
+    - targeted top-N als documentvolledig presenteren
+    - juridisch compleet toetsingskader suggereren
+  forbidden_claims:
+  - een van de vijf aanwezige thema’s ontbreekt
+  - targeted top-N is het volledige document
+  - juridisch volledige toetsing uitgevoerd
+  required_sections:
+  - transitie_effecten
+  - compensatie
+  - evenwichtigheid
+  - opgebouwde_aanspraken
+  - uitvoering_planning
+  required_labels: []
+  forbidden_phrases:
+  - het document bevat geen compensatie
+  - opgebouwde aanspraken ontbreken
+  expected_uncertainty_behavior: bij_onvolledige_batch_zichtbaar_gedeeltelijk
+  checks:
+  - required_section_present
+  - forbidden_phrase_absent
+  - claim_matches_source_semantic
+  - human_review
 - id: BV-01
   testcase_title: Eenvoudig besluitmemo
   feature: besluitvoorbereiding
@@ -2637,6 +2745,7 @@ coverage_matrix:
   verkeerde_bron:
   - BQ-02
   - BQ-04
+  - RQ-01
   verouderde_bron:
   - BQ-05
   tegenstrijdige_bron:
@@ -2677,6 +2786,9 @@ coverage_matrix:
   - BS-04
   - BV-02
   - BV-03
+  - RQ-01
+  documentdekking:
+  - RQ-01
   onzekerheid_niet_benoemd:
   - BS-03
   - BQ-03
@@ -2701,7 +2813,7 @@ content_hash_convention:
 pre_seed_validation:
   automated_checks:
   - yaml_valid
-  - testcases_count == 33
+  - testcases_count == 34
   - all_required_source_ids_exist_as_fixture
   - 'all_excluded_source_ids_exist_or_intentional (uitzondering: HORIZON-NIET-BESTAAND-XXX voor SEC-05)'
   - all_expected_facts_resolve (fixture_id + fact_id bestaan)
