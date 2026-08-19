@@ -54,6 +54,9 @@ test("kosteloze preflight is main-only, versleuteld, herhaalbaar en ruimt altijd
   assert.match(text, /cryptsetup luksFormat/);
   assert.match(text, /"data-root": \$data_root/);
   assert.match(text, /run: bash scripts\/run-supabase-restore-preflight\.sh/);
+  assert.match(text, /\/etc\/apt\/apt-mirrors\.txt/);
+  assert.match(text, /https:\/\/archive\.ubuntu\.com\/ubuntu/);
+  assert.doesNotMatch(text, /['"]http:\/\/azure\.archive\.ubuntu\.com\/ubuntu['"]/);
   assert.match(text, /timeout --signal=TERM 5m apt-get update/);
   assert.match(text, /Versleutelde productiegegevens aantoonbaar vernietigen[\s\S]*?if: always\(\)/);
   assert.doesNotMatch(text, /RESTORE_TARGET_DB_URL|RESTORE_TARGET_SUPABASE_SERVICE_ROLE_KEY/);
