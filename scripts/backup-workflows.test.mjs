@@ -118,6 +118,8 @@ test("managed restore scheidt keys, hervat exact, test Auth/RLS/app en lekt geen
   assert.match(text.slice(markerStep, inventoryStep), /env\.write\(f"INVENTORY_KEY=/);
   assert.doesNotMatch(text.slice(markerStep, inventoryStep), /INVENTORY_PATH=/);
   assert.match(text.slice(inventoryStep, archiveStep), /INVENTORY_PATH="\$DRILL_ROOT/);
+  assert.match(text.slice(inventoryStep, archiveStep), /verify-portable-checksum\.mjs/);
+  assert.doesNotMatch(text.slice(inventoryStep, archiveStep), /sha256sum -c/);
   assert.match(text, /verify-supabase-managed-keys\.mjs/);
   assert.match(text, /verify-supabase-auth-config\.mjs/);
   assert.match(text, /verify-supabase-managed-functional\.mjs setup/);
