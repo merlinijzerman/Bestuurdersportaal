@@ -128,8 +128,10 @@ async function main() {
     const loginButton = page.locator('form button[type="submit"]');
     smokeStage = "login_submit_button_visible";
     await loginButton.waitFor({ state: "visible", timeout: 45_000 });
+    smokeStage = "login_submit_button_enabled";
+    if (!(await loginButton.isEnabled())) fail("login_button_disabled");
     smokeStage = "login_submit_button_click";
-    await loginButton.click({ timeout: 45_000 });
+    await loginButton.click({ timeout: 45_000, force: true });
     smokeStage = "login_redirect";
     await page.waitForURL((url) => url.pathname === "/", { timeout: 45_000 });
     smokeStage = "dashboard";
