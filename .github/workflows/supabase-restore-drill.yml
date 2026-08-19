@@ -355,9 +355,9 @@ jobs:
             --endpoint-url "$B2_S3_ENDPOINT" --only-show-errors --no-progress
           aws s3 cp "s3://$B2_BUCKET_NAME/$INVENTORY_CHECKSUM_KEY" "$INVENTORY_PATH.sha256" \
             --endpoint-url "$B2_S3_ENDPOINT" --only-show-errors --no-progress
-          (cd "$DRILL_ROOT" && sha256sum -c "$(basename "$INVENTORY_PATH").sha256")
+          node scripts/verify-portable-checksum.mjs \
+            "$INVENTORY_PATH" "$INVENTORY_PATH.sha256" "$INVENTORY_SHA256" >/dev/null
           test "$(stat -c '%s' "$INVENTORY_PATH")" = "$INVENTORY_BYTES"
-          test "$(sha256sum "$INVENTORY_PATH" | awk '{print $1}')" = "$INVENTORY_SHA256"
           echo "INVENTORY_PATH=$INVENTORY_PATH" >> "$GITHUB_ENV"
 
       - name: Exacte backup-archieven binnen LUKS ophalen
