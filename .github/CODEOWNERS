@@ -18,4 +18,8 @@
 /app/(platform)/                     @merlinijzerman
 
 # Datamodel + RLS (migratie-eerst-dan-deploy)
+# Sinds fase 1 van de migratie-mapherindeling staan rollbacks en seeds naast
+# migrations/ in plaats van erin; ze horen onder dezelfde review.
 /supabase/migrations/                @merlinijzerman
+/supabase/rollbacks/                 @merlinijzerman
+/supabase/seeds/                     @merlinijzerman

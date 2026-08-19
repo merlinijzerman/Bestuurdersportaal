@@ -88,5 +88,5 @@ host-afdwinging is proportioneel/gefaseerd (hoogrisico-routes eerst).
   [`lib/tenant-context.ts`](../lib/tenant-context.ts),
   [`app/(dashboard)/layout.tsx`](../app/(dashboard)/layout.tsx),
   [`app/api/chat/route.ts`](../app/api/chat/route.ts)
-- Migratie: [`2026_07_08_tenant_domains_seed.sql`](../supabase/migrations/2026_07_08_tenant_domains_seed.sql)
+- Migratie: [`2026_07_08_tenant_domains_seed.sql`](../supabase/seeds/schema/2026_07_08_tenant_domains_seed.sql)
 - Tests: [`lib/tenant-enforce.sanity.ts`](../lib/tenant-enforce.sanity.ts)

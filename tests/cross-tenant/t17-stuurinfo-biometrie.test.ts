@@ -40,7 +40,7 @@ const hier = dirname(fileURLToPath(import.meta.url));
 const lees = (...p: string[]) => readFileSync(join(hier, "..", "..", ...p), "utf8");
 
 const RPC_MIGRATIE = "supabase/migrations/2026_07_19_t17_stuurinfo_biometrie.sql";
-const SEED_MIGRATIE = "supabase/migrations/2026_07_19_t17b_stuurinfo_biometrie_seed.sql";
+const SEED_MIGRATIE = "supabase/seeds/schema/2026_07_19_t17b_stuurinfo_biometrie_seed.sql";
 
 const bron = (puntKey: string, waarde: number | null) => ({
   puntKey,

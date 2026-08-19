@@ -97,7 +97,7 @@ Binnen die kaders lagen enkele keuzes open die niet eenduidig uit de werkopdrach
 
 ## Referenties
 
-- Migratie: [`2026_08_12_t8_semantische_extractie.sql`](../supabase/migrations/2026_08_12_t8_semantische_extractie.sql) (+[ROLLBACK](../supabase/migrations/2026_08_12_t8_semantische_extractie_ROLLBACK.sql))
+- Migratie: [`2026_08_12_t8_semantische_extractie.sql`](../supabase/migrations/2026_08_12_t8_semantische_extractie.sql) (+[ROLLBACK](../supabase/rollbacks/2026_08_12_t8_semantische_extractie_ROLLBACK.sql))
 - Gedragstoets: [`2026_08_12_t8_semantische_extractie.sql`](../supabase/checks/2026_08_12_t8_semantische_extractie.sql)
 - Code: [`core/lib/semantische-concepten.ts`](../core/lib/semantische-concepten.ts) (+`.sanity`), [`core/lib/semantische-extractie.ts`](../core/lib/semantische-extractie.ts), [`platform/lib/semantische-extractie-job.ts`](../platform/lib/semantische-extractie-job.ts), dispatch in [`platform/lib/ingest-orchestrator.ts`](../platform/lib/ingest-orchestrator.ts), route [`app/api/internal/semantische-extractie/route.ts`](../app/api/internal/semantische-extractie/route.ts)
 - Ontwerp: [`T8-SEMANTISCHE-EXTRACTIE-ONTWERP.md`](../T8-SEMANTISCHE-EXTRACTIE-ONTWERP.md)
