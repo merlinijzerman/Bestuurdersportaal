@@ -79,13 +79,16 @@ function uitDemoSeed() {
   // Bouw dezelfde eindtoestand op als Supabase: de seed, gevolgd door de
   // latere Meridiaan-correcties in migratievolgorde. Alleen de seed lezen gaf
   // een vals-negatieve contrastmelding voor inmiddels gecorrigeerde navtekst.
+  // Paden per bestand: sinds de mapherindeling (fase 1) staan seeds niet meer
+  // in supabase/migrations/. De demo-fondsseed is demonstratiedata en woont in
+  // supabase/seeds/schema/; de twee correcties erna zijn echte migraties.
   const migraties = [
-    "2026_07_09_t8_demo_fonds_seed.sql",
-    "2026_07_28_huisstijl_t1_meridiaan_nav_text.sql",
-    "2026_07_28_meridiaan_nav_line.sql",
+    ["seeds", "schema", "2026_07_09_t8_demo_fonds_seed.sql"],
+    ["migrations", "2026_07_28_huisstijl_t1_meridiaan_nav_text.sql"],
+    ["migrations", "2026_07_28_meridiaan_nav_line.sql"],
   ];
-  for (const bestand of migraties) {
-    const sql = readFileSync(join(process.cwd(), "supabase", "migrations", bestand), "utf8");
+  for (const delen of migraties) {
+    const sql = readFileSync(join(process.cwd(), "supabase", ...delen), "utf8");
     for (const [, k, v] of sql.matchAll(/'([a-z-]+-rgb)',\s*'([\d ]+)'/g)) tokens[k] = v;
   }
   return Object.keys(tokens).length ? { "Meridiaan (actuele demo-migraties)": tokens } : {};

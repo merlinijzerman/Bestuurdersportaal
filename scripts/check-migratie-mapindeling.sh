@@ -47,6 +47,23 @@ if [ -n "$verdwaald" ]; then
   fout=1
 fi
 
+# Derde controle, toegevoegd nadat de eerste verplaatsing dit precies fout deed:
+# code en documentatie mogen niet meer naar een verplaatst bestand wijzen via
+# supabase/migrations/. De mapgate hierboven ziet alleen wáár bestanden staan,
+# niet wie ze leest. Zeven bestanden (sanity-tests, cross-tenant-tests,
+# toets-fondsthema.mjs) lazen een seed of rollback op het oude pad en faalden
+# pas in CI met ENOENT.
+stale="$(git grep -nE 'supabase/migrations/[^ )`"'\''`]*(_ROLLBACK|seed)[^ )`"'\''`]*\.sql' \
+  -- ':!scripts/check-migratie-mapindeling.sh' 2>/dev/null || true)"
+if [ -n "$stale" ]; then
+  echo "FOUT: verwijzingen naar supabase/migrations/ voor een verplaatst bestand:" >&2
+  echo "$stale" | sed 's/^/  /' >&2
+  echo "" >&2
+  echo "Wijs naar supabase/rollbacks/, supabase/seeds/preview/ of" >&2
+  echo "supabase/seeds/schema/, afhankelijk van waar het bestand nu staat." >&2
+  fout=1
+fi
+
 if [ "$fout" -ne 0 ]; then
   exit 1
 fi

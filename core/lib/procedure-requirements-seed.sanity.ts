@@ -28,7 +28,7 @@ const hier = dirname(fileURLToPath(import.meta.url));
 // toelichting). De 2026_08_13-seed is historisch (idempotent gesuperseded).
 const migratiePad = join(
   hier,
-  "../../supabase/migrations/2026_08_14_invaar_requirements_seed_v2.sql"
+  "../../supabase/seeds/schema/2026_08_14_invaar_requirements_seed_v2.sql"
 );
 
 const START = "-- <<GEGENEREERD_UIT_DEFINITIE>>";
