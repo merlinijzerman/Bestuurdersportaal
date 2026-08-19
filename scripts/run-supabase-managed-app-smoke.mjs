@@ -143,8 +143,11 @@ async function main() {
     if (!(await loginButton.isEnabled())) fail("login_button_disabled");
     smokeStage = "login_submit_button_dom_click";
     await loginButton.evaluate((button) => button.click());
-    smokeStage = "login_redirect";
-    await page.waitForURL((url) => url.pathname === "/", { timeout: 45_000 });
+    smokeStage = "login_redirect_check";
+    if (new URL(page.url()).pathname !== "/") {
+      smokeStage = "login_redirect";
+      await page.waitForURL((url) => url.pathname === "/", { timeout: 45_000 });
+    }
     smokeStage = "dashboard";
     await page.getByRole("link", { name: "Home", exact: true }).waitFor({ timeout: 45_000 });
 
