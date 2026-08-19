@@ -289,7 +289,7 @@ jobs:
                   env.write(f"{name}={value}\n")
           PY
 
-      - name: Niet-geheime Auth-inventaris ophalen en valideren
+      - name: Niet-geheime Auth-inventarismarker ophalen en valideren
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -345,6 +345,11 @@ jobs:
               env.write(f"INVENTORY_SHA256={marker['sha256']}\n")
           PY
 
+      - name: Niet-geheime Auth-inventaris ophalen en valideren
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
           INVENTORY_PATH="$DRILL_ROOT/$(basename "$INVENTORY_KEY")"
           aws s3 cp "s3://$B2_BUCKET_NAME/$INVENTORY_KEY" "$INVENTORY_PATH" \
             --endpoint-url "$B2_S3_ENDPOINT" --only-show-errors --no-progress
