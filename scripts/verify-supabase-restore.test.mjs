@@ -96,6 +96,23 @@ test("accepteert een exacte restore met een extensiesuperset op het doel", () =>
   });
 });
 
+test("accepteert een expliciete lege Storage-bucket naast de databasegroepering", () => {
+  const data = fixture();
+  data.source.storage_buckets = 3;
+  data.target.storage_buckets = 3;
+  data.storage.bucket_count = 3;
+  data.storage.buckets.push({
+    id: "lege-bucket",
+    object_count: 0,
+    total_bytes: 0,
+    objects: [],
+  });
+
+  const result = verifyRestore(data);
+  assert.equal(result.storage_buckets, 3);
+  assert.equal(result.storage_objects, 3);
+});
+
 test("weigert een verschil in kritieke databasetellingen", () => {
   const data = fixture();
   data.target.auth_users += 1;
