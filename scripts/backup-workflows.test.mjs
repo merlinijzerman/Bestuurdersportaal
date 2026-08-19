@@ -54,6 +54,7 @@ test("kosteloze preflight is main-only, versleuteld, herhaalbaar en ruimt altijd
   assert.match(text, /cryptsetup luksFormat/);
   assert.match(text, /"data-root": \$data_root/);
   assert.match(text, /run: bash scripts\/run-supabase-restore-preflight\.sh/);
+  assert.match(text, /timeout --signal=TERM 5m apt-get update/);
   assert.match(text, /Versleutelde productiegegevens aantoonbaar vernietigen[\s\S]*?if: always\(\)/);
   assert.doesNotMatch(text, /RESTORE_TARGET_DB_URL|RESTORE_TARGET_SUPABASE_SERVICE_ROLE_KEY/);
 
@@ -63,6 +64,8 @@ test("kosteloze preflight is main-only, versleuteld, herhaalbaar en ruimt altijd
   assert.match(runner, /--dry-run/);
   assert.match(runner, /cmp --silent/);
   assert.match(runner, /physical_objects_redownloaded_and_hashed: true/);
+  assert.match(runner, /contains_sql_or_row_values/);
+  assert.match(runner, /RESTORE_SQLSTATE/);
 });
 
 test("captured triggers kwalificeren de vooraf gecontroleerde public-functie", async () => {

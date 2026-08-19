@@ -94,6 +94,10 @@ test("biedt rollen, schema, data en customizations aan één falende single tran
     assert.equal(invocations.length, 1);
     const restoreInvocation = invocations[0];
     assert.match(restoreInvocation, /--single-transaction/);
+    assert.match(restoreInvocation, /-v VERBOSITY=sqlstate/);
+    for (const phase of ["roles", "schema", "data", "managed_customizations"]) {
+      assert.match(restoreInvocation, new RegExp(`RESTORE_PHASE=${phase}`));
+    }
     for (const file of ["roles.sql", "schema.sql", "data.sql", "managed-customizations.restore.sql"]) {
       assert.match(restoreInvocation, new RegExp(file.replace(".", "\\.")));
     }
