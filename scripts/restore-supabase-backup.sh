@@ -193,4 +193,4 @@ psql "$TARGET_DB_URL" \
 FINISHED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo "Restore database groen: $FINISHED_AT"
 echo "Fysieke Storage-bestanden zijn nog niet naar het doelproject geüpload."
-echo "Voer daarna uit: TARGET_SUPABASE_URL=... TARGET_SUPABASE_SERVICE_ROLE_KEY=... node scripts/restore-supabase-storage.mjs --input-dir <uitgepakte-storage-map>"
+echo "Voer daarna uit: TARGET_DB_URL=... TARGET_SUPABASE_URL=... TARGET_SUPABASE_SERVICE_ROLE_KEY=... bash scripts/restore-supabase-storage-with-metadata.sh <uitgepakte-storage-map>"

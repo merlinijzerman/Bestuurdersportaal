@@ -74,6 +74,32 @@ test("kosteloze preflight is main-only, versleuteld, herhaalbaar en ruimt altijd
   assert.match(runner, /managed_customizations_prepare/);
   assert.match(runner, /storage-diagnostic\.json/);
   assert.match(runner, /STORAGE_HTTP_STATUS/);
+  assert.match(runner, /restore-supabase-storage-with-metadata\.sh/);
+  assert.match(runner, /validation-diagnostic\.json/);
+  assert.match(runner, /contains_hashes_counts_bucket_or_object_names_or_values/);
+
+  const metadataRestore = await script("restore-supabase-storage-with-metadata.sh");
+  assert.match(metadataRestore, /capture-supabase-storage-metadata\.sql/);
+  assert.match(metadataRestore, /restore-supabase-storage\.mjs/);
+  assert.match(metadataRestore, /reconcile-supabase-storage-metadata\.sql/);
+  assert.match(metadataRestore, /SNAPSHOT_STATE/);
+  const targetSafetyCheck = metadataRestore.indexOf("bron- en doelproject zijn gelijk");
+  const metadataCapture = metadataRestore.indexOf("STORAGE_PHASE=metadata_capture");
+  assert.notEqual(targetSafetyCheck, -1);
+  assert.ok(targetSafetyCheck < metadataCapture);
+
+  const captureMetadata = await script("capture-supabase-storage-metadata.sql");
+  assert.match(captureMetadata, /select bucket_id, name, owner, owner_id, metadata, user_metadata/);
+  assert.doesNotMatch(captureMetadata, /select [^\n]*version/);
+  assert.match(captureMetadata, /revoke all on schema bestuurdersportaal_restore_private from public/);
+
+  const reconcileMetadata = await script("reconcile-supabase-storage-metadata.sql");
+  assert.match(reconcileMetadata, /owner = source\.owner/);
+  assert.match(reconcileMetadata, /owner_id = source\.owner_id/);
+  assert.match(reconcileMetadata, /metadata = source\.metadata/);
+  assert.match(reconcileMetadata, /user_metadata = source\.user_metadata/);
+  assert.doesNotMatch(reconcileMetadata, /version = source\.version/);
+  assert.match(reconcileMetadata, /drop schema bestuurdersportaal_restore_private cascade/);
 });
 
 test("captured triggers kwalificeren de vooraf gecontroleerde public-functie", async () => {

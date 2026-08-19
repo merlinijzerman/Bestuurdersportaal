@@ -160,9 +160,9 @@ PY
     exit 1
   fi
 
-  if ! node scripts/restore-supabase-storage.mjs --input-dir "$STORAGE_RESTORE_DIR" \
+  if ! bash scripts/restore-supabase-storage-with-metadata.sh "$STORAGE_RESTORE_DIR" \
     >"$ITERATION_ROOT/storage-restore.json" 2>"$ITERATION_ROOT/storage-restore.log"; then
-    STORAGE_PHASE="$(sed -n 's/^STORAGE_PHASE=\(local_archive\|bucket_read\|bucket_create\|bucket_update\|object_resume_check\|object_upload\|object_verify\)$/\1/p' "$ITERATION_ROOT/storage-restore.log" | tail -n 1)"
+    STORAGE_PHASE="$(sed -n 's/^STORAGE_PHASE=\(metadata_capture\|physical_restore\|local_archive\|bucket_read\|bucket_create\|bucket_update\|object_resume_check\|object_upload\|object_verify\|metadata_reconcile\)$/\1/p' "$ITERATION_ROOT/storage-restore.log" | tail -n 1)"
     STORAGE_HTTP_STATUS="$(sed -n 's/^STORAGE_HTTP_STATUS=\([1-5][0-9][0-9]\|unknown\)$/\1/p' "$ITERATION_ROOT/storage-restore.log" | tail -n 1)"
     STORAGE_PHASE="${STORAGE_PHASE:-local_archive}"
     STORAGE_HTTP_STATUS="${STORAGE_HTTP_STATUS:-unknown}"
@@ -175,8 +175,8 @@ from datetime import datetime, timezone
 
 path, iteration, phase, http_status = sys.argv[1:]
 allowed_phases = {
-    "local_archive", "bucket_read", "bucket_create", "bucket_update", "object_resume_check",
-    "object_upload", "object_verify",
+    "metadata_capture", "physical_restore", "local_archive", "bucket_read", "bucket_create",
+    "bucket_update", "object_resume_check", "object_upload", "object_verify", "metadata_reconcile",
 }
 if phase not in allowed_phases:
     phase = "unknown"
@@ -205,7 +205,34 @@ PY
     --target "$TARGET_VALIDATION_PATH" \
     --storage-manifest "$STORAGE_RESTORE_DIR/storage-manifest.json" \
     >"$RESTORE_EVIDENCE_PATH" 2>"$ITERATION_ROOT/verification.log"; then
-    echo "Preflight stopt: inhoudelijke restorevalidatie faalt (iteratie $iteration); de versleutelde detailoutput wordt vernietigd." >&2
+    VALIDATION_CATEGORY="$(sed -n 's/^VALIDATION_CATEGORY=\(contract\|postgres_major\|count_auth_users\|count_auth_identities\|count_storage_buckets\|count_storage_objects\|count_storage_by_bucket\|count_critical_public\|content_auth_users\|content_auth_identities\|content_storage_buckets\|content_storage_objects\|content_critical_public\|policies\|triggers\|extensions\|storage_manifest\|unknown\)$/\1/p' "$ITERATION_ROOT/verification.log" | tail -n 1)"
+    VALIDATION_CATEGORY="${VALIDATION_CATEGORY:-unknown}"
+    python3 - "$EVIDENCE_DIR/validation-diagnostic.json" "$iteration" "$VALIDATION_CATEGORY" <<'PY'
+import json
+import pathlib
+import sys
+from datetime import datetime, timezone
+
+path, iteration, category = sys.argv[1:]
+allowed_categories = {
+    "contract", "postgres_major", "count_auth_users", "count_auth_identities",
+    "count_storage_buckets", "count_storage_objects", "count_storage_by_bucket",
+    "count_critical_public", "content_auth_users", "content_auth_identities",
+    "content_storage_buckets", "content_storage_objects", "content_critical_public",
+    "policies", "triggers", "extensions", "storage_manifest", "unknown",
+}
+if category not in allowed_categories:
+    category = "unknown"
+pathlib.Path(path).write_text(json.dumps({
+    "schema_version": 1,
+    "status": "restore-validation-failed",
+    "created_utc": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    "iteration": int(iteration),
+    "category": category,
+    "contains_hashes_counts_bucket_or_object_names_or_values": False,
+}, indent=2) + "\n")
+PY
+    echo "Preflight stopt: inhoudelijke restorevalidatie faalt (iteratie $iteration, categorie $VALIDATION_CATEGORY); de versleutelde detailoutput wordt vernietigd." >&2
     exit 1
   fi
 
