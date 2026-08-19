@@ -102,6 +102,56 @@ test("kosteloze preflight is main-only, versleuteld, herhaalbaar en ruimt altijd
   assert.match(reconcileMetadata, /drop schema bestuurdersportaal_restore_private cascade/);
 });
 
+test("managed restore scheidt keys, hervat exact, test Auth/RLS/app en lekt geen productiedata", async () => {
+  const text = await workflow("supabase-restore-drill.yml");
+  assert.match(text, /RESTORE_TARGET_SUPABASE_ADMIN_KEY/);
+  assert.match(text, /RESTORE_TARGET_SUPABASE_CLIENT_KEY/);
+  assert.doesNotMatch(text, /secrets\.RESTORE_TARGET_SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(text, /platform_inventory_marker_key/);
+  assert.match(text, /verify-supabase-managed-keys\.mjs/);
+  assert.match(text, /verify-supabase-auth-config\.mjs/);
+  assert.match(text, /verify-supabase-managed-functional\.mjs setup/);
+  assert.match(text, /run-supabase-managed-app-smoke\.mjs/);
+  assert.match(text, /TENANT_ENFORCE=on/);
+  assert.match(text, /resolve-supabase-managed-restore-mode\.mjs/);
+  assert.match(text, /create-supabase-managed-restore-state\.sql|RESTORE_STATE_BACKUP_MARKER_KEY/);
+  assert.match(text, /update-supabase-managed-restore-state\.sh finalize/);
+  assert.match(text, /cryptsetup luksFormat/);
+  assert.match(text, /APP_WORKTREE=\$SECURE_ROOT\/app-worktree/);
+  assert.match(text, /Versleutelde productiegegevens aantoonbaar vernietigen[\s\S]*?if: always\(\)/);
+  assert.match(text, /create-supabase-managed-restore-evidence\.mjs/);
+  assert.match(text, /bp-managed-restore-evidence-\$\{\{ github\.run_id \}\}\/\*\.json/);
+  assert.doesNotMatch(text, /path:[\s\S]{0,500}storage-manifest\.json/);
+  assert.doesNotMatch(text, /path:[\s\S]{0,500}target-validation\.json/);
+
+  const keys = await script("verify-supabase-managed-keys.mjs");
+  assert.match(keys, /sb_secret_/);
+  assert.match(keys, /sb_publishable_/);
+  assert.match(keys, /purpose !== "admin"/);
+
+  const storage = await script("restore-supabase-storage.mjs");
+  assert.match(storage, /publishable key mag niet voor Storage-beheer/);
+  assert.match(storage, /return \{ apikey: key \}/);
+
+  const functional = await script("verify-supabase-managed-functional.mjs");
+  assert.match(functional, /signInWithPassword/);
+  assert.match(functional, /rls_foreign_document_visible/);
+  assert.match(functional, /storage_cross_tenant_visible/);
+
+  const evidence = await script("create-supabase-managed-restore-evidence.mjs");
+  assert.doesNotMatch(evidence, /storage_path:/);
+  assert.doesNotMatch(evidence, /document_id:/);
+
+  const stateSql = await script("create-supabase-managed-restore-state.sql");
+  const stateUpdater = await script("update-supabase-managed-restore-state.sh");
+  assert.match(stateSql, /bestuurdersportaal_managed_restore_private\.resume_state/);
+  assert.match(stateSql, /updated_at timestamptz/);
+  assert.match(stateUpdater, /bestuurdersportaal_managed_restore_private\.resume_state/);
+  assert.match(stateUpdater, /updated_at = now\(\)/);
+  assert.doesNotMatch(stateSql, /managed_restore_state/);
+  assert.doesNotMatch(stateSql, /bestuurdersportaal_restore_private\.resume_state/);
+});
+
 test("captured triggers kwalificeren de vooraf gecontroleerde public-functie", async () => {
   const text = await script("capture-supabase-managed-customizations.sql");
   assert.match(text, /function_namespace\.nspname = 'public'/);

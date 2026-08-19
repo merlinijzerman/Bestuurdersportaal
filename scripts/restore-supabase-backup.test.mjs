@@ -86,6 +86,8 @@ test("biedt rollen, schema, data en customizations aan één falende single tran
         TARGET_DB_URL: "postgresql://postgres.restoretarget@restoretarget.example.invalid:5432/postgres",
         TARGET_PROJECT_REF: "restoretarget",
         TARGET_IS_EMPTY_CONFIRMED: "YES",
+        RESTORE_STATE_BACKUP_MARKER_KEY: "backup-status/2026/08/19/manifest-2026-08-19T06-49-24Z.json",
+        RESTORE_STATE_DATABASE_SHA256: "a".repeat(64),
       },
     });
 
@@ -101,6 +103,8 @@ test("biedt rollen, schema, data en customizations aan één falende single tran
     for (const file of ["roles.sql", "schema.sql", "data.sql", "managed-customizations.restore.sql"]) {
       assert.match(restoreInvocation, new RegExp(file.replace(".", "\\.")));
     }
+    assert.match(restoreInvocation, /RESTORE_PHASE=resume_state/);
+    assert.match(restoreInvocation, /create-supabase-managed-restore-state\.sql/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

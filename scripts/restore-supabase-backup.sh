@@ -18,11 +18,18 @@ ARCHIVE_PATH="${1:-}"
 
 : "${TARGET_DB_URL:?TARGET_DB_URL ontbreekt}"
 : "${TARGET_PROJECT_REF:?TARGET_PROJECT_REF ontbreekt}"
-: "${TARGET_IS_EMPTY_CONFIRMED:?TARGET_IS_EMPTY_CONFIRMED moet YES zijn}"
-[ "$TARGET_IS_EMPTY_CONFIRMED" = "YES" ] || {
-  echo "Restore stopt: TARGET_IS_EMPTY_CONFIRMED is niet YES." >&2
-  exit 1
-}
+RESTORE_VALIDATE_ONLY="${RESTORE_VALIDATE_ONLY:-NO}"
+case "$RESTORE_VALIDATE_ONLY" in
+  YES|NO) ;;
+  *) echo "Restore stopt: RESTORE_VALIDATE_ONLY moet YES of NO zijn." >&2; exit 1 ;;
+esac
+if [ "$RESTORE_VALIDATE_ONLY" != "YES" ]; then
+  : "${TARGET_IS_EMPTY_CONFIRMED:?TARGET_IS_EMPTY_CONFIRMED moet YES zijn}"
+  [ "$TARGET_IS_EMPTY_CONFIRMED" = "YES" ] || {
+    echo "Restore stopt: TARGET_IS_EMPTY_CONFIRMED is niet YES." >&2
+    exit 1
+  }
+fi
 
 CHECKSUM_PATH="$ARCHIVE_PATH.sha256"
 [ -f "$CHECKSUM_PATH" ] || { echo "Checksum-bestand ontbreekt: $CHECKSUM_PATH" >&2; exit 1; }
@@ -170,6 +177,35 @@ if contract_version == 2 and manifest_version != 2:
     raise SystemExit("restorecontract 2 vereist database-validatiemanifest 2")
 PY
 
+if [ "$RESTORE_VALIDATE_ONLY" = "YES" ]; then
+  echo "Restorearchief en alle fail-closed validators zijn groen; doelproject is niet gemuteerd."
+  exit 0
+fi
+
+RESTORE_STATE_ARGS=()
+if [ -n "${RESTORE_STATE_BACKUP_MARKER_KEY:-}" ] || [ -n "${RESTORE_STATE_DATABASE_SHA256:-}" ]; then
+  [[ "${RESTORE_STATE_BACKUP_MARKER_KEY:-}" =~ ^backup-status/[0-9]{4}/[0-9]{2}/[0-9]{2}/manifest-[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z\.json$ ]] || {
+    echo "Restore stopt: RESTORE_STATE_BACKUP_MARKER_KEY is ongeldig." >&2
+    exit 1
+  }
+  [[ "${RESTORE_STATE_DATABASE_SHA256:-}" =~ ^[0-9a-f]{64}$ ]] || {
+    echo "Restore stopt: RESTORE_STATE_DATABASE_SHA256 is ongeldig." >&2
+    exit 1
+  }
+  test -f scripts/create-supabase-managed-restore-state.sql || {
+    echo "Restore stopt: managed restore-state SQL ontbreekt." >&2
+    exit 1
+  }
+  RESTORE_STATE_ARGS=(
+    -v "restore_source_project_ref=$SOURCE_PROJECT_REF"
+    -v "restore_target_project_ref=$TARGET_PROJECT_REF"
+    -v "restore_backup_marker_key=$RESTORE_STATE_BACKUP_MARKER_KEY"
+    -v "restore_database_sha256=$RESTORE_STATE_DATABASE_SHA256"
+    -c '\echo RESTORE_PHASE=resume_state'
+    -f scripts/create-supabase-managed-restore-state.sql
+  )
+fi
+
 # Follow Supabase's documented logical restore sequence in exactly one
 # transaction. A failure in the portable Auth/Storage-customizations therefore
 # rolls roles, schema and all data back as one atomic unit.
@@ -188,7 +224,8 @@ psql "$TARGET_DB_URL" \
   -f "$WORKDIR/data.sql" \
   -c "SET LOCAL session_replication_role = origin;" \
   -c '\echo RESTORE_PHASE=managed_customizations' \
-  -f "$WORKDIR/managed-customizations.restore.sql"
+  -f "$WORKDIR/managed-customizations.restore.sql" \
+  "${RESTORE_STATE_ARGS[@]}"
 
 FINISHED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo "Restore database groen: $FINISHED_AT"

@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { parseArgs, restoreStorage, storageRestoreDiagnostic } from "./restore-supabase-storage.mjs";
+import { parseArgs, restoreStorage, storageAdminHeaders, storageRestoreDiagnostic } from "./restore-supabase-storage.mjs";
 
 const sourceProject = "aebwiufuegsiwhwpdrfb";
 
@@ -73,6 +73,16 @@ test("CLI-flags dry-run/no-verify/no-resume vereisen geen waarde", () => {
     Object.fromEntries(parseArgs(["--input-dir", "/tmp/restore", "--dry-run", "--no-verify", "--no-resume"])),
     { "input-dir": "/tmp/restore", "dry-run": true, "no-verify": true, "no-resume": true },
   );
+});
+
+test("nieuwe secret key gebruikt alleen apikey en publishable wordt geweigerd", () => {
+  const secret = `sb_secret_${"a".repeat(24)}`;
+  assert.deepEqual(storageAdminHeaders(secret), { apikey: secret });
+  assert.throws(() => storageAdminHeaders(`sb_publishable_${"b".repeat(24)}`), /publishable key/i);
+  assert.deepEqual(storageAdminHeaders("legacy.service.role"), {
+    apikey: "legacy.service.role",
+    Authorization: "Bearer legacy.service.role",
+  });
 });
 
 test("Storage-restore dry-run controleert manifest, lengte en checksum", async () => {

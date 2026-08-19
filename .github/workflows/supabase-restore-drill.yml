@@ -5,11 +5,15 @@ on:
   workflow_dispatch:
     inputs:
       target_project_ref:
-        description: Project-ref van een nieuw en leeg tijdelijk Supabase-project
+        description: Project-ref van het lege doel of exact hetzelfde hervatbare doel
         required: true
         type: string
       backup_marker_key:
         description: B2-objectkey van een complete backup-status-manifest
+        required: true
+        type: string
+      platform_inventory_marker_key:
+        description: B2-marker van de complete niet-geheime platforminventaris
         required: true
         type: string
       confirmation:
@@ -26,7 +30,7 @@ concurrency:
 
 jobs:
   restore-drill:
-    name: Volledige database- en Storage-restore
+    name: Managed restore, Auth/RLS en applicatiesmoke
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -36,8 +40,11 @@ jobs:
       TARGET_PROJECT_REF: ${{ inputs.target_project_ref }}
       TARGET_SUPABASE_URL: https://${{ inputs.target_project_ref }}.supabase.co
       TARGET_DB_URL: ${{ secrets.RESTORE_TARGET_DB_URL }}
-      TARGET_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.RESTORE_TARGET_SUPABASE_SERVICE_ROLE_KEY }}
+      TARGET_SUPABASE_ADMIN_KEY: ${{ secrets.RESTORE_TARGET_SUPABASE_ADMIN_KEY }}
+      TARGET_SUPABASE_CLIENT_KEY: ${{ secrets.RESTORE_TARGET_SUPABASE_CLIENT_KEY }}
+      SUPABASE_MANAGEMENT_API_TOKEN: ${{ secrets.SUPABASE_MANAGEMENT_API_TOKEN }}
       BACKUP_MARKER_KEY: ${{ inputs.backup_marker_key }}
+      PLATFORM_INVENTORY_MARKER_KEY: ${{ inputs.platform_inventory_marker_key }}
       RESTORE_CONFIRMATION: ${{ inputs.confirmation }}
       AWS_ACCESS_KEY_ID: ${{ secrets.B2_READONLY_APPLICATION_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.B2_READONLY_APPLICATION_KEY }}
@@ -46,6 +53,7 @@ jobs:
       AWS_MAX_ATTEMPTS: "10"
       B2_BUCKET_NAME: ${{ vars.B2_BUCKET_NAME }}
       B2_S3_ENDPOINT: ${{ vars.B2_S3_ENDPOINT }}
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
 
     steps:
       - name: Repository ophalen
@@ -55,8 +63,9 @@ jobs:
         uses: actions/setup-node@v4.4.0
         with:
           node-version: 22
+          cache: npm
 
-      - name: PostgreSQL 17-client installeren
+      - name: PostgreSQL 17-client en volumeversleuteling installeren
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -66,20 +75,25 @@ jobs:
           . /etc/os-release
           echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
             | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends postgresql-client-17
+          test -f /etc/apt/apt-mirrors.txt
+          printf '%s\n' 'https://archive.ubuntu.com/ubuntu' \
+            | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+          sudo timeout --signal=TERM 5m apt-get update \
+            -o Acquire::Retries=3 \
+            -o Acquire::http::Timeout=20 \
+            -o Acquire::https::Timeout=20
+          sudo env DEBIAN_FRONTEND=noninteractive timeout --signal=TERM 5m \
+            apt-get install -y --no-install-recommends cryptsetup postgresql-client-17
           echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
 
-      - name: Restore-validator testen
+      - name: Dependencies installeren en restorecode testen
         shell: bash
         run: |
-          node --test \
-            scripts/prepare-supabase-managed-customizations.test.mjs \
-            scripts/prepare-supabase-managed-data-restore.test.mjs \
-            scripts/restore-supabase-storage.test.mjs \
-            scripts/verify-supabase-restore.test.mjs
+          set -Eeuo pipefail
+          npm ci
+          npm run test:backup-restore
 
-      - name: Inputs fail-closed controleren
+      - name: Inputs en doelbinding fail-closed controleren
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -87,39 +101,55 @@ jobs:
             echo "Restore stopt: confirmation is niet exact RESTORE_TO_EMPTY_PROJECT." >&2
             exit 1
           }
-          test "$TARGET_PROJECT_REF" != "$SOURCE_PROJECT_REF" || {
-            echo "Restore stopt: bron- en doelproject zijn gelijk." >&2
-            exit 1
-          }
+          [[ "$SOURCE_PROJECT_REF" =~ ^[a-z]{20}$ ]]
           [[ "$TARGET_PROJECT_REF" =~ ^[a-z]{20}$ ]] || {
             echo "Restore stopt: target_project_ref heeft niet het verwachte formaat." >&2
+            exit 1
+          }
+          test "$TARGET_PROJECT_REF" != "$SOURCE_PROJECT_REF" || {
+            echo "Restore stopt: bron- en doelproject zijn gelijk." >&2
             exit 1
           }
           [[ "$BACKUP_MARKER_KEY" =~ ^backup-status/[0-9]{4}/[0-9]{2}/[0-9]{2}/manifest-[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z\.json$ ]] || {
             echo "Restore stopt: backup_marker_key heeft niet het verwachte formaat." >&2
             exit 1
           }
-          for command in aws node psql sha256sum tar; do
-            command -v "$command" >/dev/null || { echo "Ontbrekend commando: $command" >&2; exit 1; }
-          done
-          for variable in TARGET_DB_URL TARGET_SUPABASE_SERVICE_ROLE_KEY B2_BUCKET_NAME B2_S3_ENDPOINT; do
+          [[ "$PLATFORM_INVENTORY_MARKER_KEY" =~ ^backup-status/platform-inventory/[0-9]{4}/[0-9]{2}/[0-9]{2}/manifest-[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z\.json$ ]] || {
+            echo "Restore stopt: platform_inventory_marker_key heeft niet het verwachte formaat." >&2
+            exit 1
+          }
+          for variable in \
+            TARGET_DB_URL TARGET_SUPABASE_ADMIN_KEY TARGET_SUPABASE_CLIENT_KEY \
+            SUPABASE_MANAGEMENT_API_TOKEN AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY \
+            B2_BUCKET_NAME B2_S3_ENDPOINT
+          do
             test -n "${!variable:-}" || { echo "Ontbrekende restore-input: $variable" >&2; exit 1; }
           done
-          test -f scripts/restore-supabase-backup.sh
-          test -f scripts/prepare-supabase-managed-customizations.mjs
-          test -f scripts/restore-supabase-storage.mjs
-          test -f scripts/restore-supabase-storage-with-metadata.sh
-          test -f scripts/capture-supabase-storage-metadata.sql
-          test -f scripts/reconcile-supabase-storage-metadata.sql
-          test -f scripts/create-backup-validation.sql
-          test -f scripts/verify-supabase-restore.mjs
+          for command in aws cryptsetup curl node openssl psql python3 rsync sha256sum tar; do
+            command -v "$command" >/dev/null || { echo "Ontbrekend restorecommando: $command" >&2; exit 1; }
+          done
+          for file in \
+            scripts/restore-supabase-backup.sh \
+            scripts/restore-supabase-storage-with-metadata.sh \
+            scripts/create-backup-validation.sql \
+            scripts/verify-supabase-restore.mjs \
+            scripts/verify-supabase-managed-keys.mjs \
+            scripts/verify-supabase-auth-config.mjs \
+            scripts/verify-supabase-managed-functional.mjs \
+            scripts/run-supabase-managed-app-smoke.mjs \
+            scripts/resolve-supabase-managed-restore-mode.mjs \
+            scripts/update-supabase-managed-restore-state.sh \
+            scripts/create-supabase-managed-restore-evidence.mjs
+          do
+            test -f "$file" || { echo "Ontbrekend restorebestand: $file" >&2; exit 1; }
+          done
 
           python3 - "$TARGET_DB_URL" "$TARGET_PROJECT_REF" <<'PY'
           import sys
           from urllib.parse import urlsplit
 
-          url, project_ref = sys.argv[1:]
-          parsed = urlsplit(url)
+          parsed = urlsplit(sys.argv[1])
+          project_ref = sys.argv[2]
           if parsed.scheme not in {"postgres", "postgresql"}:
               raise SystemExit("TARGET_DB_URL heeft geen Postgres-schema")
           if project_ref not in (parsed.hostname or "") and project_ref not in (parsed.username or ""):
@@ -128,54 +158,59 @@ jobs:
               raise SystemExit("TARGET_DB_URL verwijst niet naar database postgres")
           PY
 
-          node <<'NODE'
-          const token = process.env.TARGET_SUPABASE_SERVICE_ROLE_KEY;
-          const parts = token.split(".");
-          if (parts.length !== 3) throw new Error("Service-role-key is geen JWT");
-          const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
-          if (payload.ref !== process.env.TARGET_PROJECT_REF || payload.role !== "service_role") {
-            throw new Error("Service-role-key hoort niet aantoonbaar bij het doelproject");
-          }
-          NODE
-
-          DRILL_ROOT="$RUNNER_TEMP/supabase-restore-drill-$GITHUB_RUN_ID"
-          mkdir -p "$DRILL_ROOT"
-          chmod 700 "$DRILL_ROOT"
-          echo "DRILL_ROOT=$DRILL_ROOT" >> "$GITHUB_ENV"
-
-      - name: Leeg doelproject aantoonbaar controleren
+      - name: LUKS-volume voor alle productiedata inrichten
         shell: bash
         run: |
           set -Eeuo pipefail
-          test "$(psql "$TARGET_DB_URL" -v ON_ERROR_STOP=1 -Atc "select 1")" = "1"
-          TARGET_PRECHECK_PATH="$DRILL_ROOT/target-precheck.json"
-          psql "$TARGET_DB_URL" -v ON_ERROR_STOP=1 -Atc "
-            select json_build_object(
-              'public_tables', (
-                select count(*) from information_schema.tables
-                where table_schema = 'public' and table_type = 'BASE TABLE'
-              ),
-              'auth_users', (select count(*) from auth.users),
-              'storage_buckets', (select count(*) from storage.buckets),
-              'storage_objects', (select count(*) from storage.objects)
-            )::text;
-          " > "$TARGET_PRECHECK_PATH"
-          python3 - "$TARGET_PRECHECK_PATH" <<'PY'
-          import json
-          import pathlib
-          import sys
+          LUKS_FILE="$RUNNER_TEMP/bp-managed-restore-$GITHUB_RUN_ID.luks"
+          MAPPER_NAME="bp-managed-$GITHUB_RUN_ID"
+          SECURE_ROOT="/mnt/bp-managed-restore-$GITHUB_RUN_ID"
+          EVIDENCE_DIR="$RUNNER_TEMP/bp-managed-restore-evidence-$GITHUB_RUN_ID"
+          {
+            echo "LUKS_FILE=$LUKS_FILE"
+            echo "MAPPER_NAME=$MAPPER_NAME"
+            echo "MANAGED_RESTORE_ROOT=$SECURE_ROOT"
+            echo "DRILL_ROOT=$SECURE_ROOT/drill"
+            echo "APP_WORKTREE=$SECURE_ROOT/app-worktree"
+            echo "EVIDENCE_DIR=$EVIDENCE_DIR"
+            echo "TMPDIR=$SECURE_ROOT/tmp"
+          } >> "$GITHUB_ENV"
 
-          values = json.loads(pathlib.Path(sys.argv[1]).read_text())
-          expected = {"public_tables": 0, "auth_users": 0, "storage_buckets": 0, "storage_objects": 0}
-          if values != expected:
-              raise SystemExit(f"Restore stopt: doelproject is niet leeg: {values}")
-          PY
-          echo "Doelproject is aantoonbaar leeg." >> "$GITHUB_STEP_SUMMARY"
+          install -m 0600 /dev/null "$LUKS_FILE"
+          truncate -s 11G "$LUKS_FILE"
+          LUKS_KEY="$(openssl rand -hex 64)"
+          echo "::add-mask::$LUKS_KEY"
+          printf '%s' "$LUKS_KEY" | sudo cryptsetup luksFormat \
+            --type luks2 --batch-mode --key-file=- "$LUKS_FILE"
+          printf '%s' "$LUKS_KEY" | sudo cryptsetup open \
+            --key-file=- "$LUKS_FILE" "$MAPPER_NAME"
+          unset LUKS_KEY
 
-      - name: Completion marker downloaden en valideren
+          sudo mkfs.ext4 -q "/dev/mapper/$MAPPER_NAME"
+          sudo mkdir -p "$SECURE_ROOT"
+          sudo mount -o noatime,nodev,nosuid "/dev/mapper/$MAPPER_NAME" "$SECURE_ROOT"
+          sudo chown "$USER:$USER" "$SECURE_ROOT"
+          chmod 700 "$SECURE_ROOT"
+          mkdir -p "$SECURE_ROOT/drill" "$SECURE_ROOT/tmp" "$SECURE_ROOT/app-worktree" "$EVIDENCE_DIR"
+          rsync -a --exclude='.git/' --exclude='node_modules/' --exclude='.next/' \
+            "$GITHUB_WORKSPACE/" "$SECURE_ROOT/app-worktree/"
+          ln -s "$GITHUB_WORKSPACE/node_modules" "$SECURE_ROOT/app-worktree/node_modules"
+          sudo cryptsetup status "$MAPPER_NAME" | grep -q 'type:.*LUKS2'
+          findmnt -n -o SOURCE "$SECURE_ROOT" | grep -Fxq "/dev/mapper/$MAPPER_NAME"
+          echo "Alle archieven, manifests, responses, app-cache en browserstate blijven binnen LUKS." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Admin- en clientkey strikt scheiden en controleren
         shell: bash
         run: |
           set -Eeuo pipefail
+          umask 077
+          node scripts/verify-supabase-managed-keys.mjs > "$DRILL_ROOT/key-evidence.json"
+
+      - name: Backupmarker ophalen en valideren
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
           MARKER_NAME="$(basename "$BACKUP_MARKER_KEY")"
           MARKER_PATH="$DRILL_ROOT/$MARKER_NAME"
           aws s3 cp "s3://$B2_BUCKET_NAME/$BACKUP_MARKER_KEY" "$MARKER_PATH" \
@@ -189,99 +224,138 @@ jobs:
           import os
           import pathlib
           import re
-          import sys
 
-          marker_path = pathlib.Path(sys.argv[1])
-          manifest = json.loads(marker_path.read_text())
-          if manifest.get("schema_version") != 2 or manifest.get("status") != "complete":
+          marker_path = pathlib.Path(__import__('sys').argv[1])
+          marker = json.loads(marker_path.read_text())
+          if marker.get("schema_version") != 2 or marker.get("status") != "complete":
               raise SystemExit("Marker is niet een complete schema_version 2-back-up")
-          if manifest.get("source_project") != os.environ["SOURCE_PROJECT_REF"]:
+          if marker.get("source_project") != os.environ["SOURCE_PROJECT_REF"]:
               raise SystemExit("Marker hoort niet bij het verwachte bronproject")
-          if manifest.get("completion_marker") != os.environ["BACKUP_MARKER_KEY"]:
+          if marker.get("completion_marker") != os.environ["BACKUP_MARKER_KEY"]:
               raise SystemExit("completion_marker wijkt af van de gekozen marker")
-
-          required_coverage = [
-              "public_database_schema_and_data",
-              "auth_data",
-              "storage_metadata",
-              "managed_auth_storage_customizations",
-              "physical_storage_objects",
-          ]
-          coverage = manifest.get("coverage", {})
-          if any(coverage.get(name) is not True for name in required_coverage):
+          coverage = marker.get("coverage", {})
+          required = (
+              "public_database_schema_and_data", "auth_data", "storage_metadata",
+              "managed_auth_storage_customizations", "physical_storage_objects",
+          )
+          if any(coverage.get(name) is not True for name in required):
               raise SystemExit("Marker meldt onvolledige database/Auth/Storage-dekking")
-
-          expected_buckets = sorted(["documenten", "documenten-quarantaine", "afschriften", "aqlab-audit"])
-          storage = manifest.get("storage", {})
-          if sorted(storage.get("buckets", [])) != expected_buckets:
+          if set(marker.get("storage", {}).get("buckets", [])) != {
+              "documenten", "documenten-quarantaine", "afschriften", "aqlab-audit",
+          }:
               raise SystemExit("Marker dekt niet exact de vier afgesproken Storage-buckets")
 
-          archive_pattern = re.compile(
+          pattern = re.compile(
               r"^supabase/\d{4}/\d{2}/\d{2}/bestuurdersportaal-(database|storage)-"
               r"\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z\.tar\.gz$"
           )
-
-          def validate_artifact(section, expected_kind):
-              item = manifest.get(section)
-              if not isinstance(item, dict):
-                  raise SystemExit(f"{section} ontbreekt in marker")
+          def artifact(section, kind):
+              item = marker.get(section, {})
               key = item.get("archive_key", "")
-              match = archive_pattern.fullmatch(key)
-              if not match or match.group(1) != expected_kind:
-                  raise SystemExit(f"Ongeldige {section}.archive_key")
-              if item.get("checksum_key") != key + ".sha256":
-                  raise SystemExit(f"Ongeldige {section}.checksum_key")
-              size = item.get("bytes")
-              checksum = item.get("sha256")
-              if not isinstance(size, int) or size <= 0:
-                  raise SystemExit(f"Ongeldige {section}.bytes")
-              if not isinstance(checksum, str) or not re.fullmatch(r"[0-9a-f]{64}", checksum):
-                  raise SystemExit(f"Ongeldige {section}.sha256")
-              return key, item["checksum_key"], size, checksum
+              match = pattern.fullmatch(key)
+              if not match or match.group(1) != kind or item.get("checksum_key") != key + ".sha256":
+                  raise SystemExit(f"Ongeldig {section}-artifactcontract")
+              if not isinstance(item.get("bytes"), int) or item["bytes"] <= 0:
+                  raise SystemExit(f"Ongeldige {section}-grootte")
+              if not re.fullmatch(r"[0-9a-f]{64}", item.get("sha256", "")):
+                  raise SystemExit(f"Ongeldige {section}-checksum")
+              return key, item["checksum_key"], item["bytes"], item["sha256"]
 
-          db_key, db_checksum_key, db_bytes, db_sha = validate_artifact("database", "database")
-          storage_key, storage_checksum_key, storage_bytes, storage_sha = validate_artifact("storage", "storage")
-          database = manifest["database"]
-          if database.get("restore_contract_version") != 2:
-              raise SystemExit("Managed restore vereist database.restore_contract_version 2")
-          required_database_contents = {
-              "roles.sql",
-              "schema.sql",
-              "data.sql",
-              "managed-customizations.sql",
-              "managed-customizations-manifest.json",
-              "database-validation.json",
-              "metadata.txt",
+          db_key, db_checksum_key, db_bytes, db_sha = artifact("database", "database")
+          storage_key, storage_checksum_key, storage_bytes, storage_sha = artifact("storage", "storage")
+          database = marker.get("database", {})
+          required_contents = {
+              "roles.sql", "schema.sql", "data.sql", "managed-customizations.sql",
+              "managed-customizations-manifest.json", "database-validation.json", "metadata.txt",
           }
-          if set(database.get("contents", [])) != required_database_contents:
+          if database.get("restore_contract_version") != 2 or set(database.get("contents", [])) != required_contents:
               raise SystemExit("Databasearchief heeft niet exact restorecontract 2")
           customizations = database.get("managed_customizations", {})
           if customizations.get("schema_version") != 1:
               raise SystemExit("Managed-customizations manifestversie ontbreekt")
           if not re.fullmatch(r"[0-9a-f]{64}", customizations.get("sql_sha256", "")):
               raise SystemExit("Managed-customizations SQL-hash ontbreekt")
-          for kind in ("policies", "triggers"):
-              if not isinstance(customizations.get(kind), list):
-                  raise SystemExit(f"Managed-customizations {kind} ontbreekt")
+          if any(not isinstance(customizations.get(kind), list) for kind in ("policies", "triggers")):
+              raise SystemExit("Managed-customizations policies/triggers ontbreken")
+
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
-              for name, value in [
+              for name, value in (
                   ("MARKER_PATH", marker_path),
-                  ("DB_KEY", db_key),
-                  ("DB_CHECKSUM_KEY", db_checksum_key),
-                  ("DB_BYTES", db_bytes),
-                  ("DB_SHA256", db_sha),
-                  ("STORAGE_KEY", storage_key),
-                  ("STORAGE_CHECKSUM_KEY", storage_checksum_key),
-                  ("STORAGE_BYTES", storage_bytes),
-                  ("STORAGE_SHA256", storage_sha),
-              ]:
+                  ("DB_KEY", db_key), ("DB_CHECKSUM_KEY", db_checksum_key),
+                  ("DB_BYTES", db_bytes), ("DB_SHA256", db_sha),
+                  ("STORAGE_KEY", storage_key), ("STORAGE_CHECKSUM_KEY", storage_checksum_key),
+                  ("STORAGE_BYTES", storage_bytes), ("STORAGE_SHA256", storage_sha),
+              ):
                   env.write(f"{name}={value}\n")
           PY
 
-      - name: Back-uparchieven read-only ophalen en controleren
+      - name: Niet-geheime Auth-inventaris ophalen en valideren
         shell: bash
         run: |
           set -Eeuo pipefail
+          umask 077
+          INVENTORY_MARKER_NAME="$(basename "$PLATFORM_INVENTORY_MARKER_KEY")"
+          INVENTORY_MARKER_PATH="$DRILL_ROOT/platform-$INVENTORY_MARKER_NAME"
+          aws s3 cp "s3://$B2_BUCKET_NAME/$PLATFORM_INVENTORY_MARKER_KEY" "$INVENTORY_MARKER_PATH" \
+            --endpoint-url "$B2_S3_ENDPOINT" --only-show-errors --no-progress
+          aws s3 cp "s3://$B2_BUCKET_NAME/$PLATFORM_INVENTORY_MARKER_KEY.sha256" "$INVENTORY_MARKER_PATH.sha256" \
+            --endpoint-url "$B2_S3_ENDPOINT" --only-show-errors --no-progress
+          CHECKSUM_NAME="$(awk '{print $2}' "$INVENTORY_MARKER_PATH.sha256")"
+          test "$CHECKSUM_NAME" = "$(basename "$INVENTORY_MARKER_PATH" | sed 's/^platform-//')"
+          test "$(awk '{print $1}' "$INVENTORY_MARKER_PATH.sha256")" = "$(sha256sum "$INVENTORY_MARKER_PATH" | awk '{print $1}')"
+
+          python3 - "$INVENTORY_MARKER_PATH" <<'PY'
+          import json
+          import os
+          import pathlib
+          import re
+          import sys
+
+          path = pathlib.Path(sys.argv[1])
+          marker = json.loads(path.read_text())
+          if marker.get("schema_version") != 1 or marker.get("status") != "complete":
+              raise SystemExit("Platforminventarismarker is niet compleet")
+          if marker.get("source_project") != os.environ["SOURCE_PROJECT_REF"]:
+              raise SystemExit("Platforminventaris hoort niet bij het bronproject")
+          if marker.get("completion_marker") != os.environ["PLATFORM_INVENTORY_MARKER_KEY"]:
+              raise SystemExit("Platforminventaris completion_marker wijkt af")
+          if marker.get("coverage", {}).get("supabase_auth_config") is not True:
+              raise SystemExit("Platforminventaris dekt Auth-config niet")
+          inventory_key = marker.get("inventory_key", "")
+          if not re.fullmatch(
+              r"platform-inventory/\d{4}/\d{2}/\d{2}/platform-inventory-"
+              r"\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z\.json",
+              inventory_key,
+          ):
+              raise SystemExit("Platforminventaris-key is ongeldig")
+          if marker.get("checksum_key") != inventory_key + ".sha256":
+              raise SystemExit("Platforminventaris-checksumkey is ongeldig")
+          if not isinstance(marker.get("bytes"), int) or marker["bytes"] <= 0:
+              raise SystemExit("Platforminventaris-grootte is ongeldig")
+          if not re.fullmatch(r"[0-9a-f]{64}", marker.get("sha256", "")):
+              raise SystemExit("Platforminventaris-checksum is ongeldig")
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              env.write(f"INVENTORY_KEY={inventory_key}\n")
+              env.write(f"INVENTORY_CHECKSUM_KEY={marker['checksum_key']}\n")
+              env.write(f"INVENTORY_BYTES={marker['bytes']}\n")
+              env.write(f"INVENTORY_SHA256={marker['sha256']}\n")
+          PY
+
+          INVENTORY_PATH="$DRILL_ROOT/$(basename "$INVENTORY_KEY")"
+          aws s3 cp "s3://$B2_BUCKET_NAME/$INVENTORY_KEY" "$INVENTORY_PATH" \
+            --endpoint-url "$B2_S3_ENDPOINT" --only-show-errors --no-progress
+          aws s3 cp "s3://$B2_BUCKET_NAME/$INVENTORY_CHECKSUM_KEY" "$INVENTORY_PATH.sha256" \
+            --endpoint-url "$B2_S3_ENDPOINT" --only-show-errors --no-progress
+          (cd "$DRILL_ROOT" && sha256sum -c "$(basename "$INVENTORY_PATH").sha256")
+          test "$(stat -c '%s' "$INVENTORY_PATH")" = "$INVENTORY_BYTES"
+          test "$(sha256sum "$INVENTORY_PATH" | awk '{print $1}')" = "$INVENTORY_SHA256"
+          echo "INVENTORY_PATH=$INVENTORY_PATH" >> "$GITHUB_ENV"
+
+      - name: Exacte backup-archieven binnen LUKS ophalen
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
           DB_ARCHIVE_PATH="$DRILL_ROOT/$(basename "$DB_KEY")"
           STORAGE_ARCHIVE_PATH="$DRILL_ROOT/$(basename "$STORAGE_KEY")"
           aws s3 cp "s3://$B2_BUCKET_NAME/$DB_KEY" "$DB_ARCHIVE_PATH" \
@@ -292,29 +366,101 @@ jobs:
             --endpoint-url "$B2_S3_ENDPOINT" --only-show-errors --no-progress
           aws s3 cp "s3://$B2_BUCKET_NAME/$STORAGE_CHECKSUM_KEY" "$STORAGE_ARCHIVE_PATH.sha256" \
             --endpoint-url "$B2_S3_ENDPOINT" --only-show-errors --no-progress
-
           (cd "$DRILL_ROOT" && sha256sum -c "$(basename "$DB_ARCHIVE_PATH").sha256")
           (cd "$DRILL_ROOT" && sha256sum -c "$(basename "$STORAGE_ARCHIVE_PATH").sha256")
           test "$(stat -c '%s' "$DB_ARCHIVE_PATH")" = "$DB_BYTES"
           test "$(sha256sum "$DB_ARCHIVE_PATH" | awk '{print $1}')" = "$DB_SHA256"
           test "$(stat -c '%s' "$STORAGE_ARCHIVE_PATH")" = "$STORAGE_BYTES"
           test "$(sha256sum "$STORAGE_ARCHIVE_PATH" | awk '{print $1}')" = "$STORAGE_SHA256"
+          {
+            echo "DB_ARCHIVE_PATH=$DB_ARCHIVE_PATH"
+            echo "STORAGE_ARCHIVE_PATH=$STORAGE_ARCHIVE_PATH"
+          } >> "$GITHUB_ENV"
 
-          echo "DB_ARCHIVE_PATH=$DB_ARCHIVE_PATH" >> "$GITHUB_ENV"
-          echo "STORAGE_ARCHIVE_PATH=$STORAGE_ARCHIVE_PATH" >> "$GITHUB_ENV"
-
-      - name: Database herstellen
+      - name: Databasearchief niet-muterend valideren
         shell: bash
-        env:
-          TARGET_IS_EMPTY_CONFIRMED: "YES"
         run: |
           set -Eeuo pipefail
-          RESTORE_WORKDIR="$DRILL_ROOT/database"
-          export RESTORE_WORKDIR
-          bash scripts/restore-supabase-backup.sh "$DB_ARCHIVE_PATH"
-          echo "DB_RESTORE_DIR=$RESTORE_WORKDIR" >> "$GITHUB_ENV"
+          DB_SOURCE_DIR="$DRILL_ROOT/database-source"
+          RESTORE_VALIDATE_ONLY=YES RESTORE_WORKDIR="$DB_SOURCE_DIR" \
+            bash scripts/restore-supabase-backup.sh "$DB_ARCHIVE_PATH"
+          echo "DB_SOURCE_DIR=$DB_SOURCE_DIR" >> "$GITHUB_ENV"
 
-      - name: Storage-archief veilig uitpakken
+      - name: Nieuw herstel of strikt gebonden hervatting bepalen
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          TARGET_SNAPSHOT_PATH="$DRILL_ROOT/target-snapshot.json"
+          TARGET_COUNTS_PATH="$DRILL_ROOT/target-counts.json"
+          TARGET_STATE_PATH="$DRILL_ROOT/target-state.json"
+          test "$(psql "$TARGET_DB_URL" -X -v ON_ERROR_STOP=1 -Atc 'select 1')" = "1"
+          psql "$TARGET_DB_URL" -X -v ON_ERROR_STOP=1 -Atc "
+            select json_build_object(
+              'public_tables', (select count(*) from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE'),
+              'auth_users', (select count(*) from auth.users),
+              'storage_buckets', (select count(*) from storage.buckets),
+              'storage_objects', (select count(*) from storage.objects)
+            )::text;
+          " > "$TARGET_COUNTS_PATH"
+          STATE_TABLE="$(psql "$TARGET_DB_URL" -X -v ON_ERROR_STOP=1 -Atc \
+            "select coalesce(to_regclass('bestuurdersportaal_managed_restore_private.resume_state')::text, '')")"
+          if [ "$STATE_TABLE" = "bestuurdersportaal_managed_restore_private.resume_state" ]; then
+            psql "$TARGET_DB_URL" -X -v ON_ERROR_STOP=1 -Atc "
+              select json_build_object(
+                'contract_version', contract_version,
+                'source_project_ref', source_project_ref,
+                'target_project_ref', target_project_ref,
+                'backup_marker_key', backup_marker_key,
+                'database_sha256', database_sha256,
+                'phase', phase
+              )::text
+              from bestuurdersportaal_managed_restore_private.resume_state
+              where singleton;
+            " > "$TARGET_STATE_PATH"
+          else
+            printf '%s\n' 'null' > "$TARGET_STATE_PATH"
+          fi
+          python3 - "$TARGET_COUNTS_PATH" "$TARGET_STATE_PATH" "$TARGET_SNAPSHOT_PATH" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          counts = json.loads(pathlib.Path(sys.argv[1]).read_text())
+          state = json.loads(pathlib.Path(sys.argv[2]).read_text())
+          counts["state"] = state
+          pathlib.Path(sys.argv[3]).write_text(json.dumps(counts) + "\n")
+          PY
+          node scripts/resolve-supabase-managed-restore-mode.mjs "$TARGET_SNAPSHOT_PATH" \
+            > "$DRILL_ROOT/restore-mode.json"
+          RESTORE_MODE="$(node -e "const x=require(process.argv[1]); process.stdout.write(x.mode)" "$DRILL_ROOT/restore-mode.json")"
+          PRIOR_PHASE="$(node -e "const x=require(process.argv[1]); process.stdout.write(x.prior_phase || '')" "$DRILL_ROOT/restore-mode.json")"
+          {
+            echo "RESTORE_MODE=$RESTORE_MODE"
+            echo "PRIOR_PHASE=$PRIOR_PHASE"
+          } >> "$GITHUB_ENV"
+
+      - name: Database atomisch herstellen wanneer dit een nieuwe run is
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if [ "$RESTORE_MODE" = "fresh" ]; then
+            TARGET_IS_EMPTY_CONFIRMED=YES \
+            RESTORE_WORKDIR="$DRILL_ROOT/database-apply" \
+            RESTORE_STATE_BACKUP_MARKER_KEY="$BACKUP_MARKER_KEY" \
+            RESTORE_STATE_DATABASE_SHA256="$DB_SHA256" \
+              bash scripts/restore-supabase-backup.sh "$DB_ARCHIVE_PATH"
+          else
+            echo "Exact hetzelfde doelproject wordt hervat; databaseherstel wordt niet herhaald." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Achtergebleven gemarkeerde canaries opruimen
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node scripts/verify-supabase-managed-functional.mjs purge-stale \
+            --evidence "$DRILL_ROOT/stale-canary-cleanup.json"
+
+      - name: Storage-archief veilig binnen LUKS uitpakken
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -325,82 +471,241 @@ jobs:
           import sys
           import tarfile
 
-          archive = sys.argv[1]
-          with tarfile.open(archive, "r:gz") as handle:
+          with tarfile.open(sys.argv[1], "r:gz") as handle:
               for member in handle:
                   path = pathlib.PurePosixPath(member.name)
                   if path.is_absolute() or ".." in path.parts:
-                      raise SystemExit(f"Onveilig pad in Storage-archief: {member.name}")
+                      raise SystemExit("Onveilig pad in Storage-archief")
                   if not (member.isfile() or member.isdir()):
-                      raise SystemExit(f"Onveilig niet-regulier bestand in Storage-archief: {member.name}")
+                      raise SystemExit("Onveilig niet-regulier bestand in Storage-archief")
           PY
           tar -xzf "$STORAGE_ARCHIVE_PATH" -C "$STORAGE_RESTORE_DIR"
           test -s "$STORAGE_RESTORE_DIR/storage-manifest.json"
           echo "STORAGE_RESTORE_DIR=$STORAGE_RESTORE_DIR" >> "$GITHUB_ENV"
 
-      - name: Fysieke Storage-objecten herstellen en per object verifiëren
+      - name: Storage idempotent herstellen en verifiëren
         shell: bash
         run: |
           set -Eeuo pipefail
           bash scripts/restore-supabase-storage-with-metadata.sh "$STORAGE_RESTORE_DIR"
+          bash scripts/update-supabase-managed-restore-state.sh storage_restored
 
-      - name: Database- en Storage-dekking exact vergelijken
+      - name: Database-, Auth- en Storage-inhoud exact controleren
         shell: bash
         run: |
           set -Eeuo pipefail
           TARGET_VALIDATION_PATH="$DRILL_ROOT/target-validation.json"
-          RESTORE_EVIDENCE_PATH="$DRILL_ROOT/restore-verification.json"
-          psql "$TARGET_DB_URL" -v ON_ERROR_STOP=1 -f scripts/create-backup-validation.sql > "$TARGET_VALIDATION_PATH"
+          TECHNICAL_EVIDENCE_PATH="$DRILL_ROOT/technical-evidence.json"
+          psql "$TARGET_DB_URL" -X -v ON_ERROR_STOP=1 -f scripts/create-backup-validation.sql \
+            > "$TARGET_VALIDATION_PATH"
           node scripts/verify-supabase-restore.mjs \
-            --source "$DB_RESTORE_DIR/database-validation.json" \
+            --source "$DB_SOURCE_DIR/database-validation.json" \
             --target "$TARGET_VALIDATION_PATH" \
             --storage-manifest "$STORAGE_RESTORE_DIR/storage-manifest.json" \
-            > "$RESTORE_EVIDENCE_PATH"
-          echo "TARGET_VALIDATION_PATH=$TARGET_VALIDATION_PATH" >> "$GITHUB_ENV"
-          echo "RESTORE_EVIDENCE_PATH=$RESTORE_EVIDENCE_PATH" >> "$GITHUB_ENV"
+            > "$TECHNICAL_EVIDENCE_PATH"
+          echo "TECHNICAL_EVIDENCE_PATH=$TECHNICAL_EVIDENCE_PATH" >> "$GITHUB_ENV"
+          bash scripts/update-supabase-managed-restore-state.sh technical_verified
 
-      - name: Restorebewijs samenvatten
+      - name: Auth-provider- en beveiligingsinstellingen vergelijken
         shell: bash
         run: |
           set -Eeuo pipefail
-          node <<'NODE'
-          const fs = require("node:fs");
-          const evidence = JSON.parse(fs.readFileSync(process.env.RESTORE_EVIDENCE_PATH, "utf8"));
-          const marker = JSON.parse(fs.readFileSync(process.env.MARKER_PATH, "utf8"));
+          node scripts/verify-supabase-auth-config.mjs \
+            "$INVENTORY_PATH" "$DRILL_ROOT/auth-config-evidence.json" >/dev/null
+
+      - name: Tijdelijke canaries, echte logins en RLS-isolatie controleren
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          CANARY_STATE_PATH="$DRILL_ROOT/canary-state.json"
+          node scripts/verify-supabase-managed-functional.mjs setup \
+            --state "$CANARY_STATE_PATH" \
+            --evidence "$DRILL_ROOT/functional-evidence.json"
+          CANARY_APP_HOST="$(node -e "const x=require(process.argv[1]); process.stdout.write(x.canaries[0].host)" "$CANARY_STATE_PATH")"
+          echo "::add-mask::$CANARY_APP_HOST"
+          {
+            echo "CANARY_STATE_PATH=$CANARY_STATE_PATH"
+            echo "CANARY_APP_HOST=$CANARY_APP_HOST"
+            echo "CANARY_READY=true"
+          } >> "$GITHUB_ENV"
+
+      - name: Applicatie binnen LUKS bouwen
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd "$APP_WORKTREE"
+          NEXT_PUBLIC_SUPABASE_URL="$TARGET_SUPABASE_URL" \
+          NEXT_PUBLIC_SUPABASE_ANON_KEY="$TARGET_SUPABASE_CLIENT_KEY" \
+          APP_HOST="$CANARY_APP_HOST" \
+          TENANT_ENFORCE=on \
+          DEPLOY_TARGET=app \
+          WP3_MALWARESCAN_AAN=false \
+            npm run build
+
+      - name: Dashboard, documentenlijst en privédownload in Chrome testen
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          APP_LOG="$DRILL_ROOT/app.log"
+          cd "$APP_WORKTREE"
+          PORT=3000 \
+          NEXT_PUBLIC_SUPABASE_URL="$TARGET_SUPABASE_URL" \
+          NEXT_PUBLIC_SUPABASE_ANON_KEY="$TARGET_SUPABASE_CLIENT_KEY" \
+          APP_HOST="$CANARY_APP_HOST" \
+          TENANT_ENFORCE=on \
+          DEPLOY_TARGET=app \
+          WP3_MALWARESCAN_AAN=false \
+            npm run start > "$APP_LOG" 2>&1 &
+          APP_PID=$!
+          printf '%s\n' "$APP_PID" > "$DRILL_ROOT/app.pid"
+          cleanup_app() {
+            kill "$APP_PID" >/dev/null 2>&1 || true
+            wait "$APP_PID" >/dev/null 2>&1 || true
+          }
+          trap cleanup_app EXIT
+          for attempt in $(seq 1 45); do
+            if curl -fsS -H "Host: $CANARY_APP_HOST:3000" http://127.0.0.1:3000/login >/dev/null; then
+              break
+            fi
+            if [ "$attempt" = "45" ]; then
+              echo "Applicatieserver werd niet tijdig gereed." >&2
+              exit 1
+            fi
+            sleep 1
+          done
+          cd "$GITHUB_WORKSPACE"
+          APP_SMOKE_PORT=3000 node scripts/run-supabase-managed-app-smoke.mjs \
+            --state "$CANARY_STATE_PATH" \
+            --evidence "$DRILL_ROOT/app-evidence.json"
+
+      - name: Canary-users en hun tijdelijke auditspoor verwijderen
+        if: always() && env.CANARY_READY == 'true'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node scripts/verify-supabase-managed-functional.mjs cleanup \
+            --state "$CANARY_STATE_PATH" \
+            --evidence "$DRILL_ROOT/canary-cleanup-evidence.json"
+
+      - name: Na cleanup exact bewijzen dat geen canaryresidu resteert
+        if: always() && env.CANARY_READY == 'true'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          FINAL_TARGET_VALIDATION_PATH="$DRILL_ROOT/final-target-validation.json"
+          FINAL_TECHNICAL_EVIDENCE_PATH="$DRILL_ROOT/final-technical-evidence.json"
+          psql "$TARGET_DB_URL" -X -v ON_ERROR_STOP=1 -f scripts/create-backup-validation.sql \
+            > "$FINAL_TARGET_VALIDATION_PATH"
+          node scripts/verify-supabase-restore.mjs \
+            --source "$DB_SOURCE_DIR/database-validation.json" \
+            --target "$FINAL_TARGET_VALIDATION_PATH" \
+            --storage-manifest "$STORAGE_RESTORE_DIR/storage-manifest.json" \
+            > "$FINAL_TECHNICAL_EVIDENCE_PATH"
+          echo "FINAL_TECHNICAL_EVIDENCE_PATH=$FINAL_TECHNICAL_EVIDENCE_PATH" >> "$GITHUB_ENV"
+
+      - name: Hervattingsstate functioneel groen markeren
+        if: success()
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          bash scripts/update-supabase-managed-restore-state.sh functional_verified
+
+      - name: Alleen geaggregeerd niet-gevoelig bewijs vrijgeven
+        if: success()
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          SECURE_PUBLIC_EVIDENCE_PATH="$DRILL_ROOT/managed-restore-evidence.json"
+          node scripts/create-supabase-managed-restore-evidence.mjs \
+            --technical "$TECHNICAL_EVIDENCE_PATH" \
+            --final-technical "$FINAL_TECHNICAL_EVIDENCE_PATH" \
+            --keys "$DRILL_ROOT/key-evidence.json" \
+            --auth "$DRILL_ROOT/auth-config-evidence.json" \
+            --functional "$DRILL_ROOT/functional-evidence.json" \
+            --app "$DRILL_ROOT/app-evidence.json" \
+            --cleanup "$DRILL_ROOT/canary-cleanup-evidence.json" \
+            --mode "$DRILL_ROOT/restore-mode.json" \
+            --output "$SECURE_PUBLIC_EVIDENCE_PATH"
+          install -m 0600 "$SECURE_PUBLIC_EVIDENCE_PATH" "$EVIDENCE_DIR/managed-restore-evidence.json"
+          node --input-type=module - "$SECURE_PUBLIC_EVIDENCE_PATH" <<'NODE'
+          import { appendFile, readFile } from "node:fs/promises";
+          const report = JSON.parse(await readFile(process.argv[2], "utf8"));
           const lines = [
-            "## Volledige Supabase-restore groen",
+            "## Managed Supabase-restore groen",
             "",
-            `- Bronproject: \`${marker.source_project}\``,
-            `- Tijdelijk doelproject: \`${process.env.TARGET_PROJECT_REF}\``,
-            `- Completion marker: \`${process.env.BACKUP_MARKER_KEY}\``,
-            `- PostgreSQL-major: ${evidence.postgres_major}`,
-            `- Auth-users / identities: ${evidence.auth_users} / ${evidence.auth_identities}`,
-            `- Storage-buckets / objecten / bytes: ${evidence.storage_buckets} / ${evidence.storage_objects} / ${evidence.storage_total_bytes}`,
-            `- Kritieke publieke tabellen: \`${JSON.stringify(evidence.critical_public_counts)}\``,
-            `- Inhoudshashes database/Auth/Storage: ${evidence.content_hashes_verified ? "gelijk" : "ONGELIJK"}`,
-            `- Policies / triggers exact gevalideerd: ${evidence.policy_count} / ${evidence.trigger_count}`,
-            "- Fysieke Storage-objecten zijn na upload per object opnieuw gedownload en met SHA-256 gecontroleerd.",
+            `- Modus: ${report.restore_mode}`,
+            `- PostgreSQL-major: ${report.database.postgres_major}`,
+            `- Auth users / identities: ${report.auth_data.user_count} / ${report.auth_data.identity_count}`,
+            `- Storage buckets / objecten / bytes: ${report.storage.bucket_count} / ${report.storage.object_count} / ${report.storage.total_bytes}`,
+            `- Policies / triggers: ${report.database.policy_count} / ${report.database.trigger_count}`,
+            `- Auth-instellingen / providerinstellingen vergeleken: ${report.auth_configuration.settings_compared} / ${report.auth_configuration.provider_settings_compared}`,
+            `- Echte logins / cross-tenantweigeringen: ${report.functional.real_password_logins} / ${report.functional.cross_tenant_denials}`,
+            `- Lokale approutes in Chrome: ${report.application.app_routes_verified}`,
+            "- Canary-users zijn verwijderd en de exacte eindvalidatie is groen.",
           ];
-          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${lines.join("\n")}\n`);
+          await appendFile(process.env.GITHUB_STEP_SUMMARY, `${lines.join("\n")}\n`);
           NODE
 
-      - name: Veilig restorebewijs bewaren
-        uses: actions/upload-artifact@v4.6.2
-        with:
-          name: supabase-restore-evidence-${{ github.run_id }}
-          retention-days: 30
-          if-no-files-found: error
-          path: |
-            ${{ runner.temp }}/supabase-restore-drill-${{ github.run_id }}/target-precheck.json
-            ${{ runner.temp }}/supabase-restore-drill-${{ github.run_id }}/manifest-*.json
-            ${{ runner.temp }}/supabase-restore-drill-${{ github.run_id }}/database/database-validation.json
-            ${{ runner.temp }}/supabase-restore-drill-${{ github.run_id }}/storage/storage-manifest.json
-            ${{ runner.temp }}/supabase-restore-drill-${{ github.run_id }}/target-validation.json
-            ${{ runner.temp }}/supabase-restore-drill-${{ github.run_id }}/restore-verification.json
+      - name: Hervattingsstate na volledig bewijs verwijderen
+        if: success()
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          bash scripts/update-supabase-managed-restore-state.sh finalize
 
-      - name: Tijdelijke runnerbestanden verwijderen
+      - name: Versleutelde productiegegevens aantoonbaar vernietigen
         if: always()
         shell: bash
         run: |
           set +e
-          find "$RUNNER_TEMP" -maxdepth 1 -type d -name "supabase-restore-drill-$GITHUB_RUN_ID" -exec rm -rf {} +
+          cleanup_ok=true
+          if [ -n "${DRILL_ROOT:-}" ] && [ -f "$DRILL_ROOT/app.pid" ]; then
+            APP_PID="$(head -n 1 "$DRILL_ROOT/app.pid")"
+            if [[ "$APP_PID" =~ ^[0-9]+$ ]]; then kill "$APP_PID" >/dev/null 2>&1 || true; fi
+          fi
+          if [ -n "${MANAGED_RESTORE_ROOT:-}" ] && mountpoint -q "$MANAGED_RESTORE_ROOT"; then
+            sudo umount "$MANAGED_RESTORE_ROOT" || cleanup_ok=false
+          fi
+          if [ -n "${MAPPER_NAME:-}" ] && sudo cryptsetup status "$MAPPER_NAME" >/dev/null 2>&1; then
+            sudo cryptsetup close "$MAPPER_NAME" || cleanup_ok=false
+          fi
+          if [ -n "${LUKS_FILE:-}" ] && [ -f "$LUKS_FILE" ]; then
+            sudo rm -f "$LUKS_FILE" || cleanup_ok=false
+          fi
+          if [ -n "${MANAGED_RESTORE_ROOT:-}" ] && mountpoint -q "$MANAGED_RESTORE_ROOT"; then cleanup_ok=false; fi
+          if [ -n "${MAPPER_NAME:-}" ] && [ -e "/dev/mapper/$MAPPER_NAME" ]; then cleanup_ok=false; fi
+          if [ -n "${LUKS_FILE:-}" ] && [ -e "$LUKS_FILE" ]; then cleanup_ok=false; fi
+
+          EVIDENCE_DIR="${EVIDENCE_DIR:-$RUNNER_TEMP/bp-managed-restore-evidence-$GITHUB_RUN_ID}"
+          mkdir -p "$EVIDENCE_DIR"
+          CLEANUP_STATUS=failed
+          if [ "$cleanup_ok" = true ]; then CLEANUP_STATUS=complete; fi
+          python3 - "$EVIDENCE_DIR/cleanup.json" "$CLEANUP_STATUS" <<'PY'
+          import json
+          import pathlib
+          import sys
+          from datetime import datetime, timezone
+
+          pathlib.Path(sys.argv[1]).write_text(json.dumps({
+              "schema_version": 1,
+              "status": sys.argv[2],
+              "completed_utc": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+              "encrypted_volume_unmounted": sys.argv[2] == "complete",
+              "luks_mapping_closed": sys.argv[2] == "complete",
+              "encrypted_backing_file_removed": sys.argv[2] == "complete",
+          }, indent=2) + "\n")
+          PY
+          if [ "$cleanup_ok" != true ]; then
+            echo "Cleanup van het versleutelde managed-restorevolume is niet volledig." >&2
+            exit 1
+          fi
+          echo "Versleutelde runnerdata en tijdelijke sleutels zijn vernietigd." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Uitsluitend geaggregeerd restore- en cleanupbewijs bewaren
+        if: always()
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: supabase-managed-restore-evidence-${{ github.run_id }}
+          retention-days: 30
+          if-no-files-found: warn
+          path: ${{ runner.temp }}/bp-managed-restore-evidence-${{ github.run_id }}/*.json
