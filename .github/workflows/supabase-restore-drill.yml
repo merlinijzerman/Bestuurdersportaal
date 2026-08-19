@@ -519,9 +519,29 @@ jobs:
             --source "$DB_SOURCE_DIR/database-validation.restore.json" \
             --target "$TARGET_VALIDATION_PATH" \
             --storage-manifest "$STORAGE_RESTORE_DIR/storage-manifest.json" \
+            --allow-additional-trigger auth.users.bij_app_metadata \
             > "$TECHNICAL_EVIDENCE_PATH"
           echo "TECHNICAL_EVIDENCE_PATH=$TECHNICAL_EVIDENCE_PATH" >> "$GITHUB_ENV"
           bash scripts/update-supabase-managed-restore-state.sh technical_verified
+
+      - name: Auth-provisioningmigratie op tijdelijke restore-target toepassen
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          MIGRATION_PATH="supabase/migrations/2026_08_19_maak_profiel_admin_api_provisioning.sql"
+          test -s "$MIGRATION_PATH"
+          psql "$TARGET_DB_URL" -X -v ON_ERROR_STOP=1 -f "$MIGRATION_PATH"
+          test "$(psql "$TARGET_DB_URL" -X -v ON_ERROR_STOP=1 -Atc "
+            select count(*)
+            from pg_trigger t
+            join pg_class c on c.oid = t.tgrelid
+            join pg_namespace n on n.oid = c.relnamespace
+            where n.nspname = 'auth'
+              and c.relname = 'users'
+              and t.tgname = 'bij_app_metadata'
+              and not t.tgisinternal;
+          ")" = "1"
+          echo "Auth-provisioningmigratie toegepast op de tijdelijke restore-target." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Auth-provider- en beveiligingsinstellingen vergelijken
         shell: bash
@@ -620,6 +640,7 @@ jobs:
             --source "$DB_SOURCE_DIR/database-validation.restore.json" \
             --target "$FINAL_TARGET_VALIDATION_PATH" \
             --storage-manifest "$STORAGE_RESTORE_DIR/storage-manifest.json" \
+            --allow-additional-trigger auth.users.bij_app_metadata \
             > "$FINAL_TECHNICAL_EVIDENCE_PATH"
           echo "FINAL_TECHNICAL_EVIDENCE_PATH=$FINAL_TECHNICAL_EVIDENCE_PATH" >> "$GITHUB_ENV"
 

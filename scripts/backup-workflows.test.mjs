@@ -143,6 +143,15 @@ test("managed restore scheidt keys, hervat exact, test Auth/RLS/app en lekt geen
     (text.match(/node scripts\/normalize-supabase-validation-json\.mjs/g) || []).length,
     2,
   );
+  assert.equal(
+    (text.match(/--allow-additional-trigger auth\.users\.bij_app_metadata/g) || []).length,
+    2,
+  );
+  const technicalValidation = text.indexOf("- name: Database-, Auth- en Storage-inhoud exact controleren");
+  const provisioningMigration = text.indexOf("- name: Auth-provisioningmigratie op tijdelijke restore-target toepassen");
+  const authConfig = text.indexOf("- name: Auth-provider- en beveiligingsinstellingen vergelijken");
+  assert.ok(technicalValidation < provisioningMigration && provisioningMigration < authConfig);
+  assert.match(text, /supabase\/migrations\/2026_08_19_maak_profiel_admin_api_provisioning\.sql/);
   assert.match(text, /TARGET_VALIDATION_RAW_PATH="\$DRILL_ROOT\/target-validation\.raw"/);
   assert.match(text, /FINAL_TARGET_VALIDATION_RAW_PATH="\$DRILL_ROOT\/final-target-validation\.raw"/);
   assert.match(text, /verify-supabase-managed-keys\.mjs/);
