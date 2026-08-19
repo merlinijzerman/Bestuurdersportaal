@@ -5,7 +5,7 @@
 \pset pager off
 \set QUIET 0
 
-select '-- Supabase managed-schema customizations; generated at restore time.';
+select '-- Supabase managed-schema customizations; captured during backup.';
 select '-- This file contains no row data; Auth and Storage data are exported separately.';
 
 -- A new Supabase project owns and initializes the functions and default RLS
@@ -63,6 +63,11 @@ select format(
 from pg_trigger t
 join pg_class c on c.oid = t.tgrelid
 join pg_namespace n on n.oid = c.relnamespace
+join pg_proc trigger_function on trigger_function.oid = t.tgfoid
+join pg_namespace function_namespace on function_namespace.oid = trigger_function.pronamespace
 where n.nspname in ('auth', 'storage')
   and not t.tgisinternal
+  -- Alleen application hooks waarvan de functie door schema.sql wordt
+  -- hersteld. Supabase-managed triggerfuncties blijven eigendom van het doel.
+  and function_namespace.nspname = 'public'
 order by n.nspname, c.relname, t.tgname;

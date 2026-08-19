@@ -61,9 +61,22 @@ with tarfile.open(archive, "r:gz") as handle:
 PY
 
 tar -xzf "$ARCHIVE_PATH" -C "$WORKDIR"
-for file in roles.sql schema.sql data.sql auth-data.sql storage-data.sql managed-customizations.sql database-validation.json metadata.txt; do
+for file in roles.sql schema.sql data.sql managed-customizations.sql database-validation.json metadata.txt; do
   [ -s "$WORKDIR/$file" ] || { echo "Verplicht restorebestand ontbreekt of is leeg: $file" >&2; exit 1; }
 done
+
+RESTORE_CONTRACT_VERSION="$(sed -n 's/^restore_contract_version=//p' "$WORKDIR/metadata.txt" | head -n 1)"
+RESTORE_CONTRACT_VERSION="${RESTORE_CONTRACT_VERSION:-1}"
+case "$RESTORE_CONTRACT_VERSION" in
+  1) echo "Legacy restorecontract 1: redundante auth-data.sql/storage-data.sql worden bewust niet gebruikt." ;;
+  2)
+    [ -s "$WORKDIR/managed-customizations-manifest.json" ] || {
+      echo "Restorecontract 2 mist managed-customizations-manifest.json." >&2
+      exit 1
+    }
+    ;;
+  *) echo "Onbekende restore_contract_version: $RESTORE_CONTRACT_VERSION" >&2; exit 1 ;;
+esac
 
 SOURCE_PROJECT_REF="$(sed -n 's/^source_project=//p' "$WORKDIR/metadata.txt" | head -n 1)"
 [ -n "$SOURCE_PROJECT_REF" ] || { echo "source_project ontbreekt in metadata.txt" >&2; exit 1; }
@@ -91,24 +104,6 @@ echo "Restore gestart: $STARTED_AT"
 echo "Doelproject: $TARGET_PROJECT_REF"
 echo "Bewijswerkmap: $WORKDIR"
 
-restore_file() {
-  local label="$1"
-  local file="$2"
-  local restore_role="${3:-}"
-  echo "Restore: $label"
-  if [ -n "$restore_role" ]; then
-    case "$restore_role" in
-      supabase_auth_admin|supabase_storage_admin) ;;
-      *) echo "Restore stopt: niet-toegestane managed rol: $restore_role" >&2; exit 1 ;;
-    esac
-    psql "$TARGET_DB_URL" --single-transaction -v ON_ERROR_STOP=1 \
-      -c "SET LOCAL ROLE $restore_role;" \
-      -f "$WORKDIR/$file"
-  else
-    psql "$TARGET_DB_URL" --single-transaction -v ON_ERROR_STOP=1 -f "$WORKDIR/$file"
-  fi
-}
-
 # The Supabase CLI data-only dump is the supported, combined restore source for
 # public, Auth and Storage data. Prove those managed tables are present before
 # the first target mutation; a partial dump must fail closed.
@@ -130,20 +125,51 @@ done
 # psql status variants.
 node scripts/prepare-supabase-managed-customizations.mjs \
   --input "$WORKDIR/managed-customizations.sql" \
-  --output "$WORKDIR/managed-customizations.restore.sql"
+  --output "$WORKDIR/managed-customizations.restore.sql" \
+  --manifest "$WORKDIR/managed-customizations.restore-manifest.json"
 
-# Follow Supabase's documented logical restore sequence in one transaction.
-# session_replication_role=replica suppresses managed triggers while preserving
-# the target project's managed schemas and ownership.
+if [ "$RESTORE_CONTRACT_VERSION" = "2" ]; then
+  node --input-type=module - \
+    "$WORKDIR/managed-customizations-manifest.json" \
+    "$WORKDIR/managed-customizations.restore-manifest.json" <<'NODE'
+  import { readFile } from "node:fs/promises";
+
+  const [expectedPath, actualPath] = process.argv.slice(2);
+  const expected = JSON.parse(await readFile(expectedPath, "utf8"));
+  const actual = JSON.parse(await readFile(actualPath, "utf8"));
+  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+    throw new Error("Managed-customizations manifest wijkt af van de voorbereide SQL");
+  }
+NODE
+fi
+
+python3 - "$WORKDIR/database-validation.json" "$RESTORE_CONTRACT_VERSION" <<'PY'
+import json
+import pathlib
+import sys
+
+validation = json.loads(pathlib.Path(sys.argv[1]).read_text())
+contract_version = int(sys.argv[2])
+manifest_version = validation.get("manifest_version")
+if manifest_version not in {1, 2}:
+    raise SystemExit("database-validation.json heeft een onbekende manifest_version")
+if contract_version == 2 and manifest_version != 2:
+    raise SystemExit("restorecontract 2 vereist database-validatiemanifest 2")
+PY
+
+# Follow Supabase's documented logical restore sequence in exactly one
+# transaction. A failure in the portable Auth/Storage-customizations therefore
+# rolls roles, schema and all data back as one atomic unit.
+# session_replication_role=replica suppresses managed triggers during data load.
 psql "$TARGET_DB_URL" \
   --single-transaction \
   -v ON_ERROR_STOP=1 \
   -f "$WORKDIR/roles.sql" \
   -f "$WORKDIR/schema.sql" \
-  -c "SET session_replication_role = replica;" \
-  -f "$WORKDIR/data.sql"
-
-restore_file "managed Auth/Storage customizations" "managed-customizations.restore.sql"
+  -c "SET LOCAL session_replication_role = replica;" \
+  -f "$WORKDIR/data.sql" \
+  -c "SET LOCAL session_replication_role = origin;" \
+  -f "$WORKDIR/managed-customizations.restore.sql"
 
 FINISHED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo "Restore database groen: $FINISHED_AT"

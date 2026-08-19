@@ -5,7 +5,7 @@ import { verifyRestore } from "./verify-supabase-restore.mjs";
 
 function fixture() {
   const source = {
-    manifest_version: 1,
+    manifest_version: 2,
     captured_utc: "2026-08-17T16:59:19Z",
     postgres_version: "17.6",
     extensions: ["pgcrypto", "uuid-ossp"],
@@ -22,6 +22,26 @@ function fixture() {
       governance_log: 4,
       platform_event_log: 9,
     },
+    content_sha256: {
+      auth_users: "a".repeat(64),
+      auth_identities: "b".repeat(64),
+      storage_buckets: "c".repeat(64),
+      storage_objects: "d".repeat(64),
+      critical_public: {
+        fondsen: "e".repeat(64),
+        profielen: "f".repeat(64),
+        documenten: "0".repeat(64),
+        document_chunks: "1".repeat(64),
+        governance_log: "2".repeat(64),
+        platform_event_log: "3".repeat(64),
+      },
+    },
+    policies: [
+      { schema: "public", table: "documenten", name: "documenten_select", sha256: "4".repeat(64) },
+    ],
+    triggers: [
+      { schema: "auth", table: "users", name: "on_auth_user_created", sha256: "5".repeat(64) },
+    ],
   };
   const target = structuredClone(source);
   target.captured_utc = "2026-08-17T18:00:00Z";
@@ -61,6 +81,9 @@ test("accepteert een exacte restore met een extensiesuperset op het doel", () =>
     storage_buckets: 2,
     storage_objects: 3,
     storage_total_bytes: 60,
+    content_hashes_verified: true,
+    policy_count: 1,
+    trigger_count: 1,
     critical_public_counts: {
       document_chunks: 20,
       documenten: 3,
@@ -89,4 +112,20 @@ test("weigert wanneer het doel een bronextensie mist", () => {
   const data = fixture();
   data.target.extensions = ["pgcrypto"];
   assert.throws(() => verifyRestore(data), /doel mist extensies: uuid-ossp/);
+});
+
+test("weigert een inhoudsverschil ondanks gelijke tellingen", () => {
+  const data = fixture();
+  data.target.content_sha256.auth_users = "9".repeat(64);
+  assert.throws(() => verifyRestore(data), /inhoudshashes/);
+});
+
+test("weigert afwijkende policy- of triggerdefinities", () => {
+  const policyData = fixture();
+  policyData.target.policies[0].sha256 = "8".repeat(64);
+  assert.throws(() => verifyRestore(policyData), /policydefinities/);
+
+  const triggerData = fixture();
+  triggerData.target.triggers[0].name = "ander_trigger";
+  assert.throws(() => verifyRestore(triggerData), /triggerdefinities/);
 });

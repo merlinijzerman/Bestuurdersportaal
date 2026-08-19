@@ -4,6 +4,12 @@ on:
   schedule:
     - cron: "0 */6 * * *"
   workflow_dispatch:
+    inputs:
+      synthetic_alert:
+        description: Verstuur een veilige synthetische waarschuwing; raakt B2 en de productieback-up niet aan
+        required: true
+        default: false
+        type: boolean
   workflow_run:
     workflows:
       - Supabase-productieback-up
@@ -16,6 +22,53 @@ permissions:
   actions: read
 
 jobs:
+  synthetic-alert-delivery:
+    name: Veilige synthetische alertdelivery
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.synthetic_alert }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: production-backup
+    env:
+      BACKUP_ALERT_WEBHOOK_URL: ${{ secrets.BACKUP_ALERT_WEBHOOK_URL }}
+      ALERT_CATEGORY: b2_evidence_invalid
+      ALERT_SEVERITY: warning
+      ALERT_WEBHOOK_REQUIRED: "true"
+      ALERT_REASON: synthetische watchdogtest
+      ALERT_DETAILS: Deze veilige test raakt geen back-up, completion marker of B2-object aan.
+      ALERT_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Repository ophalen
+        uses: actions/checkout@v4.2.2
+
+      - name: Node.js instellen
+        uses: actions/setup-node@v4.4.0
+        with:
+          node-version: 22
+
+      - name: Synthetische waarschuwing versturen
+        run: node scripts/send-backup-alert.mjs
+
+  alert-channel-configuration:
+    name: Alertkanaalconfiguratie controleren
+    if: ${{ github.event_name != 'workflow_run' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    environment: production-backup
+    env:
+      BACKUP_ALERT_WEBHOOK_URL: ${{ secrets.BACKUP_ALERT_WEBHOOK_URL }}
+    steps:
+      - name: Alertkanaal afzonderlijk controleren
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if [ -z "${BACKUP_ALERT_WEBHOOK_URL:-}" ]; then
+            echo "::error title=Alertkanaal niet geconfigureerd::BACKUP_ALERT_WEBHOOK_URL ontbreekt. De B2-inhoudscontroles draaien in afzonderlijke jobs door."
+            echo "## Alertkanaal niet geconfigureerd" >> "$GITHUB_STEP_SUMMARY"
+            echo "De B2-inhoudscontroles draaien afzonderlijk door; deze configuratiefout betekent niet dat de productieback-up is mislukt." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "Alertkanaal is geconfigureerd." >> "$GITHUB_STEP_SUMMARY"
+
   failure-alert:
     name: Alert bij mislukte workflow
     if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'success' }}
@@ -24,7 +77,9 @@ jobs:
     environment: production-backup
     env:
       BACKUP_ALERT_WEBHOOK_URL: ${{ secrets.BACKUP_ALERT_WEBHOOK_URL }}
+      ALERT_CATEGORY: backup_failed
       ALERT_SEVERITY: critical
+      ALERT_WEBHOOK_REQUIRED: "true"
       ALERT_REASON: ${{ format('workflow {0} mislukt', github.event.workflow_run.name) }}
       ALERT_DETAILS: ${{ format('Workflow {0} eindigde met status {1}.', github.event.workflow_run.name, github.event.workflow_run.conclusion) }}
       ALERT_RUN_URL: ${{ github.event.workflow_run.html_url }}
@@ -62,6 +117,7 @@ jobs:
       B2_BUCKET_NAME: ${{ vars.B2_BUCKET_NAME }}
       B2_S3_ENDPOINT: ${{ vars.B2_S3_ENDPOINT }}
       BACKUP_ALERT_WEBHOOK_URL: ${{ secrets.BACKUP_ALERT_WEBHOOK_URL }}
+      ALERT_CATEGORY: b2_evidence_invalid
     steps:
       - name: Repository ophalen
         uses: actions/checkout@v4.2.2
@@ -75,9 +131,17 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          for variable in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY B2_BUCKET_NAME B2_S3_ENDPOINT BACKUP_ALERT_WEBHOOK_URL; do
-            test -n "${!variable:-}" || { echo "Ontbrekende watchdog-input: $variable" >&2; exit 1; }
+          missing_variables=""
+          for variable in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY B2_BUCKET_NAME B2_S3_ENDPOINT; do
+            test -n "${!variable:-}" || missing_variables="${missing_variables}${missing_variables:+,}$variable"
           done
+          if [ -n "$missing_variables" ]; then
+            export ALERT_SEVERITY=critical
+            export ALERT_REASON="B2-watchdogconfiguratie onvolledig"
+            export ALERT_DETAILS="Ontbrekende watchdog-input(s): $missing_variables"
+            node scripts/send-backup-alert.mjs
+            exit 1
+          fi
 
       - name: Laatste complete marker vinden
         shell: bash
@@ -157,9 +221,33 @@ jobs:
                   marker["storage"]["archive_key"],
                   marker["storage"]["checksum_key"],
               ]
+              database = marker.get("database", {})
+              customizations = database.get("managed_customizations", {})
+              expected_contents = {
+                  "roles.sql",
+                  "schema.sql",
+                  "data.sql",
+                  "managed-customizations.sql",
+                  "managed-customizations-manifest.json",
+                  "database-validation.json",
+                  "metadata.txt",
+              }
+              expected_buckets = {"documenten", "documenten-quarantaine", "afschriften", "aqlab-audit"}
               coverage = marker.get("coverage", {})
-              if marker.get("status") != "complete":
+              if marker.get("schema_version") != 2 or marker.get("status") != "complete":
                   print("critical|completion marker heeft geen status complete|" + str(marker.get("status")))
+              elif marker.get("source_project") != "aebwiufuegsiwhwpdrfb":
+                  print("critical|completion marker hoort bij onbekend bronproject|" + str(marker.get("source_project")))
+              elif database.get("restore_contract_version") != 2 or set(database.get("contents", [])) != expected_contents:
+                  print("critical|databasearchief heeft niet restorecontract 2|" + str(database.get("restore_contract_version")))
+              elif (
+                  customizations.get("schema_version") != 1
+                  or len(customizations.get("sql_sha256", "")) != 64
+                  or any(character not in "0123456789abcdef" for character in customizations.get("sql_sha256", ""))
+              ):
+                  print("critical|managed-customizations manifest is ongeldig|manifest of SQL-hash ontbreekt")
+              elif set(marker.get("storage", {}).get("buckets", [])) != expected_buckets:
+                  print("critical|Storage-dekking wijkt af van de vier afgesproken buckets|" + json.dumps(marker.get("storage", {}).get("buckets", [])))
               elif age_hours < -1:
                   print("critical|completion marker ligt in de toekomst|%.2f uur" % age_hours)
               elif age_hours > 48:
@@ -221,6 +309,7 @@ jobs:
       B2_BUCKET_NAME: ${{ vars.B2_BUCKET_NAME }}
       B2_S3_ENDPOINT: ${{ vars.B2_S3_ENDPOINT }}
       BACKUP_ALERT_WEBHOOK_URL: ${{ secrets.BACKUP_ALERT_WEBHOOK_URL }}
+      ALERT_CATEGORY: b2_evidence_invalid
     steps:
       - name: Repository ophalen
         uses: actions/checkout@v4.2.2
@@ -234,9 +323,17 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          for variable in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY B2_BUCKET_NAME B2_S3_ENDPOINT BACKUP_ALERT_WEBHOOK_URL; do
-            test -n "${!variable:-}" || { echo "Ontbrekende inventariswatchdog-input: $variable" >&2; exit 1; }
+          missing_variables=""
+          for variable in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY B2_BUCKET_NAME B2_S3_ENDPOINT; do
+            test -n "${!variable:-}" || missing_variables="${missing_variables}${missing_variables:+,}$variable"
           done
+          if [ -n "$missing_variables" ]; then
+            export ALERT_SEVERITY=critical
+            export ALERT_REASON="B2-inventariswatchdogconfiguratie onvolledig"
+            export ALERT_DETAILS="Ontbrekende inventariswatchdog-input(s): $missing_variables"
+            node scripts/send-backup-alert.mjs
+            exit 1
+          fi
 
       - name: Laatste configuratie-inventaris vinden
         shell: bash

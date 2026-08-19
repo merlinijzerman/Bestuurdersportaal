@@ -1,7 +1,7 @@
 # P0 — back-upketen, Storage en restore
 
-**Status:** implementatie gereed voor configuratie en gecontroleerde cloudtest
-**Datum:** 2026-08-17
+**Status:** kosteloze codegates gereed; B2-bewijs en managed restore nog af te tekenen
+**Datum:** 2026-08-19
 **Eigenaar:** technisch beheer / incidentleider
 
 ## Wat nu wordt opgeslagen
@@ -14,9 +14,9 @@ en bestandsgrootte zijn gecontroleerd.
 | Component | Bestand/onderdeel | Dekking |
 |---|---|---|
 | Eigen database | `roles.sql`, `schema.sql`, `data.sql` | Ja |
-| Supabase Auth-data | `auth-data.sql` | Ja, inclusief gebruikers-/identiteitsdata |
-| Storage-metadata | `storage-data.sql` | Ja, inclusief buckets en objectmetadata |
-| Auth/Storage-maatwerk | `managed-customizations.sql` | Ja, functies, RLS-state, policies en user-defined triggers |
+| Supabase Auth-data | `data.sql` | Ja, inclusief gebruikers-/identiteitsdata |
+| Storage-metadata | `data.sql` | Ja, inclusief buckets en objectmetadata |
+| Auth/Storage-maatwerk | `managed-customizations.sql` plus manifest | Alleen portable policies en user-defined triggers; geen Supabase-managed functies, ownership of standaard-RLS |
 | Fysieke documenten | afzonderlijk Storage-archief | Ja, alle vier expliciete buckets, per object met SHA-256 |
 | Niet-geheime platforminventaris | `platform-inventory/...json` | Ja, Supabase/Vercel-configuratie en Vercel-variabelenamen |
 | Supabase Auth-providerinstellingen | `platform-inventory/...json` | Gedeeltelijk: niet-geheime instellingen ja; credentials nee |
@@ -37,7 +37,9 @@ Secrets:
 - `SUPABASE_SERVICE_ROLE_KEY` — uitsluitend voor Storage-lezen tijdens de back-up
 - `B2_APPLICATION_KEY_ID` en `B2_APPLICATION_KEY` — write-only voor de back-upworkflow
 - `B2_READONLY_APPLICATION_KEY_ID` en `B2_READONLY_APPLICATION_KEY` — alleen lezen/listen voor de watchdog
-- `BACKUP_ALERT_WEBHOOK_URL` — endpoint van de afgesproken incident-/alertdienst
+- `BACKUP_ALERT_WEBHOOK_URL` — endpoint van de afgesproken incident-/alertdienst;
+  ontbreekt dit, dan blijft de inhoudelijke B2-controle draaien en faalt alleen
+  de afzonderlijke job `Alertkanaalconfiguratie controleren`
 - `SUPABASE_MANAGEMENT_API_TOKEN` — read-only Management API-token voor de
   platforminventaris; nooit in een artefact of log opnemen
 - `VERCEL_TOKEN` — read-only Vercel-token voor project- en variabelenameninventaris
@@ -65,7 +67,8 @@ tokens of documentinhoud.
   exponentiële wachttijd.
 - De `backup-status/.../manifest-*.json` completion marker wordt pas na alle
   uploads en lokale controles geüpload.
-- `supabase-backup-watchdog.yml` draait iedere zes uur en controleert:
+- `supabase-backup-watchdog.yml` draait iedere zes uur. De B2-jobs controleren,
+  onafhankelijk van de webhookconfiguratie:
   - laatste complete marker;
   - checksum van de marker;
   - ouderdom: waarschuwing boven 26 uur, kritiek boven 48 uur;
@@ -76,8 +79,17 @@ tokens of documentinhoud.
   Vercel-configuratie vast. De watchdog verwacht binnen 14 dagen een complete
   inventarismarker en alarmeert als configuratiedekking ontbreekt.
 
-Als `BACKUP_ALERT_WEBHOOK_URL` ontbreekt, faalt de watchdog bewust. Een groene
-back-up zonder werkende alertbestemming geldt dus niet als P0-gereed.
+De workflow onderscheidt drie statussen in jobnamen, logs en webhookpayload:
+`back-up mislukt`, `B2-bewijs ongeldig` en `alertkanaal niet geconfigureerd`.
+Een ontbrekend webhooksecret blokkeert de B2-controles niet en mag nooit als een
+mislukte productieback-up worden omschreven. De afzonderlijke configuratiejob
+blijft wel rood totdat een goedgekeurd alertkanaal is ingesteld; zonder werkend
+alertkanaal is de totale P0-keten niet gereed.
+
+Test alertdelivery zonder productieobjecten te wijzigen door de workflow
+`Supabase-back-upbewaking` handmatig te starten met `synthetic_alert=true`. De
+afzonderlijke job `Veilige synthetische alertdelivery` verstuurt een `warning`
+met de expliciete tekst dat geen back-up, marker of B2-object is aangeraakt.
 
 ## Platformconfiguratie en secrets
 
@@ -97,12 +109,20 @@ manager, niet in dit archief.
 
 ### Voorwaarden
 
-1. Kies een nieuw, leeg tijdelijk Supabase-project. Gebruik niet Productie,
-   Preview of een project met klantdata.
-2. Controleer PostgreSQL-majorversie en benodigde extensies.
-3. Maak een tijdelijke, bucket- en prefix-beperkte B2-read-only sleutel.
-4. Leg bronproject, doelproject, back-upobject, T0–T8 en uitvoerders vast.
-5. E-mail, AI-calls, cronjobs, webhooks en publieke DNS blijven uit.
+1. Maak vanuit dit runbook geen Supabase-project aan zonder afzonderlijke,
+   projectspecifieke kostenautorisatie. Die autorisatie noemt minimaal naam,
+   regio, plan/compute, verwachte looptijd en kostenimpact. Een algemeen “ga
+   door” of “akkoord” is hiervoor niet voldoende.
+2. Kies na die autorisatie maximaal één nieuw, leeg tijdelijk Supabase-project.
+   Gebruik niet Productie, Preview of een project met klantdata. Diagnoseer en
+   hervat fouten op hetzelfde doel; een tweede project vereist nieuwe
+   autorisatie.
+3. Start geen managed restore voordat alle kosteloze gates en het go/no-go-
+   rapport groen en goedgekeurd zijn.
+4. Controleer PostgreSQL-majorversie en benodigde extensies.
+5. Maak een tijdelijke, bucket- en prefix-beperkte B2-read-only sleutel.
+6. Leg bronproject, doelproject, back-upobject, T0–T8 en uitvoerders vast.
+7. E-mail, AI-calls, cronjobs, webhooks en publieke DNS blijven uit.
 
 ### Database
 
@@ -120,8 +140,12 @@ bash scripts/restore-supabase-backup.sh \
 ```
 
 Het script controleert checksum, padtraversal, verplichte bestanden, bron-/
-doelprojectverschil en de doelhost. De restorevolgorde is rollen, public schema,
-Auth-data, Storage-metadata, public data en managed maatwerk.
+doelprojectverschil, doelhost, SQL-allowlist en het customizationmanifest vóór
+de eerste doelmutatie. Rollen, schema, public/Auth/Storage-data en portable
+customizations worden in één `psql --single-transaction` aangeboden. Een fout
+in de laatste customization draait daardoor de volledige databasewijziging
+terug. Legacy `auth-data.sql` en `storage-data.sql` zijn niet langer onderdeel
+van het verplichte contract en worden bij oude archieven bewust genegeerd.
 
 ### Fysieke Storage
 
@@ -156,15 +180,40 @@ node scripts/restore-supabase-storage.mjs \
   --input-dir "$STORAGE_DIR"
 ```
 
-Dit maakt of actualiseert de vier buckets, uploadt idempotent en downloadt elk
-object na upload opnieuw voor een inhoudelijke hashcontrole. Gebruik voor een
-voorafgaande lokale controle `--dry-run`; dat schrijft niets naar Supabase.
+Dit maakt of actualiseert de vier buckets en werkt hervatbaar op hetzelfde doel:
+een object dat al met de verwachte SHA-256 aanwezig is, wordt overgeslagen; een
+ontbrekend of afwijkend object wordt idempotent geüpload en opnieuw gedownload.
+Gebruik voor een voorafgaande lokale controle `--dry-run`; dat schrijft niets
+naar Supabase. `--no-resume` forceert herupload van alle objecten.
+
+### Verplichte kosteloze preflight
+
+Voer vóór een managed restore minimaal uit:
+
+1. haal de gekozen completion marker, markerchecksum, beide archieven en beide
+   archiefchecksums met een read-only B2-sleutel op;
+2. valideer markerpad, bronproject, restorecontract, exacte vier buckets,
+   bestandsgroottes en SHA-256;
+3. laat de volledige managed-customizations SQL-parser/allowlist groen lopen;
+4. voer `npm run test:backup-restore` uit;
+5. voer de Storage-restore met `--dry-run` uit op het echte uitgepakte archief;
+6. herstel dezelfde database en fysieke Storage tweemaal vanaf schoon in een
+   gecontroleerde lokale/self-hosted PostgreSQL 17/Supabase-omgeving;
+7. verwijder alle tijdelijke productiegegevens en leg alleen niet-gevoelig
+   cleanupbewijs en het go/no-go-resultaat vast.
+
+Een lokale kopie met productiegegevens hoort uitsluitend in tijdelijke,
+versleutelde opslag op een gecontroleerde runner/omgeving. Neem geen secrets of
+rij-inhoud op in logs, artifacts, issues of fixtures.
 
 ### Acceptatiepoorten
 
 - [ ] B2-archive en checksum groen.
 - [ ] Database restore exit 0 met `ON_ERROR_STOP=1`.
-- [ ] Auth-users/identities en kritieke publieke rijtellingen plausibel.
+- [ ] Auth-users/identities en kritieke publieke tellingen exact gelijk.
+- [ ] Deterministische inhoudshashes voor Auth, Storage-metadata en kritieke
+      publieke tabellen exact gelijk.
+- [ ] Policies en triggers exact gelijk op naam en definitiehash.
 - [ ] Storage-metadata en fysieke objectcount gelijk aan het manifest.
 - [ ] Per Storage-object download-hash groen.
 - [ ] Laatste platforminventaris checksum- en ouderdomscontrole groen.
@@ -176,13 +225,15 @@ voorafgaande lokale controle `--dry-run`; dat schrijft niets naar Supabase.
 - [ ] Read-only B2-sleutel, doelproject en lokale Productiekopieën zijn na
   aftekening verwijderd of vernietigd volgens het privacybeleid.
 
-De cloudrestore is op 2026-08-17 nog niet uitgevoerd: daarvoor is een leeg
-tijdelijk Supabase-project nodig. Een lokale dry-run of database-restore bewijst
-niet dat Auth, Storage en de uitwijkdeploy in Supabase Cloud werken.
+De cloudrestore is nog niet end-to-end groen bewezen. Maak of start hiervoor
+geen betaald doelproject zonder de hierboven beschreven afzonderlijke
+kostenautorisatie. Een lokale dry-run of database-restore bewijst niet dat Auth,
+Storage, RLS en de uitwijkdeploy in Supabase Cloud werken.
 
 ## Lokale controles
 
 ```bash
 npm run test:backup-storage
+npm run test:backup-restore
 node --input-type=module -e 'import fs from "node:fs"; import yaml from "js-yaml"; for (const file of [".github/workflows/supabase-backup.yml", ".github/workflows/supabase-backup-watchdog.yml"]) yaml.load(fs.readFileSync(file, "utf8")); console.log("workflow YAML groen")'
 ```
