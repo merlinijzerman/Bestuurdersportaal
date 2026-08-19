@@ -41,6 +41,39 @@ function normalizeStringSet(value, label) {
   return [...value].sort();
 }
 
+function normalizeHashTree(value, label) {
+  const object = requireObject(value, label);
+  return Object.fromEntries(
+    Object.entries(object)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, hashOrChildren]) => {
+        if (typeof hashOrChildren === "string") {
+          if (!/^[0-9a-f]{64}$/.test(hashOrChildren)) fail(`${label}.${key} is geen SHA-256`);
+          return [key, hashOrChildren];
+        }
+        return [key, normalizeHashTree(hashOrChildren, `${label}.${key}`)];
+      }),
+  );
+}
+
+function normalizeObjectHashes(value, label) {
+  if (!Array.isArray(value)) fail(`${label} is geen lijst`);
+  const normalized = value.map((item, index) => {
+    const object = requireObject(item, `${label}[${index}]`);
+    for (const key of ["schema", "table", "name", "sha256"]) {
+      if (typeof object[key] !== "string" || !object[key]) fail(`${label}[${index}].${key} ontbreekt`);
+    }
+    if (!/^[0-9a-f]{64}$/.test(object.sha256)) fail(`${label}[${index}].sha256 is geen SHA-256`);
+    return { schema: object.schema, table: object.table, name: object.name, sha256: object.sha256 };
+  });
+  normalized.sort((left, right) =>
+    `${left.schema}.${left.table}.${left.name}`.localeCompare(`${right.schema}.${right.table}.${right.name}`),
+  );
+  const names = normalized.map((item) => `${item.schema}.${item.table}.${item.name}`);
+  if (new Set(names).size !== names.length) fail(`${label} bevat dubbele objectnamen`);
+  return normalized;
+}
+
 function compareCount(source, target, field) {
   const expected = requireCount(source[field], `bron.${field}`);
   const actual = requireCount(target[field], `doel.${field}`);
@@ -99,8 +132,8 @@ export function verifyRestore({ source, target, storage }) {
   requireObject(target, "doelvalidatie");
   requireObject(storage, "storage-manifest");
 
-  if (source.manifest_version !== 1 || target.manifest_version !== 1) {
-    fail("onbekende database-validatieversie");
+  if (source.manifest_version !== 2 || target.manifest_version !== 2) {
+    fail("database-validatiemanifest 2 is verplicht voor inhoudelijk restorebewijs");
   }
   if (storage.schema_version !== 1) fail("onbekende storage-manifestversie");
 
@@ -117,6 +150,20 @@ export function verifyRestore({ source, target, storage }) {
     "storage_objects_by_bucket",
   );
   compareCountMap(source.critical_public_counts, target.critical_public_counts, "critical_public_counts");
+
+  const sourceContentHashes = normalizeHashTree(source.content_sha256, "bron.content_sha256");
+  const targetContentHashes = normalizeHashTree(target.content_sha256, "doel.content_sha256");
+  if (JSON.stringify(targetContentHashes) !== JSON.stringify(sourceContentHashes)) {
+    fail("inhoudshashes van database/Auth/Storage wijken af");
+  }
+
+  const sourcePolicies = normalizeObjectHashes(source.policies, "bron.policies");
+  const targetPolicies = normalizeObjectHashes(target.policies, "doel.policies");
+  if (JSON.stringify(targetPolicies) !== JSON.stringify(sourcePolicies)) fail("policydefinities/hashes wijken af");
+
+  const sourceTriggers = normalizeObjectHashes(source.triggers, "bron.triggers");
+  const targetTriggers = normalizeObjectHashes(target.triggers, "doel.triggers");
+  if (JSON.stringify(targetTriggers) !== JSON.stringify(sourceTriggers)) fail("triggerdefinities/hashes wijken af");
 
   const sourceExtensions = normalizeStringSet(source.extensions, "bron.extensions");
   const targetExtensions = new Set(normalizeStringSet(target.extensions, "doel.extensions"));
@@ -141,6 +188,9 @@ export function verifyRestore({ source, target, storage }) {
     storage_buckets: target.storage_buckets,
     storage_objects: target.storage_objects,
     storage_total_bytes: storage.total_bytes,
+    content_hashes_verified: true,
+    policy_count: targetPolicies.length,
+    trigger_count: targetTriggers.length,
     critical_public_counts: normalizeCountMap(target.critical_public_counts, "doel.critical_public_counts"),
     source_extensions: sourceExtensions,
   };

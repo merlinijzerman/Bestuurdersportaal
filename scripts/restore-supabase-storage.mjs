@@ -3,7 +3,7 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
-import { Transform } from "node:stream";
+import { Writable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -27,12 +27,22 @@ function safeObjectPath(objectName) {
   return normalized;
 }
 
-function parseArgs(argv) {
+const BOOLEAN_ARGS = new Set(["dry-run", "no-verify", "no-resume"]);
+const VALUE_ARGS = new Set(["input-dir"]);
+
+export function parseArgs(argv) {
   const args = new Map();
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (!argument.startsWith("--")) throw new Error(`Onbekend argument: ${argument}`);
     const [key, inlineValue] = argument.slice(2).split("=", 2);
+    if (args.has(key)) throw new Error(`Dubbel argument: --${key}`);
+    if (BOOLEAN_ARGS.has(key)) {
+      if (inlineValue !== undefined) throw new Error(`--${key} accepteert geen waarde`);
+      args.set(key, true);
+      continue;
+    }
+    if (!VALUE_ARGS.has(key)) throw new Error(`Onbekend argument: --${key}`);
     const value = inlineValue ?? argv[++index];
     if (!value || value.startsWith("--")) throw new Error(`Waarde ontbreekt voor --${key}`);
     args.set(key, value);
@@ -110,7 +120,7 @@ async function uploadObject(baseUrl, serviceRoleKey, bucket, objectName, filePat
   }
 }
 
-async function verifyObject(baseUrl, serviceRoleKey, bucket, objectName, expectedHash) {
+async function verifyObject(baseUrl, serviceRoleKey, bucket, objectName, expectedHash, maxAttempts = MAX_REQUEST_ATTEMPTS) {
   const encodedPath = objectName.split("/").map((part) => encodeURIComponent(part)).join("/");
   const response = await request(
     baseUrl,
@@ -118,13 +128,14 @@ async function verifyObject(baseUrl, serviceRoleKey, bucket, objectName, expecte
     `/storage/v1/object/authenticated/${encodeURIComponent(bucket)}/${encodedPath}`,
     {},
     `Storage-verificatie ${bucket}/${objectName}`,
+    maxAttempts,
   );
   if (!response.body) throw new Error(`Storage-verificatie ${bucket}/${objectName} heeft geen body`);
   const hash = createHash("sha256");
-  const digest = new Transform({
-    transform(chunk, encoding, callback) {
+  const digest = new Writable({
+    write(chunk, encoding, callback) {
       hash.update(chunk);
-      callback(null, chunk);
+      callback();
     },
   });
   await pipeline(response.body, digest);
@@ -173,12 +184,20 @@ async function ensureBucket(baseUrl, serviceRoleKey, bucket) {
   await response.body?.cancel();
 }
 
-export async function restoreStorage({ baseUrl, serviceRoleKey, inputDir, dryRun = false, verify = true }) {
+function safeBucketId(bucketId) {
+  if (typeof bucketId !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/.test(bucketId)) {
+    throw new Error(`Ongeldige Storage-bucket-id: ${bucketId}`);
+  }
+  return bucketId;
+}
+
+export async function restoreStorage({ baseUrl, serviceRoleKey, inputDir, dryRun = false, verify = true, resume = true }) {
   const manifest = JSON.parse(await readFile(path.join(inputDir, "storage-manifest.json"), "utf8"));
   if (manifest.schema_version !== 1) throw new Error("Onbekende storage-manifestversie");
   if (!manifest.source_project) throw new Error("source_project ontbreekt in storage-manifest.json");
   if (!Array.isArray(manifest.buckets)) throw new Error("buckets ontbreekt in storage-manifest.json");
   if (manifest.bucket_count !== manifest.buckets.length) throw new Error("bucket_count klopt niet met het manifest");
+  for (const bucket of manifest.buckets) safeBucketId(bucket.id);
   if (new Set(manifest.buckets.map((bucket) => bucket.id)).size !== manifest.buckets.length) {
     throw new Error("manifest bevat dubbele bucket-id's");
   }
@@ -209,7 +228,9 @@ export async function restoreStorage({ baseUrl, serviceRoleKey, inputDir, dryRun
     throw new Error("STORAGE_RESTORE_BUCKETS dekt niet exact alle buckets uit het manifest");
   }
 
+  let processed = 0;
   let uploaded = 0;
+  let skipped = 0;
   for (const bucket of manifest.buckets) {
     if (!dryRun) await ensureBucket(baseUrl, serviceRoleKey, bucket);
     for (const object of bucket.objects) {
@@ -220,13 +241,33 @@ export async function restoreStorage({ baseUrl, serviceRoleKey, inputDir, dryRun
       const actualHash = await hashFile(filePath);
       if (actualHash !== object.sha256) throw new Error(`Lokale Storage-checksum wijkt af: ${bucket.id}/${objectName}`);
       if (!dryRun) {
+        if (resume) {
+          try {
+            await verifyObject(baseUrl, serviceRoleKey, bucket.id, objectName, object.sha256, 1);
+            skipped += 1;
+            processed += 1;
+            continue;
+          } catch {
+            // Ontbrekend, incompleet of beschadigd doelobject: de idempotente
+            // upsert hieronder herstelt precies dit object op hetzelfde doel.
+          }
+        }
         await uploadObject(baseUrl, serviceRoleKey, bucket.id, objectName, filePath, object.content_type);
         if (verify) await verifyObject(baseUrl, serviceRoleKey, bucket.id, objectName, object.sha256);
+        uploaded += 1;
       }
-      uploaded += 1;
+      processed += 1;
     }
   }
-  return { bucket_count: manifest.bucket_count, object_count: uploaded, total_bytes: manifest.total_bytes, dry_run: dryRun };
+  return {
+    bucket_count: manifest.bucket_count,
+    object_count: processed,
+    uploaded_count: uploaded,
+    skipped_count: skipped,
+    total_bytes: manifest.total_bytes,
+    dry_run: dryRun,
+    resumable: resume,
+  };
 }
 
 async function main() {
@@ -235,12 +276,14 @@ async function main() {
   if (!inputDir) throw new Error("--input-dir ontbreekt");
   const dryRun = args.has("dry-run");
   const verify = !args.has("no-verify");
+  const resume = !args.has("no-resume");
   const result = await restoreStorage({
     baseUrl: requiredEnv("TARGET_SUPABASE_URL"),
     serviceRoleKey: dryRun ? (process.env.TARGET_SUPABASE_SERVICE_ROLE_KEY ?? "dry-run") : requiredEnv("TARGET_SUPABASE_SERVICE_ROLE_KEY"),
     inputDir,
     dryRun,
     verify,
+    resume,
   });
   process.stdout.write(`${JSON.stringify({ ok: true, ...result })}\n`);
 }

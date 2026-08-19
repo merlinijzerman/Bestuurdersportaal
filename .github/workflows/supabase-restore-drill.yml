@@ -76,6 +76,7 @@ jobs:
           node --test \
             scripts/prepare-supabase-managed-customizations.test.mjs \
             scripts/prepare-supabase-managed-data-restore.test.mjs \
+            scripts/restore-supabase-storage.test.mjs \
             scripts/verify-supabase-restore.test.mjs
 
       - name: Inputs fail-closed controleren
@@ -237,6 +238,28 @@ jobs:
 
           db_key, db_checksum_key, db_bytes, db_sha = validate_artifact("database", "database")
           storage_key, storage_checksum_key, storage_bytes, storage_sha = validate_artifact("storage", "storage")
+          database = manifest["database"]
+          if database.get("restore_contract_version") != 2:
+              raise SystemExit("Managed restore vereist database.restore_contract_version 2")
+          required_database_contents = {
+              "roles.sql",
+              "schema.sql",
+              "data.sql",
+              "managed-customizations.sql",
+              "managed-customizations-manifest.json",
+              "database-validation.json",
+              "metadata.txt",
+          }
+          if set(database.get("contents", [])) != required_database_contents:
+              raise SystemExit("Databasearchief heeft niet exact restorecontract 2")
+          customizations = database.get("managed_customizations", {})
+          if customizations.get("schema_version") != 1:
+              raise SystemExit("Managed-customizations manifestversie ontbreekt")
+          if not re.fullmatch(r"[0-9a-f]{64}", customizations.get("sql_sha256", "")):
+              raise SystemExit("Managed-customizations SQL-hash ontbreekt")
+          for kind in ("policies", "triggers"):
+              if not isinstance(customizations.get(kind), list):
+                  raise SystemExit(f"Managed-customizations {kind} ontbreekt")
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
               for name, value in [
                   ("MARKER_PATH", marker_path),
@@ -351,6 +374,8 @@ jobs:
             `- Auth-users / identities: ${evidence.auth_users} / ${evidence.auth_identities}`,
             `- Storage-buckets / objecten / bytes: ${evidence.storage_buckets} / ${evidence.storage_objects} / ${evidence.storage_total_bytes}`,
             `- Kritieke publieke tabellen: \`${JSON.stringify(evidence.critical_public_counts)}\``,
+            `- Inhoudshashes database/Auth/Storage: ${evidence.content_hashes_verified ? "gelijk" : "ONGELIJK"}`,
+            `- Policies / triggers exact gevalideerd: ${evidence.policy_count} / ${evidence.trigger_count}`,
             "- Fysieke Storage-objecten zijn na upload per object opnieuw gedownload en met SHA-256 gecontroleerd.",
           ];
           fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${lines.join("\n")}\n`);
