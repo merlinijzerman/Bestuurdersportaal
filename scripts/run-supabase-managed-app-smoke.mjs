@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const HOST_PATTERN = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+let smokeStage = "initialization";
 
 class AppSmokeError extends Error {
   constructor(category) {
@@ -88,6 +89,7 @@ async function findBrowserExecutable(explicit) {
 }
 
 async function main() {
+  smokeStage = "arguments";
   const stateArg = process.argv.indexOf("--state");
   const evidenceArg = process.argv.indexOf("--evidence");
   const secureRoot = process.env.MANAGED_RESTORE_ROOT;
@@ -99,10 +101,12 @@ async function main() {
   const port = process.env.APP_SMOKE_PORT ?? "3000";
   if (!/^\d{2,5}$/.test(port)) fail("app_port");
   const origin = `http://${own.host}:${port}`;
+  smokeStage = "browser_executable";
   const executablePath = await findBrowserExecutable(process.env.PLAYWRIGHT_CHROME_PATH);
   const { chromium } = await import("@playwright/test");
   const profilePath = securePath(resolve(secureRoot, "browser-profile"), secureRoot, "profile");
   const downloadsPath = securePath(resolve(secureRoot, "browser-downloads"), secureRoot, "downloads");
+  smokeStage = "browser_launch";
   const context = await chromium.launchPersistentContext(profilePath, {
     executablePath,
     headless: true,
@@ -115,16 +119,21 @@ async function main() {
     ],
   });
   try {
+    smokeStage = "login_page";
     const page = context.pages()[0] ?? await context.newPage();
     await page.goto(`${origin}/login`, { waitUntil: "domcontentloaded", timeout: 45_000 });
+    smokeStage = "login_form";
     await page.getByLabel("E-mailadres").fill(own.email);
     await page.getByLabel("Wachtwoord").fill(own.password);
+    smokeStage = "login_submit";
     await Promise.all([
       page.waitForURL((url) => url.pathname === "/", { timeout: 45_000 }),
       page.getByRole("button", { name: "Inloggen" }).click(),
     ]);
+    smokeStage = "dashboard";
     await page.getByRole("link", { name: "Home", exact: true }).waitFor({ timeout: 45_000 });
 
+    smokeStage = "document_list_api";
     const listResult = await page.evaluate(async (expectedId) => {
       const response = await fetch("/api/documents/upload", { credentials: "same-origin" });
       if (!response.ok) return { ok: false, found: false };
@@ -136,9 +145,11 @@ async function main() {
     }, own.document_id);
     if (!listResult.ok || !listResult.found) fail("document_list_api");
 
+    smokeStage = "document_library";
     await page.goto(`${origin}/bibliotheek`, { waitUntil: "domcontentloaded", timeout: 45_000 });
     await page.getByRole("heading", { name: "Documentbibliotheek" }).waitFor({ timeout: 45_000 });
 
+    smokeStage = "private_download";
     const downloadResult = await page.evaluate(async ({ ownId, foreignId }) => {
       async function inspect(id) {
         const response = await fetch(`/api/documents/${id}/bestand`, { credentials: "same-origin" });
@@ -166,6 +177,7 @@ async function main() {
       fail("cross_tenant_download");
     }
 
+    smokeStage = "evidence";
     const evidence = buildAppSmokeEvidence({
       real_browser_login: true,
       dashboard_rendered: true,
@@ -185,7 +197,7 @@ async function main() {
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((error) => {
     const category = error instanceof AppSmokeError ? error.category : "unknown";
-    process.stderr.write(`MANAGED_APP_SMOKE_FAILED:${category}\n`);
+    process.stderr.write(`MANAGED_APP_SMOKE_FAILED:${category}:${smokeStage}\n`);
     process.exitCode = 1;
   });
 }
