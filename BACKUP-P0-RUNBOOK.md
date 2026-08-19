@@ -218,7 +218,9 @@ vanaf `main` met de exacte contract-v2-marker en bevestiging
 4. start tweemaal een schone lokale Supabase-stack met PostgreSQL 17;
 5. herstelt en vergelijkt database/Auth/Storage, inhoudshashes, policies,
    triggers en ieder opnieuw gedownload fysiek object;
-6. publiceert alleen een niet-gevoelig `go-no-go.json` en `cleanup.json`;
+6. publiceert alleen een niet-gevoelig `go-no-go.json` en `cleanup.json`; bij
+   een databasefout bevat `restore-diagnostic.json` uitsluitend iteratie,
+   restorefase en SQLSTATE, nooit SQL-tekst of rijwaarden;
 7. stopt de stack, ontkoppelt LUKS en verwijdert het versleutelde backingbestand
    in een `always()`-stap.
 

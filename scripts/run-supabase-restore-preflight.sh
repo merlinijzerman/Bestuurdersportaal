@@ -13,6 +13,7 @@ umask 077
 : "${STORAGE_ARCHIVE_PATH:?STORAGE_ARCHIVE_PATH ontbreekt}"
 : "${MARKER_PATH:?MARKER_PATH ontbreekt}"
 : "${BACKUP_MARKER_KEY:?BACKUP_MARKER_KEY ontbreekt}"
+: "${EVIDENCE_DIR:?EVIDENCE_DIR ontbreekt}"
 
 for path in "$PREFLIGHT_ROOT" "$DB_ARCHIVE_PATH" "$STORAGE_ARCHIVE_PATH" "$MARKER_PATH"; do
   case "$path" in
@@ -120,9 +121,37 @@ for iteration in 1 2; do
   assert_empty_target "$ITERATION_ROOT/target-precheck.json"
 
   export RESTORE_WORKDIR TARGET_IS_EMPTY_CONFIRMED=YES
+  DATABASE_RESTORE_LOG="$ITERATION_ROOT/database-restore.log"
   if ! bash scripts/restore-supabase-backup.sh "$DB_ARCHIVE_PATH" \
-    >"$ITERATION_ROOT/database-restore.log" 2>&1; then
-    echo "Preflight stopt: atomaire database-restore faalt (iteratie $iteration); de versleutelde detailoutput wordt vernietigd." >&2
+    >"$DATABASE_RESTORE_LOG" 2>&1; then
+    RESTORE_PHASE="$(sed -n 's/^RESTORE_PHASE=\(roles\|schema\|data\|managed_customizations\)$/\1/p' "$DATABASE_RESTORE_LOG" | tail -n 1)"
+    RESTORE_SQLSTATE="$(sed -n 's/^ERROR:[[:space:]]*\([0-9A-Z]\{5\}\)[[:space:]]*$/\1/p' "$DATABASE_RESTORE_LOG" | tail -n 1)"
+    RESTORE_PHASE="${RESTORE_PHASE:-pre_psql}"
+    RESTORE_SQLSTATE="${RESTORE_SQLSTATE:-unknown}"
+    python3 - "$EVIDENCE_DIR/restore-diagnostic.json" "$iteration" "$RESTORE_PHASE" "$RESTORE_SQLSTATE" <<'PY'
+import json
+import pathlib
+import re
+import sys
+from datetime import datetime, timezone
+
+path, iteration, phase, sqlstate = sys.argv[1:]
+allowed_phases = {"pre_psql", "roles", "schema", "data", "managed_customizations"}
+if phase not in allowed_phases:
+    phase = "unknown"
+if sqlstate != "unknown" and not re.fullmatch(r"[0-9A-Z]{5}", sqlstate):
+    sqlstate = "unknown"
+pathlib.Path(path).write_text(json.dumps({
+    "schema_version": 1,
+    "status": "database-restore-failed",
+    "created_utc": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    "iteration": int(iteration),
+    "phase": phase,
+    "sqlstate": sqlstate,
+    "contains_sql_or_row_values": False,
+}, indent=2) + "\n")
+PY
+    echo "Preflight stopt: atomaire database-restore faalt (iteratie $iteration, fase $RESTORE_PHASE, SQLSTATE $RESTORE_SQLSTATE); de versleutelde detailoutput wordt vernietigd." >&2
     exit 1
   fi
 

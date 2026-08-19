@@ -97,7 +97,7 @@ if project_ref != "local" and project_ref not in host and project_ref not in use
     raise SystemExit("TARGET_DB_URL verwijst niet aantoonbaar naar TARGET_PROJECT_REF")
 PY
 
-psql "$TARGET_DB_URL" -v ON_ERROR_STOP=1 -Atc "select 1" >/dev/null
+psql "$TARGET_DB_URL" -X -v ON_ERROR_STOP=1 -Atc "select 1" >/dev/null
 
 STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo "Restore gestart: $STARTED_AT"
@@ -162,13 +162,19 @@ PY
 # rolls roles, schema and all data back as one atomic unit.
 # session_replication_role=replica suppresses managed triggers during data load.
 psql "$TARGET_DB_URL" \
+  -X \
   --single-transaction \
   -v ON_ERROR_STOP=1 \
+  -v VERBOSITY=sqlstate \
+  -c '\echo RESTORE_PHASE=roles' \
   -f "$WORKDIR/roles.sql" \
+  -c '\echo RESTORE_PHASE=schema' \
   -f "$WORKDIR/schema.sql" \
+  -c '\echo RESTORE_PHASE=data' \
   -c "SET LOCAL session_replication_role = replica;" \
   -f "$WORKDIR/data.sql" \
   -c "SET LOCAL session_replication_role = origin;" \
+  -c '\echo RESTORE_PHASE=managed_customizations' \
   -f "$WORKDIR/managed-customizations.restore.sql"
 
 FINISHED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"

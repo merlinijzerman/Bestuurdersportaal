@@ -63,8 +63,12 @@ jobs:
           . /etc/os-release
           echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
             | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
-          sudo apt-get update -o Acquire::Retries=3
-          sudo apt-get install -y --no-install-recommends cryptsetup postgresql-client-17
+          sudo timeout --signal=TERM 5m apt-get update \
+            -o Acquire::Retries=3 \
+            -o Acquire::http::Timeout=20 \
+            -o Acquire::https::Timeout=20
+          sudo env DEBIAN_FRONTEND=noninteractive timeout --signal=TERM 5m \
+            apt-get install -y --no-install-recommends cryptsetup postgresql-client-17
           echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
 
       - name: Inputs en read-only B2-configuratie fail-closed controleren
