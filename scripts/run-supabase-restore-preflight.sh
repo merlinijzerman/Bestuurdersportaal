@@ -124,7 +124,7 @@ for iteration in 1 2; do
   DATABASE_RESTORE_LOG="$ITERATION_ROOT/database-restore.log"
   if ! bash scripts/restore-supabase-backup.sh "$DB_ARCHIVE_PATH" \
     >"$DATABASE_RESTORE_LOG" 2>&1; then
-    RESTORE_PHASE="$(sed -n 's/^RESTORE_PHASE=\(roles\|schema\|data\|managed_customizations\)$/\1/p' "$DATABASE_RESTORE_LOG" | tail -n 1)"
+    RESTORE_PHASE="$(sed -n 's/^RESTORE_PHASE=\(archive_integrity\|archive_safety\|archive_extract\|restore_contract\|target_safety\|target_connection\|data_contract\|managed_customizations_prepare\|validation_json\|roles\|schema\|data\|managed_customizations\)$/\1/p' "$DATABASE_RESTORE_LOG" | tail -n 1)"
     RESTORE_SQLSTATE="$(sed -n 's/^ERROR:[[:space:]]*\([0-9A-Z]\{5\}\)[[:space:]]*$/\1/p' "$DATABASE_RESTORE_LOG" | tail -n 1)"
     RESTORE_PHASE="${RESTORE_PHASE:-pre_psql}"
     RESTORE_SQLSTATE="${RESTORE_SQLSTATE:-unknown}"
@@ -136,7 +136,12 @@ import sys
 from datetime import datetime, timezone
 
 path, iteration, phase, sqlstate = sys.argv[1:]
-allowed_phases = {"pre_psql", "roles", "schema", "data", "managed_customizations"}
+allowed_phases = {
+    "pre_psql", "archive_integrity", "archive_safety", "archive_extract",
+    "restore_contract", "target_safety", "target_connection", "data_contract",
+    "managed_customizations_prepare", "validation_json", "roles", "schema",
+    "data", "managed_customizations",
+}
 if phase not in allowed_phases:
     phase = "unknown"
 if sqlstate != "unknown" and not re.fullmatch(r"[0-9A-Z]{5}", sqlstate):
@@ -166,7 +171,7 @@ PY
   psql "$TARGET_DB_URL" -X -qAt -v ON_ERROR_STOP=1 \
     -f scripts/create-backup-validation.sql >"$TARGET_VALIDATION_PATH" 2>"$ITERATION_ROOT/validation.log"
   if ! node scripts/verify-supabase-restore.mjs \
-    --source "$RESTORE_WORKDIR/database-validation.json" \
+    --source "$RESTORE_WORKDIR/database-validation.restore.json" \
     --target "$TARGET_VALIDATION_PATH" \
     --storage-manifest "$STORAGE_RESTORE_DIR/storage-manifest.json" \
     >"$RESTORE_EVIDENCE_PATH" 2>"$ITERATION_ROOT/verification.log"; then

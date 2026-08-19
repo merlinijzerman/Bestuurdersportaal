@@ -129,7 +129,7 @@ jobs:
             --output "$DB_DIR/managed-customizations.sql" \
             --manifest "$DB_DIR/managed-customizations-manifest.json"
           rm "$DB_DIR/managed-customizations.raw.sql"
-          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f scripts/create-backup-validation.sql > "$DB_DIR/database-validation.json"
+          psql "$SUPABASE_DB_URL" -X -qAt -v ON_ERROR_STOP=1 -f scripts/create-backup-validation.sql > "$DB_DIR/database-validation.json"
 
           cat > "$DB_DIR/metadata.txt" <<EOF
           created_utc=$BACKUP_CREATED_UTC

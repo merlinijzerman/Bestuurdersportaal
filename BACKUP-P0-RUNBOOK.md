@@ -229,6 +229,13 @@ functionele canary-/RLS-/appsmokes en verschillen met Supabase Cloud blijven
 expliciete managed gates. De workflow mag daarom nooit automatisch de managed
 restoreworkflow starten.
 
+Bestaande contract-v2-archieven kunnen vóór het JSON-document de drie standaard
+`psql`-statusregels voor outputformaat, tuples-only en pager bevatten. De restore
+maakt daarvoor uitsluitend binnen de versleutelde werkmap een genormaliseerde
+kopie. Alleen die drie exacte, unieke regels vóór het JSON-object zijn toegestaan;
+onbekende, dubbele of later voorkomende statusregels stoppen de restore fail-closed.
+Nieuwe back-ups schrijven het validatiebestand direct in quiet/unaligned vorm.
+
 ### Acceptatiepoorten
 
 - [ ] B2-archive en checksum groen.

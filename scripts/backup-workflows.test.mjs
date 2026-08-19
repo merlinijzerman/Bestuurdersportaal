@@ -33,6 +33,7 @@ test("back-up publiceert restorecontract 2 zonder redundante managed datafiles",
   assert.match(text, /BACKUP_CREATED_UTC="\$\(date -u \+%Y-%m-%dT%H:%M:%SZ\)"/);
   assert.match(text, /"created_utc": created_utc/);
   assert.match(text, /managed-customizations-manifest\.json/);
+  assert.match(text, /psql "\$SUPABASE_DB_URL" -X -qAt -v ON_ERROR_STOP=1 -f scripts\/create-backup-validation\.sql/);
   assert.doesNotMatch(text, /pg_dump .*auth-data\.sql/);
   assert.doesNotMatch(text, /pg_dump .*storage-data\.sql/);
   assert.doesNotMatch(text, /echo "- (?:Database|Storage|Completion marker): \\\\`/);
@@ -69,6 +70,8 @@ test("kosteloze preflight is main-only, versleuteld, herhaalbaar en ruimt altijd
   assert.match(runner, /physical_objects_redownloaded_and_hashed: true/);
   assert.match(runner, /contains_sql_or_row_values/);
   assert.match(runner, /RESTORE_SQLSTATE/);
+  assert.match(runner, /database-validation\.restore\.json/);
+  assert.match(runner, /managed_customizations_prepare/);
 });
 
 test("captured triggers kwalificeren de vooraf gecontroleerde public-functie", async () => {
