@@ -26,6 +26,7 @@ ARCHIVE_PATH="${1:-}"
 
 CHECKSUM_PATH="$ARCHIVE_PATH.sha256"
 [ -f "$CHECKSUM_PATH" ] || { echo "Checksum-bestand ontbreekt: $CHECKSUM_PATH" >&2; exit 1; }
+echo "RESTORE_PHASE=archive_integrity"
 if command -v sha256sum >/dev/null 2>&1; then
   (cd "$(dirname "$ARCHIVE_PATH")" && sha256sum -c "$(basename "$CHECKSUM_PATH")")
 else
@@ -42,6 +43,7 @@ chmod 700 "$WORKDIR"
   exit 1
 }
 
+echo "RESTORE_PHASE=archive_safety"
 python3 - "$ARCHIVE_PATH" <<'PY'
 import subprocess
 import sys
@@ -60,11 +62,13 @@ with tarfile.open(archive, "r:gz") as handle:
             raise SystemExit(f"Onveilig niet-regulier bestand in archief: {member.name}")
 PY
 
+echo "RESTORE_PHASE=archive_extract"
 tar -xzf "$ARCHIVE_PATH" -C "$WORKDIR"
 for file in roles.sql schema.sql data.sql managed-customizations.sql database-validation.json metadata.txt; do
   [ -s "$WORKDIR/$file" ] || { echo "Verplicht restorebestand ontbreekt of is leeg: $file" >&2; exit 1; }
 done
 
+echo "RESTORE_PHASE=restore_contract"
 RESTORE_CONTRACT_VERSION="$(sed -n 's/^restore_contract_version=//p' "$WORKDIR/metadata.txt" | head -n 1)"
 RESTORE_CONTRACT_VERSION="${RESTORE_CONTRACT_VERSION:-1}"
 case "$RESTORE_CONTRACT_VERSION" in
@@ -85,6 +89,7 @@ SOURCE_PROJECT_REF="$(sed -n 's/^source_project=//p' "$WORKDIR/metadata.txt" | h
   exit 1
 }
 
+echo "RESTORE_PHASE=target_safety"
 python3 - "$TARGET_DB_URL" "$TARGET_PROJECT_REF" <<'PY'
 from urllib.parse import urlsplit
 import sys
@@ -97,6 +102,7 @@ if project_ref != "local" and project_ref not in host and project_ref not in use
     raise SystemExit("TARGET_DB_URL verwijst niet aantoonbaar naar TARGET_PROJECT_REF")
 PY
 
+echo "RESTORE_PHASE=target_connection"
 psql "$TARGET_DB_URL" -X -v ON_ERROR_STOP=1 -Atc "select 1" >/dev/null
 
 STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -107,6 +113,7 @@ echo "Bewijswerkmap: $WORKDIR"
 # The Supabase CLI data-only dump is the supported, combined restore source for
 # public, Auth and Storage data. Prove those managed tables are present before
 # the first target mutation; a partial dump must fail closed.
+echo "RESTORE_PHASE=data_contract"
 for required_copy in \
   'auth[^[:alnum:]_]+users' \
   'auth[^[:alnum:]_]+identities' \
@@ -123,6 +130,7 @@ done
 # default RLS state. Prepare a restore-only copy that retains portable project
 # policies/triggers, removes only recognized managed output, and rejects unknown
 # psql status variants.
+echo "RESTORE_PHASE=managed_customizations_prepare"
 node scripts/prepare-supabase-managed-customizations.mjs \
   --input "$WORKDIR/managed-customizations.sql" \
   --output "$WORKDIR/managed-customizations.restore.sql" \
@@ -143,7 +151,12 @@ if [ "$RESTORE_CONTRACT_VERSION" = "2" ]; then
 NODE
 fi
 
-python3 - "$WORKDIR/database-validation.json" "$RESTORE_CONTRACT_VERSION" <<'PY'
+echo "RESTORE_PHASE=validation_json"
+VALIDATION_RESTORE_PATH="$WORKDIR/database-validation.restore.json"
+node scripts/normalize-supabase-validation-json.mjs \
+  --input "$WORKDIR/database-validation.json" \
+  --output "$VALIDATION_RESTORE_PATH"
+python3 - "$VALIDATION_RESTORE_PATH" "$RESTORE_CONTRACT_VERSION" <<'PY'
 import json
 import pathlib
 import sys
