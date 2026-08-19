@@ -10,19 +10,38 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3
 const HOST_PATTERN = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
 class FunctionalCheckError extends Error {
-  constructor(category) {
+  constructor(category, details = undefined) {
     super("Managed functionele controle faalde");
     this.name = "FunctionalCheckError";
     this.category = category;
+    this.details = details;
   }
 }
 
-function fail(category) {
-  throw new FunctionalCheckError(category);
+function safeDiagnosticToken(value) {
+  return typeof value === "string" && /^[A-Za-z0-9_.-]{1,80}$/.test(value)
+    ? value
+    : undefined;
+}
+
+export function safeAuthErrorDetails(error) {
+  const details = {};
+  const name = safeDiagnosticToken(error?.name);
+  const code = safeDiagnosticToken(error?.code);
+  if (name) details.name = name;
+  if (Number.isInteger(error?.status) && error.status >= 100 && error.status <= 599) {
+    details.status = error.status;
+  }
+  if (code) details.code = code;
+  return details;
+}
+
+function fail(category, details = undefined) {
+  throw new FunctionalCheckError(category, details);
 }
 
 function assertNoError(error, category) {
-  if (error) fail(category);
+  if (error) fail(category, safeAuthErrorDetails(error));
 }
 
 function securePath(candidate, secureRoot, label) {
@@ -364,7 +383,9 @@ async function main() {
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((error) => {
     const category = error instanceof FunctionalCheckError ? error.category : "unknown";
-    process.stderr.write(`MANAGED_FUNCTIONAL_CHECK_FAILED:${category}\n`);
+    const details = error instanceof FunctionalCheckError ? error.details : undefined;
+    const suffix = details && Object.keys(details).length > 0 ? `:${JSON.stringify(details)}` : "";
+    process.stderr.write(`MANAGED_FUNCTIONAL_CHECK_FAILED:${category}${suffix}\n`);
     process.exitCode = 1;
   });
 }

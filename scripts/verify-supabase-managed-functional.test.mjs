@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   buildFunctionalEvidence,
   chooseTenantFixtures,
+  safeAuthErrorDetails,
   validateCanaryState,
 } from "./verify-supabase-managed-functional.mjs";
 
@@ -64,4 +65,20 @@ test("evidence is uitsluitend geaggregeerd", () => {
   for (const forbidden of ["email", "password", "storage_path", "document_id", "fonds_id", "user_id"]) {
     assert.equal(Object.hasOwn(evidence, forbidden), false);
   }
+});
+
+test("Auth-foutdiagnose bevat uitsluitend veilige statusvelden", () => {
+  const details = safeAuthErrorDetails({
+    name: "AuthApiError",
+    status: 422,
+    code: "user_already_exists",
+    message: "gevoelige@email.invalid",
+  });
+  assert.deepEqual(details, {
+    name: "AuthApiError",
+    status: 422,
+    code: "user_already_exists",
+  });
+  assert.doesNotMatch(JSON.stringify(details), /gevoelige@email\.invalid/);
+  assert.deepEqual(safeAuthErrorDetails({ message: "do not log" }), {});
 });
