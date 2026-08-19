@@ -197,6 +197,16 @@ Per testcase geven we een **outline**, geen starre golden answer: *moet minimaal
 - *Verboden:* enige inhoud uit de afgeschermde bron; een omweg naar toegang suggereren.
 **Spec:** excluded_source_ids = [HORIZON-AFGESCHERMD-001]; check excluded_source_not_leaked.
 
+## RQ-01 · Volledige transitieplananalyse (router/dekking)
+**Vraag:** "Controleer het volledige synthetische transitieplan integraal op effecten, compensatie, evenwichtigheid, opgebouwde aanspraken en uitvoerbaarheid."
+**Bron:** HORIZON-TRANSITIEPLAN-ROUTER-001 · brongebonden · GK: false · min. 85 · **review verplicht**.
+**Expected answer outline:**
+- *Moet bevatten:* alle vijf thema's uit het document: de effectberekeningen, compensatieregeling, evenwichtigheidsverantwoording, omgang met opgebouwde aanspraken/rechten en uitvoeringsplanning.
+- *Dekkingsbewijs:* de retrieval-trace toont `volledig_document`/`map_reduce`, alle technisch beschikbare passages en alle geplande batches; bij een mislukte of afgeknotte batch is het antwoord zichtbaar gedeeltelijk en niet uitputtend.
+- *Mag variëren:* volgorde, formulering en paginaverwijzingen.
+- *Verboden:* stellen dat een van de vijf aanwezige thema's in het document ontbreekt; een targeted top-N-uitkomst als documentvolledig presenteren; een juridisch compleet toetsingskader suggereren.
+**Spec:** expected_facts = [transitie_effecten, compensatie, evenwichtigheidsverantwoording, opgebouwde_aanspraken, uitvoering_planning]; human review controleert daarnaast de route- en documentdekkingsmetadata.
+
 # Feature 3 — Besluitvoorbereiding
 
 ## BV-01 · Eenvoudig besluitmemo

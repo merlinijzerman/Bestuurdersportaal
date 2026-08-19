@@ -13,6 +13,7 @@
 import { type ReactNode } from "react";
 import { normgewichtLabel, isVeiligeUrl } from "@/core/lib/bronsoort";
 import { samenvattingDocumentnamen } from "@/core/lib/bronsamenvatting";
+import { dekkingslabel, type DocumentDekking } from "@/core/lib/document-dekking";
 
 export interface OnderbouwingMeta {
   /** Korte samenvatting van de bronbasis (lib/vraagtype.bronbasisLabel). */
@@ -109,6 +110,15 @@ export interface OnderbouwingMeta {
   documentGericht?: boolean | null;
   /** Inhoudelijke vervolgvragen (B1), op basis van het antwoord gegenereerd. */
   vervolgvragen?: string[] | null;
+  /** Vraagrouter v2: aantoonbare, code-gedreven documentdekking. */
+  documentdekking?: DocumentDekking | null;
+  /** Gesloten routerassen, zonder vrije vraagtekst of interne modelnaam. */
+  vraagrouter?: {
+    taak: string;
+    scope: string;
+    dekking: string;
+    bewijsniveau: string;
+  } | null;
 }
 
 const MODEL_KENNIS_GROND_LABEL: Record<string, string> = {
@@ -216,6 +226,11 @@ export default function OnderbouwingPaneel({
               · {meta.bronbasis}
             </span>
           )}
+          {meta.documentdekking && (
+            <span className="text-[11px] text-muted hidden xl:inline flex-shrink-0">
+              · {dekkingslabel(meta.documentdekking)}
+            </span>
+          )}
         </span>
         <span
           aria-hidden
@@ -252,6 +267,32 @@ export default function OnderbouwingPaneel({
               )
             )}
             {meta.bronbasis && <Rij label="Bronbasis" waarde={meta.bronbasis} />}
+            {meta.documentdekking && (
+              <Rij
+                label="Documentdekking"
+                waarde={
+                  <>
+                    {dekkingslabel(meta.documentdekking)}
+                    {meta.documentdekking.modus === "targeted" && (
+                      <span className="text-muted">
+                        {" "}— geen uitspraak over het volledige document.
+                      </span>
+                    )}
+                    {meta.documentdekking.modus === "gedeeltelijk" && (
+                      <span className="text-muted">
+                        {" "}— over ontbrekende inhoud in het volledige document kan geen conclusie worden getrokken.
+                      </span>
+                    )}
+                  </>
+                }
+              />
+            )}
+            {meta.vraagrouter && (
+              <Rij
+                label="Analysetaak"
+                waarde={`${meta.vraagrouter.taak.replaceAll("_", " ")} · ${meta.vraagrouter.bewijsniveau}`}
+              />
+            )}
             {meta.antwoordmodusLabel && (
               <Rij label="Antwoordmodus" waarde={meta.antwoordmodusLabel} />
             )}
