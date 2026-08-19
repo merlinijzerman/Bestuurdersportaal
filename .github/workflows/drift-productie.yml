@@ -1,0 +1,114 @@
+name: drift-productie
+
+# ============================================================================
+#  Nachtelijke driftdetectie op Productie — fase 5, ontwerpnotitie v2.1.
+# ----------------------------------------------------------------------------
+#  WAAROM DIT BESTAAT
+#  De T14b-auditmigratie stond sinds 17 juli 2026 op `main`, was toegepast op
+#  Preview, en bereikte Productie nooit. Dat bleef VIER WEKEN onopgemerkt — niet
+#  omdat er geen versieregister was, maar omdat er niets kéék. Deze workflow is
+#  dat wat kijkt.
+#
+#  TWEE SIGNALEN, en het tweede is de reden dat dit werkt:
+#    1. Productie versus de gepinde momentopname in de repo → vangt een stille
+#       wijziging op Productie.
+#    2. Productie versus Preview → vangt het omgekeerde: een migratie die de ene
+#       omgeving wél en de andere niet bereikte. Signaal 1 ziet dat NIET, want
+#       dan verandert er juist niets.
+#
+#  READ-ONLY. Draait als rol `drift_lezer` (scripts/drift-readonly-rol.sql):
+#  leest catalogus en bucketdefinities, en kan geen enkele fondstabel lezen.
+#  Deze workflow raakt nooit data en voert nooit DDL uit.
+#
+#  BLOKKEREND? Nee, en dat is bewust: dit is een detectiemiddel, geen poort.
+#  Een gefaalde nachtrun mag geen release tegenhouden. Maar hij moet wél gezien
+#  worden — vandaar de alert. Een controle die faalt zonder dat iemand het merkt
+#  is precies zo nuttig als geen controle.
+#
+#  EENMALIG IN TE RICHTEN, in deze volgorde:
+#    1. scripts/drift-readonly-rol.sql draaien op Productie én Preview.
+#    2. Secret DRIFT_DB_PASSWORD zetten (zelfde wachtwoord in beide omgevingen,
+#       of splits in DRIFT_DB_PASSWORD_PROD / _PREVIEW en pas dit bestand aan).
+#    3. `--pin` draaien, de momentopname NALEZEN, en committen. Nalezen is geen
+#       formaliteit: je verklaart daarmee de huidige toestand voor goed,
+#       inclusief drift die er nu al in zit. Doe dit pas NA de T14b-reparatie.
+#
+#  ONGETOETSTE AANNAME — controleer dit bij stap 2.
+#  De verbindingsstring gebruikt de pooler-vorm `<rol>.<project_ref>` naar
+#  analogie van `postgres.<ref>` in supabase-backup.yml. Dat een NIET-postgres
+#  rol daar hetzelfde werkt, heb ik niet kunnen verifiëren zonder verbinding.
+#  Werkt het niet, dan zijn er twee uitwijkroutes: de directe DB-host in plaats
+#  van de pooler, of het volledige verbindingsadres als secret opnemen en de
+#  samenstelling hieronder laten vervallen. Draai deze workflow daarom eerst
+#  één keer met workflow_dispatch voordat je op de nachtrun vertrouwt.
+# ============================================================================
+
+on:
+  schedule:
+    - cron: "0 4 * * *" # elke nacht 04:00 UTC, ná nightly-fidelity (03:00)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: drift-productie
+  cancel-in-progress: false
+
+jobs:
+  drift:
+    name: Driftdetectie Productie (read-only)
+    runs-on: ubuntu-latest
+    env:
+      PROD_REF: aebwiufuegsiwhwpdrfb
+      PREVIEW_REF: swviwoytzvaqypieqgji
+      POOLER_HOST: aws-1-eu-north-1.pooler.supabase.com
+      DRIFT_DB_PASSWORD: ${{ secrets.DRIFT_DB_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Vooraf controleren
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          command -v psql >/dev/null || { echo "psql ontbreekt op de runner" >&2; exit 1; }
+          test -n "${DRIFT_DB_PASSWORD:-}" || {
+            echo "Secret DRIFT_DB_PASSWORD ontbreekt — zie de kop van dit bestand." >&2
+            exit 1
+          }
+          test -f scripts/drift-vergelijk.sh
+          test -f supabase/checks/2026_08_19_drift_momentopname.sql
+
+      - name: Driftdetectie
+        id: drift
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ENCODED="$(python3 -c 'import os,urllib.parse; print(urllib.parse.quote(os.environ["DRIFT_DB_PASSWORD"], safe=""))')"
+          echo "::add-mask::$ENCODED"
+          export DRIFT_PROD_URL="postgresql://drift_lezer.${PROD_REF}:${ENCODED}@${POOLER_HOST}:5432/postgres"
+          export DRIFT_PREVIEW_URL="postgresql://drift_lezer.${PREVIEW_REF}:${ENCODED}@${POOLER_HOST}:5432/postgres"
+          bash scripts/drift-vergelijk.sh | tee drift-rapport.txt
+
+      - name: Rapport bewaren
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: drift-rapport
+          path: drift-rapport.txt
+          retention-days: 30
+
+      - name: Waarschuwen bij drift
+        if: failure()
+        shell: bash
+        env:
+          BACKUP_ALERT_WEBHOOK_URL: ${{ secrets.BACKUP_ALERT_WEBHOOK_URL }}
+          ALERT_CATEGORY: productie_drift
+          ALERT_SEVERITY: warning
+          ALERT_REASON: Productie wijkt af van de gepinde momentopname of van Preview
+          ALERT_DETAILS: >-
+            Zie het artefact drift-rapport van deze run. Beoordeel per regel of
+            het een bedoeld omgevingsverschil is of een migratie die is blijven
+            steken. Read-only detectie; er is niets gewijzigd.
+          ALERT_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node scripts/send-backup-alert.mjs
