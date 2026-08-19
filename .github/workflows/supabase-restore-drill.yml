@@ -301,7 +301,11 @@ jobs:
           aws s3 cp "s3://$B2_BUCKET_NAME/$PLATFORM_INVENTORY_MARKER_KEY.sha256" "$INVENTORY_MARKER_PATH.sha256" \
             --endpoint-url "$B2_S3_ENDPOINT" --only-show-errors --no-progress
           CHECKSUM_NAME="$(awk '{print $2}' "$INVENTORY_MARKER_PATH.sha256")"
-          test "$CHECKSUM_NAME" = "$(basename "$INVENTORY_MARKER_PATH" | sed 's/^platform-//')"
+          EXPECTED_CHECKSUM_NAME="platform-inventory-marker-${INVENTORY_MARKER_NAME#manifest-}"
+          test "$CHECKSUM_NAME" = "$EXPECTED_CHECKSUM_NAME" || {
+            echo "Platforminventarismarker-checksumbestandsnaam wijkt af." >&2
+            exit 1
+          }
           test "$(awk '{print $1}' "$INVENTORY_MARKER_PATH.sha256")" = "$(sha256sum "$INVENTORY_MARKER_PATH" | awk '{print $1}')"
 
           python3 - "$INVENTORY_MARKER_PATH" <<'PY'
