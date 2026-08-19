@@ -108,6 +108,9 @@ jobs:
           test -f scripts/restore-supabase-backup.sh
           test -f scripts/prepare-supabase-managed-customizations.mjs
           test -f scripts/restore-supabase-storage.mjs
+          test -f scripts/restore-supabase-storage-with-metadata.sh
+          test -f scripts/capture-supabase-storage-metadata.sql
+          test -f scripts/reconcile-supabase-storage-metadata.sql
           test -f scripts/create-backup-validation.sql
           test -f scripts/verify-supabase-restore.mjs
 
@@ -339,7 +342,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          node scripts/restore-supabase-storage.mjs --input-dir "$STORAGE_RESTORE_DIR"
+          bash scripts/restore-supabase-storage-with-metadata.sh "$STORAGE_RESTORE_DIR"
 
       - name: Database- en Storage-dekking exact vergelijken
         shell: bash

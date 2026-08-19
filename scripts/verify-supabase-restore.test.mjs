@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { verifyRestore } from "./verify-supabase-restore.mjs";
+import { restoreValidationDiagnostic, verifyRestore } from "./verify-supabase-restore.mjs";
 
 function fixture() {
   const source = {
@@ -117,7 +117,21 @@ test("weigert wanneer het doel een bronextensie mist", () => {
 test("weigert een inhoudsverschil ondanks gelijke tellingen", () => {
   const data = fixture();
   data.target.content_sha256.auth_users = "9".repeat(64);
-  assert.throws(() => verifyRestore(data), /inhoudshashes/);
+  assert.throws(() => verifyRestore(data), (error) => {
+    assert.match(error.message, /inhoudshashes/);
+    assert.deepEqual(restoreValidationDiagnostic(error), { category: "content_auth_users" });
+    return true;
+  });
+});
+
+test("diagnostiek is beperkt tot een veilige validatiecategorie", () => {
+  const data = fixture();
+  data.target.content_sha256.storage_objects = "9".repeat(64);
+  assert.throws(() => verifyRestore(data), (error) => {
+    assert.deepEqual(restoreValidationDiagnostic(error), { category: "content_storage_objects" });
+    return true;
+  });
+  assert.deepEqual(restoreValidationDiagnostic(new Error("gevoelige details")), { category: "unknown" });
 });
 
 test("weigert afwijkende policy- of triggerdefinities", () => {

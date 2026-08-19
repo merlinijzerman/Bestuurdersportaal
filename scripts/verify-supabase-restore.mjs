@@ -10,8 +10,44 @@ const EXACT_COUNT_FIELDS = [
   "storage_objects",
 ];
 
-function fail(message) {
-  throw new Error(`Restore-validatie mislukt: ${message}`);
+const VALIDATION_CATEGORIES = new Set([
+  "contract",
+  "postgres_major",
+  "count_auth_users",
+  "count_auth_identities",
+  "count_storage_buckets",
+  "count_storage_objects",
+  "count_storage_by_bucket",
+  "count_critical_public",
+  "content_auth_users",
+  "content_auth_identities",
+  "content_storage_buckets",
+  "content_storage_objects",
+  "content_critical_public",
+  "policies",
+  "triggers",
+  "extensions",
+  "storage_manifest",
+]);
+
+class RestoreValidationError extends Error {
+  constructor(message, category) {
+    super(`Restore-validatie mislukt: ${message}`);
+    this.name = "RestoreValidationError";
+    this.category = category;
+  }
+}
+
+function fail(message, category = "contract") {
+  throw new RestoreValidationError(message, VALIDATION_CATEGORIES.has(category) ? category : "contract");
+}
+
+export function restoreValidationDiagnostic(error) {
+  return {
+    category: error instanceof RestoreValidationError && VALIDATION_CATEGORIES.has(error.category)
+      ? error.category
+      : "unknown",
+  };
 }
 
 function requireObject(value, label) {
@@ -77,16 +113,40 @@ function normalizeObjectHashes(value, label) {
 function compareCount(source, target, field) {
   const expected = requireCount(source[field], `bron.${field}`);
   const actual = requireCount(target[field], `doel.${field}`);
-  if (actual !== expected) fail(`${field}: verwacht ${expected}, aangetroffen ${actual}`);
+  if (actual !== expected) fail(`${field}: verwacht ${expected}, aangetroffen ${actual}`, `count_${field}`);
 }
 
-function compareCountMap(sourceValue, targetValue, label) {
+function compareCountMap(sourceValue, targetValue, label, category = "contract") {
   const expected = normalizeCountMap(sourceValue, `bron.${label}`);
   const actual = normalizeCountMap(targetValue, `doel.${label}`);
   if (JSON.stringify(actual) !== JSON.stringify(expected)) {
-    fail(`${label} wijkt af (verwacht ${JSON.stringify(expected)}, aangetroffen ${JSON.stringify(actual)})`);
+    fail(`${label} wijkt af (verwacht ${JSON.stringify(expected)}, aangetroffen ${JSON.stringify(actual)})`, category);
   }
   return expected;
+}
+
+function compareContentHashes(sourceValue, targetValue) {
+  const source = normalizeHashTree(sourceValue, "bron.content_sha256");
+  const target = normalizeHashTree(targetValue, "doel.content_sha256");
+  const sections = [
+    "auth_users",
+    "auth_identities",
+    "storage_buckets",
+    "storage_objects",
+    "critical_public",
+  ];
+  const sortedSections = [...sections].sort();
+  if (
+    JSON.stringify(Object.keys(source).sort()) !== JSON.stringify(sortedSections)
+    || JSON.stringify(Object.keys(target).sort()) !== JSON.stringify(sortedSections)
+  ) {
+    fail("inhoudshashes hebben niet de verplichte database/Auth/Storage-structuur");
+  }
+  for (const section of sections) {
+    if (JSON.stringify(target[section]) !== JSON.stringify(source[section])) {
+      fail(`inhoudshashes van ${section} wijken af`, `content_${section}`);
+    }
+  }
 }
 
 function postgresMajor(value, label) {
@@ -140,7 +200,7 @@ export function verifyRestore({ source, target, storage }) {
   const sourceMajor = postgresMajor(source.postgres_version, "bron.postgres_version");
   const targetMajor = postgresMajor(target.postgres_version, "doel.postgres_version");
   if (sourceMajor !== 17 || targetMajor !== sourceMajor) {
-    fail(`PostgreSQL-major wijkt af (bron ${sourceMajor}, doel ${targetMajor}, verwacht 17)`);
+    fail(`PostgreSQL-major wijkt af (bron ${sourceMajor}, doel ${targetMajor}, verwacht 17)`, "postgres_major");
   }
 
   for (const field of EXACT_COUNT_FIELDS) compareCount(source, target, field);
@@ -148,36 +208,43 @@ export function verifyRestore({ source, target, storage }) {
     source.storage_objects_by_bucket,
     target.storage_objects_by_bucket,
     "storage_objects_by_bucket",
+    "count_storage_by_bucket",
   );
-  compareCountMap(source.critical_public_counts, target.critical_public_counts, "critical_public_counts");
+  compareCountMap(
+    source.critical_public_counts,
+    target.critical_public_counts,
+    "critical_public_counts",
+    "count_critical_public",
+  );
 
-  const sourceContentHashes = normalizeHashTree(source.content_sha256, "bron.content_sha256");
-  const targetContentHashes = normalizeHashTree(target.content_sha256, "doel.content_sha256");
-  if (JSON.stringify(targetContentHashes) !== JSON.stringify(sourceContentHashes)) {
-    fail("inhoudshashes van database/Auth/Storage wijken af");
-  }
+  compareContentHashes(source.content_sha256, target.content_sha256);
 
   const sourcePolicies = normalizeObjectHashes(source.policies, "bron.policies");
   const targetPolicies = normalizeObjectHashes(target.policies, "doel.policies");
-  if (JSON.stringify(targetPolicies) !== JSON.stringify(sourcePolicies)) fail("policydefinities/hashes wijken af");
+  if (JSON.stringify(targetPolicies) !== JSON.stringify(sourcePolicies)) {
+    fail("policydefinities/hashes wijken af", "policies");
+  }
 
   const sourceTriggers = normalizeObjectHashes(source.triggers, "bron.triggers");
   const targetTriggers = normalizeObjectHashes(target.triggers, "doel.triggers");
-  if (JSON.stringify(targetTriggers) !== JSON.stringify(sourceTriggers)) fail("triggerdefinities/hashes wijken af");
+  if (JSON.stringify(targetTriggers) !== JSON.stringify(sourceTriggers)) {
+    fail("triggerdefinities/hashes wijken af", "triggers");
+  }
 
   const sourceExtensions = normalizeStringSet(source.extensions, "bron.extensions");
   const targetExtensions = new Set(normalizeStringSet(target.extensions, "doel.extensions"));
   const missingExtensions = sourceExtensions.filter((extension) => !targetExtensions.has(extension));
-  if (missingExtensions.length) fail(`doel mist extensies: ${missingExtensions.join(", ")}`);
+  if (missingExtensions.length) fail(`doel mist extensies: ${missingExtensions.join(", ")}`, "extensions");
 
   const manifestCounts = manifestBucketCounts(storage);
   if (JSON.stringify(manifestCounts) !== JSON.stringify(storageCounts)) {
     fail(
       `Storage-manifest wijkt af van databasevalidatie (manifest ${JSON.stringify(manifestCounts)}, database ${JSON.stringify(storageCounts)})`,
+      "storage_manifest",
     );
   }
   if (storage.bucket_count !== source.storage_buckets || storage.object_count !== source.storage_objects) {
-    fail("Storage-manifest dekt niet exact alle Storage-metadata uit de bron");
+    fail("Storage-manifest dekt niet exact alle Storage-metadata uit de bron", "storage_manifest");
   }
 
   return {
@@ -230,6 +297,8 @@ async function main() {
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((error) => {
+    const diagnostic = restoreValidationDiagnostic(error);
+    process.stderr.write(`VALIDATION_CATEGORY=${diagnostic.category}\n`);
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
     process.exitCode = 1;
   });
