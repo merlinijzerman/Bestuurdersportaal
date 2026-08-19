@@ -85,6 +85,14 @@ function sleep(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
+export function storageAdminHeaders(key) {
+  if (/^sb_publishable_/.test(key)) {
+    throw new Error("Een publishable key mag niet voor Storage-beheer worden gebruikt");
+  }
+  if (/^sb_secret_[A-Za-z0-9_-]{16,}$/.test(key)) return { apikey: key };
+  return { apikey: key, Authorization: `Bearer ${key}` };
+}
+
 async function request(
   baseUrl,
   serviceRoleKey,
@@ -101,9 +109,8 @@ async function request(
       const response = await fetch(apiUrl(baseUrl, pathname), {
         ...init,
         headers: {
-          apikey: serviceRoleKey,
-          Authorization: `Bearer ${serviceRoleKey}`,
           ...(init?.headers ?? {}),
+          ...storageAdminHeaders(serviceRoleKey),
         },
       });
       if (response.ok) return response;
@@ -353,9 +360,14 @@ async function main() {
   const dryRun = args.has("dry-run");
   const verify = !args.has("no-verify");
   const resume = !args.has("no-resume");
+  const adminKey = process.env.TARGET_SUPABASE_ADMIN_KEY?.trim();
+  const legacyKey = process.env.TARGET_SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (adminKey && legacyKey && adminKey !== legacyKey) {
+    throw new Error("TARGET_SUPABASE_ADMIN_KEY en legacy service-role-input verschillen");
+  }
   const result = await restoreStorage({
     baseUrl: requiredEnv("TARGET_SUPABASE_URL"),
-    serviceRoleKey: dryRun ? (process.env.TARGET_SUPABASE_SERVICE_ROLE_KEY ?? "dry-run") : requiredEnv("TARGET_SUPABASE_SERVICE_ROLE_KEY"),
+    serviceRoleKey: dryRun ? (adminKey || legacyKey || "dry-run") : (adminKey || legacyKey || requiredEnv("TARGET_SUPABASE_ADMIN_KEY")),
     inputDir,
     dryRun,
     verify,
@@ -369,7 +381,10 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     const diagnostic = storageRestoreDiagnostic(error);
     process.stderr.write(`STORAGE_PHASE=${diagnostic.phase}\n`);
     process.stderr.write(`STORAGE_HTTP_STATUS=${diagnostic.httpStatus}\n`);
-    process.stderr.write(`Storage-restore mislukt: ${error instanceof Error ? error.message : String(error)}\n`);
+    // Object- en bucketnamen kunnen productiedata zijn. Houd de concrete fout
+    // in-process en geef buiten het versleutelde volume alleen de allowlisted
+    // fase en HTTP-status vrij.
+    process.stderr.write("Storage-restore mislukt; objectdetails zijn afgeschermd.\n");
     process.exitCode = 1;
   });
 }

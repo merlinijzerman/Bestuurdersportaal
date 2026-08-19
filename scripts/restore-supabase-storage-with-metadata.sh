@@ -9,7 +9,7 @@ set -Eeuo pipefail
 umask 077
 
 usage() {
-  echo "Gebruik: TARGET_DB_URL=... TARGET_PROJECT_REF=... TARGET_SUPABASE_URL=... TARGET_SUPABASE_SERVICE_ROLE_KEY=... $0 <uitgepakte-storage-map> [restore-flags]" >&2
+  echo "Gebruik: TARGET_DB_URL=... TARGET_PROJECT_REF=... TARGET_SUPABASE_URL=... TARGET_SUPABASE_ADMIN_KEY=... $0 <uitgepakte-storage-map> [restore-flags]" >&2
   exit 2
 }
 
@@ -24,7 +24,15 @@ shift
 : "${TARGET_DB_URL:?TARGET_DB_URL ontbreekt}"
 : "${TARGET_PROJECT_REF:?TARGET_PROJECT_REF ontbreekt}"
 : "${TARGET_SUPABASE_URL:?TARGET_SUPABASE_URL ontbreekt}"
-: "${TARGET_SUPABASE_SERVICE_ROLE_KEY:?TARGET_SUPABASE_SERVICE_ROLE_KEY ontbreekt}"
+if [ -n "${TARGET_SUPABASE_ADMIN_KEY:-}" ] && \
+   [ -n "${TARGET_SUPABASE_SERVICE_ROLE_KEY:-}" ] && \
+   [ "$TARGET_SUPABASE_ADMIN_KEY" != "$TARGET_SUPABASE_SERVICE_ROLE_KEY" ]; then
+  echo "Storage-restore stopt: admin- en legacy service-role-input verschillen." >&2
+  exit 1
+fi
+TARGET_SUPABASE_ADMIN_KEY="${TARGET_SUPABASE_ADMIN_KEY:-${TARGET_SUPABASE_SERVICE_ROLE_KEY:-}}"
+: "${TARGET_SUPABASE_ADMIN_KEY:?TARGET_SUPABASE_ADMIN_KEY ontbreekt}"
+export TARGET_SUPABASE_ADMIN_KEY
 
 SOURCE_PROJECT_REF="$(node --input-type=module - "$INPUT_DIR/storage-manifest.json" <<'NODE'
 import { readFile } from "node:fs/promises";
