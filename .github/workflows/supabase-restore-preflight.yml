@@ -63,6 +63,14 @@ jobs:
           . /etc/os-release
           echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
             | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          # GitHub's Azure mirror has repeatedly stalled while the official
+          # archive fallback remained reachable. Pin the ubuntu-24.04 mirror
+          # list to that HTTPS endpoint before apt resolves any package index.
+          test -f /etc/apt/apt-mirrors.txt
+          printf '%s\n' 'https://archive.ubuntu.com/ubuntu' \
+            | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+          test "$(sudo awk 'END {print NR}' /etc/apt/apt-mirrors.txt)" = "1"
+          sudo grep -Fxq 'https://archive.ubuntu.com/ubuntu' /etc/apt/apt-mirrors.txt
           sudo timeout --signal=TERM 5m apt-get update \
             -o Acquire::Retries=3 \
             -o Acquire::http::Timeout=20 \
