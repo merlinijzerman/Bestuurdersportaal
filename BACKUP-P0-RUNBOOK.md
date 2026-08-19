@@ -206,6 +206,13 @@ Een lokale kopie met productiegegevens hoort uitsluitend in tijdelijke,
 versleutelde opslag op een gecontroleerde runner/omgeving. Neem geen secrets of
 rij-inhoud op in logs, artifacts, issues of fixtures.
 
+De fysieke Storage-restore vertaalt de databasevelden uit het manifest
+(`file_size_limit`, `allowed_mime_types`) expliciet naar het camelCase-contract
+van de Storage-API (`fileSizeLimit`, `allowedMimeTypes`). Bij een fout mag alleen
+de allowlisted restorefase en de numerieke HTTP-status buiten het versleutelde
+volume als diagnostisch bewijs worden bewaard; bucket- en objectnamen blijven
+op het vernietigde volume.
+
 De workflow `.github/workflows/supabase-restore-preflight.yml` automatiseert
 deze poort zonder een Supabase-cloudproject aan te maken. Start hem uitsluitend
 vanaf `main` met de exacte contract-v2-marker en bevestiging

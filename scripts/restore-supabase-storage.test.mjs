@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { parseArgs, restoreStorage } from "./restore-supabase-storage.mjs";
+import { parseArgs, restoreStorage, storageRestoreDiagnostic } from "./restore-supabase-storage.mjs";
 
 const sourceProject = "aebwiufuegsiwhwpdrfb";
 
@@ -148,6 +148,84 @@ test("Storage-restore verifieert private objecten via de geauthenticeerde route"
     assert.equal(result.object_count, 1);
     assert.equal(result.uploaded_count, 1);
     assert.ok(calls.includes("GET /storage/v1/object/authenticated/documenten/2026/voorbeeld.txt"));
+  } finally {
+    globalThis.fetch = originalFetch;
+    await rm(fixture.inputDir, { recursive: true, force: true });
+  }
+});
+
+test("Storage-restore gebruikt het camelCase API-contract en werkt een bestaande bucket bij", async () => {
+  const fixture = await createFixture();
+  const originalFetch = globalThis.fetch;
+  const bodies = [];
+  try {
+    globalThis.fetch = async (url, init = {}) => {
+      const target = new URL(url);
+      const method = init.method ?? "GET";
+      if (method === "POST" && target.pathname === "/storage/v1/bucket") {
+        bodies.push({ method, body: JSON.parse(init.body) });
+        return Response.json({ message: "already exists" }, { status: 409 });
+      }
+      if (method === "PUT" && target.pathname === "/storage/v1/bucket/documenten") {
+        bodies.push({ method, body: JSON.parse(init.body) });
+        return Response.json({ message: "updated" });
+      }
+      if (method === "GET" && target.pathname === "/storage/v1/object/authenticated/documenten/2026/voorbeeld.txt") {
+        return new Response("document-inhoud\n");
+      }
+      throw new Error(`Onverwachte mock-request: ${method} ${target.pathname}`);
+    };
+
+    const result = await withTargetRef("restore-oefening", () => restoreStorage({
+      baseUrl: "https://restore-oefening.supabase.co",
+      serviceRoleKey: "service-role-test",
+      inputDir: fixture.inputDir,
+    }));
+
+    assert.equal(result.skipped_count, 1);
+    assert.deepEqual(bodies, [
+      {
+        method: "POST",
+        body: {
+          id: "documenten",
+          name: "documenten",
+          public: false,
+          fileSizeLimit: null,
+          allowedMimeTypes: null,
+        },
+      },
+      {
+        method: "PUT",
+        body: {
+          public: false,
+          fileSizeLimit: null,
+          allowedMimeTypes: null,
+        },
+      },
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    await rm(fixture.inputDir, { recursive: true, force: true });
+  }
+});
+
+test("Storage-restorediagnostiek geeft alleen fase en HTTP-status vrij", async () => {
+  const fixture = await createFixture();
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => Response.json({ detail: "gevoelige mockdetails" }, { status: 422 });
+    await assert.rejects(async () => {
+      try {
+        await withTargetRef("restore-oefening", () => restoreStorage({
+          baseUrl: "https://restore-oefening.supabase.co",
+          serviceRoleKey: "service-role-test",
+          inputDir: fixture.inputDir,
+        }));
+      } catch (error) {
+        assert.deepEqual(storageRestoreDiagnostic(error), { phase: "bucket_create", httpStatus: "422" });
+        throw error;
+      }
+    });
   } finally {
     globalThis.fetch = originalFetch;
     await rm(fixture.inputDir, { recursive: true, force: true });
