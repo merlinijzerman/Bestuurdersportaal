@@ -13,13 +13,13 @@
 --
 -- DEKT (werkopdracht T2, acceptatie R1):
 --   1. geldig fonds_id in APP-metadata → profiel op EXACT dat fonds;
---   2. ontbrekend fonds_id             → fail-closed (exception, geen profiel);
+--   2. ontbrekend fonds_id bij INSERT  → deferred (geen profiel);
 --   3. ongeldige UUID                  → fail-closed (exception, geen profiel);
 --   4. geldige maar onbekende UUID     → fail-closed (exception, geen profiel);
 --   5. platform-account (app-metadata) → géén profiel (guard behouden).
 --
 -- AANGEVULD 17-08-2026 (WP1 / PT-1) — de grens tegen zelfregistratie:
---   6. fonds_id ALLEEN in user-metadata → geweigerd; user én profiel teruggerold;
+--   6. fonds_id ALLEEN in user-metadata → geen profiel/toegang;
 --   7. platform-vlag in user-metadata   → geweigerd;
 --   8. tegensprekende metadata          → app-metadata wint, niet de client.
 --
@@ -29,8 +29,8 @@
 -- testvorm — hij bootst precies na wat een buitenstaander met de publieke
 -- anon-key kan sturen.
 --
--- Elke faal-case wordt POSITIEF bevestigd: we vangen de exception en asserten dat
--- er géén profielen-rij ontstond (geen "eerste fonds"-fallback).
+-- Elke negatieve case wordt POSITIEF bevestigd: er ontstaat geen profiel via
+-- user-metadata en er is geen "eerste fonds"-fallback.
 -- ============================================================================
 
 begin;
@@ -61,21 +61,21 @@ begin
     'Case 1: verwacht precies 1 profiel op het meegegeven fonds';
   raise notice 'Case 1 OK — geldig fonds_id → profiel op juist fonds';
 
-  -- ── Case 2 — ontbrekend fonds_id → exception, geen profiel ───────────────
+  -- ── Case 2 — ontbrekend fonds_id → deferred, geen profiel ───────────────
   v_user := gen_random_uuid();
-  v_gefaald := false;
-  begin
-    insert into auth.users (id, instance_id, aud, role, email, raw_app_meta_data)
-    values (v_user, '00000000-0000-0000-0000-000000000000', 'authenticated',
-            'authenticated', 'check2@example.test',
-            '{}'::jsonb);   -- géén fonds_id
-  exception when others then
-    v_gefaald := true;
-  end;
-  assert v_gefaald, 'Case 2: verwacht een exception bij ontbrekend fonds_id';
+  insert into auth.users (id, instance_id, aud, role, email, raw_app_meta_data)
+  values (v_user, '00000000-0000-0000-0000-000000000000', 'authenticated',
+          'authenticated', 'check2@example.test',
+          '{}'::jsonb);   -- geen app-metadata bij de eerste Auth-INSERT
   select count(*) into v_rows from public.profielen where id = v_user;
   assert v_rows = 0, 'Case 2: er mag GEEN profiel zijn (geen eerste-fonds-fallback)';
-  raise notice 'Case 2 OK — ontbrekend fonds_id → fail-closed, geen profiel';
+  update auth.users
+     set raw_app_meta_data = jsonb_build_object('fonds_id', v_fonds_a::text)
+   where id = v_user;
+  select count(*) into v_rows
+  from public.profielen where id = v_user and fonds_id = v_fonds_a;
+  assert v_rows = 1, 'Case 2: app-metadata-update moet het profiel provisionen';
+  raise notice 'Case 2 OK — ontbrekend fonds_id bij INSERT → profiel pas na app-metadata-update';
 
   -- ── Case 3 — ongeldige UUID → exception, geen profiel ────────────────────
   v_user := gen_random_uuid();
@@ -124,36 +124,26 @@ begin
   --
   --  Dit zijn de cases die PT-1 sluiten. Case 6 is de bevinding zelf: precies
   --  wat `supabase.auth.signUp({ options: { data: { fonds_id } } })` met de
-  --  PUBLIEKE anon-key in auth.users zet. Slaagt die insert, dan bepaalt een
-  --  buitenstaander zijn eigen tenant — en `profielen.fonds_id` is de sleutel
-  --  waar vrijwel elke RLS-policy op rust.
+  --  PUBLIEKE anon-key in auth.users zet. Die insert mag hoogstens een
+  --  profiel-loos account opleveren; `profielen.fonds_id` is de sleutel waar
+  --  vrijwel elke RLS-policy op rust.
   -- ══════════════════════════════════════════════════════════════════════════
 
-  -- ── Case 6 — fonds_id ALLEEN in user-metadata → weigeren, niets achterlaten ─
+  -- ── Case 6 — fonds_id ALLEEN in user-metadata → geen profiel/toegang ──────
   v_user := gen_random_uuid();
-  v_gefaald := false;
-  begin
-    insert into auth.users (id, instance_id, aud, role, email,
-                            raw_user_meta_data, raw_app_meta_data)
-    values (v_user, '00000000-0000-0000-0000-000000000000', 'authenticated',
-            'authenticated', 'check6@example.test',
-            -- exact de vorm die een client zelf kan zetten:
-            jsonb_build_object('naam', 'Zelf Geregistreerd',
-                               'fonds_id', v_fonds_a::text),
-            '{}'::jsonb);
-  exception when others then
-    v_gefaald := true;
-  end;
-  assert v_gefaald,
-    'LEK (PT-1): fonds_id in user-metadata werd GEACCEPTEERD — zelfregistratie kan het eigen fonds kiezen';
+  insert into auth.users (id, instance_id, aud, role, email,
+                          raw_user_meta_data, raw_app_meta_data)
+  values (v_user, '00000000-0000-0000-0000-000000000000', 'authenticated',
+          'authenticated', 'check6@example.test',
+          -- exact de vorm die een client zelf kan zetten:
+          jsonb_build_object('naam', 'Zelf Geregistreerd',
+                             'fonds_id', v_fonds_a::text),
+          '{}'::jsonb);
   select count(*) into v_rows from public.profielen where id = v_user;
   assert v_rows = 0, 'Case 6: er mag GEEN profiel zijn';
-  -- Ook de auth-user zelf moet zijn teruggerold: de trigger is AFTER INSERT, dus
-  -- een exception rolt de hele insert terug. Blijft er een user staan zonder
-  -- profiel, dan is dat een half account dat later alsnog kan worden gerepareerd.
   select count(*) into v_rows from auth.users where id = v_user;
-  assert v_rows = 0, 'Case 6: de auth-user moet zijn teruggerold';
-  raise notice 'Case 6 OK — fonds_id in user-metadata → geweigerd, user en profiel teruggerold';
+  assert v_rows = 1, 'Case 6: de Auth-user mag bestaan zonder tenantprofiel';
+  raise notice 'Case 6 OK — fonds_id in user-metadata → geen profiel/toegang';
 
   -- ── Case 7 — platform-vlag in user-metadata → weigeren ─────────────────────
   -- Zonder deze regel zou de vlag stil worden genegeerd en kreeg de aanvrager

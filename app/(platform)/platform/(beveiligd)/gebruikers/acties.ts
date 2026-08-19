@@ -140,6 +140,9 @@ export async function gebruikerAanmaken(input: {
         // is alleen via de service-role te zetten — dus alleen hier, achter
         // capability `platform.tenants.manage` + live AAL2 + twee-fasen-audit.
         //
+        // Supabase GoTrue kan app_metadata bij createUser() pas in de volgende
+        // service-role-update vastleggen. De databaseprovisioningtrigger is
+        // daarop ingericht; de expliciete update hieronder is daarom vereist.
         // `naam` blijft in user_metadata: presentatie, geen privilege.
         const { data: aangemaakt, error: maakFout } = await svc.auth.admin.createUser({
           email,
@@ -162,8 +165,8 @@ export async function gebruikerAanmaken(input: {
               effect: { afgewezen: "email_bestaat" },
             };
           }
-          // Backstop: de fail-closed maak_profiel-trigger (ontbrekend/ongeldig/
-          // onbekend fonds) rolt de auth.users-insert terug → geen half account.
+          // Backstop: de fail-closed maak_profiel-trigger (ongeldig/onbekend
+          // fonds) rolt de auth.users-mutatie terug → geen half account.
           console.error("[P3B] createUser mislukt:", boodschap);
           return {
             resultaat: { ok: false, foutcode: "aanmaak_mislukt", melding: "Aanmaken geweigerd. Controleer de invoer en het fonds." },
@@ -176,6 +179,42 @@ export async function gebruikerAanmaken(input: {
           return {
             resultaat: { ok: false, foutcode: "aanmaak_mislukt", melding: "Aanmaken mislukte onverwacht." },
             effect: { afgewezen: "geen_user_id" },
+          };
+        }
+
+        // createUser() accepteert app_metadata in het HTTP-contract, maar
+        // GoTrue maakt die waarde niet betrouwbaar zichtbaar aan de
+        // auth.users-inserttrigger. updateUserById is het ondersteunde
+        // service-rolepad waarop `bij_app_metadata` het profiel aanmaakt.
+        const { error: metadataFout } = await svc.auth.admin.updateUserById(nieuweId, {
+          app_metadata: {
+            ...(aangemaakt?.user?.app_metadata ?? {}),
+            fonds_id: input.fondsId,
+          },
+        });
+        if (metadataFout) {
+          await svc.auth.admin.deleteUser(nieuweId);
+          console.error("[P3B] app-metadata bijwerken mislukt:", metadataFout.message);
+          return {
+            resultaat: { ok: false, foutcode: "aanmaak_mislukt", melding: "Aanmaken geweigerd. Controleer de invoer en het fonds." },
+            effect: { afgewezen: "app_metadata_mislukt" },
+          };
+        }
+
+        const { data: profiel, error: profielFout } = await svc
+          .from("profielen")
+          .select("id, fonds_id")
+          .eq("id", nieuweId)
+          .maybeSingle();
+        if (profielFout || !profiel || profiel.fonds_id !== input.fondsId) {
+          await svc.auth.admin.deleteUser(nieuweId);
+          console.error(
+            "[P3B] profielprovisioning na app-metadata-update mislukt:",
+            profielFout?.message ?? "profiel ontbreekt of fonds wijkt af",
+          );
+          return {
+            resultaat: { ok: false, foutcode: "aanmaak_mislukt", melding: "Aanmaken geweigerd. Controleer de invoer en het fonds." },
+            effect: { afgewezen: "profielprovisioning_mislukt" },
           };
         }
 
