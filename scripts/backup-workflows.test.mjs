@@ -30,11 +30,21 @@ test("watchdog controleert B2 ook zonder webhook en isoleert de configuratiefout
 test("back-up publiceert restorecontract 2 zonder redundante managed datafiles", async () => {
   const text = await workflow("supabase-backup.yml");
   assert.match(text, /restore_contract_version=2/);
+  assert.match(text, /BACKUP_CREATED_UTC="\$\(date -u \+%Y-%m-%dT%H:%M:%SZ\)"/);
+  assert.match(text, /"created_utc": created_utc/);
   assert.match(text, /managed-customizations-manifest\.json/);
   assert.doesNotMatch(text, /pg_dump .*auth-data\.sql/);
   assert.doesNotMatch(text, /pg_dump .*storage-data\.sql/);
   assert.doesNotMatch(text, /echo "- (?:Database|Storage|Completion marker): \\\\`/);
   assert.match(text, /printf -- '- Database: `%s`/);
+});
+
+test("watchdog accepteert zowel ISO-tijd als het bestaande contract-v2 manifest", async () => {
+  const text = await workflow("supabase-backup-watchdog.yml");
+  assert.match(text, /def parse_created_utc\(value\):/);
+  assert.match(text, /datetime\.fromisoformat\(value\.replace\("Z", "\+00:00"\)\)/);
+  assert.match(text, /datetime\.strptime\(value, "%Y-%m-%dT%H-%M-%SZ"\)/);
+  assert.match(text, /created = parse_created_utc\(marker\["created_utc"\]\)/);
 });
 
 test("captured triggers kwalificeren de vooraf gecontroleerde public-functie", async () => {

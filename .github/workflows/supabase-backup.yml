@@ -110,7 +110,8 @@ jobs:
         run: |
           set -Eeuo pipefail
           umask 077
-          BACKUP_TIMESTAMP="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
+          BACKUP_CREATED_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          BACKUP_TIMESTAMP="${BACKUP_CREATED_UTC//:/-}"
           BACKUP_ROOT="$RUNNER_TEMP/supabase-backup-$BACKUP_TIMESTAMP"
           DB_DIR="$BACKUP_ROOT/database"
           STORAGE_DIR="$BACKUP_ROOT/storage"
@@ -131,7 +132,7 @@ jobs:
           psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f scripts/create-backup-validation.sql > "$DB_DIR/database-validation.json"
 
           cat > "$DB_DIR/metadata.txt" <<EOF
-          created_utc=$BACKUP_TIMESTAMP
+          created_utc=$BACKUP_CREATED_UTC
           source_project=$SUPABASE_PROJECT_REF
           format=supabase-cli-logical-dump-plus-portable-customizations
           restore_contract_version=2
@@ -156,6 +157,7 @@ jobs:
           done
 
           echo "BACKUP_TIMESTAMP=$BACKUP_TIMESTAMP" >> "$GITHUB_ENV"
+          echo "BACKUP_CREATED_UTC=$BACKUP_CREATED_UTC" >> "$GITHUB_ENV"
           echo "BACKUP_ROOT=$BACKUP_ROOT" >> "$GITHUB_ENV"
           echo "DB_DIR=$DB_DIR" >> "$GITHUB_ENV"
           echo "STORAGE_DIR=$STORAGE_DIR" >> "$GITHUB_ENV"
@@ -200,6 +202,7 @@ jobs:
 
           db_archive, storage_archive, db_hash, storage_hash, storage_manifest_path, customizations_manifest_path, status_path = sys.argv[1:]
           timestamp = os.environ["BACKUP_TIMESTAMP"]
+          created_utc = os.environ["BACKUP_CREATED_UTC"]
           prefix = os.environ["OBJECT_PREFIX"] if "OBJECT_PREFIX" in os.environ else f"supabase/{timestamp[:4]}/{timestamp[5:7]}/{timestamp[8:10]}"
           status_key = os.environ["STATUS_KEY"]
 
@@ -215,7 +218,7 @@ jobs:
           manifest = {
               "schema_version": 2,
               "status": "complete",
-              "created_utc": timestamp,
+              "created_utc": created_utc,
               "source_project": os.environ["SUPABASE_PROJECT_REF"],
               "database": {
                   "restore_contract_version": 2,
