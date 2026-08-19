@@ -522,7 +522,7 @@ test("BB-23 — geen enkele lektest in de DB-suite kan een lek als OK rapportere
 });
 
 test("BB-21 — er is een ROLLBACK, en die weigert bij bestaande bureau-profielen", () => {
-  const r = lees("supabase", "migrations", "2026_08_05_bestuursbureau_rol_ROLLBACK.sql");
+  const r = lees("supabase", "rollbacks", "2026_08_05_bestuursbureau_rol_ROLLBACK.sql");
   assert.ok(r.includes("ROLLBACK GEWEIGERD"), "de rollback heeft geen voorportaal");
   assert.ok(
     !r.includes("is distinct from 'bestuursbureau'"),

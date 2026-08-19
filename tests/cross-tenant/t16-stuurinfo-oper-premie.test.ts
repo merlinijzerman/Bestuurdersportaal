@@ -38,7 +38,7 @@ const hier = dirname(fileURLToPath(import.meta.url));
 const lees = (...p: string[]) => readFileSync(join(hier, "..", "..", ...p), "utf8");
 
 const RPC_MIGRATIE = "supabase/migrations/2026_07_18_t16_stuurinfo_oper_premie.sql";
-const SEED_MIGRATIE = "supabase/migrations/2026_07_18_t16b_stuurinfo_oper_premie_seed.sql";
+const SEED_MIGRATIE = "supabase/seeds/schema/2026_07_18_t16b_stuurinfo_oper_premie_seed.sql";
 
 // ── (1) Server-side gates ────────────────────────────────────────────────────
 
