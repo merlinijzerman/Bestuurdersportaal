@@ -12,6 +12,7 @@ const MAX_REQUEST_ATTEMPTS = 4;
 const RETRYABLE_HTTP_STATUSES = new Set([408, 425, 429]);
 const STORAGE_DIAGNOSTIC_PHASES = new Set([
   "local_archive",
+  "bucket_read",
   "bucket_create",
   "bucket_update",
   "object_resume_check",
@@ -197,26 +198,24 @@ async function verifyObject(
 }
 
 async function ensureBucket(baseUrl, serviceRoleKey, bucket) {
-  const response = await request(
-    baseUrl,
-    serviceRoleKey,
-    "/storage/v1/bucket",
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        id: bucket.id,
-        name: bucket.name,
-        public: bucket.public,
-        fileSizeLimit: bucket.file_size_limit,
-        allowedMimeTypes: bucket.allowed_mime_types,
-      }),
-    },
-    `Storage-bucket ${bucket.id} aanmaken`,
-    "bucket_create",
-  ).catch(async (error) => {
-    if (!(error instanceof StorageRestoreRequestError) || error.httpStatus !== 409) throw error;
-    return request(
+  let exists = true;
+  try {
+    const discoveryResponse = await request(
+      baseUrl,
+      serviceRoleKey,
+      `/storage/v1/bucket/${encodeURIComponent(bucket.id)}`,
+      {},
+      `Storage-bucket ${bucket.id} opzoeken`,
+      "bucket_read",
+    );
+    await discoveryResponse.body?.cancel();
+  } catch (error) {
+    if (!(error instanceof StorageRestoreRequestError) || error.httpStatus !== 404) throw error;
+    exists = false;
+  }
+
+  const response = exists
+    ? await request(
       baseUrl,
       serviceRoleKey,
       `/storage/v1/bucket/${encodeURIComponent(bucket.id)}`,
@@ -231,8 +230,25 @@ async function ensureBucket(baseUrl, serviceRoleKey, bucket) {
       },
       `Storage-bucket ${bucket.id} bijwerken`,
       "bucket_update",
+    )
+    : await request(
+      baseUrl,
+      serviceRoleKey,
+      "/storage/v1/bucket",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          id: bucket.id,
+          name: bucket.name,
+          public: bucket.public,
+          fileSizeLimit: bucket.file_size_limit,
+          allowedMimeTypes: bucket.allowed_mime_types,
+        }),
+      },
+      `Storage-bucket ${bucket.id} aanmaken`,
+      "bucket_create",
     );
-  });
   await response.body?.cancel();
 }
 

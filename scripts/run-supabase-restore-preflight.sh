@@ -162,7 +162,7 @@ PY
 
   if ! node scripts/restore-supabase-storage.mjs --input-dir "$STORAGE_RESTORE_DIR" \
     >"$ITERATION_ROOT/storage-restore.json" 2>"$ITERATION_ROOT/storage-restore.log"; then
-    STORAGE_PHASE="$(sed -n 's/^STORAGE_PHASE=\(local_archive\|bucket_create\|bucket_update\|object_resume_check\|object_upload\|object_verify\)$/\1/p' "$ITERATION_ROOT/storage-restore.log" | tail -n 1)"
+    STORAGE_PHASE="$(sed -n 's/^STORAGE_PHASE=\(local_archive\|bucket_read\|bucket_create\|bucket_update\|object_resume_check\|object_upload\|object_verify\)$/\1/p' "$ITERATION_ROOT/storage-restore.log" | tail -n 1)"
     STORAGE_HTTP_STATUS="$(sed -n 's/^STORAGE_HTTP_STATUS=\([1-5][0-9][0-9]\|unknown\)$/\1/p' "$ITERATION_ROOT/storage-restore.log" | tail -n 1)"
     STORAGE_PHASE="${STORAGE_PHASE:-local_archive}"
     STORAGE_HTTP_STATUS="${STORAGE_HTTP_STATUS:-unknown}"
@@ -175,7 +175,7 @@ from datetime import datetime, timezone
 
 path, iteration, phase, http_status = sys.argv[1:]
 allowed_phases = {
-    "local_archive", "bucket_create", "bucket_update", "object_resume_check",
+    "local_archive", "bucket_read", "bucket_create", "bucket_update", "object_resume_check",
     "object_upload", "object_verify",
 }
 if phase not in allowed_phases:
