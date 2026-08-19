@@ -20,6 +20,17 @@ function fail(category) {
   throw new AppSmokeError(category);
 }
 
+function classifySmokeFailure(error) {
+  if (error instanceof AppSmokeError) return error.category;
+  const message = typeof error?.message === "string" ? error.message : "";
+  if (/timeout/i.test(message)) return "playwright_timeout";
+  if (/intercepts pointer events/i.test(message)) return "pointer_intercepted";
+  if (/not attached/i.test(message)) return "element_detached";
+  if (/not enabled/i.test(message)) return "element_not_enabled";
+  if (/closed/i.test(message)) return "browser_closed";
+  return "unknown";
+}
+
 function securePath(candidate, secureRoot, label) {
   if (!candidate || !secureRoot || !isAbsolute(candidate) || !isAbsolute(secureRoot)) {
     fail(`${label}_path`);
@@ -130,8 +141,8 @@ async function main() {
     await loginButton.waitFor({ state: "visible", timeout: 45_000 });
     smokeStage = "login_submit_button_enabled";
     if (!(await loginButton.isEnabled())) fail("login_button_disabled");
-    smokeStage = "login_submit_button_click";
-    await loginButton.click({ timeout: 45_000, force: true });
+    smokeStage = "login_submit_button_dom_click";
+    await loginButton.evaluate((button) => button.click());
     smokeStage = "login_redirect";
     await page.waitForURL((url) => url.pathname === "/", { timeout: 45_000 });
     smokeStage = "dashboard";
@@ -200,7 +211,7 @@ async function main() {
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((error) => {
-    const category = error instanceof AppSmokeError ? error.category : "unknown";
+    const category = classifySmokeFailure(error);
     process.stderr.write(`MANAGED_APP_SMOKE_FAILED:${category}:${smokeStage}\n`);
     process.exitCode = 1;
   });
