@@ -131,6 +131,7 @@ jobs:
           for file in \
             scripts/restore-supabase-backup.sh \
             scripts/restore-supabase-storage-with-metadata.sh \
+            scripts/download-b2-object-with-retry.sh \
             scripts/create-backup-validation.sql \
             scripts/normalize-supabase-validation-json.mjs \
             scripts/verify-supabase-restore.mjs \
@@ -214,10 +215,10 @@ jobs:
           umask 077
           MARKER_NAME="$(basename "$BACKUP_MARKER_KEY")"
           MARKER_PATH="$DRILL_ROOT/$MARKER_NAME"
-          aws s3 cp "s3://$B2_BUCKET_NAME/$BACKUP_MARKER_KEY" "$MARKER_PATH" \
-            --endpoint-url "$B2_S3_ENDPOINT" --only-show-errors --no-progress
-          aws s3 cp "s3://$B2_BUCKET_NAME/$BACKUP_MARKER_KEY.sha256" "$MARKER_PATH.sha256" \
-            --endpoint-url "$B2_S3_ENDPOINT" --only-show-errors --no-progress
+          scripts/download-b2-object-with-retry.sh \
+            "s3://$B2_BUCKET_NAME/$BACKUP_MARKER_KEY" "$MARKER_PATH" "$B2_S3_ENDPOINT"
+          scripts/download-b2-object-with-retry.sh \
+            "s3://$B2_BUCKET_NAME/$BACKUP_MARKER_KEY.sha256" "$MARKER_PATH.sha256" "$B2_S3_ENDPOINT"
           (cd "$DRILL_ROOT" && sha256sum -c "$MARKER_NAME.sha256")
 
           python3 - "$MARKER_PATH" <<'PY'
@@ -297,10 +298,10 @@ jobs:
           umask 077
           INVENTORY_MARKER_NAME="$(basename "$PLATFORM_INVENTORY_MARKER_KEY")"
           INVENTORY_MARKER_PATH="$DRILL_ROOT/platform-$INVENTORY_MARKER_NAME"
-          aws s3 cp "s3://$B2_BUCKET_NAME/$PLATFORM_INVENTORY_MARKER_KEY" "$INVENTORY_MARKER_PATH" \
-            --endpoint-url "$B2_S3_ENDPOINT" --only-show-errors --no-progress
-          aws s3 cp "s3://$B2_BUCKET_NAME/$PLATFORM_INVENTORY_MARKER_KEY.sha256" "$INVENTORY_MARKER_PATH.sha256" \
-            --endpoint-url "$B2_S3_ENDPOINT" --only-show-errors --no-progress
+          scripts/download-b2-object-with-retry.sh \
+            "s3://$B2_BUCKET_NAME/$PLATFORM_INVENTORY_MARKER_KEY" "$INVENTORY_MARKER_PATH" "$B2_S3_ENDPOINT"
+          scripts/download-b2-object-with-retry.sh \
+            "s3://$B2_BUCKET_NAME/$PLATFORM_INVENTORY_MARKER_KEY.sha256" "$INVENTORY_MARKER_PATH.sha256" "$B2_S3_ENDPOINT"
           CHECKSUM_NAME="$(awk '{print $2}' "$INVENTORY_MARKER_PATH.sha256")"
           EXPECTED_CHECKSUM_NAME="platform-inventory-marker-${INVENTORY_MARKER_NAME#manifest-}"
           test "$CHECKSUM_NAME" = "$EXPECTED_CHECKSUM_NAME" || {
@@ -352,10 +353,11 @@ jobs:
           set -Eeuo pipefail
           umask 077
           INVENTORY_PATH="$DRILL_ROOT/$(basename "$INVENTORY_KEY")"
-          aws s3 cp "s3://$B2_BUCKET_NAME/$INVENTORY_KEY" "$INVENTORY_PATH" \
-            --endpoint-url "$B2_S3_ENDPOINT" --only-show-errors --no-progress
-          aws s3 cp "s3://$B2_BUCKET_NAME/$INVENTORY_CHECKSUM_KEY" "$INVENTORY_PATH.sha256" \
-            --endpoint-url "$B2_S3_ENDPOINT" --only-show-errors --no-progress
+          scripts/download-b2-object-with-retry.sh \
+            "s3://$B2_BUCKET_NAME/$INVENTORY_KEY" "$INVENTORY_PATH" "$B2_S3_ENDPOINT" \
+            "$INVENTORY_BYTES" "$INVENTORY_SHA256"
+          scripts/download-b2-object-with-retry.sh \
+            "s3://$B2_BUCKET_NAME/$INVENTORY_CHECKSUM_KEY" "$INVENTORY_PATH.sha256" "$B2_S3_ENDPOINT"
           node scripts/verify-portable-checksum.mjs \
             "$INVENTORY_PATH" "$INVENTORY_PATH.sha256" "$INVENTORY_SHA256" >/dev/null
           test "$(stat -c '%s' "$INVENTORY_PATH")" = "$INVENTORY_BYTES"
@@ -368,14 +370,16 @@ jobs:
           umask 077
           DB_ARCHIVE_PATH="$DRILL_ROOT/$(basename "$DB_KEY")"
           STORAGE_ARCHIVE_PATH="$DRILL_ROOT/$(basename "$STORAGE_KEY")"
-          aws s3 cp "s3://$B2_BUCKET_NAME/$DB_KEY" "$DB_ARCHIVE_PATH" \
-            --endpoint-url "$B2_S3_ENDPOINT" --only-show-errors --no-progress
-          aws s3 cp "s3://$B2_BUCKET_NAME/$DB_CHECKSUM_KEY" "$DB_ARCHIVE_PATH.sha256" \
-            --endpoint-url "$B2_S3_ENDPOINT" --only-show-errors --no-progress
-          aws s3 cp "s3://$B2_BUCKET_NAME/$STORAGE_KEY" "$STORAGE_ARCHIVE_PATH" \
-            --endpoint-url "$B2_S3_ENDPOINT" --only-show-errors --no-progress
-          aws s3 cp "s3://$B2_BUCKET_NAME/$STORAGE_CHECKSUM_KEY" "$STORAGE_ARCHIVE_PATH.sha256" \
-            --endpoint-url "$B2_S3_ENDPOINT" --only-show-errors --no-progress
+          scripts/download-b2-object-with-retry.sh \
+            "s3://$B2_BUCKET_NAME/$DB_KEY" "$DB_ARCHIVE_PATH" "$B2_S3_ENDPOINT" \
+            "$DB_BYTES" "$DB_SHA256"
+          scripts/download-b2-object-with-retry.sh \
+            "s3://$B2_BUCKET_NAME/$DB_CHECKSUM_KEY" "$DB_ARCHIVE_PATH.sha256" "$B2_S3_ENDPOINT"
+          scripts/download-b2-object-with-retry.sh \
+            "s3://$B2_BUCKET_NAME/$STORAGE_KEY" "$STORAGE_ARCHIVE_PATH" "$B2_S3_ENDPOINT" \
+            "$STORAGE_BYTES" "$STORAGE_SHA256"
+          scripts/download-b2-object-with-retry.sh \
+            "s3://$B2_BUCKET_NAME/$STORAGE_CHECKSUM_KEY" "$STORAGE_ARCHIVE_PATH.sha256" "$B2_S3_ENDPOINT"
           (cd "$DRILL_ROOT" && sha256sum -c "$(basename "$DB_ARCHIVE_PATH").sha256")
           (cd "$DRILL_ROOT" && sha256sum -c "$(basename "$STORAGE_ARCHIVE_PATH").sha256")
           test "$(stat -c '%s' "$DB_ARCHIVE_PATH")" = "$DB_BYTES"

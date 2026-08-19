@@ -1,6 +1,6 @@
 # P0 — back-upketen, Storage en restore
 
-**Status:** B2-bewijs en versleutelde kosteloze restorepreflight groen; managed restore nog niet uitgevoerd
+**Status:** B2-bewijs en versleutelde kosteloze restorepreflight groen; managed database en Storage hersteld, functionele verificatie nog te hervatten
 **Datum:** 2026-08-19
 **Eigenaar:** technisch beheer / incidentleider
 
@@ -81,6 +81,10 @@ tokens of documentinhoud.
 
 - Iedere B2-upload gebruikt AWS-retries plus vijf expliciete uploadpogingen met
   exponentiële wachttijd.
+- Iedere managed B2-download gebruikt maximaal drie expliciete pogingen. Een
+  incomplete of inhoudelijk afwijkende tijdelijke download wordt vóór de volgende
+  poging verwijderd, blijft uitsluitend op LUKS-opslag en wordt pas atomisch als
+  bruikbaar bestand vrijgegeven nadat de verwachte lengte en SHA-256 kloppen.
 - De `backup-status/.../manifest-*.json` completion marker wordt pas na alle
   uploads en lokale controles geüpload.
 - `supabase-backup-watchdog.yml` draait iedere zes uur. De B2-jobs controleren,
@@ -275,6 +279,11 @@ waarden op hetzelfde doel verder. Een niet-leeg doel zonder die state, een ander
 doelproject of een andere back-up wordt fail-closed geweigerd. Storage wordt bij
 een retry idempotent hervat; de database wordt niet opnieuw geladen. De state
 wordt pas na alle technische, functionele en cleanupchecks verwijderd.
+
+Een tijdelijke afgebroken B2-stream verandert deze binding niet. Hervat na een
+groene retryfix op exact hetzelfde doelproject; maak geen vervangend project aan.
+De workflow verwijdert iedere partiële download binnen LUKS en probeert een
+object maximaal drie keer, waarna hij fail-closed stopt.
 
 De managed workflow voert aanvullend uit:
 
