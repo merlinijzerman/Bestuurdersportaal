@@ -167,8 +167,19 @@ test("managed restore scheidt keys, hervat exact, test Auth/RLS/app en lekt geen
   assert.match(text, /cryptsetup luksFormat/);
   assert.match(text, /setsid \.\/node_modules\/\.bin\/next start/);
   assert.doesNotMatch(text, /npm run start > "\$APP_LOG"/);
-  assert.match(text, /kill -- "-\$APP_PID"/);
+  assert.match(text, /kill -- "-\$pid"/);
+  assert.match(text, /kill -- "-\$PID"/);
   assert.match(text, /sudo fuser -km "\$MANAGED_RESTORE_ROOT"/);
+
+  // De smoke draait over TLS omdat de app HSTS en upgrade-insecure-requests
+  // meestuurt; over plain http laadt Chrome de _next-chunks niet en hydrateert
+  // React nooit. De terminator is een wegwerplaag binnen LUKS — de
+  // productieheaders in next.config.ts blijven onaangeroerd.
+  assert.match(text, /serve-managed-smoke-tls\.mjs/);
+  assert.match(text, /openssl req -x509/);
+  assert.match(text, /APP_SMOKE_PORT=3443 APP_SMOKE_SCHEME=https/);
+  assert.match(text, /TLS_CERT="\$DRILL_ROOT\/smoke-tls\.crt"/);
+  assert.doesNotMatch(text, /APP_SMOKE_PORT=3000 node/);
   assert.match(text, /APP_WORKTREE=\$SECURE_ROOT\/app-worktree/);
   assert.match(text, /Versleutelde productiegegevens aantoonbaar vernietigen[\s\S]*?if: always\(\)/);
   assert.match(text, /create-supabase-managed-restore-evidence\.mjs/);
@@ -218,6 +229,23 @@ test("managed restore scheidt keys, hervat exact, test Auth/RLS/app en lekt geen
   const invullen = smoke.indexOf('getByLabel("E-mailadres")');
   assert.ok(hydratie > 0 && invullen > hydratie);
   assert.match(smoke, /MANAGED_APP_SMOKE_DIAGNOSTIC/);
+  assert.match(smoke, /APP_SMOKE_SCHEME/);
+
+  // De TLS-terminator bestaat alleen omdat deze twee productieheaders blijven
+  // staan. Verdwijnen ze, dan is de wegwerplaag zinloos geworden en moet die
+  // keuze bewust opnieuw worden gemaakt in plaats van stil mee te schuiven.
+  const config = await readFile(path.join(repositoryRoot, "next.config.ts"), "utf8");
+  assert.match(config, /Strict-Transport-Security/);
+  assert.match(config, /upgrade-insecure-requests/);
+
+  // Alles wat door de terminator loopt is herstelde productiedata: geen paden,
+  // hosts, headers of bodies in de logs.
+  const tls = await readFile(
+    path.join(repositoryRoot, "scripts", "serve-managed-smoke-tls.mjs"),
+    "utf8"
+  );
+  assert.doesNotMatch(tls, /console\.(?:log|info|warn|error|debug)/);
+  assert.match(tls, /"x-forwarded-proto": "https"/);
 });
 
 test("Auth-configuratiediagnose is main-only, read-only en publiceert geen waarden", async () => {

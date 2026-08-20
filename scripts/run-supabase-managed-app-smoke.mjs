@@ -183,7 +183,12 @@ async function main() {
   const foreign = state.canaries[1];
   const port = process.env.APP_SMOKE_PORT ?? "3000";
   if (!/^\d{2,5}$/.test(port)) fail("app_port");
-  const origin = `http://${own.host}:${port}`;
+  // De oefening draait achter een wegwerp-TLS-terminator, omdat de app in
+  // productie HSTS en een CSP met upgrade-insecure-requests meestuurt. Over
+  // plain http upgradet Chrome dan alle subresources en hydrateert React nooit.
+  const scheme = process.env.APP_SMOKE_SCHEME ?? "https";
+  if (scheme !== "https" && scheme !== "http") fail("app_scheme");
+  const origin = `${scheme}://${own.host}:${port}`;
   smokeStage = "browser_executable";
   const executablePath = await findBrowserExecutable(process.env.PLAYWRIGHT_CHROME_PATH);
   const { chromium } = await import("@playwright/test");
@@ -195,6 +200,9 @@ async function main() {
     headless: true,
     acceptDownloads: false,
     downloadsPath,
+    // Het certificaat is een wegwerpexemplaar dat alleen binnen deze run en
+    // binnen het versleutelde volume bestaat; een echte CA is hier zinloos.
+    ignoreHTTPSErrors: true,
     args: [
       `--host-resolver-rules=MAP ${own.host} 127.0.0.1,EXCLUDE localhost`,
       "--no-proxy-server",
