@@ -10,20 +10,19 @@
 //
 //  GET ?status=open  — optioneel statusfilter. Tenant-isolatie via RLS
 //  (anon-key + fonds_id). Geen service-role.
+//
+//  W2: auth-preamble via withFondsRoute v1 (de naad). Gedrag ongewijzigd — de
+//  wrapper doet de auth + profielresolutie; de query en respons zijn identiek.
 // ============================================================
 
-import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { NextResponse, type NextRequest } from "next/server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(req: NextRequest) {
+export const GET = withFondsRoute({}, async (ctx, req: NextRequest) => {
   try {
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+    const supabase = ctx.supabase;
 
     const url = new URL(req.url);
     const status = url.searchParams.get("status"); // optioneel filter
@@ -57,4 +56,4 @@ export async function GET(req: NextRequest) {
     console.error("Fout in GET /api/classificatie/queue:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

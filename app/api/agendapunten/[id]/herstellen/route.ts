@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { NextResponse } from "next/server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 
 // ============================================================
 //  POST /api/agendapunten/[id]/herstellen
@@ -7,20 +7,15 @@ import { createServerSupabase } from "@/core/lib/supabase-server";
 //  Rechten: voorzitter + beheerder (niet de eigenaar zelf —
 //  herstel hoort via overleg met de voorzitter).
 //  Logt een 'agendapunt_hersteld'-event in agendapunt_log.
+//
+//  W2: auth-preamble via withFondsRoute v1 (de naad). Gedrag ongewijzigd — de
+//  wrapper levert user + rol via ctx; de 404/400-checks, de rolgate en de
+//  auditlog blijven exact in de route staan (audit is deploy 3, niet v1).
 // ============================================================
-export async function POST(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const POST = withFondsRoute({}, async (ctx, _req, params) => {
   try {
-    const { id } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const { id } = params as { id: string };
+    const supabase = ctx.supabase;
 
     const { data: agendapunt } = await supabase
       .from("agendapunten")
@@ -39,13 +34,9 @@ export async function POST(
       );
     }
 
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("rol")
-      .eq("id", user.id)
-      .single();
-
-    const rol = (profiel as { rol?: string } | null)?.rol;
+    // Rol komt uit de wrapper-context (haalProfiel). De rolgate blijft in de
+    // route — capability-/rolmodel is deploy 3, niet v1.
+    const rol = ctx.rol;
     if (rol !== "voorzitter" && rol !== "beheerder") {
       return NextResponse.json(
         { error: "Alleen voorzitter of beheerder mag een agendapunt herstellen" },
@@ -72,7 +63,7 @@ export async function POST(
     await supabase.from("agendapunt_log").insert({
       agendapunt_id: id,
       event_type: "agendapunt_hersteld",
-      actor_id: user.id,
+      actor_id: ctx.gebruikerId,
       payload: {},
     });
 
@@ -81,4 +72,4 @@ export async function POST(
     console.error("Fout in POST /api/agendapunten/[id]/herstellen:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});
