@@ -91,8 +91,26 @@ export async function seed(admin = adminClient()) {
   await seedCatalogus(admin);
   await seedRisicos(admin);
   await seedGesprekken(admin, users);
+  await seedProcedures(admin);
 
   return { fondsId: FONDS_ID, users };
+}
+
+// ── Tier 2: procedures ──────────────────────────────────────────────────────
+async function seedProcedures(admin) {
+  // Geen delete: een lopende procedure is bewust niet verwijderbaar (trigger).
+  // Upsert-ignore houdt de vaste fixture idempotent (inhoud verandert nooit).
+  const { error } = await admin.from("procedures").upsert(
+    {
+      id: FIX.procedure1,
+      fonds_id: FONDS_ID,
+      template_code: "algemeen",
+      titel: "W1 Procedure",
+      status: "lopend",
+    },
+    { onConflict: "id", ignoreDuplicates: true }
+  );
+  if (error) throw new Error(`procedures: ${error.message}`);
 }
 
 // ── Tier 2: gesprekken (eigenaar = auth.uid, dus per-run user-id) ───────────

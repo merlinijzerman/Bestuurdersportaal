@@ -86,6 +86,16 @@ export const scenarios = [
   { slug: "gesprekken-id.delete.bestuurder.404", method: "DELETE", path: `/api/gesprekken/${FIX.gesprekOnbekend}`, rol: "bestuurder", verwacht: "json" },
   { slug: "gesprekken-id.delete.bestuurder.200", method: "DELETE", path: `/api/gesprekken/${FIX.gesprek1}`, rol: "bestuurder", verwacht: "json" },
 
+  // ── /api/procedures/[id] — profielen(naam) · [id] · 404 ────────────────────
+  { slug: "procedures-id.patch.anon", method: "PATCH", path: `/api/procedures/${FIX.procedure1}`, rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "procedures-id.patch.bestuurder.404", method: "PATCH", path: `/api/procedures/${FIX.procedureOnbekend}`, rol: "bestuurder", body: { motivering: "W1 karakterisering", titel: "x" }, verwacht: "json" },
+
+  // ── /api/procedures/[id]/requirements — profielen(naam,rol) · GET/POST ─────
+  { slug: "procedures-requirements.get.bestuurder", method: "GET", path: `/api/procedures/${FIX.procedure1}/requirements`, rol: "bestuurder", verwacht: "json" },
+  { slug: "procedures-requirements.get.anon", method: "GET", path: `/api/procedures/${FIX.procedure1}/requirements`, rol: "anon", verwacht: "json" },
+  { slug: "procedures-requirements.post.bestuurder.403", method: "POST", path: `/api/procedures/${FIX.procedure1}/requirements`, rol: "bestuurder", body: { label: "x" }, verwacht: "json" },
+  { slug: "procedures-requirements.post.beheerder.invalid", method: "POST", path: `/api/procedures/${FIX.procedure1}/requirements`, rol: "beheerder", body: LEEG, verwacht: "json" },
+
   // ── /api/zoeken — rate-limit · host-guard ──────────────────────────────────
   { slug: "zoeken.get.anon", method: "GET", path: "/api/zoeken?q=test", rol: "anon", verwacht: "json" },
   {
