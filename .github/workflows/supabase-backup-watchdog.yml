@@ -80,11 +80,26 @@ jobs:
     name: Alertkanaalconfiguratie controleren
     if: ${{ github.event_name != 'workflow_run' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 10
     environment: production-backup
     env:
       BACKUP_ALERT_WEBHOOK_URL: ${{ secrets.BACKUP_ALERT_WEBHOOK_URL }}
     steps:
+      # De fail-closed controle leest de workflow met js-yaml en heeft dus de
+      # repository én de devDependencies nodig. Zonder deze drie stappen faalt
+      # de job op MODULE_NOT_FOUND in plaats van op de bewaking zelf.
+      - name: Repository ophalen
+        uses: actions/checkout@v4.2.2
+
+      - name: Node.js instellen
+        uses: actions/setup-node@v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Dependencies installeren
+        run: npm ci
+
       - name: Alertkanaal afzonderlijk controleren
         shell: bash
         run: |

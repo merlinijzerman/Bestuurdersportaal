@@ -50,6 +50,20 @@ test("het goedgekeurde meldkanaal staat in code en is per kanaal fail-closed", a
     text,
     /Synthetische mislukking zichtbaar maken via GitHub[\s\S]*?exit 1/
   );
+
+  // De fail-closed controle leest de workflow met js-yaml (devDependency). Een
+  // job zonder checkout, Node en npm ci faalt dan op MODULE_NOT_FOUND en meldt
+  // dus een fout in de bewaking die er niet is.
+  const configuratiejob = text.slice(
+    text.indexOf("  alert-channel-configuration:"),
+    text.indexOf("  failure-alert:")
+  );
+  assert.match(configuratiejob, /uses: actions\/checkout/);
+  assert.match(configuratiejob, /uses: actions\/setup-node/);
+  assert.match(configuratiejob, /run: npm ci/);
+  assert.ok(
+    configuratiejob.indexOf("npm ci") < configuratiejob.indexOf("verify-watchdog-fail-closed.mjs")
+  );
 });
 
 test("back-up publiceert restorecontract 2 zonder redundante managed datafiles", async () => {
