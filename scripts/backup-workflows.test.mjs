@@ -121,6 +121,8 @@ test("managed restore scheidt keys, hervat exact, test Auth/RLS/app en lekt geen
   assert.match(text.slice(inventoryStep, archiveStep), /verify-portable-checksum\.mjs/);
   assert.doesNotMatch(text.slice(inventoryStep, archiveStep), /sha256sum -c/);
   assert.match(text, /scripts\/download-b2-object-with-retry\.sh/);
+  assert.match(text, /B2_DOWNLOAD_MAX_ATTEMPTS: "3"/);
+  assert.match(text, /B2_DOWNLOAD_RETRY_DELAY_SECONDS: "5"/);
   const downloadInvocations = text.slice(markerStep).split("\n").filter(
     (line) => line.trim() === "scripts/download-b2-object-with-retry.sh \\",
   );
