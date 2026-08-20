@@ -96,6 +96,22 @@ SQL_P5="supabase/checks/2026_08_03_p5_monitoring.sql"
 # is een actieve predicaat-uitbreiding en geen vanzelfsprekendheid. Inclusief
 # nulgrens G23: bestuurder en voorzitter gedragen zich exact als daarvoor.
 SQL_BB="supabase/checks/2026_08_05_bb_rolgrenzen.sql"
+# ── V4 (2026-08-20) — suites die geschreven waren maar nergens automatisch
+#    draaiden; geïnventariseerd + geverifieerd groen tegen een schone PG17-stack
+#    (ticket V4). Alleen relevante, self-seeding, hard-falende suites zijn hier
+#    aangesloten. Rode suites (fondsleden, a-rollen/capabilities, t7/t8) kregen
+#    een eigen issue; read-only diagnoses (f0, t14b-driftmeting, vraagrouter-
+#    preview) en de handmatige checklist 06_20e blijven bewust búiten deze gate.
+# P3-B — rol zetten via het service-role-pad (besluit 0082, B-4): bevriezing-
+# trigger laat service-role vrij, rol-CHECK weigert ongeldige waarde. ASSERT-
+# gebaseerd (plpgsql.check_asserts staat in CI aan).
+SQL_P3B="supabase/checks/2026_07_27_p3b_rol_service_role.sql"
+# Plateau B — de reflectieflow is server-controlled (besluit 0110): client kan
+# bronset/beurtteller/afronding niet sturen; dekt AC-18 en AC-24.
+SQL_REFLECTIE="supabase/checks/2026_08_05_b_reflectie_flow.sql"
+# T5 — comparison_results + fn_schrijf_vergelijking: RLS-isolatie, schrijfpad
+# alleen via de functie, fonds server-side uit auth.uid(), tenant-guard (42501).
+SQL_T5VGL="supabase/checks/2026_08_13_t5_vergelijking.sql"
 
 echo "== [1/4] tsc --noEmit --skipLibCheck =="
 ./node_modules/.bin/tsc --noEmit --skipLibCheck
@@ -184,6 +200,16 @@ echo "-- AI-begrenzing (quota, kill switch, modelallowlist, vier-ogenheractiveri
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_AIB"
 echo
 
+echo "-- P3-B rol via service-role-pad (bevriezing-trigger vrij, rol-CHECK weigert ongeldig) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P3B"
+echo
+echo "-- Plateau B reflectieflow server-controlled (bronset/beurtteller/afronding niet client-stuurbaar) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_REFLECTIE"
+echo
+echo "-- T5 vergelijking (comparison_results RLS + schrijfpad-only via functie + tenant-guard) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_T5VGL"
+echo
+
 echo "============================================================================"
 echo "GROEN: volledige §15 cross-tenant suite geslaagd (app-laag + DB-laag)."
 echo "  AI-beg quota/kill switch/vier ogen            (DB-laag; race apart)"
@@ -208,4 +234,7 @@ echo "  R1   gedragsbewijs K-01/H-01/H-02/M-01                                (D
 echo "  MP   maak_profiel deterministisch fonds + zelfregistratiegrens PT-1   (DB-laag)"
 echo "  P5   monitoringtabellen deny-by-default + RPC niet-anon + retentie    (DB-laag)"
 echo "  BB   rolgrenzen bestuursbureau + nulgrens G23                          (DB-laag)"
+echo "  P3-B rol via service-role-pad (bevriezing-trigger + rol-CHECK)         (DB-laag, V4)"
+echo "  B    reflectieflow server-controlled (bronset/beurtteller/afronding)   (DB-laag, V4)"
+echo "  T5   vergelijking comparison_results RLS + schrijfpad-only + guard      (DB-laag, V4)"
 echo "============================================================================"
