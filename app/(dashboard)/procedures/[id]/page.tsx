@@ -34,6 +34,7 @@ import {
 } from "@/core/lib/procedure-fase-status";
 import { haalFondsleden, weergaveNaam, initialen } from "@/core/lib/fondsleden";
 import { kiesWeergave } from "@/core/lib/procedure-detail-weergave";
+import { VERGADERING_KOLOMMEN_AGENDA } from "@/core/lib/kolommen";
 
 // Forceer dynamische rendering: deze page leest live data uit Supabase
 // (decision-state, readiness, evidence) en mag absoluut niet door de
@@ -249,7 +250,7 @@ export default async function ProcedureDetailPage({
         .order("datum", { ascending: false }),
       supabase
         .from("vergaderingen")
-        .select("id, titel, datum, locatie")
+        .select(VERGADERING_KOLOMMEN_AGENDA)
         .eq("fonds_id", profiel?.fonds_id || "")
         .gte("datum", new Date().toISOString())
         .order("datum", { ascending: true }),

@@ -15,6 +15,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { requireCapability } from "@/core/lib/capabilities";
+import { ORGANISATIEPROFIEL_KOLOMMEN } from "@/core/lib/kolommen";
 
 export const dynamic = "force-dynamic";
 
@@ -27,10 +28,6 @@ const STRATEGISCHE_VELDEN = [
   "strategische_speerpunten",
   "risicohouding",
 ] as const;
-
-const PROFIEL_KOLOMMEN =
-  "organisatietype, uitvoerende_partijen, omvang, kernfeiten, missie, visie, " +
-  "strategische_speerpunten, risicohouding, peildatum, bijgewerkt_door, bijgewerkt_op";
 
 function tekstOfNull(waarde: unknown): string | null {
   if (typeof waarde !== "string") return null;
@@ -55,7 +52,7 @@ export async function GET() {
     // RLS beperkt de SELECT tot het eigen fonds; er is er hoogstens één.
     const { data: profiel } = await supabase
       .from("organisatie_profielen")
-      .select(PROFIEL_KOLOMMEN)
+      .select(ORGANISATIEPROFIEL_KOLOMMEN)
       .maybeSingle();
 
     return NextResponse.json({ profiel: profiel ?? null, rol: eigen?.rol ?? null });

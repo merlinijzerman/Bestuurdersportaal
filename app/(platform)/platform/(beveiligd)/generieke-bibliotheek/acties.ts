@@ -43,6 +43,7 @@ import {
   QUARANTAINE_PAD_PATROON,
 } from "@/platform/lib/generiek-pipeline";
 import { herindexeerDocument } from "@/core/lib/reindex";
+import { DOCUMENT_KOLOMMEN_LEVENSCYCLUS } from "@/core/lib/kolommen";
 import { INDEXERING_VERSIE, PREFIX_MODEL, PREFIX_PROMPT_VERSIE } from "@/core/lib/chunk-ingest";
 
 const LIJST_PAD = "/platform/generieke-bibliotheek";
@@ -539,7 +540,7 @@ export async function curatieDepreceren(documentId: string, reden: string): Prom
         }
         const { data: huidig } = await svc
           .from("documenten")
-          .select("id, titel, status, bronstatus, geldig_tot, bibliotheek")
+          .select(DOCUMENT_KOLOMMEN_LEVENSCYCLUS)
           .eq("id", documentId)
           .maybeSingle();
 
@@ -612,7 +613,7 @@ export async function curatieWithdrawn(documentId: string, reden: string): Promi
         }
         const { data: huidig } = await svc
           .from("documenten")
-          .select("id, titel, status, bronstatus, geldig_tot, bibliotheek")
+          .select(DOCUMENT_KOLOMMEN_LEVENSCYCLUS)
           .eq("id", documentId)
           .maybeSingle();
 

@@ -24,6 +24,7 @@
 import "server-only";
 import { cache } from "react";
 import { createServerSupabase } from "@/core/lib/supabase-server";
+import { VERGADERING_KOLOMMEN_AGENDA } from "@/core/lib/kolommen";
 import { haalFondsSessie } from "@/core/lib/fonds-sessie";
 import { isBureauRol } from "@/core/lib/bureau-gate";
 import {
@@ -106,7 +107,7 @@ export const getPortaalContext = cache(
     // Eerstvolgende vergadering (RLS: eigen fonds).
     const { data: vergaderingenRaw } = await supabase
       .from("vergaderingen")
-      .select("id, titel, datum, locatie")
+      .select(VERGADERING_KOLOMMEN_AGENDA)
       .eq("fonds_id", fondsId)
       .gte("datum", nu)
       .order("datum", { ascending: true })

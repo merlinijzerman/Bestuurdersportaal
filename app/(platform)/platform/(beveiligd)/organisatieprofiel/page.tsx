@@ -17,16 +17,12 @@
 
 import { withPlatformRead } from "@/platform/lib/platform-wrapper";
 import { huidigePlatformIdentiteit } from "@/platform/lib/platform-auth";
+import { ORGANISATIEPROFIEL_KOLOMMEN_MET_FONDS } from "@/core/lib/kolommen";
 import OrganisatieprofielClient from "./_components/OrganisatieprofielClient";
 
 export const dynamic = "force-dynamic";
 
 const CAP = "platform.config.manage"; // zie besluit B-OP5-1
-
-const PROFIEL_KOLOMMEN =
-  "fonds_id, organisatietype, uitvoerende_partijen, omvang, kernfeiten, " +
-  "missie, visie, strategische_speerpunten, risicohouding, peildatum, " +
-  "bijgewerkt_door, bijgewerkt_op";
 
 export default async function OrganisatieprofielPagina() {
   const identiteit = await huidigePlatformIdentiteit();
@@ -44,7 +40,7 @@ export default async function OrganisatieprofielPagina() {
       async (svc) => {
         const [{ data: f }, { data: p }] = await Promise.all([
           svc.from("fondsen").select("id, naam").order("naam"),
-          svc.from("organisatie_profielen").select(PROFIEL_KOLOMMEN),
+          svc.from("organisatie_profielen").select(ORGANISATIEPROFIEL_KOLOMMEN_MET_FONDS),
         ]);
         const fondsenUit = (f ?? []) as { id: string; naam: string }[];
         const profielenUit = (p ?? []) as unknown as Record<string, unknown>[];

@@ -121,6 +121,7 @@ import {
   type VraagScope,
 } from "@/core/lib/vraagrouter";
 import { verfijnVraagrouteMetModel } from "@/core/lib/vraagrouter-model";
+import { RISICO_KOLOMMEN_MATRIX } from "@/core/lib/kolommen";
 import {
   bredeDekking,
   dekkingsInstructie,
@@ -968,9 +969,7 @@ export async function POST(req: NextRequest) {
         // Fondsbreed: alle risico's (RLS) + de recentste weging-/sluitregels.
         const { data: risicoRows } = await supabase
           .from("risicos")
-          .select(
-            "id, categorie, titel, toelichting, kans, impact, niveau, type_risico, status, eigenaar_naam, volgende_beoordeling, gesloten_op, sluit_motivering"
-          )
+          .select(RISICO_KOLOMMEN_MATRIX)
           .eq("fonds_id", fondsId)
           .order("niveau", { ascending: false });
         const risicos = (risicoRows ?? []) as RisicoRij[];
@@ -997,9 +996,7 @@ export async function POST(req: NextRequest) {
         // Verdieping op één risico. RLS-weigering bij een vreemd-fonds-id.
         const { data: r } = await supabase
           .from("risicos")
-          .select(
-            "id, categorie, titel, toelichting, kans, impact, niveau, type_risico, status, eigenaar_naam, volgende_beoordeling, gesloten_op, sluit_motivering"
-          )
+          .select(RISICO_KOLOMMEN_MATRIX)
           .eq("id", moduleScope.risico_id)
           .maybeSingle();
         if (!r?.id) {

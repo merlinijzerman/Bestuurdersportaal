@@ -12,6 +12,7 @@
 
 import { NextResponse } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
+import { PROCEDURE_KOLOMMEN_DOSSIER } from "@/core/lib/kolommen";
 
 export const dynamic = "force-dynamic";
 
@@ -30,9 +31,7 @@ export async function GET() {
     // dossier-reads). We selecteren de periode-/metadata-velden hier.
     const { data: procedures, error: procFout } = await supabase
       .from("procedures")
-      .select(
-        "id, template_code, titel, beschrijving, status, gestart_op, deadline, periode_type, periode_start, periode_eind, periode_jaar, procesmodel_id"
-      )
+      .select(PROCEDURE_KOLOMMEN_DOSSIER)
       .order("gestart_op", { ascending: false });
     if (procFout) {
       console.error("Dossiers ophalen fout:", procFout);

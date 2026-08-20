@@ -16,6 +16,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { requireCapability } from "@/core/lib/capabilities";
+import { PROCEDURE_KOLOMMEN_DOSSIER } from "@/core/lib/kolommen";
 import {
   DOSSIER_STATUSSEN,
   PERIODE_TYPES,
@@ -41,9 +42,7 @@ export async function GET(
 
     const { data: dossier, error } = await supabase
       .from("procedures")
-      .select(
-        "id, template_code, titel, beschrijving, status, gestart_op, deadline, periode_type, periode_start, periode_eind, periode_jaar, procesmodel_id"
-      )
+      .select(PROCEDURE_KOLOMMEN_DOSSIER)
       .eq("id", id)
       .maybeSingle();
     if (error || !dossier) {
