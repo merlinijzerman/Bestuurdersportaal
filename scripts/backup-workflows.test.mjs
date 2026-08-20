@@ -231,6 +231,12 @@ test("managed restore scheidt keys, hervat exact, test Auth/RLS/app en lekt geen
   assert.match(smoke, /MANAGED_APP_SMOKE_DIAGNOSTIC/);
   assert.match(smoke, /APP_SMOKE_SCHEME/);
 
+  // De dashboardcontrole mag niet afhangen van het fondsmanifest: welke
+  // modules in de nav staan is een configuratiekeuze per fonds, geen bewijs
+  // dat het herstel is geslaagd.
+  assert.match(smoke, /a\[href="\/profiel"\]/);
+  assert.doesNotMatch(smoke, /getByRole\("link", \{ name: "Home"/);
+
   // De TLS-terminator bestaat alleen omdat deze twee productieheaders blijven
   // staan. Verdwijnen ze, dan is de wegwerplaag zinloos geworden en moet die
   // keuze bewust opnieuw worden gemaakt in plaats van stil mee te schuiven.
