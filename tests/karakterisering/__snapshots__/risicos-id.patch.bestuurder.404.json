@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Risico niet gevonden"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 404
+}

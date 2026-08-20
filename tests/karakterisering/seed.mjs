@@ -80,8 +80,26 @@ export async function seed(admin = adminClient()) {
   // 4. Domein-fixtures (tier 2).
   await seedDocumenten(admin);
   await seedCatalogus(admin);
+  await seedRisicos(admin);
 
   return { fondsId: FONDS_ID, users };
+}
+
+// ── Tier 2: risico's ────────────────────────────────────────────────────────
+async function seedRisicos(admin) {
+  await admin.from("risicos").delete().eq("fonds_id", FONDS_ID);
+  const { error } = await admin.from("risicos").insert({
+    id: FIX.risico1,
+    fonds_id: FONDS_ID,
+    titel: "W1 Risico",
+    categorie: "operationeel_datakwaliteit",
+    kans: 3,
+    impact: 3,
+    niveau: "middel",
+    type_risico: "structureel",
+    status: "actief",
+  });
+  if (error) throw new Error(`risicos: ${error.message}`);
 }
 
 // ── Tier 2: catalogus (procesmodellen + organen/gremia) ─────────────────────

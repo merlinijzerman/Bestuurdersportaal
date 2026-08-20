@@ -36,6 +36,9 @@ export const FIX = {
   procesmodel1: "00000000-0000-4000-8000-0000000b0001",
   procesmodelOnbekend: "00000000-0000-4000-8000-0000000b00ff",
   gremium1: "00000000-0000-4000-8000-0000000c0001",
+  risicoOnbekend: "00000000-0000-4000-8000-0000000715ff",
+  decisionOnbekend: "00000000-0000-4000-8000-00000000dec0",
+  decisionRiskOnbekend: "00000000-0000-4000-8000-0000dec0715f",
 };
 
 // Vaste bytes voor de bestand-download (BESLUIT: body_sha256 i.p.v. ruwe bytes).
