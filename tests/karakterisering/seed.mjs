@@ -79,8 +79,34 @@ export async function seed(admin = adminClient()) {
 
   // 4. Domein-fixtures (tier 2).
   await seedDocumenten(admin);
+  await seedCatalogus(admin);
 
   return { fondsId: FONDS_ID, users };
+}
+
+// ── Tier 2: catalogus (procesmodellen + organen/gremia) ─────────────────────
+async function seedCatalogus(admin) {
+  await admin.from("procesmodellen").delete().eq("fonds_id", FONDS_ID);
+  await admin.from("gremia").delete().eq("fonds_id", FONDS_ID);
+
+  {
+    const { error } = await admin.from("procesmodellen").insert({
+      id: FIX.procesmodel1,
+      fonds_id: FONDS_ID,
+      generiek_procestype: "jaarplanning",
+      naam: "W1 Procesmodel",
+    });
+    if (error) throw new Error(`procesmodellen: ${error.message}`);
+  }
+  {
+    const { error } = await admin.from("gremia").insert({
+      id: FIX.gremium1,
+      fonds_id: FONDS_ID,
+      naam: "W1 Gremium",
+      type: "besluitvormend",
+    });
+    if (error) throw new Error(`gremia: ${error.message}`);
+  }
 }
 
 // ── Tier 2: documenten ──────────────────────────────────────────────────────

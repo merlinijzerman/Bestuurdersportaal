@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Naam is verplicht"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 400
+}
