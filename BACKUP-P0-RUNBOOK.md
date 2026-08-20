@@ -147,6 +147,15 @@ geen back-up, completion marker of B2-object aangeraakt.
   dat je de GitHub-melding hebt ontvangen; die ontvangstcontrole is onderdeel
   van de test en kan niet geautomatiseerd worden.
 
+**Laatst volledig bevestigd: 2026-08-20**, run 32348713703 — run rood geworden
+én de GitHub-notificatie aantoonbaar ontvangen. Herhaal deze test bij elke
+wijziging aan de bewaking, en verder minimaal halfjaarlijks: is deze datum meer
+dan zes maanden oud, dan is niet meer aangetoond dat een melding de ontvanger
+nog bereikt. Let daarbij op wie de ontvanger is — GitHub stuurt notificaties
+over scheduled workflows naar de gebruiker die de workflow heeft aangemaakt, en
+die ontvanger verschuift stilzwijgend als iemand anders de cron-expressie
+wijzigt.
+
 ## Platformconfiguratie en secrets
 
 De Management API-inventaris gebruikt uitsluitend read-only endpoints. De
