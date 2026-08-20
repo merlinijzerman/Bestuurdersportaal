@@ -165,6 +165,10 @@ test("managed restore scheidt keys, hervat exact, test Auth/RLS/app en lekt geen
   assert.match(text, /create-supabase-managed-restore-state\.sql|RESTORE_STATE_BACKUP_MARKER_KEY/);
   assert.match(text, /update-supabase-managed-restore-state\.sh finalize/);
   assert.match(text, /cryptsetup luksFormat/);
+  assert.match(text, /setsid \.\/node_modules\/\.bin\/next start/);
+  assert.doesNotMatch(text, /npm run start > "\$APP_LOG"/);
+  assert.match(text, /kill -- "-\$APP_PID"/);
+  assert.match(text, /sudo fuser -km "\$MANAGED_RESTORE_ROOT"/);
   assert.match(text, /APP_WORKTREE=\$SECURE_ROOT\/app-worktree/);
   assert.match(text, /Versleutelde productiegegevens aantoonbaar vernietigen[\s\S]*?if: always\(\)/);
   assert.match(text, /create-supabase-managed-restore-evidence\.mjs/);
@@ -198,6 +202,10 @@ test("managed restore scheidt keys, hervat exact, test Auth/RLS/app en lekt geen
   assert.match(stateUpdater, /updated_at = now\(\)/);
   assert.doesNotMatch(stateSql, /managed_restore_state/);
   assert.doesNotMatch(stateSql, /bestuurdersportaal_restore_private\.resume_state/);
+
+  const login = await readFile(path.join(repositoryRoot, "app", "login", "page.tsx"), "utf8");
+  assert.match(login, /window\.location\.replace\("\/"\)/);
+  assert.doesNotMatch(login, /router\.(?:push|refresh)/);
 });
 
 test("Auth-configuratiediagnose is main-only, read-only en publiceert geen waarden", async () => {
