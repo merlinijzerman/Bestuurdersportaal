@@ -3,6 +3,8 @@ import test from "node:test";
 
 import {
   buildAppSmokeEvidence,
+  classifySmokePath,
+  formatSmokeDiagnostic,
   validateAppCanaryState,
 } from "./run-supabase-managed-app-smoke.mjs";
 
@@ -56,4 +58,39 @@ test("app-evidence faalt als een negatieve isolatiecheck ontbreekt", () => {
     private_download_headers_safe: true,
     cross_tenant_download_denied: false,
   }));
+});
+
+test("routediagnose plet elke onbekende of gegevensdragende URL", () => {
+  assert.equal(classifySmokePath("http://a.example.nl:3000/login?next=/x"), "/login");
+  assert.equal(classifySmokePath("http://a.example.nl:3000/"), "/");
+  assert.equal(
+    classifySmokePath("http://a.example.nl:3000/api/documents/cccccccc-cccc-4ccc-8ccc-cccccccccccc/bestand"),
+    "other"
+  );
+  assert.equal(classifySmokePath("geen-url"), "unknown");
+});
+
+test("diagnose publiceert uitsluitend booleans en geclassificeerde routes", () => {
+  const line = formatSmokeDiagnostic({
+    pathname: "/login",
+    root_path: "/login",
+    login_error: true,
+    login_busy: false,
+    auth_cookie: false,
+  });
+  assert.equal(line, "pathname=/login;root_path=/login;login_error=true;login_busy=false;auth_cookie=false");
+});
+
+test("diagnose weigert vrije tekst, cookiewaarden en onbekende velden", () => {
+  const line = formatSmokeDiagnostic({
+    pathname: "http://a.example.nl:3000/login",
+    root_path: "/bibliotheek",
+    auth_cookie: true,
+    email: "a@example.invalid",
+    cookie: "sb-access-token=geheim",
+    foutmelding: "Inloggen mislukt",
+  });
+  assert.equal(line, "root_path=/bibliotheek;auth_cookie=true");
+  assert.equal(line.includes("example.invalid"), false);
+  assert.equal(line.includes("geheim"), false);
 });
