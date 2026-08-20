@@ -106,30 +106,38 @@ create table if not exists public.profielen (
 -- partiële fout volledig terugrolt en een wijziging zonder auditregel onmogelijk
 -- is. RLS blijft onverkort gelden (geen DEFINER, geen service-role).
 
--- Automatisch profiel aanmaken bij registratie.
--- Authoritatief in de migraties: 2026-06-23b (platform-skip-guard) +
--- 2026-07-08 (R1, deterministische fondstoewijzing). Hier alleen documentatie.
+-- Automatisch profiel aanmaken bij Auth-provisioning.
+-- Authoritatief in de migraties: 2026-08-19_maak_profiel_admin_api_provisioning.
+-- Hier alleen documentatie.
 --  - Platform-back-office-accounts ({"platform": true}) krijgen bewust GEEN
 --    tenant-profiel.
---  - Het fonds komt UITSLUITEND uit raw_user_meta_data.fonds_id (geen limit 1 /
---    default-fonds). Ontbrekend/ongeldig/onbekend fonds → fail-closed exception
---    (auth.users-insert rolt terug). Zie decisions/0044.
+--  - Het fonds komt UITSLUITEND uit raw_app_meta_data.fonds_id. Supabase
+--    GoTrue kan app_metadata bij auth.admin.createUser() pas in een volgende
+--    service-role-update beschikbaar maken; daarom bestaat naast
+--    `bij_registratie` ook `bij_app_metadata`.
+--  - Ontbrekende app_metadata bij INSERT geeft geen profiel. Een publieke
+--    signup kan daardoor geen fonds kiezen via raw_user_meta_data; zonder
+--    service-role app_metadata blijft het account tenant-loos.
 create or replace function public.maak_profiel()
 returns trigger language plpgsql security definer as $$
 declare
   v_fonds_tekst text;
   v_fonds_id    uuid;
+  v_bestaand    uuid;
 begin
-  if coalesce(new.raw_user_meta_data->>'platform', '') = 'true' then
+  if coalesce(new.raw_app_meta_data->>'platform', '') = 'true' then
     return new;
   end if;
 
-  v_fonds_tekst := new.raw_user_meta_data->>'fonds_id';
-
-  if v_fonds_tekst is null or btrim(v_fonds_tekst) = '' then
+  if coalesce(new.raw_user_meta_data->>'platform', '') = 'true' then
     raise exception
-      'maak_profiel: geen fonds_id in user-metadata (geen default/eerste-fonds). Zie decisions/0044.'
+      'maak_profiel: platform-vlag in user-metadata wordt niet geaccepteerd.'
       using errcode = 'check_violation';
+  end if;
+
+  v_fonds_tekst := new.raw_app_meta_data->>'fonds_id';
+  if v_fonds_tekst is null or btrim(v_fonds_tekst) = '' then
+    return new;
   end if;
 
   begin
@@ -145,6 +153,18 @@ begin
       using errcode = 'foreign_key_violation';
   end if;
 
+  if exists (select 1 from public.profielen p where p.id = new.id) then
+    select p.fonds_id into v_bestaand
+    from public.profielen p
+    where p.id = new.id;
+    if v_bestaand is distinct from v_fonds_id then
+      raise exception
+        'maak_profiel: bestaand profiel kan niet naar een ander fonds worden verplaatst.'
+        using errcode = 'check_violation';
+    end if;
+    return new;
+  end if;
+
   insert into public.profielen (id, naam, fonds_id)
   values (
     new.id,
@@ -158,6 +178,11 @@ $$;
 drop trigger if exists bij_registratie on auth.users;
 create trigger bij_registratie
   after insert on auth.users
+  for each row execute function public.maak_profiel();
+
+drop trigger if exists bij_app_metadata on auth.users;
+create trigger bij_app_metadata
+  after update of raw_app_meta_data on auth.users
   for each row execute function public.maak_profiel();
 
 -- ── 2b. Organisatieprofiel ─────────────────────────────────

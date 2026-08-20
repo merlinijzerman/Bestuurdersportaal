@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { verifyRestore } from "./verify-supabase-restore.mjs";
+import { restoreValidationDiagnostic, verifyRestore } from "./verify-supabase-restore.mjs";
 
 function fixture() {
   const source = {
@@ -96,6 +96,42 @@ test("accepteert een exacte restore met een extensiesuperset op het doel", () =>
   });
 });
 
+test("accepteert een expliciete lege Storage-bucket naast de databasegroepering", () => {
+  const data = fixture();
+  data.source.storage_buckets = 3;
+  data.target.storage_buckets = 3;
+  data.storage.bucket_count = 3;
+  data.storage.buckets.push({
+    id: "lege-bucket",
+    object_count: 0,
+    total_bytes: 0,
+    objects: [],
+  });
+
+  const result = verifyRestore(data);
+  assert.equal(result.storage_buckets, 3);
+  assert.equal(result.storage_objects, 3);
+});
+
+test("accepteert uitsluitend de expliciet toegestane nieuwe Auth-trigger", () => {
+  const data = fixture();
+  data.target.triggers.push({
+    schema: "auth",
+    table: "users",
+    name: "bij_app_metadata",
+    sha256: "6".repeat(64),
+  });
+
+  assert.equal(
+    verifyRestore({ ...data, allowedAdditionalTriggers: ["auth.users.bij_app_metadata"] }).trigger_count,
+    2,
+  );
+  assert.throws(
+    () => verifyRestore({ ...data, allowedAdditionalTriggers: ["auth.users.andere_trigger"] }),
+    /triggerdefinities/,
+  );
+});
+
 test("weigert een verschil in kritieke databasetellingen", () => {
   const data = fixture();
   data.target.auth_users += 1;
@@ -117,7 +153,21 @@ test("weigert wanneer het doel een bronextensie mist", () => {
 test("weigert een inhoudsverschil ondanks gelijke tellingen", () => {
   const data = fixture();
   data.target.content_sha256.auth_users = "9".repeat(64);
-  assert.throws(() => verifyRestore(data), /inhoudshashes/);
+  assert.throws(() => verifyRestore(data), (error) => {
+    assert.match(error.message, /inhoudshashes/);
+    assert.deepEqual(restoreValidationDiagnostic(error), { category: "content_auth_users" });
+    return true;
+  });
+});
+
+test("diagnostiek is beperkt tot een veilige validatiecategorie", () => {
+  const data = fixture();
+  data.target.content_sha256.storage_objects = "9".repeat(64);
+  assert.throws(() => verifyRestore(data), (error) => {
+    assert.deepEqual(restoreValidationDiagnostic(error), { category: "content_storage_objects" });
+    return true;
+  });
+  assert.deepEqual(restoreValidationDiagnostic(new Error("gevoelige details")), { category: "unknown" });
 });
 
 test("weigert afwijkende policy- of triggerdefinities", () => {

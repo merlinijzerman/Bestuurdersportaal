@@ -62,7 +62,7 @@ ongewijzigd, contrast aantoonbaar WCAG AA, en de per-fonds theming-allowlist
   via `fonds_theming` een *donkere* `nav-rgb` overschrijven zónder óók
   `nav-text-rgb`/`nav-text-active-rgb` te zetten: die erven nu donkere navtekst op
   een donker vlak → onleesbaar. In de repo betreft dit uitsluitend de **fictieve
-  Meridiaan-demoseed** (`supabase/migrations/2026_07_09_t8_demo_fonds_seed.sql`;
+  Meridiaan-demoseed** (`supabase/seeds/schema/2026_07_09_t8_demo_fonds_seed.sql`;
   geen auth-gebruikers, "verwijderen vóór productie"). Op akkoord van de
   opdrachtgever **gecorrigeerd** via een aparte idempotente migratie
   (`2026_07_28_huisstijl_t1_meridiaan_nav_text.sql` + ROLLBACK): Meridiaan krijgt

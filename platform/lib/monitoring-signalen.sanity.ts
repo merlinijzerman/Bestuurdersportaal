@@ -428,7 +428,7 @@ test("registry en migratie-seed dekken dezelfde elf signalen met dezelfde drempe
   // breken op precies de drie signalen die deze tranche toevoegt.
   const migraties = [
     "../../supabase/migrations/2026_08_03_p5_monitoring.sql",
-    "../../supabase/migrations/2026_08_08_p4b_signalen_seed.sql",
+    "../../supabase/seeds/schema/2026_08_08_p4b_signalen_seed.sql",
   ];
   let blok = "";
   for (const rel of migraties) {

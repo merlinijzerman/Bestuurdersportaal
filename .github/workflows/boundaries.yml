@@ -10,11 +10,15 @@ name: boundaries
 #   2. Service-role-lek-check — de platform-service-role-laag (@/platform/lib)
 #      mag nooit in tenant-/client-code lekken (TO §12 test 2).
 #
-#  BLOKKEREND MAKEN (fasering, spiegelt besluit 0046/0049 voor de xtenant-gate):
-#  het AANZETTEN als required status check is één repo-admin-handeling — zet
-#  branch protection op `main` met de hieronder GEPINDE job-`name` als required
-#  check. Wijzig die naam NIET zonder de branch-protection-regel mee te verzetten,
-#  anders wordt de gate stil losgekoppeld.
+#  BLOKKEREND: sinds 19-08-2026 staat `Code-scheiding (T9 core/platform-grens)`
+#  als required status check op `main`. Wijzig die job-`name` NIET zonder de
+#  branch-protection-regel mee te verzetten — anders wordt de gate stil
+#  losgekoppeld en blijft elke PR bovendien hangen op een check die nooit meldt.
+#
+#  De tweede job hieronder (`Mapindeling supabase/`) is NOG NIET required. Zet
+#  hem pas aan nádat hij één keer op `main` heeft gedraaid: een required check
+#  waarvan de job op de doelbranch onbekend is, blijft eeuwig pending en
+#  blokkeert ook de PR die hem zou introduceren.
 # ============================================================================
 on:
   push:
@@ -38,3 +42,13 @@ jobs:
         run: npm run lint:boundaries
       - name: Service-role-lek-check
         run: bash scripts/check-service-role-leak.sh
+
+  migratie-mapindeling:
+    # Gepinde check-naam voor branch protection "required status check".
+    # Zelfde fasering als hierboven: aanzetten is één repo-admin-handeling.
+    name: Mapindeling supabase/ (migraties vs rollbacks/seeds)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Mapindeling-gate
+        run: bash scripts/check-migratie-mapindeling.sh

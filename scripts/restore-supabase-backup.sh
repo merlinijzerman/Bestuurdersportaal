@@ -18,14 +18,22 @@ ARCHIVE_PATH="${1:-}"
 
 : "${TARGET_DB_URL:?TARGET_DB_URL ontbreekt}"
 : "${TARGET_PROJECT_REF:?TARGET_PROJECT_REF ontbreekt}"
-: "${TARGET_IS_EMPTY_CONFIRMED:?TARGET_IS_EMPTY_CONFIRMED moet YES zijn}"
-[ "$TARGET_IS_EMPTY_CONFIRMED" = "YES" ] || {
-  echo "Restore stopt: TARGET_IS_EMPTY_CONFIRMED is niet YES." >&2
-  exit 1
-}
+RESTORE_VALIDATE_ONLY="${RESTORE_VALIDATE_ONLY:-NO}"
+case "$RESTORE_VALIDATE_ONLY" in
+  YES|NO) ;;
+  *) echo "Restore stopt: RESTORE_VALIDATE_ONLY moet YES of NO zijn." >&2; exit 1 ;;
+esac
+if [ "$RESTORE_VALIDATE_ONLY" != "YES" ]; then
+  : "${TARGET_IS_EMPTY_CONFIRMED:?TARGET_IS_EMPTY_CONFIRMED moet YES zijn}"
+  [ "$TARGET_IS_EMPTY_CONFIRMED" = "YES" ] || {
+    echo "Restore stopt: TARGET_IS_EMPTY_CONFIRMED is niet YES." >&2
+    exit 1
+  }
+fi
 
 CHECKSUM_PATH="$ARCHIVE_PATH.sha256"
 [ -f "$CHECKSUM_PATH" ] || { echo "Checksum-bestand ontbreekt: $CHECKSUM_PATH" >&2; exit 1; }
+echo "RESTORE_PHASE=archive_integrity"
 if command -v sha256sum >/dev/null 2>&1; then
   (cd "$(dirname "$ARCHIVE_PATH")" && sha256sum -c "$(basename "$CHECKSUM_PATH")")
 else
@@ -42,6 +50,7 @@ chmod 700 "$WORKDIR"
   exit 1
 }
 
+echo "RESTORE_PHASE=archive_safety"
 python3 - "$ARCHIVE_PATH" <<'PY'
 import subprocess
 import sys
@@ -60,11 +69,13 @@ with tarfile.open(archive, "r:gz") as handle:
             raise SystemExit(f"Onveilig niet-regulier bestand in archief: {member.name}")
 PY
 
+echo "RESTORE_PHASE=archive_extract"
 tar -xzf "$ARCHIVE_PATH" -C "$WORKDIR"
 for file in roles.sql schema.sql data.sql managed-customizations.sql database-validation.json metadata.txt; do
   [ -s "$WORKDIR/$file" ] || { echo "Verplicht restorebestand ontbreekt of is leeg: $file" >&2; exit 1; }
 done
 
+echo "RESTORE_PHASE=restore_contract"
 RESTORE_CONTRACT_VERSION="$(sed -n 's/^restore_contract_version=//p' "$WORKDIR/metadata.txt" | head -n 1)"
 RESTORE_CONTRACT_VERSION="${RESTORE_CONTRACT_VERSION:-1}"
 case "$RESTORE_CONTRACT_VERSION" in
@@ -85,6 +96,7 @@ SOURCE_PROJECT_REF="$(sed -n 's/^source_project=//p' "$WORKDIR/metadata.txt" | h
   exit 1
 }
 
+echo "RESTORE_PHASE=target_safety"
 python3 - "$TARGET_DB_URL" "$TARGET_PROJECT_REF" <<'PY'
 from urllib.parse import urlsplit
 import sys
@@ -97,7 +109,8 @@ if project_ref != "local" and project_ref not in host and project_ref not in use
     raise SystemExit("TARGET_DB_URL verwijst niet aantoonbaar naar TARGET_PROJECT_REF")
 PY
 
-psql "$TARGET_DB_URL" -v ON_ERROR_STOP=1 -Atc "select 1" >/dev/null
+echo "RESTORE_PHASE=target_connection"
+psql "$TARGET_DB_URL" -X -v ON_ERROR_STOP=1 -Atc "select 1" >/dev/null
 
 STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo "Restore gestart: $STARTED_AT"
@@ -107,6 +120,7 @@ echo "Bewijswerkmap: $WORKDIR"
 # The Supabase CLI data-only dump is the supported, combined restore source for
 # public, Auth and Storage data. Prove those managed tables are present before
 # the first target mutation; a partial dump must fail closed.
+echo "RESTORE_PHASE=data_contract"
 for required_copy in \
   'auth[^[:alnum:]_]+users' \
   'auth[^[:alnum:]_]+identities' \
@@ -123,6 +137,7 @@ done
 # default RLS state. Prepare a restore-only copy that retains portable project
 # policies/triggers, removes only recognized managed output, and rejects unknown
 # psql status variants.
+echo "RESTORE_PHASE=managed_customizations_prepare"
 node scripts/prepare-supabase-managed-customizations.mjs \
   --input "$WORKDIR/managed-customizations.sql" \
   --output "$WORKDIR/managed-customizations.restore.sql" \
@@ -143,7 +158,12 @@ if [ "$RESTORE_CONTRACT_VERSION" = "2" ]; then
 NODE
 fi
 
-python3 - "$WORKDIR/database-validation.json" "$RESTORE_CONTRACT_VERSION" <<'PY'
+echo "RESTORE_PHASE=validation_json"
+VALIDATION_RESTORE_PATH="$WORKDIR/database-validation.restore.json"
+node scripts/normalize-supabase-validation-json.mjs \
+  --input "$WORKDIR/database-validation.json" \
+  --output "$VALIDATION_RESTORE_PATH"
+python3 - "$VALIDATION_RESTORE_PATH" "$RESTORE_CONTRACT_VERSION" <<'PY'
 import json
 import pathlib
 import sys
@@ -157,21 +177,57 @@ if contract_version == 2 and manifest_version != 2:
     raise SystemExit("restorecontract 2 vereist database-validatiemanifest 2")
 PY
 
+if [ "$RESTORE_VALIDATE_ONLY" = "YES" ]; then
+  echo "Restorearchief en alle fail-closed validators zijn groen; doelproject is niet gemuteerd."
+  exit 0
+fi
+
+RESTORE_STATE_ARGS=()
+if [ -n "${RESTORE_STATE_BACKUP_MARKER_KEY:-}" ] || [ -n "${RESTORE_STATE_DATABASE_SHA256:-}" ]; then
+  [[ "${RESTORE_STATE_BACKUP_MARKER_KEY:-}" =~ ^backup-status/[0-9]{4}/[0-9]{2}/[0-9]{2}/manifest-[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}Z\.json$ ]] || {
+    echo "Restore stopt: RESTORE_STATE_BACKUP_MARKER_KEY is ongeldig." >&2
+    exit 1
+  }
+  [[ "${RESTORE_STATE_DATABASE_SHA256:-}" =~ ^[0-9a-f]{64}$ ]] || {
+    echo "Restore stopt: RESTORE_STATE_DATABASE_SHA256 is ongeldig." >&2
+    exit 1
+  }
+  test -f scripts/create-supabase-managed-restore-state.sql || {
+    echo "Restore stopt: managed restore-state SQL ontbreekt." >&2
+    exit 1
+  }
+  RESTORE_STATE_ARGS=(
+    -v "restore_source_project_ref=$SOURCE_PROJECT_REF"
+    -v "restore_target_project_ref=$TARGET_PROJECT_REF"
+    -v "restore_backup_marker_key=$RESTORE_STATE_BACKUP_MARKER_KEY"
+    -v "restore_database_sha256=$RESTORE_STATE_DATABASE_SHA256"
+    -c '\echo RESTORE_PHASE=resume_state'
+    -f scripts/create-supabase-managed-restore-state.sql
+  )
+fi
+
 # Follow Supabase's documented logical restore sequence in exactly one
 # transaction. A failure in the portable Auth/Storage-customizations therefore
 # rolls roles, schema and all data back as one atomic unit.
 # session_replication_role=replica suppresses managed triggers during data load.
 psql "$TARGET_DB_URL" \
+  -X \
   --single-transaction \
   -v ON_ERROR_STOP=1 \
+  -v VERBOSITY=sqlstate \
+  -c '\echo RESTORE_PHASE=roles' \
   -f "$WORKDIR/roles.sql" \
+  -c '\echo RESTORE_PHASE=schema' \
   -f "$WORKDIR/schema.sql" \
+  -c '\echo RESTORE_PHASE=data' \
   -c "SET LOCAL session_replication_role = replica;" \
   -f "$WORKDIR/data.sql" \
   -c "SET LOCAL session_replication_role = origin;" \
-  -f "$WORKDIR/managed-customizations.restore.sql"
+  -c '\echo RESTORE_PHASE=managed_customizations' \
+  -f "$WORKDIR/managed-customizations.restore.sql" \
+  "${RESTORE_STATE_ARGS[@]}"
 
 FINISHED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo "Restore database groen: $FINISHED_AT"
 echo "Fysieke Storage-bestanden zijn nog niet naar het doelproject geüpload."
-echo "Voer daarna uit: TARGET_SUPABASE_URL=... TARGET_SUPABASE_SERVICE_ROLE_KEY=... node scripts/restore-supabase-storage.mjs --input-dir <uitgepakte-storage-map>"
+echo "Voer daarna uit: TARGET_DB_URL=... TARGET_SUPABASE_URL=... TARGET_SUPABASE_SERVICE_ROLE_KEY=... bash scripts/restore-supabase-storage-with-metadata.sh <uitgepakte-storage-map>"

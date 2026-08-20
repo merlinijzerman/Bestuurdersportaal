@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { parseArgs, restoreStorage } from "./restore-supabase-storage.mjs";
+import { parseArgs, restoreStorage, storageAdminHeaders, storageRestoreDiagnostic } from "./restore-supabase-storage.mjs";
 
 const sourceProject = "aebwiufuegsiwhwpdrfb";
 
@@ -75,6 +75,16 @@ test("CLI-flags dry-run/no-verify/no-resume vereisen geen waarde", () => {
   );
 });
 
+test("nieuwe secret key gebruikt alleen apikey en publishable wordt geweigerd", () => {
+  const secret = `sb_secret_${"a".repeat(24)}`;
+  assert.deepEqual(storageAdminHeaders(secret), { apikey: secret });
+  assert.throws(() => storageAdminHeaders(`sb_publishable_${"b".repeat(24)}`), /publishable key/i);
+  assert.deepEqual(storageAdminHeaders("legacy.service.role"), {
+    apikey: "legacy.service.role",
+    Authorization: "Bearer legacy.service.role",
+  });
+});
+
 test("Storage-restore dry-run controleert manifest, lengte en checksum", async () => {
   const fixture = await createFixture();
   try {
@@ -119,6 +129,7 @@ test("Storage-restore verifieert private objecten via de geauthenticeerde route"
   const fixture = await createFixture();
   const originalFetch = globalThis.fetch;
   const calls = [];
+  let createBucketBody;
   try {
     globalThis.fetch = async (url, init = {}) => {
       const target = new URL(url);
@@ -128,7 +139,13 @@ test("Storage-restore verifieert private objecten via de geauthenticeerde route"
       assert.equal(headers.get("apikey"), "service-role-test");
       assert.equal(headers.get("authorization"), "Bearer service-role-test");
 
-      if (method === "POST" && target.pathname === "/storage/v1/bucket") return Response.json({ id: "documenten" });
+      if (method === "GET" && target.pathname === "/storage/v1/bucket/documenten") {
+        return Response.json({ message: "missing" }, { status: 404 });
+      }
+      if (method === "POST" && target.pathname === "/storage/v1/bucket") {
+        createBucketBody = JSON.parse(init.body);
+        return Response.json({ id: "documenten" });
+      }
       if (method === "POST" && target.pathname === "/storage/v1/object/documenten/2026/voorbeeld.txt") {
         return new Response(null, { status: 200 });
       }
@@ -147,7 +164,83 @@ test("Storage-restore verifieert private objecten via de geauthenticeerde route"
 
     assert.equal(result.object_count, 1);
     assert.equal(result.uploaded_count, 1);
+    assert.deepEqual(createBucketBody, {
+      id: "documenten",
+      name: "documenten",
+      public: false,
+      fileSizeLimit: null,
+      allowedMimeTypes: null,
+    });
     assert.ok(calls.includes("GET /storage/v1/object/authenticated/documenten/2026/voorbeeld.txt"));
+  } finally {
+    globalThis.fetch = originalFetch;
+    await rm(fixture.inputDir, { recursive: true, force: true });
+  }
+});
+
+test("Storage-restore gebruikt het camelCase API-contract en werkt een bestaande bucket bij", async () => {
+  const fixture = await createFixture();
+  const originalFetch = globalThis.fetch;
+  const bodies = [];
+  try {
+    globalThis.fetch = async (url, init = {}) => {
+      const target = new URL(url);
+      const method = init.method ?? "GET";
+      if (method === "GET" && target.pathname === "/storage/v1/bucket/documenten") {
+        bodies.push({ method });
+        return Response.json({ id: "documenten" });
+      }
+      if (method === "PUT" && target.pathname === "/storage/v1/bucket/documenten") {
+        bodies.push({ method, body: JSON.parse(init.body) });
+        return Response.json({ message: "updated" });
+      }
+      if (method === "GET" && target.pathname === "/storage/v1/object/authenticated/documenten/2026/voorbeeld.txt") {
+        return new Response("document-inhoud\n");
+      }
+      throw new Error(`Onverwachte mock-request: ${method} ${target.pathname}`);
+    };
+
+    const result = await withTargetRef("restore-oefening", () => restoreStorage({
+      baseUrl: "https://restore-oefening.supabase.co",
+      serviceRoleKey: "service-role-test",
+      inputDir: fixture.inputDir,
+    }));
+
+    assert.equal(result.skipped_count, 1);
+    assert.deepEqual(bodies, [
+      { method: "GET" },
+      {
+        method: "PUT",
+        body: {
+          public: false,
+          fileSizeLimit: null,
+          allowedMimeTypes: null,
+        },
+      },
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    await rm(fixture.inputDir, { recursive: true, force: true });
+  }
+});
+
+test("Storage-restorediagnostiek geeft alleen fase en HTTP-status vrij", async () => {
+  const fixture = await createFixture();
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => Response.json({ detail: "gevoelige mockdetails" }, { status: 422 });
+    await assert.rejects(async () => {
+      try {
+        await withTargetRef("restore-oefening", () => restoreStorage({
+          baseUrl: "https://restore-oefening.supabase.co",
+          serviceRoleKey: "service-role-test",
+          inputDir: fixture.inputDir,
+        }));
+      } catch (error) {
+        assert.deepEqual(storageRestoreDiagnostic(error), { phase: "bucket_read", httpStatus: "422" });
+        throw error;
+      }
+    });
   } finally {
     globalThis.fetch = originalFetch;
     await rm(fixture.inputDir, { recursive: true, force: true });
@@ -167,6 +260,9 @@ test("hervat een gedeeltelijke set en dekt grote, lege en Unicode/nested objecte
       const target = new URL(url);
       const method = init.method ?? "GET";
       calls.push(`${method} ${decodeURIComponent(target.pathname)}`);
+      if (method === "GET" && target.pathname === "/storage/v1/bucket/documenten") {
+        return Response.json({ message: "missing" }, { status: 404 });
+      }
       if (method === "POST" && target.pathname === "/storage/v1/bucket") return Response.json({ id: "documenten" });
       if (method === "GET" && decodeURIComponent(target.pathname).endsWith("/leeg bestand.txt")) {
         return new Response(Buffer.alloc(0), { status: 200 });
@@ -204,6 +300,9 @@ test("probeert een mislukte objectupload opnieuw", async () => {
     globalThis.fetch = async (url, init = {}) => {
       const target = new URL(url);
       const method = init.method ?? "GET";
+      if (method === "GET" && target.pathname === "/storage/v1/bucket/documenten") {
+        return Response.json({ message: "missing" }, { status: 404 });
+      }
       if (method === "POST" && target.pathname === "/storage/v1/bucket") return Response.json({ id: "documenten" });
       if (method === "POST" && target.pathname.includes("/storage/v1/object/documenten/")) {
         uploadAttempts += 1;

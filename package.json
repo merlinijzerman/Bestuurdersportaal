@@ -21,7 +21,7 @@
     "test:xtenant": "node --import tsx --test tests/cross-tenant/*.test.ts",
     "test:xtenant:ci": "bash scripts/cross-tenant-ci.sh",
     "test:backup-storage": "node --test scripts/backup-supabase-storage.test.mjs scripts/restore-supabase-storage.test.mjs",
-    "test:backup-restore": "node --test scripts/backup-workflows.test.mjs scripts/send-backup-alert.test.mjs scripts/prepare-supabase-managed-customizations.test.mjs scripts/restore-supabase-backup.test.mjs scripts/restore-supabase-storage.test.mjs scripts/verify-supabase-restore.test.mjs",
+    "test:backup-restore": "node --test scripts/backup-workflows.test.mjs scripts/diagnose-supabase-auth-config.test.mjs scripts/download-b2-object-with-retry.test.mjs scripts/send-backup-alert.test.mjs scripts/normalize-supabase-validation-json.test.mjs scripts/prepare-supabase-managed-customizations.test.mjs scripts/resolve-supabase-managed-restore-mode.test.mjs scripts/restore-supabase-backup.test.mjs scripts/restore-supabase-storage.test.mjs scripts/run-supabase-managed-app-smoke.test.mjs scripts/update-supabase-managed-restore-state.test.mjs scripts/verify-portable-checksum.test.mjs scripts/verify-supabase-auth-config.test.mjs scripts/verify-supabase-managed-functional.test.mjs scripts/verify-supabase-managed-keys.test.mjs scripts/verify-supabase-restore.test.mjs scripts/verify-watchdog-fail-closed.test.mjs scripts/create-supabase-managed-restore-evidence.test.mjs",
     "test:platform-inventory": "node --test scripts/capture-platform-inventory.test.mjs",
     "prepare": "git config core.hooksPath scripts/hooks || true"
   },

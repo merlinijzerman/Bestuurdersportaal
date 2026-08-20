@@ -1,14 +1,12 @@
 "use client";
 import { useState } from "react";
 import { createClient } from "@/core/lib/supabase";
-import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [wachtwoord, setWachtwoord] = useState("");
   const [laden, setLaden] = useState(false);
   const [fout, setFout] = useState("");
-  const router = useRouter();
   const supabase = createClient();
 
   async function handleLogin(e: React.FormEvent) {
@@ -25,8 +23,10 @@ export default function LoginPage() {
       setFout("Inloggen mislukt. Controleer uw e-mailadres en wachtwoord.");
       setLaden(false);
     } else {
-      router.push("/");
-      router.refresh();
+      // Forceer één volledige navigatie nadat de Supabase-client de sessiecookie
+      // heeft opgeslagen. Twee gelijktijdige clientnavigaties kunnen elkaar
+      // annuleren en de gebruiker op /login laten staan.
+      window.location.replace("/");
     }
   }
 
@@ -51,10 +51,11 @@ export default function LoginPage() {
           </h2>
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label className="block text-sm font-semibold text-ink mb-1">
+              <label htmlFor="login-email" className="block text-sm font-semibold text-ink mb-1">
                 E-mailadres
               </label>
               <input
+                id="login-email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -64,10 +65,11 @@ export default function LoginPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-ink mb-1">
+              <label htmlFor="login-password" className="block text-sm font-semibold text-ink mb-1">
                 Wachtwoord
               </label>
               <input
+                id="login-password"
                 type="password"
                 value={wachtwoord}
                 onChange={(e) => setWachtwoord(e.target.value)}

@@ -1,7 +1,7 @@
 # P0 — back-upketen, Storage en restore
 
-**Status:** kosteloze codegates gereed; B2-bewijs en managed restore nog af te tekenen
-**Datum:** 2026-08-19
+**Status:** managed restore-oefening end-to-end groen (run 32345486528, 2026-08-20); alertkanaal vastgesteld op GitHub-notificaties (besluit 0185)
+**Datum:** 2026-08-20
 **Eigenaar:** technisch beheer / incidentleider
 
 ## Wat nu wordt opgeslagen
@@ -37,12 +37,28 @@ Secrets:
 - `SUPABASE_SERVICE_ROLE_KEY` — uitsluitend voor Storage-lezen tijdens de back-up
 - `B2_APPLICATION_KEY_ID` en `B2_APPLICATION_KEY` — write-only voor de back-upworkflow
 - `B2_READONLY_APPLICATION_KEY_ID` en `B2_READONLY_APPLICATION_KEY` — alleen lezen/listen voor de watchdog
-- `BACKUP_ALERT_WEBHOOK_URL` — endpoint van de afgesproken incident-/alertdienst;
-  ontbreekt dit, dan blijft de inhoudelijke B2-controle draaien en faalt alleen
-  de afzonderlijke job `Alertkanaalconfiguratie controleren`
+- `BACKUP_ALERT_WEBHOOK_URL` — **optioneel**. Alleen vereist wanneer
+  `ALERT_CHANNEL` in de watchdog op `webhook` staat. Bij het huidige kanaal
+  `github-native` (besluit 0185) is dit secret niet nodig en wordt het genegeerd
 - `SUPABASE_MANAGEMENT_API_TOKEN` — read-only Management API-token voor de
   platforminventaris; nooit in een artefact of log opnemen
 - `VERCEL_TOKEN` — read-only Vercel-token voor project- en variabelenameninventaris
+
+Aanvullend, uitsluitend voor één afzonderlijk geautoriseerde managed
+restore-oefening op het tijdelijke doelproject:
+
+- `RESTORE_TARGET_DB_URL`
+- `RESTORE_TARGET_SUPABASE_ADMIN_KEY` — óf `sb_secret_…`, óf een legacy
+  `service_role`-JWT van exact het doelproject
+- `RESTORE_TARGET_SUPABASE_CLIENT_KEY` — óf `sb_publishable_…`, óf een legacy
+  `anon`-JWT van exact het doelproject
+
+De admin- en clientkey moeten verschillend zijn. Een publishable/anon-key wordt
+nooit voor beheer, usercreatie of Storage-restore gebruikt. Nieuwe opaque keys
+gaan als `apikey`; alleen de legacy service-role-JWT wordt daarnaast als Bearer
+gebruikt. `SUPABASE_MANAGEMENT_API_TOKEN` leest tijdens deze oefening uitsluitend
+de Auth-config van het tijdelijke doel om die met de niet-geheime broninventaris
+te vergelijken.
 
 Variables:
 
@@ -65,6 +81,10 @@ tokens of documentinhoud.
 
 - Iedere B2-upload gebruikt AWS-retries plus vijf expliciete uploadpogingen met
   exponentiële wachttijd.
+- Iedere managed B2-download gebruikt maximaal drie expliciete pogingen. Een
+  incomplete of inhoudelijk afwijkende tijdelijke download wordt vóór de volgende
+  poging verwijderd, blijft uitsluitend op LUKS-opslag en wordt pas atomisch als
+  bruikbaar bestand vrijgegeven nadat de verwachte lengte en SHA-256 kloppen.
 - De `backup-status/.../manifest-*.json` completion marker wordt pas na alle
   uploads en lokale controles geüpload.
 - `supabase-backup-watchdog.yml` draait iedere zes uur. De B2-jobs controleren,
@@ -82,14 +102,59 @@ tokens of documentinhoud.
 De workflow onderscheidt drie statussen in jobnamen, logs en webhookpayload:
 `back-up mislukt`, `B2-bewijs ongeldig` en `alertkanaal niet geconfigureerd`.
 Een ontbrekend webhooksecret blokkeert de B2-controles niet en mag nooit als een
-mislukte productieback-up worden omschreven. De afzonderlijke configuratiejob
-blijft wel rood totdat een goedgekeurd alertkanaal is ingesteld; zonder werkend
-alertkanaal is de totale P0-keten niet gereed.
+mislukte productieback-up worden omschreven.
 
-Test alertdelivery zonder productieobjecten te wijzigen door de workflow
-`Supabase-back-upbewaking` handmatig te starten met `synthetic_alert=true`. De
-afzonderlijke job `Veilige synthetische alertdelivery` verstuurt een `warning`
-met de expliciete tekst dat geen back-up, marker of B2-object is aangeraakt.
+### Het goedgekeurde meldkanaal
+
+Het kanaal staat als `ALERT_CHANNEL` in `supabase-backup-watchdog.yml`, bewust in
+code en niet in een instelling in de UI: wijzigen vereist een PR en is daarmee
+reviewbaar en terugleesbaar.
+
+Huidige waarde: **`github-native`** (besluit 0185). De rode workflowrun zélf is
+het meldkanaal. Iedere inhoudelijke afwijking roept `send-backup-alert.mjs` aan
+en sluit af met `exit 1`; de run wordt daardoor rood en GitHub stuurt een
+notificatie naar de eigenaar van de workflow.
+
+Die belofte is alleen waar zolang elke afwijking de run ook echt rood maakt. De
+job `Alertkanaalconfiguratie controleren` draait daarom
+`scripts/verify-watchdog-fail-closed.mjs`, die afdwingt dat beide inhoudelijke
+controlejobs bestaan, dat elke vaststellende stap eindigt met `exit 1` en dat
+nergens `continue-on-error` staat. Een onbekende of lege `ALERT_CHANNEL` faalt
+eveneens. Zet je het kanaal op `webhook`, dan eist dezelfde job juist dat
+`BACKUP_ALERT_WEBHOOK_URL` aanwezig is.
+
+Bewust geaccepteerde beperkingen van `github-native`, elk een reden om alsnog
+een toegewijd kanaal in te richten:
+
+- de melding landt in dezelfde inbox als alle overige GitHub-ruis, zonder eigen
+  urgentie, ontvangstbevestiging of escalatie bij uitblijven;
+- GitHub stuurt notificaties over scheduled workflows naar de gebruiker die de
+  workflow heeft aangemaakt; wijzigt iemand anders de cron-expressie, dan
+  verschuift de ontvanger stilzwijgend;
+- er is één ontvanger en geen dienstdoend rooster;
+- een storing bij GitHub Actions maakt zowel de back-up als de melding erover
+  onzichtbaar.
+
+### Veilige negatieve test
+
+Start `Supabase-back-upbewaking` handmatig met `synthetic_alert=true`. Er wordt
+geen back-up, completion marker of B2-object aangeraakt.
+
+- Bij `webhook` verstuurt de job `Veilige synthetische alertdelivery` een
+  `warning` met de expliciete tekst dat niets is aangeraakt.
+- Bij `github-native` maakt diezelfde job de run **met opzet rood**. Dat is het
+  bewijs zelf: alleen een rode run levert de notificatie op. Controleer daarna
+  dat je de GitHub-melding hebt ontvangen; die ontvangstcontrole is onderdeel
+  van de test en kan niet geautomatiseerd worden.
+
+**Laatst volledig bevestigd: 2026-08-20**, run 32348713703 — run rood geworden
+én de GitHub-notificatie aantoonbaar ontvangen. Herhaal deze test bij elke
+wijziging aan de bewaking, en verder minimaal halfjaarlijks: is deze datum meer
+dan zes maanden oud, dan is niet meer aangetoond dat een melding de ontvanger
+nog bereikt. Let daarbij op wie de ontvanger is — GitHub stuurt notificaties
+over scheduled workflows naar de gebruiker die de workflow heeft aangemaakt, en
+die ontvanger verschuift stilzwijgend als iemand anders de cron-expressie
+wijzigt.
 
 ## Platformconfiguratie en secrets
 
@@ -174,7 +239,7 @@ Controleer lokaal per object de SHA-256 en upload daarna naar de nieuwe buckets:
 ```bash
 export TARGET_SUPABASE_URL='https://<DOELREF>.supabase.co'
 export TARGET_PROJECT_REF='<DOELREF>'
-export TARGET_SUPABASE_SERVICE_ROLE_KEY='<tijdelijke-doelsleutel>'
+export TARGET_SUPABASE_ADMIN_KEY='<sb_secret_… of legacy service-role-JWT>'
 
 node scripts/restore-supabase-storage.mjs \
   --input-dir "$STORAGE_DIR"
@@ -206,6 +271,95 @@ Een lokale kopie met productiegegevens hoort uitsluitend in tijdelijke,
 versleutelde opslag op een gecontroleerde runner/omgeving. Neem geen secrets of
 rij-inhoud op in logs, artifacts, issues of fixtures.
 
+De fysieke Storage-restore vertaalt de databasevelden uit het manifest
+(`file_size_limit`, `allowed_mime_types`) expliciet naar het camelCase-contract
+van de Storage-API (`fileSizeLimit`, `allowedMimeTypes`). Omdat de database-
+restore de bucketmetadata al terugzet, leest de fysieke restore iedere bucket
+eerst en werkt zij een bestaande bucket bij; alleen een expliciete 404 leidt tot
+aanmaken. Bij een fout mag alleen
+de allowlisted restorefase en de numerieke HTTP-status buiten het versleutelde
+volume als diagnostisch bewijs worden bewaard; bucket- en objectnamen blijven
+op het vernietigde volume.
+
+De workflow `.github/workflows/supabase-restore-preflight.yml` automatiseert
+deze poort zonder een Supabase-cloudproject aan te maken. Start hem uitsluitend
+vanaf `main` met de exacte contract-v2-marker en bevestiging
+`PREFLIGHT_ON_ENCRYPTED_EPHEMERAL_RUNNER`. De workflow:
+
+1. gebruikt alleen de prefix-beperkte B2-read-only sleutel;
+2. plaatst archieven, tijdelijke logs én Docker/PostgreSQL op één nieuw
+   LUKS2-volume met een eenmalige sleutel;
+3. valideert marker, checksums, restorecontract en Storage dry-run vóór herstel;
+4. start tweemaal een schone lokale Supabase-stack met PostgreSQL 17;
+5. herstelt en vergelijkt database/Auth/Storage, inhoudshashes, policies,
+   triggers en ieder opnieuw gedownload fysiek object;
+6. publiceert alleen een niet-gevoelig `go-no-go.json` en `cleanup.json`; bij
+   een databasefout bevat `restore-diagnostic.json` uitsluitend iteratie,
+   restorefase en SQLSTATE, nooit SQL-tekst of rijwaarden;
+7. stopt de stack, ontkoppelt LUKS en verwijdert het versleutelde backingbestand
+   in een `always()`-stap.
+
+Een groene preflight is alleen `go-for-managed-review`: Auth-providersecrets,
+functionele canary-/RLS-/appsmokes en verschillen met Supabase Cloud blijven
+expliciete managed gates. De workflow mag daarom nooit automatisch de managed
+restoreworkflow starten.
+
+### Managed restoreworkflow
+
+`.github/workflows/supabase-restore-drill.yml` maakt zelf geen project aan en
+verwijdert ook geen project. Start de workflow alleen na projectspecifieke
+autorisatie en uitsluitend vanaf `main`, met:
+
+1. de project-ref van het ene tijdelijke doel;
+2. de exacte contract-v2 `backup_marker_key`;
+3. de exacte complete `platform_inventory_marker_key` onder
+   `backup-status/platform-inventory/`;
+4. bevestiging `RESTORE_TO_EMPTY_PROJECT`.
+
+De eerste run accepteert alleen een aantoonbaar leeg doel. Als databaseherstel
+al atomisch is geslaagd en Storage of verificatie later faalt, blijft in een
+afgeschermd databaseschema een state met bronref, doelref, marker en
+databasechecksum staan. Een retry mag uitsluitend met alle vier exact dezelfde
+waarden op hetzelfde doel verder. Een niet-leeg doel zonder die state, een ander
+doelproject of een andere back-up wordt fail-closed geweigerd. Storage wordt bij
+een retry idempotent hervat; de database wordt niet opnieuw geladen. De state
+wordt pas na alle technische, functionele en cleanupchecks verwijderd.
+
+Een tijdelijke afgebroken B2-stream verandert deze binding niet. Hervat na een
+groene retryfix op exact hetzelfde doelproject; maak geen vervangend project aan.
+De workflow verwijdert iedere partiële download binnen LUKS en probeert een
+object maximaal drie keer, waarna hij fail-closed stopt.
+
+De managed workflow voert aanvullend uit:
+
+- vergelijking van allowlisted Auth-provider-, login-, sessie-, MFA- en
+  wachtwoordinstellingen; secretvelden worden niet opgehaald of gelogd;
+- twee tijdelijke gemarkeerde canary-users in verschillende fondsen, aangemaakt
+  met de adminkey, gevolgd door echte e-mail/wachtwoordlogin met de clientkey;
+- positieve eigen-profiel/document/Storage-tests en negatieve profiel-,
+  document- en privé-Storagetests over de tenantgrens via beide user-JWT's;
+- een lokale Chrome-smoke tegen de herstelde managed backend voor Home/dashboard,
+  Documentbibliotheek/API en een geautoriseerde privédownload; het document van
+  de andere tenant moet via dezelfde appsessie 404 geven;
+- verwijdering van canary-users en hun tijdelijke inzageregels, gevolgd door een
+  tweede exacte database/Auth/Storage-validatie tegen de bron.
+
+Alle archieven, manifests, databasequeryresultaten, canarygegevens,
+app-build/cache/logs en browserprofielen staan op een nieuw LUKS2-volume op de
+ephemere runner. Een `always()`-stap ontkoppelt het volume, sluit de mapping en
+verwijdert het versleutelde backingbestand. Alleen
+`managed-restore-evidence.json` met tellingen/booleans en `cleanup.json` worden
+buiten LUKS geplaatst en als artifact bewaard. Geen namen, e-mailadressen,
+user-/document-ID's, objectpaden, hashes, rijwaarden of volledig Storage-manifest
+verlaten het versleutelde volume.
+
+Bestaande contract-v2-archieven kunnen vóór het JSON-document de drie standaard
+`psql`-statusregels voor outputformaat, tuples-only en pager bevatten. De restore
+maakt daarvoor uitsluitend binnen de versleutelde werkmap een genormaliseerde
+kopie. Alleen die drie exacte, unieke regels vóór het JSON-object zijn toegestaan;
+onbekende, dubbele of later voorkomende statusregels stoppen de restore fail-closed.
+Nieuwe back-ups schrijven het validatiebestand direct in quiet/unaligned vorm.
+
 ### Acceptatiepoorten
 
 - [ ] B2-archive en checksum groen.
@@ -225,15 +379,88 @@ rij-inhoud op in logs, artifacts, issues of fixtures.
 - [ ] Read-only B2-sleutel, doelproject en lokale Productiekopieën zijn na
   aftekening verwijderd of vernietigd volgens het privacybeleid.
 
-De cloudrestore is nog niet end-to-end groen bewezen. Maak of start hiervoor
-geen betaald doelproject zonder de hierboven beschreven afzonderlijke
-kostenautorisatie. Een lokale dry-run of database-restore bewijst niet dat Auth,
-Storage, RLS en de uitwijkdeploy in Supabase Cloud werken.
+### Aangetoond herstel
+
+Run `32345486528` (2026-08-20) heeft alle poorten hierboven groen doorlopen op
+het tijdelijke doelproject `mqeyrsdptapbdmwnrhnq`, vanaf backupmarker
+`backup-status/2026/08/19/manifest-2026-08-19T06-49-24Z.json`. Het geaggregeerde
+bewijsartifact legt vast:
+
+| Onderdeel | Waargenomen |
+|---|---|
+| Database | PostgreSQL 17, inhoudshashes gelijk, 160 policies, 84 triggers, 6 kritieke tabellen met 7.510 rijen, 7 extensies |
+| Auth | 16 gebruikers, 16 identities, 42 instellingen en 27 providerinstellingen vergeleken, 0 afwijkingen |
+| Storage | 4 buckets, 34 objecten, 29.067.773 bytes, per object opnieuw gedownload en op SHA-256 gecontroleerd |
+| Functioneel | 2 echte wachtwoordlogins, 4 positieve en 4 negatieve RLS-controles, 4 cross-tenantweigeringen over 2 tenants |
+| Applicatie | echte browserlogin, dashboard, documentenlijst, geautoriseerde privédownload met veilige headers, cross-tenantdownload geweigerd |
+| Opruiming | 2 canary-users verwijderd, 0 profielresidu, versleuteld volume unmounted, LUKS-mapping gesloten, backing file verwijderd |
+
+Geen enkele secretwaarde, hostnaam, e-mailadres of document-id staat in het
+bewijs; het bevat uitsluitend aantallen en booleans.
+
+Maak of start hiervoor geen nieuw betaald doelproject zonder de hierboven
+beschreven afzonderlijke kostenautorisatie. Een lokale dry-run of
+database-restore bewijst niet dat Auth, Storage, RLS en de uitwijkdeploy in
+Supabase Cloud werken; alleen een managed oefening als deze doet dat.
+
+## Hersteldoelen (RPO en RTO)
+
+**RPO — maximaal aanvaardbaar dataverlies: 24 uur.** De back-up draait dagelijks
+om 01:30 UTC en is pas compleet als de marker is geschreven. Valt Productie vlak
+vóór een geslaagde run uit, dan is de laatste bruikbare marker maximaal iets meer
+dan 24 uur oud. De watchdog waarschuwt boven 26 uur en escaleert boven 48 uur;
+die grenzen zijn bewust ruimer dan 24 uur, zodat één vertraagde run geen vals
+alarm geeft maar een echt gemiste dag wél opvalt.
+
+**RTO — gemeten componenten.** Uit run 32345486528 en de voorgaande oefeningen
+zijn deze stappen daadwerkelijk geklokt op een GitHub-hosted runner:
+
+| Stap | Gemeten |
+|---|---|
+| Volledige managed restore vanaf schoon (database, Auth, Storage-metadata, fysieke objecten) | circa 5 minuten |
+| Hervatte restore met functionele en applicatieverificatie | 3 minuten 30 seconden |
+| Volledige kosteloze preflight met dubbele lokale restore | circa 20 minuten |
+
+Deze cijfers dekken **niet** de volledige uitwijk. Nog niet geklokt, en dus nog
+geen onderdeel van een RTO-toezegging:
+
+- aanmaken en gereedmaken van een vervangend Supabase-project (inclusief regio en
+  plan/compute);
+- opnieuw uitgeven en instellen van Auth-providercredentials, API/JWT-sleutels en
+  overige secrets volgens de checklist onder *Platformconfiguratie en secrets*;
+- DNS-omzetting en propagatie;
+- deploy van de applicatie naar de vervangende omgeving.
+
+Een RTO-toezegging aan het bestuur is pas verantwoord nadat die vier stappen in
+één oefening zijn geklokt. Tot dat moment geldt: de datalaag is aantoonbaar
+binnen tientallen minuten herstelbaar, de volledige dienstverlening niet.
+
+## Escalatie
+
+De escalatieladder hangt aan de drie statussen die de bewaking onderscheidt.
+
+| Trigger | Eerste actie | Escaleer wanneer |
+|---|---|---|
+| `alertkanaal niet geconfigureerd` | Bij `github-native`: de fail-closed controle herstellen die de bewaking rood laat worden. Bij `webhook`: `BACKUP_ALERT_WEBHOOK_URL` instellen. Daarna de synthetische test draaien | Direct bij constatering; de bewaking meldt dan mogelijk niets meer |
+| `B2-bewijs ongeldig` | Marker, checksums en gerefereerde objecten controleren; back-up handmatig herdraaien | Als een tweede run hetzelfde bewijs afkeurt |
+| `back-up mislukt` | Runlog beoordelen en handmatig herdraaien | Als de marker ouder dan 26 uur wordt |
+| Markerouderdom boven 48 uur | Behandelen als P0-incident: er is geen verse herstelbron | Onmiddellijk naar de incidentleider |
+| Restore-oefening faalt ná mutatie op het doel | Hervatten op hetzelfde doelproject met de atomische en hervatbare fasen | Voor een tweede project is nieuwe kostenautorisatie vereist |
+
+Besluitrechten: de eigenaar van dit runbook beslist over herdraaien en
+hervatten. Het aanmaken van een betaald doelproject en het verwijderen van een
+tijdelijk doelproject zijn uitsluitend beslissingen van de opdrachtgever, met de
+kostenautorisatie zoals hierboven beschreven.
+
+De namen, telefoonnummers en meldkanalen van de dienstdoende personen staan
+bewust **niet** in dit bestand — het is een publieke repository. Neem ze op in
+het interne oproepregister en verwijs daar vanuit dit runbook naar zodra dat
+register is ingericht.
 
 ## Lokale controles
 
 ```bash
 npm run test:backup-storage
 npm run test:backup-restore
-node --input-type=module -e 'import fs from "node:fs"; import yaml from "js-yaml"; for (const file of [".github/workflows/supabase-backup.yml", ".github/workflows/supabase-backup-watchdog.yml"]) yaml.load(fs.readFileSync(file, "utf8")); console.log("workflow YAML groen")'
+node --input-type=module -e 'import fs from "node:fs"; import yaml from "js-yaml"; for (const file of [".github/workflows/supabase-backup.yml", ".github/workflows/supabase-backup-watchdog.yml", ".github/workflows/supabase-restore-preflight.yml", ".github/workflows/supabase-restore-drill.yml", ".github/workflows/platform-inventory.yml"]) yaml.load(fs.readFileSync(file, "utf8")); console.log("workflow YAML groen")'
 ```
