@@ -7,10 +7,12 @@
 -- `security_invoker = on`: dan wordt RLS als de AANROEPER geëvalueerd
 -- (authenticated, géén bypassrls) i.p.v. als de view-eigenaar.
 --
--- Deze check faalt zodra een view in `public` die een fonds_id-tabel leest NIET
--- op security_invoker staat. Read-only. Overtreding → raise exception → psql
--- exit <> 0 → CI faalt. Elke "LEK:" markeert een tenant-view zonder de tweede
--- laag.
+-- Deze check faalt zodra een view in `public` die (a) een fonds_id-tabel leest
+-- én (b) leesbaar is voor een niet-bypassrls user-rol (anon/authenticated), NIET
+-- op security_invoker staat. service_role (BYPASSRLS) omzeilt RLS toch, dus een
+-- service_role-only view is geen C-01-blootstelling en wordt niet geëist.
+-- Read-only. Overtreding → raise exception → psql exit <> 0 → CI faalt. Elke
+-- "LEK:" markeert een user-leesbare tenant-view zonder de tweede laag.
 --
 -- Negatieve controle (besluit 0046 §E-patroon): zet op een wegwerp-DB één
 -- tenant-view terug op security_invoker=off → deze check wordt ROOD.
@@ -27,7 +29,7 @@ declare
 begin
   for r in
     with tenant_views as (
-      select distinct c.relname,
+      select distinct c.relname, c.oid,
              coalesce((select option_value from pg_options_to_table(c.reloptions)
                        where option_name='security_invoker'),'off') as si
       from pg_class c
@@ -42,11 +44,16 @@ begin
     )
     select relname from tenant_views
     where si not in ('true','on')
+      -- Alleen relevant als een NIET-bypassrls user-rol (anon/authenticated) de
+      -- view kan lezen. service_role heeft BYPASSRLS en omzeilt RLS toch, dus
+      -- daar is security_invoker geen isolatielaag en geen C-01-blootstelling.
+      and (has_table_privilege('anon', oid, 'SELECT')
+        or has_table_privilege('authenticated', oid, 'SELECT'))
       and not (relname = any(v_uitzonderingen))
     order by relname
   loop
     v_lekken := v_lekken || r.relname;
-    raise warning 'LEK: % leest tenantdata maar staat niet op security_invoker', r.relname;
+    raise warning 'LEK: % is leesbaar voor een user-rol maar staat niet op security_invoker', r.relname;
   end loop;
 
   if cardinality(v_lekken) > 0 then
