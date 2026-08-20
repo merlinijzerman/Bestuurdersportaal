@@ -88,6 +88,10 @@ SQL_BB="supabase/checks/2026_08_05_bb_rolgrenzen.sql"
 # Zelfde fixture als core/lib/decision.sanity.ts → weergave en gate zijn
 # aantoonbaar in sync.
 SQL_BBIND="supabase/checks/2026_08_18_bewijsbinding.sql"
+# V2 — security_invoker op tenant-views. Faalt zodra een view in public die een
+# fonds_id-tabel leest niet op security_invoker=on staat. Na Bevinding B is dit
+# (niet FORCE) de tweede laag tegen de C-01-definer-view-klasse.
+SQL_V2SI="supabase/checks/2026_08_20_v2_security_invoker_regressie.sql"
 
 echo "== [1/4] tsc --noEmit --skipLibCheck =="
 ./node_modules/.bin/tsc --noEmit --skipLibCheck
@@ -173,6 +177,10 @@ echo "-- Bewijsbinding (document-vereiste vervuld via expliciete binding, geen w
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_BBIND"
 echo
 
+echo "-- V2 security_invoker (elke tenant-view op invoker; geen definer-view leest tenantdata) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_V2SI"
+echo
+
 echo "============================================================================"
 echo "GROEN: volledige §15 cross-tenant suite geslaagd (app-laag + DB-laag)."
 echo "  T1–T4  host→fonds + fail-closed enforce      (app-laag)"
@@ -195,4 +203,5 @@ echo "  R1   tenantcorrectheid van policies + anon + search_path (gates A-E)  (D
 echo "  R1   gedragsbewijs K-01/H-01/H-02/M-01                                (DB-laag)"
 echo "  P5   monitoringtabellen deny-by-default + RPC niet-anon + retentie    (DB-laag)"
 echo "  BB   rolgrenzen bestuursbureau + nulgrens G23                          (DB-laag)"
+echo "  V2   security_invoker op tenant-views (2e laag C-01, i.p.v. FORCE)     (DB-laag)"
 echo "============================================================================"
