@@ -27,6 +27,31 @@ test("watchdog controleert B2 ook zonder webhook en isoleert de configuratiefout
   assert.doesNotMatch(text, /for variable in[^\n]*BACKUP_ALERT_WEBHOOK_URL/);
 });
 
+test("het goedgekeurde meldkanaal staat in code en is per kanaal fail-closed", async () => {
+  const text = await workflow("supabase-backup-watchdog.yml");
+
+  // Kanaalkeuze hoort in de repository, niet in een muteerbare UI-instelling:
+  // wijzigen vereist dan een PR en is terugleesbaar (besluit 0185).
+  assert.match(text, /^env:\n  ALERT_CHANNEL: (?:github-native|webhook)$/m);
+
+  // Bij github-native is de rode run het kanaal; die belofte is alleen waar
+  // zolang iedere afwijking de run ook echt rood maakt.
+  assert.match(text, /verify-watchdog-fail-closed\.mjs/);
+
+  // Een onbekend of leeg kanaal mag nooit stilzwijgend groen zijn.
+  assert.match(text, /ALERT_CHANNEL is '\$\{ALERT_CHANNEL:-leeg\}'/);
+
+  // De negatieve test moet in beide kanalen bewijzen dat een afwijking wordt
+  // gemeld: via de webhook, of doordat de run aantoonbaar rood wordt.
+  assert.match(text, /if: env\.ALERT_CHANNEL == 'webhook'/);
+  assert.match(text, /if: env\.ALERT_CHANNEL == 'github-native'/);
+  assert.match(text, /::error title=Synthetische watchdogtest::/);
+  assert.match(
+    text,
+    /Synthetische mislukking zichtbaar maken via GitHub[\s\S]*?exit 1/
+  );
+});
+
 test("back-up publiceert restorecontract 2 zonder redundante managed datafiles", async () => {
   const text = await workflow("supabase-backup.yml");
   assert.match(text, /restore_contract_version=2/);
