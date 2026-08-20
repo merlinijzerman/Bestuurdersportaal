@@ -26,9 +26,15 @@ export function emailVoor(rol) {
   return `w1-${rol}@karakterisering.invalid`;
 }
 
-// Vaste domein-UUID's (worden in latere tiers geseed). Herkenbare achtervoegsels.
+// Vaste domein-UUID's (per tier geseed). Herkenbare achtervoegsels.
 export const FIX = {
   document1: "00000000-0000-4000-8000-0000000d0c01",
+  documentIntrekken: "00000000-0000-4000-8000-0000000d0c02",
+  documentOnbekend: "00000000-0000-4000-8000-0000000d0cff",
   procedure1: "00000000-0000-4000-8000-00000000cd01",
   risico1: "00000000-0000-4000-8000-0000000715c1",
 };
+
+// Vaste bytes voor de bestand-download (BESLUIT: body_sha256 i.p.v. ruwe bytes).
+export const DOCUMENT1_BYTES = "%PDF-1.4 W1-KARAKTERISERING-FIXTURE\n";
+export const DOCUMENT1_PAD = `${FONDS_ID}/w1-document.pdf`;

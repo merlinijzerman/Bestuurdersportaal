@@ -9,7 +9,7 @@
 //  normalisatielaag mapt ze. Domein-UUID's zijn vast.
 // ============================================================================
 import { createClient } from "@supabase/supabase-js";
-import { ENV, FONDS_ID, ROLLEN, WACHTWOORD, emailVoor } from "./config.mjs";
+import { ENV, FONDS_ID, ROLLEN, WACHTWOORD, emailVoor, FIX, DOCUMENT1_BYTES, DOCUMENT1_PAD } from "./config.mjs";
 
 export function adminClient() {
   return createClient(ENV.url, ENV.serviceKey, { auth: { persistSession: false } });
@@ -77,9 +77,59 @@ export async function seed(admin = adminClient()) {
     if (error) throw new Error(`profielen(${rol}): ${error.message}`);
   }
 
-  // 4. Domein-fixtures — volgen in tier 2 (documenten, procedures, risico's, ...).
+  // 4. Domein-fixtures (tier 2).
+  await seedDocumenten(admin);
 
   return { fondsId: FONDS_ID, users };
+}
+
+// ── Tier 2: documenten ──────────────────────────────────────────────────────
+async function seedDocumenten(admin) {
+  // Opruimen: rijen + storage-object + inzage-log van dit fonds.
+  await admin.from("document_inzage").delete().eq("fonds_id", FONDS_ID);
+  await admin.from("documenten").delete().eq("fonds_id", FONDS_ID);
+  await admin.storage.from("documenten").remove([DOCUMENT1_PAD]);
+
+  // Storage-object onder <fonds_id>/… zodat de fonds-RLS-leespolicy het toelaat.
+  {
+    const bytes = new TextEncoder().encode(DOCUMENT1_BYTES);
+    const { error } = await admin.storage
+      .from("documenten")
+      .upload(DOCUMENT1_PAD, bytes, { contentType: "application/pdf", upsert: true });
+    if (error) throw new Error(`storage.upload: ${error.message}`);
+  }
+
+  // Actief document (bytes-download happy path).
+  {
+    const { error } = await admin.from("documenten").insert({
+      id: FIX.document1,
+      fonds_id: FONDS_ID,
+      bibliotheek: "fonds",
+      bron: "Intern",
+      titel: "W1 Document",
+      bestandsnaam: "w1-document.pdf",
+      bestandstype: "pdf",
+      opslag_pad: DOCUMENT1_PAD,
+      actief: true,
+    });
+    if (error) throw new Error(`documenten(actief): ${error.message}`);
+  }
+
+  // Ingetrokken document (410-pad; geen storage-object nodig — actief-check gaat voor).
+  {
+    const { error } = await admin.from("documenten").insert({
+      id: FIX.documentIntrekken,
+      fonds_id: FONDS_ID,
+      bibliotheek: "fonds",
+      bron: "Intern",
+      titel: "W1 Ingetrokken document",
+      bestandsnaam: "w1-ingetrokken.pdf",
+      bestandstype: "pdf",
+      opslag_pad: `${FONDS_ID}/w1-ingetrokken.pdf`,
+      actief: false,
+    });
+    if (error) throw new Error(`documenten(intrekken): ${error.message}`);
+  }
 }
 
 // Handmatig: `node --env-file=.env.local tests/karakterisering/seed.mjs`

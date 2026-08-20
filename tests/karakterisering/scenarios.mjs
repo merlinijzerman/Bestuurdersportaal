@@ -15,6 +15,7 @@
 //  (documenten/procedures/besluiten/…) volgen als tier 2.
 // ============================================================================
 import { LIMIET_ZOEKEN, LIMIET_ZOEKEN_ENDPOINT } from "./ratelimit-const.mjs";
+import { FIX } from "./config.mjs";
 
 const LEEG = {};
 
@@ -41,6 +42,12 @@ export const scenarios = [
 
   // ── /api/contact — publiek; CSRF-gate (geen Origin in prod → geweigerd) ─────
   { slug: "contact.post.anon.geen-origin", method: "POST", path: "/api/contact", rol: "anon", body: { naam: "T", organisatie: "O", email: "t@x.nl" }, headers: { "content-type": "application/json" }, verwacht: "json" },
+
+  // ── /api/documents/[id]/bestand — non-JSON bytes · host-guard · [id] ───────
+  { slug: "documents-bestand.get.bestuurder", method: "GET", path: `/api/documents/${FIX.document1}/bestand`, rol: "bestuurder", verwacht: "bytes" },
+  { slug: "documents-bestand.get.anon", method: "GET", path: `/api/documents/${FIX.document1}/bestand`, rol: "anon", verwacht: "json" },
+  { slug: "documents-bestand.get.404", method: "GET", path: `/api/documents/${FIX.documentOnbekend}/bestand`, rol: "bestuurder", verwacht: "json" },
+  { slug: "documents-bestand.get.410-ingetrokken", method: "GET", path: `/api/documents/${FIX.documentIntrekken}/bestand`, rol: "bestuurder", verwacht: "json" },
 
   // ── /api/zoeken — rate-limit · host-guard ──────────────────────────────────
   { slug: "zoeken.get.anon", method: "GET", path: "/api/zoeken?q=test", rol: "anon", verwacht: "json" },

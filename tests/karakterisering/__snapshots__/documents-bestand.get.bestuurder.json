@@ -1,0 +1,11 @@
+{
+  "body": {
+    "body_bytes": 36,
+    "body_sha256": "2b60dde649f41dc0b66d4cb6c4405df27a3dfdb3893f429a028a08fc2e886074"
+  },
+  "headers": {
+    "content-disposition": "attachment; filename=\"w1-document.pdf\"",
+    "content-type": "application/pdf"
+  },
+  "status": 200
+}
