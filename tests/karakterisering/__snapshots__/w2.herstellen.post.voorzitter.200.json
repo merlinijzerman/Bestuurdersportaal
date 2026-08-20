@@ -1,0 +1,26 @@
+{
+  "body": {
+    "agendapunt": {
+      "aangemaakt": "<ts>",
+      "aangemaakt_door": null,
+      "beschrijving": null,
+      "categorie": "informatie",
+      "gewijzigd_door": null,
+      "gewijzigd_op": null,
+      "id": "<uuid:1>",
+      "procedure_stap_id": null,
+      "tijdsduur_minuten": null,
+      "titel": "W1 Agendapunt verwijderd",
+      "verantwoordelijke": null,
+      "vergadering_id": "<uuid:2>",
+      "verwijder_reden": null,
+      "verwijderd_door": null,
+      "verwijderd_op": null,
+      "volgorde": 0
+    }
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

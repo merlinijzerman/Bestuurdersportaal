@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Agendapunt is niet verwijderd; herstellen niet van toepassing"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 400
+}
