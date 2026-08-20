@@ -10,8 +10,13 @@
 #  Versie-pin (besluit 0046, validatiepunt 1): de schone Preview-omgeving draait
 #  sinds 2026-08-14 op Postgres major 17. `major_version = 17` houdt de
 #  wegwerp-test-DB representatief voor de baseline waartegen Sprint 1 sluit.
-#  Productie draait mogelijk nog op major 14; die versie-afwijking is expliciet
-#  migratierisico en moet vóór promotie afzonderlijk worden afgetest.
+#  Productie draait OOK op major 17 — gemeten op 2026-08-19 in het dashboard van
+#  project aebwiufuegsiwhwpdrfb: Postgres 17.6.1.111 (Auth 2.195.0, PostgREST
+#  14.5). De eerdere aanname "mogelijk nog op major 14" was onjuist en is hier
+#  vervangen; onderbouwing in 02 Architectuur/ONTWERPNOTITIE-MIGRATIEPROCES-v2.1
+#  §1. Wat resteert is een MINOR-verschil: er staat een upgrade naar 17.6.1.155
+#  klaar. Voer die uit vóór een geautomatiseerde productiemigratie, niet
+#  ertussendoor.
 #
 #  Dit bestand is GEEN productieconfig — de app deployt via Vercel op het
 #  gehoste Supabase-project, niet via deze CLI-stack.

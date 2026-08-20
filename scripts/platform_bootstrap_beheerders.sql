@@ -194,6 +194,22 @@ on conflict do nothing;
 -- ╔══════════════════════════════════════════════════════════════════════════╗
 -- ║  DEEL 5 — Auditspoor van deze bootstrap                                   ║
 -- ╚══════════════════════════════════════════════════════════════════════════╝
+do $$
+begin
+  if to_regclass('public.platform_event_chain_state') is null
+     or not exists (
+       select 1
+         from pg_proc p
+         join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public'
+          and p.proname = 'fn_platform_event_hash'
+          and pg_get_functiondef(p.oid) ilike '%platform_event_chain_state%'
+     ) then
+    raise exception
+      'STOP: voer eerst 2026_08_15_platform_event_chain_head.sql uit';
+  end if;
+end $$;
+
 -- Grants via de UI loggen attempt+result in platform_event_log (hash-keten).
 -- Deze SQL-route doet dat niet vanzelf; zonder deze inserts staat er een gat in
 -- het spoor precies op het moment dat de zwaarste rechten zijn uitgedeeld.

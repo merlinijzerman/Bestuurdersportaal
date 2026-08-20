@@ -131,7 +131,7 @@ values ('dddddddd-dddd-dddd-dddd-dddddddddddd','22222222-2222-2222-2222-22222222
 
 -- ── Impersoneer user A (fonds A) ────────────────────────────────────────────
 set local role authenticated;
-set local request.jwt.claims to '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}';
+set local request.jwt.claim.sub to 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
 -- POSITIEVE controle: A mag in EIGEN fonds schrijven (policy niet over-restrictief).
 --

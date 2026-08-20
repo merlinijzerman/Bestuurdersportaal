@@ -167,6 +167,10 @@ Soft-deactivate (`actief = false`) i.p.v. verwijderen — consistent met `decisi
 
 Zonder deze unie bestaat een handmatig toegevoegde eis wel in beeld maar telt hij niet in de readiness — precies de val die het proceduremodule-ontwerp bij `external_submission`/`consultation` benoemt. Een regressietest borgt dit (§8).
 
+**Vervulling van een document-vereiste (v0.5, 18-08-2026 — besluit 0183).** Beide lagen bepaalden of een `document`/`external_submission`/`consultation`-vereiste vervuld was uit "er staat een bewijsstuk op dezelfde stap" plus een optionele `documenttype`-tag. Droeg de vereiste geen tag — de standaardset doet dat nergens — dan vervulde één stuk álle document-vereisten van die stap, ook de blokkerende, en verbruikte de match niets. Vervulling loopt sindsdien uitsluitend via een **expliciete binding**: `procedure_bewijs.requirement_sleutel` = `stap_volgorde|requirement_type|coalesce(documenttype, label)`, dezelfde identiteit als `idx_req_uniek` en als de uitsluiting-`match_sleutel` (§5.5). Beide lagen doen daarna alleen nog een gelijkheidstest, en "één bewijsstuk vervult hoogstens één vereiste" volgt uit het datamodel in plaats van uit een matchingregel.
+
+Twee consequenties voor deze engine: (a) de sleutel gebruikt het **oorspronkelijke** `requirement_type`, niet de `v_type`-mapping naar `document` — anders zou een als `document` gebonden stuk een `consultation`-vereiste vervullen; (b) de identiteit moet uniek zijn binnen een stap, over de template- én de instantie-arm heen. `procedure_requirement_instance` kent geen tegenhanger van `idx_req_uniek`, dus `POST …/requirements` weigert een botsende toevoeging (400) en de seed-generator weigert hetzelfde bij de bron. Zie `BEWIJSMATCH-BINDING-ONTWERP.md`.
+
 ### 5.4 Governance en RLS
 
 - Toevoegen/deactiveren gegate op capability **beheerder of voorzitter** (vrijheidsniveau 2/3). Gewone rollen: read-only.

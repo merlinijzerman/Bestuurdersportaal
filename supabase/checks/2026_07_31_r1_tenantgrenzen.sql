@@ -114,7 +114,7 @@ values ('a0000000-0000-0000-0000-0000000000c1',
 
 -- ── Als VOORZITTER van fonds A (de rol die het lek exploiteerbaar maakte) ──
 set local role authenticated;
-set local request.jwt.claims to '{"sub":"c6c6c6c6-c6c6-c6c6-c6c6-c6c6c6c6c6c6"}';
+set local request.jwt.claim.sub to 'c6c6c6c6-c6c6-c6c6-c6c6-c6c6c6c6c6c6';
 
 do $$
 declare n int;
@@ -152,7 +152,7 @@ begin
 end $$;
 
 -- ── Als gewone BESTUURDER van fonds A: injectie in het dossier van fonds B ──
-set local request.jwt.claims to '{"sub":"a4a4a4a4-a4a4-a4a4-a4a4-a4a4a4a4a4a4"}';
+set local request.jwt.claim.sub to 'a4a4a4a4-a4a4-a4a4-a4a4-a4a4a4a4a4a4';
 
 do $$
 begin

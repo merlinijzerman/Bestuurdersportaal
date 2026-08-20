@@ -14,6 +14,8 @@
 #    • EERST: supabase/baseline/2026_08_14_preview_public.sql.
 #    • DAN  : alleen migraties die alfabetisch NA BASELINE_CUTOFF vallen.
 #    • NIET: *_ROLLBACK.sql (terugdraai-scripts, geen forward-migratie).
+#    • NIET: *_seed_preview.sql (omgevingsspecifieke Preview-data/bewijs).
+#    • NIET: *_seed_production.sql (omgevingsspecifiek Productiebewijs).
 #    • NIET: supabase/checks/*   (dat zijn de testsuites zelf, niet het schema).
 #
 #  Draait tegen een EPHEMERE test-DB (Supabase CLI in CI, of een lokale
@@ -29,9 +31,11 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 DB_URL="${TEST_DATABASE_URL:-${DATABASE_URL:-}}"
+STORAGE_SYSTEM_URL="${TEST_DATABASE_STORAGE_ADMIN_URL:-$DB_URL}"
 MIGRATIE_DIR="supabase/migrations"
 BASELINE="supabase/baseline/2026_08_14_preview_public.sql"
 BASELINE_AUTH_HOOKS="supabase/baseline/2026_08_14_auth_hooks.sql"
+BASELINE_STORAGE_SYSTEM_TEST="supabase/baseline/2026_08_14_storage_system_test.sql"
 BASELINE_STORAGE="supabase/baseline/2026_08_14_storage_custom.sql"
 BASELINE_CUTOFF="2026_08_14_security_grant_hygiene_late_recreate.sql"
 
@@ -65,6 +69,11 @@ if [ ! -f "$BASELINE_STORAGE" ]; then
   exit 1
 fi
 
+if [ ! -f "$BASELINE_STORAGE_SYSTEM_TEST" ]; then
+  echo "FOUT: Storage-testsysteembaseline '$BASELINE_STORAGE_SYSTEM_TEST' niet gevonden." >&2
+  exit 1
+fi
+
 # Verzamel alleen forward-migraties ná het baseline-cutoff. De while-vorm werkt
 # zowel op macOS Bash 3.2 als op de nieuwere Bash van de CI-runner.
 MIGRATIES=()
@@ -72,7 +81,25 @@ while IFS= read -r f; do
   if [[ "$(basename "$f")" > "$BASELINE_CUTOFF" ]]; then
     MIGRATIES+=("$f")
   fi
-done < <(find "$MIGRATIE_DIR" -maxdepth 1 -name '*.sql' ! -name '*_ROLLBACK.sql' | LC_ALL=C sort)
+done < <(
+  find "$MIGRATIE_DIR" -maxdepth 1 -name '*.sql' \
+    ! -name '*_ROLLBACK.sql' \
+    ! -name '*_seed_preview.sql' \
+    ! -name '*_seed_production.sql' \
+  | LC_ALL=C sort
+)
+
+echo "Provider-defaults voor een reproduceerbare Preview-baseline normaliseren…"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -q <<'SQL'
+-- Een verse Supabase-Postgres kent nieuwe public-functies via de default ACL
+-- expliciet EXECUTE toe aan anon. De schema-only pg_dump bevat vervolgens
+-- alleen de ACL-delta van Preview; zonder deze normalisatie kunnen op een
+-- schone replay oude anon-grants herleven (gate H/T15). Alle baseline-objecten
+-- worden hieronder als postgres aangemaakt. De drie bewust publieke RPC's
+-- krijgen verderop in de baseline hun expliciete anon-grant terug.
+alter default privileges for role postgres in schema public
+  revoke execute on functions from anon;
+SQL
 
 echo "Extensies voor de Preview-baseline gereedmaken…"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -q <<'SQL'
@@ -84,6 +111,7 @@ SQL
 echo "Gesquashte Preview-baseline toepassen op de test-DB…"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$BASELINE"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$BASELINE_AUTH_HOOKS"
+psql "$STORAGE_SYSTEM_URL" -v ON_ERROR_STOP=1 -q -f "$BASELINE_STORAGE_SYSTEM_TEST"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$BASELINE_STORAGE"
 echo "OK: baseline toegepast."
 echo
@@ -98,4 +126,4 @@ if [ "${#MIGRATIES[@]}" -gt 0 ]; then
 fi
 
 echo
-echo "OK: baseline + ${#MIGRATIES[@]} post-baseline-migraties toegepast (ROLLBACK-scripts en checks/ overgeslagen)."
+echo "OK: baseline + ${#MIGRATIES[@]} post-baseline-migraties toegepast (ROLLBACK-scripts, omgevingsseeds en checks/ overgeslagen)."

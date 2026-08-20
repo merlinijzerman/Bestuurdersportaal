@@ -1175,12 +1175,26 @@ create table if not exists public.procedure_bewijs (
   document_id           uuid references public.documenten(id) on delete set null,
   titel                 text not null,
   beschrijving          text,
+  -- 1D-4 (2026_05_08_phase_1d_bewijs_documenttype.sql): tag die overeenkomt met
+  -- procedure_requirements.documenttype. Sinds de bewijsbinding alleen nog een
+  -- suggestie bij het opvoeren; hij vervult zelf geen vereiste.
+  documenttype          text,
+  -- Bewijsbinding (2026_08_18_bewijs_requirement_binding.sql): de vereiste die
+  -- dit stuk vervult, als stap_volgorde|requirement_type|coalesce(documenttype,
+  -- label). Null = ongebonden → vervult niets. Bewust geen FK: vereisten leven
+  -- in twee tabellen en de template-set wordt bij elke seed ge-delete/re-insert.
+  requirement_sleutel   text,
+  -- (2026_05_20_stemmingen.sql voegt hier ook stemming_id toe; die tabel staat
+  -- nog niet in dit documentatiebestand, vandaar niet opgenomen.)
   toegevoegd_op         timestamptz default now(),
   toegevoegd_door       uuid references auth.users(id) on delete set null,
   toegevoegd_door_naam  text
 );
 
 create index if not exists idx_bewijs_stap on public.procedure_bewijs(stap_id, toegevoegd_op desc);
+create index if not exists idx_procbewijs_req_sleutel
+  on public.procedure_bewijs(stap_id, requirement_sleutel)
+  where requirement_sleutel is not null;
 
 -- Per-proces bestuurlijke toelichting per fase (WO-2-vervolg, migratie
 -- 2026_08_14). Los van de gedeelde D8-fasebeschrijving. Eigen fonds_id →

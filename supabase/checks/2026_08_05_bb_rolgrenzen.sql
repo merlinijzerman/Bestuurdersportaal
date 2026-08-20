@@ -281,7 +281,7 @@ values ('bb000000-0000-0000-0000-0000000000d1',
 
 -- ── FR-3 — het bureau leest 0 inbrengrijen ────────────────────────────────
 set local role authenticated;
-set local request.jwt.claims to '{"sub":"bb000003-0000-0000-0000-000000000003"}';
+set local request.jwt.claim.sub to 'bb000003-0000-0000-0000-000000000003';
 
 do $$
 declare n int;
@@ -416,7 +416,7 @@ end $$;
 --  groen zijn, en dan bewijst hij niets.
 -- ════════════════════════════════════════════════════════════════════════════
 
-set local request.jwt.claims to '{"sub":"bb000001-0000-0000-0000-000000000001"}';
+set local request.jwt.claim.sub to 'bb000001-0000-0000-0000-000000000001';
 
 do $$
 declare n int;
@@ -472,7 +472,7 @@ exception
     raise notice 'OK: een stem met een vreemde uitbrenger wordt geweigerd (uitgebracht_door = auth.uid()).';
 end $$;
 
-set local request.jwt.claims to '{"sub":"bb000002-0000-0000-0000-000000000002"}';
+set local request.jwt.claim.sub to 'bb000002-0000-0000-0000-000000000002';
 
 -- POSITIEVE TEGENHANGER: de voorzitter brengt zijn eigen stem uit. Zonder deze
 -- test zou een te breed geformuleerde rol-uitsluiting (bijvoorbeeld `<>` met een

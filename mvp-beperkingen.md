@@ -1,6 +1,6 @@
 # MVP-beperkingen — Bestuurdersportaal
 
-**Laatst bijgewerkt:** 2026-07-31 (securityreview 30-31 juli: §3 en §4 bijgewerkt; AI-weergave tranche 1: §5 aangevuld met het niet-geregistreerde kopieerpad; overige tekst per 2026-07-04)
+**Laatst bijgewerkt:** 2026-08-15 (dagelijkse off-site databaseback-up + restore-/uitwijkdraaiboek; hersteltest en PITR nog open)
 **Doel:** eerlijk overzicht van wat de MVP níét is of níét kan, plus de noodzakelijke stappen richting productiegeschiktheid. Bronnen: feitenrapporten 4 juli 2026, `HANDOVER.md` §Bekende beperkingen, `SECURITY-ROUTE-A-IMPLEMENTATIE.md`, `CODE-REVIEW-2026-07-03.md` (afgekapt), `decisions/`.
 
 ## 1. Functionele beperkingen
@@ -21,7 +21,7 @@
 | Beperking | Toelichting | Status |
 |---|---|---|
 | **Mailgun-sandbox** | Contactnotificaties alleen naar vooraf geautoriseerde ontvangers; geen eigen maildomein; mail is soft-fail (opslag in Supabase altijd) | Interim (decision 0033) |
-| **Single-region, geen redundantie** | Eén Supabase-project (EU-Frankfurt) + Vercel; geen DR-plan, geen uitgewerkte back-up-/restore-procedure gedocumenteerd | Open/Onbekend |
+| **Single-region; uitwijk nog niet beproefd** | Productie blijft één Supabase-project. Sinds 15-08 draait dagelijks een versleutelde logische databaseback-up naar Backblaze B2 (beoogd RPO maximaal circa 24 uur) en is een restore-/uitwijkdraaiboek vastgelegd. Restore, Auth-validatie en omschakeling naar een nieuw project zijn nog niet geoefend; RTO is daarom onbekend. Storage-objecten vallen buiten de huidige back-up. Later volgt PITR; B2 blijft dan de onafhankelijke off-site laag | Deels gemitigeerd — oefening/PITR/Storage open |
 | **Geen SLA, geen alerting, geen error-monitoring** | Sentry (WP7) uitgesteld; alleen Vercel-logs en handmatige waarneming | Uitgesteld |
 | Anthropic spend-limiet niet gezet | Kosten-backstop is handmatige actie, nog open | Open |
 | Synchrone AI-samenvatting bij upload | 5–20 sec bij grote PDF's | Bekend |
@@ -77,7 +77,7 @@ Geprioriteerd; 1–8 zijn randvoorwaardelijk voor een pilot met een echte klant,
 4. **CI + testbasis**: pipeline met tsc, lek-check en sanity-scripts; testrunner introduceren; ESLint werkend maken.
 5. **Compliance-basis**: DPA's, verwerkersregister (incl. Mailgun), bewaartermijnen, DPIA-toetsing (FG/jurist), datalekprocedure, B10-checkpoint.
 6. **Mailgun-productie of Resend-besluit** — geverifieerd domein; sandbox-beperking opheffen.
-7. **Operationele backstops**: Anthropic spend-limiet, Vercel CVE-branch mergen, HSTS-preload, back-up-/restore-procedure vastleggen (nu Onbekend).
+7. **Operationele backstops**: Anthropic spend-limiet, Vercel CVE-branch mergen en HSTS-preload; daarnaast de vastgelegde restore-/uitwijkprocedure beproeven, Storage-objecten meenemen en later PITR activeren. De dagelijkse B2-databaseback-up is operationeel; RTO blijft tot de oefening Onbekend.
 8. **Monitoring**: Sentry-besluit (EU-residency + sub-verwerker-registratie) of gelijkwaardig alternatief; minimale alerting.
 9. **P0-fundament T-serie (decision 0040)** vóór een tweede fonds: tenant-resolver, deterministische fondskoppeling (R1), server-side auditfonds (R2), RLS-hardening, RAG-tenantdiscipline, dataclassificatie, demo/productie-scheiding en de geformaliseerde her-introductie-gate 0026 — samengevat in gate G2.
 10. **Klantbeeld op echte data** — datakoppeling uitvoerder + verwerkersafspraken.

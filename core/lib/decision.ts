@@ -38,6 +38,7 @@ import {
   type StemverslagSummary,
   mapLegacyStatus,
 } from "./decision-view";
+import { requirementSleutel } from "./requirement-sleutel";
 
 // Supabase client met onze tabellen — losjes getyped omdat we geen
 // gegenereerde db-types hebben in dit project. Casten we lokaal naar
@@ -362,7 +363,7 @@ export async function buildDecisionDossierView(
     const { data: bewijsRows } = await supabase
       .from("procedure_bewijs")
       .select(
-        "id, stap_id, document_id, titel, beschrijving, documenttype, toegevoegd_op, toegevoegd_door_naam"
+        "id, stap_id, document_id, titel, beschrijving, documenttype, requirement_sleutel, toegevoegd_op, toegevoegd_door_naam"
       )
       .in("stap_id", stapIds)
       .order("toegevoegd_op", { ascending: false });
@@ -372,8 +373,13 @@ export async function buildDecisionDossierView(
       const va = stapVolgorde.get(a.stap_id) ?? 0;
       const vb = stapVolgorde.get(b.stap_id) ?? 0;
       if (va !== vb) return va - vb;
-      // Nieuwste eerst binnen dezelfde stap.
-      return (b.toegevoegd_op ?? "").localeCompare(a.toegevoegd_op ?? "");
+      // Nieuwste eerst binnen dezelfde stap; bij een gelijke timestamp (twee
+      // stukken in dezelfde transactie) beslist het id, zodat de volgorde in
+      // het auditdossier en de export reproduceerbaar is.
+      return (
+        (b.toegevoegd_op ?? "").localeCompare(a.toegevoegd_op ?? "") ||
+        a.id.localeCompare(b.id)
+      );
     });
   }
 
@@ -477,8 +483,47 @@ interface ProcedureBewijsRow {
   titel: string | null;
   beschrijving: string | null;
   // 1D-4: tag die overeenkomt met procedure_requirements.documenttype.
-  // Vervangt titel-string-matching voor de readiness-check op documenten.
+  // Sinds de bewijsbinding (2026-08-18) nog uitsluitend een suggestie bij het
+  // opvoeren — hij vinkt zelf geen vereiste meer af.
   documenttype: string | null;
+  // Bewijsbinding: de vereiste die dit stuk vervult, als sleutel
+  // `stap_volgorde|requirement_type|coalesce(documenttype, label)`.
+  // Null = (nog) niet gebonden; zo'n stuk vervult niets.
+  requirement_sleutel: string | null;
+  toegevoegd_op: string | null;
+}
+
+/**
+ * Beoordeelt of een document-achtige vereiste (`document`,
+ * `external_submission`, `consultation`) vervuld is, en zo ja door welk
+ * bewijsstuk.
+ *
+ * Eén gelijkheidstest op de expliciete binding — geen wildcard, geen
+ * documenttype-gok, geen titel-substring. Daardoor geldt per constructie:
+ * een bewijsstuk draagt precies één sleutel en kan dus hoogstens één
+ * vereiste vervullen. Spiegelt de document-tak van
+ * `fn_decision_readiness_check` (migratie 2026_08_18_bewijs_requirement_binding).
+ *
+ * `bewijzen` wordt verondersteld deterministisch gesorteerd te zijn
+ * (toegevoegd_op, dan id); bij meerdere gebonden stukken is de eerste de bron.
+ *
+ * Geëxporteerd zodat de sanity-check hem zonder Supabase-client kan toetsen.
+ */
+export function vervultDocumentRequirement(
+  req: Pick<
+    MergedRequirement,
+    "stap_volgorde" | "requirement_type" | "documenttype" | "label"
+  >,
+  bewijzen: Pick<ProcedureBewijsRow, "id" | "titel" | "requirement_sleutel">[]
+): { id: string; titel: string | null } | null {
+  const sleutel = requirementSleutel(
+    req.stap_volgorde,
+    req.requirement_type,
+    req.documenttype,
+    req.label
+  );
+  const match = bewijzen.find((b) => b.requirement_sleutel === sleutel);
+  return match ? { id: match.id, titel: match.titel } : null;
 }
 
 async function buildEvidenceLijst(
@@ -511,11 +556,17 @@ async function buildEvidenceLijst(
   );
   // Identiteit = coalesce(documenttype, label) — spiegelt de unieke index van
   // procedure_requirements en het NOT EXISTS in fn_decision_readiness_check.
+  // Zelfde sleutel als de bewijsbinding; één definitie in requirement-sleutel.ts.
   const requirements: MergedRequirement[] = ((reqRows ?? []) as ProcedureRequirementRow[])
     .filter(
       (r) =>
         !uitgesloten.has(
-          `${r.stap_volgorde}|${r.requirement_type}|${r.documenttype ?? r.label}`
+          requirementSleutel(
+            r.stap_volgorde,
+            r.requirement_type,
+            r.documenttype,
+            r.label
+          )
         )
     )
     .map((r) => ({ ...r, bron: "template" as const, instance_id: null }));
@@ -576,12 +627,24 @@ async function buildEvidenceLijst(
   if (stapIds.length > 0) {
     const { data: bewijsRows } = await supabase
       .from("procedure_bewijs")
-      .select("id, stap_id, document_id, titel, beschrijving, documenttype")
+      .select(
+        "id, stap_id, document_id, titel, beschrijving, documenttype, requirement_sleutel, toegevoegd_op"
+      )
       .in("stap_id", stapIds);
     for (const b of (bewijsRows ?? []) as ProcedureBewijsRow[]) {
       const lijst = bewijsByStap.get(b.stap_id) ?? [];
       lijst.push(b);
       bewijsByStap.set(b.stap_id, lijst);
+    }
+    // Determinisme: PostgREST garandeert geen returnvolgorde. Zonder deze
+    // sortering zou bij meerdere gebonden stukken per vereiste het getoonde
+    // bron_id/bron_titel per aanroep kunnen wisselen.
+    for (const lijst of bewijsByStap.values()) {
+      lijst.sort(
+        (a, b) =>
+          (a.toegevoegd_op ?? "").localeCompare(b.toegevoegd_op ?? "") ||
+          a.id.localeCompare(b.id)
+      );
     }
   }
 
@@ -633,16 +696,11 @@ async function buildEvidenceLijst(
       case "document": {
         const stap = stapByVolgorde.get(req.stap_volgorde);
         const bewijzen = stap ? bewijsByStap.get(stap.id) ?? [] : [];
-        // 1D-4: primair matchen op de documenttype-kolom; fallback op
-        // titel-string-match voor bewijsstukken die vóór 1D-4 zijn
-        // toegevoegd zonder expliciete tag.
-        const match = bewijzen.find((b) => {
-          if (!req.documenttype) return true;
-          if (b.documenttype === req.documenttype) return true;
-          return (b.titel ?? "")
-            .toLowerCase()
-            .includes(req.documenttype.toLowerCase());
-        });
+        // Vervulling loopt uitsluitend via de expliciete binding
+        // (procedure_bewijs.requirement_sleutel). De oude wildcard
+        // "vereiste zonder documenttype matcht elk bewijsstuk van de stap"
+        // liet één upload alle document-vereisten van die stap afvinken.
+        const match = vervultDocumentRequirement(req, bewijzen);
         if (match) {
           vervuld = true;
           bron = "procedure_bewijs";

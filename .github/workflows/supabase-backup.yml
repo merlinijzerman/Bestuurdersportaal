@@ -1,0 +1,294 @@
+name: Supabase-productieback-up
+
+on:
+  schedule:
+    - cron: "30 1 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-productieback-up
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    name: Database en Storage naar Backblaze B2
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    environment: production-backup
+    env:
+      # Fail closed if the project is ever replaced: these identifiers are
+      # checked against the database URL and the Storage API.
+      SUPABASE_PROJECT_REF: aebwiufuegsiwhwpdrfb
+      SUPABASE_URL: https://aebwiufuegsiwhwpdrfb.supabase.co
+      STORAGE_BACKUP_BUCKETS: documenten,documenten-quarantaine,afschriften,aqlab-audit
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.B2_APPLICATION_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.B2_APPLICATION_KEY }}
+      AWS_DEFAULT_REGION: eu-central-003
+      AWS_RETRY_MODE: standard
+      AWS_MAX_ATTEMPTS: "10"
+      B2_BUCKET_NAME: ${{ vars.B2_BUCKET_NAME }}
+      B2_S3_ENDPOINT: ${{ vars.B2_S3_ENDPOINT }}
+
+    steps:
+      - name: Repository ophalen
+        uses: actions/checkout@v4.2.2
+
+      - name: Node.js instellen
+        uses: actions/setup-node@v4.4.0
+        with:
+          node-version: 22
+
+      - name: Supabase CLI installeren
+        uses: supabase/setup-cli@v2.1.1
+        with:
+          version: 2.114.0
+          github-token: ${{ github.token }}
+
+      - name: Back-upinputs fail-closed controleren
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          for command in aws node pg_dump psql sha256sum tar; do
+            command -v "$command" >/dev/null || { echo "Ontbrekend commando: $command" >&2; exit 1; }
+          done
+          for variable in SUPABASE_DB_PASSWORD SUPABASE_SERVICE_ROLE_KEY B2_BUCKET_NAME B2_S3_ENDPOINT; do
+            test -n "${!variable:-}" || { echo "Ontbrekende back-upinput: $variable" >&2; exit 1; }
+          done
+          test -f scripts/backup-supabase-storage.mjs
+          test -f scripts/capture-supabase-managed-customizations.sql
+          test -f scripts/create-backup-validation.sql
+
+      - name: Veilige databaseverbinding opbouwen
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ENCODED_PASSWORD="$(python3 -c 'import os, urllib.parse; print(urllib.parse.quote(os.environ["SUPABASE_DB_PASSWORD"], safe=""))')"
+          echo "::add-mask::$ENCODED_PASSWORD"
+          SUPABASE_DB_URL="postgresql://postgres.${SUPABASE_PROJECT_REF}:${ENCODED_PASSWORD}@aws-1-eu-north-1.pooler.supabase.com:5432/postgres"
+          echo "::add-mask::$SUPABASE_DB_URL"
+          echo "SUPABASE_DB_URL=$SUPABASE_DB_URL" >> "$GITHUB_ENV"
+
+      - name: Bronverbinding controleren
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -Atc "select 1")" = "1"
+          test "$SUPABASE_PROJECT_REF" = "aebwiufuegsiwhwpdrfb"
+
+      - name: Database, Auth en Storage-metadata exporteren
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          BACKUP_TIMESTAMP="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
+          BACKUP_ROOT="$RUNNER_TEMP/supabase-backup-$BACKUP_TIMESTAMP"
+          DB_DIR="$BACKUP_ROOT/database"
+          STORAGE_DIR="$BACKUP_ROOT/storage"
+          mkdir -p "$DB_DIR" "$STORAGE_DIR"
+
+          # The Supabase CLI deliberately excludes managed schemas from its
+          # normal dump. Keep the public dump and managed data separate so the
+          # restore target can initialize its own managed schemas first.
+          supabase db dump --db-url "$SUPABASE_DB_URL" -f "$DB_DIR/roles.sql" --role-only
+          supabase db dump --db-url "$SUPABASE_DB_URL" -f "$DB_DIR/schema.sql"
+          supabase db dump --db-url "$SUPABASE_DB_URL" -f "$DB_DIR/data.sql" --data-only --use-copy -x "storage.buckets_vectors" -x "storage.vector_indexes"
+          pg_dump "$SUPABASE_DB_URL" --data-only --schema=auth --no-owner --no-privileges --disable-triggers -f "$DB_DIR/auth-data.sql"
+          pg_dump "$SUPABASE_DB_URL" --data-only --schema=storage --no-owner --no-privileges --disable-triggers -T "storage.buckets_vectors" -T "storage.vector_indexes" -f "$DB_DIR/storage-data.sql"
+          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f scripts/capture-supabase-managed-customizations.sql > "$DB_DIR/managed-customizations.sql"
+          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f scripts/create-backup-validation.sql > "$DB_DIR/database-validation.json"
+
+          cat > "$DB_DIR/metadata.txt" <<EOF
+          created_utc=$BACKUP_TIMESTAMP
+          source_project=$SUPABASE_PROJECT_REF
+          format=supabase-cli-logical-dump-plus-managed-data
+          cli_version=2.114.0
+          contents=roles.sql,schema.sql,data.sql,auth-data.sql,storage-data.sql,managed-customizations.sql,database-validation.json
+          physical_storage_archive=separate
+          EOF
+
+          for file in roles.sql schema.sql data.sql auth-data.sql storage-data.sql managed-customizations.sql database-validation.json metadata.txt; do
+            test -s "$DB_DIR/$file" || { echo "Leeg of ontbrekend databasebestand: $file" >&2; exit 1; }
+          done
+          grep -Eq 'auth\.(users|identities)' "$DB_DIR/auth-data.sql" || {
+            echo "Auth-data.sql bevat geen herkenbare Auth-tabellen; back-up stopt." >&2
+            exit 1
+          }
+          grep -Eq 'storage\.(buckets|objects)' "$DB_DIR/storage-data.sql" || {
+            echo "Storage-data.sql bevat geen herkenbare Storage-tabellen; back-up stopt." >&2
+            exit 1
+          }
+
+          echo "BACKUP_TIMESTAMP=$BACKUP_TIMESTAMP" >> "$GITHUB_ENV"
+          echo "BACKUP_ROOT=$BACKUP_ROOT" >> "$GITHUB_ENV"
+          echo "DB_DIR=$DB_DIR" >> "$GITHUB_ENV"
+          echo "STORAGE_DIR=$STORAGE_DIR" >> "$GITHUB_ENV"
+
+      - name: Fysieke Storage-objecten exporteren
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node scripts/backup-supabase-storage.mjs --output-dir "$STORAGE_DIR"
+          test -s "$STORAGE_DIR/storage-manifest.json"
+
+      - name: Back-uparchieven en unified manifest maken
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          DB_ARCHIVE_NAME="bestuurdersportaal-database-$BACKUP_TIMESTAMP.tar.gz"
+          STORAGE_ARCHIVE_NAME="bestuurdersportaal-storage-$BACKUP_TIMESTAMP.tar.gz"
+          DB_ARCHIVE_PATH="$BACKUP_ROOT/$DB_ARCHIVE_NAME"
+          STORAGE_ARCHIVE_PATH="$BACKUP_ROOT/$STORAGE_ARCHIVE_NAME"
+          tar -C "$DB_DIR" --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -czf "$DB_ARCHIVE_PATH" .
+          tar -C "$STORAGE_DIR" --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -czf "$STORAGE_ARCHIVE_PATH" .
+          (cd "$BACKUP_ROOT" && sha256sum "$DB_ARCHIVE_NAME" > "$DB_ARCHIVE_NAME.sha256")
+          (cd "$BACKUP_ROOT" && sha256sum "$STORAGE_ARCHIVE_NAME" > "$STORAGE_ARCHIVE_NAME.sha256")
+          (cd "$BACKUP_ROOT" && sha256sum -c "$DB_ARCHIVE_NAME.sha256")
+          (cd "$BACKUP_ROOT" && sha256sum -c "$STORAGE_ARCHIVE_NAME.sha256")
+
+          OBJECT_PREFIX="supabase/$(date -u +%Y)/$(date -u +%m)/$(date -u +%d)"
+          DB_KEY="$OBJECT_PREFIX/$DB_ARCHIVE_NAME"
+          DB_CHECKSUM_KEY="$DB_KEY.sha256"
+          STORAGE_KEY="$OBJECT_PREFIX/$STORAGE_ARCHIVE_NAME"
+          STORAGE_CHECKSUM_KEY="$STORAGE_KEY.sha256"
+          STATUS_KEY="backup-status/$(date -u +%Y)/$(date -u +%m)/$(date -u +%d)/manifest-$BACKUP_TIMESTAMP.json"
+          STATUS_PATH="$BACKUP_ROOT/manifest-$BACKUP_TIMESTAMP.json"
+          export OBJECT_PREFIX STATUS_KEY
+
+          python3 - "$DB_ARCHIVE_PATH" "$STORAGE_ARCHIVE_PATH" "$DB_ARCHIVE_PATH.sha256" "$STORAGE_ARCHIVE_PATH.sha256" "$STORAGE_DIR/storage-manifest.json" "$STATUS_PATH" <<'PY'
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import sys
+
+          db_archive, storage_archive, db_hash, storage_hash, storage_manifest_path, status_path = sys.argv[1:]
+          timestamp = os.environ["BACKUP_TIMESTAMP"]
+          prefix = os.environ["OBJECT_PREFIX"] if "OBJECT_PREFIX" in os.environ else f"supabase/{timestamp[:4]}/{timestamp[5:7]}/{timestamp[8:10]}"
+          status_key = os.environ["STATUS_KEY"]
+
+          def checksum(path):
+              digest = hashlib.sha256()
+              with open(path, "rb") as handle:
+                  for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                      digest.update(chunk)
+              return digest.hexdigest()
+
+          storage = json.loads(pathlib.Path(storage_manifest_path).read_text())
+          manifest = {
+              "schema_version": 2,
+              "status": "complete",
+              "created_utc": timestamp,
+              "source_project": os.environ["SUPABASE_PROJECT_REF"],
+              "database": {
+                  "archive_key": f"{prefix}/{pathlib.Path(db_archive).name}",
+                  "checksum_key": f"{prefix}/{pathlib.Path(db_archive).name}.sha256",
+                  "bytes": pathlib.Path(db_archive).stat().st_size,
+                  "sha256": checksum(db_archive),
+                  "contents": ["roles.sql", "schema.sql", "data.sql", "auth-data.sql", "storage-data.sql", "managed-customizations.sql", "database-validation.json", "metadata.txt"],
+              },
+              "storage": {
+                  "archive_key": f"{prefix}/{pathlib.Path(storage_archive).name}",
+                  "checksum_key": f"{prefix}/{pathlib.Path(storage_archive).name}.sha256",
+                  "bytes": pathlib.Path(storage_archive).stat().st_size,
+                  "sha256": checksum(storage_archive),
+                  "bucket_count": storage["bucket_count"],
+                  "object_count": storage["object_count"],
+                  "total_bytes": storage["total_bytes"],
+                  "buckets": [bucket["id"] for bucket in storage["buckets"]],
+              },
+              "coverage": {
+                  "public_database_schema_and_data": True,
+                  "auth_data": True,
+                  "storage_metadata": True,
+                  "managed_auth_storage_customizations": True,
+                  "physical_storage_objects": True,
+                  "supabase_auth_provider_settings": False,
+                  "supabase_api_keys_and_secrets": False,
+                  "vercel_dns_and_external_integrations": False,
+              },
+              "completion_marker": status_key,
+          }
+          pathlib.Path(status_path).write_text(json.dumps(manifest, indent=2) + "\n")
+          pathlib.Path(status_path + ".sha256").write_text(f"{checksum(status_path)}  {pathlib.Path(status_path).name}\n")
+          PY
+
+          echo "OBJECT_PREFIX=$OBJECT_PREFIX" >> "$GITHUB_ENV"
+          echo "DB_ARCHIVE_NAME=$DB_ARCHIVE_NAME" >> "$GITHUB_ENV"
+          echo "DB_ARCHIVE_PATH=$DB_ARCHIVE_PATH" >> "$GITHUB_ENV"
+          echo "DB_CHECKSUM_PATH=$DB_ARCHIVE_PATH.sha256" >> "$GITHUB_ENV"
+          echo "STORAGE_ARCHIVE_NAME=$STORAGE_ARCHIVE_NAME" >> "$GITHUB_ENV"
+          echo "STORAGE_ARCHIVE_PATH=$STORAGE_ARCHIVE_PATH" >> "$GITHUB_ENV"
+          echo "STORAGE_CHECKSUM_PATH=$STORAGE_ARCHIVE_PATH.sha256" >> "$GITHUB_ENV"
+          echo "STATUS_KEY=$STATUS_KEY" >> "$GITHUB_ENV"
+          echo "STATUS_PATH=$STATUS_PATH" >> "$GITHUB_ENV"
+
+      - name: Archieven met retry naar Backblaze B2 uploaden
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          upload_with_retry() {
+            local source="$1"
+            local key="$2"
+            local attempt
+            for attempt in 1 2 3 4 5; do
+              if aws s3 cp "$source" "s3://$B2_BUCKET_NAME/$key" --endpoint-url "$B2_S3_ENDPOINT" --only-show-errors --no-progress; then
+                return 0
+              fi
+              if [ "$attempt" -lt 5 ]; then
+                sleep $((2 ** (attempt - 1)))
+              fi
+            done
+            echo "B2-upload mislukt na 5 pogingen: $key" >&2
+            return 1
+          }
+
+          verify_size_with_retry() {
+            local source="$1"
+            local key="$2"
+            local expected
+            local actual
+            expected="$(stat -c '%s' "$source")"
+            for attempt in 1 2 3 4 5; do
+              actual="$(aws s3api head-object --endpoint-url "$B2_S3_ENDPOINT" --bucket "$B2_BUCKET_NAME" --key "$key" --query ContentLength --output text 2>/dev/null || true)"
+              if [ "$actual" = "$expected" ]; then
+                return 0
+              fi
+              sleep $((2 ** (attempt - 1)))
+            done
+            echo "B2-integriteitscontrole mislukt voor $key (verwacht=$expected, aangetroffen=$actual)" >&2
+            return 1
+          }
+
+          upload_with_retry "$DB_ARCHIVE_PATH" "$OBJECT_PREFIX/$DB_ARCHIVE_NAME"
+          upload_with_retry "$DB_CHECKSUM_PATH" "$OBJECT_PREFIX/$DB_ARCHIVE_NAME.sha256"
+          upload_with_retry "$STORAGE_ARCHIVE_PATH" "$OBJECT_PREFIX/$STORAGE_ARCHIVE_NAME"
+          upload_with_retry "$STORAGE_CHECKSUM_PATH" "$OBJECT_PREFIX/$STORAGE_ARCHIVE_NAME.sha256"
+          verify_size_with_retry "$DB_ARCHIVE_PATH" "$OBJECT_PREFIX/$DB_ARCHIVE_NAME"
+          verify_size_with_retry "$DB_CHECKSUM_PATH" "$OBJECT_PREFIX/$DB_ARCHIVE_NAME.sha256"
+          verify_size_with_retry "$STORAGE_ARCHIVE_PATH" "$OBJECT_PREFIX/$STORAGE_ARCHIVE_NAME"
+          verify_size_with_retry "$STORAGE_CHECKSUM_PATH" "$OBJECT_PREFIX/$STORAGE_ARCHIVE_NAME.sha256"
+
+          # The completion marker is uploaded last. The watchdog treats its
+          # absence as an incomplete/failed backup, even if an archive exists.
+          upload_with_retry "$STATUS_PATH" "$STATUS_KEY"
+          upload_with_retry "$STATUS_PATH.sha256" "$STATUS_KEY.sha256"
+          verify_size_with_retry "$STATUS_PATH" "$STATUS_KEY"
+          verify_size_with_retry "$STATUS_PATH.sha256" "$STATUS_KEY.sha256"
+
+          echo "Back-up volledig opgeslagen en geverifieerd:" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Database: \\`s3://$B2_BUCKET_NAME/$OBJECT_PREFIX/$DB_ARCHIVE_NAME\\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Storage: \\`s3://$B2_BUCKET_NAME/$OBJECT_PREFIX/$STORAGE_ARCHIVE_NAME\\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Completion marker: \\`s3://$B2_BUCKET_NAME/$STATUS_KEY\\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Tijdelijke bestanden verwijderen
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          find "$RUNNER_TEMP" -maxdepth 1 -type d -name "supabase-backup-*" -exec rm -rf {} +

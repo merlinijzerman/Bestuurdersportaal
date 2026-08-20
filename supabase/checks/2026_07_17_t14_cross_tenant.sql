@@ -74,7 +74,7 @@ end $$;
 -- T14a — log SELECT-isolatie: fonds A ziet GEEN logregels van fonds B.
 -- ════════════════════════════════════════════════════════════════════════════
 set local role authenticated;
-set local request.jwt.claims to '{"sub":"4aaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}';
+set local request.jwt.claim.sub to '4aaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
 do $$
 declare n int;
@@ -223,7 +223,7 @@ end $$;
 --        restpunt — zelfde vorm als fonds_config_log).
 -- ════════════════════════════════════════════════════════════════════════════
 set local role authenticated;
-set local request.jwt.claims to '{"sub":"4aaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}';
+set local request.jwt.claim.sub to '4aaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
 do $$
 declare gelukt boolean := false;
@@ -257,7 +257,7 @@ begin
   raise notice 'OK T14g-1: cross-tenant en gespoofte log-inserts geweigerd (WITH CHECK).';
 end $$;
 
-set local request.jwt.claims to '{"sub":"4bbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"}';
+set local request.jwt.claim.sub to '4bbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 
 do $$
 declare gelukt boolean := false;
@@ -281,7 +281,7 @@ end $$;
 -- ════════════════════════════════════════════════════════════════════════════
 -- T14d — RPC-rolgate: bestuurder → weigering; beheerder slaagt consistent.
 -- ════════════════════════════════════════════════════════════════════════════
-set local request.jwt.claims to '{"sub":"4bbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"}';
+set local request.jwt.claim.sub to '4bbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 
 do $$
 declare gelukt boolean := false;
@@ -310,7 +310,7 @@ begin
   raise notice 'OK T14d-1: RPC geweigerd voor niet-privileged bestuurder (RLS-rolgate).';
 end $$;
 
-set local request.jwt.claims to '{"sub":"4aaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}';
+set local request.jwt.claim.sub to '4aaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
 do $$
 declare n_reeks int; n_res int; n_kpi int; n_per int; n_log int; v_soli numeric; v_ev numeric;
@@ -398,7 +398,7 @@ end $$;
 -- T14f — RPC-validaties: balansevenwicht + gekoppelde standen (DB-niveau).
 -- ════════════════════════════════════════════════════════════════════════════
 set local role authenticated;
-set local request.jwt.claims to '{"sub":"4aaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}';
+set local request.jwt.claim.sub to '4aaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
 do $$
 declare gelukt boolean := false; melding text;

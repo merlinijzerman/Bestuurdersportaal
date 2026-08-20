@@ -176,13 +176,57 @@ export async function POST(
         ? st.alternatieven.find((a) => a.code === uitslag.winnend_alternatief)?.label ??
           uitslag.winnend_alternatief
         : "geen eenduidige uitslag";
-      await supabase.from("procedure_bewijs").insert({
-        stap_id: stapId,
-        stemming_id: stemmingId,
-        titel: `Stemverslag — ${st.vraag.slice(0, 160)}`,
-        beschrijving: `Uitslag: ${winnaarLabel} (${samenvatting}). Quorum: ${uitslag.quorum_status}, meerderheid: ${uitslag.meerderheid_status}.`,
-        toegevoegd_door: user.id,
-      });
+      const bewijsTitel = `Stemverslag — ${st.vraag.slice(0, 160)}`;
+      // Bewust ZONDER requirement_sleutel: het systeem bepaalt niet welke
+      // bewijslast een stemverslag vervult. Sinds de bewijsbinding (besluit
+      // 0183) telt een ongebonden stuk niet mee voor readiness; wie het als
+      // onderbouwing wil laten gelden, koppelt het in de UI aan een vereiste
+      // — en dát wordt als `bewijs_binding_gewijzigd` gelogd.
+      const { data: stemBewijs, error: bewijsFout } = await supabase
+        .from("procedure_bewijs")
+        .insert({
+          stap_id: stapId,
+          stemming_id: stemmingId,
+          titel: bewijsTitel,
+          beschrijving: `Uitslag: ${winnaarLabel} (${samenvatting}). Quorum: ${uitslag.quorum_status}, meerderheid: ${uitslag.meerderheid_status}.`,
+          toegevoegd_door: user.id,
+        })
+        .select("id, stap_id")
+        .single();
+      if (bewijsFout) {
+        // Niet fataal voor het sluiten van de stemming, maar wél zichtbaar
+        // maken: zonder deze rij ontbreekt het stemverslag in het dossier.
+        console.error("Stemverslag-bewijs toevoegen fout:", bewijsFout);
+      }
+
+      // Append-only auditregel: dit is het enige pad waarlangs het systeem zelf
+      // een bewijsstuk in het dossier zet. Zonder deze regel staat er bewijs in
+      // het dossier waarvan alleen `stemmingen` de herkomst kent, terwijl elk
+      // door een mens opgevoerd stuk wél een logregel heeft.
+      if (stemBewijs) {
+        const { data: stapRij } = await supabase
+          .from("procedure_stappen")
+          .select("naam, procedure_id")
+          .eq("id", stapId)
+          .single();
+        if (stapRij?.procedure_id) {
+          await supabase.from("procedure_log").insert({
+            procedure_id: stapRij.procedure_id,
+            event_type: "bewijs_toegevoegd",
+            actor_id: user.id,
+            actor_naam: null,
+            payload: {
+              bewijs_id: stemBewijs.id,
+              stap: stapRij.naam,
+              titel: bewijsTitel,
+              bron: "stemverslag",
+              stemming_id: stemmingId,
+              requirement_sleutel: null,
+              requirement_label: null,
+            },
+          });
+        }
+      }
     }
 
     // Notificatie: starter + tegen-stemmers

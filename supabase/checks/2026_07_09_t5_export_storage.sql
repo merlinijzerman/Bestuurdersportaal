@@ -156,7 +156,7 @@ values
 
 -- ── Impersoneer user A (fonds A) ────────────────────────────────────────────
 set local role authenticated;
-set local request.jwt.claims to '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}';
+set local request.jwt.claim.sub to 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
 -- ── T6 — EXPORT: bronqueries zijn RLS-gefilterd ─────────────────────────────
 

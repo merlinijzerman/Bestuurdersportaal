@@ -64,7 +64,7 @@ values
 
 -- ── Impersoneer user A (elke ingelogde identiteit mag generiek lezen, B13) ──
 set local role authenticated;
-set local request.jwt.claims to '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}';
+set local request.jwt.claim.sub to 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
 -- R1 (NEGATIEF): verlopen review verschijnt NIET — beide RPC's.
 do $$

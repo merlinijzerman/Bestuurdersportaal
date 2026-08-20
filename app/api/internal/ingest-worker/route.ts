@@ -45,6 +45,43 @@ async function draai(req: NextRequest): Promise<NextResponse> {
   if (!geautoriseerd(req)) {
     return NextResponse.json({ error: "Niet geautoriseerd" }, { status: 401 });
   }
+  // ── W0.1-PROBE (Route A WP3) — TIJDELIJK, VERWIJDEREN NA HET GO/NO-GO ──────
+  // Het hele authenticatiemodel van de WP3-scanner rust erop dat de beheerworker
+  // een kortlevend Vercel OIDC-token kan minten. In Vercel Functions arriveert
+  // dat token als `x-vercel-oidc-token`-header op de Request — maar of een
+  // CRON-invocatie die header draagt, is niet gedocumenteerd. Deze probe stelt
+  // dat vast langs het echte cron-pad, zonder gedrag te wijzigen.
+  //
+  // Logt bewust NOOIT het token zelf. Alleen aanwezigheid, lengte en de
+  // niet-geheime claims die we moeten pinnen (iss/aud/sub/owner_id/project_id).
+  // De handtekening wordt niet gelezen en niet geverifieerd — dit is een
+  // aanwezigheidstest, geen authenticatie.
+  try {
+    const oidc = req.headers.get("x-vercel-oidc-token");
+    let claims: Record<string, unknown> = {};
+    if (oidc) {
+      const deel = oidc.split(".")[1];
+      if (deel) {
+        const { iss, aud, sub, owner_id, project_id, environment, exp, iat } = JSON.parse(
+          Buffer.from(deel, "base64url").toString("utf8")
+        );
+        claims = { iss, aud, sub, owner_id, project_id, environment, levensduur_s: exp - iat };
+      }
+    }
+    console.log(
+      JSON.stringify({
+        tag: "wp3-oidc-probe",
+        trigger: req.method === "GET" ? "cron_of_get" : "post",
+        aanwezig: Boolean(oidc),
+        lengte: oidc?.length ?? 0,
+        ...claims,
+      })
+    );
+  } catch {
+    console.log(JSON.stringify({ tag: "wp3-oidc-probe", aanwezig: false, fout: "onleesbaar" }));
+  }
+  // ── EINDE W0.1-PROBE ──────────────────────────────────────────────────────
+
   try {
     const svc = createServiceSupabase();
     // Werker-id draagt de starttijd zodat het auditspoor invocaties onderscheidt.

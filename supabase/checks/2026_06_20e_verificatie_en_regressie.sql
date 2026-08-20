@@ -8,7 +8,7 @@
 -- RLS testen vanuit de SQL-editor: de editor draait als 'postgres' en OMZEILT
 -- RLS. Om als tenant te testen simuleren we een ingelogde gebruiker met:
 --     set local role authenticated;
---     set local request.jwt.claims to '{"sub":"<USER_UUID>"}';
+--     set local request.jwt.claim.sub to '<USER_UUID>';
 -- auth.uid() leest dan <USER_UUID>. Doe dit altijd binnen begin; ... rollback;.
 --
 -- VUL EERST DEZE PLACEHOLDERS IN (uit je seed/demo-data):
@@ -107,7 +107,7 @@ where schemaname='storage' and tablename='objects'
 -- C1 (#6). Tenant kan GEEN generiek document inserten (RLS with check faalt).
 begin;
   set local role authenticated;
-  set local request.jwt.claims to '{"sub":"<FONDS_A_USER>"}';
+  set local request.jwt.claim.sub to '<FONDS_A_USER>';
   -- Verwacht: ERROR new row violates row-level security policy for table "documenten".
   insert into public.documenten (fonds_id, bibliotheek, bron, titel)
   values (null, 'generiek', 'DNB', 'TEST mag niet — generiek door tenant');
@@ -116,7 +116,7 @@ rollback;
 -- C2 (#7a). Tenant kan een generiek document NIET updaten (0 rijen geraakt).
 begin;
   set local role authenticated;
-  set local request.jwt.claims to '{"sub":"<FONDS_A_USER>"}';
+  set local request.jwt.claim.sub to '<FONDS_A_USER>';
   with poging as (
     update public.documenten set titel = titel || ' (gehackt)'
     where id = '<GENERIEK_DOC>' returning 1)
@@ -126,7 +126,7 @@ rollback;
 -- C3 (#7b). Tenant kan generiek NIET deleten (0 rijen).
 begin;
   set local role authenticated;
-  set local request.jwt.claims to '{"sub":"<FONDS_A_USER>"}';
+  set local request.jwt.claim.sub to '<FONDS_A_USER>';
   with poging as (delete from public.documenten where id='<GENERIEK_DOC>' returning 1)
   select count(*) as generiek_delete_geraakt from poging;   -- Verwacht: 0.
 rollback;
@@ -135,7 +135,7 @@ rollback;
 --   Vul <FONDS_A_DOC> = een eigen fondsdocument van Fonds A.
 begin;
   set local role authenticated;
-  set local request.jwt.claims to '{"sub":"<FONDS_A_USER>"}';
+  set local request.jwt.claim.sub to '<FONDS_A_USER>';
   with poging as (
     update public.documenten set bibliotheek='generiek'
     where id='<FONDS_A_DOC>' and bibliotheek='fonds' returning 1)
@@ -145,7 +145,7 @@ rollback;
 -- C5 (#8a). Tenant KAN generiek wel LEZEN.
 begin;
   set local role authenticated;
-  set local request.jwt.claims to '{"sub":"<FONDS_A_USER>"}';
+  set local request.jwt.claim.sub to '<FONDS_A_USER>';
   select count(*) as generiek_zichtbaar from public.documenten where bibliotheek='generiek';
   -- Verwacht: > 0 (alle generieke docs leesbaar).
 rollback;
@@ -153,7 +153,7 @@ rollback;
 -- C6 (#8b). Chunks van generiek: lezen JA, schrijven NEE.
 begin;
   set local role authenticated;
-  set local request.jwt.claims to '{"sub":"<FONDS_A_USER>"}';
+  set local request.jwt.claim.sub to '<FONDS_A_USER>';
   select count(*) as generiek_chunks_leesbaar
   from public.document_chunks where document_id='<GENERIEK_DOC>';   -- Verwacht: > 0.
   -- Schrijfpoging op een generiek-chunk:
@@ -164,7 +164,7 @@ rollback;
 -- C7 (#9 / #15 / #16). Eigen fondsdocs werken; Fonds A ziet Fonds B niet.
 begin;
   set local role authenticated;
-  set local request.jwt.claims to '{"sub":"<FONDS_A_USER>"}';
+  set local request.jwt.claim.sub to '<FONDS_A_USER>';
   -- Eigen fondsdoc inserten lukt:
   insert into public.documenten (fonds_id, bibliotheek, bron, titel)
   values ('<FONDS_A_ID>', 'fonds', 'Intern', 'TEST eigen fondsdoc');  -- Verwacht: OK (1 rij).

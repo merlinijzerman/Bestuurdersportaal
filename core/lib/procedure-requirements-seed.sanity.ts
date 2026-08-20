@@ -61,4 +61,90 @@ check("seed bevat één rij per requirement uit de definitie", () => {
   assert.equal(rijen.length, aantal);
 });
 
+// ── Bewijsbinding: de matchsleutel moet per stap niet-leeg en uniek zijn ──
+//
+// coalesce(documenttype, label) is de identiteit die de unieke index
+// idx_req_uniek draagt, de per-proces uitsluiting én — sinds 2026-08-18 —
+// de bewijs↔vereiste-binding. Botsen twee vereisten binnen één stap op die
+// identiteit, dan vervult één bewijsstuk ze allebei. De generator hoort dat
+// te weigeren in plaats van de fout de database in te schrijven.
+function defMet(requirements: unknown[]): ProcedureDefinitie {
+  return {
+    code: "test_template",
+    versie: "1.0.0",
+    naam: "Test",
+    fasen: [],
+    stappen: [
+      { volgorde: 1, naam: "Stap 1", checklist: [], requirements },
+    ],
+  } as unknown as ProcedureDefinitie;
+}
+
+check("generator weigert een dubbele matchsleutel binnen één stap", () => {
+  assert.throws(
+    () =>
+      genereerRequirementsSeed(
+        defMet([
+          { requirement_type: "document", label: "Transitieplan", verplicht: true, blokkerend: true },
+          { requirement_type: "document", label: "Transitieplan", verplicht: true, blokkerend: true },
+        ])
+      ),
+    /dubbele matchsleutel/i
+  );
+});
+
+check("generator weigert een lege matchsleutel", () => {
+  assert.throws(
+    () =>
+      genereerRequirementsSeed(
+        defMet([
+          { requirement_type: "document", label: "   ", verplicht: true, blokkerend: true },
+        ])
+      ),
+    /lege matchsleutel/i
+  );
+});
+
+check("gelijke labels met verschillend documenttype botsen niet", () => {
+  const sql = genereerRequirementsSeed(
+    defMet([
+      { requirement_type: "document", label: "Verslag", documenttype: "verslag_a", verplicht: true, blokkerend: true },
+      { requirement_type: "document", label: "Verslag", documenttype: "verslag_b", verplicht: true, blokkerend: true },
+    ])
+  );
+  assert.match(sql, /verslag_a/);
+  assert.match(sql, /verslag_b/);
+});
+
+check("hetzelfde label in een ándere stap is toegestaan", () => {
+  const def = {
+    code: "test_template",
+    versie: "1.0.0",
+    naam: "Test",
+    fasen: [],
+    stappen: [
+      {
+        volgorde: 1,
+        naam: "Stap 1",
+        checklist: [],
+        requirements: [
+          { requirement_type: "document", label: "Verslag", verplicht: true, blokkerend: true },
+        ],
+      },
+      {
+        volgorde: 2,
+        naam: "Stap 2",
+        checklist: [],
+        requirements: [
+          { requirement_type: "document", label: "Verslag", verplicht: true, blokkerend: true },
+        ],
+      },
+    ],
+  } as unknown as ProcedureDefinitie;
+  const rijen = genereerRequirementsSeed(def)
+    .split("\n")
+    .filter((r) => r.trimStart().startsWith("('test_template',"));
+  assert.equal(rijen.length, 2);
+});
+
 console.log(`\nprocedure-requirements-seed.sanity: ${n} checks groen.`);

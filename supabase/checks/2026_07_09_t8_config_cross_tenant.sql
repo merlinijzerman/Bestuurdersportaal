@@ -74,7 +74,7 @@ insert into public.fonds_content_overrides (fonds_id, sleutel, waarde)
 -- T8a — SELECT-isolatie: fonds A ziet GÉÉN config-rij van fonds B.
 -- ════════════════════════════════════════════════════════════════════════════
 set local role authenticated;
-set local request.jwt.claims to '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}';
+set local request.jwt.claim.sub to 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
 do $$
 declare n int;
@@ -95,7 +95,7 @@ end $$;
 -- ════════════════════════════════════════════════════════════════════════════
 -- T8b — Rolgate NEGATIEF: een bestuurder (niet-privileged) mag geen theming schrijven.
 -- ════════════════════════════════════════════════════════════════════════════
-set local request.jwt.claims to '{"sub":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"}';
+set local request.jwt.claim.sub to 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 
 do $$
 declare gelukt boolean := false;
@@ -116,7 +116,7 @@ end $$;
 -- ════════════════════════════════════════════════════════════════════════════
 -- T8c — Rolgate POSITIEF: een beheerder van fonds A mag WEL theming schrijven.
 -- ════════════════════════════════════════════════════════════════════════════
-set local request.jwt.claims to '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}';
+set local request.jwt.claim.sub to 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
 do $$
 declare n int;

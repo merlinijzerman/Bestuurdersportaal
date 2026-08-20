@@ -85,7 +85,7 @@ insert into public.fonds_stuurinfo_reserve
 -- T15a — RPC-rolgate: bestuurder → weigering.
 -- ════════════════════════════════════════════════════════════════════════════
 set local role authenticated;
-set local request.jwt.claims to '{"sub":"5bbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"}';
+set local request.jwt.claim.sub to '5bbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 
 do $$
 declare gelukt boolean := false;
@@ -108,7 +108,7 @@ end $$;
 -- ════════════════════════════════════════════════════════════════════════════
 -- T15b — beheerder A slaagt; grenzen-update raakt alleen de band; alles gelogd.
 -- ════════════════════════════════════════════════════════════════════════════
-set local request.jwt.claims to '{"sub":"5aaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}';
+set local request.jwt.claim.sub to '5aaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
 do $$
 declare n_reeks int; n_kpi int; n_log int; r record;

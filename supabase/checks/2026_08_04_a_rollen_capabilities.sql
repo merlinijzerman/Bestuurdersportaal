@@ -252,7 +252,7 @@ values
 
 -- ── AC-3 — een collega in HETZELFDE fonds ziet niets van A ────────────────
 set local role authenticated;
-set local request.jwt.claims to '{"sub":"cccccccc-cccc-cccc-cccc-cccccccccccc"}';
+set local request.jwt.claim.sub to 'cccccccc-cccc-cccc-cccc-cccccccccccc';
 
 do $$
 declare n int;
@@ -301,7 +301,7 @@ exception
 end $$;
 
 -- ── AC-7 — geen direct verwijderpad ──────────────────────────────────────
-set local request.jwt.claims to '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}';
+set local request.jwt.claim.sub to 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
 do $$
 declare n int;
@@ -328,7 +328,7 @@ exception
 end $$;
 
 -- ── Eigenaarschap: A mag niet het gesprek van een ander verwijderen ───────
-set local request.jwt.claims to '{"sub":"cccccccc-cccc-cccc-cccc-cccccccccccc"}';
+set local request.jwt.claim.sub to 'cccccccc-cccc-cccc-cccc-cccccccccccc';
 do $$
 begin
   perform public.verwijder_gesprek('a0000000-0000-0000-0000-00000000000a',
@@ -341,7 +341,7 @@ exception
 end $$;
 
 -- ── AC-5 — auditor MET read, ZONDER read_sources ─────────────────────────
-set local request.jwt.claims to '{"sub":"dddddddd-dddd-dddd-dddd-dddddddddddd"}';
+set local request.jwt.claim.sub to 'dddddddd-dddd-dddd-dddd-dddddddddddd';
 do $$
 declare v_meta jsonb; n int; v_json text;
 begin
@@ -402,7 +402,7 @@ begin
 end $$;
 
 -- Eigen regels opvragen is géén inzage in die van een ander → geen inzageregel.
-set local request.jwt.claims to '{"sub":"cccccccc-cccc-cccc-cccc-cccccccccccc"}';
+set local request.jwt.claim.sub to 'cccccccc-cccc-cccc-cccc-cccccccccccc';
 do $$
 declare n_voor int; n_na int;
 begin
@@ -416,7 +416,7 @@ begin
 end $$;
 
 -- Bronniveau zonder motivering wordt geweigerd.
-set local request.jwt.claims to '{"sub":"eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"}';
+set local request.jwt.claim.sub to 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee';
 do $$
 begin
   perform public.lees_governance_audit('11111111-1111-1111-1111-111111111111',
@@ -500,7 +500,7 @@ begin
 end $$;
 
 -- ── AC-8 / AC-10 — verwijderen: idempotent, spoor intact ─────────────────
-set local request.jwt.claims to '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}';
+set local request.jwt.claim.sub to 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 do $$
 declare
   v1 jsonb; v2 jsonb;
@@ -593,7 +593,7 @@ begin
 end $$;
 
 -- ── Tenantgrens blijft staan: B ziet niets van fonds A ───────────────────
-set local request.jwt.claims to '{"sub":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"}';
+set local request.jwt.claim.sub to 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 do $$
 declare n int;
 begin

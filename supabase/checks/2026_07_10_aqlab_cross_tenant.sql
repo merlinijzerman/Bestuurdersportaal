@@ -127,7 +127,7 @@ end $$;
 
 -- ── Impersoneer een tenant-user (fonds 3) ───────────────────────────────────
 set local role authenticated;
-set local request.jwt.claims to '{"sub":"33333333-cccc-cccc-cccc-cccccccccccc"}';
+set local request.jwt.claim.sub to '33333333-cccc-cccc-cccc-cccccccccccc';
 
 -- NEGATIEF #5 (deny-by-default lees): tenant-sessie ziet GEEN aqlab_-rijen.
 do $$

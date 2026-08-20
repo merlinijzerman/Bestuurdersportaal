@@ -60,7 +60,7 @@ insert into public.fonds_klantbeeld_cohort (fonds_id, leeftijd, aantal)
 -- T11a — SELECT-isolatie: fonds A ziet GÉÉN stuurinfo/klantbeeld-rij van fonds B.
 -- ════════════════════════════════════════════════════════════════════════════
 set local role authenticated;
-set local request.jwt.claims to '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}';
+set local request.jwt.claim.sub to 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
 do $$
 declare n int;
@@ -79,7 +79,7 @@ end $$;
 -- ════════════════════════════════════════════════════════════════════════════
 -- T11b — Rolgate NEGATIEF: een bestuurder (niet-privileged) mag geen KPI schrijven.
 -- ════════════════════════════════════════════════════════════════════════════
-set local request.jwt.claims to '{"sub":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"}';
+set local request.jwt.claim.sub to 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 
 do $$
 declare gelukt boolean := false;
@@ -100,7 +100,7 @@ end $$;
 -- ════════════════════════════════════════════════════════════════════════════
 -- T11c — Rolgate POSITIEF: een beheerder van fonds A mag WEL een KPI schrijven.
 -- ════════════════════════════════════════════════════════════════════════════
-set local request.jwt.claims to '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}';
+set local request.jwt.claim.sub to 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
 do $$
 declare n int;
@@ -155,7 +155,7 @@ end $$;
 --        De UPDATE-USING-clause eist een privileged rol → de rij is onzichtbaar
 --        voor UPDATE → 0 rijen geraakt (geen mutatie).
 -- ════════════════════════════════════════════════════════════════════════════
-set local request.jwt.claims to '{"sub":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"}';
+set local request.jwt.claim.sub to 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 
 do $$
 declare geraakt int;
@@ -173,7 +173,7 @@ end $$;
 -- T11g — Cross-tenant UPDATE-move NEGATIEF: beheerder van A mag een eigen rij
 --        niet naar fonds B "verplaatsen" (WITH CHECK op fonds_id weigert).
 -- ════════════════════════════════════════════════════════════════════════════
-set local request.jwt.claims to '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}';
+set local request.jwt.claim.sub to 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
 do $$
 declare gelukt boolean := false;

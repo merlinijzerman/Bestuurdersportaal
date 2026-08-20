@@ -13,6 +13,11 @@ beoordeeld, bewijs heeft en onafhankelijk is gereviewd.
   aanvalspaden en technische risico's.
 - [`OMGEVINGEN-RUNBOOK.md`](./OMGEVINGEN-RUNBOOK.md) — doelarchitectuur en
   gecontroleerde cutover van Preview en Productie.
+- [`RUNBOOK-MIGRATIES.md`](./RUNBOOK-MIGRATIES.md) — vaste gang voor het
+  toepassen van een schemawijziging op productie. Bevat de interim-procedure
+  (handmatig, geldt nu) én de doelgang met goedkeuringspoort, plus de
+  inrichtingschecklist die tussen die twee staat. Ontwerp:
+  [`../02 Architectuur/ONTWERPNOTITIE-MIGRATIEPROCES.md`](../02%20Architectuur/ONTWERPNOTITIE-MIGRATIEPROCES.md).
 - [`../decisions/0175-preview-productie-scheiding.md`](../decisions/0175-preview-productie-scheiding.md)
   — bindend architectuurbesluit over de domeinen en Preview-AI.
 - [`../decisions/0176-fondsgerichte-preview-tenants.md`](../decisions/0176-fondsgerichte-preview-tenants.md)

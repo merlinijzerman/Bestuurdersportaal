@@ -22,6 +22,22 @@ declare
   v_aantal_caps        int;
   d                    record;
 begin
+  -- Fail closed vóór enige beheer- of auditmutatie als de deterministische
+  -- ketenkopmigratie nog niet aanwezig is. De oudere tijdstip+UUID-trigger kan
+  -- bij de multi-row auditinsert hieronder een fork maken.
+  if to_regclass('public.platform_event_chain_state') is null
+     or not exists (
+       select 1
+         from pg_proc p
+         join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public'
+          and p.proname = 'fn_platform_event_hash'
+          and pg_get_functiondef(p.oid) ilike '%platform_event_chain_state%'
+     ) then
+    raise exception
+      'STOP: voer eerst 2026_08_15_platform_event_chain_head.sql uit';
+  end if;
+
   -- Schemavariant van auth.identities bepalen (provider_id bestaat pas vanaf
   -- GoTrue ~v2.60). Zo werkt het script op beide varianten.
   select exists (

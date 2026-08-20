@@ -93,7 +93,7 @@ values ('d1a11111-1111-1111-1111-111111111111','11111111-1111-1111-1111-11111111
 
 -- ── Impersoneer user A (fonds A) ────────────────────────────────────────────
 set local role authenticated;
-set local request.jwt.claims to '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}';
+set local request.jwt.claim.sub to 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
 -- #1: A mag GEEN directe INSERT op comparison_results (schrijven alleen via functie).
 do $$
@@ -187,7 +187,7 @@ reset role;
 
 -- ── Impersoneer user B (fonds B): leesisolatie ──────────────────────────────
 set local role authenticated;
-set local request.jwt.claims to '{"sub":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"}';
+set local request.jwt.claim.sub to 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 
 -- #5 (leesisolatie): B ziet GEEN comparison_results van fonds A.
 do $$

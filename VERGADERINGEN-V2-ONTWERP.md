@@ -399,6 +399,8 @@ stemmingen.agendapunt_id
 
 **`procedure_bewijs.stemming_id`** (nieuw, expliciet t.o.v. v1.0). Bij sluiten van een stemming wordt automatisch een `procedure_bewijs`-rij geschreven met:
 
+> **Bijgewerkt 18-08-2026 (besluit 0183).** De rij wordt bewust **zonder** `requirement_sleutel` geschreven: het systeem bepaalt niet welke bewijslast een stemverslag vervult. Sinds de bewijs↔vereiste-binding telt een ongebonden bewijsstuk niet mee voor readiness — het stemverslag vervult dus geen enkele vereiste totdat iemand het in de UI aan een vereiste koppelt (en dát wordt als `bewijs_binding_gewijzigd` gelogd). De insert schrijft sindsdien ook een append-only `procedure_log`-regel (`bewijs_toegevoegd`, `bron: "stemverslag"`); die ontbrak, terwijl elk door een mens opgevoerd stuk er wél een had. Het `documenttype: 'stemverslag'` uit onderstaand schets-SQL wordt in de werkelijke route niet gezet.
+
 ```sql
 insert into procedure_bewijs (
   procedure_id, stap_id, stemming_id, documenttype, titel, beschrijving, aangemaakt_door

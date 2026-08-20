@@ -55,7 +55,7 @@ insert into public.fonds_stuurinfo_reserve (fonds_id, periode, reserve_key, labe
 -- T13a — SELECT-isolatie: fonds A ziet GÉÉN periode/reserve van fonds B.
 -- ════════════════════════════════════════════════════════════════════════════
 set local role authenticated;
-set local request.jwt.claims to '{"sub":"3aaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}';
+set local request.jwt.claim.sub to '3aaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
 do $$
 declare n int;
@@ -73,7 +73,7 @@ end $$;
 -- ════════════════════════════════════════════════════════════════════════════
 -- T13b — Rolgate NEGATIEF: een bestuurder (niet-privileged) mag niets schrijven.
 -- ════════════════════════════════════════════════════════════════════════════
-set local request.jwt.claims to '{"sub":"3bbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"}';
+set local request.jwt.claim.sub to '3bbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 
 do $$
 declare gelukt boolean := false;
@@ -95,7 +95,7 @@ end $$;
 -- T13c — Rolgate POSITIEF: een beheerder van fonds A mag WEL periode + reserve
 --        schrijven (in deze volgorde: de reserve-FK eist de registry-rij).
 -- ════════════════════════════════════════════════════════════════════════════
-set local request.jwt.claims to '{"sub":"3aaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}';
+set local request.jwt.claim.sub to '3aaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
 do $$
 declare n int;
@@ -205,7 +205,7 @@ end $$;
 --        reserve bijwerken. De UPDATE-USING-clause eist een privileged rol →
 --        de rijen zijn onzichtbaar voor UPDATE → 0 rijen geraakt.
 -- ════════════════════════════════════════════════════════════════════════════
-set local request.jwt.claims to '{"sub":"3bbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"}';
+set local request.jwt.claim.sub to '3bbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 
 do $$
 declare geraakt int;

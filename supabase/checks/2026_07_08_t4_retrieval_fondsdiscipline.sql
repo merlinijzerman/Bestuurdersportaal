@@ -78,7 +78,7 @@ values
 
 -- ── Impersoneer user A (fonds A) ────────────────────────────────────────────
 set local role authenticated;
-set local request.jwt.claims to '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}';
+set local request.jwt.claim.sub to 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
 -- POSITIEF / regressie: A ziet met p_fonds_id => A zowel het EIGEN fondsdoc als
 -- het published generieke document (filter niet over-restrictief).

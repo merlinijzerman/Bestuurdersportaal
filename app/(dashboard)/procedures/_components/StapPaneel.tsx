@@ -18,6 +18,10 @@ import { uploadDocument } from "@/core/lib/document-upload-client";
 import { DOCUMENTTYPEN, DOCUMENTTYPE_LABEL } from "@/core/lib/document-metadata";
 import { bewijsUploadDocumenttypeBlokker } from "@/core/lib/document-ingest-classificatie";
 import {
+  BINDBARE_REQUIREMENT_TYPES,
+  requirementSleutel,
+} from "@/core/lib/requirement-sleutel";
+import {
   checklistSamenvatting,
   bewijsstukkenSamenvatting,
   vergaderingenSamenvatting,
@@ -514,6 +518,10 @@ export default function StapPaneel({
   // relevant bij een nieuwe upload — een bestaand bibliotheekdocument heeft al
   // een type.
   const [bewijsMetadataType, setBewijsMetadataType] = useState("");
+  // Bewijsbinding: welk vereiste vervult het stuk dat we nu opvoeren?
+  // Zonder binding telt een bewijsstuk niet mee voor readiness — daarom staat
+  // de keuze expliciet in het formulier en niet impliciet in een tag.
+  const [bewijsVereiste, setBewijsVereiste] = useState<EvidenceItem | null>(null);
   // 3-D: bibliotheek-picker — kiezen uit bestaande documenten i.p.v. uploaden.
   // Houdt de uploadflow ongewijzigd; deze state is exclusief actief.
   const [bewijsBibliotheekId, setBewijsBibliotheekId] = useState<string | null>(null);
@@ -562,6 +570,24 @@ export default function StapPaneel({
   const stapEvidence = evidence.filter(
     (e) => e.stap_volgorde === stap.volgorde
   );
+  // Vereisten die met een bewijsstuk vervuld kunnen worden — dezelfde const
+  // als de server gebruikt, zodat client en server niet uiteen kunnen lopen.
+  const bindbareVereisten = stapEvidence.filter((e) =>
+    (BINDBARE_REQUIREMENT_TYPES as readonly string[]).includes(
+      e.requirement_type
+    )
+  );
+  const sleutelVan = (r: EvidenceItem) =>
+    requirementSleutel(r.stap_volgorde, r.requirement_type, r.documenttype, r.label);
+  const labelBijSleutel = new Map(
+    bindbareVereisten.map((r) => [sleutelVan(r), r.label])
+  );
+  const vereisteAlsPayload = (r: EvidenceItem) => ({
+    stap_volgorde: r.stap_volgorde,
+    requirement_type: r.requirement_type,
+    documenttype: r.documenttype,
+    label: r.label,
+  });
 
   const voldaanCount = checklist.filter((c) => c.voldaan).length;
   const totaalCount = checklist.length;
@@ -638,6 +664,22 @@ export default function StapPaneel({
     }
   }
 
+  // Eén resetpunt voor het bewijsformulier. Belangrijk voor de binding: bleef
+  // `bewijsVereiste` na annuleren staan, dan opende een volgende "+ Bewijsstuk
+  // toevoegen" met de vereiste van de vórige poging nog geselecteerd — een
+  // voorspelbare misbinding.
+  function resetBewijsForm() {
+    setBewijsTitel("");
+    setBewijsBeschrijving("");
+    setBewijsBestand(null);
+    setBewijsDocumenttype("");
+    setBewijsVereiste(null);
+    setBewijsMetadataType("");
+    setBewijsBibliotheekId(null);
+    setBewijsBibliotheekTitel("");
+    setBewijsForm(false);
+  }
+
   async function bewijsToevoegen(e: React.FormEvent) {
     e.preventDefault();
     if (alleenLezen) return;
@@ -705,6 +747,9 @@ export default function StapPaneel({
           beschrijving: bewijsBeschrijving.trim() || null,
           document_id: documentId,
           documenttype: bewijsDocumenttype.trim() || null,
+          // Bewijsbinding: welke vereiste dit stuk vervult. De server leidt de
+          // sleutel af en verifieert dat de vereiste bestaat.
+          vereiste: bewijsVereiste ? vereisteAlsPayload(bewijsVereiste) : null,
         }),
       });
       if (!res.ok) {
@@ -713,14 +758,7 @@ export default function StapPaneel({
       }
       const data = await res.json();
       setBewijs([data.bewijs as Bewijs, ...bewijs]);
-      setBewijsTitel("");
-      setBewijsBeschrijving("");
-      setBewijsBestand(null);
-      setBewijsDocumenttype("");
-      setBewijsMetadataType("");
-      setBewijsBibliotheekId(null);
-      setBewijsBibliotheekTitel("");
-      setBewijsForm(false);
+      resetBewijsForm();
       router.refresh();
     } catch (err: unknown) {
       setFout(err instanceof Error ? err.message : "Toevoegen mislukt");
@@ -1020,12 +1058,54 @@ export default function StapPaneel({
   }
 
   // "Opvoeren" bij een vereiste opent het bewijs-formulier, voorgevuld met de
-  // vereiste als titel + documenttype-tag.
+  // vereiste als titel + documenttype-tag. De binding zelf wordt hier gezet:
+  // titel en tag zijn suggesties, de binding is wat readiness bepaalt.
   function opvoerenVanuitVereiste(r: EvidenceItem) {
     setBewijsOpen(true);
     setBewijsForm(true);
+    setBewijsVereiste(r);
     if (!bewijsTitel.trim()) setBewijsTitel(r.label);
     if (r.documenttype) setBewijsDocumenttype(r.documenttype);
+  }
+
+  // Een reeds opgevoerd stuk alsnog aan een vereiste binden of losmaken.
+  // Dit is ook het herstelpad voor stukken die de backfill ongebonden liet.
+  async function bewijsBindenAanVereiste(bewijsId: string, sleutel: string) {
+    if (alleenLezen) return;
+    const doel = bindbareVereisten.find((r) => sleutelVan(r) === sleutel);
+    if (sleutel && !doel) return;
+    setFout(null);
+    setBezig(`bewijs-bind-${bewijsId}`);
+    try {
+      const res = await fetch(
+        `/api/procedures/${procedureId}/bewijs/${bewijsId}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            vereiste: doel ? vereisteAlsPayload(doel) : null,
+          }),
+        }
+      );
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Koppelen aan vereiste mislukt");
+      }
+      setBewijs((huidig) =>
+        huidig.map((b) =>
+          b.id === bewijsId
+            ? { ...b, requirement_sleutel: doel ? sleutel : null }
+            : b
+        )
+      );
+      router.refresh();
+    } catch (err: unknown) {
+      setFout(
+        err instanceof Error ? err.message : "Koppelen aan vereiste mislukt"
+      );
+    } finally {
+      setBezig(null);
+    }
   }
 
   // WO-3-vervolg: een vereiste verwijderen. Standaardset (bron='template') →
@@ -1329,7 +1409,8 @@ export default function StapPaneel({
           !alleenLezen
             ? () => {
                 setBewijsOpen(true);
-                setBewijsForm((f) => !f);
+                if (bewijsForm) resetBewijsForm();
+                else setBewijsForm(true);
               }
             : undefined
         }
@@ -1353,6 +1434,42 @@ export default function StapPaneel({
               placeholder="Korte beschrijving (optioneel)"
               className="w-full border border-line rounded px-2 py-1.5 text-sm focus:border-accent outline-none resize-none"
             />
+            {/* Bewijsbinding: welk vereiste vervult dit stuk? Zonder binding
+                telt het stuk niet mee voor de bewijslast — dat zeggen we hier
+                expliciet, vóór de handeling (UX-guardrail "maak vereisten en
+                blokkers expliciet") in plaats van via een stille uitkomst. */}
+            {bindbareVereisten.length > 0 && (
+              <div>
+                <label className="block text-[11px] uppercase tracking-wide text-muted font-semibold mb-1">
+                  Vervult welke vereiste?
+                </label>
+                <select
+                  value={bewijsVereiste ? sleutelVan(bewijsVereiste) : ""}
+                  onChange={(e) =>
+                    setBewijsVereiste(
+                      bindbareVereisten.find(
+                        (r) => sleutelVan(r) === e.target.value
+                      ) ?? null
+                    )
+                  }
+                  className="w-full border border-line rounded px-2 py-1.5 text-sm bg-white focus:border-accent outline-none"
+                >
+                  <option value="">— geen vereiste (telt niet mee) —</option>
+                  {bindbareVereisten.map((r) => (
+                    <option key={sleutelVan(r)} value={sleutelVan(r)}>
+                      {r.label}
+                      {r.vervuld ? " — al vervuld" : ""}
+                    </option>
+                  ))}
+                </select>
+                {!bewijsVereiste && (
+                  <p className="text-xs text-muted mt-1">
+                    Zonder gekozen vereiste blijft de gevraagde bewijslast op
+                    &laquo;nog op te voeren&raquo; staan.
+                  </p>
+                )}
+              </div>
+            )}
             {/* 1D-4: documenttype-tag uit de stap-requirements.
                 Als er documenttypes in deze stap zijn, presenteren we
                 ze als dropdown — anders een vrij tekstveld. */}
@@ -1464,7 +1581,7 @@ export default function StapPaneel({
             <div className="flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setBewijsForm(false)}
+                onClick={resetBewijsForm}
                 className="text-xs px-3 py-1.5 border border-line rounded hover:border-accent"
               >
                 Annuleren
@@ -1547,6 +1664,63 @@ export default function StapPaneel({
                           : "Toegevoegd"}{" "}
                         · {formatDatumKort(b.toegevoegd_op)}
                       </div>
+                      {/* Bewijsbinding: welke vereiste vervult dit stuk?
+                          Ongebonden stukken tellen niet mee — dat is zichtbaar
+                          én ter plekke te herstellen. */}
+                      {bindbareVereisten.length > 0 && (
+                        <div className="text-xs mt-1">
+                          {b.requirement_sleutel &&
+                          labelBijSleutel.has(b.requirement_sleutel) ? (
+                            <span className="text-muted">
+                              Vervult:{" "}
+                              <span className="text-ink">
+                                {labelBijSleutel.get(b.requirement_sleutel)}
+                              </span>
+                            </span>
+                          ) : b.requirement_sleutel ? (
+                            // Wél gebonden, maar de vereiste staat niet in de
+                            // lijst: per proces uitgesloten, of weggevallen door
+                            // een classificatiewijziging. "Niet gekoppeld" tonen
+                            // zou onwaar zijn — en zou de gebruiker verleiden de
+                            // bestaande binding stil te overschrijven.
+                            <span className="text-muted">
+                              Gekoppeld aan een vereiste die hier niet wordt
+                              getoond:{" "}
+                              <code className="text-ink">
+                                {b.requirement_sleutel}
+                              </code>
+                            </span>
+                          ) : (
+                            <span className="text-warn-ink">
+                              Niet aan een vereiste gekoppeld — telt niet mee
+                              voor de bewijslast.
+                            </span>
+                          )}
+                          {!alleenLezen && (
+                            <select
+                              value={
+                                b.requirement_sleutel &&
+                                labelBijSleutel.has(b.requirement_sleutel)
+                                  ? b.requirement_sleutel
+                                  : ""
+                              }
+                              disabled={bezig === `bewijs-bind-${b.id}`}
+                              onChange={(e) =>
+                                bewijsBindenAanVereiste(b.id, e.target.value)
+                              }
+                              className="ml-2 border border-line rounded px-1.5 py-0.5 text-xs bg-white focus:border-accent outline-none disabled:opacity-50"
+                              aria-label="Aan vereiste koppelen"
+                            >
+                              <option value="">— geen vereiste —</option>
+                              {bindbareVereisten.map((r) => (
+                                <option key={sleutelVan(r)} value={sleutelVan(r)}>
+                                  {r.label}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                        </div>
+                      )}
                       {!alleenLezen && (gepland || magVerwijderen) && (
                         <div className="flex items-center gap-3 mt-2">
                           {gepland && (

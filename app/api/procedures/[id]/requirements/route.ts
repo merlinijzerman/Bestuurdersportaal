@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { ensureDecisionForProcedure } from "@/core/lib/decision";
+import { requirementSleutel } from "@/core/lib/requirement-sleutel";
 import { REQUIREMENT_TYPES } from "@/core/lib/procedure-definitie";
 
 // GET  /api/procedures/[id]/requirements  — actieve instantie-requirements
@@ -108,13 +109,72 @@ export async function POST(
     // Fonds_id server-side uit de procedure (RLS begrenst tot eigen fonds).
     const { data: procedure } = await supabase
       .from("procedures")
-      .select("id, fonds_id")
+      .select("id, fonds_id, template_code")
       .eq("id", id)
       .single();
     if (!procedure?.fonds_id) {
       return NextResponse.json({ error: "Procedure niet gevonden" }, { status: 404 });
     }
     const { decision_id } = await ensureDecisionForProcedure(supabase, id);
+
+    // Uniciteit van de matchsleutel binnen de stap. De identiteit
+    // coalesce(documenttype, label) draagt de bewijs↔vereiste-binding
+    // (procedure_bewijs.requirement_sleutel, besluit 0183) én het
+    // uitsluitingsmasker. Botsen twee vereisten op die identiteit, dan vervult
+    // één gebonden bewijsstuk ze allebei — precies de dubbeltelling die de
+    // bewijsmatching-fix opruimt. `procedure_requirements` heeft hiervoor de
+    // unieke index idx_req_uniek; `procedure_requirement_instance` niet, dus
+    // toetsen we hier, tegen BEIDE armen van de readiness-unie.
+    const nieuweDocumenttype = body.documenttype?.trim() || null;
+    const nieuweSleutel = requirementSleutel(
+      body.stap_volgorde,
+      body.requirement_type,
+      nieuweDocumenttype,
+      label
+    );
+    const [{ data: templateRijen }, { data: instantieRijen }] = await Promise.all([
+      supabase
+        .from("procedure_requirements")
+        .select("stap_volgorde, requirement_type, documenttype, label")
+        .eq("template_code", procedure.template_code)
+        .eq("stap_volgorde", body.stap_volgorde)
+        .eq("requirement_type", body.requirement_type),
+      supabase
+        .from("procedure_requirement_instance")
+        .select("stap_volgorde, requirement_type, documenttype, label")
+        .eq("decision_id", decision_id)
+        .eq("actief", true)
+        .eq("stap_volgorde", body.stap_volgorde)
+        .eq("requirement_type", body.requirement_type),
+    ]);
+    type SleutelRij = {
+      stap_volgorde: number;
+      requirement_type: string;
+      documenttype: string | null;
+      label: string;
+    };
+    const botst = [
+      ...((templateRijen ?? []) as SleutelRij[]),
+      ...((instantieRijen ?? []) as SleutelRij[]),
+    ].some(
+      (r) =>
+        requirementSleutel(
+          r.stap_volgorde,
+          r.requirement_type,
+          r.documenttype,
+          r.label
+        ) === nieuweSleutel
+    );
+    if (botst) {
+      return NextResponse.json(
+        {
+          error:
+            "Er bestaat op deze stap al een vereiste van dit type met dezelfde identiteit " +
+            "(documenttype, of anders het label). Kies een ander label of een eigen documenttype.",
+        },
+        { status: 400 }
+      );
+    }
 
     // 1. Instantie-requirement invoegen.
     const { data: nieuw, error: insFout } = await supabase
@@ -124,7 +184,7 @@ export async function POST(
         stap_volgorde: body.stap_volgorde,
         requirement_type: body.requirement_type,
         label,
-        documenttype: body.documenttype ?? null,
+        documenttype: nieuweDocumenttype,
         veld_pad: body.veld_pad ?? null,
         verplicht: body.verplicht ?? true,
         blokkerend: body.blokkerend ?? false,

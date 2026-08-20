@@ -110,7 +110,7 @@ insert into public.fonds_stuurinfo_reserve
 -- T17a — RLS-rolgate: bestuurder kan geen langleven-reeksrij schrijven.
 -- ════════════════════════════════════════════════════════════════════════════
 set local role authenticated;
-set local request.jwt.claims to '{"sub":"7bbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"}';
+set local request.jwt.claim.sub to '7bbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 
 do $$
 declare gelukt boolean := false;
@@ -131,7 +131,7 @@ end $$;
 -- ════════════════════════════════════════════════════════════════════════════
 -- T17b — beheerder A schrijft langleven (3) + risicodekking (2), gelogd.
 -- ════════════════════════════════════════════════════════════════════════════
-set local request.jwt.claims to '{"sub":"7aaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}';
+set local request.jwt.claim.sub to '7aaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
 do $$
 declare n_reeks int; n_log int;

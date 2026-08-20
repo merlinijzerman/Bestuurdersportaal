@@ -115,6 +115,11 @@ declare
     'platform_capabilities',          -- deny-by-default
     'platform_identity_capabilities', -- deny-by-default
     'platform_event_log',             -- deny-by-default
+    'platform_event_chain_state',     -- één platformbrede ketenkop; RLS aan,
+                                      -- geen browser-/service-rolegrants
+    'platform_event_fork_declarations', -- append-only platformregister voor
+                                      -- exact verklaarde historische forks;
+                                      -- RLS aan, geen applicatiegrants
     'platform_signaal_config',        -- deny-by-default; drempels/intervallen zijn
                                       -- platformbreed, niet per fonds (P5, besluit 0105)
     'voorbereidingen',                -- persoonlijk (gebruiker_id = auth.uid())

@@ -1,13 +1,13 @@
 # mvp/ — codebase + werkdocumentatie Bestuurdersportaal
 
-**Laatst bijgewerkt:** 2026-08-02
+**Laatst bijgewerkt:** 2026-08-15
 
 ## Wat deze map is
 
 Deze map bevat **twee dingen tegelijk**:
 
 1. **De codebase** van het Bestuurdersportaal — Next.js 15 (App Router) + Supabase (EU-Frankfurt) + Vercel, met Anthropic (AI-antwoorden), Mistral (embeddings + OCR) en Mailgun (contactnotificaties). Zie `SETUP.md` voor lokaal draaien.
-2. **De werkdocumentatie** die met de code meebeweegt: `HANDOVER.md` (levend masterdocument), `CLAUDE.md` (werkinstructies en guardrails), de `*-ONTWERP.md`-documenten, `decisions/` (103 besluitrecords, 0001–0103) en de securityplannen (`SECURITY-ROUTE-A-*.md`).
+2. **De werkdocumentatie** die met de code meebeweegt: `HANDOVER.md` (levend masterdocument), `CLAUDE.md` (werkinstructies en guardrails), de `*-ONTWERP.md`-documenten, de genummerde besluitrecords in `decisions/` en de securityplannen (`SECURITY-ROUTE-A-*.md`).
 
 **Bron-van-waarheid-hiërarchie** (vastgelegd in `CLAUDE.md`): code + `supabase/migrations/` > `HANDOVER.md` > ontwerpdocumenten. `supabase/schema.sql` is documentatie en mag achterlopen.
 
@@ -21,6 +21,7 @@ Deze map bevat **twee dingen tegelijk**:
 | `mvp-beperkingen.md` | Bekende beperkingen + noodzakelijke stappen richting productiegeschiktheid |
 | `mvp-demo-script.md` | Eerlijk, stapsgewijs demoscript langs de werkende functionaliteit |
 | `mvp-acceptatiecriteria.md` | Toetsbare acceptatiecriteria per module + as-built status |
+| `../04 Technische inrichting/Bestuurdersportaal - Back-up restore en uitwijk runbook v1.0.md` | Operationeel draaiboek voor dagelijkse back-up, restore, uitwijk en de latere PITR-fase |
 
 ## Documentatiestructuur (bovenliggende mappen)
 

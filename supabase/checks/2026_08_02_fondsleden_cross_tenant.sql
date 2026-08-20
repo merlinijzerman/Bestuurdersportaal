@@ -54,7 +54,7 @@ end $$;
 
 -- ── V1/V2/V3 — als lid van fonds A ──────────────────────────────────────────
 set local role authenticated;
-set local request.jwt.claims to '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}';
+set local request.jwt.claim.sub to 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
 do $$
 declare
@@ -100,7 +100,7 @@ begin
 end $$;
 
 -- ── V2 — wederkerig, als lid van fonds B ────────────────────────────────────
-set local request.jwt.claims to '{"sub":"cccccccc-cccc-cccc-cccc-cccccccccccc"}';
+set local request.jwt.claim.sub to 'cccccccc-cccc-cccc-cccc-cccccccccccc';
 
 do $$
 declare
@@ -121,7 +121,7 @@ begin
 end $$;
 
 -- ── V6 — de onderliggende policy is ONgewijzigd ─────────────────────────────
-set local request.jwt.claims to '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}';
+set local request.jwt.claim.sub to 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
 do $$
 declare
@@ -136,7 +136,7 @@ begin
 end $$;
 
 -- ── V4 — zonder sessie: nul rijen ───────────────────────────────────────────
-set local request.jwt.claims to '{}';
+set local request.jwt.claim.sub to '';
 
 do $$
 declare

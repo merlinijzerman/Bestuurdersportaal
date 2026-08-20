@@ -88,7 +88,7 @@ insert into public.fonds_stuurinfo_reeks
 -- T16a — RPC-rolgate: bestuurder → weigering (beide RPC's).
 -- ════════════════════════════════════════════════════════════════════════════
 set local role authenticated;
-set local request.jwt.claims to '{"sub":"6bbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"}';
+set local request.jwt.claim.sub to '6bbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 
 do $$
 declare gelukt boolean;
@@ -130,7 +130,7 @@ end $$;
 -- ════════════════════════════════════════════════════════════════════════════
 -- T16b — beheerder A slaagt (operationeel); reserve-rij ongewijzigd; gelogd.
 -- ════════════════════════════════════════════════════════════════════════════
-set local request.jwt.claims to '{"sub":"6aaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}';
+set local request.jwt.claim.sub to '6aaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
 do $$
 declare n_mut int; n_kosten int; n_kpi int; n_log int; r record;

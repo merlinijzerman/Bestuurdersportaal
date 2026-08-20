@@ -387,7 +387,7 @@ values
 
 -- ── Vanaf hier: A is aan het woord ────────────────────────────────────────
 set local role authenticated;
-set local request.jwt.claims to '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}';
+set local request.jwt.claim.sub to 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
 -- ── AC-18a — de client kan NIET rechtstreeks schrijven ────────────────────
 -- Geen insert-, update- of delete-policy: alle drie moeten falen. Dit is de test
@@ -750,7 +750,7 @@ end $$;
 -- ── FR-16 — een collega ziet NUL rijen ────────────────────────────────────
 -- De reflectiestatus is auteur-only. Een collega in hetzelfde fonds ziet niets:
 -- niet dát er gereflecteerd wordt, niet waarover, en niet hoe ver.
-set local request.jwt.claims to '{"sub":"cccccccc-cccc-cccc-cccc-cccccccccccc"}';
+set local request.jwt.claim.sub to 'cccccccc-cccc-cccc-cccc-cccccccccccc';
 do $$
 declare n int;
 begin
@@ -764,7 +764,7 @@ begin
 end $$;
 
 -- ── Tenantgrens — een gebruiker uit een ander fonds ziet óók niets ────────
-set local request.jwt.claims to '{"sub":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"}';
+set local request.jwt.claim.sub to 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 do $$
 declare n int;
 begin
@@ -786,7 +786,7 @@ end $$;
 -- ── AC-24 — verwijderen van het gesprek ruimt de flowstatus mee op ────────
 -- Het gedragsbewijs bij structurele check 3. Bewust via verwijder_gesprek(),
 -- niet via een kale DELETE: dat is het enige pad dat de gebruiker heeft.
-set local request.jwt.claims to '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}';
+set local request.jwt.claim.sub to 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 do $$
 declare n int;
 begin
@@ -846,7 +846,7 @@ values ('f0000000-0000-0000-0000-00000000000f','ffffffff-ffff-ffff-ffff-ffffffff
         '33333333-3333-3333-3333-333333333333','Failsafe-gesprek','[]'::jsonb);
 
 set local role authenticated;
-set local request.jwt.claims to '{"sub":"ffffffff-ffff-ffff-ffff-ffffffffffff"}';
+set local request.jwt.claim.sub to 'ffffffff-ffff-ffff-ffff-ffffffffffff';
 select public.reflectie_transitie('f0000000-0000-0000-0000-00000000000f','start','twijfel',null);
 
 reset role;
@@ -855,7 +855,7 @@ update public.gesprek_reflectie_state
  where gesprek_id = 'f0000000-0000-0000-0000-00000000000f';
 
 set local role authenticated;
-set local request.jwt.claims to '{"sub":"ffffffff-ffff-ffff-ffff-ffffffffffff"}';
+set local request.jwt.claim.sub to 'ffffffff-ffff-ffff-ffff-ffffffffffff';
 do $$
 declare r public.gesprek_reflectie_state;
 begin

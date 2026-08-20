@@ -80,6 +80,14 @@ SQL_P5="supabase/checks/2026_08_03_p5_monitoring.sql"
 # is een actieve predicaat-uitbreiding en geen vanzelfsprekendheid. Inclusief
 # nulgrens G23: bestuurder en voorzitter gedragen zich exact als daarvoor.
 SQL_BB="supabase/checks/2026_08_05_bb_rolgrenzen.sql"
+# Bewijsbinding (2026-08-18) — fn_decision_readiness_check vervult een
+# document-vereiste alleen nog via de expliciete binding
+# procedure_bewijs.requirement_sleutel. Zonder deze toets kan de wildcard
+# ("vereiste zonder documenttype matcht elk bewijsstuk van de stap") stil
+# terugkeren en blokkerende bewijslast weer als compleet laten gelden.
+# Zelfde fixture als core/lib/decision.sanity.ts → weergave en gate zijn
+# aantoonbaar in sync.
+SQL_BBIND="supabase/checks/2026_08_18_bewijsbinding.sql"
 
 echo "== [1/4] tsc --noEmit --skipLibCheck =="
 ./node_modules/.bin/tsc --noEmit --skipLibCheck
@@ -160,6 +168,9 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P5"
 echo
 echo "-- BB-rolgrenzen (bestuursbureau: 0 rijen inbreng/stemgedrag, geen schrijfpad, nulgrens G23) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_BB"
+echo
+echo "-- Bewijsbinding (document-vereiste vervuld via expliciete binding, geen wildcard) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_BBIND"
 echo
 
 echo "============================================================================"

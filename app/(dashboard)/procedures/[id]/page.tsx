@@ -109,6 +109,10 @@ export interface Bewijs {
   // WO-2-vervolg: null → vooraf opgegeven ("Nog te leveren"); later te koppelen.
   document_id: string | null;
   toegevoegd_door: string | null;
+  // Bewijsbinding: de vereiste die dit stuk vervult
+  // (stap_volgorde|requirement_type|coalesce(documenttype, label)).
+  // Null = ongebonden → telt niet mee voor de bewijslast.
+  requirement_sleutel: string | null;
 }
 
 export interface Besluit {
