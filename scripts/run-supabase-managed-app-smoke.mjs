@@ -206,6 +206,20 @@ async function main() {
     smokeStage = "login_page";
     const page = context.pages()[0] ?? await context.newPage();
     await page.goto(`${origin}/login`, { waitUntil: "domcontentloaded", timeout: 45_000 });
+    // domcontentloaded vuurt voordat React hydrateert. Vullen en klikken vóór
+    // hydratie levert een native formulierverzending op: de velden hebben geen
+    // name-attribuut, dus dat is een kale GET /login en de browser blijft op de
+    // loginpagina staan. React zet bij hydratie __reactProps$-sleutels op de
+    // DOM-node; dat is het exacte signaal dat onSubmit is aangekoppeld.
+    smokeStage = "login_hydration";
+    await page.waitForFunction(
+      () => {
+        const veld = document.getElementById("login-email");
+        return !!veld && Object.keys(veld).some((sleutel) => sleutel.startsWith("__reactProps$"));
+      },
+      undefined,
+      { timeout: 45_000 }
+    );
     smokeStage = "login_form";
     await page.getByLabel("E-mailadres").fill(own.email);
     await page.getByLabel("Wachtwoord").fill(own.password);

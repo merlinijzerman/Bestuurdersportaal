@@ -206,6 +206,18 @@ test("managed restore scheidt keys, hervat exact, test Auth/RLS/app en lekt geen
   const login = await readFile(path.join(repositoryRoot, "app", "login", "page.tsx"), "utf8");
   assert.match(login, /window\.location\.replace\("\/"\)/);
   assert.doesNotMatch(login, /router\.(?:push|refresh)/);
+
+  // De smoke mag het loginformulier pas aanraken nadat React is gehydrateerd.
+  // Klikken daarvoor levert een native GET /login op — de velden hebben geen
+  // name-attribuut — en dat is niet te onderscheiden van een mislukte login.
+  const smoke = await readFile(
+    path.join(repositoryRoot, "scripts", "run-supabase-managed-app-smoke.mjs"),
+    "utf8"
+  );
+  const hydratie = smoke.indexOf("__reactProps$");
+  const invullen = smoke.indexOf('getByLabel("E-mailadres")');
+  assert.ok(hydratie > 0 && invullen > hydratie);
+  assert.match(smoke, /MANAGED_APP_SMOKE_DIAGNOSTIC/);
 });
 
 test("Auth-configuratiediagnose is main-only, read-only en publiceert geen waarden", async () => {
