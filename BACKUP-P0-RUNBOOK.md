@@ -1,6 +1,6 @@
 # P0 — back-upketen, Storage en restore
 
-**Status:** managed restore-oefening end-to-end groen (run 32345486528, 2026-08-20); alertkanaal nog niet geconfigureerd
+**Status:** managed restore-oefening end-to-end groen (run 32345486528, 2026-08-20); alertkanaal vastgesteld op GitHub-notificaties (besluit 0185)
 **Datum:** 2026-08-20
 **Eigenaar:** technisch beheer / incidentleider
 
@@ -37,9 +37,9 @@ Secrets:
 - `SUPABASE_SERVICE_ROLE_KEY` — uitsluitend voor Storage-lezen tijdens de back-up
 - `B2_APPLICATION_KEY_ID` en `B2_APPLICATION_KEY` — write-only voor de back-upworkflow
 - `B2_READONLY_APPLICATION_KEY_ID` en `B2_READONLY_APPLICATION_KEY` — alleen lezen/listen voor de watchdog
-- `BACKUP_ALERT_WEBHOOK_URL` — endpoint van de afgesproken incident-/alertdienst;
-  ontbreekt dit, dan blijft de inhoudelijke B2-controle draaien en faalt alleen
-  de afzonderlijke job `Alertkanaalconfiguratie controleren`
+- `BACKUP_ALERT_WEBHOOK_URL` — **optioneel**. Alleen vereist wanneer
+  `ALERT_CHANNEL` in de watchdog op `webhook` staat. Bij het huidige kanaal
+  `github-native` (besluit 0185) is dit secret niet nodig en wordt het genegeerd
 - `SUPABASE_MANAGEMENT_API_TOKEN` — read-only Management API-token voor de
   platforminventaris; nooit in een artefact of log opnemen
 - `VERCEL_TOKEN` — read-only Vercel-token voor project- en variabelenameninventaris
@@ -102,14 +102,50 @@ tokens of documentinhoud.
 De workflow onderscheidt drie statussen in jobnamen, logs en webhookpayload:
 `back-up mislukt`, `B2-bewijs ongeldig` en `alertkanaal niet geconfigureerd`.
 Een ontbrekend webhooksecret blokkeert de B2-controles niet en mag nooit als een
-mislukte productieback-up worden omschreven. De afzonderlijke configuratiejob
-blijft wel rood totdat een goedgekeurd alertkanaal is ingesteld; zonder werkend
-alertkanaal is de totale P0-keten niet gereed.
+mislukte productieback-up worden omschreven.
 
-Test alertdelivery zonder productieobjecten te wijzigen door de workflow
-`Supabase-back-upbewaking` handmatig te starten met `synthetic_alert=true`. De
-afzonderlijke job `Veilige synthetische alertdelivery` verstuurt een `warning`
-met de expliciete tekst dat geen back-up, marker of B2-object is aangeraakt.
+### Het goedgekeurde meldkanaal
+
+Het kanaal staat als `ALERT_CHANNEL` in `supabase-backup-watchdog.yml`, bewust in
+code en niet in een instelling in de UI: wijzigen vereist een PR en is daarmee
+reviewbaar en terugleesbaar.
+
+Huidige waarde: **`github-native`** (besluit 0185). De rode workflowrun zélf is
+het meldkanaal. Iedere inhoudelijke afwijking roept `send-backup-alert.mjs` aan
+en sluit af met `exit 1`; de run wordt daardoor rood en GitHub stuurt een
+notificatie naar de eigenaar van de workflow.
+
+Die belofte is alleen waar zolang elke afwijking de run ook echt rood maakt. De
+job `Alertkanaalconfiguratie controleren` draait daarom
+`scripts/verify-watchdog-fail-closed.mjs`, die afdwingt dat beide inhoudelijke
+controlejobs bestaan, dat elke vaststellende stap eindigt met `exit 1` en dat
+nergens `continue-on-error` staat. Een onbekende of lege `ALERT_CHANNEL` faalt
+eveneens. Zet je het kanaal op `webhook`, dan eist dezelfde job juist dat
+`BACKUP_ALERT_WEBHOOK_URL` aanwezig is.
+
+Bewust geaccepteerde beperkingen van `github-native`, elk een reden om alsnog
+een toegewijd kanaal in te richten:
+
+- de melding landt in dezelfde inbox als alle overige GitHub-ruis, zonder eigen
+  urgentie, ontvangstbevestiging of escalatie bij uitblijven;
+- GitHub stuurt notificaties over scheduled workflows naar de gebruiker die de
+  workflow heeft aangemaakt; wijzigt iemand anders de cron-expressie, dan
+  verschuift de ontvanger stilzwijgend;
+- er is één ontvanger en geen dienstdoend rooster;
+- een storing bij GitHub Actions maakt zowel de back-up als de melding erover
+  onzichtbaar.
+
+### Veilige negatieve test
+
+Start `Supabase-back-upbewaking` handmatig met `synthetic_alert=true`. Er wordt
+geen back-up, completion marker of B2-object aangeraakt.
+
+- Bij `webhook` verstuurt de job `Veilige synthetische alertdelivery` een
+  `warning` met de expliciete tekst dat niets is aangeraakt.
+- Bij `github-native` maakt diezelfde job de run **met opzet rood**. Dat is het
+  bewijs zelf: alleen een rode run levert de notificatie op. Controleer daarna
+  dat je de GitHub-melding hebt ontvangen; die ontvangstcontrole is onderdeel
+  van de test en kan niet geautomatiseerd worden.
 
 ## Platformconfiguratie en secrets
 
@@ -396,7 +432,7 @@ De escalatieladder hangt aan de drie statussen die de bewaking onderscheidt.
 
 | Trigger | Eerste actie | Escaleer wanneer |
 |---|---|---|
-| `alertkanaal niet geconfigureerd` | Webhookbestemming instellen als `BACKUP_ALERT_WEBHOOK_URL` en de synthetische alerttest draaien | Direct bij constatering; zonder alertkanaal is de keten blind |
+| `alertkanaal niet geconfigureerd` | Bij `github-native`: de fail-closed controle herstellen die de bewaking rood laat worden. Bij `webhook`: `BACKUP_ALERT_WEBHOOK_URL` instellen. Daarna de synthetische test draaien | Direct bij constatering; de bewaking meldt dan mogelijk niets meer |
 | `B2-bewijs ongeldig` | Marker, checksums en gerefereerde objecten controleren; back-up handmatig herdraaien | Als een tweede run hetzelfde bewijs afkeurt |
 | `back-up mislukt` | Runlog beoordelen en handmatig herdraaien | Als de marker ouder dan 26 uur wordt |
 | Markerouderdom boven 48 uur | Behandelen als P0-incident: er is geen verse herstelbron | Onmiddellijk naar de incidentleider |
