@@ -43,8 +43,6 @@ begin
   end if;
 end $$;
 
-alter table storage.objects enable row level security;
-
 do $$
 begin
   if to_regprocedure('storage.foldername(text)') is null then
@@ -64,9 +62,23 @@ begin
   end if;
 end $$;
 
-grant usage on schema storage to anon, authenticated, service_role;
-grant select on table storage.buckets to anon, authenticated, service_role;
-grant select, insert, update, delete on table storage.objects
-  to anon, authenticated, service_role;
-grant execute on function storage.foldername(text)
-  to anon, authenticated, service_role;
+-- Ownership-gevoelige statements (RLS aanzetten + grants) draaien ALLEEN in de
+-- kale test-container, waar dit script storage.objects zelf aanmaakte en postgres
+-- dus de eigenaar is. In de officiële Supabase-stack bezit supabase_storage_admin
+-- deze objecten: daar bestaan RLS en grants al en zijn deze statements inert
+-- (ongeguard zouden ze 'must be owner of table objects' geven — de reden dat de
+-- §15-suite op de CLI-stack rood liep).
+do $$
+begin
+  if to_regclass('storage.objects') is not null and exists (
+    select 1 from pg_class c
+    where c.oid = to_regclass('storage.objects')
+      and c.relowner = (select r.oid from pg_roles r where r.rolname = current_user)
+  ) then
+    execute 'alter table storage.objects enable row level security';
+    execute 'grant usage on schema storage to anon, authenticated, service_role';
+    execute 'grant select on table storage.buckets to anon, authenticated, service_role';
+    execute 'grant select, insert, update, delete on table storage.objects to anon, authenticated, service_role';
+    execute 'grant execute on function storage.foldername(text) to anon, authenticated, service_role';
+  end if;
+end $$;
