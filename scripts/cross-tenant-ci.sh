@@ -96,6 +96,10 @@ SQL_P5="supabase/checks/2026_08_03_p5_monitoring.sql"
 # is een actieve predicaat-uitbreiding en geen vanzelfsprekendheid. Inclusief
 # nulgrens G23: bestuurder en voorzitter gedragen zich exact als daarvoor.
 SQL_BB="supabase/checks/2026_08_05_bb_rolgrenzen.sql"
+# V2 — security_invoker op tenant-views. Faalt zodra een view in public die een
+# fonds_id-tabel leest niet op security_invoker=on staat. Na Bevinding B is dit
+# (niet FORCE) de tweede laag tegen de C-01-definer-view-klasse.
+SQL_V2SI="supabase/checks/2026_08_20_v2_security_invoker_regressie.sql"
 
 echo "== [1/4] tsc --noEmit --skipLibCheck =="
 ./node_modules/.bin/tsc --noEmit --skipLibCheck
@@ -184,6 +188,10 @@ echo "-- AI-begrenzing (quota, kill switch, modelallowlist, vier-ogenheractiveri
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_AIB"
 echo
 
+echo "-- V2 security_invoker (elke tenant-view op invoker; geen definer-view leest tenantdata) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_V2SI"
+echo
+
 echo "============================================================================"
 echo "GROEN: volledige §15 cross-tenant suite geslaagd (app-laag + DB-laag)."
 echo "  AI-beg quota/kill switch/vier ogen            (DB-laag; race apart)"
@@ -208,4 +216,5 @@ echo "  R1   gedragsbewijs K-01/H-01/H-02/M-01                                (D
 echo "  MP   maak_profiel deterministisch fonds + zelfregistratiegrens PT-1   (DB-laag)"
 echo "  P5   monitoringtabellen deny-by-default + RPC niet-anon + retentie    (DB-laag)"
 echo "  BB   rolgrenzen bestuursbureau + nulgrens G23                          (DB-laag)"
+echo "  V2   security_invoker op tenant-views (2e laag C-01, i.p.v. FORCE)     (DB-laag)"
 echo "============================================================================"
