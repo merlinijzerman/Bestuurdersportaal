@@ -15,20 +15,33 @@ export function adminClient() {
   return createClient(ENV.url, ENV.serviceKey, { auth: { persistSession: false } });
 }
 
-async function verwijderTestgebruikers(admin) {
-  // Pagineer door alle gebruikers en verwijder de karakterisering-testaccounts.
-  for (let page = 1; page <= 20; page++) {
+async function vindGebruikerOpEmail(admin, email) {
+  for (let page = 1; page <= 50; page++) {
     const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 200 });
     if (error) throw new Error(`listUsers: ${error.message}`);
     const users = data?.users ?? [];
-    const testers = users.filter((u) => (u.email ?? "").endsWith("@karakterisering.invalid"));
-    for (const u of testers) await admin.auth.admin.deleteUser(u.id);
-    if (users.length < 200) break;
+    const hit = users.find((u) => (u.email ?? "") === email);
+    if (hit) return hit;
+    if (users.length < 200) return null;
   }
+  return null;
 }
 
-async function maakGebruiker(admin, rol) {
+// Hergebruik de testgebruiker als hij al bestaat (idempotent zonder delete):
+// side-effectrijen (append-only logs, gesprekken) verwijzen via FK naar de
+// user-id, dus users verwijderen faalt na de eerste run. Hergebruik houdt de
+// auth-UUID ook stabiel — nog steeds gedekt door de UUID-normalisatie.
+async function vindOfMaakGebruiker(admin, rol) {
   const email = emailVoor(rol);
+  const bestaand = await vindGebruikerOpEmail(admin, email);
+  if (bestaand) {
+    const { error } = await admin.auth.admin.updateUserById(bestaand.id, {
+      password: WACHTWOORD,
+      app_metadata: { ...(bestaand.app_metadata ?? {}), fonds_id: FONDS_ID },
+    });
+    if (error) throw new Error(`updateUserById(${rol}, hergebruik): ${error.message}`);
+    return { rol, email, password: WACHTWOORD, userId: bestaand.id };
+  }
   const { data, error } = await admin.auth.admin.createUser({
     email,
     password: WACHTWOORD,
@@ -51,11 +64,7 @@ async function maakGebruiker(admin, rol) {
  * @returns {Promise<{fondsId:string, users:Record<string,{email,password,userId,rol}>}>}
  */
 export async function seed(admin = adminClient()) {
-  // 1. Opruimen (idempotent).
-  await verwijderTestgebruikers(admin);
-  await admin.from("profielen").delete().eq("fonds_id", FONDS_ID);
-
-  // 2. Fonds.
+  // 1. Fonds.
   {
     const { error } = await admin
       .from("fondsen")
@@ -63,10 +72,10 @@ export async function seed(admin = adminClient()) {
     if (error) throw new Error(`fondsen: ${error.message}`);
   }
 
-  // 3. Gebruikers + profielen (één per rol).
+  // 2. Gebruikers + profielen (één per rol) — hergebruik indien aanwezig.
   const users = {};
   for (const rol of ROLLEN) {
-    const u = await maakGebruiker(admin, rol);
+    const u = await vindOfMaakGebruiker(admin, rol);
     users[rol] = u;
     const { error } = await admin
       .from("profielen")
@@ -81,8 +90,21 @@ export async function seed(admin = adminClient()) {
   await seedDocumenten(admin);
   await seedCatalogus(admin);
   await seedRisicos(admin);
+  await seedGesprekken(admin, users);
 
   return { fondsId: FONDS_ID, users };
+}
+
+// ── Tier 2: gesprekken (eigenaar = auth.uid, dus per-run user-id) ───────────
+async function seedGesprekken(admin, users) {
+  await admin.from("gesprekken").delete().eq("fonds_id", FONDS_ID);
+  const { error } = await admin.from("gesprekken").insert({
+    id: FIX.gesprek1,
+    gebruiker_id: users.bestuurder.userId,
+    fonds_id: FONDS_ID,
+    titel: "W1 Gesprek",
+  });
+  if (error) throw new Error(`gesprekken: ${error.message}`);
 }
 
 // ── Tier 2: risico's ────────────────────────────────────────────────────────

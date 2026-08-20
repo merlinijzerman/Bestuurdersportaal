@@ -39,6 +39,9 @@ export const FIX = {
   risicoOnbekend: "00000000-0000-4000-8000-0000000715ff",
   decisionOnbekend: "00000000-0000-4000-8000-00000000dec0",
   decisionRiskOnbekend: "00000000-0000-4000-8000-0000dec0715f",
+  gesprek1: "00000000-0000-4000-8000-00000000c501",
+  gesprekOnbekend: "00000000-0000-4000-8000-00000000c5ff",
+  agendapuntOnbekend: "00000000-0000-4000-8000-0000000a900f",
 };
 
 // Vaste bytes voor de bestand-download (BESLUIT: body_sha256 i.p.v. ruwe bytes).
