@@ -1,0 +1,66 @@
+// ============================================================================
+//  W1 — Scenariotabel (datatabel, geen losse testbestanden — §4.5).
+// ----------------------------------------------------------------------------
+//  Eén rij = één snapshot. Velden:
+//    slug      bestandsnaam van de snapshot (uniek)
+//    method    HTTP-methode
+//    path      pad onder de app-host
+//    rol       'anon' of een van de vier rollen (bepaalt de sessiecookie)
+//    body      request-body (JSON) — optioneel
+//    verwacht  'json' | 'bytes' | 'redirect' — bepaalt de snapshotvorm
+//    headers   extra request-headers — optioneel
+//    preseed   async (ctx) => {}  — DB-voorbewerking vóór het request
+//
+//  TIER 1 (framework-bewijs): routes met minimale seed. Domein-graaf-routes
+//  (documenten/procedures/besluiten/…) volgen als tier 2.
+// ============================================================================
+import { LIMIET_ZOEKEN, LIMIET_ZOEKEN_ENDPOINT } from "./ratelimit-const.mjs";
+
+const LEEG = {};
+
+export const scenarios = [
+  // ── /api/profiel — brede select · capability · A2 ──────────────────────────
+  { slug: "profiel.get.bestuurder", method: "GET", path: "/api/profiel", rol: "bestuurder", verwacht: "json" },
+  { slug: "profiel.get.anon", method: "GET", path: "/api/profiel", rol: "anon", verwacht: "json" },
+  { slug: "profiel.patch.anon", method: "PATCH", path: "/api/profiel", rol: "anon", body: LEEG, verwacht: "json" },
+
+  // ── /api/healthz/ping — publiek, altijd {ok:true} ──────────────────────────
+  { slug: "healthz-ping.get", method: "GET", path: "/api/healthz/ping", rol: "anon", verwacht: "json" },
+
+  // ── /api/platform/healthz — gedeelde cron-auth; DEPLOY_TARGET=app → skipped ─
+  { slug: "platform-healthz.get.anon", method: "GET", path: "/api/platform/healthz", rol: "anon", verwacht: "json" },
+
+  // ── /api/instellingen — A2 · profielen(naam,fonds_id,rol) · capability ──────
+  { slug: "instellingen.get.beheerder", method: "GET", path: "/api/instellingen", rol: "beheerder", verwacht: "json" },
+  { slug: "instellingen.get.anon", method: "GET", path: "/api/instellingen", rol: "anon", verwacht: "json" },
+  { slug: "instellingen.post.anon", method: "POST", path: "/api/instellingen", rol: "anon", body: LEEG, verwacht: "json" },
+
+  // ── /api/risicos — A1 multiline · weigerAlsModuleUit · 400 ─────────────────
+  { slug: "risicos.post.bestuurder.invalid", method: "POST", path: "/api/risicos", rol: "bestuurder", body: { titel: "" }, verwacht: "json" },
+  { slug: "risicos.post.anon", method: "POST", path: "/api/risicos", rol: "anon", body: LEEG, verwacht: "json" },
+
+  // ── /api/contact — publiek; CSRF-gate (geen Origin in prod → geweigerd) ─────
+  { slug: "contact.post.anon.geen-origin", method: "POST", path: "/api/contact", rol: "anon", body: { naam: "T", organisatie: "O", email: "t@x.nl" }, headers: { "content-type": "application/json" }, verwacht: "json" },
+
+  // ── /api/zoeken — rate-limit · host-guard ──────────────────────────────────
+  { slug: "zoeken.get.anon", method: "GET", path: "/api/zoeken?q=test", rol: "anon", verwacht: "json" },
+  {
+    slug: "zoeken.get.bestuurder.gezaaide-429",
+    method: "GET",
+    path: "/api/zoeken?q=test",
+    rol: "bestuurder",
+    verwacht: "json",
+    // BESLUIT: teller vullen tot de limiet → deterministische 429 vóór enige
+    // embedding-call.
+    preseed: async ({ admin, users }) => {
+      const uid = users.bestuurder.userId;
+      await admin.from("rate_limit_events").delete().eq("gebruiker_id", uid).eq("endpoint", LIMIET_ZOEKEN_ENDPOINT);
+      const rijen = Array.from({ length: LIMIET_ZOEKEN }, () => ({
+        gebruiker_id: uid,
+        endpoint: LIMIET_ZOEKEN_ENDPOINT,
+      }));
+      const { error } = await admin.from("rate_limit_events").insert(rijen);
+      if (error) throw new Error(`preseed rate_limit_events: ${error.message}`);
+    },
+  },
+];

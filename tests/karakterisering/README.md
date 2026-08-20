@@ -5,15 +5,30 @@ en na een wijziging byte-voor-byte vergelijkt. Doel: bewijzen dat de deploy-2-co
 **niets** aan het gedrag verandert ("nul verschil"). Zie issue #88 en
 `05 Security en compliance/TICKET-W1-karakteriseringsharnas.md`.
 
-> **Status:** in aanbouw. De sessie→cookie-brug is bewezen (`spike.mjs`, groen).
-> Runner (`run.mjs`), volledige seed, normalisatielaag en routetabel volgen.
+> **Status:** framework groen op tier 1 (13 scenario's: record + verify + 3× stabiel
+> + negatieve controle bewezen). Tier 2 (domein-graaf-routes: documenten, procedures,
+> besluiten, vergaderingen, …) volgt.
 
 ## Bestanden
 
 | Bestand | Rol |
 |---|---|
-| `sessie.mjs` | Sessie→cookie-brug: rol → geldige `Cookie`-header via de `@supabase/ssr` cookie-jar. Definitief. |
-| `spike.mjs` | Throwaway bewijs van de cookie-brug (seed 1 rol → GET `/api/profiel` 200 + 401). Wordt vervangen door `run.mjs`. |
+| `config.mjs` | Vaste UUID's, rollen, env. |
+| `seed.mjs` | Deterministische seed (1 fonds, 4 rollen + profielen; domein-fixtures per tier). Idempotent. |
+| `sessie.mjs` | Sessie→cookie-brug: rol → geldige `Cookie`-header via de `@supabase/ssr` cookie-jar. |
+| `normaliseer.mjs` | §2-normalisatie: UUID-mapping `<uuid:N>`, `<ts>`, array-sort, header-whitelist. |
+| `scenarios.mjs` | Datatabel: één rij = één snapshot (pad, methode, rol, body, verwacht, preseed). |
+| `run.mjs` | Runner: `--record` legt vast, `--verify` vergelijkt byte-voor-byte. |
+| `__snapshots__/` | De vastgelegde snapshots (tegen `main`). |
+| `spike.mjs` | Throwaway cookie-brug-bewijs (historisch; opgevolgd door `run.mjs`). |
+
+## Opnemen / verifiëren
+
+```bash
+node --env-file=.env.local tests/karakterisering/run.mjs --record   # snapshots vastleggen
+node --env-file=.env.local tests/karakterisering/run.mjs --verify   # vergelijken (CI)
+node --env-file=.env.local tests/karakterisering/run.mjs --verify --only=<slug>
+```
 
 ## Lokaal draaien (deze Mac: geen psql/supabase op PATH, wel Docker)
 
@@ -43,8 +58,9 @@ export PATH="<scratchpad>/bin:$PATH"   # supabase→npx-pin 2.114.0, psql→post
    node --env-file=.env.local tests/karakterisering/spike.mjs
    ```
 
-## Opnemen / verifiëren / bijwerken
+## Wanneer een snapshot bijwerken mag
 
-_Volgt bij `run.mjs` (`--record` / `--verify`)._ Regel voor nu: een snapshot mag
-alleen worden bijgewerkt als het gedrag **bewust** is gewijzigd; elke uitbreiding
-van de normalisatie hoort een `BESLUIT:`-comment bij issue #88 te zijn.
+Alleen als het gedrag **bewust** is gewijzigd (dan opnieuw `--record` en de diff
+in de PR motiveren). Een onverwacht verschil is een **fout**, geen ruis. Elke
+uitbreiding van de normalisatielaag hoort een `BESLUIT:`-comment bij issue #88 te
+zijn — voeg nooit een normalisatieregel toe alleen om een diff weg te poetsen.
