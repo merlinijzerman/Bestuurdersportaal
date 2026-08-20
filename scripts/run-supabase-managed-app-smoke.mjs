@@ -31,6 +31,78 @@ function classifySmokeFailure(error) {
   return "unknown";
 }
 
+const SAFE_SMOKE_PATHS = new Set(["/", "/login", "/bibliotheek"]);
+const DIAGNOSTIC_FIELDS = ["pathname", "root_path", "login_error", "login_busy", "auth_cookie"];
+const DIAGNOSTIC_PATH_FIELDS = new Set(["pathname", "root_path"]);
+
+// Alleen een vaste, vooraf bekende routenaam mag in de logs belanden. Elke
+// andere waarde (inclusief query, host en documentpaden) wordt geplet tot een
+// categorie, zodat diagnose nooit tenant- of gebruikersgegevens lekt.
+export function classifySmokePath(value) {
+  try {
+    const pathname = new URL(value).pathname;
+    return SAFE_SMOKE_PATHS.has(pathname) ? pathname : "other";
+  } catch {
+    return "unknown";
+  }
+}
+
+// Uitsluitend booleans en geclassificeerde routenamen. Onbekende sleutels en
+// niet-primitieve waarden worden weggelaten in plaats van doorgegeven.
+export function formatSmokeDiagnostic(fields) {
+  const parts = [];
+  for (const key of DIAGNOSTIC_FIELDS) {
+    const value = fields?.[key];
+    if (typeof value === "boolean") {
+      parts.push(`${key}=${value}`);
+    } else if (
+      DIAGNOSTIC_PATH_FIELDS.has(key) &&
+      typeof value === "string" &&
+      (SAFE_SMOKE_PATHS.has(value) || value === "other" || value === "unknown")
+    ) {
+      parts.push(`${key}=${value}`);
+    }
+  }
+  return parts.join(";");
+}
+
+// Diagnose mag de oorspronkelijke fout nooit verdringen: elke stap is
+// afzonderlijk best-effort en valt terug op een neutrale waarde.
+async function collectLoginDiagnostics(page) {
+  const fields = {};
+  try {
+    fields.pathname = classifySmokePath(page.url());
+  } catch {
+    fields.pathname = "unknown";
+  }
+  try {
+    fields.login_error = await page.locator("form div.bg-err-tint").isVisible({ timeout: 2_000 });
+  } catch {
+    fields.login_error = false;
+  }
+  try {
+    fields.login_busy = await page.locator('form button[type="submit"]').isDisabled({ timeout: 2_000 });
+  } catch {
+    fields.login_busy = false;
+  }
+  try {
+    const cookies = await page.context().cookies();
+    fields.auth_cookie = cookies.some((cookie) => typeof cookie?.name === "string" && cookie.name.startsWith("sb-"));
+  } catch {
+    fields.auth_cookie = false;
+  }
+  try {
+    const finalUrl = await page.evaluate(async () => {
+      const response = await fetch("/", { credentials: "same-origin" });
+      return response.url;
+    });
+    fields.root_path = classifySmokePath(finalUrl);
+  } catch {
+    fields.root_path = "unknown";
+  }
+  return formatSmokeDiagnostic(fields);
+}
+
 function securePath(candidate, secureRoot, label) {
   if (!candidate || !secureRoot || !isAbsolute(candidate) || !isAbsolute(secureRoot)) {
     fail(`${label}_path`);
@@ -129,10 +201,25 @@ async function main() {
       "--disable-dev-shm-usage",
     ],
   });
+  let loginDiagnostic = "";
   try {
     smokeStage = "login_page";
     const page = context.pages()[0] ?? await context.newPage();
     await page.goto(`${origin}/login`, { waitUntil: "domcontentloaded", timeout: 45_000 });
+    // domcontentloaded vuurt voordat React hydrateert. Vullen en klikken vóór
+    // hydratie levert een native formulierverzending op: de velden hebben geen
+    // name-attribuut, dus dat is een kale GET /login en de browser blijft op de
+    // loginpagina staan. React zet bij hydratie __reactProps$-sleutels op de
+    // DOM-node; dat is het exacte signaal dat onSubmit is aangekoppeld.
+    smokeStage = "login_hydration";
+    await page.waitForFunction(
+      () => {
+        const veld = document.getElementById("login-email");
+        return !!veld && Object.keys(veld).some((sleutel) => sleutel.startsWith("__reactProps$"));
+      },
+      undefined,
+      { timeout: 45_000 }
+    );
     smokeStage = "login_form";
     await page.getByLabel("E-mailadres").fill(own.email);
     await page.getByLabel("Wachtwoord").fill(own.password);
@@ -207,6 +294,17 @@ async function main() {
     });
     await writeFile(evidencePath, `${JSON.stringify(evidence, null, 2)}\n`, { mode: 0o600 });
     await chmod(evidencePath, 0o600);
+  } catch (error) {
+    // Diagnose draait nog binnen de open browsercontext, maar mag de
+    // oorspronkelijke fout nooit vervangen of vertragen tot een crash.
+    try {
+      const page = context.pages()[0];
+      if (page) loginDiagnostic = await collectLoginDiagnostics(page);
+      if (error && typeof error === "object") error.smokeDiagnostic = loginDiagnostic;
+    } catch {
+      // Diagnose is optioneel; de categorie en fase blijven altijd beschikbaar.
+    }
+    throw error;
   } finally {
     await context.close();
   }
@@ -216,6 +314,9 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((error) => {
     const category = classifySmokeFailure(error);
     process.stderr.write(`MANAGED_APP_SMOKE_FAILED:${category}:${smokeStage}\n`);
+    if (typeof error?.smokeDiagnostic === "string" && error.smokeDiagnostic) {
+      process.stderr.write(`MANAGED_APP_SMOKE_DIAGNOSTIC:${error.smokeDiagnostic}\n`);
+    }
     process.exitCode = 1;
   });
 }
