@@ -1,0 +1,19 @@
+{
+  "body": {
+    "item": {
+      "aangemaakt": "<ts>",
+      "actief": true,
+      "bijgewerkt": "<ts>",
+      "fonds_id": "<uuid:1>",
+      "gekopieerd_van_id": null,
+      "id": "<uuid:2>",
+      "naam": "W1 Expertise gewijzigd",
+      "omschrijving": null,
+      "sort_order": 0
+    }
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

@@ -5,9 +5,9 @@ en na een wijziging byte-voor-byte vergelijkt. Doel: bewijzen dat de deploy-2-co
 **niets** aan het gedrag verandert ("nul verschil"). Zie issue #88 en
 `05 Security en compliance/TICKET-W1-karakteriseringsharnas.md`.
 
-> **Status:** framework groen op tier 1 (13 scenario's: record + verify + 3× stabiel
-> + negatieve controle bewezen). Tier 2 (domein-graaf-routes: documenten, procedures,
-> besluiten, vergaderingen, …) volgt.
+> **Status:** compleet — 62 scenario's over 25 routes, verify 3× stabiel,
+> negatieve controle bewezen, CI groen. Elke §3-variant gedekt; SSE/LLM-routes
+> bewust uitgesloten (W5).
 
 ## Bestanden
 

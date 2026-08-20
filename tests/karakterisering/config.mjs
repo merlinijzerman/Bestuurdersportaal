@@ -36,6 +36,7 @@ export const FIX = {
   procesmodel1: "00000000-0000-4000-8000-0000000b0001",
   procesmodelOnbekend: "00000000-0000-4000-8000-0000000b00ff",
   gremium1: "00000000-0000-4000-8000-0000000c0001",
+  expertise1: "00000000-0000-4000-8000-0000000e0001",
   risicoOnbekend: "00000000-0000-4000-8000-0000000715ff",
   decisionOnbekend: "00000000-0000-4000-8000-00000000dec0",
   decisionRiskOnbekend: "00000000-0000-4000-8000-0000dec0715f",
@@ -43,7 +44,12 @@ export const FIX = {
   gesprekOnbekend: "00000000-0000-4000-8000-00000000c5ff",
   agendapuntOnbekend: "00000000-0000-4000-8000-0000000a900f",
   procedureOnbekend: "00000000-0000-4000-8000-00000000cdff",
+  afschrift1: "00000000-0000-4000-8000-00000a75c701",
+  afschriftOnbekend: "00000000-0000-4000-8000-00000a75c7ff",
+  aqlabExportOnbekend: "00000000-0000-4000-8000-00000a91b0ff",
 };
+
+export const AFSCHRIFT1_PAD = `${FONDS_ID}/w1-afschrift.pdf`;
 
 // Vaste bytes voor de bestand-download (BESLUIT: body_sha256 i.p.v. ruwe bytes).
 export const DOCUMENT1_BYTES = "%PDF-1.4 W1-KARAKTERISERING-FIXTURE\n";

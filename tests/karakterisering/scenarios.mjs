@@ -11,8 +11,11 @@
 //    headers   extra request-headers — optioneel
 //    preseed   async (ctx) => {}  — DB-voorbewerking vóór het request
 //
-//  TIER 1 (framework-bewijs): routes met minimale seed. Domein-graaf-routes
-//  (documenten/procedures/besluiten/…) volgen als tier 2.
+//  62 scenario's over 25 routes; elke §3-variant gedekt. Happy path + 401 +
+//  relevante foutpaden (400/403/404/409/410/429) + de twee BESLUIT-1-vormen
+//  (bytes-download sha256; 307-redirect met genormaliseerd location_pad).
+//  Bewust uitgesloten: SSE/LLM-routes (W5) en de besluit-graaf-happy-paths
+//  (zware seed; dezelfde wrapper al gedekt via 401/404/400).
 // ============================================================================
 import { LIMIET_ZOEKEN, LIMIET_ZOEKEN_ENDPOINT } from "./ratelimit-const.mjs";
 import { FIX } from "./config.mjs";
@@ -95,6 +98,30 @@ export const scenarios = [
   { slug: "procedures-requirements.get.anon", method: "GET", path: `/api/procedures/${FIX.procedure1}/requirements`, rol: "anon", verwacht: "json" },
   { slug: "procedures-requirements.post.bestuurder.403", method: "POST", path: `/api/procedures/${FIX.procedure1}/requirements`, rol: "bestuurder", body: { label: "x" }, verwacht: "json" },
   { slug: "procedures-requirements.post.beheerder.invalid", method: "POST", path: `/api/procedures/${FIX.procedure1}/requirements`, rol: "beheerder", body: LEEG, verwacht: "json" },
+
+  // ── /api/expertises + /api/focusgebieden — organen-factory (siblings) ──────
+  { slug: "expertises.get.bestuurder", method: "GET", path: "/api/expertises", rol: "bestuurder", verwacht: "json" },
+  { slug: "expertises.get.anon", method: "GET", path: "/api/expertises", rol: "anon", verwacht: "json" },
+  { slug: "expertises.post.bestuurder.403", method: "POST", path: "/api/expertises", rol: "bestuurder", body: { naam: "x" }, verwacht: "json" },
+  { slug: "focusgebieden.get.bestuurder", method: "GET", path: "/api/focusgebieden", rol: "bestuurder", verwacht: "json" },
+  { slug: "focusgebieden.post.bestuurder.403", method: "POST", path: "/api/focusgebieden", rol: "bestuurder", body: { naam: "x" }, verwacht: "json" },
+  { slug: "expertises-id.patch.anon", method: "PATCH", path: `/api/expertises/${FIX.expertise1}`, rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "expertises-id.patch.beheerder", method: "PATCH", path: `/api/expertises/${FIX.expertise1}`, rol: "beheerder", body: { naam: "W1 Expertise gewijzigd" }, verwacht: "json" },
+
+  // ── /api/stuurinformatie/beheer — weigerAlsModuleUit · capability ──────────
+  { slug: "stuurinformatie-beheer.get.anon", method: "GET", path: "/api/stuurinformatie/beheer", rol: "anon", verwacht: "json" },
+  { slug: "stuurinformatie-beheer.get.bestuurder.403", method: "GET", path: "/api/stuurinformatie/beheer", rol: "bestuurder", verwacht: "json" },
+  { slug: "stuurinformatie-beheer.get.beheerder", method: "GET", path: "/api/stuurinformatie/beheer", rol: "beheerder", verwacht: "json" },
+
+  // ── /api/aqlab/audit/[exportId] — withPlatformRead (platformsurface) ───────
+  { slug: "aqlab-audit.get.anon", method: "GET", path: `/api/aqlab/audit/${FIX.aqlabExportOnbekend}`, rol: "anon", verwacht: "json" },
+  { slug: "aqlab-audit.get.bestuurder", method: "GET", path: `/api/aqlab/audit/${FIX.aqlabExportOnbekend}`, rol: "bestuurder", verwacht: "json" },
+
+  // ── /api/procedures/[id]/afschriften/[afschriftId]/download — 307-redirect ─
+  { slug: "afschrift-download.get.anon", method: "GET", path: `/api/procedures/${FIX.procedure1}/afschriften/${FIX.afschrift1}/download`, rol: "anon", verwacht: "json" },
+  { slug: "afschrift-download.get.bestuursbureau.403", method: "GET", path: `/api/procedures/${FIX.procedure1}/afschriften/${FIX.afschrift1}/download`, rol: "bestuursbureau", verwacht: "json" },
+  { slug: "afschrift-download.get.bestuurder.404", method: "GET", path: `/api/procedures/${FIX.procedure1}/afschriften/${FIX.afschriftOnbekend}/download`, rol: "bestuurder", verwacht: "json" },
+  { slug: "afschrift-download.get.bestuurder.307", method: "GET", path: `/api/procedures/${FIX.procedure1}/afschriften/${FIX.afschrift1}/download`, rol: "bestuurder", verwacht: "redirect" },
 
   // ── /api/zoeken — rate-limit · host-guard ──────────────────────────────────
   { slug: "zoeken.get.anon", method: "GET", path: "/api/zoeken?q=test", rol: "anon", verwacht: "json" },

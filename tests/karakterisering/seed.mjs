@@ -9,7 +9,7 @@
 //  normalisatielaag mapt ze. Domein-UUID's zijn vast.
 // ============================================================================
 import { createClient } from "@supabase/supabase-js";
-import { ENV, FONDS_ID, ROLLEN, WACHTWOORD, emailVoor, FIX, DOCUMENT1_BYTES, DOCUMENT1_PAD } from "./config.mjs";
+import { ENV, FONDS_ID, ROLLEN, WACHTWOORD, emailVoor, FIX, DOCUMENT1_BYTES, DOCUMENT1_PAD, AFSCHRIFT1_PAD } from "./config.mjs";
 
 export function adminClient() {
   return createClient(ENV.url, ENV.serviceKey, { auth: { persistSession: false } });
@@ -92,8 +92,33 @@ export async function seed(admin = adminClient()) {
   await seedRisicos(admin);
   await seedGesprekken(admin, users);
   await seedProcedures(admin);
+  await seedAfschrift(admin);
 
   return { fondsId: FONDS_ID, users };
+}
+
+// ── Tier 2: afschrift (307-redirect naar signed URL — BESLUIT 1) ────────────
+async function seedAfschrift(admin) {
+  // Storage-object in de 'afschriften'-bucket onder <fonds_id>/…
+  const bytes = new TextEncoder().encode("%PDF-1.4 W1-AFSCHRIFT-FIXTURE\n");
+  const up = await admin.storage
+    .from("afschriften")
+    .upload(AFSCHRIFT1_PAD, bytes, { contentType: "application/pdf", upsert: true });
+  if (up.error) throw new Error(`storage.upload(afschrift): ${up.error.message}`);
+
+  const { error } = await admin.from("procedure_afschriften").upsert(
+    {
+      id: FIX.afschrift1,
+      procedure_id: FIX.procedure1,
+      fonds_id: FONDS_ID,
+      versie: "actueel",
+      status: "gereed",
+      ai_leeswijzer: false,
+      opslag_pad: AFSCHRIFT1_PAD,
+    },
+    { onConflict: "id" }
+  );
+  if (error) throw new Error(`procedure_afschriften: ${error.message}`);
 }
 
 // ── Tier 2: procedures ──────────────────────────────────────────────────────
@@ -146,6 +171,7 @@ async function seedRisicos(admin) {
 async function seedCatalogus(admin) {
   await admin.from("procesmodellen").delete().eq("fonds_id", FONDS_ID);
   await admin.from("gremia").delete().eq("fonds_id", FONDS_ID);
+  await admin.from("expertises").delete().eq("fonds_id", FONDS_ID);
 
   {
     const { error } = await admin.from("procesmodellen").insert({
@@ -164,6 +190,14 @@ async function seedCatalogus(admin) {
       type: "besluitvormend",
     });
     if (error) throw new Error(`gremia: ${error.message}`);
+  }
+  {
+    const { error } = await admin.from("expertises").insert({
+      id: FIX.expertise1,
+      fonds_id: FONDS_ID,
+      naam: "W1 Expertise",
+    });
+    if (error) throw new Error(`expertises: ${error.message}`);
   }
 }
 
