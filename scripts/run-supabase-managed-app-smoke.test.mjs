@@ -94,3 +94,14 @@ test("diagnose weigert vrije tekst, cookiewaarden en onbekende velden", () => {
   assert.equal(line.includes("example.invalid"), false);
   assert.equal(line.includes("geheim"), false);
 });
+
+test("diagnose onderscheidt een geblokkeerde tenant van een lege navigatie", () => {
+  const line = formatSmokeDiagnostic({
+    pathname: "/",
+    root_path: "/",
+    auth_cookie: true,
+    tenant_blocked: true,
+    shell_rendered: false,
+  });
+  assert.equal(line, "pathname=/;root_path=/;auth_cookie=true;tenant_blocked=true;shell_rendered=false");
+});

@@ -32,7 +32,15 @@ function classifySmokeFailure(error) {
 }
 
 const SAFE_SMOKE_PATHS = new Set(["/", "/login", "/bibliotheek"]);
-const DIAGNOSTIC_FIELDS = ["pathname", "root_path", "login_error", "login_busy", "auth_cookie"];
+const DIAGNOSTIC_FIELDS = [
+  "pathname",
+  "root_path",
+  "login_error",
+  "login_busy",
+  "auth_cookie",
+  "tenant_blocked",
+  "shell_rendered",
+];
 const DIAGNOSTIC_PATH_FIELDS = new Set(["pathname", "root_path"]);
 
 // Alleen een vaste, vooraf bekende routenaam mag in de logs belanden. Elke
@@ -99,6 +107,21 @@ async function collectLoginDiagnostics(page) {
     fields.root_path = classifySmokePath(finalUrl);
   } catch {
     fields.root_path = "unknown";
+  }
+  try {
+    // Vaste UI-tekst uit de fail-closed tenantgate in de dashboardlayout.
+    fields.tenant_blocked = await page
+      .getByRole("heading", { name: "Geen toegang op dit adres" })
+      .isVisible({ timeout: 2_000 });
+  } catch {
+    fields.tenant_blocked = false;
+  }
+  try {
+    // De profiellink hoort bij de shell zelf en staat los van het
+    // modulemanifest; hij onderscheidt "shell rendert" van "nav is leeg".
+    fields.shell_rendered = await page.locator('a[href="/profiel"]').isVisible({ timeout: 2_000 });
+  } catch {
+    fields.shell_rendered = false;
   }
   return formatSmokeDiagnostic(fields);
 }
@@ -244,7 +267,13 @@ async function main() {
       await page.waitForURL((url) => url.pathname === "/", { timeout: 45_000 });
     }
     smokeStage = "dashboard";
-    await page.getByRole("link", { name: "Home", exact: true }).waitFor({ timeout: 45_000 });
+    // Bewust de profiellink en niet een nav-item: welke modules in de nav staan
+    // hangt af van het fondsmanifest (beschikbareModules), en dat mag de
+    // hersteloefening niet impliciet meetesten. De profiellink hoort bij de
+    // shell zelf en bewijst dus dat de dashboardlayout voor deze gebruiker is
+    // gerenderd — inclusief de auth-gate en de fail-closed tenantcontrole
+    // erboven, die beide een pagina zonder shell zouden opleveren.
+    await page.locator('a[href="/profiel"]').waitFor({ timeout: 45_000 });
 
     smokeStage = "document_list_api";
     const listResult = await page.evaluate(async (expectedId) => {
