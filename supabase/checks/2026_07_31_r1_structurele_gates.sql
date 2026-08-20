@@ -738,7 +738,379 @@ end $$;
 reset role;
 rollback;
 
+
+-- ============================================================================
+-- ║ GATES K1, K3, K5, K7, K8, K9 — eenheidsdimensie (ZELF-ACTIVEREND)        ║
+-- ============================================================================
+-- Toegevoegd bij ticket V0 (voorwerk eenheidsdimensie), vóórdat er iets te
+-- toetsen valt. Criteria: Architectuurnotitie eenheidsdimensie (APF-kringen)
+-- v0.4 §8; datamodel §4.1–§4.3; retrieval-predicaat §5.2.
+--
+-- WAAROM ZE ER NU AL STAAN. Een acceptatiecriterium dat pas wordt opgeschreven
+-- als de migratie er ligt, is geen criterium maar een beschrijving. Deze gates
+-- zijn geschreven vóór de eerste kolom bestaat, zodat ze de migratie beoordelen
+-- in plaats van andersom.
+--
+-- HOE "ZELF-ACTIVEREND" WERKT. Elke gate begint met een guard op het object dat
+-- hij toetst:
+--
+--     if to_regclass('public.eenheden') is null then return; end if;
+--
+-- Zolang dat object niet bestaat zwijgt de gate en blijft CI groen; vanaf het
+-- moment dat het er is, handhaaft hij automatisch. Geen aparte "gates aanzetten"-
+-- stap, geen periode met rode CI, en niemand kan vergeten ze in te schakelen.
+-- Gates die een kolom toetsen guarden aanvullend op die kolom, omdat de kolommen
+-- (P1-3) later landen dan de tabel (P1-1).
+--
+-- LET OP — een zwijgende gate is geen geslaagde gate. Vóór P1-1 geeft geen van
+-- deze zes een OK-notice. Zie je ze niet in de output, dan is dat correct; zie je
+-- ze ná P1-1 nog steeds niet, dan is de guard verkeerd en toetst er niets.
+-- ============================================================================
+
+
+-- ╔════════════════════════════════════════════════════════════════════════╗
+-- ║ GATE K7 — elk fonds heeft PRECIES ÉÉN systeem-eenheid                  ║
+-- ╚════════════════════════════════════════════════════════════════════════╝
+-- Twee helften, omdat "precies één" in PostgreSQL niet met één mechanisme te
+-- borgen is (§4.1): *bestaan* is geen tabelconstraint.
+--   • hoogstens één → de partiële unique-index ux_eenheden_systeem
+--   • ten minste één → een trigger op fondsen, die alleen achteraf toetsbaar is
+-- Deze gate toetst beide. Valt de index weg bij een herbouw van het schema, dan
+-- is de eerste helft stil verdwenen; daarom staat hij hier expliciet.
+do $$
+declare
+  ontbreekt text;
+begin
+  if to_regclass('public.eenheden') is null then return; end if;
+
+  select string_agg(format('  - fonds %s (%s)', f.id, f.naam), chr(10) order by f.naam)
+    into ontbreekt
+    from public.fondsen f
+   where not exists (
+           select 1 from public.eenheden e
+            where e.fonds_id = f.id and e.is_systeem
+         );
+
+  if ontbreekt is not null then
+    raise exception E'GATE K7 FAALT: fondsen zonder systeem-eenheid — objecten van dit fonds kunnen niet fondsbreed worden geplaatst:\n%', ontbreekt;
+  end if;
+
+  if to_regclass('public.ux_eenheden_systeem') is null then
+    raise exception 'GATE K7 FAALT: de partiele unique-index ux_eenheden_systeem ontbreekt; "hoogstens een systeem-eenheid per fonds" is dan nergens afgedwongen.';
+  end if;
+
+  raise notice 'GATE K7 OK: elk fonds heeft precies een systeem-eenheid (bestaan getoetst, uniciteit afgedwongen).';
+end $$;
+
+
+-- ╔════════════════════════════════════════════════════════════════════════╗
+-- ║ GATE K9 — fonds met de module UIT houdt precies één eenheid            ║
+-- ╚════════════════════════════════════════════════════════════════════════╝
+-- De eenheidsdimensie is optioneel. Een fonds dat hem niet gebruikt, hoort de
+-- systeem-eenheid te hebben en verder niets: anders bestaat er wél een indeling
+-- die nergens in de interface zichtbaar is, en dat is precies het geval waarin
+-- iemand een stuk in een kring hangt die niemand kan zien.
+--
+-- WAT DEZE GATE NIET ZIET. Het effectieve manifest is `registry.defaultActief ⊕
+-- fonds_module_manifest` (core/lib/fonds-config.ts) en die default staat in
+-- CODE, niet in de database. SQL kan dus alleen fondsen zien met een EXPLICIETE
+-- uit-regel. Staat de module standaard uit en heeft een fonds geen rij, dan valt
+-- het buiten deze gate. Dat is een bewuste ondergrens, geen omissie.
+do $$
+declare
+  offenders text;
+begin
+  if to_regclass('public.eenheden') is null then return; end if;
+  if to_regclass('public.fonds_module_manifest') is null then return; end if;
+
+  select string_agg(
+           format('  - fonds %s: %s eenheden terwijl de module expliciet uit staat', x.fonds_id, x.aantal),
+           chr(10) order by x.fonds_id)
+    into offenders
+    from (
+      select m.fonds_id,
+             (select count(*) from public.eenheden e where e.fonds_id = m.fonds_id) as aantal
+        from public.fonds_module_manifest m
+       where m.module_key = 'eenheden'
+         and m.actief is false
+    ) x
+   where x.aantal <> 1;
+
+  if offenders is not null then
+    raise exception E'GATE K9 FAALT: onzichtbare eenheidsindeling — een fonds met de module uit hoort alleen de systeem-eenheid te houden:\n%', offenders;
+  end if;
+
+  raise notice 'GATE K9 OK: elk fonds met de module expliciet uit houdt precies een eenheid.';
+end $$;
+
+
+-- ╔════════════════════════════════════════════════════════════════════════╗
+-- ║ GATE K1 — fondsconsistentie op eenheid_id                              ║
+-- ╚════════════════════════════════════════════════════════════════════════╝
+-- De composite-FK (fonds_id, eenheid_id) → eenheden (fonds_id, id) dekt dit
+-- declaratief af — MAAR alleen waar beide kolommen gevuld zijn. PostgreSQL
+-- hanteert MATCH SIMPLE: is één van de FK-kolommen NULL, dan wordt de constraint
+-- overgeslagen (§4.3). Deze gate toetst de uitkomst in de data, niet de intentie
+-- in de migratie — conform de werkinstructie "toets de uitkomst in de database".
+--
+-- De tweede helft is het gat dat MATCH SIMPLE juist openlaat: de HALFGEVULDE
+-- combinatie bij `documenten`, waar `eenheid_id` nullable blijft omdat
+-- NULL ⟺ generiek. Een document met een fonds maar zonder eenheid, of andersom,
+-- valt buiten élke declaratieve toets.
+do $$
+declare
+  t         text;
+  n         bigint;
+  offenders text := '';
+begin
+  if to_regclass('public.eenheden') is null then return; end if;
+
+  foreach t in array array['procedures','risicos','vergaderingen','documenten'] loop
+    if to_regclass('public.' || t) is null then continue; end if;
+    if not exists (
+         select 1 from information_schema.columns
+          where table_schema = 'public' and table_name = t and column_name = 'eenheid_id')
+    then continue; end if;
+
+    execute format(
+      'select count(*) from public.%I x
+        where x.eenheid_id is not null
+          and not exists (select 1 from public.eenheden e
+                           where e.id = x.eenheid_id and e.fonds_id = x.fonds_id)', t)
+      into n;
+
+    if n > 0 then
+      offenders := offenders ||
+        format('  - %s: %s rijen verwijzen naar een eenheid van een ANDER fonds%s', t, n, chr(10));
+    end if;
+  end loop;
+
+  if to_regclass('public.documenten') is not null
+     and exists (select 1 from information_schema.columns
+                  where table_schema = 'public' and table_name = 'documenten'
+                    and column_name = 'eenheid_id')
+  then
+    execute 'select count(*) from public.documenten
+              where (fonds_id is null) <> (eenheid_id is null)'
+      into n;
+    if n > 0 then
+      offenders := offenders ||
+        format('  - documenten: %s rijen met een halfgevulde (fonds_id, eenheid_id)-combinatie — buiten bereik van de composite-FK%s', n, chr(10));
+    end if;
+  end if;
+
+  if offenders <> '' then
+    raise exception E'GATE K1 FAALT: eenheidskoppelingen doorbreken de fondsgrens:\n%', offenders;
+  end if;
+
+  raise notice 'GATE K1 OK: elke eenheidskoppeling blijft binnen het eigen fonds; geen halfgevulde combinaties.';
+end $$;
+
+
+-- ╔════════════════════════════════════════════════════════════════════════╗
+-- ║ GATE K3 — eenheidsscope filtert geen generieke bronnen weg             ║
+-- ╚════════════════════════════════════════════════════════════════════════╝
+-- TWEE HELFTEN, EN DE TWEEDE IS DE BELANGRIJKSTE.
+--
+-- K3a (data) — een niet-generieke chunk draagt een eenheid van het EIGEN fonds.
+-- `document_chunks.eenheid_id` is een denorm-kolom die de parent volgt via
+-- fn_chunk_denorm (§4.2, §5.1). Loopt die denorm scheef, dan is de pre-filter
+-- vóór de HNSW-scan aantoonbaar onjuist en betekent "scope ∪ {systeem}" niets
+-- meer.
+--
+-- K3b (structureel) — de REGRESSIETEST op de fout die in v0.3 van de
+-- architectuurnotitie zat. Die formulering liet een generieke chunk
+-- (`eenheid_id IS NULL`) aan geen enkele tak van het scope-predicaat voldoen.
+-- Bij een actieve kringscope zou de assistent daarmee stilzwijgend het volledige
+-- DNB-, AFM- en Pensioenfederatie-corpus buitensluiten. Dat is de gevaarlijkste
+-- soort fout: hij is niet zichtbaar in de output, alleen in wat ontbreekt. §5.2
+-- corrigeert het predicaat met een expliciete generieke ontsnapping; deze helft
+-- bewaakt dat die er blijft.
+--
+-- WAT K3b NIET KAN. De toets is TEKSTUEEL op de functiedefinitie — dezelfde
+-- ondergrens die bij gate D1 is opgeschreven. Hij ziet DÁT er binnen de
+-- eenheidstak een generieke ontsnapping staat, niet of die in élke uitvoerings-
+-- tak bereikbaar is. Lees hem als ondergrens, niet als bewijs; het echte bewijs
+-- is de K4-baseline plus de AQLab-categorie "kringvermenging" (K6).
+do $$
+declare
+  n            bigint;
+  fn           text;
+  definitie    text;
+  genormaliseerd text;
+  p            int;
+  offenders    text := '';
+begin
+  if to_regclass('public.eenheden') is null then return; end if;
+
+  -- ── K3a — denorm-integriteit ────────────────────────────────────────────
+  if to_regclass('public.document_chunks') is not null
+     and exists (select 1 from information_schema.columns
+                  where table_schema = 'public' and table_name = 'document_chunks'
+                    and column_name = 'eenheid_id')
+  then
+    execute 'select count(*) from public.document_chunks dc
+              where dc.bibliotheek is distinct from ''generiek''
+                and dc.eenheid_id is not null
+                and not exists (select 1 from public.eenheden e
+                                 where e.id = dc.eenheid_id and e.fonds_id = dc.fonds_id)'
+      into n;
+    if n > 0 then
+      offenders := offenders ||
+        format('  - document_chunks: %s niet-generieke chunks dragen een eenheid van een ander fonds (denorm scheef)%s', n, chr(10));
+    end if;
+  end if;
+
+  -- ── K3b — generieke ontsnapping in het scope-predicaat ──────────────────
+  foreach fn in array array['zoek_chunks','zoek_chunks_hybride'] loop
+    select pg_get_functiondef(p2.oid) into definitie
+      from pg_proc p2
+      join pg_namespace ns on ns.oid = p2.pronamespace
+     where ns.nspname = 'public' and p2.proname = fn
+     order by p2.oid desc
+     limit 1;
+
+    if definitie is null then continue; end if;
+
+    genormaliseerd := lower(regexp_replace(definitie, '\s+', ' ', 'g'));
+
+    -- Nog geen scope-parameter: de gate is voor deze functie niet van toepassing.
+    if position('p_eenheid_ids' in genormaliseerd) = 0 then continue; end if;
+
+    p := position('p_eenheid_ids is null' in genormaliseerd);
+    if p = 0 then
+      offenders := offenders ||
+        format('  - %s: heeft p_eenheid_ids maar geen "p_eenheid_ids is null"-tak; scope is dan niet uitschakelbaar%s', fn, chr(10));
+    elsif position('generiek' in substr(genormaliseerd, p, 300)) = 0 then
+      offenders := offenders ||
+        format('  - %s: het eenheidspredicaat kent geen generieke ontsnapping — een actieve scope sluit het generieke corpus uit (v0.3-regressie)%s', fn, chr(10));
+    end if;
+  end loop;
+
+  if offenders <> '' then
+    raise exception E'GATE K3 FAALT: de eenheidsscope tast het generieke corpus aan of de denorm loopt scheef:\n%', offenders;
+  end if;
+
+  raise notice 'GATE K3 OK: denorm binnen het eigen fonds; het scope-predicaat laat generieke bronnen door.';
+end $$;
+
+
+-- ╔════════════════════════════════════════════════════════════════════════╗
+-- ║ GATE K8 — de tijdelijke vangnettrigger bestaat niet meer               ║
+-- ╚════════════════════════════════════════════════════════════════════════╝
+-- Risico R4: blijft `trg_eenheid_vangnet` staan, dan krijgt elk object waarvoor
+-- niemand een eenheid koos stilzwijgend de systeem-eenheid. Dat leest als
+-- "bewust APF-breed" terwijl het "vergeten" betekent — en het verschil is later
+-- niet meer te reconstrueren.
+--
+-- AFWIJKENDE GUARD, BEWUST. De overige gates guarden op het bestaan van
+-- `eenheden`. Dat zou hier fout uitpakken: de vangnettrigger MAG bestaan tijdens
+-- expand/migrate en moet pas weg zijn ná de contract-stap. Guarden op `eenheden`
+-- maakt CI rood gedurende precies het venster waarin de trigger legitiem is —
+-- exact wat deze aanpak wil voorkomen. Daarom activeert K8 op het contract-
+-- signaal zelf: `procedures.eenheid_id` staat op NOT NULL (§4.2, kolom wordt
+-- NOT NULL na contract). Vanaf dat moment is er geen reden meer voor een vangnet.
+do $$
+begin
+  if to_regclass('public.eenheden') is null then return; end if;
+
+  if not exists (
+       select 1 from information_schema.columns
+        where table_schema = 'public' and table_name = 'procedures'
+          and column_name = 'eenheid_id' and is_nullable = 'NO')
+  then return; end if;
+
+  if exists (select 1 from pg_trigger where tgname = 'trg_eenheid_vangnet' and not tgisinternal) then
+    raise exception 'GATE K8 FAALT: trg_eenheid_vangnet bestaat nog na de contract-stap; vergeten eenheden worden daardoor als bewust fondsbreed geboekt (risico R4).';
+  end if;
+
+  raise notice 'GATE K8 OK: de vangnettrigger is opgeruimd.';
+end $$;
+
+
+-- ╔════════════════════════════════════════════════════════════════════════╗
+-- ║ GATE K5 — een inactieve eenheid weigert nieuwe koppelingen             ║
+-- ╚════════════════════════════════════════════════════════════════════════╝
+-- GEDRAGSTEST, geen structuurtest. §8 is daar expliciet over: "getoetst door een
+-- insert-poging, niet door de aanwezigheid van een FK". Een FK naar `eenheden`
+-- zegt niets over `actief` — die invariant is procedureel (§4.1) en dus alleen
+-- door gedrag te bewijzen. Zelfde opzet als gate D: alles in een transactie die
+-- onvoorwaardelijk terugrolt, zodat de check niets achterlaat.
+--
+-- MET POSITIEVE CONTROLE. Een test die alleen kijkt of de tweede insert faalt,
+-- slaagt óók wanneer die insert om een heel andere reden faalt — een ontbrekende
+-- NOT NULL-waarde, een gewijzigde CHECK op template_code, een trigger die er
+-- niets mee te maken heeft. Dan is de gate groen zonder iets te hebben
+-- aangetoond. Daarom eerst een identieke insert naar een ACTIEVE eenheid, die
+-- moet slagen. Slaagt die controle niet, dan meldt de gate zich ONBRUIKBAAR in
+-- plaats van groen: een gate die niets kan bewijzen hoort luid te zijn, niet stil.
+begin;
+do $$
+declare
+  v_fonds     uuid;
+  v_actief    uuid;
+  v_inactief  uuid;
+  controle_ok boolean := false;
+  koppeling_geaccepteerd boolean := false;
+  fout        text;
+begin
+  if to_regclass('public.eenheden') is null then return; end if;
+  if not exists (
+       select 1 from information_schema.columns
+        where table_schema = 'public' and table_name = 'procedures' and column_name = 'eenheid_id')
+  then return; end if;
+
+  select id into v_fonds from public.fondsen order by aangemaakt nulls last, id limit 1;
+  if v_fonds is null then
+    raise notice 'GATE K5 OVERGESLAGEN: geen enkel fonds in deze database.';
+    return;
+  end if;
+
+  insert into public.eenheden (fonds_id, code, naam, soort, is_systeem, actief)
+  values (v_fonds, 'k5-gate-actief', 'K5 gatetest actief (rollback)', 'overig', false, true)
+  returning id into v_actief;
+
+  insert into public.eenheden (fonds_id, code, naam, soort, is_systeem, actief)
+  values (v_fonds, 'k5-gate-inactief', 'K5 gatetest inactief (rollback)', 'overig', false, false)
+  returning id into v_inactief;
+
+  -- Positieve controle: naar een ACTIEVE eenheid moet koppelen gewoon lukken.
+  begin
+    insert into public.procedures (fonds_id, template_code, titel, eenheid_id)
+    values (v_fonds, 'k5_gatetest', 'K5 gatetest controle (rollback)', v_actief);
+    controle_ok := true;
+  exception when others then
+    fout := sqlerrm;
+  end;
+
+  if not controle_ok then
+    raise exception 'GATE K5 ONBRUIKBAAR: de controle-insert naar een ACTIEVE eenheid faalde (%). De gate kan daarmee niets aantonen over inactieve eenheden — repareer de testopzet voordat je dit als groen leest.', fout;
+  end if;
+
+  -- De eigenlijke toets: naar een INACTIEVE eenheid moet het worden geweigerd.
+  begin
+    insert into public.procedures (fonds_id, template_code, titel, eenheid_id)
+    values (v_fonds, 'k5_gatetest', 'K5 gatetest inactief (rollback)', v_inactief);
+    koppeling_geaccepteerd := true;
+  exception when others then
+    koppeling_geaccepteerd := false;
+  end;
+
+  if koppeling_geaccepteerd then
+    raise exception 'GATE K5 FAALT: een nieuwe koppeling naar een GEDEACTIVEERDE eenheid werd geaccepteerd. Deactiveren is dan cosmetisch en de kring blijft in gebruik.';
+  end if;
+
+  raise notice 'GATE K5 OK: koppelen naar een actieve eenheid lukt, naar een inactieve wordt geweigerd.';
+end $$;
+rollback;
+
+
 -- ============================================================================
 -- Alles geslaagd als psql exit 0 gaf en je de OK-notices van A1, A2, B, C, C2,
 -- E, F, G, H en D zag. Elke "FAALT" doet raise exception → non-zero exit → CI rood.
+--
+-- De eenheidsgates K1, K3, K5, K7, K8 en K9 zijn ZELF-ACTIVEREND: zolang
+-- public.eenheden niet bestaat geven ze geen notice en is dat correct. Vanaf
+-- P1-1 hoor je ze in de output terug te zien; blijven ze dan stil, dan toetst er
+-- niets en klopt de guard niet.
 -- ============================================================================
