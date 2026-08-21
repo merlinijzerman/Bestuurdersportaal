@@ -288,6 +288,28 @@ Beide leunen op `toetsWrapperFundament()`, dat in W4 twee ankers erbij kreeg:
 en `ctx.rol` uit `rol: profiel?.rol`. Zonder die ankers zou het accepteren van
 `ctx.*` een lege verwijzing zijn — precies het vals-groen dat W3 wilde uitsluiten.
 
+#### De negatieve controle moet TWEE kanten op
+
+De vier sabotage-controles uit besluit 0046 §E saboteren allemaal het
+**wrapper**-pad. Valt bij het omzetten per ongeluk de **route-eigen** tak weg,
+dan worden ze nog steeds keurig rood: de guard is dan eenzijdig maar oogt gezond.
+Dat is met geen enkele sabotage van één kant te vangen.
+
+Loop daarom per omgezette guard na dat beide takken er nog staan, en meet ze:
+saboteer de guard met de route **klassiek** én met de route **gemigreerd**, en eis
+in allebei rood. Voor de drie W4-guards zijn dat twaalf metingen (per guard:
+klassiek-ongewijzigd groen, klassiek-gesaboteerd rood, wrapper-ongewijzigd groen,
+wrapper-gesaboteerd rood) — alle twaalf zoals verwacht.
+
+**Toets per handler, niet per bestand.** `redenFondsIdNietUitProfiel` deed dat
+aanvankelijk niet, en dat was precies de eenzijdigheid hierboven: bij een bestand
+met één gemigreerde en één klassieke handler stelde hij alleen nog de klassieke
+eis, dus over de gemigreerde handler beloofde hij niets meer. Gemeten op
+`stuurinformatie/beheer/route.ts` (GET+POST): met POST door de wrapper én zonder
+`ctx.fondsId` bleef de bestandstoets **groen**, de handlertoets valt rood. Elke
+nieuwe helper hoort de vorm van `redenGeenHostGuard` te volgen — filteren over
+`leesHandlers(bron)`, niet over de bron als geheel.
+
 #### De negatieve controle die dit afdekt
 
 Tien lekken, alle tien rood, plus één positieve controle (een gemigreerde route

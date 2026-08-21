@@ -205,12 +205,15 @@ export function redenFondsIdNietUitProfiel(bron: string): string | null {
   if (handlers.length === 0) return "geen geëxporteerde HTTP-handler gevonden";
   const uitProfiel = /\bprofiel\??\.fonds_id\b/.test(bron);
   const uitCtx = /\bctx\.fondsId\b/.test(bron);
-  const eigen = handlers.filter((h) => !h.viaWrapper);
-  if (eigen.length > 0 && !uitProfiel) {
-    return `${benoem(eigen)} schrijft de preambule zelf maar leidt fonds_id niet af uit het profiel (geen profiel.fonds_id / profiel?.fonds_id)`;
-  }
-  if (eigen.length === 0 && !uitProfiel && !uitCtx) {
-    return `${benoem(handlers)} delegeert aan withFondsRoute maar gebruikt het profiel-fonds niet (geen ctx.fondsId)`;
+  // PER HANDLER, niet per bestand. Een bestand met één gemigreerde en één
+  // klassieke handler zou bij een bestandstoets alleen nog de klassieke eis
+  // stellen: de wrapper-tak valt dan stil weg en de guard is eenzijdig — rood bij
+  // sabotage, dus ogenschijnlijk gezond, terwijl hij over de gemigreerde handler
+  // niets meer belooft. `stuurinformatie/beheer` (GET+POST) is precies zo'n
+  // bestand. Zie ook redenGeenHostGuard, dat dezelfde vorm heeft.
+  const ongedekt = handlers.filter((h) => (h.viaWrapper ? !uitCtx : !uitProfiel));
+  if (ongedekt.length > 0) {
+    return `${benoem(ongedekt)} leidt fonds_id niet af uit het profiel (geen profiel.fonds_id / profiel?.fonds_id in de route, geen ctx.fondsId uit de wrapper)`;
   }
   return null;
 }
