@@ -1295,4 +1295,125 @@ export const scenarios = [
     body: { toelichting: "W4" }, verwacht: "json",
     preseed: async ({ admin }) => zetProcedureStap(admin),
   },
+
+  // ══ de losse routes ════════════════════════════════════════════════════════
+  //  Wat na de acht domeinen resteert. Vier ervan staan hier om een eigen reden:
+  //  `vergelijk` (teller + host-guard), `/api/profiel` (gemengd bestand),
+  //  `stuurinformatie/beheer` (afwijkende preambule via een gate()-helper) en
+  //  `stuurinformatie/beheer/upload` (T14 bindt op beide).
+
+  // ── classificatie ─────────────────────────────────────────────────────────
+  { slug: "w4.classificatie-beoordeel.post.anon", method: "POST", path: `/api/classificatie/${FIX.classificatieOnbekend}/beoordeel`, rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.classificatie-beoordeel.post.bestuurder.403", method: "POST", path: `/api/classificatie/${FIX.classificatieOnbekend}/beoordeel`, rol: "bestuurder", body: { actie: "bevestigen" }, verwacht: "json" },
+  { slug: "w4.classificatie-beoordeel.post.voorzitter.400", method: "POST", path: `/api/classificatie/${FIX.classificatieOnbekend}/beoordeel`, rol: "voorzitter", body: { actie: "onzin" }, verwacht: "json" },
+  { slug: "w4.classificatie-beoordeel.post.voorzitter.404", method: "POST", path: `/api/classificatie/${FIX.classificatieOnbekend}/beoordeel`, rol: "voorzitter", body: { actie: "bevestigen" }, verwacht: "json" },
+  { slug: "w4.classificatie-terugdraai.post.anon", method: "POST", path: `/api/classificatie/${FIX.classificatieOnbekend}/terugdraai`, rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.classificatie-terugdraai.post.bestuurder.403", method: "POST", path: `/api/classificatie/${FIX.classificatieOnbekend}/terugdraai`, rol: "bestuurder", body: LEEG, verwacht: "json" },
+  { slug: "w4.classificatie-terugdraai.post.voorzitter.404", method: "POST", path: `/api/classificatie/${FIX.classificatieOnbekend}/terugdraai`, rol: "voorzitter", body: LEEG, verwacht: "json" },
+  { slug: "w4.classificatie-backfill.post.anon", method: "POST", path: "/api/classificatie/backfill", rol: "anon", body: LEEG, verwacht: "json" },
+  {
+    slug: "w4.classificatie-backfill.post.bestuurder.403",
+    method: "POST", path: "/api/classificatie/backfill", rol: "bestuurder",
+    body: LEEG, verwacht: "json",
+    preseed: async ({ admin }) => wisLimiet(admin, "backfill"),
+  },
+
+  // ── dossiers/[id] ─────────────────────────────────────────────────────────
+  { slug: "w4.dossiers-id.get.anon", method: "GET", path: `/api/dossiers/${FIX.dossierOnbekend}`, rol: "anon", verwacht: "json" },
+  { slug: "w4.dossiers-id.get.bestuurder.404", method: "GET", path: `/api/dossiers/${FIX.dossierOnbekend}`, rol: "bestuurder", verwacht: "json" },
+  { slug: "w4.dossiers-id.patch.anon", method: "PATCH", path: `/api/dossiers/${FIX.dossierOnbekend}`, rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.dossiers-id.patch.bestuurder.403", method: "PATCH", path: `/api/dossiers/${FIX.dossierOnbekend}`, rol: "bestuurder", body: { titel: "W4" }, verwacht: "json" },
+
+  // ── organisatieprofiel ────────────────────────────────────────────────────
+  { slug: "w4.organisatieprofiel.get.anon", method: "GET", path: "/api/organisatieprofiel", rol: "anon", verwacht: "json" },
+  { slug: "w4.organisatieprofiel.get.bestuurder", method: "GET", path: "/api/organisatieprofiel", rol: "bestuurder", verwacht: "json" },
+  { slug: "w4.organisatieprofiel.put.anon", method: "PUT", path: "/api/organisatieprofiel", rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.organisatieprofiel.put.bestuurder.403", method: "PUT", path: "/api/organisatieprofiel", rol: "bestuurder", body: LEEG, verwacht: "json" },
+
+  // ── reflectie/transitie ───────────────────────────────────────────────────
+  //  Idem: de GET valideert `gesprek_id` VOOR de sessiecontrole, dus een anonieme
+  //  aanvraag zonder geldig id krijgt 400 en geen 401. Ook dat verschuift.
+  { slug: "w4.reflectie.get.anon.400-id", method: "GET", path: "/api/reflectie/transitie", rol: "anon", verwacht: "json" },
+  { slug: "w4.reflectie.post.anon.400-id", method: "POST", path: "/api/reflectie/transitie", rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.reflectie.post.bestuurder.400", method: "POST", path: "/api/reflectie/transitie", rol: "bestuurder", body: LEEG, verwacht: "json" },
+
+  // ── vergelijk — TELLER + HOST-GUARD tegelijk ──────────────────────────────
+  //  LET OP: de modulevlag-check ("Vergelijkmodus is niet actief.") staat VOOR de
+  //  sessiecontrole. Zolang de module uitstaat geven alle vier deze scenario's
+  //  404 en wordt het auth-pad niet eens bereikt. Na de migratie draait de
+  //  wrapper auth eerst, dus de anonieme variant wordt 401. Dat is dezelfde
+  //  gesanctioneerde wijziging als bij `documents/upload` (§1a) en hij komt straks
+  //  als rode snapshot naar boven — daarvoor staan ze hier op ONGEWIJZIGDE code.
+  { slug: "w4.vergelijk.post.anon", method: "POST", path: "/api/vergelijk", rol: "anon", body: LEEG, verwacht: "json" },
+  {
+    slug: "w4.vergelijk.post.bestuurder.400-mode",
+    method: "POST", path: "/api/vergelijk", rol: "bestuurder",
+    body: { mode: "asymmetrisch" }, verwacht: "json",
+    preseed: async ({ admin }) => wisLimiet(admin, "vergelijk"),
+  },
+  {
+    slug: "w4.vergelijk.post.bestuurder.400-documenten",
+    method: "POST", path: "/api/vergelijk", rol: "bestuurder",
+    body: { mode: "symmetrisch" }, verwacht: "json",
+    preseed: async ({ admin }) => wisLimiet(admin, "vergelijk"),
+  },
+  {
+    slug: "w4.vergelijk.post.bestuurder.400-zelfde",
+    method: "POST", path: "/api/vergelijk", rol: "bestuurder",
+    body: { mode: "symmetrisch", bron_document_id: FIX.document1, doel_document_id: FIX.document1 }, verwacht: "json",
+    preseed: async ({ admin }) => wisLimiet(admin, "vergelijk"),
+  },
+
+  // ── /api/profiel — GEMENGD: GET leest 10 kolommen (blijft), PATCH twee ────
+  //  LET OP: op BEHEERDER, niet op bestuurder. De bestaande W1-snapshot
+  //  `profiel.get.bestuurder` LEEST het profiel van de bestuurder; een PATCH op
+  //  diezelfde rij laat die snapshot meebewegen met de volgorde van de lus. Dat
+  //  gebeurde ook: de eerste opzet zette `antwoordvoorkeur` op de bestuurder en
+  //  de 3x-verify viel meteen rood op `profiel.get.bestuurder`. Exact de
+  //  volgorde-afhankelijkheid uit §4 — en het bewijs dat drie rondes iets doen.
+  //  De preseed zet de sturingsvelden bovendien vers, want `seed()` upsert alleen
+  //  id/fonds_id/naam/rol en raakt deze kolommen niet.
+  {
+    slug: "w4.profiel.patch.beheerder.200",
+    method: "PATCH", path: "/api/profiel", rol: "beheerder",
+    body: { antwoordvoorkeur: "kern-eerst" }, verwacht: "json",
+    preseed: async ({ admin, users }) => {
+      const { error } = await admin
+        .from("profielen")
+        .update({
+          antwoordvoorkeur: null,
+          detailniveau: null,
+          standaard_ai_modus: null,
+          bestuurlijke_rol: null,
+          reflectie_uitnodiging: true, // NOT NULL, default true
+        })
+        .eq("id", users.beheerder.userId);
+      if (error) throw new Error(`preseed profiel(beheerder): ${error.message}`);
+    },
+  },
+
+  // ── instellingen — handwerk (§1: afwijkende auth-preambule) ───────────────
+  { slug: "w4.instellingen.post.bestuurder.403", method: "POST", path: "/api/instellingen", rol: "bestuurder", body: { modules: {} }, verwacht: "json" },
+  { slug: "w4.instellingen.get.bestuurder", method: "GET", path: "/api/instellingen", rol: "bestuurder", verwacht: "json" },
+
+  // ── stuurinformatie/beheer (+upload) — handwerk; T14 bindt op beide ───────
+  { slug: "w4.stuurinfo-beheer.get.anon", method: "GET", path: "/api/stuurinformatie/beheer", rol: "anon", verwacht: "json" },
+  { slug: "w4.stuurinfo-beheer.get.bestuurder.403", method: "GET", path: "/api/stuurinformatie/beheer", rol: "bestuurder", verwacht: "json" },
+  { slug: "w4.stuurinfo-beheer.get.beheerder", method: "GET", path: "/api/stuurinformatie/beheer", rol: "beheerder", verwacht: "json" },
+  { slug: "w4.stuurinfo-beheer.post.anon", method: "POST", path: "/api/stuurinformatie/beheer", rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.stuurinfo-beheer.post.bestuurder.403", method: "POST", path: "/api/stuurinformatie/beheer", rol: "bestuurder", body: LEEG, verwacht: "json" },
+  { slug: "w4.stuurinfo-beheer.post.beheerder.400", method: "POST", path: "/api/stuurinformatie/beheer", rol: "beheerder", body: LEEG, verwacht: "json" },
+  { slug: "w4.stuurinfo-upload.post.anon", method: "POST", path: "/api/stuurinformatie/beheer/upload", rol: "anon", body: LEEG, verwacht: "json" },
+  {
+    slug: "w4.stuurinfo-upload.post.bestuurder.403",
+    method: "POST", path: "/api/stuurinformatie/beheer/upload", rol: "bestuurder",
+    body: LEEG, verwacht: "json",
+    preseed: async ({ admin }) => wisLimiet(admin, "stuurinfo_upload"),
+  },
+  {
+    slug: "w4.stuurinfo-upload.post.beheerder.500-geen-bestand",
+    method: "POST", path: "/api/stuurinformatie/beheer/upload", rol: "beheerder",
+    body: LEEG, verwacht: "json",
+    preseed: async ({ admin }) => wisLimiet(admin, "stuurinfo_upload"),
+  },
 ];

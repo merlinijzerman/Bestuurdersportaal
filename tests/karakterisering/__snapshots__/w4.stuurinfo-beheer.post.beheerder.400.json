@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Onbekende of ontbrekende 'type'"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 400
+}

@@ -150,6 +150,10 @@ export const FIX = {
   procedureChecklist: "00000000-0000-4000-8000-0000000cd102",
   procedureBewijs: "00000000-0000-4000-8000-0000000cd103",
   procedureKindOnbekend: "00000000-0000-4000-8000-0000000cd10f",
+
+  //  losse routes
+  classificatieOnbekend: "00000000-0000-4000-8000-0000000c1a5f",
+  dossierOnbekend: "00000000-0000-4000-8000-0000000d0551",
 };
 
 export const AFSCHRIFT1_PAD = `${FONDS_ID}/w1-afschrift.pdf`;

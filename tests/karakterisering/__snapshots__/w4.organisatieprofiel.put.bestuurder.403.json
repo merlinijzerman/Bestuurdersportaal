@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Geen rechten om het organisatieprofiel te beheren (organisation.profile.manage)"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 403
+}
