@@ -10,8 +10,7 @@
 // -----------------------------------------------------------------------------
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
-import { beoordeelRouteHostToegang } from "@/core/lib/tenant-route-guard";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { isBureauRol } from "@/core/lib/bureau-gate";
 import { sha256Hex } from "@/core/lib/afschrift-manifest";
 import { AFSCHRIFT_AI_MODEL, AFSCHRIFT_PROMPTVERSIE } from "@/core/lib/afschrift-ai-config";
@@ -27,36 +26,13 @@ const AFSCHRIFT_BUREAU_WEIGERING =
 
 type Versie = "actueel" | "besluitmoment";
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const POST = withFondsRoute({ hostGuard: true, label: "procedures.afschrift.POST" }, async (ctx, req: NextRequest, params) => {
   try {
-    const { id: procedureId } = await params;
-    const supabase = await createServerSupabase();
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam, fonds_id, rol")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    const hostOordeel = await beoordeelRouteHostToegang({
-      sessieFondsId: profiel?.fonds_id ?? null,
-      gebruikerId: user.id,
-      label: "procedures.afschrift.POST",
-    });
-    if (!hostOordeel.toegestaan) {
-      return NextResponse.json({ error: "Dit webadres hoort niet bij uw fonds." }, { status: 403 });
-    }
+    const { id: procedureId } = params as { id: string };
+    const supabase = ctx.supabase;
 
     // Bureau-gate: het afschrift bevat stemgedrag (ontwerpbeslissing 4).
-    if (isBureauRol(profiel?.rol)) {
+    if (isBureauRol(ctx.rol)) {
       return NextResponse.json({ error: AFSCHRIFT_BUREAU_WEIGERING }, { status: 403 });
     }
 
@@ -145,10 +121,10 @@ export async function POST(
         fonds_id: procedure.fonds_id,
         versie,
         aanleiding,
-        gebouwd_onder_rol: profiel?.rol ?? null,
+        gebouwd_onder_rol: ctx.rol ?? null,
         dossier_stand_event_id: dossierStandEventId,
         dossier_stand_op: dossierStandOp,
-        aangemaakt_door: user.id,
+        aangemaakt_door: ctx.gebruikerId,
         // Fase 2: de door de gebruiker vastgestelde leeswijzer (§2–4). Ook bij
         // een sjabloon-terugval (aiLeeswijzer=false) bewaren we de — mogelijk
         // geredigeerde — tekst, zodat wat de gebruiker zag ook in de bundel komt.
@@ -159,7 +135,7 @@ export async function POST(
         ai_tekst_hash: leeswijzerTekst ? sha256Hex(JSON.stringify(leeswijzerTekst)) : null,
         // De vaststelling (mens-in-de-lus) leggen we vast zodra er een tekst is
         // vastgesteld — de CHECK-constraint eist dit bij ai_leeswijzer=true.
-        ai_vastgesteld_door: leeswijzerTekst ? user.id : null,
+        ai_vastgesteld_door: leeswijzerTekst ? ctx.gebruikerId : null,
         ai_vastgesteld_op: leeswijzerTekst ? new Date().toISOString() : null,
       })
       .select("id")
@@ -174,8 +150,8 @@ export async function POST(
     await supabase.from("procedure_log").insert({
       procedure_id: procedureId,
       event_type: "afschrift_aangemaakt",
-      actor_id: user.id,
-      actor_naam: profiel?.naam ?? null,
+      actor_id: ctx.gebruikerId,
+      actor_naam: ctx.naam ?? null,
       payload: { afschrift_id: rij.id, versie, aanleiding },
     });
 
@@ -184,4 +160,4 @@ export async function POST(
     console.error("Fout in POST /api/procedures/[id]/afschrift:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

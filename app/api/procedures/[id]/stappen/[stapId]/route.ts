@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { notifyUser } from "@/core/lib/notifications";
 import {
   herberekenActiveerbaarheid,
@@ -7,19 +7,10 @@ import {
   type StapActivatieState,
 } from "@/core/lib/procedure-activatie";
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string; stapId: string }> }
-) {
+export const PATCH = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id, stapId } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const { id, stapId } = params as { id: string; stapId: string };
+    const supabase = ctx.supabase;
 
     const body = (await req.json()) as { status?: "actief" | "afgerond" };
     if (body.status !== "afgerond" && body.status !== "actief") {
@@ -28,12 +19,6 @@ export async function PATCH(
         { status: 400 }
       );
     }
-
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam")
-      .eq("id", user.id)
-      .single();
 
     // Haal de stap op
     const { data: stap } = await supabase
@@ -113,7 +98,7 @@ export async function PATCH(
         .update({
           status: "afgerond",
           voltooid_op: new Date().toISOString(),
-          voltooid_door: user.id,
+          voltooid_door: ctx.gebruikerId,
         })
         .eq("id", stapId);
       if (updateFout) {
@@ -127,8 +112,8 @@ export async function PATCH(
       await supabase.from("procedure_log").insert({
         procedure_id: id,
         event_type: "stap_voltooid",
-        actor_id: user.id,
-        actor_naam: profiel?.naam || null,
+        actor_id: ctx.gebruikerId,
+        actor_naam: ctx.naam || null,
         payload: { stap: stap.naam },
       });
 
@@ -177,12 +162,14 @@ export async function PATCH(
             {
               type: "procedure_afgerond",
               procedure_titel: proc.titel ?? "Procedure",
-              afgerond_door_naam: profiel?.naam || user.email || "Een collega",
+              afgerond_door_naam: ctx.naam || ctx.email || "Een collega",
             },
             {
               gerelateerd_aan_type: "procedure",
               gerelateerd_aan_id: id,
-              actor_naam: profiel?.naam || null,
+              // BESLUIT (W4): `|| undefined`, waarde-identiek via
+          // `opts.actor_naam ?? null` in notifyUser. Zie inbreng.
+          actor_naam: ctx.naam || undefined,
             }
           );
         }
@@ -200,8 +187,10 @@ export async function PATCH(
           await supabase.from("procedure_log").insert({
             procedure_id: id,
             event_type: "stap_gestart",
-            actor_id: user.id,
-            actor_naam: profiel?.naam || null,
+            actor_id: ctx.gebruikerId,
+            // BESLUIT (W4): `|| undefined`, waarde-identiek via
+          // `opts.actor_naam ?? null` in notifyUser. Zie inbreng.
+          actor_naam: ctx.naam || undefined,
             payload: { stap: doel.naam },
           });
         }
@@ -219,8 +208,10 @@ export async function PATCH(
           await supabase.from("procedure_log").insert({
             procedure_id: id,
             event_type: "stap_gestart",
-            actor_id: user.id,
-            actor_naam: profiel?.naam || null,
+            actor_id: ctx.gebruikerId,
+            // BESLUIT (W4): `|| undefined`, waarde-identiek via
+          // `opts.actor_naam ?? null` in notifyUser. Zie inbreng.
+          actor_naam: ctx.naam || undefined,
             payload: { stap: volgende.naam },
           });
         }
@@ -241,8 +232,8 @@ export async function PATCH(
     await supabase.from("procedure_log").insert({
       procedure_id: id,
       event_type: "stap_gestart",
-      actor_id: user.id,
-      actor_naam: profiel?.naam || null,
+      actor_id: ctx.gebruikerId,
+      actor_naam: ctx.naam || null,
       payload: { stap: stap.naam },
     });
     return NextResponse.json({ ok: true });
@@ -250,4 +241,4 @@ export async function PATCH(
     console.error("Fout in PATCH /api/procedures/[id]/stappen/[stapId]:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});
