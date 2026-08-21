@@ -56,6 +56,62 @@ check_grep() {
   else repo_fail "$omschrijving — '$patroon' niet in $bestand"; fi
 }
 
+# — host↔fonds-enforce, wrapper-bewust (EPIC W / W3, issue #94) ---------------
+#  Een route dwingt host↔fonds op twee manieren af, en beide tellen:
+#    (a) klassiek — de route roept zelf `beoordeelRouteHostToegang(` aan;
+#    (b) na de codemod — `withFondsRoute({ … hostGuard: true … })`, waarbij de
+#        wrapper de aanroep doet.
+#  Zonder (b) valt dit script vals-rood zodra een hoogrisico-route migreert; zó
+#  brak `zoeken` in W3, en omdat dit script NIET in CI draait bleef dat stil.
+#  Zonder de verankering hieronder zou (b) juist vals-groen zijn: `hostGuard: true`
+#  is alleen bewijs als de wrapper er feitelijk iets mee doet. Daarom eerst
+#  `check_wrapper_fundament` — precies zoals `toetsWrapperFundament()` dat doet
+#  voor de statische guards in tests/cross-tenant/.
+WRAPPER="core/lib/route-wrapper.ts"
+
+check_wrapper_fundament() {
+  local reden="" plat=""
+  [ -f "$WRAPPER" ] || reden="$WRAPPER ontbreekt"
+  if [ -z "$reden" ]; then
+    # Op ADJACENTIE toetsen, niet op losse woorden: `spec.hostGuard` staat ook in
+    # de toelichtende commentaarkop van de wrapper, en een commentaar is geen
+    # handhaving. De TS-variant (toetsWrapperFundament) doet hetzelfde met een
+    # regex over meerdere regels; hier plat de bron eerst tot één regel.
+    # Twee valkuilen, allebei door de negatieve controle gevonden:
+    #  • herestring, GEEN pipe — dit script draait met `set -o pipefail`, en
+    #    `grep -q` sluit de pipe bij de eerste match → SIGPIPE op de schrijver →
+    #    de hele pipeline telt als mislukt (vals-rood);
+    #  • herhalingsteller ≤255 — BSD grep (macOS) weigert `.{0,300}` met
+    #    "invalid repetition count(s)"; GNU grep (CI) accepteert het wél. Een
+    #    ruimere marge zou dus lokaal rood en in CI groen zijn. 200 is ruim: de
+    #    feitelijke afstanden zijn ~60 resp. ~130 tekens.
+    plat=$(tr '\n' ' ' < "$WRAPPER")
+    grep -Eq 'spec\.hostGuard\).{0,200}beoordeelRouteHostToegang\(' <<<"$plat" \
+      || reden="de spec.hostGuard-tak roept beoordeelRouteHostToegang niet aan"
+    grep -Eq '!oordeel\.toegestaan.{0,200}status: *403' <<<"$plat" \
+      || reden="een afgewezen host-oordeel leidt niet tot 403"
+  fi
+  if [ -z "$reden" ]; then
+    repo_pass "A1 wrapper-fundament: withFondsRoute-hostGuard dwingt host↔fonds echt af"
+  else
+    repo_fail "A1 wrapper-fundament — $reden (dan is 'hostGuard: true' in een route geen bewijs)"
+  fi
+}
+
+check_hostguard() {
+  local omschrijving="$1" bestand="$2"
+  if [ ! -f "$bestand" ]; then repo_fail "$omschrijving — $bestand ontbreekt"; return; fi
+  if grep -q "beoordeelRouteHostToegang(" "$bestand"; then
+    repo_pass "$omschrijving"; return
+  fi
+  # Alleen de ECHTE wrapper telt; een gelijknamige lokale functie niet.
+  if grep -q 'from "@/core/lib/route-wrapper"' "$bestand" \
+     && grep -Eq 'withFondsRoute\(\{[^}]*hostGuard: *true' "$bestand"; then
+    repo_pass "$omschrijving (via withFondsRoute hostGuard: true)"; return
+  fi
+  repo_fail "$omschrijving — geen beoordeelRouteHostToegang( en geen withFondsRoute({ hostGuard: true }) in $bestand"
+}
+
 echo "============================================================================"
 echo " G2 go/no-go — evidence-consolidatie (repo-side)   $(date +%Y-%m-%d)"
 echo "============================================================================"
@@ -69,13 +125,14 @@ check_files "A1 resolver/enforce-modules aanwezig" \
   core/lib/tenant-host.ts core/lib/tenant-context.ts core/lib/tenant-enforce.ts core/lib/tenant-route-guard.ts
 check_grep  "A1 pagina-chokepoint (dashboard-layout) achter enforce" \
   "beoordeelToegang" "app/(dashboard)/layout.tsx"
+check_wrapper_fundament
 for r in \
   "app/api/chat/route.ts" \
   "app/api/zoeken/route.ts" \
   "app/api/documents/upload/route.ts" \
   "app/api/documents/[id]/bestand/route.ts" \
   "app/api/decisions/[id]/auditdossier/route.ts"; do
-  check_grep "A1 hoogrisico-route host-enforce: $r" "beoordeelRouteHostToegang" "$r"
+  check_hostguard "A1 hoogrisico-route host-enforce: $r" "$r"
 done
 ops_open "A1 TENANT_ENFORCE=on op PRODUCTIE + seeds gedraaid — ops (lockout-risico, mens beslist ná observatievenster)"
 

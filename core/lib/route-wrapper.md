@@ -214,6 +214,41 @@ Draai deze vier vóór je een guard wrapper-bewust noemt; commit ze nooit:
 | `withFondsRoute` lokaal shadowen i.p.v. importeren | `GET schrijft de preambule zelf maar roept createServerSupabase( niet aan` |
 | Service-role in de wrapper introduceren | `wrapper raakt de service-role — dan lekt élke gedelegeerde route eromheen` |
 | De `spec.hostGuard`-tak uit de wrapper halen | `wrapper: spec.hostGuard roept beoordeelRouteHostToegang niet aan` |
+| Het 403 uit de wrapper-afwijzing halen | `wrapper: een afgewezen host-oordeel leidt niet tot 403` |
+
+Dezelfde vier gelden voor `scripts/g2-evidence.sh` (`bash scripts/g2-evidence.sh`,
+verwacht **21 groen, 0 rood**). De derde variant is daar niet theoretisch: een
+eerdere versie van die check keek naar het lósse woord `spec.hostGuard` en bleef
+groen op een uitgeholde wrapper.
+
+### Guards buiten CI zijn het echte gevaar
+
+AFS-1 en AQL-4 vielen tenminste op — twee rode required checks. `scripts/g2-evidence.sh`
+viel **stil** om: de A1-lus grept vijf hoogrisico-routes op
+`beoordeelRouteHostToegang`, en `app/api/zoeken/route.ts` is in W3 gemigreerd. Dat
+script draait in geen enkele workflow (het is de mechanische aftekening voor de
+**G2/B10 go/no-go**, criterium A1, P0), dus er was geen signaal. Zonder deze
+controle was de livegang-evidence stilzwijgend één criterium armer geworden.
+
+Het is daarom nu wrapper-bewust — `check_hostguard` + `check_wrapper_fundament`,
+met dezelfde twee-wegen-logica en dezelfde verankering als de TS-helper. **Zoek
+vóór W4 breder dan CI**: `grep -rn "app/api" scripts/ tests/` vindt wat er nog
+meer naar route-bronnen kijkt.
+
+Twee bash-specifieke valkuilen die de negatieve controle blootlegde, allebei
+stille vals-signalen:
+
+- **`grep -q` achter een pipe onder `set -o pipefail`.** `grep -q` sluit de pipe
+  bij de eerste match → SIGPIPE op de schrijver → de pipeline telt als mislukt.
+  Een geslaagde toets werd zo rood. Gebruik een herestring (`<<<"$plat"`).
+- **Herhalingstellers boven 255.** BSD grep (macOS) weigert `.{0,300}` met
+  *invalid repetition count(s)*; GNU grep (CI) accepteert het. Lokaal rood, in CI
+  groen — of andersom. Blijf onder 255.
+
+En let op waar je op toetst: `grep -q "spec.hostGuard"` op de wrapper werd al
+bevredigd door de **commentaarkop**. Een commentaar is geen handhaving. Toets op
+adjacentie tussen de tak en de daadwerkelijke aanroep, zoals `toetsWrapperFundament()`
+dat doet.
 
 ### Voor W4
 
@@ -222,6 +257,5 @@ Eén bron-guard op route-niveau is nog **niet** wrapper-bewust: `AFS-3`
 hun preambule nog zelf, dus hij staat groen. (`portaalcontext-privacy` inspecteert
 een lib-helper, geen route — daar speelt de wrapper niet.) Migreer je zo'n route,
 verwacht dan een vals-rode guard en zet hem met dezelfde helper om — één regel
-per assertie. Dat
-hoort bij de route-migratie, niet bij een aparte "testfix": een guard die je stil
-laat vervallen is het enige echte risico van dit hele spoor.
+per assertie. Dat hoort bij de route-migratie, niet bij een aparte "testfix": een
+guard die stil vervalt is het enige echte risico van dit hele spoor.
