@@ -199,10 +199,20 @@ check_grep  "B9 gepinde required-status-check-naam" "Cross-tenant isolatie" ".gi
 # anders dan "niet gedaan": zonder admin-token (o.a. de standaard GITHUB_TOKEN
 # in Actions) is dit endpoint niet leesbaar, en dan zegt deze regel dat ook.
 check_branch_protection() {
+  # De drie uit de V4-acceptatiecriteria (#81), PLUS deze job zelf.
+  #
+  # Die laatste is geen netheid maar de sluiting van precies het gat waar dit
+  # hele spoor over ging: `G2-aftekening (repo-side)` is sinds #97 een required
+  # check, en zonder deze regel kan iemand hem morgen uit de branch protection
+  # halen terwijl dit script vrolijk DONE blijft melden. Dan draait de job nog
+  # wel, maar houdt hij niets meer tegen — en niemand merkt het.
+  #
+  # Een controle die zijn eigen afdwingbaarheid niet toetst, meet alleen zichzelf.
   local vereist=(
     "Cross-tenant isolatie (§15 T1-T14)"
     "Security baseline (Sprint 1)"
     "Code-scheiding (T9 core/platform-grens)"
+    "G2-aftekening (repo-side)"
   )
   if ! command -v gh >/dev/null 2>&1; then
     ops_onbekend "B9 branch protection — niet vast te stellen: geen gh CLI beschikbaar"
@@ -249,7 +259,7 @@ check_branch_protection() {
     ops_open "B9 branch protection — required checks staan aan, maar enforce_admins is UIT (een admin kan er langs)"
     return
   fi
-  ops_done "B9 branch protection — 3/3 required checks aanwezig, enforce_admins aan"
+  ops_done "B9 branch protection — ${#vereist[@]}/${#vereist[@]} required checks aanwezig, enforce_admins aan"
 }
 check_branch_protection
 
