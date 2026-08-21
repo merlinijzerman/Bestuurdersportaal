@@ -140,7 +140,11 @@ function eigenProfielVariabelen(verwijderd) {
 }
 
 function substitueer(regel, eigenVars = []) {
-  let r = regel.replace(/\buser\.id\b/g, "ctx.gebruikerId");
+  // `user.email` -> `ctx.email`: de wrapper geeft het sessieveld door dat de oude
+  // preambule via `user` in scope had. Verankerd in toetsWrapperFundament (f).
+  let r = regel
+    .replace(/\buser\.id\b/g, "ctx.gebruikerId")
+    .replace(/\buser\.email\b/g, "ctx.email");
   for (const v of eigenVars) {
     // `(profiel as { rol?: string } | null)?.rol` -> `ctx.rol`
     r = r.replace(

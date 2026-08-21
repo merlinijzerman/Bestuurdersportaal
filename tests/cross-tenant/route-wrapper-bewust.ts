@@ -144,6 +144,14 @@ export function toetsWrapperFundament(): void {
     /ctx:\s*FondsContext\s*=\s*\{[\s\S]{0,400}?\brol:\s*profiel\?\.rol/,
     "wrapper: ctx.rol komt niet uit het profiel"
   );
+  // (f) `ctx.email` komt uit de SESSIE (user), niet uit body of profiel. Zonder
+  //     dit anker zou een route die `user.email` door `ctx.email` verving op een
+  //     lege verwijzing kunnen leunen.
+  assert.match(
+    w,
+    /ctx:\s*FondsContext\s*=\s*\{[\s\S]{0,400}?\bemail:\s*user\.email\b/,
+    "wrapper: ctx.email komt niet uit de sessiegebruiker"
+  );
 
   fundamentGetoetst = true;
 }

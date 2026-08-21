@@ -1,31 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { isBureauRol, BUREAU_WEIGERING } from "@/core/lib/bureau-gate";
 
-export async function DELETE(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const DELETE = withFondsRoute({}, async (ctx, _req: NextRequest, params) => {
   try {
-    const { id } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const { id } = params as { id: string };
+    const supabase = ctx.supabase;
 
     // T1 bureau-rol (§5.3). Zonder deze gate levert de select hieronder null
     // — de rij bestaat wél, maar is RLS-afgeschermd — en zou de gebruiker
     // "Inbreng niet gevonden" (404) zien. Dat is onjuist én in strijd met FR-6:
     // de interface hoort niet te verzwijgen dát er iets is afgeschermd.
-    const { data: eigenProfiel } = await supabase
-      .from("profielen")
-      .select("rol")
-      .eq("id", user.id)
-      .maybeSingle();
-    if (isBureauRol((eigenProfiel as { rol?: string | null } | null)?.rol)) {
+    if (isBureauRol(ctx.rol)) {
       return NextResponse.json({ error: BUREAU_WEIGERING.inbreng }, { status: 403 });
     }
 
@@ -40,7 +26,7 @@ export async function DELETE(
     if (!bestaande) {
       return NextResponse.json({ error: "Inbreng niet gevonden" }, { status: 404 });
     }
-    if (bestaande.gebruiker_id !== user.id) {
+    if (bestaande.gebruiker_id !== ctx.gebruikerId) {
       return NextResponse.json(
         { error: "Alleen eigen inbreng mag worden verwijderd" },
         { status: 403 }
@@ -58,4 +44,4 @@ export async function DELETE(
     console.error("Fout in DELETE /api/inbreng/[id]:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

@@ -11,6 +11,8 @@
 //    1. Authenticatie      — createServerSupabase() + auth.getUser(); bij !user
 //                            EXACT NextResponse.json({error:"Niet ingelogd"},401).
 //    2. Profielresolutie   — haalProfiel(supabase, user.id): id, naam, rol, fonds_id.
+//                            (`ctx.email` komt uit de sessie, niet uit het profiel;
+//                            zie de toelichting bij FondsContext.)
 //    3. Host-guard         — alleen als spec.hostGuard === true (de 12 routes die
 //                            hem nu al hebben); hergebruikt beoordeelRouteHostToegang.
 //    4. Correlation ID     — gegenereerd, in ctx en logregels. In v1 NIET als
@@ -33,6 +35,15 @@ type RlsClient = Awaited<ReturnType<typeof createServerSupabase>>;
  *  UITSLUITEND uit haalProfiel, nooit uit body of query. */
 export type FondsContext = {
   readonly gebruikerId: string;
+  /** `user.email` uit de sessie. GEEN vijfde ding dat de wrapper DOET — het is
+   *  wat de oude preambule de handler al gaf: die had `user` in scope. Drie van
+   *  de 78 W4-routes gebruiken het als naam-fallback (`profiel?.naam ||
+   *  user.email`). Bewust `string | undefined` en niet `| null`: bij een insert
+   *  laat PostgREST een `undefined`-veld weg (kolomdefault) terwijl `null` de
+   *  kolom expliciet leegzet. Dat verschil is in de snapshots onzichtbaar omdat
+   *  de fixtures allemaal een naam hebben — dus hier exact overnemen i.p.v.
+   *  vertrouwen op de test. */
+  readonly email: string | undefined;
   readonly fondsId: string | null; // null = gebruiker zonder fonds; route beslist zelf
   readonly rol: string | null;
   readonly naam: string | null;
@@ -117,6 +128,7 @@ export function maakWithFondsRoute(deps: WrapperDeps) {
       // 4. Correlation ID leeft in ctx + logregels (v1: geen responseheader).
       const ctx: FondsContext = {
         gebruikerId: user.id,
+        email: user.email,
         fondsId,
         rol: profiel?.rol ?? null,
         naam: profiel?.naam ?? null,
