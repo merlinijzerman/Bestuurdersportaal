@@ -17,61 +17,82 @@ verschil is stil. Zie de `-- ROL:`-regel bovenin de suite, bewaakt door `ROL-1`.
 
 ## Herkomst en regenereren
 
-> ⚠️ **DEZE ALLOWLIST IS NOG NIET GELDIG ALS BASIS VOOR DE GATE.**
-> Zij is gegenereerd uit wat "de schone migratiestand" heet, en dat is iets
-> anders dan het klinkt.
+Op 21-08-2026 is de allowlist eerst opnieuw tegen **productie** gegenereerd en
+daarna geannoteerd met uitsluitend de hieronder beschreven migratieverschillen.
+Dat voorkomt dat de preview-baseline (`2026_08_14_preview_public`) ongemerkt als
+productiewaarheid wordt behandeld.
 
-Gegenereerd uit de **schone migratiestand** (baseline `2026_08_14_preview_public`
-+ alle post-cutoff-migraties, inclusief de C-01-cleanup en de V3-MAINTAIN-revoke).
+### Reproduceerbare telling
 
-**Het probleem: die baseline is een dump van PREVIEW, geen model uit de
-migraties.** `supabase/baseline/2026_08_14_preview_public.sql` is op 14-08-2026
-als schema-only dump uit het Preview-project getrokken en bevat zelf 32
-`SECURITY DEFINER`-vermeldingen. Wat de testketen opbouwt is dus
-*Preview-van-14-08 + latere migraties* — niet wat de repo beschrijft, en niet
-productie. Genereer je de allowlist daaruit, dan codificeer je de
-ongedocumenteerde objecten van Preview als de verwachte toestand.
+De SECDEF-telling telt object-OID's in `pg_proc`, dus niet unieke functienamen.
+De `fonds_id`-telling telt alleen gewone en gepartitioneerde tabellen (`r`,`p`),
+geen views. Beide queries zijn als `postgres` ongewijzigd op productie en de
+verse CI-keten uitgevoerd:
 
-Drie standen, alle drie gemeten en alle drie verschillend
-(`SECURITY DEFINER`-functies in `public`):
+```sql
+select count(*)
+from pg_proc p
+join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public' and p.prosecdef;
+
+select count(*)
+from pg_class c
+join pg_namespace n on n.oid = c.relnamespace
+join pg_attribute a on a.attrelid = c.oid
+where n.nspname = 'public'
+  and c.relkind in ('r', 'p')
+  and a.attname = 'fonds_id'
+  and a.attnum > 0
+  and not a.attisdropped;
+```
+
+De standen blijven verschillend, maar de vroegere conclusie "elf
+productie-only functies" volgt er niet uit:
 
 | stand | aantal | bron |
 |---|---|---|
-| pure replay van alleen de migraties | 28 | Bevinding A bij #78, 20-08 |
-| **baseline + migraties (wat CI bouwt)** | **42** | gemeten 21-08 op een verse stack |
-| productie | 39 | Bevinding A bij #78, 20-08 |
+| pure replay van alleen de migraties | 28 | historische meting bij #78; andere keten |
+| **baseline + migraties (wat CI bouwt)** | **42** | opnieuw gemeten 21-08 |
+| productie | **39** | opnieuw gemeten 21-08 met dezelfde query |
 
-Ook `fonds_id`-tabellen lopen uiteen: 63 (pure replay) / 64 (baseline+migraties)
-/ 65 (productie).
+Voor `fonds_id`-tabellen is de uitkomst 64 in CI en 65 op productie. De review
+van de objectlijsten leverde dit op:
 
-**Voor het regenereren geldt daarom:**
+- **nul productie-only SECDEF-functies**;
+- drie CI-only SECDEF-functies:
+  `fn_platform_event_chain_assert_valid()`,
+  `fn_platform_event_fork_declaration_immutable()` en
+  `fn_platform_event_hash()`;
+- zeven gedeelde SECDEF-functies met een andere definitiehash. De drie AQLab-
+  functies en `fn_rate_limit_check()` verschillen alleen in commentaar/opmaak.
+  De overige drie zijn echte versiedrift: productie heeft de geharde
+  `contact_notificatie_status()` en bevriest ook `ai_leeswijzer_tekst`; CI heeft
+  bij `maak_profiel()` juist de nieuwere admin-API-provisioning uit 19-08;
+- één productie-only tabel: `fonds_licentie`. Schema, constraints, RLS en grants
+  zijn gereviewd en komen overeen met de ontbrekende migratie
+  `2026_08_15_fonds_licentie.sql` op de herstelbranch.
 
-1. genereer tegen **productie**, niet tegen de testketen — anders is de gate een
-   toets op een model in plaats van op de werkelijkheid;
-2. doe dat pas **ná** de inventarisatie van de definer-functies die alleen in
-   productie bestaan (Bevinding A). Zonder die inventarisatie verklaar je
-   ongereviewde objecten tot verwachte toestand — precies wat de gate zou moeten
-   vinden;
-3. de getallen van Bevinding A zijn van 20-08 en zijn met een eenvoudige telling
-   op de huidige keten **niet reproduceerbaar** (28 versus de 42 hierboven). Doe
-   de telling opnieuw en leg de méthode vast, zodat "elf productie-only functies"
-   een meting is en geen overlevering.
-Dat is exact de stand waartegen de gate in CI draait (ephemere Supabase-DB in
-`scripts/cross-tenant-ci.sh`). Regenereren na een bewuste grant-/objectwijziging:
+Regenereren begint altijd met een ongewijzigde productie-observatie in een
+tijdelijk bestand; overschrijf de verwachte allowlist niet vóór de objectreview:
 
 ```bash
-# tegen de schone migratie-DB (supabase start + testdb-apply-migrations.sh):
-psql "$TEST_DATABASE_URL" -q -f scripts/gen/v3-allowlist-generate.sql \
-  > supabase/checks/allowlist-grants.tsv
+psql "$PROD_DATABASE_URL" -q -f scripts/gen/v3-allowlist-generate.sql \
+  > /tmp/allowlist-grants.productie.tsv
+diff -u supabase/checks/allowlist-grants.tsv \
+  /tmp/allowlist-grants.productie.tsv
 ```
+
+De ruwe productiemeting van 21-08 bevatte 752 regels. Na uitsluiting van de
+operationele `drift_lezer`-policy en toepassing van de al gereviewde
+migratie-annotaties bleef tegenover de vorige allowlist exact één wijziging over:
+de drie rolregels voor `fonds_licentie`.
 
 ## Baseline-besluit
 
-**Baseline = productie-stand, geannoteerd naar de migratiewaarheid** (besluit V3,
-27-08-… zie issue). De preview↔productie-vergelijking (drift-bewijs bij het issue)
-gaf één feature-cluster verschil; die annotaties staan hieronder. De gate draait
-tegen de migratie-DB, dus de allowlist volgt die stand; de nog-niet-uitgerolde
-delta is een deploy-actiepunt op productie, geen gate-afwijking.
+**Baseline = productiestand van 21-08-2026, geannoteerd naar de
+migratiewaarheid.** De gate draait tegen de migratie-DB, dus de allowlist volgt
+voor beoordeelde, nog niet uitgerolde delta's die stand. Onbekende productie-
+objecten worden nooit automatisch geaccepteerd.
 
 ## Afwijkingen van "de saaie standaard" — met reden
 
@@ -127,3 +148,6 @@ MAINTAIN. Afwijkingen die bewust in de allowlist staan:
 Extensiefuncties (pgvector, pg_trgm) zijn uitgesloten via `pg_depend deptype='e'`
 — puur rekenkundig, geen datatoegang. `prosecdef`/`proconfig` (search_path-pinning)
 valt buiten V3: dat blijft gate E in `2026_07_31_r1_structurele_gates.sql`.
+Storage-policies die uitsluitend een operationele rol buiten `public`, `anon`,
+`authenticated` en `service_role` noemen (zoals `drift_lezer`) vallen eveneens
+buiten V3; de rol-DDL controleert die policy zelf fail-closed.

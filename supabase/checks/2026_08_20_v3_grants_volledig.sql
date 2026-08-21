@@ -104,7 +104,11 @@ stgpol_rows as (
   select 'STGPOL' sectie, p.schemaname::text sch,
          (p.tablename || ' :: ' || p.policyname)::text obj, 'policy' klasse,
          array_to_string(p.roles, ',') rol, p.cmd rechten
-    from pg_policies p where p.schemaname='storage'
+    from pg_policies p
+   where p.schemaname='storage'
+     -- Alleen policies die één van de drie bewaakte app-rollen (of PUBLIC)
+     -- raken. Operationele rollen zoals drift_lezer hebben een eigen gate.
+     and p.roles && array['public','anon','authenticated','service_role']::name[]
 )
 select sectie, sch, obj, klasse, rol, rechten
   from (select * from rel_rows union all select * from fn_rows

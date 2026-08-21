@@ -522,6 +522,9 @@ REL	public	fonds_instellingen	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRU
 REL	public	fonds_klantbeeld_cohort	table	anon	SELECT
 REL	public	fonds_klantbeeld_cohort	table	authenticated	SELECT,INSERT,UPDATE,DELETE
 REL	public	fonds_klantbeeld_cohort	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	fonds_licentie	table	anon	-
+REL	public	fonds_licentie	table	authenticated	-
+REL	public	fonds_licentie	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
 REL	public	fonds_module_manifest	table	anon	SELECT
 REL	public	fonds_module_manifest	table	authenticated	SELECT,INSERT,UPDATE,DELETE
 REL	public	fonds_module_manifest	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN

@@ -1,6 +1,6 @@
--- V3 allowlist generator — emits the canonical TSV to stdout.
--- Run against the CLEAN migration stand (baseline + all post-cutoff migrations,
--- incl. C-01 cleanup and V3 MAINTAIN-revoke). Output = supabase/checks/allowlist-grants.tsv.
+-- V3 allowlist generator — emits an observed TSV to stdout.
+-- Regenerate against PRODUCTIE first. Compare that observation with the checked-in
+-- baseline and apply only reviewed migration-only deltas; see the toelichting.
 copy (
   with rollen(rol) as (values ('anon'),('authenticated'),('service_role')),
   privs(p, ord) as (values
@@ -41,7 +41,11 @@ copy (
     select 'STGPOL' sectie, p.schemaname sch,
            p.tablename || ' :: ' || p.policyname obj, 'policy' klasse,
            array_to_string(p.roles, ',') rol, p.cmd rechten
-      from pg_policies p where p.schemaname='storage'
+      from pg_policies p
+     where p.schemaname='storage'
+       -- V3 bewaakt de drie app-rollen. Operationele policies voor een aparte
+       -- rol (zoals drift_lezer) horen bij de eigen rolcontrole, niet bij V3.
+       and p.roles && array['public','anon','authenticated','service_role']::name[]
   )
   select sectie, sch, obj, klasse, rol, rechten
     from (select * from rel_rows union all select * from fn_rows
