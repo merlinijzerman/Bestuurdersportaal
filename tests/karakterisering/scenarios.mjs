@@ -164,4 +164,20 @@ export const scenarios = [
   { slug: "w3.aqlab-assurance.get.bestuurder", method: "GET", path: "/api/aqlab/assurance", rol: "bestuurder", verwacht: "json" },
   { slug: "w3.dossiers.get.anon", method: "GET", path: "/api/dossiers", rol: "anon", verwacht: "json" },
   { slug: "w3.dossiers.get.bestuurder", method: "GET", path: "/api/dossiers", rol: "bestuurder", verwacht: "json" },
+
+  // ── W3-fase 2 — baselines op ONGEWIJZIGDE code (issue #94) ──────────────────
+  //  [id]-dossierroutes: 401 + 404-pad (happy-200 vergt de zware besluit-graaf-
+  //  seed en is bewust uitgesloten, net als de bestaande decisions-scenario's).
+  { slug: "w3.decisions-dossier.get.anon", method: "GET", path: `/api/decisions/${FIX.decisionOnbekend}/dossier`, rol: "anon", verwacht: "json" },
+  { slug: "w3.decisions-dossier.get.bestuurder.404", method: "GET", path: `/api/decisions/${FIX.decisionOnbekend}/dossier`, rol: "bestuurder", verwacht: "json" },
+  { slug: "w3.procedures-dossier.get.anon", method: "GET", path: `/api/procedures/${FIX.procedureOnbekend}/dossier`, rol: "anon", verwacht: "json" },
+  { slug: "w3.procedures-dossier.get.bestuurder.404", method: "GET", path: `/api/procedures/${FIX.procedureOnbekend}/dossier`, rol: "bestuurder", verwacht: "json" },
+  // notificaties: eigen gebruiker_id-scoping via RLS; lege lijst is een geldige 200.
+  { slug: "w3.notificaties.get.anon", method: "GET", path: "/api/notificaties", rol: "anon", verwacht: "json" },
+  { slug: "w3.notificaties.get.bestuurder", method: "GET", path: "/api/notificaties", rol: "bestuurder", verwacht: "json" },
+  // afschriften-lijst: happy 200 (procedure1 heeft een afschrift geseed). De
+  // bestuursbureau-variant oefent bewust het profiel?.rol -> ctx.rol-pad (isBureauRol).
+  { slug: "w3.procedures-afschriften.get.anon", method: "GET", path: `/api/procedures/${FIX.procedure1}/afschriften`, rol: "anon", verwacht: "json" },
+  { slug: "w3.procedures-afschriften.get.bestuurder", method: "GET", path: `/api/procedures/${FIX.procedure1}/afschriften`, rol: "bestuurder", verwacht: "json" },
+  { slug: "w3.procedures-afschriften.get.bestuursbureau", method: "GET", path: `/api/procedures/${FIX.procedure1}/afschriften`, rol: "bestuursbureau", verwacht: "json" },
 ];
