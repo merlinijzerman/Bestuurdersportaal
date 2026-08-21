@@ -22,6 +22,13 @@
 --  of plakken in de Supabase SQL-editor.
 -- ============================================================================
 
+-- ----------------------------------------------------------------------------
+-- ROL: postgres voor de opbouw, per scenario anon / authenticated /
+--      service_role — deze suite toetst juist het VERSCHIL tussen die drie.
+--      (verplicht en machineleesbaar — zie ROL-1 in
+--       tests/cross-tenant/checksuite-rolverklaring.test.ts voor het waarom)
+-- ----------------------------------------------------------------------------
+
 begin;
 
 -- ── Seed ────────────────────────────────────────────────────────────────────

@@ -27,6 +27,13 @@
 -- mee, dus deze regel was dubbelop. Zonder hem draait dit bestand zowel in
 -- psql/CI als rechtstreeks in de SQL-editor.
 
+-- ----------------------------------------------------------------------------
+-- ROL: postgres voor opbouw en afbraak, authenticated per scenario — de meting
+--      gebeurt onder RLS, niet onder BYPASSRLS.
+--      (verplicht en machineleesbaar — zie ROL-1 in
+--       tests/cross-tenant/checksuite-rolverklaring.test.ts voor het waarom)
+-- ----------------------------------------------------------------------------
+
 begin;
 
 -- ── Seed: twee fondsen, twee gebruikers, objecten aan beide kanten ──────────

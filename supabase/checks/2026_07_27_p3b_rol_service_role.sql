@@ -20,6 +20,13 @@
 --   • invariant : de bevriezing-trigger blokkeert de service-role NIET.
 -- ============================================================================
 
+-- ----------------------------------------------------------------------------
+-- ROL: postgres met auth.uid() IS NULL — dat IS het service-role-pad dat hier
+--      onder toets staat. De rol is hier het onderwerp, niet de omstandigheid.
+--      (verplicht en machineleesbaar — zie ROL-1 in
+--       tests/cross-tenant/checksuite-rolverklaring.test.ts voor het waarom)
+-- ----------------------------------------------------------------------------
+
 begin;
 
 do $$
