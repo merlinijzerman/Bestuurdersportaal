@@ -18,6 +18,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
+import { redenGeenRlsClient } from "./route-wrapper-bewust";
+
 const hier = dirname(fileURLToPath(import.meta.url));
 const lees = (...p: string[]) => readFileSync(join(hier, "..", "..", ...p), "utf8");
 
@@ -30,13 +32,22 @@ const USER_ROUTES: { pad: string[]; wat: string }[] = [
 ];
 
 // ── (1) De user-routes draaien onder de RLS-client, NOOIT service-role ──────
+//
+//  Wrapper-bewust (W3, issue #94): sinds de codemod schrijft `withFondsRoute` de
+//  auth-preambule voor een deel van deze routes. `redenGeenRlsClient` kijkt per
+//  geëxporteerde handler waar de belofte staat — in de route of in de wrapper —
+//  en toetst eerst dat de wrapper zelf op createServerSupabase draait en de
+//  service-role niet aanraakt (`toetsWrapperFundament`). De negatieve helft van
+//  de invariant (géén service-role in de route) blijft hier onverkort staan.
 
 test("AFS-1 — elke user-route gebruikt createServerSupabase (RLS), niet de service-role", () => {
   for (const { pad, wat } of USER_ROUTES) {
     const bron = lees(...pad);
-    assert.ok(
-      bron.includes("createServerSupabase("),
-      `${pad.join("/")} (${wat}) gebruikt de RLS-client niet`
+    const reden = redenGeenRlsClient(bron);
+    assert.equal(
+      reden,
+      null,
+      `${pad.join("/")} (${wat}) gebruikt de RLS-client niet: ${reden}`
     );
     assert.ok(
       !bron.includes("createServiceSupabase") && !bron.includes("SUPABASE_SERVICE_ROLE_KEY"),

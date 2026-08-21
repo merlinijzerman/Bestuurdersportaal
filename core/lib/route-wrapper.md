@@ -155,3 +155,73 @@ aangetoond dat een verboden "betere foutmelding" op het 500-pad het harnas groen
 liet maar door de classifier als `afwijkend` werd gevangen. Draai in W4 ná elke
 route `node tests/karakterisering/classificeer-diff.mjs`; een `afwijkend` is een
 regel om te lezen, geen bug in het script.
+
+## De statische guards moeten wrapper-bewust zijn (W3, issue #94)
+
+Het karakteriseringsharnas bewijst **gedrag** (byte-identiek). Daarnaast staan er
+in `tests/cross-tenant/*.test.ts` tientallen **statische guards** die de BRON
+inspecteren: "roept deze route `createServerSupabase(` aan?", "staat
+`beoordeelRouteHostToegang(` erin?", "zie ik `auth.getUser`?". Die guards zijn
+geschreven voor een route die haar preambule zélf schrijft. De codemod verplaatst
+precies díé regels naar de wrapper — dus gaan ze vals-rood, terwijl er functioneel
+niets is verzwakt. In W3 gebeurde dat bij twee verplichte checks tegelijk
+(`AFS-1`, `AQL-4`; beide draaien via `npm run test:xtenant`, dus zowel
+*Cross-tenant isolatie* als *Security baseline*).
+
+**Los dit nooit op door het patroon uit de guard te schrappen.** Dan is de guard
+vals-groen: er bewijst niets meer dat er een RLS-client of een host↔fonds-grens
+is. Gebruik `tests/cross-tenant/route-wrapper-bewust.ts`:
+
+```ts
+import { redenGeenRlsClient, redenGeenHostGuard, redenGeenGebruikerscontrole }
+  from "./route-wrapper-bewust";
+
+const bron = lees("app", "api", "…", "route.ts");
+assert.equal(redenGeenRlsClient(bron), null, "route mist anon+RLS-auth");
+assert.equal(redenGeenHostGuard(bron), null, "route mist host↔fonds-enforce");
+```
+
+Elke helper geeft `null` (in orde) of een leesbare reden, en berust op drie
+principes:
+
+1. **Per handler, niet per bestand.** De helper inventariseert de geëxporteerde
+   HTTP-handlers en bepaalt per handler waar de belofte hoort te staan: in de
+   route (klassiek) of in de wrapper (`export const GET = withFondsRoute(…)`).
+   Dat is *strenger* dan voorheen — eerst volstond het dat het patroon érgens in
+   het bestand stond.
+2. **De delegatie is verankerd.** `toetsWrapperFundament()` (automatisch
+   aangeroepen) bewijst dat `core/lib/route-wrapper.ts` de belofte feitelijk
+   waarmaakt: `createServerSupabase` + `auth.getUser` + 401-tak, géén
+   `createServiceSupabase`/`SUPABASE_SERVICE_ROLE_KEY`, en onder `spec.hostGuard`
+   een echte `beoordeelRouteHostToegang`-aanroep met 403 bij afwijzing. Zonder
+   dat anker is "de route wijst naar de wrapper" een lege verwijzing.
+3. **Alleen de echte wrapper telt.** `withFondsRoute` wordt pas geaccepteerd als
+   de route hem uit `@/core/lib/route-wrapper` importeert; een gelijknamige lokale
+   functie valt terug op de klassieke eis.
+
+`hostGuard` is expliciet: `withFondsRoute({ hostGuard: true }, …)` telt als
+host↔fonds-enforce, `withFondsRoute({}, …)` **niet**. Vergeet je de spec-vlag bij
+het migreren van een van de 12 host-guard-routes, dan valt de guard rood uit —
+zoals bedoeld.
+
+### Negatieve controle (besluit 0046 §E) — vier lekken die rood móéten worden
+
+Draai deze vier vóór je een guard wrapper-bewust noemt; commit ze nooit:
+
+| Lek | Verwachte melding |
+|---|---|
+| `hostGuard: true` uit de spec halen | `GET dwingt host↔fonds niet af …` |
+| `withFondsRoute` lokaal shadowen i.p.v. importeren | `GET schrijft de preambule zelf maar roept createServerSupabase( niet aan` |
+| Service-role in de wrapper introduceren | `wrapper raakt de service-role — dan lekt élke gedelegeerde route eromheen` |
+| De `spec.hostGuard`-tak uit de wrapper halen | `wrapper: spec.hostGuard roept beoordeelRouteHostToegang niet aan` |
+
+### Voor W4
+
+Eén bron-guard op route-niveau is nog **niet** wrapper-bewust: `AFS-3`
+(host↔fonds op afschrift aanmaken/download/intrekken). Die drie routes schrijven
+hun preambule nog zelf, dus hij staat groen. (`portaalcontext-privacy` inspecteert
+een lib-helper, geen route — daar speelt de wrapper niet.) Migreer je zo'n route,
+verwacht dan een vals-rode guard en zet hem met dezelfde helper om — één regel
+per assertie. Dat
+hoort bij de route-migratie, niet bij een aparte "testfix": een guard die je stil
+laat vervallen is het enige echte risico van dit hele spoor.
