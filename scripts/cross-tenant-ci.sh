@@ -96,6 +96,14 @@ SQL_P5="supabase/checks/2026_08_03_p5_monitoring.sql"
 # is een actieve predicaat-uitbreiding en geen vanzelfsprekendheid. Inclusief
 # nulgrens G23: bestuurder en voorzitter gedragen zich exact als daarvoor.
 SQL_BB="supabase/checks/2026_08_05_bb_rolgrenzen.sql"
+# C-01 (2026-08-20) — vw_fondsleden: cross-tenant + kolomafscherming + LEES- en
+# SCHRIJFrechten op de drie views in public. Deze suite bestond sinds 02-08 maar
+# stond in GEEN ENKELE CI-job; daardoor bleef onopgemerkt dat `authenticated`
+# INSERT/UPDATE/DELETE op de definer-view had (Supabase-default-ACL, niet uit een
+# migratie) en daarmee buiten RLS om `rol` en `fonds_id` van elk profiel kon
+# zetten. V10 is generiek: geen enkele view in public mag I/U/D hebben voor een
+# browserrol — dat sluit de objectklasse die de gates A–H niet kennen.
+SQL_VWF="supabase/checks/2026_08_02_fondsleden_cross_tenant.sql"
 
 echo "== [1/4] tsc --noEmit --skipLibCheck =="
 ./node_modules/.bin/tsc --noEmit --skipLibCheck
@@ -184,6 +192,10 @@ echo "-- AI-begrenzing (quota, kill switch, modelallowlist, vier-ogenheractiveri
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_AIB"
 echo
 
+echo "-- C-01 (vw_fondsleden cross-tenant + kolomafscherming + view-schrijfrechten) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_VWF"
+echo
+
 echo "============================================================================"
 echo "GROEN: volledige §15 cross-tenant suite geslaagd (app-laag + DB-laag)."
 echo "  AI-beg quota/kill switch/vier ogen            (DB-laag; race apart)"
@@ -208,4 +220,5 @@ echo "  R1   gedragsbewijs K-01/H-01/H-02/M-01                                (D
 echo "  MP   maak_profiel deterministisch fonds + zelfregistratiegrens PT-1   (DB-laag)"
 echo "  P5   monitoringtabellen deny-by-default + RPC niet-anon + retentie    (DB-laag)"
 echo "  BB   rolgrenzen bestuursbureau + nulgrens G23                          (DB-laag)"
+echo "  C-01 vw_-views: cross-tenant, kolomafscherming, geen I/U/D voor browserrol (DB-laag)"
 echo "============================================================================"
