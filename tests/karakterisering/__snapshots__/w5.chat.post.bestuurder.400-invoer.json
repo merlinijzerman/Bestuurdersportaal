@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": "messages of vraag is verplicht",
+    "foutcode": "geen_invoer"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 400
+}

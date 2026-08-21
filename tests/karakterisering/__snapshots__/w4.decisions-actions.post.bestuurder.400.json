@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Actie is verplicht"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 400
+}

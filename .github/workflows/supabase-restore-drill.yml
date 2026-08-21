@@ -51,6 +51,8 @@ jobs:
       AWS_DEFAULT_REGION: eu-central-003
       AWS_RETRY_MODE: standard
       AWS_MAX_ATTEMPTS: "10"
+      B2_DOWNLOAD_MAX_ATTEMPTS: "3"
+      B2_DOWNLOAD_RETRY_DELAY_SECONDS: "5"
       B2_BUCKET_NAME: ${{ vars.B2_BUCKET_NAME }}
       B2_S3_ENDPOINT: ${{ vars.B2_S3_ENDPOINT }}
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
@@ -125,7 +127,7 @@ jobs:
           do
             test -n "${!variable:-}" || { echo "Ontbrekende restore-input: $variable" >&2; exit 1; }
           done
-          for command in aws cryptsetup curl node openssl psql python3 rsync sha256sum tar; do
+          for command in aws cryptsetup curl fuser node openssl psql python3 rsync setsid sha256sum tar; do
             command -v "$command" >/dev/null || { echo "Ontbrekend restorecommando: $command" >&2; exit 1; }
           done
           for file in \
@@ -584,6 +586,19 @@ jobs:
         run: |
           set -Eeuo pipefail
           APP_LOG="$DRILL_ROOT/app.log"
+          TLS_LOG="$DRILL_ROOT/tls.log"
+          TLS_CERT="$DRILL_ROOT/smoke-tls.crt"
+          TLS_KEY="$DRILL_ROOT/smoke-tls.key"
+          # De app stuurt in productie HSTS en een CSP met
+          # upgrade-insecure-requests mee. Over plain http upgradet Chrome
+          # daardoor elke subresource, laden de _next/static-chunks niet en
+          # hydrateert React nooit. De oefening krijgt dus een wegwerp-TLS-laag
+          # binnen LUKS in plaats van versoepelde productieheaders.
+          openssl req -x509 -newkey rsa:2048 -sha256 -days 1 -nodes \
+            -keyout "$TLS_KEY" -out "$TLS_CERT" \
+            -subj "/CN=$CANARY_APP_HOST" \
+            -addext "subjectAltName=DNS:$CANARY_APP_HOST" >/dev/null 2>&1
+          chmod 600 "$TLS_KEY" "$TLS_CERT"
           cd "$APP_WORKTREE"
           PORT=3000 \
           NEXT_PUBLIC_SUPABASE_URL="$TARGET_SUPABASE_URL" \
@@ -592,16 +607,25 @@ jobs:
           TENANT_ENFORCE=on \
           DEPLOY_TARGET=app \
           WP3_MALWARESCAN_AAN=false \
-            npm run start > "$APP_LOG" 2>&1 &
+            setsid ./node_modules/.bin/next start > "$APP_LOG" 2>&1 &
           APP_PID=$!
           printf '%s\n' "$APP_PID" > "$DRILL_ROOT/app.pid"
+          cd "$GITHUB_WORKSPACE"
+          setsid node scripts/serve-managed-smoke-tls.mjs \
+            --cert "$TLS_CERT" --key "$TLS_KEY" \
+            --listen 3443 --upstream 3000 > "$TLS_LOG" 2>&1 &
+          TLS_PID=$!
+          printf '%s\n' "$TLS_PID" > "$DRILL_ROOT/tls.pid"
           cleanup_app() {
-            kill "$APP_PID" >/dev/null 2>&1 || true
-            wait "$APP_PID" >/dev/null 2>&1 || true
+            for pid in "$TLS_PID" "$APP_PID"; do
+              kill -- "-$pid" >/dev/null 2>&1 || kill "$pid" >/dev/null 2>&1 || true
+              wait "$pid" >/dev/null 2>&1 || true
+            done
           }
           trap cleanup_app EXIT
           for attempt in $(seq 1 45); do
-            if curl -fsS -H "Host: $CANARY_APP_HOST:3000" http://127.0.0.1:3000/login >/dev/null; then
+            if curl -fsSk --resolve "$CANARY_APP_HOST:3443:127.0.0.1" \
+              "https://$CANARY_APP_HOST:3443/login" >/dev/null; then
               break
             fi
             if [ "$attempt" = "45" ]; then
@@ -610,8 +634,7 @@ jobs:
             fi
             sleep 1
           done
-          cd "$GITHUB_WORKSPACE"
-          APP_SMOKE_PORT=3000 node scripts/run-supabase-managed-app-smoke.mjs \
+          APP_SMOKE_PORT=3443 APP_SMOKE_SCHEME=https node scripts/run-supabase-managed-app-smoke.mjs \
             --state "$CANARY_STATE_PATH" \
             --evidence "$DRILL_ROOT/app-evidence.json"
 
@@ -700,12 +723,21 @@ jobs:
         run: |
           set +e
           cleanup_ok=true
-          if [ -n "${DRILL_ROOT:-}" ] && [ -f "$DRILL_ROOT/app.pid" ]; then
-            APP_PID="$(head -n 1 "$DRILL_ROOT/app.pid")"
-            if [[ "$APP_PID" =~ ^[0-9]+$ ]]; then kill "$APP_PID" >/dev/null 2>&1 || true; fi
+          if [ -n "${DRILL_ROOT:-}" ]; then
+            for pidfile in "$DRILL_ROOT/tls.pid" "$DRILL_ROOT/app.pid"; do
+              [ -f "$pidfile" ] || continue
+              PID="$(head -n 1 "$pidfile")"
+              if [[ "$PID" =~ ^[0-9]+$ ]]; then
+                kill -- "-$PID" >/dev/null 2>&1 || kill "$PID" >/dev/null 2>&1 || true
+              fi
+            done
           fi
           if [ -n "${MANAGED_RESTORE_ROOT:-}" ] && mountpoint -q "$MANAGED_RESTORE_ROOT"; then
-            sudo umount "$MANAGED_RESTORE_ROOT" || cleanup_ok=false
+            if ! sudo umount "$MANAGED_RESTORE_ROOT"; then
+              sudo fuser -km "$MANAGED_RESTORE_ROOT" >/dev/null 2>&1 || true
+              sleep 1
+              sudo umount "$MANAGED_RESTORE_ROOT" || cleanup_ok=false
+            fi
           fi
           if [ -n "${MAPPER_NAME:-}" ] && sudo cryptsetup status "$MAPPER_NAME" >/dev/null 2>&1; then
             sudo cryptsetup close "$MAPPER_NAME" || cleanup_ok=false

@@ -11,7 +11,7 @@
 // ============================================================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { requireCapability } from "@/core/lib/capabilities";
 import {
   logClassificatieKoppeling,
@@ -20,19 +20,12 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const POST = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+    const { id } = params as { id: string };
+    const supabase = ctx.supabase;
 
-    if (!(await requireCapability(user.id, "classification.review"))) {
+    if (!(await requireCapability(ctx.gebruikerId, "classification.review"))) {
       return NextResponse.json(
         { error: "Geen rechten om classificaties terug te draaien (classification.review)" },
         { status: 403 }
@@ -63,11 +56,6 @@ export async function POST(
       .select("titel, fonds_id, procesinstantie_id")
       .eq("id", voorstel.document_id)
       .maybeSingle();
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam")
-      .eq("id", user.id)
-      .maybeSingle();
 
     const nu = new Date().toISOString();
     const oudeKoppeling = doc?.procesinstantie_id ?? voorstel.voorgestelde_procesinstantie_id;
@@ -85,7 +73,7 @@ export async function POST(
 
     const { error: vErr } = await supabase
       .from("classificatie_voorstellen")
-      .update({ status: "teruggedraaid", beoordeeld_door: user.id, teruggedraaid_op: nu })
+      .update({ status: "teruggedraaid", beoordeeld_door: ctx.gebruikerId, teruggedraaid_op: nu })
       .eq("id", id);
     if (vErr) {
       console.error("Voorstel terugdraaien fout:", vErr);
@@ -96,8 +84,8 @@ export async function POST(
       documentId: voorstel.document_id,
       documentTitel: doc?.titel ?? null,
       fondsId: voorstel.fonds_id,
-      gebruikerId: user.id,
-      gebruikerNaam: profiel?.naam ?? null,
+      gebruikerId: ctx.gebruikerId,
+      gebruikerNaam: ctx.naam ?? null,
       veldNaam: "procesinstantie_id",
       oudeWaarde: oudeKoppeling ?? null,
       nieuweWaarde: null,
@@ -120,4 +108,4 @@ export async function POST(
     console.error("Fout in POST /api/classificatie/[id]/terugdraai:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

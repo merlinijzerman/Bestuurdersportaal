@@ -1,0 +1,20 @@
+{
+  "body": {
+    "action": {
+      "aangemaakt_op": "<ts>",
+      "actie": "W4 actie gewijzigd",
+      "afhankelijk_van": null,
+      "deadline": null,
+      "decision_id": "<uuid:1>",
+      "eigenaar_naam": null,
+      "id": "<uuid:2>",
+      "status": "open",
+      "voorwaarde_id": null
+    },
+    "gewijzigd": true
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

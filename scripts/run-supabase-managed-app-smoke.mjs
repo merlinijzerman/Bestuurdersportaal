@@ -31,6 +31,101 @@ function classifySmokeFailure(error) {
   return "unknown";
 }
 
+const SAFE_SMOKE_PATHS = new Set(["/", "/login", "/bibliotheek"]);
+const DIAGNOSTIC_FIELDS = [
+  "pathname",
+  "root_path",
+  "login_error",
+  "login_busy",
+  "auth_cookie",
+  "tenant_blocked",
+  "shell_rendered",
+];
+const DIAGNOSTIC_PATH_FIELDS = new Set(["pathname", "root_path"]);
+
+// Alleen een vaste, vooraf bekende routenaam mag in de logs belanden. Elke
+// andere waarde (inclusief query, host en documentpaden) wordt geplet tot een
+// categorie, zodat diagnose nooit tenant- of gebruikersgegevens lekt.
+export function classifySmokePath(value) {
+  try {
+    const pathname = new URL(value).pathname;
+    return SAFE_SMOKE_PATHS.has(pathname) ? pathname : "other";
+  } catch {
+    return "unknown";
+  }
+}
+
+// Uitsluitend booleans en geclassificeerde routenamen. Onbekende sleutels en
+// niet-primitieve waarden worden weggelaten in plaats van doorgegeven.
+export function formatSmokeDiagnostic(fields) {
+  const parts = [];
+  for (const key of DIAGNOSTIC_FIELDS) {
+    const value = fields?.[key];
+    if (typeof value === "boolean") {
+      parts.push(`${key}=${value}`);
+    } else if (
+      DIAGNOSTIC_PATH_FIELDS.has(key) &&
+      typeof value === "string" &&
+      (SAFE_SMOKE_PATHS.has(value) || value === "other" || value === "unknown")
+    ) {
+      parts.push(`${key}=${value}`);
+    }
+  }
+  return parts.join(";");
+}
+
+// Diagnose mag de oorspronkelijke fout nooit verdringen: elke stap is
+// afzonderlijk best-effort en valt terug op een neutrale waarde.
+async function collectLoginDiagnostics(page) {
+  const fields = {};
+  try {
+    fields.pathname = classifySmokePath(page.url());
+  } catch {
+    fields.pathname = "unknown";
+  }
+  try {
+    fields.login_error = await page.locator("form div.bg-err-tint").isVisible({ timeout: 2_000 });
+  } catch {
+    fields.login_error = false;
+  }
+  try {
+    fields.login_busy = await page.locator('form button[type="submit"]').isDisabled({ timeout: 2_000 });
+  } catch {
+    fields.login_busy = false;
+  }
+  try {
+    const cookies = await page.context().cookies();
+    fields.auth_cookie = cookies.some((cookie) => typeof cookie?.name === "string" && cookie.name.startsWith("sb-"));
+  } catch {
+    fields.auth_cookie = false;
+  }
+  try {
+    const finalUrl = await page.evaluate(async () => {
+      const response = await fetch("/", { credentials: "same-origin" });
+      return response.url;
+    });
+    fields.root_path = classifySmokePath(finalUrl);
+  } catch {
+    fields.root_path = "unknown";
+  }
+  try {
+    // Vaste UI-tekst uit de fail-closed tenantgate in de dashboardlayout.
+    fields.tenant_blocked = await page
+      .getByRole("heading", { name: "Geen toegang op dit adres" })
+      .isVisible({ timeout: 2_000 });
+  } catch {
+    fields.tenant_blocked = false;
+  }
+  try {
+    // De profiellink hoort bij de shell zelf en staat los van het
+    // modulemanifest; hij onderscheidt "shell rendert" van "nav is leeg".
+    fields.shell_rendered = await page.locator('a[href="/profiel"]').isVisible({ timeout: 2_000 });
+  } catch {
+    fields.shell_rendered = false;
+  }
+  return formatSmokeDiagnostic(fields);
+}
+
 function securePath(candidate, secureRoot, label) {
   if (!candidate || !secureRoot || !isAbsolute(candidate) || !isAbsolute(secureRoot)) {
     fail(`${label}_path`);
@@ -111,7 +206,12 @@ async function main() {
   const foreign = state.canaries[1];
   const port = process.env.APP_SMOKE_PORT ?? "3000";
   if (!/^\d{2,5}$/.test(port)) fail("app_port");
-  const origin = `http://${own.host}:${port}`;
+  // De oefening draait achter een wegwerp-TLS-terminator, omdat de app in
+  // productie HSTS en een CSP met upgrade-insecure-requests meestuurt. Over
+  // plain http upgradet Chrome dan alle subresources en hydrateert React nooit.
+  const scheme = process.env.APP_SMOKE_SCHEME ?? "https";
+  if (scheme !== "https" && scheme !== "http") fail("app_scheme");
+  const origin = `${scheme}://${own.host}:${port}`;
   smokeStage = "browser_executable";
   const executablePath = await findBrowserExecutable(process.env.PLAYWRIGHT_CHROME_PATH);
   const { chromium } = await import("@playwright/test");
@@ -123,16 +223,34 @@ async function main() {
     headless: true,
     acceptDownloads: false,
     downloadsPath,
+    // Het certificaat is een wegwerpexemplaar dat alleen binnen deze run en
+    // binnen het versleutelde volume bestaat; een echte CA is hier zinloos.
+    ignoreHTTPSErrors: true,
     args: [
       `--host-resolver-rules=MAP ${own.host} 127.0.0.1,EXCLUDE localhost`,
       "--no-proxy-server",
       "--disable-dev-shm-usage",
     ],
   });
+  let loginDiagnostic = "";
   try {
     smokeStage = "login_page";
     const page = context.pages()[0] ?? await context.newPage();
     await page.goto(`${origin}/login`, { waitUntil: "domcontentloaded", timeout: 45_000 });
+    // domcontentloaded vuurt voordat React hydrateert. Vullen en klikken vóór
+    // hydratie levert een native formulierverzending op: de velden hebben geen
+    // name-attribuut, dus dat is een kale GET /login en de browser blijft op de
+    // loginpagina staan. React zet bij hydratie __reactProps$-sleutels op de
+    // DOM-node; dat is het exacte signaal dat onSubmit is aangekoppeld.
+    smokeStage = "login_hydration";
+    await page.waitForFunction(
+      () => {
+        const veld = document.getElementById("login-email");
+        return !!veld && Object.keys(veld).some((sleutel) => sleutel.startsWith("__reactProps$"));
+      },
+      undefined,
+      { timeout: 45_000 }
+    );
     smokeStage = "login_form";
     await page.getByLabel("E-mailadres").fill(own.email);
     await page.getByLabel("Wachtwoord").fill(own.password);
@@ -149,7 +267,13 @@ async function main() {
       await page.waitForURL((url) => url.pathname === "/", { timeout: 45_000 });
     }
     smokeStage = "dashboard";
-    await page.getByRole("link", { name: "Home", exact: true }).waitFor({ timeout: 45_000 });
+    // Bewust de profiellink en niet een nav-item: welke modules in de nav staan
+    // hangt af van het fondsmanifest (beschikbareModules), en dat mag de
+    // hersteloefening niet impliciet meetesten. De profiellink hoort bij de
+    // shell zelf en bewijst dus dat de dashboardlayout voor deze gebruiker is
+    // gerenderd — inclusief de auth-gate en de fail-closed tenantcontrole
+    // erboven, die beide een pagina zonder shell zouden opleveren.
+    await page.locator('a[href="/profiel"]').waitFor({ timeout: 45_000 });
 
     smokeStage = "document_list_api";
     const listResult = await page.evaluate(async (expectedId) => {
@@ -207,6 +331,17 @@ async function main() {
     });
     await writeFile(evidencePath, `${JSON.stringify(evidence, null, 2)}\n`, { mode: 0o600 });
     await chmod(evidencePath, 0o600);
+  } catch (error) {
+    // Diagnose draait nog binnen de open browsercontext, maar mag de
+    // oorspronkelijke fout nooit vervangen of vertragen tot een crash.
+    try {
+      const page = context.pages()[0];
+      if (page) loginDiagnostic = await collectLoginDiagnostics(page);
+      if (error && typeof error === "object") error.smokeDiagnostic = loginDiagnostic;
+    } catch {
+      // Diagnose is optioneel; de categorie en fase blijven altijd beschikbaar.
+    }
+    throw error;
   } finally {
     await context.close();
   }
@@ -216,6 +351,9 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((error) => {
     const category = classifySmokeFailure(error);
     process.stderr.write(`MANAGED_APP_SMOKE_FAILED:${category}:${smokeStage}\n`);
+    if (typeof error?.smokeDiagnostic === "string" && error.smokeDiagnostic) {
+      process.stderr.write(`MANAGED_APP_SMOKE_DIAGNOSTIC:${error.smokeDiagnostic}\n`);
+    }
     process.exitCode = 1;
   });
 }

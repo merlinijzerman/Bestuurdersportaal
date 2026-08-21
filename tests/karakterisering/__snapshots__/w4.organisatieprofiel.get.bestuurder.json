@@ -1,0 +1,10 @@
+{
+  "body": {
+    "profiel": null,
+    "rol": "bestuurder"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

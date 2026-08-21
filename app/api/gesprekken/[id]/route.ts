@@ -23,17 +23,15 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 
 export const dynamic = "force-dynamic";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const DELETE = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id } = await params;
+    const { id } = params as { id: string };
     if (!UUID.test(id)) {
       return NextResponse.json({ error: "Ongeldig gesprek-id" }, { status: 400 });
     }
@@ -52,11 +50,7 @@ export async function DELETE(
     }
     if (!requestId) requestId = crypto.randomUUID();
 
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+    const supabase = ctx.supabase;
 
     const { data, error } = await supabase.rpc("verwijder_gesprek", {
       p_gesprek_id: id,
@@ -86,4 +80,4 @@ export async function DELETE(
     console.error("Fout in DELETE /api/gesprekken/[id]:", e);
     return NextResponse.json({ error: "Interne fout" }, { status: 500 });
   }
-}
+});

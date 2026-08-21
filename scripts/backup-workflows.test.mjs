@@ -27,6 +27,45 @@ test("watchdog controleert B2 ook zonder webhook en isoleert de configuratiefout
   assert.doesNotMatch(text, /for variable in[^\n]*BACKUP_ALERT_WEBHOOK_URL/);
 });
 
+test("het goedgekeurde meldkanaal staat in code en is per kanaal fail-closed", async () => {
+  const text = await workflow("supabase-backup-watchdog.yml");
+
+  // Kanaalkeuze hoort in de repository, niet in een muteerbare UI-instelling:
+  // wijzigen vereist dan een PR en is terugleesbaar (besluit 0185).
+  assert.match(text, /^env:\n  ALERT_CHANNEL: (?:github-native|webhook)$/m);
+
+  // Bij github-native is de rode run het kanaal; die belofte is alleen waar
+  // zolang iedere afwijking de run ook echt rood maakt.
+  assert.match(text, /verify-watchdog-fail-closed\.mjs/);
+
+  // Een onbekend of leeg kanaal mag nooit stilzwijgend groen zijn.
+  assert.match(text, /ALERT_CHANNEL is '\$\{ALERT_CHANNEL:-leeg\}'/);
+
+  // De negatieve test moet in beide kanalen bewijzen dat een afwijking wordt
+  // gemeld: via de webhook, of doordat de run aantoonbaar rood wordt.
+  assert.match(text, /if: env\.ALERT_CHANNEL == 'webhook'/);
+  assert.match(text, /if: env\.ALERT_CHANNEL == 'github-native'/);
+  assert.match(text, /::error title=Synthetische watchdogtest::/);
+  assert.match(
+    text,
+    /Synthetische mislukking zichtbaar maken via GitHub[\s\S]*?exit 1/
+  );
+
+  // De fail-closed controle leest de workflow met js-yaml (devDependency). Een
+  // job zonder checkout, Node en npm ci faalt dan op MODULE_NOT_FOUND en meldt
+  // dus een fout in de bewaking die er niet is.
+  const configuratiejob = text.slice(
+    text.indexOf("  alert-channel-configuration:"),
+    text.indexOf("  failure-alert:")
+  );
+  assert.match(configuratiejob, /uses: actions\/checkout/);
+  assert.match(configuratiejob, /uses: actions\/setup-node/);
+  assert.match(configuratiejob, /run: npm ci/);
+  assert.ok(
+    configuratiejob.indexOf("npm ci") < configuratiejob.indexOf("verify-watchdog-fail-closed.mjs")
+  );
+});
+
 test("back-up publiceert restorecontract 2 zonder redundante managed datafiles", async () => {
   const text = await workflow("supabase-backup.yml");
   assert.match(text, /restore_contract_version=2/);
@@ -121,6 +160,8 @@ test("managed restore scheidt keys, hervat exact, test Auth/RLS/app en lekt geen
   assert.match(text.slice(inventoryStep, archiveStep), /verify-portable-checksum\.mjs/);
   assert.doesNotMatch(text.slice(inventoryStep, archiveStep), /sha256sum -c/);
   assert.match(text, /scripts\/download-b2-object-with-retry\.sh/);
+  assert.match(text, /B2_DOWNLOAD_MAX_ATTEMPTS: "3"/);
+  assert.match(text, /B2_DOWNLOAD_RETRY_DELAY_SECONDS: "5"/);
   const downloadInvocations = text.slice(markerStep).split("\n").filter(
     (line) => line.trim() === "scripts/download-b2-object-with-retry.sh \\",
   );
@@ -163,6 +204,21 @@ test("managed restore scheidt keys, hervat exact, test Auth/RLS/app en lekt geen
   assert.match(text, /create-supabase-managed-restore-state\.sql|RESTORE_STATE_BACKUP_MARKER_KEY/);
   assert.match(text, /update-supabase-managed-restore-state\.sh finalize/);
   assert.match(text, /cryptsetup luksFormat/);
+  assert.match(text, /setsid \.\/node_modules\/\.bin\/next start/);
+  assert.doesNotMatch(text, /npm run start > "\$APP_LOG"/);
+  assert.match(text, /kill -- "-\$pid"/);
+  assert.match(text, /kill -- "-\$PID"/);
+  assert.match(text, /sudo fuser -km "\$MANAGED_RESTORE_ROOT"/);
+
+  // De smoke draait over TLS omdat de app HSTS en upgrade-insecure-requests
+  // meestuurt; over plain http laadt Chrome de _next-chunks niet en hydrateert
+  // React nooit. De terminator is een wegwerplaag binnen LUKS — de
+  // productieheaders in next.config.ts blijven onaangeroerd.
+  assert.match(text, /serve-managed-smoke-tls\.mjs/);
+  assert.match(text, /openssl req -x509/);
+  assert.match(text, /APP_SMOKE_PORT=3443 APP_SMOKE_SCHEME=https/);
+  assert.match(text, /TLS_CERT="\$DRILL_ROOT\/smoke-tls\.crt"/);
+  assert.doesNotMatch(text, /APP_SMOKE_PORT=3000 node/);
   assert.match(text, /APP_WORKTREE=\$SECURE_ROOT\/app-worktree/);
   assert.match(text, /Versleutelde productiegegevens aantoonbaar vernietigen[\s\S]*?if: always\(\)/);
   assert.match(text, /create-supabase-managed-restore-evidence\.mjs/);
@@ -196,6 +252,45 @@ test("managed restore scheidt keys, hervat exact, test Auth/RLS/app en lekt geen
   assert.match(stateUpdater, /updated_at = now\(\)/);
   assert.doesNotMatch(stateSql, /managed_restore_state/);
   assert.doesNotMatch(stateSql, /bestuurdersportaal_restore_private\.resume_state/);
+
+  const login = await readFile(path.join(repositoryRoot, "app", "login", "page.tsx"), "utf8");
+  assert.match(login, /window\.location\.replace\("\/"\)/);
+  assert.doesNotMatch(login, /router\.(?:push|refresh)/);
+
+  // De smoke mag het loginformulier pas aanraken nadat React is gehydrateerd.
+  // Klikken daarvoor levert een native GET /login op — de velden hebben geen
+  // name-attribuut — en dat is niet te onderscheiden van een mislukte login.
+  const smoke = await readFile(
+    path.join(repositoryRoot, "scripts", "run-supabase-managed-app-smoke.mjs"),
+    "utf8"
+  );
+  const hydratie = smoke.indexOf("__reactProps$");
+  const invullen = smoke.indexOf('getByLabel("E-mailadres")');
+  assert.ok(hydratie > 0 && invullen > hydratie);
+  assert.match(smoke, /MANAGED_APP_SMOKE_DIAGNOSTIC/);
+  assert.match(smoke, /APP_SMOKE_SCHEME/);
+
+  // De dashboardcontrole mag niet afhangen van het fondsmanifest: welke
+  // modules in de nav staan is een configuratiekeuze per fonds, geen bewijs
+  // dat het herstel is geslaagd.
+  assert.match(smoke, /a\[href="\/profiel"\]/);
+  assert.doesNotMatch(smoke, /getByRole\("link", \{ name: "Home"/);
+
+  // De TLS-terminator bestaat alleen omdat deze twee productieheaders blijven
+  // staan. Verdwijnen ze, dan is de wegwerplaag zinloos geworden en moet die
+  // keuze bewust opnieuw worden gemaakt in plaats van stil mee te schuiven.
+  const config = await readFile(path.join(repositoryRoot, "next.config.ts"), "utf8");
+  assert.match(config, /Strict-Transport-Security/);
+  assert.match(config, /upgrade-insecure-requests/);
+
+  // Alles wat door de terminator loopt is herstelde productiedata: geen paden,
+  // hosts, headers of bodies in de logs.
+  const tls = await readFile(
+    path.join(repositoryRoot, "scripts", "serve-managed-smoke-tls.mjs"),
+    "utf8"
+  );
+  assert.doesNotMatch(tls, /console\.(?:log|info|warn|error|debug)/);
+  assert.match(tls, /"x-forwarded-proto": "https"/);
 });
 
 test("Auth-configuratiediagnose is main-only, read-only en publiceert geen waarden", async () => {

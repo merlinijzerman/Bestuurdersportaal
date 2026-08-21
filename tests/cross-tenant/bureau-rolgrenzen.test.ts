@@ -35,6 +35,7 @@ import {
   isTenantRol,
 } from "../../app/(platform)/platform/(beveiligd)/gebruikers/gedeeld";
 import { MODULE_REGISTRY, alleModules } from "../../core/lib/module-registry";
+import { rolUitdrukkingVoor } from "./route-wrapper-bewust";
 import {
   telEigenInbreng,
   telZonderGekoppeldStuk,
@@ -363,7 +364,20 @@ test("BB-15 — de motiveringseis bij agendapuntwijziging is fail-safe voor het 
   // altijd 0. Zonder fail-safe zou de motiveringsplicht — een governancecontrole
   // met notificatie aan de bijdragers — precies voor die rol stil verdwijnen.
   const route = lees("app", "api", "agendapunten", "[id]", "route.ts");
-  assert.match(route, /if \(isBureauRol\(profiel\?\.rol\)\) motiveringVereist = true;/);
+  // Wrapper-bewust (W4, issue #94): de rol staat in `profiel?.rol` zolang de route
+  // haar eigen `profielen`-select doet, en in `ctx.rol` zodra elke handler aan
+  // `withFondsRoute` delegeert — dat veld vult de wrapper uitsluitend uit
+  // haalProfiel (verankerd door toetsWrapperFundament). `rolUitdrukkingVoor` kiest
+  // de vorm die bij DEZE route hoort, zodat de guard even streng blijft als
+  // voorheen: niet "een van beide vormen ergens", maar de juiste vorm op de regel.
+  const rolBron = rolUitdrukkingVoor(route);
+  assert.match(
+    route,
+    new RegExp(
+      `if \\(isBureauRol\\(${rolBron.replace(/[.?]/g, "\\$&")}\\)\\) motiveringVereist = true;`
+    ),
+    `de fail-safe moet op ${rolBron} toetsen`
+  );
 });
 
 // ── (6) Startpunt (§6.6, FR-7a) ────────────────────────────────────────────

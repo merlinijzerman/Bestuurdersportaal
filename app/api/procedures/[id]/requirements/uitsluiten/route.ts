@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { ensureDecisionForProcedure } from "@/core/lib/decision";
 
 // POST /api/procedures/[id]/requirements/uitsluiten
@@ -11,17 +11,10 @@ import { ensureDecisionForProcedure } from "@/core/lib/decision";
 // toelichting; gegate op voorzitter/beheerder; fonds_id + decision_id server-side
 // afgeleid; append-only gelogd. Upsert op de unieke sleutel = idempotent en
 // heractiveert een eerder teruggedraaide uitsluiting.
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const POST = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+    const { id } = params as { id: string };
+    const supabase = ctx.supabase;
 
     const body = (await req.json()) as {
       stap_volgorde?: number;
@@ -31,12 +24,11 @@ export async function POST(
       reden?: string;
     };
 
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam, rol")
-      .eq("id", user.id)
-      .single();
-    if (!profiel || !["voorzitter", "beheerder"].includes(profiel.rol)) {
+    // BESLUIT (W4): `!profiel ||` valt weg en `ctx.rol` krijgt `?? ""`.
+    // Uitkomst-identiek: geen profielrij -> haalProfiel geeft null -> ctx.rol is
+    // null -> "" -> 403; profielrij met rol null idem; rol gezet ongewijzigd.
+    // Zelfde afweging als bij de twee documents-backfills.
+    if (!["voorzitter", "beheerder"].includes(ctx.rol ?? "")) {
       return NextResponse.json(
         { error: "Alleen voorzitter of beheerder kan een vereiste uitsluiten" },
         { status: 403 }
@@ -92,7 +84,7 @@ export async function POST(
           match_sleutel: matchSleutel,
           reden,
           actief: true,
-          uitgesloten_door: user.id,
+          uitgesloten_door: ctx.gebruikerId,
           uitgesloten_op: new Date().toISOString(),
         },
         { onConflict: "decision_id,stap_volgorde,requirement_type,match_sleutel" }
@@ -110,8 +102,8 @@ export async function POST(
       .insert({
         decision_id,
         event_type: "requirement_uitgesloten",
-        actor_id: user.id,
-        actor_naam: profiel.naam ?? null,
+        actor_id: ctx.gebruikerId,
+        actor_naam: ctx.naam ?? null,
         object_type: "procedure_requirement_uitsluiting",
         object_id: rij.id,
         reden,
@@ -136,8 +128,8 @@ export async function POST(
     await supabase.from("procedure_log").insert({
       procedure_id: id,
       event_type: "requirement_uitgesloten",
-      actor_id: user.id,
-      actor_naam: profiel.naam || null,
+      actor_id: ctx.gebruikerId,
+      actor_naam: ctx.naam || null,
       payload: { stap_volgorde: body.stap_volgorde, label, reden },
     });
 
@@ -146,4 +138,4 @@ export async function POST(
     console.error("Fout in POST …/requirements/uitsluiten:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

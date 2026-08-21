@@ -1,0 +1,11 @@
+{
+  "body": {
+    "actie": "deactiveren",
+    "document_id": "<uuid:1>",
+    "success": true
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

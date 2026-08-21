@@ -16,7 +16,7 @@
 // ============================================================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { rolHeeftCapability } from "@/core/lib/capabilities";
 import { weigerAlsModuleUit } from "@/core/lib/module-guard";
 import {
@@ -50,19 +50,19 @@ function schoonBron(b: unknown): KopieBron | null {
   };
 }
 
-export async function POST(req: NextRequest) {
+export const POST = withFondsRoute({}, async (ctx, req: NextRequest) => {
   try {
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+    const supabase = ctx.supabase;
 
-    // Rol + fondsnaam uit het profiel (RLS-client, eigen rij).
+    // Rol + fondsnaam uit het profiel (RLS-client, eigen rij). BLIJFT staan: de
+    // wrapper levert vier profielkolommen, deze select heeft de join
+    // `fondsen(naam)` erbij en die zit er niet bij. Recept "Gevallen die MET DE
+    // HAND moeten": eigen aanvullende query in de handler, en de bestaande
+    // casts eromheen ongemoeid — dat houdt de diff bij de preambule.
     const { data: profiel } = await supabase
       .from("profielen")
       .select("rol, naam, fonds_id, fondsen(naam)")
-      .eq("id", user.id)
+      .eq("id", ctx.gebruikerId)
       .single();
 
     // Capability-gate (G2/FR-21). De definer-RPC log_word_export() dubbelt deze
@@ -129,7 +129,11 @@ export async function POST(req: NextRequest) {
         ? ((profiel as { fondsen?: { naam?: string }[] }).fondsen?.[0]?.naam ?? null)
         : null;
 
-    const ctx: DocxStukContext = {
+    // Hernoemd van `ctx` naar `docxCtx`: `ctx` is sinds de migratie de
+    // FondsContext van de wrapper. Twee regels, en de alternatieve kant — de
+    // wrapperparameter anders noemen — zou deze route laten afwijken van de 94
+    // andere.
+    const docxCtx: DocxStukContext = {
       titel,
       datum: nlDatum(new Date()),
       surface: "bureau",
@@ -161,7 +165,7 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Nu pas de .docx bouwen (herkomst + bronnenlijst constructief) ───────
-    const payload = await bouwDocx(antwoord, bronnen, ctx);
+    const payload = await bouwDocx(antwoord, bronnen, docxCtx);
 
     return new NextResponse(Buffer.from(payload.bytes), {
       status: 200,
@@ -176,4 +180,4 @@ export async function POST(req: NextRequest) {
     console.error("Fout in POST /api/ai/stuk-export:", e);
     return NextResponse.json({ error: "Export mislukt" }, { status: 500 });
   }
-}
+});

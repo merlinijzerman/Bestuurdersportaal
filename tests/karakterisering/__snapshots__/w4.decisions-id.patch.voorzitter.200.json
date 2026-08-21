@@ -1,0 +1,35 @@
+{
+  "body": {
+    "decision": {
+      "aangemaakt_op": "<ts>",
+      "aanleiding": null,
+      "ai_risicoklasse": "laag",
+      "beleidsafwijking": false,
+      "besluit_code": "W4-001",
+      "besluitvraag": "Gaat W4 door?",
+      "complexiteit": "complicated",
+      "eigenaar_id": null,
+      "eigenaar_naam": null,
+      "fonds_id": "<uuid:1>",
+      "gewenste_besluitdatum": null,
+      "governance_orgaan": null,
+      "id": "<uuid:2>",
+      "is_primary_decision": false,
+      "laatst_gewijzigd": "<ts>",
+      "mandaatgevoelig": false,
+      "procedure_id": "<uuid:3>",
+      "risiconiveau": "middel",
+      "scope": null,
+      "status": "concept",
+      "template_versie": null,
+      "titel": "W4 Besluit gewijzigd",
+      "toezichtgevoelig": false,
+      "vertrouwelijkheid": "intern"
+    },
+    "gewijzigd": true
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

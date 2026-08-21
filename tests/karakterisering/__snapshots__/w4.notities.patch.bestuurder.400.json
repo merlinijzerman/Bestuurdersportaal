@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Geef eigen_notities of vrije_notities mee"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 400
+}

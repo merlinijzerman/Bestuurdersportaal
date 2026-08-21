@@ -1,0 +1,26 @@
+{
+  "body": {
+    "item": {
+      "aangemaakt_door": "<uuid:1>",
+      "aangemaakt_op": "<ts>",
+      "actief": true,
+      "bewijs_vereist": false,
+      "bron": "handmatig",
+      "governance_event_id": null,
+      "id": "<uuid:2>",
+      "label": "W4 checklistitem",
+      "opmerking": null,
+      "stap_id": "<uuid:3>",
+      "toelichting": null,
+      "voldaan": false,
+      "voldaan_door": null,
+      "voldaan_door_naam": null,
+      "voldaan_op": null,
+      "volgorde": 1
+    }
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

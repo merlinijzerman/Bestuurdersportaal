@@ -7,7 +7,7 @@ import {
   sleutelUitRequest,
   vingerafdruk,
 } from "@/core/lib/ai-preflight";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
 import { rateLimited, badRequest } from "@/core/lib/api-errors";
 
@@ -36,19 +36,10 @@ UITVOER: alleen JSON, geen markdown of toelichting eromheen, in dit exacte forma
   "onvoldoende_context": false
 }`;
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string; stapId: string }> }
-) {
+export const POST = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id, stapId } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const { id, stapId } = params as { id: string; stapId: string };
+    const supabase = ctx.supabase;
 
     // Rate limiting (WP2): vóór de Anthropic-call.
     // Besluit 0180: fail-closed op dit kostendragende pad. Drempel ongewijzigd.
@@ -228,4 +219,4 @@ export async function POST(
     console.error("Fout in besluit-concept-route:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

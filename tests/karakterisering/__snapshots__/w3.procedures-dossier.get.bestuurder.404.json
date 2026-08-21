@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Dit dossier is niet gevonden of u heeft er geen toegang toe."
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 404
+}

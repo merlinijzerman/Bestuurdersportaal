@@ -16,7 +16,11 @@
 #            NOOIT groen — het toont enkel de openstaande bewijseis + eigenaar.
 #
 #  Exit-code: 0 als ALLE [REPO]-checks slagen (het mechanische deel is rond).
-#  De [OPS]-regels zijn informatief (verwacht-open) en beïnvloeden de exit niet.
+#  De [OPS]-regels zijn informatief en beïnvloeden de exit niet. Ze kennen drie
+#  standen — OPEN (nog te doen), DONE (gemeten dat het gedaan is) en "?" (niet
+#  vast te stellen). Die derde stand is er sinds #97 en is de belangrijkste: hem
+#  weglaten dwingt een meetbeperking in een van de andere twee, en dan klinkt
+#  "ik kon het niet lezen" als "het is niet gedaan" of, erger, als "het is oké".
 #
 #  Canonieke aftekening blijft de checklist:
 #    ../02 Architectuur/Bestuurdersportaal - T7 G2 go-no-go checklist v0.1.md
@@ -40,6 +44,14 @@ rood=0
 repo_pass() { printf '  [REPO] \033[32mPASS\033[0m  %s\n' "$1"; groen=$((groen+1)); }
 repo_fail() { printf '  [REPO] \033[31mFAIL\033[0m  %s\n' "$1"; rood=$((rood+1)); }
 ops_open()  { printf '  [OPS ] \033[33mOPEN\033[0m  %s\n' "$1"; }
+# Een OPS-regel die inmiddels MEETBAAR is. Blijft [OPS] en blijft buiten de
+# exit-code — die scheiding is bewust (#97) — maar meldt niet langer "open"
+# terwijl de handeling allang verricht is.
+ops_done()  { printf '  [OPS ] \033[32mDONE\033[0m  %s\n' "$1"; }
+# En de derde stand, die het gevaarlijkst is om weg te laten: we KONDEN het niet
+# vaststellen. Dat is iets anders dan "niet gedaan", en het hoort niet als een
+# van beide te worden gepresenteerd.
+ops_onbekend() { printf '  [OPS ] \033[33m  ? \033[0m  %s\n' "$1"; }
 
 # Faalt als één van de opgegeven paden ontbreekt.
 check_files() {
@@ -56,6 +68,67 @@ check_grep() {
   else repo_fail "$omschrijving — '$patroon' niet in $bestand"; fi
 }
 
+# — host↔fonds-enforce, wrapper-bewust (EPIC W / W3, issue #94) ---------------
+#  Een route dwingt host↔fonds op twee manieren af, en beide tellen:
+#    (a) klassiek — de route roept zelf `beoordeelRouteHostToegang(` aan;
+#    (b) na de codemod — `withFondsRoute({ … hostGuard: true … })`, waarbij de
+#        wrapper de aanroep doet.
+#  Zonder (b) valt dit script vals-rood zodra een hoogrisico-route migreert; zó
+#  brak `zoeken` in W3, en omdat dit script NIET in CI draait bleef dat stil.
+#  Zonder de verankering hieronder zou (b) juist vals-groen zijn: `hostGuard: true`
+#  is alleen bewijs als de wrapper er feitelijk iets mee doet. Daarom eerst
+#  `check_wrapper_fundament` — precies zoals `toetsWrapperFundament()` dat doet
+#  voor de statische guards in tests/cross-tenant/.
+WRAPPER="core/lib/route-wrapper.ts"
+
+check_wrapper_fundament() {
+  local reden="" plat=""
+  [ -f "$WRAPPER" ] || reden="$WRAPPER ontbreekt"
+  if [ -z "$reden" ]; then
+    # Op ADJACENTIE toetsen, niet op losse woorden: `spec.hostGuard` staat ook in
+    # de toelichtende commentaarkop van de wrapper, en een commentaar is geen
+    # handhaving. De TS-variant (toetsWrapperFundament) doet hetzelfde met een
+    # regex over meerdere regels; hier plat de bron eerst tot één regel.
+    # Twee valkuilen, allebei door de negatieve controle gevonden:
+    #  • herestring, GEEN pipe — dit script draait met `set -o pipefail`, en
+    #    `grep -q` sluit de pipe bij de eerste match → SIGPIPE op de schrijver →
+    #    de hele pipeline telt als mislukt (vals-rood);
+    #  • herhalingsteller ≤255 — BSD grep (macOS) weigert `.{0,300}` met
+    #    "invalid repetition count(s)"; GNU grep (CI) accepteert het wél. Een
+    #    ruimere marge zou dus lokaal rood en in CI groen zijn. 200 is ruim: de
+    #    feitelijke afstanden zijn ~60 resp. ~130 tekens.
+    #  • W4: de tak toetst sinds `hostGuard: "route-eigen"` op `=== true` i.p.v.
+    #    op truthy. Het patroon stond op de letterlijke vorm `spec.hostGuard)` en
+    #    viel dáárdoor rood — een terechte melding van een check die aan een
+    #    schrijfwijze hing. Nu op de VERGELIJKING zelf, met beide vormen
+    #    toegestaan, zodat hij de handhaving toetst en niet de spelling.
+    plat=$(tr '\n' ' ' < "$WRAPPER")
+    grep -Eq 'spec\.hostGuard( *=== *true)? *\).{0,200}beoordeelRouteHostToegang\(' <<<"$plat" \
+      || reden="de spec.hostGuard-tak roept beoordeelRouteHostToegang niet aan"
+    grep -Eq '!oordeel\.toegestaan.{0,200}status: *403' <<<"$plat" \
+      || reden="een afgewezen host-oordeel leidt niet tot 403"
+  fi
+  if [ -z "$reden" ]; then
+    repo_pass "A1 wrapper-fundament: withFondsRoute-hostGuard dwingt host↔fonds echt af"
+  else
+    repo_fail "A1 wrapper-fundament — $reden (dan is 'hostGuard: true' in een route geen bewijs)"
+  fi
+}
+
+check_hostguard() {
+  local omschrijving="$1" bestand="$2"
+  if [ ! -f "$bestand" ]; then repo_fail "$omschrijving — $bestand ontbreekt"; return; fi
+  if grep -q "beoordeelRouteHostToegang(" "$bestand"; then
+    repo_pass "$omschrijving"; return
+  fi
+  # Alleen de ECHTE wrapper telt; een gelijknamige lokale functie niet.
+  if grep -q 'from "@/core/lib/route-wrapper"' "$bestand" \
+     && grep -Eq 'withFondsRoute\(\{[^}]*hostGuard: *true' "$bestand"; then
+    repo_pass "$omschrijving (via withFondsRoute hostGuard: true)"; return
+  fi
+  repo_fail "$omschrijving — geen beoordeelRouteHostToegang( en geen withFondsRoute({ hostGuard: true }) in $bestand"
+}
+
 echo "============================================================================"
 echo " G2 go/no-go — evidence-consolidatie (repo-side)   $(date +%Y-%m-%d)"
 echo "============================================================================"
@@ -69,13 +142,14 @@ check_files "A1 resolver/enforce-modules aanwezig" \
   core/lib/tenant-host.ts core/lib/tenant-context.ts core/lib/tenant-enforce.ts core/lib/tenant-route-guard.ts
 check_grep  "A1 pagina-chokepoint (dashboard-layout) achter enforce" \
   "beoordeelToegang" "app/(dashboard)/layout.tsx"
+check_wrapper_fundament
 for r in \
   "app/api/chat/route.ts" \
   "app/api/zoeken/route.ts" \
   "app/api/documents/upload/route.ts" \
   "app/api/documents/[id]/bestand/route.ts" \
   "app/api/decisions/[id]/auditdossier/route.ts"; do
-  check_grep "A1 hoogrisico-route host-enforce: $r" "beoordeelRouteHostToegang" "$r"
+  check_hostguard "A1 hoogrisico-route host-enforce: $r" "$r"
 done
 ops_open "A1 TENANT_ENFORCE=on op PRODUCTIE + seeds gedraaid — ops (lockout-risico, mens beslist ná observatievenster)"
 
@@ -117,7 +191,77 @@ check_files "B9 workflow + orkestratie aanwezig" \
   .github/workflows/rls-cross-tenant.yml scripts/cross-tenant-ci.sh
 check_grep  "B9 CI: ontbrekende DB → rood (geen stille skip)" "XTENANT_REQUIRE_DB" ".github/workflows/rls-cross-tenant.yml"
 check_grep  "B9 gepinde required-status-check-naam" "Cross-tenant isolatie" ".github/workflows/rls-cross-tenant.yml"
-ops_open "B9 branch protection 'required status check' AANZETTEN op main — repo-admin-handeling"
+# B9 — branch protection. Dit was een HARDGECODEERDE ops_open-regel: hij meldde
+# onvoorwaardelijk "nog aanzetten", ook nadat het was aangezet. Een aftekenregel
+# die permanent rood staat wordt genegeerd — dat is de spiegelbeeldvariant van
+# het probleem in #97 (een check die nergens draait, dus geen signaal geeft).
+# Nu wordt het gemeten. Drie standen, want "kon het niet vaststellen" is iets
+# anders dan "niet gedaan": zonder admin-token (o.a. de standaard GITHUB_TOKEN
+# in Actions) is dit endpoint niet leesbaar, en dan zegt deze regel dat ook.
+check_branch_protection() {
+  # De drie uit de V4-acceptatiecriteria (#81), PLUS deze job zelf.
+  #
+  # Die laatste is geen netheid maar de sluiting van precies het gat waar dit
+  # hele spoor over ging: `G2-aftekening (repo-side)` is sinds #97 een required
+  # check, en zonder deze regel kan iemand hem morgen uit de branch protection
+  # halen terwijl dit script vrolijk DONE blijft melden. Dan draait de job nog
+  # wel, maar houdt hij niets meer tegen — en niemand merkt het.
+  #
+  # Een controle die zijn eigen afdwingbaarheid niet toetst, meet alleen zichzelf.
+  local vereist=(
+    "Cross-tenant isolatie (§15 T1-T14)"
+    "Security baseline (Sprint 1)"
+    "Code-scheiding (T9 core/platform-grens)"
+    "G2-aftekening (repo-side)"
+  )
+  if ! command -v gh >/dev/null 2>&1; then
+    ops_onbekend "B9 branch protection — niet vast te stellen: geen gh CLI beschikbaar"
+    return
+  fi
+  local json fout
+  if ! json="$(gh api repos/{owner}/{repo}/branches/main/protection 2>/tmp/g2_bp_err)"; then
+    fout="$(cat /tmp/g2_bp_err 2>/dev/null)"; rm -f /tmp/g2_bp_err
+    # 404 en 403 betekenen HET TEGENOVERGESTELDE van elkaar en mogen nooit op
+    # dezelfde regel uitkomen: "er staat geen enkele protection op main" is een
+    # BEVINDING, "ik mag het niet lezen" is een meetbeperking. Ze samenvouwen tot
+    # "niet vast te stellen" laat de ernstigste stand geruststellend klinken.
+    # Toets op de HTTP-STATUS en niet op de foutzin: die zin is Engels, wisselt
+    # per geval ("Branch not protected" vs "Branch not found") en verschilt in
+    # hoofdletters van wat je verwacht — de eerste versie van deze case matchte
+    # daardoor niets en viel stilzwijgend in de "onbekend"-tak.
+    case "$fout" in
+      *"HTTP 404"*)
+        case "$fout" in
+          *"not protected"*) ops_open "B9 branch protection — er staat GEEN branch protection op main" ;;
+          *)                 ops_open "B9 branch protection — branch 'main' niet gevonden op dit endpoint (naam of repo verkeerd?)" ;;
+        esac ;;
+      *"HTTP 403"*|*"HTTP 401"*)
+        ops_onbekend "B9 branch protection — niet vast te stellen: geen leesrecht (admin-token vereist; de standaard GITHUB_TOKEN in Actions heeft dit niet)" ;;
+      *)
+        ops_onbekend "B9 branch protection — niet vast te stellen: onverwachte fout van het protection-endpoint" ;;
+    esac
+    return
+  fi
+  rm -f /tmp/g2_bp_err
+  local contexts admins ontbreekt=""
+  contexts="$(printf '%s' "$json" | python3 -c 'import json,sys; d=json.load(sys.stdin); print("\n".join(d.get("required_status_checks",{}).get("contexts",[])))' 2>/dev/null || true)"
+  admins="$(printf '%s' "$json" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(str(d.get("enforce_admins",{}).get("enabled",False)).lower())' 2>/dev/null || echo false)"
+  local v
+  for v in "${vereist[@]}"; do
+    printf '%s\n' "$contexts" | grep -Fxq "$v" || ontbreekt="$ontbreekt\n      - $v"
+  done
+  if [ -n "$ontbreekt" ]; then
+    # shellcheck disable=SC2059
+    printf "  [OPS ] \033[33mOPEN\033[0m  B9 branch protection — required checks ONTBREKEN:$ontbreekt\n"
+    return
+  fi
+  if [ "$admins" != "true" ]; then
+    ops_open "B9 branch protection — required checks staan aan, maar enforce_admins is UIT (een admin kan er langs)"
+    return
+  fi
+  ops_done "B9 branch protection — ${#vereist[@]}/${#vereist[@]} required checks aanwezig, enforce_admins aan"
+}
+check_branch_protection
 
 # B10 — T6 gedeelde contentlaag opgeleverd.
 check_files "B10 T6 beheerkenmerken-migratie + read-only-check aanwezig" \
@@ -159,7 +303,8 @@ fi
 echo
 echo "============================================================================"
 echo " Repo-side (mechanisch):  $groen groen, $rood rood."
-echo " [OPS]-regels zijn verwacht-open en wachten op mensbesluit/ops-handeling —"
+echo " [OPS]-regels tellen niet mee in de exit-code: OPEN = nog te doen,"
+echo " DONE = gemeten dat het gedaan is, ? = niet vast te stellen (geen recht/tool)."
 echo " zie de canonieke checklist voor de aftekening (G2-GO-NO-GO-CONTROLEKADER.md)."
 echo "============================================================================"
 

@@ -1,0 +1,32 @@
+{
+  "body": {
+    "dossiers": [
+      {
+        "beschrijving": null,
+        "deadline": null,
+        "gestart_op": "<ts>",
+        "id": "<uuid:1>",
+        "periode_eind": null,
+        "periode_jaar": null,
+        "periode_start": null,
+        "periode_type": null,
+        "procesmodel_id": null,
+        "status": "lopend",
+        "status_view": {
+          "afgeleid_van_decision": true,
+          "decision_id": "<uuid:2>",
+          "decision_status": "in_onderbouwing",
+          "dossierstatus": "lopend",
+          "procedure_id": "<uuid:1>",
+          "sublabel": null
+        },
+        "template_code": "algemeen",
+        "titel": "W1 Procedure"
+      }
+    ]
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

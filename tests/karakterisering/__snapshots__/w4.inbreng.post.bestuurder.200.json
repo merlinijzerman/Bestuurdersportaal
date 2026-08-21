@@ -1,0 +1,16 @@
+{
+  "body": {
+    "inbreng": {
+      "aangemaakt": "<ts>",
+      "agendapunt_id": "<uuid:1>",
+      "gebruiker_id": "<uuid:2>",
+      "gebruiker_naam": "W1 bestuurder",
+      "id": "<uuid:3>",
+      "tekst": "W4 inbreng"
+    }
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

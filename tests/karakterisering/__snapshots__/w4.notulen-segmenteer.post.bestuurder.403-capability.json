@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Geen rechten om notulensegmenten te beheren."
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 403
+}

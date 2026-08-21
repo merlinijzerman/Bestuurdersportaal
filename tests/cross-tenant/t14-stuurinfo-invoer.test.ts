@@ -30,6 +30,7 @@ import {
   valideerPeriodeInvoer,
 } from "../../core/lib/stuurinfo-invoer";
 import { SJABLOON_VELDEN } from "../../core/lib/stuurinfo-sjabloon";
+import { redenFondsIdNietUitProfiel } from "./route-wrapper-bewust";
 
 const hier = dirname(fileURLToPath(import.meta.url));
 const lees = (...p: string[]) => readFileSync(join(hier, "..", "..", ...p), "utf8");
@@ -56,13 +57,19 @@ test("T14 — elke invoerlaag-route draagt requireCapability('stuurinformatie.ma
   }
 });
 
+// Wrapper-bewust (W4, issue #94): de positieve helft van deze invariant — "het
+// fonds komt uit het profiel" — kan op twee plekken staan. Klassiek doet de route
+// zelf de `profielen`-select (`profiel?.fonds_id`); na de codemod komt het uit
+// `ctx.fondsId`, dat `withFondsRoute` uitsluitend uit `haalProfiel` vult.
+// `redenFondsIdNietUitProfiel` kiest per route de juiste eis en verankert de
+// wrapper-tak met `toetsWrapperFundament()`. Het patroon schrappen zou de guard
+// vals-groen maken: dan bewijst niets meer dát het fonds server-side is afgeleid.
+// De negatieve helft (nooit uit de body) blijft hier onverkort staan.
 test("T14 — fonds_id komt uit het profiel, nooit uit de request-body", () => {
   for (const pad of ROUTES) {
     const src = lees(pad);
-    assert.ok(
-      src.includes("profiel.fonds_id") || src.includes("profiel?.fonds_id"),
-      `${pad} moet fonds_id uit het profiel afleiden`
-    );
+    const reden = redenFondsIdNietUitProfiel(src);
+    assert.equal(reden, null, `${pad} moet fonds_id uit het profiel afleiden: ${reden}`);
     assert.ok(
       !/body\s*[.[]\s*["']?fonds_id/.test(src),
       `${pad} mag fonds_id nooit uit de body lezen`

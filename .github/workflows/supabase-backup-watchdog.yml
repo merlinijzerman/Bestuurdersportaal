@@ -21,6 +21,13 @@ permissions:
   contents: read
   actions: read
 
+# Het goedgekeurde meldkanaal staat bewust in code en niet in een instelling in
+# de UI: wijzigen vereist een PR en is daarmee reviewbaar en terugleesbaar
+# (besluit 0185). Toegestaan: "github-native" (de rode workflowrun plus de
+# GitHub-notificatie is het kanaal) of "webhook" (BACKUP_ALERT_WEBHOOK_URL).
+env:
+  ALERT_CHANNEL: github-native
+
 jobs:
   synthetic-alert-delivery:
     name: Veilige synthetische alertdelivery
@@ -32,7 +39,6 @@ jobs:
       BACKUP_ALERT_WEBHOOK_URL: ${{ secrets.BACKUP_ALERT_WEBHOOK_URL }}
       ALERT_CATEGORY: b2_evidence_invalid
       ALERT_SEVERITY: warning
-      ALERT_WEBHOOK_REQUIRED: "true"
       ALERT_REASON: synthetische watchdogtest
       ALERT_DETAILS: Deze veilige test raakt geen back-up, completion marker of B2-object aan.
       ALERT_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -45,22 +51,78 @@ jobs:
         with:
           node-version: 22
 
-      - name: Synthetische waarschuwing versturen
+      - name: Synthetische waarschuwing naar de webhook versturen
+        if: env.ALERT_CHANNEL == 'webhook'
+        env:
+          ALERT_WEBHOOK_REQUIRED: "true"
         run: node scripts/send-backup-alert.mjs
+
+      # Bij github-native is de rode run zelf het meldkanaal. De negatieve test
+      # moet dus een rode run opleveren: alleen dan bewijst hij dat een echte
+      # afwijking ook daadwerkelijk gemeld wordt. Er wordt niets aangeraakt —
+      # geen back-up, geen completion marker, geen B2-object.
+      - name: Synthetische mislukking zichtbaar maken via GitHub
+        if: env.ALERT_CHANNEL == 'github-native'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node scripts/send-backup-alert.mjs
+          {
+            echo "## Synthetische watchdogtest"
+            echo "Deze run is met opzet rood. Hij bewijst dat een afwijking in de"
+            echo "back-upbewaking een GitHub-notificatie oplevert. Er is geen"
+            echo "back-up, completion marker of B2-object aangeraakt."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::error title=Synthetische watchdogtest::Opzettelijke testmelding; er is niets aangeraakt."
+          exit 1
 
   alert-channel-configuration:
     name: Alertkanaalconfiguratie controleren
     if: ${{ github.event_name != 'workflow_run' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 10
     environment: production-backup
     env:
       BACKUP_ALERT_WEBHOOK_URL: ${{ secrets.BACKUP_ALERT_WEBHOOK_URL }}
     steps:
+      # De fail-closed controle leest de workflow met js-yaml en heeft dus de
+      # repository én de devDependencies nodig. Zonder deze drie stappen faalt
+      # de job op MODULE_NOT_FOUND in plaats van op de bewaking zelf.
+      - name: Repository ophalen
+        uses: actions/checkout@v4.2.2
+
+      - name: Node.js instellen
+        uses: actions/setup-node@v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Dependencies installeren
+        run: npm ci
+
       - name: Alertkanaal afzonderlijk controleren
         shell: bash
         run: |
           set -Eeuo pipefail
+          case "${ALERT_CHANNEL:-}" in
+            github-native)
+              # De rode run is het kanaal. Dat geldt alleen zolang iedere
+              # inhoudelijke afwijking de run ook echt rood maakt.
+              node scripts/verify-watchdog-fail-closed.mjs
+              {
+                echo "## Alertkanaal: GitHub-notificaties"
+                echo "Een afwijking maakt de run rood; GitHub meldt dat aan de eigenaar"
+                echo "van de workflow. Er is bewust geen extern meldkanaal ingericht."
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+              ;;
+            webhook)
+              ;;
+            *)
+              echo "::error title=Alertkanaal onbekend::ALERT_CHANNEL is '${ALERT_CHANNEL:-leeg}'; verwacht github-native of webhook."
+              exit 1
+              ;;
+          esac
           if [ -z "${BACKUP_ALERT_WEBHOOK_URL:-}" ]; then
             echo "::error title=Alertkanaal niet geconfigureerd::BACKUP_ALERT_WEBHOOK_URL ontbreekt. De B2-inhoudscontroles draaien in afzonderlijke jobs door."
             echo "## Alertkanaal niet geconfigureerd" >> "$GITHUB_STEP_SUMMARY"
@@ -79,7 +141,6 @@ jobs:
       BACKUP_ALERT_WEBHOOK_URL: ${{ secrets.BACKUP_ALERT_WEBHOOK_URL }}
       ALERT_CATEGORY: backup_failed
       ALERT_SEVERITY: critical
-      ALERT_WEBHOOK_REQUIRED: "true"
       ALERT_REASON: ${{ format('workflow {0} mislukt', github.event.workflow_run.name) }}
       ALERT_DETAILS: ${{ format('Workflow {0} eindigde met status {1}.', github.event.workflow_run.name, github.event.workflow_run.conclusion) }}
       ALERT_RUN_URL: ${{ github.event.workflow_run.html_url }}
@@ -94,12 +155,16 @@ jobs:
 
       - name: Mislukte run alarmeren
         shell: bash
+        env:
+          ALERT_WEBHOOK_REQUIRED: ${{ env.ALERT_CHANNEL == 'webhook' && 'true' || 'false' }}
         run: |
           set -Eeuo pipefail
-          test -n "${BACKUP_ALERT_WEBHOOK_URL:-}" || {
+          if [ "${ALERT_CHANNEL:-}" = "webhook" ] && [ -z "${BACKUP_ALERT_WEBHOOK_URL:-}" ]; then
             echo "BACKUP_ALERT_WEBHOOK_URL ontbreekt; failure-alerting is niet geconfigureerd." >&2
             exit 1
-          }
+          fi
+          # Bij github-native heeft de mislukte bronworkflow zelf al een
+          # notificatie opgeleverd; deze job legt de reden alleen vast.
           node scripts/send-backup-alert.mjs
 
   freshness-alert:

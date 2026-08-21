@@ -8,15 +8,22 @@ name: rls-cross-tenant
 #  past de migraties toe en draait de app-laag (node:test) én de DB-laag (psql:
 #  T3/T4/T6/T7). Elke overtreding → non-zero exit → deze job faalt.
 #
-#  Activering (fasering, besluit 0046 → geëffectueerd in T7/besluit 0049): de
-#  suite draait op ELKE push én pull_request. Blokkerend maken = één repo-admin-
-#  handeling: zet branch protection op `main` met deze job als REQUIRED STATUS
-#  CHECK. De check-naam is bewust gepind (job `name:` hieronder) zodat hij
-#  stabiel te selecteren is: "Cross-tenant isolatie (§15 T1-T14)". Stappen +
-#  motivering staan in `G2-GO-NO-GO-CONTROLEKADER.md` (repo-root) en de
-#  go/no-go-checklist B9. Het AANZETTEN blijft een admin-handeling (Claude Code
-#  bereidt voor + documenteert); de directe-push-flow naar main blijft geldig
-#  zolang er feitelijk één tenant is (Horizon-demo), tot net vóór PGB live.
+#  De suite draait op ELKE push én pull_request. Motivering en stappen staan in
+#  `G2-GO-NO-GO-CONTROLEKADER.md` (repo-root) en de go/no-go-checklist B9.
+#
+#  GATE-STATUS STAAT NIET IN DIT BESTAND (W4, #96). Of deze job blokkeert is
+#  uitsluitend te lezen uit de branch-protection-regel op `main`:
+#      gh api repos/:owner/:repo/branches/main/protection \
+#        --jq '.required_status_checks.contexts[]'
+#  Een comment kan dat niet weten, en op 21-08-2026 hadden drie van de vier
+#  gate-uitspraken in deze map het mis — alle drie onderschattend. Zet die
+#  bewering hier dus niet terug; corrigeren lost één geval op, weglaten lost de
+#  categorie op.
+#
+#  Wat WEL hier hoort: de job-`name` hieronder is de gepinde check-naam.
+#  Hernoem hem niet zonder de branch-protection-regel mee te verzetten — dan
+#  wordt de gate stil losgekoppeld én blijft elke PR hangen op een check die
+#  nooit meldt.
 #
 #  XTENANT_REQUIRE_DB=1 gaat NIET over merge-blokkade maar over test-integriteit
 #  BINNEN deze job: in CI staat de DB er altijd (supabase start), dus een

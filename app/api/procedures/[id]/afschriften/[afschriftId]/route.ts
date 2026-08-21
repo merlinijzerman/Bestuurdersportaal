@@ -6,37 +6,14 @@
 // -----------------------------------------------------------------------------
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
-import { beoordeelRouteHostToegang } from "@/core/lib/tenant-route-guard";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 
 export const dynamic = "force-dynamic";
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string; afschriftId: string }> }
-) {
+export const PATCH = withFondsRoute({ hostGuard: true, label: "procedures.afschrift.intrekken.PATCH" }, async (ctx, req: NextRequest, params) => {
   try {
-    const { id: procedureId, afschriftId } = await params;
-    const supabase = await createServerSupabase();
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam, fonds_id")
-      .eq("id", user.id)
-      .maybeSingle();
-    const hostOordeel = await beoordeelRouteHostToegang({
-      sessieFondsId: profiel?.fonds_id ?? null,
-      gebruikerId: user.id,
-      label: "procedures.afschrift.PATCH",
-    });
-    if (!hostOordeel.toegestaan) {
-      return NextResponse.json({ error: "Dit webadres hoort niet bij uw fonds." }, { status: 403 });
-    }
+    const { id: procedureId, afschriftId } = params as { id: string; afschriftId: string };
+    const supabase = ctx.supabase;
 
     const body = (await req.json().catch(() => ({}))) as { reden?: unknown };
     const reden =
@@ -64,7 +41,7 @@ export async function PATCH(
       .from("procedure_afschriften")
       .update({
         ingetrokken_op: new Date().toISOString(),
-        ingetrokken_door: user.id,
+        ingetrokken_door: ctx.gebruikerId,
         ingetrokken_reden: reden,
       })
       .eq("id", afschriftId)
@@ -84,8 +61,8 @@ export async function PATCH(
     await supabase.from("procedure_log").insert({
       procedure_id: procedureId,
       event_type: "afschrift_ingetrokken",
-      actor_id: user.id,
-      actor_naam: profiel?.naam ?? null,
+      actor_id: ctx.gebruikerId,
+      actor_naam: ctx.naam ?? null,
       payload: { afschrift_id: afschriftId, reden },
     });
 
@@ -94,4 +71,4 @@ export async function PATCH(
     console.error("Fout in PATCH afschrift:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

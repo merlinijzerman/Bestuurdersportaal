@@ -1,9 +1,21 @@
 name: security-baseline
 
-# Eén stabiele status voor de Sprint 1-securityondergrens. Deze job kan in
-# branch protection als verplichte check worden geselecteerd zonder zeven losse
-# workflowstappen te hoeven beheren. De ephemere DB/RLS-suite blijft daarnaast
-# de afzonderlijke verplichte check `Cross-tenant isolatie (§15 T1-T14)`.
+# Eén stabiele status voor de Sprint 1-securityondergrens, zodat branch
+# protection één check kan selecteren i.p.v. zeven losse workflowstappen.
+#
+#  GATE-STATUS STAAT NIET IN DIT BESTAND (W4, #96). Of deze job blokkeert is
+#  uitsluitend te lezen uit de branch-protection-regel op `main`:
+#      gh api repos/:owner/:repo/branches/main/protection \
+#        --jq '.required_status_checks.contexts[]'
+#  Een comment kan dat niet weten, en op 21-08-2026 hadden drie van de vier
+#  gate-uitspraken in deze map het mis — alle drie onderschattend. Zet die
+#  bewering hier dus niet terug; corrigeren lost één geval op, weglaten lost de
+#  categorie op.
+#
+#  Wat WEL hier hoort: de job-`name` hieronder is de gepinde check-naam.
+#  Hernoem hem niet zonder de branch-protection-regel mee te verzetten — dan
+#  wordt de gate stil losgekoppeld én blijft elke PR hangen op een check die
+#  nooit meldt.
 on:
   push:
   pull_request:

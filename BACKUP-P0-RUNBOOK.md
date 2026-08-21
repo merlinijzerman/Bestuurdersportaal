@@ -1,7 +1,7 @@
 # P0 — back-upketen, Storage en restore
 
-**Status:** B2-bewijs en versleutelde kosteloze restorepreflight groen; managed database en Storage hersteld, functionele verificatie nog te hervatten
-**Datum:** 2026-08-19
+**Status:** managed restore-oefening end-to-end groen (run 32345486528, 2026-08-20); alertkanaal vastgesteld op GitHub-notificaties (besluit 0185)
+**Datum:** 2026-08-20
 **Eigenaar:** technisch beheer / incidentleider
 
 ## Wat nu wordt opgeslagen
@@ -37,9 +37,9 @@ Secrets:
 - `SUPABASE_SERVICE_ROLE_KEY` — uitsluitend voor Storage-lezen tijdens de back-up
 - `B2_APPLICATION_KEY_ID` en `B2_APPLICATION_KEY` — write-only voor de back-upworkflow
 - `B2_READONLY_APPLICATION_KEY_ID` en `B2_READONLY_APPLICATION_KEY` — alleen lezen/listen voor de watchdog
-- `BACKUP_ALERT_WEBHOOK_URL` — endpoint van de afgesproken incident-/alertdienst;
-  ontbreekt dit, dan blijft de inhoudelijke B2-controle draaien en faalt alleen
-  de afzonderlijke job `Alertkanaalconfiguratie controleren`
+- `BACKUP_ALERT_WEBHOOK_URL` — **optioneel**. Alleen vereist wanneer
+  `ALERT_CHANNEL` in de watchdog op `webhook` staat. Bij het huidige kanaal
+  `github-native` (besluit 0185) is dit secret niet nodig en wordt het genegeerd
 - `SUPABASE_MANAGEMENT_API_TOKEN` — read-only Management API-token voor de
   platforminventaris; nooit in een artefact of log opnemen
 - `VERCEL_TOKEN` — read-only Vercel-token voor project- en variabelenameninventaris
@@ -102,14 +102,59 @@ tokens of documentinhoud.
 De workflow onderscheidt drie statussen in jobnamen, logs en webhookpayload:
 `back-up mislukt`, `B2-bewijs ongeldig` en `alertkanaal niet geconfigureerd`.
 Een ontbrekend webhooksecret blokkeert de B2-controles niet en mag nooit als een
-mislukte productieback-up worden omschreven. De afzonderlijke configuratiejob
-blijft wel rood totdat een goedgekeurd alertkanaal is ingesteld; zonder werkend
-alertkanaal is de totale P0-keten niet gereed.
+mislukte productieback-up worden omschreven.
 
-Test alertdelivery zonder productieobjecten te wijzigen door de workflow
-`Supabase-back-upbewaking` handmatig te starten met `synthetic_alert=true`. De
-afzonderlijke job `Veilige synthetische alertdelivery` verstuurt een `warning`
-met de expliciete tekst dat geen back-up, marker of B2-object is aangeraakt.
+### Het goedgekeurde meldkanaal
+
+Het kanaal staat als `ALERT_CHANNEL` in `supabase-backup-watchdog.yml`, bewust in
+code en niet in een instelling in de UI: wijzigen vereist een PR en is daarmee
+reviewbaar en terugleesbaar.
+
+Huidige waarde: **`github-native`** (besluit 0185). De rode workflowrun zélf is
+het meldkanaal. Iedere inhoudelijke afwijking roept `send-backup-alert.mjs` aan
+en sluit af met `exit 1`; de run wordt daardoor rood en GitHub stuurt een
+notificatie naar de eigenaar van de workflow.
+
+Die belofte is alleen waar zolang elke afwijking de run ook echt rood maakt. De
+job `Alertkanaalconfiguratie controleren` draait daarom
+`scripts/verify-watchdog-fail-closed.mjs`, die afdwingt dat beide inhoudelijke
+controlejobs bestaan, dat elke vaststellende stap eindigt met `exit 1` en dat
+nergens `continue-on-error` staat. Een onbekende of lege `ALERT_CHANNEL` faalt
+eveneens. Zet je het kanaal op `webhook`, dan eist dezelfde job juist dat
+`BACKUP_ALERT_WEBHOOK_URL` aanwezig is.
+
+Bewust geaccepteerde beperkingen van `github-native`, elk een reden om alsnog
+een toegewijd kanaal in te richten:
+
+- de melding landt in dezelfde inbox als alle overige GitHub-ruis, zonder eigen
+  urgentie, ontvangstbevestiging of escalatie bij uitblijven;
+- GitHub stuurt notificaties over scheduled workflows naar de gebruiker die de
+  workflow heeft aangemaakt; wijzigt iemand anders de cron-expressie, dan
+  verschuift de ontvanger stilzwijgend;
+- er is één ontvanger en geen dienstdoend rooster;
+- een storing bij GitHub Actions maakt zowel de back-up als de melding erover
+  onzichtbaar.
+
+### Veilige negatieve test
+
+Start `Supabase-back-upbewaking` handmatig met `synthetic_alert=true`. Er wordt
+geen back-up, completion marker of B2-object aangeraakt.
+
+- Bij `webhook` verstuurt de job `Veilige synthetische alertdelivery` een
+  `warning` met de expliciete tekst dat niets is aangeraakt.
+- Bij `github-native` maakt diezelfde job de run **met opzet rood**. Dat is het
+  bewijs zelf: alleen een rode run levert de notificatie op. Controleer daarna
+  dat je de GitHub-melding hebt ontvangen; die ontvangstcontrole is onderdeel
+  van de test en kan niet geautomatiseerd worden.
+
+**Laatst volledig bevestigd: 2026-08-20**, run 32348713703 — run rood geworden
+én de GitHub-notificatie aantoonbaar ontvangen. Herhaal deze test bij elke
+wijziging aan de bewaking, en verder minimaal halfjaarlijks: is deze datum meer
+dan zes maanden oud, dan is niet meer aangetoond dat een melding de ontvanger
+nog bereikt. Let daarbij op wie de ontvanger is — GitHub stuurt notificaties
+over scheduled workflows naar de gebruiker die de workflow heeft aangemaakt, en
+die ontvanger verschuift stilzwijgend als iemand anders de cron-expressie
+wijzigt.
 
 ## Platformconfiguratie en secrets
 
@@ -334,11 +379,83 @@ Nieuwe back-ups schrijven het validatiebestand direct in quiet/unaligned vorm.
 - [ ] Read-only B2-sleutel, doelproject en lokale Productiekopieën zijn na
   aftekening verwijderd of vernietigd volgens het privacybeleid.
 
-De cloudrestore is nog niet end-to-end groen bewezen en deze hardening heeft
-geen managed project aangemaakt of restore gestart. Maak of start hiervoor geen
-betaald doelproject zonder de hierboven beschreven afzonderlijke
-kostenautorisatie. Een lokale dry-run of database-restore bewijst niet dat Auth,
-Storage, RLS en de uitwijkdeploy in Supabase Cloud werken.
+### Aangetoond herstel
+
+Run `32345486528` (2026-08-20) heeft alle poorten hierboven groen doorlopen op
+het tijdelijke doelproject `mqeyrsdptapbdmwnrhnq`, vanaf backupmarker
+`backup-status/2026/08/19/manifest-2026-08-19T06-49-24Z.json`. Het geaggregeerde
+bewijsartifact legt vast:
+
+| Onderdeel | Waargenomen |
+|---|---|
+| Database | PostgreSQL 17, inhoudshashes gelijk, 160 policies, 84 triggers, 6 kritieke tabellen met 7.510 rijen, 7 extensies |
+| Auth | 16 gebruikers, 16 identities, 42 instellingen en 27 providerinstellingen vergeleken, 0 afwijkingen |
+| Storage | 4 buckets, 34 objecten, 29.067.773 bytes, per object opnieuw gedownload en op SHA-256 gecontroleerd |
+| Functioneel | 2 echte wachtwoordlogins, 4 positieve en 4 negatieve RLS-controles, 4 cross-tenantweigeringen over 2 tenants |
+| Applicatie | echte browserlogin, dashboard, documentenlijst, geautoriseerde privédownload met veilige headers, cross-tenantdownload geweigerd |
+| Opruiming | 2 canary-users verwijderd, 0 profielresidu, versleuteld volume unmounted, LUKS-mapping gesloten, backing file verwijderd |
+
+Geen enkele secretwaarde, hostnaam, e-mailadres of document-id staat in het
+bewijs; het bevat uitsluitend aantallen en booleans.
+
+Maak of start hiervoor geen nieuw betaald doelproject zonder de hierboven
+beschreven afzonderlijke kostenautorisatie. Een lokale dry-run of
+database-restore bewijst niet dat Auth, Storage, RLS en de uitwijkdeploy in
+Supabase Cloud werken; alleen een managed oefening als deze doet dat.
+
+## Hersteldoelen (RPO en RTO)
+
+**RPO — maximaal aanvaardbaar dataverlies: 24 uur.** De back-up draait dagelijks
+om 01:30 UTC en is pas compleet als de marker is geschreven. Valt Productie vlak
+vóór een geslaagde run uit, dan is de laatste bruikbare marker maximaal iets meer
+dan 24 uur oud. De watchdog waarschuwt boven 26 uur en escaleert boven 48 uur;
+die grenzen zijn bewust ruimer dan 24 uur, zodat één vertraagde run geen vals
+alarm geeft maar een echt gemiste dag wél opvalt.
+
+**RTO — gemeten componenten.** Uit run 32345486528 en de voorgaande oefeningen
+zijn deze stappen daadwerkelijk geklokt op een GitHub-hosted runner:
+
+| Stap | Gemeten |
+|---|---|
+| Volledige managed restore vanaf schoon (database, Auth, Storage-metadata, fysieke objecten) | circa 5 minuten |
+| Hervatte restore met functionele en applicatieverificatie | 3 minuten 30 seconden |
+| Volledige kosteloze preflight met dubbele lokale restore | circa 20 minuten |
+
+Deze cijfers dekken **niet** de volledige uitwijk. Nog niet geklokt, en dus nog
+geen onderdeel van een RTO-toezegging:
+
+- aanmaken en gereedmaken van een vervangend Supabase-project (inclusief regio en
+  plan/compute);
+- opnieuw uitgeven en instellen van Auth-providercredentials, API/JWT-sleutels en
+  overige secrets volgens de checklist onder *Platformconfiguratie en secrets*;
+- DNS-omzetting en propagatie;
+- deploy van de applicatie naar de vervangende omgeving.
+
+Een RTO-toezegging aan het bestuur is pas verantwoord nadat die vier stappen in
+één oefening zijn geklokt. Tot dat moment geldt: de datalaag is aantoonbaar
+binnen tientallen minuten herstelbaar, de volledige dienstverlening niet.
+
+## Escalatie
+
+De escalatieladder hangt aan de drie statussen die de bewaking onderscheidt.
+
+| Trigger | Eerste actie | Escaleer wanneer |
+|---|---|---|
+| `alertkanaal niet geconfigureerd` | Bij `github-native`: de fail-closed controle herstellen die de bewaking rood laat worden. Bij `webhook`: `BACKUP_ALERT_WEBHOOK_URL` instellen. Daarna de synthetische test draaien | Direct bij constatering; de bewaking meldt dan mogelijk niets meer |
+| `B2-bewijs ongeldig` | Marker, checksums en gerefereerde objecten controleren; back-up handmatig herdraaien | Als een tweede run hetzelfde bewijs afkeurt |
+| `back-up mislukt` | Runlog beoordelen en handmatig herdraaien | Als de marker ouder dan 26 uur wordt |
+| Markerouderdom boven 48 uur | Behandelen als P0-incident: er is geen verse herstelbron | Onmiddellijk naar de incidentleider |
+| Restore-oefening faalt ná mutatie op het doel | Hervatten op hetzelfde doelproject met de atomische en hervatbare fasen | Voor een tweede project is nieuwe kostenautorisatie vereist |
+
+Besluitrechten: de eigenaar van dit runbook beslist over herdraaien en
+hervatten. Het aanmaken van een betaald doelproject en het verwijderen van een
+tijdelijk doelproject zijn uitsluitend beslissingen van de opdrachtgever, met de
+kostenautorisatie zoals hierboven beschreven.
+
+De namen, telefoonnummers en meldkanalen van de dienstdoende personen staan
+bewust **niet** in dit bestand — het is een publieke repository. Neem ze op in
+het interne oproepregister en verwijs daar vanuit dit runbook naar zodra dat
+register is ingericht.
 
 ## Lokale controles
 

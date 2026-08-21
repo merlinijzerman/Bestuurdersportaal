@@ -1,20 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { ensureDecisionForProcedure } from "@/core/lib/decision";
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string; itemId: string }> }
-) {
+export const PATCH = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id, itemId } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const { id, itemId } = params as { id: string; itemId: string };
+    const supabase = ctx.supabase;
 
     const body = (await req.json()) as {
       voldaan?: boolean;
@@ -31,12 +22,6 @@ export async function PATCH(
         { status: 400 }
       );
     }
-
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam, rol")
-      .eq("id", user.id)
-      .single();
 
     // Haal item + stap op voor logging
     const { data: item } = await supabase
@@ -68,7 +53,7 @@ export async function PATCH(
     // Voorbehouden aan voorzitter/beheerder; append-only (actief=false i.p.v.
     // verwijderen). De 'voldaan'-toggle hieronder blijft vrij voor elk lid.
     if (typeof body.actief === "boolean") {
-      if (!["voorzitter", "beheerder"].includes(profiel?.rol ?? "")) {
+      if (!["voorzitter", "beheerder"].includes(ctx.rol ?? "")) {
         return NextResponse.json(
           {
             error:
@@ -100,8 +85,8 @@ export async function PATCH(
         event_type: body.actief
           ? "checklistitem_geheractiveerd"
           : "checklistitem_gedeactiveerd",
-        actor_id: user.id,
-        actor_naam: profiel?.naam ?? null,
+        actor_id: ctx.gebruikerId,
+        actor_naam: ctx.naam ?? null,
         object_type: "procedure_checklist",
         object_id: itemId,
         reden,
@@ -118,8 +103,8 @@ export async function PATCH(
         event_type: body.actief
           ? "checklistitem_geheractiveerd"
           : "checklistitem_gedeactiveerd",
-        actor_id: user.id,
-        actor_naam: profiel?.naam || null,
+        actor_id: ctx.gebruikerId,
+        actor_naam: ctx.naam || null,
         payload: { stap: stap.naam, item: item.label, reden },
       });
       return NextResponse.json({ ok: true });
@@ -136,8 +121,8 @@ export async function PATCH(
     const updates: Record<string, unknown> = {
       voldaan: body.voldaan,
       voldaan_op: body.voldaan ? new Date().toISOString() : null,
-      voldaan_door: body.voldaan ? user.id : null,
-      voldaan_door_naam: body.voldaan ? profiel?.naam || null : null,
+      voldaan_door: body.voldaan ? ctx.gebruikerId : null,
+      voldaan_door_naam: body.voldaan ? ctx.naam || null : null,
     };
     if (body.opmerking !== undefined) {
       updates.opmerking = body.opmerking || null;
@@ -156,8 +141,8 @@ export async function PATCH(
       await supabase.from("procedure_log").insert({
         procedure_id: id,
         event_type: body.voldaan ? "checklistitem_voldaan" : "checklistitem_geopend",
-        actor_id: user.id,
-        actor_naam: profiel?.naam || null,
+        actor_id: ctx.gebruikerId,
+        actor_naam: ctx.naam || null,
         payload: { stap: stap.naam, item: item.label },
       });
     }
@@ -167,4 +152,4 @@ export async function PATCH(
     console.error("Fout in PATCH /api/procedures/[id]/checklist/[itemId]:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

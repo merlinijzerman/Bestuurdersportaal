@@ -1,23 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 
 // Per-proces fase-toelichting (WO-2-vervolg). Upsert op (procedure_id, fase_code).
 // Server-side gegate op voorzitter/beheerder; fonds_id wordt server-side
 // afgeleid (nooit uit de request). De RLS-policy op procedure_fase_toelichting
 // dwingt hetzelfde af (defense-in-depth).
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const POST = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const { id } = params as { id: string };
+    const supabase = ctx.supabase;
 
     const body = (await req.json()) as {
       fase_code?: string;
@@ -31,12 +22,7 @@ export async function POST(
       );
     }
 
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("fonds_id, naam, rol")
-      .eq("id", user.id)
-      .single();
-    if (!["voorzitter", "beheerder"].includes(profiel?.rol ?? "")) {
+    if (!["voorzitter", "beheerder"].includes(ctx.rol ?? "")) {
       return NextResponse.json(
         { error: "Alleen voorzitter of beheerder kan een fase-toelichting bewerken" },
         { status: 403 }
@@ -49,7 +35,7 @@ export async function POST(
       .select("id, fonds_id")
       .eq("id", id)
       .single();
-    if (!procedure || procedure.fonds_id !== profiel?.fonds_id) {
+    if (!procedure || procedure.fonds_id !== ctx.fondsId) {
       return NextResponse.json(
         { error: "Procedure hoort niet bij dit fonds" },
         { status: 400 }
@@ -75,7 +61,7 @@ export async function POST(
           fase_code: faseCode,
           toelichting,
           fonds_id: procedure.fonds_id,
-          aangepast_door: user.id,
+          aangepast_door: ctx.gebruikerId,
           aangepast_op: new Date().toISOString(),
         },
         { onConflict: "procedure_id,fase_code" }
@@ -88,8 +74,8 @@ export async function POST(
     await supabase.from("procedure_log").insert({
       procedure_id: id,
       event_type: "fase_toelichting_bijgewerkt",
-      actor_id: user.id,
-      actor_naam: profiel?.naam || null,
+      actor_id: ctx.gebruikerId,
+      actor_naam: ctx.naam || null,
       payload: { fase_code: faseCode, leeg: toelichting === null },
     });
 
@@ -98,4 +84,4 @@ export async function POST(
     console.error("Fout in POST /api/procedures/[id]/fase-toelichting:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

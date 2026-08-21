@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { notifyUser } from "@/core/lib/notifications";
 import { isBureauRol, BUREAU_WEIGERING } from "@/core/lib/bureau-gate";
 import {
@@ -19,19 +19,10 @@ import {
 //  bewijs in procedure_bewijs met expliciete stemming_id-FK.
 //  Notificeert starter + tegen-stemmers.
 // ============================================================
-export async function POST(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const POST = withFondsRoute({}, async (ctx, _req: NextRequest, params) => {
   try {
-    const { id: stemmingId } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const { id: stemmingId } = params as { id: string };
+    const supabase = ctx.supabase;
 
     const { data: stemming } = await supabase
       .from("stemmingen")
@@ -64,19 +55,14 @@ export async function POST(
     }
 
     // Rolcheck
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("rol")
-      .eq("id", user.id)
-      .maybeSingle();
-    const rol = (profiel as { rol?: string } | null)?.rol;
+    const rol = ctx.rol;
     // T1 bureau-rol (§5.3): geen stemronde sluiten. Vóór de starter-tak, om
     // dezelfde reden als bij het openen (zie /api/stemmingen POST).
     if (isBureauRol(rol)) {
       return NextResponse.json({ error: BUREAU_WEIGERING.stemronde }, { status: 403 });
     }
     const isPrivileged = rol === "voorzitter" || rol === "beheerder";
-    if (st.geopend_door !== user.id && !isPrivileged) {
+    if (st.geopend_door !== ctx.gebruikerId && !isPrivileged) {
       return NextResponse.json(
         { error: "Alleen de starter, voorzitter of beheerder mag de stemronde sluiten" },
         { status: 403 }
@@ -148,7 +134,7 @@ export async function POST(
       .update({
         status: "gesloten",
         gesloten_op: new Date().toISOString(),
-        gesloten_door: user.id,
+        gesloten_door: ctx.gebruikerId,
         uitslag,
       })
       .eq("id", stemmingId)
@@ -181,7 +167,7 @@ export async function POST(
         stemming_id: stemmingId,
         titel: `Stemverslag — ${st.vraag.slice(0, 160)}`,
         beschrijving: `Uitslag: ${winnaarLabel} (${samenvatting}). Quorum: ${uitslag.quorum_status}, meerderheid: ${uitslag.meerderheid_status}.`,
-        toegevoegd_door: user.id,
+        toegevoegd_door: ctx.gebruikerId,
       });
     }
 
@@ -211,7 +197,7 @@ export async function POST(
           {
             gerelateerd_aan_type: "agendapunt",
             gerelateerd_aan_id: st.agendapunt_id,
-            actor_id: user.id,
+            actor_id: ctx.gebruikerId,
           }
         )
       )
@@ -222,4 +208,4 @@ export async function POST(
     console.error("Fout in POST /api/stemmingen/[id]/sluiten:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

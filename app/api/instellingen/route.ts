@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { requireCapability } from "@/core/lib/capabilities";
 import { errorResponse } from "@/core/lib/api-errors";
 import {
@@ -34,30 +34,14 @@ import {
 //  RLS beperkt alles tot het eigen fonds; de schrijf-rolgate zit óók in de DB.
 // ============================================================
 
-async function fondsVanGebruiker() {
-  const supabase = await createServerSupabase();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { supabase, user: null, profiel: null };
-  const { data: profiel } = await supabase
-    .from("profielen")
-    .select("naam, fonds_id, rol")
-    .eq("id", user.id)
-    .single();
-  return { supabase, user, profiel };
-}
-
-export async function GET() {
+export const GET = withFondsRoute({}, async (ctx) => {
   try {
-    const { user, profiel } = await fondsVanGebruiker();
-    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    if (!profiel?.fonds_id)
+    if (!ctx.fondsId)
       return NextResponse.json({ error: "Geen fonds" }, { status: 400 });
 
-    const magBeheren = await requireCapability(user.id, "fonds.config.manage");
-    const config = await haalFondsConfig(profiel.fonds_id);
-    const historie = await haalConfigHistorie(profiel.fonds_id, 50);
+    const magBeheren = await requireCapability(ctx.gebruikerId, "fonds.config.manage");
+    const config = await haalFondsConfig(ctx.fondsId);
+    const historie = await haalConfigHistorie(ctx.fondsId, 50);
 
     // Besluit 0137: het beheerscherm moet de EFFECTIEVE bronkeuze-modus én de
     // herkomst tonen (fonds → env → default), niet alleen de ruwe fonds-vlag —
@@ -67,12 +51,12 @@ export async function GET() {
       bronkeuzeVlag,
       process.env.BRONKEUZE_MODUS
     );
-    const vraagrouterVlaggen = await vraagrouterVlaggenVoorFonds(profiel.fonds_id);
+    const vraagrouterVlaggen = await vraagrouterVlaggenVoorFonds(ctx.fondsId);
 
     return NextResponse.json({
       mag_beheren: magBeheren,
-      hybride_zoeken: await hybrideZoekenAan(profiel.fonds_id),
-      representatie_constraints: await representatieConstraintsAan(profiel.fonds_id),
+      hybride_zoeken: await hybrideZoekenAan(ctx.fondsId),
+      representatie_constraints: await representatieConstraintsAan(ctx.fondsId),
       bronkeuze_modus: {
         effectief: bronkeuze.modus,
         herkomst: bronkeuze.herkomst,
@@ -104,22 +88,20 @@ export async function GET() {
     console.error("Instellingen GET fout:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});
 
-export async function POST(req: NextRequest) {
+export const POST = withFondsRoute({}, async (ctx, req: NextRequest) => {
   try {
-    const { user, profiel } = await fondsVanGebruiker();
-    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    if (!profiel?.fonds_id)
+    if (!ctx.fondsId)
       return NextResponse.json({ error: "Geen fonds" }, { status: 400 });
 
     // Autorisatie: server-side capability-gate (naast de RLS-rolgate op de tabellen).
-    const magBeheren = await requireCapability(user.id, "fonds.config.manage");
+    const magBeheren = await requireCapability(ctx.gebruikerId, "fonds.config.manage");
     if (!magBeheren)
       return NextResponse.json({ error: "Onvoldoende rechten" }, { status: 403 });
 
-    const fondsId = profiel.fonds_id; // server-side afgeleid, nooit uit de body
-    const actor = { id: user.id, naam: profiel.naam ?? null };
+    const fondsId = ctx.fondsId; // server-side afgeleid, nooit uit de body
+    const actor = { id: ctx.gebruikerId, naam: ctx.naam ?? null };
     const body = (await req.json()) as Record<string, unknown>;
 
     // ── Legacy-vorm: { hybride_zoeken: boolean } → feature-flag-write ──────────
@@ -185,4 +167,4 @@ export async function POST(req: NextRequest) {
     // rechtstreeks naar de client. Nu server-side loggen, generiek antwoorden.
     return errorResponse("instellingen.POST", e);
   }
-}
+});

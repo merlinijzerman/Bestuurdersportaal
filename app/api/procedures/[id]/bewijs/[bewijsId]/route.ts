@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 
 // Bewijsstuk-mutaties op een lopende procedure (WO-2-vervolg):
 //  • PATCH  — een document koppelen aan een vooraf opgegeven (titel-only)
@@ -35,19 +36,10 @@ async function haalContext(
   return { bewijs, stap } as const;
 }
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string; bewijsId: string }> }
-) {
+export const PATCH = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id, bewijsId } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const { id, bewijsId } = params as { id: string; bewijsId: string };
+    const supabase = ctx.supabase;
 
     const body = (await req.json()) as {
       document_id?: string | null;
@@ -60,16 +52,10 @@ export async function PATCH(
       );
     }
 
-    const ctx = await haalContext(supabase, id, bewijsId);
-    if ("fout" in ctx) {
-      return NextResponse.json({ error: ctx.fout }, { status: ctx.status });
+    const bewijsCtx = await haalContext(supabase, id, bewijsId);
+    if ("fout" in bewijsCtx) {
+      return NextResponse.json({ error: bewijsCtx.fout }, { status: bewijsCtx.status });
     }
-
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam, fonds_id")
-      .eq("id", user.id)
-      .single();
 
     // Document moet bestaan én van het eigen fonds zijn (RLS scopet documenten
     // al; deze check geeft een nette 400 i.p.v. een stille mismatch).
@@ -78,7 +64,7 @@ export async function PATCH(
       .select("id, fonds_id, titel")
       .eq("id", body.document_id)
       .single();
-    if (!doc || doc.fonds_id !== profiel?.fonds_id) {
+    if (!doc || doc.fonds_id !== ctx.fondsId) {
       return NextResponse.json(
         { error: "Document niet gevonden in dit fonds" },
         { status: 400 }
@@ -102,9 +88,9 @@ export async function PATCH(
     await supabase.from("procedure_log").insert({
       procedure_id: id,
       event_type: "bewijs_document_gekoppeld",
-      actor_id: user.id,
-      actor_naam: profiel?.naam || null,
-      payload: { stap: ctx.stap.naam, titel: ctx.bewijs.titel, document: doc.titel },
+      actor_id: ctx.gebruikerId,
+      actor_naam: ctx.naam || null,
+      payload: { stap: bewijsCtx.stap.naam, titel: bewijsCtx.bewijs.titel, document: doc.titel },
     });
 
     return NextResponse.json({ ok: true });
@@ -112,38 +98,23 @@ export async function PATCH(
     console.error("Fout in PATCH /api/procedures/[id]/bewijs/[bewijsId]:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});
 
-export async function DELETE(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string; bewijsId: string }> }
-) {
+export const DELETE = withFondsRoute({}, async (ctx, _req: NextRequest, params) => {
   try {
-    const { id, bewijsId } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const { id, bewijsId } = params as { id: string; bewijsId: string };
+    const supabase = ctx.supabase;
 
-    const ctx = await haalContext(supabase, id, bewijsId);
-    if ("fout" in ctx) {
-      return NextResponse.json({ error: ctx.fout }, { status: ctx.status });
+    const bewijsCtx = await haalContext(supabase, id, bewijsId);
+    if ("fout" in bewijsCtx) {
+      return NextResponse.json({ error: bewijsCtx.fout }, { status: bewijsCtx.status });
     }
-
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam, rol")
-      .eq("id", user.id)
-      .single();
 
     // Verwijderen mag de indiener zelf (eigen vergissing herstellen) of een
     // voorzitter/beheerder (dossierbeheer). De RLS-policy borgt daarnaast dat
     // het sowieso binnen het eigen fonds blijft.
-    const isPrivileged = ["voorzitter", "beheerder"].includes(profiel?.rol ?? "");
-    const isIndiener = ctx.bewijs.toegevoegd_door === user.id;
+    const isPrivileged = ["voorzitter", "beheerder"].includes(ctx.rol ?? "");
+    const isIndiener = bewijsCtx.bewijs.toegevoegd_door === ctx.gebruikerId;
     if (!isPrivileged && !isIndiener) {
       return NextResponse.json(
         {
@@ -156,9 +127,9 @@ export async function DELETE(
 
     // Snapshot van de te loggen velden vóór de delete (de rij is straks weg).
     const logPayload = {
-      stap: ctx.stap.naam,
-      titel: ctx.bewijs.titel,
-      document_id: ctx.bewijs.document_id ?? null,
+      stap: bewijsCtx.stap.naam,
+      titel: bewijsCtx.bewijs.titel,
+      document_id: bewijsCtx.bewijs.document_id ?? null,
     };
 
     const { error: delFout } = await supabase
@@ -176,8 +147,8 @@ export async function DELETE(
     await supabase.from("procedure_log").insert({
       procedure_id: id,
       event_type: "bewijs_verwijderd",
-      actor_id: user.id,
-      actor_naam: profiel?.naam || null,
+      actor_id: ctx.gebruikerId,
+      actor_naam: ctx.naam || null,
       payload: logPayload,
     });
 
@@ -186,4 +157,4 @@ export async function DELETE(
     console.error("Fout in DELETE /api/procedures/[id]/bewijs/[bewijsId]:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

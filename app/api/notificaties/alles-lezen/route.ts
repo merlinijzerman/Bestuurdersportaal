@@ -6,17 +6,11 @@
 // ============================================================
 
 import { NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 
-export async function POST() {
+export const POST = withFondsRoute({}, async (ctx) => {
   try {
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const supabase = ctx.supabase;
 
     const { error, count } = await supabase
       .from("notificaties")
@@ -33,4 +27,4 @@ export async function POST() {
     console.error("Fout in POST /api/notificaties/alles-lezen:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

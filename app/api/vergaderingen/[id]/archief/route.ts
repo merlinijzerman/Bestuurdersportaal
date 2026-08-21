@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import {
   magArchiveren,
   magDearchiveren,
@@ -43,28 +43,13 @@ type VergaderingRij = {
   gearchiveerd_op: string | null;
 };
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const POST = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const { id } = params as { id: string };
+    const supabase = ctx.supabase;
 
     const body = (await req.json().catch(() => ({}))) as { actie?: string };
     const actie = body.actie === "terughalen" ? "terughalen" : "archiveren";
-
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam, fonds_id")
-      .eq("id", user.id)
-      .single();
 
     const { data: rij } = await supabase
       .from("vergaderingen")
@@ -78,7 +63,7 @@ export async function POST(
     const vergadering = rij as VergaderingRij;
 
     // Tweede linie naast RLS: expliciet, met een leesbare melding.
-    if (!profiel?.fonds_id || vergadering.fonds_id !== profiel.fonds_id) {
+    if (!ctx.fondsId || vergadering.fonds_id !== ctx.fondsId) {
       return NextResponse.json(
         { error: "Deze vergadering hoort niet bij uw fonds." },
         { status: 403 }
@@ -99,7 +84,7 @@ export async function POST(
       .from("vergaderingen")
       .update(
         actie === "archiveren"
-          ? { gearchiveerd_op: nu, gearchiveerd_door: user.id }
+          ? { gearchiveerd_op: nu, gearchiveerd_door: ctx.gebruikerId }
           : { gearchiveerd_op: null, gearchiveerd_door: null }
       )
       .eq("id", id)
@@ -121,9 +106,9 @@ export async function POST(
       vergadering_id: id,
       event_type:
         actie === "archiveren" ? "vergadering_gearchiveerd" : "vergadering_gedearchiveerd",
-      actor_id: user.id,
+      actor_id: ctx.gebruikerId,
       payload: {
-        actor_naam: profiel?.naam ?? null,
+        actor_naam: ctx.naam ?? null,
         // Snapshot: de titel kan later wijzigen, het log moet zelfstandig
         // leesbaar blijven.
         titel_snapshot: vergadering.titel,
@@ -139,4 +124,4 @@ export async function POST(
     console.error("Fout in POST /api/vergaderingen/[id]/archief:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});
