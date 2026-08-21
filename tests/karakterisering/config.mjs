@@ -51,6 +51,18 @@ export const FIX = {
   vergadering1: "00000000-0000-4000-8000-00000000e601",
   agendapunt1: "00000000-0000-4000-8000-0000000a9001",
   agendapuntVerwijderd: "00000000-0000-4000-8000-0000000a9002",
+
+  // ── W4 — fixtures voor de muterende routes ────────────────────────────────
+  //  Elk scenario dat een GESLAAGDE mutatie vastlegt krijgt een EIGEN UUID en
+  //  een eigen preseed (W4 §4). Zo is de snapshot herhaalbaar zonder dat de
+  //  volgorde van de scenariolijst dragend wordt.
+  //
+  //  notificaties — bewust op voorzitter/beheerder, NIET op bestuurder: de
+  //  bestaande snapshot `w3.notificaties.get.bestuurder` legt een LEGE lijst
+  //  vast, en die zou anders meebewegen met de volgorde van de lus.
+  notificatieLezen: "00000000-0000-4000-8000-00000000f001",   // voorzitter
+  notificatieAlles: "00000000-0000-4000-8000-00000000f002",   // beheerder
+  notificatieOnbekend: "00000000-0000-4000-8000-00000000f0ff",
 };
 
 export const AFSCHRIFT1_PAD = `${FONDS_ID}/w1-afschrift.pdf`;

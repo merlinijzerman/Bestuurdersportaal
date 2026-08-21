@@ -18,7 +18,7 @@
 //  (zware seed; dezelfde wrapper al gedekt via 401/404/400).
 // ============================================================================
 import { LIMIET_ZOEKEN, LIMIET_ZOEKEN_ENDPOINT } from "./ratelimit-const.mjs";
-import { FIX } from "./config.mjs";
+import { FIX, FONDS_ID } from "./config.mjs";
 
 const LEEG = {};
 
@@ -180,4 +180,69 @@ export const scenarios = [
   { slug: "w3.procedures-afschriften.get.anon", method: "GET", path: `/api/procedures/${FIX.procedure1}/afschriften`, rol: "anon", verwacht: "json" },
   { slug: "w3.procedures-afschriften.get.bestuurder", method: "GET", path: `/api/procedures/${FIX.procedure1}/afschriften`, rol: "bestuurder", verwacht: "json" },
   { slug: "w3.procedures-afschriften.get.bestuursbureau", method: "GET", path: `/api/procedures/${FIX.procedure1}/afschriften`, rol: "bestuursbureau", verwacht: "json" },
+
+  // ══ W4 — de muterende routes ═══════════════════════════════════════════════
+  //
+  //  seed() draait ÉÉN keer, vóór de lus (run.mjs). Elk scenario dat een
+  //  GESLAAGDE mutatie vastlegt zet daarom zijn eigen fixture vers in `preseed`,
+  //  op een EIGEN UUID. Zonder dat wordt de volgorde van deze lijst dragend:
+  //  de tweede geslaagde mutatie op dezelfde rij ziet het effect van de eerste,
+  //  en `--record` zou dat als "gedrag" vastleggen (W4 §4).
+  //
+  //  Afwijzingspaden (401/400/403/404/…) muteren niets en hebben geen preseed
+  //  nodig.
+
+  // ── /api/notificaties/[id]/lezen — PATCH · [id] · idempotent ───────────────
+  //  Ontvanger is bewust VOORZITTER: `w3.notificaties.get.bestuurder` legt een
+  //  lege lijst vast, en een fixture op bestuurder zou die laten meebewegen met
+  //  de volgorde van de lus.
+  { slug: "w4.notificaties-lezen.patch.anon", method: "PATCH", path: `/api/notificaties/${FIX.notificatieLezen}/lezen`, rol: "anon", verwacht: "json" },
+  {
+    slug: "w4.notificaties-lezen.patch.voorzitter.200-geupdatet",
+    method: "PATCH",
+    path: `/api/notificaties/${FIX.notificatieLezen}/lezen`,
+    rol: "voorzitter",
+    verwacht: "json",
+    preseed: async ({ admin, users }) => {
+      await admin.from("notificaties").delete().eq("id", FIX.notificatieLezen);
+      const { error } = await admin.from("notificaties").insert({
+        id: FIX.notificatieLezen,
+        ontvanger_id: users.voorzitter.userId,
+        fonds_id: FONDS_ID,
+        type: "procedure_afgerond",
+        payload: { w4: "karakterisering" },
+        gelezen_op: null,
+      });
+      if (error) throw new Error(`preseed notificatieLezen: ${error.message}`);
+    },
+  },
+  // Onbekende id → géén fout, wel `geupdatet: false`. Muteert niets.
+  { slug: "w4.notificaties-lezen.patch.voorzitter.onbekend", method: "PATCH", path: `/api/notificaties/${FIX.notificatieOnbekend}/lezen`, rol: "voorzitter", verwacht: "json" },
+
+  // ── /api/notificaties/alles-lezen — POST · bulk-update met exact-count ─────
+  //  `count` telt ÁLLE ongelezen rijen van de beller. De preseed maakt de
+  //  beheerder-inbox daarom eerst leeg en zet er precies één terug, zodat
+  //  `aantal_gewijzigd` deterministisch 1 is — ongeacht wat eerder in de lus
+  //  gedraaid heeft.
+  { slug: "w4.notificaties-alles-lezen.post.anon", method: "POST", path: "/api/notificaties/alles-lezen", rol: "anon", body: LEEG, verwacht: "json" },
+  {
+    slug: "w4.notificaties-alles-lezen.post.beheerder.200",
+    method: "POST",
+    path: "/api/notificaties/alles-lezen",
+    rol: "beheerder",
+    body: LEEG,
+    verwacht: "json",
+    preseed: async ({ admin, users }) => {
+      await admin.from("notificaties").delete().eq("ontvanger_id", users.beheerder.userId);
+      const { error } = await admin.from("notificaties").insert({
+        id: FIX.notificatieAlles,
+        ontvanger_id: users.beheerder.userId,
+        fonds_id: FONDS_ID,
+        type: "besluit_geregistreerd",
+        payload: { w4: "karakterisering" },
+        gelezen_op: null,
+      });
+      if (error) throw new Error(`preseed notificatieAlles: ${error.message}`);
+    },
+  },
 ];
