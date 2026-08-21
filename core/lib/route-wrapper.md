@@ -112,3 +112,46 @@ Capability-checks, schemavalidatie, rate limiting, auditconsolidatie, of het
 uitsturen van `x-request-id` — dat is **deploy 3**. Elke control die je hier
 toevoegt maakt v1 gedragsveranderend en breekt de byte-identiteit die dit hele
 spoor mogelijk maakt.
+
+## Wat in W3 in de praktijk anders bleek (lees vóór W4)
+
+De acht W3-routes leverden vier verfijningen op het recept op. De
+diff-classificatie (`tests/karakterisering/classificeer-diff.mjs`) kent ze
+inmiddels; W4 kan erop leunen.
+
+1. **Houd body-churn nul met lokale aliassen.** Naast `const supabase =
+   ctx.supabase;` ook `const fondsId = ctx.fondsId;` /
+   `const bureau = isBureauRol(ctx.rol);` — dus de lokale variabele behouden i.p.v.
+   elke body-regel naar `ctx.*` herschrijven. Dat houdt de diff minimaal en de
+   classificatie triviaal `conform`. Alleen waar de route de waarde één keer
+   gebruikt, mag de substitutie (`user.id → ctx.gebruikerId`, `profiel?.rol →
+   ctx.rol`) inline.
+
+2. **Gesplitste signaturen en calls.** `[id]`-routes hebben vaak een handler-
+   signatuur over vier regels (`export async function GET(` / `_req: NextRequest,`
+   / `{ params }: { params: Promise<{ id: string }> }` / `) {`) en host-guard-/
+   403-blokken over meerdere regels. Die collapsen naar één wrapper-regel; de
+   classifier herkent de fragmenten. Voor `[id]`-routes: `const { id } = params as
+   { id: string };` (géén `await params`), en de handler-arg-volgorde
+   `(ctx, _req: NextRequest, params)`.
+
+3. **Laat de `NextRequest`-import staan en annoteer de req-parameter.** Anders
+   wordt de import ongebruikt en zou je hem "even" moeten opruimen — dat is een
+   niet-mechanische wijziging. `async (ctx, req: NextRequest)` /
+   `async (ctx, _req: NextRequest, params)` houdt de import eerlijk gebruikt.
+
+4. **Host-guard-ordening bij een route met een eigen `if (!fondsId)`-403.**
+   `aqlab/assurance` en `zoeken` deden vroeger `if (!fondsId) → <eigen 403>` VÓÓR
+   de host-guard. De wrapper draait de host-guard juist vóór de handler. Onder
+   `TENANT_ENFORCE≠on` (observe — de test-/standaardconfig) is de guard
+   transparant, dus byte-identiek. Onder `TENANT_ENFORCE=on` kan een gebruiker
+   zónder fonds de host-guard-403 krijgen i.p.v. de eigen 403 (zelfde status,
+   andere body). Dat is een **`BESLUIT:`** per route, geen stilzwijgende aanname.
+   Laat de eigen `if (!fondsId)`-tak altijd IN de handler staan.
+
+**De classificatie is de poort, niet het harnas alleen.** Het harnas bewijst
+gedrag (byte-identiek); de classifier bewijst dat de diff mechanisch is. In W3 is
+aangetoond dat een verboden "betere foutmelding" op het 500-pad het harnas groen
+liet maar door de classifier als `afwijkend` werd gevangen. Draai in W4 ná elke
+route `node tests/karakterisering/classificeer-diff.mjs`; een `afwijkend` is een
+regel om te lezen, geen bug in het script.
