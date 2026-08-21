@@ -50,13 +50,20 @@ const TOEGESTAAN_TOEGEVOEGD = [
   /^const supabase = ctx\.supabase;$/,
   // Lokale alias die body-churn nul houdt: const X = ctx.(fondsId|rol|naam|gebruikerId);
   /^const \w+ = ctx\.(fondsId|rol|naam|gebruikerId);$/,
+  // [id]-route: params is bij de wrapper al ge-awaite -> cast i.p.v. await.
+  /^const \{ [\w:\s]+ \} = params as \{[^}]*\};$/,
 ];
 
 // Verwijderingen die het recept voorschrijft (de preamble die de wrapper overneemt).
 const TOEGESTAAN_VERWIJDERD = [
   /^import \{ createServerSupabase \} from "@\/core\/lib\/supabase-server";$/,
   /^import \{ beoordeelRouteHostToegang \} from "@\/core\/lib\/tenant-route-guard";$/,
-  /^export async function (GET|POST|PATCH|PUT|DELETE|HEAD|OPTIONS)\s*\(.*\)\s*\{$/,
+  // Oude handler-signatuur — één regel of gesplitst over meerdere regels:
+  //   export async function GET(          _req: NextRequest,
+  //   { params }: { params: Promise<{ id: string }> }          ) {
+  /^export async function (GET|POST|PATCH|PUT|DELETE|HEAD|OPTIONS)\s*\(/,
+  /^_?\w+: NextRequest,?$/,
+  /^\{ params \}: \{ params: Promise<\{[^}]*\}> \},?$/,
   /^const supabase = await createServerSupabase\(\);$/,
   // getUser — één regel of gesplitst.
   /supabase\.auth\.getUser\(\)/,
@@ -65,28 +72,50 @@ const TOEGESTAAN_VERWIJDERD = [
   // 401-tak — één regel of gesplitst.
   /error: "Niet ingelogd"/,
   /^if \(!user\)\s*\{?$/,
-  // Eigen profiel-select (subset ≤4 kolommen) die haalProfiel vervangt.
+  // [id]-route: de oude await-params-vorm.
+  /^const \{ [\w:\s]+ \} = await params;$/,
+  // Eigen profiel-select (subset ≤4 kolommen) die haalProfiel vervangt — één
+  // regel of als method-chain over meerdere regels. De fragmenten zijn strak
+  // begrensd: alleen profielkolommen, alleen de id=user-filter, alleen de
+  // single-terminator. Een échte query-verwijdering matcht hier niet.
   /^const \{ data: profiel \} = await supabase\b/,
   /\.from\("profielen"\)/,
+  /^\.select\("(id|naam|rol|fonds_id)(,\s*(id|naam|rol|fonds_id))*"\)$/,
+  /^\.eq\("id",\s*user\.id\)$/,
+  /^\.(maybeSingle|single)\(\);?$/,
   /^const fondsId = profiel\?\.fonds_id/,
   /^const \w+ = profiel\?\.(rol|naam|fonds_id)/,
-  // Host-guard-blok.
+  // Host-guard-blok — call-opener, argument-regels en de 403-return, één regel
+  // of gesplitst. De opener/terminator/status dragen geen tekst; de body-tekst
+  // ("Dit webadres…") is de poort die een afwijkende 403 alsnog zou markeren.
   /beoordeelRouteHostToegang/,
   /\bhostOordeel\b/,
   /\bsessieFondsId\b/,
+  /^gebruikerId: (user\.id|ctx\.gebruikerId),?$/,
+  /^label: "[\w.\-]+",?$/,
   /error: "Dit webadres hoort niet bij uw fonds\."/,
+  // Gesplitste NextResponse.json(...)-return van een gesanctioneerde fout: de
+  // opener, de status-regel en de sluiter. De error-regel wordt apart getoetst.
+  /^return NextResponse\.json\($/,
+  /^\{ status: (401|403) \},?$/,
 ];
 
-// Structurele sluiters van verwijderde blokken (dragen geen semantiek).
-const STRUCTUUR = [/^\}\)?;?$/, /^\)\;?$/, /^\{$/];
+// Structurele haakjes zonder semantiek (bv. de `) {` van een gesplitste
+// signatuur, de wrapper-sluiter `});`, losse blok-braces).
+const STRUCTUUR = [/^\}\)?;?$/, /^\)\;?$/, /^\)\s*\{$/, /^\{$/];
 
 // Verwijderde commentaarregels: het weghalen van preamble-commentaar verandert
 // geen gedrag. Toegevoegd commentaar wordt NIET gesanctioneerd (dat is initiatief).
 const isCommentaar = (l) => l.startsWith("//");
 
-// Toegestane token-substituties in body-regels.
+// Toegestane token-substituties in body-regels: de vier haalProfiel-velden en
+// het gebruiker-id. Meer niet — een andere tekstwijziging blijft afwijkend.
 function substitueer(regel) {
-  return regel.replace(/\buser\.id\b/g, "ctx.gebruikerId");
+  return regel
+    .replace(/\buser\.id\b/g, "ctx.gebruikerId")
+    .replace(/\bprofiel\?\.rol\b/g, "ctx.rol")
+    .replace(/\bprofiel\?\.naam\b/g, "ctx.naam")
+    .replace(/\bprofiel\?\.fonds_id\b/g, "ctx.fondsId");
 }
 
 const matcht = (regels, regel) => regels.some((re) => re.test(regel));
