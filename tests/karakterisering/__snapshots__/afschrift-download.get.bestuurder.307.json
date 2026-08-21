@@ -1,6 +1,6 @@
 {
   "body": {
-    "location_pad": "/storage/v1/object/sign/afschriften/00000000-0000-4000-8000-000000000001/w1-afschrift.pdf"
+    "location_vorm": "<supabase>/storage/v1/object/sign/afschriften/<uuid>/w1-afschrift.pdf?download=<geredigeerd>&token=<geredigeerd>"
   },
   "headers": {},
   "status": 307

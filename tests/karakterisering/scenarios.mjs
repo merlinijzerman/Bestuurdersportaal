@@ -9,8 +9,13 @@
 //    body      request-body (JSON) — optioneel
 //    rawBody   ruwe request-body zonder JSON.stringify — optioneel; voor
 //              scenario's die juist een ONGELDIGE body moeten sturen
-//    verwacht  'json' | 'bytes' | 'redirect' — bepaalt de snapshotvorm
+//    verwacht  'json' | 'bytes' | 'bestand' | 'vorm' | 'redirect' — bepaalt de
+//              snapshotvorm. W5 voegde 'bestand' (status+headers+bytelengte, geen
+//              hash) en 'vorm' (status+headers, body expliciet niet) toe; zie de
+//              BESLUIT-blokken in run.mjs voor wanneer welke.
 //    headers   extra request-headers — optioneel
+//    headersExtra  extra RESPONS-headers om te vergelijken (W5: nosniff op de
+//              downloadroutes) — optioneel
 //    preseed   async (ctx) => {}  — DB-voorbewerking vóór het request
 //
 //  62 scenario's over 25 routes; elke §3-variant gedekt. Happy path + 401 +
@@ -19,7 +24,14 @@
 //  Bewust uitgesloten: SSE/LLM-routes (W5) en de besluit-graaf-happy-paths
 //  (zware seed; dezelfde wrapper al gedekt via 401/404/400).
 // ============================================================================
-import { LIMIET_ZOEKEN, LIMIET_ZOEKEN_ENDPOINT } from "./ratelimit-const.mjs";
+import {
+  LIMIET_ZOEKEN,
+  LIMIET_ZOEKEN_ENDPOINT,
+  LIMIET_CHAT,
+  LIMIET_CHAT_ENDPOINT,
+  LIMIET_VOORBEREIDING,
+  LIMIET_VOORBEREIDING_ENDPOINT,
+} from "./ratelimit-const.mjs";
 import { FIX, FONDS_ID } from "./config.mjs";
 
 const LEEG = {};
@@ -66,6 +78,39 @@ async function zetAgendapuntBesluit(admin, users, id = FIX.agendapuntBesluit) {
  *  §4, alleen dan via een teller in plaats van via een fixture. */
 async function wisLimiet(admin, endpoint) {
   await wis(admin, "rate_limit_events", { endpoint });
+}
+
+/** Vult de teller tot precies de limiet, zodat de volgende aanroep 429 geeft.
+ *  Eerst wissen: zonder dat telt wat een eerdere ronde liet staan mee, en dan is
+ *  het scenario 429 om de verkeerde reden. */
+async function vulLimiet(admin, uid, endpoint, limiet) {
+  await wis(admin, "rate_limit_events", { gebruiker_id: uid, endpoint });
+  const rijen = Array.from({ length: limiet }, () => ({ gebruiker_id: uid, endpoint }));
+  const { error } = await admin.from("rate_limit_events").insert(rijen);
+  if (error) throw new Error(`preseed rate_limit_events(${endpoint}): ${error.message}`);
+}
+
+/** Eigen besluit voor de auditdossier-route, met een LEEG gebeurtenissenspoor.
+ *
+ *  De route schrijft zelf een `auditdossier_geexporteerd`-event, en de
+ *  dossier-view rendert `view.events`. Zonder wissen groeit het antwoord dus per
+ *  verify-ronde: ronde 1 nul events, ronde 2 één, ronde 3 twee. Dat is §4 in zijn
+ *  zuiverste vorm — een snapshot die zichzelf ongeldig maakt. */
+async function zetDecisionAuditdossier(admin) {
+  const { error } = await admin.from("decision_objects").upsert(
+    {
+      id: FIX.decisionAuditdossier,
+      procedure_id: FIX.procedure1,
+      fonds_id: FONDS_ID,
+      besluit_code: "W5-001",
+      titel: "W5 Besluit auditdossier",
+      besluitvraag: "Gaat W5 door?",
+      status: "concept",
+      is_primary_decision: false,
+    },
+    { onConflict: "id" }
+  );
+  if (error) throw new Error(`preseed decisionAuditdossier: ${error.message}`);
 }
 
 /** Vergadering in een vaste staat. Upsert-reset, nooit delete: `vergadering_log`
@@ -263,7 +308,10 @@ export const scenarios = [
   { slug: "contact.post.anon.geen-origin", method: "POST", path: "/api/contact", rol: "anon", body: { naam: "T", organisatie: "O", email: "t@x.nl" }, headers: { "content-type": "application/json" }, verwacht: "json" },
 
   // ── /api/documents/[id]/bestand — non-JSON bytes · host-guard · [id] ───────
-  { slug: "documents-bestand.get.bestuurder", method: "GET", path: `/api/documents/${FIX.document1}/bestand`, rol: "bestuurder", verwacht: "bytes" },
+  //  W5: `headersExtra` erbij — deze route zet nosniff ZELF, bovenop de globale
+  //  header uit next.config.ts. Dat is de enige downloadroute waar de bronregel
+  //  ook statisch bewaakt wordt (WP3-10). Het snapshot dekt nu beide kanten.
+  { slug: "documents-bestand.get.bestuurder", method: "GET", path: `/api/documents/${FIX.document1}/bestand`, rol: "bestuurder", verwacht: "bytes", headersExtra: ["x-content-type-options"] },
   { slug: "documents-bestand.get.anon", method: "GET", path: `/api/documents/${FIX.document1}/bestand`, rol: "anon", verwacht: "json" },
   { slug: "documents-bestand.get.404", method: "GET", path: `/api/documents/${FIX.documentOnbekend}/bestand`, rol: "bestuurder", verwacht: "json" },
   { slug: "documents-bestand.get.410-ingetrokken", method: "GET", path: `/api/documents/${FIX.documentIntrekken}/bestand`, rol: "bestuurder", verwacht: "json" },
@@ -1417,4 +1465,189 @@ export const scenarios = [
     body: LEEG, verwacht: "json",
     preseed: async ({ admin }) => wisLimiet(admin, "stuurinfo_upload"),
   },
+  // ══ W5 — de acht handwerkroutes (#101, EPIC W #91) ════════════════════════
+  //
+  //  Deze acht geven geen JSON terug of ze streamen; het harnas doet hier dus
+  //  iets anders dan bij de 87 ervoor. Wat NIET gekarakteriseerd is staat per
+  //  blok als expliciete lacune benoemd — een eerlijke lacune is beter dan een
+  //  instabiel snapshot.
+  //
+  //  Routes 7 (`documents/[id]/bestand`) en 8 (`afschriften/…/download`) hadden
+  //  hun scenario's al sinds W1; die staan hierboven en zijn niet verplaatst.
+
+  // ── 1. /api/chat — SSE ────────────────────────────────────────────────────
+  //  LACUNE: het streamende happy path is NIET gekarakteriseerd. De respons is
+  //  een SSE-stroom uit een Opus-aanroep en dus niet deterministisch; in CI
+  //  staat bovendien een dummy-API-sleutel. Gekarakteriseerd is alles wat het
+  //  model NIET bereikt — en dat is precies wat de wrapper raakt.
+  //
+  //  LACUNE: het `weigerAlsModuleUit`-pad (403 "Module 'ai' is niet beschikbaar")
+  //  is NIET runtime gekarakteriseerd, en dat is gemeten en niet aangenomen.
+  //  Die tak is alleen te bereiken door de module in `fonds_module_manifest` uit
+  //  te zetten. Elke schrijfactie daarop laat via de audittrigger
+  //  `fn_fonds_config_capture` een regel achter in `fonds_config_log` — en die
+  //  tabel is APPEND-ONLY, ook voor de service-role. `/api/instellingen` geeft
+  //  die configuratiehistorie terug, dus de twee bestaande snapshots
+  //  `instellingen.get.beheerder` en `w4.instellingen.get.bestuurder` sloegen om
+  //  én bleven omslaan: onherstelbaar, en groeiend per ronde.
+  //
+  //  Een scenario dat een andere snapshot permanent beschadigt is duurder dan de
+  //  dekking die het oplevert. Het instrument voor deze tak bestaat bovendien al
+  //  en is niet-runtime: `T8 — AI-chat-entrypoint past server-side de
+  //  module-beschikbaarheidsguard toe` in tests/cross-tenant/fonds-config.test.ts
+  //  eist de letterlijke `weigerAlsModuleUit(`-aanroep mét `"ai"` in deze route.
+  //  Die guard moet na de migratie groen blijven; dat is de acceptatie-eis.
+  //
+  //  De eerste drie zijn de W4-§3-vorm: `chat` doet `req.json()` en
+  //  `valideerChatInvoer` VÓÓR `getUser()`. Een beller zonder sessie krijgt
+  //  vandaag dus een 400/500 over zijn body i.p.v. 401. Deze drie leggen dat
+  //  vast op ONGEWIJZIGDE code, zodat de wijziging na migratie meetbaar is en
+  //  niet aangenomen.
+  { slug: "w5.chat.post.anon.401", method: "POST", path: "/api/chat", rol: "anon", body: { vraag: "Wat is de dekkingsgraad van het fonds?" }, verwacht: "json" },
+  { slug: "w5.chat.post.anon.400-invoer", method: "POST", path: "/api/chat", rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w5.chat.post.anon.kapotte-body", method: "POST", path: "/api/chat", rol: "anon", rawBody: "{ dit is geen json", verwacht: "json" },
+  { slug: "w5.chat.post.bestuurder.400-invoer", method: "POST", path: "/api/chat", rol: "bestuurder", body: LEEG, verwacht: "json" },
+  {
+    //  429 — fail-closed rate limit (H-12), vóór RAG/Anthropic.
+    slug: "w5.chat.post.bestuurder.429",
+    method: "POST", path: "/api/chat", rol: "bestuurder",
+    body: { vraag: "Wat is de dekkingsgraad van het fonds?" }, verwacht: "json",
+    preseed: async ({ admin, users }) =>
+      vulLimiet(admin, users.bestuurder.userId, LIMIET_CHAT_ENDPOINT, LIMIET_CHAT),
+  },
+  {
+    //  400 — ontbrekende Idempotency-Key. Dit is de LAATSTE poort vóór
+    //  `preflight()`, en dus het diepste punt dat te karakteriseren is zonder
+    //  AI-quotum te reserveren. Reserveren zou §4 opnieuw introduceren: een
+    //  teller die over drie verify-rondes doortikt.
+    slug: "w5.chat.post.bestuurder.400-idempotentie",
+    method: "POST", path: "/api/chat", rol: "bestuurder",
+    body: { vraag: "Wat is de dekkingsgraad van het fonds?" }, verwacht: "json",
+    preseed: async ({ admin }) => wisLimiet(admin, LIMIET_CHAT_ENDPOINT),
+  },
+
+  // ── 2. /api/agendapunten/[id]/voorbereiding — SSE ──────────────────────────
+  //  Zelfde patroon, kleiner. Deze route heeft GEEN host-guard en GEEN
+  //  module-guard; de poorten zijn auth → rate limit → fonds → idempotentie.
+  //  LACUNE: ook hier is het streamende happy path niet gekarakteriseerd.
+  { slug: "w5.voorbereiding.post.anon", method: "POST", path: `/api/agendapunten/${FIX.agendapuntOnbekend}/voorbereiding`, rol: "anon", body: LEEG, verwacht: "json" },
+  {
+    slug: "w5.voorbereiding.post.bestuurder.429",
+    method: "POST", path: `/api/agendapunten/${FIX.agendapuntOnbekend}/voorbereiding`, rol: "bestuurder",
+    body: LEEG, verwacht: "json",
+    preseed: async ({ admin, users }) =>
+      vulLimiet(admin, users.bestuurder.userId, LIMIET_VOORBEREIDING_ENDPOINT, LIMIET_VOORBEREIDING),
+  },
+  {
+    slug: "w5.voorbereiding.post.bestuurder.400-idempotentie",
+    method: "POST", path: `/api/agendapunten/${FIX.agendapuntOnbekend}/voorbereiding`, rol: "bestuurder",
+    body: LEEG, verwacht: "json",
+    preseed: async ({ admin }) => wisLimiet(admin, LIMIET_VOORBEREIDING_ENDPOINT),
+  },
+
+  // ── 3. /api/ai/stuk-export — docx-download ────────────────────────────────
+  //  De invariant van deze route is de VOLGORDE: `log_word_export` moet slagen
+  //  vóór het bestand teruggaat (B-4/G16).
+  //
+  //  GEMETEN: die volgorde is met een REQUEST niet te forceren, en dus niet in
+  //  een snapshot te vangen. Eerst geprobeerd met een gesprek_id dat niet
+  //  bestaat — verwachting: FK-schending → 500 zonder .docx. Uitkomst: 200 mét
+  //  .docx, want `governance_export_log.gesprek_audit_id` heeft geen
+  //  foreign key, en de kolom `stuksoort` geen check-constraint. Er is geen
+  //  invoer die de RPC laat falen terwijl de capability-gate ervóór slaagt.
+  //
+  //  Het scenario is daarom verwijderd i.p.v. groen gehouden op de verkeerde
+  //  grond. De volgorde wordt bewaakt door `STUK-1` in
+  //  tests/cross-tenant/ai-poort.test.ts (bronvolgorde) en is eenmalig
+  //  runtime gemeten door de RPC-grant in te trekken; zie het BESLUIT in het
+  //  W5-issue.
+  { slug: "w5.stuk-export.post.anon", method: "POST", path: "/api/ai/stuk-export", rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w5.stuk-export.post.bestuurder.403", method: "POST", path: "/api/ai/stuk-export", rol: "bestuurder", body: LEEG, verwacht: "json" },
+  { slug: "w5.stuk-export.post.bestuursbureau.400-leeg", method: "POST", path: "/api/ai/stuk-export", rol: "bestuursbureau", body: LEEG, verwacht: "json" },
+  { slug: "w5.stuk-export.post.bestuursbureau.400-stuksoort", method: "POST", path: "/api/ai/stuk-export", rol: "bestuursbureau", body: { antwoord: "Concept voor het bestuur.", stuksoort: "bestaat-niet" }, verwacht: "json" },
+  {
+    slug: "w5.stuk-export.post.bestuursbureau.200",
+    method: "POST", path: "/api/ai/stuk-export", rol: "bestuursbureau",
+    body: {
+      antwoord: "Concept voor het bestuur. [Bron 1]",
+      stuksoort: "memo",
+      onderwerp: "W5",
+    },
+    verwacht: "bestand",
+    headersExtra: ["x-content-type-options"],
+  },
+
+  // ── 4. /api/stuurinformatie/beheer/sjabloon — xlsx-download ───────────────
+  { slug: "w5.sjabloon.get.anon", method: "GET", path: "/api/stuurinformatie/beheer/sjabloon", rol: "anon", verwacht: "json" },
+  { slug: "w5.sjabloon.get.bestuurder.403", method: "GET", path: "/api/stuurinformatie/beheer/sjabloon", rol: "bestuurder", verwacht: "json" },
+  {
+    slug: "w5.sjabloon.get.beheerder.200",
+    method: "GET", path: "/api/stuurinformatie/beheer/sjabloon", rol: "beheerder",
+    verwacht: "bestand",
+    headersExtra: ["x-content-type-options"],
+  },
+
+  // ── 5. /api/decisions/[id]/auditdossier — HTML inline ─────────────────────
+  //  Deze GET is niet idempotent: hij schrijft een governance_event. Dat wordt
+  //  hier NIET opgelost — dat is een gedragswijziging en W5 is de naad. Het
+  //  vervolg staat intern (TICKET-H04.md) en wordt gevolgd in #102.
+  { slug: "w5.auditdossier.get.anon", method: "GET", path: `/api/decisions/${FIX.decisionOnbekend}/auditdossier`, rol: "anon", verwacht: "json" },
+  {
+    slug: "w5.auditdossier.get.bestuursbureau.403",
+    method: "GET", path: `/api/decisions/${FIX.decisionAuditdossier}/auditdossier`, rol: "bestuursbureau",
+    verwacht: "json",
+    preseed: async ({ admin }) => zetDecisionAuditdossier(admin),
+  },
+  { slug: "w5.auditdossier.get.bestuurder.404", method: "GET", path: `/api/decisions/${FIX.decisionOnbekend}/auditdossier`, rol: "bestuurder", verwacht: "json" },
+  { slug: "w5.auditdossier.get.bestuurder.400-trigger", method: "GET", path: `/api/decisions/${FIX.decisionOnbekend}/auditdossier?trigger=besloten`, rol: "bestuurder", verwacht: "json" },
+  {
+    slug: "w5.auditdossier.get.bestuurder.404-geen-snapshot",
+    method: "GET", path: `/api/decisions/${FIX.decisionAuditdossier}/auditdossier?versie=besluitmoment`, rol: "bestuurder",
+    verwacht: "json",
+    preseed: async ({ admin }) => zetDecisionAuditdossier(admin),
+  },
+  {
+    //  200 JSON — `verwacht: "vorm"`. LACUNE: de body is NIET gekarakteriseerd,
+    //  en de reden is de route zelf.
+    //
+    //  GEMETEN, niet aangenomen: eerst opgezet als `verwacht: "json"` met een
+    //  preseed die het gebeurtenissenspoor zou wissen. Dat kan niet —
+    //  `governance_events` is append-only, ook voor de service-role ("… is
+    //  append-only"). En wissen zou ook niet helpen: de route SCHRIJFT bij elke
+    //  aanroep een `auditdossier_geexporteerd`-event op dit besluit, en de
+    //  dossier-view rendert `view.events` terug. Elke aanroep verandert dus het
+    //  antwoord van de volgende — ronde 2 van `--verify` liep meteen rood.
+    //
+    //  Dat is geen tekortkoming van het harnas maar een eigenschap van deze
+    //  route: het antwoord is niet idempotent. Vervolg intern (TICKET-H04.md),
+    //  gevolgd in #102; W5 lost het niet op.
+    slug: "w5.auditdossier.get.bestuurder.200-json",
+    method: "GET", path: `/api/decisions/${FIX.decisionAuditdossier}/auditdossier?formaat=json`, rol: "bestuurder",
+    verwacht: "vorm",
+    headersExtra: ["x-content-type-options"],
+    preseed: async ({ admin }) => zetDecisionAuditdossier(admin),
+  },
+  {
+    //  200 HTML — `verwacht: "vorm"`. LACUNE: de body is NIET gekarakteriseerd,
+    //  om twee onafhankelijke redenen. (a) Dezelfde als bij de JSON-variant
+    //  hierboven: de route schrijft per aanroep een governance_event dat in het
+    //  dossier terugkomt. (b) De footer rendert de generatiedatum als
+    //  "21 augustus 2026"; die string wisselt van lengte per maand, dus zelfs de
+    //  bytelengte zou niet stabiel zijn.
+    //  Wat de wrapper hier kan breken — status, content-type, de
+    //  inline-content-disposition — staat wél in het snapshot.
+    slug: "w5.auditdossier.get.bestuurder.200-html",
+    method: "GET", path: `/api/decisions/${FIX.decisionAuditdossier}/auditdossier`, rol: "bestuurder",
+    verwacht: "vorm",
+    headersExtra: ["x-content-type-options"],
+    preseed: async ({ admin }) => zetDecisionAuditdossier(admin),
+  },
+
+  // ── 6. /api/aqlab/assurance/audit/[exportId] — HTML · host-guard ──────────
+  //  LACUNE: het 200-pad is niet gekarakteriseerd. Dat vraagt een VRIJGEGEVEN
+  //  aqlab-export met een HTML-bestand in de `aqlab-audit`-bucket plus een
+  //  vrijgavebesluit — een seed die W1 bewust buiten scope liet. De twee paden
+  //  hieronder dekken wat de wrapper raakt: de preambule en de host-guard.
+  { slug: "w5.aqlab-assurance-audit.get.anon", method: "GET", path: `/api/aqlab/assurance/audit/${FIX.aqlabExportOnbekend}`, rol: "anon", verwacht: "json" },
+  { slug: "w5.aqlab-assurance-audit.get.bestuurder.403", method: "GET", path: `/api/aqlab/assurance/audit/${FIX.aqlabExportOnbekend}`, rol: "bestuurder", verwacht: "json" },
 ];

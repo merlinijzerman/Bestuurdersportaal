@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Er is een fout opgetreden bij het verwerken van uw vraag."
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 500
+}

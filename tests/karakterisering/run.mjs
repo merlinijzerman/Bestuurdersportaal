@@ -19,7 +19,7 @@ import { ENV } from "./config.mjs";
 import { seed, adminClient } from "./seed.mjs";
 import { sessieCookies } from "./sessie.mjs";
 import { scenarios } from "./scenarios.mjs";
-import { normaliseerJson, normaliseerHeaders, locatiePad, stabielJson } from "./normaliseer.mjs";
+import { normaliseerJson, normaliseerHeaders, locatieVorm, stabielJson } from "./normaliseer.mjs";
 
 const HIER = dirname(fileURLToPath(import.meta.url));
 const SNAP_DIR = join(HIER, "__snapshots__");
@@ -82,8 +82,40 @@ function bodySnapshot(res, verwacht) {
       body_bytes: res.buffer.length,
     };
   }
+  // BESLUIT (W5, #101): `bestand` = status + headers + BYTELENGTE, zonder hash.
+  //
+  // Voor een xlsx/docx/HTML die een tijdstempel of een gegenereerde datum bevat
+  // is `bytes` niet houdbaar: de sha256 verschilt per run of per dag, en dan
+  // staat er binnen een week een snapshot dat iemand "even bijwerkt" tot het
+  // niets meer toetst. De lengte is wél stabiel — een datum heeft een vaste
+  // breedte — en samen met de drie headers dekt dat exact wat de wrapper zou
+  // kunnen breken: de statuscode, het content-type, de bestandsnaam, nosniff, en
+  // of er überhaupt een volledig bestand uitkomt.
+  //
+  // Wat dit expliciet NIET toetst is de INHOUD. Dat is een bewuste lacune per
+  // route, gemotiveerd in scenarios.mjs — geen stilzwijgende versoepeling. Kies
+  // `bytes` waar de bytes wél reproduceerbaar zijn; dat is per route gemeten en
+  // niet aangenomen.
+  if (verwacht === "bestand") {
+    return { body_bytes: res.buffer.length };
+  }
+  // BESLUIT (W5, #101): `vorm` = status + headers, en de body EXPLICIET niet.
+  //
+  // Voor `auditdossier?formaat=html` is zelfs de bytelengte niet stabiel: de
+  // footer rendert de generatiedatum via toLocaleDateString("nl-NL",
+  // {month:"long"}) — "1 mei 2026" en "21 augustus 2026" verschillen in lengte.
+  // Een snapshot dat om middernacht of aan het begin van een maand omvalt toetst
+  // niets; het leert alleen aan om snapshots bij te werken zonder te kijken.
+  //
+  // De sleutel heet daarom `body_niet_gekarakteriseerd`: de lacune staat IN het
+  // snapshot en is greppable, in plaats van dat hij als weggelaten regel
+  // onzichtbaar is. Zie het ontwerpprincipe "een uitzondering is een waarde"
+  // in core/lib/route-wrapper.md.
+  if (verwacht === "vorm") {
+    return { body_niet_gekarakteriseerd: true };
+  }
   if (verwacht === "redirect") {
-    return { location_pad: locatiePad(res.headers.get("location")) };
+    return { location_vorm: locatieVorm(res.headers.get("location"), ENV.url) };
   }
   // json (met tekst-fallback zodat een niet-JSON-fout leesbaar blijft).
   const tekst = res.buffer.toString("utf8");
@@ -107,7 +139,7 @@ async function bouwSnapshot(scenario, ctx) {
   });
   return {
     status: res.status,
-    headers: normaliseerHeaders(res.headers),
+    headers: normaliseerHeaders(res.headers, scenario.headersExtra),
     body: bodySnapshot(res, scenario.verwacht),
   };
 }
