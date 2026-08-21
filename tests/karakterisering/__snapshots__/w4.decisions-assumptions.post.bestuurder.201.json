@@ -1,0 +1,21 @@
+{
+  "body": {
+    "assumption": {
+      "aangemaakt_op": "<ts>",
+      "ai_gedetecteerd": false,
+      "bron_document_id": null,
+      "decision_id": "<uuid:1>",
+      "evaluatiecriterium": null,
+      "gewijzigd_door": "<uuid:2>",
+      "id": "<uuid:3>",
+      "onzekerheid": null,
+      "status": "concept",
+      "tekst": "W4 aanname",
+      "type": "overig"
+    }
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 201
+}

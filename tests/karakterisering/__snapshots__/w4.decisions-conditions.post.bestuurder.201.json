@@ -1,0 +1,21 @@
+{
+  "body": {
+    "condition": {
+      "aangemaakt_op": "<ts>",
+      "deadline": null,
+      "decision_id": "<uuid:1>",
+      "drempelwaarde": null,
+      "eigenaar_naam": null,
+      "heroverwegingstrigger": null,
+      "id": "<uuid:2>",
+      "kpi": null,
+      "monitorfrequentie": null,
+      "status": "open",
+      "voorwaarde": "W4 voorwaarde"
+    }
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 201
+}

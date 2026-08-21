@@ -118,6 +118,46 @@ async function zetAgendapunt(admin, users, id, extra = {}) {
   if (error) throw new Error(`preseed agendapunt ${id}: ${error.message}`);
 }
 
+/** Het besluitobject waar het hele decisions-domein aan hangt. Upsert-reset,
+ *  nooit delete: `governance_events` hangt er met RESTRICT aan en
+ *  `decision_audit_snapshots` met CASCADE terwijl die tabel append-only is. Eén
+ *  auditregel maakt het besluit dus permanent onverwijderbaar. */
+async function zetDecision(admin, extra = {}) {
+  const { error } = await admin.from("decision_objects").upsert(
+    {
+      id: FIX.decision1,
+      procedure_id: FIX.procedure1,
+      fonds_id: FONDS_ID,
+      besluit_code: "W4-001",
+      titel: "W4 Besluit",
+      besluitvraag: "Gaat W4 door?",
+      status: "concept",
+      // NIET primair. `idx_dobj_one_primary` is een partiële unique index:
+      // één is_primary_decision=true per procedure. Op een DB waar al een
+      // besluit op `procedure1` staat — zoals een lokale werk-DB waarin
+      // procedures-routes hebben gedraaid — botst de fixture daar anders op,
+      // terwijl hij in de VERSE CI-DB gewoon slaagt. Zo'n snapshot zou lokaal en
+      // in CI verschillend tot stand komen. Geen enkele decisions-route leest
+      // dit veld, dus `false` is hier vrij van betekenis en vrij van botsingen.
+      is_primary_decision: false,
+      ...extra,
+    },
+    { onConflict: "id" }
+  );
+  if (error) throw new Error(`preseed decision1: ${error.message}`);
+}
+
+/** Kindrij van het besluit in een vaste staat, plus opruimen van wat een POST
+ *  eerder aanmaakte (die routes zijn niet-idempotent). */
+async function zetDecisionKind(admin, tabel, rij) {
+  await zetDecision(admin);
+  await wis(admin, tabel, { decision_id: FIX.decision1 });
+  if (rij) {
+    const { error } = await admin.from(tabel).insert({ decision_id: FIX.decision1, ...rij });
+    if (error) throw new Error(`preseed ${tabel}: ${error.message}`);
+  }
+}
+
 /** Document in een vaste staat. Upsert-reset: `documenten` heeft append-only
  *  kinderen (`extraction_run`, `comparison_results`) met NO ACTION, dus zodra er
  *  één extractie of vergelijking op staat is de rij niet meer te verwijderen. */
@@ -963,4 +1003,138 @@ export const scenarios = [
     body: LEEG, verwacht: "json",
     preseed: async ({ admin }) => wisLimiet(admin, "backfill"),
   },
+
+  // ══ decisions ══════════════════════════════════════════════════════════════
+  //  Dertien routes, en ELKE schrijft een `governance_events`-regel met
+  //  `actor_id` + `actor_naam`. Dat is precies het spoor dat het harnas NIET
+  //  ziet — het vergelijkt responses, geen databaserijen. Daarom hier bewust een
+  //  200-pad per schrijfroute: een scenario dat op 401 of 404 stopt schrijft
+  //  niets en zegt dus niets over het actorveld.
+  //  De controle op die velden zelf is de actorvelden-audit (§5), niet dit harnas.
+
+  // ── decisions/[id] — PATCH ────────────────────────────────────────────────
+  { slug: "w4.decisions-id.patch.anon", method: "PATCH", path: `/api/decisions/${FIX.decisionOnbekend}`, rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.decisions-id.patch.bestuurder.404", method: "PATCH", path: `/api/decisions/${FIX.decisionOnbekend}`, rol: "bestuurder", body: { titel: "W4" }, verwacht: "json" },
+  {
+    slug: "w4.decisions-id.patch.voorzitter.200",
+    method: "PATCH", path: `/api/decisions/${FIX.decision1}`, rol: "voorzitter",
+    body: { titel: "W4 Besluit gewijzigd" }, verwacht: "json",
+    preseed: async ({ admin }) => zetDecision(admin),
+  },
+
+  // ── decisions/[id]/status — POST ──────────────────────────────────────────
+  { slug: "w4.decisions-status.post.anon", method: "POST", path: `/api/decisions/${FIX.decision1}/status`, rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.decisions-status.post.bestuurder.400", method: "POST", path: `/api/decisions/${FIX.decision1}/status`, rol: "bestuurder", body: { status: "onzin" }, verwacht: "json" },
+  { slug: "w4.decisions-status.post.bestuurder.404", method: "POST", path: `/api/decisions/${FIX.decisionOnbekend}/status`, rol: "bestuurder", body: { status: "concept" }, verwacht: "json" },
+
+  // ── decisions/[id]/actions — POST + PATCH ─────────────────────────────────
+  { slug: "w4.decisions-actions.post.anon", method: "POST", path: `/api/decisions/${FIX.decision1}/actions`, rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.decisions-actions.post.bestuurder.400", method: "POST", path: `/api/decisions/${FIX.decision1}/actions`, rol: "bestuurder", body: { actie: "" }, verwacht: "json" },
+  { slug: "w4.decisions-actions.post.bestuurder.404", method: "POST", path: `/api/decisions/${FIX.decisionOnbekend}/actions`, rol: "bestuurder", body: { actie: "W4 actie" }, verwacht: "json" },
+  {
+    slug: "w4.decisions-actions.post.bestuurder.201",
+    method: "POST", path: `/api/decisions/${FIX.decision1}/actions`, rol: "bestuurder",
+    body: { actie: "W4 actie" }, verwacht: "json",
+    preseed: async ({ admin }) => zetDecisionKind(admin, "decision_actions", null),
+  },
+  { slug: "w4.decisions-action-id.patch.anon", method: "PATCH", path: `/api/decisions/${FIX.decision1}/actions/${FIX.decisionKindOnbekend}`, rol: "anon", body: LEEG, verwacht: "json" },
+  {
+    slug: "w4.decisions-action-id.patch.bestuurder.200",
+    method: "PATCH", path: `/api/decisions/${FIX.decision1}/actions/${FIX.decisionAction}`, rol: "bestuurder",
+    body: { actie: "W4 actie gewijzigd" }, verwacht: "json",
+    preseed: async ({ admin }) => zetDecisionKind(admin, "decision_actions", { id: FIX.decisionAction, actie: "W4 actie" }),
+  },
+
+  // ── decisions/[id]/assumptions — POST + PATCH ─────────────────────────────
+  { slug: "w4.decisions-assumptions.post.anon", method: "POST", path: `/api/decisions/${FIX.decision1}/assumptions`, rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.decisions-assumptions.post.bestuurder.400", method: "POST", path: `/api/decisions/${FIX.decision1}/assumptions`, rol: "bestuurder", body: { tekst: "" }, verwacht: "json" },
+  {
+    slug: "w4.decisions-assumptions.post.bestuurder.201",
+    method: "POST", path: `/api/decisions/${FIX.decision1}/assumptions`, rol: "bestuurder",
+    body: { tekst: "W4 aanname" }, verwacht: "json",
+    preseed: async ({ admin }) => zetDecisionKind(admin, "decision_assumptions", null),
+  },
+  { slug: "w4.decisions-assumption-id.patch.anon", method: "PATCH", path: `/api/decisions/${FIX.decision1}/assumptions/${FIX.decisionKindOnbekend}`, rol: "anon", body: LEEG, verwacht: "json" },
+  {
+    slug: "w4.decisions-assumption-id.patch.bestuurder.200",
+    method: "PATCH", path: `/api/decisions/${FIX.decision1}/assumptions/${FIX.decisionAssumption}`, rol: "bestuurder",
+    body: { tekst: "W4 aanname gewijzigd" }, verwacht: "json",
+    preseed: async ({ admin }) => zetDecisionKind(admin, "decision_assumptions", { id: FIX.decisionAssumption, tekst: "W4 aanname" }),
+  },
+
+  // ── decisions/[id]/conditions — POST + PATCH ──────────────────────────────
+  { slug: "w4.decisions-conditions.post.anon", method: "POST", path: `/api/decisions/${FIX.decision1}/conditions`, rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.decisions-conditions.post.bestuurder.400", method: "POST", path: `/api/decisions/${FIX.decision1}/conditions`, rol: "bestuurder", body: { voorwaarde: "" }, verwacht: "json" },
+  {
+    slug: "w4.decisions-conditions.post.bestuurder.201",
+    method: "POST", path: `/api/decisions/${FIX.decision1}/conditions`, rol: "bestuurder",
+    body: { voorwaarde: "W4 voorwaarde" }, verwacht: "json",
+    preseed: async ({ admin }) => zetDecisionKind(admin, "decision_conditions", null),
+  },
+  { slug: "w4.decisions-condition-id.patch.anon", method: "PATCH", path: `/api/decisions/${FIX.decision1}/conditions/${FIX.decisionKindOnbekend}`, rol: "anon", body: LEEG, verwacht: "json" },
+  {
+    slug: "w4.decisions-condition-id.patch.bestuurder.200",
+    method: "PATCH", path: `/api/decisions/${FIX.decision1}/conditions/${FIX.decisionCondition}`, rol: "bestuurder",
+    body: { voorwaarde: "W4 voorwaarde gewijzigd" }, verwacht: "json",
+    preseed: async ({ admin }) => zetDecisionKind(admin, "decision_conditions", { id: FIX.decisionCondition, voorwaarde: "W4 voorwaarde" }),
+  },
+
+  // ── decisions/[id]/risks — POST + PATCH ───────────────────────────────────
+  { slug: "w4.decisions-risks.post.anon", method: "POST", path: `/api/decisions/${FIX.decision1}/risks`, rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.decisions-risks.post.bestuurder.400", method: "POST", path: `/api/decisions/${FIX.decision1}/risks`, rol: "bestuurder", body: { beschrijving: "" }, verwacht: "json" },
+  {
+    slug: "w4.decisions-risks.post.bestuurder.201",
+    method: "POST", path: `/api/decisions/${FIX.decision1}/risks`, rol: "bestuurder",
+    body: { beschrijving: "W4 besluitrisico" }, verwacht: "json",
+    preseed: async ({ admin }) => zetDecisionKind(admin, "decision_risks", null),
+  },
+  { slug: "w4.decisions-risk-id.patch.anon", method: "PATCH", path: `/api/decisions/${FIX.decision1}/risks/${FIX.decisionKindOnbekend}`, rol: "anon", body: LEEG, verwacht: "json" },
+  {
+    slug: "w4.decisions-risk-id.patch.bestuurder.200",
+    method: "PATCH", path: `/api/decisions/${FIX.decision1}/risks/${FIX.decisionRisk}`, rol: "bestuurder",
+    body: { beschrijving: "W4 besluitrisico gewijzigd" }, verwacht: "json",
+    preseed: async ({ admin }) => zetDecisionKind(admin, "decision_risks", { id: FIX.decisionRisk, beschrijving: "W4 besluitrisico" }),
+  },
+
+  // ── decisions/[id]/dissent — POST + PATCH/DELETE · bureau-403 (BB-12) ─────
+  { slug: "w4.decisions-dissent.post.anon", method: "POST", path: `/api/decisions/${FIX.decision1}/dissent`, rol: "anon", body: LEEG, verwacht: "json" },
+  {
+    slug: "w4.decisions-dissent.post.bestuursbureau.403",
+    method: "POST", path: `/api/decisions/${FIX.decision1}/dissent`, rol: "bestuursbureau",
+    body: { standpunt: "tegen", argument: "W4" }, verwacht: "json",
+    preseed: async ({ admin }) => zetDecision(admin),
+  },
+  {
+    slug: "w4.decisions-dissent.post.bestuurder.201",
+    method: "POST", path: `/api/decisions/${FIX.decision1}/dissent`, rol: "bestuurder",
+    body: { standpunt: "tegen", argument: "W4 dissent" }, verwacht: "json",
+    preseed: async ({ admin }) => zetDecisionKind(admin, "decision_dissent", null),
+  },
+  { slug: "w4.decisions-dissent-id.patch.anon", method: "PATCH", path: `/api/decisions/${FIX.decision1}/dissent/${FIX.decisionKindOnbekend}`, rol: "anon", body: LEEG, verwacht: "json" },
+  {
+    // BEVINDING: dit is 404, GEEN bureau-403. De lookup loopt over de RLS-client
+    // en `2026_08_05_bestuursbureau_rol.sql` schermt dissent voor die rol af, dus
+    // de rij is onzichtbaar vóórdat de bureau-gate iets kan zeggen. De gate zelf
+    // staat er wel (BB-12 toetst dat statisch); hij is via deze weg alleen niet
+    // bereikbaar. Vastgelegd zoals het IS.
+    slug: "w4.decisions-dissent-id.patch.bestuursbureau.404-rls",
+    method: "PATCH", path: `/api/decisions/${FIX.decision1}/dissent/${FIX.decisionDissent}`, rol: "bestuursbureau",
+    body: { argument: "W4" }, verwacht: "json",
+    preseed: async ({ admin, users }) =>
+      zetDecisionKind(admin, "decision_dissent", {
+        id: FIX.decisionDissent, bestuurder_id: users.bestuurder.userId,
+        bestuurder_naam: "W1 bestuurder", standpunt: "tegen", argument: "W4 dissent",
+      }),
+  },
+  {
+    slug: "w4.decisions-dissent-id.delete.anon",
+    method: "DELETE", path: `/api/decisions/${FIX.decision1}/dissent/${FIX.decisionKindOnbekend}`, rol: "anon", verwacht: "json",
+  },
+
+  // ── decisions/[id]/ai-interactions/[aiid] — PATCH · rol-gate ──────────────
+  { slug: "w4.decisions-ai.patch.anon", method: "PATCH", path: `/api/decisions/${FIX.decision1}/ai-interactions/${FIX.decisionKindOnbekend}`, rol: "anon", body: LEEG, verwacht: "json" },
+  // De rol-gate staat NA de lookup: een onbekende interactie geeft 404, ook voor
+  // een rol die de gate sowieso niet zou halen.
+  { slug: "w4.decisions-ai.patch.bestuurder.404", method: "PATCH", path: `/api/decisions/${FIX.decision1}/ai-interactions/${FIX.decisionKindOnbekend}`, rol: "bestuurder", body: { validatiestatus: "gevalideerd" }, verwacht: "json" },
+  { slug: "w4.decisions-ai.patch.voorzitter.404", method: "PATCH", path: `/api/decisions/${FIX.decision1}/ai-interactions/${FIX.decisionKindOnbekend}`, rol: "voorzitter", body: { validatiestatus: "gevalideerd" }, verwacht: "json" },
 ];

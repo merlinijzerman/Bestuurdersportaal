@@ -127,6 +127,21 @@ export const FIX = {
   documentDeactiveren: "00000000-0000-4000-8000-0000000d0c10",
   documentGedeactiveerd: "00000000-0000-4000-8000-0000000d0c11",
   agendapuntDocument: "00000000-0000-4000-8000-0000000a9040",
+
+  //  decisions — W1 sloot de besluit-graaf bewust uit ("zware seed"). W4 heeft
+  //  hem wél nodig: alle dertien routes schrijven een governance_events-regel, en
+  //  een scenario dat op 401/404 stopt zegt niets over het actorspoor.
+  //  `governance_events.decision_id` hangt met RESTRICT aan `decision_objects` en
+  //  `decision_audit_snapshots` met CASCADE + append-only — dus zodra er één
+  //  event op staat is het besluit ONVERWIJDERBAAR. Alles via upsert-reset.
+  decision1: "00000000-0000-4000-8000-00000000de01",
+  decisionAction: "00000000-0000-4000-8000-00000000de11",
+  decisionAssumption: "00000000-0000-4000-8000-00000000de12",
+  decisionCondition: "00000000-0000-4000-8000-00000000de13",
+  decisionRisk: "00000000-0000-4000-8000-00000000de14",
+  decisionDissent: "00000000-0000-4000-8000-00000000de15",
+  decisionAiInteractie: "00000000-0000-4000-8000-00000000de16",
+  decisionKindOnbekend: "00000000-0000-4000-8000-00000000de1f",
 };
 
 export const AFSCHRIFT1_PAD = `${FONDS_ID}/w1-afschrift.pdf`;
