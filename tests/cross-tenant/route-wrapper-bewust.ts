@@ -153,6 +153,25 @@ export function toetsWrapperFundament(): void {
     "wrapper: ctx.email komt niet uit de sessiegebruiker"
   );
 
+  // (g) `ctx` mag NOOIT als geheel in een logregel of serialisatie belanden.
+  //     Sinds W4 draagt de context een e-mailadres, en hij staat in élke handler
+  //     in scope. Eén `console.error("fout", ctx)` zet daarmee PII in de
+  //     platformlogs — waar vandaag al ongeredigeerde foutobjecten heen gaan.
+  //     De wrapper doet dit nu niet; deze assertie zorgt dat dat zo blijft.
+  //     Losse velden (ctx.requestId, ctx.gebruikerId) mogen wel: die zijn geen
+  //     PII-bundel en `requestId` is juist waarvoor correlatie bestaat.
+  for (const regel of w.split("\n")) {
+    const kaal = /\bctx\b(?!\s*[.:])/;
+    if (/console\.\w+\(/.test(regel) && kaal.test(regel.slice(regel.indexOf("console.")))) {
+      assert.fail(
+        `wrapper: logregel serialiseert de hele ctx (PII-lek naar de logs): ${regel.trim()}`
+      );
+    }
+    if (/JSON\.stringify\(\s*ctx\s*\)/.test(regel)) {
+      assert.fail(`wrapper: JSON.stringify(ctx) lekt PII naar de logs: ${regel.trim()}`);
+    }
+  }
+
   fundamentGetoetst = true;
 }
 
