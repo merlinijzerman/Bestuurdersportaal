@@ -1,0 +1,22 @@
+{
+  "body": {
+    "risk": {
+      "aangemaakt_op": "<ts>",
+      "beschrijving": "W4 besluitrisico",
+      "categorie": null,
+      "decision_id": "<uuid:1>",
+      "eigenaar_naam": null,
+      "id": "<uuid:2>",
+      "impact": null,
+      "kans": null,
+      "mitigatie": null,
+      "residual_risk": null,
+      "risicomatrix_id": null,
+      "status": "open"
+    }
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 201
+}

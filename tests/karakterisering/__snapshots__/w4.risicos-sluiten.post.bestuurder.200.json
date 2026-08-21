@@ -1,0 +1,29 @@
+{
+  "body": {
+    "risico": {
+      "aangemaakt": "<ts>",
+      "aangemaakt_door": null,
+      "categorie": "operationeel_datakwaliteit",
+      "eigenaar_id": null,
+      "eigenaar_naam": null,
+      "fonds_id": "<uuid:1>",
+      "gesloten_door": "<uuid:2>",
+      "gesloten_op": "<ts>",
+      "id": "<uuid:3>",
+      "impact": 3,
+      "kans": 3,
+      "niveau": "middel",
+      "niveau_handmatig": false,
+      "sluit_motivering": "W4 karakterisering — sluitmotivering",
+      "status": "gesloten",
+      "titel": "W4 Risico (sluiten)",
+      "toelichting": null,
+      "type_risico": "structureel",
+      "volgende_beoordeling": null
+    }
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

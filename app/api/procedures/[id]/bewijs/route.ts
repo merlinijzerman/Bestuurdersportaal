@@ -1,19 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const POST = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const { id } = params as { id: string };
+    const supabase = ctx.supabase;
 
     const body = (await req.json()) as {
       stap_id?: string;
@@ -44,12 +35,6 @@ export async function POST(
       );
     }
 
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam")
-      .eq("id", user.id)
-      .single();
-
     const { data: bewijs, error } = await supabase
       .from("procedure_bewijs")
       .insert({
@@ -58,8 +43,8 @@ export async function POST(
         titel,
         beschrijving: body.beschrijving || null,
         documenttype: body.documenttype?.trim() || null,
-        toegevoegd_door: user.id,
-        toegevoegd_door_naam: profiel?.naam || null,
+        toegevoegd_door: ctx.gebruikerId,
+        toegevoegd_door_naam: ctx.naam || null,
       })
       .select()
       .single();
@@ -75,8 +60,8 @@ export async function POST(
     await supabase.from("procedure_log").insert({
       procedure_id: id,
       event_type: "bewijs_toegevoegd",
-      actor_id: user.id,
-      actor_naam: profiel?.naam || null,
+      actor_id: ctx.gebruikerId,
+      actor_naam: ctx.naam || null,
       payload: { stap: stap.naam, titel },
     });
 
@@ -85,4 +70,4 @@ export async function POST(
     console.error("Fout in POST /api/procedures/[id]/bewijs:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

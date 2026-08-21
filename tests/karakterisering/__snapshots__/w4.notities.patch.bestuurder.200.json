@@ -1,0 +1,20 @@
+{
+  "body": {
+    "voorbereiding": {
+      "agendapunt_id": "<uuid:1>",
+      "ai_output": {},
+      "bijgewerkt_op": "<ts>",
+      "bronnen_meta": {},
+      "diepte": "snel",
+      "eigen_notities": {},
+      "gebruiker_id": "<uuid:2>",
+      "gegenereerd_op": "<ts>",
+      "id": "<uuid:3>",
+      "vrije_notities": "W4 notitie"
+    }
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

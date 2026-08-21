@@ -1,22 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 
 const TOEGESTANE_STATUSSEN = ["open", "in_voorbereiding", "genomen"] as const;
 type Status = (typeof TOEGESTANE_STATUSSEN)[number];
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string; mid: string }> }
-) {
+export const PATCH = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id, mid } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const { id, mid } = params as { id: string; mid: string };
+    const supabase = ctx.supabase;
 
     const body = (await req.json()) as {
       status?: string;
@@ -83,17 +74,12 @@ export async function PATCH(
     }
 
     if (nieuweStatus && nieuweStatus !== oude.status) {
-      const { data: profiel } = await supabase
-        .from("profielen")
-        .select("naam")
-        .eq("id", user.id)
-        .single();
 
       await supabase.from("risico_log").insert({
         risico_id: id,
         event_type: "maatregel_status_gewijzigd",
-        actor_id: user.id,
-        actor_naam: profiel?.naam || null,
+        actor_id: ctx.gebruikerId,
+        actor_naam: ctx.naam || null,
         payload: {
           maatregel_id: mid,
           beschrijving: oude.beschrijving,
@@ -108,4 +94,4 @@ export async function PATCH(
     console.error("Fout in PATCH /api/risicos/[id]/maatregelen/[mid]:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

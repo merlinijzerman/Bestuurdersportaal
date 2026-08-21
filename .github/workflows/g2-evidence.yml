@@ -1,0 +1,77 @@
+name: g2-evidence
+
+# ============================================================================
+#  G2/B10 go/no-go — mechanische aftekening (issue #97).
+# ----------------------------------------------------------------------------
+#  `scripts/g2-evidence.sh` levert het repo-side bewijs voor de G2-criteria
+#  (A1–A8 + B9/B10). Het draaide in GEEN ENKELE workflow, en dat is precies het
+#  probleem dat deze job oplost.
+#
+#  WAAROM DIT EEN EIGEN JOB IS. In W3 migreerde `app/api/zoeken/route.ts` naar
+#  withFondsRoute en viel de A1-lus om naar 20 groen / 1 rood. Twintig dagen
+#  lang, zonder enig signaal. De twee TS-guards die tegelijk omvielen (AFS-1,
+#  AQL-4) draaien wél in CI en waren binnen een dag zichtbaar. Het verschil zat
+#  niet in de kwaliteit van de check maar in de vindbaarheid van de uitkomst:
+#  een P0-criterium waarvan het bewijs stil kan vervallen is geen bewijs.
+#
+#  NIET BLOKKEREND GEMAAKT IN DIT BESTAND. Of deze job een merge tegenhoudt is
+#  uitsluitend te lezen uit de branch-protection-regel op `main`:
+#      gh api repos/:owner/:repo/branches/main/protection \
+#        --jq '.required_status_checks.contexts[]'
+#  Zet die bewering hier dus niet neer — een comment kan het niet weten. Zie de
+#  waarschuwing bovenin karakterisering.yml, waar dezelfde fout al drie keer is
+#  gemaakt.
+#
+#  GEEN DATABASE. Het script draait zonder DB (tsc + test:xtenant + sanity +
+#  bron-inspectie) en kost seconden. De `--suite`-variant, die de volledige
+#  cross-tenant-suite meeneemt, hoort hier NIET: die draait al als eigen job
+#  (`rls-cross-tenant.yml`) en zou hier alleen looptijd verdubbelen.
+#
+#  OVER DE [OPS]-REGELS. Twee ervan zijn sinds #97 MEETBAAR: B9 leest het
+#  branch-protection-endpoint en B9b de runhistorie van de driftworkflow. Ze
+#  beïnvloeden de exit-code bewust niet — ze vragen
+#  een live-handeling of een mensbesluit. Eén ervan (B9 branch protection) is
+#  sinds #97 wél meetbaar; die leest het protection-endpoint. De standaard
+#  GITHUB_TOKEN heeft daar geen leesrecht op, dus in CI meldt die regel
+#  "niet vast te stellen" in plaats van groen of rood. Dat is de bedoeling:
+#  een meetbeperking hoort zichtbaar te zijn, niet weggepoetst.
+# ============================================================================
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+  # Voor de B9b-regel: die leest de runhistorie van drift-productie.yml om vast
+  # te stellen dat er een GESLAAGDE nachtrun is geweest — geconfigureerd is niet
+  # hetzelfde als werkend.
+  actions: read
+
+concurrency:
+  group: g2-evidence-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  g2-evidence:
+    name: G2-aftekening (repo-side)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Node opzetten
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Dependencies installeren
+        run: npm ci
+
+      - name: G2-evidence draaien
+        env:
+          # Zodat de B9-regel het protection-endpoint kán proberen. Lukt het
+          # niet, dan meldt het script dat expliciet — het valt niet stil terug
+          # op groen.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/g2-evidence.sh

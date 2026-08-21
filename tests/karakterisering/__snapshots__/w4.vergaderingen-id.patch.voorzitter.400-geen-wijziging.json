@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Geen wijzigingen meegegeven"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 400
+}

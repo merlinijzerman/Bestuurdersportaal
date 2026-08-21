@@ -3,16 +3,18 @@ name: nightly-fidelity
 # ============================================================================
 #  §15 cross-tenant suite — nightly FIDELITEIT (optie B, besluit 0046).
 # ----------------------------------------------------------------------------
-#  NIET-blokkerend fidelity-vangnet naast de blokkerende ephemere CI-run
-#  (rls-cross-tenant.yml, optie A). Draait dezelfde §15-suite tegen een echte,
+#  Fidelity-vangnet naast de ephemere CI-run (rls-cross-tenant.yml, optie A).
+#  Draait dezelfde §15-suite tegen een echte,
 #  wegwerpbare GEHOSTE test-DB (secret TEST_DATABASE_URL) die dichter bij de
 #  productie-Supabase-config staat dan de CLI-stack. Zo surfacet drift die
 #  optie A niet ziet: config die alleen in het Supabase-dashboard leeft
 #  (auth-instellingen, extensies, storage-policies buiten de migraties).
 #
-#  Non-blocking bewust: een gehoste test-DB is deelbaar/traag/soms afwezig; hij
-#  mag geen PR blokkeren. De harde poort blijft optie A. Ontbreekt het secret,
-#  dan skipt de suite netjes (scripts/cross-tenant-ci.sh → geen DB → app-laag).
+#  Deze job draait op een schema en niet op push/PR, en de stap hieronder staat
+#  op `continue-on-error` — dat is de reden dat een falende fidelity-run niets
+#  tegenhoudt, en het staat in de CONFIG, niet in dit commentaar. Een gehoste
+#  test-DB is deelbaar/traag/soms afwezig. Ontbreekt het secret, dan skipt de
+#  suite netjes (scripts/cross-tenant-ci.sh → geen DB → app-laag).
 #
 #  De DB-laag draait hier NIET-destructief: de gedrag-suites seeden en rollen
 #  terug (begin … rollback). Draai desondanks NOOIT tegen productie — het secret

@@ -21,6 +21,13 @@
 -- Uitvoeren:  scripts/rls-cross-tenant-test.sh   (of: psql "$DB" -f dit-bestand)
 -- ============================================================================
 
+-- ----------------------------------------------------------------------------
+-- ROL: postgres voor deel 1 (structurele dekking uit de catalogus, seedloos),
+--      authenticated per scenario voor deel 2 (gedragsbewijs onder RLS).
+--      (verplicht en machineleesbaar — zie ROL-1 in
+--       tests/cross-tenant/checksuite-rolverklaring.test.ts voor het waarom)
+-- ----------------------------------------------------------------------------
+
 \set ON_ERROR_STOP on
 
 -- ╔════════════════════════════════════════════════════════════════════════╗

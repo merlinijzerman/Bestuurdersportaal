@@ -11,17 +11,11 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 
-export async function GET(req: NextRequest) {
+export const GET = withFondsRoute({}, async (ctx, req: NextRequest) => {
   try {
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const supabase = ctx.supabase;
 
     const url = new URL(req.url);
     const ongelezen = url.searchParams.get("ongelezen") === "true";
@@ -58,4 +52,4 @@ export async function GET(req: NextRequest) {
     console.error("Fout in GET /api/notificaties:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

@@ -11,19 +11,13 @@
 // ============================================================
 
 import { NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export const GET = withFondsRoute({}, async (ctx) => {
   try {
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const supabase = ctx.supabase;
 
     // Procedures van het eigen fonds (RLS dwingt fonds_id af; expliciete
     // filter laten we weg en vertrouwen op de policy — net als de overige
@@ -67,4 +61,4 @@ export async function GET() {
     console.error("Fout in GET /api/dossiers:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

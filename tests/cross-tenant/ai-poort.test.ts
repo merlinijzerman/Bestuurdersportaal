@@ -248,3 +248,44 @@ test("AI-begrenzing — offline scripts dragen een expliciete waarschuwing", () 
     );
   }
 });
+
+// ── (6) STUK-1 (W5, #101) — geen bestand de deur uit zonder auditregel ───────
+
+test("STUK-1 — ai/stuk-export logt VÓÓR het bouwen en teruggeven van de .docx", () => {
+  // B-4/G16: bouw en registratie zitten bewust in één route, zodat er geen
+  // bestand naar buiten kan zonder auditregel — eerst loggen, dan pas het
+  // bestand. Die volgorde is een ORDENING in de handler en geen aanroep; de
+  // andere controles in dit bestand toetsen "roept X aan", en zouden dus groen
+  // blijven als iemand de twee blokken omdraait.
+  //
+  // Waarom bron-inspectie en geen scenario in het karakteriseringsharnas:
+  // GEMETEN in W5 dat er geen INVOER bestaat die log_word_export laat falen
+  // terwijl de capability-gate ervóór slaagt — `governance_export_log
+  // .gesprek_audit_id` heeft geen foreign key en `stuksoort` geen
+  // check-constraint. De volgorde is dus niet via een request af te dwingen.
+  //
+  // Runtime WEL eenmalig tegenbewezen (W5, #101): met `revoke execute on
+  // log_word_export from authenticated` gaf de route 500 met content-type
+  // application/json in plaats van een .docx, en bleef het aantal regels in
+  // governance_export_log gelijk. Deze test bewaakt dat die volgorde blijft
+  // staan; de meting bewijst dat de volgorde doet wat ze belooft.
+  const bron = lees(join("app", "api", "ai", "stuk-export", "route.ts"));
+
+  const log = bron.indexOf('.rpc("log_word_export"');
+  const bouw = bron.indexOf("await bouwDocx(");
+  assert.ok(log !== -1, "ai/stuk-export roept log_word_export niet meer aan");
+  assert.ok(bouw !== -1, "ai/stuk-export roept bouwDocx niet meer aan");
+  assert.ok(
+    log < bouw,
+    "ai/stuk-export bouwt de .docx vóór de auditregel; dat laat een export zonder spoor toe (B-4/G16)."
+  );
+
+  // En de mislukking moet ook echt blokkeren: een gelogde-maar-genegeerde fout
+  // zou de volgorde formeel intact laten en de garantie toch weghalen.
+  const naLog = bron.slice(log, bouw);
+  assert.match(
+    naLog,
+    /if \(logFout\)[\s\S]*status: 500/,
+    "ai/stuk-export gaat door na een mislukte log_word_export; de export hoort dan te stoppen."
+  );
+});

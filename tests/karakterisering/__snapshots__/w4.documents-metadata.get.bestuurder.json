@@ -1,0 +1,41 @@
+{
+  "body": {
+    "bewerkbaar": {
+      "bronstatusChange": true,
+      "metadataUpdate": true,
+      "statusChange": true
+    },
+    "context_blokkers": [],
+    "document": {
+      "actief": true,
+      "agendapunt_id": null,
+      "bibliotheek": "fonds",
+      "bronorganisatie": null,
+      "bronstatus": null,
+      "context": "algemeen",
+      "documentdatum": null,
+      "documenttype": null,
+      "extern_url": null,
+      "fonds_id": "<uuid:1>",
+      "geldig_tot": null,
+      "geldig_vanaf": null,
+      "id": "<uuid:2>",
+      "normgewicht": null,
+      "opgeslagen_door": null,
+      "procesinstantie_id": null,
+      "status": "concept",
+      "titel": "W1 Document",
+      "vergadering_id": null,
+      "vervangen_door_document_id": null,
+      "vervangt_document_id": null
+    },
+    "toegestane_vervolgstatussen": [
+      "gearchiveerd",
+      "vastgesteld"
+    ]
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

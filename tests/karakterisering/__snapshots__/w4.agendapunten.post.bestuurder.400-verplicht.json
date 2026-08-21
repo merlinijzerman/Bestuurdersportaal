@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "vergadering_id en titel zijn verplicht"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 400
+}

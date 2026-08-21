@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Dit document is ingetrokken en is niet meer in te zien. Neem contact op met de beheerder als u het origineel nodig heeft."
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 410
+}

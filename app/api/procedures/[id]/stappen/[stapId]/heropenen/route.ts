@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { ensureDecisionForProcedure } from "@/core/lib/decision";
 import {
   afhankelijkeAfgerondeStappen,
@@ -14,19 +14,10 @@ import {
 // (nieuwe versie van het oordeel, geen overschrijving). Afhankelijke,
 // reeds afgeronde stappen worden NIET teruggezet maar gemarkeerd met
 // `herbevestiging_nodig = true` (zichtbaar, niet-blokkerend signaal).
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string; stapId: string }> }
-) {
+export const POST = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id, stapId } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const { id, stapId } = params as { id: string; stapId: string };
+    const supabase = ctx.supabase;
 
     const body = (await req.json().catch(() => ({}))) as { motivering?: string };
     const motivering = body.motivering?.trim();
@@ -38,12 +29,11 @@ export async function POST(
     }
 
     // Capability: alleen voorzitter/beheerder mogen heropenen (vrijheidsniveau 2/3).
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam, rol")
-      .eq("id", user.id)
-      .single();
-    if (!profiel || !["voorzitter", "beheerder"].includes(profiel.rol)) {
+    // BESLUIT (W4): `!profiel ||` valt weg en `ctx.rol` krijgt `?? ""`.
+    // Uitkomst-identiek: geen profielrij -> haalProfiel geeft null -> ctx.rol is
+    // null -> "" -> 403; profielrij met rol null idem; rol gezet ongewijzigd.
+    // Zelfde afweging als bij de twee documents-backfills.
+    if (!["voorzitter", "beheerder"].includes(ctx.rol ?? "")) {
       return NextResponse.json(
         { error: "Alleen voorzitter of beheerder kan een stap heropenen" },
         { status: 403 }
@@ -111,8 +101,8 @@ export async function POST(
     const { error: eventFout } = await supabase.from("governance_events").insert({
       decision_id,
       event_type: "stap_heropend",
-      actor_id: user.id,
-      actor_naam: profiel.naam ?? null,
+      actor_id: ctx.gebruikerId,
+      actor_naam: ctx.naam ?? null,
       object_type: "procedure_stap",
       object_id: stapId,
       oude_waarde: { status: "afgerond" },
@@ -156,8 +146,8 @@ export async function POST(
     await supabase.from("procedure_log").insert({
       procedure_id: id,
       event_type: "stap_heropend",
-      actor_id: user.id,
-      actor_naam: profiel.naam ?? null,
+      actor_id: ctx.gebruikerId,
+      actor_naam: ctx.naam ?? null,
       payload: { stap: stap.naam, motivering, herbevestiging: teHerbevestigen },
     });
 
@@ -166,4 +156,4 @@ export async function POST(
     console.error("Fout in POST …/stappen/[stapId]/heropenen:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

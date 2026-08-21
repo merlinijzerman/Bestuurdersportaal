@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 
 type VergaderingRow = {
   id: string;
@@ -21,19 +21,10 @@ type VergaderingRow = {
 //  Audit: diff-gebaseerde entry in vergadering_log (append-only,
 //  migratie 2026_07_20_vergadering_wijzigen.sql).
 // ============================================================
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const PATCH = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const { id } = params as { id: string };
+    const supabase = ctx.supabase;
 
     const { data: vergaderingRaw } = await supabase
       .from("vergaderingen")
@@ -54,15 +45,10 @@ export async function PATCH(
     }
 
     // Profiel + rol (zelfde rechtenmodel als agendapunt-PATCH)
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam, rol, fonds_id")
-      .eq("id", user.id)
-      .single();
 
-    const isEigenaar = vergadering.aangemaakt_door === user.id;
+    const isEigenaar = vergadering.aangemaakt_door === ctx.gebruikerId;
     const isPrivileged =
-      profiel?.rol === "voorzitter" || profiel?.rol === "beheerder";
+      ctx.rol === "voorzitter" || ctx.rol === "beheerder";
 
     if (!isEigenaar && !isPrivileged) {
       return NextResponse.json(
@@ -119,7 +105,7 @@ export async function PATCH(
 
     // ── Audit-velden + update ───────────────────────────────
     updatePayload.gewijzigd_op = new Date().toISOString();
-    updatePayload.gewijzigd_door = user.id;
+    updatePayload.gewijzigd_door = ctx.gebruikerId;
 
     const { data: updated, error: updFout } = await supabase
       .from("vergaderingen")
@@ -137,7 +123,7 @@ export async function PATCH(
     const { error: logFout } = await supabase.from("vergadering_log").insert({
       vergadering_id: id,
       event_type: "vergadering_gewijzigd",
-      actor_id: user.id,
+      actor_id: ctx.gebruikerId,
       payload: {
         velden: gewijzigdeVelden,
         diff,
@@ -154,4 +140,4 @@ export async function PATCH(
     console.error("Fout in PATCH /api/vergaderingen/[id]:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

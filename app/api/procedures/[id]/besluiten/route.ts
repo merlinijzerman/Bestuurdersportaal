@@ -1,20 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { notifyUser } from "@/core/lib/notifications";
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const POST = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const { id } = params as { id: string };
+    const supabase = ctx.supabase;
 
     const body = (await req.json()) as {
       stap_id?: string | null;
@@ -53,12 +44,6 @@ export async function POST(
       );
     }
 
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam")
-      .eq("id", user.id)
-      .single();
-
     // Verworpen alternatieven: filter lege strings + trim.
     const alternatieven = Array.isArray(body.verworpen_alternatieven)
       ? body.verworpen_alternatieven
@@ -78,8 +63,8 @@ export async function POST(
         motivering: body.motivering || null,
         datum,
         verworpen_alternatieven: alternatieven,
-        vastgelegd_door: user.id,
-        vastgelegd_door_naam: profiel?.naam || null,
+        vastgelegd_door: ctx.gebruikerId,
+        vastgelegd_door_naam: ctx.naam || null,
       })
       .select()
       .single();
@@ -95,8 +80,8 @@ export async function POST(
     await supabase.from("procedure_log").insert({
       procedure_id: id,
       event_type: "besluit_vastgelegd",
-      actor_id: user.id,
-      actor_naam: profiel?.naam || null,
+      actor_id: ctx.gebruikerId,
+      actor_naam: ctx.naam || null,
       payload: { formulering, datum },
     });
 
@@ -108,8 +93,8 @@ export async function POST(
       await supabase.from("governance_events").insert({
         decision_id: proc.decision_id,
         event_type: "besluit_vastgelegd",
-        actor_id: user.id,
-        actor_naam: profiel?.naam || null,
+        actor_id: ctx.gebruikerId,
+        actor_naam: ctx.naam || null,
         object_type: "besluit",
         object_id: besluit.id,
         nieuwe_waarde: {
@@ -137,12 +122,15 @@ export async function POST(
           type: "besluit_geregistreerd",
           procedure_titel: proc.titel ?? "Procedure",
           besluit_formulering_preview: preview,
-          actor_naam: profiel?.naam || user.email || "Een collega",
+          actor_naam: ctx.naam || ctx.email || "Een collega",
         },
         {
           gerelateerd_aan_type: "procedure",
           gerelateerd_aan_id: id,
-          actor_naam: profiel?.naam || null,
+          // BESLUIT (W4): `|| undefined`. Waarde-identiek — notifyUser doet
+          // `opts.actor_naam ?? null` — en typegeldig tegen
+          // `NotifyOpts.actor_naam?: string`. Zelfde afweging als in inbreng.
+          actor_naam: ctx.naam || undefined,
         }
       );
     }
@@ -152,4 +140,4 @@ export async function POST(
     console.error("Fout in POST /api/procedures/[id]/besluiten:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

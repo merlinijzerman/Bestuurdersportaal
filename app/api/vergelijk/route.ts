@@ -12,8 +12,7 @@
 // -----------------------------------------------------------------------------
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
-import { beoordeelRouteHostToegang } from "@/core/lib/tenant-route-guard";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { weigerAlsModuleUit } from "@/core/lib/module-guard";
 import { errorResponse, badRequest, rateLimited } from "@/core/lib/api-errors";
 import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
@@ -38,17 +37,15 @@ interface VergelijkBody {
   dimensies?: unknown;
 }
 
-export async function POST(req: NextRequest): Promise<NextResponse> {
+export const POST = withFondsRoute({ hostGuard: true, label: "vergelijk.POST" }, async (ctx, req: NextRequest) => {
   try {
     // 0. Feature-flag: uit = feature niet beschikbaar (chat-ingang doet ook niets).
     if (!vergelijkmodusAan()) {
       return NextResponse.json({ error: "Vergelijkmodus is niet actief." }, { status: 404 });
     }
 
-    // 1. Auth.
-    const supabase = await createServerSupabase();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+    // 1. Auth — nu door withFondsRoute.
+    const supabase = ctx.supabase;
 
     // 2. Body + validatie.
     const body = (await req.json()) as VergelijkBody;
@@ -69,24 +66,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       : undefined;
 
     // 3. fonds_id — SERVER-SIDE uit het profiel (body wordt nooit vertrouwd).
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("fonds_id")
-      .eq("id", user.id)
-      .single();
-    const fondsId = profiel?.fonds_id ?? null;
+    const fondsId = ctx.fondsId;
+    // BESLUIT (W4 §7): deze tak BLIJFT staan, maar de host-guard draait er sinds
+    // de migratie VOOR — de wrapper doet hem vóór de handler. Onder
+    // TENANT_ENFORCE≠on is dat transparant en dus byte-identiek. Onder
+    // TENANT_ENFORCE=on krijgt een gebruiker ZONDER fonds voortaan
+    // "Dit webadres hoort niet bij uw fonds." (403) in plaats van
+    // "Geen fonds gekoppeld aan dit account" (403): zelfde status, andere body.
+    // Dezelfde afweging als in W3 bij `aqlab/assurance` en `zoeken`.
     if (!fondsId) {
       return NextResponse.json({ error: "Geen fonds gekoppeld aan dit account" }, { status: 403 });
-    }
-
-    // 4. Host↔fonds-guard (fail-closed onder TENANT_ENFORCE).
-    const hostOordeel = await beoordeelRouteHostToegang({
-      sessieFondsId: fondsId,
-      gebruikerId: user.id,
-      label: "vergelijk.POST",
-    });
-    if (!hostOordeel.toegestaan) {
-      return NextResponse.json({ error: "Dit webadres hoort niet bij uw fonds." }, { status: 403 });
     }
 
     // 5. Module-beschikbaarheid (AI). BESCHIKBAARHEID ≠ AUTORISATIE.
@@ -165,4 +154,4 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   } catch (error) {
     return errorResponse("vergelijk.POST", error);
   }
-}
+});

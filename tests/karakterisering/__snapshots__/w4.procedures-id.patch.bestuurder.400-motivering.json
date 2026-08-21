@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Motivering is verplicht (min. 3 tekens)"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 400
+}

@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Document is al gedeactiveerd."
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 409
+}

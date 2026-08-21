@@ -5,7 +5,7 @@
 // 'risk_gewijzigd'. Geen hard-delete (audit).
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 
 const RISK_CATEGORIE = [
   "financieel",
@@ -46,19 +46,10 @@ function isGeldigeKi(n: unknown): n is number {
   return typeof n === "number" && Number.isInteger(n) && n >= 1 && n <= 5;
 }
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string; rid: string }> }
-) {
+export const PATCH = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id: decisionId, rid } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const { id: decisionId, rid } = params as { id: string; rid: string };
+    const supabase = ctx.supabase;
 
     const body = (await req.json()) as WijzigBody;
 
@@ -169,18 +160,13 @@ export async function PATCH(
       );
     }
 
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam")
-      .eq("id", user.id)
-      .maybeSingle();
-    const actorNaam = profiel?.naam ?? null;
+    const actorNaam = ctx.naam;
 
     if (inhoudelijkGewijzigd.length > 0) {
       await supabase.from("governance_events").insert({
         decision_id: decisionId,
         event_type: "risk_gewijzigd",
-        actor_id: user.id,
+        actor_id: ctx.gebruikerId,
         actor_naam: actorNaam,
         object_type: "risk",
         object_id: rid,
@@ -197,7 +183,7 @@ export async function PATCH(
       await supabase.from("governance_events").insert({
         decision_id: decisionId,
         event_type: "risk_status_gewijzigd",
-        actor_id: user.id,
+        actor_id: ctx.gebruikerId,
         actor_naam: actorNaam,
         object_type: "risk",
         object_id: rid,
@@ -211,4 +197,4 @@ export async function PATCH(
     console.error("Fout in PATCH /api/decisions/[id]/risks/[rid]:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

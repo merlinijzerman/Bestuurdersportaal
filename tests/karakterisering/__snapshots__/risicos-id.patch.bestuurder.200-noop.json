@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": "Er is niets gewijzigd.",
+    "foutcode": "geen_wijziging"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

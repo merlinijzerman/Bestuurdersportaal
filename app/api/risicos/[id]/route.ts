@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import {
   bouwRisicoWijziging,
   RISICO_VELD_LABEL,
@@ -39,25 +39,10 @@ import {
 
 type RisicoRij = RisicoHuidig & { id: string; fonds_id: string; status: string };
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const PATCH = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
-
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam, fonds_id")
-      .eq("id", user.id)
-      .single();
+    const { id } = params as { id: string };
+    const supabase = ctx.supabase;
 
     const { data: rij } = await supabase
       .from("risicos")
@@ -72,7 +57,7 @@ export async function PATCH(
     }
     const risico = rij as RisicoRij;
 
-    if (!profiel?.fonds_id || risico.fonds_id !== profiel.fonds_id) {
+    if (!ctx.fondsId || risico.fonds_id !== ctx.fondsId) {
       return NextResponse.json(
         { error: "Dit risico hoort niet bij uw fonds." },
         { status: 403 }
@@ -138,8 +123,8 @@ export async function PATCH(
     const { error: logFout } = await supabase.from("risico_log").insert({
       risico_id: id,
       event_type: "risico_gewijzigd",
-      actor_id: user.id,
-      actor_naam: profiel?.naam ?? null,
+      actor_id: ctx.gebruikerId,
+      actor_naam: ctx.naam ?? null,
       payload: {
         velden: uitkomst.gewijzigdeVelden,
         // Leesbare labels erbij zodat het logboek zonder de code te kennen
@@ -161,4 +146,4 @@ export async function PATCH(
     console.error("Fout in PATCH /api/risicos/[id]:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

@@ -8,7 +8,7 @@ import {
   sleutelUitRequest,
   vingerafdruk,
 } from "@/core/lib/ai-preflight";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { zoekRelevanteChunksMetMeta, telNietActueleFondstreffers, maakContext, maakBronSentinel, haalDocumentChunksMetDekking, telDocumentChunks, VOLLEDIGE_DOCUMENT_CHUNK_CAP, haalBevrorenChunks, verrijkNotulenChunks, verrijkDocumentmetadata, type DocumentChunk, type DocumentChunkOphaalresultaat, type BronVerwijzing, type RetrievalMeta, type RetrievalFilters } from "@/core/lib/rag";
 // Plateau B — de reflectieflow. `isActief` heet hier `isReflectieActief` omdat
 // `actief` in deze route al een half dozijn andere betekenissen heeft.
@@ -308,7 +308,24 @@ function documentBronnen(chunks: DocumentChunk[]): BronVerwijzing[] {
 //  (DRY, één bron van waarheid). Zie de import bovenaan dit bestand.
 // ============================================================
 
-export async function POST(req: NextRequest) {
+// SSE-ROUTE (W5, #101) — de meest blootgestelde route van het platform.
+//
+// `hostGuard: "route-eigen"`, en dat is een WAARDE en geen weglating. De wrapper
+// zou de host-guard vóór de handler trekken, en daarmee vóór de fail-closed rate
+// limit (H-12) en vóór de eigen `!fondsId`-403. Die volgorde is hier uitgeschreven
+// en gemotiveerd: de rate limit is de enige rem op het aantal Opus-aanroepen en
+// moet als eerste staan, want anders kost een geweigerd verzoek alsnog een
+// teller-omweg. De guard blijft daarom inline staan, met de reden erbij.
+// (Zelfde vorm als `documents/upload` in W4.)
+//
+// W5 raakt ALLEEN de preambule aan. Deze route is 3.735 regels en bevinding S-05;
+// splitsen is R-28 en hoort in deploy 3.
+//
+// Het vangnet van de wrapper omhult alleen de aanroep van deze handler. Zodra de
+// Response met de ReadableStream is teruggegeven (het "stream-openpunt", besluit
+// 0087) is status 200 verzonden en doet de wrapper niets meer — bewezen met een
+// geïnjecteerde throw ná het eerste enqueue in core/lib/route-wrapper.sanity.ts.
+export const POST = withFondsRoute({ hostGuard: "route-eigen" }, async (ctx, req: NextRequest) => {
   try {
     const body = (await req.json()) as {
       // nieuw: volledige conversatiegeschiedenis
@@ -458,15 +475,8 @@ export async function POST(req: NextRequest) {
     // documenten). Corrigeert alleen de toon; ontsluit geen bevoegdheid.
     const opstelTaak = isOpsteltaak(vraag);
 
-    // Authenticatie
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    // Authenticatie — door withFondsRoute.
+    const supabase = ctx.supabase;
 
     // Rate limiting (WP2): vóór RAG/Anthropic, zodat een loop geen kosten maakt.
     // Moet vóór de SSE-stream gebeuren — een 429 is een gewone JSON-response.
@@ -483,7 +493,7 @@ export async function POST(req: NextRequest) {
       // T4 — het geldende wettelijk regime van het fonds meelezen (fonds-niveau,
       // geen PII). Stuurt de regime-demotie in de retrieval (RetrievalFilters).
       .select("naam, rol, fonds_id, fondsen(naam, primair_wettelijk_regime)")
-      .eq("id", user.id)
+      .eq("id", ctx.gebruikerId)
       .single();
 
     // Fonds-scope komt UITSLUITEND uit de sessie (T1.3, besluit 0042). Nooit uit
@@ -502,7 +512,7 @@ export async function POST(req: NextRequest) {
     // zolang enforce uit staat.
     const hostOordeel = await beoordeelRouteHostToegang({
       sessieFondsId: fondsId,
-      gebruikerId: user.id,
+      gebruikerId: ctx.gebruikerId,
       label: "chat.POST",
     });
     if (!hostOordeel.toegestaan) {
@@ -562,7 +572,7 @@ export async function POST(req: NextRequest) {
           .from("governance_log")
           .select("id, gebruiker_id, fonds_id, retrieval_meta")
           .eq("id", vorigId)
-          .eq("gebruiker_id", user.id)
+          .eq("gebruiker_id", ctx.gebruikerId)
           .eq("fonds_id", fondsId)
           .maybeSingle(),
         supabase
@@ -650,7 +660,7 @@ export async function POST(req: NextRequest) {
       body.fonds_id !== fondsId;
     if (bodyFondsAfwijkend) {
       console.warn(
-        `[T4] body.fonds_id (${body.fonds_id}) wijkt af van sessie-fonds (${fondsId}) — genegeerd (gebruiker ${user.id}).`
+        `[T4] body.fonds_id (${body.fonds_id}) wijkt af van sessie-fonds (${fondsId}) — genegeerd (gebruiker ${ctx.gebruikerId}).`
       );
     }
 
@@ -668,7 +678,7 @@ export async function POST(req: NextRequest) {
         | RetrievalFilters["primairRegime"]
         | undefined;
 
-    const volledigeNaam = profiel?.naam || user.email || "een bestuurslid";
+    const volledigeNaam = profiel?.naam || ctx.email || "een bestuurslid";
     const voornaam = volledigeNaam.split(" ")[0] || volledigeNaam;
     const rolLabel = ROL_LABEL[profiel?.rol || "bestuurder"] || "bestuurslid";
     const fondsnaam =
@@ -692,7 +702,7 @@ export async function POST(req: NextRequest) {
     if (algemeenPerspectief) {
       profielsturingStatus = "uitgeschakeld";
     } else {
-      const sturing = await bouwProfielsturing(supabase, user.id);
+      const sturing = await bouwProfielsturing(supabase, ctx.gebruikerId);
       if (sturing) {
         ctxBestuurder.profielsturing = sturing.tekst;
         profielsturingStatus = "actief";
@@ -1006,7 +1016,7 @@ export async function POST(req: NextRequest) {
           // Manipulatiesignaal (vgl. de body.fonds_id-lijn): een risico-id dat onder
           // RLS niets teruggeeft is ofwel verwijderd ofwel van een ander fonds.
           console.warn(
-            `[0151] module_scope risico_id (${moduleScope.risico_id}) niet gevonden onder RLS — geweigerd (gebruiker ${user.id}, fonds ${fondsId}).`
+            `[0151] module_scope risico_id (${moduleScope.risico_id}) niet gevonden onder RLS — geweigerd (gebruiker ${ctx.gebruikerId}, fonds ${fondsId}).`
           );
           return NextResponse.json(
             { error: "Het gekozen risico is niet gevonden of u heeft er geen toegang toe." },
@@ -1046,7 +1056,7 @@ export async function POST(req: NextRequest) {
           .maybeSingle();
         if (!proc?.id) {
           console.warn(
-            `[0151] module_scope procedure_id (${moduleScope.procedure_id}) niet gevonden onder RLS — geweigerd (gebruiker ${user.id}, fonds ${fondsId}).`
+            `[0151] module_scope procedure_id (${moduleScope.procedure_id}) niet gevonden onder RLS — geweigerd (gebruiker ${ctx.gebruikerId}, fonds ${fondsId}).`
           );
           return NextResponse.json(
             { error: "Het gekozen proces is niet gevonden of u heeft er geen toegang toe." },
@@ -2355,7 +2365,7 @@ export async function POST(req: NextRequest) {
       heeftPortaalstandNodig(vraag);
     if (portaalstandNodig) {
       const stand = await getPortaalContext({
-        userId: user.id,
+        userId: ctx.gebruikerId,
         fondsId,
         gebruikerNaam: profiel?.naam ?? null,
         // T1 bureau-rol (§6.6): zonder de rol valt de afleiding terug op de
@@ -3732,4 +3742,4 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

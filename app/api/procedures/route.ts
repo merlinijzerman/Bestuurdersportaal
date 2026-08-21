@@ -1,17 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { vindTemplate } from "@/core/lib/proces-templates";
 import { beginStatussen } from "@/core/lib/procedure-activatie";
 
-export async function POST(req: NextRequest) {
+export const POST = withFondsRoute({}, async (ctx, req: NextRequest) => {
   try {
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const supabase = ctx.supabase;
 
     const body = (await req.json()) as {
       template_code?: string;
@@ -38,12 +32,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("fonds_id, naam")
-      .eq("id", user.id)
-      .single();
-    if (!profiel?.fonds_id) {
+    if (!ctx.fondsId) {
       return NextResponse.json(
         { error: "Geen fonds gekoppeld aan profiel" },
         { status: 400 }
@@ -54,13 +43,13 @@ export async function POST(req: NextRequest) {
     const { data: procedure, error: procFout } = await supabase
       .from("procedures")
       .insert({
-        fonds_id: profiel.fonds_id,
+        fonds_id: ctx.fondsId,
         template_code: templateCode,
         titel,
         beschrijving: body.beschrijving || null,
         deadline: body.deadline || null,
         status: "lopend",
-        gestart_door: user.id,
+        gestart_door: ctx.gebruikerId,
       })
       .select()
       .single();
@@ -87,11 +76,11 @@ export async function POST(req: NextRequest) {
     // vanzelf uit. Nooit vertrouwen op wat de client meestuurt.
     const gekozenIds = Array.from(
       new Set((body.eigenaar_ids || []).filter((v) => typeof v === "string" && v))
-    ).filter((v) => v !== user.id);
+    ).filter((v) => v !== ctx.gebruikerId);
 
     const eigenaars: { gebruiker_id: string | null; gebruiker_naam: string }[] = [];
-    if (profiel.naam) {
-      eigenaars.push({ gebruiker_id: user.id, gebruiker_naam: profiel.naam });
+    if (ctx.naam) {
+      eigenaars.push({ gebruiker_id: ctx.gebruikerId, gebruiker_naam: ctx.naam });
     }
     if (gekozenIds.length > 0) {
       const { data: leden } = await supabase
@@ -192,8 +181,8 @@ export async function POST(req: NextRequest) {
       {
         procedure_id: procedure.id,
         event_type: "procedure_aangemaakt",
-        actor_id: user.id,
-        actor_naam: profiel.naam || null,
+        actor_id: ctx.gebruikerId,
+        actor_naam: ctx.naam || null,
         payload: { template: template.naam },
       },
     ];
@@ -204,12 +193,12 @@ export async function POST(req: NextRequest) {
     // gebruiker_id mee, zodat een latere lezer de persoon kan terugvinden ook
     // als diens weergavenaam inmiddels is gewijzigd.
     for (const e of Array.from(perNaam.values())) {
-      if (e.gebruiker_id !== user.id) {
+      if (e.gebruiker_id !== ctx.gebruikerId) {
         logEntries.push({
           procedure_id: procedure.id,
           event_type: "eigenaar_toegevoegd",
-          actor_id: user.id,
-          actor_naam: profiel.naam || null,
+          actor_id: ctx.gebruikerId,
+          actor_naam: ctx.naam || null,
           payload: { naam: e.gebruiker_naam, gebruiker_id: e.gebruiker_id },
         });
       }
@@ -225,8 +214,8 @@ export async function POST(req: NextRequest) {
     logEntries.push({
       procedure_id: procedure.id,
       event_type: "stap_gestart",
-      actor_id: user.id,
-      actor_naam: profiel.naam || null,
+      actor_id: ctx.gebruikerId,
+      actor_naam: ctx.naam || null,
       payload: parallelModel
         ? { parallel: true, actieve_stappen: actieveStapNamen }
         : { stap: actieveStapNamen[0] },
@@ -238,4 +227,4 @@ export async function POST(req: NextRequest) {
     console.error("Fout in POST /api/procedures:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

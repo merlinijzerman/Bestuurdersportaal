@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute, type FondsContext } from "@/core/lib/route-wrapper";
 import { requireCapability } from "@/core/lib/capabilities";
 import { weigerAlsModuleUit } from "@/core/lib/module-guard";
 import { errorResponse, badRequest } from "@/core/lib/api-errors";
@@ -57,46 +57,33 @@ import {
 //  body; de RLS-rolgate (voorzitter/beheerder, WITH CHECK) dubbelt dit in de DB.
 // ============================================================
 
-async function fondsVanGebruiker() {
-  const supabase = await createServerSupabase();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { user: null, profiel: null };
-  const { data: profiel } = await supabase
-    .from("profielen")
-    .select("naam, fonds_id, rol")
-    .eq("id", user.id)
-    .single();
-  return { user, profiel };
-}
-
 type Gate =
   | { ok: true; fondsId: string }
   | { ok: false; res: NextResponse };
 
-async function gate(): Promise<Gate> {
-  const { user, profiel } = await fondsVanGebruiker();
-  if (!user) return { ok: false, res: NextResponse.json({ error: "Niet ingelogd" }, { status: 401 }) };
-  if (!profiel?.fonds_id)
+// HANDWERK (W4): de auth-preambule zat in `fondsVanGebruiker()` en de poorten in
+// `gate()`, geen van beide in een handler. De wrapper doet de preambule; `gate()`
+// krijgt de context mee en houdt zijn eigen `!fondsId`-tak (§7).
+async function gate(ctx: FondsContext): Promise<Gate> {
+  if (!ctx.fondsId)
     return { ok: false, res: NextResponse.json({ error: "Geen fonds" }, { status: 400 }) };
 
   // Autorisatie: schrijf-capability, server-side (naast de RLS-rolgate in de DB).
-  const magBeheren = await requireCapability(user.id, "stuurinformatie.manage");
+  const magBeheren = await requireCapability(ctx.gebruikerId, "stuurinformatie.manage");
   if (!magBeheren)
     return { ok: false, res: NextResponse.json({ error: "Onvoldoende rechten" }, { status: 403 }) };
 
   // Beschikbaarheid: module 'stuurinformatie' moet aanstaan voor dit fonds.
-  const fondsId = profiel.fonds_id; // server-side afgeleid, nooit uit de body
+  const fondsId = ctx.fondsId; // server-side afgeleid, nooit uit de body
   const weigering = await weigerAlsModuleUit(fondsId, "stuurinformatie");
   if (weigering) return { ok: false, res: weigering };
 
   return { ok: true, fondsId };
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withFondsRoute({}, async (ctx, req: NextRequest) => {
   try {
-    const g = await gate();
+    const g = await gate(ctx);
     if (!g.ok) return g.res;
 
     // ?periode= wordt uitsluitend gevalideerd tegen de eigen registry
@@ -107,11 +94,11 @@ export async function GET(req: NextRequest) {
   } catch (e) {
     return errorResponse("stuurinformatie.beheer.GET", e);
   }
-}
+});
 
-export async function POST(req: NextRequest) {
+export const POST = withFondsRoute({}, async (ctx, req: NextRequest) => {
   try {
-    const g = await gate();
+    const g = await gate(ctx);
     if (!g.ok) return g.res;
 
     const body = (await req.json()) as Record<string, unknown>;
@@ -200,4 +187,4 @@ export async function POST(req: NextRequest) {
       userMessage: "Opslaan mislukt. Controleer de invoer en probeer het opnieuw.",
     });
   }
-}
+});

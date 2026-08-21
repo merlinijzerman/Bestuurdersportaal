@@ -29,6 +29,13 @@
 -- Uitvoeren:  psql "$DB" -f dit-bestand   (of via scripts/cross-tenant-ci.sh)
 -- ============================================================================
 
+-- ----------------------------------------------------------------------------
+-- ROL: postgres voor opbouw en afbraak, authenticated per scenario — de meting
+--      gebeurt onder RLS, niet onder BYPASSRLS.
+--      (verplicht en machineleesbaar — zie ROL-1 in
+--       tests/cross-tenant/checksuite-rolverklaring.test.ts voor het waarom)
+-- ----------------------------------------------------------------------------
+
 \set ON_ERROR_STOP on
 
 -- ╔════════════════════════════════════════════════════════════════════════╗

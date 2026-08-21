@@ -30,7 +30,12 @@ echo "[1/3] SUPABASE_SERVICE_ROLE_KEY alleen in de server-only platform-laag…"
 # Zoek bewust naar een UITVOERBARE process.env-toegang, niet naar de losse naam.
 # De oude tekstzoeker markeerde ook documentatiecomments en negatieve tests als
 # geheimlek. Dat maakte de gate rood zonder dat de sleutel ooit werd ingelezen.
-toegestaan_regex='^(platform/lib/.*\.(ts|tsx|js|mjs)|scripts/.*)$'
+# tests/karakterisering/* is server-only testinfra (Node-scripts, alleen CI/lokaal,
+# nooit gebundeld). Het karakteriseringsharnas (W1, issue #88) seedt de wegwerp-
+# test-DB via de service-role (admin.createUser/updateUserById/storage.upload) —
+# dat is inherent aan het harnas. De ECHTE grens (geen service-role in een
+# client-bundle) blijft volledig geborgd door [3/3] + de buildoutput-sleutelcheck.
+toegestaan_regex='^(platform/lib/.*\.(ts|tsx|js|mjs)|scripts/.*|tests/karakterisering/.*\.mjs)$'
 
 # FAIL-CLOSED (WP5-5b). Deze stap stond met `rg … || true` in de pijplijn: op een
 # runner zonder ripgrep gaf hij nul treffers én exit 0, en meldde de gate dus

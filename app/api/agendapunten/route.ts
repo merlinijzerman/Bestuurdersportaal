@@ -1,17 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 
 const TOEGESTANE_CATEGORIEEN = ["beeldvorming", "oordeelsvorming", "besluitvorming", "informatie"];
 
-export async function POST(req: NextRequest) {
+export const POST = withFondsRoute({}, async (ctx, req: NextRequest) => {
   try {
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const supabase = ctx.supabase;
 
     const body = (await req.json()) as {
       vergadering_id?: string;
@@ -62,7 +56,7 @@ export async function POST(req: NextRequest) {
         tijdsduur_minuten: tijdsduur_minuten || null,
         verantwoordelijke: verantwoordelijke || null,
         volgorde,
-        aangemaakt_door: user.id,
+        aangemaakt_door: ctx.gebruikerId,
       })
       .select()
       .single();
@@ -77,4 +71,4 @@ export async function POST(req: NextRequest) {
     console.error("Fout in /api/agendapunten:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

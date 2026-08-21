@@ -13,7 +13,7 @@
 //   • ai_output_gevalideerd, ai_output_aangepast, ai_output_afgekeurd
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import type { AIValidatieStatus } from "@/core/lib/decision-view";
 
 const ROLLEN_VOOR_SPECIALISTISCH = new Set(["voorzitter", "beheerder"]);
@@ -33,19 +33,10 @@ interface PatchBody {
   verworpen_reden?: string | null;
 }
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string; aiid: string }> }
-) {
+export const PATCH = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id, aiid } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const { id, aiid } = params as { id: string; aiid: string };
+    const supabase = ctx.supabase;
 
     const body = (await req.json()) as PatchBody;
 
@@ -79,12 +70,13 @@ export async function PATCH(
       body.validatiestatus !== ai.validatiestatus &&
       ai.validatie_domein !== "algemeen"
     ) {
-      const { data: profiel } = await supabase
-        .from("profielen")
-        .select("rol")
-        .eq("id", user.id)
-        .maybeSingle();
-      const rol = profiel?.rol ?? "bestuurder";
+      // Het `?? "bestuurder"` stond er al en blijft ONGEWIJZIGD: een gebruiker
+      // zonder rol wordt hier als bestuurder behandeld. Dat is een fail-OPEN
+      // default, en daarmee een observatie voor W7 — geen W4-wijziging.
+      // De classifier markeert deze regel omdat de gesanctioneerde aliasvorm
+      // `const X = ctx.rol;` is; met een betekenisvolle default hoort een mens
+      // ernaar te kijken, en dat is precies wat hier gebeurt.
+      const rol = ctx.rol ?? "bestuurder";
       if (!ROLLEN_VOOR_SPECIALISTISCH.has(rol)) {
         return NextResponse.json(
           {
@@ -100,7 +92,7 @@ export async function PATCH(
     if (body.validatiestatus !== undefined) {
       updates.validatiestatus = body.validatiestatus;
       if (body.validatiestatus !== "concept") {
-        updates.gevalideerd_door = user.id;
+        updates.gevalideerd_door = ctx.gebruikerId;
         updates.gevalideerd_op = new Date().toISOString();
       }
     }
@@ -136,12 +128,7 @@ export async function PATCH(
     }
 
     // Governance-event loggen.
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam")
-      .eq("id", user.id)
-      .maybeSingle();
-    const actorNaam = profiel?.naam ?? null;
+    const actorNaam = ctx.naam;
 
     let eventType = "ai_output_gewijzigd";
     if (
@@ -154,7 +141,7 @@ export async function PATCH(
     await supabase.from("governance_events").insert({
       decision_id: id,
       event_type: eventType,
-      actor_id: user.id,
+      actor_id: ctx.gebruikerId,
       actor_naam: actorNaam,
       object_type: "decision_ai_interaction",
       object_id: aiid,
@@ -176,4 +163,4 @@ export async function PATCH(
     console.error("Fout in PATCH /api/decisions/[id]/ai-interactions/[aiid]:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

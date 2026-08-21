@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Dissent is een bestuurlijk standpunt. Het bestuursbureau legt geen dissent vast."
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 403
+}
