@@ -32,22 +32,51 @@ name: karakterisering
 #             vers zet valt pas op bij de tweede ronde. Eén groene run zegt daar
 #             niets over.
 #
-#  BESLUIT: bedoeld als maatregel VOOR DE DUUR VAN DEPLOY 2. Zodra W5 klaar is
-#  en de muterende scenario's stabiel zijn gebleken, mág dit terug naar 1× hier
-#  met een 3×-ronde in `nightly-fidelity`. Wie dat terugdraait: haal de lus weg
-#  en zet er een verwijzing naar dit besluit voor in de plaats — niet
-#  stilzwijgend, want dan verdwijnt de herhaalbaarheidscontrole zonder spoor.
+#  BESLUIT: bedoeld als maatregel VOOR DE DUUR VAN DEPLOY 2. De voorwaarde is
+#  NIET dat iemand er last van heeft, maar dat W5 klaar is en de muterende
+#  scenario's stabiel zijn gebleken.
 #
-#  Maar weeg het dan tegen de GEMETEN kosten, niet tegen de aanname. Bij 131
-#  scenario's (21-08-2026, run op deze branch):
+#  STAND 21-08-2026: W5 is gemerged (#101/#104) — 95 van de 116 routes door de
+#  wrapper, 361 scenario's, `--verify` 3x groen, ook op een van nul herbouwde
+#  database en in CI. De eerste helft van de voorwaarde is dus vervuld. De tweede
+#  niet: deploy 2 is wél gemerged maar nog niet UITGEROLD, en dat is precies de
+#  periode waarin ronde 2 en 3 hun werk moeten doen. Blijft staan tot na de
+#  uitrol; dán is dit een echte keuze in plaats van een aanname.
 #
-#      stack boot   69s  |  next build   75s  |  npm ci   16s
-#      verify 3×    27s  (was ~13s bij 1×)    |  job totaal 3m42s
+#  Wie het terugdraait: haal de lus weg en zet er een verwijzing naar dit besluit
+#  voor in de plaats, niet stilzwijgend — anders verdwijnt de
+#  herhaalbaarheidscontrole zonder spoor.
 #
-#  De derde ronde kost dus ~14s op een job van bijna vier minuten — circa 6%,
-#  geen factor 3. De job wordt gedomineerd door de Supabase-stack en de
-#  Next-build, niet door de suite. Groeit het aantal scenario's sterk, meet dan
-#  opnieuw; met deze verhouding is terugdraaien nauwelijks winst.
+#  LET OP, de eerste versie van deze notitie zei "met een 3×-ronde in
+#  `nightly-fidelity`". DAT KAN NIET. Die workflow draait
+#  `scripts/cross-tenant-ci.sh` tegen een gehoste test-DB; hij bouwt de app niet,
+#  start geen server en kent het harnas niet. De 3× daarheen verplaatsen betekent
+#  een NIEUWE job die een stack boot en `next build` draait — dat is deze workflow
+#  dupliceren, geen kleine verhuizing. Wie de 3× hier weghaalt zonder die job te
+#  bouwen, haalt de controle wég in plaats van hem te verplaatsen.
+#
+#  Weeg het tegen de GEMETEN kosten, niet tegen de aanname — en meet opnieuw, want
+#  de verhouding beweegt met het aantal scenario's:
+#
+#      131 scenario's (21-08, tijdens W4)   verify 3× 27s van 3m42s -> 1× scheelt ~6%
+#      335 scenario's (21-08, na W4)        verify 3× 41s van 3m35s -> 1× scheelt ~11%
+#      361 scenario's (21-08, na W5)        zie hieronder               -> ~12%
+#
+#  Meting na W5, run 32512844760, job 231s in totaal:
+#
+#      stack boot 76s | next build 51s | npm ci 14s | schema 10s | stack stop 18s
+#      "app starten + snapshots 3x verifiëren"  48s
+#
+#  LET OP bij het lezen van dat laatste getal: die STAP meet de server-start én de
+#  drie rondes samen. Twee extra rondes kosten daarvan grofweg 29s — circa 12% van
+#  de job — maar dat is afgeleid, niet gemeten. Wil je het besluit op een gemeten
+#  getal baseren, splits die stap dan eerst in twee stappen; dat is goedkoper dan
+#  je vergissen in de richting van "weghalen scheelt veel".
+#
+#  De job wordt nog steeds gedomineerd door de Supabase-stack en `next build`,
+#  niet door de suite. Geen factor 3, maar de winst groeit mee met het aantal
+#  scenario's. Meet vóór het besluit en zet het gemeten getal hier neer, in plaats
+#  van dit rijtje te laten verouderen.
 #
 #  Nooit tegen productie: uitsluitend de wegwerp-CLI-DB; de seed is idempotent.
 # ============================================================================
