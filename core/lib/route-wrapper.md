@@ -8,6 +8,37 @@
 > houden. Een verschil is een **bevinding**, geen reden om het snapshot bij te
 > werken.
 
+## Ontwerpprincipe: een uitzondering is een WAARDE, geen afwezigheid
+
+Dit staat hier los van W4, omdat het verder reikt dan dit spoor.
+
+Een route die bewust van de norm afwijkt moet dat **zeggen**, niet **verzwijgen**.
+Een ontbrekend veld is niet te onderscheiden van een vergeten veld: een latere
+gate leest het als een omissie, iemand "repareert" het, en de reden — die nergens
+in de code stond — is verdwenen.
+
+`spec.hostGuard` is daarom drie-waardig en niet twee:
+
+```ts
+hostGuard: true            // de wrapper dwingt host↔fonds af, vóór de handler
+hostGuard: false           // deze route kent geen host↔fonds-grens
+hostGuard: "route-eigen"   // de route doet het ZELF, bewust — met de reden erbij
+```
+
+`documents/upload` gebruikt de derde: de wrapper zou de guard vóór de fail-closed
+rate limit trekken én de twee labels die de anomaliedetectie voeden samenvouwen.
+Als `{}` zou die route in elke inventarisatie als "mist hostGuard" opduiken.
+
+Twee eisen bij zo'n waarde, allebei geleerd in W4:
+
+1. **Toets op de waarde, niet op waarheid.** `"route-eigen"` is een string en dus
+   truthy; `if (spec.hostGuard)` zou die route de guard er stilzwijgend bovenop
+   geven. De tak toetst op `=== true`, en anker (h) in `toetsWrapperFundament()`
+   bewaakt dat.
+2. **De uitzondering mag geen ontsnapping zijn.** `"route-eigen"` zonder inline
+   `beoordeelRouteHostToegang(` moet rood worden — bij zowel de TS-guards als
+   `g2-evidence`. Gemeten, niet aangenomen.
+
 ## Wat de wrapper doet (en dus wat je uit de route weghaalt)
 
 `withFondsRoute(spec, handler)` (`core/lib/route-wrapper.ts`) doet vóór de
