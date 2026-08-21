@@ -156,6 +156,12 @@ SQL_VWF="supabase/checks/2026_08_02_fondsleden_cross_tenant.sql"
 # zette `naam` in app-metadata terwijl maak_profiel hem uit user-metadata leest.
 # Zie de fixture-correctie in de suite zelf.
 SQL_ROLCAP="supabase/checks/2026_08_04_a_rollen_capabilities.sql"
+# T7/T8 — semantische laag en extractie (#84). Stonden op de V4-rodelijst omdat
+# de concepts-catalogus in de test-DB leeg is: die wordt door PRE-CUTOFF
+# migraties gevuld en de schema-only baseline stript data-INSERTs. De suites
+# zaaien hem nu zelf, binnen hun eigen transactie.
+SQL_T7SEM="supabase/checks/2026_08_12_t7_semantische_laag.sql"
+SQL_T8SEM="supabase/checks/2026_08_12_t8_semantische_extractie.sql"
 
 echo "== [1/4] tsc --noEmit --skipLibCheck =="
 ./node_modules/.bin/tsc --noEmit --skipLibCheck
@@ -261,6 +267,11 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_T5VGL"
 echo
 echo "-- A rollen/capabilities + governance_log-schrijfpad (fonds en naam server-side) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_ROLCAP"
+echo "-- T7 semantische laag (RLS op semantic_units + waardetypering + catalogus) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_T7SEM"
+echo
+echo "-- T8 semantische extractie (gate H op de schrijffunctie + catalogus-hints) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_T8SEM"
 echo
 echo "-- C-01 (vw_fondsleden cross-tenant + kolomafscherming + view-schrijfrechten) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_VWF"
@@ -296,5 +307,7 @@ echo "  P3-B rol via service-role-pad (bevriezing-trigger + rol-CHECK)         (
 echo "  B    reflectieflow server-controlled (bronset/beurtteller/afronding)   (DB-laag, V4)"
 echo "  T5   vergelijking comparison_results RLS + schrijfpad-only + guard      (DB-laag, V4)"
 echo "  A    rollen/capabilities + governance_log: fonds én naam server-side      (DB-laag)"
+echo "  T7   semantische laag: RLS op semantic_units + waardetypering            (DB-laag)"
+echo "  T8   semantische extractie: gate H op de schrijffunctie + hints         (DB-laag)"
 echo "  C-01 vw_-views: cross-tenant, kolomafscherming, geen I/U/D voor browserrol (DB-laag)"
 echo "============================================================================"
