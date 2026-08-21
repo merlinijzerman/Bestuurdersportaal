@@ -70,6 +70,12 @@ export const PATCH = withFondsRoute({}, async (ctx, req: NextRequest, params) =>
       body.validatiestatus !== ai.validatiestatus &&
       ai.validatie_domein !== "algemeen"
     ) {
+      // Het `?? "bestuurder"` stond er al en blijft ONGEWIJZIGD: een gebruiker
+      // zonder rol wordt hier als bestuurder behandeld. Dat is een fail-OPEN
+      // default, en daarmee een observatie voor W7 — geen W4-wijziging.
+      // De classifier markeert deze regel omdat de gesanctioneerde aliasvorm
+      // `const X = ctx.rol;` is; met een betekenisvolle default hoort een mens
+      // ernaar te kijken, en dat is precies wat hier gebeurt.
       const rol = ctx.rol ?? "bestuurder";
       if (!ROLLEN_VOOR_SPECIALISTISCH.has(rol)) {
         return NextResponse.json(
