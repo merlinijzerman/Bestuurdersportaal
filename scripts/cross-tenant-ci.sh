@@ -151,6 +151,11 @@ SQL_T4="supabase/checks/2026_07_08_t4_retrieval_fondsdiscipline.sql"
 # zetten. V10 is generiek: geen enkele view in public mag I/U/D hebben voor een
 # browserrol — dat sluit de objectklasse die de gates A–H niet kennen.
 SQL_VWF="supabase/checks/2026_08_02_fondsleden_cross_tenant.sql"
+# A — rollen/capabilities + het governance_log-schrijfpad (#83). Stond op de
+# V4-rodelijst; bleek geen productregressie maar een verouderde FIXTURE: de seed
+# zette `naam` in app-metadata terwijl maak_profiel hem uit user-metadata leest.
+# Zie de fixture-correctie in de suite zelf.
+SQL_ROLCAP="supabase/checks/2026_08_04_a_rollen_capabilities.sql"
 
 echo "== [1/4] tsc --noEmit --skipLibCheck =="
 ./node_modules/.bin/tsc --noEmit --skipLibCheck
@@ -254,6 +259,9 @@ echo
 echo "-- T5 vergelijking (comparison_results RLS + schrijfpad-only via functie + tenant-guard) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_T5VGL"
 echo
+echo "-- A rollen/capabilities + governance_log-schrijfpad (fonds en naam server-side) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_ROLCAP"
+echo
 echo "-- C-01 (vw_fondsleden cross-tenant + kolomafscherming + view-schrijfrechten) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_VWF"
 echo
@@ -287,5 +295,6 @@ echo "  T4   retrieval-fondsdiscipline (fondsgrens + published-only-generiek)  (
 echo "  P3-B rol via service-role-pad (bevriezing-trigger + rol-CHECK)         (DB-laag, V4)"
 echo "  B    reflectieflow server-controlled (bronset/beurtteller/afronding)   (DB-laag, V4)"
 echo "  T5   vergelijking comparison_results RLS + schrijfpad-only + guard      (DB-laag, V4)"
+echo "  A    rollen/capabilities + governance_log: fonds én naam server-side      (DB-laag)"
 echo "  C-01 vw_-views: cross-tenant, kolomafscherming, geen I/U/D voor browserrol (DB-laag)"
 echo "============================================================================"
