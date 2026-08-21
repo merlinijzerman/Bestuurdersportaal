@@ -1498,11 +1498,26 @@ export const scenarios = [
   //  eist de letterlijke `weigerAlsModuleUit(`-aanroep mét `"ai"` in deze route.
   //  Die guard moet na de migratie groen blijven; dat is de acceptatie-eis.
   //
-  //  De eerste drie zijn de W4-§3-vorm: `chat` doet `req.json()` en
-  //  `valideerChatInvoer` VÓÓR `getUser()`. Een beller zonder sessie krijgt
-  //  vandaag dus een 400/500 over zijn body i.p.v. 401. Deze drie leggen dat
-  //  vast op ONGEWIJZIGDE code, zodat de wijziging na migratie meetbaar is en
-  //  niet aangenomen.
+  //  De eerste drie zijn de W4-§3-vorm: `chat` deed `req.json()` en
+  //  `valideerChatInvoer` VÓÓR `getUser()`. Een beller zonder sessie kreeg dus
+  //  een oordeel over zijn body i.p.v. 401. Eerst vastgelegd op ONGEWIJZIGDE
+  //  code (commit "W5 baselines"), daarna gemigreerd, daarna deze twee bewust
+  //  bijgewerkt:
+  //
+  //    .400-invoer      400 {"error":"messages of vraag is verplicht",
+  //                          "foutcode":"geen_invoer"}   ->  401 Niet ingelogd
+  //    .kapotte-body    500 {"error":"Er is een fout opgetreden bij het
+  //                          verwerken van uw vraag."}    ->  401 Niet ingelogd
+  //
+  //  Dat is winst en geen regressie: een niet-ingelogde beller kreeg een
+  //  foutorakel over de vorm van zijn invoer, en bij kapotte JSON zelfs een 500
+  //  op een pad waar de server niets fout deed. Beide zijn nu 401. Het is
+  //  niettemin een GEDRAGSWIJZIGING — de enige in W5 — en staat daarom als
+  //  aparte commit met de baseline ervóór, niet als stilzwijgende re-record.
+  //
+  //  `.401` (geldige body, geen sessie) is ONgewijzigd gebleven. Dat is de
+  //  tegenproef: als die óók was omgeslagen zou de wijziging ergens anders
+  //  vandaan komen dan uit de verplaatste auth.
   { slug: "w5.chat.post.anon.401", method: "POST", path: "/api/chat", rol: "anon", body: { vraag: "Wat is de dekkingsgraad van het fonds?" }, verwacht: "json" },
   { slug: "w5.chat.post.anon.400-invoer", method: "POST", path: "/api/chat", rol: "anon", body: LEEG, verwacht: "json" },
   { slug: "w5.chat.post.anon.kapotte-body", method: "POST", path: "/api/chat", rol: "anon", rawBody: "{ dit is geen json", verwacht: "json" },

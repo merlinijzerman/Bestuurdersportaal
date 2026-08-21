@@ -1,9 +1,9 @@
 {
   "body": {
-    "error": "Er is een fout opgetreden bij het verwerken van uw vraag."
+    "error": "Niet ingelogd"
   },
   "headers": {
     "content-type": "application/json"
   },
-  "status": 500
+  "status": 401
 }
