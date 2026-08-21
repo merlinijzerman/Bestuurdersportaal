@@ -30,8 +30,7 @@
 // dossier-export heeft opgevraagd.
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
-import { beoordeelRouteHostToegang } from "@/core/lib/tenant-route-guard";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { isBureauRol } from "@/core/lib/bureau-gate";
 import { buildDecisionDossierView } from "@/core/lib/decision";
 import { renderAuditdossierHtml } from "@/core/lib/auditdossier-html";
@@ -64,40 +63,15 @@ interface SnapshotRow {
   snapshot: unknown; // jsonb — wordt naar DecisionDossierView gecast
 }
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+// T1.3 — de host↔fonds-afdwinging (defense-in-depth náást RLS) is naar de
+// wrapper verhuisd: `hostGuard: true`. GEMETEN en niet aangenomen — de inline
+// guard stond al direct ná het profiel en vóór élke andere poort van deze route,
+// dus de wrapper trekt hem op exact dezelfde plek in de volgorde. De actor-naam
+// die het profiel hier ook leverde komt nu uit `ctx.naam`.
+export const GET = withFondsRoute({ hostGuard: true, label: "decisions.auditdossier.GET" }, async (ctx, req: NextRequest, params) => {
   try {
-    const { id: decisionId } = await params;
-    const supabase = await createServerSupabase();
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
-
-    // T1.3 — resolveer de sessie-fonds server-side en dwing host↔fonds af vóór de
-    // export (defense-in-depth náást RLS). `profiel` wordt hergebruikt voor de
-    // actor-naam in audit-event + HTML-footer. Gedrag-neutraal zolang enforce uit.
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam, fonds_id, rol")
-      .eq("id", user.id)
-      .maybeSingle();
-    const hostOordeel = await beoordeelRouteHostToegang({
-      sessieFondsId: profiel?.fonds_id ?? null,
-      gebruikerId: user.id,
-      label: "decisions.auditdossier.GET",
-    });
-    if (!hostOordeel.toegestaan) {
-      return NextResponse.json(
-        { error: "Dit webadres hoort niet bij uw fonds." },
-        { status: 403 }
-      );
-    }
+    const { id: decisionId } = params as { id: string };
+    const supabase = ctx.supabase;
 
     // T1 bureau-rol (FR-4/G9): het auditdossier rendert `stemmingen.uitslag`
     // inclusief `per_stemgerechtigde` — naam, keuze en motivering per bestuurslid.
@@ -106,7 +80,7 @@ export async function GET(
     // `stem_uitbrengingen`. Zonder deze gate is de export een omweg om het alsnog
     // te lezen. De onderliggende jsonb blijft via PostgREST bereikbaar; de
     // structurele afscherming is openstaand punt OP-T1-7.
-    if (isBureauRol((profiel as { rol?: string | null } | null)?.rol)) {
+    if (isBureauRol(ctx.rol)) {
       return NextResponse.json(
         {
           error:
@@ -213,9 +187,9 @@ export async function GET(
       });
     }
 
-    // Actor-naam voor audit-event en HTML-footer. `profiel` is hierboven al
-    // opgehaald (naam + fonds_id) voor de host-afdwinging.
-    const aanvragerNaam = profiel?.naam ?? null;
+    // Actor-naam voor audit-event en HTML-footer. Kwam uit de profielselect die
+    // ook de host-afdwinging voedde; die twee doet de wrapper nu allebei.
+    const aanvragerNaam = ctx.naam ?? null;
 
     // Logging — best effort. Bij faillende insert (RLS, etc.) blokkeren
     // we de export niet, want het auditspoor is secundair aan de
@@ -223,7 +197,7 @@ export async function GET(
     await supabase.from("governance_events").insert({
       decision_id: decisionId,
       event_type: "auditdossier_geexporteerd",
-      actor_id: user.id,
+      actor_id: ctx.gebruikerId,
       actor_naam: aanvragerNaam,
       object_type: "decision_object",
       object_id: decisionId,
@@ -269,4 +243,4 @@ export async function GET(
     console.error("Fout in GET /api/decisions/[id]/auditdossier:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});
