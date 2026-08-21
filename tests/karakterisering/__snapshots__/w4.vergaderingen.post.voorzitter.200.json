@@ -1,0 +1,22 @@
+{
+  "body": {
+    "vergadering": {
+      "aangemaakt": "<ts>",
+      "aangemaakt_door": "<uuid:1>",
+      "datum": "<ts>",
+      "fonds_id": "<uuid:2>",
+      "gearchiveerd_door": null,
+      "gearchiveerd_op": null,
+      "gewijzigd_door": null,
+      "gewijzigd_op": null,
+      "id": "<uuid:3>",
+      "locatie": null,
+      "status": "in_voorbereiding",
+      "titel": "W4 nieuwe vergadering"
+    }
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

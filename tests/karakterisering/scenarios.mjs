@@ -57,6 +57,36 @@ async function zetAgendapuntBesluit(admin, users, id = FIX.agendapuntBesluit) {
   if (error) throw new Error(`preseed agendapuntBesluit: ${error.message}`);
 }
 
+/** Wist de rate-limit-teller voor één endpoint. Nodig zodra een scenario een
+ *  begrensde route raakt: het harnas draait `--verify` 3x achter elkaar (en in
+ *  CI ook), dus zonder wissen tikt de teller door en slaat de respons ergens
+ *  in ronde 2 of 3 om naar 429. Dat is dezelfde volgorde-afhankelijkheid als in
+ *  §4, alleen dan via een teller in plaats van via een fixture. */
+async function wisLimiet(admin, endpoint) {
+  await wis(admin, "rate_limit_events", { endpoint });
+}
+
+/** Vergadering in een vaste staat. Upsert-reset, nooit delete: `vergadering_log`
+ *  is append-only en hangt er met CASCADE aan. */
+async function zetVergaderingFixture(admin, users, id, extra = {}) {
+  const { error } = await admin.from("vergaderingen").upsert(
+    {
+      id,
+      fonds_id: FONDS_ID,
+      titel: "W4 Vergadering fixture",
+      datum: "2026-03-01T10:00:00Z",
+      locatie: "W4",
+      status: "gepland",
+      aangemaakt_door: users.voorzitter.userId,
+      gearchiveerd_op: null,
+      gearchiveerd_door: null,
+      ...extra,
+    },
+    { onConflict: "id" }
+  );
+  if (error) throw new Error(`preseed vergadering ${id}: ${error.message}`);
+}
+
 /** Agendapunt in een vaste staat op een EIGEN vergadering. */
 async function zetVergadering(admin, id, titel) {
   const { error } = await admin.from("vergaderingen").upsert(
@@ -84,6 +114,22 @@ async function zetAgendapunt(admin, users, id, extra = {}) {
     { onConflict: "id" }
   );
   if (error) throw new Error(`preseed agendapunt ${id}: ${error.message}`);
+}
+
+/** Eén inbrengregel van de BESTUURDER op een vast agendapunt. */
+async function zetInbreng(admin, users) {
+  await zetAgendapunt(admin, users, FIX.agendapuntInbreng);
+  const { error } = await admin.from("agendapunt_inbreng").upsert(
+    {
+      id: FIX.inbreng1,
+      agendapunt_id: FIX.agendapuntInbreng,
+      gebruiker_id: users.bestuurder.userId,
+      gebruiker_naam: "W1 bestuurder",
+      tekst: "W4 bestaande inbreng",
+    },
+    { onConflict: "id" }
+  );
+  if (error) throw new Error(`preseed inbreng1: ${error.message}`);
 }
 
 /** Stemronde in een vaste staat; geopend door de VOORZITTER, op een EIGEN
@@ -594,4 +640,158 @@ export const scenarios = [
       await wis(admin, "voorbereidingen", { agendapunt_id: FIX.agendapuntNotities });
     },
   },
+
+  // ══ vergaderingen ══════════════════════════════════════════════════════════
+  { slug: "w4.vergaderingen.post.anon", method: "POST", path: "/api/vergaderingen", rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.vergaderingen.post.bestuurder.400", method: "POST", path: "/api/vergaderingen", rol: "bestuurder", body: LEEG, verwacht: "json" },
+  {
+    // NIET-IDEMPOTENT: elke run maakt een nieuwe rij. Opruimen op TITEL, niet op
+    // fonds: de andere vergaderingfixtures hebben `vergadering_log`-regels en
+    // zijn daardoor onverwijderbaar.
+    slug: "w4.vergaderingen.post.voorzitter.200",
+    method: "POST", path: "/api/vergaderingen", rol: "voorzitter",
+    body: { titel: "W4 nieuwe vergadering", datum: "2026-04-01T10:00:00Z" }, verwacht: "json",
+    preseed: async ({ admin }) => wis(admin, "vergaderingen", { titel: "W4 nieuwe vergadering" }),
+  },
+
+  { slug: "w4.vergaderingen-id.patch.anon", method: "PATCH", path: `/api/vergaderingen/${FIX.vergaderingOnbekend}`, rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.vergaderingen-id.patch.bestuurder.404", method: "PATCH", path: `/api/vergaderingen/${FIX.vergaderingOnbekend}`, rol: "bestuurder", body: { titel: "x" }, verwacht: "json" },
+  {
+    // Bestuurder is niet de aanmaker (voorzitter is dat) en niet privileged.
+    slug: "w4.vergaderingen-id.patch.bestuurder.403",
+    method: "PATCH", path: `/api/vergaderingen/${FIX.vergaderingWijzigen}`, rol: "bestuurder",
+    body: { titel: "W4 mag niet" }, verwacht: "json",
+    preseed: async ({ admin, users }) => zetVergaderingFixture(admin, users, FIX.vergaderingWijzigen),
+  },
+  {
+    slug: "w4.vergaderingen-id.patch.voorzitter.400-geen-wijziging",
+    method: "PATCH", path: `/api/vergaderingen/${FIX.vergaderingWijzigen}`, rol: "voorzitter",
+    body: LEEG, verwacht: "json",
+    preseed: async ({ admin, users }) => zetVergaderingFixture(admin, users, FIX.vergaderingWijzigen),
+  },
+  {
+    slug: "w4.vergaderingen-id.patch.voorzitter.200",
+    method: "PATCH", path: `/api/vergaderingen/${FIX.vergaderingWijzigen}`, rol: "voorzitter",
+    body: { titel: "W4 gewijzigde vergadertitel" }, verwacht: "json",
+    preseed: async ({ admin, users }) => zetVergaderingFixture(admin, users, FIX.vergaderingWijzigen),
+  },
+
+  { slug: "w4.vergaderingen-archief.post.anon", method: "POST", path: `/api/vergaderingen/${FIX.vergaderingArchief}/archief`, rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.vergaderingen-archief.post.bestuurder.404", method: "POST", path: `/api/vergaderingen/${FIX.vergaderingOnbekend}/archief`, rol: "bestuurder", body: { actie: "archiveren" }, verwacht: "json" },
+  {
+    slug: "w4.vergaderingen-archief.post.voorzitter.200",
+    method: "POST", path: `/api/vergaderingen/${FIX.vergaderingArchief}/archief`, rol: "voorzitter",
+    body: { actie: "archiveren" }, verwacht: "json",
+    preseed: async ({ admin, users }) => zetVergaderingFixture(admin, users, FIX.vergaderingArchief),
+  },
+  {
+    // Tweede keer archiveren op een al gearchiveerde vergadering -> 400.
+    slug: "w4.vergaderingen-archief.post.voorzitter.400-al-gearchiveerd",
+    method: "POST", path: `/api/vergaderingen/${FIX.vergaderingArchief}/archief`, rol: "voorzitter",
+    body: { actie: "archiveren" }, verwacht: "json",
+    preseed: async ({ admin, users }) =>
+      zetVergaderingFixture(admin, users, FIX.vergaderingArchief, {
+        gearchiveerd_op: "2026-03-02T10:00:00Z",
+        gearchiveerd_door: users.voorzitter.userId,
+      }),
+  },
+
+  // ══ inbreng ════════════════════════════════════════════════════════════════
+  { slug: "w4.inbreng.post.anon", method: "POST", path: "/api/inbreng", rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.inbreng.post.bestuurder.400", method: "POST", path: "/api/inbreng", rol: "bestuurder", body: LEEG, verwacht: "json" },
+  {
+    // Bureau-gate (BB-12) — `profiel?.rol` -> ctx.rol.
+    slug: "w4.inbreng.post.bestuursbureau.403",
+    method: "POST", path: "/api/inbreng", rol: "bestuursbureau",
+    body: { agendapunt_id: FIX.agendapuntInbreng, tekst: "W4 bureau-inbreng" }, verwacht: "json",
+    preseed: async ({ admin, users }) => zetAgendapunt(admin, users, FIX.agendapuntInbreng),
+  },
+  {
+    slug: "w4.inbreng.post.bestuurder.200",
+    method: "POST", path: "/api/inbreng", rol: "bestuurder",
+    body: { agendapunt_id: FIX.agendapuntInbreng, tekst: "W4 inbreng" }, verwacht: "json",
+    preseed: async ({ admin, users }) => {
+      await zetAgendapunt(admin, users, FIX.agendapuntInbreng);
+      await wis(admin, "agendapunt_inbreng", { agendapunt_id: FIX.agendapuntInbreng });
+    },
+  },
+
+  { slug: "w4.inbreng-id.delete.anon", method: "DELETE", path: `/api/inbreng/${FIX.inbrengOnbekend}`, rol: "anon", verwacht: "json" },
+  { slug: "w4.inbreng-id.delete.bestuursbureau.403", method: "DELETE", path: `/api/inbreng/${FIX.inbrengOnbekend}`, rol: "bestuursbureau", verwacht: "json" },
+  { slug: "w4.inbreng-id.delete.bestuurder.404", method: "DELETE", path: `/api/inbreng/${FIX.inbrengOnbekend}`, rol: "bestuurder", verwacht: "json" },
+  {
+    // Voorzitter probeert andermans inbreng te verwijderen -> 403.
+    slug: "w4.inbreng-id.delete.voorzitter.403-niet-eigen",
+    method: "DELETE", path: `/api/inbreng/${FIX.inbreng1}`, rol: "voorzitter", verwacht: "json",
+    preseed: async ({ admin, users }) => zetInbreng(admin, users),
+  },
+  {
+    slug: "w4.inbreng-id.delete.bestuurder.200",
+    method: "DELETE", path: `/api/inbreng/${FIX.inbreng1}`, rol: "bestuurder", verwacht: "json",
+    preseed: async ({ admin, users }) => zetInbreng(admin, users),
+  },
+
+  // ══ notulen ════════════════════════════════════════════════════════════════
+  //  BEWUSTE LACUNE (§4): de happy paths van segmenteren en bevestigen zijn NIET
+  //  gekarakteriseerd. Ze vereisen een echt notulendocument in storage plus een
+  //  modelcall; dat herhaalbaar maken kost meer dan het oplevert, en de
+  //  AI-routes staan sowieso in W5. De afwijzingspaden dekken wat de codemod
+  //  hier raakt: de preambule, de capability-gate en de rate limit.
+  //  Beide begrensde routes wissen hun teller in de preseed — anders slaat de
+  //  respons in verify-ronde 2 of 3 om naar 429.
+  { slug: "w4.notulen-segmenteer.post.anon", method: "POST", path: `/api/notulen/${FIX.documentOnbekend}/segmenteer`, rol: "anon", body: LEEG, verwacht: "json" },
+  {
+    slug: "w4.notulen-segmenteer.post.bestuurder.403-capability",
+    method: "POST", path: `/api/notulen/${FIX.documentOnbekend}/segmenteer`, rol: "bestuurder",
+    body: LEEG, verwacht: "json",
+    preseed: async ({ admin }) => wisLimiet(admin, "segmenteer"),
+  },
+  {
+    slug: "w4.notulen-segmenteer.post.voorzitter.404",
+    method: "POST", path: `/api/notulen/${FIX.documentOnbekend}/segmenteer`, rol: "voorzitter",
+    body: LEEG, verwacht: "json",
+    preseed: async ({ admin }) => wisLimiet(admin, "segmenteer"),
+  },
+  {
+    // Bestaand document, maar documenttype != 'notulen' -> 400.
+    slug: "w4.notulen-segmenteer.post.voorzitter.400-geen-notulen",
+    method: "POST", path: `/api/notulen/${FIX.document1}/segmenteer`, rol: "voorzitter",
+    body: LEEG, verwacht: "json",
+    preseed: async ({ admin }) => wisLimiet(admin, "segmenteer"),
+  },
+
+  { slug: "w4.notulen-bevestig.post.anon", method: "POST", path: `/api/notulen/segmenten/${FIX.segmentOnbekend}/bevestig`, rol: "anon", body: LEEG, verwacht: "json" },
+  {
+    slug: "w4.notulen-bevestig.post.bestuurder.403-capability",
+    method: "POST", path: `/api/notulen/segmenten/${FIX.segmentOnbekend}/bevestig`, rol: "bestuurder",
+    body: LEEG, verwacht: "json",
+    preseed: async ({ admin }) => wisLimiet(admin, "notulen_bevestig"),
+  },
+  {
+    // Zonder Idempotency-Key stopt de route VOOR de lookup: 400, geen 404.
+    slug: "w4.notulen-bevestig.post.voorzitter.400-idempotency",
+    method: "POST", path: `/api/notulen/segmenten/${FIX.segmentOnbekend}/bevestig`, rol: "voorzitter",
+    body: LEEG, verwacht: "json",
+    preseed: async ({ admin }) => wisLimiet(admin, "notulen_bevestig"),
+  },
+  {
+    // MET sleutel wordt de lookup wél bereikt -> 404. Vaste sleutel: het
+    // idempotentieregister is per (gebruiker, sleutel), en een wisselende
+    // sleutel zou elke run een nieuwe reservering aanmaken.
+    slug: "w4.notulen-bevestig.post.voorzitter.404",
+    method: "POST", path: `/api/notulen/segmenten/${FIX.segmentOnbekend}/bevestig`, rol: "voorzitter",
+    body: LEEG, verwacht: "json",
+    headers: { "content-type": "application/json", "idempotency-key": "w4-karakterisering-bevestig" },
+    preseed: async ({ admin }) => wisLimiet(admin, "notulen_bevestig"),
+  },
+
+  { slug: "w4.notulen-segment.patch.anon", method: "PATCH", path: `/api/notulen/segmenten/${FIX.segmentOnbekend}`, rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.notulen-segment.patch.bestuurder.403-capability", method: "PATCH", path: `/api/notulen/segmenten/${FIX.segmentOnbekend}`, rol: "bestuurder", body: LEEG, verwacht: "json" },
+  { slug: "w4.notulen-segment.patch.voorzitter.404", method: "PATCH", path: `/api/notulen/segmenten/${FIX.segmentOnbekend}`, rol: "voorzitter", body: { titel: "W4" }, verwacht: "json" },
+  { slug: "w4.notulen-segment.delete.anon", method: "DELETE", path: `/api/notulen/segmenten/${FIX.segmentOnbekend}`, rol: "anon", verwacht: "json" },
+  { slug: "w4.notulen-segment.delete.bestuurder.403-capability", method: "DELETE", path: `/api/notulen/segmenten/${FIX.segmentOnbekend}`, rol: "bestuurder", verwacht: "json" },
+  // BEVINDING (observatielijst): een onbekend segment geeft hier 500
+  // "Verwijderen mislukt", niet 404 — de RPC gooit en de route vertaalt dat niet.
+  // Vastgelegd zoals het IS; repareren is deploy 3, niet W4.
+  { slug: "w4.notulen-segment.delete.voorzitter.500-onbekend", method: "DELETE", path: `/api/notulen/segmenten/${FIX.segmentOnbekend}`, rol: "voorzitter", verwacht: "json" },
 ];

@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Alleen eigen inbreng mag worden verwijderd"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 403
+}

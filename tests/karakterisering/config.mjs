@@ -103,6 +103,23 @@ export const FIX = {
   agendapuntWijzigen: "00000000-0000-4000-8000-0000000a9020",
   agendapuntVerwijderen: "00000000-0000-4000-8000-0000000a9021",
   agendapuntNotities: "00000000-0000-4000-8000-0000000a9022",
+
+  //  vergaderingen — `vergadering_log` is append-only met CASCADE, dus een
+  //  vergadering die ooit gewijzigd of gearchiveerd is valt niet meer te
+  //  verwijderen. Alle fixtures gaan daarom via upsert-reset.
+  vergaderingWijzigen: "00000000-0000-4000-8000-00000000e620",
+  vergaderingArchief: "00000000-0000-4000-8000-00000000e621",
+  vergaderingOnbekend: "00000000-0000-4000-8000-00000000e6ff",
+
+  //  inbreng
+  agendapuntInbreng: "00000000-0000-4000-8000-0000000a9030",
+  inbreng1: "00000000-0000-4000-8000-0000000b9e01",
+  inbrengOnbekend: "00000000-0000-4000-8000-0000000b9eff",
+
+  //  notulen — happy paths zijn hier bewust NIET gekarakteriseerd (§4): ze
+  //  vereisen een echt notulendocument in storage én een modelcall. De
+  //  afwijzingspaden dekken de preambule, de rol-gate en de rate limit.
+  segmentOnbekend: "00000000-0000-4000-8000-0000005e6f0f",
 };
 
 export const AFSCHRIFT1_PAD = `${FONDS_ID}/w1-afschrift.pdf`;
