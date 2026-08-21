@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { weigerAlsModuleUit } from "@/core/lib/module-guard";
 import {
   CategorieSlug,
@@ -18,15 +18,9 @@ const TOEGESTANE_CATEGORIEEN: CategorieSlug[] = [
 const TOEGESTANE_NIVEAUS: NiveauSlug[] = ["laag", "middel", "hoog"];
 const TOEGESTANE_TYPES: TypeRisicoSlug[] = ["structureel", "tijdelijk"];
 
-export async function POST(req: NextRequest) {
+export const POST = withFondsRoute({}, async (ctx, req: NextRequest) => {
   try {
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const supabase = ctx.supabase;
 
     const body = (await req.json()) as {
       titel?: string;
@@ -76,13 +70,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Ongeldig type" }, { status: 400 });
     }
 
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("fonds_id, naam")
-      .eq("id", user.id)
-      .single();
-
-    if (!profiel?.fonds_id) {
+    if (!ctx.fondsId) {
       return NextResponse.json(
         { error: "Geen fonds gekoppeld aan profiel" },
         { status: 400 }
@@ -92,13 +80,13 @@ export async function POST(req: NextRequest) {
     // T8 — BESCHIKBAARHEIDSgate: staat de risicomatrix-module in het manifest van
     // dit fonds UIT, dan weigeren we de directe API-call (403). BESCHIKBAARHEID ≠
     // AUTORISATIE: komt bovenop RLS, vervangt die niet. fonds_id is server-side afgeleid.
-    const moduleWeigering = await weigerAlsModuleUit(profiel.fonds_id, "risicomatrix");
+    const moduleWeigering = await weigerAlsModuleUit(ctx.fondsId, "risicomatrix");
     if (moduleWeigering) return moduleWeigering;
 
     const { data: risico, error } = await supabase
       .from("risicos")
       .insert({
-        fonds_id: profiel.fonds_id,
+        fonds_id: ctx.fondsId,
         categorie,
         titel,
         toelichting: body.toelichting || null,
@@ -108,7 +96,7 @@ export async function POST(req: NextRequest) {
         niveau_handmatig: niveauHandmatig,
         type_risico: typeRisico,
         status: "actief",
-        aangemaakt_door: user.id,
+        aangemaakt_door: ctx.gebruikerId,
       })
       .select()
       .single();
@@ -124,8 +112,8 @@ export async function POST(req: NextRequest) {
     await supabase.from("risico_log").insert({
       risico_id: risico.id,
       event_type: "risico_aangemaakt",
-      actor_id: user.id,
-      actor_naam: profiel.naam || null,
+      actor_id: ctx.gebruikerId,
+      actor_naam: ctx.naam || null,
       payload: { kans, impact, niveau, type_risico: typeRisico },
     });
 
@@ -134,4 +122,4 @@ export async function POST(req: NextRequest) {
     console.error("Fout in POST /api/risicos:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});
