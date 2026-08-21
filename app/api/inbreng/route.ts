@@ -1,17 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { notifyUser } from "@/core/lib/notifications";
 import { isBureauRol, BUREAU_WEIGERING } from "@/core/lib/bureau-gate";
 
-export async function POST(req: NextRequest) {
+export const POST = withFondsRoute({}, async (ctx, req: NextRequest) => {
   try {
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const supabase = ctx.supabase;
 
     const body = (await req.json()) as {
       agendapunt_id?: string;
@@ -26,16 +20,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam, fonds_id, rol")
-      .eq("id", user.id)
-      .single();
-
     // T1 bureau-rol (§5.3): geen inbreng. De harde weigering staat in de
     // RLS-policy "eigen inbreng schrijven"; deze check levert een leesbare
     // melding in plaats van een kale insert-fout.
-    if (isBureauRol(profiel?.rol)) {
+    if (isBureauRol(ctx.rol)) {
       return NextResponse.json({ error: BUREAU_WEIGERING.inbreng }, { status: 403 });
     }
 
@@ -43,8 +31,8 @@ export async function POST(req: NextRequest) {
       .from("agendapunt_inbreng")
       .insert({
         agendapunt_id,
-        gebruiker_id: user.id,
-        gebruiker_naam: profiel?.naam || user.email,
+        gebruiker_id: ctx.gebruikerId,
+        gebruiker_naam: ctx.naam || ctx.email,
         tekst: tekst.trim(),
       })
       .select()
@@ -60,7 +48,7 @@ export async function POST(req: NextRequest) {
     // overspoelen bij een drukke vergadering. De organisator is degene
     // die zicht houdt op de voorbereiding van de vergadering en
     // baat heeft bij signaal "iemand heeft input geleverd".
-    if (profiel?.fonds_id) {
+    if (ctx.fondsId) {
       const { data: agendapunt } = await supabase
         .from("agendapunten")
         .select("titel, vergadering_id, vergaderingen(aangemaakt_door)")
@@ -80,17 +68,24 @@ export async function POST(req: NextRequest) {
           supabase,
           "inbreng_geplaatst",
           organisatorId,
-          profiel.fonds_id,
+          ctx.fondsId,
           {
             type: "inbreng_geplaatst",
             agendapunt_titel: agendapunt.titel,
-            actor_naam: profiel.naam || user.email || "Een collega",
+            actor_naam: ctx.naam || ctx.email || "Een collega",
             vergadering_id: agendapunt.vergadering_id,
           },
           {
             gerelateerd_aan_type: "agendapunt",
             gerelateerd_aan_id: agendapunt_id,
-            actor_naam: profiel.naam || null,
+            // BESLUIT (W4): `|| null` -> `|| undefined`. Zonder gegenereerde
+            // Supabase-types was `profiel.naam` hier `any`, dus compileerde
+            // `|| null`; `ctx.naam` is `string | null` en dat botst met
+            // `NotifyOpts.actor_naam?: string`. Waarde-identiek: notifyUser doet
+            // `opts.actor_naam ?? null` (core/lib/notifications.ts:149), dus
+            // null en undefined komen allebei als null in de kolom. En `||`
+            // blijft `||`, zodat een lege naam net als voorheen wegvalt.
+            actor_naam: ctx.naam || undefined,
           }
         );
       }
@@ -101,4 +96,4 @@ export async function POST(req: NextRequest) {
     console.error("Fout in /api/inbreng:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

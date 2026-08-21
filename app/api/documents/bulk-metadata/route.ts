@@ -15,7 +15,7 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
 import { rateLimited } from "@/core/lib/api-errors";
 import { rolHeeftCapability } from "@/core/lib/capabilities";
@@ -40,13 +40,9 @@ interface DocResultaat {
   fouten?: string[];
 }
 
-export async function POST(req: NextRequest) {
+export const POST = withFondsRoute({}, async (ctx, req: NextRequest) => {
   try {
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+    const supabase = ctx.supabase;
 
     // M-06 (review 2026-07-30): deze route doet per aanroep externe
     // modelcalls en had geen enkele limiet — onbeperkt herhaalbaar door een
@@ -68,12 +64,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Maximaal 200 documenten per batch" }, { status: 400 });
     }
 
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("rol, naam")
-      .eq("id", user.id)
-      .maybeSingle();
-    const rol = profiel?.rol ?? null;
+    const rol = ctx.rol;
     const caps: GebruikerCapabilities = {
       metadataUpdate: rolHeeftCapability(rol, "documents.metadata.update"),
       statusChange: rolHeeftCapability(rol, "documents.status.change"),
@@ -163,8 +154,8 @@ export async function POST(req: NextRequest) {
           document_id: document.id,
           document_titel_snapshot: document.titel,
           fonds_id: document.fonds_id,
-          gewijzigd_door: user.id,
-          gewijzigd_door_naam: profiel?.naam ?? null,
+          gewijzigd_door: ctx.gebruikerId,
+          gewijzigd_door_naam: ctx.naam ?? null,
           veld_naam: w.veld,
           oude_waarde: w.oude_waarde,
           nieuwe_waarde: w.nieuwe_waarde,
@@ -209,4 +200,4 @@ export async function POST(req: NextRequest) {
     console.error("Fout in POST /api/documents/bulk-metadata:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

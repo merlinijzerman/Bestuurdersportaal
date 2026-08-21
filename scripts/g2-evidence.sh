@@ -85,8 +85,13 @@ check_wrapper_fundament() {
     #    "invalid repetition count(s)"; GNU grep (CI) accepteert het wél. Een
     #    ruimere marge zou dus lokaal rood en in CI groen zijn. 200 is ruim: de
     #    feitelijke afstanden zijn ~60 resp. ~130 tekens.
+    #  • W4: de tak toetst sinds `hostGuard: "route-eigen"` op `=== true` i.p.v.
+    #    op truthy. Het patroon stond op de letterlijke vorm `spec.hostGuard)` en
+    #    viel dáárdoor rood — een terechte melding van een check die aan een
+    #    schrijfwijze hing. Nu op de VERGELIJKING zelf, met beide vormen
+    #    toegestaan, zodat hij de handhaving toetst en niet de spelling.
     plat=$(tr '\n' ' ' < "$WRAPPER")
-    grep -Eq 'spec\.hostGuard\).{0,200}beoordeelRouteHostToegang\(' <<<"$plat" \
+    grep -Eq 'spec\.hostGuard( *=== *true)? *\).{0,200}beoordeelRouteHostToegang\(' <<<"$plat" \
       || reden="de spec.hostGuard-tak roept beoordeelRouteHostToegang niet aan"
     grep -Eq '!oordeel\.toegestaan.{0,200}status: *403' <<<"$plat" \
       || reden="een afgewezen host-oordeel leidt niet tot 403"

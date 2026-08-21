@@ -1,0 +1,10 @@
+{
+  "body": {
+    "geupdatet": false,
+    "ok": true
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

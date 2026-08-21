@@ -11,30 +11,23 @@
 // ============================================================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { requireCapability } from "@/core/lib/capabilities";
 
 export const dynamic = "force-dynamic";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const PATCH = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id } = await params;
+    const { id } = params as { id: string };
     if (!UUID.test(id)) {
       return NextResponse.json({ error: "Ongeldig document-id" }, { status: 400 });
     }
 
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+    const supabase = ctx.supabase;
 
-    if (!(await requireCapability(user.id, "documents.metadata.update"))) {
+    if (!(await requireCapability(ctx.gebruikerId, "documents.metadata.update"))) {
       return NextResponse.json({ error: "Geen rechten" }, { status: 403 });
     }
 
@@ -59,4 +52,4 @@ export async function PATCH(
     console.error("Fout in PATCH ai-markering:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

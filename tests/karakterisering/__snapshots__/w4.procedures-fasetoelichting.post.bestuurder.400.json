@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "fase_code is verplicht"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 400
+}

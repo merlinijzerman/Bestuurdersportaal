@@ -20,7 +20,7 @@ import {
   vingerafdruk,
 } from "@/core/lib/ai-preflight";
 import { createServerSupabase } from "@/core/lib/supabase-server";
-import { beoordeelRouteHostToegang } from "@/core/lib/tenant-route-guard";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { isBureauRol } from "@/core/lib/bureau-gate";
 import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
 import { rateLimited, badRequest } from "@/core/lib/api-errors";
@@ -95,33 +95,12 @@ async function bouwFeitenkaartVoorProces(
   return bouwFeitenkaart(bron);
 }
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const POST = withFondsRoute({ hostGuard: true, label: "procedures.afschrift.concept.POST" }, async (ctx, req: NextRequest, params) => {
   try {
-    const { id: procedureId } = await params;
-    const supabase = await createServerSupabase();
+    const { id: procedureId } = params as { id: string };
+    const supabase = ctx.supabase;
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("fonds_id, rol")
-      .eq("id", user.id)
-      .maybeSingle();
-    const hostOordeel = await beoordeelRouteHostToegang({
-      sessieFondsId: profiel?.fonds_id ?? null,
-      gebruikerId: user.id,
-      label: "procedures.afschrift.concept.POST",
-    });
-    if (!hostOordeel.toegestaan) {
-      return NextResponse.json({ error: "Dit webadres hoort niet bij uw fonds." }, { status: 403 });
-    }
-    if (isBureauRol(profiel?.rol)) {
+    if (isBureauRol(ctx.rol)) {
       return NextResponse.json(
         { error: "Het afschrift bevat stemgedrag per bestuurslid en is niet beschikbaar voor het bestuursbureau." },
         { status: 403 }
@@ -244,4 +223,4 @@ export async function POST(
     console.error("Fout in POST /api/procedures/[id]/afschrift/concept:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

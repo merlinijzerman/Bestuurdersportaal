@@ -1,0 +1,14 @@
+{
+  "body": {
+    "vergadering": {
+      "datum": "<ts>",
+      "gearchiveerd_op": "<ts>",
+      "id": "<uuid:1>",
+      "titel": "W4 Vergadering fixture"
+    }
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Geen rechten"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 403
+}

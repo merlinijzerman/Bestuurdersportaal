@@ -17,23 +17,16 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { requireCapability } from "@/core/lib/capabilities";
 
 export const dynamic = "force-dynamic";
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const PATCH = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    if (!(await requireCapability(user.id, "notulen.segment.confirm"))) {
+    const { id } = params as { id: string };
+    const supabase = ctx.supabase;
+    if (!(await requireCapability(ctx.gebruikerId, "notulen.segment.confirm"))) {
       return NextResponse.json({ error: "Geen rechten" }, { status: 403 });
     }
 
@@ -113,19 +106,14 @@ export async function PATCH(
       .select("titel, fonds_id")
       .eq("id", segment.document_id)
       .maybeSingle();
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam")
-      .eq("id", user.id)
-      .maybeSingle();
 
     const { error: logError } = await supabase.from("document_metadata_log").insert(
       logVelden.map((v) => ({
         document_id: segment.document_id,
         document_titel_snapshot: document?.titel ?? null,
         fonds_id: document?.fonds_id ?? null,
-        gewijzigd_door: user.id,
-        gewijzigd_door_naam: profiel?.naam ?? null,
+        gewijzigd_door: ctx.gebruikerId,
+        gewijzigd_door_naam: ctx.naam ?? null,
         veld_naam: v.veld,
         oude_waarde: v.oud,
         nieuwe_waarde: v.nieuw,
@@ -147,20 +135,13 @@ export async function PATCH(
     console.error("Fout in PATCH /api/notulen/segmenten/[id]:", e);
     return NextResponse.json({ error: "Interne fout" }, { status: 500 });
   }
-}
+});
 
-export async function DELETE(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const DELETE = withFondsRoute({}, async (ctx, _req: NextRequest, params) => {
   try {
-    const { id } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    if (!(await requireCapability(user.id, "notulen.segment.confirm"))) {
+    const { id } = params as { id: string };
+    const supabase = ctx.supabase;
+    if (!(await requireCapability(ctx.gebruikerId, "notulen.segment.confirm"))) {
       return NextResponse.json({ error: "Geen rechten" }, { status: 403 });
     }
 
@@ -179,4 +160,4 @@ export async function DELETE(
     console.error("Fout in DELETE /api/notulen/segmenten/[id]:", e);
     return NextResponse.json({ error: "Interne fout" }, { status: 500 });
   }
-}
+});

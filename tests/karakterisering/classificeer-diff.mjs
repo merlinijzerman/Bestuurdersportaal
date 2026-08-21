@@ -51,7 +51,7 @@ const TOEGESTAAN_TOEGEVOEGD = [
   // Lokale alias die body-churn nul houdt: const X = ctx.(fondsId|rol|naam|gebruikerId);
   /^const \w+ = ctx\.(fondsId|rol|naam|gebruikerId);$/,
   // [id]-route: params is bij de wrapper al ge-awaite -> cast i.p.v. await.
-  /^const \{ [\w:\s]+ \} = params as \{[^}]*\};$/,
+  /^const \{ [\w,:\s]+ \} = params as \{[^}]*\};$/,
 ];
 
 // Verwijderingen die het recept voorschrijft (de preamble die de wrapper overneemt).
@@ -73,18 +73,18 @@ const TOEGESTAAN_VERWIJDERD = [
   /error: "Niet ingelogd"/,
   /^if \(!user\)\s*\{?$/,
   // [id]-route: de oude await-params-vorm.
-  /^const \{ [\w:\s]+ \} = await params;$/,
+  /^const \{ [\w,:\s]+ \} = await params;$/,
   // Eigen profiel-select (subset ≤4 kolommen) die haalProfiel vervangt — één
   // regel of als method-chain over meerdere regels. De fragmenten zijn strak
   // begrensd: alleen profielkolommen, alleen de id=user-filter, alleen de
   // single-terminator. Een échte query-verwijdering matcht hier niet.
-  /^const \{ data: profiel \} = await supabase\b/,
+  /^const \{ data: \w+ \} = await supabase\b/,
   /\.from\("profielen"\)/,
   /^\.select\("(id|naam|rol|fonds_id)(,\s*(id|naam|rol|fonds_id))*"\)$/,
   /^\.eq\("id",\s*user\.id\)$/,
   /^\.(maybeSingle|single)\(\);?$/,
-  /^const fondsId = profiel\?\.fonds_id/,
-  /^const \w+ = profiel\?\.(rol|naam|fonds_id)/,
+  /^const fondsId = profiel\??\.fonds_id/,
+  /^const \w+ = profiel\??\.(rol|naam|fonds_id)/,
   // Host-guard-blok — call-opener, argument-regels en de 403-return, één regel
   // of gesplitst. De opener/terminator/status dragen geen tekst; de body-tekst
   // ("Dit webadres…") is de poort die een afwijkende 403 alsnog zou markeren.
@@ -110,12 +110,53 @@ const isCommentaar = (l) => l.startsWith("//");
 
 // Toegestane token-substituties in body-regels: de vier haalProfiel-velden en
 // het gebruiker-id. Meer niet — een andere tekstwijziging blijft afwijkend.
-function substitueer(regel) {
-  return regel
+//
+// BESLUIT (W4): de optional chain is OPTIONEEL in het patroon. W3 kende alleen
+// `profiel?.X`, maar veel schrijfroutes doen eerst een expliciete
+// `if (!profiel?.fonds_id) -> 400` en gebruiken daarna `profiel.fonds_id`. Dat is
+// dezelfde substitutie, niet een andere. Het verbreedt wat automatisch wordt
+// weggestreept, maar niet WELKE velden: de whitelist blijft exact de vier
+// haalProfiel-kolommen. De controle uit §5 blijft daarmee intact — zet je
+// `ctx.fondsId` waar `ctx.gebruikerId` hoort, dan substitueert de verwijderde
+// regel naar iets anders dan de toegevoegde en blijft het `afwijkend`.
+const CTX_VELD = { rol: "ctx.rol", naam: "ctx.naam", fonds_id: "ctx.fondsId" };
+
+// BESLUIT (W4): welke variabele het eigen profiel draagt, wordt UIT DE DIFF
+// afgeleid — niet uit een namenlijst. In de 78 schrijfroutes heet hij `profiel`
+// (71×), maar ook `eigenProfiel`, `eigen` en `actorProfiel`. Beslissend is het
+// filter: alleen een select met `.eq("id", user.id)` beschrijft het eigen profiel.
+// `stemgerProfiel` in stemmingen/[id]/stemmen filtert op de VOLMACHTGEVER en
+// blijft daardoor buiten schot — precies zoals het hoort, want die rol door
+// `ctx.rol` vervangen zou een echte gedragswijziging zijn.
+function eigenProfielVariabelen(verwijderd) {
+  const opEigenId = verwijderd.some((l) => /^\.eq\("id",\s*user\.id\)$/.test(l));
+  if (!opEigenId) return [];
+  const vars = [];
+  for (const l of verwijderd) {
+    const m = l.match(/^const \{ data: (\w+) \} = await supabase\b/);
+    if (m) vars.push(m[1]);
+  }
+  return vars;
+}
+
+function substitueer(regel, eigenVars = []) {
+  // `user.email` -> `ctx.email`: de wrapper geeft het sessieveld door dat de oude
+  // preambule via `user` in scope had. Verankerd in toetsWrapperFundament (f).
+  let r = regel
     .replace(/\buser\.id\b/g, "ctx.gebruikerId")
-    .replace(/\bprofiel\?\.rol\b/g, "ctx.rol")
-    .replace(/\bprofiel\?\.naam\b/g, "ctx.naam")
-    .replace(/\bprofiel\?\.fonds_id\b/g, "ctx.fondsId");
+    .replace(/\buser\.email\b/g, "ctx.email");
+  for (const v of eigenVars) {
+    // `(profiel as { rol?: string } | null)?.rol` -> `ctx.rol`
+    r = r.replace(
+      new RegExp(`\\(\\s*${v} as [^()]*\\)\\s*\\??\\.(rol|naam|fonds_id)\\b`, "g"),
+      (_m, veld) => CTX_VELD[veld]
+    );
+    r = r.replace(
+      new RegExp(`\\b${v}\\??\\.(rol|naam|fonds_id)\\b`, "g"),
+      (_m, veld) => CTX_VELD[veld]
+    );
+  }
+  return r;
 }
 
 const matcht = (regels, regel) => regels.some((re) => re.test(regel));
@@ -156,25 +197,46 @@ function classificeer({ verwijderd, toegevoegd }) {
   let rem = verwijderd.map(trim).filter((l) => l.length > 0);
   let add = toegevoegd.map(trim).filter((l) => l.length > 0);
 
-  // 1. Gesanctioneerde verwijderingen wegstrepen (preamble + structuur + comment).
-  rem = rem.filter(
-    (l) => !(matcht(TOEGESTAAN_VERWIJDERD, l) || matcht(STRUCTUUR, l) || isCommentaar(l))
-  );
-  // 2. Gesanctioneerde toevoegingen wegstrepen (import + signatuur + aliassen +
-  //    de wrapper-sluiter `});` en andere structurele haakjes — geen semantiek).
-  add = add.filter((l) => !(matcht(TOEGESTAAN_TOEGEVOEGD, l) || matcht(STRUCTUUR, l)));
+  const eigenVars = eigenProfielVariabelen(rem);
 
-  // 3. Token-substitutie: een verwijderde body-regel die na substitutie exact
-  //    een toegevoegde regel is, is een gesanctioneerde wijziging.
+  // De cast-vorm van de alias — `const rol = (profiel as { rol?: string } | null)?.rol;`
+  // — wordt vervangen door `const rol = ctx.rol;`, en die toevoeging valt al onder
+  // TOEGESTAAN_TOEGEVOEGD. De verwijdering moet dus apart worden weggestreept, maar
+  // ALLEEN voor variabelen die in deze diff aantoonbaar het eigen profiel droegen.
+  // Een blanket-patroon zou `(stemgerProfiel as …)?.rol -> ctx.rol` stilzwijgend
+  // accepteren, en dat is een echte gedragswijziging.
+  const castAlias =
+    eigenVars.length > 0
+      ? new RegExp(
+          `^const \\w+ = \\(\\s*(?:${eigenVars.join("|")}) as [^()]*\\)\\s*\\??\\.(?:rol|naam|fonds_id);?$`
+        )
+      : null;
+
+  // VOLGORDE (W4): eerst PAREN sluiten, dan pas losse regels wegstrepen.
+  //
+  //  Andersom eet een verwijderpatroon soms de linkerhelft op van een paar dat
+  //  het niet bedoelde. `.eq("id", user.id)` staat in de verwijderlijst omdat het
+  //  bij de profielen-select hoort die verdwijnt — maar in `/api/profiel` BLIJFT
+  //  die select (tien kolommen, handwerk) en verandert alleen het token. De
+  //  verwijderde regel werd dan weggestreept en de toegevoegde bleef als
+  //  onverklaard achter. Idem voor `gebruikerId:` in de classificatie-routes, waar
+  //  het geen host-guard-argument is maar een gewone parameter.
+  //
+  //  Paren sluiten is strenger, niet losser: een paar valt alleen weg als de
+  //  verwijderde regel NA substitutie exact de toegevoegde regel is. Een verkeerd
+  //  veld (`ctx.fondsId` waar `ctx.gebruikerId` hoort) sluit dus geen paar.
+
+  // 1. Token-substitutie: een verwijderde body-regel die na substitutie exact een
+  //    toegevoegde regel is, is een gesanctioneerde wijziging.
   for (let i = rem.length - 1; i >= 0; i--) {
-    const s = substitueer(rem[i]);
+    const s = substitueer(rem[i], eigenVars);
     const j = add.indexOf(s);
     if (j >= 0) {
       rem.splice(i, 1);
       add.splice(j, 1);
     }
   }
-  // 4. Verplaatste (identieke) regels wegstrepen.
+  // 2. Verplaatste (identieke) regels wegstrepen.
   for (let i = rem.length - 1; i >= 0; i--) {
     const j = add.indexOf(rem[i]);
     if (j >= 0) {
@@ -182,6 +244,19 @@ function classificeer({ verwijderd, toegevoegd }) {
       add.splice(j, 1);
     }
   }
+  // 3. Gesanctioneerde verwijderingen wegstrepen (preamble + structuur + comment).
+  rem = rem.filter(
+    (l) =>
+      !(
+        matcht(TOEGESTAAN_VERWIJDERD, l) ||
+        matcht(STRUCTUUR, l) ||
+        isCommentaar(l) ||
+        (castAlias && castAlias.test(l))
+      )
+  );
+  // 4. Gesanctioneerde toevoegingen wegstrepen (import + signatuur + aliassen +
+  //    de wrapper-sluiter `});` en andere structurele haakjes — geen semantiek).
+  add = add.filter((l) => !(matcht(TOEGESTAAN_TOEGEVOEGD, l) || matcht(STRUCTUUR, l)));
 
   const conform = rem.length === 0 && add.length === 0;
   return {

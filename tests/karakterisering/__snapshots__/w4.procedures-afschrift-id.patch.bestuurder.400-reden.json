@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Een reden voor het intrekken is verplicht."
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 400
+}

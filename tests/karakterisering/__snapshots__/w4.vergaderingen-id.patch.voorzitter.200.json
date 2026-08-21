@@ -1,0 +1,22 @@
+{
+  "body": {
+    "vergadering": {
+      "aangemaakt": "<ts>",
+      "aangemaakt_door": "<uuid:1>",
+      "datum": "<ts>",
+      "fonds_id": "<uuid:2>",
+      "gearchiveerd_door": null,
+      "gearchiveerd_op": null,
+      "gewijzigd_door": "<uuid:1>",
+      "gewijzigd_op": "<ts>",
+      "id": "<uuid:3>",
+      "locatie": "W4",
+      "status": "gepland",
+      "titel": "W4 gewijzigde vergadertitel"
+    }
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

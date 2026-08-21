@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Inbreng op een agendapunt is een bestuurlijke uiting. Het bestuursbureau ondersteunt de voorbereiding en plaatst zelf geen inbreng."
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 403
+}

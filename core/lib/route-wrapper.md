@@ -8,6 +8,37 @@
 > houden. Een verschil is een **bevinding**, geen reden om het snapshot bij te
 > werken.
 
+## Ontwerpprincipe: een uitzondering is een WAARDE, geen afwezigheid
+
+Dit staat hier los van W4, omdat het verder reikt dan dit spoor.
+
+Een route die bewust van de norm afwijkt moet dat **zeggen**, niet **verzwijgen**.
+Een ontbrekend veld is niet te onderscheiden van een vergeten veld: een latere
+gate leest het als een omissie, iemand "repareert" het, en de reden — die nergens
+in de code stond — is verdwenen.
+
+`spec.hostGuard` is daarom drie-waardig en niet twee:
+
+```ts
+hostGuard: true            // de wrapper dwingt host↔fonds af, vóór de handler
+hostGuard: false           // deze route kent geen host↔fonds-grens
+hostGuard: "route-eigen"   // de route doet het ZELF, bewust — met de reden erbij
+```
+
+`documents/upload` gebruikt de derde: de wrapper zou de guard vóór de fail-closed
+rate limit trekken én de twee labels die de anomaliedetectie voeden samenvouwen.
+Als `{}` zou die route in elke inventarisatie als "mist hostGuard" opduiken.
+
+Twee eisen bij zo'n waarde, allebei geleerd in W4:
+
+1. **Toets op de waarde, niet op waarheid.** `"route-eigen"` is een string en dus
+   truthy; `if (spec.hostGuard)` zou die route de guard er stilzwijgend bovenop
+   geven. De tak toetst op `=== true`, en anker (h) in `toetsWrapperFundament()`
+   bewaakt dat.
+2. **De uitzondering mag geen ontsnapping zijn.** `"route-eigen"` zonder inline
+   `beoordeelRouteHostToegang(` moet rood worden — bij zowel de TS-guards als
+   `g2-evidence`. Gemeten, niet aangenomen.
+
 ## Wat de wrapper doet (en dus wat je uit de route weghaalt)
 
 `withFondsRoute(spec, handler)` (`core/lib/route-wrapper.ts`) doet vóór de
@@ -317,6 +348,93 @@ mag niet vals-rood vallen). Eén valkuil bleek in de praktijk beslissend: de
 sabotage-transformaties **stapelen** als je de route er niet tussendoor herstelt.
 De shadow-variant liet daardoor de échte wrapper-import staan en mat niets — hij
 kwam vals-groen uit. Herstel tussen elke meting.
+
+## Wat W4 in de praktijk opleverde (lees vóór W5)
+
+De 78 schrijfroutes lieten zes dingen zien die de acht leesroutes van W3 niet
+konden tonen.
+
+### 1. `ctx` kreeg één veld erbij: `email`
+
+Drie routes gebruiken `user.email` als naam-fallback. De oude preambule had `user`
+in scope; de wrapper hield er vier velden van over. `ctx.email` herstelt wat er
+was — het is geen vijfde ding dat de wrapper DOET. Bewust `string | undefined` en
+niet `| null`: PostgREST laat een `undefined`-veld weg (kolomdefault) terwijl
+`null` de kolom leegzet, en dat verschil is in de snapshots onzichtbaar omdat de
+fixtures allemaal een naam hebben.
+
+`toetsWrapperFundament()` verankert het (f), en anker (g) zorgt dat `ctx` NOOIT
+als geheel in een logregel belandt — sinds er een e-mailadres in zit is één
+`console.error("fout", ctx)` een PII-lek.
+
+### 2. `hostGuard` heeft drie waarden, want "geen" is een keuze
+
+`true` · `false`/afwezig · `"route-eigen"`. De derde is er omdat een ontbrekend
+veld niet te onderscheiden is van een vergeten veld. `documents/upload` gebruikt
+hem: de wrapper zou de guard vóór de fail-closed rate limit trekken én de twee
+labels (`.init` / `.complete`) die de anomaliedetectie voeden samenvouwen.
+
+**De tak toetst op `=== true`, niet op truthy** — `"route-eigen"` is een string en
+dus truthy; op truthy toetsen zou zo'n route de guard dubbel geven. Anker (h)
+bewaakt dat.
+
+Voor de vier andere host-guard-routes is `true` juist wél goed, en dat is gemeten
+en niet aangenomen: bij alle vier stond de inline guard al direct ná het profiel
+en vóór elke andere poort. **De codemod verwijdert de inline aanroep niet — doe
+dat met de hand, anders draait de guard twee keer.**
+
+### 3. Drie routes deden werk VÓÓR de auth — de enige gedragswijzigingen
+
+`documents/upload` (400 bij kapotte JSON), `vergelijk` (404 modulevlag),
+`reflectie/transitie` (400 ongeldig id). Alle drie geven nu 401. Dat is winst —
+er werd werk verricht, en soms een foutorakel afgegeven, voor een beller die niet
+was ingelogd — maar het is een wijziging, dus: eerst meten op ongewijzigde code,
+baseline in de commit ervóór, snapshot pas daarna bij met motivering.
+
+Zoek ze vooraf op: alles vóór de `getUser()`-regel in de handler is een kandidaat.
+
+### 4. Vier substitutievormen die het recept nog niet kende
+
+- `profiel.X` zonder optional chain (schrijfroutes guarden eerst, gebruiken daarna);
+- de eigen-profielselect heet niet altijd `profiel` (ook `eigenProfiel`, `eigen`,
+  `actorProfiel`) — de regel hangt aan het FILTER `.eq("id", user.id)`, niet aan
+  de naam. `stemgerProfiel` in `stemmingen/[id]/stemmen` filtert op de
+  volmachtgever en moet blijven staan;
+- de cast-vorm `const rol = (profiel as { rol?: string } | null)?.rol;`;
+- `?? null` achter `ctx.X` is een no-op (ctx-velden zijn nooit `undefined`), maar
+  `?? "bestuurder"` is een échte default en hoort zichtbaar te blijven.
+
+De classifier sluit sinds W4 eerst PAREN en streept pas daarna losse regels weg.
+Andersom eet een verwijderpatroon soms de linkerhelft op van een paar dat het niet
+bedoelde (`.eq("id", user.id)` in `/api/profiel`, waar de select juist blijft).
+
+### 5. Het harnas ziet geen databaserijen — de actorvelden-audit wel
+
+47 routes schrijven een auditregel. Een fout actorveld is in de snapshots
+volledig onzichtbaar. Naast de classifier draait daarom een audit die ELK
+actorveld afdrukt met zijn herkomst, inclusief één niveau aliasresolutie
+(`actor_naam: actorNaam` zegt niets tot je ziet dat `actorNaam = ctx.naam`).
+Eindstand: 216 actorvelden in 78 routes, 0 verdacht. **Toets per veld, niet per
+regel** — `{ gebruiker_id: ctx.gebruikerId, gebruiker_naam: ctx.naam }` staat op
+één regel en een regeltoets slaat daar vals alarm op.
+
+### 6. §4 slaat ook toe buiten de snapshots
+
+Drie vormen die staat overdragen tussen verify-rondes:
+
+- **een fixture** (bekend uit het ticket);
+- **een teller** — elke fail-closed limiet (rate limit, AI-quotum,
+  idempotentiesleutel) tikt door over de drie rondes en slaat ergens om naar 429.
+  Wis hem in de preseed;
+- **de gedeelde `seed()`** — `seedRisicos` en `seedDocumenten` deden
+  delete-en-herbouw op tabellen met append-only kinderen. Zodra er één auditregel
+  staat is de rij onverwijderbaar. Alles via upsert-reset, en **controleer élk
+  delete-resultaat**: een ongecontroleerde delete komt er twee stappen verderop
+  uit als een duplicate-key, met een melding die niets zegt over de oorzaak.
+
+Let ook op partiële unique indexen (`idx_stemming_een_open`,
+`idx_dobj_one_primary`): die dwingen "eigen fixture per scenario" af waar
+voorzichtigheid dat niet zou hebben gedaan.
 
 ### Voor W5
 

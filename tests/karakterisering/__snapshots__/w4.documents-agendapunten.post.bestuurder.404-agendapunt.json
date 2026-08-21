@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Agendapunt niet gevonden of niet aan een vergadering gekoppeld."
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 404
+}

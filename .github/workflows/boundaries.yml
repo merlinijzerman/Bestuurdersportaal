@@ -10,15 +10,24 @@ name: boundaries
 #   2. Service-role-lek-check — de platform-service-role-laag (@/platform/lib)
 #      mag nooit in tenant-/client-code lekken (TO §12 test 2).
 #
-#  BLOKKEREND: sinds 19-08-2026 staat `Code-scheiding (T9 core/platform-grens)`
-#  als required status check op `main`. Wijzig die job-`name` NIET zonder de
-#  branch-protection-regel mee te verzetten — anders wordt de gate stil
-#  losgekoppeld en blijft elke PR bovendien hangen op een check die nooit meldt.
+#  GATE-STATUS STAAT NIET IN DIT BESTAND (W4, #96). Of deze job blokkeert is
+#  uitsluitend te lezen uit de branch-protection-regel op `main`:
+#      gh api repos/:owner/:repo/branches/main/protection \
+#        --jq '.required_status_checks.contexts[]'
+#  Een comment kan dat niet weten, en op 21-08-2026 hadden drie van de vier
+#  gate-uitspraken in deze map het mis — alle drie onderschattend. Zet die
+#  bewering hier dus niet terug; corrigeren lost één geval op, weglaten lost de
+#  categorie op.
 #
-#  De tweede job hieronder (`Mapindeling supabase/`) is NOG NIET required. Zet
-#  hem pas aan nádat hij één keer op `main` heeft gedraaid: een required check
-#  waarvan de job op de doelbranch onbekend is, blijft eeuwig pending en
-#  blokkeert ook de PR die hem zou introduceren.
+#  Wat WEL hier hoort: de job-`name` hieronder is de gepinde check-naam.
+#  Hernoem hem niet zonder de branch-protection-regel mee te verzetten — dan
+#  wordt de gate stil losgekoppeld én blijft elke PR hangen op een check die
+#  nooit meldt.
+#
+#  Volgorde-eis die WEL blijft: zet een job pas als required aan nádat hij één
+#  keer op `main` heeft gedraaid. Een required check waarvan de job op de
+#  doelbranch onbekend is, blijft eeuwig pending en blokkeert ook de PR die hem
+#  zou introduceren.
 # ============================================================================
 on:
   push:

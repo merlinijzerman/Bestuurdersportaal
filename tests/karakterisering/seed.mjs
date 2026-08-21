@@ -8,8 +8,23 @@
 //  bouwt daarna vers op. Auth-user-UUID's variëren per run (GoTrue); de
 //  normalisatielaag mapt ze. Domein-UUID's zijn vast.
 // ============================================================================
+import { pathToFileURL } from "node:url";
 import { createClient } from "@supabase/supabase-js";
 import { ENV, FONDS_ID, ROLLEN, WACHTWOORD, emailVoor, FIX, DOCUMENT1_BYTES, DOCUMENT1_PAD, AFSCHRIFT1_PAD } from "./config.mjs";
+
+// ── W4-BESLUIT: elke delete wordt gecontroleerd ─────────────────────────────
+//  Het defect dat W4 blootlegde bij `seedRisicos` was niet de append-only
+//  cascade maar de ONGECONTROLEERDE delete. Daardoor kwam een geblokkeerde
+//  opruiming eruit als een duplicate-key op de insert erna — twee stappen
+//  verderop, met een melding die niets zegt over de oorzaak. Een gecontroleerde
+//  delete faalt op de plek waar het misgaat, met de reden erbij.
+//
+//  Sweep over alle seed*-functies (W4): zes ongecontroleerde deletes en één
+//  ongecontroleerde storage-remove. Alle zeven lopen nu hierlangs.
+async function wis(admin, tabel, kolom, waarde) {
+  const { error } = await admin.from(tabel).delete().eq(kolom, waarde);
+  if (error) throw new Error(`delete ${tabel}: ${error.message}`);
+}
 
 export function adminClient() {
   return createClient(ENV.url, ENV.serviceKey, { auth: { persistSession: false } });
@@ -158,9 +173,20 @@ async function seedAfschrift(admin) {
 }
 
 // ── Tier 2: procedures ──────────────────────────────────────────────────────
+// W4-BESLUIT: `ignoreDuplicates` eraf. Geen delete — een lopende procedure is
+// bewust niet verwijderbaar (trigger), en `procedure_log` + `procedure_afschriften`
+// hangen er append-only met CASCADE aan. Maar de upsert moet wél RESETTEN.
+//
+// De oude opmerking ("inhoud verandert nooit") klopte in W1: daar raakten alleen
+// leesroutes deze fixture. Het procedures-domein van W4 telt 20 routes, waarvan
+// er meerdere de procedure zélf muteren (PATCH /procedures/[id], stap-status,
+// heropenen, besluiten). Met `ignoreDuplicates` blijft zo'n mutatie voor ALTIJD
+// staan en drijft elke latere snapshot die deze procedure leest — precies de
+// volgorde-afhankelijkheid uit §4, alleen dan in de gedeelde seed.
+//
+// Gemeten vóór de wijziging: `titel` handmatig veranderd, seed opnieuw gedraaid,
+// titel bleef veranderd.
 async function seedProcedures(admin) {
-  // Geen delete: een lopende procedure is bewust niet verwijderbaar (trigger).
-  // Upsert-ignore houdt de vaste fixture idempotent (inhoud verandert nooit).
   const { error } = await admin.from("procedures").upsert(
     {
       id: FIX.procedure1,
@@ -169,14 +195,14 @@ async function seedProcedures(admin) {
       titel: "W1 Procedure",
       status: "lopend",
     },
-    { onConflict: "id", ignoreDuplicates: true }
+    { onConflict: "id" }
   );
   if (error) throw new Error(`procedures: ${error.message}`);
 }
 
 // ── Tier 2: gesprekken (eigenaar = auth.uid, dus per-run user-id) ───────────
 async function seedGesprekken(admin, users) {
-  await admin.from("gesprekken").delete().eq("fonds_id", FONDS_ID);
+  await wis(admin, "gesprekken", "fonds_id", FONDS_ID);
   const { error } = await admin.from("gesprekken").insert({
     id: FIX.gesprek1,
     gebruiker_id: users.bestuurder.userId,
@@ -187,27 +213,36 @@ async function seedGesprekken(admin, users) {
 }
 
 // ── Tier 2: risico's ────────────────────────────────────────────────────────
+// W4-BESLUIT: upsert i.p.v. delete-en-herbouw, net als seedAgendapunten.
+// `risico_log` is append-only (trigger weigert DELETE), en `risico_log.risico_id`
+// hangt met ON DELETE CASCADE aan `risicos`. Zodra één risico een auditregel heeft
+// — en dat is precies wat de W4-schrijfscenario's veroorzaken — faalt de
+// delete-en-herbouw. De fout van die delete werd hier NIET gecontroleerd, dus het
+// gevolg was geen leesbare melding maar een duplicate-key op de daaropvolgende
+// insert. Upsert reset dezelfde vaste staat zonder de logketen te raken.
 async function seedRisicos(admin) {
-  await admin.from("risicos").delete().eq("fonds_id", FONDS_ID);
-  const { error } = await admin.from("risicos").insert({
-    id: FIX.risico1,
-    fonds_id: FONDS_ID,
-    titel: "W1 Risico",
-    categorie: "operationeel_datakwaliteit",
-    kans: 3,
-    impact: 3,
-    niveau: "middel",
-    type_risico: "structureel",
-    status: "actief",
-  });
+  const { error } = await admin.from("risicos").upsert(
+    {
+      id: FIX.risico1,
+      fonds_id: FONDS_ID,
+      titel: "W1 Risico",
+      categorie: "operationeel_datakwaliteit",
+      kans: 3,
+      impact: 3,
+      niveau: "middel",
+      type_risico: "structureel",
+      status: "actief",
+    },
+    { onConflict: "id" }
+  );
   if (error) throw new Error(`risicos: ${error.message}`);
 }
 
 // ── Tier 2: catalogus (procesmodellen + organen/gremia) ─────────────────────
 async function seedCatalogus(admin) {
-  await admin.from("procesmodellen").delete().eq("fonds_id", FONDS_ID);
-  await admin.from("gremia").delete().eq("fonds_id", FONDS_ID);
-  await admin.from("expertises").delete().eq("fonds_id", FONDS_ID);
+  await wis(admin, "procesmodellen", "fonds_id", FONDS_ID);
+  await wis(admin, "gremia", "fonds_id", FONDS_ID);
+  await wis(admin, "expertises", "fonds_id", FONDS_ID);
 
   {
     const { error } = await admin.from("procesmodellen").insert({
@@ -238,11 +273,24 @@ async function seedCatalogus(admin) {
 }
 
 // ── Tier 2: documenten ──────────────────────────────────────────────────────
+// W4-BESLUIT: upsert i.p.v. delete-en-herbouw, om dezelfde reden als seedRisicos
+// maar met een andere FK-vorm. `documenten` heeft twee append-only kinderen —
+// `extraction_run` en `comparison_results` — en die hangen er met NO ACTION aan.
+// Zodra het documents-domein van W4 één extractie of vergelijking heeft gedraaid,
+// weigert Postgres de delete. Cascade zou hier niet eens helpen: beide kinderen
+// dragen zelf een no-delete-trigger.
+//
+// Het storage-object blijft wél weggegooid worden: `upload({ upsert: true })`
+// hieronder zet het toch terug, en storage kent deze beperking niet.
 async function seedDocumenten(admin) {
-  // Opruimen: rijen + storage-object + inzage-log van dit fonds.
-  await admin.from("document_inzage").delete().eq("fonds_id", FONDS_ID);
-  await admin.from("documenten").delete().eq("fonds_id", FONDS_ID);
-  await admin.storage.from("documenten").remove([DOCUMENT1_PAD]);
+  // Opruimen: inzage-log + storage-object. De documentrijen zelf gaan via upsert.
+  await wis(admin, "document_inzage", "fonds_id", FONDS_ID);
+  {
+    const { error } = await admin.storage.from("documenten").remove([DOCUMENT1_PAD]);
+    if (error && !/not.?found/i.test(error.message)) {
+      throw new Error(`storage.remove: ${error.message}`);
+    }
+  }
 
   // Storage-object onder <fonds_id>/… zodat de fonds-RLS-leespolicy het toelaat.
   {
@@ -255,7 +303,7 @@ async function seedDocumenten(admin) {
 
   // Actief document (bytes-download happy path).
   {
-    const { error } = await admin.from("documenten").insert({
+    const { error } = await admin.from("documenten").upsert({
       id: FIX.document1,
       fonds_id: FONDS_ID,
       bibliotheek: "fonds",
@@ -265,13 +313,13 @@ async function seedDocumenten(admin) {
       bestandstype: "pdf",
       opslag_pad: DOCUMENT1_PAD,
       actief: true,
-    });
+    }, { onConflict: "id" });
     if (error) throw new Error(`documenten(actief): ${error.message}`);
   }
 
   // Ingetrokken document (410-pad; geen storage-object nodig — actief-check gaat voor).
   {
-    const { error } = await admin.from("documenten").insert({
+    const { error } = await admin.from("documenten").upsert({
       id: FIX.documentIntrekken,
       fonds_id: FONDS_ID,
       bibliotheek: "fonds",
@@ -281,13 +329,20 @@ async function seedDocumenten(admin) {
       bestandstype: "pdf",
       opslag_pad: `${FONDS_ID}/w1-ingetrokken.pdf`,
       actief: false,
-    });
+    }, { onConflict: "id" });
     if (error) throw new Error(`documenten(intrekken): ${error.message}`);
   }
 }
 
 // Handmatig: `node --env-file=.env.local tests/karakterisering/seed.mjs`
-if (import.meta.url === `file://${process.argv[1]}`) {
+//
+// W4: `file://${process.argv[1]}` i.p.v. pathToFileURL was hier een stille no-op.
+// argv[1] is het pad zoals getypt (relatief), en een absoluut pad met een spatie
+// erin — zoals de checkout van dit project — wordt in een file-URL als %20
+// gecodeerd. De vergelijking sloeg dus nooit aan: het gedocumenteerde commando
+// eindigde zonder uitvoer én zonder foutcode, en de DB bleef ongeseed. De rest
+// van de repo gebruikt al `pathToFileURL(process.argv[1]).href`.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const res = await seed();
   console.log("seed klaar:", JSON.stringify({ fondsId: res.fondsId, rollen: Object.keys(res.users) }));
 }

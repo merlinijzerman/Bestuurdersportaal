@@ -1,33 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 
 // Stap-toelichting (WO-3) — de bestuurlijke toelichting onder de staptitel.
 // Slaat op in de bestaande kolom `procedure_stappen.beschrijving` (per-proces
 // snapshot; pure content, raakt checklist/bewijslast/activatie niet). Server-side
 // gegate op voorzitter/beheerder; de procedure-koppeling wordt geverifieerd en
 // de mutatie append-only gelogd in `procedure_log`.
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string; stapId: string }> }
-) {
+export const POST = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id, stapId } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const { id, stapId } = params as { id: string; stapId: string };
+    const supabase = ctx.supabase;
 
     const body = (await req.json()) as { toelichting?: string | null };
 
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("fonds_id, naam, rol")
-      .eq("id", user.id)
-      .single();
-    if (!["voorzitter", "beheerder"].includes(profiel?.rol ?? "")) {
+    if (!["voorzitter", "beheerder"].includes(ctx.rol ?? "")) {
       return NextResponse.json(
         { error: "Alleen voorzitter of beheerder kan de toelichting bewerken" },
         { status: 403 }
@@ -41,7 +27,7 @@ export async function POST(
       .select("id, fonds_id")
       .eq("id", id)
       .single();
-    if (!procedure || procedure.fonds_id !== profiel?.fonds_id) {
+    if (!procedure || procedure.fonds_id !== ctx.fondsId) {
       return NextResponse.json(
         { error: "Procedure hoort niet bij dit fonds" },
         { status: 400 }
@@ -83,8 +69,8 @@ export async function POST(
     await supabase.from("procedure_log").insert({
       procedure_id: id,
       event_type: "stap_toelichting_bijgewerkt",
-      actor_id: user.id,
-      actor_naam: profiel?.naam || null,
+      actor_id: ctx.gebruikerId,
+      actor_naam: ctx.naam || null,
       payload: { stap: stap.naam, leeg: toelichting === null },
     });
 
@@ -96,4 +82,4 @@ export async function POST(
     );
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

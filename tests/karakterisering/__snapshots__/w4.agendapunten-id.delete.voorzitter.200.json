@@ -1,0 +1,26 @@
+{
+  "body": {
+    "agendapunt": {
+      "aangemaakt": "<ts>",
+      "aangemaakt_door": "<uuid:1>",
+      "beschrijving": null,
+      "categorie": "informatie",
+      "gewijzigd_door": null,
+      "gewijzigd_op": null,
+      "id": "<uuid:2>",
+      "procedure_stap_id": null,
+      "tijdsduur_minuten": null,
+      "titel": "W4 Agendapunt",
+      "verantwoordelijke": null,
+      "vergadering_id": "<uuid:3>",
+      "verwijder_reden": "W4 verwijderreden voor de karakterisering",
+      "verwijderd_door": "<uuid:1>",
+      "verwijderd_op": "<ts>",
+      "volgorde": 1
+    }
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

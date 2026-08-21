@@ -1,0 +1,20 @@
+{
+  "body": {
+    "maatregel": {
+      "aangemaakt": "<ts>",
+      "aangemaakt_door": "<uuid:1>",
+      "beschrijving": "W4 maatregel",
+      "bijgewerkt_op": "<ts>",
+      "id": "<uuid:2>",
+      "procedure_id": null,
+      "risico_id": "<uuid:3>",
+      "status": "open",
+      "verantwoordelijke": null,
+      "volgorde": 1
+    }
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

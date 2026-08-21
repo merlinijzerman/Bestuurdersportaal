@@ -14,22 +14,15 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { requireCapability } from "@/core/lib/capabilities";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const GET = withFondsRoute({}, async (ctx, _req: NextRequest, params) => {
   try {
-    const { id } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+    const { id } = params as { id: string };
+    const supabase = ctx.supabase;
 
     const { data, error } = await supabase
       .from("document_procesinstanties")
@@ -44,21 +37,14 @@ export async function GET(
     console.error("Fout in GET .../procesinstanties:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const POST = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+    const { id } = params as { id: string };
+    const supabase = ctx.supabase;
 
-    if (!(await requireCapability(user.id, "documents.metadata.update"))) {
+    if (!(await requireCapability(ctx.gebruikerId, "documents.metadata.update"))) {
       return NextResponse.json(
         { error: "Geen rechten om koppelingen te beheren (documents.metadata.update)" },
         { status: 403 }
@@ -91,7 +77,7 @@ export async function POST(
       fonds_id: document.fonds_id,
       document_id: id,
       procesinstantie_id: body.procesinstantie_id,
-      aangemaakt_door: user.id,
+      aangemaakt_door: ctx.gebruikerId,
     });
     if (error) {
       console.error("Koppeling-insert fout:", error);
@@ -107,19 +93,13 @@ export async function POST(
       return NextResponse.json({ error: melding }, { status: 422 });
     }
 
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam")
-      .eq("id", user.id)
-      .maybeSingle();
-
     // Auditspoor (append-only).
     await supabase.from("document_metadata_log").insert({
       document_id: id,
       document_titel_snapshot: document.titel,
       fonds_id: document.fonds_id,
-      gewijzigd_door: user.id,
-      gewijzigd_door_naam: profiel?.naam ?? null,
+      gewijzigd_door: ctx.gebruikerId,
+      gewijzigd_door_naam: ctx.naam ?? null,
       veld_naam: "secundaire_procesinstantie",
       oude_waarde: null,
       nieuwe_waarde: body.procesinstantie_id,
@@ -132,21 +112,14 @@ export async function POST(
     console.error("Fout in POST .../procesinstanties:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});
 
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const DELETE = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+    const { id } = params as { id: string };
+    const supabase = ctx.supabase;
 
-    if (!(await requireCapability(user.id, "documents.metadata.update"))) {
+    if (!(await requireCapability(ctx.gebruikerId, "documents.metadata.update"))) {
       return NextResponse.json(
         { error: "Geen rechten om koppelingen te beheren (documents.metadata.update)" },
         { status: 403 }
@@ -185,18 +158,12 @@ export async function DELETE(
       );
     }
 
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam")
-      .eq("id", user.id)
-      .maybeSingle();
-
     await supabase.from("document_metadata_log").insert({
       document_id: id,
       document_titel_snapshot: document?.titel ?? null,
       fonds_id: document?.fonds_id ?? null,
-      gewijzigd_door: user.id,
-      gewijzigd_door_naam: profiel?.naam ?? null,
+      gewijzigd_door: ctx.gebruikerId,
+      gewijzigd_door_naam: ctx.naam ?? null,
       veld_naam: "secundaire_procesinstantie",
       oude_waarde: body.procesinstantie_id,
       nieuwe_waarde: null,
@@ -209,4 +176,4 @@ export async function DELETE(
     console.error("Fout in DELETE .../procesinstanties:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

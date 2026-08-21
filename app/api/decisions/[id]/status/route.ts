@@ -30,7 +30,7 @@
 //   }
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import {
   mapDecisionToProcedureStatus,
   type DecisionStatus,
@@ -83,19 +83,10 @@ interface DecisionRowMin {
   risiconiveau: "laag" | "middel" | "hoog";
 }
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const POST = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id: decisionId } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const { id: decisionId } = params as { id: string };
+    const supabase = ctx.supabase;
 
     const body = (await req.json()) as Body;
     if (!body.status || !ALLE_STATUSSEN.includes(body.status)) {
@@ -129,14 +120,9 @@ export async function POST(
     }
 
     // 2. Rolcheck voor override.
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam, rol")
-      .eq("id", user.id)
-      .maybeSingle();
     const isPrivileged =
-      profiel?.rol === "voorzitter" || profiel?.rol === "beheerder";
-    const actorNaam = profiel?.naam ?? null;
+      ctx.rol === "voorzitter" || ctx.rol === "beheerder";
+    const actorNaam = ctx.naam;
 
     // 3. Readiness-gate (alleen voor bepaalde targets).
     const readinessTarget = READINESS_VOOR_STATUS[target];
@@ -246,7 +232,7 @@ export async function POST(
       await supabase.from("governance_events").insert({
         decision_id: decisionId,
         event_type: `override_${ov.target}`,
-        actor_id: user.id,
+        actor_id: ctx.gebruikerId,
         actor_naam: actorNaam,
         object_type: "decision_object",
         object_id: decisionId,
@@ -262,7 +248,7 @@ export async function POST(
     await supabase.from("governance_events").insert({
       decision_id: decisionId,
       event_type: "status_gewijzigd",
-      actor_id: user.id,
+      actor_id: ctx.gebruikerId,
       actor_naam: actorNaam,
       object_type: "decision_object",
       object_id: decisionId,
@@ -303,4 +289,4 @@ export async function POST(
     console.error("Fout in POST /api/decisions/[id]/status:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

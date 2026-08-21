@@ -18,7 +18,7 @@
 //   • dissent_ingetrokken         — DELETE (hard delete; logregel blijft)
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { notifyUser } from "@/core/lib/notifications";
 import { isBureauRol, BUREAU_WEIGERING } from "@/core/lib/bureau-gate";
 
@@ -47,19 +47,10 @@ const INHOUDELIJKE_VELDEN: (keyof WijzigBody)[] = [
   "gekoppeld_voorwaarde_id",
 ];
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string; did: string }> }
-) {
+export const PATCH = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id: decisionId, did } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const { id: decisionId, did } = params as { id: string; did: string };
+    const supabase = ctx.supabase;
 
     const body = (await req.json()) as WijzigBody;
 
@@ -83,19 +74,14 @@ export async function PATCH(
       );
     }
 
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam, rol")
-      .eq("id", user.id)
-      .maybeSingle();
-    const isAuteur = huidig.bestuurder_id === user.id;
+    const isAuteur = huidig.bestuurder_id === ctx.gebruikerId;
     const isPrivileged =
-      profiel?.rol === "voorzitter" || profiel?.rol === "beheerder";
+      ctx.rol === "voorzitter" || ctx.rol === "beheerder";
 
     // T1 bureau-rol (§5.3): geen dissent vastleggen of wijzigen. Het bureau kan
     // geen auteur zijn (de POST is geweigerd), maar een rolwijziging achteraf zou
     // de auteur-tak anders alsnog openen.
-    if (isBureauRol(profiel?.rol)) {
+    if (isBureauRol(ctx.rol)) {
       return NextResponse.json({ error: BUREAU_WEIGERING.dissent }, { status: 403 });
     }
 
@@ -204,13 +190,13 @@ export async function PATCH(
       );
     }
 
-    const actorNaam = profiel?.naam ?? null;
+    const actorNaam = ctx.naam;
 
     if (inhoudelijkGewijzigd.length > 0) {
       await supabase.from("governance_events").insert({
         decision_id: decisionId,
         event_type: "dissent_gewijzigd",
-        actor_id: user.id,
+        actor_id: ctx.gebruikerId,
         actor_naam: actorNaam,
         object_type: "dissent",
         object_id: did,
@@ -224,7 +210,7 @@ export async function PATCH(
       await supabase.from("governance_events").insert({
         decision_id: decisionId,
         event_type: "dissent_zichtbaarheid_gewijzigd",
-        actor_id: user.id,
+        actor_id: ctx.gebruikerId,
         actor_naam: actorNaam,
         object_type: "dissent",
         object_id: did,
@@ -236,7 +222,7 @@ export async function PATCH(
       await supabase.from("governance_events").insert({
         decision_id: decisionId,
         event_type: "dissent_formeel_vastgesteld",
-        actor_id: user.id,
+        actor_id: ctx.gebruikerId,
         actor_naam: actorNaam,
         object_type: "dissent",
         object_id: did,
@@ -278,7 +264,13 @@ export async function PATCH(
             {
               gerelateerd_aan_type: "decision",
               gerelateerd_aan_id: decisionId,
-              actor_naam: actorNaam,
+              // BESLUIT (W4): `|| undefined` i.p.v. de kale waarde. `actorNaam`
+              // was via de untypeerde .select() `any` en compileerde daarom tegen
+              // `NotifyOpts.actor_naam?: string`; via ctx is het `string | null`.
+              // Waarde-identiek: notifyUser doet `opts.actor_naam ?? null`
+              // (core/lib/notifications.ts:149), dus null en undefined komen
+              // allebei als null in de kolom. Zelfde afweging als in inbreng.
+              actor_naam: actorNaam || undefined,
             }
           );
         }
@@ -290,21 +282,12 @@ export async function PATCH(
     console.error("Fout in PATCH /api/decisions/[id]/dissent/[did]:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});
 
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string; did: string }> }
-) {
+export const DELETE = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id: decisionId, did } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const { id: decisionId, did } = params as { id: string; did: string };
+    const supabase = ctx.supabase;
 
     const { data: huidig } = await supabase
       .from("decision_dissent")
@@ -319,17 +302,12 @@ export async function DELETE(
       );
     }
 
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam, rol")
-      .eq("id", user.id)
-      .maybeSingle();
-    const isAuteur = huidig.bestuurder_id === user.id;
+    const isAuteur = huidig.bestuurder_id === ctx.gebruikerId;
     const isPrivileged =
-      profiel?.rol === "voorzitter" || profiel?.rol === "beheerder";
+      ctx.rol === "voorzitter" || ctx.rol === "beheerder";
 
     // T1 bureau-rol (§5.3): geen dissent intrekken. Zie de PATCH hierboven.
-    if (isBureauRol(profiel?.rol)) {
+    if (isBureauRol(ctx.rol)) {
       return NextResponse.json({ error: BUREAU_WEIGERING.dissent }, { status: 403 });
     }
 
@@ -346,8 +324,8 @@ export async function DELETE(
     await supabase.from("governance_events").insert({
       decision_id: decisionId,
       event_type: "dissent_ingetrokken",
-      actor_id: user.id,
-      actor_naam: profiel?.naam ?? null,
+      actor_id: ctx.gebruikerId,
+      actor_naam: ctx.naam ?? null,
       object_type: "dissent",
       object_id: did,
       oude_waarde: {
@@ -371,4 +349,4 @@ export async function DELETE(
     console.error("Fout in DELETE /api/decisions/[id]/dissent/[did]:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

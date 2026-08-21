@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Deze stap vereist geen besluit"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 400
+}

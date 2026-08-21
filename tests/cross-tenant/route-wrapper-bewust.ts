@@ -144,6 +144,45 @@ export function toetsWrapperFundament(): void {
     /ctx:\s*FondsContext\s*=\s*\{[\s\S]{0,400}?\brol:\s*profiel\?\.rol/,
     "wrapper: ctx.rol komt niet uit het profiel"
   );
+  // (f) `ctx.email` komt uit de SESSIE (user), niet uit body of profiel. Zonder
+  //     dit anker zou een route die `user.email` door `ctx.email` verving op een
+  //     lege verwijzing kunnen leunen.
+  assert.match(
+    w,
+    /ctx:\s*FondsContext\s*=\s*\{[\s\S]{0,400}?\bemail:\s*user\.email\b/,
+    "wrapper: ctx.email komt niet uit de sessiegebruiker"
+  );
+
+  // (h) De host-guard-tak toetst op `=== true`, niet op truthy. Sinds W4 kent de
+  //     spec de waarde `"route-eigen"` — een route die de guard ZELF aanroept,
+  //     bewust, om de ordening te behouden. Die string is truthy; zou de wrapper
+  //     op truthy toetsen, dan kreeg zo'n route de guard er stilzwijgend nog een
+  //     keer bovenop, vóór zijn eigen fail-closed poorten. Precies de herordening
+  //     die de uitzondering moet voorkomen.
+  assert.match(
+    w,
+    /if\s*\(\s*spec\.hostGuard\s*===\s*true\s*\)/,
+    "wrapper: host-guard-tak toetst op truthy i.p.v. === true — 'route-eigen' zou dan dubbel bewaakt worden"
+  );
+
+  // (g) `ctx` mag NOOIT als geheel in een logregel of serialisatie belanden.
+  //     Sinds W4 draagt de context een e-mailadres, en hij staat in élke handler
+  //     in scope. Eén `console.error("fout", ctx)` zet daarmee PII in de
+  //     platformlogs — waar vandaag al ongeredigeerde foutobjecten heen gaan.
+  //     De wrapper doet dit nu niet; deze assertie zorgt dat dat zo blijft.
+  //     Losse velden (ctx.requestId, ctx.gebruikerId) mogen wel: die zijn geen
+  //     PII-bundel en `requestId` is juist waarvoor correlatie bestaat.
+  for (const regel of w.split("\n")) {
+    const kaal = /\bctx\b(?!\s*[.:])/;
+    if (/console\.\w+\(/.test(regel) && kaal.test(regel.slice(regel.indexOf("console.")))) {
+      assert.fail(
+        `wrapper: logregel serialiseert de hele ctx (PII-lek naar de logs): ${regel.trim()}`
+      );
+    }
+    if (/JSON\.stringify\(\s*ctx\s*\)/.test(regel)) {
+      assert.fail(`wrapper: JSON.stringify(ctx) lekt PII naar de logs: ${regel.trim()}`);
+    }
+  }
 
   fundamentGetoetst = true;
 }

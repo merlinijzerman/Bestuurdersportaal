@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": "Deze vergadering staat al in het archief.",
+    "foutcode": "reeds_gearchiveerd"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 400
+}

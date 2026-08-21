@@ -16,7 +16,7 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { requireCapability } from "@/core/lib/capabilities";
 import { maakChunksUitSegmenten } from "@/core/lib/rag";
 import { embedTeksten, naarVectorLiteral, EMBED_MODEL } from "@/core/lib/embeddings";
@@ -32,20 +32,12 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const POST = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id } = await params;
-    const supabase = await createServerSupabase();
+    const { id } = params as { id: string };
+    const supabase = ctx.supabase;
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-
-    if (!(await requireCapability(user.id, "notulen.segment.confirm"))) {
+    if (!(await requireCapability(ctx.gebruikerId, "notulen.segment.confirm"))) {
       return NextResponse.json(
         { error: "Geen rechten om notulensegmenten te bevestigen." },
         { status: 403 }
@@ -191,4 +183,4 @@ export async function POST(
     console.error("Fout in POST /api/notulen/segmenten/[id]/bevestig:", e);
     return NextResponse.json({ error: "Interne fout" }, { status: 500 });
   }
-}
+});

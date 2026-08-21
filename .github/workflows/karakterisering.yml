@@ -8,10 +8,46 @@ name: karakterisering
 #  gecommitte snapshots → non-zero exit → deze job faalt. Zo wordt de deploy-2-
 #  codemod ("nul verschil") een test i.p.v. een bewering.
 #
-#  NIET-BLOKKEREND (ticket §4.7): deze job draait op elke push/PR maar is
-#  bewust GEEN required status check. Blokkerend maken gebeurt pas in W2, zodra
-#  bewezen is dat de suite stabiel is — dat is één branch-protection-handeling
-#  (deze job als required check), net als bij `rls-cross-tenant`.
+#  GATE-STATUS STAAT NIET IN DIT BESTAND (W4, #96). Of deze job blokkeert is
+#  uitsluitend te lezen uit de branch-protection-regel op `main`:
+#      gh api repos/:owner/:repo/branches/main/protection \
+#        --jq '.required_status_checks.contexts[]'
+#  Een comment kan dat niet weten, en op 21-08-2026 hadden drie van de vier
+#  gate-uitspraken in deze map het mis — alle drie onderschattend. Zet die
+#  bewering hier dus niet terug; corrigeren lost één geval op, weglaten lost de
+#  categorie op.
+#
+#  Wat WEL hier hoort: de job-`name` hieronder is de gepinde check-naam.
+#  Hernoem hem niet zonder de branch-protection-regel mee te verzetten — dan
+#  wordt de gate stil losgekoppeld én blijft elke PR hangen op een check die
+#  nooit meldt.
+#
+#  DRIE VERIFY-RONDES, TIJDELIJK (W4 §4, #96). `--verify` draait hieronder 3×
+#  achter elkaar in plaats van 1×. Die twee meten verschillende dingen:
+#
+#    ronde 1  bewijst dat de snapshots niet op opgebouwde staat leunen — de DB
+#             is per run vers, dus wat hier slaagt is reproduceerbaar vanaf nul;
+#    ronde 2+ bewijzen dat een scenario HERHAALBAAR is. Deploy 2 voegt ~200
+#             scenario's toe die echt muteren; een preseed die de fixture niet
+#             vers zet valt pas op bij de tweede ronde. Eén groene run zegt daar
+#             niets over.
+#
+#  BESLUIT: bedoeld als maatregel VOOR DE DUUR VAN DEPLOY 2. Zodra W5 klaar is
+#  en de muterende scenario's stabiel zijn gebleken, mág dit terug naar 1× hier
+#  met een 3×-ronde in `nightly-fidelity`. Wie dat terugdraait: haal de lus weg
+#  en zet er een verwijzing naar dit besluit voor in de plaats — niet
+#  stilzwijgend, want dan verdwijnt de herhaalbaarheidscontrole zonder spoor.
+#
+#  Maar weeg het dan tegen de GEMETEN kosten, niet tegen de aanname. Bij 131
+#  scenario's (21-08-2026, run op deze branch):
+#
+#      stack boot   69s  |  next build   75s  |  npm ci   16s
+#      verify 3×    27s  (was ~13s bij 1×)    |  job totaal 3m42s
+#
+#  De derde ronde kost dus ~14s op een job van bijna vier minuten — circa 6%,
+#  geen factor 3. De job wordt gedomineerd door de Supabase-stack en de
+#  Next-build, niet door de suite. Groeit het aantal scenario's sterk, meet dan
+#  opnieuw; met deze verhouding is terugdraaien nauwelijks winst.
 #
 #  Nooit tegen productie: uitsluitend de wegwerp-CLI-DB; de seed is idempotent.
 # ============================================================================
@@ -82,7 +118,7 @@ jobs:
       - name: App bouwen
         run: npm run build
 
-      - name: App starten + snapshots verifiëren
+      - name: App starten + snapshots 3x verifiëren
         run: |
           PORT=3000 npm run start &
           SERVER=$!
@@ -95,8 +131,19 @@ jobs:
             kill "$SERVER" 2>/dev/null || true
             exit 1
           fi
-          node tests/karakterisering/run.mjs --verify
-          code=$?
+          # 3x achter elkaar — zie de BESLUIT-notitie in de kop. Ronde 1 dekt
+          # "geen opgebouwde staat", ronde 2 en 3 dekken herhaalbaarheid.
+          code=0
+          for ronde in 1 2 3; do
+            echo "::group::karakterisering --verify ronde $ronde/3"
+            if ! node tests/karakterisering/run.mjs --verify; then
+              echo "::endgroup::"
+              echo "FOUT: --verify rood in ronde $ronde van 3." >&2
+              code=1
+              break
+            fi
+            echo "::endgroup::"
+          done
           kill "$SERVER" 2>/dev/null || true
           exit $code
 
