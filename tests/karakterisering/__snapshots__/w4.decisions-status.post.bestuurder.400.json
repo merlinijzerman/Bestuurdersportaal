@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Ongeldige status: onzin"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 400
+}

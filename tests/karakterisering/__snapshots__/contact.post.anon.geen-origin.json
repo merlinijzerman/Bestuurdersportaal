@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Verzoek geweigerd."
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 403
+}

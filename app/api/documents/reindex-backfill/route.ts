@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
 import { badRequest } from "@/core/lib/api-errors";
 import {
@@ -33,15 +33,9 @@ import { INDEXERING_VERSIE, PREFIX_MODEL, PREFIX_PROMPT_VERSIE } from "@/core/li
 //  het eigen fonds. `tekst` wordt nooit aangeraakt (omkeerbaar).
 // ============================================================================
 
-export async function POST(req: NextRequest) {
+export const POST = withFondsRoute({}, async (ctx, req: NextRequest) => {
   try {
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const supabase = ctx.supabase;
 
     // M-06 (review 2026-07-30): deze route doet per aanroep externe
     // modelcalls en had geen enkele limiet — onbeperkt herhaalbaar door een
@@ -56,15 +50,18 @@ export async function POST(req: NextRequest) {
     const limiet = await controleerLimiet(supabase, LIMIETEN.backfill, { failClosed: true });
     if (!limiet.toegestaan) return rateLimited("documents.reindex-backfill", limiet.resetAt);
 
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("rol, fonds_id")
-      .eq("id", user.id)
-      .single();
-    if (!profiel || !["voorzitter", "beheerder"].includes(profiel.rol)) {
+    // BESLUIT (W4): `!profiel ||` valt weg en `profiel.rol` wordt `ctx.rol ?? ""`.
+    // Uitkomst-identiek, in alle drie de gevallen:
+    //   geen profielrij      -> haalProfiel geeft null -> ctx.rol is null -> "" -> 403
+    //   profielrij, rol null -> ctx.rol is null        -> ""              -> 403
+    //   rol gezet            -> ongewijzigd
+    // De `!profiel`-tak was de "geen rij"-variant; die is nu de null-variant.
+    // `?? ""` omdat `includes` een string eist en de lege string nooit in de
+    // lijst staat — geen nieuwe uitkomst, alleen een typegeldige schrijfwijze.
+    if (!["voorzitter", "beheerder"].includes(ctx.rol ?? "")) {
       return NextResponse.json({ error: "Onvoldoende rechten" }, { status: 403 });
     }
-    if (!profiel.fonds_id) {
+    if (!ctx.fondsId) {
       return NextResponse.json({ error: "Geen fonds gekoppeld" }, { status: 400 });
     }
 
@@ -145,14 +142,14 @@ export async function POST(req: NextRequest) {
     // Per-run provenance (lichte registratie). Best-effort: een logfout mag de
     // re-index niet breken. fonds_id = eigen fonds (RLS-policy "fonds reindex_runs").
     const { error: runErr } = await supabase.from("reindex_runs").insert({
-      fonds_id: profiel.fonds_id,
+      fonds_id: ctx.fondsId,
       bibliotheek: "fonds",
       prefix_model: PREFIX_MODEL,
       prompt_versie: PREFIX_PROMPT_VERSIE,
       indexering_versie: INDEXERING_VERSIE,
       aantal_documenten: res.status === "verwerkt" ? 1 : 0,
       aantal_chunks: res.aantalChunks,
-      gestart_door: user.id,
+      gestart_door: ctx.gebruikerId,
     });
     if (runErr) console.error("[reindex-backfill] reindex_runs niet geschreven:", runErr.message);
 
@@ -173,4 +170,4 @@ export async function POST(req: NextRequest) {
     console.error("[reindex-backfill] fout:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

@@ -18,7 +18,7 @@
 // ============================================================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
 import { rateLimited } from "@/core/lib/api-errors";
 import {
@@ -26,7 +26,6 @@ import {
   type DocumentChunk,
   type RetrievalFilters,
 } from "@/core/lib/rag";
-import { beoordeelRouteHostToegang } from "@/core/lib/tenant-route-guard";
 import type { RetrievalModus } from "@/core/lib/vraagtype";
 
 export const dynamic = "force-dynamic";
@@ -62,13 +61,9 @@ interface ZoekResultaat {
   treffers: Treffer[];
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withFondsRoute({ hostGuard: true, label: "zoeken.GET" }, async (ctx, req: NextRequest) => {
   try {
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+    const supabase = ctx.supabase;
 
     // M-06 (review 2026-07-30): deze route doet per aanroep externe
     // modelcalls en had geen enkele limiet — onbeperkt herhaalbaar door een
@@ -82,29 +77,10 @@ export async function GET(req: NextRequest) {
     // de expliciete fondsfilter meegaat naar de retrieval. Fail-closed: zonder fonds
     // geen retrieval (een profiel zonder fonds mag niets zien). De query-string kan
     // dit niet beïnvloeden — er is geen fonds-parameter en RLS blijft leidend.
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("fonds_id")
-      .eq("id", user.id)
-      .single();
-    const fondsId = profiel?.fonds_id ?? null;
+    const fondsId = ctx.fondsId;
     if (!fondsId) {
       return NextResponse.json(
         { error: "Geen fonds gekoppeld aan dit profiel." },
-        { status: 403 }
-      );
-    }
-
-    // T1.3 — host↔fonds-afdwinging (defense-in-depth náást RLS). Observe + fail-
-    // closed onder TENANT_ENFORCE=on; gedrag-neutraal zolang enforce uit staat.
-    const hostOordeel = await beoordeelRouteHostToegang({
-      sessieFondsId: fondsId,
-      gebruikerId: user.id,
-      label: "zoeken.GET",
-    });
-    if (!hostOordeel.toegestaan) {
-      return NextResponse.json(
-        { error: "Dit webadres hoort niet bij uw fonds." },
         { status: 403 }
       );
     }
@@ -201,4 +177,4 @@ export async function GET(req: NextRequest) {
     console.error("Fout in GET /api/zoeken:", e);
     return NextResponse.json({ error: "Serverfout bij zoeken." }, { status: 500 });
   }
-}
+});

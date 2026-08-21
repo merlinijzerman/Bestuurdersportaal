@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Verwijderen mislukt"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 500
+}

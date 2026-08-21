@@ -1,0 +1,30 @@
+{
+  "body": {
+    "afschriften": [
+      {
+        "aangemaaktDoorNaam": null,
+        "aangemaaktOp": "<ts>",
+        "aanleiding": null,
+        "bestandsaantal": null,
+        "bevatStemgedrag": false,
+        "bytes": null,
+        "id": "<uuid:1>",
+        "ingetrokken": false,
+        "ingetrokkenDoorNaam": null,
+        "ingetrokkenReden": null,
+        "magDownloaden": false,
+        "nietDownloadbaarReden": "Niet beschikbaar voor het bestuursbureau (bevat stemgedrag).",
+        "sha256": null,
+        "sha256Prefix": null,
+        "status": "gereed",
+        "verouderd": false,
+        "verouderdSindsdien": 0,
+        "versie": "actueel"
+      }
+    ]
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

@@ -1,0 +1,21 @@
+{
+  "body": {
+    "gewijzigd": false,
+    "stem": {
+      "id": "<uuid:1>",
+      "is_volmacht": false,
+      "keuze": "voor",
+      "motivering": "W4",
+      "stemgerechtigde_id": "<uuid:2>",
+      "stemming_id": "<uuid:3>",
+      "uitgebracht_door": "<uuid:2>",
+      "uitgebracht_op": "<ts>",
+      "volmacht_bevestigd": false,
+      "volmacht_toelichting": null
+    }
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

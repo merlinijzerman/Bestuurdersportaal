@@ -1,0 +1,11 @@
+{
+  "body": {
+    "aantal_regels": 0,
+    "status": "verwijderd",
+    "success": true
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

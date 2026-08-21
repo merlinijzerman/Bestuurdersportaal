@@ -1,0 +1,69 @@
+{
+  "body": {
+    "disclaimer": "Scores ondersteunen kwaliteitsborging en releasebesluitvorming, maar vormen geen juridische garantie en vervangen geen menselijke verantwoordelijkheid. De indicatoren meten toetsbare vormen van brongebondenheid, volledigheid en bestuurlijke bruikbaarheid; zij bewijzen niet dat elke feitelijke claim juist is. De eindverantwoordelijkheid voor besluitvorming blijft menselijk (human-in-the-loop).",
+    "scope_banner": "Dit is een productbrede controle. De controle is uitgevoerd op representatieve testgevallen en bewijst niet dat elk fondsdocument inhoudelijk is gevalideerd.",
+    "tegels": [
+      {
+        "aantal_testgevallen": "Onbekend",
+        "audit_export_id": null,
+        "brongebondenheid": "Onbekend",
+        "feature_code": "besluitvoorbereiding",
+        "feature_naam": "Besluitvoorbereiding",
+        "footer": "AI is alleen ondersteunend, besluitvorming blijft menselijk.",
+        "format_compliance": "Onbekend",
+        "geldigheid": "Representatieve testgevallen (synthetisch)",
+        "inhoud_hash": null,
+        "kritieke_bevindingen": 0,
+        "laatste_controle": null,
+        "openstaande_review": "Geen",
+        "regressie": "Onbekend",
+        "status_label": "Niet vrijgegeven",
+        "type_controle": "Productbrede controle",
+        "wat_niet": "Geen garantie dat elke afzonderlijke zin of elk fondsdocument feitelijk juist is; menselijke controle blijft nodig en besluitvorming blijft mensenwerk.",
+        "wat_wel": "Deze AI-feature is (nog) niet vrijgegeven voor gebruik. De onderstaande indicatoren tonen de laatste meetresultaten; ze vormen geen vrijgave en geen bevestiging dat de feature aan de gestelde eisen voldoet."
+      },
+      {
+        "aantal_testgevallen": "Onbekend",
+        "audit_export_id": null,
+        "brongebondenheid": "Onbekend",
+        "feature_code": "bestuurlijke_samenvatting",
+        "feature_naam": "Bestuurlijke samenvatting",
+        "footer": "AI is alleen ondersteunend, besluitvorming blijft menselijk.",
+        "format_compliance": "Onbekend",
+        "geldigheid": "Representatieve testgevallen (synthetisch)",
+        "inhoud_hash": null,
+        "kritieke_bevindingen": 0,
+        "laatste_controle": null,
+        "openstaande_review": "Geen",
+        "regressie": "Onbekend",
+        "status_label": "Niet vrijgegeven",
+        "type_controle": "Productbrede controle",
+        "wat_niet": "Geen garantie dat elke afzonderlijke zin of elk fondsdocument feitelijk juist is; menselijke controle blijft nodig en besluitvorming blijft mensenwerk.",
+        "wat_wel": "Deze AI-feature is (nog) niet vrijgegeven voor gebruik. De onderstaande indicatoren tonen de laatste meetresultaten; ze vormen geen vrijgave en geen bevestiging dat de feature aan de gestelde eisen voldoet."
+      },
+      {
+        "aantal_testgevallen": "Onbekend",
+        "audit_export_id": null,
+        "brongebondenheid": "Onbekend",
+        "feature_code": "brongebonden_vraagbeantwoording",
+        "feature_naam": "Brongebonden vraagbeantwoording",
+        "footer": "AI is alleen ondersteunend, besluitvorming blijft menselijk.",
+        "format_compliance": "Onbekend",
+        "geldigheid": "Representatieve testgevallen (synthetisch)",
+        "inhoud_hash": null,
+        "kritieke_bevindingen": 0,
+        "laatste_controle": null,
+        "openstaande_review": "Geen",
+        "regressie": "Onbekend",
+        "status_label": "Niet vrijgegeven",
+        "type_controle": "Productbrede controle",
+        "wat_niet": "Geen garantie dat elke afzonderlijke zin of elk fondsdocument feitelijk juist is; menselijke controle blijft nodig en besluitvorming blijft mensenwerk.",
+        "wat_wel": "Deze AI-feature is (nog) niet vrijgegeven voor gebruik. De onderstaande indicatoren tonen de laatste meetresultaten; ze vormen geen vrijgave en geen bevestiging dat de feature aan de gestelde eisen voldoet."
+      }
+    ]
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Alleen de starter, voorzitter of beheerder mag de stemronde sluiten"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 403
+}

@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Het openen, sluiten of intrekken van een stemronde is een bestuurlijke handeling. Het bestuursbureau voert die niet uit."
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 403
+}

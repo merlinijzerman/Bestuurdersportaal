@@ -10,7 +10,7 @@
 // -----------------------------------------------------------------------------
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { isBureauRol } from "@/core/lib/bureau-gate";
 import { haalFondsleden, weergaveNaam } from "@/core/lib/fondsleden";
 
@@ -33,25 +33,12 @@ interface AfschriftRow {
   ingetrokken_reden: string | null;
 }
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const GET = withFondsRoute({}, async (ctx, _req: NextRequest, params) => {
   try {
-    const { id: procedureId } = await params;
-    const supabase = await createServerSupabase();
+    const { id: procedureId } = params as { id: string };
+    const supabase = ctx.supabase;
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("rol")
-      .eq("id", user.id)
-      .maybeSingle();
-    const bureau = isBureauRol(profiel?.rol);
+    const bureau = isBureauRol(ctx.rol);
 
     const { data: rows } = await supabase
       .from("procedure_afschriften")
@@ -143,4 +130,4 @@ export async function GET(
     console.error("Fout in GET /api/procedures/[id]/afschriften:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

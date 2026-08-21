@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Onvoldoende rechten"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 403
+}

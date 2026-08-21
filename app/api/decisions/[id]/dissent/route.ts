@@ -26,7 +26,7 @@
 //   }
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { isBureauRol, BUREAU_WEIGERING } from "@/core/lib/bureau-gate";
 
 const ZICHTBAARHEID = [
@@ -48,19 +48,10 @@ interface CreateBody {
   stemming_id?: string | null; // optionele koppeling naar een tegen-stem
 }
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const POST = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id: decisionId } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const { id: decisionId } = params as { id: string };
+    const supabase = ctx.supabase;
 
     const body = (await req.json()) as CreateBody;
 
@@ -98,20 +89,15 @@ export async function POST(
     }
 
     // Profiel ophalen voor naam + rolcheck.
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam, rol")
-      .eq("id", user.id)
-      .maybeSingle();
     const isPrivileged =
-      profiel?.rol === "voorzitter" || profiel?.rol === "beheerder";
+      ctx.rol === "voorzitter" || ctx.rol === "beheerder";
 
     // T1 bureau-rol (§5.3): geen dissent vastleggen, in geen enkele
     // zichtbaarheidsvorm. Zonder deze check zou het bureau langs de tak
     // `bestuurder_id = auth.uid()` in de RLS-schrijfpolicy binnenkomen — die tak
     // is met migratie 2026_08_05_bestuursbureau_rol.sql dichtgezet; dit is de
     // leesbare tegenhanger.
-    if (isBureauRol(profiel?.rol)) {
+    if (isBureauRol(ctx.rol)) {
       return NextResponse.json({ error: BUREAU_WEIGERING.dissent }, { status: 403 });
     }
 
@@ -143,8 +129,8 @@ export async function POST(
       .from("decision_dissent")
       .insert({
         decision_id: decisionId,
-        bestuurder_id: user.id,
-        bestuurder_naam: body.bestuurder_naam?.trim() || profiel?.naam || "",
+        bestuurder_id: ctx.gebruikerId,
+        bestuurder_naam: body.bestuurder_naam?.trim() || ctx.naam || "",
         zichtbaarheid: body.zichtbaarheid ?? "gedeelde_zorg",
         formeel_vastgesteld: body.formeel_vastgesteld ?? false,
         standpunt: body.standpunt.trim(),
@@ -168,8 +154,8 @@ export async function POST(
     await supabase.from("governance_events").insert({
       decision_id: decisionId,
       event_type: "dissent_vastgelegd",
-      actor_id: user.id,
-      actor_naam: profiel?.naam ?? null,
+      actor_id: ctx.gebruikerId,
+      actor_naam: ctx.naam ?? null,
       object_type: "dissent",
       object_id: nieuw.id,
       nieuwe_waarde: {
@@ -184,4 +170,4 @@ export async function POST(
     console.error("Fout in POST /api/decisions/[id]/dissent:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

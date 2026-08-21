@@ -96,12 +96,25 @@ SQL_P5="supabase/checks/2026_08_03_p5_monitoring.sql"
 # is een actieve predicaat-uitbreiding en geen vanzelfsprekendheid. Inclusief
 # nulgrens G23: bestuurder en voorzitter gedragen zich exact als daarvoor.
 SQL_BB="supabase/checks/2026_08_05_bb_rolgrenzen.sql"
-# ── V4 (2026-08-20) — suites die geschreven waren maar nergens automatisch
+# ── V4 (2026-08-20/21) — suites die geschreven waren maar nergens automatisch
 #    draaiden; geïnventariseerd + geverifieerd groen tegen een schone PG17-stack
-#    (ticket V4). Alleen relevante, self-seeding, hard-falende suites zijn hier
-#    aangesloten. Rode suites (fondsleden, a-rollen/capabilities, t7/t8) kregen
-#    een eigen issue; read-only diagnoses (f0, t14b-driftmeting, vraagrouter-
-#    preview) en de handmatige checklist 06_20e blijven bewust búiten deze gate.
+#    (ticket V4, #81). Alleen relevante, self-seeding, hard-falende suites zijn
+#    hier aangesloten.
+#
+#    BEWUST BUITEN DEZE GATE, met reden — een uitzondering is een waarde:
+#      • read-only diagnoses (f0-ingest-voorraad, t14b-driftmeting, vraagrouter-
+#        preview): groen, maar ze stellen niets HARD vast; in een gate kosten ze
+#        looptijd zonder bescherming toe te voegen;
+#      • 2026_06_20e_verificatie_en_regressie: GEEN CI-suite maar een handmatige
+#        checklist voor de Supabase SQL-editor, met placeholders (<FONDS_A_USER>);
+#      • a-rollen/capabilities (#83) en t7/t8 semantisch (#84): ROOD gemeten op
+#        21-08 tegen een schone stack. Aansluiten kan pas als die bevindingen
+#        gesloten zijn — een rode suite aansluiten maakt de gate rood zonder dat
+#        er iets nieuws beschermd wordt.
+#
+#    CORRECTIE 21-08: hierboven stond de fondsleden-suite als "rood/uitgesloten".
+#    Dat klopt niet meer — C-01 (#76, PR #77) is gemerged en die suite is nu
+#    aangesloten en groen; zie SQL_VWF hieronder.
 # P3-B — rol zetten via het service-role-pad (besluit 0082, B-4): bevriezing-
 # trigger laat service-role vrij, rol-CHECK weigert ongeldige waarde. ASSERT-
 # gebaseerd (plpgsql.check_asserts staat in CI aan).
@@ -112,6 +125,32 @@ SQL_REFLECTIE="supabase/checks/2026_08_05_b_reflectie_flow.sql"
 # T5 — comparison_results + fn_schrijf_vergelijking: RLS-isolatie, schrijfpad
 # alleen via de functie, fonds server-side uit auth.uid(), tenant-guard (42501).
 SQL_T5VGL="supabase/checks/2026_08_13_t5_vergelijking.sql"
+# ── T3 en T4 (21-08) — de twee FUNDAMENTELE negatieve suites, en ze hadden een
+#    eigen faalpatroon: ze stonden in `scripts/rls-cross-tenant-test.sh`, een
+#    TWEEDE script dat in geen enkele workflow draait. CI roept uitsluitend dit
+#    bestand aan. Ze waren dus niet vergeten — ze zaten in een script dat niemand
+#    aanroept, en dat is moeilijker te zien dan een omissie.
+#
+#    Samen 23 harde `raise exception`-asserties, allebei groen gemeten tegen een
+#    schone stack, allebei expliciet voor CI geschreven ("elke overtreding doet
+#    raise exception → psql exit-code <> 0 → CI faalt"). Zelfde faalpatroon als
+#    C-01: de detectie bestond, de gate zag hem niet.
+# T3 — negatieve cross-tenant RLS-suite. DEEL 1 is structureel en seedloos: faalt
+# zodra een write-policy op een tenant-tabel géén WITH CHECK heeft of een auditlog
+# de append-only-trigger mist. Dekt ook toekomstige tabellen.
+SQL_T3="supabase/checks/2026_07_08_t3_cross_tenant.sql"
+# T4 — negatieve retrieval-fondsdiscipline: zoek_chunks(_hybride) dwingen de
+# fondsgrens en de published-only-generiekregel af, en een request-supplied
+# p_fonds_id surfacet nooit andermans content.
+SQL_T4="supabase/checks/2026_07_08_t4_retrieval_fondsdiscipline.sql"
+# C-01 (2026-08-20) — vw_fondsleden: cross-tenant + kolomafscherming + LEES- en
+# SCHRIJFrechten op de drie views in public. Deze suite bestond sinds 02-08 maar
+# stond in GEEN ENKELE CI-job; daardoor bleef onopgemerkt dat `authenticated`
+# INSERT/UPDATE/DELETE op de definer-view had (Supabase-default-ACL, niet uit een
+# migratie) en daarmee buiten RLS om `rol` en `fonds_id` van elk profiel kon
+# zetten. V10 is generiek: geen enkele view in public mag I/U/D hebben voor een
+# browserrol — dat sluit de objectklasse die de gates A–H niet kennen.
+SQL_VWF="supabase/checks/2026_08_02_fondsleden_cross_tenant.sql"
 
 echo "== [1/4] tsc --noEmit --skipLibCheck =="
 ./node_modules/.bin/tsc --noEmit --skipLibCheck
@@ -200,6 +239,12 @@ echo "-- AI-begrenzing (quota, kill switch, modelallowlist, vier-ogenheractiveri
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_AIB"
 echo
 
+echo "-- T3 negatieve cross-tenant RLS (write-policies zonder WITH CHECK + append-only-triggers) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_T3"
+echo
+echo "-- T4 retrieval-fondsdiscipline (zoek_chunks/_hybride: fondsgrens + published-only-generiek) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_T4"
+echo
 echo "-- P3-B rol via service-role-pad (bevriezing-trigger vrij, rol-CHECK weigert ongeldig) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P3B"
 echo
@@ -208,6 +253,9 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_REFLECTIE"
 echo
 echo "-- T5 vergelijking (comparison_results RLS + schrijfpad-only via functie + tenant-guard) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_T5VGL"
+echo
+echo "-- C-01 (vw_fondsleden cross-tenant + kolomafscherming + view-schrijfrechten) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_VWF"
 echo
 
 echo "============================================================================"
@@ -234,7 +282,10 @@ echo "  R1   gedragsbewijs K-01/H-01/H-02/M-01                                (D
 echo "  MP   maak_profiel deterministisch fonds + zelfregistratiegrens PT-1   (DB-laag)"
 echo "  P5   monitoringtabellen deny-by-default + RPC niet-anon + retentie    (DB-laag)"
 echo "  BB   rolgrenzen bestuursbureau + nulgrens G23                          (DB-laag)"
+echo "  T3   negatieve cross-tenant RLS (WITH CHECK + append-only-dekking)     (DB-laag, V4)"
+echo "  T4   retrieval-fondsdiscipline (fondsgrens + published-only-generiek)  (DB-laag, V4)"
 echo "  P3-B rol via service-role-pad (bevriezing-trigger + rol-CHECK)         (DB-laag, V4)"
 echo "  B    reflectieflow server-controlled (bronset/beurtteller/afronding)   (DB-laag, V4)"
 echo "  T5   vergelijking comparison_results RLS + schrijfpad-only + guard      (DB-laag, V4)"
+echo "  C-01 vw_-views: cross-tenant, kolomafscherming, geen I/U/D voor browserrol (DB-laag)"
 echo "============================================================================"

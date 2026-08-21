@@ -1,19 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const POST = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const { id } = params as { id: string };
+    const supabase = ctx.supabase;
 
     const body = (await req.json()) as {
       beschrijving?: string;
@@ -26,12 +17,6 @@ export async function POST(
         { status: 400 }
       );
     }
-
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam")
-      .eq("id", user.id)
-      .single();
 
     // Bepaal volgorde: laatste + 1
     const { data: laatste } = await supabase
@@ -51,7 +36,7 @@ export async function POST(
         verantwoordelijke: body.verantwoordelijke || null,
         status: "open",
         volgorde,
-        aangemaakt_door: user.id,
+        aangemaakt_door: ctx.gebruikerId,
       })
       .select()
       .single();
@@ -67,8 +52,8 @@ export async function POST(
     await supabase.from("risico_log").insert({
       risico_id: id,
       event_type: "maatregel_toegevoegd",
-      actor_id: user.id,
-      actor_naam: profiel?.naam || null,
+      actor_id: ctx.gebruikerId,
+      actor_naam: ctx.naam || null,
       payload: { beschrijving, maatregel_id: maatregel.id },
     });
 
@@ -77,4 +62,4 @@ export async function POST(
     console.error("Fout in POST /api/risicos/[id]/maatregelen:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

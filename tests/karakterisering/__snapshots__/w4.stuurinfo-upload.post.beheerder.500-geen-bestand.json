@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Verwerken van het bestand is mislukt. Controleer het sjabloon en probeer opnieuw."
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 500
+}

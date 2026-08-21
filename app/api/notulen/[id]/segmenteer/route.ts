@@ -14,7 +14,7 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
 import { rateLimited } from "@/core/lib/api-errors";
 import { requireCapability } from "@/core/lib/capabilities";
@@ -27,18 +27,10 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export async function POST(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const POST = withFondsRoute({}, async (ctx, _req: NextRequest, params) => {
   try {
-    const { id } = await params;
-    const supabase = await createServerSupabase();
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+    const { id } = params as { id: string };
+    const supabase = ctx.supabase;
 
     // M-06 (review 2026-07-30): deze route doet per aanroep externe
     // modelcalls en had geen enkele limiet — onbeperkt herhaalbaar door een
@@ -48,18 +40,12 @@ export async function POST(
     const limiet = await controleerLimiet(supabase, LIMIETEN.segmenteer, { failClosed: true });
     if (!limiet.toegestaan) return rateLimited("notulen.segmenteer", limiet.resetAt);
 
-    if (!(await requireCapability(user.id, "notulen.segment.confirm"))) {
+    if (!(await requireCapability(ctx.gebruikerId, "notulen.segment.confirm"))) {
       return NextResponse.json(
         { error: "Geen rechten om notulensegmenten te beheren." },
         { status: 403 }
       );
     }
-
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam")
-      .eq("id", user.id)
-      .maybeSingle();
 
     // Document laden (RLS beperkt tot eigen fonds).
     const { data: document, error: docError } = await supabase
@@ -190,8 +176,8 @@ export async function POST(
       document_id: id,
       document_titel_snapshot: document.titel,
       fonds_id: document.fonds_id,
-      gewijzigd_door: user.id,
-      gewijzigd_door_naam: profiel?.naam ?? null,
+      gewijzigd_door: ctx.gebruikerId,
+      gewijzigd_door_naam: ctx.naam ?? null,
       veld_naam: "notulen_segmenten",
       oude_waarde: `${onbevestigdeIds.length} onbevestigd vervangen`,
       nieuwe_waarde: `${rijen.length} voorstel(len) gegenereerd`,
@@ -216,4 +202,4 @@ export async function POST(
     console.error("Fout in POST /api/notulen/[id]/segmenteer:", e);
     return NextResponse.json({ error: "Interne fout" }, { status: 500 });
   }
-}
+});

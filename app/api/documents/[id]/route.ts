@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 
 // PATCH /api/documents/[id]
 // Body: { actie: "deactiveren" | "reactiveren", reden?: string }
@@ -8,19 +8,9 @@ import { createServerSupabase } from "@/core/lib/supabase-server";
 // - voorzitter / beheerder: altijd
 // - bestuurder: deactiveren alleen als opgeslagen_door = jij én < 24 uur na upload
 // - reactiveren: alleen voorzitter / beheerder
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const { id } = await params;
-  const supabase = await createServerSupabase();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-  }
+export const PATCH = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
+  const { id } = params as { id: string };
+    const supabase = ctx.supabase;
 
   const body = await req.json().catch(() => ({}));
   const actie = body?.actie as "deactiveren" | "reactiveren" | undefined;
@@ -33,12 +23,6 @@ export async function PATCH(
     );
   }
 
-  const { data: profiel } = await supabase
-    .from("profielen")
-    .select("naam, rol")
-    .eq("id", user.id)
-    .single();
-
   const { data: document, error: docError } = await supabase
     .from("documenten")
     .select("id, titel, fonds_id, opgeslagen_door, actief, aangemaakt")
@@ -50,7 +34,7 @@ export async function PATCH(
   }
 
   const isVoorzitterOfBeheerder =
-    profiel?.rol === "voorzitter" || profiel?.rol === "beheerder";
+    ctx.rol === "voorzitter" || ctx.rol === "beheerder";
 
   if (actie === "reactiveren" && !isVoorzitterOfBeheerder) {
     return NextResponse.json(
@@ -60,7 +44,7 @@ export async function PATCH(
   }
 
   if (actie === "deactiveren" && !isVoorzitterOfBeheerder) {
-    const isUploader = document.opgeslagen_door === user.id;
+    const isUploader = document.opgeslagen_door === ctx.gebruikerId;
     const uploadDatum = new Date(document.aangemaakt).getTime();
     const minderDan24u = Date.now() - uploadDatum < 24 * 60 * 60 * 1000;
     if (!isUploader || !minderDan24u) {
@@ -92,7 +76,7 @@ export async function PATCH(
       ? {
           actief: false,
           gedeactiveerd_op: new Date().toISOString(),
-          gedeactiveerd_door: user.id,
+          gedeactiveerd_door: ctx.gebruikerId,
           deactivatie_reden: reden,
         }
       : {
@@ -119,8 +103,8 @@ export async function PATCH(
     document_id: document.id,
     document_titel_snapshot: document.titel,
     fonds_id: document.fonds_id,
-    gebruiker_id: user.id,
-    gebruiker_naam: profiel?.naam ?? null,
+    gebruiker_id: ctx.gebruikerId,
+    gebruiker_naam: ctx.naam ?? null,
     actie: actie === "deactiveren" ? "gedeactiveerd" : "gereactiveerd",
     reden,
   });
@@ -130,4 +114,4 @@ export async function PATCH(
     actie,
     document_id: document.id,
   });
-}
+});

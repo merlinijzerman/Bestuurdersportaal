@@ -1,0 +1,38 @@
+{
+  "body": {
+    "stemming": {
+      "agendapunt_id": "<uuid:1>",
+      "alternatieven": [
+        {
+          "code": "onthouden",
+          "label": "Onthouden"
+        },
+        {
+          "code": "tegen",
+          "label": "Tegen"
+        },
+        {
+          "code": "voor",
+          "label": "Voor"
+        }
+      ],
+      "decision_id": null,
+      "fonds_id": "<uuid:2>",
+      "geopend_door": "<uuid:3>",
+      "geopend_op": "<ts>",
+      "gesloten_door": "<uuid:3>",
+      "gesloten_op": "<ts>",
+      "id": "<uuid:4>",
+      "ingetrokken_reden": "W4 intrekreden",
+      "status": "ingetrokken",
+      "uitslag": null,
+      "vereist_quorum": null,
+      "vereiste_meerderheid": null,
+      "vraag": "W4 stemvraag"
+    }
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

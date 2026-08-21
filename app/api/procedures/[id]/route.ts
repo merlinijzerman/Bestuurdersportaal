@@ -14,7 +14,7 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 
 type WijzigBody = {
   titel?: string;
@@ -26,19 +26,10 @@ type WijzigBody = {
 const BEWERKBARE_VELDEN = ["titel", "beschrijving", "deadline"] as const;
 type BewerkbaarVeld = (typeof BEWERKBARE_VELDEN)[number];
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const PATCH = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const { id } = params as { id: string };
+    const supabase = ctx.supabase;
 
     const body = (await req.json()) as WijzigBody;
     const motivering = body.motivering?.trim();
@@ -136,17 +127,12 @@ export async function PATCH(
     }
 
     // 4. Schrijf audit-event met diff + motivering.
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam")
-      .eq("id", user.id)
-      .maybeSingle();
 
     await supabase.from("procedure_log").insert({
       procedure_id: id,
       event_type: "procedure_metadata_gewijzigd",
-      actor_id: user.id,
-      actor_naam: profiel?.naam || null,
+      actor_id: ctx.gebruikerId,
+      actor_naam: ctx.naam || null,
       payload: {
         velden: gewijzigdeVelden,
         oud: oudeWaarden,
@@ -160,4 +146,4 @@ export async function PATCH(
     console.error("Fout in PATCH /api/procedures/[id]:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

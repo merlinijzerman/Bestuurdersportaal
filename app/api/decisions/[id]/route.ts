@@ -15,7 +15,7 @@
 //                                     (dat opent de readiness-field-check)
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 
 const VERTROUWELIJKHEID = [
   "publiek",
@@ -53,19 +53,10 @@ const CLASSIFICATIE_KEYS = [
   "ai_risicoklasse",
 ] as const;
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const PATCH = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const { id } = params as { id: string };
+    const supabase = ctx.supabase;
 
     const body = (await req.json()) as WijzigBody;
 
@@ -198,12 +189,7 @@ export async function PATCH(
     }
 
     // Actor-naam voor governance-events.
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam")
-      .eq("id", user.id)
-      .maybeSingle();
-    const actorNaam = profiel?.naam ?? null;
+    const actorNaam = ctx.naam;
 
     // Events: één voor metadata, één voor classificatie.
     const algemeneVelden = Object.keys(wijzigingen).filter(
@@ -213,7 +199,7 @@ export async function PATCH(
       await supabase.from("governance_events").insert({
         decision_id: id,
         event_type: "decision_metadata_gewijzigd",
-        actor_id: user.id,
+        actor_id: ctx.gebruikerId,
         actor_naam: actorNaam,
         object_type: "decision_object",
         object_id: id,
@@ -229,7 +215,7 @@ export async function PATCH(
       await supabase.from("governance_events").insert({
         decision_id: id,
         event_type: "classificatie_gewijzigd",
-        actor_id: user.id,
+        actor_id: ctx.gebruikerId,
         actor_naam: actorNaam,
         object_type: "decision_object",
         object_id: id,
@@ -253,7 +239,7 @@ export async function PATCH(
         await supabase.from("governance_events").insert({
           decision_id: id,
           event_type: "classificatie_bevestigd",
-          actor_id: user.id,
+          actor_id: ctx.gebruikerId,
           actor_naam: actorNaam,
           object_type: "decision_object",
           object_id: id,
@@ -274,4 +260,4 @@ export async function PATCH(
     console.error("Fout in PATCH /api/decisions/[id]:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

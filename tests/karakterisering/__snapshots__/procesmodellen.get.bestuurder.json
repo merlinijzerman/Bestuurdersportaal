@@ -1,0 +1,26 @@
+{
+  "body": {
+    "procesmodellen": [
+      {
+        "aangemaakt": "<ts>",
+        "actief": true,
+        "bijgewerkt": "<ts>",
+        "default_bronstatus_regels": {},
+        "default_tijdlijnfases": [],
+        "domein": null,
+        "fonds_id": "<uuid:1>",
+        "frequentie": null,
+        "generiek_procestype": "jaarplanning",
+        "id": "<uuid:2>",
+        "naam": "W1 Procesmodel",
+        "omschrijving": null,
+        "synoniemen": [],
+        "verwachte_documenttypen": []
+      }
+    ]
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

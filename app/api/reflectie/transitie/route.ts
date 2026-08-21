@@ -26,7 +26,7 @@
 // ============================================================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import {
   effectieveStatus,
   isReflectieActie,
@@ -127,18 +127,14 @@ function rpcFout(error: { message?: string }): NextResponse {
  * dekt uitsluitend de eigen rij binnen het eigen fonds. Er wordt bewust NOOIT
  * automatisch een bericht verstuurd — deze route geeft alleen status terug.
  */
-export async function GET(req: NextRequest) {
+export const GET = withFondsRoute({}, async (ctx, req: NextRequest) => {
   try {
     const gesprekId = req.nextUrl.searchParams.get("gesprek_id");
     if (!gesprekId || !UUID.test(gesprekId)) {
       return NextResponse.json({ error: "Ongeldig gesprek-id" }, { status: 400 });
     }
 
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+    const supabase = ctx.supabase;
 
     const { data, error } = await supabase
       .from("gesprek_reflectie_state")
@@ -158,10 +154,10 @@ export async function GET(req: NextRequest) {
     console.error("Fout in GET /api/reflectie/transitie:", e);
     return NextResponse.json(naarAntwoord(null));
   }
-}
+});
 
 /** POST — één transitie aanvragen. De actie is het enige wat de client stuurt. */
-export async function POST(req: NextRequest) {
+export const POST = withFondsRoute({}, async (ctx, req: NextRequest) => {
   try {
     const body = (await req.json().catch(() => ({}))) as {
       gesprek_id?: unknown;
@@ -183,11 +179,7 @@ export async function POST(req: NextRequest) {
         ? body.bronset_log_id
         : null;
 
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+    const supabase = ctx.supabase;
 
     const { data, error } = await supabase.rpc("reflectie_transitie", {
       p_gesprek_id: body.gesprek_id,
@@ -203,4 +195,4 @@ export async function POST(req: NextRequest) {
     console.error("Fout in POST /api/reflectie/transitie:", e);
     return NextResponse.json({ error: "Interne fout" }, { status: 500 });
   }
-}
+});

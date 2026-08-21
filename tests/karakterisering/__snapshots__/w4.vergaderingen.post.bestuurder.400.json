@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Titel en datum zijn verplicht"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 400
+}
