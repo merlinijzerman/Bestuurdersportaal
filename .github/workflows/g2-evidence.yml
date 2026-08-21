@@ -27,7 +27,9 @@ name: g2-evidence
 #  cross-tenant-suite meeneemt, hoort hier NIET: die draait al als eigen job
 #  (`rls-cross-tenant.yml`) en zou hier alleen looptijd verdubbelen.
 #
-#  OVER DE [OPS]-REGELS. Die beïnvloeden de exit-code bewust niet — ze vragen
+#  OVER DE [OPS]-REGELS. Twee ervan zijn sinds #97 MEETBAAR: B9 leest het
+#  branch-protection-endpoint en B9b de runhistorie van de driftworkflow. Ze
+#  beïnvloeden de exit-code bewust niet — ze vragen
 #  een live-handeling of een mensbesluit. Eén ervan (B9 branch protection) is
 #  sinds #97 wél meetbaar; die leest het protection-endpoint. De standaard
 #  GITHUB_TOKEN heeft daar geen leesrecht op, dus in CI meldt die regel
@@ -41,6 +43,10 @@ on:
 
 permissions:
   contents: read
+  # Voor de B9b-regel: die leest de runhistorie van drift-productie.yml om vast
+  # te stellen dat er een GESLAAGDE nachtrun is geweest — geconfigureerd is niet
+  # hetzelfde als werkend.
+  actions: read
 
 concurrency:
   group: g2-evidence-${{ github.workflow }}-${{ github.ref }}
