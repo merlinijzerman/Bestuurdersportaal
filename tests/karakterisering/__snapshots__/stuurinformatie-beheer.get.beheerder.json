@@ -1,0 +1,117 @@
+{
+  "body": {
+    "gekozen": null,
+    "huidig": {
+      "activa": {
+        "belegd": null,
+        "overig": null
+      },
+      "biometrie": {
+        "aopvi_toegekend": null,
+        "macro": null,
+        "micro": null,
+        "ppwzp_toegekend": null,
+        "vrijval": null
+      },
+      "financieringsgraad": null,
+      "grenzen": {
+        "solidariteitsreserve": {
+          "bovengrens": null,
+          "ondergrens": null
+        }
+      },
+      "operKostenBegroot": {
+        "bestuur_overig": null,
+        "uitvoeringskosten": null,
+        "vermogensbeheer": null
+      },
+      "operKostenRealisatie": {
+        "bestuur_overig": null,
+        "uitvoeringskosten": null,
+        "vermogensbeheer": null
+      },
+      "operationeel": {
+        "bandBoven": null,
+        "bandOnder": null,
+        "beschermingsrendement": null,
+        "gemist_rendement_twk": null,
+        "kosten": null,
+        "norm": null,
+        "overig": null,
+        "overrendement": null,
+        "premie_kostenopslag": null,
+        "reserveStand": null,
+        "twk_invaar": null,
+        "verrekening_reserves": null
+      },
+      "passiva": {
+        "ev_comp": null,
+        "ev_soli": null,
+        "ev_toets_mvev": null,
+        "ev_toets_oper": null,
+        "ev_toets_overig": null,
+        "overig": null,
+        "tv": null,
+        "vuk": null
+      },
+      "premie": {
+        "eur": {
+          "opslag_toekomstige_kosten": null,
+          "opslag_uitvoeringskosten": null,
+          "risico_aop": null,
+          "risico_ppwzp": null,
+          "risico_pvi": null,
+          "spaarpremie": null
+        },
+        "mutaties": {
+          "beschermingsrendement": null,
+          "onttrekkingen": null,
+          "overig": null,
+          "overrendement": null,
+          "premie": null,
+          "verrekening_reserves": null
+        },
+        "ondergrensPct": null,
+        "pct": {
+          "opslag_toekomstige_kosten": null,
+          "opslag_uitvoeringskosten": null,
+          "risico_aop": null,
+          "risico_ppwzp": null,
+          "risico_pvi": null,
+          "spaarpremie": null
+        },
+        "reserveStand": null,
+        "startomvang": null,
+        "toekenning": null
+      },
+      "reserves": {
+        "ao_reserve": null,
+        "kostenreserve": null,
+        "ppwzp_reserve": null,
+        "ppwzp_reserve_eerbiedigend": null
+      },
+      "soli": {
+        "overrendementsbijdrage": null,
+        "premie": null,
+        "rendement": null,
+        "reserveStand": null,
+        "uitdeling": null
+      },
+      "spreiding": {
+        "aanpassingsfactor": null,
+        "bandBoven": null,
+        "bandOnder": null,
+        "beschikbaar": null,
+        "voorziening": null
+      }
+    },
+    "log": [],
+    "periodes": [],
+    "referentie": null,
+    "vorige": null
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

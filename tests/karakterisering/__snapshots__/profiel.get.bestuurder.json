@@ -1,0 +1,23 @@
+{
+  "body": {
+    "focusgebied_ids": [],
+    "gremium_ids": [],
+    "profiel": {
+      "antwoordvoorkeur": null,
+      "bestuurlijke_rol": null,
+      "detailniveau": null,
+      "fonds_id": "<uuid:1>",
+      "id": "<uuid:2>",
+      "naam": "W1 bestuurder",
+      "primaire_expertise_id": null,
+      "reflectie_uitnodiging": true,
+      "rol": "bestuurder",
+      "standaard_ai_modus": null
+    },
+    "secundaire_expertise_ids": []
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

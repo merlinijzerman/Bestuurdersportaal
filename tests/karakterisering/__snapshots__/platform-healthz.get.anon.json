@@ -1,0 +1,10 @@
+{
+  "body": {
+    "ok": true,
+    "skipped": "deploy_target=app"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}
