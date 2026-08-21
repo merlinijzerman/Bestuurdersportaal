@@ -8,6 +8,7 @@
 //  bouwt daarna vers op. Auth-user-UUID's variëren per run (GoTrue); de
 //  normalisatielaag mapt ze. Domein-UUID's zijn vast.
 // ============================================================================
+import { pathToFileURL } from "node:url";
 import { createClient } from "@supabase/supabase-js";
 import { ENV, FONDS_ID, ROLLEN, WACHTWOORD, emailVoor, FIX, DOCUMENT1_BYTES, DOCUMENT1_PAD, AFSCHRIFT1_PAD } from "./config.mjs";
 
@@ -172,9 +173,20 @@ async function seedAfschrift(admin) {
 }
 
 // ── Tier 2: procedures ──────────────────────────────────────────────────────
+// W4-BESLUIT: `ignoreDuplicates` eraf. Geen delete — een lopende procedure is
+// bewust niet verwijderbaar (trigger), en `procedure_log` + `procedure_afschriften`
+// hangen er append-only met CASCADE aan. Maar de upsert moet wél RESETTEN.
+//
+// De oude opmerking ("inhoud verandert nooit") klopte in W1: daar raakten alleen
+// leesroutes deze fixture. Het procedures-domein van W4 telt 20 routes, waarvan
+// er meerdere de procedure zélf muteren (PATCH /procedures/[id], stap-status,
+// heropenen, besluiten). Met `ignoreDuplicates` blijft zo'n mutatie voor ALTIJD
+// staan en drijft elke latere snapshot die deze procedure leest — precies de
+// volgorde-afhankelijkheid uit §4, alleen dan in de gedeelde seed.
+//
+// Gemeten vóór de wijziging: `titel` handmatig veranderd, seed opnieuw gedraaid,
+// titel bleef veranderd.
 async function seedProcedures(admin) {
-  // Geen delete: een lopende procedure is bewust niet verwijderbaar (trigger).
-  // Upsert-ignore houdt de vaste fixture idempotent (inhoud verandert nooit).
   const { error } = await admin.from("procedures").upsert(
     {
       id: FIX.procedure1,
@@ -183,7 +195,7 @@ async function seedProcedures(admin) {
       titel: "W1 Procedure",
       status: "lopend",
     },
-    { onConflict: "id", ignoreDuplicates: true }
+    { onConflict: "id" }
   );
   if (error) throw new Error(`procedures: ${error.message}`);
 }
@@ -323,7 +335,14 @@ async function seedDocumenten(admin) {
 }
 
 // Handmatig: `node --env-file=.env.local tests/karakterisering/seed.mjs`
-if (import.meta.url === `file://${process.argv[1]}`) {
+//
+// W4: `file://${process.argv[1]}` i.p.v. pathToFileURL was hier een stille no-op.
+// argv[1] is het pad zoals getypt (relatief), en een absoluut pad met een spatie
+// erin — zoals de checkout van dit project — wordt in een file-URL als %20
+// gecodeerd. De vergelijking sloeg dus nooit aan: het gedocumenteerde commando
+// eindigde zonder uitvoer én zonder foutcode, en de DB bleef ongeseed. De rest
+// van de repo gebruikt al `pathToFileURL(process.argv[1]).href`.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const res = await seed();
   console.log("seed klaar:", JSON.stringify({ fondsId: res.fondsId, rollen: Object.keys(res.users) }));
 }
