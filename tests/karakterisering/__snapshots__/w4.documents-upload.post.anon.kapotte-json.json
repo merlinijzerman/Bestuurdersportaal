@@ -1,9 +1,9 @@
 {
   "body": {
-    "error": "Ongeldige aanvraag (verwacht JSON)."
+    "error": "Niet ingelogd"
   },
   "headers": {
     "content-type": "application/json"
   },
-  "status": 400
+  "status": 401
 }

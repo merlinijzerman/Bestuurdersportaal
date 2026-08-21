@@ -934,11 +934,19 @@ export const scenarios = [
     preseed: async ({ admin }) => wisLimiet(admin, "backfill"),
   },
   { slug: "w4.documents-reindex.post.anon", method: "POST", path: "/api/documents/reindex-backfill", rol: "anon", body: LEEG, verwacht: "json" },
-  // ── documents/upload — HANDWERK. De POST parseert vandaag de JSON VOOR de
-  //  sessiecontrole, dus een anonieme aanvraag met kapotte JSON krijgt 400 en
-  //  geen 401. De wrapper draait auth per definitie eerst. Dit scenario legt dat
-  //  vast op de ONGEWIJZIGDE code, zodat het verschil straks als rode snapshot
-  //  naar boven komt in plaats van ongemerkt door te glippen.
+  // ── documents/upload — HANDWERK.
+  //  BESLUIT (W4, #96) — DE ENIGE RESPONS-ZICHTBARE GEDRAGSVERANDERING IN W4.
+  //  Vóór de migratie parseerde de POST de request-body VOOR de sessiecontrole:
+  //  een anonieme aanvraag met kapotte JSON kreeg 400 "Ongeldige aanvraag
+  //  (verwacht JSON)". De wrapper draait auth per definitie eerst, dus dat is nu
+  //  401 "Niet ingelogd".
+  //
+  //  Onvermijdelijk: de wrapper omhult de hele handler, dus de parse kan niet
+  //  vóór de auth blijven zonder de route buiten de wrapper te houden.
+  //  Verdedigbaar: 401 is wat de 76 andere routes een anonieme beller geven, en
+  //  parse-feedback aan een niet-ingelogde beller is geen verlies.
+  //  Deze snapshot is bewust BIJGEWERKT — de baseline met 400 staat in de
+  //  voorgaande commit, dus het verschil is uit de historie af te lezen.
   { slug: "w4.documents-upload.post.anon.kapotte-json", method: "POST", path: "/api/documents/upload", rol: "anon", rawBody: "{dit is geen json", headers: { "content-type": "application/json" }, verwacht: "json" },
   { slug: "w4.documents-upload.post.anon", method: "POST", path: "/api/documents/upload", rol: "anon", body: LEEG, verwacht: "json" },
   { slug: "w4.documents-upload.get.anon", method: "GET", path: "/api/documents/upload", rol: "anon", verwacht: "json" },

@@ -36,6 +36,7 @@ import { toegestaneUploadExtensie } from "@/core/lib/ingest-caps";
 import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
 import { badRequest, rateLimited } from "@/core/lib/api-errors";
 import { beoordeelRouteHostToegang } from "@/core/lib/tenant-route-guard";
+import { withFondsRoute, type FondsContext } from "@/core/lib/route-wrapper";
 
 type ServerSupabase = Awaited<ReturnType<typeof createServerSupabase>>;
 const malwareScanAan = () => process.env.WP3_MALWARESCAN_AAN === "true";
@@ -438,7 +439,18 @@ async function valideerUploadMetadata(
   };
 }
 
-export async function POST(req: NextRequest) {
+// HANDWERK (W4). Deze route wijkt op twee punten af van het recept.
+//
+// (1) De preambule stond NIET in de handler maar in de twee hulpfuncties. De
+//     wrapper zit daarom om de dispatcher, en `ctx` wordt doorgegeven. Een
+//     codemod die de hulpfuncties "plausibel" een supabase-parameter geeft
+//     compileert prima en ziet er goed uit — vandaar met de hand.
+//
+// (2) De spec is BEWUST `{}` en niet `{ hostGuard: true }`. De inline
+//     host-guards blijven staan. Zie het BESLUIT in de commit: de wrapper zou de
+//     guard vóór de fail-closed rate limit trekken, en de twee aparte labels
+//     (`documents.upload.init` / `.complete`) tot één samenvouwen.
+export const POST = withFondsRoute({}, async (ctx, req: NextRequest) => {
   let body: Record<string, unknown>;
   try {
     body = (await req.json()) as Record<string, unknown>;
@@ -449,17 +461,17 @@ export async function POST(req: NextRequest) {
     );
   }
   const mode = body.mode === "complete" ? "complete" : "init";
-  return mode === "complete" ? completeUpload(req, body) : initUpload(req, body);
-}
+  return mode === "complete" ? completeUpload(ctx, req, body) : initUpload(ctx, req, body);
+});
 
 // ── init: gate de metadata + wijs een opslagpad toe (nog geen bestand/rij) ──
-async function initUpload(req: NextRequest, body: Record<string, unknown>) {
+async function initUpload(
+  ctx: FondsContext,
+  req: NextRequest,
+  body: Record<string, unknown>
+) {
   try {
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+    const supabase = ctx.supabase;
 
     // Rate limiting (WP2): op de init-stap — de gate vóór de eigenlijke upload.
     // Besluit 0180: fail-closed. Een upload zet de asynchrone ingest in gang en
@@ -470,17 +482,12 @@ async function initUpload(req: NextRequest, body: Record<string, unknown>) {
     });
     if (!limiet.toegestaan) return rateLimited("documents.upload", limiet.resetAt);
 
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("fonds_id, rol, naam")
-      .eq("id", user.id)
-      .single();
-    if (!profiel?.fonds_id)
+    if (!ctx.fondsId)
       return NextResponse.json({ error: "Geen fonds gekoppeld" }, { status: 400 });
 
     const hostOordeel = await beoordeelRouteHostToegang({
-      sessieFondsId: profiel.fonds_id,
-      gebruikerId: user.id,
+      sessieFondsId: ctx.fondsId,
+      gebruikerId: ctx.gebruikerId,
       label: "documents.upload.init",
     });
     if (!hostOordeel.toegestaan)
@@ -513,7 +520,7 @@ async function initUpload(req: NextRequest, body: Record<string, unknown>) {
       );
     }
 
-    const meta = await valideerUploadMetadata(supabase, user.id, profiel.fonds_id, "init", {
+    const meta = await valideerUploadMetadata(supabase, ctx.gebruikerId, ctx.fondsId, "init", {
       bestandsnaam,
       agendapunt_id: body.agendapunt_id as string | null,
       bibliotheek: body.bibliotheek as string | null,
@@ -533,7 +540,7 @@ async function initUpload(req: NextRequest, body: Record<string, unknown>) {
     // Pad-conventie: <fonds_uuid>/<document_uuid>.<ext>. De storage-INSERT-policy
     // dwingt af dat de foldernaam het eigen fonds_id is; de client mint niets zelf.
     const document_id = randomUUID();
-    const pad = `${profiel.fonds_id}/${document_id}.${ext}`;
+    const pad = `${ctx.fondsId}/${document_id}.${ext}`;
     return NextResponse.json(
       malwareScanAan()
         ? { document_id, quarantaine_pad: pad, bucket: "documenten-quarantaine" }
@@ -549,29 +556,24 @@ async function initUpload(req: NextRequest, body: Record<string, unknown>) {
 }
 
 // ── complete: valideer het geüploade object + registreer de documentrij ─────
-async function completeUpload(req: NextRequest, body: Record<string, unknown>) {
+async function completeUpload(
+  ctx: FondsContext,
+  req: NextRequest,
+  body: Record<string, unknown>
+) {
   // F0.1 — nulmeting-instrumentatie (metadata/tellingen, geen fondsinhoud/titel).
   const correlatieId = randomUUID();
   const tStart = Date.now();
   let validatieMs = 0;
   try {
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+    const supabase = ctx.supabase;
 
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("fonds_id, rol, naam")
-      .eq("id", user.id)
-      .single();
-    if (!profiel?.fonds_id)
+    if (!ctx.fondsId)
       return NextResponse.json({ error: "Geen fonds gekoppeld" }, { status: 400 });
 
     const hostOordeel = await beoordeelRouteHostToegang({
-      sessieFondsId: profiel.fonds_id,
-      gebruikerId: user.id,
+      sessieFondsId: ctx.fondsId,
+      gebruikerId: ctx.gebruikerId,
       label: "documents.upload.complete",
     });
     if (!hostOordeel.toegestaan)
@@ -595,7 +597,7 @@ async function completeUpload(req: NextRequest, body: Record<string, unknown>) {
     if (
       !document_id ||
       !ext ||
-      aangeleverdPad !== `${profiel.fonds_id}/${document_id}.${ext}`
+      aangeleverdPad !== `${ctx.fondsId}/${document_id}.${ext}`
     ) {
       return NextResponse.json(
         { error: "Ongeldig opslagpad voor deze upload.", foutcode: "opslagpad_ongeldig" },
@@ -603,7 +605,7 @@ async function completeUpload(req: NextRequest, body: Record<string, unknown>) {
       );
     }
 
-    const meta = await valideerUploadMetadata(supabase, user.id, profiel.fonds_id, "complete", {
+    const meta = await valideerUploadMetadata(supabase, ctx.gebruikerId, ctx.fondsId, "complete", {
       bestandsnaam,
       agendapunt_id: body.agendapunt_id as string | null,
       bibliotheek: body.bibliotheek as string | null,
@@ -651,7 +653,7 @@ async function completeUpload(req: NextRequest, body: Record<string, unknown>) {
       const { data: bestaand } = await supabase
         .from("documenten")
         .select("id, titel")
-        .eq("fonds_id", profiel.fonds_id)
+        .eq("fonds_id", ctx.fondsId)
         .eq("bestand_hash", validatie.hash)
         .eq("actief", true)
         .maybeSingle();
@@ -668,7 +670,7 @@ async function completeUpload(req: NextRequest, body: Record<string, unknown>) {
       .from("documenten")
       .insert({
         id: document_id,
-        fonds_id: profiel.fonds_id,
+        fonds_id: ctx.fondsId,
         bibliotheek: meta.bibliotheek,
         bron: meta.bron,
         titel: meta.titel,
@@ -676,7 +678,7 @@ async function completeUpload(req: NextRequest, body: Record<string, unknown>) {
         bestand_hash: gevalideerd?.hash ?? null,
         bestandstype: gevalideerd?.bestandstype ?? ext,
         paginas: null,
-        opgeslagen_door: user.id,
+        opgeslagen_door: ctx.gebruikerId,
         geindexeerd: false,
         opslag_pad: scanIngeschakeld ? null : opslag_pad,
         quarantaine_pad: scanIngeschakeld ? quarantaine_pad : null,
@@ -769,9 +771,9 @@ async function completeUpload(req: NextRequest, body: Record<string, unknown>) {
       const { error: auditFout } = await supabase.from("document_metadata_log").insert({
         document_id: document.id,
         document_titel_snapshot: meta.titel,
-        fonds_id: profiel.fonds_id,
-        gewijzigd_door: user.id,
-        gewijzigd_door_naam: profiel.naam ?? null,
+        fonds_id: ctx.fondsId,
+        gewijzigd_door: ctx.gebruikerId,
+        gewijzigd_door_naam: ctx.naam ?? null,
         oude_waarde: "upload",
         ...regel,
       });
@@ -843,9 +845,9 @@ async function completeUpload(req: NextRequest, body: Record<string, unknown>) {
             .insert({
               document_id: meta.retire.voorgangerId,
               document_titel_snapshot: meta.retire.voorgangerTitel,
-              fonds_id: profiel.fonds_id,
-              gewijzigd_door: user.id,
-              gewijzigd_door_naam: profiel.naam ?? null,
+              fonds_id: ctx.fondsId,
+              gewijzigd_door: ctx.gebruikerId,
+              gewijzigd_door_naam: ctx.naam ?? null,
               wijzig_reden: meta.retire.reden,
               ...regel,
             });
@@ -866,7 +868,7 @@ async function completeUpload(req: NextRequest, body: Record<string, unknown>) {
         fase: "request",
         correlatie_id: correlatieId,
         document_id: document.id,
-        fonds_id: profiel.fonds_id,
+        fonds_id: ctx.fondsId,
         bestandstype: gevalideerd?.bestandstype ?? ext,
         agendapunt: !!meta.agendapunt_id,
         status: "verwerken",
@@ -901,15 +903,9 @@ async function completeUpload(req: NextRequest, body: Record<string, unknown>) {
 
 
 // Haal lijst van documenten op
-export async function GET(req: NextRequest) {
+export const GET = withFondsRoute({}, async (ctx, req: NextRequest) => {
   try {
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const supabase = ctx.supabase;
 
     const { searchParams } = new URL(req.url);
     const bibliotheek = searchParams.get("bibliotheek");
@@ -933,4 +929,4 @@ export async function GET(req: NextRequest) {
     console.error("Fout bij ophalen documenten:", error);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});
