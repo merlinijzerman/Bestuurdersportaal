@@ -57,6 +57,35 @@ async function zetAgendapuntBesluit(admin, users, id = FIX.agendapuntBesluit) {
   if (error) throw new Error(`preseed agendapuntBesluit: ${error.message}`);
 }
 
+/** Agendapunt in een vaste staat op een EIGEN vergadering. */
+async function zetVergadering(admin, id, titel) {
+  const { error } = await admin.from("vergaderingen").upsert(
+    { id, fonds_id: FONDS_ID, titel, datum: "2026-02-01T10:00:00Z" },
+    { onConflict: "id" }
+  );
+  if (error) throw new Error(`preseed vergadering ${titel}: ${error.message}`);
+}
+
+async function zetAgendapunt(admin, users, id, extra = {}) {
+  await zetVergadering(admin, FIX.vergaderingAgendapunt, "W4 Vergadering");
+  const { error } = await admin.from("agendapunten").upsert(
+    {
+      id,
+      vergadering_id: FIX.vergaderingAgendapunt,
+      titel: "W4 Agendapunt",
+      categorie: "informatie",
+      volgorde: 1,
+      aangemaakt_door: users.voorzitter.userId,
+      verwijderd_op: null,
+      verwijderd_door: null,
+      verwijder_reden: null,
+      ...extra,
+    },
+    { onConflict: "id" }
+  );
+  if (error) throw new Error(`preseed agendapunt ${id}: ${error.message}`);
+}
+
 /** Stemronde in een vaste staat; geopend door de VOORZITTER, op een EIGEN
  *  agendapunt — `idx_stemming_een_open` laat maar één open ronde per agendapunt
  *  toe, dus gedeelde agendapunten laten de preseeds op elkaar botsen. */
@@ -496,5 +525,73 @@ export const scenarios = [
     method: "POST", path: `/api/stemmingen/${FIX.stemmingIntrekken}/intrekken`, rol: "voorzitter",
     body: { reden: "W4 intrekreden" }, verwacht: "json",
     preseed: async ({ admin, users }) => zetStemming(admin, users, FIX.stemmingIntrekken, "open", FIX.agendapuntIntrekken),
+  },
+
+  // ══ agendapunten ═══════════════════════════════════════════════════════════
+
+  // ── /api/agendapunten — POST · volgorde = max + 1 ─────────────────────────
+  { slug: "w4.agendapunten.post.anon", method: "POST", path: "/api/agendapunten", rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.agendapunten.post.bestuurder.400-verplicht", method: "POST", path: "/api/agendapunten", rol: "bestuurder", body: LEEG, verwacht: "json" },
+  { slug: "w4.agendapunten.post.bestuurder.400-categorie", method: "POST", path: "/api/agendapunten", rol: "bestuurder", body: { vergadering_id: FIX.vergaderingNieuwAgendapunt, titel: "W4", categorie: "onzin" }, verwacht: "json" },
+  {
+    // NIET-IDEMPOTENT: `volgorde` is max + 1 over de vergadering. Eigen
+    // vergadering + leegmaken houdt hem op 1.
+    slug: "w4.agendapunten.post.voorzitter.200",
+    method: "POST", path: "/api/agendapunten", rol: "voorzitter",
+    body: { vergadering_id: FIX.vergaderingNieuwAgendapunt, titel: "W4 nieuw agendapunt", categorie: "informatie" },
+    verwacht: "json",
+    // EIGEN vergadering, los van de agendapunten die gewijzigd/verwijderd worden:
+    // `agendapunt_log` is append-only met CASCADE, dus een vergadering waarop ooit
+    // een agendapunt is verwijderd valt niet meer leeg te maken. De rijen die deze
+    // POST zelf aanmaakt hebben geen logregel en gaan dus wél weg.
+    preseed: async ({ admin }) => {
+      await zetVergadering(admin, FIX.vergaderingNieuwAgendapunt, "W4 Vergadering (nieuw punt)");
+      await wis(admin, "agendapunten", { vergadering_id: FIX.vergaderingNieuwAgendapunt });
+    },
+  },
+
+  // ── /api/agendapunten/[id] — PATCH · DELETE · bureau-fail-safe (BB-15) ────
+  {
+    slug: "w4.agendapunten-id.patch.voorzitter.200",
+    method: "PATCH", path: `/api/agendapunten/${FIX.agendapuntWijzigen}`, rol: "voorzitter",
+    body: { titel: "W4 gewijzigde titel" }, verwacht: "json",
+    preseed: async ({ admin, users }) => zetAgendapunt(admin, users, FIX.agendapuntWijzigen),
+  },
+  {
+    // Bestuurder is niet de aanmaker (voorzitter is dat) en niet privileged.
+    slug: "w4.agendapunten-id.patch.bestuurder.403",
+    method: "PATCH", path: `/api/agendapunten/${FIX.agendapuntWijzigen}`, rol: "bestuurder",
+    body: { titel: "W4 mag niet" }, verwacht: "json",
+    preseed: async ({ admin, users }) => zetAgendapunt(admin, users, FIX.agendapuntWijzigen),
+  },
+  {
+    // Bureau: de motiveringsplicht is voor deze rol fail-safe AAN (BB-15). Dit
+    // scenario dekt de respons die daaruit volgt; BB-15 dekt de regel statisch.
+    slug: "w4.agendapunten-id.patch.bestuursbureau",
+    method: "PATCH", path: `/api/agendapunten/${FIX.agendapuntWijzigen}`, rol: "bestuursbureau",
+    body: { titel: "W4 bureau" }, verwacht: "json",
+    preseed: async ({ admin, users }) => zetAgendapunt(admin, users, FIX.agendapuntWijzigen),
+  },
+  {
+    slug: "w4.agendapunten-id.delete.voorzitter.200",
+    method: "DELETE", path: `/api/agendapunten/${FIX.agendapuntVerwijderen}`, rol: "voorzitter",
+    body: { reden: "W4 verwijderreden voor de karakterisering" }, verwacht: "json",
+    preseed: async ({ admin, users }) => zetAgendapunt(admin, users, FIX.agendapuntVerwijderen),
+  },
+
+  // ── /api/agendapunten/[id]/voorbereiding/notities — PATCH · upsert-pad ────
+  { slug: "w4.notities.patch.anon", method: "PATCH", path: `/api/agendapunten/${FIX.agendapuntNotities}/voorbereiding/notities`, rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.notities.patch.bestuurder.400", method: "PATCH", path: `/api/agendapunten/${FIX.agendapuntNotities}/voorbereiding/notities`, rol: "bestuurder", body: LEEG, verwacht: "json" },
+  { slug: "w4.notities.patch.bestuurder.404", method: "PATCH", path: `/api/agendapunten/${FIX.agendapuntOnbekend}/voorbereiding/notities`, rol: "bestuurder", body: { vrije_notities: "W4" }, verwacht: "json" },
+  {
+    // De route doet update-of-insert. Zonder opruimen legt run 2 het UPDATE-pad
+    // vast waar run 1 het INSERT-pad vastlegde.
+    slug: "w4.notities.patch.bestuurder.200",
+    method: "PATCH", path: `/api/agendapunten/${FIX.agendapuntNotities}/voorbereiding/notities`, rol: "bestuurder",
+    body: { vrije_notities: "W4 notitie" }, verwacht: "json",
+    preseed: async ({ admin, users }) => {
+      await zetAgendapunt(admin, users, FIX.agendapuntNotities);
+      await wis(admin, "voorbereidingen", { agendapunt_id: FIX.agendapuntNotities });
+    },
   },
 ];

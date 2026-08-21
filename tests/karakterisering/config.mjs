@@ -90,6 +90,19 @@ export const FIX = {
   stemmingIntrekken: "00000000-0000-4000-8000-00000057e003",
   stemmingGesloten: "00000000-0000-4000-8000-00000057e004",
   stemmingOnbekend: "00000000-0000-4000-8000-00000057e0ff",
+
+  //  agendapunten — eigen vergadering voor de POST (die zet `volgorde` op max+1,
+  //  dus een gedeelde vergadering laat de teller per run oplopen) en een eigen
+  //  agendapunt per muterend scenario.
+  vergaderingAgendapunt: "00000000-0000-4000-8000-00000000e610",
+  //  Aparte vergadering voor de POST. Die preseed maakt de agendapuntenlijst leeg
+  //  om `volgorde` op 1 te houden, en `agendapunt_log` is append-only met CASCADE
+  //  — dus zodra er op dezelfde vergadering een agendapunt is VERWIJDERD, is die
+  //  lijst niet meer leeg te maken.
+  vergaderingNieuwAgendapunt: "00000000-0000-4000-8000-00000000e611",
+  agendapuntWijzigen: "00000000-0000-4000-8000-0000000a9020",
+  agendapuntVerwijderen: "00000000-0000-4000-8000-0000000a9021",
+  agendapuntNotities: "00000000-0000-4000-8000-0000000a9022",
 };
 
 export const AFSCHRIFT1_PAD = `${FONDS_ID}/w1-afschrift.pdf`;
