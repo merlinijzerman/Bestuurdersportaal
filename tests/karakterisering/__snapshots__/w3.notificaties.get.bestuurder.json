@@ -1,0 +1,10 @@
+{
+  "body": {
+    "notificaties": [],
+    "ongelezen_totaal": 0
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

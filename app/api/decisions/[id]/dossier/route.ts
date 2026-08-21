@@ -8,23 +8,14 @@
 // parallele route `/api/procedures/[id]/dossier`.
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { buildDecisionDossierView } from "@/core/lib/decision";
 import { errorResponse } from "@/core/lib/api-errors";
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const GET = withFondsRoute({}, async (ctx, _req: NextRequest, params) => {
   try {
-    const { id } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const { id } = params as { id: string };
+    const supabase = ctx.supabase;
 
     const view = await buildDecisionDossierView(supabase, id, {
       autoUpgraded: false,
@@ -47,4 +38,4 @@ export async function GET(
         : undefined,
     });
   }
-}
+});
