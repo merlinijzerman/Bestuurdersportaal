@@ -187,19 +187,28 @@ async function seedGesprekken(admin, users) {
 }
 
 // ── Tier 2: risico's ────────────────────────────────────────────────────────
+// W4-BESLUIT: upsert i.p.v. delete-en-herbouw, net als seedAgendapunten.
+// `risico_log` is append-only (trigger weigert DELETE), en `risico_log.risico_id`
+// hangt met ON DELETE CASCADE aan `risicos`. Zodra één risico een auditregel heeft
+// — en dat is precies wat de W4-schrijfscenario's veroorzaken — faalt de
+// delete-en-herbouw. De fout van die delete werd hier NIET gecontroleerd, dus het
+// gevolg was geen leesbare melding maar een duplicate-key op de daaropvolgende
+// insert. Upsert reset dezelfde vaste staat zonder de logketen te raken.
 async function seedRisicos(admin) {
-  await admin.from("risicos").delete().eq("fonds_id", FONDS_ID);
-  const { error } = await admin.from("risicos").insert({
-    id: FIX.risico1,
-    fonds_id: FONDS_ID,
-    titel: "W1 Risico",
-    categorie: "operationeel_datakwaliteit",
-    kans: 3,
-    impact: 3,
-    niveau: "middel",
-    type_risico: "structureel",
-    status: "actief",
-  });
+  const { error } = await admin.from("risicos").upsert(
+    {
+      id: FIX.risico1,
+      fonds_id: FONDS_ID,
+      titel: "W1 Risico",
+      categorie: "operationeel_datakwaliteit",
+      kans: 3,
+      impact: 3,
+      niveau: "middel",
+      type_risico: "structureel",
+      status: "actief",
+    },
+    { onConflict: "id" }
+  );
   if (error) throw new Error(`risicos: ${error.message}`);
 }
 

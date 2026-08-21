@@ -63,6 +63,15 @@ export const FIX = {
   notificatieLezen: "00000000-0000-4000-8000-00000000f001",   // voorzitter
   notificatieAlles: "00000000-0000-4000-8000-00000000f002",   // beheerder
   notificatieOnbekend: "00000000-0000-4000-8000-00000000f0ff",
+
+  //  risicos — eigen risico's per muterend scenario. `seed()` zet ÉÉN risico
+  //  (risico1) en de bestaande snapshot `risicos-id.patch.bestuurder.200-noop`
+  //  hangt daaraan; een sluit- of maatregelscenario op datzelfde risico zou die
+  //  laten meebewegen met de volgorde van de lus.
+  risicoSluiten: "00000000-0000-4000-8000-0000000715c2",
+  risicoMaatregelen: "00000000-0000-4000-8000-0000000715c3",
+  maatregel1: "00000000-0000-4000-8000-000000071dd1",
+  maatregelOnbekend: "00000000-0000-4000-8000-000000071ddf",
 };
 
 export const AFSCHRIFT1_PAD = `${FONDS_ID}/w1-afschrift.pdf`;

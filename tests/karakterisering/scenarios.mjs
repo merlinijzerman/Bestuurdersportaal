@@ -245,4 +245,90 @@ export const scenarios = [
       if (error) throw new Error(`preseed notificatieAlles: ${error.message}`);
     },
   },
+
+  // ── /api/risicos/[id]/sluiten — POST · [id] · 400-motivering · audit ──────
+  { slug: "w4.risicos-sluiten.post.anon", method: "POST", path: `/api/risicos/${FIX.risicoSluiten}/sluiten`, rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.risicos-sluiten.post.bestuurder.400", method: "POST", path: `/api/risicos/${FIX.risicoSluiten}/sluiten`, rol: "bestuurder", body: LEEG, verwacht: "json" },
+  {
+    slug: "w4.risicos-sluiten.post.bestuurder.200",
+    method: "POST",
+    path: `/api/risicos/${FIX.risicoSluiten}/sluiten`,
+    rol: "bestuurder",
+    body: { motivering: "W4 karakterisering — sluitmotivering" },
+    verwacht: "json",
+    // Zet het risico vers op 'actief'; anders sluit de tweede run een al
+    // gesloten risico en drijft de snapshot. UPSERT, geen delete: `risico_log`
+    // is append-only en hangt met CASCADE aan `risicos`, dus een risico met
+    // auditregels is niet meer te verwijderen.
+    preseed: async ({ admin }) => {
+      const { error } = await admin.from("risicos").upsert({
+        id: FIX.risicoSluiten,
+        fonds_id: FONDS_ID,
+        titel: "W4 Risico (sluiten)",
+        categorie: "operationeel_datakwaliteit",
+        kans: 3, impact: 3, niveau: "middel",
+        type_risico: "structureel", status: "actief",
+        gesloten_op: null, gesloten_door: null, sluit_motivering: null,
+      }, { onConflict: "id" });
+      if (error) throw new Error(`preseed risicoSluiten: ${error.message}`);
+    },
+  },
+
+  // ── /api/risicos/[id]/maatregelen — POST · volgorde = laatste + 1 ─────────
+  { slug: "w4.risicos-maatregelen.post.anon", method: "POST", path: `/api/risicos/${FIX.risicoMaatregelen}/maatregelen`, rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.risicos-maatregelen.post.bestuurder.400", method: "POST", path: `/api/risicos/${FIX.risicoMaatregelen}/maatregelen`, rol: "bestuurder", body: LEEG, verwacht: "json" },
+  {
+    slug: "w4.risicos-maatregelen.post.bestuurder.200",
+    method: "POST",
+    path: `/api/risicos/${FIX.risicoMaatregelen}/maatregelen`,
+    rol: "bestuurder",
+    body: { beschrijving: "W4 maatregel", verantwoordelijke: null },
+    verwacht: "json",
+    // NIET-IDEMPOTENTE INSERT (§4): de route bepaalt `volgorde` als laatste + 1.
+    // Zonder het leegmaken van de maatregelenlijst groeit die per run.
+    // `risico_maatregelen` is niet append-only, dus daar mag delete wél.
+    preseed: async ({ admin }) => {
+      const { error } = await admin.from("risicos").upsert({
+        id: FIX.risicoMaatregelen,
+        fonds_id: FONDS_ID,
+        titel: "W4 Risico (maatregelen)",
+        categorie: "operationeel_datakwaliteit",
+        kans: 2, impact: 2, niveau: "laag",
+        type_risico: "structureel", status: "actief",
+      }, { onConflict: "id" });
+      if (error) throw new Error(`preseed risicoMaatregelen: ${error.message}`);
+      await admin.from("risico_maatregelen").delete().eq("risico_id", FIX.risicoMaatregelen);
+    },
+  },
+
+  // ── /api/risicos/[id]/maatregelen/[mid] — PATCH · meervoudige [id]-params ─
+  { slug: "w4.risicos-maatregel.patch.anon", method: "PATCH", path: `/api/risicos/${FIX.risicoMaatregelen}/maatregelen/${FIX.maatregel1}`, rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.risicos-maatregel.patch.bestuurder.400", method: "PATCH", path: `/api/risicos/${FIX.risicoMaatregelen}/maatregelen/${FIX.maatregel1}`, rol: "bestuurder", body: { status: "onzin" }, verwacht: "json" },
+  {
+    slug: "w4.risicos-maatregel.patch.bestuurder.200",
+    method: "PATCH",
+    path: `/api/risicos/${FIX.risicoMaatregelen}/maatregelen/${FIX.maatregel1}`,
+    rol: "bestuurder",
+    body: { status: "genomen" },
+    verwacht: "json",
+    preseed: async ({ admin }) => {
+      const { error: rErr } = await admin.from("risicos").upsert({
+        id: FIX.risicoMaatregelen,
+        fonds_id: FONDS_ID,
+        titel: "W4 Risico (maatregelen)",
+        categorie: "operationeel_datakwaliteit",
+        kans: 2, impact: 2, niveau: "laag",
+        type_risico: "structureel", status: "actief",
+      }, { onConflict: "id" });
+      if (rErr) throw new Error(`preseed risicoMaatregelen (patch): ${rErr.message}`);
+      const { error } = await admin.from("risico_maatregelen").upsert({
+        id: FIX.maatregel1,
+        risico_id: FIX.risicoMaatregelen,
+        beschrijving: "W4 maatregel (te wijzigen)",
+        status: "open",
+        volgorde: 1,
+      }, { onConflict: "id" });
+      if (error) throw new Error(`preseed maatregel1: ${error.message}`);
+    },
+  },
 ];
