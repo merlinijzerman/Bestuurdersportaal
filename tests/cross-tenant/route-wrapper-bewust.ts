@@ -120,6 +120,31 @@ export function toetsWrapperFundament(): void {
     "wrapper: geeft de RLS-client niet door in ctx"
   );
 
+  // (e) `ctx.fondsId` en `ctx.rol` komen UITSLUITEND uit haalProfiel — nooit uit
+  //     body of query. Zonder dit anker zou een guard die `ctx.fondsId` accepteert
+  //     als "server-side afgeleid" een lege verwijzing zijn: de route bewijst dan
+  //     niets meer over de herkomst van het fonds. (W4, issue #94/#96.)
+  assert.match(
+    w,
+    /const\s+profiel\s*=\s*await\s+deps\.haalProfiel\(/,
+    "wrapper: het profiel komt niet uit haalProfiel"
+  );
+  assert.match(
+    w,
+    /const\s+fondsId\s*=\s*profiel\?\.fondsId/,
+    "wrapper: fondsId wordt niet uit het profiel afgeleid"
+  );
+  assert.match(
+    w,
+    /ctx:\s*FondsContext\s*=\s*\{[\s\S]{0,400}?\bfondsId,/,
+    "wrapper: geeft het profiel-fondsId niet door als ctx.fondsId"
+  );
+  assert.match(
+    w,
+    /ctx:\s*FondsContext\s*=\s*\{[\s\S]{0,400}?\brol:\s*profiel\?\.rol/,
+    "wrapper: ctx.rol komt niet uit het profiel"
+  );
+
   fundamentGetoetst = true;
 }
 
@@ -164,4 +189,42 @@ export function redenGeenHostGuard(bron: string): string | null {
     return `${benoem(ongedekt)} dwingt host↔fonds niet af (geen beoordeelRouteHostToegang( in de route, geen withFondsRoute({ hostGuard: true }))`;
   }
   return null;
+}
+
+/** null = in orde; anders de reden waarom `fonds_id` niet aantoonbaar
+ *  server-side uit het profiel komt.
+ *
+ *  Klassiek schrijft de route dat zelf (`profiel.fonds_id` / `profiel?.fonds_id`);
+ *  na de codemod komt het uit `ctx.fondsId`, dat de wrapper uitsluitend uit
+ *  `haalProfiel` vult — verankerd door {@link toetsWrapperFundament} (e). De
+ *  negatieve helft van de invariant ("nooit uit de body") blijft bij de aanroeper:
+ *  die kent de body-vorm van de route. */
+export function redenFondsIdNietUitProfiel(bron: string): string | null {
+  toetsWrapperFundament();
+  const handlers = leesHandlers(bron);
+  if (handlers.length === 0) return "geen geëxporteerde HTTP-handler gevonden";
+  const uitProfiel = /\bprofiel\??\.fonds_id\b/.test(bron);
+  const uitCtx = /\bctx\.fondsId\b/.test(bron);
+  // PER HANDLER, niet per bestand. Een bestand met één gemigreerde en één
+  // klassieke handler zou bij een bestandstoets alleen nog de klassieke eis
+  // stellen: de wrapper-tak valt dan stil weg en de guard is eenzijdig — rood bij
+  // sabotage, dus ogenschijnlijk gezond, terwijl hij over de gemigreerde handler
+  // niets meer belooft. `stuurinformatie/beheer` (GET+POST) is precies zo'n
+  // bestand. Zie ook redenGeenHostGuard, dat dezelfde vorm heeft.
+  const ongedekt = handlers.filter((h) => (h.viaWrapper ? !uitCtx : !uitProfiel));
+  if (ongedekt.length > 0) {
+    return `${benoem(ongedekt)} leidt fonds_id niet af uit het profiel (geen profiel.fonds_id / profiel?.fonds_id in de route, geen ctx.fondsId uit de wrapper)`;
+  }
+  return null;
+}
+
+/** De uitdrukking waarmee DEZE route de profielrol aanduidt: `profiel?.rol` als
+ *  ze haar preambule zelf schrijft, `ctx.rol` als elke handler aan de wrapper
+ *  delegeert. Zo blijft een guard die op de letterlijke regel toetst even streng
+ *  als voorheen, in plaats van beide vormen los te accepteren. */
+export function rolUitdrukkingVoor(bron: string): "profiel?.rol" | "ctx.rol" {
+  toetsWrapperFundament();
+  const handlers = leesHandlers(bron);
+  const allesViaWrapper = handlers.length > 0 && handlers.every((h) => h.viaWrapper);
+  return allesViaWrapper ? "ctx.rol" : "profiel?.rol";
 }

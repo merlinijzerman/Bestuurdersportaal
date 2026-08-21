@@ -250,12 +250,83 @@ bevredigd door de **commentaarkop**. Een commentaar is geen handhaving. Toets op
 adjacentie tussen de tak en de daadwerkelijke aanroep, zoals `toetsWrapperFundament()`
 dat doet.
 
-### Voor W4
+### Wat de W4-inventarisatie opleverde (stap 0, issue #94)
 
-Eén bron-guard op route-niveau is nog **niet** wrapper-bewust: `AFS-3`
-(host↔fonds op afschrift aanmaken/download/intrekken). Die drie routes schrijven
-hun preambule nog zelf, dus hij staat groen. (`portaalcontext-privacy` inspecteert
-een lib-helper, geen route — daar speelt de wrapper niet.) Migreer je zo'n route,
-verwacht dan een vals-rode guard en zet hem met dezelfde helper om — één regel
-per assertie. Dat hoort bij de route-migratie, niet bij een aparte "testfix": een
-guard die stil vervalt is het enige echte risico van dit hele spoor.
+**De aanbevolen zoekopdracht is te smal.** `grep -rn "app/api" scripts/ tests/`
+vindt 8 van de 14 bestanden die route-bronnen lezen: guards die hun pad met
+`lees("app", "api", …)` opbouwen — dus juist de in W3 omgezette — bevatten het
+letterlijke fragment `app/api` niet. Zoek daarom óók op `'"api"'` en op
+`route\.ts`; dat trio dekt alle 14.
+
+Van die 14 hangen er drie aan de preambule, en die zijn in W4 omgezet:
+
+| Guard | Bestand | Wat eraan hing | Nu |
+|---|---|---|---|
+| `AFS-3` | `afschrift-toegang.test.ts` | letterlijk `beoordeelRouteHostToegang(` | `redenGeenHostGuard()` |
+| `T14` (fonds uit profiel) | `t14-stuurinfo-invoer.test.ts` | `profiel.fonds_id` / `profiel?.fonds_id` | `redenFondsIdNietUitProfiel()` |
+| `BB-15` | `bureau-rolgrenzen.test.ts` | `isBureauRol(profiel?.rol)` letterlijk | `rolUitdrukkingVoor()` |
+
+De overige elf toetsen op iets dat de codemod niet aanraakt (rol-gates,
+`isBureauRol(` + 403, `weigerAlsModuleUit`, `requireCapability`, RPC-vormen,
+`ai-preflight`, migratieteksten). Ze zijn bewust ONGEMOEID gelaten: een guard
+"voor de zekerheid" omschrijven vergroot alleen het oppervlak waarop hij stil kan
+vervallen. `scripts/g2-evidence.sh` was in W3 al wrapper-bewust en blijft groen
+(21/0), óók voor `documents/upload` zodra die met `hostGuard: true` migreert.
+
+#### Twee nieuwe helpers in `route-wrapper-bewust.ts`
+
+- `redenFondsIdNietUitProfiel(bron)` — "het fonds komt server-side uit het
+  profiel" geldt klassiek via `profiel?.fonds_id` en na de codemod via
+  `ctx.fondsId`. De negatieve helft ("nooit uit de body") blijft bij de aanroeper.
+- `rolUitdrukkingVoor(bron)` — geeft `"profiel?.rol"` of `"ctx.rol"`, afhankelijk
+  van of ÉLKE handler delegeert. Een guard die op de letterlijke regel toetst
+  blijft daarmee even streng: niet "een van beide vormen ergens in het bestand",
+  maar de juiste vorm op de juiste regel.
+
+Beide leunen op `toetsWrapperFundament()`, dat in W4 twee ankers erbij kreeg:
+`ctx.fondsId` komt aantoonbaar uit `haalProfiel` (`const fondsId = profiel?.fondsId`)
+en `ctx.rol` uit `rol: profiel?.rol`. Zonder die ankers zou het accepteren van
+`ctx.*` een lege verwijzing zijn — precies het vals-groen dat W3 wilde uitsluiten.
+
+#### De negatieve controle moet TWEE kanten op
+
+De vier sabotage-controles uit besluit 0046 §E saboteren allemaal het
+**wrapper**-pad. Valt bij het omzetten per ongeluk de **route-eigen** tak weg,
+dan worden ze nog steeds keurig rood: de guard is dan eenzijdig maar oogt gezond.
+Dat is met geen enkele sabotage van één kant te vangen.
+
+Loop daarom per omgezette guard na dat beide takken er nog staan, en meet ze:
+saboteer de guard met de route **klassiek** én met de route **gemigreerd**, en eis
+in allebei rood. Voor de drie W4-guards zijn dat twaalf metingen (per guard:
+klassiek-ongewijzigd groen, klassiek-gesaboteerd rood, wrapper-ongewijzigd groen,
+wrapper-gesaboteerd rood) — alle twaalf zoals verwacht.
+
+**Toets per handler, niet per bestand.** `redenFondsIdNietUitProfiel` deed dat
+aanvankelijk niet, en dat was precies de eenzijdigheid hierboven: bij een bestand
+met één gemigreerde en één klassieke handler stelde hij alleen nog de klassieke
+eis, dus over de gemigreerde handler beloofde hij niets meer. Gemeten op
+`stuurinformatie/beheer/route.ts` (GET+POST): met POST door de wrapper én zonder
+`ctx.fondsId` bleef de bestandstoets **groen**, de handlertoets valt rood. Elke
+nieuwe helper hoort de vorm van `redenGeenHostGuard` te volgen — filteren over
+`leesHandlers(bron)`, niet over de bron als geheel.
+
+#### De negatieve controle die dit afdekt
+
+Tien lekken, alle tien rood, plus één positieve controle (een gemigreerde route
+mag niet vals-rood vallen). Eén valkuil bleek in de praktijk beslissend: de
+sabotage-transformaties **stapelen** als je de route er niet tussendoor herstelt.
+De shadow-variant liet daardoor de échte wrapper-import staan en mat niets — hij
+kwam vals-groen uit. Herstel tussen elke meting.
+
+### Voor W5
+
+Na W4 zijn alle bron-guards die aan de preambule hingen wrapper-bewust; W5 hoeft
+er geen meer om te zetten. `AFS-3` dekt ook de downloadroute
+(`procedures/[id]/afschriften/[afschriftId]/download`), die in W5 migreert — die
+staat dus al klaar. (`portaalcontext-privacy` inspecteert een lib-helper, geen
+route — daar speelt de wrapper niet.)
+
+Kom je toch een nieuwe tegen: zet hem met dezelfde helpers om, één regel per
+assertie, en draai de negatieve controle. Dat hoort bij de route-migratie, niet
+bij een aparte "testfix" — een guard die stil vervalt is het enige echte risico
+van dit hele spoor.
