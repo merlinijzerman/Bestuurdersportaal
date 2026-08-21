@@ -193,9 +193,30 @@ function classificeer({ verwijderd, toegevoegd }) {
   let rem = verwijderd.map(trim).filter((l) => l.length > 0);
   let add = toegevoegd.map(trim).filter((l) => l.length > 0);
 
+  const eigenVars = eigenProfielVariabelen(rem);
+
+  // De cast-vorm van de alias — `const rol = (profiel as { rol?: string } | null)?.rol;`
+  // — wordt vervangen door `const rol = ctx.rol;`, en die toevoeging valt al onder
+  // TOEGESTAAN_TOEGEVOEGD. De verwijdering moet dus apart worden weggestreept, maar
+  // ALLEEN voor variabelen die in deze diff aantoonbaar het eigen profiel droegen.
+  // Een blanket-patroon zou `(stemgerProfiel as …)?.rol -> ctx.rol` stilzwijgend
+  // accepteren, en dat is een echte gedragswijziging.
+  const castAlias =
+    eigenVars.length > 0
+      ? new RegExp(
+          `^const \\w+ = \\(\\s*(?:${eigenVars.join("|")}) as [^()]*\\)\\s*\\??\\.(?:rol|naam|fonds_id);?$`
+        )
+      : null;
+
   // 1. Gesanctioneerde verwijderingen wegstrepen (preamble + structuur + comment).
   rem = rem.filter(
-    (l) => !(matcht(TOEGESTAAN_VERWIJDERD, l) || matcht(STRUCTUUR, l) || isCommentaar(l))
+    (l) =>
+      !(
+        matcht(TOEGESTAAN_VERWIJDERD, l) ||
+        matcht(STRUCTUUR, l) ||
+        isCommentaar(l) ||
+        (castAlias && castAlias.test(l))
+      )
   );
   // 2. Gesanctioneerde toevoegingen wegstrepen (import + signatuur + aliassen +
   //    de wrapper-sluiter `});` en andere structurele haakjes — geen semantiek).
@@ -203,7 +224,6 @@ function classificeer({ verwijderd, toegevoegd }) {
 
   // 3. Token-substitutie: een verwijderde body-regel die na substitutie exact
   //    een toegevoegde regel is, is een gesanctioneerde wijziging.
-  const eigenVars = eigenProfielVariabelen(verwijderd.map(trim));
   for (let i = rem.length - 1; i >= 0; i--) {
     const s = substitueer(rem[i], eigenVars);
     const j = add.indexOf(s);

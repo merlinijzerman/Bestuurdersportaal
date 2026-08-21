@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { notifyByRole } from "@/core/lib/notifications";
 import {
   DEFAULT_ALTERNATIEVEN,
@@ -26,15 +26,9 @@ const TOEGESTANE_MEERDERHEDEN: VereisteMeerderheid[] = [
 //
 //  decision_id wordt afgeleid via agendapunt → procedure-stap → procedure.
 // ============================================================
-export async function POST(req: NextRequest) {
+export const POST = withFondsRoute({}, async (ctx, req: NextRequest) => {
   try {
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const supabase = ctx.supabase;
 
     const body = (await req.json()) as {
       agendapunt_id?: string;
@@ -96,12 +90,7 @@ export async function POST(req: NextRequest) {
     const fondsId = (verg as { fonds_id: string }).fonds_id;
 
     // Rolcheck: voorzitter/beheerder/aanmaker
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam, rol")
-      .eq("id", user.id)
-      .maybeSingle();
-    const rol = (profiel as { rol?: string } | null)?.rol;
+    const rol = ctx.rol;
     // T1 bureau-rol (§5.3): geen stemronde openen. Deze check moet VÓÓR de
     // aanmaker-tak: het bureau bouwt in de praktijk de agenda en is dus vaak
     // `aangemaakt_door`, waardoor het anders langs die tak alsnog binnenkomt.
@@ -109,7 +98,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: BUREAU_WEIGERING.stemronde }, { status: 403 });
     }
     const isPrivileged = rol === "voorzitter" || rol === "beheerder";
-    const isAanmaker = ap.aangemaakt_door === user.id;
+    const isAanmaker = ap.aangemaakt_door === ctx.gebruikerId;
     if (!isPrivileged && !isAanmaker) {
       return NextResponse.json(
         {
@@ -199,7 +188,7 @@ export async function POST(req: NextRequest) {
         vereist_quorum: quorum,
         vereiste_meerderheid: meerderheid,
         status: "open",
-        geopend_door: user.id,
+        geopend_door: ctx.gebruikerId,
       })
       .select()
       .single();
@@ -217,7 +206,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Notificatie naar alle bestuurders + voorzitters van het fonds
-    const actorNaam = (profiel as { naam?: string | null } | null)?.naam ?? "Een collega";
+    const actorNaam = ctx.naam ?? "Een collega";
     await notifyByRole(
       supabase,
       "stemronde_geopend",
@@ -234,7 +223,7 @@ export async function POST(req: NextRequest) {
         gerelateerd_aan_type: "agendapunt",
         gerelateerd_aan_id: ap.id,
         actor_naam: actorNaam,
-        actor_id: user.id,
+        actor_id: ctx.gebruikerId,
       }
     );
 
@@ -243,4 +232,4 @@ export async function POST(req: NextRequest) {
     console.error("Fout in POST /api/stemmingen:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});
