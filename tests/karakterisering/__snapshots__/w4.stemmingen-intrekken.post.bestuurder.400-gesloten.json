@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Alleen een open stemronde kan worden ingetrokken"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 400
+}

@@ -22,6 +22,51 @@ import { FIX, FONDS_ID } from "./config.mjs";
 
 const LEEG = {};
 
+// ── Gedeelde preseed-bouwstenen ──────────────────────────────────────────────
+//  Upsert, nooit delete-en-herbouw: agendapunt_log en de stem-/besluitlogboeken
+//  zijn append-only en hangen met CASCADE aan hun ouder. Een rij met auditregels
+//  is daardoor niet meer te verwijderen — zie de W4-bevinding bij seedRisicos.
+
+/** Agendapunt met categorie 'besluitvorming'; aangemaakt door de VOORZITTER,
+ *  zodat de aanmaker-tak in POST /api/stemmingen niet per ongeluk open staat
+ *  voor de bestuurder die het 403-scenario moet krijgen. */
+async function zetAgendapuntBesluit(admin, users, id = FIX.agendapuntBesluit) {
+  const { error } = await admin.from("agendapunten").upsert(
+    {
+      id,
+      vergadering_id: FIX.vergadering1,
+      titel: "W4 Agendapunt besluitvorming",
+      categorie: "besluitvorming",
+      aangemaakt_door: users.voorzitter.userId,
+      verwijderd_op: null,
+    },
+    { onConflict: "id" }
+  );
+  if (error) throw new Error(`preseed agendapuntBesluit: ${error.message}`);
+}
+
+/** Stemronde in een vaste staat; geopend door de VOORZITTER, op een EIGEN
+ *  agendapunt — `idx_stemming_een_open` laat maar één open ronde per agendapunt
+ *  toe, dus gedeelde agendapunten laten de preseeds op elkaar botsen. */
+async function zetStemming(admin, users, id, status, agendapuntId) {
+  await zetAgendapuntBesluit(admin, users, agendapuntId);
+  const { error } = await admin.from("stemmingen").upsert(
+    {
+      id,
+      fonds_id: FONDS_ID,
+      agendapunt_id: agendapuntId,
+      vraag: "W4 stemvraag",
+      status,
+      geopend_door: users.voorzitter.userId,
+      geopend_op: "2026-01-03T10:00:00Z",
+      gesloten_op: status === "open" ? null : "2026-01-04T10:00:00Z",
+      gesloten_door: status === "open" ? null : users.voorzitter.userId,
+    },
+    { onConflict: "id" }
+  );
+  if (error) throw new Error(`preseed stemming ${status}: ${error.message}`);
+}
+
 export const scenarios = [
   // ── /api/profiel — brede select · capability · A2 ──────────────────────────
   { slug: "profiel.get.bestuurder", method: "GET", path: "/api/profiel", rol: "bestuurder", verwacht: "json" },
@@ -330,5 +375,114 @@ export const scenarios = [
       }, { onConflict: "id" });
       if (error) throw new Error(`preseed maatregel1: ${error.message}`);
     },
+  },
+
+  // ══ stemmingen ═════════════════════════════════════════════════════════════
+  //  Gedeelde bouwsteen: een agendapunt met categorie 'besluitvorming'. De
+  //  W1-fixtures hebben die categorie niet, en zonder categorie stopt
+  //  `POST /api/stemmingen` al bij de 400.
+  //  Elke stemronde krijgt een EIGEN UUID: sluiten, intrekken en stemmen
+  //  wijzigen alle drie dezelfde rij, dus één gedeelde ronde zou de volgorde
+  //  van deze lijst dragend maken (§4).
+
+  // ── /api/stemmingen — POST · bureau-403 · rol-403 · 200 ───────────────────
+  { slug: "w4.stemmingen.post.anon", method: "POST", path: "/api/stemmingen", rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.stemmingen.post.bestuurder.400-verplicht", method: "POST", path: "/api/stemmingen", rol: "bestuurder", body: LEEG, verwacht: "json" },
+  { slug: "w4.stemmingen.post.bestuurder.404-agendapunt", method: "POST", path: "/api/stemmingen", rol: "bestuurder", body: { agendapunt_id: FIX.agendapuntOnbekend, vraag: "W4?" }, verwacht: "json" },
+  { slug: "w4.stemmingen.post.bestuurder.400-categorie", method: "POST", path: "/api/stemmingen", rol: "bestuurder", body: { agendapunt_id: FIX.agendapunt1, vraag: "W4?" }, verwacht: "json" },
+  {
+    // Bureau-gate (BB-12). Oefent bewust het profiel?.rol -> ctx.rol-pad.
+    slug: "w4.stemmingen.post.bestuursbureau.403",
+    method: "POST", path: "/api/stemmingen", rol: "bestuursbureau",
+    body: { agendapunt_id: FIX.agendapuntBesluit, vraag: "W4 bureau?" }, verwacht: "json",
+    preseed: async ({ admin, users }) => zetAgendapuntBesluit(admin, users),
+  },
+  {
+    // Bestuurder is niet voorzitter/beheerder en niet de aanmaker -> 403.
+    slug: "w4.stemmingen.post.bestuurder.403-rol",
+    method: "POST", path: "/api/stemmingen", rol: "bestuurder",
+    body: { agendapunt_id: FIX.agendapuntBesluit, vraag: "W4 rol?" }, verwacht: "json",
+    preseed: async ({ admin, users }) => zetAgendapuntBesluit(admin, users),
+  },
+  {
+    // Happy path. NIET-IDEMPOTENT: elke run maakt een nieuwe stemronde-rij.
+    // De preseed ruimt de rondes op dit agendapunt eerst op.
+    slug: "w4.stemmingen.post.voorzitter.200",
+    method: "POST", path: "/api/stemmingen", rol: "voorzitter",
+    body: { vraag: "W4 stemronde?", agendapunt_id: FIX.agendapuntBesluit }, verwacht: "json",
+    preseed: async ({ admin, users }) => {
+      await zetAgendapuntBesluit(admin, users);
+      await admin.from("stemmingen").delete().eq("agendapunt_id", FIX.agendapuntBesluit);
+    },
+  },
+
+  // ── /api/stemmingen/[id]/stemmen — POST · bureau-403 · 200 ────────────────
+  { slug: "w4.stemmen.post.anon", method: "POST", path: `/api/stemmingen/${FIX.stemmingStemmen}/stemmen`, rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.stemmen.post.bestuurder.400-keuze", method: "POST", path: `/api/stemmingen/${FIX.stemmingStemmen}/stemmen`, rol: "bestuurder", body: LEEG, verwacht: "json" },
+  { slug: "w4.stemmen.post.bestuurder.404", method: "POST", path: `/api/stemmingen/${FIX.stemmingOnbekend}/stemmen`, rol: "bestuurder", body: { keuze: "voor" }, verwacht: "json" },
+  {
+    slug: "w4.stemmen.post.bestuurder.400-gesloten",
+    method: "POST", path: `/api/stemmingen/${FIX.stemmingGesloten}/stemmen`, rol: "bestuurder",
+    body: { keuze: "voor" }, verwacht: "json",
+    preseed: async ({ admin, users }) => zetStemming(admin, users, FIX.stemmingGesloten, "gesloten", FIX.agendapuntGesloten),
+  },
+  {
+    // Bureau-gate (BB-12) — `eigenProfiel?.rol` -> ctx.rol.
+    slug: "w4.stemmen.post.bestuursbureau.403",
+    method: "POST", path: `/api/stemmingen/${FIX.stemmingStemmen}/stemmen`, rol: "bestuursbureau",
+    body: { keuze: "voor" }, verwacht: "json",
+    preseed: async ({ admin, users }) => zetStemming(admin, users, FIX.stemmingStemmen, "open", FIX.agendapuntStemmen),
+  },
+  {
+    slug: "w4.stemmen.post.bestuurder.200",
+    method: "POST", path: `/api/stemmingen/${FIX.stemmingStemmen}/stemmen`, rol: "bestuurder",
+    body: { keuze: "voor", motivering: "W4" }, verwacht: "json",
+    // De stem is uniek per (stemming, stemgerechtigde): zonder opruimen levert
+    // de tweede run het WIJZIGEN-pad op i.p.v. het insert-pad.
+    preseed: async ({ admin, users }) => {
+      await zetStemming(admin, users, FIX.stemmingStemmen, "open", FIX.agendapuntStemmen);
+      await admin.from("stem_uitbrengingen").delete().eq("stemming_id", FIX.stemmingStemmen);
+    },
+  },
+
+  // ── /api/stemmingen/[id]/sluiten — POST · 403-starter · 200 ───────────────
+  { slug: "w4.stemmingen-sluiten.post.anon", method: "POST", path: `/api/stemmingen/${FIX.stemmingSluiten}/sluiten`, rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.stemmingen-sluiten.post.bestuurder.404", method: "POST", path: `/api/stemmingen/${FIX.stemmingOnbekend}/sluiten`, rol: "bestuurder", body: LEEG, verwacht: "json" },
+  {
+    slug: "w4.stemmingen-sluiten.post.bestuursbureau.403",
+    method: "POST", path: `/api/stemmingen/${FIX.stemmingSluiten}/sluiten`, rol: "bestuursbureau",
+    body: LEEG, verwacht: "json",
+    preseed: async ({ admin, users }) => zetStemming(admin, users, FIX.stemmingSluiten, "open", FIX.agendapuntSluiten),
+  },
+  {
+    // Bestuurder is niet de starter (voorzitter opende) en niet privileged.
+    slug: "w4.stemmingen-sluiten.post.bestuurder.403-starter",
+    method: "POST", path: `/api/stemmingen/${FIX.stemmingSluiten}/sluiten`, rol: "bestuurder",
+    body: LEEG, verwacht: "json",
+    preseed: async ({ admin, users }) => zetStemming(admin, users, FIX.stemmingSluiten, "open", FIX.agendapuntSluiten),
+  },
+  {
+    slug: "w4.stemmingen-sluiten.post.voorzitter.200",
+    method: "POST", path: `/api/stemmingen/${FIX.stemmingSluiten}/sluiten`, rol: "voorzitter",
+    body: LEEG, verwacht: "json",
+    preseed: async ({ admin, users }) => zetStemming(admin, users, FIX.stemmingSluiten, "open", FIX.agendapuntSluiten),
+  },
+
+  // ── /api/stemmingen/[id]/intrekken — POST · 400-niet-open · 200 ───────────
+  { slug: "w4.stemmingen-intrekken.post.anon", method: "POST", path: `/api/stemmingen/${FIX.stemmingIntrekken}/intrekken`, rol: "anon", body: LEEG, verwacht: "json" },
+  // De motiveringseis (>= 10 tekens) staat VOOR de lookup: dit is een 400, geen 404.
+  { slug: "w4.stemmingen-intrekken.post.bestuurder.400-reden", method: "POST", path: `/api/stemmingen/${FIX.stemmingOnbekend}/intrekken`, rol: "bestuurder", body: { reden: "W4" }, verwacht: "json" },
+  { slug: "w4.stemmingen-intrekken.post.bestuurder.404", method: "POST", path: `/api/stemmingen/${FIX.stemmingOnbekend}/intrekken`, rol: "bestuurder", body: { reden: "W4 onbekende stemronde" }, verwacht: "json" },
+  {
+    slug: "w4.stemmingen-intrekken.post.bestuurder.400-gesloten",
+    method: "POST", path: `/api/stemmingen/${FIX.stemmingGesloten}/intrekken`, rol: "bestuurder",
+    body: { reden: "W4 reeds gesloten ronde" }, verwacht: "json",
+    preseed: async ({ admin, users }) => zetStemming(admin, users, FIX.stemmingGesloten, "gesloten", FIX.agendapuntGesloten),
+  },
+  {
+    slug: "w4.stemmingen-intrekken.post.voorzitter.200",
+    method: "POST", path: `/api/stemmingen/${FIX.stemmingIntrekken}/intrekken`, rol: "voorzitter",
+    body: { reden: "W4 intrekreden" }, verwacht: "json",
+    preseed: async ({ admin, users }) => zetStemming(admin, users, FIX.stemmingIntrekken, "open", FIX.agendapuntIntrekken),
   },
 ];

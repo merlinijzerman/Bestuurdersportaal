@@ -78,7 +78,7 @@ const TOEGESTAAN_VERWIJDERD = [
   // regel of als method-chain over meerdere regels. De fragmenten zijn strak
   // begrensd: alleen profielkolommen, alleen de id=user-filter, alleen de
   // single-terminator. Een échte query-verwijdering matcht hier niet.
-  /^const \{ data: profiel \} = await supabase\b/,
+  /^const \{ data: \w+ \} = await supabase\b/,
   /\.from\("profielen"\)/,
   /^\.select\("(id|naam|rol|fonds_id)(,\s*(id|naam|rol|fonds_id))*"\)$/,
   /^\.eq\("id",\s*user\.id\)$/,
@@ -119,12 +119,40 @@ const isCommentaar = (l) => l.startsWith("//");
 // haalProfiel-kolommen. De controle uit §5 blijft daarmee intact — zet je
 // `ctx.fondsId` waar `ctx.gebruikerId` hoort, dan substitueert de verwijderde
 // regel naar iets anders dan de toegevoegde en blijft het `afwijkend`.
-function substitueer(regel) {
-  return regel
-    .replace(/\buser\.id\b/g, "ctx.gebruikerId")
-    .replace(/\bprofiel\??\.rol\b/g, "ctx.rol")
-    .replace(/\bprofiel\??\.naam\b/g, "ctx.naam")
-    .replace(/\bprofiel\??\.fonds_id\b/g, "ctx.fondsId");
+const CTX_VELD = { rol: "ctx.rol", naam: "ctx.naam", fonds_id: "ctx.fondsId" };
+
+// BESLUIT (W4): welke variabele het eigen profiel draagt, wordt UIT DE DIFF
+// afgeleid — niet uit een namenlijst. In de 78 schrijfroutes heet hij `profiel`
+// (71×), maar ook `eigenProfiel`, `eigen` en `actorProfiel`. Beslissend is het
+// filter: alleen een select met `.eq("id", user.id)` beschrijft het eigen profiel.
+// `stemgerProfiel` in stemmingen/[id]/stemmen filtert op de VOLMACHTGEVER en
+// blijft daardoor buiten schot — precies zoals het hoort, want die rol door
+// `ctx.rol` vervangen zou een echte gedragswijziging zijn.
+function eigenProfielVariabelen(verwijderd) {
+  const opEigenId = verwijderd.some((l) => /^\.eq\("id",\s*user\.id\)$/.test(l));
+  if (!opEigenId) return [];
+  const vars = [];
+  for (const l of verwijderd) {
+    const m = l.match(/^const \{ data: (\w+) \} = await supabase\b/);
+    if (m) vars.push(m[1]);
+  }
+  return vars;
+}
+
+function substitueer(regel, eigenVars = []) {
+  let r = regel.replace(/\buser\.id\b/g, "ctx.gebruikerId");
+  for (const v of eigenVars) {
+    // `(profiel as { rol?: string } | null)?.rol` -> `ctx.rol`
+    r = r.replace(
+      new RegExp(`\\(\\s*${v} as [^()]*\\)\\s*\\??\\.(rol|naam|fonds_id)\\b`, "g"),
+      (_m, veld) => CTX_VELD[veld]
+    );
+    r = r.replace(
+      new RegExp(`\\b${v}\\??\\.(rol|naam|fonds_id)\\b`, "g"),
+      (_m, veld) => CTX_VELD[veld]
+    );
+  }
+  return r;
 }
 
 const matcht = (regels, regel) => regels.some((re) => re.test(regel));
@@ -175,8 +203,9 @@ function classificeer({ verwijderd, toegevoegd }) {
 
   // 3. Token-substitutie: een verwijderde body-regel die na substitutie exact
   //    een toegevoegde regel is, is een gesanctioneerde wijziging.
+  const eigenVars = eigenProfielVariabelen(verwijderd.map(trim));
   for (let i = rem.length - 1; i >= 0; i--) {
-    const s = substitueer(rem[i]);
+    const s = substitueer(rem[i], eigenVars);
     const j = add.indexOf(s);
     if (j >= 0) {
       rem.splice(i, 1);

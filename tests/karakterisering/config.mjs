@@ -72,6 +72,24 @@ export const FIX = {
   risicoMaatregelen: "00000000-0000-4000-8000-0000000715c3",
   maatregel1: "00000000-0000-4000-8000-000000071dd1",
   maatregelOnbekend: "00000000-0000-4000-8000-000000071ddf",
+
+  //  stemmingen — één agendapunt met categorie 'besluitvorming' (de W1-fixtures
+  //  hebben die categorie niet) en per muterend scenario een eigen stemronde.
+  //  Één gedeelde stemronde zou de volgorde dragend maken: sluiten, intrekken en
+  //  stemmen wijzigen alle drie dezelfde rij.
+  //  Eén agendapunt PER stemronde: `idx_stemming_een_open` staat maximaal één
+  //  open stemronde per agendapunt toe, dus gedeelde agendapunten laten de
+  //  preseeds op elkaar botsen.
+  agendapuntBesluit: "00000000-0000-4000-8000-0000000a9010",
+  agendapuntStemmen: "00000000-0000-4000-8000-0000000a9011",
+  agendapuntSluiten: "00000000-0000-4000-8000-0000000a9012",
+  agendapuntIntrekken: "00000000-0000-4000-8000-0000000a9013",
+  agendapuntGesloten: "00000000-0000-4000-8000-0000000a9014",
+  stemmingStemmen: "00000000-0000-4000-8000-00000057e001",
+  stemmingSluiten: "00000000-0000-4000-8000-00000057e002",
+  stemmingIntrekken: "00000000-0000-4000-8000-00000057e003",
+  stemmingGesloten: "00000000-0000-4000-8000-00000057e004",
+  stemmingOnbekend: "00000000-0000-4000-8000-00000057e0ff",
 };
 
 export const AFSCHRIFT1_PAD = `${FONDS_ID}/w1-afschrift.pdf`;
