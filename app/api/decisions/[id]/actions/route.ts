@@ -16,7 +16,7 @@
 //   }
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 
 const STATUS = [
   "open",
@@ -35,19 +35,10 @@ interface CreateBody {
   afhankelijk_van?: string | null;
 }
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const POST = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id: decisionId } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const { id: decisionId } = params as { id: string };
+    const supabase = ctx.supabase;
 
     const body = (await req.json()) as CreateBody;
     if (!body.actie || typeof body.actie !== "string" || !body.actie.trim()) {
@@ -113,17 +104,11 @@ export async function POST(
       );
     }
 
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam")
-      .eq("id", user.id)
-      .maybeSingle();
-
     await supabase.from("governance_events").insert({
       decision_id: decisionId,
       event_type: "actie_toegevoegd",
-      actor_id: user.id,
-      actor_naam: profiel?.naam ?? null,
+      actor_id: ctx.gebruikerId,
+      actor_naam: ctx.naam ?? null,
       object_type: "action",
       object_id: nieuw.id,
       nieuwe_waarde: {
@@ -139,4 +124,4 @@ export async function POST(
     console.error("Fout in POST /api/decisions/[id]/actions:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

@@ -18,7 +18,7 @@
 //   }
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 
 const ASSUMPTION_TYPES = [
   "macro",
@@ -57,19 +57,10 @@ const INHOUDELIJKE_VELDEN: (keyof WijzigBody)[] = [
   "ai_gedetecteerd",
 ];
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string; aid: string }> }
-) {
+export const PATCH = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id: decisionId, aid } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const { id: decisionId, aid } = params as { id: string; aid: string };
+    const supabase = ctx.supabase;
 
     const body = (await req.json()) as WijzigBody;
 
@@ -147,7 +138,7 @@ export async function PATCH(
       return NextResponse.json({ assumption: huidig, gewijzigd: false });
     }
 
-    wijzigingen.gewijzigd_door = user.id;
+    wijzigingen.gewijzigd_door = ctx.gebruikerId;
 
     const { data: bijgewerkt, error: updFout } = await supabase
       .from("decision_assumptions")
@@ -164,18 +155,13 @@ export async function PATCH(
     }
 
     // Actor-naam voor events.
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam")
-      .eq("id", user.id)
-      .maybeSingle();
-    const actorNaam = profiel?.naam ?? null;
+    const actorNaam = ctx.naam;
 
     if (inhoudelijkGewijzigd.length > 0) {
       await supabase.from("governance_events").insert({
         decision_id: decisionId,
         event_type: "assumption_gewijzigd",
-        actor_id: user.id,
+        actor_id: ctx.gebruikerId,
         actor_naam: actorNaam,
         object_type: "assumption",
         object_id: aid,
@@ -195,7 +181,7 @@ export async function PATCH(
           body.status === "verwijderd"
             ? "assumption_verwijderd"
             : "assumption_status_gewijzigd",
-        actor_id: user.id,
+        actor_id: ctx.gebruikerId,
         actor_naam: actorNaam,
         object_type: "assumption",
         object_id: aid,
@@ -209,4 +195,4 @@ export async function PATCH(
     console.error("Fout in PATCH /api/decisions/[id]/assumptions/[aid]:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});
