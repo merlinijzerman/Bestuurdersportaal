@@ -23,6 +23,14 @@
 -- ╚════════════════════════════════════════════════════════════════════════╝
 
 -- 1a. Vijf tabellen bestaan mét RLS.
+-- ----------------------------------------------------------------------------
+-- ROL: postgres voor de opbouw en de catalogus-seed, authenticated per scenario
+--      — de RLS-toets (fonds B ziet geen semantic_units van fonds A) moet onder
+--      RLS gelden, niet onder BYPASSRLS.
+--      (verplicht en machineleesbaar — zie ROL-1 in
+--       tests/cross-tenant/checksuite-rolverklaring.test.ts voor het waarom)
+-- ----------------------------------------------------------------------------
+
 do $$
 declare
   t text;
@@ -87,6 +95,56 @@ end $$;
 -- ║ DEEL 2 — GEDRAG (constraints + RLS + append-only). begin ... rollback.   ║
 -- ╚════════════════════════════════════════════════════════════════════════╝
 begin;
+
+-- ── CATALOGUS-SEED (#84) ────────────────────────────────────────────────────
+-- De concepts-catalogus wordt door MIGRATIES gevuld:
+--   2026_08_12_t7_semantische_laag.sql       de vier basisrijen
+--   2026_08_12_t8_semantische_extractie.sql  de normalization-hints
+-- Beide zijn PRE-CUTOFF en dus gesquasht in de schema-only baseline
+-- (besluit 0046), die data-INSERTs strípt. In de ephemere test-DB en in CI is
+-- `concepts` daardoor LEEG — niet omdat er iets stuk is, maar omdat referentie-
+-- data per constructie niet in een schema-dump zit.
+--
+-- De keten kan dit niet oplossen: scripts/testdb-apply-migrations.sh past
+-- helemaal GEEN seeds toe (supabase/seeds/* wordt alleen in een foutmelding
+-- genoemd). Daarom zaait deze suite zelf wat zij nodig heeft, binnen haar eigen
+-- transactie, en laat niets achter.
+--
+-- LET OP: dit is een KOPIE. Wijzigt de catalogus in een migratie en niet hier,
+-- dan toetst deze suite een catalogus die nergens meer bestaat. De assertie
+-- direct hieronder maakt dat zichtbaar in plaats van stil.
+insert into public.concepts (key, label, type, status) values
+  ('solidariteitsreserve.bovengrens', 'Bovengrens solidariteitsreserve', 'percentage',    'actief'),
+  ('franchise',                       'Franchise',                       'amount',        'actief'),
+  ('invaarmethodiek',                 'Invaarmethodiek',                 'policy_choice', 'conditioneel'),
+  ('transitiedatum',                  'Transitiedatum',                  'date',          'uitgesteld')
+on conflict (key) do nothing;
+
+update public.concepts set normalization = jsonb_build_object(
+  'omschrijving', 'Percentage van het collectieve vermogen dat maximaal in de solidariteitsreserve mag zitten.',
+  'eenheid', 'procent') where key = 'solidariteitsreserve.bovengrens';
+update public.concepts set normalization = jsonb_build_object(
+  'omschrijving', 'Bedrag dat op het pensioengevend salaris in mindering wordt gebracht.',
+  'eenheid', 'euro') where key = 'franchise';
+update public.concepts set normalization = jsonb_build_object(
+  'omschrijving', 'De gekozen methodiek voor het invaren van bestaande aanspraken.',
+  'eenheid', 'keuze') where key = 'invaarmethodiek';
+
+do $$
+declare n int;
+begin
+  select count(*) into n from public.concepts
+   where key in ('solidariteitsreserve.bovengrens','franchise','invaarmethodiek')
+     and normalization->>'omschrijving' is not null;
+  if n <> 3 then
+    raise exception
+      'SEED-DRIFT (#84): de catalogus-seed in deze suite levert % van 3 hints. '
+      'Waarschijnlijk is de catalogus in een migratie gewijzigd zonder deze '
+      'kopie bij te werken.', n;
+  end if;
+end $$;
+-- ── einde catalogus-seed ────────────────────────────────────────────────────
+
 
 -- Seed 2 fondsen (RLS omzeild als eigenaar). slug is NOT NULL + UNIQUE.
 insert into public.fondsen (id, naam, slug)
