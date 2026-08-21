@@ -151,6 +151,11 @@ SQL_T4="supabase/checks/2026_07_08_t4_retrieval_fondsdiscipline.sql"
 # zetten. V10 is generiek: geen enkele view in public mag I/U/D hebben voor een
 # browserrol — dat sluit de objectklasse die de gates A–H niet kennen.
 SQL_VWF="supabase/checks/2026_08_02_fondsleden_cross_tenant.sql"
+# V3 — grants-gate over ALLE objectklassen (relaties, functies, buckets,
+# storage-policies) tegen een expliciete allowlist in de repo. Sluit de blinde
+# vlek waar C-01 in viel: gates A-H redeneren over tabellen en functies, nooit
+# over views. Faalt in BEIDE richtingen — te veel én onverwacht te weinig.
+SQL_V3="supabase/checks/2026_08_20_v3_grants_volledig.sql"
 
 echo "== [1/4] tsc --noEmit --skipLibCheck =="
 ./node_modules/.bin/tsc --noEmit --skipLibCheck
@@ -258,6 +263,10 @@ echo "-- C-01 (vw_fondsleden cross-tenant + kolomafscherming + view-schrijfrecht
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_VWF"
 echo
 
+echo "-- V3 (grants-gate over alle objectklassen: relaties, functies, buckets, storage-policies) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_V3"
+echo
+
 echo "============================================================================"
 echo "GROEN: volledige §15 cross-tenant suite geslaagd (app-laag + DB-laag)."
 echo "  AI-beg quota/kill switch/vier ogen            (DB-laag; race apart)"
@@ -288,4 +297,5 @@ echo "  P3-B rol via service-role-pad (bevriezing-trigger + rol-CHECK)         (
 echo "  B    reflectieflow server-controlled (bronset/beurtteller/afronding)   (DB-laag, V4)"
 echo "  T5   vergelijking comparison_results RLS + schrijfpad-only + guard      (DB-laag, V4)"
 echo "  C-01 vw_-views: cross-tenant, kolomafscherming, geen I/U/D voor browserrol (DB-laag)"
+echo "  V3   grants-gate: feitelijke rechten op alle relaties/functies == allowlist (DB-laag)"
 echo "============================================================================"
