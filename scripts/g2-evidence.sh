@@ -263,6 +263,38 @@ check_branch_protection() {
 }
 check_branch_protection
 
+# B9b — nachtelijke driftdetectie op Productie (#65). Landde met de cron BEWUST
+# uit: zonder de drie inrichtingsstappen faalt de nachtrun elke nacht, en volgens
+# besluit 0185 is een rode nachtrun het alertkanaal. Een controle die elke nacht
+# rood is, leert je die notificatie negeren.
+#
+# Deze regel bestaat zodat dat geen SLAPEND controlemiddel wordt — precies het
+# patroon dat #97 blootlegde. Hij leest de workflow: staat er een ACTIEVE
+# cron-regel, dan is de inrichting rond en gaat hij naar DONE. Zo kan hij niet
+# blijven liegen zoals de vorige B9-regel deed.
+check_drift_inrichting() {
+  local wf=".github/workflows/drift-productie.yml"
+  local eigenaar="technisch beheer (merlinijzerman)"
+  local sinds="2026-08-21"
+  if [ ! -f "$wf" ]; then
+    ops_onbekend "B9b driftdetectie — workflow $wf ontbreekt; niet vast te stellen"
+    return
+  fi
+  # Een cron-regel die NIET is uitgecommentarieerd. Bewust op de regelvorm en
+  # niet op het woord "cron": dat staat ook in de uitleg bovenin het bestand.
+  if grep -qE '^[[:space:]]+- cron:' "$wf"; then
+    ops_done "B9b driftdetectie Productie — cron actief; inrichting rond"
+    return
+  fi
+  # Dagen sinds `sinds`. BSD en GNU date verschillen; probeer beide.
+  local nu start dagen
+  nu="$(date +%s)"
+  start="$(date -j -f '%Y-%m-%d' "$sinds" +%s 2>/dev/null || date -d "$sinds" +%s 2>/dev/null || echo "")"
+  if [ -n "$start" ]; then dagen=$(( (nu - start) / 86400 )); else dagen="?"; fi
+  ops_open "B9b driftdetectie Productie — cron UIT, inrichting open sinds ${sinds} (${dagen} dagen) — eigenaar: ${eigenaar}; zie DRIFT_INRICHTING_OPEN in $wf"
+}
+check_drift_inrichting
+
 # B10 — T6 gedeelde contentlaag opgeleverd.
 check_files "B10 T6 beheerkenmerken-migratie + read-only-check aanwezig" \
   supabase/migrations/2026_07_09_t6_generiek_beheerkenmerken.sql \

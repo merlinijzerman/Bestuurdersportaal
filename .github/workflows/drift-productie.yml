@@ -25,31 +25,67 @@ name: drift-productie
 #  worden — vandaar de alert. Een controle die faalt zonder dat iemand het merkt
 #  is precies zo nuttig als geen controle.
 #
-#  EENMALIG IN TE RICHTEN, in deze volgorde:
-#    1. scripts/drift-readonly-rol.sql draaien op Productie én Preview.
-#    2. Secret DRIFT_DB_PASSWORD zetten (zelfde wachtwoord in beide omgevingen,
-#       of splits in DRIFT_DB_PASSWORD_PROD / _PREVIEW en pas dit bestand aan).
-#    3. `--pin` draaien, de momentopname NALEZEN, en committen. Nalezen is geen
-#       formaliteit: je verklaart daarmee de huidige toestand voor goed,
-#       inclusief drift die er nu al in zit. Doe dit pas NA de T14b-reparatie.
+#  ── DRIFT_INRICHTING_OPEN — de cron staat UIT tot deze drie stappen klaar zijn.
+#  Greppable met: grep -rn DRIFT_INRICHTING_OPEN
+#
+#  Waarom uit en niet gewoon aan: zonder deze stappen faalt de nachtrun elke
+#  nacht, en volgens besluit 0185 IS een rode nachtrun het alertkanaal. Je traint
+#  jezelf dan om precies die notificatie te negeren — het omgekeerde van wat dit
+#  ding moet doen. Aanzetten is later één regel; zie stap 4.
+#
+#  STAP 1 — rol aanmaken op Productie ÉN Preview.
+#    scripts/drift-readonly-rol.sql, wachtwoord invullen, uitvoeren. Het script
+#    is fail-closed: het weigert een rol die te ruim is (super/bypassrls/
+#    tabelrechten) én een die te krap is (geen leespolicy op storage.buckets).
+#
+#  STAP 2 — secret DRIFT_DB_PASSWORD zetten (repo → Settings → Secrets).
+#    Zelfde wachtwoord in beide omgevingen, of splits in _PROD/_PREVIEW en pas
+#    de samenstelling hieronder aan.
+#
+#  STAP 3 — pinnen. EN NIET EERDER DAN NA DE INVENTARISATIE VAN DE ELF
+#    PRODUCTIE-ONLY SECURITY-DEFINER-FUNCTIES (Bevinding A bij #78: prod/preview
+#    telt 39 SECDEF-functies tegen 28 in een repo-replay, o.a. het fn_ai_*-
+#    subsysteem). Pin je vóór die inventarisatie, dan verklaar je ongereviewde
+#    drift tot VERWACHTE toestand en kijkt deze controle daar nooit meer naar.
+#    Pinnen is geen formaliteit: je tekent de huidige toestand af.
+#
+#  STAP 4 — cron aanzetten: haal het commentaarteken weg bij de `schedule`-regels
+#    hieronder, en werk de [OPS]-regel in scripts/g2-evidence.sh bij.
 #
 #  ONGETOETSTE AANNAME — controleer dit bij stap 2.
 #  De verbindingsstring gebruikt de pooler-vorm `<rol>.<project_ref>` naar
 #  analogie van `postgres.<ref>` in supabase-backup.yml. Dat een NIET-postgres
-#  rol daar hetzelfde werkt, heb ik niet kunnen verifiëren zonder verbinding.
-#  Werkt het niet, dan zijn er twee uitwijkroutes: de directe DB-host in plaats
-#  van de pooler, of het volledige verbindingsadres als secret opnemen en de
-#  samenstelling hieronder laten vervallen. Draai deze workflow daarom eerst
-#  één keer met workflow_dispatch voordat je op de nachtrun vertrouwt.
+#  rol daar hetzelfde werkt, is niet geverifieerd zonder verbinding. Werkt het
+#  niet: de directe DB-host in plaats van de pooler, of het volledige
+#  verbindingsadres als secret. Draai daarom eerst één keer met
+#  workflow_dispatch voordat je op de nachtrun vertrouwt.
+#
+#  WAT WÉL GEMETEN IS (21-08-2026, wegwerp-PG17-stack met het volle schema):
+#  de rol-DDL draait schoon, `drift_lezer` levert een momentopname die
+#  BYTE-IDENTIEK is aan die van `postgres` (718 regels), en `public.profielen`,
+#  `storage.objects` en DDL zijn alle drie geweigerd. Zonder de bucket-leespolicy
+#  zag de rol 0 buckets terwijl postgres er 4 zag — zie de kop van de rol-DDL.
+#
 # ============================================================================
 
 on:
-  schedule:
-    - cron: "0 4 * * *" # elke nacht 04:00 UTC, ná nightly-fidelity (03:00)
+  # DRIFT_INRICHTING_OPEN — cron bewust uitgeschakeld; zet deze twee regels terug
+  # zodra stap 1 t/m 3 in de kop klaar zijn.
+  #  schedule:
+  #    - cron: "0 4 * * *" # elke nacht 04:00 UTC, ná nightly-fidelity (03:00)
   workflow_dispatch:
 
 permissions:
   contents: read
+
+# Het meldkanaal staat in de workflow en niet in de UI: wijzigen vereist een PR
+# en is daarmee reviewbaar en terugleesbaar (besluit 0185). Toegestaan:
+# "github-native" (de rode run plus de GitHub-notificatie IS het kanaal) of
+# "webhook" (BACKUP_ALERT_WEBHOOK_URL). Zelfde vorm als
+# supabase-backup-watchdog.yml; deze workflow is van vóór dat besluit en week
+# ervan af door `send-backup-alert.mjs` onvoorwaardelijk aan te roepen.
+env:
+  ALERT_CHANNEL: github-native
 
 concurrency:
   group: drift-productie
@@ -98,8 +134,9 @@ jobs:
           path: drift-rapport.txt
           retention-days: 30
 
-      - name: Waarschuwen bij drift
-        if: failure()
+      - name: Waarschuwen bij drift — webhookkanaal
+        if: failure() && env.ALERT_CHANNEL == 'webhook'
+
         shell: bash
         env:
           BACKUP_ALERT_WEBHOOK_URL: ${{ secrets.BACKUP_ALERT_WEBHOOK_URL }}
@@ -112,3 +149,19 @@ jobs:
             steken. Read-only detectie; er is niets gewijzigd.
           ALERT_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: node scripts/send-backup-alert.mjs
+
+      # Bij github-native is de rode run zelf het meldkanaal. De stap hieronder
+      # voegt daar alleen leesbaarheid aan toe; hij verandert de uitkomst niet.
+      - name: Drift zichtbaar maken via GitHub
+        if: failure() && env.ALERT_CHANNEL == 'github-native'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          {
+            echo "## Driftdetectie Productie"
+            echo "Productie wijkt af van de gepinde momentopname of van Preview."
+            echo "Zie het artefact **drift-rapport** van deze run. Beoordeel per"
+            echo "regel of het een bedoeld omgevingsverschil is of een migratie"
+            echo "die is blijven steken. Read-only detectie; er is niets gewijzigd."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::error title=Productiedrift::Zie het artefact drift-rapport van deze run."
