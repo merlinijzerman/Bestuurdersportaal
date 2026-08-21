@@ -153,6 +153,18 @@ export function toetsWrapperFundament(): void {
     "wrapper: ctx.email komt niet uit de sessiegebruiker"
   );
 
+  // (h) De host-guard-tak toetst op `=== true`, niet op truthy. Sinds W4 kent de
+  //     spec de waarde `"route-eigen"` — een route die de guard ZELF aanroept,
+  //     bewust, om de ordening te behouden. Die string is truthy; zou de wrapper
+  //     op truthy toetsen, dan kreeg zo'n route de guard er stilzwijgend nog een
+  //     keer bovenop, vóór zijn eigen fail-closed poorten. Precies de herordening
+  //     die de uitzondering moet voorkomen.
+  assert.match(
+    w,
+    /if\s*\(\s*spec\.hostGuard\s*===\s*true\s*\)/,
+    "wrapper: host-guard-tak toetst op truthy i.p.v. === true — 'route-eigen' zou dan dubbel bewaakt worden"
+  );
+
   // (g) `ctx` mag NOOIT als geheel in een logregel of serialisatie belanden.
   //     Sinds W4 draagt de context een e-mailadres, en hij staat in élke handler
   //     in scope. Eén `console.error("fout", ctx)` zet daarmee PII in de

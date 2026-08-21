@@ -15,6 +15,8 @@
 //                            zie de toelichting bij FondsContext.)
 //    3. Host-guard         — alleen als spec.hostGuard === true (de 12 routes die
 //                            hem nu al hebben); hergebruikt beoordeelRouteHostToegang.
+//                            `hostGuard: "route-eigen"` = de route doet het zelf,
+//                            bewust; zie RouteSpecV1.
 //    4. Correlation ID     — gegenereerd, in ctx en logregels. In v1 NIET als
 //                            responseheader (dat zou elk snapshot doen afwijken).
 //
@@ -52,8 +54,20 @@ export type FondsContext = {
 };
 
 export type RouteSpecV1 = {
-  /** default false in v1; true voor de 12 routes die de host-guard nu al hebben. */
-  readonly hostGuard?: boolean;
+  /** Wie host↔fonds afdwingt voor deze route. Drie waarden, en de derde is er
+   *  omdat een AFWEZIG veld niet te onderscheiden is van een VERGETEN veld:
+   *
+   *    true            de wrapper doet het, vóór de handler (de gewone vorm);
+   *    false/afwezig   deze route kent geen host↔fonds-grens;
+   *    "route-eigen"   de route roept `beoordeelRouteHostToegang` ZELF aan, en
+   *                    dat is een bewuste keuze — niet een vergeten vlag.
+   *
+   *  W4 gebruikt "route-eigen" voor `documents/upload`: de wrapper zou de guard
+   *  vóór de fail-closed rate limit trekken, en de twee aparte labels
+   *  (`documents.upload.init` / `.complete`) die de anomaliedetectie voeden tot
+   *  één samenvouwen. Zo is de uitzondering greppable, kan een latere gate hem
+   *  onderscheiden van een omissie, en hangt de motivering aan de code. */
+  readonly hostGuard?: boolean | "route-eigen";
   /** loglabel voor de host-guard-anomaliedetectie (alleen logging, geen respons). */
   readonly label?: string;
 };
@@ -111,7 +125,11 @@ export function maakWithFondsRoute(deps: WrapperDeps) {
       const fondsId = profiel?.fondsId ?? null;
 
       // 3. Host-guard — alleen waar de route hem nu al heeft.
-      if (spec.hostGuard) {
+      // LET OP: `=== true`, niet truthy. "route-eigen" is een string en dus
+      // truthy; die route doet de guard zelf en mag hem hier NIET nog eens
+      // krijgen — dat zou de ordening veranderen die de uitzondering juist
+      // beschermt.
+      if (spec.hostGuard === true) {
         const oordeel = await deps.beoordeelRouteHostToegang({
           sessieFondsId: fondsId,
           gebruikerId: user.id,

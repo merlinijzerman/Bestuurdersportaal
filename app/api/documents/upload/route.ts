@@ -446,11 +446,13 @@ async function valideerUploadMetadata(
 //     codemod die de hulpfuncties "plausibel" een supabase-parameter geeft
 //     compileert prima en ziet er goed uit — vandaar met de hand.
 //
-// (2) De spec is BEWUST `{}` en niet `{ hostGuard: true }`. De inline
-//     host-guards blijven staan. Zie het BESLUIT in de commit: de wrapper zou de
-//     guard vóór de fail-closed rate limit trekken, en de twee aparte labels
-//     (`documents.upload.init` / `.complete`) tot één samenvouwen.
-export const POST = withFondsRoute({}, async (ctx, req: NextRequest) => {
+// (2) `hostGuard: "route-eigen"` — de route dwingt host↔fonds ZELF af, in
+//     `initUpload` en `completeUpload`. Bewust geen `true`: de wrapper zou de
+//     guard vóór de FAIL-CLOSED rate limit trekken, en de twee aparte labels
+//     (`documents.upload.init` / `.complete`) die de anomaliedetectie voeden tot
+//     één samenvouwen. Als WAARDE vastgelegd en niet als ontbrekend veld, zodat
+//     de uitzondering greppable is en niet als omissie leest.
+export const POST = withFondsRoute({ hostGuard: "route-eigen" }, async (ctx, req: NextRequest) => {
   let body: Record<string, unknown>;
   try {
     body = (await req.json()) as Record<string, unknown>;
