@@ -268,30 +268,54 @@ check_branch_protection
 # besluit 0185 is een rode nachtrun het alertkanaal. Een controle die elke nacht
 # rood is, leert je die notificatie negeren.
 #
-# Deze regel bestaat zodat dat geen SLAPEND controlemiddel wordt — precies het
-# patroon dat #97 blootlegde. Hij leest de workflow: staat er een ACTIEVE
-# cron-regel, dan is de inrichting rond en gaat hij naar DONE. Zo kan hij niet
-# blijven liegen zoals de vorige B9-regel deed.
+# DONE BETEKENT HIER: ER IS EEN GESLAAGDE SCHEDULED RUN GEWEEST.
+# De eerste versie van deze regel keek of er een `schedule:` in de workflow stond.
+# Dat is GECONFIGUREERD, niet WERKEND — hetzelfde onderscheid als branch
+# protection die bestaat versus blokkeert, en als een suite die geregistreerd is
+# versus draait. Precies het verschil dat dit hele cluster steeds opnieuw
+# blootlegde. Een aftekening hoort een WAARNEMING te zijn, geen bewering, dus
+# vraagt deze regel de runhistorie op.
+#
+# Vier standen, en de vierde is er omdat "ik kon het niet vaststellen" geen van
+# de andere drie mag worden.
 check_drift_inrichting() {
   local wf=".github/workflows/drift-productie.yml"
   local eigenaar="technisch beheer (merlinijzerman)"
   local sinds="2026-08-21"
+  local nu start dagen
+  nu="$(date +%s)"
+  start="$(date -j -f '%Y-%m-%d' "$sinds" +%s 2>/dev/null || date -d "$sinds" +%s 2>/dev/null || echo "")"
+  if [ -n "$start" ]; then dagen="$(( (nu - start) / 86400 )) dagen"; else dagen="? dagen"; fi
+
   if [ ! -f "$wf" ]; then
     ops_onbekend "B9b driftdetectie — workflow $wf ontbreekt; niet vast te stellen"
     return
   fi
-  # Een cron-regel die NIET is uitgecommentarieerd. Bewust op de regelvorm en
-  # niet op het woord "cron": dat staat ook in de uitleg bovenin het bestand.
-  if grep -qE '^[[:space:]]+- cron:' "$wf"; then
-    ops_done "B9b driftdetectie Productie — cron actief; inrichting rond"
+  if ! command -v gh >/dev/null 2>&1; then
+    ops_onbekend "B9b driftdetectie — niet vast te stellen: geen gh CLI om de runhistorie te lezen"
     return
   fi
-  # Dagen sinds `sinds`. BSD en GNU date verschillen; probeer beide.
-  local nu start dagen
-  nu="$(date +%s)"
-  start="$(date -j -f '%Y-%m-%d' "$sinds" +%s 2>/dev/null || date -d "$sinds" +%s 2>/dev/null || echo "")"
-  if [ -n "$start" ]; then dagen=$(( (nu - start) / 86400 )); else dagen="?"; fi
-  ops_open "B9b driftdetectie Productie — cron UIT, inrichting open sinds ${sinds} (${dagen} dagen) — eigenaar: ${eigenaar}; zie DRIFT_INRICHTING_OPEN in $wf"
+
+  local laatste
+  if ! laatste="$(gh run list --workflow drift-productie.yml --event schedule \
+                    --status success --limit 1 --json createdAt \
+                    --jq '.[0].createdAt // empty' 2>/dev/null)"; then
+    ops_onbekend "B9b driftdetectie — niet vast te stellen: runhistorie niet leesbaar (actions:read vereist)"
+    return
+  fi
+
+  if [ -n "$laatste" ]; then
+    ops_done "B9b driftdetectie Productie — geslaagde nachtrun waargenomen (${laatste%T*})"
+    return
+  fi
+
+  # Geen geslaagde nachtrun. Onderscheid of de cron überhaupt aanstaat: dat
+  # scheelt de lezer een zoektocht.
+  if grep -qE '^[[:space:]]+- cron:' "$wf"; then
+    ops_open "B9b driftdetectie Productie — cron staat AAN maar er is nog geen geslaagde nachtrun (open sinds ${sinds}, ${dagen}) — eigenaar: ${eigenaar}"
+  else
+    ops_open "B9b driftdetectie Productie — cron UIT, inrichting open sinds ${sinds} (${dagen}) — eigenaar: ${eigenaar}; zie DRIFT_INRICHTING_OPEN in $wf"
+  fi
 }
 check_drift_inrichting
 
