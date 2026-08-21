@@ -155,4 +155,13 @@ export const scenarios = [
       if (error) throw new Error(`preseed rate_limit_events: ${error.message}`);
     },
   },
+
+  // ── W3-proefroutes — baselines op ONGEWIJZIGDE code (issue #___) ────────────
+  //  Vastgelegd vóór enige migratie, zodat de karakterisering iets bewijst.
+  //  aqlab/assurance = de enige W3-route met host-guard (spec.hostGuard-pad);
+  //  dossiers = de tweede, uniforme leesroute.
+  { slug: "w3.aqlab-assurance.get.anon", method: "GET", path: "/api/aqlab/assurance", rol: "anon", verwacht: "json" },
+  { slug: "w3.aqlab-assurance.get.bestuurder", method: "GET", path: "/api/aqlab/assurance", rol: "bestuurder", verwacht: "json" },
+  { slug: "w3.dossiers.get.anon", method: "GET", path: "/api/dossiers", rol: "anon", verwacht: "json" },
+  { slug: "w3.dossiers.get.bestuurder", method: "GET", path: "/api/dossiers", rol: "bestuurder", verwacht: "json" },
 ];
