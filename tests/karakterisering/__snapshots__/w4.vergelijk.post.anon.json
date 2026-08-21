@@ -1,9 +1,9 @@
 {
   "body": {
-    "error": "Vergelijkmodus is niet actief."
+    "error": "Niet ingelogd"
   },
   "headers": {
     "content-type": "application/json"
   },
-  "status": 404
+  "status": 401
 }

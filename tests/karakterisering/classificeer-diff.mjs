@@ -212,7 +212,39 @@ function classificeer({ verwijderd, toegevoegd }) {
         )
       : null;
 
-  // 1. Gesanctioneerde verwijderingen wegstrepen (preamble + structuur + comment).
+  // VOLGORDE (W4): eerst PAREN sluiten, dan pas losse regels wegstrepen.
+  //
+  //  Andersom eet een verwijderpatroon soms de linkerhelft op van een paar dat
+  //  het niet bedoelde. `.eq("id", user.id)` staat in de verwijderlijst omdat het
+  //  bij de profielen-select hoort die verdwijnt — maar in `/api/profiel` BLIJFT
+  //  die select (tien kolommen, handwerk) en verandert alleen het token. De
+  //  verwijderde regel werd dan weggestreept en de toegevoegde bleef als
+  //  onverklaard achter. Idem voor `gebruikerId:` in de classificatie-routes, waar
+  //  het geen host-guard-argument is maar een gewone parameter.
+  //
+  //  Paren sluiten is strenger, niet losser: een paar valt alleen weg als de
+  //  verwijderde regel NA substitutie exact de toegevoegde regel is. Een verkeerd
+  //  veld (`ctx.fondsId` waar `ctx.gebruikerId` hoort) sluit dus geen paar.
+
+  // 1. Token-substitutie: een verwijderde body-regel die na substitutie exact een
+  //    toegevoegde regel is, is een gesanctioneerde wijziging.
+  for (let i = rem.length - 1; i >= 0; i--) {
+    const s = substitueer(rem[i], eigenVars);
+    const j = add.indexOf(s);
+    if (j >= 0) {
+      rem.splice(i, 1);
+      add.splice(j, 1);
+    }
+  }
+  // 2. Verplaatste (identieke) regels wegstrepen.
+  for (let i = rem.length - 1; i >= 0; i--) {
+    const j = add.indexOf(rem[i]);
+    if (j >= 0) {
+      rem.splice(i, 1);
+      add.splice(j, 1);
+    }
+  }
+  // 3. Gesanctioneerde verwijderingen wegstrepen (preamble + structuur + comment).
   rem = rem.filter(
     (l) =>
       !(
@@ -222,28 +254,9 @@ function classificeer({ verwijderd, toegevoegd }) {
         (castAlias && castAlias.test(l))
       )
   );
-  // 2. Gesanctioneerde toevoegingen wegstrepen (import + signatuur + aliassen +
+  // 4. Gesanctioneerde toevoegingen wegstrepen (import + signatuur + aliassen +
   //    de wrapper-sluiter `});` en andere structurele haakjes — geen semantiek).
   add = add.filter((l) => !(matcht(TOEGESTAAN_TOEGEVOEGD, l) || matcht(STRUCTUUR, l)));
-
-  // 3. Token-substitutie: een verwijderde body-regel die na substitutie exact
-  //    een toegevoegde regel is, is een gesanctioneerde wijziging.
-  for (let i = rem.length - 1; i >= 0; i--) {
-    const s = substitueer(rem[i], eigenVars);
-    const j = add.indexOf(s);
-    if (j >= 0) {
-      rem.splice(i, 1);
-      add.splice(j, 1);
-    }
-  }
-  // 4. Verplaatste (identieke) regels wegstrepen.
-  for (let i = rem.length - 1; i >= 0; i--) {
-    const j = add.indexOf(rem[i]);
-    if (j >= 0) {
-      rem.splice(i, 1);
-      add.splice(j, 1);
-    }
-  }
 
   const conform = rem.length === 0 && add.length === 0;
   return {

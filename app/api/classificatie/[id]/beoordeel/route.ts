@@ -11,7 +11,7 @@
 // ============================================================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { requireCapability } from "@/core/lib/capabilities";
 import {
   logClassificatieKoppeling,
@@ -22,19 +22,12 @@ export const dynamic = "force-dynamic";
 
 const GELDIGE_ACTIES = ["bevestigen", "afwijzen"] as const;
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const POST = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+    const { id } = params as { id: string };
+    const supabase = ctx.supabase;
 
-    if (!(await requireCapability(user.id, "classification.review"))) {
+    if (!(await requireCapability(ctx.gebruikerId, "classification.review"))) {
       return NextResponse.json(
         { error: "Geen rechten om classificaties te beoordelen (classification.review)" },
         { status: 403 }
@@ -74,11 +67,6 @@ export async function POST(
       .select("titel, fonds_id, procesinstantie_id")
       .eq("id", voorstel.document_id)
       .maybeSingle();
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam")
-      .eq("id", user.id)
-      .maybeSingle();
 
     const nu = new Date().toISOString();
 
@@ -86,7 +74,7 @@ export async function POST(
     if (body.actie === "afwijzen") {
       const { error: vErr } = await supabase
         .from("classificatie_voorstellen")
-        .update({ status: "afgewezen", beoordeeld_door: user.id })
+        .update({ status: "afgewezen", beoordeeld_door: ctx.gebruikerId })
         .eq("id", id);
       if (vErr) {
         console.error("Voorstel afwijzen fout:", vErr);
@@ -96,8 +84,8 @@ export async function POST(
         documentId: voorstel.document_id,
         documentTitel: doc?.titel ?? null,
         fondsId: voorstel.fonds_id,
-        gebruikerId: user.id,
-        gebruikerNaam: profiel?.naam ?? null,
+        gebruikerId: ctx.gebruikerId,
+        gebruikerNaam: ctx.naam ?? null,
         veldNaam: "classificatie_status",
         oudeWaarde: "open",
         nieuweWaarde: "afgewezen",
@@ -141,7 +129,7 @@ export async function POST(
 
     const { error: vErr } = await supabase
       .from("classificatie_voorstellen")
-      .update({ status: "bevestigd", beoordeeld_door: user.id, toegepast_op: nu })
+      .update({ status: "bevestigd", beoordeeld_door: ctx.gebruikerId, toegepast_op: nu })
       .eq("id", id);
     if (vErr) {
       console.error("Voorstel bevestigen fout:", vErr);
@@ -152,8 +140,8 @@ export async function POST(
       documentId: voorstel.document_id,
       documentTitel: doc?.titel ?? null,
       fondsId: voorstel.fonds_id,
-      gebruikerId: user.id,
-      gebruikerNaam: profiel?.naam ?? null,
+      gebruikerId: ctx.gebruikerId,
+      gebruikerNaam: ctx.naam ?? null,
       veldNaam: "procesinstantie_id",
       oudeWaarde: null,
       nieuweWaarde: voorstel.voorgestelde_procesinstantie_id,
@@ -176,4 +164,4 @@ export async function POST(
     console.error("Fout in POST /api/classificatie/[id]/beoordeel:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

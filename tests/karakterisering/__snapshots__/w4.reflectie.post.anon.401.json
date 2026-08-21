@@ -1,9 +1,9 @@
 {
   "body": {
-    "error": "Ongeldig gesprek-id"
+    "error": "Niet ingelogd"
   },
   "headers": {
     "content-type": "application/json"
   },
-  "status": 400
+  "status": 401
 }

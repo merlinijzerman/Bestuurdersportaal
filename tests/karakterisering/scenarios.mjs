@@ -1331,19 +1331,20 @@ export const scenarios = [
   { slug: "w4.organisatieprofiel.put.bestuurder.403", method: "PUT", path: "/api/organisatieprofiel", rol: "bestuurder", body: LEEG, verwacht: "json" },
 
   // ── reflectie/transitie ───────────────────────────────────────────────────
-  //  Idem: de GET valideert `gesprek_id` VOOR de sessiecontrole, dus een anonieme
-  //  aanvraag zonder geldig id krijgt 400 en geen 401. Ook dat verschuift.
-  { slug: "w4.reflectie.get.anon.400-id", method: "GET", path: "/api/reflectie/transitie", rol: "anon", verwacht: "json" },
-  { slug: "w4.reflectie.post.anon.400-id", method: "POST", path: "/api/reflectie/transitie", rol: "anon", body: LEEG, verwacht: "json" },
+  //  §1a — GESANCTIONEERDE WIJZIGING. De GET valideerde `gesprek_id` VOOR de
+  //  sessiecontrole: een anonieme aanvraag zonder geldig id kreeg
+  //  400 "Ongeldig gesprek-id". Nu 401 "Niet ingelogd". De baseline met de 400
+  //  staat in de commit hiervóór; dit snapshot is bijgewerkt MET motivering.
+  { slug: "w4.reflectie.get.anon.401", method: "GET", path: "/api/reflectie/transitie", rol: "anon", verwacht: "json" },
+  { slug: "w4.reflectie.post.anon.401", method: "POST", path: "/api/reflectie/transitie", rol: "anon", body: LEEG, verwacht: "json" },
   { slug: "w4.reflectie.post.bestuurder.400", method: "POST", path: "/api/reflectie/transitie", rol: "bestuurder", body: LEEG, verwacht: "json" },
 
   // ── vergelijk — TELLER + HOST-GUARD tegelijk ──────────────────────────────
-  //  LET OP: de modulevlag-check ("Vergelijkmodus is niet actief.") staat VOOR de
-  //  sessiecontrole. Zolang de module uitstaat geven alle vier deze scenario's
-  //  404 en wordt het auth-pad niet eens bereikt. Na de migratie draait de
-  //  wrapper auth eerst, dus de anonieme variant wordt 401. Dat is dezelfde
-  //  gesanctioneerde wijziging als bij `documents/upload` (§1a) en hij komt straks
-  //  als rode snapshot naar boven — daarvoor staan ze hier op ONGEWIJZIGDE code.
+  //  §1a — GESANCTIONEERDE WIJZIGING. De modulevlag-check ("Vergelijkmodus is
+  //  niet actief.") stond VOOR de sessiecontrole, dus een anonieme beller kreeg
+  //  404 en leerde daarmee of de module aanstond. Nu 401. De drie ingelogde
+  //  varianten blijven 404: die bereiken de modulecheck nog steeds.
+  //  Baseline met de 404 staat in de commit hiervóór.
   { slug: "w4.vergelijk.post.anon", method: "POST", path: "/api/vergelijk", rol: "anon", body: LEEG, verwacht: "json" },
   {
     slug: "w4.vergelijk.post.bestuurder.400-mode",
