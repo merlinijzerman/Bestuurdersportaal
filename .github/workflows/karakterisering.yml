@@ -32,12 +32,22 @@ name: karakterisering
 #             vers zet valt pas op bij de tweede ronde. Eén groene run zegt daar
 #             niets over.
 #
-#  BESLUIT: dit is een MAATREGEL VOOR DE DUUR VAN DEPLOY 2, niet permanent. De
-#  job wordt er ruwweg drie keer zo lang van, op elke push en elke PR. Zodra W5
-#  klaar is en de muterende scenario's stabiel zijn gebleken, mag dit terug naar
-#  1× hier, met een 3×-ronde in `nightly-fidelity`. Wie dat terugdraait: haal de
-#  lus weg en zet er een verwijzing naar dit besluit voor in de plaats — niet
+#  BESLUIT: bedoeld als maatregel VOOR DE DUUR VAN DEPLOY 2. Zodra W5 klaar is
+#  en de muterende scenario's stabiel zijn gebleken, mág dit terug naar 1× hier
+#  met een 3×-ronde in `nightly-fidelity`. Wie dat terugdraait: haal de lus weg
+#  en zet er een verwijzing naar dit besluit voor in de plaats — niet
 #  stilzwijgend, want dan verdwijnt de herhaalbaarheidscontrole zonder spoor.
+#
+#  Maar weeg het dan tegen de GEMETEN kosten, niet tegen de aanname. Bij 131
+#  scenario's (21-08-2026, run op deze branch):
+#
+#      stack boot   69s  |  next build   75s  |  npm ci   16s
+#      verify 3×    27s  (was ~13s bij 1×)    |  job totaal 3m42s
+#
+#  De derde ronde kost dus ~14s op een job van bijna vier minuten — circa 6%,
+#  geen factor 3. De job wordt gedomineerd door de Supabase-stack en de
+#  Next-build, niet door de suite. Groeit het aantal scenario's sterk, meet dan
+#  opnieuw; met deze verhouding is terugdraaien nauwelijks winst.
 #
 #  Nooit tegen productie: uitsluitend de wegwerp-CLI-DB; de seed is idempotent.
 # ============================================================================
