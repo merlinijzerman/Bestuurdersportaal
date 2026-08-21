@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Ongeldige aanvraag (verwacht JSON)."
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 400
+}

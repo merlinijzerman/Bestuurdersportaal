@@ -7,6 +7,8 @@
 //    path      pad onder de app-host
 //    rol       'anon' of een van de vier rollen (bepaalt de sessiecookie)
 //    body      request-body (JSON) — optioneel
+//    rawBody   ruwe request-body zonder JSON.stringify — optioneel; voor
+//              scenario's die juist een ONGELDIGE body moeten sturen
 //    verwacht  'json' | 'bytes' | 'redirect' — bepaalt de snapshotvorm
 //    headers   extra request-headers — optioneel
 //    preseed   async (ctx) => {}  — DB-voorbewerking vóór het request
@@ -932,6 +934,21 @@ export const scenarios = [
     preseed: async ({ admin }) => wisLimiet(admin, "backfill"),
   },
   { slug: "w4.documents-reindex.post.anon", method: "POST", path: "/api/documents/reindex-backfill", rol: "anon", body: LEEG, verwacht: "json" },
+  // ── documents/upload — HANDWERK. De POST parseert vandaag de JSON VOOR de
+  //  sessiecontrole, dus een anonieme aanvraag met kapotte JSON krijgt 400 en
+  //  geen 401. De wrapper draait auth per definitie eerst. Dit scenario legt dat
+  //  vast op de ONGEWIJZIGDE code, zodat het verschil straks als rode snapshot
+  //  naar boven komt in plaats van ongemerkt door te glippen.
+  { slug: "w4.documents-upload.post.anon.kapotte-json", method: "POST", path: "/api/documents/upload", rol: "anon", rawBody: "{dit is geen json", headers: { "content-type": "application/json" }, verwacht: "json" },
+  { slug: "w4.documents-upload.post.anon", method: "POST", path: "/api/documents/upload", rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.documents-upload.get.anon", method: "GET", path: "/api/documents/upload", rol: "anon", verwacht: "json" },
+  { slug: "w4.documents-upload.get.bestuurder", method: "GET", path: "/api/documents/upload", rol: "bestuurder", verwacht: "json" },
+  {
+    slug: "w4.documents-upload.post.bestuurder.400-bestandsnaam",
+    method: "POST", path: "/api/documents/upload", rol: "bestuurder",
+    body: { mode: "init", bestandsnaam: "", grootte: 10 }, verwacht: "json",
+    preseed: async ({ admin }) => wisLimiet(admin, "upload"),
+  },
   {
     slug: "w4.documents-reindex.post.bestuurder.403",
     method: "POST", path: "/api/documents/reindex-backfill", rol: "bestuurder",

@@ -34,10 +34,19 @@ if (!modus) {
 }
 
 // Ruw HTTP-verzoek zonder redirects te volgen (nodig voor de 307-redirectcase).
-function doeVerzoek({ method, path, cookie, body, headers }) {
+// `rawBody` stuurt de bytes ONGEWIJZIGD mee, zonder JSON.stringify. Nodig voor
+// scenario's die juist een kapotte body moeten sturen: `documents/upload`
+// parseert de JSON vandaag vóór de sessiecontrole, en dat verschil is alleen te
+// meten met een body die niet valide is (W4, #96).
+function doeVerzoek({ method, path, cookie, body, rawBody, headers }) {
   return new Promise((resolve, reject) => {
     const url = new URL(path, ENV.appBaseUrl);
-    const data = body === undefined ? null : Buffer.from(JSON.stringify(body));
+    const data =
+      rawBody !== undefined
+        ? Buffer.from(rawBody)
+        : body === undefined
+          ? null
+          : Buffer.from(JSON.stringify(body));
     const h = { ...(headers || {}) };
     if (cookie) h["cookie"] = cookie;
     if (data && !h["content-type"]) h["content-type"] = "application/json";
@@ -93,6 +102,7 @@ async function bouwSnapshot(scenario, ctx) {
     path: scenario.path,
     cookie,
     body: scenario.body,
+    rawBody: scenario.rawBody,
     headers: scenario.headers,
   });
   return {

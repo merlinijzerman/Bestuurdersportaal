@@ -1,0 +1,10 @@
+{
+  "body": {
+    "error": "Bestandstype niet ondersteund (alleen PDF, Word, PowerPoint of Excel).",
+    "foutcode": "type_niet_ondersteund"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 400
+}
