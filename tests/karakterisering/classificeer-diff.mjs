@@ -62,7 +62,13 @@ const TOEGESTAAN_VERWIJDERD = [
   //   export async function GET(          _req: NextRequest,
   //   { params }: { params: Promise<{ id: string }> }          ) {
   /^export async function (GET|POST|PATCH|PUT|DELETE|HEAD|OPTIONS)\s*\(/,
-  /^_?\w+: NextRequest,?$/,
+  // BESLUIT (W5, #101): ook de kale `Request`. `aqlab/assurance/audit/[exportId]`
+  // typeerde zijn eerste parameter als `_req: Request` in plaats van
+  // `_req: NextRequest` — dezelfde gesanctioneerde verwijdering van een oude
+  // handler-signatuur, maar het patroon kende alleen de Next-variant en liet de
+  // regel als onverklaard achter. Dit verbreedt WELKE typenaam telt, niet WELKE
+  // regels: het blijft één parameterdeclaratie in een signatuur.
+  /^_?\w+: (NextRequest|Request),?$/,
   /^\{ params \}: \{ params: Promise<\{[^}]*\}> \},?$/,
   /^const supabase = await createServerSupabase\(\);$/,
   // getUser — één regel of gesplitst.

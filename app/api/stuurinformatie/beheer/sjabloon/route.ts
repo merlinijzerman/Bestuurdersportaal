@@ -15,15 +15,14 @@ import { sjabloonAoa, SJABLOON_WERKBLAD } from "@/core/lib/stuurinfo-sjabloon";
 
 export const GET = withFondsRoute({}, async (ctx) => {
   try {
-    const fondsId = ctx.fondsId;
-    if (!fondsId)
+    if (!ctx.fondsId)
       return NextResponse.json({ error: "Geen fonds" }, { status: 400 });
 
     const magBeheren = await requireCapability(ctx.gebruikerId, "stuurinformatie.manage");
     if (!magBeheren)
       return NextResponse.json({ error: "Onvoldoende rechten" }, { status: 403 });
 
-    const weigering = await weigerAlsModuleUit(fondsId, "stuurinformatie");
+    const weigering = await weigerAlsModuleUit(ctx.fondsId, "stuurinformatie");
     if (weigering) return weigering;
 
     const werkboek = XLSX.utils.book_new();
