@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Vergelijkmodus is niet actief."
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 404
+}

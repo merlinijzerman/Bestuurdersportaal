@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Onbekende actie. Verwacht: 'deactiveren' of 'reactiveren'."
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 400
+}

@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Heropenen vereist een motivering"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 400
+}

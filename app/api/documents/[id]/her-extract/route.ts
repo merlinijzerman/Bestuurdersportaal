@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
 import { rateLimited } from "@/core/lib/api-errors";
 import { ONDERSTEUNDE_TYPES, type Bestandstype } from "@/core/lib/document-extractie";
@@ -25,19 +25,9 @@ import { ONDERSTEUNDE_TYPES, type Bestandstype } from "@/core/lib/document-extra
 // generieke documenten niet muteren (read-only) — dat pad loopt via de platform-
 // curatie. De autorisatie- en validatiepoorten zijn bewust identiek gebleven aan
 // de vorige (synchrone) versie; alleen het zware werk is naar de worker verhuisd.
-export async function POST(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const { id } = await params;
-  const supabase = await createServerSupabase();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-  }
+export const POST = withFondsRoute({}, async (ctx, _req: NextRequest, params) => {
+  const { id } = params as { id: string };
+    const supabase = ctx.supabase;
 
   // M-06: her-indexeren laat de worker externe modelcalls doen; fail-closed
   // rate-limit (dezelfde pot als opnieuw-verwerken).
@@ -46,14 +36,8 @@ export async function POST(
   });
   if (!limiet.toegestaan) return rateLimited("documents.her-extract", limiet.resetAt);
 
-  const { data: profiel } = await supabase
-    .from("profielen")
-    .select("rol")
-    .eq("id", user.id)
-    .single();
-
   const isVoorzitterOfBeheerder =
-    profiel?.rol === "voorzitter" || profiel?.rol === "beheerder";
+    ctx.rol === "voorzitter" || ctx.rol === "beheerder";
   if (!isVoorzitterOfBeheerder) {
     return NextResponse.json(
       { error: "Alleen voorzitter of beheerder mag een document her-indexeren." },
@@ -111,4 +95,4 @@ export async function POST(
     bericht:
       "Het document wordt opnieuw geïndexeerd; het is binnen enkele minuten weer doorzoekbaar.",
   });
-}
+});

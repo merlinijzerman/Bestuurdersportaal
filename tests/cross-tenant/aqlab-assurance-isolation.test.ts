@@ -22,6 +22,11 @@ import {
   type AssuranceMeetwaarden,
 } from '../../core/lib/aqlab/assurance-core';
 import type { ModuleKey } from '../../core/lib/module-registry';
+import {
+  redenGeenGebruikerscontrole,
+  redenGeenHostGuard,
+  redenGeenRlsClient,
+} from './route-wrapper-bewust';
 
 const hier = dirname(fileURLToPath(import.meta.url));
 const lees = (...p: string[]) => readFileSync(join(hier, '..', '..', ...p), 'utf8');
@@ -67,14 +72,27 @@ test('AQL-4 — de (dashboard)-assurance-view haalt de service-role NIET binnen'
   assert.ok(page.includes('/api/aqlab/assurance'), 'assurance-view fetcht niet het gecureerde endpoint');
 });
 
+// Wrapper-bewust (W3, issue #94): het assurance-endpoint loopt sinds de codemod
+// via `withFondsRoute({ hostGuard: true })`. De drie eisen — anon+RLS, sessie-
+// controle en host↔fonds — zijn dan niet weg maar verhuisd naar de wrapper. De
+// helpers kijken per geëxporteerde handler waar de eis is belegd en verankeren de
+// delegatie met `toetsWrapperFundament()`: alleen een wrapper die feitelijk
+// createServerSupabase + auth.getUser doet, de service-role níét aanraakt en
+// onder `hostGuard` beoordeelRouteHostToegang met 403 afdwingt, telt mee. Een
+// route die de wrapper zónder `hostGuard: true` gebruikt, valt hier dus rood uit.
 test('AQL-4 — het assurance-endpoint authenticeert (anon+RLS) én dwingt host↔fonds af', () => {
   const route = lees('app', 'api', 'aqlab', 'assurance', 'route.ts');
-  assert.ok(route.includes('createServerSupabase'), 'endpoint mist anon+RLS-auth');
-  assert.ok(route.includes('auth.getUser'), 'endpoint mist getUser');
-  assert.ok(route.includes('beoordeelRouteHostToegang'), 'endpoint mist host↔fonds-enforce');
+  assert.equal(redenGeenRlsClient(route), null, 'endpoint mist anon+RLS-auth');
+  assert.equal(redenGeenGebruikerscontrole(route), null, 'endpoint mist getUser');
+  assert.equal(redenGeenHostGuard(route), null, 'endpoint mist host↔fonds-enforce');
+  // Het gecureerde endpoint mag de service-role nooit binnenhalen (AQL-4-kern).
+  assert.ok(
+    !route.includes('createServiceSupabase') && !route.includes('SUPABASE_SERVICE_ROLE_KEY'),
+    'endpoint raakt de service-role — het assurance-leespad is deny-by-default'
+  );
   const dl = lees('app', 'api', 'aqlab', 'assurance', 'audit', '[exportId]', 'route.ts');
   assert.ok(dl.includes('magFondsAuditExportZien'), 'download mist scope-autorisatie');
-  assert.ok(dl.includes('beoordeelRouteHostToegang'), 'download mist host↔fonds-enforce');
+  assert.equal(redenGeenHostGuard(dl), null, 'download mist host↔fonds-enforce');
 });
 
 test('AQL-4 — fonds-download alleen voor VRIJGEGEVEN rapporten (niet geblokkeerd/tussenstatus)', () => {

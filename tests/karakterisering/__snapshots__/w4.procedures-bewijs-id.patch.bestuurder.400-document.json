@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "document_id is verplicht"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 400
+}

@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Verzoek mist een geldige Idempotency-Key. Vernieuw de pagina en probeer het opnieuw."
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 400
+}

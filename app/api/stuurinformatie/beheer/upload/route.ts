@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { requireCapability } from "@/core/lib/capabilities";
 import { weigerAlsModuleUit } from "@/core/lib/module-guard";
 import { errorResponse, badRequest, rateLimited } from "@/core/lib/api-errors";
@@ -35,27 +35,18 @@ import {
 const MAX_BESTAND_BYTES = 1_000_000;
 const MAX_RIJEN = 200;
 
-export async function POST(req: NextRequest) {
+export const POST = withFondsRoute({}, async (ctx, req: NextRequest) => {
   try {
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+    const supabase = ctx.supabase;
 
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("fonds_id")
-      .eq("id", user.id)
-      .single();
-    if (!profiel?.fonds_id)
+    if (!ctx.fondsId)
       return NextResponse.json({ error: "Geen fonds" }, { status: 400 });
 
-    const magBeheren = await requireCapability(user.id, "stuurinformatie.manage");
+    const magBeheren = await requireCapability(ctx.gebruikerId, "stuurinformatie.manage");
     if (!magBeheren)
       return NextResponse.json({ error: "Onvoldoende rechten" }, { status: 403 });
 
-    const weigering = await weigerAlsModuleUit(profiel.fonds_id, "stuurinformatie");
+    const weigering = await weigerAlsModuleUit(ctx.fondsId, "stuurinformatie");
     if (weigering) return weigering;
 
     const limiet = await controleerLimiet(supabase, LIMIETEN.stuurinfo_upload);
@@ -130,4 +121,4 @@ export async function POST(req: NextRequest) {
       userMessage: "Verwerken van het bestand is mislukt. Controleer het sjabloon en probeer opnieuw.",
     });
   }
-}
+});

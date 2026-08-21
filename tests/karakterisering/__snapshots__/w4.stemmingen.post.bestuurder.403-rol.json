@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Alleen voorzitter, beheerder of de aanmaker van het agendapunt mag een stemronde starten"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 403
+}

@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Het afschrift bevat het auditdossier met stemgedrag per bestuurslid en is daarom niet beschikbaar voor het bestuursbureau."
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 403
+}

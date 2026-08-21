@@ -15,7 +15,7 @@
 // ============================================================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
 import { rateLimited } from "@/core/lib/api-errors";
 import { classificeerDocument, type ClassificatieInvoer } from "@/core/lib/classificatie";
@@ -32,13 +32,9 @@ const BATCH = 25;
 // Aantal chunks dat we per document bekijken voor de inhoudsmatch (S4).
 const CHUNK_STEEKPROEF = 12;
 
-export async function POST(_req: NextRequest) {
+export const POST = withFondsRoute({}, async (ctx, _req: NextRequest) => {
   try {
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+    const supabase = ctx.supabase;
 
     // M-06 (review 2026-07-30): deze route doet per aanroep externe
     // modelcalls en had geen enkele limiet — onbeperkt herhaalbaar door een
@@ -48,21 +44,19 @@ export async function POST(_req: NextRequest) {
     const limiet = await controleerLimiet(supabase, LIMIETEN.backfill, { failClosed: true });
     if (!limiet.toegestaan) return rateLimited("classificatie.backfill", limiet.resetAt);
 
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("rol, naam, fonds_id")
-      .eq("id", user.id)
-      .single();
-    if (!profiel || !["voorzitter", "beheerder"].includes(profiel.rol)) {
+    // BESLUIT (W4): `!profiel ||` valt weg en `ctx.rol` krijgt `?? ""`.
+    // Uitkomst-identiek; zelfde afweging als bij de documents-backfills en de
+    // vijf procedures-rolgates.
+    if (!["voorzitter", "beheerder"].includes(ctx.rol ?? "")) {
       return NextResponse.json({ error: "Onvoldoende rechten" }, { status: 403 });
     }
-    if (!profiel.fonds_id) {
+    if (!ctx.fondsId) {
       return NextResponse.json(
         { error: "Gebruiker zonder fonds kan niet classificeren" },
         { status: 400 }
       );
     }
-    const fondsId = profiel.fonds_id as string;
+    const fondsId = ctx.fondsId as string;
 
     const kandidaten = await haalKandidaten(supabase, fondsId);
 
@@ -211,8 +205,8 @@ export async function POST(_req: NextRequest) {
           documentId: doc.id as string,
           documentTitel: (doc.titel as string) ?? null,
           fondsId,
-          gebruikerId: user.id,
-          gebruikerNaam: (profiel.naam as string | null) ?? null,
+          gebruikerId: ctx.gebruikerId,
+          gebruikerNaam: (ctx.naam as string | null) ?? null,
           veldNaam: "procesinstantie_id",
           oudeWaarde: null,
           nieuweWaarde: voorstel.procesinstantie_id,
@@ -271,4 +265,4 @@ export async function POST(_req: NextRequest) {
     console.error("Classificatie-backfill fout:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

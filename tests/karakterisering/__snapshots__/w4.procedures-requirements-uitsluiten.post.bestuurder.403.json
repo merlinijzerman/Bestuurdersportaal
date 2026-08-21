@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Alleen voorzitter of beheerder kan een vereiste uitsluiten"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 403
+}

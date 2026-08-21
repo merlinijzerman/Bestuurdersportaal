@@ -1,0 +1,152 @@
+name: karakterisering
+
+# ============================================================================
+#  W1 — Karakteriseringsharnas (issue #88, EPIC W / deploy 2 "de naad").
+# ----------------------------------------------------------------------------
+#  Draait de snapshot-suite (`tests/karakterisering/run.mjs --verify`) tegen een
+#  EPHEMERE Supabase-CLI-stack + `next start`. Elk byte-verschil t.o.v. de
+#  gecommitte snapshots → non-zero exit → deze job faalt. Zo wordt de deploy-2-
+#  codemod ("nul verschil") een test i.p.v. een bewering.
+#
+#  GATE-STATUS STAAT NIET IN DIT BESTAND (W4, #96). Of deze job blokkeert is
+#  uitsluitend te lezen uit de branch-protection-regel op `main`:
+#      gh api repos/:owner/:repo/branches/main/protection \
+#        --jq '.required_status_checks.contexts[]'
+#  Een comment kan dat niet weten, en op 21-08-2026 hadden drie van de vier
+#  gate-uitspraken in deze map het mis — alle drie onderschattend. Zet die
+#  bewering hier dus niet terug; corrigeren lost één geval op, weglaten lost de
+#  categorie op.
+#
+#  Wat WEL hier hoort: de job-`name` hieronder is de gepinde check-naam.
+#  Hernoem hem niet zonder de branch-protection-regel mee te verzetten — dan
+#  wordt de gate stil losgekoppeld én blijft elke PR hangen op een check die
+#  nooit meldt.
+#
+#  DRIE VERIFY-RONDES, TIJDELIJK (W4 §4, #96). `--verify` draait hieronder 3×
+#  achter elkaar in plaats van 1×. Die twee meten verschillende dingen:
+#
+#    ronde 1  bewijst dat de snapshots niet op opgebouwde staat leunen — de DB
+#             is per run vers, dus wat hier slaagt is reproduceerbaar vanaf nul;
+#    ronde 2+ bewijzen dat een scenario HERHAALBAAR is. Deploy 2 voegt ~200
+#             scenario's toe die echt muteren; een preseed die de fixture niet
+#             vers zet valt pas op bij de tweede ronde. Eén groene run zegt daar
+#             niets over.
+#
+#  BESLUIT: bedoeld als maatregel VOOR DE DUUR VAN DEPLOY 2. Zodra W5 klaar is
+#  en de muterende scenario's stabiel zijn gebleken, mág dit terug naar 1× hier
+#  met een 3×-ronde in `nightly-fidelity`. Wie dat terugdraait: haal de lus weg
+#  en zet er een verwijzing naar dit besluit voor in de plaats — niet
+#  stilzwijgend, want dan verdwijnt de herhaalbaarheidscontrole zonder spoor.
+#
+#  Maar weeg het dan tegen de GEMETEN kosten, niet tegen de aanname. Bij 131
+#  scenario's (21-08-2026, run op deze branch):
+#
+#      stack boot   69s  |  next build   75s  |  npm ci   16s
+#      verify 3×    27s  (was ~13s bij 1×)    |  job totaal 3m42s
+#
+#  De derde ronde kost dus ~14s op een job van bijna vier minuten — circa 6%,
+#  geen factor 3. De job wordt gedomineerd door de Supabase-stack en de
+#  Next-build, niet door de suite. Groeit het aantal scenario's sterk, meet dan
+#  opnieuw; met deze verhouding is terugdraaien nauwelijks winst.
+#
+#  Nooit tegen productie: uitsluitend de wegwerp-CLI-DB; de seed is idempotent.
+# ============================================================================
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: karakterisering-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  karakterisering:
+    name: Karakterisering (snapshot-verschil = rood)
+    runs-on: ubuntu-latest
+    env:
+      # App-secrets die het gekarakteriseerde pad niet raken: dummies zodat
+      # `next build` + boot slagen. De echte LLM/HMAC-routes staan buiten de
+      # selectie (SSE/LLM → W5).
+      AUDIT_HMAC_SLEUTEL: "0123456789abcdef0123456789abcdef"
+      AUDIT_HMAC_SLEUTEL_VERSIE: "v1"
+      ANTHROPIC_API_KEY: "sk-ant-dummy-not-used"
+      AI_MODEL: "claude-3-5-haiku-latest"
+      NEXT_PUBLIC_FONDS_NAAM: "Testfonds W1"
+      DEPLOY_TARGET: "app"
+      APP_BASE_URL: "http://127.0.0.1:3000"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Node opzetten
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Dependencies installeren
+        run: npm ci
+
+      # Pin op dezelfde CLI als de rls-cross-tenant-baseline (db.major_version=17).
+      - name: Supabase CLI opzetten
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.114.0
+
+      - name: Ephemere Supabase-stack starten (Postgres + auth + storage)
+        run: bash scripts/start-ephemeral-supabase.sh
+
+      # De CLI-demo-keys van deze verse stack; NEXT_PUBLIC_* moeten vóór de build
+      # in de omgeving staan (worden geïnlined).
+      - name: Stack-keys in de omgeving zetten
+        run: |
+          eval "$(supabase status -o env)"
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=$API_URL"
+            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON_KEY"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY"
+          } >> "$GITHUB_ENV"
+
+      - name: Schema opbouwen (baseline + post-cutoff-migraties)
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+        run: bash scripts/testdb-apply-migrations.sh
+
+      - name: App bouwen
+        run: npm run build
+
+      - name: App starten + snapshots 3x verifiëren
+        run: |
+          PORT=3000 npm run start &
+          SERVER=$!
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:3000/api/healthz/ping >/dev/null && ok=1 && break
+            sleep 1
+          done
+          if [ "${ok:-0}" != "1" ]; then
+            echo "FOUT: next start kwam niet op binnen 60s." >&2
+            kill "$SERVER" 2>/dev/null || true
+            exit 1
+          fi
+          # 3x achter elkaar — zie de BESLUIT-notitie in de kop. Ronde 1 dekt
+          # "geen opgebouwde staat", ronde 2 en 3 dekken herhaalbaarheid.
+          code=0
+          for ronde in 1 2 3; do
+            echo "::group::karakterisering --verify ronde $ronde/3"
+            if ! node tests/karakterisering/run.mjs --verify; then
+              echo "::endgroup::"
+              echo "FOUT: --verify rood in ronde $ronde van 3." >&2
+              code=1
+              break
+            fi
+            echo "::endgroup::"
+          done
+          kill "$SERVER" 2>/dev/null || true
+          exit $code
+
+      - name: Supabase-stack stoppen
+        if: always()
+        run: supabase stop || true

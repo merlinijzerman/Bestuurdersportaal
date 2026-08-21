@@ -1,22 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 
 // POST: maak een agendapunt aan in een bestaande vergadering en koppel
 // het aan deze procedure-stap. Vult titel/beschrijving uit de stap als
 // die niet expliciet meegegeven worden.
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string; stapId: string }> }
-) {
+export const POST = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id, stapId } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const { id, stapId } = params as { id: string; stapId: string };
+    const supabase = ctx.supabase;
 
     const body = (await req.json()) as {
       vergadering_id?: string;
@@ -99,17 +90,11 @@ export async function POST(
       );
     }
 
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam")
-      .eq("id", user.id)
-      .single();
-
     await supabase.from("procedure_log").insert({
       procedure_id: id,
       event_type: "agendapunt_gekoppeld",
-      actor_id: user.id,
-      actor_naam: profiel?.naam || null,
+      actor_id: ctx.gebruikerId,
+      actor_naam: ctx.naam || null,
       payload: {
         stap: stap.naam,
         agendapunt_id: agendapunt.id,
@@ -122,4 +107,4 @@ export async function POST(
     console.error("Fout in POST agendapunt-koppeling:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

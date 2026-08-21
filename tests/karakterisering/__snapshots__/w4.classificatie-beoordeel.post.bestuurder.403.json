@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Geen rechten om classificaties te beoordelen (classification.review)"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 403
+}

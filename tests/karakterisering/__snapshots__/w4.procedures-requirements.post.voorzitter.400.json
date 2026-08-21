@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "label is verplicht"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 400
+}

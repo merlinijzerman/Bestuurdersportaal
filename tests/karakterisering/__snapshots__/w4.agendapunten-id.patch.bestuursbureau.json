@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "U heeft geen recht om dit agendapunt te wijzigen"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 403
+}
