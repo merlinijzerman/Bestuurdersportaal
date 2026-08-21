@@ -1,0 +1,11 @@
+{
+  "body": {
+    "body_niet_gekarakteriseerd": true
+  },
+  "headers": {
+    "content-disposition": "attachment; filename=\"auditdossier_W5-001_actueel_<datum>.json\"",
+    "content-type": "application/json; charset=utf-8",
+    "x-content-type-options": "nosniff"
+  },
+  "status": 200
+}

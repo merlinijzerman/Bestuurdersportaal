@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
-import { beoordeelRouteHostToegang } from "@/core/lib/tenant-route-guard";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import {
   bepaalBestandsnaam,
   bepaalContentType,
@@ -12,39 +11,18 @@ import { heeftSchoonScanbewijs } from "@/core/lib/document-scan-poort";
 // Levert het originele bestand uitsluitend als download.
 // RLS op documenten zorgt al voor toegangscontrole; we voegen alleen het
 // inzage-logregeltje toe.
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const { id } = await params;
-  const supabase = await createServerSupabase();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-  }
-
-  // T1.3 — resolveer de sessie-fonds server-side en dwing host↔fonds af vóór de
-  // document-lookup/download (defense-in-depth náást RLS). `profiel` wordt hier
-  // ook hergebruikt voor de inzage-logging. Gedrag-neutraal zolang enforce uit.
-  const { data: profiel } = await supabase
-    .from("profielen")
-    .select("naam, fonds_id")
-    .eq("id", user.id)
-    .single();
-  const hostOordeel = await beoordeelRouteHostToegang({
-    sessieFondsId: profiel?.fonds_id ?? null,
-    gebruikerId: user.id,
-    label: "documents.bestand.GET",
-  });
-  if (!hostOordeel.toegestaan) {
-    return NextResponse.json(
-      { error: "Dit webadres hoort niet bij uw fonds." },
-      { status: 403 }
-    );
-  }
+// T1.3 — host↔fonds-afdwinging vóór de document-lookup/download
+// (defense-in-depth náást RLS) zit sinds W5 in de wrapper: `hostGuard: true`.
+// GEMETEN: de inline guard stond al direct ná het profiel en vóór élke andere
+// poort, dus de volgorde blijft dezelfde. De naam die het profiel hier ook
+// leverde voor de inzage-logging komt nu uit `ctx.naam`.
+//
+// LET OP: deze route heeft GEEN eigen try/catch. Een onafgevangen fout kwam vóór
+// W5 bij Next terecht en wordt nu 500 {"error":"Serverfout"} uit het vangnet van
+// de wrapper. Uniformering, maar wel een verschil — zie het BESLUIT in #101.
+export const GET = withFondsRoute({ hostGuard: true, label: "documents.bestand.GET" }, async (ctx, _req: NextRequest, params) => {
+  const { id } = params as { id: string };
+  const supabase = ctx.supabase;
 
   const { data: document, error: docError } = await supabase
     .from("documenten")
@@ -117,14 +95,14 @@ export async function GET(
   // Inzage loggen — non-blocking, maar de fout wordt WEL gelogd. Voorheen werd
   // de retourwaarde genegeerd terwijl het commentaar "fouten worden geprint"
   // beloofde: het inzagelogboek — de enige registratie van wie welk document
-  // inzag — kon dus gaten hebben zonder enig signaal. `profiel` is hierboven al
-  // opgehaald (naam + fonds_id) voor de host-afdwinging.
+  // inzag — kon dus gaten hebben zonder enig signaal. Naam en fonds komen sinds
+  // W5 uit `ctx`; de wrapper haalt hetzelfde profiel op.
   const { error: inzageError } = await supabase.from("document_inzage").insert({
     document_id: document.id,
     document_titel_snapshot: document.titel,
     fonds_id: document.fonds_id,
-    gebruiker_id: user.id,
-    gebruiker_naam: profiel?.naam ?? null,
+    gebruiker_id: ctx.gebruikerId,
+    gebruiker_naam: ctx.naam ?? null,
     actie: "inzage",
   });
   if (inzageError) {
@@ -173,4 +151,4 @@ export async function GET(
       "Cache-Control": "private, max-age=0, no-store",
     },
   });
-}
+});

@@ -1,0 +1,11 @@
+{
+  "body": {
+    "body_bytes": 6030
+  },
+  "headers": {
+    "content-disposition": "attachment; filename=\"Memo-W5.docx\"",
+    "content-type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "x-content-type-options": "nosniff"
+  },
+  "status": 200
+}
