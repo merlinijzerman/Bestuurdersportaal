@@ -118,6 +118,27 @@ async function zetAgendapunt(admin, users, id, extra = {}) {
   if (error) throw new Error(`preseed agendapunt ${id}: ${error.message}`);
 }
 
+/** Procedurestap op de geseede `procedure1`, plus opruimen van de kindrijen die
+ *  een POST eerder aanmaakte. Upsert-reset: `procedure_log` en
+ *  `procedure_afschriften` hangen append-only met CASCADE aan `procedures`. */
+async function zetProcedureStap(admin, extra = {}) {
+  const { error } = await admin.from("procedure_stappen").upsert(
+    {
+      id: FIX.procedureStap,
+      procedure_id: FIX.procedure1,
+      volgorde: 1,
+      naam: "W4 Stap",
+      status: "open",
+      heropend_op: null,
+      voltooid_op: null,
+      voltooid_door: null,
+      ...extra,
+    },
+    { onConflict: "id" }
+  );
+  if (error) throw new Error(`preseed procedureStap: ${error.message}`);
+}
+
 /** Het besluitobject waar het hele decisions-domein aan hangt. Upsert-reset,
  *  nooit delete: `governance_events` hangt er met RESTRICT aan en
  *  `decision_audit_snapshots` met CASCADE terwijl die tabel append-only is. Eén
@@ -1137,4 +1158,141 @@ export const scenarios = [
   // een rol die de gate sowieso niet zou halen.
   { slug: "w4.decisions-ai.patch.bestuurder.404", method: "PATCH", path: `/api/decisions/${FIX.decision1}/ai-interactions/${FIX.decisionKindOnbekend}`, rol: "bestuurder", body: { validatiestatus: "gevalideerd" }, verwacht: "json" },
   { slug: "w4.decisions-ai.patch.voorzitter.404", method: "PATCH", path: `/api/decisions/${FIX.decision1}/ai-interactions/${FIX.decisionKindOnbekend}`, rol: "voorzitter", body: { validatiestatus: "gevalideerd" }, verwacht: "json" },
+
+  // OBSERVATIE, over dit hele domein: in de meeste [id]-routes staat de
+  //  BODYVALIDATIE vóór de rol-gate en vóór de lookup. Een bestuurder die geen
+  //  rechten heeft krijgt daardoor eerst 400 "veld X is verplicht" en pas met een
+  //  geldige body de 403. Dat lekt geen data, maar het betekent wel dat de
+  //  slug-namen hier de gemeten volgorde volgen en niet de bedoelde gate.
+  //  Voor W7: validatie ná autorisatie is de gebruikelijke volgorde.
+
+  // ══ procedures ═════════════════════════════════════════════════════════════
+  //  Twintig routes. Drie dragen een INLINE host-guard (afschrift,
+  //  afschrift/concept, afschriften/[afschriftId]); onder TENANT_ENFORCE≠on is
+  //  die transparant, dus het harnas ziet de ordening niet — daarvoor is de
+  //  handmatige tegenproef uit §7.
+  //  Twee routes zijn AI-routes met een fail-closed teller (afschrift_concept,
+  //  besluit_concept); hun happy path zou een modelcall doen en is een BEWUSTE
+  //  LACUNE (§4). De teller wordt in de preseed gewist.
+
+  // ── procedures — POST ─────────────────────────────────────────────────────
+  { slug: "w4.procedures.post.anon", method: "POST", path: "/api/procedures", rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.procedures.post.bestuurder.400-template", method: "POST", path: "/api/procedures", rol: "bestuurder", body: LEEG, verwacht: "json" },
+  { slug: "w4.procedures.post.bestuurder.400-titel", method: "POST", path: "/api/procedures", rol: "bestuurder", body: { template_code: "algemeen" }, verwacht: "json" },
+
+  // ── procedures/[id] — PATCH ───────────────────────────────────────────────
+  { slug: "w4.procedures-id.patch.anon", method: "PATCH", path: `/api/procedures/${FIX.procedureOnbekend}`, rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.procedures-id.patch.bestuurder.400-motivering", method: "PATCH", path: `/api/procedures/${FIX.procedureOnbekend}`, rol: "bestuurder", body: { titel: "W4" }, verwacht: "json" },
+
+  // ── procedures/[id]/afschrift + concept + intrekken — host-guard-routes ───
+  { slug: "w4.procedures-afschrift.post.anon", method: "POST", path: `/api/procedures/${FIX.procedure1}/afschrift`, rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.procedures-afschrift.post.bestuursbureau.403", method: "POST", path: `/api/procedures/${FIX.procedure1}/afschrift`, rol: "bestuursbureau", body: LEEG, verwacht: "json" },
+  { slug: "w4.procedures-afschrift.post.bestuurder.404", method: "POST", path: `/api/procedures/${FIX.procedureOnbekend}/afschrift`, rol: "bestuurder", body: LEEG, verwacht: "json" },
+  { slug: "w4.procedures-afschrift-concept.post.anon", method: "POST", path: `/api/procedures/${FIX.procedure1}/afschrift/concept`, rol: "anon", body: LEEG, verwacht: "json" },
+  {
+    slug: "w4.procedures-afschrift-concept.post.bestuursbureau.403",
+    method: "POST", path: `/api/procedures/${FIX.procedure1}/afschrift/concept`, rol: "bestuursbureau",
+    body: LEEG, verwacht: "json",
+    preseed: async ({ admin }) => wisLimiet(admin, "afschrift_concept"),
+  },
+  { slug: "w4.procedures-afschrift-id.patch.anon", method: "PATCH", path: `/api/procedures/${FIX.procedure1}/afschriften/${FIX.afschriftOnbekend}`, rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.procedures-afschrift-id.patch.bestuurder.400-reden", method: "PATCH", path: `/api/procedures/${FIX.procedure1}/afschriften/${FIX.afschriftOnbekend}`, rol: "bestuurder", body: LEEG, verwacht: "json" },
+
+  // ── procedures/[id]/besluiten — POST ──────────────────────────────────────
+  { slug: "w4.procedures-besluiten.post.anon", method: "POST", path: `/api/procedures/${FIX.procedure1}/besluiten`, rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.procedures-besluiten.post.bestuurder.400", method: "POST", path: `/api/procedures/${FIX.procedure1}/besluiten`, rol: "bestuurder", body: LEEG, verwacht: "json" },
+
+  // ── procedures/[id]/bewijs — POST + PATCH/DELETE ──────────────────────────
+  { slug: "w4.procedures-bewijs.post.anon", method: "POST", path: `/api/procedures/${FIX.procedure1}/bewijs`, rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.procedures-bewijs.post.bestuurder.400-stap", method: "POST", path: `/api/procedures/${FIX.procedure1}/bewijs`, rol: "bestuurder", body: { titel: "W4" }, verwacht: "json" },
+  {
+    slug: "w4.procedures-bewijs.post.bestuurder.400-titel",
+    method: "POST", path: `/api/procedures/${FIX.procedure1}/bewijs`, rol: "bestuurder",
+    body: { stap_id: FIX.procedureStap }, verwacht: "json",
+    preseed: async ({ admin }) => zetProcedureStap(admin),
+  },
+  { slug: "w4.procedures-bewijs-id.patch.anon", method: "PATCH", path: `/api/procedures/${FIX.procedure1}/bewijs/${FIX.procedureKindOnbekend}`, rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.procedures-bewijs-id.patch.bestuurder.400-document", method: "PATCH", path: `/api/procedures/${FIX.procedure1}/bewijs/${FIX.procedureKindOnbekend}`, rol: "bestuurder", body: { titel: "W4" }, verwacht: "json" },
+  { slug: "w4.procedures-bewijs-id.delete.anon", method: "DELETE", path: `/api/procedures/${FIX.procedure1}/bewijs/${FIX.procedureKindOnbekend}`, rol: "anon", verwacht: "json" },
+
+  // ── procedures/[id]/checklist — POST + PATCH ──────────────────────────────
+  { slug: "w4.procedures-checklist.post.anon", method: "POST", path: `/api/procedures/${FIX.procedure1}/checklist`, rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.procedures-checklist.post.bestuurder.400", method: "POST", path: `/api/procedures/${FIX.procedure1}/checklist`, rol: "bestuurder", body: LEEG, verwacht: "json" },
+  {
+    slug: "w4.procedures-checklist.post.bestuurder.403",
+    method: "POST", path: `/api/procedures/${FIX.procedure1}/checklist`, rol: "bestuurder",
+    body: { stap_id: FIX.procedureStap, label: "W4 checklistitem" }, verwacht: "json",
+    preseed: async ({ admin }) => zetProcedureStap(admin),
+  },
+  {
+    slug: "w4.procedures-checklist.post.voorzitter.200",
+    method: "POST", path: `/api/procedures/${FIX.procedure1}/checklist`, rol: "voorzitter",
+    body: { stap_id: FIX.procedureStap, label: "W4 checklistitem" }, verwacht: "json",
+    preseed: async ({ admin }) => {
+      await zetProcedureStap(admin);
+      await wis(admin, "procedure_checklist", { stap_id: FIX.procedureStap });
+    },
+  },
+  { slug: "w4.procedures-checklist-id.patch.anon", method: "PATCH", path: `/api/procedures/${FIX.procedure1}/checklist/${FIX.procedureKindOnbekend}`, rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.procedures-checklist-id.patch.bestuurder.404", method: "PATCH", path: `/api/procedures/${FIX.procedure1}/checklist/${FIX.procedureKindOnbekend}`, rol: "bestuurder", body: { voldaan: true }, verwacht: "json" },
+
+  // ── procedures/[id]/fase-beschrijving + fase-toelichting — POST ───────────
+  { slug: "w4.procedures-fasebeschrijving.post.anon", method: "POST", path: `/api/procedures/${FIX.procedure1}/fase-beschrijving`, rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.procedures-fasebeschrijving.post.bestuurder.400", method: "POST", path: `/api/procedures/${FIX.procedure1}/fase-beschrijving`, rol: "bestuurder", body: LEEG, verwacht: "json" },
+  { slug: "w4.procedures-fasetoelichting.post.anon", method: "POST", path: `/api/procedures/${FIX.procedure1}/fase-toelichting`, rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.procedures-fasetoelichting.post.bestuurder.400", method: "POST", path: `/api/procedures/${FIX.procedure1}/fase-toelichting`, rol: "bestuurder", body: LEEG, verwacht: "json" },
+
+  // ── procedures/[id]/requirements — GET + POST + PATCH + uitsluiten ────────
+  { slug: "w4.procedures-requirements.get.anon", method: "GET", path: `/api/procedures/${FIX.procedure1}/requirements`, rol: "anon", verwacht: "json" },
+  { slug: "w4.procedures-requirements.get.bestuurder", method: "GET", path: `/api/procedures/${FIX.procedure1}/requirements`, rol: "bestuurder", verwacht: "json" },
+  { slug: "w4.procedures-requirements.post.anon", method: "POST", path: `/api/procedures/${FIX.procedure1}/requirements`, rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.procedures-requirements.post.bestuurder.403", method: "POST", path: `/api/procedures/${FIX.procedure1}/requirements`, rol: "bestuurder", body: { label: "W4" }, verwacht: "json" },
+  { slug: "w4.procedures-requirements.post.voorzitter.400", method: "POST", path: `/api/procedures/${FIX.procedure1}/requirements`, rol: "voorzitter", body: LEEG, verwacht: "json" },
+  { slug: "w4.procedures-requirement-id.patch.anon", method: "PATCH", path: `/api/procedures/${FIX.procedure1}/requirements/${FIX.procedureKindOnbekend}`, rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.procedures-requirement-id.patch.bestuurder.400-actief", method: "PATCH", path: `/api/procedures/${FIX.procedure1}/requirements/${FIX.procedureKindOnbekend}`, rol: "bestuurder", body: { label: "W4" }, verwacht: "json" },
+  { slug: "w4.procedures-requirements-uitsluiten.post.anon", method: "POST", path: `/api/procedures/${FIX.procedure1}/requirements/uitsluiten`, rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.procedures-requirements-uitsluiten.post.bestuurder.403", method: "POST", path: `/api/procedures/${FIX.procedure1}/requirements/uitsluiten`, rol: "bestuurder", body: LEEG, verwacht: "json" },
+
+  // ── procedures/[id]/stappen/[stapId] — PATCH + vier subroutes ─────────────
+  { slug: "w4.procedures-stap.patch.anon", method: "PATCH", path: `/api/procedures/${FIX.procedure1}/stappen/${FIX.procedureStap}`, rol: "anon", body: LEEG, verwacht: "json" },
+  {
+    slug: "w4.procedures-stap.patch.bestuurder.200",
+    method: "PATCH", path: `/api/procedures/${FIX.procedure1}/stappen/${FIX.procedureStap}`, rol: "bestuurder",
+    body: { status: "actief" }, verwacht: "json",
+    preseed: async ({ admin }) => zetProcedureStap(admin),
+  },
+  { slug: "w4.procedures-stap-agendapunt.post.anon", method: "POST", path: `/api/procedures/${FIX.procedure1}/stappen/${FIX.procedureStap}/agendapunt`, rol: "anon", body: LEEG, verwacht: "json" },
+  {
+    slug: "w4.procedures-stap-agendapunt.post.bestuurder.400",
+    method: "POST", path: `/api/procedures/${FIX.procedure1}/stappen/${FIX.procedureStap}/agendapunt`, rol: "bestuurder",
+    body: LEEG, verwacht: "json",
+    preseed: async ({ admin }) => zetProcedureStap(admin),
+  },
+  { slug: "w4.procedures-besluitconcept.post.anon", method: "POST", path: `/api/procedures/${FIX.procedure1}/stappen/${FIX.procedureStap}/besluit-concept`, rol: "anon", body: LEEG, verwacht: "json" },
+  {
+    slug: "w4.procedures-besluitconcept.post.bestuurder",
+    method: "POST", path: `/api/procedures/${FIX.procedure1}/stappen/${FIX.procedureStap}/besluit-concept`, rol: "bestuurder",
+    body: LEEG, verwacht: "json",
+    preseed: async ({ admin }) => { await zetProcedureStap(admin); await wisLimiet(admin, "besluit_concept"); },
+  },
+  { slug: "w4.procedures-heropenen.post.anon", method: "POST", path: `/api/procedures/${FIX.procedure1}/stappen/${FIX.procedureStap}/heropenen`, rol: "anon", body: LEEG, verwacht: "json" },
+  {
+    slug: "w4.procedures-heropenen.post.bestuurder.403",
+    method: "POST", path: `/api/procedures/${FIX.procedure1}/stappen/${FIX.procedureStap}/heropenen`, rol: "bestuurder",
+    body: { motivering: "W4 heropenreden" }, verwacht: "json",
+    preseed: async ({ admin }) => zetProcedureStap(admin, { status: "afgerond" }),
+  },
+  {
+    slug: "w4.procedures-heropenen.post.voorzitter.400-motivering",
+    method: "POST", path: `/api/procedures/${FIX.procedure1}/stappen/${FIX.procedureStap}/heropenen`, rol: "voorzitter",
+    body: LEEG, verwacht: "json",
+    preseed: async ({ admin }) => zetProcedureStap(admin, { status: "afgerond" }),
+  },
+  { slug: "w4.procedures-staptoelichting.post.anon", method: "POST", path: `/api/procedures/${FIX.procedure1}/stappen/${FIX.procedureStap}/toelichting`, rol: "anon", body: LEEG, verwacht: "json" },
+  {
+    slug: "w4.procedures-staptoelichting.post.bestuurder.403",
+    method: "POST", path: `/api/procedures/${FIX.procedure1}/stappen/${FIX.procedureStap}/toelichting`, rol: "bestuurder",
+    body: { toelichting: "W4" }, verwacht: "json",
+    preseed: async ({ admin }) => zetProcedureStap(admin),
+  },
 ];

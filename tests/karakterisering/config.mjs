@@ -142,6 +142,14 @@ export const FIX = {
   decisionDissent: "00000000-0000-4000-8000-00000000de15",
   decisionAiInteractie: "00000000-0000-4000-8000-00000000de16",
   decisionKindOnbekend: "00000000-0000-4000-8000-00000000de1f",
+
+  //  procedures — `procedure_log` en `procedure_afschriften` hangen append-only
+  //  met CASCADE aan `procedures`; een procedure met historie is onverwijderbaar.
+  //  Alles via upsert-reset op de bestaande `procedure1`.
+  procedureStap: "00000000-0000-4000-8000-0000000cd101",
+  procedureChecklist: "00000000-0000-4000-8000-0000000cd102",
+  procedureBewijs: "00000000-0000-4000-8000-0000000cd103",
+  procedureKindOnbekend: "00000000-0000-4000-8000-0000000cd10f",
 };
 
 export const AFSCHRIFT1_PAD = `${FONDS_ID}/w1-afschrift.pdf`;

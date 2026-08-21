@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Checklist-item niet gevonden"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 404
+}
