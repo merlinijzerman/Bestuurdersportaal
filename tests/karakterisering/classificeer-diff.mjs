@@ -51,7 +51,7 @@ const TOEGESTAAN_TOEGEVOEGD = [
   // Lokale alias die body-churn nul houdt: const X = ctx.(fondsId|rol|naam|gebruikerId);
   /^const \w+ = ctx\.(fondsId|rol|naam|gebruikerId);$/,
   // [id]-route: params is bij de wrapper al ge-awaite -> cast i.p.v. await.
-  /^const \{ [\w:\s]+ \} = params as \{[^}]*\};$/,
+  /^const \{ [\w,:\s]+ \} = params as \{[^}]*\};$/,
 ];
 
 // Verwijderingen die het recept voorschrijft (de preamble die de wrapper overneemt).
@@ -73,7 +73,7 @@ const TOEGESTAAN_VERWIJDERD = [
   /error: "Niet ingelogd"/,
   /^if \(!user\)\s*\{?$/,
   // [id]-route: de oude await-params-vorm.
-  /^const \{ [\w:\s]+ \} = await params;$/,
+  /^const \{ [\w,:\s]+ \} = await params;$/,
   // Eigen profiel-select (subset ≤4 kolommen) die haalProfiel vervangt — één
   // regel of als method-chain over meerdere regels. De fragmenten zijn strak
   // begrensd: alleen profielkolommen, alleen de id=user-filter, alleen de
@@ -83,8 +83,8 @@ const TOEGESTAAN_VERWIJDERD = [
   /^\.select\("(id|naam|rol|fonds_id)(,\s*(id|naam|rol|fonds_id))*"\)$/,
   /^\.eq\("id",\s*user\.id\)$/,
   /^\.(maybeSingle|single)\(\);?$/,
-  /^const fondsId = profiel\?\.fonds_id/,
-  /^const \w+ = profiel\?\.(rol|naam|fonds_id)/,
+  /^const fondsId = profiel\??\.fonds_id/,
+  /^const \w+ = profiel\??\.(rol|naam|fonds_id)/,
   // Host-guard-blok — call-opener, argument-regels en de 403-return, één regel
   // of gesplitst. De opener/terminator/status dragen geen tekst; de body-tekst
   // ("Dit webadres…") is de poort die een afwijkende 403 alsnog zou markeren.
@@ -110,12 +110,21 @@ const isCommentaar = (l) => l.startsWith("//");
 
 // Toegestane token-substituties in body-regels: de vier haalProfiel-velden en
 // het gebruiker-id. Meer niet — een andere tekstwijziging blijft afwijkend.
+//
+// BESLUIT (W4): de optional chain is OPTIONEEL in het patroon. W3 kende alleen
+// `profiel?.X`, maar veel schrijfroutes doen eerst een expliciete
+// `if (!profiel?.fonds_id) -> 400` en gebruiken daarna `profiel.fonds_id`. Dat is
+// dezelfde substitutie, niet een andere. Het verbreedt wat automatisch wordt
+// weggestreept, maar niet WELKE velden: de whitelist blijft exact de vier
+// haalProfiel-kolommen. De controle uit §5 blijft daarmee intact — zet je
+// `ctx.fondsId` waar `ctx.gebruikerId` hoort, dan substitueert de verwijderde
+// regel naar iets anders dan de toegevoegde en blijft het `afwijkend`.
 function substitueer(regel) {
   return regel
     .replace(/\buser\.id\b/g, "ctx.gebruikerId")
-    .replace(/\bprofiel\?\.rol\b/g, "ctx.rol")
-    .replace(/\bprofiel\?\.naam\b/g, "ctx.naam")
-    .replace(/\bprofiel\?\.fonds_id\b/g, "ctx.fondsId");
+    .replace(/\bprofiel\??\.rol\b/g, "ctx.rol")
+    .replace(/\bprofiel\??\.naam\b/g, "ctx.naam")
+    .replace(/\bprofiel\??\.fonds_id\b/g, "ctx.fondsId");
 }
 
 const matcht = (regels, regel) => regels.some((re) => re.test(regel));
