@@ -14,6 +14,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { rolHeeftCapability } from "@/core/lib/capabilities";
 import {
   bouwMetadataPlan,
@@ -50,17 +51,10 @@ async function leesCapabilities(
   };
 }
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const GET = withFondsRoute({}, async (ctx, _req: NextRequest, params) => {
   try {
-    const { id } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+    const { id } = params as { id: string };
+    const supabase = ctx.supabase;
 
     const { data: document, error } = await supabase
       .from("documenten")
@@ -71,7 +65,7 @@ export async function GET(
       return NextResponse.json({ error: "Document niet gevonden" }, { status: 404 });
     }
 
-    const { caps } = await leesCapabilities(supabase, user.id);
+    const { caps } = await leesCapabilities(supabase, ctx.gebruikerId);
 
     return NextResponse.json({
       document,
@@ -90,19 +84,12 @@ export async function GET(
     console.error("Fout in GET /api/documents/[id]/metadata:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const PATCH = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+    const { id } = params as { id: string };
+    const supabase = ctx.supabase;
 
     const body = (await req.json().catch(() => ({}))) as MetadataVerzoek & {
       preview?: boolean;
@@ -117,7 +104,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Document niet gevonden" }, { status: 404 });
     }
 
-    const { naam, caps } = await leesCapabilities(supabase, user.id);
+    const { naam, caps } = await leesCapabilities(supabase, ctx.gebruikerId);
 
     const huidig: HuidigDocument = {
       status: document.status,
@@ -184,7 +171,7 @@ export async function PATCH(
       document_id: id,
       document_titel_snapshot: document.titel,
       fonds_id: document.fonds_id,
-      gewijzigd_door: user.id,
+      gewijzigd_door: ctx.gebruikerId,
       gewijzigd_door_naam: naam,
     };
     const logRijen: Record<string, unknown>[] = plan.wijzigingen.map((w) => ({
@@ -219,4 +206,4 @@ export async function PATCH(
     console.error("Fout in PATCH /api/documents/[id]/metadata:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
 import { rateLimited } from "@/core/lib/api-errors";
 import { embedTeksten, embedTekst, naarVectorLiteral, EMBED_MODEL } from "@/core/lib/embeddings";
@@ -28,15 +28,9 @@ import {
 // (embeddings + losse updates per chunk). De client roept herhaaldelijk aan.
 const BATCH = 25;
 
-export async function POST(req: NextRequest) {
+export const POST = withFondsRoute({}, async (ctx, req: NextRequest) => {
   try {
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const supabase = ctx.supabase;
 
     // M-06 (review 2026-07-30): deze route doet per aanroep externe
     // modelcalls en had geen enkele limiet — onbeperkt herhaalbaar door een
@@ -50,12 +44,15 @@ export async function POST(req: NextRequest) {
     const limiet = await controleerLimiet(supabase, LIMIETEN.backfill, { failClosed: true });
     if (!limiet.toegestaan) return rateLimited("documents.embeddings-backfill", limiet.resetAt);
 
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("rol")
-      .eq("id", user.id)
-      .single();
-    if (!profiel || !["voorzitter", "beheerder"].includes(profiel.rol)) {
+    // BESLUIT (W4): `!profiel ||` valt weg en `profiel.rol` wordt `ctx.rol ?? ""`.
+    // Uitkomst-identiek, in alle drie de gevallen:
+    //   geen profielrij      -> haalProfiel geeft null -> ctx.rol is null -> "" -> 403
+    //   profielrij, rol null -> ctx.rol is null        -> ""              -> 403
+    //   rol gezet            -> ongewijzigd
+    // De `!profiel`-tak was de "geen rij"-variant; die is nu de null-variant.
+    // `?? ""` omdat `includes` een string eist en de lege string nooit in de
+    // lijst staat — geen nieuwe uitkomst, alleen een typegeldige schrijfwijze.
+    if (!["voorzitter", "beheerder"].includes(ctx.rol ?? "")) {
       return NextResponse.json({ error: "Onvoldoende rechten" }, { status: 403 });
     }
 
@@ -179,4 +176,4 @@ export async function POST(req: NextRequest) {
     console.error("Backfill fout:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});
