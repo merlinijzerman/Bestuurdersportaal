@@ -123,6 +123,17 @@ export const scenarios = [
   { slug: "afschrift-download.get.bestuurder.404", method: "GET", path: `/api/procedures/${FIX.procedure1}/afschriften/${FIX.afschriftOnbekend}/download`, rol: "bestuurder", verwacht: "json" },
   { slug: "afschrift-download.get.bestuurder.307", method: "GET", path: `/api/procedures/${FIX.procedure1}/afschriften/${FIX.afschrift1}/download`, rol: "bestuurder", verwacht: "redirect" },
 
+  // ── W2-pilots (baseline vóór wrapper-migratie) ────────────────────────────
+  // Pilot 1: /api/classificatie/queue — GET, auth-variant A, leunt op RLS.
+  { slug: "w2.classificatie-queue.get.bestuurder", method: "GET", path: "/api/classificatie/queue", rol: "bestuurder", verwacht: "json" },
+  { slug: "w2.classificatie-queue.get.anon", method: "GET", path: "/api/classificatie/queue", rol: "anon", verwacht: "json" },
+  // Pilot 2: /api/agendapunten/[id]/herstellen — POST, rolcheck + agendapunt_log.
+  { slug: "w2.herstellen.post.anon", method: "POST", path: `/api/agendapunten/${FIX.agendapuntVerwijderd}/herstellen`, rol: "anon", verwacht: "json" },
+  { slug: "w2.herstellen.post.bestuurder.404", method: "POST", path: `/api/agendapunten/${FIX.agendapuntOnbekend}/herstellen`, rol: "bestuurder", verwacht: "json" },
+  { slug: "w2.herstellen.post.voorzitter.400-niet-verwijderd", method: "POST", path: `/api/agendapunten/${FIX.agendapunt1}/herstellen`, rol: "voorzitter", verwacht: "json" },
+  { slug: "w2.herstellen.post.bestuurder.403", method: "POST", path: `/api/agendapunten/${FIX.agendapuntVerwijderd}/herstellen`, rol: "bestuurder", verwacht: "json" },
+  { slug: "w2.herstellen.post.voorzitter.200", method: "POST", path: `/api/agendapunten/${FIX.agendapuntVerwijderd}/herstellen`, rol: "voorzitter", verwacht: "json" },
+
   // ── /api/zoeken — rate-limit · host-guard ──────────────────────────────────
   { slug: "zoeken.get.anon", method: "GET", path: "/api/zoeken?q=test", rol: "anon", verwacht: "json" },
   {

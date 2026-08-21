@@ -93,8 +93,44 @@ export async function seed(admin = adminClient()) {
   await seedGesprekken(admin, users);
   await seedProcedures(admin);
   await seedAfschrift(admin);
+  await seedAgendapunten(admin, users);
 
   return { fondsId: FONDS_ID, users };
+}
+
+// ── W2-pilot: vergadering + agendapunten (herstellen-route) ─────────────────
+// Upsert (geen delete): agendapunt_log verwijst append-only naar agendapunt_id,
+// dus deleten faalt na de eerste run. Upsert RESET verwijderd_op naar de vaste
+// staat zodat de 200-herstel-run reproduceerbaar blijft.
+async function seedAgendapunten(admin, users) {
+  {
+    const { error } = await admin.from("vergaderingen").upsert(
+      { id: FIX.vergadering1, fonds_id: FONDS_ID, titel: "W1 Vergadering", datum: "2026-01-01T10:00:00Z" },
+      { onConflict: "id" }
+    );
+    if (error) throw new Error(`vergaderingen: ${error.message}`);
+  }
+  {
+    const { error } = await admin.from("agendapunten").upsert(
+      { id: FIX.agendapunt1, vergadering_id: FIX.vergadering1, titel: "W1 Agendapunt actief", verwijderd_op: null },
+      { onConflict: "id" }
+    );
+    if (error) throw new Error(`agendapunten(actief): ${error.message}`);
+  }
+  {
+    const { error } = await admin.from("agendapunten").upsert(
+      {
+        id: FIX.agendapuntVerwijderd,
+        vergadering_id: FIX.vergadering1,
+        titel: "W1 Agendapunt verwijderd",
+        verwijderd_op: "2026-01-02T10:00:00Z",
+        verwijderd_door: users.voorzitter.userId,
+        verwijder_reden: "W1 fixture",
+      },
+      { onConflict: "id" }
+    );
+    if (error) throw new Error(`agendapunten(verwijderd): ${error.message}`);
+  }
 }
 
 // ── Tier 2: afschrift (307-redirect naar signed URL — BESLUIT 1) ────────────

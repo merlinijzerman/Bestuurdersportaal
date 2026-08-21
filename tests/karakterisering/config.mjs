@@ -47,6 +47,10 @@ export const FIX = {
   afschrift1: "00000000-0000-4000-8000-00000a75c701",
   afschriftOnbekend: "00000000-0000-4000-8000-00000a75c7ff",
   aqlabExportOnbekend: "00000000-0000-4000-8000-00000a91b0ff",
+  // W2-pilot: agendapunten/[id]/herstellen
+  vergadering1: "00000000-0000-4000-8000-00000000e601",
+  agendapunt1: "00000000-0000-4000-8000-0000000a9001",
+  agendapuntVerwijderd: "00000000-0000-4000-8000-0000000a9002",
 };
 
 export const AFSCHRIFT1_PAD = `${FONDS_ID}/w1-afschrift.pdf`;
