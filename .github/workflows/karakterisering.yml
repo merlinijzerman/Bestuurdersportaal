@@ -34,8 +34,14 @@ name: karakterisering
 #
 #  BESLUIT: bedoeld als maatregel VOOR DE DUUR VAN DEPLOY 2. De voorwaarde is
 #  NIET dat iemand er last van heeft, maar dat W5 klaar is en de muterende
-#  scenario's stabiel zijn gebleken. Zolang deploy 2 loopt — en W5 voegt nog 8
-#  routes met scenario's toe — blijft dit staan.
+#  scenario's stabiel zijn gebleken.
+#
+#  STAND 21-08-2026: W5 is gemerged (#101/#104) — 95 van de 116 routes door de
+#  wrapper, 361 scenario's, `--verify` 3x groen, ook op een van nul herbouwde
+#  database en in CI. De eerste helft van de voorwaarde is dus vervuld. De tweede
+#  niet: deploy 2 is wél gemerged maar nog niet UITGEROLD, en dat is precies de
+#  periode waarin ronde 2 en 3 hun werk moeten doen. Blijft staan tot na de
+#  uitrol; dán is dit een echte keuze in plaats van een aanname.
 #
 #  Wie het terugdraait: haal de lus weg en zet er een verwijzing naar dit besluit
 #  voor in de plaats, niet stilzwijgend — anders verdwijnt de
@@ -54,11 +60,23 @@ name: karakterisering
 #
 #      131 scenario's (21-08, tijdens W4)   verify 3× 27s van 3m42s -> 1× scheelt ~6%
 #      335 scenario's (21-08, na W4)        verify 3× 41s van 3m35s -> 1× scheelt ~11%
+#      361 scenario's (21-08, na W5)        zie hieronder               -> ~12%
 #
-#  De job wordt nog steeds gedomineerd door de Supabase-stack (75s) en `next
-#  build` (55s), niet door de suite. Geen factor 3, maar de winst groeit mee: bij
-#  W5 en deploy 3 komen er scenario's bij. Meet vóór het besluit, en zet het
-#  gemeten getal hier neer in plaats van dit rijtje te laten verouderen.
+#  Meting na W5, run 32512844760, job 231s in totaal:
+#
+#      stack boot 76s | next build 51s | npm ci 14s | schema 10s | stack stop 18s
+#      "app starten + snapshots 3x verifiëren"  48s
+#
+#  LET OP bij het lezen van dat laatste getal: die STAP meet de server-start én de
+#  drie rondes samen. Twee extra rondes kosten daarvan grofweg 29s — circa 12% van
+#  de job — maar dat is afgeleid, niet gemeten. Wil je het besluit op een gemeten
+#  getal baseren, splits die stap dan eerst in twee stappen; dat is goedkoper dan
+#  je vergissen in de richting van "weghalen scheelt veel".
+#
+#  De job wordt nog steeds gedomineerd door de Supabase-stack en `next build`,
+#  niet door de suite. Geen factor 3, maar de winst groeit mee met het aantal
+#  scenario's. Meet vóór het besluit en zet het gemeten getal hier neer, in plaats
+#  van dit rijtje te laten verouderen.
 #
 #  Nooit tegen productie: uitsluitend de wegwerp-CLI-DB; de seed is idempotent.
 # ============================================================================
