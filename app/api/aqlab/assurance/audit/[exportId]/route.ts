@@ -9,32 +9,28 @@
 // -----------------------------------------------------------------------------
 
 import { NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
-import { beoordeelRouteHostToegang } from "@/core/lib/tenant-route-guard";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { magFondsAuditExportZien } from "@/core/lib/aqlab/assurance";
 
 const BUCKET = "aqlab-audit";
 
-export async function GET(
-  _req: Request,
-  { params }: { params: Promise<{ exportId: string }> }
-) {
-  const { exportId } = await params;
-  const supabase = await createServerSupabase();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+// LET OP: deze route heeft GEEN eigen try/catch, en dat verandert met de
+// migratie iets aan het foutpad. Vóór W5 kwam een onafgevangen fout bij Next
+// terecht; nu vangt het laatste vangnet van de wrapper hem en wordt het
+// 500 {"error":"Serverfout"}. Dat is een uniformering, geen verlies — maar het
+// is een verschil, en het staat daarom hier en als BESLUIT in #101 in plaats van
+// dat het stilzwijgend meelift.
+export const GET = withFondsRoute({ hostGuard: true, label: "aqlab.assurance.audit.GET" }, async (ctx, _req, params) => {
+  const { exportId } = params as { exportId: string };
+  const supabase = ctx.supabase;
 
-  const { data: profiel } = await supabase
-    .from("profielen").select("fonds_id").eq("id", user.id).maybeSingle();
-  const fondsId = profiel?.fonds_id ?? null;
+  // BLIJFT in de handler (W3 §4, dezelfde vorm als /api/aqlab/assurance): de
+  // wrapper trekt de host-guard vóór de handler, terwijl deze eigen 403 vroeger
+  // ervóór stond. Onder TENANT_ENFORCE≠on is de guard transparant en dus
+  // byte-identiek; onder enforce=on kan een gebruiker zónder fonds voortaan de
+  // host-guard-403 krijgen in plaats van deze. Zelfde status, andere body.
+  const fondsId = ctx.fondsId;
   if (!fondsId) return NextResponse.json({ error: "Geen fonds-profiel" }, { status: 403 });
-
-  const hostOordeel = await beoordeelRouteHostToegang({
-    sessieFondsId: fondsId, gebruikerId: user.id, label: "aqlab.assurance.audit.GET",
-  });
-  if (!hostOordeel.toegestaan) {
-    return NextResponse.json({ error: "Dit webadres hoort niet bij uw fonds." }, { status: 403 });
-  }
 
   // D1b: sessie-client + SECURITY DEFINER-RPC's (autorisatie + log) en een
   // storage-policy op vrijgegeven exports — geen service-role meer.
@@ -59,4 +55,4 @@ export async function GET(
       "Cache-Control": "private, no-store",
     },
   });
-}
+});

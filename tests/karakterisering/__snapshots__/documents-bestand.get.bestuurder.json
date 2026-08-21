@@ -5,7 +5,8 @@
   },
   "headers": {
     "content-disposition": "attachment; filename=\"w1-document.pdf\"",
-    "content-type": "application/pdf"
+    "content-type": "application/pdf",
+    "x-content-type-options": "nosniff"
   },
   "status": 200
 }

@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Decision Object niet gevonden of geen toegang"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 404
+}

@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Geen audit-snapshot beschikbaar voor dit besluit. Snapshots ontstaan automatisch bij overgang naar besloten / voorwaardelijk_besloten / in_evaluatie / afgesloten."
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 404
+}

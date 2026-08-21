@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Parameter ?trigger= werkt alleen samen met ?versie=besluitmoment."
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 400
+}

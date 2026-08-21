@@ -151,6 +151,19 @@ export const FIX = {
   procedureBewijs: "00000000-0000-4000-8000-0000000cd103",
   procedureKindOnbekend: "00000000-0000-4000-8000-0000000cd10f",
 
+  // ── W5 — fixtures voor de acht handwerkroutes ─────────────────────────────
+  //  `decisionAuditdossier` is een EIGEN besluit en niet `decision1`. De
+  //  auditdossier-route schrijft bij elke aanroep een governance_event, en die
+  //  regel komt in de volgende ronde terug in `view.events` van het dossier —
+  //  het antwoord groeit dus per verify-ronde. Op een eigen besluit kan de
+  //  preseed die events wissen; op `decision1` zou dat de dertien
+  //  W4-decisions-snapshots meeslepen.
+  decisionAuditdossier: "00000000-0000-4000-8000-00000000de20",
+  //  Onbekend gesprek voor de log-vóór-bestand-tegenproef op `ai/stuk-export`:
+  //  een niet-bestaande gesprek_id laat `log_word_export` op zijn FK stuklopen,
+  //  en dan MOET er een 500 uitkomen in plaats van een .docx.
+  gesprekLogfout: "00000000-0000-4000-8000-00000000c5f0",
+
   //  losse routes
   classificatieOnbekend: "00000000-0000-4000-8000-0000000c1a5f",
   dossierOnbekend: "00000000-0000-4000-8000-0000000d0551",

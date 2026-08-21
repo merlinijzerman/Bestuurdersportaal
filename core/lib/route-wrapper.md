@@ -438,13 +438,127 @@ voorzichtigheid dat niet zou hebben gedaan.
 
 ### Voor W5
 
-Na W4 zijn alle bron-guards die aan de preambule hingen wrapper-bewust; W5 hoeft
-er geen meer om te zetten. `AFS-3` dekt ook de downloadroute
-(`procedures/[id]/afschriften/[afschriftId]/download`), die in W5 migreert — die
-staat dus al klaar. (`portaalcontext-privacy` inspecteert een lib-helper, geen
-route — daar speelt de wrapper niet.)
+Na W4 zijn alle bron-guards die aan de preambule hingen wrapper-bewust; W5 hoefde
+er geen meer om te zetten. Dat klopte in de praktijk: `AFS-3` dekte de
+downloadroute (`procedures/[id]/afschriften/[afschriftId]/download`) zonder
+aanpassing, en `WP3-10`, `T8` en `T14` bleven groen. W5 voegde er één guard bij —
+`STUK-1` — maar niet omdat er een oude verviel; zie hieronder.
 
 Kom je toch een nieuwe tegen: zet hem met dezelfde helpers om, één regel per
 assertie, en draai de negatieve controle. Dat hoort bij de route-migratie, niet
 bij een aparte "testfix" — een guard die stil vervalt is het enige echte risico
 van dit hele spoor.
+
+## Wat W5 in de praktijk opleverde (lees vóór W5b en W13)
+
+De acht handwerkroutes — twee SSE, vier downloads, één 307, één HTML — lieten
+zeven dingen zien die de 86 routes ervóór niet konden tonen.
+
+### 1. De wrapper raakt een stream niet aan, en `async start` is de reden
+
+Het vangnet van de wrapper omhult **alleen de aanroep van de handler**. Zodra die
+een `Response` met een `ReadableStream` heeft teruggegeven zijn de headers
+verzonden en kan de catch niet meer afgaan. Dat is niet vanzelfsprekend: het
+hangt aan één woord.
+
+Bij een **synchrone** `start(controller)` draait de hele body al binnen
+`new ReadableStream(...)` — dus vóór `new Response(...)` en vóór de handler
+returnt. Een throw komt dan gewoon uit de handleraanroep en wordt 500
+`{"error":"Serverfout"}`, en dat is dáár ook precies goed. Bij `async start`
+faalt hij pas ná de return en doet de wrapper niets.
+
+Beide gevallen staan als sanity-test in `route-wrapper.sanity.ts`, plus een
+tegenproef (throw vóór de return → wél 500). Zonder die tegenproef zou "geen
+Serverfout" ook waar zijn met een volledig kapot vangnet.
+
+End-to-end gemeten in de Next-runtime, met twee tijdelijke routes (wrapper vs.
+kale preambule) die één regel enqueue'n, 300 ms wachten zodat de headers echt
+vertrekken, en dan gooien. Identiek: `200`, `text/event-stream`, het eerste event
+binnen, `respons compleet: false`, `ECONNRESET`, nergens `Serverfout`.
+
+**Herhaal die meting** bij elke volgende streamende route, en herschrijf een
+`async start` nooit naar synchroon zonder te weten dat je daarmee verandert welke
+laag de fout afhandelt.
+
+### 2. Karakteriseren van niet-JSON: drie vormen, en de lacune staat IN het snapshot
+
+| `verwacht` | Wat er wordt vergeleken | Wanneer |
+|---|---|---|
+| `bytes` | status + headers + sha256 + lengte | reproduceerbare bytes |
+| `bestand` | status + headers + **lengte** | xlsx/docx met een tijdstempel erin |
+| `vorm` | status + headers, `body_niet_gekarakteriseerd: true` | zelfs de lengte is niet stabiel |
+
+Kies per route en **meet** het; neem niet aan dat een xlsx reproduceerbaar is.
+De sleutel `body_niet_gekarakteriseerd` is bewust een waarde en geen weglating —
+zelfde principe als `hostGuard: "route-eigen"`.
+
+### 3. Een niet-idempotente GET is niet karakteriseerbaar, en dat is het signaal
+
+`decisions/[id]/auditdossier` schrijft per aanroep een `governance_event` dat de
+dossier-view terugrendert: het antwoord van aanroep N verandert dat van N+1.
+Ronde 2 van `--verify` liep meteen rood. Dat is geen tekortkoming van het harnas.
+Loop je hier tegenaan, behandel het als een bevinding over de ROUTE en niet als
+een snapshotprobleem, en leg hem vast in de interne bevindingenadministratie
+(`TICKET-H04.md`) — niet in dit recept.
+
+### 4. Niet elke tak is via een request bereikbaar — en dan is bron-inspectie het instrument
+
+Twee keer gebeurd, twee keer een scenario geschrapt in plaats van het groen te
+houden op de verkeerde grond:
+
+- **`chat` + module `ai` uit.** Elke schrijfactie op `fonds_module_manifest` laat
+  via `fn_fonds_config_capture` een regel achter in `fonds_config_log`, die
+  append-only is — ook voor de service-role. `/api/instellingen` geeft die
+  historie terug, dus twee bestaande snapshots sloegen om én bleven omslaan.
+  Instrument: `T8` in `fonds-config.test.ts`.
+- **`ai/stuk-export` met een falende `log_word_export`.** Er bestaat geen invoer
+  die de RPC laat falen terwijl de capability-gate ervóór slaagt:
+  `governance_export_log.gesprek_audit_id` heeft geen foreign key en `stuksoort`
+  geen check-constraint. Instrument: `STUK-1` in `ai-poort.test.ts`, plus een
+  eenmalige runtime-tegenproef (`revoke execute` → 500, geen .docx, logtabel niet
+  gegroeid).
+
+**Regel:** een snapshot dat een ánder snapshot beschadigt is duurder dan zijn
+dekking. En een ORDENING (eerst A, dan B) is nooit met "roept A aan" te bewaken.
+
+### 5. Verbreed de header-whitelist niet globaal
+
+`x-content-type-options` toevoegen aan `HEADER_WHITELIST` wijzigde in één keer
+alle 335 snapshots: `nosniff` komt uit `securityHeaders` in `next.config.ts` en
+staat op élke respons. Een route *mag* hem overschrijven, en dát is het
+interessante geval — dus per scenario via `headersExtra`, niet globaal.
+
+### 6. `?? null` achter `ctx.X` houd je
+
+Het is een no-op, maar het laat het substitutiepaar in `classificeer-diff.mjs`
+sluiten. Weglaten kost een onverklaarde regel per keer. Dit is de W4-huisstijl;
+W5 heeft zich eraan aangepast nadat de classificatie het aanwees.
+
+### 7. `conform` is voor handwerkroutes niet haalbaar, en dat is geen tekortkoming
+
+Toegevoegd commentaar wordt bewust niet gesanctioneerd ("dat is initiatief"). Een
+handwerkroute mét motivering is dus altijd `afwijkend`. W4 sloot af op 60 conform
+/ 18 afwijkend, W5 op 0 / 8. **Wat je wél haalt en moet halen:** dat élke
+onverklaarde regel een COMMENTAARregel is. Blijft er code over, dan is dat een
+regel om te lezen.
+
+Vervang de acceptatie-eis "classificatie conform, exit 0" daarom door: *geen
+onverklaarde code-regel*. Anders wordt de eis stilzwijgend genegeerd, en dan
+bewaakt hij niets meer.
+
+### 8. De restcategorie is kleiner dan hij lijkt
+
+Na W5 staan er 95 van de 116 routes door de wrapper. De 21 die overblijven zijn
+**niet** "9 machineroutes + 12 publieke":
+
+| Categorie | Aantal |
+|---|---|
+| Machineroutes (`withMachineRoute`, W5b) | 9 |
+| Platform-surface (`withPlatformRead`) | 1 |
+| **Gedeelde-preambule-routes** | **10** |
+| Werkelijk publiek | 1 (`contact`) |
+
+Die tien zijn wél geauthenticeerd: `catalogusContext()` in
+`core/lib/catalogus-api.ts` en de fabriek `core/lib/organen-route.ts` dragen de
+preambule. Dat is een **vierde migratiepatroon**, geen uitzondering. Zet ze niet
+in de W13-uitzonderingslijst zonder dat besluit expliciet te nemen.
