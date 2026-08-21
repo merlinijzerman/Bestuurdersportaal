@@ -22,6 +22,18 @@ import { FIX, FONDS_ID } from "./config.mjs";
 
 const LEEG = {};
 
+/** Delete met foutcontrole. Een ongecontroleerde delete in een preseed geeft
+ *  hetzelfde stille falen als in seed.mjs: de opruiming wordt geweigerd (bv. door
+ *  een append-only kind), de preseed loopt door, en de fout komt er twee stappen
+ *  verderop uit als een duplicate-key of — erger — als een snapshot die groen is
+ *  op de verkeerde grond. Zie de W4-sweep in seed.mjs. */
+async function wis(admin, tabel, filter) {
+  let q = admin.from(tabel).delete();
+  for (const [kolom, waarde] of Object.entries(filter)) q = q.eq(kolom, waarde);
+  const { error } = await q;
+  if (error) throw new Error(`preseed delete ${tabel}: ${error.message}`);
+}
+
 // ── Gedeelde preseed-bouwstenen ──────────────────────────────────────────────
 //  Upsert, nooit delete-en-herbouw: agendapunt_log en de stem-/besluitlogboeken
 //  zijn append-only en hangen met CASCADE aan hun ouder. Een rij met auditregels
@@ -191,7 +203,7 @@ export const scenarios = [
     // embedding-call.
     preseed: async ({ admin, users }) => {
       const uid = users.bestuurder.userId;
-      await admin.from("rate_limit_events").delete().eq("gebruiker_id", uid).eq("endpoint", LIMIET_ZOEKEN_ENDPOINT);
+      await wis(admin, "rate_limit_events", { gebruiker_id: uid, endpoint: LIMIET_ZOEKEN_ENDPOINT });
       const rijen = Array.from({ length: LIMIET_ZOEKEN }, () => ({
         gebruiker_id: uid,
         endpoint: LIMIET_ZOEKEN_ENDPOINT,
@@ -249,7 +261,7 @@ export const scenarios = [
     rol: "voorzitter",
     verwacht: "json",
     preseed: async ({ admin, users }) => {
-      await admin.from("notificaties").delete().eq("id", FIX.notificatieLezen);
+      await wis(admin, "notificaties", { id: FIX.notificatieLezen });
       const { error } = await admin.from("notificaties").insert({
         id: FIX.notificatieLezen,
         ontvanger_id: users.voorzitter.userId,
@@ -278,7 +290,7 @@ export const scenarios = [
     body: LEEG,
     verwacht: "json",
     preseed: async ({ admin, users }) => {
-      await admin.from("notificaties").delete().eq("ontvanger_id", users.beheerder.userId);
+      await wis(admin, "notificaties", { ontvanger_id: users.beheerder.userId });
       const { error } = await admin.from("notificaties").insert({
         id: FIX.notificatieAlles,
         ontvanger_id: users.beheerder.userId,
@@ -342,7 +354,7 @@ export const scenarios = [
         type_risico: "structureel", status: "actief",
       }, { onConflict: "id" });
       if (error) throw new Error(`preseed risicoMaatregelen: ${error.message}`);
-      await admin.from("risico_maatregelen").delete().eq("risico_id", FIX.risicoMaatregelen);
+      await wis(admin, "risico_maatregelen", { risico_id: FIX.risicoMaatregelen });
     },
   },
 
@@ -412,7 +424,7 @@ export const scenarios = [
     body: { vraag: "W4 stemronde?", agendapunt_id: FIX.agendapuntBesluit }, verwacht: "json",
     preseed: async ({ admin, users }) => {
       await zetAgendapuntBesluit(admin, users);
-      await admin.from("stemmingen").delete().eq("agendapunt_id", FIX.agendapuntBesluit);
+      await wis(admin, "stemmingen", { agendapunt_id: FIX.agendapuntBesluit });
     },
   },
 
@@ -441,7 +453,7 @@ export const scenarios = [
     // de tweede run het WIJZIGEN-pad op i.p.v. het insert-pad.
     preseed: async ({ admin, users }) => {
       await zetStemming(admin, users, FIX.stemmingStemmen, "open", FIX.agendapuntStemmen);
-      await admin.from("stem_uitbrengingen").delete().eq("stemming_id", FIX.stemmingStemmen);
+      await wis(admin, "stem_uitbrengingen", { stemming_id: FIX.stemmingStemmen });
     },
   },
 
