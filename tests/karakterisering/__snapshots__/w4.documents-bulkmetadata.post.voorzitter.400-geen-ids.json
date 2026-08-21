@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Geen document_ids meegegeven"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 400
+}

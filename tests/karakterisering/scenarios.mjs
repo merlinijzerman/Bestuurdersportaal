@@ -116,6 +116,27 @@ async function zetAgendapunt(admin, users, id, extra = {}) {
   if (error) throw new Error(`preseed agendapunt ${id}: ${error.message}`);
 }
 
+/** Document in een vaste staat. Upsert-reset: `documenten` heeft append-only
+ *  kinderen (`extraction_run`, `comparison_results`) met NO ACTION, dus zodra er
+ *  één extractie of vergelijking op staat is de rij niet meer te verwijderen. */
+async function zetDocument(admin, id, actief) {
+  const { error } = await admin.from("documenten").upsert(
+    {
+      id,
+      fonds_id: FONDS_ID,
+      bibliotheek: "fonds",
+      bron: "Intern",
+      titel: `W4 Document (${actief ? "actief" : "gedeactiveerd"})`,
+      bestandsnaam: "w4-document.pdf",
+      bestandstype: "pdf",
+      opslag_pad: `${FONDS_ID}/w4-document.pdf`,
+      actief,
+    },
+    { onConflict: "id" }
+  );
+  if (error) throw new Error(`preseed document ${id}: ${error.message}`);
+}
+
 /** Eén inbrengregel van de BESTUURDER op een vast agendapunt. */
 async function zetInbreng(admin, users) {
   await zetAgendapunt(admin, users, FIX.agendapuntInbreng);
@@ -794,4 +815,127 @@ export const scenarios = [
   // "Verwijderen mislukt", niet 404 — de RPC gooit en de route vertaalt dat niet.
   // Vastgelegd zoals het IS; repareren is deploy 3, niet W4.
   { slug: "w4.notulen-segment.delete.voorzitter.500-onbekend", method: "DELETE", path: `/api/notulen/segmenten/${FIX.segmentOnbekend}`, rol: "voorzitter", verwacht: "json" },
+
+  // ══ documents ══════════════════════════════════════════════════════════════
+  //  Drie routes in dit domein hebben GEEN eigen try/catch — daar wordt de
+  //  wrapper de eerste vanger. Het verschil in foutrespons is apart gemeten en
+  //  vastgelegd in de migratiecommit; het is niet als scenario op te nemen omdat
+  //  het een geïnjecteerde exception vereist.
+  //  Vier routes zijn fail-closed begrensd; die wissen hun teller (§4, derde
+  //  faalvorm: een teller draagt staat over tussen verify-rondes).
+  //
+  //  OBSERVATIE: er is hier geen enkel 403-scenario op `documents.metadata.update`,
+  //  en dat is geen omissie in de dekking. Die capability is aan ALLE VIER de
+  //  rollen toegekend — inclusief bestuursbureau — dus hij scheidt niets. Wat
+  //  eruitziet als een autorisatiepoort is er feitelijk geen. Staat op de
+  //  observatielijst; repareren is deploy 3.
+
+  // ── documents/[id] — PATCH · de-/reactiveren · 409 ────────────────────────
+  { slug: "w4.documents-id.patch.anon", method: "PATCH", path: `/api/documents/${FIX.documentOnbekend}`, rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.documents-id.patch.bestuurder.400-actie", method: "PATCH", path: `/api/documents/${FIX.documentOnbekend}`, rol: "bestuurder", body: { actie: "onzin" }, verwacht: "json" },
+  { slug: "w4.documents-id.patch.bestuurder.404", method: "PATCH", path: `/api/documents/${FIX.documentOnbekend}`, rol: "bestuurder", body: { actie: "deactiveren" }, verwacht: "json" },
+  {
+    slug: "w4.documents-id.patch.bestuurder.403-reactiveren",
+    method: "PATCH", path: `/api/documents/${FIX.documentGedeactiveerd}`, rol: "bestuurder",
+    body: { actie: "reactiveren" }, verwacht: "json",
+    preseed: async ({ admin }) => zetDocument(admin, FIX.documentGedeactiveerd, false),
+  },
+  {
+    slug: "w4.documents-id.patch.voorzitter.200-deactiveren",
+    method: "PATCH", path: `/api/documents/${FIX.documentDeactiveren}`, rol: "voorzitter",
+    body: { actie: "deactiveren", reden: "W4 deactiveerreden" }, verwacht: "json",
+    preseed: async ({ admin }) => zetDocument(admin, FIX.documentDeactiveren, true),
+  },
+  {
+    slug: "w4.documents-id.patch.voorzitter.409-al-gedeactiveerd",
+    method: "PATCH", path: `/api/documents/${FIX.documentGedeactiveerd}`, rol: "voorzitter",
+    body: { actie: "deactiveren", reden: "W4 nogmaals" }, verwacht: "json",
+    preseed: async ({ admin }) => zetDocument(admin, FIX.documentGedeactiveerd, false),
+  },
+
+  // ── documents/[id]/metadata — GET + PATCH ─────────────────────────────────
+  { slug: "w4.documents-metadata.get.anon", method: "GET", path: `/api/documents/${FIX.document1}/metadata`, rol: "anon", verwacht: "json" },
+  { slug: "w4.documents-metadata.get.bestuurder", method: "GET", path: `/api/documents/${FIX.document1}/metadata`, rol: "bestuurder", verwacht: "json" },
+  { slug: "w4.documents-metadata.get.bestuurder.404", method: "GET", path: `/api/documents/${FIX.documentOnbekend}/metadata`, rol: "bestuurder", verwacht: "json" },
+  { slug: "w4.documents-metadata.patch.anon", method: "PATCH", path: `/api/documents/${FIX.document1}/metadata`, rol: "anon", body: LEEG, verwacht: "json" },
+  // `titel` is geen metadataveld hier; de plan-bouwer ziet nul wijzigingen -> 400.
+  { slug: "w4.documents-metadata.patch.bestuurder.400-geen-wijzigingen", method: "PATCH", path: `/api/documents/${FIX.document1}/metadata`, rol: "bestuurder", body: { titel: "W4" }, verwacht: "json" },
+  { slug: "w4.documents-metadata.patch.voorzitter.404", method: "PATCH", path: `/api/documents/${FIX.documentOnbekend}/metadata`, rol: "voorzitter", body: { titel: "W4" }, verwacht: "json" },
+
+  // ── documents/[id]/ai-markering — PATCH ───────────────────────────────────
+  { slug: "w4.documents-aimarkering.patch.anon", method: "PATCH", path: `/api/documents/${FIX.document1}/ai-markering`, rol: "anon", body: LEEG, verwacht: "json" },
+  // Het veld heet `markering` en moet een boolean zijn.
+  { slug: "w4.documents-aimarkering.patch.voorzitter.200", method: "PATCH", path: `/api/documents/${FIX.document1}/ai-markering`, rol: "voorzitter", body: { markering: true }, verwacht: "json" },
+  { slug: "w4.documents-aimarkering.patch.voorzitter.400-waarde", method: "PATCH", path: `/api/documents/${FIX.document1}/ai-markering`, rol: "voorzitter", body: { markering: "onzin" }, verwacht: "json" },
+  { slug: "w4.documents-aimarkering.patch.voorzitter.400-id", method: "PATCH", path: "/api/documents/geen-uuid/ai-markering", rol: "voorzitter", body: { ai_gegenereerd: true }, verwacht: "json" },
+
+  // ── documents/[id]/agendapunten — GET + POST + DELETE ─────────────────────
+  { slug: "w4.documents-agendapunten.get.anon", method: "GET", path: `/api/documents/${FIX.document1}/agendapunten`, rol: "anon", verwacht: "json" },
+  { slug: "w4.documents-agendapunten.get.bestuurder", method: "GET", path: `/api/documents/${FIX.document1}/agendapunten`, rol: "bestuurder", verwacht: "json" },
+  { slug: "w4.documents-agendapunten.post.anon", method: "POST", path: `/api/documents/${FIX.document1}/agendapunten`, rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.documents-agendapunten.post.bestuurder.404-agendapunt", method: "POST", path: `/api/documents/${FIX.document1}/agendapunten`, rol: "bestuurder", body: { agendapunt_id: FIX.agendapuntOnbekend }, verwacht: "json" },
+  { slug: "w4.documents-agendapunten.post.voorzitter.400", method: "POST", path: `/api/documents/${FIX.document1}/agendapunten`, rol: "voorzitter", body: LEEG, verwacht: "json" },
+  { slug: "w4.documents-agendapunten.post.voorzitter.404", method: "POST", path: `/api/documents/${FIX.documentOnbekend}/agendapunten`, rol: "voorzitter", body: { agendapunt_id: FIX.agendapuntOnbekend }, verwacht: "json" },
+  { slug: "w4.documents-agendapunten.delete.anon", method: "DELETE", path: `/api/documents/${FIX.document1}/agendapunten?agendapunt_id=${FIX.agendapuntOnbekend}`, rol: "anon", verwacht: "json" },
+  // De DELETE leest agendapunt_id uit de BODY, niet uit de query — vandaar 400.
+  { slug: "w4.documents-agendapunten.delete.bestuurder.400-ontbreekt", method: "DELETE", path: `/api/documents/${FIX.document1}/agendapunten?agendapunt_id=${FIX.agendapuntOnbekend}`, rol: "bestuurder", verwacht: "json" },
+
+  // ── documents/[id]/procesinstanties — GET + POST + DELETE ─────────────────
+  { slug: "w4.documents-procesinstanties.get.anon", method: "GET", path: `/api/documents/${FIX.document1}/procesinstanties`, rol: "anon", verwacht: "json" },
+  { slug: "w4.documents-procesinstanties.get.bestuurder", method: "GET", path: `/api/documents/${FIX.document1}/procesinstanties`, rol: "bestuurder", verwacht: "json" },
+  { slug: "w4.documents-procesinstanties.post.anon", method: "POST", path: `/api/documents/${FIX.document1}/procesinstanties`, rol: "anon", body: LEEG, verwacht: "json" },
+  { slug: "w4.documents-procesinstanties.post.bestuurder.400-ontbreekt", method: "POST", path: `/api/documents/${FIX.document1}/procesinstanties`, rol: "bestuurder", body: LEEG, verwacht: "json" },
+  { slug: "w4.documents-procesinstanties.post.voorzitter.400", method: "POST", path: `/api/documents/${FIX.document1}/procesinstanties`, rol: "voorzitter", body: LEEG, verwacht: "json" },
+  { slug: "w4.documents-procesinstanties.delete.anon", method: "DELETE", path: `/api/documents/${FIX.document1}/procesinstanties`, rol: "anon", verwacht: "json" },
+
+  // ── documents/[id]/her-extract + opnieuw-verwerken — GEEN eigen try/catch ──
+  { slug: "w4.documents-herextract.post.anon", method: "POST", path: `/api/documents/${FIX.documentOnbekend}/her-extract`, rol: "anon", body: LEEG, verwacht: "json" },
+  {
+    slug: "w4.documents-herextract.post.bestuurder.403",
+    method: "POST", path: `/api/documents/${FIX.documentOnbekend}/her-extract`, rol: "bestuurder",
+    body: LEEG, verwacht: "json",
+    preseed: async ({ admin }) => wisLimiet(admin, "her_extract"),
+  },
+  {
+    slug: "w4.documents-herextract.post.voorzitter.404",
+    method: "POST", path: `/api/documents/${FIX.documentOnbekend}/her-extract`, rol: "voorzitter",
+    body: LEEG, verwacht: "json",
+    preseed: async ({ admin }) => wisLimiet(admin, "her_extract"),
+  },
+  { slug: "w4.documents-opnieuw.post.anon", method: "POST", path: `/api/documents/${FIX.documentOnbekend}/opnieuw-verwerken`, rol: "anon", body: LEEG, verwacht: "json" },
+  {
+    slug: "w4.documents-opnieuw.post.bestuurder.403",
+    method: "POST", path: `/api/documents/${FIX.documentOnbekend}/opnieuw-verwerken`, rol: "bestuurder",
+    body: LEEG, verwacht: "json",
+    preseed: async ({ admin }) => wisLimiet(admin, "her_extract"),
+  },
+  {
+    slug: "w4.documents-opnieuw.post.voorzitter.404",
+    method: "POST", path: `/api/documents/${FIX.documentOnbekend}/opnieuw-verwerken`, rol: "voorzitter",
+    body: LEEG, verwacht: "json",
+    preseed: async ({ admin }) => wisLimiet(admin, "her_extract"),
+  },
+
+  // ── documents/bulk-metadata + de twee backfills ───────────────────────────
+  { slug: "w4.documents-bulkmetadata.post.anon", method: "POST", path: "/api/documents/bulk-metadata", rol: "anon", body: LEEG, verwacht: "json" },
+  {
+    slug: "w4.documents-bulkmetadata.post.voorzitter.400-geen-ids",
+    method: "POST", path: "/api/documents/bulk-metadata", rol: "voorzitter",
+    body: { document_ids: [] }, verwacht: "json",
+    preseed: async ({ admin }) => wisLimiet(admin, "bulk_metadata"),
+  },
+  { slug: "w4.documents-embeddings.post.anon", method: "POST", path: "/api/documents/embeddings-backfill", rol: "anon", body: LEEG, verwacht: "json" },
+  {
+    slug: "w4.documents-embeddings.post.bestuurder.403",
+    method: "POST", path: "/api/documents/embeddings-backfill", rol: "bestuurder",
+    body: LEEG, verwacht: "json",
+    preseed: async ({ admin }) => wisLimiet(admin, "backfill"),
+  },
+  { slug: "w4.documents-reindex.post.anon", method: "POST", path: "/api/documents/reindex-backfill", rol: "anon", body: LEEG, verwacht: "json" },
+  {
+    slug: "w4.documents-reindex.post.bestuurder.403",
+    method: "POST", path: "/api/documents/reindex-backfill", rol: "bestuurder",
+    body: LEEG, verwacht: "json",
+    preseed: async ({ admin }) => wisLimiet(admin, "backfill"),
+  },
 ];

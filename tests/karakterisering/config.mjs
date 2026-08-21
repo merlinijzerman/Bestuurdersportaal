@@ -120,6 +120,13 @@ export const FIX = {
   //  vereisen een echt notulendocument in storage én een modelcall. De
   //  afwijzingspaden dekken de preambule, de rol-gate en de rate limit.
   segmentOnbekend: "00000000-0000-4000-8000-0000005e6f0f",
+
+  //  documents — eigen documenten voor de de-/reactiveercyclus. `document1` en
+  //  `documentIntrekken` hangen aan bestaande W1-snapshots (bytes-download,
+  //  410-pad) en mogen dus niet van status wisselen.
+  documentDeactiveren: "00000000-0000-4000-8000-0000000d0c10",
+  documentGedeactiveerd: "00000000-0000-4000-8000-0000000d0c11",
+  agendapuntDocument: "00000000-0000-4000-8000-0000000a9040",
 };
 
 export const AFSCHRIFT1_PAD = `${FONDS_ID}/w1-afschrift.pdf`;
