@@ -51,6 +51,13 @@
 -- ════════════════════════════════════════════════════════════════════════════
 
 -- ── 1. De CHECK kent de vierde rol ────────────────────────────────────────
+-- ----------------------------------------------------------------------------
+-- ROL: postgres voor opbouw en afbraak, authenticated per scenario — de meting
+--      gebeurt onder RLS, niet onder BYPASSRLS.
+--      (verplicht en machineleesbaar — zie ROL-1 in
+--       tests/cross-tenant/checksuite-rolverklaring.test.ts voor het waarom)
+-- ----------------------------------------------------------------------------
+
 do $$
 declare n int;
 begin

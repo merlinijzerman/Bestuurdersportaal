@@ -33,6 +33,13 @@
 -- user-metadata en er is geen "eerste fonds"-fallback.
 -- ============================================================================
 
+-- ----------------------------------------------------------------------------
+-- ROL: postgres — de logica zit in een trigger op auth.users en vereist een
+--      insert in dat schema; dat kan alleen als postgres.
+--      (verplicht en machineleesbaar — zie ROL-1 in
+--       tests/cross-tenant/checksuite-rolverklaring.test.ts voor het waarom)
+-- ----------------------------------------------------------------------------
+
 begin;
 
 do $$

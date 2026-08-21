@@ -38,6 +38,13 @@
 -- Dit is de dragende maatregel van AC-18. Komt er ooit een insert-, update- of
 -- delete-policy bij, dan kan de browser met de anon-key rechtstreeks schrijven
 -- en is de hele toestandsmachine decoratie.
+-- ----------------------------------------------------------------------------
+-- ROL: postgres voor opbouw en afbraak, authenticated per scenario — de meting
+--      gebeurt onder RLS, niet onder BYPASSRLS.
+--      (verplicht en machineleesbaar — zie ROL-1 in
+--       tests/cross-tenant/checksuite-rolverklaring.test.ts voor het waarom)
+-- ----------------------------------------------------------------------------
+
 do $$
 declare fouten text := ''; r record; n int;
 begin

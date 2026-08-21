@@ -23,6 +23,13 @@
 -- ╚════════════════════════════════════════════════════════════════════════╝
 
 -- 1a. Tabel bestaat mét RLS.
+-- ----------------------------------------------------------------------------
+-- ROL: postgres voor opbouw en afbraak, authenticated per scenario — de meting
+--      gebeurt onder RLS, niet onder BYPASSRLS.
+--      (verplicht en machineleesbaar — zie ROL-1 in
+--       tests/cross-tenant/checksuite-rolverklaring.test.ts voor het waarom)
+-- ----------------------------------------------------------------------------
+
 do $$
 begin
   if not exists (select 1 from pg_class c

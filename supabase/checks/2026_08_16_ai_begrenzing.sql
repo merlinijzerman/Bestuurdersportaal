@@ -38,6 +38,13 @@
 --  psql exit 0 + de "OK #"-notices = groen; elke "LEK:"/"FAALT" → raise → non-zero exit.
 -- ============================================================================
 
+-- ----------------------------------------------------------------------------
+-- ROL: postgres voor opbouw en afbraak, authenticated per scenario — de meting
+--      gebeurt onder RLS, niet onder BYPASSRLS.
+--      (verplicht en machineleesbaar — zie ROL-1 in
+--       tests/cross-tenant/checksuite-rolverklaring.test.ts voor het waarom)
+-- ----------------------------------------------------------------------------
+
 \echo '== DEEL 1 — STRUCTUUR =='
 
 -- 1a. Alle acht tabellen: RLS aan, geen policy, anon/authenticated buiten.

@@ -56,6 +56,13 @@
 -- ╔════════════════════════════════════════════════════════════════════════╗
 -- ║ GATE A — parent-afgeleide tenanttabellen                                ║
 -- ╚════════════════════════════════════════════════════════════════════════╝
+-- ----------------------------------------------------------------------------
+-- ROL: postgres voor de catalogusgates, anon voor de grantcontrole — de vraag
+--      daar is wat een NIET-ingelogde bezoeker kan.
+--      (verplicht en machineleesbaar — zie ROL-1 in
+--       tests/cross-tenant/checksuite-rolverklaring.test.ts voor het waarom)
+-- ----------------------------------------------------------------------------
+
 do $$
 declare
   r record;

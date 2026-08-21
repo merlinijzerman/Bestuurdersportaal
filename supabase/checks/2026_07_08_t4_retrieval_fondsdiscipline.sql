@@ -23,6 +23,13 @@
 -- Uitvoeren:  psql "$DB" -f dit-bestand
 -- ============================================================================
 
+-- ----------------------------------------------------------------------------
+-- ROL: postgres voor de seed, authenticated per scenario — de fondsgrens moet
+--      onder RLS gelden; als postgres zou elke meting vals-groen zijn.
+--      (verplicht en machineleesbaar — zie ROL-1 in
+--       tests/cross-tenant/checksuite-rolverklaring.test.ts voor het waarom)
+-- ----------------------------------------------------------------------------
+
 \set ON_ERROR_STOP on
 
 begin;
