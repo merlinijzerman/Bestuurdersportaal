@@ -1,0 +1,153 @@
+# allowlist-grants.tsv — toelichting en afwijkingen
+
+Machine-leesbare bron van waarheid voor de **V3-grants-gate**
+(`2026_08_20_v3_grants_volledig.sql`). Eén regel per `(object, rol)`; kolommen:
+`sectie ⇥ schema ⇥ object ⇥ klasse ⇥ rol ⇥ rechten`. `rechten='-'` betekent geen
+recht. De verzameling distinct objecten ís het objectregister (drijft de regel
+"onbekend object").
+
+## ROL — waarmee genereren en toetsen
+
+**`postgres`, en met dezelfde rol in beide.** De gate vraagt met
+`has_table_privilege(<rol>, …)` *naar* de rechten van `anon`, `authenticated` en
+`service_role`; hij meet dus niet ALS die rollen maar OVER hen, en daarvoor is de
+volledige catalogus nodig. Genereer je als `postgres` en toets je later als een
+beperkte rol, dan mist de gate structureel wat de allowlist wél bevat — en dat
+verschil is stil. Zie de `-- ROL:`-regel bovenin de suite, bewaakt door `ROL-1`.
+
+## Herkomst en regenereren
+
+Op 21-08-2026 is de allowlist eerst opnieuw tegen **productie** gegenereerd en
+daarna geannoteerd met uitsluitend de hieronder beschreven migratieverschillen.
+Dat voorkomt dat de preview-baseline (`2026_08_14_preview_public`) ongemerkt als
+productiewaarheid wordt behandeld.
+
+### Reproduceerbare telling
+
+De SECDEF-telling telt object-OID's in `pg_proc`, dus niet unieke functienamen.
+De `fonds_id`-telling telt alleen gewone en gepartitioneerde tabellen (`r`,`p`),
+geen views. Beide queries zijn als `postgres` ongewijzigd op productie en de
+verse CI-keten uitgevoerd:
+
+```sql
+select count(*)
+from pg_proc p
+join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public' and p.prosecdef;
+
+select count(*)
+from pg_class c
+join pg_namespace n on n.oid = c.relnamespace
+join pg_attribute a on a.attrelid = c.oid
+where n.nspname = 'public'
+  and c.relkind in ('r', 'p')
+  and a.attname = 'fonds_id'
+  and a.attnum > 0
+  and not a.attisdropped;
+```
+
+De standen blijven verschillend, maar de vroegere conclusie "elf
+productie-only functies" volgt er niet uit:
+
+| stand | aantal | bron |
+|---|---|---|
+| pure replay van alleen de migraties | 28 | historische meting bij #78; andere keten |
+| **baseline + migraties (wat CI bouwt)** | **42** | opnieuw gemeten 21-08 |
+| productie | **39** | opnieuw gemeten 21-08 met dezelfde query |
+
+Voor `fonds_id`-tabellen is de uitkomst 64 in CI en 65 op productie. De review
+van de objectlijsten leverde dit op:
+
+- **nul productie-only SECDEF-functies**;
+- drie CI-only SECDEF-functies:
+  `fn_platform_event_chain_assert_valid()`,
+  `fn_platform_event_fork_declaration_immutable()` en
+  `fn_platform_event_hash()`;
+- zeven gedeelde SECDEF-functies met een andere definitiehash. De drie AQLab-
+  functies en `fn_rate_limit_check()` verschillen alleen in commentaar/opmaak.
+  De overige drie zijn echte versiedrift: productie heeft de geharde
+  `contact_notificatie_status()` en bevriest ook `ai_leeswijzer_tekst`; CI heeft
+  bij `maak_profiel()` juist de nieuwere admin-API-provisioning uit 19-08;
+- één productie-only tabel: `fonds_licentie`. Schema, constraints, RLS en grants
+  zijn gereviewd en komen overeen met de ontbrekende migratie
+  `2026_08_15_fonds_licentie.sql` op de herstelbranch.
+
+Regenereren begint altijd met een ongewijzigde productie-observatie in een
+tijdelijk bestand; overschrijf de verwachte allowlist niet vóór de objectreview:
+
+```bash
+psql "$PROD_DATABASE_URL" -q -f scripts/gen/v3-allowlist-generate.sql \
+  > /tmp/allowlist-grants.productie.tsv
+diff -u supabase/checks/allowlist-grants.tsv \
+  /tmp/allowlist-grants.productie.tsv
+```
+
+De ruwe productiemeting van 21-08 bevatte 752 regels. Na uitsluiting van de
+operationele `drift_lezer`-policy en toepassing van de al gereviewde
+migratie-annotaties bleef tegenover de vorige allowlist exact één wijziging over:
+de drie rolregels voor `fonds_licentie`.
+
+## Baseline-besluit
+
+**Baseline = productiestand van 21-08-2026, geannoteerd naar de
+migratiewaarheid.** De gate draait tegen de migratie-DB, dus de allowlist volgt
+voor beoordeelde, nog niet uitgerolde delta's die stand. Onbekende productie-
+objecten worden nooit automatisch geaccepteerd.
+
+## Afwijkingen van "de saaie standaard" — met reden
+
+De saaie standaard voor een tenant-tabel is: `anon=SELECT` (of `-`),
+`authenticated=SELECT,INSERT,UPDATE,DELETE`, `service_role=` alle rechten incl.
+MAINTAIN. Afwijkingen die bewust in de allowlist staan:
+
+1. **MAINTAIN-hygiëne (V3-remediatie).** `anon` en `authenticated` hebben nergens
+   in `public` MAINTAIN — dat is door `2026_08_20_v3_maintain_revoke.sql`
+   ingetrokken (Supabase-default-ACL kende het breed toe: anon op 118/123,
+   authenticated op 120). `service_role` behoudt MAINTAIN, net als bij gate F de
+   vertrouwde backend-rol.
+
+2. **Platform-event-chain (in migratie, nog niet in productie).** De vier objecten
+   `platform_event_chain_state`, `platform_event_fork_declarations`,
+   `fn_platform_event_chain_assert_valid(...)`,
+   `fn_platform_event_fork_declaration_immutable(...)` staan in de allowlist met
+   **geen enkel grant** voor alle drie rollen (deny-by-default append-only
+   platformregisters). Ze bestaan in preview/migraties maar nog niet in productie
+   → **deploy-actiepunt productie**.
+
+3. **`fn_platform_event_hash()` gehard (geen grants).** In productie draagt deze
+   trigger-functie nog `authenticated`/`service_role` EXECUTE (on-gehardende
+   default); de allowlist legt de gehardende migratiestand vast (geen grants) →
+   **deploy-actiepunt productie** (grant strippen).
+
+4. **C-01-views.** `vw_fondsleden`, `vw_dossier_status`: `authenticated=SELECT`,
+   `anon=-`. `vw_governance_audit`: beide `-` (alleen via de definer-RPC).
+   `service_role` volledig. De gate bewaakt dit dubbel: als grant-vergelijking én
+   als expliciete C-01-regel (geabsorbeerd uit V10).
+
+5. **Deny-by-default tabellen** (`platform_signaal_config`, `rate_limit_events`,
+   `fonds_licentie`, `governance_audit_grants`, e.d.): `anon=-`, `authenticated=-`,
+   `service_role=` subset of alle rechten. Bewuste keuze; niet elk service_role-
+   recht is volledig (bv. `ai_config_versie`=`SELECT,UPDATE`,
+   `ai_heractivering_besluit`=`SELECT,INSERT`).
+
+6. **Read-only-generiek** (`concepts`, `comparison_run`, `extraction_run`,
+   `semantic_units`, `governance_log_inhoud`, …): `anon=-`, `authenticated=SELECT`,
+   `service_role` volledig. Global-by-design codelijsten/afgeleide content.
+
+7. **`storage`-schema is Supabase-beheerd — bewust geaccepteerd.**
+   `storage.objects`, `storage.buckets`, `storage.buckets_analytics` kennen
+   `anon` én `authenticated` **alle** tabelrechten toe (incl. TRUNCATE), en ~20
+   `storage.*`-functies zijn anon-EXECUTE. Dit is de Supabase-platformdefault, RLS-
+   /policy-gated (zie de `STGPOL`-regels). Ze staan in de allowlist zodat de gate
+   niet vals-rood slaat bij elke platform-upgrade; **wijzigt Supabase deze stand,
+   dan is dat zichtbaar als een gate-verschil** — precies de bedoeling. Een
+   striktere afscherming van het storage-schema is een apart, later besluit.
+
+## Objecten die NIET in scope zijn
+
+Extensiefuncties (pgvector, pg_trgm) zijn uitgesloten via `pg_depend deptype='e'`
+— puur rekenkundig, geen datatoegang. `prosecdef`/`proconfig` (search_path-pinning)
+valt buiten V3: dat blijft gate E in `2026_07_31_r1_structurele_gates.sql`.
+Storage-policies die uitsluitend een operationele rol buiten `public`, `anon`,
+`authenticated` en `service_role` noemen (zoals `drift_lezer`) vallen eveneens
+buiten V3; de rol-DDL controleert die policy zelf fail-closed.
