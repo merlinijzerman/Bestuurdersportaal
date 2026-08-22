@@ -245,12 +245,12 @@ extensie|plpgsql|versie=1.0
 extensie|supabase_vault|versie=0.3.1
 extensie|uuid-ossp|versie=1.1
 extensie|vector|versie=0.8.0
-functie|public.afschriften_claim_jobs|secdef=true searchpath=search_path=public md5=3591950fa9928adcd7b98ef7ba0ce2a4
+functie|public.afschriften_claim_jobs|secdef=true searchpath=search_path=public, pg_temp md5=7d627ad02675f5a56b0bacf317c2175a
 functie|public.aqlab_add_run_cost|secdef=true searchpath=search_path=public, pg_temp md5=832aece20a61e944fdd94a6cb4bc28dc
-functie|public.aqlab_assurance_meetwaarden|secdef=true searchpath=search_path=public, pg_temp md5=1150dc1b5f46eda2f6183257e54df61f
-functie|public.aqlab_audit_export_bron|secdef=true searchpath=search_path=public, pg_temp md5=c88a4a62fee1610dd096ef60a7805aee
+functie|public.aqlab_assurance_meetwaarden|secdef=true searchpath=search_path=public, pg_temp md5=43c9df1cc0582a19fdb3ae3ba3ef7d18
+functie|public.aqlab_audit_export_bron|secdef=true searchpath=search_path=public, pg_temp md5=2528b6732e9173420acd54cafd358660
 functie|public.aqlab_claim_run_jobs|secdef=true searchpath=search_path=public, pg_temp md5=eb184099dde34abfc0c8ba08c5a1a118
-functie|public.aqlab_log_download|secdef=true searchpath=search_path=public, pg_temp md5=b5b0b031a003acdd8692a7f012dcdbf9
+functie|public.aqlab_log_download|secdef=true searchpath=search_path=public, pg_temp md5=0f4a1b18aff22b11c54332e578fff96f
 functie|public.array_to_halfvec|secdef=false searchpath=niet gepind md5=08fe62b1d62dbc61e549c804fde116ce
 functie|public.array_to_halfvec|secdef=false searchpath=niet gepind md5=4a8e00016064afa9d666574b2e85c7fc
 functie|public.array_to_halfvec|secdef=false searchpath=niet gepind md5=56e58b4545df506ce2140cd8ac4a1785
@@ -270,8 +270,8 @@ functie|public.contact_notificatie_status|secdef=true searchpath=search_path=pub
 functie|public.cosine_distance|secdef=false searchpath=niet gepind md5=5afce0d4539ac19c272fa594b112f8d8
 functie|public.cosine_distance|secdef=false searchpath=niet gepind md5=aae873c024ea345680642fcc9f8134aa
 functie|public.cosine_distance|secdef=false searchpath=niet gepind md5=f0d2d2543f6b6fc987170e7007cb382d
-functie|public.documenten_claim_ingest_jobs|secdef=true searchpath=search_path=public md5=0cfb60b4d5f67277939bf4b85974eb3f
-functie|public.fn_afschrift_bevries_kolommen|secdef=true searchpath=search_path=public md5=f3e976be87c95d608840e02e29f7a67b
+functie|public.documenten_claim_ingest_jobs|secdef=true searchpath=search_path=public, pg_temp md5=ab6ffe2b1e448c3bd14fa0eba972ee36
+functie|public.fn_afschrift_bevries_kolommen|secdef=true searchpath=search_path=public, pg_temp md5=7c450090869d688a36043e8462763a0a
 functie|public.fn_ai_actie_afronden|secdef=true searchpath=search_path=public, pg_temp md5=1ade7953987ff17e6497dd1e2031fe03
 functie|public.fn_ai_actie_bevries_kolommen|secdef=false searchpath=niet gepind md5=b731d7c8d5f74e2d4855b311ce296009
 functie|public.fn_ai_actietype_spec|secdef=true searchpath=search_path=public, pg_temp md5=db52ad2dc9eb89860b7ffe4bcaa32328
@@ -312,7 +312,7 @@ functie|public.fn_document_status_overgang_check|secdef=false searchpath=niet ge
 functie|public.fn_document_status_transitie|secdef=false searchpath=niet gepind md5=7d857b7ab28163b7c6ccf635358c987a
 functie|public.fn_dossierstatus_van_decision|secdef=false searchpath=niet gepind md5=fd4edd59525e5f110b8ee8d8285a6c7d
 functie|public.fn_export_log_immutable|secdef=false searchpath=niet gepind md5=ef0c3f7e78b73861b4cb4d64ef8a9892
-functie|public.fn_fonds_config_capture|secdef=false searchpath=niet gepind md5=71874eeae19540a13c34d82406de218e
+functie|public.fn_fonds_config_capture|secdef=false searchpath=niet gepind md5=3adcacded2f543f9f4dec31a0bd0fa76
 functie|public.fn_fonds_stuurinfo_capture|secdef=false searchpath=niet gepind md5=7e52d092d5b6096564b2d243dcdbef7f
 functie|public.fn_generiek_geldigheidsstatus|secdef=false searchpath=niet gepind md5=a7e747a1eb51b7fa7c5ead8e420cd898
 functie|public.fn_generiek_status_overgang_check|secdef=false searchpath=niet gepind md5=6d86f5fda64c759509f0292085aea872
@@ -326,12 +326,12 @@ functie|public.fn_notulen_segment_check|secdef=false searchpath=search_path=publ
 functie|public.fn_notulen_segment_ontbevestig|secdef=false searchpath=search_path=public, pg_temp md5=7cb5a8b2a7f47217d31c50cfa8d61ad1
 functie|public.fn_notulen_segment_verwijder|secdef=false searchpath=search_path=public, pg_temp md5=f9478d535ba029ccc463195545ae2194
 functie|public.fn_organisatie_profielen_touch|secdef=false searchpath=niet gepind md5=8b58dbe35ad1684b1d4a8408fe7174df
-functie|public.fn_platform_event_chain_assert_valid|secdef=true searchpath=search_path=pg_catalog, public, extensions md5=4d3dddc3c8c54c0a1ea775d780685946
-functie|public.fn_platform_event_fork_declaration_immutable|secdef=true searchpath=search_path=pg_catalog, public md5=c6bc9bf07c7f3838f5fb23682b2c1614
-functie|public.fn_platform_event_hash|secdef=true searchpath=search_path=pg_catalog, public md5=b0d295788debbd3dc6bb16a095ff1d88
+functie|public.fn_platform_event_chain_assert_valid|secdef=true searchpath=search_path=pg_catalog, public, extensions, pg_temp md5=01f54fe33cdfc6c8bf8dfba660cac6a6
+functie|public.fn_platform_event_fork_declaration_immutable|secdef=true searchpath=search_path=pg_catalog, public, pg_temp md5=06e92f7f318af090d222cbdded3a2dd9
+functie|public.fn_platform_event_hash|secdef=true searchpath=search_path=pg_catalog, public, pg_temp md5=3e654ca6fcb8ef411a8b331ea98f543d
 functie|public.fn_platform_event_immutable|secdef=false searchpath=niet gepind md5=b8fdf1fe9384e836325efa9b9fe9a053
 functie|public.fn_profiel_bevries_kolommen|secdef=true searchpath=search_path=public, pg_temp md5=1cb989181b99371810cd9cb65975b32f
-functie|public.fn_rate_limit_check|secdef=true searchpath=search_path=public, pg_temp md5=aa350903697b08f75a89ecebc49560c6
+functie|public.fn_rate_limit_check|secdef=true searchpath=search_path=public, pg_temp md5=5161460bc4f0848ab8ae355e0d981bfc
 functie|public.fn_schrijf_semantische_extractie|secdef=false searchpath=search_path=public md5=83862552d2a8ab85475b19145e1edc8b
 functie|public.fn_schrijf_vergelijking|secdef=true searchpath=search_path=public, pg_temp md5=297d2304ee033da1799ad3b222e0cd28
 functie|public.fn_snapshot_immutable|secdef=false searchpath=niet gepind md5=6c6a7a470620f20c18069d54ed39d696
@@ -443,9 +443,9 @@ functie|public.strict_word_similarity_dist_op|secdef=false searchpath=niet gepin
 functie|public.strict_word_similarity_op|secdef=false searchpath=niet gepind md5=fa21d1ae2c217ba161bb3f7777e5e020
 functie|public.strict_word_similarity|secdef=false searchpath=niet gepind md5=523450d477b4e105989795603c58761a
 functie|public.stuurinfo_balans_opslaan|secdef=false searchpath=search_path=public md5=f04911f800fb8152d8577f8aca3137cd
-functie|public.stuurinfo_operationeel_opslaan|secdef=false searchpath=search_path=public md5=79c186f606482640cc20d0853441d659
+functie|public.stuurinfo_operationeel_opslaan|secdef=false searchpath=search_path=public md5=f86f6abbf320a3b2665798c9fabb2100
 functie|public.stuurinfo_premie_opslaan|secdef=false searchpath=search_path=public md5=af3a6820ab3c82ff660c6816aa7de5e3
-functie|public.stuurinfo_soli_opslaan|secdef=false searchpath=search_path=public md5=7db26598aa5e8a9a68d151abe0ab8847
+functie|public.stuurinfo_soli_opslaan|secdef=false searchpath=search_path=public md5=50c1c2fa69fd03bc6aa47f0071b52d9b
 functie|public.subvector|secdef=false searchpath=niet gepind md5=179536e7df074edc984e384c50b43c92
 functie|public.subvector|secdef=false searchpath=niet gepind md5=e70d40bff82b94d819606d1a12ecc00a
 functie|public.vector_accum|secdef=false searchpath=niet gepind md5=918091a0f660f2fcafae8089b702c764
