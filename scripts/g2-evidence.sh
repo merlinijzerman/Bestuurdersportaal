@@ -41,6 +41,23 @@ groen=0
 rood=0
 
 # — helpers ------------------------------------------------------------------
+# Toont de laatste regels van een weggeschreven log bij een FAIL.
+#
+# WAAROM DIT ER IS. Deze drie checks schreven hun uitvoer naar /tmp en meldden bij
+# een fout alleen "zie /tmp/<bestand>". Lokaal is dat werkbaar; in CI is die map
+# na afloop onbereikbaar, dus stond er een RODE check zonder enige diagnose —
+# precies de faalvorm die dit script elders bestrijdt: het signaal bestaat, maar
+# is onleesbaar. Gemeten op de eerste promotie preview->main (#119): "sanity-
+# guards — zie /tmp/g2_sanity.log" en verder niets.
+toon_log() {
+  local bestand="$1" regels="${2:-40}"
+  [ -f "$bestand" ] || return 0
+  echo "        ── laatste $regels regels van $bestand ──"
+  tail -n "$regels" "$bestand" | sed 's/^/        /'
+  echo "        ── einde $bestand ──"
+}
+
+
 repo_pass() { printf '  [REPO] \033[32mPASS\033[0m  %s\n' "$1"; groen=$((groen+1)); }
 repo_fail() { printf '  [REPO] \033[31mFAIL\033[0m  %s\n' "$1"; rood=$((rood+1)); }
 ops_open()  { printf '  [OPS ] \033[33mOPEN\033[0m  %s\n' "$1"; }
@@ -332,19 +349,19 @@ echo "--------------------------------------------------------------------------
 if ./node_modules/.bin/tsc --noEmit --skipLibCheck >/tmp/g2_tsc.log 2>&1; then
   repo_pass "tsc --noEmit --skipLibCheck exit 0"
 else
-  repo_fail "tsc — zie /tmp/g2_tsc.log"; fi
+  repo_fail "tsc — zie hieronder"; toon_log "/tmp/g2_tsc.log"; fi
 
 # App-laag §15-matrix (node:test) — snel, geen DB.
 if npm run --silent test:xtenant >/tmp/g2_xtenant.log 2>&1; then
   repo_pass "app-laag §15-matrix (T1-T14) groen"
 else
-  repo_fail "app-laag §15-matrix — zie /tmp/g2_xtenant.log"; fi
+  repo_fail "app-laag §15-matrix — zie hieronder"; toon_log "/tmp/g2_xtenant.log"; fi
 
 # Pure guards.
 if npm run --silent sanity >/tmp/g2_sanity.log 2>&1; then
   repo_pass "core/lib + platform/lib *.sanity.ts guards groen"
 else
-  repo_fail "sanity-guards — zie /tmp/g2_sanity.log"; fi
+  repo_fail "sanity-guards — zie hieronder"; toon_log "/tmp/g2_sanity.log"; fi
 
 if [ "$RUN_SUITE" = "1" ]; then
   echo
