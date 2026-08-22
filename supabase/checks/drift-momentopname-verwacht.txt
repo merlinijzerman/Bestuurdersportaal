@@ -1,0 +1,775 @@
+execute|public.afschriften_claim_jobs|anon=false authenticated=false
+execute|public.aqlab_add_run_cost|anon=false authenticated=false
+execute|public.aqlab_assurance_meetwaarden|anon=false authenticated=true
+execute|public.aqlab_audit_export_bron|anon=false authenticated=true
+execute|public.aqlab_claim_run_jobs|anon=false authenticated=false
+execute|public.aqlab_log_download|anon=false authenticated=true
+execute|public.array_to_halfvec|anon=true authenticated=true
+execute|public.array_to_halfvec|anon=true authenticated=true
+execute|public.array_to_halfvec|anon=true authenticated=true
+execute|public.array_to_halfvec|anon=true authenticated=true
+execute|public.array_to_sparsevec|anon=true authenticated=true
+execute|public.array_to_sparsevec|anon=true authenticated=true
+execute|public.array_to_sparsevec|anon=true authenticated=true
+execute|public.array_to_sparsevec|anon=true authenticated=true
+execute|public.array_to_vector|anon=true authenticated=true
+execute|public.array_to_vector|anon=true authenticated=true
+execute|public.array_to_vector|anon=true authenticated=true
+execute|public.array_to_vector|anon=true authenticated=true
+execute|public.binary_quantize|anon=true authenticated=true
+execute|public.binary_quantize|anon=true authenticated=true
+execute|public.contact_aanvraag_insert|anon=true authenticated=true
+execute|public.contact_notificatie_status|anon=true authenticated=true
+execute|public.cosine_distance|anon=true authenticated=true
+execute|public.cosine_distance|anon=true authenticated=true
+execute|public.cosine_distance|anon=true authenticated=true
+execute|public.documenten_claim_ingest_jobs|anon=false authenticated=false
+execute|public.fn_afschrift_bevries_kolommen|anon=false authenticated=true
+execute|public.fn_ai_actie_afronden|anon=false authenticated=true
+execute|public.fn_ai_actie_bevries_kolommen|anon=false authenticated=false
+execute|public.fn_ai_actietype_spec|anon=false authenticated=true
+execute|public.fn_ai_allowlist_wijzigen|anon=false authenticated=false
+execute|public.fn_ai_bump_config_versie|anon=false authenticated=false
+execute|public.fn_ai_heractivering_aanvragen|anon=false authenticated=false
+execute|public.fn_ai_heractivering_afwijzen|anon=false authenticated=false
+execute|public.fn_ai_heractivering_goedkeuren|anon=false authenticated=false
+execute|public.fn_ai_heractivering_intrekken|anon=false authenticated=false
+execute|public.fn_ai_poort_check|anon=false authenticated=true
+execute|public.fn_ai_preflight_systeem|anon=false authenticated=false
+execute|public.fn_ai_preflight|anon=false authenticated=true
+execute|public.fn_ai_quota_wijzigen|anon=false authenticated=false
+execute|public.fn_ai_reserveer_intern|anon=false authenticated=false
+execute|public.fn_ai_switch_stoppen|anon=false authenticated=false
+execute|public.fn_app_error_log|anon=false authenticated=true
+execute|public.fn_bron_whitelist_log_hash|anon=false authenticated=true
+execute|public.fn_bron_whitelist_log_immutable|anon=false authenticated=true
+execute|public.fn_build_decision_dossier|anon=false authenticated=true
+execute|public.fn_chunk_denorm_before_insert|anon=false authenticated=true
+execute|public.fn_chunk_denorm_refresh|anon=false authenticated=true
+execute|public.fn_chunk_denorm|anon=false authenticated=true
+execute|public.fn_contact_aanvragen_no_delete|anon=false authenticated=true
+execute|public.fn_decision_code|anon=false authenticated=true
+execute|public.fn_decision_readiness_check|anon=false authenticated=true
+execute|public.fn_decision_readiness_overview|anon=false authenticated=true
+execute|public.fn_decision_snapshot|anon=false authenticated=true
+execute|public.fn_decision_status_check|anon=false authenticated=true
+execute|public.fn_decision_touch|anon=false authenticated=true
+execute|public.fn_doc_meta_log_hash|anon=false authenticated=true
+execute|public.fn_doc_meta_log_immutable|anon=false authenticated=true
+execute|public.fn_document_agendapunt_validatie|anon=false authenticated=false
+execute|public.fn_document_agendapunt_vergadering_check|anon=false authenticated=true
+execute|public.fn_document_primair_vs_secundair_check|anon=false authenticated=true
+execute|public.fn_document_procesinstantie_fonds_check|anon=false authenticated=true
+execute|public.fn_document_procesinstantie_validatie|anon=false authenticated=true
+execute|public.fn_document_status_overgang_check|anon=false authenticated=true
+execute|public.fn_document_status_transitie|anon=false authenticated=true
+execute|public.fn_dossierstatus_van_decision|anon=false authenticated=true
+execute|public.fn_export_log_immutable|anon=false authenticated=true
+execute|public.fn_fonds_config_capture|anon=false authenticated=true
+execute|public.fn_fonds_stuurinfo_capture|anon=false authenticated=true
+execute|public.fn_generiek_geldigheidsstatus|anon=false authenticated=true
+execute|public.fn_generiek_status_overgang_check|anon=false authenticated=true
+execute|public.fn_generiek_transitie|anon=false authenticated=true
+execute|public.fn_govevent_hash|anon=false authenticated=true
+execute|public.fn_govevent_immutable|anon=false authenticated=true
+execute|public.fn_log_append_only|anon=false authenticated=true
+execute|public.fn_notulen_segment_audit|anon=false authenticated=true
+execute|public.fn_notulen_segment_bevestig|anon=false authenticated=true
+execute|public.fn_notulen_segment_check|anon=false authenticated=true
+execute|public.fn_notulen_segment_ontbevestig|anon=false authenticated=true
+execute|public.fn_notulen_segment_verwijder|anon=false authenticated=true
+execute|public.fn_organisatie_profielen_touch|anon=false authenticated=true
+execute|public.fn_platform_event_hash|anon=false authenticated=true
+execute|public.fn_platform_event_immutable|anon=false authenticated=true
+execute|public.fn_profiel_bevries_kolommen|anon=false authenticated=false
+execute|public.fn_rate_limit_check|anon=false authenticated=true
+execute|public.fn_schrijf_semantische_extractie|anon=false authenticated=false
+execute|public.fn_schrijf_vergelijking|anon=false authenticated=true
+execute|public.fn_snapshot_immutable|anon=false authenticated=true
+execute|public.fn_zelfde_fonds|anon=false authenticated=true
+execute|public.gin_extract_query_trgm|anon=true authenticated=true
+execute|public.gin_extract_value_trgm|anon=true authenticated=true
+execute|public.gin_trgm_consistent|anon=true authenticated=true
+execute|public.gin_trgm_triconsistent|anon=true authenticated=true
+execute|public.gtrgm_compress|anon=true authenticated=true
+execute|public.gtrgm_consistent|anon=true authenticated=true
+execute|public.gtrgm_decompress|anon=true authenticated=true
+execute|public.gtrgm_distance|anon=true authenticated=true
+execute|public.gtrgm_in|anon=true authenticated=true
+execute|public.gtrgm_options|anon=true authenticated=true
+execute|public.gtrgm_out|anon=true authenticated=true
+execute|public.gtrgm_penalty|anon=true authenticated=true
+execute|public.gtrgm_picksplit|anon=true authenticated=true
+execute|public.gtrgm_same|anon=true authenticated=true
+execute|public.gtrgm_union|anon=true authenticated=true
+execute|public.halfvec_accum|anon=true authenticated=true
+execute|public.halfvec_add|anon=true authenticated=true
+execute|public.halfvec_avg|anon=true authenticated=true
+execute|public.halfvec_cmp|anon=true authenticated=true
+execute|public.halfvec_combine|anon=true authenticated=true
+execute|public.halfvec_concat|anon=true authenticated=true
+execute|public.halfvec_eq|anon=true authenticated=true
+execute|public.halfvec_ge|anon=true authenticated=true
+execute|public.halfvec_gt|anon=true authenticated=true
+execute|public.halfvec_in|anon=true authenticated=true
+execute|public.halfvec_l2_squared_distance|anon=true authenticated=true
+execute|public.halfvec_le|anon=true authenticated=true
+execute|public.halfvec_lt|anon=true authenticated=true
+execute|public.halfvec_mul|anon=true authenticated=true
+execute|public.halfvec_negative_inner_product|anon=true authenticated=true
+execute|public.halfvec_ne|anon=true authenticated=true
+execute|public.halfvec_out|anon=true authenticated=true
+execute|public.halfvec_recv|anon=true authenticated=true
+execute|public.halfvec_send|anon=true authenticated=true
+execute|public.halfvec_spherical_distance|anon=true authenticated=true
+execute|public.halfvec_sub|anon=true authenticated=true
+execute|public.halfvec_to_float4|anon=true authenticated=true
+execute|public.halfvec_to_sparsevec|anon=true authenticated=true
+execute|public.halfvec_to_vector|anon=true authenticated=true
+execute|public.halfvec_typmod_in|anon=true authenticated=true
+execute|public.halfvec|anon=true authenticated=true
+execute|public.hamming_distance|anon=true authenticated=true
+execute|public.hnsw_bit_support|anon=true authenticated=true
+execute|public.hnsw_halfvec_support|anon=true authenticated=true
+execute|public.hnsw_sparsevec_support|anon=true authenticated=true
+execute|public.hnswhandler|anon=true authenticated=true
+execute|public.inner_product|anon=true authenticated=true
+execute|public.inner_product|anon=true authenticated=true
+execute|public.inner_product|anon=true authenticated=true
+execute|public.ivfflat_bit_support|anon=true authenticated=true
+execute|public.ivfflat_halfvec_support|anon=true authenticated=true
+execute|public.ivfflathandler|anon=true authenticated=true
+execute|public.jaccard_distance|anon=true authenticated=true
+execute|public.l1_distance|anon=true authenticated=true
+execute|public.l1_distance|anon=true authenticated=true
+execute|public.l1_distance|anon=true authenticated=true
+execute|public.l2_distance|anon=true authenticated=true
+execute|public.l2_distance|anon=true authenticated=true
+execute|public.l2_distance|anon=true authenticated=true
+execute|public.l2_normalize|anon=true authenticated=true
+execute|public.l2_normalize|anon=true authenticated=true
+execute|public.l2_normalize|anon=true authenticated=true
+execute|public.l2_norm|anon=true authenticated=true
+execute|public.l2_norm|anon=true authenticated=true
+execute|public.lees_governance_audit|anon=false authenticated=true
+execute|public.log_word_export|anon=false authenticated=true
+execute|public.maak_profiel|anon=false authenticated=false
+execute|public.mag_audit_bronnen|anon=false authenticated=true
+execute|public.mag_audit_redacties|anon=false authenticated=true
+execute|public.mag_audit|anon=false authenticated=true
+execute|public.meta_basisniveau|anon=false authenticated=true
+execute|public.meta_bronniveau|anon=false authenticated=true
+execute|public.meta_projectie|anon=false authenticated=true
+execute|public.profiel_opslaan|anon=false authenticated=true
+execute|public.reflectie_bronset_hash|anon=false authenticated=true
+execute|public.reflectie_transitie|anon=false authenticated=true
+execute|public.resolve_tenant_host|anon=true authenticated=true
+execute|public.schrijf_ai_interactie|anon=false authenticated=true
+execute|public.set_limit|anon=true authenticated=true
+execute|public.show_limit|anon=true authenticated=true
+execute|public.show_trgm|anon=true authenticated=true
+execute|public.similarity_dist|anon=true authenticated=true
+execute|public.similarity_op|anon=true authenticated=true
+execute|public.similarity|anon=true authenticated=true
+execute|public.sparsevec_cmp|anon=true authenticated=true
+execute|public.sparsevec_eq|anon=true authenticated=true
+execute|public.sparsevec_ge|anon=true authenticated=true
+execute|public.sparsevec_gt|anon=true authenticated=true
+execute|public.sparsevec_in|anon=true authenticated=true
+execute|public.sparsevec_l2_squared_distance|anon=true authenticated=true
+execute|public.sparsevec_le|anon=true authenticated=true
+execute|public.sparsevec_lt|anon=true authenticated=true
+execute|public.sparsevec_negative_inner_product|anon=true authenticated=true
+execute|public.sparsevec_ne|anon=true authenticated=true
+execute|public.sparsevec_out|anon=true authenticated=true
+execute|public.sparsevec_recv|anon=true authenticated=true
+execute|public.sparsevec_send|anon=true authenticated=true
+execute|public.sparsevec_to_halfvec|anon=true authenticated=true
+execute|public.sparsevec_to_vector|anon=true authenticated=true
+execute|public.sparsevec_typmod_in|anon=true authenticated=true
+execute|public.sparsevec|anon=true authenticated=true
+execute|public.strict_word_similarity_commutator_op|anon=true authenticated=true
+execute|public.strict_word_similarity_dist_commutator_op|anon=true authenticated=true
+execute|public.strict_word_similarity_dist_op|anon=true authenticated=true
+execute|public.strict_word_similarity_op|anon=true authenticated=true
+execute|public.strict_word_similarity|anon=true authenticated=true
+execute|public.stuurinfo_balans_opslaan|anon=false authenticated=true
+execute|public.stuurinfo_operationeel_opslaan|anon=false authenticated=true
+execute|public.stuurinfo_premie_opslaan|anon=false authenticated=true
+execute|public.stuurinfo_soli_opslaan|anon=false authenticated=true
+execute|public.subvector|anon=true authenticated=true
+execute|public.subvector|anon=true authenticated=true
+execute|public.vector_accum|anon=true authenticated=true
+execute|public.vector_add|anon=true authenticated=true
+execute|public.vector_avg|anon=true authenticated=true
+execute|public.vector_cmp|anon=true authenticated=true
+execute|public.vector_combine|anon=true authenticated=true
+execute|public.vector_concat|anon=true authenticated=true
+execute|public.vector_dims|anon=true authenticated=true
+execute|public.vector_dims|anon=true authenticated=true
+execute|public.vector_eq|anon=true authenticated=true
+execute|public.vector_ge|anon=true authenticated=true
+execute|public.vector_gt|anon=true authenticated=true
+execute|public.vector_in|anon=true authenticated=true
+execute|public.vector_l2_squared_distance|anon=true authenticated=true
+execute|public.vector_le|anon=true authenticated=true
+execute|public.vector_lt|anon=true authenticated=true
+execute|public.vector_mul|anon=true authenticated=true
+execute|public.vector_negative_inner_product|anon=true authenticated=true
+execute|public.vector_ne|anon=true authenticated=true
+execute|public.vector_norm|anon=true authenticated=true
+execute|public.vector_out|anon=true authenticated=true
+execute|public.vector_recv|anon=true authenticated=true
+execute|public.vector_send|anon=true authenticated=true
+execute|public.vector_spherical_distance|anon=true authenticated=true
+execute|public.vector_sub|anon=true authenticated=true
+execute|public.vector_to_float4|anon=true authenticated=true
+execute|public.vector_to_halfvec|anon=true authenticated=true
+execute|public.vector_to_sparsevec|anon=true authenticated=true
+execute|public.vector_typmod_in|anon=true authenticated=true
+execute|public.vector|anon=true authenticated=true
+execute|public.verwijder_gesprek|anon=false authenticated=true
+execute|public.word_similarity_commutator_op|anon=true authenticated=true
+execute|public.word_similarity_dist_commutator_op|anon=true authenticated=true
+execute|public.word_similarity_dist_op|anon=true authenticated=true
+execute|public.word_similarity_op|anon=true authenticated=true
+execute|public.word_similarity|anon=true authenticated=true
+execute|public.zoek_chunks_hybride|anon=false authenticated=true
+execute|public.zoek_chunks|anon=false authenticated=true
+extensie|pg_stat_statements|versie=1.11
+extensie|pg_trgm|versie=1.6
+extensie|pgcrypto|versie=1.3
+extensie|plpgsql|versie=1.0
+extensie|supabase_vault|versie=0.3.1
+extensie|uuid-ossp|versie=1.1
+extensie|vector|versie=0.8.0
+functie|public.afschriften_claim_jobs|secdef=true searchpath=search_path=public md5=3591950fa9928adcd7b98ef7ba0ce2a4
+functie|public.aqlab_add_run_cost|secdef=true searchpath=search_path=public, pg_temp md5=832aece20a61e944fdd94a6cb4bc28dc
+functie|public.aqlab_assurance_meetwaarden|secdef=true searchpath=search_path=public, pg_temp md5=1150dc1b5f46eda2f6183257e54df61f
+functie|public.aqlab_audit_export_bron|secdef=true searchpath=search_path=public, pg_temp md5=c88a4a62fee1610dd096ef60a7805aee
+functie|public.aqlab_claim_run_jobs|secdef=true searchpath=search_path=public, pg_temp md5=eb184099dde34abfc0c8ba08c5a1a118
+functie|public.aqlab_log_download|secdef=true searchpath=search_path=public, pg_temp md5=b5b0b031a003acdd8692a7f012dcdbf9
+functie|public.array_to_halfvec|secdef=false searchpath=niet gepind md5=08fe62b1d62dbc61e549c804fde116ce
+functie|public.array_to_halfvec|secdef=false searchpath=niet gepind md5=4a8e00016064afa9d666574b2e85c7fc
+functie|public.array_to_halfvec|secdef=false searchpath=niet gepind md5=56e58b4545df506ce2140cd8ac4a1785
+functie|public.array_to_halfvec|secdef=false searchpath=niet gepind md5=904db2dcbf9a5860124ad1a0e75c52a0
+functie|public.array_to_sparsevec|secdef=false searchpath=niet gepind md5=3e4e6997e24314568fcb3c132beab743
+functie|public.array_to_sparsevec|secdef=false searchpath=niet gepind md5=748e6a6647a319c3ba9c85c717824dad
+functie|public.array_to_sparsevec|secdef=false searchpath=niet gepind md5=de63cf8e89ab568e0475c1b05cc9e0a6
+functie|public.array_to_sparsevec|secdef=false searchpath=niet gepind md5=ecc5d14d69bf5808b179c24c42eef51b
+functie|public.array_to_vector|secdef=false searchpath=niet gepind md5=1e2b6d9448dd7c8dc9e3499f5e9e1503
+functie|public.array_to_vector|secdef=false searchpath=niet gepind md5=4ac9a9c9f43c3746bebb714c3fc09f35
+functie|public.array_to_vector|secdef=false searchpath=niet gepind md5=6e5efe70a73a6ea87722dfae7f9a7bc4
+functie|public.array_to_vector|secdef=false searchpath=niet gepind md5=c04d2f04a75d7b2db04e9eef227e493e
+functie|public.binary_quantize|secdef=false searchpath=niet gepind md5=a0a6c716d5df703d8e89d34584aea1cf
+functie|public.binary_quantize|secdef=false searchpath=niet gepind md5=f931f9c7fce7b5b01db97f3c052b88a6
+functie|public.contact_aanvraag_insert|secdef=true searchpath=search_path=public, pg_temp md5=ad126faf0c8007971eb7ae40c4944cbf
+functie|public.contact_notificatie_status|secdef=true searchpath=search_path=public, pg_temp md5=31c49fb7b9afe76ee560f3ee96cdbde3
+functie|public.cosine_distance|secdef=false searchpath=niet gepind md5=5afce0d4539ac19c272fa594b112f8d8
+functie|public.cosine_distance|secdef=false searchpath=niet gepind md5=aae873c024ea345680642fcc9f8134aa
+functie|public.cosine_distance|secdef=false searchpath=niet gepind md5=f0d2d2543f6b6fc987170e7007cb382d
+functie|public.documenten_claim_ingest_jobs|secdef=true searchpath=search_path=public md5=0cfb60b4d5f67277939bf4b85974eb3f
+functie|public.fn_afschrift_bevries_kolommen|secdef=true searchpath=search_path=public md5=f3e976be87c95d608840e02e29f7a67b
+functie|public.fn_ai_actie_afronden|secdef=true searchpath=search_path=public, pg_temp md5=1ade7953987ff17e6497dd1e2031fe03
+functie|public.fn_ai_actie_bevries_kolommen|secdef=false searchpath=niet gepind md5=b731d7c8d5f74e2d4855b311ce296009
+functie|public.fn_ai_actietype_spec|secdef=true searchpath=search_path=public, pg_temp md5=db52ad2dc9eb89860b7ffe4bcaa32328
+functie|public.fn_ai_allowlist_wijzigen|secdef=true searchpath=search_path=public, pg_temp md5=cb63b9c42b3d2780daaf83cdce8ee7f7
+functie|public.fn_ai_bump_config_versie|secdef=true searchpath=search_path=public, pg_temp md5=606d473e8e519063ce27dbb82bd8c08b
+functie|public.fn_ai_heractivering_aanvragen|secdef=true searchpath=search_path=public, pg_temp md5=ebf5d5cbbc3e0cf637ffb0d31eaa029f
+functie|public.fn_ai_heractivering_afwijzen|secdef=true searchpath=search_path=public, pg_temp md5=14b17773be9c51e30866e038f5ac14c1
+functie|public.fn_ai_heractivering_goedkeuren|secdef=true searchpath=search_path=public, pg_temp md5=3c88ace1d39c09c4cc04d2408aae1afc
+functie|public.fn_ai_heractivering_intrekken|secdef=true searchpath=search_path=public, pg_temp md5=13498daae77497f5343d52a6c559d1f9
+functie|public.fn_ai_poort_check|secdef=true searchpath=search_path=public, pg_temp md5=fe6e4729e45e0bc4c0e3253c305c7f46
+functie|public.fn_ai_preflight_systeem|secdef=true searchpath=search_path=public, pg_temp md5=6aebf209e17426dd6b5ab3c444933be4
+functie|public.fn_ai_preflight|secdef=true searchpath=search_path=public, pg_temp md5=52430e36ed3f8bf0822db07293fc76a8
+functie|public.fn_ai_quota_wijzigen|secdef=true searchpath=search_path=public, pg_temp md5=ffaa4d8e63331a6dae7ccf9ab19cf9e2
+functie|public.fn_ai_reserveer_intern|secdef=true searchpath=search_path=public, pg_temp md5=eb5d25daf886431b1fd9ea7f19b9bc24
+functie|public.fn_ai_switch_stoppen|secdef=true searchpath=search_path=public, pg_temp md5=e1e3f1e158145605cf32172d109cec38
+functie|public.fn_app_error_log|secdef=true searchpath=search_path=public, pg_temp md5=47a90cb00c8a9278ef3b31c4e3cfce0d
+functie|public.fn_bron_whitelist_log_hash|secdef=false searchpath=niet gepind md5=1aa9977b6faa89b2602d8063635d7e78
+functie|public.fn_bron_whitelist_log_immutable|secdef=false searchpath=niet gepind md5=94349a2cbfe96fe81e4377f84fa535c2
+functie|public.fn_build_decision_dossier|secdef=false searchpath=niet gepind md5=fc21561876389af8dba84f4a070b872a
+functie|public.fn_chunk_denorm_before_insert|secdef=false searchpath=search_path=public, pg_temp md5=67c83b5bcab8eb1599f65b56453b2b19
+functie|public.fn_chunk_denorm_refresh|secdef=false searchpath=search_path=public, pg_temp md5=b98c9d83fc5c31caf22d893427411d80
+functie|public.fn_chunk_denorm|secdef=false searchpath=search_path=public, pg_temp md5=7407172179d566288620b6040471d1f9
+functie|public.fn_contact_aanvragen_no_delete|secdef=false searchpath=niet gepind md5=1080388908f45c73657e4acb99ea8f89
+functie|public.fn_decision_code|secdef=false searchpath=niet gepind md5=c3cbda023278c39644055523be469deb
+functie|public.fn_decision_readiness_check|secdef=false searchpath=niet gepind md5=8ea857446adfc27e8d58c4a6b27b914b
+functie|public.fn_decision_readiness_overview|secdef=false searchpath=niet gepind md5=b66240a861a60d6f2cf87374b0732b08
+functie|public.fn_decision_snapshot|secdef=false searchpath=niet gepind md5=bab1eeaeb7ff99bb08f8c6bf573eb24c
+functie|public.fn_decision_status_check|secdef=false searchpath=niet gepind md5=07b816d9343f3bcdfefa2590d3a7337b
+functie|public.fn_decision_touch|secdef=false searchpath=niet gepind md5=ad400f9606ba5747eedfab918407f5ff
+functie|public.fn_doc_meta_log_hash|secdef=false searchpath=niet gepind md5=273081c60c95ccbb1e3b9fea14de3d2f
+functie|public.fn_doc_meta_log_immutable|secdef=false searchpath=niet gepind md5=534e3c73a31bac1f4b77fc4c4ac3d673
+functie|public.fn_document_agendapunt_validatie|secdef=false searchpath=niet gepind md5=56c7031b3be91f8edc14d7d8693e4c4e
+functie|public.fn_document_agendapunt_vergadering_check|secdef=false searchpath=niet gepind md5=5067a8dc58d891ca93286e6cc8449b99
+functie|public.fn_document_primair_vs_secundair_check|secdef=false searchpath=niet gepind md5=4104f96118b55db697a9164324828370
+functie|public.fn_document_procesinstantie_fonds_check|secdef=false searchpath=niet gepind md5=830a69ae893cd05ccce79d53a16f0fc9
+functie|public.fn_document_procesinstantie_validatie|secdef=false searchpath=niet gepind md5=7db2ce8b18935f02c7af15529b09b6aa
+functie|public.fn_document_status_overgang_check|secdef=false searchpath=niet gepind md5=8a31496af07ca0d4c397fb0d9c9625e3
+functie|public.fn_document_status_transitie|secdef=false searchpath=niet gepind md5=7d857b7ab28163b7c6ccf635358c987a
+functie|public.fn_dossierstatus_van_decision|secdef=false searchpath=niet gepind md5=fd4edd59525e5f110b8ee8d8285a6c7d
+functie|public.fn_export_log_immutable|secdef=false searchpath=niet gepind md5=ef0c3f7e78b73861b4cb4d64ef8a9892
+functie|public.fn_fonds_config_capture|secdef=false searchpath=niet gepind md5=71874eeae19540a13c34d82406de218e
+functie|public.fn_fonds_stuurinfo_capture|secdef=false searchpath=niet gepind md5=7e52d092d5b6096564b2d243dcdbef7f
+functie|public.fn_generiek_geldigheidsstatus|secdef=false searchpath=niet gepind md5=a7e747a1eb51b7fa7c5ead8e420cd898
+functie|public.fn_generiek_status_overgang_check|secdef=false searchpath=niet gepind md5=6d86f5fda64c759509f0292085aea872
+functie|public.fn_generiek_transitie|secdef=false searchpath=niet gepind md5=ed9c5995a0a1919f410f050fbfb0bd10
+functie|public.fn_govevent_hash|secdef=false searchpath=niet gepind md5=1294f096cd0d8f24de1ff3b311ea4ed0
+functie|public.fn_govevent_immutable|secdef=false searchpath=niet gepind md5=1d5c905da3137e3861cd0d71fa4aec89
+functie|public.fn_log_append_only|secdef=false searchpath=niet gepind md5=fed6579db5f69ca5ff4b7d7a685e451f
+functie|public.fn_notulen_segment_audit|secdef=false searchpath=search_path=public, pg_temp md5=2c8a5db4298f143527721e2f7d60324e
+functie|public.fn_notulen_segment_bevestig|secdef=false searchpath=search_path=public, pg_temp md5=ce297c95ea931f6fea911ff0fce958ca
+functie|public.fn_notulen_segment_check|secdef=false searchpath=search_path=public, pg_temp md5=00be212fd3ed9ac7200b4ce06123e512
+functie|public.fn_notulen_segment_ontbevestig|secdef=false searchpath=search_path=public, pg_temp md5=7cb5a8b2a7f47217d31c50cfa8d61ad1
+functie|public.fn_notulen_segment_verwijder|secdef=false searchpath=search_path=public, pg_temp md5=f9478d535ba029ccc463195545ae2194
+functie|public.fn_organisatie_profielen_touch|secdef=false searchpath=niet gepind md5=8b58dbe35ad1684b1d4a8408fe7174df
+functie|public.fn_platform_event_hash|secdef=false searchpath=niet gepind md5=533b740a6975a40211a1f2980271ac55
+functie|public.fn_platform_event_immutable|secdef=false searchpath=niet gepind md5=b8fdf1fe9384e836325efa9b9fe9a053
+functie|public.fn_profiel_bevries_kolommen|secdef=true searchpath=search_path=public, pg_temp md5=1cb989181b99371810cd9cb65975b32f
+functie|public.fn_rate_limit_check|secdef=true searchpath=search_path=public, pg_temp md5=aa350903697b08f75a89ecebc49560c6
+functie|public.fn_schrijf_semantische_extractie|secdef=false searchpath=search_path=public md5=83862552d2a8ab85475b19145e1edc8b
+functie|public.fn_schrijf_vergelijking|secdef=true searchpath=search_path=public, pg_temp md5=297d2304ee033da1799ad3b222e0cd28
+functie|public.fn_snapshot_immutable|secdef=false searchpath=niet gepind md5=6c6a7a470620f20c18069d54ed39d696
+functie|public.fn_zelfde_fonds|secdef=true searchpath=search_path=public, pg_temp md5=fd415f348794638b2fcfa791b8f23421
+functie|public.gin_extract_query_trgm|secdef=false searchpath=niet gepind md5=908112f5743e0dc3307ce7da24a3d095
+functie|public.gin_extract_value_trgm|secdef=false searchpath=niet gepind md5=42bc3d69fe7ae6ba4409315e68686e93
+functie|public.gin_trgm_consistent|secdef=false searchpath=niet gepind md5=3b5516ee327d210cf276d0f7cbec6a1b
+functie|public.gin_trgm_triconsistent|secdef=false searchpath=niet gepind md5=ebb9557e4d7f2342aa65aa319bf2f6ad
+functie|public.gtrgm_compress|secdef=false searchpath=niet gepind md5=0ac3144cfd060482fab5339fe0e2a9e1
+functie|public.gtrgm_consistent|secdef=false searchpath=niet gepind md5=00d55f7471e62f08ca85d8d4e61991e7
+functie|public.gtrgm_decompress|secdef=false searchpath=niet gepind md5=217b0af3efb9f430e911c6e2aeb0aa99
+functie|public.gtrgm_distance|secdef=false searchpath=niet gepind md5=374c53a6404b5daf685b2c4222c76a54
+functie|public.gtrgm_in|secdef=false searchpath=niet gepind md5=85d9e1867f8d5b1ad99fbeac7a03595e
+functie|public.gtrgm_options|secdef=false searchpath=niet gepind md5=18b083f2c473ca71bc90b18732d82493
+functie|public.gtrgm_out|secdef=false searchpath=niet gepind md5=03641c6b5e277450ea5f628094c0a607
+functie|public.gtrgm_penalty|secdef=false searchpath=niet gepind md5=4f0a4190629a524609fe1b21fc480341
+functie|public.gtrgm_picksplit|secdef=false searchpath=niet gepind md5=366a79f83941d97999f208690619b79d
+functie|public.gtrgm_same|secdef=false searchpath=niet gepind md5=e34ae9aee761b36d68942175420b9030
+functie|public.gtrgm_union|secdef=false searchpath=niet gepind md5=1e514b035bac6c001492f0ec64f222b8
+functie|public.halfvec_accum|secdef=false searchpath=niet gepind md5=54d1be5e155e0a4f46aaefdf048f9e14
+functie|public.halfvec_add|secdef=false searchpath=niet gepind md5=be91e61f15f9375e7fc6fc7e201414ba
+functie|public.halfvec_avg|secdef=false searchpath=niet gepind md5=9b14a1480f97af0b2ddf79dda459067f
+functie|public.halfvec_cmp|secdef=false searchpath=niet gepind md5=62209ae06f559faa5d2aefae66bb9016
+functie|public.halfvec_combine|secdef=false searchpath=niet gepind md5=b029372e9e41488b190750e02747dcc1
+functie|public.halfvec_concat|secdef=false searchpath=niet gepind md5=5784e3b5ddeb9f01e849ef4c2ae24c33
+functie|public.halfvec_eq|secdef=false searchpath=niet gepind md5=6107300fb96b786aa3a8679490c81e3e
+functie|public.halfvec_ge|secdef=false searchpath=niet gepind md5=473843e04e1b794a68f54b8e9ef212de
+functie|public.halfvec_gt|secdef=false searchpath=niet gepind md5=fdde962be26b5f2e6e67a11a094c6be3
+functie|public.halfvec_in|secdef=false searchpath=niet gepind md5=5f40b416d6871956552a95c72583da16
+functie|public.halfvec_l2_squared_distance|secdef=false searchpath=niet gepind md5=7344a4ecdf96ee4aa3a5aa43836f2448
+functie|public.halfvec_le|secdef=false searchpath=niet gepind md5=456d805ac049548c040c98afa8e44979
+functie|public.halfvec_lt|secdef=false searchpath=niet gepind md5=110995de19dd759e0e8500ef7558cee1
+functie|public.halfvec_mul|secdef=false searchpath=niet gepind md5=d6fb7e62338db095dff4b383e19a521d
+functie|public.halfvec_negative_inner_product|secdef=false searchpath=niet gepind md5=3414b3774d740dd44f6e7cf8801a8d21
+functie|public.halfvec_ne|secdef=false searchpath=niet gepind md5=7d1acaf8976417083a395850ee6afabb
+functie|public.halfvec_out|secdef=false searchpath=niet gepind md5=d22ebecea2675b416feee97debb147d3
+functie|public.halfvec_recv|secdef=false searchpath=niet gepind md5=820e08d843a48fb3660436be96136201
+functie|public.halfvec_send|secdef=false searchpath=niet gepind md5=c988b2e6efe9545747e5d6f6ea134b5e
+functie|public.halfvec_spherical_distance|secdef=false searchpath=niet gepind md5=ddd2b632e1c7cca05d66733f30eee77e
+functie|public.halfvec_sub|secdef=false searchpath=niet gepind md5=fd1be42acde50294ce01e8da75ab8066
+functie|public.halfvec_to_float4|secdef=false searchpath=niet gepind md5=1e64ba4560cb09290c4d379d433efbec
+functie|public.halfvec_to_sparsevec|secdef=false searchpath=niet gepind md5=6980386e81693c44c494c3c71887d088
+functie|public.halfvec_to_vector|secdef=false searchpath=niet gepind md5=6b9ca72386903ba2512fc9fbad275524
+functie|public.halfvec_typmod_in|secdef=false searchpath=niet gepind md5=c8386270dc59092c6827964bbba43eec
+functie|public.halfvec|secdef=false searchpath=niet gepind md5=f87c14fff07474f7e43b5f7244f3015c
+functie|public.hamming_distance|secdef=false searchpath=niet gepind md5=79295fb012f8d6be61bc93671fd853ca
+functie|public.hnsw_bit_support|secdef=false searchpath=niet gepind md5=21d09e266ad9f1e441c31ee3503856d9
+functie|public.hnsw_halfvec_support|secdef=false searchpath=niet gepind md5=3c03c2f54ef2f78254b8fea0b9a93289
+functie|public.hnsw_sparsevec_support|secdef=false searchpath=niet gepind md5=f1d9fe99c993cdc0bac6751bf877f05b
+functie|public.hnswhandler|secdef=false searchpath=niet gepind md5=9424a7a689b8ab8f7b3c5b336824bff3
+functie|public.inner_product|secdef=false searchpath=niet gepind md5=882c5096007ba72e09eafbe8f0ede592
+functie|public.inner_product|secdef=false searchpath=niet gepind md5=8889f691c6ee13cfeb67991836590a2c
+functie|public.inner_product|secdef=false searchpath=niet gepind md5=fa326892b8f634eb70b2c79edddcd6b8
+functie|public.ivfflat_bit_support|secdef=false searchpath=niet gepind md5=5e8e613436d1fe0fbac1be2ec64e7f62
+functie|public.ivfflat_halfvec_support|secdef=false searchpath=niet gepind md5=77279fd896518d9ef0506acef0a3501a
+functie|public.ivfflathandler|secdef=false searchpath=niet gepind md5=0de1b36165584133292b91ad445e0f56
+functie|public.jaccard_distance|secdef=false searchpath=niet gepind md5=39e3706cc63926d2de59e8a43c4c7412
+functie|public.l1_distance|secdef=false searchpath=niet gepind md5=b21a4e42a38e11d857d18b65d8475540
+functie|public.l1_distance|secdef=false searchpath=niet gepind md5=bc6ab80072728b1ce4196b9e3ca11df9
+functie|public.l1_distance|secdef=false searchpath=niet gepind md5=bdab75babc166fc4eefe636f1124fcba
+functie|public.l2_distance|secdef=false searchpath=niet gepind md5=209de3349b4ea79f5f5928e15b0660fc
+functie|public.l2_distance|secdef=false searchpath=niet gepind md5=8514f4b6703c290facadd9372af2f216
+functie|public.l2_distance|secdef=false searchpath=niet gepind md5=a7c77b3512d8645352a5da57cff98c6f
+functie|public.l2_normalize|secdef=false searchpath=niet gepind md5=2068500442aae9279006a2fa6a15cf71
+functie|public.l2_normalize|secdef=false searchpath=niet gepind md5=466ba44e01ea3de3fefdc514a8224910
+functie|public.l2_normalize|secdef=false searchpath=niet gepind md5=691f451dba71be9cff1d64b2a555710e
+functie|public.l2_norm|secdef=false searchpath=niet gepind md5=750a66695db37f6872869b233f1d592b
+functie|public.l2_norm|secdef=false searchpath=niet gepind md5=a33a811e4c8c037e5d1dba539fb1c6d4
+functie|public.lees_governance_audit|secdef=true searchpath=search_path=public, pg_temp md5=3ba375023dd533506f9dae72698d0dbe
+functie|public.log_word_export|secdef=true searchpath=search_path=public, pg_temp md5=2f8f9e3ee63f1c06a888c795078b0a32
+functie|public.maak_profiel|secdef=true searchpath=search_path=public, pg_temp md5=f7be632c43fc8be9ef3711a118ca1d86
+functie|public.mag_audit_bronnen|secdef=true searchpath=search_path=public, pg_temp md5=91654e231469a7b2fe08be59d4b10aea
+functie|public.mag_audit_redacties|secdef=true searchpath=search_path=public, pg_temp md5=fc264937e48c2b9b69d0635a4004ff5d
+functie|public.mag_audit|secdef=true searchpath=search_path=public, pg_temp md5=2ce30128a8920e86b5fa11bf9daa7270
+functie|public.meta_basisniveau|secdef=false searchpath=search_path=public, pg_temp md5=90cf5561170a5c1d88327b4c0b5127dd
+functie|public.meta_bronniveau|secdef=false searchpath=search_path=public, pg_temp md5=470bff2d41570b74f1f6d194a97b9343
+functie|public.meta_projectie|secdef=false searchpath=search_path=public, pg_temp md5=b0c303f4abf257e3ae6aa396e0cee69f
+functie|public.profiel_opslaan|secdef=false searchpath=search_path=public md5=70e69f20ccfab8b6e9ceecf5498e7acd
+functie|public.reflectie_bronset_hash|secdef=false searchpath=search_path=public, extensions, pg_temp md5=c0e9dc288479dcc69b0cebb7260f9b53
+functie|public.reflectie_transitie|secdef=true searchpath=search_path=public, pg_temp md5=f8159a5b858714efb9de98751019cd4a
+functie|public.resolve_tenant_host|secdef=true searchpath=search_path=public, pg_temp md5=61147705424418e26053f4d1835b49f2
+functie|public.schrijf_ai_interactie|secdef=true searchpath=search_path=public, pg_temp md5=7884b25e83c42251a54056c8a91ed474
+functie|public.set_limit|secdef=false searchpath=niet gepind md5=c30ba59e63bc3cb36608046c50620e39
+functie|public.show_limit|secdef=false searchpath=niet gepind md5=4be49f417a851b1848da525e573e408d
+functie|public.show_trgm|secdef=false searchpath=niet gepind md5=42aa0974abb454971132812dcce06cac
+functie|public.similarity_dist|secdef=false searchpath=niet gepind md5=831e333ae2231e3fb1e6e88a55ccc0a0
+functie|public.similarity_op|secdef=false searchpath=niet gepind md5=c62f80a7a7107d232daf8683decbfaf5
+functie|public.similarity|secdef=false searchpath=niet gepind md5=fd931cb85ba442355f277550b8836710
+functie|public.sparsevec_cmp|secdef=false searchpath=niet gepind md5=2d01c75c094756697eb44b950f39d2df
+functie|public.sparsevec_eq|secdef=false searchpath=niet gepind md5=523c52820eba216f40210383d06b3a41
+functie|public.sparsevec_ge|secdef=false searchpath=niet gepind md5=bd1c95f0ca8cbed7cc79ec4f95865da9
+functie|public.sparsevec_gt|secdef=false searchpath=niet gepind md5=67d4a09695e1ff98daab86eead1cdfe3
+functie|public.sparsevec_in|secdef=false searchpath=niet gepind md5=ec0bc0bb76f1ff63d7a8a181e323fee5
+functie|public.sparsevec_l2_squared_distance|secdef=false searchpath=niet gepind md5=4c7079f9abc234dc5ab805b400eb0693
+functie|public.sparsevec_le|secdef=false searchpath=niet gepind md5=42a118a297161b642e6fe2e18426bbc1
+functie|public.sparsevec_lt|secdef=false searchpath=niet gepind md5=59057f8d995130b088b36c0b9a38f646
+functie|public.sparsevec_negative_inner_product|secdef=false searchpath=niet gepind md5=f78935f3858b00016ef844b462ad7214
+functie|public.sparsevec_ne|secdef=false searchpath=niet gepind md5=d08e893d1887028bd0092445495736cb
+functie|public.sparsevec_out|secdef=false searchpath=niet gepind md5=c913a0d3fa0cdb751a4cfdb6bb2d4662
+functie|public.sparsevec_recv|secdef=false searchpath=niet gepind md5=69390baa05bb17f61ecd49dbff660274
+functie|public.sparsevec_send|secdef=false searchpath=niet gepind md5=55ff35cdfad47233651db1efc18bc5d6
+functie|public.sparsevec_to_halfvec|secdef=false searchpath=niet gepind md5=e4198414d8b7b54e23b9f35e8e046fc3
+functie|public.sparsevec_to_vector|secdef=false searchpath=niet gepind md5=5cc3934c1d3d01389e599920e9a67eca
+functie|public.sparsevec_typmod_in|secdef=false searchpath=niet gepind md5=9a82ae7a1957ad1c754be0313c7f1fca
+functie|public.sparsevec|secdef=false searchpath=niet gepind md5=a8f3a148732a59d236038953364e5e22
+functie|public.strict_word_similarity_commutator_op|secdef=false searchpath=niet gepind md5=49fe0d7b5f628c2f13e21ad6d0c5d28f
+functie|public.strict_word_similarity_dist_commutator_op|secdef=false searchpath=niet gepind md5=e4384ee3a07267eb13f09bb4b042f334
+functie|public.strict_word_similarity_dist_op|secdef=false searchpath=niet gepind md5=bc660db5cc387e8821747f1ecfb347eb
+functie|public.strict_word_similarity_op|secdef=false searchpath=niet gepind md5=fa21d1ae2c217ba161bb3f7777e5e020
+functie|public.strict_word_similarity|secdef=false searchpath=niet gepind md5=523450d477b4e105989795603c58761a
+functie|public.stuurinfo_balans_opslaan|secdef=false searchpath=search_path=public md5=f04911f800fb8152d8577f8aca3137cd
+functie|public.stuurinfo_operationeel_opslaan|secdef=false searchpath=search_path=public md5=79c186f606482640cc20d0853441d659
+functie|public.stuurinfo_premie_opslaan|secdef=false searchpath=search_path=public md5=af3a6820ab3c82ff660c6816aa7de5e3
+functie|public.stuurinfo_soli_opslaan|secdef=false searchpath=search_path=public md5=7db26598aa5e8a9a68d151abe0ab8847
+functie|public.subvector|secdef=false searchpath=niet gepind md5=179536e7df074edc984e384c50b43c92
+functie|public.subvector|secdef=false searchpath=niet gepind md5=e70d40bff82b94d819606d1a12ecc00a
+functie|public.vector_accum|secdef=false searchpath=niet gepind md5=918091a0f660f2fcafae8089b702c764
+functie|public.vector_add|secdef=false searchpath=niet gepind md5=f38b4f3182ed289f10c8ecd9a97c14e6
+functie|public.vector_avg|secdef=false searchpath=niet gepind md5=bc5680a979402f794ae80bfc2139888f
+functie|public.vector_cmp|secdef=false searchpath=niet gepind md5=be7778bbee63ac7656e8fcbce5485363
+functie|public.vector_combine|secdef=false searchpath=niet gepind md5=bf04a56b359298b8ed5b91b0d931e215
+functie|public.vector_concat|secdef=false searchpath=niet gepind md5=f464af44b7263a535fe5bc6e469b460b
+functie|public.vector_dims|secdef=false searchpath=niet gepind md5=9ea69b242398a0ad4eeab308019c73ab
+functie|public.vector_dims|secdef=false searchpath=niet gepind md5=adb8ddf6c4de0169125e7e344a3b14ce
+functie|public.vector_eq|secdef=false searchpath=niet gepind md5=842f415bc2e87e4f85be6c875b3f9236
+functie|public.vector_ge|secdef=false searchpath=niet gepind md5=065cbf5162fb6de9142565d325f776c0
+functie|public.vector_gt|secdef=false searchpath=niet gepind md5=236e870b2211421641abee2776dedd1b
+functie|public.vector_in|secdef=false searchpath=niet gepind md5=6d91e25b8f8016e5d2b25f4c0c2b778b
+functie|public.vector_l2_squared_distance|secdef=false searchpath=niet gepind md5=cbcdf7f66d9aadc5af51a579b7f59ed0
+functie|public.vector_le|secdef=false searchpath=niet gepind md5=7f7ae65ff57a1541bd608f3c1ec5efbf
+functie|public.vector_lt|secdef=false searchpath=niet gepind md5=fc0d522ad531097d98bd3c69cb770d34
+functie|public.vector_mul|secdef=false searchpath=niet gepind md5=df49bd8e2b83936b0d302ea6767f10ed
+functie|public.vector_negative_inner_product|secdef=false searchpath=niet gepind md5=d5426e2c82df3b25ee0fb0609a0ff0b4
+functie|public.vector_ne|secdef=false searchpath=niet gepind md5=b0025b5011326a40bb50d979327b2535
+functie|public.vector_norm|secdef=false searchpath=niet gepind md5=94d34f3c0812d5f206c50dedb4c88c5d
+functie|public.vector_out|secdef=false searchpath=niet gepind md5=bc659f94ec54edcc12f3167afe08525e
+functie|public.vector_recv|secdef=false searchpath=niet gepind md5=5eacba0af87e0730e37bcf432c0fb66a
+functie|public.vector_send|secdef=false searchpath=niet gepind md5=5eb71428b845bf163b3acb9787d3ab89
+functie|public.vector_spherical_distance|secdef=false searchpath=niet gepind md5=ff42b9f50f890d3f4300bdd26d7515e2
+functie|public.vector_sub|secdef=false searchpath=niet gepind md5=694502162901dcd9bc5aa91a83f40495
+functie|public.vector_to_float4|secdef=false searchpath=niet gepind md5=a131c79aae7ddbc08ff413b1c955c4ad
+functie|public.vector_to_halfvec|secdef=false searchpath=niet gepind md5=15a89bbd2593580726bb9dc4250388c0
+functie|public.vector_to_sparsevec|secdef=false searchpath=niet gepind md5=781e10cb4edb96a28d6dcbcd73b5aaca
+functie|public.vector_typmod_in|secdef=false searchpath=niet gepind md5=3a5eb5b679790e4a1e11585fd71fa75e
+functie|public.vector|secdef=false searchpath=niet gepind md5=263b127ddc477d395b11187221ab9636
+functie|public.verwijder_gesprek|secdef=true searchpath=search_path=public, pg_temp md5=d686e57cca2eb3251a5b2a225724e115
+functie|public.word_similarity_commutator_op|secdef=false searchpath=niet gepind md5=98ece0ccacd71230bea0e7805d310670
+functie|public.word_similarity_dist_commutator_op|secdef=false searchpath=niet gepind md5=db36854b61d077b4cb945606bab01fc6
+functie|public.word_similarity_dist_op|secdef=false searchpath=niet gepind md5=ab0c2cb7ec6c0cbe0937ec3288d2cfda
+functie|public.word_similarity_op|secdef=false searchpath=niet gepind md5=9cb3bc9ce246a2c4c4d17c7205f4a17f
+functie|public.word_similarity|secdef=false searchpath=niet gepind md5=f9acfb3b071c96db4b1bb593b621c747
+functie|public.zoek_chunks_hybride|secdef=false searchpath=search_path=public, pg_temp md5=82aacc6ac18418901de4886b53a314b8
+functie|public.zoek_chunks|secdef=false searchpath=search_path=public, pg_temp md5=b028e3132bf135cca8e22e9dfe47bfee
+policy|public.agendapunt_inbreng.eigen inbreng schrijven|cmd=INSERT qual=geen withcheck=cd3c3a3fa0b1d344fe1921796da66edb
+policy|public.agendapunt_inbreng.eigen inbreng verwijderen|cmd=DELETE qual=091c184b5624f8c1cdaa4071481ae309 withcheck=geen
+policy|public.agendapunt_inbreng.eigen inbreng wijzigen|cmd=UPDATE qual=091c184b5624f8c1cdaa4071481ae309 withcheck=091c184b5624f8c1cdaa4071481ae309
+policy|public.agendapunt_inbreng.fonds inbreng lezen|cmd=SELECT qual=38c663810ae7953345820b0cba776509 withcheck=geen
+policy|public.agendapunt_log.fonds agendapunt_log insert|cmd=INSERT qual=geen withcheck=8b7ba891a9e7fdf00f6107763522c647
+policy|public.agendapunt_log.fonds agendapunt_log select|cmd=SELECT qual=aeebfd2ddd120c82c40c630eebc393ba withcheck=geen
+policy|public.agendapunten.fonds agendapunten|cmd=ALL qual=785b31eddeb79a556a9e16d965c5f775 withcheck=785b31eddeb79a556a9e16d965c5f775
+policy|public.bron_whitelist.bron_whitelist lees actief|cmd=SELECT qual=7dd7375db92c944717c84160ea6b2379 withcheck=geen
+policy|public.catalogus_log.lees catalogus_log|cmd=SELECT qual=2f27d8bfa02792e2d07542361269c317 withcheck=geen
+policy|public.catalogus_log.schrijf catalogus_log|cmd=INSERT qual=geen withcheck=2f27d8bfa02792e2d07542361269c317
+policy|public.classificatie_voorstellen.fonds classificatie_voorstellen|cmd=ALL qual=2f27d8bfa02792e2d07542361269c317 withcheck=2f27d8bfa02792e2d07542361269c317
+policy|public.comparison_results.comparison_results eigen fonds lezen|cmd=SELECT qual=2f27d8bfa02792e2d07542361269c317 withcheck=geen
+policy|public.comparison_run.comparison_run eigen fonds lezen|cmd=SELECT qual=2f27d8bfa02792e2d07542361269c317 withcheck=geen
+policy|public.concepts.concepts lezen|cmd=SELECT qual=b326b5062b2f0e69046810717534cb09 withcheck=geen
+policy|public.decision_actions.fonds decision_actions|cmd=ALL qual=41784fcc2638bda96e9d04a366994a27 withcheck=41784fcc2638bda96e9d04a366994a27
+policy|public.decision_ai_interactions.ai validatie domein|cmd=UPDATE qual=a35b9eaf247947ae222c7b19b587062a withcheck=a35b9eaf247947ae222c7b19b587062a
+policy|public.decision_ai_interactions.fonds decision_ai_interactions|cmd=ALL qual=41784fcc2638bda96e9d04a366994a27 withcheck=41784fcc2638bda96e9d04a366994a27
+policy|public.decision_assumptions.fonds decision_assumptions|cmd=ALL qual=41784fcc2638bda96e9d04a366994a27 withcheck=41784fcc2638bda96e9d04a366994a27
+policy|public.decision_audit_snapshots.fonds decision_audit_snapshots|cmd=ALL qual=41784fcc2638bda96e9d04a366994a27 withcheck=41784fcc2638bda96e9d04a366994a27
+policy|public.decision_conditions.fonds decision_conditions|cmd=ALL qual=41784fcc2638bda96e9d04a366994a27 withcheck=41784fcc2638bda96e9d04a366994a27
+policy|public.decision_dissent.dissent zichtbaarheid select|cmd=SELECT qual=cbe7ad8b5fb59d838f83f1aee890d7be withcheck=geen
+policy|public.decision_dissent.dissent zichtbaarheid write|cmd=ALL qual=4cb578285335b280f8069d76fe27d89d withcheck=4cb578285335b280f8069d76fe27d89d
+policy|public.decision_evaluations.fonds decision_evaluations|cmd=ALL qual=41784fcc2638bda96e9d04a366994a27 withcheck=41784fcc2638bda96e9d04a366994a27
+policy|public.decision_objects.fonds decision_objects|cmd=ALL qual=2f27d8bfa02792e2d07542361269c317 withcheck=2f27d8bfa02792e2d07542361269c317
+policy|public.decision_risks.fonds decision_risks|cmd=ALL qual=41784fcc2638bda96e9d04a366994a27 withcheck=41784fcc2638bda96e9d04a366994a27
+policy|public.difference_judgements.eigen oordelen lezen|cmd=SELECT qual=c3add3cb58628b3380a348f0e0180da0 withcheck=geen
+policy|public.difference_judgements.eigen oordelen schrijven|cmd=INSERT qual=geen withcheck=092cf42dbf41157f530ed3d65ee74297
+policy|public.document_agendapunten.fonds document_agendapunten|cmd=ALL qual=2f27d8bfa02792e2d07542361269c317 withcheck=2f27d8bfa02792e2d07542361269c317
+policy|public.document_chunks.chunks select|cmd=SELECT qual=623170e20c043db7058013e20c357ce5 withcheck=geen
+policy|public.document_chunks.chunks write eigen fonds|cmd=ALL qual=af8efb3f3480a1cac3162cdc6f54dc09 withcheck=af8efb3f3480a1cac3162cdc6f54dc09
+policy|public.document_inzage.eigen inzage schrijven|cmd=INSERT qual=geen withcheck=dceb6c82541764413f773a37776c6226
+policy|public.document_inzage.fonds inzage lezen|cmd=SELECT qual=e4ec55520fe86371332daeea7e9a262c withcheck=geen
+policy|public.document_metadata_log.lees document_metadata_log|cmd=SELECT qual=e4ec55520fe86371332daeea7e9a262c withcheck=geen
+policy|public.document_metadata_log.schrijf document_metadata_log|cmd=INSERT qual=geen withcheck=edf2bef496336e29b22d9dbb1cf2c0fd
+policy|public.document_metadata_review_queue.lees meta_review_queue|cmd=SELECT qual=2f27d8bfa02792e2d07542361269c317 withcheck=geen
+policy|public.document_metadata_review_queue.schrijf meta_review_queue|cmd=ALL qual=2f27d8bfa02792e2d07542361269c317 withcheck=2f27d8bfa02792e2d07542361269c317
+policy|public.document_procesinstanties.fonds document_procesinstanties|cmd=ALL qual=2f27d8bfa02792e2d07542361269c317 withcheck=2f27d8bfa02792e2d07542361269c317
+policy|public.documenten.documenten delete eigen fonds|cmd=DELETE qual=2f27d8bfa02792e2d07542361269c317 withcheck=geen
+policy|public.documenten.documenten insert eigen fonds|cmd=INSERT qual=geen withcheck=8e801fc30ff577f85b0cec18d448f565
+policy|public.documenten.documenten select|cmd=SELECT qual=a0dd1e8f006d48ce057d4cd1d4ce068a withcheck=geen
+policy|public.documenten.documenten update eigen fonds|cmd=UPDATE qual=2f27d8bfa02792e2d07542361269c317 withcheck=8e801fc30ff577f85b0cec18d448f565
+policy|public.expertises.lees expertises|cmd=SELECT qual=13796f4aaef53d629fd509e52e91899c withcheck=geen
+policy|public.expertises.schrijf expertises|cmd=ALL qual=2f27d8bfa02792e2d07542361269c317 withcheck=2f27d8bfa02792e2d07542361269c317
+policy|public.extraction_run.extraction_run eigen fonds lezen|cmd=SELECT qual=2f27d8bfa02792e2d07542361269c317 withcheck=geen
+policy|public.fonds_config_log.config log insert eigen fonds|cmd=INSERT qual=geen withcheck=2f27d8bfa02792e2d07542361269c317
+policy|public.fonds_config_log.config log lezen eigen fonds|cmd=SELECT qual=2f27d8bfa02792e2d07542361269c317 withcheck=geen
+policy|public.fonds_content_overrides.overrides bijwerken priv|cmd=UPDATE qual=bb513dfaa0ef49971066524795a72236 withcheck=bb513dfaa0ef49971066524795a72236
+policy|public.fonds_content_overrides.overrides lezen eigen fonds|cmd=SELECT qual=2f27d8bfa02792e2d07542361269c317 withcheck=geen
+policy|public.fonds_content_overrides.overrides schrijven priv|cmd=INSERT qual=geen withcheck=bb513dfaa0ef49971066524795a72236
+policy|public.fonds_feature_flags.flags bijwerken priv|cmd=UPDATE qual=bb513dfaa0ef49971066524795a72236 withcheck=bb513dfaa0ef49971066524795a72236
+policy|public.fonds_feature_flags.flags lezen eigen fonds|cmd=SELECT qual=2f27d8bfa02792e2d07542361269c317 withcheck=geen
+policy|public.fonds_feature_flags.flags schrijven priv|cmd=INSERT qual=geen withcheck=bb513dfaa0ef49971066524795a72236
+policy|public.fonds_instellingen.fonds instellingen|cmd=ALL qual=2f27d8bfa02792e2d07542361269c317 withcheck=2f27d8bfa02792e2d07542361269c317
+policy|public.fonds_klantbeeld_cohort.klantbeeld cohort bijwerken priv|cmd=UPDATE qual=bb513dfaa0ef49971066524795a72236 withcheck=bb513dfaa0ef49971066524795a72236
+policy|public.fonds_klantbeeld_cohort.klantbeeld cohort lezen eigen fonds|cmd=SELECT qual=2f27d8bfa02792e2d07542361269c317 withcheck=geen
+policy|public.fonds_klantbeeld_cohort.klantbeeld cohort schrijven priv|cmd=INSERT qual=geen withcheck=bb513dfaa0ef49971066524795a72236
+policy|public.fonds_module_manifest.manifest bijwerken priv|cmd=UPDATE qual=bb513dfaa0ef49971066524795a72236 withcheck=bb513dfaa0ef49971066524795a72236
+policy|public.fonds_module_manifest.manifest lezen eigen fonds|cmd=SELECT qual=2f27d8bfa02792e2d07542361269c317 withcheck=geen
+policy|public.fonds_module_manifest.manifest schrijven priv|cmd=INSERT qual=geen withcheck=bb513dfaa0ef49971066524795a72236
+policy|public.fonds_stuurinfo_kpi.stuurinfo kpi bijwerken priv|cmd=UPDATE qual=bb513dfaa0ef49971066524795a72236 withcheck=bb513dfaa0ef49971066524795a72236
+policy|public.fonds_stuurinfo_kpi.stuurinfo kpi lezen eigen fonds|cmd=SELECT qual=2f27d8bfa02792e2d07542361269c317 withcheck=geen
+policy|public.fonds_stuurinfo_kpi.stuurinfo kpi schrijven priv|cmd=INSERT qual=geen withcheck=bb513dfaa0ef49971066524795a72236
+policy|public.fonds_stuurinfo_log.stuurinfo log lezen eigen fonds|cmd=SELECT qual=2f27d8bfa02792e2d07542361269c317 withcheck=geen
+policy|public.fonds_stuurinfo_log.stuurinfo log schrijven priv|cmd=INSERT qual=geen withcheck=724264e7b81f0253b8c303c897637d77
+policy|public.fonds_stuurinfo_periode.stuurinfo periode bijwerken priv|cmd=UPDATE qual=bb513dfaa0ef49971066524795a72236 withcheck=bb513dfaa0ef49971066524795a72236
+policy|public.fonds_stuurinfo_periode.stuurinfo periode lezen eigen fonds|cmd=SELECT qual=2f27d8bfa02792e2d07542361269c317 withcheck=geen
+policy|public.fonds_stuurinfo_periode.stuurinfo periode schrijven priv|cmd=INSERT qual=geen withcheck=bb513dfaa0ef49971066524795a72236
+policy|public.fonds_stuurinfo_reeks.stuurinfo reeks bijwerken priv|cmd=UPDATE qual=bb513dfaa0ef49971066524795a72236 withcheck=bb513dfaa0ef49971066524795a72236
+policy|public.fonds_stuurinfo_reeks.stuurinfo reeks lezen eigen fonds|cmd=SELECT qual=2f27d8bfa02792e2d07542361269c317 withcheck=geen
+policy|public.fonds_stuurinfo_reeks.stuurinfo reeks schrijven priv|cmd=INSERT qual=geen withcheck=bb513dfaa0ef49971066524795a72236
+policy|public.fonds_stuurinfo_reserve.stuurinfo reserve bijwerken priv|cmd=UPDATE qual=bb513dfaa0ef49971066524795a72236 withcheck=bb513dfaa0ef49971066524795a72236
+policy|public.fonds_stuurinfo_reserve.stuurinfo reserve lezen eigen fonds|cmd=SELECT qual=2f27d8bfa02792e2d07542361269c317 withcheck=geen
+policy|public.fonds_stuurinfo_reserve.stuurinfo reserve schrijven priv|cmd=INSERT qual=geen withcheck=bb513dfaa0ef49971066524795a72236
+policy|public.fonds_theming.theming bijwerken priv|cmd=UPDATE qual=bb513dfaa0ef49971066524795a72236 withcheck=bb513dfaa0ef49971066524795a72236
+policy|public.fonds_theming.theming lezen eigen fonds|cmd=SELECT qual=2f27d8bfa02792e2d07542361269c317 withcheck=geen
+policy|public.fonds_theming.theming schrijven priv|cmd=INSERT qual=geen withcheck=bb513dfaa0ef49971066524795a72236
+policy|public.fondsen.fondsen lezen|cmd=SELECT qual=dc71e447411e7aaf354179a11ad2e2ae withcheck=geen
+policy|public.gesprek_reflectie_state.eigen reflectiestatus lezen|cmd=SELECT qual=60de521b3ddbc398305365192f89510e withcheck=geen
+policy|public.gesprekken.eigen gesprekken aanmaken|cmd=INSERT qual=geen withcheck=60de521b3ddbc398305365192f89510e
+policy|public.gesprekken.eigen gesprekken bijwerken|cmd=UPDATE qual=60de521b3ddbc398305365192f89510e withcheck=60de521b3ddbc398305365192f89510e
+policy|public.gesprekken.eigen gesprekken lezen|cmd=SELECT qual=60de521b3ddbc398305365192f89510e withcheck=geen
+policy|public.governance_audit_inzage.eigen inzage lezen|cmd=SELECT qual=c81321cc0ae91c16134b3a87182221c2 withcheck=geen
+policy|public.governance_events.fonds governance_events|cmd=ALL qual=41784fcc2638bda96e9d04a366994a27 withcheck=41784fcc2638bda96e9d04a366994a27
+policy|public.governance_export_log.export log select|cmd=SELECT qual=66721872fdea5173f9d1ec2acd05bfb7 withcheck=geen
+policy|public.governance_log.auditregels schrijven eigen fonds|cmd=INSERT qual=geen withcheck=60de521b3ddbc398305365192f89510e
+policy|public.governance_log.eigen auditregels lezen|cmd=SELECT qual=4bd22020d24b805df30721396493c6ab withcheck=geen
+policy|public.governance_log_inhoud.eigen loginhoud lezen|cmd=SELECT qual=cbf722e229103ea8cd234606b66342c9 withcheck=geen
+policy|public.governance_redacties.redacties lezen|cmd=SELECT qual=683b900d924238e9bec4b8c3cd723e50 withcheck=geen
+policy|public.gremia.lees gremia|cmd=SELECT qual=13796f4aaef53d629fd509e52e91899c withcheck=geen
+policy|public.gremia.schrijf gremia|cmd=ALL qual=2f27d8bfa02792e2d07542361269c317 withcheck=2f27d8bfa02792e2d07542361269c317
+policy|public.kritische_focusgebieden.lees focusgebieden|cmd=SELECT qual=13796f4aaef53d629fd509e52e91899c withcheck=geen
+policy|public.kritische_focusgebieden.schrijf focusgebieden|cmd=ALL qual=2f27d8bfa02792e2d07542361269c317 withcheck=2f27d8bfa02792e2d07542361269c317
+policy|public.notificaties.eigen notificaties select|cmd=SELECT qual=047d5cd93588d2b5f021a522ac929920 withcheck=geen
+policy|public.notificaties.eigen notificaties update|cmd=UPDATE qual=29682af1288f331713300748d7bfc44f withcheck=29682af1288f331713300748d7bfc44f
+policy|public.notificaties.notificaties insert eigen fonds|cmd=INSERT qual=geen withcheck=0e7f96831287da7e0e216d7ee10afe43
+policy|public.notulen_segmenten.fonds notulen_segmenten|cmd=ALL qual=2f27d8bfa02792e2d07542361269c317 withcheck=2f27d8bfa02792e2d07542361269c317
+policy|public.organisatie_profielen.organisatieprofiel insert eigen fonds|cmd=INSERT qual=geen withcheck=2f27d8bfa02792e2d07542361269c317
+policy|public.organisatie_profielen.organisatieprofiel select eigen fonds|cmd=SELECT qual=2f27d8bfa02792e2d07542361269c317 withcheck=geen
+policy|public.organisatie_profielen.organisatieprofiel update eigen fonds|cmd=UPDATE qual=2f27d8bfa02792e2d07542361269c317 withcheck=2f27d8bfa02792e2d07542361269c317
+policy|public.platform_identities.zelf-lees eigen platform-identiteit|cmd=SELECT qual=bc9c729a84690340789a4e4f01175335 withcheck=geen
+policy|public.procedure_afschriften.fonds afschriften aanmaken|cmd=INSERT qual=geen withcheck=11249e7e97d9092a68149a015bfd4c85
+policy|public.procedure_afschriften.fonds afschriften bijwerken|cmd=UPDATE qual=11249e7e97d9092a68149a015bfd4c85 withcheck=11249e7e97d9092a68149a015bfd4c85
+policy|public.procedure_afschriften.fonds afschriften lezen|cmd=SELECT qual=2f27d8bfa02792e2d07542361269c317 withcheck=geen
+policy|public.procedure_besluiten.fonds proc besluiten|cmd=ALL qual=f518677ef23a57d26f5855fa0e826c7c withcheck=f518677ef23a57d26f5855fa0e826c7c
+policy|public.procedure_bewijs.fonds proc bewijs|cmd=ALL qual=f4beb99a89df626389d1215114fde375 withcheck=f4beb99a89df626389d1215114fde375
+policy|public.procedure_checklist.fonds proc checklist|cmd=ALL qual=f4beb99a89df626389d1215114fde375 withcheck=f4beb99a89df626389d1215114fde375
+policy|public.procedure_eigenaars.fonds proc eigenaars|cmd=ALL qual=f518677ef23a57d26f5855fa0e826c7c withcheck=f518677ef23a57d26f5855fa0e826c7c
+policy|public.procedure_fase_beschrijving_override.fase-override eigen fonds lezen|cmd=SELECT qual=2f27d8bfa02792e2d07542361269c317 withcheck=geen
+policy|public.procedure_fase_beschrijving_override.fase-override schrijven voorzitter-beheerder|cmd=INSERT qual=geen withcheck=ca0b263f188d2e090df7d13e5973e141
+policy|public.procedure_fase_beschrijving_override.fase-override wijzigen voorzitter-beheerder|cmd=UPDATE qual=2f27d8bfa02792e2d07542361269c317 withcheck=ca0b263f188d2e090df7d13e5973e141
+policy|public.procedure_fase_toelichting.fase-toelichting eigen fonds lezen|cmd=SELECT qual=2f27d8bfa02792e2d07542361269c317 withcheck=geen
+policy|public.procedure_fase_toelichting.fase-toelichting toevoegen voorzitter-beheerder|cmd=INSERT qual=geen withcheck=ca0b263f188d2e090df7d13e5973e141
+policy|public.procedure_fase_toelichting.fase-toelichting wijzigen voorzitter-beheerder|cmd=UPDATE qual=2f27d8bfa02792e2d07542361269c317 withcheck=ca0b263f188d2e090df7d13e5973e141
+policy|public.procedure_log.fonds proc log|cmd=ALL qual=f518677ef23a57d26f5855fa0e826c7c withcheck=f518677ef23a57d26f5855fa0e826c7c
+policy|public.procedure_requirement_instance.req-instance eigen fonds lezen|cmd=SELECT qual=2f27d8bfa02792e2d07542361269c317 withcheck=geen
+policy|public.procedure_requirement_instance.req-instance toevoegen voorzitter-beheerder|cmd=INSERT qual=geen withcheck=ca0b263f188d2e090df7d13e5973e141
+policy|public.procedure_requirement_instance.req-instance wijzigen voorzitter-beheerder|cmd=UPDATE qual=2f27d8bfa02792e2d07542361269c317 withcheck=ca0b263f188d2e090df7d13e5973e141
+policy|public.procedure_requirement_uitsluiting.req-uitsluiting eigen fonds lezen|cmd=SELECT qual=2f27d8bfa02792e2d07542361269c317 withcheck=geen
+policy|public.procedure_requirement_uitsluiting.req-uitsluiting toevoegen voorzitter-beheerder|cmd=INSERT qual=geen withcheck=ca0b263f188d2e090df7d13e5973e141
+policy|public.procedure_requirement_uitsluiting.req-uitsluiting wijzigen voorzitter-beheerder|cmd=UPDATE qual=2f27d8bfa02792e2d07542361269c317 withcheck=ca0b263f188d2e090df7d13e5973e141
+policy|public.procedure_requirements.req read all|cmd=SELECT qual=dc71e447411e7aaf354179a11ad2e2ae withcheck=geen
+policy|public.procedure_requirements.req write beheerder|cmd=ALL qual=e85c35d7d903c1d4052d58c64837c2d2 withcheck=e85c35d7d903c1d4052d58c64837c2d2
+policy|public.procedure_stappen.fonds proc stappen|cmd=ALL qual=f518677ef23a57d26f5855fa0e826c7c withcheck=f518677ef23a57d26f5855fa0e826c7c
+policy|public.procedure_template_fasen.fasen insert beheerder|cmd=INSERT qual=geen withcheck=e85c35d7d903c1d4052d58c64837c2d2
+policy|public.procedure_template_fasen.fasen read all|cmd=SELECT qual=dc71e447411e7aaf354179a11ad2e2ae withcheck=geen
+policy|public.procedure_template_fasen.fasen update beheerder|cmd=UPDATE qual=e85c35d7d903c1d4052d58c64837c2d2 withcheck=e85c35d7d903c1d4052d58c64837c2d2
+policy|public.procedures.fonds procedures|cmd=ALL qual=2f27d8bfa02792e2d07542361269c317 withcheck=2f27d8bfa02792e2d07542361269c317
+policy|public.procesmodel_expertises.fonds procesmodel_expertises|cmd=ALL qual=2f27d8bfa02792e2d07542361269c317 withcheck=2f27d8bfa02792e2d07542361269c317
+policy|public.procesmodel_focusgebieden.fonds procesmodel_focusgebieden|cmd=ALL qual=2f27d8bfa02792e2d07542361269c317 withcheck=2f27d8bfa02792e2d07542361269c317
+policy|public.procesmodel_gremia.fonds procesmodel_gremia|cmd=ALL qual=2f27d8bfa02792e2d07542361269c317 withcheck=2f27d8bfa02792e2d07542361269c317
+policy|public.procesmodellen.fonds procesmodellen|cmd=ALL qual=2f27d8bfa02792e2d07542361269c317 withcheck=2f27d8bfa02792e2d07542361269c317
+policy|public.profiel_expertises.eigen profiel_expertises|cmd=ALL qual=309db0dfdf0c056de34d201ca889f4cd withcheck=309db0dfdf0c056de34d201ca889f4cd
+policy|public.profiel_focusgebieden.eigen profiel_focusgebieden|cmd=ALL qual=309db0dfdf0c056de34d201ca889f4cd withcheck=309db0dfdf0c056de34d201ca889f4cd
+policy|public.profiel_gremia.eigen profiel_gremia|cmd=ALL qual=309db0dfdf0c056de34d201ca889f4cd withcheck=309db0dfdf0c056de34d201ca889f4cd
+policy|public.profiel_log.lees profiel_log|cmd=SELECT qual=2f27d8bfa02792e2d07542361269c317 withcheck=geen
+policy|public.profiel_log.schrijf profiel_log|cmd=INSERT qual=geen withcheck=65cbdc991e3d937d23aaf422f41daf0c
+policy|public.profielen.profiel select eigen|cmd=SELECT qual=bc9c729a84690340789a4e4f01175335 withcheck=geen
+policy|public.profielen.profiel update eigen|cmd=UPDATE qual=bc9c729a84690340789a4e4f01175335 withcheck=bc9c729a84690340789a4e4f01175335
+policy|public.reindex_runs.fonds reindex_runs|cmd=ALL qual=2f27d8bfa02792e2d07542361269c317 withcheck=2f27d8bfa02792e2d07542361269c317
+policy|public.risico_log.fonds risico log|cmd=ALL qual=ce4b70aee8396b3de4d0f05673da454c withcheck=ce4b70aee8396b3de4d0f05673da454c
+policy|public.risico_maatregelen.fonds maatregelen|cmd=ALL qual=ce4b70aee8396b3de4d0f05673da454c withcheck=ce4b70aee8396b3de4d0f05673da454c
+policy|public.risicos.fonds risicos|cmd=ALL qual=2f27d8bfa02792e2d07542361269c317 withcheck=2f27d8bfa02792e2d07542361269c317
+policy|public.semantic_units.semantic_units eigen fonds lezen|cmd=SELECT qual=2f27d8bfa02792e2d07542361269c317 withcheck=geen
+policy|public.stem_uitbrengingen.fonds stem delete|cmd=DELETE qual=4bad3286beb2bae54253cb2c5eb1937a withcheck=geen
+policy|public.stem_uitbrengingen.fonds stem insert|cmd=INSERT qual=geen withcheck=4610a044d0ceba14abcd6b95c7e396f3
+policy|public.stem_uitbrengingen.fonds stem select|cmd=SELECT qual=7da07cbe7447344ed3a42bebc8703bed withcheck=geen
+policy|public.stem_uitbrengingen.fonds stem update|cmd=UPDATE qual=4bad3286beb2bae54253cb2c5eb1937a withcheck=4bad3286beb2bae54253cb2c5eb1937a
+policy|public.stemmingen.fonds stemmingen insert|cmd=INSERT qual=geen withcheck=2bb99dec8cd70aaf16a7b23dabcbb792
+policy|public.stemmingen.fonds stemmingen select|cmd=SELECT qual=2f27d8bfa02792e2d07542361269c317 withcheck=geen
+policy|public.stemmingen.fonds stemmingen update|cmd=UPDATE qual=11249e7e97d9092a68149a015bfd4c85 withcheck=11249e7e97d9092a68149a015bfd4c85
+policy|public.vergadering_log.fonds vergadering_log insert|cmd=INSERT qual=geen withcheck=afdc75f5e2546cde4db3f40a4d7d25cc
+policy|public.vergadering_log.fonds vergadering_log select|cmd=SELECT qual=785b31eddeb79a556a9e16d965c5f775 withcheck=geen
+policy|public.vergaderingen.fonds vergaderingen|cmd=ALL qual=2f27d8bfa02792e2d07542361269c317 withcheck=2f27d8bfa02792e2d07542361269c317
+policy|public.voorbereidingen.eigen voorbereiding|cmd=ALL qual=2e0e37eb5ab390535d9987200e48043d withcheck=2e0e37eb5ab390535d9987200e48043d
+policy|public.wettelijk_regime_per_fondstype.regime-mapping lezen|cmd=SELECT qual=b326b5062b2f0e69046810717534cb09 withcheck=geen
+policy|storage.buckets.drift_lezer leest bucketdefinities|cmd=SELECT qual=b326b5062b2f0e69046810717534cb09 withcheck=geen
+policy|storage.objects.afschriften storage lezen|cmd=SELECT qual=b063c9b1146e725a23b12f0b85c1aa7f withcheck=geen
+policy|storage.objects.aqlab-audit fonds-download vrijgegeven|cmd=SELECT qual=fe79d9d69fefbdaa3ee449b3c8a94000 withcheck=geen
+policy|storage.objects.documenten quarantaine schrijven|cmd=INSERT qual=geen withcheck=bd96d07eb60b35e0eff02676ae23ad45
+policy|storage.objects.documenten storage lezen|cmd=SELECT qual=a527bb1d89a6af87949ddba50d420d24 withcheck=geen
+policy|storage.objects.documenten storage schrijven|cmd=INSERT qual=geen withcheck=4273c86811d545e56532e6b4301812ec
+publication|supabase_realtime|alletabellen=false insert=true update=true delete=true
+rls|agendapunt_inbreng|enabled=true forced=false
+rls|agendapunt_log|enabled=true forced=false
+rls|agendapunten|enabled=true forced=false
+rls|ai_actie|enabled=true forced=false
+rls|ai_config_versie|enabled=true forced=false
+rls|ai_heractivering_besluit|enabled=true forced=false
+rls|ai_heractivering_verzoek|enabled=true forced=false
+rls|ai_kill_switch|enabled=true forced=false
+rls|ai_model_allowlist|enabled=true forced=false
+rls|ai_quota_config|enabled=true forced=false
+rls|ai_verbruik_log|enabled=true forced=false
+rls|app_errors|enabled=true forced=false
+rls|aqlab_ai_features|enabled=true forced=false
+rls|aqlab_audit_exports|enabled=true forced=false
+rls|aqlab_findings|enabled=true forced=false
+rls|aqlab_fixture_documents|enabled=true forced=false
+rls|aqlab_human_reviews|enabled=true forced=false
+rls|aqlab_log|enabled=true forced=false
+rls|aqlab_model_configurations|enabled=true forced=false
+rls|aqlab_prompt_versions|enabled=true forced=false
+rls|aqlab_release_decisions|enabled=true forced=false
+rls|aqlab_run_jobs|enabled=true forced=false
+rls|aqlab_run_outputs|enabled=true forced=false
+rls|aqlab_runs|enabled=true forced=false
+rls|aqlab_scores|enabled=true forced=false
+rls|aqlab_test_case_fixtures|enabled=true forced=false
+rls|aqlab_test_cases|enabled=true forced=false
+rls|aqlab_test_sets|enabled=true forced=false
+rls|bron_whitelist_log|enabled=true forced=false
+rls|bron_whitelist|enabled=true forced=false
+rls|catalogus_log|enabled=true forced=false
+rls|classificatie_voorstellen|enabled=true forced=false
+rls|comparison_results|enabled=true forced=false
+rls|comparison_run|enabled=true forced=false
+rls|concepts|enabled=true forced=false
+rls|contact_aanvragen|enabled=true forced=false
+rls|decision_actions|enabled=true forced=false
+rls|decision_ai_interactions|enabled=true forced=false
+rls|decision_assumptions|enabled=true forced=false
+rls|decision_audit_snapshots|enabled=true forced=false
+rls|decision_conditions|enabled=true forced=false
+rls|decision_dissent|enabled=true forced=false
+rls|decision_evaluations|enabled=true forced=false
+rls|decision_objects|enabled=true forced=false
+rls|decision_risks|enabled=true forced=false
+rls|difference_judgements|enabled=true forced=false
+rls|document_agendapunten|enabled=true forced=false
+rls|document_chunks|enabled=true forced=false
+rls|document_inzage|enabled=true forced=false
+rls|document_metadata_log|enabled=true forced=false
+rls|document_metadata_review_queue|enabled=true forced=false
+rls|document_procesinstanties|enabled=true forced=false
+rls|document_processing_jobs|enabled=true forced=false
+rls|documenten|enabled=true forced=false
+rls|expertises|enabled=true forced=false
+rls|extraction_run|enabled=true forced=false
+rls|fonds_config_log|enabled=true forced=false
+rls|fonds_content_overrides|enabled=true forced=false
+rls|fonds_feature_flags|enabled=true forced=false
+rls|fonds_instellingen|enabled=true forced=false
+rls|fonds_klantbeeld_cohort|enabled=true forced=false
+rls|fonds_licentie|enabled=true forced=false
+rls|fonds_module_manifest|enabled=true forced=false
+rls|fonds_stuurinfo_kpi|enabled=true forced=false
+rls|fonds_stuurinfo_log|enabled=true forced=false
+rls|fonds_stuurinfo_periode|enabled=true forced=false
+rls|fonds_stuurinfo_reeks|enabled=true forced=false
+rls|fonds_stuurinfo_reserve|enabled=true forced=false
+rls|fonds_theming|enabled=true forced=false
+rls|fondsen|enabled=true forced=false
+rls|gesprek_reflectie_state|enabled=true forced=false
+rls|gesprekken|enabled=true forced=false
+rls|governance_audit_grants|enabled=true forced=false
+rls|governance_audit_inzage|enabled=true forced=false
+rls|governance_events|enabled=true forced=false
+rls|governance_export_log|enabled=true forced=false
+rls|governance_log_inhoud|enabled=true forced=false
+rls|governance_log|enabled=true forced=false
+rls|governance_redacties|enabled=true forced=false
+rls|gremia|enabled=true forced=false
+rls|kritische_focusgebieden|enabled=true forced=false
+rls|notificaties|enabled=true forced=false
+rls|notulen_segmenten|enabled=true forced=false
+rls|organisatie_profielen|enabled=true forced=false
+rls|platform_capabilities|enabled=true forced=false
+rls|platform_event_log|enabled=true forced=false
+rls|platform_identities|enabled=true forced=false
+rls|platform_identity_capabilities|enabled=true forced=false
+rls|platform_signaal_config|enabled=true forced=false
+rls|platform_signal_snapshots|enabled=true forced=false
+rls|procedure_afschriften|enabled=true forced=false
+rls|procedure_besluiten|enabled=true forced=false
+rls|procedure_bewijs|enabled=true forced=false
+rls|procedure_checklist|enabled=true forced=false
+rls|procedure_eigenaars|enabled=true forced=false
+rls|procedure_fase_beschrijving_override|enabled=true forced=false
+rls|procedure_fase_toelichting|enabled=true forced=false
+rls|procedure_log|enabled=true forced=false
+rls|procedure_requirement_instance|enabled=true forced=false
+rls|procedure_requirement_uitsluiting|enabled=true forced=false
+rls|procedure_requirements|enabled=true forced=false
+rls|procedure_stappen|enabled=true forced=false
+rls|procedure_template_fasen|enabled=true forced=false
+rls|procedures|enabled=true forced=false
+rls|procesmodel_expertises|enabled=true forced=false
+rls|procesmodel_focusgebieden|enabled=true forced=false
+rls|procesmodel_gremia|enabled=true forced=false
+rls|procesmodellen|enabled=true forced=false
+rls|profiel_expertises|enabled=true forced=false
+rls|profiel_focusgebieden|enabled=true forced=false
+rls|profiel_gremia|enabled=true forced=false
+rls|profiel_log|enabled=true forced=false
+rls|profielen|enabled=true forced=false
+rls|rate_limit_events|enabled=true forced=false
+rls|reindex_runs|enabled=true forced=false
+rls|risico_log|enabled=true forced=false
+rls|risico_maatregelen|enabled=true forced=false
+rls|risicos|enabled=true forced=false
+rls|semantic_units|enabled=true forced=false
+rls|stem_uitbrengingen|enabled=true forced=false
+rls|stemmingen|enabled=true forced=false
+rls|tenant_domains|enabled=true forced=false
+rls|vergadering_log|enabled=true forced=false
+rls|vergaderingen|enabled=true forced=false
+rls|voorbereidingen|enabled=true forced=false
+rls|wettelijk_regime_per_fondstype|enabled=true forced=false
+storage.bucket|afschriften|public=false limiet=157286400 mimetypes=alle
+storage.bucket|aqlab-audit|public=false limiet=geen mimetypes=alle
+storage.bucket|documenten-quarantaine|public=false limiet=geen mimetypes=alle
+storage.bucket|documenten|public=false limiet=26214400 mimetypes=alle
