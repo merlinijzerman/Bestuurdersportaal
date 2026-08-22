@@ -74,9 +74,22 @@ else
     echo "  Geen afwijking."
   else
     echo "  AFWIJKING — Productie wijkt af van de gepinde momentopname:"
-    sed -n '4,80p' "$WERKMAP/diff1.txt" | sed 's/^/    /'
+    # De weergave wordt afgekapt; het VOLLEDIGE verschil gaat als artefact mee.
+    #
+    # De vorige vorm vergeleek het aantal GEWIJZIGDE regels met de WEERGAVElimiet
+    # — twee verschillende grootheden. Een diff met 15 wijzigingen verspreid over
+    # 200 regels context werd stilzwijgend afgekapt zonder melding, en de lezer
+    # dacht alles te zien. Zo kwam op 22-08 een onvolledige driehoeksvergelijking
+    # tot stand.
+    totaal=$(wc -l < "$WERKMAP/diff1.txt" | tr -d ' ')
     regels=$(grep -c '^[+-]' "$WERKMAP/diff1.txt" || true)
-    [ "$regels" -gt 80 ] && echo "    … ($regels gewijzigde regels in totaal)"
+    sed -n '4,80p' "$WERKMAP/diff1.txt" | sed 's/^/    /'
+    echo "    ── $regels gewijzigde regels; de diff is $totaal regels lang ──"
+    if [ "$totaal" -gt 80 ]; then
+      echo "    WEERGAVE AFGEKAPT op regel 80. Het volledige verschil staat in het"
+      echo "    artefact drift-diff1.txt van deze run — lees dat, niet dit."
+    fi
+    cp "$WERKMAP/diff1.txt" "drift-diff1.txt" 2>/dev/null || true
     bevindingen=$((bevindingen + 1))
   fi
 fi
@@ -97,9 +110,22 @@ else
     echo "  Preview en Productie zijn schemagelijk."
   else
     echo "  AFWIJKING — Preview (-) en Productie (+) lopen uiteen:"
-    sed -n '4,80p' "$WERKMAP/diff2.txt" | sed 's/^/    /'
+    # De weergave wordt afgekapt; het VOLLEDIGE verschil gaat als artefact mee.
+    #
+    # De vorige vorm vergeleek het aantal GEWIJZIGDE regels met de WEERGAVElimiet
+    # — twee verschillende grootheden. Een diff met 15 wijzigingen verspreid over
+    # 200 regels context werd stilzwijgend afgekapt zonder melding, en de lezer
+    # dacht alles te zien. Zo kwam op 22-08 een onvolledige driehoeksvergelijking
+    # tot stand.
+    totaal=$(wc -l < "$WERKMAP/diff2.txt" | tr -d ' ')
     regels=$(grep -c '^[+-]' "$WERKMAP/diff2.txt" || true)
-    [ "$regels" -gt 80 ] && echo "    … ($regels gewijzigde regels in totaal)"
+    sed -n '4,80p' "$WERKMAP/diff2.txt" | sed 's/^/    /'
+    echo "    ── $regels gewijzigde regels; de diff is $totaal regels lang ──"
+    if [ "$totaal" -gt 80 ]; then
+      echo "    WEERGAVE AFGEKAPT op regel 80. Het volledige verschil staat in het"
+      echo "    artefact drift-diff2.txt van deze run — lees dat, niet dit."
+    fi
+    cp "$WERKMAP/diff2.txt" "drift-diff2.txt" 2>/dev/null || true
     echo
     echo "  Beoordeel per regel: is dit een bedoeld omgevingsverschil, of is"
     echo "  een migratie in één omgeving blijven steken? Zie de classificatie"
