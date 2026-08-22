@@ -49,6 +49,9 @@ jobs:
       - name: Committed-secretsscan
         run: bash scripts/check-committed-secrets.sh
 
+      - name: Publicatiegrens securitydocumentatie
+        run: npm run security:publication
+
       - name: Service-role-lekcheck
         run: bash scripts/check-service-role-leak.sh
 

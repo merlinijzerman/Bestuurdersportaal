@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "defaultClassification": "private",
+  "public": [
+    "security/ASVS-L2-REGISTER.md",
+    "security/DREIGINGSMODEL.md",
+    "security/PUBLICATIEBELEID.md",
+    "security/README.md",
+    "security/publicatie-manifest.json"
+  ],
+  "legacyFrozen": [
+    {
+      "path": "security/DEPENDENCY-NEXT-15-5-23-2026-08-16.md",
+      "sha256": "0572b0a32ce601885c8b2a0d7e811e361e97166ed617bbe1ecaf0afd4155fa2b"
+    },
+    {
+      "path": "security/OMGEVINGEN-RUNBOOK.md",
+      "sha256": "f811b20778561031ce86d35e9b4ccaa607651af8dbe9a34c12e8bf6776ed5d5f"
+    },
+    {
+      "path": "security/OVERDRACHT-DEPLOY-PENTEST-CRITICAL-HIGH-2026-08-17.md",
+      "sha256": "c21760a4a08f3732f6d606145d5b62b2ffcaa2375621910fdf4262e4d74179b0"
+    },
+    {
+      "path": "security/RUNBOOK-MIGRATIES.md",
+      "sha256": "e7412e47b93bca6653c095d4c5be19209d2a5cf7737722304a82353fca769a10"
+    },
+    {
+      "path": "security/SPRINT-1-BEWIJS-2026-08-14.md",
+      "sha256": "8a7bab0cf56f2022adcc5304d4b110830a690269e3a424d85158e6870c495224"
+    },
+    {
+      "path": "security/UITVOER-T14B-DRIFTREPARATIE-2026-08-19.md",
+      "sha256": "29e7c80e3e214644776eb6ea96ba0e42498203e8193bd95770662432c4f8aeba"
+    }
+  ]
+}
