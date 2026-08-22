@@ -79,7 +79,9 @@ execute|public.fn_notulen_segment_check|anon=false authenticated=true
 execute|public.fn_notulen_segment_ontbevestig|anon=false authenticated=true
 execute|public.fn_notulen_segment_verwijder|anon=false authenticated=true
 execute|public.fn_organisatie_profielen_touch|anon=false authenticated=true
-execute|public.fn_platform_event_hash|anon=false authenticated=true
+execute|public.fn_platform_event_chain_assert_valid|anon=false authenticated=false
+execute|public.fn_platform_event_fork_declaration_immutable|anon=false authenticated=false
+execute|public.fn_platform_event_hash|anon=false authenticated=false
 execute|public.fn_platform_event_immutable|anon=false authenticated=true
 execute|public.fn_profiel_bevries_kolommen|anon=false authenticated=false
 execute|public.fn_rate_limit_check|anon=false authenticated=true
@@ -324,7 +326,9 @@ functie|public.fn_notulen_segment_check|secdef=false searchpath=search_path=publ
 functie|public.fn_notulen_segment_ontbevestig|secdef=false searchpath=search_path=public, pg_temp md5=7cb5a8b2a7f47217d31c50cfa8d61ad1
 functie|public.fn_notulen_segment_verwijder|secdef=false searchpath=search_path=public, pg_temp md5=f9478d535ba029ccc463195545ae2194
 functie|public.fn_organisatie_profielen_touch|secdef=false searchpath=niet gepind md5=8b58dbe35ad1684b1d4a8408fe7174df
-functie|public.fn_platform_event_hash|secdef=false searchpath=niet gepind md5=533b740a6975a40211a1f2980271ac55
+functie|public.fn_platform_event_chain_assert_valid|secdef=true searchpath=search_path=pg_catalog, public, extensions md5=4d3dddc3c8c54c0a1ea775d780685946
+functie|public.fn_platform_event_fork_declaration_immutable|secdef=true searchpath=search_path=pg_catalog, public md5=c6bc9bf07c7f3838f5fb23682b2c1614
+functie|public.fn_platform_event_hash|secdef=true searchpath=search_path=pg_catalog, public md5=b0d295788debbd3dc6bb16a095ff1d88
 functie|public.fn_platform_event_immutable|secdef=false searchpath=niet gepind md5=b8fdf1fe9384e836325efa9b9fe9a053
 functie|public.fn_profiel_bevries_kolommen|secdef=true searchpath=search_path=public, pg_temp md5=1cb989181b99371810cd9cb65975b32f
 functie|public.fn_rate_limit_check|secdef=true searchpath=search_path=public, pg_temp md5=aa350903697b08f75a89ecebc49560c6
@@ -728,6 +732,8 @@ rls|notificaties|enabled=true forced=false
 rls|notulen_segmenten|enabled=true forced=false
 rls|organisatie_profielen|enabled=true forced=false
 rls|platform_capabilities|enabled=true forced=false
+rls|platform_event_chain_state|enabled=true forced=false
+rls|platform_event_fork_declarations|enabled=true forced=false
 rls|platform_event_log|enabled=true forced=false
 rls|platform_identities|enabled=true forced=false
 rls|platform_identity_capabilities|enabled=true forced=false
