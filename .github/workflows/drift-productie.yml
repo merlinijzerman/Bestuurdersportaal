@@ -25,13 +25,13 @@ name: drift-productie
 #  worden — vandaar de alert. Een controle die faalt zonder dat iemand het merkt
 #  is precies zo nuttig als geen controle.
 #
-#  ── DRIFT_INRICHTING_OPEN — de cron staat UIT tot deze drie stappen klaar zijn.
+#  ── DRIFT_INRICHTING_OPEN — inrichting klaar; actuele drift nog open.
 #  Greppable met: grep -rn DRIFT_INRICHTING_OPEN
 #
-#  Waarom uit en niet gewoon aan: zonder deze stappen faalt de nachtrun elke
-#  nacht, en volgens besluit 0185 IS een rode nachtrun het alertkanaal. Je traint
-#  jezelf dan om precies die notificatie te negeren — het omgekeerde van wat dit
-#  ding moet doen. Aanzetten is later één regel; zie stap 4.
+#  De handmatige run bereikt beide databases en meldt terecht bestaande
+#  Productie↔Preview-drift. De cron blijft uit tot die concrete delta is
+#  uitgerold of per regel bewust geclassificeerd; anders begint de bewaking met
+#  een permanent rood signaal. Aanzetten is daarna één regel; zie stap 4.
 #
 #  STAP 1 — rol aanmaken op Productie ÉN Preview.
 #    scripts/drift-readonly-rol.sql, wachtwoord invullen, uitvoeren. Het script
@@ -42,23 +42,25 @@ name: drift-productie
 #    Zelfde wachtwoord in beide omgevingen, of splits in _PROD/_PREVIEW en pas
 #    de samenstelling hieronder aan.
 #
-#  STAP 3 — pinnen. EN NIET EERDER DAN NA DE INVENTARISATIE VAN DE ELF
-#    PRODUCTIE-ONLY SECURITY-DEFINER-FUNCTIES (Bevinding A bij #78: prod/preview
-#    telt 39 SECDEF-functies tegen 28 in een repo-replay, o.a. het fn_ai_*-
-#    subsysteem). Pin je vóór die inventarisatie, dan verklaar je ongereviewde
-#    drift tot VERWACHTE toestand en kijkt deze controle daar nooit meer naar.
-#    Pinnen is geen formaliteit: je tekent de huidige toestand af.
+#  STAP 3 — pinnen. De productie-inventarisatie van 21-08-2026 telt met
+#    pg_proc.prosecdef 39 SECURITY-DEFINER-functies in public; de CI-keten telt
+#    met exact dezelfde query 42. Er zijn géén productie-only functies: de drie
+#    extra functies bestaan alleen in CI. De ene productie-only fonds_id-tabel
+#    is fonds_licentie en correspondeert met de ontbrekende migratie op de
+#    herstelbranch. De huidige productiestand is na die review gepind. Pinnen is
+#    geen formaliteit: je tekent de huidige toestand af.
 #
-#  STAP 4 — cron aanzetten: haal het commentaarteken weg bij de `schedule`-regels
-#    hieronder, en werk de [OPS]-regel in scripts/g2-evidence.sh bij.
+#  STAP 4 — na afhandeling van de huidige Productie↔Preview-drift de cron
+#    aanzetten: haal het commentaarteken weg bij de `schedule`-regels hieronder,
+#    en werk de [OPS]-regel in scripts/g2-evidence.sh bij.
 #
-#  ONGETOETSTE AANNAME — controleer dit bij stap 2.
-#  De verbindingsstring gebruikt de pooler-vorm `<rol>.<project_ref>` naar
-#  analogie van `postgres.<ref>` in supabase-backup.yml. Dat een NIET-postgres
-#  rol daar hetzelfde werkt, is niet geverifieerd zonder verbinding. Werkt het
-#  niet: de directe DB-host in plaats van de pooler, of het volledige
-#  verbindingsadres als secret. Draai daarom eerst één keer met
-#  workflow_dispatch voordat je op de nachtrun vertrouwt.
+#  POOLER GETOETST — 21-08-2026.
+#  De sessiepooler accepteert de vorm `<rol>.<project_ref>` ook voor de custom
+#  rol drift_lezer. Productie en Preview gebruiken wel verschillende hosts;
+#  neem die daarom nooit samen in één POOLER_HOST-variabele. De eerste rooktest
+#  ving precies die fout. Na propagatie leverden beide verbindingen een
+#  momentopname en vier buckets, terwijl public.profielen en storage.objects
+#  met permission denied dicht bleven.
 #
 #  WAT WÉL GEMETEN IS (21-08-2026, wegwerp-PG17-stack met het volle schema):
 #  de rol-DDL draait schoon, `drift_lezer` levert een momentopname die
@@ -69,8 +71,8 @@ name: drift-productie
 # ============================================================================
 
 on:
-  # DRIFT_INRICHTING_OPEN — cron bewust uitgeschakeld; zet deze twee regels terug
-  # zodra stap 1 t/m 3 in de kop klaar zijn.
+  # DRIFT_INRICHTING_OPEN — inrichting klaar, maar de handmatige run is terecht
+  # rood op bestaande Productie↔Preview-drift. Eerst die delta afhandelen.
   #  schedule:
   #    - cron: "0 4 * * *" # elke nacht 04:00 UTC, ná nightly-fidelity (03:00)
   workflow_dispatch:
@@ -98,7 +100,8 @@ jobs:
     env:
       PROD_REF: aebwiufuegsiwhwpdrfb
       PREVIEW_REF: swviwoytzvaqypieqgji
-      POOLER_HOST: aws-1-eu-north-1.pooler.supabase.com
+      PROD_POOLER_HOST: aws-1-eu-north-1.pooler.supabase.com
+      PREVIEW_POOLER_HOST: aws-0-eu-north-1.pooler.supabase.com
       DRIFT_DB_PASSWORD: ${{ secrets.DRIFT_DB_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
@@ -122,8 +125,8 @@ jobs:
           set -Eeuo pipefail
           ENCODED="$(python3 -c 'import os,urllib.parse; print(urllib.parse.quote(os.environ["DRIFT_DB_PASSWORD"], safe=""))')"
           echo "::add-mask::$ENCODED"
-          export DRIFT_PROD_URL="postgresql://drift_lezer.${PROD_REF}:${ENCODED}@${POOLER_HOST}:5432/postgres"
-          export DRIFT_PREVIEW_URL="postgresql://drift_lezer.${PREVIEW_REF}:${ENCODED}@${POOLER_HOST}:5432/postgres"
+          export DRIFT_PROD_URL="postgresql://drift_lezer.${PROD_REF}:${ENCODED}@${PROD_POOLER_HOST}:5432/postgres"
+          export DRIFT_PREVIEW_URL="postgresql://drift_lezer.${PREVIEW_REF}:${ENCODED}@${PREVIEW_POOLER_HOST}:5432/postgres"
           bash scripts/drift-vergelijk.sh | tee drift-rapport.txt
 
       - name: Rapport bewaren
