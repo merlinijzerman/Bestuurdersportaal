@@ -184,7 +184,8 @@ function dissentItem(over: Partial<DissentItem>): DissentItem {
 function bewijsItem(over: Partial<BewijsItem>): BewijsItem {
   return {
     id: "b", stap_id: "s1", document_id: "doc-1", titel: "ALM-analyse",
-    beschrijving: null, documenttype: null, toegevoegd_op: "2026-03-20T09:00:00.000Z",
+    beschrijving: null, documenttype: null, requirement_sleutel: null,
+    toegevoegd_op: "2026-03-20T09:00:00.000Z",
     toegevoegd_door_naam: null, ...over,
   };
 }

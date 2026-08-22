@@ -218,9 +218,31 @@ export function valideerDefinitie(def: unknown): string[] {
     if (!Array.isArray(s.requirements)) {
       fouten.push(`${pos}: requirements ontbreekt (mag [] zijn)`);
     } else {
+      // Matchsleutel-identiteit coalesce(documenttype, label) moet binnen een
+      // stap uniek en niet-leeg zijn. Diezelfde identiteit draagt de unieke
+      // index idx_req_uniek, de per-proces uitsluiting én de bewijsbinding
+      // (procedure_bewijs.requirement_sleutel). Botsen twee vereisten, dan is
+      // de binding ambigu en falen resolver/readiness gesloten.
+      const identiteiten = new Set<string>();
       for (const [j, r0] of s.requirements.entries()) {
         const r = r0 as Record<string, unknown>;
         const rp = `${pos} requirement[${j}]`;
+        if (isStr(r.label) || isStr(r.documenttype)) {
+          const identiteit = isStr(r.documenttype)
+            ? (r.documenttype as string)
+            : ((r.label as string) ?? "");
+          const sleutel = `${String(r.requirement_type)}|${identiteit}`;
+          if (identiteit.trim() === "") {
+            fouten.push(`${rp}: lege matchsleutel (documenttype én label leeg)`);
+          } else if (identiteiten.has(sleutel)) {
+            fouten.push(
+              `${rp}: dubbele matchsleutel '${identiteit}' binnen deze stap ` +
+                `voor requirement_type '${String(r.requirement_type)}'`
+            );
+          } else {
+            identiteiten.add(sleutel);
+          }
+        }
         if (!isStr(r.requirement_type) ||
             !REQUIREMENT_TYPES.includes(r.requirement_type as DefinitieRequirementType)) {
           fouten.push(`${rp}: onbekend requirement_type '${r.requirement_type}'`);
