@@ -25,13 +25,16 @@ name: drift-productie
 #  worden — vandaar de alert. Een controle die faalt zonder dat iemand het merkt
 #  is precies zo nuttig als geen controle.
 #
-#  ── DRIFT_INRICHTING_OPEN — inrichting klaar; actuele drift nog open.
-#  Greppable met: grep -rn DRIFT_INRICHTING_OPEN
+#  ── DRIFT_INRICHTING_AFGEROND — 22-08-2026. De cron staat aan.
 #
-#  De handmatige run bereikt beide databases en meldt terecht bestaande
-#  Productie↔Preview-drift. De cron blijft uit tot die concrete delta is
-#  uitgerold of per regel bewust geclassificeerd; anders begint de bewaking met
-#  een permanent rood signaal. Aanzetten is daarna één regel; zie stap 4.
+#  De Productie↔Preview-delta die het aanzetten blokkeerde is afgehandeld, niet
+#  weggeklikt. Van de tien afwijkende functies bleken er acht cosmetisch — alleen
+#  commentaar en regelafbrekingen; met witruimte en commentaar weg was de SQL
+#  letterlijk gelijk. Die acht zijn gelijkgetrokken met de repo in plaats van op
+#  een uitzonderingslijst gezet, zodat er geen lijst is om te onderhouden.
+#  De twee echte verschillen zaten allebei op Preview en zijn daar uitgerold.
+#
+#  Beide signalen zijn groen gemeten vóór het aanzetten (run 32575692781).
 #
 #  STAP 1 — rol aanmaken op Productie ÉN Preview.
 #    scripts/drift-readonly-rol.sql, wachtwoord invullen, uitvoeren. Het script
@@ -50,9 +53,10 @@ name: drift-productie
 #    herstelbranch. De huidige productiestand is na die review gepind. Pinnen is
 #    geen formaliteit: je tekent de huidige toestand af.
 #
-#  STAP 4 — na afhandeling van de huidige Productie↔Preview-drift de cron
-#    aanzetten: haal het commentaarteken weg bij de `schedule`-regels hieronder,
-#    en werk de [OPS]-regel in scripts/g2-evidence.sh bij.
+#  STAP 4 — GEDAAN op 22-08-2026. De cron staat aan. De [OPS]-regel in
+#    scripts/g2-evidence.sh hoefde niet bijgewerkt: die meet zelf of de cron
+#    aanstaat, en gaat pas naar DONE bij een gezíéne geslaagde nachtrun — niet
+#    bij een aanwezige cronregel. Dat onderscheid is het hele punt van B9b.
 #
 #  POOLER GETOETST — 21-08-2026.
 #  De sessiepooler accepteert de vorm `<rol>.<project_ref>` ook voor de custom
@@ -71,10 +75,8 @@ name: drift-productie
 # ============================================================================
 
 on:
-  # DRIFT_INRICHTING_OPEN — inrichting klaar, maar de handmatige run is terecht
-  # rood op bestaande Productie↔Preview-drift. Eerst die delta afhandelen.
-  #  schedule:
-  #    - cron: "0 4 * * *" # elke nacht 04:00 UTC, ná nightly-fidelity (03:00)
+  schedule:
+    - cron: "0 4 * * *" # elke nacht 04:00 UTC, ná nightly-fidelity (03:00)
   workflow_dispatch:
 
 permissions:
