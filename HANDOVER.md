@@ -1232,3 +1232,5 @@ Migraties zijn klein en geïsoleerd — geen schema-rollbacks nodig zolang je de
 *Hiermee is **Vergaderingen V2 (tranche 1 + 2)** volledig opgeleverd, samen met de **procedure-audit-followups (deploy A, 19 mei)**: restrictive RLS op `decision_ai_interactions`, FK `governance_events.decision_id` → `on delete restrict`, `chk_bronnen_array` CHECK, `?trigger=…`-parameter op de auditdossier-route, type-guards `isAIBron()`/`validateAIBronnenPayload()`, en de versmalde auditclaim in `PROCEDURE-MVP1-ONTWERP.md` §11.*
 
 *Een klein openstaand puntje: `supabase/schema.sql` (geconsolideerde documentatie) is niet bijgewerkt met de `stemmingen`- en `stem_uitbrengingen`-tabellen — de migraties zijn de bron van waarheid en compleet. **Volgende stap**: testen in productie als voorzitter; daarna Security Route A WP2-WP5 (rate limiting wacht op Upstash Redis, plus prompt-injection, upload-hardening, CSRF Origin-check) en WP7 (Sentry, wacht op EU-residency-account).*
+
+<!-- TEGENPROEF previewpoort — NIET MERGEN, wordt gesloten. -->
