@@ -50,7 +50,7 @@ Opdrachten komen vaak als **werkopdracht** uit een plansessie (zie `WERKOPDRACHT
 - **TypeScript-check vóór commit (verplicht):** `./node_modules/.bin/tsc --noEmit --skipLibCheck` moet exit 0 zijn.
 - **Schema-wijzigingen:** schrijf een idempotente migratie in `supabase/migrations/<datum>_<naam>.sql`, werk `schema.sql` bij als documentatie, en draai de migratie **eerst in Supabase** — dán pas code-deploy (anders crashen inserts / breken CHECK-constraints). Documenteer migraties.
 - **Controleer RLS-impact** bij elke datamodelwijziging.
-- **Deploy** verloopt via GitHub Desktop (commit → push → Vercel auto-deploy). **Geen terminal-git commits.** Branch protection op `main` staat aan: commit op een feature-branch → PR → merge ná groene gates. Rechtstreeks op `main` pushen is geblokkeerd.
+- **Deploy** verloopt via GitHub Desktop (commit → push). **Geen terminal-git commits.** De weg is **preview eerst**: feature-branch → PR naar `preview` → merge → PR van `preview` naar `main`. `main` is de productiebranch en deployt naar Production; `preview` deployt naar de Preview-omgeving, die een **eigen Supabase** heeft (geverifieerd 22-08-2026). Branch protection op `main` staat aan en geldt óók voor de eigenaar: rechtstreeks pushen is geblokkeerd, en een PR naar `main` die niet van `preview` komt wordt rood gezet door de check **Previewpoort**. Bewuste uitzondering: label `hotfix-direct-naar-main`. Merge pas ná groene gates én een waargenomen preview-deploy — zie `security/RELEASEWEG-PREVIEW-EERST.md`.
 - **Geef altijd aan welke bestanden je hebt aangepast.**
 - De AI-toon-systeemprompt in `app/api/chat/route.ts` is kostbaar, fijn afgesteld werk — wijzig met beleid en alleen op verzoek.
 
