@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
 import { rateLimited } from "@/core/lib/api-errors";
 
@@ -13,19 +13,9 @@ import { rateLimited } from "@/core/lib/api-errors";
 // Rechten: alleen voorzitter/beheerder, server-side afgedwongen. Tenant-isolatie
 // via RLS (anon-key): een gebruiker kan alleen documenten van het eigen fonds
 // raken; generieke documenten zijn read-only voor tenants.
-export async function POST(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const { id } = await params;
-  const supabase = await createServerSupabase();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-  }
+export const POST = withFondsRoute({}, async (ctx, _req: NextRequest, params) => {
+  const { id } = params as { id: string };
+    const supabase = ctx.supabase;
 
   // Fail-closed rate-limit (dezelfde pot als her-extract: het is een
   // herverwerkings-actie die de worker externe modelcalls laat doen).
@@ -36,13 +26,8 @@ export async function POST(
     return rateLimited("documents.opnieuw-verwerken", limiet.resetAt);
   }
 
-  const { data: profiel } = await supabase
-    .from("profielen")
-    .select("rol")
-    .eq("id", user.id)
-    .single();
   const isVoorzitterOfBeheerder =
-    profiel?.rol === "voorzitter" || profiel?.rol === "beheerder";
+    ctx.rol === "voorzitter" || ctx.rol === "beheerder";
   if (!isVoorzitterOfBeheerder) {
     return NextResponse.json(
       { error: "Alleen voorzitter of beheerder mag een document opnieuw verwerken." },
@@ -97,4 +82,4 @@ export async function POST(
     status: "verwerken",
     bericht: "Het document is opnieuw in de verwerkingswachtrij gezet.",
   });
-}
+});

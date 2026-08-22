@@ -9,29 +9,15 @@
 // -----------------------------------------------------------------------------
 
 import { NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
-import { beoordeelRouteHostToegang } from "@/core/lib/tenant-route-guard";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { haalAssuranceVoorFonds } from "@/core/lib/aqlab/assurance";
 
-export async function GET() {
-  const supabase = await createServerSupabase();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-
-  const { data: profiel } = await supabase
-    .from("profielen").select("fonds_id").eq("id", user.id).maybeSingle();
-  const fondsId = profiel?.fonds_id ?? null;
+export const GET = withFondsRoute({ hostGuard: true, label: "aqlab.assurance.GET" }, async (ctx) => {
+  const supabase = ctx.supabase;
+  const fondsId = ctx.fondsId;
   if (!fondsId) return NextResponse.json({ error: "Geen fonds-profiel" }, { status: 403 });
-
-  // Host↔fonds-enforce (defense-in-depth náást RLS), zoals de auditdossier-route.
-  const hostOordeel = await beoordeelRouteHostToegang({
-    sessieFondsId: fondsId, gebruikerId: user.id, label: "aqlab.assurance.GET",
-  });
-  if (!hostOordeel.toegestaan) {
-    return NextResponse.json({ error: "Dit webadres hoort niet bij uw fonds." }, { status: 403 });
-  }
 
   // D1b: sessie-client (RLS + SECURITY DEFINER-RPC's), geen service-role meer.
   const view = await haalAssuranceVoorFonds(supabase, fondsId);
   return NextResponse.json(view, { headers: { "Cache-Control": "private, no-store" } });
-}
+});

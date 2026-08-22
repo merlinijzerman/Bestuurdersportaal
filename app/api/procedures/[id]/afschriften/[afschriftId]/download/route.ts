@@ -8,8 +8,7 @@
 // -----------------------------------------------------------------------------
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
-import { beoordeelRouteHostToegang } from "@/core/lib/tenant-route-guard";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { isBureauRol } from "@/core/lib/bureau-gate";
 
 export const dynamic = "force-dynamic";
@@ -18,34 +17,17 @@ const SIGNED_URL_TTL_SECONDS = 60;
 const AFSCHRIFT_BUREAU_WEIGERING =
   "Het afschrift bevat het auditdossier met stemgedrag per bestuurslid en is daarom niet beschikbaar voor het bestuursbureau.";
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string; afschriftId: string }> }
-) {
+// De host↔fonds-guard zit sinds W5 in de wrapper (`hostGuard: true`). GEMETEN:
+// de inline aanroep stond al direct ná het profiel en vóór de bureau-gate, dus
+// de volgorde van poorten blijft ongewijzigd. `AFS-3` in
+// tests/cross-tenant/afschrift-toegang.test.ts is sinds W4 wrapper-bewust en
+// dekt deze route zonder aanpassing.
+export const GET = withFondsRoute({ hostGuard: true, label: "procedures.afschrift.download.GET" }, async (ctx, _req: NextRequest, params) => {
   try {
-    const { id: procedureId, afschriftId } = await params;
-    const supabase = await createServerSupabase();
+    const { id: procedureId, afschriftId } = params as { id: string; afschriftId: string };
+    const supabase = ctx.supabase;
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam, fonds_id, rol")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    const hostOordeel = await beoordeelRouteHostToegang({
-      sessieFondsId: profiel?.fonds_id ?? null,
-      gebruikerId: user.id,
-      label: "procedures.afschrift.download.GET",
-    });
-    if (!hostOordeel.toegestaan) {
-      return NextResponse.json({ error: "Dit webadres hoort niet bij uw fonds." }, { status: 403 });
-    }
-    if (isBureauRol(profiel?.rol)) {
+    if (isBureauRol(ctx.rol)) {
       return NextResponse.json({ error: AFSCHRIFT_BUREAU_WEIGERING }, { status: 403 });
     }
 
@@ -81,8 +63,8 @@ export async function GET(
     await supabase.from("procedure_log").insert({
       procedure_id: procedureId,
       event_type: "afschrift_gedownload",
-      actor_id: user.id,
-      actor_naam: profiel?.naam ?? null,
+      actor_id: ctx.gebruikerId,
+      actor_naam: ctx.naam ?? null,
       payload: { afschrift_id: afschriftId },
     });
 
@@ -91,4 +73,4 @@ export async function GET(
     console.error("Fout in GET afschrift download:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

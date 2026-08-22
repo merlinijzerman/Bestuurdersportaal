@@ -14,7 +14,7 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { requireCapability } from "@/core/lib/capabilities";
 import {
   DOSSIER_STATUSSEN,
@@ -25,19 +25,10 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const GET = withFondsRoute({}, async (ctx, _req: NextRequest, params) => {
   try {
-    const { id } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const { id } = params as { id: string };
+    const supabase = ctx.supabase;
 
     const { data: dossier, error } = await supabase
       .from("procedures")
@@ -66,7 +57,7 @@ export async function GET(
     console.error("Fout in GET /api/dossiers/[id]:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});
 
 type PatchBody = {
   status?: string;
@@ -77,24 +68,15 @@ type PatchBody = {
   periode_jaar?: number | null;
 };
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const PATCH = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const { id } = params as { id: string };
+    const supabase = ctx.supabase;
 
     // Beheeractie: dossierstatus/periode wijzigen vereist de capability
     // `dossiers.manage` (TO §5). Server-side leidend; UI-zichtbaarheid is
     // cosmetisch. RLS borgt daarnaast tenant-isolatie per fonds_id.
-    if (!(await requireCapability(user.id, "dossiers.manage"))) {
+    if (!(await requireCapability(ctx.gebruikerId, "dossiers.manage"))) {
       return NextResponse.json(
         { error: "Geen rechten om dit dossier te beheren" },
         { status: 403 }
@@ -201,11 +183,6 @@ export async function PATCH(
 
     // Append-only audit-event (alleen bij een echte statuswijziging; de
     // periode-only wijziging loggen we als metadata-event).
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam")
-      .eq("id", user.id)
-      .maybeSingle();
 
     const heeftStatusWijziging = "status" in nieuweWaarden;
     await supabase.from("procedure_log").insert({
@@ -213,8 +190,8 @@ export async function PATCH(
       event_type: heeftStatusWijziging
         ? "dossierstatus_handmatig_gewijzigd"
         : "dossier_periode_gewijzigd",
-      actor_id: user.id,
-      actor_naam: profiel?.naam || null,
+      actor_id: ctx.gebruikerId,
+      actor_naam: ctx.naam || null,
       payload: heeftStatusWijziging
         ? {
             oud: oudeWaarden,
@@ -229,4 +206,4 @@ export async function PATCH(
     console.error("Fout in PATCH /api/dossiers/[id]:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

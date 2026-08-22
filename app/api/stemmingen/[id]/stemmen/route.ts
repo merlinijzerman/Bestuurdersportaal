@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { notifyUser } from "@/core/lib/notifications";
 import type { Alternatief } from "@/core/lib/stemming";
 import { isBureauRol, BUREAU_WEIGERING } from "@/core/lib/bureau-gate";
@@ -22,19 +22,10 @@ import { isBureauRol, BUREAU_WEIGERING } from "@/core/lib/bureau-gate";
 //
 //  Wijzigen kan alleen vóór sluiting en alleen door de uitbrenger zelf.
 // ============================================================
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const POST = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id: stemmingId } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const { id: stemmingId } = params as { id: string };
+    const supabase = ctx.supabase;
 
     const body = (await req.json()) as {
       keuze?: string;
@@ -75,12 +66,7 @@ export async function POST(
     // T1 bureau-rol (§5.3): geen stem uitbrengen, ook niet bij volmacht. Deze
     // route had tot nu toe geen rolgate; de harde weigering staat in de
     // RLS-policy "fonds stem insert".
-    const { data: eigenProfiel } = await supabase
-      .from("profielen")
-      .select("rol")
-      .eq("id", user.id)
-      .maybeSingle();
-    if (isBureauRol((eigenProfiel as { rol?: string } | null)?.rol)) {
+    if (isBureauRol(ctx.rol)) {
       return NextResponse.json({ error: BUREAU_WEIGERING.stemmen }, { status: 403 });
     }
 
@@ -93,8 +79,8 @@ export async function POST(
       );
     }
 
-    const stemgerechtigdeId = body.stemgerechtigde_id || user.id;
-    const isVolmacht = stemgerechtigdeId !== user.id;
+    const stemgerechtigdeId = body.stemgerechtigde_id || ctx.gebruikerId;
+    const isVolmacht = stemgerechtigdeId !== ctx.gebruikerId;
 
     // ── Volmacht-validatie ──
     if (isVolmacht) {
@@ -139,7 +125,7 @@ export async function POST(
     if (bestaand) {
       const b = bestaand as { id: string; uitgebracht_door: string };
       // Alleen de uitbrenger zelf mag wijzigen
-      if (b.uitgebracht_door !== user.id) {
+      if (b.uitgebracht_door !== ctx.gebruikerId) {
         if (!isVolmacht) {
           // Eigen stem geweigerd: er bestaat al een volmachtstem voor mij
           return NextResponse.json(
@@ -179,7 +165,7 @@ export async function POST(
       .from("stem_uitbrengingen")
       .insert({
         stemming_id: stemmingId,
-        uitgebracht_door: user.id,
+        uitgebracht_door: ctx.gebruikerId,
         stemgerechtigde_id: stemgerechtigdeId,
         keuze: body.keuze,
         motivering: body.motivering ?? null,
@@ -209,12 +195,7 @@ export async function POST(
         .maybeSingle();
       const vergaderingId =
         (agendapunt as { vergadering_id?: string } | null)?.vergadering_id ?? "";
-      const { data: actorProfiel } = await supabase
-        .from("profielen")
-        .select("naam")
-        .eq("id", user.id)
-        .maybeSingle();
-      const actorNaam = (actorProfiel as { naam?: string | null } | null)?.naam ?? "Een collega";
+      const actorNaam = ctx.naam ?? "Een collega";
       const keuzeLabel =
         st.alternatieven.find((a) => a.code === body.keuze)?.label ?? body.keuze;
 
@@ -236,7 +217,7 @@ export async function POST(
           gerelateerd_aan_type: "agendapunt",
           gerelateerd_aan_id: st.agendapunt_id,
           actor_naam: actorNaam,
-          actor_id: user.id,
+          actor_id: ctx.gebruikerId,
         }
       );
     }
@@ -246,4 +227,4 @@ export async function POST(
     console.error("Fout in POST /api/stemmingen/[id]/stemmen:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

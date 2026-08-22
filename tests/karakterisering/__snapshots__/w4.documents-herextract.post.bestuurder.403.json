@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Alleen voorzitter of beheerder mag een document her-indexeren."
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 403
+}

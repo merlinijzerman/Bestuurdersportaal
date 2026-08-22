@@ -1,15 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 
-export async function POST(req: NextRequest) {
+export const POST = withFondsRoute({}, async (ctx, req: NextRequest) => {
   try {
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const supabase = ctx.supabase;
 
     const body = (await req.json()) as {
       titel?: string;
@@ -26,25 +20,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("fonds_id")
-      .eq("id", user.id)
-      .single();
-
-    if (!profiel?.fonds_id) {
+    if (!ctx.fondsId) {
       return NextResponse.json({ error: "Geen fonds gekoppeld" }, { status: 400 });
     }
 
     const { data, error } = await supabase
       .from("vergaderingen")
       .insert({
-        fonds_id: profiel.fonds_id,
+        fonds_id: ctx.fondsId,
         titel,
         datum,
         locatie: locatie || null,
         status: status || "in_voorbereiding",
-        aangemaakt_door: user.id,
+        aangemaakt_door: ctx.gebruikerId,
       })
       .select()
       .single();
@@ -59,4 +47,4 @@ export async function POST(req: NextRequest) {
     console.error("Fout in /api/vergaderingen:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

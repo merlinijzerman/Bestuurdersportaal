@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Niet ingelogd"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 401
+}

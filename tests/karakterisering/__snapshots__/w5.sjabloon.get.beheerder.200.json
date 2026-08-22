@@ -1,0 +1,11 @@
+{
+  "body": {
+    "body_bytes": 17909
+  },
+  "headers": {
+    "content-disposition": "attachment; filename=\"stuurinformatie-sjabloon.xlsx\"",
+    "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "x-content-type-options": "nosniff"
+  },
+  "status": 200
+}

@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "agendapunt_id en vraag zijn verplicht"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 400
+}

@@ -7,8 +7,8 @@
 -- nieuwe zoek_chunks-signatuur per modus/peildatum aan, en assert welke
 -- document-id's wél/niet terugkomen. De rollback maakt de seed ongedaan, dus er
 -- blijft niets achter. Draai in de Supabase SQL-editor (rol postgres = bypass
--- RLS; dat is hier gewenst, we testen de FILTERLAAG, niet RLS — RLS is gedekt
--- door 2026_06_20e_verificatie_en_regressie.sql).
+-- RLS; dat is hier gewenst, we testen de FILTERLAAG, niet RLS — zie de
+-- ROL-regel hierboven voor waar RLS wél gedekt is).
 --
 -- De zoek_vector is generated (to_tsvector('dutch', tekst)); elke seed-chunk
 -- bevat het token 'zorgvuldigheidsbeginsel' zodat de FTS-query alle seed-rijen
@@ -23,6 +23,15 @@
 -- Peildatum is vastgepind op 2026-06-20 zodat de geldigheidstests stabiel zijn,
 -- onafhankelijk van current_date.
 -- ============================================================================
+
+-- ----------------------------------------------------------------------------
+-- ROL: postgres (BYPASSRLS), bewust — dit toetst de FILTERLAAG in zoek_chunks
+--      (status/bronstatus/geldigheid), niet RLS. Cross-tenant RLS is gedekt
+--      door t3_cross_tenant en retrieval-fondsdiscipline door t4; beide draaien
+--      sinds 21-08-2026 in de gate.
+--      (verplicht en machineleesbaar — zie ROL-1 in
+--       tests/cross-tenant/checksuite-rolverklaring.test.ts voor het waarom)
+-- ----------------------------------------------------------------------------
 
 begin;
 
@@ -164,6 +173,10 @@ rollback;
 --   #7  bronkaarten tonen status/bronstatus/datum/peildatum → UI-smoke (app/(dashboard)/ai)
 --   #12 besluitvorming neemt Decision Object-registratie mee → route-smoke (fn_build_decision_dossier-injectie)
 --   #13-24 bronsoort-weging (#17/#18/#24)                    → lib/weeg-bronsoort.sanity.ts
---          bronsoort-isolatie (#15/#16/#19/#20/#23)          → 2026_06_20e_verificatie_en_regressie.sql
+--          bronsoort-isolatie (#15/#16/#19/#20/#23)          → 2026_07_08_t3_cross_tenant.sql +
+--                                                              2026_07_08_t4_retrieval_fondsdiscipline.sql
+--          (stond hier: 2026_06_20e_verificatie_en_regressie.sql — dat is een
+--           HANDMATIGE checklist met placeholders die niet in de gate draait;
+--           gecorrigeerd 21-08-2026)
 --          bronkaart-labels (#21)                            → lib/bronsoort.sanity.ts (bestaand)
 -- ============================================================================

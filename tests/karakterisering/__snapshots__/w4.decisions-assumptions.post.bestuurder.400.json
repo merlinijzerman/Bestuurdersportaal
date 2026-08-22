@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Tekst is verplicht"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 400
+}

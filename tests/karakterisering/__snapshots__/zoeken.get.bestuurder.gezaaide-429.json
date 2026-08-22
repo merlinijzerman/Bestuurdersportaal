@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "U heeft te veel verzoeken achter elkaar gedaan. Probeer het over circa 5 minuten opnieuw."
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 429
+}

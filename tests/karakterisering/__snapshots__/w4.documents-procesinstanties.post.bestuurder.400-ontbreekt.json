@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "procesinstantie_id ontbreekt"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 400
+}

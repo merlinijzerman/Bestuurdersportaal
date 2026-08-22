@@ -1,19 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const PATCH = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const { id } = params as { id: string };
+    const supabase = ctx.supabase;
 
     const body = (await req.json()) as {
       eigen_notities?: Record<string, string>;
@@ -61,7 +52,7 @@ export async function PATCH(
       .from("voorbereidingen")
       .select("id")
       .eq("agendapunt_id", id)
-      .eq("gebruiker_id", user.id)
+      .eq("gebruiker_id", ctx.gebruikerId)
       .maybeSingle();
 
     let voorbereiding;
@@ -70,7 +61,7 @@ export async function PATCH(
         .from("voorbereidingen")
         .update(update)
         .eq("agendapunt_id", id)
-        .eq("gebruiker_id", user.id)
+        .eq("gebruiker_id", ctx.gebruikerId)
         .select()
         .single();
       if (error) {
@@ -83,7 +74,7 @@ export async function PATCH(
       // ai_output blijft default '{}' (geen AI-output gegenereerd).
       const insertPayload: Record<string, unknown> = {
         agendapunt_id: id,
-        gebruiker_id: user.id,
+        gebruiker_id: ctx.gebruikerId,
         ...update,
       };
       if (!heeftEigen) insertPayload.eigen_notities = {};
@@ -104,4 +95,4 @@ export async function PATCH(
     console.error("Fout in notities-route:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

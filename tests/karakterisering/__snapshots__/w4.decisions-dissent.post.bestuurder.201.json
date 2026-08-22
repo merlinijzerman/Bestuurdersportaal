@@ -1,0 +1,23 @@
+{
+  "body": {
+    "dissent": {
+      "aangemaakt_op": "<ts>",
+      "argument": "W4 dissent",
+      "bestuurder_id": "<uuid:1>",
+      "bestuurder_naam": "W1 bestuurder",
+      "decision_id": "<uuid:2>",
+      "formeel_vastgesteld": false,
+      "gekoppeld_aanname_id": null,
+      "gekoppeld_risico_id": null,
+      "gekoppeld_voorwaarde_id": null,
+      "id": "<uuid:3>",
+      "standpunt": "tegen",
+      "stemming_id": null,
+      "zichtbaarheid": "gedeelde_zorg"
+    }
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 201
+}

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 
 // PATCH /api/procedures/[id]/requirements/[reqId]
 //
@@ -8,17 +8,10 @@ import { createServerSupabase } from "@/core/lib/supabase-server";
 // voorzitter/beheerder. Een BLOKKERENDE vereiste deactiveren kan alleen met
 // verplichte motivering (REQ-006) — nooit stil. Elke mutatie logt één
 // governance_event.
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string; reqId: string }> }
-) {
+export const PATCH = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id, reqId } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+    const { id, reqId } = params as { id: string; reqId: string };
+    const supabase = ctx.supabase;
 
     const body = (await req.json()) as { actief?: boolean; motivering?: string };
     if (typeof body.actief !== "boolean") {
@@ -29,12 +22,11 @@ export async function PATCH(
     }
     const motivering = body.motivering?.trim() || null;
 
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam, rol")
-      .eq("id", user.id)
-      .single();
-    if (!profiel || !["voorzitter", "beheerder"].includes(profiel.rol)) {
+    // BESLUIT (W4): `!profiel ||` valt weg en `ctx.rol` krijgt `?? ""`.
+    // Uitkomst-identiek: geen profielrij -> haalProfiel geeft null -> ctx.rol is
+    // null -> "" -> 403; profielrij met rol null idem; rol gezet ongewijzigd.
+    // Zelfde afweging als bij de twee documents-backfills.
+    if (!["voorzitter", "beheerder"].includes(ctx.rol ?? "")) {
       return NextResponse.json(
         { error: "Alleen voorzitter of beheerder kan een vereiste wijzigen" },
         { status: 403 }
@@ -89,8 +81,8 @@ export async function PATCH(
       event_type: body.actief
         ? "requirement_geheractiveerd"
         : "requirement_gedeactiveerd",
-      actor_id: user.id,
-      actor_naam: profiel.naam ?? null,
+      actor_id: ctx.gebruikerId,
+      actor_naam: ctx.naam ?? null,
       object_type: "procedure_requirement_instance",
       object_id: reqId,
       oude_waarde: { actief: reqRow.actief, blokkerend: reqRow.blokkerend },
@@ -107,4 +99,4 @@ export async function PATCH(
     console.error("Fout in PATCH …/requirements/[reqId]:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

@@ -1,0 +1,9 @@
+{
+  "body": {
+    "ai_ondersteund_voorbereid": true
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}

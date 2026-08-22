@@ -4,7 +4,7 @@
 // 'actie_status_gewijzigd', inhoudelijke wijzigingen 'actie_gewijzigd'.
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 
 const STATUS = [
   "open",
@@ -31,19 +31,10 @@ const INHOUDELIJK: (keyof WijzigBody)[] = [
   "afhankelijk_van",
 ];
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string; aid: string }> }
-) {
+export const PATCH = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id: decisionId, aid } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const { id: decisionId, aid } = params as { id: string; aid: string };
+    const supabase = ctx.supabase;
 
     const body = (await req.json()) as WijzigBody;
     if (body.status !== undefined && !STATUS.includes(body.status)) {
@@ -138,18 +129,13 @@ export async function PATCH(
       );
     }
 
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam")
-      .eq("id", user.id)
-      .maybeSingle();
-    const actorNaam = profiel?.naam ?? null;
+    const actorNaam = ctx.naam;
 
     if (inhoudelijk.length > 0) {
       await supabase.from("governance_events").insert({
         decision_id: decisionId,
         event_type: "actie_gewijzigd",
-        actor_id: user.id,
+        actor_id: ctx.gebruikerId,
         actor_naam: actorNaam,
         object_type: "action",
         object_id: aid,
@@ -163,7 +149,7 @@ export async function PATCH(
       await supabase.from("governance_events").insert({
         decision_id: decisionId,
         event_type: "actie_status_gewijzigd",
-        actor_id: user.id,
+        actor_id: ctx.gebruikerId,
         actor_naam: actorNaam,
         object_type: "action",
         object_id: aid,
@@ -177,4 +163,4 @@ export async function PATCH(
     console.error("Fout in PATCH /api/decisions/[id]/actions/[aid]:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

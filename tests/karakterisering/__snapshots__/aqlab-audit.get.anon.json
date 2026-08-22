@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "no_session_or_inactive"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 403
+}

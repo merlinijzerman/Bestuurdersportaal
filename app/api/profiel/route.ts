@@ -15,7 +15,7 @@
 // ============================================================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { requireCapability } from "@/core/lib/capabilities";
 import { ANTWOORDMODI, type Antwoordmodus } from "@/core/lib/vraagtype";
 
@@ -57,28 +57,24 @@ function uniekeIds(ruw: unknown): string[] {
   return Array.from(new Set(ids));
 }
 
-export async function GET() {
+export const GET = withFondsRoute({}, async (ctx) => {
   try {
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+    const supabase = ctx.supabase;
 
     const { data: profiel } = await supabase
       .from("profielen")
       .select(
         "id, naam, rol, fonds_id, bestuurlijke_rol, primaire_expertise_id, antwoordvoorkeur, standaard_ai_modus, detailniveau, reflectie_uitnodiging"
       )
-      .eq("id", user.id)
+      .eq("id", ctx.gebruikerId)
       .single();
 
     if (!profiel) return NextResponse.json({ error: "Profiel niet gevonden" }, { status: 404 });
 
     const [exp, grem, focus] = await Promise.all([
-      supabase.from("profiel_expertises").select("expertise_id").eq("profiel_id", user.id),
-      supabase.from("profiel_gremia").select("gremium_id").eq("profiel_id", user.id),
-      supabase.from("profiel_focusgebieden").select("focusgebied_id").eq("profiel_id", user.id),
+      supabase.from("profiel_expertises").select("expertise_id").eq("profiel_id", ctx.gebruikerId),
+      supabase.from("profiel_gremia").select("gremium_id").eq("profiel_id", ctx.gebruikerId),
+      supabase.from("profiel_focusgebieden").select("focusgebied_id").eq("profiel_id", ctx.gebruikerId),
     ]);
 
     return NextResponse.json({
@@ -91,30 +87,21 @@ export async function GET() {
     console.error("Fout in GET /api/profiel:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});
 
-export async function PATCH(req: NextRequest) {
+export const PATCH = withFondsRoute({}, async (ctx, req: NextRequest) => {
   try {
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+    const supabase = ctx.supabase;
 
     // Strikt zelfbeheer: capability dekt het EIGEN profiel; RLS dwingt de rij af.
-    if (!(await requireCapability(user.id, "profile.manage.own"))) {
+    if (!(await requireCapability(ctx.gebruikerId, "profile.manage.own"))) {
       return NextResponse.json(
         { error: "Geen rechten om het profiel te beheren (profile.manage.own)" },
         { status: 403 }
       );
     }
 
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam, fonds_id")
-      .eq("id", user.id)
-      .single();
-    if (!profiel?.fonds_id) {
+    if (!ctx.fondsId) {
       return NextResponse.json(
         { error: "Profiel heeft nog geen fonds; koppeling/profielbeheer niet mogelijk." },
         { status: 400 }
@@ -224,4 +211,4 @@ export async function PATCH(req: NextRequest) {
     console.error("Fout in PATCH /api/profiel:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

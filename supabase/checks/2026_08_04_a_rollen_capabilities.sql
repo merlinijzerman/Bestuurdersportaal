@@ -40,6 +40,14 @@
 -- governance_log_inhoud "voor de consistentie" aan fn_log_append_only() hangt,
 -- breekt precies datgene wat de tabel moest oplossen: dan kan een gebruiker zijn
 -- gesprek weer niet verwijderen. Dit faalt luid.
+-- ----------------------------------------------------------------------------
+-- ROL: postgres voor de opbouw en de auth.users-seed, authenticated per
+--      scenario via request.jwt.claims — de capability- en rolgrenzen moeten
+--      onder RLS gelden, niet onder BYPASSRLS.
+--      (verplicht en machineleesbaar — zie ROL-1 in
+--       tests/cross-tenant/checksuite-rolverklaring.test.ts voor het waarom)
+-- ----------------------------------------------------------------------------
+
 do $$
 declare n int;
 begin
@@ -182,18 +190,27 @@ insert into public.fondsen (id, naam, slug)
 values ('11111111-1111-1111-1111-111111111111', 'A-check Fonds A', 'a-check-fonds-a'),
        ('22222222-2222-2222-2222-222222222222', 'A-check Fonds B', 'a-check-fonds-b');
 
-insert into auth.users (id, aud, role, email, raw_app_meta_data, created_at, updated_at)
+-- FIXTURE-CORRECTIE (#83, 21-08-2026). `maak_profiel` leest NIET alles uit
+-- dezelfde metadata-kolom:
+--   fonds_id / platform  <- raw_APP_meta_data  (sinds 2026_08_17, door de
+--                           back-office gezet en dus niet client-stuurbaar)
+--   naam                 <- raw_USER_meta_data, met de e-mail als fallback
+-- Deze seed zette alles in app-metadata. Daardoor slaagde de fonds-assertie en
+-- viel de naam-assertie terug op de e-mail — wat eruitzag als de "e-mail-als-
+-- naam"-regressie uit besluit 0102, maar een fixture-fout was. Beide kolommen
+-- worden nu gevuld; welke kolom waarvoor telt, is precies wat hier getoetst hoort.
+insert into auth.users (id, aud, role, email, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
 values
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','authenticated','authenticated','a-auteur@test.local',
-   '{"naam":"Auteur A","fonds_id":"11111111-1111-1111-1111-111111111111"}', now(), now()),
+   '{"naam":"Auteur A","fonds_id":"11111111-1111-1111-1111-111111111111"}', '{"naam":"Auteur A","fonds_id":"11111111-1111-1111-1111-111111111111"}', now(), now()),
   ('cccccccc-cccc-cccc-cccc-cccccccccccc','authenticated','authenticated','c-collega@test.local',
-   '{"naam":"Collega C","fonds_id":"11111111-1111-1111-1111-111111111111"}', now(), now()),
+   '{"naam":"Collega C","fonds_id":"11111111-1111-1111-1111-111111111111"}', '{"naam":"Collega C","fonds_id":"11111111-1111-1111-1111-111111111111"}', now(), now()),
   ('dddddddd-dddd-dddd-dddd-dddddddddddd','authenticated','authenticated','d-auditor@test.local',
-   '{"naam":"Auditor D","fonds_id":"11111111-1111-1111-1111-111111111111"}', now(), now()),
+   '{"naam":"Auditor D","fonds_id":"11111111-1111-1111-1111-111111111111"}', '{"naam":"Auditor D","fonds_id":"11111111-1111-1111-1111-111111111111"}', now(), now()),
   ('eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee','authenticated','authenticated','e-auditor@test.local',
-   '{"naam":"Auditor E","fonds_id":"11111111-1111-1111-1111-111111111111"}', now(), now()),
+   '{"naam":"Auditor E","fonds_id":"11111111-1111-1111-1111-111111111111"}', '{"naam":"Auditor E","fonds_id":"11111111-1111-1111-1111-111111111111"}', now(), now()),
   ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb','authenticated','authenticated','b-ander@test.local',
-   '{"naam":"Ander B","fonds_id":"22222222-2222-2222-2222-222222222222"}', now(), now());
+   '{"naam":"Ander B","fonds_id":"22222222-2222-2222-2222-222222222222"}', '{"naam":"Ander B","fonds_id":"22222222-2222-2222-2222-222222222222"}', now(), now());
 
 do $$
 begin

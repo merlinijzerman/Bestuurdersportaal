@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { ensureDecisionForProcedure } from "@/core/lib/decision";
 
 // POST /api/procedures/[id]/checklist
@@ -8,17 +8,10 @@ import { ensureDecisionForProcedure } from "@/core/lib/decision";
 // procedure (D7). Voorbehouden aan voorzitter/beheerder; append-only gelogd.
 // Het item krijgt bron='handmatig' zodat het te onderscheiden is van de
 // meegesnapshotte template-items.
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const POST = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+    const { id } = params as { id: string };
+    const supabase = ctx.supabase;
 
     const body = (await req.json()) as {
       stap_id?: string;
@@ -33,12 +26,11 @@ export async function POST(
       );
     }
 
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam, rol")
-      .eq("id", user.id)
-      .single();
-    if (!profiel || !["voorzitter", "beheerder"].includes(profiel.rol)) {
+    // BESLUIT (W4): `!profiel ||` valt weg en `ctx.rol` krijgt `?? ""`.
+    // Uitkomst-identiek: geen profielrij -> haalProfiel geeft null -> ctx.rol is
+    // null -> "" -> 403; profielrij met rol null idem; rol gezet ongewijzigd.
+    // Zelfde afweging als bij de twee documents-backfills.
+    if (!["voorzitter", "beheerder"].includes(ctx.rol ?? "")) {
       return NextResponse.json(
         { error: "Alleen voorzitter of beheerder kan een checklist-item toevoegen" },
         { status: 403 }
@@ -78,7 +70,7 @@ export async function POST(
         voldaan: false,
         bron: "handmatig",
         actief: true,
-        aangemaakt_door: user.id,
+        aangemaakt_door: ctx.gebruikerId,
       })
       .select()
       .single();
@@ -93,8 +85,8 @@ export async function POST(
       .insert({
         decision_id,
         event_type: "checklistitem_toegevoegd",
-        actor_id: user.id,
-        actor_naam: profiel.naam ?? null,
+        actor_id: ctx.gebruikerId,
+        actor_naam: ctx.naam ?? null,
         object_type: "procedure_checklist",
         object_id: nieuw.id,
         nieuwe_waarde: { stap: stap.naam, label, bewijs_vereist: body.bewijs_vereist ?? false },
@@ -113,8 +105,8 @@ export async function POST(
     await supabase.from("procedure_log").insert({
       procedure_id: id,
       event_type: "checklistitem_toegevoegd",
-      actor_id: user.id,
-      actor_naam: profiel.naam || null,
+      actor_id: ctx.gebruikerId,
+      actor_naam: ctx.naam || null,
       payload: { stap: stap.naam, item: label },
     });
 
@@ -123,4 +115,4 @@ export async function POST(
     console.error("Fout in POST …/checklist:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

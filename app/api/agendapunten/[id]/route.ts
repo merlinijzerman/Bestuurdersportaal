@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { notifyAgendapuntBijdragers } from "@/core/lib/notifications";
 import { isBureauRol } from "@/core/lib/bureau-gate";
 
@@ -63,19 +64,10 @@ async function haalAgendapuntMetFonds(
 //  Rechten: eigenaar (aangemaakt_door) + voorzitter/beheerder.
 //  Motivering verplicht bij ≥1 bijdrager (min 10 tekens).
 // ============================================================
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const PATCH = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const { id } = params as { id: string };
+    const supabase = ctx.supabase;
 
     const meta = await haalAgendapuntMetFonds(supabase, id);
     if (!meta) {
@@ -91,15 +83,10 @@ export async function PATCH(
     }
 
     // Profiel + rol
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam, rol, fonds_id")
-      .eq("id", user.id)
-      .single();
 
-    const isEigenaar = agendapunt.aangemaakt_door === user.id;
+    const isEigenaar = agendapunt.aangemaakt_door === ctx.gebruikerId;
     const isPrivileged =
-      profiel?.rol === "voorzitter" || profiel?.rol === "beheerder";
+      ctx.rol === "voorzitter" || ctx.rol === "beheerder";
 
     if (!isEigenaar && !isPrivileged) {
       return NextResponse.json(
@@ -271,7 +258,7 @@ export async function PATCH(
       // inbrengrijen. Zonder deze regel zou de motiveringseis voor die rol stil
       // verdwijnen precies wanneer er wél bijdragen zijn. Wie de bijdragen niet
       // kan zien, motiveert altijd.
-      if (isBureauRol(profiel?.rol)) motiveringVereist = true;
+      if (isBureauRol(ctx.rol)) motiveringVereist = true;
     }
 
     const motivering = (body.motivering ?? "").trim();
@@ -286,7 +273,7 @@ export async function PATCH(
 
     // ── Audit-velden + update ───────────────────────────────
     updatePayload.gewijzigd_op = new Date().toISOString();
-    updatePayload.gewijzigd_door = user.id;
+    updatePayload.gewijzigd_door = ctx.gebruikerId;
 
     const { data: updated, error: updFout } = await supabase
       .from("agendapunten")
@@ -308,7 +295,7 @@ export async function PATCH(
       await supabase.from("agendapunt_log").insert({
         agendapunt_id: id,
         event_type,
-        actor_id: user.id,
+        actor_id: ctx.gebruikerId,
         payload: {
           velden: betekenisvolleVelden,
           diff,
@@ -316,7 +303,7 @@ export async function PATCH(
         },
       });
 
-      const actorNaam = (profiel as { naam?: string | null } | null)?.naam ?? "Een collega";
+      const actorNaam = ctx.naam ?? "Een collega";
       const huidigeTitel =
         (updatePayload.titel as string | undefined) ?? agendapunt.titel;
       const huidigeVergadering =
@@ -342,7 +329,7 @@ export async function PATCH(
             gerelateerd_aan_type: "agendapunt",
             gerelateerd_aan_id: id,
             actor_naam: actorNaam,
-            actor_id: user.id,
+            actor_id: ctx.gebruikerId,
           }
         );
       } else {
@@ -363,7 +350,7 @@ export async function PATCH(
             gerelateerd_aan_type: "agendapunt",
             gerelateerd_aan_id: id,
             actor_naam: actorNaam,
-            actor_id: user.id,
+            actor_id: ctx.gebruikerId,
           }
         );
       }
@@ -374,26 +361,17 @@ export async function PATCH(
     console.error("Fout in PATCH /api/agendapunten/[id]:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});
 
 // ============================================================
 //  DELETE /api/agendapunten/[id]
 //  Soft-delete. Rechten: eigenaar + voorzitter/beheerder.
 //  Verplichte reden (min 10 tekens).
 // ============================================================
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const DELETE = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
   try {
-    const { id } = await params;
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-    }
+    const { id } = params as { id: string };
+    const supabase = ctx.supabase;
 
     const meta = await haalAgendapuntMetFonds(supabase, id);
     if (!meta) {
@@ -408,15 +386,9 @@ export async function DELETE(
       );
     }
 
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam, rol")
-      .eq("id", user.id)
-      .single();
-
-    const isEigenaar = agendapunt.aangemaakt_door === user.id;
+    const isEigenaar = agendapunt.aangemaakt_door === ctx.gebruikerId;
     const isPrivileged =
-      profiel?.rol === "voorzitter" || profiel?.rol === "beheerder";
+      ctx.rol === "voorzitter" || ctx.rol === "beheerder";
 
     if (!isEigenaar && !isPrivileged) {
       return NextResponse.json(
@@ -443,7 +415,7 @@ export async function DELETE(
       .from("agendapunten")
       .update({
         verwijderd_op: new Date().toISOString(),
-        verwijderd_door: user.id,
+        verwijderd_door: ctx.gebruikerId,
         verwijder_reden: reden,
       })
       .eq("id", id)
@@ -458,11 +430,11 @@ export async function DELETE(
     await supabase.from("agendapunt_log").insert({
       agendapunt_id: id,
       event_type: "agendapunt_verwijderd",
-      actor_id: user.id,
+      actor_id: ctx.gebruikerId,
       payload: { motivering: reden },
     });
 
-    const actorNaam = (profiel as { naam?: string | null } | null)?.naam ?? "Een collega";
+    const actorNaam = ctx.naam ?? "Een collega";
     await notifyAgendapuntBijdragers(
       supabase,
       id,
@@ -479,7 +451,7 @@ export async function DELETE(
         gerelateerd_aan_type: "agendapunt",
         gerelateerd_aan_id: id,
         actor_naam: actorNaam,
-        actor_id: user.id,
+        actor_id: ctx.gebruikerId,
       }
     );
 
@@ -488,4 +460,4 @@ export async function DELETE(
     console.error("Fout in DELETE /api/agendapunten/[id]:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

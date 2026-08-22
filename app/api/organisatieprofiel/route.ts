@@ -13,7 +13,7 @@
 // ============================================================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabase } from "@/core/lib/supabase-server";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { requireCapability } from "@/core/lib/capabilities";
 
 export const dynamic = "force-dynamic";
@@ -38,19 +38,9 @@ function tekstOfNull(waarde: unknown): string | null {
   return t.length > 0 ? t : null;
 }
 
-export async function GET() {
+export const GET = withFondsRoute({}, async (ctx) => {
   try {
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
-
-    const { data: eigen } = await supabase
-      .from("profielen")
-      .select("rol")
-      .eq("id", user.id)
-      .single();
+    const supabase = ctx.supabase;
 
     // RLS beperkt de SELECT tot het eigen fonds; er is er hoogstens één.
     const { data: profiel } = await supabase
@@ -58,35 +48,26 @@ export async function GET() {
       .select(PROFIEL_KOLOMMEN)
       .maybeSingle();
 
-    return NextResponse.json({ profiel: profiel ?? null, rol: eigen?.rol ?? null });
+    return NextResponse.json({ profiel: profiel ?? null, rol: ctx.rol ?? null });
   } catch (e) {
     console.error("Fout in GET /api/organisatieprofiel:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});
 
-export async function PUT(req: NextRequest) {
+export const PUT = withFondsRoute({}, async (ctx, req: NextRequest) => {
   try {
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+    const supabase = ctx.supabase;
 
     // Rolgate: fonds-breed profiel → beheerder-only (analoog aan catalog.manage).
-    if (!(await requireCapability(user.id, "organisation.profile.manage"))) {
+    if (!(await requireCapability(ctx.gebruikerId, "organisation.profile.manage"))) {
       return NextResponse.json(
         { error: "Geen rechten om het organisatieprofiel te beheren (organisation.profile.manage)" },
         { status: 403 }
       );
     }
 
-    const { data: profiel } = await supabase
-      .from("profielen")
-      .select("naam, fonds_id")
-      .eq("id", user.id)
-      .single();
-    if (!profiel?.fonds_id) {
+    if (!ctx.fondsId) {
       return NextResponse.json(
         { error: "Profiel heeft nog geen fonds; organisatieprofiel-beheer niet mogelijk." },
         { status: 400 }
@@ -118,10 +99,10 @@ export async function PUT(req: NextRequest) {
     // touch-trigger zet bijgewerkt_op. bijgewerkt_door = weergavenaam bewerker.
     const { error } = await supabase.from("organisatie_profielen").upsert(
       {
-        fonds_id: profiel.fonds_id,
+        fonds_id: ctx.fondsId,
         ...waarden,
         peildatum,
-        bijgewerkt_door: profiel.naam ?? null,
+        bijgewerkt_door: ctx.naam ?? null,
       },
       { onConflict: "fonds_id" }
     );
@@ -135,4 +116,4 @@ export async function PUT(req: NextRequest) {
     console.error("Fout in PUT /api/organisatieprofiel:", e);
     return NextResponse.json({ error: "Serverfout" }, { status: 500 });
   }
-}
+});

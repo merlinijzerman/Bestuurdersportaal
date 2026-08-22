@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Ongeldig document-id"
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 400
+}

@@ -1,0 +1,67 @@
+{
+  "body": {
+    "bronkeuze_modus": {
+      "effectief": "blokkerend",
+      "fonds_waarde": null,
+      "herkomst": "default"
+    },
+    "flags": {},
+    "historie": [],
+    "hybride_zoeken": false,
+    "mag_beheren": false,
+    "modules": [
+      {
+        "beschikbaar": true,
+        "key": "ai",
+        "label": "AI Assistent"
+      },
+      {
+        "beschikbaar": true,
+        "key": "bibliotheek",
+        "label": "Documentbibliotheek"
+      },
+      {
+        "beschikbaar": true,
+        "key": "klantbeeld",
+        "label": "Klantbeeld"
+      },
+      {
+        "beschikbaar": true,
+        "key": "notulen",
+        "label": "Besluiten & Notulen"
+      },
+      {
+        "beschikbaar": true,
+        "key": "procedures",
+        "label": "Processen"
+      },
+      {
+        "beschikbaar": true,
+        "key": "risicomatrix",
+        "label": "Risicomatrix"
+      },
+      {
+        "beschikbaar": true,
+        "key": "stuurinformatie",
+        "label": "Stuurinformatie"
+      },
+      {
+        "beschikbaar": true,
+        "key": "vergaderingen",
+        "label": "Vergaderingen"
+      }
+    ],
+    "overrides": {},
+    "representatie_constraints": false,
+    "theming": {},
+    "vraagrouter_flags": {
+      "volledige_analyse_vervolg": false,
+      "vraagrouter_model": false,
+      "vraagrouter_v2": false
+    }
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 200
+}
