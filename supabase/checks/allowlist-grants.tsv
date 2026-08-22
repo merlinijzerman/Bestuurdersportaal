@@ -1,0 +1,769 @@
+sectie	sch	obj	klasse	rol	rechten
+BUCKET	storage	afschriften	bucket	-	public=false
+BUCKET	storage	aqlab-audit	bucket	-	public=false
+BUCKET	storage	documenten	bucket	-	public=false
+BUCKET	storage	documenten-quarantaine	bucket	-	public=false
+FUNC	public	afschriften_claim_jobs(p_worker_id text, p_limit integer, p_lease_seconds integer)	function	anon	-
+FUNC	public	afschriften_claim_jobs(p_worker_id text, p_limit integer, p_lease_seconds integer)	function	authenticated	-
+FUNC	public	afschriften_claim_jobs(p_worker_id text, p_limit integer, p_lease_seconds integer)	function	service_role	EXECUTE
+FUNC	public	aqlab_add_run_cost(p_run_id uuid, p_delta numeric)	function	anon	-
+FUNC	public	aqlab_add_run_cost(p_run_id uuid, p_delta numeric)	function	authenticated	-
+FUNC	public	aqlab_add_run_cost(p_run_id uuid, p_delta numeric)	function	service_role	EXECUTE
+FUNC	public	aqlab_assurance_meetwaarden(p_codes text[])	function	anon	-
+FUNC	public	aqlab_assurance_meetwaarden(p_codes text[])	function	authenticated	EXECUTE
+FUNC	public	aqlab_assurance_meetwaarden(p_codes text[])	function	service_role	EXECUTE
+FUNC	public	aqlab_audit_export_bron(p_export_id uuid)	function	anon	-
+FUNC	public	aqlab_audit_export_bron(p_export_id uuid)	function	authenticated	EXECUTE
+FUNC	public	aqlab_audit_export_bron(p_export_id uuid)	function	service_role	EXECUTE
+FUNC	public	aqlab_claim_run_jobs(p_worker_id text, p_limit integer, p_lease_seconds integer)	function	anon	-
+FUNC	public	aqlab_claim_run_jobs(p_worker_id text, p_limit integer, p_lease_seconds integer)	function	authenticated	-
+FUNC	public	aqlab_claim_run_jobs(p_worker_id text, p_limit integer, p_lease_seconds integer)	function	service_role	EXECUTE
+FUNC	public	aqlab_log_download(p_export_id uuid)	function	anon	-
+FUNC	public	aqlab_log_download(p_export_id uuid)	function	authenticated	EXECUTE
+FUNC	public	aqlab_log_download(p_export_id uuid)	function	service_role	EXECUTE
+FUNC	public	contact_aanvraag_insert(p_naam text, p_organisatie text, p_rol text, p_email text, p_telefoon text, p_type_verzoek text, p_bericht text, p_herkomst_pagina text, p_privacy_version text, p_ip_hash text)	function	anon	EXECUTE
+FUNC	public	contact_aanvraag_insert(p_naam text, p_organisatie text, p_rol text, p_email text, p_telefoon text, p_type_verzoek text, p_bericht text, p_herkomst_pagina text, p_privacy_version text, p_ip_hash text)	function	authenticated	EXECUTE
+FUNC	public	contact_aanvraag_insert(p_naam text, p_organisatie text, p_rol text, p_email text, p_telefoon text, p_type_verzoek text, p_bericht text, p_herkomst_pagina text, p_privacy_version text, p_ip_hash text)	function	service_role	EXECUTE
+FUNC	public	contact_notificatie_status(p_id uuid, p_verzonden boolean, p_error text)	function	anon	EXECUTE
+FUNC	public	contact_notificatie_status(p_id uuid, p_verzonden boolean, p_error text)	function	authenticated	EXECUTE
+FUNC	public	contact_notificatie_status(p_id uuid, p_verzonden boolean, p_error text)	function	service_role	EXECUTE
+FUNC	public	documenten_claim_ingest_jobs(p_worker_id text, p_limit integer, p_lease_seconds integer, p_max_per_fonds integer)	function	anon	-
+FUNC	public	documenten_claim_ingest_jobs(p_worker_id text, p_limit integer, p_lease_seconds integer, p_max_per_fonds integer)	function	authenticated	-
+FUNC	public	documenten_claim_ingest_jobs(p_worker_id text, p_limit integer, p_lease_seconds integer, p_max_per_fonds integer)	function	service_role	EXECUTE
+FUNC	public	fn_afschrift_bevries_kolommen()	function	anon	-
+FUNC	public	fn_afschrift_bevries_kolommen()	function	authenticated	EXECUTE
+FUNC	public	fn_afschrift_bevries_kolommen()	function	service_role	EXECUTE
+FUNC	public	fn_ai_actie_afronden(p_actie_id uuid, p_status text, p_resultaat_ref text)	function	anon	-
+FUNC	public	fn_ai_actie_afronden(p_actie_id uuid, p_status text, p_resultaat_ref text)	function	authenticated	EXECUTE
+FUNC	public	fn_ai_actie_afronden(p_actie_id uuid, p_status text, p_resultaat_ref text)	function	service_role	EXECUTE
+FUNC	public	fn_ai_actie_bevries_kolommen()	function	anon	-
+FUNC	public	fn_ai_actie_bevries_kolommen()	function	authenticated	-
+FUNC	public	fn_ai_actie_bevries_kolommen()	function	service_role	-
+FUNC	public	fn_ai_actietype_spec(p_actietype text)	function	anon	-
+FUNC	public	fn_ai_actietype_spec(p_actietype text)	function	authenticated	EXECUTE
+FUNC	public	fn_ai_actietype_spec(p_actietype text)	function	service_role	EXECUTE
+FUNC	public	fn_ai_allowlist_wijzigen(p_provider text, p_model text, p_actief boolean, p_venster_start timestamp with time zone, p_venster_eind timestamp with time zone, p_reden text, p_actor uuid)	function	anon	-
+FUNC	public	fn_ai_allowlist_wijzigen(p_provider text, p_model text, p_actief boolean, p_venster_start timestamp with time zone, p_venster_eind timestamp with time zone, p_reden text, p_actor uuid)	function	authenticated	-
+FUNC	public	fn_ai_allowlist_wijzigen(p_provider text, p_model text, p_actief boolean, p_venster_start timestamp with time zone, p_venster_eind timestamp with time zone, p_reden text, p_actor uuid)	function	service_role	EXECUTE
+FUNC	public	fn_ai_bump_config_versie()	function	anon	-
+FUNC	public	fn_ai_bump_config_versie()	function	authenticated	-
+FUNC	public	fn_ai_bump_config_versie()	function	service_role	EXECUTE
+FUNC	public	fn_ai_heractivering_aanvragen(p_sleutel text, p_actor uuid, p_reden text)	function	anon	-
+FUNC	public	fn_ai_heractivering_aanvragen(p_sleutel text, p_actor uuid, p_reden text)	function	authenticated	-
+FUNC	public	fn_ai_heractivering_aanvragen(p_sleutel text, p_actor uuid, p_reden text)	function	service_role	EXECUTE
+FUNC	public	fn_ai_heractivering_afwijzen(p_sleutel text, p_actor uuid, p_reden text)	function	anon	-
+FUNC	public	fn_ai_heractivering_afwijzen(p_sleutel text, p_actor uuid, p_reden text)	function	authenticated	-
+FUNC	public	fn_ai_heractivering_afwijzen(p_sleutel text, p_actor uuid, p_reden text)	function	service_role	EXECUTE
+FUNC	public	fn_ai_heractivering_goedkeuren(p_sleutel text, p_actor uuid, p_reden text)	function	anon	-
+FUNC	public	fn_ai_heractivering_goedkeuren(p_sleutel text, p_actor uuid, p_reden text)	function	authenticated	-
+FUNC	public	fn_ai_heractivering_goedkeuren(p_sleutel text, p_actor uuid, p_reden text)	function	service_role	EXECUTE
+FUNC	public	fn_ai_heractivering_intrekken(p_sleutel text, p_actor uuid)	function	anon	-
+FUNC	public	fn_ai_heractivering_intrekken(p_sleutel text, p_actor uuid)	function	authenticated	-
+FUNC	public	fn_ai_heractivering_intrekken(p_sleutel text, p_actor uuid)	function	service_role	EXECUTE
+FUNC	public	fn_ai_poort_check(p_provider text, p_model text)	function	anon	-
+FUNC	public	fn_ai_poort_check(p_provider text, p_model text)	function	authenticated	EXECUTE
+FUNC	public	fn_ai_poort_check(p_provider text, p_model text)	function	service_role	EXECUTE
+FUNC	public	fn_ai_preflight(p_actietype text, p_provider text, p_model text, p_ocr_paginas integer, p_idempotentie text, p_vingerafdruk text, p_dryrun boolean)	function	anon	-
+FUNC	public	fn_ai_preflight(p_actietype text, p_provider text, p_model text, p_ocr_paginas integer, p_idempotentie text, p_vingerafdruk text, p_dryrun boolean)	function	authenticated	EXECUTE
+FUNC	public	fn_ai_preflight(p_actietype text, p_provider text, p_model text, p_ocr_paginas integer, p_idempotentie text, p_vingerafdruk text, p_dryrun boolean)	function	service_role	EXECUTE
+FUNC	public	fn_ai_preflight_systeem(p_actietype text, p_fonds_id uuid, p_provider text, p_model text, p_ocr_paginas integer, p_idempotentie text, p_vingerafdruk text, p_dryrun boolean)	function	anon	-
+FUNC	public	fn_ai_preflight_systeem(p_actietype text, p_fonds_id uuid, p_provider text, p_model text, p_ocr_paginas integer, p_idempotentie text, p_vingerafdruk text, p_dryrun boolean)	function	authenticated	-
+FUNC	public	fn_ai_preflight_systeem(p_actietype text, p_fonds_id uuid, p_provider text, p_model text, p_ocr_paginas integer, p_idempotentie text, p_vingerafdruk text, p_dryrun boolean)	function	service_role	EXECUTE
+FUNC	public	fn_ai_quota_wijzigen(p_sleutel text, p_waarde integer, p_actor uuid)	function	anon	-
+FUNC	public	fn_ai_quota_wijzigen(p_sleutel text, p_waarde integer, p_actor uuid)	function	authenticated	-
+FUNC	public	fn_ai_quota_wijzigen(p_sleutel text, p_waarde integer, p_actor uuid)	function	service_role	EXECUTE
+FUNC	public	fn_ai_reserveer_intern(p_actietype text, p_fonds_id uuid, p_gebruiker_id uuid, p_via_systeem boolean, p_provider text, p_model text, p_ocr_paginas integer, p_idempotentie text, p_vingerafdruk text, p_dryrun boolean)	function	anon	-
+FUNC	public	fn_ai_reserveer_intern(p_actietype text, p_fonds_id uuid, p_gebruiker_id uuid, p_via_systeem boolean, p_provider text, p_model text, p_ocr_paginas integer, p_idempotentie text, p_vingerafdruk text, p_dryrun boolean)	function	authenticated	-
+FUNC	public	fn_ai_reserveer_intern(p_actietype text, p_fonds_id uuid, p_gebruiker_id uuid, p_via_systeem boolean, p_provider text, p_model text, p_ocr_paginas integer, p_idempotentie text, p_vingerafdruk text, p_dryrun boolean)	function	service_role	-
+FUNC	public	fn_ai_switch_stoppen(p_sleutel text, p_actor uuid, p_reden text)	function	anon	-
+FUNC	public	fn_ai_switch_stoppen(p_sleutel text, p_actor uuid, p_reden text)	function	authenticated	-
+FUNC	public	fn_ai_switch_stoppen(p_sleutel text, p_actor uuid, p_reden text)	function	service_role	EXECUTE
+FUNC	public	fn_app_error_log(p_label text, p_categorie text, p_severity text, p_http_status integer, p_fouttype text, p_foutcode text, p_melding_kort text, p_context_sleutels text[], p_correlatie_id uuid)	function	anon	-
+FUNC	public	fn_app_error_log(p_label text, p_categorie text, p_severity text, p_http_status integer, p_fouttype text, p_foutcode text, p_melding_kort text, p_context_sleutels text[], p_correlatie_id uuid)	function	authenticated	EXECUTE
+FUNC	public	fn_app_error_log(p_label text, p_categorie text, p_severity text, p_http_status integer, p_fouttype text, p_foutcode text, p_melding_kort text, p_context_sleutels text[], p_correlatie_id uuid)	function	service_role	EXECUTE
+FUNC	public	fn_bron_whitelist_log_hash()	function	anon	-
+FUNC	public	fn_bron_whitelist_log_hash()	function	authenticated	EXECUTE
+FUNC	public	fn_bron_whitelist_log_hash()	function	service_role	EXECUTE
+FUNC	public	fn_bron_whitelist_log_immutable()	function	anon	-
+FUNC	public	fn_bron_whitelist_log_immutable()	function	authenticated	EXECUTE
+FUNC	public	fn_bron_whitelist_log_immutable()	function	service_role	EXECUTE
+FUNC	public	fn_build_decision_dossier(p_decision_id uuid)	function	anon	-
+FUNC	public	fn_build_decision_dossier(p_decision_id uuid)	function	authenticated	EXECUTE
+FUNC	public	fn_build_decision_dossier(p_decision_id uuid)	function	service_role	EXECUTE
+FUNC	public	fn_chunk_denorm(p_document_id uuid)	function	anon	-
+FUNC	public	fn_chunk_denorm(p_document_id uuid)	function	authenticated	EXECUTE
+FUNC	public	fn_chunk_denorm(p_document_id uuid)	function	service_role	EXECUTE
+FUNC	public	fn_chunk_denorm_before_insert()	function	anon	-
+FUNC	public	fn_chunk_denorm_before_insert()	function	authenticated	EXECUTE
+FUNC	public	fn_chunk_denorm_before_insert()	function	service_role	EXECUTE
+FUNC	public	fn_chunk_denorm_refresh()	function	anon	-
+FUNC	public	fn_chunk_denorm_refresh()	function	authenticated	EXECUTE
+FUNC	public	fn_chunk_denorm_refresh()	function	service_role	EXECUTE
+FUNC	public	fn_contact_aanvragen_no_delete()	function	anon	-
+FUNC	public	fn_contact_aanvragen_no_delete()	function	authenticated	EXECUTE
+FUNC	public	fn_contact_aanvragen_no_delete()	function	service_role	EXECUTE
+FUNC	public	fn_decision_code()	function	anon	-
+FUNC	public	fn_decision_code()	function	authenticated	EXECUTE
+FUNC	public	fn_decision_code()	function	service_role	EXECUTE
+FUNC	public	fn_decision_readiness_check(p_decision_id uuid, p_target text)	function	anon	-
+FUNC	public	fn_decision_readiness_check(p_decision_id uuid, p_target text)	function	authenticated	EXECUTE
+FUNC	public	fn_decision_readiness_check(p_decision_id uuid, p_target text)	function	service_role	EXECUTE
+FUNC	public	fn_decision_readiness_overview(p_decision_id uuid)	function	anon	-
+FUNC	public	fn_decision_readiness_overview(p_decision_id uuid)	function	authenticated	EXECUTE
+FUNC	public	fn_decision_readiness_overview(p_decision_id uuid)	function	service_role	EXECUTE
+FUNC	public	fn_decision_snapshot()	function	anon	-
+FUNC	public	fn_decision_snapshot()	function	authenticated	EXECUTE
+FUNC	public	fn_decision_snapshot()	function	service_role	EXECUTE
+FUNC	public	fn_decision_status_check()	function	anon	-
+FUNC	public	fn_decision_status_check()	function	authenticated	EXECUTE
+FUNC	public	fn_decision_status_check()	function	service_role	EXECUTE
+FUNC	public	fn_decision_touch()	function	anon	-
+FUNC	public	fn_decision_touch()	function	authenticated	EXECUTE
+FUNC	public	fn_decision_touch()	function	service_role	EXECUTE
+FUNC	public	fn_doc_meta_log_hash()	function	anon	-
+FUNC	public	fn_doc_meta_log_hash()	function	authenticated	EXECUTE
+FUNC	public	fn_doc_meta_log_hash()	function	service_role	EXECUTE
+FUNC	public	fn_doc_meta_log_immutable()	function	anon	-
+FUNC	public	fn_doc_meta_log_immutable()	function	authenticated	EXECUTE
+FUNC	public	fn_doc_meta_log_immutable()	function	service_role	EXECUTE
+FUNC	public	fn_document_agendapunt_validatie()	function	anon	-
+FUNC	public	fn_document_agendapunt_validatie()	function	authenticated	-
+FUNC	public	fn_document_agendapunt_validatie()	function	service_role	EXECUTE
+FUNC	public	fn_document_agendapunt_vergadering_check()	function	anon	-
+FUNC	public	fn_document_agendapunt_vergadering_check()	function	authenticated	EXECUTE
+FUNC	public	fn_document_agendapunt_vergadering_check()	function	service_role	EXECUTE
+FUNC	public	fn_document_primair_vs_secundair_check()	function	anon	-
+FUNC	public	fn_document_primair_vs_secundair_check()	function	authenticated	EXECUTE
+FUNC	public	fn_document_primair_vs_secundair_check()	function	service_role	EXECUTE
+FUNC	public	fn_document_procesinstantie_fonds_check()	function	anon	-
+FUNC	public	fn_document_procesinstantie_fonds_check()	function	authenticated	EXECUTE
+FUNC	public	fn_document_procesinstantie_fonds_check()	function	service_role	EXECUTE
+FUNC	public	fn_document_procesinstantie_validatie()	function	anon	-
+FUNC	public	fn_document_procesinstantie_validatie()	function	authenticated	EXECUTE
+FUNC	public	fn_document_procesinstantie_validatie()	function	service_role	EXECUTE
+FUNC	public	fn_document_status_overgang_check()	function	anon	-
+FUNC	public	fn_document_status_overgang_check()	function	authenticated	EXECUTE
+FUNC	public	fn_document_status_overgang_check()	function	service_role	EXECUTE
+FUNC	public	fn_document_status_transitie(p_van text, p_naar text)	function	anon	-
+FUNC	public	fn_document_status_transitie(p_van text, p_naar text)	function	authenticated	EXECUTE
+FUNC	public	fn_document_status_transitie(p_van text, p_naar text)	function	service_role	EXECUTE
+FUNC	public	fn_dossierstatus_van_decision(p_status text)	function	anon	-
+FUNC	public	fn_dossierstatus_van_decision(p_status text)	function	authenticated	EXECUTE
+FUNC	public	fn_dossierstatus_van_decision(p_status text)	function	service_role	EXECUTE
+FUNC	public	fn_export_log_immutable()	function	anon	-
+FUNC	public	fn_export_log_immutable()	function	authenticated	EXECUTE
+FUNC	public	fn_export_log_immutable()	function	service_role	EXECUTE
+FUNC	public	fn_fonds_config_capture()	function	anon	-
+FUNC	public	fn_fonds_config_capture()	function	authenticated	EXECUTE
+FUNC	public	fn_fonds_config_capture()	function	service_role	EXECUTE
+FUNC	public	fn_fonds_stuurinfo_capture()	function	anon	-
+FUNC	public	fn_fonds_stuurinfo_capture()	function	authenticated	EXECUTE
+FUNC	public	fn_fonds_stuurinfo_capture()	function	service_role	EXECUTE
+FUNC	public	fn_generiek_geldigheidsstatus(p_status text, p_bronstatus text)	function	anon	-
+FUNC	public	fn_generiek_geldigheidsstatus(p_status text, p_bronstatus text)	function	authenticated	EXECUTE
+FUNC	public	fn_generiek_geldigheidsstatus(p_status text, p_bronstatus text)	function	service_role	EXECUTE
+FUNC	public	fn_generiek_status_overgang_check()	function	anon	-
+FUNC	public	fn_generiek_status_overgang_check()	function	authenticated	EXECUTE
+FUNC	public	fn_generiek_status_overgang_check()	function	service_role	EXECUTE
+FUNC	public	fn_generiek_transitie(p_van text, p_naar text)	function	anon	-
+FUNC	public	fn_generiek_transitie(p_van text, p_naar text)	function	authenticated	EXECUTE
+FUNC	public	fn_generiek_transitie(p_van text, p_naar text)	function	service_role	EXECUTE
+FUNC	public	fn_govevent_hash()	function	anon	-
+FUNC	public	fn_govevent_hash()	function	authenticated	EXECUTE
+FUNC	public	fn_govevent_hash()	function	service_role	EXECUTE
+FUNC	public	fn_govevent_immutable()	function	anon	-
+FUNC	public	fn_govevent_immutable()	function	authenticated	EXECUTE
+FUNC	public	fn_govevent_immutable()	function	service_role	EXECUTE
+FUNC	public	fn_log_append_only()	function	anon	-
+FUNC	public	fn_log_append_only()	function	authenticated	EXECUTE
+FUNC	public	fn_log_append_only()	function	service_role	EXECUTE
+FUNC	public	fn_notulen_segment_audit(p_document_id uuid, p_veld text, p_oud text, p_nieuw text, p_reden text, p_rag_impact boolean)	function	anon	-
+FUNC	public	fn_notulen_segment_audit(p_document_id uuid, p_veld text, p_oud text, p_nieuw text, p_reden text, p_rag_impact boolean)	function	authenticated	EXECUTE
+FUNC	public	fn_notulen_segment_audit(p_document_id uuid, p_veld text, p_oud text, p_nieuw text, p_reden text, p_rag_impact boolean)	function	service_role	EXECUTE
+FUNC	public	fn_notulen_segment_bevestig(p_segment_id uuid, p_chunks jsonb, p_reden text)	function	anon	-
+FUNC	public	fn_notulen_segment_bevestig(p_segment_id uuid, p_chunks jsonb, p_reden text)	function	authenticated	EXECUTE
+FUNC	public	fn_notulen_segment_bevestig(p_segment_id uuid, p_chunks jsonb, p_reden text)	function	service_role	EXECUTE
+FUNC	public	fn_notulen_segment_check()	function	anon	-
+FUNC	public	fn_notulen_segment_check()	function	authenticated	EXECUTE
+FUNC	public	fn_notulen_segment_check()	function	service_role	EXECUTE
+FUNC	public	fn_notulen_segment_ontbevestig(p_segment_id uuid, p_reden text)	function	anon	-
+FUNC	public	fn_notulen_segment_ontbevestig(p_segment_id uuid, p_reden text)	function	authenticated	EXECUTE
+FUNC	public	fn_notulen_segment_ontbevestig(p_segment_id uuid, p_reden text)	function	service_role	EXECUTE
+FUNC	public	fn_notulen_segment_verwijder(p_segment_id uuid, p_reden text)	function	anon	-
+FUNC	public	fn_notulen_segment_verwijder(p_segment_id uuid, p_reden text)	function	authenticated	EXECUTE
+FUNC	public	fn_notulen_segment_verwijder(p_segment_id uuid, p_reden text)	function	service_role	EXECUTE
+FUNC	public	fn_organisatie_profielen_touch()	function	anon	-
+FUNC	public	fn_organisatie_profielen_touch()	function	authenticated	EXECUTE
+FUNC	public	fn_organisatie_profielen_touch()	function	service_role	EXECUTE
+FUNC	public	fn_platform_event_chain_assert_valid()	function	anon	-
+FUNC	public	fn_platform_event_chain_assert_valid()	function	authenticated	-
+FUNC	public	fn_platform_event_chain_assert_valid()	function	service_role	-
+FUNC	public	fn_platform_event_fork_declaration_immutable()	function	anon	-
+FUNC	public	fn_platform_event_fork_declaration_immutable()	function	authenticated	-
+FUNC	public	fn_platform_event_fork_declaration_immutable()	function	service_role	-
+FUNC	public	fn_platform_event_hash()	function	anon	-
+FUNC	public	fn_platform_event_hash()	function	authenticated	-
+FUNC	public	fn_platform_event_hash()	function	service_role	-
+FUNC	public	fn_platform_event_immutable()	function	anon	-
+FUNC	public	fn_platform_event_immutable()	function	authenticated	EXECUTE
+FUNC	public	fn_platform_event_immutable()	function	service_role	EXECUTE
+FUNC	public	fn_profiel_bevries_kolommen()	function	anon	-
+FUNC	public	fn_profiel_bevries_kolommen()	function	authenticated	-
+FUNC	public	fn_profiel_bevries_kolommen()	function	service_role	EXECUTE
+FUNC	public	fn_rate_limit_check(p_endpoint text, p_limiet integer, p_venster interval)	function	anon	-
+FUNC	public	fn_rate_limit_check(p_endpoint text, p_limiet integer, p_venster interval)	function	authenticated	EXECUTE
+FUNC	public	fn_rate_limit_check(p_endpoint text, p_limiet integer, p_venster interval)	function	service_role	EXECUTE
+FUNC	public	fn_schrijf_semantische_extractie(p_fonds_id uuid, p_document_id uuid, p_model text, p_prompt_version text, p_extractor_version text, p_catalog_version text, p_status text, p_units jsonb)	function	anon	-
+FUNC	public	fn_schrijf_semantische_extractie(p_fonds_id uuid, p_document_id uuid, p_model text, p_prompt_version text, p_extractor_version text, p_catalog_version text, p_status text, p_units jsonb)	function	authenticated	-
+FUNC	public	fn_schrijf_semantische_extractie(p_fonds_id uuid, p_document_id uuid, p_model text, p_prompt_version text, p_extractor_version text, p_catalog_version text, p_status text, p_units jsonb)	function	service_role	EXECUTE
+FUNC	public	fn_schrijf_vergelijking(p_mode text, p_model text, p_prompt_version text, p_comparator_version text, p_findings jsonb)	function	anon	-
+FUNC	public	fn_schrijf_vergelijking(p_mode text, p_model text, p_prompt_version text, p_comparator_version text, p_findings jsonb)	function	authenticated	EXECUTE
+FUNC	public	fn_schrijf_vergelijking(p_mode text, p_model text, p_prompt_version text, p_comparator_version text, p_findings jsonb)	function	service_role	EXECUTE
+FUNC	public	fn_snapshot_immutable()	function	anon	-
+FUNC	public	fn_snapshot_immutable()	function	authenticated	EXECUTE
+FUNC	public	fn_snapshot_immutable()	function	service_role	EXECUTE
+FUNC	public	fn_zelfde_fonds(p_gebruiker uuid)	function	anon	-
+FUNC	public	fn_zelfde_fonds(p_gebruiker uuid)	function	authenticated	EXECUTE
+FUNC	public	fn_zelfde_fonds(p_gebruiker uuid)	function	service_role	EXECUTE
+FUNC	public	lees_governance_audit(p_fonds uuid, p_filters jsonb, p_motivering text, p_limiet integer, p_bronniveau boolean)	function	anon	-
+FUNC	public	lees_governance_audit(p_fonds uuid, p_filters jsonb, p_motivering text, p_limiet integer, p_bronniveau boolean)	function	authenticated	EXECUTE
+FUNC	public	lees_governance_audit(p_fonds uuid, p_filters jsonb, p_motivering text, p_limiet integer, p_bronniveau boolean)	function	service_role	EXECUTE
+FUNC	public	log_word_export(p_gesprek_audit_id uuid, p_stuksoort text, p_promptvariant text, p_bronnen jsonb)	function	anon	-
+FUNC	public	log_word_export(p_gesprek_audit_id uuid, p_stuksoort text, p_promptvariant text, p_bronnen jsonb)	function	authenticated	EXECUTE
+FUNC	public	log_word_export(p_gesprek_audit_id uuid, p_stuksoort text, p_promptvariant text, p_bronnen jsonb)	function	service_role	EXECUTE
+FUNC	public	maak_profiel()	function	anon	-
+FUNC	public	maak_profiel()	function	authenticated	-
+FUNC	public	maak_profiel()	function	service_role	EXECUTE
+FUNC	public	mag_audit(p_fonds uuid)	function	anon	-
+FUNC	public	mag_audit(p_fonds uuid)	function	authenticated	EXECUTE
+FUNC	public	mag_audit(p_fonds uuid)	function	service_role	EXECUTE
+FUNC	public	mag_audit_bronnen(p_fonds uuid)	function	anon	-
+FUNC	public	mag_audit_bronnen(p_fonds uuid)	function	authenticated	EXECUTE
+FUNC	public	mag_audit_bronnen(p_fonds uuid)	function	service_role	EXECUTE
+FUNC	public	mag_audit_redacties(p_fonds uuid)	function	anon	-
+FUNC	public	mag_audit_redacties(p_fonds uuid)	function	authenticated	EXECUTE
+FUNC	public	mag_audit_redacties(p_fonds uuid)	function	service_role	EXECUTE
+FUNC	public	meta_basisniveau(p_meta jsonb)	function	anon	-
+FUNC	public	meta_basisniveau(p_meta jsonb)	function	authenticated	EXECUTE
+FUNC	public	meta_basisniveau(p_meta jsonb)	function	service_role	EXECUTE
+FUNC	public	meta_bronniveau(p_meta jsonb)	function	anon	-
+FUNC	public	meta_bronniveau(p_meta jsonb)	function	authenticated	EXECUTE
+FUNC	public	meta_bronniveau(p_meta jsonb)	function	service_role	EXECUTE
+FUNC	public	meta_projectie(p_meta jsonb, p_bron boolean)	function	anon	-
+FUNC	public	meta_projectie(p_meta jsonb, p_bron boolean)	function	authenticated	EXECUTE
+FUNC	public	meta_projectie(p_meta jsonb, p_bron boolean)	function	service_role	EXECUTE
+FUNC	public	profiel_opslaan(p_naam text, p_bestuurlijke_rol text, p_primaire_expertise_id uuid, p_antwoordvoorkeur text, p_standaard_ai_modus text, p_detailniveau text, p_secundaire_expertise_ids uuid[], p_gremium_ids uuid[], p_focusgebied_ids uuid[], p_reflectie_uitnodiging boolean)	function	anon	-
+FUNC	public	profiel_opslaan(p_naam text, p_bestuurlijke_rol text, p_primaire_expertise_id uuid, p_antwoordvoorkeur text, p_standaard_ai_modus text, p_detailniveau text, p_secundaire_expertise_ids uuid[], p_gremium_ids uuid[], p_focusgebied_ids uuid[], p_reflectie_uitnodiging boolean)	function	authenticated	EXECUTE
+FUNC	public	profiel_opslaan(p_naam text, p_bestuurlijke_rol text, p_primaire_expertise_id uuid, p_antwoordvoorkeur text, p_standaard_ai_modus text, p_detailniveau text, p_secundaire_expertise_ids uuid[], p_gremium_ids uuid[], p_focusgebied_ids uuid[], p_reflectie_uitnodiging boolean)	function	service_role	EXECUTE
+FUNC	public	reflectie_bronset_hash(p_retrieval_meta jsonb)	function	anon	-
+FUNC	public	reflectie_bronset_hash(p_retrieval_meta jsonb)	function	authenticated	EXECUTE
+FUNC	public	reflectie_bronset_hash(p_retrieval_meta jsonb)	function	service_role	EXECUTE
+FUNC	public	reflectie_transitie(p_gesprek_id uuid, p_actie text, p_ingang text, p_bronset_log_id uuid)	function	anon	-
+FUNC	public	reflectie_transitie(p_gesprek_id uuid, p_actie text, p_ingang text, p_bronset_log_id uuid)	function	authenticated	EXECUTE
+FUNC	public	reflectie_transitie(p_gesprek_id uuid, p_actie text, p_ingang text, p_bronset_log_id uuid)	function	service_role	EXECUTE
+FUNC	public	resolve_tenant_host(p_host text)	function	anon	EXECUTE
+FUNC	public	resolve_tenant_host(p_host text)	function	authenticated	EXECUTE
+FUNC	public	resolve_tenant_host(p_host text)	function	service_role	EXECUTE
+FUNC	public	schrijf_ai_interactie(p_vraag text, p_antwoord text, p_bronnen jsonb, p_modus text, p_model text, p_retrieval_meta jsonb, p_retrieval_meta_inhoud jsonb, p_gesprek_audit_id uuid, p_inhoud_hmac text, p_hmac_schema_versie smallint, p_hmac_sleutel_versie smallint)	function	anon	-
+FUNC	public	schrijf_ai_interactie(p_vraag text, p_antwoord text, p_bronnen jsonb, p_modus text, p_model text, p_retrieval_meta jsonb, p_retrieval_meta_inhoud jsonb, p_gesprek_audit_id uuid, p_inhoud_hmac text, p_hmac_schema_versie smallint, p_hmac_sleutel_versie smallint)	function	authenticated	EXECUTE
+FUNC	public	schrijf_ai_interactie(p_vraag text, p_antwoord text, p_bronnen jsonb, p_modus text, p_model text, p_retrieval_meta jsonb, p_retrieval_meta_inhoud jsonb, p_gesprek_audit_id uuid, p_inhoud_hmac text, p_hmac_schema_versie smallint, p_hmac_sleutel_versie smallint)	function	service_role	EXECUTE
+FUNC	public	stuurinfo_balans_opslaan(p_periode text, p_peildatum date, p_bron text, p_invoer_bron text, p_activa jsonb, p_passiva jsonb, p_reserves jsonb, p_financieringsgraad numeric)	function	anon	-
+FUNC	public	stuurinfo_balans_opslaan(p_periode text, p_peildatum date, p_bron text, p_invoer_bron text, p_activa jsonb, p_passiva jsonb, p_reserves jsonb, p_financieringsgraad numeric)	function	authenticated	EXECUTE
+FUNC	public	stuurinfo_balans_opslaan(p_periode text, p_peildatum date, p_bron text, p_invoer_bron text, p_activa jsonb, p_passiva jsonb, p_reserves jsonb, p_financieringsgraad numeric)	function	service_role	EXECUTE
+FUNC	public	stuurinfo_operationeel_opslaan(p_periode text, p_invoer_bron text, p_mutaties jsonb, p_norm numeric, p_band_onder numeric, p_band_boven numeric, p_kosten_realisatie jsonb, p_kosten_begroot jsonb)	function	anon	-
+FUNC	public	stuurinfo_operationeel_opslaan(p_periode text, p_invoer_bron text, p_mutaties jsonb, p_norm numeric, p_band_onder numeric, p_band_boven numeric, p_kosten_realisatie jsonb, p_kosten_begroot jsonb)	function	authenticated	EXECUTE
+FUNC	public	stuurinfo_operationeel_opslaan(p_periode text, p_invoer_bron text, p_mutaties jsonb, p_norm numeric, p_band_onder numeric, p_band_boven numeric, p_kosten_realisatie jsonb, p_kosten_begroot jsonb)	function	service_role	EXECUTE
+FUNC	public	stuurinfo_premie_opslaan(p_periode text, p_invoer_bron text, p_componenten_eur jsonb, p_componenten_pct jsonb, p_comp_mutaties jsonb, p_toekenning numeric, p_startomvang numeric, p_ondergrens_pct numeric)	function	anon	-
+FUNC	public	stuurinfo_premie_opslaan(p_periode text, p_invoer_bron text, p_componenten_eur jsonb, p_componenten_pct jsonb, p_comp_mutaties jsonb, p_toekenning numeric, p_startomvang numeric, p_ondergrens_pct numeric)	function	authenticated	EXECUTE
+FUNC	public	stuurinfo_premie_opslaan(p_periode text, p_invoer_bron text, p_componenten_eur jsonb, p_componenten_pct jsonb, p_comp_mutaties jsonb, p_toekenning numeric, p_startomvang numeric, p_ondergrens_pct numeric)	function	service_role	EXECUTE
+FUNC	public	stuurinfo_soli_opslaan(p_periode text, p_invoer_bron text, p_vulling jsonb, p_uitdeling numeric, p_ondergrens numeric, p_bovengrens numeric)	function	anon	-
+FUNC	public	stuurinfo_soli_opslaan(p_periode text, p_invoer_bron text, p_vulling jsonb, p_uitdeling numeric, p_ondergrens numeric, p_bovengrens numeric)	function	authenticated	EXECUTE
+FUNC	public	stuurinfo_soli_opslaan(p_periode text, p_invoer_bron text, p_vulling jsonb, p_uitdeling numeric, p_ondergrens numeric, p_bovengrens numeric)	function	service_role	EXECUTE
+FUNC	public	verwijder_gesprek(p_gesprek_id uuid, p_request_id uuid)	function	anon	-
+FUNC	public	verwijder_gesprek(p_gesprek_id uuid, p_request_id uuid)	function	authenticated	EXECUTE
+FUNC	public	verwijder_gesprek(p_gesprek_id uuid, p_request_id uuid)	function	service_role	EXECUTE
+FUNC	public	zoek_chunks(p_query text, p_limit integer, p_document_ids uuid[], p_bronstatus text[], p_documentstatus text[], p_procesinstantie_ids uuid[], p_modus text, p_peildatum date, p_bronsoort text[], p_fonds_id uuid)	function	anon	-
+FUNC	public	zoek_chunks(p_query text, p_limit integer, p_document_ids uuid[], p_bronstatus text[], p_documentstatus text[], p_procesinstantie_ids uuid[], p_modus text, p_peildatum date, p_bronsoort text[], p_fonds_id uuid)	function	authenticated	EXECUTE
+FUNC	public	zoek_chunks(p_query text, p_limit integer, p_document_ids uuid[], p_bronstatus text[], p_documentstatus text[], p_procesinstantie_ids uuid[], p_modus text, p_peildatum date, p_bronsoort text[], p_fonds_id uuid)	function	service_role	EXECUTE
+FUNC	public	zoek_chunks_hybride(p_query text, p_embedding vector, p_limit integer, p_kandidaten integer, p_k integer, p_document_ids uuid[], p_bronstatus text[], p_documentstatus text[], p_procesinstantie_ids uuid[], p_modus text, p_peildatum date, p_bronsoort text[], p_fonds_id uuid)	function	anon	-
+FUNC	public	zoek_chunks_hybride(p_query text, p_embedding vector, p_limit integer, p_kandidaten integer, p_k integer, p_document_ids uuid[], p_bronstatus text[], p_documentstatus text[], p_procesinstantie_ids uuid[], p_modus text, p_peildatum date, p_bronsoort text[], p_fonds_id uuid)	function	authenticated	EXECUTE
+FUNC	public	zoek_chunks_hybride(p_query text, p_embedding vector, p_limit integer, p_kandidaten integer, p_k integer, p_document_ids uuid[], p_bronstatus text[], p_documentstatus text[], p_procesinstantie_ids uuid[], p_modus text, p_peildatum date, p_bronsoort text[], p_fonds_id uuid)	function	service_role	EXECUTE
+FUNC	storage	allow_any_operation(expected_operations text[])	function	anon	EXECUTE
+FUNC	storage	allow_any_operation(expected_operations text[])	function	authenticated	EXECUTE
+FUNC	storage	allow_any_operation(expected_operations text[])	function	service_role	EXECUTE
+FUNC	storage	allow_only_operation(expected_operation text)	function	anon	EXECUTE
+FUNC	storage	allow_only_operation(expected_operation text)	function	authenticated	EXECUTE
+FUNC	storage	allow_only_operation(expected_operation text)	function	service_role	EXECUTE
+FUNC	storage	can_insert_object(bucketid text, name text, owner uuid, metadata jsonb)	function	anon	EXECUTE
+FUNC	storage	can_insert_object(bucketid text, name text, owner uuid, metadata jsonb)	function	authenticated	EXECUTE
+FUNC	storage	can_insert_object(bucketid text, name text, owner uuid, metadata jsonb)	function	service_role	EXECUTE
+FUNC	storage	enforce_bucket_name_length()	function	anon	EXECUTE
+FUNC	storage	enforce_bucket_name_length()	function	authenticated	EXECUTE
+FUNC	storage	enforce_bucket_name_length()	function	service_role	EXECUTE
+FUNC	storage	extension(name text)	function	anon	EXECUTE
+FUNC	storage	extension(name text)	function	authenticated	EXECUTE
+FUNC	storage	extension(name text)	function	service_role	EXECUTE
+FUNC	storage	filename(name text)	function	anon	EXECUTE
+FUNC	storage	filename(name text)	function	authenticated	EXECUTE
+FUNC	storage	filename(name text)	function	service_role	EXECUTE
+FUNC	storage	foldername(name text)	function	anon	EXECUTE
+FUNC	storage	foldername(name text)	function	authenticated	EXECUTE
+FUNC	storage	foldername(name text)	function	service_role	EXECUTE
+FUNC	storage	get_common_prefix(p_key text, p_prefix text, p_delimiter text)	function	anon	EXECUTE
+FUNC	storage	get_common_prefix(p_key text, p_prefix text, p_delimiter text)	function	authenticated	EXECUTE
+FUNC	storage	get_common_prefix(p_key text, p_prefix text, p_delimiter text)	function	service_role	EXECUTE
+FUNC	storage	get_size_by_bucket()	function	anon	EXECUTE
+FUNC	storage	get_size_by_bucket()	function	authenticated	EXECUTE
+FUNC	storage	get_size_by_bucket()	function	service_role	EXECUTE
+FUNC	storage	list_multipart_uploads_with_delimiter(bucket_id text, prefix_param text, delimiter_param text, max_keys integer, next_key_token text, next_upload_token text)	function	anon	EXECUTE
+FUNC	storage	list_multipart_uploads_with_delimiter(bucket_id text, prefix_param text, delimiter_param text, max_keys integer, next_key_token text, next_upload_token text)	function	authenticated	EXECUTE
+FUNC	storage	list_multipart_uploads_with_delimiter(bucket_id text, prefix_param text, delimiter_param text, max_keys integer, next_key_token text, next_upload_token text)	function	service_role	EXECUTE
+FUNC	storage	list_objects_with_delimiter(_bucket_id text, prefix_param text, delimiter_param text, max_keys integer, start_after text, next_token text, sort_order text)	function	anon	EXECUTE
+FUNC	storage	list_objects_with_delimiter(_bucket_id text, prefix_param text, delimiter_param text, max_keys integer, start_after text, next_token text, sort_order text)	function	authenticated	EXECUTE
+FUNC	storage	list_objects_with_delimiter(_bucket_id text, prefix_param text, delimiter_param text, max_keys integer, start_after text, next_token text, sort_order text)	function	service_role	EXECUTE
+FUNC	storage	operation()	function	anon	EXECUTE
+FUNC	storage	operation()	function	authenticated	EXECUTE
+FUNC	storage	operation()	function	service_role	EXECUTE
+FUNC	storage	protect_delete()	function	anon	EXECUTE
+FUNC	storage	protect_delete()	function	authenticated	EXECUTE
+FUNC	storage	protect_delete()	function	service_role	EXECUTE
+FUNC	storage	search(prefix text, bucketname text, limits integer, levels integer, offsets integer, search text, sortcolumn text, sortorder text)	function	anon	EXECUTE
+FUNC	storage	search(prefix text, bucketname text, limits integer, levels integer, offsets integer, search text, sortcolumn text, sortorder text)	function	authenticated	EXECUTE
+FUNC	storage	search(prefix text, bucketname text, limits integer, levels integer, offsets integer, search text, sortcolumn text, sortorder text)	function	service_role	EXECUTE
+FUNC	storage	search_by_timestamp(p_prefix text, p_bucket_id text, p_limit integer, p_level integer, p_start_after text, p_sort_order text, p_sort_column text, p_sort_column_after text)	function	anon	EXECUTE
+FUNC	storage	search_by_timestamp(p_prefix text, p_bucket_id text, p_limit integer, p_level integer, p_start_after text, p_sort_order text, p_sort_column text, p_sort_column_after text)	function	authenticated	EXECUTE
+FUNC	storage	search_by_timestamp(p_prefix text, p_bucket_id text, p_limit integer, p_level integer, p_start_after text, p_sort_order text, p_sort_column text, p_sort_column_after text)	function	service_role	EXECUTE
+FUNC	storage	search_v2(prefix text, bucket_name text, limits integer, levels integer, start_after text, sort_order text, sort_column text, sort_column_after text)	function	anon	EXECUTE
+FUNC	storage	search_v2(prefix text, bucket_name text, limits integer, levels integer, start_after text, sort_order text, sort_column text, sort_column_after text)	function	authenticated	EXECUTE
+FUNC	storage	search_v2(prefix text, bucket_name text, limits integer, levels integer, start_after text, sort_order text, sort_column text, sort_column_after text)	function	service_role	EXECUTE
+FUNC	storage	update_updated_at_column()	function	anon	EXECUTE
+FUNC	storage	update_updated_at_column()	function	authenticated	EXECUTE
+FUNC	storage	update_updated_at_column()	function	service_role	EXECUTE
+REL	public	agendapunt_inbreng	table	anon	SELECT
+REL	public	agendapunt_inbreng	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	agendapunt_inbreng	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	agendapunt_log	table	anon	SELECT
+REL	public	agendapunt_log	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	agendapunt_log	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	agendapunten	table	anon	SELECT
+REL	public	agendapunten	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	agendapunten	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	ai_actie	table	anon	-
+REL	public	ai_actie	table	authenticated	-
+REL	public	ai_actie	table	service_role	SELECT,INSERT,UPDATE,DELETE
+REL	public	ai_config_versie	table	anon	-
+REL	public	ai_config_versie	table	authenticated	-
+REL	public	ai_config_versie	table	service_role	SELECT,UPDATE
+REL	public	ai_heractivering_besluit	table	anon	-
+REL	public	ai_heractivering_besluit	table	authenticated	-
+REL	public	ai_heractivering_besluit	table	service_role	SELECT,INSERT
+REL	public	ai_heractivering_verzoek	table	anon	-
+REL	public	ai_heractivering_verzoek	table	authenticated	-
+REL	public	ai_heractivering_verzoek	table	service_role	SELECT,INSERT
+REL	public	ai_kill_switch	table	anon	-
+REL	public	ai_kill_switch	table	authenticated	-
+REL	public	ai_kill_switch	table	service_role	SELECT,INSERT,UPDATE
+REL	public	ai_model_allowlist	table	anon	-
+REL	public	ai_model_allowlist	table	authenticated	-
+REL	public	ai_model_allowlist	table	service_role	SELECT,INSERT,UPDATE,DELETE
+REL	public	ai_quota_config	table	anon	-
+REL	public	ai_quota_config	table	authenticated	-
+REL	public	ai_quota_config	table	service_role	SELECT,INSERT,UPDATE
+REL	public	ai_verbruik_log	table	anon	-
+REL	public	ai_verbruik_log	table	authenticated	-
+REL	public	ai_verbruik_log	table	service_role	SELECT,INSERT
+REL	public	app_errors	table	anon	-
+REL	public	app_errors	table	authenticated	-
+REL	public	app_errors	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	aqlab_ai_features	table	anon	SELECT
+REL	public	aqlab_ai_features	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	aqlab_ai_features	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	aqlab_audit_exports	table	anon	SELECT
+REL	public	aqlab_audit_exports	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	aqlab_audit_exports	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	aqlab_findings	table	anon	SELECT
+REL	public	aqlab_findings	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	aqlab_findings	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	aqlab_fixture_documents	table	anon	SELECT
+REL	public	aqlab_fixture_documents	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	aqlab_fixture_documents	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	aqlab_human_reviews	table	anon	SELECT
+REL	public	aqlab_human_reviews	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	aqlab_human_reviews	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	aqlab_log	table	anon	SELECT
+REL	public	aqlab_log	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	aqlab_log	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	aqlab_model_configurations	table	anon	SELECT
+REL	public	aqlab_model_configurations	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	aqlab_model_configurations	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	aqlab_prompt_versions	table	anon	SELECT
+REL	public	aqlab_prompt_versions	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	aqlab_prompt_versions	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	aqlab_release_decisions	table	anon	SELECT
+REL	public	aqlab_release_decisions	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	aqlab_release_decisions	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	aqlab_run_jobs	table	anon	SELECT
+REL	public	aqlab_run_jobs	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	aqlab_run_jobs	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	aqlab_run_outputs	table	anon	SELECT
+REL	public	aqlab_run_outputs	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	aqlab_run_outputs	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	aqlab_runs	table	anon	SELECT
+REL	public	aqlab_runs	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	aqlab_runs	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	aqlab_scores	table	anon	SELECT
+REL	public	aqlab_scores	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	aqlab_scores	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	aqlab_test_case_fixtures	table	anon	SELECT
+REL	public	aqlab_test_case_fixtures	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	aqlab_test_case_fixtures	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	aqlab_test_cases	table	anon	SELECT
+REL	public	aqlab_test_cases	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	aqlab_test_cases	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	aqlab_test_sets	table	anon	SELECT
+REL	public	aqlab_test_sets	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	aqlab_test_sets	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	bron_whitelist	table	anon	SELECT
+REL	public	bron_whitelist	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	bron_whitelist	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	bron_whitelist_log	table	anon	SELECT
+REL	public	bron_whitelist_log	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	bron_whitelist_log	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	catalogus_log	table	anon	SELECT
+REL	public	catalogus_log	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	catalogus_log	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	classificatie_voorstellen	table	anon	SELECT
+REL	public	classificatie_voorstellen	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	classificatie_voorstellen	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	comparison_results	table	anon	-
+REL	public	comparison_results	table	authenticated	SELECT
+REL	public	comparison_results	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	comparison_run	table	anon	-
+REL	public	comparison_run	table	authenticated	SELECT
+REL	public	comparison_run	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	concepts	table	anon	-
+REL	public	concepts	table	authenticated	SELECT
+REL	public	concepts	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	contact_aanvragen	table	anon	SELECT
+REL	public	contact_aanvragen	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	contact_aanvragen	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	decision_actions	table	anon	SELECT
+REL	public	decision_actions	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	decision_actions	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	decision_ai_interactions	table	anon	SELECT
+REL	public	decision_ai_interactions	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	decision_ai_interactions	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	decision_assumptions	table	anon	SELECT
+REL	public	decision_assumptions	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	decision_assumptions	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	decision_audit_snapshots	table	anon	SELECT
+REL	public	decision_audit_snapshots	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	decision_audit_snapshots	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	decision_conditions	table	anon	SELECT
+REL	public	decision_conditions	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	decision_conditions	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	decision_dissent	table	anon	SELECT
+REL	public	decision_dissent	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	decision_dissent	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	decision_evaluations	table	anon	SELECT
+REL	public	decision_evaluations	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	decision_evaluations	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	decision_objects	table	anon	SELECT
+REL	public	decision_objects	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	decision_objects	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	decision_risks	table	anon	SELECT
+REL	public	decision_risks	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	decision_risks	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	difference_judgements	table	anon	-
+REL	public	difference_judgements	table	authenticated	SELECT,INSERT
+REL	public	difference_judgements	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	document_agendapunten	table	anon	SELECT
+REL	public	document_agendapunten	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	document_agendapunten	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	document_chunks	table	anon	SELECT
+REL	public	document_chunks	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	document_chunks	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	document_inzage	table	anon	SELECT
+REL	public	document_inzage	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	document_inzage	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	document_metadata_log	table	anon	SELECT
+REL	public	document_metadata_log	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	document_metadata_log	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	document_metadata_review_queue	table	anon	SELECT
+REL	public	document_metadata_review_queue	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	document_metadata_review_queue	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	document_procesinstanties	table	anon	SELECT
+REL	public	document_procesinstanties	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	document_procesinstanties	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	document_processing_jobs	table	anon	SELECT
+REL	public	document_processing_jobs	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	document_processing_jobs	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	documenten	table	anon	SELECT
+REL	public	documenten	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	documenten	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	expertises	table	anon	SELECT
+REL	public	expertises	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	expertises	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	extraction_run	table	anon	-
+REL	public	extraction_run	table	authenticated	SELECT
+REL	public	extraction_run	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	fonds_config_log	table	anon	SELECT
+REL	public	fonds_config_log	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	fonds_config_log	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	fonds_content_overrides	table	anon	SELECT
+REL	public	fonds_content_overrides	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	fonds_content_overrides	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	fonds_feature_flags	table	anon	SELECT
+REL	public	fonds_feature_flags	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	fonds_feature_flags	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	fonds_instellingen	table	anon	SELECT
+REL	public	fonds_instellingen	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	fonds_instellingen	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	fonds_klantbeeld_cohort	table	anon	SELECT
+REL	public	fonds_klantbeeld_cohort	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	fonds_klantbeeld_cohort	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	fonds_licentie	table	anon	-
+REL	public	fonds_licentie	table	authenticated	-
+REL	public	fonds_licentie	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	fonds_module_manifest	table	anon	SELECT
+REL	public	fonds_module_manifest	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	fonds_module_manifest	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	fonds_stuurinfo_kpi	table	anon	SELECT
+REL	public	fonds_stuurinfo_kpi	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	fonds_stuurinfo_kpi	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	fonds_stuurinfo_log	table	anon	SELECT
+REL	public	fonds_stuurinfo_log	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	fonds_stuurinfo_log	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	fonds_stuurinfo_periode	table	anon	SELECT
+REL	public	fonds_stuurinfo_periode	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	fonds_stuurinfo_periode	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	fonds_stuurinfo_reeks	table	anon	SELECT
+REL	public	fonds_stuurinfo_reeks	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	fonds_stuurinfo_reeks	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	fonds_stuurinfo_reserve	table	anon	SELECT
+REL	public	fonds_stuurinfo_reserve	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	fonds_stuurinfo_reserve	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	fonds_theming	table	anon	SELECT
+REL	public	fonds_theming	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	fonds_theming	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	fondsen	table	anon	SELECT
+REL	public	fondsen	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	fondsen	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	gesprek_reflectie_state	table	anon	-
+REL	public	gesprek_reflectie_state	table	authenticated	SELECT
+REL	public	gesprek_reflectie_state	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	gesprekken	table	anon	SELECT
+REL	public	gesprekken	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	gesprekken	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	governance_audit_grants	table	anon	-
+REL	public	governance_audit_grants	table	authenticated	-
+REL	public	governance_audit_grants	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	governance_audit_inzage	table	anon	-
+REL	public	governance_audit_inzage	table	authenticated	SELECT
+REL	public	governance_audit_inzage	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	governance_events	table	anon	SELECT
+REL	public	governance_events	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	governance_events	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	governance_export_log	table	anon	-
+REL	public	governance_export_log	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	governance_export_log	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	governance_log	table	anon	SELECT
+REL	public	governance_log	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	governance_log	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	governance_log_inhoud	table	anon	-
+REL	public	governance_log_inhoud	table	authenticated	SELECT
+REL	public	governance_log_inhoud	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	governance_redacties	table	anon	-
+REL	public	governance_redacties	table	authenticated	SELECT
+REL	public	governance_redacties	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	gremia	table	anon	SELECT
+REL	public	gremia	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	gremia	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	kritische_focusgebieden	table	anon	SELECT
+REL	public	kritische_focusgebieden	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	kritische_focusgebieden	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	notificaties	table	anon	SELECT
+REL	public	notificaties	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	notificaties	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	notulen_segmenten	table	anon	SELECT
+REL	public	notulen_segmenten	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	notulen_segmenten	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	organisatie_profielen	table	anon	SELECT
+REL	public	organisatie_profielen	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	organisatie_profielen	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	platform_capabilities	table	anon	SELECT
+REL	public	platform_capabilities	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	platform_capabilities	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	platform_event_chain_state	table	anon	-
+REL	public	platform_event_chain_state	table	authenticated	-
+REL	public	platform_event_chain_state	table	service_role	-
+REL	public	platform_event_fork_declarations	table	anon	-
+REL	public	platform_event_fork_declarations	table	authenticated	-
+REL	public	platform_event_fork_declarations	table	service_role	-
+REL	public	platform_event_log	table	anon	SELECT
+REL	public	platform_event_log	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	platform_event_log	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	platform_identities	table	anon	SELECT
+REL	public	platform_identities	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	platform_identities	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	platform_identity_capabilities	table	anon	SELECT
+REL	public	platform_identity_capabilities	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	platform_identity_capabilities	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	platform_signaal_config	table	anon	-
+REL	public	platform_signaal_config	table	authenticated	-
+REL	public	platform_signaal_config	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	platform_signal_snapshots	table	anon	-
+REL	public	platform_signal_snapshots	table	authenticated	-
+REL	public	platform_signal_snapshots	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	procedure_afschriften	table	anon	-
+REL	public	procedure_afschriften	table	authenticated	SELECT,INSERT,UPDATE
+REL	public	procedure_afschriften	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	procedure_besluiten	table	anon	SELECT
+REL	public	procedure_besluiten	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	procedure_besluiten	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	procedure_bewijs	table	anon	SELECT
+REL	public	procedure_bewijs	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	procedure_bewijs	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	procedure_checklist	table	anon	SELECT
+REL	public	procedure_checklist	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	procedure_checklist	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	procedure_eigenaars	table	anon	SELECT
+REL	public	procedure_eigenaars	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	procedure_eigenaars	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	procedure_fase_beschrijving_override	table	anon	-
+REL	public	procedure_fase_beschrijving_override	table	authenticated	SELECT,INSERT,UPDATE
+REL	public	procedure_fase_beschrijving_override	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	procedure_fase_toelichting	table	anon	-
+REL	public	procedure_fase_toelichting	table	authenticated	SELECT,INSERT,UPDATE
+REL	public	procedure_fase_toelichting	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	procedure_log	table	anon	SELECT
+REL	public	procedure_log	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	procedure_log	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	procedure_requirement_instance	table	anon	-
+REL	public	procedure_requirement_instance	table	authenticated	SELECT,INSERT,UPDATE
+REL	public	procedure_requirement_instance	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	procedure_requirement_uitsluiting	table	anon	-
+REL	public	procedure_requirement_uitsluiting	table	authenticated	SELECT,INSERT,UPDATE
+REL	public	procedure_requirement_uitsluiting	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	procedure_requirements	table	anon	SELECT
+REL	public	procedure_requirements	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	procedure_requirements	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	procedure_stappen	table	anon	SELECT
+REL	public	procedure_stappen	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	procedure_stappen	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	procedure_template_fasen	table	anon	-
+REL	public	procedure_template_fasen	table	authenticated	SELECT,INSERT,UPDATE
+REL	public	procedure_template_fasen	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	procedures	table	anon	SELECT
+REL	public	procedures	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	procedures	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	procesmodel_expertises	table	anon	SELECT
+REL	public	procesmodel_expertises	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	procesmodel_expertises	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	procesmodel_focusgebieden	table	anon	SELECT
+REL	public	procesmodel_focusgebieden	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	procesmodel_focusgebieden	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	procesmodel_gremia	table	anon	SELECT
+REL	public	procesmodel_gremia	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	procesmodel_gremia	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	procesmodellen	table	anon	SELECT
+REL	public	procesmodellen	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	procesmodellen	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	profiel_expertises	table	anon	SELECT
+REL	public	profiel_expertises	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	profiel_expertises	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	profiel_focusgebieden	table	anon	SELECT
+REL	public	profiel_focusgebieden	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	profiel_focusgebieden	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	profiel_gremia	table	anon	SELECT
+REL	public	profiel_gremia	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	profiel_gremia	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	profiel_log	table	anon	SELECT
+REL	public	profiel_log	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	profiel_log	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	profielen	table	anon	SELECT
+REL	public	profielen	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	profielen	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	rate_limit_events	table	anon	-
+REL	public	rate_limit_events	table	authenticated	-
+REL	public	rate_limit_events	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	reindex_runs	table	anon	SELECT
+REL	public	reindex_runs	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	reindex_runs	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	risico_log	table	anon	SELECT
+REL	public	risico_log	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	risico_log	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	risico_maatregelen	table	anon	SELECT
+REL	public	risico_maatregelen	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	risico_maatregelen	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	risicos	table	anon	SELECT
+REL	public	risicos	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	risicos	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	semantic_units	table	anon	-
+REL	public	semantic_units	table	authenticated	SELECT
+REL	public	semantic_units	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	stem_uitbrengingen	table	anon	SELECT
+REL	public	stem_uitbrengingen	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	stem_uitbrengingen	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	stemmingen	table	anon	SELECT
+REL	public	stemmingen	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	stemmingen	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	tenant_domains	table	anon	SELECT
+REL	public	tenant_domains	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	tenant_domains	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	vergadering_log	table	anon	SELECT
+REL	public	vergadering_log	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	vergadering_log	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	vergaderingen	table	anon	SELECT
+REL	public	vergaderingen	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	vergaderingen	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	voorbereidingen	table	anon	SELECT
+REL	public	voorbereidingen	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	voorbereidingen	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	vw_dossier_status	view	anon	-
+REL	public	vw_dossier_status	view	authenticated	SELECT
+REL	public	vw_dossier_status	view	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	vw_fondsleden	view	anon	-
+REL	public	vw_fondsleden	view	authenticated	SELECT
+REL	public	vw_fondsleden	view	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	vw_governance_audit	view	anon	-
+REL	public	vw_governance_audit	view	authenticated	-
+REL	public	vw_governance_audit	view	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	wettelijk_regime_per_fondstype	table	anon	-
+REL	public	wettelijk_regime_per_fondstype	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	wettelijk_regime_per_fondstype	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	storage	buckets	table	anon	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	storage	buckets	table	authenticated	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	storage	buckets	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	storage	buckets_analytics	table	anon	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	storage	buckets_analytics	table	authenticated	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	storage	buckets_analytics	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	storage	buckets_vectors	table	anon	SELECT
+REL	storage	buckets_vectors	table	authenticated	SELECT
+REL	storage	buckets_vectors	table	service_role	SELECT
+REL	storage	iceberg_namespaces	table	anon	SELECT
+REL	storage	iceberg_namespaces	table	authenticated	SELECT
+REL	storage	iceberg_namespaces	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	storage	iceberg_tables	table	anon	SELECT
+REL	storage	iceberg_tables	table	authenticated	SELECT
+REL	storage	iceberg_tables	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	storage	migrations	table	anon	-
+REL	storage	migrations	table	authenticated	-
+REL	storage	migrations	table	service_role	-
+REL	storage	objects	table	anon	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	storage	objects	table	authenticated	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	storage	objects	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	storage	s3_multipart_uploads	table	anon	SELECT
+REL	storage	s3_multipart_uploads	table	authenticated	SELECT
+REL	storage	s3_multipart_uploads	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	storage	s3_multipart_uploads_parts	table	anon	SELECT
+REL	storage	s3_multipart_uploads_parts	table	authenticated	SELECT
+REL	storage	s3_multipart_uploads_parts	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	storage	vector_indexes	table	anon	SELECT
+REL	storage	vector_indexes	table	authenticated	SELECT
+REL	storage	vector_indexes	table	service_role	SELECT
+STGPOL	storage	objects :: afschriften storage lezen	policy	authenticated	SELECT
+STGPOL	storage	objects :: aqlab-audit fonds-download vrijgegeven	policy	authenticated	SELECT
+STGPOL	storage	objects :: documenten quarantaine schrijven	policy	authenticated	INSERT
+STGPOL	storage	objects :: documenten storage lezen	policy	authenticated	SELECT
+STGPOL	storage	objects :: documenten storage schrijven	policy	authenticated	INSERT
