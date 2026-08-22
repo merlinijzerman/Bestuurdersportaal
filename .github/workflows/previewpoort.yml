@@ -1,0 +1,98 @@
+name: previewpoort
+
+# ============================================================================
+#  De previewpoort afdwingen: naar `main` mag alleen `preview`.
+# ----------------------------------------------------------------------------
+#  WAAROM DIT BESTAAT
+#  Besluit #75 (20-08-2026) legde vast: "feature naar preview, preview naar
+#  main". Binnen 36 uur gingen er 96 commits omheen — 16 PR's op één dag,
+#  allemaal rechtstreeks naar main en dus naar Productie.
+#
+#  Dat was niemands nalatigheid in het bijzonder, en juist dát is het punt:
+#    • `gh pr create` kiest standaard `main`;
+#    • branch protection KAN de bronbranch niet beperken — dat is geen instelling
+#      die iemand vergeten is, GitHub biedt hem niet in required checks;
+#    • er waren geen rulesets;
+#    • de zes verplichte checks toetsen de INHOUD van een PR, nooit de HERKOMST.
+#
+#  Een afspraak zonder handhaving houdt niet. Dezelfde week bleek dat vier keer
+#  bij andere controles (T3/T4 in een script dat nergens draaide, g2-evidence in
+#  geen enkele workflow, een ops_open die permanent loog, een gate die stil kon
+#  krimpen). Dit is dezelfde categorie, en de oplossing is dezelfde: maak er een
+#  meting van.
+#
+#  DE UITZONDERING IS EEN WAARDE, GEEN ONTSNAPPING.
+#  Een hotfix rechtstreeks naar main kan — met het label `hotfix-direct-naar-main`
+#  op de PR. Dat is bewust een handeling die zichtbaar is, een naam heeft en in de
+#  PR-historie blijft staan, in plaats van een gewoonte die niemand opmerkt.
+#  Zonder dat label is de check hard rood.
+#
+#  BLOKKEREND? Staat niet in dit bestand — dat is alleen uit de
+#  branch-protection-regel op `main` te lezen:
+#      gh api repos/:owner/:repo/branches/main/protection \
+#        --jq '.required_status_checks.contexts[]'
+#  Zet die bewering hier niet neer; drie andere workflowbestanden hadden hem mis.
+# ============================================================================
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, edited, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+jobs:
+  previewpoort:
+    name: Previewpoort (naar main alleen vanuit preview)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Bronbranch toetsen
+        shell: bash
+        env:
+          BASIS: ${{ github.base_ref }}
+          BRON: ${{ github.head_ref }}
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        run: |
+          set -Eeuo pipefail
+          echo "basis=$BASIS  bron=$BRON  labels=${LABELS:-geen}"
+
+          # Alles wat niet naar main gaat, is per definitie in orde: dit is een
+          # poort vóór main, geen algemene branchpolitie.
+          if [ "$BASIS" != "main" ]; then
+            echo "::notice title=Previewpoort::PR gaat naar '$BASIS', niet naar main — poort niet van toepassing."
+            exit 0
+          fi
+
+          if [ "$BRON" = "preview" ]; then
+            echo "::notice title=Previewpoort::Bron is 'preview' — de poort is doorlopen."
+            exit 0
+          fi
+
+          case ",${LABELS}," in
+            *",hotfix-direct-naar-main,"*)
+              echo "::warning title=Previewpoort omzeild::PR van '$BRON' gaat rechtstreeks naar main op het label hotfix-direct-naar-main. Bewust toegestaan; leg de reden vast in de PR-body."
+              {
+                echo "## Previewpoort bewust omzeild"
+                echo "Bron \`$BRON\` gaat rechtstreeks naar \`main\` op het label"
+                echo "\`hotfix-direct-naar-main\`. Zorg dat \`preview\` daarna wordt"
+                echo "bijgewerkt, anders loopt de poort opnieuw leeg."
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 0 ;;
+          esac
+
+          {
+            echo "## Previewpoort: geblokkeerd"
+            echo
+            echo "Deze PR gaat van \`$BRON\` rechtstreeks naar \`main\`, en \`main\` deployt naar **Productie**."
+            echo
+            echo "Besluit #75: *feature naar preview, preview naar main*."
+            echo
+            echo "**Wat te doen:** zet de basis om naar \`preview\` —"
+            echo "\`gh pr edit <nummer> --base preview\`— en promoveer daarna via een"
+            echo "PR van \`preview\` naar \`main\`."
+            echo
+            echo "Moet het écht rechtstreeks: zet het label \`hotfix-direct-naar-main\`"
+            echo "op deze PR en motiveer het in de body. Werk \`preview\` daarna bij."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::error title=Previewpoort::PR van '$BRON' naar main. Zet de basis om naar 'preview', of label hem hotfix-direct-naar-main met een motivering."
+          exit 1
