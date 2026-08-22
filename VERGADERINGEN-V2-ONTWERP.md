@@ -399,6 +399,8 @@ stemmingen.agendapunt_id
 
 **`procedure_bewijs.stemming_id`** (nieuw, expliciet t.o.v. v1.0). Bij sluiten van een stemming wordt automatisch een `procedure_bewijs`-rij geschreven met:
 
+> **Bijgewerkt 22-08-2026 (besluit 0183).** De rij wordt bewust **zonder** `requirement_sleutel` geschreven: het systeem bepaalt niet welke bewijslast een stemverslag vervult. Sinds de bewijs↔vereiste-binding telt een ongebonden bewijsstuk niet mee voor readiness — het stemverslag vervult dus geen enkele vereiste totdat iemand het in de UI aan een vereiste koppelt. De generieke database-audittrigger schrijft in dezelfde transactie `bewijs_toegevoegd`, inclusief `stemming_id`; een latere koppeling wordt `bewijs_binding_gewijzigd`. Het `documenttype: 'stemverslag'` uit onderstaand schets-SQL wordt in de werkelijke route niet gezet.
+
 ```sql
 insert into procedure_bewijs (
   procedure_id, stap_id, stemming_id, documenttype, titel, beschrijving, aangemaakt_door
