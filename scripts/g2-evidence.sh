@@ -331,7 +331,7 @@ check_drift_inrichting() {
   if grep -qE '^[[:space:]]+- cron:' "$wf"; then
     ops_open "B9b driftdetectie Productie — cron staat AAN maar er is nog geen geslaagde nachtrun (open sinds ${sinds}, ${dagen}) — eigenaar: ${eigenaar}"
   else
-    ops_open "B9b driftdetectie Productie — cron UIT, inrichting open sinds ${sinds} (${dagen}) — eigenaar: ${eigenaar}; zie DRIFT_INRICHTING_OPEN in $wf"
+    ops_open "B9b driftdetectie Productie — cron UIT (de \`schedule\`-regel ontbreekt of staat uitgecommentarieerd in $wf), open sinds ${sinds} (${dagen}) — eigenaar: ${eigenaar}"
   fi
 }
 check_drift_inrichting
