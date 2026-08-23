@@ -562,3 +562,117 @@ Die tien zijn wél geauthenticeerd: `catalogusContext()` in
 `core/lib/catalogus-api.ts` en de fabriek `core/lib/organen-route.ts` dragen de
 preambule. Dat is een **vierde migratiepatroon**, geen uitzondering. Zet ze niet
 in de W13-uitzonderingslijst zonder dat besluit expliciet te nemen.
+
+---
+
+## Wat W6 in de praktijk opleverde (lees vóór W7)
+
+W6 is het eerste gedragsveranderende ticket van het spoor — en landt juist
+daarom **uitgeschakeld**. `capability` werd een verplicht veld in `RouteSpecV1`,
+de wrapper handhaaft het achter `ENFORCE_CAPABILITY`, en alle declaraties staan
+op `"TE_BEPALEN"`. Zie besluit `0186`.
+
+### 1. De codemod is één regel per handler, en dus één paar in de classifier
+
+De transformatie is exact:
+
+```
+export const GET = withFondsRoute({}, async (ctx, …
+export const GET = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, …
+
+export const GET = withFondsRoute({ hostGuard: true, label: "x" }, async (ctx, …
+export const GET = withFondsRoute({ capability: "TE_BEPALEN", hostGuard: true, label: "x" }, async (ctx, …
+```
+
+`capability` staat vooraan, alle 112 spec-literals zijn plat en eenregelig, en er
+verandert verder niets op de regel.
+
+In `classificeer-diff.mjs` is dat **stap 1b**, en bewust als PAAR en niet als
+verwijderpatroon: de verwijderde signatuurregel valt alleen weg als hij ná de
+transformatie *exact* de toegevoegde regel is. Een verwijderpatroon zou élke
+gewijzigde signatuurregel wegstrepen. De tegenproef is gedraaid: een `hostGuard`
+die van de regel verdwijnt, en een declaratie die "alvast" op een echte
+capability wordt gezet, worden allebei `afwijkend`. Die tweede is precies de
+faalmodus uit §8 van het ticket.
+
+**Niet** afgedwongen in `TOEGESTAAN_TOEGEVOEGD` dat een spec een `capability`
+draagt: dat zou de W3/W4-ranges met terugwerkende kracht afwijkend maken. Die eis
+hangt aan het TYPE en straks aan de CI-regel van W13.
+
+### 2. "95 routes" zijn 112 handlers, en dat verschil is de eenheid van W7
+
+W5 sloot af op 95 van de 116 route-BESTANDEN. `capability` is echter een
+eigenschap van een HANDLER: 95 bestanden dragen samen 112 `withFondsRoute`-
+aanroepen. W7 neemt dus 112 besluiten, niet 95 — en in bestanden met GET+PATCH is
+dat vaak twee verschillende antwoorden.
+
+### 3. De vlag mag de vorm van `TENANT_ENFORCE` niet kopiëren
+
+`tenantEnforceVoorOmgeving()` zet productie/preview/staging altijd fail-closed.
+Diezelfde vorm hier zou de eerste preview-deploy het hele portaal op 403 zetten.
+`capabilityEnforceVoorOmgeving()` kent daarom één invoer: `ENFORCE_CAPABILITY=on`.
+De sanity-suite heeft daar een expliciete tegenproef voor, zodat een latere
+"consistentie"-refactor hem niet ongemerkt gelijktrekt.
+
+### 4. De poort staat NA de host-guard, en dat is een meting waard
+
+Stond hij ervóór, dan zou het flippen van `ENFORCE_CAPABILITY` veranderen wélke
+403 een host-mismatch oplevert. De sanity-suite meet de ordening in plaats van
+haar te beredeneren (`ORDENING: host-guard gaat vóór de capability-poort`).
+
+### 5. De vlag-aan-run IS de ontdekkingsronde van W7
+
+Met `ENFORCE_CAPABILITY=on` valt 220 van de 361 harnasscenario's om, allemaal op
+403. De 141 die overeind blijven zijn de `anon`-scenario's (401 vóór de poort) en
+14 scenario's op routes die nog **niet** door de wrapper lopen — `procesmodellen`,
+`gremia`, `expertises`, `focusgebieden`, `aqlab/audit`. Dat is meteen een
+zichtbaarheidsgrens om vast te houden: het harnas raakt niet alleen de 95.
+
+Draai die run dus niet als "even kijken", maar leg de uitkomst vast als route +
+rol + uitkomst. Dat is de dataset waar W7 mee begint.
+
+### 6. Observe-logging is proportioneel, en dat is geen bezuiniging
+
+De wrapper logt onder de vlag-uit-stand alleen de zou-WEIGERINGEN, net als
+`[TENANT-RESOLVE]`. Met alles op `"TE_BEPALEN"` is dat vandaag élk ingelogd
+request; zodra W7 declaraties invult dooft het log vanzelf uit tot de echte
+mismatches. Een logregel op de happy path zou nu niets extra's vertellen en na W7
+alleen ruis zijn.
+
+De regel draagt route, methode, capability, rol, zou-beslissing en reden — en
+bewust géén gebruikers-id en géén e-mailadres. De sanity-suite toetst dat laatste
+expliciet: `ctx` draagt sinds W4 een e-mailadres en staat in elke handler in scope.
+
+### 7. De parenlijst is per handler, en de gates staan niet altijd in de handler
+
+De inventarisatie (route → route-eigen gate → gedeclareerde capability) is per
+handler gelezen, niet per bestand. Twee dingen bleken daarbij te tellen:
+
+- **Gates staan soms in het modulehoofd.** `documents/upload` doet zijn
+  `requireCapability(cap as Capability)` in helperfuncties bóven de export. Een
+  handlerblok-scan alleen zou die route als "geen autorisatie" tellen. De lijst
+  heeft daarom een tweede kolom voor het modulehoofd.
+- **`requireCapability` is niet de enige vorm.** `chat` en `ai/stuk-export`
+  toetsen met `rolHeeftCapability()` rechtstreeks. Wie alleen op
+  `requireCapability` grept, telt de bureau-capabilities niet mee.
+
+Tien handlers houden een 403-tak die niet automatisch te classificeren was. Ze
+zijn met het oog gelezen en geen van de tien is een rolgate: het gaat om
+"geen fonds gekoppeld", "hoort niet bij uw fonds", eigenaarschap en de
+WP3-veiligheidsweigering. Laat zo'n rest niet als "geen gate" in de lijst staan —
+dat leest als een vrijbrief.
+
+### 8. Zes capabilities sluiten nul rollen uit
+
+Uit de §4-audit: `documents.metadata.update`, `documents.status.change`,
+`documents.bronstatus.change`, `profile.manage.own`, `stuurinformatie.view` en
+`klantbeeld.view` hangen aan alle vier de rollen. Als autorisatiepoort scheiden ze
+niets. Declareer op zo'n route `"iedere-ingelogde"` in plaats van een capability
+die niets doet — dan staat er wat er bedoeld wordt en telt hij niet mee als
+autorisatie in latere metingen. De alternatieve lezing (de map is fout) is per
+capability een W7-besluit, geen opruimwerk.
+
+`generic.library.manage` staat in de tenant-`Capability`-union maar hangt aan géén
+enkele rol; de werkende variant is `platform.generic.library.manage` in
+`platform/lib/platform-capabilities.ts`. Een route die de tenant-variant zou
+declareren is voor iedereen dicht.
