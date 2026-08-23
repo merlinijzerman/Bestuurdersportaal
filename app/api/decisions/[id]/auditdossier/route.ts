@@ -68,7 +68,7 @@ interface SnapshotRow {
 // guard stond al direct ná het profiel en vóór élke andere poort van deze route,
 // dus de wrapper trekt hem op exact dezelfde plek in de volgorde. De actor-naam
 // die het profiel hier ook leverde komt nu uit `ctx.naam`.
-export const GET = withFondsRoute({ hostGuard: true, label: "decisions.auditdossier.GET" }, async (ctx, req: NextRequest, params) => {
+export const GET = withFondsRoute({ capability: "TE_BEPALEN", hostGuard: true, label: "decisions.auditdossier.GET" }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: decisionId } = params as { id: string };
     const supabase = ctx.supabase;

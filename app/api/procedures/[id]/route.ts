@@ -26,7 +26,7 @@ type WijzigBody = {
 const BEWERKBARE_VELDEN = ["titel", "beschrijving", "deadline"] as const;
 type BewerkbaarVeld = (typeof BEWERKBARE_VELDEN)[number];
 
-export const PATCH = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

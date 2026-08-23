@@ -20,7 +20,7 @@ const BUCKET = "aqlab-audit";
 // 500 {"error":"Serverfout"}. Dat is een uniformering, geen verlies — maar het
 // is een verschil, en het staat daarom hier en als BESLUIT in #101 in plaats van
 // dat het stilzwijgend meelift.
-export const GET = withFondsRoute({ hostGuard: true, label: "aqlab.assurance.audit.GET" }, async (ctx, _req, params) => {
+export const GET = withFondsRoute({ capability: "TE_BEPALEN", hostGuard: true, label: "aqlab.assurance.audit.GET" }, async (ctx, _req, params) => {
   const { exportId } = params as { exportId: string };
   const supabase = ctx.supabase;
 

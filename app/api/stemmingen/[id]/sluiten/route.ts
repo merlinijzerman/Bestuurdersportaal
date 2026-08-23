@@ -19,7 +19,7 @@ import {
 //  bewijs in procedure_bewijs met expliciete stemming_id-FK.
 //  Notificeert starter + tegen-stemmers.
 // ============================================================
-export const POST = withFondsRoute({}, async (ctx, _req: NextRequest, params) => {
+export const POST = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, _req: NextRequest, params) => {
   try {
     const { id: stemmingId } = params as { id: string };
     const supabase = ctx.supabase;

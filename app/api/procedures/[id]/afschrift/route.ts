@@ -26,7 +26,7 @@ const AFSCHRIFT_BUREAU_WEIGERING =
 
 type Versie = "actueel" | "besluitmoment";
 
-export const POST = withFondsRoute({ hostGuard: true, label: "procedures.afschrift.POST" }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ capability: "TE_BEPALEN", hostGuard: true, label: "procedures.afschrift.POST" }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: procedureId } = params as { id: string };
     const supabase = ctx.supabase;

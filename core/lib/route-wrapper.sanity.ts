@@ -26,6 +26,13 @@
 import assert from "node:assert/strict";
 import type { NextRequest } from "next/server";
 import { maakWithFondsRoute, type WrapperDeps, type FondsContext } from "./route-wrapper";
+import type { RouteCapability } from "./capability-enforce";
+
+/** De v1-tests (W2/W5) gaan NIET over de capability-poort. Ze draaien daarom op
+ *  de declaratie die aantoonbaar niets afsluit, zodat ze precies dezelfde
+ *  invarianten blijven toetsen als vóór W6. De poort zelf heeft eigen tests
+ *  onderaan dit bestand. */
+const IEDEREEN: RouteCapability = "iedere-ingelogde";
 
 let n = 0;
 async function test(naam: string, fn: () => Promise<void>) {
@@ -46,6 +53,9 @@ function deps(overrides: Partial<WrapperDeps>): WrapperDeps {
     createServerSupabase: async () => nepSupabase({ id: "u-1" }),
     haalProfiel: async () => ({ id: "u-1", naam: "N", rol: "voorzitter", fondsId: "f-1" }),
     beoordeelRouteHostToegang: async () => ({ toegestaan: true }),
+    // W6: default UIT. De vlag-aan-stand is de enige tak die gedrag verandert en
+    // wordt per test expliciet aangezet — nooit via process.env.
+    capabilityEnforceAan: () => false,
     ...overrides,
   };
 }
@@ -57,7 +67,7 @@ async function main() {
 
   await test("geen sessie → exact {\"error\":\"Niet ingelogd\"} met status 401", async () => {
     const wrap = maakWithFondsRoute(deps({ createServerSupabase: async () => nepSupabase(null) }));
-    const handler = wrap({}, async () => new Response("mag niet"));
+    const handler = wrap({ capability: IEDEREEN }, async () => new Response("mag niet"));
     const res = await handler(req());
     assert.equal(res.status, 401);
     assert.deepEqual(await res.json(), { error: "Niet ingelogd" });
@@ -66,7 +76,7 @@ async function main() {
   await test("geen profiel → ctx.fondsId/rol/naam === null", async () => {
     const cap: { ctx?: FondsContext } = {};
     const wrap = maakWithFondsRoute(deps({ haalProfiel: async () => null }));
-    const handler = wrap({}, async (ctx) => {
+    const handler = wrap({ capability: IEDEREEN }, async (ctx) => {
       cap.ctx = ctx;
       return Response.json({ ok: true });
     });
@@ -88,7 +98,7 @@ async function main() {
         },
       })
     );
-    const handler = wrap({}, async () => Response.json({ ok: true }));
+    const handler = wrap({ capability: IEDEREEN }, async () => Response.json({ ok: true }));
     await handler(req());
     assert.equal(aangeroepen, 0);
   });
@@ -97,7 +107,7 @@ async function main() {
     const wrap = maakWithFondsRoute(
       deps({ beoordeelRouteHostToegang: async () => ({ toegestaan: false }) })
     );
-    const handler = wrap({ hostGuard: true }, async () => Response.json({ ok: true }));
+    const handler = wrap({ capability: IEDEREEN, hostGuard: true }, async () => Response.json({ ok: true }));
     const res = await handler(req());
     assert.equal(res.status, 403);
     assert.deepEqual(await res.json(), { error: "Dit webadres hoort niet bij uw fonds." });
@@ -105,7 +115,7 @@ async function main() {
 
   await test("onafgevangen fout in handler → 500 {\"error\":\"Serverfout\"}", async () => {
     const wrap = maakWithFondsRoute(deps({}));
-    const handler = wrap({}, async () => {
+    const handler = wrap({ capability: IEDEREEN }, async () => {
       throw new Error("boem");
     });
     const res = await handler(req());
@@ -116,7 +126,7 @@ async function main() {
   await test("ctx draagt rol/naam/fondsId door uit haalProfiel", async () => {
     const cap: { ctx?: FondsContext } = {};
     const wrap = maakWithFondsRoute(deps({}));
-    const handler = wrap({}, async (ctx) => {
+    const handler = wrap({ capability: IEDEREEN }, async (ctx) => {
       cap.ctx = ctx;
       return Response.json({ ok: true });
     });
@@ -165,7 +175,7 @@ async function main() {
   await test("stream → de wrapper geeft DEZELFDE Response door (identiteit)", async () => {
     const respons = sseRespons(() => {});
     const wrap = maakWithFondsRoute(deps({}));
-    const handler = wrap({}, async () => respons);
+    const handler = wrap({ capability: IEDEREEN }, async () => respons);
     const uit = await handler(req());
     // Identiteit, niet gelijkwaardigheid: de wrapper mag hem niet herverpakken.
     assert.equal(uit, respons);
@@ -180,7 +190,7 @@ async function main() {
       throw new Error("W5-injectie: fout ná het eerste enqueue");
     });
     const wrap = maakWithFondsRoute(deps({}));
-    const handler = wrap({}, async () => respons);
+    const handler = wrap({ capability: IEDEREEN }, async () => respons);
 
     // 1. De wrapper heeft de respons al teruggegeven vóór de stream wordt
     //    geconsumeerd. Zijn catch omhult ALLEEN de aanroep van de handler.
@@ -218,7 +228,7 @@ async function main() {
     // later een `async start` naar synchroon herschrijft, verandert daarmee stil
     // welke laag de fout afhandelt.
     const wrap = maakWithFondsRoute(deps({}));
-    const handler = wrap({}, async () => {
+    const handler = wrap({ capability: IEDEREEN }, async () => {
       const enc = new TextEncoder();
       const stream = new ReadableStream<Uint8Array>({
         start(controller) {
@@ -237,12 +247,190 @@ async function main() {
     // Tegenproef bij de vorige test. Zonder deze zou "geen Serverfout" ook waar
     // zijn als het vangnet helemaal stuk was.
     const wrap = maakWithFondsRoute(deps({}));
-    const handler = wrap({}, async () => {
+    const handler = wrap({ capability: IEDEREEN }, async () => {
       throw new Error("fout vóór de eerste byte");
     });
     const res = await handler(req());
     assert.equal(res.status, 500);
     assert.deepEqual(await res.json(), { error: "Serverfout" });
+  });
+
+  // ── W6 (#___) — de capability-poort ───────────────────────────────────────
+  //
+  //  Twee dingen moeten hier hard vaststaan, en ze zijn elkaars tegenproef:
+  //    • met de vlag UIT verandert er NIETS aan de respons — dat is de hele
+  //      belofte waarop de byte-identieke snapshots rusten;
+  //    • met de vlag AAN geeft `TE_BEPALEN` wél 403 — anders zou "niets
+  //      veranderd" ook waar zijn als de poort helemaal niet bedraad was.
+  //  De vlag komt uit de DEPS, nooit uit process.env: een test die op een
+  //  omgevingsvariabele leunt bewijst niets over de andere stand.
+
+  /** Vangt console.warn af en geeft de opgevangen regels terug. */
+  async function metOpgevangenWarn<T>(fn: () => Promise<T>): Promise<[T, unknown[][]]> {
+    const opgevangen: unknown[][] = [];
+    const origineel = console.warn;
+    console.warn = (...args: unknown[]) => {
+      opgevangen.push(args);
+    };
+    try {
+      return [await fn(), opgevangen];
+    } finally {
+      console.warn = origineel;
+    }
+  }
+
+  await test("vlag UIT + TE_BEPALEN → handler draait, respons ONGEWIJZIGD", async () => {
+    let aangeroepen = 0;
+    const wrap = maakWithFondsRoute(deps({ capabilityEnforceAan: () => false }));
+    const handler = wrap({ capability: "TE_BEPALEN" }, async () => {
+      aangeroepen++;
+      return Response.json({ ok: true });
+    });
+    const [res] = await metOpgevangenWarn(() => handler(req()));
+    assert.equal(aangeroepen, 1);
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), { ok: true });
+  });
+
+  await test("vlag UIT + TE_BEPALEN → observe-logregel met route, rol en zou-beslissing", async () => {
+    const wrap = maakWithFondsRoute(deps({ capabilityEnforceAan: () => false }));
+    const handler = wrap({ capability: "TE_BEPALEN" }, async () => Response.json({ ok: true }));
+    const [, warns] = await metOpgevangenWarn(() => handler(req()));
+    const regel = warns.find((w) => w[0] === "[CAPABILITY-OBSERVE]");
+    assert.ok(regel, "geen [CAPABILITY-OBSERVE]-regel — W7 begint dan zonder dataset");
+    const veld = regel[1] as Record<string, unknown>;
+    assert.equal(veld.capability, "TE_BEPALEN");
+    assert.equal(veld.rol, "voorzitter");
+    assert.equal(veld.zouBeslissing, "weigeren");
+    assert.equal(veld.reden, "te-bepalen");
+    assert.equal(veld.handhaven, false);
+    assert.equal(veld.route, "/api/test");
+  });
+
+  await test("observe-logregel draagt GEEN e-mail en GEEN gebruikers-id", async () => {
+    // De ctx draagt sinds W4 een e-mailadres. Deze regel gaat naar de
+    // platformlogs; W7 heeft route + rol + uitkomst nodig en verder niets.
+    const wrap = maakWithFondsRoute(deps({ capabilityEnforceAan: () => false }));
+    const handler = wrap({ capability: "TE_BEPALEN" }, async () => Response.json({ ok: true }));
+    const [, warns] = await metOpgevangenWarn(() => handler(req()));
+    const regel = warns.find((w) => w[0] === "[CAPABILITY-OBSERVE]");
+    assert.ok(regel);
+    const tekst = JSON.stringify(regel[1]);
+    assert.ok(!/@/.test(tekst), `observe-log lekt een e-mailadres: ${tekst}`);
+    assert.ok(!/\bu-1\b/.test(tekst), `observe-log lekt het gebruikers-id: ${tekst}`);
+  });
+
+  await test("vlag AAN + TE_BEPALEN → 403 en de handler draait NIET", async () => {
+    let aangeroepen = 0;
+    const wrap = maakWithFondsRoute(deps({ capabilityEnforceAan: () => true }));
+    const handler = wrap({ capability: "TE_BEPALEN" }, async () => {
+      aangeroepen++;
+      return Response.json({ ok: true });
+    });
+    const [res] = await metOpgevangenWarn(() => handler(req()));
+    assert.equal(res.status, 403);
+    assert.deepEqual(await res.json(), { error: "U heeft geen rechten voor deze actie." });
+    assert.equal(aangeroepen, 0, "de handler draaide alsnog — de poort staat ná de route");
+  });
+
+  await test("vlag AAN + iedere-ingelogde → doorgelaten", async () => {
+    const wrap = maakWithFondsRoute(deps({ capabilityEnforceAan: () => true }));
+    const handler = wrap({ capability: "iedere-ingelogde" }, async () => Response.json({ ok: true }));
+    const res = await handler(req());
+    assert.equal(res.status, 200);
+  });
+
+  await test("vlag AAN + echte capability: rol heeft hem → door, rol mist hem → 403", async () => {
+    // `dossiers.manage` hangt aan beheerder+voorzitter, niet aan bestuurder.
+    const doorlaat = maakWithFondsRoute(deps({ capabilityEnforceAan: () => true }));
+    const res1 = await doorlaat({ capability: "dossiers.manage" }, async () =>
+      Response.json({ ok: true })
+    )(req());
+    assert.equal(res1.status, 200);
+
+    const weiger = maakWithFondsRoute(
+      deps({
+        capabilityEnforceAan: () => true,
+        haalProfiel: async () => ({ id: "u-1", naam: "N", rol: "bestuurder", fondsId: "f-1" }),
+      })
+    );
+    const [res2] = await metOpgevangenWarn(() =>
+      weiger({ capability: "dossiers.manage" }, async () => Response.json({ ok: true }))(req())
+    );
+    assert.equal(res2.status, 403);
+  });
+
+  await test("vlag AAN + geen profiel → 403 bij een echte capability (geen rol = geen recht)", async () => {
+    const wrap = maakWithFondsRoute(
+      deps({ capabilityEnforceAan: () => true, haalProfiel: async () => null })
+    );
+    const [res] = await metOpgevangenWarn(() =>
+      wrap({ capability: "dossiers.manage" }, async () => Response.json({ ok: true }))(req())
+    );
+    assert.equal(res.status, 403);
+  });
+
+  await test("ORDENING: host-guard gaat vóór de capability-poort", async () => {
+    // Het BESLUIT uit de wrapper, gemeten in plaats van beredeneerd. Zou de
+    // capability-poort ervóór staan, dan zou het flippen van ENFORCE_CAPABILITY
+    // veranderen WELKE 403 een host-mismatch oplevert — een gedragswijziging die
+    // niets met autorisatie te maken heeft.
+    const wrap = maakWithFondsRoute(
+      deps({
+        capabilityEnforceAan: () => true,
+        beoordeelRouteHostToegang: async () => ({ toegestaan: false }),
+      })
+    );
+    const handler = wrap(
+      { capability: "TE_BEPALEN", hostGuard: true },
+      async () => Response.json({ ok: true })
+    );
+    const [res] = await metOpgevangenWarn(() => handler(req()));
+    assert.equal(res.status, 403);
+    assert.deepEqual(await res.json(), { error: "Dit webadres hoort niet bij uw fonds." });
+  });
+
+  await test("vlag UIT + rol mist de capability → doorlaten (observe), niet weigeren", async () => {
+    let aangeroepen = 0;
+    const wrap = maakWithFondsRoute(
+      deps({
+        capabilityEnforceAan: () => false,
+        haalProfiel: async () => ({ id: "u-1", naam: "N", rol: "bestuurder", fondsId: "f-1" }),
+      })
+    );
+    const handler = wrap({ capability: "dossiers.manage" }, async () => {
+      aangeroepen++;
+      return Response.json({ ok: true });
+    });
+    const [res, warns] = await metOpgevangenWarn(() => handler(req()));
+    assert.equal(res.status, 200);
+    assert.equal(aangeroepen, 1);
+    const regel = warns.find((w) => w[0] === "[CAPABILITY-OBSERVE]");
+    assert.ok(regel, "een mismatch onder de vlag-uit hoort wél geobserveerd te worden");
+    assert.equal((regel[1] as Record<string, unknown>).reden, "rol-mist-capability");
+  });
+
+  await test("vlag UIT + rol HEEFT de capability → geen logregel (happy path blijft stil)", async () => {
+    const wrap = maakWithFondsRoute(deps({ capabilityEnforceAan: () => false }));
+    const handler = wrap({ capability: "dossiers.manage" }, async () => Response.json({ ok: true }));
+    const [, warns] = await metOpgevangenWarn(() => handler(req()));
+    assert.equal(
+      warns.filter((w) => w[0] === "[CAPABILITY-OBSERVE]").length,
+      0,
+      "proportioneel loggen: alleen zou-weigeringen, zoals [TENANT-RESOLVE]"
+    );
+  });
+
+  await test("geen sessie → 401 vóór de capability-poort, ook met de vlag AAN", async () => {
+    // De 401 is de byte-identieke vorm uit W2. Hij mag door W6 niet in een 403
+    // veranderen: dat zou wél een responsebyte wijzigen.
+    const wrap = maakWithFondsRoute(
+      deps({ createServerSupabase: async () => nepSupabase(null), capabilityEnforceAan: () => true })
+    );
+    const handler = wrap({ capability: "TE_BEPALEN" }, async () => new Response("mag niet"));
+    const res = await handler(req());
+    assert.equal(res.status, 401);
+    assert.deepEqual(await res.json(), { error: "Niet ingelogd" });
   });
 
   console.log(`\nAlle ${n} route-wrapper sanity-tests groen.`);

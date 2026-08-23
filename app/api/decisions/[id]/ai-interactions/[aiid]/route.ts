@@ -33,7 +33,7 @@ interface PatchBody {
   verworpen_reden?: string | null;
 }
 
-export const PATCH = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest, params) => {
   try {
     const { id, aiid } = params as { id: string; aiid: string };
     const supabase = ctx.supabase;

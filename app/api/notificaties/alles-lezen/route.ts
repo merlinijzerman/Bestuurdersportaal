@@ -8,7 +8,7 @@
 import { NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
 
-export const POST = withFondsRoute({}, async (ctx) => {
+export const POST = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx) => {
   try {
     const supabase = ctx.supabase;
 

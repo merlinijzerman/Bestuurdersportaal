@@ -22,7 +22,7 @@ const AFSCHRIFT_BUREAU_WEIGERING =
 // de volgorde van poorten blijft ongewijzigd. `AFS-3` in
 // tests/cross-tenant/afschrift-toegang.test.ts is sinds W4 wrapper-bewust en
 // dekt deze route zonder aanpassing.
-export const GET = withFondsRoute({ hostGuard: true, label: "procedures.afschrift.download.GET" }, async (ctx, _req: NextRequest, params) => {
+export const GET = withFondsRoute({ capability: "TE_BEPALEN", hostGuard: true, label: "procedures.afschrift.download.GET" }, async (ctx, _req: NextRequest, params) => {
   try {
     const { id: procedureId, afschriftId } = params as { id: string; afschriftId: string };
     const supabase = ctx.supabase;
