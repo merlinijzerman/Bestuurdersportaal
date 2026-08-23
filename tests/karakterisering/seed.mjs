@@ -11,6 +11,7 @@
 import { pathToFileURL } from "node:url";
 import { createClient } from "@supabase/supabase-js";
 import { ENV, FONDS_ID, ROLLEN, WACHTWOORD, emailVoor, FIX, DOCUMENT1_BYTES, DOCUMENT1_PAD, AFSCHRIFT1_PAD } from "./config.mjs";
+import { bevestigVeiligeSeedDoelomgeving } from "./seed-doelomgeving.mjs";
 
 // ── W4-BESLUIT: elke delete wordt gecontroleerd ─────────────────────────────
 //  Het defect dat W4 blootlegde bij `seedRisicos` was niet de append-only
@@ -27,6 +28,7 @@ async function wis(admin, tabel, kolom, waarde) {
 }
 
 export function adminClient() {
+  bevestigVeiligeSeedDoelomgeving({ url: ENV.url });
   return createClient(ENV.url, ENV.serviceKey, { auth: { persistSession: false } });
 }
 
@@ -79,6 +81,7 @@ async function vindOfMaakGebruiker(admin, rol) {
  * @returns {Promise<{fondsId:string, users:Record<string,{email,password,userId,rol}>}>}
  */
 export async function seed(admin = adminClient()) {
+  bevestigVeiligeSeedDoelomgeving({ url: ENV.url });
   // 1. Fonds.
   {
     const { error } = await admin
