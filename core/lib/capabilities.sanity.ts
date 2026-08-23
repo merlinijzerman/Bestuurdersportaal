@@ -135,6 +135,7 @@ test("alle vier de rollen dragen profile.manage.own (eigen profiel beheren)", ()
 const W7_GATES = [
     "agendapunten.manage",
     "assurance.view",
+    "chat.use",
     "beheer.backfill",
     "classification.queue.view",
     "decisions.manage",
@@ -163,6 +164,7 @@ const W7_PER_ROL: Record<string, readonly string[]> = {
   beheerder: [
     "agendapunten.manage",
     "assurance.view",
+    "chat.use",
     "beheer.backfill",
     "classification.queue.view",
     "decisions.manage",
@@ -189,6 +191,7 @@ const W7_PER_ROL: Record<string, readonly string[]> = {
   voorzitter: [
     "agendapunten.manage",
     "assurance.view",
+    "chat.use",
     "beheer.backfill",
     "classification.queue.view",
     "decisions.manage",
@@ -215,6 +218,7 @@ const W7_PER_ROL: Record<string, readonly string[]> = {
   bestuurder: [
     "agendapunten.manage",
     "assurance.view",
+    "chat.use",
     "classification.queue.view",
     "decisions.manage",
     "decisions.view",
@@ -239,6 +243,7 @@ const W7_PER_ROL: Record<string, readonly string[]> = {
   bestuursbureau: [
     "agendapunten.manage",
     "assurance.view",
+    "chat.use",
     "classification.queue.view",
     "decisions.manage",
     "decisions.view",
