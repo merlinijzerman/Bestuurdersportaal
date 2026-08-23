@@ -1,0 +1,9 @@
+{
+  "body": {
+    "error": "Deze actie kan niet vanaf een andere website worden gestart. Open het item opnieuw vanuit het portaal."
+  },
+  "headers": {
+    "content-type": "application/json"
+  },
+  "status": 403
+}

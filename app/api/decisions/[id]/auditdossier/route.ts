@@ -31,6 +31,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
+import { beoordeelNavigatieHerkomst, crossSiteGeweigerd } from "@/core/lib/navigatie-herkomst";
 import { isBureauRol } from "@/core/lib/bureau-gate";
 import { buildDecisionDossierView } from "@/core/lib/decision";
 import { renderAuditdossierHtml } from "@/core/lib/auditdossier-html";
@@ -69,6 +70,13 @@ interface SnapshotRow {
 // dus de wrapper trekt hem op exact dezelfde plek in de volgorde. De actor-naam
 // die het profiel hier ook leverde komt nu uit `ctx.naam`.
 export const GET = withFondsRoute({ capability: "TE_BEPALEN", hostGuard: true, label: "decisions.auditdossier.GET" }, async (ctx, req: NextRequest, params) => {
+  // H-04: een top-level navigatie vanaf een vreemde site stuurt onder een
+  // Lax-cookie de sessie mee. Deze route schrijft een auditrecord, dus zo'n
+  // aanroep zou een gebeurtenis in het dossier van het slachtoffer zetten.
+  // Weigeren vóór er werk gebeurt; de uitkomst gaat mee in het record.
+  const oordeel = beoordeelNavigatieHerkomst(req);
+  if (!oordeel.toegestaan) return crossSiteGeweigerd("decisions.auditdossier.GET");
+
   try {
     const { id: decisionId } = params as { id: string };
     const supabase = ctx.supabase;
@@ -201,7 +209,7 @@ export const GET = withFondsRoute({ capability: "TE_BEPALEN", hostGuard: true, l
       actor_naam: aanvragerNaam,
       object_type: "decision_object",
       object_id: decisionId,
-      nieuwe_waarde: { versie, formaat, trigger: trigger ?? null },
+      nieuwe_waarde: { versie, formaat, trigger: trigger ?? null, herkomst: oordeel.herkomst },
     });
 
     // Bestandsnaam voor download — veilig (geen spaces of speciale tekens).
