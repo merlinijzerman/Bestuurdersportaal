@@ -24,8 +24,8 @@
 // -----------------------------------------------------------------------------
 
 import { NextRequest, NextResponse } from "next/server";
+import { withMachineRoute, type MachineContext } from "@/platform/lib/machine-route-wrapper";
 import { createServiceSupabase } from "@/platform/lib/supabase-service";
-import { draaitOpAppSurface, geautoriseerdeCron } from "@/platform/lib/cron-auth";
 import { logPlatformFout } from "@/platform/lib/platform-fout-log";
 import { meetSignaal, type Meting } from "@/platform/lib/monitoring-queries";
 import {
@@ -61,13 +61,7 @@ type SnapshotRij = {
   meta: Record<string, unknown> | null;
 };
 
-async function draai(req: NextRequest): Promise<NextResponse> {
-  if (draaitOpAppSurface()) {
-    return NextResponse.json({ ok: true, skipped: "deploy_target=app" });
-  }
-  if (!geautoriseerdeCron(req)) {
-    return NextResponse.json({ error: "Niet geautoriseerd" }, { status: 401 });
-  }
+async function draai(_ctx: MachineContext, _req: NextRequest): Promise<NextResponse> {
 
   const nu = new Date();
   const svc = createServiceSupabase();
@@ -261,10 +255,11 @@ async function schoonOp(
   return uitkomst;
 }
 
+// De DEPLOY_TARGET-skip en de constant-time CRON_SECRET-bearer staan sinds W5b
+// in platform/lib/machine-route-wrapper.ts, niet meer in dit bestand. Zelfde
+// controle, zelfde volgorde, zelfde responses — alleen op één plek.
+const SPEC = { bewaking: "cron-secret", label: "platform.monitoring.snapshot" } as const;
+
 // Vercel Cron gebruikt GET; POST voor handmatige/lokale triggers.
-export async function GET(req: NextRequest) {
-  return draai(req);
-}
-export async function POST(req: NextRequest) {
-  return draai(req);
-}
+export const GET = withMachineRoute(SPEC, draai);
+export const POST = withMachineRoute(SPEC, draai);
