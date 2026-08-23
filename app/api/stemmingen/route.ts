@@ -8,6 +8,7 @@ import {
   type VereisteMeerderheid,
 } from "@/core/lib/stemming";
 import { isBureauRol, BUREAU_WEIGERING } from "@/core/lib/bureau-gate";
+import { weigerAlsModuleUit } from "@/core/lib/module-guard";
 
 const TOEGESTANE_MEERDERHEDEN: VereisteMeerderheid[] = [
   "gewone",
@@ -29,6 +30,18 @@ const TOEGESTANE_MEERDERHEDEN: VereisteMeerderheid[] = [
 export const POST = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest) => {
   try {
     const supabase = ctx.supabase;
+
+    // VEN-2 — BESCHIKBAARHEIDSGATE (nadrukkelijk GÉÉN autorisatie). De module
+    // 'stemmingen' staat registry-breed uit (defaultActief=false,
+    // manifestBeheerbaar=false), dus deze route weigert voor elk fonds met 403.
+    // Bewust hier, als eerste stap ná de auth-preambule van withFondsRoute en
+    // VÓÓR body-validatie en resource-lookups: anders hangt de weigering af van
+    // een geldige body of een bestaand record, en levert een directe API-call
+    // een 400/404 op in plaats van het bedoelde 403.
+    // `ctx.fondsId` is server-side afgeleid uit het eigen profiel — nooit uit de
+    // request-body, en nooit uit het aangesproken record.
+    const moduleWeigering = await weigerAlsModuleUit(ctx.fondsId, "stemmingen");
+    if (moduleWeigering) return moduleWeigering;
 
     const body = (await req.json()) as {
       agendapunt_id?: string;

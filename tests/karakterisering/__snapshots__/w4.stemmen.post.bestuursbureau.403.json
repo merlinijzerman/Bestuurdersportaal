@@ -1,6 +1,6 @@
 {
   "body": {
-    "error": "Het bestuursbureau neemt niet deel aan de besluitvorming en brengt geen stem uit."
+    "error": "Module 'stemmingen' is niet beschikbaar voor dit fonds"
   },
   "headers": {
     "content-type": "application/json"
