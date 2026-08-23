@@ -17,7 +17,7 @@
 | Marketing | Niet nodig op Preview | `bestuurdersportaal.com`, `www.bestuurdersportaal.com` |
 | Beheer | `beheer.preview.bestuurdersportaal.com` → alleen Preview | `beheer.bestuurdersportaal.com` → alleen Productie |
 | Ongebruikt domein | `horizon.bestuurdersportaal.com` blijft afwezig | Niet registreren of koppelen |
-| Vercel | custom environment **`preview-stable`**, vast gekoppeld aan branch `preview` → `app.preview.bestuurdersportaal.com` | `main` → Production |
+| Vercel | custom environment **`preview-stable`**, vast gekoppeld aan branch `preview` → de vier exacte Preview-apphosts | `main` → Production |
 | Supabase | eigen project of aantoonbaar geïsoleerde branch, eigen Auth/DB/Storage/secrets | bestaand Productieproject |
 | AI | Aan, met Preview-only projecten/keys/budget en quota per gebruiker/fonds | Productie-only projecten/keys/budget/quotering |
 | E-mail | sink/testmailbox; geen echte ontvangers | geaccordeerde Productieontvangers |
@@ -46,6 +46,37 @@ er ongehinderd doorheen. Gerepareerd en op een echte PR geverifieerd; zie
 
 De scanner is de uitzondering: `bestuurdersportaal-scanner` heeft geen
 `preview-stable` en valt dus wél onder `Preview – …`.
+
+### Preview-hosts volgen de environment, geen losse deployment
+
+De vier Preview-apphosts zijn **domeinen van `preview-stable`**. Dit is de
+enige toegestane koppeling; een handmatige `vercel alias` naar een afzonderlijke
+deployment is geen herstelprocedure en mag niet als automatisering worden
+toegevoegd. Bij een geslaagde Git-deploy van branch `preview` promoveert Vercel
+de nieuwe deployment van deze environment en nemen alle vier hosts die
+deployment tegelijk over.
+
+| Vaste host | Vercel-environment |
+|---|---|
+| `app.preview.bestuurdersportaal.com` | `preview-stable` |
+| `pgb.preview.bestuurdersportaal.com` | `preview-stable` |
+| `phenc.preview.bestuurdersportaal.com` | `preview-stable` |
+| `huisartsenpensioen.preview.bestuurdersportaal.com` | `preview-stable` |
+
+**Controle na een incident of wijziging aan domains/environments.** Open in
+Vercel het project **bestuurdersportaal**: `Settings → Environments →
+preview-stable`. Daar moet *Branch Tracking* ingeschakeld zijn met patroon
+`Branch is: preview`, en moeten precies bovenstaande vier hosts onder *Domains*
+staan. Controleer daarna in `Deployments` dat de nieuwste `preview-stable`
+deployment *Ready* is. Een host die als `Preview`, `Production` of een concrete
+deploymentalias wordt getoond, is afwijking: herstel hem in de domeininstelling
+naar `preview-stable` en leg de oorzaak vast.
+
+**Uitvoeringsbewijs 2026-08-23 (OMG-2).** Deze native koppeling is in de
+Vercel-omgeving waargenomen: branch tracking staat aan voor uitsluitend
+`preview`; alle vier hosts tonen `Valid Configuration` en `preview-stable`; de
+nieuwste `preview-stable`-deployment is *Ready*. Daardoor is er geen CI-secret,
+deploy hook of per-deployment aliasactie nodig die zelf opnieuw kan verlopen.
 
 ### Eén stack, meerdere fondsgerichte Preview-omgevingen
 
