@@ -250,7 +250,7 @@ functie|public.aqlab_add_run_cost|secdef=true searchpath=search_path=public, pg_
 functie|public.aqlab_assurance_meetwaarden|secdef=true searchpath=search_path=public, pg_temp md5=43c9df1cc0582a19fdb3ae3ba3ef7d18
 functie|public.aqlab_audit_export_bron|secdef=true searchpath=search_path=public, pg_temp md5=2528b6732e9173420acd54cafd358660
 functie|public.aqlab_claim_run_jobs|secdef=true searchpath=search_path=public, pg_temp md5=eb184099dde34abfc0c8ba08c5a1a118
-functie|public.aqlab_log_download|secdef=true searchpath=search_path=public, pg_temp md5=0f4a1b18aff22b11c54332e578fff96f
+functie|public.aqlab_log_download|secdef=true searchpath=search_path=public, pg_temp md5=939e5cd71423918b62412dc906eb218f
 functie|public.array_to_halfvec|secdef=false searchpath=niet gepind md5=08fe62b1d62dbc61e549c804fde116ce
 functie|public.array_to_halfvec|secdef=false searchpath=niet gepind md5=4a8e00016064afa9d666574b2e85c7fc
 functie|public.array_to_halfvec|secdef=false searchpath=niet gepind md5=56e58b4545df506ce2140cd8ac4a1785
