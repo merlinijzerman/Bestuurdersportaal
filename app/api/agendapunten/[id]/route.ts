@@ -64,7 +64,7 @@ async function haalAgendapuntMetFonds(
 //  Rechten: eigenaar (aangemaakt_door) + voorzitter/beheerder.
 //  Motivering verplicht bij ≥1 bijdrager (min 10 tekens).
 // ============================================================
-export const PATCH = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;
@@ -368,7 +368,7 @@ export const PATCH = withFondsRoute({}, async (ctx, req: NextRequest, params) =>
 //  Soft-delete. Rechten: eigenaar + voorzitter/beheerder.
 //  Verplichte reden (min 10 tekens).
 // ============================================================
-export const DELETE = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
+export const DELETE = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

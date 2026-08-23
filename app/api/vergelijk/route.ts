@@ -37,7 +37,7 @@ interface VergelijkBody {
   dimensies?: unknown;
 }
 
-export const POST = withFondsRoute({ hostGuard: true, label: "vergelijk.POST" }, async (ctx, req: NextRequest) => {
+export const POST = withFondsRoute({ capability: "TE_BEPALEN", hostGuard: true, label: "vergelijk.POST" }, async (ctx, req: NextRequest) => {
   try {
     // 0. Feature-flag: uit = feature niet beschikbaar (chat-ingang doet ook niets).
     if (!vergelijkmodusAan()) {

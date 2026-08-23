@@ -81,7 +81,7 @@ async function gate(ctx: FondsContext): Promise<Gate> {
   return { ok: true, fondsId };
 }
 
-export const GET = withFondsRoute({}, async (ctx, req: NextRequest) => {
+export const GET = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest) => {
   try {
     const g = await gate(ctx);
     if (!g.ok) return g.res;
@@ -96,7 +96,7 @@ export const GET = withFondsRoute({}, async (ctx, req: NextRequest) => {
   }
 });
 
-export const POST = withFondsRoute({}, async (ctx, req: NextRequest) => {
+export const POST = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest) => {
   try {
     const g = await gate(ctx);
     if (!g.ok) return g.res;

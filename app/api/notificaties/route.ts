@@ -13,7 +13,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
 
-export const GET = withFondsRoute({}, async (ctx, req: NextRequest) => {
+export const GET = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest) => {
   try {
     const supabase = ctx.supabase;
 

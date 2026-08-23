@@ -83,7 +83,7 @@ interface DecisionRowMin {
   risiconiveau: "laag" | "middel" | "hoog";
 }
 
-export const POST = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: decisionId } = params as { id: string };
     const supabase = ctx.supabase;

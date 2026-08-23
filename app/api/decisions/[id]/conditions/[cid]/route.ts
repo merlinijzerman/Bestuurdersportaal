@@ -36,7 +36,7 @@ const INHOUDELIJK: (keyof WijzigBody)[] = [
   "heroverwegingstrigger",
 ];
 
-export const PATCH = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: decisionId, cid } = params as { id: string; cid: string };
     const supabase = ctx.supabase;

@@ -26,7 +26,7 @@ const TOEGESTANE_MEERDERHEDEN: VereisteMeerderheid[] = [
 //
 //  decision_id wordt afgeleid via agendapunt → procedure-stap → procedure.
 // ============================================================
-export const POST = withFondsRoute({}, async (ctx, req: NextRequest) => {
+export const POST = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest) => {
   try {
     const supabase = ctx.supabase;
 

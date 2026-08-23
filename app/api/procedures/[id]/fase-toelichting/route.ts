@@ -5,7 +5,7 @@ import { withFondsRoute } from "@/core/lib/route-wrapper";
 // Server-side gegate op voorzitter/beheerder; fonds_id wordt server-side
 // afgeleid (nooit uit de request). De RLS-policy op procedure_fase_toelichting
 // dwingt hetzelfde af (defense-in-depth).
-export const POST = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

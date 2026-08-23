@@ -10,7 +10,7 @@ import { withFondsRoute } from "@/core/lib/route-wrapper";
 
 export const dynamic = "force-dynamic";
 
-export const PATCH = withFondsRoute({ hostGuard: true, label: "procedures.afschrift.intrekken.PATCH" }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ capability: "TE_BEPALEN", hostGuard: true, label: "procedures.afschrift.intrekken.PATCH" }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: procedureId, afschriftId } = params as { id: string; afschriftId: string };
     const supabase = ctx.supabase;
