@@ -165,6 +165,34 @@ function substitueer(regel, eigenVars = []) {
   return r;
 }
 
+/** De W6-codemod: `capability: "TE_BEPALEN"` als EERSTE veld in de spec-literal
+ *  van een `withFondsRoute`-signatuur. Eén vorm, mechanisch, en verder niets.
+ *
+ *  Geeft de VERWACHTE toegevoegde regel terug voor een verwijderde regel, of
+ *  null als deze regel geen wrapper-signatuur is. Het paar sluit alleen als het
+ *  resultaat EXACT de toegevoegde regel is — dus verandert de codemod op
+ *  dezelfde regel ook maar één ander teken (een handlerparameter, een
+ *  hostGuard-waarde, een label), dan blijft de verwijderde regel onverklaard en
+ *  is het bestand `afwijkend`. Dat is strenger dan een verwijderpatroon: dat zou
+ *  élke gewijzigde signatuurregel wegstrepen.
+ *
+ *  BEWUST NIET in TOEGESTAAN_TOEGEVOEGD afgedwongen dat de spec een
+ *  `capability` DRAAGT: dat zou de W3/W4-ranges met terugwerkende kracht
+ *  afwijkend maken, terwijl die diffs correct waren voor hun eigen recept. De
+ *  "geen enkele route zonder declaratie"-eis hangt aan het TYPE (RouteSpecV1)
+ *  en straks aan de CI-regel van W13, niet aan deze tekstclassificatie. */
+const W6_CAPABILITY = 'capability: "TE_BEPALEN"';
+const W6_SIGNATUUR =
+  /^(export const (?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS) = withFondsRoute\()\{([^{}]*)\}(,.*)$/;
+
+function w6SpecUitbreiding(regel) {
+  const m = W6_SIGNATUUR.exec(regel);
+  if (!m) return null;
+  const binnen = m[2].trim();
+  const inhoud = binnen ? `${W6_CAPABILITY}, ${binnen}` : W6_CAPABILITY;
+  return `${m[1]}{ ${inhoud} }${m[3]}`;
+}
+
 const matcht = (regels, regel) => regels.some((re) => re.test(regel));
 
 // ── Diff parsen ──────────────────────────────────────────────────────────────
@@ -237,6 +265,18 @@ function classificeer({ verwijderd, toegevoegd }) {
   for (let i = rem.length - 1; i >= 0; i--) {
     const s = substitueer(rem[i], eigenVars);
     const j = add.indexOf(s);
+    if (j >= 0) {
+      rem.splice(i, 1);
+      add.splice(j, 1);
+    }
+  }
+  // 1b. W6 — de spec-uitbreiding met de capability-declaratie. Ook een PAAR, om
+  //     dezelfde reden als hierboven: alleen als de verwijderde signatuurregel
+  //     ná de codemod-transformatie exact de toegevoegde regel is, sluit hij.
+  for (let i = rem.length - 1; i >= 0; i--) {
+    const verwacht = w6SpecUitbreiding(rem[i]);
+    if (verwacht === null) continue;
+    const j = add.indexOf(verwacht);
     if (j >= 0) {
       rem.splice(i, 1);
       add.splice(j, 1);
