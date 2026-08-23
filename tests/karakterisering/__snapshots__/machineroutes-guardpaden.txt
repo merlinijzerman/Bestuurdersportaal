@@ -1,0 +1,28 @@
+skip       GET  /api/aqlab/worker                              200  {"ok":true,"skipped":"deploy_target=app"}
+skip       POST /api/aqlab/worker                              200  {"ok":true,"skipped":"deploy_target=app"}
+skip       GET  /api/internal/afschrift-worker                 200  {"ok":true,"skipped":"deploy_target=app"}
+skip       POST /api/internal/afschrift-worker                 200  {"ok":true,"skipped":"deploy_target=app"}
+skip       GET  /api/internal/ingest-worker                    200  {"ok":true,"skipped":"deploy_target=app"}
+skip       POST /api/internal/ingest-worker                    200  {"ok":true,"skipped":"deploy_target=app"}
+skip       GET  /api/internal/semantische-extractie            405  
+skip       POST /api/internal/semantische-extractie            200  {"ok":true,"skipped":"deploy_target=app"}
+skip       GET  /api/platform/monitoring/snapshot              200  {"ok":true,"skipped":"deploy_target=app"}
+skip       POST /api/platform/monitoring/snapshot              200  {"ok":true,"skipped":"deploy_target=app"}
+skip       GET  /api/platform/healthz                          200  {"ok":true,"skipped":"deploy_target=app"}
+skip       POST /api/platform/healthz                          200  {"ok":true,"skipped":"deploy_target=app"}
+skip       GET  /api/healthz/ping                              200  {"ok":true}
+skip       POST /api/healthz/ping                              405  
+onbevoegd  GET  /api/aqlab/worker                              401  {"error":"Niet geautoriseerd"}
+onbevoegd  POST /api/aqlab/worker                              401  {"error":"Niet geautoriseerd"}
+onbevoegd  GET  /api/internal/afschrift-worker                 401  {"error":"Niet geautoriseerd"}
+onbevoegd  POST /api/internal/afschrift-worker                 401  {"error":"Niet geautoriseerd"}
+onbevoegd  GET  /api/internal/ingest-worker                    401  {"error":"Niet geautoriseerd"}
+onbevoegd  POST /api/internal/ingest-worker                    401  {"error":"Niet geautoriseerd"}
+onbevoegd  GET  /api/internal/semantische-extractie            405  
+onbevoegd  POST /api/internal/semantische-extractie            401  {"error":"Niet geautoriseerd"}
+onbevoegd  GET  /api/platform/monitoring/snapshot              401  {"error":"Niet geautoriseerd"}
+onbevoegd  POST /api/platform/monitoring/snapshot              401  {"error":"Niet geautoriseerd"}
+onbevoegd  GET  /api/platform/healthz                          401  {"error":"Niet geautoriseerd"}
+onbevoegd  POST /api/platform/healthz                          401  {"error":"Niet geautoriseerd"}
+onbevoegd  GET  /api/healthz/ping                              200  {"ok":true}
+onbevoegd  POST /api/healthz/ping                              405  

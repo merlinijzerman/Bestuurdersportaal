@@ -13,8 +13,8 @@
 // overlappende invocaties zijn veilig.
 // -----------------------------------------------------------------------------
 
-import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
+import { withMachineRoute, type MachineContext } from "@/platform/lib/machine-route-wrapper";
 import { createServiceSupabase } from "@/platform/lib/supabase-service";
 import { verwerkBatch } from "@/platform/lib/aqlab/run-orchestrator";
 import { errorResponse } from "@/core/lib/api-errors";
@@ -28,34 +28,7 @@ const MAX_BATCHES_PER_INVOCATIE = 4;
 const JOBS_PER_BATCH = 3;
 const LEASE_SECONDS = 180;
 
-function geautoriseerd(req: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return false; // fail-closed: geen secret geconfigureerd → geen toegang.
-  const auth = req.headers.get("authorization");
-  if (!auth) return false;
-  // L-02 (review 2026-07-30): constant-time vergelijking. Over HTTP is een
-  // timing-side-channel praktisch niet exploiteerbaar (netwerkjitter ≫ het
-  // verschil), maar `===` op een secret is hygiëne die je niet wilt uitleggen
-  // in een securityreview. timingSafeEqual eist gelijke bufferlengtes, vandaar
-  // de lengtecheck vooraf — die lekt alleen de lengte, niet de inhoud.
-  const verwacht = Buffer.from(`Bearer ${secret}`, "utf8");
-  const gekregen = Buffer.from(auth, "utf8");
-  if (verwacht.length !== gekregen.length) return false;
-  return timingSafeEqual(verwacht, gekregen);
-}
-
-async function draai(req: NextRequest): Promise<NextResponse> {
-  // Fase B (variant C): de cron staat in vercel.json en vuurt in BEIDE Vercel-
-  // projecten. De worker hoort alleen in het beheer-project — dat is het enige
-  // project met de service-role. Skip expliciet op de gedeelde app/publiek-surface
-  // (die heeft de service-role niet meer). Zonder DEPLOY_TARGET (huidige enkel-
-  // project) draait hij gewoon door (backward-compat).
-  if (process.env.DEPLOY_TARGET === "app") {
-    return NextResponse.json({ ok: true, skipped: "deploy_target=app" });
-  }
-  if (!geautoriseerd(req)) {
-    return NextResponse.json({ error: "Niet geautoriseerd" }, { status: 401 });
-  }
+async function draai(_ctx: MachineContext, _req: NextRequest): Promise<NextResponse> {
   try {
     const svc = createServiceSupabase();
     const workerId = `cron-${Date.now()}`;
@@ -82,10 +55,11 @@ async function draai(req: NextRequest): Promise<NextResponse> {
   }
 }
 
+// De DEPLOY_TARGET-skip en de constant-time CRON_SECRET-bearer staan sinds W5b
+// in platform/lib/machine-route-wrapper.ts, niet meer in dit bestand. Zelfde
+// controle, zelfde volgorde, zelfde responses — alleen op één plek.
+const SPEC = { bewaking: "cron-secret", label: "aqlab.worker" } as const;
+
 // Vercel Cron gebruikt GET; POST voor handmatige/lokale triggers.
-export async function GET(req: NextRequest) {
-  return draai(req);
-}
-export async function POST(req: NextRequest) {
-  return draai(req);
-}
+export const GET = withMachineRoute(SPEC, draai);
+export const POST = withMachineRoute(SPEC, draai);

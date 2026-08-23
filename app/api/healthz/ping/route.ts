@@ -22,9 +22,15 @@
 // -----------------------------------------------------------------------------
 
 import { NextResponse } from "next/server";
+import { withMachineRoute } from "@/platform/lib/machine-route-wrapper";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  return NextResponse.json({ ok: true });
-}
+// `bewaking: "publiek"` is een WAARDE, geen weglating. Deze route hoort als
+// enige machineroute geen controle te hebben — zie de kop hierboven. Door hem
+// toch door de wrapper te halen staat die keuze in de code in plaats van in de
+// afwezigheid ervan, en kan een latere gate hem onderscheiden van een route
+// waar iemand de bewaking gewoon vergat.
+const SPEC = { bewaking: "publiek", label: "healthz.ping" } as const;
+
+export const GET = withMachineRoute(SPEC, async () => NextResponse.json({ ok: true }));

@@ -14,8 +14,8 @@
 // FOR UPDATE SKIP LOCKED, `embedding is null` is de voortgang, de lease is de klok).
 // -----------------------------------------------------------------------------
 
-import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
+import { withMachineRoute, type MachineContext } from "@/platform/lib/machine-route-wrapper";
 import { createServiceSupabase } from "@/platform/lib/supabase-service";
 import { draaiIngestWorker } from "@/platform/lib/ingest-orchestrator";
 import { errorResponse } from "@/core/lib/api-errors";
@@ -23,28 +23,7 @@ import { errorResponse } from "@/core/lib/api-errors";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300; // seconden; de cron herhaalt tot de queue leeg is.
 
-function geautoriseerd(req: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return false; // fail-closed: geen secret geconfigureerd → geen toegang.
-  const auth = req.headers.get("authorization");
-  if (!auth) return false;
-  // Constant-time vergelijking (L-02). timingSafeEqual eist gelijke bufferlengtes,
-  // vandaar de lengtecheck vooraf — die lekt alleen de lengte, niet de inhoud.
-  const verwacht = Buffer.from(`Bearer ${secret}`, "utf8");
-  const gekregen = Buffer.from(auth, "utf8");
-  if (verwacht.length !== gekregen.length) return false;
-  return timingSafeEqual(verwacht, gekregen);
-}
-
-async function draai(req: NextRequest): Promise<NextResponse> {
-  // Variant C: de cron vuurt in BEIDE Vercel-projecten. De worker hoort alleen in
-  // het beheer-project (het enige met de service-role). Skip op de app-surface.
-  if (process.env.DEPLOY_TARGET === "app") {
-    return NextResponse.json({ ok: true, skipped: "deploy_target=app" });
-  }
-  if (!geautoriseerd(req)) {
-    return NextResponse.json({ error: "Niet geautoriseerd" }, { status: 401 });
-  }
+async function draai(_ctx: MachineContext, req: NextRequest): Promise<NextResponse> {
   try {
     const svc = createServiceSupabase();
     // Werker-id draagt de starttijd zodat het auditspoor invocaties onderscheidt.
@@ -61,10 +40,11 @@ async function draai(req: NextRequest): Promise<NextResponse> {
   }
 }
 
+// De DEPLOY_TARGET-skip en de constant-time CRON_SECRET-bearer staan sinds W5b
+// in platform/lib/machine-route-wrapper.ts, niet meer in dit bestand. Zelfde
+// controle, zelfde volgorde, zelfde responses — alleen op één plek.
+const SPEC = { bewaking: "cron-secret", label: "internal.ingest-worker" } as const;
+
 // Vercel Cron gebruikt GET; POST voor handmatige/lokale triggers.
-export async function GET(req: NextRequest) {
-  return draai(req);
-}
-export async function POST(req: NextRequest) {
-  return draai(req);
-}
+export const GET = withMachineRoute(SPEC, draai);
+export const POST = withMachineRoute(SPEC, draai);
