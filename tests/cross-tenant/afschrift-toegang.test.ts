@@ -109,11 +109,45 @@ test("AFS-3 — aanmaken, download en intrekken dwingen host↔fonds af", () => 
 // ── (4) De worker is CRON-only + service-role + app-surface-skip ────────────
 
 test("AFS-4 — de worker-route is CRON-secret-gated en draait alleen in het beheer-project", () => {
-  const bron = lees("app", "api", "internal", "afschrift-worker", "route.ts");
-  assert.ok(bron.includes("CRON_SECRET"), "worker mist de CRON_SECRET-gate");
-  assert.ok(bron.includes("timingSafeEqual"), "worker vergelijkt het secret niet constant-time");
-  assert.ok(bron.includes('process.env.DEPLOY_TARGET === "app"'), "worker skipt de app-surface niet");
-  assert.ok(bron.includes("createServiceSupabase("), "worker gebruikt de service-role niet");
+  // Deze test toetste tot W5b de BRONTEKST van de route: staat `timingSafeEqual`
+  // in dit bestand? Sinds de route door `withMachineRoute` loopt staat die niet
+  // meer hier maar in de wrapper. De eigenschap is niet veranderd, de plek wel —
+  // en een test die op de oude plek blijft kijken, meet dan niets meer en wordt
+  // vervolgens "gefixt" door hem te versoepelen. Daarom toetst hij nu de KETEN:
+  // route → wrapper → cron-auth. Dat is strenger dan de vorige vorm, want die
+  // bewees alleen dat een woord ergens in één bestand voorkwam.
+  const route = lees("app", "api", "internal", "afschrift-worker", "route.ts");
+  assert.ok(
+    route.includes("withMachineRoute"),
+    "worker loopt niet door withMachineRoute"
+  );
+  assert.match(
+    route,
+    /bewaking:\s*"cron-secret"/,
+    'worker staat niet op bewaking: "cron-secret" (staat hij per ongeluk op "publiek"?)'
+  );
+  assert.ok(route.includes("createServiceSupabase("), "worker gebruikt de service-role niet");
+
+  // Schakel 2: de wrapper delegeert naar de gedeelde cron-auth en nergens anders.
+  const wrapper = lees("platform", "lib", "machine-route-wrapper.ts");
+  assert.ok(
+    wrapper.includes('import("./cron-auth")'),
+    "de wrapper haalt de bewaking niet uit platform/lib/cron-auth"
+  );
+  assert.ok(
+    wrapper.includes("draaitOpAppSurface") && wrapper.includes("geautoriseerdeCron"),
+    "de wrapper roept de skip- of de bearer-check niet aan"
+  );
+
+  // Schakel 3: cron-auth doet waar het om gaat — fail-closed, constant-time,
+  // en de skip op de gedeelde surface.
+  const auth = lees("platform", "lib", "cron-auth.ts");
+  assert.ok(auth.includes("CRON_SECRET"), "cron-auth mist de CRON_SECRET-gate");
+  assert.ok(auth.includes("timingSafeEqual"), "cron-auth vergelijkt het secret niet constant-time");
+  assert.ok(
+    auth.includes('process.env.DEPLOY_TARGET === "app"'),
+    "cron-auth skipt de app-surface niet"
+  );
 });
 
 // ── (5) De download mint de signed URL onder de user-sessie ─────────────────
