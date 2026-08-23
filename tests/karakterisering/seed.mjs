@@ -128,6 +128,38 @@ export async function seed(admin = adminClient()) {
 // Stemmingen blijven bewust ongezaaid: VEN-2 moet zichtbaar uitgeschakeld
 // blijven totdat die module expliciet is geactiveerd.
 async function seedPreviewWaarneming(admin, users) {
+  // Een vroege OMG-1-versie gebruikte per ongeluk `decision1` voor deze
+  // Preview-fixture. Herstel uitsluitend die exact herkenbare oude toestand:
+  // de W4-fixture krijgt zijn eigen code terug en de oude dissent verdwijnt.
+  // Daarmee kan de nieuwe, eigen Preview-UUID hieronder conflictvrij landen.
+  const { data: oudePreviewDecision, error: oudePreviewDecisionError } = await admin
+    .from("decision_objects")
+    .select("id")
+    .eq("id", FIX.decision1)
+    .eq("besluit_code", "SYN-OMG1-001")
+    .maybeSingle();
+  if (oudePreviewDecisionError) {
+    throw new Error(`decision_objects(oude OMG-1-fixture lezen): ${oudePreviewDecisionError.message}`);
+  }
+  if (oudePreviewDecision) {
+    const { error: oudeDissentError } = await admin
+      .from("decision_dissent")
+      .delete()
+      .eq("id", FIX.decisionDissent1)
+      .eq("decision_id", FIX.decision1);
+    if (oudeDissentError) {
+      throw new Error(`decision_dissent(oude OMG-1-fixture): ${oudeDissentError.message}`);
+    }
+    const { error: oudeDecisionHerstelError } = await admin
+      .from("decision_objects")
+      .update({ besluit_code: "W4-001" })
+      .eq("id", FIX.decision1)
+      .eq("besluit_code", "SYN-OMG1-001");
+    if (oudeDecisionHerstelError) {
+      throw new Error(`decision_objects(oude OMG-1-fixture herstellen): ${oudeDecisionHerstelError.message}`);
+    }
+  }
+
   const bytes = new TextEncoder().encode(NOTULEN_DOCUMENT_BYTES);
   const upload = await admin.storage.from("documenten").upload(NOTULEN_DOCUMENT_PAD, bytes, {
     contentType: "application/pdf", upsert: true,
