@@ -62,6 +62,8 @@ const ENTITEITEN = [
   { naam: "agendapunt_inbreng", tabel: "agendapunt_inbreng", kolom: "agendapunt_id", waarde: FIX.agendapunt1, herkomst: "OMG-1" },
   { naam: "decision_objects", tabel: "decision_objects", kolom: "fonds_id", waarde: FONDS_ID, herkomst: "OMG-1" },
   { naam: "decision_dissent", tabel: "decision_dissent", kolom: "decision_id", waarde: FIX.previewDecision1, herkomst: "OMG-1" },
+  { naam: "procedure_stappen", tabel: "procedure_stappen", kolom: "procedure_id", waarde: FIX.procedure1, herkomst: "OMG-1 (preview-only)" },
+  { naam: "procedure_checklist", tabel: "procedure_checklist", kolom: "stap_id", waarde: FIX.previewProcedureStap1, herkomst: "OMG-1 (preview-only)" },
 ];
 
 // Wat er NIET mag zijn: stemmingen blijven ongezaaid (VEN-2). Een gevulde lijst
@@ -100,21 +102,60 @@ function tijd() {
   return new Date().toISOString().replace(/\.\d+Z$/, "Z");
 }
 
+// ── Twee dingen die een RIJTELLING niet ziet ────────────────────────────────
+//  Een telling van 1 vóór en 1 ná zegt niets over de INHOUD van die ene rij.
+//  Twee velden veranderen wél tussen runs en bepalen of een tweede waarnemer
+//  op dezelfde uitgangspositie begint als de eerste.
+
+/** Workflowstatus van de preview-fixture. De seed zet `status` bewust alleen
+ *  bij de eerste insert (statusovergangen zijn bewaakt en niet omkeerbaar), dus
+ *  een handmatige rondgang die de status opschuift laat die staan. Dat is een
+ *  legitieme keuze én een breuk met "Preview vanaf leeg reproduceerbaar": de
+ *  volgende waarnemer begint waar de vorige ophield. Meten, niet verzwijgen. */
+async function besluitStatus() {
+  const { data, error } = await admin
+    .from("decision_objects")
+    .select("status")
+    .eq("id", FIX.previewDecision1)
+    .maybeSingle();
+  if (error) return `FOUT: ${error.message}`;
+  return data?.status ?? "(geen rij)";
+}
+
+/** Host→fonds-mapping. Zonder rij in `tenant_domains` is de gevulde dataset
+ *  niet via de Preview-UI bereikbaar — precies de blokkade van 23-08 15:06.
+ *  De seed maakt die rij NIET; hij is met de hand aangelegd. Dit is dus de
+ *  reproduceerbaarheidscontrole: bouw Preview opnieuw op en dit valt om. */
+async function hostMapping() {
+  const { count, error } = await admin
+    .from("tenant_domains")
+    .select("*", { count: "exact", head: true })
+    .eq("fonds_id", FONDS_ID)
+    .eq("actief", true);
+  if (error) return { aantal: null, fout: error.message };
+  return { aantal: count ?? 0 };
+}
+
 // ── Uitvoering ──────────────────────────────────────────────────────────────
 console.log(`OMG-1 uitvoeringsbewijs — projectref ${projectRef} (${doelomgeving})\n`);
+
+const statusVooraf = await besluitStatus();
 
 const run1Start = tijd();
 await seed(admin);
 const run1Eind = tijd();
 const na1 = await meet(ENTITEITEN);
 const kosten1 = await meet(KOSTEN);
+const status1 = await besluitStatus();
 
 const run2Start = tijd();
 await seed(admin);
 const run2Eind = tijd();
 const na2 = await meet(ENTITEITEN);
 const kosten2 = await meet(KOSTEN);
+const status2 = await besluitStatus();
 const leeg = await meet(MOET_LEEG);
+const host = await hostMapping();
 
 // ── Oordeel ─────────────────────────────────────────────────────────────────
 const drift = na1
@@ -157,6 +198,30 @@ R.push(
     ? "\nGeen enkele teller liep op tussen de twee runs: de seed veroorzaakt **geen ingest, geen embedding en geen modelcall**."
     : `\n**LET OP** — een tellerliep op: ${kostenDrift.map((d) => `${d.naam}: ${d.run1} → ${d.run2}`).join("; ")}`
 );
+R.push("\n#### Uitgangspositie: wat een rijtelling niet ziet\n");
+R.push("| Wat | Vóór run 1 | Na run 1 | Na run 2 |");
+R.push("|---|---|---|---|");
+R.push(`| status van het preview-besluit | ${statusVooraf} | ${status1} | ${status2} |`);
+if (statusVooraf !== "(geen rij)" && statusVooraf !== "concept" && status2 === statusVooraf) {
+  R.push(
+    `\n**De seed heeft de status NIET teruggezet** (\`${statusVooraf}\`). Dat is bewust — ` +
+      "statusovergangen zijn bewaakt en niet omkeerbaar — maar het betekent dat een tweede " +
+      "waarnemer níet op dezelfde uitgangspositie begint als de eerste. Wie Preview echt vanaf " +
+      "leeg wil reproduceren, moet de rij eerst verwijderen. Zie OMG-1 §7, criterium " +
+      '"Preview vanaf leeg reproduceerbaar".'
+  );
+}
+R.push("\n#### Bereikbaarheid via de UI (tenant_domains)\n");
+R.push(
+  host.fout
+    ? `Niet te bepalen: ${host.fout}`
+    : host.aantal > 0
+      ? `${host.aantal} actieve host→fonds-mapping voor het testfonds. **Deze rij maakt de seed niet** — ` +
+        "hij is met de hand aangelegd en verdwijnt bij een herbouw van Preview vanaf leeg."
+      : "**GEEN actieve host→fonds-mapping.** De gevulde dataset is dan niet via de Preview-UI " +
+        "bereikbaar en een routeproef levert geen bewijs over capability-handhaving — de blokkade " +
+        "van 23-08 15:06."
+);
 R.push("\n#### VEN-2: stemmingen blijven ongezaaid\n");
 R.push(
   leegFout.length === 0
@@ -171,7 +236,8 @@ if (ontbreekt.length > 0) {
 const rapport = R.join("\n");
 console.log(rapport);
 
-const gefaald = drift.length > 0 || leegFout.length > 0 || ontbreekt.length > 0;
+const gefaald =
+  drift.length > 0 || leegFout.length > 0 || ontbreekt.length > 0 || (host.aantal ?? 0) === 0;
 if (gefaald) {
   console.error("\nBEWIJS NIET SLUITEND — zie de gemarkeerde regels hierboven.");
   process.exitCode = 1;
