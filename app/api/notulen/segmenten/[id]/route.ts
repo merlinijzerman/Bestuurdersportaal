@@ -22,7 +22,7 @@ import { requireCapability } from "@/core/lib/capabilities";
 
 export const dynamic = "force-dynamic";
 
-export const PATCH = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;
@@ -137,7 +137,7 @@ export const PATCH = withFondsRoute({}, async (ctx, req: NextRequest, params) =>
   }
 });
 
-export const DELETE = withFondsRoute({}, async (ctx, _req: NextRequest, params) => {
+export const DELETE = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, _req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

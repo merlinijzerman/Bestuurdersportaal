@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
+import { beoordeelNavigatieHerkomst, crossSiteGeweigerd } from "@/core/lib/navigatie-herkomst";
 import {
   bepaalBestandsnaam,
   bepaalContentType,
@@ -20,7 +21,14 @@ import { heeftSchoonScanbewijs } from "@/core/lib/document-scan-poort";
 // LET OP: deze route heeft GEEN eigen try/catch. Een onafgevangen fout kwam vóór
 // W5 bij Next terecht en wordt nu 500 {"error":"Serverfout"} uit het vangnet van
 // de wrapper. Uniformering, maar wel een verschil — zie het BESLUIT in #101.
-export const GET = withFondsRoute({ hostGuard: true, label: "documents.bestand.GET" }, async (ctx, _req: NextRequest, params) => {
+export const GET = withFondsRoute({ capability: "TE_BEPALEN", hostGuard: true, label: "documents.bestand.GET" }, async (ctx, req: NextRequest, params) => {
+  // H-04: een top-level navigatie vanaf een vreemde site stuurt onder een
+  // Lax-cookie de sessie mee. Deze route schrijft een auditrecord, dus zo'n
+  // aanroep zou een gebeurtenis in het dossier van het slachtoffer zetten.
+  // Weigeren vóór er werk gebeurt; de uitkomst gaat mee in het record.
+  const oordeel = beoordeelNavigatieHerkomst(req);
+  if (!oordeel.toegestaan) return crossSiteGeweigerd("documents.bestand.GET");
+
   const { id } = params as { id: string };
   const supabase = ctx.supabase;
 
@@ -104,6 +112,7 @@ export const GET = withFondsRoute({ hostGuard: true, label: "documents.bestand.G
     gebruiker_id: ctx.gebruikerId,
     gebruiker_naam: ctx.naam ?? null,
     actie: "inzage",
+    herkomst: oordeel.herkomst,
   });
   if (inzageError) {
     console.error(

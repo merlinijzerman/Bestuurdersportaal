@@ -57,7 +57,7 @@ function uniekeIds(ruw: unknown): string[] {
   return Array.from(new Set(ids));
 }
 
-export const GET = withFondsRoute({}, async (ctx) => {
+export const GET = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx) => {
   try {
     const supabase = ctx.supabase;
 
@@ -89,7 +89,7 @@ export const GET = withFondsRoute({}, async (ctx) => {
   }
 });
 
-export const PATCH = withFondsRoute({}, async (ctx, req: NextRequest) => {
+export const PATCH = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest) => {
   try {
     const supabase = ctx.supabase;
 

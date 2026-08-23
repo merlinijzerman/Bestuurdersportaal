@@ -325,7 +325,7 @@ function documentBronnen(chunks: DocumentChunk[]): BronVerwijzing[] {
 // Response met de ReadableStream is teruggegeven (het "stream-openpunt", besluit
 // 0087) is status 200 verzonden en doet de wrapper niets meer — bewezen met een
 // geïnjecteerde throw ná het eerste enqueue in core/lib/route-wrapper.sanity.ts.
-export const POST = withFondsRoute({ hostGuard: "route-eigen" }, async (ctx, req: NextRequest) => {
+export const POST = withFondsRoute({ capability: "TE_BEPALEN", hostGuard: "route-eigen" }, async (ctx, req: NextRequest) => {
   try {
     const body = (await req.json()) as {
       // nieuw: volledige conversatiegeschiedenis

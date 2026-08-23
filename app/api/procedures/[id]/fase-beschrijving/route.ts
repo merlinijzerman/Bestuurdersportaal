@@ -12,7 +12,7 @@ import { withFondsRoute } from "@/core/lib/route-wrapper";
 // generieke beschrijving (fail-safe leeslogica in `mergeFasen`). De mutatie is
 // fonds-config maar wordt per-procedure append-only gelogd in `procedure_log`,
 // zodat ze in dezelfde audit-trail zichtbaar is als de fase-toelichting.
-export const POST = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

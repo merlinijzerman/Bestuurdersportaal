@@ -8,7 +8,7 @@ import { ensureDecisionForProcedure } from "@/core/lib/decision";
 // procedure (D7). Voorbehouden aan voorzitter/beheerder; append-only gelogd.
 // Het item krijgt bron='handmatig' zodat het te onderscheiden is van de
 // meegesnapshotte template-items.
-export const POST = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

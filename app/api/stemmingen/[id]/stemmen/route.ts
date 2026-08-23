@@ -22,7 +22,7 @@ import { isBureauRol, BUREAU_WEIGERING } from "@/core/lib/bureau-gate";
 //
 //  Wijzigen kan alleen vóór sluiting en alleen door de uitbrenger zelf.
 // ============================================================
-export const POST = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: stemmingId } = params as { id: string };
     const supabase = ctx.supabase;

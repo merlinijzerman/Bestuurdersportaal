@@ -10,6 +10,7 @@
 
 import { NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
+import { beoordeelNavigatieHerkomst, crossSiteGeweigerd } from "@/core/lib/navigatie-herkomst";
 import { magFondsAuditExportZien } from "@/core/lib/aqlab/assurance";
 
 const BUCKET = "aqlab-audit";
@@ -20,7 +21,14 @@ const BUCKET = "aqlab-audit";
 // 500 {"error":"Serverfout"}. Dat is een uniformering, geen verlies — maar het
 // is een verschil, en het staat daarom hier en als BESLUIT in #101 in plaats van
 // dat het stilzwijgend meelift.
-export const GET = withFondsRoute({ hostGuard: true, label: "aqlab.assurance.audit.GET" }, async (ctx, _req, params) => {
+export const GET = withFondsRoute({ capability: "TE_BEPALEN", hostGuard: true, label: "aqlab.assurance.audit.GET" }, async (ctx, req, params) => {
+  // H-04: een top-level navigatie vanaf een vreemde site stuurt onder een
+  // Lax-cookie de sessie mee. Deze route schrijft een auditrecord, dus zo'n
+  // aanroep zou een gebeurtenis in het dossier van het slachtoffer zetten.
+  // Weigeren vóór er werk gebeurt; de uitkomst gaat mee in het record.
+  const oordeel = beoordeelNavigatieHerkomst(req);
+  if (!oordeel.toegestaan) return crossSiteGeweigerd("aqlab.assurance.audit.GET");
+
   const { exportId } = params as { exportId: string };
   const supabase = ctx.supabase;
 
@@ -46,7 +54,7 @@ export const GET = withFondsRoute({ hostGuard: true, label: "aqlab.assurance.aud
   const html = await blob.text();
 
   // Append-only downloadspoor (herleidbaar wie/wanneer welk rapport ophaalde).
-  await supabase.rpc("aqlab_log_download", { p_export_id: exportId });
+  await supabase.rpc("aqlab_log_download", { p_export_id: exportId, p_herkomst: oordeel.herkomst });
 
   return new NextResponse(html, {
     headers: {

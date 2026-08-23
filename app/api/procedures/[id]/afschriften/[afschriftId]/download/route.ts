@@ -9,6 +9,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
+import { beoordeelNavigatieHerkomst, crossSiteGeweigerd } from "@/core/lib/navigatie-herkomst";
 import { isBureauRol } from "@/core/lib/bureau-gate";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +23,14 @@ const AFSCHRIFT_BUREAU_WEIGERING =
 // de volgorde van poorten blijft ongewijzigd. `AFS-3` in
 // tests/cross-tenant/afschrift-toegang.test.ts is sinds W4 wrapper-bewust en
 // dekt deze route zonder aanpassing.
-export const GET = withFondsRoute({ hostGuard: true, label: "procedures.afschrift.download.GET" }, async (ctx, _req: NextRequest, params) => {
+export const GET = withFondsRoute({ capability: "TE_BEPALEN", hostGuard: true, label: "procedures.afschrift.download.GET" }, async (ctx, req: NextRequest, params) => {
+  // H-04: een top-level navigatie vanaf een vreemde site stuurt onder een
+  // Lax-cookie de sessie mee. Deze route schrijft een auditrecord, dus zo'n
+  // aanroep zou een gebeurtenis in het dossier van het slachtoffer zetten.
+  // Weigeren vóór er werk gebeurt; de uitkomst gaat mee in het record.
+  const oordeel = beoordeelNavigatieHerkomst(req);
+  if (!oordeel.toegestaan) return crossSiteGeweigerd("procedures.afschrift.download.GET");
+
   try {
     const { id: procedureId, afschriftId } = params as { id: string; afschriftId: string };
     const supabase = ctx.supabase;
@@ -65,7 +73,7 @@ export const GET = withFondsRoute({ hostGuard: true, label: "procedures.afschrif
       event_type: "afschrift_gedownload",
       actor_id: ctx.gebruikerId,
       actor_naam: ctx.naam ?? null,
-      payload: { afschrift_id: afschriftId },
+      payload: { afschrift_id: afschriftId, herkomst: oordeel.herkomst },
     });
 
     return NextResponse.redirect(signed.signedUrl, { status: 307 });

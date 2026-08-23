@@ -127,7 +127,7 @@ function rpcFout(error: { message?: string }): NextResponse {
  * dekt uitsluitend de eigen rij binnen het eigen fonds. Er wordt bewust NOOIT
  * automatisch een bericht verstuurd — deze route geeft alleen status terug.
  */
-export const GET = withFondsRoute({}, async (ctx, req: NextRequest) => {
+export const GET = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest) => {
   try {
     const gesprekId = req.nextUrl.searchParams.get("gesprek_id");
     if (!gesprekId || !UUID.test(gesprekId)) {
@@ -157,7 +157,7 @@ export const GET = withFondsRoute({}, async (ctx, req: NextRequest) => {
 });
 
 /** POST — één transitie aanvragen. De actie is het enige wat de client stuurt. */
-export const POST = withFondsRoute({}, async (ctx, req: NextRequest) => {
+export const POST = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest) => {
   try {
     const body = (await req.json().catch(() => ({}))) as {
       gesprek_id?: unknown;

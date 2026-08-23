@@ -4,7 +4,7 @@ import { withFondsRoute } from "@/core/lib/route-wrapper";
 const TOEGESTANE_STATUSSEN = ["open", "in_voorbereiding", "genomen"] as const;
 type Status = (typeof TOEGESTANE_STATUSSEN)[number];
 
-export const PATCH = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest, params) => {
   try {
     const { id, mid } = params as { id: string; mid: string };
     const supabase = ctx.supabase;

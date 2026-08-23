@@ -11,7 +11,7 @@ import { ensureDecisionForProcedure } from "@/core/lib/decision";
 // toelichting; gegate op voorzitter/beheerder; fonds_id + decision_id server-side
 // afgeleid; append-only gelogd. Upsert op de unieke sleutel = idempotent en
 // heractiveert een eerder teruggedraaide uitsluiting.
-export const POST = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

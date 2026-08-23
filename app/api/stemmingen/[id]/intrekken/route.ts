@@ -11,7 +11,7 @@ const REDEN_MIN = 10;
 //  Rechten: starter (geopend_door) / voorzitter / beheerder.
 //  Verplichte reden (min 10 tekens). Notificeert starter + alle stemmers.
 // ============================================================
-export const POST = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: stemmingId } = params as { id: string };
     const supabase = ctx.supabase;

@@ -31,7 +31,7 @@ const INHOUDELIJK: (keyof WijzigBody)[] = [
   "afhankelijk_van",
 ];
 
-export const PATCH = withFondsRoute({}, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: decisionId, aid } = params as { id: string; aid: string };
     const supabase = ctx.supabase;
