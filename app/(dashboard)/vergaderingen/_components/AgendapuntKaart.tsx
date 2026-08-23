@@ -157,6 +157,7 @@ export default function AgendapuntKaart({
   kanOmlaag,
   vorigeVolgorde,
   volgendeVolgorde,
+  stemmenBeschikbaar,
   stemming,
   stemmen,
   bestuursleden,
@@ -172,6 +173,10 @@ export default function AgendapuntKaart({
   kanOmlaag: boolean;
   vorigeVolgorde: number | null;
   volgendeVolgorde: number | null;
+  /** VEN-2 — staat de stemmodule voor dit fonds aan? Server-side bepaald in de
+   *  pagina (moduleBeschikbaar). Louter WEERGAVE: de afdwinging zit in de
+   *  server-guard op de vier /api/stemmingen-routes. */
+  stemmenBeschikbaar: boolean;
   stemming: StemmingData | null;
   stemmen: StemData[];
   bestuursleden: Bestuurslid[];
@@ -503,8 +508,10 @@ export default function AgendapuntKaart({
             <p className="text-sm text-ink leading-relaxed">{punt.beschrijving}</p>
           )}
 
-          {/* Stemronde — alleen bij besluitvorming */}
-          {punt.categorie === "besluitvorming" && (
+          {/* Stemronde — alleen bij besluitvorming, en alleen als de stemmodule
+              voor dit fonds beschikbaar is (VEN-2). Uit = het blok is er niet:
+              geen dode knoppen, geen leeg paneel. */}
+          {stemmenBeschikbaar && punt.categorie === "besluitvorming" && (
             <StemrondeBlok
               agendapuntId={punt.id}
               decisionGekoppeld={!!punt.procedure_stap_id}

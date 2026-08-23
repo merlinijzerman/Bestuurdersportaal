@@ -79,8 +79,12 @@ export default function Sidebar({
   const beschikbaarSet: Set<ModuleKey> | null = beschikbareModules
     ? new Set(beschikbareModules.filter(isModuleKey))
     : null;
+  // VEN-2: sub-functies (navigeerbaar=false) krijgen nooit een eigen menu-item —
+  // ze delen de href van hun dragende module. Dit filter staat los van de
+  // beschikbaarheid: ook als zo'n module ooit AAN gaat, hoort er geen tweede
+  // "Vergaderingen"-regel in de nav te verschijnen.
   const navItems = alleModules().filter(
-    (m) => !beschikbaarSet || beschikbaarSet.has(m.key)
+    (m) => m.navigeerbaar !== false && (!beschikbaarSet || beschikbaarSet.has(m.key))
   );
 
   let huidigSection = "";

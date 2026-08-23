@@ -1,5 +1,6 @@
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { isBureauRol } from "@/core/lib/bureau-gate";
+import { moduleBeschikbaar } from "@/core/lib/fonds-config";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import NieuwAgendapuntForm from "../_components/NieuwAgendapuntForm";
@@ -84,6 +85,12 @@ export default async function VergaderingDetailPage({
   }
   const v = vergadering as Vergadering;
 
+  // VEN-2 — is de stemmodule voor dit fonds beschikbaar? Vandaag: nee, voor elk
+  // fonds (registry: defaultActief=false, manifestBeheerbaar=false). Dit stuurt
+  // uitsluitend de WEERGAVE; de maatregel is de server-guard in de vier
+  // /api/stemmingen-routes. Nooit alleen dit blok wijzigen.
+  const stemmenBeschikbaar = await moduleBeschikbaar(v.fonds_id, "stemmingen");
+
   // Komende vergaderingen binnen hetzelfde fonds (exclusief huidige) voor verplaatsen-dropdown
   const { data: komendeRaw } = await supabase
     .from("vergaderingen")
@@ -135,7 +142,10 @@ export default async function VergaderingDetailPage({
           .eq("gebruiker_id", user.id)
           .in("agendapunt_id", agendapuntIds)
       : Promise.resolve({ data: [] }),
-    agendapuntIds.length > 0
+    // VEN-2: met een uitgeschakelde stemmodule halen we de stemronden niet op.
+    // Niet renderen is niet genoeg — props van een server-component belanden in
+    // de RSC-payload, dus stemgedrag zou anders alsnog naar de browser gaan.
+    stemmenBeschikbaar && agendapuntIds.length > 0
       ? supabase
           .from("stemmingen")
           .select("*")
@@ -201,6 +211,7 @@ export default async function VergaderingDetailPage({
   }
 
   // Stemmen ophalen voor de open stemmingen (voor live-totalen + eigen stem).
+  // (leeg zolang de stemmodule uit staat — de query hierboven draaide niet)
   const openStemmingIds = Array.from(stemmingPerAgendapunt.values())
     .filter((s) => s.status === "open")
     .map((s) => s.id);
@@ -388,6 +399,7 @@ export default async function VergaderingDetailPage({
                 kanOmlaag={p?.kanOmlaag ?? false}
                 vorigeVolgorde={p?.vorigeVolgorde ?? null}
                 volgendeVolgorde={p?.volgendeVolgorde ?? null}
+                stemmenBeschikbaar={stemmenBeschikbaar}
                 stemming={stemmingRow}
                 stemmen={stemmenVoorPunt}
                 bestuursleden={bestuursleden}

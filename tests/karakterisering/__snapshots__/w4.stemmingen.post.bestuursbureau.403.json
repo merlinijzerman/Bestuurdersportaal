@@ -1,6 +1,6 @@
 {
   "body": {
-    "error": "Het openen, sluiten of intrekken van een stemronde is een bestuurlijke handeling. Het bestuursbureau voert die niet uit."
+    "error": "Module 'stemmingen' is niet beschikbaar voor dit fonds"
   },
   "headers": {
     "content-type": "application/json"
