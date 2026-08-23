@@ -25,7 +25,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export const GET = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, _req: NextRequest, params) => {
+export const GET = withFondsRoute({ capability: "dossiers.view" }, async (ctx, _req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;
@@ -68,7 +68,7 @@ type PatchBody = {
   periode_jaar?: number | null;
 };
 
-export const PATCH = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ capability: "dossiers.manage" }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

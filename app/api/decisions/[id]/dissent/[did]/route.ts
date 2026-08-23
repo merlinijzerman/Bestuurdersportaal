@@ -47,7 +47,7 @@ const INHOUDELIJKE_VELDEN: (keyof WijzigBody)[] = [
   "gekoppeld_voorwaarde_id",
 ];
 
-export const PATCH = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ capability: "decisions.manage" }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: decisionId, did } = params as { id: string; did: string };
     const supabase = ctx.supabase;
@@ -284,7 +284,7 @@ export const PATCH = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, re
   }
 });
 
-export const DELETE = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest, params) => {
+export const DELETE = withFondsRoute({ capability: "decisions.manage" }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: decisionId, did } = params as { id: string; did: string };
     const supabase = ctx.supabase;

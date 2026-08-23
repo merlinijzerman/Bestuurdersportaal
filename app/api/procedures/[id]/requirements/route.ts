@@ -11,7 +11,7 @@ import { REQUIREMENT_TYPES } from "@/core/lib/procedure-definitie";
 // server-side afgeleid (nooit uit de request). Elke toevoeging schrijft precies
 // één governance_event (append-only) en telt mee in de readiness-unie.
 
-export const GET = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, _req: NextRequest, params) => {
+export const GET = withFondsRoute({ capability: "procedures.view" }, async (ctx, _req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;
@@ -30,7 +30,7 @@ export const GET = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, _req
   }
 });
 
-export const POST = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ capability: "procedures.manage" }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

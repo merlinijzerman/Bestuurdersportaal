@@ -23,7 +23,7 @@ const AFSCHRIFT_BUREAU_WEIGERING =
 // de volgorde van poorten blijft ongewijzigd. `AFS-3` in
 // tests/cross-tenant/afschrift-toegang.test.ts is sinds W4 wrapper-bewust en
 // dekt deze route zonder aanpassing.
-export const GET = withFondsRoute({ capability: "TE_BEPALEN", hostGuard: true, label: "procedures.afschrift.download.GET" }, async (ctx, req: NextRequest, params) => {
+export const GET = withFondsRoute({ capability: "procedures.view", hostGuard: true, label: "procedures.afschrift.download.GET" }, async (ctx, req: NextRequest, params) => {
   // H-04: een top-level navigatie vanaf een vreemde site stuurt onder een
   // Lax-cookie de sessie mee. Deze route schrijft een auditrecord, dus zo'n
   // aanroep zou een gebeurtenis in het dossier van het slachtoffer zetten.

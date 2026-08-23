@@ -57,7 +57,7 @@ const INHOUDELIJKE_VELDEN: (keyof WijzigBody)[] = [
   "ai_gedetecteerd",
 ];
 
-export const PATCH = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ capability: "decisions.manage" }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: decisionId, aid } = params as { id: string; aid: string };
     const supabase = ctx.supabase;

@@ -13,7 +13,7 @@ import { rateLimited } from "@/core/lib/api-errors";
 // Rechten: alleen voorzitter/beheerder, server-side afgedwongen. Tenant-isolatie
 // via RLS (anon-key): een gebruiker kan alleen documenten van het eigen fonds
 // raken; generieke documenten zijn read-only voor tenants.
-export const POST = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, _req: NextRequest, params) => {
+export const POST = withFondsRoute({ capability: "documents.lifecycle.manage" }, async (ctx, _req: NextRequest, params) => {
   const { id } = params as { id: string };
     const supabase = ctx.supabase;
 

@@ -23,7 +23,7 @@ import { weigerAlsModuleUit } from "@/core/lib/module-guard";
 //
 //  Wijzigen kan alleen vóór sluiting en alleen door de uitbrenger zelf.
 // ============================================================
-export const POST = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ capability: "stemming.deelname" }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: stemmingId } = params as { id: string };
     const supabase = ctx.supabase;

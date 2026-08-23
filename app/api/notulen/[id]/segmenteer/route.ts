@@ -27,7 +27,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export const POST = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, _req: NextRequest, params) => {
+export const POST = withFondsRoute({ capability: "notulen.segment.confirm" }, async (ctx, _req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

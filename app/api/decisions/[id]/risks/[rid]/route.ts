@@ -46,7 +46,7 @@ function isGeldigeKi(n: unknown): n is number {
   return typeof n === "number" && Number.isInteger(n) && n >= 1 && n <= 5;
 }
 
-export const PATCH = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ capability: "decisions.manage" }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: decisionId, rid } = params as { id: string; rid: string };
     const supabase = ctx.supabase;

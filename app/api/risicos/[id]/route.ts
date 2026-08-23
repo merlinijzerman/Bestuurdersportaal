@@ -39,7 +39,7 @@ import {
 
 type RisicoRij = RisicoHuidig & { id: string; fonds_id: string; status: string };
 
-export const PATCH = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ capability: "risicos.manage" }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

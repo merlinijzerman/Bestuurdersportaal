@@ -7,7 +7,7 @@ import {
   type StapActivatieState,
 } from "@/core/lib/procedure-activatie";
 
-export const PATCH = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ capability: "procedures.manage" }, async (ctx, req: NextRequest, params) => {
   try {
     const { id, stapId } = params as { id: string; stapId: string };
     const supabase = ctx.supabase;

@@ -8,7 +8,7 @@ import { withFondsRoute } from "@/core/lib/route-wrapper";
 // - voorzitter / beheerder: altijd
 // - bestuurder: deactiveren alleen als opgeslagen_door = jij én < 24 uur na upload
 // - reactiveren: alleen voorzitter / beheerder
-export const PATCH = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ capability: "documents.lifecycle.manage" }, async (ctx, req: NextRequest, params) => {
   const { id } = params as { id: string };
     const supabase = ctx.supabase;
 
