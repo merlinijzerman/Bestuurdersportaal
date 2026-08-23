@@ -30,6 +30,7 @@ export function emailVoor(rol) {
 export const FIX = {
   document1: "00000000-0000-4000-8000-0000000d0c01",
   documentIntrekken: "00000000-0000-4000-8000-0000000d0c02",
+  notulenDocument1: "00000000-0000-4000-8000-0000000d0c03",
   documentOnbekend: "00000000-0000-4000-8000-0000000d0cff",
   procedure1: "00000000-0000-4000-8000-00000000cd01",
   risico1: "00000000-0000-4000-8000-0000000715c1",
@@ -120,6 +121,7 @@ export const FIX = {
   //  vereisen een echt notulendocument in storage én een modelcall. De
   //  afwijzingspaden dekken de preambule, de rol-gate en de rate limit.
   segmentOnbekend: "00000000-0000-4000-8000-0000005e6f0f",
+  notulenSegment1: "00000000-0000-4000-8000-0000005e6001",
 
   //  documents — eigen documenten voor de de-/reactiveercyclus. `document1` en
   //  `documentIntrekken` hangen aan bestaande W1-snapshots (bytes-download,
@@ -140,6 +142,8 @@ export const FIX = {
   decisionCondition: "00000000-0000-4000-8000-00000000de13",
   decisionRisk: "00000000-0000-4000-8000-00000000de14",
   decisionDissent: "00000000-0000-4000-8000-00000000de15",
+  decisionDissent1: "00000000-0000-4000-8000-00000000de17",
+  previewDecision1: "00000000-0000-4000-8000-00000000de18",
   decisionAiInteractie: "00000000-0000-4000-8000-00000000de16",
   decisionKindOnbekend: "00000000-0000-4000-8000-00000000de1f",
 
@@ -174,3 +178,5 @@ export const AFSCHRIFT1_PAD = `${FONDS_ID}/w1-afschrift.pdf`;
 // Vaste bytes voor de bestand-download (BESLUIT: body_sha256 i.p.v. ruwe bytes).
 export const DOCUMENT1_BYTES = "%PDF-1.4 W1-KARAKTERISERING-FIXTURE\n";
 export const DOCUMENT1_PAD = `${FONDS_ID}/w1-document.pdf`;
+export const NOTULEN_DOCUMENT_PAD = `${FONDS_ID}/synthetische-notulen-w1.pdf`;
+export const NOTULEN_DOCUMENT_BYTES = "%PDF-1.4 SYNTHETISCH-OMG1-NOTULEN\\n";

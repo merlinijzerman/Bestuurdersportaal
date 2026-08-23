@@ -107,6 +107,7 @@ jobs:
       NEXT_PUBLIC_FONDS_NAAM: "Testfonds W1"
       DEPLOY_TARGET: "app"
       APP_BASE_URL: "http://127.0.0.1:3000"
+      SEED_DOELOMGEVING: "local"
     steps:
       - uses: actions/checkout@v4
 
@@ -118,6 +119,9 @@ jobs:
 
       - name: Dependencies installeren
         run: npm ci
+
+      - name: Projectref-grendel verifiëren (geen database)
+        run: npm run test:seed-guard
 
       # Pin op dezelfde CLI als de rls-cross-tenant-baseline (db.major_version=17).
       - name: Supabase CLI opzetten
