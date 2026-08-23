@@ -17,7 +17,7 @@
 | Marketing | Niet nodig op Preview | `bestuurdersportaal.com`, `www.bestuurdersportaal.com` |
 | Beheer | `beheer.preview.bestuurdersportaal.com` → alleen Preview | `beheer.bestuurdersportaal.com` → alleen Productie |
 | Ongebruikt domein | `horizon.bestuurdersportaal.com` blijft afwezig | Niet registreren of koppelen |
-| Vercel | vaste Preview/custom environment op vaste previewbranch | `main`/Production |
+| Vercel | custom environment **`preview-stable`**, vast gekoppeld aan branch `preview` → `app.preview.bestuurdersportaal.com` | `main` → Production |
 | Supabase | eigen project of aantoonbaar geïsoleerde branch, eigen Auth/DB/Storage/secrets | bestaand Productieproject |
 | AI | Aan, met Preview-only projecten/keys/budget en quota per gebruiker/fonds | Productie-only projecten/keys/budget/quotering |
 | E-mail | sink/testmailbox; geen echte ontvangers | geaccordeerde Productieontvangers |
@@ -29,6 +29,23 @@
 redirect het waar de provider dat veilig ondersteunt en neem het mee in host- en
 Auth-tests. De beheeromgeving blijft Productie en valt buiten de domeinverhuizing;
 haar secrets en service-role worden nooit aan Preview toegekend.
+
+### De naam `preview-stable` is niet cosmetisch
+
+De branch `preview` deployt naar het **custom environment** `preview-stable`, niet
+naar het ingebouwde `Preview`. Dat laatste vangt alleen de niet-toegewezen
+branches. Elke controle die op deploymentnamen leunt moet dus `preview-stable – …`
+noemen.
+
+Op 22-08-2026 ging dat één keer mis: branch protection op `main` eiste
+`Preview – bestuurdersportaal` en `Preview – bestuurdersportaal-beheer` als
+verplichte deployments. Een PR vanaf `preview` produceert die namen nooit, dus de
+poort wachtte op iets dat niet bestond en hield niets tegen — drie merges gingen
+er ongehinderd doorheen. Gerepareerd en op een echte PR geverifieerd; zie
+`RELEASEWEG-PREVIEW-EERST.md` §5.2.
+
+De scanner is de uitzondering: `bestuurdersportaal-scanner` heeft geen
+`preview-stable` en valt dus wél onder `Preview – …`.
 
 ### Eén stack, meerdere fondsgerichte Preview-omgevingen
 
