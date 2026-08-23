@@ -1,13 +1,18 @@
 // ============================================================================
-//  withFondsRoute v1 — de naad (EPIC W, W2, deploy 2).
+//  withFondsRoute — de naad (EPIC W; v1 = W2/deploy 2, capability-poort = W6).
 // ----------------------------------------------------------------------------
-//  Eén punt waar elke tenant-route doorheen loopt. v1 doet PRECIES wat de routes
-//  vandaag al doen — nul gedragsverandering, zodat de karakteriseringssnapshots
-//  (W1) byte-identiek blijven. Alles daarbovenop (capability, schemavalidatie,
-//  rate limit, audit, centrale foutconsolidatie, x-request-id-header) is
-//  deploy 3 — bewust NIET hier.
+//  Eén punt waar elke tenant-route doorheen loopt. v1 deed PRECIES wat de routes
+//  al deden — nul gedragsverandering, zodat de karakteriseringssnapshots (W1)
+//  byte-identiek bleven. Schemavalidatie, rate limit, audit, centrale
+//  foutconsolidatie en de x-request-id-header zijn W8–W11 — bewust NIET hier.
 //
-//  v1 doet exact vier dingen:
+//  W6 voegt het VIJFDE ding toe: de capability-poort. Die landt UITGESCHAKELD
+//  (`ENFORCE_CAPABILITY` staat uit) en met 112 handlers op `"TE_BEPALEN"`, dus
+//  ook nu verandert er geen responsebyte en blijven de snapshots byte-identiek.
+//  Wat hij wél doet is observeren: elke zou-weigering gaat als
+//  `[CAPABILITY-OBSERVE]` naar het log, en dat is de dataset waarmee W7 begint.
+//
+//  De wrapper doet exact vijf dingen:
 //    1. Authenticatie      — createServerSupabase() + auth.getUser(); bij !user
 //                            EXACT NextResponse.json({error:"Niet ingelogd"},401).
 //    2. Profielresolutie   — haalProfiel(supabase, user.id): id, naam, rol, fonds_id.
@@ -17,7 +22,12 @@
 //                            hem nu al hebben); hergebruikt beoordeelRouteHostToegang.
 //                            `hostGuard: "route-eigen"` = de route doet het zelf,
 //                            bewust; zie RouteSpecV1.
-//    4. Correlation ID     — gegenereerd, in ctx en logregels. In v1 NIET als
+//    3b. Capability-poort — beoordeelt spec.capability tegen de profielrol
+//                            (core/lib/capability-enforce.ts). Onder
+//                            `ENFORCE_CAPABILITY=on` wordt een zou-weigering een
+//                            403; anders alleen een logregel. NA de host-guard,
+//                            zie het BESLUIT bij het blok zelf.
+//    4. Correlation ID     — gegenereerd, in ctx en logregels. NIET als
 //                            responseheader (dat zou elk snapshot doen afwijken).
 //
 //  De wrapper vangt GEEN fouten die de route zelf al vangt; hij heeft alleen een
@@ -27,6 +37,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { haalProfiel } from "@/core/lib/profiel";
+import {
+  beoordeelCapability,
+  capabilityEnforceAan,
+  type RouteCapability,
+} from "@/core/lib/capability-enforce";
 // LET OP: tenant-route-guard trekt `server-only` mee. Die wordt daarom LAZY
 // geladen in echteDeps (alleen de 12 host-guard-routes raken hem), zodat deze
 // module — en dus de sanity-suite — buiten de Next-runtime importeerbaar blijft.
@@ -54,6 +69,23 @@ export type FondsContext = {
 };
 
 export type RouteSpecV1 = {
+  /** WIE mag deze route aanroepen. VERPLICHT — geen default, geen weglating.
+   *
+   *  Verplicht en niet optioneel omdat een AFWEZIG veld niet te onderscheiden is
+   *  van een VERGETEN veld; dezelfde redenering als bij `hostGuard`. Het type
+   *  dwingt af dat elke nieuwe route een declaratie MEEBRENGT — ook als die
+   *  declaratie voorlopig `"TE_BEPALEN"` is.
+   *
+   *  W6 landt met 112 handlers op `"TE_BEPALEN"` en de vlag `ENFORCE_CAPABILITY`
+   *  UIT: gedrag ongewijzigd, wél observe-logging. W7 vult de echte declaraties
+   *  in; W13 laat CI falen op elke resterende `"TE_BEPALEN"`.
+   *
+   *  ⚠ DE WRAPPER-CHECK KOMT BOVENÓP DE ROUTE-EIGEN GATES, hij vervangt er geen
+   *  enkele. Een declaratie hier kan RUIMER zijn dan de inline `requireCapability`
+   *  of rolstring in de route. Zolang beide draaien is dat onschadelijk; haal je
+   *  de inline gate weg in het vertrouwen dat de wrapper het overneemt, dan
+   *  verzwak je de route zonder dat een test dat ziet. Zie TICKET-W6 §3. */
+  readonly capability: RouteCapability;
   /** Wie host↔fonds afdwingt voor deze route. Drie waarden, en de derde is er
    *  omdat een AFWEZIG veld niet te onderscheiden is van een VERGETEN veld:
    *
@@ -83,6 +115,29 @@ function nietIngelogd(): NextResponse {
   return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
 }
 
+/** 403-respons van de capability-poort. Eén vaste vorm, zoals de host-guard er
+ *  ook één heeft. Bewust GEEN 404: het ticket (§7) laat de 403-versus-404-vraag
+ *  expliciet open — hem hier beantwoorden zou een gedragswijziging zijn in het
+ *  ticket dat belooft er geen te maken. Bewust ook geen `errorResponse()`: die
+ *  schrijft naar `app_errors`, en een afgewezen autorisatie is geen applicatie-
+ *  fout maar een normale uitkomst. */
+function geenRechten(): NextResponse {
+  return NextResponse.json(
+    { error: "U heeft geen rechten voor deze actie." },
+    { status: 403 }
+  );
+}
+
+/** Alleen het pad, nooit de querystring — die kan zoektermen dragen. Faalt de
+ *  parse, dan is het log dat ene veld kwijt en niet het request. */
+function padVan(request: NextRequest): string {
+  try {
+    return new URL(request.url).pathname;
+  } catch {
+    return "<onbekend-pad>";
+  }
+}
+
 export type HostGuardArgs = { sessieFondsId: string | null; gebruikerId?: string; label: string };
 export type HostGuardOordeel = { toegestaan: boolean };
 
@@ -92,11 +147,17 @@ export type WrapperDeps = {
   createServerSupabase: typeof createServerSupabase;
   haalProfiel: typeof haalProfiel;
   beoordeelRouteHostToegang: (args: HostGuardArgs) => Promise<HostGuardOordeel>;
+  /** Leest `ENFORCE_CAPABILITY`. Injecteerbaar zodat de sanity-suite BEIDE
+   *  vlagstanden kan bewijzen zonder process.env te muteren — de vlag-aan-stand
+   *  is de enige tak die gedrag verandert en mag niet op een omgevingsvariabele
+   *  in een testrun leunen. */
+  capabilityEnforceAan: () => boolean;
 };
 
 const echteDeps: WrapperDeps = {
   createServerSupabase,
   haalProfiel,
+  capabilityEnforceAan,
   beoordeelRouteHostToegang: async (args) => {
     const mod = await import("@/core/lib/tenant-route-guard");
     return mod.beoordeelRouteHostToegang(args);
@@ -141,6 +202,43 @@ export function maakWithFondsRoute(deps: WrapperDeps) {
             { status: 403 }
           );
         }
+      }
+
+      // 3b. Capability-poort (W6) — NA de host-guard, VÓÓR de handler.
+      //
+      // ORDENING (BESLUIT, W6): de host↔fonds-grens gaat voor. Die staat in
+      // productie al fail-closed aan; de capability-poort niet. Zou de
+      // capability-check ervóór komen, dan zou het flippen van
+      // ENFORCE_CAPABILITY veranderen WELKE 403 een host-mismatch oplevert —
+      // een gedragswijziging die niets met autorisatie te maken heeft.
+      //
+      // Onder de vlag UIT verandert er geen enkele responsebyte; er wordt
+      // alleen geobserveerd. Dat is de hele belofte van W6.
+      const capOordeel = beoordeelCapability({
+        capability: spec.capability,
+        rol: profiel?.rol ?? null,
+      });
+      if (!capOordeel.toegestaan) {
+        const handhaven = deps.capabilityEnforceAan();
+        // Proportioneel loggen, zoals [TENANT-RESOLVE]: alleen de zou-weigeringen.
+        // De happy path blijft stil. Met 112 handlers op "TE_BEPALEN" is dat
+        // vandaag nog élk request — en precies dat is de dataset waarmee W7
+        // begint: route + rol + zou-beslissing, ook zonder productieverkeer.
+        //
+        // GEEN gebruikers-id en GEEN e-mail in deze regel: W7 heeft route, rol en
+        // uitkomst nodig, meer niet. Het pad kan fixture-/resource-UUID's dragen
+        // (geen persoonsgegeven); de hele ctx belandt hier bewust nooit in.
+        console.warn("[CAPABILITY-OBSERVE]", {
+          route: spec.label ?? padVan(request),
+          methode: request.method,
+          capability: spec.capability,
+          rol: profiel?.rol ?? null,
+          zouBeslissing: "weigeren",
+          reden: capOordeel.reden,
+          handhaven,
+          requestId,
+        });
+        if (handhaven) return geenRechten();
       }
 
       // 4. Correlation ID leeft in ctx + logregels (v1: geen responseheader).
