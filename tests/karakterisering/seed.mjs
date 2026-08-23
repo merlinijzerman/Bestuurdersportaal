@@ -10,7 +10,12 @@
 // ============================================================================
 import { pathToFileURL } from "node:url";
 import { createClient } from "@supabase/supabase-js";
-import { ENV, FONDS_ID, ROLLEN, WACHTWOORD, emailVoor, FIX, DOCUMENT1_BYTES, DOCUMENT1_PAD, AFSCHRIFT1_PAD } from "./config.mjs";
+import {
+  ENV, FONDS_ID, ROLLEN, WACHTWOORD, emailVoor, FIX,
+  DOCUMENT1_BYTES, DOCUMENT1_PAD, AFSCHRIFT1_PAD,
+  NOTULEN_DOCUMENT_BYTES, NOTULEN_DOCUMENT_PAD,
+} from "./config.mjs";
+import { bevestigVeiligeSeedDoelomgeving } from "./seed-doelomgeving.mjs";
 
 // ── W4-BESLUIT: elke delete wordt gecontroleerd ─────────────────────────────
 //  Het defect dat W4 blootlegde bij `seedRisicos` was niet de append-only
@@ -27,6 +32,7 @@ async function wis(admin, tabel, kolom, waarde) {
 }
 
 export function adminClient() {
+  bevestigVeiligeSeedDoelomgeving({ url: ENV.url });
   return createClient(ENV.url, ENV.serviceKey, { auth: { persistSession: false } });
 }
 
@@ -79,6 +85,7 @@ async function vindOfMaakGebruiker(admin, rol) {
  * @returns {Promise<{fondsId:string, users:Record<string,{email,password,userId,rol}>}>}
  */
 export async function seed(admin = adminClient()) {
+  const { doelomgeving } = bevestigVeiligeSeedDoelomgeving({ url: ENV.url });
   // 1. Fonds.
   {
     const { error } = await admin
@@ -109,8 +116,69 @@ export async function seed(admin = adminClient()) {
   await seedProcedures(admin);
   await seedAfschrift(admin);
   await seedAgendapunten(admin, users);
+  // Preview-waarnemingsdata hoort niet in de lokale CI-stack: die stack
+  // karakteriseert de bestaande productroutes en hun vaste snapshots. Alleen
+  // de expliciet bevestigde Preview-run vult de extra, synthetische UI-data.
+  if (doelomgeving === "preview") await seedPreviewWaarneming(admin, users);
 
   return { fondsId: FONDS_ID, users };
+}
+
+// ── OMG-1: synthetische fixtures voor de Preview-waarneming ─────────────────
+// Stemmingen blijven bewust ongezaaid: VEN-2 moet zichtbaar uitgeschakeld
+// blijven totdat die module expliciet is geactiveerd.
+async function seedPreviewWaarneming(admin, users) {
+  const bytes = new TextEncoder().encode(NOTULEN_DOCUMENT_BYTES);
+  const upload = await admin.storage.from("documenten").upload(NOTULEN_DOCUMENT_PAD, bytes, {
+    contentType: "application/pdf", upsert: true,
+  });
+  if (upload.error) throw new Error(`storage.upload(notulen): ${upload.error.message}`);
+  const { error: documentError } = await admin.from("documenten").upsert({
+    id: FIX.notulenDocument1, fonds_id: FONDS_ID, bibliotheek: "fonds", bron: "Intern",
+    titel: "SYNTHETISCH — Notulen oefenvergadering W1",
+    bestandsnaam: "synthetische-notulen-w1.pdf", bestandstype: "pdf",
+    opslag_pad: NOTULEN_DOCUMENT_PAD, vergadering_id: FIX.vergadering1,
+    context: "vergadering", documenttype: "notulen", status: "vastgesteld",
+    verwerkingsstatus: "beschikbaar", actief: true,
+  }, { onConflict: "id" });
+  if (documentError) throw new Error(`documenten(notulen): ${documentError.message}`);
+  const { error: segmentError } = await admin.from("notulen_segmenten").upsert({
+    id: FIX.notulenSegment1, document_id: FIX.notulenDocument1,
+    vergadering_id: FIX.vergadering1, agendapunt_id: FIX.agendapunt1, fonds_id: FONDS_ID,
+    segment_index: 0, titel: "SYNTHETISCH — oefenagendapunt",
+    tekst: "SYNTHETISCHE TESTTEKST. Geen echte vergadering, personen of besluiten.",
+    bevestigd: false, bevestigd_door: null, bevestigd_op: null,
+  }, { onConflict: "id" });
+  if (segmentError) throw new Error(`notulen_segmenten: ${segmentError.message}`);
+
+  const { error: inbrengError } = await admin.from("agendapunt_inbreng").upsert({
+    id: FIX.inbreng1, agendapunt_id: FIX.agendapunt1, gebruiker_id: users.bestuurder.userId,
+    gebruiker_naam: "SYNTHETISCHE bestuurder W1",
+    tekst: "SYNTHETISCHE inbreng voor de preview-waarneming.",
+  }, { onConflict: "id" });
+  if (inbrengError) throw new Error(`agendapunt_inbreng: ${inbrengError.message}`);
+
+  const { error: decisionError } = await admin.from("decision_objects").upsert({
+    id: FIX.previewDecision1, procedure_id: FIX.procedure1, fonds_id: FONDS_ID,
+    besluit_code: "SYN-OMG1-001", titel: "SYNTHETISCH — oefenbesluit Preview",
+    besluitvraag: "Is de synthetische Preview-omgeving gevuld?",
+    aanleiding: "OMG-1 preview-waarneming",
+    scope: "Alleen synthetische testdata; geen productiebetekenis.",
+    // Dit is ook de vaste beginstatus van `zetDecision()` in scenarios.mjs.
+    // De harnas-reset mag geen verboden statusovergang afdwingen; de dissent-
+    // fixture is onafhankelijk van de workflowstatus en blijft zo testbaar.
+    governance_orgaan: "SYNTHETISCH oefengremium", status: "concept",
+    is_primary_decision: false, eigenaar_id: users.voorzitter.userId,
+    eigenaar_naam: "SYNTHETISCHE voorzitter W1",
+  }, { onConflict: "id" });
+  if (decisionError) throw new Error(`decision_objects: ${decisionError.message}`);
+  const { error: dissentError } = await admin.from("decision_dissent").upsert({
+    id: FIX.decisionDissent1, decision_id: FIX.previewDecision1, bestuurder_id: users.bestuurder.userId,
+    bestuurder_naam: "SYNTHETISCHE bestuurder W1", zichtbaarheid: "gedeelde_zorg",
+    formeel_vastgesteld: false, standpunt: "SYNTHETISCHE minderheidsopvatting voor de UI-test.",
+    argument: "Deze tekst is uitsluitend fictieve preview-testdata.",
+  }, { onConflict: "id" });
+  if (dissentError) throw new Error(`decision_dissent: ${dissentError.message}`);
 }
 
 // ── W2-pilot: vergadering + agendapunten (herstellen-route) ─────────────────
