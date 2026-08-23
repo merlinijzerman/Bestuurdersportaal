@@ -32,17 +32,23 @@ staat in `vercel.json` onvoorwaardelijk:
 Dit is een harde grens: **geen enkele Git-branch** mag de scanner automatisch
 deployen. De test `test/vercel-config.test.mjs` bewaakt die instelling in CI.
 
-Alleen een bestaande, gecontroleerde Vercel Deploy Hook mag de image verversen:
+Alleen een gecontroleerde Vercel Deploy Hook mag de image verversen:
 
-1. de dagelijkse signature-refresh gebruikt de hook met `buildCache=false`;
-2. na een wijziging onder `scanner/` draait eerst `npm test`; daarna wordt
-   diezelfde hook bewust gestart voor de betreffende omgeving;
-3. app- en beheer-previewdeployments gebruiken de al gevalideerde
+1. maak in Vercel een hook **`scanner-preview-signature-refresh`** voor branch
+   `preview` en bewaar de URL uitsluitend als GitHub Actions-secret
+   `VERCEL_SCANNER_PREVIEW_DEPLOY_HOOK_URL`;
+2. `.github/workflows/scanner-signature-refresh.yml` roept die hook dagelijks
+   om 03:17 UTC met `buildCache=false` aan; `workflow_dispatch` is de bewuste
+   verversing na een scannerwijziging;
+3. na een wijziging onder `scanner/` draait eerst `npm test`; daarna wordt
+   de handmatige workflow bewust gestart en wordt `/health` gecontroleerd;
+4. app- en beheer-previewdeployments gebruiken de al gevalideerde
    scannerdeployment van hun omgeving — ze bouwen geen eigen scannerimage.
 
-Schakel Git-deploys niet tijdelijk in om een scannerrelease te doen. Dat opent
-opnieuw de route waarin iedere feature-commit een image en registry-opslag
-maakt. Gebruik de hook of een doelbewuste deployment vanuit het dashboard.
+De PR met deze instelling mag pas worden gemerged wanneer stap 1 is uitgevoerd
+en een handmatige workflow-run groen is. Schakel Git-deploys niet tijdelijk in
+om een scannerrelease te doen. Dat opent opnieuw de route waarin iedere
+feature-commit een image en registry-opslag maakt.
 
 Previewcontrole:
 

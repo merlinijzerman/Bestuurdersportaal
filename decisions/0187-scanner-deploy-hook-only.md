@@ -28,8 +28,12 @@ signatureverversing of een beoordeelde scannerwijziging.
 - `scanner/vercel.json` blokkeert Git-deploys op iedere branch.
 - `scanner/test/vercel-config.test.mjs` faalt wanneer die blokkade verdwijnt;
   de bestaande security-baseline draait deze test op elke push en PR.
-- De dagelijkse Deploy Hook met `buildCache=false` blijft de signature-refresh
-  uitvoeren.
+- Vóór de merge bestaat in Vercel de hook `scanner-preview-signature-refresh`
+  voor branch `preview`; de URL staat uitsluitend als GitHub Actions-secret
+  `VERCEL_SCANNER_PREVIEW_DEPLOY_HOOK_URL`.
+- `.github/workflows/scanner-signature-refresh.yml` roept die hook dagelijks
+  met `buildCache=false` aan en biedt een handmatige run voor een bewuste
+  scannerrelease.
 - Bij een wijziging onder `scanner/`: eerst de scanner-tests, daarna een
   bewuste hook-deploy en een `/health`-controle in de doelomgeving.
 - App- en beheerpreviews delen de bestaande, gevalideerde
