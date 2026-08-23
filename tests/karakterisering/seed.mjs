@@ -203,19 +203,33 @@ async function seedPreviewWaarneming(admin, users) {
     throw new Error(`decision_objects(oude primaire preview-fixture): ${oudePrimaireError.message}`);
   }
 
-  const { error: decisionError } = await admin.from("decision_objects").upsert({
+  // Status is een bewaakte workflow. Een handmatige Preview-waarneming kan de
+  // fixture legitiem van `concept` naar een volgende status brengen; een seed
+  // mag die overgang niet illegaal terugdraaien. Voeg de beginstatus daarom
+  // alleen toe bij de eerste insert en laat hem bij herhaalde runs intact.
+  const { data: bestaandPreviewBesluit, error: bestaandPreviewBesluitError } = await admin
+    .from("decision_objects")
+    .select("id")
+    .eq("id", FIX.previewDecision1)
+    .maybeSingle();
+  if (bestaandPreviewBesluitError) {
+    throw new Error(`decision_objects(preview-fixture lezen): ${bestaandPreviewBesluitError.message}`);
+  }
+
+  const previewBesluit = {
     id: FIX.previewDecision1, procedure_id: FIX.procedure1, fonds_id: FONDS_ID,
     besluit_code: "SYN-OMG1-001", titel: "SYNTHETISCH — oefenbesluit Preview",
     besluitvraag: "Is de synthetische Preview-omgeving gevuld?",
     aanleiding: "OMG-1 preview-waarneming",
     scope: "Alleen synthetische testdata; geen productiebetekenis.",
-    // Dit is ook de vaste beginstatus van `zetDecision()` in scenarios.mjs.
-    // De harnas-reset mag geen verboden statusovergang afdwingen; de dissent-
-    // fixture is onafhankelijk van de workflowstatus en blijft zo testbaar.
-    governance_orgaan: "SYNTHETISCH oefengremium", status: "concept",
+    governance_orgaan: "SYNTHETISCH oefengremium",
     is_primary_decision: true, eigenaar_id: users.voorzitter.userId,
     eigenaar_naam: "SYNTHETISCHE voorzitter W1",
-  }, { onConflict: "id" });
+    ...(bestaandPreviewBesluit ? {} : { status: "concept" }),
+  };
+  const { error: decisionError } = await admin
+    .from("decision_objects")
+    .upsert(previewBesluit, { onConflict: "id" });
   if (decisionError) throw new Error(`decision_objects: ${decisionError.message}`);
 
   const { error: procedureDecisionError } = await admin
