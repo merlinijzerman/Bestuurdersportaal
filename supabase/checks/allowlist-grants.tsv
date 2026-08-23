@@ -18,9 +18,9 @@ FUNC	public	aqlab_audit_export_bron(p_export_id uuid)	function	service_role	EXEC
 FUNC	public	aqlab_claim_run_jobs(p_worker_id text, p_limit integer, p_lease_seconds integer)	function	anon	-
 FUNC	public	aqlab_claim_run_jobs(p_worker_id text, p_limit integer, p_lease_seconds integer)	function	authenticated	-
 FUNC	public	aqlab_claim_run_jobs(p_worker_id text, p_limit integer, p_lease_seconds integer)	function	service_role	EXECUTE
-FUNC	public	aqlab_log_download(p_export_id uuid)	function	anon	-
-FUNC	public	aqlab_log_download(p_export_id uuid)	function	authenticated	EXECUTE
-FUNC	public	aqlab_log_download(p_export_id uuid)	function	service_role	EXECUTE
+FUNC	public	aqlab_log_download(p_export_id uuid, p_herkomst text)	function	anon	-
+FUNC	public	aqlab_log_download(p_export_id uuid, p_herkomst text)	function	authenticated	EXECUTE
+FUNC	public	aqlab_log_download(p_export_id uuid, p_herkomst text)	function	service_role	EXECUTE
 FUNC	public	contact_aanvraag_insert(p_naam text, p_organisatie text, p_rol text, p_email text, p_telefoon text, p_type_verzoek text, p_bericht text, p_herkomst_pagina text, p_privacy_version text, p_ip_hash text)	function	anon	EXECUTE
 FUNC	public	contact_aanvraag_insert(p_naam text, p_organisatie text, p_rol text, p_email text, p_telefoon text, p_type_verzoek text, p_bericht text, p_herkomst_pagina text, p_privacy_version text, p_ip_hash text)	function	authenticated	EXECUTE
 FUNC	public	contact_aanvraag_insert(p_naam text, p_organisatie text, p_rol text, p_email text, p_telefoon text, p_type_verzoek text, p_bericht text, p_herkomst_pagina text, p_privacy_version text, p_ip_hash text)	function	service_role	EXECUTE

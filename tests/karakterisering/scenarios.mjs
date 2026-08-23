@@ -1665,4 +1665,62 @@ export const scenarios = [
   //  hieronder dekken wat de wrapper raakt: de preambule en de host-guard.
   { slug: "w5.aqlab-assurance-audit.get.anon", method: "GET", path: `/api/aqlab/assurance/audit/${FIX.aqlabExportOnbekend}`, rol: "anon", verwacht: "json" },
   { slug: "w5.aqlab-assurance-audit.get.bestuurder.403", method: "GET", path: `/api/aqlab/assurance/audit/${FIX.aqlabExportOnbekend}`, rol: "bestuurder", verwacht: "json" },
+
+  // ══ H-04 — cross-site navigatie naar de vier schrijvende GET-routes ═══════
+  //  Deze vier routes schrijven een auditrecord. Onder een Lax-cookie stuurt een
+  //  top-level navigatie de sessie mee, dus een <img> of een vreemde link kan
+  //  namens een ingelogde bestuurder zo'n GET doen — en daarmee een gebeurtenis
+  //  in DIENS dossier schrijven. Sinds H-04 weigert de route dat.
+  //
+  //  De scenario's gebruiken bewust ONBEKENDE id's. Een 403 op een id dat niet
+  //  bestaat bewijst dat de herkomstcontrole vóór de opzoeking draait; kwam hij
+  //  erna, dan zou hier een 404 staan. Dat onderscheid is de hele maatregel: de
+  //  weigering moet vallen vóórdat er werk — en dus een auditrecord — is.
+  //
+  //  Het toegestane pad heeft GEEN eigen scenario nodig: alle bestaande
+  //  scenario's hierboven sturen geen Sec-Fetch-Site en lopen dus door de tak
+  //  "niet_verifieerbaar". Dat die snapshots ongewijzigd blijven, is het bewijs
+  //  dat de doorlaat-tak niets aan de respons verandert.
+  {
+    slug: "h04.documents-bestand.get.bestuurder.403-cross-site",
+    method: "GET",
+    path: `/api/documents/${FIX.documentOnbekend}/bestand`,
+    rol: "bestuurder",
+    headers: { "sec-fetch-site": "cross-site" },
+    verwacht: "json",
+  },
+  {
+    slug: "h04.auditdossier.get.bestuurder.403-cross-site",
+    method: "GET",
+    path: `/api/decisions/${FIX.decisionOnbekend}/auditdossier`,
+    rol: "bestuurder",
+    headers: { "sec-fetch-site": "cross-site" },
+    verwacht: "json",
+  },
+  {
+    slug: "h04.afschrift-download.get.bestuurder.403-cross-site",
+    method: "GET",
+    path: `/api/procedures/${FIX.procedure1}/afschriften/${FIX.afschriftOnbekend}/download`,
+    rol: "bestuurder",
+    headers: { "sec-fetch-site": "cross-site" },
+    verwacht: "json",
+  },
+  {
+    slug: "h04.aqlab-assurance-audit.get.bestuurder.403-cross-site",
+    method: "GET",
+    path: `/api/aqlab/assurance/audit/${FIX.aqlabExportOnbekend}`,
+    rol: "bestuurder",
+    headers: { "sec-fetch-site": "cross-site" },
+    verwacht: "json",
+  },
+  //  En de tegenhanger: same-origin moet NIET weigeren. Zonder deze regel zou
+  //  een wrapper die alles weigert er ook groen uitzien.
+  {
+    slug: "h04.documents-bestand.get.bestuurder.same-origin-doorgelaten",
+    method: "GET",
+    path: `/api/documents/${FIX.documentOnbekend}/bestand`,
+    rol: "bestuurder",
+    headers: { "sec-fetch-site": "same-origin" },
+    verwacht: "json",
+  },
 ];
