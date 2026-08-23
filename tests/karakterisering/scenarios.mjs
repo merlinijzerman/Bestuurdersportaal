@@ -604,6 +604,29 @@ export const scenarios = [
   //  wijzigen alle drie dezelfde rij, dus één gedeelde ronde zou de volgorde
   //  van deze lijst dragend maken (§4).
 
+//  BESLUIT (VEN-2, 23-08-2026) — LEES DIT VOORDAT JE EEN STEM-SNAPSHOT DUIDT.
+//  De stemmodule staat sindsdien voor ELK fonds uit (module-registry:
+//  defaultActief=false, manifestBeheerbaar=false) en de vier routes dragen
+//  weigerAlsModuleUit(ctx.fondsId, "stemmingen") als eerste stap ná de
+//  auth-preambule. Gevolg voor deze 23 scenario's:
+//
+//    • de vier `anon`-scenario's blijven 401 — de wrapper weigert vóór de
+//      beschikbaarheidsgate; ONGEWIJZIGD, en dat is de nulgrens;
+//    • de 19 INGELOGDE scenario's geven nu alle 19 dezelfde 403
+//      "Module 'stemmingen' is niet beschikbaar voor dit fonds".
+//
+//  De slugs dragen nog hun oorspronkelijke uitkomst (`.200`, `.403-starter`,
+//  `.400-reden`): die beschrijven het scenario — welke rol, welke body, welke
+//  fixture — niet meer de verwachte status. Bewust NIET hernoemd: de slug is de
+//  bestandsnaam van de snapshot, en hernoemen zou de historische vergelijking
+//  met `main` breken bij een wijziging die juist niets aan die scenario's doet.
+//  Gaat de module ooit weer aan, dan komen de oorspronkelijke uitkomsten terug
+//  en klopt de naamgeving weer — dat is meteen de tegenproef.
+//
+//  LET OP: deze 19 snapshots toetsen sinds VEN-2 nog maar één ding, namelijk dat
+//  de modulegate dicht zit. Ze zijn GEEN dekking meer op de rol- en
+//  bureau-weigeringen erachter; die dekking komt terug zodra de module aan gaat.
+
   // ── /api/stemmingen — POST · bureau-403 · rol-403 · 200 ───────────────────
   { slug: "w4.stemmingen.post.anon", method: "POST", path: "/api/stemmingen", rol: "anon", body: LEEG, verwacht: "json" },
   { slug: "w4.stemmingen.post.bestuurder.400-verplicht", method: "POST", path: "/api/stemmingen", rol: "bestuurder", body: LEEG, verwacht: "json" },

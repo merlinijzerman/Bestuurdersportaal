@@ -1,6 +1,6 @@
 {
   "body": {
-    "error": "Alleen de starter, voorzitter of beheerder mag de stemronde sluiten"
+    "error": "Module 'stemmingen' is niet beschikbaar voor dit fonds"
   },
   "headers": {
     "content-type": "application/json"

@@ -1,9 +1,9 @@
 {
   "body": {
-    "error": "keuze is verplicht"
+    "error": "Module 'stemmingen' is niet beschikbaar voor dit fonds"
   },
   "headers": {
     "content-type": "application/json"
   },
-  "status": 400
+  "status": 403
 }

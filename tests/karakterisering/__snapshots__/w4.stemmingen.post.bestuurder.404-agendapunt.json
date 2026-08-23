@@ -1,9 +1,9 @@
 {
   "body": {
-    "error": "Agendapunt niet gevonden"
+    "error": "Module 'stemmingen' is niet beschikbaar voor dit fonds"
   },
   "headers": {
     "content-type": "application/json"
   },
-  "status": 404
+  "status": 403
 }

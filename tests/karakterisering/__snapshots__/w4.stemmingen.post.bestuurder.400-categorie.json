@@ -1,9 +1,9 @@
 {
   "body": {
-    "error": "Een stemronde kan alleen op een besluitvormings-agendapunt"
+    "error": "Module 'stemmingen' is niet beschikbaar voor dit fonds"
   },
   "headers": {
     "content-type": "application/json"
   },
-  "status": 400
+  "status": 403
 }

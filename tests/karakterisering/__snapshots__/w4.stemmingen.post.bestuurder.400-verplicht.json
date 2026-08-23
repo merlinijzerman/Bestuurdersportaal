@@ -1,9 +1,9 @@
 {
   "body": {
-    "error": "agendapunt_id en vraag zijn verplicht"
+    "error": "Module 'stemmingen' is niet beschikbaar voor dit fonds"
   },
   "headers": {
     "content-type": "application/json"
   },
-  "status": 400
+  "status": 403
 }
