@@ -18,6 +18,32 @@ Het project bevat bewust geen Supabase-, database- of leverancierscredential.
 `POST /scan` vereist een geldig Vercel OIDC-token en accepteert uitsluitend een
 kortlevende signed URL naar de vaste quarantainebucket.
 
+## Deploydiscipline — hook-only
+
+De scanner bevat de ClamAV-signatures in zijn containerimage. Een gewone
+Git-push zou dus telkens een nieuw, groot Vercel Container Registry-image
+maken, ook wanneer alleen app-, beheer- of documentatiecode verandert. Daarom
+staat in `vercel.json` onvoorwaardelijk:
+
+```json
+"git": { "deploymentEnabled": false }
+```
+
+Dit is een harde grens: **geen enkele Git-branch** mag de scanner automatisch
+deployen. De test `test/vercel-config.test.mjs` bewaakt die instelling in CI.
+
+Alleen een bestaande, gecontroleerde Vercel Deploy Hook mag de image verversen:
+
+1. de dagelijkse signature-refresh gebruikt de hook met `buildCache=false`;
+2. na een wijziging onder `scanner/` draait eerst `npm test`; daarna wordt
+   diezelfde hook bewust gestart voor de betreffende omgeving;
+3. app- en beheer-previewdeployments gebruiken de al gevalideerde
+   scannerdeployment van hun omgeving — ze bouwen geen eigen scannerimage.
+
+Schakel Git-deploys niet tijdelijk in om een scannerrelease te doen. Dat opent
+opnieuw de route waarin iedere feature-commit een image en registry-opslag
+maakt. Gebruik de hook of een doelbewuste deployment vanuit het dashboard.
+
 Previewcontrole:
 
 1. `npm test`
