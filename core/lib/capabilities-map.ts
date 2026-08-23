@@ -51,6 +51,7 @@ export type Capability =
   //    vereist; ze zeggen (nog) niet wie hem heeft — zie de toekenning hieronder.
   | "agendapunten.manage"
   | "assurance.view"
+  | "chat.use"
   | "beheer.backfill"
   | "classification.queue.view"
   | "decisions.manage"
@@ -97,6 +98,7 @@ export const ROL_CAPABILITIES: Record<string, Capability[]> = {
     // handlers onder die gate worden strenger, zonder één routebestand aan te raken.
     "agendapunten.manage",
     "assurance.view",
+    "chat.use",
     "beheer.backfill",
     "classification.queue.view",
     "decisions.manage",
@@ -139,6 +141,7 @@ export const ROL_CAPABILITIES: Record<string, Capability[]> = {
     // handlers onder die gate worden strenger, zonder één routebestand aan te raken.
     "agendapunten.manage",
     "assurance.view",
+    "chat.use",
     "beheer.backfill",
     "classification.queue.view",
     "decisions.manage",
@@ -177,6 +180,7 @@ export const ROL_CAPABILITIES: Record<string, Capability[]> = {
     // handlers onder die gate worden strenger, zonder één routebestand aan te raken.
     "agendapunten.manage",
     "assurance.view",
+    "chat.use",
     "classification.queue.view",
     "decisions.manage",
     "decisions.view",
@@ -218,6 +222,7 @@ export const ROL_CAPABILITIES: Record<string, Capability[]> = {
     // handlers onder die gate worden strenger, zonder één routebestand aan te raken.
     "agendapunten.manage",
     "assurance.view",
+    "chat.use",
     "classification.queue.view",
     "decisions.manage",
     "decisions.view",
