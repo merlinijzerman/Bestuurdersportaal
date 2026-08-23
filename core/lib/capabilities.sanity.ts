@@ -123,6 +123,183 @@ test("alle vier de rollen dragen profile.manage.own (eigen profiel beheren)", ()
   }
 });
 
+// ── W7 (#153) — de 24 gedeclareerde gates ─────────────────────────────────
+// Deze set bestaat zodat élke route een GEDECLAREERDE poort heeft; wie hem draagt
+// is bewust nog niet ingevuld (besluitregister regel 1). Twee gates zijn wél
+// meteen scherp: daar dragen ALLE onderliggende routes vandaag al dezelfde
+// rolgate, dus scherp declareren verandert niets aan het gedrag (regel 3).
+//
+// Deze constanten dienen één doel: de pins hieronder blijven leesbaar als
+// BASELINE + W7-DELTA. Wijzigt er iets buiten deze delta, dan faalt de nulgrens-
+// test nog steeds luid — precies waarvoor hij is gebouwd.
+const W7_GATES = [
+    "agendapunten.manage",
+    "assurance.view",
+    "beheer.backfill",
+    "classification.queue.view",
+    "decisions.manage",
+    "decisions.view",
+    "documents.lifecycle.manage",
+    "documents.view",
+    "dossiers.view",
+    "gesprekken.manage",
+    "inbreng.manage",
+    "notificaties.manage.own",
+    "notificaties.view.own",
+    "organisation.profile.view",
+    "procedures.manage",
+    "procedures.view",
+    "profile.view.own",
+    "reflectie.manage.own",
+    "reflectie.view.own",
+    "risicos.manage",
+    "stemming.deelname",
+    "vergaderingen.manage",
+    "vergelijk.use",
+    "zoeken.use",
+  ] as const;
+
+const W7_PER_ROL: Record<string, readonly string[]> = {
+  beheerder: [
+    "agendapunten.manage",
+    "assurance.view",
+    "beheer.backfill",
+    "classification.queue.view",
+    "decisions.manage",
+    "decisions.view",
+    "documents.lifecycle.manage",
+    "documents.view",
+    "dossiers.view",
+    "gesprekken.manage",
+    "inbreng.manage",
+    "notificaties.manage.own",
+    "notificaties.view.own",
+    "organisation.profile.view",
+    "procedures.manage",
+    "procedures.view",
+    "profile.view.own",
+    "reflectie.manage.own",
+    "reflectie.view.own",
+    "risicos.manage",
+    "stemming.deelname",
+    "vergaderingen.manage",
+    "vergelijk.use",
+    "zoeken.use",
+  ],
+  voorzitter: [
+    "agendapunten.manage",
+    "assurance.view",
+    "beheer.backfill",
+    "classification.queue.view",
+    "decisions.manage",
+    "decisions.view",
+    "documents.lifecycle.manage",
+    "documents.view",
+    "dossiers.view",
+    "gesprekken.manage",
+    "inbreng.manage",
+    "notificaties.manage.own",
+    "notificaties.view.own",
+    "organisation.profile.view",
+    "procedures.manage",
+    "procedures.view",
+    "profile.view.own",
+    "reflectie.manage.own",
+    "reflectie.view.own",
+    "risicos.manage",
+    "stemming.deelname",
+    "vergaderingen.manage",
+    "vergelijk.use",
+    "zoeken.use",
+  ],
+  bestuurder: [
+    "agendapunten.manage",
+    "assurance.view",
+    "classification.queue.view",
+    "decisions.manage",
+    "decisions.view",
+    "documents.view",
+    "dossiers.view",
+    "gesprekken.manage",
+    "inbreng.manage",
+    "notificaties.manage.own",
+    "notificaties.view.own",
+    "organisation.profile.view",
+    "procedures.manage",
+    "procedures.view",
+    "profile.view.own",
+    "reflectie.manage.own",
+    "reflectie.view.own",
+    "risicos.manage",
+    "stemming.deelname",
+    "vergaderingen.manage",
+    "vergelijk.use",
+    "zoeken.use",
+  ],
+  bestuursbureau: [
+    "agendapunten.manage",
+    "assurance.view",
+    "classification.queue.view",
+    "decisions.manage",
+    "decisions.view",
+    "documents.view",
+    "dossiers.view",
+    "gesprekken.manage",
+    "notificaties.manage.own",
+    "notificaties.view.own",
+    "organisation.profile.view",
+    "procedures.manage",
+    "procedures.view",
+    "profile.view.own",
+    "reflectie.manage.own",
+    "reflectie.view.own",
+    "risicos.manage",
+    "vergaderingen.manage",
+    "vergelijk.use",
+    "zoeken.use",
+  ],
+};
+
+test("de 24 W7-gates staan aan minstens één rol toegekend", () => {
+  for (const gate of W7_GATES) {
+    const dragers = Object.entries(ROL_CAPABILITIES)
+      .filter(([, caps]) => (caps as string[]).includes(gate))
+      .map(([rol]) => rol);
+    assert.ok(dragers.length > 0, `${gate} hangt aan geen enkele rol — dan geeft elke route die hem declareert 403 voor iedere rol`);
+  }
+});
+
+test("twee W7-gates zijn meteen scherp: alleen voorzitter en beheerder", () => {
+  // Besluit 3. Niet omdat W7 dit beslist, maar omdat alle routes onder deze twee
+  // gates vandaag al `voorzitter|beheerder` afdwingen. Richting: gelijk.
+  for (const gate of ["beheer.backfill", "documents.lifecycle.manage"] as const) {
+    assert.equal(rolHeeftCapability("voorzitter", gate), true, `voorzitter ${gate}`);
+    assert.equal(rolHeeftCapability("beheerder", gate), true, `beheerder ${gate}`);
+    assert.equal(rolHeeftCapability("bestuurder", gate), false, `bestuurder mag ${gate} niet dragen`);
+    assert.equal(rolHeeftCapability("bestuursbureau", gate), false, `bestuursbureau mag ${gate} niet dragen`);
+  }
+});
+
+test("twee W7-gates sluiten het bestuursbureau uit", () => {
+  // inbreng en stemdeelname zijn bestuurlijke handelingen; álle routes eronder
+  // weigeren het bureau vandaag al via isBureauRol() en via RLS (§5.3).
+  for (const gate of ["inbreng.manage", "stemming.deelname"] as const) {
+    assert.equal(rolHeeftCapability("bestuursbureau", gate), false, `bestuursbureau mag ${gate} niet dragen`);
+    for (const rol of ["bestuurder", "voorzitter", "beheerder"]) {
+      assert.equal(rolHeeftCapability(rol, gate), true, `${rol} ${gate}`);
+    }
+  }
+});
+
+test("generic.library.manage hangt nog steeds aan GEEN enkele rol", () => {
+  // Dode capability: de gebruikte heet platform.generic.library.manage en zit in
+  // het platformmodel. Zolang deze bestaat mag geen enkele route hem declareren —
+  // dat zou 403 geven voor élke rol zonder dat iets dat meldt.
+  for (const caps of Object.values(ROL_CAPABILITIES)) {
+    assert.ok(!(caps as string[]).includes("generic.library.manage"));
+  }
+});
+
 // ── T1 bureau-rol (ontwerp §5.2, besluit 0128) ─────────────────────────────
 // De mapping van `bestuursbureau` is een governance-afspraak met het fonds, geen
 // implementatiedetail. Daarom exact gepind: wat erin zit én wat er bewust NIET in
@@ -153,8 +330,8 @@ const BUREAU_NIET = [
 test("bestuursbureau draagt exact de capabilities uit ontwerp §5.2", () => {
   assert.deepEqual(
     [...ROL_CAPABILITIES.bestuursbureau].sort(),
-    [...BUREAU_WEL].sort(),
-    "de rij bestuursbureau wijkt af van §5.2"
+    [...BUREAU_WEL, ...W7_PER_ROL.bestuursbureau].sort(),
+    "de rij bestuursbureau wijkt af van §5.2 plus de W7-gates"
   );
 });
 
@@ -189,8 +366,16 @@ test("ai.deskresearch en ai.stukvoorbereiding hangen uitsluitend aan bestuursbur
 // De bureau-rol is additief. De capability-sets van de drie bestaande rollen zijn
 // hier letterlijk gepind: wijzigt er één, dan is dat per definitie een doorbraak
 // van de nulgrens en faalt deze test luid in plaats van stil.
-test("nulgrens: de capability-sets van de drie bestaande rollen zijn ongewijzigd", () => {
-  assert.deepEqual([...ROL_CAPABILITIES.beheerder].sort(), [
+test("nulgrens G23: de drie bestaande rollen zijn alleen met W7-gates uitgebreid", () => {
+  // De sets van vóór W7, letterlijk gepind. G23 (besluit 0128) verbiedt dat het
+  // GEDRAG en de RECHTEN van deze drie rollen wijzigen. W7 voegt gates toe die op
+  // dit moment door GEEN ENKELE route worden gedeclareerd — er verandert dus geen
+  // responsebyte. En zodra PR-B ze declareert, blijft elke route-eigen gate staan,
+  // dus ook dan wint de strengste. Wat hier wél verandert is de VERZAMELING, en
+  // die hoort zichtbaar te veranderen in plaats van stil.
+  //
+  // Wijzigt er iets buiten de W7-delta, dan faalt deze test nog steeds luid.
+  const VOOR_W7_beheerder = [
     "catalog.manage",
     "classification.review",
     "documents.bronstatus.change",
@@ -205,8 +390,8 @@ test("nulgrens: de capability-sets van de drie bestaande rollen zijn ongewijzigd
     "profile.manage.own",
     "stuurinformatie.manage",
     "stuurinformatie.view",
-  ]);
-  assert.deepEqual([...ROL_CAPABILITIES.voorzitter].sort(), [
+  ];
+  const VOOR_W7_voorzitter = [
     "classification.review",
     "documents.bronstatus.change",
     "documents.metadata.update",
@@ -219,15 +404,31 @@ test("nulgrens: de capability-sets van de drie bestaande rollen zijn ongewijzigd
     "profile.manage.own",
     "stuurinformatie.manage",
     "stuurinformatie.view",
-  ]);
-  assert.deepEqual([...ROL_CAPABILITIES.bestuurder].sort(), [
+  ];
+  const VOOR_W7_bestuurder = [
     "documents.bronstatus.change",
     "documents.metadata.update",
     "documents.status.change",
     "klantbeeld.view",
     "profile.manage.own",
     "stuurinformatie.view",
-  ]);
+  ];
+
+  assert.deepEqual(
+    [...ROL_CAPABILITIES.beheerder].sort(),
+    [...VOOR_W7_beheerder, ...W7_PER_ROL.beheerder].sort(),
+    "beheerder: wijziging buiten de W7-delta"
+  );
+  assert.deepEqual(
+    [...ROL_CAPABILITIES.voorzitter].sort(),
+    [...VOOR_W7_voorzitter, ...W7_PER_ROL.voorzitter].sort(),
+    "voorzitter: wijziging buiten de W7-delta"
+  );
+  assert.deepEqual(
+    [...ROL_CAPABILITIES.bestuurder].sort(),
+    [...VOOR_W7_bestuurder, ...W7_PER_ROL.bestuurder].sort(),
+    "bestuurder: wijziging buiten de W7-delta"
+  );
 });
 
 test("er bestaat GEEN profile.manage.all in de mapping (geen beheerder-override)", () => {
