@@ -22,7 +22,7 @@ aanwezig zijn:
 Voor Preview zijn alleen de volgende handmatige stappen toegestaan:
 
 ```bash
-SEED_DOELOMGEVING=preview \\
+SEED_DOELOMGEVING=preview \
 node --env-file=.env.preview tests/karakterisering/seed.mjs
 ```
 

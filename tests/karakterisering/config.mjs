@@ -179,4 +179,4 @@ export const AFSCHRIFT1_PAD = `${FONDS_ID}/w1-afschrift.pdf`;
 export const DOCUMENT1_BYTES = "%PDF-1.4 W1-KARAKTERISERING-FIXTURE\n";
 export const DOCUMENT1_PAD = `${FONDS_ID}/w1-document.pdf`;
 export const NOTULEN_DOCUMENT_PAD = `${FONDS_ID}/synthetische-notulen-w1.pdf`;
-export const NOTULEN_DOCUMENT_BYTES = "%PDF-1.4 SYNTHETISCH-OMG1-NOTULEN\\n";
+export const NOTULEN_DOCUMENT_BYTES = "%PDF-1.4 SYNTHETISCH-OMG1-NOTULEN\n";
