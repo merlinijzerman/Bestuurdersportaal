@@ -2,7 +2,7 @@
 
 > **Geldt voor elk V-, W- en VEN-ticket vanaf 22-08-2026.** Elk ticket verwijst hiernaar in §0b; dit bestand is de enige plek waar de weg zelf staat beschreven.
 >
-> **Status per 22-08-2026 14:30 — deels afgedwongen.** De previewpoort (herkomst) is een verplichte check op `main` en werkt aantoonbaar. De deploymentpoort is aangezet maar **noemt omgevingen die op deze weg nooit ontstaan** en kan daardoor niet blokkeren; zie §5.2. Twee Vercel-controles zijn uitgevoerd en zijn groen; zie §5.5.
+> **Status per 22-08-2026 einde dag — volledig afgedwongen en gemeten.** Beide poorten werken: de previewpoort op herkomst (§5.1) en de deploymentpoort op deployments (§5.2). Die tweede was aangezet maar inert — hij noemde omgevingen die op deze weg nooit ontstaan — en is dezelfde dag gerepareerd en op een echte PR geverifieerd. De twee Vercel-controles zijn groen (§5.5). Eén punt staat open: het scannervinkje (§5.2).
 
 ---
 
@@ -89,19 +89,11 @@ De workflow benoemt zelf waaróm dit als check moest en niet als instelling kon:
 
 **De uitzondering is een waarde, geen ontsnapping.** Label `hotfix-direct-naar-main` laat de poort door met een zichtbare `::warning`.
 
-### 5.2 De deploymentpoort — ⚠️ aangezet maar inert
+### 5.2 De deploymentpoort — gerepareerd en geverifieerd
 
-In `Settings → Branches → main` staat **"Require deployments to succeed before merging"** aan. Aangevinkt zijn:
+In `Settings → Branches → main` staat **"Require deployments to succeed before merging"** aan.
 
-| Omgeving | Verplicht | Ontstaat bij een `preview`→`main`-PR? |
-|---|---|---|
-| `Preview – bestuurdersportaal` | ✅ | **nee** |
-| `Preview – bestuurdersportaal-beheer` | ✅ | **nee** |
-| `Preview – bestuurdersportaal-scanner` | ❌ | ja |
-| `preview-stable – bestuurdersportaal` | ❌ | ja |
-| `preview-stable – bestuurdersportaal-beheer` | ❌ | ja |
-
-**Dit is de kern van het probleem.** De branch `preview` is in Vercel toegewezen aan het custom environment **`preview-stable`** (§5.5). Een PR vanaf `preview` produceert dus deployments met de naam `preview-stable – …`, terwijl de poort wacht op `Preview – …`. Die twee ontstaan op deze weg nooit, en GitHub heeft niets om op te wachten.
+**Wat er mis was.** Verplicht gesteld waren `Preview – bestuurdersportaal` en `Preview – bestuurdersportaal-beheer`. Maar de branch `preview` is in Vercel toegewezen aan het custom environment **`preview-stable`** (§5.5). Een PR vanaf `preview` produceert dus deployments met de naam `preview-stable – …`, en op die twee stond geen vinkje. De poort wachtte op iets dat op deze weg nooit ontstaat, en GitHub had niets om op te wachten.
 
 Gemeten aan PR #125 (head `ee31630`), de deployments op die commit:
 
@@ -111,13 +103,24 @@ Preview – bestuurdersportaal-scanner           2026-08-22T11:26:25Z
 preview-stable – bestuurdersportaal-beheer     2026-08-22T11:25:50Z
 ```
 
-Geen van de twee verplichte omgevingen staat erbij, en #119, #123 en #125 zijn alle drie gemerged. De poort heeft dus geen enkele merge tegengehouden en kan dat in deze opstelling ook niet.
+Geen van de twee verplichte omgevingen. #119, #123 en #125 zijn alle drie gemerged: de poort had nooit een merge tegengehouden en kon dat in die opstelling ook niet.
 
-> **Te herstellen:** vink `preview-stable – bestuurdersportaal` en `preview-stable – bestuurdersportaal-beheer` aan, en haal de twee `Preview – …`-vinkjes weg. Daarna verifiëren op een echte PR — niet op het vinkje. Leg de uitkomst vast als `BESLUIT:` in EPIC W #91.
->
-> **De scannervraag verandert hierdoor van kleur.** `Preview – bestuurdersportaal-scanner` is de enige omgeving die vandaag wél ontstaat én niet verplicht is. Is dat een besluit ("de scanner is geen gebruikersvlak") of een vinkje dat niemand zette? Ook vastleggen in #91.
+**Wat er is veranderd.** De twee `preview-stable`-omgevingen zijn verplicht gemaakt, de twee `Preview – …` niet meer:
 
-Dit is precies de klasse "platformdefault die niemand heeft geverifieerd" waar C-01 uit voortkwam — en het laat zien waarom §4 waarneming eist in plaats van configuratie.
+| Omgeving | Verplicht | Ontstaat bij een `preview`→`main`-PR? |
+|---|---|---|
+| `preview-stable – bestuurdersportaal` | ✅ | ja |
+| `preview-stable – bestuurdersportaal-beheer` | ✅ | ja |
+| `Preview – bestuurdersportaal-scanner` | ❌ | ja |
+| `Preview – bestuurdersportaal` / `– beheer` | ❌ | nee |
+
+**Hoe dat is geverifieerd.** Niet aan het vinkje, want juist het vinkje was het bewijs dat ontbrak. Op PR #127 stond de merge op `BLOCKED` zolang de twee verplichte `preview-stable`-deployments er niet allebei waren, en sloeg om naar `CLEAN` toen ze geslaagd waren.
+
+Eerlijk over de bewijskracht: bij de eerste waarneming liepen er ook nog checks, dus die twee oorzaken zijn niet volledig te scheiden. Het harde bewijs zit in het contrast met de oude stand, waarin de verplichte omgevingen **nooit** ontstonden en merges toch doorgingen.
+
+> **Openstaand — het scannervinkje.** Door de reparatie verandert deze vraag van kleur. `Preview – bestuurdersportaal-scanner` is nu de enige omgeving die bij een `preview`→`main`-PR wél ontstaat en niet verplicht is. Besluit ("de scanner is geen gebruikersvlak") of vinkje dat niemand zette? Vastleggen als `BESLUIT:` in EPIC W #91.
+
+Dit was precies de klasse "platformdefault die niemand heeft geverifieerd" waar C-01 uit voortkwam — en het laat zien waarom §4 waarneming eist in plaats van configuratie.
 
 ### 5.3 De volledige stand van de poort op `main`
 
@@ -128,7 +131,7 @@ Dit is precies de klasse "platformdefault die niemand heeft geverifieerd" waar C
 | Require status checks (7 stuks) | ✅ incl. **Previewpoort** |
 | Require branches to be up to date | ✅ |
 | Require conversation resolution | ✅ |
-| Require deployments | ⚠️ aan, maar inert — zie §5.2 |
+| Require deployments (2 × `preview-stable`) | ✅ — gerepareerd en geverifieerd op PR #127, zie §5.2 |
 | **Do not allow bypassing the above settings** | ✅ — **geldt óók voor de eigenaar** |
 | Allow force pushes / deletions | ❌ / ❌ |
 
@@ -136,7 +139,7 @@ Dat voorlaatste vinkje is het belangrijkste van de lijst. Zonder dat vinkje is e
 
 ### 5.4 Wat hiermee **niet** is afgedekt
 
-1. **`preview` zelf is niet beschermd.** Er is precies één branch protection rule en die staat op `main`. Direct pushen naar `preview` kan dus. Het effect blijft beperkt, want de checks draaien alsnog op de PR van `preview` naar `main`. Wat ontbreekt is de tussenstap: een wijziging kan op `preview` staan zonder dat er ooit een PR-review op is geweest. **Overweeg een tweede, lichtere regel op `preview`** (PR verplicht, geen deploymenteis) en leg de keuze vast.
+1. **`preview` zelf is niet beschermd — `BESLUIT: 22-08-2026, bewuste keuze.`** Er is precies één branch protection rule en die staat op `main`. Direct pushen naar `preview` kan dus. Aanvaard omdat de inhoud alsnog langs alle zeven checks én de deploymenteis komt bij de PR naar `main`. Wat we accepteren is dat er op `preview` zelf geen PR-moment is. Te herzien zodra er meer dan één persoon op de repo werkt; dán is een lichtere regel op `preview` (PR verplicht, geen deploymenteis) de eerste stap.
 2. **Een geslaagde deploy is geen waarneming.** GitHub kan zien dát Vercel klaar is; niet of iemand heeft ingelogd en gekeken. §4 blijft dus volledig overeind en blijft menselijk werk.
 
 ### 5.5 De Vercel-kant — ✅ geverifieerd 22-08-2026
@@ -165,6 +168,12 @@ Daarmee is het scenario dat §5.5 urgent maakte — een verplichte preview-deplo
 ## 6. Wat dit betekent voor de rest van de reeks
 
 - **§0b in elk V-, W- en VEN-ticket blijft staan.** De herkomstpoort dwingt de weg af; §0b beschrijft wát je op preview moet wáárnemen, en dát is het deel dat geen machine kan overnemen.
-- **Drie punten resteren**, klein genoeg voor `BESLUIT:`-regels bij EPIC W #91: de deploymentpoort repareren (§5.2), het scannervinkje, en de bescherming van `preview` (§5.4).
+- **Van de drie punten resteert er één.** De deploymentpoort is gerepareerd en geverifieerd (§5.2); de bescherming van `preview` is als bewuste keuze vastgelegd (§5.4). Open blijft het scannervinkje — `BESLUIT:`-regel bij EPIC W #91.
 
-> **Het patroon, voor het rapport.** De eerste versie van dit document meldde de poort als volledig afgedwongen, op basis van de vinkjes in de instellingenpagina. Eén meting aan een echte PR liet zien dat de helft ervan niets doet. Dat is geen tegenslag maar de illustratie van de these: *geconfigureerd is niet werkend*, en het verschil is alleen zichtbaar als je meet. De herkomstpoort — die wél is gemeten aan drie merges — werkt. Neem beide op in §14 van het reviewrapport: de eerste als tegenvoorbeeld, de tweede als bevestiging van het patroon.
+> **Het patroon, voor het rapport.** Dit document is binnen één dag drie keer van status veranderd, en die volgorde is de these zelf.
+>
+> Versie 1 beschreef een norm zonder handhaving. Versie 2 meldde de poort als volledig afgedwongen — op basis van de vinkjes in de instellingenpagina. Versie 3 is deze: één meting aan een echte PR liet zien dat de helft van dat mechanisme niets deed, waarna het binnen een dag is gerepareerd en opnieuw gemeten.
+>
+> *Geconfigureerd is niet werkend*, en het verschil is alleen zichtbaar als je meet. Dat geldt hier dubbel, want de tussenstap — de onterechte melding "volledig afgedwongen" — is precies de fout die dit document elders aanwijst, gemaakt door dit document zelf.
+>
+> Neem alle drie op in §14 van het reviewrapport. Niet de eindstand als succes, maar de reeks: de fout, de meting die hem ving, en de reparatie. Het corrigerende vermogen is de bevinding, niet de eindstand.
