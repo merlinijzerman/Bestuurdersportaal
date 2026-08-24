@@ -532,6 +532,67 @@ async function main() {
     assert.deepEqual(await res.json(), { error: "U heeft geen rechten voor deze actie." });
   });
 
+  // Ruwe body (mogelijk kapot); reqMetBody stringify't altijd geldige JSON.
+  const reqRauw = (rauw: string) =>
+    new Request("http://localhost/api/test", {
+      method: "POST",
+      body: rauw,
+      headers: { "content-type": "application/json" },
+    }) as unknown as NextRequest;
+
+  await test("SCHEMA vlag AAN + AFWEZIGE body → GEEN 400 (leeg = {}); alleen kapotte JSON 400t", async () => {
+    // De W9-robuustheidsfix: een afwezige body is geen kapotte JSON. Routes die de
+    // body optioneel lezen (slikkers, DELETE zonder body) geven vandaag 2xx; de poort
+    // mag daar niet op 400'en. Een LOOS schema accepteert {}.
+    let aangeroepen = 0;
+    const wrap = maakWithFondsRoute(deps({ schemaEnforceAan: () => true }));
+    const handler = wrap(
+      { capability: "iedere-ingelogde", schema: z.object({ titel: z.string().optional() }).passthrough() },
+      async () => {
+        aangeroepen++;
+        return Response.json({ ok: true });
+      }
+    );
+    // req() heeft GEEN body.
+    const res = await handler(req());
+    assert.equal(res.status, 200, "een afwezige body mag geen 400 geven onder de vlag");
+    assert.equal(aangeroepen, 1);
+  });
+
+  await test("SCHEMA vlag AAN + KAPOTTE JSON → 400 (de gesanctioneerde slikker-wijziging)", async () => {
+    let aangeroepen = 0;
+    const wrap = maakWithFondsRoute(deps({ schemaEnforceAan: () => true }));
+    const handler = wrap(
+      { capability: "iedere-ingelogde", schema: z.object({ titel: z.string().optional() }).passthrough() },
+      async () => {
+        aangeroepen++;
+        return Response.json({ ok: true });
+      }
+    );
+    const [res] = await metOpgevangenWarn(() => handler(reqRauw("{ dit is geen json")));
+    assert.equal(res.status, 400);
+    assert.equal(aangeroepen, 0, "bij kapotte JSON mag de handler niet draaien");
+  });
+
+  await test("SCHEMA vlag UIT + KAPOTTE JSON → doorlaten (observe), de handler draait", async () => {
+    let aangeroepen = 0;
+    const wrap = maakWithFondsRoute(deps({ schemaEnforceAan: () => false }));
+    const handler = wrap(
+      { capability: "iedere-ingelogde", schema: z.object({ titel: z.string().optional() }).passthrough() },
+      async () => {
+        aangeroepen++;
+        return Response.json({ ok: true });
+      }
+    );
+    const [res, warns] = await metOpgevangenWarn(() => handler(reqRauw("{ kapot")));
+    assert.equal(res.status, 200, "vlag uit mag kapotte JSON niet 400'en — byte-identiek");
+    assert.equal(aangeroepen, 1);
+    assert.ok(
+      warns.find((w) => w[0] === "[SCHEMA-OBSERVE]" && (w[1] as Record<string, unknown>).code === "invalid_json"),
+      "kapotte JSON hoort onder de vlag-uit wél geobserveerd te worden"
+    );
+  });
+
   console.log(`\nAlle ${n} route-wrapper sanity-tests groen.`);
 }
 

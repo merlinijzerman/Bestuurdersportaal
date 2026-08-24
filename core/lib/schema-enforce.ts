@@ -121,3 +121,33 @@ export function beoordeelSchema(args: {
   });
   return { toegestaan: false, fouten };
 }
+
+/**
+ * Leest de body van een request-KLOON (nooit het origineel; de handler leest dat
+ * zelf). Onderscheidt drie gevallen, zodat de schema-poort een AFWEZIGE body niet
+ * als fout behandelt — cruciaal om niet strenger te zijn dan de route:
+ *
+ *   - lege/afwezige body → `{}`. Veel routes lezen de body OPTIONEEL (een DELETE
+ *     zonder body, een slikker met `.catch(() => ({}))`) en geven daar vandaag een
+ *     2xx op. De losse schema's accepteren `{}`, dus de poort mag er niet op 400'en.
+ *   - geldige JSON → het geparseerde object.
+ *   - bytes aanwezig maar ONPARSEBAAR → `{ kapot: true }`. Dít is de gesanctioneerde
+ *     slikker-wijziging: kapotte JSON wordt onder de vlag een 400. Een afwezige body
+ *     valt hier NIET onder — die is geen kapotte JSON.
+ */
+export async function leesBodyVanKloon(
+  request: { clone: () => { text: () => Promise<string> } }
+): Promise<{ body: unknown; kapot: boolean }> {
+  let rauw = "";
+  try {
+    rauw = await request.clone().text();
+  } catch {
+    return { body: {}, kapot: false };
+  }
+  if (rauw.trim() === "") return { body: {}, kapot: false };
+  try {
+    return { body: JSON.parse(rauw), kapot: false };
+  } catch {
+    return { body: undefined, kapot: true };
+  }
+}

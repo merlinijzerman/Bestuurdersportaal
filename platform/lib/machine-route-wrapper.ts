@@ -49,6 +49,7 @@ import { NextResponse, type NextRequest } from "next/server";
 // `core/lib` (ai-poort, app-fout, …); andersom nul. Geen duplicaat. Zie TICKET-W9 §2.2.
 import {
   beoordeelSchema,
+  leesBodyVanKloon,
   schemaEnforceAan,
   type SchemaDeclaratie,
 } from "@/core/lib/schema-enforce";
@@ -154,15 +155,22 @@ export function maakWithMachineRoute(deps: MachineDeps) {
       // request.clone(), nooit het origineel: de handler leest de body zelf.
       // Vlag UIT → observe + door (byte-identiek); vlag AAN → mismatch = 400.
       if (spec.schema !== "geen-body") {
-        let body: unknown;
-        let parsebaar = true;
-        try {
-          body = await request.clone().json();
-        } catch {
-          parsebaar = false;
-        }
+        // Afwezige/lege body → `{}` (geen 400); alleen écht kapotte JSON → 400.
+        const { body, kapot } = await leesBodyVanKloon(request);
         const handhaven = deps.schemaEnforceAan();
-        if (parsebaar) {
+        if (kapot) {
+          console.warn("[SCHEMA-OBSERVE]", {
+            route: spec.label,
+            handler: request.method,
+            veld: "(body)",
+            verwacht: "json",
+            gekregen: "onparsebaar",
+            code: "invalid_json",
+            handhaven,
+            requestId,
+          });
+          if (handhaven) return NextResponse.json({ error: "Ongeldige invoer." }, { status: 400 });
+        } else {
           const oordeel = beoordeelSchema({ schema: spec.schema, body });
           if (!oordeel.toegestaan) {
             for (const f of oordeel.fouten) {
@@ -181,18 +189,6 @@ export function maakWithMachineRoute(deps: MachineDeps) {
               return NextResponse.json({ error: "Ongeldige invoer." }, { status: 400 });
             }
           }
-        } else if (handhaven) {
-          console.warn("[SCHEMA-OBSERVE]", {
-            route: spec.label,
-            handler: request.method,
-            veld: "(body)",
-            verwacht: "json",
-            gekregen: "onparsebaar",
-            code: "invalid_json",
-            handhaven,
-            requestId,
-          });
-          return NextResponse.json({ error: "Ongeldige invoer." }, { status: 400 });
         }
       }
 
