@@ -185,17 +185,23 @@ jobs:
           echo "vlag-uit-pass: $(( $(date +%s) - t0 ))s"
           exit $code
 
-      # W7 (#153): dezelfde stack, dezelfde build, tweede Next-proces mét de vlag.
-      # `run.mjs --authz` toetst de draaiende server tegen authz-matrix.expected.json.
+      # W7 (#153): dezelfde stack, dezelfde build, tweede Next-proces mét de vlag —
+      # op een EIGEN poort (3001). De vlag-uit-server hierboven wordt via `npm run
+      # start` gestart, dat `next-server` als kind spawnt; `kill` op de npm-wrapper
+      # laat dat kind mogelijk op poort 3000 staan. Een aparte poort vermijdt die
+      # kill-timing-race volledig: bindt de vlag-aan-server elders, dan is een
+      # EADDRINUSE geen stille terugval op de vlag-UIT-server (die zou de twee
+      # verwachte 403's als 400/404 teruggeven en het contract vals-rood maken).
       - name: Autorisatiecontract afdwingen (vlag AAN)
         env:
           ENFORCE_CAPABILITY: "on"
+          APP_BASE_URL: "http://127.0.0.1:3001"
         run: |
           t0=$(date +%s)
-          ENFORCE_CAPABILITY=on PORT=3000 npm run start &
+          ENFORCE_CAPABILITY=on PORT=3001 npm run start &
           SERVER=$!
           for i in $(seq 1 60); do
-            curl -sf http://127.0.0.1:3000/api/healthz/ping >/dev/null && ok=1 && break
+            curl -sf http://127.0.0.1:3001/api/healthz/ping >/dev/null && ok=1 && break
             sleep 1
           done
           if [ "${ok:-0}" != "1" ]; then
