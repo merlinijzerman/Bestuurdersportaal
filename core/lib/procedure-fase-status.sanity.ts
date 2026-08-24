@@ -13,7 +13,6 @@ import {
   faseStatus,
   bewijslastDekking,
   faseAandacht,
-  aggregeerPortfolio,
   type FaseStatus,
 } from "./procedure-fase-status";
 
@@ -187,23 +186,6 @@ check("faseAandacht: alles sluitend, geen heropend → geen vlag", () => {
     ]),
     "geen"
   );
-});
-
-// ── aggregeerPortfolio ────────────────────────────────────────────────────────
-
-check("aggregeerPortfolio: telt uitsluitend lopende procedures", () => {
-  const agg = aggregeerPortfolio([
-    { isAfgerond: false, heeftAandacht: true, heeftRood: false, besluitrijp: false },
-    { isAfgerond: false, heeftAandacht: true, heeftRood: true, besluitrijp: false },
-    { isAfgerond: false, heeftAandacht: false, heeftRood: false, besluitrijp: true },
-    { isAfgerond: true, heeftAandacht: true, heeftRood: true, besluitrijp: true }, // afgerond → niet geteld
-  ]);
-  assert.deepEqual(agg, {
-    lopend: 3,
-    metAandacht: 2,
-    tijdkritisch: 1,
-    besluitrijp: 1,
-  });
 });
 
 console.log(`\nprocedure-fase-status.sanity: ${n} checks groen.`);

@@ -151,42 +151,7 @@ export function faseAandacht(
   return "geen";
 }
 
-// ── Portfolio-aggregatie (lijstpagina) ──────────────────────────────────────
-
-export interface ProcesSamenvatting {
-  /** status ∈ {afgerond, gearchiveerd} — telt niet als 'lopend'. */
-  isAfgerond: boolean;
-  /** ≥1 fase met een aandachtsvlag (oranje of rood). */
-  heeftAandacht: boolean;
-  /** ≥1 fase met een rode vlag. Termijn-rood volgt bij review O2 — nu alleen
-   *  ontbrekende blokkerende bewijslast. */
-  heeftRood: boolean;
-  /** readiness-niveau 'besluitrijp' voldoet. */
-  besluitrijp: boolean;
-}
-
-export interface PortfolioAggregaat {
-  lopend: number;
-  metAandacht: number;
-  tijdkritisch: number;
-  besluitrijp: number;
-}
-
-/**
- * Portfolio-samenvattingstegels (§7.1): geteld over de LOPENDE procedures.
- *  - Lopend       — procedures in uitvoering.
- *  - Met aandacht — ≥1 fase met aandachtsvlag.
- *  - Tijdkritisch — ≥1 rode vlag (termijn-rood volgt bij O2).
- *  - Besluitrijp  — readiness-niveau 'besluitrijp' voldoet.
- */
-export function aggregeerPortfolio(
-  procs: ProcesSamenvatting[]
-): PortfolioAggregaat {
-  const lopend = procs.filter((p) => !p.isAfgerond);
-  return {
-    lopend: lopend.length,
-    metAandacht: lopend.filter((p) => p.heeftAandacht).length,
-    tijdkritisch: lopend.filter((p) => p.heeftRood).length,
-    besluitrijp: lopend.filter((p) => p.besluitrijp).length,
-  };
-}
+// P1a (#165): de portfolio-aggregatie (ProcesSamenvatting/PortfolioAggregaat/
+// aggregeerPortfolio) is verwijderd met de tegels — het overzicht telt de
+// filters nu client-side. Git-historie is het archief; #168 (P3) herziet de
+// signalen sowieso.

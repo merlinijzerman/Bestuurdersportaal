@@ -749,6 +749,19 @@ export default async function ProcedureDetailPage({
               kanBeheren={currentUserIsPrivileged}
               currentUserId={user.id}
               voltooidDoorNaam={geselecteerdeVoltooidDoorNaam}
+              fase={(() => {
+                // P1a (#165): fasecontext voor het tabblad Overzicht.
+                const g = faseGroepen.find(
+                  (f) => f.fase_code === geselecteerdeStap.fase_code
+                );
+                return g
+                  ? {
+                      code: g.fase_code,
+                      titel: g.titel,
+                      beschrijving: g.toelichting ?? g.beschrijving,
+                    }
+                  : null;
+              })()}
               evidence={dossier?.evidence ?? []}
               checklist={checklist.filter(
                 (c) => c.stap_id === geselecteerdeStap.id && c.actief !== false
