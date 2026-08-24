@@ -1,0 +1,2775 @@
+{
+  "meta": {
+    "_commentaar": "GEGENEREERD door scripts/gen/w7-authz-matrix.mjs — niet met de hand wijzigen. Dit is het W7-autorisatiecontract: per karakteriseringsscenario de zou-uitkomst onder ENFORCE_CAPABILITY=on. 'onveranderd' = de poort laat door en het route-eigen gedrag blijft (vergelijk met het byte-identieke snapshot); '403' = de poort weigert. De statische test w7-autz-matrix.test.ts hergenereert dit en faalt op elk verschil; de flag-on-runner toetst het tegen de draaiende server.",
+    "scenarios_in_scope": 345,
+    "weigeringen_403": 28,
+    "rollen": [
+      "bestuurder",
+      "voorzitter",
+      "beheerder",
+      "bestuursbureau"
+    ]
+  },
+  "matrix": [
+    {
+      "slug": "afschrift-download.get.anon",
+      "method": "GET",
+      "route": "/procedures/[id]/afschriften/[afschriftId]/download",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "afschrift-download.get.bestuurder.307",
+      "method": "GET",
+      "route": "/procedures/[id]/afschriften/[afschriftId]/download",
+      "rol": "bestuurder",
+      "capability": "procedures.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "afschrift-download.get.bestuurder.404",
+      "method": "GET",
+      "route": "/procedures/[id]/afschriften/[afschriftId]/download",
+      "rol": "bestuurder",
+      "capability": "procedures.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "afschrift-download.get.bestuursbureau.403",
+      "method": "GET",
+      "route": "/procedures/[id]/afschriften/[afschriftId]/download",
+      "rol": "bestuursbureau",
+      "capability": "procedures.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "agendapunten-id.delete.anon",
+      "method": "DELETE",
+      "route": "/agendapunten/[id]",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "agendapunten-id.patch.anon",
+      "method": "PATCH",
+      "route": "/agendapunten/[id]",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "agendapunten-id.patch.bestuurder.404",
+      "method": "PATCH",
+      "route": "/agendapunten/[id]",
+      "rol": "bestuurder",
+      "capability": "agendapunten.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "decisions-id.patch.anon",
+      "method": "PATCH",
+      "route": "/decisions/[id]",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "decisions-id.patch.bestuurder.404",
+      "method": "PATCH",
+      "route": "/decisions/[id]",
+      "rol": "bestuurder",
+      "capability": "decisions.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "decisions-risks.patch.anon",
+      "method": "PATCH",
+      "route": "/decisions/[id]/risks/[rid]",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "decisions-risks.patch.bestuurder.400-status",
+      "method": "PATCH",
+      "route": "/decisions/[id]/risks/[rid]",
+      "rol": "bestuurder",
+      "capability": "decisions.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "documents-bestand.get.404",
+      "method": "GET",
+      "route": "/documents/[id]/bestand",
+      "rol": "bestuurder",
+      "capability": "documents.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "documents-bestand.get.410-ingetrokken",
+      "method": "GET",
+      "route": "/documents/[id]/bestand",
+      "rol": "bestuurder",
+      "capability": "documents.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "documents-bestand.get.anon",
+      "method": "GET",
+      "route": "/documents/[id]/bestand",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "documents-bestand.get.bestuurder",
+      "method": "GET",
+      "route": "/documents/[id]/bestand",
+      "rol": "bestuurder",
+      "capability": "documents.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "gesprekken-id.delete.anon",
+      "method": "DELETE",
+      "route": "/gesprekken/[id]",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "gesprekken-id.delete.bestuurder.200",
+      "method": "DELETE",
+      "route": "/gesprekken/[id]",
+      "rol": "bestuurder",
+      "capability": "gesprekken.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "gesprekken-id.delete.bestuurder.404",
+      "method": "DELETE",
+      "route": "/gesprekken/[id]",
+      "rol": "bestuurder",
+      "capability": "gesprekken.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "gesprekken-id.delete.invalid-id",
+      "method": "DELETE",
+      "route": "/gesprekken/[id]",
+      "rol": "bestuurder",
+      "capability": "gesprekken.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "h04.afschrift-download.get.bestuurder.403-cross-site",
+      "method": "GET",
+      "route": "/procedures/[id]/afschriften/[afschriftId]/download",
+      "rol": "bestuurder",
+      "capability": "procedures.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "h04.aqlab-assurance-audit.get.bestuurder.403-cross-site",
+      "method": "GET",
+      "route": "/aqlab/assurance/audit/[exportId]",
+      "rol": "bestuurder",
+      "capability": "assurance.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "h04.auditdossier.get.bestuurder.403-cross-site",
+      "method": "GET",
+      "route": "/decisions/[id]/auditdossier",
+      "rol": "bestuurder",
+      "capability": "decisions.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "h04.documents-bestand.get.bestuurder.403-cross-site",
+      "method": "GET",
+      "route": "/documents/[id]/bestand",
+      "rol": "bestuurder",
+      "capability": "documents.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "h04.documents-bestand.get.bestuurder.same-origin-doorgelaten",
+      "method": "GET",
+      "route": "/documents/[id]/bestand",
+      "rol": "bestuurder",
+      "capability": "documents.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "instellingen.get.anon",
+      "method": "GET",
+      "route": "/instellingen",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "instellingen.get.beheerder",
+      "method": "GET",
+      "route": "/instellingen",
+      "rol": "beheerder",
+      "capability": "iedere-ingelogde",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "instellingen.post.anon",
+      "method": "POST",
+      "route": "/instellingen",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "procedures-id.patch.anon",
+      "method": "PATCH",
+      "route": "/procedures/[id]",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "procedures-id.patch.bestuurder.404",
+      "method": "PATCH",
+      "route": "/procedures/[id]",
+      "rol": "bestuurder",
+      "capability": "procedures.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "procedures-requirements.get.anon",
+      "method": "GET",
+      "route": "/procedures/[id]/requirements",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "procedures-requirements.get.bestuurder",
+      "method": "GET",
+      "route": "/procedures/[id]/requirements",
+      "rol": "bestuurder",
+      "capability": "procedures.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "procedures-requirements.post.beheerder.invalid",
+      "method": "POST",
+      "route": "/procedures/[id]/requirements",
+      "rol": "beheerder",
+      "capability": "procedures.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "procedures-requirements.post.bestuurder.403",
+      "method": "POST",
+      "route": "/procedures/[id]/requirements",
+      "rol": "bestuurder",
+      "capability": "procedures.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "profiel.get.anon",
+      "method": "GET",
+      "route": "/profiel",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "profiel.get.bestuurder",
+      "method": "GET",
+      "route": "/profiel",
+      "rol": "bestuurder",
+      "capability": "profile.view.own",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "profiel.patch.anon",
+      "method": "PATCH",
+      "route": "/profiel",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "risicos-id.patch.anon",
+      "method": "PATCH",
+      "route": "/risicos/[id]",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "risicos-id.patch.bestuurder.200-noop",
+      "method": "PATCH",
+      "route": "/risicos/[id]",
+      "rol": "bestuurder",
+      "capability": "risicos.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "risicos-id.patch.bestuurder.404",
+      "method": "PATCH",
+      "route": "/risicos/[id]",
+      "rol": "bestuurder",
+      "capability": "risicos.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "risicos.post.anon",
+      "method": "POST",
+      "route": "/risicos",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "risicos.post.bestuurder.invalid",
+      "method": "POST",
+      "route": "/risicos",
+      "rol": "bestuurder",
+      "capability": "risicos.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "stuurinformatie-beheer.get.anon",
+      "method": "GET",
+      "route": "/stuurinformatie/beheer",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "stuurinformatie-beheer.get.beheerder",
+      "method": "GET",
+      "route": "/stuurinformatie/beheer",
+      "rol": "beheerder",
+      "capability": "stuurinformatie.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "stuurinformatie-beheer.get.bestuurder.403",
+      "method": "GET",
+      "route": "/stuurinformatie/beheer",
+      "rol": "bestuurder",
+      "capability": "stuurinformatie.manage",
+      "vlagAan": "403"
+    },
+    {
+      "slug": "w2.classificatie-queue.get.anon",
+      "method": "GET",
+      "route": "/classificatie/queue",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w2.classificatie-queue.get.bestuurder",
+      "method": "GET",
+      "route": "/classificatie/queue",
+      "rol": "bestuurder",
+      "capability": "classification.queue.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w2.herstellen.post.anon",
+      "method": "POST",
+      "route": "/agendapunten/[id]/herstellen",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w2.herstellen.post.bestuurder.403",
+      "method": "POST",
+      "route": "/agendapunten/[id]/herstellen",
+      "rol": "bestuurder",
+      "capability": "agendapunten.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w2.herstellen.post.bestuurder.404",
+      "method": "POST",
+      "route": "/agendapunten/[id]/herstellen",
+      "rol": "bestuurder",
+      "capability": "agendapunten.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w2.herstellen.post.voorzitter.200",
+      "method": "POST",
+      "route": "/agendapunten/[id]/herstellen",
+      "rol": "voorzitter",
+      "capability": "agendapunten.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w2.herstellen.post.voorzitter.400-niet-verwijderd",
+      "method": "POST",
+      "route": "/agendapunten/[id]/herstellen",
+      "rol": "voorzitter",
+      "capability": "agendapunten.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w3.aqlab-assurance.get.anon",
+      "method": "GET",
+      "route": "/aqlab/assurance",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w3.aqlab-assurance.get.bestuurder",
+      "method": "GET",
+      "route": "/aqlab/assurance",
+      "rol": "bestuurder",
+      "capability": "assurance.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w3.decisions-dossier.get.anon",
+      "method": "GET",
+      "route": "/decisions/[id]/dossier",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w3.decisions-dossier.get.bestuurder.404",
+      "method": "GET",
+      "route": "/decisions/[id]/dossier",
+      "rol": "bestuurder",
+      "capability": "decisions.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w3.dossiers.get.anon",
+      "method": "GET",
+      "route": "/dossiers",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w3.dossiers.get.bestuurder",
+      "method": "GET",
+      "route": "/dossiers",
+      "rol": "bestuurder",
+      "capability": "dossiers.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w3.notificaties.get.anon",
+      "method": "GET",
+      "route": "/notificaties",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w3.notificaties.get.bestuurder",
+      "method": "GET",
+      "route": "/notificaties",
+      "rol": "bestuurder",
+      "capability": "notificaties.view.own",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w3.procedures-afschriften.get.anon",
+      "method": "GET",
+      "route": "/procedures/[id]/afschriften",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w3.procedures-afschriften.get.bestuurder",
+      "method": "GET",
+      "route": "/procedures/[id]/afschriften",
+      "rol": "bestuurder",
+      "capability": "procedures.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w3.procedures-afschriften.get.bestuursbureau",
+      "method": "GET",
+      "route": "/procedures/[id]/afschriften",
+      "rol": "bestuursbureau",
+      "capability": "procedures.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w3.procedures-dossier.get.anon",
+      "method": "GET",
+      "route": "/procedures/[id]/dossier",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w3.procedures-dossier.get.bestuurder.404",
+      "method": "GET",
+      "route": "/procedures/[id]/dossier",
+      "rol": "bestuurder",
+      "capability": "procedures.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.agendapunten-id.delete.voorzitter.200",
+      "method": "DELETE",
+      "route": "/agendapunten/[id]",
+      "rol": "voorzitter",
+      "capability": "agendapunten.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.agendapunten-id.patch.bestuurder.403",
+      "method": "PATCH",
+      "route": "/agendapunten/[id]",
+      "rol": "bestuurder",
+      "capability": "agendapunten.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.agendapunten-id.patch.bestuursbureau",
+      "method": "PATCH",
+      "route": "/agendapunten/[id]",
+      "rol": "bestuursbureau",
+      "capability": "agendapunten.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.agendapunten-id.patch.voorzitter.200",
+      "method": "PATCH",
+      "route": "/agendapunten/[id]",
+      "rol": "voorzitter",
+      "capability": "agendapunten.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.agendapunten.post.anon",
+      "method": "POST",
+      "route": "/agendapunten",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.agendapunten.post.bestuurder.400-categorie",
+      "method": "POST",
+      "route": "/agendapunten",
+      "rol": "bestuurder",
+      "capability": "agendapunten.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.agendapunten.post.bestuurder.400-verplicht",
+      "method": "POST",
+      "route": "/agendapunten",
+      "rol": "bestuurder",
+      "capability": "agendapunten.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.agendapunten.post.voorzitter.200",
+      "method": "POST",
+      "route": "/agendapunten",
+      "rol": "voorzitter",
+      "capability": "agendapunten.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.classificatie-backfill.post.anon",
+      "method": "POST",
+      "route": "/classificatie/backfill",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.classificatie-backfill.post.bestuurder.403",
+      "method": "POST",
+      "route": "/classificatie/backfill",
+      "rol": "bestuurder",
+      "capability": "beheer.backfill",
+      "vlagAan": "403"
+    },
+    {
+      "slug": "w4.classificatie-beoordeel.post.anon",
+      "method": "POST",
+      "route": "/classificatie/[id]/beoordeel",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.classificatie-beoordeel.post.bestuurder.403",
+      "method": "POST",
+      "route": "/classificatie/[id]/beoordeel",
+      "rol": "bestuurder",
+      "capability": "classification.review",
+      "vlagAan": "403"
+    },
+    {
+      "slug": "w4.classificatie-beoordeel.post.voorzitter.400",
+      "method": "POST",
+      "route": "/classificatie/[id]/beoordeel",
+      "rol": "voorzitter",
+      "capability": "classification.review",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.classificatie-beoordeel.post.voorzitter.404",
+      "method": "POST",
+      "route": "/classificatie/[id]/beoordeel",
+      "rol": "voorzitter",
+      "capability": "classification.review",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.classificatie-terugdraai.post.anon",
+      "method": "POST",
+      "route": "/classificatie/[id]/terugdraai",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.classificatie-terugdraai.post.bestuurder.403",
+      "method": "POST",
+      "route": "/classificatie/[id]/terugdraai",
+      "rol": "bestuurder",
+      "capability": "classification.review",
+      "vlagAan": "403"
+    },
+    {
+      "slug": "w4.classificatie-terugdraai.post.voorzitter.404",
+      "method": "POST",
+      "route": "/classificatie/[id]/terugdraai",
+      "rol": "voorzitter",
+      "capability": "classification.review",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.decisions-action-id.patch.anon",
+      "method": "PATCH",
+      "route": "/decisions/[id]/actions/[aid]",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.decisions-action-id.patch.bestuurder.200",
+      "method": "PATCH",
+      "route": "/decisions/[id]/actions/[aid]",
+      "rol": "bestuurder",
+      "capability": "decisions.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.decisions-actions.post.anon",
+      "method": "POST",
+      "route": "/decisions/[id]/actions",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.decisions-actions.post.bestuurder.201",
+      "method": "POST",
+      "route": "/decisions/[id]/actions",
+      "rol": "bestuurder",
+      "capability": "decisions.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.decisions-actions.post.bestuurder.400",
+      "method": "POST",
+      "route": "/decisions/[id]/actions",
+      "rol": "bestuurder",
+      "capability": "decisions.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.decisions-actions.post.bestuurder.404",
+      "method": "POST",
+      "route": "/decisions/[id]/actions",
+      "rol": "bestuurder",
+      "capability": "decisions.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.decisions-ai.patch.anon",
+      "method": "PATCH",
+      "route": "/decisions/[id]/ai-interactions/[aiid]",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.decisions-ai.patch.bestuurder.404",
+      "method": "PATCH",
+      "route": "/decisions/[id]/ai-interactions/[aiid]",
+      "rol": "bestuurder",
+      "capability": "decisions.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.decisions-ai.patch.voorzitter.404",
+      "method": "PATCH",
+      "route": "/decisions/[id]/ai-interactions/[aiid]",
+      "rol": "voorzitter",
+      "capability": "decisions.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.decisions-assumption-id.patch.anon",
+      "method": "PATCH",
+      "route": "/decisions/[id]/assumptions/[aid]",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.decisions-assumption-id.patch.bestuurder.200",
+      "method": "PATCH",
+      "route": "/decisions/[id]/assumptions/[aid]",
+      "rol": "bestuurder",
+      "capability": "decisions.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.decisions-assumptions.post.anon",
+      "method": "POST",
+      "route": "/decisions/[id]/assumptions",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.decisions-assumptions.post.bestuurder.201",
+      "method": "POST",
+      "route": "/decisions/[id]/assumptions",
+      "rol": "bestuurder",
+      "capability": "decisions.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.decisions-assumptions.post.bestuurder.400",
+      "method": "POST",
+      "route": "/decisions/[id]/assumptions",
+      "rol": "bestuurder",
+      "capability": "decisions.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.decisions-condition-id.patch.anon",
+      "method": "PATCH",
+      "route": "/decisions/[id]/conditions/[cid]",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.decisions-condition-id.patch.bestuurder.200",
+      "method": "PATCH",
+      "route": "/decisions/[id]/conditions/[cid]",
+      "rol": "bestuurder",
+      "capability": "decisions.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.decisions-conditions.post.anon",
+      "method": "POST",
+      "route": "/decisions/[id]/conditions",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.decisions-conditions.post.bestuurder.201",
+      "method": "POST",
+      "route": "/decisions/[id]/conditions",
+      "rol": "bestuurder",
+      "capability": "decisions.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.decisions-conditions.post.bestuurder.400",
+      "method": "POST",
+      "route": "/decisions/[id]/conditions",
+      "rol": "bestuurder",
+      "capability": "decisions.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.decisions-dissent-id.delete.anon",
+      "method": "DELETE",
+      "route": "/decisions/[id]/dissent/[did]",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.decisions-dissent-id.patch.anon",
+      "method": "PATCH",
+      "route": "/decisions/[id]/dissent/[did]",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.decisions-dissent-id.patch.bestuursbureau.404-rls",
+      "method": "PATCH",
+      "route": "/decisions/[id]/dissent/[did]",
+      "rol": "bestuursbureau",
+      "capability": "decisions.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.decisions-dissent.post.anon",
+      "method": "POST",
+      "route": "/decisions/[id]/dissent",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.decisions-dissent.post.bestuurder.201",
+      "method": "POST",
+      "route": "/decisions/[id]/dissent",
+      "rol": "bestuurder",
+      "capability": "decisions.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.decisions-dissent.post.bestuursbureau.403",
+      "method": "POST",
+      "route": "/decisions/[id]/dissent",
+      "rol": "bestuursbureau",
+      "capability": "decisions.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.decisions-id.patch.anon",
+      "method": "PATCH",
+      "route": "/decisions/[id]",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.decisions-id.patch.bestuurder.404",
+      "method": "PATCH",
+      "route": "/decisions/[id]",
+      "rol": "bestuurder",
+      "capability": "decisions.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.decisions-id.patch.voorzitter.200",
+      "method": "PATCH",
+      "route": "/decisions/[id]",
+      "rol": "voorzitter",
+      "capability": "decisions.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.decisions-risk-id.patch.anon",
+      "method": "PATCH",
+      "route": "/decisions/[id]/risks/[rid]",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.decisions-risk-id.patch.bestuurder.200",
+      "method": "PATCH",
+      "route": "/decisions/[id]/risks/[rid]",
+      "rol": "bestuurder",
+      "capability": "decisions.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.decisions-risks.post.anon",
+      "method": "POST",
+      "route": "/decisions/[id]/risks",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.decisions-risks.post.bestuurder.201",
+      "method": "POST",
+      "route": "/decisions/[id]/risks",
+      "rol": "bestuurder",
+      "capability": "decisions.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.decisions-risks.post.bestuurder.400",
+      "method": "POST",
+      "route": "/decisions/[id]/risks",
+      "rol": "bestuurder",
+      "capability": "decisions.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.decisions-status.post.anon",
+      "method": "POST",
+      "route": "/decisions/[id]/status",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.decisions-status.post.bestuurder.400",
+      "method": "POST",
+      "route": "/decisions/[id]/status",
+      "rol": "bestuurder",
+      "capability": "decisions.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.decisions-status.post.bestuurder.404",
+      "method": "POST",
+      "route": "/decisions/[id]/status",
+      "rol": "bestuurder",
+      "capability": "decisions.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.documents-agendapunten.delete.anon",
+      "method": "DELETE",
+      "route": "/documents/[id]/agendapunten",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.documents-agendapunten.delete.bestuurder.400-ontbreekt",
+      "method": "DELETE",
+      "route": "/documents/[id]/agendapunten",
+      "rol": "bestuurder",
+      "capability": "documents.metadata.update",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.documents-agendapunten.get.anon",
+      "method": "GET",
+      "route": "/documents/[id]/agendapunten",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.documents-agendapunten.get.bestuurder",
+      "method": "GET",
+      "route": "/documents/[id]/agendapunten",
+      "rol": "bestuurder",
+      "capability": "documents.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.documents-agendapunten.post.anon",
+      "method": "POST",
+      "route": "/documents/[id]/agendapunten",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.documents-agendapunten.post.bestuurder.404-agendapunt",
+      "method": "POST",
+      "route": "/documents/[id]/agendapunten",
+      "rol": "bestuurder",
+      "capability": "documents.metadata.update",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.documents-agendapunten.post.voorzitter.400",
+      "method": "POST",
+      "route": "/documents/[id]/agendapunten",
+      "rol": "voorzitter",
+      "capability": "documents.metadata.update",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.documents-agendapunten.post.voorzitter.404",
+      "method": "POST",
+      "route": "/documents/[id]/agendapunten",
+      "rol": "voorzitter",
+      "capability": "documents.metadata.update",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.documents-aimarkering.patch.anon",
+      "method": "PATCH",
+      "route": "/documents/[id]/ai-markering",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.documents-aimarkering.patch.voorzitter.200",
+      "method": "PATCH",
+      "route": "/documents/[id]/ai-markering",
+      "rol": "voorzitter",
+      "capability": "documents.metadata.update",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.documents-aimarkering.patch.voorzitter.400-id",
+      "method": "PATCH",
+      "route": "/documents/[id]/ai-markering",
+      "rol": "voorzitter",
+      "capability": "documents.metadata.update",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.documents-aimarkering.patch.voorzitter.400-waarde",
+      "method": "PATCH",
+      "route": "/documents/[id]/ai-markering",
+      "rol": "voorzitter",
+      "capability": "documents.metadata.update",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.documents-bulkmetadata.post.anon",
+      "method": "POST",
+      "route": "/documents/bulk-metadata",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.documents-bulkmetadata.post.voorzitter.400-geen-ids",
+      "method": "POST",
+      "route": "/documents/bulk-metadata",
+      "rol": "voorzitter",
+      "capability": "documents.metadata.update",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.documents-embeddings.post.anon",
+      "method": "POST",
+      "route": "/documents/embeddings-backfill",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.documents-embeddings.post.bestuurder.403",
+      "method": "POST",
+      "route": "/documents/embeddings-backfill",
+      "rol": "bestuurder",
+      "capability": "beheer.backfill",
+      "vlagAan": "403"
+    },
+    {
+      "slug": "w4.documents-herextract.post.anon",
+      "method": "POST",
+      "route": "/documents/[id]/her-extract",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.documents-herextract.post.bestuurder.403",
+      "method": "POST",
+      "route": "/documents/[id]/her-extract",
+      "rol": "bestuurder",
+      "capability": "documents.lifecycle.manage",
+      "vlagAan": "403"
+    },
+    {
+      "slug": "w4.documents-herextract.post.voorzitter.404",
+      "method": "POST",
+      "route": "/documents/[id]/her-extract",
+      "rol": "voorzitter",
+      "capability": "documents.lifecycle.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.documents-id.patch.anon",
+      "method": "PATCH",
+      "route": "/documents/[id]",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.documents-id.patch.bestuurder.400-actie",
+      "method": "PATCH",
+      "route": "/documents/[id]",
+      "rol": "bestuurder",
+      "capability": "documents.lifecycle.manage",
+      "vlagAan": "403"
+    },
+    {
+      "slug": "w4.documents-id.patch.bestuurder.403-reactiveren",
+      "method": "PATCH",
+      "route": "/documents/[id]",
+      "rol": "bestuurder",
+      "capability": "documents.lifecycle.manage",
+      "vlagAan": "403"
+    },
+    {
+      "slug": "w4.documents-id.patch.bestuurder.404",
+      "method": "PATCH",
+      "route": "/documents/[id]",
+      "rol": "bestuurder",
+      "capability": "documents.lifecycle.manage",
+      "vlagAan": "403"
+    },
+    {
+      "slug": "w4.documents-id.patch.voorzitter.200-deactiveren",
+      "method": "PATCH",
+      "route": "/documents/[id]",
+      "rol": "voorzitter",
+      "capability": "documents.lifecycle.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.documents-id.patch.voorzitter.409-al-gedeactiveerd",
+      "method": "PATCH",
+      "route": "/documents/[id]",
+      "rol": "voorzitter",
+      "capability": "documents.lifecycle.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.documents-metadata.get.anon",
+      "method": "GET",
+      "route": "/documents/[id]/metadata",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.documents-metadata.get.bestuurder",
+      "method": "GET",
+      "route": "/documents/[id]/metadata",
+      "rol": "bestuurder",
+      "capability": "documents.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.documents-metadata.get.bestuurder.404",
+      "method": "GET",
+      "route": "/documents/[id]/metadata",
+      "rol": "bestuurder",
+      "capability": "documents.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.documents-metadata.patch.anon",
+      "method": "PATCH",
+      "route": "/documents/[id]/metadata",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.documents-metadata.patch.bestuurder.400-geen-wijzigingen",
+      "method": "PATCH",
+      "route": "/documents/[id]/metadata",
+      "rol": "bestuurder",
+      "capability": "documents.metadata.update",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.documents-metadata.patch.voorzitter.404",
+      "method": "PATCH",
+      "route": "/documents/[id]/metadata",
+      "rol": "voorzitter",
+      "capability": "documents.metadata.update",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.documents-opnieuw.post.anon",
+      "method": "POST",
+      "route": "/documents/[id]/opnieuw-verwerken",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.documents-opnieuw.post.bestuurder.403",
+      "method": "POST",
+      "route": "/documents/[id]/opnieuw-verwerken",
+      "rol": "bestuurder",
+      "capability": "documents.lifecycle.manage",
+      "vlagAan": "403"
+    },
+    {
+      "slug": "w4.documents-opnieuw.post.voorzitter.404",
+      "method": "POST",
+      "route": "/documents/[id]/opnieuw-verwerken",
+      "rol": "voorzitter",
+      "capability": "documents.lifecycle.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.documents-procesinstanties.delete.anon",
+      "method": "DELETE",
+      "route": "/documents/[id]/procesinstanties",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.documents-procesinstanties.get.anon",
+      "method": "GET",
+      "route": "/documents/[id]/procesinstanties",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.documents-procesinstanties.get.bestuurder",
+      "method": "GET",
+      "route": "/documents/[id]/procesinstanties",
+      "rol": "bestuurder",
+      "capability": "documents.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.documents-procesinstanties.post.anon",
+      "method": "POST",
+      "route": "/documents/[id]/procesinstanties",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.documents-procesinstanties.post.bestuurder.400-ontbreekt",
+      "method": "POST",
+      "route": "/documents/[id]/procesinstanties",
+      "rol": "bestuurder",
+      "capability": "documents.metadata.update",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.documents-procesinstanties.post.voorzitter.400",
+      "method": "POST",
+      "route": "/documents/[id]/procesinstanties",
+      "rol": "voorzitter",
+      "capability": "documents.metadata.update",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.documents-reindex.post.anon",
+      "method": "POST",
+      "route": "/documents/reindex-backfill",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.documents-reindex.post.bestuurder.403",
+      "method": "POST",
+      "route": "/documents/reindex-backfill",
+      "rol": "bestuurder",
+      "capability": "beheer.backfill",
+      "vlagAan": "403"
+    },
+    {
+      "slug": "w4.documents-upload.get.anon",
+      "method": "GET",
+      "route": "/documents/upload",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.documents-upload.get.bestuurder",
+      "method": "GET",
+      "route": "/documents/upload",
+      "rol": "bestuurder",
+      "capability": "documents.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.documents-upload.post.anon",
+      "method": "POST",
+      "route": "/documents/upload",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.documents-upload.post.anon.kapotte-json",
+      "method": "POST",
+      "route": "/documents/upload",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.documents-upload.post.bestuurder.400-bestandsnaam",
+      "method": "POST",
+      "route": "/documents/upload",
+      "rol": "bestuurder",
+      "capability": "documents.metadata.update",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.dossiers-id.get.anon",
+      "method": "GET",
+      "route": "/dossiers/[id]",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.dossiers-id.get.bestuurder.404",
+      "method": "GET",
+      "route": "/dossiers/[id]",
+      "rol": "bestuurder",
+      "capability": "dossiers.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.dossiers-id.patch.anon",
+      "method": "PATCH",
+      "route": "/dossiers/[id]",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.dossiers-id.patch.bestuurder.403",
+      "method": "PATCH",
+      "route": "/dossiers/[id]",
+      "rol": "bestuurder",
+      "capability": "dossiers.manage",
+      "vlagAan": "403"
+    },
+    {
+      "slug": "w4.inbreng-id.delete.anon",
+      "method": "DELETE",
+      "route": "/inbreng/[id]",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.inbreng-id.delete.bestuurder.200",
+      "method": "DELETE",
+      "route": "/inbreng/[id]",
+      "rol": "bestuurder",
+      "capability": "inbreng.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.inbreng-id.delete.bestuurder.404",
+      "method": "DELETE",
+      "route": "/inbreng/[id]",
+      "rol": "bestuurder",
+      "capability": "inbreng.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.inbreng-id.delete.bestuursbureau.403",
+      "method": "DELETE",
+      "route": "/inbreng/[id]",
+      "rol": "bestuursbureau",
+      "capability": "inbreng.manage",
+      "vlagAan": "403"
+    },
+    {
+      "slug": "w4.inbreng-id.delete.voorzitter.403-niet-eigen",
+      "method": "DELETE",
+      "route": "/inbreng/[id]",
+      "rol": "voorzitter",
+      "capability": "inbreng.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.inbreng.post.anon",
+      "method": "POST",
+      "route": "/inbreng",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.inbreng.post.bestuurder.200",
+      "method": "POST",
+      "route": "/inbreng",
+      "rol": "bestuurder",
+      "capability": "inbreng.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.inbreng.post.bestuurder.400",
+      "method": "POST",
+      "route": "/inbreng",
+      "rol": "bestuurder",
+      "capability": "inbreng.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.inbreng.post.bestuursbureau.403",
+      "method": "POST",
+      "route": "/inbreng",
+      "rol": "bestuursbureau",
+      "capability": "inbreng.manage",
+      "vlagAan": "403"
+    },
+    {
+      "slug": "w4.instellingen.get.bestuurder",
+      "method": "GET",
+      "route": "/instellingen",
+      "rol": "bestuurder",
+      "capability": "iedere-ingelogde",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.instellingen.post.bestuurder.403",
+      "method": "POST",
+      "route": "/instellingen",
+      "rol": "bestuurder",
+      "capability": "fonds.config.manage",
+      "vlagAan": "403"
+    },
+    {
+      "slug": "w4.notificaties-alles-lezen.post.anon",
+      "method": "POST",
+      "route": "/notificaties/alles-lezen",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.notificaties-alles-lezen.post.beheerder.200",
+      "method": "POST",
+      "route": "/notificaties/alles-lezen",
+      "rol": "beheerder",
+      "capability": "notificaties.manage.own",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.notificaties-lezen.patch.anon",
+      "method": "PATCH",
+      "route": "/notificaties/[id]/lezen",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.notificaties-lezen.patch.voorzitter.200-geupdatet",
+      "method": "PATCH",
+      "route": "/notificaties/[id]/lezen",
+      "rol": "voorzitter",
+      "capability": "notificaties.manage.own",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.notificaties-lezen.patch.voorzitter.onbekend",
+      "method": "PATCH",
+      "route": "/notificaties/[id]/lezen",
+      "rol": "voorzitter",
+      "capability": "notificaties.manage.own",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.notities.patch.anon",
+      "method": "PATCH",
+      "route": "/agendapunten/[id]/voorbereiding/notities",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.notities.patch.bestuurder.200",
+      "method": "PATCH",
+      "route": "/agendapunten/[id]/voorbereiding/notities",
+      "rol": "bestuurder",
+      "capability": "agendapunten.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.notities.patch.bestuurder.400",
+      "method": "PATCH",
+      "route": "/agendapunten/[id]/voorbereiding/notities",
+      "rol": "bestuurder",
+      "capability": "agendapunten.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.notities.patch.bestuurder.404",
+      "method": "PATCH",
+      "route": "/agendapunten/[id]/voorbereiding/notities",
+      "rol": "bestuurder",
+      "capability": "agendapunten.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.notulen-bevestig.post.anon",
+      "method": "POST",
+      "route": "/notulen/segmenten/[id]/bevestig",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.notulen-bevestig.post.bestuurder.403-capability",
+      "method": "POST",
+      "route": "/notulen/segmenten/[id]/bevestig",
+      "rol": "bestuurder",
+      "capability": "notulen.segment.confirm",
+      "vlagAan": "403"
+    },
+    {
+      "slug": "w4.notulen-bevestig.post.voorzitter.400-idempotency",
+      "method": "POST",
+      "route": "/notulen/segmenten/[id]/bevestig",
+      "rol": "voorzitter",
+      "capability": "notulen.segment.confirm",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.notulen-bevestig.post.voorzitter.404",
+      "method": "POST",
+      "route": "/notulen/segmenten/[id]/bevestig",
+      "rol": "voorzitter",
+      "capability": "notulen.segment.confirm",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.notulen-segment.delete.anon",
+      "method": "DELETE",
+      "route": "/notulen/segmenten/[id]",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.notulen-segment.delete.bestuurder.403-capability",
+      "method": "DELETE",
+      "route": "/notulen/segmenten/[id]",
+      "rol": "bestuurder",
+      "capability": "notulen.segment.confirm",
+      "vlagAan": "403"
+    },
+    {
+      "slug": "w4.notulen-segment.delete.voorzitter.500-onbekend",
+      "method": "DELETE",
+      "route": "/notulen/segmenten/[id]",
+      "rol": "voorzitter",
+      "capability": "notulen.segment.confirm",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.notulen-segment.patch.anon",
+      "method": "PATCH",
+      "route": "/notulen/segmenten/[id]",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.notulen-segment.patch.bestuurder.403-capability",
+      "method": "PATCH",
+      "route": "/notulen/segmenten/[id]",
+      "rol": "bestuurder",
+      "capability": "notulen.segment.confirm",
+      "vlagAan": "403"
+    },
+    {
+      "slug": "w4.notulen-segment.patch.voorzitter.404",
+      "method": "PATCH",
+      "route": "/notulen/segmenten/[id]",
+      "rol": "voorzitter",
+      "capability": "notulen.segment.confirm",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.notulen-segmenteer.post.anon",
+      "method": "POST",
+      "route": "/notulen/[id]/segmenteer",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.notulen-segmenteer.post.bestuurder.403-capability",
+      "method": "POST",
+      "route": "/notulen/[id]/segmenteer",
+      "rol": "bestuurder",
+      "capability": "notulen.segment.confirm",
+      "vlagAan": "403"
+    },
+    {
+      "slug": "w4.notulen-segmenteer.post.voorzitter.400-geen-notulen",
+      "method": "POST",
+      "route": "/notulen/[id]/segmenteer",
+      "rol": "voorzitter",
+      "capability": "notulen.segment.confirm",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.notulen-segmenteer.post.voorzitter.404",
+      "method": "POST",
+      "route": "/notulen/[id]/segmenteer",
+      "rol": "voorzitter",
+      "capability": "notulen.segment.confirm",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.organisatieprofiel.get.anon",
+      "method": "GET",
+      "route": "/organisatieprofiel",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.organisatieprofiel.get.bestuurder",
+      "method": "GET",
+      "route": "/organisatieprofiel",
+      "rol": "bestuurder",
+      "capability": "organisation.profile.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.organisatieprofiel.put.anon",
+      "method": "PUT",
+      "route": "/organisatieprofiel",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.organisatieprofiel.put.bestuurder.403",
+      "method": "PUT",
+      "route": "/organisatieprofiel",
+      "rol": "bestuurder",
+      "capability": "organisation.profile.manage",
+      "vlagAan": "403"
+    },
+    {
+      "slug": "w4.procedures-afschrift-concept.post.anon",
+      "method": "POST",
+      "route": "/procedures/[id]/afschrift/concept",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-afschrift-concept.post.bestuursbureau.403",
+      "method": "POST",
+      "route": "/procedures/[id]/afschrift/concept",
+      "rol": "bestuursbureau",
+      "capability": "procedures.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-afschrift-id.patch.anon",
+      "method": "PATCH",
+      "route": "/procedures/[id]/afschriften/[afschriftId]",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-afschrift-id.patch.bestuurder.400-reden",
+      "method": "PATCH",
+      "route": "/procedures/[id]/afschriften/[afschriftId]",
+      "rol": "bestuurder",
+      "capability": "procedures.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-afschrift.post.anon",
+      "method": "POST",
+      "route": "/procedures/[id]/afschrift",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-afschrift.post.bestuurder.404",
+      "method": "POST",
+      "route": "/procedures/[id]/afschrift",
+      "rol": "bestuurder",
+      "capability": "procedures.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-afschrift.post.bestuursbureau.403",
+      "method": "POST",
+      "route": "/procedures/[id]/afschrift",
+      "rol": "bestuursbureau",
+      "capability": "procedures.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-besluitconcept.post.anon",
+      "method": "POST",
+      "route": "/procedures/[id]/stappen/[stapId]/besluit-concept",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-besluitconcept.post.bestuurder",
+      "method": "POST",
+      "route": "/procedures/[id]/stappen/[stapId]/besluit-concept",
+      "rol": "bestuurder",
+      "capability": "procedures.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-besluiten.post.anon",
+      "method": "POST",
+      "route": "/procedures/[id]/besluiten",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-besluiten.post.bestuurder.400",
+      "method": "POST",
+      "route": "/procedures/[id]/besluiten",
+      "rol": "bestuurder",
+      "capability": "procedures.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-bewijs-id.delete.anon",
+      "method": "DELETE",
+      "route": "/procedures/[id]/bewijs/[bewijsId]",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-bewijs-id.patch.anon",
+      "method": "PATCH",
+      "route": "/procedures/[id]/bewijs/[bewijsId]",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-bewijs-id.patch.bestuurder.400-document",
+      "method": "PATCH",
+      "route": "/procedures/[id]/bewijs/[bewijsId]",
+      "rol": "bestuurder",
+      "capability": "procedures.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-bewijs.post.anon",
+      "method": "POST",
+      "route": "/procedures/[id]/bewijs",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-bewijs.post.bestuurder.400-stap",
+      "method": "POST",
+      "route": "/procedures/[id]/bewijs",
+      "rol": "bestuurder",
+      "capability": "procedures.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-bewijs.post.bestuurder.400-titel",
+      "method": "POST",
+      "route": "/procedures/[id]/bewijs",
+      "rol": "bestuurder",
+      "capability": "procedures.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-checklist-id.patch.anon",
+      "method": "PATCH",
+      "route": "/procedures/[id]/checklist/[itemId]",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-checklist-id.patch.bestuurder.404",
+      "method": "PATCH",
+      "route": "/procedures/[id]/checklist/[itemId]",
+      "rol": "bestuurder",
+      "capability": "procedures.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-checklist.post.anon",
+      "method": "POST",
+      "route": "/procedures/[id]/checklist",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-checklist.post.bestuurder.400",
+      "method": "POST",
+      "route": "/procedures/[id]/checklist",
+      "rol": "bestuurder",
+      "capability": "procedures.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-checklist.post.bestuurder.403",
+      "method": "POST",
+      "route": "/procedures/[id]/checklist",
+      "rol": "bestuurder",
+      "capability": "procedures.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-checklist.post.voorzitter.200",
+      "method": "POST",
+      "route": "/procedures/[id]/checklist",
+      "rol": "voorzitter",
+      "capability": "procedures.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-fasebeschrijving.post.anon",
+      "method": "POST",
+      "route": "/procedures/[id]/fase-beschrijving",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-fasebeschrijving.post.bestuurder.400",
+      "method": "POST",
+      "route": "/procedures/[id]/fase-beschrijving",
+      "rol": "bestuurder",
+      "capability": "procedures.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-fasetoelichting.post.anon",
+      "method": "POST",
+      "route": "/procedures/[id]/fase-toelichting",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-fasetoelichting.post.bestuurder.400",
+      "method": "POST",
+      "route": "/procedures/[id]/fase-toelichting",
+      "rol": "bestuurder",
+      "capability": "procedures.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-heropenen.post.anon",
+      "method": "POST",
+      "route": "/procedures/[id]/stappen/[stapId]/heropenen",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-heropenen.post.bestuurder.403",
+      "method": "POST",
+      "route": "/procedures/[id]/stappen/[stapId]/heropenen",
+      "rol": "bestuurder",
+      "capability": "procedures.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-heropenen.post.voorzitter.400-motivering",
+      "method": "POST",
+      "route": "/procedures/[id]/stappen/[stapId]/heropenen",
+      "rol": "voorzitter",
+      "capability": "procedures.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-id.patch.anon",
+      "method": "PATCH",
+      "route": "/procedures/[id]",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-id.patch.bestuurder.400-motivering",
+      "method": "PATCH",
+      "route": "/procedures/[id]",
+      "rol": "bestuurder",
+      "capability": "procedures.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-requirement-id.patch.anon",
+      "method": "PATCH",
+      "route": "/procedures/[id]/requirements/[reqId]",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-requirement-id.patch.bestuurder.400-actief",
+      "method": "PATCH",
+      "route": "/procedures/[id]/requirements/[reqId]",
+      "rol": "bestuurder",
+      "capability": "procedures.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-requirements-uitsluiten.post.anon",
+      "method": "POST",
+      "route": "/procedures/[id]/requirements/uitsluiten",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-requirements-uitsluiten.post.bestuurder.403",
+      "method": "POST",
+      "route": "/procedures/[id]/requirements/uitsluiten",
+      "rol": "bestuurder",
+      "capability": "procedures.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-requirements.get.anon",
+      "method": "GET",
+      "route": "/procedures/[id]/requirements",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-requirements.get.bestuurder",
+      "method": "GET",
+      "route": "/procedures/[id]/requirements",
+      "rol": "bestuurder",
+      "capability": "procedures.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-requirements.post.anon",
+      "method": "POST",
+      "route": "/procedures/[id]/requirements",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-requirements.post.bestuurder.403",
+      "method": "POST",
+      "route": "/procedures/[id]/requirements",
+      "rol": "bestuurder",
+      "capability": "procedures.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-requirements.post.voorzitter.400",
+      "method": "POST",
+      "route": "/procedures/[id]/requirements",
+      "rol": "voorzitter",
+      "capability": "procedures.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-stap-agendapunt.post.anon",
+      "method": "POST",
+      "route": "/procedures/[id]/stappen/[stapId]/agendapunt",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-stap-agendapunt.post.bestuurder.400",
+      "method": "POST",
+      "route": "/procedures/[id]/stappen/[stapId]/agendapunt",
+      "rol": "bestuurder",
+      "capability": "procedures.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-stap.patch.anon",
+      "method": "PATCH",
+      "route": "/procedures/[id]/stappen/[stapId]",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-stap.patch.bestuurder.200",
+      "method": "PATCH",
+      "route": "/procedures/[id]/stappen/[stapId]",
+      "rol": "bestuurder",
+      "capability": "procedures.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-staptoelichting.post.anon",
+      "method": "POST",
+      "route": "/procedures/[id]/stappen/[stapId]/toelichting",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures-staptoelichting.post.bestuurder.403",
+      "method": "POST",
+      "route": "/procedures/[id]/stappen/[stapId]/toelichting",
+      "rol": "bestuurder",
+      "capability": "procedures.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures.post.anon",
+      "method": "POST",
+      "route": "/procedures",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures.post.bestuurder.400-template",
+      "method": "POST",
+      "route": "/procedures",
+      "rol": "bestuurder",
+      "capability": "procedures.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.procedures.post.bestuurder.400-titel",
+      "method": "POST",
+      "route": "/procedures",
+      "rol": "bestuurder",
+      "capability": "procedures.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.profiel.patch.beheerder.200",
+      "method": "PATCH",
+      "route": "/profiel",
+      "rol": "beheerder",
+      "capability": "profile.manage.own",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.reflectie.get.anon.401",
+      "method": "GET",
+      "route": "/reflectie/transitie",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.reflectie.post.anon.401",
+      "method": "POST",
+      "route": "/reflectie/transitie",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.reflectie.post.bestuurder.400",
+      "method": "POST",
+      "route": "/reflectie/transitie",
+      "rol": "bestuurder",
+      "capability": "reflectie.manage.own",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.risicos-maatregel.patch.anon",
+      "method": "PATCH",
+      "route": "/risicos/[id]/maatregelen/[mid]",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.risicos-maatregel.patch.bestuurder.200",
+      "method": "PATCH",
+      "route": "/risicos/[id]/maatregelen/[mid]",
+      "rol": "bestuurder",
+      "capability": "risicos.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.risicos-maatregel.patch.bestuurder.400",
+      "method": "PATCH",
+      "route": "/risicos/[id]/maatregelen/[mid]",
+      "rol": "bestuurder",
+      "capability": "risicos.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.risicos-maatregelen.post.anon",
+      "method": "POST",
+      "route": "/risicos/[id]/maatregelen",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.risicos-maatregelen.post.bestuurder.200",
+      "method": "POST",
+      "route": "/risicos/[id]/maatregelen",
+      "rol": "bestuurder",
+      "capability": "risicos.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.risicos-maatregelen.post.bestuurder.400",
+      "method": "POST",
+      "route": "/risicos/[id]/maatregelen",
+      "rol": "bestuurder",
+      "capability": "risicos.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.risicos-sluiten.post.anon",
+      "method": "POST",
+      "route": "/risicos/[id]/sluiten",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.risicos-sluiten.post.bestuurder.200",
+      "method": "POST",
+      "route": "/risicos/[id]/sluiten",
+      "rol": "bestuurder",
+      "capability": "risicos.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.risicos-sluiten.post.bestuurder.400",
+      "method": "POST",
+      "route": "/risicos/[id]/sluiten",
+      "rol": "bestuurder",
+      "capability": "risicos.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.stemmen.post.anon",
+      "method": "POST",
+      "route": "/stemmingen/[id]/stemmen",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.stemmen.post.bestuurder.200",
+      "method": "POST",
+      "route": "/stemmingen/[id]/stemmen",
+      "rol": "bestuurder",
+      "capability": "stemming.deelname",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.stemmen.post.bestuurder.400-gesloten",
+      "method": "POST",
+      "route": "/stemmingen/[id]/stemmen",
+      "rol": "bestuurder",
+      "capability": "stemming.deelname",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.stemmen.post.bestuurder.400-keuze",
+      "method": "POST",
+      "route": "/stemmingen/[id]/stemmen",
+      "rol": "bestuurder",
+      "capability": "stemming.deelname",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.stemmen.post.bestuurder.404",
+      "method": "POST",
+      "route": "/stemmingen/[id]/stemmen",
+      "rol": "bestuurder",
+      "capability": "stemming.deelname",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.stemmen.post.bestuursbureau.403",
+      "method": "POST",
+      "route": "/stemmingen/[id]/stemmen",
+      "rol": "bestuursbureau",
+      "capability": "stemming.deelname",
+      "vlagAan": "403"
+    },
+    {
+      "slug": "w4.stemmingen-intrekken.post.anon",
+      "method": "POST",
+      "route": "/stemmingen/[id]/intrekken",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.stemmingen-intrekken.post.bestuurder.400-gesloten",
+      "method": "POST",
+      "route": "/stemmingen/[id]/intrekken",
+      "rol": "bestuurder",
+      "capability": "stemming.deelname",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.stemmingen-intrekken.post.bestuurder.400-reden",
+      "method": "POST",
+      "route": "/stemmingen/[id]/intrekken",
+      "rol": "bestuurder",
+      "capability": "stemming.deelname",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.stemmingen-intrekken.post.bestuurder.404",
+      "method": "POST",
+      "route": "/stemmingen/[id]/intrekken",
+      "rol": "bestuurder",
+      "capability": "stemming.deelname",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.stemmingen-intrekken.post.voorzitter.200",
+      "method": "POST",
+      "route": "/stemmingen/[id]/intrekken",
+      "rol": "voorzitter",
+      "capability": "stemming.deelname",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.stemmingen-sluiten.post.anon",
+      "method": "POST",
+      "route": "/stemmingen/[id]/sluiten",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.stemmingen-sluiten.post.bestuurder.403-starter",
+      "method": "POST",
+      "route": "/stemmingen/[id]/sluiten",
+      "rol": "bestuurder",
+      "capability": "stemming.deelname",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.stemmingen-sluiten.post.bestuurder.404",
+      "method": "POST",
+      "route": "/stemmingen/[id]/sluiten",
+      "rol": "bestuurder",
+      "capability": "stemming.deelname",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.stemmingen-sluiten.post.bestuursbureau.403",
+      "method": "POST",
+      "route": "/stemmingen/[id]/sluiten",
+      "rol": "bestuursbureau",
+      "capability": "stemming.deelname",
+      "vlagAan": "403"
+    },
+    {
+      "slug": "w4.stemmingen-sluiten.post.voorzitter.200",
+      "method": "POST",
+      "route": "/stemmingen/[id]/sluiten",
+      "rol": "voorzitter",
+      "capability": "stemming.deelname",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.stemmingen.post.anon",
+      "method": "POST",
+      "route": "/stemmingen",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.stemmingen.post.bestuurder.400-categorie",
+      "method": "POST",
+      "route": "/stemmingen",
+      "rol": "bestuurder",
+      "capability": "stemming.deelname",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.stemmingen.post.bestuurder.400-verplicht",
+      "method": "POST",
+      "route": "/stemmingen",
+      "rol": "bestuurder",
+      "capability": "stemming.deelname",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.stemmingen.post.bestuurder.403-rol",
+      "method": "POST",
+      "route": "/stemmingen",
+      "rol": "bestuurder",
+      "capability": "stemming.deelname",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.stemmingen.post.bestuurder.404-agendapunt",
+      "method": "POST",
+      "route": "/stemmingen",
+      "rol": "bestuurder",
+      "capability": "stemming.deelname",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.stemmingen.post.bestuursbureau.403",
+      "method": "POST",
+      "route": "/stemmingen",
+      "rol": "bestuursbureau",
+      "capability": "stemming.deelname",
+      "vlagAan": "403"
+    },
+    {
+      "slug": "w4.stemmingen.post.voorzitter.200",
+      "method": "POST",
+      "route": "/stemmingen",
+      "rol": "voorzitter",
+      "capability": "stemming.deelname",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.stuurinfo-beheer.get.anon",
+      "method": "GET",
+      "route": "/stuurinformatie/beheer",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.stuurinfo-beheer.get.beheerder",
+      "method": "GET",
+      "route": "/stuurinformatie/beheer",
+      "rol": "beheerder",
+      "capability": "stuurinformatie.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.stuurinfo-beheer.get.bestuurder.403",
+      "method": "GET",
+      "route": "/stuurinformatie/beheer",
+      "rol": "bestuurder",
+      "capability": "stuurinformatie.manage",
+      "vlagAan": "403"
+    },
+    {
+      "slug": "w4.stuurinfo-beheer.post.anon",
+      "method": "POST",
+      "route": "/stuurinformatie/beheer",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.stuurinfo-beheer.post.beheerder.400",
+      "method": "POST",
+      "route": "/stuurinformatie/beheer",
+      "rol": "beheerder",
+      "capability": "stuurinformatie.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.stuurinfo-beheer.post.bestuurder.403",
+      "method": "POST",
+      "route": "/stuurinformatie/beheer",
+      "rol": "bestuurder",
+      "capability": "stuurinformatie.manage",
+      "vlagAan": "403"
+    },
+    {
+      "slug": "w4.stuurinfo-upload.post.anon",
+      "method": "POST",
+      "route": "/stuurinformatie/beheer/upload",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.stuurinfo-upload.post.beheerder.500-geen-bestand",
+      "method": "POST",
+      "route": "/stuurinformatie/beheer/upload",
+      "rol": "beheerder",
+      "capability": "stuurinformatie.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.stuurinfo-upload.post.bestuurder.403",
+      "method": "POST",
+      "route": "/stuurinformatie/beheer/upload",
+      "rol": "bestuurder",
+      "capability": "stuurinformatie.manage",
+      "vlagAan": "403"
+    },
+    {
+      "slug": "w4.vergaderingen-archief.post.anon",
+      "method": "POST",
+      "route": "/vergaderingen/[id]/archief",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.vergaderingen-archief.post.bestuurder.404",
+      "method": "POST",
+      "route": "/vergaderingen/[id]/archief",
+      "rol": "bestuurder",
+      "capability": "vergaderingen.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.vergaderingen-archief.post.voorzitter.200",
+      "method": "POST",
+      "route": "/vergaderingen/[id]/archief",
+      "rol": "voorzitter",
+      "capability": "vergaderingen.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.vergaderingen-archief.post.voorzitter.400-al-gearchiveerd",
+      "method": "POST",
+      "route": "/vergaderingen/[id]/archief",
+      "rol": "voorzitter",
+      "capability": "vergaderingen.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.vergaderingen-id.patch.anon",
+      "method": "PATCH",
+      "route": "/vergaderingen/[id]",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.vergaderingen-id.patch.bestuurder.403",
+      "method": "PATCH",
+      "route": "/vergaderingen/[id]",
+      "rol": "bestuurder",
+      "capability": "vergaderingen.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.vergaderingen-id.patch.bestuurder.404",
+      "method": "PATCH",
+      "route": "/vergaderingen/[id]",
+      "rol": "bestuurder",
+      "capability": "vergaderingen.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.vergaderingen-id.patch.voorzitter.200",
+      "method": "PATCH",
+      "route": "/vergaderingen/[id]",
+      "rol": "voorzitter",
+      "capability": "vergaderingen.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.vergaderingen-id.patch.voorzitter.400-geen-wijziging",
+      "method": "PATCH",
+      "route": "/vergaderingen/[id]",
+      "rol": "voorzitter",
+      "capability": "vergaderingen.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.vergaderingen.post.anon",
+      "method": "POST",
+      "route": "/vergaderingen",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.vergaderingen.post.bestuurder.400",
+      "method": "POST",
+      "route": "/vergaderingen",
+      "rol": "bestuurder",
+      "capability": "vergaderingen.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.vergaderingen.post.voorzitter.200",
+      "method": "POST",
+      "route": "/vergaderingen",
+      "rol": "voorzitter",
+      "capability": "vergaderingen.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.vergelijk.post.anon",
+      "method": "POST",
+      "route": "/vergelijk",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.vergelijk.post.bestuurder.400-documenten",
+      "method": "POST",
+      "route": "/vergelijk",
+      "rol": "bestuurder",
+      "capability": "vergelijk.use",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.vergelijk.post.bestuurder.400-mode",
+      "method": "POST",
+      "route": "/vergelijk",
+      "rol": "bestuurder",
+      "capability": "vergelijk.use",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w4.vergelijk.post.bestuurder.400-zelfde",
+      "method": "POST",
+      "route": "/vergelijk",
+      "rol": "bestuurder",
+      "capability": "vergelijk.use",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w5.aqlab-assurance-audit.get.anon",
+      "method": "GET",
+      "route": "/aqlab/assurance/audit/[exportId]",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w5.aqlab-assurance-audit.get.bestuurder.403",
+      "method": "GET",
+      "route": "/aqlab/assurance/audit/[exportId]",
+      "rol": "bestuurder",
+      "capability": "assurance.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w5.auditdossier.get.anon",
+      "method": "GET",
+      "route": "/decisions/[id]/auditdossier",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w5.auditdossier.get.bestuurder.200-html",
+      "method": "GET",
+      "route": "/decisions/[id]/auditdossier",
+      "rol": "bestuurder",
+      "capability": "decisions.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w5.auditdossier.get.bestuurder.200-json",
+      "method": "GET",
+      "route": "/decisions/[id]/auditdossier",
+      "rol": "bestuurder",
+      "capability": "decisions.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w5.auditdossier.get.bestuurder.400-trigger",
+      "method": "GET",
+      "route": "/decisions/[id]/auditdossier",
+      "rol": "bestuurder",
+      "capability": "decisions.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w5.auditdossier.get.bestuurder.404",
+      "method": "GET",
+      "route": "/decisions/[id]/auditdossier",
+      "rol": "bestuurder",
+      "capability": "decisions.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w5.auditdossier.get.bestuurder.404-geen-snapshot",
+      "method": "GET",
+      "route": "/decisions/[id]/auditdossier",
+      "rol": "bestuurder",
+      "capability": "decisions.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w5.auditdossier.get.bestuursbureau.403",
+      "method": "GET",
+      "route": "/decisions/[id]/auditdossier",
+      "rol": "bestuursbureau",
+      "capability": "decisions.view",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w5.chat.post.anon.400-invoer",
+      "method": "POST",
+      "route": "/chat",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w5.chat.post.anon.401",
+      "method": "POST",
+      "route": "/chat",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w5.chat.post.anon.kapotte-body",
+      "method": "POST",
+      "route": "/chat",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w5.chat.post.bestuurder.400-idempotentie",
+      "method": "POST",
+      "route": "/chat",
+      "rol": "bestuurder",
+      "capability": "chat.use",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w5.chat.post.bestuurder.400-invoer",
+      "method": "POST",
+      "route": "/chat",
+      "rol": "bestuurder",
+      "capability": "chat.use",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w5.chat.post.bestuurder.429",
+      "method": "POST",
+      "route": "/chat",
+      "rol": "bestuurder",
+      "capability": "chat.use",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w5.sjabloon.get.anon",
+      "method": "GET",
+      "route": "/stuurinformatie/beheer/sjabloon",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w5.sjabloon.get.beheerder.200",
+      "method": "GET",
+      "route": "/stuurinformatie/beheer/sjabloon",
+      "rol": "beheerder",
+      "capability": "stuurinformatie.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w5.sjabloon.get.bestuurder.403",
+      "method": "GET",
+      "route": "/stuurinformatie/beheer/sjabloon",
+      "rol": "bestuurder",
+      "capability": "stuurinformatie.manage",
+      "vlagAan": "403"
+    },
+    {
+      "slug": "w5.stuk-export.post.anon",
+      "method": "POST",
+      "route": "/ai/stuk-export",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w5.stuk-export.post.bestuurder.403",
+      "method": "POST",
+      "route": "/ai/stuk-export",
+      "rol": "bestuurder",
+      "capability": "ai.stukvoorbereiding",
+      "vlagAan": "403"
+    },
+    {
+      "slug": "w5.stuk-export.post.bestuursbureau.200",
+      "method": "POST",
+      "route": "/ai/stuk-export",
+      "rol": "bestuursbureau",
+      "capability": "ai.stukvoorbereiding",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w5.stuk-export.post.bestuursbureau.400-leeg",
+      "method": "POST",
+      "route": "/ai/stuk-export",
+      "rol": "bestuursbureau",
+      "capability": "ai.stukvoorbereiding",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w5.stuk-export.post.bestuursbureau.400-stuksoort",
+      "method": "POST",
+      "route": "/ai/stuk-export",
+      "rol": "bestuursbureau",
+      "capability": "ai.stukvoorbereiding",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w5.voorbereiding.post.anon",
+      "method": "POST",
+      "route": "/agendapunten/[id]/voorbereiding",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w5.voorbereiding.post.bestuurder.400-idempotentie",
+      "method": "POST",
+      "route": "/agendapunten/[id]/voorbereiding",
+      "rol": "bestuurder",
+      "capability": "agendapunten.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "w5.voorbereiding.post.bestuurder.429",
+      "method": "POST",
+      "route": "/agendapunten/[id]/voorbereiding",
+      "rol": "bestuurder",
+      "capability": "agendapunten.manage",
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "zoeken.get.anon",
+      "method": "GET",
+      "route": "/zoeken",
+      "rol": "anon",
+      "capability": null,
+      "vlagAan": "onveranderd"
+    },
+    {
+      "slug": "zoeken.get.bestuurder.gezaaide-429",
+      "method": "GET",
+      "route": "/zoeken",
+      "rol": "bestuurder",
+      "capability": "zoeken.use",
+      "vlagAan": "onveranderd"
+    }
+  ]
+}

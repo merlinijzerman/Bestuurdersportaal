@@ -34,7 +34,7 @@ import {
 //  RLS beperkt alles tot het eigen fonds; de schrijf-rolgate zit óók in de DB.
 // ============================================================
 
-export const GET = withFondsRoute({ capability: "fonds.config.manage" }, async (ctx) => {
+export const GET = withFondsRoute({ capability: "iedere-ingelogde" }, async (ctx) => {
   try {
     if (!ctx.fondsId)
       return NextResponse.json({ error: "Geen fonds" }, { status: 400 });
