@@ -24,13 +24,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
-import { z } from "zod";
 
 export const dynamic = "force-dynamic";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export const DELETE = withFondsRoute({ capability: "gesprekken.manage", schema: z.object({ "request_id": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const DELETE = withFondsRoute({ capability: "gesprekken.manage", schema: "geen-body" }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     if (!UUID.test(id)) {
