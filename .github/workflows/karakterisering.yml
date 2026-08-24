@@ -123,6 +123,13 @@ jobs:
       - name: Projectref-grendel verifiëren (geen database)
         run: npm run test:seed-guard
 
+      # W8 (#175) — puur, geen DB/build nodig, dus VÓÓR de dure stack-boot zodat een
+      # te streng conceptschema meteen faalt. De classifier bewijst differentieel dat
+      # geen gegenereerd schema strenger is dan de code (corpus = de harnas-bodies) en
+      # dat een bewust te streng schema ROOD wordt (negatieve controle). Exit ≠ 0 → rood.
+      - name: W8 — schema niet-strenger (differentiële classifier)
+        run: npm run test:schema-niet-strenger
+
       # Pin op dezelfde CLI als de rls-cross-tenant-baseline (db.major_version=17).
       - name: Supabase CLI opzetten
         uses: supabase/setup-cli@v1
