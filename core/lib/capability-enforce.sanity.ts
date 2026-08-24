@@ -2,10 +2,10 @@
 //  Sanity-tests voor de pure capability-beoordeling (W6, EPIC W, deploy 3).
 //
 //  Twee dingen worden hier gemeten, allebei zonder I/O en zonder Next-runtime:
-//    1. de env-schakelaar — en vooral: dat hij NIET het omgevingsgedrag van
-//       `tenantEnforceVoorOmgeving` kopieert. Zou hij preview/productie
-//       automatisch fail-closed zetten, dan zou de eerste W6-deploy het hele
-//       portaal op 403 zetten, want alle 112 handlers staan op "TE_BEPALEN".
+//    1. de env-schakelaar. FASE 2 (besluit 0188): sinds W7 alle declaraties heeft
+//       ingevuld (nul "TE_BEPALEN") en de env-flip stabiel is waargenomen, zet
+//       deze functie productie/preview/staging ALTIJD fail-closed — nu GELIJK aan
+//       `tenantEnforceVoorOmgeving`. Buiten die omgevingen blijft de opt-in.
 //    2. de zou-beslissing per declaratie, inclusief de drie bijzondere waarden.
 //
 //  Uitvoeren: npx tsx core/lib/capability-enforce.sanity.ts
@@ -37,26 +37,36 @@ test("alleen ENFORCE_CAPABILITY=on zet de poort aan", () => {
   assert.equal(capabilityEnforceVoorOmgeving({}), false);
 });
 
-test("de schakelaar leunt NIET op de omgeving — de vlag-default flipt pas in W7+", () => {
-  // Tegenproef op de verleiding om tenantEnforceVoorOmgeving te kopiëren. Zolang
-  // er 112 declaraties "TE_BEPALEN" staan, is een omgevings-default hetzelfde als
-  // het portaal uitzetten. De flip naar fail-closed hoort in deze functie thuis,
-  // op een eigen moment, met een eigen BESLUIT.
-  //
-  // Geen object-literal maar een variabele: zo passeert de excess-property-check
-  // en toetst de assertie het RUNTIME-gedrag — de functie kijkt naar geen van
-  // deze velden. De typefout zou hier juist het bewijs verbergen.
-  const omgevingsInvoer = {
-    enforceCapability: undefined,
-    vercelEnv: "production",
-    vercelTargetEnv: "preview",
-    deployTarget: "staging",
-  };
-  assert.equal(
-    capabilityEnforceVoorOmgeving(omgevingsInvoer),
-    false,
-    "een beschermde omgeving mag de poort in W6 niet stil aanzetten"
-  );
+test("FASE 2 (0188): productie/preview/staging zetten de poort ALTIJD aan", () => {
+  // De inversie van de W6-tegenproef. In W6 mocht een beschermde omgeving de
+  // poort NIET stil aanzetten (112× TE_BEPALEN). Na W7 is dat juist de bedoeling:
+  // een beschermde omgeving is fail-closed, ook zonder env-waarde en zelfs bij
+  // een foute waarde. Gelijk aan tenantEnforceVoorOmgeving.
+  for (const veld of ["vercelEnv", "vercelTargetEnv", "deployTarget"] as const) {
+    for (const waarde of ["production", "preview", "staging"]) {
+      // enforceCapability bewust afwezig én op "off": geen van beide mag de
+      // beschermde omgeving nog uitzetten.
+      assert.equal(
+        capabilityEnforceVoorOmgeving({ [veld]: waarde }),
+        true,
+        `${veld}=${waarde} moet fail-closed zijn`
+      );
+      assert.equal(
+        capabilityEnforceVoorOmgeving({ [veld]: waarde, enforceCapability: "off" }),
+        true,
+        `${veld}=${waarde} mag door enforceCapability=off niet stil uitgezet worden`
+      );
+    }
+  }
+});
+
+test("FASE 2 (0188): buiten een beschermde omgeving blijft de opt-in gelden", () => {
+  // Lokaal/dev: geen omgevingsmarkering → alleen ENFORCE_CAPABILITY=on zet aan.
+  assert.equal(capabilityEnforceVoorOmgeving({ enforceCapability: "on" }), true);
+  assert.equal(capabilityEnforceVoorOmgeving({ enforceCapability: "off" }), false);
+  assert.equal(capabilityEnforceVoorOmgeving({ enforceCapability: undefined }), false);
+  assert.equal(capabilityEnforceVoorOmgeving({ vercelEnv: "development" }), false);
+  assert.equal(capabilityEnforceVoorOmgeving({ deployTarget: "app", vercelEnv: null }), false);
 });
 
 // ── De zou-beslissing ────────────────────────────────────────────────────────
