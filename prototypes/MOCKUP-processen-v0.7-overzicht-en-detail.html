@@ -1,0 +1,1515 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Processen — overzicht en stapdetail (v0.7) · Wtp-invaarbesluit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Newsreader:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ──────────────────────────────────────────────────────────────────────────
+   Tokenlaag — 1-op-1 overgenomen uit mvp/app/globals.css (bron van waarheid).
+   Deze mockup voegt GEEN nieuwe kleuren toe; alles hieronder is bestaand.
+   ────────────────────────────────────────────────────────────────────────── */
+:root{
+  --paper:#EEF1F6; --ink:#12233B; --muted:#5C6B82; --line:#DFE5EE;
+  --accent:#234E70; --accent-ink:#1A3A54; --accent-tint:#E7EDF3; --card:#FFFFFF;
+  --app-bg:#EEF1F6; --app-surface:#FFFFFF; --app-line:#DFE5EE;
+  --app-line-strong:#C8D2E0; --app-line-control:#78869C; --app-zebra:#F7F9FC;
+  --nav:#FFFFFF; --nav-line:#DFE5EE; --nav-text:#5C6B82; --nav-text-active:#12233B;
+  --nav-accent:#234E70; --nav-active:rgba(35,78,112,.10);
+  --ok:#106B46; --ok-tint:#EAF7F0; --ok-ink:#0D5A3B;
+  --err:#A4271C; --err-tint:#FDF0EE; --err-ink:#8C2017;
+  --warn:#8A5A00; --warn-tint:#FDF6E6; --warn-ink:#744A00;
+  --phase:#0E7C9B; --phase-tint:#E2F0F5; --phase-ink:#0A6178;
+  --shadow-card:0 1px 2px rgb(18 35 59 / .04), 0 10px 26px -18px rgb(18 35 59 / .35);
+  --font-serif:'Newsreader',Georgia,serif;
+  --font-sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--app-bg);color:var(--ink);font-family:var(--font-sans);font-size:14px;line-height:1.5;
+  -webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+h1,h2,h3{margin:0}
+ul,ol{margin:0;padding:0;list-style:none}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
+.serif{font-family:var(--font-serif)}
+
+/* mockup-strip (staat buiten de app) */
+.mockbar{position:fixed;top:0;left:0;right:0;height:30px;z-index:60;background:var(--warn-tint);
+  border-bottom:1px solid rgba(138,90,0,.3);color:var(--warn-ink);font-size:11.5px;
+  display:flex;align-items:center;justify-content:space-between;padding:0 16px}
+.mockbar b{font-weight:600}
+
+/* ── Sidebar (core/components/Sidebar.tsx — lichte nav, w-64) ── */
+nav.side{position:fixed;top:30px;left:0;width:256px;height:calc(100vh - 30px);background:var(--nav);
+  border-right:1px solid var(--nav-line);display:flex;flex-direction:column;z-index:50}
+.side .logoblok{border-bottom:1px solid var(--nav-line);padding:24px 20px}
+.side .logorow{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.logotile{width:40px;height:40px;border-radius:12px;background:var(--nav-accent);color:#fff;display:grid;place-items:center;
+  font-weight:900;font-size:18px}
+.hamb{width:32px;height:32px;border-radius:8px;color:var(--nav-text);display:grid;place-items:center}
+.hamb:hover{background:var(--nav-line);color:var(--nav-text-active)}
+.side .fonds{font-weight:700;font-size:14px;color:var(--nav-text-active);line-height:1.35}
+.side .omgeving{font-size:12px;color:var(--nav-text);margin-top:2px}
+.side .profiel{border-bottom:1px solid var(--nav-line);display:flex;align-items:center;gap:10px;padding:12px 20px}
+.side .profiel:hover{background:var(--nav-line)}
+.side .avatar{width:32px;height:32px;border-radius:50%;background:var(--nav-accent);color:#fff;display:grid;place-items:center;
+  font-weight:700;font-size:12px}
+.side .pnaam{font-size:12px;font-weight:600;color:var(--nav-text-active)}
+.side .prol{font-size:12px;color:var(--nav-text)}
+.side .items{flex:1;overflow-y:auto;padding:12px 0}
+.side .sect{padding:12px 20px 4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:rgba(92,107,130,.7)}
+.side a.item{display:flex;align-items:center;gap:10px;font-size:14px;padding:10px 20px;border-left:3px solid transparent;
+  color:var(--nav-text);text-decoration:none}
+.side a.item:hover{background:var(--nav-line);color:var(--nav-text-active)}
+.side a.item.on{background:var(--nav-active);color:var(--nav-text-active);border-left-color:var(--nav-accent);font-weight:500}
+.side a.item .ico{width:20px;text-align:center;font-size:16px;flex:0 0 20px}
+.side .badge{background:var(--nav-accent);color:#fff;font-size:11px;font-weight:700;padding:1px 8px;border-radius:99px}
+.side .sfoot{border-top:1px solid var(--nav-line);padding:16px 20px;font-size:12px;color:var(--nav-text)}
+.side .sfoot .dot{width:8px;height:8px;border-radius:50%;background:var(--ok);display:inline-block;margin-right:8px}
+
+/* ── Content ── */
+main{margin-left:256px;padding:30px 0 0}
+.page{padding:28px;display:flex;flex-direction:column;gap:24px;max-width:1680px}
+.backrow{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.backlink{font-size:14px;color:var(--muted);display:inline-flex;align-items:center;gap:5px}
+.backlink:hover{color:var(--ink)}
+.actiebtn{display:inline-flex;align-items:center;gap:6px;border-radius:8px;border:1px solid rgba(35,78,112,.4);
+  background:rgba(35,78,112,.05);padding:6px 12px;font-size:14px;font-weight:500;color:var(--accent)}
+.actiebtn:hover{background:rgba(35,78,112,.1)}
+
+.tag{font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.04em;padding:2px 8px;border-radius:4px}
+.tag.phase{color:var(--phase-ink);background:var(--phase-tint)}
+.tag.warn{color:var(--warn-ink);background:var(--warn-tint);border:1px solid rgba(138,90,0,.3)}
+.tag.neutral{color:var(--ink);background:var(--app-bg);border:1px solid var(--line)}
+.tag.ok{color:var(--ok-ink);background:var(--ok-tint);border:1px solid rgba(16,107,70,.3)}
+.tag.err{color:var(--err-ink);background:var(--err-tint);border:1px solid rgba(164,39,28,.3)}
+
+h1.titel{font-family:var(--font-serif);font-size:22px;font-weight:700;color:var(--ink);letter-spacing:-.01em}
+.subtxt{font-size:14px;color:var(--muted);margin-top:6px;max-width:78ch}
+
+.metacard{background:#fff;border:1px solid var(--line);border-radius:12px;padding:20px;display:grid;
+  grid-template-columns:repeat(4,1fr);gap:16px}
+@media(max-width:1100px){.metacard{grid-template-columns:repeat(2,1fr)}}
+.metacard .k{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600}
+.metacard .v{font-size:14px;color:var(--ink);font-weight:500;margin-top:8px}
+.metacard .sub{font-size:12px;color:var(--muted);margin-top:2px}
+.progbar{width:100%;height:6px;background:var(--app-bg);border-radius:99px;overflow:hidden;margin-top:6px}
+.progbar span{display:block;height:100%;background:var(--accent);transition:width .35s ease}
+.stack{display:flex;margin-top:8px}
+.stack div{width:32px;height:32px;border-radius:50%;background:var(--phase-tint);color:var(--phase-ink);font-size:12px;
+  font-weight:500;display:grid;place-items:center;border:2px solid #fff;margin-right:-8px}
+
+.grid12{display:grid;grid-template-columns:repeat(12,1fr);gap:20px;align-items:start}
+.col4{grid-column:span 4}
+.col8{grid-column:span 8}
+@media(max-width:1240px){.col4,.col8{grid-column:span 12}}
+
+.panel{background:#fff;border:1px solid var(--line);border-radius:12px}
+.panel.pad{padding:20px}
+.railcard{position:sticky;top:46px}
+.railhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.railhead .k{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600}
+.railhead .n{font-size:11px;color:var(--muted)}
+.railnote{font-size:11px;color:var(--muted);font-style:italic;margin:-8px 0 12px}
+
+/* fase-accordeon (FaseRail.tsx) */
+.fase{border-radius:8px;overflow:hidden}
+.fase>.fkop{width:100%;text-align:left;padding:10px;display:flex;align-items:center;gap:10px}
+.fase>.fkop:hover{background:rgba(223,229,238,.5)}
+.fase.sel>.fkop{background:var(--nav-active)}
+.fbadge{width:28px;height:28px;border-radius:6px;display:grid;place-items:center;font-size:11px;font-weight:700;
+  background:var(--app-bg);color:var(--nav-text);border:1px solid var(--nav-line);flex:0 0 28px}
+.ftitel{flex:1;min-width:0}
+.ftitel b{display:block;font-size:14px;font-weight:600;color:var(--nav-text-active);line-height:1.25}
+.ftitel span{display:block;font-size:11px;color:var(--nav-text);margin-top:2px}
+.fpill{font-size:10px;font-weight:600;border-radius:99px;padding:2px 8px;white-space:nowrap;
+  background:var(--ok-tint);color:var(--ok-ink);border:1px solid rgba(16,107,70,.2)}
+.chev{font-size:11px;color:var(--nav-text);transition:transform .18s ease}
+.fase.open .chev{transform:rotate(180deg)}
+.stappen{display:none;padding:4px 12px 12px}
+.fase.open .stappen{display:block}
+.slink{position:relative;display:block;width:100%;text-align:left;padding:8px 12px 8px 36px;border-radius:8px;margin-bottom:4px}
+.slink:hover{background:rgba(223,229,238,.5)}
+.slink.on{background:var(--nav-active)}
+.snum{position:absolute;left:0;top:10px;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;
+  font-size:12px;font-weight:600;background:var(--app-bg);border:1px solid var(--nav-line);color:var(--nav-text)}
+.slink.on .snum{background:var(--nav-accent);border-color:var(--nav-accent);color:#fff}
+.slink .sconn{position:absolute;left:11px;top:34px;bottom:-4px;width:1px;background:var(--nav-line)}
+.snaam{display:block;font-size:14px;line-height:1.35;color:var(--nav-text)}
+.slink.on .snaam{font-weight:600;color:var(--nav-text-active)}
+.snaam.klaar,.snaam.bezig{color:var(--ink)}
+.smeta{display:block;font-size:12px;color:var(--nav-text);margin-top:2px}
+.railfoot{border-top:1px solid var(--line);margin-top:12px;padding-top:12px;font-size:12px;color:var(--muted)}
+
+/* stapkop */
+.stapkop{padding:22px 24px 0}
+.stapkop .rol{font-size:12px;text-transform:uppercase;letter-spacing:.04em;font-weight:600}
+.stapkop .rol.actief{color:var(--warn-ink)} .stapkop .rol.klaar{color:var(--ok-ink)} .stapkop .rol.open{color:var(--muted)}
+.stapkop h2{font-size:17px;font-weight:600;color:var(--ink);margin-top:4px}
+.kopregel{display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap}
+.stapnav{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);white-space:nowrap}
+.ibtn{width:28px;height:28px;border:1px solid var(--app-line-control);border-radius:8px;display:grid;place-items:center;
+  color:var(--muted)}
+.ibtn:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+.ibtn:disabled{opacity:.35;cursor:not-allowed}
+.stapmeta{font-size:12px;color:var(--muted);margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+/* tabs — de kern van variant 3 */
+.tabbar{display:flex;gap:4px;margin-top:16px;border-bottom:1px solid var(--line);overflow-x:auto}
+.tab{padding:9px 14px;font-size:14px;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;
+  border-radius:8px 8px 0 0;display:flex;align-items:center;gap:7px;white-space:nowrap}
+.tab:hover{color:var(--ink);background:var(--app-zebra)}
+.tab.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:600;background:none}
+.tab .n{font-size:11px;font-weight:600;padding:1px 7px;border-radius:99px;background:var(--app-bg);color:var(--muted)}
+.tab.on .n{background:var(--accent-tint);color:var(--accent)}
+.tab .n.err{background:var(--err-tint);color:var(--err-ink)}
+.tab .n.ok{background:var(--ok-tint);color:var(--ok-ink)}
+.tabbody{padding:20px 24px 24px}
+
+/* generieke bouwstenen (StapPaneel.tsx) */
+.lbl{font-size:11px;text-transform:uppercase;letter-spacing:.04em;font-weight:600;color:var(--muted);
+  display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.lbl .wijzig{font-size:12px;text-transform:none;letter-spacing:0;font-weight:400;color:var(--accent)}
+.lbl .wijzig:hover{text-decoration:underline}
+.sectiekop{display:flex;align-items:center;gap:8px;margin:0 0 12px}
+.sectiekop b{font-size:14px;font-weight:600}
+.sectiekop .n{font-size:12px;color:var(--muted);font-weight:400}
+.sectiekop .add{margin-left:auto;font-size:12px;color:var(--ink)}
+.sectiekop .add:hover{text-decoration:underline}
+.tekst{font-size:13px;color:var(--muted);line-height:1.6}
+.tekst.ink{color:var(--ink)}
+.box{border:1px solid var(--line);border-radius:12px;padding:16px}
+.box.bg{background:var(--app-bg);border-color:transparent}
+.kv{display:flex;justify-content:space-between;gap:12px;font-size:13px;padding:7px 0;border-bottom:1px solid var(--line)}
+.kv:last-child{border-bottom:0}.kv .k{color:var(--muted)}.kv .v{font-weight:600;text-align:right}
+.split{display:grid;grid-template-columns:1.4fr 1fr;gap:20px}
+@media(max-width:1400px){.split{grid-template-columns:1fr}}
+
+.rij{display:flex;gap:12px;align-items:flex-start;padding:12px;border:1px solid var(--line);border-radius:8px;margin-bottom:8px}
+.rij.klaar{background:var(--ok-tint);border-color:rgba(16,107,70,.3)}
+.rij .tegel{width:36px;height:40px;border-radius:4px;display:grid;place-items:center;font-size:10px;font-weight:700;
+  background:var(--app-bg);color:var(--muted);flex:0 0 36px}
+.rij .tegel.klaar{background:var(--ok-tint);color:var(--ok-ink)}
+.rij .body{flex:1;min-width:0}
+.rij .t{font-size:13px;line-height:1.45;color:var(--ink)}
+.rij .m{font-size:12px;color:var(--muted);margin-top:4px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.rij .r{display:flex;gap:8px;align-items:center;flex-shrink:0}
+.mini{font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.04em;padding:2px 6px;border-radius:4px}
+.mini.blok{color:var(--err-ink);background:var(--err-tint);border:1px solid rgba(164,39,28,.3)}
+.mini.bew{color:var(--warn-ink);background:var(--warn-tint);border:1px solid rgba(138,90,0,.3)}
+.mini.ok{color:var(--ok-ink);background:var(--ok-tint);border:1px solid rgba(16,107,70,.3)}
+.mini.neut{color:var(--muted);background:var(--app-bg);border:1px solid var(--line)}
+/* Zwaarte (v0.7 §5.1) — kritiek erft de rode tint van .blok, vereist de neutrale. */
+.mini.kritiek{color:var(--err-ink);background:var(--err-tint);border:1px solid rgba(164,39,28,.3)}
+.mini.vereist{color:var(--muted);background:var(--app-bg);border:1px solid var(--line)}
+.mini.afwijk{color:var(--warn-ink);background:var(--warn-tint);border:1px solid rgba(138,90,0,.3)}
+/* Afrondpaneel: verschijnt boven de voettekstbalk, geen modal. */
+.afrondpaneel{border-top:1px solid var(--line);background:var(--warn-tint);padding:16px 24px}
+.afrondpaneel h4{font-size:14px;margin:0 0 6px;color:var(--warn-ink)}
+.afrondpaneel p{font-size:13px;line-height:1.55;color:var(--warn-ink);margin:0 0 12px;max-width:82ch}
+.afrondpaneel ul{margin:0 0 12px 18px;font-size:13px;line-height:1.6;color:var(--warn-ink)}
+.afrondpaneel textarea{width:100%;max-width:82ch;font:inherit;font-size:13px;padding:8px 10px;border:1px solid rgba(138,90,0,.35);
+  border-radius:6px;background:#fff;color:var(--ink);resize:vertical}
+.afrondpaneel .bevestig{display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--warn-ink);margin:12px 0;max-width:82ch}
+.afrondpaneel .rij2{display:flex;gap:8px;margin-top:12px}
+/* Aantekeningen (§9.3) — bewust rustiger dan een bewijsrij: werkverkeer, geen dossierobject. */
+.notitieveld{border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-bottom:12px;background:var(--app-bg)}
+.notitieveld textarea{width:100%;font:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--line);
+  border-radius:6px;background:#fff;color:var(--ink);resize:vertical}
+.notitieveld .nhint{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.5;max-width:78ch}
+.notitie{padding:10px 2px;border-bottom:1px solid var(--line)}
+.notitie .nkop{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin-bottom:4px}
+.notitie .nkop b{color:var(--ink);font-size:13px;font-weight:600}
+.notitie .nact{margin-left:auto;display:flex;gap:10px}
+.notitie .ntekst{font-size:13px;line-height:1.6;color:var(--ink);max-width:78ch}
+.voet .st{line-height:1.9} .voet .st .mini{display:inline-block;margin-right:6px;vertical-align:middle}
+.uitleg{font-size:12px;color:var(--muted);background:var(--app-bg);border-left:2px solid var(--line);border-radius:0 6px 6px 0;
+  padding:9px 12px;margin-top:8px;line-height:1.55}
+.chk{width:16px;height:16px;accent-color:var(--accent);margin-top:2px;flex:0 0 16px;cursor:pointer}
+.chk:disabled{cursor:not-allowed}
+.link{font-size:12px;color:var(--accent)} .link:hover{text-decoration:underline}
+.link.mut{color:var(--muted)} .link.ink{color:var(--ink)}
+.link.ai{color:var(--accent);white-space:nowrap}
+
+.knop{padding:7px 14px;border-radius:8px;font-size:13px;font-weight:500;border:1px solid var(--app-line-control);
+  background:#fff;display:inline-flex;align-items:center;gap:6px}
+.knop:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+.knop.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+.knop.pri:hover:not(:disabled){background:var(--accent-ink);border-color:var(--accent-ink);color:#fff}
+.knop.klein{padding:5px 12px;font-size:12px}
+.knop:disabled{background:var(--app-line-strong);border-color:var(--app-line-strong);color:var(--muted);cursor:not-allowed}
+.knop.pri:disabled{background:var(--app-line-strong);border-color:var(--app-line-strong);color:var(--muted)}
+
+.melding{display:flex;gap:10px;padding:10px 14px;border-radius:8px;font-size:13px;line-height:1.5;margin-bottom:14px}
+.melding.warn{background:var(--warn-tint);color:var(--warn-ink);border:1px solid rgba(138,90,0,.3)}
+.melding.err{background:var(--err-tint);color:var(--err-ink);border:1px solid rgba(164,39,28,.3)}
+.melding.ok{background:var(--ok-tint);color:var(--ok-ink);border:1px solid rgba(16,107,70,.3)}
+.melding.info{background:var(--accent-tint);color:var(--accent-ink);border:1px solid rgba(35,78,112,.25)}
+.leeg{border:1px dashed var(--app-line-strong);border-radius:12px;padding:24px;text-align:center;color:var(--muted);font-size:13px}
+.veld{margin-bottom:12px}
+.veld label{display:block;font-size:12px;font-weight:600;margin-bottom:4px}
+.veld input,.veld textarea{width:100%;border:1px solid var(--line);border-radius:6px;padding:8px 10px;font:inherit;font-size:13px;
+  color:var(--ink);background:#fff;resize:vertical}
+.veld textarea{min-height:70px}
+.veld input:focus,.veld textarea:focus{outline:none;border-color:var(--accent)}
+.hint{font-size:11px;color:var(--muted);margin-top:4px}
+
+/* voettekst-balk van het stappaneel */
+.voet{border-top:1px solid var(--line);padding:16px 24px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  background:var(--app-zebra);border-radius:0 0 12px 12px}
+.voet .st{font-size:13px;color:var(--muted)} .voet .st b{color:var(--ink)}
+.voet .kn{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+
+/* dossier */
+.dossier .rijkop{width:100%;display:flex;align-items:center;gap:12px;padding:14px 20px;text-align:left}
+.dossier .rijkop:hover{background:var(--app-zebra)}
+.dossier .item{border-bottom:1px solid var(--line)}
+.dossier .item:last-child{border-bottom:0}
+.dossier .inhoud{display:none;padding:0 20px 16px 52px;font-size:13px;color:var(--muted);line-height:1.6}
+.dossier .item.open .inhoud{display:block}
+
+#toast{position:fixed;bottom:24px;left:calc(50% + 128px);transform:translate(-50%,16px);background:var(--ink);color:#fff;
+  padding:10px 18px;border-radius:99px;font-size:13px;box-shadow:var(--shadow-card);opacity:0;pointer-events:none;
+  transition:opacity .2s,transform .2s;z-index:70}
+#toast.on{opacity:1;transform:translate(-50%,0)}
+.legenda{font-size:12px;color:var(--muted);line-height:1.7;border-top:1px solid var(--line);padding-top:16px}
+
+/* ── Scherm 1: procesoverzicht (filters + lijst) ── */
+.col3{grid-column:span 3}
+.col9{grid-column:span 9}
+.col12{grid-column:span 12}
+@media(max-width:1240px){.col3,.col9{grid-column:span 12}}
+
+/* werkbalk boven de lijst — filterrail staat standaard ingeklapt */
+.werkbalk{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.statuskeuze{display:inline-flex;border:1px solid var(--app-line-control);border-radius:8px;overflow:hidden;background:#fff}
+.statuskeuze button{padding:7px 14px;font-size:13px;color:var(--muted);border-right:1px solid var(--line);display:flex;
+  align-items:center;gap:7px}
+.statuskeuze button:last-child{border-right:0}
+.statuskeuze button:hover{background:var(--app-zebra);color:var(--ink)}
+.statuskeuze button.aan{background:var(--accent-tint);color:var(--accent);font-weight:600}
+.statuskeuze .aantal{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.statuskeuze button.aan .aantal{color:var(--accent)}
+#filterKnop .tel{background:var(--accent);color:#fff;font-size:11px;font-weight:700;border-radius:99px;padding:0 6px;margin-left:2px}
+#filterKnop[aria-expanded="true"]{border-color:var(--accent);color:var(--accent);background:var(--accent-tint)}
+.chips{display:flex;gap:6px;flex-wrap:wrap;flex:1;min-width:0}
+/* Zoeken (v0.8) — stapelt op de filters, niet ernaast: één resultatenlijst. */
+.zoekvak{position:relative;display:flex;align-items:center}
+.zoekvak .zicoon{position:absolute;left:10px;font-size:15px;color:var(--muted);pointer-events:none}
+.zoekvak input{width:250px;font:inherit;font-size:13px;padding:8px 28px 8px 30px;border:1px solid var(--line);
+  border-radius:8px;background:#fff;color:var(--ink)}
+.zoekvak input::placeholder{color:var(--muted)}
+.zoekvak input:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:transparent}
+.zoekvak input::-webkit-search-cancel-button{display:none}
+.zwis{position:absolute;right:6px;width:18px;height:18px;border:0;border-radius:50%;background:var(--app-bg);
+  color:var(--muted);font-size:13px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center}
+mark{background:var(--warn-tint);color:inherit;border-radius:2px;padding:0 2px;
+  box-shadow:inset 0 -1.5px 0 rgba(138,90,0,.45)}
+.chip{display:inline-flex;align-items:center;gap:7px;font-size:12px;padding:4px 8px 4px 10px;border-radius:99px;
+  background:var(--accent-tint);color:var(--accent-ink);border:1px solid rgba(35,78,112,.2)}
+.chip .x{font-size:13px;line-height:1;opacity:.6}
+.chip:hover .x{opacity:1}
+.chip.wis{background:none;border-color:transparent;color:var(--muted)}
+.chip.wis:hover{text-decoration:underline}
+.filterrail{position:sticky;top:46px}
+.fgroep{margin-bottom:18px}
+.fgroep>.gk{font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;display:flex;align-items:baseline;gap:8px}
+.fgroep>.gk .gh{font-size:11px;font-weight:400;color:var(--muted)}
+.fopt .vk.rond{border-radius:50%;font-size:9px;line-height:1}
+.fopt{display:flex;align-items:center;gap:10px;width:100%;padding:6px 8px;border-radius:6px;text-align:left;font-size:13px;
+  color:var(--muted)}
+.fopt:hover{background:var(--app-zebra)}
+.fopt.aan{color:var(--ink);font-weight:500}
+.fopt .vk{width:16px;height:16px;border-radius:4px;border:1px solid var(--app-line-control);flex:0 0 16px;display:grid;
+  place-items:center;font-size:11px;color:#fff;background:#fff}
+.fopt.aan .vk{background:var(--accent);border-color:var(--accent)}
+.fopt .streep{width:3px;height:14px;border-radius:2px;flex:0 0 3px}
+.fopt .lab{flex:1;min-width:0}
+.fopt .aantal{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.fopt.nul{opacity:.45}
+.s-accent{background:var(--accent)} .s-warn{background:var(--warn)} .s-err{background:var(--err)} .s-ok{background:var(--ok)}
+.s-line{background:var(--app-line-strong)}
+
+.lijstkop{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:4px 0 12px;flex-wrap:wrap}
+.lijstkop b{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.lijstkop .n{font-size:12px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0}
+.sorteer{font-size:12px;color:var(--muted);display:inline-flex;align-items:center;gap:8px}
+.sorteer select{border:1px solid var(--app-line-control);border-radius:8px;padding:5px 10px;font:inherit;font-size:13px;
+  color:var(--ink);background:#fff}
+.legenda-fase{display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:11px;color:var(--muted)}
+.legenda-fase .lk{text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+.legenda-fase span{display:inline-flex;align-items:center;gap:6px}
+.seg{width:14px;height:8px;border-radius:2px;display:inline-block;position:relative}
+.seg.ok{background:var(--ok)} .seg.bezig{background:var(--accent)}
+.seg.seg-leeg{background:var(--app-bg);border:1px solid var(--line)}
+.seg.stip::after{content:'';position:absolute;top:-4px;right:-2px;width:7px;height:7px;border-radius:50%;background:var(--warn);
+  box-shadow:0 0 0 1px #fff}
+
+.pkaart{display:block;width:100%;text-align:left;background:#fff;border:1px solid var(--line);border-radius:12px;
+  margin-bottom:10px;overflow:hidden}
+.pkaart:hover{border-color:var(--accent)}
+.pkaart.klaar{opacity:.75}
+.pkaart .binnen{padding:16px 18px}
+.pkaart .kkop{display:flex;align-items:flex-start;gap:12px;margin-bottom:10px}
+.pkaart .ptitel{font-family:var(--font-serif);font-size:17px;font-weight:600;color:var(--ink);margin-top:6px}
+.pkaart .pomschrijving{font-size:12px;color:var(--muted);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pkaart .pijl{margin-left:auto;color:var(--muted);font-size:18px;flex-shrink:0}
+.pkaart:hover .pijl{color:var(--accent)}
+.kkolommen{display:grid;grid-template-columns:2.6fr 1fr;gap:24px;margin-top:14px}
+@media(max-width:900px){.kkolommen{grid-template-columns:1fr}}
+.kkolommen>div+div{border-left:1px solid var(--line);padding-left:20px}
+@media(max-width:900px){.kkolommen>div+div{border-left:0;padding-left:0}}
+.kk{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600}
+.kv2{font-size:14px;color:var(--ink);margin-top:5px}
+.kv2 b{font-weight:600}
+.kv2.sub{font-size:12px;color:var(--muted);margin-top:2px}
+.fasestrip{display:grid;gap:5px;margin-top:8px}
+.fasestrip .fs{position:relative}
+.fasestrip .fs .balk{height:8px;border-radius:2px}
+.fasestrip .fs .stip{position:absolute;top:-4px;right:-1px;width:7px;height:7px;border-radius:50%;box-shadow:0 0 0 1px #fff}
+.fasestrip .fl{font-size:9.5px;color:var(--muted);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.strook{border-top:1px solid var(--line);background:var(--app-zebra);padding:9px 18px;display:flex;gap:18px;flex-wrap:wrap}
+.strook span{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:500}
+.strook .bol{width:8px;height:8px;border-radius:50%;flex:0 0 8px}
+.strook .rood{color:var(--err-ink)} .strook .rood .bol{background:var(--err)}
+.strook .oranje{color:var(--warn-ink)} .strook .oranje .bol{background:var(--warn)}
+.strook .groen{color:var(--ok-ink)} .strook .groen .bol{background:var(--ok)}
+.paginatie{display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--muted);padding:6px 2px 0}
+.geenresultaat{background:#fff;border:1px dashed var(--app-line-strong);border-radius:12px;padding:32px;text-align:center;
+  font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<div class="mockbar">
+  <span><b>Niet-functionele mockup</b> · v0.7 — gesynchroniseerd met engine-ontwerp v0.8 · <b>scherm 1</b> procesoverzicht (filters + lijst) · <b>scherm 2</b> stapdetail met tabs · chrome, tokens en terminologie uit de huidige inrichting (globals.css, Sidebar, FaseRail, StapPaneel) · klik een proceskaart om door te klikken</span>
+  <span>Wijzigingen worden niet opgeslagen</span>
+</div>
+
+<nav class="side">
+  <div class="logoblok">
+    <div class="logorow">
+      <div class="logotile">H</div>
+      <button class="hamb" title="Menu inklappen">≡</button>
+    </div>
+    <div class="fonds">Pensioenfonds voor Huisartsen</div>
+    <div class="omgeving">Demo omgeving</div>
+  </div>
+  <div class="profiel">
+    <div class="avatar">MI</div>
+    <div style="flex:1;min-width:0"><div class="pnaam">M. IJzerman</div><div class="prol">Voorzitter bestuur</div></div>
+    <span style="color:rgba(92,107,130,.6);font-size:12px">›</span>
+  </div>
+  <div class="items">
+    <div class="sect">Overzicht</div>
+    <a class="item" href="#"><span class="ico">⌂</span><span style="flex:1">Home</span></a>
+    <a class="item" href="#"><span class="ico">◐</span><span style="flex:1">Stuurinformatie</span></a>
+    <a class="item" href="#"><span class="ico">◍</span><span style="flex:1">Klantbeeld</span></a>
+    <div class="sect">Kennisbase</div>
+    <a class="item" href="#"><span class="ico">✦</span><span style="flex:1">AI Assistent</span><span class="badge">AI</span></a>
+    <a class="item" href="#"><span class="ico">▤</span><span style="flex:1">Documentbibliotheek</span></a>
+    <div class="sect">Bestuur</div>
+    <a class="item" href="#"><span class="ico">▦</span><span style="flex:1">Vergaderingen</span></a>
+    <a class="item" href="#"><span class="ico">✓</span><span style="flex:1">Besluiten &amp; Notulen</span></a>
+    <a class="item on" href="#"><span class="ico">◧</span><span style="flex:1">Processen</span></a>
+    <a class="item" href="#"><span class="ico">◇</span><span style="flex:1">Risicomatrix</span></a>
+    <div class="sect">Beheer</div>
+    <a class="item" href="#"><span class="ico">⚙</span><span style="flex:1">Catalogus &amp; organen</span></a>
+    <a class="item" href="#"><span class="ico">◎</span><span style="flex:1">Governance Log</span></a>
+  </div>
+  <div class="sfoot"><span class="dot"></span>Beheerde AI-omgeving actief<div style="margin-top:8px">Uitloggen →</div></div>
+</nav>
+
+<main>
+
+  <!-- ══════════════ SCHERM 1 — PROCESOVERZICHT (filters + lijst) ══════════════ -->
+  <div class="page" id="schermOverzicht">
+    <div class="backrow">
+      <div>
+        <h1 class="titel">Processen</h1>
+        <p class="subtxt">Status per fase is <b>afgeleid</b> uit de onderliggende stappen en bewijslast — niet uit een volgorde. Processen lopen parallel: fasen kunnen tegelijk lopen.</p>
+      </div>
+      <button class="knop pri" data-noop style="padding:9px 16px;font-weight:600">+ Nieuwe procedure</button>
+    </div>
+
+    <!-- Werkbalk: status altijd bij de hand, de rest achter één knop -->
+    <div class="werkbalk">
+      <div class="statuskeuze" id="statuskeuze"></div>
+      <button class="knop" id="filterKnop" aria-expanded="false">☰ Filters<span class="tel" id="filterTel" hidden></span></button>
+      <div class="zoekvak">
+        <span class="zicoon" aria-hidden="true">⌕</span>
+        <input id="zoek" type="search" placeholder="Zoek op naam of omschrijving   /" aria-label="Zoek in processen" />
+        <button class="zwis" id="zoekWis" hidden aria-label="Zoekterm wissen">×</button>
+      </div>
+      <div class="chips" id="chips"></div>
+      <label class="sorteer">Sorteer op:
+        <select id="sorteer">
+          <option value="deadline">Deadline</option>
+          <option value="aandacht">Aandacht eerst</option>
+          <option value="voortgang">Voortgang</option>
+          <option value="titel">Titel</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="grid12">
+      <div class="col3" id="railKolom" hidden>
+        <div class="panel pad filterrail">
+          <div class="railhead">
+            <div class="k">Filters</div>
+            <button class="link" id="wisFilters">Wis filters</button>
+          </div>
+          <div id="filters"></div>
+          <div class="railfoot"><button class="link mut" data-noop>Meer filters (periode, eigenaar, orgaan) →</button></div>
+        </div>
+      </div>
+
+      <div class="col12" id="lijstKolom">
+        <div class="lijstkop">
+          <div><b id="lijstTitel"></b> <span class="n" id="lijstFilterUitleg"></span></div>
+          <div class="legenda-fase">
+            <span class="lk">Fase-status:</span>
+            <span><i class="seg ok"></i> Afgerond</span>
+            <span><i class="seg bezig"></i> In behandeling</span>
+            <span><i class="seg seg-leeg"></i> Nog niet begonnen</span>
+            <span><i class="seg bezig stip"></i> Aandacht</span>
+          </div>
+        </div>
+
+        <div id="proceslijst"></div>
+
+        <div class="paginatie">
+          <span id="pagTekst"></span>
+          <span style="display:inline-flex;gap:8px"><button class="ibtn" disabled>‹</button><button class="ibtn" disabled>›</button></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="legenda">
+      <b>Wat is er anders dan in de huidige module?</b> De vier portfolio-tegels (Lopend / Met aandacht / Tijdkritisch / Besluitrijp) en de twee vaste secties (Lopend / Afgerond) zijn samengevoegd tot <b>één lijst</b>. De tellingen staan er nog steeds — maar nu op de plek waar je er ook iets mee kunt: als filter.
+      De filterrail staat <b>standaard ingeklapt</b>; alleen de statuskeuze (Lopend / Afgerond / Alle) staat altijd in de werkbalk, omdat dat de enige keuze is die je dagelijks maakt. Actieve filters staan als chip in de werkbalk en zijn daar ook weer weg te klikken.
+      Per kaart blijven twee kolommen over — <b>Voortgang</b> (met de fasestrip) en <b>Deadline</b> — met de aandachtspunten als aparte strook onderaan, zodat een rode vlag niet meer tussen de tellers verdwijnt.
+      <br /><br />
+      <b>Zoeken (v0.8).</b> Het zoekveld staat in de werkbalk en <b>stapelt op de filters</b> in plaats van ernaast te staan — één resultatenlijst, en de zoekterm verschijnt als chip die je net als elk ander filter wegklikt.
+      Sneltoets <code>/</code> springt erheen, <code>Esc</code> wist. Doorzocht wordt wat op de kaart staat: naam, omschrijving en procestype; de treffer wordt gemarkeerd.
+      Levert dat niets op binnen de huidige filters, dan biedt de lege staat aan om in <i>alle</i> processen te zoeken — dat voorkomt de klassieke &ldquo;niets gevonden&rdquo; terwijl het gezochte gewoon onder een ander filter staat.
+      Zoeken <i>dóór</i> in stappen, checklist, bewijsstukken en aantekeningen is bewust een aparte vraag (beslispunt BP-9): dat vraagt gegroepeerde treffers en overlapt met de AI-assistent en de bibliotheekzoekfunctie.
+      <br><br>
+      <b>Nieuw in v0.7 (engine-ontwerp v0.7):</b> het signaal <i>Besluitrijp</i> is vervallen — het hing aan de readiness-ladder, en die vervalt met besluit 0184. In de plaats staat <b>Met afwijking</b>: een signaal dat volgt uit een vastgelegd feit (een stap die is afgerond terwijl er iets openstond), niet uit een procesbrede rijpheidsmeting.
+      Er staan bewust <b>maximaal drie</b> aandachtspunten per kaart, in een vaste prioriteitsvolgorde — zonder die volgorde valt willekeurig welk signaal af zodra er een vierde bijkomt.
+    </div>
+  </div>
+
+  <!-- ══════════════ SCHERM 2 — STAPDETAIL MET TABS ══════════════ -->
+  <div class="page" id="schermDetail" hidden>
+
+    <div class="backrow">
+      <button class="backlink" id="terugNaarLijst">← Terug naar processen</button>
+      <button class="actiebtn" data-noop>↧ Afschrift genereren</button>
+    </div>
+
+    <div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+        <span class="tag phase" id="procTemplate"></span>
+        <span class="tag neutral" id="dossierStatus">Lopend · dossier in onderbouwing</span>
+        <span class="tag warn">Toezichtgevoelig</span>
+        <span class="tag neutral">Mandaatgevoelig</span>
+        <span style="font-size:11px;color:var(--muted)" id="defRef"></span>
+      </div>
+      <h1 class="titel" id="procNaam"></h1>
+      <p class="subtxt" id="procOmschrijving"></p>
+    </div>
+
+    <div class="metacard">
+      <div>
+        <div class="k">Eigenaar &amp; betrokkenen</div>
+        <div class="stack"><div>MI</div><div>JD</div><div>RB</div><div style="background:var(--app-bg);color:var(--ink)">+4</div></div>
+        <div class="v" style="margin-top:8px">Voorzitter bestuur</div>
+      </div>
+      <div>
+        <div class="k">Voortgang</div>
+        <div class="v" id="voortgangTekst"></div>
+        <div class="progbar"><span id="voortgangBar" style="width:0%"></span></div>
+        <div class="sub" id="voortgangSub"></div>
+      </div>
+      <div>
+        <div class="k">Doorlooptijd</div>
+        <div class="v" id="doorlooptijd"></div>
+        <div class="sub">Beoogde transitiedatum 1 januari 2028</div>
+      </div>
+      <div>
+        <div class="k">Classificatie</div>
+        <div class="v" id="classificatie"></div>
+        <div class="sub" id="regelgeving"></div>
+      </div>
+    </div>
+
+    <div class="grid12">
+      <!-- Linkerkolom: procesfasen-accordeon (FaseRail) -->
+      <div class="col4">
+        <div class="panel pad railcard">
+          <div class="railhead">
+            <div class="k">Procesfasen</div>
+            <div class="n" id="railTelling"></div>
+          </div>
+          <div class="railnote">Parallel proces — geen vaste volgorde.</div>
+          <div id="rail"></div>
+          <div class="railfoot">▤ Procesdocumentatie</div>
+        </div>
+      </div>
+
+      <!-- Rechterkolom: stapdetail met tabs -->
+      <div class="col8">
+        <div class="panel">
+          <div class="stapkop">
+            <div class="kopregel">
+              <div style="flex:1;min-width:0">
+                <div class="rol" id="stapRol"></div>
+                <h2 id="stapTitel"></h2>
+              </div>
+              <div class="stapnav">
+                <button class="ibtn" id="vorige" title="Vorige stap">‹</button>
+                <span id="stapTeller"></span>
+                <button class="ibtn" id="volgende" title="Volgende stap">›</button>
+              </div>
+            </div>
+            <div class="stapmeta" id="stapMeta"></div>
+            <div class="tabbar" id="tabbar"></div>
+          </div>
+          <div class="tabbody" id="tabbody"></div>
+          <div class="afrondpaneel" id="afwijkVak" hidden></div>
+          <div class="voet">
+            <div class="st" id="voetStatus"></div>
+            <div class="kn" id="voetKnoppen"></div>
+          </div>
+        </div>
+
+        <!-- Dossier (DossierSectie) -->
+        <div class="panel dossier" style="margin-top:20px" id="dossier">
+          <div class="item"><button class="rijkop" data-doss="1"><span class="fbadge">CLS</span>
+            <span style="flex:1"><b style="font-size:14px">Classificatie &amp; onderbouwing</b>
+            <span style="display:block;font-size:12px;color:var(--muted);margin-top:2px">Bevestigd — complex, risico hoog, mandaat- en toezichtgevoelig</span></span>
+            <span class="chev">▾</span></button>
+            <div class="inhoud">Classificatie en onderbouwing zijn vastgesteld en bevestigd. Wijziging vereist een nieuwe bevestiging en wordt append-only gelogd.</div></div>
+          <div class="item"><button class="rijkop" data-doss="2"><span class="fbadge">OND</span>
+            <span style="flex:1"><b style="font-size:14px">Onderbouwing</b>
+            <span style="display:block;font-size:12px;color:var(--muted);margin-top:2px">Aannames 0 · Risico's 0 · Voorwaarden 0 · Acties 0 · Dissent 0</span></span>
+            <span class="chev">▾</span></button>
+            <div class="inhoud">Wat onder het besluit ligt: aannames, risico's, voorwaarden, acties en afwijkende standpunten. Een leeg dissent-blok kan ook betekenen dat dissent als 'privé' is vastgelegd door anderen.</div></div>
+          <div class="item"><button class="rijkop" data-doss="3"><span class="fbadge">ST</span>
+            <span style="flex:1"><b style="font-size:14px">Statusovergang</b>
+            <span style="display:block;font-size:12px;color:var(--muted);margin-top:2px">Huidig: in onderbouwing</span></span>
+            <span class="chev">▾</span></button>
+            <div class="inhoud">Kies een vervolgstatus zodra de onderbouwing compleet is (bespreekrijp, besluitrijp). Elke overgang wordt gelogd.</div></div>
+          <div class="item"><button class="rijkop" data-doss="4"><span class="fbadge">LOG</span>
+            <span style="flex:1"><b style="font-size:14px">Audit-trail</b>
+            <span style="display:block;font-size:12px;color:var(--muted);margin-top:2px" id="auditTelling">36 append-only events</span></span>
+            <span class="chev">▾</span></button>
+            <div class="inhoud">Onwijzigbaar, gehasht logboek van alle proces- en besluitgebeurtenissen: aangemaakt, gewijzigd, afgevinkt, bewijs opgevoerd, status gewijzigd.</div></div>
+          <div class="item"><button class="rijkop" data-doss="5"><span class="fbadge">PDF</span>
+            <span style="flex:1"><b style="font-size:14px">Afschriften</b>
+            <span style="display:block;font-size:12px;color:var(--muted);margin-top:2px">Vastgelegde, downloadbare auditbundels</span></span>
+            <span class="chev">▾</span></button>
+            <div class="inhoud">Genereer en bewaar een afschrift (PDF/bundel) als momentopname van het dossier voor verantwoording of toezicht.</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="legenda">
+      <b>Wat is er anders dan in de huidige module?</b> De secties Checklist, Bewijsstukken, Vergaderingen en Besluit staan nu niet meer als vier uitklapbare panelen onder elkaar in één lange kolom, maar als <b>tabs</b> in het stapdetail. Daarmee blijft het scherm rustig bij stappen met 8–9 checklistpunten en 6–8 bewijsstukken, en is per tab zichtbaar hoeveel er nog open staat.
+      Nieuw is ook de <b>vaste voettekstbalk</b>: wat er nog open staat staat er permanent, in plaats van alleen als tooltip op de knop.
+      De chrome (zijbalk, tokens, kaarten, fase-accordeon, dossier) is ongewijzigd t.o.v. de huidige inrichting.
+      <br><br>
+      <b>Nieuw in v0.7 — afronden kan altijd (engine-ontwerp v0.7 §5.1).</b> De knop <i>Stap afronden</i> is nooit meer uitgeschakeld; het oordeel ligt bij de gebruiker, het systeem bewaakt de vastlegging.
+      Wat de zwaarte van een vereiste bepaalt, is niet óf je kunt afronden maar wát het portaal dan doet:
+      <span class="mini vereist" style="vertical-align:middle">Vereist</span> vraagt een motivering en levert een aandachtssignaal;
+      <span class="mini kritiek" style="vertical-align:middle">Kritiek</span> vraagt daarnaast een expliciete bevestiging en is prominent zichtbaar op het procesoverzicht.
+      De twee oude booleans <i>verplicht</i> en <i>blokkerend</i> zijn tot dat ene veld samengevoegd.
+      <b>Overrulen is niet vervullen:</b> de stap gaat dicht, maar het openstaande punt blijft open in de tellingen en in het dossier — dat onderscheidt het van uitsluiten (&ldquo;deze eis geldt hier niet&rdquo;).
+      Bij afronden met afwijking worden statuswijziging, snapshot, auditregel en herberekening in de engine als <b>één transactie</b> uitgevoerd.
+      <br><br>
+      <br><br>
+      <b>Bewijslast weg uit Overzicht (v0.8).</b> De preview van de bewijslast stond hier als derde weergave van dezelfde informatie: de tabbadge toont al <i>0/3</i>, en de voettekstbalk noemt permanent wat er nog open staat. Overzicht is daarmee het tabblad met <b>context en werkverkeer</b> — wat is deze stap, in welke fase, en wat speelt er nu; de andere tabs dragen het werk. &ldquo;✦ Vraag de AI over dit stuk&rdquo; staat waar de stukken staan, op het tabblad Bewijsstukken; die knop verschijnt bij elk opgevoerd stuk en opent dezelfde route als in de documentbibliotheek (<code>/ai?doc=…</code>).
+      <br><br>
+      <b>Aantekeningen per stap (engine-ontwerp v0.8 §9.3, beslispunt BP-8).</b> Onderaan dit tabblad staat ruimte voor werkaantekeningen — &ldquo;gebeld met de actuaris, cijfers volgen volgende week&rdquo;. Dat staat nu in mailboxen.
+      Vier grenzen maken het bruikbaar zonder dat de verantwoording erheen lekt: het is <b>gedeeld</b> met iedereen die het dossier ziet (geen privénotities in een bestuurlijk dossier),
+      <b>bewerkbaar en verwijderbaar</b> door de auteur (bewust géén append-only auditobject — anders wordt het te zwaar en gaat het werkverkeer weer per mail),
+      het <b>verschijnt niet in het afschrift</b> (maar is wél opvraagbaar, en dat staat er ook bij),
+      en het <b>zet de stap niet op actief</b> — een aantekening is geen inhoudelijke handeling.
+      Alles wat vervulling, besluit of afwijking raakt, hoort in de append-only laag en verandert hier niet door.
+      <br><br>
+      <b>Klikbaar:</b> fasen open/dicht · stap wisselen (‹ › of pijltjestoetsen) · tabs · checklist afvinken · bewijsstukken opvoeren · besluit vastleggen (met AI-concept) · stap afronden, ook met afwijking · aantekening toevoegen of verwijderen. Niet-gestarte stappen zijn alleen-lezen, net als in de module.
+    </div>
+  </div>
+</main>
+
+<div id="toast"></div>
+
+<script>
+const DATA = {"code":"pf_wtp_invaarbesluit","versie":"2.0.0","naam":"Wtp-invaarbesluit — bestuurlijke keten","korte_omschrijving":"Volledige bestuurlijke keten voor het invaren onder de Wtp: van opdrachtaanvaarding en beoordelingskader, via onderbouwing, evenwichtigheid en communicatie/keuzebegeleiding, naar besluitvorming, DNB/AFM-toezicht, go/no-go, omzetting en nazorg.","context":"Generieke bestuurlijke keten voor het invaren onder de Wet toekomst pensioenen. Per fonds aanpasbaar (opdrachtgever, regelingtype, transitiedatum, organenstructuur) — in het portaal via aanpasbare checklist, bewijslast en toelichtingen.","regelgeving":["Wet toekomst pensioenen","Wet verplichte beroepspensioenregeling","DNB-toezicht","AFM-toezicht"],"classificatie":{"complexiteit":"complex","risiconiveau":"hoog","mandaatgevoelig":true,"toezichtgevoelig":true,"beleidsafwijking":true,"ai_risicoklasse":"middel"},"eigenaar_rol":"voorzitter","dagen":640,"fasen":[{"fase_code":"I","volgorde":1,"titel":"Kaders","generieke_beschrijving":"Het bestuur legt de opdracht en de eigen beoordelingsmaatstaven vast vóórdat de inhoudelijke weging begint: wat vraagt de opdrachtgever, en op basis van welk kader beoordelen wij of de transitie verantwoord en evenwichtig is?"},{"fase_code":"II","volgorde":2,"titel":"Onderbouwing","generieke_beschrijving":"Het bestuur bouwt de feitelijke onderbouwing op: uitvoerbaarheid en beheersing, betrouwbaarheid van data en modellen, de transitie-effecten en evenwichtigheid, en de uitlegbaarheid richting deelnemers."},{"fase_code":"III","volgorde":3,"titel":"Besluitvorming","generieke_beschrijving":"Het bestuur vormt het voorgenomen besluit en doorloopt medezeggenschap en intern toezicht, met zichtbare weging van adviezen, hoorrecht en eventuele afwijkende inzichten."},{"fase_code":"IV","volgorde":4,"titel":"Toezicht & voorbereiding","generieke_beschrijving":"Het dossier gaat naar DNB en AFM ter beoordeling, en de deelnemers en de klantbediening worden tijdig en persoonlijk voorbereid op de transitie."},{"fase_code":"V","volgorde":5,"titel":"Gereedheid & invaren","generieke_beschrijving":"Het bestuur toetst de finale gereedheid tegen vooraf bepaalde criteria, neemt het go/no-go-besluit en voert — bij go — de daadwerkelijke omzetting uit."},{"fase_code":"VI","volgorde":6,"titel":"Nazorg & verantwoording","generieke_beschrijving":"Na de transitie controleert en verklaart het bestuur de uitkomsten, informeert het definitief, en monitort het gemaakte keuzes, klachten en signalen als bestuurlijke feedback."}],"stappen":[{"volgorde":1,"naam":"Opdracht ontvangen en duiden","beschrijving":"Is de opdracht van de sociale partners of beroepspensioenvereniging voldoende duidelijk én kunnen wij die beheerst en evenwichtig uitvoeren? Opdrachtaanvaarding is een expliciet (voorgenomen) besluit.","fase_code":"I","fase_type":"intake","vereist_besluit":true,"dagen":30,"checklist":[{"label":"Transitieplan van sociale partners / beroepspensioenvereniging ontvangen en inhoudelijk geduid","bewijs":true,"toelichting":"Gebruik 'sociale partners' of 'beroepspensioenvereniging' afhankelijk van het fondstype. Het transitieplan is informatiebron voor de eigen fondsbesluitvorming; DNB houdt geen toezicht op de arbeidsvoorwaardelijke keuzes zelf."},{"label":"Formeel invaarverzoek ontvangen; reikwijdte en beoogde transitiedatum zijn eenduidig","bewijs":true,"toelichting":"Leg expliciet vast welke aanspraken/rechten het verzoek omvat en welke beoogde datum geldt. Dit voorkomt dat het fonds impliciete uitgangspunten hanteert."},{"label":"Gewijzigde pensioenovereenkomst/-regeling en compensatieafspraken ontvangen, voor zover van toepassing","bewijs":true,"toelichting":"Voor beroepspensioenfondsen kan de terminologie afwijken. Compensatie is conditioneel; het dossier moet zichtbaar maken of compensatie wel of niet speelt."},{"label":"Doelstellingen, maatstaven, bandbreedtes en voorrangsregels uit het transitieplan geïnventariseerd","bewijs":true,"toelichting":"Deze elementen vormen belangrijke input voor de latere beoordeling van transitie-effecten en evenwichtigheid."},{"label":"Gecontroleerd dat het wettelijk hoorrecht in de arbeidsvoorwaardelijke fase is verwerkt, indien van toepassing","bewijs":true,"toelichting":"Het hoorrecht ligt bij sociale partners / beroepspensioenvereniging en hoort niet bij de fondsorganenprocedure. Het fonds controleert of de relevante inbreng en verwerking daarvan uit het transitieplan blijken."},{"label":"Onduidelijkheden en ontbrekende onderbouwing aantoonbaar teruggelegd bij sociale partners / beroepspensioenvereniging","bewijs":true,"toelichting":"Het fonds moet voldoende duidelijkheid verkrijgen om de eigen wettelijke verantwoordelijkheid voor uitvoerbaarheid en evenwichtigheid te kunnen nemen."},{"label":"Onderbouwing hoorrecht en verwerking in transitieplan","bewijs":true,"toelichting":"Alleen indien representatieve verenigingen het wettelijke hoorrecht konden uitoefenen."},{"label":"Vragen-, antwoorden- en verduidelijkingslog sociale partners / beroepspensioenvereniging","bewijs":true,"toelichting":"Maakt zichtbaar welke onduidelijkheden zijn opgelost en welke uitgangspunten door het bestuur zijn gehanteerd."}],"bewijs":[{"type":"document","label":"Transitieplan","toelichting":"Definitieve, bestuurlijk gebruikte versie inclusief bijlagen en versiehistorie.","verplicht":true,"blokkerend":true},{"type":"document","label":"Formeel invaarverzoek","toelichting":"Bewaar het verzoek zoals ontvangen, inclusief reikwijdte, datum en eventuele voorwaarden.","verplicht":true,"blokkerend":true},{"type":"document","label":"(Gewijzigde) pensioenovereenkomst/-regeling en compensatieafspraken","toelichting":"Gebruik generieke terminologie; de precieze documentvorm verschilt per fondstype en arbeidsvoorwaardelijke context.","verplicht":true,"blokkerend":false}]},{"volgorde":2,"naam":"Bestuurlijk beoordelingskader vaststellen","beschrijving":"Op basis van welk kader en welke maatstaven vinden wij de transitie straks wél/niet aanvaardbaar en evenwichtig? Verwijs expliciet naar het risicopreferentieonderzoek (RPO).","fase_code":"I","fase_type":"intake","vereist_besluit":true,"dagen":30,"checklist":[{"label":"Risicopreferentieonderzoek uitgevoerd en risicohouding per relevante groep/cohort vastgesteld","bewijs":true,"toelichting":"RPO is input voor de risicohouding; DNB beschrijft een volgtijdig proces van RPO, weging, vertaling naar beleid/toedelingsregels en toetsing."},{"label":"Doelstellingen en beleidsuitgangspunten van het fonds voor de transitie expliciet vastgelegd","bewijs":true,"toelichting":"Maak onderscheid tussen doelstellingen van sociale partners en de eigen bestuurlijke beoordelingscriteria van het fonds."},{"label":"Evenwichtigheidsraamwerk vóór de uiteindelijke weging vastgesteld","bewijs":true,"toelichting":"Voorkomt dat beoordelingscriteria achteraf worden aangepast aan de berekende uitkomsten."},{"label":"Deelnemersgroepen/cohorten en materialiteitscriteria bepaald","bewijs":true,"toelichting":"Leg vast welke groepen afzonderlijk worden beoordeeld en wanneer een effect bestuurlijk materieel is."},{"label":"Maatstaven, bandbreedtes en voorrangsregels geoperationaliseerd voor bestuurlijke besluitvorming","bewijs":true,"toelichting":"Vertaal abstracte doelstellingen naar concreet toepasbare criteria voor de latere weging."}],"bewijs":[{"type":"document","label":"RPO-rapport en besluit risicohouding","toelichting":"Inclusief onderbouwing hoe RPO, deelnemerskenmerken en wetenschappelijke inzichten zijn gewogen.","verplicht":true,"blokkerend":false},{"type":"document","label":"Bestuurlijk beoordelingskader / evenwichtigheidsraamwerk","toelichting":"Bevat groepen, maatstaven, bandbreedtes, voorrangsregels en materialiteitscriteria.","verplicht":true,"blokkerend":true},{"type":"approval","label":"Vaststellingsbesluit beoordelingskader","toelichting":"Notulen/besluit waaruit blijkt dat het kader tijdig is vastgesteld.","verplicht":true,"blokkerend":false}]},{"volgorde":3,"naam":"Uitvoerbaarheid en beheersing beoordelen","beschrijving":"Kunnen fonds, PUO en keten de nieuwe regeling en het invaren aantoonbaar beheerst uitvoeren? Expliciet eigenaarschap op ketenregie, escalatie en uitstelscenario. Doorlopend spoor → stap 11.","fase_code":"II","fase_type":"analyse","vereist_besluit":false,"dagen":120,"checklist":[{"label":"Implementatieplan opgesteld als zelfstandig leesbare onderbouwing van de beheerste transitie","bewijs":true,"toelichting":"DNB besteedt bij het implementatieplan bijzondere aandacht aan besluitvorming, risicobeheersing en datakwaliteit."},{"label":"Governance en verantwoordelijkheidsverdeling fonds–PUO–vermogensbeheerder–overige ketenpartijen vastgelegd","bewijs":true,"toelichting":"Maak eigenaarschap, besluitrechten, escalaties en afhankelijkheden expliciet; pas partijen aan op de fondssituatie."},{"label":"Impact op pensioenadministratie, IT, vermogensbeheer, uitbesteding, continuïteit en communicatie integraal beoordeeld","bewijs":true,"toelichting":"Het model is generiek; fondsen bepalen zelf welke keten- en operationele componenten materieel zijn."},{"label":"Migratie-/conversieaanpak en teststrategie (keten-, acceptatie- en regressietesten) uitgewerkt","bewijs":true,"toelichting":"Definieer vooraf acceptatiecriteria, onafhankelijke controles en escalatie bij niet-gehaalde testcriteria."},{"label":"Fallback-/uitstelscenario inclusief besluitcriteria en consequenties uitgewerkt","bewijs":true,"toelichting":"Een fallback is onderdeel van beheerste uitvoering en ondersteunt de latere go/no-go-besluitvorming."},{"label":"Materiële transitie- en restrisico's expliciet beoordeeld en door het bestuur geaccepteerd of gemitigeerd","bewijs":true,"toelichting":"Maak zichtbaar welk restrisico resteert, wie eigenaar is en waarom dit bestuurlijk aanvaardbaar is."},{"label":"Kritieke mijlpalen, afhankelijkheden en readiness-gates vastgesteld","bewijs":true,"toelichting":"Processtappen lopen deels parallel, maar cruciale besluiten kennen wel afhankelijkheden en gates."}],"bewijs":[{"type":"document","label":"Implementatieplan","toelichting":"Definitieve bestuursversie plus relevante bijlagen en wijzigingshistorie.","verplicht":true,"blokkerend":true},{"type":"risk","label":"Integrale transitie-risicoanalyse (bijv. ERB/RSA of vergelijkbaar)","toelichting":"Vorm is fondsspecifiek; de risicoanalyse moet de materiële Wtp-transitierisico's aantoonbaar afdekken.","verplicht":true,"blokkerend":false},{"type":"document","label":"RACI/verantwoordelijkheidsmatrix en ketenafspraken","toelichting":"Onderbouwt dat de ketenverantwoordelijkheden niet alleen in projectdocumentatie maar bestuurlijk zijn geborgd.","verplicht":false,"blokkerend":false},{"type":"document","label":"Teststrategie / QA-plan en acceptatiecriteria","toelichting":"Koppel de criteria aan de latere go/no-go en leg onafhankelijke kwaliteitsborging vast.","verplicht":true,"blokkerend":false},{"type":"document","label":"Fallback-/uitstelplan","toelichting":"Beschrijft scenario, triggers, besluitbevoegdheid en deelnemers-/toezichtcommunicatie.","verplicht":true,"blokkerend":false},{"type":"assumption","label":"Materiële aannames uitvoerbaarheid","toelichting":"Geen kunstmatig minimumaantal: registreer alleen aannames die de besluitvorming of readiness materieel beïnvloeden.","verplicht":false,"blokkerend":false},{"type":"dissent_review","label":"Opinies en afwijkende inzichten sleutelfuncties","toelichting":"Leg zowel de opinie als de bestuurlijke verwerking van kritische punten vast.","verplicht":true,"blokkerend":false}]},{"volgorde":4,"naam":"Datakwaliteit beoordelen","beschrijving":"Kunnen wij vertrouwen op data, modellen en uitkomsten? Het oordeel van de externe accountant/IT-auditor over datakwaliteit is een blokkerende voorwaarde vóór het invaarbesluit. Doorlopend spoor → stap 12.","fase_code":"II","fase_type":"analyse","vereist_besluit":false,"dagen":120,"checklist":[{"label":"Datakwaliteitsbeleid, risicobereidheid/MTA en correctie- en herzieningenbeleid vastgesteld","bewijs":true,"toelichting":"DNB verwacht een eigen fondsbeoordeling van datakwaliteit en duidelijke uitgangspunten voor toegestane afwijkingen en correcties."},{"label":"Kritieke data-elementen en fondsspecifieke datarisico's geïdentificeerd","bewijs":true,"toelichting":"De risicoanalyse bepaalt de omvang en diepgang van aanvullende data-analyses en deelwaarnemingen."},{"label":"Data-analyses, correcties en opvolging van bevindingen aantoonbaar afgerond","bewijs":true,"toelichting":"Materiële tekortkomingen die de invaarberekeningen een onjuist beeld kunnen geven moeten vóór het invaarbesluit zijn opgelost."},{"label":"Rapport externe accountant of externe IT-auditor vóór vaststelling/indiening van invaarbesluit en implementatieplan ontvangen","bewijs":true,"toelichting":"Het rapport stelt het bestuur in staat een eigen oordeel te vormen over juistheid en volledigheid van de relevante pensioendata."},{"label":"Bestuursoordeel over juistheid, volledigheid en reproduceerbaarheid van de relevante pensioendata vastgelegd","bewijs":true,"toelichting":"Het externe rapport vervangt het eigen bestuursoordeel niet; de opvolging van bevindingen moet zichtbaar zijn."},{"label":"Modellen en berekeningen gevalideerd; plausibiliteits-, gevoeligheids- en reconciliatiecontroles uitgevoerd","bewijs":true,"toelichting":"De vorm van validatie is fondsspecifiek. DNB verwacht dat het bestuur belangrijke uitkomsten kan begrijpen en verklaren."}],"bewijs":[{"type":"document","label":"Datakwaliteitsbeleid, risicoanalyse en correctie-/herzieningenbeleid","toelichting":"Inclusief kritieke data-elementen, MTA/risicobereidheid en uitgevoerde beheersmaatregelen.","verplicht":true,"blokkerend":false},{"type":"document","label":"Rapport externe accountant / externe IT-auditor vóór invaren","toelichting":"Minimaal werkzaamheden passend binnen de door DNB beschreven opdrachtvorm; bevindingen en opvolging zijn onderdeel van de fondsbeoordeling.","verplicht":true,"blokkerend":true},{"type":"approval","label":"Bestuursoordeel datakwaliteit","toelichting":"Expliciete bestuurlijke conclusie dat de data voldoende betrouwbaar zijn voor besluitvorming en invaren.","verplicht":true,"blokkerend":true},{"type":"document","label":"Modelvalidatie- en plausibiliteitsrapportage","toelichting":"Bevat modelscope, validatie, uitkomsten, gevoeligheden en verklaring van materiële afwijkingen.","verplicht":true,"blokkerend":false},{"type":"assumption","label":"Gevalideerde kernaannames data/model","toelichting":"Registreer alleen materiële aannames en leg vast hoe wijzigingen worden gemonitord.","verplicht":false,"blokkerend":false},{"type":"risk","label":"Restrisico datakwaliteit","toelichting":"Inclusief resterende bevindingen, impact, eigenaar, oplosdatum en acceptatie.","verplicht":true,"blokkerend":false}]},{"volgorde":5,"naam":"Transitie-effecten en evenwichtigheid beoordelen","beschrijving":"Welke groepen worden geraakt, en waarom is het geheel evenwichtig? Netto-profijt, vermogenstoedeling, vulling van de solidariteits-/risicodelingsreserve, compensatiebesluit + financieringsbron. Voedt stap 7.","fase_code":"II","fase_type":"analyse","vereist_besluit":false,"dagen":120,"checklist":[{"label":"Netto-profijt en pensioenverwachtingen per relevante deelnemersgroep/cohort berekend","bewijs":true,"toelichting":"Beoordeel niet alleen één kengetal; combineer netto-profijt met pensioenverwachtingen en andere relevante maatstaven."},{"label":"Transitie-effecten onder relevante economische scenario's en gevoeligheden inzichtelijk gemaakt","bewijs":true,"toelichting":"Onderbouw dat het bestuur de robuustheid van effecten onder alternatieve omstandigheden heeft onderzocht."},{"label":"Invaarmethodiek en aanwending/verdeling van vermogen onderbouwd","bewijs":true,"toelichting":"Leg keuze en toepassing van standaard- of vba-methode vast, inclusief de relevante wettelijke grenzen en keuzes."},{"label":"Initiële vulling solidariteits-/risicodelingsreserve en compensatie(depot) beoordeeld, voor zover van toepassing","bewijs":true,"toelichting":"Terminologie en toepassing hangen af van SPR/FPR en de gekozen compensatie-inrichting."},{"label":"Relevante alternatieven voor verdeling, reservehoogte en/of beleidskeuzes aantoonbaar beschouwd","bewijs":true,"toelichting":"DNB vraagt op onderdelen expliciet om alternatieven; bestuurlijk laat dit zien dat niet alleen de voorkeursvariant is doorgerekend."},{"label":"Materiële uitschieters en negatieve effecten per groep verklaard","bewijs":true,"toelichting":"Een verklaring van het effect is iets anders dan een oordeel dat het effect evenwichtig is; leg beide vast."},{"label":"Uitkomsten getoetst aan vooraf vastgestelde maatstaven, bandbreedtes en voorrangsregels","bewijs":true,"toelichting":"De toets moet herleidbaar zijn naar het beoordelingskader uit stap 2."},{"label":"Integrale belangenafweging en zelfstandig bestuursoordeel over evenwichtigheid vastgelegd","bewijs":true,"toelichting":"Het bestuur blijft zelfstandig verantwoordelijk voor de evenwichtige belangenafweging en motiveert waarom het totaalresultaat aanvaardbaar is."}],"bewijs":[{"type":"document","label":"Transitie-effect- en evenwichtigheidsrapportage","toelichting":"Integreert effecten, verklaringen, alternatieven, criteria en de bestuurlijke weging.","verplicht":true,"blokkerend":true},{"type":"kpi","label":"Netto-profijt en pensioenverwachtingen per cohort/groep","toelichting":"Bewaar resultaten op voldoende detailniveau om later te kunnen reproduceren welke uitkomsten aan het bestuur zijn voorgelegd.","verplicht":true,"blokkerend":false},{"type":"document","label":"Onderbouwing invaarmethodiek en vermogensverdeling","toelichting":"Inclusief berekeningen, gekozen parameters en bestuurlijke argumentatie.","verplicht":true,"blokkerend":false},{"type":"document","label":"Reserve- en compensatieanalyse","toelichting":"Voor zover solidariteitsreserve, risicodelingsreserve en/of compensatie(depot) onderdeel zijn van de transitie.","verplicht":false,"blokkerend":false},{"type":"document","label":"Scenario-, alternatief- en gevoeligheidsanalyse","toelichting":"Onderbouwt robuustheid en de afweging van alternatieven.","verplicht":true,"blokkerend":false},{"type":"evaluation","label":"Evenwichtigheidsoordeel bestuur","toelichting":"Expliciet besluit/oordeel met motivering per materiële deelnemersgroep en over de transitie als geheel.","verplicht":true,"blokkerend":true}]},{"volgorde":6,"naam":"Communicatiestrategie, keuzebegeleiding en deelnemersimpact beoordelen","beschrijving":"Kunnen deelnemers de keuze en persoonlijke gevolgen correct en realistisch begrijpen — én relevante keuzes verantwoord maken? Keuzebegeleiding/zorgplicht als apart thema. Communicatiemoment ①. Doorlopend spoor → 10 → 12.","fase_code":"II","fase_type":"consultatie","vereist_besluit":false,"dagen":120,"checklist":[{"label":"Communicatieplan uitgewerkt langs de zes AFM-focusaspecten","bewijs":true,"toelichting":"AFM focust op doelgroepen, doelen, planning, onderbouwing wie/wat/wanneer/hoe, evaluatie/effectmeting en persoonlijke toelichtingen/peildatum."},{"label":"Doelgroepen, kernboodschappen en verwachte deelnemersimpact per doelgroep vastgelegd","bewijs":true,"toelichting":"Maak zichtbaar waar negatieve effecten, onzekerheid of compensatie extra uitleg vereisen."},{"label":"Aanpak persoonlijke toelichtingen en peildatum prognose-transitieoverzicht onderbouwd","bewijs":true,"toelichting":"AFM verlangt persoonlijke duiding van verschillen en benoemt peildatum expliciet als aandachtspunt."},{"label":"Compensatiecommunicatie en uitleg voor groepen met én zonder compensatie uitgewerkt, indien van toepassing","bewijs":true,"toelichting":"Voorkom dat compensatie alleen wordt benoemd bij deelnemers die een compensatiebedrag ontvangen."},{"label":"Deelnemertesten / effectmeting voor begrijpelijkheid en handelingsperspectief uitgevoerd of gepland","bewijs":true,"toelichting":"De AFM verwacht dat wordt onderbouwd hoe communicatie aansluit bij deelnemers en hoe het effect wordt geëvalueerd."},{"label":"Keuzebegeleiding voor relevante deelnemerskeuzes ontworpen en getest, indien van toepassing","bewijs":true,"toelichting":"Keuzebegeleiding is een structurele AFM-norm. De concrete keuzes hangen af van regeling en uitvoeringsmodel; maak dit daarom conditioneel."},{"label":"Bestuurlijke beoordeling van uitlegbaarheid, risico's en verwachtingsmanagement vastgelegd","bewijs":true,"toelichting":"Bestuurlijk relevant is niet alleen of informatie juridisch correct is, maar ook of materiële effecten begrijpelijk en evenwichtig kunnen worden uitgelegd."}],"bewijs":[{"type":"document","label":"Communicatieplan en AFM-aanleverformulier","toelichting":"Bewaar ingediende versie, bijlagen en onderbouwing van de gemaakte communicatiekeuzes.","verplicht":true,"blokkerend":true},{"type":"document","label":"Doelgroep-, boodschap- en kanalenmatrix","toelichting":"Herleidbaar overzicht van doelgroep, boodschap, kanaal, timing en gewenste uitkomst.","verplicht":true,"blokkerend":false},{"type":"document","label":"Onderbouwing persoonlijke toelichtingen en peildatum","toelichting":"Leg keuze van peildatum en aanpak van persoonlijke verschilverklaringen vast.","verplicht":true,"blokkerend":false},{"type":"evaluation","label":"Deelnemertesten en effectmeting","toelichting":"Resultaten plus aantoonbare verwerking van bevindingen in communicatie.","verplicht":true,"blokkerend":false},{"type":"document","label":"Keuzebegeleidingsontwerp en testresultaten","toelichting":"Alleen opnemen waar deelnemers materiële keuzes hebben waarop de wettelijke norm keuzebegeleiding van toepassing is.","verplicht":false,"blokkerend":false}]},{"volgorde":7,"naam":"Voorgenomen invaarbesluit en opdrachtaanvaarding vormen","beschrijving":"Is er voldoende grond om de opdracht te aanvaarden en het invaren voor te nemen? Volgt logisch op stap 4 (datakwaliteit) en stap 5 (evenwichtigheid); geborgd via de readiness-ladder, niet via een blokkerende afhankelijkheid.","fase_code":"III","fase_type":"besluitvorming","vereist_besluit":true,"dagen":30,"checklist":[{"label":"Integrale beslisnota opgesteld met samenvatting van opdracht, uitvoerbaarheid, data, effecten, risico's en communicatie","bewijs":true,"toelichting":"De beslisnota verbindt de onderbouwingen uit stappen 1–6 tot één reproduceerbare bestuurlijke redeneerlijn."},{"label":"Expliciet getoetst of wettelijke gronden bestaan om het invaarverzoek niet uit te voeren","bewijs":true,"toelichting":"Leg vast dat het bestuur zelfstandig heeft beoordeeld of invaren binnen wettelijke voorschriften, evenwichtige belangenafweging en beheerste/integere bedrijfsvoering past."},{"label":"Argumentatie van invaarmethodiek, vermogensverdeling en eventuele reserves/compensatie expliciet in het besluit opgenomen","bewijs":true,"toelichting":"Het besluit moet herleidbaar zijn naar de analyses en alternatieven uit stap 5."},{"label":"Opinies van sleutelfunctiehouders en materiële afwijkende inzichten bestuurlijk gewogen","bewijs":true,"toelichting":"Niet alleen opnemen als bijlage; maak zichtbaar hoe kritische punten het besluit hebben beïnvloed."},{"label":"Voorwaarden, afhankelijkheden en openstaande acties aan het voorgenomen besluit benoemd","bewijs":true,"toelichting":"Deze voorwaarden vormen input voor toezichtopvolging en de latere go/no-go."}],"bewijs":[{"type":"document","label":"Voorgenomen invaarbesluit en integrale beslisnota","toelichting":"Centraal besluitdocument met bronverwijzingen naar onderliggende dossierstukken.","verplicht":true,"blokkerend":true},{"type":"approval","label":"Voorgenomen opdrachtaanvaarding / opdrachtbevestiging","toelichting":"Terminologie en exacte documentvorm kunnen per fonds verschillen; leg de formele aanvaarding van de uitvoeringsopdracht aantoonbaar vast.","verplicht":true,"blokkerend":false},{"type":"document","label":"Opinies sleutelfunctiehouders","toelichting":"Inclusief bestuurreactie op materiële bevindingen.","verplicht":true,"blokkerend":false},{"type":"dissent_review","label":"Afwijkende inzichten / dissent","toelichting":"Leg relevante minderheidsstandpunten of fundamentele twijfels vast, inclusief afweging door het bestuur.","verplicht":false,"blokkerend":false},{"type":"mandate_check","label":"Bevoegdheid en mandaat voorgenomen besluit","toelichting":"Toets statuten, reglementen en eventuele delegatie/mandatering.","verplicht":true,"blokkerend":false}]},{"volgorde":8,"naam":"Fondsorganen en intern toezicht doorlopen","beschrijving":"Hebben medezeggenschap en intern toezicht tijdig, met voldoende informatie, aantoonbaar invloed gehad? Route volgens het geldende bestuursmodel en fondsregime; hoorrecht voor VO/gewezen deelnemers/gepensioneerden.","fase_code":"III","fase_type":"consultatie","vereist_besluit":false,"dagen":45,"checklist":[{"label":"Toepasselijke governance-route vastgesteld: VO of BO en vorm van intern toezicht","bewijs":true,"toelichting":"Het bestuursmodel bepaalt welke organen en bevoegdheden van toepassing zijn. Intern toezicht kan o.a. RvT, visitatiecommissie of NUB zijn."},{"label":"Verantwoordingsorgaan tijdig om advies gevraagd, indien van toepassing","bewijs":true,"toelichting":"Het VO heeft adviesrecht op het voorgenomen invaarbesluit. Geef voldoende informatie zodat het advies wezenlijke invloed kan hebben."},{"label":"Bij negatief advies van VO of een geleding: sociale partners om heroverweging gevraagd en uitkomst verwerkt","bewijs":true,"toelichting":"Dit is een specifieke wettelijke vervolgactie; leg ook de onderbouwing van de heroverweging vast."},{"label":"Belanghebbendenorgaan om goedkeuring gevraagd, indien van toepassing","bewijs":true,"toelichting":"Het BO heeft goedkeuringsrecht; dit is juridisch iets anders dan het adviesrecht van een VO."},{"label":"Intern toezicht heeft toezicht op het invaren uitgevoerd en oordeel/aandachtspunten vastgelegd","bewijs":true,"toelichting":"Intern toezicht houdt toezicht op het invaren. De vorm van het interne toezicht verschilt per bestuursmodel."},{"label":"Raad van toezicht heeft het voorgenomen invaarbesluit goedgekeurd, indien een RvT aanwezig is","bewijs":true,"toelichting":"Alleen de RvT heeft het specifieke wettelijke goedkeuringsrecht op het voorgenomen invaarbesluit; andere vormen van intern toezicht hebben een andere rol."},{"label":"Reactie van het bestuur op adviezen, goedkeuringen en toezichtbevindingen vastgelegd; versieverschillen traceerbaar","bewijs":true,"toelichting":"Maak aantoonbaar welke wijzigingen uit de governance zijn voortgekomen en welke aandachtspunten bewust niet zijn overgenomen."},{"label":"Advies VO inclusief eventuele adviezen per geleding","bewijs":true,"toelichting":"Inclusief adviesaanvraag en alle informatie die voor de advisering is verstrekt."},{"label":"Herverweging sociale partners na negatief VO-advies","bewijs":true,"toelichting":"Alleen als VO of een geleding negatief adviseert; bewaar verzoek, heroverweging en bestuursverwerking."}],"bewijs":[{"type":"approval","label":"Goedkeuring BO","toelichting":"Alleen bij een fonds met belanghebbendenorgaan.","verplicht":false,"blokkerend":false},{"type":"document","label":"Oordeel / rapportage intern toezicht","toelichting":"De vorm verschilt per bestuursmodel; de inhoudelijke aandachtspunten en reactie van het bestuur horen in het dossier.","verplicht":true,"blokkerend":false},{"type":"approval","label":"Goedkeuring Raad van Toezicht","toelichting":"Alleen indien een Raad van Toezicht aanwezig is.","verplicht":false,"blokkerend":false},{"type":"dissent_review","label":"Reactie- en wijzigingenmatrix governance","toelichting":"Praktische bewijslast om adviespunten, bestuursreactie en wijzigingen reproduceerbaar te koppelen.","verplicht":false,"blokkerend":false}]},{"volgorde":9,"naam":"Invaarmelding en toezichtbeoordeling","beschrijving":"Is het dossier volledig, consistent en verdedigbaar richting DNB en AFM, en zijn bevindingen beheerst? Tijdkritisch: indiening ruim vóór de transitiedatum. Iteratielus → 4/5/6.","fase_code":"IV","fase_type":"externe_indiening","vereist_besluit":false,"dagen":120,"checklist":[{"label":"Invaarsjabloon volledig ingevuld met exacte bronverwijzingen naar onderliggende documentatie","bewijs":true,"toelichting":"Het invaarsjabloon is verplicht onderdeel van de invaarmelding en is voor DNB een belangrijke informatiebron bij de beoordeling."},{"label":"Implementatieplan en invaarmelding tijdig bij DNB ingediend","bewijs":true,"toelichting":"Het implementatieplan wordt binnen twee weken na vaststelling en uiterlijk twaalf maanden vóór de beoogde ingangsdatum ingediend; het invaarbesluit wordt gelijktijdig gemeld."},{"label":"Communicatieplan en AFM-aanleverformulier tijdig bij AFM ingediend","bewijs":true,"toelichting":"Voor uitvoerders die vanaf 1 juli 2026 invaren geldt uiterlijk één jaar vóór de transitiedatum als indienmoment."},{"label":"Eventuele partiële beoordelingen en resterende informatieverplichtingen correct verwerkt","bewijs":true,"toelichting":"Partiële beoordeling is optioneel; leg vast welke onderdelen al zijn beoordeeld en welke informatie in de volledige melding nog vereist is."},{"label":"DNB-bevindingenbrieven en AFM-terugkoppeling centraal geregistreerd, beantwoord en aantoonbaar verwerkt","bewijs":true,"toelichting":"Gebruik een change-log zodat zichtbaar blijft welke documenten, besluiten of maatregelen naar aanleiding van toezicht zijn aangepast."},{"label":"DNB-beschikking ontvangen en eventuele voorschriften/toezichtbrief vertaald naar concrete acties","bewijs":true,"toelichting":"DNB geeft geen 'goedkeuring' maar een beschikking waarin wel of geen verbod op invaren wordt opgelegd, eventueel met voorschriften."},{"label":"AFM-terugkoppeling verwerkt zonder deze als voorafgaande goedkeuring van communicatie of transitieoverzichten te behandelen","bewijs":true,"toelichting":"De AFM keurt transitieoverzichten niet vooraf goed; het fonds blijft zelf verantwoordelijk voor correcte, duidelijke, tijdige en evenwichtige informatie."}],"bewijs":[{"type":"external_submission","label":"Bevestiging invaarmelding DNB","toelichting":"Bewijs van tijdige en volledige indiening.","verplicht":true,"blokkerend":true},{"type":"document","label":"Ingevuld invaarsjabloon","toelichting":"Bewaar de ingediende versie plus eventuele latere versies met wijzigingshistorie.","verplicht":true,"blokkerend":true},{"type":"external_submission","label":"Bevestiging indiening communicatieplan AFM","toelichting":"Inclusief AFM-aanleverformulier en eventuele bijlagen.","verplicht":true,"blokkerend":false},{"type":"document","label":"Toezichtvragen-, bevindingen- en opvolgingslog","toelichting":"Combineer vraag, antwoord, bron, eigenaar, deadline, wijziging en closure.","verplicht":true,"blokkerend":false},{"type":"approval","label":"DNB-beschikking (wel/geen verbod) en eventuele voorschriften/toezichtbrief","toelichting":"Gebruik 'beschikking' in plaats van 'DNB-goedkeuring'. Voor daadwerkelijke invaren is een beschikking zonder verbod vereist.","verplicht":true,"blokkerend":true},{"type":"document","label":"AFM-terugkoppeling communicatieplan en opvolging","toelichting":"AFM-terugkoppeling is toezichtinput, geen formele goedkeuring.","verplicht":true,"blokkerend":false}]},{"volgorde":10,"naam":"Deelnemers voorbereiden op de transitie","beschrijving":"Zijn deelnemers tijdig persoonlijk geïnformeerd en is de klantbediening (incl. keuzeproces) gereed? Tijdkritisch. Communicatiemoment ②. Doorlopend comm-spoor.","fase_code":"IV","fase_type":"implementatie","vereist_besluit":false,"dagen":90,"checklist":[{"label":"Prognose-transitieoverzicht uiterlijk één maand vóór de transitiedatum aan de relevante deelnemers verstrekt","bewijs":true,"toelichting":"De AFM benoemt dit als het prognose-transitieoverzicht / de eerste berekening. Bewijs van tijdige verstrekking is essentieel."},{"label":"Persoonlijke toelichting op verschillen, scenariobedragen en relevante compensatie opgenomen","bewijs":true,"toelichting":"Het overzicht moet persoonlijke gevolgen duiden; alleen bedragen tonen is onvoldoende."},{"label":"Segmentatie en productiecontroles tonen dat de juiste deelnemers de juiste informatie ontvangen","bewijs":true,"toelichting":"Controleer doelgroep, status, life-events, compensatie en andere conditionele teksten op persoonsniveau."},{"label":"Communicatie via brief, portaal, website, FAQ en klantcontact is inhoudelijk consistent","bewijs":true,"toelichting":"Inconsistenties tussen kanalen vergroten het risico op onduidelijke of onevenwichtige informatie."},{"label":"Keuzeomgeving is live, getest en voorzien van passende keuzebegeleiding, indien relevante keuzes spelen","bewijs":true,"toelichting":"Alleen toepassen voor keuzes die voor de regeling/deelnemer relevant zijn."},{"label":"FAQ, scripts, training, klachten- en escalatieproces zijn gereed voor verhoogd klantcontact","bewijs":true,"toelichting":"Klantbediening is onderdeel van operationele communication-readiness en levert na invaren belangrijke signalen op."},{"label":"Indien een finale go/no-go ná verzending van het prognose-overzicht ligt: voorbehoud en handelwijze richting deelnemers zijn geborgd","bewijs":true,"toelichting":"Maak transparant dat de transitie nog afhankelijk kan zijn van een later go/no-go-moment en borg communicatie bij uitstel/wijziging."}],"bewijs":[{"type":"document","label":"Prognose-transitieoverzicht (model en representatieve voorbeelden)","toelichting":"Bewaar zowel het generieke ontwerp als voorbeelden van de conditionele/persoonlijke invulling.","verplicht":true,"blokkerend":false},{"type":"document","label":"Bewijs tijdige verstrekking prognose-transitieoverzicht","toelichting":"Verzend-/publicatielog met dekking van de relevante populatie.","verplicht":true,"blokkerend":true},{"type":"evaluation","label":"Segmentatie- en productiecontrole communicatie","toelichting":"Controle op populatie, conditionele teksten, bedragen en kanaalconsistentie.","verplicht":true,"blokkerend":false},{"type":"document","label":"Klantcontact-readiness (FAQ, scripts, training, klachten-/escalatieproces)","toelichting":"Bevat eigenaarschap, escalatieroutes en monitoring van veelvoorkomende vragen en klachten.","verplicht":true,"blokkerend":false}]},{"volgorde":11,"naam":"Gereedheid bewaken en finale go/no-go","beschrijving":"Zijn alle vooraf bepaalde criteria nog steeds vervuld om daadwerkelijk in te varen? Tijdkritisch, kort vóór de transitiedatum. Volgt logisch op 9·10 via de readiness-ladder.","fase_code":"V","fase_type":"besluitvorming","vereist_besluit":true,"dagen":30,"checklist":[{"label":"Vooraf vastgestelde go/no-go-criteria integraal getoetst","bewijs":true,"toelichting":"De finale beslissing moet teruggrijpen op vooraf vastgestelde objectieve criteria, niet alleen op projectstatussen."},{"label":"Finale test-/QA-resultaten, datakwaliteit en openstaande bevindingen beoordeeld","bewijs":true,"toelichting":"Maak onderscheid tussen opgeloste bevindingen, geaccepteerde restrisico's en blokkades."},{"label":"Pensioenadministratie, IT, vermogensbeheer, ketenpartijen en klantbediening gereed verklaard","bewijs":true,"toelichting":"Readiness moet end-to-end zijn; een groen oordeel van één uitvoerder is onvoldoende als kritieke ketenafhankelijkheden openstaan."},{"label":"Actuele financiële invaarcondities en vooraf gedefinieerde bandbreedtes getoetst","bewijs":true,"toelichting":"Monitor of de actuele situatie nog valt binnen de omstandigheden waarop de bestuurlijke besluitvorming is gebaseerd."},{"label":"DNB-voorschriften, toezichtbevindingen en overige voorwaarden aantoonbaar afgehandeld","bewijs":true,"toelichting":"DNB kan vóór invaren voorschriften stellen en naleving daarvan monitoren."},{"label":"Materiële wijzigingen sinds de invaarmelding beoordeeld en waar nodig onmiddellijk aan DNB gemeld","bewijs":true,"toelichting":"DNB verwacht melding van materiële wijzigingen en van onjuiste/onvolledige eerder verstrekte informatie."},{"label":"Fallback-/uitstelscenario actueel en direct uitvoerbaar","bewijs":true,"toelichting":"Inclusief gevolgen voor administratie, vermogen, deelnemerscommunicatie, planning en toezichthouders."},{"label":"Formeel bestuurlijk go/no-go-besluit genomen en bevoegdheid gecontroleerd","bewijs":true,"toelichting":"Leg besluit, voorwaarden, dissent en bevoegdheid vast in het bestuursdossier."}],"bewijs":[{"type":"document","label":"Go/no-go-dossier","toelichting":"Integraal overzicht van criteria, bewijs, bevindingen, voorwaarden en conclusie.","verplicht":true,"blokkerend":true},{"type":"kpi","label":"Readiness-criteria en finale statusrapportage","toelichting":"Minimaal administratie, IT, data, keten, vermogen, communicatie en toezichtvoorwaarden.","verplicht":true,"blokkerend":false},{"type":"risk","label":"Actuele restrisico's en fallback-/uitstelplan","toelichting":"Alle geaccepteerde restrisico's moeten expliciet bij de finale beslissing zijn betrokken.","verplicht":true,"blokkerend":false},{"type":"external_submission","label":"Bewijs naleving DNB-voorschriften / melding materiële wijzigingen","toelichting":"Alleen voor zover voorschriften of materiële wijzigingen aan de orde zijn.","verplicht":false,"blokkerend":false},{"type":"approval","label":"Finale go/no-go-besluit","toelichting":"Expliciet bestuursbesluit met datum, voorwaarden en verwijzing naar het go/no-go-dossier.","verplicht":true,"blokkerend":true},{"type":"mandate_check","label":"Bevoegdheid go/no-go-besluit","toelichting":"Controleer statutaire/reglementaire bevoegdheid en eventuele delegaties.","verplicht":true,"blokkerend":false}]},{"volgorde":12,"naam":"Invaren, communiceren, controleren en verantwoorden","beschrijving":"Is uitgevoerd wat is besloten, klopt de vermogensverdeling, en kunnen verschillen worden verklaard? Tijdkritisch. Communicatiemoment ③. Monitoring van gemaakte keuzes als signaalfunctie.","fase_code":"VI","fase_type":"evaluatie","vereist_besluit":false,"dagen":90,"checklist":[{"label":"Transitie op de invaardatum uitgevoerd en financiële/administratieve basisgegevens vastgesteld","bewijs":true,"toelichting":"Leg de feitelijke uitvoering en de gebruikte basisgegevens vast zodat de overgang reproduceerbaar is."},{"label":"Definitieve invaarberekeningen en reconciliaties vóór/na de transitie uitgevoerd","bewijs":true,"toelichting":"Controleer aansluiting van totaalvermogen, individuele vermogens en relevante reserves/voorzieningen."},{"label":"Externe accountant heeft na invaren de juistheid en volledigheid van de transitie onderzocht","bewijs":true,"toelichting":"De externe accountant onderzoekt na invaren ten minste de berekeningen die aan de vermogensverdeling ten grondslag liggen. De certificerend actuaris kan conform de controleaanpak worden betrokken."},{"label":"Bevindingen uit post-invaarcontroles en incidenten tijdig gecorrigeerd en bestuurlijk gevolgd","bewijs":true,"toelichting":"Nieuwe datakwaliteitsbevindingen moeten in het kader van beheerste en integere uitvoering worden gecorrigeerd."},{"label":"Definitief transitieoverzicht uiterlijk zes maanden na de transitiedatum aan de relevante deelnemers verstrekt","bewijs":true,"toelichting":"Het definitieve overzicht toont de definitief vastgestelde bedragen en geeft het finale beeld van de persoonlijke transitie."},{"label":"Verschillen tussen prognose- en definitief transitieoverzicht persoonlijk toegelicht","bewijs":true,"toelichting":"AFM verlangt dat eventuele verschillen met het prognose-overzicht worden toegelicht."},{"label":"Klachten, klantcontact, keuzes en andere deelnemerssignalen geanalyseerd op patronen en mogelijke fouten","bewijs":true,"toelichting":"Gebruik deelnemerssignalen als bestuurlijke feedback op uitvoering, uitlegbaarheid en eventuele herstelbehoefte."},{"label":"Intern toezicht heeft de uitvoering/nazorg betrokken in de verantwoording en openstaande acties worden bewaakt","bewijs":true,"toelichting":"Intern toezicht houdt toezicht op het invaren en legt hierover verantwoording af; borg opvolging van resterende aandachtspunten."},{"label":"Bestuursevaluatie van transitie, communicatie en beheersing uitgevoerd; verbeteracties vastgelegd","bewijs":true,"toelichting":"Sluit de bestuurlijke cyclus: besloten, uitgevoerd, gecontroleerd, verklaard en geëvalueerd."}],"bewijs":[{"type":"document","label":"Post-invaar rapport externe accountant over juistheid en volledigheid van de transitie","toelichting":"Verplichte externe controle na transitie; reikwijdte omvat ten minste de vermogensverdelingsberekeningen.","verplicht":true,"blokkerend":false},{"type":"document","label":"Reconciliatie- en vermogensverdelingsrapport","toelichting":"Bewijs dat de feitelijke verdeling en administratieve verwerking aansluiten op het invaarbesluit en de gecontroleerde berekeningen.","verplicht":true,"blokkerend":false},{"type":"document","label":"Definitief transitieoverzicht (model en representatieve voorbeelden)","toelichting":"Bewaar voorbeelden voor verschillende relevante deelnemerssituaties.","verplicht":true,"blokkerend":false},{"type":"document","label":"Bewijs tijdige verstrekking definitief transitieoverzicht","toelichting":"Verzend-/publicatielog waaruit blijkt dat uiterlijk zes maanden na transitiedatum is verstrekt.","verplicht":true,"blokkerend":false},{"type":"document","label":"Verschillenanalyse prognose versus definitief","toelichting":"Onderbouw oorzaken van verschillen en koppel deze aan de persoonlijke toelichting.","verplicht":true,"blokkerend":false},{"type":"risk","label":"Incidenten-, correctie- en herstelregister","toelichting":"Bevat impact, deelnemersgroep, herstelactie, eigenaar, status en eventuele toezichtmelding.","verplicht":true,"blokkerend":false},{"type":"kpi","label":"Klachten-, klantcontact- en keuzemonitoring","toelichting":"Analyseer volumes, categorieën, doelgroepen en trends en vertaal materiële signalen naar bestuurlijke acties.","verplicht":false,"blokkerend":false},{"type":"evaluation","label":"Bestuursevaluatie en verbeteracties","toelichting":"Leg lessons learned, openstaande beheersacties en overdracht naar lijnorganisatie vast.","verplicht":false,"blokkerend":false}]}]};
+
+/* ── vertaal-/labelconstanten uit de codebase ── */
+const TYPE_AFK = {document:'DOC', kpi:'KPI', external_submission:'EXT', mandate_check:'MND',
+  assumption:'AAN', risk:'RIS', dissent_review:'DIS', approval:'GDK', evaluation:'EVA'};
+const TYPE_LABEL = {document:'Document', kpi:'Norm / KPI', external_submission:'Externe indiening',
+  mandate_check:'Mandaatcheck', assumption:'Aanname', risk:'Risico', dissent_review:'Dissent-review',
+  approval:'Goedkeuring', evaluation:'Evaluatie'};
+
+/* ── demostand ── */
+const state = {cur:1, tab:'overzicht', openFasen:new Set(['I']), uit:new Set(), stappen:{},
+               afwijkPaneel:false, notitieOpen:false, alleNotities:false};
+DATA.stappen.forEach(s => {
+  state.stappen[s.volgorde] = {
+    // engine-statussen v0.7: niet_begonnen|actief|heropend|geblokkeerd|afgerond|vervallen
+    // 'actief' geldt pas zodra er iets is gedaan in de stap; hier voorgezet voor de demo.
+    status: s.volgorde <= 2 ? 'actief' : 'niet_begonnen',
+    vink:new Set(),
+    // Eén bewijsstuk staat in de demo al opgevoerd, zodat "✦ Vraag de AI over dit
+    // stuk" meteen zichtbaar is — die knop verschijnt alleen bij een opgevoerd stuk.
+    bewijs: s.volgorde === 1 ? {0:'bibliotheek, 14-08-2026'} : {},
+    besluit:null, vergaderingen:[],
+    afwijking:null,  // {motivering, wat:[...], door, datum}
+    notities: s.volgorde === 1 ? [
+      {auteur:'J. de Vries', datum:'19 aug 2026', tekst:'Gebeld met de actuaris over de compensatieafspraken; hij levert de doorrekening uiterlijk 5 september aan. Tot die tijd houden we deze stap open.', eigen:false},
+      {auteur:'M. IJzerman', datum:'18 aug 2026', bewerkt:true, tekst:'Sociale partners hebben mondeling bevestigd dat het transitieplan niet meer wijzigt. Schriftelijke bevestiging opgevraagd — die komt bij de bewijslast, niet hier.', eigen:true}
+    ] : []
+  };
+});
+
+const stap = n => DATA.stappen.find(s => s.volgorde === n);
+const sv   = n => state.stappen[n];
+const faseVan = c => DATA.fasen.find(f => f.fase_code === c);
+const esc = t => String(t).replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+const alleenLezen = n => ['niet_begonnen','geblokkeerd','afgerond'].includes(sv(n).status);
+
+/* ── Zwaarte (engine-ontwerp v0.7 §5.1) ────────────────────────────────────
+   De demodata draagt nog de oude booleans verplicht/blokkerend. De engine kent
+   sinds v0.7 één veld zwaarte; hier wordt het afgeleid volgens dezelfde
+   migratieregel als in het ontwerp:
+        verplicht = false                  → optioneel
+        verplicht = true,  blokkerend = f  → vereist
+        verplicht = true,  blokkerend = t  → kritiek                          */
+const zwaarteVan = b => b.blokkerend ? 'kritiek' : (b.verplicht ? 'vereist' : 'optioneel');
+const ZW_LABEL = {optioneel:'Optioneel', vereist:'Vereist', kritiek:'Kritiek'};
+
+function tel(n){
+  const s = stap(n), v = sv(n);
+  const per = z => s.bewijs.map((b,i) => ({b,i})).filter(x => zwaarteVan(x.b) === z);
+  const open = z => per(z).filter(x => !v.bewijs[x.i]).length;
+  return {
+    cTot:s.checklist.length, cOk:v.vink.size,
+    bTot:s.bewijs.length,    bOk:Object.keys(v.bewijs).length,
+    kritTot:per('kritiek').length, kritOpen:open('kritiek'),
+    verTot:per('vereist').length,  verOpen:open('vereist'),
+    besluitOpen: s.vereist_besluit && !v.besluit
+  };
+}
+/* v0.7: afronden kan altijd. Wat openstaat boven 'optioneel' bepaalt of het een
+   gewone afronding is of een afronding met afwijking (motivering verplicht;
+   bij kritiek bovendien een expliciete bevestiging). */
+function openBovenOptioneel(n){
+  const s = stap(n), c = tel(n), r = [];
+  if (c.cOk < c.cTot) r.push({zw:'vereist', tekst:(c.cTot-c.cOk) + ' checklistpunt' + (c.cTot-c.cOk===1?'':'en')});
+  if (c.verOpen)  r.push({zw:'vereist', tekst:c.verOpen + ' vereist bewijsstuk' + (c.verOpen===1?'':'ken')});
+  if (c.kritOpen) r.push({zw:'kritiek', tekst:c.kritOpen + ' kritiek bewijsstuk' + (c.kritOpen===1?'':'ken')});
+  if (c.besluitOpen) r.push({zw:'kritiek', tekst:'het formele besluit'});
+  return r;
+}
+const heeftKritiekOpen = n => openBovenOptioneel(n).some(x => x.zw === 'kritiek');
+const ontbreekt = n => openBovenOptioneel(n).map(x => x.tekst);
+function toast(m){
+  const t = document.getElementById('toast');
+  t.textContent = m; t.classList.add('on');
+  clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('on'), 2600);
+}
+
+/* ── paginakop ── */
+const PROCES_TITEL = 'Invaarbesluit SPR-regeling';
+function kop(){
+  document.getElementById('procTemplate').textContent = DATA.naam;
+  document.getElementById('procNaam').textContent = PROCES_TITEL;
+  document.getElementById('procOmschrijving').textContent = DATA.korte_omschrijving;
+  document.getElementById('defRef').textContent = DATA.code + '@' + DATA.versie;
+  const klaar = DATA.stappen.filter(s => sv(s.volgorde).status === 'afgerond').length;
+  const pct = Math.round(klaar / DATA.stappen.length * 100);
+  document.getElementById('voortgangTekst').textContent = klaar + ' van ' + DATA.stappen.length + ' stappen afgerond';
+  document.getElementById('voortgangBar').style.width = pct + '%';
+  document.getElementById('voortgangSub').textContent = pct + '% · ' + DATA.fasen.length + ' fasen';
+  document.getElementById('doorlooptijd').textContent = '± ' + DATA.dagen + ' dagen';
+  document.getElementById('classificatie').textContent =
+    DATA.classificatie.complexiteit.charAt(0).toUpperCase() + DATA.classificatie.complexiteit.slice(1) +
+    ' · risico ' + DATA.classificatie.risiconiveau;
+  document.getElementById('regelgeving').textContent = DATA.regelgeving.join(' · ');
+  document.getElementById('railTelling').textContent = DATA.stappen.length + ' stappen · ' + DATA.fasen.length + ' fasen';
+}
+
+/* ── fase-accordeon ── */
+function rail(){
+  const el = document.getElementById('rail');
+  el.innerHTML = DATA.fasen.map(f => {
+    const ss = DATA.stappen.filter(s => s.fase_code === f.fase_code);
+    const open = state.openFasen.has(f.fase_code);
+    const sel  = stap(state.cur).fase_code === f.fase_code;
+    const klaar = ss.every(s => sv(s.volgorde).status === 'afgerond');
+    return `<div class="fase ${open?'open':''} ${sel?'sel':''}">
+      <button class="fkop" data-fase="${f.fase_code}" aria-expanded="${open}">
+        <span class="fbadge">${f.fase_code}</span>
+        <span class="ftitel"><b>${esc(f.titel)}</b><span>${ss.length} stap${ss.length===1?'':'pen'}</span></span>
+        ${klaar?'<span class="fpill">Afgerond</span>':''}
+        <span class="chev">▾</span>
+      </button>
+      <div class="stappen">${ss.map((s,i) => stapLink(s, i === ss.length-1)).join('')}</div>
+    </div>`;
+  }).join('');
+  el.querySelectorAll('[data-fase]').forEach(b => b.onclick = () => {
+    const c = b.dataset.fase;
+    state.openFasen.has(c) ? state.openFasen.delete(c) : state.openFasen.add(c);
+    rail();
+  });
+  el.querySelectorAll('[data-stap]').forEach(b => b.onclick = () => naar(+b.dataset.stap));
+}
+function stapLink(s, laatste){
+  const v = sv(s.volgorde), c = tel(s.volgorde), on = state.cur === s.volgorde;
+  const klaar = v.status === 'afgerond', bezig = v.status === 'actief' || v.status === 'heropend';
+  let meta = '';
+  if (klaar) meta = 'Afgerond 20 aug';
+  else if (bezig) meta = (v.status === 'heropend' ? 'Heropend' : 'Actief') + ' — ' + c.cOk + '/' + c.cTot + ' checklist, ' + c.bOk + '/' + c.bTot + ' bewijs';
+  else if (s.vereist_besluit) meta = 'Vereist formeel besluit';
+  // v0.7: geen geschatte doorlooptijd per stap meer — die suggereerde een planning
+  // die niemand maakt of bijhoudt. Wat er wél kan: per lopend proces een optionele datum.
+  else meta = 'Nog niet gestart';
+  return `<button class="slink ${on?'on':''}" data-stap="${s.volgorde}">
+    <span class="snum">${klaar?'✓':s.volgorde}</span>${laatste?'':'<span class="sconn"></span>'}
+    <span class="snaam ${klaar?'klaar':(bezig?'bezig':'')}">${esc(s.naam)}</span>
+    <span class="smeta">${meta}</span>
+  </button>`;
+}
+
+/* ── stapdetail ── */
+const TABS = [{id:'overzicht',t:'Overzicht'},{id:'checklist',t:'Checklist'},{id:'bewijs',t:'Bewijsstukken'},
+              {id:'vergaderingen',t:'Vergaderingen'},{id:'besluit',t:'Besluit'}];
+
+function detail(){
+  const s = stap(state.cur), v = sv(state.cur), c = tel(state.cur), f = faseVan(s.fase_code);
+  const lees = alleenLezen(state.cur);
+
+  const rol = document.getElementById('stapRol');
+  rol.className = 'rol ' + (v.status === 'afgerond' ? 'klaar' : (lees ? 'open' : 'actief'));
+  rol.textContent = v.status === 'afgerond' ? 'Afgeronde stap — alleen-lezen'
+                  : v.status === 'heropend' ? 'Heropende stap'
+                  : lees ? 'Nog niet gestarte stap — alleen-lezen' : 'Actieve stap';
+  document.getElementById('stapTitel').textContent = s.volgorde + ' — ' + s.naam;
+  document.getElementById('stapTeller').textContent = 'Stap ' + s.volgorde + ' van ' + DATA.stappen.length;
+  document.getElementById('vorige').disabled = s.volgorde === 1;
+  document.getElementById('volgende').disabled = s.volgorde === DATA.stappen.length;
+  document.getElementById('stapMeta').innerHTML =
+    `<span class="tag phase">Fase ${f.fase_code} — ${esc(f.titel)}</span>
+     <span>${s.vereist_besluit ? 'Vereist formeel besluit' : 'Geen formeel besluit'}</span><span>·</span>
+     <span>Datum: geen <button class="wijzig" data-noop>Instellen</button></span>`;
+
+  const badges = {
+    overzicht:'',
+    checklist:`<span class="n ${c.cOk===c.cTot?'ok':''}">${c.cOk}/${c.cTot}</span>`,
+    bewijs:`<span class="n ${c.kritOpen?'err':(c.verOpen?'':(c.bOk===c.bTot?'ok':''))}">${c.bOk}/${c.bTot}</span>`,
+    vergaderingen:`<span class="n">${v.vergaderingen.length}</span>`,
+    besluit: v.besluit ? '<span class="n ok">✓</span>' : (s.vereist_besluit ? '<span class="n err">vereist</span>' : '<span class="n">n.v.t.</span>')
+  };
+  document.getElementById('tabbar').innerHTML = TABS.map(t =>
+    `<button class="tab ${state.tab===t.id?'on':''}" data-tab="${t.id}">${t.t}${badges[t.id]}</button>`).join('');
+  document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { state.tab = b.dataset.tab; detail(); });
+
+  document.getElementById('tabbody').innerHTML =
+    ({overzicht:tabOverzicht, checklist:tabChecklist, bewijs:tabBewijs,
+      vergaderingen:tabVergaderingen, besluit:tabBesluit})[state.tab](s, v, c, f, lees);
+
+  voet(s, v, c, lees);
+  bind();
+}
+
+function leesbanner(v){
+  if (v.status === 'afgerond')
+    return `<div class="melding ok">Deze stap is afgerond op 20 augustus 2026 door M. IJzerman. Alleen-lezen — heropenen kan met verplichte motivering (voorzitter/beheerder).</div>`;
+  return `<div class="melding info"><span>Deze stap is nog niet gestart en staat daarom op alleen-lezen. <button class="link ink" data-start style="font-weight:600">Stap activeren (demo)</button></span></div>`;
+}
+
+function tabOverzicht(s, v, c, f, lees){
+  return `${lees ? leesbanner(v) : ''}
+  <div style="max-width:none">
+    <div class="lbl">Toelichting <button class="wijzig" data-noop>Wijzigen</button></div>
+    <p class="tekst ink" style="max-width:78ch">${esc(s.beschrijving)}</p>
+    <div class="uitleg" style="max-width:78ch"><b style="color:var(--ink)">Fase ${f.fase_code} — ${esc(f.titel)}.</b> ${esc(f.generieke_beschrijving)}</div>
+
+    ${notitieBlok(v, lees)}
+  </div>`;
+}
+
+/* ── Aantekeningen (engine-ontwerp v0.8 §9.3) ───────────────────────────────
+   Werkverkeer, geen verantwoording. Gedeeld met iedereen die het dossier ziet,
+   bewerkbaar door de auteur, niet in het afschrift, en activeert de stap niet.
+   Bewust onderaan Overzicht en niet als zesde tab: dat zou een gewicht
+   suggereren dat het niet heeft.                                             */
+function notitieBlok(v, lees){
+  const n = v.notities;
+  const toon = state.alleNotities ? n : n.slice(0, 3);
+  return `
+  <div class="sectiekop" style="margin-top:28px"><b>Aantekeningen</b>
+    <span class="n">${n.length===0 ? 'geen' : n.length + (n.length===1?' aantekening':' aantekeningen')} · niet in het afschrift</span>
+    ${lees?'':'<button class="add" data-notitienieuw>+ Aantekening</button>'}</div>
+  ${state.notitieOpen && !lees ? `
+    <div class="notitieveld">
+      <textarea id="notTekst" rows="2" placeholder="Werkaantekening — bv. “Gebeld met de actuaris, cijfers volgen volgende week.”"></textarea>
+      <div class="nhint">Zichtbaar voor iedereen met toegang tot dit dossier, en opvraagbaar bij een geschil of toezichtsvraag.
+        Motivering bij een besluit of afwijking hoort daar, niet hier.</div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="knop" data-notitieannuleer>Annuleren</button>
+        <button class="knop pri" data-notitieopslaan>Vastleggen</button></div>
+    </div>` : ''}
+  ${n.length === 0 && !state.notitieOpen
+    ? '<div class="seg-leeg" style="font-size:13px;color:var(--muted);padding:2px">Nog geen aantekeningen bij deze stap.</div>'
+    : toon.map((x,i) => `<div class="notitie">
+        <div class="nkop"><b>${esc(x.auteur)}</b><span>${esc(x.datum)}</span>${x.bewerkt?'<span class="mini neut">Bewerkt</span>':''}
+          ${lees||!x.eigen?'':'<span class="nact"><button class="link mut" data-noop>Wijzigen</button><button class="link mut" data-notitieweg="'+i+'">Verwijderen</button></span>'}</div>
+        <div class="ntekst">${esc(x.tekst)}</div>
+      </div>`).join('')}
+  ${n.length > 3 ? `<button class="link ink" data-notitiesalle style="font-weight:600;font-size:13px">
+      ${state.alleNotities ? 'Toon minder' : 'Toon alle ' + n.length + ' aantekeningen'}</button>` : ''}`;
+}
+
+function tabChecklist(s, v, c, f, lees){
+  return `${lees ? leesbanner(v) : ''}
+  <div class="sectiekop"><b>Checklist</b>
+    <span class="n">${c.cOk} van ${c.cTot} voldaan · ${s.checklist.filter(x=>x.bewijs).length}× bewijs vereist</span>
+    ${lees?'':'<button class="add" data-noop>+ Checklistpunt toevoegen</button>'}</div>
+  ${c.cOk===c.cTot ? '<div class="melding ok">Alle checklistpunten zijn voldaan.</div>' : ''}
+  ${s.checklist.map((it,i) => {
+    const ok = v.vink.has(i), k = 'c'+state.cur+'-'+i, uit = state.uit.has(k);
+    return `<div class="rij ${ok?'klaar':''}">
+      <input type="checkbox" class="chk" data-vink="${i}" ${ok?'checked':''} ${lees?'disabled':''} />
+      <span class="body">
+        <span class="t">${esc(it.label)}</span>
+        <span class="m">${it.bewijs?'<span class="mini bew">Bewijs vereist</span>':''}
+          ${it.toelichting?`<button class="link mut" data-uit="${k}">Toelichting ${uit?'▴':'▾'}</button>`:''}</span>
+        ${uit?`<div class="uitleg">${esc(it.toelichting)}</div>`:''}
+      </span>
+      ${lees?'':'<span class="r"><button class="link mut" data-noop>Verwijderen</button></span>'}
+    </div>`;
+  }).join('')}`;
+}
+
+function bewijsRij(b, i, v, lees){
+  const op = v.bewijs[i], k = 'b'+state.cur+'-'+i, uit = state.uit.has(k);
+  return `<div class="rij ${op?'klaar':''}">
+    <span class="tegel ${op?'klaar':''}">${TYPE_AFK[b.type]||'—'}</span>
+    <span class="body">
+      <span class="t">${esc(b.label)}</span>
+      <span class="m"><span>${TYPE_LABEL[b.type]||b.type}</span>
+        ${(z => z==='optioneel' ? '' : `<span class="mini ${z}" title="${z==='kritiek'
+            ? 'Afronden zonder dit stuk kan alleen als afwijking, met motivering én expliciete bevestiging.'
+            : 'Afronden zonder dit stuk kan alleen als afwijking, met motivering.'}">${ZW_LABEL[z]}</span>`)(zwaarteVan(b))}
+        ${op?`<span class="mini ok">Opgevoerd · ${esc(op)}</span>`:''}
+        ${b.toelichting?`<button class="link mut" data-uit="${k}">Toelichting ${uit?'▴':'▾'}</button>`:''}</span>
+      ${uit?`<div class="uitleg">${esc(b.toelichting)}</div>`:''}
+    </span>
+    <span class="r">
+      ${op ? `<button class="link ai" data-ai-doc="${esc(b.label)}" title="Open de AI-assistent met de vraag beperkt tot dit document">✦ Vraag de AI over dit stuk</button>` : ''}
+      ${lees ? '' : (op
+        ? `<button class="link mut" data-terug="${i}">Verwijderen</button>`
+        : `<button class="knop klein" data-op="${i}">Opvoeren</button>`)}</span>
+  </div>`;
+}
+
+function tabBewijs(s, v, c, f, lees){
+  const zwt = [c.kritTot?c.kritTot+' kritiek':'', c.verTot?c.verTot+' vereist':''].filter(Boolean).join(' · ');
+  return `${lees ? leesbanner(v) : ''}
+  <div class="sectiekop"><b>Bewijsstukken</b>
+    <span class="n">${c.bOk} van ${c.bTot} opgevoerd${zwt?' · '+zwt:''}</span>
+    ${lees?'':'<button class="add" data-noop>+ Bewijsstuk toevoegen</button>'}</div>
+  ${v.afwijking
+    ? `<div class="melding warn"><span><b>Deze stap is afgerond met een afwijking.</b>
+        Openstaand bij afronding: ${esc(v.afwijking.wat.join(' · '))}. Motivering van ${esc(v.afwijking.door)} (${esc(v.afwijking.datum)}):
+        &ldquo;${esc(v.afwijking.motivering)}&rdquo; — <b>overrulen is niet vervullen</b>: deze punten blijven open in de tellingen en in het dossier.</span></div>`
+    : (c.kritOpen
+      ? `<div class="melding err"><span><b>${c.kritOpen===1 ? 'Er ontbreekt 1 kritiek bewijsstuk.' : 'Er ontbreken '+c.kritOpen+' kritieke bewijsstukken.'}</b>
+          De stap kan wél worden afgerond, maar alleen als <b>afwijking</b>: met motivering én een expliciete bevestiging, en met een prominent signaal op het procesoverzicht.
+          Opvoeren kan uit de documentbibliotheek of als nieuwe upload.</span></div>`
+      : (c.verOpen
+        ? `<div class="melding warn"><span><b>${c.verOpen===1 ? 'Er ontbreekt 1 vereist bewijsstuk.' : 'Er ontbreken '+c.verOpen+' vereiste bewijsstukken.'}</b>
+            Afronden kan als afwijking, met verplichte motivering. Het proces krijgt dan een aandachtssignaal.</span></div>`
+        : '<div class="melding ok">Alle vereiste en kritieke bewijsstukken zijn opgevoerd.</div>'))}
+  ${s.bewijs.map((b,i) => bewijsRij(b, i, v, lees)).join('')}`;
+}
+
+function tabVergaderingen(s, v, c, f, lees){
+  if (!v.vergaderingen.length) return `${lees ? leesbanner(v) : ''}
+    <div class="sectiekop"><b>Vergaderingen</b><span class="n">geen</span>
+      ${lees?'':'<button class="add" data-plan>+ Koppelen aan vergadering</button>'}</div>
+    <div class="leeg">Deze stap staat (nog) niet op een vergaderagenda.<br />
+      Koppel de stap aan een bestuursvergadering zodat behandeling, weging en besluitvorming traceerbaar zijn.</div>`;
+  return `${lees ? leesbanner(v) : ''}
+    <div class="sectiekop"><b>Vergaderingen</b><span class="n">${v.vergaderingen.length} gekoppeld</span>
+      ${lees?'':'<button class="add" data-plan>+ Koppelen aan vergadering</button>'}</div>
+    ${v.vergaderingen.map(m => `<div class="rij"><span class="tegel">VG</span><span class="body">
+      <span class="t">${esc(m.titel)}</span><span class="m">${esc(m.datum)} · agendapunt ${esc(m.punt)}</span></span>
+      <span class="r"><button class="link" data-noop>Agenda openen →</button></span></div>`).join('')}`;
+}
+
+function tabBesluit(s, v, c, f, lees){
+  if (v.besluit) return `<div class="sectiekop"><b>Besluit</b><span class="n">vastgelegd</span></div>
+    <div class="rij klaar" style="align-items:flex-start">
+      <span class="tegel klaar">BSL</span>
+      <span class="body">
+        <span class="t" style="font-weight:600">${esc(v.besluit.formulering)}</span>
+        ${v.besluit.motivering?`<div class="tekst" style="margin-top:6px;white-space:pre-wrap">${esc(v.besluit.motivering)}</div>`:''}
+        ${v.besluit.alternatieven?`<div class="uitleg"><b style="color:var(--ink)">Verworpen alternatieven</b><br>${esc(v.besluit.alternatieven).replace(/\n/g,'<br>')}</div>`:''}
+        <span class="m">${esc(v.besluit.datum)} · M. IJzerman · append-only gelogd</span>
+      </span>
+      ${lees?'':'<span class="r"><button class="link mut" data-besluitweg>Intrekken</button></span>'}
+    </div>`;
+  if (!s.vereist_besluit) return `<div class="sectiekop"><b>Besluit</b><span class="n">niet vereist voor deze stap</span></div>
+    <div class="melding info">Deze stap vereist geen formeel besluit. De uitkomst landt als onderbouwing in het dossier en wordt meegewogen bij stap 7 (voorgenomen invaarbesluit en opdrachtaanvaarding).</div>
+    <div class="leeg">Toch een besluit vastleggen? ${lees?'Activeer eerst de stap.':'<button class="link ink" data-forceer style="font-weight:600">Besluit toevoegen</button>'}</div>`;
+  if (lees) return `${leesbanner(v)}<div class="sectiekop"><b>Besluit</b><span class="n">formeel besluit vereist</span></div>
+    <div class="melding info">Deze stap vereist een formeel besluit. Vastleggen kan zodra de stap actief is.</div>`;
+  const mis = openBovenOptioneel(state.cur).filter(x => x.tekst !== 'het formele besluit').map(x => x.tekst);
+  return `<div class="sectiekop"><b>Besluit vastleggen</b><span class="n">formeel besluit vereist</span>
+      <button class="add" data-ai>↗ Concept met AI</button></div>
+    ${mis.length ? `<div class="melding warn">De onderbouwing is nog niet compleet: ${mis.join(' · ')}. Vastleggen mag; de stap kan daarna gewoon worden afgerond, maar dan als afwijking met motivering.</div>` : ''}
+    <div class="split">
+      <div>
+        <div class="veld"><label>Formulering <span style="color:var(--err-ink)">*</span></label>
+          <textarea id="bForm" rows="2" placeholder="Bv.: Het bestuur aanvaardt de opdracht van sociale partners, onder de voorwaarden zoals hieronder gemotiveerd."></textarea></div>
+        <div class="veld"><label>Motivering</label>
+          <textarea id="bMot" rows="4" placeholder="Motivering (optioneel) — verwijs naar de checklist, het opgevoerde bewijs en de weging."></textarea></div>
+        <div class="veld"><label>Verworpen alternatieven</label>
+          <textarea id="bAlt" rows="3" placeholder="Eén per regel (optioneel)&#10;Bv.: Opdracht aanvaarden zonder aanvullende verduidelijking → afgewezen ivm onvoldoende onderbouwing"></textarea></div>
+        <div class="veld" style="max-width:200px"><label>Datum</label><input type="date" id="bDat" value="2026-08-20" /></div>
+        <div style="display:flex;gap:8px"><button class="knop" data-noop>Annuleren</button>
+          <button class="knop pri" data-besluitopslaan>Vastleggen</button></div>
+      </div>
+      <div>
+        <div class="box bg"><div class="lbl">Onderbouwing beschikbaar</div>
+          <div class="kv"><span class="k">Checklist voldaan</span><span class="v">${c.cOk} / ${c.cTot}</span></div>
+          <div class="kv"><span class="k">Bewijs opgevoerd</span><span class="v">${c.bOk} / ${c.bTot}</span></div>
+          <div class="kv"><span class="k">Open — kritiek</span><span class="v">${c.kritOpen}</span></div>
+          <div class="kv"><span class="k">Open — vereist</span><span class="v">${c.verOpen}</span></div>
+          <div class="uitleg">“Concept met AI” stelt uitsluitend een <b style="color:var(--ink)">conceptformulering en -motivering</b> op, op basis van het opgevoerde bewijs en eerdere stappen. Review en aanpassen vóór vastleggen; het bestuur blijft verantwoordelijk. Het gebruik wordt gelogd in het governance-log.</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+/* ── voettekstbalk ──────────────────────────────────────────────────────────
+   v0.7 §5.1: de knop is nooit meer uitgeschakeld. Wat openstaat bepaalt of het
+   'Stap afronden' is of 'Afronden met afwijking'; dat laatste opent het paneel
+   hieronder en vraagt een motivering (en bij kritiek een bevestiging).        */
+function voet(s, v, c, lees){
+  const open = openBovenOptioneel(state.cur);
+  const mis  = open.map(x => x.tekst);
+  const krit = heeftKritiekOpen(state.cur);
+
+  document.getElementById('voetStatus').innerHTML = v.status === 'afgerond'
+    ? (v.afwijking
+        ? `<span class="mini afwijk">Met afwijking</span> Afgerond terwijl ${esc(v.afwijking.wat.join(' · '))} openstond`
+        : 'Stap afgerond · alles was voldaan')
+    : lees
+      ? 'Stap nog niet gestart — alleen-lezen'
+      : (mis.length
+          ? `Nog open: <b>${mis.join('</b> · <b>')}</b> — afronden kan, als afwijking`
+          : 'Alles voldaan');
+
+  const kn = [];
+  if (!lees && s.vereist_besluit && !v.besluit) kn.push('<button class="knop" data-tabnaar="besluit">+ Besluit vastleggen</button>');
+  if (v.status === 'afgerond') kn.push('<button class="knop" data-heropen>Stap heropenen</button>');
+  else if (lees) kn.push('<button class="knop" data-start>Stap activeren (demo)</button>');
+  else if (!mis.length) kn.push('<button class="knop pri" data-voltooi>Stap afronden</button>');
+  else kn.push(`<button class="knop pri" data-afwijkopen
+      title="${krit ? 'Motivering én expliciete bevestiging vereist' : 'Motivering vereist'}">Afronden met afwijking…</button>`);
+  document.getElementById('voetKnoppen').innerHTML = kn.join('');
+
+  afwijkPaneel(v, lees, open, krit);
+}
+
+/* Het afrondpaneel — geen modal; het staat in de flow boven de voetbalk. */
+function afwijkPaneel(v, lees, open, krit){
+  const el = document.getElementById('afwijkVak');
+  if (!state.afwijkPaneel || lees || v.status === 'afgerond' || !open.length){
+    el.innerHTML = ''; el.hidden = true; return;
+  }
+  el.hidden = false;
+  el.innerHTML = `
+    <h4>Afronden met afwijking</h4>
+    <p>De stap gaat dicht terwijl het volgende openstaat. <b>Overrulen is niet vervullen:</b> deze punten blijven
+       open in de tellingen en in het dossier, en de afwijking komt in het afschrift. Geldt een eis hier helemaal
+       niet, sluit hem dan uit in plaats van hem te overrulen — dat is iets anders en het auditspoor houdt het uit elkaar.</p>
+    <ul>${open.map(x => `<li><span class="mini ${x.zw}">${ZW_LABEL[x.zw]}</span> ${esc(x.tekst)}</li>`).join('')}</ul>
+    <label style="display:block;font-size:13px;font-weight:600;color:var(--warn-ink);margin-bottom:5px">
+      Motivering <span style="color:var(--err-ink)">*</span></label>
+    <textarea id="afwMot" rows="3" placeholder="Waarom rondt het bestuur deze stap af zonder dat alles rond is? Verwijs naar de weging en naar wat er in plaats daarvan is vastgelegd."></textarea>
+    ${krit ? `<label class="bevestig"><input type="checkbox" id="afwBev" />
+      <span>Ik bevestig dat ik afrond terwijl <b>kritieke</b> punten openstaan, en dat dit prominent zichtbaar
+      wordt op het procesoverzicht en in het afschrift.</span></label>` : ''}
+    <div class="rij2">
+      <button class="knop" data-afwijkdicht>Annuleren</button>
+      <button class="knop pri" data-afwijkbevestig>Afronden met afwijking</button>
+      <span style="font-size:12px;color:var(--warn-ink);align-self:center">
+        Vereist de bevoegdheid <code>procedure.afwijking.vastleggen</code> — voorzitter of beheerder.</span>
+    </div>`;
+}
+
+/* Afronden — één route voor gewoon en afwijkend afronden. */
+function voltooiStap(bericht){
+  sv(state.cur).status = 'afgerond';
+  toast(bericht);
+  const n = stap(state.cur + 1);
+  if (n && sv(n.volgorde).status === 'niet_begonnen') { sv(n.volgorde).status = 'actief'; state.openFasen.add(n.fase_code); }
+  alles();
+}
+
+/* ── interactie ── */
+function bind(){
+  const d = document;
+  d.querySelectorAll('[data-vink]').forEach(el => el.onchange = () => {
+    const i = +el.dataset.vink, v = sv(state.cur);
+    v.vink.has(i) ? v.vink.delete(i) : v.vink.add(i);
+    alles();
+  });
+  d.querySelectorAll('[data-uit]').forEach(el => el.onclick = () => {
+    const k = el.dataset.uit;
+    state.uit.has(k) ? state.uit.delete(k) : state.uit.add(k);
+    detail();
+  });
+  d.querySelectorAll('[data-op]').forEach(el => el.onclick = () => {
+    sv(state.cur).bewijs[+el.dataset.op] = 'bibliotheek, 20-08-2026';
+    toast('Bewijsstuk gekoppeld aan de vereiste en gelogd in de audit-trail');
+    alles();
+  });
+  d.querySelectorAll('[data-terug]').forEach(el => el.onclick = () => {
+    delete sv(state.cur).bewijs[+el.dataset.terug];
+    toast('Koppeling verwijderd — de verwijdering is zelf ook gelogd');
+    alles();
+  });
+  d.querySelectorAll('[data-ai-doc]').forEach(el => el.onclick = () => {
+    // Generiek instappunt: /ai?doc=<id> — dezelfde route als "Vraag de AI over
+    // dit stuk" in de documentbibliotheek. Geen proces-eigen AI.
+    toast('Opent de AI-assistent, vraag beperkt tot “' + el.dataset.aiDoc + '” (/ai?doc=…)');
+  });
+  d.querySelectorAll('[data-tabnaar]').forEach(el => el.onclick = () => { state.tab = el.dataset.tabnaar; detail(); });
+  d.querySelectorAll('[data-plan]').forEach(el => el.onclick = () => {
+    sv(state.cur).vergaderingen.push({titel:'Bestuursvergadering — Wtp-transitie', datum:'17 september 2026', punt:'4b'});
+    toast('Stap gekoppeld aan de vergadering van 17 september');
+    alles();
+  });
+  d.querySelectorAll('[data-start]').forEach(el => el.onclick = () => {
+    sv(state.cur).status = 'actief'; toast('Stap geactiveerd (alleen in deze demo)'); alles();
+  });
+  d.querySelectorAll('[data-forceer]').forEach(el => el.onclick = () => { stap(state.cur).vereist_besluit = true; detail(); });
+  d.querySelectorAll('[data-ai]').forEach(el => el.onclick = () => {
+    const s = stap(state.cur), c = tel(state.cur);
+    const f = document.getElementById('bForm'), m = document.getElementById('bMot');
+    if (!f) return;
+    f.value = `Het bestuur stelt stap ${s.volgorde} — ${s.naam} vast en legt de uitkomst vast in het dossier.`;
+    m.value = `AI-concept — review en pas aan voor je vastlegt.\n\n`
+      + `Van de ${c.cTot} checklistpunten zijn er ${c.cOk} voldaan; ${c.bOk} van de ${c.bTot} gevraagde bewijsstukken zijn opgevoerd`
+      + `${c.kritOpen ? ` — ${c.kritOpen} kritiek stuk ontbreekt nog` : ' (geen kritieke stukken open)'}.\n\n`
+      + `${s.beschrijving}\n\nHet bestuur weegt uitvoerbaarheid, beheersing en evenwichtigheid en legt afwijkende standpunten expliciet vast in het dossier.`;
+    toast('AI-concept ingevuld — review en pas aan voor je vastlegt');
+  });
+  d.querySelectorAll('[data-besluitopslaan]').forEach(el => el.onclick = () => {
+    const f = document.getElementById('bForm').value.trim();
+    if (!f) { toast('Formulering is verplicht.'); return; }
+    sv(state.cur).besluit = {formulering:f, motivering:document.getElementById('bMot').value.trim(),
+      alternatieven:document.getElementById('bAlt').value.trim(), datum:'20 augustus 2026'};
+    toast('Besluit vastgelegd'); alles();
+  });
+  d.querySelectorAll('[data-besluitweg]').forEach(el => el.onclick = () => {
+    sv(state.cur).besluit = null; toast('Besluit ingetrokken — de intrekking is gelogd'); alles();
+  });
+  d.querySelectorAll('[data-afwijkopen]').forEach(el => el.onclick = () => {
+    state.afwijkPaneel = true; alles();
+    document.getElementById('afwMot')?.focus();
+  });
+  d.querySelectorAll('[data-afwijkdicht]').forEach(el => el.onclick = () => { state.afwijkPaneel = false; alles(); });
+  d.querySelectorAll('[data-afwijkbevestig]').forEach(el => el.onclick = () => {
+    const mot = document.getElementById('afwMot').value.trim();
+    if (!mot) { toast('Motivering is verplicht bij afronden met afwijking.'); return; }
+    const bev = document.getElementById('afwBev');
+    if (bev && !bev.checked) { toast('Bevestig eerst dat er kritieke punten openstaan.'); return; }
+    sv(state.cur).afwijking = {motivering:mot, wat:ontbreekt(state.cur), door:'M. IJzerman', datum:'20-08-2026'};
+    state.afwijkPaneel = false;
+    // In de engine is dit één transactie: status + snapshot + procedure_log +
+    // governance-event + herberekenActiveerbaarheid(). Faalt er één, faalt alles.
+    voltooiStap('Stap afgerond met afwijking — motivering, snapshot en governance-event zijn vastgelegd');
+  });
+  d.querySelectorAll('[data-notitienieuw]').forEach(el => el.onclick = () => {
+    state.notitieOpen = true; alles(); document.getElementById('notTekst')?.focus();
+  });
+  d.querySelectorAll('[data-notitieannuleer]').forEach(el => el.onclick = () => { state.notitieOpen = false; alles(); });
+  d.querySelectorAll('[data-notitieopslaan]').forEach(el => el.onclick = () => {
+    const t = document.getElementById('notTekst').value.trim();
+    if (!t) { toast('Een lege aantekening leggen we niet vast.'); return; }
+    sv(state.cur).notities.unshift({auteur:'M. IJzerman', datum:'20 aug 2026', tekst:t, eigen:true});
+    state.notitieOpen = false;
+    // Let op: een aantekening zet de stap NIET op 'actief' (§4.2) — het is geen
+    // inhoudelijke handeling, en anders staat een stap actief door "nog navragen".
+    toast('Aantekening vastgelegd — zichtbaar in het dossier, niet in het afschrift');
+    alles();
+  });
+  d.querySelectorAll('[data-notitieweg]').forEach(el => el.onclick = () => {
+    sv(state.cur).notities.splice(+el.dataset.notitieweg, 1);
+    toast('Aantekening verwijderd'); alles();
+  });
+  d.querySelectorAll('[data-notitiesalle]').forEach(el => el.onclick = () => { state.alleNotities = !state.alleNotities; alles(); });
+  d.querySelectorAll('[data-voltooi]').forEach(el => el.onclick = () => voltooiStap('Stap afgerond'));
+  d.querySelectorAll('[data-heropen]').forEach(el => el.onclick = () => {
+    // v0.7 §5.2: eerdere afwijkingen blijven staan (append-only) — ze worden niet gewist.
+    sv(state.cur).status = 'heropend'; toast('Stap heropend — motivering is verplicht en wordt gelogd'); alles();
+  });
+  d.querySelectorAll('[data-noop]').forEach(el => el.onclick = () => toast('Niet-functionele mockup — deze actie is niet uitgewerkt'));
+}
+
+function naar(n){
+  if (n < 1 || n > DATA.stappen.length) return;
+  state.cur = n; state.openFasen.add(stap(n).fase_code);
+  state.afwijkPaneel = false; state.notitieOpen = false; state.alleNotities = false;
+  alles();
+}
+document.getElementById('vorige').onclick = () => naar(state.cur - 1);
+document.getElementById('volgende').onclick = () => naar(state.cur + 1);
+document.addEventListener('keydown', e => {
+  if (e.target.matches('input,textarea,select')) return;
+  if (e.key === 'ArrowLeft') naar(state.cur - 1);
+  if (e.key === 'ArrowRight') naar(state.cur + 1);
+});
+document.querySelectorAll('[data-doss]').forEach(b => b.onclick = () => b.parentElement.classList.toggle('open'));
+
+/* Zoeken — eenmalig gebonden, zodat de cursorpositie niet verspringt bij elke render. */
+(function bindZoek(){
+  const zi = document.getElementById('zoek');
+  zi.addEventListener('input', () => { filters.zoek = zi.value.trim(); overzicht(); });
+  zi.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { zi.value = ''; filters.zoek = ''; overzicht(); zi.blur(); }
+  });
+  document.getElementById('zoekWis').onclick = () => { filters.zoek = ''; overzicht(); zi.focus(); };
+  // "/" springt naar het zoekveld, tenzij je al in een invoerveld staat.
+  document.addEventListener('keydown', e => {
+    if (e.key !== '/' || e.metaKey || e.ctrlKey) return;
+    const a = document.activeElement, tag = a && a.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    if (document.getElementById('schermOverzicht').hidden) return;
+    e.preventDefault(); zi.focus(); zi.select();
+  });
+})();
+
+/* ════════════════════ SCHERM 1 — PROCESOVERZICHT ════════════════════ */
+
+const FASE_KLEUR = {afgerond:'var(--ok)', in_behandeling:'var(--accent)', nog_niet_begonnen:'var(--app-bg)'};
+
+/* Het invaarproces wordt LIVE afgeleid uit de stapstatus in scherm 2 — vink je
+   in het detail iets af, dan verandert deze kaart mee. De overige processen zijn
+   plausibele demovulling om de filterrail te kunnen beoordelen. */
+function invaarProces(){
+  const fasen = DATA.fasen.map(f => {
+    const ss = DATA.stappen.filter(x => x.fase_code === f.fase_code);
+    const alleKlaar = ss.every(x => sv(x.volgorde).status === 'afgerond');
+    const bezig = ss.some(x => ['actief','heropend','afgerond'].includes(sv(x.volgorde).status));
+    let aandacht = 'geen';
+    ss.forEach(x => {
+      if (['actief','heropend'].includes(sv(x.volgorde).status)) {
+        const c = tel(x.volgorde);
+        if (c.kritOpen) aandacht = 'rood';
+        else if (aandacht === 'geen' && (c.verOpen || c.cOk < c.cTot || c.besluitOpen)) aandacht = 'oranje';
+      }
+    });
+    return {code:f.fase_code, titel:f.titel,
+      status: alleKlaar ? 'afgerond' : (bezig ? 'in_behandeling' : 'nog_niet_begonnen'),
+      aandacht: alleKlaar ? 'geen' : aandacht};
+  });
+  const af = DATA.stappen.filter(s => sv(s.volgorde).status === 'afgerond').length;
+  const rood = fasen.some(f => f.aandacht === 'rood');
+  const oranje = fasen.some(f => f.aandacht === 'oranje');
+  const heropend = DATA.stappen.filter(s => sv(s.volgorde).status === 'heropend');
+  const afwijkend = DATA.stappen.filter(s => sv(s.volgorde).afwijking);
+  /* v0.7 §12: maximaal drie signalen, in vaste prioriteitsvolgorde. Zonder vaste
+     volgorde valt willekeurig welk signaal af zodra er een vierde bijkomt. De
+     tellingen blijven bestaan, maar als tweede regel — niet als hoofdboodschap. */
+  const punten = [];
+  if (rood)   punten.push({niveau:'rood',   tekst:'Kritieke bewijslast ontbreekt'});          // 1
+  afwijkend.forEach(s => punten.push({niveau:'rood',                                          // 3
+    tekst:'Stap ' + s.volgorde + ' afgerond met afwijking'}));
+  heropend.forEach(s => punten.push({niveau:'oranje', tekst:'Stap ' + s.volgorde + ' heropend'}));
+  if (!rood && oranje) punten.push({niveau:'oranje', tekst:'Vereiste bewijslast ontbreekt'});
+  return {
+    id:'inv', template:'pf_wtp_invaarbesluit', templateLabel:'Wtp-invaarbesluit — bestuurlijke keten',
+    titel:PROCES_TITEL, omschrijving: DATA.korte_omschrijving,
+    dossierstatus:'Lopend', sublabel:'Toezichtgevoelig',
+    fasen, stappenAf:af, stappenTot:DATA.stappen.length,
+    afwijking: afwijkend.length > 0,
+    aandacht:punten.slice(0,3), deadline:'1 jan 2027', gestart:'20 aug 2026', afgerond:false
+  };
+}
+
+function fs(code, titel, status, aandacht){ return {code, titel, status, aandacht}; }
+const OVERIGE = [
+  {id:'esg', template:'beleidswijziging_beleggingsbeleid', templateLabel:'Beleidswijziging beleggingsbeleid',
+   titel:'Aanpassing beleggingsbeleid ESG', omschrijving:'Concept → onderbouwing → validatie → bestuursoverleg → besluit → implementatie en evaluatie.',
+   dossierstatus:'Lopend', sublabel:null,
+   fasen:[fs('I','Concept','afgerond','geen'),fs('II','Onderbouwing','afgerond','geen'),fs('III','Validatie','in_behandeling','rood'),
+          fs('IV','Bestuursoverleg','nog_niet_begonnen','geen'),fs('V','Besluit','nog_niet_begonnen','geen'),fs('VI','Evaluatie','nog_niet_begonnen','geen')],
+   stappenAf:3, stappenTot:6, afwijking:false,
+   aandacht:[{niveau:'rood',tekst:'Kritieke bewijslast ontbreekt'}], deadline:'23 nov 2026', gestart:'8 mei 2026', afgerond:false},
+
+  {id:'uitb', template:'uitbestedingsreview', templateLabel:'Uitbestedingsreview',
+   titel:'Jaarlijkse review pensioenadministratie (AZL)', omschrijving:'KPI-rapportage, SLA-check, due diligence, review-overleg en bevindingen.',
+   dossierstatus:'Ter besluitvorming', sublabel:null, periode:'Jaar 2026',
+   fasen:[fs('I','KPI-rapportage','afgerond','geen'),fs('II','SLA-check','afgerond','geen'),fs('III','Due diligence','afgerond','geen'),
+          fs('IV','Review-overleg','afgerond','geen'),fs('V','Bevindingen','in_behandeling','geen')],
+   stappenAf:4, stappenTot:5, afwijking:true,
+   aandacht:[{niveau:'rood',tekst:'Stap 4 afgerond met afwijking'}], deadline:'30 sep 2026', gestart:'2 feb 2026', afgerond:false},
+
+  {id:'inc', template:'incident_dnb', templateLabel:'Incident-meldplicht DNB',
+   titel:'Datalek deelnemersportaal juli 2026', omschrijving:'Registratie, triage meldplicht, melding DNB, analyse, maatregelen en afsluiting.',
+   dossierstatus:'In implementatie', sublabel:'Toezichtgevoelig',
+   fasen:[fs('I','Registratie','afgerond','geen'),fs('II','Triage','afgerond','geen'),fs('III','Melding DNB','afgerond','geen'),
+          fs('IV','Analyse','afgerond','geen'),fs('V','Maatregelen','in_behandeling','oranje'),fs('VI','Afsluiting','nog_niet_begonnen','geen')],
+   stappenAf:4, stappenTot:6, afwijking:false,
+   aandacht:[{niveau:'oranje',tekst:'Vereiste bewijslast ontbreekt'},{niveau:'oranje',tekst:'Stap 5: herbevestiging nodig'}],
+   deadline:'5 sep 2026', gestart:'14 jul 2026', afgerond:false},
+
+  {id:'irm', template:'beleidswijziging', templateLabel:'Beleidswijziging',
+   titel:'Herziening risicobereidheid en IRM-kader', omschrijving:'Voorstel → impactanalyse → bestuursoverleg → besluit → implementatie → evaluatie.',
+   dossierstatus:'Lopend', sublabel:null,
+   fasen:[fs('I','Voorstel','in_behandeling','oranje'),fs('II','Impactanalyse','nog_niet_begonnen','geen'),
+          fs('III','Bestuursoverleg','nog_niet_begonnen','geen'),fs('IV','Besluit','nog_niet_begonnen','geen'),
+          fs('V','Implementatie','nog_niet_begonnen','geen'),fs('VI','Evaluatie','nog_niet_begonnen','geen')],
+   stappenAf:0, stappenTot:6, afwijking:false,
+   aandacht:[{niveau:'oranje',tekst:'Vereiste bewijslast ontbreekt'}], deadline:'12 dec 2026', gestart:'1 aug 2026', afgerond:false},
+
+  {id:'toe', template:'beleidswijziging', templateLabel:'Beleidswijziging',
+   titel:'Toeslagbesluit 2026', omschrijving:'Vaststelling toeslagverlening per 1 januari 2026.',
+   dossierstatus:'Afgerond', sublabel:null, periode:'Jaar 2026',
+   fasen:[fs('I','Voorstel','afgerond','geen'),fs('II','Impactanalyse','afgerond','geen'),fs('III','Bestuursoverleg','afgerond','geen'),
+          fs('IV','Besluit','afgerond','geen'),fs('V','Implementatie','afgerond','geen'),fs('VI','Evaluatie','afgerond','geen')],
+   stappenAf:6, stappenTot:6, afwijking:false,
+   aandacht:[], deadline:'14 feb 2026', gestart:'3 nov 2025', afgerond:true}
+];
+const alleProcessen = () => [invaarProces(), ...OVERIGE];
+
+/* Afwijking t.o.v. de schets: 'Lopend / Met aandacht / Tijdkritisch / Besluitrijp'
+   zijn géén nevengeschikte opties — de laatste drie zijn deelverzamelingen van
+   'Lopend'. Als checkboxes in één groep versmalt aanvinken de lijst dus niet, wat
+   het filter onbetrouwbaar laat aanvoelen. Daarom: Status = keuze uit één (radio),
+   Signalen = losse vinkjes die daar bovenop filteren. */
+const filters = {status:'lopend', signaal:new Set(), type:new Set(), zoek:''};
+
+/* Zoeken doorzoekt bewust alléén wat op de kaart staat: titel, omschrijving en
+   procestype. Zoeken dóór in stappen, checklist, bewijsstukken en aantekeningen
+   is een andere functie — die vraagt gegroepeerde treffers (proces → stap → regel)
+   en overlapt met de AI-assistent en de bibliotheekzoekfunctie. Zie BP-9. */
+const zoekVeldenVan = p => [p.titel, p.omschrijving, p.templateLabel].join(' ').toLowerCase();
+const pastBijZoek = p => !filters.zoek || zoekVeldenVan(p).includes(filters.zoek.toLowerCase());
+
+/* Markeert de treffer in al-ge-escapete tekst. */
+function markeer(veiligeTekst){
+  if (!filters.zoek) return veiligeTekst;
+  const naald = esc(filters.zoek).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return veiligeTekst.replace(new RegExp(naald, 'gi'), m => '<mark>' + m + '</mark>');
+}
+let railOpen = false;
+let sortering = 'deadline';
+
+const heeftRood   = p => p.aandacht.some(a => a.niveau === 'rood');
+const heeftOranje = p => p.aandacht.some(a => a.niveau === 'oranje');
+const STATUS_OPTIES = [
+  {id:'lopend',   label:'Lopend',   streep:'s-accent', test:p => !p.afgerond},
+  {id:'afgerond', label:'Afgerond', streep:'s-line',   test:p => p.afgerond},
+  {id:'alle',     label:'Alle',     streep:'',         test:() => true}
+];
+/* v0.7: 'Besluitrijp' vervalt met de readiness-ladder (besluit 0184) — het was
+   een procesbrede rijpheidsmeting bij stapsgewijze besluitvorming. In de plaats
+   komt een signaal dat wél uit een vastgelegd feit volgt: afgerond met afwijking. */
+const SIGNAAL_OPTIES = [
+  {id:'aandacht',    label:'Met aandacht',    streep:'s-warn', test:p => heeftRood(p) || heeftOranje(p)},
+  {id:'tijdkritisch',label:'Tijdkritisch',    streep:'s-err',  test:p => heeftRood(p)},
+  {id:'afwijking',   label:'Met afwijking',   streep:'s-err',  test:p => !!p.afwijking}
+];
+
+function pastBijFilter(p){
+  const s = (STATUS_OPTIES.find(o => o.id === filters.status) || STATUS_OPTIES[2]).test(p);
+  const g = filters.signaal.size === 0 || SIGNAAL_OPTIES.some(o => filters.signaal.has(o.id) && o.test(p));
+  const t = filters.type.size === 0 || filters.type.has(p.template);
+  return s && g && t && pastBijZoek(p);
+}
+
+function renderFilters(){
+  const alle = alleProcessen();
+  const inStatus = alle.filter(p => (STATUS_OPTIES.find(o => o.id === filters.status) || STATUS_OPTIES[2]).test(p));
+  const typen = [];
+  inStatus.forEach(p => { if (!typen.some(t => t.code === p.template)) typen.push({code:p.template, label:p.templateLabel}); });
+
+  const groep = (titel, opties, hint) => `<div class="fgroep"><div class="gk">${titel}${hint?`<span class="gh">${hint}</span>`:''}</div>${opties}</div>`;
+  const opt = (groepnaam, id, label, aantal, streep, radio) => {
+    const aan = radio ? filters[groepnaam] === id : filters[groepnaam].has(id);
+    return `<button class="fopt ${aan?'aan':''} ${aantal?'':'nul'}" data-f="${groepnaam}" data-v="${esc(id)}" data-radio="${radio?1:0}">
+      <span class="vk ${radio?'rond':''}">${aan?(radio?'●':'✓'):''}</span>
+      ${streep?`<span class="streep ${streep}"></span>`:''}
+      <span class="lab">${esc(label)}</span><span class="aantal">${aantal}</span></button>`;
+  };
+
+  // Status zit in de werkbalk en staat bewust NIET ook in de rail — één keuze,
+  // één bedieningsplek.
+  document.getElementById('filters').innerHTML =
+    groep('Signalen', SIGNAAL_OPTIES.map(o => opt('signaal', o.id, o.label, inStatus.filter(o.test).length, o.streep)).join(''), 'binnen status') +
+    groep('Procestype', typen.map(t => opt('type', t.code, t.label, inStatus.filter(p => p.template === t.code).length)).join(''));
+
+  // Werkbalk: statuskeuze + chips voor wat er in de ingeklapte rail aan staat.
+  document.getElementById('statuskeuze').innerHTML = STATUS_OPTIES.map(o =>
+    `<button class="${filters.status===o.id?'aan':''}" data-status="${o.id}">${o.label}<span class="aantal">${alle.filter(o.test).length}</span></button>`).join('');
+  document.querySelectorAll('[data-status]').forEach(b => b.onclick = () => { filters.status = b.dataset.status; overzicht(); });
+
+  const chips = [];
+  if (filters.zoek) chips.push({g:'zoek', v:filters.zoek, label:'Zoek: ' + filters.zoek});
+  filters.signaal.forEach(v => chips.push({g:'signaal', v, label:(SIGNAAL_OPTIES.find(o => o.id === v)||{}).label || v}));
+  filters.type.forEach(v => chips.push({g:'type', v, label:(typen.find(t => t.code === v)||{}).label || v}));
+  document.getElementById('chips').innerHTML = chips.map(c =>
+    `<button class="chip" data-chip="${c.g}" data-v="${esc(c.v)}">${esc(c.label)}<span class="x">×</span></button>`).join('')
+    + (chips.length ? '<button class="chip wis" data-wisalles>Wis filters</button>' : '');
+  document.querySelectorAll('[data-chip]').forEach(b => b.onclick = () => {
+    if (b.dataset.chip === 'zoek') filters.zoek = '';
+    else filters[b.dataset.chip].delete(b.dataset.v);
+    overzicht();
+  });
+  document.querySelectorAll('[data-wisalles]').forEach(b => b.onclick = () => {
+    filters.signaal.clear(); filters.type.clear(); filters.zoek = ''; overzicht();
+  });
+  const tel = document.getElementById('filterTel');
+  tel.hidden = chips.length === 0; tel.textContent = chips.length;
+
+  document.querySelectorAll('[data-f]').forEach(b => b.onclick = () => {
+    const n = b.dataset.f, v = b.dataset.v;
+    if (b.dataset.radio === '1') filters[n] = v;
+    else filters[n].has(v) ? filters[n].delete(v) : filters[n].add(v);
+    overzicht();
+  });
+  document.getElementById('wisFilters').onclick = () => {
+    filters.status = 'lopend'; filters.signaal.clear(); filters.type.clear(); filters.zoek = ''; overzicht();
+  };
+}
+
+function procesKaart(p){
+  const kolommen = p.fasen.length;
+  const strip = `<div class="fasestrip" style="grid-template-columns:repeat(${kolommen},minmax(0,1fr))">
+    ${p.fasen.map(f => `<div class="fs"><div class="balk" style="background:${FASE_KLEUR[f.status]};${f.status==='nog_niet_begonnen'?'border:1px solid var(--line);':''}"></div>
+      ${f.aandacht!=='geen'?`<span class="stip" style="background:${f.aandacht==='rood'?'var(--err)':'var(--warn)'}"></span>`:''}
+      <div class="fl">${f.code} · ${esc(f.titel)}</div></div>`).join('')}</div>`;
+  return `<button class="pkaart ${p.afgerond?'klaar':''}" data-proces="${p.id}">
+    <div class="binnen">
+      <div class="kkop">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+            <span class="tag phase">${esc(p.templateLabel)}</span>
+            <span class="tag ${p.afgerond?'ok':'neutral'}">${esc(p.dossierstatus)}</span>
+            ${p.sublabel?`<span class="tag warn">${esc(p.sublabel)}</span>`:''}
+            ${p.periode?`<span class="tag neutral">${esc(p.periode)}</span>`:''}
+          </div>
+          <div class="ptitel">${markeer(esc(p.titel))}</div>
+          <div class="pomschrijving">${markeer(esc(p.omschrijving))}</div>
+        </div>
+        <span class="pijl">›</span>
+      </div>
+      <div class="kkolommen">
+        <div>
+          <div class="kk">Voortgang</div>
+          <div class="kv2"><b>${p.stappenAf}/${p.stappenTot}</b> stappen afgerond</div>
+          ${strip}
+        </div>
+        <div>
+          <div class="kk">Deadline</div>
+          <div class="kv2">${esc(p.deadline)}</div>
+          <div class="kv2 sub">Gestart ${esc(p.gestart)}</div>
+        </div>
+      </div>
+    </div>
+    ${p.aandacht.length ? `<div class="strook">${p.aandacht.map(a =>
+      `<span class="${a.niveau}"><span class="bol"></span>${esc(a.tekst)}</span>`).join('')}</div>` : ''}
+  </button>`;
+}
+
+const MAAND = {jan:0,feb:1,mrt:2,apr:3,mei:4,jun:5,jul:6,aug:7,sep:8,okt:9,nov:10,dec:11};
+function datumWaarde(d){
+  const [dag, mnd, jaar] = d.split(' ');
+  return (+jaar) * 372 + (MAAND[mnd] ?? 0) * 31 + (+dag);
+}
+
+function overzicht(){
+  renderFilters();
+  const alle = alleProcessen();
+  let lijst = alle.filter(pastBijFilter);
+  const rang = p => heeftRood(p) ? 0 : (heeftOranje(p) ? 1 : 2);
+  lijst.sort((a,b) => {
+    if (sortering === 'deadline')  return datumWaarde(a.deadline) - datumWaarde(b.deadline);
+    if (sortering === 'aandacht')  return rang(a) - rang(b) || datumWaarde(a.deadline) - datumWaarde(b.deadline);
+    if (sortering === 'voortgang') return (b.stappenAf/b.stappenTot) - (a.stappenAf/a.stappenTot);
+    return a.titel.localeCompare(b.titel, 'nl');
+  });
+
+  document.getElementById('lijstTitel').textContent = 'Processen (' + lijst.length + ')';
+  const statusLabel = (STATUS_OPTIES.find(o => o.id === filters.status) || {}).label || 'Alle';
+  const extra = filters.signaal.size + filters.type.size;
+  document.getElementById('lijstFilterUitleg').textContent =
+    '· ' + statusLabel.toLowerCase() + (extra ? ' · ' + extra + ' extra filter' + (extra===1?'':'s') : '')
+    + (filters.zoek ? ' · zoek: “' + filters.zoek + '”' : '') + ' · ' + alle.length + ' in totaal';
+
+  const zi = document.getElementById('zoek');
+  if (zi.value !== filters.zoek) zi.value = filters.zoek;
+  document.getElementById('zoekWis').hidden = !filters.zoek;
+  document.getElementById('proceslijst').innerHTML = lijst.length
+    ? lijst.map(procesKaart).join('')
+    : (filters.zoek
+        ? `<div class="geenresultaat">Geen processen gevonden voor &ldquo;${esc(filters.zoek)}&rdquo; binnen de huidige filters.<br />
+             <button class="link ink" data-zoekbreed style="font-weight:600">Zoek in alle processen</button> of
+             <button class="link ink" data-zoekwis style="font-weight:600">wis de zoekterm</button>.</div>`
+        : '<div class="geenresultaat">Geen processen die aan deze filters voldoen.<br />Pas de filters aan of wis ze.</div>');
+  document.getElementById('pagTekst').textContent = lijst.length ? '1–' + lijst.length + ' van ' + lijst.length : '0 resultaten';
+
+  // Ná het renderen van de lijst: de knoppen in de lege staat bestaan pas nu.
+  document.querySelectorAll('[data-zoekwis]').forEach(b => b.onclick = () => { filters.zoek = ''; overzicht(); });
+  document.querySelectorAll('[data-zoekbreed]').forEach(b => b.onclick = () => {
+    // Verbreedt de filters en houdt de zoekterm juist vást — dat is de hele bedoeling.
+    filters.status = 'alle'; filters.signaal.clear(); filters.type.clear(); overzicht();
+  });
+
+  document.querySelectorAll('[data-proces]').forEach(b => b.onclick = () => {
+    if (b.dataset.proces === 'inv') toonScherm('detail');
+    else toast('Alleen het invaarproces is in deze mockup uitgewerkt tot stapniveau');
+  });
+  document.querySelectorAll('#schermOverzicht [data-noop]').forEach(el =>
+    el.onclick = () => toast('Niet-functionele mockup — deze actie is niet uitgewerkt'));
+}
+
+document.getElementById('sorteer').onchange = e => { sortering = e.target.value; overzicht(); };
+document.getElementById('filterKnop').onclick = () => {
+  railOpen = !railOpen;
+  document.getElementById('railKolom').hidden = !railOpen;
+  document.getElementById('lijstKolom').className = railOpen ? 'col9' : 'col12';
+  document.getElementById('filterKnop').setAttribute('aria-expanded', railOpen ? 'true' : 'false');
+};
+document.getElementById('terugNaarLijst').onclick = () => toonScherm('overzicht');
+
+function toonScherm(n){
+  document.getElementById('schermOverzicht').hidden = n !== 'overzicht';
+  document.getElementById('schermDetail').hidden    = n !== 'detail';
+  window.scrollTo({top:0});
+  if (n === 'overzicht') overzicht();
+}
+
+function alles(){ kop(); rail(); detail(); overzicht(); }
+alles();
+toonScherm('overzicht');
+</script>
+</body>
+</html>

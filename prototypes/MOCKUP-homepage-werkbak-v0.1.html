@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Homepage met werkbak — mockup v0.1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Newsreader:wght@600;700&display=swap" rel="stylesheet">
+<style>
+/* Tokenlaag 1-op-1 uit mvp/app/globals.css — geen nieuwe kleuren. */
+:root{
+  --ink:#12233B; --muted:#5C6B82; --line:#DFE5EE; --app-bg:#EEF1F6; --app-zebra:#F7F9FC;
+  --accent:#234E70; --accent-ink:#1A3A54; --accent-tint:#E7EDF3;
+  --ok:#106B46; --ok-tint:#EAF7F0; --ok-ink:#0D5A3B;
+  --err:#A4271C; --err-tint:#FDF0EE; --err-ink:#8C2017;
+  --warn:#8A5A00; --warn-tint:#FDF6E6; --warn-ink:#744A00;
+  --phase:#0E7C9B; --phase-tint:#E2F0F5; --phase-ink:#0A6178;
+  --line-strong:#C8D2E0; --line-control:#78869C;
+  --nav:#FFFFFF; --nav-line:#DFE5EE; --nav-text:#5C6B82; --nav-text-active:#12233B;
+  --nav-accent:#234E70; --nav-active:rgba(35,78,112,.10);
+  --serif:'Newsreader',Georgia,serif;
+  --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--app-bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5;
+  -webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+h1,h2,h3{margin:0}
+::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
+
+.mockbar{position:fixed;top:0;left:0;right:0;height:30px;z-index:60;background:var(--warn-tint);
+  border-bottom:1px solid rgba(138,90,0,.3);color:var(--warn-ink);font-size:11.5px;
+  display:flex;align-items:center;justify-content:space-between;padding:0 16px}
+.mockbar b{font-weight:600}
+
+/* sidebar (Sidebar.tsx) */
+nav.side{position:fixed;top:30px;left:0;width:256px;height:calc(100vh - 30px);background:var(--nav);
+  border-right:1px solid var(--nav-line);display:flex;flex-direction:column;z-index:50}
+.logoblok{border-bottom:1px solid var(--nav-line);padding:24px 20px}
+.logorow{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.logotile{width:40px;height:40px;border-radius:12px;background:var(--nav-accent);color:#fff;display:grid;place-items:center;font-weight:900;font-size:18px}
+.hamb{width:32px;height:32px;border-radius:8px;color:var(--nav-text);display:grid;place-items:center}
+.fonds{font-weight:700;font-size:14px;color:var(--nav-text-active);line-height:1.35}
+.omgeving{font-size:12px;color:var(--nav-text);margin-top:2px}
+.profiel{border-bottom:1px solid var(--nav-line);display:flex;align-items:center;gap:10px;padding:12px 20px}
+.avatar{width:32px;height:32px;border-radius:50%;background:var(--nav-accent);color:#fff;display:grid;place-items:center;font-weight:700;font-size:12px;flex-shrink:0}
+.pnaam{font-size:12px;font-weight:600;color:var(--nav-text-active)}
+.prol{font-size:12px;color:var(--nav-text)}
+.items{flex:1;overflow-y:auto;padding:12px 0}
+.sect{padding:12px 20px 4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:rgba(92,107,130,.7)}
+.side a.item{display:flex;align-items:center;gap:10px;font-size:14px;padding:10px 20px;border-left:3px solid transparent;color:var(--nav-text);text-decoration:none}
+.side a.item:hover{background:var(--nav-line);color:var(--nav-text-active)}
+.side a.item.on{background:var(--nav-active);color:var(--nav-text-active);border-left-color:var(--nav-accent);font-weight:500}
+.side a.item .ico{width:20px;text-align:center;font-size:16px;flex:0 0 20px}
+.badge{background:var(--nav-accent);color:#fff;font-size:11px;font-weight:700;padding:1px 8px;border-radius:99px}
+.sfoot{border-top:1px solid var(--nav-line);padding:16px 20px;font-size:12px;color:var(--nav-text)}
+.sfoot .dot{width:8px;height:8px;border-radius:50%;background:var(--ok);display:inline-block;margin-right:8px}
+
+main{margin-left:256px;padding:30px 0 0}
+.page{padding:28px;display:flex;flex-direction:column;gap:20px;max-width:1180px}
+.kaart{background:#fff;border:1px solid var(--line);border-radius:12px;padding:20px}
+.groet{font-family:var(--serif);font-size:20px;font-weight:700}
+.sub{font-size:14px;color:var(--muted);margin-top:4px}
+.sub a{color:var(--ink);font-weight:500;text-decoration:none}
+.sub a:hover{color:var(--accent)}
+
+.kkop{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.kkop h2{font-size:14px;font-weight:600}
+.kkop .meer{font-size:12px;color:var(--ink);text-decoration:none}
+.kkop .meer:hover{color:var(--accent)}
+
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.chip{font-size:12.5px;padding:5px 11px;border-radius:99px;border:1px solid var(--line);color:var(--muted);
+  display:inline-flex;align-items:center;gap:7px}
+.chip:hover{border-color:var(--line-control);color:var(--ink)}
+.chip.aan{background:var(--accent-tint);border-color:rgba(35,78,112,.3);color:var(--accent);font-weight:600}
+.chip .n{font-size:11px;font-variant-numeric:tabular-nums;opacity:.8}
+
+.rij{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--line);border-radius:8px;
+  margin-bottom:8px;background:#fff;text-align:left;width:100%}
+.rij{cursor:pointer}
+.rij:hover{border-color:var(--accent);background:var(--app-zebra)}
+.knop.klaar{width:32px;padding:6px 0;text-align:center;color:var(--ok-ink);border-color:var(--line)}
+.knop.klaar:hover{border-color:var(--ok);color:var(--ok-ink);background:var(--ok-tint)}
+.rij .tegel{width:34px;height:34px;flex:0 0 34px;border-radius:8px;display:grid;place-items:center;font-size:10px;
+  font-weight:700;background:var(--app-bg);color:var(--muted);letter-spacing:.02em}
+.rij .tegel.actie{background:var(--accent-tint);color:var(--accent)}
+.rij .tegel.stap{background:var(--phase-tint);color:var(--phase-ink)}
+.rij .tegel.verg{background:var(--app-bg);color:var(--muted)}
+.rij .tegel.stuk{background:var(--app-bg);color:var(--muted)}
+.rij .mid{flex:1;min-width:0}
+.rij .t{font-size:13.5px;font-weight:500;line-height:1.35}
+.rij .h{font-size:12px;color:var(--muted);margin-top:3px;display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+.rij .r{display:flex;align-items:center;gap:12px;flex-shrink:0}
+.dat{font-size:12.5px;text-align:right;white-space:nowrap}
+.dat b{display:block;font-weight:600}
+.dat span{color:var(--muted);font-size:11.5px}
+.dat.laat b{color:var(--err-ink)} .dat.laat span{color:var(--err-ink)}
+.dat.bijna b{color:var(--warn-ink)} .dat.bijna span{color:var(--warn-ink)}
+.mini{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;padding:2px 7px;border-radius:4px}
+.mini.err{color:var(--err-ink);background:var(--err-tint);border:1px solid rgba(164,39,28,.3)}
+.mini.warn{color:var(--warn-ink);background:var(--warn-tint);border:1px solid rgba(138,90,0,.3)}
+.mini.neut{color:var(--muted);background:var(--app-bg);border:1px solid var(--line)}
+.av{width:28px;height:28px;border-radius:50%;background:var(--phase-tint);color:var(--phase-ink);display:grid;
+  place-items:center;font-size:11px;font-weight:600;flex-shrink:0}
+.av.leeg{background:var(--app-bg);color:var(--muted);border:1px dashed var(--line-control);font-size:14px}
+.knop{padding:6px 12px;border-radius:8px;font-size:12.5px;font-weight:500;border:1px solid var(--line-control);background:#fff}
+.knop:hover{border-color:var(--accent);color:var(--accent)}
+.knop.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+.knop.pri:hover{background:var(--accent-ink);color:#fff}
+.meerknop{width:100%;padding:10px;border:1px dashed var(--line-strong);border-radius:8px;background:var(--app-zebra);
+  font-size:12.5px;color:var(--muted);margin-top:2px}
+.meerknop:hover{border-color:var(--accent);color:var(--accent)}
+.leeg-melding{border:1px dashed var(--line-strong);border-radius:8px;padding:22px;text-align:center;color:var(--muted);font-size:13px}
+
+/* toewijzen-paneel */
+.toewijs{border:1px solid var(--accent);border-radius:8px;background:var(--accent-tint);padding:14px;margin:-4px 0 8px}
+.toewijs .tk{font-size:12.5px;font-weight:600;margin-bottom:10px}
+.leden{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
+.lid{display:flex;align-items:center;gap:10px;padding:7px 9px;border-radius:6px;background:#fff;border:1px solid transparent;width:100%;text-align:left}
+.lid:hover{border-color:var(--accent)}
+.lid.aan{border-color:var(--accent);background:#fff;box-shadow:0 0 0 2px rgba(35,78,112,.12)}
+.lid .nm{display:block;font-size:13px;font-weight:500}
+.lid .rl{display:block;font-size:11.5px;color:var(--muted)}
+.extern{display:flex;gap:8px;align-items:center;margin-top:2px}
+.extern input{flex:1;border:1px solid var(--line);border-radius:6px;padding:6px 9px;font:inherit;font-size:12.5px;background:#fff}
+.extern input:focus{outline:none;border-color:var(--accent)}
+.hint{font-size:11.5px;color:var(--muted);margin-top:8px;line-height:1.5}
+
+.twee{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+@media(max-width:980px){.twee{grid-template-columns:1fr}}
+.tijd{display:flex;gap:11px;padding:9px 0;border-bottom:1px solid var(--line);font-size:12.5px}
+.tijd:last-child{border-bottom:0}
+.tijd .bol{width:8px;height:8px;border-radius:50%;background:var(--line-strong);margin-top:6px;flex-shrink:0}
+.tijd .w{color:var(--muted);font-size:11.5px;margin-top:2px}
+.legenda{font-size:12px;color:var(--muted);line-height:1.7;border-top:1px solid var(--line);padding-top:16px}
+#toast{position:fixed;bottom:24px;left:calc(50% + 128px);transform:translate(-50%,16px);background:var(--ink);color:#fff;
+  padding:10px 18px;border-radius:99px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:70}
+#toast.on{opacity:1;transform:translate(-50%,0)}
+</style>
+</head>
+<body>
+
+<div class="mockbar">
+  <span><b>Niet-functionele mockup</b> · Homepage met werkbak · v0.1 · chrome en tokens uit de huidige inrichting · het blok “Uw open procedure-stappen” bestaat al en gaat op in “Voor u”</span>
+  <span>Wijzigingen worden niet opgeslagen</span>
+</div>
+
+<nav class="side">
+  <div class="logoblok">
+    <div class="logorow"><div class="logotile">H</div><button class="hamb">≡</button></div>
+    <div class="fonds">Pensioenfonds voor Huisartsen</div>
+    <div class="omgeving">Demo omgeving</div>
+  </div>
+  <div class="profiel">
+    <div class="avatar">MI</div>
+    <div style="flex:1;min-width:0"><div class="pnaam">M. IJzerman</div><div class="prol">Voorzitter bestuur</div></div>
+    <span style="color:rgba(92,107,130,.6);font-size:12px">›</span>
+  </div>
+  <div class="items">
+    <div class="sect">Overzicht</div>
+    <a class="item on" href="#"><span class="ico">⌂</span><span style="flex:1">Home</span><span class="badge" id="navTel">7</span></a>
+    <a class="item" href="#"><span class="ico">◐</span><span style="flex:1">Stuurinformatie</span></a>
+    <a class="item" href="#"><span class="ico">◍</span><span style="flex:1">Klantbeeld</span></a>
+    <div class="sect">Kennisbase</div>
+    <a class="item" href="#"><span class="ico">✦</span><span style="flex:1">AI Assistent</span><span class="badge">AI</span></a>
+    <a class="item" href="#"><span class="ico">▤</span><span style="flex:1">Documentbibliotheek</span></a>
+    <div class="sect">Bestuur</div>
+    <a class="item" href="#"><span class="ico">▦</span><span style="flex:1">Vergaderingen</span></a>
+    <a class="item" href="#"><span class="ico">✓</span><span style="flex:1">Besluiten &amp; Notulen</span></a>
+    <a class="item" href="#"><span class="ico">◧</span><span style="flex:1">Processen</span></a>
+    <a class="item" href="#"><span class="ico">◇</span><span style="flex:1">Risicomatrix</span></a>
+    <div class="sect">Beheer</div>
+    <a class="item" href="#"><span class="ico">⚙</span><span style="flex:1">Catalogus &amp; organen</span></a>
+    <a class="item" href="#"><span class="ico">◎</span><span style="flex:1">Governance Log</span></a>
+  </div>
+  <div class="sfoot"><span class="dot"></span>Beheerde AI-omgeving actief<div style="margin-top:8px">Uitloggen →</div></div>
+</nav>
+
+<main>
+  <div class="page">
+
+    <!-- Welkomst — bestaand blok, ongewijzigd -->
+    <div class="kaart">
+      <div class="groet">Goedemorgen Merlin, fijn u terug te zien.</div>
+      <div class="sub">U bent voorzitter van Pensioenfonds voor Huisartsen. De volgende vergadering is
+        <a href="#">Bestuursvergadering september</a> op 17 september 2026.</div>
+    </div>
+
+    <!-- DE WERKBAK -->
+    <div class="kaart">
+      <div class="kkop">
+        <h2>Voor u — <span style="font-weight:400;color:var(--muted)" id="kopTelling"></span></h2>
+        <a class="meer" href="#" data-noop>Alles met een houder →</a>
+      </div>
+
+      <div class="chips" id="chips"></div>
+      <div id="lijst"></div>
+
+      <div class="hint" style="margin-top:10px">Maximaal zeven regels, gesorteerd op datum; items zonder datum onderaan. <b>Een te laat item wordt nooit verborgen</b>, ook niet als dat de zeven overschrijdt — anders verbergt de cap precies waarvoor de lijst bestaat. Doorbladeren gebeurt niet hier maar achter “Alles met een houder”.
+      <b>Klikken opent de bron</b> — de actie in het dossier van zijn eigen processtap, de stap in het stapdetail, de inbreng bij het agendapunt — met de juiste sectie opengeklapt en het item gemarkeerd. Een actie afvinken kan met het vinkje, zonder de homepage te verlaten.
+      Hier staat alleen werk met een <b>expliciete houder</b>. Openstaande vereisten zonder toegewezen persoon staan bij het proces zelf, niet hier — anders wordt deze lijst een verzameling waar niemand zich verantwoordelijk voor voelt.</div>
+    </div>
+
+    <!-- Bestaande blokken, compacter -->
+    <div class="twee">
+      <div class="kaart">
+        <div class="kkop"><h2>Komende vergadering</h2><a class="meer" href="#" data-noop>Bekijken →</a></div>
+        <div class="rij" style="cursor:default">
+          <span class="tegel verg">17<br>SEP</span>
+          <span class="mid"><span class="t">Bestuursvergadering september</span>
+            <span class="h">8 agendapunten · <span class="mini warn">3 zonder stuk</span></span></span>
+        </div>
+        <div style="font-size:12.5px;color:var(--muted);margin-top:4px">Uw inbreng op agendapunt 4b wordt verwacht vóór 10 september.</div>
+      </div>
+
+      <div class="kaart">
+        <div class="kkop"><h2>Uw recente activiteit</h2><a class="meer" href="#" data-noop>Governance Log →</a></div>
+        <div class="tijd"><span class="bol"></span><span><b>Bewijsstuk opgevoerd</b> — Transitieplan, stap 1<div class="w">vandaag 09:14</div></span></div>
+        <div class="tijd"><span class="bol"></span><span><b>Besluit vastgelegd</b> — opdrachtaanvaarding<div class="w">gisteren 16:02</div></span></div>
+        <div class="tijd"><span class="bol"></span><span><b>Actie toegewezen</b> — vragenlog bijwerken<div class="w">19 augustus</div></span></div>
+      </div>
+    </div>
+
+    <div class="legenda">
+      <b>Wat dit voorstel doet.</b> De homepage heeft al een blok “Uw open procedure-stappen”. Dat gaat op in één werkbak <b>Voor u</b>, met daarnaast acties, vergaderingvoorbereiding en stukken die op uw beoordeling wachten.
+      De werkbak is een <b>weergave</b>, geen nieuwe entiteit: alles wat u hier ziet bestaat al in <code>decision_actions</code>, <code>procedure_stappen</code>, <code>voorbereidingen</code> of de reviewwachtrij. Er komt dus geen tweede takenlijst die uit de pas kan lopen.
+      <br><br>
+      <b>Klikbaar:</b> de filterchips, en bij de actie zonder houder de knop <b>Toewijzen</b> — die toont hoe de koppeling aan de fondsprofielen werkt, inclusief de uitzondering voor iemand buiten het portaal.
+    </div>
+  </div>
+</main>
+
+<div id="toast"></div>
+
+<script>
+const LEDEN = [
+  {id:'u1', naam:'M. IJzerman', rol:'Voorzitter bestuur', ini:'MI'},
+  {id:'u2', naam:'J. de Vries', rol:'Bestuurslid — beleggingen', ini:'JD'},
+  {id:'u3', naam:'R. Bakker', rol:'Bestuurslid — risico', ini:'RB'},
+  {id:'u4', naam:'S. Willems', rol:'Bestuursbureau', ini:'SW'},
+  {id:'u5', naam:'A. Hoekstra', rol:'Secretaris', ini:'AH'}
+];
+
+const ITEMS = [
+  {id:1, proces:'inv', stap:5, soort:'actie', tegel:'ACTIE', titel:'Impactanalyse compensatie aanleveren',
+   herkomst:'Invaarbesluit SPR-regeling · stap 5', houder:'u1', datum:'18 aug 2026', dagen:-3},
+  {id:2, proces:'inv', stap:1, soort:'actie', tegel:'ACTIE', titel:'Vragenlog sociale partners bijwerken',
+   herkomst:'Invaarbesluit SPR-regeling · stap 1', houder:'u1', datum:'25 aug 2026', dagen:4},
+  {id:3, proces:'inv', stap:2, soort:'stap', tegel:'STAP', titel:'Bestuurlijk beoordelingskader vaststellen',
+   herkomst:'Invaarbesluit SPR-regeling · fase I', houder:'u1', datum:'31 aug 2026', dagen:10,
+   extra:'0/5 checklist · 1 blokkerend bewijs open'},
+  {id:4, proces:'inv', stap:6, soort:'actie', tegel:'ACTIE', titel:'Concept-communicatieplan afstemmen met AZL',
+   herkomst:'Invaarbesluit SPR-regeling · stap 6', houder:null, datum:'8 sep 2026', dagen:18},
+  {id:5, proces:'verg-sep', stap:'4b', soort:'vergadering', tegel:'VERG', titel:'Inbreng agendapunt 4b — voorgenomen invaarbesluit',
+   herkomst:'Bestuursvergadering september', houder:'u1', datum:'10 sep 2026', dagen:20},
+  {id:6, proces:'doc-transitieplan-v3', stap:null, soort:'stuk', tegel:'STUK', titel:'Transitieplan v3 — metadata beoordelen',
+   herkomst:'Documentbibliotheek · wacht op beoordeling', houder:'u1', datum:null, dagen:null},
+  {id:7, proces:'inv', stap:5, soort:'actie', tegel:'ACTIE', titel:'Second opinion evenwichtigheidstoets aanvragen',
+   herkomst:'Invaarbesluit SPR-regeling · stap 5', houder:'u1', datum:'12 sep 2026', dagen:22},
+  {id:8, proces:'inv', stap:8, soort:'actie', tegel:'ACTIE', titel:'Reactie verantwoordingsorgaan verwerken',
+   herkomst:'Invaarbesluit SPR-regeling · stap 8', houder:'u1', datum:'19 aug 2026', dagen:-2},
+  {id:9, proces:'inv', stap:4, soort:'stap', tegel:'STAP', titel:'Datakwaliteit beoordelen',
+   herkomst:'Invaarbesluit SPR-regeling · fase II', houder:'u1', datum:'30 sep 2026', dagen:40,
+   extra:'0/6 checklist · 2 blokkerend bewijs open'},
+  {id:10, proces:'vb-selectie', stap:3, soort:'actie', tegel:'ACTIE', titel:'Aanbestedingsdossier vermogensbeheerder aanvullen',
+   herkomst:'Selectie vermogensbeheerder · stap 3', houder:'u1', datum:'15 okt 2026', dagen:55},
+  {id:11, proces:'doc-isae-2026', stap:null, soort:'stuk', tegel:'STUK', titel:'ISAE 3402 AZL 2026 — bronstatus vaststellen',
+   herkomst:'Documentbibliotheek · wacht op beoordeling', houder:'u1', datum:null, dagen:null}
+];
+
+// Maximaal zeven regels. Bewust géén paginering: een werkbak is geen zoekresultaat,
+// en pagina 2 van een takenlijst wordt zelden geopend. Harde regel: een te laat
+// item wordt nooit verborgen, ook niet als dat de zeven overschrijdt.
+const MAX = 7;
+let toonAlles = false;
+
+function sorteer(a, b){
+  const A = a.dagen === null ? 99999 : a.dagen;   // zonder datum altijd onderaan
+  const B = b.dagen === null ? 99999 : b.dagen;
+  return A - B;
+}
+
+// Waar je heen gaat: altijd naar de BRON, met een anker dat de juiste sectie
+// opent en het item markeert. De werkbak is een ingang, geen eigen scherm.
+const DOEL = {
+  actie:        i => `/procedures/${i.proces}?stap=${i.stap}&dossier=acties#actie-${i.id}`,
+  stap:         i => `/procedures/${i.proces}?stap=${i.stap}`,
+  vergadering:  i => `/vergaderingen/${i.proces}#agendapunt-${i.stap}`,
+  stuk:         i => `/bibliotheek?doc=${i.proces}&actie=metadata`
+};
+
+const FILTERS = [
+  {id:'alles', label:'Alles', test:() => true},
+  {id:'actie', label:'Acties', test:i => i.soort === 'actie'},
+  {id:'stap', label:'Stappen', test:i => i.soort === 'stap'},
+  {id:'vergadering', label:'Vergaderingen', test:i => i.soort === 'vergadering'},
+  {id:'stuk', label:'Stukken', test:i => i.soort === 'stuk'}
+];
+let filter = 'alles';
+let toewijzenVoor = null;
+let keuze = null;
+
+const esc = t => String(t).replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+const lid = id => LEDEN.find(l => l.id === id);
+function toast(m){
+  const t = document.getElementById('toast');
+  t.textContent = m; t.classList.add('on');
+  clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('on'), 2600);
+}
+
+function datumBlok(i){
+  if (i.dagen === null) return '<span class="dat"><b>—</b><span>geen datum</span></span>';
+  const kl = i.dagen < 0 ? 'laat' : (i.dagen <= 7 ? 'bijna' : '');
+  const w = i.dagen < 0 ? Math.abs(i.dagen) + ' dagen te laat'
+          : i.dagen === 0 ? 'vandaag'
+          : 'over ' + i.dagen + ' dagen';
+  return `<span class="dat ${kl}"><b>${esc(i.datum)}</b><span>${w}</span></span>`;
+}
+
+function rij(i){
+  const h = i.houder ? lid(i.houder) : null;
+  return `<div class="rij" data-open="${i.id}">
+    <span class="tegel ${i.soort === 'vergadering' ? 'verg' : i.soort}">${i.tegel}</span>
+    <span class="mid">
+      <span class="t">${esc(i.titel)}</span>
+      <span class="h">${esc(i.herkomst)}${i.extra ? ' · <span class="mini neut">' + esc(i.extra) + '</span>' : ''}
+        ${i.dagen !== null && i.dagen < 0 ? '<span class="mini err">Te laat</span>' : ''}
+        ${!i.houder ? '<span class="mini warn">Geen houder</span>' : ''}</span>
+    </span>
+    <span class="r">
+      ${datumBlok(i)}
+      ${i.soort === 'actie' && i.houder ? `<button class="knop klaar" data-af="${i.id}" title="Actie afronden zonder het scherm te verlaten">✓</button>` : ''}
+      ${h ? `<span class="av" title="${esc(h.naam)}">${h.ini}</span>`
+          : `<button class="knop" data-toewijs="${i.id}">Toewijzen</button>`}
+    </span>
+  </div>`;
+}
+
+function toewijsPaneel(i){
+  return `<div class="toewijs">
+    <div class="tk">Actiehouder koppelen — “${esc(i.titel)}”</div>
+    <div class="leden">
+      ${LEDEN.map(l => `<button class="lid ${keuze === l.id ? 'aan' : ''}" data-kies="${l.id}">
+        <span class="av">${l.ini}</span>
+        <span style="flex:1"><span class="nm">${esc(l.naam)}</span><span class="rl">${esc(l.rol)}</span></span>
+        ${keuze === l.id ? '<span style="color:var(--accent);font-weight:700">✓</span>' : ''}
+      </button>`).join('')}
+    </div>
+    <div class="extern">
+      <span class="av leeg">+</span>
+      <input placeholder="Iemand buiten het portaal — naam invullen" id="externNaam" />
+    </div>
+    <div class="hint">Een lid van het fonds wordt gekoppeld op <b>profiel</b>, zodat de actie in zijn of haar werkbak verschijnt. Voor iemand buiten het portaal — een adviseur of de uitvoerder — blijft alleen de naam staan. Precies één van beide.</div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="knop" data-annuleer>Annuleren</button>
+      <button class="knop pri" data-bevestig="${i.id}">Toewijzen</button>
+    </div>
+  </div>`;
+}
+
+function render(){
+  const f = FILTERS.find(x => x.id === filter);
+  const zichtbaar = ITEMS.filter(f.test);
+  const telaat = ITEMS.filter(i => i.dagen !== null && i.dagen < 0).length;
+
+  document.getElementById('kopTelling').textContent =
+    ITEMS.length + ' open' + (telaat ? ' · ' + telaat + ' te laat' : '');
+  // de telling toont bewust het TOTAAL, niet wat er zichtbaar is
+  document.getElementById('navTel').textContent = ITEMS.length;
+
+  document.getElementById('chips').innerHTML = FILTERS.map(x =>
+    `<button class="chip ${filter === x.id ? 'aan' : ''}" data-f="${x.id}">${x.label}
+      <span class="n">${ITEMS.filter(x.test).length}</span></button>`).join('');
+
+  const gesorteerd = [...zichtbaar].sort(sorteer);
+  const telaatInFilter = gesorteerd.filter(i => i.dagen !== null && i.dagen < 0);
+  // De cap geldt op de rest; te late items tellen altijd mee, hoeveel het er ook zijn.
+  const rest = gesorteerd.filter(i => !(i.dagen !== null && i.dagen < 0));
+  const getoond = toonAlles
+    ? gesorteerd
+    : [...telaatInFilter, ...rest.slice(0, Math.max(0, MAX - telaatInFilter.length))];
+  const verborgen = gesorteerd.length - getoond.length;
+
+  document.getElementById('lijst').innerHTML = (gesorteerd.length
+    ? getoond.map(i => (toewijzenVoor === i.id ? toewijsPaneel(i) : '') + rij(i)).join('')
+    : '<div class="leeg-melding">Niets open in deze categorie.</div>')
+    + (verborgen > 0
+        ? `<button class="meerknop" data-meer>Toon alles — nog ${verborgen} ${verborgen === 1 ? 'regel' : 'regels'} ↓</button>`
+        : (toonAlles && gesorteerd.length > MAX
+            ? '<button class="meerknop" data-minder>Toon minder ↑</button>' : ''));
+
+  document.querySelectorAll('[data-meer]').forEach(b => b.onclick = () => { toonAlles = true; render(); });
+  document.querySelectorAll('[data-minder]').forEach(b => b.onclick = () => { toonAlles = false; render(); });
+
+  document.querySelectorAll('[data-f]').forEach(b => b.onclick = () => { filter = b.dataset.f; toewijzenVoor = null; render(); });
+  document.querySelectorAll('[data-open]').forEach(el => el.onclick = e => {
+    if (e.target.closest('button')) return;      // knoppen in de rij niet doorlaten
+    const i = ITEMS.find(x => x.id === +el.dataset.open);
+    toast('→ ' + DOEL[i.soort](i));
+  });
+  document.querySelectorAll('[data-af]').forEach(b => b.onclick = () => {
+    const i = ITEMS.find(x => x.id === +b.dataset.af);
+    ITEMS.splice(ITEMS.indexOf(i), 1);
+    toast('Actie afgerond — gelogd in de audit-trail van het proces');
+    render();
+  });
+  document.querySelectorAll('[data-toewijs]').forEach(b => b.onclick = () => {
+    toewijzenVoor = +b.dataset.toewijs; keuze = null; render();
+  });
+  document.querySelectorAll('[data-kies]').forEach(b => b.onclick = () => { keuze = b.dataset.kies; render(); });
+  document.querySelectorAll('[data-annuleer]').forEach(b => b.onclick = () => { toewijzenVoor = null; render(); });
+  document.querySelectorAll('[data-bevestig]').forEach(b => b.onclick = () => {
+    const i = ITEMS.find(x => x.id === +b.dataset.bevestig);
+    const extern = (document.getElementById('externNaam') || {}).value;
+    if (keuze) {
+      i.houder = keuze;
+      toast('Actie toegewezen aan ' + lid(keuze).naam + ' — zichtbaar in zijn of haar werkbak');
+    } else if (extern && extern.trim()) {
+      i.houder = null; i.externNaam = extern.trim();
+      toast('Toegewezen aan ' + extern.trim() + ' (buiten het portaal) — geen werkbak');
+    } else {
+      toast('Kies een lid of vul een naam in'); return;
+    }
+    toewijzenVoor = null; keuze = null; render();
+  });
+  document.querySelectorAll('[data-noop]').forEach(el => el.onclick = e => {
+    e.preventDefault(); toast('Niet-functionele mockup — deze actie is niet uitgewerkt');
+  });
+}
+render();
+</script>
+</body>
+</html>

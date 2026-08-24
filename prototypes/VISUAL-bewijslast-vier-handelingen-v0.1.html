@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Bewijslast in een lopend proces — one-pager v0.1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Newsreader:wght@600;700&display=swap" rel="stylesheet">
+<style>
+/* Tokenlaag uit mvp/app/globals.css — geen nieuwe kleuren. */
+:root{
+  --ink:#12233B; --muted:#5C6B82; --line:#DFE5EE; --app-bg:#EEF1F6; --app-zebra:#F7F9FC;
+  --accent:#234E70; --accent-ink:#1A3A54; --accent-tint:#E7EDF3;
+  --ok:#106B46; --ok-tint:#EAF7F0; --ok-ink:#0D5A3B;
+  --err:#A4271C; --err-tint:#FDF0EE; --err-ink:#8C2017;
+  --warn:#8A5A00; --warn-tint:#FDF6E6; --warn-ink:#744A00;
+  --phase:#0E7C9B; --phase-tint:#E2F0F5; --phase-ink:#0A6178;
+  --line-strong:#C8D2E0;
+  --serif:'Newsreader',Georgia,serif;
+  --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--app-bg);color:var(--ink);font-family:var(--sans);font-size:13.5px;line-height:1.5;
+  -webkit-font-smoothing:antialiased}
+.blad{max-width:1180px;margin:0 auto;padding:28px 28px 48px}
+h1{font-family:var(--serif);font-size:26px;font-weight:700;margin:0;letter-spacing:-.01em}
+h2{font-family:var(--serif);font-size:17px;font-weight:600;margin:0 0 10px}
+h3{font-family:var(--serif);font-size:15px;font-weight:600;margin:0 0 4px}
+.lead{font-size:15px;color:var(--muted);margin:8px 0 0;max-width:80ch}
+.lead b{color:var(--ink);font-weight:600}
+.kop{border-bottom:1px solid var(--line);padding-bottom:16px;margin-bottom:22px;display:flex;
+  align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap}
+.meta{font-size:11.5px;color:var(--muted);text-align:right;white-space:nowrap}
+section{background:#fff;border:1px solid var(--line);border-radius:12px;padding:20px 22px;margin-bottom:16px}
+.nr{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--accent);color:#fff;
+  font-size:12px;font-weight:700;margin-right:9px;vertical-align:2px}
+.uitleg{font-size:12.5px;color:var(--muted);max-width:90ch;margin:0 0 16px}
+.uitleg b{color:var(--ink)}
+p{max-width:90ch}
+
+/* ── Woordenlijst ── */
+.woorden{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+@media(max-width:820px){.woorden{grid-template-columns:1fr}}
+.woord{border:1px solid var(--line);border-radius:8px;padding:11px 13px;background:var(--app-zebra)}
+.woord b{display:block;font-size:13.5px;margin-bottom:2px}
+.woord span{font-size:12px;color:var(--muted)}
+.isgelijk{text-align:center;font-size:12px;color:var(--muted);margin:0 0 16px}
+
+/* ── Keten: sjabloon → definitie → dossier ── */
+.keten{display:grid;grid-template-columns:1fr 34px 1fr 34px 1fr;align-items:stretch;gap:0}
+@media(max-width:920px){.keten{grid-template-columns:1fr}}
+.kstap{border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:#fff}
+.kstap.def{background:var(--accent-tint);border-color:rgba(35,78,112,.25)}
+.kstap.dos{background:var(--app-zebra)}
+.kstap .kl{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;font-weight:700;color:var(--muted);margin-bottom:4px}
+.kstap .kw{font-size:12px;color:var(--muted);margin-top:8px}
+.kstap .kw b{color:var(--ink)}
+.kpijl{display:flex;align-items:center;justify-content:center;color:var(--line-strong);font-size:22px}
+@media(max-width:920px){.kpijl{padding:8px 0;transform:rotate(90deg)}}
+
+/* ── Voor/na ── */
+.vn{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:820px){.vn{grid-template-columns:1fr}}
+.vnkolom{border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.vnkolom.nu{background:var(--err-tint);border-color:rgba(164,39,28,.28)}
+.vnkolom.straks{background:var(--ok-tint);border-color:rgba(16,107,70,.28)}
+.vnkolom .vk{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;font-weight:700;margin-bottom:8px}
+.vnkolom.nu .vk{color:var(--err-ink)} .vnkolom.straks .vk{color:var(--ok-ink)}
+.eis{display:flex;align-items:center;gap:9px;background:#fff;border:1px solid var(--line);border-radius:8px;
+  padding:8px 11px;margin-bottom:6px;font-size:12.5px}
+.bal{width:9px;height:9px;border-radius:50%;flex:none}
+.bal.groen{background:var(--ok)} .bal.open{background:#fff;border:1.5px solid var(--line-strong)}
+.eis .st{margin-left:auto;font-size:11px;font-weight:600}
+.eis .st.g{color:var(--ok-ink)} .eis .st.o{color:var(--muted)}
+.vnnoot{font-size:12px;margin-top:9px;line-height:1.5}
+.vnkolom.nu .vnnoot{color:var(--err-ink)} .vnkolom.straks .vnnoot{color:var(--ok-ink)}
+
+/* ── Vier handelingen ── */
+table{width:100%;border-collapse:collapse;font-size:12.5px;margin:2px 0 18px}
+th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);
+  font-weight:700;padding:0 10px 7px 0;border-bottom:1px solid var(--line)}
+td{padding:9px 10px 9px 0;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+td.h{font-weight:600;white-space:nowrap}
+.pil{display:inline-block;font-size:10.5px;font-weight:600;padding:2px 7px;border-radius:11px;white-space:nowrap}
+.pil.telt{background:var(--ok-tint);color:var(--ok-ink);border:1px solid rgba(16,107,70,.3)}
+.pil.weg{background:var(--app-bg);color:var(--muted);border:1px solid var(--line-strong)}
+.pil.open{background:var(--warn-tint);color:var(--warn-ink);border:1px solid rgba(138,90,0,.3)}
+
+.hkaarten{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+@media(max-width:820px){.hkaarten{grid-template-columns:1fr}}
+.hk{border:1px solid var(--line);border-radius:10px;padding:13px 15px;background:var(--app-zebra)}
+.hk .hn{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;font-weight:700;color:var(--accent);margin-bottom:3px}
+.hk p{margin:0;font-size:12.5px;color:var(--muted)}
+.hk p b{color:var(--ink)}
+.hk .vb{margin-top:9px;padding-top:9px;border-top:1px dashed var(--line-strong);font-size:12px;color:var(--ink)}
+.hk .vb .vl{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700;display:block;margin-bottom:2px}
+
+/* ── Kader ── */
+.kader{border:1px solid rgba(138,90,0,.3);background:var(--warn-tint);border-radius:10px;padding:14px 16px;margin-top:4px}
+.kader h3{color:var(--warn-ink)}
+.kader p{margin:0;font-size:12.5px;color:var(--warn-ink)}
+.kader p + p{margin-top:8px}
+
+/* ── Rekensom ── */
+.som{display:flex;flex-wrap:wrap;gap:0;align-items:stretch;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.som .cel{padding:11px 15px;border-right:1px solid var(--line);flex:1;min-width:120px}
+.som .cel:last-child{border-right:0}
+.som .cel.tot{background:var(--accent-tint)}
+.som .g{font-family:var(--serif);font-size:21px;font-weight:700;line-height:1.1}
+.som .l{font-size:11px;color:var(--muted);margin-top:2px}
+.som .cel.tot .g{color:var(--accent-ink)}
+
+.slot{background:var(--accent-tint);border:1px solid rgba(35,78,112,.25)}
+.slot h2{color:var(--accent-ink)}
+ul{margin:0 0 0 18px;padding:0} li{margin-bottom:6px;max-width:88ch}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;background:var(--app-bg);
+  padding:1px 5px;border-radius:4px}
+</style>
+</head>
+<body>
+<div class="blad">
+
+  <div class="kop">
+    <div>
+      <h1>Bewijslast in een lopend proces</h1>
+      <p class="lead">Vier handelingen die vaak door elkaar lopen — en hoe een vereiste uit de <b>definitie</b> zich verhoudt tot wat er in een <b>dossier</b> gebeurt. Met het Wtp-invaarproces als doorlopend voorbeeld.</p>
+    </div>
+    <div class="meta">Bestuurdersportaal · module Processen<br />one-pager v0.1 · 21-08-2026<br />bij engine-ontwerp v0.8 §6, beslispunt BP-7</div>
+  </div>
+
+  <!-- 1 ───────────────────────────────────────────── -->
+  <section>
+    <h2><span class="nr">1</span>Eén ding, drie woorden</h2>
+    <div class="woorden">
+      <div class="woord"><b>Bewijslast</b><span>zoals het bestuur en het Excel-sjabloon het noemen</span></div>
+      <div class="woord"><b>Vereisten</b><span>zoals het scherm het noemt</span></div>
+      <div class="woord"><b>Requirements</b><span>zoals de code het noemt</span></div>
+    </div>
+    <p class="isgelijk">— dit is hetzelfde, en in dit stuk noemen we het verder <b>vereiste</b> —</p>
+    <p class="uitleg" style="margin-bottom:0">Eén regel op het tabblad <i>Bewijslast</i> van het sjabloon wordt één vereiste, en die verschijnt als één regel in het stapdetail. Wat er ontbreekt is niet de lijst, maar de <b>koppeling</b>: welk stuk hoort bij welke regel. Die leggen we vandaag niet vast.</p>
+  </section>
+
+  <!-- 2 ───────────────────────────────────────────── -->
+  <section>
+    <h2><span class="nr">2</span>Waar een vereiste vandaan komt</h2>
+    <p class="uitleg">De definitie is <b>gedeeld en onveranderlijk</b>: hij geldt voor elk fonds dat dit proces start, en een gepubliceerde versie verandert niet meer. Het dossier is van het fonds. Alles wat een fonds bijzonder maakt, landt rechts — nooit links.</p>
+    <div class="keten">
+      <div class="kstap">
+        <div class="kl">Invoer</div>
+        <h3>Excel-sjabloon</h3>
+        <div class="kw">Tabblad <b>Bewijslast</b>: per regel een stap, een type, een label, en de <b>zwaarte</b> (optioneel · vereist · kritiek).</div>
+      </div>
+      <div class="kpijl">→</div>
+      <div class="kstap def">
+        <div class="kl">Bibliotheek · gedeeld</div>
+        <h3>Definitie <span style="font-family:var(--sans);font-size:12px;font-weight:400;color:var(--accent-ink)">versie 2.0.0</span></h3>
+        <div class="kw">Fasen, stappen, checklist en vereisten. <b>Onveranderlijk</b> zodra gepubliceerd — wijzigen betekent een nieuwe versie.</div>
+      </div>
+      <div class="kpijl">→</div>
+      <div class="kstap dos">
+        <div class="kl">Fonds · per dossier</div>
+        <h3>Lopend proces</h3>
+        <div class="kw">Hier gebeurt alles: stukken koppelen, eisen toevoegen, uitsluiten, afwijken. <b>De definitie blijft onaangeroerd.</b></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 ───────────────────────────────────────────── -->
+  <section>
+    <h2><span class="nr">3</span>Het probleem, in één voorbeeld</h2>
+    <p class="uitleg">Stap 1 van het invaarproces vraagt drie stukken. U uploadt het <b>transitieplan</b>.</p>
+    <div class="vn">
+      <div class="vnkolom nu">
+        <div class="vk">Nu</div>
+        <div class="eis"><span class="bal groen"></span>Transitieplan<span class="st g">vervuld</span></div>
+        <div class="eis"><span class="bal groen"></span>Formeel invaarverzoek<span class="st g">vervuld</span></div>
+        <div class="eis"><span class="bal groen"></span>Pensioenovereenkomst en compensatie<span class="st g">vervuld</span></div>
+        <div class="vnnoot">Alle drie op groen. Het systeem weet niet dát dit het transitieplan was — het weet alleen dat er <b>iets</b> op stap 1 hangt. Eén upload vult drie vakjes.</div>
+      </div>
+      <div class="vnkolom straks">
+        <div class="vk">Straks</div>
+        <div class="eis"><span class="bal groen"></span>Transitieplan<span class="st g">vervuld</span></div>
+        <div class="eis"><span class="bal open"></span>Formeel invaarverzoek<span class="st o">open</span></div>
+        <div class="eis"><span class="bal open"></span>Pensioenovereenkomst en compensatie<span class="st o">open</span></div>
+        <div class="vnnoot">Bij het opvoeren onthouden we <b>bij welke regel</b> het stuk hoort. Meer is het niet.</div>
+      </div>
+    </div>
+    <p class="uitleg" style="margin:16px 0 0"><b>Voor de gebruiker verandert de handeling niet.</b> De knop <i>Opvoeren</i> staat al op de regel zelf, dus de keuze wordt al gemaakt — hij wordt alleen nog niet bewaard. Hetzelfde geldt voor besluiten: het invaarproces kent vijf goedkeuringsvereisten (stappen 2, 7, 8, 9 en 11). Vandaag zet één statuswissel ze alle vijf op groen.</p>
+  </section>
+
+  <!-- 4 ───────────────────────────────────────────── -->
+  <section>
+    <h2><span class="nr">4</span>De vier handelingen</h2>
+    <p class="uitleg">Dit is de kern. Vier dingen die u met een vereiste kunt doen, en ze betekenen alle vier iets anders — vooral de onderste twee worden makkelijk verward.</p>
+    <table>
+      <thead><tr><th style="width:22%">Handeling</th><th style="width:31%">Wat u ermee zegt</th><th style="width:20%">Telt de vereiste nog mee?</th><th>In het afschrift</th></tr></thead>
+      <tbody>
+        <tr><td class="h">Vervullen</td><td>“Hier is het gevraagde stuk.”</td><td><span class="pil telt">ja · staat op groen</span></td><td>het stuk, met wie het koppelde en wanneer</td></tr>
+        <tr><td class="h">Toevoegen</td><td>“Dit dossier vraagt iets extra’s.”</td><td><span class="pil telt">ja · als nieuwe eis</span></td><td>als toevoeging bovenop de definitie</td></tr>
+        <tr><td class="h">Uitsluiten</td><td>“Deze eis geldt hier niet, want…”</td><td><span class="pil weg">nee · uit de teller</span></td><td>als uitsluiting, mét reden</td></tr>
+        <tr><td class="h">Overrulen</td><td>“De eis geldt wél, maar we sluiten de stap toch.”</td><td><span class="pil open">ja · blijft open</span></td><td>als afwijking, mét motivering</td></tr>
+      </tbody>
+    </table>
+
+    <div class="hkaarten">
+      <div class="hk">
+        <div class="hn">Vervullen</div>
+        <p>Een stuk, besluit of vaststelling koppelen aan één regel. Bij eisen zonder tastbaar object — <b>dissentronde gehouden</b>, <b>mandaatcheck gedaan</b> — is de vervulling een knop met een verplichte toelichting, geen upload.</p>
+        <div class="vb"><span class="vl">Voorbeeld</span>Het transitieplan koppelen aan regel 1 van stap 1.</div>
+      </div>
+      <div class="hk">
+        <div class="hn">Toevoegen</div>
+        <p>Een extra eis die alleen in dít dossier geldt. Krijgt dezelfde behandeling als een eis uit de definitie en kan op dezelfde manier vervuld worden. <b>Geen uitzondering in het model.</b></p>
+        <div class="vb"><span class="vl">Voorbeeld</span>Dit fonds heeft een belanghebbendenorgaan in plaats van een verantwoordingsorgaan en voegt op stap 3 een eigen advies­vereiste toe.</div>
+      </div>
+      <div class="hk">
+        <div class="hn">Uitsluiten</div>
+        <p>De eis hoort hier niet thuis. Verplichte reden, vastgelegd als governance-event. De eis <b>verdwijnt uit de teller</b> en het dossier wordt er niet slechter van — want hij gold niet.</p>
+        <div class="vb"><span class="vl">Voorbeeld</span>Deze regeling kent geen compensatieafspraken, dus die eis geldt niet — met die reden erbij.</div>
+      </div>
+      <div class="hk">
+        <div class="hn">Overrulen bij afronden</div>
+        <p>De eis geldt wél, maar de stap gaat toch dicht. Verplichte motivering, en bij <b>kritiek</b> ook een expliciete bevestiging. De eis <b>blijft open staan</b> in de tellingen en in het dossier.</p>
+        <div class="vb"><span class="vl">Voorbeeld</span>Het externe actuariële oordeel komt pas 5 september, maar het bestuur wil de stap vóór de vergadering van 17 september sluiten.</div>
+      </div>
+    </div>
+
+    <div class="kader" style="margin-top:14px">
+      <h3>Uitsluiten en overrulen zijn elkaars tegenpool</h3>
+      <p><b>Uitsluiten</b> zegt: deze eis hoort hier niet. <b>Overrulen</b> zegt: hij hoort er wel, maar we gaan toch verder. Het verschil is bestuurlijk wezenlijk — de eerste vraagt om een afbakening, de tweede om een verantwoording.</p>
+      <p>Bouwen we alleen overrulen, dan gaan mensen dat gebruiken voor uitsluiten, en verdwijnt het onderscheid uit het auditspoor. Daarom moeten ze allebei bestaan, en allebei zichtbaar zijn in het afschrift.</p>
+    </div>
+  </section>
+
+  <!-- 5 ───────────────────────────────────────────── -->
+  <section>
+    <h2><span class="nr">5</span>Hoeveel stukken hangen er aan één vereiste?</h2>
+    <p class="uitleg">Niet altijd één. Het sjabloon kent de kolom <code>min_aantal</code>: een eis kan om drie gevalideerde kernaannames vragen, of om twee documenten.</p>
+    <div class="vn">
+      <div class="vnkolom" style="background:var(--app-zebra)">
+        <div class="vk" style="color:var(--muted)">Wat mag</div>
+        <p style="margin:0;font-size:12.5px">Eén vereiste kan om <b>meerdere</b> stukken vragen. Zij is vervuld zodra het aantal gekoppelde stukken <code>min_aantal</code> haalt — standaard 1.</p>
+      </div>
+      <div class="vnkolom" style="background:var(--err-tint);border-color:rgba(164,39,28,.28)">
+        <div class="vk" style="color:var(--err-ink)">Wat niet mag</div>
+        <p style="margin:0;font-size:12.5px;color:var(--err-ink)">Eén stuk hoort bij <b>hoogstens één</b> vereiste. Dat is de regel die voorkomt dat één upload drie vakjes vult.</p>
+      </div>
+    </div>
+    <p class="uitleg" style="margin:14px 0 0">Dus niet één-op-één tussen vereiste en stuk, maar één-op-één tussen <b>stuk en vereiste</b>: één document kan niet twee vakjes vullen, één vakje kan wel om twee documenten vragen.</p>
+  </section>
+
+  <!-- 6 ───────────────────────────────────────────── -->
+  <section>
+    <h2><span class="nr">6</span>Wat het afschrift straks laat zien</h2>
+    <p class="uitleg">Omdat de definitie onaangeroerd blijft, is elke afwijking van de standaard <b>optelbaar en verklaarbaar</b>. Een voorbeeld voor één dossier:</p>
+    <div class="som">
+      <div class="cel"><div class="g">12</div><div class="l">uit de definitie <span style="opacity:.7">v2.0.0</span></div></div>
+      <div class="cel"><div class="g" style="color:var(--muted)">− 1</div><div class="l">uitgesloten, met reden</div></div>
+      <div class="cel"><div class="g">+ 2</div><div class="l">toegevoegd voor dit fonds</div></div>
+      <div class="cel tot"><div class="g">13</div><div class="l">gelden in dit dossier</div></div>
+      <div class="cel"><div class="g" style="color:var(--ok-ink)">10</div><div class="l">vervuld</div></div>
+      <div class="cel"><div class="g" style="color:var(--warn-ink)">2</div><div class="l">open</div></div>
+      <div class="cel"><div class="g" style="color:var(--err-ink)">1</div><div class="l">overruled, met motivering</div></div>
+    </div>
+    <p class="uitleg" style="margin:16px 0 0">Die rekensom is vandaag niet te maken. Dat is precies het verschil: nu kunt u zeggen <i>“het dossier is compleet”</i>, straks kunt u zeggen <b>waaruit dat blijkt</b> — en waar het bewust niet compleet is.</p>
+  </section>
+
+  <!-- 7 ───────────────────────────────────────────── -->
+  <section class="slot">
+    <h2><span class="nr">7</span>Wat dit betekent bij invoering</h2>
+    <ul>
+      <li><b>Voor wie ermee werkt verandert er weinig.</b> De knoppen staan waar ze stonden; de keuze die iemand toch al maakte, wordt voortaan bewaard. Nieuw zijn alleen de knoppen voor eisen zonder document — <i>dissentronde afgerond</i>, <i>mandaatcheck uitgevoerd</i>.</li>
+      <li><b>Voor het bestuur verandert er eenmalig veel.</b> Dossiers die vandaag groen tonen op dissent, goedkeuring, risico’s, KPI’s, evaluatie, mandaatcheck, aannames en AI-validatie gaan openstaand tonen. Dat is de correctie, niet een storing — maar het moet vóór oplevering worden doorgerekend en met de voorzitter doorgenomen, niet erna.</li>
+      <li><b>Er wordt niets weggegooid.</b> Uitsluiten haalt niets uit de definitie; overrulen vult geen vakje. Alles blijft zichtbaar, met wie, wanneer en waarom.</li>
+      <li><b>Openstaand punt.</b> Voor bestaande dossiers moet nog worden gekozen: de huidige — te ruime — groene stand overnemen, óf alleen overnemen wat aantoonbaar gebonden is en de rest laten openvallen. Het advies is het tweede, met een terugvalrapport per fonds. Route één maakt van een meetfout een vastgelegd feit.</li>
+    </ul>
+  </section>
+
+</div>
+</body>
+</html>
