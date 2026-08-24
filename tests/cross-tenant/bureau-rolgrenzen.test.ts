@@ -66,7 +66,6 @@ const BUREAU_NIET = [
   "organisation.profile.manage",
   "fonds.config.manage",
   "stuurinformatie.manage",
-  "generic.library.manage",
 ] as const;
 
 // ── W7 (#153) — de 24 gedeclareerde gates, per rol ────────────────────────────

@@ -95,7 +95,7 @@ test("W7-2 — elke gedeclareerde gate bestaat en hangt aan minstens één rol",
     assert.ok(
       gedragen.has(h.gedeclareerd as Capability),
       `${h.label} declareert "${h.gedeclareerd}", en die hangt aan geen enkele rol. ` +
-        "Dat geeft 403 voor iedere rol zonder dat iets dat meldt — zie generic.library.manage."
+        "Dat geeft 403 voor iedere rol zonder dat iets dat meldt."
     );
   }
 });
@@ -175,9 +175,10 @@ test("W7-4 — per gate komt de meest beperkte drager er aantoonbaar door", () =
   }
 });
 
-test("W7-5 — generic.library.manage wordt door geen enkele route gedeclareerd", () => {
-  // Dode capability: aan geen enkele rol toegekend, dus een declaratie ervan
-  // geeft 403 voor iedereen. Opruimen is een eigen PR; tot dan is dit de grendel.
+test("W7-5 — geen route declareert de verwijderde generic.library.manage", () => {
+  // De dode tenant-capability is uit de union verwijderd (eigen PR). Deze grendel
+  // blijft staan tegen TEKSTUELE herintroductie: dook de naam ooit weer op in een
+  // declaratie, dan geeft die route 403 voor iedere rol zonder dat iets dat meldt.
   const fout = HANDLERS.filter((h) => h.gedeclareerd === "generic.library.manage");
   assert.deepEqual(fout.map((h) => h.label), []);
 });

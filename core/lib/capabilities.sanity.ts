@@ -296,12 +296,17 @@ test("twee W7-gates sluiten het bestuursbureau uit", () => {
   }
 });
 
-test("generic.library.manage hangt nog steeds aan GEEN enkele rol", () => {
-  // Dode capability: de gebruikte heet platform.generic.library.manage en zit in
-  // het platformmodel. Zolang deze bestaat mag geen enkele route hem declareren —
-  // dat zou 403 geven voor élke rol zonder dat iets dat meldt.
-  for (const caps of Object.values(ROL_CAPABILITIES)) {
-    assert.ok(!(caps as string[]).includes("generic.library.manage"));
+test("de tenant-union draagt geen platform-only capabilities (regressie)", () => {
+  // `generic.library.manage` was een dode tenant-capability: aan geen enkele rol
+  // toegekend, door geen enkele route gedeclareerd. De werkelijke capability heet
+  // `platform.generic.library.manage` en hoort in het PLATFORMmodel
+  // (platform-capabilities.ts), niet in de tenant-union. Hij is verwijderd; deze
+  // test bewaakt dat noch die naam, noch een andere `platform.`-naam terugkeert in
+  // de tenant-union — dat zou de modelscheiding (T9) doorbreken.
+  const tenantNamen = new Set(Object.values(ROL_CAPABILITIES).flat());
+  assert.ok(!tenantNamen.has("generic.library.manage" as never), "dode capability terug in de tenant-union");
+  for (const naam of tenantNamen) {
+    assert.ok(!(naam as string).startsWith("platform."), `platform-capability '${naam}' hoort niet in de tenant-union`);
   }
 });
 
@@ -329,7 +334,6 @@ const BUREAU_NIET = [
   "organisation.profile.manage",
   "fonds.config.manage",
   "stuurinformatie.manage",
-  "generic.library.manage",
 ] as const;
 
 test("bestuursbureau draagt exact de capabilities uit ontwerp §5.2", () => {
