@@ -1,15 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
+import {
+  leesVereisteVerwijzing,
+  resolveRequirementBinding,
+} from "@/core/lib/bewijs-binding";
 
 // Bewijsstuk-mutaties op een lopende procedure (WO-2-vervolg):
 //  • PATCH  — een document koppelen aan een vooraf opgegeven (titel-only)
-//             bewijsstuk ("Nog te leveren" → geleverd).
+//             bewijsstuk ("Nog te leveren" → geleverd), en/of de
+//             bewijs↔vereiste-binding zetten, wijzigen of losmaken.
 //  • DELETE — een (foutief) bewijsstuk verwijderen.
 //
 // Beide lopen via de anon-key + RLS: de bestaande FOR ALL-policy
 // "fonds proc bewijs" scopet op het eigen fonds (stap → procedure → fonds).
-// Elke mutatie wordt append-only gelogd in procedure_log.
+// Elke mutatie wordt door de database-trigger atomair en append-only gelogd in
+// procedure_log, óók als zij buiten deze route om via PostgREST loopt.
 
 async function haalContext(
   supabase: Awaited<ReturnType<typeof createServerSupabase>>,
@@ -19,14 +25,14 @@ async function haalContext(
   const { data: bewijs } = await supabase
     .from("procedure_bewijs")
     .select(
-      "id, titel, document_id, toegevoegd_door, stap_id, procedure_stappen(naam, procedure_id)"
+      "id, titel, document_id, requirement_sleutel, toegevoegd_door, stap_id, procedure_stappen(naam, procedure_id, volgorde)"
     )
     .eq("id", bewijsId)
     .single();
   if (!bewijs) return { fout: "Bewijsstuk niet gevonden", status: 404 } as const;
   const stapData = bewijs.procedure_stappen as
-    | { naam: string; procedure_id: string }
-    | { naam: string; procedure_id: string }[]
+    | { naam: string; procedure_id: string; volgorde: number }
+    | { naam: string; procedure_id: string; volgorde: number }[]
     | null
     | undefined;
   const stap = Array.isArray(stapData) ? stapData[0] : stapData;
@@ -44,10 +50,14 @@ export const PATCH = withFondsRoute({ capability: "procedures.manage" }, async (
     const body = (await req.json()) as {
       document_id?: string | null;
       documenttype?: string | null;
+      // triple = binden/wijzigen, null = losmaken, afwezig = ongemoeid.
+      vereiste?: unknown;
     };
-    if (!body.document_id) {
+    const wilKoppelen = typeof body.document_id === "string" && !!body.document_id;
+    const wilBinden = body.vereiste !== undefined;
+    if (!wilKoppelen && !wilBinden) {
       return NextResponse.json(
-        { error: "document_id is verplicht" },
+        { error: "document_id of vereiste is verplicht" },
         { status: 400 }
       );
     }
@@ -57,41 +67,74 @@ export const PATCH = withFondsRoute({ capability: "procedures.manage" }, async (
       return NextResponse.json({ error: bewijsCtx.fout }, { status: bewijsCtx.status });
     }
 
-    // Document moet bestaan én van het eigen fonds zijn (RLS scopet documenten
-    // al; deze check geeft een nette 400 i.p.v. een stille mismatch).
-    const { data: doc } = await supabase
-      .from("documenten")
-      .select("id, fonds_id, titel")
-      .eq("id", body.document_id)
-      .single();
-    if (!doc || doc.fonds_id !== ctx.fondsId) {
-      return NextResponse.json(
-        { error: "Document niet gevonden in dit fonds" },
-        { status: 400 }
-      );
+    const updates: Record<string, unknown> = {};
+    if (wilKoppelen) {
+      // Document moet bestaan én van het eigen fonds zijn (RLS scopet documenten
+      // al; deze check geeft een nette 400 i.p.v. een stille mismatch).
+      const { data: gevonden } = await supabase
+        .from("documenten")
+        .select("id, fonds_id, titel")
+        .eq("id", body.document_id)
+        .single();
+      if (!gevonden || gevonden.fonds_id !== ctx.fondsId) {
+        return NextResponse.json(
+          { error: "Document niet gevonden in dit fonds" },
+          { status: 400 }
+        );
+      }
+      updates.document_id = body.document_id;
+      if (typeof body.documenttype === "string") {
+        updates.documenttype = body.documenttype.trim() || null;
+      }
     }
 
-    const updates: Record<string, unknown> = { document_id: body.document_id };
-    if (typeof body.documenttype === "string") {
-      updates.documenttype = body.documenttype.trim() || null;
+    if (wilBinden) {
+      const verwijzing = leesVereisteVerwijzing(body.vereiste);
+      if (verwijzing === "ongeldig") {
+        return NextResponse.json(
+          { error: "Ongeldige vereiste-verwijzing" },
+          { status: 400 }
+        );
+      }
+      if (verwijzing === null) {
+        updates.requirement_sleutel = null;
+      } else {
+        const binding = await resolveRequirementBinding(
+          supabase,
+          id,
+          verwijzing,
+          bewijsCtx.stap.volgorde
+        );
+        if (!binding.ok) {
+          return NextResponse.json(
+            { error: binding.fout },
+            { status: binding.serverfout ? 500 : 400 }
+          );
+        }
+        updates.requirement_sleutel = binding.sleutel;
+      }
     }
 
     const { error: updFout } = await supabase
       .from("procedure_bewijs")
       .update(updates)
       .eq("id", bewijsId);
-    if (updFout) {
-      console.error("Bewijs koppelen fout:", updFout);
-      return NextResponse.json({ error: "Koppelen mislukt" }, { status: 500 });
+    if (updFout?.code === "23505") {
+      return NextResponse.json(
+        { error: "Aan dit vereiste is al een bewijsstuk gekoppeld" },
+        { status: 409 }
+      );
     }
-
-    await supabase.from("procedure_log").insert({
-      procedure_id: id,
-      event_type: "bewijs_document_gekoppeld",
-      actor_id: ctx.gebruikerId,
-      actor_naam: ctx.naam || null,
-      payload: { stap: bewijsCtx.stap.naam, titel: bewijsCtx.bewijs.titel, document: doc.titel },
-    });
+    if (updFout?.code === "23514") {
+      return NextResponse.json(
+        { error: "Ongeldige of niet-eenduidige vereiste-binding" },
+        { status: 400 }
+      );
+    }
+    if (updFout) {
+      console.error("Bewijs bijwerken fout:", updFout);
+      return NextResponse.json({ error: "Bijwerken mislukt" }, { status: 500 });
+    }
 
     return NextResponse.json({ ok: true });
   } catch (e) {
@@ -125,13 +168,6 @@ export const DELETE = withFondsRoute({ capability: "procedures.manage" }, async 
       );
     }
 
-    // Snapshot van de te loggen velden vóór de delete (de rij is straks weg).
-    const logPayload = {
-      stap: bewijsCtx.stap.naam,
-      titel: bewijsCtx.bewijs.titel,
-      document_id: bewijsCtx.bewijs.document_id ?? null,
-    };
-
     const { error: delFout } = await supabase
       .from("procedure_bewijs")
       .delete()
@@ -140,17 +176,6 @@ export const DELETE = withFondsRoute({ capability: "procedures.manage" }, async 
       console.error("Bewijs verwijderen fout:", delFout);
       return NextResponse.json({ error: "Verwijderen mislukt" }, { status: 500 });
     }
-
-    // Auditregel ná de geslaagde delete (CLAUDE.md: log ná de wijziging).
-    // document_id in de payload zodat de verwijderde koppeling reconstrueerbaar
-    // blijft (het bibliotheekdocument zelf blijft bestaan).
-    await supabase.from("procedure_log").insert({
-      procedure_id: id,
-      event_type: "bewijs_verwijderd",
-      actor_id: ctx.gebruikerId,
-      actor_naam: ctx.naam || null,
-      payload: logPayload,
-    });
 
     return NextResponse.json({ ok: true });
   } catch (e) {
