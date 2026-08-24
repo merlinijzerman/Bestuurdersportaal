@@ -49,11 +49,11 @@ De scanner is de uitzondering: `bestuurdersportaal-scanner` heeft geen
 
 ### Preview-hosts volgen de environment, geen losse deployment
 
-De vier Preview-apphosts zijn **domeinen van `preview-stable`**. Dit is de
+De vijf Preview-apphosts zijn **domeinen van `preview-stable`**. Dit is de
 enige toegestane koppeling; een handmatige `vercel alias` naar een afzonderlijke
 deployment is geen herstelprocedure en mag niet als automatisering worden
 toegevoegd. Bij een geslaagde Git-deploy van branch `preview` promoveert Vercel
-de nieuwe deployment van deze environment en nemen alle vier hosts die
+de nieuwe deployment van deze environment en nemen alle vijf hosts die
 deployment tegelijk over.
 
 | Vaste host | Vercel-environment |
@@ -62,11 +62,18 @@ deployment tegelijk over.
 | `pgb.preview.bestuurdersportaal.com` | `preview-stable` |
 | `phenc.preview.bestuurdersportaal.com` | `preview-stable` |
 | `huisartsenpensioen.preview.bestuurdersportaal.com` | `preview-stable` |
+| `testfonds-w1.preview.bestuurdersportaal.com` | `preview-stable` |
+
+De vijfde host, `testfonds-w1.preview.bestuurdersportaal.com`, is de **actieve,
+blijvende** koppeling naar het synthetische `Testfonds W1` — de tenant-hostmapping
+die de OMG-1-waarneming en de W7-preview-rondgang reproduceerbaar via de UI
+bereikbaar maakt. Hij is géén tijdelijke uitzondering: hij hoort net als de andere
+vier op `preview-stable` te staan en telt mee in de controle hieronder.
 
 **Controle na een incident of wijziging aan domains/environments.** Open in
 Vercel het project **bestuurdersportaal**: `Settings → Environments →
 preview-stable`. Daar moet *Branch Tracking* ingeschakeld zijn met patroon
-`Branch is: preview`, en moeten precies bovenstaande vier hosts onder *Domains*
+`Branch is: preview`, en moeten precies bovenstaande vijf hosts onder *Domains*
 staan. Controleer daarna in `Deployments` dat de nieuwste `preview-stable`
 deployment *Ready* is. Een host die als `Preview`, `Production` of een concrete
 deploymentalias wordt getoond, is afwijking: herstel hem in de domeininstelling
@@ -77,6 +84,11 @@ Vercel-omgeving waargenomen: branch tracking staat aan voor uitsluitend
 `preview`; alle vier hosts tonen `Valid Configuration` en `preview-stable`; de
 nieuwste `preview-stable`-deployment is *Ready*. Daardoor is er geen CI-secret,
 deploy hook of per-deployment aliasactie nodig die zelf opnieuw kan verlopen.
+
+**Aanvulling 2026-08-24.** De vijfde host `testfonds-w1.preview.bestuurdersportaal.com`
+is bevestigd actief op `preview-stable` (opdrachtgever). Hij hoort structureel in
+deze tabel en niet als afwijking te worden hersteld — de waarneming van 23-08
+noemde vier hosts omdat de synthetische W1-host daarna is toegevoegd.
 
 ### Eén stack, meerdere fondsgerichte Preview-omgevingen
 
