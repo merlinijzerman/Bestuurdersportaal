@@ -139,14 +139,32 @@ test("AFS-4 — de worker-route is CRON-secret-gated en draait alleen in het beh
     "de wrapper roept de skip- of de bearer-check niet aan"
   );
 
-  // Schakel 3: cron-auth doet waar het om gaat — fail-closed, constant-time,
-  // en de skip op de gedeelde surface.
+  // Schakel 3: cron-auth leest env/header en de skip op de gedeelde surface, en
+  // delegeert de beslissing naar de pure kern.
   const auth = lees("platform", "lib", "cron-auth.ts");
   assert.ok(auth.includes("CRON_SECRET"), "cron-auth mist de CRON_SECRET-gate");
-  assert.ok(auth.includes("timingSafeEqual"), "cron-auth vergelijkt het secret niet constant-time");
   assert.ok(
     auth.includes('process.env.DEPLOY_TARGET === "app"'),
     "cron-auth skipt de app-surface niet"
+  );
+  assert.ok(
+    auth.includes("beoordeelCronBearer"),
+    "cron-auth delegeert de bearer-beslissing niet naar de gedeelde kern"
+  );
+
+  // Schakel 4 (W5b PR 2, #103): de PURE kern doet waar het om gaat —
+  // constant-time vergelijking én de entropie-ondergrens. De logica is naar
+  // cron-auth-core.ts verplaatst zodat de sanity-suite haar zonder `server-only`
+  // kan draaien; deze keten volgt die verhuizing één hop verder.
+  const core = lees("platform", "lib", "cron-auth-core.ts");
+  assert.ok(core.includes("timingSafeEqual"), "cron-auth-core vergelijkt het secret niet constant-time");
+  assert.ok(
+    core.includes("CRON_SECRET_MIN_LENGTE"),
+    "cron-auth-core mist de entropie-ondergrens"
+  );
+  assert.ok(
+    /secret\.length\s*<\s*CRON_SECRET_MIN_LENGTE/.test(core),
+    "cron-auth-core weigert een te kort secret niet fail-closed"
   );
 });
 

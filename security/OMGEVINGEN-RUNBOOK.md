@@ -150,9 +150,36 @@ runbook, git, screenshots of tickets.
 | `PLATFORM_HOST` | `beheer.preview.bestuurdersportaal.com` in beheer-Preview | `beheer.bestuurdersportaal.com` in beheer-Productie | Nooit beide hosts/secrets in dezelfde environment |
 | `MARKETING_HOST` | indien nodig eigen Previewwaarde | apex + `www` | Geen Preview-host in Productiescope |
 | Supabase URL/anon/service-role | Previewproject | Productieproject | Alle drie gescheiden; service-role nooit browser/public |
+| `CRON_SECRET` | eigen Previewwaarde | eigen Productiewaarde | Bearer voor de machineroutes; **≥ 32 tekens** (code weigert korter, fail-closed — W5b/#103); per omgeving verschillend |
 | Anthropic/OpenAI/Mistral | Previewproject/key | Productieproject/key | Aparte budgetten, modelallowlist en kill switch |
 | Mailgun/notify-variabelen | sink of volledig uit | geaccordeerde ontvangers | Test mag nooit echte notificatie sturen |
 | monitoring/analytics | Previewdataset | Productiedataset | Geen vermenging van gebruikers/incidenten |
+
+### Secretrotatie — `CRON_SECRET` (W5b / #103)
+
+`CRON_SECRET` beschermt de zes service-role-machineroutes. Er is één statisch
+secret per omgeving; per-route secrets kunnen niet (Vercel Cron stuurt precies
+deze env-waarde als bearer).
+
+- **Entropie-ondergrens.** De code (`platform/lib/cron-auth-core.ts`,
+  `CRON_SECRET_MIN_LENGTE = 32`) weigert een secret korter dan 32 tekens
+  fail-closed. Genereer met een CSPRNG, bijv. `openssl rand -hex 32` (64 hex-tekens)
+  of `openssl rand -base64 48`.
+- **⚠ Volgorde bij het invoeren van de ondergrens of bij rotatie.** Zet de nieuwe
+  (lange) waarde in de provider **vóór** de code die de ondergrens afdwingt daar
+  deployt. Andersom zetten de cron-routes zichzelf op 401 tot de rotatie rond is —
+  dezelfde "config eerst, dan code"-regel als bij een migratie.
+- **Cadans.** Roteer minimaal **elk kwartaal**, en direct bij elk vermoeden van
+  blootstelling (zie ook stap 5 onder *Rollback*). Roteer Preview en Productie
+  onafhankelijk; ze delen nooit een waarde.
+- **Vastleggen bij elke rotatie:** datum, omgeving(en) en uitvoerder — bij het
+  betreffende issue, zonder de waarde zelf.
+
+**Rotatie-log (vul aan bij elke rotatie):**
+
+| Datum | Omgeving(en) | Uitvoerder | Aanleiding |
+|---|---|---|---|
+| _(nog te vullen bij de W5b-rotatie, #103)_ | | | entropie-ondergrens ingevoerd |
 
 ## Productielogin en Supabase Auth
 

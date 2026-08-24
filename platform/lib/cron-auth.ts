@@ -23,8 +23,8 @@
 // ============================================================================
 
 import "server-only";
-import { timingSafeEqual } from "node:crypto";
 import type { NextRequest } from "next/server";
+import { beoordeelCronBearer } from "./cron-auth-core";
 
 /**
  * True als deze route op de gedeelde (app/publiek) surface draait en dus moet
@@ -36,19 +36,16 @@ export function draaitOpAppSurface(): boolean {
 }
 
 /**
- * Constant-time bearer-check tegen CRON_SECRET.
+ * Constant-time bearer-check tegen CRON_SECRET, met entropie-ondergrens.
  *
- * Fail-closed: zonder geconfigureerd secret is niemand geautoriseerd. De
- * lengtecheck vooraf is nodig omdat timingSafeEqual gelijke bufferlengtes eist;
- * die lekt alleen de lengte, niet de inhoud.
+ * Fail-closed op: ontbrekend secret, een secret korter dan
+ * `CRON_SECRET_MIN_LENGTE` (W5b PR 2, #103), ontbrekende header of
+ * lengteverschil. De pure logica staat in cron-auth-core.ts zodat de sanity-
+ * suite haar zonder Next kan draaien; hier lezen we alleen env en header.
  */
 export function geautoriseerdeCron(req: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return false;
-  const auth = req.headers.get("authorization");
-  if (!auth) return false;
-  const verwacht = Buffer.from(`Bearer ${secret}`, "utf8");
-  const gekregen = Buffer.from(auth, "utf8");
-  if (verwacht.length !== gekregen.length) return false;
-  return timingSafeEqual(verwacht, gekregen);
+  return beoordeelCronBearer({
+    secret: process.env.CRON_SECRET,
+    authHeader: req.headers.get("authorization"),
+  });
 }

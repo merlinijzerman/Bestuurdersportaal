@@ -97,8 +97,13 @@ interface VoorgangerUnit {
 // ── Enqueue (lui / on-demand) ────────────────────────────────────────────────
 // Zet één semantische-extractie-job weg voor een document. Behavior-neutraal als
 // de flag uit staat (geen job). De partiële unieke index (document_id, stap) vangt
-// een concurrente dubbele enqueue af (23505 = onschadelijk). T5 roept dit aan bij
-// de eerste vergelijkingsbehoefte; de interne route biedt een handmatige trigger.
+// een concurrente dubbele enqueue af (23505 = onschadelijk).
+//
+// AANROEPER (geverifieerd, W5b PR 2 / #103): dit is VANDAAG het enige enqueue-pad
+// voor semantische extractie, en de ENIGE aanroeper is de interne machineroute
+// `POST /api/internal/semantische-extractie` (een operatortool). T5 CONSUMEERT
+// `semantic_units`, maar enqueuet ze niet — het eerdere commentaar dat "T5 dit
+// aanroept" was onjuist en is verwijderd.
 export async function enqueueSemantischeExtractie(
   svc: SupabaseClient,
   documentId: string
@@ -112,6 +117,13 @@ export async function enqueueSemantischeExtractie(
     .single();
   if (error || !doc) return { enqueued: false, reden: "document_niet_gevonden" };
   if (doc.actief === false) return { enqueued: false, reden: "document_inactief" };
+  // Tweede grens (W5b PR 2 / #103): extractie leest chunks die de indexering
+  // aanmaakt. Zonder indexering is er niets te extraheren en zou de job in de
+  // worker alsnog stranden. Weiger vroeg, MET reden — een operator die vlak na
+  // upload enqueuet ziet zo dát en waaróm het niet ging, en kan het later
+  // opnieuw proberen. (`geindexeerd` werd al geselecteerd maar niet gebruikt;
+  // dat ongebruikte veld was zelf het signaal dat deze check hoorde te bestaan.)
+  if (doc.geindexeerd !== true) return { enqueued: false, reden: "niet_geindexeerd" };
 
   const { error: insErr } = await svc.from("document_processing_jobs").insert({
     document_id: documentId,
