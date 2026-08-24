@@ -9,8 +9,19 @@
 // slaat de route zichzelf over (die heeft de service-role niet). Machine-pad:
 // createServiceSupabase, géén usersessie.
 //
-// T5 roept enqueueSemantischeExtractie server-side direct aan; deze route is de
-// handmatige trigger voor test/beheer. Behavior-neutraal als de flag uit staat.
+// BESLUIT (W5b PR 2 / #103) — operator-enqueuetool, bewust behouden.
+// Dit is VANDAAG het enige pad dat een semantische-extractie-job in de wachtrij
+// zet; de verwerking loopt daarna via de ingest-worker. Er is geen
+// geautomatiseerde enqueue (T5 consumeert `semantic_units`, enqueuet ze niet —
+// zie de correctie in semantische-extractie-job.ts).
+//   • WIE:  een beheerder/operator van het beheer-project, met de CRON_SECRET.
+//   • WANNEER: één document handmatig laten (her)extraheren — bv. na een fix in
+//     de extractielogica, of om T8/T5 op een specifiek dossier te voeden zonder
+//     op een geautomatiseerd pad te wachten dat nog niet bestaat.
+// De begrenzing zit in de callee: flag-gated, document moet bestaan, actief én
+// GEÏNDEXEERD zijn, en `fonds_id` komt server-side uit het document (niet uit de
+// request). Restrisico is LLM-kosten binnen de operator-vertrouwensgrens.
+// Behavior-neutraal als de flag uit staat.
 // -----------------------------------------------------------------------------
 
 import { NextRequest, NextResponse } from "next/server";
@@ -45,7 +56,7 @@ async function draai(_ctx: MachineContext, req: NextRequest): Promise<NextRespon
 // De DEPLOY_TARGET-skip en de constant-time CRON_SECRET-bearer staan sinds W5b
 // in platform/lib/machine-route-wrapper.ts, niet meer in dit bestand. Zelfde
 // controle, zelfde volgorde, zelfde responses — alleen op één plek.
-const SPEC = { bewaking: "cron-secret", label: "internal.semantische-extractie" } as const;
+const SPEC = { bewaking: "cron-secret", label: "internal.semantische-extractie", directeMutaties: [] } as const;
 
 // Alleen POST: dit is de handmatige trigger, geen cron-GET.
 export const POST = withMachineRoute(SPEC, draai);
