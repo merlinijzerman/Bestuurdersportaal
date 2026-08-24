@@ -1,6 +1,6 @@
 # Proceduremodule-engine — ontwerp
 
-> **Status**: v0.10 — **vastgesteld**; beslispunten gesloten, werktickets uitgezet
+> **Status**: v0.12 — **vastgesteld**; beslispunten gesloten, werktickets uitgezet
 > **Datum**: 2026-08-24 (as-built opnieuw geverifieerd ná productierelease #161)
 > **Bron**: as-built code en datamodel per 2026-08-21, geverifieerd tegen `core/lib/procedure-activatie.ts`, `procedure-fase-status.ts`, `procedure-fasen.ts`, `decision.ts`, `decision-view.ts`, `dossier.ts`, `proces-templates.ts`, `app/api/procedures/**`, `app/api/decisions/[id]/status`, `app/(dashboard)/procedures/_components/*`, `supabase/migrations/2026_04_29_procedures.sql`, `2026_05_07_decision_object.sql`, `…_d6*`, `…_d7*`, `…_d8*`, `2026_08_14_readiness_*`, `2026_08_18_bewijs_requirement_binding.sql`, `2026_08_22_bewijs_requirement_binding_hardening.sql` · besluiten [`0002`](decisions/0002-generieke-proceduremodule-definitie-als-data.md), [`0174`](decisions/0174-proceduremodule-engine-v2-D6-D7-D8.md), [`0183`](decisions/0183-expliciete-bewijs-vereiste-binding.md), [`0187`](decisions/0187-readiness-vervalt.md) · `PROCEDURE-GENERIEK-ONTWERP.md` v0.4
 > **Doel**: één ontwerp van de proces-engine dat klopt met wat er draait, met de besluiten van 21-08-2026, én met de kerninvarianten die het bestuurlijk betrouwbaar maken.
@@ -8,6 +8,24 @@
 > **Impactklasse**: **data + tenant/security**.
 
 ## Revisielog
+
+**v0.12 (2026-08-24)** — één tegenstrijdigheid opgelost, gevonden tijdens de bouw van **P2** ([#167](https://github.com/merlinijzerman/Bestuurdersportaal/issues/167)). Geen richtingwijziging.
+
+§6.2 stelde tegelijk dat er **meerdere** koppelingen per vereiste mogen bestaan (`min_aantal`) én dat "de unieke index per brontabel" dat afdwingt. Een unieke index op `(scope, requirement_sleutel)` verbiedt precies wat `min_aantal > 1` moet toestaan. De fout is ontstaan bij de herziening van BP-7 (v0.9/v0.10): in de centrale-tabelvariant stonden er **twee** indexen, en bij de overgang naar het bronkolom-patroon is die tweedeling in één zin samengevouwen. Gecorrigeerd:
+
+1. **De index per brontabel is niet-uniek**, en dient alleen het opzoeken. "Eén artefact vervult hoogstens één vereiste" wordt afgedwongen door de **vorm van het schema** — één bronrij is één artefact en draagt één `requirement_sleutel`-kolom — en heeft geen index nodig. Zie §6.2.
+2. **I6 herschreven.** De helft "een vereiste heeft hoogstens één vervulling" was al vervallen in v0.9 maar bleef in de invariantentabel staan.
+3. **`procedure_bewijs` wijkt vandaag af.** De bestaande unieke partiële index `(stap_id, requirement_sleutel)` uit #160 dwingt wél één-bewijs-per-vereiste af. Daarmee kan `min_aantal > 1` voor documenttypen vandaag niet werken. Dat wordt in P2 rechtgetrokken in plaats van geërfd (§6.2, §13.1).
+
+**v0.11 (2026-08-24)** — één aanname gecorrigeerd, met gevolgen voor de zwaarte van P2.
+
+**Er zijn nog geen fondsen aangesloten in productie.** v0.6 t/m v0.10 noemden de zichtbare terugval bij P2 "de grootste risicopost in het hele migratiepad" en eisten een terugvalrapport per fonds vóór oplevering. Dat is geschreven voor een situatie met lopende dossiers bij aangesloten fondsen, en die bestaat niet. Een rapport "per fonds" zou over seed- en previewdata gaan: dat meet de seed, niet de werkelijkheid.
+
+Wat daaruit volgt is groter dan het vervallen van dat rapport:
+
+1. **De backfill is grotendeels een non-vraag.** De R1/R2-afweging, gefaseerd terugvallen en het communicatieplan gaan over bestaande productiedata. Met alleen seed- en previewdata mag je opnieuw zaaien. De migratie blijft correct, maar hoeft geen zorgvuldige operatie te zijn.
+2. **Dit is het venster om de strengste variant te bouwen — gratis.** I7 met INSERT-blokkade en append-only publicatieregister, positief-en-gebonden voor alle elf typen ineens, de status-feitenmatrix voor alle achttien statussen, `niet_begonnen` met de actief-trigger: elk daarvan kost nu niets. Bij het eerste aangesloten fonds wordt elk daarvan een migratie mét terugvalgesprek en fasering. Waar in dit document "gefaseerd" of "voorzichtig" staat omdat bestaande data pijn zou doen — dat vervalt.
+3. **Het risico verdwijnt niet, het verschuift.** Het komt terug bij de onboarding van fonds 1, als *onboardingvraag* en niet als migratievraag: hoeveel handmatig koppelwerk kost het om een lopend traject of bestaande stukken in te brengen. Belegd als OB-E14 in `00 Overzicht en status/openstaande-punten-en-risicos.md`.
 
 **v0.10 (2026-08-24)** — drie feitelijke correcties op §13.1, gevonden bij het schrijven van de werkopdracht voor **P1b** ([#166](https://github.com/merlinijzerman/Bestuurdersportaal/issues/166)). Geen richtingwijziging; v0.9 verwees naar objecten die niet bestaan.
 
@@ -146,7 +164,7 @@ Zeven invarianten die het systeem **altijd** afdwingt, ook met motivering en ook
 | **I3** | Afwijkend afronden en beëindigen vragen een expliciete bevoegdheid (§5.1, §5.2). | capability-check |
 | **I4** | Een overgang buiten de toegestane-overgangenmatrix bestaat niet. | statusroute |
 | **I5** | `fonds_id` wordt server-side afgeleid, nooit uit de request — **en elk gerefereerd object hoort bij hetzelfde fonds.** | RLS + referentiecontrole, zie hieronder |
-| **I6** | Eén vereiste heeft hoogstens één vervulling, en één artefact vervult hoogstens één vereiste. | twee unieke indexen (§6.2) |
+| **I6** | Eén artefact vervult hoogstens één vereiste. Een vereiste mag méér vervullingen hebben; vervuld = `count(gebonden feiten) ≥ min_aantal`. | vorm van het schema: één sleutelkolom per bronrij (§6.2) |
 | **I7** | Een gepubliceerde templateversie is onveranderlijk; elke inhoudelijke wijziging maakt een nieuwe versie. | publicatiestatus + weigerende trigger (§13.1) |
 
 > **I5 uitgebreid (v0.8).** De review heeft gelijk dat server-side afleiden van `fonds_id` niet voorkomt dat een actie wordt gekoppeld aan een profiel uit een ánder fonds: RLS beschermt de *rij*, niet de *verwijzing*. Twee lagen: (a) elke insert/update die een vreemde sleutel zet, toetst dat het doelobject hetzelfde `fonds_id` heeft — als constraint waar het kan (composite FK op `(id, fonds_id)`), anders in de route; (b) een periodieke integriteitscontrole die kruisverwijzingen tussen fondsen opspoort, in dezelfde vorm als `CONTROLE-t14b-productiedrift.sql`. Zonder (b) merk je een lek pas als iemand ernaar kijkt.
@@ -269,7 +287,7 @@ Besluit [`0183`](decisions/0183-expliciete-bewijs-vereiste-binding.md) heeft de 
 
 | Type | Stand | Huidige regel |
 |---|---|---|
-| `document` · `external_submission` · `consultation` | ✅ gebonden | gelijkheid op `requirement_sleutel`, server-side afgeleid, uniek per `(stap_id, sleutel)` |
+| `document` · `external_submission` · `consultation` | ✅ gebonden | gelijkheid op `requirement_sleutel`, server-side afgeleid, **uniek** per `(stap_id, sleutel)` — die uniciteit gaat er in P2 af, zie §6.2 |
 | `approval` | ❌ | besluitstatus ∈ {besloten, voorwaardelijk_besloten, in_uitvoering, in_evaluatie, afgesloten} — en `bron = null`: er wordt **geen enkele bron** vastgelegd. Bij het invaarproces vinkt één statuswissel vijf vereisten af |
 | `dissent_review` | ❌ | `count === 0` — vervulling **door afwezigheid** |
 | `risk` · `evaluation` | ❌ | `ctx.risks.length > 0` · `ctx.evaluations.length > 0` |
@@ -287,7 +305,7 @@ v0.8 stelde één centrale tabel `procedure_requirement_vervulling` voor, met al
 - `fn_audit_procedure_bewijs_mutation` voor het atomaire auditspoor;
 - de gedeelde TS-definitie in `core/lib/requirement-sleutel.ts`, die TS en plpgsql laat spiegelen.
 
-**Besluit: doortrekken, niet vervangen.** Per resterend type krijgt de brontabel dezelfde `requirement_sleutel`-kolom, dezelfde unieke index en dezelfde validatietrigger, aangehaakt op de bestaande resolver.
+**Besluit: doortrekken, niet vervangen.** Per resterend type krijgt de brontabel dezelfde `requirement_sleutel`-kolom, dezelfde (niet-unieke) opzoekindex en dezelfde validatietrigger, aangehaakt op de bestaande resolver.
 
 **Voor de typen zonder brontabel komt er één nieuwe brontabel**, geen uitzonderingsmechanisme:
 
@@ -312,16 +330,29 @@ create table public.procedure_vaststelling (
 
 **De `min_aantal`-correctie.** v0.8 schreef "per vereiste hoogstens één vervulling". Dat is fout — `min_aantal` bestaat en wordt gebruikt. Juist is:
 
-| | Regel |
-|---|---|
-| Meerdere koppelingen per vereiste | **toegestaan**; vervuld zodra het aantal `min_aantal` haalt (standaard 1) |
-| Eén artefact aan twee vereisten | **verboden** — de unieke index per brontabel dwingt dat af |
+| | Regel | Waar afgedwongen |
+|---|---|---|
+| Meerdere koppelingen per vereiste | **toegestaan**; vervuld zodra het aantal `min_aantal` haalt (standaard 1) | telling in de resolver, géén index |
+| Eén artefact aan twee vereisten | **verboden** | de **vorm** van het schema: één bronrij draagt één `requirement_sleutel` |
+| Hetzelfde artefact twee keer meetellen | **onmogelijk** | idem — een rij telt één keer |
 
 Dus niet één-op-één tussen vereiste en stuk, maar één-op-één tussen **stuk en vereiste**.
 
+**Waarom hier geen unieke index hoort** *(v0.12)*. In de centrale-tabelvariant van v0.8 waren er twee indexen nodig: één op `(procedure_id, requirement_sleutel)` en één op `(procedure_id, brontype, bron_id)`. In het bronkolom-patroon vervalt de tweede — een bronrij *is* het artefact en heeft één sleutelkolom, dus de tweede regel is structureel gegarandeerd. En de eerste **mag niet**: die zou precies `min_aantal > 1` breken. De index per brontabel is daarom een gewone, niet-unieke index op `(procedure_id, requirement_sleutel)`, puur voor opzoeken.
+
+**Scope van de telling is de procedure, niet de stap.** De sleutel draagt `stap_volgorde` al in zich, en niet elke bron heeft een gevulde `stap_id` — `procedure_besluiten.stap_id` is nullable (zie hierboven). Tellen op `(procedure_id, requirement_sleutel)` werkt daarom voor álle brontabellen gelijk; dat is de voorwaarde voor één generieke vervuldheidsfunctie en één generieke sanity-test.
+
+**Gevolg voor `procedure_bewijs` — een bestaande afwijking, geen nieuwe.** De unieke partiële index `(stap_id, requirement_sleutel)` uit #160 dwingt vandaag *wél* één-bewijs-per-vereiste af. Concreet: een vereiste "afschriften van tien deelnemersgroepen" (`min_aantal = 10`) kan met het huidige schema nooit groen worden — het tweede bewijs wordt geweigerd. Dat is geen bedoeld ontwerp maar een onbedoeld gevolg van een index die is gebouwd om dubbele *bindingen* te voorkomen, terwijl de kolomvorm dat al doet. **In P2 vervangen** door de niet-unieke variant, in dezelfde migratie als de overige brontabellen, zodat alle twaalf typen zich identiek gedragen. Vast te leggen in besluitrecord **0189** bij P2, met de expliciete constatering dat er geen `min_aantal > 1` in de huidige seed staat en de wijziging dus geen bestaand gedrag raakt — te verifiëren vóór de migratie.
+
+**Oververvulling is normaal.** Twaalf afschriften waar er tien gevraagd worden is geen fout en wordt niet geblokkeerd; de UI toont "10 van 10 vereist, 12 aangeleverd". Een bovengrens hoort niet in dit model thuis.
+
 **Sanity-test.** Eén generieke test die per requirement-type afdwingt dat vervulling positief en gebonden is. Die kan nu pas slagen, en vangt elk toekomstig type automatisch af.
 
-**Zichtbaar gevolg en de grootste risicopost.** Dossiers die vandaag groen tonen op de acht ongebonden typen gaan openstaand tonen. Niet technisch maar bestuurlijk het zwaarst: een bestuurder die zijn dossier van groen naar oranje ziet gaan zonder uitleg, wantrouwt het portaal en niet de oude regel. De backfillregel van #160 (R1/R2: alleen wederzijds eenduidige kandidaten binden, ambigu blijft **zichtbaar** ongebonden) wordt doorgetrokken, met een terugvalrapport per fonds vóór oplevering.
+**Zichtbaar gevolg — en waarom dat nu goedkoop is.** Dossiers die vandaag groen tonen op de acht ongebonden typen gaan openstaand tonen. Bij aangesloten fondsen zou dat bestuurlijk het zwaarste punt van de EPIC zijn: een bestuurder die zijn dossier van groen naar oranje ziet gaan zonder uitleg, wantrouwt het portaal en niet de oude regel.
+
+**Maar er zijn nog geen fondsen aangesloten** (v0.11). Er is dus geen dossier om iemand mee te verrassen, en geen terugvalrapport dat ergens over gaat. De backfillregel van #160 (R1/R2: alleen wederzijds eenduidige kandidaten binden, ambigu blijft **zichtbaar** ongebonden) wordt doorgetrokken omdat hij juist is, niet omdat er data beschermd moet worden — met seed- en previewdata mag je opnieuw zaaien.
+
+Dat maakt dit het goedkoopste moment om de regel in één keer voor alle elf typen door te voeren, zonder fasering. Verificatie loopt via de generieke sanity-test op de previewseed, niet via een rapport. Het bestuurlijke gesprek verschuift naar de onboarding van fonds 1 (OB-E14).
 
 ---
 
@@ -560,7 +591,7 @@ Uitgezet als GitHub-issues onder `EPIC P — Proceduremodule generieke engine`, 
 |---|---|---|---|
 | **P1a** | UI-herinrichting: overzicht (één lijst, ingeklapte rail, chips, zoeken, kaart) en stapdetail (tabs, voetbalk). Raakt **geen API** | alleen UI | — |
 | **P1b** | Fundament: `template_versie` op vereisten, `idx_req_uniek` uitbreiden, publicatiestatus + weigerende trigger (I7), dossiers pinnen op versie i.p.v. code, vijfde trigger-kolom `ai_risicoklasse` | data + audit | — |
-| **P2** | Vervulling: patroon doortrekken naar de acht resterende typen + `procedure_vaststelling`; generieke sanity-test; backfill R1/R2 en terugvalrapport | data | P1b |
+| **P2** | Vervulling: patroon doortrekken naar de acht resterende typen + `procedure_vaststelling`; unieke bewijsindex vervangen door niet-unieke (§6.2); telling procedure-scoped; generieke sanity-test; backfill R1/R2 | data + UI | P1b |
 | **P3** | `zwaarte`, afronden met afwijking, **readiness ontmantelen** (uitvoering van `0187`: `fn_decision_readiness_check`, `ReadinessLadder.tsx`, vier migraties, twee consumenten buiten de module) | data + UI | P2 |
 | **P4** | Statussen sluitend: `niet_begonnen` + actief-trigger, beëindigen/heropenen, fasestatus `vervallen`, negende dossierstatus, status-feitenmatrix (§4.6), invarianten I1–I7 geborgd | data + tenant/security | P3 |
 | **P5** | Acties, werkbak, aantekeningen (§9.3), bestuurlijke signalen (§12) | data + UI | deels P3 |
@@ -595,7 +626,7 @@ Alle negen zijn beslecht in de sessie van 21 t/m 24-08-2026.
 **Tradeoffs**
 
 - **Zacht waar het oordeel telt, hard waar het feit telt.** De prijs van zacht is dat het auditspoor het werk doet; de prijs van hard is dat een bestuur soms wordt geweigerd. §4.5 en §4.6 leggen de grens vast zodat die afweging niet per scherm opnieuw wordt gemaakt.
-- **Zichtbare verslechtering bij oplevering, breder dan bij 0183.** Na P2 tonen dossiers hun werkelijke openstaande bewijslast over acht requirement-typen tegelijk. Bedoeld, maar niet zonder voorbereiding: zie de risicopost aan het eind van §6.2.
+- **Zichtbare verslechtering bij oplevering, breder dan bij 0183.** Na P2 tonen dossiers hun werkelijke openstaande bewijslast over acht requirement-typen tegelijk. Bedoeld — en nu nog kosteloos, omdat er geen fondsen zijn aangesloten (§6.2). Het gesprek daarover hoort bij de onboarding van fonds 1, niet bij deze EPIC.
 - **P1b kost tijd vóórdat iemand functionaliteit ziet.** Onveranderlijkheid levert geen zichtbare feature op en staat toch vooraan. De reden is dat elk later ticket de bewijslast als vaste grootheid veronderstelt; bouw je die volgorde om, dan migreer je twee keer. P1a vangt dat op: die levert wél meteen zichtbaar resultaat en raakt niets.
 - **Twee gedragingen zolang `open` bestaat** (§3).
 
