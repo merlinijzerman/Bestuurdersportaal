@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
+import {
+  leesVereisteVerwijzing,
+  resolveRequirementBinding,
+} from "@/core/lib/bewijs-binding";
 
 export const POST = withFondsRoute({ capability: "procedures.manage" }, async (ctx, req: NextRequest, params) => {
   try {
@@ -11,7 +15,10 @@ export const POST = withFondsRoute({ capability: "procedures.manage" }, async (c
       titel?: string;
       beschrijving?: string | null;
       document_id?: string | null;
-      documenttype?: string | null; // 1D-4: tag voor readiness-match
+      documenttype?: string | null; // 1D-4: tag, sinds de binding alleen suggestie
+      // De client stuurt de vereiste als triple; de sleutel wordt server-side
+      // afgeleid en tegen de procedure geverifieerd.
+      vereiste?: unknown;
     };
     const stapId = body.stap_id;
     const titel = body.titel?.trim();
@@ -25,7 +32,7 @@ export const POST = withFondsRoute({ capability: "procedures.manage" }, async (c
     // Verifieer dat de stap bij deze procedure hoort
     const { data: stap } = await supabase
       .from("procedure_stappen")
-      .select("naam, procedure_id")
+      .select("naam, procedure_id, volgorde")
       .eq("id", stapId)
       .single();
     if (!stap || stap.procedure_id !== id) {
@@ -33,6 +40,30 @@ export const POST = withFondsRoute({ capability: "procedures.manage" }, async (c
         { error: "Stap hoort niet bij deze procedure" },
         { status: 400 }
       );
+    }
+
+    let bindingSleutel: string | null = null;
+    if (body.vereiste !== undefined && body.vereiste !== null) {
+      const verwijzing = leesVereisteVerwijzing(body.vereiste);
+      if (verwijzing === "ongeldig" || verwijzing === null) {
+        return NextResponse.json(
+          { error: "Ongeldige vereiste-verwijzing" },
+          { status: 400 }
+        );
+      }
+      const binding = await resolveRequirementBinding(
+        supabase,
+        id,
+        verwijzing,
+        stap.volgorde
+      );
+      if (!binding.ok) {
+        return NextResponse.json(
+          { error: binding.fout },
+          { status: binding.serverfout ? 500 : 400 }
+        );
+      }
+      bindingSleutel = binding.sleutel;
     }
 
     const { data: bewijs, error } = await supabase
@@ -43,12 +74,25 @@ export const POST = withFondsRoute({ capability: "procedures.manage" }, async (c
         titel,
         beschrijving: body.beschrijving || null,
         documenttype: body.documenttype?.trim() || null,
+        requirement_sleutel: bindingSleutel,
         toegevoegd_door: ctx.gebruikerId,
         toegevoegd_door_naam: ctx.naam || null,
       })
       .select()
       .single();
 
+    if (error?.code === "23505") {
+      return NextResponse.json(
+        { error: "Aan dit vereiste is al een bewijsstuk gekoppeld" },
+        { status: 409 }
+      );
+    }
+    if (error?.code === "23514") {
+      return NextResponse.json(
+        { error: "Ongeldige of niet-eenduidige vereiste-binding" },
+        { status: 400 }
+      );
+    }
     if (error || !bewijs) {
       console.error("Bewijs toevoegen fout:", error);
       return NextResponse.json(
@@ -56,14 +100,6 @@ export const POST = withFondsRoute({ capability: "procedures.manage" }, async (c
         { status: 500 }
       );
     }
-
-    await supabase.from("procedure_log").insert({
-      procedure_id: id,
-      event_type: "bewijs_toegevoegd",
-      actor_id: ctx.gebruikerId,
-      actor_naam: ctx.naam || null,
-      payload: { stap: stap.naam, titel },
-    });
 
     return NextResponse.json({ bewijs });
   } catch (e) {

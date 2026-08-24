@@ -212,6 +212,11 @@ function renderBewijs(items: BewijsItem[], steps: ProcedureStep[]): string {
           (b) => `
           <tr>
             <td><pre>${esc(b.titel)}</pre></td>
+            <td>${
+              b.requirement_sleutel
+                ? esc(b.requirement_sleutel.split("|").slice(2).join("|"))
+                : "<em>niet gekoppeld</em>"
+            }</td>
             <td>${b.documenttype ? esc(b.documenttype) : "—"}</td>
             <td><pre>${esc(b.beschrijving ?? "—")}</pre></td>
             <td>${esc(b.toegevoegd_door_naam ?? "—")}</td>
@@ -227,6 +232,7 @@ function renderBewijs(items: BewijsItem[], steps: ProcedureStep[]): string {
           <thead>
             <tr>
               <th>Titel</th>
+              <th>Vervult vereiste</th>
               <th>Documenttype</th>
               <th>Beschrijving</th>
               <th>Toegevoegd door</th>

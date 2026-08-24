@@ -497,8 +497,14 @@ export interface BewijsItem {
   document_id: string | null;
   titel: string;
   beschrijving: string | null;
-  /** 1D-4: tag die overeenkomt met procedure_requirements.documenttype. */
+  /** 1D-4: tag die overeenkomt met procedure_requirements.documenttype.
+      Sinds de bewijsbinding alleen nog een suggestie bij het opvoeren; hij
+      vervult zelf geen vereiste meer. */
   documenttype: string | null;
+  /** Bewijsbinding: de vereiste die dit stuk vervult, als sleutel
+      `stap_volgorde|requirement_type|coalesce(documenttype, label)`.
+      Null = ongebonden; zo'n stuk telt niet mee voor readiness. */
+  requirement_sleutel: string | null;
   toegevoegd_op: string;
   toegevoegd_door_naam: string | null;
 }
