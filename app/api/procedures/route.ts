@@ -3,7 +3,7 @@ import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { vindTemplate } from "@/core/lib/proces-templates";
 import { beginStatussen } from "@/core/lib/procedure-activatie";
 
-export const POST = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest) => {
+export const POST = withFondsRoute({ capability: "procedures.manage" }, async (ctx, req: NextRequest) => {
   try {
     const supabase = ctx.supabase;
 

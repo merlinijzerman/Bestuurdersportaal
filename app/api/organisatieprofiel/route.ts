@@ -38,7 +38,7 @@ function tekstOfNull(waarde: unknown): string | null {
   return t.length > 0 ? t : null;
 }
 
-export const GET = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx) => {
+export const GET = withFondsRoute({ capability: "organisation.profile.view" }, async (ctx) => {
   try {
     const supabase = ctx.supabase;
 
@@ -55,7 +55,7 @@ export const GET = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx) => {
   }
 });
 
-export const PUT = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest) => {
+export const PUT = withFondsRoute({ capability: "organisation.profile.manage" }, async (ctx, req: NextRequest) => {
   try {
     const supabase = ctx.supabase;
 

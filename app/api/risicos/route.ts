@@ -18,7 +18,7 @@ const TOEGESTANE_CATEGORIEEN: CategorieSlug[] = [
 const TOEGESTANE_NIVEAUS: NiveauSlug[] = ["laag", "middel", "hoog"];
 const TOEGESTANE_TYPES: TypeRisicoSlug[] = ["structureel", "tijdelijk"];
 
-export const POST = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest) => {
+export const POST = withFondsRoute({ capability: "risicos.manage" }, async (ctx, req: NextRequest) => {
   try {
     const supabase = ctx.supabase;
 

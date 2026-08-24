@@ -29,7 +29,7 @@ export const dynamic = "force-dynamic";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export const DELETE = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest, params) => {
+export const DELETE = withFondsRoute({ capability: "gesprekken.manage" }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     if (!UUID.test(id)) {

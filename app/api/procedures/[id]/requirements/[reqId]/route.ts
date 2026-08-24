@@ -8,7 +8,7 @@ import { withFondsRoute } from "@/core/lib/route-wrapper";
 // voorzitter/beheerder. Een BLOKKERENDE vereiste deactiveren kan alleen met
 // verplichte motivering (REQ-006) — nooit stil. Elke mutatie logt één
 // governance_event.
-export const PATCH = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ capability: "procedures.manage" }, async (ctx, req: NextRequest, params) => {
   try {
     const { id, reqId } = params as { id: string; reqId: string };
     const supabase = ctx.supabase;

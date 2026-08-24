@@ -21,7 +21,7 @@ const BUCKET = "aqlab-audit";
 // 500 {"error":"Serverfout"}. Dat is een uniformering, geen verlies — maar het
 // is een verschil, en het staat daarom hier en als BESLUIT in #101 in plaats van
 // dat het stilzwijgend meelift.
-export const GET = withFondsRoute({ capability: "TE_BEPALEN", hostGuard: true, label: "aqlab.assurance.audit.GET" }, async (ctx, req, params) => {
+export const GET = withFondsRoute({ capability: "assurance.view", hostGuard: true, label: "aqlab.assurance.audit.GET" }, async (ctx, req, params) => {
   // H-04: een top-level navigatie vanaf een vreemde site stuurt onder een
   // Lax-cookie de sessie mee. Deze route schrijft een auditrecord, dus zo'n
   // aanroep zou een gebeurtenis in het dossier van het slachtoffer zetten.

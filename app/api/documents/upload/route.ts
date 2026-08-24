@@ -452,7 +452,7 @@ async function valideerUploadMetadata(
 //     (`documents.upload.init` / `.complete`) die de anomaliedetectie voeden tot
 //     één samenvouwen. Als WAARDE vastgelegd en niet als ontbrekend veld, zodat
 //     de uitzondering greppable is en niet als omissie leest.
-export const POST = withFondsRoute({ capability: "TE_BEPALEN", hostGuard: "route-eigen" }, async (ctx, req: NextRequest) => {
+export const POST = withFondsRoute({ capability: "documents.metadata.update", hostGuard: "route-eigen" }, async (ctx, req: NextRequest) => {
   let body: Record<string, unknown>;
   try {
     body = (await req.json()) as Record<string, unknown>;
@@ -905,7 +905,7 @@ async function completeUpload(
 
 
 // Haal lijst van documenten op
-export const GET = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest) => {
+export const GET = withFondsRoute({ capability: "documents.view" }, async (ctx, req: NextRequest) => {
   try {
     const supabase = ctx.supabase;
 

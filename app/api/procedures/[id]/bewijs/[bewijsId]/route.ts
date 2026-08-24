@@ -36,7 +36,7 @@ async function haalContext(
   return { bewijs, stap } as const;
 }
 
-export const PATCH = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ capability: "procedures.manage" }, async (ctx, req: NextRequest, params) => {
   try {
     const { id, bewijsId } = params as { id: string; bewijsId: string };
     const supabase = ctx.supabase;
@@ -100,7 +100,7 @@ export const PATCH = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, re
   }
 });
 
-export const DELETE = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, _req: NextRequest, params) => {
+export const DELETE = withFondsRoute({ capability: "procedures.manage" }, async (ctx, _req: NextRequest, params) => {
   try {
     const { id, bewijsId } = params as { id: string; bewijsId: string };
     const supabase = ctx.supabase;
