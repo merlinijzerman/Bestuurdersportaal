@@ -13,21 +13,35 @@ import assert from "node:assert/strict";
 import { z } from "zod";
 import {
   beoordeelSchema,
+  leesBodyVanKloon,
   schemaEnforceVoorOmgeving,
 } from "./schema-enforce";
 
+/** Nep-request: `clone().text()` levert de meegegeven ruwe body. `null` = geen body. */
+function nepReq(rauw: string | null) {
+  return {
+    clone: () => ({
+      text: async () => {
+        if (rauw === null) throw new Error("geen body");
+        return rauw;
+      },
+    }),
+  };
+}
+
 let n = 0;
-function test(naam: string, fn: () => void) {
-  fn();
+async function test(naam: string, fn: () => void | Promise<void>) {
+  await fn();
   n++;
   console.log(`  ✓ ${naam}`);
 }
 
+async function main() {
 console.log("schema-enforce sanity-tests:");
 
 // ── De env-schakelaar ────────────────────────────────────────────────────────
 
-test("alleen ENFORCE_SCHEMA=on zet de poort aan (kale opt-in)", () => {
+await test("alleen ENFORCE_SCHEMA=on zet de poort aan (kale opt-in)", () => {
   assert.equal(schemaEnforceVoorOmgeving({ enforceSchema: "on" }), true);
   assert.equal(schemaEnforceVoorOmgeving({ enforceSchema: " ON " }), true);
   assert.equal(schemaEnforceVoorOmgeving({ enforceSchema: "off" }), false);
@@ -38,24 +52,24 @@ test("alleen ENFORCE_SCHEMA=on zet de poort aan (kale opt-in)", () => {
 
 // ── De beoordeling ───────────────────────────────────────────────────────────
 
-test('"geen-body" is altijd toegestaan', () => {
+await test('"geen-body" is altijd toegestaan', () => {
   const o = beoordeelSchema({ schema: "geen-body", body: undefined });
   assert.equal(o.toegestaan, true);
 });
 
-test("een geldige body wordt toegestaan en levert data", () => {
+await test("een geldige body wordt toegestaan en levert data", () => {
   const schema = z.object({ titel: z.string().optional() }).passthrough();
   const o = beoordeelSchema({ schema, body: { titel: "x", extra: 1 } });
   assert.equal(o.toegestaan, true);
   assert.deepEqual((o as { data: unknown }).data, { titel: "x", extra: 1 });
 });
 
-test("een lege body wordt toegestaan bij een all-optioneel schema", () => {
+await test("een lege body wordt toegestaan bij een all-optioneel schema", () => {
   const schema = z.object({ titel: z.string().optional() }).passthrough();
   assert.equal(beoordeelSchema({ schema, body: {} }).toegestaan, true);
 });
 
-test("een mismatch levert veld + verwacht + gekregen (de observe-velden)", () => {
+await test("een mismatch levert veld + verwacht + gekregen (de observe-velden)", () => {
   const schema = z.object({ kans: z.number().optional() }).passthrough();
   const o = beoordeelSchema({ schema, body: { kans: "hoog" } });
   assert.equal(o.toegestaan, false);
@@ -66,4 +80,28 @@ test("een mismatch levert veld + verwacht + gekregen (de observe-velden)", () =>
   assert.equal(fouten[0].gekregen, "string");
 });
 
+// ── leesBodyVanKloon: leeg = {}, geldig = geparseerd, kapot = kapot ──────────
+
+await test("leesBodyVanKloon: AFWEZIGE body → {} (kapot=false) — geen 400 op afwezig", async () => {
+  assert.deepEqual(await leesBodyVanKloon(nepReq(null)), { body: {}, kapot: false });
+  assert.deepEqual(await leesBodyVanKloon(nepReq("")), { body: {}, kapot: false });
+  assert.deepEqual(await leesBodyVanKloon(nepReq("   ")), { body: {}, kapot: false });
+});
+
+await test("leesBodyVanKloon: geldige JSON → geparseerd object", async () => {
+  assert.deepEqual(await leesBodyVanKloon(nepReq('{"a":1}')), { body: { a: 1 }, kapot: false });
+  assert.deepEqual(await leesBodyVanKloon(nepReq("{}")), { body: {}, kapot: false });
+});
+
+await test("leesBodyVanKloon: bytes aanwezig maar ONPARSEBAAR → kapot=true (de slikker-sanctie)", async () => {
+  const uit = await leesBodyVanKloon(nepReq("{ dit is geen json"));
+  assert.equal(uit.kapot, true);
+});
+
 console.log(`\nAlle ${n} schema-enforce sanity-tests groen.`);
+}
+
+main().catch((e) => {
+  console.error("schema-enforce sanity ROOD:", e);
+  process.exit(1);
+});

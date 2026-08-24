@@ -44,6 +44,7 @@ import {
 } from "@/core/lib/capability-enforce";
 import {
   beoordeelSchema,
+  leesBodyVanKloon,
   schemaEnforceAan,
   type SchemaDeclaratie,
 } from "@/core/lib/schema-enforce";
@@ -277,20 +278,30 @@ export function maakWithFondsRoute(deps: WrapperDeps) {
       // handler exact wat hij vandaag ziet → byte-identiek. Onder de vlag AAN wordt
       // een mismatch een 400 en draait de handler niet.
       if (spec.schema !== "geen-body") {
-        let body: unknown;
-        let parsebaar = true;
-        try {
-          body = await request.clone().json();
-        } catch {
-          parsebaar = false; // kapotte of afwezige JSON
-        }
+        // Een AFWEZIGE/lege body wordt `{}` — routes die de body optioneel lezen
+        // accepteren dat vandaag (2xx), dus de poort mag er niet op 400'en. Alleen
+        // ECHT kapotte JSON (`kapot`) is de gesanctioneerde slikker-wijziging.
+        const { body, kapot } = await leesBodyVanKloon(request);
         const handhaven = deps.schemaEnforceAan();
-        if (parsebaar) {
+        if (kapot) {
+          // Vlag UIT: NIET afdwingen — de handler doet vandaag wat hij doet (500, of
+          // `{}` bij een slikker). Vlag AAN → 400 (TICKET §7).
+          console.warn("[SCHEMA-OBSERVE]", {
+            route: spec.label ?? padVan(request),
+            handler: request.method,
+            veld: "(body)",
+            verwacht: "json",
+            gekregen: "onparsebaar",
+            code: "invalid_json",
+            handhaven,
+            requestId,
+          });
+          if (handhaven) return NextResponse.json({ error: "Ongeldige invoer." }, { status: 400 });
+        } else {
           const oordeel = beoordeelSchema({ schema: spec.schema, body });
           if (!oordeel.toegestaan) {
             // Observe-log met de vijf velden: route + handler(=methode) + veld +
-            // verwachte vorm + gekregen vorm. Zonder deze vijf is de vlag-uit-fase
-            // waardeloos. GEEN waarden, alleen vormen — het pad kan payload dragen.
+            // verwachte vorm + gekregen vorm. GEEN waarden, alleen vormen.
             for (const f of oordeel.fouten) {
               console.warn("[SCHEMA-OBSERVE]", {
                 route: spec.label ?? padVan(request),
@@ -307,21 +318,6 @@ export function maakWithFondsRoute(deps: WrapperDeps) {
               return NextResponse.json({ error: "Ongeldige invoer." }, { status: 400 });
             }
           }
-        } else if (handhaven) {
-          // Vlag UIT: NIET afdwingen — de handler doet vandaag wat hij doet (een
-          // 500, of `{}` bij een slikker). Alleen onder de vlag AAN wordt kapotte
-          // JSON een 400; dat is de gesanctioneerde slikker-wijziging (TICKET §7).
-          console.warn("[SCHEMA-OBSERVE]", {
-            route: spec.label ?? padVan(request),
-            handler: request.method,
-            veld: "(body)",
-            verwacht: "json",
-            gekregen: "onparsebaar",
-            code: "invalid_json",
-            handhaven,
-            requestId,
-          });
-          return NextResponse.json({ error: "Ongeldige invoer." }, { status: 400 });
         }
       }
 
