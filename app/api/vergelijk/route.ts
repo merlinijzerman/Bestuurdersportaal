@@ -26,6 +26,7 @@ import {
 import { vergelijkmodusAan } from "@/core/lib/vergelijk-config";
 import { voerVergelijkingUit } from "@/core/lib/vergelijk-kern";
 import { productieDeps, VERGELIJK_VERSIES } from "@/core/lib/vergelijk-productie";
+import { z } from "zod";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120; // meerdere dimensies × retrieval + Opus; ruim genomen.
@@ -37,7 +38,7 @@ interface VergelijkBody {
   dimensies?: unknown;
 }
 
-export const POST = withFondsRoute({ capability: "vergelijk.use", hostGuard: true, label: "vergelijk.POST" }, async (ctx, req: NextRequest) => {
+export const POST = withFondsRoute({ capability: "vergelijk.use", hostGuard: true, label: "vergelijk.POST", schema: z.object({ "bron_document_id": z.unknown().optional(), "dimensies": z.unknown().optional(), "doel_document_id": z.unknown().optional(), "mode": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
   try {
     // 0. Feature-flag: uit = feature niet beschikbaar (chat-ingang doet ook niets).
     if (!vergelijkmodusAan()) {

@@ -20,6 +20,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
+import { z } from "zod";
 
 const RISK_CATEGORIE = [
   "financieel",
@@ -49,7 +50,7 @@ function isGeldigeKi(n: unknown): n is number {
   return typeof n === "number" && Number.isInteger(n) && n >= 1 && n <= 5;
 }
 
-export const POST = withFondsRoute({ capability: "decisions.manage" }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ capability: "decisions.manage", schema: z.object({ "beschrijving": z.unknown().optional(), "categorie": z.unknown().optional(), "eigenaar_naam": z.unknown().optional(), "impact": z.unknown().optional(), "kans": z.unknown().optional(), "mitigatie": z.unknown().optional(), "residual_risk": z.unknown().optional(), "risicomatrix_id": z.unknown().optional(), "status": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: decisionId } = params as { id: string };
     const supabase = ctx.supabase;

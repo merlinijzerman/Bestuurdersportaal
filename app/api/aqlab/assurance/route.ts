@@ -12,7 +12,7 @@ import { NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { haalAssuranceVoorFonds } from "@/core/lib/aqlab/assurance";
 
-export const GET = withFondsRoute({ capability: "assurance.view", hostGuard: true, label: "aqlab.assurance.GET" }, async (ctx) => {
+export const GET = withFondsRoute({ capability: "assurance.view", hostGuard: true, label: "aqlab.assurance.GET", schema: "geen-body" }, async (ctx) => {
   const supabase = ctx.supabase;
   const fondsId = ctx.fondsId;
   if (!fondsId) return NextResponse.json({ error: "Geen fonds-profiel" }, { status: 403 });

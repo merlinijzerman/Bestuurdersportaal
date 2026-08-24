@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { ensureDecisionForProcedure } from "@/core/lib/decision";
+import { z } from "zod";
 
 // POST /api/procedures/[id]/requirements/uitsluiten
 //
@@ -11,7 +12,7 @@ import { ensureDecisionForProcedure } from "@/core/lib/decision";
 // toelichting; gegate op voorzitter/beheerder; fonds_id + decision_id server-side
 // afgeleid; append-only gelogd. Upsert op de unieke sleutel = idempotent en
 // heractiveert een eerder teruggedraaide uitsluiting.
-export const POST = withFondsRoute({ capability: "procedures.manage" }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ capability: "procedures.manage", schema: z.object({ "documenttype": z.unknown().optional(), "label": z.unknown().optional(), "reden": z.unknown().optional(), "requirement_type": z.unknown().optional(), "stap_volgorde": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

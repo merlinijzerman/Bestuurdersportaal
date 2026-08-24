@@ -22,6 +22,7 @@ import { maakChunksUitSegmenten } from "@/core/lib/rag";
 import { embedTeksten, naarVectorLiteral, EMBED_MODEL } from "@/core/lib/embeddings";
 import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
 import { rateLimited, badRequest } from "@/core/lib/api-errors";
+import { z } from "zod";
 import {
   preflight,
   preflightRespons,
@@ -32,7 +33,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export const POST = withFondsRoute({ capability: "notulen.segment.confirm" }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ capability: "notulen.segment.confirm", schema: z.object({ "reden": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

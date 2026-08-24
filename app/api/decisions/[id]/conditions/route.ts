@@ -18,6 +18,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
+import { z } from "zod";
 
 const STATUS = [
   "open",
@@ -38,7 +39,7 @@ interface CreateBody {
   status?: (typeof STATUS)[number];
 }
 
-export const POST = withFondsRoute({ capability: "decisions.manage" }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ capability: "decisions.manage", schema: z.object({ "deadline": z.unknown().optional(), "drempelwaarde": z.unknown().optional(), "eigenaar_naam": z.unknown().optional(), "heroverwegingstrigger": z.unknown().optional(), "kpi": z.unknown().optional(), "monitorfrequentie": z.unknown().optional(), "status": z.unknown().optional(), "voorwaarde": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: decisionId } = params as { id: string };
     const supabase = ctx.supabase;

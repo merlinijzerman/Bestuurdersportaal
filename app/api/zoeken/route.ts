@@ -61,7 +61,7 @@ interface ZoekResultaat {
   treffers: Treffer[];
 }
 
-export const GET = withFondsRoute({ capability: "zoeken.use", hostGuard: true, label: "zoeken.GET" }, async (ctx, req: NextRequest) => {
+export const GET = withFondsRoute({ capability: "zoeken.use", hostGuard: true, label: "zoeken.GET", schema: "geen-body" }, async (ctx, req: NextRequest) => {
   try {
     const supabase = ctx.supabase;
 

@@ -4,6 +4,7 @@ import { requireCapability } from "@/core/lib/capabilities";
 import { weigerAlsModuleUit } from "@/core/lib/module-guard";
 import { errorResponse, badRequest } from "@/core/lib/api-errors";
 import { haalStuurinfoInvoer } from "@/core/lib/stuurinfo-beheer-bron";
+import { z } from "zod";
 import {
   schrijfPeriode,
   slaBalansReservesOp,
@@ -81,7 +82,7 @@ async function gate(ctx: FondsContext): Promise<Gate> {
   return { ok: true, fondsId };
 }
 
-export const GET = withFondsRoute({ capability: "stuurinformatie.manage" }, async (ctx, req: NextRequest) => {
+export const GET = withFondsRoute({ capability: "stuurinformatie.manage", schema: "geen-body" }, async (ctx, req: NextRequest) => {
   try {
     const g = await gate(ctx);
     if (!g.ok) return g.res;
@@ -96,7 +97,7 @@ export const GET = withFondsRoute({ capability: "stuurinformatie.manage" }, asyn
   }
 });
 
-export const POST = withFondsRoute({ capability: "stuurinformatie.manage" }, async (ctx, req: NextRequest) => {
+export const POST = withFondsRoute({ capability: "stuurinformatie.manage", schema: z.object({ "type": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
   try {
     const g = await gate(ctx);
     if (!g.ok) return g.res;

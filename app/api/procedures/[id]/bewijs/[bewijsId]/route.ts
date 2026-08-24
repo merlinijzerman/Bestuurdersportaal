@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
+import { z } from "zod";
 import {
   leesVereisteVerwijzing,
   resolveRequirementBinding,
@@ -42,7 +43,7 @@ async function haalContext(
   return { bewijs, stap } as const;
 }
 
-export const PATCH = withFondsRoute({ capability: "procedures.manage" }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ capability: "procedures.manage", schema: z.object({ "document_id": z.unknown().optional(), "documenttype": z.unknown().optional(), "vereiste": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id, bewijsId } = params as { id: string; bewijsId: string };
     const supabase = ctx.supabase;
@@ -143,7 +144,7 @@ export const PATCH = withFondsRoute({ capability: "procedures.manage" }, async (
   }
 });
 
-export const DELETE = withFondsRoute({ capability: "procedures.manage" }, async (ctx, _req: NextRequest, params) => {
+export const DELETE = withFondsRoute({ capability: "procedures.manage", schema: "geen-body" }, async (ctx, _req: NextRequest, params) => {
   try {
     const { id, bewijsId } = params as { id: string; bewijsId: string };
     const supabase = ctx.supabase;

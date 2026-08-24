@@ -9,6 +9,7 @@ import {
 } from "@/core/lib/stemming";
 import { isBureauRol, BUREAU_WEIGERING } from "@/core/lib/bureau-gate";
 import { weigerAlsModuleUit } from "@/core/lib/module-guard";
+import { z } from "zod";
 
 const TOEGESTANE_MEERDERHEDEN: VereisteMeerderheid[] = [
   "gewone",
@@ -27,7 +28,7 @@ const TOEGESTANE_MEERDERHEDEN: VereisteMeerderheid[] = [
 //
 //  decision_id wordt afgeleid via agendapunt → procedure-stap → procedure.
 // ============================================================
-export const POST = withFondsRoute({ capability: "stemming.deelname" }, async (ctx, req: NextRequest) => {
+export const POST = withFondsRoute({ capability: "stemming.deelname", schema: z.object({ "agendapunt_id": z.unknown().optional(), "alternatieven": z.unknown().optional(), "vereist_quorum": z.unknown().optional(), "vereiste_meerderheid": z.unknown().optional(), "vraag": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
   try {
     const supabase = ctx.supabase;
 

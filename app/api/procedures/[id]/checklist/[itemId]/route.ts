@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { ensureDecisionForProcedure } from "@/core/lib/decision";
+import { z } from "zod";
 
-export const PATCH = withFondsRoute({ capability: "procedures.manage" }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ capability: "procedures.manage", schema: z.object({ "actief": z.unknown().optional(), "opmerking": z.unknown().optional(), "reden": z.unknown().optional(), "voldaan": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id, itemId } = params as { id: string; itemId: string };
     const supabase = ctx.supabase;

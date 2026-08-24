@@ -31,6 +31,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
+import { z } from "zod";
 import {
   mapDecisionToProcedureStatus,
   type DecisionStatus,
@@ -83,7 +84,7 @@ interface DecisionRowMin {
   risiconiveau: "laag" | "middel" | "hoog";
 }
 
-export const POST = withFondsRoute({ capability: "decisions.manage" }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ capability: "decisions.manage", schema: z.object({ "override_reden": z.unknown().optional(), "reden": z.unknown().optional(), "status": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: decisionId } = params as { id: string };
     const supabase = ctx.supabase;

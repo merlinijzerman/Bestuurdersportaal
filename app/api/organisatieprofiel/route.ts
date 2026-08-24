@@ -15,6 +15,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { requireCapability } from "@/core/lib/capabilities";
+import { z } from "zod";
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +39,7 @@ function tekstOfNull(waarde: unknown): string | null {
   return t.length > 0 ? t : null;
 }
 
-export const GET = withFondsRoute({ capability: "organisation.profile.view" }, async (ctx) => {
+export const GET = withFondsRoute({ capability: "organisation.profile.view", schema: "geen-body" }, async (ctx) => {
   try {
     const supabase = ctx.supabase;
 
@@ -55,7 +56,7 @@ export const GET = withFondsRoute({ capability: "organisation.profile.view" }, a
   }
 });
 
-export const PUT = withFondsRoute({ capability: "organisation.profile.manage" }, async (ctx, req: NextRequest) => {
+export const PUT = withFondsRoute({ capability: "organisation.profile.manage", schema: z.object({ "peildatum": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
   try {
     const supabase = ctx.supabase;
 

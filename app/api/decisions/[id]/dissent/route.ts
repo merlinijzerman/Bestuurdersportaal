@@ -28,6 +28,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { isBureauRol, BUREAU_WEIGERING } from "@/core/lib/bureau-gate";
+import { z } from "zod";
 
 const ZICHTBAARHEID = [
   "prive",
@@ -48,7 +49,7 @@ interface CreateBody {
   stemming_id?: string | null; // optionele koppeling naar een tegen-stem
 }
 
-export const POST = withFondsRoute({ capability: "decisions.manage" }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ capability: "decisions.manage", schema: z.object({ "argument": z.unknown().optional(), "bestuurder_naam": z.unknown().optional(), "formeel_vastgesteld": z.unknown().optional(), "gekoppeld_aanname_id": z.unknown().optional(), "gekoppeld_risico_id": z.unknown().optional(), "gekoppeld_voorwaarde_id": z.unknown().optional(), "standpunt": z.unknown().optional(), "stemming_id": z.unknown().optional(), "zichtbaarheid": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: decisionId } = params as { id: string };
     const supabase = ctx.supabase;

@@ -33,7 +33,7 @@ interface AfschriftRow {
   ingetrokken_reden: string | null;
 }
 
-export const GET = withFondsRoute({ capability: "procedures.view" }, async (ctx, _req: NextRequest, params) => {
+export const GET = withFondsRoute({ capability: "procedures.view", schema: "geen-body" }, async (ctx, _req: NextRequest, params) => {
   try {
     const { id: procedureId } = params as { id: string };
     const supabase = ctx.supabase;

@@ -15,6 +15,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
 import type { AIValidatieStatus } from "@/core/lib/decision-view";
+import { z } from "zod";
 
 const ROLLEN_VOOR_SPECIALISTISCH = new Set(["voorzitter", "beheerder"]);
 const TOEGESTANE_STATUSSEN: AIValidatieStatus[] = [
@@ -33,7 +34,7 @@ interface PatchBody {
   verworpen_reden?: string | null;
 }
 
-export const PATCH = withFondsRoute({ capability: "decisions.manage" }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ capability: "decisions.manage", schema: z.object({ "aangepaste_output": z.unknown().optional(), "gebruik_context": z.unknown().optional(), "gebruikt_in_dossier": z.unknown().optional(), "validatiestatus": z.unknown().optional(), "verworpen_reden": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id, aiid } = params as { id: string; aiid: string };
     const supabase = ctx.supabase;

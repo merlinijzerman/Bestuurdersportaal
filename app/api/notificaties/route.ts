@@ -13,7 +13,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
 
-export const GET = withFondsRoute({ capability: "notificaties.view.own" }, async (ctx, req: NextRequest) => {
+export const GET = withFondsRoute({ capability: "notificaties.view.own", schema: "geen-body" }, async (ctx, req: NextRequest) => {
   try {
     const supabase = ctx.supabase;
 

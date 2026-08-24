@@ -24,6 +24,7 @@ import {
 } from "@/core/lib/document-metadata-service";
 import { toegestaneVervolgstatussen } from "@/core/lib/document-status-transities";
 import { valideerContext } from "@/core/lib/document-metadata";
+import { z } from "zod";
 
 export const dynamic = "force-dynamic";
 
@@ -51,7 +52,7 @@ async function leesCapabilities(
   };
 }
 
-export const GET = withFondsRoute({ capability: "documents.view" }, async (ctx, _req: NextRequest, params) => {
+export const GET = withFondsRoute({ capability: "documents.view", schema: "geen-body" }, async (ctx, _req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;
@@ -86,7 +87,7 @@ export const GET = withFondsRoute({ capability: "documents.view" }, async (ctx, 
   }
 });
 
-export const PATCH = withFondsRoute({ capability: "documents.metadata.update" }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ capability: "documents.metadata.update", schema: z.object({ "preview": z.unknown().optional(), "reden": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

@@ -21,6 +21,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { notifyUser } from "@/core/lib/notifications";
 import { isBureauRol, BUREAU_WEIGERING } from "@/core/lib/bureau-gate";
+import { z } from "zod";
 
 const ZICHTBAARHEID = [
   "prive",
@@ -47,7 +48,7 @@ const INHOUDELIJKE_VELDEN: (keyof WijzigBody)[] = [
   "gekoppeld_voorwaarde_id",
 ];
 
-export const PATCH = withFondsRoute({ capability: "decisions.manage" }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ capability: "decisions.manage", schema: z.object({ "formeel_vastgesteld": z.unknown().optional(), "zichtbaarheid": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: decisionId, did } = params as { id: string; did: string };
     const supabase = ctx.supabase;
@@ -284,7 +285,7 @@ export const PATCH = withFondsRoute({ capability: "decisions.manage" }, async (c
   }
 });
 
-export const DELETE = withFondsRoute({ capability: "decisions.manage" }, async (ctx, req: NextRequest, params) => {
+export const DELETE = withFondsRoute({ capability: "decisions.manage", schema: "geen-body" }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: decisionId, did } = params as { id: string; did: string };
     const supabase = ctx.supabase;

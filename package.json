@@ -27,7 +27,7 @@
     "schema:inventaris": "node tests/karakterisering/schema-inventaris.mjs",
     "schema:corpus": "node tests/karakterisering/schema-corpus.mjs",
     "schema:concepten": "node tests/karakterisering/schema-genereer.mjs",
-    "test:schema-niet-strenger": "node tests/karakterisering/schema-niet-strenger.mjs",
+    "test:schema-niet-strenger": "node tests/karakterisering/schema-niet-strenger.mjs --uit-code",
     "prepare": "git config core.hooksPath scripts/hooks || true"
   },
   "dependencies": {

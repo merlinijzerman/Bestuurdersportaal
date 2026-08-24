@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { ensureDecisionForProcedure } from "@/core/lib/decision";
+import { z } from "zod";
 import {
   afhankelijkeAfgerondeStappen,
   type StapActivatieState,
@@ -14,7 +15,7 @@ import {
 // (nieuwe versie van het oordeel, geen overschrijving). Afhankelijke,
 // reeds afgeronde stappen worden NIET teruggezet maar gemarkeerd met
 // `herbevestiging_nodig = true` (zichtbaar, niet-blokkerend signaal).
-export const POST = withFondsRoute({ capability: "procedures.manage" }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ capability: "procedures.manage", schema: z.object({ "motivering": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id, stapId } = params as { id: string; stapId: string };
     const supabase = ctx.supabase;

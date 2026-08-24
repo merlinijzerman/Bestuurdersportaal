@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
+import { z } from "zod";
 
 // PATCH /api/procedures/[id]/requirements/[reqId]
 //
@@ -8,7 +9,7 @@ import { withFondsRoute } from "@/core/lib/route-wrapper";
 // voorzitter/beheerder. Een BLOKKERENDE vereiste deactiveren kan alleen met
 // verplichte motivering (REQ-006) — nooit stil. Elke mutatie logt één
 // governance_event.
-export const PATCH = withFondsRoute({ capability: "procedures.manage" }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ capability: "procedures.manage", schema: z.object({ "actief": z.unknown().optional(), "motivering": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id, reqId } = params as { id: string; reqId: string };
     const supabase = ctx.supabase;

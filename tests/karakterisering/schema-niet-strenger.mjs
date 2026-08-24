@@ -37,6 +37,7 @@ import { z } from "zod";
 import { pathToFileURL } from "node:url";
 import { bouwCorpus } from "./schema-corpus.mjs";
 import { genereerSchemas } from "./schema-genereer.mjs";
+import { leesSchemasUitCode } from "./schema-uit-code.mjs";
 
 // ── De 21 slikkers, geclassificeerd (PLAN §2.5) ───────────────────────────────
 //  Een `.catch(() => ({}))`-handler vangt kapotte JSON op met `{}`. Onder
@@ -119,6 +120,10 @@ function negatieveControle() {
 const args = process.argv.slice(2);
 const jsonUit = args.includes("--json");
 const alleenSelftest = args.includes("--selftest");
+// --uit-code: toets de schema's zoals ze in de ROUTEBESTANDEN staan (de eindstand,
+// TICKET-W9 stap 10) i.p.v. de generatoroutput. Zo bewijst de classifier iets wat
+// ook echt in de code staat — ook ná handwerk.
+const uitCode = args.includes("--uit-code");
 
 const neg = negatieveControle();
 
@@ -130,7 +135,7 @@ if (alleenSelftest) {
 }
 
 // ── Classificeer alle body-lezende handlers ───────────────────────────────────
-const schemas = genereerSchemas();
+const schemas = uitCode ? leesSchemasUitCode() : genereerSchemas();
 const corpus = bouwCorpus();
 const corpusPerHandler = new Map(corpus.handlers.map((h) => [h.handler, h.bodies]));
 

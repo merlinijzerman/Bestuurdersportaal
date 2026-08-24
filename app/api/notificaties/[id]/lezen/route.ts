@@ -10,7 +10,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
 
-export const PATCH = withFondsRoute({ capability: "notificaties.manage.own" }, async (ctx, _req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ capability: "notificaties.manage.own", schema: "geen-body" }, async (ctx, _req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

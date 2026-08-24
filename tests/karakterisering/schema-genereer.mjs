@@ -43,35 +43,34 @@ const PRIMITIEF = {
 export function genereerSchema(h) {
   if (!h.bodyLezend) return { schema: null, bron: '"geen-body"', velden: [] };
 
-  // Guard-map: veld -> primitieftype, alleen bij een `typeof veld === "T"`-guard.
-  // FILTER op h.velden: de typeof-detectie vangt óók bare `typeof localVar` (bv.
-  // een lusvariabele `s`/`a` of `nieuweWaarde`), en dat is GEEN body-veldguard.
-  // Zonder deze filter zou een lokale variabele een schemaveld ten onrechte
-  // typeren — de enige plek waar de generator te streng zou kunnen worden.
+  // AANSCHERP-KANDIDATEN, GEEN TYPERING. De W9-handwerkverificatie (§6) toonde dat
+  // een `typeof veld === "T"`-guard in deze codebase bijna altijd CONDITIONEEL
+  // GEBRUIK is (`typeof x === "T" && ...` → veld genegeerd bij verkeerd type), niet
+  // 400-op-type. Een veld daarom `z.T()` typeren zou STRENGER zijn dan de code:
+  // onder ENFORCE_SCHEMA=on zou een body die de code vandaag accepteert (en het veld
+  // negeert) een 400 krijgen. Dat is precies de stille over-strengheid die §8/§11
+  // verbieden. De generator TYPEERT dus niets; elk veld is `z.unknown().optional()`.
+  // De guard-detectie blijft, maar alleen als LIJST van aanscherp-kandidaten voor
+  // ná fonds 1 (met observe-data en een eigen besluit) — nooit als typering.
   const veldSet = new Set(h.velden);
-  const guard = {};
+  const kandidaten = [];
   for (const t of h.typeofChecks || []) {
-    if (t.op === "===" && PRIMITIEF[t.type] && veldSet.has(t.veld)) guard[t.veld] = t.type;
-  }
-
-  const vorm = {};
-  const bronVelden = [];
-  for (const veld of h.velden) {
-    if (guard[veld]) {
-      vorm[veld] = PRIMITIEF[guard[veld]]().optional();
-      bronVelden.push(`  ${JSON.stringify(veld)}: z.${guard[veld]}().optional(),`);
-    } else {
-      vorm[veld] = z.unknown().optional();
-      bronVelden.push(`  ${JSON.stringify(veld)}: z.unknown().optional(),`);
+    if (t.op === "===" && PRIMITIEF[t.type] && veldSet.has(t.veld) && !kandidaten.includes(t.veld)) {
+      kandidaten.push(t.veld);
     }
   }
+
+  const bronVelden = h.velden.map((veld) => `  ${JSON.stringify(veld)}: z.unknown().optional(),`);
+  const vorm = Object.fromEntries(h.velden.map((veld) => [veld, z.unknown().optional()]));
 
   const schema = z.object(vorm).passthrough();
   const bron =
     h.velden.length === 0
-      ? "z.object({}).passthrough()  // 0 velden afgeleid — handwerk W9"
+      ? "z.object({}).passthrough()"
       : `z.object({\n${bronVelden.join("\n")}\n}).passthrough()`;
-  return { schema, bron, velden: h.velden, guarded: Object.keys(guard) };
+  // guarded blijft leeg: geen enkel veld is getypeerd, dus de classifier heeft geen
+  // guarded-uitzondering nodig. `aanscherpKandidaten` is puur informatief.
+  return { schema, bron, velden: h.velden, guarded: [], aanscherpKandidaten: kandidaten };
 }
 
 /** Map<`METHOD bestand`, {schema, bron, ...}> voor alle body-lezende handlers. */

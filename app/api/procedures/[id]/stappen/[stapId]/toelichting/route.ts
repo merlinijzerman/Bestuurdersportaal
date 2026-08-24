@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
+import { z } from "zod";
 
 // Stap-toelichting (WO-3) — de bestuurlijke toelichting onder de staptitel.
 // Slaat op in de bestaande kolom `procedure_stappen.beschrijving` (per-proces
 // snapshot; pure content, raakt checklist/bewijslast/activatie niet). Server-side
 // gegate op voorzitter/beheerder; de procedure-koppeling wordt geverifieerd en
 // de mutatie append-only gelogd in `procedure_log`.
-export const POST = withFondsRoute({ capability: "procedures.manage" }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ capability: "procedures.manage", schema: z.object({ "toelichting": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id, stapId } = params as { id: string; stapId: string };
     const supabase = ctx.supabase;

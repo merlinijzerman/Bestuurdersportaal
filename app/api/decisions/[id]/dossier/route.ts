@@ -12,7 +12,7 @@ import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { buildDecisionDossierView } from "@/core/lib/decision";
 import { errorResponse } from "@/core/lib/api-errors";
 
-export const GET = withFondsRoute({ capability: "decisions.view" }, async (ctx, _req: NextRequest, params) => {
+export const GET = withFondsRoute({ capability: "decisions.view", schema: "geen-body" }, async (ctx, _req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;
