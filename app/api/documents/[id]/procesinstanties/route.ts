@@ -16,10 +16,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { requireCapability } from "@/core/lib/capabilities";
+import { z } from "zod";
 
 export const dynamic = "force-dynamic";
 
-export const GET = withFondsRoute({ capability: "documents.view" }, async (ctx, _req: NextRequest, params) => {
+export const GET = withFondsRoute({ capability: "documents.view", schema: "geen-body" }, async (ctx, _req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;
@@ -39,7 +40,7 @@ export const GET = withFondsRoute({ capability: "documents.view" }, async (ctx, 
   }
 });
 
-export const POST = withFondsRoute({ capability: "documents.metadata.update" }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ capability: "documents.metadata.update", schema: z.object({ "procesinstantie_id": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;
@@ -114,7 +115,7 @@ export const POST = withFondsRoute({ capability: "documents.metadata.update" }, 
   }
 });
 
-export const DELETE = withFondsRoute({ capability: "documents.metadata.update" }, async (ctx, req: NextRequest, params) => {
+export const DELETE = withFondsRoute({ capability: "documents.metadata.update", schema: z.object({ "procesinstantie_id": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

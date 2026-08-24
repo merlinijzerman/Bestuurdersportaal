@@ -42,6 +42,12 @@ import {
   capabilityEnforceAan,
   type RouteCapability,
 } from "@/core/lib/capability-enforce";
+import {
+  beoordeelSchema,
+  leesBodyVanKloon,
+  schemaEnforceAan,
+  type SchemaDeclaratie,
+} from "@/core/lib/schema-enforce";
 // LET OP: tenant-route-guard trekt `server-only` mee. Die wordt daarom LAZY
 // geladen in echteDeps (alleen de 12 host-guard-routes raken hem), zodat deze
 // module — en dus de sanity-suite — buiten de Next-runtime importeerbaar blijft.
@@ -86,6 +92,19 @@ export type RouteSpecV1 = {
    *  de inline gate weg in het vertrouwen dat de wrapper het overneemt, dan
    *  verzwak je de route zonder dat een test dat ziet. Zie TICKET-W6 §3. */
   readonly capability: RouteCapability;
+  /** WELKE bodyvorm deze route accepteert. VERPLICHT — een zod-schema of de
+   *  expliciete waarde `"geen-body"`. Zelfde regel als `capability`: een AFWEZIGE
+   *  waarde is niet te onderscheiden van een VERGETEN waarde, dus het type dwingt
+   *  af dat elke declaratie een bodycontract MEEBRENGT.
+   *
+   *  W9 landt met de vlag `ENFORCE_SCHEMA` UIT: gedrag ongewijzigd, wél observe-
+   *  logging van elke mismatch. De vlag-default flipt pas aan het EIND van deploy 3.
+   *
+   *  ⚠ DE WRAPPER-CHECK KOMT BOVENÓP DE ROUTE-EIGEN CONTROLES (de `typeof`-checks,
+   *  de 232 handmatige 400's), hij vervangt er geen enkele. Een schema kan RUIMER
+   *  zijn dan de inline controle; zolang beide draaien is dat onschadelijk. Zie
+   *  TICKET-W9 §8. */
+  readonly schema: SchemaDeclaratie;
   /** Wie host↔fonds afdwingt voor deze route. Drie waarden, en de derde is er
    *  omdat een AFWEZIG veld niet te onderscheiden is van een VERGETEN veld:
    *
@@ -152,12 +171,17 @@ export type WrapperDeps = {
    *  is de enige tak die gedrag verandert en mag niet op een omgevingsvariabele
    *  in een testrun leunen. */
   capabilityEnforceAan: () => boolean;
+  /** Leest `ENFORCE_SCHEMA`. Injecteerbaar om dezelfde reden als
+   *  `capabilityEnforceAan`: de vlag-aan-stand is de enige tak die gedrag
+   *  verandert en mag in een testrun niet op process.env leunen. */
+  schemaEnforceAan: () => boolean;
 };
 
 const echteDeps: WrapperDeps = {
   createServerSupabase,
   haalProfiel,
   capabilityEnforceAan,
+  schemaEnforceAan,
   beoordeelRouteHostToegang: async (args) => {
     const mod = await import("@/core/lib/tenant-route-guard");
     return mod.beoordeelRouteHostToegang(args);
@@ -239,6 +263,62 @@ export function maakWithFondsRoute(deps: WrapperDeps) {
           requestId,
         });
         if (handhaven) return geenRechten();
+      }
+
+      // 3c. Schema-poort (W9) — NA de capability-poort, VÓÓR de handler.
+      //
+      // ORDENING: capability vóór schema. Autorisatie ("mag deze rol dit?") gaat
+      // vóór vormvalidatie ("klopt de body?") — een 403 hoort niet te veranderen
+      // in een 400 doordat ENFORCE_SCHEMA flipt. Meet die ordening in de sanity-
+      // suite in plaats van haar te beredeneren.
+      //
+      // DE WRAPPER LEEST EEN request.clone(), NOOIT HET ORIGINEEL. Een request-body
+      // is één keer leesbaar en de handler leest hem ZELF (req.json()). Door de
+      // kloon te lezen blijft het origineel onaangeroerd: onder de vlag UIT ziet de
+      // handler exact wat hij vandaag ziet → byte-identiek. Onder de vlag AAN wordt
+      // een mismatch een 400 en draait de handler niet.
+      if (spec.schema !== "geen-body") {
+        // Een AFWEZIGE/lege body wordt `{}` — routes die de body optioneel lezen
+        // accepteren dat vandaag (2xx), dus de poort mag er niet op 400'en. Alleen
+        // ECHT kapotte JSON (`kapot`) is de gesanctioneerde slikker-wijziging.
+        const { body, kapot } = await leesBodyVanKloon(request);
+        const handhaven = deps.schemaEnforceAan();
+        if (kapot) {
+          // Vlag UIT: NIET afdwingen — de handler doet vandaag wat hij doet (500, of
+          // `{}` bij een slikker). Vlag AAN → 400 (TICKET §7).
+          console.warn("[SCHEMA-OBSERVE]", {
+            route: spec.label ?? padVan(request),
+            handler: request.method,
+            veld: "(body)",
+            verwacht: "json",
+            gekregen: "onparsebaar",
+            code: "invalid_json",
+            handhaven,
+            requestId,
+          });
+          if (handhaven) return NextResponse.json({ error: "Ongeldige invoer." }, { status: 400 });
+        } else {
+          const oordeel = beoordeelSchema({ schema: spec.schema, body });
+          if (!oordeel.toegestaan) {
+            // Observe-log met de vijf velden: route + handler(=methode) + veld +
+            // verwachte vorm + gekregen vorm. GEEN waarden, alleen vormen.
+            for (const f of oordeel.fouten) {
+              console.warn("[SCHEMA-OBSERVE]", {
+                route: spec.label ?? padVan(request),
+                handler: request.method,
+                veld: f.veld,
+                verwacht: f.verwacht,
+                gekregen: f.gekregen,
+                code: f.code,
+                handhaven,
+                requestId,
+              });
+            }
+            if (handhaven) {
+              return NextResponse.json({ error: "Ongeldige invoer." }, { status: 400 });
+            }
+          }
+        }
       }
 
       // 4. Correlation ID leeft in ctx + logregels (v1: geen responseheader).

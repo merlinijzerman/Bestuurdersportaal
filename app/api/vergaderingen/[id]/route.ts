@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
+import { z } from "zod";
 
 type VergaderingRow = {
   id: string;
@@ -21,7 +22,7 @@ type VergaderingRow = {
 //  Audit: diff-gebaseerde entry in vergadering_log (append-only,
 //  migratie 2026_07_20_vergadering_wijzigen.sql).
 // ============================================================
-export const PATCH = withFondsRoute({ capability: "vergaderingen.manage" }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ capability: "vergaderingen.manage", schema: z.object({ "datum": z.unknown().optional(), "locatie": z.unknown().optional(), "titel": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

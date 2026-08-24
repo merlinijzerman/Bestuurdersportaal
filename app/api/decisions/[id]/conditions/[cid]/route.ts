@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
+import { z } from "zod";
 
 const STATUS = [
   "open",
@@ -36,7 +37,7 @@ const INHOUDELIJK: (keyof WijzigBody)[] = [
   "heroverwegingstrigger",
 ];
 
-export const PATCH = withFondsRoute({ capability: "decisions.manage" }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ capability: "decisions.manage", schema: z.object({ "status": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: decisionId, cid } = params as { id: string; cid: string };
     const supabase = ctx.supabase;

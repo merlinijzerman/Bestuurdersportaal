@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { notifyUser } from "@/core/lib/notifications";
+import { z } from "zod";
 
-export const POST = withFondsRoute({ capability: "procedures.manage" }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ capability: "procedures.manage", schema: z.object({ "agendapunt_id": z.unknown().optional(), "datum": z.unknown().optional(), "formulering": z.unknown().optional(), "motivering": z.unknown().optional(), "stap_id": z.unknown().optional(), "vergadering_id": z.unknown().optional(), "verworpen_alternatieven": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

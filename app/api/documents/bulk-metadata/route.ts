@@ -19,6 +19,7 @@ import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { controleerLimiet, LIMIETEN } from "@/core/lib/rate-limit";
 import { rateLimited } from "@/core/lib/api-errors";
 import { rolHeeftCapability } from "@/core/lib/capabilities";
+import { z } from "zod";
 import {
   bouwMetadataPlan,
   type HuidigDocument,
@@ -40,7 +41,7 @@ interface DocResultaat {
   fouten?: string[];
 }
 
-export const POST = withFondsRoute({ capability: "documents.metadata.update" }, async (ctx, req: NextRequest) => {
+export const POST = withFondsRoute({ capability: "documents.metadata.update", schema: z.object({ "document_ids": z.unknown().optional(), "preview": z.unknown().optional(), "wijziging": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
   try {
     const supabase = ctx.supabase;
 

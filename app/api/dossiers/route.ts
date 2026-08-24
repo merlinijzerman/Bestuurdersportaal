@@ -15,7 +15,7 @@ import { withFondsRoute } from "@/core/lib/route-wrapper";
 
 export const dynamic = "force-dynamic";
 
-export const GET = withFondsRoute({ capability: "dossiers.view" }, async (ctx) => {
+export const GET = withFondsRoute({ capability: "dossiers.view", schema: "geen-body" }, async (ctx) => {
   try {
     const supabase = ctx.supabase;
 

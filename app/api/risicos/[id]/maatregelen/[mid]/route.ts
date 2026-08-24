@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
+import { z } from "zod";
 
 const TOEGESTANE_STATUSSEN = ["open", "in_voorbereiding", "genomen"] as const;
 type Status = (typeof TOEGESTANE_STATUSSEN)[number];
 
-export const PATCH = withFondsRoute({ capability: "risicos.manage" }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ capability: "risicos.manage", schema: z.object({ "beschrijving": z.unknown().optional(), "status": z.unknown().optional(), "verantwoordelijke": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id, mid } = params as { id: string; mid: string };
     const supabase = ctx.supabase;

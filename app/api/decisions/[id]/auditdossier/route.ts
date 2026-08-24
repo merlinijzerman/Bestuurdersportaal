@@ -69,7 +69,7 @@ interface SnapshotRow {
 // guard stond al direct ná het profiel en vóór élke andere poort van deze route,
 // dus de wrapper trekt hem op exact dezelfde plek in de volgorde. De actor-naam
 // die het profiel hier ook leverde komt nu uit `ctx.naam`.
-export const GET = withFondsRoute({ capability: "decisions.view", hostGuard: true, label: "decisions.auditdossier.GET" }, async (ctx, req: NextRequest, params) => {
+export const GET = withFondsRoute({ capability: "decisions.view", hostGuard: true, label: "decisions.auditdossier.GET", schema: "geen-body" }, async (ctx, req: NextRequest, params) => {
   // H-04: een top-level navigatie vanaf een vreemde site stuurt onder een
   // Lax-cookie de sessie mee. Deze route schrijft een auditrecord, dus zo'n
   // aanroep zou een gebeurtenis in het dossier van het slachtoffer zetten.

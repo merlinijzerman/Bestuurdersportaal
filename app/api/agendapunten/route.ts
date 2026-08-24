@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
+import { z } from "zod";
 
 const TOEGESTANE_CATEGORIEEN = ["beeldvorming", "oordeelsvorming", "besluitvorming", "informatie"];
 
-export const POST = withFondsRoute({ capability: "agendapunten.manage" }, async (ctx, req: NextRequest) => {
+export const POST = withFondsRoute({ capability: "agendapunten.manage", schema: z.object({ "beschrijving": z.unknown().optional(), "categorie": z.unknown().optional(), "tijdsduur_minuten": z.unknown().optional(), "titel": z.unknown().optional(), "verantwoordelijke": z.unknown().optional(), "vergadering_id": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
   try {
     const supabase = ctx.supabase;
 

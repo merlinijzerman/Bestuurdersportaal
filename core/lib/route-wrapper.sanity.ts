@@ -24,6 +24,7 @@
 //  expliciete injectieproef hieronder in plaats van een redenering.
 // ============================================================================
 import assert from "node:assert/strict";
+import { z } from "zod";
 import type { NextRequest } from "next/server";
 import { maakWithFondsRoute, type WrapperDeps, type FondsContext } from "./route-wrapper";
 import type { RouteCapability } from "./capability-enforce";
@@ -56,6 +57,9 @@ function deps(overrides: Partial<WrapperDeps>): WrapperDeps {
     // W6: default UIT. De vlag-aan-stand is de enige tak die gedrag verandert en
     // wordt per test expliciet aangezet — nooit via process.env.
     capabilityEnforceAan: () => false,
+    // W9: default UIT, zelfde reden als capabilityEnforceAan. De schema-poort-tests
+    // onderaan zetten hem per test expliciet aan.
+    schemaEnforceAan: () => false,
     ...overrides,
   };
 }
@@ -67,7 +71,7 @@ async function main() {
 
   await test("geen sessie → exact {\"error\":\"Niet ingelogd\"} met status 401", async () => {
     const wrap = maakWithFondsRoute(deps({ createServerSupabase: async () => nepSupabase(null) }));
-    const handler = wrap({ capability: IEDEREEN }, async () => new Response("mag niet"));
+    const handler = wrap({ capability: IEDEREEN, schema: "geen-body" }, async () => new Response("mag niet"));
     const res = await handler(req());
     assert.equal(res.status, 401);
     assert.deepEqual(await res.json(), { error: "Niet ingelogd" });
@@ -76,7 +80,7 @@ async function main() {
   await test("geen profiel → ctx.fondsId/rol/naam === null", async () => {
     const cap: { ctx?: FondsContext } = {};
     const wrap = maakWithFondsRoute(deps({ haalProfiel: async () => null }));
-    const handler = wrap({ capability: IEDEREEN }, async (ctx) => {
+    const handler = wrap({ capability: IEDEREEN, schema: "geen-body" }, async (ctx) => {
       cap.ctx = ctx;
       return Response.json({ ok: true });
     });
@@ -98,7 +102,7 @@ async function main() {
         },
       })
     );
-    const handler = wrap({ capability: IEDEREEN }, async () => Response.json({ ok: true }));
+    const handler = wrap({ capability: IEDEREEN, schema: "geen-body" }, async () => Response.json({ ok: true }));
     await handler(req());
     assert.equal(aangeroepen, 0);
   });
@@ -107,7 +111,7 @@ async function main() {
     const wrap = maakWithFondsRoute(
       deps({ beoordeelRouteHostToegang: async () => ({ toegestaan: false }) })
     );
-    const handler = wrap({ capability: IEDEREEN, hostGuard: true }, async () => Response.json({ ok: true }));
+    const handler = wrap({ capability: IEDEREEN, hostGuard: true, schema: "geen-body" }, async () => Response.json({ ok: true }));
     const res = await handler(req());
     assert.equal(res.status, 403);
     assert.deepEqual(await res.json(), { error: "Dit webadres hoort niet bij uw fonds." });
@@ -115,7 +119,7 @@ async function main() {
 
   await test("onafgevangen fout in handler → 500 {\"error\":\"Serverfout\"}", async () => {
     const wrap = maakWithFondsRoute(deps({}));
-    const handler = wrap({ capability: IEDEREEN }, async () => {
+    const handler = wrap({ capability: IEDEREEN, schema: "geen-body" }, async () => {
       throw new Error("boem");
     });
     const res = await handler(req());
@@ -126,7 +130,7 @@ async function main() {
   await test("ctx draagt rol/naam/fondsId door uit haalProfiel", async () => {
     const cap: { ctx?: FondsContext } = {};
     const wrap = maakWithFondsRoute(deps({}));
-    const handler = wrap({ capability: IEDEREEN }, async (ctx) => {
+    const handler = wrap({ capability: IEDEREEN, schema: "geen-body" }, async (ctx) => {
       cap.ctx = ctx;
       return Response.json({ ok: true });
     });
@@ -175,7 +179,7 @@ async function main() {
   await test("stream → de wrapper geeft DEZELFDE Response door (identiteit)", async () => {
     const respons = sseRespons(() => {});
     const wrap = maakWithFondsRoute(deps({}));
-    const handler = wrap({ capability: IEDEREEN }, async () => respons);
+    const handler = wrap({ capability: IEDEREEN, schema: "geen-body" }, async () => respons);
     const uit = await handler(req());
     // Identiteit, niet gelijkwaardigheid: de wrapper mag hem niet herverpakken.
     assert.equal(uit, respons);
@@ -190,7 +194,7 @@ async function main() {
       throw new Error("W5-injectie: fout ná het eerste enqueue");
     });
     const wrap = maakWithFondsRoute(deps({}));
-    const handler = wrap({ capability: IEDEREEN }, async () => respons);
+    const handler = wrap({ capability: IEDEREEN, schema: "geen-body" }, async () => respons);
 
     // 1. De wrapper heeft de respons al teruggegeven vóór de stream wordt
     //    geconsumeerd. Zijn catch omhult ALLEEN de aanroep van de handler.
@@ -228,7 +232,7 @@ async function main() {
     // later een `async start` naar synchroon herschrijft, verandert daarmee stil
     // welke laag de fout afhandelt.
     const wrap = maakWithFondsRoute(deps({}));
-    const handler = wrap({ capability: IEDEREEN }, async () => {
+    const handler = wrap({ capability: IEDEREEN, schema: "geen-body" }, async () => {
       const enc = new TextEncoder();
       const stream = new ReadableStream<Uint8Array>({
         start(controller) {
@@ -247,7 +251,7 @@ async function main() {
     // Tegenproef bij de vorige test. Zonder deze zou "geen Serverfout" ook waar
     // zijn als het vangnet helemaal stuk was.
     const wrap = maakWithFondsRoute(deps({}));
-    const handler = wrap({ capability: IEDEREEN }, async () => {
+    const handler = wrap({ capability: IEDEREEN, schema: "geen-body" }, async () => {
       throw new Error("fout vóór de eerste byte");
     });
     const res = await handler(req());
@@ -282,7 +286,7 @@ async function main() {
   await test("vlag UIT + TE_BEPALEN → handler draait, respons ONGEWIJZIGD", async () => {
     let aangeroepen = 0;
     const wrap = maakWithFondsRoute(deps({ capabilityEnforceAan: () => false }));
-    const handler = wrap({ capability: "TE_BEPALEN" }, async () => {
+    const handler = wrap({ capability: "TE_BEPALEN", schema: "geen-body" }, async () => {
       aangeroepen++;
       return Response.json({ ok: true });
     });
@@ -294,7 +298,7 @@ async function main() {
 
   await test("vlag UIT + TE_BEPALEN → observe-logregel met route, rol en zou-beslissing", async () => {
     const wrap = maakWithFondsRoute(deps({ capabilityEnforceAan: () => false }));
-    const handler = wrap({ capability: "TE_BEPALEN" }, async () => Response.json({ ok: true }));
+    const handler = wrap({ capability: "TE_BEPALEN", schema: "geen-body" }, async () => Response.json({ ok: true }));
     const [, warns] = await metOpgevangenWarn(() => handler(req()));
     const regel = warns.find((w) => w[0] === "[CAPABILITY-OBSERVE]");
     assert.ok(regel, "geen [CAPABILITY-OBSERVE]-regel — W7 begint dan zonder dataset");
@@ -311,7 +315,7 @@ async function main() {
     // De ctx draagt sinds W4 een e-mailadres. Deze regel gaat naar de
     // platformlogs; W7 heeft route + rol + uitkomst nodig en verder niets.
     const wrap = maakWithFondsRoute(deps({ capabilityEnforceAan: () => false }));
-    const handler = wrap({ capability: "TE_BEPALEN" }, async () => Response.json({ ok: true }));
+    const handler = wrap({ capability: "TE_BEPALEN", schema: "geen-body" }, async () => Response.json({ ok: true }));
     const [, warns] = await metOpgevangenWarn(() => handler(req()));
     const regel = warns.find((w) => w[0] === "[CAPABILITY-OBSERVE]");
     assert.ok(regel);
@@ -323,7 +327,7 @@ async function main() {
   await test("vlag AAN + TE_BEPALEN → 403 en de handler draait NIET", async () => {
     let aangeroepen = 0;
     const wrap = maakWithFondsRoute(deps({ capabilityEnforceAan: () => true }));
-    const handler = wrap({ capability: "TE_BEPALEN" }, async () => {
+    const handler = wrap({ capability: "TE_BEPALEN", schema: "geen-body" }, async () => {
       aangeroepen++;
       return Response.json({ ok: true });
     });
@@ -335,7 +339,7 @@ async function main() {
 
   await test("vlag AAN + iedere-ingelogde → doorgelaten", async () => {
     const wrap = maakWithFondsRoute(deps({ capabilityEnforceAan: () => true }));
-    const handler = wrap({ capability: "iedere-ingelogde" }, async () => Response.json({ ok: true }));
+    const handler = wrap({ capability: "iedere-ingelogde", schema: "geen-body" }, async () => Response.json({ ok: true }));
     const res = await handler(req());
     assert.equal(res.status, 200);
   });
@@ -343,7 +347,7 @@ async function main() {
   await test("vlag AAN + echte capability: rol heeft hem → door, rol mist hem → 403", async () => {
     // `dossiers.manage` hangt aan beheerder+voorzitter, niet aan bestuurder.
     const doorlaat = maakWithFondsRoute(deps({ capabilityEnforceAan: () => true }));
-    const res1 = await doorlaat({ capability: "dossiers.manage" }, async () =>
+    const res1 = await doorlaat({ capability: "dossiers.manage", schema: "geen-body" }, async () =>
       Response.json({ ok: true })
     )(req());
     assert.equal(res1.status, 200);
@@ -355,7 +359,7 @@ async function main() {
       })
     );
     const [res2] = await metOpgevangenWarn(() =>
-      weiger({ capability: "dossiers.manage" }, async () => Response.json({ ok: true }))(req())
+      weiger({ capability: "dossiers.manage", schema: "geen-body" }, async () => Response.json({ ok: true }))(req())
     );
     assert.equal(res2.status, 403);
   });
@@ -365,7 +369,7 @@ async function main() {
       deps({ capabilityEnforceAan: () => true, haalProfiel: async () => null })
     );
     const [res] = await metOpgevangenWarn(() =>
-      wrap({ capability: "dossiers.manage" }, async () => Response.json({ ok: true }))(req())
+      wrap({ capability: "dossiers.manage", schema: "geen-body" }, async () => Response.json({ ok: true }))(req())
     );
     assert.equal(res.status, 403);
   });
@@ -382,7 +386,7 @@ async function main() {
       })
     );
     const handler = wrap(
-      { capability: "TE_BEPALEN", hostGuard: true },
+      { capability: "TE_BEPALEN", hostGuard: true, schema: "geen-body" },
       async () => Response.json({ ok: true })
     );
     const [res] = await metOpgevangenWarn(() => handler(req()));
@@ -398,7 +402,7 @@ async function main() {
         haalProfiel: async () => ({ id: "u-1", naam: "N", rol: "bestuurder", fondsId: "f-1" }),
       })
     );
-    const handler = wrap({ capability: "dossiers.manage" }, async () => {
+    const handler = wrap({ capability: "dossiers.manage", schema: "geen-body" }, async () => {
       aangeroepen++;
       return Response.json({ ok: true });
     });
@@ -412,7 +416,7 @@ async function main() {
 
   await test("vlag UIT + rol HEEFT de capability → geen logregel (happy path blijft stil)", async () => {
     const wrap = maakWithFondsRoute(deps({ capabilityEnforceAan: () => false }));
-    const handler = wrap({ capability: "dossiers.manage" }, async () => Response.json({ ok: true }));
+    const handler = wrap({ capability: "dossiers.manage", schema: "geen-body" }, async () => Response.json({ ok: true }));
     const [, warns] = await metOpgevangenWarn(() => handler(req()));
     assert.equal(
       warns.filter((w) => w[0] === "[CAPABILITY-OBSERVE]").length,
@@ -427,10 +431,166 @@ async function main() {
     const wrap = maakWithFondsRoute(
       deps({ createServerSupabase: async () => nepSupabase(null), capabilityEnforceAan: () => true })
     );
-    const handler = wrap({ capability: "TE_BEPALEN" }, async () => new Response("mag niet"));
+    const handler = wrap({ capability: "TE_BEPALEN", schema: "geen-body" }, async () => new Response("mag niet"));
     const res = await handler(req());
     assert.equal(res.status, 401);
     assert.deepEqual(await res.json(), { error: "Niet ingelogd" });
+  });
+
+  // ── Schema-poort (W9) ─────────────────────────────────────────────────────
+  // Een POST-request MET body; de wrapper leest een clone, de handler het origineel.
+  const reqMetBody = (body: unknown) =>
+    new Request("http://localhost/api/test", {
+      method: "POST",
+      body: JSON.stringify(body),
+      headers: { "content-type": "application/json" },
+    }) as unknown as NextRequest;
+
+  await test("SCHEMA: de wrapper leest een clone — de handler leest het origineel ONGEMOEID", async () => {
+    // De kern van het W9-ontwerp: request.clone() consumeert het origineel niet,
+    // dus ziet de handler onder de vlag UIT exact wat hij vandaag ziet (byte-identiek).
+    const gezien: unknown[] = [];
+    const wrap = maakWithFondsRoute(deps({}));
+    const handler = wrap(
+      { capability: "iedere-ingelogde", schema: z.object({}).passthrough() },
+      async (_ctx, request) => {
+        gezien.push(await request.json());
+        return Response.json({ ok: true });
+      }
+    );
+    const res = await handler(reqMetBody({ a: 1, titel: "x" }));
+    assert.equal(res.status, 200);
+    assert.deepEqual(gezien[0], { a: 1, titel: "x" }, "de handler moet de volledige body kunnen lezen");
+  });
+
+  await test("SCHEMA vlag UIT + mismatch → observe (5 velden) én doorlaten", async () => {
+    let aangeroepen = 0;
+    const wrap = maakWithFondsRoute(deps({ schemaEnforceAan: () => false }));
+    const handler = wrap(
+      { capability: "iedere-ingelogde", schema: z.object({ titel: z.string() }).passthrough() },
+      async () => {
+        aangeroepen++;
+        return Response.json({ ok: true });
+      }
+    );
+    const [res, warns] = await metOpgevangenWarn(() => handler(reqMetBody({ titel: 123 })));
+    assert.equal(res.status, 200, "vlag uit mag geen byte wijzigen");
+    assert.equal(aangeroepen, 1, "de handler moet gewoon draaien onder de vlag uit");
+    const regel = warns.find((w) => w[0] === "[SCHEMA-OBSERVE]");
+    assert.ok(regel, "een mismatch onder de vlag-uit hoort geobserveerd te worden");
+    const r = regel[1] as Record<string, unknown>;
+    assert.equal(r.veld, "titel");
+    assert.equal(r.verwacht, "string");
+    assert.equal(r.gekregen, "number");
+    assert.equal(r.handhaven, false);
+  });
+
+  await test("SCHEMA vlag AAN + mismatch → 400, de handler draait NIET", async () => {
+    let aangeroepen = 0;
+    const wrap = maakWithFondsRoute(deps({ schemaEnforceAan: () => true }));
+    const handler = wrap(
+      { capability: "iedere-ingelogde", schema: z.object({ titel: z.string() }).passthrough() },
+      async () => {
+        aangeroepen++;
+        return Response.json({ ok: true });
+      }
+    );
+    const [res] = await metOpgevangenWarn(() => handler(reqMetBody({ titel: 123 })));
+    assert.equal(res.status, 400);
+    assert.deepEqual(await res.json(), { error: "Ongeldige invoer." });
+    assert.equal(aangeroepen, 0, "bij afdwinging mag de handler niet draaien");
+  });
+
+  await test("SCHEMA vlag AAN + geldige body → doorgelaten", async () => {
+    const wrap = maakWithFondsRoute(deps({ schemaEnforceAan: () => true }));
+    const handler = wrap(
+      { capability: "iedere-ingelogde", schema: z.object({ titel: z.string() }).passthrough() },
+      async () => Response.json({ ok: true })
+    );
+    const res = await handler(reqMetBody({ titel: "geldig", extra: 1 }));
+    assert.equal(res.status, 200, "een geldige body (met onbekend extra veld) moet door");
+  });
+
+  await test("ORDENING: capability gaat vóór schema — een 403 wordt geen 400", async () => {
+    // Beide vlaggen AAN, capability weigert ÉN de body zou een schemafout geven.
+    // De uitkomst moet 403 zijn (capability eerst), niet 400 (schema). Gemeten,
+    // niet beredeneerd — zodat het flippen van ENFORCE_SCHEMA niet verandert WELKE
+    // afwijzing een onbevoegd verzoek krijgt.
+    const wrap = maakWithFondsRoute(
+      deps({
+        capabilityEnforceAan: () => true,
+        schemaEnforceAan: () => true,
+        haalProfiel: async () => ({ id: "u-1", naam: "N", rol: "bestuurder", fondsId: "f-1" }),
+      })
+    );
+    const handler = wrap(
+      { capability: "dossiers.manage", schema: z.object({ titel: z.string() }).passthrough() },
+      async () => Response.json({ ok: true })
+    );
+    const [res] = await metOpgevangenWarn(() => handler(reqMetBody({ titel: 123 })));
+    assert.equal(res.status, 403, "capability weigert eerst; schema komt er niet aan toe");
+    assert.deepEqual(await res.json(), { error: "U heeft geen rechten voor deze actie." });
+  });
+
+  // Ruwe body (mogelijk kapot); reqMetBody stringify't altijd geldige JSON.
+  const reqRauw = (rauw: string) =>
+    new Request("http://localhost/api/test", {
+      method: "POST",
+      body: rauw,
+      headers: { "content-type": "application/json" },
+    }) as unknown as NextRequest;
+
+  await test("SCHEMA vlag AAN + AFWEZIGE body → GEEN 400 (leeg = {}); alleen kapotte JSON 400t", async () => {
+    // De W9-robuustheidsfix: een afwezige body is geen kapotte JSON. Routes die de
+    // body optioneel lezen (slikkers, DELETE zonder body) geven vandaag 2xx; de poort
+    // mag daar niet op 400'en. Een LOOS schema accepteert {}.
+    let aangeroepen = 0;
+    const wrap = maakWithFondsRoute(deps({ schemaEnforceAan: () => true }));
+    const handler = wrap(
+      { capability: "iedere-ingelogde", schema: z.object({ titel: z.string().optional() }).passthrough() },
+      async () => {
+        aangeroepen++;
+        return Response.json({ ok: true });
+      }
+    );
+    // req() heeft GEEN body.
+    const res = await handler(req());
+    assert.equal(res.status, 200, "een afwezige body mag geen 400 geven onder de vlag");
+    assert.equal(aangeroepen, 1);
+  });
+
+  await test("SCHEMA vlag AAN + KAPOTTE JSON → 400 (de gesanctioneerde slikker-wijziging)", async () => {
+    let aangeroepen = 0;
+    const wrap = maakWithFondsRoute(deps({ schemaEnforceAan: () => true }));
+    const handler = wrap(
+      { capability: "iedere-ingelogde", schema: z.object({ titel: z.string().optional() }).passthrough() },
+      async () => {
+        aangeroepen++;
+        return Response.json({ ok: true });
+      }
+    );
+    const [res] = await metOpgevangenWarn(() => handler(reqRauw("{ dit is geen json")));
+    assert.equal(res.status, 400);
+    assert.equal(aangeroepen, 0, "bij kapotte JSON mag de handler niet draaien");
+  });
+
+  await test("SCHEMA vlag UIT + KAPOTTE JSON → doorlaten (observe), de handler draait", async () => {
+    let aangeroepen = 0;
+    const wrap = maakWithFondsRoute(deps({ schemaEnforceAan: () => false }));
+    const handler = wrap(
+      { capability: "iedere-ingelogde", schema: z.object({ titel: z.string().optional() }).passthrough() },
+      async () => {
+        aangeroepen++;
+        return Response.json({ ok: true });
+      }
+    );
+    const [res, warns] = await metOpgevangenWarn(() => handler(reqRauw("{ kapot")));
+    assert.equal(res.status, 200, "vlag uit mag kapotte JSON niet 400'en — byte-identiek");
+    assert.equal(aangeroepen, 1);
+    assert.ok(
+      warns.find((w) => w[0] === "[SCHEMA-OBSERVE]" && (w[1] as Record<string, unknown>).code === "invalid_json"),
+      "kapotte JSON hoort onder de vlag-uit wél geobserveerd te worden"
+    );
   });
 
   console.log(`\nAlle ${n} route-wrapper sanity-tests groen.`);

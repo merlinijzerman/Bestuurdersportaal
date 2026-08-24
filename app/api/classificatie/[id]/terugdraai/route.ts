@@ -13,6 +13,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { requireCapability } from "@/core/lib/capabilities";
+import { z } from "zod";
 import {
   logClassificatieKoppeling,
   bouwClassificatieReden,
@@ -20,7 +21,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export const POST = withFondsRoute({ capability: "classification.review" }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ capability: "classification.review", schema: z.object({ "opmerking": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

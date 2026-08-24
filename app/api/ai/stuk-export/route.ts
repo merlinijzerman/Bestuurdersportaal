@@ -27,6 +27,7 @@ import {
 } from "@/core/lib/stukvoorbereiding";
 import { bouwDocx, type DocxStukContext } from "@/core/lib/antwoord-docx";
 import { nlDatum, type KopieBron } from "@/core/lib/antwoord-klembord";
+import { z } from "zod";
 
 export const dynamic = "force-dynamic";
 
@@ -50,7 +51,7 @@ function schoonBron(b: unknown): KopieBron | null {
   };
 }
 
-export const POST = withFondsRoute({ capability: "ai.stukvoorbereiding" }, async (ctx, req: NextRequest) => {
+export const POST = withFondsRoute({ capability: "ai.stukvoorbereiding", schema: z.object({ "antwoord": z.unknown().optional(), "bronnen": z.unknown().optional(), "gesprek_id": z.unknown().optional(), "onderwerp": z.unknown().optional(), "stuksoort": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
   try {
     const supabase = ctx.supabase;
 

@@ -45,6 +45,8 @@ const trim = (s) => s.replace(/\s+/g, " ").trim();
 // Toevoegingen die de wrapper introduceert.
 const TOEGESTAAN_TOEGEVOEGD = [
   /^import \{ withFondsRoute \} from "@\/core\/lib\/route-wrapper";$/,
+  // W9-codemod: de zod-import die een schema-literal nodig heeft.
+  /^import \{ z \} from "zod";$/,
   // Signatuur: export const METHOD = withFondsRoute(<spec>, async (ctx[, req[, params]]) => {
   /^export const (GET|POST|PATCH|PUT|DELETE|HEAD|OPTIONS) = withFondsRoute\(.*, async \(ctx.*\) => \{$/,
   /^const supabase = ctx\.supabase;$/,
@@ -193,6 +195,33 @@ function w6SpecUitbreiding(regel) {
   return `${m[1]}{ ${inhoud} }${m[3]}`;
 }
 
+/** De W9-codemod: `, schema: <zod-literal>` als extra veld in de spec-literal van
+ *  een with(Fonds|Machine)Route-signatuur. De literal bevat zelf accolades
+ *  (`z.object({...})`), dus bakenen we het spec-object af met accolade-diepte en
+ *  strippen we het schema-veld eruit. Geeft de regel terug ZONDER het schema-veld;
+ *  is dat exact de verwijderde regel, dan is het paar gesanctioneerd — en verandert
+ *  de codemod op dezelfde regel ook maar één ander teken, dan sluit het paar niet. */
+function w9StripSchema(regel) {
+  const pos = regel.indexOf(", schema:");
+  if (pos < 0) return null;
+  // Scan vanaf de waarde naar rechts tot de accolade die op diepte 0 het
+  // spec-object sluit; braces IN de zod-literal (z.object({...})) tellen mee.
+  let diepte = 0;
+  let sluit = -1;
+  for (let i = pos + 2; i < regel.length; i++) {
+    if (regel[i] === "{") diepte++;
+    else if (regel[i] === "}") {
+      if (diepte === 0) { sluit = i; break; }
+      diepte--;
+    }
+  }
+  if (sluit < 0) return null;
+  // Verwijder ", schema: <waarde>" en behoud de spec-sluiter (incl. de spatie ervóór
+  // die de codemod schrijft), zodat het resultaat exact de oude spec-regel is.
+  const voorSluiter = regel[sluit - 1] === " " ? sluit - 1 : sluit;
+  return regel.slice(0, pos) + regel.slice(voorSluiter);
+}
+
 const matcht = (regels, regel) => regels.some((re) => re.test(regel));
 
 // ── Diff parsen ──────────────────────────────────────────────────────────────
@@ -278,6 +307,19 @@ function classificeer({ verwijderd, toegevoegd }) {
     if (verwacht === null) continue;
     const j = add.indexOf(verwacht);
     if (j >= 0) {
+      rem.splice(i, 1);
+      add.splice(j, 1);
+    }
+  }
+  // 1c. W9 — de spec-uitbreiding met het schema-veld. Voor elke TOEGEVOEGDE regel:
+  //     strip het schema-veld; is het resultaat exact een VERWIJDERDE regel, dan is
+  //     het paar gesanctioneerd. Zelfde strengheid als 1b — een ander gewijzigd
+  //     teken op de regel laat het paar niet sluiten.
+  for (let j = add.length - 1; j >= 0; j--) {
+    const zonder = w9StripSchema(add[j]);
+    if (zonder === null) continue;
+    const i = rem.indexOf(zonder);
+    if (i >= 0) {
       rem.splice(i, 1);
       add.splice(j, 1);
     }

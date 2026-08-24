@@ -28,7 +28,7 @@ import {
 // (embeddings + losse updates per chunk). De client roept herhaaldelijk aan.
 const BATCH = 25;
 
-export const POST = withFondsRoute({ capability: "beheer.backfill" }, async (ctx, req: NextRequest) => {
+export const POST = withFondsRoute({ capability: "beheer.backfill", schema: "geen-body" }, async (ctx, req: NextRequest) => {
   try {
     const supabase = ctx.supabase;
 

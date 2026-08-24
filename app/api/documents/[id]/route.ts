@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
+import { z } from "zod";
 
 // PATCH /api/documents/[id]
 // Body: { actie: "deactiveren" | "reactiveren", reden?: string }
@@ -8,7 +9,7 @@ import { withFondsRoute } from "@/core/lib/route-wrapper";
 // - voorzitter / beheerder: altijd
 // - bestuurder: deactiveren alleen als opgeslagen_door = jij én < 24 uur na upload
 // - reactiveren: alleen voorzitter / beheerder
-export const PATCH = withFondsRoute({ capability: "documents.lifecycle.manage" }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ capability: "documents.lifecycle.manage", schema: z.object({ "actie": z.unknown().optional(), "reden": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   const { id } = params as { id: string };
     const supabase = ctx.supabase;
 

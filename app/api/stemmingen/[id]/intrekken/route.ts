@@ -3,6 +3,7 @@ import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { notifyUser } from "@/core/lib/notifications";
 import { isBureauRol, BUREAU_WEIGERING } from "@/core/lib/bureau-gate";
 import { weigerAlsModuleUit } from "@/core/lib/module-guard";
+import { z } from "zod";
 
 const REDEN_MIN = 10;
 
@@ -12,7 +13,7 @@ const REDEN_MIN = 10;
 //  Rechten: starter (geopend_door) / voorzitter / beheerder.
 //  Verplichte reden (min 10 tekens). Notificeert starter + alle stemmers.
 // ============================================================
-export const POST = withFondsRoute({ capability: "stemming.deelname" }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ capability: "stemming.deelname", schema: z.object({ "reden": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: stemmingId } = params as { id: string };
     const supabase = ctx.supabase;

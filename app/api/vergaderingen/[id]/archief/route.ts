@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
+import { z } from "zod";
 import {
   magArchiveren,
   magDearchiveren,
@@ -43,7 +44,7 @@ type VergaderingRij = {
   gearchiveerd_op: string | null;
 };
 
-export const POST = withFondsRoute({ capability: "vergaderingen.manage" }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ capability: "vergaderingen.manage", schema: z.object({ "actie": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

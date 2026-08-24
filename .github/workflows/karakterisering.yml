@@ -123,6 +123,13 @@ jobs:
       - name: Projectref-grendel verifiëren (geen database)
         run: npm run test:seed-guard
 
+      # W8 (#175) — puur, geen DB/build nodig, dus VÓÓR de dure stack-boot zodat een
+      # te streng conceptschema meteen faalt. De classifier bewijst differentieel dat
+      # geen gegenereerd schema strenger is dan de code (corpus = de harnas-bodies) en
+      # dat een bewust te streng schema ROOD wordt (negatieve controle). Exit ≠ 0 → rood.
+      - name: W8 — schema niet-strenger (differentiële classifier)
+        run: npm run test:schema-niet-strenger
+
       # Pin op dezelfde CLI als de rls-cross-tenant-baseline (db.major_version=17).
       - name: Supabase CLI opzetten
         uses: supabase/setup-cli@v1
@@ -215,6 +222,39 @@ jobs:
           kill "$SERVER" 2>/dev/null || true
           wait "$SERVER" 2>/dev/null || true
           echo "vlag-aan-pass: $(( $(date +%s) - t0 ))s"
+          exit $code
+
+      # W9 (#176): derde Next-proces op een EIGEN poort (3002), mét ENFORCE_SCHEMA=on.
+      # Zelfde reden voor de aparte poort als bij de vlag-aan-server hierboven: geen
+      # kill-timing-race met de andere processen. Bewijst twee dingen tegen de server:
+      #   Deel 1  geen over-strengheid — elk corpus-scenario houdt zijn vlag-uit-status
+      #           (de losse schema's breken geen geldig verkeer);
+      #   Deel 2  de handhaving vuurt — geauthenticeerde kapotte JSON naar elk van de 7
+      #           gesanctioneerde slikkers geeft 400 (empirische §7-bevestiging).
+      # ENFORCE_CAPABILITY blijft hier UIT, anders zouden capability-403's Deel 1 kleuren.
+      - name: Schemahandhaving afdwingen (ENFORCE_SCHEMA aan)
+        env:
+          ENFORCE_SCHEMA: "on"
+          APP_BASE_URL: "http://127.0.0.1:3002"
+        run: |
+          t0=$(date +%s)
+          ENFORCE_SCHEMA=on PORT=3002 npm run start &
+          SERVER=$!
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:3002/api/healthz/ping >/dev/null && ok=1 && break
+            sleep 1
+          done
+          if [ "${ok:-0}" != "1" ]; then
+            echo "FOUT: next start (schema aan) kwam niet op binnen 60s." >&2
+            kill "$SERVER" 2>/dev/null || true; exit 1
+          fi
+          echo "::group::karakterisering --schema (vlag AAN)"
+          node tests/karakterisering/run.mjs --schema
+          code=$?
+          echo "::endgroup::"
+          kill "$SERVER" 2>/dev/null || true
+          wait "$SERVER" 2>/dev/null || true
+          echo "schema-pass: $(( $(date +%s) - t0 ))s"
           exit $code
 
       - name: Supabase-stack stoppen

@@ -30,12 +30,14 @@ const modus = process.argv.includes("--record")
     ? "verify"
     : process.argv.includes("--authz")
       ? "authz"
-      : null;
+      : process.argv.includes("--schema")
+        ? "schema"
+        : null;
 const onlyArg = process.argv.find((a) => a.startsWith("--only="));
 const only = onlyArg ? onlyArg.slice("--only=".length) : null;
 
 if (!modus) {
-  console.error("Gebruik: run.mjs --record | --verify | --authz [--only=<slug>]");
+  console.error("Gebruik: run.mjs --record | --verify | --authz | --schema [--only=<slug>]");
   process.exit(2);
 }
 
@@ -223,6 +225,79 @@ async function main() {
       console.log(`mislukt: ${mislukt.join(", ")}`);
       process.exit(1);
     }
+    return;
+  }
+
+  // ── W9 flag-on-modus: toets de draaiende server onder ENFORCE_SCHEMA=on ──────
+  // Twee claims, allebei tegen de echte server:
+  //   Deel 1  GEEN OVER-STRENGHEID. Elk corpus-scenario MOET dezelfde status geven
+  //           als zijn byte-identieke vlag-uit-snapshot. De losse schema's
+  //           accepteren elke geldige body, dus de vlag mag geen enkel geldig
+  //           verzoek breken. Eén afwijking = een schema is strenger dan de code.
+  //   Deel 2  DE HANDHAVING VUURT. Een geauthenticeerde KAPOTTE-JSON-body naar elk
+  //           van de 7 gesanctioneerde slikkers MOET 400 geven (de schema-poort
+  //           slaat toe vóór de handler). Dat is de empirische bevestiging van §7:
+  //           statisch afgeleid ≠ gemeten.
+  if (modus === "schema") {
+    const enforceAan = (process.env.ENFORCE_SCHEMA ?? "").trim().toLowerCase() === "on";
+    if (enforceAan !== true) {
+      throw new Error(
+        "run.mjs --schema vereist ENFORCE_SCHEMA=on in de server- én runner-omgeving; " +
+          "anders toets je de vlag-uit-toestand tegen het vlag-aan-contract."
+      );
+    }
+    // Deel 1 — geen over-strengheid.
+    const teDoen = only ? scenarios.filter((s) => s.slug === only) : scenarios;
+    let ok1 = 0;
+    const gewijzigd = [];
+    for (const s of teDoen) {
+      const snapVerwacht = JSON.parse(await readFile(join(SNAP_DIR, `${s.slug}.json`), "utf8"));
+      const nu = await bouwSnapshot(s, ctx);
+      if (nu.status === snapVerwacht.status) ok1++;
+      else gewijzigd.push(`${s.slug}: was ${snapVerwacht.status}, nu ${nu.status}`);
+    }
+    console.log(`[schema] Deel 1 — geen over-strengheid: ${ok1}/${teDoen.length} status-ongewijzigd.`);
+    for (const g of gewijzigd) console.log(`  ✗ ${g}`);
+
+    // Deel 2 — de handhaving vuurt op de 7 slikkers.
+    const SLIKKERS = [
+      { naam: "classificatie.terugdraai", method: "POST", re: /^\/api\/classificatie\/[^/]+\/terugdraai$/ },
+      { naam: "notulen.bevestig", method: "POST", re: /^\/api\/notulen\/segmenten\/[^/]+\/bevestig$/ },
+      { naam: "organisatieprofiel", method: "PUT", re: /^\/api\/organisatieprofiel\/?$/ },
+      { naam: "procedures.afschrift", method: "POST", re: /^\/api\/procedures\/[^/]+\/afschrift$/ },
+      { naam: "profiel", method: "PATCH", re: /^\/api\/profiel\/?$/ },
+      { naam: "risicos", method: "PATCH", re: /^\/api\/risicos\/[^/]+$/ },
+      { naam: "vergaderingen.archief", method: "POST", re: /^\/api\/vergaderingen\/[^/]+\/archief$/ },
+    ];
+    let ok2 = 0;
+    const slikkerFout = [];
+    for (const sl of SLIKKERS) {
+      // Zoek een GEAUTHENTICEERD scenario (rol != anon) voor deze route: geldig pad,
+      // geldige sessie. De kapotte body maakt van elke uitkomst een 400 vóór de handler.
+      const basis = scenarios.find(
+        (s) => s.rol !== "anon" && s.method === sl.method && sl.re.test(s.path.split("?")[0]),
+      );
+      if (!basis) {
+        slikkerFout.push(`${sl.naam}: geen geauthenticeerd scenario om op te bouwen — niet bevestigd`);
+        continue;
+      }
+      const cookie = await ctx.cookieVoor(basis.rol);
+      const res = await doeVerzoek({
+        method: sl.method,
+        path: basis.path,
+        cookie,
+        rawBody: "{ dit is geen json",
+        headers: basis.headers,
+      });
+      if (res.status === 400) ok2++;
+      else slikkerFout.push(`${sl.naam} (${basis.path}): verwacht 400, kreeg ${res.status}`);
+    }
+    console.log(`[schema] Deel 2 — handhaving op de slikkers: ${ok2}/${SLIKKERS.length} gaven 400 op kapotte JSON.`);
+    for (const f of slikkerFout) console.log(`  ✗ ${f}`);
+
+    const fout = gewijzigd.length + slikkerFout.length;
+    console.log(`\n[schema] ${fout === 0 ? "GROEN" : "ROOD"}: ${ok1} ongewijzigd, ${ok2}/${SLIKKERS.length} slikkers bevestigd.`);
+    if (fout > 0) process.exit(1);
     return;
   }
 

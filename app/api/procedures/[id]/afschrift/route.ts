@@ -14,6 +14,7 @@ import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { isBureauRol } from "@/core/lib/bureau-gate";
 import { sha256Hex } from "@/core/lib/afschrift-manifest";
 import { AFSCHRIFT_AI_MODEL, AFSCHRIFT_PROMPTVERSIE } from "@/core/lib/afschrift-ai-config";
+import { z } from "zod";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +27,7 @@ const AFSCHRIFT_BUREAU_WEIGERING =
 
 type Versie = "actueel" | "besluitmoment";
 
-export const POST = withFondsRoute({ capability: "procedures.manage", hostGuard: true, label: "procedures.afschrift.POST" }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ capability: "procedures.manage", hostGuard: true, label: "procedures.afschrift.POST", schema: z.object({ "aanleiding": z.unknown().optional(), "aiLeeswijzer": z.unknown().optional(), "leeswijzerTekst": z.unknown().optional(), "versie": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: procedureId } = params as { id: string };
     const supabase = ctx.supabase;
