@@ -57,7 +57,7 @@ create or replace function public.fn_validate_requirement_instance_binding_sleut
 returns trigger
 language plpgsql
 security definer
-set search_path = ''
+set search_path = pg_temp
 as $$
 declare
   v_procedure_id uuid;
@@ -137,7 +137,7 @@ create or replace function public.fn_validate_bewijs_requirement_binding()
 returns trigger
 language plpgsql
 security definer
-set search_path = ''
+set search_path = pg_temp
 as $$
 declare
   v_procedure_id uuid;
@@ -242,7 +242,7 @@ create or replace function public.fn_audit_procedure_bewijs_mutation()
 returns trigger
 language plpgsql
 security definer
-set search_path = ''
+set search_path = pg_temp
 as $$
 declare
   v_row public.procedure_bewijs%rowtype;
