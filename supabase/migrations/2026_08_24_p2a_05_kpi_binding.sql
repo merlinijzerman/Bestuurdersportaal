@@ -32,7 +32,7 @@ revoke all on function public.fn_validate_kpi_binding() from public, anon, authe
 grant execute on function public.fn_validate_kpi_binding() to service_role;
 drop trigger if exists trg_kpi_validate_binding on public.decision_conditions;
 create trigger trg_kpi_validate_binding
-  before insert or update of requirement_sleutel on public.decision_conditions
+  before insert or update of requirement_sleutel, decision_id on public.decision_conditions
   for each row execute function public.fn_validate_kpi_binding();
 
 create or replace function public.fn_audit_kpi_binding()

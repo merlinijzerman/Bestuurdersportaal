@@ -32,7 +32,7 @@ revoke all on function public.fn_validate_aivalidation_binding() from public, an
 grant execute on function public.fn_validate_aivalidation_binding() to service_role;
 drop trigger if exists trg_aivalidation_validate_binding on public.decision_ai_interactions;
 create trigger trg_aivalidation_validate_binding
-  before insert or update of requirement_sleutel on public.decision_ai_interactions
+  before insert or update of requirement_sleutel, decision_id on public.decision_ai_interactions
   for each row execute function public.fn_validate_aivalidation_binding();
 
 create or replace function public.fn_audit_aivalidation_binding()

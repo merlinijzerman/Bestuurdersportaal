@@ -46,7 +46,7 @@ grant execute on function public.fn_validate_risk_binding() to service_role;
 
 drop trigger if exists trg_risk_validate_binding on public.decision_risks;
 create trigger trg_risk_validate_binding
-  before insert or update of requirement_sleutel on public.decision_risks
+  before insert or update of requirement_sleutel, decision_id on public.decision_risks
   for each row execute function public.fn_validate_risk_binding();
 
 -- ── 4. Dunne audit-wrapper → gedeelde log (alleen bij bindingswijziging).
