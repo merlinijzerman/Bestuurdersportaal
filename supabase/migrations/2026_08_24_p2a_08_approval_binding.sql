@@ -32,7 +32,7 @@ revoke all on function public.fn_validate_approval_binding() from public, anon, 
 grant execute on function public.fn_validate_approval_binding() to service_role;
 drop trigger if exists trg_approval_validate_binding on public.procedure_besluiten;
 create trigger trg_approval_validate_binding
-  before insert or update of requirement_sleutel on public.procedure_besluiten
+  before insert or update of requirement_sleutel, procedure_id on public.procedure_besluiten
   for each row execute function public.fn_validate_approval_binding();
 
 create or replace function public.fn_audit_approval_binding()

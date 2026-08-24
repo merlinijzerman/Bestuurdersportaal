@@ -126,6 +126,16 @@ begin
     return; -- geen bindingswijziging
   end if;
 
+  -- Defensief tegen cascade-delete: is de procedure zelf al weg (bv. een
+  -- decision_object dat via ON DELETE CASCADE zijn Groep-A-feiten meesleept), dan
+  -- kan er niet tegen procedure_log gelogd worden (FK/NOT NULL). Sla dan stil over
+  -- i.p.v. de hele delete met een cryptische NOT-NULL-fout te laten falen; de
+  -- verwijdering van de ouder is de audit-gebeurtenis op dat niveau. (Onbereikbaar
+  -- in de praktijk: Decision Objects worden niet hard-verwijderd — besluit 0001.)
+  if not exists (select 1 from public.procedures where id = p_procedure_id) then
+    return;
+  end if;
+
   if v_actor is not null then
     select naam into v_naam from public.profielen where id = v_actor;
   end if;

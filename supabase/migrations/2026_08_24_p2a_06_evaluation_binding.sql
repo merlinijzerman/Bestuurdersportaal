@@ -32,7 +32,7 @@ revoke all on function public.fn_validate_evaluation_binding() from public, anon
 grant execute on function public.fn_validate_evaluation_binding() to service_role;
 drop trigger if exists trg_evaluation_validate_binding on public.decision_evaluations;
 create trigger trg_evaluation_validate_binding
-  before insert or update of requirement_sleutel on public.decision_evaluations
+  before insert or update of requirement_sleutel, decision_id on public.decision_evaluations
   for each row execute function public.fn_validate_evaluation_binding();
 
 create or replace function public.fn_audit_evaluation_binding()
