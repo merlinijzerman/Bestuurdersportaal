@@ -69,7 +69,7 @@ create table if not exists public.profielen (
   -- 2026-08-05 (T1 bureau-rol, besluit 0128, migratie 2026_08_05_bestuursbureau_rol.sql):
   -- vierde waarde 'bestuursbureau'. Default blijft 'bestuurder' — maak_profiel()
   -- zet de rol niet; verhoging loopt via het service-role-pad (P3-B).
-  rol         text check (rol in ('bestuurder','voorzitter','beheerder','bestuursbureau')) default 'bestuurder',
+  rol         text check (rol in ('bestuurder','voorzitter','beheerder','bestuursbureau')) not null default 'bestuurder',
   aangemaakt  timestamptz default now(),
   -- Increment F (FO §14, migratie 2026_06_22_profiel.sql) — persoonlijk
   -- bestuurdersprofiel. Strikt zelfbeheerd (besluit 0017): alleen de persoon zelf
