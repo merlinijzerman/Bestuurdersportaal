@@ -53,21 +53,50 @@ export type Handlerbeeld = {
   readonly hostGuardInSpec: boolean;
 };
 
+/** Leest het eerste objectargument van een wrapper-aanroep. W9 voegt een
+ * `z.object({...})`-schema toe, dus de spec is niet langer plat en `[^{}]*`
+ * zou een geldige delegatie ten onrechte als route-eigen classificeren. */
+function leesObjectArgument(bron: string, vanaf: number): string | null {
+  const begin = bron.indexOf("{", vanaf);
+  if (begin < 0) return null;
+  let diepte = 0;
+  let quote: string | null = null;
+  let escape = false;
+  for (let i = begin; i < bron.length; i++) {
+    const teken = bron[i];
+    if (quote) {
+      if (escape) escape = false;
+      else if (teken === "\\") escape = true;
+      else if (teken === quote) quote = null;
+      continue;
+    }
+    if (teken === '"' || teken === "'" || teken === "`") {
+      quote = teken;
+      continue;
+    }
+    if (teken === "{") diepte++;
+    else if (teken === "}") {
+      diepte--;
+      if (diepte === 0) return bron.slice(begin, i + 1);
+    }
+  }
+  return null;
+}
+
 /** Inventariseert de geëxporteerde HTTP-handlers van een route-bestand. */
 export function leesHandlers(bron: string): Handlerbeeld[] {
   const heeftWrapperImport = WRAPPER_IMPORT.test(bron);
   const beeld: Handlerbeeld[] = [];
   for (const methode of METHODEN) {
-    // Spec-object van de wrapper-aanroep. De spec is plat (hostGuard + label),
-    // dus [^{}]* is hier exact genoeg en kan niet over de handler heen lopen.
-    const wrapper = new RegExp(
-      `export\\s+const\\s+${methode}\\s*=\\s*withFondsRoute\\s*\\(\\s*(\\{[^{}]*\\})`
+    const start = new RegExp(
+      `export\\s+const\\s+${methode}\\s*=\\s*withFondsRoute\\s*\\(\\s*\\{`
     ).exec(bron);
-    if (wrapper && heeftWrapperImport) {
+    const spec = start ? leesObjectArgument(bron, start.index) : null;
+    if (spec && heeftWrapperImport) {
       beeld.push({
         methode,
         viaWrapper: true,
-        hostGuardInSpec: /\bhostGuard\s*:\s*true\b/.test(wrapper[1]),
+        hostGuardInSpec: /\bhostGuard\s*:\s*true\b/.test(spec),
       });
       continue;
     }

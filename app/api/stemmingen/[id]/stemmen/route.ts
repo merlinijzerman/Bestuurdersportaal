@@ -4,6 +4,7 @@ import { notifyUser } from "@/core/lib/notifications";
 import type { Alternatief } from "@/core/lib/stemming";
 import { isBureauRol, BUREAU_WEIGERING } from "@/core/lib/bureau-gate";
 import { weigerAlsModuleUit } from "@/core/lib/module-guard";
+import { z } from "zod";
 
 // ============================================================
 //  POST /api/stemmingen/[id]/stemmen — breng een stem uit of wijzig 'm.
@@ -23,7 +24,7 @@ import { weigerAlsModuleUit } from "@/core/lib/module-guard";
 //
 //  Wijzigen kan alleen vóór sluiting en alleen door de uitbrenger zelf.
 // ============================================================
-export const POST = withFondsRoute({ capability: "stemming.deelname" }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ capability: "stemming.deelname", schema: z.object({ "keuze": z.unknown().optional(), "motivering": z.unknown().optional(), "stemgerechtigde_id": z.unknown().optional(), "volmacht_bevestigd": z.unknown().optional(), "volmacht_toelichting": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: stemmingId } = params as { id: string };
     const supabase = ctx.supabase;

@@ -35,7 +35,7 @@ import {
 const MAX_BESTAND_BYTES = 1_000_000;
 const MAX_RIJEN = 200;
 
-export const POST = withFondsRoute({ capability: "stuurinformatie.manage" }, async (ctx, req: NextRequest) => {
+export const POST = withFondsRoute({ capability: "stuurinformatie.manage", schema: "geen-body" }, async (ctx, req: NextRequest) => {
   try {
     const supabase = ctx.supabase;
 

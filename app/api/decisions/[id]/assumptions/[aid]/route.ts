@@ -19,6 +19,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
+import { z } from "zod";
 
 const ASSUMPTION_TYPES = [
   "macro",
@@ -57,7 +58,7 @@ const INHOUDELIJKE_VELDEN: (keyof WijzigBody)[] = [
   "ai_gedetecteerd",
 ];
 
-export const PATCH = withFondsRoute({ capability: "decisions.manage" }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ capability: "decisions.manage", schema: z.object({ "onzekerheid": z.unknown().optional(), "status": z.unknown().optional(), "type": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: decisionId, aid } = params as { id: string; aid: string };
     const supabase = ctx.supabase;

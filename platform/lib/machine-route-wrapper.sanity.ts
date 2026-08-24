@@ -59,6 +59,9 @@ function deps(opties: { opAppSurface: boolean; geautoriseerd: boolean }) {
       geteld.authCheck++;
       return opties.geautoriseerd;
     },
+    // W9: default UIT. Alle specs hier zijn "geen-body", dus de schema-poort wordt
+    // sowieso overgeslagen; de dep is er om MachineDeps compleet te maken.
+    schemaEnforceAan: () => false,
   };
   return { d, geteld };
 }
@@ -72,7 +75,7 @@ async function main() {
     async () => {
       const { d, geteld } = deps({ opAppSurface: true, geautoriseerd: false });
       let handlerAangeroepen = 0;
-      const route = maakWithMachineRoute(d)({ bewaking: "cron-secret", label: "t", directeMutaties: [] }, async () => {
+      const route = maakWithMachineRoute(d)({ bewaking: "cron-secret", label: "t", directeMutaties: [], schema: "geen-body" }, async () => {
         handlerAangeroepen++;
         return new Response("nooit");
       });
@@ -94,7 +97,7 @@ async function main() {
   await test("niet geautoriseerd: exact 401 {\"error\":\"Niet geautoriseerd\"}", async () => {
     const { d, geteld } = deps({ opAppSurface: false, geautoriseerd: false });
     let handlerAangeroepen = 0;
-    const route = maakWithMachineRoute(d)({ bewaking: "cron-secret", label: "t", directeMutaties: [] }, async () => {
+    const route = maakWithMachineRoute(d)({ bewaking: "cron-secret", label: "t", directeMutaties: [], schema: "geen-body" }, async () => {
       handlerAangeroepen++;
       return new Response("nooit");
     });
@@ -117,7 +120,7 @@ async function main() {
     // binnen een closure wordt gezet tot `never`, en dan verdwijnt juist de
     // assertie die er hier toe doet.
     const gezien: MachineContext[] = [];
-    const route = maakWithMachineRoute(d)({ bewaking: "cron-secret", label: "worker", directeMutaties: [] }, async (ctx) => {
+    const route = maakWithMachineRoute(d)({ bewaking: "cron-secret", label: "worker", directeMutaties: [], schema: "geen-body" }, async (ctx) => {
       gezien.push(ctx);
       return eigen;
     });
@@ -138,7 +141,7 @@ async function main() {
   // ── 4. "publiek" kijkt niet eens ──────────────────────────────────────────
   await test('bewaking "publiek": geen van beide controles wordt aangeroepen', async () => {
     const { d, geteld } = deps({ opAppSurface: true, geautoriseerd: false });
-    const route = maakWithMachineRoute(d)({ bewaking: "publiek", label: "ping", directeMutaties: [] }, async () =>
+    const route = maakWithMachineRoute(d)({ bewaking: "publiek", label: "ping", directeMutaties: [], schema: "geen-body" }, async () =>
       Response.json({ ok: true })
     );
 
@@ -153,7 +156,7 @@ async function main() {
   await test("v1 heeft GEEN vangnet: een fout uit de handler komt ongewijzigd naar buiten", async () => {
     const { d } = deps({ opAppSurface: false, geautoriseerd: true });
     const stuk = new Error("kapot in de handler");
-    const route = maakWithMachineRoute(d)({ bewaking: "cron-secret", label: "t", directeMutaties: [] }, async () => {
+    const route = maakWithMachineRoute(d)({ bewaking: "cron-secret", label: "t", directeMutaties: [], schema: "geen-body" }, async () => {
       throw stuk;
     });
 

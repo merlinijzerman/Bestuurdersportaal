@@ -15,6 +15,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
+import { z } from "zod";
 
 type WijzigBody = {
   titel?: string;
@@ -26,7 +27,7 @@ type WijzigBody = {
 const BEWERKBARE_VELDEN = ["titel", "beschrijving", "deadline"] as const;
 type BewerkbaarVeld = (typeof BEWERKBARE_VELDEN)[number];
 
-export const PATCH = withFondsRoute({ capability: "procedures.manage" }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ capability: "procedures.manage", schema: z.object({ "motivering": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

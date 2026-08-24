@@ -45,6 +45,13 @@
 //  gaan lopen — wat H-02 juist als risico noemt.
 // ============================================================================
 import { NextResponse, type NextRequest } from "next/server";
+// ÉÉN enforce-module, gedeeld met withFondsRoute. `platform/lib` importeert al uit
+// `core/lib` (ai-poort, app-fout, …); andersom nul. Geen duplicaat. Zie TICKET-W9 §2.2.
+import {
+  beoordeelSchema,
+  schemaEnforceAan,
+  type SchemaDeclaratie,
+} from "@/core/lib/schema-enforce";
 
 /** Hoe deze route bewaakt wordt. TWEE WAARDEN, en `"publiek"` is er omdat een
  *  AFWEZIGE bewaking niet te onderscheiden is van een VERGETEN bewaking —
@@ -80,6 +87,11 @@ export type MachineSpecV1 = {
    * wat hij meet — vandaar de naam naar het meetbare, niet naar gezag.
    */
   readonly directeMutaties: readonly DirecteMutatie[];
+  /** WELKE bodyvorm deze machineroute accepteert. VERPLICHT (besluit optie a) — een
+   *  zod-schema of `"geen-body"`. Van de 12 machinehandlers leest alleen
+   *  `internal/semantische-extractie` een body (`document_id`); de rest is
+   *  `"geen-body"`. Zelfde `request.clone()`-mechaniek en vlag als withFondsRoute. */
+  readonly schema: SchemaDeclaratie;
 };
 
 /** Context voor een machineroute. Bewust mager: er is geen sessie, geen
@@ -105,11 +117,15 @@ type MachineHandler = (
 export type MachineDeps = {
   draaitOpAppSurface: () => boolean | Promise<boolean>;
   geautoriseerdeCron: (req: NextRequest) => boolean | Promise<boolean>;
+  /** Leest `ENFORCE_SCHEMA`. Injecteerbaar zodat de sanity-suite beide vlagstanden
+   *  bewijst zonder process.env te muteren. Dezelfde vlag als withFondsRoute. */
+  schemaEnforceAan: () => boolean;
 };
 
 const echteDeps: MachineDeps = {
   draaitOpAppSurface: async () => (await import("./cron-auth")).draaitOpAppSurface(),
   geautoriseerdeCron: async (req) => (await import("./cron-auth")).geautoriseerdeCron(req),
+  schemaEnforceAan,
 };
 
 /** Factory zodat de wrapper testbaar is zonder env en zonder Next-runtime.
@@ -131,6 +147,52 @@ export function maakWithMachineRoute(deps: MachineDeps) {
         // 2. Constant-time bearer.
         if (!(await deps.geautoriseerdeCron(request))) {
           return NextResponse.json({ error: "Niet geautoriseerd" }, { status: 401 });
+        }
+      }
+
+      // Schema-poort (W9) — NA de bewaking, VÓÓR de handler. Leest een
+      // request.clone(), nooit het origineel: de handler leest de body zelf.
+      // Vlag UIT → observe + door (byte-identiek); vlag AAN → mismatch = 400.
+      if (spec.schema !== "geen-body") {
+        let body: unknown;
+        let parsebaar = true;
+        try {
+          body = await request.clone().json();
+        } catch {
+          parsebaar = false;
+        }
+        const handhaven = deps.schemaEnforceAan();
+        if (parsebaar) {
+          const oordeel = beoordeelSchema({ schema: spec.schema, body });
+          if (!oordeel.toegestaan) {
+            for (const f of oordeel.fouten) {
+              console.warn("[SCHEMA-OBSERVE]", {
+                route: spec.label,
+                handler: request.method,
+                veld: f.veld,
+                verwacht: f.verwacht,
+                gekregen: f.gekregen,
+                code: f.code,
+                handhaven,
+                requestId,
+              });
+            }
+            if (handhaven) {
+              return NextResponse.json({ error: "Ongeldige invoer." }, { status: 400 });
+            }
+          }
+        } else if (handhaven) {
+          console.warn("[SCHEMA-OBSERVE]", {
+            route: spec.label,
+            handler: request.method,
+            veld: "(body)",
+            verwacht: "json",
+            gekregen: "onparsebaar",
+            code: "invalid_json",
+            handhaven,
+            requestId,
+          });
+          return NextResponse.json({ error: "Ongeldige invoer." }, { status: 400 });
         }
       }
 

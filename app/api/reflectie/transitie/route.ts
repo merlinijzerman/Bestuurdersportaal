@@ -27,6 +27,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
+import { z } from "zod";
 import {
   effectieveStatus,
   isReflectieActie,
@@ -127,7 +128,7 @@ function rpcFout(error: { message?: string }): NextResponse {
  * dekt uitsluitend de eigen rij binnen het eigen fonds. Er wordt bewust NOOIT
  * automatisch een bericht verstuurd — deze route geeft alleen status terug.
  */
-export const GET = withFondsRoute({ capability: "reflectie.view.own" }, async (ctx, req: NextRequest) => {
+export const GET = withFondsRoute({ capability: "reflectie.view.own", schema: "geen-body" }, async (ctx, req: NextRequest) => {
   try {
     const gesprekId = req.nextUrl.searchParams.get("gesprek_id");
     if (!gesprekId || !UUID.test(gesprekId)) {
@@ -157,7 +158,7 @@ export const GET = withFondsRoute({ capability: "reflectie.view.own" }, async (c
 });
 
 /** POST — één transitie aanvragen. De actie is het enige wat de client stuurt. */
-export const POST = withFondsRoute({ capability: "reflectie.manage.own" }, async (ctx, req: NextRequest) => {
+export const POST = withFondsRoute({ capability: "reflectie.manage.own", schema: z.object({ "actie": z.unknown().optional(), "bronset_log_id": z.unknown().optional(), "gesprek_id": z.unknown().optional(), "ingang": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
   try {
     const body = (await req.json().catch(() => ({}))) as {
       gesprek_id?: unknown;

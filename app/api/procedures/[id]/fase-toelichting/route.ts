@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
+import { z } from "zod";
 
 // Per-proces fase-toelichting (WO-2-vervolg). Upsert op (procedure_id, fase_code).
 // Server-side gegate op voorzitter/beheerder; fonds_id wordt server-side
 // afgeleid (nooit uit de request). De RLS-policy op procedure_fase_toelichting
 // dwingt hetzelfde af (defense-in-depth).
-export const POST = withFondsRoute({ capability: "procedures.manage" }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ capability: "procedures.manage", schema: z.object({ "fase_code": z.unknown().optional(), "toelichting": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

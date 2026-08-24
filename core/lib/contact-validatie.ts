@@ -18,6 +18,8 @@
 //  client ze direct aan het juiste invoerveld kan koppelen.
 // ============================================================================
 
+import { z } from "zod";
+
 export const TYPE_VERZOEK_OPTIES = [
   "demo",
   "pilot",
@@ -81,64 +83,97 @@ function alsTekst(waarde: unknown): string {
   return typeof waarde === "string" ? waarde.trim() : "";
 }
 
+// ── W9 — het contract als zod-schema ────────────────────────────────────────
+//  De publieke contactroute valt buiten `withFondsRoute` (geen sessie), maar is
+//  de ENIGE publiek bereikbare body-lezer. Daarom krijgt hij een echt schema,
+//  hier gedeclareerd en inline toegepast in /api/contact via `valideerContact`.
+//
+//  `valideerContact` DELEGEERT zijn validatie sinds W9 aan dit schema — de
+//  logica is één-op-één overgezet, GEEN aanscherping: elke `.transform(alsTekst)`
+//  spiegelt de oude coercie (niet-string → '' → verplicht-fout), elke lengte- en
+//  formaatcheck komt uit `superRefine` met exact dezelfde melding en veldsleutel.
+//  Dat `contact-validatie.sanity.ts` ongewijzigd groen blijft, IS het bewijs dat
+//  de omzetting niets heeft aangescherpt (TICKET-W9 §4).
+//
+//  R-13 (herkomst-spoofing) en R-14 (fail-open Turnstile, `contact/route.ts:105`)
+//  blijven ONGEMOEID open — een schema is geen botbescherming. Zie het issue.
+// `.optional()` zodat een ONTBREKENDE key wordt geaccepteerd (zod 4 weigert
+// `z.unknown()` anders als "nonoptional"); de transform coerceert dan
+// undefined/niet-string → '' — precies de oude `alsTekst`-coercie.
+const tekst = z.unknown().optional().transform(alsTekst);
+
+export const contactSchema = z
+  .object({
+    naam: tekst,
+    organisatie: tekst,
+    rol: tekst,
+    email: tekst,
+    telefoon: tekst,
+    type_verzoek: tekst,
+    bericht: tekst,
+  })
+  .passthrough()
+  .superRefine((v, ctx) => {
+    const fout = (veld: ContactVeld, message: string) =>
+      ctx.addIssue({ code: "custom", path: [veld], message });
+
+    if (!v.naam) fout("naam", "Vul uw naam in.");
+    else if (v.naam.length > VELD_MAX.naam) fout("naam", "Naam is te lang.");
+
+    if (!v.organisatie) fout("organisatie", "Vul uw organisatie in.");
+    else if (v.organisatie.length > VELD_MAX.organisatie)
+      fout("organisatie", "Organisatie is te lang.");
+
+    // rol optioneel (besluit 0037 #2): alleen lengte; leeg → '' opslaan.
+    if (v.rol && v.rol.length > VELD_MAX.rol) fout("rol", "Rol of functie is te lang.");
+
+    if (!v.email) fout("email", "Vul een geldig e-mailadres in.");
+    else if (v.email.length > VELD_MAX.email || !EMAIL_RE.test(v.email))
+      fout("email", "Vul een geldig e-mailadres in.");
+
+    if (v.telefoon && v.telefoon.length > VELD_MAX.telefoon)
+      fout("telefoon", "Telefoonnummer is te lang.");
+
+    const typeGeldig = (TYPE_VERZOEK_OPTIES as readonly string[]).includes(v.type_verzoek);
+    if (!v.type_verzoek) fout("type", "Kies een type verzoek.");
+    else if (!typeGeldig) fout("type", "Ongeldig type verzoek.");
+
+    // bericht optioneel: alleen lengte; leeg → '' opslaan.
+    if (v.bericht && v.bericht.length > VELD_MAX.bericht)
+      fout("bericht", "Bericht is te lang.");
+  });
+
 /**
  * Valideer en normaliseer een contactinzending.
  *
  * Retourneert óf `{ ok: true, schoon }` met opslag-klare waarden, óf
  * `{ ok: false, fouten }` met per-veld een korte NL-melding. De server
  * gebruikt alleen `ok` (generieke 400 naar buiten); de client toont `fouten`.
+ *
+ * W9: delegeert aan {@link contactSchema}; gedrag identiek (sanity-suite = tegenproef).
  */
 export function valideerContact(invoer: ContactInvoer): ValidatieResultaat {
-  const fouten: Partial<Record<ContactVeld, string>> = {};
-
-  const naam = alsTekst(invoer.naam);
-  const organisatie = alsTekst(invoer.organisatie);
-  const rol = alsTekst(invoer.rol);
-  const email = alsTekst(invoer.email);
-  const telefoon = alsTekst(invoer.telefoon);
-  const typeRuw = alsTekst(invoer.type_verzoek);
-  const bericht = alsTekst(invoer.bericht);
-
-  if (!naam) fouten.naam = "Vul uw naam in.";
-  else if (naam.length > VELD_MAX.naam) fouten.naam = "Naam is te lang.";
-
-  if (!organisatie) fouten.organisatie = "Vul uw organisatie in.";
-  else if (organisatie.length > VELD_MAX.organisatie)
-    fouten.organisatie = "Organisatie is te lang.";
-
-  // rol is optioneel (besluit 0037 #2): alleen lengte begrenzen; leeg → '' opslaan.
-  if (rol && rol.length > VELD_MAX.rol) fouten.rol = "Rol of functie is te lang.";
-
-  if (!email) fouten.email = "Vul een geldig e-mailadres in.";
-  else if (email.length > VELD_MAX.email || !EMAIL_RE.test(email))
-    fouten.email = "Vul een geldig e-mailadres in.";
-
-  if (telefoon && telefoon.length > VELD_MAX.telefoon)
-    fouten.telefoon = "Telefoonnummer is te lang.";
-
-  const typeGeldig = (TYPE_VERZOEK_OPTIES as readonly string[]).includes(typeRuw);
-  if (!typeRuw) fouten.type = "Kies een type verzoek.";
-  else if (!typeGeldig) fouten.type = "Ongeldig type verzoek.";
-
-  // bericht is optioneel (besluit 0037 #2): alleen lengte begrenzen; leeg → '' opslaan.
-  if (bericht && bericht.length > VELD_MAX.bericht)
-    fouten.bericht = "Bericht is te lang.";
-
-  if (Object.keys(fouten).length > 0) {
+  const res = contactSchema.safeParse(invoer);
+  if (!res.success) {
+    const fouten: Partial<Record<ContactVeld, string>> = {};
+    for (const issue of res.error.issues) {
+      const veld = issue.path[0] as ContactVeld | undefined;
+      if (veld && fouten[veld] === undefined) fouten[veld] = issue.message;
+    }
     return { ok: false, schoon: null, fouten };
   }
-
+  const v = res.data;
   return {
     ok: true,
     fouten: {},
     schoon: {
-      naam,
-      organisatie,
-      rol,
-      email,
-      telefoon: telefoon || null,
-      type_verzoek: typeRuw as TypeVerzoek,
-      bericht,
+      naam: v.naam,
+      organisatie: v.organisatie,
+      rol: v.rol,
+      email: v.email,
+      telefoon: v.telefoon || null,
+      type_verzoek: v.type_verzoek as TypeVerzoek,
+      bericht: v.bericht,
     },
   };
 }

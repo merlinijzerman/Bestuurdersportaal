@@ -3,6 +3,7 @@ import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { ensureDecisionForProcedure } from "@/core/lib/decision";
 import { requirementSleutel } from "@/core/lib/requirement-sleutel";
 import { REQUIREMENT_TYPES } from "@/core/lib/procedure-definitie";
+import { z } from "zod";
 
 // GET  /api/procedures/[id]/requirements  — actieve instantie-requirements
 // POST /api/procedures/[id]/requirements  — voeg een instantie-requirement toe
@@ -12,7 +13,7 @@ import { REQUIREMENT_TYPES } from "@/core/lib/procedure-definitie";
 // server-side afgeleid (nooit uit de request). Elke toevoeging schrijft precies
 // één governance_event (append-only) en telt mee in de readiness-unie.
 
-export const GET = withFondsRoute({ capability: "procedures.view" }, async (ctx, _req: NextRequest, params) => {
+export const GET = withFondsRoute({ capability: "procedures.view", schema: "geen-body" }, async (ctx, _req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;
@@ -31,7 +32,7 @@ export const GET = withFondsRoute({ capability: "procedures.view" }, async (ctx,
   }
 });
 
-export const POST = withFondsRoute({ capability: "procedures.manage" }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ capability: "procedures.manage", schema: z.object({ "blokkerend": z.unknown().optional(), "documenttype": z.unknown().optional(), "label": z.unknown().optional(), "min_aantal": z.unknown().optional(), "requirement_type": z.unknown().optional(), "stap_volgorde": z.unknown().optional(), "veld_pad": z.unknown().optional(), "vereist_validatie_domein": z.unknown().optional(), "verplicht": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
+import { z } from "zod";
 
-export const PATCH = withFondsRoute({ capability: "agendapunten.manage" }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ capability: "agendapunten.manage", schema: z.object({ "eigen_notities": z.unknown().optional(), "vrije_notities": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;
