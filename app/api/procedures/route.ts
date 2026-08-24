@@ -46,6 +46,10 @@ export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beo
       .insert({
         fonds_id: ctx.fondsId,
         template_code: templateCode,
+        // P1b (#166): pin de definitieversie bij start (snapshot-integriteit).
+        // De rijke definities dragen 'm (uit de JSON); code-templates niet →
+        // '1.0.0' (OB-4). Zo leest het dossier altijd zijn eigen versie.
+        template_versie: template.versie ?? "1.0.0",
         titel,
         beschrijving: body.beschrijving || null,
         deadline: body.deadline || null,

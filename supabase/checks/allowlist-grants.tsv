@@ -222,9 +222,15 @@ FUNC	public	fn_platform_event_hash()	function	service_role	-
 FUNC	public	fn_platform_event_immutable()	function	anon	-
 FUNC	public	fn_platform_event_immutable()	function	authenticated	EXECUTE
 FUNC	public	fn_platform_event_immutable()	function	service_role	EXECUTE
+FUNC	public	fn_procedure_requirements_versievast()	function	anon	-
+FUNC	public	fn_procedure_requirements_versievast()	function	authenticated	-
+FUNC	public	fn_procedure_requirements_versievast()	function	service_role	EXECUTE
 FUNC	public	fn_profiel_bevries_kolommen()	function	anon	-
 FUNC	public	fn_profiel_bevries_kolommen()	function	authenticated	-
 FUNC	public	fn_profiel_bevries_kolommen()	function	service_role	EXECUTE
+FUNC	public	fn_publicatie_append_only()	function	anon	-
+FUNC	public	fn_publicatie_append_only()	function	authenticated	-
+FUNC	public	fn_publicatie_append_only()	function	service_role	EXECUTE
 FUNC	public	fn_rate_limit_check(p_endpoint text, p_limiet integer, p_venster interval)	function	anon	-
 FUNC	public	fn_rate_limit_check(p_endpoint text, p_limiet integer, p_venster interval)	function	authenticated	EXECUTE
 FUNC	public	fn_rate_limit_check(p_endpoint text, p_limiet integer, p_venster interval)	function	service_role	EXECUTE
@@ -702,6 +708,9 @@ REL	public	procedure_fase_toelichting	table	service_role	SELECT,INSERT,UPDATE,DE
 REL	public	procedure_log	table	anon	SELECT
 REL	public	procedure_log	table	authenticated	SELECT,INSERT,UPDATE,DELETE
 REL	public	procedure_log	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	procedure_definitie_publicatie	table	anon	-
+REL	public	procedure_definitie_publicatie	table	authenticated	SELECT
+REL	public	procedure_definitie_publicatie	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
 REL	public	procedure_requirement_instance	table	anon	-
 REL	public	procedure_requirement_instance	table	authenticated	SELECT,INSERT,UPDATE
 REL	public	procedure_requirement_instance	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN

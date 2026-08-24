@@ -1052,7 +1052,9 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         // Reikwijdte/fase uit het Decision Object + de gekoppelde bewijsstukken.
         const { data: proc } = await supabase
           .from("procedures")
-          .select("id, titel, status, template_code, beschrijving, decision_id")
+          .select(
+            "id, titel, status, template_code, template_versie, beschrijving, decision_id"
+          )
           .eq("id", moduleScope.procedure_id)
           .maybeSingle();
         if (!proc?.id) {
@@ -1106,11 +1108,20 @@ export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route
         // geen vervuld/niet-vervuld-oordeel — dat vergt de readiness-engine).
         let requirements: RequirementRij[] = [];
         if (proc.template_code && huidigeStap) {
-          const { data: reqRows } = await supabase
+          // P1b (#166): versie-gefilterd op de gepinde versie; fallback naar
+          // code-only als die (kortstondig) null is.
+          let reqQuery = supabase
             .from("procedure_requirements")
             .select("label, requirement_type, verplicht, blokkerend")
             .eq("template_code", proc.template_code as string)
             .eq("stap_volgorde", huidigeStap.volgorde);
+          if (proc.template_versie) {
+            reqQuery = reqQuery.eq(
+              "template_versie",
+              proc.template_versie as string
+            );
+          }
+          const { data: reqRows } = await reqQuery;
           requirements = (reqRows ?? []) as RequirementRij[];
         }
 
