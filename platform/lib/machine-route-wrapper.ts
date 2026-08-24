@@ -59,10 +59,27 @@ import { NextResponse, type NextRequest } from "next/server";
  *                   bijzet, zet er een motivering bij. */
 export type MachineBewaking = "cron-secret" | "publiek";
 
+/** De directe schrijf-primitieven op de service-role-client. */
+export type DirecteMutatie = "delete" | "insert" | "update" | "upsert" | "storage-remove";
+
 export type MachineSpecV1 = {
   readonly bewaking: MachineBewaking;
   /** Herkenbare naam in logregels. Geen effect op de respons. */
   readonly label: string;
+  /**
+   * De directe schrijfacties die de HANDLER ZELF op database/storage doet, als
+   * DRIFTDETECTOR: wijkt de code van het routebestand af van deze lijst, dan valt
+   * de gate `machine-directe-mutaties.sanity.ts` om. `[]` = geen directe mutatie
+   * in de handler.
+   *
+   * MEET BEWUST NIET de mutaties in aangeroepen `platform/lib`-functies — vijf van
+   * de zes service-role-machineroutes delegeren hun schrijfwerk (queues, storage),
+   * en een route-surface-grep kijkt daar niet in. Dit veld is dus geen
+   * capability-grens over het hele call-pad; die structurele grens (de wrapper
+   * levert een begrensde client) is vervolgticket #172. Elke controle verklaart
+   * wat hij meet — vandaar de naam naar het meetbare, niet naar gezag.
+   */
+  readonly directeMutaties: readonly DirecteMutatie[];
 };
 
 /** Context voor een machineroute. Bewust mager: er is geen sessie, geen

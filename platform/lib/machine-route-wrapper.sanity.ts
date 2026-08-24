@@ -72,7 +72,7 @@ async function main() {
     async () => {
       const { d, geteld } = deps({ opAppSurface: true, geautoriseerd: false });
       let handlerAangeroepen = 0;
-      const route = maakWithMachineRoute(d)({ bewaking: "cron-secret", label: "t" }, async () => {
+      const route = maakWithMachineRoute(d)({ bewaking: "cron-secret", label: "t", directeMutaties: [] }, async () => {
         handlerAangeroepen++;
         return new Response("nooit");
       });
@@ -94,7 +94,7 @@ async function main() {
   await test("niet geautoriseerd: exact 401 {\"error\":\"Niet geautoriseerd\"}", async () => {
     const { d, geteld } = deps({ opAppSurface: false, geautoriseerd: false });
     let handlerAangeroepen = 0;
-    const route = maakWithMachineRoute(d)({ bewaking: "cron-secret", label: "t" }, async () => {
+    const route = maakWithMachineRoute(d)({ bewaking: "cron-secret", label: "t", directeMutaties: [] }, async () => {
       handlerAangeroepen++;
       return new Response("nooit");
     });
@@ -117,7 +117,7 @@ async function main() {
     // binnen een closure wordt gezet tot `never`, en dan verdwijnt juist de
     // assertie die er hier toe doet.
     const gezien: MachineContext[] = [];
-    const route = maakWithMachineRoute(d)({ bewaking: "cron-secret", label: "worker" }, async (ctx) => {
+    const route = maakWithMachineRoute(d)({ bewaking: "cron-secret", label: "worker", directeMutaties: [] }, async (ctx) => {
       gezien.push(ctx);
       return eigen;
     });
@@ -138,7 +138,7 @@ async function main() {
   // ── 4. "publiek" kijkt niet eens ──────────────────────────────────────────
   await test('bewaking "publiek": geen van beide controles wordt aangeroepen', async () => {
     const { d, geteld } = deps({ opAppSurface: true, geautoriseerd: false });
-    const route = maakWithMachineRoute(d)({ bewaking: "publiek", label: "ping" }, async () =>
+    const route = maakWithMachineRoute(d)({ bewaking: "publiek", label: "ping", directeMutaties: [] }, async () =>
       Response.json({ ok: true })
     );
 
@@ -153,7 +153,7 @@ async function main() {
   await test("v1 heeft GEEN vangnet: een fout uit de handler komt ongewijzigd naar buiten", async () => {
     const { d } = deps({ opAppSurface: false, geautoriseerd: true });
     const stuk = new Error("kapot in de handler");
-    const route = maakWithMachineRoute(d)({ bewaking: "cron-secret", label: "t" }, async () => {
+    const route = maakWithMachineRoute(d)({ bewaking: "cron-secret", label: "t", directeMutaties: [] }, async () => {
       throw stuk;
     });
 
