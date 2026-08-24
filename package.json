@@ -24,6 +24,10 @@
     "test:backup-restore": "node --test scripts/backup-workflows.test.mjs scripts/diagnose-supabase-auth-config.test.mjs scripts/download-b2-object-with-retry.test.mjs scripts/send-backup-alert.test.mjs scripts/normalize-supabase-validation-json.test.mjs scripts/prepare-supabase-managed-customizations.test.mjs scripts/resolve-supabase-managed-restore-mode.test.mjs scripts/restore-supabase-backup.test.mjs scripts/restore-supabase-storage.test.mjs scripts/run-supabase-managed-app-smoke.test.mjs scripts/update-supabase-managed-restore-state.test.mjs scripts/verify-portable-checksum.test.mjs scripts/verify-supabase-auth-config.test.mjs scripts/verify-supabase-managed-functional.test.mjs scripts/verify-supabase-managed-keys.test.mjs scripts/verify-supabase-restore.test.mjs scripts/verify-watchdog-fail-closed.test.mjs scripts/create-supabase-managed-restore-evidence.test.mjs",
     "test:platform-inventory": "node --test scripts/capture-platform-inventory.test.mjs",
     "test:seed-guard": "node --test tests/karakterisering/seed-doelomgeving.test.mjs",
+    "schema:inventaris": "node tests/karakterisering/schema-inventaris.mjs",
+    "schema:corpus": "node tests/karakterisering/schema-corpus.mjs",
+    "schema:concepten": "node tests/karakterisering/schema-genereer.mjs",
+    "test:schema-niet-strenger": "node tests/karakterisering/schema-niet-strenger.mjs",
     "prepare": "git config core.hooksPath scripts/hooks || true"
   },
   "dependencies": {
@@ -37,7 +41,8 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "unpdf": "^0.12.1",
-    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.0",
