@@ -33,6 +33,9 @@ export const FIX = {
   notulenDocument1: "00000000-0000-4000-8000-0000000d0c03",
   documentOnbekend: "00000000-0000-4000-8000-0000000d0cff",
   procedure1: "00000000-0000-4000-8000-00000000cd01",
+  // Alleen Preview-waarneming: vaste UI-fixtures naast de kale lokale W1-seed.
+  previewProcedureStap1: "00000000-0000-4000-8000-0000000cd201",
+  previewProcedureChecklist1: "00000000-0000-4000-8000-0000000cd202",
   risico1: "00000000-0000-4000-8000-0000000715c1",
   procesmodel1: "00000000-0000-4000-8000-0000000b0001",
   procesmodelOnbekend: "00000000-0000-4000-8000-0000000b00ff",
@@ -179,4 +182,4 @@ export const AFSCHRIFT1_PAD = `${FONDS_ID}/w1-afschrift.pdf`;
 export const DOCUMENT1_BYTES = "%PDF-1.4 W1-KARAKTERISERING-FIXTURE\n";
 export const DOCUMENT1_PAD = `${FONDS_ID}/w1-document.pdf`;
 export const NOTULEN_DOCUMENT_PAD = `${FONDS_ID}/synthetische-notulen-w1.pdf`;
-export const NOTULEN_DOCUMENT_BYTES = "%PDF-1.4 SYNTHETISCH-OMG1-NOTULEN\\n";
+export const NOTULEN_DOCUMENT_BYTES = "%PDF-1.4 SYNTHETISCH-OMG1-NOTULEN\n";

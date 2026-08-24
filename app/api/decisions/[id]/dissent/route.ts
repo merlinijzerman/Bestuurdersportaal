@@ -48,7 +48,7 @@ interface CreateBody {
   stemming_id?: string | null; // optionele koppeling naar een tegen-stem
 }
 
-export const POST = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ capability: "decisions.manage" }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: decisionId } = params as { id: string };
     const supabase = ctx.supabase;

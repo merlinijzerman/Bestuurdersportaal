@@ -32,7 +32,7 @@ const BATCH = 25;
 // Aantal chunks dat we per document bekijken voor de inhoudsmatch (S4).
 const CHUNK_STEEKPROEF = 12;
 
-export const POST = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, _req: NextRequest) => {
+export const POST = withFondsRoute({ capability: "beheer.backfill" }, async (ctx, _req: NextRequest) => {
   try {
     const supabase = ctx.supabase;
 

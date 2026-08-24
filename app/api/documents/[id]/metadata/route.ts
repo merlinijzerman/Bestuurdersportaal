@@ -51,7 +51,7 @@ async function leesCapabilities(
   };
 }
 
-export const GET = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, _req: NextRequest, params) => {
+export const GET = withFondsRoute({ capability: "documents.view" }, async (ctx, _req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;
@@ -86,7 +86,7 @@ export const GET = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, _req
   }
 });
 
-export const PATCH = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ capability: "documents.metadata.update" }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

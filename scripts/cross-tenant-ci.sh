@@ -167,6 +167,9 @@ SQL_ROLCAP="supabase/checks/2026_08_04_a_rollen_capabilities.sql"
 # zaaien hem nu zelf, binnen hun eigen transactie.
 SQL_T7SEM="supabase/checks/2026_08_12_t7_semantische_laag.sql"
 SQL_T8SEM="supabase/checks/2026_08_12_t8_semantische_extractie.sql"
+# Bewijs↔vereiste-binding — expliciete één-op-éénbinding, fail-closed bij
+# ambiguïteit, atomische audit voor directe PostgREST-writes en snapshotdekking.
+SQL_BBIND="supabase/checks/2026_08_18_bewijsbinding.sql"
 
 echo "== [1/4] tsc --noEmit --skipLibCheck =="
 ./node_modules/.bin/tsc --noEmit --skipLibCheck
@@ -281,6 +284,9 @@ echo
 echo "-- C-01 (vw_fondsleden cross-tenant + kolomafscherming + view-schrijfrechten) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_VWF"
 echo
+echo "-- Bewijsbinding (één-op-één, DB-validatie, atomische audit, snapshot) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_BBIND"
+echo
 
 echo "-- V3 (grants-gate over alle objectklassen: relaties, functies, buckets, storage-policies) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_V3"
@@ -320,4 +326,5 @@ echo "  T7   semantische laag: RLS op semantic_units + waardetypering           
 echo "  T8   semantische extractie: gate H op de schrijffunctie + hints         (DB-laag)"
 echo "  C-01 vw_-views: cross-tenant, kolomafscherming, geen I/U/D voor browserrol (DB-laag)"
 echo "  V3   grants-gate: feitelijke rechten op alle relaties/functies == allowlist (DB-laag)"
+echo "  BBIND bewijsbinding: één-op-één + DB-validatie/audit + snapshotdekking       (DB-laag)"
 echo "============================================================================"

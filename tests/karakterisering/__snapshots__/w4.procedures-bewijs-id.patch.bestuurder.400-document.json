@@ -1,6 +1,6 @@
 {
   "body": {
-    "error": "document_id is verplicht"
+    "error": "document_id of vereiste is verplicht"
   },
   "headers": {
     "content-type": "application/json"

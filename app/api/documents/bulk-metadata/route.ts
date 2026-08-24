@@ -40,7 +40,7 @@ interface DocResultaat {
   fouten?: string[];
 }
 
-export const POST = withFondsRoute({ capability: "TE_BEPALEN" }, async (ctx, req: NextRequest) => {
+export const POST = withFondsRoute({ capability: "documents.metadata.update" }, async (ctx, req: NextRequest) => {
   try {
     const supabase = ctx.supabase;
 

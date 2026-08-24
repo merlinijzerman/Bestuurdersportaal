@@ -151,33 +151,70 @@ jobs:
       - name: App bouwen
         run: npm run build
 
-      - name: App starten + snapshots 3x verifiëren
+      # Twee passes op ÉÉN gedeelde stack en ÉÉN build (de dure delen). De vlag
+      # wordt per Next-proces gelezen (env bij processtart), dus flag-uit en
+      # flag-aan zijn twee `next start`-processen — geen tweede build, geen tweede
+      # Supabase. Runtime van beide wordt geëcho'd zodat de kosten zichtbaar zijn.
+      - name: App starten + snapshots 3x verifiëren (vlag UIT)
         run: |
+          wacht_op_boot() {
+            for i in $(seq 1 60); do
+              curl -sf http://127.0.0.1:3000/api/healthz/ping >/dev/null && return 0
+              sleep 1
+            done
+            echo "FOUT: next start kwam niet op binnen 60s." >&2
+            return 1
+          }
+          t0=$(date +%s)
           PORT=3000 npm run start &
           SERVER=$!
-          for i in $(seq 1 60); do
-            curl -sf http://127.0.0.1:3000/api/healthz/ping >/dev/null && ok=1 && break
-            sleep 1
-          done
-          if [ "${ok:-0}" != "1" ]; then
-            echo "FOUT: next start kwam niet op binnen 60s." >&2
-            kill "$SERVER" 2>/dev/null || true
-            exit 1
-          fi
+          if ! wacht_op_boot; then kill "$SERVER" 2>/dev/null || true; exit 1; fi
           # 3x achter elkaar — zie de BESLUIT-notitie in de kop. Ronde 1 dekt
           # "geen opgebouwde staat", ronde 2 en 3 dekken herhaalbaarheid.
           code=0
           for ronde in 1 2 3; do
-            echo "::group::karakterisering --verify ronde $ronde/3"
+            echo "::group::karakterisering --verify ronde $ronde/3 (vlag UIT)"
             if ! node tests/karakterisering/run.mjs --verify; then
-              echo "::endgroup::"
-              echo "FOUT: --verify rood in ronde $ronde van 3." >&2
-              code=1
-              break
+              echo "::endgroup::"; echo "FOUT: --verify rood in ronde $ronde van 3." >&2
+              code=1; break
             fi
             echo "::endgroup::"
           done
           kill "$SERVER" 2>/dev/null || true
+          wait "$SERVER" 2>/dev/null || true
+          echo "vlag-uit-pass: $(( $(date +%s) - t0 ))s"
+          exit $code
+
+      # W7 (#153): dezelfde stack, dezelfde build, tweede Next-proces mét de vlag —
+      # op een EIGEN poort (3001). De vlag-uit-server hierboven wordt via `npm run
+      # start` gestart, dat `next-server` als kind spawnt; `kill` op de npm-wrapper
+      # laat dat kind mogelijk op poort 3000 staan. Een aparte poort vermijdt die
+      # kill-timing-race volledig: bindt de vlag-aan-server elders, dan is een
+      # EADDRINUSE geen stille terugval op de vlag-UIT-server (die zou de twee
+      # verwachte 403's als 400/404 teruggeven en het contract vals-rood maken).
+      - name: Autorisatiecontract afdwingen (vlag AAN)
+        env:
+          ENFORCE_CAPABILITY: "on"
+          APP_BASE_URL: "http://127.0.0.1:3001"
+        run: |
+          t0=$(date +%s)
+          ENFORCE_CAPABILITY=on PORT=3001 npm run start &
+          SERVER=$!
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:3001/api/healthz/ping >/dev/null && ok=1 && break
+            sleep 1
+          done
+          if [ "${ok:-0}" != "1" ]; then
+            echo "FOUT: next start (vlag aan) kwam niet op binnen 60s." >&2
+            kill "$SERVER" 2>/dev/null || true; exit 1
+          fi
+          echo "::group::karakterisering --authz (vlag AAN)"
+          node tests/karakterisering/run.mjs --authz
+          code=$?
+          echo "::endgroup::"
+          kill "$SERVER" 2>/dev/null || true
+          wait "$SERVER" 2>/dev/null || true
+          echo "vlag-aan-pass: $(( $(date +%s) - t0 ))s"
           exit $code
 
       - name: Supabase-stack stoppen

@@ -66,11 +66,126 @@ const BUREAU_NIET = [
   "organisation.profile.manage",
   "fonds.config.manage",
   "stuurinformatie.manage",
-  "generic.library.manage",
 ] as const;
 
+// ── W7 (#153) — de 24 gedeclareerde gates, per rol ────────────────────────────
+// De pins hieronder zijn BASELINE + W7-DELTA. Zo blijft de nulgrens-guardrail
+// doen waarvoor hij is gebouwd (elke wijziging BUITEN deze delta faalt luid),
+// terwijl de W7-uitbreiding zichtbaar en apart staat.
+//
+// W7 voegt gates toe die op dit moment door GEEN ENKELE route worden
+// gedeclareerd — nul gedragswijziging. Zodra PR-B ze declareert blijft elke
+// route-eigen gate staan, dus ook dan wint de strengste.
+const W7_PER_ROL: Record<string, readonly string[]> = {
+  beheerder: [
+    "agendapunten.manage",
+    "assurance.view",
+    "chat.use",
+    "beheer.backfill",
+    "classification.queue.view",
+    "decisions.manage",
+    "decisions.view",
+    "documents.lifecycle.manage",
+    "documents.view",
+    "dossiers.view",
+    "gesprekken.manage",
+    "inbreng.manage",
+    "notificaties.manage.own",
+    "notificaties.view.own",
+    "organisation.profile.view",
+    "procedures.manage",
+    "procedures.view",
+    "profile.view.own",
+    "reflectie.manage.own",
+    "reflectie.view.own",
+    "risicos.manage",
+    "stemming.deelname",
+    "vergaderingen.manage",
+    "vergelijk.use",
+    "zoeken.use",
+  ],
+  voorzitter: [
+    "agendapunten.manage",
+    "assurance.view",
+    "chat.use",
+    "beheer.backfill",
+    "classification.queue.view",
+    "decisions.manage",
+    "decisions.view",
+    "documents.lifecycle.manage",
+    "documents.view",
+    "dossiers.view",
+    "gesprekken.manage",
+    "inbreng.manage",
+    "notificaties.manage.own",
+    "notificaties.view.own",
+    "organisation.profile.view",
+    "procedures.manage",
+    "procedures.view",
+    "profile.view.own",
+    "reflectie.manage.own",
+    "reflectie.view.own",
+    "risicos.manage",
+    "stemming.deelname",
+    "vergaderingen.manage",
+    "vergelijk.use",
+    "zoeken.use",
+  ],
+  bestuurder: [
+    "agendapunten.manage",
+    "assurance.view",
+    "chat.use",
+    "classification.queue.view",
+    "decisions.manage",
+    "decisions.view",
+    "documents.view",
+    "dossiers.view",
+    "gesprekken.manage",
+    "inbreng.manage",
+    "notificaties.manage.own",
+    "notificaties.view.own",
+    "organisation.profile.view",
+    "procedures.manage",
+    "procedures.view",
+    "profile.view.own",
+    "reflectie.manage.own",
+    "reflectie.view.own",
+    "risicos.manage",
+    "stemming.deelname",
+    "vergaderingen.manage",
+    "vergelijk.use",
+    "zoeken.use",
+  ],
+  bestuursbureau: [
+    "agendapunten.manage",
+    "assurance.view",
+    "chat.use",
+    "classification.queue.view",
+    "decisions.manage",
+    "decisions.view",
+    "documents.view",
+    "dossiers.view",
+    "gesprekken.manage",
+    "notificaties.manage.own",
+    "notificaties.view.own",
+    "organisation.profile.view",
+    "procedures.manage",
+    "procedures.view",
+    "profile.view.own",
+    "reflectie.manage.own",
+    "reflectie.view.own",
+    "risicos.manage",
+    "vergaderingen.manage",
+    "vergelijk.use",
+    "zoeken.use",
+  ],
+};
+
 test("BB-1 — bestuursbureau draagt exact de capabilities uit ontwerp §5.2", () => {
-  assert.deepEqual([...ROL_CAPABILITIES.bestuursbureau].sort(), [...BUREAU_WEL].sort());
+  assert.deepEqual(
+    [...ROL_CAPABILITIES.bestuursbureau].sort(),
+    [...BUREAU_WEL, ...W7_PER_ROL.bestuursbureau].sort()
+  );
 });
 
 test("BB-2 — bestuursbureau draagt geen enkele uitgesloten capability (§5.3)", () => {
@@ -115,9 +230,10 @@ test("BB-4 — de twee AI-capabilities zijn server-side bedraad (T2/T4)", () => 
 // ── (2) NULGRENS G23 — de drie bestaande rollen zijn ongewijzigd ───────────
 
 test("BB-5 — nulgrens: de capability-sets van bestuurder/voorzitter/beheerder zijn gepind", () => {
-  // Letterlijk gepind. Wijzigt er één, dan is dat per definitie een doorbraak van
-  // de nulgrens en faalt deze test luid in plaats van stil.
-  assert.deepEqual([...ROL_CAPABILITIES.beheerder].sort(), [
+  // Letterlijk gepind als BASELINE + W7-DELTA. Wijzigt er iets buiten de delta,
+  // dan is dat per definitie een doorbraak van de nulgrens en faalt deze test
+  // luid in plaats van stil.
+  const VOOR_W7_beheerder = [
     "catalog.manage",
     "classification.review",
     "documents.bronstatus.change",
@@ -132,8 +248,8 @@ test("BB-5 — nulgrens: de capability-sets van bestuurder/voorzitter/beheerder 
     "profile.manage.own",
     "stuurinformatie.manage",
     "stuurinformatie.view",
-  ]);
-  assert.deepEqual([...ROL_CAPABILITIES.voorzitter].sort(), [
+  ];
+  const VOOR_W7_voorzitter = [
     "classification.review",
     "documents.bronstatus.change",
     "documents.metadata.update",
@@ -146,15 +262,28 @@ test("BB-5 — nulgrens: de capability-sets van bestuurder/voorzitter/beheerder 
     "profile.manage.own",
     "stuurinformatie.manage",
     "stuurinformatie.view",
-  ]);
-  assert.deepEqual([...ROL_CAPABILITIES.bestuurder].sort(), [
+  ];
+  const VOOR_W7_bestuurder = [
     "documents.bronstatus.change",
     "documents.metadata.update",
     "documents.status.change",
     "klantbeeld.view",
     "profile.manage.own",
     "stuurinformatie.view",
-  ]);
+  ];
+
+  assert.deepEqual(
+    [...ROL_CAPABILITIES.beheerder].sort(),
+    [...VOOR_W7_beheerder, ...W7_PER_ROL.beheerder].sort()
+  );
+  assert.deepEqual(
+    [...ROL_CAPABILITIES.voorzitter].sort(),
+    [...VOOR_W7_voorzitter, ...W7_PER_ROL.voorzitter].sort()
+  );
+  assert.deepEqual(
+    [...ROL_CAPABILITIES.bestuurder].sort(),
+    [...VOOR_W7_bestuurder, ...W7_PER_ROL.bestuurder].sort()
+  );
 });
 
 test("BB-6 — nulgrens: de bureau-gate raakt de bestaande rollen niet", () => {

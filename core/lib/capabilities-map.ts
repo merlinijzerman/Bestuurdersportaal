@@ -26,8 +26,6 @@ export type Capability =
   | "classification.review"
   // Increment D — notulensegmenten voorstellen/bevestigen/corrigeren (FO §8, TO §2.5).
   | "notulen.segment.confirm"
-  // Increment C+/B13 — generieke (platform-gecureerde) bibliotheek beheren.
-  | "generic.library.manage"
   // Increment F — persoonlijk bestuurdersprofiel (FO §14, besluit 0017).
   | "profile.manage.own"
   // Organisatieprofiel v0.4 — tenant-zelfservice op het fonds-brede contextprofiel.
@@ -44,7 +42,36 @@ export type Capability =
   //  • ai.stukvoorbereiding → producerende taken + Word-export (G2/G15).
   //  • ai.deskresearch      → webpad-gate (T4).
   | "ai.deskresearch"
-  | "ai.stukvoorbereiding";
+  | "ai.stukvoorbereiding"
+  // ── W7 (issue #153, besluitregister regel 1) — één gate per domein per
+  //    lezen/schrijven, zodat élke route een GEDECLAREERDE poort heeft en de
+  //    vlag naar fail-closed kan. Deze 24 zeggen WÁT voor bevoegdheid een route
+  //    vereist; ze zeggen (nog) niet wie hem heeft — zie de toekenning hieronder.
+  | "agendapunten.manage"
+  | "assurance.view"
+  | "chat.use"
+  | "beheer.backfill"
+  | "classification.queue.view"
+  | "decisions.manage"
+  | "decisions.view"
+  | "documents.lifecycle.manage"
+  | "documents.view"
+  | "dossiers.view"
+  | "gesprekken.manage"
+  | "inbreng.manage"
+  | "notificaties.manage.own"
+  | "notificaties.view.own"
+  | "organisation.profile.view"
+  | "procedures.manage"
+  | "procedures.view"
+  | "profile.view.own"
+  | "reflectie.manage.own"
+  | "reflectie.view.own"
+  | "risicos.manage"
+  | "stemming.deelname"
+  | "vergaderingen.manage"
+  | "vergelijk.use"
+  | "zoeken.use";
 
 /** Rol → toegekende capabilities. Bron-van-waarheid voor autorisatie in v2. */
 export const ROL_CAPABILITIES: Record<string, Capability[]> = {
@@ -63,6 +90,35 @@ export const ROL_CAPABILITIES: Record<string, Capability[]> = {
     "stuurinformatie.view",
     "stuurinformatie.manage",
     "klantbeeld.view",
+    // ── W7-gates (#153) — RUIM BIJ BESLUIT, NIET BIJ ONTWERP. ──────────────
+    // alle 24 W7-gates.
+    // Aanscherpen gebeurt HIER, niet in de routes: haal een naam weg en alle
+    // handlers onder die gate worden strenger, zonder één routebestand aan te raken.
+    "agendapunten.manage",
+    "assurance.view",
+    "chat.use",
+    "beheer.backfill",
+    "classification.queue.view",
+    "decisions.manage",
+    "decisions.view",
+    "documents.lifecycle.manage",
+    "documents.view",
+    "dossiers.view",
+    "gesprekken.manage",
+    "inbreng.manage",
+    "notificaties.manage.own",
+    "notificaties.view.own",
+    "organisation.profile.view",
+    "procedures.manage",
+    "procedures.view",
+    "profile.view.own",
+    "reflectie.manage.own",
+    "reflectie.view.own",
+    "risicos.manage",
+    "stemming.deelname",
+    "vergaderingen.manage",
+    "vergelijk.use",
+    "zoeken.use",
   ],
   voorzitter: [
     "dossiers.manage",
@@ -77,6 +133,35 @@ export const ROL_CAPABILITIES: Record<string, Capability[]> = {
     "stuurinformatie.view",
     "stuurinformatie.manage",
     "klantbeeld.view",
+    // ── W7-gates (#153) — RUIM BIJ BESLUIT, NIET BIJ ONTWERP. ──────────────
+    // alle 24 W7-gates.
+    // Aanscherpen gebeurt HIER, niet in de routes: haal een naam weg en alle
+    // handlers onder die gate worden strenger, zonder één routebestand aan te raken.
+    "agendapunten.manage",
+    "assurance.view",
+    "chat.use",
+    "beheer.backfill",
+    "classification.queue.view",
+    "decisions.manage",
+    "decisions.view",
+    "documents.lifecycle.manage",
+    "documents.view",
+    "dossiers.view",
+    "gesprekken.manage",
+    "inbreng.manage",
+    "notificaties.manage.own",
+    "notificaties.view.own",
+    "organisation.profile.view",
+    "procedures.manage",
+    "procedures.view",
+    "profile.view.own",
+    "reflectie.manage.own",
+    "reflectie.view.own",
+    "risicos.manage",
+    "stemming.deelname",
+    "vergaderingen.manage",
+    "vergelijk.use",
+    "zoeken.use",
   ],
   bestuurder: [
     "documents.metadata.update",
@@ -85,6 +170,35 @@ export const ROL_CAPABILITIES: Record<string, Capability[]> = {
     "profile.manage.own",
     "stuurinformatie.view",
     "klantbeeld.view",
+    // ── W7-gates (#153) — RUIM BIJ BESLUIT, NIET BIJ ONTWERP. ──────────────
+    // 22 van de 24 W7-gates. `beheer.backfill` en `documents.lifecycle.manage`
+    // niet: dáár dragen ALLE onderliggende routes vandaag al een voorzitter/beheerder-
+    // gate, dus scherp declareren is hier gelijk aan wat er draait (regel 3).
+    // Aanscherpen gebeurt HIER, niet in de routes: haal een naam weg en alle
+    // handlers onder die gate worden strenger, zonder één routebestand aan te raken.
+    "agendapunten.manage",
+    "assurance.view",
+    "chat.use",
+    "classification.queue.view",
+    "decisions.manage",
+    "decisions.view",
+    "documents.view",
+    "dossiers.view",
+    "gesprekken.manage",
+    "inbreng.manage",
+    "notificaties.manage.own",
+    "notificaties.view.own",
+    "organisation.profile.view",
+    "procedures.manage",
+    "procedures.view",
+    "profile.view.own",
+    "reflectie.manage.own",
+    "reflectie.view.own",
+    "risicos.manage",
+    "stemming.deelname",
+    "vergaderingen.manage",
+    "vergelijk.use",
+    "zoeken.use",
   ],
   // T1 bureau-rol (ontwerp §5.2, besluit 0128). Zijtak: ruim op documentbeheer,
   // strikt smaller op alle beoordelende/beherende handelingen. De ai.*-bureau-
@@ -98,6 +212,33 @@ export const ROL_CAPABILITIES: Record<string, Capability[]> = {
     "klantbeeld.view",
     "ai.deskresearch",
     "ai.stukvoorbereiding",
+    // ── W7-gates (#153) — RUIM BIJ BESLUIT, NIET BIJ ONTWERP. ──────────────
+    // 20 van de 24. Naast de twee scherpe gates ook `inbreng.manage` en
+    // `stemming.deelname` niet: álle routes daaronder sluiten het bureau vandaag al uit,
+    // via isBureauRol() én via RLS. De toekenning legt vast wat er is (§5.3).
+    // Aanscherpen gebeurt HIER, niet in de routes: haal een naam weg en alle
+    // handlers onder die gate worden strenger, zonder één routebestand aan te raken.
+    "agendapunten.manage",
+    "assurance.view",
+    "chat.use",
+    "classification.queue.view",
+    "decisions.manage",
+    "decisions.view",
+    "documents.view",
+    "dossiers.view",
+    "gesprekken.manage",
+    "notificaties.manage.own",
+    "notificaties.view.own",
+    "organisation.profile.view",
+    "procedures.manage",
+    "procedures.view",
+    "profile.view.own",
+    "reflectie.manage.own",
+    "reflectie.view.own",
+    "risicos.manage",
+    "vergaderingen.manage",
+    "vergelijk.use",
+    "zoeken.use",
   ],
 };
 

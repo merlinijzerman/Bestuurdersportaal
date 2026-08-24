@@ -113,7 +113,7 @@ export async function seed(admin = adminClient()) {
   await seedCatalogus(admin);
   await seedRisicos(admin);
   await seedGesprekken(admin, users);
-  await seedProcedures(admin);
+  await seedProcedures(admin, { preview: doelomgeving === "preview" });
   await seedAfschrift(admin);
   await seedAgendapunten(admin, users);
   // Preview-waarnemingsdata hoort niet in de lokale CI-stack: die stack
@@ -128,6 +128,38 @@ export async function seed(admin = adminClient()) {
 // Stemmingen blijven bewust ongezaaid: VEN-2 moet zichtbaar uitgeschakeld
 // blijven totdat die module expliciet is geactiveerd.
 async function seedPreviewWaarneming(admin, users) {
+  // Een vroege OMG-1-versie gebruikte per ongeluk `decision1` voor deze
+  // Preview-fixture. Herstel uitsluitend die exact herkenbare oude toestand:
+  // de W4-fixture krijgt zijn eigen code terug en de oude dissent verdwijnt.
+  // Daarmee kan de nieuwe, eigen Preview-UUID hieronder conflictvrij landen.
+  const { data: oudePreviewDecision, error: oudePreviewDecisionError } = await admin
+    .from("decision_objects")
+    .select("id")
+    .eq("id", FIX.decision1)
+    .eq("besluit_code", "SYN-OMG1-001")
+    .maybeSingle();
+  if (oudePreviewDecisionError) {
+    throw new Error(`decision_objects(oude OMG-1-fixture lezen): ${oudePreviewDecisionError.message}`);
+  }
+  if (oudePreviewDecision) {
+    const { error: oudeDissentError } = await admin
+      .from("decision_dissent")
+      .delete()
+      .eq("id", FIX.decisionDissent1)
+      .eq("decision_id", FIX.decision1);
+    if (oudeDissentError) {
+      throw new Error(`decision_dissent(oude OMG-1-fixture): ${oudeDissentError.message}`);
+    }
+    const { error: oudeDecisionHerstelError } = await admin
+      .from("decision_objects")
+      .update({ besluit_code: "W4-001" })
+      .eq("id", FIX.decision1)
+      .eq("besluit_code", "SYN-OMG1-001");
+    if (oudeDecisionHerstelError) {
+      throw new Error(`decision_objects(oude OMG-1-fixture herstellen): ${oudeDecisionHerstelError.message}`);
+    }
+  }
+
   const bytes = new TextEncoder().encode(NOTULEN_DOCUMENT_BYTES);
   const upload = await admin.storage.from("documenten").upload(NOTULEN_DOCUMENT_PAD, bytes, {
     contentType: "application/pdf", upsert: true,
@@ -158,20 +190,57 @@ async function seedPreviewWaarneming(admin, users) {
   }, { onConflict: "id" });
   if (inbrengError) throw new Error(`agendapunt_inbreng: ${inbrengError.message}`);
 
-  const { error: decisionError } = await admin.from("decision_objects").upsert({
+  // De procedurepagina kiest het primaire besluit. Zet alleen de vaste
+  // Preview-fixture primair, zodat een eerdere handmatige rondgang geen
+  // willekeurig auto-upgradebesluit als UI-ingang achterlaat.
+  const { error: oudePrimaireError } = await admin
+    .from("decision_objects")
+    .update({ is_primary_decision: false })
+    .eq("fonds_id", FONDS_ID)
+    .eq("procedure_id", FIX.procedure1)
+    .neq("id", FIX.previewDecision1);
+  if (oudePrimaireError) {
+    throw new Error(`decision_objects(oude primaire preview-fixture): ${oudePrimaireError.message}`);
+  }
+
+  // Status is een bewaakte workflow. Een handmatige Preview-waarneming kan de
+  // fixture legitiem van `concept` naar een volgende status brengen; een seed
+  // mag die overgang niet illegaal terugdraaien. Voeg de beginstatus daarom
+  // alleen toe bij de eerste insert en laat hem bij herhaalde runs intact.
+  const { data: bestaandPreviewBesluit, error: bestaandPreviewBesluitError } = await admin
+    .from("decision_objects")
+    .select("id")
+    .eq("id", FIX.previewDecision1)
+    .maybeSingle();
+  if (bestaandPreviewBesluitError) {
+    throw new Error(`decision_objects(preview-fixture lezen): ${bestaandPreviewBesluitError.message}`);
+  }
+
+  const previewBesluit = {
     id: FIX.previewDecision1, procedure_id: FIX.procedure1, fonds_id: FONDS_ID,
     besluit_code: "SYN-OMG1-001", titel: "SYNTHETISCH — oefenbesluit Preview",
     besluitvraag: "Is de synthetische Preview-omgeving gevuld?",
     aanleiding: "OMG-1 preview-waarneming",
     scope: "Alleen synthetische testdata; geen productiebetekenis.",
-    // Dit is ook de vaste beginstatus van `zetDecision()` in scenarios.mjs.
-    // De harnas-reset mag geen verboden statusovergang afdwingen; de dissent-
-    // fixture is onafhankelijk van de workflowstatus en blijft zo testbaar.
-    governance_orgaan: "SYNTHETISCH oefengremium", status: "concept",
-    is_primary_decision: false, eigenaar_id: users.voorzitter.userId,
+    governance_orgaan: "SYNTHETISCH oefengremium",
+    is_primary_decision: true, eigenaar_id: users.voorzitter.userId,
     eigenaar_naam: "SYNTHETISCHE voorzitter W1",
-  }, { onConflict: "id" });
+    ...(bestaandPreviewBesluit ? {} : { status: "concept" }),
+  };
+  const { error: decisionError } = await admin
+    .from("decision_objects")
+    .upsert(previewBesluit, { onConflict: "id" });
   if (decisionError) throw new Error(`decision_objects: ${decisionError.message}`);
+
+  const { error: procedureDecisionError } = await admin
+    .from("procedures")
+    .update({ decision_id: FIX.previewDecision1 })
+    .eq("id", FIX.procedure1)
+    .eq("fonds_id", FONDS_ID);
+  if (procedureDecisionError) {
+    throw new Error(`procedures(preview decision): ${procedureDecisionError.message}`);
+  }
+
   const { error: dissentError } = await admin.from("decision_dissent").upsert({
     id: FIX.decisionDissent1, decision_id: FIX.previewDecision1, bestuurder_id: users.bestuurder.userId,
     bestuurder_naam: "SYNTHETISCHE bestuurder W1", zichtbaarheid: "gedeelde_zorg",
@@ -254,18 +323,70 @@ async function seedAfschrift(admin) {
 //
 // Gemeten vóór de wijziging: `titel` handmatig veranderd, seed opnieuw gedraaid,
 // titel bleef veranderd.
-async function seedProcedures(admin) {
+async function seedProcedures(admin, { preview = false } = {}) {
   const { error } = await admin.from("procedures").upsert(
     {
       id: FIX.procedure1,
       fonds_id: FONDS_ID,
-      template_code: "algemeen",
+      // `algemeen` is de historische, kale W1-fixture en bestaat niet als
+      // startbaar producttemplate. Preview gebruikt daarom een bestaand
+      // template-codepad; de stap hieronder blijft bewust eigen testdata in
+      // plaats van een tweede implementatie van POST /api/procedures.
+      template_code: preview ? "beleidswijziging" : "algemeen",
       titel: "W1 Procedure",
       status: "lopend",
     },
     { onConflict: "id" }
   );
   if (error) throw new Error(`procedures: ${error.message}`);
+
+  if (!preview) return;
+
+  // Een producttemplate hier opnieuw uitrollen zou de materialisatielogica van
+  // POST /api/procedures dupliceren. Deze expliciete, synthetische UI-fixture
+  // is genoeg voor de dossierweergave; de lokale snapshots raken hem niet.
+  const { error: stapError } = await admin.from("procedure_stappen").upsert(
+    {
+      id: FIX.previewProcedureStap1,
+      procedure_id: FIX.procedure1,
+      volgorde: 101,
+      naam: "SYNTHETISCH — W7 dossiercontrole",
+      beschrijving: "Alleen voor de reproduceerbare Preview-waarneming.",
+      vereist_besluit: true,
+      geschatte_dagen: 0,
+      status: "actief",
+      blokkerende_afhankelijkheden: [],
+      fase_code: null,
+      herbevestiging_nodig: false,
+      heropend_op: null,
+      voltooid_op: null,
+      voltooid_door: null,
+    },
+    { onConflict: "id" }
+  );
+  if (stapError) throw new Error(`procedure_stappen(preview-W7): ${stapError.message}`);
+
+  const { error: checklistError } = await admin.from("procedure_checklist").upsert(
+    {
+      id: FIX.previewProcedureChecklist1,
+      stap_id: FIX.previewProcedureStap1,
+      volgorde: 1,
+      label: "SYNTHETISCH — W7-dossier bereikbaar",
+      bewijs_vereist: false,
+      toelichting: "Geen productvereiste; uitsluitend Preview-waarneming.",
+      voldaan: false,
+      voldaan_op: null,
+      voldaan_door: null,
+      voldaan_door_naam: null,
+      opmerking: null,
+      bron: "template",
+      actief: true,
+      governance_event_id: null,
+      aangemaakt_door: null,
+    },
+    { onConflict: "id" }
+  );
+  if (checklistError) throw new Error(`procedure_checklist(preview-W7): ${checklistError.message}`);
 }
 
 // ── Tier 2: gesprekken (eigenaar = auth.uid, dus per-run user-id) ───────────

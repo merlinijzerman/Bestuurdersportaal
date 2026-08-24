@@ -6,6 +6,7 @@
 // Puur en deterministisch (geen tijd/random), zodat de output stabiel is.
 
 import type { ProcedureDefinitie } from "./procedure-definitie";
+import { requirementIdentiteit } from "./requirement-sleutel";
 
 function sqlStr(v: string | null | undefined): string {
   if (v === null || v === undefined) return "null";
@@ -26,7 +27,31 @@ function sqlInt(n: number | null | undefined): string {
 export function genereerRequirementsSeed(def: ProcedureDefinitie): string {
   const rows: string[] = [];
   for (const stap of [...def.stappen].sort((a, b) => a.volgorde - b.volgorde)) {
+    // Bindings-/matchsleutel bewaken. De identiteit coalesce(documenttype,
+    // label) draagt drie dingen: de unieke index idx_req_uniek, de
+    // uitsluiting (match_sleutel) én sinds 2026-08-18 de bewijsbinding
+    // (procedure_bewijs.requirement_sleutel). Een lege of dubbele identiteit
+    // binnen dezelfde stap maakt een vereiste onadresseerbaar of laat één
+    // bewijsstuk twee vereisten vervullen — precies de fout die de
+    // bewijsmatching-fix opruimt. Faal hier, vóórdat de seed in de DB belandt.
+    const gezien = new Set<string>();
     for (const r of stap.requirements) {
+      const identiteit = requirementIdentiteit(r.documenttype ?? null, r.label);
+      if (identiteit.trim() === "") {
+        throw new Error(
+          `stap ${stap.volgorde}, requirement '${r.requirement_type}': ` +
+            `lege matchsleutel (documenttype én label zijn leeg)`
+        );
+      }
+      const sleutel = `${r.requirement_type}|${identiteit}`;
+      if (gezien.has(sleutel)) {
+        throw new Error(
+          `stap ${stap.volgorde}: dubbele matchsleutel '${identiteit}' ` +
+            `voor requirement_type '${r.requirement_type}'. ` +
+            `coalesce(documenttype, label) moet uniek zijn binnen een stap.`
+        );
+      }
+      gezien.add(sleutel);
       rows.push(
         `  (${sqlStr(def.code)}, ${stap.volgorde}, ${sqlStr(r.requirement_type)}, ` +
           `${sqlStr(r.label)}, ${sqlStr(r.documenttype ?? null)}, ${sqlStr(r.veld_pad ?? null)}, ` +
