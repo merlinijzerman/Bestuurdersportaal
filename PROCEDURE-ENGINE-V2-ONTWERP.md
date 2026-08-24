@@ -1,6 +1,6 @@
 # Proceduremodule-engine — ontwerp
 
-> **Status**: v0.12 — **vastgesteld**; beslispunten gesloten, werktickets uitgezet
+> **Status**: v0.14 — **vastgesteld**; beslispunten gesloten, werktickets uitgezet
 > **Datum**: 2026-08-24 (as-built opnieuw geverifieerd ná productierelease #161)
 > **Bron**: as-built code en datamodel per 2026-08-21, geverifieerd tegen `core/lib/procedure-activatie.ts`, `procedure-fase-status.ts`, `procedure-fasen.ts`, `decision.ts`, `decision-view.ts`, `dossier.ts`, `proces-templates.ts`, `app/api/procedures/**`, `app/api/decisions/[id]/status`, `app/(dashboard)/procedures/_components/*`, `supabase/migrations/2026_04_29_procedures.sql`, `2026_05_07_decision_object.sql`, `…_d6*`, `…_d7*`, `…_d8*`, `2026_08_14_readiness_*`, `2026_08_18_bewijs_requirement_binding.sql`, `2026_08_22_bewijs_requirement_binding_hardening.sql` · besluiten [`0002`](decisions/0002-generieke-proceduremodule-definitie-als-data.md), [`0174`](decisions/0174-proceduremodule-engine-v2-D6-D7-D8.md), [`0183`](decisions/0183-expliciete-bewijs-vereiste-binding.md), [`0187`](decisions/0187-readiness-vervalt.md) · `PROCEDURE-GENERIEK-ONTWERP.md` v0.4
 > **Doel**: één ontwerp van de proces-engine dat klopt met wat er draait, met de besluiten van 21-08-2026, én met de kerninvarianten die het bestuurlijk betrouwbaar maken.
@@ -8,6 +8,12 @@
 > **Impactklasse**: **data + tenant/security**.
 
 ## Revisielog
+
+**v0.14 (2026-08-24)** — één regel in de scopetabel van §6.2 gecorrigeerd naar de gemeten werkelijkheid. `procedure_bewijs` draagt géén `procedure_id`; `stap_id` is daar de lokale sleutel. Dat is gelijkwaardig aan dossier-scoped omdat `fn_validate_bewijs_requirement_binding` de stap in de sleutel gelijkschakelt aan `stap.volgorde` — nu expliciet onderbouwd in plaats van aangenomen.
+
+**v0.13 (2026-08-24)** — één te stellige formulering gecorrigeerd, gevonden bij de bouw van **P2**.
+
+v0.12 schreef "de scope van de telling is de **procedure**". Dat gaat uit van procedure ↔ decision object 1:1, en dat geldt niet: de vijf `decision_*`-brontabellen dragen geen `procedure_id`, en één procedure kan meer dan één besluitobject dragen. De regel wordt **tabelnatuurlijk**: besluitgebonden feiten tellen op `decision_id`, procesgebonden feiten op `procedure_id`. De onderliggende invariant is ongewijzigd — **dossier-scoped, nooit stap-scoped**. Zie §6.2, inclusief het gevolg dat vervulling daarmee asymmetrisch is en de herkomst van een vervulling in de UI zichtbaar moet zijn.
 
 **v0.12 (2026-08-24)** — één tegenstrijdigheid opgelost, gevonden tijdens de bouw van **P2** ([#167](https://github.com/merlinijzerman/Bestuurdersportaal/issues/167)). Geen richtingwijziging.
 
@@ -340,7 +346,19 @@ Dus niet één-op-één tussen vereiste en stuk, maar één-op-één tussen **st
 
 **Waarom hier geen unieke index hoort** *(v0.12)*. In de centrale-tabelvariant van v0.8 waren er twee indexen nodig: één op `(procedure_id, requirement_sleutel)` en één op `(procedure_id, brontype, bron_id)`. In het bronkolom-patroon vervalt de tweede — een bronrij *is* het artefact en heeft één sleutelkolom, dus de tweede regel is structureel gegarandeerd. En de eerste **mag niet**: die zou precies `min_aantal > 1` breken. De index per brontabel is daarom een gewone, niet-unieke index op `(procedure_id, requirement_sleutel)`, puur voor opzoeken.
 
-**Scope van de telling is de procedure, niet de stap.** De sleutel draagt `stap_volgorde` al in zich, en niet elke bron heeft een gevulde `stap_id` — `procedure_besluiten.stap_id` is nullable (zie hierboven). Tellen op `(procedure_id, requirement_sleutel)` werkt daarom voor álle brontabellen gelijk; dat is de voorwaarde voor één generieke vervuldheidsfunctie en één generieke sanity-test.
+**Scope van de telling is het dossier, nooit de stap** *(gecorrigeerd in v0.13)*. De sleutel draagt `stap_volgorde` al in zich, en niet elke bron heeft een gevulde `stap_id` — `procedure_besluiten.stap_id` is nullable. v0.12 schreef "de procedure"; dat is te stellig gebleken, want **procedure ↔ decision object is niet 1:1** en de vijf `decision_*`-brontabellen dragen geen `procedure_id`. De regel is daarom **tabelnatuurlijk**:
+
+| Brontabel | Scopekolom | Waarom |
+|---|---|---|
+| `decision_risks` · `decision_assumptions` · `decision_conditions` · `decision_evaluations` · `decision_ai_interactions` | `decision_id` | een risico, aanname, KPI of evaluatie hoort bij één **besluit** |
+| `procedure_besluiten` · `procedure_vaststelling` | `procedure_id` | een besluit of vaststelling hoort bij het **proces** |
+| `procedure_bewijs` | `stap_id` | die tabel draagt geen `procedure_id`; `stap_id` is er de lokale sleutel |
+
+De uitzondering bij `procedure_bewijs` is **gelijkwaardig, niet afwijkend**: `fn_validate_bewijs_requirement_binding` dwingt af dat de `stap_volgorde` in de sleutel gelijk is aan `stap.volgorde` (de cross-step-guard). `stap_id` en de sleutel kunnen dus niet uit elkaar lopen, en stap-scoped tellen levert daar dezelfde verzameling op als dossier-scoped. Zou die guard ooit vervallen, dan vervalt deze gelijkwaardigheid mee.
+
+Bij één besluit per procedure — de MVP-norm — vallen beide samen. Zodra een procedure een tweede besluitobject draagt, is dit onderscheid het verschil tussen juist en fout: procedure-breed tellen zou een vereiste van besluit B laten vervullen door een risico van besluit A. Denormaliseren van `procedure_id` naar de `decision_*`-tabellen om de indexvorm gelijk te trekken is geen oplossing — een synchroon te houden kolom is duurder dan twee scopevormen.
+
+**Gevolg dat expliciet gemaakt moet worden:** vervulling is daarmee **asymmetrisch**. Bewijsstukken en vaststellingen worden gedeeld tussen besluiten op dezelfde procedure (het is dezelfde processtap), besluitgebonden feiten niet. Dat is bedoeld, maar het moet in de UI zichtbaar zijn *welk* feit een vereiste vervult — anders ziet een bestuurder een groene vereiste zonder te weten waar die vandaan komt. De scope hoort als **eigenschap van het brontype** in één tabel te staan (`brontype → scopekolom`), niet als verspreide conditionals; de generieke sanity-test toetst dat elk type een scope declareert.
 
 **Gevolg voor `procedure_bewijs` — een bestaande afwijking, geen nieuwe.** De unieke partiële index `(stap_id, requirement_sleutel)` uit #160 dwingt vandaag *wél* één-bewijs-per-vereiste af. Concreet: een vereiste "afschriften van tien deelnemersgroepen" (`min_aantal = 10`) kan met het huidige schema nooit groen worden — het tweede bewijs wordt geweigerd. Dat is geen bedoeld ontwerp maar een onbedoeld gevolg van een index die is gebouwd om dubbele *bindingen* te voorkomen, terwijl de kolomvorm dat al doet. **In P2 vervangen** door de niet-unieke variant, in dezelfde migratie als de overige brontabellen, zodat alle twaalf typen zich identiek gedragen. Vast te leggen in besluitrecord **0189** bij P2, met de expliciete constatering dat er geen `min_aantal > 1` in de huidige seed staat en de wijziging dus geen bestaand gedrag raakt — te verifiëren vóór de migratie.
 

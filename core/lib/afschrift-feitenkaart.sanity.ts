@@ -73,6 +73,7 @@ function baseProcedure(over: Partial<ProcedureSummary> = {}): ProcedureSummary {
     id: "proc-1",
     fonds_id: "fonds-1",
     template_code: "beleggingsbeleid",
+    template_versie: null,
     titel: "Wijziging beleggingsbeleid 2026",
     beschrijving: null,
     status: "besloten",
