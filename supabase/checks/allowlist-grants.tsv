@@ -81,6 +81,9 @@ FUNC	public	fn_ai_switch_stoppen(p_sleutel text, p_actor uuid, p_reden text)	fun
 FUNC	public	fn_app_error_log(p_label text, p_categorie text, p_severity text, p_http_status integer, p_fouttype text, p_foutcode text, p_melding_kort text, p_context_sleutels text[], p_correlatie_id uuid)	function	anon	-
 FUNC	public	fn_app_error_log(p_label text, p_categorie text, p_severity text, p_http_status integer, p_fouttype text, p_foutcode text, p_melding_kort text, p_context_sleutels text[], p_correlatie_id uuid)	function	authenticated	EXECUTE
 FUNC	public	fn_app_error_log(p_label text, p_categorie text, p_severity text, p_http_status integer, p_fouttype text, p_foutcode text, p_melding_kort text, p_context_sleutels text[], p_correlatie_id uuid)	function	service_role	EXECUTE
+FUNC	public	fn_audit_procedure_bewijs_mutation()	function	anon	-
+FUNC	public	fn_audit_procedure_bewijs_mutation()	function	authenticated	-
+FUNC	public	fn_audit_procedure_bewijs_mutation()	function	service_role	-
 FUNC	public	fn_bron_whitelist_log_hash()	function	anon	-
 FUNC	public	fn_bron_whitelist_log_hash()	function	authenticated	EXECUTE
 FUNC	public	fn_bron_whitelist_log_hash()	function	service_role	EXECUTE
@@ -222,6 +225,12 @@ FUNC	public	fn_schrijf_vergelijking(p_mode text, p_model text, p_prompt_version 
 FUNC	public	fn_snapshot_immutable()	function	anon	-
 FUNC	public	fn_snapshot_immutable()	function	authenticated	EXECUTE
 FUNC	public	fn_snapshot_immutable()	function	service_role	EXECUTE
+FUNC	public	fn_validate_bewijs_requirement_binding()	function	anon	-
+FUNC	public	fn_validate_bewijs_requirement_binding()	function	authenticated	-
+FUNC	public	fn_validate_bewijs_requirement_binding()	function	service_role	-
+FUNC	public	fn_validate_requirement_instance_binding_sleutel()	function	anon	-
+FUNC	public	fn_validate_requirement_instance_binding_sleutel()	function	authenticated	-
+FUNC	public	fn_validate_requirement_instance_binding_sleutel()	function	service_role	-
 FUNC	public	fn_zelfde_fonds(p_gebruiker uuid)	function	anon	-
 FUNC	public	fn_zelfde_fonds(p_gebruiker uuid)	function	authenticated	EXECUTE
 FUNC	public	fn_zelfde_fonds(p_gebruiker uuid)	function	service_role	EXECUTE
