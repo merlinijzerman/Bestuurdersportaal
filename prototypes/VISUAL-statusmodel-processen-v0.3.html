@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Statusmodel processen — one-pager v0.3</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Newsreader:wght@600;700&display=swap" rel="stylesheet">
+<style>
+/* Tokenlaag uit mvp/app/globals.css — geen nieuwe kleuren. */
+:root{
+  --ink:#12233B; --muted:#5C6B82; --line:#DFE5EE; --app-bg:#EEF1F6; --app-zebra:#F7F9FC;
+  --accent:#234E70; --accent-ink:#1A3A54; --accent-tint:#E7EDF3;
+  --ok:#106B46; --ok-tint:#EAF7F0; --ok-ink:#0D5A3B;
+  --err:#A4271C; --err-tint:#FDF0EE; --err-ink:#8C2017;
+  --warn:#8A5A00; --warn-tint:#FDF6E6; --warn-ink:#744A00;
+  --phase:#0E7C9B; --phase-tint:#E2F0F5; --phase-ink:#0A6178;
+  --line-strong:#C8D2E0;
+  --serif:'Newsreader',Georgia,serif;
+  --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--app-bg);color:var(--ink);font-family:var(--sans);font-size:13.5px;line-height:1.5;
+  -webkit-font-smoothing:antialiased}
+.blad{max-width:1180px;margin:0 auto;padding:28px 28px 48px}
+h1{font-family:var(--serif);font-size:26px;font-weight:700;margin:0;letter-spacing:-.01em}
+h2{font-family:var(--serif);font-size:17px;font-weight:600;margin:0 0 10px}
+.lead{font-size:15px;color:var(--muted);margin:8px 0 0;max-width:80ch}
+.lead b{color:var(--ink);font-weight:600}
+.kop{border-bottom:1px solid var(--line);padding-bottom:16px;margin-bottom:22px;display:flex;
+  align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap}
+.meta{font-size:11.5px;color:var(--muted);text-align:right;white-space:nowrap}
+section{background:#fff;border:1px solid var(--line);border-radius:12px;padding:20px 22px;margin-bottom:16px}
+.nr{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--accent);color:#fff;
+  font-size:12px;font-weight:700;margin-right:9px;vertical-align:2px}
+.uitleg{font-size:12.5px;color:var(--muted);max-width:88ch;margin:0 0 16px}
+
+/* ── Het schema: twee sporen + poort ── */
+.schema{display:grid;grid-template-columns:1fr 190px 1fr;gap:0;align-items:stretch}
+@media(max-width:920px){.schema{grid-template-columns:1fr}}
+.spoor{border:1px solid var(--line);border-radius:12px;padding:16px}
+.spoor.links{background:var(--app-zebra)}
+.spoor.rechts{background:var(--accent-tint)}
+.spoor .sk{font-size:11px;text-transform:uppercase;letter-spacing:.07em;font-weight:700;color:var(--muted);margin-bottom:3px}
+.spoor h3{font-family:var(--serif);font-size:16px;margin:0 0 2px;font-weight:600}
+.spoor .wie{font-size:12px;color:var(--muted);margin-bottom:12px}
+.spoor .wie b{color:var(--ink)}
+.blok{background:#fff;border:1px solid var(--line);border-radius:8px;padding:9px 11px;margin-bottom:7px;font-size:12.5px}
+.blok b{display:block;font-size:13px;margin-bottom:1px}
+.blok span{color:var(--muted)}
+.poort{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 10px;position:relative}
+.poort .p{background:#fff;border:2px solid var(--accent);border-radius:12px;padding:12px 10px;text-align:center;width:100%}
+.poort .p .t{font-size:11px;text-transform:uppercase;letter-spacing:.07em;font-weight:700;color:var(--accent)}
+.poort .p .g{font-size:12.5px;color:var(--muted);margin-top:5px;line-height:1.45}
+.poort .pijl{color:var(--line-strong);font-size:20px;line-height:1;margin:6px 0}
+@media(max-width:920px){.poort{padding:14px 0}}
+.afgeleid{margin-top:14px;border:1px dashed var(--line-strong);border-radius:12px;padding:12px 16px;
+  display:flex;gap:14px;align-items:center;flex-wrap:wrap;background:var(--app-zebra)}
+.afgeleid .lab{font-size:11px;text-transform:uppercase;letter-spacing:.07em;font-weight:700;color:var(--muted)}
+.afgeleid .item{font-size:12.5px}
+.afgeleid .item b{font-weight:600}
+.afgeleid .item span{color:var(--muted)}
+
+/* ── Tabel ── */
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;
+  padding:0 10px 7px 0;border-bottom:1px solid var(--line)}
+td{padding:9px 10px 9px 0;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+td.w b{font-weight:600}
+.pil{display:inline-block;font-size:10.5px;font-weight:600;padding:1px 7px;border-radius:99px;white-space:nowrap}
+.pil.mens{background:var(--warn-tint);color:var(--warn-ink)}
+.pil.engine{background:var(--accent-tint);color:var(--accent)}
+.pil.auto{background:var(--ok-tint);color:var(--ok-ink)}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;background:var(--app-bg);
+  padding:1px 5px;border-radius:4px;color:var(--ink)}
+
+/* ── Statusmachine ── */
+.machine{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:4px 0 12px}
+.st{border:1px solid var(--line-strong);border-radius:8px;padding:7px 12px;background:#fff;font-size:12.5px;font-weight:600;
+  white-space:nowrap}
+.st.geblok{background:var(--app-bg);color:var(--muted);border-color:var(--line)}
+.st.actief{background:var(--warn-tint);color:var(--warn-ink);border-color:rgba(138,90,0,.35)}
+.st.klaar{background:var(--ok-tint);color:var(--ok-ink);border-color:rgba(16,107,70,.35)}
+.st.uit{background:var(--err-tint);color:var(--err-ink);border-color:rgba(164,39,28,.3)}
+.st.nieuw{border-style:dashed}
+.arr{color:var(--line-strong);font-weight:700}
+.arr small{display:block;font-size:10px;color:var(--muted);font-weight:500;text-align:center;margin-top:-2px}
+.trigger{font-size:11.5px;color:var(--muted);margin-left:2px}
+
+/* ── Readiness ── */
+.ladder{display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:8px}
+.trap{border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:#fff}
+.trap .n{font-size:12.5px;font-weight:600}
+.trap .d{font-size:11.5px;color:var(--muted);margin-top:3px;line-height:1.4}
+.trap.poortje{border-color:var(--accent);background:var(--accent-tint)}
+
+/* ── Voorstellen ── */
+.voorstel{border-left:3px solid var(--accent);background:var(--app-zebra);border-radius:0 8px 8px 0;padding:11px 14px;
+  margin-bottom:8px}
+.voorstel .vk{font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px}
+.chip{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:1px 7px;border-radius:99px;
+  background:var(--accent);color:#fff}
+.chip.feit{background:var(--line);color:var(--muted)}
+.voorstel p{margin:4px 0 0;font-size:12.5px;color:var(--muted);max-width:92ch}
+.voetnoot{font-size:11.5px;color:var(--muted);line-height:1.6;border-top:1px solid var(--line);padding-top:14px;margin-top:6px}
+
+@media print{
+  body{background:#fff}
+  .blad{max-width:none;padding:0}
+  section{break-inside:avoid;box-shadow:none}
+  @page{size:A4 landscape;margin:12mm}
+}
+</style>
+</head>
+<body>
+<div class="blad">
+
+  <div class="kop">
+    <div>
+      <h1>Statusmodel processen</h1>
+      <p class="lead"><b>Twee dingen zet je zelf. De rest volgt.</b> Je rondt een <b>stap</b> af, en je kiest een <b>dossierstatus</b>. Alle andere statussen in het portaal zijn afgeleid — die hoef je niet te onderhouden en zou je ook niet moeten kunnen zetten.</p>
+    </div>
+    <div class="meta">v0.3 · 21-08-2026<br />Bestuurdersportaal · module Processen<br />feiten uit de as-built; voorstellen gemarkeerd</div>
+  </div>
+
+  <section>
+    <h2><span class="nr">1</span>Twee sporen, één meting</h2>
+    <p class="uitleg">De uitvoering (stappen) en de bestuurlijke duiding (het dossier) zijn twee aparte sporen. Ze lopen niet automatisch in de pas — dat is bewust: een bestuur mag besluiten voordat alle nazorg af is. Wat ze deelt is één meting: <b>welke vereisten staan nog open</b>. Die meting <i>telt</i>; ze blokkeert niet. <span style="color:var(--ink)">De readiness-ladder die hier eerder stond is vervallen (besluit 0184).</span></p>
+
+    <div class="schema">
+      <div class="spoor links">
+        <div class="sk">Spoor 1 · uitvoering</div>
+        <h3>Stappen</h3>
+        <div class="wie">bepaald door <b>de engine</b> · jij rondt alleen af</div>
+        <div class="blok"><b>Bij de start</b><span>elke stap zonder onvervulde afhankelijkheid wordt <code>niet begonnen</code>, de rest <code>geblokkeerd</code></span></div>
+        <div class="blok"><b>Bij de eerste handeling</b><span>een afgevinkt checklistpunt, een gekoppeld bewijsstuk of een vastgelegd besluit maakt de stap <code>actief</code></span></div>
+        <div class="blok"><b>Bij afronden</b><span>de engine herberekent welke geblokkeerde stappen nu vrijkomen</span></div>
+      </div>
+
+      <div class="poort">
+        <div class="pijl">↔</div>
+        <div class="p">
+          <div class="t">Openstaande vereisten</div>
+          <div class="g">één telling, gevoed door het bewijs dat aan de stappen hangt. Signaleert naar beide kanten — en houdt niemand tegen.</div>
+        </div>
+        <div class="pijl">↔</div>
+      </div>
+
+      <div class="spoor rechts">
+        <div class="sk">Spoor 2 · bestuurlijke duiding</div>
+        <h3>Dossier</h3>
+        <div class="wie">bepaald door <b>een mens</b> · binnen toegestane overgangen</div>
+        <div class="blok"><b>Wat je tegenhoudt</b><span>niets — alleen de toegestane volgende statussen. Staan er vereisten open, dan waarschuwt het portaal.</span></div>
+        <div class="blok"><b>Hoofdlijn</b><span>concept → in onderbouwing → in validatie → in review → geagendeerd → in bespreking → besloten → in uitvoering → in evaluatie → afgesloten</span></div>
+        <div class="blok"><b>Zijpaden</b><span>teruggezet · aangehouden · geëscaleerd · voorwaardelijk besloten · afgewezen · heropend</span></div>
+        <div class="blok"><b>Einde</b><span>beëindigd, met verplichte reden — vanuit elke status</span></div>
+      </div>
+    </div>
+
+    <div class="afgeleid">
+      <span class="lab">Hieruit volgt vanzelf</span>
+      <span class="item"><b>Fasestatus</b> <span>— afgerond / in behandeling / nog niet begonnen, uit de stappen van die fase</span></span>
+      <span class="item"><b>Processtatus in het overzicht</b> <span>— uit de dossierstatus</span></span>
+      <span class="item"><b>Aandachtsvlaggen</b> <span>— uit de bewijslast</span></span>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="nr">2</span>Wie zet wat</h2>
+    <table>
+      <thead><tr><th style="width:20%">Statusdrager</th><th style="width:34%">Waarden</th><th style="width:14%">Wie</th><th>Hoe bepaald</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="w"><b>Stapstatus</b></td>
+          <td>geblokkeerd · <i>niet begonnen</i> · actief · afgerond · heropend · <i>vervallen</i></td>
+          <td><span class="pil engine">engine</span></td>
+          <td>uit de blokkerende afhankelijkheden én uit wat er in de stap gebeurt. De mens doet twee dingen: werken (dat maakt de stap actief) en afronden.</td>
+        </tr>
+        <tr>
+          <td class="w"><b>Dossierstatus</b></td>
+          <td>17 waarden — zie spoor 2 hierboven</td>
+          <td><span class="pil mens">mens</span></td>
+          <td>keuze uit de toegestane volgende statussen. Geen enkele overgang wordt geblokkeerd; staan er vereisten open, dan volgt een waarschuwing.</td>
+        </tr>
+        <tr>
+          <td class="w"><b>Processtatus</b></td>
+          <td>gepland · lopend · ter besluitvorming · besloten · in implementatie · afgerond · heropend</td>
+          <td><span class="pil auto">afgeleid</span></td>
+          <td>1-op-1 uit de dossierstatus; staat alleen in de database om het overzicht snel te kunnen sorteren</td>
+        </tr>
+        <tr>
+          <td class="w"><b>Fasestatus</b></td>
+          <td>nog niet begonnen · in behandeling · afgerond</td>
+          <td><span class="pil auto">afgeleid</span></td>
+          <td>alle stappen afgerond → afgerond; minstens één actief of afgerond → in behandeling; anders nog niet begonnen</td>
+        </tr>
+        <tr>
+          <td class="w"><b>Openstaande vereisten</b><br /><span style="font-size:11.5px;color:var(--muted)">geen status, een telling</span></td>
+          <td>aantal open · waarvan blokkerend</td>
+          <td><span class="pil auto">afgeleid</span></td>
+          <td>per vereiste: is er bewijs aan gebonden? Optellen op vier schalen — zie blok 4. Nooit invoer.</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2><span class="nr">3</span>De stapstatus van dichtbij</h2>
+    <p class="uitleg">Dit is het enige niveau met een levenscyclus. Alles wat je in het scherm ziet gebeuren met een stap, gebeurt hier.</p>
+
+    <div class="machine">
+      <span class="st geblok">geblokkeerd</span>
+      <span class="arr">→<small>afhankelijkheid<br />afgerond</small></span>
+      <span class="st geblok nieuw">niet begonnen</span>
+      <span class="arr">→<small>eerste<br />handeling</small></span>
+      <span class="st actief">actief</span>
+      <span class="arr">→<small>jij rondt af</small></span>
+      <span class="st klaar">afgerond</span>
+      <span class="arr">→<small>met motivering</small></span>
+      <span class="st actief">heropend</span>
+    </div>
+    <div class="machine" style="margin-top:-4px">
+      <span class="st uit nieuw">vervallen</span>
+      <span class="trigger">— elke stap die nog niet afgerond was op het moment dat het <b>proces wordt beëindigd</b>; afgeronde stappen blijven afgerond</span>
+    </div>
+
+    <div class="afgeleid" style="margin:0 0 14px">
+      <span class="lab">Telt als “er is iets gedaan”</span>
+      <span class="item"><b>checklistpunt afgevinkt</b></span>
+      <span class="item"><b>bewijsstuk gekoppeld</b></span>
+      <span class="item"><b>besluit vastgelegd</b></span>
+      <span class="item"><b>handmatig gestart</b></span>
+      <span class="item"><span>— níet: toelichting wijzigen, een vereiste toevoegen of uitsluiten, agenderen</span></span>
+    </div>
+
+    <div class="voorstel" style="border-left-color:var(--warn);margin-bottom:14px">
+      <div class="vk"><span class="chip" style="background:var(--warn)">let op</span><code>geblokkeerd</code> komt vandaag niet voor</div>
+      <p>Geen enkele definitie declareert een afhankelijkheid: bij <code>pf_wtp_invaarbesluit</code> staat bij alle twaalf stappen een lege lijst, en de vier code-templates kennen het veld niet. Na de start wordt de kolom alleen gelezen, nooit geschreven — er is geen scherm om een afhankelijkheid te zetten. De toestand bestaat dus in de constraint, de code en de rail, maar niemand ziet hem. Beslis bij de eerste definitie die hem écht nodig heeft (incident-meldplicht: melden kan niet vóór de triage; geschiktheidstoetsing: het DNB-gesprek volgt op de indiening) of je hem gaat gebruiken — of ruim hem samen met het legacy-pad op.</p>
+    </div>
+
+    <p class="uitleg" style="margin-bottom:8px"><b>Twee dingen die géén status zijn — en dat ook niet moeten worden:</b></p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="blok" style="margin:0">
+        <b>Afgerond met afwijking</b>
+        <span>een <i>vlag</i> op een afgeronde stap, plus de verplichte motivering en een momentopname van wat er ontbrak. Geen aparte status, want de engine hoeft er niets anders mee te doen.</span>
+      </div>
+      <div class="blok" style="margin:0">
+        <b>Datum verstreken</b>
+        <span>een <i>signaal</i> in de rail en op de kaart. Maak er geen status van: dan moet iemand hem onderhouden en gaan mensen hem wegklikken.</span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="nr">4</span>Wat ontbreekt er nog — de enige meting die overblijft</h2>
+    <p class="uitleg">Eén toets per vereiste: is er bewijs aan gebonden? Die uitkomst tel je op, op de schaal die de vraag van dat moment past. Geen niveaus, geen mapping, geen eigen woordenlijst — en het werkt net zo goed voor een proces dat een fonds zelf modelleert.</p>
+    <div class="ladder">
+      <div class="trap"><div class="n">Per stap</div><div class="d">“3 open, waarvan 1 blokkerend” — voedt de voettekstbalk en de knop <i>Stap voltooien</i></div></div>
+      <div class="trap"><div class="n">Per fase</div><div class="d">afgeleid uit de stappen van die fase — voedt de fasestrip en de aandachtsstip</div></div>
+      <div class="trap"><div class="n">Per proces</div><div class="d">totaal open, waarvan blokkerend — voedt de proceskaart in het overzicht</div></div>
+      <div class="trap poortje"><div class="n">Bij een besluit</div><div class="d">open <b>tot en met deze stap</b> — de vraag die je bij een besluitmoment werkelijk stelt</div></div>
+    </div>
+    <p class="uitleg" style="margin:14px 0 0"><b style="color:var(--ink)">Waarom de zes readiness-niveaus zijn vervallen.</b> Ze waren procesbreed terwijl besluiten stapsgewijs vallen — bij het invaarproces telden 50 van de 63 vereisten mee voor “besluitrijp”, waaronder zes uit de nazorgstap, terwijl het invaarbesluit in stap 7 valt. En de ladder was dubbel gesloten: zes vaste niveaus en twaalf vaste typen. Een zelf gemodelleerd proces past daar niet op — bij een incidentmelding staat de toezichthouderindiening vooraan, terwijl de ladder haar op het voorlaatste niveau zet. Zie besluit 0184.</p>
+  </section>
+
+  <section>
+    <h2><span class="nr">5</span>Wat we vereenvoudigen</h2>
+    <p class="uitleg">Het model is op vijf punten complexer dan het hoeft te zijn. Geen van deze wijzigingen raakt de werking van de engine.</p>
+
+    <div class="voorstel" style="border-left-color:var(--ok)">
+      <div class="vk"><span class="chip" style="background:var(--ok)">besluit 0184</span>De readiness-ladder vervalt</div>
+      <p>Zes niveaus met een eigen woordenlijst, naast de stappen en fasen die hetzelfde ordenden. De vervuldheidstoets per vereiste blijft — die voedt alles in blok 4. Uitfasering in drie stappen: eerst stoppen met beslissen (de vijf gates eruit), dan uit beeld, dan pas de functies opruimen.</p>
+    </div>
+
+    <div class="voorstel">
+      <div class="vk"><span class="chip">voorstel</span><code>actief</code> betekent “hier wordt aan gewerkt”</div>
+      <p>Nu schrijft de engine bij de start al <code>actief</code> weg — bij het invaarproces staan daardoor vanaf dag één twaalf stappen “actief” en zegt het woord niets. Voorstel: bij de start <code>niet begonnen</code>, en pas <code>actief</code> bij de eerste inhoudelijke handeling. Robuust te doen met een AFTER-trigger op checklist, bewijs en besluiten, zodat geen route het kan vergeten. Bewust opgeslagen en niet afgeleid: anders zeggen kolom en scherm verschillende dingen en verlies je het moment waarop het gebeurde.</p>
+    </div>
+
+    <div class="voorstel">
+      <div class="vk"><span class="chip">voorstel</span>Processtatus verdwijnt uit beeld</div>
+      <p>Hij is een kopie van de dossierstatus. Twee statussen tonen die hetzelfde zeggen, maar niet altijd tegelijk bijwerken, levert alleen twijfel op. Voorstel: alleen de dossierstatus tonen; de kolom blijft bestaan voor sortering in het overzicht.</p>
+    </div>
+
+    <div class="voorstel">
+      <div class="vk"><span class="chip">voorstel</span>De legacy-status <code>open</code> wordt opgeruimd</div>
+      <p>Naast <code>geblokkeerd/actief</code> bestaat nog een oude, sequentiële status <code>open</code>, met een eigen activatiepad in de code. Twee gedragingen naast elkaar. Voorstel: opruimen zodra geen lopend proces er meer op staat. <b>Niet gratis:</b> de vier code-templates draaien op dat pad en declareren geen afhankelijkheden. Ruim je <code>open</code> weg zonder voor hen een keten te declareren (stap <i>n</i> hangt van <i>n−1</i>), dan worden ze in één klap volledig parallel — een echte gedragsverandering, die in het ticket hoort te staan.</p>
+    </div>
+
+    <div class="voorstel">
+      <div class="vk"><span class="chip">voorstel</span>Geen geschatte doorlooptijd per stap</div>
+      <p>Elke stap draagt nu een vooraf ingevuld aantal dagen. Dat suggereert planning die niemand heeft gemaakt en die niemand bijhoudt. Voorstel: schrappen uit de definitie. Wie wil sturen op tijd, zet zelf een datum (hieronder).</p>
+    </div>
+
+    <div class="voorstel">
+      <div class="vk"><span class="chip">voorstel</span>Eén optionele datum per stap: uiterlijk gereed</div>
+      <p>Handmatig, niet berekend, niet verplicht, en alleen zichtbaar als hij gezet is. In een proces zonder gates — waar alle stappen tegelijk actief zijn — is de datum het enige dat ordening geeft. Het veld <code>procedure_stappen.deadline</code> bestaat al en wordt al getoond; er is alleen nog geen manier om hem in te vullen.</p>
+    </div>
+
+    <div class="voorstel">
+      <div class="vk"><span class="chip">voorstel</span>De twee sporen signaleren naar elkaar — zonder automatiek</div>
+      <p>Zijn alle stappen afgerond, dan stelt het portaal voor de dossierstatus te verhogen. Verhoog je de dossierstatus terwijl er stappen open staan, dan waarschuwt het portaal. Beide zijn suggesties: het oordeel blijft bij het bestuur, net als bij het afronden van een stap.</p>
+    </div>
+
+    <div class="voorstel" style="border-left-color:var(--line-strong)">
+      <div class="vk"><span class="chip feit">feit</span>Wat we bewust <i>niet</i> vereenvoudigen</div>
+      <p>De 17 dossierstatussen blijven. Ze ogen als veel, maar de gebruiker ziet er per moment maar twee tot vier — namelijk de toegestane volgende stappen. Terugbrengen zou betekenen dat onderscheiden verdwijnen die bestuurlijk wél betekenis hebben, zoals <i>aangehouden</i> tegenover <i>teruggezet</i>.</p>
+    </div>
+  </section>
+
+  <div class="voetnoot">
+    <b>Bron.</b> Feiten uit de as-built per 21-08-2026: <code>core/lib/procedure-activatie.ts</code> (stapstatus), <code>core/lib/decision-view.ts</code> + <code>app/api/decisions/[id]/status</code> (dossierstatus, overgangen, readiness-drempels), <code>core/lib/procedure-fase-status.ts</code> (fasestatus), <code>fn_decision_readiness_check</code> (readiness). De statussen <i>vervallen</i> en <i>beëindigd</i> en de vlag <i>afgerond met afwijking</i> volgen uit het besluit over validatie, afwijking en beëindiging (D9) en zijn nog niet gebouwd. Het vervallen van de readiness-ladder is vastgelegd in <b>besluit 0184</b>; de functies bestaan nog en worden gefaseerd uitgezet.
+  </div>
+</div>
+</body>
+</html>

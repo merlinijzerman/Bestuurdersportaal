@@ -1,330 +1,612 @@
-# Proceduremodule-engine v2 — parallelle activatie, aanpasbare vereisten en fasebeschrijving
+# Proceduremodule-engine — ontwerp
 
-> **Status**: v0.2 — geïmplementeerd in WO-1 (D6/D7/D8 + definitie); zie besluit [`0174`](decisions/0174-proceduremodule-engine-v2-D6-D7-D8.md) · **Datum**: 2026-08-13
-> **Bron**: `Procesontwerp-invaarprocedure-SPH-v0.1.md` (03 Functioneel ontwerp) · `Bestuurdersportaal - Proceduremodule generiek ontwerp v0.2.md` · `mvp/lib/decision.ts`, `procedure_stappen`/`procedure_checklist`/`procedure_requirements` · `decisions/0002` (definitie als data), `0001/0024` (append-only), `0049` (go/no-go-gate)
-> **Doel**: de generieke proceduremodule-engine uitbreiden zodat (D6) stappen **per definitie parallel** lopen met expliciete, schaarse harde afhankelijkheden en heropen-mogelijkheid, (D7) checklist en bewijslast **aanpasbaar** zijn op template- én instantieniveau, en (D8) elke fase een **generieke, per fonds overschrijfbare beschrijving** heeft.
-> **Scope-afbakening**: engine + datamodel + readiness + audit/RLS + UX-consumptie. **Niet**: de inhoudelijke invaardefinitie zelf (dat is de canonieke JSON `pf_wtp_invaarbesluit@2.0.0`, een apart, licht spoor) en geen wijziging aan het Decision Object-statusmodel behalve waar hieronder expliciet benoemd.
-> **Impactklasse**: **data + tenant/security** → de documentatiehaak vuurt (00–09 + as-built) en de structurele gates (`supabase/checks/…structurele_gates.sql`) moeten schoon draaien.
+> **Status**: v0.10 — **vastgesteld**; beslispunten gesloten, werktickets uitgezet
+> **Datum**: 2026-08-24 (as-built opnieuw geverifieerd ná productierelease #161)
+> **Bron**: as-built code en datamodel per 2026-08-21, geverifieerd tegen `core/lib/procedure-activatie.ts`, `procedure-fase-status.ts`, `procedure-fasen.ts`, `decision.ts`, `decision-view.ts`, `dossier.ts`, `proces-templates.ts`, `app/api/procedures/**`, `app/api/decisions/[id]/status`, `app/(dashboard)/procedures/_components/*`, `supabase/migrations/2026_04_29_procedures.sql`, `2026_05_07_decision_object.sql`, `…_d6*`, `…_d7*`, `…_d8*`, `2026_08_14_readiness_*`, `2026_08_18_bewijs_requirement_binding.sql`, `2026_08_22_bewijs_requirement_binding_hardening.sql` · besluiten [`0002`](decisions/0002-generieke-proceduremodule-definitie-als-data.md), [`0174`](decisions/0174-proceduremodule-engine-v2-D6-D7-D8.md), [`0183`](decisions/0183-expliciete-bewijs-vereiste-binding.md), [`0187`](decisions/0187-readiness-vervalt.md) · `PROCEDURE-GENERIEK-ONTWERP.md` v0.4
+> **Doel**: één ontwerp van de proces-engine dat klopt met wat er draait, met de besluiten van 21-08-2026, én met de kerninvarianten die het bestuurlijk betrouwbaar maken.
+> **Scope**: engine, datamodel, audit/RLS en de UI-consumptie daarvan. **Niet**: de inhoudelijke procesdefinities en niet de registry-migratie (fase C–D van `PROCEDURE-GENERIEK-ONTWERP.md`) — met één uitzondering: de versiebevriezing is nu een expliciete go-livevoorwaarde (§13).
+> **Impactklasse**: **data + tenant/security**.
 
 ## Revisielog
 
-**v0.4 (2026-08-14)** — Per-proces **verwijderen** van checklist- en bewijslastitems (met verplichte toelichting). Naast het *toevoegen* (D7) kan een voorzitter/beheerder nu per lopende procedure items verwijderen. Handmatige instantie-items: bestaande soft-deactivate (`procedure_requirement_instance.actief=false`). **Template-vereisten** (de generieke set): verwijderen is een **per-proces overlay** via de nieuwe tabel `procedure_requirement_uitsluiting` — de generieke `procedure_requirements`-set wordt **nooit** gemuteerd. `fn_decision_readiness_check` en `buildEvidenceLijst` trekken de overlay af met een `NOT EXISTS` (match op `decision_id`+`stap_volgorde`+`requirement_type`+`label`). Checklist-verwijdering loopt via `procedure_checklist.actief`. Zie §5.5; datadictionary §32; OB-E12/OB-E13 bijgewerkt.
+**v0.10 (2026-08-24)** — drie feitelijke correcties op §13.1, gevonden bij het schrijven van de werkopdracht voor **P1b** ([#166](https://github.com/merlinijzerman/Bestuurdersportaal/issues/166)). Geen richtingwijziging; v0.9 verwees naar objecten die niet bestaan.
 
-**v0.3 (2026-08-13)** — WO-3 (UI-herinrichting Processen-detail). De D8-fasebeschrijving is uit de linker fasen-rail gehaald naar een **aparte fase-weergave** rechts (`FaseWeergave.tsx`, geopend via `?fase=`) met een echt bewerkpad: `POST /api/procedures/[id]/fase-beschrijving` schrijft `procedure_fase_beschrijving_override` (leeg opslaan = override wissen → terugval op de generieke default), server-side gegate op rol **voorzitter/beheerder**, append-only gelogd in **`procedure_log`** (`event_type: fase_beschrijving_bijgewerkt`). De rail (`FaseRail.tsx`) is een schone fase-accordeon (badge/titel/stap-count/status-pill/aandachtsrand) zónder beschrijvings-/toelichtingsblokken. §6-governance en §7 hieronder hierop bijgewerkt (gate = rol, log = `procedure_log`, **niet** `fonds_config_log`/`fonds.config.manage`). Nieuw datagat **OB-E10**: checklistitem-/bewijsstuk-`toelichting` bestaat alleen in de standaardset-JSON, niet in de DB (aparte, kleine data-WO — buiten de UI-scope).
+1. **Er is geen registry.** §13.1 hing de publicatiestatus aan `procedure_template_versies`. Die tabel bestaat niet op `origin/main`; alleen `procedure_template_fasen` (D8). De registry is fase C van `PROCEDURE-GENERIEK-ONTWERP.md` en valt buiten deze EPIC. I7 krijgt daarom een eigen, minimaal **publicatieregister** — nadrukkelijk niet de registry.
+2. **`procedure_requirement_instance` krijgt géén `template_versie`.** Die tabel is gesleuteld op `decision_id`: instantie-vereisten horen bij een dossier, niet bij een templateversie. v0.8/v0.9 schreven "idem"; dat was fout.
+3. **De backfill mag geen blanket default krijgen.** `add column … not null default '1.0.0'` tagt de invaarvereisten als `1.0.0` terwijl lopende dossiers op `2.0.0` pinnen — dan vinden die dossiers **nul** vereisten en tonen ze een lege, groene bewijslast. Erger dan het probleem dat we oplossen, en het valt niet op.
 
-**v0.2 (2026-08-13)** — geïmplementeerd in WO-1 (besluit [`0174`](decisions/0174-proceduremodule-engine-v2-D6-D7-D8.md)). Vier gedwongen aanpassingen na codeverificatie (het ontwerp liep hierop vóór op de werkelijkheid):
-- **B1** — Er zijn géén template-tabellen (`procedure_templates`/`procedure_template_stappen` bestaan niet; templates leven als code/JSON, requirements op `template_code`). Daarom: geen `alter procedure_template_stappen`; de D8-tabellen (`procedure_template_fasen`, `procedure_fase_beschrijving_override`) zijn op **`template_code`** gesleuteld i.p.v. `template_id`; `blokkerende_afhankelijkheden`/`fase_code` leven in de JSON-definitie en worden bij start meegesnapshot op `procedure_stappen`.
-- **B2** — `voltooid_op` hergebruikt i.p.v. een nieuwe `afgerond_op` (§4.1); die kolom bestond al.
-- **B3** — Requirements zijn niet geversioneerd/gesnapshot; readiness leest live per `template_code`. Snapshot-integriteit geldt voor stappen/checklist, niet voor requirements (bestaande engine-eigenschap).
-- **B4** — Geen zod (repo-ethos "geen extra runtime-dep"); lichte eigen validator (schema + DAG + fase-refs) onder `npm run sanity`, plus een uit de JSON gegenereerde, drift-gecontroleerde requirements-seed.
-- Extra: `external_submission`/`consultation` toegevoegd aan de requirement-enum + readiness/evidence (via de document-logica), nodig om D7 ("instantie-item telt mee in readiness") waar te maken.
+Meevaller, genoteerd voor P5: **`decision_objects.gewenste_besluitdatum` bestaat al** (`2026_05_07_decision_object.sql:80`). Signaal 5 in §12 vraagt dus geen nieuwe kolom.
 
-**v0.1 (2026-08-13)** — eerste opzet. Vertaalt de open beslissingen D6/D7/D8 uit het invaar-procesontwerp naar een bouwbaar engine-ontwerp. Kernwijziging t.o.v. proceduremodule-ontwerp v0.2: dat ging uit van **sequentiële** activatie (auto-activeer de volgende stap); dit ontwerp maakt **parallel de default**. Dit moet via `ontwerp-sync-reviewer` terug in v0.2 (revisielog) worden opgenomen zodat de twee documenten niet uiteenlopen.
+**v0.9 (2026-08-24)** — geen nieuwe architectuur; **vier feitelijke correcties** en één herzien beslispunt, na hermeting tegen `origin/main` ná productierelease [#161](https://github.com/merlinijzerman/Bestuurdersportaal/pull/161).
+
+1. **De as-built-tabel in v0.8 was op vier regels onjuist** (§2). Oorzaak: v0.8 mat een lokale `main` die achterliep, terwijl het werk op PR [#115](https://github.com/merlinijzerman/Bestuurdersportaal/pull/115) stond (later gesuperseded door #160). Besluit `0183` bestaat wél, `procedure_bewijs.requirement_sleutel` bestaat wél, en `idx_req_uniek` op `procedure_requirements` bestond al op main — dat laatste was een leesfout van mij, geen gat in het schema.
+2. **BP-7 herzien** (§6.2). Niet één centrale vervullingstabel, maar **het bestaande patroon doortrekken**: de sleutel als kolom op de brontabel, zoals `0183` die heeft neergezet en #115/#160 hebben gehard. Reden: het dure deel — de server-side resolver, twee validatietriggers en de audittrigger — is generiek en staat er al. Voor de typen zonder brontabel komt één nieuwe **brontabel** `procedure_vaststelling`, die zich als elke andere bron gedraagt. Eén mechanisme, niet twee.
+3. **`min_aantal` gecorrigeerd** (§6.2). v0.8 schreef "per vereiste hoogstens één vervulling". Fout: een vereiste kan om meerdere stukken vragen. Hard blijft alleen: **één artefact vervult hoogstens één vereiste**.
+4. **Volgorde-afhankelijkheid** (§13.2): ticket **P1b** moet vóór **P2**. Zonder `template_versie` in de identiteitsindex is de vereiste-sleutel niet versievast.
+
+Verder: besluitrecords starten bij **0188** (0183 t/m 0187 zijn vergeven), en readiness is *besloten* ([`0187`](decisions/0187-readiness-vervalt.md)) maar **niet uitgevoerd** — `ReadinessLadder.tsx`, vier migraties en `fn_decision_readiness_check` staan er nog.
+
+**v0.8 (2026-08-21)** — drie inhoudelijke aanvullingen en acht gerichte correcties na de review op v0.7. De architectuur is ongewijzigd; wat ontbrak was volledigheid op drie plekken waar v0.7 een regel stelde maar hem niet overal doortrok.
+
+1. **Eén generiek vervullingsmechanisme voor álle requirement-typen** (§6, **BP-7**). v0.7 zei "positief en gebonden" maar loste alleen `document`, `approval` en `dissent_review` op. De review wees op de rest — geverifieerd in de code: `ai_validation` neemt de eerste passende gevalideerde AI-output (`core/lib/decision.ts:712`), `assumption` telt álle gevalideerde aannames tegen `min_aantal` (`:736`), en `risk` / `kpi` / `evaluation` / `mandate_check` vervullen op "bestaat er minstens één" (`:755` e.v.). De aangekondigde sanity-test kon dus niet slagen. Vervangen door één generiek mechanisme. **In v0.9 herzien**: niet een centrale tabel maar het bestaande sleutelpatroon doortrekken — zie §6.2.
+2. **Versiebevriezing wordt onveranderlijkheid** (§13.1, I7). Filteren op `template_versie` verhindert niet dat iemand een vereiste binnen dezelfde versie wijzigt. Geverifieerd, en de uitgangspositie is slechter dan aangenomen: `procedure_requirements` heeft vandaag **geen enkele unique constraint** en **geen versiekolom** — alleen `template_code` (`supabase/migrations/2026_05_07_decision_object.sql:304`). Toegevoegd: invariant I7, een publicatiestatus met weigerende trigger, en een unieke sleutel inclusief `template_versie`.
+3. **I1 krijgt een volledige status-feitenmatrix** (§4.6). v0.7 noemde drie statussen; ook `afgewezen`, `in_uitvoering`, `in_evaluatie`, `geagendeerd` en `beeindigd` stellen feiten. Eén tabel `besluitstatus_vereist_feit`, als data, zodat geen route dit meer zelf interpreteert.
+
+Gerichte correcties: fasestatus `afgerond` alleen bij louter afgeronde stappen (§5.2); het auditlog is canoniek voor de afwijkingshistorie, de stapkolommen beschrijven alleen de laatste afronding (§5.1); I5 dekt nu ook dat gerefereerde objecten bij hetzelfde fonds horen (§4.5); filter "Blokkade" → **"Kritieke vereisten"** (§10); signaal 5 komt uit `gewenste_besluitdatum` of de agendakoppeling, niet uit `procedure_stappen.deadline` (§12); "geen houder" toetst `eigenaar_id` **én** `eigenaar_naam` (§12); de werkbak toont **alle** achterstallige items en vult aan tot zeven (§9.2); en `geannuleerd` blijft een verborgen legacy-opslagwaarde in plaats van te verdwijnen (§5.2, BP-3). Nieuw daarnaast: **aantekeningen per processtap** (§9.3), naar aanleiding van de vraag of het stapdetail ruimte moet laten voor notities.
+
+**v0.7 (2026-08-21)** — besluit↔vereiste-binding, "tot en met deze stap" vervalt, invarianten I1–I6, `zwaarte`, beëindigen/heropenen doorvertaald, versiebevriezing als go-livevoorwaarde.
+**v0.6 (2026-08-21)** — D9 (validatie, afwijking, beëindiging), D10 (positief gebonden bewijs), readiness vervalt ([`0184`](decisions/0184-readiness-vervalt.md)), classificatie sturend/duidend, acties en werkbak, `actief` pas bij de eerste handeling.
+**v0.5 (2026-08-18)** — bewijs↔vereiste-binding via `requirement_sleutel`.
+**v0.4 (2026-08-14)** — per-proces uitsluiting van template-vereisten.
+**v0.3 (2026-08-13)** — fasebeschrijving met eigen weergave en bewerkpad.
+**v0.2 (2026-08-13)** — geïmplementeerd in WO-1 ([`0174`](decisions/0174-proceduremodule-engine-v2-D6-D7-D8.md)).
+**v0.1 (2026-08-13)** — D6/D7/D8.
 
 ---
 
 ## 1. Doelpositionering
 
-De huidige engine is bewust generiek (snapshot-bij-start, readiness-ladder, Decision Object), maar kent drie beperkingen die het invaarproces blootlegde en die breder gelden voor complexe, iteratieve procedures:
+De engine draait en is generiek. Wat dit ontwerp toevoegt is **consistentie**, langs één lijn:
 
-1. **Sequentieel aannemen.** De engine activeert één stap tegelijk en zet automatisch "de volgende" open. Complexe processen lopen niet zo: onderbouwing, data en communicatie rijpen parallel, en toezichtvragen heropenen eerdere stappen. → **D6**.
-2. **Vaste vereisten.** Checklist en bewijslast liggen in de template vast; een lopende procedure kan geen extra checklistonderwerp of bewijslasttype krijgen, terwijl dat bij een 640-daags invaartraject onvermijdelijk is. → **D7**.
-3. **Geen fase-duiding als data.** Fasen bestaan nu alleen als lichtgewicht `fase_type`-tag; er is geen leesbare fasebeschrijving, laat staan een per-fonds aanpasbare. → **D8**.
+> Het systeem meet en registreert; de mens oordeelt. **Maar het systeem bewaakt wel de feiten.** Waar iets een bestuurlijk oordeel is, wordt het een signaal met een gemotiveerde afwijking. Waar iets een feitelijke integriteitsregel is, weigert het systeem.
 
-Leidend principe (aansluitend op `decision 0002`): **gedrag als data, niet als code.** Afhankelijkheden, aanpasbaarheid en fasebeschrijving worden configuratie op de definitie/instantie, niet nieuwe hardcoded takken per procedure. Het snapshot-pattern en de readiness-ladder blijven in de kern ongewijzigd.
+De review op v0.6 legde bloot dat die tweede helft ontbrak. De review op v0.7 legde bloot dat hij op drie plekken wel was opgeschreven maar niet doorgetrokken: naar alle requirement-typen (§6), naar alle besluitstatussen (§4.6), en naar de onveranderlijkheid van een gepubliceerde versie (§13.1). Een invariant die voor de helft van de gevallen geldt, is geen invariant.
 
 ---
 
-## 2. Huidige situatie — wat blijft, wat wijzigt
+## 2. Wat er staat — as-built per 24-08-2026
 
-**Blijft (behouden):**
-- Snapshot-bij-start: template → `procedure_stappen`/`procedure_checklist`; `decision_objects.template_versie` bevriest de versie. Lopende procedures wijzigen nooit mee met een nieuwe templateversie.
-- `procedure_requirements` als readiness-bron, met classificatie-conditionals (`triggert_bij_*`).
-- Append-only `governance_events` met sha256-hashketen (`decision 0001`).
-- De zes readiness-niveaus en `fn_decision_readiness_check`.
+Geverifieerd tegen `origin/main` ná productierelease #161.
 
-**Wijzigt:**
-- **Activatie**: van "auto-activeer volgende stap" naar **afhankelijkheidsgestuurd, parallel-by-default** (§3, §4).
-- **Instantietabellen** `procedure_stappen`/`procedure_checklist` en de requirements: **schrijfbaar ná snapshot** voor handmatige toevoegingen, met herkomst en governance-koppeling (§5).
-- **Readiness-bron**: leest voortaan template-requirements **plus** actieve instantie-requirements (§5.3).
-- **Fasen**: worden onderdeel van de definitie met een generieke beschrijving en een fonds-override-laag (§6).
+| Onderdeel | Stand | Vindplaats |
+|---|---|---|
+| Snapshot bij start | ✅ | `app/api/procedures/route.ts` |
+| Parallelle, afhankelijkheidsgestuurde activatie (D6) | ✅ | `core/lib/procedure-activatie.ts` |
+| Heropenen met `herbevestiging_nodig` | ✅ | `…/stappen/[stapId]/heropenen` |
+| Instantie-vereisten toevoegen / uitsluiten (D7) | ✅ | `procedure_requirement_instance`, `_uitsluiting` |
+| Fasen als data met fonds-override (D8) | ✅ — alleen geseed voor `pf_wtp_invaarbesluit` | `procedure_template_fasen` |
+| **Bewijs↔vereiste-binding** voor `document`, `external_submission`, `consultation` | ✅ **in productie** — sleutel server-side afgeleid, unieke partiële index `(stap_id, requirement_sleutel)` | `procedure_bewijs.requirement_sleutel`, `core/lib/requirement-sleutel.ts`, `bewijs-binding.ts` |
+| Validatie- en audittriggers op die binding | ✅ | `fn_validate_bewijs_requirement_binding`, `fn_validate_requirement_instance_binding_sleutel`, `fn_audit_procedure_bewijs_mutation` |
+| Identiteitsindex op vereisten | ✅ — `idx_req_uniek` op `(template_code, stap_volgorde, requirement_type, coalesce(documenttype, label))` | `2026_05_07_decision_object.sql` |
+| Binding voor de **overige acht** typen | ❌ — `approval` (`bron = null`), `dissent_review` (afwezigheid), `risk`, `kpi`, `evaluation`, `mandate_check`, `assumption`, `ai_validation` | §6 |
+| `template_versie` in de identiteitsindex | ❌ — de index is versieloos | §13.1, I7 |
+| Onveranderlijkheid van een gepubliceerde versie | ❌ — geen publicatiestatus, geen weigerende trigger | §13.1, I7 |
+| `zwaarte`, `besluitmoment_stap` op vereisten | ❌ | §5.1, §7 |
+| Readiness | ⛔ **besloten dat het vervalt** ([`0187`](decisions/0187-readiness-vervalt.md)) — **implementatie staat er nog volledig**: `ReadinessLadder.tsx`, vier migraties, `fn_decision_readiness_check` (door #115 juist herschreven) | §7 |
+| Legacy sequentieel pad (`status = 'open'`) | ⚠️ bestaat nog | §3 |
 
 ---
 
 ## 3. Kernprincipe — parallel by default
 
-> Een procedure is **standaard parallel**. Elke stap is *activeerbaar* zodra haar (eventuele) blokkerende afhankelijkheden zijn afgerond. Een stap zonder afhankelijkheden is dus vanaf de start activeerbaar. Sequentieel gedrag is geen engine-default meer, maar een **gevolg van het declareren van een afhankelijkheidsketen**.
+Een procedure is standaard parallel: elke stap is activeerbaar zodra haar blokkerende afhankelijkheden zijn afgerond. **`volgorde` is presentatie- en verantwoordingsvolgorde, geen activatievolgorde en geen bewijslastvolgorde.**
 
-Concreet:
-- Bij `procedure_start` worden **alle** stappen zonder onvervulde blokkerende afhankelijkheid tegelijk op `actief` gezet (niet alleen stap 1).
-- De nummering (`volgorde`) is nog slechts **presentatie-/verantwoordingsvolgorde**, geen activatievolgorde.
-- Harde gates zijn **optioneel en schaars**: een procedure declareert `blokkerende_afhankelijkheden` alleen waar nodig. **Het invaarproces gebruikt ze bewust niet** — alle 12 stappen zijn vanaf de start activeerbaar; de besluitdiscipline ligt bij de readiness-ladder en de formele go/no-go-gate (`decision 0049`), niet bij stap-afhankelijkheden. (Andere procedures, zoals incident-meldplicht DNB, kunnen wél een gate declareren; de engine ondersteunt dat generiek.)
-- **Doorlopende sporen** (communicatie, datakwaliteit, ketenregie) zijn simpelweg stappen zonder afhankelijkheid die lang `actief` blijven en meerdere keren geraakt worden.
-- **Iteratie**: een `afgerond` stap kan heropend worden (§4.3).
+**`geblokkeerd` komt vandaag niet voor.** Geen definitie declareert een afhankelijkheid: bij `pf_wtp_invaarbesluit@2.0.0` staat bij alle twaalf stappen een lege lijst; de vier code-templates kennen het veld niet en draaien op het legacy-pad. Na de start wordt de kolom alleen gelezen.
 
-Deze inversie is de belangrijkste keuze van dit ontwerp en de expliciete aanpassing t.o.v. proceduremodule-ontwerp v0.2.
+Beslissen bij **fase B1** (incident-meldplicht, geschiktheidstoetsing) of afhankelijkheden echt worden gebruikt. Zo nee, dan kunnen `geblokkeerd` en het legacy-pad in één opruimactie weg. **Let op:** `open` verwijderen zonder voor de vier code-templates een keten te declareren maakt ze in één klap volledig parallel — een gedragsverandering, geen opschoning.
 
 ---
 
-## 4. D6 — Afhankelijkheidsgestuurde, parallelle activatie
+## 4. Het statusmodel
 
-### 4.1 Datamodel-delta
+### 4.1 Dragers en terminologie
+
+De terminologie volgt de code, niet andersom.
+
+| Drager | Waarden | Wie bepaalt |
+|---|---|---|
+| **Stapstatus** (`procedure_stappen.status`) | `geblokkeerd` · `niet_begonnen` · `actief` · `afgerond` · `heropend` · `vervallen` | engine |
+| **Besluitstatus** (`decision_objects.status`, `DecisionStatus`) | 17 + `beeindigd` = 18, waarvan `geannuleerd` verborgen legacy | mens, binnen de overgangsmatrix |
+| **Dossierstatus** (`procedures.status`, `DossierStatus`) | 8 + `beeindigd` = 9 | afgeleid uit de besluitstatus |
+| **Fasestatus** | `nog_niet_begonnen` · `in_behandeling` · `afgerond` · `vervallen` | afgeleid uit de stappen |
+| **Actiestatus** (`decision_actions.status`) | `open` · `in_behandeling` · `afgerond` · `vervallen` · `escalatie` | actiehouder |
+| *Openstaande vereisten* (geen status) | aantal open, per zwaarte | afgeleid uit de evidence-laag |
+
+De term **processtatus** vervalt; die bestond alleen in dit document en week af van de code.
+
+> **Correctie in v0.8.** De review adviseerde `geannuleerd` te mappen naar dossierstatus `beeindigd`. Die waarde bestaat vandaag niet: `DossierStatus` kent acht waarden en `beeindigd` zit er niet bij (`core/lib/dossier.ts:18`). De mapping vraagt dus eerst dat `beeindigd` als **negende dossierstatus** wordt toegevoegd. Het alternatief — mappen naar `gearchiveerd` — is fout: archiveren is opruimen van een afgerond dossier, beëindigen is stoppen vóór het einde, en juist dat verschil wil een toezichthouder zien. Opgenomen in ticket **P4**.
+
+### 4.2 `actief` betekent "hier wordt aan gewerkt"
+
+Bij de start wordt een activeerbare stap `niet_begonnen`; hij wordt `actief` bij de eerste inhoudelijke handeling — een afgevinkt checklistpunt, een gekoppeld bewijsstuk, een vastgelegd besluit, of expliciet "stap starten". Níet: toelichting wijzigen, een vereiste toevoegen of uitsluiten, agenderen.
 
 ```sql
--- Template: afhankelijkheden als data (verwijst naar stap-volgordes binnen dezelfde template)
-alter table public.procedure_template_stappen
-  add column if not exists blokkerende_afhankelijkheden int[] not null default '{}';
-
--- Instantie (snapshot): afhankelijkheden + expliciet stap-statusmodel
 alter table public.procedure_stappen
-  add column if not exists blokkerende_afhankelijkheden int[] not null default '{}',
-  add column if not exists status text not null default 'geblokkeerd'
-      check (status in ('geblokkeerd','actief','afgerond','heropend')),
-  add column if not exists herbevestiging_nodig boolean not null default false,
-  add column if not exists afgerond_op   timestamptz,
-  add column if not exists heropend_op   timestamptz;
+  add column if not exists actief_sinds  timestamptz,
+  add column if not exists gestart_door  uuid references auth.users(id);
 ```
 
-`blokkerende_afhankelijkheden` bevat de `volgorde`-waarden van de stappen die eerst `afgerond` moeten zijn. Leeg = geen gate.
+Zonder die twee bewaar je alleen de toestand, niet het moment — terwijl het document juist claimt dat het startmoment wordt vastgelegd.
 
-### 4.2 Activatielogica (deterministisch, herberekenbaar)
+**De trigger doet exact één overgang: `niet_begonnen → actief`.** Nooit een geblokkeerde, afgeronde of vervallen stap reactiveren. Een AFTER-trigger op `procedure_checklist`, `procedure_bewijs` en `procedure_besluiten`, met die statusvoorwaarde in de `where`.
 
-Eén pure functie bepaalt de status; ze is idempotent en kan altijd opnieuw gedraaid worden (belangrijk voor resume/herstel):
+**Migratie van lopende processen:** per stap bepalen of er al een handeling op zit; zo ja `actief` met `actief_sinds` uit de vroegste gebeurtenis in `procedure_log`, zo nee `niet_begonnen`. Deterministisch, in dezelfde migratie.
 
-```
-activeerbaar(stap) := elke v in stap.blokkerende_afhankelijkheden
-                      heeft een stap met status = 'afgerond'
-```
+### 4.3 Twee dingen die géén status worden
 
-- **Bij `procedure_start`**: snapshot stappen; zet `status = 'actief'` voor elke stap waarvoor `activeerbaar` waar is, anders `'geblokkeerd'`. → meerdere gelijktijdig actief.
-- **Bij stap-afronden** (`status → 'afgerond'`, `afgerond_op = now()`): herbereken uitsluitend de stappen die déze stap als afhankelijkheid noemen; wie nu `activeerbaar` is en `'geblokkeerd'` stond, wordt `'actief'`.
-- Er is **geen** "activeer de volgende op volgorde" meer. De helper `activeerVolgendeStap()` wordt vervangen door `herberekenActiveerbaarheid(decision_id, gewijzigde_volgorde?)`.
+**Afgerond met afwijking** is een vlag op een afgeronde stap (§5.1). **Datum verstreken** is een signaal (§10).
 
-Cyclusbewaking: `blokkerende_afhankelijkheden` moet een DAG vormen. Validatie bij template-import (Zod + een topologische check, §8); een cyclus is een harde importfout.
+### 4.4 Relatie tussen de twee sporen
 
-### 4.3 Heropenen (iteratie/rework)
+Uitvoering (stappen) en bestuurlijke duiding (besluitstatus) blijven gescheiden: een bestuur mag besluiten voordat de nazorg af is. De koppeling is **signalering**, geen automatiek: alle stappen afgerond → voorstel om de besluitstatus te verhogen; besluitstatus verhogen terwijl er stappen open staan → waarschuwing.
 
-Een `afgerond` stap kan terug naar `'heropend'` (telt voor readiness/UI als actief):
+### 4.5 Zacht of hard — de grens
 
-- Toegestaan voor beheerder/voorzitter; **append-only gelogd** als `governance_event` met motivering. De eerdere afronding blijft in het spoor; het bestuurlijk oordeel krijgt een **nieuwe versie** (geen overschrijving).
-- Waar afhankelijkheden zijn gedeclareerd (andere procedures): stappen die van de heropende stap afhankelijk zijn en al `afgerond` waren, worden **niet automatisch teruggezet** (voorkomt cascade-churn), maar gemarkeerd met `herbevestiging_nodig = true` — een zichtbaar, niet-blokkerend signaal "controleer of dit nog klopt".
-- **Het invaarproces kent geen afhankelijkheden**, dus geen automatische herbevestiging: het bestuur markeert desgewenst zelf gerelateerde stappen. Voorbeeld: een DNB-vraag heropent stap 5 (evenwichtigheid); het bestuur beoordeelt of stap 7 (voorgenomen besluit) herzien moet worden.
+| | Wat het is | Regime |
+|---|---|---|
+| **Bestuurlijk oordeel** | is de onderbouwing voldoende, is dit bewijs genoeg, kan deze stap dicht | **zacht** — waarschuwen, en gemotiveerd afwijken mag |
+| **Feitelijke integriteit** | bestaat het feit waarop de status zich beroept, is de handelende persoon bevoegd, valt de overgang binnen de matrix, blijft de tenantgrens intact, is de definitie waarop het dossier draait onveranderd | **hard** — het systeem weigert |
 
-### 4.4 Relatie tot het Decision Object-statusmodel
+Zeven invarianten die het systeem **altijd** afdwingt, ook met motivering en ook door een voorzitter:
 
-Het stap-statusmodel (`geblokkeerd/actief/afgerond/heropend`) staat **los** van de 17-status Decision Object-machine en de readiness-ladder; die blijven ongewijzigd. Wel: de bestaande go/no-go-gate (`decision 0049`) blijft de formele besluitpoort — stap-afhankelijkheden zijn een *fijnmaziger*, procesinterne laag eronder, geen vervanging.
+| | Invariant | Waar afgedwongen |
+|---|---|---|
+| **I1** | Een besluitstatus die een feit stelt, vereist dat feit — volgens de matrix in §4.6, niet volgens de interpretatie van de route. | statusroute + `besluitstatus_vereist_feit` |
+| **I2** | Een afwijking zonder motivering bestaat niet — minimumlengte afgedwongen, niet leeg-met-spaties. | CHECK + route |
+| **I3** | Afwijkend afronden en beëindigen vragen een expliciete bevoegdheid (§5.1, §5.2). | capability-check |
+| **I4** | Een overgang buiten de toegestane-overgangenmatrix bestaat niet. | statusroute |
+| **I5** | `fonds_id` wordt server-side afgeleid, nooit uit de request — **en elk gerefereerd object hoort bij hetzelfde fonds.** | RLS + referentiecontrole, zie hieronder |
+| **I6** | Eén vereiste heeft hoogstens één vervulling, en één artefact vervult hoogstens één vereiste. | twee unieke indexen (§6.2) |
+| **I7** | Een gepubliceerde templateversie is onveranderlijk; elke inhoudelijke wijziging maakt een nieuwe versie. | publicatiestatus + weigerende trigger (§13.1) |
 
----
+> **I5 uitgebreid (v0.8).** De review heeft gelijk dat server-side afleiden van `fonds_id` niet voorkomt dat een actie wordt gekoppeld aan een profiel uit een ánder fonds: RLS beschermt de *rij*, niet de *verwijzing*. Twee lagen: (a) elke insert/update die een vreemde sleutel zet, toetst dat het doelobject hetzelfde `fonds_id` heeft — als constraint waar het kan (composite FK op `(id, fonds_id)`), anders in de route; (b) een periodieke integriteitscontrole die kruisverwijzingen tussen fondsen opspoort, in dezelfde vorm als `CONTROLE-t14b-productiedrift.sql`. Zonder (b) merk je een lek pas als iemand ernaar kijkt.
 
-## 5. D7 — Aanpasbare checklist en bewijslast
+### 4.6 De status-feitenmatrix *(nieuw in v0.8)*
 
-### 5.1 Twee niveaus
-
-1. **Template-niveau** (definitie/editor, fase G proceduremodule): checklist-items en requirements beheren als data; wijziging = nieuwe templateversie; lopende procedures behouden hun snapshot.
-2. **Instantie-niveau** (lopende procedure): een bevoegde rol voegt een **checklistonderwerp** of **bewijslasttype** toe aan een stap van een lópende procedure. Noodzakelijk door het iteratieve karakter (§3).
-
-### 5.2 Datamodel-delta
+I1 is pas afdwingbaar als vastligt wélk feit welke status vereist. Als **data**, niet als `if`-reeks per route:
 
 ```sql
--- Instantie-checklist: herkomst + soft-deactivate + governance-koppeling
-alter table public.procedure_checklist
-  add column if not exists bron text not null default 'template'
-      check (bron in ('template','handmatig')),
-  add column if not exists actief boolean not null default true,
-  add column if not exists governance_event_id uuid references public.governance_events(id),
-  add column if not exists aangemaakt_door uuid references auth.users(id),
-  add column if not exists aangemaakt_op   timestamptz default now();
-
--- Instantie-requirements: een nieuwe, instantie-scoped tabel naast de template-requirements.
--- (procedure_requirements blijft de TEMPLATE-bron; instantie-toevoegingen horen daar niet in.)
-create table if not exists public.procedure_requirement_instance (
-  id                uuid primary key default uuid_generate_v4(),
-  decision_id       uuid not null references public.decision_objects(id) on delete cascade,
-  stap_volgorde     int  not null,
-  requirement_type  text not null,      -- zelfde enum als procedure_requirements
-  label             text not null,
-  documenttype      text,
-  verplicht         boolean not null default true,
-  blokkerend        boolean not null default false,
-  min_aantal        int default 1,
-  vereist_validatie_domein text,
-  bron              text not null default 'handmatig' check (bron in ('handmatig')),
-  actief            boolean not null default true,
-  governance_event_id uuid references public.governance_events(id),
-  aangemaakt_door   uuid references auth.users(id),
-  aangemaakt_op     timestamptz default now(),
-  fonds_id          uuid not null references public.fondsen(id)  -- tenant-scoping (RLS)
+create table public.besluitstatus_vereist_feit (
+  doelstatus     text primary key,
+  vereist_feit   text not null,            -- sleutel die de controlefunctie kent
+  toelichting    text not null
 );
 ```
 
-Soft-deactivate (`actief = false`) i.p.v. verwijderen — consistent met `decisions/0001/0024` (append-only; audit overleeft).
+| Doelstatus | Vereist feit |
+|---|---|
+| `concept` · `in_onderbouwing` · `in_validatie` · `in_review` | geen — werktoestanden, geen beweringen |
+| `geagendeerd` | een gekoppeld agendapunt op een geplande vergadering |
+| `in_bespreking` | een gekoppeld agendapunt op een vergadering van vandaag of eerder |
+| `besloten` | ≥ 1 besluit gebonden aan een approval-vereiste (§6) |
+| `voorwaardelijk_besloten` | idem **plus** ≥ 1 vastgelegde voorwaarde |
+| `afgewezen` | een vastgelegd besluit met uitkomst *afwijzend* |
+| `aangehouden` | een vastgelegde reden van aanhouding |
+| `geescaleerd` | een escalatie-event met geadresseerde |
+| `teruggezet` | motivering **en** de doelstatus waarnaar wordt teruggezet |
+| `in_uitvoering` | een voorafgaand `besloten` of `voorwaardelijk_besloten` in de historie |
+| `in_evaluatie` | idem **plus** een geplande evaluatie |
+| `afgesloten` | elk besluitmoment heeft zijn gebonden besluit (§7) |
+| `heropend` | motivering **en** de terminale status waaruit wordt heropend |
+| `beeindigd` | het beëindigingsevent met reden en actor (§5.2) |
+| `geannuleerd` | **niet kiesbaar** — verborgen legacy-opslagwaarde (§5.2) |
 
-### 5.3 Readiness-consumptie
+Eén functie `toetsStatusFeit(decision_id, doelstatus)` leest deze tabel en weigert of laat door. Dat scheelt niet alleen dubbele logica: het maakt de regel **zichtbaar en toetsbaar** voor een auditor, en een nieuwe status kan niet meer stilzwijgend zonder feitentoets worden toegevoegd.
 
-`fn_decision_readiness_check` en `buildEvidenceLijst` lezen voortaan de **unie** van:
-- template-requirements (`procedure_requirements`, versie-gefilterd + classificatie-conditionals), en
-- **actieve** instantie-requirements (`procedure_requirement_instance` waar `actief = true`).
+**Bewust zacht gelaten:** de matrix eist het *bestaan* van het feit, niet de *kwaliteit* ervan. Of een besluit goed onderbouwd is, blijft een bestuurlijk oordeel (§4.5). Dat onderscheid is de hele grens.
 
-Zonder deze unie bestaat een handmatig toegevoegde eis wel in beeld maar telt hij niet in de readiness — precies de val die het proceduremodule-ontwerp bij `external_submission`/`consultation` benoemt. Een regressietest borgt dit (§8).
+---
 
-**Vervulling van een document-vereiste (v0.5, 18-08-2026 — besluit 0183).** Beide lagen bepaalden of een `document`/`external_submission`/`consultation`-vereiste vervuld was uit "er staat een bewijsstuk op dezelfde stap" plus een optionele `documenttype`-tag. Droeg de vereiste geen tag — de standaardset doet dat nergens — dan vervulde één stuk álle document-vereisten van die stap, ook de blokkerende, en verbruikte de match niets. Vervulling loopt sindsdien uitsluitend via een **expliciete binding**: `procedure_bewijs.requirement_sleutel` = `stap_volgorde|requirement_type|coalesce(documenttype, label)`, dezelfde identiteit als `idx_req_uniek` en als de uitsluiting-`match_sleutel` (§5.5). Beide lagen doen daarna alleen nog een gelijkheidstest, en "één bewijsstuk vervult hoogstens één vereiste" volgt uit het datamodel in plaats van uit een matchingregel.
+## 5. D9 — Validatie, afwijking en beëindiging
 
-Twee consequenties voor deze engine: (a) de sleutel gebruikt het **oorspronkelijke** `requirement_type`, niet de `v_type`-mapping naar `document` — anders zou een als `document` gebonden stuk een `consultation`-vereiste vervullen; (b) de identiteit moet uniek zijn binnen een stap, over de template- én de instantie-arm heen. De seed-generator voorkomt templatebotsingen; `POST …/requirements` geeft bij een template↔instantie- of instantie↔instantie-botsing een bruikbare foutmelding, terwijl een SECURITY DEFINER-trigger dezelfde cross-table-invariant transactioneel afdwingt voor ieder schrijfpad. Resolver, bewijsvalidatie, weergave en readiness-gate behandelen eventueel vooraf bestaande drift fail-closed als onvervuld. De database dwingt bovendien één bewijsclaim per vereiste en één stap per `(procedure_id, volgorde)` af. Zie `BEWIJSMATCH-BINDING-ONTWERP.md`.
+### 5.1 Een stap kan altijd worden afgerond — met de juiste zwaarte en bevoegdheid
 
-### 5.4 Governance en RLS
-
-- Toevoegen/deactiveren gegate op capability **beheerder of voorzitter** (vrijheidsniveau 2/3). Gewone rollen: read-only.
-- Elke mutatie schrijft een `governance_event` (wie/wat/wanneer/motivering) en zet `governance_event_id`.
-- Een **blokkerende** vereiste deactiveren kan alleen via de bestaande override-mechaniek **met verplichte motivering** (REQ-006); nooit stil.
-- RLS: `procedure_requirement_instance` en de nieuwe kolommen vallen onder de fonds-RLS (`fonds_id` server-side afgeleid, nooit uit de request). De structurele gates moeten schoon draaien (policies/grants).
-
-### 5.5 Per-proces uitsluiting van template-vereisten (overlay, v0.4)
-
-Toevoegen (§5.2) en soft-deactivate dekken *handmatige* items. Een **template-vereiste** (generieke set in `procedure_requirements`, gesleuteld op `template_code`, gedeeld door álle fondsen en procedures) mag echter **niet** in-place worden verwijderd of gedeactiveerd: dat zou de gedeelde bron muteren. Verwijderen-per-proces gebeurt daarom als **overlay**, niet als mutatie.
+**`verplicht` en `blokkerend` worden één veld.** Twee booleans leveren vier combinaties waarvan er één onzin is (`verplicht = false, blokkerend = true`).
 
 ```sql
-create table if not exists public.procedure_requirement_uitsluiting (
-  id                  uuid primary key default uuid_generate_v4(),
-  decision_id         uuid not null references public.decision_objects(id) on delete cascade,
-  fonds_id            uuid not null references public.fondsen(id),   -- tenant-scoping (RLS)
-  stap_volgorde       int  not null,
-  requirement_type    text not null,   -- zelfde enum-superset als procedure_requirements
-  label               text not null,   -- weergave/audit
-  match_sleutel       text not null,   -- coalesce(documenttype, label): identiteit van de template-vereiste
-  reden               text not null,   -- verplichte toelichting (nooit stil)
-  actief              boolean not null default true,
-  governance_event_id uuid references public.governance_events(id),
-  uitgesloten_door    uuid references auth.users(id),
-  uitgesloten_op      timestamptz default now(),
-  unique (decision_id, stap_volgorde, requirement_type, match_sleutel)
-);
+alter table public.procedure_requirements
+  add column if not exists zwaarte text
+      check (zwaarte in ('optioneel','vereist','kritiek'));
+-- idem procedure_requirement_instance
+-- migratie:  verplicht = false                    → 'optioneel'
+--            verplicht = true  en blokkerend = f  → 'vereist'
+--            verplicht = true  en blokkerend = t  → 'kritiek'
+-- de booleans blijven tijdelijk als afgeleide leeskolommen; droppen in een latere opruiming
 ```
 
-**Invariant: de generieke set blijft onaangeroerd.** `procedure_requirements` wordt bij een verwijdering nooit ge-UPDATE of -DELETE; de uitsluiting leeft uitsluitend per `decision_id` in de overlay. Een ander fonds of een nieuwe procedure op dezelfde template ziet de template-vereiste onverkort; heractiveren = `actief=false` op de overlay-rij.
-
-**Readiness-consumptie (verfijnt §5.3).** `fn_decision_readiness_check` en `buildEvidenceLijst` lezen de UNION van (template-requirements **minus de actieve overlay-uitsluitingen voor deze `decision_id`**) plus de actieve instantie-requirements. De aftrek is een `NOT EXISTS` op `procedure_requirement_uitsluiting` (match op `decision_id`, `stap_volgorde`, `requirement_type`, en `match_sleutel = coalesce(documenttype, label)` — gelijk aan de unieke index van `procedure_requirements`), **alléén in de template-arm** (instantie-items kennen hun eigen `actief`-vlag).
-
-**Governance en RLS** (spiegelt §5.4): uitsluiten gegate op **voorzitter/beheerder**; verplichte `reden`; elke mutatie schrijft één `governance_event` en zet `governance_event_id`; append-only (fonds-RLS + `WITH CHECK`, `fonds_id` server-side afgeleid). De readiness-functie herstelt na `create or replace` zijn grants (Gate H).
-
----
-
-## 6. D8 — Fasebeschrijving als data, per fonds overschrijfbaar
-
-**Verfijning t.o.v. §1.2 van het procesontwerp:** fasen zijn niet universeel I–VI (een incidentprocedure heeft andere fasen). Daarom worden fasen **onderdeel van de definitie**, met een generieke default in de gedeelde template en een fonds-override-laag.
-
-```sql
-create table if not exists public.procedure_template_fasen (
-  id            uuid primary key default uuid_generate_v4(),
-  template_id   uuid not null references public.procedure_templates(id) on delete cascade,
-  fase_code     text not null,          -- bv. 'kaders','onderbouwing',... of 'I'..'VI'
-  volgorde      int  not null,
-  titel         text not null,
-  generieke_beschrijving text,          -- gedeelde default (fonds-onafhankelijk)
-  unique (template_id, fase_code)
-);
-alter table public.procedure_template_stappen
-  add column if not exists fase_code text;   -- stap → fase
-
-create table if not exists public.procedure_fase_beschrijving_override (
-  id            uuid primary key default uuid_generate_v4(),
-  template_code text not null,
-  fase_code     text not null,
-  fonds_id      uuid not null references public.fondsen(id) on delete cascade,
-  beschrijving  text not null,
-  aangepast_door uuid references auth.users(id),
-  aangepast_op   timestamptz default now(),
-  unique (template_code, fase_code, fonds_id)
-);
-```
-
-Leeslogica (fail-safe): `beschrijving := coalesce(override[fonds, fase], template.generieke_beschrijving)`. Ontbreekt een override, dan de gedeelde default.
-
-Governance: bewerken van een override via `POST /api/procedures/[id]/fase-beschrijving` (WO-3), server-side gegate op rol **voorzitter/beheerder** (de RLS-policies op `procedure_fase_beschrijving_override` zijn defense-in-depth); `template_code` en `fonds_id` worden server-side uit de procedure afgeleid, nooit uit de request. Leeg opslaan verwijdert de override → terugval op de generieke default. Append-only gelogd in **`procedure_log`** (`event_type: fase_beschrijving_bijgewerkt`). Een fasebeschrijving is **pure content** — wijzigen raakt stappen, checklist, bewijslast of activatie niet.
-
----
-
-## 7. Engine-consumptie — wat wijzigt minimaal
-
-1. **`procedure_start`**: naast de bestaande snapshot ook `blokkerende_afhankelijkheden` en `fase_code` meesnapshotten en de initiële stap-statussen zetten (§4.2). Fasen-defaults komen uit `procedure_template_fasen`.
-2. **Stap-afronden**: vervang `activeerVolgendeStap()` door `herberekenActiveerbaarheid()`; zet `herbevestiging_nodig` op afhankelijke afgeronde stappen bij heropening.
-3. **Readiness/vereisten**: union template + instantie-requirements (§5.3); mechaniek verder ongewijzigd.
-4. **UI (Processen-detail)**: toont meerdere `actief`-stappen tegelijk (procesfasen-rail), de fasebeschrijving per fase, en de "toevoegen"-affordances voor checklist/bewijslast (zie mockup `MOCKUP-invaarprocedure-portaalstijl-v0.2.html`). `herbevestiging_nodig` als zichtbaar, niet-blokkerend signaal.
-
-Het snapshot-pattern blijft heilig; lopende procedures veranderen niet mee met templatewijzigingen.
-
-### 7.1 Afgeleide fase-status (UI, voor het totaaloverzicht)
-
-Omdat er geen sequentiële cursor meer is (parallel-by-default), wordt "waar staat een fase / een procedure" **afgeleid** uit de onderliggende staat — niet uit volgorde. Deze afleiding is **UI-laag** (in de presentatielaag/RSC-server-render uit de data die §7 al levert — geen browser-only berekening, geen server-side aggregatie: die is OB-E5); ze introduceert geen nieuwe tabellen. De pure afleidingsfuncties leven in `core/lib/procedure-fase-status.ts` (sanity-getest). Visuele referentie: `MOCKUP-processen-overzicht-v0.1.html` (totaaloverzicht) en de detail-rail in `MOCKUP-invaarprocedure-portaalstijl-v0.2.html`.
-
-**Fase-status** per fase F met stappen S_F (gebruikt `fase_code` + stap-`status` uit §4):
-- **Afgerond** — alle stappen in S_F zijn `afgerond`.
-- **Nog niet begonnen** — geen stap `afgerond` en geen stap `actief`/`heropend`.
-- **In behandeling** — anders (begonnen maar niet af).
-
-**Aandachtsvlag** (orthogonaal signaal, zegt niets over voortgang):
-- **Rood** — een verplichte **blokkerende** vereiste in F is niet sluitend terwijl F in behandeling is, óf een tijdkritische termijn in F is overschreden.
-- **Oranje** — een stap in F is `heropend`/`herbevestiging_nodig`, óf een verplichte (niet-blokkerende) vereiste ontbreekt, óf een termijn nadert (< drempel).
-
-*Implementatienoot (WO-2):* het **rework-signaal** (`heropend`/`herbevestiging_nodig`) vuurt ongeacht de fase-status — ook op een afgeronde fase, want een heropening slaat juist vaak op een reeds afgeronde stap; anders zou de stip op de fasestrip en de tekst in de tellerregel uiteenlopen. De **bewijslast-condities** (rood/oranje) worden alleen op een fase *in behandeling* geëvalueerd: een nog niet begonnen fase heeft nog geen bewijslast en licht niet op.
-
-**Bewijslast-dekking** per fase = # verplichte vereisten met status *volledig* ÷ # verplichte vereisten (template-actief + instantie-actief, §5.3), als percentage.
-
-**Portfolio-aggregatie** (lijstpagina): *Lopend* = procedures in uitvoering · *Met aandacht* = ≥1 fase met aandachtsvlag · *Tijdkritisch* = ≥1 rode aandachtsvlag (zolang termijnen-als-data ontbreken telt dit de ontbrekende blokkerende bewijslast; de termijn-component volgt bij review O2) · *Besluitrijp* = readiness-niveau *besluitrijp* voldoet.
-
-Kanttekeningen: de **termijn**-condities leunen op termijnen-als-data (review O2) — tot die er zijn, tonen de vlaggen alleen heropend/ontbrekende-bewijslast. De afleiding is deterministisch en fondsonafhankelijk; alleen de naderings-drempel is desgewenst instelbaar. Als de portfolio-aggregatie over veel procedures traag wordt, is een server-side helper een latere optimalisatie (geen blokker; OB-E5).
-
----
-
-## 8. Validatie en tests (testklassen)
-
-- **Schema-/DAG-validatie**: `blokkerende_afhankelijkheden` verwijzen naar bestaande stap-volgordes en vormen een DAG (geen cyclus); Zod + topologische check in CI en in de seed-importer.
-- **Parallelle-start-test**: een definitie zonder afhankelijkheden activeert bij start **alle** stappen tegelijk; met een keten activeert alleen de kop.
-- **Gate-test** (fixture-definitie mét een gate; de invaardefinitie heeft er bewust geen): een geblokkeerde stap blijft `geblokkeerd` tot al zijn afhankelijkheden `afgerond` zijn en wordt daarna automatisch `actief`.
-- **Heropen-test**: heropenen van stap 5 zet stap 7 op `herbevestiging_nodig` zonder hem terug te zetten; audit toont beide versies.
-- **Aanpasbaarheid-readiness-test**: een handmatig toegevoegde `actief` instantie-requirement telt mee in `fn_decision_readiness_check` én `buildEvidenceLijst`; na `actief = false` niet meer.
-- **Governance-/RLS-test**: toevoegen/deactiveren zonder capability faalt (403/policy); elke mutatie schrijft exact één `governance_event`; blokkerende deactivatie vereist motivering.
-- **Fonds-override-test**: ontbrekende override valt terug op de generieke default; een fonds ziet alleen zijn eigen override (RLS).
-- **Snapshot-integriteit**: een nieuwe templateversie verandert een lopende procedure niet (regressie).
-
----
-
-## 9. Migratiepad (increments → werkopdrachten)
-
-Backwards-compatible en incrementeel, bewust in **twee** werkopdrachten gehouden — gesplitst langs de impactklasse-grens (data/security vs. alleen-UI). Beide starten in Plan-modus met subagents `supabase-rls-reviewer` + `audit-evidence-reviewer` + `ontwerp-sync-reviewer`.
-
-| WO | Inhoud | Impactklasse | Kern-DoD |
+| Zwaarte | Normaal afronden | Afronden met afwijking | Bestuurlijk signaal |
 |---|---|---|---|
-| **WO-1 · Definitie + engine** | Canonieke definitie `pf_wtp_invaarbesluit@2.0.0.json` (géén blokkerende afhankelijkheden) + D6 (parallelle activatie + heropenen), D7 (`procedure_requirement_instance` + herkomst/soft-deactivate + readiness-unie + governance/RLS) en D8 (`procedure_template_fasen` + fonds-override) | data + tenant/security | alle testklassen (§8) groen; structurele gates schoon; documentatiehaak vuurt (00–09 + as-built) |
-| **WO-2 · UI-consumptie** | Processen-detail (meerdere `actief`-stappen parallel, fasebeschrijving, toevoeg-affordances checklist/bewijslast, `herbevestiging_nodig`) **én het totaaloverzicht met afgeleide fase-status** (§7.1): fasestrip + aandachtsstip + readiness-horde + bewijslast-dekking, en per-fase status in de detail-rail | alleen UI | UX consistent met bestaande patronen; afleidingsregels §7.1 gevolgd; `HANDOVER.md`; leunt op WO-1 |
+| **optioneel** | ja | n.v.t. | geen |
+| **vereist** | nee | ja, met motivering | aandacht |
+| **kritiek** | nee | ja, met motivering **en** expliciete bevestiging | prominent, ook op het overzicht |
 
-Volgorde: **WO-1 vóór WO-2** (de UI leunt op het nieuwe model). De definitie en de drie engine-uitbreidingen zitten bewust in één ticket omdat ze hetzelfde datamodel en dezelfde testklassen raken; verder opsplitsen levert alleen extra overdrachtskosten op zonder risicoreductie.
+> **BP-1, bevestigd door de review.** De bevoegdheid hangt aan de **handeling**, niet aan de zwaarte: één capability `procedure.afwijking.vastleggen` (voorzitter/beheerder). Anders ontstaat een matrix van rol × zwaarte die per fonds anders geconfigureerd wil worden. Wat *kritiek* extra vraagt is een **bevestigingsstap** plus prominente vastlegging.
+
+**De afrondroute** berekent eerst wat ontbreekt, per zwaarte. Is er niets open boven `optioneel`, dan is het een gewone afronding. Anders: bevoegdheid vereist, motivering verplicht, en:
+
+```sql
+alter table public.procedure_stappen
+  add column if not exists afgerond_met_afwijking boolean not null default false,
+  add column if not exists afwijking_motivering   text,
+  add column if not exists afwijking_snapshot     jsonb,   -- wát er ontbrak, per zwaarte
+  add column if not exists afwijking_door         uuid references auth.users(id);
+```
+
+> **Correctie in v0.8 — waar de historie leeft.** De review vroeg terecht wat er bij heropenen en opnieuw afronden met `afwijking_snapshot` gebeurt. Antwoord: **de stapkolommen beschrijven uitsluitend de laatste afronding en worden overschreven; `procedure_log` is canoniek voor de historie.** Elke afronding schrijft een append-only regel met de volledige snapshot, actor en tijdstip. Zo blijft "wat stond er open toen we dit de eerste keer sloten" beantwoordbaar, zonder de stap zelf te belasten met een groeiende lijst. Consequentie die expliciet moet worden gebouwd: het log is daarmee **de** bron voor het afschrift — een afschrift dat op de kolommen leunt, verliest historie zonder het te merken.
+
+**Atomair.** Statuswijziging, afwijkingssnapshot, `procedure_log`-regel, governance-event en `herberekenActiveerbaarheid()` vormen **één transactie**.
+
+**Overrulen is niet vervullen.** De stap gaat dicht; de ontbrekende vereiste blijft open in de tellingen en in het dossier. Dat onderscheidt overrulen van **uitsluiten** (`procedure_requirement_uitsluiting`, "deze eis geldt hier niet", verdwijnt uit de telling). Bouw je alleen het eerste, dan wordt overrulen gebruikt voor het tweede en verdwijnt het onderscheid uit het auditspoor.
+
+**Randvoorwaarde.** De huidige bewijs-gate telt `count > 0` over de hele stap. Om *wat ontbreekt* correct te snapshotten moet die over op de vervullingstabel (§6.2). Zit op het kritieke pad.
+
+### 5.2 Beëindigen en heropenen
+
+Nieuwe eindtoestand `beeindigd`, bereikbaar vanuit elke niet-terminale status, door een bevoegde rol, met verplichte reden.
+
+```sql
+alter table public.procedures
+  add column if not exists beeindigd_op    timestamptz,
+  add column if not exists beeindigd_door  uuid references auth.users(id),
+  add column if not exists beeindigd_reden text;
+-- CHECK-uitbreidingen: procedures.status + 'beeindigd'   (9e dossierstatus, §4.1)
+--                      decision_objects.status + 'beeindigd'
+--                      procedure_stappen.status + 'niet_begonnen' + 'vervallen'
+```
+
+| Vraag | Antwoord |
+|---|---|
+| Fase met uitsluitend vervallen stappen | fasestatus **`vervallen`**. |
+| Fase met afgeronde **én** vervallen stappen | **Correctie in v0.8:** niet `afgerond`. `afgerond` geldt alleen als *alle* stappen afgerond zijn; zodra alle stappen terminaal zijn en er minstens één vervallen is, is de fase **`vervallen`**. De review heeft gelijk: een fase "afgerond" noemen waarin werk is komen te vervallen, is precies het vals groen dat §6 elders uitbant. Zolang niet alle stappen terminaal zijn blijft de fase `in_behandeling`. |
+| Heten vereisten na beëindiging nog "openstaand"? | Nee — **"open bij beëindiging"**, weg uit elke actuele telling (werkbak, proceskaart, signalen), volledig zichtbaar in het afschrift. |
+| Wat wordt actief bij heropening? | Vervallen stappen gaan terug naar `niet_begonnen` of `geblokkeerd` (herberekening); afgeronde stappen blijven afgerond. `actief_sinds` wordt **niet** gewist. |
+| Wat gebeurt met eerdere afwijkingen? | Ze blijven in `procedure_log` (§5.1); de stapkolommen beschrijven de laatste afronding. |
+| Blijft `geannuleerd` bestaan? | **Correctie in v0.8: ja, technisch.** v0.7 liet hem vervallen; de review wijst er terecht op dat dat pas kan ná migratie van bestaande rijen. Daarom: `geannuleerd` blijft in het TypeScript- en databasecontract als **verborgen legacy-opslagwaarde**, verdwijnt uit elke nieuwe overgang en uit elke keuzelijst, en wordt in de UI getoond als *Beëindigd*. Verwijderen uit het contract is een aparte opruimactie ná de datamigratie — niet nu. |
+
+`procedures.status = 'gearchiveerd'` blijft wat het is (opruimen van oude dossiers) en wordt hier niet op gestapeld.
 
 ---
 
-## 10. Open beslissingen en tradeoffs
+## 6. D10 — Vervulling vereist positief, gebonden bewijs *(herzien in v0.8)*
 
-**Open beslissingen**
-1. **OB-E1 — Heropen-cascade.** Voorstel: niet-auto-terugzetten + `herbevestiging_nodig`-vlag (§4.3). Alternatief: harde terugzetting van afhankelijke stappen (afgewezen: cascade-churn, audit-ruis).
-2. **OB-E2 — Instantie-requirements: aparte tabel vs. decision_id-kolom op een gesnapshotte requirements-tabel.** Voorstel: aparte `procedure_requirement_instance` (§5.2), omdat `procedure_requirements` bewust de template-bron blijft.
-3. **OB-E3 — Fase-identiteit.** Voorstel: fasen per template (`procedure_template_fasen`) i.p.v. een universele I–VI-lijst; verfijnt §1.2 van het procesontwerp.
-4. **OB-E4 — SPH-fondsvariant of gedeelde definitie?** Voorstel: SPH-fondsvariant voor de invaardefinitie (afwijkende opdrachtgever + FPR); de engine-uitbreidingen zijn generiek (gedeeld).
-5. **OB-E5 — Afgeleide fase-status: UI of server-side?** Voorstel: **UI-afgeleid** (§7.1) in WO-2, uit de bestaande data. Een server-side aggregatiehelper is een latere optimalisatie als de portfolio-lijst over veel procedures traag wordt — geen blokker.
+De regel:
+
+> Een vereiste is uitsluitend vervuld door een **vastgelegd feit dat aan díe vereiste gebonden is**. Nooit door afwezigheid, nooit door een status elders, nooit door iets op een andere stap.
+
+### 6.1 Wat er al gebonden is, en wat niet
+
+Besluit [`0183`](decisions/0183-expliciete-bewijs-vereiste-binding.md) heeft de regel neergezet en PR #115/#160 hebben hem gehard en naar productie gebracht — **voor drie van de elf typen**. De overige acht matchen nog generiek (geverifieerd in `core/lib/decision.ts` op `origin/main`):
+
+| Type | Stand | Huidige regel |
+|---|---|---|
+| `document` · `external_submission` · `consultation` | ✅ gebonden | gelijkheid op `requirement_sleutel`, server-side afgeleid, uniek per `(stap_id, sleutel)` |
+| `approval` | ❌ | besluitstatus ∈ {besloten, voorwaardelijk_besloten, in_uitvoering, in_evaluatie, afgesloten} — en `bron = null`: er wordt **geen enkele bron** vastgelegd. Bij het invaarproces vinkt één statuswissel vijf vereisten af |
+| `dissent_review` | ❌ | `count === 0` — vervulling **door afwezigheid** |
+| `risk` · `evaluation` | ❌ | `ctx.risks.length > 0` · `ctx.evaluations.length > 0` |
+| `kpi` | ❌ | ≥ 1 voorwaarde met een KPI |
+| `mandate_check` | ❌ | bestaat er ergens een `mandate_check_passed`-event |
+| `assumption` | ❌ | telling ≥ `min_aantal`, zonder binding |
+| `ai_validation` | ❌ | eerste passende gevalideerde output |
+
+### 6.2 BP-7 — het bestaande patroon doortrekken
+
+v0.8 stelde één centrale tabel `procedure_requirement_vervulling` voor, met als argument tegen de alternatieve route: *"zeven migraties"*. **Dat argument is grotendeels vervallen.** Het dure deel van 0183 is niet de kolom maar de machinerie eromheen, en die is generiek:
+
+- de **resolver** die sleutels server-side afleidt en onbekende, dubbele en cross-table-ambigue claims fail-closed weigert;
+- `fn_validate_bewijs_requirement_binding` en `fn_validate_requirement_instance_binding_sleutel`;
+- `fn_audit_procedure_bewijs_mutation` voor het atomaire auditspoor;
+- de gedeelde TS-definitie in `core/lib/requirement-sleutel.ts`, die TS en plpgsql laat spiegelen.
+
+**Besluit: doortrekken, niet vervangen.** Per resterend type krijgt de brontabel dezelfde `requirement_sleutel`-kolom, dezelfde unieke index en dezelfde validatietrigger, aangehaakt op de bestaande resolver.
+
+**Voor de typen zonder brontabel komt er één nieuwe brontabel**, geen uitzonderingsmechanisme:
+
+```sql
+create table public.procedure_vaststelling (
+  id                  uuid primary key default uuid_generate_v4(),
+  fonds_id            uuid not null references public.fondsen(id),
+  procedure_id        uuid not null references public.procedures(id) on delete cascade,
+  stap_id             uuid references public.procedure_stappen(id) on delete set null,
+  requirement_sleutel text not null,          -- zelfde formaat, zelfde resolver
+  soort               text not null check (soort in ('dissentronde','mandaatcheck','kpi','evaluatie')),
+  uitkomst            text not null,          -- bv. 'geen dissent' | 'dissent vastgelegd'
+  toelichting         text not null,
+  actor               uuid not null references auth.users(id),
+  vastgelegd_op       timestamptz not null default now()
+);
+```
+
+`dissent_review` wordt daarmee een **knop** — *"dissentronde afgerond"*, met datum, persoon en uitkomst — in plaats van een afwezigheidstoets. Vervulling door afwezigheid verdwijnt daarmee overal.
+
+**`approval`** krijgt `requirement_sleutel` op `procedure_besluiten`. Dat `procedure_besluiten.stap_id` nullable is, hoeft niet te veranderen: de binding zit in de sleutel, niet in de stap.
+
+**De `min_aantal`-correctie.** v0.8 schreef "per vereiste hoogstens één vervulling". Dat is fout — `min_aantal` bestaat en wordt gebruikt. Juist is:
+
+| | Regel |
+|---|---|
+| Meerdere koppelingen per vereiste | **toegestaan**; vervuld zodra het aantal `min_aantal` haalt (standaard 1) |
+| Eén artefact aan twee vereisten | **verboden** — de unieke index per brontabel dwingt dat af |
+
+Dus niet één-op-één tussen vereiste en stuk, maar één-op-één tussen **stuk en vereiste**.
+
+**Sanity-test.** Eén generieke test die per requirement-type afdwingt dat vervulling positief en gebonden is. Die kan nu pas slagen, en vangt elk toekomstig type automatisch af.
+
+**Zichtbaar gevolg en de grootste risicopost.** Dossiers die vandaag groen tonen op de acht ongebonden typen gaan openstaand tonen. Niet technisch maar bestuurlijk het zwaarst: een bestuurder die zijn dossier van groen naar oranje ziet gaan zonder uitleg, wantrouwt het portaal en niet de oude regel. De backfillregel van #160 (R1/R2: alleen wederzijds eenduidige kandidaten binden, ambigu blijft **zichtbaar** ongebonden) wordt doorgetrokken, met een terugvalrapport per fonds vóór oplevering.
+
+---
+
+## 7. Readiness vervalt — en wat een besluitmoment in de plaats krijgt
+
+Readiness vervalt ([`0184`](decisions/0184-readiness-vervalt.md)): procesbrede meting bij stapsgewijze besluitvorming, een gesloten ladder die niet op zelf gemodelleerde processen past, en tegenspraak met D8. Wat blijft is de vervuldheidstoets per vereiste.
+
+**"Tot en met deze stap" vervalt óók.** §3 verklaart `volgorde` tot presentatievolgorde, en bij parallelle takken zegt "tot en met 9" niets over wat het besluit in stap 9 nodig heeft.
+
+**In de plaats: expliciete binding aan een besluitmoment.**
+
+```sql
+alter table public.procedure_requirements
+  add column if not exists besluitmoment_stap int;   -- volgorde van een stap met vereist_besluit
+-- idem procedure_requirement_instance
+```
+
+| Regel | |
+|---|---|
+| Leeg | de vereiste telt alleen voor haar eigen stap |
+| Gevuld | de vereiste telt óók mee voor het besluit op die stap — ongeacht in welke tak of fase zij zelf staat |
+| **Eén besluitmoment per vereiste** | de kolom is één `int`, dus structureel afgedwongen. Moet dezelfde eis vóór twee besluiten rond zijn, dan zijn dat **twee vereisten** — de tweede is de herbevestiging, en die hoort zichtbaar te zijn in plaats van impliciet (advies review bij BP-2, overgenomen). |
+| Validatie | een stap met `vereist_besluit` waaraan **geen enkele** vereiste is gebonden levert een waarschuwing bij import |
+
+Die laatste regel voorkomt vals groen: zonder binding zou een besluitmoment "0 openstaand" tonen omdat er niets aan hangt, niet omdat alles rond is.
+
+| Schaal | Wat je toont |
+|---|---|
+| Stap | openstaande vereisten van die stap, per zwaarte |
+| Fase | afgeleid uit de stappen van die fase |
+| Proces | totaal open, per zwaarte |
+| **Besluitmoment** | vereisten met `besluitmoment_stap = N`, plus die op stap N zelf |
+
+**Uitfasering in drie stappen:** (1) de vijf gates vervallen, vervangen door de waarschuwing uit §4.4 — met behoud van I1, dat is géén readiness-gate maar een integriteitsregel; (2) `ReadinessLadder.tsx`, horde-teksten en niveau-labels verdwijnen; (3) pas als niets het meer leest: de SQL-functies. Twee consumenten buiten de module moeten mee in stap 2: `app/api/chat/route.ts` en `app/api/stemmingen/[id]/sluiten/route.ts`.
+
+Het afschrift verliest het label "verantwoordingsrijp" en toont de vervulde én openstaande vereisten. Bestaande afschriften blijven ongewijzigd.
+
+---
+
+## 8. D11 — Classificatie: sturend versus duidend
+
+**Feitelijke stand.** Zes dimensies, vier trigger-kolommen, en die worden in één template gebruikt (`beleidswijziging_beleggingsbeleid`, drie regels); `toezichtgevoelig` nergens. De invaarseed van 114 regels bevat geen enkele conditional. Oorzaak: `triggert_bij` bestaat in de database maar **niet in het JSON-contract** (OB-7 in `PROCEDURE-GENERIEK-ONTWERP.md`).
+
+| | Dimensies | Rol |
+|---|---|---|
+| **Sturend** | complexiteit · risiconiveau · mandaatgevoelig · toezichtgevoelig · **ai_risicoklasse** | zetten vereisten aan of uit via `triggert_bij` |
+| **Duidend** | beleidsafwijking | context; gevolg is een governance-event (`policy_deviation_flagged`), geen vereiste |
+
+`ai_risicoklasse` krijgt een vijfde trigger-kolom, zodat BR-009 (menselijke validatie bij middel/hoog) als gewone conditionele vereiste kan worden gemodelleerd in plaats van als hardgecodeerde regel. Duidende dimensies worden in de UI als **kenmerk** gepresenteerd, niet als instelling.
+
+**Volgorde:** `triggert_bij` in het contract (fase C), dan toetsen bij B1 met de incident-definitie. Nul conditionals bij drie definities is het bewijs om de sturende set terug te brengen.
+
+**Voor de generieke engine:** vijf vaste dimensies blijven een gesloten model. De nette vorm is de sturende dimensies hard in kolommen en duidende kenmerken vrij in de bestaande `classificatie jsonb`, zodat een nieuw etiket geen migratie vraagt.
+
+---
+
+## 9. Acties, werkbak en aantekeningen
+
+### 9.1 De actiehouder wordt een profiel
+
+```sql
+alter table public.decision_actions
+  add column if not exists eigenaar_id uuid references public.profielen(id) on delete set null;
+```
+
+| Situatie | `eigenaar_id` | `eigenaar_naam` |
+|---|---|---|
+| Lid van het fonds | gevuld — live koppeling, werkbak, notificatie | **ook gevuld** — historische momentopname |
+| Buiten het portaal | leeg | gevuld |
+
+Bij een interne houder dus **beide**: het id voor de koppeling, de naam voor het spoor als iemand het fonds verlaat — hetzelfde patroon als `voltooid_door` + `voltooid_door_naam`. De koppeling valt onder I5: het profiel moet bij hetzelfde fonds horen (§4.5).
+
+De ledenbron bestaat al (`core/lib/fondsleden.ts`); de picker wordt hergebruikt. `decision_actions.afhankelijk_van` wordt vermoedelijk nergens gevuld: meenemen in dezelfde afweging als `geblokkeerd` (BP-5).
+
+### 9.2 De werkbak is een weergave
+
+De homepage heeft al "Uw open procedure-stappen". Dat gaat op in één blok **Voor u**, gevoed door vier bestaande bronnen: `decision_actions`, `procedure_stappen`, `voorbereidingen`, `document_metadata_review_queue`. Eén leesfunctie `haalWerkbak(userId)`; geen aparte takentabel.
+
+**Regels**, met de correctie uit de review:
+
+- alleen items met een **expliciete houder**;
+- **eerst alle achterstallige items**, daarna aanvullen tot zeven met de eerstvolgende op datum, dan "toon alles". v0.7 zei "maximaal zeven" én "een te laat item wordt nooit verborgen" — bij acht achterstallige items spreken die elkaar tegen, en dan wint *nooit verbergen*. Zeven is een rustpunt, geen norm;
+- klikken opent de bron met de juiste sectie opengeklapt.
+
+Uitwerking: `MOCKUP-homepage-werkbak-v0.1.html`.
+
+### 9.3 Aantekeningen per processtap *(nieuw in v0.8)*
+
+**De vraag** was of het tabblad Overzicht van een stap ruimte moet laten voor aantekeningen. Ja — maar alleen als vooraf vastligt wat het *niet* is, want anders wordt het vrije veld de plek waar de verantwoording heen lekt.
+
+Wat er vandaag al is en dus géén aantekening nodig heeft: de **toelichting** bij de stap (definitie, hoort bij het proces, niet bij dit dossier), de **motivering** bij een besluit, de **afwijkingsmotivering** (§5.1), en de **toelichting bij een vervulling** (§6.2). Wat ontbreekt is de tussenlaag: *"gebeld met de actuaris, cijfers volgen volgende week"*. Dat is werkverkeer, geen verantwoording, en het staat nu in mailboxen.
+
+```sql
+create table public.procedure_stap_notitie (
+  id           uuid primary key default uuid_generate_v4(),
+  fonds_id     uuid not null references public.fondsen(id),
+  procedure_id uuid not null references public.procedures(id) on delete cascade,
+  stap_id      uuid not null references public.procedure_stappen(id) on delete cascade,
+  tekst        text not null,
+  auteur       uuid not null references auth.users(id),
+  auteur_naam  text not null,                       -- momentopname, zie §9.1
+  aangemaakt_op timestamptz not null default now(),
+  bewerkt_op    timestamptz
+);
+```
+
+Vier ontwerpkeuzes, elk met een reden:
+
+| Keuze | Waarom |
+|---|---|
+| **Zichtbaar voor iedereen met toegang tot het dossier** — geen privé-notities | Een privénotitie in een bestuurlijk dossier is een schijnvorm: hij is opvraagbaar zodra iemand ernaar vraagt, maar niemand rekent erop. Liever eerlijk gedeeld, of niet in het portaal. |
+| **Wél bewerkbaar en verwijderbaar door de auteur**, mét `bewerkt_op` | Dit is bewust géén append-only auditobject. Zou het dat wel zijn, dan wordt het te zwaar om te gebruiken en gebeurt het werkverkeer weer per mail. De grens: alles wat vervulling, besluit of afwijking raakt, hoort in de append-only laag — daar verandert niets aan. |
+| **Verschijnt niet in het afschrift** | Anders wordt de aantekening feitelijk verantwoording en gaan mensen erop letten wat ze schrijven. Wel opvraagbaar op verzoek; dat onderscheid expliciet in de UI melden. |
+| **Activeert de stap niet** (§4.2) | Een aantekening is geen inhoudelijke handeling. Anders staat een stap op `actief` omdat iemand "nog even navragen" heeft getypt. |
+
+**In de UI:** op het tabblad Overzicht, als een rustig blok met "+ Aantekening". Getoond met auteur en datum, nieuwste boven, ingeklapt vanaf drie. Niet als zesde tabblad — dat suggereert een gewicht dat het niet heeft, en de tabbalk is al vol.
+
+**Daarbij vervalt de bewijslast-preview op Overzicht.** Die stond er als derde weergave van dezelfde informatie: de tabbadge toont al `0/3` en de voettekstbalk noemt permanent wat er open staat. Overzicht wordt daarmee het tabblad met **context en werkverkeer** — wat is deze stap, in welke fase, en wat speelt er nu — en de andere vier tabs dragen het werk. Dat geeft de aantekening ook een natuurlijke plek in plaats van een aanhangsel onder een lijst.
+
+**Openstaand punt daarbij:** met Overzicht als contexttabblad is het de vraag of het nog het juiste landingstabblad is voor een *actieve* stap; Checklist ligt dan meer voor de hand. Bewust niet nu beslist — eerst kijken hoe het in gebruik voelt.
+
+**Twee risico's om te benoemen bij vaststelling.** (1) Het veld trekt aan: zodra het bestaat, komt er informatie in die eigenlijk in de motivering of bij een vereiste hoort. Tegengif is de vaste plek onderaan en een korte hint in de UI over waar wat hoort. (2) Bij een geschil of toezichtsvraag is de aantekening opvraagbaar; gebruikers moeten dat weten vóórdat ze het gebruiken, niet erna. Dat pleit voor één zin bij het invoerveld, niet voor het weglaten van de functie.
+
+**Alternatief dat is afgewogen:** aantekeningen bij het proces als geheel in plaats van per stap. Afgevallen — dan ontstaat één lange draad zonder aanhechting, en juist de koppeling aan de stap maakt hem terugvindbaar. Beide bouwen kan later; beginnen bij de stap is de smallere en nuttigere helft. Opgenomen in ticket **P5**.
+
+---
+
+## 10. Wat uit de definitie vervalt, en wat terugkomt
+
+**Vervalt:** `geschatte_dagen` per stap (schijnprecisie) en `termijn_dagen` / `bevestiging_vereist` bij een vereiste (bestonden zonder gedrag).
+
+**Komt terug: één optionele datum per stap — uiterlijk gereed.** `procedure_stappen.deadline` bestaat al en wordt getoond in `StapPaneel.tsx`; er is geen invoerpad. Randvoorwaarden: één betekenis (**uiterlijk gereed**, niet "wanneer we het doen"); op de instantie en niet berekend; en er wordt **geen status uit afgeleid** — een verstreken datum is een signaal.
+
+**Gevolg voor het overzicht:** het filter "Tijdkritisch" gaat vandaag niet over tijd maar over ontbrekende kritieke vereisten. Hernoemen naar **"Kritieke vereisten"** — v0.7 stelde "Blokkade" voor, maar de review heeft gelijk dat dat het nieuwe model tegenspreekt: een kritieke vereiste is met bevoegdheid en motivering te passeren (§5.1) en is dus geen blokkade. "Tijdkritisch" komt vrij voor datums.
+
+---
+
+## 11. Engine-consumptie en UI
+
+1. **Start**: snapshot van stappen, checklist, `fase_code`, afhankelijkheden; statussen `niet_begonnen` / `geblokkeerd`.
+2. **Handeling**: trigger `niet_begonnen → actief`, met `actief_sinds` en `gestart_door`.
+3. **Afronden**: bepaal wat open staat per zwaarte; niets open boven optioneel → gewone afronding; anders bevoegdheid + motivering (+ bevestiging bij kritiek). Alles in één transactie (§5.1).
+4. **Beëindigen**: besluitstatus en dossierstatus `beeindigd`, niet-afgeronde stappen `vervallen`, reden verplicht, tellingen uit de werkvoorraad (§5.2).
+5. **Statuswissel**: `toetsStatusFeit()` tegen de matrix van §4.6, vóór de overgangsmatrix (I4) en vóór de capability-check (I3).
+6. **Tellingen**: `buildEvidenceLijst` als gelijkheidstest op `requirement_sleutel` per brontabel; UI telt op vier schalen (§7).
+7. **Schermen**: `MOCKUP-processen-v0.7-overzicht-en-detail.html` — gesynchroniseerd met dit ontwerp (zwaarte, afronden-met-afwijking, readiness eruit); aantekeningen (§9.3) staan er nog niet in. Statusmodel: `VISUAL-statusmodel-processen-v0.3.html`. Definitie-invoer: `SJABLOON-procesdefinitie-v0.2.xlsx`.
+
+---
+
+## 12. Bestuurlijke informatiewaarde
+
+Tellingen zijn operationeel. "17 open, waarvan 4 kritiek" is geen handelingsperspectief. De proceskaart beantwoordt vier vragen: waar staat het dossier, welk oordeel komt nu, wat vraagt aandacht, en wie moet wat vóór wanneer.
+
+Daarvoor is **geen nieuw datamodel** nodig — met één uitzondering, zie signaal 5. Toon er **maximaal drie**, in deze vaste prioriteitsvolgorde (zonder vaste volgorde valt willekeurig welk signaal af):
+
+| # | Signaal | Afgeleid uit |
+|---|---|---|
+| 1 | "Twee kritieke vereisten ontbreken" | evidence-laag, `zwaarte = kritiek` |
+| 2 | "Eén actie is drie dagen te laat" | `decision_actions.deadline` |
+| 3 | "Eén stap afgerond met afwijking; opvolging open" | `afgerond_met_afwijking` |
+| 4 | "Formele dissent nog niet vastgesteld" | `decision_dissent.formeel_vastgesteld` |
+| 5 | "Go/no-gobesluit gepland op 30 september" | **gecorrigeerd in v0.8:** `gewenste_besluitdatum` op het besluitmoment, of de agendakoppeling van de vergadering waarop het besluit staat — **niet** `procedure_stappen.deadline`. Dat veld betekent volgens §10 *uiterlijk gereed*; die twee door elkaar halen levert een datum die niemand heeft gepland. Vraagt dus één nieuwe kolom of hergebruik van de agendakoppeling; keuze bij ticket **P5**. |
+| 6 | "Geen houder toegewezen" | **gecorrigeerd in v0.8:** `eigenaar_id is null` **én** `eigenaar_naam is null`. Een externe houder heeft bewust alleen een naam (§9.1) en is dus wél toegewezen. |
+
+De totalen blijven bestaan, maar als tweede regel — niet als hoofdboodschap.
+
+### 12.1 Zoeken in processen *(nieuw in v0.8, BP-9)*
+
+Het procesoverzicht krijgt een zoekveld. Twee reikwijdtes, en het verschil is groter dan het lijkt.
+
+**Nu gebouwd — zoeken op de kaart.** Naam, omschrijving en procestype. Cliëntzijdig, want de lijst is per fonds klein. Het **stapelt op de filters** in plaats van ernaast te staan: één resultatenlijst, de zoekterm als chip. Levert het niets op binnen de actieve filters, dan biedt de lege staat aan in *alle* processen te zoeken — anders krijg je "niets gevonden" terwijl het gezochte onder een ander filter staat, en dat is de meest voorkomende manier waarop zoeken vertrouwen verliest.
+
+**Nog niet gebouwd — zoeken dóór in het dossier.** Stappen, checklistpunten, bewijsstukken, besluiten, aantekeningen. Nuttig ("waar hebben we het transitieplan opgevoerd?"), maar het is een andere functie:
+
+- het vraagt **gegroepeerde treffers** (proces → stap → regel), niet een gefilterde lijst kaarten;
+- het overlapt met twee bestaande paden: de **documentbibliotheek** heeft eigen zoek, en de **AI-assistent** beantwoordt precies dit soort vragen in natuurlijke taal. Drie ingangen naar dezelfde inhoud is een keuze die je bewust maakt, niet een die erin groeit;
+- het raakt **I5**: een zoekindex over meerdere tabellen is de klassieke plek waar de tenantgrens lekt, omdat de index vaak buiten RLS om wordt gelezen. Bouwen we dit, dan is `fonds_id` onderdeel van de indexsleutel en niet van het filter achteraf;
+- **aantekeningen** (§9.3) zouden erin meekomen. Dat is verdedigbaar, maar het verandert wel hoe mensen ze gebruiken zodra ze weten dat er doorheen wordt gezocht.
+
+Advies: eerst de kaartzoek in gebruik nemen en kijken waar mensen tegenaan lopen. Blijkt de behoefte vooral "waar staat dit document", dan is het antwoord de bibliotheek of de assistent — niet een derde zoekfunctie in Processen.
+
+---
+
+## 13. Migratiepad
+
+### 13.1 Go-livevoorwaarde (ticket P1b) — versiebevriezing én onveranderlijkheid
+
+De bewijslast wordt live gelezen per `template_code`; een gewijzigde seed verandert daarmee de bewijslast van lopende én afgeronde dossiers.
+
+> Er wordt geen tweede generieke definitie in gebruik genomen en de registry wordt niet geactiveerd voordat stappen, checklist **én** vereisten als één versievaste set worden gestart.
+
+**Correctie in v0.8.** v0.7 stopte bij versie-pinnen. De review heeft gelijk dat dat te weinig is: filteren op `template_versie` verhindert niet dat iemand een vereiste *binnen* dezelfde versie wijzigt, en dan verandert de bewijslast van een lopend dossier alsnog zonder spoor. Geverifieerd, en de uitgangspositie is slechter dan aangenomen: `procedure_requirements` heeft **geen versiekolom en geen enkele unique constraint** (`supabase/migrations/2026_05_07_decision_object.sql:304`) — vandaag kan dezelfde vereiste tweemaal bestaan zonder dat iets protesteert.
+
+**Correctie in v0.10 — er is geen registry.** v0.9 hing de publicatiestatus aan `procedure_template_versies`. Die tabel bestaat niet: op `origin/main` staat alleen `procedure_template_fasen` (D8). De registry hoort bij fase C en valt buiten deze EPIC. I7 heeft dus een eigen aanhechtingspunt nodig.
+
+Drie onderdelen, samen I7:
+
+```sql
+-- 1. versie op de vereiste zelf — LET OP: geen blanket default, zie hieronder
+alter table public.procedure_requirements
+  add column if not exists template_versie text;
+
+-- 2. identiteit van een vereiste, nu pas versievast
+--    (idx_req_uniek bestaat al zonder versie; die wordt vervangen)
+create unique index idx_requirement_identiteit
+  on public.procedure_requirements(
+       template_code, template_versie, stap_volgorde, requirement_type,
+       coalesce(documenttype, label));
+
+-- 3. publicatieregister — minimaal, uitdrukkelijk NIET de registry
+create table public.procedure_definitie_publicatie (
+  template_code     text not null,
+  template_versie   text not null,
+  gepubliceerd_op   timestamptz not null default now(),
+  gepubliceerd_door uuid references auth.users(id),
+  primary key (template_code, template_versie)
+);
+-- BEFORE UPDATE OR DELETE op procedure_requirements:
+--   staat de (template_code, template_versie) in dit register → raise exception.
+--   Wijzigen kan dan alleen via een nieuwe versie.
+```
+
+Fase C kan dit register later absorberen; tot die tijd doet het precies één ding, en dat is I7 afdwingen.
+
+**De backfill is de plek waar dit stil kan mislukken.** Zet `template_versie` niet op een blanket default. `pf_wtp_invaarbesluit` draait op `2.0.0`; tag je de vereisten als `1.0.0` terwijl lopende dossiers op `2.0.0` pinnen, dan vinden die dossiers **nul** vereisten en tonen ze een lege, groene bewijslast. Leid de versie per `template_code` af uit de bron — de canonieke JSON respectievelijk de seed — en toon met een regressietest aan dat elk bestaand dossier vóór en ná de migratie evenveel vereisten vindt. Voor de vier code-templates geldt de conventie uit OB-4: die worden `1.0.0`.
+
+Dat is het verschil tussen *versiepinning* (het dossier wijst naar een versie) en *versiebevriezing* (die versie kán niet meer veranderen). Alleen het tweede is verdedigbaar tegenover een toezichthouder.
+
+**Verder in P1b.** `procedures.template_versie` is nieuw. `decision_objects.template_versie` bestáát al (`2026_05_07_decision_object.sql:79`) maar wordt gevuld met de **code** — `core/lib/decision.ts:147` zet `procedure.template_code`. Dat wordt de versie. En de vereisten-tellingen gaan filteren op `(template_code, template_versie)`.
+
+### 13.2 Werktickets
+
+Uitgezet als GitHub-issues onder `EPIC P — Proceduremodule generieke engine`, milestone *Proceduremodule v2*.
+
+| Ticket | Inhoud | Impact | Volgt op |
+|---|---|---|---|
+| **P1a** | UI-herinrichting: overzicht (één lijst, ingeklapte rail, chips, zoeken, kaart) en stapdetail (tabs, voetbalk). Raakt **geen API** | alleen UI | — |
+| **P1b** | Fundament: `template_versie` op vereisten, `idx_req_uniek` uitbreiden, publicatiestatus + weigerende trigger (I7), dossiers pinnen op versie i.p.v. code, vijfde trigger-kolom `ai_risicoklasse` | data + audit | — |
+| **P2** | Vervulling: patroon doortrekken naar de acht resterende typen + `procedure_vaststelling`; generieke sanity-test; backfill R1/R2 en terugvalrapport | data | P1b |
+| **P3** | `zwaarte`, afronden met afwijking, **readiness ontmantelen** (uitvoering van `0187`: `fn_decision_readiness_check`, `ReadinessLadder.tsx`, vier migraties, twee consumenten buiten de module) | data + UI | P2 |
+| **P4** | Statussen sluitend: `niet_begonnen` + actief-trigger, beëindigen/heropenen, fasestatus `vervallen`, negende dossierstatus, status-feitenmatrix (§4.6), invarianten I1–I7 geborgd | data + tenant/security | P3 |
+| **P5** | Acties, werkbak, aantekeningen (§9.3), bestuurlijke signalen (§12) | data + UI | deels P3 |
+| **P6** | Promotie naar preview en productie; migratievolgorde, gates schoon, terugval vooraf gecommuniceerd | — | P1–P5 |
+
+**Waarom P1b vóór P2.** `idx_req_uniek` bestaat, maar zonder `template_versie` erin. Zolang dat zo is, is de vereiste-sleutel niet versievast en zou een nieuwe templateversie de binding van een lopend dossier kunnen laten verschuiven. Dat is precies wat 0183 wilde voorkomen.
+
+**Afhankelijkheid van het wrapperspoor.** 103 van de 114 routes zitten achter een wrapper; de elf resterende zijn catalogus-routes zonder raakvlak. Het echte raakpunt is het **capability-vocabulaire**: er zijn 42 gedeclareerde capabilities, waarvan vier in ons domein (`procedures.view/manage`, `decisions.view/manage`), en `authz-matrix.expected.json` is sinds #157 een continue CI-gate. P2 komt toe met `procedures.manage`; **P3 is de eerste die nieuwe capabilities nodig heeft** en wacht daarmee op het rolmodelbesluit ([#153](https://github.com/merlinijzerman/Bestuurdersportaal/issues/153)). P6 mag niet samenvallen met de vlag-flip aan het eind van Deploy 3 ([`0186`](decisions/0186-capability-vlagdefault-flipt-pas-eind-deploy-3.md)) — twee gedragsveranderingen in één release maken een storing onherleidbaar.
+
+**Snapshots.** 103 van de 367 karakteriseringssnapshots zitten op procedures/decisions. P2, P3 en P4 veranderen responses bewust. Regel: een snapshot-update is altijd een **aparte, gemotiveerde commit**, nooit meeliftend in een functionele wijziging.
+
+Opruimen van het legacy-pad en `geblokkeerd` volgt ná fase B1.
+
+---
+
+## 14. Beslispunten — gesloten
+
+Alle negen zijn beslecht in de sessie van 21 t/m 24-08-2026.
+
+| Nr | Onderwerp | Uitkomst |
+|---|---|---|
+| **BP-1** | Bevoegdheid bij *kritiek* | ✅ Aan de handeling: één capability + bevestigingsstap. Naam volgt de conventie: **`procedures.afwijking.vastleggen`** (meervoud, zoals `procedures.manage`) |
+| **BP-2** | `besluitmoment_stap` in definitie én sjabloon | ✅ Ja; maximaal één besluitmoment per vereiste, herbevestiging wordt een tweede vereiste |
+| **BP-3** | `geannuleerd` | ✅ Blijft als **verborgen legacy-opslagwaarde**; uit elke nieuwe overgang, in de UI getoond als *Beëindigd* |
+| **BP-4** | Vier-ogen bij override op toezichtgevoelig proces | ✅ Niet bouwen; capability, motivering en governance-event volstaan in deze fase |
+| **BP-5** | Afhankelijkheden gebruiken of opruimen | ✅ Uitgesteld tot B1, dáár als **verplicht exit-besluit** |
+| **BP-6** | `geschat_aantal_dagen` op procesniveau | ✅ Blijft — één aantoonbare consument: `NieuweProcedureForm.tsx:111`, oriëntatie bij de templatekeuze. Vervalt zodra die verdwijnt |
+| **BP-7** | Mechanisme dat álle typen aan hun vervullende feit bindt | ✅ **Herzien**: bestaand patroon doortrekken + brontabel `procedure_vaststelling` (§6.2), niet één centrale tabel |
+| **BP-8** | Aantekeningen per processtap | ✅ Bouwen, met de vier grenzen uit §9.3 |
+| **BP-9** | Diepte van zoeken | ✅ Alleen de kaart. Diep zoeken naar `openstaande-punten-en-risicos.md`, met herbeoordeling na drie maanden gebruik |
 
 **Tradeoffs**
-- Parallel-by-default vergroot de kans op "veel tegelijk actief" — mitigatie: de UI toont readiness per stap en `herbevestiging_nodig`, niet één lineaire cursor.
-- Instantie-aanpasbaarheid verhoogt auditlast — mitigatie: verplichte governance-events + herkomstvlag maken elke afwijking traceerbaar.
-- Extra tabellen raken de structurele gates/RLS — bewust in WO-3 gebundeld met de securityreview.
+
+- **Zacht waar het oordeel telt, hard waar het feit telt.** De prijs van zacht is dat het auditspoor het werk doet; de prijs van hard is dat een bestuur soms wordt geweigerd. §4.5 en §4.6 leggen de grens vast zodat die afweging niet per scherm opnieuw wordt gemaakt.
+- **Zichtbare verslechtering bij oplevering, breder dan bij 0183.** Na P2 tonen dossiers hun werkelijke openstaande bewijslast over acht requirement-typen tegelijk. Bedoeld, maar niet zonder voorbereiding: zie de risicopost aan het eind van §6.2.
+- **P1b kost tijd vóórdat iemand functionaliteit ziet.** Onveranderlijkheid levert geen zichtbare feature op en staat toch vooraan. De reden is dat elk later ticket de bewijslast als vaste grootheid veronderstelt; bouw je die volgorde om, dan migreer je twee keer. P1a vangt dat op: die levert wél meteen zichtbaar resultaat en raakt niets.
+- **Twee gedragingen zolang `open` bestaat** (§3).
 
 ---
 
-## 11. Wat dit document niet is
+## 15. Wat dit document niet is
 
-- Geen inhoudelijke invaardefinitie (dat is `pf_wtp_invaarbesluit@2.0.0.json`, WO-1).
-- Geen wijziging aan de 17-status Decision Object-machine of de zes readiness-niveaus.
-- Geen in-app template-editor (fase G proceduremodule; eigen ontwerp).
-- Geen AI-controles/AI-validatie (bewust buiten scope in deze tranche).
-- Geen resolutie van de compliance-openstaande punten O1–O5 uit de review — die horen in `00 Overzicht en status/openstaande-punten-en-risicos.md` mét eigenaar, niet in dit engine-ontwerp.
+Geen procesdefinitie (zie `SJABLOON-procesdefinitie-v0.2.xlsx`), geen registry-ontwerp (`PROCEDURE-GENERIEK-ONTWERP.md` v0.4, fasen C–D), geen in-app editor, en geen wijziging aan de besluitstatussen zelf behalve de toevoeging `beeindigd` en het verbergen van `geannuleerd`.
 
 ---
 
-*Vervolg na akkoord: decision-records aanmaken voor D6/D7/D8 (`decisions/0174…`), WO-1 t/m WO-5 opstellen volgens `WERKOPDRACHT-TEMPLATE.md`, en de DDL-delta's (§4.1, §5.2, §6) verwerken in `09 Objectenmodel`. Terugkoppelen naar proceduremodule-ontwerp v0.2 (parallel-by-default) via `ontwerp-sync-reviewer`.*
+*Besluitrecords worden per ticket geschreven, startend bij **0188** (0183 t/m 0187 zijn vergeven): 0188 bij P1b (versiebevriezing en onveranderlijkheid, §13.1), 0189 bij P2 (D10 — vervulling doorgetrokken, §6), 0190 bij P3 (D9 — validatie, afwijking, beëindiging, §5), 0191 bij P4 (invarianten I1–I7 en de status-feitenmatrix, §4.5–4.6), 0192 bij P5 (acties, werkbak, aantekeningen). D11 (classificatie, §8) hoort bij de definitielaag en volgt met fase C.*
+
+*Bijbehorende stukken: `SJABLOON-procesdefinitie-v0.2.xlsx`, `MOCKUP-processen-v0.7-overzicht-en-detail.html`, `MOCKUP-homepage-werkbak-v0.1.html`, `VISUAL-statusmodel-processen-v0.3.html` en `VISUAL-bewijslast-vier-handelingen-v0.1.html` (functionele uitleg van de vier handelingen, bij §6 en §9.3).*
