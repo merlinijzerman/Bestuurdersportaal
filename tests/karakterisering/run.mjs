@@ -24,12 +24,18 @@ import { normaliseerJson, normaliseerHeaders, locatieVorm, stabielJson } from ".
 const HIER = dirname(fileURLToPath(import.meta.url));
 const SNAP_DIR = join(HIER, "__snapshots__");
 
-const modus = process.argv.includes("--record") ? "record" : process.argv.includes("--verify") ? "verify" : null;
+const modus = process.argv.includes("--record")
+  ? "record"
+  : process.argv.includes("--verify")
+    ? "verify"
+    : process.argv.includes("--authz")
+      ? "authz"
+      : null;
 const onlyArg = process.argv.find((a) => a.startsWith("--only="));
 const only = onlyArg ? onlyArg.slice("--only=".length) : null;
 
 if (!modus) {
-  console.error("Gebruik: run.mjs --record | --verify [--only=<slug>]");
+  console.error("Gebruik: run.mjs --record | --verify | --authz [--only=<slug>]");
   process.exit(2);
 }
 
@@ -167,6 +173,58 @@ async function main() {
       return cookieHeader;
     },
   };
+
+  // ── W7 flag-on-modus: toets de draaiende server tegen het autorisatiecontract ──
+  // Draait met ENFORCE_CAPABILITY=on in de server-omgeving. Per in-scope scenario:
+  //   matrix zegt "403"          → de server MOET 403 geven;
+  //   matrix zegt "onveranderd"  → de server MOET dezelfde status geven als het
+  //                                byte-identieke vlag-uit-snapshot.
+  // Zo is de "28" een tegen de server geverifieerde contractwaarde, geen
+  // voorspelling. De statische test w7-autz-matrix.test.ts borgt dat het contract
+  // zelf klopt met de code; deze modus borgt dat de server het naleeft.
+  if (modus === "authz") {
+    // Spiegelt capabilityEnforceVoorOmgeving() bewust inline: run.mjs draait onder
+    // kaal node en importeert geen TS. De pure functie in capability-enforce.ts is
+    // de bron; wijzigt die van vorm, dan valt deze runner op.
+    const enforceAan = (process.env.ENFORCE_CAPABILITY ?? "").trim().toLowerCase() === "on";
+    if (enforceAan !== true) {
+      throw new Error(
+        "run.mjs --authz vereist ENFORCE_CAPABILITY=on in de server- én runner-omgeving; " +
+          "anders toets je de vlag-uit-toestand tegen het vlag-aan-contract."
+      );
+    }
+    const { matrix } = JSON.parse(await readFile(join(HIER, "authz-matrix.expected.json"), "utf8"));
+    const perSlug = new Map(matrix.map((r) => [r.slug, r]));
+    const teDoen = only ? scenarios.filter((s) => s.slug === only) : scenarios;
+    let ok = 0, fout = 0;
+    const mislukt = [];
+    for (const s of teDoen) {
+      const cel = perSlug.get(s.slug);
+      if (!cel) continue; // buiten W7-scope (niet-gewrapt/machineroute) — niet getoetst
+      let verwacht;
+      if (cel.vlagAan === "403") {
+        verwacht = 403;
+      } else {
+        const snap = JSON.parse(await readFile(join(SNAP_DIR, `${s.slug}.json`), "utf8"));
+        verwacht = snap.status;
+      }
+      const snap = await bouwSnapshot(s, ctx);
+      if (snap.status === verwacht) {
+        ok++;
+      } else {
+        console.log(
+          `  ✗ ${s.slug}  — verwacht ${verwacht} (${cel.vlagAan}), kreeg ${snap.status}`
+        );
+        fout++; mislukt.push(s.slug);
+      }
+    }
+    console.log(`\n[authz] ${ok} ok, ${fout} fout (${perSlug.size} in scope van ${teDoen.length}).`);
+    if (fout > 0) {
+      console.log(`mislukt: ${mislukt.join(", ")}`);
+      process.exit(1);
+    }
+    return;
+  }
 
   const teDraaien = only ? scenarios.filter((s) => s.slug === only) : scenarios;
   if (only && teDraaien.length === 0) throw new Error(`geen scenario met slug ${only}`);
