@@ -21,6 +21,7 @@ import {
   BINDBARE_REQUIREMENT_TYPES,
   requirementSleutel,
 } from "@/core/lib/requirement-sleutel";
+import { zwaarteVanVereiste } from "@/core/lib/requirement-zwaarte";
 import {
   checklistSamenvatting,
   bewijsstukkenSamenvatting,
@@ -74,6 +75,9 @@ interface Props {
   /** Id van de ingelogde gebruiker — bepaalt of de verwijder-knop op een
       eigen bewijsstuk zichtbaar is (server-side check blijft leidend). */
   currentUserId?: string;
+  /** P1a (#165): fase van deze stap, voor de context op het tabblad Overzicht.
+      Puur presentatie; komt uit de per fonds overschrijfbare fasetitels/-tekst. */
+  fase?: { code: string; titel: string; beschrijving: string | null } | null;
 }
 
 function formatDatumKort(d: string) {
@@ -84,72 +88,98 @@ function formatDatumKort(d: string) {
   });
 }
 
-// ── Ingeklapte sectie (WO-3) ─────────────────────────────────────────────────
-// Checklist / Bewijsstukken / Vergaderingen openen standaard ingeklapt met een
-// samenvatting in de kop. `open`/`onToggle` zijn controlled zodat de "+ toevoegen"-
-// affordance de sectie tegelijk kan openklappen.
+// ── Sectie (WO-3 / P1a) ──────────────────────────────────────────────────────
+// P1a (#165): Checklist / Bewijsstukken / Vergaderingen / Besluit zijn tabs
+// geworden. Binnen een tab staat de sectie `statisch` open — geen collapse-chrome
+// meer, maar wél de kop met samenvatting en de "+ toevoegen"-affordance (mockup
+// `sectiekop`). De oude ingeklapte variant (`open`/`onToggle`) blijft bestaan
+// voor eventueel hergebruik buiten de tabs.
 function Sectie({
   titel,
   samenvatting,
   open,
   onToggle,
+  statisch = false,
   addLabel,
   onAdd,
   children,
 }: {
   titel: string;
   samenvatting: string;
-  open: boolean;
-  onToggle: () => void;
+  open?: boolean;
+  onToggle?: () => void;
+  statisch?: boolean;
   addLabel?: string;
   onAdd?: () => void;
   children: React.ReactNode;
 }) {
+  const toon = statisch ? true : !!open;
   return (
-    <div className="mt-6">
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={onToggle}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            onToggle();
-          }
-        }}
-        className="flex items-center gap-2 cursor-pointer select-none"
-      >
-        <div className="text-[11px] uppercase tracking-wide text-muted font-semibold">
-          {titel}
-        </div>
-        <span className="text-[11px] text-muted">· {samenvatting}</span>
-        <span className="ml-auto flex items-center gap-3">
+    <div className="mt-2">
+      {statisch ? (
+        <div className="flex items-center gap-2">
+          <div className="text-[11px] uppercase tracking-wide text-muted font-semibold">
+            {titel}
+          </div>
+          <span className="text-[11px] text-muted">· {samenvatting}</span>
           {addLabel && onAdd && (
             <button
               type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onAdd();
-              }}
-              className="text-xs text-accent hover:underline"
+              onClick={onAdd}
+              className="ml-auto text-xs text-accent hover:underline"
             >
               {addLabel}
             </button>
           )}
-          <span
-            aria-hidden
-            className={`text-muted text-xs transition-transform ${
-              open ? "" : "-rotate-90"
-            }`}
-          >
-            ▾
+        </div>
+      ) : (
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={onToggle}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onToggle?.();
+            }
+          }}
+          className="flex items-center gap-2 cursor-pointer select-none"
+        >
+          <div className="text-[11px] uppercase tracking-wide text-muted font-semibold">
+            {titel}
+          </div>
+          <span className="text-[11px] text-muted">· {samenvatting}</span>
+          <span className="ml-auto flex items-center gap-3">
+            {addLabel && onAdd && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAdd();
+                }}
+                className="text-xs text-accent hover:underline"
+              >
+                {addLabel}
+              </button>
+            )}
+            <span
+              aria-hidden
+              className={`text-muted text-xs transition-transform ${
+                open ? "" : "-rotate-90"
+              }`}
+            >
+              ▾
+            </span>
           </span>
-        </span>
-      </div>
-      {open && <div className="mt-3">{children}</div>}
+        </div>
+      )}
+      {toon && <div className="mt-3">{children}</div>}
     </div>
   );
 }
+
+// P1a (#165): tabs van het stapdetail.
+type StapTab = "overzicht" | "checklist" | "bewijs" | "vergaderingen" | "besluit";
 
 // ── Uitklapbaar checklistpunt (WO-3) ─────────────────────────────────────────
 // De toelichting per checklistpunt bestaat nog niet als data (OB-E10, aparte
@@ -489,8 +519,13 @@ export default function StapPaneel({
   voltooidDoorNaam = null,
   kanBeheren = false,
   currentUserId = "",
+  fase = null,
 }: Props) {
   const router = useRouter();
+  // P1a (#165): actief tabblad. Landingstabblad = Overzicht (mockup-default);
+  // of Checklist beter past voor een actieve stap is bewust een open punt
+  // (zie 00 Overzicht en status/openstaande-punten-en-risicos.md).
+  const [tab, setTab] = useState<StapTab>("overzicht");
   const [checklist, setChecklist] = useState<ChecklistItem[]>(initieelChecklist);
   const [bewijs, setBewijs] = useState<Bewijs[]>(initieelBewijs);
 
@@ -554,10 +589,6 @@ export default function StapPaneel({
   const [heropenMotivering, setHeropenMotivering] = useState("");
   // WO-2-vervolg: welk (titel-only) bewijsstuk koppelen we aan een document?
   const [koppelDoelId, setKoppelDoelId] = useState<string | null>(null);
-  // WO-3: ingeklapte secties (controlled zodat "+ toevoegen" ze kan openklappen).
-  const [checklistOpen, setChecklistOpen] = useState(false);
-  const [bewijsOpen, setBewijsOpen] = useState(false);
-  const [vergaderingOpen, setVergaderingOpen] = useState(false);
   // WO-3: stap-toelichting (onder de titel) bewerken.
   const [toelichtingBewerken, setToelichtingBewerken] = useState(false);
   const [toelichtingWaarde, setToelichtingWaarde] = useState(
@@ -608,6 +639,30 @@ export default function StapPaneel({
     allesVoldaan &&
     (bewijsVereist === 0 || heeftBewijs) &&
     (!stap.vereist_besluit || besluit !== null);
+
+  // P1a (#165): tab-badges. Zwaarte komt van de VEREISTE (blokkerend→kritiek,
+  // verplicht→vereist) via de enige afleidfunctie (swap-punt voor #168).
+  const bewijsTot = stapEvidence.length;
+  const bewijsVervuld = stapEvidence.filter((e) => e.vervuld).length;
+  const kritiekOpen = stapEvidence.filter(
+    (e) => !e.vervuld && zwaarteVanVereiste(e) === "kritiek"
+  ).length;
+  const vereistOpen = stapEvidence.filter(
+    (e) => !e.vervuld && zwaarteVanVereiste(e) === "vereist"
+  ).length;
+
+  // "Nog open" voor de vaste voettekstbalk — dezelfde blokkers als kanVoltooien,
+  // nu permanent zichtbaar i.p.v. alleen als tooltip. P1a wijzigt het afrond-
+  // gedrag NIET (afronden-met-afwijking is #168); dit toont alleen wat er staat.
+  const nogOpen = [
+    !allesVoldaan
+      ? `${totaalCount - voldaanCount} checklistpunt${
+          totaalCount - voldaanCount === 1 ? "" : "en"
+        }`
+      : null,
+    bewijsVereist > 0 && !heeftBewijs ? "een bewijsstuk" : null,
+    stap.vereist_besluit && !besluit ? "het formele besluit" : null,
+  ].filter(Boolean) as string[];
 
   async function checklistToggle(item: ChecklistItem) {
     if (alleenLezen) return;
@@ -1071,7 +1126,7 @@ export default function StapPaneel({
   // vereiste als titel + documenttype-tag. De binding zelf wordt hier gezet:
   // titel en tag zijn suggesties, de binding is wat readiness bepaalt.
   function opvoerenVanuitVereiste(r: EvidenceItem) {
-    setBewijsOpen(true);
+    setTab("bewijs");
     setBewijsForm(true);
     setBewijsVereiste(r);
     if (!bewijsTitel.trim()) setBewijsTitel(r.label);
@@ -1164,6 +1219,57 @@ export default function StapPaneel({
     }
   }
 
+  // P1a (#165): tab-definities met badge. Kleur van de bewijs-badge volgt de
+  // zwaarte: kritiek open → rood, anders vereist open → oranje, anders volledig
+  // → groen.
+  const tabBadge = (tekst: string, kleur: string) => (
+    <span className={`text-[10px] px-1.5 py-0.5 rounded ${kleur}`}>{tekst}</span>
+  );
+  const bewijsBadgeKleur =
+    kritiekOpen > 0
+      ? "bg-err-tint text-err-ink"
+      : vereistOpen > 0
+        ? "bg-warn-tint text-warn-ink"
+        : bewijsTot > 0 && bewijsVervuld === bewijsTot
+          ? "bg-ok-tint text-ok-ink"
+          : "bg-app-bg text-muted";
+  const TABS: { id: StapTab; label: string; badge: React.ReactNode }[] = [
+    { id: "overzicht", label: "Overzicht", badge: null },
+    {
+      id: "checklist",
+      label: "Checklist",
+      badge: tabBadge(
+        `${voldaanCount}/${totaalCount}`,
+        allesVoldaan ? "bg-ok-tint text-ok-ink" : "bg-app-bg text-muted"
+      ),
+    },
+    {
+      id: "bewijs",
+      label: "Bewijsstukken",
+      badge:
+        bewijsTot > 0
+          ? tabBadge(`${bewijsVervuld}/${bewijsTot}`, bewijsBadgeKleur)
+          : null,
+    },
+    {
+      id: "vergaderingen",
+      label: "Vergaderingen",
+      badge:
+        gekoppeldeAgendapunten.length > 0
+          ? tabBadge(String(gekoppeldeAgendapunten.length), "bg-app-bg text-muted")
+          : null,
+    },
+    {
+      id: "besluit",
+      label: "Besluit",
+      badge: besluit
+        ? tabBadge("✓", "bg-ok-tint text-ok-ink")
+        : stap.vereist_besluit
+          ? tabBadge("vereist", "bg-err-tint text-err-ink")
+          : null,
+    },
+  ];
+
   return (
     <div className="bg-white border border-line rounded-xl p-6">
       <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -1205,6 +1311,41 @@ export default function StapPaneel({
           {stap.eigenaar_naam && <div className="mt-1">{stap.eigenaar_naam}</div>}
         </div>
       </div>
+
+      {/* P1a (#165): tabbladen. De balk staat BUITEN de leesmodus-fieldset zodat
+          tab-switchen ook op een alleen-lezen stap werkt. */}
+      <div
+        role="tablist"
+        aria-label="Stapdetail"
+        className="mt-5 flex items-center gap-1 border-b border-line flex-wrap"
+      >
+        {TABS.map((t) => {
+          const actief = tab === t.id;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={actief}
+              onClick={() => setTab(t.id)}
+              className={`px-3 py-2 text-[13px] border-b-2 -mb-px inline-flex items-center gap-1.5 ${
+                actief
+                  ? "border-accent text-accent font-semibold"
+                  : "border-transparent text-muted hover:text-ink"
+              }`}
+            >
+              {t.label}
+              {t.badge}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Overzicht — het tabblad met context (toelichting + fase) en de
+          stap-brede acties. Bewust BUITEN de fieldset: toelichting en heropenen
+          moeten ook op een afgeronde stap door voorzitter/beheerder kunnen. */}
+      {tab === "overzicht" && (
+        <div className="mt-4">
 
       {/* WO-3: toelichting onder de staptitel (schrijft procedure_stappen.
           beschrijving). Bewerkbaar door voorzitter/beheerder — bewust BUITEN de
@@ -1321,26 +1462,40 @@ export default function StapPaneel({
         </div>
       )}
 
+      {/* P1a (#165): fasecontext op het tabblad Overzicht. */}
+      {fase && (
+        <div className="mt-5">
+          <div className="text-[11px] uppercase tracking-wide text-muted font-semibold mb-1">
+            Fase
+          </div>
+          <p className="text-[13px] text-ink max-w-2xl">
+            <b>
+              Fase {fase.code} — {fase.titel}.
+            </b>{" "}
+            {fase.beschrijving ?? ""}
+          </p>
+        </div>
+      )}
+        </div>
+      )}
+
       {/* T6-1A: in leesmodus schakelt de fieldset alle formuliercontrols
           (inputs, textareas, selects, knoppen) native uit — zichtbaar maar
           niet bedienbaar. Navigatielinks (agendapunten) blijven werken. */}
       <fieldset disabled={alleenLezen} className="min-w-0 border-0 p-0 m-0">
 
-      {/* Checklist — WO-3: ingeklapt met samenvatting; items uitklapbaar. */}
+      {/* Checklist (P1a: tabblad). */}
+      {tab === "checklist" && (
       <Sectie
         titel="Checklist"
         samenvatting={checklistSamenvatting(checklist)}
-        open={checklistOpen}
-        onToggle={() => setChecklistOpen((o) => !o)}
+        statisch
         addLabel={
           kanBeheren && !alleenLezen ? "+ Checklistpunt toevoegen" : undefined
         }
         onAdd={
           kanBeheren && !alleenLezen
-            ? () => {
-                setChecklistOpen(true);
-                setChecklistForm((f) => !f);
-              }
+            ? () => setChecklistForm((f) => !f)
             : undefined
         }
       >
@@ -1405,20 +1560,20 @@ export default function StapPaneel({
           </div>
         )}
       </Sectie>
+      )}
 
-      {/* Bewijsstukken — WO-3: vereist-gedreven (evidence-unie), ingeklapt.
+      {/* Bewijsstukken (P1a: tabblad) — vereist-gedreven (evidence-unie).
           Elk item uitklapbaar; "Opvoeren" hergebruikt het bewijs-formulier.
           Daaronder de reeds opgevoerde stukken (koppelen/verwijderen). */}
+      {tab === "bewijs" && (
       <Sectie
         titel="Bewijsstukken"
         samenvatting={bewijsstukkenSamenvatting(stapEvidence)}
-        open={bewijsOpen}
-        onToggle={() => setBewijsOpen((o) => !o)}
+        statisch
         addLabel={!alleenLezen ? "+ Bewijsstuk toevoegen" : undefined}
         onAdd={
           !alleenLezen
             ? () => {
-                setBewijsOpen(true);
                 if (bewijsForm) resetBewijsForm();
                 else setBewijsForm(true);
               }
@@ -1674,6 +1829,20 @@ export default function StapPaneel({
                           : "Toegevoegd"}{" "}
                         · {formatDatumKort(b.toegevoegd_op)}
                       </div>
+                      {/* P1a (#165): "Vraag de AI over dit stuk" — zelfde route
+                          als de documentbibliotheek (/ai?doc=…). Alleen bij een
+                          gekoppeld document; een titel-only stuk (document_id
+                          null) heeft niets om over te vragen. Een <a> blijft ook
+                          in de leesmodus-fieldset klikbaar. */}
+                      {b.document_id && (
+                        <a
+                          href={`/ai?doc=${b.document_id}`}
+                          className="inline-flex items-center gap-1 text-xs text-accent hover:underline mt-1"
+                          title="Open de AI-assistent met de vraag beperkt tot dit document"
+                        >
+                          ✦ Vraag de AI over dit stuk
+                        </a>
+                      )}
                       {/* Bewijsbinding: welke vereiste vervult dit stuk?
                           Ongebonden stukken tellen niet mee — dat is zichtbaar
                           én ter plekke te herstellen. */}
@@ -1780,13 +1949,14 @@ export default function StapPaneel({
           </div>
         )}
       </Sectie>
+      )}
 
-      {/* Vergaderingen — WO-3: ingeklapt met samenvatting. */}
+      {/* Vergaderingen (P1a: tabblad). */}
+      {tab === "vergaderingen" && (
       <Sectie
         titel="Vergaderingen"
         samenvatting={vergaderingenSamenvatting(gekoppeldeAgendapunten.length)}
-        open={vergaderingOpen}
-        onToggle={() => setVergaderingOpen((o) => !o)}
+        statisch
         addLabel={
           !alleenLezen && komendeVergaderingen.length > 0
             ? "+ Voeg toe aan vergadering"
@@ -1794,10 +1964,7 @@ export default function StapPaneel({
         }
         onAdd={
           !alleenLezen && komendeVergaderingen.length > 0
-            ? () => {
-                setVergaderingOpen(true);
-                setVergaderingForm(true);
-              }
+            ? () => setVergaderingForm(true)
             : undefined
         }
       >
@@ -1887,9 +2054,12 @@ export default function StapPaneel({
           </p>
         )}
       </Sectie>
+      )}
 
-      {/* Besluit (alleen op stappen die dat vereisen) */}
-      {stap.vereist_besluit && (
+      {/* Besluit (P1a: tabblad). Ook zichtbaar als de stap geen besluit vereist,
+          dan met een korte toelichting. */}
+      {tab === "besluit" &&
+        (stap.vereist_besluit ? (
         <div className="mt-6">
           <div className="flex items-center justify-between mb-3">
             <div className="text-xs uppercase tracking-wide text-muted font-semibold">
@@ -1997,7 +2167,12 @@ export default function StapPaneel({
             </div>
           )}
         </div>
-      )}
+        ) : (
+          <div className="mt-4 text-sm text-muted italic">
+            Deze stap vereist geen formeel besluit. De uitkomst landt als
+            onderbouwing in het dossier.
+          </div>
+        ))}
 
       {fout && (
         <div className="mt-3 text-sm text-err-ink bg-err-tint border border-err/30 rounded-lg px-3 py-2">
@@ -2011,28 +2186,33 @@ export default function StapPaneel({
         </div>
       )}
 
-      {/* Voltooien — alleen de knop; wat nog ontbreekt staat als tooltip.
-          De blokkers zelf staan hierboven (checklist, bewijs, besluit). */}
-      <div className="mt-6 pt-5 border-t border-line flex items-center justify-end">
+      {/* Vaste voettekstbalk (P1a #165): wat er nog open staat is nu permanent
+          zichtbaar i.p.v. alleen als tooltip. Het afrondgedrag zelf is
+          ONGEWIJZIGD — afronden-met-afwijking hoort bij #168. De blokkers zelf
+          staan in de tabs hierboven (checklist, bewijs, besluit). */}
+      <div className="mt-6 pt-5 border-t border-line flex items-center justify-between gap-3 flex-wrap">
+        <div className="text-xs text-muted min-w-0">
+          {stap.status === "afgerond" ? (
+            <span className="text-ok-ink">Stap afgerond.</span>
+          ) : alleenLezen ? (
+            "Stap nog niet gestart — alleen-lezen."
+          ) : nogOpen.length > 0 ? (
+            <>
+              Nog open:{" "}
+              <span className="text-ink font-medium">
+                {nogOpen.join(" · ")}
+              </span>
+            </>
+          ) : (
+            <span className="text-ok-ink">
+              Alles voldaan — klaar om af te ronden.
+            </span>
+          )}
+        </div>
         <button
           onClick={stapVoltooien}
           disabled={!kanVoltooien || bezig === "voltooien"}
-          title={
-            kanVoltooien
-              ? "Alle vereisten voldaan"
-              : `Nog nodig: ${[
-                  !allesVoldaan
-                    ? `${totaalCount - voldaanCount} checklist-item${
-                        totaalCount - voldaanCount === 1 ? "" : "s"
-                      }`
-                    : null,
-                  bewijsVereist > 0 && !heeftBewijs ? "bewijsstuk" : null,
-                  stap.vereist_besluit && !besluit ? "besluit" : null,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}`
-          }
-          className={`px-4 py-2 text-sm rounded-lg font-medium ${
+          className={`px-4 py-2 text-sm rounded-lg font-medium flex-shrink-0 ${
             kanVoltooien
               ? "bg-accent text-white hover:bg-accent-ink"
               : "bg-app-line text-muted cursor-not-allowed"
