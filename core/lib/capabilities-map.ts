@@ -26,8 +26,6 @@ export type Capability =
   | "classification.review"
   // Increment D — notulensegmenten voorstellen/bevestigen/corrigeren (FO §8, TO §2.5).
   | "notulen.segment.confirm"
-  // Increment C+/B13 — generieke (platform-gecureerde) bibliotheek beheren.
-  | "generic.library.manage"
   // Increment F — persoonlijk bestuurdersprofiel (FO §14, besluit 0017).
   | "profile.manage.own"
   // Organisatieprofiel v0.4 — tenant-zelfservice op het fonds-brede contextprofiel.
