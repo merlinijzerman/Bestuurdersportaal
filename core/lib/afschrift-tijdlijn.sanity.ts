@@ -61,7 +61,7 @@ function decision(over: Partial<DecisionObject> = {}): DecisionObject {
 }
 function procedure(): ProcedureSummary {
   return {
-    id: "proc-1", fonds_id: "fonds-1", template_code: "t", titel: "Proces",
+    id: "proc-1", fonds_id: "fonds-1", template_code: "t", template_versie: null, titel: "Proces",
     beschrijving: null, status: "besloten", gestart_op: "2026-03-01T09:00:00.000Z",
     gestart_door: null, deadline: null, afgerond_op: "2026-04-01T09:00:00.000Z", decision_id: "dec-1",
   };

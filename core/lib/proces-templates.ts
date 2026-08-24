@@ -39,6 +39,11 @@ export interface ProcessTemplateStap {
 
 export interface ProcessTemplate {
   code: string;
+  /** P1b (#166): definitieversie. Uit de canonieke JSON (`def.versie`) voor de
+      rijke definities; de code-templates dragen 'm niet en vallen bij start
+      terug op '1.0.0' (OB-4). Wordt bij procedure-start naar
+      procedures.template_versie gesnapshot. */
+  versie?: string;
   naam: string;
   korte_omschrijving: string;
   geschat_aantal_dagen: number;

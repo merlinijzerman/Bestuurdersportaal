@@ -94,7 +94,7 @@ export const POST = withFondsRoute({ capability: "procedures.manage" }, async (c
     // Fonds_id server-side uit de procedure (RLS begrenst tot eigen fonds).
     const { data: procedure } = await supabase
       .from("procedures")
-      .select("id, fonds_id, template_code")
+      .select("id, fonds_id, template_code, template_versie")
       .eq("id", id)
       .single();
     if (!procedure?.fonds_id) {
@@ -116,13 +116,19 @@ export const POST = withFondsRoute({ capability: "procedures.manage" }, async (c
       nieuweDocumenttype,
       label
     );
+    // P1b (#166): template-arm versie-gefilterd op de gepinde versie; fallback
+    // naar code-only als die (kortstondig) null is.
+    let tplQuery = supabase
+      .from("procedure_requirements")
+      .select("stap_volgorde, requirement_type, documenttype, label")
+      .eq("template_code", procedure.template_code)
+      .eq("stap_volgorde", body.stap_volgorde)
+      .eq("requirement_type", body.requirement_type);
+    if (procedure.template_versie) {
+      tplQuery = tplQuery.eq("template_versie", procedure.template_versie);
+    }
     const [{ data: templateRijen }, { data: instantieRijen }] = await Promise.all([
-      supabase
-        .from("procedure_requirements")
-        .select("stap_volgorde, requirement_type, documenttype, label")
-        .eq("template_code", procedure.template_code)
-        .eq("stap_volgorde", body.stap_volgorde)
-        .eq("requirement_type", body.requirement_type),
+      tplQuery,
       supabase
         .from("procedure_requirement_instance")
         .select("stap_volgorde, requirement_type, documenttype, label")

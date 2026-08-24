@@ -68,7 +68,7 @@ export async function ensureDecisionForProcedure(
   const { data: procedure, error: procFout } = await supabase
     .from("procedures")
     .select(
-      "id, fonds_id, template_code, titel, beschrijving, status, gestart_door, deadline, decision_id"
+      "id, fonds_id, template_code, template_versie, titel, beschrijving, status, gestart_door, deadline, decision_id"
     )
     .eq("id", procedureId)
     .single();
@@ -142,7 +142,9 @@ export async function ensureDecisionForProcedure(
       ai_risicoklasse: "laag",
       vertrouwelijkheid: "intern",
       is_primary_decision: true,
-      template_versie: procedure.template_code,
+      // P1b (#166): de VERSIE waarop het dossier is gepind — niet langer de code
+      // (dat was de bug). De backfill in de P1b-migratie herstelt bestaande rijen.
+      template_versie: procedure.template_versie ?? null,
     })
     .select("id")
     .single();
@@ -236,7 +238,7 @@ export async function buildDecisionDossierView(
   const { data: procRow, error: procFout } = await supabase
     .from("procedures")
     .select(
-      "id, fonds_id, template_code, titel, beschrijving, status, gestart_op, gestart_door, deadline, afgerond_op, decision_id"
+      "id, fonds_id, template_code, template_versie, titel, beschrijving, status, gestart_op, gestart_door, deadline, afgerond_op, decision_id"
     )
     .eq("id", decision.procedure_id)
     .single();
@@ -536,11 +538,20 @@ async function buildEvidenceLijst(
   supabase: Sb,
   ctx: BuildEvidenceContext
 ): Promise<EvidenceItem[]> {
-  // Alle requirements voor deze template.
-  const { data: reqRows } = await supabase
+  // Alle requirements voor deze template. P1b (#166): versie-gefilterd op de
+  // versie waarop dit dossier is gepind (procedures.template_versie). Fallback
+  // naar code-only als de versie (kortstondig, deploy-venster) null is.
+  // Behavioraal een no-op zolang er één versie per code bestaat — puur toekomst-
+  // vast: een dossier op v1 leest v1, ook nadat een v2 is geseed. Readiness in
+  // de DB blijft bewust ongewijzigd (dat is #168).
+  let reqQuery = supabase
     .from("procedure_requirements")
     .select("*")
     .eq("template_code", ctx.procedure.template_code);
+  if (ctx.procedure.template_versie) {
+    reqQuery = reqQuery.eq("template_versie", ctx.procedure.template_versie);
+  }
+  const { data: reqRows } = await reqQuery;
 
   // WO-3-vervolg: per-proces uitsluitingen (overlay). Deze markeren een
   // TEMPLATE-vereiste als niet van toepassing voor DIT decision — de generieke

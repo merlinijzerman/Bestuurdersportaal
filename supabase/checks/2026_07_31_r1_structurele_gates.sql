@@ -105,6 +105,9 @@ declare
   globaal text[] := array[
     'fondsen',                        -- lijst van fondsen, geen tenantinhoud
     'procedure_requirements',         -- globale templateconfiguratie
+    'procedure_definitie_publicatie', -- P1b (#166): publicatieregister (I7),
+                                      -- globaal, geen fonds_id; append-only,
+                                      -- read-all-authenticated, geen write-policy.
     'procedure_template_fasen',       -- globale fase-defaults per template_code
                                       -- (D8): gedeelde toelichtende content, geen
                                       -- fonds_id, geen PII. `for select using

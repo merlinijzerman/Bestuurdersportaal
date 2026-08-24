@@ -544,6 +544,8 @@ create table public.procedure_definitie_publicatie (
 --   Wijzigen kan dan alleen via een nieuwe versie.
 ```
 
+> **As-built (P1b, uitgevoerd — zie [besluit 0188](decisions/0188-versievastheid-en-onveranderlijkheid-definitie.md)).** Drie verfijningen t.o.v. de schets hierboven: (a) de bestaande unieke index heet `idx_req_uniek` en wordt uitgebreid — er komt geen nieuwe `idx_requirement_identiteit`; (b) `gepubliceerd_door` krijgt **geen** FK naar `auth.users` (migratie-/systeempublicaties hebben hem NULL); (c) de trigger weigert `BEFORE INSERT OR UPDATE OR DELETE` (niet alleen update/delete): een vereiste *toevoegen* aan een bevroren versie verandert de bewijslast net zo goed. Bovendien is het register zélf append-only (een `before update/delete`- én `before truncate`-grendel).
+
 Fase C kan dit register later absorberen; tot die tijd doet het precies één ding, en dat is I7 afdwingen.
 
 **De backfill is de plek waar dit stil kan mislukken.** Zet `template_versie` niet op een blanket default. `pf_wtp_invaarbesluit` draait op `2.0.0`; tag je de vereisten als `1.0.0` terwijl lopende dossiers op `2.0.0` pinnen, dan vinden die dossiers **nul** vereisten en tonen ze een lege, groene bewijslast. Leid de versie per `template_code` af uit de bron — de canonieke JSON respectievelijk de seed — en toon met een regressietest aan dat elk bestaand dossier vóór en ná de migratie evenveel vereisten vindt. Voor de vier code-templates geldt de conventie uit OB-4: die worden `1.0.0`.

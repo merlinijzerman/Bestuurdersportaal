@@ -95,6 +95,11 @@ export interface ProcedureSummary {
   id: string;
   fonds_id: string;
   template_code: string;
+  /** P1b (#166): versie waarop dit dossier is gepind (snapshot-bij-start).
+      Nullable: bestaande dossiers zijn gebackfilld, nieuwe worden bij start
+      gevuld; in het korte deploy-venster kan hij null zijn (lezer valt dan
+      terug op code-only). */
+  template_versie: string | null;
   titel: string;
   beschrijving: string | null;
   status: DossierStatus;
