@@ -80,28 +80,45 @@ export type CapabilityOordeel =
 /**
  * Bepaalt of capability-afdwinging actief is voor deze deployment.
  *
- * BEWUST ANDERS DAN {@link tenantEnforceVoorOmgeving}. Die functie zet
- * productie/preview/staging ALTIJD fail-closed, ook zonder env-waarde. Dat is
- * daar juist, want de tenantgrens is uitgekristalliseerd. Hier zou het de
- * belofte van W6 breken: met 95 routes op `TE_BEPALEN` zou een omgevings-
- * default betekenen dat de eerste preview-deploy het hele portaal op 403 zet.
+ * FASE 2 (W7, besluit 0188) — nu GELIJK aan {@link tenantEnforceVoorOmgeving}.
+ * In W6 week deze functie er bewust van af: met 112 routes op `TE_BEPALEN` zou
+ * een omgevings-default de eerste preview-deploy het hele portaal op 403 zetten
+ * (besluit 0186). Die reden is weg — W7 heeft alle declaraties ingevuld, nul
+ * `TE_BEPALEN`, en de env-flip (`ENFORCE_CAPABILITY=on`) is op preview én
+ * productie stabiel waargenomen.
  *
- * W6 landt daarom met een KALE opt-in schakelaar: alleen `ENFORCE_CAPABILITY=on`
- * zet hem aan, overal. De omgevings-default flipt naar fail-closed aan het EIND
- * van deploy 3 — als eigen `BESLUIT:` op een eigen moment, pas nadat W7 de
- * declaraties heeft ingevuld en `TE_BEPALEN` is verdwenen. Die flip hoort hier,
- * in deze functie, en nergens anders.
+ * Daarom zet deze functie productie/preview/staging nu ALTIJD fail-closed, ook
+ * zonder env-waarde en zelfs als `ENFORCE_CAPABILITY` per ongeluk op `off`
+ * staat. Een configuratiefout mag een beveiligingsgrens niet stil uitschakelen.
+ * Buiten die beschermde omgevingen (lokaal/dev) blijft de opt-in gelden: alleen
+ * `ENFORCE_CAPABILITY=on` zet hem daar aan.
+ *
+ * GEVOLG VOOR TERUGDRAAIEN: in productie is de env-vlag weghalen géén uitweg
+ * meer — uitzetten vereist een codewijziging (revert van dit besluit). Dat is de
+ * bedoeling en de reden dat 0188 pas na een stabiele fase-1-periode landt.
  */
 export function capabilityEnforceVoorOmgeving(args: {
   enforceCapability?: string | null;
+  vercelEnv?: string | null;
+  vercelTargetEnv?: string | null;
+  deployTarget?: string | null;
 }): boolean {
-  return (args.enforceCapability?.trim().toLowerCase() ?? "") === "on";
+  const norm = (v: string | null | undefined) => v?.trim().toLowerCase() ?? "";
+  const omgevingen = [args.vercelEnv, args.vercelTargetEnv, args.deployTarget].map(norm);
+  const beschermd = omgevingen.some(
+    (v) => v === "production" || v === "preview" || v === "staging"
+  );
+  return beschermd || norm(args.enforceCapability) === "on";
 }
 
-/** Leest de env-vlag. Apart van de pure functie zodat die testbaar blijft. */
+/** Leest de env-signalen. Apart van de pure functie zodat die testbaar blijft.
+ *  Spiegelt tenant-context.ts: dezelfde drie omgevingsvelden. */
 export function capabilityEnforceAan(): boolean {
   return capabilityEnforceVoorOmgeving({
     enforceCapability: process.env.ENFORCE_CAPABILITY,
+    vercelEnv: process.env.VERCEL_ENV,
+    vercelTargetEnv: process.env.VERCEL_TARGET_ENV,
+    deployTarget: process.env.DEPLOY_TARGET,
   });
 }
 
