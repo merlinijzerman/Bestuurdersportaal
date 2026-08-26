@@ -14,6 +14,7 @@
 // ============================================================================
 
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -48,6 +49,41 @@ const inv = JSON.parse(readFileSync(join(HIER, "audit-inventaris.json"), "utf8")
   };
   handlers: Handler[];
 };
+
+// ── 0. Drift-gate: de ingecheckte JSON = een VERSE regeneratie ───────────────
+// Zonder deze check leest de rest van deze suite een statische momentopname en kan
+// de bron (audit-inventaris.mjs of de gemeten app/api-code) driften terwijl CI groen
+// blijft — precies het gat dat de review van #201 vond. Dit is de "regenerate-en-
+// vergelijk" die 0191 §6 belooft, nu AAN de gate gehangen: `npm run sanity` draait in
+// `security-baseline.yml` (required check "Security baseline (Sprint 1)"), dus deze
+// test regenereert daar de inventaris uit de bron en vergelijkt met het ingecheckte
+// bestand. Semantische diff (parsed deep-equal), niet byte — sleutelvolgorde is geen
+// drift; een gewijzigde meting wél.
+test("audit-inventaris.json is een verse regeneratie uit de bron (geen stille drift)", () => {
+  let vers: string;
+  try {
+    vers = execFileSync("node", [join(HIER, "audit-inventaris.mjs")], {
+      cwd: ROOT,
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    });
+  } catch (e) {
+    // exitCode 1 = de generator zelf viel fail-closed (assertie-fouten in de bron);
+    // toon de stderr i.p.v. een kale child_process-throw.
+    const err = e as { status?: number; stderr?: string; message?: string };
+    throw new Error(
+      `verse generatie van audit-inventaris.mjs faalde (exit ${err.status ?? "?"}): ${err.stderr || err.message}`
+    );
+  }
+  const versObj = JSON.parse(vers);
+  const ingecheckt = JSON.parse(readFileSync(join(HIER, "audit-inventaris.json"), "utf8"));
+  assert.deepEqual(
+    versObj,
+    ingecheckt,
+    "audit-inventaris.json loopt achter op de bron — regenereer met:\n" +
+      "  node tests/karakterisering/audit-inventaris.mjs > tests/karakterisering/audit-inventaris.json"
+  );
+});
 
 // ── 1. De split-assertie is schoon ───────────────────────────────────────────
 test("meta.assertieFouten is leeg (de generatie faalde niet fail-closed)", () => {
