@@ -1,11 +1,11 @@
 {
   "meta": {
-    "basis": "origin/preview b18a549",
+    "basis": "origin/preview",
+    "tracing": "v2-callgraph-fixpoint",
     "aantalHandlers": 94,
-    "writerFuncties": 39,
     "metBewijsketen": 22,
-    "metEnigSpoor": 56,
-    "zonderSpoor": 38,
+    "metEnigSpoor": 58,
+    "zonderSpoor": 36,
     "afgezochtePatronen": {
       "tabellen": [
         "governance_events",
@@ -152,7 +152,7 @@
         {
           "token": "fn_schrijf_vergelijking",
           "via": "voerVergelijkingUit",
-          "soort": "di"
+          "soort": "transitief"
         }
       ],
       "platform": []
@@ -616,10 +616,17 @@
     {
       "handler": "POST app/api/instellingen/route.ts",
       "wrapper": "withFondsRoute",
-      "schrijftAuditspoor": false,
+      "schrijftAuditspoor": true,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
-      "domein": [],
+      "domein": [
+        {
+          "token": "fonds_config_log",
+          "via": "schrijfFlag",
+          "soort": "trigger",
+          "basis": "fonds_feature_flags"
+        }
+      ],
       "platform": []
     },
     {
@@ -1189,10 +1196,17 @@
     {
       "handler": "POST app/api/stuurinformatie/beheer/route.ts",
       "wrapper": "withFondsRoute",
-      "schrijftAuditspoor": false,
+      "schrijftAuditspoor": true,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
-      "domein": [],
+      "domein": [
+        {
+          "token": "fonds_stuurinfo_log",
+          "via": "schrijfSpreiding",
+          "soort": "trigger",
+          "basis": "fonds_stuurinfo_kpi"
+        }
+      ],
       "platform": []
     },
     {
@@ -1253,7 +1267,7 @@
         {
           "token": "fn_schrijf_vergelijking",
           "via": "voerVergelijkingUit",
-          "soort": "di"
+          "soort": "transitief"
         }
       ],
       "platform": []
