@@ -39,6 +39,7 @@ import {
   mapLegacyStatus,
 } from "./decision-view";
 import { requirementSleutel } from "./requirement-sleutel";
+import { vervuldViaBinding } from "./vervulling";
 
 // Supabase client met onze tabellen — losjes getyped omdat we geen
 // gegenereerde db-types hebben in dit project. Casten we lokaal naar
@@ -648,64 +649,127 @@ async function buildEvidenceLijst(
     (req.triggert_bij_toezichtgevoelig === null ||
       ctx.decision.toezichtgevoelig === req.triggert_bij_toezichtgevoelig);
 
-  const bindingSleutelAantallen = new Map<string, number>();
-  for (const req of alleRequirements) {
-    if (
-      !isRequirementActief(req) ||
-      !["document", "external_submission", "consultation"].includes(
-        req.requirement_type
-      )
-    ) {
-      continue;
+  // ── D10 (besluit 0189): vervulling = een POSITIEF, GEBONDEN feit. Per brontabel
+  //    de gebonden feiten (requirement_sleutel) ophalen op de dossier-lokale scope
+  //    en per sleutel tellen; `vervuld = aantal >= min_aantal`. Eén gelijkheidstest
+  //    op de sleutel vervangt alle per-type matchlogica. `field` blijft de
+  //    gemotiveerde uitzondering (veld op het besluit / governance-event).
+  type GebondenFeit = {
+    bron_type: EvidenceItem["bron_type"];
+    id: string;
+    titel: string | null;
+    sorteer: string;
+  };
+  const feitenPerSleutel = new Map<string, GebondenFeit[]>();
+  const voegFeitToe = (sleutel: string | null, feit: GebondenFeit) => {
+    if (!sleutel) return;
+    const lijst = feitenPerSleutel.get(sleutel) ?? [];
+    lijst.push(feit);
+    feitenPerSleutel.set(sleutel, lijst);
+  };
+
+  // procedure_bewijs is stap-scoped; stappen zijn uniek per procedure.
+  const stapIds = ctx.steps.map((s) => s.id);
+  if (stapIds.length > 0) {
+    const { data } = await supabase
+      .from("procedure_bewijs")
+      .select("id, titel, requirement_sleutel, toegevoegd_op")
+      .in("stap_id", stapIds)
+      .not("requirement_sleutel", "is", null);
+    for (const r of (data ?? []) as Array<{
+      id: string;
+      titel: string | null;
+      requirement_sleutel: string | null;
+      toegevoegd_op: string | null;
+    }>) {
+      voegFeitToe(r.requirement_sleutel, {
+        bron_type: "procedure_bewijs",
+        id: r.id,
+        titel: r.titel,
+        sorteer: `${r.toegevoegd_op ?? ""}|${r.id}`,
+      });
     }
-    const sleutel = requirementSleutel(
+  }
+
+  // Besluitgebonden bronnen (decision-scoped): tellen per Decision Object.
+  const decisionBronnen: Array<{
+    tabel: string;
+    bron_type: EvidenceItem["bron_type"];
+    titelKolom: string;
+  }> = [
+    { tabel: "decision_risks", bron_type: "risk", titelKolom: "beschrijving" },
+    { tabel: "decision_assumptions", bron_type: "assumption", titelKolom: "tekst" },
+    { tabel: "decision_conditions", bron_type: "condition", titelKolom: "kpi" },
+    { tabel: "decision_evaluations", bron_type: "evaluation", titelKolom: "geplande_datum" },
+    { tabel: "decision_ai_interactions", bron_type: "ai_output", titelKolom: "gebruik_context" },
+  ];
+  // Proceduregebonden bronnen (procedure-scoped): gedeeld tussen besluiten.
+  const procedureBronnen: Array<{
+    tabel: string;
+    bron_type: EvidenceItem["bron_type"];
+    titelKolom: string;
+  }> = [
+    { tabel: "procedure_besluiten", bron_type: "procedure_besluit", titelKolom: "formulering" },
+    { tabel: "procedure_vaststelling", bron_type: "procedure_vaststelling", titelKolom: "uitkomst" },
+  ];
+  const laadGebondenBron = async (
+    tabel: string,
+    bronType: EvidenceItem["bron_type"],
+    titelKolom: string,
+    scopeKolom: "decision_id" | "procedure_id",
+    scopeWaarde: string
+  ) => {
+    const { data } = await supabase
+      .from(tabel)
+      .select(`id, requirement_sleutel, ${titelKolom}`)
+      .eq(scopeKolom, scopeWaarde)
+      .not("requirement_sleutel", "is", null);
+    for (const r of (data ?? []) as unknown as Array<Record<string, unknown>>) {
+      const titelWaarde = r[titelKolom];
+      voegFeitToe(r.requirement_sleutel as string | null, {
+        bron_type: bronType,
+        id: r.id as string,
+        titel: titelWaarde == null ? null : String(titelWaarde),
+        sorteer: r.id as string,
+      });
+    }
+  };
+  for (const b of decisionBronnen) {
+    await laadGebondenBron(b.tabel, b.bron_type, b.titelKolom, "decision_id", ctx.decisionId);
+  }
+  for (const b of procedureBronnen) {
+    await laadGebondenBron(b.tabel, b.bron_type, b.titelKolom, "procedure_id", ctx.procedure.id);
+  }
+
+  // Determinisme: PostgREST garandeert geen returnvolgorde. Sorteer per sleutel
+  // zodat het getoonde herkomst-bron_id/-titel stabiel is over aanroepen.
+  for (const lijst of feitenPerSleutel.values()) {
+    lijst.sort((a, b) => a.sorteer.localeCompare(b.sorteer));
+  }
+
+  // Fail-closed bij een dubbel-gedefinieerde sleutel (config-drift: dezelfde
+  // (stap|type|identiteit) bestaat als template- én actieve instantievereiste).
+  // fn_decision_readiness_check blokkeert dat in SQL; de evidence-view moet dat
+  // spiegelen, anders vinkt één gebonden feit beide vereisten af (UI groen, gate
+  // rood). resolveVereisteSleutel weigert zulke bindingen bij het AANMAKEN, maar
+  // legacy/directe bindingen omzeilen dat — daarom hier ook geteld en geweerd.
+  const sleutelRequirementAantal = new Map<string, number>();
+  for (const req of alleRequirements) {
+    if (req.requirement_type === "field" || !isRequirementActief(req)) continue;
+    const s = requirementSleutel(
       req.stap_volgorde,
       req.requirement_type,
       req.documenttype,
       req.label
     );
-    bindingSleutelAantallen.set(
-      sleutel,
-      (bindingSleutelAantallen.get(sleutel) ?? 0) + 1
-    );
+    sleutelRequirementAantal.set(s, (sleutelRequirementAantal.get(s) ?? 0) + 1);
   }
-
-  // Bewijsstukken voor alle stappen van deze procedure.
-  const stapIds = ctx.steps.map((s) => s.id);
-  const bewijsByStap = new Map<string, ProcedureBewijsRow[]>();
-  if (stapIds.length > 0) {
-    const { data: bewijsRows } = await supabase
-      .from("procedure_bewijs")
-      .select(
-        "id, stap_id, document_id, titel, beschrijving, documenttype, requirement_sleutel, toegevoegd_op"
-      )
-      .in("stap_id", stapIds);
-    for (const b of (bewijsRows ?? []) as ProcedureBewijsRow[]) {
-      const lijst = bewijsByStap.get(b.stap_id) ?? [];
-      lijst.push(b);
-      bewijsByStap.set(b.stap_id, lijst);
-    }
-    // Determinisme: PostgREST garandeert geen returnvolgorde. Zonder deze
-    // sortering zou bij meerdere gebonden stukken per vereiste het getoonde
-    // bron_id/bron_titel per aanroep kunnen wisselen.
-    for (const lijst of bewijsByStap.values()) {
-      lijst.sort(
-        (a, b) =>
-          (a.toegevoegd_op ?? "").localeCompare(b.toegevoegd_op ?? "") ||
-          a.id.localeCompare(b.id)
-      );
-    }
-  }
-
-  const stapByVolgorde = new Map<number, ProcedureStep>();
-  for (const s of ctx.steps) stapByVolgorde.set(s.volgorde, s);
 
   const evidence: EvidenceItem[] = [];
 
   for (const req of alleRequirements) {
-    // Conditionele activatie: dezelfde semantiek als
-    // fn_decision_readiness_check (AND tussen velden, OR binnen array).
-    // Instantie-requirements hebben geen triggers → altijd actief.
+    // Conditionele activatie: dezelfde semantiek als fn_decision_readiness_check
+    // (AND tussen velden, OR binnen array). Instantie-requirements → altijd actief.
     if (!isRequirementActief(req)) continue;
 
     let vervuld = false;
@@ -713,186 +777,63 @@ async function buildEvidenceLijst(
     let bronId: string | null = null;
     let bronTitel: string | null = null;
 
-    switch (req.requirement_type) {
-      // external_submission (DNB/AFM-indiening) en consultation (hoorrecht/
-      // advies) delen de document-afhandeling: een matchend bewijsstuk op de
-      // stap. Spiegelt v_type in fn_decision_readiness_check.
-      case "external_submission":
-      case "consultation":
-      case "document": {
-        const stap = stapByVolgorde.get(req.stap_volgorde);
-        const bewijzen = stap ? bewijsByStap.get(stap.id) ?? [] : [];
-        // Vervulling loopt uitsluitend via de expliciete binding
-        // (procedure_bewijs.requirement_sleutel). De oude wildcard
-        // "vereiste zonder documenttype matcht elk bewijsstuk van de stap"
-        // liet één upload alle document-vereisten van die stap afvinken.
-        const sleutel = requirementSleutel(
-          req.stap_volgorde,
-          req.requirement_type,
-          req.documenttype,
-          req.label
+    if (req.requirement_type === "field") {
+      // Gemotiveerde uitzondering (0189): geen gebonden feit, maar een veld op het
+      // Decision Object of het governance-event classificatie_bevestigd.
+      if (req.veld_pad === "decision.besluitvraag") {
+        const ingevuld =
+          !!ctx.decision.besluitvraag &&
+          !ctx.decision.besluitvraag.startsWith("Aanvullen na auto-upgrade");
+        vervuld = ingevuld;
+        bronTitel = ingevuld ? "Besluitvraag ingevuld" : "Besluitvraag ontbreekt";
+      } else if (req.veld_pad === "decision.scope") {
+        vervuld = !!ctx.decision.scope && ctx.decision.scope.trim().length > 0;
+        bronTitel = vervuld ? "Scope ingevuld" : "Scope ontbreekt";
+      } else {
+        const bevestigd = ctx.events.find(
+          (e) => e.event_type === "classificatie_bevestigd"
         );
-        const match = vervultDocumentRequirement(
-          req,
-          bewijzen,
-          bindingSleutelAantallen.get(sleutel) ?? 0
-        );
-        if (match) {
-          vervuld = true;
-          bron = "procedure_bewijs";
-          bronId = match.id;
-          bronTitel = match.titel;
-        }
-        break;
-      }
-      case "ai_validation": {
-        // Phase 1C-fix (review-issue 4): domein komt uit de kolom
-        // `vereist_validatie_domein` in plaats van string-match op label.
-        // Null = geen domein-eis; elke gevalideerde AI-output telt dan.
-        const vereistDomein = req.vereist_validatie_domein;
-        const match = ctx.aiOutputs.find((ai) => {
-          if (!["gevalideerd", "aangepast"].includes(ai.validatiestatus)) {
-            return false;
-          }
-          if (vereistDomein && ai.validatie_domein !== vereistDomein) {
-            return false;
-          }
-          return true;
-        });
-        if (match) {
-          vervuld = true;
-          bron = "ai_output";
-          bronId = match.id;
-          bronTitel =
-            match.gebruik_context ??
-            `AI-output (${match.validatie_domein})`;
-        }
-        break;
-      }
-      case "assumption": {
-        // Phase 1C-fix (review-issue 5): drempel komt uit de kolom
-        // `min_aantal` in plaats van regex op het label.
-        const gevalideerd = ctx.assumptions.filter((a) =>
-          ["gevalideerd", "gewijzigd"].includes(a.status)
-        );
-        const drempel = req.min_aantal ?? 1;
-        if (gevalideerd.length >= drempel) {
-          vervuld = true;
-          bron = "assumption";
-          const eerste = gevalideerd[0];
-          bronId = eerste?.id ?? null;
-          bronTitel =
-            gevalideerd.length === 1
-              ? eerste.tekst.slice(0, 60)
-              : `${gevalideerd.length} gevalideerde aannames`;
-        }
-        break;
-      }
-      case "risk": {
-        if (ctx.risks.length > 0) {
-          vervuld = true;
-          bron = "risk";
-          bronId = ctx.risks[0].id;
-          bronTitel = `${ctx.risks.length} risico's geregistreerd`;
-        }
-        break;
-      }
-      case "kpi": {
-        const metKpi = ctx.conditions.filter((c) => c.kpi !== null);
-        if (metKpi.length > 0) {
-          vervuld = true;
-          bron = "condition";
-          bronId = metKpi[0].id;
-          bronTitel = `${metKpi.length} KPI('s) gedefinieerd`;
-        }
-        break;
-      }
-      case "evaluation": {
-        if (ctx.evaluations.length > 0) {
-          vervuld = true;
-          bron = "evaluation";
-          bronId = ctx.evaluations[0].id;
-          bronTitel = `Evaluatie gepland: ${ctx.evaluations[0].geplande_datum}`;
-        }
-        break;
-      }
-      case "mandate_check": {
-        const ev = ctx.events.find(
-          (e) => e.event_type === "mandate_check_passed"
-        );
-        if (ev) {
-          vervuld = true;
-          bron = "governance_event";
-          bronId = ev.id;
-          bronTitel = "Mandaatcheck geslaagd";
-        }
-        break;
-      }
-      case "approval": {
-        const beslotenStatuses = [
-          "besloten",
-          "voorwaardelijk_besloten",
-          "in_uitvoering",
-          "in_evaluatie",
-          "afgesloten",
-        ];
-        if (beslotenStatuses.includes(ctx.decision.status)) {
-          vervuld = true;
-          bron = null;
-          bronTitel = `Status: ${ctx.decision.status}`;
-        }
-        break;
-      }
-      case "dissent_review": {
-        // Vervuld als er geen openstaande formele dissent zonder
-        // formeel_vastgesteld bestaat. We hebben dissent al via
-        // ctx, maar dit type is alleen relevant in latere stappen
-        // dus we filteren niet expliciet op zichtbaarheid hier.
-        const { count } = await supabase
-          .from("decision_dissent")
-          .select("id", { count: "exact", head: true })
-          .eq("decision_id", ctx.decisionId)
-          .in("zichtbaarheid", ["formele_dissent", "minderheidsnotitie"])
-          .eq("formeel_vastgesteld", false);
-        vervuld = (count ?? 0) === 0;
+        vervuld =
+          !!bevestigd ||
+          ctx.decision.complexiteit !== "complicated" ||
+          ctx.decision.risiconiveau !== "middel";
         bronTitel = vervuld
-          ? "Geen openstaande dissent"
-          : `${count} openstaande dissent-notitie(s)`;
-        break;
-      }
-      case "field": {
-        // Eenvoudige veld-controles op decision-object niveau.
-        if (req.veld_pad === "decision.besluitvraag") {
-          const ingevuld =
-            !!ctx.decision.besluitvraag &&
-            !ctx.decision.besluitvraag.startsWith("Aanvullen na auto-upgrade");
-          vervuld = ingevuld;
-          bronTitel = ingevuld ? "Besluitvraag ingevuld" : "Besluitvraag ontbreekt";
-        } else if (req.veld_pad === "decision.scope") {
-          vervuld = !!ctx.decision.scope && ctx.decision.scope.trim().length > 0;
-          bronTitel = vervuld ? "Scope ingevuld" : "Scope ontbreekt";
-        } else {
-          // Classificatie-velden: in MVP-1B beschouwen we 'ingevuld'
-          // als 'niet meer op default'. Voor `complexiteit` en
-          // `risiconiveau` betekent dat een waarde anders dan
-          // complicated/middel óf een expliciete bevestiging via
-          // governance_event 'classificatie_bevestigd'.
-          const bevestigd = ctx.events.find(
-            (e) => e.event_type === "classificatie_bevestigd"
-          );
-          vervuld =
-            !!bevestigd ||
-            ctx.decision.complexiteit !== "complicated" ||
-            ctx.decision.risiconiveau !== "middel";
-          bronTitel = vervuld
-            ? "Classificatie ingevuld"
-            : "Classificatie nog op default";
-          if (bevestigd) {
-            bron = "governance_event";
-            bronId = bevestigd.id;
-          }
+          ? "Classificatie ingevuld"
+          : "Classificatie nog op default";
+        if (bevestigd) {
+          bron = "governance_event";
+          bronId = bevestigd.id;
         }
-        break;
+      }
+    } else {
+      // Alle overige typen: puur tellen op de gebonden sleutel (D10). Geen enkele
+      // afleiding, status of afwezigheid telt nog mee — alleen het gebonden feit.
+      const sleutel = requirementSleutel(
+        req.stap_volgorde,
+        req.requirement_type,
+        req.documenttype,
+        req.label
+      );
+      if ((sleutelRequirementAantal.get(sleutel) ?? 0) > 1) {
+        // Ambigu gedefinieerd → fail-closed, gelijk aan de SQL-readiness-gate.
+        vervuld = false;
+        bronTitel = "Dubbel gedefinieerde vereiste — los de configuratie op";
+      } else {
+        const feiten = feitenPerSleutel.get(sleutel) ?? [];
+        vervuld = vervuldViaBinding(
+          req.requirement_type,
+          feiten.length,
+          req.min_aantal
+        );
+        if (vervuld && feiten.length > 0) {
+          const eerste = feiten[0];
+          bron = eerste.bron_type;
+          bronId = eerste.id;
+          bronTitel =
+            feiten.length === 1
+              ? eerste.titel
+              : `${feiten.length} gebonden feiten`;
+        }
       }
     }
 
