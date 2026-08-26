@@ -13,7 +13,7 @@ const REDEN_MIN = 10;
 //  Rechten: starter (geopend_door) / voorzitter / beheerder.
 //  Verplichte reden (min 10 tekens). Notificeert starter + alle stemmers.
 // ============================================================
-export const POST = withFondsRoute({ capability: "stemming.deelname", schema: z.object({ "reden": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "stemmingen.id.intrekken.post" }, capability: "stemming.deelname", schema: z.object({ "reden": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: stemmingId } = params as { id: string };
     const supabase = ctx.supabase;

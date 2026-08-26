@@ -23,7 +23,7 @@ export const dynamic = "force-dynamic";
 
 const GELDIGE_ACTIES = ["bevestigen", "afwijzen"] as const;
 
-export const POST = withFondsRoute({ capability: "classification.review", schema: z.object({ "actie": z.unknown().optional(), "opmerking": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "classificatie.id.beoordeel.post" }, capability: "classification.review", schema: z.object({ "actie": z.unknown().optional(), "opmerking": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

@@ -27,7 +27,7 @@ const AFSCHRIFT_BUREAU_WEIGERING =
 
 type Versie = "actueel" | "besluitmoment";
 
-export const POST = withFondsRoute({ capability: "procedures.manage", hostGuard: true, label: "procedures.afschrift.POST", schema: z.object({ "aanleiding": z.unknown().optional(), "aiLeeswijzer": z.unknown().optional(), "leeswijzerTekst": z.unknown().optional(), "versie": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ hostGuard: "afdwingen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "procedures.id.afschrift.post" }, capability: "procedures.manage", label: "procedures.afschrift.POST", schema: z.object({ "aanleiding": z.unknown().optional(), "aiLeeswijzer": z.unknown().optional(), "leeswijzerTekst": z.unknown().optional(), "versie": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: procedureId } = params as { id: string };
     const supabase = ctx.supabase;

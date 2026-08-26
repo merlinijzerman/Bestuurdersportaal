@@ -21,7 +21,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export const POST = withFondsRoute({ capability: "classification.review", schema: z.object({ "opmerking": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "classificatie.id.terugdraai.post" }, capability: "classification.review", schema: z.object({ "opmerking": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

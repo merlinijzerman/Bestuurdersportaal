@@ -52,7 +52,7 @@ async function leesCapabilities(
   };
 }
 
-export const GET = withFondsRoute({ capability: "documents.view", schema: "geen-body" }, async (ctx, _req: NextRequest, params) => {
+export const GET = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: "geen", capability: "documents.view", schema: "geen-body" }, async (ctx, _req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;
@@ -87,7 +87,7 @@ export const GET = withFondsRoute({ capability: "documents.view", schema: "geen-
   }
 });
 
-export const PATCH = withFondsRoute({ capability: "documents.metadata.update", schema: z.object({ "preview": z.unknown().optional(), "reden": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "documents.id.metadata.patch" }, capability: "documents.metadata.update", schema: z.object({ "preview": z.unknown().optional(), "reden": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

@@ -24,7 +24,7 @@ import { z } from "zod";
 //
 //  Wijzigen kan alleen vóór sluiting en alleen door de uitbrenger zelf.
 // ============================================================
-export const POST = withFondsRoute({ capability: "stemming.deelname", schema: z.object({ "keuze": z.unknown().optional(), "motivering": z.unknown().optional(), "stemgerechtigde_id": z.unknown().optional(), "volmacht_bevestigd": z.unknown().optional(), "volmacht_toelichting": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "stemmingen.id.stemmen.post" }, capability: "stemming.deelname", schema: z.object({ "keuze": z.unknown().optional(), "motivering": z.unknown().optional(), "stemgerechtigde_id": z.unknown().optional(), "volmacht_bevestigd": z.unknown().optional(), "volmacht_toelichting": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: stemmingId } = params as { id: string };
     const supabase = ctx.supabase;

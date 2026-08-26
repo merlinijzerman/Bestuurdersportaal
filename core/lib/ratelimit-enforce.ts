@@ -36,17 +36,25 @@ export type { LimietNaam };
 
 /**
  * Wat een route in zijn {@link RouteSpecV1} declareert voor rate limiting. Naast
- * een echte limietnaam zijn er twee bijzondere waarden; ze bestaan omdat een
+ * een echte limietnaam zijn er drie bijzondere waarden; ze bestaan omdat een
  * AFWEZIGE waarde niet te onderscheiden is van een VERGETEN waarde:
  *
- *   "geen"         expliciet: deze route kent geen tempolimiet.
- *   "route-eigen"  de route roept `controleerLimiet` ZELF aan (de 16 bestaande
- *                  adopters). De wrapper blijft eruit — anders dubbele telling op
- *                  de gedeelde teller. Per besluit 0190 corollarium A wordt deze
- *                  keuze PER LIMIETSLEUTEL genomen: alle routes die een sleutel
- *                  delen krijgen dezelfde waarde.
+ *   "geen"                expliciet BEOORDEELD: deze route kent geen tempolimiet.
+ *   "route-eigen"         de route roept `controleerLimiet` ZELF aan (de 16 bestaande
+ *                         adopters). De wrapper blijft eruit — anders dubbele telling op
+ *                         de gedeelde teller. Per besluit 0190 corollarium A wordt deze
+ *                         keuze PER LIMIETSLEUTEL genomen: alle routes die een sleutel
+ *                         delen krijgen dezelfde waarde.
+ *   "nog-niet-beoordeeld" #183a bevriezing: nog NIEMAND heeft geoordeeld of deze route
+ *                         een limiet nodig heeft. NIET hetzelfde als `"geen"` (= beoordeeld,
+ *                         geen limiet). Zelfde patroon als W7's `TE_BEPALEN` op `capability`
+ *                         — het enige "voorlopige waarde"-mechanisme dat in dit project
+ *                         aantoonbaar convergeerde (W7 landde met 0). De W13-driftpoort
+ *                         bewaakt het aantal (dalend = werk, stijgend = drift); de W10-pas
+ *                         heeft een meetbare DoD: nul over, elke route wordt een `LimietNaam`
+ *                         óf een `"geen"` mét motivering. Geen codepad — no-op net als `"geen"`.
  */
-export type RateLimitDeclaratie = LimietNaam | "geen" | "route-eigen";
+export type RateLimitDeclaratie = LimietNaam | "geen" | "route-eigen" | "nog-niet-beoordeeld";
 
 /**
  * De kostendragende endpoints die fail-CLOSED horen te zijn (H-12, review 30-07):
@@ -94,13 +102,16 @@ export function ratelimitEnforceAan(): boolean {
 
 /**
  * MOET de wrapper voor deze declaratie de teller raadplegen? Type-guard: narrowt
- * naar {@link LimietNaam} zodat `LIMIETEN[decl]` typecheckt. `"geen"` en
- * `"route-eigen"` → de wrapper doet niets (en telt dus ook niet — corollarium B).
+ * naar {@link LimietNaam} zodat `LIMIETEN[decl]` typecheckt. `"geen"`,
+ * `"route-eigen"` en `"nog-niet-beoordeeld"` → de wrapper doet niets (en telt dus
+ * ook niet — corollarium B). `"nog-niet-beoordeeld"` is een onbeoordeelde route:
+ * geen limiet toepassen tot de W10-pas oordeelt, dus hier expliciet een no-op —
+ * anders zou het bevriezings-label stil een teller op een gedeelde sleutel raken.
  */
 export function wrapperTeltVoor(
   decl: RateLimitDeclaratie
 ): decl is LimietNaam {
-  return decl !== "geen" && decl !== "route-eigen";
+  return decl !== "geen" && decl !== "route-eigen" && decl !== "nog-niet-beoordeeld";
 }
 
 /** De zou-uitkomst, vlag-bewust. `observe` = vlag uit, zou geweigerd zijn (alleen

@@ -27,7 +27,7 @@ type WijzigBody = {
 const BEWERKBARE_VELDEN = ["titel", "beschrijving", "deadline"] as const;
 type BewerkbaarVeld = (typeof BEWERKBARE_VELDEN)[number];
 
-export const PATCH = withFondsRoute({ capability: "procedures.manage", schema: z.object({ "motivering": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "procedures.id.patch" }, capability: "procedures.manage", schema: z.object({ "motivering": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

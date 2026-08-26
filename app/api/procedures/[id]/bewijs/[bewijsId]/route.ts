@@ -43,7 +43,7 @@ async function haalContext(
   return { bewijs, stap } as const;
 }
 
-export const PATCH = withFondsRoute({ capability: "procedures.manage", schema: z.object({ "document_id": z.unknown().optional(), "documenttype": z.unknown().optional(), "vereiste": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "procedures.id.bewijs.bewijsId.patch" }, capability: "procedures.manage", schema: z.object({ "document_id": z.unknown().optional(), "documenttype": z.unknown().optional(), "vereiste": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id, bewijsId } = params as { id: string; bewijsId: string };
     const supabase = ctx.supabase;
@@ -144,7 +144,7 @@ export const PATCH = withFondsRoute({ capability: "procedures.manage", schema: z
   }
 });
 
-export const DELETE = withFondsRoute({ capability: "procedures.manage", schema: "geen-body" }, async (ctx, _req: NextRequest, params) => {
+export const DELETE = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "procedures.id.bewijs.bewijsId.delete" }, capability: "procedures.manage", schema: "geen-body" }, async (ctx, _req: NextRequest, params) => {
   try {
     const { id, bewijsId } = params as { id: string; bewijsId: string };
     const supabase = ctx.supabase;

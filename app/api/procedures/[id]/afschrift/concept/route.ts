@@ -95,7 +95,7 @@ async function bouwFeitenkaartVoorProces(
   return bouwFeitenkaart(bron);
 }
 
-export const POST = withFondsRoute({ capability: "procedures.manage", hostGuard: true, label: "procedures.afschrift.concept.POST", schema: "geen-body" }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ hostGuard: "afdwingen", rateLimit: "route-eigen", audit: "geen", capability: "procedures.manage", label: "procedures.afschrift.concept.POST", schema: "geen-body" }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: procedureId } = params as { id: string };
     const supabase = ctx.supabase;

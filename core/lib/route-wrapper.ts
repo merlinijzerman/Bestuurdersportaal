@@ -18,8 +18,8 @@
 //    2. Profielresolutie   — haalProfiel(supabase, user.id): id, naam, rol, fonds_id.
 //                            (`ctx.email` komt uit de sessie, niet uit het profiel;
 //                            zie de toelichting bij FondsContext.)
-//    3. Host-guard         — alleen als spec.hostGuard === true (de 12 routes die
-//                            hem nu al hebben); hergebruikt beoordeelRouteHostToegang.
+//    3. Host-guard         — alleen als spec.hostGuard === "afdwingen" (de 10 routes
+//                            die hem nu al hebben); hergebruikt beoordeelRouteHostToegang.
 //                            `hostGuard: "route-eigen"` = de route doet het zelf,
 //                            bewust; zie RouteSpecV1.
 //    3b. Capability-poort — beoordeelt spec.capability tegen de profielrol
@@ -121,20 +121,23 @@ export type RouteSpecV1 = {
    *  zijn dan de inline controle; zolang beide draaien is dat onschadelijk. Zie
    *  TICKET-W9 §8. */
   readonly schema: SchemaDeclaratie;
-  /** Wie host↔fonds afdwingt voor deze route. Drie waarden, en de derde is er
-   *  omdat een AFWEZIG veld niet te onderscheiden is van een VERGETEN veld:
+  /** Wie host↔fonds afdwingt voor deze route. VERPLICHT (#183a) — drie WOORD-waarden,
+   *  want een AFWEZIG veld is niet te onderscheiden van een VERGETEN veld:
    *
-   *    true            de wrapper doet het, vóór de handler (de gewone vorm);
-   *    false/afwezig   deze route kent geen host↔fonds-grens;
+   *    "afdwingen"     de wrapper doet het, vóór de handler (de gewone vorm);
+   *    "geen"          deze route kent geen host↔fonds-grens;
    *    "route-eigen"   de route roept `beoordeelRouteHostToegang` ZELF aan, en
    *                    dat is een bewuste keuze — niet een vergeten vlag.
    *
+   *  #183a verving het oude `boolean | "route-eigen"` (`true`→`"afdwingen"`,
+   *  weglating→`"geen"`) byte-identiek: de wrapper vuurde de guard alleen op
+   *  `=== true`, dus weglating/`false`/`"route-eigen"` vielen er alle drie al buiten.
    *  W4 gebruikt "route-eigen" voor `documents/upload`: de wrapper zou de guard
    *  vóór de fail-closed rate limit trekken, en de twee aparte labels
    *  (`documents.upload.init` / `.complete`) die de anomaliedetectie voeden tot
    *  één samenvouwen. Zo is de uitzondering greppable, kan een latere gate hem
    *  onderscheiden van een omissie, en hangt de motivering aan de code. */
-  readonly hostGuard?: boolean | "route-eigen";
+  readonly hostGuard: "afdwingen" | "geen" | "route-eigen";
   /** WELKE tempolimiet deze route draagt (W10). Drie soorten waarden, om dezelfde
    *  reden als bij `hostGuard`: een AFWEZIGE waarde is niet te onderscheiden van
    *  een VERGETEN waarde.
@@ -145,12 +148,14 @@ export type RouteSpecV1 = {
    *                   wrapper blijft eruit — anders telt één request DUBBEL op de
    *                   gedeelde teller (besluit 0190, de gedeelde-resource-regel).
    *
-   *  Nog OPTIONEEL; verplicht maken + de declaraties invullen is #183. Bij landing
-   *  draagt geen enkele route dit veld, dus de poort is volledig inert (byte-
-   *  identiek). De vlag `ENFORCE_RATELIMIT` is kale opt-in; default flipt aan het
-   *  eind van deploy 3 (besluit 0189). ⚠ De wrapper-check komt BOVENÓP de route-
-   *  eigen `controleerLimiet`-aanroepen — vandaar `"route-eigen"`. */
-  readonly rateLimit?: RateLimitDeclaratie;
+   *  VERPLICHT (#183a). De poort is volledig inert (byte-identiek): `ENFORCE_RATELIMIT`
+   *  is kale opt-in en staat uit, en de bevriezingswaarden (`"route-eigen"` /
+   *  `"nog-niet-beoordeeld"` / `"geen"`) zijn alle no-ops in de wrapper. #183a vult
+   *  16 gemeten adopters op `"route-eigen"` en de rest op `"nog-niet-beoordeeld"`
+   *  (nog geen kostenoordeel geveld — de W10-pas maakt er `LimietNaam`/`"geen"` van).
+   *  Default flipt aan het eind van deploy 3 (besluit 0189). ⚠ De wrapper-check komt
+   *  BOVENÓP de route-eigen `controleerLimiet`-aanroepen — vandaar `"route-eigen"`. */
+  readonly rateLimit: RateLimitDeclaratie;
   /** OF deze route een handelingsregel achterlaat (W11). TWEE waarden (§4-model,
    *  0191 geamendeerd) — het veld is een INSTRUCTIE aan de wrapper, geen bewering
    *  over code elders:
@@ -163,9 +168,9 @@ export type RouteSpecV1 = {
    *
    *  ⚠ OMGEKEERDE VLAG-SEMANTIEK t.o.v. capability/schema/rateLimit: `ENFORCE_AUDIT`
    *  UIT betekent NIETS SCHRIJVEN (alleen [AUDIT-OBSERVE]-loggen), niet doorlaten.
-   *  Bij landing draagt geen route dit veld → nul extra rijen, byte-identiek. De
-   *  echte handelingstabel + retentie/RLS is een vervolg (besluit 0190). */
-  readonly audit?: AuditDeclaratie;
+   *  VERPLICHT (#183a); `ENFORCE_AUDIT` staat uit → nul extra rijen, byte-identiek.
+   *  De echte handelingstabel + retentie/RLS is een vervolg (besluit 0190/0191). */
+  readonly audit: AuditDeclaratie;
   /** loglabel voor de host-guard-anomaliedetectie (alleen logging, geen respons). */
   readonly label?: string;
 };
@@ -312,11 +317,11 @@ export function maakWithFondsRoute(deps: WrapperDeps) {
       const fondsId = profiel?.fondsId ?? null;
 
       // 3. Host-guard — alleen waar de route hem nu al heeft.
-      // LET OP: `=== true`, niet truthy. "route-eigen" is een string en dus
-      // truthy; die route doet de guard zelf en mag hem hier NIET nog eens
-      // krijgen — dat zou de ordening veranderen die de uitzondering juist
-      // beschermt.
-      if (spec.hostGuard === true) {
+      // LET OP: exact `=== "afdwingen"`. `"geen"` en `"route-eigen"` vallen er
+      // bewust buiten: `"route-eigen"` doet de guard zelf en mag hem hier NIET nog
+      // eens krijgen — dat zou de ordening veranderen die de uitzondering juist
+      // beschermt. (#183a: was `=== true` toen het veld nog boolean was.)
+      if (spec.hostGuard === "afdwingen") {
         const oordeel = await deps.beoordeelRouteHostToegang({
           sessieFondsId: fondsId,
           gebruikerId: user.id,

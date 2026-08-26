@@ -82,7 +82,7 @@ async function gate(ctx: FondsContext): Promise<Gate> {
   return { ok: true, fondsId };
 }
 
-export const GET = withFondsRoute({ capability: "stuurinformatie.manage", schema: "geen-body" }, async (ctx, req: NextRequest) => {
+export const GET = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: "geen", capability: "stuurinformatie.manage", schema: "geen-body" }, async (ctx, req: NextRequest) => {
   try {
     const g = await gate(ctx);
     if (!g.ok) return g.res;
@@ -97,7 +97,7 @@ export const GET = withFondsRoute({ capability: "stuurinformatie.manage", schema
   }
 });
 
-export const POST = withFondsRoute({ capability: "stuurinformatie.manage", schema: z.object({ "type": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
+export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "stuurinformatie.beheer.post" }, capability: "stuurinformatie.manage", schema: z.object({ "type": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
   try {
     const g = await gate(ctx);
     if (!g.ok) return g.res;

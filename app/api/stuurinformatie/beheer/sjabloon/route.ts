@@ -13,7 +13,7 @@ import { sjabloonAoa, SJABLOON_WERKBLAD } from "@/core/lib/stuurinfo-sjabloon";
 //  Zelfde gates als de rest van de invoerlaag (capability + module).
 // ============================================================
 
-export const GET = withFondsRoute({ capability: "stuurinformatie.manage", schema: "geen-body" }, async (ctx) => {
+export const GET = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: "geen", capability: "stuurinformatie.manage", schema: "geen-body" }, async (ctx) => {
   try {
     if (!ctx.fondsId)
       return NextResponse.json({ error: "Geen fonds" }, { status: 400 });

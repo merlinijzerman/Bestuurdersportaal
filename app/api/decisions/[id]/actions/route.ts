@@ -36,7 +36,7 @@ interface CreateBody {
   afhankelijk_van?: string | null;
 }
 
-export const POST = withFondsRoute({ capability: "decisions.manage", schema: z.object({ "actie": z.unknown().optional(), "afhankelijk_van": z.unknown().optional(), "deadline": z.unknown().optional(), "eigenaar_naam": z.unknown().optional(), "status": z.unknown().optional(), "voorwaarde_id": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "decisions.id.actions.post" }, capability: "decisions.manage", schema: z.object({ "actie": z.unknown().optional(), "afhankelijk_van": z.unknown().optional(), "deadline": z.unknown().optional(), "eigenaar_naam": z.unknown().optional(), "status": z.unknown().optional(), "voorwaarde_id": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: decisionId } = params as { id: string };
     const supabase = ctx.supabase;

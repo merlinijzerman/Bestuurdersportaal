@@ -58,7 +58,7 @@ function uniekeIds(ruw: unknown): string[] {
   return Array.from(new Set(ids));
 }
 
-export const GET = withFondsRoute({ capability: "profile.view.own", schema: "geen-body" }, async (ctx) => {
+export const GET = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: "geen", capability: "profile.view.own", schema: "geen-body" }, async (ctx) => {
   try {
     const supabase = ctx.supabase;
 
@@ -90,7 +90,7 @@ export const GET = withFondsRoute({ capability: "profile.view.own", schema: "gee
   }
 });
 
-export const PATCH = withFondsRoute({ capability: "profile.manage.own", schema: z.object({ "antwoordvoorkeur": z.unknown().optional(), "bestuurlijke_rol": z.unknown().optional(), "detailniveau": z.unknown().optional(), "focusgebied_ids": z.unknown().optional(), "gremium_ids": z.unknown().optional(), "naam": z.unknown().optional(), "primaire_expertise_id": z.unknown().optional(), "reflectie_uitnodiging": z.unknown().optional(), "secundaire_expertise_ids": z.unknown().optional(), "standaard_ai_modus": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
+export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "profiel.patch" }, capability: "profile.manage.own", schema: z.object({ "antwoordvoorkeur": z.unknown().optional(), "bestuurlijke_rol": z.unknown().optional(), "detailniveau": z.unknown().optional(), "focusgebied_ids": z.unknown().optional(), "gremium_ids": z.unknown().optional(), "naam": z.unknown().optional(), "primaire_expertise_id": z.unknown().optional(), "reflectie_uitnodiging": z.unknown().optional(), "secundaire_expertise_ids": z.unknown().optional(), "standaard_ai_modus": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
   try {
     const supabase = ctx.supabase;
 

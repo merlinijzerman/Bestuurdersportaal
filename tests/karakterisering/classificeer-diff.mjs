@@ -222,6 +222,71 @@ function w9StripSchema(regel) {
   return regel.slice(0, pos) + regel.slice(voorSluiter);
 }
 
+/** #183a — de drieveld-uitbreiding (hostGuard woord-union + rateLimit + audit).
+ *  Anders dan W9 is dit NIET puur additief: de codemod zet drie velden vooraan in het
+ *  spec-object ÉN verplaatst/converteert een bestaande hostGuard (boolean → woord). Een
+ *  string-strip zou dat niet betrouwbaar terugdraaien, dus vergelijken we VELDVERZAMELINGEN:
+ *  een paar (verwijderd→toegevoegd) is gesanctioneerd als — met identieke prefix/suffix —
+ *  de enige NIEUWE sleutels {hostGuard?, rateLimit, audit} zijn, geen sleutel verdwijnt,
+ *  en elke gedeelde sleutel zijn waarde houdt (behalve hostGuard: true→"afdwingen",
+ *  false→"geen"). Dit meet de VORM van de transformatie, niet de gekozen waarden — die
+ *  horen bij de codemod-meting en de W13-gate, precies zoals de kop van dit bestand eist. */
+function splitTopVelden(binnen) {
+  const uit = [];
+  let d = 0, start = 0, str = null;
+  for (let i = 0; i < binnen.length; i++) {
+    const c = binnen[i];
+    if (str) { if (c === str && binnen[i - 1] !== "\\") str = null; continue; }
+    if (c === '"' || c === "'" || c === "`") { str = c; continue; }
+    if (c === "{" || c === "[" || c === "(") d++;
+    else if (c === "}" || c === "]" || c === ")") d--;
+    else if (c === "," && d === 0) { uit.push(binnen.slice(start, i)); start = i + 1; }
+  }
+  if (start < binnen.length) uit.push(binnen.slice(start));
+  return uit.map((s) => s.trim()).filter((s) => s.length > 0);
+}
+
+/** "<prefix>{ <velden> }<suffix>" → {prefix, velden:Map, suffix} of null. Vindt het
+ *  EERSTE object-literal via accolade-diepte (nesting in z.object({...})/audit:{...}
+ *  telt mee); string-bewust. */
+function parseSpecRegel(regel) {
+  const open = regel.indexOf("{");
+  if (open < 0) return null;
+  let d = 0, sluit = -1, str = null;
+  for (let i = open; i < regel.length; i++) {
+    const c = regel[i];
+    if (str) { if (c === str && regel[i - 1] !== "\\") str = null; continue; }
+    if (c === '"' || c === "'" || c === "`") { str = c; continue; }
+    if (c === "{") d++;
+    else if (c === "}") { d--; if (d === 0) { sluit = i; break; } }
+  }
+  if (sluit < 0) return null;
+  const velden = new Map();
+  for (const veld of splitTopVelden(regel.slice(open + 1, sluit).trim())) {
+    const dp = veld.indexOf(":");
+    if (dp < 0) return null; // shorthand/spread → onbekende vorm, val terug op "afwijkend"
+    velden.set(veld.slice(0, dp).trim(), veld.slice(dp + 1).trim());
+  }
+  return { prefix: regel.slice(0, open), velden, suffix: regel.slice(sluit + 1) };
+}
+
+function w183Paar(remLine, addLine) {
+  const a = parseSpecRegel(remLine), b = parseSpecRegel(addLine);
+  if (!a || !b) return false;
+  if (a.prefix !== b.prefix || a.suffix !== b.suffix) return false;
+  const nieuw = [...b.velden.keys()].filter((k) => !a.velden.has(k));
+  if (!nieuw.includes("rateLimit") || !nieuw.includes("audit")) return false;
+  for (const k of nieuw) if (k !== "rateLimit" && k !== "audit" && k !== "hostGuard") return false;
+  for (const k of a.velden.keys()) if (!b.velden.has(k)) return false; // geen sleutel verdwenen
+  for (const [k, v] of a.velden) {
+    if (k === "hostGuard") {
+      const nw = b.velden.get(k);
+      if (!((v === "true" && nw === '"afdwingen"') || (v === "false" && nw === '"geen"') || nw === v)) return false;
+    } else if (b.velden.get(k) !== v) return false;
+  }
+  return true;
+}
+
 const matcht = (regels, regel) => regels.some((re) => re.test(regel));
 
 // ── Diff parsen ──────────────────────────────────────────────────────────────
@@ -319,6 +384,17 @@ function classificeer({ verwijderd, toegevoegd }) {
     const zonder = w9StripSchema(add[j]);
     if (zonder === null) continue;
     const i = rem.indexOf(zonder);
+    if (i >= 0) {
+      rem.splice(i, 1);
+      add.splice(j, 1);
+    }
+  }
+  // 1d. #183a — de drieveld-uitbreiding. Voor elke TOEGEVOEGDE spec-regel: zoek een
+  //     VERWIJDERDE regel waarmee hij een gesanctioneerd paar vormt (veldverzameling,
+  //     w183Paar). Zelfde strengheid als 1b/1c: één ander gewijzigd veld en het paar
+  //     sluit niet — die regel blijft onverklaard en het bestand wordt "afwijkend".
+  for (let j = add.length - 1; j >= 0; j--) {
+    const i = rem.findIndex((r) => w183Paar(r, add[j]));
     if (i >= 0) {
       rem.splice(i, 1);
       add.splice(j, 1);

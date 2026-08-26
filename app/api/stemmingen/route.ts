@@ -28,7 +28,7 @@ const TOEGESTANE_MEERDERHEDEN: VereisteMeerderheid[] = [
 //
 //  decision_id wordt afgeleid via agendapunt → procedure-stap → procedure.
 // ============================================================
-export const POST = withFondsRoute({ capability: "stemming.deelname", schema: z.object({ "agendapunt_id": z.unknown().optional(), "alternatieven": z.unknown().optional(), "vereist_quorum": z.unknown().optional(), "vereiste_meerderheid": z.unknown().optional(), "vraag": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
+export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "stemmingen.post" }, capability: "stemming.deelname", schema: z.object({ "agendapunt_id": z.unknown().optional(), "alternatieven": z.unknown().optional(), "vereist_quorum": z.unknown().optional(), "vereiste_meerderheid": z.unknown().optional(), "vraag": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
   try {
     const supabase = ctx.supabase;
 

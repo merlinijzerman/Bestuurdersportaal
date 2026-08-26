@@ -91,7 +91,7 @@
       "schrijftAuditspoor": true,
       "klasse": "domein",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -109,7 +109,7 @@
       "schrijftAuditspoor": true,
       "klasse": "domein",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -127,7 +127,7 @@
       "schrijftAuditspoor": true,
       "klasse": "domein",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -145,7 +145,7 @@
       "schrijftAuditspoor": false,
       "klasse": "geen",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "geen",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -157,7 +157,7 @@
       "schrijftAuditspoor": false,
       "klasse": "geen",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "geen",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -169,7 +169,7 @@
       "schrijftAuditspoor": false,
       "klasse": "bestuurlijk-gap",
       "ketengebeurtenisVereist": true,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -181,7 +181,7 @@
       "schrijftAuditspoor": true,
       "klasse": "domein",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -211,7 +211,7 @@
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -235,7 +235,7 @@
       "schrijftAuditspoor": true,
       "klasse": "domein",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -253,7 +253,7 @@
       "schrijftAuditspoor": true,
       "klasse": "domein",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -271,7 +271,7 @@
       "schrijftAuditspoor": true,
       "klasse": "domein",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -289,7 +289,7 @@
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -307,7 +307,7 @@
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -325,7 +325,7 @@
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -343,7 +343,7 @@
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -361,7 +361,7 @@
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -379,7 +379,7 @@
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -397,7 +397,7 @@
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -415,7 +415,7 @@
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -433,7 +433,7 @@
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -451,7 +451,7 @@
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -469,7 +469,7 @@
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -487,7 +487,7 @@
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -505,7 +505,7 @@
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -523,7 +523,7 @@
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -541,7 +541,7 @@
       "schrijftAuditspoor": true,
       "klasse": "domein",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -559,7 +559,7 @@
       "schrijftAuditspoor": true,
       "klasse": "domein",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -577,7 +577,7 @@
       "schrijftAuditspoor": false,
       "klasse": "operationeel",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -589,7 +589,7 @@
       "schrijftAuditspoor": false,
       "klasse": "operationeel",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -601,7 +601,7 @@
       "schrijftAuditspoor": true,
       "klasse": "domein",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -619,7 +619,7 @@
       "schrijftAuditspoor": false,
       "klasse": "operationeel",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -631,7 +631,7 @@
       "schrijftAuditspoor": true,
       "klasse": "domein",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -649,7 +649,7 @@
       "schrijftAuditspoor": true,
       "klasse": "domein",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -667,7 +667,7 @@
       "schrijftAuditspoor": false,
       "klasse": "bestuurlijk-gap",
       "ketengebeurtenisVereist": true,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -679,7 +679,7 @@
       "schrijftAuditspoor": true,
       "klasse": "domein",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -697,7 +697,7 @@
       "schrijftAuditspoor": false,
       "klasse": "operationeel",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -709,7 +709,7 @@
       "schrijftAuditspoor": false,
       "klasse": "operationeel",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -721,7 +721,7 @@
       "schrijftAuditspoor": true,
       "klasse": "domein",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -739,7 +739,7 @@
       "schrijftAuditspoor": true,
       "klasse": "domein",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -757,7 +757,7 @@
       "schrijftAuditspoor": false,
       "klasse": "operationeel",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -769,7 +769,7 @@
       "schrijftAuditspoor": false,
       "klasse": "bestuurlijk-gap",
       "ketengebeurtenisVereist": true,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -781,7 +781,7 @@
       "schrijftAuditspoor": false,
       "klasse": "bestuurlijk-gap",
       "ketengebeurtenisVereist": true,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -793,7 +793,7 @@
       "schrijftAuditspoor": true,
       "klasse": "domein",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -848,7 +848,7 @@
       "schrijftAuditspoor": false,
       "klasse": "geen",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "geen",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -860,7 +860,7 @@
       "schrijftAuditspoor": false,
       "klasse": "geen",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "geen",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -872,7 +872,7 @@
       "schrijftAuditspoor": true,
       "klasse": "domein",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -890,7 +890,7 @@
       "schrijftAuditspoor": false,
       "klasse": "bestuurlijk-gap",
       "ketengebeurtenisVereist": true,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -902,7 +902,7 @@
       "schrijftAuditspoor": true,
       "klasse": "domein",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -920,7 +920,7 @@
       "schrijftAuditspoor": false,
       "klasse": "bestuurlijk-gap",
       "ketengebeurtenisVereist": true,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -932,7 +932,7 @@
       "schrijftAuditspoor": false,
       "klasse": "bestuurlijk-gap",
       "ketengebeurtenisVereist": true,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -968,7 +968,7 @@
       "schrijftAuditspoor": false,
       "klasse": "geen",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "geen",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -980,7 +980,7 @@
       "schrijftAuditspoor": true,
       "klasse": "domein",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -998,7 +998,7 @@
       "schrijftAuditspoor": true,
       "klasse": "domein",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1016,7 +1016,7 @@
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -1040,7 +1040,7 @@
       "schrijftAuditspoor": true,
       "klasse": "domein",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1059,7 +1059,7 @@
       "schrijftAuditspoor": true,
       "klasse": "domein",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1078,7 +1078,7 @@
       "schrijftAuditspoor": true,
       "klasse": "domein",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1097,7 +1097,7 @@
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -1121,7 +1121,7 @@
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -1145,7 +1145,7 @@
       "schrijftAuditspoor": true,
       "klasse": "domein",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1163,7 +1163,7 @@
       "schrijftAuditspoor": true,
       "klasse": "domein",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1181,7 +1181,7 @@
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -1199,7 +1199,7 @@
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -1217,7 +1217,7 @@
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -1241,7 +1241,7 @@
       "schrijftAuditspoor": true,
       "klasse": "domein",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1259,7 +1259,7 @@
       "schrijftAuditspoor": true,
       "klasse": "domein",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1277,7 +1277,7 @@
       "schrijftAuditspoor": false,
       "klasse": "geen",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "geen",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -1289,7 +1289,7 @@
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -1313,7 +1313,7 @@
       "schrijftAuditspoor": true,
       "klasse": "domein",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1331,7 +1331,7 @@
       "schrijftAuditspoor": true,
       "klasse": "domein",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1349,7 +1349,7 @@
       "schrijftAuditspoor": true,
       "klasse": "domein",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1367,7 +1367,7 @@
       "schrijftAuditspoor": false,
       "klasse": "operationeel",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -1379,7 +1379,7 @@
       "schrijftAuditspoor": false,
       "klasse": "operationeel",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -1391,7 +1391,7 @@
       "schrijftAuditspoor": true,
       "klasse": "domein",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1409,7 +1409,7 @@
       "schrijftAuditspoor": true,
       "klasse": "domein",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1427,7 +1427,7 @@
       "schrijftAuditspoor": true,
       "klasse": "domein",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1445,7 +1445,7 @@
       "schrijftAuditspoor": true,
       "klasse": "domein",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1463,7 +1463,7 @@
       "schrijftAuditspoor": true,
       "klasse": "domein",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1481,7 +1481,7 @@
       "schrijftAuditspoor": false,
       "klasse": "bestuurlijk-gap",
       "ketengebeurtenisVereist": true,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -1493,7 +1493,7 @@
       "schrijftAuditspoor": true,
       "klasse": "domein",
       "ketengebeurtenisVereist": true,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1512,7 +1512,7 @@
       "schrijftAuditspoor": false,
       "klasse": "bestuurlijk-gap",
       "ketengebeurtenisVereist": true,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -1524,7 +1524,7 @@
       "schrijftAuditspoor": false,
       "klasse": "bestuurlijk-gap",
       "ketengebeurtenisVereist": true,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -1536,7 +1536,7 @@
       "schrijftAuditspoor": true,
       "klasse": "domein",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1555,7 +1555,7 @@
       "schrijftAuditspoor": false,
       "klasse": "geen",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "geen",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -1567,7 +1567,7 @@
       "schrijftAuditspoor": true,
       "klasse": "domein",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1585,7 +1585,7 @@
       "schrijftAuditspoor": true,
       "klasse": "domein",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1603,7 +1603,7 @@
       "schrijftAuditspoor": false,
       "klasse": "bestuurlijk-gap",
       "ketengebeurtenisVereist": true,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -1615,7 +1615,7 @@
       "schrijftAuditspoor": true,
       "klasse": "domein",
       "ketengebeurtenisVereist": false,
-      "declaredAudit": null,
+      "declaredAudit": "spec",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [

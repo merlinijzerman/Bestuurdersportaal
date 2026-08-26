@@ -7,7 +7,7 @@ import { z } from "zod";
 // snapshot; pure content, raakt checklist/bewijslast/activatie niet). Server-side
 // gegate op voorzitter/beheerder; de procedure-koppeling wordt geverifieerd en
 // de mutatie append-only gelogd in `procedure_log`.
-export const POST = withFondsRoute({ capability: "procedures.manage", schema: z.object({ "toelichting": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "procedures.id.stappen.stapId.toelichting.post" }, capability: "procedures.manage", schema: z.object({ "toelichting": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id, stapId } = params as { id: string; stapId: string };
     const supabase = ctx.supabase;

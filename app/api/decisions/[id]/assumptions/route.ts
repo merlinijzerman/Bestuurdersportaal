@@ -46,7 +46,7 @@ interface CreateBody {
   status?: (typeof ASSUMPTION_STATUS_BIJ_AANMAKEN)[number];
 }
 
-export const POST = withFondsRoute({ capability: "decisions.manage", schema: z.object({ "ai_gedetecteerd": z.unknown().optional(), "bron_document_id": z.unknown().optional(), "evaluatiecriterium": z.unknown().optional(), "onzekerheid": z.unknown().optional(), "status": z.unknown().optional(), "tekst": z.unknown().optional(), "type": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "decisions.id.assumptions.post" }, capability: "decisions.manage", schema: z.object({ "ai_gedetecteerd": z.unknown().optional(), "bron_document_id": z.unknown().optional(), "evaluatiecriterium": z.unknown().optional(), "onzekerheid": z.unknown().optional(), "status": z.unknown().optional(), "tekst": z.unknown().optional(), "type": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: decisionId } = params as { id: string };
     const supabase = ctx.supabase;

@@ -39,7 +39,7 @@ function tekstOfNull(waarde: unknown): string | null {
   return t.length > 0 ? t : null;
 }
 
-export const GET = withFondsRoute({ capability: "organisation.profile.view", schema: "geen-body" }, async (ctx) => {
+export const GET = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: "geen", capability: "organisation.profile.view", schema: "geen-body" }, async (ctx) => {
   try {
     const supabase = ctx.supabase;
 
@@ -56,7 +56,7 @@ export const GET = withFondsRoute({ capability: "organisation.profile.view", sch
   }
 });
 
-export const PUT = withFondsRoute({ capability: "organisation.profile.manage", schema: z.object({ "peildatum": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
+export const PUT = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "organisatieprofiel.put" }, capability: "organisation.profile.manage", schema: z.object({ "peildatum": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
   try {
     const supabase = ctx.supabase;
 

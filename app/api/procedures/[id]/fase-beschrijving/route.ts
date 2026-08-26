@@ -13,7 +13,7 @@ import { z } from "zod";
 // generieke beschrijving (fail-safe leeslogica in `mergeFasen`). De mutatie is
 // fonds-config maar wordt per-procedure append-only gelogd in `procedure_log`,
 // zodat ze in dezelfde audit-trail zichtbaar is als de fase-toelichting.
-export const POST = withFondsRoute({ capability: "procedures.manage", schema: z.object({ "beschrijving": z.unknown().optional(), "fase_code": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "procedures.id.fase-beschrijving.post" }, capability: "procedures.manage", schema: z.object({ "beschrijving": z.unknown().optional(), "fase_code": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

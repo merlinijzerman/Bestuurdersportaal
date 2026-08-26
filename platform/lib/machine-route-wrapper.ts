@@ -100,8 +100,8 @@ export type MachineSpecV1 = {
    *  type verbiedt dat aan de bron, zodat de codemod van #183 er geen kan neerzetten.
    *  Hier is `"geen"` bovendien EERLIJK: machineroutes hébben geen tempolimiet — de
    *  asymmetrie met `audit` (dat het dekkende mechanisme benoemt) staat in besluit 0190.
-   *  Nog optioneel; er is geen rate-limit-codepad in deze wrapper (altijd no-op). */
-  readonly rateLimit?: "geen";
+   *  VERPLICHT (#183a); er is geen rate-limit-codepad in deze wrapper (altijd no-op). */
+  readonly rateLimit: "geen";
   /** Auditspoor (W11). TWEE toegestane literals: `"platform-event-log" | "geen"`.
    *  De wrapper schrijft NIETS (geen `auth.uid()`/fonds → geen handelingen_log); de
    *  literal BENOEMT het dekkende mechanisme, en die benoeming is GEMETEN, niet
@@ -127,8 +127,9 @@ export type MachineSpecV1 = {
    *  alle 12 declaraties op `"geen"` en houdt de drager `spoor_vereist` in
    *  `audit-inventaris.json` de 9 openstaande worker-declaraties rood (symmetrisch aan
    *  `ketengebeurtenis_vereist` op de tenant-kant). Elke `"platform-event-log"`-declaratie
-   *  valt rood tot het gemeten spoor bestaat. */
-  readonly audit?: "platform-event-log" | "geen";
+   *  valt rood tot het gemeten spoor bestaat. VERPLICHT (#183a); #183a bevriest alle
+   *  12 op `"geen"`, #183b-machine flipt de 5 worker-SPECs na de write. */
+  readonly audit: "platform-event-log" | "geen";
 };
 
 /** Context voor een machineroute. Bewust mager: er is geen sessie, geen

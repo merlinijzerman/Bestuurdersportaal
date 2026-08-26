@@ -19,7 +19,7 @@ const TOEGESTANE_CATEGORIEEN: CategorieSlug[] = [
 const TOEGESTANE_NIVEAUS: NiveauSlug[] = ["laag", "middel", "hoog"];
 const TOEGESTANE_TYPES: TypeRisicoSlug[] = ["structureel", "tijdelijk"];
 
-export const POST = withFondsRoute({ capability: "risicos.manage", schema: z.object({ "categorie": z.unknown().optional(), "impact": z.unknown().optional(), "kans": z.unknown().optional(), "niveau": z.unknown().optional(), "niveau_handmatig": z.unknown().optional(), "titel": z.unknown().optional(), "toelichting": z.unknown().optional(), "type_risico": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
+export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "risicos.post" }, capability: "risicos.manage", schema: z.object({ "categorie": z.unknown().optional(), "impact": z.unknown().optional(), "kans": z.unknown().optional(), "niveau": z.unknown().optional(), "niveau_handmatig": z.unknown().optional(), "titel": z.unknown().optional(), "toelichting": z.unknown().optional(), "type_risico": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
   try {
     const supabase = ctx.supabase;
 

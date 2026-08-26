@@ -6,7 +6,7 @@ import { z } from "zod";
 // Server-side gegate op voorzitter/beheerder; fonds_id wordt server-side
 // afgeleid (nooit uit de request). De RLS-policy op procedure_fase_toelichting
 // dwingt hetzelfde af (defense-in-depth).
-export const POST = withFondsRoute({ capability: "procedures.manage", schema: z.object({ "fase_code": z.unknown().optional(), "toelichting": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "procedures.id.fase-toelichting.post" }, capability: "procedures.manage", schema: z.object({ "fase_code": z.unknown().optional(), "toelichting": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

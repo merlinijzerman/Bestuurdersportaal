@@ -25,7 +25,7 @@ import { ONDERSTEUNDE_TYPES, type Bestandstype } from "@/core/lib/document-extra
 // generieke documenten niet muteren (read-only) — dat pad loopt via de platform-
 // curatie. De autorisatie- en validatiepoorten zijn bewust identiek gebleven aan
 // de vorige (synchrone) versie; alleen het zware werk is naar de worker verhuisd.
-export const POST = withFondsRoute({ capability: "documents.lifecycle.manage", schema: "geen-body" }, async (ctx, _req: NextRequest, params) => {
+export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "route-eigen", audit: { handeling: "documents.id.her-extract.post" }, capability: "documents.lifecycle.manage", schema: "geen-body" }, async (ctx, _req: NextRequest, params) => {
   const { id } = params as { id: string };
     const supabase = ctx.supabase;
 

@@ -120,7 +120,10 @@ check_wrapper_fundament() {
     #    schrijfwijze hing. Nu op de VERGELIJKING zelf, met beide vormen
     #    toegestaan, zodat hij de handhaving toetst en niet de spelling.
     plat=$(tr '\n' ' ' < "$WRAPPER")
-    grep -Eq 'spec\.hostGuard( *=== *true)? *\).{0,200}beoordeelRouteHostToegang\(' <<<"$plat" \
+    # #183a: hostGuard is een woord-union; de tak toetst nu op `=== "afdwingen"`
+    # (was `=== true`). Beide vormen blijven toegestaan zodat de check de handhaving
+    # toetst en niet de spelling.
+    grep -Eq 'spec\.hostGuard( *=== *(true|"afdwingen"))? *\).{0,200}beoordeelRouteHostToegang\(' <<<"$plat" \
       || reden="de spec.hostGuard-tak roept beoordeelRouteHostToegang niet aan"
     grep -Eq '!oordeel\.toegestaan.{0,200}status: *403' <<<"$plat" \
       || reden="een afgewezen host-oordeel leidt niet tot 403"
@@ -140,10 +143,10 @@ check_hostguard() {
   fi
   # Alleen de ECHTE wrapper telt; een gelijknamige lokale functie niet.
   if grep -q 'from "@/core/lib/route-wrapper"' "$bestand" \
-     && grep -Eq 'withFondsRoute\(\{[^}]*hostGuard: *true' "$bestand"; then
-    repo_pass "$omschrijving (via withFondsRoute hostGuard: true)"; return
+     && grep -Eq 'withFondsRoute\(\{[^}]*hostGuard: *(true|"afdwingen")' "$bestand"; then
+    repo_pass "$omschrijving (via withFondsRoute hostGuard: \"afdwingen\")"; return
   fi
-  repo_fail "$omschrijving — geen beoordeelRouteHostToegang( en geen withFondsRoute({ hostGuard: true }) in $bestand"
+  repo_fail "$omschrijving — geen beoordeelRouteHostToegang( en geen withFondsRoute({ hostGuard: \"afdwingen\" }) in $bestand"
 }
 
 echo "============================================================================"

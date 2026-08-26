@@ -65,7 +65,7 @@ async function haalAgendapuntMetFonds(
 //  Rechten: eigenaar (aangemaakt_door) + voorzitter/beheerder.
 //  Motivering verplicht bij ≥1 bijdrager (min 10 tekens).
 // ============================================================
-export const PATCH = withFondsRoute({ capability: "agendapunten.manage", schema: z.object({ "beschrijving": z.unknown().optional(), "categorie": z.unknown().optional(), "motivering": z.unknown().optional(), "tijdsduur_minuten": z.unknown().optional(), "titel": z.unknown().optional(), "verantwoordelijke": z.unknown().optional(), "vergadering_id": z.unknown().optional(), "volgorde": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "agendapunten.id.patch" }, capability: "agendapunten.manage", schema: z.object({ "beschrijving": z.unknown().optional(), "categorie": z.unknown().optional(), "motivering": z.unknown().optional(), "tijdsduur_minuten": z.unknown().optional(), "titel": z.unknown().optional(), "verantwoordelijke": z.unknown().optional(), "vergadering_id": z.unknown().optional(), "volgorde": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;
@@ -369,7 +369,7 @@ export const PATCH = withFondsRoute({ capability: "agendapunten.manage", schema:
 //  Soft-delete. Rechten: eigenaar + voorzitter/beheerder.
 //  Verplichte reden (min 10 tekens).
 // ============================================================
-export const DELETE = withFondsRoute({ capability: "agendapunten.manage", schema: z.object({ "reden": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const DELETE = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "agendapunten.id.delete" }, capability: "agendapunten.manage", schema: z.object({ "reden": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

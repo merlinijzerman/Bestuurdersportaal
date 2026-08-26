@@ -48,7 +48,7 @@ handler exact vier dingen — v1, geen gedragsverandering:
    `NextResponse.json({ error: "Niet ingelogd" }, { status: 401 })`.
 2. **Profiel** — `haalProfiel(supabase, user.id)` → `ctx` met `gebruikerId`,
    `fondsId`, `rol`, `naam` (vier kolommen).
-3. **Host-guard** — alleen als `spec.hostGuard === true`.
+3. **Host-guard** — alleen als `spec.hostGuard === "afdwingen"` (#183a: woord-union, was `=== true`).
 4. **Correlation ID** — `ctx.requestId` (nog géén responseheader in v1).
 
 De handler krijgt `(ctx, request, params)` en gebruikt `ctx.supabase` (de RLS-client).

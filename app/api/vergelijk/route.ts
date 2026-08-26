@@ -38,7 +38,7 @@ interface VergelijkBody {
   dimensies?: unknown;
 }
 
-export const POST = withFondsRoute({ capability: "vergelijk.use", hostGuard: true, label: "vergelijk.POST", schema: z.object({ "bron_document_id": z.unknown().optional(), "dimensies": z.unknown().optional(), "doel_document_id": z.unknown().optional(), "mode": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
+export const POST = withFondsRoute({ hostGuard: "afdwingen", rateLimit: "route-eigen", audit: { handeling: "vergelijk.post" }, capability: "vergelijk.use", label: "vergelijk.POST", schema: z.object({ "bron_document_id": z.unknown().optional(), "dimensies": z.unknown().optional(), "doel_document_id": z.unknown().optional(), "mode": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
   try {
     // 0. Feature-flag: uit = feature niet beschikbaar (chat-ingang doet ook niets).
     if (!vergelijkmodusAan()) {
