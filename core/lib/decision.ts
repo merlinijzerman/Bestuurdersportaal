@@ -27,6 +27,7 @@ import {
   type DissentItem,
   type Evaluation,
   type EvidenceItem,
+  type GebondenFeitRef,
   type GovernanceEvent,
   type ProcedureStep,
   type ProcedureSummary,
@@ -658,6 +659,9 @@ async function buildEvidenceLijst(
     bron_type: EvidenceItem["bron_type"];
     id: string;
     titel: string | null;
+    datum: string | null;
+    actor: string | null; // opgeloste naam; voor uuid-kolommen na de batch gevuld
+    actorId: string | null; // uuid dat nog naar een naam geresolveerd wordt
     sorteer: string;
   };
   const feitenPerSleutel = new Map<string, GebondenFeit[]>();
@@ -668,12 +672,22 @@ async function buildEvidenceLijst(
     feitenPerSleutel.set(sleutel, lijst);
   };
 
+  // Per brontabel: welke kolom de titel/datum/actor draagt. actorSoort 'id' = uuid
+  // → via profielen naar een naam. Gedeeld met de kandidatenroute (#192).
+  type BronConfig = {
+    bron_type: EvidenceItem["bron_type"];
+    titelKolom: string;
+    datumKolom: string;
+    actorKolom: string;
+    actorSoort: "naam" | "id";
+  };
+
   // procedure_bewijs is stap-scoped; stappen zijn uniek per procedure.
   const stapIds = ctx.steps.map((s) => s.id);
   if (stapIds.length > 0) {
     const { data } = await supabase
       .from("procedure_bewijs")
-      .select("id, titel, requirement_sleutel, toegevoegd_op")
+      .select("id, titel, requirement_sleutel, toegevoegd_op, toegevoegd_door_naam")
       .in("stap_id", stapIds)
       .not("requirement_sleutel", "is", null);
     for (const r of (data ?? []) as Array<{
@@ -681,70 +695,100 @@ async function buildEvidenceLijst(
       titel: string | null;
       requirement_sleutel: string | null;
       toegevoegd_op: string | null;
+      toegevoegd_door_naam: string | null;
     }>) {
       voegFeitToe(r.requirement_sleutel, {
         bron_type: "procedure_bewijs",
         id: r.id,
         titel: r.titel,
+        datum: r.toegevoegd_op,
+        actor: r.toegevoegd_door_naam,
+        actorId: null,
         sorteer: `${r.toegevoegd_op ?? ""}|${r.id}`,
       });
     }
   }
 
-  // Besluitgebonden bronnen (decision-scoped): tellen per Decision Object.
-  const decisionBronnen: Array<{
-    tabel: string;
-    bron_type: EvidenceItem["bron_type"];
-    titelKolom: string;
-  }> = [
-    { tabel: "decision_risks", bron_type: "risk", titelKolom: "beschrijving" },
-    { tabel: "decision_assumptions", bron_type: "assumption", titelKolom: "tekst" },
-    { tabel: "decision_conditions", bron_type: "condition", titelKolom: "kpi" },
-    { tabel: "decision_evaluations", bron_type: "evaluation", titelKolom: "geplande_datum" },
-    { tabel: "decision_ai_interactions", bron_type: "ai_output", titelKolom: "gebruik_context" },
+  const decisionBronnen: BronConfig[] = [
+    { bron_type: "risk", titelKolom: "beschrijving", datumKolom: "aangemaakt_op", actorKolom: "eigenaar_naam", actorSoort: "naam" },
+    { bron_type: "assumption", titelKolom: "tekst", datumKolom: "aangemaakt_op", actorKolom: "gewijzigd_door", actorSoort: "id" },
+    { bron_type: "condition", titelKolom: "kpi", datumKolom: "aangemaakt_op", actorKolom: "eigenaar_naam", actorSoort: "naam" },
+    { bron_type: "evaluation", titelKolom: "geplande_datum", datumKolom: "aangemaakt_op", actorKolom: "uitgevoerd_door", actorSoort: "id" },
+    { bron_type: "ai_output", titelKolom: "gebruik_context", datumKolom: "gevalideerd_op", actorKolom: "gevalideerd_door", actorSoort: "id" },
   ];
-  // Proceduregebonden bronnen (procedure-scoped): gedeeld tussen besluiten.
-  const procedureBronnen: Array<{
-    tabel: string;
-    bron_type: EvidenceItem["bron_type"];
-    titelKolom: string;
-  }> = [
-    { tabel: "procedure_besluiten", bron_type: "procedure_besluit", titelKolom: "formulering" },
-    { tabel: "procedure_vaststelling", bron_type: "procedure_vaststelling", titelKolom: "uitkomst" },
+  const decisionTabel: Record<string, string> = {
+    risk: "decision_risks", assumption: "decision_assumptions", condition: "decision_conditions",
+    evaluation: "decision_evaluations", ai_output: "decision_ai_interactions",
+  };
+  const procedureBronnen: BronConfig[] = [
+    { bron_type: "procedure_besluit", titelKolom: "formulering", datumKolom: "datum", actorKolom: "vastgelegd_door_naam", actorSoort: "naam" },
+    { bron_type: "procedure_vaststelling", titelKolom: "uitkomst", datumKolom: "vastgelegd_op", actorKolom: "actor", actorSoort: "id" },
   ];
+  const procedureTabel: Record<string, string> = {
+    procedure_besluit: "procedure_besluiten", procedure_vaststelling: "procedure_vaststelling",
+  };
   const laadGebondenBron = async (
-    tabel: string,
-    bronType: EvidenceItem["bron_type"],
-    titelKolom: string,
-    scopeKolom: "decision_id" | "procedure_id",
-    scopeWaarde: string
+    tabel: string, cfg: BronConfig,
+    scopeKolom: "decision_id" | "procedure_id", scopeWaarde: string
   ) => {
     const { data } = await supabase
       .from(tabel)
-      .select(`id, requirement_sleutel, ${titelKolom}`)
+      .select(`id, requirement_sleutel, ${cfg.titelKolom}, ${cfg.datumKolom}, ${cfg.actorKolom}`)
       .eq(scopeKolom, scopeWaarde)
       .not("requirement_sleutel", "is", null);
     for (const r of (data ?? []) as unknown as Array<Record<string, unknown>>) {
-      const titelWaarde = r[titelKolom];
+      const titelWaarde = r[cfg.titelKolom];
+      const datumWaarde = r[cfg.datumKolom];
+      const actorWaarde = r[cfg.actorKolom];
       voegFeitToe(r.requirement_sleutel as string | null, {
-        bron_type: bronType,
+        bron_type: cfg.bron_type,
         id: r.id as string,
         titel: titelWaarde == null ? null : String(titelWaarde),
-        sorteer: r.id as string,
+        datum: datumWaarde == null ? null : String(datumWaarde),
+        actor: cfg.actorSoort === "naam" && typeof actorWaarde === "string" ? actorWaarde : null,
+        actorId: cfg.actorSoort === "id" && typeof actorWaarde === "string" ? actorWaarde : null,
+        sorteer: `${datumWaarde == null ? "" : String(datumWaarde)}|${r.id as string}`,
       });
     }
   };
   for (const b of decisionBronnen) {
-    await laadGebondenBron(b.tabel, b.bron_type, b.titelKolom, "decision_id", ctx.decisionId);
+    await laadGebondenBron(decisionTabel[b.bron_type as string], b, "decision_id", ctx.decisionId);
   }
   for (const b of procedureBronnen) {
-    await laadGebondenBron(b.tabel, b.bron_type, b.titelKolom, "procedure_id", ctx.procedure.id);
+    await laadGebondenBron(procedureTabel[b.bron_type as string], b, "procedure_id", ctx.procedure.id);
+  }
+
+  // Actor-namen resolven voor de uuid-kolommen (één batch via profielen).
+  const teResolven = new Set<string>();
+  for (const lijst of feitenPerSleutel.values())
+    for (const f of lijst) if (f.actorId) teResolven.add(f.actorId);
+  if (teResolven.size > 0) {
+    const { data: profielen } = await supabase
+      .from("profielen").select("id, naam").in("id", Array.from(teResolven));
+    const naamPerId = new Map<string, string>();
+    for (const p of (profielen ?? []) as Array<{ id: string; naam: string | null }>)
+      if (p.naam) naamPerId.set(p.id, p.naam);
+    for (const lijst of feitenPerSleutel.values())
+      for (const f of lijst) if (f.actorId && !f.actor) f.actor = naamPerId.get(f.actorId) ?? null;
   }
 
   // Determinisme: PostgREST garandeert geen returnvolgorde. Sorteer per sleutel
-  // zodat het getoonde herkomst-bron_id/-titel stabiel is over aanroepen.
+  // zodat het getoonde herkomst-spoor stabiel is over aanroepen.
   for (const lijst of feitenPerSleutel.values()) {
     lijst.sort((a, b) => a.sorteer.localeCompare(b.sorteer));
+  }
+
+  // dissent_open: openstaande formele dissent voor de harde guard (#192). Eén
+  // query per dossier; alleen zinvol voor dissent_review, elders 0.
+  let dissentOpen = 0;
+  {
+    const { count } = await supabase
+      .from("decision_dissent")
+      .select("id", { count: "exact", head: true })
+      .eq("decision_id", ctx.decisionId)
+      .in("zichtbaarheid", ["formele_dissent", "minderheidsnotitie"])
+      .eq("formeel_vastgesteld", false);
+    dissentOpen = count ?? 0;
   }
 
   // Fail-closed bij een dubbel-gedefinieerde sleutel (config-drift: dezelfde
@@ -776,6 +820,7 @@ async function buildEvidenceLijst(
     let bron: EvidenceItem["bron_type"] = null;
     let bronId: string | null = null;
     let bronTitel: string | null = null;
+    let gebondenFeiten: GebondenFeitRef[] = [];
 
     if (req.requirement_type === "field") {
       // Gemotiveerde uitzondering (0189): geen gebonden feit, maar een veld op het
@@ -825,7 +870,16 @@ async function buildEvidenceLijst(
           feiten.length,
           req.min_aantal
         );
-        if (vervuld && feiten.length > 0) {
+        // Het volledige herkomst-spoor — ook bij een deels-vervulde vereiste, zodat
+        // de UI de reeds gekoppelde feiten toont met datum en persoon (#192).
+        gebondenFeiten = feiten.map((f) => ({
+          id: f.id,
+          bron_type: f.bron_type,
+          titel: f.titel,
+          datum: f.datum,
+          actor: f.actor,
+        }));
+        if (feiten.length > 0) {
           const eerste = feiten[0];
           bron = eerste.bron_type;
           bronId = eerste.id;
@@ -849,6 +903,9 @@ async function buildEvidenceLijst(
       bron_type: bron,
       bron_id: bronId,
       bron_titel: bronTitel,
+      gebonden_feiten: gebondenFeiten,
+      min_aantal: req.min_aantal ?? 1,
+      dissent_open: req.requirement_type === "dissent_review" ? dissentOpen : 0,
       bron: req.bron,
       instance_id: req.instance_id,
     });
