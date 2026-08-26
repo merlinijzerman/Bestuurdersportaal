@@ -114,12 +114,20 @@ export type MachineSpecV1 = {
    *  schrijven". Dat is ONWAAR — nul aanroepen van `logAttempt`/`logSecurity`/
    *  `logResultGegarandeerd` in de machineroutes. Het mechanisme bestaat (platform-
    *  serveracties gebruiken het via `withPlatform`), maar de machineroutes laten het
-   *  liggen. #183b-machine voegt `logResultGegarandeerd` (retry, NIET fail-closed —
-   *  een logfout mag een cron-run niet laten mislukken) toe aan de vijf werkende/
-   *  muterende handlers; de twee readiness-probes (`platform/healthz`, `healthz/ping`)
-   *  krijgen `"geen"` (ze muteren niets en `healthz` logt bewust niet — een
-   *  gezondheidscontrole die faalt op het loggen is een zelfreferentiële storing).
-   *  Tot #183b-machine landt, valt elke `"platform-event-log"`-declaratie rood. */
+   *  liggen; `monitoring/snapshot` *leest* `platform_event_log` (het is de gat-detector)
+   *  maar schrijft het niet. De waarde is bovendien PER SPEC, niet per methode: GET en
+   *  POST delen in vijf bestanden één `const SPEC` + één `draai`, dus ze dragen dezelfde
+   *  `audit`-waarde (per-methode splitsen = de SPEC splitsen = structuurwijziging).
+   *  #183b-machine voegt `logResultGegarandeerd` (retry, NIET fail-closed — een logfout
+   *  mag een cron-run niet laten mislukken) toe aan de vijf worker-SPECs (aqlab/worker ·
+   *  afschrift-worker · ingest-worker · semantische-extractie · monitoring/snapshot);
+   *  de twee readiness-probes (`platform/healthz`, `healthz/ping`) krijgen `"geen"` (ze
+   *  muteren niets en `healthz` logt bewust niet — een gezondheidscontrole die faalt op
+   *  het loggen is een zelfreferentiële storing). Tot die writes landen bevriest #183a
+   *  alle 12 declaraties op `"geen"` en houdt de drager `spoor_vereist` in
+   *  `audit-inventaris.json` de 9 openstaande worker-declaraties rood (symmetrisch aan
+   *  `ketengebeurtenis_vereist` op de tenant-kant). Elke `"platform-event-log"`-declaratie
+   *  valt rood tot het gemeten spoor bestaat. */
   readonly audit?: "platform-event-log" | "geen";
 };
 

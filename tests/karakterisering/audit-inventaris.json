@@ -28,6 +28,17 @@
       "POST app/api/stemmingen/route.ts",
       "POST app/api/vergaderingen/route.ts"
     ],
+    "spoorVereist": [
+      "GET app/api/aqlab/worker/route.ts",
+      "POST app/api/aqlab/worker/route.ts",
+      "GET app/api/internal/afschrift-worker/route.ts",
+      "POST app/api/internal/afschrift-worker/route.ts",
+      "GET app/api/internal/ingest-worker/route.ts",
+      "POST app/api/internal/ingest-worker/route.ts",
+      "POST app/api/internal/semantische-extractie/route.ts",
+      "GET app/api/platform/monitoring/snapshot/route.ts",
+      "POST app/api/platform/monitoring/snapshot/route.ts"
+    ],
     "assertieFouten": [],
     "afgezochtePatronen": {
       "tabellen": [

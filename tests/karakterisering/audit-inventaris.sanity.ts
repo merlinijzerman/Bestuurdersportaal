@@ -40,7 +40,12 @@ type Handler = {
   platform: { token: string }[];
 };
 const inv = JSON.parse(readFileSync(join(HIER, "audit-inventaris.json"), "utf8")) as {
-  meta: { assertieFouten: string[]; klasseTelling: Record<string, number> };
+  meta: {
+    assertieFouten: string[];
+    klasseTelling: Record<string, number>;
+    ketengebeurtenisVereist: string[];
+    spoorVereist: string[];
+  };
   handlers: Handler[];
 };
 
@@ -84,6 +89,37 @@ test("PROVEN-RED: een 'geen'-handler mét spoor wordt gevlagd", () => {
 test("PROVEN-RED: audit:\"platform-event-log\" zonder gemeten platform_event_log-write wordt gevlagd", () => {
   const nep: Handler[] = [{ handler: "POST /nep", wrapper: "withMachineRoute", klasse: "machine", schrijftAuditspoor: false, declaredAudit: "platform-event-log", bewijsketen: [], platform: [] }];
   assert.equal(overtredingen(nep).length, 1, "een machine-declaratie zonder gemeten platform-spoor moet rood zijn");
+});
+
+// ── 2b. De machine-drager `spoorVereist` (symmetrisch aan ketengebeurtenisVereist) ─
+// De 5 worker-SPECs / 9 declaraties waarvan de platform_event_log-write openstaat.
+// ONAFHANKELIJK herleid (niet op de generatie vertrouwd): de worker-SPEC-lijst staat
+// hier óók, zodat een drift in de .mjs hier opvalt.
+const WORKER_SPEC_FILES = [
+  "app/api/aqlab/worker/route.ts",
+  "app/api/internal/afschrift-worker/route.ts",
+  "app/api/internal/ingest-worker/route.ts",
+  "app/api/internal/semantische-extractie/route.ts",
+  "app/api/platform/monitoring/snapshot/route.ts",
+];
+const isWorkerDecl = (d: string) => WORKER_SPEC_FILES.some((f) => d.endsWith(f));
+
+test("spoorVereist bevat uitsluitend worker-SPEC-declaraties (geen probe glipt erin)", () => {
+  const vreemd = inv.meta.spoorVereist.filter((d) => !isWorkerDecl(d));
+  assert.deepEqual(vreemd, [], `niet-worker in spoorVereist: ${vreemd.join(", ")}`);
+});
+
+test("spoorVereist dekt de 9 openstaande worker-declaraties (RED tot #183b-machine)", () => {
+  // Pin op de huidige stand: geen enkele worker schrijft vandaag platform_event_log,
+  // dus alle 9 declaraties (5 SPECs, GET+POST behalve semantische-extractie POST-only)
+  // staan open. #183b-machine landt de writes en laat dit getal bewust naar 0 zakken —
+  // pas dán, met beide dragers leeg, mag ENFORCE_AUDIT=on (0191 §7 VLAGKOPPELING).
+  assert.equal(inv.meta.spoorVereist.length, 9, `verwacht 9 open worker-declaraties, kreeg ${inv.meta.spoorVereist.length}`);
+});
+
+test("PROVEN-RED: een probe-declaratie in spoorVereist wordt gevlagd", () => {
+  const nep = ["GET app/api/healthz/ping/route.ts", "POST app/api/platform/healthz/route.ts"];
+  assert.equal(nep.filter((d) => !isWorkerDecl(d)).length, 2, "probes horen niet in spoorVereist — de check moet ze zien");
 });
 
 // ── 3. Triggerherkenning tegen de migraties ──────────────────────────────────

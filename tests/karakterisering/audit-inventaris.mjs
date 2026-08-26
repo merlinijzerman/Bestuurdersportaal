@@ -424,6 +424,57 @@ function dedupVia(arr) {
 }
 function kort(x) { const o = { token: x.token, via: x.via, soort: x.soort }; if (x.basis) o.basis = x.basis; return o; }
 
+// ── Machine-kant: de spoor-vereist-drager (#183b-machine) ────────────────────
+// Symmetrisch aan ketengebeurtenisVereist, maar PER SPEC: GET en POST delen één
+// `const SPEC` + één `draai`, dus de audit-waarde is per SPEC, niet per methode —
+// per-methode splitsen zou de SPEC splitsen (structuurwijziging, geen byte-identieke
+// codemod). De 5 worker-SPECs MOETEN `platform_event_log` gaan schrijven
+// (logResultGegarandeerd); tot die write landt bevriest #183a ze op `"geen"` en staat
+// deze drager ROOD. De 2 probes (platform.healthz-diagnostiek, healthz.ping-liveness)
+// zijn eerlijk "geen" en horen hier NIET. GEMETEN, niet beweerd: de VEREISTE is
+// gedeclareerd, maar of de write vandaag ONTBREEKT wordt per SPEC gemeten
+// (directeWrites + fnWrites over het routebestand — het `draai` is gedeeld, dus één
+// meting dekt GET+POST). Zodra #183b-machine de write landt, meet `heeftPlatformSpoor`
+// true en leegt de drager zichzelf. Voedt de VLAGKOPPELING (0191 §7): `ENFORCE_AUDIT=on`
+// pas als spoorVereist én ketengebeurtenisVereist beide leeg zijn.
+const MACHINE_WORKER_SPECS = new Set([
+  "app/api/aqlab/worker/route.ts",
+  "app/api/internal/afschrift-worker/route.ts",
+  "app/api/internal/ingest-worker/route.ts",
+  "app/api/internal/semantische-extractie/route.ts",
+  "app/api/platform/monitoring/snapshot/route.ts",
+]);
+// Strip commentaar vóór de fn-matching: `\bnaam\s*\(` matcht anders een functienaam
+// die in een KOPCOMMENTAAR staat (aqlab/worker noemt `withPlatform (…)` in regel 8-9,
+// een platform-writer — dat is de "lees de callee, niet de surface"-val toegepast op
+// deze meter zelf). Het per-handler-blok van de hoofdlus ontsnapt eraan omdat het ná
+// het kopcommentaar begint; deze SPEC-brede meting niet, dus strippen we hier expliciet.
+function zonderCommentaar(src) {
+  return src
+    .replace(/\/\*[\s\S]*?\*\//g, " ")            // blok-commentaar
+    .replace(/(^|[^:"'`])\/\/[^\n]*/g, "$1");     // regel-commentaar (`:` spaart http://)
+}
+const spoorVereist = [];
+for (const f of apiFiles) {
+  const rel = relative(ROOT, f);
+  if (!MACHINE_WORKER_SPECS.has(rel)) continue;
+  const code = zonderCommentaar(readFileSync(f, "utf8"));
+  // Meet de platform_event_log-write over het hele routebestand (draai is gedeeld).
+  // directeWrites matcht alleen .insert/upsert/update/delete — snapshot's `.select()`
+  // op platform_event_log (het LEZEN) telt dus terecht NIET als spoor.
+  const directPlatform = directeWrites(code).some((x) => x.trail === "platform");
+  let viaFnPlatform = false;
+  for (const [naam, w] of fnWrites) {
+    if (w.some((t) => t.trail === "platform") && new RegExp(`\\b${naam}\\s*\\(`).test(code)) { viaFnPlatform = true; break; }
+  }
+  const heeftPlatformSpoor = directPlatform || viaFnPlatform;
+  const exp = /export\s+const\s+(GET|POST|PATCH|PUT|DELETE)\s*=\s*withMachineRoute\b/g;
+  let mm;
+  while ((mm = exp.exec(code))) {
+    if (!heeftPlatformSpoor) spoorVereist.push(`${mm[1]} ${rel}`);
+  }
+}
+
 // ── Samenvatting + uitvoer ───────────────────────────────────────────────────
 const n = inventaris.length;
 const metBewijsketen = inventaris.filter((h) => h.routeEigenKandidaat).length;
@@ -439,6 +490,7 @@ for (const h of inventaris) klasseTelling[h.klasse] = (klasseTelling[h.klasse] |
 const ketengebeurtenisVereist = inventaris.filter((h) => h.ketengebeurtenisVereist).map((h) => h.handler);
 console.error(`  klasse: ${JSON.stringify(klasseTelling)}`);
 console.error(`  ketengebeurtenis_vereist (bewijsketen-gap, #183b): ${ketengebeurtenisVereist.length}`);
+console.error(`  spoor_vereist (machine platform_event_log, #183b-machine): ${spoorVereist.length}`);
 if (assertieFouten.length) {
   console.error(`\n✗ ${assertieFouten.length} ASSERTIE-FOUT(EN) — fail-closed:`);
   for (const f of assertieFouten) console.error(`   - ${f}`);
@@ -451,6 +503,7 @@ console.log(JSON.stringify({
     basis: "origin/preview", tracing: "v2-callgraph-fixpoint", aantalHandlers: n,
     metBewijsketen, metEnigSpoor, zonderSpoor, klasseTelling,
     ketengebeurtenisVereist, // de 12 die #183b een governance_events-write moet geven
+    spoorVereist, // de 9 machine-declaraties (5 worker-SPECs) die #183b-machine een platform_event_log-write moet geven
     assertieFouten,
     afgezochtePatronen: { tabellen: Object.keys(TABEL_TRAIL), rpcs: Object.keys(RPC_TRAIL) },
     triggerLaag: Object.fromEntries(Object.entries(BASE_TRIGGER).map(([b, v]) => [b, v.log])),
