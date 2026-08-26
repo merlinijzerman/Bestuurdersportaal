@@ -90,6 +90,7 @@ test("PROVEN-RED: audit:\"governance-events\" zonder gemeten governance_events-w
 const AUDIT_CAPTURE: Record<string, string[]> = {
   fn_fonds_config_capture: ["fonds_content_overrides", "fonds_feature_flags", "fonds_module_manifest", "fonds_theming"],
   fn_fonds_stuurinfo_capture: ["fonds_stuurinfo_kpi", "fonds_stuurinfo_periode", "fonds_stuurinfo_reeks", "fonds_stuurinfo_reserve"],
+  fn_audit_procedure_bewijs_mutation: ["procedure_bewijs"], // → procedure_log, fail-closed
 };
 
 function alleMigraties(): string {

@@ -4,12 +4,12 @@
     "tracing": "v2-callgraph-fixpoint",
     "aantalHandlers": 94,
     "metBewijsketen": 22,
-    "metEnigSpoor": 58,
-    "zonderSpoor": 36,
+    "metEnigSpoor": 62,
+    "zonderSpoor": 32,
     "klasseTelling": {
-      "domein": 36,
+      "domein": 40,
       "geen": 7,
-      "bestuurlijk-gap": 15,
+      "bestuurlijk-gap": 11,
       "machine": 6,
       "bewijsketen": 22,
       "operationeel": 8
@@ -55,7 +55,8 @@
       "fonds_stuurinfo_kpi": "fonds_stuurinfo_log",
       "fonds_stuurinfo_periode": "fonds_stuurinfo_log",
       "fonds_stuurinfo_reeks": "fonds_stuurinfo_log",
-      "fonds_stuurinfo_reserve": "fonds_stuurinfo_log"
+      "fonds_stuurinfo_reserve": "fonds_stuurinfo_log",
+      "procedure_bewijs": "procedure_log"
     }
   },
   "handlers": [
@@ -951,34 +952,55 @@
     {
       "handler": "PATCH app/api/procedures/[id]/bewijs/[bewijsId]/route.ts",
       "wrapper": "withFondsRoute",
-      "schrijftAuditspoor": false,
-      "klasse": "bestuurlijk-gap",
+      "schrijftAuditspoor": true,
+      "klasse": "domein",
       "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
-      "domein": [],
+      "domein": [
+        {
+          "token": "procedure_log",
+          "via": "direct",
+          "soort": "trigger",
+          "basis": "procedure_bewijs"
+        }
+      ],
       "platform": []
     },
     {
       "handler": "DELETE app/api/procedures/[id]/bewijs/[bewijsId]/route.ts",
       "wrapper": "withFondsRoute",
-      "schrijftAuditspoor": false,
-      "klasse": "bestuurlijk-gap",
+      "schrijftAuditspoor": true,
+      "klasse": "domein",
       "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
-      "domein": [],
+      "domein": [
+        {
+          "token": "procedure_log",
+          "via": "direct",
+          "soort": "trigger",
+          "basis": "procedure_bewijs"
+        }
+      ],
       "platform": []
     },
     {
       "handler": "POST app/api/procedures/[id]/bewijs/route.ts",
       "wrapper": "withFondsRoute",
-      "schrijftAuditspoor": false,
-      "klasse": "bestuurlijk-gap",
+      "schrijftAuditspoor": true,
+      "klasse": "domein",
       "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
-      "domein": [],
+      "domein": [
+        {
+          "token": "procedure_log",
+          "via": "direct",
+          "soort": "trigger",
+          "basis": "procedure_bewijs"
+        }
+      ],
       "platform": []
     },
     {
@@ -1358,12 +1380,19 @@
     {
       "handler": "POST app/api/stemmingen/[id]/sluiten/route.ts",
       "wrapper": "withFondsRoute",
-      "schrijftAuditspoor": false,
-      "klasse": "bestuurlijk-gap",
+      "schrijftAuditspoor": true,
+      "klasse": "domein",
       "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
-      "domein": [],
+      "domein": [
+        {
+          "token": "procedure_log",
+          "via": "direct",
+          "soort": "trigger",
+          "basis": "procedure_bewijs"
+        }
+      ],
       "platform": []
     },
     {

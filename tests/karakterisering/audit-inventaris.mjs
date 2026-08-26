@@ -67,6 +67,12 @@ const BASE_TRIGGER = {
   fonds_stuurinfo_periode: { log: "fonds_stuurinfo_log", trail: "domein" },
   fonds_stuurinfo_reeks: { log: "fonds_stuurinfo_log", trail: "domein" },
   fonds_stuurinfo_reserve: { log: "fonds_stuurinfo_log", trail: "domein" },
+  // trg_procedure_bewijs_audit → fn_audit_procedure_bewijs_mutation schrijft bij
+  // ELKE insert/update/delete op procedure_bewijs een procedure_log-regel, fail-
+  // closed (2026_08_22_bewijs_requirement_binding_hardening.sql:283/367). De repo
+  // wist het al: tests/cross-tenant/procedure-v2-governance.test.ts:181. Gemist in
+  // v1 → de drie bewijs-handlers stonden ten onrechte op "geen spoor".
+  procedure_bewijs: { log: "procedure_log", trail: "domein" },
 };
 
 // ── De SPLIT (besluit W11 / vervolg 0190) — klasse per handler ZONDER gemeten spoor.
@@ -87,12 +93,23 @@ const SPLIT_KLASSE = {
   "POST app/api/notulen/segmenten/[id]/bevestig/route.ts": "bestuurlijk-gap",
   "DELETE app/api/notulen/segmenten/[id]/route.ts": "bestuurlijk-gap",
   "PUT app/api/organisatieprofiel/route.ts": "bestuurlijk-gap",
-  "POST app/api/procedures/[id]/bewijs/route.ts": "bestuurlijk-gap",
-  "PATCH app/api/procedures/[id]/bewijs/[bewijsId]/route.ts": "bestuurlijk-gap",
-  "DELETE app/api/procedures/[id]/bewijs/[bewijsId]/route.ts": "bestuurlijk-gap",
+  // NB: de 3 procedures/[id]/bewijs-handlers stonden hier als "bestuurlijk-gap",
+  // maar dat was onwaar — `trg_procedure_bewijs_audit` schrijft al procedure_log
+  // (zie BASE_TRIGGER). Ze meten nu als "domein" en horen dus NIET meer in deze
+  // no-spoor-lijst (de assertie vlagt een stale entry). BESLUIT (0191 §7): voor een
+  // bestuurlijk feit met een fail-closed domeinspoor dat óók de feitenkaart voedt
+  // VOLSTAAT procedure_log — geen route-eigen governance_events-write erbovenop
+  // (die zou het spoor dupliceren, direct-PostgREST-writes NIET dekken, en de keten
+  // verdunnen). bestuurlijk-gap is daarmee 12, niet 15.
   "POST app/api/stemmingen/route.ts": "bestuurlijk-gap",
   "POST app/api/stemmingen/[id]/stemmen/route.ts": "bestuurlijk-gap",
-  "POST app/api/stemmingen/[id]/sluiten/route.ts": "bestuurlijk-gap",
+  // NB: `stemmingen/[id]/sluiten` stond hier ook als "bestuurlijk-gap", maar de
+  // procedure_bewijs-trigger onthulde het: sluiten INSERT'et zelf een procedure_bewijs
+  // (sluiten/route.ts:178, "bewijs … met stemming_id-FK") → procedure_log. Het meet dus
+  // als "domein" en hoort niet in deze lijst. ⚠ ANDERS dan de 3 bewijs-handlers is dit
+  // een KETENGEBEURTENIS (een stemming sluiten). OPEN VRAAG voor de eigenaar (0191 §7):
+  // volstaat het procedure_log-spoor, of hoort een stemming-sluiten óók een
+  // governance_events-event te krijgen? Niet door mij beslist — bewust geen entry hier.
   "POST app/api/stemmingen/[id]/intrekken/route.ts": "bestuurlijk-gap",
   "POST app/api/vergaderingen/route.ts": "bestuurlijk-gap",
   "PATCH app/api/documents/[id]/route.ts": "bestuurlijk-gap", // status is RAG-bepalend, 0128 B-2
