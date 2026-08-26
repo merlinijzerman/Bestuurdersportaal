@@ -47,13 +47,19 @@ begin
   ) then
     raise exception 'DEEL 1a FAALT: kolom procedure_bewijs.requirement_sleutel ontbreekt.';
   end if;
+  -- P2/PR-A (#160-correctie, 0189 §6.2): de index is bewust NIET-uniek — uniciteit
+  -- verbood min_aantal > 1. "Eén artefact vervult hoogstens één vereiste" borgt de
+  -- kolomvorm (één requirement_sleutel per rij), niet de index.
   select i.indisunique into v_uniek
     from pg_index i
     join pg_class c on c.oid = i.indexrelid
    where c.relname='idx_procbewijs_req_sleutel'
      and c.relnamespace='public'::regnamespace;
-  if v_uniek is distinct from true then
-    raise exception 'DEEL 1a FAALT: idx_procbewijs_req_sleutel ontbreekt of is niet uniek.';
+  if v_uniek is null then
+    raise exception 'DEEL 1a FAALT: idx_procbewijs_req_sleutel ontbreekt.';
+  end if;
+  if v_uniek is distinct from false then
+    raise exception 'DEEL 1a FAALT: idx_procbewijs_req_sleutel is uniek — de #160-correctie (niet-uniek, min_aantal) is niet toegepast.';
   end if;
   if not exists (
     select 1 from pg_class where relname='idx_procedure_stappen_volgorde_uniek'
@@ -61,7 +67,7 @@ begin
   ) then
     raise exception 'DEEL 1a FAALT: unieke stapvolgorde-index ontbreekt.';
   end if;
-  raise notice 'DEEL 1a OK: bindingskolom + unieke indexes aanwezig.';
+  raise notice 'DEEL 1a OK: bindingskolom aanwezig, opzoekindex niet-uniek (#160-correctie), stapvolgorde-index uniek.';
 end $$;
 
 -- 1b. De oude wildcard mag niet meer in de functiebody staan.
@@ -408,19 +414,24 @@ begin
   raise notice 'OK #8b: legacy-dubbele sleutel faalt gesloten in readiness én bij bewijswrite.';
 end $$;
 
--- #8c — de unieke partiële index verhindert dat twee bewijsstukken hetzelfde
--- vereiste claimen, onafhankelijk van de API-route.
+-- #8c — sinds de #160-correctie (niet-uniek, 0189 §6.2) mag één vereiste door
+-- MEER dan één bewijsstuk gedekt worden: vervulling = count(gebonden feiten) >=
+-- min_aantal, en de kolomvorm borgt nog steeds "één artefact vervult hoogstens
+-- één vereiste". De DB weigert de tweede binding dus niet meer.
 do $$
+declare v_voor int; v_na int;
 begin
-  begin
-    insert into public.procedure_bewijs (stap_id, titel, requirement_sleutel)
-    values ('33333333-0000-0000-0000-000000000011'::uuid,
-            'Dubbele claim', '1|document|Formeel invaarverzoek');
-    raise exception 'FAALT #8c: een tweede bewijsstuk claimde hetzelfde vereiste.';
-  exception
-    when unique_violation then null;
-  end;
-  raise notice 'OK #8c: één vereiste kan door maximaal één bewijsstuk worden geclaimd.';
+  select count(*) into v_voor from public.procedure_bewijs
+   where requirement_sleutel = '1|document|Formeel invaarverzoek';
+  insert into public.procedure_bewijs (stap_id, titel, requirement_sleutel)
+  values ('33333333-0000-0000-0000-000000000011'::uuid,
+          'Tweede stuk zelfde vereiste', '1|document|Formeel invaarverzoek');
+  select count(*) into v_na from public.procedure_bewijs
+   where requirement_sleutel = '1|document|Formeel invaarverzoek';
+  if v_na <> v_voor + 1 then
+    raise exception 'FAALT #8c: tweede binding aan dezelfde vereiste geweigerd — de #160-correctie (niet-uniek, min_aantal) ontbreekt.';
+  end if;
+  raise notice 'OK #8c: niet-unieke index staat meerdere gebonden stukken per vereiste toe (min_aantal/oververvulling).';
 end $$;
 
 rollback;
