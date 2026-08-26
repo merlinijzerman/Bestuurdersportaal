@@ -460,10 +460,16 @@ function BewijsstukRij({
                 {r.bron_titel ? ` — ${r.bron_titel}` : ""}
               </p>
             )}
-            {/* Ontkoppelen — deur (a) van I1: alleen als er een gebonden bronrij is.
-                De route weigert onder een besloten besluit (nette 409). Field/veld
-                heeft geen bron_id en toont dus geen ontkoppel-actie. */}
-            {r.vervuld && r.bron_id && kanBeheren && !alleenLezen && (
+            {/* Ontkoppelen — deur (a) van I1: alleen bij een echt gebonden feit.
+                De route weigert onder een besloten besluit (nette 409). De field-
+                uitzondering (classificatie/veld) vult via governance_event en heeft
+                geen koppelbare bron — daar géén ontkoppel-actie (de route zou 400
+                geven). Vandaar de bron_type !== "governance_event"-poort. */}
+            {r.vervuld &&
+              r.bron_id &&
+              r.bron_type !== "governance_event" &&
+              kanBeheren &&
+              !alleenLezen && (
               <button
                 type="button"
                 onClick={() => onOntkoppelen(r)}

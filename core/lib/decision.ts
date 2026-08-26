@@ -747,6 +747,24 @@ async function buildEvidenceLijst(
     lijst.sort((a, b) => a.sorteer.localeCompare(b.sorteer));
   }
 
+  // Fail-closed bij een dubbel-gedefinieerde sleutel (config-drift: dezelfde
+  // (stap|type|identiteit) bestaat als template- én actieve instantievereiste).
+  // fn_decision_readiness_check blokkeert dat in SQL; de evidence-view moet dat
+  // spiegelen, anders vinkt één gebonden feit beide vereisten af (UI groen, gate
+  // rood). resolveVereisteSleutel weigert zulke bindingen bij het AANMAKEN, maar
+  // legacy/directe bindingen omzeilen dat — daarom hier ook geteld en geweerd.
+  const sleutelRequirementAantal = new Map<string, number>();
+  for (const req of alleRequirements) {
+    if (req.requirement_type === "field" || !isRequirementActief(req)) continue;
+    const s = requirementSleutel(
+      req.stap_volgorde,
+      req.requirement_type,
+      req.documenttype,
+      req.label
+    );
+    sleutelRequirementAantal.set(s, (sleutelRequirementAantal.get(s) ?? 0) + 1);
+  }
+
   const evidence: EvidenceItem[] = [];
 
   for (const req of alleRequirements) {
@@ -796,18 +814,26 @@ async function buildEvidenceLijst(
         req.documenttype,
         req.label
       );
-      const feiten = feitenPerSleutel.get(sleutel) ?? [];
-      vervuld = vervuldViaBinding(
-        req.requirement_type,
-        feiten.length,
-        req.min_aantal
-      );
-      if (vervuld && feiten.length > 0) {
-        const eerste = feiten[0];
-        bron = eerste.bron_type;
-        bronId = eerste.id;
-        bronTitel =
-          feiten.length === 1 ? eerste.titel : `${feiten.length} gebonden feiten`;
+      if ((sleutelRequirementAantal.get(sleutel) ?? 0) > 1) {
+        // Ambigu gedefinieerd → fail-closed, gelijk aan de SQL-readiness-gate.
+        vervuld = false;
+        bronTitel = "Dubbel gedefinieerde vereiste — los de configuratie op";
+      } else {
+        const feiten = feitenPerSleutel.get(sleutel) ?? [];
+        vervuld = vervuldViaBinding(
+          req.requirement_type,
+          feiten.length,
+          req.min_aantal
+        );
+        if (vervuld && feiten.length > 0) {
+          const eerste = feiten[0];
+          bron = eerste.bron_type;
+          bronId = eerste.id;
+          bronTitel =
+            feiten.length === 1
+              ? eerste.titel
+              : `${feiten.length} gebonden feiten`;
+        }
       }
     }
 
