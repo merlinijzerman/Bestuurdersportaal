@@ -57,9 +57,9 @@ function overtredingen(handlers: Handler[]): string[] {
       fouten.push(`ontbrekende split-klasse: ${h.handler}`);
     if (h.klasse === "geen" && h.schrijftAuditspoor)
       fouten.push(`"geen" met spoor: ${h.handler}`);
-    // declaratie-verificatie: named-mechanism moet gemeten spoor hebben (geen bewering)
-    if (h.declaredAudit === "governance-events" && (h.bewijsketen?.length ?? 0) === 0)
-      fouten.push(`beweerde vrijstelling: ${h.handler} audit:"governance-events" zonder gemeten governance_events-write`);
+    // declaratie-verificatie: het machine-mechanisme moet gemeten spoor hebben (geen
+    // bewering). "governance-events" is uit de tenant-union verwijderd (§4-model);
+    // de bewijsketen-lacune leeft nu in de klasse + de gate.
     if (h.declaredAudit === "platform-event-log" && (h.platform?.length ?? 0) === 0)
       fouten.push(`beweerde vrijstelling: ${h.handler} audit:"platform-event-log" zonder gemeten platform_event_log-write`);
   }
@@ -81,9 +81,9 @@ test("PROVEN-RED: een 'geen'-handler mét spoor wordt gevlagd", () => {
   assert.equal(overtredingen(nep).length, 1, "de check moet een 'geen'+spoor-overtreding zien");
 });
 
-test("PROVEN-RED: audit:\"governance-events\" zonder gemeten governance_events-write wordt gevlagd", () => {
-  const nep: Handler[] = [{ handler: "POST /nep", wrapper: "withFondsRoute", klasse: "bestuurlijk-gap", schrijftAuditspoor: false, declaredAudit: "governance-events", bewijsketen: [], platform: [] }];
-  assert.equal(overtredingen(nep).length, 1, "een zelfverklaarde vrijstelling zonder gemeten spoor moet rood zijn");
+test("PROVEN-RED: audit:\"platform-event-log\" zonder gemeten platform_event_log-write wordt gevlagd", () => {
+  const nep: Handler[] = [{ handler: "POST /nep", wrapper: "withMachineRoute", klasse: "machine", schrijftAuditspoor: false, declaredAudit: "platform-event-log", bewijsketen: [], platform: [] }];
+  assert.equal(overtredingen(nep).length, 1, "een machine-declaratie zonder gemeten platform-spoor moet rood zijn");
 });
 
 // ── 3. Triggerherkenning tegen de migraties ──────────────────────────────────

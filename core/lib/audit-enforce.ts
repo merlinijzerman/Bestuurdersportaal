@@ -23,13 +23,19 @@
 //  (besluit genomen, dissent vastgelegd; publiek: bestuur, accountant,
 //  toezichthouder). Een generieke "PATCH /api/x door gebruiker y" per request zou
 //  die keten verdunnen met HTTP-ruis — schade, geen redundantie. De wrapper krijgt
-//  daarom zijn eigen handelingstabel (tenant-only, forensisch publiek). Gevolg:
-//  géén gedeelde resource met de route-eigen `governance_events`-writes, dus
-//  volgens de gedeelde-resource-regel (besluit 0190) is er GEEN "route-eigen".
-//  De tenant-union is DRIE waarden — `AuditSpec | "governance-events" | "geen"`:
-//  de split (0191 §6) toonde 15 bestuurlijke handlers waarvan het spoor in
-//  `governance_events` hoort; die dragen `"governance-events"` (benoemt het
-//  dekkende mechanisme, gemeten in de inventaris), niet `"geen"`.
+//  daarom zijn eigen handelingstabel (tenant-only, forensisch publiek).
+//
+//  TENANT-UNION = TWEE WAARDEN: `AuditSpec | "geen"` (§4-model, 0191 geamendeerd).
+//  Het veld is een INSTRUCTIE aan de wrapper — "schrijf een handelingsregel, of
+//  niet" — waar door constructie aan voldaan wordt, geen BEWERING over code elders.
+//  Elke te-auditen tenant-handler krijgt dus een `handelingen_log`-regel, óók de
+//  bestuurlijke: een forensisch spoor met gaten op precies de gevoeligste
+//  handelingen (accountovername op bestuurlijke routes) is een slecht spoor. Het
+//  bestuurlijke/domein-spoor (`governance_events`, `*_log`) blijft bestaan; het is
+//  alleen NIET het onderwerp van dit veld. Zo stopt de union bij twee waarden i.p.v.
+//  één-per-mechanisme (er zijn er ≥10). De machine-kant benoemt wél het dekkende
+//  spoor (`"platform-event-log"`), omdat de wrapper daar niet KÁN schrijven (geen
+//  `auth.uid()`/fonds) — waar handelen onmogelijk is, rest benoemen.
 //
 //  KALE OPT-IN. Alleen `ENFORCE_AUDIT=on`; geen omgevings-default. Het veld landt
 //  optioneel en op geen route gedeclareerd, dus bij landing schrijft en logt de
@@ -37,29 +43,25 @@
 // ============================================================================
 
 /**
- * Wat een tenant-route declareert. Twee waarden (géén "route-eigen", zie de
- * module-kop):
+ * Wat een tenant-route declareert. TWEE waarden (§4-model):
  *
- *   AuditSpec           de wrapper schrijft een handelingsregel; `handeling` is het
- *                       semantische label dat de wrapper niet uit request/ctx kan
- *                       afleiden (bv. "besluit.status.wijzigen"). Route/methode/
- *                       gebruiker/fonds/tijd leidt de wrapper zelf af.
- *   "governance-events" bestuurlijk feit: de ROUTE schrijft zelf een
- *                       `governance_events`-regel; de wrapper doet niets. Deze
- *                       waarde BENOEMT het dekkende mechanisme i.p.v. `"geen"` te
- *                       zeggen (0190-regel), net als de machine-kant
- *                       `"platform-event-log"` draagt. Géén botsing op een gedeelde
- *                       resource (andere tabel), dus geen `"route-eigen"`.
- *                       ⚠ Deze waarde is GEMETEN, niet beweerd: de assertie in
- *                       `tests/karakterisering/audit-inventaris.mjs` (fail-closed,
- *                       incl. DB-trigger-laag) toetst dat de handler `governance_events`
- *                       ook echt schrijft — anders is de declaratie rood. Zie 0191 §6.
- *   "geen"              expliciet geen handelingsregel — per stuk gemotiveerd, niet
- *                       als default. De spoorloze handlers uit de inventaris zijn juist
- *                       de I-6-lacune die dit veld dicht, geen `"geen"`-categorie.
+ *   AuditSpec   de wrapper schrijft een handelingsregel; `handeling` is het
+ *               semantische label dat de wrapper niet uit request/ctx kan afleiden.
+ *               Route/methode/gebruiker/fonds/tijd leidt de wrapper zelf af. Élke
+ *               te-auditen handler krijgt dit — óók de bestuurlijke (die houden
+ *               daarnáást hun eigen `governance_events`-regel; andere tabel, andere
+ *               vraag, geen dubbeling).
+ *   "geen"      expliciet geen handelingsregel — per stuk gemotiveerd, niet als
+ *               default. Uitsluitend waar aantoonbaar niets forensisch hoort te
+ *               worden vastgelegd (bv. read-achtige POST, AI-concept).
+ *
+ * `"governance-events"` bestónd hier (0191 §6, drie-waardenmodel) maar is verwijderd:
+ * het was een BEWERING over code elders i.p.v. een instructie. De bewijsketen-lacune
+ * die die waarde droeg leeft nu in de inventaris-klasse `bestuurlijk-gap` + de
+ * bijbehorende gate, niet in de union. Zie het geamendeerde 0191 §4/§6.
  */
 export type AuditSpec = { readonly handeling: string };
-export type AuditDeclaratie = AuditSpec | "governance-events" | "geen";
+export type AuditDeclaratie = AuditSpec | "geen";
 
 /**
  * Bepaalt of audit-afdwinging actief is. Kale opt-in, net als de andere
@@ -93,10 +95,7 @@ export function beoordeelAudit(args: {
   handhaven: boolean;
 }): AuditActie {
   const { audit, handhaven } = args;
-  // "governance-events" → wrapper doet niets: de route schrijft zelf governance_events.
-  // Zelfde uitkomst als "geen"/afwezig voor de wrapper (die handelingen_log-poort),
-  // maar semantisch anders (gedekt door een ander mechanisme, gemeten in de inventaris).
-  if (!audit || audit === "geen" || audit === "governance-events") return { actie: "niets" };
+  if (!audit || audit === "geen") return { actie: "niets" };
   return handhaven
     ? { actie: "schrijven", handeling: audit.handeling }
     : { actie: "observe", handeling: audit.handeling };

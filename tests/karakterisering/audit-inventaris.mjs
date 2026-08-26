@@ -79,8 +79,11 @@ const BASE_TRIGGER = {
 // Alleen no-spoor handlers staan hier: hun spoor bestaat vandaag NIET en de klasse
 // bepaalt waar het hoort. Handlers MÉT gemeten spoor krijgen hun klasse uit de
 // meting (bewijsketen/domein/platform), niet uit deze lijst.
-//   bestuurlijk-gap  → hoort in governance_events (permanent); write ontbreekt nog,
-//                      #183 voegt hem route-eigen toe, dán pas audit:"governance-events".
+//   bestuurlijk-gap  → een BESTUURLIJK feit dat een governance_events-ketengebeurtenis
+//                      hoort te hebben maar die vandaag mist. §4-model: het audit-veld
+//                      is AuditSpec (handelingen_log) net als elke te-auditen handler;
+//                      de ontbrekende governance_events-write is een APARTE, gedrags-
+//                      veranderende taak (#183b) die de bewijsketen-gap-gate groen maakt.
 //   operationeel     → handelingen_log (wrapper, 90 dagen), audit: AuditSpec{…}.
 //   geen             → aantoonbaar geen spoor nodig, per stuk gemotiveerd.
 // De machine-handlers staan er NIET in: zij zijn "machine" (platform_event_log,
@@ -359,7 +362,7 @@ for (const f of apiFiles) {
     // Gedeclareerde audit-waarde (W11): parse hem uit het RouteSpec-object in het blok.
     // Nog géén route declareert `audit:` — dit is voorbereid op #183, zodat de
     // assertie fail-closed is vanaf de dag dat de eerste declaratie landt.
-    const auditM = blok.match(/\baudit:\s*("governance-events"|"platform-event-log"|"geen"|\{)/);
+    const auditM = blok.match(/\baudit:\s*("platform-event-log"|"geen"|\{)/);
     const declaredAudit = auditM ? (auditM[1] === "{" ? "spec" : auditM[1].replace(/"/g, "")) : null;
     // klasse: gemeten spoor wint; anders machine (typegrens) of de gedeclareerde split.
     let klasse;
@@ -398,8 +401,10 @@ for (const h of inventaris) {
 
   // DECLARATIE-VERIFICATIE (0191 §6): een waarde die zegt "ik heb elders een spoor"
   // is GEMETEN, niet beweerd. Fail-closed vanaf de eerste declaratie (#183).
-  if (h.declaredAudit === "governance-events" && h.bewijsketen.length === 0)
-    assertieFouten.push(`beweerde vrijstelling: ${h.handler} declareert audit:"governance-events" maar schrijft NIET aantoonbaar naar governance_events (voeg de route-eigen write toe, of herclassificeer)`);
+  // "governance-events" is verwijderd uit de tenant-union (§4-model); alleen de
+  // machine-kant benoemt nog een dekkend spoor. De bewijsketen-lacune (bestuurlijk-gap
+  // handlers zonder governance_events-write) leeft in de klasse + de gate, niet in de
+  // audit-declaratie.
   if (h.declaredAudit === "platform-event-log" && h.platform.length === 0)
     assertieFouten.push(`beweerde vrijstelling: ${h.handler} declareert audit:"platform-event-log" maar schrijft NIET aantoonbaar naar platform_event_log`);
 }

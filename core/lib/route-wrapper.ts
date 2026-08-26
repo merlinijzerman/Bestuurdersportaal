@@ -151,17 +151,15 @@ export type RouteSpecV1 = {
    *  eind van deploy 3 (besluit 0189). ⚠ De wrapper-check komt BOVENÓP de route-
    *  eigen `controleerLimiet`-aanroepen — vandaar `"route-eigen"`. */
   readonly rateLimit?: RateLimitDeclaratie;
-  /** OF deze route een handelingsregel achterlaat (W11). DRIE waarden — géén
-   *  "route-eigen", want de wrapper schrijft naar een EIGEN tenant-handelingstabel
-   *  en botst dus niet met de route-eigen `governance_events`-writes (besluit 0190,
-   *  gedeelde-resource-regel):
+  /** OF deze route een handelingsregel achterlaat (W11). TWEE waarden (§4-model,
+   *  0191 geamendeerd) — het veld is een INSTRUCTIE aan de wrapper, geen bewering
+   *  over code elders:
    *
-   *    AuditSpec           de wrapper schrijft een handelingsregel; `handeling` is
-   *                        het semantische label. NÁ de handler, met de uitkomst.
-   *    "governance-events" bestuurlijk feit: de ROUTE schrijft zelf `governance_events`,
-   *                        de wrapper doet niets. Benoemt het dekkende mechanisme
-   *                        (0191 §6); GEMETEN in de auditinventaris, niet beweerd.
-   *    "geen"              expliciet geen handelingsregel — per stuk gemotiveerd.
+   *    AuditSpec   de wrapper schrijft een handelingsregel; `handeling` is het
+   *                semantische label. NÁ de handler, met de uitkomst. Élke te-
+   *                auditen handler krijgt dit, óók de bestuurlijke (die houden
+   *                daarnáást hun eigen `governance_events`-regel — andere tabel).
+   *    "geen"      expliciet geen handelingsregel — per stuk gemotiveerd.
    *
    *  ⚠ OMGEKEERDE VLAG-SEMANTIEK t.o.v. capability/schema/rateLimit: `ENFORCE_AUDIT`
    *  UIT betekent NIETS SCHRIJVEN (alleen [AUDIT-OBSERVE]-loggen), niet doorlaten.
