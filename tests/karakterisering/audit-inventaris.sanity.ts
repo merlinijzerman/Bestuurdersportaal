@@ -35,6 +35,9 @@ type Handler = {
   wrapper: string;
   klasse: string;
   schrijftAuditspoor: boolean;
+  declaredAudit: string | null;
+  bewijsketen: { token: string }[];
+  platform: { token: string }[];
 };
 const inv = JSON.parse(readFileSync(join(HIER, "audit-inventaris.json"), "utf8")) as {
   meta: { assertieFouten: string[]; klasseTelling: Record<string, number> };
@@ -54,6 +57,11 @@ function overtredingen(handlers: Handler[]): string[] {
       fouten.push(`ontbrekende split-klasse: ${h.handler}`);
     if (h.klasse === "geen" && h.schrijftAuditspoor)
       fouten.push(`"geen" met spoor: ${h.handler}`);
+    // declaratie-verificatie: named-mechanism moet gemeten spoor hebben (geen bewering)
+    if (h.declaredAudit === "governance-events" && (h.bewijsketen?.length ?? 0) === 0)
+      fouten.push(`beweerde vrijstelling: ${h.handler} audit:"governance-events" zonder gemeten governance_events-write`);
+    if (h.declaredAudit === "platform-event-log" && (h.platform?.length ?? 0) === 0)
+      fouten.push(`beweerde vrijstelling: ${h.handler} audit:"platform-event-log" zonder gemeten platform_event_log-write`);
   }
   return fouten;
 }
@@ -69,14 +77,20 @@ test("geen enkele 'geen'-handler draagt een gemeten spoor", () => {
 
 // ── 2. Proven-red — dezelfde check moet een overtreding vlaggen ──────────────
 test("PROVEN-RED: een 'geen'-handler mét spoor wordt gevlagd", () => {
-  const nep: Handler[] = [{ handler: "POST /nep", wrapper: "withFondsRoute", klasse: "geen", schrijftAuditspoor: true }];
+  const nep: Handler[] = [{ handler: "POST /nep", wrapper: "withFondsRoute", klasse: "geen", schrijftAuditspoor: true, declaredAudit: null, bewijsketen: [], platform: [] }];
   assert.equal(overtredingen(nep).length, 1, "de check moet een 'geen'+spoor-overtreding zien");
+});
+
+test("PROVEN-RED: audit:\"governance-events\" zonder gemeten governance_events-write wordt gevlagd", () => {
+  const nep: Handler[] = [{ handler: "POST /nep", wrapper: "withFondsRoute", klasse: "bestuurlijk-gap", schrijftAuditspoor: false, declaredAudit: "governance-events", bewijsketen: [], platform: [] }];
+  assert.equal(overtredingen(nep).length, 1, "een zelfverklaarde vrijstelling zonder gemeten spoor moet rood zijn");
 });
 
 // ── 3. Triggerherkenning tegen de migraties ──────────────────────────────────
 const AUDIT_CAPTURE: Record<string, string[]> = {
   fn_fonds_config_capture: ["fonds_content_overrides", "fonds_feature_flags", "fonds_module_manifest", "fonds_theming"],
   fn_fonds_stuurinfo_capture: ["fonds_stuurinfo_kpi", "fonds_stuurinfo_periode", "fonds_stuurinfo_reeks", "fonds_stuurinfo_reserve"],
+  fn_audit_procedure_bewijs_mutation: ["procedure_bewijs"], // → procedure_log, fail-closed
 };
 
 function alleMigraties(): string {

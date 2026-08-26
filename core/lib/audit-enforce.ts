@@ -25,8 +25,11 @@
 //  die keten verdunnen met HTTP-ruis — schade, geen redundantie. De wrapper krijgt
 //  daarom zijn eigen handelingstabel (tenant-only, forensisch publiek). Gevolg:
 //  géén gedeelde resource met de route-eigen `governance_events`-writes, dus
-//  volgens de gedeelde-resource-regel (besluit 0190) is er GEEN "route-eigen"
-//  nodig — de tenant-union is twee waarden: `AuditSpec | "geen"`.
+//  volgens de gedeelde-resource-regel (besluit 0190) is er GEEN "route-eigen".
+//  De tenant-union is DRIE waarden — `AuditSpec | "governance-events" | "geen"`:
+//  de split (0191 §6) toonde 15 bestuurlijke handlers waarvan het spoor in
+//  `governance_events` hoort; die dragen `"governance-events"` (benoemt het
+//  dekkende mechanisme, gemeten in de inventaris), niet `"geen"`.
 //
 //  KALE OPT-IN. Alleen `ENFORCE_AUDIT=on`; geen omgevings-default. Het veld landt
 //  optioneel en op geen route gedeclareerd, dus bij landing schrijft en logt de
@@ -37,18 +40,26 @@
  * Wat een tenant-route declareert. Twee waarden (géén "route-eigen", zie de
  * module-kop):
  *
- *   AuditSpec   de wrapper schrijft een handelingsregel; `handeling` is het
- *               semantische label dat de wrapper niet uit request/ctx kan afleiden
- *               (bv. "besluit.status.wijzigen") en dat het forensische spoor
- *               leesbaar maakt. Route/methode/gebruiker/fonds/tijd leidt de
- *               wrapper zelf af.
- *   "geen"      expliciet geen handelingsregel (bv. een read-achtige POST, of een
- *               route die aantoonbaar geen spoor hoeft — per stuk gemotiveerd,
- *               niet als default; de 38 spoorloze handlers uit de inventaris zijn
- *               juist de I-6-lacune die dit veld dicht, niet een `"geen"`-categorie).
+ *   AuditSpec           de wrapper schrijft een handelingsregel; `handeling` is het
+ *                       semantische label dat de wrapper niet uit request/ctx kan
+ *                       afleiden (bv. "besluit.status.wijzigen"). Route/methode/
+ *                       gebruiker/fonds/tijd leidt de wrapper zelf af.
+ *   "governance-events" bestuurlijk feit: de ROUTE schrijft zelf een
+ *                       `governance_events`-regel; de wrapper doet niets. Deze
+ *                       waarde BENOEMT het dekkende mechanisme i.p.v. `"geen"` te
+ *                       zeggen (0190-regel), net als de machine-kant
+ *                       `"platform-event-log"` draagt. Géén botsing op een gedeelde
+ *                       resource (andere tabel), dus geen `"route-eigen"`.
+ *                       ⚠ Deze waarde is GEMETEN, niet beweerd: de assertie in
+ *                       `tests/karakterisering/audit-inventaris.mjs` (fail-closed,
+ *                       incl. DB-trigger-laag) toetst dat de handler `governance_events`
+ *                       ook echt schrijft — anders is de declaratie rood. Zie 0191 §6.
+ *   "geen"              expliciet geen handelingsregel — per stuk gemotiveerd, niet
+ *                       als default. De spoorloze handlers uit de inventaris zijn juist
+ *                       de I-6-lacune die dit veld dicht, geen `"geen"`-categorie.
  */
 export type AuditSpec = { readonly handeling: string };
-export type AuditDeclaratie = AuditSpec | "geen";
+export type AuditDeclaratie = AuditSpec | "governance-events" | "geen";
 
 /**
  * Bepaalt of audit-afdwinging actief is. Kale opt-in, net als de andere
@@ -82,7 +93,10 @@ export function beoordeelAudit(args: {
   handhaven: boolean;
 }): AuditActie {
   const { audit, handhaven } = args;
-  if (!audit || audit === "geen") return { actie: "niets" };
+  // "governance-events" → wrapper doet niets: de route schrijft zelf governance_events.
+  // Zelfde uitkomst als "geen"/afwezig voor de wrapper (die handelingen_log-poort),
+  // maar semantisch anders (gedekt door een ander mechanisme, gemeten in de inventaris).
+  if (!audit || audit === "geen" || audit === "governance-events") return { actie: "niets" };
   return handhaven
     ? { actie: "schrijven", handeling: audit.handeling }
     : { actie: "observe", handeling: audit.handeling };

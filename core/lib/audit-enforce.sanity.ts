@@ -61,6 +61,15 @@ test("geen declaratie / \"geen\" → niets (geen log, geen rij), ongeacht de vla
   }
 });
 
+test("\"governance-events\" → niets: de route schrijft zelf, de wrapper blijft eruit", () => {
+  // De derde waarde (0191 §6): bestuurlijk feit, spoor in governance_events, géén
+  // handelingen_log-regel van de wrapper. Zelfde wrapper-uitkomst als "geen", maar
+  // semantisch een DEKKING (gemeten in de inventaris), geen afwezigheid.
+  for (const handhaven of [false, true]) {
+    assert.deepEqual(beoordeelAudit({ audit: "governance-events", handhaven }), { actie: "niets" });
+  }
+});
+
 test("AuditSpec + vlag UIT → OBSERVE (loggen, NIETS schrijven) — de omgekeerde semantiek", () => {
   const u = beoordeelAudit({ audit: { handeling: "besluit.status.wijzigen" }, handhaven: false });
   assert.deepEqual(u, { actie: "observe", handeling: "besluit.status.wijzigen" });

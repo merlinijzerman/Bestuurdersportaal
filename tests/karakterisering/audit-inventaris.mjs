@@ -67,6 +67,12 @@ const BASE_TRIGGER = {
   fonds_stuurinfo_periode: { log: "fonds_stuurinfo_log", trail: "domein" },
   fonds_stuurinfo_reeks: { log: "fonds_stuurinfo_log", trail: "domein" },
   fonds_stuurinfo_reserve: { log: "fonds_stuurinfo_log", trail: "domein" },
+  // trg_procedure_bewijs_audit → fn_audit_procedure_bewijs_mutation schrijft bij
+  // ELKE insert/update/delete op procedure_bewijs een procedure_log-regel, fail-
+  // closed (2026_08_22_bewijs_requirement_binding_hardening.sql:283/367). De repo
+  // wist het al: tests/cross-tenant/procedure-v2-governance.test.ts:181. Gemist in
+  // v1 → de drie bewijs-handlers stonden ten onrechte op "geen spoor".
+  procedure_bewijs: { log: "procedure_log", trail: "domein" },
 };
 
 // ── De SPLIT (besluit W11 / vervolg 0190) — klasse per handler ZONDER gemeten spoor.
@@ -87,12 +93,23 @@ const SPLIT_KLASSE = {
   "POST app/api/notulen/segmenten/[id]/bevestig/route.ts": "bestuurlijk-gap",
   "DELETE app/api/notulen/segmenten/[id]/route.ts": "bestuurlijk-gap",
   "PUT app/api/organisatieprofiel/route.ts": "bestuurlijk-gap",
-  "POST app/api/procedures/[id]/bewijs/route.ts": "bestuurlijk-gap",
-  "PATCH app/api/procedures/[id]/bewijs/[bewijsId]/route.ts": "bestuurlijk-gap",
-  "DELETE app/api/procedures/[id]/bewijs/[bewijsId]/route.ts": "bestuurlijk-gap",
+  // NB: de 3 procedures/[id]/bewijs-handlers stonden hier als "bestuurlijk-gap",
+  // maar dat was onwaar — `trg_procedure_bewijs_audit` schrijft al procedure_log
+  // (zie BASE_TRIGGER). Ze meten nu als "domein" en horen dus NIET meer in deze
+  // no-spoor-lijst (de assertie vlagt een stale entry). BESLUIT (0191 §7): voor een
+  // bestuurlijk feit met een fail-closed domeinspoor dat óók de feitenkaart voedt
+  // VOLSTAAT procedure_log — geen route-eigen governance_events-write erbovenop
+  // (die zou het spoor dupliceren, direct-PostgREST-writes NIET dekken, en de keten
+  // verdunnen). bestuurlijk-gap is daarmee 12, niet 15.
   "POST app/api/stemmingen/route.ts": "bestuurlijk-gap",
   "POST app/api/stemmingen/[id]/stemmen/route.ts": "bestuurlijk-gap",
-  "POST app/api/stemmingen/[id]/sluiten/route.ts": "bestuurlijk-gap",
+  // NB: `stemmingen/[id]/sluiten` stond hier ook als "bestuurlijk-gap", maar de
+  // procedure_bewijs-trigger onthulde het: sluiten INSERT'et zelf een procedure_bewijs
+  // (sluiten/route.ts:178, "bewijs … met stemming_id-FK") → procedure_log. Het meet dus
+  // als "domein" en hoort niet in deze no-spoor-lijst. BESLUIT (eigenaar, 0191 §7): een
+  // stemming sluiten is een KETENGEBEURTENIS → #183 voegt een route-eigen
+  // governance_events-event toe BOVENOP het procedure_log-spoor; klasse wordt dan
+  // "bewijsketen". Tot die write landt is klasse "domein" (er ís een spoor).
   "POST app/api/stemmingen/[id]/intrekken/route.ts": "bestuurlijk-gap",
   "POST app/api/vergaderingen/route.ts": "bestuurlijk-gap",
   "PATCH app/api/documents/[id]/route.ts": "bestuurlijk-gap", // status is RAG-bepalend, 0128 B-2
@@ -339,6 +356,11 @@ for (const f of apiFiles) {
     const platform = alle.filter((x) => x.trail === "platform");
     const heeftSpoor = bewijsketen.length + domein.length + platform.length > 0;
     const key = `${method} ${rel}`;
+    // Gedeclareerde audit-waarde (W11): parse hem uit het RouteSpec-object in het blok.
+    // Nog géén route declareert `audit:` — dit is voorbereid op #183, zodat de
+    // assertie fail-closed is vanaf de dag dat de eerste declaratie landt.
+    const auditM = blok.match(/\baudit:\s*("governance-events"|"platform-event-log"|"geen"|\{)/);
+    const declaredAudit = auditM ? (auditM[1] === "{" ? "spec" : auditM[1].replace(/"/g, "")) : null;
     // klasse: gemeten spoor wint; anders machine (typegrens) of de gedeclareerde split.
     let klasse;
     if (bewijsketen.length) klasse = "bewijsketen";
@@ -351,6 +373,7 @@ for (const f of apiFiles) {
       wrapper,
       schrijftAuditspoor: heeftSpoor,
       klasse,
+      declaredAudit,
       routeEigenKandidaat: bewijsketen.length > 0,
       bewijsketen: bewijsketen.map(kort),
       domein: domein.map(kort),
@@ -372,6 +395,13 @@ for (const h of inventaris) {
     assertieFouten.push(`stale split-klasse: ${h.handler} heeft nu een GEMETEN spoor (${[...h.bewijsketen, ...h.domein, ...h.platform].map((t) => t.token).join(", ")}) — herclassificeer, verwijder de SPLIT_KLASSE-entry`);
   if (h.klasse === "geen" && h.schrijftAuditspoor)
     assertieFouten.push(`"geen" met spoor: ${h.handler}`);
+
+  // DECLARATIE-VERIFICATIE (0191 §6): een waarde die zegt "ik heb elders een spoor"
+  // is GEMETEN, niet beweerd. Fail-closed vanaf de eerste declaratie (#183).
+  if (h.declaredAudit === "governance-events" && h.bewijsketen.length === 0)
+    assertieFouten.push(`beweerde vrijstelling: ${h.handler} declareert audit:"governance-events" maar schrijft NIET aantoonbaar naar governance_events (voeg de route-eigen write toe, of herclassificeer)`);
+  if (h.declaredAudit === "platform-event-log" && h.platform.length === 0)
+    assertieFouten.push(`beweerde vrijstelling: ${h.handler} declareert audit:"platform-event-log" maar schrijft NIET aantoonbaar naar platform_event_log`);
 }
 
 function dedupVia(arr) {
