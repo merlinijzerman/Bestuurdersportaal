@@ -6,6 +6,15 @@
     "metBewijsketen": 22,
     "metEnigSpoor": 58,
     "zonderSpoor": 36,
+    "klasseTelling": {
+      "domein": 36,
+      "geen": 7,
+      "bestuurlijk-gap": 15,
+      "machine": 6,
+      "bewijsketen": 22,
+      "operationeel": 8
+    },
+    "assertieFouten": [],
     "afgezochtePatronen": {
       "tabellen": [
         "governance_events",
@@ -37,6 +46,16 @@
         "aqlab_claim_run_jobs",
         "fn_app_error_log"
       ]
+    },
+    "triggerLaag": {
+      "fonds_content_overrides": "fonds_config_log",
+      "fonds_feature_flags": "fonds_config_log",
+      "fonds_module_manifest": "fonds_config_log",
+      "fonds_theming": "fonds_config_log",
+      "fonds_stuurinfo_kpi": "fonds_stuurinfo_log",
+      "fonds_stuurinfo_periode": "fonds_stuurinfo_log",
+      "fonds_stuurinfo_reeks": "fonds_stuurinfo_log",
+      "fonds_stuurinfo_reserve": "fonds_stuurinfo_log"
     }
   },
   "handlers": [
@@ -44,6 +63,7 @@
       "handler": "POST app/api/agendapunten/[id]/herstellen/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "domein",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -59,6 +79,7 @@
       "handler": "PATCH app/api/agendapunten/[id]/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "domein",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -74,6 +95,7 @@
       "handler": "DELETE app/api/agendapunten/[id]/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "domein",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -89,6 +111,7 @@
       "handler": "PATCH app/api/agendapunten/[id]/voorbereiding/notities/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
+      "klasse": "geen",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -98,6 +121,7 @@
       "handler": "POST app/api/agendapunten/[id]/voorbereiding/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
+      "klasse": "geen",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -107,6 +131,7 @@
       "handler": "POST app/api/agendapunten/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
+      "klasse": "bestuurlijk-gap",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -116,6 +141,7 @@
       "handler": "POST app/api/ai/stuk-export/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "domein",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -131,6 +157,7 @@
       "handler": "POST app/api/aqlab/worker/route.ts",
       "wrapper": "withMachineRoute",
       "schrijftAuditspoor": false,
+      "klasse": "machine",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -140,6 +167,7 @@
       "handler": "POST app/api/chat/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "bewijsketen",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -161,6 +189,7 @@
       "handler": "POST app/api/classificatie/[id]/beoordeel/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "domein",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -176,6 +205,7 @@
       "handler": "POST app/api/classificatie/[id]/terugdraai/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "domein",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -191,6 +221,7 @@
       "handler": "POST app/api/classificatie/backfill/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "domein",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -206,6 +237,7 @@
       "handler": "PATCH app/api/decisions/[id]/actions/[aid]/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "bewijsketen",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -221,6 +253,7 @@
       "handler": "POST app/api/decisions/[id]/actions/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "bewijsketen",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -236,6 +269,7 @@
       "handler": "PATCH app/api/decisions/[id]/ai-interactions/[aiid]/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "bewijsketen",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -251,6 +285,7 @@
       "handler": "PATCH app/api/decisions/[id]/assumptions/[aid]/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "bewijsketen",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -266,6 +301,7 @@
       "handler": "POST app/api/decisions/[id]/assumptions/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "bewijsketen",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -281,6 +317,7 @@
       "handler": "PATCH app/api/decisions/[id]/conditions/[cid]/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "bewijsketen",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -296,6 +333,7 @@
       "handler": "POST app/api/decisions/[id]/conditions/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "bewijsketen",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -311,6 +349,7 @@
       "handler": "PATCH app/api/decisions/[id]/dissent/[did]/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "bewijsketen",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -326,6 +365,7 @@
       "handler": "DELETE app/api/decisions/[id]/dissent/[did]/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "bewijsketen",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -341,6 +381,7 @@
       "handler": "POST app/api/decisions/[id]/dissent/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "bewijsketen",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -356,6 +397,7 @@
       "handler": "PATCH app/api/decisions/[id]/risks/[rid]/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "bewijsketen",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -371,6 +413,7 @@
       "handler": "POST app/api/decisions/[id]/risks/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "bewijsketen",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -386,6 +429,7 @@
       "handler": "PATCH app/api/decisions/[id]/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "bewijsketen",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -401,6 +445,7 @@
       "handler": "POST app/api/decisions/[id]/status/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "bewijsketen",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -416,6 +461,7 @@
       "handler": "POST app/api/documents/[id]/agendapunten/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "domein",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -431,6 +477,7 @@
       "handler": "DELETE app/api/documents/[id]/agendapunten/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "domein",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -446,6 +493,7 @@
       "handler": "PATCH app/api/documents/[id]/ai-markering/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
+      "klasse": "operationeel",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -455,6 +503,7 @@
       "handler": "POST app/api/documents/[id]/her-extract/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
+      "klasse": "operationeel",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -464,6 +513,7 @@
       "handler": "PATCH app/api/documents/[id]/metadata/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "domein",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -479,6 +529,7 @@
       "handler": "POST app/api/documents/[id]/opnieuw-verwerken/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
+      "klasse": "operationeel",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -488,6 +539,7 @@
       "handler": "POST app/api/documents/[id]/procesinstanties/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "domein",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -503,6 +555,7 @@
       "handler": "DELETE app/api/documents/[id]/procesinstanties/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "domein",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -518,6 +571,7 @@
       "handler": "PATCH app/api/documents/[id]/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
+      "klasse": "bestuurlijk-gap",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -527,6 +581,7 @@
       "handler": "POST app/api/documents/bulk-metadata/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "domein",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -542,6 +597,7 @@
       "handler": "POST app/api/documents/embeddings-backfill/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
+      "klasse": "operationeel",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -551,6 +607,7 @@
       "handler": "POST app/api/documents/reindex-backfill/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
+      "klasse": "operationeel",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -560,6 +617,7 @@
       "handler": "POST app/api/documents/upload/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "domein",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -575,6 +633,7 @@
       "handler": "PATCH app/api/dossiers/[id]/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "domein",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -590,6 +649,7 @@
       "handler": "DELETE app/api/gesprekken/[id]/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
+      "klasse": "operationeel",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -599,6 +659,7 @@
       "handler": "DELETE app/api/inbreng/[id]/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
+      "klasse": "bestuurlijk-gap",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -608,6 +669,7 @@
       "handler": "POST app/api/inbreng/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
+      "klasse": "bestuurlijk-gap",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -617,6 +679,7 @@
       "handler": "POST app/api/instellingen/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "domein",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -633,6 +696,7 @@
       "handler": "POST app/api/internal/afschrift-worker/route.ts",
       "wrapper": "withMachineRoute",
       "schrijftAuditspoor": false,
+      "klasse": "machine",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -642,6 +706,7 @@
       "handler": "POST app/api/internal/ingest-worker/route.ts",
       "wrapper": "withMachineRoute",
       "schrijftAuditspoor": false,
+      "klasse": "machine",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -651,6 +716,7 @@
       "handler": "POST app/api/internal/semantische-extractie/route.ts",
       "wrapper": "withMachineRoute",
       "schrijftAuditspoor": false,
+      "klasse": "machine",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -660,6 +726,7 @@
       "handler": "PATCH app/api/notificaties/[id]/lezen/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
+      "klasse": "geen",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -669,6 +736,7 @@
       "handler": "POST app/api/notificaties/alles-lezen/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
+      "klasse": "geen",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -678,6 +746,7 @@
       "handler": "POST app/api/notulen/[id]/segmenteer/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "domein",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -693,6 +762,7 @@
       "handler": "POST app/api/notulen/segmenten/[id]/bevestig/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
+      "klasse": "bestuurlijk-gap",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -702,6 +772,7 @@
       "handler": "PATCH app/api/notulen/segmenten/[id]/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "domein",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -717,6 +788,7 @@
       "handler": "DELETE app/api/notulen/segmenten/[id]/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
+      "klasse": "bestuurlijk-gap",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -726,6 +798,7 @@
       "handler": "PUT app/api/organisatieprofiel/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
+      "klasse": "bestuurlijk-gap",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -735,6 +808,7 @@
       "handler": "POST app/api/platform/healthz/route.ts",
       "wrapper": "withMachineRoute",
       "schrijftAuditspoor": false,
+      "klasse": "machine",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -744,6 +818,7 @@
       "handler": "POST app/api/platform/monitoring/snapshot/route.ts",
       "wrapper": "withMachineRoute",
       "schrijftAuditspoor": false,
+      "klasse": "machine",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -753,6 +828,7 @@
       "handler": "POST app/api/procedures/[id]/afschrift/concept/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
+      "klasse": "geen",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -762,6 +838,7 @@
       "handler": "POST app/api/procedures/[id]/afschrift/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "domein",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -777,6 +854,7 @@
       "handler": "PATCH app/api/procedures/[id]/afschriften/[afschriftId]/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "domein",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -792,6 +870,7 @@
       "handler": "POST app/api/procedures/[id]/besluiten/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "bewijsketen",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -813,6 +892,7 @@
       "handler": "PATCH app/api/procedures/[id]/bewijs/[bewijsId]/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
+      "klasse": "bestuurlijk-gap",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -822,6 +902,7 @@
       "handler": "DELETE app/api/procedures/[id]/bewijs/[bewijsId]/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
+      "klasse": "bestuurlijk-gap",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -831,6 +912,7 @@
       "handler": "POST app/api/procedures/[id]/bewijs/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
+      "klasse": "bestuurlijk-gap",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -840,6 +922,7 @@
       "handler": "PATCH app/api/procedures/[id]/checklist/[itemId]/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "bewijsketen",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -861,6 +944,7 @@
       "handler": "POST app/api/procedures/[id]/checklist/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "bewijsketen",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -882,6 +966,7 @@
       "handler": "POST app/api/procedures/[id]/fase-beschrijving/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "domein",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -897,6 +982,7 @@
       "handler": "POST app/api/procedures/[id]/fase-toelichting/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "domein",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -912,6 +998,7 @@
       "handler": "PATCH app/api/procedures/[id]/requirements/[reqId]/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "bewijsketen",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -927,6 +1014,7 @@
       "handler": "POST app/api/procedures/[id]/requirements/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "bewijsketen",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -942,6 +1030,7 @@
       "handler": "POST app/api/procedures/[id]/requirements/uitsluiten/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "bewijsketen",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -963,6 +1052,7 @@
       "handler": "PATCH app/api/procedures/[id]/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "domein",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -978,6 +1068,7 @@
       "handler": "POST app/api/procedures/[id]/stappen/[stapId]/agendapunt/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "domein",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -993,6 +1084,7 @@
       "handler": "POST app/api/procedures/[id]/stappen/[stapId]/besluit-concept/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
+      "klasse": "geen",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -1002,6 +1094,7 @@
       "handler": "POST app/api/procedures/[id]/stappen/[stapId]/heropenen/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "bewijsketen",
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -1023,6 +1116,7 @@
       "handler": "PATCH app/api/procedures/[id]/stappen/[stapId]/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "domein",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1038,6 +1132,7 @@
       "handler": "POST app/api/procedures/[id]/stappen/[stapId]/toelichting/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "domein",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1053,6 +1148,7 @@
       "handler": "POST app/api/procedures/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "domein",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1068,6 +1164,7 @@
       "handler": "PATCH app/api/profiel/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
+      "klasse": "operationeel",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -1077,6 +1174,7 @@
       "handler": "POST app/api/reflectie/transitie/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
+      "klasse": "operationeel",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -1086,6 +1184,7 @@
       "handler": "PATCH app/api/risicos/[id]/maatregelen/[mid]/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "domein",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1101,6 +1200,7 @@
       "handler": "POST app/api/risicos/[id]/maatregelen/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "domein",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1116,6 +1216,7 @@
       "handler": "PATCH app/api/risicos/[id]/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "domein",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1131,6 +1232,7 @@
       "handler": "POST app/api/risicos/[id]/sluiten/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "domein",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1146,6 +1248,7 @@
       "handler": "POST app/api/risicos/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "domein",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1161,6 +1264,7 @@
       "handler": "POST app/api/stemmingen/[id]/intrekken/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
+      "klasse": "bestuurlijk-gap",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -1170,6 +1274,7 @@
       "handler": "POST app/api/stemmingen/[id]/sluiten/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
+      "klasse": "bestuurlijk-gap",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -1179,6 +1284,7 @@
       "handler": "POST app/api/stemmingen/[id]/stemmen/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
+      "klasse": "bestuurlijk-gap",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -1188,6 +1294,7 @@
       "handler": "POST app/api/stemmingen/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
+      "klasse": "bestuurlijk-gap",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -1197,6 +1304,7 @@
       "handler": "POST app/api/stuurinformatie/beheer/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "domein",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1213,6 +1321,7 @@
       "handler": "POST app/api/stuurinformatie/beheer/upload/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
+      "klasse": "geen",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -1222,6 +1331,7 @@
       "handler": "POST app/api/vergaderingen/[id]/archief/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "domein",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1237,6 +1347,7 @@
       "handler": "PATCH app/api/vergaderingen/[id]/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "domein",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1252,6 +1363,7 @@
       "handler": "POST app/api/vergaderingen/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
+      "klasse": "bestuurlijk-gap",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -1261,6 +1373,7 @@
       "handler": "POST app/api/vergelijk/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
+      "klasse": "domein",
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [

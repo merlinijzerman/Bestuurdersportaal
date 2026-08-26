@@ -69,6 +69,52 @@ const BASE_TRIGGER = {
   fonds_stuurinfo_reserve: { log: "fonds_stuurinfo_log", trail: "domein" },
 };
 
+// ── De SPLIT (besluit W11 / vervolg 0190) — klasse per handler ZONDER gemeten spoor.
+// Alleen no-spoor handlers staan hier: hun spoor bestaat vandaag NIET en de klasse
+// bepaalt waar het hoort. Handlers MÉT gemeten spoor krijgen hun klasse uit de
+// meting (bewijsketen/domein/platform), niet uit deze lijst.
+//   bestuurlijk-gap  → hoort in governance_events (permanent); write ontbreekt nog,
+//                      #183 voegt hem route-eigen toe, dán pas audit:"governance-events".
+//   operationeel     → handelingen_log (wrapper, 90 dagen), audit: AuditSpec{…}.
+//   geen             → aantoonbaar geen spoor nodig, per stuk gemotiveerd.
+// De machine-handlers staan er NIET in: zij zijn "machine" (platform_event_log,
+// typegrens op MachineSpecV1).
+const SPLIT_KLASSE = {
+  // A. bestuurlijk feit → governance_events (permanent) — 15
+  "POST app/api/agendapunten/route.ts": "bestuurlijk-gap",
+  "POST app/api/inbreng/route.ts": "bestuurlijk-gap",
+  "DELETE app/api/inbreng/[id]/route.ts": "bestuurlijk-gap",
+  "POST app/api/notulen/segmenten/[id]/bevestig/route.ts": "bestuurlijk-gap",
+  "DELETE app/api/notulen/segmenten/[id]/route.ts": "bestuurlijk-gap",
+  "PUT app/api/organisatieprofiel/route.ts": "bestuurlijk-gap",
+  "POST app/api/procedures/[id]/bewijs/route.ts": "bestuurlijk-gap",
+  "PATCH app/api/procedures/[id]/bewijs/[bewijsId]/route.ts": "bestuurlijk-gap",
+  "DELETE app/api/procedures/[id]/bewijs/[bewijsId]/route.ts": "bestuurlijk-gap",
+  "POST app/api/stemmingen/route.ts": "bestuurlijk-gap",
+  "POST app/api/stemmingen/[id]/stemmen/route.ts": "bestuurlijk-gap",
+  "POST app/api/stemmingen/[id]/sluiten/route.ts": "bestuurlijk-gap",
+  "POST app/api/stemmingen/[id]/intrekken/route.ts": "bestuurlijk-gap",
+  "POST app/api/vergaderingen/route.ts": "bestuurlijk-gap",
+  "PATCH app/api/documents/[id]/route.ts": "bestuurlijk-gap", // status is RAG-bepalend, 0128 B-2
+  // B. operationele handeling → handelingen_log — 8
+  "PATCH app/api/documents/[id]/ai-markering/route.ts": "operationeel",
+  "POST app/api/documents/[id]/her-extract/route.ts": "operationeel", // gebonden aan pijplijngedrag; zie 0191
+  "POST app/api/documents/[id]/opnieuw-verwerken/route.ts": "operationeel", // idem
+  "POST app/api/documents/embeddings-backfill/route.ts": "operationeel",
+  "POST app/api/documents/reindex-backfill/route.ts": "operationeel",
+  "DELETE app/api/gesprekken/[id]/route.ts": "operationeel",
+  "POST app/api/reflectie/transitie/route.ts": "operationeel",
+  "PATCH app/api/profiel/route.ts": "operationeel", // fonds_id/rol-tabel (C-01), goedkope verzekering
+  // C. geen spoor nodig — 7
+  "PATCH app/api/agendapunten/[id]/voorbereiding/notities/route.ts": "geen", // privé-voorbereiding, §5.3
+  "POST app/api/agendapunten/[id]/voorbereiding/route.ts": "geen",
+  "PATCH app/api/notificaties/[id]/lezen/route.ts": "geen",
+  "POST app/api/notificaties/alles-lezen/route.ts": "geen",
+  "POST app/api/procedures/[id]/afschrift/concept/route.ts": "geen", // AI-concept, geen state-change
+  "POST app/api/procedures/[id]/stappen/[stapId]/besluit-concept/route.ts": "geen",
+  "POST app/api/stuurinformatie/beheer/upload/route.ts": "geen", // parse-only preview
+};
+
 function directeWrites(code) {
   const hits = [];
   for (const [tabel, trail] of Object.entries(TABEL_TRAIL)) {
@@ -291,16 +337,41 @@ for (const f of apiFiles) {
     const bewijsketen = alle.filter((x) => x.trail === "bewijsketen");
     const domein = alle.filter((x) => x.trail === "domein");
     const platform = alle.filter((x) => x.trail === "platform");
+    const heeftSpoor = bewijsketen.length + domein.length + platform.length > 0;
+    const key = `${method} ${rel}`;
+    // klasse: gemeten spoor wint; anders machine (typegrens) of de gedeclareerde split.
+    let klasse;
+    if (bewijsketen.length) klasse = "bewijsketen";
+    else if (domein.length) klasse = "domein";
+    else if (platform.length) klasse = "platform";
+    else if (wrapper === "withMachineRoute") klasse = "machine"; // platform_event_log via typegrens
+    else klasse = SPLIT_KLASSE[key] || "ONBEKEND"; // no-spoor tenant → uit de split
     inventaris.push({
-      handler: `${method} ${rel}`,
+      handler: key,
       wrapper,
-      schrijftAuditspoor: bewijsketen.length + domein.length + platform.length > 0,
+      schrijftAuditspoor: heeftSpoor,
+      klasse,
       routeEigenKandidaat: bewijsketen.length > 0,
       bewijsketen: bewijsketen.map(kort),
       domein: domein.map(kort),
       platform: platform.map(kort),
     });
   }
+}
+
+// ── Fail-closed assertie: de split moet compleet én consistent zijn ──────────
+// Draait ALTIJD (geen waarschuwingsmodus). Bij een schending → process.exitCode 1,
+// zodat een regeneratie/CI-run faalt. De triggerlaag zit in de meting, dus een
+// handler die door fn_fonds_config/stuurinfo_capture wordt gedekt komt hier als
+// "domein" binnen en wordt NIET als "geen spoor" afgekeurd.
+const assertieFouten = [];
+for (const h of inventaris) {
+  if (h.klasse === "ONBEKEND")
+    assertieFouten.push(`ontbrekende split-klasse: ${h.handler} — no-spoor tenant-handler zonder SPLIT_KLASSE-entry (geen stille "geen")`);
+  if (SPLIT_KLASSE[h.handler] && h.schrijftAuditspoor)
+    assertieFouten.push(`stale split-klasse: ${h.handler} heeft nu een GEMETEN spoor (${[...h.bewijsketen, ...h.domein, ...h.platform].map((t) => t.token).join(", ")}) — herclassificeer, verwijder de SPLIT_KLASSE-entry`);
+  if (h.klasse === "geen" && h.schrijftAuditspoor)
+    assertieFouten.push(`"geen" met spoor: ${h.handler}`);
 }
 
 function dedupVia(arr) {
@@ -320,11 +391,23 @@ console.error(`state-changing handlers: ${n}`);
 console.error(`  met bewijsketen-write: ${metBewijsketen}`);
 console.error(`  met enig auditspoor: ${metEnigSpoor}`);
 console.error(`  zonder enig auditspoor: ${zonderSpoor}`);
+const klasseTelling = {};
+for (const h of inventaris) klasseTelling[h.klasse] = (klasseTelling[h.klasse] || 0) + 1;
+console.error(`  klasse: ${JSON.stringify(klasseTelling)}`);
+if (assertieFouten.length) {
+  console.error(`\n✗ ${assertieFouten.length} ASSERTIE-FOUT(EN) — fail-closed:`);
+  for (const f of assertieFouten) console.error(`   - ${f}`);
+  process.exitCode = 1;
+} else {
+  console.error(`✓ split-assertie schoon (${n} handlers geklasseerd)`);
+}
 console.log(JSON.stringify({
   meta: {
     basis: "origin/preview", tracing: "v2-callgraph-fixpoint", aantalHandlers: n,
-    metBewijsketen, metEnigSpoor, zonderSpoor,
+    metBewijsketen, metEnigSpoor, zonderSpoor, klasseTelling,
+    assertieFouten,
     afgezochtePatronen: { tabellen: Object.keys(TABEL_TRAIL), rpcs: Object.keys(RPC_TRAIL) },
+    triggerLaag: Object.fromEntries(Object.entries(BASE_TRIGGER).map(([b, v]) => [b, v.log])),
   },
   handlers: inventaris,
 }, null, 2));
