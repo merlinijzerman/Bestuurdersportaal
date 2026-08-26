@@ -27,6 +27,7 @@ import {
   geenEnkeleRood,
 } from "@/platform/lib/monitoring-health";
 import { logPlatformFout } from "@/platform/lib/platform-fout-log";
+import { huidigeEnforceVlagstand } from "@/core/lib/enforce-vlagstand";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -41,6 +42,9 @@ async function draai(_ctx: MachineContext, _req: NextRequest): Promise<NextRespo
       ok: geenEnkeleRood(componenten),
       onbekend: aantalOnbekend(componenten),
       tijdstip: new Date().toISOString(),
+      // Operationele fase-1-gate: dit zijn de opgeloste standen waarop de
+      // enforce-modules beslissen, niet de ruwe Vercel-waarden.
+      enforce: huidigeEnforceVlagstand(),
       componenten,
     });
   } catch (error) {
