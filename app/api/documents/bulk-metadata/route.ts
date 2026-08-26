@@ -41,7 +41,7 @@ interface DocResultaat {
   fouten?: string[];
 }
 
-export const POST = withFondsRoute({ capability: "documents.metadata.update", schema: z.object({ "document_ids": z.unknown().optional(), "preview": z.unknown().optional(), "wijziging": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
+export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "route-eigen", audit: { handeling: "documents.bulk-metadata-wijzigen" }, capability: "documents.metadata.update", schema: z.object({ "document_ids": z.unknown().optional(), "preview": z.unknown().optional(), "wijziging": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
   try {
     const supabase = ctx.supabase;
 

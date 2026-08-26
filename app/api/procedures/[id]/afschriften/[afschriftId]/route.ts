@@ -11,7 +11,7 @@ import { z } from "zod";
 
 export const dynamic = "force-dynamic";
 
-export const PATCH = withFondsRoute({ capability: "procedures.manage", hostGuard: true, label: "procedures.afschrift.intrekken.PATCH", schema: z.object({ "reden": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ hostGuard: "afdwingen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "procedures.afschriften.wijzigen" }, capability: "procedures.manage", label: "procedures.afschrift.intrekken.PATCH", schema: z.object({ "reden": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: procedureId, afschriftId } = params as { id: string; afschriftId: string };
     const supabase = ctx.supabase;

@@ -57,7 +57,7 @@ async function draai(_ctx: MachineContext, req: NextRequest): Promise<NextRespon
 // De DEPLOY_TARGET-skip en de constant-time CRON_SECRET-bearer staan sinds W5b
 // in platform/lib/machine-route-wrapper.ts, niet meer in dit bestand. Zelfde
 // controle, zelfde volgorde, zelfde responses — alleen op één plek.
-const SPEC = { bewaking: "cron-secret", label: "internal.semantische-extractie", directeMutaties: [], schema: z.object({ "document_id": z.unknown().optional() }).passthrough() } as const;
+const SPEC = { rateLimit: "geen", audit: "geen", bewaking: "cron-secret", label: "internal.semantische-extractie", directeMutaties: [], schema: z.object({ "document_id": z.unknown().optional() }).passthrough() } as const;
 
 // Alleen POST: dit is de handmatige trigger, geen cron-GET.
 export const POST = withMachineRoute(SPEC, draai);

@@ -31,6 +31,6 @@ export const dynamic = "force-dynamic";
 // toch door de wrapper te halen staat die keuze in de code in plaats van in de
 // afwezigheid ervan, en kan een latere gate hem onderscheiden van een route
 // waar iemand de bewaking gewoon vergat.
-const SPEC = { bewaking: "publiek", label: "healthz.ping", directeMutaties: [], schema: "geen-body" } as const;
+const SPEC = { rateLimit: "geen", audit: "geen", bewaking: "publiek", label: "healthz.ping", directeMutaties: [], schema: "geen-body" } as const;
 
 export const GET = withMachineRoute(SPEC, async () => NextResponse.json({ ok: true }));

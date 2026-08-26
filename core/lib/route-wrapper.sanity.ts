@@ -26,8 +26,21 @@
 import assert from "node:assert/strict";
 import { z } from "zod";
 import type { NextRequest } from "next/server";
-import { maakWithFondsRoute, type WrapperDeps, type FondsContext } from "./route-wrapper";
+import { maakWithFondsRoute as _maakWithFondsRoute, type WrapperDeps, type FondsContext, type RouteSpecV1 } from "./route-wrapper";
 import type { RouteCapability } from "./capability-enforce";
+
+// #183a: hostGuard/rateLimit/audit zijn nu VERPLICHT op RouteSpecV1. Deze test-shim
+// vult neutrale NO-OP-defaults voor elk veld dat een fixture niet expliciet zet, zodat
+// de tests minimaal blijven en enkel het veld tonen dat ze toetsen; een fixture die zo'n
+// veld wél zet, overschrijft de default. Puur fixture-gemak — geen productiegedrag.
+const W183_DEFAULTS = { hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: "geen" } as const;
+type TestSpec = Omit<RouteSpecV1, "hostGuard" | "rateLimit" | "audit"> &
+  Partial<Pick<RouteSpecV1, "hostGuard" | "rateLimit" | "audit">>;
+function maakWithFondsRoute(deps: WrapperDeps) {
+  const echt = _maakWithFondsRoute(deps);
+  return (spec: TestSpec, handler: Parameters<typeof echt>[1]) =>
+    echt({ ...W183_DEFAULTS, ...spec } as RouteSpecV1, handler);
+}
 
 /** De v1-tests (W2/W5) gaan NIET over de capability-poort. Ze draaien daarom op
  *  de declaratie die aantoonbaar niets afsluit, zodat ze precies dezelfde
@@ -128,7 +141,7 @@ async function main() {
     const wrap = maakWithFondsRoute(
       deps({ beoordeelRouteHostToegang: async () => ({ toegestaan: false }) })
     );
-    const handler = wrap({ capability: IEDEREEN, hostGuard: true, schema: "geen-body" }, async () => Response.json({ ok: true }));
+    const handler = wrap({ capability: IEDEREEN, hostGuard: "afdwingen", schema: "geen-body" }, async () => Response.json({ ok: true }));
     const res = await handler(req());
     assert.equal(res.status, 403);
     assert.deepEqual(await res.json(), { error: "Dit webadres hoort niet bij uw fonds." });
@@ -403,7 +416,7 @@ async function main() {
       })
     );
     const handler = wrap(
-      { capability: "TE_BEPALEN", hostGuard: true, schema: "geen-body" },
+      { capability: "TE_BEPALEN", hostGuard: "afdwingen", schema: "geen-body" },
       async () => Response.json({ ok: true })
     );
     const [res] = await metOpgevangenWarn(() => handler(req()));

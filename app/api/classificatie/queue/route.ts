@@ -20,7 +20,7 @@ import { withFondsRoute } from "@/core/lib/route-wrapper";
 
 export const dynamic = "force-dynamic";
 
-export const GET = withFondsRoute({ capability: "classification.queue.view", schema: "geen-body" }, async (ctx, req: NextRequest) => {
+export const GET = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: "geen", capability: "classification.queue.view", schema: "geen-body" }, async (ctx, req: NextRequest) => {
   try {
     const supabase = ctx.supabase;
 

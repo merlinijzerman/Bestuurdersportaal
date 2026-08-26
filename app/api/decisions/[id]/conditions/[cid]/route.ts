@@ -37,7 +37,7 @@ const INHOUDELIJK: (keyof WijzigBody)[] = [
   "heroverwegingstrigger",
 ];
 
-export const PATCH = withFondsRoute({ capability: "decisions.manage", schema: z.object({ "status": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "decisions.conditions.wijzigen" }, capability: "decisions.manage", schema: z.object({ "status": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: decisionId, cid } = params as { id: string; cid: string };
     const supabase = ctx.supabase;

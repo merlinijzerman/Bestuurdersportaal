@@ -36,7 +36,7 @@ UITVOER: alleen JSON, geen markdown of toelichting eromheen, in dit exacte forma
   "onvoldoende_context": false
 }`;
 
-export const POST = withFondsRoute({ capability: "procedures.manage", schema: "geen-body" }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "route-eigen", audit: "geen", capability: "procedures.manage", schema: "geen-body" }, async (ctx, req: NextRequest, params) => {
   try {
     const { id, stapId } = params as { id: string; stapId: string };
     const supabase = ctx.supabase;
