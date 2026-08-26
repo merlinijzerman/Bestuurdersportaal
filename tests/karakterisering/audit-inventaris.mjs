@@ -106,10 +106,10 @@ const SPLIT_KLASSE = {
   // NB: `stemmingen/[id]/sluiten` stond hier ook als "bestuurlijk-gap", maar de
   // procedure_bewijs-trigger onthulde het: sluiten INSERT'et zelf een procedure_bewijs
   // (sluiten/route.ts:178, "bewijs … met stemming_id-FK") → procedure_log. Het meet dus
-  // als "domein" en hoort niet in deze lijst. ⚠ ANDERS dan de 3 bewijs-handlers is dit
-  // een KETENGEBEURTENIS (een stemming sluiten). OPEN VRAAG voor de eigenaar (0191 §7):
-  // volstaat het procedure_log-spoor, of hoort een stemming-sluiten óók een
-  // governance_events-event te krijgen? Niet door mij beslist — bewust geen entry hier.
+  // als "domein" en hoort niet in deze no-spoor-lijst. BESLUIT (eigenaar, 0191 §7): een
+  // stemming sluiten is een KETENGEBEURTENIS → #183 voegt een route-eigen
+  // governance_events-event toe BOVENOP het procedure_log-spoor; klasse wordt dan
+  // "bewijsketen". Tot die write landt is klasse "domein" (er ís een spoor).
   "POST app/api/stemmingen/[id]/intrekken/route.ts": "bestuurlijk-gap",
   "POST app/api/vergaderingen/route.ts": "bestuurlijk-gap",
   "PATCH app/api/documents/[id]/route.ts": "bestuurlijk-gap", // status is RAG-bepalend, 0128 B-2
