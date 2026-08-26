@@ -179,6 +179,8 @@ SQL_T8SEM="supabase/checks/2026_08_12_t8_semantische_extractie.sql"
 # Bewijs↔vereiste-binding — expliciete één-op-éénbinding, fail-closed bij
 # ambiguïteit, atomische audit voor directe PostgREST-writes en snapshotdekking.
 SQL_BBIND="supabase/checks/2026_08_18_bewijsbinding.sql"
+# P2/PR-B (#167): procedure_vaststelling — binding, I1 en tenant-isolatie (0189).
+SQL_VAST="supabase/checks/2026_08_25_vaststelling_binding_cross_tenant.sql"
 
 if [ "${XTENANT_FAST_LAGEN:-uitvoeren}" = "overslaan" ]; then
   echo "== [1–2/4] snelle lagen bewust niet herhaald =="
@@ -302,6 +304,9 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_VWF"
 echo
 echo "-- Bewijsbinding (één-op-één, DB-validatie, atomische audit, snapshot) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_BBIND"
+echo
+echo "-- Vaststelling-binding (type/I5/cross-procedure, I1-slot, tenant-isolatie) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_VAST"
 echo
 
 echo "-- #214-a1 schrijfpoort (kolom-revoke bewaakt + gedragstoets: directe PATCH faalt, RPC werkt) --"
