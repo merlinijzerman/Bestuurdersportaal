@@ -47,6 +47,20 @@ const REQUIREMENT_LABELS: Record<string, string> = {
   consultation: "Consultatie",
 };
 
+// P2/PR-B (#167): herkomst van een vervulling — welk gebonden feit de vereiste
+// afvinkt (0189, D10). Spiegelt EvidenceItem.bron_type.
+const HERKOMST_LABELS: Record<string, string> = {
+  procedure_bewijs: "Bewijsstuk",
+  ai_output: "AI-validatie",
+  assumption: "Aanname",
+  risk: "Risico",
+  condition: "KPI/voorwaarde",
+  evaluation: "Evaluatie",
+  procedure_besluit: "Besluit",
+  procedure_vaststelling: "Vaststelling",
+  governance_event: "Governance-event",
+};
+
 interface Props {
   procedureId: string;
   stap: Stap;
@@ -350,6 +364,8 @@ function BewijsstukRij({
   kanBeheren,
   onOpvoeren,
   onVerwijderen,
+  onOntkoppelen,
+  bezigOntkoppel,
   bezigDel,
 }: {
   r: EvidenceItem;
@@ -357,6 +373,8 @@ function BewijsstukRij({
   kanBeheren: boolean;
   onOpvoeren: () => void;
   onVerwijderen: (r: EvidenceItem, reden: string) => void;
+  onOntkoppelen: (r: EvidenceItem) => void;
+  bezigOntkoppel: boolean;
   bezigDel: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -431,10 +449,29 @@ function BewijsstukRij({
                 Nog geen toelichting bij dit bewijsstuk.
               </p>
             )}
-            {r.vervuld && r.bron_titel && (
+            {r.vervuld && (
               <p className="text-[13px] text-ok-ink mt-2">
-                Opgevoerd: {r.bron_titel}
+                {/* P2/PR-B (#167): herkomst — welk gebonden feit deze vereiste
+                    vervult (0189, D10). */}
+                Herkomst:{" "}
+                <span className="font-medium">
+                  {r.bron_type ? HERKOMST_LABELS[r.bron_type] ?? r.bron_type : "vastgelegd"}
+                </span>
+                {r.bron_titel ? ` — ${r.bron_titel}` : ""}
               </p>
+            )}
+            {/* Ontkoppelen — deur (a) van I1: alleen als er een gebonden bronrij is.
+                De route weigert onder een besloten besluit (nette 409). Field/veld
+                heeft geen bron_id en toont dus geen ontkoppel-actie. */}
+            {r.vervuld && r.bron_id && kanBeheren && !alleenLezen && (
+              <button
+                type="button"
+                onClick={() => onOntkoppelen(r)}
+                disabled={bezigOntkoppel}
+                className="text-[11px] text-err-ink hover:underline mt-2 disabled:opacity-50"
+              >
+                {bezigOntkoppel ? "Bezig…" : "Ontkoppelen van deze vereiste"}
+              </button>
             )}
             {!r.vervuld && r.documenttype && (
               <p className="text-[13px] text-muted mt-2">
@@ -629,6 +666,38 @@ export default function StapPaneel({
     documenttype: r.documenttype,
     label: r.label,
   });
+
+  // P2/PR-B (#167): ontkoppelen via de ene koppelroute (0189, D10). De route
+  // weigert onder een besloten besluit (I1) met een nette 409; die tonen we.
+  async function ontkoppelVereiste(r: EvidenceItem) {
+    if (!r.bron_id) return;
+    setFout(null);
+    setBezig(`ontkoppel-${r.bron_id}`);
+    try {
+      const res = await fetch(
+        `/api/procedures/${procedureId}/vereisten/koppel`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            actie: "ontkoppel",
+            vereiste: vereisteAlsPayload(r),
+            bron_id: r.bron_id,
+          }),
+        }
+      );
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        setFout(data.error ?? "Ontkoppelen mislukt");
+        return;
+      }
+      router.refresh();
+    } catch (err) {
+      setFout(err instanceof Error ? err.message : "Ontkoppelen mislukt");
+    } finally {
+      setBezig(null);
+    }
+  }
 
   const voldaanCount = checklist.filter((c) => c.voldaan).length;
   const totaalCount = checklist.length;
@@ -1773,6 +1842,8 @@ export default function StapPaneel({
                 kanBeheren={kanBeheren}
                 onOpvoeren={() => opvoerenVanuitVereiste(r)}
                 onVerwijderen={bewijsstukVerwijderen}
+                onOntkoppelen={ontkoppelVereiste}
+                bezigOntkoppel={bezig === `ontkoppel-${r.bron_id}`}
                 bezigDel={bezig === reqDelKey(r)}
               />
             ))}

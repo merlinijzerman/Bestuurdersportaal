@@ -188,7 +188,7 @@ export interface EvidenceItem {
   // Ondersteunende verwijzing — voor 'document' is dit het bewijsstuk,
   // voor andere types is het de eerste matchende kindrij (bijv. een
   // gevalideerde aanname of een AI-output).
-  bron_type: "procedure_bewijs" | "ai_output" | "assumption" | "risk" | "condition" | "evaluation" | "governance_event" | null;
+  bron_type: "procedure_bewijs" | "ai_output" | "assumption" | "risk" | "condition" | "evaluation" | "procedure_besluit" | "procedure_vaststelling" | "governance_event" | null;
   bron_id: string | null;
   bron_titel: string | null;
   // WO-3-vervolg: herkomst van de vereiste — 'template' (generieke set,
