@@ -93,6 +93,15 @@ export type MachineSpecV1 = {
    *  `internal/semantische-extractie` een body (`document_id`); de rest is
    *  `"geen-body"`. Zelfde `request.clone()`-mechaniek en vlag als withFondsRoute. */
   readonly schema: SchemaDeclaratie;
+  /** Tempolimiet (W10). ÉÉN toegestane literal: `"geen"` — en dat is een TYPEGRENS,
+   *  geen keuze. `fn_rate_limit_check` sleutelt op `auth.uid()` en werpt `28000`
+   *  bij een null-uid (`2026_06_10_rate_limiting.sql`); een machineroute heeft geen
+   *  sessie, dus een echte `LimietNaam` zou daar een 500 geven i.p.v. een 429. Het
+   *  type verbiedt dat aan de bron, zodat de codemod van #183 er geen kan neerzetten.
+   *  Hier is `"geen"` bovendien EERLIJK: machineroutes hébben geen tempolimiet — de
+   *  asymmetrie met `audit` (dat het dekkende mechanisme benoemt) staat in besluit 0190.
+   *  Nog optioneel; er is geen rate-limit-codepad in deze wrapper (altijd no-op). */
+  readonly rateLimit?: "geen";
 };
 
 /** Context voor een machineroute. Bewust mager: er is geen sessie, geen

@@ -60,6 +60,18 @@ function deps(overrides: Partial<WrapperDeps>): WrapperDeps {
     // W9: default UIT, zelfde reden als capabilityEnforceAan. De schema-poort-tests
     // onderaan zetten hem per test expliciet aan.
     schemaEnforceAan: () => false,
+    // W10: default UIT. De teller-stub geeft standaard "toegestaan" terug zodat de
+    // rate-limit-poort geen enkele bestaande test raakt; de W10-tests overriden per
+    // stuk. De echte teller (server-only) komt hier nooit in beeld.
+    ratelimitEnforceAan: () => false,
+    controleerLimiet: async () => ({ toegestaan: true, resterend: 99, resetAt: null }),
+    // Stub-429: de echte responder trekt api-errors → app_errors (server-only)
+    // mee; hier een kale 429 zodat de handhaaf-tak server-loos toetsbaar is.
+    bouwRateLimited: async () =>
+      new Response(JSON.stringify({ error: "rate limited" }), {
+        status: 429,
+        headers: { "content-type": "application/json" },
+      }),
     ...overrides,
   };
 }
@@ -591,6 +603,105 @@ async function main() {
       warns.find((w) => w[0] === "[SCHEMA-OBSERVE]" && (w[1] as Record<string, unknown>).code === "invalid_json"),
       "kapotte JSON hoort onder de vlag-uit wél geobserveerd te worden"
     );
+  });
+
+  // ── Rate-limit-poort (W10) ────────────────────────────────────────────────
+  // Een teller-stub die noteert of/voor-welke-sleutel hij is aangeroepen, en of
+  // hij toestaat. Zo bewijzen we de gedeelde-resource-regel (alleen een LimietNaam
+  // raakt de teller) en de vlag-bewuste uitkomst — zonder DB.
+  const telStub = (toegestaan: boolean, geraakt: string[]) =>
+    async (_s: unknown, naam: string) => {
+      geraakt.push(naam);
+      return { toegestaan, resterend: toegestaan ? 5 : 0, resetAt: toegestaan ? null : new Date("2026-01-01T00:00:00Z") };
+    };
+
+  await test("RATELIMIT: geen declaratie → de teller wordt NIET geraakt (inert bij landing)", async () => {
+    const geraakt: string[] = [];
+    const wrap = maakWithFondsRoute(deps({ controleerLimiet: telStub(true, geraakt) }));
+    const [res] = await metOpgevangenWarn(() =>
+      wrap({ capability: "iedere-ingelogde", schema: "geen-body" }, async () => Response.json({ ok: true }))(req())
+    );
+    assert.equal(res.status, 200);
+    assert.equal(geraakt.length, 0, "zonder rateLimit-veld mag de wrapper de teller niet raken");
+  });
+
+  for (const waarde of ["geen", "route-eigen"] as const) {
+    await test(`RATELIMIT: "${waarde}" → de wrapper telt NIET (gedeelde-resource-regel)`, async () => {
+      const geraakt: string[] = [];
+      const wrap = maakWithFondsRoute(
+        deps({ controleerLimiet: telStub(true, geraakt), ratelimitEnforceAan: () => true })
+      );
+      const [res] = await metOpgevangenWarn(() =>
+        wrap({ capability: "iedere-ingelogde", schema: "geen-body", rateLimit: waarde }, async () => Response.json({ ok: true }))(req())
+      );
+      assert.equal(res.status, 200);
+      assert.equal(geraakt.length, 0, `"${waarde}" mag de gedeelde teller niet raken`);
+    });
+  }
+
+  await test("RATELIMIT: LimietNaam + binnen de grens → handler draait (200)", async () => {
+    const geraakt: string[] = [];
+    let aangeroepen = 0;
+    const wrap = maakWithFondsRoute(deps({ controleerLimiet: telStub(true, geraakt) }));
+    const [res] = await metOpgevangenWarn(() =>
+      wrap({ capability: "iedere-ingelogde", schema: "geen-body", rateLimit: "chat" }, async () => {
+        aangeroepen++;
+        return Response.json({ ok: true });
+      })(req())
+    );
+    assert.equal(res.status, 200);
+    assert.equal(aangeroepen, 1);
+    assert.deepEqual(geraakt, ["chat"], "de teller wordt precies op de gedeclareerde sleutel geraakt");
+  });
+
+  await test("RATELIMIT: over de grens + vlag UIT → observe (handler draait, 200), niet 429", async () => {
+    const geraakt: string[] = [];
+    let aangeroepen = 0;
+    const wrap = maakWithFondsRoute(
+      deps({ controleerLimiet: telStub(false, geraakt), ratelimitEnforceAan: () => false })
+    );
+    const [res, warns] = await metOpgevangenWarn(() =>
+      wrap({ capability: "iedere-ingelogde", schema: "geen-body", rateLimit: "chat" }, async () => {
+        aangeroepen++;
+        return Response.json({ ok: true });
+      })(req())
+    );
+    assert.equal(res.status, 200, "vlag uit: geen 429, byte-identiek");
+    assert.equal(aangeroepen, 1, "vlag uit: de handler draait gewoon");
+    const regel = warns.find((w) => w[0] === "[RATELIMIT-OBSERVE]");
+    assert.ok(regel, "een zou-weigering hoort onder de vlag-uit wél geobserveerd te worden");
+    assert.equal((regel[1] as Record<string, unknown>).handhaven, false);
+  });
+
+  await test("RATELIMIT: over de grens + vlag AAN → 429, de handler draait NIET", async () => {
+    const geraakt: string[] = [];
+    let aangeroepen = 0;
+    const wrap = maakWithFondsRoute(
+      deps({ controleerLimiet: telStub(false, geraakt), ratelimitEnforceAan: () => true })
+    );
+    const [res] = await metOpgevangenWarn(() =>
+      wrap({ capability: "iedere-ingelogde", schema: "geen-body", rateLimit: "chat" }, async () => {
+        aangeroepen++;
+        return Response.json({ ok: true });
+      })(req())
+    );
+    assert.equal(res.status, 429, "vlag aan + over de grens → 429");
+    assert.equal(aangeroepen, 0, "429 kort-sluit: de handler draait niet");
+  });
+
+  await test("ORDENING: schema (3c) gaat vóór rate-limit (3d) — een 400 verschijnt, de teller wordt niet geraakt", async () => {
+    const geraakt: string[] = [];
+    const wrap = maakWithFondsRoute(
+      deps({ controleerLimiet: telStub(false, geraakt), schemaEnforceAan: () => true, ratelimitEnforceAan: () => true })
+    );
+    const [res] = await metOpgevangenWarn(() =>
+      wrap(
+        { capability: "iedere-ingelogde", schema: z.object({ titel: z.string() }), rateLimit: "chat" },
+        async () => Response.json({ ok: true })
+      )(reqMetBody({ titel: 123 }))
+    );
+    assert.equal(res.status, 400, "vorm eerst afgekeurd");
+    assert.equal(geraakt.length, 0, "de rate-limit-poort draait niet meer na een 400");
   });
 
   console.log(`\nAlle ${n} route-wrapper sanity-tests groen.`);
