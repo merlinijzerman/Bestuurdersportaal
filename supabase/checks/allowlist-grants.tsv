@@ -450,6 +450,18 @@ FUNC	public	fn_validate_vaststelling_binding()	function	service_role	EXECUTE
 FUNC	public	fn_audit_vaststelling_binding()	function	anon	-
 FUNC	public	fn_audit_vaststelling_binding()	function	authenticated	-
 FUNC	public	fn_audit_vaststelling_binding()	function	service_role	EXECUTE
+FUNC	public	fn_assert_feit_ontgrendeld(p_decision_id uuid)	function	anon	-
+FUNC	public	fn_assert_feit_ontgrendeld(p_decision_id uuid)	function	authenticated	-
+FUNC	public	fn_assert_feit_ontgrendeld(p_decision_id uuid)	function	service_role	EXECUTE
+FUNC	public	fn_guard_decision_scoped_i1()	function	anon	-
+FUNC	public	fn_guard_decision_scoped_i1()	function	authenticated	-
+FUNC	public	fn_guard_decision_scoped_i1()	function	service_role	EXECUTE
+FUNC	public	fn_guard_procedure_scoped_i1()	function	anon	-
+FUNC	public	fn_guard_procedure_scoped_i1()	function	authenticated	-
+FUNC	public	fn_guard_procedure_scoped_i1()	function	service_role	EXECUTE
+FUNC	public	fn_guard_bewijs_i1()	function	anon	-
+FUNC	public	fn_guard_bewijs_i1()	function	authenticated	-
+FUNC	public	fn_guard_bewijs_i1()	function	service_role	EXECUTE
 REL	public	agendapunt_inbreng	table	anon	SELECT
 REL	public	agendapunt_inbreng	table	authenticated	SELECT,INSERT,UPDATE,DELETE
 REL	public	agendapunt_inbreng	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
