@@ -84,6 +84,11 @@ export const LIMIETEN = {
   notulen_bevestig: { endpoint: "notulen_bevestig", limiet: 60, venster: "1 hour" },
 } as const satisfies Record<string, Limiet>;
 
+/** De limietnamen uit het benoemde register — de enige echte declaratiewaarden
+ *  voor `RouteSpecV1.rateLimit`. Hier gedefinieerd (niet in ratelimit-enforce.ts)
+ *  zodat dié module met een pure type-import server-loos blijft. */
+export type LimietNaam = keyof typeof LIMIETEN;
+
 export type LimietBeslissing = {
   /** Of het request door mag. */
   toegestaan: boolean;

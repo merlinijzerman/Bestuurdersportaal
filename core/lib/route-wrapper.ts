@@ -48,6 +48,17 @@ import {
   schemaEnforceAan,
   type SchemaDeclaratie,
 } from "@/core/lib/schema-enforce";
+import {
+  beoordeelRateLimitUitkomst,
+  isFailClosed,
+  ratelimitEnforceAan,
+  wrapperTeltVoor,
+  type RateLimitDeclaratie,
+} from "@/core/lib/ratelimit-enforce";
+// UITSLUITEND TYPES uit rate-limit — een waarde-import zou `logAppFout` (server-
+// only) meetrekken. De echte `controleerLimiet` + `LIMIETEN` worden LAZY geladen
+// in echteDeps, net als tenant-route-guard hieronder.
+import type { LimietNaam, LimietBeslissing } from "@/core/lib/rate-limit";
 // LET OP: tenant-route-guard trekt `server-only` mee. Die wordt daarom LAZY
 // geladen in echteDeps (alleen de 12 host-guard-routes raken hem), zodat deze
 // module — en dus de sanity-suite — buiten de Next-runtime importeerbaar blijft.
@@ -119,6 +130,22 @@ export type RouteSpecV1 = {
    *  één samenvouwen. Zo is de uitzondering greppable, kan een latere gate hem
    *  onderscheiden van een omissie, en hangt de motivering aan de code. */
   readonly hostGuard?: boolean | "route-eigen";
+  /** WELKE tempolimiet deze route draagt (W10). Drie soorten waarden, om dezelfde
+   *  reden als bij `hostGuard`: een AFWEZIGE waarde is niet te onderscheiden van
+   *  een VERGETEN waarde.
+   *
+   *    LimietNaam     een sleutel uit `LIMIETEN`; de wrapper telt op de teller;
+   *    "geen"         expliciet geen tempolimiet;
+   *    "route-eigen"  de route belt `controleerLimiet` ZELF (de 16 adopters); de
+   *                   wrapper blijft eruit — anders telt één request DUBBEL op de
+   *                   gedeelde teller (besluit 0190, de gedeelde-resource-regel).
+   *
+   *  Nog OPTIONEEL; verplicht maken + de declaraties invullen is #183. Bij landing
+   *  draagt geen enkele route dit veld, dus de poort is volledig inert (byte-
+   *  identiek). De vlag `ENFORCE_RATELIMIT` is kale opt-in; default flipt aan het
+   *  eind van deploy 3 (besluit 0189). ⚠ De wrapper-check komt BOVENÓP de route-
+   *  eigen `controleerLimiet`-aanroepen — vandaar `"route-eigen"`. */
+  readonly rateLimit?: RateLimitDeclaratie;
   /** loglabel voor de host-guard-anomaliedetectie (alleen logging, geen respons). */
   readonly label?: string;
 };
@@ -175,6 +202,22 @@ export type WrapperDeps = {
    *  `capabilityEnforceAan`: de vlag-aan-stand is de enige tak die gedrag
    *  verandert en mag in een testrun niet op process.env leunen. */
   schemaEnforceAan: () => boolean;
+  /** Leest `ENFORCE_RATELIMIT`. Injecteerbaar om dezelfde reden als de andere
+   *  vlaglezers. */
+  ratelimitEnforceAan: () => boolean;
+  /** Raadpleegt de rate-limit-teller voor één limietsleutel. LAZY in echteDeps
+   *  (rate-limit trekt via `logAppFout` server-only mee); injecteerbaar zodat de
+   *  sanity-suite hem stubt zonder DB — de teller is de enige TOESTANDSDRAGENDE
+   *  control. De `LIMIETEN`-opzoeking én `failClosed` zitten in de echte dep, niet
+   *  in de wrapper, zodat de wrapper server-loos blijft. */
+  controleerLimiet: (
+    supabase: RlsClient,
+    limietNaam: LimietNaam
+  ) => Promise<LimietBeslissing>;
+  /** Bouwt de 429-respons. Async + LAZY in echteDeps (api-errors → app_errors is
+   *  server-only); injecteerbaar zodat de sanity de handhaaf-tak server-loos toetst.
+   *  De echte responder schrijft het P5-signaal (rate-limit-incident, 90 dagen). */
+  bouwRateLimited: (label: string, resetAt: Date | null) => Promise<Response>;
 };
 
 const echteDeps: WrapperDeps = {
@@ -182,9 +225,20 @@ const echteDeps: WrapperDeps = {
   haalProfiel,
   capabilityEnforceAan,
   schemaEnforceAan,
+  ratelimitEnforceAan,
   beoordeelRouteHostToegang: async (args) => {
     const mod = await import("@/core/lib/tenant-route-guard");
     return mod.beoordeelRouteHostToegang(args);
+  },
+  controleerLimiet: async (supabase, limietNaam) => {
+    const mod = await import("@/core/lib/rate-limit");
+    return mod.controleerLimiet(supabase, mod.LIMIETEN[limietNaam], {
+      failClosed: isFailClosed(limietNaam),
+    });
+  },
+  bouwRateLimited: async (label, resetAt) => {
+    const { rateLimited } = await import("@/core/lib/api-errors");
+    return rateLimited(label, resetAt);
   },
 };
 
@@ -317,6 +371,43 @@ export function maakWithFondsRoute(deps: WrapperDeps) {
             if (handhaven) {
               return NextResponse.json({ error: "Ongeldige invoer." }, { status: 400 });
             }
+          }
+        }
+      }
+
+      // 3d. Rate-limit-poort (W10) — NA de schema-poort, VÓÓR de handler.
+      //
+      // ORDENING: ná schema. Autorisatie en vorm gaan vóór tempo; een 429 hoort
+      // niet in een 400 te veranderen doordat een vlag flipt.
+      //
+      // GEDEELDE RESOURCE (besluit 0190): alleen bij een echte LimietNaam raakt de
+      // wrapper de teller. "geen"/"route-eigen" → niets doen, en dus ook niet
+      // tellen — de 16 zelf-limiterende routes tikken hun teller niet dubbel op.
+      //
+      // TELLEN-IN-OBSERVE: `controleerLimiet` telt ook met de vlag UIT — de enige
+      // manier om te weten of de grens geraakt zóú zijn. De teller-write is niet
+      // gebruikerszichtbaar en de respons blijft byte-identiek. Bij landing draagt
+      // geen enkele route dit veld, dus deze tak draait niet.
+      if (spec.rateLimit && wrapperTeltVoor(spec.rateLimit)) {
+        const beslissing = await deps.controleerLimiet(supabase, spec.rateLimit);
+        const uitkomst = beoordeelRateLimitUitkomst({
+          beslissing,
+          handhaven: deps.ratelimitEnforceAan(),
+        });
+        if (uitkomst.actie !== "door") {
+          console.warn("[RATELIMIT-OBSERVE]", {
+            route: spec.label ?? padVan(request),
+            methode: request.method,
+            limiet: spec.rateLimit,
+            resterend: beslissing.resterend,
+            handhaven: uitkomst.actie === "weiger",
+            requestId,
+          });
+          if (uitkomst.actie === "weiger") {
+            // De 429-responder is GEÏNJECTEERD: de echte (echteDeps) laadt LAZY
+            // api-errors (→ app_errors, server-only) en schrijft daar het P5-signaal;
+            // de sanity stubt hem, zodat de handhaaf-tak server-loos toetsbaar blijft.
+            return await deps.bouwRateLimited(spec.label ?? spec.rateLimit, uitkomst.resetAt);
           }
         }
       }
