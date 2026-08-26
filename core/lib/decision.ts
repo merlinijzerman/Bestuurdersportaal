@@ -763,10 +763,12 @@ async function buildEvidenceLijst(
   for (const lijst of feitenPerSleutel.values())
     for (const f of lijst) if (f.actorId) teResolven.add(f.actorId);
   if (teResolven.size > 0) {
-    const { data: profielen } = await supabase
-      .from("profielen").select("id, naam").in("id", Array.from(teResolven));
+    // vw_fondsleden i.p.v. profielen (own-row-only): fonds-veilige naamresolutie
+    // van fondsgenoten. Zie de RLS-review bij #192.
+    const { data: leden } = await supabase
+      .from("vw_fondsleden").select("id, naam").in("id", Array.from(teResolven));
     const naamPerId = new Map<string, string>();
-    for (const p of (profielen ?? []) as Array<{ id: string; naam: string | null }>)
+    for (const p of (leden ?? []) as Array<{ id: string; naam: string | null }>)
       if (p.naam) naamPerId.set(p.id, p.naam);
     for (const lijst of feitenPerSleutel.values())
       for (const f of lijst) if (f.actorId && !f.actor) f.actor = naamPerId.get(f.actorId) ?? null;
@@ -778,10 +780,15 @@ async function buildEvidenceLijst(
     lijst.sort((a, b) => a.sorteer.localeCompare(b.sorteer));
   }
 
-  // dissent_open: openstaande formele dissent voor de harde guard (#192). Eén
-  // query per dossier; alleen zinvol voor dissent_review, elders 0.
+  // dissent_open: openstaande formele dissent voor de harde guard (#192). Alleen
+  // opvragen als er een actieve dissent_review-vereiste is — anders een nutteloze
+  // query per dossier.
   let dissentOpen = 0;
-  {
+  if (
+    alleRequirements.some(
+      (r) => r.requirement_type === "dissent_review" && isRequirementActief(r)
+    )
+  ) {
     const { count } = await supabase
       .from("decision_dissent")
       .select("id", { count: "exact", head: true })

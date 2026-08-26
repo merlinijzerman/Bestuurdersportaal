@@ -52,6 +52,10 @@ const KANDIDAAT_BRON: Partial<Record<RequirementType, KandidaatBron>> = {
     titelKolom: "beschrijving", datumKolom: "aangemaakt_op",
     actorKolom: "eigenaar_naam", actorSoort: "naam",
   },
+  // Let op (RLS/code-review #192): assumption heeft geen aanmaker-kolom, dus de
+  // actor is de laatste WIJZIGER (`gewijzigd_door`) en is null bij een nooit-
+  // gewijzigde aanname; evaluation's `uitgevoerd_door` is null tot uitvoering. De
+  // "persoon" is voor die twee typen dus vaak leeg — geen bug, een datamodel-grens.
   assumption: {
     brontabel: "decision_assumptions", scope: "decision",
     titelKolom: "tekst", datumKolom: "aangemaakt_op",
@@ -185,9 +189,12 @@ export async function haalKandidaten(
       new Set(rijen.map((r) => r[bron.actorKolom]).filter((v): v is string => typeof v === "string"))
     );
     if (ids.length > 0) {
-      const { data: profielen } = await supabase
-        .from("profielen").select("id, naam").in("id", ids);
-      for (const p of (profielen ?? []) as Array<{ id: string; naam: string | null }>) {
+      // vw_fondsleden i.p.v. profielen: profielen.select is own-row-only
+      // (auth.uid()=id), dus een directe lookup resolvet alleen je eigen naam.
+      // De definer-view geeft id/naam/rol van fondsgenoten, fonds-veilig.
+      const { data: leden } = await supabase
+        .from("vw_fondsleden").select("id, naam").in("id", ids);
+      for (const p of (leden ?? []) as Array<{ id: string; naam: string | null }>) {
         if (p.naam) naamPerId.set(p.id, p.naam);
       }
     }

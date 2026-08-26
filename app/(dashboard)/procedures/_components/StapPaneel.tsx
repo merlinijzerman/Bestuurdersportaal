@@ -445,7 +445,15 @@ function BewijsstukRij({
           const nogNodig = Math.max(0, r.min_aantal - aantal);
           // Status: vervuld / deels (bij min_aantal>1) / open.
           const status = r.vervuld
-            ? { cls: "text-ok-ink bg-ok-tint", tekst: r.min_aantal > 1 ? `Vervuld · ${aantal} van ${r.min_aantal}` : "Vervuld" }
+            ? {
+                cls: "text-ok-ink bg-ok-tint",
+                tekst:
+                  r.min_aantal > 1
+                    ? aantal > r.min_aantal
+                      ? `Vervuld · ${aantal} gekoppeld`
+                      : `Vervuld · ${aantal} van ${r.min_aantal}`
+                    : "Vervuld",
+              }
             : aantal > 0
               ? { cls: "text-warn-ink bg-warn-tint", tekst: `${aantal} van ${r.min_aantal}` }
               : { cls: "text-muted bg-app-line", tekst: "Open" };

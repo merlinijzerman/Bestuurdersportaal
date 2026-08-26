@@ -108,6 +108,11 @@ export default function VereisteKiezer({
         documenttype: vereiste.documenttype,
         label: vereiste.label,
       };
+      // Sequentieel; houd bij hoeveel er landde zodat een fout halverwege niet
+      // suggereert dat er niets is opgeslagen. De route is idempotent op dezelfde
+      // sleutel, dus opnieuw proberen is veilig.
+      let gelukt = 0;
+      const totaal = selectie.size;
       for (const bronId of selectie) {
         const res = await fetch(
           `/api/procedures/${procedureId}/vereisten/koppel`,
@@ -119,10 +124,17 @@ export default function VereisteKiezer({
         );
         if (!res.ok) {
           const d = (await res.json().catch(() => ({}))) as { error?: string };
-          setFout(d.error ?? "Koppelen mislukt");
+          const rest = d.error ?? "Koppelen mislukt";
+          setFout(
+            gelukt > 0
+              ? `${gelukt} van ${totaal} gekoppeld; de rest mislukte: ${rest}`
+              : rest
+          );
           setBezig(false);
+          if (gelukt > 0) router.refresh(); // reflecteer wat wél landde
           return;
         }
+        gelukt++;
       }
       onClose();
       router.refresh();
