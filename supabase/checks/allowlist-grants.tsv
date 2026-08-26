@@ -354,6 +354,54 @@ FUNC	storage	search_v2(prefix text, bucket_name text, limits integer, levels int
 FUNC	storage	update_updated_at_column()	function	anon	EXECUTE
 FUNC	storage	update_updated_at_column()	function	authenticated	EXECUTE
 FUNC	storage	update_updated_at_column()	function	service_role	EXECUTE
+FUNC	public	fn_assert_gebonden_feit(p_fonds_id uuid, p_procedure_id uuid, p_sleutel text, p_verwacht_type text)	function	anon	-
+FUNC	public	fn_assert_gebonden_feit(p_fonds_id uuid, p_procedure_id uuid, p_sleutel text, p_verwacht_type text)	function	authenticated	-
+FUNC	public	fn_assert_gebonden_feit(p_fonds_id uuid, p_procedure_id uuid, p_sleutel text, p_verwacht_type text)	function	service_role	EXECUTE
+FUNC	public	fn_log_gebonden_feit_mutatie(p_procedure_id uuid, p_brontabel text, p_bron_id uuid, p_oude_sleutel text, p_nieuwe_sleutel text)	function	anon	-
+FUNC	public	fn_log_gebonden_feit_mutatie(p_procedure_id uuid, p_brontabel text, p_bron_id uuid, p_oude_sleutel text, p_nieuwe_sleutel text)	function	authenticated	-
+FUNC	public	fn_log_gebonden_feit_mutatie(p_procedure_id uuid, p_brontabel text, p_bron_id uuid, p_oude_sleutel text, p_nieuwe_sleutel text)	function	service_role	EXECUTE
+FUNC	public	fn_validate_risk_binding()	function	anon	-
+FUNC	public	fn_validate_risk_binding()	function	authenticated	-
+FUNC	public	fn_validate_risk_binding()	function	service_role	EXECUTE
+FUNC	public	fn_audit_risk_binding()	function	anon	-
+FUNC	public	fn_audit_risk_binding()	function	authenticated	-
+FUNC	public	fn_audit_risk_binding()	function	service_role	EXECUTE
+FUNC	public	fn_validate_assumption_binding()	function	anon	-
+FUNC	public	fn_validate_assumption_binding()	function	authenticated	-
+FUNC	public	fn_validate_assumption_binding()	function	service_role	EXECUTE
+FUNC	public	fn_audit_assumption_binding()	function	anon	-
+FUNC	public	fn_audit_assumption_binding()	function	authenticated	-
+FUNC	public	fn_audit_assumption_binding()	function	service_role	EXECUTE
+FUNC	public	fn_validate_kpi_binding()	function	anon	-
+FUNC	public	fn_validate_kpi_binding()	function	authenticated	-
+FUNC	public	fn_validate_kpi_binding()	function	service_role	EXECUTE
+FUNC	public	fn_audit_kpi_binding()	function	anon	-
+FUNC	public	fn_audit_kpi_binding()	function	authenticated	-
+FUNC	public	fn_audit_kpi_binding()	function	service_role	EXECUTE
+FUNC	public	fn_validate_evaluation_binding()	function	anon	-
+FUNC	public	fn_validate_evaluation_binding()	function	authenticated	-
+FUNC	public	fn_validate_evaluation_binding()	function	service_role	EXECUTE
+FUNC	public	fn_audit_evaluation_binding()	function	anon	-
+FUNC	public	fn_audit_evaluation_binding()	function	authenticated	-
+FUNC	public	fn_audit_evaluation_binding()	function	service_role	EXECUTE
+FUNC	public	fn_validate_aivalidation_binding()	function	anon	-
+FUNC	public	fn_validate_aivalidation_binding()	function	authenticated	-
+FUNC	public	fn_validate_aivalidation_binding()	function	service_role	EXECUTE
+FUNC	public	fn_audit_aivalidation_binding()	function	anon	-
+FUNC	public	fn_audit_aivalidation_binding()	function	authenticated	-
+FUNC	public	fn_audit_aivalidation_binding()	function	service_role	EXECUTE
+FUNC	public	fn_validate_approval_binding()	function	anon	-
+FUNC	public	fn_validate_approval_binding()	function	authenticated	-
+FUNC	public	fn_validate_approval_binding()	function	service_role	EXECUTE
+FUNC	public	fn_audit_approval_binding()	function	anon	-
+FUNC	public	fn_audit_approval_binding()	function	authenticated	-
+FUNC	public	fn_audit_approval_binding()	function	service_role	EXECUTE
+FUNC	public	fn_validate_vaststelling_binding()	function	anon	-
+FUNC	public	fn_validate_vaststelling_binding()	function	authenticated	-
+FUNC	public	fn_validate_vaststelling_binding()	function	service_role	EXECUTE
+FUNC	public	fn_audit_vaststelling_binding()	function	anon	-
+FUNC	public	fn_audit_vaststelling_binding()	function	authenticated	-
+FUNC	public	fn_audit_vaststelling_binding()	function	service_role	EXECUTE
 REL	public	agendapunt_inbreng	table	anon	SELECT
 REL	public	agendapunt_inbreng	table	authenticated	SELECT,INSERT,UPDATE,DELETE
 REL	public	agendapunt_inbreng	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
@@ -657,6 +705,9 @@ REL	public	procedure_log	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE
 REL	public	procedure_definitie_publicatie	table	anon	-
 REL	public	procedure_definitie_publicatie	table	authenticated	SELECT
 REL	public	procedure_definitie_publicatie	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	procedure_vaststelling	table	anon	-
+REL	public	procedure_vaststelling	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	procedure_vaststelling	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
 REL	public	procedure_requirement_instance	table	anon	-
 REL	public	procedure_requirement_instance	table	authenticated	SELECT,INSERT,UPDATE
 REL	public	procedure_requirement_instance	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
