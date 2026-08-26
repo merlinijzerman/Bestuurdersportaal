@@ -245,9 +245,10 @@ export type WrapperDeps = {
   auditEnforceAan: () => boolean;
   /** Schrijft één handelingsregel naar de eigen tenant-handelingstabel (W11).
    *  Alleen aangeroepen op de "schrijven"-tak (vlag AAN + AuditSpec), best-effort.
-   *  De echte tabel + retentie/RLS is een vervolg (besluit 0190), dus de echte dep
-   *  THROWT tot die migratie landt — luidruchtig i.p.v. een stil audit-gat. */
+   *  De RPC leidt gebruiker en fonds server-side uit de sessie af; de wrapper
+   *  geeft dezelfde RLS-client door zodat de sessie niet opnieuw wordt opgebouwd. */
   schrijfHandeling: (args: {
+    supabase: RlsClient;
     gebruikerId: string;
     fondsId: string | null;
     handeling: string;
@@ -275,14 +276,15 @@ const echteDeps: WrapperDeps = {
     });
   },
   auditEnforceAan,
-  schrijfHandeling: async () => {
-    // De tenant-handelingstabel + retentie/RLS is een vervolg op besluit 0190 en
-    // bestaat nog niet. Tot die migratie landt kan ENFORCE_AUDIT niet naar "on":
-    // deze throw maakt dat luidruchtig i.p.v. een stil audit-gat. De wrapper vangt
-    // hem best-effort af, dus een respons breekt er niet op.
-    throw new Error(
-      "[AUDIT] handelingstabel nog niet aangelegd — zie besluit 0190 (retentie/RLS + migratie)"
-    );
+  schrijfHandeling: async ({ supabase, handeling, methode, pad, status, requestId }) => {
+    const { error } = await supabase.rpc("fn_schrijf_handeling", {
+      p_handeling: handeling,
+      p_methode: methode,
+      p_pad: pad,
+      p_status: status,
+      p_request_id: requestId,
+    });
+    if (error) throw error;
   },
   bouwRateLimited: async (label, resetAt) => {
     const { rateLimited } = await import("@/core/lib/api-errors");
@@ -505,6 +507,7 @@ export function maakWithFondsRoute(deps: WrapperDeps) {
           // een 500 veranderen. De echte dep throwt tot de handelingstabel er is.
           try {
             await deps.schrijfHandeling({
+              supabase,
               gebruikerId: ctx.gebruikerId,
               fondsId,
               handeling: actie.handeling,
