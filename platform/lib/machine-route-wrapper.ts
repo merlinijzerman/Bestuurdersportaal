@@ -102,14 +102,25 @@ export type MachineSpecV1 = {
    *  asymmetrie met `audit` (dat het dekkende mechanisme benoemt) staat in besluit 0190.
    *  Nog optioneel; er is geen rate-limit-codepad in deze wrapper (altijd no-op). */
   readonly rateLimit?: "geen";
-  /** Auditspoor (W11). ÉÉN toegestane literal: `"platform-event-log"` — en dat is
-   *  óók een TYPEGRENS met een bedoeling. De 6 machinehandlers schrijven hun spoor
-   *  al naar `platform_event_log` (via `logAttempt`/`logSecurity`/`logResultGegarandeerd`);
-   *  de wrapper schrijft hier dus NIETS. De literal BENOEMT het dekkende mechanisme
-   *  i.p.v. `"geen"` te zeggen — want `"geen"` zou een onwaarheid zijn: er ís een
-   *  spoor. Dat is de asymmetrie met `rateLimit: "geen"` (dáár is "geen" eerlijk).
-   *  Zie besluit 0190 corollarium C. Nog optioneel; geen audit-codepad in deze wrapper. */
-  readonly audit?: "platform-event-log";
+  /** Auditspoor (W11). TWEE toegestane literals: `"platform-event-log" | "geen"`.
+   *  De wrapper schrijft NIETS (geen `auth.uid()`/fonds → geen handelingen_log); de
+   *  literal BENOEMT het dekkende mechanisme, en die benoeming is GEMETEN, niet
+   *  beweerd — de assertie in `audit-inventaris.mjs` valt rood als een
+   *  `"platform-event-log"`-declaratie niet aantoonbaar naar `platform_event_log`
+   *  schrijft.
+   *
+   *  ⚠ CORRECTIE (gemeten op `origin/preview`): een eerdere versie van dit commentaar
+   *  beweerde dat "de 6 machinehandlers hun spoor al naar `platform_event_log`
+   *  schrijven". Dat is ONWAAR — nul aanroepen van `logAttempt`/`logSecurity`/
+   *  `logResultGegarandeerd` in de machineroutes. Het mechanisme bestaat (platform-
+   *  serveracties gebruiken het via `withPlatform`), maar de machineroutes laten het
+   *  liggen. #183b-machine voegt `logResultGegarandeerd` (retry, NIET fail-closed —
+   *  een logfout mag een cron-run niet laten mislukken) toe aan de vijf werkende/
+   *  muterende handlers; de twee readiness-probes (`platform/healthz`, `healthz/ping`)
+   *  krijgen `"geen"` (ze muteren niets en `healthz` logt bewust niet — een
+   *  gezondheidscontrole die faalt op het loggen is een zelfreferentiële storing).
+   *  Tot #183b-machine landt, valt elke `"platform-event-log"`-declaratie rood. */
+  readonly audit?: "platform-event-log" | "geen";
 };
 
 /** Context voor een machineroute. Bewust mager: er is geen sessie, geen

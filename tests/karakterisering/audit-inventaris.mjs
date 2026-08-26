@@ -371,11 +371,19 @@ for (const f of apiFiles) {
     else if (platform.length) klasse = "platform";
     else if (wrapper === "withMachineRoute") klasse = "machine"; // platform_event_log via typegrens
     else klasse = SPLIT_KLASSE[key] || "ONBEKEND"; // no-spoor tenant → uit de split
+    // KETENGEBEURTENIS_VEREIST — de handlers die een governance_events-ketengebeurtenis
+    // horen te hebben maar die vandaag missen. Dit is de DRAGER van de bewijsketen-gap
+    // (0191 §7, §4-model): de audit-waarde benoemt het niet meer, dus een eigen
+    // machineleesbare markering. = de bestuurlijk-gap-klasse ÉN `sluiten` (dat klasse
+    // `domein` is — het heeft procedure_log — maar wél een keten-event nodig heeft).
+    const KETEN_SLUITEN = "POST app/api/stemmingen/[id]/sluiten/route.ts";
+    const ketengebeurtenisVereist = klasse === "bestuurlijk-gap" || key === KETEN_SLUITEN;
     inventaris.push({
       handler: key,
       wrapper,
       schrijftAuditspoor: heeftSpoor,
       klasse,
+      ketengebeurtenisVereist,
       declaredAudit,
       routeEigenKandidaat: bewijsketen.length > 0,
       bewijsketen: bewijsketen.map(kort),
@@ -428,7 +436,9 @@ console.error(`  met enig auditspoor: ${metEnigSpoor}`);
 console.error(`  zonder enig auditspoor: ${zonderSpoor}`);
 const klasseTelling = {};
 for (const h of inventaris) klasseTelling[h.klasse] = (klasseTelling[h.klasse] || 0) + 1;
+const ketengebeurtenisVereist = inventaris.filter((h) => h.ketengebeurtenisVereist).map((h) => h.handler);
 console.error(`  klasse: ${JSON.stringify(klasseTelling)}`);
+console.error(`  ketengebeurtenis_vereist (bewijsketen-gap, #183b): ${ketengebeurtenisVereist.length}`);
 if (assertieFouten.length) {
   console.error(`\n✗ ${assertieFouten.length} ASSERTIE-FOUT(EN) — fail-closed:`);
   for (const f of assertieFouten) console.error(`   - ${f}`);
@@ -440,6 +450,7 @@ console.log(JSON.stringify({
   meta: {
     basis: "origin/preview", tracing: "v2-callgraph-fixpoint", aantalHandlers: n,
     metBewijsketen, metEnigSpoor, zonderSpoor, klasseTelling,
+    ketengebeurtenisVereist, // de 12 die #183b een governance_events-write moet geven
     assertieFouten,
     afgezochtePatronen: { tabellen: Object.keys(TABEL_TRAIL), rpcs: Object.keys(RPC_TRAIL) },
     triggerLaag: Object.fromEntries(Object.entries(BASE_TRIGGER).map(([b, v]) => [b, v.log])),
