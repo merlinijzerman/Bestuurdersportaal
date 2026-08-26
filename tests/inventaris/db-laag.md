@@ -1,0 +1,922 @@
+# VEN-4 — inventaris databaselaag
+
+Bevroren nulmeting van de effectieve DDL op origin/fix/w11-inventaris-diepte (32b9e21df292aac9525b610e2cd4665cf0129815). De meting gebruikt de drie baselinebestanden en 21 forward-migraties na de cutoff; alle 160 migratiebestanden zijn gecontroleerd. Een live database is niet geraadpleegd.
+
+## Tellingen
+
+| Categorie | Objecten |
+|---|---:|
+| trigger | 80 |
+| security-definer | 25 |
+| policy | 160 |
+| cascade | 221 |
+| default | 98 |
+| view | 3 |
+| grant | 295 |
+| cron | 0 |
+
+## Kernbevinding — zichtbaar_in_code: false
+
+Alle hieronder genoemde objecten hebben databasegedrag dat niet uit de routecode/code-tracing kan worden afgeleid. De volledige lijst staat ook machineleesbaar in zichtbaar_in_code_false in het JSON-artefact.
+
+- cascade:agendapunt_log_agendapunt_id_fkey
+- cascade:agendapunten_aangemaakt_door_fkey
+- cascade:agendapunten_gewijzigd_door_fkey
+- cascade:agendapunten_procedure_stap_id_fkey
+- cascade:agendapunten_vergadering_id_fkey
+- cascade:agendapunten_verwijderd_door_fkey
+- cascade:app_errors_fonds_id_fkey
+- cascade:aqlab_audit_exports_feature_id_fkey
+- cascade:aqlab_audit_exports_run_id_fkey
+- cascade:aqlab_findings_run_output_id_fkey
+- cascade:aqlab_findings_score_id_fkey
+- cascade:aqlab_fixture_documents_feature_id_fkey
+- cascade:aqlab_human_reviews_run_output_id_fkey
+- cascade:aqlab_prompt_versions_feature_id_fkey
+- cascade:aqlab_release_audit_export_fk
+- cascade:aqlab_release_decisions_feature_id_fkey
+- cascade:aqlab_release_decisions_model_configuration_id_fkey
+- cascade:aqlab_release_decisions_prompt_version_id_fkey
+- cascade:aqlab_release_decisions_run_id_fkey
+- cascade:aqlab_run_jobs_run_id_fkey
+- cascade:aqlab_run_jobs_test_case_id_fkey
+- cascade:aqlab_run_outputs_prompt_version_id_fkey
+- cascade:aqlab_run_outputs_run_id_fkey
+- cascade:aqlab_run_outputs_test_case_id_fkey
+- cascade:aqlab_runs_baseline_run_id_fkey
+- cascade:aqlab_runs_model_configuration_id_fkey
+- cascade:aqlab_runs_promoted_testcase_id_fkey
+- cascade:aqlab_runs_prompt_version_id_fkey
+- cascade:aqlab_runs_test_set_id_fkey
+- cascade:aqlab_scores_run_output_id_fkey
+- cascade:aqlab_test_case_fixtures_fixture_document_id_fkey
+- cascade:aqlab_test_case_fixtures_test_case_id_fkey
+- cascade:aqlab_test_cases_feature_id_fkey
+- cascade:aqlab_test_cases_test_set_id_fkey
+- cascade:aqlab_test_sets_feature_id_fkey
+- cascade:catalogus_log_actor_id_fkey
+- cascade:catalogus_log_fonds_id_fkey
+- cascade:classificatie_voorstellen_beoordeeld_door_fkey
+- cascade:classificatie_voorstellen_document_id_fkey
+- cascade:classificatie_voorstellen_fonds_id_fkey
+- cascade:classificatie_voorstellen_voorgestelde_procesinstantie_id_fkey
+- cascade:decision_actions_afhankelijk_van_fkey
+- cascade:decision_actions_decision_id_fkey
+- cascade:decision_actions_voorwaarde_id_fkey
+- cascade:decision_ai_interactions_aangemaakt_door_fkey
+- cascade:decision_ai_interactions_decision_id_fkey
+- cascade:decision_ai_interactions_gevalideerd_door_fkey
+- cascade:decision_ai_interactions_procedure_stap_id_fkey
+- cascade:decision_assumptions_bron_document_id_fkey
+- cascade:decision_assumptions_decision_id_fkey
+- cascade:decision_assumptions_gewijzigd_door_fkey
+- cascade:decision_audit_snapshots_decision_id_fkey
+- cascade:decision_conditions_decision_id_fkey
+- cascade:decision_dissent_bestuurder_id_fkey
+- cascade:decision_dissent_decision_id_fkey
+- cascade:decision_dissent_gekoppeld_aanname_id_fkey
+- cascade:decision_dissent_gekoppeld_risico_id_fkey
+- cascade:decision_dissent_stemming_id_fkey
+- cascade:decision_dissent_voorwaarde_fk
+- cascade:decision_evaluations_decision_id_fkey
+- cascade:decision_evaluations_uitgevoerd_door_fkey
+- cascade:decision_objects_eigenaar_id_fkey
+- cascade:decision_objects_fonds_id_fkey
+- cascade:decision_objects_procedure_id_fkey
+- cascade:decision_risks_decision_id_fkey
+- cascade:decision_risks_risicomatrix_id_fkey
+- cascade:document_agendapunten_aangemaakt_door_fkey
+- cascade:document_agendapunten_agendapunt_id_fkey
+- cascade:document_agendapunten_document_id_fkey
+- cascade:document_agendapunten_fonds_id_fkey
+- cascade:document_agendapunten_vergadering_id_fkey
+- cascade:document_chunks_agendapunt_id_fkey
+- cascade:document_chunks_document_id_fkey
+- cascade:document_chunks_notulen_segment_id_fkey
+- cascade:document_chunks_procesinstantie_id_fkey
+- cascade:document_chunks_procesmodel_id_fkey
+- cascade:document_chunks_vergadering_id_fkey
+- cascade:document_inzage_document_id_fkey
+- cascade:document_inzage_fonds_id_fkey
+- cascade:document_inzage_gebruiker_id_fkey
+- cascade:document_metadata_log_fonds_id_fkey
+- cascade:document_metadata_log_gewijzigd_door_fkey
+- cascade:document_metadata_review_queue_beoordeeld_door_fkey
+- cascade:document_metadata_review_queue_document_id_fkey
+- cascade:document_metadata_review_queue_fonds_id_fkey
+- cascade:document_procesinstanties_aangemaakt_door_fkey
+- cascade:document_procesinstanties_document_id_fkey
+- cascade:document_procesinstanties_fonds_id_fkey
+- cascade:document_procesinstanties_procesinstantie_id_fkey
+- cascade:document_processing_jobs_document_id_fkey
+- cascade:document_processing_jobs_fonds_id_fkey
+- cascade:document_processing_jobs_versie_id_fkey
+- cascade:documenten_agendapunt_id_fkey
+- cascade:documenten_gedeactiveerd_door_fkey
+- cascade:documenten_metadata_gecontroleerd_door_fkey
+- cascade:documenten_procesinstantie_id_fkey
+- cascade:documenten_vergadering_id_fkey
+- cascade:documenten_vervangen_door_document_id_fkey
+- cascade:documenten_vervangt_document_id_fkey
+- cascade:expertises_fonds_id_fkey
+- cascade:fk_profielen_primaire_expertise
+- cascade:fonds_config_log_fonds_id_fkey
+- cascade:fonds_content_overrides_fonds_id_fkey
+- cascade:fonds_feature_flags_fonds_id_fkey
+- cascade:fonds_instellingen_fonds_id_fkey
+- cascade:fonds_klantbeeld_cohort_fonds_id_fkey
+- cascade:fonds_module_manifest_fonds_id_fkey
+- cascade:fonds_stuurinfo_kpi_fonds_id_fkey
+- cascade:fonds_stuurinfo_kpi_periode_fk
+- cascade:fonds_stuurinfo_log_fonds_id_fkey
+- cascade:fonds_stuurinfo_periode_fonds_id_fkey
+- cascade:fonds_stuurinfo_reeks_fonds_id_fkey
+- cascade:fonds_stuurinfo_reeks_periode_fk
+- cascade:fonds_stuurinfo_reserve_fonds_id_fkey
+- cascade:fonds_stuurinfo_reserve_fonds_id_periode_fkey
+- cascade:fonds_theming_fonds_id_fkey
+- cascade:gesprek_reflectie_state_gebruiker_id_fkey
+- cascade:gesprek_reflectie_state_gesprek_id_fkey
+- cascade:gesprekken_fonds_id_fkey
+- cascade:gesprekken_gebruiker_id_fkey
+- cascade:governance_audit_grants_fonds_id_fkey
+- cascade:governance_audit_grants_gebruiker_id_fkey
+- cascade:governance_events_actor_id_fkey
+- cascade:gremia_fonds_id_fkey
+- cascade:kritische_focusgebieden_fonds_id_fkey
+- cascade:notificaties_actor_id_fkey
+- cascade:notificaties_fonds_id_fkey
+- cascade:notificaties_ontvanger_id_fkey
+- cascade:notulen_segmenten_agendapunt_id_fkey
+- cascade:notulen_segmenten_bevestigd_door_fkey
+- cascade:notulen_segmenten_document_id_fkey
+- cascade:notulen_segmenten_fonds_id_fkey
+- cascade:notulen_segmenten_vergadering_id_fkey
+- cascade:organisatie_profielen_fonds_id_fkey
+- cascade:platform_signal_snapshots_fonds_id_fkey
+- cascade:procedure_afschriften_aangemaakt_door_fkey
+- cascade:procedure_afschriften_ai_vastgesteld_door_fkey
+- cascade:procedure_afschriften_fonds_id_fkey
+- cascade:procedure_afschriften_ingetrokken_door_fkey
+- cascade:procedure_afschriften_procedure_id_fkey
+- cascade:procedure_besluiten_agendapunt_id_fkey
+- cascade:procedure_besluiten_decision_id_fkey
+- cascade:procedure_besluiten_procedure_id_fkey
+- cascade:procedure_besluiten_stap_id_fkey
+- cascade:procedure_besluiten_vastgelegd_door_fkey
+- cascade:procedure_besluiten_vergadering_id_fkey
+- cascade:procedure_bewijs_document_id_fkey
+- cascade:procedure_bewijs_stap_id_fkey
+- cascade:procedure_bewijs_stemming_id_fkey
+- cascade:procedure_bewijs_toegevoegd_door_fkey
+- cascade:procedure_checklist_aangemaakt_door_fkey
+- cascade:procedure_checklist_stap_id_fkey
+- cascade:procedure_checklist_voldaan_door_fkey
+- cascade:procedure_eigenaars_gebruiker_id_fkey
+- cascade:procedure_eigenaars_procedure_id_fkey
+- cascade:procedure_fase_beschrijving_override_aangepast_door_fkey
+- cascade:procedure_fase_beschrijving_override_fonds_id_fkey
+- cascade:procedure_fase_toelichting_aangepast_door_fkey
+- cascade:procedure_fase_toelichting_fonds_id_fkey
+- cascade:procedure_fase_toelichting_procedure_id_fkey
+- cascade:procedure_log_actor_id_fkey
+- cascade:procedure_log_procedure_id_fkey
+- cascade:procedure_requirement_instance_aangemaakt_door_fkey
+- cascade:procedure_requirement_instance_decision_id_fkey
+- cascade:procedure_requirement_instance_fonds_id_fkey
+- cascade:procedure_requirement_uitsluiting_decision_id_fkey
+- cascade:procedure_requirement_uitsluiting_fonds_id_fkey
+- cascade:procedure_requirement_uitsluiting_uitgesloten_door_fkey
+- cascade:procedure_stappen_procedure_id_fkey
+- cascade:procedure_stappen_voltooid_door_fkey
+- cascade:procedures_decision_id_fkey
+- cascade:procedures_fonds_id_fkey
+- cascade:procedures_gestart_door_fkey
+- cascade:procesmodel_expertises_aangemaakt_door_fkey
+- cascade:procesmodel_expertises_fonds_id_expertise_id_fkey
+- cascade:procesmodel_expertises_fonds_id_procesmodel_id_fkey
+- cascade:procesmodel_focusgebieden_aangemaakt_door_fkey
+- cascade:procesmodel_focusgebieden_fonds_id_focusgebied_id_fkey
+- cascade:procesmodel_focusgebieden_fonds_id_procesmodel_id_fkey
+- cascade:procesmodel_gremia_aangemaakt_door_fkey
+- cascade:procesmodel_gremia_fonds_id_gremium_id_fkey
+- cascade:procesmodellen_fonds_id_fkey
+- cascade:profiel_expertises_fonds_id_expertise_id_fkey
+- cascade:profiel_expertises_fonds_id_profiel_id_fkey
+- cascade:profiel_focusgebieden_fonds_id_focusgebied_id_fkey
+- cascade:profiel_focusgebieden_fonds_id_profiel_id_fkey
+- cascade:profiel_gremia_fonds_id_gremium_id_fkey
+- cascade:profiel_gremia_fonds_id_profiel_id_fkey
+- cascade:profiel_log_actor_id_fkey
+- cascade:profiel_log_fonds_id_fkey
+- cascade:profiel_log_profiel_id_fkey
+- cascade:profielen_id_fkey
+- cascade:rate_limit_events_gebruiker_id_fkey
+- cascade:reindex_runs_fonds_id_fkey
+- cascade:reindex_runs_gestart_door_fkey
+- cascade:risico_log_actor_id_fkey
+- cascade:risico_log_risico_id_fkey
+- cascade:risico_maatregelen_aangemaakt_door_fkey
+- cascade:risico_maatregelen_risico_id_fkey
+- cascade:risicos_aangemaakt_door_fkey
+- cascade:risicos_eigenaar_id_fkey
+- cascade:risicos_fonds_id_fkey
+- cascade:risicos_gesloten_door_fkey
+- cascade:stem_uitbrengingen_stemgerechtigde_id_fkey
+- cascade:stem_uitbrengingen_stemming_id_fkey
+- cascade:stem_uitbrengingen_uitgebracht_door_fkey
+- cascade:stemmingen_agendapunt_id_fkey
+- cascade:stemmingen_decision_id_fkey
+- cascade:stemmingen_fonds_id_fkey
+- cascade:stemmingen_geopend_door_fkey
+- cascade:stemmingen_gesloten_door_fkey
+- cascade:vergadering_log_actor_id_fkey
+- cascade:vergadering_log_vergadering_id_fkey
+- cascade:vergaderingen_fonds_id_fkey
+- cascade:vergaderingen_gearchiveerd_door_fkey
+- cascade:vergaderingen_gewijzigd_door_fkey
+- cascade:voorbereidingen_agendapunt_id_fkey
+- cascade:voorbereidingen_gebruiker_id_fkey
+- cascade:ai_kill_switch_gewijzigd_door_fkey
+- cascade:fonds_licentie_fonds_id_fkey
+- cascade:documenten_vervangt_na_scan_document_id_fkey
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- default:id
+- grant:agendapunt_inbreng
+- grant:agendapunt_inbreng
+- grant:agendapunt_log
+- grant:agendapunt_log
+- grant:agendapunten
+- grant:agendapunten
+- grant:aqlab_ai_features
+- grant:aqlab_ai_features
+- grant:aqlab_assurance_meetwaarden(p_codes text[])
+- grant:aqlab_audit_export_bron(p_export_id uuid)
+- grant:aqlab_audit_exports
+- grant:aqlab_audit_exports
+- grant:aqlab_findings
+- grant:aqlab_findings
+- grant:aqlab_fixture_documents
+- grant:aqlab_fixture_documents
+- grant:aqlab_human_reviews
+- grant:aqlab_human_reviews
+- grant:aqlab_log
+- grant:aqlab_log
+- grant:aqlab_log_download(p_export_id uuid)
+- grant:aqlab_log_download(uuid, text)
+- grant:aqlab_model_configurations
+- grant:aqlab_model_configurations
+- grant:aqlab_prompt_versions
+- grant:aqlab_prompt_versions
+- grant:aqlab_release_decisions
+- grant:aqlab_release_decisions
+- grant:aqlab_run_jobs
+- grant:aqlab_run_jobs
+- grant:aqlab_run_outputs
+- grant:aqlab_run_outputs
+- grant:aqlab_runs
+- grant:aqlab_runs
+- grant:aqlab_scores
+- grant:aqlab_scores
+- grant:aqlab_test_case_fixtures
+- grant:aqlab_test_case_fixtures
+- grant:aqlab_test_cases
+- grant:aqlab_test_cases
+- grant:aqlab_test_sets
+- grant:aqlab_test_sets
+- grant:bron_whitelist
+- grant:bron_whitelist
+- grant:bron_whitelist_log
+- grant:bron_whitelist_log
+- grant:catalogus_log
+- grant:catalogus_log
+- grant:classificatie_voorstellen
+- grant:classificatie_voorstellen
+- grant:comparison_results
+- grant:comparison_run
+- grant:concepts
+- grant:contact_aanvraag_insert(p_naam text, p_organisatie text, p_rol text, p_email text, p_telefoon text, p_type_verzoek text, p_bericht text, p_herkomst_pagina text, p_privacy_version text, p_ip_hash text)
+- grant:contact_aanvraag_insert(p_naam text, p_organisatie text, p_rol text, p_email text, p_telefoon text, p_type_verzoek text, p_bericht text, p_herkomst_pagina text, p_privacy_version text, p_ip_hash text)
+- grant:contact_aanvragen
+- grant:contact_aanvragen
+- grant:contact_notificatie_status(p_id uuid, p_verzonden boolean, p_error text)
+- grant:contact_notificatie_status(p_id uuid, p_verzonden boolean, p_error text)
+- grant:decision_actions
+- grant:decision_actions
+- grant:decision_ai_interactions
+- grant:decision_ai_interactions
+- grant:decision_assumptions
+- grant:decision_assumptions
+- grant:decision_audit_snapshots
+- grant:decision_audit_snapshots
+- grant:decision_conditions
+- grant:decision_conditions
+- grant:decision_dissent
+- grant:decision_dissent
+- grant:decision_evaluations
+- grant:decision_evaluations
+- grant:decision_objects
+- grant:decision_objects
+- grant:decision_risks
+- grant:decision_risks
+- grant:decision_seq
+- grant:decision_seq
+- grant:difference_judgements
+- grant:document_agendapunten
+- grant:document_agendapunten
+- grant:document_chunks
+- grant:document_chunks
+- grant:document_inzage
+- grant:document_inzage
+- grant:document_metadata_log
+- grant:document_metadata_log
+- grant:document_metadata_review_queue
+- grant:document_metadata_review_queue
+- grant:document_procesinstanties
+- grant:document_procesinstanties
+- grant:document_processing_jobs
+- grant:document_processing_jobs
+- grant:documenten
+- grant:documenten
+- grant:expertises
+- grant:expertises
+- grant:extraction_run
+- grant:fn_afschrift_bevries_kolommen()
+- grant:fn_ai_actie_afronden(uuid,text,text)
+- grant:fn_ai_actietype_spec(text)
+- grant:fn_ai_poort_check(text,text)
+- grant:fn_ai_preflight(text,text,text,integer,text,text,boolean)
+- grant:fn_app_error_log(p_label text, p_categorie text, p_severity text, p_http_status integer, p_fouttype text, p_foutcode text, p_melding_kort text, p_context_sleutels text[], p_correlatie_id uuid)
+- grant:fn_bron_whitelist_log_hash()
+- grant:fn_bron_whitelist_log_immutable()
+- grant:fn_build_decision_dossier(p_decision_id uuid)
+- grant:fn_build_decision_dossier(uuid)
+- grant:fn_chunk_denorm_before_insert()
+- grant:fn_chunk_denorm_refresh()
+- grant:fn_chunk_denorm(p_document_id uuid)
+- grant:fn_contact_aanvragen_no_delete()
+- grant:fn_decision_code()
+- grant:fn_decision_readiness_check(p_decision_id uuid, p_target text)
+- grant:fn_decision_readiness_check(uuid, text)
+- grant:fn_decision_readiness_overview(p_decision_id uuid)
+- grant:fn_decision_snapshot()
+- grant:fn_decision_status_check()
+- grant:fn_decision_touch()
+- grant:fn_doc_meta_log_hash()
+- grant:fn_doc_meta_log_immutable()
+- grant:fn_document_agendapunt_vergadering_check()
+- grant:fn_document_primair_vs_secundair_check()
+- grant:fn_document_procesinstantie_fonds_check()
+- grant:fn_document_procesinstantie_validatie()
+- grant:fn_document_status_overgang_check()
+- grant:fn_document_status_transitie(p_van text, p_naar text)
+- grant:fn_dossierstatus_van_decision(p_status text)
+- grant:fn_export_log_immutable()
+- grant:fn_fonds_config_capture()
+- grant:fn_fonds_stuurinfo_capture()
+- grant:fn_generiek_geldigheidsstatus(p_status text, p_bronstatus text)
+- grant:fn_generiek_status_overgang_check()
+- grant:fn_generiek_transitie(p_van text, p_naar text)
+- grant:fn_govevent_hash()
+- grant:fn_govevent_immutable()
+- grant:fn_log_append_only()
+- grant:fn_notulen_segment_audit(p_document_id uuid, p_veld text, p_oud text, p_nieuw text, p_reden text, p_rag_impact boolean)
+- grant:fn_notulen_segment_bevestig(p_segment_id uuid, p_chunks jsonb, p_reden text)
+- grant:fn_notulen_segment_check()
+- grant:fn_notulen_segment_ontbevestig(p_segment_id uuid, p_reden text)
+- grant:fn_notulen_segment_verwijder(p_segment_id uuid, p_reden text)
+- grant:fn_organisatie_profielen_touch()
+- grant:fn_platform_event_hash()
+- grant:fn_platform_event_immutable()
+- grant:fn_rate_limit_check(p_endpoint text, p_limiet integer, p_venster interval)
+- grant:fn_schrijf_vergelijking(p_mode text, p_model text, p_prompt_version text, p_comparator_version text, p_findings jsonb)
+- grant:fn_snapshot_immutable()
+- grant:fn_zelfde_fonds(p_gebruiker uuid)
+- grant:fonds_config_log
+- grant:fonds_config_log
+- grant:fonds_content_overrides
+- grant:fonds_content_overrides
+- grant:fonds_feature_flags
+- grant:fonds_feature_flags
+- grant:fonds_instellingen
+- grant:fonds_instellingen
+- grant:fonds_klantbeeld_cohort
+- grant:fonds_klantbeeld_cohort
+- grant:fonds_module_manifest
+- grant:fonds_module_manifest
+- grant:fonds_stuurinfo_kpi
+- grant:fonds_stuurinfo_kpi
+- grant:fonds_stuurinfo_log
+- grant:fonds_stuurinfo_log
+- grant:fonds_stuurinfo_periode
+- grant:fonds_stuurinfo_periode
+- grant:fonds_stuurinfo_reeks
+- grant:fonds_stuurinfo_reeks
+- grant:fonds_stuurinfo_reserve
+- grant:fonds_stuurinfo_reserve
+- grant:fonds_theming
+- grant:fonds_theming
+- grant:fondsen
+- grant:fondsen
+- grant:gesprek_reflectie_state
+- grant:gesprekken
+- grant:gesprekken
+- grant:governance_audit_inzage
+- grant:governance_events
+- grant:governance_events
+- grant:governance_export_log
+- grant:governance_log
+- grant:governance_log
+- grant:governance_log_inhoud
+- grant:governance_redacties
+- grant:gremia
+- grant:gremia
+- grant:kritische_focusgebieden
+- grant:kritische_focusgebieden
+- grant:lees_governance_audit(p_fonds uuid, p_filters jsonb, p_motivering text, p_limiet integer, p_bronniveau boolean)
+- grant:log_word_export(p_gesprek_audit_id uuid, p_stuksoort text, p_promptvariant text, p_bronnen jsonb)
+- grant:mag_audit_bronnen(p_fonds uuid)
+- grant:mag_audit_redacties(p_fonds uuid)
+- grant:mag_audit(p_fonds uuid)
+- grant:meta_basisniveau(p_meta jsonb)
+- grant:meta_bronniveau(p_meta jsonb)
+- grant:meta_projectie(jsonb, boolean)
+- grant:meta_projectie(p_meta jsonb, p_bron boolean)
+- grant:notificaties
+- grant:notificaties
+- grant:notulen_segmenten
+- grant:notulen_segmenten
+- grant:organisatie_profielen
+- grant:organisatie_profielen
+- grant:platform_capabilities
+- grant:platform_capabilities
+- grant:platform_event_log
+- grant:platform_event_log
+- grant:platform_identities
+- grant:platform_identities
+- grant:platform_identity_capabilities
+- grant:platform_identity_capabilities
+- grant:procedure_afschriften
+- grant:procedure_besluiten
+- grant:procedure_besluiten
+- grant:procedure_bewijs
+- grant:procedure_bewijs
+- grant:procedure_checklist
+- grant:procedure_checklist
+- grant:procedure_eigenaars
+- grant:procedure_eigenaars
+- grant:procedure_fase_beschrijving_override
+- grant:procedure_fase_toelichting
+- grant:procedure_log
+- grant:procedure_log
+- grant:procedure_requirement_instance
+- grant:procedure_requirement_uitsluiting
+- grant:procedure_requirements
+- grant:procedure_requirements
+- grant:procedure_stappen
+- grant:procedure_stappen
+- grant:procedure_template_fasen
+- grant:procedures
+- grant:procedures
+- grant:procesmodel_expertises
+- grant:procesmodel_expertises
+- grant:procesmodel_focusgebieden
+- grant:procesmodel_focusgebieden
+- grant:procesmodel_gremia
+- grant:procesmodel_gremia
+- grant:procesmodellen
+- grant:procesmodellen
+- grant:profiel_expertises
+- grant:profiel_expertises
+- grant:profiel_focusgebieden
+- grant:profiel_focusgebieden
+- grant:profiel_gremia
+- grant:profiel_gremia
+- grant:profiel_log
+- grant:profiel_log
+- grant:profiel_opslaan(p_naam text, p_bestuurlijke_rol text, p_primaire_expertise_id uuid, p_antwoordvoorkeur text, p_standaard_ai_modus text, p_detailniveau text, p_secundaire_expertise_ids uuid[], p_gremium_ids uuid[], p_focusgebied_ids uuid[], p_reflectie_uitnodiging boolean)
+- grant:profielen
+- grant:profielen
+- grant:public
+- grant:public
+- grant:reflectie_bronset_hash(p_retrieval_meta jsonb)
+- grant:reflectie_transitie(p_gesprek_id uuid, p_actie text, p_ingang text, p_bronset_log_id uuid)
+- grant:reindex_runs
+- grant:reindex_runs
+- grant:resolve_tenant_host(p_host text)
+- grant:resolve_tenant_host(p_host text)
+- grant:risico_log
+- grant:risico_log
+- grant:risico_maatregelen
+- grant:risico_maatregelen
+- grant:risicos
+- grant:risicos
+- grant:schrijf_ai_interactie(p_vraag text, p_antwoord text, p_bronnen jsonb, p_modus text, p_model text, p_retrieval_meta jsonb, p_retrieval_meta_inhoud jsonb, p_gesprek_audit_id uuid, p_inhoud_hmac text, p_hmac_schema_versie smallint, p_hmac_sleutel_versie smallint)
+- grant:semantic_units
+- grant:stem_uitbrengingen
+- grant:stem_uitbrengingen
+- grant:stemmingen
+- grant:stemmingen
+- grant:stuurinfo_balans_opslaan( text, date, text, text, jsonb, jsonb, jsonb, numeric )
+- grant:stuurinfo_balans_opslaan(p_periode text, p_peildatum date, p_bron text, p_invoer_bron text, p_activa jsonb, p_passiva jsonb, p_reserves jsonb, p_financieringsgraad numeric)
+- grant:stuurinfo_operationeel_opslaan(p_periode text, p_invoer_bron text, p_mutaties jsonb, p_norm numeric, p_band_onder numeric, p_band_boven numeric, p_kosten_realisatie jsonb, p_kosten_begroot jsonb)
+- grant:stuurinfo_premie_opslaan(p_periode text, p_invoer_bron text, p_componenten_eur jsonb, p_componenten_pct jsonb, p_comp_mutaties jsonb, p_toekenning numeric, p_startomvang numeric, p_ondergrens_pct numeric)
+- grant:stuurinfo_soli_opslaan(p_periode text, p_invoer_bron text, p_vulling jsonb, p_uitdeling numeric, p_ondergrens numeric, p_bovengrens numeric)
+- grant:tenant_domains
+- grant:tenant_domains
+- grant:vector, p_limit integer, p_kandidaten integer, p_k integer, p_document_ids uuid[], p_bronstatus text[], p_documentstatus text[], p_procesinstantie_ids uuid[], p_modus text, p_peildatum date, p_bronsoort text[], p_fonds_id uuid)
+- grant:vergadering_log
+- grant:vergadering_log
+- grant:vergaderingen
+- grant:vergaderingen
+- grant:verwijder_gesprek(p_gesprek_id uuid, p_request_id uuid)
+- grant:voorbereidingen
+- grant:voorbereidingen
+- grant:vw_dossier_status
+- grant:vw_dossier_status
+- grant:vw_fondsleden
+- grant:wettelijk_regime_per_fondstype
+- grant:zoek_chunks(p_query text, p_limit integer, p_document_ids uuid[], p_bronstatus text[], p_documentstatus text[], p_procesinstantie_ids uuid[], p_modus text, p_peildatum date, p_bronsoort text[], p_fonds_id uuid)
+- policy:afschriften storage lezen
+- policy:ai validatie domein
+- policy:aqlab-audit fonds-download vrijgegeven
+- policy:auditregels schrijven eigen fonds
+- policy:bron_whitelist lees actief
+- policy:chunks select
+- policy:chunks write eigen fonds
+- policy:comparison_results eigen fonds lezen
+- policy:comparison_run eigen fonds lezen
+- policy:concepts lezen
+- policy:config log insert eigen fonds
+- policy:config log lezen eigen fonds
+- policy:dissent zichtbaarheid select
+- policy:dissent zichtbaarheid write
+- policy:documenten delete eigen fonds
+- policy:documenten insert eigen fonds
+- policy:documenten quarantaine schrijven
+- policy:documenten select
+- policy:documenten storage lezen
+- policy:documenten storage schrijven
+- policy:documenten update eigen fonds
+- policy:eigen auditregels lezen
+- policy:eigen gesprekken aanmaken
+- policy:eigen gesprekken bijwerken
+- policy:eigen gesprekken lezen
+- policy:eigen inbreng schrijven
+- policy:eigen inbreng verwijderen
+- policy:eigen inbreng wijzigen
+- policy:eigen inzage lezen
+- policy:eigen inzage schrijven
+- policy:eigen loginhoud lezen
+- policy:eigen notificaties select
+- policy:eigen notificaties update
+- policy:eigen oordelen lezen
+- policy:eigen oordelen schrijven
+- policy:eigen profiel_expertises
+- policy:eigen profiel_focusgebieden
+- policy:eigen profiel_gremia
+- policy:eigen reflectiestatus lezen
+- policy:eigen voorbereiding
+- policy:export log select
+- policy:extraction_run eigen fonds lezen
+- policy:fase-override eigen fonds lezen
+- policy:fase-override schrijven voorzitter-beheerder
+- policy:fase-override wijzigen voorzitter-beheerder
+- policy:fase-toelichting eigen fonds lezen
+- policy:fase-toelichting toevoegen voorzitter-beheerder
+- policy:fase-toelichting wijzigen voorzitter-beheerder
+- policy:fasen insert beheerder
+- policy:fasen read all
+- policy:fasen update beheerder
+- policy:flags bijwerken priv
+- policy:flags lezen eigen fonds
+- policy:flags schrijven priv
+- policy:fonds afschriften aanmaken
+- policy:fonds afschriften bijwerken
+- policy:fonds afschriften lezen
+- policy:fonds agendapunt_log insert
+- policy:fonds agendapunt_log select
+- policy:fonds agendapunten
+- policy:fonds classificatie_voorstellen
+- policy:fonds decision_actions
+- policy:fonds decision_ai_interactions
+- policy:fonds decision_assumptions
+- policy:fonds decision_audit_snapshots
+- policy:fonds decision_conditions
+- policy:fonds decision_evaluations
+- policy:fonds decision_objects
+- policy:fonds decision_risks
+- policy:fonds document_agendapunten
+- policy:fonds document_procesinstanties
+- policy:fonds governance_events
+- policy:fonds inbreng lezen
+- policy:fonds instellingen
+- policy:fonds inzage lezen
+- policy:fonds maatregelen
+- policy:fonds notulen_segmenten
+- policy:fonds proc besluiten
+- policy:fonds proc bewijs
+- policy:fonds proc checklist
+- policy:fonds proc eigenaars
+- policy:fonds proc log
+- policy:fonds proc stappen
+- policy:fonds procedures
+- policy:fonds procesmodel_expertises
+- policy:fonds procesmodel_focusgebieden
+- policy:fonds procesmodel_gremia
+- policy:fonds procesmodellen
+- policy:fonds reindex_runs
+- policy:fonds risico log
+- policy:fonds risicos
+- policy:fonds stem delete
+- policy:fonds stem insert
+- policy:fonds stem select
+- policy:fonds stem update
+- policy:fonds stemmingen insert
+- policy:fonds stemmingen select
+- policy:fonds stemmingen update
+- policy:fonds vergadering_log insert
+- policy:fonds vergadering_log select
+- policy:fonds vergaderingen
+- policy:fondsen lezen
+- policy:klantbeeld cohort bijwerken priv
+- policy:klantbeeld cohort lezen eigen fonds
+- policy:klantbeeld cohort schrijven priv
+- policy:lees catalogus_log
+- policy:lees document_metadata_log
+- policy:lees expertises
+- policy:lees focusgebieden
+- policy:lees gremia
+- policy:lees meta_review_queue
+- policy:lees profiel_log
+- policy:manifest bijwerken priv
+- policy:manifest lezen eigen fonds
+- policy:manifest schrijven priv
+- policy:notificaties insert eigen fonds
+- policy:organisatieprofiel insert eigen fonds
+- policy:organisatieprofiel select eigen fonds
+- policy:organisatieprofiel update eigen fonds
+- policy:overrides bijwerken priv
+- policy:overrides lezen eigen fonds
+- policy:overrides schrijven priv
+- policy:profiel select eigen
+- policy:profiel update eigen
+- policy:redacties lezen
+- policy:regime-mapping lezen
+- policy:req read all
+- policy:req write beheerder
+- policy:req-instance eigen fonds lezen
+- policy:req-instance toevoegen voorzitter-beheerder
+- policy:req-instance wijzigen voorzitter-beheerder
+- policy:req-uitsluiting eigen fonds lezen
+- policy:req-uitsluiting toevoegen voorzitter-beheerder
+- policy:req-uitsluiting wijzigen voorzitter-beheerder
+- policy:schrijf catalogus_log
+- policy:schrijf document_metadata_log
+- policy:schrijf expertises
+- policy:schrijf focusgebieden
+- policy:schrijf gremia
+- policy:schrijf meta_review_queue
+- policy:schrijf profiel_log
+- policy:semantic_units eigen fonds lezen
+- policy:stuurinfo kpi bijwerken priv
+- policy:stuurinfo kpi lezen eigen fonds
+- policy:stuurinfo kpi schrijven priv
+- policy:stuurinfo log lezen eigen fonds
+- policy:stuurinfo log schrijven priv
+- policy:stuurinfo periode bijwerken priv
+- policy:stuurinfo periode lezen eigen fonds
+- policy:stuurinfo periode schrijven priv
+- policy:stuurinfo reeks bijwerken priv
+- policy:stuurinfo reeks lezen eigen fonds
+- policy:stuurinfo reeks schrijven priv
+- policy:stuurinfo reserve bijwerken priv
+- policy:stuurinfo reserve lezen eigen fonds
+- policy:stuurinfo reserve schrijven priv
+- policy:theming bijwerken priv
+- policy:theming lezen eigen fonds
+- policy:theming schrijven priv
+- policy:zelf-lees eigen platform-identiteit
+- security-definer:afschriften_claim_jobs
+- security-definer:aqlab_add_run_cost
+- security-definer:aqlab_assurance_meetwaarden
+- security-definer:aqlab_audit_export_bron
+- security-definer:aqlab_claim_run_jobs
+- security-definer:aqlab_log_download
+- security-definer:contact_aanvraag_insert
+- security-definer:contact_notificatie_status
+- security-definer:documenten_claim_ingest_jobs
+- security-definer:fn_afschrift_bevries_kolommen
+- security-definer:fn_app_error_log
+- security-definer:fn_profiel_bevries_kolommen
+- security-definer:fn_rate_limit_check
+- security-definer:fn_schrijf_vergelijking
+- security-definer:fn_zelfde_fonds
+- security-definer:lees_governance_audit
+- security-definer:log_word_export
+- security-definer:maak_profiel
+- security-definer:mag_audit
+- security-definer:mag_audit_bronnen
+- security-definer:mag_audit_redacties
+- security-definer:reflectie_transitie
+- security-definer:resolve_tenant_host
+- security-definer:schrijf_ai_interactie
+- security-definer:verwijder_gesprek
+- trigger:bij_app_metadata
+- trigger:bij_registratie
+- trigger:trg_afschrift_bevries_kolommen
+- trigger:trg_agendapunt_log_no_delete
+- trigger:trg_agendapunt_log_no_update
+- trigger:trg_aqlab_audit_exports_no_delete
+- trigger:trg_aqlab_audit_exports_no_update
+- trigger:trg_aqlab_log_no_delete
+- trigger:trg_aqlab_log_no_update
+- trigger:trg_aqlab_release_decisions_no_delete
+- trigger:trg_aqlab_release_decisions_no_update
+- trigger:trg_audit_inzage_no_delete
+- trigger:trg_audit_inzage_no_update
+- trigger:trg_bron_whitelist_log_hash
+- trigger:trg_bron_whitelist_log_no_delete
+- trigger:trg_bron_whitelist_log_no_update
+- trigger:trg_chunk_denorm_before_insert
+- trigger:trg_chunk_denorm_refresh
+- trigger:trg_comparison_results_no_delete
+- trigger:trg_comparison_results_no_update
+- trigger:trg_comparison_run_no_delete
+- trigger:trg_comparison_run_no_update
+- trigger:trg_contact_aanvragen_no_delete
+- trigger:trg_decision_code
+- trigger:trg_decision_snapshot
+- trigger:trg_decision_status_check
+- trigger:trg_decision_touch
+- trigger:trg_difference_judgements_no_delete
+- trigger:trg_difference_judgements_no_update
+- trigger:trg_doc_meta_log_hash
+- trigger:trg_doc_meta_log_no_delete
+- trigger:trg_doc_meta_log_no_update
+- trigger:trg_document_agendapunt_validatie
+- trigger:trg_document_agendapunt_vergadering
+- trigger:trg_document_primair_vs_secundair
+- trigger:trg_document_procesinstantie_fonds
+- trigger:trg_document_procesinstantie_validatie
+- trigger:trg_document_status_overgang
+- trigger:trg_export_log_no_delete
+- trigger:trg_export_log_no_update
+- trigger:trg_extraction_run_no_delete
+- trigger:trg_extraction_run_no_update
+- trigger:trg_fonds_config_log_no_delete
+- trigger:trg_fonds_config_log_no_update
+- trigger:trg_fonds_flags_audit
+- trigger:trg_fonds_manifest_audit
+- trigger:trg_fonds_overrides_audit
+- trigger:trg_fonds_stuurinfo_kpi_audit
+- trigger:trg_fonds_stuurinfo_log_no_delete
+- trigger:trg_fonds_stuurinfo_log_no_update
+- trigger:trg_fonds_stuurinfo_periode_audit
+- trigger:trg_fonds_stuurinfo_reeks_audit
+- trigger:trg_fonds_stuurinfo_reserve_audit
+- trigger:trg_fonds_theming_audit
+- trigger:trg_generiek_status_overgang
+- trigger:trg_governance_log_no_delete
+- trigger:trg_governance_log_no_update
+- trigger:trg_govevent_hash
+- trigger:trg_govevent_no_delete
+- trigger:trg_govevent_no_update
+- trigger:trg_notulen_segment_check
+- trigger:trg_organisatie_profielen_touch
+- trigger:trg_platform_event_hash
+- trigger:trg_platform_event_no_delete
+- trigger:trg_platform_event_no_update
+- trigger:trg_procedure_afschriften_no_delete
+- trigger:trg_procedure_bewijs_audit
+- trigger:trg_procedure_bewijs_validate_binding
+- trigger:trg_procedure_log_no_delete
+- trigger:trg_procedure_log_no_update
+- trigger:trg_profiel_bevries_kolommen
+- trigger:trg_redacties_no_delete
+- trigger:trg_redacties_no_update
+- trigger:trg_requirement_instance_validate_binding_sleutel
+- trigger:trg_risico_log_no_delete
+- trigger:trg_risico_log_no_update
+- trigger:trg_snap_no_delete
+- trigger:trg_snap_no_update
+- trigger:trg_vergadering_log_no_delete
+- trigger:trg_vergadering_log_no_update
+- view:vw_dossier_status
+- view:vw_fondsleden
+- view:vw_governance_audit
+
+## W11 BASE_TRIGGER
+
+De inventaris bevestigt twee triggerfuncties maar acht bindings: fn_fonds_config_capture en fn_fonds_stuurinfo_capture. Zij schrijven respectievelijk fonds_config_log en fonds_stuurinfo_log bij de configuratie- en stuurinfo-tabellen. Dit is de complete invoer voor de huidige BASE_TRIGGER-laag; de bindingen staan in JSON.
+
+## Autorizatie, anon en R-07/R-13
+
+- security-definer-functies leggen eigenaarrechten en een database-aanroepgrens vast; migratie 2026_08_22_secdef_search_path_pg_temp.sql borgt pg_temp als laatste pad en faalt gesloten bij ongepinde functies.
+- Grants met anon of authenticated zijn afzonderlijk opgenomen. De anon-objecten zijn de kandidaten voor R-13; bij contact_* is de complete RPC-lijst expliciet herkenbaar.
+- Policies zonder expliciet fondspredicaat zijn gemarkeerd met de R-07-aanname in aanname_elders; dat is een bevinding, geen uitspraak dat de policy per se exploiteerbaar is.
+
+## Cascades en open interpretatie
+
+Elke CASCADE/SET NULL-foreign-key staat als object in JSON. De opmerking-velden markeren de inschatting dat een oudermutatie meer rijen kan raken dan de routecode noemt. De inventaris repareert niets; live drift en daadwerkelijke runtime-bereikbaarheid blijven vervolgmetingen.
+
+## Feit, inschatting en open vraag
+
+gedrag beschrijft het DDL-feit, opmerking beschrijft de inschatting of het risico, en ontbrekende live-database-informatie staat expliciet in meta.live_database. bron bevat voor elk object bestand en regelnummer.
+
