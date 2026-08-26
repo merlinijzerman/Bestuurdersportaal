@@ -161,13 +161,13 @@ values ('33333333-0000-0000-0000-0000000000d1'::uuid,
 -- Drie blokkerende document-vereisten zonder documenttype — exact het patroon
 -- van stap 1 in de invaarseed v2 — plus één external_submission op stap 9.
 insert into public.procedure_requirements
-  (template_code, stap_volgorde, requirement_type, label, documenttype,
+  (template_code, template_versie, stap_volgorde, requirement_type, label, documenttype,
    veld_pad, verplicht, blokkerend, min_aantal)
 values
-  ('bb_test_template', 1, 'document', 'Transitieplan',            null, null, true, true, 1),
-  ('bb_test_template', 1, 'document', 'Formeel invaarverzoek',    null, null, true, true, 1),
-  ('bb_test_template', 1, 'document', '(Gewijzigde) pensioenovereenkomst/-regeling en compensatieafspraken',     null, null, true, true, 1),
-  ('bb_test_template', 9, 'external_submission', 'DNB-indiening', null, null, true, true, 1);
+  ('bb_test_template', '1.0.0', 1, 'document', 'Transitieplan',            null, null, true, true, 1),
+  ('bb_test_template', '1.0.0', 1, 'document', 'Formeel invaarverzoek',    null, null, true, true, 1),
+  ('bb_test_template', '1.0.0', 1, 'document', '(Gewijzigde) pensioenovereenkomst/-regeling en compensatieafspraken',     null, null, true, true, 1),
+  ('bb_test_template', '1.0.0', 9, 'external_submission', 'DNB-indiening', null, null, true, true, 1);
 
 -- Eén bewijsstuk, gebonden aan de EERSTE vereiste.
 insert into public.procedure_bewijs (id, stap_id, titel, requirement_sleutel)
@@ -323,9 +323,9 @@ do $$
 declare r jsonb;
 begin
   insert into public.procedure_requirements
-    (template_code, stap_volgorde, requirement_type, label, documenttype,
+    (template_code, template_versie, stap_volgorde, requirement_type, label, documenttype,
      veld_pad, verplicht, blokkerend, min_aantal)
-  values ('bb_test_template', 9, 'document', 'ALM-analyse', 'alm_analyse',
+  values ('bb_test_template', '1.0.0', 9, 'document', 'ALM-analyse', 'alm_analyse',
           null, true, true, 1);
 
   insert into public.procedure_bewijs (id, stap_id, titel, documenttype, requirement_sleutel)
@@ -456,9 +456,9 @@ values ('33333333-aaaa-0000-0000-000000000001','33333333-aaaa-aaaa-aaaa-33333333
 insert into public.procedure_stappen (id, procedure_id, volgorde, naam)
 values ('33333333-aaaa-0000-0000-000000000011','33333333-aaaa-0000-0000-000000000001',1,'Stap 1');
 insert into public.procedure_requirements
-  (template_code, stap_volgorde, requirement_type, label, documenttype,
+  (template_code, template_versie, stap_volgorde, requirement_type, label, documenttype,
    veld_pad, verplicht, blokkerend, min_aantal)
-values ('bb_test_template',1,'document','Transitieplan',null,null,true,true,1);
+values ('bb_test_template','1.0.0',1,'document','Transitieplan',null,null,true,true,1);
 insert into public.procedure_bewijs (id, stap_id, titel, requirement_sleutel)
 values ('33333333-aaaa-0000-0000-0000000000b1','33333333-aaaa-0000-0000-000000000011',
         'Transitieplan A','1|document|Transitieplan');
