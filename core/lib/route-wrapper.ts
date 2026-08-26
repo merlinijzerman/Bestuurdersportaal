@@ -55,6 +55,11 @@ import {
   wrapperTeltVoor,
   type RateLimitDeclaratie,
 } from "@/core/lib/ratelimit-enforce";
+import {
+  auditEnforceAan,
+  beoordeelAudit,
+  type AuditDeclaratie,
+} from "@/core/lib/audit-enforce";
 // UITSLUITEND TYPES uit rate-limit — een waarde-import zou `logAppFout` (server-
 // only) meetrekken. De echte `controleerLimiet` + `LIMIETEN` worden LAZY geladen
 // in echteDeps, net als tenant-route-guard hieronder.
@@ -146,6 +151,20 @@ export type RouteSpecV1 = {
    *  eind van deploy 3 (besluit 0189). ⚠ De wrapper-check komt BOVENÓP de route-
    *  eigen `controleerLimiet`-aanroepen — vandaar `"route-eigen"`. */
   readonly rateLimit?: RateLimitDeclaratie;
+  /** OF deze route een handelingsregel achterlaat (W11). TWEE waarden — géén
+   *  "route-eigen", want de wrapper schrijft naar een EIGEN tenant-handelingstabel
+   *  en botst dus niet met de route-eigen `governance_events`-writes (besluit 0190,
+   *  gedeelde-resource-regel):
+   *
+   *    AuditSpec   de wrapper schrijft een handelingsregel; `handeling` is het
+   *                semantische label. NÁ de handler, met de uitkomst.
+   *    "geen"      expliciet geen handelingsregel — per stuk gemotiveerd.
+   *
+   *  ⚠ OMGEKEERDE VLAG-SEMANTIEK t.o.v. capability/schema/rateLimit: `ENFORCE_AUDIT`
+   *  UIT betekent NIETS SCHRIJVEN (alleen [AUDIT-OBSERVE]-loggen), niet doorlaten.
+   *  Bij landing draagt geen route dit veld → nul extra rijen, byte-identiek. De
+   *  echte handelingstabel + retentie/RLS is een vervolg (besluit 0190). */
+  readonly audit?: AuditDeclaratie;
   /** loglabel voor de host-guard-anomaliedetectie (alleen logging, geen respons). */
   readonly label?: string;
 };
@@ -218,6 +237,22 @@ export type WrapperDeps = {
    *  server-only); injecteerbaar zodat de sanity de handhaaf-tak server-loos toetst.
    *  De echte responder schrijft het P5-signaal (rate-limit-incident, 90 dagen). */
   bouwRateLimited: (label: string, resetAt: Date | null) => Promise<Response>;
+  /** Leest `ENFORCE_AUDIT`. Injecteerbaar; ⚠ OMGEKEERDE semantiek — vlag-uit
+   *  schrijft niets. Zie audit-enforce.ts. */
+  auditEnforceAan: () => boolean;
+  /** Schrijft één handelingsregel naar de eigen tenant-handelingstabel (W11).
+   *  Alleen aangeroepen op de "schrijven"-tak (vlag AAN + AuditSpec), best-effort.
+   *  De echte tabel + retentie/RLS is een vervolg (besluit 0190), dus de echte dep
+   *  THROWT tot die migratie landt — luidruchtig i.p.v. een stil audit-gat. */
+  schrijfHandeling: (args: {
+    gebruikerId: string;
+    fondsId: string | null;
+    handeling: string;
+    methode: string;
+    pad: string;
+    status: number;
+    requestId: string;
+  }) => Promise<void>;
 };
 
 const echteDeps: WrapperDeps = {
@@ -235,6 +270,16 @@ const echteDeps: WrapperDeps = {
     return mod.controleerLimiet(supabase, mod.LIMIETEN[limietNaam], {
       failClosed: isFailClosed(limietNaam),
     });
+  },
+  auditEnforceAan,
+  schrijfHandeling: async () => {
+    // De tenant-handelingstabel + retentie/RLS is een vervolg op besluit 0190 en
+    // bestaat nog niet. Tot die migratie landt kan ENFORCE_AUDIT niet naar "on":
+    // deze throw maakt dat luidruchtig i.p.v. een stil audit-gat. De wrapper vangt
+    // hem best-effort af, dus een respons breekt er niet op.
+    throw new Error(
+      "[AUDIT] handelingstabel nog niet aangelegd — zie besluit 0190 (retentie/RLS + migratie)"
+    );
   },
   bouwRateLimited: async (label, resetAt) => {
     const { rateLimited } = await import("@/core/lib/api-errors");
@@ -425,14 +470,53 @@ export function maakWithFondsRoute(deps: WrapperDeps) {
 
       // Laatste vangnet: alleen wat de route zélf niet vangt. Dezelfde vorm als
       // de 87 bestaande blokken. De route behoudt zijn eigen try/catch.
-      let params: unknown;
+      let respons: Response;
       try {
-        params = invocatie?.params ? await invocatie.params : undefined;
-        return await handler(ctx, request, params);
+        const params = invocatie?.params ? await invocatie.params : undefined;
+        respons = await handler(ctx, request, params);
       } catch (e) {
         console.error(`[${requestId}] onafgevangen routefout:`, e);
-        return NextResponse.json({ error: "Serverfout" }, { status: 500 });
+        respons = NextResponse.json({ error: "Serverfout" }, { status: 500 });
       }
+
+      // 3e. Audit-poort (W11) — NÁ de handler, met de uitkomst (status). Alleen een
+      // handeling die daadwerkelijk DRAAIDE laat een spoor; de pre-handler-korte-
+      // sluitingen (401/403/400/429) niet.
+      //
+      // ⚠ OMGEKEERDE VLAG-SEMANTIEK: vlag UIT = observe = NIETS SCHRIJVEN (alleen
+      // loggen wat er geschreven zóú zijn). Bij landing draagt geen route dit veld,
+      // dus deze tak is inert: nul extra rijen, byte-identiek, stream ongemoeid.
+      if (spec.audit) {
+        const actie = beoordeelAudit({ audit: spec.audit, handhaven: deps.auditEnforceAan() });
+        if (actie.actie === "observe") {
+          console.warn("[AUDIT-OBSERVE]", {
+            route: spec.label ?? padVan(request),
+            methode: request.method,
+            handeling: actie.handeling,
+            status: respons.status,
+            heeftFonds: fondsId !== null,
+            requestId,
+          });
+        } else if (actie.actie === "schrijven") {
+          // Best-effort: een mislukte spoor-write mag een geslaagde handeling niet in
+          // een 500 veranderen. De echte dep throwt tot de handelingstabel er is.
+          try {
+            await deps.schrijfHandeling({
+              gebruikerId: ctx.gebruikerId,
+              fondsId,
+              handeling: actie.handeling,
+              methode: request.method,
+              pad: padVan(request),
+              status: respons.status,
+              requestId,
+            });
+          } catch (e) {
+            console.error(`[${requestId}] [AUDIT] handelingsregel niet weggeschreven:`, e);
+          }
+        }
+      }
+
+      return respons;
     };
   };
 }

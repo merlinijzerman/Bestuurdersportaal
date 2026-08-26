@@ -72,6 +72,11 @@ function deps(overrides: Partial<WrapperDeps>): WrapperDeps {
         status: 429,
         headers: { "content-type": "application/json" },
       }),
+    // W11: default UIT. schrijfHandeling is standaard een no-op; de W11-tests
+    // overriden hem om aan te tonen dat/of hij wordt aangeroepen. De echte writer
+    // (handelingstabel) komt hier nooit in beeld.
+    auditEnforceAan: () => false,
+    schrijfHandeling: async () => {},
     ...overrides,
   };
 }
@@ -702,6 +707,118 @@ async function main() {
     );
     assert.equal(res.status, 400, "vorm eerst afgekeurd");
     assert.equal(geraakt.length, 0, "de rate-limit-poort draait niet meer na een 400");
+  });
+
+  // ── Audit-poort (W11) ─────────────────────────────────────────────────────
+  // Een schrijver-stub die noteert of/waarmee hij is aangeroepen. De kern: onder
+  // de vlag UIT schrijft hij NIET (omgekeerde semantiek), en de post-handler-
+  // plaatsing betekent dat een korte-sluiting (403) hem niet bereikt.
+  type HandelingArgs = Parameters<WrapperDeps["schrijfHandeling"]>[0];
+  const auditStub = (opgeslagen: HandelingArgs[]) => async (args: HandelingArgs) => {
+    opgeslagen.push(args);
+  };
+
+  await test("AUDIT: geen declaratie → geen schrijver, geen observe-log (inert bij landing)", async () => {
+    const opgeslagen: HandelingArgs[] = [];
+    const wrap = maakWithFondsRoute(deps({ schrijfHandeling: auditStub(opgeslagen), auditEnforceAan: () => true }));
+    const [res, warns] = await metOpgevangenWarn(() =>
+      wrap({ capability: "iedere-ingelogde", schema: "geen-body" }, async () => Response.json({ ok: true }))(req())
+    );
+    assert.equal(res.status, 200);
+    assert.equal(opgeslagen.length, 0);
+    assert.equal(warns.filter((w) => w[0] === "[AUDIT-OBSERVE]").length, 0);
+  });
+
+  await test("AUDIT: \"geen\" → niets (geen schrijver, geen log)", async () => {
+    const opgeslagen: HandelingArgs[] = [];
+    const wrap = maakWithFondsRoute(deps({ schrijfHandeling: auditStub(opgeslagen), auditEnforceAan: () => true }));
+    const [res, warns] = await metOpgevangenWarn(() =>
+      wrap({ capability: "iedere-ingelogde", schema: "geen-body", audit: "geen" }, async () => Response.json({ ok: true }))(req())
+    );
+    assert.equal(res.status, 200);
+    assert.equal(opgeslagen.length, 0);
+    assert.equal(warns.filter((w) => w[0] === "[AUDIT-OBSERVE]").length, 0);
+  });
+
+  await test("AUDIT: AuditSpec + vlag UIT → observe: [AUDIT-OBSERVE] gelogd, maar NIETS geschreven", async () => {
+    const opgeslagen: HandelingArgs[] = [];
+    const wrap = maakWithFondsRoute(deps({ schrijfHandeling: auditStub(opgeslagen), auditEnforceAan: () => false }));
+    const [res, warns] = await metOpgevangenWarn(() =>
+      wrap(
+        { capability: "iedere-ingelogde", schema: "geen-body", audit: { handeling: "test.doen" } },
+        async () => Response.json({ ok: true })
+      )(req())
+    );
+    assert.equal(res.status, 200);
+    assert.equal(opgeslagen.length, 0, "de omgekeerde semantiek: vlag-uit schrijft NIETS");
+    const regel = warns.find((w) => w[0] === "[AUDIT-OBSERVE]");
+    assert.ok(regel, "vlag-uit hoort wél te observeren wat er geschreven zóú zijn");
+    assert.equal((regel[1] as Record<string, unknown>).handeling, "test.doen");
+  });
+
+  await test("AUDIT: AuditSpec + vlag AAN → schrijver aangeroepen met handeling/methode/status", async () => {
+    const opgeslagen: HandelingArgs[] = [];
+    let aangeroepen = 0;
+    const wrap = maakWithFondsRoute(deps({ schrijfHandeling: auditStub(opgeslagen), auditEnforceAan: () => true }));
+    const [res] = await metOpgevangenWarn(() =>
+      wrap(
+        { capability: "iedere-ingelogde", schema: "geen-body", audit: { handeling: "test.doen" }, label: "test.route" },
+        async () => {
+          aangeroepen++;
+          return Response.json({ ok: true });
+        }
+      )(req())
+    );
+    assert.equal(res.status, 200);
+    assert.equal(aangeroepen, 1);
+    assert.equal(opgeslagen.length, 1);
+    assert.equal(opgeslagen[0].handeling, "test.doen");
+    assert.equal(opgeslagen[0].methode, "GET");
+    assert.equal(opgeslagen[0].status, 200);
+    assert.equal(opgeslagen[0].gebruikerId, "u-1");
+  });
+
+  await test("AUDIT: vlag AAN + schrijver THROWT → respons blijft 200 (best-effort, geen 500)", async () => {
+    const wrap = maakWithFondsRoute(
+      deps({
+        auditEnforceAan: () => true,
+        schrijfHandeling: async () => {
+          throw new Error("handelingstabel bestaat nog niet");
+        },
+      })
+    );
+    const [res] = await metOpgevangenWarn(() =>
+      wrap(
+        { capability: "iedere-ingelogde", schema: "geen-body", audit: { handeling: "test.doen" } },
+        async () => Response.json({ ok: true })
+      )(req())
+    );
+    assert.equal(res.status, 200, "een mislukte spoor-write mag een geslaagde handeling niet breken");
+  });
+
+  await test("AUDIT: post-handler — een 403 (capability) short-circuit bereikt de audit-poort NIET", async () => {
+    const opgeslagen: HandelingArgs[] = [];
+    let aangeroepen = 0;
+    const wrap = maakWithFondsRoute(
+      deps({
+        capabilityEnforceAan: () => true,
+        auditEnforceAan: () => true,
+        schrijfHandeling: auditStub(opgeslagen),
+        haalProfiel: async () => ({ id: "u-1", naam: "N", rol: "bestuurder", fondsId: "f-1" }),
+      })
+    );
+    const [res] = await metOpgevangenWarn(() =>
+      wrap(
+        { capability: "dossiers.manage", schema: "geen-body", audit: { handeling: "test.doen" } },
+        async () => {
+          aangeroepen++;
+          return Response.json({ ok: true });
+        }
+      )(req())
+    );
+    assert.equal(res.status, 403);
+    assert.equal(aangeroepen, 0, "de handler draaide niet");
+    assert.equal(opgeslagen.length, 0, "alleen een handeling die DRAAIDE laat een spoor");
   });
 
   console.log(`\nAlle ${n} route-wrapper sanity-tests groen.`);
