@@ -339,6 +339,11 @@ for (const f of apiFiles) {
     const platform = alle.filter((x) => x.trail === "platform");
     const heeftSpoor = bewijsketen.length + domein.length + platform.length > 0;
     const key = `${method} ${rel}`;
+    // Gedeclareerde audit-waarde (W11): parse hem uit het RouteSpec-object in het blok.
+    // Nog géén route declareert `audit:` — dit is voorbereid op #183, zodat de
+    // assertie fail-closed is vanaf de dag dat de eerste declaratie landt.
+    const auditM = blok.match(/\baudit:\s*("governance-events"|"platform-event-log"|"geen"|\{)/);
+    const declaredAudit = auditM ? (auditM[1] === "{" ? "spec" : auditM[1].replace(/"/g, "")) : null;
     // klasse: gemeten spoor wint; anders machine (typegrens) of de gedeclareerde split.
     let klasse;
     if (bewijsketen.length) klasse = "bewijsketen";
@@ -351,6 +356,7 @@ for (const f of apiFiles) {
       wrapper,
       schrijftAuditspoor: heeftSpoor,
       klasse,
+      declaredAudit,
       routeEigenKandidaat: bewijsketen.length > 0,
       bewijsketen: bewijsketen.map(kort),
       domein: domein.map(kort),
@@ -372,6 +378,13 @@ for (const h of inventaris) {
     assertieFouten.push(`stale split-klasse: ${h.handler} heeft nu een GEMETEN spoor (${[...h.bewijsketen, ...h.domein, ...h.platform].map((t) => t.token).join(", ")}) — herclassificeer, verwijder de SPLIT_KLASSE-entry`);
   if (h.klasse === "geen" && h.schrijftAuditspoor)
     assertieFouten.push(`"geen" met spoor: ${h.handler}`);
+
+  // DECLARATIE-VERIFICATIE (0191 §6): een waarde die zegt "ik heb elders een spoor"
+  // is GEMETEN, niet beweerd. Fail-closed vanaf de eerste declaratie (#183).
+  if (h.declaredAudit === "governance-events" && h.bewijsketen.length === 0)
+    assertieFouten.push(`beweerde vrijstelling: ${h.handler} declareert audit:"governance-events" maar schrijft NIET aantoonbaar naar governance_events (voeg de route-eigen write toe, of herclassificeer)`);
+  if (h.declaredAudit === "platform-event-log" && h.platform.length === 0)
+    assertieFouten.push(`beweerde vrijstelling: ${h.handler} declareert audit:"platform-event-log" maar schrijft NIET aantoonbaar naar platform_event_log`);
 }
 
 function dedupVia(arr) {

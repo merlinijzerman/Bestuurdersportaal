@@ -64,6 +64,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "domein",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -80,6 +81,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "domein",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -96,6 +98,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "domein",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -112,6 +115,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
       "klasse": "geen",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -122,6 +126,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
       "klasse": "geen",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -132,6 +137,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
       "klasse": "bestuurlijk-gap",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -142,6 +148,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "domein",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -158,6 +165,7 @@
       "wrapper": "withMachineRoute",
       "schrijftAuditspoor": false,
       "klasse": "machine",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -168,6 +176,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
+      "declaredAudit": null,
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -190,6 +199,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "domein",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -206,6 +216,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "domein",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -222,6 +233,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "domein",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -238,6 +250,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
+      "declaredAudit": null,
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -254,6 +267,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
+      "declaredAudit": null,
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -270,6 +284,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
+      "declaredAudit": null,
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -286,6 +301,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
+      "declaredAudit": null,
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -302,6 +318,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
+      "declaredAudit": null,
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -318,6 +335,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
+      "declaredAudit": null,
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -334,6 +352,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
+      "declaredAudit": null,
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -350,6 +369,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
+      "declaredAudit": null,
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -366,6 +386,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
+      "declaredAudit": null,
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -382,6 +403,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
+      "declaredAudit": null,
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -398,6 +420,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
+      "declaredAudit": null,
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -414,6 +437,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
+      "declaredAudit": null,
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -430,6 +454,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
+      "declaredAudit": null,
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -446,6 +471,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
+      "declaredAudit": null,
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -462,6 +488,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "domein",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -478,6 +505,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "domein",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -494,6 +522,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
       "klasse": "operationeel",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -504,6 +533,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
       "klasse": "operationeel",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -514,6 +544,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "domein",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -530,6 +561,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
       "klasse": "operationeel",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -540,6 +572,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "domein",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -556,6 +589,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "domein",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -572,6 +606,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
       "klasse": "bestuurlijk-gap",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -582,6 +617,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "domein",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -598,6 +634,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
       "klasse": "operationeel",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -608,6 +645,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
       "klasse": "operationeel",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -618,6 +656,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "domein",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -634,6 +673,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "domein",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -650,6 +690,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
       "klasse": "operationeel",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -660,6 +701,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
       "klasse": "bestuurlijk-gap",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -670,6 +712,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
       "klasse": "bestuurlijk-gap",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -680,6 +723,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "domein",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -697,6 +741,7 @@
       "wrapper": "withMachineRoute",
       "schrijftAuditspoor": false,
       "klasse": "machine",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -707,6 +752,7 @@
       "wrapper": "withMachineRoute",
       "schrijftAuditspoor": false,
       "klasse": "machine",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -717,6 +763,7 @@
       "wrapper": "withMachineRoute",
       "schrijftAuditspoor": false,
       "klasse": "machine",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -727,6 +774,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
       "klasse": "geen",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -737,6 +785,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
       "klasse": "geen",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -747,6 +796,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "domein",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -763,6 +813,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
       "klasse": "bestuurlijk-gap",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -773,6 +824,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "domein",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -789,6 +841,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
       "klasse": "bestuurlijk-gap",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -799,6 +852,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
       "klasse": "bestuurlijk-gap",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -809,6 +863,7 @@
       "wrapper": "withMachineRoute",
       "schrijftAuditspoor": false,
       "klasse": "machine",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -819,6 +874,7 @@
       "wrapper": "withMachineRoute",
       "schrijftAuditspoor": false,
       "klasse": "machine",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -829,6 +885,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
       "klasse": "geen",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -839,6 +896,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "domein",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -855,6 +913,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "domein",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -871,6 +930,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
+      "declaredAudit": null,
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -893,6 +953,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
       "klasse": "bestuurlijk-gap",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -903,6 +964,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
       "klasse": "bestuurlijk-gap",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -913,6 +975,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
       "klasse": "bestuurlijk-gap",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -923,6 +986,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
+      "declaredAudit": null,
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -945,6 +1009,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
+      "declaredAudit": null,
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -967,6 +1032,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "domein",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -983,6 +1049,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "domein",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -999,6 +1066,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
+      "declaredAudit": null,
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -1015,6 +1083,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
+      "declaredAudit": null,
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -1031,6 +1100,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
+      "declaredAudit": null,
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -1053,6 +1123,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "domein",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1069,6 +1140,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "domein",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1085,6 +1157,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
       "klasse": "geen",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -1095,6 +1168,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "bewijsketen",
+      "declaredAudit": null,
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
@@ -1117,6 +1191,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "domein",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1133,6 +1208,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "domein",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1149,6 +1225,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "domein",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1165,6 +1242,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
       "klasse": "operationeel",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -1175,6 +1253,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
       "klasse": "operationeel",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -1185,6 +1264,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "domein",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1201,6 +1281,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "domein",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1217,6 +1298,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "domein",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1233,6 +1315,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "domein",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1249,6 +1332,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "domein",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1265,6 +1349,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
       "klasse": "bestuurlijk-gap",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -1275,6 +1360,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
       "klasse": "bestuurlijk-gap",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -1285,6 +1371,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
       "klasse": "bestuurlijk-gap",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -1295,6 +1382,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
       "klasse": "bestuurlijk-gap",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -1305,6 +1393,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "domein",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1322,6 +1411,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
       "klasse": "geen",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -1332,6 +1422,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "domein",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1348,6 +1439,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "domein",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
@@ -1364,6 +1456,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": false,
       "klasse": "bestuurlijk-gap",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [],
@@ -1374,6 +1467,7 @@
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
       "klasse": "domein",
+      "declaredAudit": null,
       "routeEigenKandidaat": false,
       "bewijsketen": [],
       "domein": [
