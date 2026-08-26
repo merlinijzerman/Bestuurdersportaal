@@ -169,10 +169,20 @@ export const POST = withFondsRoute(
         if (await besluitOpSlot(supabase, eigenaarBesluit)) {
           return fout(409, "Het besluit staat op slot; ontkoppelen is geweigerd (I1).");
         }
-        const { error } = await supabase
+        let q = supabase
           .from(bronDef.brontabel)
           .update({ requirement_sleutel: null })
           .eq("id", bronId);
+        // Defense-in-depth (procesgebonden): bind de mutatie aan déze procedure,
+        // gespiegeld op de vaststelling-delete. Decision-scoped leunt op RLS + de
+        // fn_assert-trigger (sleutel↔eigen procedure).
+        if (bronDef.scope === "procedure") q = q.eq("procedure_id", id);
+        const { error } = await q;
+        // Een 23514 op een unbind kan alleen de I1-DB-backstop zijn (een null-
+        // sleutel triggert fn_assert_gebonden_feit niet). Dus: 409, geen 500.
+        if (error?.code === "23514") {
+          return fout(409, "Het besluit staat op slot; ontkoppelen is geweigerd (I1).");
+        }
         if (error) {
           console.error("Ontkoppelen fout:", error);
           return fout(500, "Ontkoppelen mislukt");
@@ -188,11 +198,16 @@ export const POST = withFondsRoute(
       if (huidigeSleutel !== null && (await besluitOpSlot(supabase, eigenaarBesluit))) {
         return fout(409, "Het besluit staat op slot; herbinden is geweigerd (I1).");
       }
-      const { error } = await supabase
+      let uq = supabase
         .from(bronDef.brontabel)
         .update({ requirement_sleutel: sleutel })
         .eq("id", bronId);
+      if (bronDef.scope === "procedure") uq = uq.eq("procedure_id", id);
+      const { error } = await uq;
       if (error?.code === "23514") {
+        // Na de I1-voorpoort is een 23514 hier de fn_assert-trigger: de sleutel
+        // hoort niet bij de procedure/het besluit van deze bronrij (of een race
+        // waarbij het besluit net op slot ging). Niet-eenduidig → 400.
         return fout(400, "Ongeldige of niet-eenduidige vereiste-binding");
       }
       if (error) {
