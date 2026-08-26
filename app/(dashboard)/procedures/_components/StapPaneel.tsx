@@ -14,6 +14,9 @@ import type {
 import type { EvidenceItem } from "@/core/lib/decision-view";
 import BibliotheekPicker from "@/core/components/BibliotheekPicker";
 import VereisteToevoegen from "./VereisteToevoegen";
+import VereisteKiezer from "./VereisteKiezer";
+import VaststellingFormulier from "./VaststellingFormulier";
+import { magLosmaken, magKoppelen } from "@/core/lib/vereiste-affordance";
 import { uploadDocument } from "@/core/lib/document-upload-client";
 import { DOCUMENTTYPEN, DOCUMENTTYPE_LABEL } from "@/core/lib/document-metadata";
 import { bewijsUploadDocumenttypeBlokker } from "@/core/lib/document-ingest-classificatie";
@@ -45,6 +48,22 @@ const REQUIREMENT_LABELS: Record<string, string> = {
   dissent_review: "Dissent-review",
   external_submission: "Externe indiening",
   consultation: "Consultatie",
+};
+
+// #192: de affordance-tekst per type (kiezer/opvoeren/vastleggen). Eén knop per
+// vereisteregel; de tekst volgt het type (mockup v0.1).
+const ACTIE_LABEL: Record<string, string> = {
+  document: "Opvoeren",
+  external_submission: "Opvoeren",
+  consultation: "Opvoeren",
+  risk: "Koppel bestaand risico",
+  assumption: "Koppel aannames",
+  kpi: "Koppel KPI",
+  approval: "Koppel besluit",
+  evaluation: "Evaluatie vastleggen",
+  ai_validation: "Koppel AI-validatie",
+  dissent_review: "Leg vast",
+  mandate_check: "Leg vast",
 };
 
 // P2/PR-B (#167): herkomst van een vervulling — welk gebonden feit de vereiste
@@ -92,6 +111,9 @@ interface Props {
   /** P1a (#165): fase van deze stap, voor de context op het tabblad Overzicht.
       Puur presentatie; komt uit de per fonds overschrijfbare fasetitels/-tekst. */
   fase?: { code: string; titel: string; beschrijving: string | null } | null;
+  /** #192: staat het besluit "op slot" (I1)? Bepaalt of losmaken vergrendeld is
+      met reden. UI-signaal — de harde gate zit server-side in de koppelroute. */
+  besluitOpSlot?: boolean;
 }
 
 function formatDatumKort(d: string) {
@@ -362,19 +384,21 @@ function BewijsstukRij({
   r,
   alleenLezen,
   kanBeheren,
-  onOpvoeren,
+  slotAan,
+  onKoppelen,
   onVerwijderen,
   onOntkoppelen,
-  bezigOntkoppel,
+  bezigOntkoppelId,
   bezigDel,
 }: {
   r: EvidenceItem;
   alleenLezen: boolean;
   kanBeheren: boolean;
-  onOpvoeren: () => void;
+  slotAan: boolean;
+  onKoppelen: (r: EvidenceItem) => void;
   onVerwijderen: (r: EvidenceItem, reden: string) => void;
-  onOntkoppelen: (r: EvidenceItem) => void;
-  bezigOntkoppel: boolean;
+  onOntkoppelen: (r: EvidenceItem, feitId: string) => void;
+  bezigOntkoppelId: string | null;
   bezigDel: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -416,23 +440,57 @@ function BewijsstukRij({
             ▾
           </span>
         </span>
-        {r.vervuld ? (
-          <span className="text-[11px] text-ok-ink font-medium shrink-0 whitespace-nowrap">
-            ✓ Opgevoerd
-          </span>
-        ) : alleenLezen ? (
-          <span className="text-[11px] text-muted shrink-0 whitespace-nowrap">
-            Nog op te voeren
-          </span>
-        ) : (
-          <button
-            type="button"
-            onClick={onOpvoeren}
-            className="text-[11px] text-accent hover:underline shrink-0 whitespace-nowrap"
-          >
-            Opvoeren
-          </button>
-        )}
+        {(() => {
+          const aantal = r.gebonden_feiten.length;
+          const nogNodig = Math.max(0, r.min_aantal - aantal);
+          // Status: vervuld / deels (bij min_aantal>1) / open.
+          const status = r.vervuld
+            ? { cls: "text-ok-ink bg-ok-tint", tekst: r.min_aantal > 1 ? `Vervuld · ${aantal} van ${r.min_aantal}` : "Vervuld" }
+            : aantal > 0
+              ? { cls: "text-warn-ink bg-warn-tint", tekst: `${aantal} van ${r.min_aantal}` }
+              : { cls: "text-muted bg-app-line", tekst: "Open" };
+          const isEval = r.requirement_type === "evaluation";
+          const koppelbaar = magKoppelen({
+            type: r.requirement_type,
+            kanBeheren,
+            alleenLezen,
+            slotAan,
+          });
+          // Knop-tekst: nog niet genoeg → type-actie; genoeg/over → "Nog een toevoegen".
+          const knopTekst = nogNodig > 0 ? ACTIE_LABEL[r.requirement_type] ?? "Koppelen" : "Nog een toevoegen";
+          return (
+            <div className="flex flex-col items-end gap-1.5 shrink-0 min-w-[150px]">
+              <span className={`text-[11px] font-semibold rounded-full px-2.5 py-0.5 whitespace-nowrap ${status.cls}`}>
+                {status.tekst}
+              </span>
+              {/* magKoppelen dekt de field/alleen-lezen/beheer-poort; evaluation is
+                  koppelbaar=false (bevinding #198) maar krijgt een reden i.p.v. niets. */}
+              {(koppelbaar || (isEval && kanBeheren && !alleenLezen)) && (
+                isEval ? (
+                  <span
+                    className="text-[11px] text-muted italic text-right max-w-[150px] leading-tight"
+                    title="Evaluaties kunnen nog niet in het portaal worden vastgelegd (openstaand punt #198)."
+                  >
+                    Evaluaties kunnen nog niet worden vastgelegd
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => onKoppelen(r)}
+                    className="border border-app-line-control rounded-lg px-3 py-1.5 text-[12.5px] font-medium bg-white text-ink hover:bg-accent-tint hover:border-accent whitespace-nowrap"
+                  >
+                    {knopTekst}
+                  </button>
+                )
+              )}
+              {nogNodig > 0 && r.min_aantal > 1 && (
+                <span className="text-[11px] text-muted text-right max-w-[150px] leading-tight">
+                  Nog {nogNodig} nodig
+                </span>
+              )}
+            </div>
+          );
+        })()}
       </div>
       {open && (
         <div className="px-3 pb-3">
@@ -449,35 +507,66 @@ function BewijsstukRij({
                 Nog geen toelichting bij dit bewijsstuk.
               </p>
             )}
-            {r.vervuld && (
+            {/* Field-uitzondering (classificatie/veld): geen gebonden feit maar een
+                veld/governance-event — toon de tekstuele herkomst, geen losmaken. */}
+            {r.vervuld && r.gebonden_feiten.length === 0 && r.bron_titel && (
               <p className="text-[13px] text-ok-ink mt-2">
-                {/* P2/PR-B (#167): herkomst — welk gebonden feit deze vereiste
-                    vervult (0189, D10). */}
-                Herkomst:{" "}
-                <span className="font-medium">
-                  {r.bron_type ? HERKOMST_LABELS[r.bron_type] ?? r.bron_type : "vastgelegd"}
-                </span>
-                {r.bron_titel ? ` — ${r.bron_titel}` : ""}
+                Herkomst: <span className="font-medium">{r.bron_titel}</span>
               </p>
             )}
-            {/* Ontkoppelen — deur (a) van I1: alleen bij een echt gebonden feit.
-                De route weigert onder een besloten besluit (nette 409). De field-
-                uitzondering (classificatie/veld) vult via governance_event en heeft
-                geen koppelbare bron — daar géén ontkoppel-actie (de route zou 400
-                geven). Vandaar de bron_type !== "governance_event"-poort. */}
-            {r.vervuld &&
-              r.bron_id &&
-              r.bron_type !== "governance_event" &&
-              kanBeheren &&
-              !alleenLezen && (
-              <button
-                type="button"
-                onClick={() => onOntkoppelen(r)}
-                disabled={bezigOntkoppel}
-                className="text-[11px] text-err-ink hover:underline mt-2 disabled:opacity-50"
-              >
-                {bezigOntkoppel ? "Bezig…" : "Ontkoppelen van deze vereiste"}
-              </button>
+            {/* #192: het volledige herkomst-spoor — elk gebonden feit met datum en
+                persoon, met per-feit losmaken (deur (a) van I1). Onder een besloten
+                besluit is losmaken vergrendeld mét reden i.p.v. een kale 409. */}
+            {r.gebonden_feiten.length > 0 && (
+              <div className="mt-2 space-y-1.5">
+                <div className="text-[11px] uppercase tracking-wide text-muted font-semibold">
+                  Herkomst
+                </div>
+                {r.gebonden_feiten.map((f) => {
+                  const meta = [f.datum, f.actor].filter(Boolean).join(" · ");
+                  // Toon de beheerregel als er in principe iets te beheren valt;
+                  // magLosmaken beslist of het echt kan (onder slot: nee → vergrendeld).
+                  const toonBeheer =
+                    kanBeheren && !alleenLezen && f.bron_type !== "governance_event";
+                  const losmaakbaar = magLosmaken({
+                    slotAan,
+                    kanBeheren,
+                    alleenLezen,
+                    bronType: f.bron_type,
+                  });
+                  return (
+                    <div
+                      key={f.id}
+                      className="flex items-start justify-between gap-3 text-[13px]"
+                    >
+                      <span className="text-ok-ink min-w-0">
+                        ✓ {f.titel ?? (f.bron_type ? HERKOMST_LABELS[f.bron_type] : null) ?? "vastgelegd"}
+                        {meta && <span className="text-muted font-normal"> · {meta}</span>}
+                      </span>
+                      {toonBeheer &&
+                        (losmaakbaar ? (
+                          <button
+                            type="button"
+                            onClick={() => onOntkoppelen(r, f.id)}
+                            disabled={bezigOntkoppelId === f.id}
+                            className="text-[11px] text-err-ink hover:underline shrink-0 disabled:opacity-50"
+                          >
+                            {bezigOntkoppelId === f.id ? "Bezig…" : "Losmaken"}
+                          </button>
+                        ) : (
+                          <span className="text-[11px] text-muted italic shrink-0">
+                            vergrendeld
+                          </span>
+                        ))}
+                    </div>
+                  );
+                })}
+                {slotAan && (
+                  <p className="text-[11px] text-muted">
+                    Vergrendeld — het besluit is genomen. Losmaken kan pas na heropenen.
+                  </p>
+                )}
+              </div>
             )}
             {!r.vervuld && r.documenttype && (
               <p className="text-[13px] text-muted mt-2">
@@ -563,8 +652,13 @@ export default function StapPaneel({
   kanBeheren = false,
   currentUserId = "",
   fase = null,
+  besluitOpSlot = false,
 }: Props) {
   const router = useRouter();
+  const slotAan = besluitOpSlot;
+  // #192: welke vereiste heeft de kiezer / het vaststellingsformulier open.
+  const [kiezerVereiste, setKiezerVereiste] = useState<EvidenceItem | null>(null);
+  const [vastformVereiste, setVastformVereiste] = useState<EvidenceItem | null>(null);
   // P1a (#165): actief tabblad. Landingstabblad = Overzicht (mockup-default);
   // of Checklist beter past voor een actieve stap is bewust een open punt
   // (zie 00 Overzicht en status/openstaande-punten-en-risicos.md).
@@ -673,12 +767,32 @@ export default function StapPaneel({
     label: r.label,
   });
 
-  // P2/PR-B (#167): ontkoppelen via de ene koppelroute (0189, D10). De route
-  // weigert onder een besloten besluit (I1) met een nette 409; die tonen we.
-  async function ontkoppelVereiste(r: EvidenceItem) {
-    if (!r.bron_id) return;
+  // #192: één affordance per vereisteregel — routeer naar de juiste flow op type.
+  function koppelenVanuitVereiste(r: EvidenceItem) {
+    switch (r.requirement_type) {
+      case "document":
+      case "external_submission":
+      case "consultation":
+        opvoerenVanuitVereiste(r); // bestaande upload-flow (Opvoeren)
+        return;
+      case "dissent_review":
+      case "mandate_check":
+        setVastformVereiste(r); // objectloos → vaststellingsformulier
+        return;
+      case "field":
+      case "evaluation":
+        return; // geen koppel-affordance (veld / doodlopend #198)
+      default:
+        setKiezerVereiste(r); // risk/assumption/kpi/approval/ai_validation → kiezer
+    }
+  }
+
+  // P2/PR-B (#167), #192: ontkoppelen (deur a) via de ene koppelroute per gebonden
+  // feit. De route weigert onder een besloten besluit (I1) met een nette 409; onder
+  // slot toont de UI 'vergrendeld' i.p.v. de knop.
+  async function ontkoppelVereiste(r: EvidenceItem, feitId: string) {
     setFout(null);
-    setBezig(`ontkoppel-${r.bron_id}`);
+    setBezig(`ontkoppel-${feitId}`);
     try {
       const res = await fetch(
         `/api/procedures/${procedureId}/vereisten/koppel`,
@@ -688,18 +802,18 @@ export default function StapPaneel({
           body: JSON.stringify({
             actie: "ontkoppel",
             vereiste: vereisteAlsPayload(r),
-            bron_id: r.bron_id,
+            bron_id: feitId,
           }),
         }
       );
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
-        setFout(data.error ?? "Ontkoppelen mislukt");
+        setFout(data.error ?? "Losmaken mislukt");
         return;
       }
       router.refresh();
     } catch (err) {
-      setFout(err instanceof Error ? err.message : "Ontkoppelen mislukt");
+      setFout(err instanceof Error ? err.message : "Losmaken mislukt");
     } finally {
       setBezig(null);
     }
@@ -1846,10 +1960,13 @@ export default function StapPaneel({
                 r={r}
                 alleenLezen={alleenLezen}
                 kanBeheren={kanBeheren}
-                onOpvoeren={() => opvoerenVanuitVereiste(r)}
+                slotAan={slotAan}
+                onKoppelen={koppelenVanuitVereiste}
                 onVerwijderen={bewijsstukVerwijderen}
                 onOntkoppelen={ontkoppelVereiste}
-                bezigOntkoppel={bezig === `ontkoppel-${r.bron_id}`}
+                bezigOntkoppelId={
+                  bezig?.startsWith("ontkoppel-") ? bezig.slice("ontkoppel-".length) : null
+                }
                 bezigDel={bezig === reqDelKey(r)}
               />
             ))}
@@ -2330,6 +2447,23 @@ export default function StapPaneel({
             if (doelId) bewijsKoppelen(doelId, id);
           }}
           onClose={() => setKoppelDoelId(null)}
+        />
+      )}
+
+      {/* #192: de kiezer voor bestaande artefacten en het vaststellingsformulier
+          voor de objectloze typen. */}
+      {kiezerVereiste && (
+        <VereisteKiezer
+          procedureId={procedureId}
+          vereiste={kiezerVereiste}
+          onClose={() => setKiezerVereiste(null)}
+        />
+      )}
+      {vastformVereiste && (
+        <VaststellingFormulier
+          procedureId={procedureId}
+          vereiste={vastformVereiste}
+          onClose={() => setVastformVereiste(null)}
         />
       )}
     </div>
