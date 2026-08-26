@@ -170,6 +170,8 @@ SQL_T8SEM="supabase/checks/2026_08_12_t8_semantische_extractie.sql"
 # Bewijs↔vereiste-binding — expliciete één-op-éénbinding, fail-closed bij
 # ambiguïteit, atomische audit voor directe PostgREST-writes en snapshotdekking.
 SQL_BBIND="supabase/checks/2026_08_18_bewijsbinding.sql"
+# P2/PR-B (#167): procedure_vaststelling — binding, I1 en tenant-isolatie (0189).
+SQL_VAST="supabase/checks/2026_08_25_vaststelling_binding_cross_tenant.sql"
 
 echo "== [1/4] tsc --noEmit --skipLibCheck =="
 ./node_modules/.bin/tsc --noEmit --skipLibCheck
@@ -286,6 +288,9 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_VWF"
 echo
 echo "-- Bewijsbinding (één-op-één, DB-validatie, atomische audit, snapshot) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_BBIND"
+echo
+echo "-- Vaststelling-binding (type/I5/cross-procedure, I1-slot, tenant-isolatie) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_VAST"
 echo
 
 echo "-- V3 (grants-gate over alle objectklassen: relaties, functies, buckets, storage-policies) --"
