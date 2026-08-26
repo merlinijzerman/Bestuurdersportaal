@@ -154,10 +154,9 @@ buiten V3; de rol-DDL controleert die policy zelf fail-closed.
 
 ## W11 — handelingen_log (besluit 0191, migratie 2026_08_26_w11_handelingen_log.sql)
 
-Nieuwe objecten voor de forensische tenant-handelingslog. **De tsv-regels volgen ná
-het draaien van de migratie in Supabase** (regenereer met
-`scripts/gen/v3-allowlist-generate.sql`); hieronder de bedoelde stand, als
-motivering vooraf:
+Nieuwe objecten voor de forensische tenant-handelingslog. De TSV-regels zijn na
+het draaien van de migratie in Supabase gemeten met dezelfde cataloguslogica als
+`scripts/gen/v3-allowlist-generate.sql`.
 
 - **`handelingen_log`** (tabel): `anon` niets; `authenticated` alleen `SELECT`
   (RLS-policy `handelingen lezen met capability` gate't op `mag_handelingen_lezen`,
@@ -175,3 +174,11 @@ motivering vooraf:
   retentiesnoei van rijen ouder dan 90 dagen.
 - **`fn_handelingen_retentie_guard()`**: trigger-functie, voor iedereen `EXECUTE`
   ingetrokken (draait in de triggercontext, niemand roept hem direct aan).
+
+De lokale Supabase-testketen was op het moment van regenereren niet beschikbaar
+(CLI/psql ontbreken en Docker draait niet). De delta is daarom rechtstreeks
+tegen de gehoste preview-database gemeten. Daarbij bleek dat de oorspronkelijke
+grantlijst `MAINTAIN` op `handelingen_log` via de default-ACL liet staan;
+dat is vóór merge expliciet ingetrokken zodat V3's browserrol-invariant ook voor
+nieuwe tabellen geldt. De definitieve meting hoort dus `authenticated=SELECT`
+te tonen, zonder `MAINTAIN`.

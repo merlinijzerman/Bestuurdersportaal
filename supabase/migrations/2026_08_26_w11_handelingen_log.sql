@@ -167,6 +167,8 @@ revoke all on public.handelingen_lees_grants from anon;
 -- authenticated mag NIET zelf schrijven/muteren en de grants niet lezen.
 revoke insert, update, delete, truncate, references, trigger
   on public.handelingen_log from authenticated;
+-- V3 browserrollen mogen ook op nieuwe tabellen geen MAINTAIN erven.
+revoke maintain on public.handelingen_log from anon, authenticated;
 revoke all on public.handelingen_lees_grants from authenticated;
 -- Lezen van handelingen_log mag wél, maar de RLS-policy gate't op de capability.
 grant select on public.handelingen_log to authenticated;
@@ -207,6 +209,8 @@ begin
     raise exception 'VERIFICATIE: anon mag handelingen_log lezen'; end if;
   if has_table_privilege('authenticated', 'public.handelingen_log', 'INSERT') then
     raise exception 'VERIFICATIE: authenticated mag direct in handelingen_log inserten'; end if;
+  if has_table_privilege('authenticated', 'public.handelingen_log', 'MAINTAIN') then
+    raise exception 'VERIFICATIE: authenticated mag handelingen_log onderhouden'; end if;
 
   raise notice 'W11 handelingen_log: verificatie geslaagd.';
 end $$;

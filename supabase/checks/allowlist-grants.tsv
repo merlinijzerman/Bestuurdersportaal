@@ -171,6 +171,12 @@ FUNC	public	fn_generiek_status_overgang_check()	function	service_role	EXECUTE
 FUNC	public	fn_generiek_transitie(p_van text, p_naar text)	function	anon	-
 FUNC	public	fn_generiek_transitie(p_van text, p_naar text)	function	authenticated	EXECUTE
 FUNC	public	fn_generiek_transitie(p_van text, p_naar text)	function	service_role	EXECUTE
+FUNC	public	fn_handelingen_retentie_guard()	function	anon	-
+FUNC	public	fn_handelingen_retentie_guard()	function	authenticated	-
+FUNC	public	fn_handelingen_retentie_guard()	function	service_role	EXECUTE
+FUNC	public	fn_handelingen_snoei()	function	anon	-
+FUNC	public	fn_handelingen_snoei()	function	authenticated	-
+FUNC	public	fn_handelingen_snoei()	function	service_role	EXECUTE
 FUNC	public	fn_govevent_hash()	function	anon	-
 FUNC	public	fn_govevent_hash()	function	authenticated	EXECUTE
 FUNC	public	fn_govevent_hash()	function	service_role	EXECUTE
@@ -180,6 +186,9 @@ FUNC	public	fn_govevent_immutable()	function	service_role	EXECUTE
 FUNC	public	fn_log_append_only()	function	anon	-
 FUNC	public	fn_log_append_only()	function	authenticated	EXECUTE
 FUNC	public	fn_log_append_only()	function	service_role	EXECUTE
+FUNC	public	mag_handelingen_lezen(p_fonds uuid)	function	anon	-
+FUNC	public	mag_handelingen_lezen(p_fonds uuid)	function	authenticated	EXECUTE
+FUNC	public	mag_handelingen_lezen(p_fonds uuid)	function	service_role	EXECUTE
 FUNC	public	fn_notulen_segment_audit(p_document_id uuid, p_veld text, p_oud text, p_nieuw text, p_reden text, p_rag_impact boolean)	function	anon	-
 FUNC	public	fn_notulen_segment_audit(p_document_id uuid, p_veld text, p_oud text, p_nieuw text, p_reden text, p_rag_impact boolean)	function	authenticated	EXECUTE
 FUNC	public	fn_notulen_segment_audit(p_document_id uuid, p_veld text, p_oud text, p_nieuw text, p_reden text, p_rag_impact boolean)	function	service_role	EXECUTE
@@ -216,6 +225,9 @@ FUNC	public	fn_profiel_bevries_kolommen()	function	service_role	EXECUTE
 FUNC	public	fn_rate_limit_check(p_endpoint text, p_limiet integer, p_venster interval)	function	anon	-
 FUNC	public	fn_rate_limit_check(p_endpoint text, p_limiet integer, p_venster interval)	function	authenticated	EXECUTE
 FUNC	public	fn_rate_limit_check(p_endpoint text, p_limiet integer, p_venster interval)	function	service_role	EXECUTE
+FUNC	public	fn_schrijf_handeling(p_handeling text, p_methode text, p_pad text, p_status integer, p_request_id uuid)	function	anon	-
+FUNC	public	fn_schrijf_handeling(p_handeling text, p_methode text, p_pad text, p_status integer, p_request_id uuid)	function	authenticated	EXECUTE
+FUNC	public	fn_schrijf_handeling(p_handeling text, p_methode text, p_pad text, p_status integer, p_request_id uuid)	function	service_role	EXECUTE
 FUNC	public	fn_schrijf_semantische_extractie(p_fonds_id uuid, p_document_id uuid, p_model text, p_prompt_version text, p_extractor_version text, p_catalog_version text, p_status text, p_units jsonb)	function	anon	-
 FUNC	public	fn_schrijf_semantische_extractie(p_fonds_id uuid, p_document_id uuid, p_model text, p_prompt_version text, p_extractor_version text, p_catalog_version text, p_status text, p_units jsonb)	function	authenticated	-
 FUNC	public	fn_schrijf_semantische_extractie(p_fonds_id uuid, p_document_id uuid, p_model text, p_prompt_version text, p_extractor_version text, p_catalog_version text, p_status text, p_units jsonb)	function	service_role	EXECUTE
@@ -558,6 +570,12 @@ REL	public	fonds_theming	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE
 REL	public	fondsen	table	anon	SELECT
 REL	public	fondsen	table	authenticated	SELECT,INSERT,UPDATE,DELETE
 REL	public	fondsen	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	handelingen_lees_grants	table	anon	-
+REL	public	handelingen_lees_grants	table	authenticated	-
+REL	public	handelingen_lees_grants	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	handelingen_log	table	anon	-
+REL	public	handelingen_log	table	authenticated	SELECT
+REL	public	handelingen_log	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
 REL	public	gesprek_reflectie_state	table	anon	-
 REL	public	gesprek_reflectie_state	table	authenticated	SELECT
 REL	public	gesprek_reflectie_state	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
