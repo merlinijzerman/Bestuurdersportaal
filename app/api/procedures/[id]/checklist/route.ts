@@ -9,7 +9,7 @@ import { z } from "zod";
 // procedure (D7). Voorbehouden aan voorzitter/beheerder; append-only gelogd.
 // Het item krijgt bron='handmatig' zodat het te onderscheiden is van de
 // meegesnapshotte template-items.
-export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "procedures.id.checklist.post" }, capability: "procedures.manage", schema: z.object({ "bewijs_vereist": z.unknown().optional(), "label": z.unknown().optional(), "stap_id": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "procedures.checklist.aanmaken" }, capability: "procedures.manage", schema: z.object({ "bewijs_vereist": z.unknown().optional(), "label": z.unknown().optional(), "stap_id": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

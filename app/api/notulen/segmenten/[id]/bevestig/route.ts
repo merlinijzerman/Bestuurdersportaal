@@ -33,7 +33,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "route-eigen", audit: { handeling: "notulen.segmenten.id.bevestig.post" }, capability: "notulen.segment.confirm", schema: z.object({ "reden": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "route-eigen", audit: { handeling: "notulen.segmenten.bevestigen" }, capability: "notulen.segment.confirm", schema: z.object({ "reden": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

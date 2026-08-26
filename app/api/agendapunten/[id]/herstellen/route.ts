@@ -12,7 +12,7 @@ import { withFondsRoute } from "@/core/lib/route-wrapper";
 //  wrapper levert user + rol via ctx; de 404/400-checks, de rolgate en de
 //  auditlog blijven exact in de route staan (audit is deploy 3, niet v1).
 // ============================================================
-export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "agendapunten.id.herstellen.post" }, capability: "agendapunten.manage", schema: "geen-body" }, async (ctx, _req, params) => {
+export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "agendapunten.herstellen" }, capability: "agendapunten.manage", schema: "geen-body" }, async (ctx, _req, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

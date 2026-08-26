@@ -6,7 +6,7 @@ import {
   resolveRequirementBinding,
 } from "@/core/lib/bewijs-binding";
 
-export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "procedures.id.bewijs.post" }, capability: "procedures.manage", schema: z.object({ "beschrijving": z.unknown().optional(), "document_id": z.unknown().optional(), "documenttype": z.unknown().optional(), "stap_id": z.unknown().optional(), "titel": z.unknown().optional(), "vereiste": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "procedures.bewijs.aanmaken" }, capability: "procedures.manage", schema: z.object({ "beschrijving": z.unknown().optional(), "document_id": z.unknown().optional(), "documenttype": z.unknown().optional(), "stap_id": z.unknown().optional(), "titel": z.unknown().optional(), "vereiste": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

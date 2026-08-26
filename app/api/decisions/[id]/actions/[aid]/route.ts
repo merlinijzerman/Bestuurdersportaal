@@ -32,7 +32,7 @@ const INHOUDELIJK: (keyof WijzigBody)[] = [
   "afhankelijk_van",
 ];
 
-export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "decisions.id.actions.aid.patch" }, capability: "decisions.manage", schema: z.object({ "status": z.unknown().optional(), "voorwaarde_id": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "decisions.actions.wijzigen" }, capability: "decisions.manage", schema: z.object({ "status": z.unknown().optional(), "voorwaarde_id": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: decisionId, aid } = params as { id: string; aid: string };
     const supabase = ctx.supabase;

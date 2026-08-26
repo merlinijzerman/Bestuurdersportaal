@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { isBureauRol, BUREAU_WEIGERING } from "@/core/lib/bureau-gate";
 
-export const DELETE = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "inbreng.id.delete" }, capability: "inbreng.manage", schema: "geen-body" }, async (ctx, _req: NextRequest, params) => {
+export const DELETE = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "inbreng.verwijderen" }, capability: "inbreng.manage", schema: "geen-body" }, async (ctx, _req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

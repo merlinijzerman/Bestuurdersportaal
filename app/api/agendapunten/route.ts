@@ -4,7 +4,7 @@ import { z } from "zod";
 
 const TOEGESTANE_CATEGORIEEN = ["beeldvorming", "oordeelsvorming", "besluitvorming", "informatie"];
 
-export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "agendapunten.post" }, capability: "agendapunten.manage", schema: z.object({ "beschrijving": z.unknown().optional(), "categorie": z.unknown().optional(), "tijdsduur_minuten": z.unknown().optional(), "titel": z.unknown().optional(), "verantwoordelijke": z.unknown().optional(), "vergadering_id": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
+export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "agendapunten.aanmaken" }, capability: "agendapunten.manage", schema: z.object({ "beschrijving": z.unknown().optional(), "categorie": z.unknown().optional(), "tijdsduur_minuten": z.unknown().optional(), "titel": z.unknown().optional(), "verantwoordelijke": z.unknown().optional(), "vergadering_id": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
   try {
     const supabase = ctx.supabase;
 

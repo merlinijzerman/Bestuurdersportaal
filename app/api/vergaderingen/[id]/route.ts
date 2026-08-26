@@ -22,7 +22,7 @@ type VergaderingRow = {
 //  Audit: diff-gebaseerde entry in vergadering_log (append-only,
 //  migratie 2026_07_20_vergadering_wijzigen.sql).
 // ============================================================
-export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "vergaderingen.id.patch" }, capability: "vergaderingen.manage", schema: z.object({ "datum": z.unknown().optional(), "locatie": z.unknown().optional(), "titel": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "vergaderingen.wijzigen" }, capability: "vergaderingen.manage", schema: z.object({ "datum": z.unknown().optional(), "locatie": z.unknown().optional(), "titel": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

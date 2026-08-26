@@ -9,7 +9,7 @@ import { z } from "zod";
 // voorzitter/beheerder. Een BLOKKERENDE vereiste deactiveren kan alleen met
 // verplichte motivering (REQ-006) — nooit stil. Elke mutatie logt één
 // governance_event.
-export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "procedures.id.requirements.reqId.patch" }, capability: "procedures.manage", schema: z.object({ "actief": z.unknown().optional(), "motivering": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "procedures.requirements.wijzigen" }, capability: "procedures.manage", schema: z.object({ "actief": z.unknown().optional(), "motivering": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id, reqId } = params as { id: string; reqId: string };
     const supabase = ctx.supabase;

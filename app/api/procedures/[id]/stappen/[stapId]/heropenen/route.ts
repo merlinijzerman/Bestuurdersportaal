@@ -15,7 +15,7 @@ import {
 // (nieuwe versie van het oordeel, geen overschrijving). Afhankelijke,
 // reeds afgeronde stappen worden NIET teruggezet maar gemarkeerd met
 // `herbevestiging_nodig = true` (zichtbaar, niet-blokkerend signaal).
-export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "procedures.id.stappen.stapId.heropenen.post" }, capability: "procedures.manage", schema: z.object({ "motivering": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "procedures.stappen.heropenen" }, capability: "procedures.manage", schema: z.object({ "motivering": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id, stapId } = params as { id: string; stapId: string };
     const supabase = ctx.supabase;

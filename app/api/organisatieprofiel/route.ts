@@ -56,7 +56,7 @@ export const GET = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoo
   }
 });
 
-export const PUT = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "organisatieprofiel.put" }, capability: "organisation.profile.manage", schema: z.object({ "peildatum": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
+export const PUT = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "organisatieprofiel.wijzigen" }, capability: "organisation.profile.manage", schema: z.object({ "peildatum": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
   try {
     const supabase = ctx.supabase;
 

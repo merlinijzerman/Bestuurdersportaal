@@ -40,7 +40,7 @@ import {
 
 type RisicoRij = RisicoHuidig & { id: string; fonds_id: string; status: string };
 
-export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "risicos.id.patch" }, capability: "risicos.manage", schema: z.object({ "categorie": z.unknown().optional(), "eigenaar_naam": z.unknown().optional(), "impact": z.unknown().optional(), "kans": z.unknown().optional(), "niveau": z.unknown().optional(), "niveau_handmatig": z.unknown().optional(), "reden": z.unknown().optional(), "titel": z.unknown().optional(), "toelichting": z.unknown().optional(), "type_risico": z.unknown().optional(), "volgende_beoordeling": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "risicos.wijzigen" }, capability: "risicos.manage", schema: z.object({ "categorie": z.unknown().optional(), "eigenaar_naam": z.unknown().optional(), "impact": z.unknown().optional(), "kans": z.unknown().optional(), "niveau": z.unknown().optional(), "niveau_handmatig": z.unknown().optional(), "reden": z.unknown().optional(), "titel": z.unknown().optional(), "toelichting": z.unknown().optional(), "type_risico": z.unknown().optional(), "volgende_beoordeling": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

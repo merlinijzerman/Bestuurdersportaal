@@ -40,7 +40,7 @@ export const GET = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoo
   }
 });
 
-export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "documents.id.procesinstanties.post" }, capability: "documents.metadata.update", schema: z.object({ "procesinstantie_id": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "documents.procesinstantie-koppelen" }, capability: "documents.metadata.update", schema: z.object({ "procesinstantie_id": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;
@@ -115,7 +115,7 @@ export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beo
   }
 });
 
-export const DELETE = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "documents.id.procesinstanties.delete" }, capability: "documents.metadata.update", schema: z.object({ "procesinstantie_id": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const DELETE = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "documents.procesinstantie-ontkoppelen" }, capability: "documents.metadata.update", schema: z.object({ "procesinstantie_id": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

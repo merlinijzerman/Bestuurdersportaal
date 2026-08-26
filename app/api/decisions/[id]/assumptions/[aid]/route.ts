@@ -58,7 +58,7 @@ const INHOUDELIJKE_VELDEN: (keyof WijzigBody)[] = [
   "ai_gedetecteerd",
 ];
 
-export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "decisions.id.assumptions.aid.patch" }, capability: "decisions.manage", schema: z.object({ "onzekerheid": z.unknown().optional(), "status": z.unknown().optional(), "type": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "decisions.assumptions.wijzigen" }, capability: "decisions.manage", schema: z.object({ "onzekerheid": z.unknown().optional(), "status": z.unknown().optional(), "type": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: decisionId, aid } = params as { id: string; aid: string };
     const supabase = ctx.supabase;

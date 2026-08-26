@@ -27,7 +27,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "route-eigen", audit: { handeling: "notulen.id.segmenteer.post" }, capability: "notulen.segment.confirm", schema: "geen-body" }, async (ctx, _req: NextRequest, params) => {
+export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "route-eigen", audit: { handeling: "notulen.segmenteren" }, capability: "notulen.segment.confirm", schema: "geen-body" }, async (ctx, _req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

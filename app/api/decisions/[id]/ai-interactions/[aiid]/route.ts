@@ -34,7 +34,7 @@ interface PatchBody {
   verworpen_reden?: string | null;
 }
 
-export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "decisions.id.ai-interactions.aiid.patch" }, capability: "decisions.manage", schema: z.object({ "aangepaste_output": z.unknown().optional(), "gebruik_context": z.unknown().optional(), "gebruikt_in_dossier": z.unknown().optional(), "validatiestatus": z.unknown().optional(), "verworpen_reden": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "decisions.ai-interactions.wijzigen" }, capability: "decisions.manage", schema: z.object({ "aangepaste_output": z.unknown().optional(), "gebruik_context": z.unknown().optional(), "gebruikt_in_dossier": z.unknown().optional(), "validatiestatus": z.unknown().optional(), "verworpen_reden": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id, aiid } = params as { id: string; aiid: string };
     const supabase = ctx.supabase;

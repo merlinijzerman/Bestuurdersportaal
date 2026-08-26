@@ -4,7 +4,7 @@ import { notifyUser } from "@/core/lib/notifications";
 import { isBureauRol, BUREAU_WEIGERING } from "@/core/lib/bureau-gate";
 import { z } from "zod";
 
-export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "inbreng.post" }, capability: "inbreng.manage", schema: z.object({ "agendapunt_id": z.unknown().optional(), "tekst": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
+export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "inbreng.aanmaken" }, capability: "inbreng.manage", schema: z.object({ "agendapunt_id": z.unknown().optional(), "tekst": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
   try {
     const supabase = ctx.supabase;
 

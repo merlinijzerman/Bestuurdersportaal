@@ -158,7 +158,7 @@ export const GET = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoo
 });
 
 /** POST — één transitie aanvragen. De actie is het enige wat de client stuurt. */
-export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "reflectie.transitie.post" }, capability: "reflectie.manage.own", schema: z.object({ "actie": z.unknown().optional(), "bronset_log_id": z.unknown().optional(), "gesprek_id": z.unknown().optional(), "ingang": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
+export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "reflectie.transitie-uitvoeren" }, capability: "reflectie.manage.own", schema: z.object({ "actie": z.unknown().optional(), "bronset_log_id": z.unknown().optional(), "gesprek_id": z.unknown().optional(), "ingang": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
   try {
     const body = (await req.json().catch(() => ({}))) as {
       gesprek_id?: unknown;

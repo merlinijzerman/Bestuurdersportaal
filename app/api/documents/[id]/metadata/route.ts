@@ -87,7 +87,7 @@ export const GET = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoo
   }
 });
 
-export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "documents.id.metadata.patch" }, capability: "documents.metadata.update", schema: z.object({ "preview": z.unknown().optional(), "reden": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "documents.metadata-wijzigen" }, capability: "documents.metadata.update", schema: z.object({ "preview": z.unknown().optional(), "reden": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

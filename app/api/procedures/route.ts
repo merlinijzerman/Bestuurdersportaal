@@ -4,7 +4,7 @@ import { vindTemplate } from "@/core/lib/proces-templates";
 import { beginStatussen } from "@/core/lib/procedure-activatie";
 import { z } from "zod";
 
-export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "procedures.post" }, capability: "procedures.manage", schema: z.object({ "beschrijving": z.unknown().optional(), "deadline": z.unknown().optional(), "eigenaar_ids": z.unknown().optional(), "template_code": z.unknown().optional(), "titel": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
+export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "procedures.aanmaken" }, capability: "procedures.manage", schema: z.object({ "beschrijving": z.unknown().optional(), "deadline": z.unknown().optional(), "eigenaar_ids": z.unknown().optional(), "template_code": z.unknown().optional(), "titel": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
   try {
     const supabase = ctx.supabase;
 

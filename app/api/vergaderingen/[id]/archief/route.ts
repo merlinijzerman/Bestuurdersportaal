@@ -44,7 +44,7 @@ type VergaderingRij = {
   gearchiveerd_op: string | null;
 };
 
-export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "vergaderingen.id.archief.post" }, capability: "vergaderingen.manage", schema: z.object({ "actie": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "vergaderingen.archiveren" }, capability: "vergaderingen.manage", schema: z.object({ "actie": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

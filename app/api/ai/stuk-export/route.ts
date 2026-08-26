@@ -51,7 +51,7 @@ function schoonBron(b: unknown): KopieBron | null {
   };
 }
 
-export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "ai.stuk-export.post" }, capability: "ai.stukvoorbereiding", schema: z.object({ "antwoord": z.unknown().optional(), "bronnen": z.unknown().optional(), "gesprek_id": z.unknown().optional(), "onderwerp": z.unknown().optional(), "stuksoort": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
+export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "ai.stuk-exporteren" }, capability: "ai.stukvoorbereiding", schema: z.object({ "antwoord": z.unknown().optional(), "bronnen": z.unknown().optional(), "gesprek_id": z.unknown().optional(), "onderwerp": z.unknown().optional(), "stuksoort": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
   try {
     const supabase = ctx.supabase;
 

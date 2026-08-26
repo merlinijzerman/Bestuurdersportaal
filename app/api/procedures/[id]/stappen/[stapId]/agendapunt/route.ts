@@ -5,7 +5,7 @@ import { z } from "zod";
 // POST: maak een agendapunt aan in een bestaande vergadering en koppel
 // het aan deze procedure-stap. Vult titel/beschrijving uit de stap als
 // die niet expliciet meegegeven worden.
-export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "procedures.id.stappen.stapId.agendapunt.post" }, capability: "procedures.manage", schema: z.object({ "beschrijving": z.unknown().optional(), "categorie": z.unknown().optional(), "titel": z.unknown().optional(), "vergadering_id": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "procedures.stappen.agendapunt-koppelen" }, capability: "procedures.manage", schema: z.object({ "beschrijving": z.unknown().optional(), "categorie": z.unknown().optional(), "titel": z.unknown().optional(), "vergadering_id": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id, stapId } = params as { id: string; stapId: string };
     const supabase = ctx.supabase;

@@ -32,7 +32,7 @@ export const GET = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoo
   }
 });
 
-export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "procedures.id.requirements.post" }, capability: "procedures.manage", schema: z.object({ "blokkerend": z.unknown().optional(), "documenttype": z.unknown().optional(), "label": z.unknown().optional(), "min_aantal": z.unknown().optional(), "requirement_type": z.unknown().optional(), "stap_volgorde": z.unknown().optional(), "veld_pad": z.unknown().optional(), "vereist_validatie_domein": z.unknown().optional(), "verplicht": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "procedures.requirements.aanmaken" }, capability: "procedures.manage", schema: z.object({ "blokkerend": z.unknown().optional(), "documenttype": z.unknown().optional(), "label": z.unknown().optional(), "min_aantal": z.unknown().optional(), "requirement_type": z.unknown().optional(), "stap_volgorde": z.unknown().optional(), "veld_pad": z.unknown().optional(), "vereist_validatie_domein": z.unknown().optional(), "verplicht": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

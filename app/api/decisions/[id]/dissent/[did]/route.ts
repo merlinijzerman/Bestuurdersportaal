@@ -48,7 +48,7 @@ const INHOUDELIJKE_VELDEN: (keyof WijzigBody)[] = [
   "gekoppeld_voorwaarde_id",
 ];
 
-export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "decisions.id.dissent.did.patch" }, capability: "decisions.manage", schema: z.object({ "formeel_vastgesteld": z.unknown().optional(), "zichtbaarheid": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "decisions.dissent.wijzigen" }, capability: "decisions.manage", schema: z.object({ "formeel_vastgesteld": z.unknown().optional(), "zichtbaarheid": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: decisionId, did } = params as { id: string; did: string };
     const supabase = ctx.supabase;
@@ -285,7 +285,7 @@ export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-be
   }
 });
 
-export const DELETE = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "decisions.id.dissent.did.delete" }, capability: "decisions.manage", schema: "geen-body" }, async (ctx, req: NextRequest, params) => {
+export const DELETE = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "decisions.dissent.verwijderen" }, capability: "decisions.manage", schema: "geen-body" }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: decisionId, did } = params as { id: string; did: string };
     const supabase = ctx.supabase;
