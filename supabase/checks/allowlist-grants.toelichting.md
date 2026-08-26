@@ -151,3 +151,27 @@ valt buiten V3: dat blijft gate E in `2026_07_31_r1_structurele_gates.sql`.
 Storage-policies die uitsluitend een operationele rol buiten `public`, `anon`,
 `authenticated` en `service_role` noemen (zoals `drift_lezer`) vallen eveneens
 buiten V3; de rol-DDL controleert die policy zelf fail-closed.
+
+## W11 — handelingen_log (besluit 0191, migratie 2026_08_26_w11_handelingen_log.sql)
+
+Nieuwe objecten voor de forensische tenant-handelingslog. **De tsv-regels volgen ná
+het draaien van de migratie in Supabase** (regenereer met
+`scripts/gen/v3-allowlist-generate.sql`); hieronder de bedoelde stand, als
+motivering vooraf:
+
+- **`handelingen_log`** (tabel): `anon` niets; `authenticated` alleen `SELECT`
+  (RLS-policy `handelingen lezen met capability` gate't op `mag_handelingen_lezen`,
+  dus deny-by-default per fonds/capability); geen `INSERT` voor `authenticated` —
+  schrijven kan uitsluitend via de definer `fn_schrijf_handeling`. `service_role`
+  volledig (nodig voor retentiesnoei).
+- **`handelingen_lees_grants`** (tabel): deny-by-default — `anon` én
+  `authenticated` niets (ook geen SELECT); uitsluitend leesbaar binnen
+  `mag_handelingen_lezen()`. `service_role` volledig (grants toekennen via een
+  gedocumenteerde SQL-stap door de eigenaar, geen beheer-UI).
+- **`fn_schrijf_handeling(...)`**, **`mag_handelingen_lezen(uuid)`**: `anon` niets,
+  `authenticated` + `service_role` `EXECUTE`. Beide `SECURITY DEFINER` met vaste
+  `search_path`; `fn_schrijf_handeling` leidt fonds/gebruiker uit `auth.uid()` af.
+- **`fn_handelingen_snoei()`**: service-role-only (`anon`/`authenticated` niets) —
+  retentiesnoei van rijen ouder dan 90 dagen.
+- **`fn_handelingen_retentie_guard()`**: trigger-functie, voor iedereen `EXECUTE`
+  ingetrokken (draait in de triggercontext, niemand roept hem direct aan).
