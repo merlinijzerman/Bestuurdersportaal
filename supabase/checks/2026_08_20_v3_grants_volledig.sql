@@ -123,11 +123,20 @@ declare
 begin
   -- 1. LEK: onbekend object — feitelijk object dat niet in de allowlist staat.
   --    DE belangrijkste regel: dwingt een bewuste keuze bij elk nieuw object.
+  --    UITZONDERING (smal, expliciet): storage.iceberg_namespaces / iceberg_tables
+  --    zijn de Supabase-Iceberg-catalogus — platform-beheerd en VERSIE-AFHANKELIJK
+  --    aanwezig: afwezig op Productie/Preview (gemeten 27-08-2026), aanwezig op de
+  --    ephemere CI-Supabase (nieuwere Supabase-CLI). Ze staan bewust NIET in de
+  --    allowlist (zie toelichting §8); zonder deze uitzondering slaat de gate op de
+  --    CI-DB vals-rood op hun *aanwezigheid*. Alleen deze twee, alleen hier — elk
+  --    ander storage-object blijft exact gecontroleerd.
   for r in
     select distinct a.sch, a.obj, a.klasse
       from v3_actual a
      where not exists (select 1 from v3_allow w
                         where w.sch=a.sch and w.obj=a.obj)
+       and not (a.sch = 'storage'
+                and a.obj in ('iceberg_namespaces', 'iceberg_tables'))
      order by 1,2
   loop
     lek := lek || format('  LEK onbekend object: %s.%s (%s) staat niet in de allowlist%s',

@@ -151,8 +151,17 @@ MAINTAIN. Afwijkingen die bewust in de allowlist staan:
    via een repo-migratie** aangemaakt; het is een Supabase-platformfeature die deze
    projecten niet hebben. Ze in de allowlist laten staan sloeg de V3-gate op beide
    omgevingen vals-rood ("LEK ontbrekend object"). Daarom uit de allowlist verwijderd.
-   Komt de Iceberg-feature ooit op een omgeving, dan verschijnen ze als "onbekend
-   object" — de bedoelde richting: een bewuste toevoeging, geen stille bijvangst.
+
+   **Versie-afhankelijk aanwezig — de gate negeert hun *aanwezigheid*.** Ze ontbreken
+   op Productie/Preview, maar de **ephemere CI-Supabase** (nieuwere Supabase-CLI) hééft
+   ze wél. Zonder tegenmaatregel zou de gate op de CI-DB vals-rood slaan op "LEK
+   onbekend object". Daarom kent de `onbekend object`-check in
+   `2026_08_20_v3_grants_volledig.sql` één **smalle, expliciet benoemde** uitzondering:
+   `storage.iceberg_namespaces` en `storage.iceberg_tables` worden daar overgeslagen —
+   alléén deze twee, alléén in die check. Elk ander storage-object blijft exact
+   gecontroleerd; hun grants (als ze aanwezig zijn) blijven RLS-/policy-gated zoals de
+   rest van het platform-beheerde `storage`-schema (punt 7). Komt de feature ooit op
+   Productie/Preview, dan is dat zichtbaar in de omgeving, niet als een gate-verschil.
 
 ## Objecten die NIET in scope zijn
 
