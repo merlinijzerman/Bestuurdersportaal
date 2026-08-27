@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { templateLabel } from "@/core/lib/proces-templates";
 import { isBureauRol } from "@/core/lib/bureau-gate";
+import { rolHeeftCapability } from "@/core/lib/capabilities-map";
 import {
   DOSSIER_STATUS_LABEL,
   dossierStatusKleur,
@@ -226,6 +227,13 @@ export default async function ProcedureDetailPage({
     .single();
   const currentUserIsPrivileged =
     profiel?.rol === "voorzitter" || profiel?.rol === "beheerder";
+  // P3 (#168, §5.1): afronden met afwijking hangt aan de capability, niet aan de
+  // kanBeheren-hardcode — bestuurder draagt de capability wél maar is geen
+  // kanBeheren. De harde gate zit server-side (route + DB-functie).
+  const magAfwijkingVastleggen = rolHeeftCapability(
+    profiel?.rol,
+    "procedures.afwijking.vastleggen"
+  );
   // T1 bureau-rol (§5.3): geen dissent vastleggen. UI-cosmetica; de weigering
   // staat in de dissent-routes en in de RLS-schrijfpolicy.
   const currentUserIsBureau = isBureauRol(profiel?.rol);
@@ -747,6 +755,7 @@ export default async function ProcedureDetailPage({
               stap={geselecteerdeStap}
               alleenLezen={!geselecteerdeIsBewerkbaar}
               kanBeheren={currentUserIsPrivileged}
+              magAfwijkingVastleggen={magAfwijkingVastleggen}
               currentUserId={user.id}
               voltooidDoorNaam={geselecteerdeVoltooidDoorNaam}
               fase={(() => {
