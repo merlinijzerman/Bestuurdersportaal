@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { ensureDecisionForProcedure } from "@/core/lib/decision";
 import { requirementSleutel } from "@/core/lib/requirement-sleutel";
+import { zwaarteVanVereiste } from "@/core/lib/requirement-zwaarte";
 import { REQUIREMENT_TYPES } from "@/core/lib/procedure-definitie";
 
 // GET  /api/procedures/[id]/requirements  — actieve instantie-requirements
@@ -176,8 +177,13 @@ export const POST = withFondsRoute({ capability: "procedures.manage" }, async (c
         label,
         documenttype: nieuweDocumenttype,
         veld_pad: body.veld_pad ?? null,
-        verplicht: body.verplicht ?? true,
-        blokkerend: body.blokkerend ?? false,
+        // P3 (#168): verplicht/blokkerend zijn nu afgeleide (generated) leeskolommen
+        // uit zwaarte — dus zwaarte is de schrijfkant. De UI stuurt nog de twee
+        // booleans; die leiden we hier af naar de zwaarte-bron van waarheid.
+        zwaarte: zwaarteVanVereiste({
+          verplicht: body.verplicht ?? true,
+          blokkerend: body.blokkerend ?? false,
+        }),
         min_aantal: body.min_aantal ?? 1,
         vereist_validatie_domein: body.vereist_validatie_domein ?? null,
         bron: "handmatig",
