@@ -155,6 +155,57 @@ runbook, git, screenshots of tickets.
 | Mailgun/notify-variabelen | sink of volledig uit | geaccordeerde ontvangers | Test mag nooit echte notificatie sturen |
 | monitoring/analytics | Previewdataset | Productiedataset | Geen vermenging van gebruikers/incidenten |
 
+### ENFORCE_AUDIT-vlagkoppeling (0191 §7)
+
+**Voorwaarde voor `ENFORCE_AUDIT=on`.** De vlag mag pas aan als **beide**
+dragers leeg zijn:
+
+1. de bewijsketen-gap-gate (`ketengebeurtenis_vereist`): alle 12
+   bestuurlijk-gap-handlers én `stemmingen/[id]/sluiten` schrijven hun
+   `governance_events`-ketengebeurtenis;
+2. de machine-drager (`spoor_vereist`): de 5 worker-SPECs schrijven
+   `platform_event_log`.
+
+Bron: `tests/karakterisering/audit-inventaris.json`
+(`meta.ketengebeurtenisVereist` / `meta.spoorVereist`) en besluit
+[`0191`](../decisions/0191-handelingstabel-en-de-audit-union.md) §7. Zolang één
+drager niet leeg is, is `ENFORCE_AUDIT=on` niet toegestaan.
+
+**Vlagstand controleren op Preview of Productie.** De autoritatieve bron is
+Vercel: `project → Settings → Environment Variables →` de betreffende
+omgeving. Detectie is exact `=== "on"`; afwezig of elke andere waarde dan `on`
+betekent dus **uit**. Dit geldt voor `ENFORCE_AUDIT`, `ENFORCE_RATELIMIT`,
+`ENFORCE_CAPABILITY` en `ENFORCE_SCHEMA`.
+
+**Runtime via healthz (achter Deployment Protection).**
+`GET /api/platform/healthz` geeft de opgeloste enforce-booleans terug, maar zit
+op Preview achter Vercel Deployment Protection. Gebruik daarom *Protection
+Bypass for Automation* (`Vercel → Deployment Protection`):
+
+```bash
+curl \
+  -H "x-vercel-protection-bypass: $BYPASS" \
+  -H "Authorization: Bearer $CRON_SECRET" \
+  "https://<preview>/api/platform/healthz" | jq '.enforce'
+```
+
+Zonder de bypass-header geeft de endpoint HTML terug, geen JSON. De
+Vercel-env-config blijft een alternatief autoritatief bewijs.
+
+**Positieve DB-bevestiging.** Controleer op de doel-Supabase ná
+state-changing acties:
+
+```sql
+select count(*) from handelingen_log;
+```
+
+Een lege tabel betekent dat de wrapper niets schrijft en `ENFORCE_AUDIT` dus
+uit staat.
+
+**Actiepunt (open).** Stel het Protection-Bypass-secret in voor
+geautomatiseerde healthz-checks, of leg vast dat de check vanuit de beschermde
+context draait. Alleen dan blijft "mag deze vlag aan?" een uitvoerbare controle.
+
 ### Secretrotatie — `CRON_SECRET` (W5b / #103)
 
 `CRON_SECRET` beschermt de zes service-role-machineroutes. Er is één statisch
