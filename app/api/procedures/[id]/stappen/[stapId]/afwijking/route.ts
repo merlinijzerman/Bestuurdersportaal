@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute, type FondsContext } from "@/core/lib/route-wrapper";
 import { ensureDecisionForProcedure } from "@/core/lib/decision";
 import { pasActivatieCascadeToe } from "@/core/lib/procedure-activatie-cascade";
+import { MIN_MOTIVERING_LENGTE } from "@/core/lib/afwijking";
 
 // POST /api/procedures/[id]/stappen/[stapId]/afwijking
 //
@@ -38,8 +39,13 @@ export async function afrondenMetAfwijkingHandler(
 
       const body = (await req.json()) as { motivering?: string; bevestigd?: boolean };
       const motivering = body.motivering?.trim();
-      if (!motivering) {
-        return NextResponse.json({ error: "Een motivering is verplicht" }, { status: 400 });
+      // I2: minimumlengte afgedwongen (niet leeg-met-spaties). De DB-functie draagt
+      // dezelfde grens als backstop (PC002 + CHECK-constraint).
+      if (!motivering || motivering.length < MIN_MOTIVERING_LENGTE) {
+        return NextResponse.json(
+          { error: `Een afwijking vereist een motivering van minimaal ${MIN_MOTIVERING_LENGTE} tekens` },
+          { status: 400 }
+        );
       }
 
       // Stap server-side ophalen (RLS begrenst tot het eigen fonds): 404 + de

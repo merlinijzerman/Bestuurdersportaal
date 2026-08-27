@@ -4,6 +4,8 @@
 -- afronding, procedure_log houdt de historie los daarvan).
 begin;
 
+alter table public.procedure_stappen
+  drop constraint if exists procedure_stappen_afwijking_motivering_minlengte;
 alter table public.procedure_stappen drop column if exists afwijking_door;
 alter table public.procedure_stappen drop column if exists afwijking_snapshot;
 alter table public.procedure_stappen drop column if exists afwijking_motivering;
