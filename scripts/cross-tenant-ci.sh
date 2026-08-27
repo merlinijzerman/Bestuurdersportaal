@@ -181,6 +181,8 @@ SQL_T8SEM="supabase/checks/2026_08_12_t8_semantische_extractie.sql"
 SQL_BBIND="supabase/checks/2026_08_18_bewijsbinding.sql"
 # P2/PR-B (#167): procedure_vaststelling — binding, I1 en tenant-isolatie (0189).
 SQL_VAST="supabase/checks/2026_08_25_vaststelling_binding_cross_tenant.sql"
+# P3/PR-C (#168): afronden met afwijking — snapshot-pin (SQL-helft) + eigen slot (0192).
+SQL_P3C="supabase/checks/2026_08_27_p3c_afwijking.sql"
 
 if [ "${XTENANT_FAST_LAGEN:-uitvoeren}" = "overslaan" ]; then
   echo "== [1–2/4] snelle lagen bewust niet herhaald =="
@@ -312,6 +314,10 @@ echo
 echo "-- #214-a1 schrijfpoort (kolom-revoke bewaakt + gedragstoets: directe PATCH faalt, RPC werkt) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P214A1"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P214A1G"
+echo
+
+echo "-- Afronden met afwijking (snapshot-pin SQL-helft, eigen slot, atomaire kern) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P3C"
 echo
 
 echo "-- V3 (grants-gate over alle objectklassen: relaties, functies, buckets, storage-policies) --"
