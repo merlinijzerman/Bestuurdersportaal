@@ -50,20 +50,24 @@ export async function pasActivatieCascadeToe(
     }));
 
     if (alleStappenAfgerond(activatieState)) {
-      // Alle stappen afgerond — procedure is klaar.
-      await supabase
-        .from("procedures")
-        .update({ status: "afgerond", afgerond_op: new Date().toISOString() })
-        .eq("id", procedureId);
-
-      // Iteratie 3-A: notificatie naar de procedure-starter.
+      // Alle stappen afgerond — procedure is klaar. Idempotent (voorwaarde 2, 0192):
+      // is de procedure AL afgerond (bv. bij achterstand-herstel dat de cascade
+      // opnieuw draait), dan niet nogmaals afronden en — belangrijker — niet
+      // nogmaals notificeren. Daarom de status vóór de update lezen.
       const { data: proc } = await supabase
         .from("procedures")
-        .select("titel, gestart_door, fonds_id")
+        .select("titel, gestart_door, fonds_id, status")
         .eq("id", procedureId)
         .maybeSingle();
-      if (proc?.gestart_door && proc.fonds_id) {
-        await notifyUser(
+      if (proc && proc.status !== "afgerond") {
+        await supabase
+          .from("procedures")
+          .update({ status: "afgerond", afgerond_op: new Date().toISOString() })
+          .eq("id", procedureId);
+
+        // Iteratie 3-A: notificatie naar de procedure-starter (eenmalig).
+        if (proc.gestart_door && proc.fonds_id) {
+          await notifyUser(
           supabase,
           "procedure_afgerond",
           proc.gestart_door,
@@ -78,7 +82,8 @@ export async function pasActivatieCascadeToe(
             gerelateerd_aan_id: procedureId,
             actor_naam: actor.naam || undefined,
           }
-        );
+          );
+        }
       }
     } else if (activatieState.some((s) => s.status === "geblokkeerd")) {
       // Parallel model (engine v2): activeer elke stap die door dit afronden

@@ -635,6 +635,10 @@ export default function StapPaneel({
   const [afwijkingForm, setAfwijkingForm] = useState(false);
   const [afwijkingMotivering, setAfwijkingMotivering] = useState("");
   const [afwijkingBevestigd, setAfwijkingBevestigd] = useState(false);
+  // Als de SERVER om bevestiging vraagt (409) terwijl de client geen kritieke
+  // vereiste zag (client- en server-zwaarte kunnen afwijken), tonen we het
+  // bevestigingsvakje alsnog — anders zou elke retry vastlopen op 409.
+  const [serverVraagtBevestiging, setServerVraagtBevestiging] = useState(false);
   // WO-2 (D7): handmatig checklistpunt toevoegen aan een lopende stap.
   const [checklistForm, setChecklistForm] = useState(false);
   const [checklistLabel, setChecklistLabel] = useState("");
@@ -1087,8 +1091,10 @@ export default function StapPaneel({
       );
       const data = await res.json().catch(() => ({}));
       if (res.status === 409 && data.bevestiging_vereist) {
-        // Server vraagt expliciete bevestiging bij een kritieke vereiste.
+        // Server vraagt expliciete bevestiging bij een kritieke vereiste. Toon het
+        // vakje ook als de client zelf geen kritieke vereiste zag.
         setAfwijkingBevestigd(false);
+        setServerVraagtBevestiging(true);
         setFout(data.error || "Bevestig expliciet om af te ronden.");
         return;
       }
@@ -1099,6 +1105,7 @@ export default function StapPaneel({
       setAfwijkingForm(false);
       setAfwijkingMotivering("");
       setAfwijkingBevestigd(false);
+      setServerVraagtBevestiging(false);
       router.refresh();
     } catch (err: unknown) {
       setFout(err instanceof Error ? err.message : "Afronden met afwijking mislukt");
@@ -2412,7 +2419,7 @@ export default function StapPaneel({
               placeholder="Waarom wordt deze stap afgerond terwijl dit openstaat?"
             />
           </label>
-          {kritiekOpen > 0 && (
+          {(kritiekOpen > 0 || serverVraagtBevestiging) && (
             <label className="flex items-start gap-2 mt-2 text-xs text-ink">
               <input
                 type="checkbox"
@@ -2432,11 +2439,13 @@ export default function StapPaneel({
               disabled={
                 bezig === "afwijking" ||
                 afwijkingMotivering.trim().length === 0 ||
-                (kritiekOpen > 0 && !afwijkingBevestigd)
+                ((kritiekOpen > 0 || serverVraagtBevestiging) && !afwijkingBevestigd)
               }
               className={`px-4 py-2 text-sm rounded-lg font-medium ${
                 afwijkingMotivering.trim().length > 0 &&
-                (kritiekOpen === 0 || afwijkingBevestigd)
+                (kritiekOpen === 0 && !serverVraagtBevestiging
+                  ? true
+                  : afwijkingBevestigd)
                   ? "bg-warn text-white hover:opacity-90"
                   : "bg-app-line text-muted cursor-not-allowed"
               }`}
@@ -2444,7 +2453,12 @@ export default function StapPaneel({
               {bezig === "afwijking" ? "Bezig…" : "Afronden met afwijking"}
             </button>
             <button
-              onClick={() => setAfwijkingForm(false)}
+              onClick={() => {
+                setAfwijkingForm(false);
+                setAfwijkingBevestigd(false);
+                setServerVraagtBevestiging(false);
+                setFout(null);
+              }}
               disabled={bezig === "afwijking"}
               className="px-3 py-2 text-sm rounded-lg text-muted hover:text-ink"
             >

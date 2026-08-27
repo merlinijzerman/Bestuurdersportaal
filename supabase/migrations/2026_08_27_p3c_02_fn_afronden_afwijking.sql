@@ -103,7 +103,12 @@ begin
       v_dubbel    int;
     begin
       -- Ambiguïteit: dezelfde sleutel meer dan één keer gedefinieerd op deze stap →
-      -- fail-closed (niet vervuld), gelijk aan decision.ts (r817) en de SQL-gate.
+      -- fail-closed (niet vervuld), gelijk aan decision.ts (r817). BELANGRIJK: de
+      -- dubbeltelling gebruikt DEZELFDE gefilterde set als de hoofdlus en als
+      -- decision.ts (dat telt over `alleRequirements`, ná uitsluiting én activatie).
+      -- De template-arm r2 draagt daarom exact het uitsluitings- én het
+      -- triggert_bij_*-filter; anders zou een uitgesloten of inactieve template-
+      -- vereiste een botsende ACTIEVE instantie-vereiste stil fail-closed maken.
       select count(*) into v_dubbel from (
         select 1 from public.procedure_requirements r2
           where r2.template_code = v_proc.template_code
@@ -111,6 +116,18 @@ begin
             and r2.stap_volgorde = rij.stap_volgorde
             and (r2.stap_volgorde::text || '|' || r2.requirement_type || '|'
                  || coalesce(r2.documenttype, r2.label)) = v_sleutel
+            and (v_dec.id is null or not exists (
+                  select 1 from public.procedure_requirement_uitsluiting u
+                   where u.decision_id = v_dec.id
+                     and u.actief = true
+                     and u.stap_volgorde    = r2.stap_volgorde
+                     and u.requirement_type = r2.requirement_type
+                     and u.match_sleutel    = coalesce(r2.documenttype, r2.label)))
+            and (v_dec.id is null or (
+                  (r2.triggert_bij_complexiteit     is null or v_dec.complexiteit     = any (r2.triggert_bij_complexiteit))
+              and (r2.triggert_bij_risiconiveau     is null or v_dec.risiconiveau     = any (r2.triggert_bij_risiconiveau))
+              and (r2.triggert_bij_mandaatgevoelig  is null or v_dec.mandaatgevoelig  = r2.triggert_bij_mandaatgevoelig)
+              and (r2.triggert_bij_toezichtgevoelig is null or v_dec.toezichtgevoelig = r2.triggert_bij_toezichtgevoelig)))
         union all
         select 1 from public.procedure_requirement_instance i2
           where v_dec.id is not null and i2.decision_id = v_dec.id and i2.actief = true
@@ -124,7 +141,10 @@ begin
         if v_dec.id is null then
           v_vervuld := false;
         elsif rij.veld_pad = 'decision.besluitvraag' then
+          -- Spiegelt decision.ts r783-787: `!!besluitvraag` — een lege string telt
+          -- als NIET ingevuld (length>0), niet alleen `is not null`.
           v_vervuld := v_dec.besluitvraag is not null
+                   and length(v_dec.besluitvraag) > 0
                    and v_dec.besluitvraag !~ '^Aanvullen na auto-upgrade';
         elsif rij.veld_pad = 'decision.scope' then
           v_vervuld := v_dec.scope is not null and length(trim(v_dec.scope)) > 0;
@@ -178,8 +198,13 @@ begin
 
   return jsonb_build_object('kritiek', v_kritiek, 'vereist', v_vereist, 'optioneel', v_optioneel);
 end $$;
-revoke all on function public.fn_stap_open_per_zwaarte(uuid) from public, anon;
-grant execute on function public.fn_stap_open_per_zwaarte(uuid) to authenticated, service_role;
+-- GEEN grant aan authenticated/service_role. Deze read-only snapshotfunctie is
+-- SECURITY DEFINER (bypast RLS) en draagt geen eigen fondsslot; zou authenticated
+-- haar direct kunnen aanroepen, dan kon een gebruiker de open vereisten (labels +
+-- sleutels) van een stap in een VREEMD fonds uitlezen. Niets buiten de afrondfunctie
+-- roept haar aan, en die is SECURITY DEFINER (draait als eigenaar), dus de eigenaar
+-- behoudt execute voor de interne aanroep — verder niemand.
+revoke all on function public.fn_stap_open_per_zwaarte(uuid) from public, anon, authenticated, service_role;
 
 -- ── 2. fn_stap_afronden_met_afwijking: de atomaire kern (§5.1). ──
 create or replace function public.fn_stap_afronden_met_afwijking(
@@ -229,14 +254,19 @@ begin
   end if;
 
   -- ── Poort: stap hoort bij de procedure en staat op actief/heropend. ──
+  -- FOR UPDATE serialiseert gelijktijdige afrondingen op dezelfde stap: een tweede
+  -- concurrente call blokkeert hier tot de eerste commit, leest dán status='afgerond'
+  -- en valt op de statuspoort — zo ontstaan er geen twee audit-/governance-regels
+  -- voor één afronding (lost update tussen transacties).
   select ps.id, ps.naam, ps.status, ps.volgorde into v_stap
     from public.procedure_stappen ps
-   where ps.id = p_stap_id and ps.procedure_id = p_procedure_id;
+   where ps.id = p_stap_id and ps.procedure_id = p_procedure_id
+   for update;
   if not found then
-    raise exception 'Stap niet gevonden bij deze procedure.' using errcode = '23514';
+    raise exception 'Stap niet gevonden bij deze procedure.' using errcode = 'PC002';
   end if;
   if v_stap.status is distinct from 'actief' and v_stap.status is distinct from 'heropend' then
-    raise exception 'Alleen een actieve of heropende stap kan worden afgerond.' using errcode = '23514';
+    raise exception 'Alleen een actieve of heropende stap kan worden afgerond.' using errcode = 'PC002';
   end if;
 
   -- ── Snapshot (D10, dezelfde functie die de pin bindt aan decision.ts). ──
@@ -244,13 +274,15 @@ begin
   v_kritiek_open := jsonb_array_length(v_snapshot->'kritiek') > 0;
   v_open_boven_optioneel := v_kritiek_open or jsonb_array_length(v_snapshot->'vereist') > 0;
 
-  -- ── Regels (§5.1). ──
+  -- ── Regels (§5.1). Eigen SQLSTATE PC002 = door de gebruiker te verhelpen
+  --    validatie; de route mag de melding tonen. Een KALE 23514 (een echte
+  --    CHECK-constraint) mag NOOIT doorgegeven worden — die zou schema-namen lekken.
   if not v_open_boven_optioneel then
     raise exception 'Geen afwijking nodig: er staat niets open boven optioneel. Gebruik de normale afronding.'
-      using errcode = '23514';
+      using errcode = 'PC002';
   end if;
   if p_motivering is null or length(trim(p_motivering)) = 0 then
-    raise exception 'Een afwijking vereist een motivering.' using errcode = '23514';
+    raise exception 'Een afwijking vereist een motivering.' using errcode = 'PC002';
   end if;
   if v_kritiek_open and coalesce(p_bevestigd, false) = false then
     -- Eigen SQLSTATE zodat de route 409 "bevestiging vereist" kan onderscheiden.

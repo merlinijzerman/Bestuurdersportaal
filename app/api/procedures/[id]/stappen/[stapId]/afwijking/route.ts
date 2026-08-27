@@ -82,13 +82,22 @@ export async function afrondenMetAfwijkingHandler(
             { status: 403 }
           );
         }
-        // 23514 = validatie (geen afwijking nodig / lege motivering / poort) → 400,
-        // met de nette melding van de functie (geen schema-lek).
-        if (rpcFout.code === "23514") {
+        // PC002 = door de gebruiker te verhelpen validatie van de functie ZELF
+        // (geen afwijking nodig / lege motivering / poort). Alléén deze nette,
+        // door ons geschreven meldingen worden getoond. Een KALE 23514 (een echte
+        // CHECK-constraint) valt hieronder NIET en krijgt een generieke melding —
+        // Postgres' auto-tekst zou schema-namen lekken.
+        if (rpcFout.code === "PC002") {
           return NextResponse.json({ error: rpcFout.message }, { status: 400 });
         }
+        // Alles wat niet één van onze eigen codes is (kale 23514-constraint,
+        // interne fail-closed, onverwachte DB-fout): generieke melding, geen
+        // doorgifte van de rauwe DB-tekst.
         console.error("Afwijking vastleggen fout:", rpcFout);
-        return NextResponse.json({ error: "Afronden met afwijking mislukt" }, { status: 500 });
+        return NextResponse.json(
+          { error: "Afronden met afwijking mislukt" },
+          { status: 500 }
+        );
       }
 
       // Afgeleide toestand (buiten de transactie, herstelbaar): activatie-cascade.
