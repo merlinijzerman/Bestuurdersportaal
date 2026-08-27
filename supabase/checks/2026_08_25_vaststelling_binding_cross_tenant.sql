@@ -68,10 +68,10 @@ values ('44444444-0000-0000-0000-000000000001','44444444-4444-4444-4444-44444444
 insert into public.procedure_stappen (id, procedure_id, volgorde, naam)
 values ('44444444-0000-0000-0000-000000000011','44444444-0000-0000-0000-000000000001',9,'Stap 9');
 insert into public.procedure_requirements
-  (template_code, template_versie, stap_volgorde, requirement_type, label, documenttype, veld_pad, verplicht, blokkerend, min_aantal)
+  (template_code, template_versie, stap_volgorde, requirement_type, label, documenttype, veld_pad, zwaarte, min_aantal)
 values
-  ('vs_test_template', '1.0.0', 9, 'mandate_check',  'Mandaatcheck', null, null, true, true, 1),
-  ('vs_test_template', '1.0.0', 9, 'dissent_review', 'Dissentronde', null, null, true, true, 1);
+  ('vs_test_template', '1.0.0', 9, 'mandate_check',  'Mandaatcheck', null, null, 'kritiek', 1),
+  ('vs_test_template', '1.0.0', 9, 'dissent_review', 'Dissentronde', null, null, 'kritiek', 1);
 -- Direct als 'besloten' ingevoerd: de statusovergangsmachine blokkeert een
 -- UPDATE concept→besloten, maar #5 heeft een besloten besluit nodig. Een INSERT
 -- van een vaststelling is niet I1-bewaakt (de I1-trigger vuurt op delete/update),
@@ -180,8 +180,8 @@ values ('44444444-aaaa-0000-0000-000000000001','44444444-aaaa-aaaa-aaaa-44444444
 insert into public.procedure_stappen (id, procedure_id, volgorde, naam)
 values ('44444444-aaaa-0000-0000-000000000011','44444444-aaaa-0000-0000-000000000001',9,'Stap 9');
 insert into public.procedure_requirements
-  (template_code, template_versie, stap_volgorde, requirement_type, label, documenttype, veld_pad, verplicht, blokkerend, min_aantal)
-values ('vs_test_template', '1.0.0', 9, 'mandate_check', 'Mandaatcheck', null, null, true, true, 1)
+  (template_code, template_versie, stap_volgorde, requirement_type, label, documenttype, veld_pad, zwaarte, min_aantal)
+values ('vs_test_template', '1.0.0', 9, 'mandate_check', 'Mandaatcheck', null, null, 'kritiek', 1)
 on conflict do nothing;
 insert into public.procedure_vaststelling
   (id, fonds_id, procedure_id, stap_id, requirement_sleutel, soort, uitkomst, toelichting, actor)
