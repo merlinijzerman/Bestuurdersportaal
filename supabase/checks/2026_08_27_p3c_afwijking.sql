@@ -138,7 +138,7 @@ begin
   begin
     perform public.fn_stap_afronden_met_afwijking('cccccccc-0000-0000-0000-000000000011','cccccccc-0000-0000-0000-0000000000f1','   ',true);
     raise exception 'FAALT #3: lege motivering geaccepteerd.';
-  exception when check_violation then null;
+  exception when sqlstate 'PC002' then null;
   end;
   raise notice 'OK #3: lege motivering geweigerd.';
 end $$;
@@ -215,9 +215,122 @@ begin
   begin
     perform public.fn_stap_afronden_met_afwijking('cccccccc-0000-0000-0000-000000000012','cccccccc-0000-0000-0000-0000000000f1','Motivering',true);
     raise exception 'FAALT #8: afwijking toegestaan terwijl niets boven optioneel openstond.';
-  exception when check_violation then null;
+  exception when sqlstate 'PC002' then null;
   end;
   raise notice 'OK #8: niets open boven optioneel -> afwijking geweigerd (gebruik normale afronding).';
+end $$;
+
+-- ╔════════════════════════════════════════════════════════════════════════╗
+-- ║ DEEL 3 — SNAPSHOT-PARITEIT HARDENING (sluit de vals-negatief-gaten die   ║
+-- ║ de review vond: alle 8 bronnen, de v_dubbel-uitsluiting, besluitvraag=''). ║
+-- ╚════════════════════════════════════════════════════════════════════════╝
+
+insert into public.procedure_stappen (id, procedure_id, volgorde, naam, status)
+values ('cccccccc-0000-0000-0000-000000000013','cccccccc-0000-0000-0000-0000000000f1',3,'Stap 3','actief'),
+       ('cccccccc-0000-0000-0000-000000000014','cccccccc-0000-0000-0000-0000000000f1',4,'Stap 4','actief'),
+       ('cccccccc-0000-0000-0000-000000000015','cccccccc-0000-0000-0000-0000000000f1',5,'Stap 5','actief');
+
+-- #9-fixture: één vereiste MULTI met min_aantal=8, gevoed door EXACT één gebonden
+-- feit in ELK van de acht bronnen. Laat de SQL één bron weg, dan telt hij ≤7 < 8 →
+-- MULTI staat open → #9 valt. Zo bijt de test op een ontbrekende/dubbele bron.
+insert into public.procedure_requirements
+  (template_code, template_versie, stap_volgorde, requirement_type, label, documenttype, veld_pad, zwaarte, min_aantal)
+values ('pc_test_template','1.0.0',3,'document','MULTI',null,null,'kritiek',8);
+
+-- Validate-triggers tijdelijk uit: de test meet of fn_stap_open_per_zwaarte de feiten
+-- TELT, niet of de binding geldig is (dat dekken de bindingstoetsen). Zo hoeven we de
+-- per-bron type/I5-regels niet na te bootsen.
+alter table public.procedure_bewijs           disable trigger trg_procedure_bewijs_validate_binding;
+alter table public.decision_risks             disable trigger trg_risk_validate_binding;
+alter table public.decision_assumptions       disable trigger trg_assumption_validate_binding;
+alter table public.decision_conditions        disable trigger trg_kpi_validate_binding;
+alter table public.decision_evaluations       disable trigger trg_evaluation_validate_binding;
+alter table public.decision_ai_interactions   disable trigger trg_aivalidation_validate_binding;
+alter table public.procedure_besluiten        disable trigger trg_approval_validate_binding;
+alter table public.procedure_vaststelling     disable trigger trg_vaststelling_validate_binding;
+
+insert into public.procedure_bewijs (id, stap_id, titel, requirement_sleutel)
+  values (gen_random_uuid(),'cccccccc-0000-0000-0000-000000000013','MULTI-bewijs','3|document|MULTI');
+insert into public.decision_risks (decision_id, beschrijving, requirement_sleutel)
+  values ('cccccccc-0000-0000-0000-0000000000d1','MULTI-risk','3|document|MULTI');
+insert into public.decision_assumptions (decision_id, tekst, requirement_sleutel)
+  values ('cccccccc-0000-0000-0000-0000000000d1','MULTI-assumption','3|document|MULTI');
+insert into public.decision_conditions (decision_id, voorwaarde, requirement_sleutel)
+  values ('cccccccc-0000-0000-0000-0000000000d1','MULTI-condition','3|document|MULTI');
+insert into public.decision_evaluations (decision_id, geplande_datum, requirement_sleutel)
+  values ('cccccccc-0000-0000-0000-0000000000d1','2026-01-01','3|document|MULTI');
+insert into public.decision_ai_interactions (decision_id, type, prompt, output, requirement_sleutel)
+  values ('cccccccc-0000-0000-0000-0000000000d1','samenvatting','p','o','3|document|MULTI');
+insert into public.procedure_besluiten (procedure_id, formulering, datum, requirement_sleutel)
+  values ('cccccccc-0000-0000-0000-0000000000f1','MULTI-besluit','2026-01-01','3|document|MULTI');
+insert into public.procedure_vaststelling (fonds_id, procedure_id, requirement_sleutel, soort, uitkomst, toelichting, actor)
+  values ('cccccccc-cccc-cccc-cccc-cccccccccccc','cccccccc-0000-0000-0000-0000000000f1','3|document|MULTI','mandaatcheck','ok','t','cccccccc-0000-0000-0000-0000000000a1');
+
+-- #10-fixture (v_dubbel-uitsluiting): een UITGESLOTEN template-vereiste + een ACTIEVE
+-- instantie-vereiste met dezelfde sleutel, plus één gebonden bewijs. Vóór de fix
+-- telde v_dubbel de uitgesloten template mee → COLLIDE ambigu → fail-closed open.
+-- Ná de fix telt v_dubbel alleen de actieve/niet-uitgesloten set → COLLIDE vervuld.
+-- Drift-volgorde (zoals de review beschrijft): eerst de instantie (de sleutel
+-- bestaat nog niet als template, dus de uniciteitsguard op de instantie laat 'm
+-- door), dán het botsende template (procedure_requirements heeft géén guard), dán
+-- de uitsluiting van dat template.
+insert into public.procedure_requirement_instance
+  (decision_id, fonds_id, stap_volgorde, requirement_type, label, documenttype, zwaarte, min_aantal, actief, bron)
+values ('cccccccc-0000-0000-0000-0000000000d1','cccccccc-cccc-cccc-cccc-cccccccccccc',4,'document','COLLIDE',null,'vereist',1,true,'handmatig');
+insert into public.procedure_requirements
+  (template_code, template_versie, stap_volgorde, requirement_type, label, documenttype, veld_pad, zwaarte, min_aantal)
+values ('pc_test_template','1.0.0',4,'document','COLLIDE',null,null,'vereist',1);
+insert into public.procedure_requirement_uitsluiting
+  (decision_id, fonds_id, stap_volgorde, requirement_type, label, match_sleutel, reden, actief, uitgesloten_door)
+values ('cccccccc-0000-0000-0000-0000000000d1','cccccccc-cccc-cccc-cccc-cccccccccccc',4,'document','COLLIDE','COLLIDE','test',true,'cccccccc-0000-0000-0000-0000000000a1');
+insert into public.procedure_bewijs (id, stap_id, titel, requirement_sleutel)
+  values (gen_random_uuid(),'cccccccc-0000-0000-0000-000000000014','COLLIDE-bewijs','4|document|COLLIDE');
+
+alter table public.procedure_bewijs           enable trigger trg_procedure_bewijs_validate_binding;
+alter table public.decision_risks             enable trigger trg_risk_validate_binding;
+alter table public.decision_assumptions       enable trigger trg_assumption_validate_binding;
+alter table public.decision_conditions        enable trigger trg_kpi_validate_binding;
+alter table public.decision_evaluations       enable trigger trg_evaluation_validate_binding;
+alter table public.decision_ai_interactions   enable trigger trg_aivalidation_validate_binding;
+alter table public.procedure_besluiten        enable trigger trg_approval_validate_binding;
+alter table public.procedure_vaststelling     enable trigger trg_vaststelling_validate_binding;
+
+-- #9 alle 8 bronnen geteld: MULTI (min_aantal=8) is vervuld, dus niet open.
+do $$
+declare s jsonb;
+begin
+  s := public.fn_stap_open_per_zwaarte('cccccccc-0000-0000-0000-000000000013');
+  if s::text like '%MULTI%' then
+    raise exception 'FAALT #9: MULTI staat open — fn_stap_open_per_zwaarte telt niet alle 8 bronnen: %', s;
+  end if;
+  raise notice 'OK #9: alle acht gebonden-feit-bronnen worden geteld (min_aantal=8 vervuld).';
+end $$;
+
+-- #10 v_dubbel-uitsluiting: COLLIDE is vervuld (niet ambigu ondanks de uitgesloten
+-- template-tweeling), dus niet open.
+do $$
+declare s jsonb;
+begin
+  s := public.fn_stap_open_per_zwaarte('cccccccc-0000-0000-0000-000000000014');
+  if s::text like '%COLLIDE%' then
+    raise exception 'FAALT #10: COLLIDE staat open — v_dubbel telt een uitgesloten template mee (ambiguïteit-fout): %', s;
+  end if;
+  raise notice 'OK #10: v_dubbel gebruikt de gefilterde set — uitgesloten tweeling maakt niet ambigu.';
+end $$;
+
+-- #11 besluitvraag = lege string telt als NIET ingevuld (spiegelt !!besluitvraag).
+do $$
+declare s jsonb;
+begin
+  update public.decision_objects set besluitvraag = '' where id = 'cccccccc-0000-0000-0000-0000000000d1';
+  insert into public.procedure_requirements
+    (template_code, template_versie, stap_volgorde, requirement_type, label, documenttype, veld_pad, zwaarte, min_aantal)
+  values ('pc_test_template','1.0.0',5,'field','Besluitvraag-veld',null,'decision.besluitvraag','vereist',1);
+  s := public.fn_stap_open_per_zwaarte('cccccccc-0000-0000-0000-000000000015');
+  if not (s->'vereist' @> '[{"label":"Besluitvraag-veld"}]') then
+    raise exception 'FAALT #11: besluitvraag='''' werd als vervuld gezien (moet open zijn, gelijk aan !!besluitvraag): %', s;
+  end if;
+  raise notice 'OK #11: besluitvraag='''' telt als niet ingevuld — field open.';
 end $$;
 
 rollback;

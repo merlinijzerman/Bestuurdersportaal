@@ -114,14 +114,19 @@ export const PATCH = withFondsRoute({ capability: "procedures.manage" }, async (
 
       // ── D6: activeerbaarheid herberekenen — of procedure afronden ──
       // Gedeelde helper (PR-C, #168): identiek gedrag, nu ook gebruikt door de
-      // afronden-met-afwijking-route. Gedragsbehoudend: de respons blijft {ok:true}
-      // (een eventuele achterstand logt de helper luid als `activatie_achterstand`).
-      await pasActivatieCascadeToe(
+      // afronden-met-afwijking-route. Responscontract BEHOUDEN t.o.v. de oude route:
+      // happy path {ok:true}; een faal in de cascade gaf voorheen (uncaught) een 500
+      // "Serverfout" en doet dat nog steeds — nieuw is alleen de luide
+      // `activatie_achterstand`-logregel die de helper additioneel wegschrijft.
+      const cascade = await pasActivatieCascadeToe(
         supabase,
         id,
         { volgorde: stap.volgorde, naam: stap.naam },
         { gebruikerId: ctx.gebruikerId, naam: ctx.naam, email: ctx.email }
       );
+      if (!cascade.ok) {
+        return NextResponse.json({ error: "Serverfout" }, { status: 500 });
+      }
 
       return NextResponse.json({ ok: true });
     }
