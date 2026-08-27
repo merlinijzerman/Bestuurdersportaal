@@ -1,0 +1,12 @@
+{
+  "toelichting": "Gewrapte routes waarvan het authz-matrix-scenario en de OPGENOMEN snapshot nog volgen bij de stack-run. De stack/preview blijft uit tot P6 (#171); een contractwaarde wordt tegen een draaiende server opgenomen of niet — nooit voorspeld (besluit 0192, contractwaarde-regel). Deze lijst MOET leeg zijn vóór P6. Zolang een route hierin staat, hoort er GEEN scenario in scenarios.mjs voor te bestaan (anders oogt de matrix compleet terwijl het negatieve contract nooit is waargenomen).",
+  "blokkeert": "#171 (via #211)",
+  "uitgesteld": [
+    {
+      "method": "POST",
+      "route": "/procedures/[id]/stappen/[stapId]/afwijking",
+      "capability": "procedures.afwijking.vastleggen",
+      "reden": "P3/PR-C (#168): nieuwe gate; de negatieve 403-cellen (beheerder + bestuursbureau) moeten tegen een draaiende server worden opgenomen, niet voorspeld. De inner rolgate is nu al met een gewone gedragstest bewezen (afwijking-rolgate.test.ts)."
+    }
+  ]
+}

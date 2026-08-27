@@ -86,6 +86,12 @@ interface Props {
       afgeronde stap heropenen? Alleen voorzitter/beheerder. Dit is een
       UI-signaal — de harde gate zit server-side in de routes. */
   kanBeheren?: boolean;
+  /** P3 (#168, §5.1): mag deze gebruiker een afwijking vastleggen bij het
+      afronden (capability procedures.afwijking.vastleggen — voorzitter/bestuurder)?
+      UI-signaal; de harde gate zit server-side in de route én in de DB-functie.
+      Bewust NIET kanBeheren hergebruiken: bestuurder draagt de capability wél maar
+      is geen kanBeheren (voorzitter/beheerder). */
+  magAfwijkingVastleggen?: boolean;
   /** Id van de ingelogde gebruiker — bepaalt of de verwijder-knop op een
       eigen bewijsstuk zichtbaar is (server-side check blijft leidend). */
   currentUserId?: string;
@@ -561,6 +567,7 @@ export default function StapPaneel({
   alleenLezen = false,
   voltooidDoorNaam = null,
   kanBeheren = false,
+  magAfwijkingVastleggen = false,
   currentUserId = "",
   fase = null,
 }: Props) {
@@ -623,6 +630,15 @@ export default function StapPaneel({
   // vervolgstap open. Bewust gescheiden van `fout` — dat blok is rood en zegt
   // "er is iets misgegaan", wat hier niet klopt.
   const [melding, setMelding] = useState<string | null>(null);
+  // P3 (#168, §5.1): afronden met afwijking — het motiveringsformulier onder de
+  // afrondknop, en de expliciete bevestiging bij een openstaande kritieke vereiste.
+  const [afwijkingForm, setAfwijkingForm] = useState(false);
+  const [afwijkingMotivering, setAfwijkingMotivering] = useState("");
+  const [afwijkingBevestigd, setAfwijkingBevestigd] = useState(false);
+  // Als de SERVER om bevestiging vraagt (409) terwijl de client geen kritieke
+  // vereiste zag (client- en server-zwaarte kunnen afwijken), tonen we het
+  // bevestigingsvakje alsnog — anders zou elke retry vastlopen op 409.
+  const [serverVraagtBevestiging, setServerVraagtBevestiging] = useState(false);
   // WO-2 (D7): handmatig checklistpunt toevoegen aan een lopende stap.
   const [checklistForm, setChecklistForm] = useState(false);
   const [checklistLabel, setChecklistLabel] = useState("");
@@ -725,6 +741,18 @@ export default function StapPaneel({
   const vereistOpen = stapEvidence.filter(
     (e) => !e.vervuld && zwaarteVanVereiste(e) === "vereist"
   ).length;
+  // P3 (#168, §5.1): afronden-met-afwijking is een optie zodra er iets openstaat
+  // bóven optioneel en de gebruiker de capability draagt. Het normale "Stap
+  // voltooien" blijft in PR-C ongewijzigd bestaan; de telling die de normale
+  // afronding hierop blokkeert is §5.2 → P4. De open items komen uit stapEvidence.
+  const afwijkingMogelijk =
+    stap.status !== "afgerond" &&
+    !alleenLezen &&
+    magAfwijkingVastleggen &&
+    kritiekOpen + vereistOpen > 0;
+  const openBovenOptioneel = stapEvidence.filter(
+    (e) => !e.vervuld && zwaarteVanVereiste(e) !== "optioneel"
+  );
 
   // "Nog open" voor de vaste voettekstbalk — dezelfde blokkers als kanVoltooien,
   // nu permanent zichtbaar i.p.v. alleen als tooltip. P1a wijzigt het afrond-
@@ -1037,6 +1065,50 @@ export default function StapPaneel({
       router.refresh();
     } catch (err: unknown) {
       setFout(err instanceof Error ? err.message : "Voltooien mislukt");
+    } finally {
+      setBezig(null);
+    }
+  }
+
+  // P3 (#168, §5.1): afronden met afwijking. De server (route + DB-functie) is
+  // leidend; bij een openstaande kritieke vereiste eist hij bevestiging (409).
+  // De UI vraagt die bevestiging vooraf omdat ze kritiekOpen zelf al kent.
+  async function afwijkingVastleggen() {
+    if (alleenLezen) return;
+    setFout(null);
+    setBezig("afwijking");
+    try {
+      const res = await fetch(
+        `/api/procedures/${procedureId}/stappen/${stap.id}/afwijking`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            motivering: afwijkingMotivering,
+            bevestigd: afwijkingBevestigd,
+          }),
+        }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 409 && data.bevestiging_vereist) {
+        // Server vraagt expliciete bevestiging bij een kritieke vereiste. Toon het
+        // vakje ook als de client zelf geen kritieke vereiste zag.
+        setAfwijkingBevestigd(false);
+        setServerVraagtBevestiging(true);
+        setFout(data.error || "Bevestig expliciet om af te ronden.");
+        return;
+      }
+      if (!res.ok) {
+        throw new Error(data.error || "Afronden met afwijking mislukt");
+      }
+      if (data.waarschuwing) setMelding(data.waarschuwing);
+      setAfwijkingForm(false);
+      setAfwijkingMotivering("");
+      setAfwijkingBevestigd(false);
+      setServerVraagtBevestiging(false);
+      router.refresh();
+    } catch (err: unknown) {
+      setFout(err instanceof Error ? err.message : "Afronden met afwijking mislukt");
     } finally {
       setBezig(null);
     }
@@ -2286,18 +2358,115 @@ export default function StapPaneel({
             </span>
           )}
         </div>
-        <button
-          onClick={stapVoltooien}
-          disabled={!kanVoltooien || bezig === "voltooien"}
-          className={`px-4 py-2 text-sm rounded-lg font-medium flex-shrink-0 ${
-            kanVoltooien
-              ? "bg-accent text-white hover:bg-accent-ink"
-              : "bg-app-line text-muted cursor-not-allowed"
-          }`}
-        >
-          {bezig === "voltooien" ? "Bezig…" : "Stap voltooien"}
-        </button>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {afwijkingMogelijk && (
+            <button
+              onClick={() => setAfwijkingForm((o) => !o)}
+              disabled={bezig !== null}
+              className="px-4 py-2 text-sm rounded-lg font-medium border border-warn/40 text-warn-ink bg-warn-tint hover:bg-warn/10"
+            >
+              Afronden met afwijking
+            </button>
+          )}
+          <button
+            onClick={stapVoltooien}
+            disabled={!kanVoltooien || bezig === "voltooien"}
+            className={`px-4 py-2 text-sm rounded-lg font-medium ${
+              kanVoltooien
+                ? "bg-accent text-white hover:bg-accent-ink"
+                : "bg-app-line text-muted cursor-not-allowed"
+            }`}
+          >
+            {bezig === "voltooien" ? "Bezig…" : "Stap voltooien"}
+          </button>
+        </div>
       </div>
+
+      {/* P3 (#168, §5.1): motiveringsformulier voor afronden-met-afwijking. */}
+      {afwijkingMogelijk && afwijkingForm && (
+        <div className="mt-4 border border-warn/30 rounded-lg bg-warn-tint/50 p-4">
+          <div className="text-sm font-medium text-ink">
+            Afronden terwijl er iets openstaat
+          </div>
+          <p className="mt-1 text-xs text-muted">
+            Overrulen is niet vervullen: de onderstaande vereisten blijven daarna open
+            in het dossier. De afronding legt vast wat ontbrak, uw motivering en wie
+            afrondde.
+          </p>
+          <ul className="mt-2 space-y-1">
+            {openBovenOptioneel.map((e, i) => (
+              <li key={i} className="text-xs flex items-center gap-2">
+                <span
+                  className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase ${
+                    zwaarteVanVereiste(e) === "kritiek"
+                      ? "bg-err/15 text-err-ink"
+                      : "bg-warn/15 text-warn-ink"
+                  }`}
+                >
+                  {zwaarteVanVereiste(e)}
+                </span>
+                <span className="text-ink">{e.label}</span>
+              </li>
+            ))}
+          </ul>
+          <label className="block mt-3 text-xs text-muted">
+            Motivering (verplicht)
+            <textarea
+              value={afwijkingMotivering}
+              onChange={(ev) => setAfwijkingMotivering(ev.target.value)}
+              rows={3}
+              className="mt-1 w-full text-sm rounded-lg border border-line bg-app px-3 py-2 text-ink"
+              placeholder="Waarom wordt deze stap afgerond terwijl dit openstaat?"
+            />
+          </label>
+          {(kritiekOpen > 0 || serverVraagtBevestiging) && (
+            <label className="flex items-start gap-2 mt-2 text-xs text-ink">
+              <input
+                type="checkbox"
+                checked={afwijkingBevestigd}
+                onChange={(ev) => setAfwijkingBevestigd(ev.target.checked)}
+                className="mt-0.5"
+              />
+              <span>
+                Ik bevestig dat er een <strong>kritieke</strong> vereiste openstaat en
+                de stap desondanks bewust wordt afgerond.
+              </span>
+            </label>
+          )}
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              onClick={afwijkingVastleggen}
+              disabled={
+                bezig === "afwijking" ||
+                afwijkingMotivering.trim().length === 0 ||
+                ((kritiekOpen > 0 || serverVraagtBevestiging) && !afwijkingBevestigd)
+              }
+              className={`px-4 py-2 text-sm rounded-lg font-medium ${
+                afwijkingMotivering.trim().length > 0 &&
+                (kritiekOpen === 0 && !serverVraagtBevestiging
+                  ? true
+                  : afwijkingBevestigd)
+                  ? "bg-warn text-white hover:opacity-90"
+                  : "bg-app-line text-muted cursor-not-allowed"
+              }`}
+            >
+              {bezig === "afwijking" ? "Bezig…" : "Afronden met afwijking"}
+            </button>
+            <button
+              onClick={() => {
+                setAfwijkingForm(false);
+                setAfwijkingBevestigd(false);
+                setServerVraagtBevestiging(false);
+                setFout(null);
+              }}
+              disabled={bezig === "afwijking"}
+              className="px-3 py-2 text-sm rounded-lg text-muted hover:text-ink"
+            >
+              Annuleren
+            </button>
+          </div>
+        </div>
+      )}
 
       </fieldset>
 
