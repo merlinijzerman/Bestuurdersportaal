@@ -64,6 +64,7 @@ export type Capability =
   | "organisation.profile.view"
   | "procedures.manage"
   | "procedures.view"
+  | "procedures.afwijking.vastleggen"
   | "profile.view.own"
   | "reflectie.manage.own"
   | "reflectie.view.own"
@@ -154,6 +155,7 @@ export const ROL_CAPABILITIES: Record<string, Capability[]> = {
     "organisation.profile.view",
     "procedures.manage",
     "procedures.view",
+    "procedures.afwijking.vastleggen",
     "profile.view.own",
     "reflectie.manage.own",
     "reflectie.view.own",
@@ -191,6 +193,7 @@ export const ROL_CAPABILITIES: Record<string, Capability[]> = {
     "organisation.profile.view",
     "procedures.manage",
     "procedures.view",
+    "procedures.afwijking.vastleggen",
     "profile.view.own",
     "reflectie.manage.own",
     "reflectie.view.own",
