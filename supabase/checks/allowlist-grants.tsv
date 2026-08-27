@@ -768,12 +768,6 @@ REL	storage	buckets_analytics	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRU
 REL	storage	buckets_vectors	table	anon	SELECT
 REL	storage	buckets_vectors	table	authenticated	SELECT
 REL	storage	buckets_vectors	table	service_role	SELECT
-REL	storage	iceberg_namespaces	table	anon	SELECT
-REL	storage	iceberg_namespaces	table	authenticated	SELECT
-REL	storage	iceberg_namespaces	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
-REL	storage	iceberg_tables	table	anon	SELECT
-REL	storage	iceberg_tables	table	authenticated	SELECT
-REL	storage	iceberg_tables	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
 REL	storage	migrations	table	anon	-
 REL	storage	migrations	table	authenticated	-
 REL	storage	migrations	table	service_role	-

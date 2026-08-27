@@ -143,6 +143,26 @@ MAINTAIN. Afwijkingen die bewust in de allowlist staan:
    dan is dat zichtbaar als een gate-verschil** — precies de bedoeling. Een
    striktere afscherming van het storage-schema is een apart, later besluit.
 
+8. **`storage.iceberg_namespaces` / `storage.iceberg_tables` — verwijderd op 27-08-2026.**
+   Deze twee Supabase-Iceberg-catalogustabellen stonden in de allowlist (gemeten
+   tegen een omgeving mét de Iceberg-feature), maar ontbreken op **zowel Preview
+   als Productie** — gemeten 27-08-2026: `select to_regclass('storage.iceberg_namespaces'),
+   to_regclass('storage.iceberg_tables')` → `NULL, NULL` op beide. Ze worden **niet
+   via een repo-migratie** aangemaakt; het is een Supabase-platformfeature die deze
+   projecten niet hebben. Ze in de allowlist laten staan sloeg de V3-gate op beide
+   omgevingen vals-rood ("LEK ontbrekend object"). Daarom uit de allowlist verwijderd.
+
+   **Versie-afhankelijk aanwezig — de gate negeert hun *aanwezigheid*.** Ze ontbreken
+   op Productie/Preview, maar de **ephemere CI-Supabase** (nieuwere Supabase-CLI) hééft
+   ze wél. Zonder tegenmaatregel zou de gate op de CI-DB vals-rood slaan op "LEK
+   onbekend object". Daarom kent de `onbekend object`-check in
+   `2026_08_20_v3_grants_volledig.sql` één **smalle, expliciet benoemde** uitzondering:
+   `storage.iceberg_namespaces` en `storage.iceberg_tables` worden daar overgeslagen —
+   alléén deze twee, alléén in die check. Elk ander storage-object blijft exact
+   gecontroleerd; hun grants (als ze aanwezig zijn) blijven RLS-/policy-gated zoals de
+   rest van het platform-beheerde `storage`-schema (punt 7). Komt de feature ooit op
+   Productie/Preview, dan is dat zichtbaar in de omgeving, niet als een gate-verschil.
+
 ## Objecten die NIET in scope zijn
 
 Extensiefuncties (pgvector, pg_trgm) zijn uitgesloten via `pg_depend deptype='e'`
