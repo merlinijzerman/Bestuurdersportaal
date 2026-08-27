@@ -168,12 +168,12 @@ values ('33333333-0000-0000-0000-0000000000d1'::uuid,
 -- van stap 1 in de invaarseed v2 — plus één external_submission op stap 9.
 insert into public.procedure_requirements
   (template_code, template_versie, stap_volgorde, requirement_type, label, documenttype,
-   veld_pad, verplicht, blokkerend, min_aantal)
+   veld_pad, zwaarte, min_aantal)
 values
-  ('bb_test_template', '1.0.0', 1, 'document', 'Transitieplan',            null, null, true, true, 1),
-  ('bb_test_template', '1.0.0', 1, 'document', 'Formeel invaarverzoek',    null, null, true, true, 1),
-  ('bb_test_template', '1.0.0', 1, 'document', '(Gewijzigde) pensioenovereenkomst/-regeling en compensatieafspraken',     null, null, true, true, 1),
-  ('bb_test_template', '1.0.0', 9, 'external_submission', 'DNB-indiening', null, null, true, true, 1);
+  ('bb_test_template', '1.0.0', 1, 'document', 'Transitieplan',            null, null, 'kritiek', 1),
+  ('bb_test_template', '1.0.0', 1, 'document', 'Formeel invaarverzoek',    null, null, 'kritiek', 1),
+  ('bb_test_template', '1.0.0', 1, 'document', '(Gewijzigde) pensioenovereenkomst/-regeling en compensatieafspraken',     null, null, 'kritiek', 1),
+  ('bb_test_template', '1.0.0', 9, 'external_submission', 'DNB-indiening', null, null, 'kritiek', 1);
 
 -- Eén bewijsstuk, gebonden aan de EERSTE vereiste.
 insert into public.procedure_bewijs (id, stap_id, titel, requirement_sleutel)
@@ -330,9 +330,9 @@ declare r jsonb;
 begin
   insert into public.procedure_requirements
     (template_code, template_versie, stap_volgorde, requirement_type, label, documenttype,
-     veld_pad, verplicht, blokkerend, min_aantal)
+     veld_pad, zwaarte, min_aantal)
   values ('bb_test_template', '1.0.0', 9, 'document', 'ALM-analyse', 'alm_analyse',
-          null, true, true, 1);
+          null, 'kritiek', 1);
 
   insert into public.procedure_bewijs (id, stap_id, titel, documenttype, requirement_sleutel)
   values ('33333333-0000-0000-0000-0000000000b7'::uuid,
@@ -366,10 +366,10 @@ begin
   begin
     insert into public.procedure_requirement_instance
       (decision_id, stap_volgorde, requirement_type, label, documenttype,
-       verplicht, blokkerend, fonds_id)
+       zwaarte, fonds_id)
     values
       ('33333333-0000-0000-0000-0000000000d1'::uuid,
-       1, 'document', 'Transitieplan', null, true, true,
+       1, 'document', 'Transitieplan', null, 'kritiek',
        '33333333-3333-3333-3333-333333333333'::uuid);
     raise exception 'FAALT #8: DB-trigger accepteerde een dubbele vereistesleutel.';
   exception
@@ -382,10 +382,10 @@ alter table public.procedure_requirement_instance
   disable trigger trg_requirement_instance_validate_binding_sleutel;
 insert into public.procedure_requirement_instance
   (decision_id, stap_volgorde, requirement_type, label, documenttype,
-   verplicht, blokkerend, fonds_id)
+   zwaarte, fonds_id)
 values
   ('33333333-0000-0000-0000-0000000000d1'::uuid,
-   1, 'document', 'Transitieplan', null, true, true,
+   1, 'document', 'Transitieplan', null, 'kritiek',
    '33333333-3333-3333-3333-333333333333'::uuid);
 alter table public.procedure_requirement_instance
   enable trigger trg_requirement_instance_validate_binding_sleutel;
@@ -468,8 +468,8 @@ insert into public.procedure_stappen (id, procedure_id, volgorde, naam)
 values ('33333333-aaaa-0000-0000-000000000011','33333333-aaaa-0000-0000-000000000001',1,'Stap 1');
 insert into public.procedure_requirements
   (template_code, template_versie, stap_volgorde, requirement_type, label, documenttype,
-   veld_pad, verplicht, blokkerend, min_aantal)
-values ('bb_test_template','1.0.0',1,'document','Transitieplan',null,null,true,true,1);
+   veld_pad, zwaarte, min_aantal)
+values ('bb_test_template','1.0.0',1,'document','Transitieplan',null,null, 'kritiek', 1);
 insert into public.procedure_bewijs (id, stap_id, titel, requirement_sleutel)
 values ('33333333-aaaa-0000-0000-0000000000b1','33333333-aaaa-0000-0000-000000000011',
         'Transitieplan A','1|document|Transitieplan');
