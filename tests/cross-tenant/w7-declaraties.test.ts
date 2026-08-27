@@ -85,7 +85,11 @@ test("W7-1 — geen enkele handler staat nog op TE_BEPALEN", () => {
     [],
     "TE_BEPALEN geeft onder de vlag 403 voor élke rol; W13 laat CI hierop falen"
   );
-  assert.equal(HANDLERS.length, 112, "aantal gewrapte handlers gewijzigd — werk het register bij");
+  // 113: P2/PR-B (#167) voegde de gewrapte handler
+  // POST /procedures/[id]/vereisten/koppel (capability procedures.manage) toe
+  // zonder deze teller bij te trekken; hier gecorrigeerd. P3 (#168) voegt geen
+  // routes toe (PR-A is capability-declaratie, PR-B is kolommen).
+  assert.equal(HANDLERS.length, 113, "aantal gewrapte handlers gewijzigd — werk het register bij");
 });
 
 test("W7-2 — elke gedeclareerde gate bestaat en hangt aan minstens één rol", () => {
