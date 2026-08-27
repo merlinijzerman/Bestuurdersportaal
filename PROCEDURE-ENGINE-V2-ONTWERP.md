@@ -1,6 +1,6 @@
 # Proceduremodule-engine — ontwerp
 
-> **Status**: v0.12 — **vastgesteld**; beslispunten gesloten, werktickets uitgezet
+> **Status**: v0.19 — **vastgesteld**; beslispunten gesloten, werktickets uitgezet
 > **Datum**: 2026-08-24 (as-built opnieuw geverifieerd ná productierelease #161)
 > **Bron**: as-built code en datamodel per 2026-08-21, geverifieerd tegen `core/lib/procedure-activatie.ts`, `procedure-fase-status.ts`, `procedure-fasen.ts`, `decision.ts`, `decision-view.ts`, `dossier.ts`, `proces-templates.ts`, `app/api/procedures/**`, `app/api/decisions/[id]/status`, `app/(dashboard)/procedures/_components/*`, `supabase/migrations/2026_04_29_procedures.sql`, `2026_05_07_decision_object.sql`, `…_d6*`, `…_d7*`, `…_d8*`, `2026_08_14_readiness_*`, `2026_08_18_bewijs_requirement_binding.sql`, `2026_08_22_bewijs_requirement_binding_hardening.sql` · besluiten [`0002`](decisions/0002-generieke-proceduremodule-definitie-als-data.md), [`0174`](decisions/0174-proceduremodule-engine-v2-D6-D7-D8.md), [`0183`](decisions/0183-expliciete-bewijs-vereiste-binding.md), [`0187`](decisions/0187-readiness-vervalt.md) · `PROCEDURE-GENERIEK-ONTWERP.md` v0.4
 > **Doel**: één ontwerp van de proces-engine dat klopt met wat er draait, met de besluiten van 21-08-2026, én met de kerninvarianten die het bestuurlijk betrouwbaar maken.
@@ -8,6 +8,36 @@
 > **Impactklasse**: **data + tenant/security**.
 
 ## Revisielog
+
+**v0.19 (2026-08-26)** — §5.1 bijgetrokken naar het rolbesluit, en één scopevraag beslecht.
+
+1. **§5.1 was stale.** Daar stond nog `procedure.afwijking.vastleggen` (enkelvoud) met houders *voorzitter/beheerder* — een schets van vóór het rolbesluit van 26-08. Definitief: **`procedures.afwijking.vastleggen`**, houders **voorzitter + bestuurder**, beheerder en bestuursbureau uitgesloten.
+2. **`besluitmoment_stap` (§7) hoort wél bij P3.** Overwogen om hem als eigen increment uit te stellen. Afgewezen: §7 introduceert die kolom uitdrukkelijk *in de plaats van* readiness. Verdwijnt de procesbrede readinessmeting terwijl de besluitmoment-schaal er nog niet is, dan toont een besluitmoment "0 openstaand" omdat er niets aan hangt — precies het valse groen waar de validatieregel in §7 tegen is bedoeld. De kolom gaat mee in de additieve PR (leeg = huidige gedrag, dus nul gedragswijziging); de telling per besluitmoment landt in dezelfde PR als de ontmanteling. De **importvalidatie** blijft bij de definitielaag (fase C) en is daar een harde voorwaarde vóór er een importer live gaat.
+
+**v0.18 (2026-08-26)** — één regel toegevoegd in §14, na een tweede nummerbotsing.
+
+v0.17 loste de botsing op 0190 op door de reeks te laten opschuiven. Daarop bleek **0191 ook al vergeven** — aan het besluitrecord van de aantekeningen ([#170](https://github.com/merlinijzerman/Bestuurdersportaal/issues/170)), dat eerder is geschreven maar nog niet gemerged. Hernummeren van dat record om het plan te laten kloppen is afgewezen. **Regel**: een nummer wordt geclaimd bij het schrijven van het record, niet bij het plannen van een ticket; de lijst in §14 is een plan en geen reservering, en een geschreven record wordt nooit hernummerd — dat maakt van een chronologisch log een index en laat dode verwijzingen achter in commits en PR's. Gevolg: **P3 → 0192, P4 → 0193**. [#168](https://github.com/merlinijzerman/Bestuurdersportaal/issues/168) verwijst inmiddels naar 0191 en moet nogmaals worden gecorrigeerd, naar 0192.
+
+**v0.17 (2026-08-26)** — twee administratieve correcties, geen inhoudelijke wijziging.
+
+1. **Nummerbotsing in de besluitrecords.** 0190 was in §14 gereserveerd voor P3, maar is vergeven aan de codificatie van de per-PR-gateset. *(In v0.18 verder gecorrigeerd — zie hierboven.)*
+2. **Rolbesluit voor P3 vastgelegd.** `procedures.afwijking.vastleggen` gaat naar **voorzitter + bestuurder**; beheerder en bestuursbureau uitgesloten. Genomen 26-08-2026, vastgelegd in `05 Security en compliance/BESLISNOTITIE-capability-P3-afwijking.md` §6, inclusief de drie gevolgen voor P3 die uit die keuze volgen.
+
+**v0.16 (2026-08-26)** — één blokkade opgeheven die niet meer bestond. v0.9 t/m v0.15 stelden dat **P3** wacht op het rolmodelbesluit ([#153](https://github.com/merlinijzerman/Bestuurdersportaal/issues/153)). Bij het voorbereiden van dat besluit bleek het al genomen — op 23-08 vastgelegd in drie besluitregels, en de code staat sinds release [#161](https://github.com/merlinijzerman/Bestuurdersportaal/pull/161) van 24-08 in productie: 112 declaraties, nul `TE_BEPALEN`, plus een continue CI-gate op `authz-matrix.expected.json` ([#157](https://github.com/merlinijzerman/Bestuurdersportaal/issues/157)). Wat onder #153/[#91](https://github.com/merlinijzerman/Bestuurdersportaal/issues/91) resteert is de **productie-vlagflip**, en die blokkeert P3 niet — een nieuwe capability is onder vlag-uit inert en wordt door de gate bewaakt. §13.2 gecorrigeerd. Het besluit dat P3 wél nog vraagt — welke rollen `procedures.afwijking.vastleggen` krijgen — staat in de beslisnotitie in `05 Security en compliance`.
+
+**v0.15 (2026-08-26)** — P2 opgeleverd (PR-A fundament, PR-B omslag; RLS- en codereview beide GO). Het ontwerp loopt op drie punten bij:
+
+1. **Het ontkoppelslot is verzwaard t.o.v. 0189 — nieuwe §6.3.** 0189 legde de guard voor ontkoppelen en herbinden bij de route en alleen DELETE bij de trigger. Uitgevoerd is **alle drie de deuren op databaseniveau**, met de route als leesbare 409 erbovenop. Reden: een DELETE loopt via domeinflows die de route niet passeren, en een DB-guard is aantoonbaar te toetsen tegen een productiegelijke database. Geverifieerd op tien gedragsgevallen.
+2. **De escape-hatch is geverifieerd, en levert één openstaande vraag op.** `heropend`/`geescaleerd` vallen buiten de vaststellende verzameling en zijn via de bestaande, bevoegdheidsgeborgde en geauditeerde statusroute bereikbaar. Alleen vanuit `besloten` kost dat twee stappen, via `afgesloten` of `in_uitvoering`. Belegd bij **P4** (§6.3, §13.2) — niet als reden om het slot te versoepelen.
+3. **P6 is geblokkeerd door [#192](https://github.com/merlinijzerman/Bestuurdersportaal/issues/192).** P2 bindt acht requirement-typen, maar er is nog geen kiezer-UI om een bestaand artefact (risico, aanname, besluit, …) aan een vereiste te koppelen. Zonder die affordance staan die typen open zonder pad om ze te vervullen — dezelfde regressie die bij het ontwerp van het bindpad is afgewezen. Mockup eerst, dan bouwen.
+
+Verder gecodificeerd, buiten dit ontwerp: de lokale per-PR-gateset (`npm run gates`) inclusief de §15 cross-tenant-suite, nadat bleek dat die check bij de P1b-merge stil uit de routine was weggevallen. Besluitrecord 0190.
+
+**v0.14 (2026-08-24)** — één regel in de scopetabel van §6.2 gecorrigeerd naar de gemeten werkelijkheid. `procedure_bewijs` draagt géén `procedure_id`; `stap_id` is daar de lokale sleutel. Dat is gelijkwaardig aan dossier-scoped omdat `fn_validate_bewijs_requirement_binding` de stap in de sleutel gelijkschakelt aan `stap.volgorde` — nu expliciet onderbouwd in plaats van aangenomen.
+
+**v0.13 (2026-08-24)** — één te stellige formulering gecorrigeerd, gevonden bij de bouw van **P2**.
+
+v0.12 schreef "de scope van de telling is de **procedure**". Dat gaat uit van procedure ↔ decision object 1:1, en dat geldt niet: de vijf `decision_*`-brontabellen dragen geen `procedure_id`, en één procedure kan meer dan één besluitobject dragen. De regel wordt **tabelnatuurlijk**: besluitgebonden feiten tellen op `decision_id`, procesgebonden feiten op `procedure_id`. De onderliggende invariant is ongewijzigd — **dossier-scoped, nooit stap-scoped**. Zie §6.2, inclusief het gevolg dat vervulling daarmee asymmetrisch is en de herkomst van een vervulling in de UI zichtbaar moet zijn.
 
 **v0.12 (2026-08-24)** — één tegenstrijdigheid opgelost, gevonden tijdens de bouw van **P2** ([#167](https://github.com/merlinijzerman/Bestuurdersportaal/issues/167)). Geen richtingwijziging.
 
@@ -228,7 +258,9 @@ alter table public.procedure_requirements
 | **vereist** | nee | ja, met motivering | aandacht |
 | **kritiek** | nee | ja, met motivering **en** expliciete bevestiging | prominent, ook op het overzicht |
 
-> **BP-1, bevestigd door de review.** De bevoegdheid hangt aan de **handeling**, niet aan de zwaarte: één capability `procedure.afwijking.vastleggen` (voorzitter/beheerder). Anders ontstaat een matrix van rol × zwaarte die per fonds anders geconfigureerd wil worden. Wat *kritiek* extra vraagt is een **bevestigingsstap** plus prominente vastlegging.
+> **BP-1, bevestigd door de review.** De bevoegdheid hangt aan de **handeling**, niet aan de zwaarte: één capability. Anders ontstaat een matrix van rol × zwaarte die per fonds anders geconfigureerd wil worden. Wat *kritiek* extra vraagt is een **bevestigingsstap** plus prominente vastlegging.
+>
+> **Naam en rollen, definitief *(v0.19)*.** De capability heet **`procedures.afwijking.vastleggen`** — meervoud, conform de conventie van `procedures.view` / `procedures.manage`. Houders: **voorzitter + bestuurder**; **beheerder en bestuursbureau uitgesloten**. Besloten 26-08-2026, onderbouwing en de drie gevolgen in `05 Security en compliance/BESLISNOTITIE-capability-P3-afwijking.md` §6. *(v0.7 t/m v0.18 noemden hier `procedure.afwijking.vastleggen` (enkelvoud) en "voorzitter/beheerder"; beide waren een schets van vóór het rolbesluit en zijn hiermee vervallen.)*
 
 **De afrondroute** berekent eerst wat ontbreekt, per zwaarte. Is er niets open boven `optioneel`, dan is het een gewone afronding. Anders: bevoegdheid vereist, motivering verplicht, en:
 
@@ -345,6 +377,16 @@ Dus niet één-op-één tussen vereiste en stuk, maar één-op-één tussen **st
 **Gevolg voor `procedure_bewijs` — een bestaande afwijking, geen nieuwe.** De unieke partiële index `(stap_id, requirement_sleutel)` uit #160 dwingt vandaag *wél* één-bewijs-per-vereiste af. Concreet: een vereiste "afschriften van tien deelnemersgroepen" (`min_aantal = 10`) kan met het huidige schema nooit groen worden — het tweede bewijs wordt geweigerd. Dat is geen bedoeld ontwerp maar een onbedoeld gevolg van een index die is gebouwd om dubbele *bindingen* te voorkomen, terwijl de kolomvorm dat al doet. **In P2 vervangen** door de niet-unieke variant, in dezelfde migratie als de overige brontabellen, zodat alle twaalf typen zich identiek gedragen. Vast te leggen in besluitrecord **0189** bij P2, met de expliciete constatering dat er geen `min_aantal > 1` in de huidige seed staat en de wijziging dus geen bestaand gedrag raakt — te verifiëren vóór de migratie.
 
 **Oververvulling is normaal.** Twaalf afschriften waar er tien gevraagd worden is geen fout en wordt niet geblokkeerd; de UI toont "10 van 10 vereist, 12 aangeleverd". Een bovengrens hoort niet in dit model thuis.
+
+### 6.3 Het ontkoppelslot *(nieuw in v0.15)*
+
+Een vervulling losmaken onder een besluit dat het feit al vaststelt, breekt I1 zonder dat iets protesteert: het besluit blijft `besloten`, het onderliggende feit is weg. Dat kan langs **drie deuren** — de bronrij verwijderen, de sleutel op null zetten, of de sleutel naar een andere vereiste herbinden. Een guard op alleen de route dekt er één.
+
+**Besloten (0189): alle drie de deuren op databaseniveau.** Een BEFORE-trigger op elke brontabel weigert DELETE én de UPDATE die een bestaande sleutel wist of wijzigt, zolang de besluitstatus in de vaststellende verzameling zit — `besloten`, `voorwaardelijk_besloten`, `in_uitvoering`, `in_evaluatie`, `afgesloten`. Een **eerste** binding blijft toegestaan: bewijs aanvullen op een genomen besluit is geen aantasting. De route levert daarbovenop de leesbare 409; de database houdt de waarheid, ook voor domeinflows die de route niet passeren.
+
+**Het slot is een omweg, geen doodlopende weg.** Geverifieerd: `heropend` en `geescaleerd` zitten niet in de vaststellende verzameling, en de statusroute (`decisions.manage`, geaudit met `status_gewijzigd` inclusief oude en nieuwe waarde) bereikt ze. Vanuit `voorwaardelijk_besloten`, `in_evaluatie` en `afgesloten` is dat één stap.
+
+**Openstaand, belegd bij P4.** Vanuit `besloten` staat de overgangsmatrix alleen `in_uitvoering` en `afgesloten` toe. Een bindingsfout herstellen kost daar dus twee stappen, via een status die zelf iets betekent — `afgesloten` gebruiken als doorgang maakt het auditspoor misleidend. Dat is geen reden het slot te versoepelen, maar wel een vraag die de status-feitenmatrix van P4 moet beantwoorden: hoort er een gerichte *heropenen-ter-correctie* vanuit `besloten`? Zie §13.2.
 
 **Sanity-test.** Eén generieke test die per requirement-type afdwingt dat vervulling positief en gebonden is. Die kan nu pas slagen, en vangt elk toekomstig type automatisch af.
 
@@ -595,13 +637,13 @@ Uitgezet als GitHub-issues onder `EPIC P — Proceduremodule generieke engine`, 
 | **P1b** | Fundament: `template_versie` op vereisten, `idx_req_uniek` uitbreiden, publicatiestatus + weigerende trigger (I7), dossiers pinnen op versie i.p.v. code, vijfde trigger-kolom `ai_risicoklasse` | data + audit | — |
 | **P2** | Vervulling: patroon doortrekken naar de acht resterende typen + `procedure_vaststelling`; unieke bewijsindex vervangen door niet-unieke (§6.2); telling procedure-scoped; generieke sanity-test; backfill R1/R2 | data + UI | P1b |
 | **P3** | `zwaarte`, afronden met afwijking, **readiness ontmantelen** (uitvoering van `0187`: `fn_decision_readiness_check`, `ReadinessLadder.tsx`, vier migraties, twee consumenten buiten de module) | data + UI | P2 |
-| **P4** | Statussen sluitend: `niet_begonnen` + actief-trigger, beëindigen/heropenen, fasestatus `vervallen`, negende dossierstatus, status-feitenmatrix (§4.6), invarianten I1–I7 geborgd | data + tenant/security | P3 |
+| **P4** | Statussen sluitend: `niet_begonnen` + actief-trigger, beëindigen/heropenen, fasestatus `vervallen`, negende dossierstatus, status-feitenmatrix (§4.6), invarianten I1–I7 geborgd. **Plus**: beantwoordt of er een *heropenen-ter-correctie* vanuit `besloten` hoort (§6.3) | data + tenant/security | P3 |
 | **P5** | Acties, werkbak, aantekeningen (§9.3), bestuurlijke signalen (§12) | data + UI | deels P3 |
-| **P6** | Promotie naar preview en productie; migratievolgorde, gates schoon, terugval vooraf gecommuniceerd | — | P1–P5 |
+| **P6** | Promotie naar preview en productie; migratievolgorde, gates schoon, terugval vooraf gecommuniceerd | — | P1–P5 · **geblokkeerd door [#192](https://github.com/merlinijzerman/Bestuurdersportaal/issues/192)** |
 
 **Waarom P1b vóór P2.** `idx_req_uniek` bestaat, maar zonder `template_versie` erin. Zolang dat zo is, is de vereiste-sleutel niet versievast en zou een nieuwe templateversie de binding van een lopend dossier kunnen laten verschuiven. Dat is precies wat 0183 wilde voorkomen.
 
-**Afhankelijkheid van het wrapperspoor.** 103 van de 114 routes zitten achter een wrapper; de elf resterende zijn catalogus-routes zonder raakvlak. Het echte raakpunt is het **capability-vocabulaire**: er zijn 42 gedeclareerde capabilities, waarvan vier in ons domein (`procedures.view/manage`, `decisions.view/manage`), en `authz-matrix.expected.json` is sinds #157 een continue CI-gate. P2 komt toe met `procedures.manage`; **P3 is de eerste die nieuwe capabilities nodig heeft** en wacht daarmee op het rolmodelbesluit ([#153](https://github.com/merlinijzerman/Bestuurdersportaal/issues/153)). P6 mag niet samenvallen met de vlag-flip aan het eind van Deploy 3 ([`0186`](decisions/0186-capability-vlagdefault-flipt-pas-eind-deploy-3.md)) — twee gedragsveranderingen in één release maken een storing onherleidbaar.
+**Afhankelijkheid van het wrapperspoor.** 103 van de 114 routes zitten achter een wrapper; de elf resterende zijn catalogus-routes zonder raakvlak. Het echte raakpunt is het **capability-vocabulaire**: er zijn 42 gedeclareerde capabilities, waarvan vier in ons domein (`procedures.view/manage`, `decisions.view/manage`), en `authz-matrix.expected.json` is sinds #157 een continue CI-gate. P2 komt toe met `procedures.manage`; **P3 is de eerste die een nieuwe capability nodig heeft** (`procedures.afwijking.vastleggen`). *(Gecorrigeerd in v0.16: dat wachtte volgens v0.9–v0.15 op het rolmodelbesluit [#153](https://github.com/merlinijzerman/Bestuurdersportaal/issues/153). **Dat besluit is genomen en de code staat sinds release [#161](https://github.com/merlinijzerman/Bestuurdersportaal/pull/161) in productie**: 112 declaraties, nul `TE_BEPALEN`, en `authz-matrix.expected.json` als continue gate. P3 is dus niet geblokkeerd; wat resteert onder #153/#91 is de productie-vlagflip, en die raakt P3 niet. Zie de beslisnotitie in `05 Security en compliance`.)* P6 mag niet samenvallen met de vlag-flip aan het eind van Deploy 3 ([`0186`](decisions/0186-capability-vlagdefault-flipt-pas-eind-deploy-3.md)) — twee gedragsveranderingen in één release maken een storing onherleidbaar.
 
 **Snapshots.** 103 van de 367 karakteriseringssnapshots zitten op procedures/decisions. P2, P3 en P4 veranderen responses bewust. Regel: een snapshot-update is altijd een **aparte, gemotiveerde commit**, nooit meeliftend in een functionele wijziging.
 
@@ -640,6 +682,8 @@ Geen procesdefinitie (zie `SJABLOON-procesdefinitie-v0.2.xlsx`), geen registry-o
 
 ---
 
-*Besluitrecords worden per ticket geschreven, startend bij **0188** (0183 t/m 0187 zijn vergeven): 0188 bij P1b (versiebevriezing en onveranderlijkheid, §13.1), 0189 bij P2 (D10 — vervulling doorgetrokken, §6), 0190 bij P3 (D9 — validatie, afwijking, beëindiging, §5), 0191 bij P4 (invarianten I1–I7 en de status-feitenmatrix, §4.5–4.6), 0192 bij P5 (acties, werkbak, aantekeningen). D11 (classificatie, §8) hoort bij de definitielaag en volgt met fase C.*
+**Nummering van besluitrecords — regel** *(vastgelegd in v0.18)*. Een nummer wordt **geclaimd op het moment dat het record wordt geschreven**, in volgorde van schrijven. De lijst hieronder is een **plan, geen reservering**: loopt de werkelijke volgorde anders, dan wint de werkelijkheid en schuift het plan op. Een al geschreven record wordt **nooit hernummerd** om in een gepland schema te passen — dat maakt van een chronologisch log een index, en laat verwijzingen in commits, PR's en documenten achter die nergens meer op wijzen.
+
+*Stand: 0183 t/m 0187 vergeven · **0188** P1b (versiebevriezing en onveranderlijkheid, §13.1) · **0189** P2 (D10 — vervulling doorgetrokken, §6) · **0190** codificatie per-PR-gateset (buiten de reeks) · **0191** P5-aantekeningen (§9.3, geschreven vóór P3 en behoudt daarom dit nummer) · **0192** P3 (D9 — validatie, afwijking, beëindiging, §5) · **0193** P4 (invarianten I1–I7 en de status-feitenmatrix, §4.5–4.6). D11 (classificatie, §8) hoort bij de definitielaag en volgt met fase C.*
 
 *Bijbehorende stukken: `SJABLOON-procesdefinitie-v0.2.xlsx`, `MOCKUP-processen-v0.7-overzicht-en-detail.html`, `MOCKUP-homepage-werkbak-v0.1.html`, `VISUAL-statusmodel-processen-v0.3.html` en `VISUAL-bewijslast-vier-handelingen-v0.1.html` (functionele uitleg van de vier handelingen, bij §6 en §9.3).*
