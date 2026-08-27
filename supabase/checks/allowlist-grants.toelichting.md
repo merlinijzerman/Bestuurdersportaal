@@ -143,6 +143,17 @@ MAINTAIN. Afwijkingen die bewust in de allowlist staan:
    dan is dat zichtbaar als een gate-verschil** — precies de bedoeling. Een
    striktere afscherming van het storage-schema is een apart, later besluit.
 
+8. **`storage.iceberg_namespaces` / `storage.iceberg_tables` — verwijderd op 27-08-2026.**
+   Deze twee Supabase-Iceberg-catalogustabellen stonden in de allowlist (gemeten
+   tegen een omgeving mét de Iceberg-feature), maar ontbreken op **zowel Preview
+   als Productie** — gemeten 27-08-2026: `select to_regclass('storage.iceberg_namespaces'),
+   to_regclass('storage.iceberg_tables')` → `NULL, NULL` op beide. Ze worden **niet
+   via een repo-migratie** aangemaakt; het is een Supabase-platformfeature die deze
+   projecten niet hebben. Ze in de allowlist laten staan sloeg de V3-gate op beide
+   omgevingen vals-rood ("LEK ontbrekend object"). Daarom uit de allowlist verwijderd.
+   Komt de Iceberg-feature ooit op een omgeving, dan verschijnen ze als "onbekend
+   object" — de bedoelde richting: een bewuste toevoeging, geen stille bijvangst.
+
 ## Objecten die NIET in scope zijn
 
 Extensiefuncties (pgvector, pg_trgm) zijn uitgesloten via `pg_depend deptype='e'`
