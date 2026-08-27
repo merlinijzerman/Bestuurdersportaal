@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
-import { notifyUser } from "@/core/lib/notifications";
-import {
-  herberekenActiveerbaarheid,
-  alleStappenAfgerond,
-  type StapActivatieState,
-} from "@/core/lib/procedure-activatie";
+import { pasActivatieCascadeToe } from "@/core/lib/procedure-activatie-cascade";
 
 export const PATCH = withFondsRoute({ capability: "procedures.manage" }, async (ctx, req: NextRequest, params) => {
   try {
@@ -118,104 +113,15 @@ export const PATCH = withFondsRoute({ capability: "procedures.manage" }, async (
       });
 
       // ── D6: activeerbaarheid herberekenen — of procedure afronden ──
-      // Laad alle stappen ná het afronden van deze stap. `stap` is hierboven
-      // al op 'afgerond' gezet, dus de query reflecteert de nieuwe toestand.
-      const { data: alleStappenRows } = await supabase
-        .from("procedure_stappen")
-        .select("id, volgorde, naam, status, blokkerende_afhankelijkheden")
-        .eq("procedure_id", id);
-      const alleStappen = (alleStappenRows ?? []) as Array<{
-        id: string;
-        volgorde: number;
-        naam: string;
-        status: StapActivatieState["status"];
-        blokkerende_afhankelijkheden: number[] | null;
-      }>;
-      const activatieState: StapActivatieState[] = alleStappen.map((s) => ({
-        volgorde: s.volgorde,
-        status: s.status,
-        blokkerende_afhankelijkheden: s.blokkerende_afhankelijkheden ?? [],
-      }));
-
-      if (alleStappenAfgerond(activatieState)) {
-        // Alle stappen afgerond — procedure is klaar.
-        await supabase
-          .from("procedures")
-          .update({
-            status: "afgerond",
-            afgerond_op: new Date().toISOString(),
-          })
-          .eq("id", id);
-
-        // ── Iteratie 3-A: notificatie naar de procedure-starter ──
-        const { data: proc } = await supabase
-          .from("procedures")
-          .select("titel, gestart_door, fonds_id")
-          .eq("id", id)
-          .maybeSingle();
-        if (proc?.gestart_door && proc.fonds_id) {
-          await notifyUser(
-            supabase,
-            "procedure_afgerond",
-            proc.gestart_door,
-            proc.fonds_id,
-            {
-              type: "procedure_afgerond",
-              procedure_titel: proc.titel ?? "Procedure",
-              afgerond_door_naam: ctx.naam || ctx.email || "Een collega",
-            },
-            {
-              gerelateerd_aan_type: "procedure",
-              gerelateerd_aan_id: id,
-              // BESLUIT (W4): `|| undefined`, waarde-identiek via
-          // `opts.actor_naam ?? null` in notifyUser. Zie inbreng.
-          actor_naam: ctx.naam || undefined,
-            }
-          );
-        }
-      } else if (activatieState.some((s) => s.status === "geblokkeerd")) {
-        // Parallel model (engine v2): activeer elke stap die door dit afronden
-        // activeerbaar is geworden. Geen "volgende op volgorde" meer.
-        const teActiveren = herberekenActiveerbaarheid(activatieState);
-        for (const volg of teActiveren) {
-          const doel = alleStappen.find((s) => s.volgorde === volg);
-          if (!doel) continue;
-          await supabase
-            .from("procedure_stappen")
-            .update({ status: "actief" })
-            .eq("id", doel.id);
-          await supabase.from("procedure_log").insert({
-            procedure_id: id,
-            event_type: "stap_gestart",
-            actor_id: ctx.gebruikerId,
-            // BESLUIT (W4): `|| undefined`, waarde-identiek via
-          // `opts.actor_naam ?? null` in notifyUser. Zie inbreng.
-          actor_naam: ctx.naam || undefined,
-            payload: { stap: doel.naam },
-          });
-        }
-      } else {
-        // Legacy sequentieel pad: activeer de eerstvolgende 'open' stap op
-        // volgorde (gedrag van vóór engine v2, voor lopende procedures).
-        const volgende = alleStappen
-          .filter((s) => s.status === "open" && s.volgorde > stap.volgorde)
-          .sort((a, b) => a.volgorde - b.volgorde)[0];
-        if (volgende) {
-          await supabase
-            .from("procedure_stappen")
-            .update({ status: "actief" })
-            .eq("id", volgende.id);
-          await supabase.from("procedure_log").insert({
-            procedure_id: id,
-            event_type: "stap_gestart",
-            actor_id: ctx.gebruikerId,
-            // BESLUIT (W4): `|| undefined`, waarde-identiek via
-          // `opts.actor_naam ?? null` in notifyUser. Zie inbreng.
-          actor_naam: ctx.naam || undefined,
-            payload: { stap: volgende.naam },
-          });
-        }
-      }
+      // Gedeelde helper (PR-C, #168): identiek gedrag, nu ook gebruikt door de
+      // afronden-met-afwijking-route. Gedragsbehoudend: de respons blijft {ok:true}
+      // (een eventuele achterstand logt de helper luid als `activatie_achterstand`).
+      await pasActivatieCascadeToe(
+        supabase,
+        id,
+        { volgorde: stap.volgorde, naam: stap.naam },
+        { gebruikerId: ctx.gebruikerId, naam: ctx.naam, email: ctx.email }
+      );
 
       return NextResponse.json({ ok: true });
     }
