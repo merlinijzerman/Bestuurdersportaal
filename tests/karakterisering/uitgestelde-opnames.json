@@ -1,6 +1,6 @@
 {
   "toelichting": "Gewrapte routes waarvan het authz-matrix-scenario en de OPGENOMEN snapshot nog volgen bij de stack-run. De stack/preview blijft uit tot P6 (#171); een contractwaarde wordt tegen een draaiende server opgenomen of niet — nooit voorspeld (besluit 0192, contractwaarde-regel). Deze lijst MOET leeg zijn vóór P6. Zolang een route hierin staat, hoort er GEEN scenario in scenarios.mjs voor te bestaan (anders oogt de matrix compleet terwijl het negatieve contract nooit is waargenomen).",
-  "blokkeert": "#171",
+  "blokkeert": "#171 (via #211)",
   "uitgesteld": [
     {
       "method": "POST",
