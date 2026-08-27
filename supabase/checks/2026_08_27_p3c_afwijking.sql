@@ -42,7 +42,14 @@ begin
   if not has_function_privilege('authenticated','public.fn_stap_afronden_met_afwijking(uuid,uuid,text,boolean)','execute') then
     raise exception 'DEEL 1 FAALT: authenticated mist execute op de afrondfunctie.';
   end if;
-  raise notice 'DEEL 1 OK: vier kolommen, twee functies, grants correct (authenticated, geen service_role).';
+  -- I2: de minimumlengte-CHECK op afwijking_motivering (DB-backstop).
+  if not exists (
+    select 1 from pg_constraint
+     where conname = 'procedure_stappen_afwijking_motivering_minlengte'
+       and conrelid = 'public.procedure_stappen'::regclass) then
+    raise exception 'DEEL 1 FAALT: de I2-minimumlengte-CHECK op afwijking_motivering ontbreekt.';
+  end if;
+  raise notice 'DEEL 1 OK: vier kolommen, twee functies, I2-CHECK, grants correct (authenticated, geen service_role).';
 end $$;
 
 -- ╔════════════════════════════════════════════════════════════════════════╗
@@ -124,7 +131,7 @@ do $$
 begin
   perform set_config('request.jwt.claim.sub','cccccccc-0000-0000-0000-0000000000a1',true);
   begin
-    perform public.fn_stap_afronden_met_afwijking('cccccccc-0000-0000-0000-000000000011','cccccccc-0000-0000-0000-0000000000f1','Motivering',false);
+    perform public.fn_stap_afronden_met_afwijking('cccccccc-0000-0000-0000-000000000011','cccccccc-0000-0000-0000-0000000000f1','Bewuste afwijking',false);
     raise exception 'FAALT #2: kritiek-zonder-bevestiging geaccepteerd.';
   exception when sqlstate 'PC001' then null;
   end;
@@ -148,7 +155,7 @@ do $$
 begin
   perform set_config('request.jwt.claim.sub','cccccccc-0000-0000-0000-0000000000b1',true);
   begin
-    perform public.fn_stap_afronden_met_afwijking('cccccccc-0000-0000-0000-000000000011','cccccccc-0000-0000-0000-0000000000f1','Motivering',true);
+    perform public.fn_stap_afronden_met_afwijking('cccccccc-0000-0000-0000-000000000011','cccccccc-0000-0000-0000-0000000000f1','Bewuste afwijking',true);
     raise exception 'FAALT #4: beheerder mocht de afrondfunctie direct aanroepen (eigen slot ontbreekt).';
   exception when insufficient_privilege then null;
   end;
@@ -213,11 +220,37 @@ do $$
 begin
   perform set_config('request.jwt.claim.sub','cccccccc-0000-0000-0000-0000000000a1',true);
   begin
-    perform public.fn_stap_afronden_met_afwijking('cccccccc-0000-0000-0000-000000000012','cccccccc-0000-0000-0000-0000000000f1','Motivering',true);
+    perform public.fn_stap_afronden_met_afwijking('cccccccc-0000-0000-0000-000000000012','cccccccc-0000-0000-0000-0000000000f1','Bewuste afwijking',true);
     raise exception 'FAALT #8: afwijking toegestaan terwijl niets boven optioneel openstond.';
   exception when sqlstate 'PC002' then null;
   end;
   raise notice 'OK #8: niets open boven optioneel -> afwijking geweigerd (gebruik normale afronding).';
+end $$;
+
+-- #12 I2 (route/functie): een te korte motivering (< 10 tekens) wordt geweigerd.
+do $$
+begin
+  perform set_config('request.jwt.claim.sub','cccccccc-0000-0000-0000-0000000000a1',true);
+  begin
+    perform public.fn_stap_afronden_met_afwijking('cccccccc-0000-0000-0000-000000000011','cccccccc-0000-0000-0000-0000000000f1','te kort',true);
+    raise exception 'FAALT #12: motivering korter dan de I2-minimumlengte geaccepteerd.';
+  exception when sqlstate 'PC002' then null;
+  end;
+  raise notice 'OK #12: I2 — te korte motivering geweigerd (PC002).';
+end $$;
+
+-- #13 I2 (CHECK-backstop): een directe UPDATE met een te korte motivering valt op
+--     de constraint, ook buiten de functie om.
+do $$
+begin
+  begin
+    update public.procedure_stappen
+       set afwijking_motivering = 'kort'
+     where id = 'cccccccc-0000-0000-0000-000000000011';
+    raise exception 'FAALT #13: CHECK-constraint liet een te korte motivering toe.';
+  exception when check_violation then null;
+  end;
+  raise notice 'OK #13: I2-CHECK-backstop weigert een te korte motivering ook bij directe UPDATE.';
 end $$;
 
 -- ╔════════════════════════════════════════════════════════════════════════╗

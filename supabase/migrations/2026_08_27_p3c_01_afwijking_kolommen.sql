@@ -27,6 +27,15 @@ alter table public.procedure_stappen
   add column if not exists afwijking_snapshot      jsonb,
   add column if not exists afwijking_door          uuid references auth.users(id);
 
+-- I2 (v0.19): minimumlengte afgedwongen, niet leeg-met-spaties. DB-backstop naast de
+-- route en fn_stap_afronden_met_afwijking (PC002). 10 = core/lib/afwijking.ts
+-- MIN_MOTIVERING_LENGTE. Null = stap zonder afwijking; die legt geen motivering op.
+alter table public.procedure_stappen
+  drop constraint if exists procedure_stappen_afwijking_motivering_minlengte;
+alter table public.procedure_stappen
+  add constraint procedure_stappen_afwijking_motivering_minlengte
+  check (afwijking_motivering is null or char_length(btrim(afwijking_motivering)) >= 10);
+
 comment on column public.procedure_stappen.afgerond_met_afwijking is
   'P3 (#168, §5.1): stap afgerond terwijl er iets openstond boven optioneel. Voedt bestuurlijk signaal 3 (P5). Zie besluit 0192.';
 comment on column public.procedure_stappen.afwijking_motivering is

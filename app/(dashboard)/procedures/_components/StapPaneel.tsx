@@ -22,6 +22,7 @@ import {
   requirementSleutel,
 } from "@/core/lib/requirement-sleutel";
 import { zwaarteVanVereiste } from "@/core/lib/requirement-zwaarte";
+import { MIN_MOTIVERING_LENGTE } from "@/core/lib/afwijking";
 import {
   checklistSamenvatting,
   bewijsstukkenSamenvatting,
@@ -2390,7 +2391,7 @@ export default function StapPaneel({
           </div>
           <p className="mt-1 text-xs text-muted">
             Overrulen is niet vervullen: de onderstaande vereisten blijven daarna open
-            in het dossier. De afronding legt vast wat ontbrak, uw motivering en wie
+            in het dossier. De afronding legt vast wat ontbrak, je motivering en wie
             afrondde.
           </p>
           <ul className="mt-2 space-y-1">
@@ -2416,9 +2417,20 @@ export default function StapPaneel({
               onChange={(ev) => setAfwijkingMotivering(ev.target.value)}
               rows={3}
               className="mt-1 w-full text-sm rounded-lg border border-line bg-app px-3 py-2 text-ink"
-              placeholder="Waarom wordt deze stap afgerond terwijl dit openstaat?"
+              placeholder="Waarom rond je deze stap af terwijl dit openstaat?"
             />
           </label>
+          {/* I2: de minimumlengte is blijvend zichtbaar — vóór verzending, niet pas
+              bij de weigering. */}
+          <div className="mt-1 text-[11px] text-muted">
+            Minimaal {MIN_MOTIVERING_LENGTE} tekens; deze motivering komt in het dossier en is achteraf niet te wijzigen.
+            {afwijkingMotivering.trim().length > 0 &&
+              afwijkingMotivering.trim().length < MIN_MOTIVERING_LENGTE && (
+                <span className="text-warn-ink">
+                  {" "}Nog {MIN_MOTIVERING_LENGTE - afwijkingMotivering.trim().length} tekens nodig.
+                </span>
+              )}
+          </div>
           {(kritiekOpen > 0 || serverVraagtBevestiging) && (
             <label className="flex items-start gap-2 mt-2 text-xs text-ink">
               <input
@@ -2438,11 +2450,11 @@ export default function StapPaneel({
               onClick={afwijkingVastleggen}
               disabled={
                 bezig === "afwijking" ||
-                afwijkingMotivering.trim().length === 0 ||
+                afwijkingMotivering.trim().length < MIN_MOTIVERING_LENGTE ||
                 ((kritiekOpen > 0 || serverVraagtBevestiging) && !afwijkingBevestigd)
               }
               className={`px-4 py-2 text-sm rounded-lg font-medium ${
-                afwijkingMotivering.trim().length > 0 &&
+                afwijkingMotivering.trim().length >= MIN_MOTIVERING_LENGTE &&
                 (kritiekOpen === 0 && !serverVraagtBevestiging
                   ? true
                   : afwijkingBevestigd)

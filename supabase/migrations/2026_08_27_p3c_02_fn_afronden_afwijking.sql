@@ -281,8 +281,10 @@ begin
     raise exception 'Geen afwijking nodig: er staat niets open boven optioneel. Gebruik de normale afronding.'
       using errcode = 'PC002';
   end if;
-  if p_motivering is null or length(trim(p_motivering)) = 0 then
-    raise exception 'Een afwijking vereist een motivering.' using errcode = 'PC002';
+  -- I2: minimumlengte afgedwongen (niet leeg-met-spaties). 10 = core/lib/afwijking.ts
+  -- MIN_MOTIVERING_LENGTE; de route en een CHECK-constraint dragen dezelfde grens.
+  if p_motivering is null or length(btrim(p_motivering)) < 10 then
+    raise exception 'Een afwijking vereist een motivering van minimaal 10 tekens.' using errcode = 'PC002';
   end if;
   if v_kritiek_open and coalesce(p_bevestigd, false) = false then
     -- Eigen SQLSTATE zodat de route 409 "bevestiging vereist" kan onderscheiden.
