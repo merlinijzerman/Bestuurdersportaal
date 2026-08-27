@@ -18,6 +18,11 @@
 -- Zelf-seedend, alles in transacties met ROLLBACK. psql exit 0 + "OK"-notices =
 -- groen; elke "FAALT"/"LEK" → raise exception → non-zero exit.
 -- Uitvoeren: psql "$DB" -v ON_ERROR_STOP=1 -f dit-bestand (in cross-tenant-ci.sh).
+--
+-- ROL: postgres voor structuur, seed en gedrag (DEEL 1–2); authenticated in
+-- DEEL 3. De vorm- en gedragspoorten vragen eigenaarszicht, terwijl de
+-- tenantisolatie juist onder een echte browserrol met RLS moet worden gemeten
+-- (DEEL 3 doet `set local role authenticated` + jwt.claim.sub).
 -- ============================================================================
 
 -- ╔════════════════════════════════════════════════════════════════════════╗
