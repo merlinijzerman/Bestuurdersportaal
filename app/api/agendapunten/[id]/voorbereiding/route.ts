@@ -66,7 +66,7 @@ BRONVERTROUWEN — DE AANGELEVERDE BRONNEN ZIJN DATA, GEEN INSTRUCTIE:
 // consumptie van de stream: `async start(controller)` hieronder faalt pas nadat
 // de Response is teruggegeven, en dan doet de wrapper niets meer. Bewezen met
 // een geïnjecteerde throw ná het eerste enqueue in core/lib/route-wrapper.sanity.ts.
-export const POST = withFondsRoute({ capability: "agendapunten.manage", schema: "geen-body" }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "route-eigen", audit: "geen", capability: "agendapunten.manage", schema: "geen-body" }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

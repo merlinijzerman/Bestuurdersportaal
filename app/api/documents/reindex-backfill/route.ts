@@ -33,7 +33,7 @@ import { INDEXERING_VERSIE, PREFIX_MODEL, PREFIX_PROMPT_VERSIE } from "@/core/li
 //  het eigen fonds. `tekst` wordt nooit aangeraakt (omkeerbaar).
 // ============================================================================
 
-export const POST = withFondsRoute({ capability: "beheer.backfill", schema: "geen-body" }, async (ctx, req: NextRequest) => {
+export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "route-eigen", audit: { handeling: "documents.bulk-herindexeren" }, capability: "beheer.backfill", schema: "geen-body" }, async (ctx, req: NextRequest) => {
   try {
     const supabase = ctx.supabase;
 

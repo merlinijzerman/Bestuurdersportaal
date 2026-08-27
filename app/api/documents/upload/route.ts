@@ -453,7 +453,7 @@ async function valideerUploadMetadata(
 //     (`documents.upload.init` / `.complete`) die de anomaliedetectie voeden tot
 //     één samenvouwen. Als WAARDE vastgelegd en niet als ontbrekend veld, zodat
 //     de uitzondering greppable is en niet als omissie leest.
-export const POST = withFondsRoute({ capability: "documents.metadata.update", hostGuard: "route-eigen", schema: z.object({ "agendapunt_id": z.unknown().optional(), "bestandsnaam": z.unknown().optional(), "bibliotheek": z.unknown().optional(), "bron": z.unknown().optional(), "bronstatus": z.unknown().optional(), "bronstatus_reden": z.unknown().optional(), "document_id": z.unknown().optional(), "documentdatum": z.unknown().optional(), "documenttype": z.unknown().optional(), "grootte": z.unknown().optional(), "mimeType": z.unknown().optional(), "mode": z.unknown().optional(), "opslag_pad": z.unknown().optional(), "quarantaine_pad": z.unknown().optional(), "retire_reden": z.unknown().optional(), "status": z.unknown().optional(), "status_reden": z.unknown().optional(), "titel": z.unknown().optional(), "vervangt_rapportage_id": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
+export const POST = withFondsRoute({ hostGuard: "route-eigen", rateLimit: "route-eigen", audit: { handeling: "documents.uploaden" }, capability: "documents.metadata.update", schema: z.object({ "agendapunt_id": z.unknown().optional(), "bestandsnaam": z.unknown().optional(), "bibliotheek": z.unknown().optional(), "bron": z.unknown().optional(), "bronstatus": z.unknown().optional(), "bronstatus_reden": z.unknown().optional(), "document_id": z.unknown().optional(), "documentdatum": z.unknown().optional(), "documenttype": z.unknown().optional(), "grootte": z.unknown().optional(), "mimeType": z.unknown().optional(), "mode": z.unknown().optional(), "opslag_pad": z.unknown().optional(), "quarantaine_pad": z.unknown().optional(), "retire_reden": z.unknown().optional(), "status": z.unknown().optional(), "status_reden": z.unknown().optional(), "titel": z.unknown().optional(), "vervangt_rapportage_id": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
   let body: Record<string, unknown>;
   try {
     body = (await req.json()) as Record<string, unknown>;
@@ -906,7 +906,7 @@ async function completeUpload(
 
 
 // Haal lijst van documenten op
-export const GET = withFondsRoute({ capability: "documents.view", schema: "geen-body" }, async (ctx, req: NextRequest) => {
+export const GET = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: "geen", capability: "documents.view", schema: "geen-body" }, async (ctx, req: NextRequest) => {
   try {
     const supabase = ctx.supabase;
 

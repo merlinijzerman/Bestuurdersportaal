@@ -9,7 +9,7 @@ import { z } from "zod";
 // - voorzitter / beheerder: altijd
 // - bestuurder: deactiveren alleen als opgeslagen_door = jij én < 24 uur na upload
 // - reactiveren: alleen voorzitter / beheerder
-export const PATCH = withFondsRoute({ capability: "documents.lifecycle.manage", schema: z.object({ "actie": z.unknown().optional(), "reden": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "documents.wijzigen" }, capability: "documents.lifecycle.manage", schema: z.object({ "actie": z.unknown().optional(), "reden": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   const { id } = params as { id: string };
     const supabase = ctx.supabase;
 

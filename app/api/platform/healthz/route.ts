@@ -27,6 +27,7 @@ import {
   geenEnkeleRood,
 } from "@/platform/lib/monitoring-health";
 import { logPlatformFout } from "@/platform/lib/platform-fout-log";
+import { huidigeEnforceVlagstand } from "@/core/lib/enforce-vlagstand";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -41,6 +42,9 @@ async function draai(_ctx: MachineContext, _req: NextRequest): Promise<NextRespo
       ok: geenEnkeleRood(componenten),
       onbekend: aantalOnbekend(componenten),
       tijdstip: new Date().toISOString(),
+      // Operationele fase-1-gate: dit zijn de opgeloste standen waarop de
+      // enforce-modules beslissen, niet de ruwe Vercel-waarden.
+      enforce: huidigeEnforceVlagstand(),
       componenten,
     });
   } catch (error) {
@@ -66,7 +70,7 @@ async function draai(_ctx: MachineContext, _req: NextRequest): Promise<NextRespo
 // De DEPLOY_TARGET-skip en de constant-time CRON_SECRET-bearer staan sinds W5b
 // in platform/lib/machine-route-wrapper.ts, niet meer in dit bestand. Zelfde
 // controle, zelfde volgorde, zelfde responses — alleen op één plek.
-const SPEC = { bewaking: "cron-secret", label: "platform.healthz", directeMutaties: [], schema: "geen-body" } as const;
+const SPEC = { rateLimit: "geen", audit: "geen", bewaking: "cron-secret", label: "platform.healthz", directeMutaties: [], schema: "geen-body" } as const;
 
 // Vercel Cron gebruikt GET; POST voor handmatige/lokale triggers.
 export const GET = withMachineRoute(SPEC, draai);

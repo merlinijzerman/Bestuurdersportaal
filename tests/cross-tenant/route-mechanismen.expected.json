@@ -1,14 +1,14 @@
 {
   "_doc": "W13 (#184) — autoritatief register van het declaratie-MECHANISME per app/api-route. De gate (route-mechanismen.test.ts) faalt zodra een route buiten élk erkend mechanisme valt én hier niet staat, zodra een entry stale wordt (route verdween of migreerde naar het primaire model), zodra een capability:TE_BEPALEN terugkeert, of zodra een ontsnappingswaarde toeneemt. Append-only: bijwerken is een bewuste, gereviewde handeling. Zie 05 Security en compliance/TICKET-W13-uitzonderingslijst-en-declaratiemodel.md.",
-
-  "primair": ["withFondsRoute", "withMachineRoute"],
-
+  "primair": [
+    "withFondsRoute",
+    "withMachineRoute"
+  ],
   "erkendeAlternatieven": {
     "organen-route": "core/lib/organen-route.ts — route-factory (organenLijstCreate/organenPatch). Dwingt !user->401, fonds_id-tenant en magCatalogusBeheren(rol)->403 af. Catalogus/organen-familie (S-03 onvoltooide centralisatie). Migratie naar withFondsRoute: #177 + vervolg.",
     "catalogusContext": "core/lib/catalogus-api.ts — mini-wrapper met dezelfde garanties (magCatalogusBeheren). Zelfde familie als organen-route. Migratie: #177.",
     "withPlatformRead": "platform/lib/platform-wrapper.ts — platform-read-wrapper met capability."
   },
-
   "uitzonderingen": {
     "app/api/expertises/route.ts": "organen-route",
     "app/api/expertises/[id]/route.ts": "organen-route",
@@ -23,11 +23,9 @@
     "app/api/aqlab/audit/[exportId]/route.ts": "withPlatformRead",
     "app/api/contact/route.ts": "bespoke"
   },
-
   "bespokeReden": {
     "app/api/contact/route.ts": "Publieke contactinzending (geen sessie vereist). Eigen autoritatieve validatie via core/lib/contact-validatie.ts (zod-schema sinds W9). R-13 (herkomst-spoofing) en R-14 (fail-open Turnstile) blijven open — een schema is geen botbescherming."
   },
-
   "autorisatievormen": [
     "capability-map (rolHeeftCapability)",
     "inline rolstring",
@@ -36,10 +34,15 @@
     "platformsurface",
     "magCatalogusBeheren (domeinhelper — de ZESDE vorm; catalogus/organen-familie, W13)"
   ],
-
+  "_ontsnappingswaarden_183a": "#183a voegde 4 bewaakte escape-waarden toe (rateLimit:\"nog-niet-beoordeeld\"=96, hostGuard:\"geen\"=100, rateLimit:\"route-eigen\"=16, audit:\"geen\"=38); hostGuard:\"route-eigen\"=4 bestond al. De sprong-vanaf-0 is als proven-red vastgelegd in w183-poort-bewijs.md. nog-niet-beoordeeld is dalend werk voor de W10-pas (doel 0); de rest mag niet stijgen zonder motivering.",
   "ontsnappingswaarden": {
     "schema: \"geen-body\"": 48,
     "capability: \"iedere-ingelogde\"": 1,
-    "capability: \"publiek\"": 0
+    "capability: \"publiek\"": 0,
+    "rateLimit: \"nog-niet-beoordeeld\"": 96,
+    "hostGuard: \"geen\"": 100,
+    "rateLimit: \"route-eigen\"": 16,
+    "audit: \"geen\"": 38,
+    "hostGuard: \"route-eigen\"": 4
   }
 }

@@ -96,7 +96,7 @@ export function leesHandlers(bron: string): Handlerbeeld[] {
       beeld.push({
         methode,
         viaWrapper: true,
-        hostGuardInSpec: /\bhostGuard\s*:\s*true\b/.test(spec),
+        hostGuardInSpec: /\bhostGuard\s*:\s*"afdwingen"/.test(spec), // #183a: was `: true` (boolean → woord-union)
       });
       continue;
     }
@@ -182,16 +182,19 @@ export function toetsWrapperFundament(): void {
     "wrapper: ctx.email komt niet uit de sessiegebruiker"
   );
 
-  // (h) De host-guard-tak toetst op `=== true`, niet op truthy. Sinds W4 kent de
-  //     spec de waarde `"route-eigen"` — een route die de guard ZELF aanroept,
-  //     bewust, om de ordening te behouden. Die string is truthy; zou de wrapper
-  //     op truthy toetsen, dan kreeg zo'n route de guard er stilzwijgend nog een
-  //     keer bovenop, vóór zijn eigen fail-closed poorten. Precies de herordening
-  //     die de uitzondering moet voorkomen.
+  // (h) De host-guard-tak toetst op de EXACTE waarde `"afdwingen"`, niet op truthy.
+  //     De spec kent sinds W4 `"route-eigen"` (de route roept de guard ZELF aan,
+  //     bewust, om de ordening te behouden) en sinds #183a is hostGuard een woord-
+  //     union met óók `"geen"` — beide truthy strings. Zou de wrapper op truthy
+  //     toetsen, dan kreeg zo'n route de guard er stilzwijgend nog een keer bovenop,
+  //     vóór zijn eigen fail-closed poorten. Precies de herordening die de
+  //     uitzondering moet voorkomen. (#183a: was `=== true` toen hostGuard nog een
+  //     boolean was; de flip naar `=== "afdwingen"` is gedragsbehoudend — alleen
+  //     `true`→`"afdwingen"` vuurde ooit.)
   assert.match(
     w,
-    /if\s*\(\s*spec\.hostGuard\s*===\s*true\s*\)/,
-    "wrapper: host-guard-tak toetst op truthy i.p.v. === true — 'route-eigen' zou dan dubbel bewaakt worden"
+    /if\s*\(\s*spec\.hostGuard\s*===\s*"afdwingen"\s*\)/,
+    "wrapper: host-guard-tak toetst niet op de exacte waarde \"afdwingen\" — 'route-eigen'/'geen' zouden dan dubbel bewaakt worden"
   );
 
   // (g) `ctx` mag NOOIT als geheel in een logregel of serialisatie belanden.
@@ -254,7 +257,7 @@ export function redenGeenHostGuard(bron: string): string | null {
   const inlineGuard = bron.includes("beoordeelRouteHostToegang(");
   const ongedekt = handlers.filter((h) => (h.viaWrapper ? !h.hostGuardInSpec : !inlineGuard));
   if (ongedekt.length > 0) {
-    return `${benoem(ongedekt)} dwingt host↔fonds niet af (geen beoordeelRouteHostToegang( in de route, geen withFondsRoute({ hostGuard: true }))`;
+    return `${benoem(ongedekt)} dwingt host↔fonds niet af (geen beoordeelRouteHostToegang( in de route, geen withFondsRoute({ hostGuard: "afdwingen" }))`;
   }
   return null;
 }

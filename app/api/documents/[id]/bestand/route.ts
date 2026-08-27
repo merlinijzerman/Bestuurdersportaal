@@ -21,7 +21,7 @@ import { heeftSchoonScanbewijs } from "@/core/lib/document-scan-poort";
 // LET OP: deze route heeft GEEN eigen try/catch. Een onafgevangen fout kwam vóór
 // W5 bij Next terecht en wordt nu 500 {"error":"Serverfout"} uit het vangnet van
 // de wrapper. Uniformering, maar wel een verschil — zie het BESLUIT in #101.
-export const GET = withFondsRoute({ capability: "documents.view", hostGuard: true, label: "documents.bestand.GET", schema: "geen-body" }, async (ctx, req: NextRequest, params) => {
+export const GET = withFondsRoute({ hostGuard: "afdwingen", rateLimit: "nog-niet-beoordeeld", audit: "geen", capability: "documents.view", label: "documents.bestand.GET", schema: "geen-body" }, async (ctx, req: NextRequest, params) => {
   // H-04: een top-level navigatie vanaf een vreemde site stuurt onder een
   // Lax-cookie de sessie mee. Deze route schrijft een auditrecord, dus zo'n
   // aanroep zou een gebeurtenis in het dossier van het slachtoffer zetten.

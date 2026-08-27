@@ -26,8 +26,21 @@
 import assert from "node:assert/strict";
 import { z } from "zod";
 import type { NextRequest } from "next/server";
-import { maakWithFondsRoute, type WrapperDeps, type FondsContext } from "./route-wrapper";
+import { maakWithFondsRoute as _maakWithFondsRoute, type WrapperDeps, type FondsContext, type RouteSpecV1 } from "./route-wrapper";
 import type { RouteCapability } from "./capability-enforce";
+
+// #183a: hostGuard/rateLimit/audit zijn nu VERPLICHT op RouteSpecV1. Deze test-shim
+// vult neutrale NO-OP-defaults voor elk veld dat een fixture niet expliciet zet, zodat
+// de tests minimaal blijven en enkel het veld tonen dat ze toetsen; een fixture die zo'n
+// veld wél zet, overschrijft de default. Puur fixture-gemak — geen productiegedrag.
+const W183_DEFAULTS = { hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: "geen" } as const;
+type TestSpec = Omit<RouteSpecV1, "hostGuard" | "rateLimit" | "audit"> &
+  Partial<Pick<RouteSpecV1, "hostGuard" | "rateLimit" | "audit">>;
+function maakWithFondsRoute(deps: WrapperDeps) {
+  const echt = _maakWithFondsRoute(deps);
+  return (spec: TestSpec, handler: Parameters<typeof echt>[1]) =>
+    echt({ ...W183_DEFAULTS, ...spec } as RouteSpecV1, handler);
+}
 
 /** De v1-tests (W2/W5) gaan NIET over de capability-poort. Ze draaien daarom op
  *  de declaratie die aantoonbaar niets afsluit, zodat ze precies dezelfde
@@ -60,6 +73,23 @@ function deps(overrides: Partial<WrapperDeps>): WrapperDeps {
     // W9: default UIT, zelfde reden als capabilityEnforceAan. De schema-poort-tests
     // onderaan zetten hem per test expliciet aan.
     schemaEnforceAan: () => false,
+    // W10: default UIT. De teller-stub geeft standaard "toegestaan" terug zodat de
+    // rate-limit-poort geen enkele bestaande test raakt; de W10-tests overriden per
+    // stuk. De echte teller (server-only) komt hier nooit in beeld.
+    ratelimitEnforceAan: () => false,
+    controleerLimiet: async () => ({ toegestaan: true, resterend: 99, resetAt: null }),
+    // Stub-429: de echte responder trekt api-errors → app_errors (server-only)
+    // mee; hier een kale 429 zodat de handhaaf-tak server-loos toetsbaar is.
+    bouwRateLimited: async () =>
+      new Response(JSON.stringify({ error: "rate limited" }), {
+        status: 429,
+        headers: { "content-type": "application/json" },
+      }),
+    // W11: default UIT. schrijfHandeling is standaard een no-op; de W11-tests
+    // overriden hem om aan te tonen dat/of hij wordt aangeroepen. De echte writer
+    // (handelingstabel) komt hier nooit in beeld.
+    auditEnforceAan: () => false,
+    schrijfHandeling: async () => {},
     ...overrides,
   };
 }
@@ -111,7 +141,7 @@ async function main() {
     const wrap = maakWithFondsRoute(
       deps({ beoordeelRouteHostToegang: async () => ({ toegestaan: false }) })
     );
-    const handler = wrap({ capability: IEDEREEN, hostGuard: true, schema: "geen-body" }, async () => Response.json({ ok: true }));
+    const handler = wrap({ capability: IEDEREEN, hostGuard: "afdwingen", schema: "geen-body" }, async () => Response.json({ ok: true }));
     const res = await handler(req());
     assert.equal(res.status, 403);
     assert.deepEqual(await res.json(), { error: "Dit webadres hoort niet bij uw fonds." });
@@ -386,7 +416,7 @@ async function main() {
       })
     );
     const handler = wrap(
-      { capability: "TE_BEPALEN", hostGuard: true, schema: "geen-body" },
+      { capability: "TE_BEPALEN", hostGuard: "afdwingen", schema: "geen-body" },
       async () => Response.json({ ok: true })
     );
     const [res] = await metOpgevangenWarn(() => handler(req()));
@@ -591,6 +621,217 @@ async function main() {
       warns.find((w) => w[0] === "[SCHEMA-OBSERVE]" && (w[1] as Record<string, unknown>).code === "invalid_json"),
       "kapotte JSON hoort onder de vlag-uit wél geobserveerd te worden"
     );
+  });
+
+  // ── Rate-limit-poort (W10) ────────────────────────────────────────────────
+  // Een teller-stub die noteert of/voor-welke-sleutel hij is aangeroepen, en of
+  // hij toestaat. Zo bewijzen we de gedeelde-resource-regel (alleen een LimietNaam
+  // raakt de teller) en de vlag-bewuste uitkomst — zonder DB.
+  const telStub = (toegestaan: boolean, geraakt: string[]) =>
+    async (_s: unknown, naam: string) => {
+      geraakt.push(naam);
+      return { toegestaan, resterend: toegestaan ? 5 : 0, resetAt: toegestaan ? null : new Date("2026-01-01T00:00:00Z") };
+    };
+
+  await test("RATELIMIT: geen declaratie → de teller wordt NIET geraakt (inert bij landing)", async () => {
+    const geraakt: string[] = [];
+    const wrap = maakWithFondsRoute(deps({ controleerLimiet: telStub(true, geraakt) }));
+    const [res] = await metOpgevangenWarn(() =>
+      wrap({ capability: "iedere-ingelogde", schema: "geen-body" }, async () => Response.json({ ok: true }))(req())
+    );
+    assert.equal(res.status, 200);
+    assert.equal(geraakt.length, 0, "zonder rateLimit-veld mag de wrapper de teller niet raken");
+  });
+
+  for (const waarde of ["geen", "route-eigen"] as const) {
+    await test(`RATELIMIT: "${waarde}" → de wrapper telt NIET (gedeelde-resource-regel)`, async () => {
+      const geraakt: string[] = [];
+      const wrap = maakWithFondsRoute(
+        deps({ controleerLimiet: telStub(true, geraakt), ratelimitEnforceAan: () => true })
+      );
+      const [res] = await metOpgevangenWarn(() =>
+        wrap({ capability: "iedere-ingelogde", schema: "geen-body", rateLimit: waarde }, async () => Response.json({ ok: true }))(req())
+      );
+      assert.equal(res.status, 200);
+      assert.equal(geraakt.length, 0, `"${waarde}" mag de gedeelde teller niet raken`);
+    });
+  }
+
+  await test("RATELIMIT: LimietNaam + binnen de grens → handler draait (200)", async () => {
+    const geraakt: string[] = [];
+    let aangeroepen = 0;
+    const wrap = maakWithFondsRoute(deps({ controleerLimiet: telStub(true, geraakt) }));
+    const [res] = await metOpgevangenWarn(() =>
+      wrap({ capability: "iedere-ingelogde", schema: "geen-body", rateLimit: "chat" }, async () => {
+        aangeroepen++;
+        return Response.json({ ok: true });
+      })(req())
+    );
+    assert.equal(res.status, 200);
+    assert.equal(aangeroepen, 1);
+    assert.deepEqual(geraakt, ["chat"], "de teller wordt precies op de gedeclareerde sleutel geraakt");
+  });
+
+  await test("RATELIMIT: over de grens + vlag UIT → observe (handler draait, 200), niet 429", async () => {
+    const geraakt: string[] = [];
+    let aangeroepen = 0;
+    const wrap = maakWithFondsRoute(
+      deps({ controleerLimiet: telStub(false, geraakt), ratelimitEnforceAan: () => false })
+    );
+    const [res, warns] = await metOpgevangenWarn(() =>
+      wrap({ capability: "iedere-ingelogde", schema: "geen-body", rateLimit: "chat" }, async () => {
+        aangeroepen++;
+        return Response.json({ ok: true });
+      })(req())
+    );
+    assert.equal(res.status, 200, "vlag uit: geen 429, byte-identiek");
+    assert.equal(aangeroepen, 1, "vlag uit: de handler draait gewoon");
+    const regel = warns.find((w) => w[0] === "[RATELIMIT-OBSERVE]");
+    assert.ok(regel, "een zou-weigering hoort onder de vlag-uit wél geobserveerd te worden");
+    assert.equal((regel[1] as Record<string, unknown>).handhaven, false);
+  });
+
+  await test("RATELIMIT: over de grens + vlag AAN → 429, de handler draait NIET", async () => {
+    const geraakt: string[] = [];
+    let aangeroepen = 0;
+    const wrap = maakWithFondsRoute(
+      deps({ controleerLimiet: telStub(false, geraakt), ratelimitEnforceAan: () => true })
+    );
+    const [res] = await metOpgevangenWarn(() =>
+      wrap({ capability: "iedere-ingelogde", schema: "geen-body", rateLimit: "chat" }, async () => {
+        aangeroepen++;
+        return Response.json({ ok: true });
+      })(req())
+    );
+    assert.equal(res.status, 429, "vlag aan + over de grens → 429");
+    assert.equal(aangeroepen, 0, "429 kort-sluit: de handler draait niet");
+  });
+
+  await test("ORDENING: schema (3c) gaat vóór rate-limit (3d) — een 400 verschijnt, de teller wordt niet geraakt", async () => {
+    const geraakt: string[] = [];
+    const wrap = maakWithFondsRoute(
+      deps({ controleerLimiet: telStub(false, geraakt), schemaEnforceAan: () => true, ratelimitEnforceAan: () => true })
+    );
+    const [res] = await metOpgevangenWarn(() =>
+      wrap(
+        { capability: "iedere-ingelogde", schema: z.object({ titel: z.string() }), rateLimit: "chat" },
+        async () => Response.json({ ok: true })
+      )(reqMetBody({ titel: 123 }))
+    );
+    assert.equal(res.status, 400, "vorm eerst afgekeurd");
+    assert.equal(geraakt.length, 0, "de rate-limit-poort draait niet meer na een 400");
+  });
+
+  // ── Audit-poort (W11) ─────────────────────────────────────────────────────
+  // Een schrijver-stub die noteert of/waarmee hij is aangeroepen. De kern: onder
+  // de vlag UIT schrijft hij NIET (omgekeerde semantiek), en de post-handler-
+  // plaatsing betekent dat een korte-sluiting (403) hem niet bereikt.
+  type HandelingArgs = Parameters<WrapperDeps["schrijfHandeling"]>[0];
+  const auditStub = (opgeslagen: HandelingArgs[]) => async (args: HandelingArgs) => {
+    opgeslagen.push(args);
+  };
+
+  await test("AUDIT: geen declaratie → geen schrijver, geen observe-log (inert bij landing)", async () => {
+    const opgeslagen: HandelingArgs[] = [];
+    const wrap = maakWithFondsRoute(deps({ schrijfHandeling: auditStub(opgeslagen), auditEnforceAan: () => true }));
+    const [res, warns] = await metOpgevangenWarn(() =>
+      wrap({ capability: "iedere-ingelogde", schema: "geen-body" }, async () => Response.json({ ok: true }))(req())
+    );
+    assert.equal(res.status, 200);
+    assert.equal(opgeslagen.length, 0);
+    assert.equal(warns.filter((w) => w[0] === "[AUDIT-OBSERVE]").length, 0);
+  });
+
+  await test("AUDIT: \"geen\" → niets (geen schrijver, geen log)", async () => {
+    const opgeslagen: HandelingArgs[] = [];
+    const wrap = maakWithFondsRoute(deps({ schrijfHandeling: auditStub(opgeslagen), auditEnforceAan: () => true }));
+    const [res, warns] = await metOpgevangenWarn(() =>
+      wrap({ capability: "iedere-ingelogde", schema: "geen-body", audit: "geen" }, async () => Response.json({ ok: true }))(req())
+    );
+    assert.equal(res.status, 200);
+    assert.equal(opgeslagen.length, 0);
+    assert.equal(warns.filter((w) => w[0] === "[AUDIT-OBSERVE]").length, 0);
+  });
+
+  await test("AUDIT: AuditSpec + vlag UIT → observe: [AUDIT-OBSERVE] gelogd, maar NIETS geschreven", async () => {
+    const opgeslagen: HandelingArgs[] = [];
+    const wrap = maakWithFondsRoute(deps({ schrijfHandeling: auditStub(opgeslagen), auditEnforceAan: () => false }));
+    const [res, warns] = await metOpgevangenWarn(() =>
+      wrap(
+        { capability: "iedere-ingelogde", schema: "geen-body", audit: { handeling: "test.doen" } },
+        async () => Response.json({ ok: true })
+      )(req())
+    );
+    assert.equal(res.status, 200);
+    assert.equal(opgeslagen.length, 0, "de omgekeerde semantiek: vlag-uit schrijft NIETS");
+    const regel = warns.find((w) => w[0] === "[AUDIT-OBSERVE]");
+    assert.ok(regel, "vlag-uit hoort wél te observeren wat er geschreven zóú zijn");
+    assert.equal((regel[1] as Record<string, unknown>).handeling, "test.doen");
+  });
+
+  await test("AUDIT: AuditSpec + vlag AAN → schrijver aangeroepen met handeling/methode/status", async () => {
+    const opgeslagen: HandelingArgs[] = [];
+    let aangeroepen = 0;
+    const wrap = maakWithFondsRoute(deps({ schrijfHandeling: auditStub(opgeslagen), auditEnforceAan: () => true }));
+    const [res] = await metOpgevangenWarn(() =>
+      wrap(
+        { capability: "iedere-ingelogde", schema: "geen-body", audit: { handeling: "test.doen" }, label: "test.route" },
+        async () => {
+          aangeroepen++;
+          return Response.json({ ok: true });
+        }
+      )(req())
+    );
+    assert.equal(res.status, 200);
+    assert.equal(aangeroepen, 1);
+    assert.equal(opgeslagen.length, 1);
+    assert.equal(opgeslagen[0].handeling, "test.doen");
+    assert.equal(opgeslagen[0].methode, "GET");
+    assert.equal(opgeslagen[0].status, 200);
+    assert.equal(opgeslagen[0].gebruikerId, "u-1");
+  });
+
+  await test("AUDIT: vlag AAN + schrijver THROWT → respons blijft 200 (best-effort, geen 500)", async () => {
+    const wrap = maakWithFondsRoute(
+      deps({
+        auditEnforceAan: () => true,
+        schrijfHandeling: async () => {
+          throw new Error("handelingstabel bestaat nog niet");
+        },
+      })
+    );
+    const [res] = await metOpgevangenWarn(() =>
+      wrap(
+        { capability: "iedere-ingelogde", schema: "geen-body", audit: { handeling: "test.doen" } },
+        async () => Response.json({ ok: true })
+      )(req())
+    );
+    assert.equal(res.status, 200, "een mislukte spoor-write mag een geslaagde handeling niet breken");
+  });
+
+  await test("AUDIT: post-handler — een 403 (capability) short-circuit bereikt de audit-poort NIET", async () => {
+    const opgeslagen: HandelingArgs[] = [];
+    let aangeroepen = 0;
+    const wrap = maakWithFondsRoute(
+      deps({
+        capabilityEnforceAan: () => true,
+        auditEnforceAan: () => true,
+        schrijfHandeling: auditStub(opgeslagen),
+        haalProfiel: async () => ({ id: "u-1", naam: "N", rol: "bestuurder", fondsId: "f-1" }),
+      })
+    );
+    const [res] = await metOpgevangenWarn(() =>
+      wrap(
+        { capability: "dossiers.manage", schema: "geen-body", audit: { handeling: "test.doen" } },
+        async () => {
+          aangeroepen++;
+          return Response.json({ ok: true });
+        }
+      )(req())
+    );
+    assert.equal(res.status, 403);
+    assert.equal(aangeroepen, 0, "de handler draaide niet");
+    assert.equal(opgeslagen.length, 0, "alleen een handeling die DRAAIDE laat een spoor");
   });
 
   console.log(`\nAlle ${n} route-wrapper sanity-tests groen.`);

@@ -47,6 +47,7 @@ Opdrachten komen vaak als **werkopdracht** uit een plansessie (zie `WERKOPDRACHT
 
 - **Analyseer bestaande patronen** voordat je code wijzigt. Volg de conventies die er al zijn.
 - **Plan eerst, wijzig daarna.** Geef bij niet-triviale taken eerst een implementatieplan; voer pas uit na akkoord. Geen grote refactors zonder expliciet voorstel.
+- **Bij elke herplanning hoort een aansluittabel:** oud item → nieuwe plek, óf expliciet "vervallen omdat …". Zonder die tabel verliest een herschikking stilzwijgend scope, want het nieuwe plan oogt compleet. Het reviewrapport §14 plaatste 26 van de 30 R-nummers in vijf fasen; bij de herplanning naar drie deploymomenten (V- en W-spoor) vielen 14 daarvan buiten elk plan — niet afgewezen, niet uitgesteld, gewoon niet meegenomen. Dat bleef vier dagen onopgemerkt.
 - **TypeScript-check vóór commit (verplicht):** `./node_modules/.bin/tsc --noEmit --skipLibCheck` moet exit 0 zijn.
 - **Schema-wijzigingen:** schrijf een idempotente migratie in `supabase/migrations/<datum>_<naam>.sql`, werk `schema.sql` bij als documentatie, en draai de migratie **eerst in Supabase** — dán pas code-deploy (anders crashen inserts / breken CHECK-constraints). Documenteer migraties.
 - **Controleer RLS-impact** bij elke datamodelwijziging.
@@ -71,6 +72,10 @@ Na een implementatie rapporteer je kort en in deze volgorde: (1) samenvatting va
 ## Geen schijnzekerheid
 
 Doe geen harde juridische, actuariële, fiscale of toezichtclaims zonder bron in de codebase of projectdocumentatie. Bij ontbrekende of onzekere informatie: benoem de aanname, geef aan wat geverifieerd moet worden, en bouw geen functionaliteit die de aanname als waarheid afdwingt.
+
+**Meet tegen `origin/<branch>`, nooit in een werkkopie.** Gebruik `git fetch` gevolgd door `git grep <patroon> origin/preview -- <pad>`. Een werkboom staat mogelijk op een oude commit, en dan lijkt alles wat sindsdien gemerged is "ongecommit" of "nieuw". Dat is in dit project drie keer tot een verkeerde conclusie geleid: de Previewpoort werd "niet bestaand" verklaard vanuit een archiefbranch, W9 werd twee keer voor "ongecommit werk" aangezien vanuit worktrees die op de W8-merge stonden — de tweede keer ging het om 119 bestanden in een map die op dat moment al niet meer bestond. `git worktree list` markeert zulke bomen zelf als `prunable`; neem die aanwijzing serieus en ruim ze op.
+
+**Lees de callee, niet de surface.** Een grep-treffer en een codecommentaar zijn geen feit. Controleer per treffer wát er met de waarde gebeurt en wie een functie werkelijk aanroept. Twee keer misgegaan met gevolgen voor een securityanalyse: `["bestuurder","voorzitter"]` in `stemmingen/*` werd gelezen als een autorisatiegate terwijl het een quorumnoemer, een volmachtgevervalidatie en een notificatiedoelgroep waren; en het commentaar boven `app/api/internal/semantische-extractie/route.ts` stelt dat T5 de enqueue server-side aanroept, terwijl niets in de codebase dat doet. Een commentaar beschrijft de bedoeling van toen, niet de code van nu.
 
 ## Tests
 

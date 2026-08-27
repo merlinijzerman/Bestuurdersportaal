@@ -23,7 +23,7 @@ import { z } from "zod";
 
 export const dynamic = "force-dynamic";
 
-export const PATCH = withFondsRoute({ capability: "notulen.segment.confirm", schema: z.object({ "agendapunt_id": z.unknown().optional(), "bevestigd": z.unknown().optional(), "reden": z.unknown().optional(), "tekst": z.unknown().optional(), "titel": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "notulen.segmenten.wijzigen" }, capability: "notulen.segment.confirm", schema: z.object({ "agendapunt_id": z.unknown().optional(), "bevestigd": z.unknown().optional(), "reden": z.unknown().optional(), "tekst": z.unknown().optional(), "titel": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;
@@ -138,7 +138,7 @@ export const PATCH = withFondsRoute({ capability: "notulen.segment.confirm", sch
   }
 });
 
-export const DELETE = withFondsRoute({ capability: "notulen.segment.confirm", schema: "geen-body" }, async (ctx, _req: NextRequest, params) => {
+export const DELETE = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "notulen.segmenten.verwijderen" }, capability: "notulen.segment.confirm", schema: "geen-body" }, async (ctx, _req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

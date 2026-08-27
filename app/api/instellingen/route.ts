@@ -35,7 +35,7 @@ import {
 //  RLS beperkt alles tot het eigen fonds; de schrijf-rolgate zit óók in de DB.
 // ============================================================
 
-export const GET = withFondsRoute({ capability: "iedere-ingelogde", schema: "geen-body" }, async (ctx) => {
+export const GET = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: "geen", capability: "iedere-ingelogde", schema: "geen-body" }, async (ctx) => {
   try {
     if (!ctx.fondsId)
       return NextResponse.json({ error: "Geen fonds" }, { status: 400 });
@@ -91,7 +91,7 @@ export const GET = withFondsRoute({ capability: "iedere-ingelogde", schema: "gee
   }
 });
 
-export const POST = withFondsRoute({ capability: "fonds.config.manage", schema: z.object({ "actief": z.unknown().optional(), "hybride_zoeken": z.unknown().optional(), "key": z.unknown().optional(), "log_id": z.unknown().optional(), "module_key": z.unknown().optional(), "sleutel": z.unknown().optional(), "tokens": z.unknown().optional(), "type": z.unknown().optional(), "waarde": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
+export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "instellingen.aanmaken" }, capability: "fonds.config.manage", schema: z.object({ "actief": z.unknown().optional(), "hybride_zoeken": z.unknown().optional(), "key": z.unknown().optional(), "log_id": z.unknown().optional(), "module_key": z.unknown().optional(), "sleutel": z.unknown().optional(), "tokens": z.unknown().optional(), "type": z.unknown().optional(), "waarde": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest) => {
   try {
     if (!ctx.fondsId)
       return NextResponse.json({ error: "Geen fonds" }, { status: 400 });

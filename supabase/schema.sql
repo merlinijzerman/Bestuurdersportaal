@@ -2341,3 +2341,23 @@ create table if not exists public.procedure_afschriften (
 -- gedeelde public.fn_log_append_only() before-update/delete-triggers + het
 -- ontbreken van UPDATE/DELETE-grants. Puur additief: geen bestaande tabel/policy
 -- gewijzigd; geen app-gedrag verandert tot T8 schrijft.
+
+-- ── W11 — forensische tenant-handelingslog (besluit 0191) ────────────────
+-- Bron van waarheid: supabase/migrations/2026_08_26_w11_handelingen_log.sql.
+-- Deze documentatie hoort bij de migratie en beschrijft bewust geen bestuurlijke
+-- audit: het gaat om operationele state-changing handelingen (wie, methode, pad,
+-- status, request-id), zonder request-body of querystring.
+--
+-- public.handelingen_log:
+--   id uuid PK, fonds_id → fondsen, gebruiker_id → auth.users, handeling text,
+--   methode ∈ POST|PATCH|PUT|DELETE, pad text, status int, request_id uuid,
+--   tijdstip timestamptz. RLS aan; precies één SELECT-policy achter
+--   mag_handelingen_lezen(fonds). UPDATE is triggermatig verboden en DELETE kan
+--   alleen voor rijen ouder dan 90 dagen. Browserrollen hebben geen schrijfgrant;
+--   authenticated heeft alleen SELECT, service_role beheert retentie.
+-- public.handelingen_lees_grants:
+--   RLS aan zonder policy; deny-by-default. De SECURITY DEFINER-functie
+--   mag_handelingen_lezen(uuid) controleert auth.uid(), fonds en geldigheidsvenster.
+-- Schrijven loopt uitsluitend via fn_schrijf_handeling(text,text,text,int,uuid),
+-- die gebruiker en fonds server-side uit auth.uid() afleidt. De wrapper roept deze
+-- RPC pas aan bij ENFORCE_AUDIT=on; de code-deploy is daarom apart van deze DDL.

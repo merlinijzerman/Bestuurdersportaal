@@ -258,7 +258,7 @@ async function schoonOp(
 // De DEPLOY_TARGET-skip en de constant-time CRON_SECRET-bearer staan sinds W5b
 // in platform/lib/machine-route-wrapper.ts, niet meer in dit bestand. Zelfde
 // controle, zelfde volgorde, zelfde responses — alleen op één plek.
-const SPEC = { bewaking: "cron-secret", label: "platform.monitoring.snapshot", directeMutaties: ["delete", "insert"], schema: "geen-body" } as const;
+const SPEC = { rateLimit: "geen", audit: "geen", bewaking: "cron-secret", label: "platform.monitoring.snapshot", directeMutaties: ["delete", "insert"], schema: "geen-body" } as const;
 
 // Vercel Cron gebruikt GET; POST voor handmatige/lokale triggers.
 export const GET = withMachineRoute(SPEC, draai);

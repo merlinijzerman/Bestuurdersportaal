@@ -30,7 +30,7 @@ export const dynamic = "force-dynamic";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export const DELETE = withFondsRoute({ capability: "gesprekken.manage", schema: z.object({ "request_id": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const DELETE = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "gesprekken.verwijderen" }, capability: "gesprekken.manage", schema: z.object({ "request_id": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     if (!UUID.test(id)) {

@@ -93,6 +93,43 @@ export type MachineSpecV1 = {
    *  `internal/semantische-extractie` een body (`document_id`); de rest is
    *  `"geen-body"`. Zelfde `request.clone()`-mechaniek en vlag als withFondsRoute. */
   readonly schema: SchemaDeclaratie;
+  /** Tempolimiet (W10). ÉÉN toegestane literal: `"geen"` — en dat is een TYPEGRENS,
+   *  geen keuze. `fn_rate_limit_check` sleutelt op `auth.uid()` en werpt `28000`
+   *  bij een null-uid (`2026_06_10_rate_limiting.sql`); een machineroute heeft geen
+   *  sessie, dus een echte `LimietNaam` zou daar een 500 geven i.p.v. een 429. Het
+   *  type verbiedt dat aan de bron, zodat de codemod van #183 er geen kan neerzetten.
+   *  Hier is `"geen"` bovendien EERLIJK: machineroutes hébben geen tempolimiet — de
+   *  asymmetrie met `audit` (dat het dekkende mechanisme benoemt) staat in besluit 0190.
+   *  VERPLICHT (#183a); er is geen rate-limit-codepad in deze wrapper (altijd no-op). */
+  readonly rateLimit: "geen";
+  /** Auditspoor (W11). TWEE toegestane literals: `"platform-event-log" | "geen"`.
+   *  De wrapper schrijft NIETS (geen `auth.uid()`/fonds → geen handelingen_log); de
+   *  literal BENOEMT het dekkende mechanisme, en die benoeming is GEMETEN, niet
+   *  beweerd — de assertie in `audit-inventaris.mjs` valt rood als een
+   *  `"platform-event-log"`-declaratie niet aantoonbaar naar `platform_event_log`
+   *  schrijft.
+   *
+   *  ⚠ CORRECTIE (gemeten op `origin/preview`): een eerdere versie van dit commentaar
+   *  beweerde dat "de 6 machinehandlers hun spoor al naar `platform_event_log`
+   *  schrijven". Dat is ONWAAR — nul aanroepen van `logAttempt`/`logSecurity`/
+   *  `logResultGegarandeerd` in de machineroutes. Het mechanisme bestaat (platform-
+   *  serveracties gebruiken het via `withPlatform`), maar de machineroutes laten het
+   *  liggen; `monitoring/snapshot` *leest* `platform_event_log` (het is de gat-detector)
+   *  maar schrijft het niet. De waarde is bovendien PER SPEC, niet per methode: GET en
+   *  POST delen in vijf bestanden één `const SPEC` + één `draai`, dus ze dragen dezelfde
+   *  `audit`-waarde (per-methode splitsen = de SPEC splitsen = structuurwijziging).
+   *  #183b-machine voegt `logResultGegarandeerd` (retry, NIET fail-closed — een logfout
+   *  mag een cron-run niet laten mislukken) toe aan de vijf worker-SPECs (aqlab/worker ·
+   *  afschrift-worker · ingest-worker · semantische-extractie · monitoring/snapshot);
+   *  de twee readiness-probes (`platform/healthz`, `healthz/ping`) krijgen `"geen"` (ze
+   *  muteren niets en `healthz` logt bewust niet — een gezondheidscontrole die faalt op
+   *  het loggen is een zelfreferentiële storing). Tot die writes landen bevriest #183a
+   *  alle 12 declaraties op `"geen"` en houdt de drager `spoor_vereist` in
+   *  `audit-inventaris.json` de 9 openstaande worker-declaraties rood (symmetrisch aan
+   *  `ketengebeurtenis_vereist` op de tenant-kant). Elke `"platform-event-log"`-declaratie
+   *  valt rood tot het gemeten spoor bestaat. VERPLICHT (#183a); #183a bevriest alle
+   *  12 op `"geen"`, #183b-machine flipt de 5 worker-SPECs na de write. */
+  readonly audit: "platform-event-log" | "geen";
 };
 
 /** Context voor een machineroute. Bewust mager: er is geen sessie, geen

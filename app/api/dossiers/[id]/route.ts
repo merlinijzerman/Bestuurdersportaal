@@ -26,7 +26,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export const GET = withFondsRoute({ capability: "dossiers.view", schema: "geen-body" }, async (ctx, _req: NextRequest, params) => {
+export const GET = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: "geen", capability: "dossiers.view", schema: "geen-body" }, async (ctx, _req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;
@@ -69,7 +69,7 @@ type PatchBody = {
   periode_jaar?: number | null;
 };
 
-export const PATCH = withFondsRoute({ capability: "dossiers.manage", schema: z.object({ "motivering": z.unknown().optional(), "periode_eind": z.unknown().optional(), "periode_jaar": z.unknown().optional(), "periode_start": z.unknown().optional(), "periode_type": z.unknown().optional(), "status": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "dossiers.wijzigen" }, capability: "dossiers.manage", schema: z.object({ "motivering": z.unknown().optional(), "periode_eind": z.unknown().optional(), "periode_jaar": z.unknown().optional(), "periode_start": z.unknown().optional(), "periode_type": z.unknown().optional(), "status": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id } = params as { id: string };
     const supabase = ctx.supabase;

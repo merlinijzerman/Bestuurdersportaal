@@ -18,8 +18,8 @@
 //    2. Profielresolutie   — haalProfiel(supabase, user.id): id, naam, rol, fonds_id.
 //                            (`ctx.email` komt uit de sessie, niet uit het profiel;
 //                            zie de toelichting bij FondsContext.)
-//    3. Host-guard         — alleen als spec.hostGuard === true (de 12 routes die
-//                            hem nu al hebben); hergebruikt beoordeelRouteHostToegang.
+//    3. Host-guard         — alleen als spec.hostGuard === "afdwingen" (de 10 routes
+//                            die hem nu al hebben); hergebruikt beoordeelRouteHostToegang.
 //                            `hostGuard: "route-eigen"` = de route doet het zelf,
 //                            bewust; zie RouteSpecV1.
 //    3b. Capability-poort — beoordeelt spec.capability tegen de profielrol
@@ -48,6 +48,22 @@ import {
   schemaEnforceAan,
   type SchemaDeclaratie,
 } from "@/core/lib/schema-enforce";
+import {
+  beoordeelRateLimitUitkomst,
+  isFailClosed,
+  ratelimitEnforceAan,
+  wrapperTeltVoor,
+  type RateLimitDeclaratie,
+} from "@/core/lib/ratelimit-enforce";
+import {
+  auditEnforceAan,
+  beoordeelAudit,
+  type AuditDeclaratie,
+} from "@/core/lib/audit-enforce";
+// UITSLUITEND TYPES uit rate-limit — een waarde-import zou `logAppFout` (server-
+// only) meetrekken. De echte `controleerLimiet` + `LIMIETEN` worden LAZY geladen
+// in echteDeps, net als tenant-route-guard hieronder.
+import type { LimietNaam, LimietBeslissing } from "@/core/lib/rate-limit";
 // LET OP: tenant-route-guard trekt `server-only` mee. Die wordt daarom LAZY
 // geladen in echteDeps (alleen de 12 host-guard-routes raken hem), zodat deze
 // module — en dus de sanity-suite — buiten de Next-runtime importeerbaar blijft.
@@ -105,20 +121,56 @@ export type RouteSpecV1 = {
    *  zijn dan de inline controle; zolang beide draaien is dat onschadelijk. Zie
    *  TICKET-W9 §8. */
   readonly schema: SchemaDeclaratie;
-  /** Wie host↔fonds afdwingt voor deze route. Drie waarden, en de derde is er
-   *  omdat een AFWEZIG veld niet te onderscheiden is van een VERGETEN veld:
+  /** Wie host↔fonds afdwingt voor deze route. VERPLICHT (#183a) — drie WOORD-waarden,
+   *  want een AFWEZIG veld is niet te onderscheiden van een VERGETEN veld:
    *
-   *    true            de wrapper doet het, vóór de handler (de gewone vorm);
-   *    false/afwezig   deze route kent geen host↔fonds-grens;
+   *    "afdwingen"     de wrapper doet het, vóór de handler (de gewone vorm);
+   *    "geen"          deze route kent geen host↔fonds-grens;
    *    "route-eigen"   de route roept `beoordeelRouteHostToegang` ZELF aan, en
    *                    dat is een bewuste keuze — niet een vergeten vlag.
    *
+   *  #183a verving het oude `boolean | "route-eigen"` (`true`→`"afdwingen"`,
+   *  weglating→`"geen"`) byte-identiek: de wrapper vuurde de guard alleen op
+   *  `=== true`, dus weglating/`false`/`"route-eigen"` vielen er alle drie al buiten.
    *  W4 gebruikt "route-eigen" voor `documents/upload`: de wrapper zou de guard
    *  vóór de fail-closed rate limit trekken, en de twee aparte labels
    *  (`documents.upload.init` / `.complete`) die de anomaliedetectie voeden tot
    *  één samenvouwen. Zo is de uitzondering greppable, kan een latere gate hem
    *  onderscheiden van een omissie, en hangt de motivering aan de code. */
-  readonly hostGuard?: boolean | "route-eigen";
+  readonly hostGuard: "afdwingen" | "geen" | "route-eigen";
+  /** WELKE tempolimiet deze route draagt (W10). Drie soorten waarden, om dezelfde
+   *  reden als bij `hostGuard`: een AFWEZIGE waarde is niet te onderscheiden van
+   *  een VERGETEN waarde.
+   *
+   *    LimietNaam     een sleutel uit `LIMIETEN`; de wrapper telt op de teller;
+   *    "geen"         expliciet geen tempolimiet;
+   *    "route-eigen"  de route belt `controleerLimiet` ZELF (de 16 adopters); de
+   *                   wrapper blijft eruit — anders telt één request DUBBEL op de
+   *                   gedeelde teller (besluit 0190, de gedeelde-resource-regel).
+   *
+   *  VERPLICHT (#183a). De poort is volledig inert (byte-identiek): `ENFORCE_RATELIMIT`
+   *  is kale opt-in en staat uit, en de bevriezingswaarden (`"route-eigen"` /
+   *  `"nog-niet-beoordeeld"` / `"geen"`) zijn alle no-ops in de wrapper. #183a vult
+   *  16 gemeten adopters op `"route-eigen"` en de rest op `"nog-niet-beoordeeld"`
+   *  (nog geen kostenoordeel geveld — de W10-pas maakt er `LimietNaam`/`"geen"` van).
+   *  Default flipt aan het eind van deploy 3 (besluit 0189). ⚠ De wrapper-check komt
+   *  BOVENÓP de route-eigen `controleerLimiet`-aanroepen — vandaar `"route-eigen"`. */
+  readonly rateLimit: RateLimitDeclaratie;
+  /** OF deze route een handelingsregel achterlaat (W11). TWEE waarden (§4-model,
+   *  0191 geamendeerd) — het veld is een INSTRUCTIE aan de wrapper, geen bewering
+   *  over code elders:
+   *
+   *    AuditSpec   de wrapper schrijft een handelingsregel; `handeling` is het
+   *                semantische label. NÁ de handler, met de uitkomst. Élke te-
+   *                auditen handler krijgt dit, óók de bestuurlijke (die houden
+   *                daarnáást hun eigen `governance_events`-regel — andere tabel).
+   *    "geen"      expliciet geen handelingsregel — per stuk gemotiveerd.
+   *
+   *  ⚠ OMGEKEERDE VLAG-SEMANTIEK t.o.v. capability/schema/rateLimit: `ENFORCE_AUDIT`
+   *  UIT betekent NIETS SCHRIJVEN (alleen [AUDIT-OBSERVE]-loggen), niet doorlaten.
+   *  VERPLICHT (#183a); `ENFORCE_AUDIT` staat uit → nul extra rijen, byte-identiek.
+   *  De echte handelingstabel + retentie/RLS is een vervolg (besluit 0190/0191). */
+  readonly audit: AuditDeclaratie;
   /** loglabel voor de host-guard-anomaliedetectie (alleen logging, geen respons). */
   readonly label?: string;
 };
@@ -175,6 +227,39 @@ export type WrapperDeps = {
    *  `capabilityEnforceAan`: de vlag-aan-stand is de enige tak die gedrag
    *  verandert en mag in een testrun niet op process.env leunen. */
   schemaEnforceAan: () => boolean;
+  /** Leest `ENFORCE_RATELIMIT`. Injecteerbaar om dezelfde reden als de andere
+   *  vlaglezers. */
+  ratelimitEnforceAan: () => boolean;
+  /** Raadpleegt de rate-limit-teller voor één limietsleutel. LAZY in echteDeps
+   *  (rate-limit trekt via `logAppFout` server-only mee); injecteerbaar zodat de
+   *  sanity-suite hem stubt zonder DB — de teller is de enige TOESTANDSDRAGENDE
+   *  control. De `LIMIETEN`-opzoeking én `failClosed` zitten in de echte dep, niet
+   *  in de wrapper, zodat de wrapper server-loos blijft. */
+  controleerLimiet: (
+    supabase: RlsClient,
+    limietNaam: LimietNaam
+  ) => Promise<LimietBeslissing>;
+  /** Bouwt de 429-respons. Async + LAZY in echteDeps (api-errors → app_errors is
+   *  server-only); injecteerbaar zodat de sanity de handhaaf-tak server-loos toetst.
+   *  De echte responder schrijft het P5-signaal (rate-limit-incident, 90 dagen). */
+  bouwRateLimited: (label: string, resetAt: Date | null) => Promise<Response>;
+  /** Leest `ENFORCE_AUDIT`. Injecteerbaar; ⚠ OMGEKEERDE semantiek — vlag-uit
+   *  schrijft niets. Zie audit-enforce.ts. */
+  auditEnforceAan: () => boolean;
+  /** Schrijft één handelingsregel naar de eigen tenant-handelingstabel (W11).
+   *  Alleen aangeroepen op de "schrijven"-tak (vlag AAN + AuditSpec), best-effort.
+   *  De RPC leidt gebruiker en fonds server-side uit de sessie af; de wrapper
+   *  geeft dezelfde RLS-client door zodat de sessie niet opnieuw wordt opgebouwd. */
+  schrijfHandeling: (args: {
+    supabase: RlsClient;
+    gebruikerId: string;
+    fondsId: string | null;
+    handeling: string;
+    methode: string;
+    pad: string;
+    status: number;
+    requestId: string;
+  }) => Promise<void>;
 };
 
 const echteDeps: WrapperDeps = {
@@ -182,9 +267,31 @@ const echteDeps: WrapperDeps = {
   haalProfiel,
   capabilityEnforceAan,
   schemaEnforceAan,
+  ratelimitEnforceAan,
   beoordeelRouteHostToegang: async (args) => {
     const mod = await import("@/core/lib/tenant-route-guard");
     return mod.beoordeelRouteHostToegang(args);
+  },
+  controleerLimiet: async (supabase, limietNaam) => {
+    const mod = await import("@/core/lib/rate-limit");
+    return mod.controleerLimiet(supabase, mod.LIMIETEN[limietNaam], {
+      failClosed: isFailClosed(limietNaam),
+    });
+  },
+  auditEnforceAan,
+  schrijfHandeling: async ({ supabase, handeling, methode, pad, status, requestId }) => {
+    const { error } = await supabase.rpc("fn_schrijf_handeling", {
+      p_handeling: handeling,
+      p_methode: methode,
+      p_pad: pad,
+      p_status: status,
+      p_request_id: requestId,
+    });
+    if (error) throw error;
+  },
+  bouwRateLimited: async (label, resetAt) => {
+    const { rateLimited } = await import("@/core/lib/api-errors");
+    return rateLimited(label, resetAt);
   },
 };
 
@@ -210,11 +317,11 @@ export function maakWithFondsRoute(deps: WrapperDeps) {
       const fondsId = profiel?.fondsId ?? null;
 
       // 3. Host-guard — alleen waar de route hem nu al heeft.
-      // LET OP: `=== true`, niet truthy. "route-eigen" is een string en dus
-      // truthy; die route doet de guard zelf en mag hem hier NIET nog eens
-      // krijgen — dat zou de ordening veranderen die de uitzondering juist
-      // beschermt.
-      if (spec.hostGuard === true) {
+      // LET OP: exact `=== "afdwingen"`. `"geen"` en `"route-eigen"` vallen er
+      // bewust buiten: `"route-eigen"` doet de guard zelf en mag hem hier NIET nog
+      // eens krijgen — dat zou de ordening veranderen die de uitzondering juist
+      // beschermt. (#183a: was `=== true` toen het veld nog boolean was.)
+      if (spec.hostGuard === "afdwingen") {
         const oordeel = await deps.beoordeelRouteHostToegang({
           sessieFondsId: fondsId,
           gebruikerId: user.id,
@@ -321,6 +428,43 @@ export function maakWithFondsRoute(deps: WrapperDeps) {
         }
       }
 
+      // 3d. Rate-limit-poort (W10) — NA de schema-poort, VÓÓR de handler.
+      //
+      // ORDENING: ná schema. Autorisatie en vorm gaan vóór tempo; een 429 hoort
+      // niet in een 400 te veranderen doordat een vlag flipt.
+      //
+      // GEDEELDE RESOURCE (besluit 0190): alleen bij een echte LimietNaam raakt de
+      // wrapper de teller. "geen"/"route-eigen" → niets doen, en dus ook niet
+      // tellen — de 16 zelf-limiterende routes tikken hun teller niet dubbel op.
+      //
+      // TELLEN-IN-OBSERVE: `controleerLimiet` telt ook met de vlag UIT — de enige
+      // manier om te weten of de grens geraakt zóú zijn. De teller-write is niet
+      // gebruikerszichtbaar en de respons blijft byte-identiek. Bij landing draagt
+      // geen enkele route dit veld, dus deze tak draait niet.
+      if (spec.rateLimit && wrapperTeltVoor(spec.rateLimit)) {
+        const beslissing = await deps.controleerLimiet(supabase, spec.rateLimit);
+        const uitkomst = beoordeelRateLimitUitkomst({
+          beslissing,
+          handhaven: deps.ratelimitEnforceAan(),
+        });
+        if (uitkomst.actie !== "door") {
+          console.warn("[RATELIMIT-OBSERVE]", {
+            route: spec.label ?? padVan(request),
+            methode: request.method,
+            limiet: spec.rateLimit,
+            resterend: beslissing.resterend,
+            handhaven: uitkomst.actie === "weiger",
+            requestId,
+          });
+          if (uitkomst.actie === "weiger") {
+            // De 429-responder is GEÏNJECTEERD: de echte (echteDeps) laadt LAZY
+            // api-errors (→ app_errors, server-only) en schrijft daar het P5-signaal;
+            // de sanity stubt hem, zodat de handhaaf-tak server-loos toetsbaar blijft.
+            return await deps.bouwRateLimited(spec.label ?? spec.rateLimit, uitkomst.resetAt);
+          }
+        }
+      }
+
       // 4. Correlation ID leeft in ctx + logregels (v1: geen responseheader).
       const ctx: FondsContext = {
         gebruikerId: user.id,
@@ -334,14 +478,54 @@ export function maakWithFondsRoute(deps: WrapperDeps) {
 
       // Laatste vangnet: alleen wat de route zélf niet vangt. Dezelfde vorm als
       // de 87 bestaande blokken. De route behoudt zijn eigen try/catch.
-      let params: unknown;
+      let respons: Response;
       try {
-        params = invocatie?.params ? await invocatie.params : undefined;
-        return await handler(ctx, request, params);
+        const params = invocatie?.params ? await invocatie.params : undefined;
+        respons = await handler(ctx, request, params);
       } catch (e) {
         console.error(`[${requestId}] onafgevangen routefout:`, e);
-        return NextResponse.json({ error: "Serverfout" }, { status: 500 });
+        respons = NextResponse.json({ error: "Serverfout" }, { status: 500 });
       }
+
+      // 3e. Audit-poort (W11) — NÁ de handler, met de uitkomst (status). Alleen een
+      // handeling die daadwerkelijk DRAAIDE laat een spoor; de pre-handler-korte-
+      // sluitingen (401/403/400/429) niet.
+      //
+      // ⚠ OMGEKEERDE VLAG-SEMANTIEK: vlag UIT = observe = NIETS SCHRIJVEN (alleen
+      // loggen wat er geschreven zóú zijn). Bij landing draagt geen route dit veld,
+      // dus deze tak is inert: nul extra rijen, byte-identiek, stream ongemoeid.
+      if (spec.audit) {
+        const actie = beoordeelAudit({ audit: spec.audit, handhaven: deps.auditEnforceAan() });
+        if (actie.actie === "observe") {
+          console.warn("[AUDIT-OBSERVE]", {
+            route: spec.label ?? padVan(request),
+            methode: request.method,
+            handeling: actie.handeling,
+            status: respons.status,
+            heeftFonds: fondsId !== null,
+            requestId,
+          });
+        } else if (actie.actie === "schrijven") {
+          // Best-effort: een mislukte spoor-write mag een geslaagde handeling niet in
+          // een 500 veranderen. De echte dep throwt tot de handelingstabel er is.
+          try {
+            await deps.schrijfHandeling({
+              supabase,
+              gebruikerId: ctx.gebruikerId,
+              fondsId,
+              handeling: actie.handeling,
+              methode: request.method,
+              pad: padVan(request),
+              status: respons.status,
+              requestId,
+            });
+          } catch (e) {
+            console.error(`[${requestId}] [AUDIT] handelingsregel niet weggeschreven:`, e);
+          }
+        }
+      }
+
+      return respons;
     };
   };
 }

@@ -47,7 +47,7 @@ function isGeldigeKi(n: unknown): n is number {
   return typeof n === "number" && Number.isInteger(n) && n >= 1 && n <= 5;
 }
 
-export const PATCH = withFondsRoute({ capability: "decisions.manage", schema: z.object({ "categorie": z.unknown().optional(), "impact": z.unknown().optional(), "kans": z.unknown().optional(), "status": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "decisions.risks.wijzigen" }, capability: "decisions.manage", schema: z.object({ "categorie": z.unknown().optional(), "impact": z.unknown().optional(), "kans": z.unknown().optional(), "status": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: decisionId, rid } = params as { id: string; rid: string };
     const supabase = ctx.supabase;
