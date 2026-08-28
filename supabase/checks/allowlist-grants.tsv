@@ -90,6 +90,9 @@ FUNC	public	fn_bron_whitelist_log_hash()	function	service_role	EXECUTE
 FUNC	public	fn_bron_whitelist_log_immutable()	function	anon	-
 FUNC	public	fn_bron_whitelist_log_immutable()	function	authenticated	EXECUTE
 FUNC	public	fn_bron_whitelist_log_immutable()	function	service_role	EXECUTE
+FUNC	public	fn_besluit_status_omslag(p_decision_id uuid, p_target text, p_reden text, p_motivering text, p_open_elders jsonb)	function	anon	-
+FUNC	public	fn_besluit_status_omslag(p_decision_id uuid, p_target text, p_reden text, p_motivering text, p_open_elders jsonb)	function	authenticated	EXECUTE
+FUNC	public	fn_besluit_status_omslag(p_decision_id uuid, p_target text, p_reden text, p_motivering text, p_open_elders jsonb)	function	service_role	-
 FUNC	public	fn_build_decision_dossier(p_decision_id uuid)	function	anon	-
 FUNC	public	fn_build_decision_dossier(p_decision_id uuid)	function	authenticated	EXECUTE
 FUNC	public	fn_build_decision_dossier(p_decision_id uuid)	function	service_role	EXECUTE
@@ -240,6 +243,12 @@ FUNC	public	fn_schrijf_vergelijking(p_mode text, p_model text, p_prompt_version 
 FUNC	public	fn_snapshot_immutable()	function	anon	-
 FUNC	public	fn_snapshot_immutable()	function	authenticated	EXECUTE
 FUNC	public	fn_snapshot_immutable()	function	service_role	EXECUTE
+FUNC	public	fn_stap_afronden_met_afwijking(p_stap_id uuid, p_procedure_id uuid, p_motivering text, p_bevestigd boolean)	function	anon	-
+FUNC	public	fn_stap_afronden_met_afwijking(p_stap_id uuid, p_procedure_id uuid, p_motivering text, p_bevestigd boolean)	function	authenticated	EXECUTE
+FUNC	public	fn_stap_afronden_met_afwijking(p_stap_id uuid, p_procedure_id uuid, p_motivering text, p_bevestigd boolean)	function	service_role	-
+FUNC	public	fn_stap_open_per_zwaarte(p_stap_id uuid)	function	anon	-
+FUNC	public	fn_stap_open_per_zwaarte(p_stap_id uuid)	function	authenticated	-
+FUNC	public	fn_stap_open_per_zwaarte(p_stap_id uuid)	function	service_role	-
 FUNC	public	fn_validate_bewijs_requirement_binding()	function	anon	-
 FUNC	public	fn_validate_bewijs_requirement_binding()	function	authenticated	-
 FUNC	public	fn_validate_bewijs_requirement_binding()	function	service_role	EXECUTE
@@ -586,7 +595,7 @@ REL	public	decision_evaluations	table	anon	SELECT
 REL	public	decision_evaluations	table	authenticated	SELECT,INSERT,UPDATE,DELETE
 REL	public	decision_evaluations	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
 REL	public	decision_objects	table	anon	SELECT
-REL	public	decision_objects	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	decision_objects	table	authenticated	SELECT,INSERT,DELETE
 REL	public	decision_objects	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
 REL	public	decision_risks	table	anon	SELECT
 REL	public	decision_risks	table	authenticated	SELECT,INSERT,UPDATE,DELETE

@@ -363,6 +363,13 @@ export default async function ProcedureDetailPage({
   const afgerondAantal = stappen.filter((s) => s.status === "afgerond").length;
   const totaalStappen = stappen.length;
 
+  // Besluitmoment-stappen (§7): de volgordes van de stappen met `vereist_besluit`.
+  // Hiermee is de status-signalering besluitmoment-scoped i.p.v. dossierbreed (Q1,
+  // besluit 0193) — een nazorgvereiste elders forceert geen motivering.
+  const besluitmomentStappen = stappen
+    .filter((s) => s.vereist_besluit)
+    .map((s) => s.volgorde);
+
   // T6-1A: welke stap staat in het rechterpaneel? Selectie via ?stap=<id>
   // (server-first, past bij het force-dynamic + router.refresh()-patroon).
   // Default = de actieve stap; ontbreekt die, dan de laatst afgeronde; anders
@@ -395,6 +402,21 @@ export default async function ProcedureDetailPage({
   } catch (e) {
     console.error("Dossier laden mislukt:", e);
   }
+
+  // Signaal 3 (§12, Q2/0193): is dit besluit genomen terwijl er vereisten
+  // openstonden? Afgeleid uit het append-only event; de actor-rol is de
+  // momentopname uit de payload (niet naderhand herleiden).
+  const bmoEvent = dossier?.events.find(
+    (e) => e.event_type === "besluit_genomen_met_openstaande_vereisten"
+  );
+  const beslotenMetOpenstaand = bmoEvent
+    ? {
+        actorNaam: bmoEvent.actor_naam,
+        actorRol:
+          (bmoEvent.nieuwe_waarde as { actor_rol?: string } | null)?.actor_rol ??
+          null,
+      }
+    : null;
 
   // WO-2 (§7 + §7.1): procesfasen-rail. De fasen (D8) komen uit de definitie
   // met een per fonds overschrijfbare beschrijving; de fase-status, aandachts-
@@ -687,6 +709,8 @@ export default async function ProcedureDetailPage({
         <DossierStatusStrip
           decision={dossier.decision}
           evidence={dossier.evidence}
+          besluitmomentStappen={besluitmomentStappen}
+          beslotenMetOpenstaand={beslotenMetOpenstaand}
           statusOvergangAnker="status-overgang"
           heeftSnapshot={dossier.snapshots.length > 0}
         />
@@ -914,6 +938,7 @@ export default async function ProcedureDetailPage({
               <StatusOvergangPaneel
                 decision={dossier.decision}
                 evidence={dossier.evidence}
+                besluitmomentStappen={besluitmomentStappen}
               />
             </UitklapbaarPaneel>
 

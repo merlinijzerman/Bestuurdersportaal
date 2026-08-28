@@ -36,9 +36,12 @@ import {
 } from "@/core/lib/decision-view";
 import { buildDecisionDossierView } from "@/core/lib/decision";
 import {
-  openStaandeVereisten,
+  openVoorBesluitmomenten,
+  openElders,
+  tellPerZwaarte,
   heeftOpenBovenOptioneel,
   type OpenPerZwaarte,
+  type TellingPerZwaarte,
 } from "@/core/lib/besluitmoment-telling";
 import { MIN_MOTIVERING_LENGTE } from "@/core/lib/afwijking";
 
@@ -123,17 +126,33 @@ export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beo
     //    met iets open bóven optioneel is geen vrije doorgang: er is een motivering
     //    verplicht (zelfde vorm als de afwijking bij afronden, PR-C — I2), en het
     //    besluit wordt append-only vastgelegd. Niet blokkeren, wél onthouden.
+    //    De eis is BESLUITMOMENT-scoped, niet dossierbreed (Q1, besluit 0193): een
+    //    nazorgvereiste elders forceert geen motivering. Wat elders openstaat wordt
+    //    wél onthouden — als telling (`open_elders`), niet als eis.
     let openBijBesluit: OpenPerZwaarte | null = null;
     let besluitMotivering: string | null = null;
+    let eldersTelling: TellingPerZwaarte | null = null;
     if (BESLUIT_TRANSITIES.includes(target)) {
+      // Besluitmoment-stappen van de procedure (§7). In het interim meestal precies
+      // de stap met `vereist_besluit`; de SQL-kant (RPC) is gezaghebbend.
+      const { data: bmStappen } = await supabase
+        .from("procedure_stappen")
+        .select("volgorde")
+        .eq("procedure_id", decision.procedure_id)
+        .eq("vereist_besluit", true);
+      const besluitmomentStappen = (bmStappen ?? []).map(
+        (r) => (r as { volgorde: number }).volgorde
+      );
+
       const view = await buildDecisionDossierView(supabase, decisionId, {});
-      const open = openStaandeVereisten(view.evidence);
+      const open = openVoorBesluitmomenten(view.evidence, besluitmomentStappen);
+      eldersTelling = tellPerZwaarte(openElders(view.evidence, besluitmomentStappen));
       if (heeftOpenBovenOptioneel(open)) {
         const motivering = body.motivering?.trim();
         if (!motivering || motivering.length < MIN_MOTIVERING_LENGTE) {
           return NextResponse.json(
             {
-              error: `Er staan vereisten open boven optioneel. Een besluit met openstaande vereisten vereist een motivering van minimaal ${MIN_MOTIVERING_LENGTE} tekens.`,
+              error: `Er staan vereisten open voor dit besluitmoment. Een besluit met openstaande vereisten vereist een motivering van minimaal ${MIN_MOTIVERING_LENGTE} tekens.`,
               openstaand: { kritiek: open.kritiek.length, vereist: open.vereist.length },
             },
             { status: 400 }
@@ -179,7 +198,10 @@ export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beo
         p_target: target,
         p_reden: body.reden ?? null,
         p_motivering: besluitMotivering,
-        p_openstaand: openBijBesluit,
+        // Informatief, niet-vorderend: wat elders in het dossier openstaat. De
+        // functie berekent `open` voor het besluitmoment ZELF in SQL (Q2) — dat
+        // is niet meegegeven en dus niet te ontlopen.
+        p_open_elders: eldersTelling,
       }
     );
     if (rpcFout || !bijgewerkt) {
@@ -232,11 +254,13 @@ export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beo
         ? {
             waarschuwing: {
               boodschap:
-                "Besluit genomen terwijl er vereisten openstonden — vastgelegd in het dossier.",
+                "Besluit genomen terwijl er vereisten voor het besluitmoment openstonden — vastgelegd in het dossier.",
               openstaand: {
                 kritiek: openBijBesluit.kritiek.length,
                 vereist: openBijBesluit.vereist.length,
               },
+              // Onthouden, niet gevorderd: wat elders in het dossier nog open staat.
+              elders: eldersTelling ?? undefined,
             },
           }
         : {}),
