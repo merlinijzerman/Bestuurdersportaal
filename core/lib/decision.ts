@@ -211,8 +211,8 @@ export async function ensureDecisionForProcedure(
 /**
  * Bouw de volledige `DecisionDossierView` voor een Decision Object.
  * Dit is een aanvulling op `fn_build_decision_dossier(decision_id)`:
- * we voegen `currentStep`, `steps`, `readiness`, `evidence` en
- * `snapshots`-meta toe, en filteren dissent op rol als laatste
+ * we voegen `currentStep`, `steps`, `evidence` en `snapshots`-meta toe
+ * (readiness is ontmanteld, 0187), en filteren dissent op rol als laatste
  * verdedigingslinie naast RLS.
  */
 export async function buildDecisionDossierView(
@@ -494,7 +494,7 @@ interface ProcedureBewijsRow {
  * Eén gelijkheidstest op de expliciete binding — geen wildcard, geen
  * documenttype-gok, geen titel-substring. Daardoor geldt per constructie:
  * een bewijsstuk draagt precies één sleutel en kan dus hoogstens één
- * vereiste vervullen. Spiegelt de document-tak van
+ * vereiste vervullen. Spiegelt de document-tak van (historisch) de gedropte
  * `fn_decision_readiness_check` (migratie 2026_08_18_bewijs_requirement_binding).
  *
  * `bewijzen` wordt verondersteld deterministisch gesorteerd te zijn
@@ -542,7 +542,14 @@ async function buildEvidenceLijst(
   if (ctx.procedure.template_versie) {
     reqQuery = reqQuery.eq("template_versie", ctx.procedure.template_versie);
   }
-  const { data: reqRows } = await reqQuery;
+  // Fail-closed: een lees-fout op de vereisten mag NIET stil een lege set opleveren.
+  // De besluitmoment-telling/§4.4-signalering (PR-D) leunt hierop — lege evidence
+  // zou een besluit met openstaande vereisten stil zonder motivering/vastlegging
+  // laten passeren. Daarom hier throwen i.p.v. `?? []`.
+  const { data: reqRows, error: reqFout } = await reqQuery;
+  if (reqFout) {
+    throw new Error(`Vereisten ophalen mislukt: ${reqFout.message}`);
+  }
 
   // WO-3-vervolg: per-proces uitsluitingen (overlay). Deze markeren een
   // TEMPLATE-vereiste als niet van toepassing voor DIT decision — de generieke
@@ -582,13 +589,17 @@ async function buildEvidenceLijst(
   // D7: unie met ACTIEVE instantie-requirements (decision-scoped). Template-
   // en instantie-rijen zijn disjuncte records → geen dubbeltelling. Spiegelt
   // de UNION in fn_decision_readiness_check.
-  const { data: instRows } = await supabase
+  const { data: instRows, error: instFout } = await supabase
     .from("procedure_requirement_instance")
     .select(
       "id, stap_volgorde, requirement_type, label, documenttype, veld_pad, verplicht, blokkerend, min_aantal, vereist_validatie_domein, besluitmoment_stap"
     )
     .eq("decision_id", ctx.decisionId)
     .eq("actief", true);
+  if (instFout) {
+    // Fail-closed, zie de template-arm hierboven.
+    throw new Error(`Instantie-vereisten ophalen mislukt: ${instFout.message}`);
+  }
   const instanceRequirements: MergedRequirement[] = (
     (instRows ?? []) as Array<{
       id: string;

@@ -183,8 +183,13 @@ function verzamelAfwijkingen(bron: AfschriftBron, bewijs: BewijsTelling): string
       }
     } else {
       // NIEUW (readiness ontmanteld): de kritieke, nog niet vervulde vereisten uit
-      // de evidence (`blokkerend` = zwaarte kritiek).
-      for (const item of view.evidence) {
+      // de evidence (`blokkerend` = zwaarte kritiek). LET OP: een BEVROREN snapshot
+      // draagt geen evidence (die zit alleen in de live view) → dan blijft deze set
+      // leeg en toont het afschrift geen blokkerende-vereisten-regel. Het bevroren
+      // besluitmoment-afschrift toont deze regel dus pas als de snapshot-payload zelf
+      // de vervulling draagt — belegd bij #208 (decision_audit_snapshots). Het
+      // CONCEPT-afschrift (live view) toont 'm wél.
+      for (const item of view.evidence ?? []) {
         if (!item.vervuld && item.blokkerend) {
           blokkerend.add(`${item.requirement_type}:${item.stap_volgorde}:${item.label}`);
         }

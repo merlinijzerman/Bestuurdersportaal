@@ -44,6 +44,13 @@ function voegToe(uit: OpenPerZwaarte, item: EvidenceItem): void {
  * De openstaande (niet-vervulde) vereisten voor besluitmoment N, per zwaarte:
  * de unie van de vereisten op stap N zelf en de vereisten die via
  * `besluitmoment_stap = N` óók voor dit besluit tellen (§7 r441).
+ *
+ * DIT is de exacte §7-telling per besluitmoment. PR-D's signalering en de
+ * statusstrip gebruiken de dossier-brede `openStaandeVereisten`; de PER-besluitmoment
+ * weergave (de "0 openstaand"-val uit §7 r434) landt met de status-feitenmatrix in
+ * P4 (#169, besluit 0193) en gebruikt dán deze functie. Ze is hier al gebouwd én
+ * gepind (besluitmoment-telling.sanity.ts) zodat `besluitmoment_stap` end-to-end
+ * werkt; ze is geen dode code maar het P4-aansluitpunt.
  */
 export function openVoorBesluitmoment(
   evidence: EvidenceItem[],

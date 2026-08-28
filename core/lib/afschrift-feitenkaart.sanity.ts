@@ -320,4 +320,38 @@ test("besluiten worden per Decision Object toegewezen (view.besluiten is procesb
   assert.equal(fk.besluiten[1].vastgelegdeBesluiten.totaal, 1);
 });
 
+// PR-D (#168, 0187): de nieuwe tak — readiness ontmanteld. Een view ZONDER readiness
+// leidt de blokkerende (kritieke) vereisten uit de evidence af; en een view met noch
+// readiness noch evidence (een bevroren snapshot vóór de normaliseerView-guard) mag
+// NIET crashen.
+test("readiness afwezig → blokkerende vereisten uit de evidence", () => {
+  const blokEvidence = {
+    requirement_type: "document" as const,
+    stap_volgorde: 1,
+    label: "Kritiek stuk",
+    toelichting: null,
+    documenttype: null,
+    verplicht: true,
+    blokkerend: true,
+    vervuld: false,
+    bron_type: null,
+    bron_id: null,
+    bron_titel: null,
+    bron: "template" as const,
+    instance_id: null,
+    besluitmoment_stap: null,
+  };
+  const view = maakView({ readiness: undefined, evidence: [blokEvidence] });
+  const fk = bouwFeitenkaart(bron([view]));
+  assert.ok(
+    fk.afwijkingen.some((r: string) => /1 nog niet vervulde, blokkerende vereiste/.test(r)),
+    "de blokkerende vereiste uit de evidence hoort in de feitenkaart-afwijkingen"
+  );
+});
+
+test("readiness én evidence afwezig (bevroren snapshot) → geen crash", () => {
+  const view = maakView({ readiness: undefined, evidence: undefined as unknown as never });
+  assert.doesNotThrow(() => bouwFeitenkaart(bron([view])));
+});
+
 console.log(`\nafschrift-feitenkaart: ${n} tests groen.`);
