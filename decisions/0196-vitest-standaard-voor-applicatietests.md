@@ -1,6 +1,6 @@
 # 0196 — Vitest als standaard voor nieuwe applicatietests
 
-- **Status:** Geaccepteerd — lokaal bewezen; gehoste CI-bevestiging volgt in de WP1-PR
+- **Status:** Geaccepteerd — lokaal en gehost bewezen in PR #219
 - **Datum:** 2026-08-28
 - **Betrokkenen:** Merlin (opdracht en akkoord op uitvoering), Codex (uitvoering)
 - **Scope:** applicatietests in TypeScript; geen database-, RLS- of productielogicawijziging
@@ -49,6 +49,10 @@ foutpaden, async evaluatielogica en bron-/structuurinspectie.
 - CI bewaart console-, JSON-, JSON-summary- en LCOV-uitvoer veertien dagen. De
   samenvatting en het artifact draaien met `always()`, terwijl de teststap zelf
   blokkerend blijft.
+- Hosted security-baselinerun
+  [#33167751627](https://github.com/merlinijzerman/Bestuurdersportaal/actions/runs/33167751627)
+  is groen op Node 22. Het gedownloade artifact `vitest-coverage` bevatte alle
+  vier rapportagevormen en exact dezelfde baseline als lokaal.
 
 De runtime-steekproef is klein en laat nog geen versnelling zien. De keuze is
 daarom gebaseerd op beheersbaarheid, diagnostiek, filtering, coverage en
