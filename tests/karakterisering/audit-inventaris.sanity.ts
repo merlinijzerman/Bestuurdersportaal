@@ -145,17 +145,46 @@ test("spoorVereist bevat uitsluitend worker-SPEC-declaraties (geen probe glipt e
   assert.deepEqual(vreemd, [], `niet-worker in spoorVereist: ${vreemd.join(", ")}`);
 });
 
-test("spoorVereist dekt de 9 openstaande worker-declaraties (RED tot #183b-machine)", () => {
-  // Pin op de huidige stand: geen enkele worker schrijft vandaag platform_event_log,
-  // dus alle 9 declaraties (5 SPECs, GET+POST behalve semantische-extractie POST-only)
-  // staan open. #183b-machine landt de writes en laat dit getal bewust naar 0 zakken —
-  // pas dán, met beide dragers leeg, mag ENFORCE_AUDIT=on (0191 §7 VLAGKOPPELING).
-  assert.equal(inv.meta.spoorVereist.length, 9, `verwacht 9 open worker-declaraties, kreeg ${inv.meta.spoorVereist.length}`);
+test("spoorVereist is leeg — alle 5 worker-SPECs schrijven platform_event_log (#183b-machine geland)", () => {
+  // #183b-machine (besluit 0193) heeft de outcome-gescopte logResultGegarandeerd-write
+  // in alle 5 worker-SPECs geland; de drager is daarmee 0. De PROVEN-RED-test hierboven
+  // (regel 125) blijft bewaken dat een audit:"platform-event-log"-declaratie ZONDER
+  // gemeten write rood wordt — de gate meet gedrag, niet declaratie. Voorwaarde 2 van
+  // de 3 in 0191 §7 (VLAGKOPPELING 5c) is hiermee vervuld; spoor T (ketengebeurtenis-
+  // Vereist) staat nog open, dus ENFORCE_AUDIT=on nog niet.
+  assert.equal(inv.meta.spoorVereist.length, 0, `verwacht 0 open worker-declaraties, kreeg ${inv.meta.spoorVereist.length}: ${inv.meta.spoorVereist.join(", ")}`);
 });
 
 test("PROVEN-RED: een probe-declaratie in spoorVereist wordt gevlagd", () => {
   const nep = ["GET app/api/healthz/ping/route.ts", "POST app/api/platform/healthz/route.ts"];
   assert.equal(nep.filter((d) => !isWorkerDecl(d)).length, 2, "probes horen niet in spoorVereist — de check moet ze zien");
+});
+
+// ── 2c. Zelfdetectie-invariant (besluit 0193 §5) ─────────────────────────────
+// Snapshots gatdetector (Signaal 14) filtert op fase='attempt'; de workers schrijven
+// via logResultGegarandeerd UITSLUITEND fase='result'. Daarom komt een worker-event
+// nooit als "gat" terug. Voegt iemand een logAttempt (fase='attempt') aan een worker
+// toe, dan ontstaat een terugkoppellus waarin de gatdetector zijn eigen schrijfacties
+// telt. Deze twee tests vangen precies die anders-onzichtbare wijziging.
+const striptCommentaar = (s: string) =>
+  s.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:"'`])\/\/[^\n]*/g, "$1");
+
+test("Signaal 14 filtert op fase='attempt' (basis van de zelfdetectie-koppeling)", () => {
+  const src = readFileSync(join(ROOT, "platform/lib/monitoring-queries.ts"), "utf8");
+  assert.ok(
+    /\.eq\(\s*["'`]fase["'`]\s*,\s*["'`]attempt["'`]\s*\)/.test(src),
+    "Signaal 14 hoort op fase='attempt' te filteren; wijzigt dat, herweeg dan of worker-result-events als gat kunnen tellen"
+  );
+});
+
+test("geen worker-SPEC schrijft een attempt-event (zelfdetectie-lus uitgesloten, 0193 §5)", () => {
+  for (const f of WORKER_SPEC_FILES) {
+    const src = striptCommentaar(readFileSync(join(ROOT, f), "utf8"));
+    assert.ok(
+      !/\blogAttempt\s*\(/.test(src),
+      `${f} schrijft een attempt-event — dat maakt Signaal 14's eigen worker-events tot gaten`
+    );
+  }
 });
 
 // ── 3. Triggerherkenning tegen de migraties ──────────────────────────────────
@@ -186,6 +215,59 @@ test("audit-CAPTURE-triggers bestaan nog op hun basistabellen (anti-drift)", () 
         `geen audit-trigger ${fn} op ${base} gevonden — handlers die ${base} muteren zouden ten onrechte als "geen spoor" gelden`
       );
     }
+  }
+});
+
+// ── 3b. #183b ketentriggers/-RPC's — pin OPERATIE-set tegen de migratie ──────
+// Punt 4 (2026-08-27): AUDIT_CAPTURE moet niet alleen rood worden als een trigger
+// verdwijnt, maar óók als zijn operatieverzameling (of WHEN) versmalt terwijl de
+// BASE_TRIGGER-attributie blijft staan. Dit pint per ketentrigger: (a) hij bestaat
+// op zijn tabel met het verwachte trigger-event in de migratie, én (b) de scanner-
+// BASE_TRIGGER declareert exact de bijbehorende ops. Versmalt iemand één van beide,
+// dan divergeren ze van deze verwachting en gaat het rood.
+const KETEN_TRIGGERS: Record<string, { table: string; event: string; ops: string[] }> = {
+  trg_agendapunt_ketengebeurtenis:  { table: "agendapunten",          event: "after insert on",           ops: ["insert"] },
+  trg_inbreng_ketengebeurtenis:     { table: "agendapunt_inbreng",    event: "after insert or delete on", ops: ["insert", "delete"] },
+  trg_vergadering_ketengebeurtenis: { table: "vergaderingen",         event: "after insert on",           ops: ["insert"] },
+  trg_orgprofiel_ketengebeurtenis:  { table: "organisatie_profielen", event: "after insert or update on", ops: ["insert", "update", "upsert"] },
+  trg_stemming_ketengebeurtenis:    { table: "stemmingen",            event: "after insert or update on", ops: ["insert", "update"] },
+  trg_stem_ketengebeurtenis:        { table: "stem_uitbrengingen",    event: "after insert or update on", ops: ["insert", "update"] },
+};
+const KETEN_RPCS = ["fn_document_status_zetten", "fn_notulen_segment_bevestig", "fn_notulen_segment_verwijder"];
+// De 6 triggerfuncties achter KETEN_TRIGGERS — hun BODY moet óók governance_events
+// schrijven (symmetrisch met de RPC-check). Zonder deze grep zou iemand de insert uit
+// een triggerfunctie kunnen halen met behoud van naam/event/ops, en de gate blijft groen.
+const KETEN_TRIGGER_FNS = [
+  "fn_agendapunt_ketengebeurtenis", "fn_inbreng_ketengebeurtenis", "fn_vergadering_ketengebeurtenis",
+  "fn_orgprofiel_ketengebeurtenis", "fn_stem_ketengebeurtenis", "fn_stemming_ketengebeurtenis",
+];
+
+test("#183b ketentriggers bestaan met de gepinde operatie-set (anti-drift op versmalling)", () => {
+  const sql = alleMigraties().toLowerCase();
+  const mjs = readFileSync(join(ROOT, "tests/karakterisering/audit-inventaris.mjs"), "utf8");
+  for (const [trg, { table, event, ops }] of Object.entries(KETEN_TRIGGERS)) {
+    const evRe = new RegExp(`create trigger\\s+${trg}\\s+${event.replace(/ /g, "\\s+")}\\s+(public\\.)?${table}\\b`, "i");
+    assert.ok(evRe.test(sql), `${trg} op ${table} mist het verwachte event "${event}" in de migraties — trigger verdwenen of versmald?`);
+    const opsRe = new RegExp(`${table}:\\s*\\{[^}]*ops:\\s*\\[([^\\]]*)\\]`);
+    const mm = mjs.match(opsRe);
+    assert.ok(mm, `BASE_TRIGGER-entry voor ${table} zonder ops — attributie zou tabelbreed (te grof) worden`);
+    const gedeclareerd = mm![1].split(",").map((s) => s.replace(/["'\s]/g, "")).filter(Boolean).sort();
+    assert.deepEqual(gedeclareerd, [...ops].sort(), `BASE_TRIGGER.ops voor ${table} wijkt af van de gepinde triggerscope`);
+  }
+});
+
+test("#183b keten-RPC's én triggerfuncties schrijven aantoonbaar governance_events (gemeten, niet beweerd)", () => {
+  // Per-bestand (de notulen-RPC's staan óók in hun oorspronkelijke migratie ZONDER
+  // governance_events): er moet één migratie zijn die de functie definieert MÉT een
+  // governance_events-insert erin. Symmetrisch voor RPC's (RPC_TRAIL) én de 6
+  // triggerfuncties (BASE_TRIGGER) — anders kan de insert stil uit een functie vallen.
+  const dir = join(ROOT, "supabase/migrations");
+  const files = readdirSync(dir).filter((f) => f.endsWith(".sql")).map((f) => readFileSync(join(dir, f), "utf8").toLowerCase());
+  for (const fn of [...KETEN_RPCS, ...KETEN_TRIGGER_FNS]) {
+    const ok = files.some((s) =>
+      new RegExp(`function\\s+(public\\.)?${fn}[\\s\\S]*?insert\\s+into\\s+public\\.governance_events`, "i").test(s)
+    );
+    assert.ok(ok, `geen migratie die ${fn} definieert MÉT een governance_events-insert — de trail-claim zou een lege belofte zijn`);
   }
 });
 

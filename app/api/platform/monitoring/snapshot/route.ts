@@ -27,6 +27,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { withMachineRoute, type MachineContext } from "@/platform/lib/machine-route-wrapper";
 import { createServiceSupabase } from "@/platform/lib/supabase-service";
 import { logPlatformFout } from "@/platform/lib/platform-fout-log";
+import { logResultGegarandeerd } from "@/platform/lib/platform-audit";
 import { meetSignaal, type Meting } from "@/platform/lib/monitoring-queries";
 import {
   SIGNAAL_REGISTRY,
@@ -61,7 +62,7 @@ type SnapshotRij = {
   meta: Record<string, unknown> | null;
 };
 
-async function draai(_ctx: MachineContext, _req: NextRequest): Promise<NextResponse> {
+async function draai(ctx: MachineContext, _req: NextRequest): Promise<NextResponse> {
 
   const nu = new Date();
   const svc = createServiceSupabase();
@@ -118,6 +119,24 @@ async function draai(_ctx: MachineContext, _req: NextRequest): Promise<NextRespo
     }
 
     const opgeschoond = await schoonOp(svc, nu);
+
+    // Auditspoor (0193) — OUTCOME-GESCOPET: alleen als er een snapshot is
+    // weggeschreven. Snapshot is de ENIGE worker die destructief snoeit
+    // (`schoonOp` → delete), dus een spoor is hier het zwaarst nodig (I-6).
+    // BELANGRIJK: dit schrijft `fase='result'`; Signaal 14 (de eigen gatdetector)
+    // filtert op `fase='attempt'` — daarom telt dit event NIET als gat. Die
+    // koppeling is vastgelegd in de zelfdetectie-assertie (besluit 0193 §5).
+    // Machinegezag (identity_id=null), niet fail-closed.
+    if (rijen.length > 0) {
+      await logResultGegarandeerd({
+        correlatieId: ctx.requestId,
+        identityId: null,
+        capability: "platform.pipeline.operate",
+        handeling: "monitoring.snapshot.geschreven",
+        uitkomst: "succes",
+        effect: { gemeten, mislukt, rijen: rijen.length, opgeschoond },
+      });
+    }
 
     return NextResponse.json({
       ok: true,
@@ -258,7 +277,7 @@ async function schoonOp(
 // De DEPLOY_TARGET-skip en de constant-time CRON_SECRET-bearer staan sinds W5b
 // in platform/lib/machine-route-wrapper.ts, niet meer in dit bestand. Zelfde
 // controle, zelfde volgorde, zelfde responses — alleen op één plek.
-const SPEC = { rateLimit: "geen", audit: "geen", bewaking: "cron-secret", label: "platform.monitoring.snapshot", directeMutaties: ["delete", "insert"], schema: "geen-body" } as const;
+const SPEC = { rateLimit: "geen", audit: "platform-event-log", bewaking: "cron-secret", label: "platform.monitoring.snapshot", directeMutaties: ["delete", "insert"], schema: "geen-body" } as const;
 
 // Vercel Cron gebruikt GET; POST voor handmatige/lokale triggers.
 export const GET = withMachineRoute(SPEC, draai);

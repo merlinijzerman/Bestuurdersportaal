@@ -42,6 +42,10 @@ const TABEL_TRAIL = {
 };
 const RPC_TRAIL = {
   schrijf_ai_interactie: "bewijsketen",
+  // #183b spoor T — RPC's die governance_events schrijven (atomisch, in-transactie).
+  fn_document_status_zetten: "bewijsketen",   // handler #2 (besluit B)
+  fn_notulen_segment_bevestig: "bewijsketen", // handler #5
+  fn_notulen_segment_verwijder: "bewijsketen",// handler #6
   fn_schrijf_vergelijking: "domein",
   fn_schrijf_semantische_extractie: "domein",
   log_word_export: "domein",
@@ -73,6 +77,18 @@ const BASE_TRIGGER = {
   // wist het al: tests/cross-tenant/procedure-v2-governance.test.ts:181. Gemist in
   // v1 → de drie bewijs-handlers stonden ten onrechte op "geen spoor".
   procedure_bewijs: { log: "procedure_log", trail: "domein" },
+  // #183b spoor T — brontabel → governance_events (bewijsketen), OPERATIEBEWUST.
+  // Elke trigger is smaller dan "alle writes op de tabel"; tabelniveau zou een
+  // handler dat buiten de triggerscope schrijft VALS crediteren (0192 §2e-lijn).
+  // Gemeten (rapport 2026-08-27): dit zijn de operaties die de triggers dekken.
+  // `documenten` staat hier BEWUST NIET: die loopt via fn_document_status_zetten
+  // (RPC_TRAIL) — een payload-heuristiek zou fail-open crediteren (besluit B).
+  agendapunten:          { log: "governance_events", trail: "bewijsketen", ops: ["insert"] },
+  agendapunt_inbreng:    { log: "governance_events", trail: "bewijsketen", ops: ["insert", "delete"] },
+  vergaderingen:         { log: "governance_events", trail: "bewijsketen", ops: ["insert"] },
+  organisatie_profielen: { log: "governance_events", trail: "bewijsketen", ops: ["insert", "update", "upsert"] },
+  stemmingen:            { log: "governance_events", trail: "bewijsketen", ops: ["insert", "update"] },
+  stem_uitbrengingen:    { log: "governance_events", trail: "bewijsketen", ops: ["insert", "update"] },
 };
 
 // ── De SPLIT (besluit W11 / vervolg 0190) — klasse per handler ZONDER gemeten spoor.
@@ -89,33 +105,15 @@ const BASE_TRIGGER = {
 // De machine-handlers staan er NIET in: zij zijn "machine" (platform_event_log,
 // typegrens op MachineSpecV1).
 const SPLIT_KLASSE = {
-  // A. bestuurlijk feit → governance_events (permanent) — 15
-  "POST app/api/agendapunten/route.ts": "bestuurlijk-gap",
-  "POST app/api/inbreng/route.ts": "bestuurlijk-gap",
-  "DELETE app/api/inbreng/[id]/route.ts": "bestuurlijk-gap",
-  "POST app/api/notulen/segmenten/[id]/bevestig/route.ts": "bestuurlijk-gap",
-  "DELETE app/api/notulen/segmenten/[id]/route.ts": "bestuurlijk-gap",
-  "PUT app/api/organisatieprofiel/route.ts": "bestuurlijk-gap",
-  // NB: de 3 procedures/[id]/bewijs-handlers stonden hier als "bestuurlijk-gap",
-  // maar dat was onwaar — `trg_procedure_bewijs_audit` schrijft al procedure_log
-  // (zie BASE_TRIGGER). Ze meten nu als "domein" en horen dus NIET meer in deze
-  // no-spoor-lijst (de assertie vlagt een stale entry). BESLUIT (0191 §7): voor een
-  // bestuurlijk feit met een fail-closed domeinspoor dat óók de feitenkaart voedt
-  // VOLSTAAT procedure_log — geen route-eigen governance_events-write erbovenop
-  // (die zou het spoor dupliceren, direct-PostgREST-writes NIET dekken, en de keten
-  // verdunnen). bestuurlijk-gap is daarmee 12, niet 15.
-  "POST app/api/stemmingen/route.ts": "bestuurlijk-gap",
-  "POST app/api/stemmingen/[id]/stemmen/route.ts": "bestuurlijk-gap",
-  // NB: `stemmingen/[id]/sluiten` stond hier ook als "bestuurlijk-gap", maar de
-  // procedure_bewijs-trigger onthulde het: sluiten INSERT'et zelf een procedure_bewijs
-  // (sluiten/route.ts:178, "bewijs … met stemming_id-FK") → procedure_log. Het meet dus
-  // als "domein" en hoort niet in deze no-spoor-lijst. BESLUIT (eigenaar, 0191 §7): een
-  // stemming sluiten is een KETENGEBEURTENIS → #183 voegt een route-eigen
-  // governance_events-event toe BOVENOP het procedure_log-spoor; klasse wordt dan
-  // "bewijsketen". Tot die write landt is klasse "domein" (er ís een spoor).
-  "POST app/api/stemmingen/[id]/intrekken/route.ts": "bestuurlijk-gap",
-  "POST app/api/vergaderingen/route.ts": "bestuurlijk-gap",
-  "PATCH app/api/documents/[id]/route.ts": "bestuurlijk-gap", // status is RAG-bepalend, 0128 B-2
+  // A. bestuurlijk feit → governance_events (permanent) — GELAND (#183b spoor T,
+  //    besluit 0192 §5). De 12 handlers die hier als "bestuurlijk-gap" stonden meten
+  //    nu ALLEMAAL als "bewijsketen": elk schrijft governance_events via een
+  //    brontabel-trigger (BASE_TRIGGER, operatiebewust) of een RPC (RPC_TRAIL —
+  //    fn_document_status_zetten voor #2, fn_notulen_segment_* voor #5/#6). Ze zijn
+  //    daarom uit deze no-spoor-lijst verwijderd (anders vlagt de stale-split-assertie).
+  //    `sluiten` staat hier ook niet meer: de stemmingen-trigger levert zijn
+  //    `stemming_gesloten`-event bovenop procedure_log (KETEN_SLUITEN-markering vervalt
+  //    zodra het bewijsketen-spoor meet). ketengebeurtenis_vereist is daarmee 0.
   // B. operationele handeling → handelingen_log — 8
   "PATCH app/api/documents/[id]/ai-markering/route.ts": "operationeel",
   "POST app/api/documents/[id]/her-extract/route.ts": "operationeel", // gebonden aan pijplijngedrag; zie 0191
@@ -144,9 +142,15 @@ function directeWrites(code) {
   for (const [rpc, trail] of Object.entries(RPC_TRAIL)) {
     if (new RegExp(`\\.rpc\\(\\s*["'\\\`]${rpc}["'\\\`]`).test(code)) hits.push({ token: rpc, trail, soort: "rpc" });
   }
-  for (const [basis, { log, trail }] of Object.entries(BASE_TRIGGER)) {
-    const re = new RegExp(`\\.from\\(\\s*["'\\\`]${basis}["'\\\`]\\s*\\)[\\s\\S]{0,240}?\\.(insert|upsert|update|delete)\\b`);
-    if (re.test(code)) hits.push({ token: log, trail, soort: "trigger", basis });
+  for (const [basis, spec] of Object.entries(BASE_TRIGGER)) {
+    const { log, trail, ops } = spec;
+    // OPERATIEBEWUST (#183b): een trigger dekt zelden ALLE writes op een tabel.
+    // Crediteer alleen als de handler de tabel schrijft via een operatie die de
+    // trigger dekt (`ops`). Entries zonder `ops` = legacy, crediteren elke operatie.
+    const re = new RegExp(`\\.from\\(\\s*["'\\\`]${basis}["'\\\`]\\s*\\)[\\s\\S]{0,240}?\\.(insert|upsert|update|delete)\\b`, "g");
+    let m, dekt = false;
+    while ((m = re.exec(code))) { if (!ops || ops.includes(m[1])) { dekt = true; break; } }
+    if (dekt) hits.push({ token: log, trail, soort: "trigger", basis });
   }
   return hits;
 }
@@ -377,7 +381,11 @@ for (const f of apiFiles) {
     // machineleesbare markering. = de bestuurlijk-gap-klasse ÉN `sluiten` (dat klasse
     // `domein` is — het heeft procedure_log — maar wél een keten-event nodig heeft).
     const KETEN_SLUITEN = "POST app/api/stemmingen/[id]/sluiten/route.ts";
-    const ketengebeurtenisVereist = klasse === "bestuurlijk-gap" || key === KETEN_SLUITEN;
+    // `sluiten` had procedure_log (klasse domein) maar géén keten-event → hardgemarkeerd.
+    // #183b: de stemmingen-trigger levert nu het `stemming_gesloten`-event, dus zodra
+    // sluiten een bewijsketen-spoor meet, is de markering vervuld en vervalt hij.
+    const ketengebeurtenisVereist =
+      klasse === "bestuurlijk-gap" || (key === KETEN_SLUITEN && bewijsketen.length === 0);
     inventaris.push({
       handler: key,
       wrapper,

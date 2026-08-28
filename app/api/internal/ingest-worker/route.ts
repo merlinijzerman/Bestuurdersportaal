@@ -18,12 +18,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { withMachineRoute, type MachineContext } from "@/platform/lib/machine-route-wrapper";
 import { createServiceSupabase } from "@/platform/lib/supabase-service";
 import { draaiIngestWorker } from "@/platform/lib/ingest-orchestrator";
+import { logResultGegarandeerd } from "@/platform/lib/platform-audit";
 import { errorResponse } from "@/core/lib/api-errors";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300; // seconden; de cron herhaalt tot de queue leeg is.
 
-async function draai(_ctx: MachineContext, req: NextRequest): Promise<NextResponse> {
+async function draai(ctx: MachineContext, req: NextRequest): Promise<NextResponse> {
   try {
     const svc = createServiceSupabase();
     // Werker-id draagt de starttijd zodat het auditspoor invocaties onderscheidt.
@@ -34,6 +35,25 @@ async function draai(_ctx: MachineContext, req: NextRequest): Promise<NextRespon
     });
     // Heartbeat + telemetrie (F0.1-lijn): één gestructureerde regel per invocatie.
     console.log(JSON.stringify({ tag: "ingest-worker", worker_id: workerId, ...resultaat }));
+    // Auditspoor (0193) — OUTCOME-GESCOPET: schrijf alleen als de run daadwerkelijk
+    // iets deed. `bezig`/`overgeslagen` alléén tellen niet als activiteit van DEZE
+    // run. Machinegezag (identity_id=null), niet fail-closed.
+    const deedIets =
+      resultaat.claims > 0 ||
+      resultaat.afgerond > 0 ||
+      resultaat.geenqueued > 0 ||
+      resultaat.mislukt > 0 ||
+      resultaat.verweesd_opgeruimd > 0;
+    if (deedIets) {
+      await logResultGegarandeerd({
+        correlatieId: ctx.requestId,
+        identityId: null,
+        capability: "platform.pipeline.operate",
+        handeling: "ingest.batch.verwerkt",
+        uitkomst: "succes",
+        effect: { ...resultaat },
+      });
+    }
     return NextResponse.json({ ok: true, ...resultaat });
   } catch (error) {
     return errorResponse("ingest.worker", error);
@@ -43,7 +63,7 @@ async function draai(_ctx: MachineContext, req: NextRequest): Promise<NextRespon
 // De DEPLOY_TARGET-skip en de constant-time CRON_SECRET-bearer staan sinds W5b
 // in platform/lib/machine-route-wrapper.ts, niet meer in dit bestand. Zelfde
 // controle, zelfde volgorde, zelfde responses — alleen op één plek.
-const SPEC = { rateLimit: "geen", audit: "geen", bewaking: "cron-secret", label: "internal.ingest-worker", directeMutaties: [], schema: "geen-body" } as const;
+const SPEC = { rateLimit: "geen", audit: "platform-event-log", bewaking: "cron-secret", label: "internal.ingest-worker", directeMutaties: [], schema: "geen-body" } as const;
 
 // Vercel Cron gebruikt GET; POST voor handmatige/lokale triggers.
 export const GET = withMachineRoute(SPEC, draai);

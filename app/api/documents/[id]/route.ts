@@ -72,43 +72,23 @@ export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-be
     );
   }
 
-  const update =
-    actie === "deactiveren"
-      ? {
-          actief: false,
-          gedeactiveerd_op: new Date().toISOString(),
-          gedeactiveerd_door: ctx.gebruikerId,
-          deactivatie_reden: reden,
-        }
-      : {
-          actief: true,
-          gedeactiveerd_op: null,
-          gedeactiveerd_door: null,
-          deactivatie_reden: null,
-        };
+  // Statuswissel + inzage-log + bewijsketen atomisch in één transactie
+  // (besluit B, #183b spoor T). De rol-/24u-autorisatie hierboven blijft in de
+  // route; fn_document_status_zetten doet de drie mutaties in dezelfde transactie,
+  // leidt de actor uit auth.uid() af, en schrijft de governance_events-keten.
+  const { error: rpcError } = await supabase.rpc("fn_document_status_zetten", {
+    p_document_id: id,
+    p_actie: actie,
+    p_reden: reden,
+  });
 
-  const { error: updateError } = await supabase
-    .from("documenten")
-    .update(update)
-    .eq("id", id);
-
-  if (updateError) {
-    console.error("Fout bij update:", updateError);
+  if (rpcError) {
+    console.error("Fout bij statuswissel:", rpcError);
     return NextResponse.json(
       { error: "Kon de status niet bijwerken." },
       { status: 500 }
     );
   }
-
-  await supabase.from("document_inzage").insert({
-    document_id: document.id,
-    document_titel_snapshot: document.titel,
-    fonds_id: document.fonds_id,
-    gebruiker_id: ctx.gebruikerId,
-    gebruiker_naam: ctx.naam ?? null,
-    actie: actie === "deactiveren" ? "gedeactiveerd" : "gereactiveerd",
-    reden,
-  });
 
   return NextResponse.json({
     success: true,
