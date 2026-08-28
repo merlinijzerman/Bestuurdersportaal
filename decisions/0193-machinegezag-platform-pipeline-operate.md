@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Voorgesteld |
+| **Status** | **Vastgesteld 2026-08-28** |
 | **Datum** | 2026-08-27 |
 | **Spoor** | W · onderdeel van #183b spoor M (de 9 machine-writes) |
 | **Volgt op** | 0190, 0191 (§7 voorwaarde 5c) |
