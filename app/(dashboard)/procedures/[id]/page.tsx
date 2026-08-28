@@ -38,7 +38,7 @@ import { kiesWeergave } from "@/core/lib/procedure-detail-weergave";
 
 // Forceer dynamische rendering: deze page leest live data uit Supabase
 // (decision-state, readiness, evidence) en mag absoluut niet door de
-// Next.js full-route cache lopen — anders blijven readiness-ladder en
+// Next.js full-route cache lopen — anders blijven de besluitmoment-telling en
 // andere panelen op stale waarden hangen na mutaties via router.refresh().
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -681,12 +681,12 @@ export default async function ProcedureDetailPage({
       </div>
 
       {/* Statusbalk — onder de meta-strook (co-eigenaars), verplaatst op
-          verzoek. Huidige status, eerstvolgende readiness-horde, classificatie
+          verzoek. Huidige status, openstaande vereisten per zwaarte, classificatie
           en de knoppen export/statusovergang. */}
       {dossier && (
         <DossierStatusStrip
           decision={dossier.decision}
-          readiness={dossier.readiness}
+          evidence={dossier.evidence}
           statusOvergangAnker="status-overgang"
           heeftSnapshot={dossier.snapshots.length > 0}
         />
@@ -909,12 +909,11 @@ export default async function ProcedureDetailPage({
             <UitklapbaarPaneel
               titel="Statusovergang"
               ankerId="status-overgang"
-              samenvatting="Door naar volgende fase, met readiness-check + override"
+              samenvatting="Door naar volgende fase; besluit met openstaande vereisten vraagt een motivering"
             >
               <StatusOvergangPaneel
                 decision={dossier.decision}
-                readiness={dossier.readiness}
-                currentUserIsPrivileged={currentUserIsPrivileged}
+                evidence={dossier.evidence}
               />
             </UitklapbaarPaneel>
 

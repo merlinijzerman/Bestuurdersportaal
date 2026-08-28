@@ -1,46 +1,46 @@
 "use client";
 
-// Client-component: status-overgang voor het Decision Object met
-// readiness-gate. Per gekozen target tonen we de readiness-stand —
-// bij niet-voldoen zien voorzitter/beheerder een override-veld dat
-// een 'override_<readiness>'-event in `governance_events` legt.
+// Client-component: status-overgang voor het Decision Object.
 //
-// De DB-trigger `fn_decision_status_check` valideert de overgang
-// zelf; ongeldige combinaties (bv. concept → besloten) leveren een
-// fout uit de API die we 1-op-1 in de UI tonen.
+// §4.4-signalering i.p.v. de oude readiness-gate (besluit 0187/0193): een overgang
+// wordt NIET geblokkeerd omdat er iets openstaat — een bestuur mag besluiten vóór de
+// nazorg af is. Maar een besluit-transitie die doorgaat terwijl er vereisten open
+// staan bóven optioneel vereist een MOTIVERING (I2, zelfde vorm als de afwijking bij
+// afronden) en wordt append-only vastgelegd. Niet blokkeren, wél onthouden.
+//
+// De DB-trigger `fn_decision_status_check` (I4) valideert de overgang zelf;
+// ongeldige combinaties (bv. concept → besloten) leveren een fout uit de API.
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   type DecisionObject,
   type DecisionStatus,
-  type ReadinessOverview,
-  type ReadinessTarget,
+  type EvidenceItem,
   DECISION_STATUS_LABEL,
-  READINESS_LABEL,
 } from "@/core/lib/decision-view";
+import {
+  openStaandeVereisten,
+  heeftOpenBovenOptioneel,
+  type OpenPerZwaarte,
+} from "@/core/lib/besluitmoment-telling";
+import { MIN_MOTIVERING_LENGTE } from "@/core/lib/afwijking";
 
 interface Props {
   decision: DecisionObject;
-  readiness: ReadinessOverview;
-  currentUserIsPrivileged: boolean;
+  /** Evidence-lijst; hieruit komt de openstaand-telling per zwaarte. */
+  evidence: EvidenceItem[];
 }
 
-// Logische volgende statussen per huidige status. Eindstatussen
-// (afgewezen, geannuleerd) staan niet in deze map omdat verdere
-// overgangen daar niet bestaan; de DB-trigger zou ze sowieso weigeren.
+// Logische volgende statussen per huidige status. Eindstatussen staan niet in de
+// map; de DB-trigger zou verdere overgangen daar sowieso weigeren.
 const VOLGENDE_STATUSSEN: Partial<Record<DecisionStatus, DecisionStatus[]>> = {
   concept: ["in_onderbouwing", "geannuleerd"],
   in_onderbouwing: ["in_validatie", "teruggezet", "geannuleerd"],
   in_validatie: ["in_review", "geescaleerd", "teruggezet"],
   in_review: ["geagendeerd", "aangehouden", "teruggezet"],
   geagendeerd: ["in_bespreking", "aangehouden"],
-  in_bespreking: [
-    "besloten",
-    "voorwaardelijk_besloten",
-    "aangehouden",
-    "teruggezet",
-  ],
+  in_bespreking: ["besloten", "voorwaardelijk_besloten", "aangehouden", "teruggezet"],
   besloten: ["in_uitvoering", "afgewezen"],
   voorwaardelijk_besloten: ["in_uitvoering"],
   in_uitvoering: ["in_evaluatie"],
@@ -50,14 +50,8 @@ const VOLGENDE_STATUSSEN: Partial<Record<DecisionStatus, DecisionStatus[]>> = {
   geescaleerd: ["in_validatie", "in_review", "aangehouden"],
 };
 
-// Mapping target → readiness-niveau (§9 ontwerpdoc).
-const READINESS_VOOR_STATUS: Partial<Record<DecisionStatus, ReadinessTarget>> = {
-  in_review: "reviewrijp",
-  geagendeerd: "bespreekrijp",
-  besloten: "besluitrijp",
-  voorwaardelijk_besloten: "besluitrijp",
-  afgesloten: "verantwoordingsrijp",
-};
+// De transities die "een feit stellen" — hier geldt de motivering-eis bij iets open.
+const BESLUIT_TRANSITIES: DecisionStatus[] = ["besloten", "voorwaardelijk_besloten"];
 
 function statusKleur(s: DecisionStatus): string {
   if (
@@ -78,15 +72,11 @@ function statusKleur(s: DecisionStatus): string {
   return "bg-accent-tint text-accent-ink border-accent/30";
 }
 
-export default function StatusOvergangPaneel({
-  decision,
-  readiness,
-  currentUserIsPrivileged,
-}: Props) {
+export default function StatusOvergangPaneel({ decision, evidence }: Props) {
   const router = useRouter();
   const [target, setTarget] = useState<DecisionStatus | "">("");
   const [reden, setReden] = useState("");
-  const [overrideReden, setOverrideReden] = useState("");
+  const [motivering, setMotivering] = useState("");
   const [bezig, setBezig] = useState(false);
   const [fout, setFout] = useState<string | null>(null);
 
@@ -95,29 +85,11 @@ export default function StatusOvergangPaneel({
     [decision.status]
   );
 
-  // Readiness-stand voor het gekozen target; null als geen
-  // readiness-gate bestaat voor deze overgang.
-  const readinessVoorTarget = target
-    ? READINESS_VOOR_STATUS[target as DecisionStatus]
-    : undefined;
-  const readinessResult = readinessVoorTarget
-    ? readiness[readinessVoorTarget]
-    : null;
-
-  // Aanvullend: bij target=afgesloten + complex/hoog → ook evaluatierijp.
-  const ookEvaluatierijp =
-    target === "afgesloten" &&
-    (decision.complexiteit === "complex" || decision.risiconiveau === "hoog");
-  const evaluatieResult = ookEvaluatierijp ? readiness.evaluatierijp : null;
-
-  const readinessVoldoet =
-    (readinessResult ? readinessResult.voldoet : true) &&
-    (evaluatieResult ? evaluatieResult.voldoet : true);
-
-  const overrideNodig = !readinessVoldoet;
-  const kanZonderOverride = !overrideNodig;
-  const kanMetOverride =
-    overrideNodig && currentUserIsPrivileged && overrideReden.trim().length > 0;
+  const open = useMemo(() => openStaandeVereisten(evidence), [evidence]);
+  const isBesluit = Boolean(target && BESLUIT_TRANSITIES.includes(target as DecisionStatus));
+  const motiveringNodig = isBesluit && heeftOpenBovenOptioneel(open);
+  const motiveringOk =
+    !motiveringNodig || motivering.trim().length >= MIN_MOTIVERING_LENGTE;
 
   async function uitvoeren() {
     if (!target) {
@@ -129,9 +101,7 @@ export default function StatusOvergangPaneel({
     try {
       const body: Record<string, unknown> = { status: target };
       if (reden.trim()) body.reden = reden.trim();
-      if (overrideNodig && overrideReden.trim()) {
-        body.override_reden = overrideReden.trim();
-      }
+      if (motiveringNodig) body.motivering = motivering.trim();
       const res = await fetch(`/api/decisions/${decision.id}/status`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -139,14 +109,10 @@ export default function StatusOvergangPaneel({
       });
       const json = await res.json();
       if (!res.ok) {
-        // Bij readiness-fout krijgen we readiness-payload terug;
-        // die laten we de UI tonen door state te triggeren.
-        const msg = json.error ?? "Statusovergang mislukt";
-        const hint = json.hint ? ` ${json.hint}` : "";
-        throw new Error(`${msg}${hint}`);
+        throw new Error(json.error ?? "Statusovergang mislukt");
       }
       setReden("");
-      setOverrideReden("");
+      setMotivering("");
       setTarget("");
       router.refresh();
     } catch (e) {
@@ -159,9 +125,7 @@ export default function StatusOvergangPaneel({
   if (vlgndOpties.length === 0) {
     return (
       <div className="bg-white border border-line rounded-xl p-5">
-        <h3 className="text-sm font-semibold text-ink mb-2">
-          Status-overgang
-        </h3>
+        <h3 className="text-sm font-semibold text-ink mb-2">Status-overgang</h3>
         <div className="flex items-center gap-2">
           <span className="text-xs uppercase tracking-wide text-muted font-semibold">
             Huidig:
@@ -183,9 +147,7 @@ export default function StatusOvergangPaneel({
 
   return (
     <div className="bg-white border border-line rounded-xl p-5">
-      <h3 className="text-sm font-semibold text-ink mb-3">
-        Status-overgang
-      </h3>
+      <h3 className="text-sm font-semibold text-ink mb-3">Status-overgang</h3>
 
       <div className="flex items-center gap-2 mb-4">
         <span className="text-xs uppercase tracking-wide text-muted font-semibold">
@@ -214,28 +176,12 @@ export default function StatusOvergangPaneel({
             {vlgndOpties.map((s) => (
               <option key={s} value={s}>
                 {DECISION_STATUS_LABEL[s]}
-                {READINESS_VOOR_STATUS[s]
-                  ? ` (vereist ${READINESS_LABEL[READINESS_VOOR_STATUS[s]!]})`
-                  : ""}
               </option>
             ))}
           </select>
         </Veldgroep>
 
-        {target && readinessResult && (
-          <ReadinessHint
-            label={`Readiness: ${READINESS_LABEL[readinessResult.target]}`}
-            voldoet={readinessResult.voldoet}
-            ontbrekend={readinessResult.ontbrekend.map((o) => o.label)}
-          />
-        )}
-        {target && evaluatieResult && (
-          <ReadinessHint
-            label={`Aanvullend bij complex/hoog: ${READINESS_LABEL.evaluatierijp}`}
-            voldoet={evaluatieResult.voldoet}
-            ontbrekend={evaluatieResult.ontbrekend.map((o) => o.label)}
-          />
-        )}
+        {motiveringNodig && <OpenstaandHint open={open} />}
 
         <Veldgroep label="Reden voor overgang (optioneel)">
           <input
@@ -247,27 +193,20 @@ export default function StatusOvergangPaneel({
           />
         </Veldgroep>
 
-        {target && overrideNodig && currentUserIsPrivileged && (
-          <Veldgroep label="Override-motivering (verplicht voor doorzetten)">
+        {motiveringNodig && (
+          <Veldgroep label="Motivering (verplicht — besluit met openstaande vereisten)">
             <textarea
-              value={overrideReden}
-              onChange={(e) => setOverrideReden(e.target.value)}
+              value={motivering}
+              onChange={(e) => setMotivering(e.target.value)}
               rows={3}
               className="w-full text-sm border border-warn/30 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-warn/40 bg-warn-tint"
-              placeholder="Waarom mag deze overgang plaatsvinden ondanks ontbrekende readiness?"
+              placeholder="Waarom wordt dit besluit genomen terwijl dit openstaat?"
             />
             <p className="text-[11px] text-warn-ink mt-1">
-              Wordt apart gelogd als <code>override_…</code>-event in het
-              auditdossier.
+              Minimaal {MIN_MOTIVERING_LENGTE} tekens. Het besluit gaat door; wat
+              openstond en waarom wordt append-only vastgelegd in het dossier.
             </p>
           </Veldgroep>
-        )}
-
-        {target && overrideNodig && !currentUserIsPrivileged && (
-          <div className="text-xs text-err-ink bg-err-tint border border-err/30 rounded-md px-3 py-2">
-            Deze overgang vereist readiness die nog niet vervuld is. Alleen
-            voorzitter of beheerder kan een onderbouwde override doorzetten.
-          </div>
         )}
 
         {fout && (
@@ -280,12 +219,10 @@ export default function StatusOvergangPaneel({
           <button
             type="button"
             onClick={uitvoeren}
-            disabled={
-              !target || bezig || (!kanZonderOverride && !kanMetOverride)
-            }
+            disabled={!target || bezig || !motiveringOk}
             className="bg-accent text-white text-sm px-4 py-2 rounded-md hover:bg-accent-ink disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {bezig ? "Bezig…" : kanMetOverride ? "Doorzetten via override" : "Overgang doorvoeren"}
+            {bezig ? "Bezig…" : "Overgang doorvoeren"}
           </button>
         </div>
       </div>
@@ -293,36 +230,24 @@ export default function StatusOvergangPaneel({
   );
 }
 
-function ReadinessHint({
-  label,
-  voldoet,
-  ontbrekend,
-}: {
-  label: string;
-  voldoet: boolean;
-  ontbrekend: string[];
-}) {
+function OpenstaandHint({ open }: { open: OpenPerZwaarte }) {
+  const items = [...open.kritiek, ...open.vereist];
   return (
-    <div
-      className={`text-xs border rounded-md px-3 py-2 ${
-        voldoet
-          ? "bg-ok-tint border-ok/30 text-ok-ink"
-          : "bg-warn-tint border-warn/30 text-warn-ink"
-      }`}
-    >
+    <div className="text-xs border rounded-md px-3 py-2 bg-warn-tint border-warn/30 text-warn-ink">
       <div className="font-semibold flex items-center gap-1.5">
-        <span aria-hidden>{voldoet ? "✓" : "⚠"}</span>
-        {label}
+        <span aria-hidden>⚠</span>
+        Besluit met openstaande vereisten
+        <span className="font-normal">
+          ({open.kritiek.length} kritiek, {open.vereist.length} vereist)
+        </span>
       </div>
-      {!voldoet && ontbrekend.length > 0 && (
+      {items.length > 0 && (
         <ul className="list-disc pl-5 mt-1 space-y-0.5">
-          {ontbrekend.slice(0, 6).map((label, idx) => (
-            <li key={idx}>{label}</li>
+          {items.slice(0, 6).map((o, idx) => (
+            <li key={idx}>{o.label}</li>
           ))}
-          {ontbrekend.length > 6 && (
-            <li className="italic">
-              … plus {ontbrekend.length - 6} andere ontbrekende vereisten
-            </li>
+          {items.length > 6 && (
+            <li className="italic">… plus {items.length - 6} andere</li>
           )}
         </ul>
       )}

@@ -537,7 +537,10 @@ export interface DecisionDossierView {
   procedure: ProcedureSummary;
   currentStep: ProcedureStep | null;
   steps: ProcedureStep[];
-  readiness: ReadinessOverview;
+  // P3/PR-D (#168, 0187): readiness is ontmanteld — nieuwe views dragen het niet
+  // meer. Blijft OPTIONEEL zodat een OUD, append-only afschrift-snapshot dat het
+  // nog draagt, leesbaar blijft (afschrift-feitenkaart valt terug op de evidence).
+  readiness?: ReadinessOverview;
   evidence: EvidenceItem[];
   /** Stemverslagen (gesloten/ingetrokken) gekoppeld aan dit besluit. */
   stemverslagen: StemverslagSummary[];
@@ -585,23 +588,10 @@ export const DECISION_STATUS_LABEL: Record<DecisionStatus, string> = {
   geannuleerd: "Geannuleerd",
 };
 
-export const READINESS_LABEL: Record<ReadinessTarget, string> = {
-  onderbouwing_compleet: "Onderbouwing compleet",
-  reviewrijp: "Reviewrijp",
-  bespreekrijp: "Bespreekrijp",
-  besluitrijp: "Besluitrijp",
-  verantwoordingsrijp: "Verantwoordingsrijp",
-  evaluatierijp: "Evaluatierijp",
-};
-
-export const READINESS_VOLGORDE: ReadinessTarget[] = [
-  "onderbouwing_compleet",
-  "reviewrijp",
-  "bespreekrijp",
-  "besluitrijp",
-  "verantwoordingsrijp",
-  "evaluatierijp",
-];
+// READINESS_LABEL/READINESS_VOLGORDE (de ladder-presentatie) zijn met de
+// readiness-ontmanteling verdwenen (0187). De data-typen ReadinessOverview/
+// ReadinessResult/ReadinessTarget blijven bestaan: ze typeren de `readiness`-sleutel
+// in OUDE, append-only afschrift-snapshots die de feitenkaart nog moet kunnen lezen.
 
 export const COMPLEXITEIT_LABEL: Record<Complexiteit, string> = {
   routine: "Routine",
