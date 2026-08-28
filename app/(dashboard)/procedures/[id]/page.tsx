@@ -23,6 +23,7 @@ import DossierStatusStrip from "../_components/DossierStatusStrip";
 import ProcedureMetadataEdit from "../_components/ProcedureMetadataEdit";
 import AfschriftenPaneel from "../_components/AfschriftenPaneel";
 import { auditEventLabel } from "@/core/lib/audit-labels";
+import { besluitStaatNog } from "@/core/lib/decision-view";
 import {
   buildDecisionDossierView,
   ensureDecisionForProcedure,
@@ -404,19 +405,23 @@ export default async function ProcedureDetailPage({
   }
 
   // Signaal 3 (§12, Q2/0193): is dit besluit genomen terwijl er vereisten
-  // openstonden? Afgeleid uit het append-only event; de actor-rol is de
-  // momentopname uit de payload (niet naderhand herleiden).
+  // openstonden? Afgeleid uit het append-only event (events zijn tijdstip-desc, dus
+  // find = het nieuwste); de actor-rol is de momentopname uit de payload. Alleen
+  // tonen zolang HET BESLUIT NOG STAAT — na heropenen/afwijzen/terugzetten is het een
+  // teruggedraaid feit, geen actief signaal (reviewbevinding). Het event blijft in de
+  // audit-trail; alleen de actieve strip-markering vervalt.
   const bmoEvent = dossier?.events.find(
     (e) => e.event_type === "besluit_genomen_met_openstaande_vereisten"
   );
-  const beslotenMetOpenstaand = bmoEvent
-    ? {
-        actorNaam: bmoEvent.actor_naam,
-        actorRol:
-          (bmoEvent.nieuwe_waarde as { actor_rol?: string } | null)?.actor_rol ??
-          null,
-      }
-    : null;
+  const beslotenMetOpenstaand =
+    bmoEvent && dossier && besluitStaatNog(dossier.decision.status)
+      ? {
+          actorNaam: bmoEvent.actor_naam,
+          actorRol:
+            (bmoEvent.nieuwe_waarde as { actor_rol?: string } | null)
+              ?.actor_rol ?? null,
+        }
+      : null;
 
   // WO-2 (§7 + §7.1): procesfasen-rail. De fasen (D8) komen uit de definitie
   // met een per fonds overschrijfbare beschrijving; de fase-status, aandachts-

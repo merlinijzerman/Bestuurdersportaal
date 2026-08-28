@@ -38,7 +38,10 @@ begin
   if not has_column_privilege('authenticated','public.decision_objects','titel','update') then
     raise exception 'DEEL 1 FAALT: authenticated mist UPDATE op titel (her-grant te breed ingetrokken).';
   end if;
-  raise notice 'DEEL 1 OK: functie aanwezig, grants correct, status-kolom-revoke actief.';
+  if not exists (select 1 from pg_trigger where tgname='trg_decision_insert_status_slot') then
+    raise exception 'DEEL 1 FAALT: trg_decision_insert_status_slot (INSERT-slot) ontbreekt.';
+  end if;
+  raise notice 'DEEL 1 OK: functie aanwezig, grants correct, status-kolom-revoke + INSERT-slot actief.';
 end $$;
 
 -- DEEL 2 — GEDRAG. begin ... rollback.
@@ -75,13 +78,25 @@ values ('dddddddd-0000-0000-0000-0000000000d1','dddddddd-0000-0000-0000-00000000
        ('dddddddd-0000-0000-0000-0000000000d4','dddddddd-0000-0000-0000-0000000000f4','dddddddd-dddd-dddd-dddd-dddddddddddd','PD-0004','PD4','Vraag?', true, 'in_bespreking'),
        ('dddddddd-0000-0000-0000-0000000000d5','dddddddd-0000-0000-0000-0000000000f5','dddddddd-dddd-dddd-dddd-dddddddddddd','PD-0005','PD5','Vraag?', true, 'in_bespreking');
 
--- Open KRITIEK vereiste op de besluitmoment-stap van P1, P2 en P5 (instance-arm,
--- ongebonden → open). P3 krijgt niets (geen open). P4 idem niet nodig.
+-- Procedure P6 voor de is_primary-flip-/secundair-scenario's: een ECHT besluit d6
+-- (open kritiek) én een schone lokvogel d7 (secundair, niets open) op DEZELFDE
+-- procedure.
+insert into public.procedures (id, fonds_id, template_code, template_versie, titel)
+values ('dddddddd-0000-0000-0000-0000000000f6','dddddddd-dddd-dddd-dddd-dddddddddddd','pd_tpl','1.0.0','P6');
+insert into public.procedure_stappen (procedure_id, volgorde, naam, vereist_besluit)
+values ('dddddddd-0000-0000-0000-0000000000f6', 5, 'Besluitmoment', true);
+insert into public.decision_objects (id, procedure_id, fonds_id, besluit_code, titel, besluitvraag, is_primary_decision, status)
+values ('dddddddd-0000-0000-0000-0000000000d6','dddddddd-0000-0000-0000-0000000000f6','dddddddd-dddd-dddd-dddd-dddddddddddd','PD-0006','PD6','Vraag?', true,  'in_bespreking'),
+       ('dddddddd-0000-0000-0000-0000000000d7','dddddddd-0000-0000-0000-0000000000f6','dddddddd-dddd-dddd-dddd-dddddddddddd','PD-0007','PD7','Vraag?', false, 'in_bespreking');
+
+-- Open KRITIEK vereiste op de besluitmoment-stap van P1, P2, P5 en op d6 (instance-arm,
+-- ongebonden → open). P3 krijgt niets (geen open). d7 (lokvogel) krijgt niets.
 insert into public.procedure_requirement_instance
   (decision_id, stap_volgorde, requirement_type, label, min_aantal, actief, fonds_id, zwaarte)
 values ('dddddddd-0000-0000-0000-0000000000d1',5,'document','Kritiek stuk',1,true,'dddddddd-dddd-dddd-dddd-dddddddddddd','kritiek'),
        ('dddddddd-0000-0000-0000-0000000000d2',5,'document','Kritiek stuk',1,true,'dddddddd-dddd-dddd-dddd-dddddddddddd','kritiek'),
-       ('dddddddd-0000-0000-0000-0000000000d5',5,'document','Kritiek stuk',1,true,'dddddddd-dddd-dddd-dddd-dddddddddddd','kritiek');
+       ('dddddddd-0000-0000-0000-0000000000d5',5,'document','Kritiek stuk',1,true,'dddddddd-dddd-dddd-dddd-dddddddddddd','kritiek'),
+       ('dddddddd-0000-0000-0000-0000000000d6',5,'document','Kritiek stuk',1,true,'dddddddd-dddd-dddd-dddd-dddddddddddd','kritiek');
 
 -- #1 geldige besluit-met-open (motivering ok): status → besloten, atomair mét beide
 --    events; het event draagt open_voor_besluitmoment (SQL, niet leeg) én actor_rol.
@@ -175,6 +190,47 @@ begin
   exception when insufficient_privilege then
     reset role;
     raise notice 'OK #5: directe status-update door authenticated geweigerd (42501) — RPC is het enige pad.';
+  end;
+end $$;
+
+-- #6 decision-scoped open (reviewbevinding #2/#3): verwissel de primary-vlag naar de
+--    schone lokvogel d7 en beslis het ECHTE besluit d6 (open kritiek) zonder motivering.
+--    De open-check moet d6's EIGEN open zien (niet de nu-primaire lokvogel) → PC002.
+do $$
+declare v_status text;
+begin
+  perform set_config('request.jwt.claim.sub','dddddddd-0000-0000-0000-0000000000a1',true);
+  -- Verwissel de primary (een gewone, toegestane UPDATE op is_primary_decision).
+  update public.decision_objects set is_primary_decision = false where id='dddddddd-0000-0000-0000-0000000000d6';
+  update public.decision_objects set is_primary_decision = true  where id='dddddddd-0000-0000-0000-0000000000d7';
+  begin
+    perform public.fn_besluit_status_omslag(
+      'dddddddd-0000-0000-0000-0000000000d6', 'besloten', null, null);
+    raise exception 'FAALT #6: d6 met open kritiek ging besloten zonder motivering (open-check keek naar de lokvogel).';
+  exception when sqlstate 'PC002' then null;
+  end;
+  select status into v_status from public.decision_objects where id='dddddddd-0000-0000-0000-0000000000d6';
+  if v_status <> 'in_bespreking' then
+    raise exception 'FAALT #6: d6 wijzigde status ondanks PC002 (%).', v_status;
+  end if;
+  raise notice 'OK #6: open-check is decision-scoped — primary-flip misleidt de motiveringseis niet.';
+end $$;
+
+-- #7 INSERT-slot (reviewbevinding #1): als authenticated een decision direct met
+--    status='besloten' INSERTen faalt (42501) — een besluit-status ontstaat alleen
+--    via de RPC, niet bij het aanmaken.
+do $$
+begin
+  perform set_config('request.jwt.claim.sub','dddddddd-0000-0000-0000-0000000000a1',true);
+  set local role authenticated;
+  begin
+    insert into public.decision_objects (procedure_id, fonds_id, besluit_code, titel, besluitvraag, is_primary_decision, status)
+    values ('dddddddd-0000-0000-0000-0000000000f3','dddddddd-dddd-dddd-dddd-dddddddddddd','PD-9001','Verzonnen','Vraag?', false, 'besloten');
+    reset role;
+    raise exception 'FAALT #7: authenticated kon een rij direct met status=besloten INSERTen.';
+  exception when insufficient_privilege then
+    reset role;
+    raise notice 'OK #7: directe INSERT met status=besloten geweigerd (42501) — besluit-status alleen via de RPC.';
   end;
 end $$;
 
