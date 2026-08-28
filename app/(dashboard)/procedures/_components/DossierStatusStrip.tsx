@@ -1,26 +1,24 @@
 "use client";
 
-// Compacte status-strip. Regel 1: huidige status, eerstvolgende readiness-horde
-// + aantal ontbrekende items, en knoppen (export + statusovergang). Regel 2: een
-// compacte classificatie-strook + een eventuele "besluitvraag nog aan te
-// vullen"-nudge. Die twee zijn hierheen verplaatst nadat de losse Decision
-// Object-header boven de pagina is verwijderd, zodat de sturing zichtbaar blijft.
+// Compacte status-strip. Regel 1: huidige status, de openstaande vereisten boven
+// optioneel (per zwaarte — de besluitmoment-telling die de readiness-horde
+// vervangt, §7/0187), en knoppen (export + statusovergang). Regel 2: een compacte
+// classificatie-strook + een eventuele "besluitvraag nog aan te vullen"-nudge.
 
 import {
   type DecisionObject,
-  type ReadinessOverview,
-  type ReadinessTarget,
+  type EvidenceItem,
   DECISION_STATUS_LABEL,
-  READINESS_LABEL,
-  READINESS_VOLGORDE,
   COMPLEXITEIT_LABEL,
   RISICONIVEAU_LABEL,
 } from "@/core/lib/decision-view";
+import { openStaandeVereisten } from "@/core/lib/besluitmoment-telling";
 import AuditExportKnop from "./AuditExportKnop";
 
 interface Props {
   decision: DecisionObject;
-  readiness: ReadinessOverview;
+  /** De evidence-lijst; hieruit komt de besluitmoment-telling (open per zwaarte). */
+  evidence: EvidenceItem[];
   /** Anker-id van het status-overgang-paneel, voor de scroll-knop. */
   statusOvergangAnker?: string;
   /** Of er minstens één audit-snapshot is — bepaalt of de
@@ -59,16 +57,14 @@ function statusKleur(status: DecisionObject["status"]): string {
 
 export default function DossierStatusStrip({
   decision,
-  readiness,
+  evidence,
   statusOvergangAnker = "status-overgang",
   heeftSnapshot = true,
 }: Props) {
-  // Eerste readiness-target waaraan nog niet wordt voldaan.
-  const eersteOnvolledig: ReadinessTarget | undefined =
-    READINESS_VOLGORDE.find((t) => !readiness[t].voldoet);
-  const ontbrekendCount = eersteOnvolledig
-    ? readiness[eersteOnvolledig].ontbrekend.length
-    : 0;
+  // Besluitmoment-telling: wat staat er open boven optioneel, per zwaarte.
+  const open = openStaandeVereisten(evidence);
+  const kritiekOpen = open.kritiek.length;
+  const vereistOpen = open.vereist.length;
   const isPlaceholder = decision.besluitvraag.startsWith(
     "Aanvullen na auto-upgrade"
   );
@@ -90,24 +86,23 @@ export default function DossierStatusStrip({
           <span aria-hidden className="text-muted">
             ·
           </span>
-          {eersteOnvolledig ? (
-            <>
-              <span className="text-xs text-ink">
-                <span className="text-muted">Volgende horde:</span>{" "}
-                <span className="font-medium text-ink">
-                  {READINESS_LABEL[eersteOnvolledig]}
-                </span>
-              </span>
-              {ontbrekendCount > 0 && (
-                <span className="text-[11px] text-warn-ink bg-warn-tint border border-warn/30 px-2 py-0.5 rounded">
-                  {ontbrekendCount} ontbrekend
-                  {ontbrekendCount === 1 ? "" : "e items"}
+          {kritiekOpen + vereistOpen > 0 ? (
+            <span className="flex items-center gap-1.5">
+              <span className="text-xs text-muted">Openstaand:</span>
+              {kritiekOpen > 0 && (
+                <span className="text-[11px] text-err-ink bg-err-tint border border-err/30 px-2 py-0.5 rounded">
+                  {kritiekOpen} kritiek
                 </span>
               )}
-            </>
+              {vereistOpen > 0 && (
+                <span className="text-[11px] text-warn-ink bg-warn-tint border border-warn/30 px-2 py-0.5 rounded">
+                  {vereistOpen} vereist
+                </span>
+              )}
+            </span>
           ) : (
             <span className="text-xs text-ok-ink font-medium">
-              Alle readiness-niveaus voldoen
+              Geen openstaande vereisten boven optioneel
             </span>
           )}
         </div>

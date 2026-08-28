@@ -30,8 +30,6 @@ import {
   type GovernanceEvent,
   type ProcedureStep,
   type ProcedureSummary,
-  type ReadinessOverview,
-  type ReadinessResult,
   type RequirementType,
   type RiskItem,
   type Scenario,
@@ -324,17 +322,8 @@ export async function buildDecisionDossierView(
       .order("aangemaakt_op", { ascending: false }),
   ]);
 
-  // 5. Readiness via SQL-functies (één call met overview).
-  const { data: overviewData, error: overviewFout } = await supabase.rpc(
-    "fn_decision_readiness_overview",
-    { p_decision_id: decisionId }
-  );
-  if (overviewFout) {
-    throw new Error(
-      `Readiness-overview ophalen mislukt: ${overviewFout.message}`
-    );
-  }
-  const readiness = overviewData as ReadinessOverview;
+  // 5. Readiness is ontmanteld (0187): geen fn_decision_readiness_overview meer.
+  //    De besluitmoment-telling (open per zwaarte) komt uit de evidence hieronder.
 
   // 6. Evidence opbouwen op basis van procedure_requirements.
   const evidence = await buildEvidenceLijst(supabase, {
@@ -417,7 +406,6 @@ export async function buildDecisionDossierView(
     procedure,
     currentStep,
     steps,
-    readiness,
     evidence,
     stemverslagen,
     bewijs,
@@ -904,27 +892,6 @@ async function filterDissentOpRol(
       d.zichtbaarheid === "minderheidsnotitie"
     );
   });
-}
-
-// ── Helpers voor readiness-display ───────────────────────────────────
-
-/** Eerste readiness-target waaraan nog niet wordt voldaan, of null als alles ok is. */
-export function eersteOntbrekendeReadiness(
-  overview: ReadinessOverview
-): { target: keyof ReadinessOverview; result: ReadinessResult } | null {
-  const volgorde: (keyof ReadinessOverview)[] = [
-    "onderbouwing_compleet",
-    "reviewrijp",
-    "bespreekrijp",
-    "besluitrijp",
-    "verantwoordingsrijp",
-    "evaluatierijp",
-  ];
-  for (const t of volgorde) {
-    const r = overview[t];
-    if (!r.voldoet) return { target: t, result: r };
-  }
-  return null;
 }
 
 // `ActionItem` wordt gere-exporteerd zodat consumers van dit bestand
