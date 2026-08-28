@@ -11,6 +11,10 @@ import assert from "node:assert/strict";
 import type { EvidenceItem } from "./decision-view";
 import {
   openVoorBesluitmoment,
+  openVoorBesluitmomenten,
+  openElders,
+  tellPerZwaarte,
+  besluitmomentSignaal,
   openStaandeVereisten,
   heeftOpenBovenOptioneel,
 } from "./besluitmoment-telling";
@@ -85,6 +89,55 @@ test("heeftOpenBovenOptioneel: kritiek/vereist wel, alleen-optioneel niet", () =
   assert.equal(heeftOpenBovenOptioneel(openStaandeVereisten(EVIDENCE)), true);
   const alleenOptioneel = openStaandeVereisten([ev({ label: "O", stap_volgorde: 1, verplicht: false })]);
   assert.equal(heeftOpenBovenOptioneel(alleenOptioneel), false);
+});
+
+test("openVoorBesluitmomenten(unie van meerdere besluitmomenten) = scope 3 ∪ 5", () => {
+  // Nu tellen ook stap-3-vereisten mee (tweede besluitmoment). B5 blijft één keer.
+  const open = openVoorBesluitmomenten(EVIDENCE, [3, 5]);
+  assert.deepEqual(open.kritiek.map((o) => o.label).sort(), ["B5", "K5"]);
+  assert.deepEqual(open.vereist.map((o) => o.label).sort(), ["V2->5", "V3"]);
+  assert.equal(open.kritiek.filter((o) => o.label === "B5").length, 1, "geen dubbeltelling over meerdere N");
+});
+
+test("openElders = open BUITEN de besluitmoment-scope, per zwaarte", () => {
+  // Besluitmoment alleen stap 5: V3 (stap 3, geen koppeling) valt buiten → elders.
+  const elders = openElders(EVIDENCE, [5]);
+  assert.deepEqual(elders.vereist.map((o) => o.label), ["V3"]);
+  assert.equal(elders.kritiek.length, 0);
+  // Wat in scope zit, telt NIET als elders (geen overlap met openVoorBesluitmomenten).
+  assert.ok(!JSON.stringify(elders).includes("K5"));
+  assert.ok(!JSON.stringify(elders).includes("V2->5"));
+});
+
+test("tellPerZwaarte geeft alleen aantallen (de vorm van open_elders)", () => {
+  assert.deepEqual(tellPerZwaarte(openElders(EVIDENCE, [5])), {
+    kritiek: 0,
+    vereist: 1,
+    optioneel: 0,
+  });
+});
+
+test("besluitmomentSignaal: iets open → soort 'open' met de per-zwaarte-lijst", () => {
+  const sig = besluitmomentSignaal(EVIDENCE, [5]);
+  assert.equal(sig.soort, "open");
+  if (sig.soort === "open") {
+    assert.deepEqual(sig.open.kritiek.map((o) => o.label).sort(), ["B5", "K5"]);
+  }
+});
+
+test("besluitmomentSignaal: vereisten aanwezig én alle vervuld → 'alle-vervuld'", () => {
+  const alleVervuld: EvidenceItem[] = [
+    ev({ label: "K5", stap_volgorde: 5, blokkerend: true, vervuld: true }),
+    ev({ label: "O5", stap_volgorde: 5, verplicht: false, vervuld: true }),
+  ];
+  assert.equal(besluitmomentSignaal(alleVervuld, [5]).soort, "alle-vervuld");
+});
+
+test("besluitmomentSignaal: NIETS gekoppeld → 'geen-vereisten' (geen vals groen)", () => {
+  // Alle evidence hoort bij ANDERE stappen; besluitmoment 5 heeft niets → mag niet
+  // als "alles rond" gelezen worden (§7 r434, de vals-groen-val).
+  const elders: EvidenceItem[] = [ev({ label: "V3", stap_volgorde: 3, vervuld: true })];
+  assert.equal(besluitmomentSignaal(elders, [5]).soort, "geen-vereisten");
 });
 
 console.log(`\nbesluitmoment-telling.sanity: ${n} checks groen.`);

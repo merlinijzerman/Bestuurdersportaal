@@ -67,9 +67,9 @@ export function openVoorBesluitmoment(
 }
 
 /**
- * Alle openstaande vereisten van het dossier, per zwaarte — de basis voor de
- * §4.4-signalering bij een besluitovergang (de statusroute schrijft hiermee het
- * `besluit_genomen_met_openstaande_vereisten`-event en de waarschuwing).
+ * Alle openstaande vereisten van het dossier, per zwaarte. Dossierbreed — niet de
+ * eis (die is besluitmoment-scoped, zie onder), maar het geheugen: de statusroute
+ * leidt hieruit `open_elders` af (alleen een telling, informatief).
  */
 export function openStaandeVereisten(evidence: EvidenceItem[]): OpenPerZwaarte {
   const uit = leeg();
@@ -77,6 +77,93 @@ export function openStaandeVereisten(evidence: EvidenceItem[]): OpenPerZwaarte {
     if (!item.vervuld) voegToe(uit, item);
   }
   return uit;
+}
+
+/** Valt dit item binnen de scope van één van de besluitmomenten (§7): op de stap
+ *  zelf, of via `besluitmoment_stap` aan één van die stappen gekoppeld. */
+function inBesluitmomentScope(item: EvidenceItem, besluitmomentStappen: number[]): boolean {
+  return (
+    besluitmomentStappen.includes(item.stap_volgorde) ||
+    (item.besluitmoment_stap != null && besluitmomentStappen.includes(item.besluitmoment_stap))
+  );
+}
+
+/**
+ * De openstaande vereisten voor de besluitmomenten van dit besluit, per zwaarte —
+ * de unie over meerdere besluitmoment-stappen (§7). DIT stuurt de motiveringseis en
+ * de waarschuwing; de dossierbrede `openStaandeVereisten` niet (Q1, besluit 0193).
+ * In het interim is `besluitmoment_stap` leeg, dus de unie valt samen met de eigen
+ * stap — correct volgens §7, en de reden dat de eis dan zelden vuurt is eerlijk,
+ * niet stuk. De gezaghebbende telling gebeurt in SQL (fn_besluit_status_omslag);
+ * deze TS-kant is de UX-spiegel.
+ */
+export function openVoorBesluitmomenten(
+  evidence: EvidenceItem[],
+  besluitmomentStappen: number[]
+): OpenPerZwaarte {
+  const uit = leeg();
+  for (const item of evidence) {
+    if (item.vervuld) continue;
+    if (inBesluitmomentScope(item, besluitmomentStappen)) voegToe(uit, item);
+  }
+  return uit;
+}
+
+/**
+ * De openstaande vereisten ELDERS in het dossier (buiten de besluitmomenten), per
+ * zwaarte. Niet-vorderend: de statusroute geeft hiervan alleen de telling mee als
+ * `open_elders` — het geheugen dat we niet kwijt willen, zonder er een eis van te
+ * maken (Q1).
+ */
+export function openElders(
+  evidence: EvidenceItem[],
+  besluitmomentStappen: number[]
+): OpenPerZwaarte {
+  const uit = leeg();
+  for (const item of evidence) {
+    if (item.vervuld) continue;
+    if (!inBesluitmomentScope(item, besluitmomentStappen)) voegToe(uit, item);
+  }
+  return uit;
+}
+
+/** Het per-zwaarte-aantal (de vorm van `open_elders` in het event/­de respons). */
+export type TellingPerZwaarte = { kritiek: number; vereist: number; optioneel: number };
+export function tellPerZwaarte(open: OpenPerZwaarte): TellingPerZwaarte {
+  return {
+    kritiek: open.kritiek.length,
+    vereist: open.vereist.length,
+    optioneel: open.optioneel.length,
+  };
+}
+
+/**
+ * Het drieweg-signaal voor een besluitmoment (§7 r434, Q1) — het onderscheid dat de
+ * vals-groen-val afvangt zolang de importvalidatie (fase C) er nog niet is:
+ *   - `geen-vereisten`: aan het besluitmoment is niets gekoppeld → GEEN geruststelling.
+ *   - `alle-vervuld`:   er zijn vereisten en alle zijn vervuld.
+ *   - `open`:           er staat nog iets open (per zwaarte).
+ * Een leeg besluitmoment mag niet als "0 openstaand / alles rond" gelezen worden.
+ */
+export type BesluitmomentSignaal =
+  | { soort: "geen-vereisten" }
+  | { soort: "alle-vervuld" }
+  | { soort: "open"; open: OpenPerZwaarte };
+
+export function besluitmomentSignaal(
+  evidence: EvidenceItem[],
+  besluitmomentStappen: number[]
+): BesluitmomentSignaal {
+  let aantalInScope = 0;
+  for (const item of evidence) {
+    if (inBesluitmomentScope(item, besluitmomentStappen)) aantalInScope++;
+  }
+  if (aantalInScope === 0) return { soort: "geen-vereisten" };
+  const open = openVoorBesluitmomenten(evidence, besluitmomentStappen);
+  if (heeftOpenBovenOptioneel(open) || open.optioneel.length > 0) {
+    return { soort: "open", open };
+  }
+  return { soort: "alle-vervuld" };
 }
 
 /** Staat er iets open bóven `optioneel`? Bepaalt of een besluit een motivering

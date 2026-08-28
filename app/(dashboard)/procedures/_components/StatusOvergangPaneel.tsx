@@ -20,7 +20,7 @@ import {
   DECISION_STATUS_LABEL,
 } from "@/core/lib/decision-view";
 import {
-  openStaandeVereisten,
+  openVoorBesluitmomenten,
   heeftOpenBovenOptioneel,
   type OpenPerZwaarte,
 } from "@/core/lib/besluitmoment-telling";
@@ -30,6 +30,9 @@ interface Props {
   decision: DecisionObject;
   /** Evidence-lijst; hieruit komt de openstaand-telling per zwaarte. */
   evidence: EvidenceItem[];
+  /** Volgordes van de besluitmoment-stappen (`vereist_besluit`) — de eis is
+   *  besluitmoment-scoped, niet dossierbreed (Q1, besluit 0193). */
+  besluitmomentStappen: number[];
 }
 
 // Logische volgende statussen per huidige status. Eindstatussen staan niet in de
@@ -72,7 +75,7 @@ function statusKleur(s: DecisionStatus): string {
   return "bg-accent-tint text-accent-ink border-accent/30";
 }
 
-export default function StatusOvergangPaneel({ decision, evidence }: Props) {
+export default function StatusOvergangPaneel({ decision, evidence, besluitmomentStappen }: Props) {
   const router = useRouter();
   const [target, setTarget] = useState<DecisionStatus | "">("");
   const [reden, setReden] = useState("");
@@ -85,7 +88,10 @@ export default function StatusOvergangPaneel({ decision, evidence }: Props) {
     [decision.status]
   );
 
-  const open = useMemo(() => openStaandeVereisten(evidence), [evidence]);
+  const open = useMemo(
+    () => openVoorBesluitmomenten(evidence, besluitmomentStappen),
+    [evidence, besluitmomentStappen]
+  );
   const isBesluit = Boolean(target && BESLUIT_TRANSITIES.includes(target as DecisionStatus));
   const motiveringNodig = isBesluit && heeftOpenBovenOptioneel(open);
   const motiveringOk =
@@ -198,13 +204,19 @@ export default function StatusOvergangPaneel({ decision, evidence }: Props) {
             <textarea
               value={motivering}
               onChange={(e) => setMotivering(e.target.value)}
-              rows={3}
+              rows={4}
               className="w-full text-sm border border-warn/30 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-warn/40 bg-warn-tint"
-              placeholder="Waarom wordt dit besluit genomen terwijl dit openstaat?"
+              placeholder={
+                "Beschrijf twee dingen:\n" +
+                "1. Waarom kan dit besluit nu worden genomen zonder wat nog ontbreekt?\n" +
+                "2. Wat gebeurt er alsnog met de openstaande vereisten?"
+              }
             />
             <p className="text-[11px] text-warn-ink mt-1">
-              Minimaal {MIN_MOTIVERING_LENGTE} tekens. Het besluit gaat door; wat
-              openstond en waarom wordt append-only vastgelegd in het dossier.
+              Minimaal {MIN_MOTIVERING_LENGTE} tekens. Benoem zowel waaróm het besluit
+              nu kan als wat er nog met het openstaande gebeurt. Het besluit gaat door;
+              wat openstond en jouw motivering worden append-only vastgelegd in het
+              dossier — met je rol op dit moment.
             </p>
           </Veldgroep>
         )}
@@ -236,7 +248,7 @@ function OpenstaandHint({ open }: { open: OpenPerZwaarte }) {
     <div className="text-xs border rounded-md px-3 py-2 bg-warn-tint border-warn/30 text-warn-ink">
       <div className="font-semibold flex items-center gap-1.5">
         <span aria-hidden>⚠</span>
-        Besluit met openstaande vereisten
+        Openstaande vereisten voor dit besluitmoment
         <span className="font-normal">
           ({open.kritiek.length} kritiek, {open.vereist.length} vereist)
         </span>

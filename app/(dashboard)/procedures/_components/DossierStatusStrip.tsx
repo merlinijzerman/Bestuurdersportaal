@@ -12,13 +12,20 @@ import {
   COMPLEXITEIT_LABEL,
   RISICONIVEAU_LABEL,
 } from "@/core/lib/decision-view";
-import { openStaandeVereisten } from "@/core/lib/besluitmoment-telling";
+import { besluitmomentSignaal } from "@/core/lib/besluitmoment-telling";
 import AuditExportKnop from "./AuditExportKnop";
 
 interface Props {
   decision: DecisionObject;
   /** De evidence-lijst; hieruit komt de besluitmoment-telling (open per zwaarte). */
   evidence: EvidenceItem[];
+  /** Volgordes van de besluitmoment-stappen (`vereist_besluit`) — de signalering is
+   *  besluitmoment-scoped, niet dossierbreed (Q1, besluit 0193). */
+  besluitmomentStappen: number[];
+  /** Signaal 3 (§12): dit besluit is genomen terwijl er vereisten openstonden.
+   *  Afgeleid uit het append-only besluit_genomen_met_openstaande_vereisten-event;
+   *  null = niet van toepassing. */
+  beslotenMetOpenstaand?: { actorNaam: string | null; actorRol: string | null } | null;
   /** Anker-id van het status-overgang-paneel, voor de scroll-knop. */
   statusOvergangAnker?: string;
   /** Of er minstens één audit-snapshot is — bepaalt of de
@@ -58,13 +65,14 @@ function statusKleur(status: DecisionObject["status"]): string {
 export default function DossierStatusStrip({
   decision,
   evidence,
+  besluitmomentStappen,
+  beslotenMetOpenstaand = null,
   statusOvergangAnker = "status-overgang",
   heeftSnapshot = true,
 }: Props) {
-  // Besluitmoment-telling: wat staat er open boven optioneel, per zwaarte.
-  const open = openStaandeVereisten(evidence);
-  const kritiekOpen = open.kritiek.length;
-  const vereistOpen = open.vereist.length;
+  // Besluitmoment-signaal (§7 r434): drieweg zodat een leeg besluitmoment niet als
+  // vals groen leest. `geen-vereisten` ≠ `alle-vervuld` (Q1, besluit 0193).
+  const signaal = besluitmomentSignaal(evidence, besluitmomentStappen);
   const isPlaceholder = decision.besluitvraag.startsWith(
     "Aanvullen na auto-upgrade"
   );
@@ -86,23 +94,35 @@ export default function DossierStatusStrip({
           <span aria-hidden className="text-muted">
             ·
           </span>
-          {kritiekOpen + vereistOpen > 0 ? (
+          {signaal.soort === "open" ? (
             <span className="flex items-center gap-1.5">
-              <span className="text-xs text-muted">Openstaand:</span>
-              {kritiekOpen > 0 && (
+              <span className="text-xs text-muted">Besluitmoment:</span>
+              {signaal.open.kritiek.length > 0 && (
                 <span className="text-[11px] text-err-ink bg-err-tint border border-err/30 px-2 py-0.5 rounded">
-                  {kritiekOpen} kritiek
+                  {signaal.open.kritiek.length} kritiek
                 </span>
               )}
-              {vereistOpen > 0 && (
+              {signaal.open.vereist.length > 0 && (
                 <span className="text-[11px] text-warn-ink bg-warn-tint border border-warn/30 px-2 py-0.5 rounded">
-                  {vereistOpen} vereist
+                  {signaal.open.vereist.length} vereist
                 </span>
               )}
+              {signaal.open.kritiek.length === 0 &&
+                signaal.open.vereist.length === 0 && (
+                  <span className="text-[11px] text-muted bg-app-bg border border-line px-2 py-0.5 rounded">
+                    {signaal.open.optioneel.length} optioneel
+                  </span>
+                )}
+            </span>
+          ) : signaal.soort === "alle-vervuld" ? (
+            <span className="text-xs text-ok-ink font-medium">
+              Alle vereisten voor dit besluitmoment zijn vervuld
             </span>
           ) : (
-            <span className="text-xs text-ok-ink font-medium">
-              Geen openstaande vereisten boven optioneel
+            // geen-vereisten: bewust NEUTRAAL, geen groen vinkje (§7 r434) — niets
+            // gekoppeld is niet hetzelfde als "alles rond".
+            <span className="text-xs text-muted">
+              Aan dit besluitmoment zijn geen vereisten gekoppeld
             </span>
           )}
         </div>
@@ -120,6 +140,23 @@ export default function DossierStatusStrip({
           </a>
         </div>
       </div>
+
+      {/* Signaal 3 (§12): dit besluit is genomen terwijl er vereisten openstonden.
+          Bij een brede bevoegdheid (elke decisions.manage-houder mag, mits motivering)
+          is zichtbaarheid achteraf het tegenwicht dat vooraf ontbreekt (Q2, 0193). */}
+      {beslotenMetOpenstaand && (
+        <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-line">
+          <span className="text-[11px] text-warn-ink bg-warn-tint border border-warn/30 px-2 py-0.5 rounded font-medium">
+            ⚠ Besloten met openstaande vereisten
+          </span>
+          <span className="text-[11px] text-muted">
+            vastgelegd
+            {beslotenMetOpenstaand.actorNaam ? ` door ${beslotenMetOpenstaand.actorNaam}` : ""}
+            {beslotenMetOpenstaand.actorRol ? ` (${beslotenMetOpenstaand.actorRol})` : ""}
+            {" "}— zie het dossier voor de motivering
+          </span>
+        </div>
+      )}
 
       {/* Compacte classificatie + evt. nudge (verplaatst uit de verwijderde
           Decision Object-header, zodat deze sturing zichtbaar blijft). */}
