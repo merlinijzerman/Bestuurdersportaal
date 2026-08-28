@@ -14,8 +14,10 @@ import {
   PLATFORM_CAPABILITIES,
   PLATFORM_ROL_CAPABILITIES,
   ZWARE_CAPABILITIES,
+  NIET_TOEKENBARE_CAPABILITIES,
   heeftCapability,
   isZwareCapability,
+  isToekenbareCapability,
   type PlatformCapability,
 } from "./platform-capabilities";
 
@@ -28,9 +30,9 @@ function test(naam: string, fn: () => void) {
 
 console.log("platform-capability sanity-tests:");
 
-test("union telt exact 15 capabilities", () => {
-  assert.equal(PLATFORM_CAPABILITIES.length, 15);
-  assert.equal(new Set(PLATFORM_CAPABILITIES).size, 15, "geen duplicaten");
+test("union telt exact 16 capabilities", () => {
+  assert.equal(PLATFORM_CAPABILITIES.length, 16);
+  assert.equal(new Set(PLATFORM_CAPABILITIES).size, 16, "geen duplicaten");
 });
 
 test("elke capability begint met 'platform.'", () => {
@@ -105,6 +107,7 @@ const SEED_IN_MIGRATIE = [
   "platform.aqlab.operate",
   "platform.aqlab.review",
   "platform.aqlab.govern",
+  "platform.pipeline.operate",
 ] as const;
 
 test("code-union en migratie-seed zijn identiek (TO §12 test 17)", () => {
@@ -113,6 +116,30 @@ test("code-union en migratie-seed zijn identiek (TO §12 test 17)", () => {
   assert.equal(seed.size, union.size, "aantal verschilt");
   for (const cap of union) assert.ok(seed.has(cap), `seed mist ${cap}`);
   for (const cap of seed) assert.ok(union.has(cap as PlatformCapability), `union mist ${cap}`);
+});
+
+// ── Machinegezag: structureel niet-toekenbaar (besluit 0193) ────────────────
+test("niet-toekenbare caps zijn geldige union-leden", () => {
+  const geldig = new Set<string>(PLATFORM_CAPABILITIES);
+  for (const cap of NIET_TOEKENBARE_CAPABILITIES) {
+    assert.ok(geldig.has(cap), `${cap} is geen union-lid`);
+  }
+});
+
+test("platform.pipeline.operate is niet-toekenbaar", () => {
+  assert.equal(isToekenbareCapability("platform.pipeline.operate"), false);
+  assert.equal(isToekenbareCapability("platform.aqlab.operate"), true);
+});
+
+test("geen niet-toekenbare cap zit in enig functieprofiel (0193-invariant)", () => {
+  for (const [profiel, caps] of Object.entries(PLATFORM_ROL_CAPABILITIES)) {
+    for (const cap of caps) {
+      assert.ok(
+        isToekenbareCapability(cap),
+        `${profiel} bevat de niet-toekenbare ${cap}`
+      );
+    }
+  }
 });
 
 console.log(`\n${n} sanity-tests geslaagd.`);

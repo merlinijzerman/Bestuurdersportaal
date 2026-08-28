@@ -202,3 +202,33 @@ grantlijst `MAINTAIN` op `handelingen_log` via de default-ACL liet staan;
 dat is vóór merge expliciet ingetrokken zodat V3's browserrol-invariant ook voor
 nieuwe tabellen geldt. De definitieve meting hoort dus `authenticated=SELECT`
 te tonen, zonder `MAINTAIN`.
+
+## #183b spoor T — governance_events-ketentriggers/-RPC's (besluit 0192, migraties 2026_08_27_govevent_*.sql)
+
+Nieuwe functies voor de bewijsketen. Regenereer de TSV met
+`scripts/gen/v3-allowlist-generate.sql` tegen de Preview-DB ná het toepassen van de
+migraties. Alle grants zijn `anon` niets, `authenticated` + `service_role` `EXECUTE`.
+
+**Triggerfuncties (`SECURITY INVOKER`)** — schrijven `governance_events` bij een
+mutatie op hun brontabel:
+`fn_govevent_fonds()` (BEFORE INSERT, leidt `fonds_id` af — dalende autoriteit, 0192 §2b),
+`fn_stemming_ketengebeurtenis()`, `fn_agendapunt_ketengebeurtenis()`,
+`fn_inbreng_ketengebeurtenis()`, `fn_vergadering_ketengebeurtenis()`,
+`fn_orgprofiel_ketengebeurtenis()`, `fn_stem_ketengebeurtenis()`.
+
+**RPC (`SECURITY INVOKER`)** — `fn_document_status_zetten(uuid, text, text)`: de
+statuswissel van handler #2 (besluit B), atomisch met de inzage-regel en de
+ketengebeurtenis.
+
+> **Correctie op de rationale.** `EXECUTE` voor `authenticated` is bij een
+> *triggerfunctie* **niet vereist om te vuren** — een trigger draait als onderdeel van
+> de DML, ongeacht een EXECUTE-grant. De grant staat er voor **consistentie** met de
+> bestaande govevent-triggerfunctie `fn_govevent_hash` (die 'm óók heeft) en is
+> onschadelijk: een directe aanroep van een AFTER-triggerfunctie faalt (NEW/TG_OP
+> ontbreken). `anon` krijgt niets. De `fn_document_status_zetten`-RPC wordt wél direct
+> aangeroepen (door de route), dus daar is `authenticated=EXECUTE` functioneel.
+
+De notulen-RPC's (`fn_notulen_segment_bevestig`/`_verwijder`) zijn `create or replace`
+van bestaande functies — hun grants blijven ongewijzigd (geen nieuwe TSV-regels). De
+fonds/decision-consistentie zit niet in deze functies maar in de composite FK
+`governance_events_decision_zelfde_fonds` (0192 §2e).
