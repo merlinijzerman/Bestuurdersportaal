@@ -30,8 +30,6 @@ import {
   type GovernanceEvent,
   type ProcedureStep,
   type ProcedureSummary,
-  type ReadinessOverview,
-  type ReadinessResult,
   type RequirementType,
   type RiskItem,
   type Scenario,
@@ -213,8 +211,8 @@ export async function ensureDecisionForProcedure(
 /**
  * Bouw de volledige `DecisionDossierView` voor een Decision Object.
  * Dit is een aanvulling op `fn_build_decision_dossier(decision_id)`:
- * we voegen `currentStep`, `steps`, `readiness`, `evidence` en
- * `snapshots`-meta toe, en filteren dissent op rol als laatste
+ * we voegen `currentStep`, `steps`, `evidence` en `snapshots`-meta toe
+ * (readiness is ontmanteld, 0187), en filteren dissent op rol als laatste
  * verdedigingslinie naast RLS.
  */
 export async function buildDecisionDossierView(
@@ -324,17 +322,8 @@ export async function buildDecisionDossierView(
       .order("aangemaakt_op", { ascending: false }),
   ]);
 
-  // 5. Readiness via SQL-functies (één call met overview).
-  const { data: overviewData, error: overviewFout } = await supabase.rpc(
-    "fn_decision_readiness_overview",
-    { p_decision_id: decisionId }
-  );
-  if (overviewFout) {
-    throw new Error(
-      `Readiness-overview ophalen mislukt: ${overviewFout.message}`
-    );
-  }
-  const readiness = overviewData as ReadinessOverview;
+  // 5. Readiness is ontmanteld (0187): geen fn_decision_readiness_overview meer.
+  //    De besluitmoment-telling (open per zwaarte) komt uit de evidence hieronder.
 
   // 6. Evidence opbouwen op basis van procedure_requirements.
   const evidence = await buildEvidenceLijst(supabase, {
@@ -417,7 +406,6 @@ export async function buildDecisionDossierView(
     procedure,
     currentStep,
     steps,
-    readiness,
     evidence,
     stemverslagen,
     bewijs,
@@ -470,6 +458,8 @@ interface ProcedureRequirementRow {
   min_aantal: number;
   // OB-E10: toelichting bij het bewijsstuk (uit de definitie/standaardset).
   toelichting: string | null;
+  // P3/PR-D (#168, §7): besluitmoment-binding; leeg = alleen de eigen stap.
+  besluitmoment_stap: number | null;
 }
 
 // WO-3-vervolg: requirement + herkomst (template vs. instantie) voor de
@@ -504,7 +494,7 @@ interface ProcedureBewijsRow {
  * Eén gelijkheidstest op de expliciete binding — geen wildcard, geen
  * documenttype-gok, geen titel-substring. Daardoor geldt per constructie:
  * een bewijsstuk draagt precies één sleutel en kan dus hoogstens één
- * vereiste vervullen. Spiegelt de document-tak van
+ * vereiste vervullen. Spiegelt de document-tak van (historisch) de gedropte
  * `fn_decision_readiness_check` (migratie 2026_08_18_bewijs_requirement_binding).
  *
  * `bewijzen` wordt verondersteld deterministisch gesorteerd te zijn
@@ -552,7 +542,14 @@ async function buildEvidenceLijst(
   if (ctx.procedure.template_versie) {
     reqQuery = reqQuery.eq("template_versie", ctx.procedure.template_versie);
   }
-  const { data: reqRows } = await reqQuery;
+  // Fail-closed: een lees-fout op de vereisten mag NIET stil een lege set opleveren.
+  // De besluitmoment-telling/§4.4-signalering (PR-D) leunt hierop — lege evidence
+  // zou een besluit met openstaande vereisten stil zonder motivering/vastlegging
+  // laten passeren. Daarom hier throwen i.p.v. `?? []`.
+  const { data: reqRows, error: reqFout } = await reqQuery;
+  if (reqFout) {
+    throw new Error(`Vereisten ophalen mislukt: ${reqFout.message}`);
+  }
 
   // WO-3-vervolg: per-proces uitsluitingen (overlay). Deze markeren een
   // TEMPLATE-vereiste als niet van toepassing voor DIT decision — de generieke
@@ -592,13 +589,17 @@ async function buildEvidenceLijst(
   // D7: unie met ACTIEVE instantie-requirements (decision-scoped). Template-
   // en instantie-rijen zijn disjuncte records → geen dubbeltelling. Spiegelt
   // de UNION in fn_decision_readiness_check.
-  const { data: instRows } = await supabase
+  const { data: instRows, error: instFout } = await supabase
     .from("procedure_requirement_instance")
     .select(
-      "id, stap_volgorde, requirement_type, label, documenttype, veld_pad, verplicht, blokkerend, min_aantal, vereist_validatie_domein"
+      "id, stap_volgorde, requirement_type, label, documenttype, veld_pad, verplicht, blokkerend, min_aantal, vereist_validatie_domein, besluitmoment_stap"
     )
     .eq("decision_id", ctx.decisionId)
     .eq("actief", true);
+  if (instFout) {
+    // Fail-closed, zie de template-arm hierboven.
+    throw new Error(`Instantie-vereisten ophalen mislukt: ${instFout.message}`);
+  }
   const instanceRequirements: MergedRequirement[] = (
     (instRows ?? []) as Array<{
       id: string;
@@ -611,6 +612,7 @@ async function buildEvidenceLijst(
       blokkerend: boolean | null;
       min_aantal: number | null;
       vereist_validatie_domein: AIValidatieDomein | null;
+      besluitmoment_stap: number | null;
     }>
   ).map((r) => ({
     id: r.id,
@@ -630,6 +632,7 @@ async function buildEvidenceLijst(
     min_aantal: r.min_aantal ?? 1,
     // Instantie-requirements dragen (nog) geen toelichting.
     toelichting: null,
+    besluitmoment_stap: r.besluitmoment_stap ?? null,
     bron: "instance" as const,
     instance_id: r.id,
   }));
@@ -851,6 +854,7 @@ async function buildEvidenceLijst(
       bron_titel: bronTitel,
       bron: req.bron,
       instance_id: req.instance_id,
+      besluitmoment_stap: req.besluitmoment_stap ?? null,
     });
   }
 
@@ -899,27 +903,6 @@ async function filterDissentOpRol(
       d.zichtbaarheid === "minderheidsnotitie"
     );
   });
-}
-
-// ── Helpers voor readiness-display ───────────────────────────────────
-
-/** Eerste readiness-target waaraan nog niet wordt voldaan, of null als alles ok is. */
-export function eersteOntbrekendeReadiness(
-  overview: ReadinessOverview
-): { target: keyof ReadinessOverview; result: ReadinessResult } | null {
-  const volgorde: (keyof ReadinessOverview)[] = [
-    "onderbouwing_compleet",
-    "reviewrijp",
-    "bespreekrijp",
-    "besluitrijp",
-    "verantwoordingsrijp",
-    "evaluatierijp",
-  ];
-  for (const t of volgorde) {
-    const r = overview[t];
-    if (!r.voldoet) return { target: t, result: r };
-  }
-  return null;
 }
 
 // `ActionItem` wordt gere-exporteerd zodat consumers van dit bestand

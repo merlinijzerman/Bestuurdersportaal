@@ -1,26 +1,31 @@
 "use client";
 
-// Compacte status-strip. Regel 1: huidige status, eerstvolgende readiness-horde
-// + aantal ontbrekende items, en knoppen (export + statusovergang). Regel 2: een
-// compacte classificatie-strook + een eventuele "besluitvraag nog aan te
-// vullen"-nudge. Die twee zijn hierheen verplaatst nadat de losse Decision
-// Object-header boven de pagina is verwijderd, zodat de sturing zichtbaar blijft.
+// Compacte status-strip. Regel 1: huidige status, de openstaande vereisten boven
+// optioneel (per zwaarte — de besluitmoment-telling die de readiness-horde
+// vervangt, §7/0187), en knoppen (export + statusovergang). Regel 2: een compacte
+// classificatie-strook + een eventuele "besluitvraag nog aan te vullen"-nudge.
 
 import {
   type DecisionObject,
-  type ReadinessOverview,
-  type ReadinessTarget,
+  type EvidenceItem,
   DECISION_STATUS_LABEL,
-  READINESS_LABEL,
-  READINESS_VOLGORDE,
   COMPLEXITEIT_LABEL,
   RISICONIVEAU_LABEL,
 } from "@/core/lib/decision-view";
+import { besluitmomentSignaal } from "@/core/lib/besluitmoment-telling";
 import AuditExportKnop from "./AuditExportKnop";
 
 interface Props {
   decision: DecisionObject;
-  readiness: ReadinessOverview;
+  /** De evidence-lijst; hieruit komt de besluitmoment-telling (open per zwaarte). */
+  evidence: EvidenceItem[];
+  /** Volgordes van de besluitmoment-stappen (`vereist_besluit`) — de signalering is
+   *  besluitmoment-scoped, niet dossierbreed (Q1, besluit 0193). */
+  besluitmomentStappen: number[];
+  /** Signaal 3 (§12): dit besluit is genomen terwijl er vereisten openstonden.
+   *  Afgeleid uit het append-only besluit_genomen_met_openstaande_vereisten-event;
+   *  null = niet van toepassing. */
+  beslotenMetOpenstaand?: { actorNaam: string | null; actorRol: string | null } | null;
   /** Anker-id van het status-overgang-paneel, voor de scroll-knop. */
   statusOvergangAnker?: string;
   /** Of er minstens één audit-snapshot is — bepaalt of de
@@ -59,16 +64,15 @@ function statusKleur(status: DecisionObject["status"]): string {
 
 export default function DossierStatusStrip({
   decision,
-  readiness,
+  evidence,
+  besluitmomentStappen,
+  beslotenMetOpenstaand = null,
   statusOvergangAnker = "status-overgang",
   heeftSnapshot = true,
 }: Props) {
-  // Eerste readiness-target waaraan nog niet wordt voldaan.
-  const eersteOnvolledig: ReadinessTarget | undefined =
-    READINESS_VOLGORDE.find((t) => !readiness[t].voldoet);
-  const ontbrekendCount = eersteOnvolledig
-    ? readiness[eersteOnvolledig].ontbrekend.length
-    : 0;
+  // Besluitmoment-signaal (§7 r434): drieweg zodat een leeg besluitmoment niet als
+  // vals groen leest. `geen-vereisten` ≠ `alle-vervuld` (Q1, besluit 0193).
+  const signaal = besluitmomentSignaal(evidence, besluitmomentStappen);
   const isPlaceholder = decision.besluitvraag.startsWith(
     "Aanvullen na auto-upgrade"
   );
@@ -90,24 +94,35 @@ export default function DossierStatusStrip({
           <span aria-hidden className="text-muted">
             ·
           </span>
-          {eersteOnvolledig ? (
-            <>
-              <span className="text-xs text-ink">
-                <span className="text-muted">Volgende horde:</span>{" "}
-                <span className="font-medium text-ink">
-                  {READINESS_LABEL[eersteOnvolledig]}
-                </span>
-              </span>
-              {ontbrekendCount > 0 && (
-                <span className="text-[11px] text-warn-ink bg-warn-tint border border-warn/30 px-2 py-0.5 rounded">
-                  {ontbrekendCount} ontbrekend
-                  {ontbrekendCount === 1 ? "" : "e items"}
+          {signaal.soort === "open" ? (
+            <span className="flex items-center gap-1.5">
+              <span className="text-xs text-muted">Besluitmoment:</span>
+              {signaal.open.kritiek.length > 0 && (
+                <span className="text-[11px] text-err-ink bg-err-tint border border-err/30 px-2 py-0.5 rounded">
+                  {signaal.open.kritiek.length} kritiek
                 </span>
               )}
-            </>
-          ) : (
+              {signaal.open.vereist.length > 0 && (
+                <span className="text-[11px] text-warn-ink bg-warn-tint border border-warn/30 px-2 py-0.5 rounded">
+                  {signaal.open.vereist.length} vereist
+                </span>
+              )}
+              {signaal.open.kritiek.length === 0 &&
+                signaal.open.vereist.length === 0 && (
+                  <span className="text-[11px] text-muted bg-app-bg border border-line px-2 py-0.5 rounded">
+                    {signaal.open.optioneel.length} optioneel
+                  </span>
+                )}
+            </span>
+          ) : signaal.soort === "alle-vervuld" ? (
             <span className="text-xs text-ok-ink font-medium">
-              Alle readiness-niveaus voldoen
+              Alle vereisten voor dit besluitmoment zijn vervuld
+            </span>
+          ) : (
+            // geen-vereisten: bewust NEUTRAAL, geen groen vinkje (§7 r434) — niets
+            // gekoppeld is niet hetzelfde als "alles rond".
+            <span className="text-xs text-muted">
+              Aan dit besluitmoment zijn geen vereisten gekoppeld
             </span>
           )}
         </div>
@@ -125,6 +140,23 @@ export default function DossierStatusStrip({
           </a>
         </div>
       </div>
+
+      {/* Signaal 3 (§12): dit besluit is genomen terwijl er vereisten openstonden.
+          Bij een brede bevoegdheid (elke decisions.manage-houder mag, mits motivering)
+          is zichtbaarheid achteraf het tegenwicht dat vooraf ontbreekt (Q2, 0193). */}
+      {beslotenMetOpenstaand && (
+        <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-line">
+          <span className="text-[11px] text-warn-ink bg-warn-tint border border-warn/30 px-2 py-0.5 rounded font-medium">
+            ⚠ Besloten met openstaande vereisten
+          </span>
+          <span className="text-[11px] text-muted">
+            vastgelegd
+            {beslotenMetOpenstaand.actorNaam ? ` door ${beslotenMetOpenstaand.actorNaam}` : ""}
+            {beslotenMetOpenstaand.actorRol ? ` (${beslotenMetOpenstaand.actorRol})` : ""}
+            {" "}— zie het dossier voor de motivering
+          </span>
+        </div>
+      )}
 
       {/* Compacte classificatie + evt. nudge (verplaatst uit de verwijderde
           Decision Object-header, zodat deze sturing zichtbaar blijft). */}

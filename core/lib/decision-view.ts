@@ -196,6 +196,10 @@ export interface EvidenceItem {
   // te deactiveren). `instance_id` is de rij-id bij een instantie-vereiste.
   bron: "template" | "instance";
   instance_id: string | null;
+  // P3/PR-D (#168, §7): het besluitmoment (stap-volgorde) waarvoor deze vereiste
+  // óók meetelt, naast haar eigen stap. Leeg = alleen de eigen stap. Voedt de
+  // besluitmoment-telling die de readiness-weergave vervangt.
+  besluitmoment_stap: number | null;
 }
 
 // ── Decision-children ─────────────────────────────────────────────────
@@ -533,7 +537,10 @@ export interface DecisionDossierView {
   procedure: ProcedureSummary;
   currentStep: ProcedureStep | null;
   steps: ProcedureStep[];
-  readiness: ReadinessOverview;
+  // P3/PR-D (#168, 0187): readiness is ontmanteld — nieuwe views dragen het niet
+  // meer. Blijft OPTIONEEL zodat een OUD, append-only afschrift-snapshot dat het
+  // nog draagt, leesbaar blijft (afschrift-feitenkaart valt terug op de evidence).
+  readiness?: ReadinessOverview;
   evidence: EvidenceItem[];
   /** Stemverslagen (gesloten/ingetrokken) gekoppeld aan dit besluit. */
   stemverslagen: StemverslagSummary[];
@@ -581,23 +588,10 @@ export const DECISION_STATUS_LABEL: Record<DecisionStatus, string> = {
   geannuleerd: "Geannuleerd",
 };
 
-export const READINESS_LABEL: Record<ReadinessTarget, string> = {
-  onderbouwing_compleet: "Onderbouwing compleet",
-  reviewrijp: "Reviewrijp",
-  bespreekrijp: "Bespreekrijp",
-  besluitrijp: "Besluitrijp",
-  verantwoordingsrijp: "Verantwoordingsrijp",
-  evaluatierijp: "Evaluatierijp",
-};
-
-export const READINESS_VOLGORDE: ReadinessTarget[] = [
-  "onderbouwing_compleet",
-  "reviewrijp",
-  "bespreekrijp",
-  "besluitrijp",
-  "verantwoordingsrijp",
-  "evaluatierijp",
-];
+// READINESS_LABEL/READINESS_VOLGORDE (de ladder-presentatie) zijn met de
+// readiness-ontmanteling verdwenen (0187). De data-typen ReadinessOverview/
+// ReadinessResult/ReadinessTarget blijven bestaan: ze typeren de `readiness`-sleutel
+// in OUDE, append-only afschrift-snapshots die de feitenkaart nog moet kunnen lezen.
 
 export const COMPLEXITEIT_LABEL: Record<Complexiteit, string> = {
   routine: "Routine",
@@ -721,6 +715,23 @@ export function mapLegacyStatus(legacy: string): DecisionStatus {
  * migratie 2026_06_18_dossier_procesinstantie). Sublabel is hier niet
  * relevant — alleen de status wordt naar de kolom gesynct.
  */
+/**
+ * Staat een genomen besluit "nog"? Na deze statussen is het besluit uitgevoerd of
+ * afgesloten (niet teruggedraaid). Bepaalt of het "besloten met openstaande
+ * vereisten"-signaal (§12 signaal 3, besluit 0193) nog een ACTIEF aandachtspunt is:
+ * na heropenen/afwijzen/terugzetten vervalt de actieve markering — het append-only
+ * event blijft in de audit-trail, maar het is dan een historisch, teruggedraaid feit.
+ */
+export function besluitStaatNog(status: DecisionStatus): boolean {
+  return (
+    status === "besloten" ||
+    status === "voorwaardelijk_besloten" ||
+    status === "in_uitvoering" ||
+    status === "in_evaluatie" ||
+    status === "afgesloten"
+  );
+}
+
 export function mapDecisionToProcedureStatus(
   status: DecisionStatus
 ): DossierStatus {
