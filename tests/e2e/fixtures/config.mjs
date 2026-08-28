@@ -23,10 +23,29 @@ export const E2E_FONDSEN = Object.freeze({
   }),
 });
 
+export const E2E_PLATFORM_ACCOUNTS = Object.freeze({
+  zonderCapability: Object.freeze({
+    email: "wp3-platform-zonder-capability@e2e.invalid",
+    naam: "Synthetisch platform zonder capability",
+  }),
+  observability: Object.freeze({
+    email: "wp3-platform-observability@e2e.invalid",
+    naam: "Synthetisch platform observability",
+  }),
+  granter: Object.freeze({
+    email: "wp3-platform-granter@e2e.invalid",
+    naam: "Synthetisch platform fixture-granter",
+  }),
+});
+
 export function e2eEmail(fondsSleutel, rol) {
   return `wp3-${fondsSleutel}-${rol}@e2e.invalid`;
 }
 
 export function authStateBestand(fondsSleutel, rol) {
   return `tests/e2e/.auth/${fondsSleutel}-${rol}.json`;
+}
+
+export function platformAuthStateBestand(account, niveau) {
+  return `tests/e2e/.auth/platform-${account}-${niveau}.json`;
 }

@@ -19,11 +19,16 @@ jobs:
       ANTHROPIC_API_KEY: "sk-ant-dummy-not-used"
       AI_MODEL: "claude-3-5-haiku-latest"
       NEXT_PUBLIC_FONDS_NAAM: "Synthetische E2E-omgeving"
-      DEPLOY_TARGET: "app"
+      DEPLOY_TARGET: "beheer"
       APP_HOST: "fonds-a.localhost,fonds-b.localhost"
       PLATFORM_HOST: "beheer.localhost"
       TENANT_ENFORCE: "on"
       SEED_DOELOMGEVING: "local"
+      WP3_MALWARESCAN_AAN: "true"
+      WP3_SCANNER_URL: "http://127.0.0.1:8787"
+      WP3_E2E_SCANNER: "local"
+      WP3_E2E_STOP_NA_SCAN: "true"
+      CRON_SECRET: "wp3-e2e-cron-secret-minimaal-32-tekens"
       E2E_FONDS_A_ORIGIN: "http://fonds-a.localhost:3000"
       E2E_FONDS_B_ORIGIN: "http://fonds-b.localhost:3000"
       E2E_ONBEKENDE_ORIGIN: "http://onbekend.localhost:3000"
@@ -69,6 +74,16 @@ jobs:
           TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
         run: bash scripts/testdb-apply-migrations.sh
 
+      - name: Lokale scannergrens starten
+        run: |
+          node tests/e2e/fixtures/scanner-stub.mjs > "$RUNNER_TEMP/e2e-scanner.log" 2>&1 &
+          echo "E2E_SCANNER_PID=$!" >> "$GITHUB_ENV"
+          for i in $(seq 1 20); do
+            curl -sf http://127.0.0.1:8787/health >/dev/null && exit 0
+            sleep 1
+          done
+          exit 1
+
       - name: App eenmaal bouwen
         run: npm run build
 
@@ -82,12 +97,14 @@ jobs:
           done
           exit 1
 
-      - name: Tenantpoort in Chromium
-        run: npm run test:e2e:tenantpoort
+      - name: Securityflows in Chromium
+        run: npm run test:e2e -- --project=chromium
 
       - name: Serverlog veilig maken
         if: failure()
-        run: node scripts/sanitize-e2e-log.mjs --input "$RUNNER_TEMP/e2e-server.log" --output test-results/e2e/server.log
+        run: |
+          node scripts/sanitize-e2e-log.mjs --input "$RUNNER_TEMP/e2e-server.log" --output test-results/e2e/server.log
+          node scripts/sanitize-e2e-log.mjs --input "$RUNNER_TEMP/e2e-scanner.log" --output test-results/e2e/scanner.log
 
       - name: Browserartifacts veilig maken
         if: failure()
@@ -108,4 +125,5 @@ jobs:
         if: always()
         run: |
           if [ -n "${E2E_SERVER_PID:-}" ]; then kill "$E2E_SERVER_PID" 2>/dev/null || true; fi
+          if [ -n "${E2E_SCANNER_PID:-}" ]; then kill "$E2E_SCANNER_PID" 2>/dev/null || true; fi
           supabase stop || true

@@ -27,7 +27,7 @@
     "test:coverage-contract": "node --test scripts/vitest-coverage-workflow.test.mjs",
     "test:e2e": "playwright test --config=playwright.config.ts",
     "test:e2e:tenantpoort": "playwright test --config=playwright.config.ts tests/e2e/specs/tenantpoort.spec.ts --project=chromium",
-    "test:e2e:guard": "node --test tests/e2e/fixtures/omgeving.test.mjs scripts/playwright-workflow.test.mjs scripts/sanitize-e2e-log.test.mjs scripts/sanitize-e2e-artifacts.test.mjs",
+    "test:e2e:guard": "node --test tests/e2e/fixtures/omgeving.test.mjs tests/e2e/fixtures/totp.test.mjs tests/e2e/fixtures/scanner-stub.test.mjs scripts/playwright-workflow.test.mjs scripts/sanitize-e2e-log.test.mjs scripts/sanitize-e2e-artifacts.test.mjs",
     "test:ops:app": "npm run test:backup-restore && npm run test:platform-inventory",
     "test:scanner": "npm test --prefix scanner",
     "test:scanner:ci": "npm ci --prefix scanner --ignore-scripts && npm run test:scanner",
