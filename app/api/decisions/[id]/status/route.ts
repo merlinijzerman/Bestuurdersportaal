@@ -1,33 +1,31 @@
 // POST /api/decisions/[id]/status
 //
-// Statusovergang van een Decision Object. Twee lagen van controle:
+// Statusovergang van een Decision Object. Controlelagen:
 //
-//   1. Readiness-gate (applicatie-niveau, conform §9 ontwerpdoc):
-//        in_review                   → reviewrijp
-//        geagendeerd                 → bespreekrijp
-//        besloten / voorwaardelijk_besloten → besluitrijp
-//        afgesloten                  → verantwoordingsrijp
-//                                      + (complex/hoog) evaluatierijp
-//      Voor deze targets vragen we eerst readiness via
-//      `fn_decision_readiness_check`. Als die niet voldoet:
-//        a) bestuurder zonder override → 400 met ontbrekend.
-//        b) voorzitter/beheerder met `override_reden` → status wordt
-//           wel doorgezet, maar er komt een `override_<readiness>`
-//           governance event bovenop het gewone `status_gewijzigd`.
+//   1. §4.4-signalering i.p.v. de oude readiness-gate (besluit 0187/0193).
+//      Readiness was een ZACHT bestuurlijk oordeel dat als harde 400-gate was
+//      ingekleed; §4.5 houdt alleen de harde invarianten (I1–I7). Uitvoering
+//      (stappen) en bestuurlijke duiding (status) zijn gescheiden: een bestuur
+//      mag besluiten vóór de nazorg af is. Gaat een besluit-transitie
+//      (besloten/voorwaardelijk_besloten) door terwijl er vereisten open staan
+//      BÓVEN optioneel, dan is dat geen blokkade maar wél een verantwoording:
+//      een motivering is verplicht (I2, zelfde vorm als de afwijking bij
+//      afronden), en het besluit wordt append-only vastgelegd
+//      (`besluit_genomen_met_openstaande_vereisten`, de vorm die P4's
+//      status-feitenmatrix blijft schrijven). De respons draagt een concrete
+//      waarschuwing per zwaarte.
 //
-//   2. Status-overgangstrigger (database-niveau):
-//      `fn_decision_status_check` blokkeert ongeldige overgangen
-//      (bv. concept → besloten). Die fout vangen we netjes af.
+//   2. Open-stemming-guard: geen (voorwaardelijk) besloten met een open
+//      gekoppelde stemming (VERGADERINGEN-V2 §7.6). Ongemoeid.
 //
-// Audit-snapshot wordt door de DB-trigger automatisch aangemaakt
-// bij overgang naar besloten/voorwaardelijk_besloten/in_evaluatie/afgesloten.
+//   3. Status-overgangstrigger (DB, I4): `fn_decision_status_check` blokkeert
+//      ongeldige overgangen (bv. concept → besloten). Fout netjes afgevangen.
 //
-// Body:
-//   {
-//     status: DecisionStatus,
-//     reden?: string,
-//     override_reden?: string         // alleen relevant bij faillende readiness
-//   }
+// Audit-snapshot wordt door de DB-trigger automatisch aangemaakt bij overgang
+// naar besloten/voorwaardelijk_besloten/in_evaluatie/afgesloten.
+//
+// Body: { status: DecisionStatus, reden?: string, motivering?: string }
+//   `motivering` is verplicht bij een besluit met iets open boven optioneel.
 
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
@@ -35,9 +33,14 @@ import { z } from "zod";
 import {
   mapDecisionToProcedureStatus,
   type DecisionStatus,
-  type ReadinessTarget,
-  type ReadinessResult,
 } from "@/core/lib/decision-view";
+import { buildDecisionDossierView } from "@/core/lib/decision";
+import {
+  openStaandeVereisten,
+  heeftOpenBovenOptioneel,
+  type OpenPerZwaarte,
+} from "@/core/lib/besluitmoment-telling";
+import { MIN_MOTIVERING_LENGTE } from "@/core/lib/afwijking";
 
 const ALLE_STATUSSEN: DecisionStatus[] = [
   "concept",
@@ -59,21 +62,17 @@ const ALLE_STATUSSEN: DecisionStatus[] = [
   "geannuleerd",
 ];
 
-// Mapping target-status → vereist readiness-niveau (§9 ontwerpdoc).
-const READINESS_VOOR_STATUS: Partial<Record<DecisionStatus, ReadinessTarget>> = {
-  in_review: "reviewrijp",
-  geagendeerd: "bespreekrijp",
-  besloten: "besluitrijp",
-  voorwaardelijk_besloten: "besluitrijp",
-  afgesloten: "verantwoordingsrijp",
-  // 'evaluatierijp' wordt aanvullend gecheckt voor complex/hoog
-  // bij overgang naar afgesloten — zie logica hieronder.
-};
+// P3/PR-D (#168): de besluit-transities die "een feit stellen" — hier geldt de
+// §4.4-signalering (motivering + vastlegging bij openstaande vereisten), niet meer
+// de harde readiness-gate (besluit 0187).
+const BESLUIT_TRANSITIES: DecisionStatus[] = ["besloten", "voorwaardelijk_besloten"];
 
 interface Body {
   status?: DecisionStatus;
   reden?: string;
-  override_reden?: string;
+  // §4.4/I2: verplichte motivering wanneer een besluit doorgaat met iets open
+  // boven optioneel — zelfde vorm als de afwijking bij afronden (PR-C).
+  motivering?: string;
 }
 
 interface DecisionRowMin {
@@ -120,68 +119,32 @@ export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beo
       });
     }
 
-    // 2. Rolcheck voor override.
-    const isPrivileged =
-      ctx.rol === "voorzitter" || ctx.rol === "beheerder";
     const actorNaam = ctx.naam;
 
-    // 3. Readiness-gate (alleen voor bepaalde targets).
-    const readinessTarget = READINESS_VOOR_STATUS[target];
-    const overrides: { target: ReadinessTarget; ontbrekend: unknown }[] = [];
-
-    async function readiness(t: ReadinessTarget): Promise<ReadinessResult> {
-      const { data, error } = await supabase.rpc(
-        "fn_decision_readiness_check",
-        { p_decision_id: decisionId, p_target: t }
-      );
-      if (error) {
-        console.error("Readiness-check Postgres-fout:", error);
-        throw new Error("Readiness-check faalde");
-      }
-      return data as ReadinessResult;
-    }
-
-    if (readinessTarget) {
-      const result = await readiness(readinessTarget);
-      if (!result.voldoet) {
-        if (!body.override_reden || !isPrivileged) {
+    // 3. §4.4-signalering i.p.v. de harde readiness-gate (besluit 0187/0193).
+    //    De overgang wordt NIET geblokkeerd omdat er iets open staat — een bestuur
+    //    mag besluiten vóór de nazorg af is. Maar een besluit-transitie die doorgaat
+    //    met iets open bóven optioneel is geen vrije doorgang: er is een motivering
+    //    verplicht (zelfde vorm als de afwijking bij afronden, PR-C — I2), en het
+    //    besluit wordt append-only vastgelegd. Niet blokkeren, wél onthouden.
+    let openBijBesluit: OpenPerZwaarte | null = null;
+    let besluitMotivering: string | null = null;
+    if (BESLUIT_TRANSITIES.includes(target)) {
+      const view = await buildDecisionDossierView(supabase, decisionId, {});
+      const open = openStaandeVereisten(view.evidence);
+      if (heeftOpenBovenOptioneel(open)) {
+        const motivering = body.motivering?.trim();
+        if (!motivering || motivering.length < MIN_MOTIVERING_LENGTE) {
           return NextResponse.json(
             {
-              error: `Dossier voldoet niet aan ${readinessTarget}.`,
-              readiness: result,
-              kan_overrulen: result.kan_overrulen,
-              hint: isPrivileged
-                ? "Voeg 'override_reden' toe om door te zetten."
-                : "Vraag voorzitter of beheerder voor een onderbouwde override.",
+              error: `Er staan vereisten open boven optioneel. Een besluit met openstaande vereisten vereist een motivering van minimaal ${MIN_MOTIVERING_LENGTE} tekens.`,
+              openstaand: { kritiek: open.kritiek.length, vereist: open.vereist.length },
             },
             { status: 400 }
           );
         }
-        overrides.push({ target: readinessTarget, ontbrekend: result.ontbrekend });
-      }
-
-      // Aanvullend: voor 'afgesloten' bij complex/hoog ook 'evaluatierijp'
-      if (
-        target === "afgesloten" &&
-        (decision.complexiteit === "complex" || decision.risiconiveau === "hoog")
-      ) {
-        const evRes = await readiness("evaluatierijp");
-        if (!evRes.voldoet) {
-          if (!body.override_reden || !isPrivileged) {
-            return NextResponse.json(
-              {
-                error:
-                  "Bij complex of hoog risico is voor afsluiting óók 'evaluatierijp' vereist.",
-                readiness: evRes,
-                hint: isPrivileged
-                  ? "Voeg 'override_reden' toe om door te zetten."
-                  : "Vraag voorzitter of beheerder voor een onderbouwde override.",
-              },
-              { status: 400 }
-            );
-          }
-          overrides.push({ target: "evaluatierijp", ontbrekend: evRes.ontbrekend });
-        }
+        openBijBesluit = open;
+        besluitMotivering = motivering;
       }
     }
 
@@ -228,20 +191,21 @@ export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beo
       );
     }
 
-    // 5. Governance events — eerst eventuele overrides, dan status_gewijzigd.
-    for (const ov of overrides) {
+    // 5. Governance events — eerst het besluit-met-openstaande-vereisten (0193,
+    //    de vastleggingsvorm die P4's status-feitenmatrix blijft schrijven), dan
+    //    status_gewijzigd.
+    if (openBijBesluit) {
       await supabase.from("governance_events").insert({
         decision_id: decisionId,
-        event_type: `override_${ov.target}`,
+        event_type: "besluit_genomen_met_openstaande_vereisten",
         actor_id: ctx.gebruikerId,
         actor_naam: actorNaam,
         object_type: "decision_object",
         object_id: decisionId,
-        reden: body.override_reden ?? null,
-        oude_waarde: { ontbrekend: ov.ontbrekend },
+        reden: besluitMotivering,
         nieuwe_waarde: {
           target_status: target,
-          readiness_target: ov.target,
+          openstaand: openBijBesluit, // per zwaarte, {label, requirement_sleutel}
         },
       });
     }
@@ -283,8 +247,20 @@ export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beo
     return NextResponse.json({
       decision: bijgewerkt,
       gewijzigd: true,
-      via_override: overrides.length > 0,
       procedure_status: legacyStatus,
+      // §4.4-signalering: concreet, per zwaarte op besluitmoment-schaal — niet vaag.
+      ...(openBijBesluit
+        ? {
+            waarschuwing: {
+              boodschap:
+                "Besluit genomen terwijl er vereisten openstonden — vastgelegd in het dossier.",
+              openstaand: {
+                kritiek: openBijBesluit.kritiek.length,
+                vereist: openBijBesluit.vereist.length,
+              },
+            },
+          }
+        : {}),
     });
   } catch (e) {
     console.error("Fout in POST /api/decisions/[id]/status:", e);

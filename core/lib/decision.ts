@@ -470,6 +470,8 @@ interface ProcedureRequirementRow {
   min_aantal: number;
   // OB-E10: toelichting bij het bewijsstuk (uit de definitie/standaardset).
   toelichting: string | null;
+  // P3/PR-D (#168, §7): besluitmoment-binding; leeg = alleen de eigen stap.
+  besluitmoment_stap: number | null;
 }
 
 // WO-3-vervolg: requirement + herkomst (template vs. instantie) voor de
@@ -595,7 +597,7 @@ async function buildEvidenceLijst(
   const { data: instRows } = await supabase
     .from("procedure_requirement_instance")
     .select(
-      "id, stap_volgorde, requirement_type, label, documenttype, veld_pad, verplicht, blokkerend, min_aantal, vereist_validatie_domein"
+      "id, stap_volgorde, requirement_type, label, documenttype, veld_pad, verplicht, blokkerend, min_aantal, vereist_validatie_domein, besluitmoment_stap"
     )
     .eq("decision_id", ctx.decisionId)
     .eq("actief", true);
@@ -611,6 +613,7 @@ async function buildEvidenceLijst(
       blokkerend: boolean | null;
       min_aantal: number | null;
       vereist_validatie_domein: AIValidatieDomein | null;
+      besluitmoment_stap: number | null;
     }>
   ).map((r) => ({
     id: r.id,
@@ -630,6 +633,7 @@ async function buildEvidenceLijst(
     min_aantal: r.min_aantal ?? 1,
     // Instantie-requirements dragen (nog) geen toelichting.
     toelichting: null,
+    besluitmoment_stap: r.besluitmoment_stap ?? null,
     bron: "instance" as const,
     instance_id: r.id,
   }));
@@ -851,6 +855,7 @@ async function buildEvidenceLijst(
       bron_titel: bronTitel,
       bron: req.bron,
       instance_id: req.instance_id,
+      besluitmoment_stap: req.besluitmoment_stap ?? null,
     });
   }
 

@@ -196,6 +196,10 @@ export interface EvidenceItem {
   // te deactiveren). `instance_id` is de rij-id bij een instantie-vereiste.
   bron: "template" | "instance";
   instance_id: string | null;
+  // P3/PR-D (#168, §7): het besluitmoment (stap-volgorde) waarvoor deze vereiste
+  // óók meetelt, naast haar eigen stap. Leeg = alleen de eigen stap. Voedt de
+  // besluitmoment-telling die de readiness-weergave vervangt.
+  besluitmoment_stap: number | null;
 }
 
 // ── Decision-children ─────────────────────────────────────────────────
