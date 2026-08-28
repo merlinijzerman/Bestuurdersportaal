@@ -1,6 +1,6 @@
 # 0194 — Nightly fidelity fail-closed als operationeel signaal
 
-- **Status:** Geaccepteerd — technisch gerealiseerd; eerste echte workflowrun nog uit te voeren
+- **Status:** Geaccepteerd — fail-closed in GitHub bewezen; groene DB-run geblokkeerd door ontbrekend repositorysecret
 - **Datum:** 2026-08-28
 - **Betrokkenen:** Merlin (opdracht), Codex (uitvoering)
 - **Herziet:** het niet-blokkerende skip-/`continue-on-error`-deel van besluit 0046; optie A en de PR-gates blijven ongewijzigd
@@ -34,7 +34,8 @@ De workflow blijft scheduled en is geen required PR-check. Rood blokkeert daarom
 - Fouten in secretconfiguratie, bereikbaarheid, migraties, RLS of tenantgedrag zijn zichtbaar als rode nightlyrun.
 - De database-URL wordt niet gelogd; alleen een vaste foutcategorie verschijnt.
 - Een fout ingestelde URL kan niet betrouwbaar aan de hostnaam als Productie worden herkend. De secretbeheerder blijft verantwoordelijk voor een aparte wegwerpbare testdatabase.
-- De eerste echte `workflow_dispatch` kan pas na commit/push van deze wijziging en met het repositorysecret worden uitgevoerd; tot dat bewijs is WP0 technisch gerealiseerd maar operationeel nog niet volledig afgetekend.
+- Handmatige run [`#51`](https://github.com/merlinijzerman/Bestuurdersportaal/actions/runs/33160032080) op commit `2d7ae6f` stopte op 28 augustus 2026 vóór installatie en DB-aanroepen met uitsluitend `fidelity_config_missing`. Daarmee is fail-closed in de echte GitHub-omgeving bewezen.
+- Het repositorysecret `TEST_DATABASE_URL` is nog leeg of ontbreekt. De groene DB-laag kan daarom pas worden bewezen nadat de repositorybeheerder dit secret naar een aparte wegwerp-testdatabase heeft gezet en run #51 opnieuw heeft uitgevoerd.
 
 ## Referenties
 
