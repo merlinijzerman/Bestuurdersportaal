@@ -32,15 +32,20 @@ const expected = {
   },
 };
 
-assert.equal(report.numTotalTestSuites, 5, "WP1-pariteit verwacht exact vijf suites");
-assert.equal(report.numTotalTests, 127, "WP1-pariteit verwacht exact 127 tests");
 assert.equal(report.numFailedTests, 0, "WP1-pariteit accepteert geen rode tests");
 
 const actualFiles = new Set();
 for (const suite of report.testResults) {
   const normalized = String(suite.name).replaceAll("\\", "/");
   const relativePath = Object.keys(expected).find((candidate) => normalized.endsWith(candidate));
-  assert.ok(relativePath, `onverwachte Vitest-suite in pariteitsrapport: ${suite.name}`);
+  if (!relativePath) {
+    assert.match(
+      normalized,
+      /tests\/component\/.*\.component\.test\.tsx$/,
+      `onverwachte niet-component-suite in pariteitsrapport: ${suite.name}`,
+    );
+    continue;
+  }
   actualFiles.add(relativePath);
 
   const titles = suite.assertionResults.map((test) => test.title).sort();

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   berekenUitslag,
@@ -369,6 +369,7 @@ function StemPaneel({
             ))}
           </div>
           <textarea
+            aria-label="Optionele motivering"
             rows={2}
             value={motivering}
             onChange={(e) => setMotivering(e.target.value)}
@@ -403,6 +404,7 @@ function StemPaneel({
             Volmachtstem
           </div>
           <select
+            aria-label="Bestuurslid voor volmachtstem"
             value={volmachtVoor}
             onChange={(e) => setVolmachtVoor(e.target.value)}
             className="w-full text-sm border border-line rounded px-2 py-1.5 bg-white outline-none focus:border-accent"
@@ -430,6 +432,7 @@ function StemPaneel({
             ))}
           </div>
           <input
+            aria-label="Toelichting op de volmacht"
             type="text"
             value={volmachtToelichting}
             onChange={(e) => setVolmachtToelichting(e.target.value)}
@@ -495,7 +498,10 @@ function StemPaneel({
       )}
 
       {fout && (
-        <div className="text-xs text-err-ink bg-err-tint border border-err/30 rounded px-2 py-1.5">
+        <div
+          role="alert"
+          className="text-xs text-err-ink bg-err-tint border border-err/30 rounded px-2 py-1.5"
+        >
           {fout}
         </div>
       )}
@@ -534,6 +540,7 @@ function StemPaneel({
           ) : (
             <div className="w-full space-y-2">
               <textarea
+                aria-label="Reden voor intrekken"
                 rows={2}
                 value={intrekReden}
                 onChange={(e) => setIntrekReden(e.target.value)}
@@ -749,6 +756,7 @@ function StemStartenModal({
   const [meerderheid, setMeerderheid] = useState("");
   const [bezig, setBezig] = useState(false);
   const [fout, setFout] = useState<string | null>(null);
+  const titelId = useId();
 
   async function start() {
     if (!vraag.trim() || bezig) return;
@@ -788,10 +796,21 @@ function StemStartenModal({
 
   return (
     <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4 overflow-y-auto">
-      <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-5 space-y-4 my-8">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titelId}
+        className="bg-white rounded-xl shadow-xl max-w-md w-full p-5 space-y-4 my-8"
+      >
         <div className="flex items-start justify-between">
-          <div className="text-sm font-semibold text-ink">Stemronde starten</div>
-          <button onClick={onClose} className="text-muted text-sm hover:text-ink">
+          <div id={titelId} className="text-sm font-semibold text-ink">
+            Stemronde starten
+          </div>
+          <button
+            aria-label="Stemrondevenster sluiten"
+            onClick={onClose}
+            className="text-muted text-sm hover:text-ink"
+          >
             ✕
           </button>
         </div>
@@ -850,6 +869,7 @@ function StemStartenModal({
                   />
                   {customAlt.length > 2 && (
                     <button
+                      aria-label={`Alternatief ${i + 1} verwijderen`}
                       onClick={() => setCustomAlt(customAlt.filter((_, j) => j !== i))}
                       className="text-muted hover:text-err-ink px-1"
                     >
@@ -903,7 +923,10 @@ function StemStartenModal({
         </div>
 
         {fout && (
-          <div className="text-xs text-err-ink bg-err-tint border border-err/30 rounded px-3 py-2">
+          <div
+            role="alert"
+            className="text-xs text-err-ink bg-err-tint border border-err/30 rounded px-3 py-2"
+          >
             {fout}
           </div>
         )}
@@ -950,6 +973,7 @@ function DissentPromptDialog({
   const [zichtbaarheid, setZichtbaarheid] = useState("gedeelde_zorg");
   const [bezig, setBezig] = useState(false);
   const [fout, setFout] = useState<string | null>(null);
+  const titelId = useId();
 
   async function leg_vast() {
     setBezig(true);
@@ -978,8 +1002,13 @@ function DissentPromptDialog({
 
   return (
     <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-5 space-y-4">
-        <div className="text-sm font-semibold text-ink">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titelId}
+        className="bg-white rounded-xl shadow-xl max-w-md w-full p-5 space-y-4"
+      >
+        <div id={titelId} className="text-sm font-semibold text-ink">
           Wilt u dit als dissent vastleggen?
         </div>
         <p className="text-xs text-ink leading-relaxed">
@@ -1011,7 +1040,10 @@ function DissentPromptDialog({
           Minderheidsnotitie kan alleen door voorzitter of beheerder worden vastgesteld.
         </p>
         {fout && (
-          <div className="text-xs text-err-ink bg-err-tint border border-err/30 rounded px-2 py-1.5">
+          <div
+            role="alert"
+            className="text-xs text-err-ink bg-err-tint border border-err/30 rounded px-2 py-1.5"
+          >
             {fout}
           </div>
         )}

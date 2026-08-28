@@ -9,7 +9,7 @@
 // zelf; ongeldige combinaties (bv. concept → besloten) leveren een
 // fout uit de API die we 1-op-1 in de UI tonen.
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   type DecisionObject,
@@ -89,6 +89,7 @@ export default function StatusOvergangPaneel({
   const [overrideReden, setOverrideReden] = useState("");
   const [bezig, setBezig] = useState(false);
   const [fout, setFout] = useState<string | null>(null);
+  const idBasis = useId();
 
   const vlgndOpties = useMemo(
     () => VOLGENDE_STATUSSEN[decision.status] ?? [],
@@ -201,8 +202,9 @@ export default function StatusOvergangPaneel({
       </div>
 
       <div className="space-y-3">
-        <Veldgroep label="Volgende status">
+        <Veldgroep label="Volgende status" htmlFor={`${idBasis}-doel`}>
           <select
+            id={`${idBasis}-doel`}
             value={target}
             onChange={(e) => {
               setTarget(e.target.value as DecisionStatus | "");
@@ -237,8 +239,12 @@ export default function StatusOvergangPaneel({
           />
         )}
 
-        <Veldgroep label="Reden voor overgang (optioneel)">
+        <Veldgroep
+          label="Reden voor overgang (optioneel)"
+          htmlFor={`${idBasis}-reden`}
+        >
           <input
+            id={`${idBasis}-reden`}
             type="text"
             value={reden}
             onChange={(e) => setReden(e.target.value)}
@@ -248,8 +254,12 @@ export default function StatusOvergangPaneel({
         </Veldgroep>
 
         {target && overrideNodig && currentUserIsPrivileged && (
-          <Veldgroep label="Override-motivering (verplicht voor doorzetten)">
+          <Veldgroep
+            label="Override-motivering (verplicht voor doorzetten)"
+            htmlFor={`${idBasis}-override-reden`}
+          >
             <textarea
+              id={`${idBasis}-override-reden`}
               value={overrideReden}
               onChange={(e) => setOverrideReden(e.target.value)}
               rows={3}
@@ -271,7 +281,10 @@ export default function StatusOvergangPaneel({
         )}
 
         {fout && (
-          <div className="text-xs text-err-ink bg-err-tint border border-err/30 rounded-md px-3 py-2 whitespace-pre-line">
+          <div
+            role="alert"
+            className="text-xs text-err-ink bg-err-tint border border-err/30 rounded-md px-3 py-2 whitespace-pre-line"
+          >
             {fout}
           </div>
         )}
@@ -332,14 +345,19 @@ function ReadinessHint({
 
 function Veldgroep({
   label,
+  htmlFor,
   children,
 }: {
   label: string;
+  htmlFor: string;
   children: React.ReactNode;
 }) {
   return (
     <div>
-      <label className="text-[11px] uppercase tracking-wide text-muted font-semibold block mb-1">
+      <label
+        htmlFor={htmlFor}
+        className="text-[11px] uppercase tracking-wide text-muted font-semibold block mb-1"
+      >
         {label}
       </label>
       {children}
