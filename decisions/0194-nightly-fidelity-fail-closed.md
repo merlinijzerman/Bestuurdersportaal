@@ -34,11 +34,12 @@ De workflow blijft scheduled en is geen required PR-check. Rood blokkeert daarom
 
 - Fouten in secretconfiguratie, bereikbaarheid, migraties, RLS of tenantgedrag zijn zichtbaar als rode nightlyrun.
 - De database-URL wordt niet gelogd; alleen een vaste foutcategorie verschijnt.
-- Een fout ingestelde URL kan niet betrouwbaar aan de hostnaam als Productie worden herkend. De secretbeheerder blijft verantwoordelijk voor een aparte wegwerpbare testdatabase.
+- De oorspronkelijke generieke URL-controle kon Productie niet betrouwbaar herkennen; besluit 0195 vervangt dit door exacte binding aan Preview-ref, poolerhost en least-privilege gebruiker.
 - Handmatige run [`#51`](https://github.com/merlinijzerman/Bestuurdersportaal/actions/runs/33160032080) op commit `2d7ae6f` stopte op 28 augustus 2026 vóór installatie en DB-aanroepen met uitsluitend `fidelity_config_missing`. Daarmee is fail-closed in de echte GitHub-omgeving bewezen.
-- Het repositorysecret `TEST_DATABASE_URL` is nog leeg of ontbreekt. De groene DB-laag kan daarom pas worden bewezen nadat de repositorybeheerder dit secret naar een aparte wegwerp-testdatabase heeft gezet en run #51 opnieuw heeft uitgevoerd.
+- Historische constatering bij run #51: `TEST_DATABASE_URL` ontbrak. Dit secret en de aparte wegwerpdatabase zijn door besluit 0195 vervallen voor de nightlyroute.
 - Handmatige run [`#52`](https://github.com/merlinijzerman/Bestuurdersportaal/actions/runs/33161616108) op commit `ff67a0b` bewees de meldroute: job `Nightly fidelity melden` werd groen en GitHub Actions werkte issue [`#217`](https://github.com/merlinijzerman/Bestuurdersportaal/issues/217) bij met uitsluitend run-, event-, branch- en commitmetadata. `OP-TST1` is daarmee gesloten.
 - **Herziening 0195:** de ontbrekende wegwerp-DB is niet ingericht. Na expliciet akkoord gebruikt de nightly de bestaande vaste Preview uitsluitend via `drift_lezer`, met geforceerd read-only catalogusbewijs; de volledige muterende DB-gedragssuite blijft ephemeer. De historische runbewijzen hierboven blijven geldig voor fail-closed en melding.
+- **Herstelbewijs:** run [#54](https://github.com/merlinijzerman/Bestuurdersportaal/actions/runs/33164927445) is volledig groen en heeft incident [#217](https://github.com/merlinijzerman/Bestuurdersportaal/issues/217) automatisch met herstelbewijs gesloten.
 
 ## Referenties
 

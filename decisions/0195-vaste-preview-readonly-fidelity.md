@@ -1,6 +1,6 @@
 # 0195 — Vaste Preview uitsluitend read-only voor nightly fidelity
 
-- **Status:** Geaccepteerd — technisch gerealiseerd; herstelrun na baseline-review open
+- **Status:** Geaccepteerd — technisch en gehost bewezen
 - **Datum:** 2026-08-28
 - **Betrokkenen:** Merlin (akkoord), Codex (uitvoering)
 - **Herziet:** besluit 0046 optie B en het DB-doel uit besluit 0194; optie A, fail-closed gedrag en de GitHub-issuemelding blijven ongewijzigd
@@ -83,6 +83,12 @@ Daarom is uitsluitend de gecanonicaliseerde hash van deze vijf categorieën als
 Preview-baseline vastgelegd in `preview-fidelity-verwacht.sha256`. Een volgende
 wijziging vereist opnieuw een expliciete driftreview; de actuele catalogus blijft
 als artifact beschikbaar, zonder tabeldata of storage-objecten.
+
+Herstelrun [#54](https://github.com/merlinijzerman/Bestuurdersportaal/actions/runs/33164927445)
+op commit `2553b1a` is volledig groen: app-contracten, doeldatabasepreflight,
+least-privilege-/mutatieproeven, catalogusbaseline, artifact en meldjob. Het door
+de eerdere rode runs bijgewerkte [incident #217](https://github.com/merlinijzerman/Bestuurdersportaal/issues/217)
+is door diezelfde workflow met herstelbewijs gesloten.
 
 ## Referenties
 
