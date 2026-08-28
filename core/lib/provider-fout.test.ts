@@ -1,35 +1,29 @@
 import assert from "node:assert/strict";
+import { test } from "vitest";
 import {
   isProviderAuthenticatieFout,
   zijnVereistePrefixesVolledig,
 } from "./provider-fout";
 
-let n = 0;
-function check(naam: string, fn: () => void) {
-  fn();
-  n++;
-  console.log(`  ✓ ${naam}`);
-}
-
 console.log("provider-fout sanity-tests:");
 
-check("herkent een structurele HTTP 401", () => {
+test("herkent een structurele HTTP 401", () => {
   assert.equal(isProviderAuthenticatieFout({ status: 401 }), true);
 });
 
-check("herkent Anthropic-authenticatiefouten zonder statusveld", () => {
+test("herkent Anthropic-authenticatiefouten zonder statusveld", () => {
   assert.equal(
     isProviderAuthenticatieFout(new Error("authentication_error: API key is invalid.")),
     true
   );
 });
 
-check("classificeert tijdelijke providerfouten niet als authenticatiefout", () => {
+test("classificeert tijdelijke providerfouten niet als authenticatiefout", () => {
   assert.equal(isProviderAuthenticatieFout({ status: 429 }), false);
   assert.equal(isProviderAuthenticatieFout(new Error("fetch failed")), false);
 });
 
-check("blokkeert ontbrekende en gedeeltelijke prefixes in prefixmodus", () => {
+test("blokkeert ontbrekende en gedeeltelijke prefixes in prefixmodus", () => {
   assert.equal(
     zijnVereistePrefixesVolledig({
       metPrefix: true,
@@ -50,7 +44,7 @@ check("blokkeert ontbrekende en gedeeltelijke prefixes in prefixmodus", () => {
   );
 });
 
-check("staat volledige prefixes en bewuste baseline-modus toe", () => {
+test("staat volledige prefixes en bewuste baseline-modus toe", () => {
   assert.equal(
     zijnVereistePrefixesVolledig({
       metPrefix: true,
@@ -70,5 +64,3 @@ check("staat volledige prefixes en bewuste baseline-modus toe", () => {
     true
   );
 });
-
-console.log(`\n${n} tests groen.`);

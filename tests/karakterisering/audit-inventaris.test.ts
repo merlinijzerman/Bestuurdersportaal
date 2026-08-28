@@ -10,10 +10,11 @@
 //       Die herkenning is met de hand ontdekt; deze test vangt stille drift bij een
 //       migratie — dan mag een handler die erop leunt niet als "geen spoor" gelden.
 //
-//  Uitvoeren: npx tsx tests/karakterisering/audit-inventaris.sanity.ts
+//  Uitvoeren: npx vitest run tests/karakterisering/audit-inventaris.test.ts
 // ============================================================================
 
 import assert from "node:assert/strict";
+import { test } from "vitest";
 import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -21,13 +22,6 @@ import { fileURLToPath } from "node:url";
 
 const HIER = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HIER, "..", "..");
-
-let n = 0;
-function test(naam: string, fn: () => void) {
-  fn();
-  n++;
-  console.log(`  ✓ ${naam}`);
-}
 
 console.log("auditinventaris-gate sanity-tests:");
 
@@ -270,5 +264,3 @@ test("#183b keten-RPC's én triggerfuncties schrijven aantoonbaar governance_eve
     assert.ok(ok, `geen migratie die ${fn} definieert MÉT een governance_events-insert — de trail-claim zou een lege belofte zijn`);
   }
 });
-
-console.log(`\n${n} sanity-tests geslaagd.`);
