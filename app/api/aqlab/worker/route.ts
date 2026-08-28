@@ -17,6 +17,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { withMachineRoute, type MachineContext } from "@/platform/lib/machine-route-wrapper";
 import { createServiceSupabase } from "@/platform/lib/supabase-service";
 import { verwerkBatch } from "@/platform/lib/aqlab/run-orchestrator";
+import { logResultGegarandeerd } from "@/platform/lib/platform-audit";
 import { errorResponse } from "@/core/lib/api-errors";
 
 export const dynamic = "force-dynamic";
@@ -28,7 +29,7 @@ const MAX_BATCHES_PER_INVOCATIE = 4;
 const JOBS_PER_BATCH = 3;
 const LEASE_SECONDS = 180;
 
-async function draai(_ctx: MachineContext, _req: NextRequest): Promise<NextResponse> {
+async function draai(ctx: MachineContext, _req: NextRequest): Promise<NextResponse> {
   try {
     const svc = createServiceSupabase();
     const workerId = `cron-${Date.now()}`;
@@ -45,6 +46,20 @@ async function draai(_ctx: MachineContext, _req: NextRequest): Promise<NextRespo
       r.afgerond.forEach((id) => afgerond.add(id));
       if (r.verwerkt === 0) break; // queue leeg voor nu.
     }
+    // Auditspoor (0193) — OUTCOME-GESCOPET: een lege run schrijft niets (liveness
+    // hoort bij healthz, niet bij het spoor). identity_id=null (machinegezag),
+    // capability=platform.pipeline.operate. Niet fail-closed: een logfout mag de
+    // cron-run niet laten mislukken.
+    if (totaalVerwerkt > 0) {
+      await logResultGegarandeerd({
+        correlatieId: ctx.requestId,
+        identityId: null,
+        capability: "platform.pipeline.operate",
+        handeling: "aqlab.runs.verwerkt",
+        uitkomst: "succes",
+        effect: { verwerkt: totaalVerwerkt, runs_afgerond: [...afgerond] },
+      });
+    }
     return NextResponse.json({
       ok: true,
       verwerkt: totaalVerwerkt,
@@ -58,7 +73,7 @@ async function draai(_ctx: MachineContext, _req: NextRequest): Promise<NextRespo
 // De DEPLOY_TARGET-skip en de constant-time CRON_SECRET-bearer staan sinds W5b
 // in platform/lib/machine-route-wrapper.ts, niet meer in dit bestand. Zelfde
 // controle, zelfde volgorde, zelfde responses — alleen op één plek.
-const SPEC = { rateLimit: "geen", audit: "geen", bewaking: "cron-secret", label: "aqlab.worker", directeMutaties: [], schema: "geen-body" } as const;
+const SPEC = { rateLimit: "geen", audit: "platform-event-log", bewaking: "cron-secret", label: "aqlab.worker", directeMutaties: [], schema: "geen-body" } as const;
 
 // Vercel Cron gebruikt GET; POST voor handmatige/lokale triggers.
 export const GET = withMachineRoute(SPEC, draai);

@@ -80,7 +80,16 @@ declare
     ['decision_ai_interactions',  'decision_objects'],
     ['decision_dissent',          'decision_objects'],
     ['decision_audit_snapshots',  'decision_objects'],
-    ['governance_events',         'decision_objects'],
+    -- governance_events STOND hier (parent = decision_objects), maar heeft sinds
+    -- besluit 0192 (2026-08-27) een EIGEN fonds_id. Daarmee valt hij per definitie
+    -- buiten dit register (regel: uitsluitend tabellen ZONDER eigen fonds_id) en
+    -- wordt hij door GATE B gedekt (WITH CHECK noemt fonds_id). A1 slaat hem over
+    -- (fonds_id-kolom aanwezig). De cross-tenant decision_id-injectie die A2's
+    -- WITH-CHECK-eis hier statisch borgde, wordt nu DECLARATIEF afgedwongen door de
+    -- composite FK governance_events(decision_id,fonds_id)->decision_objects(id,fonds_id)
+    -- (0192 §2b(ii)/§2e). De trigger fn_govevent_fonds leidt alleen fonds_id af; de
+    -- FK handhaaft. Een statische policy-tekst-gate ziet die constraint niet, dus een
+    -- gedragstest (§15, NEGATIEF #6 → 23503) bewaakt hem. Zie 0192 §2e.
     ['agendapunten',              'vergaderingen'],
     ['agendapunt_inbreng',        'agendapunten'],
     ['agendapunt_log',            'vergaderingen'],

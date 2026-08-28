@@ -3,42 +3,18 @@
     "basis": "origin/preview",
     "tracing": "v2-callgraph-fixpoint",
     "aantalHandlers": 94,
-    "metBewijsketen": 22,
-    "metEnigSpoor": 62,
-    "zonderSpoor": 32,
+    "metBewijsketen": 35,
+    "metEnigSpoor": 73,
+    "zonderSpoor": 21,
     "klasseTelling": {
-      "domein": 40,
+      "domein": 38,
       "geen": 7,
-      "bestuurlijk-gap": 11,
+      "bewijsketen": 35,
       "machine": 6,
-      "bewijsketen": 22,
       "operationeel": 8
     },
-    "ketengebeurtenisVereist": [
-      "POST app/api/agendapunten/route.ts",
-      "PATCH app/api/documents/[id]/route.ts",
-      "DELETE app/api/inbreng/[id]/route.ts",
-      "POST app/api/inbreng/route.ts",
-      "POST app/api/notulen/segmenten/[id]/bevestig/route.ts",
-      "DELETE app/api/notulen/segmenten/[id]/route.ts",
-      "PUT app/api/organisatieprofiel/route.ts",
-      "POST app/api/stemmingen/[id]/intrekken/route.ts",
-      "POST app/api/stemmingen/[id]/sluiten/route.ts",
-      "POST app/api/stemmingen/[id]/stemmen/route.ts",
-      "POST app/api/stemmingen/route.ts",
-      "POST app/api/vergaderingen/route.ts"
-    ],
-    "spoorVereist": [
-      "GET app/api/aqlab/worker/route.ts",
-      "POST app/api/aqlab/worker/route.ts",
-      "GET app/api/internal/afschrift-worker/route.ts",
-      "POST app/api/internal/afschrift-worker/route.ts",
-      "GET app/api/internal/ingest-worker/route.ts",
-      "POST app/api/internal/ingest-worker/route.ts",
-      "POST app/api/internal/semantische-extractie/route.ts",
-      "GET app/api/platform/monitoring/snapshot/route.ts",
-      "POST app/api/platform/monitoring/snapshot/route.ts"
-    ],
+    "ketengebeurtenisVereist": [],
+    "spoorVereist": [],
     "assertieFouten": [],
     "afgezochtePatronen": {
       "tabellen": [
@@ -61,6 +37,9 @@
       ],
       "rpcs": [
         "schrijf_ai_interactie",
+        "fn_document_status_zetten",
+        "fn_notulen_segment_bevestig",
+        "fn_notulen_segment_verwijder",
         "fn_schrijf_vergelijking",
         "fn_schrijf_semantische_extractie",
         "log_word_export",
@@ -81,7 +60,13 @@
       "fonds_stuurinfo_periode": "fonds_stuurinfo_log",
       "fonds_stuurinfo_reeks": "fonds_stuurinfo_log",
       "fonds_stuurinfo_reserve": "fonds_stuurinfo_log",
-      "procedure_bewijs": "procedure_log"
+      "procedure_bewijs": "procedure_log",
+      "agendapunten": "governance_events",
+      "agendapunt_inbreng": "governance_events",
+      "vergaderingen": "governance_events",
+      "organisatie_profielen": "governance_events",
+      "stemmingen": "governance_events",
+      "stem_uitbrengingen": "governance_events"
     }
   },
   "handlers": [
@@ -166,12 +151,19 @@
     {
       "handler": "POST app/api/agendapunten/route.ts",
       "wrapper": "withFondsRoute",
-      "schrijftAuditspoor": false,
-      "klasse": "bestuurlijk-gap",
-      "ketengebeurtenisVereist": true,
+      "schrijftAuditspoor": true,
+      "klasse": "bewijsketen",
+      "ketengebeurtenisVereist": false,
       "declaredAudit": "spec",
-      "routeEigenKandidaat": false,
-      "bewijsketen": [],
+      "routeEigenKandidaat": true,
+      "bewijsketen": [
+        {
+          "token": "governance_events",
+          "via": "direct",
+          "soort": "trigger",
+          "basis": "agendapunten"
+        }
+      ],
       "domein": [],
       "platform": []
     },
@@ -664,12 +656,18 @@
     {
       "handler": "PATCH app/api/documents/[id]/route.ts",
       "wrapper": "withFondsRoute",
-      "schrijftAuditspoor": false,
-      "klasse": "bestuurlijk-gap",
-      "ketengebeurtenisVereist": true,
+      "schrijftAuditspoor": true,
+      "klasse": "bewijsketen",
+      "ketengebeurtenisVereist": false,
       "declaredAudit": "spec",
-      "routeEigenKandidaat": false,
-      "bewijsketen": [],
+      "routeEigenKandidaat": true,
+      "bewijsketen": [
+        {
+          "token": "fn_document_status_zetten",
+          "via": "direct",
+          "soort": "rpc"
+        }
+      ],
       "domein": [],
       "platform": []
     },
@@ -766,24 +764,38 @@
     {
       "handler": "DELETE app/api/inbreng/[id]/route.ts",
       "wrapper": "withFondsRoute",
-      "schrijftAuditspoor": false,
-      "klasse": "bestuurlijk-gap",
-      "ketengebeurtenisVereist": true,
+      "schrijftAuditspoor": true,
+      "klasse": "bewijsketen",
+      "ketengebeurtenisVereist": false,
       "declaredAudit": "spec",
-      "routeEigenKandidaat": false,
-      "bewijsketen": [],
+      "routeEigenKandidaat": true,
+      "bewijsketen": [
+        {
+          "token": "governance_events",
+          "via": "direct",
+          "soort": "trigger",
+          "basis": "agendapunt_inbreng"
+        }
+      ],
       "domein": [],
       "platform": []
     },
     {
       "handler": "POST app/api/inbreng/route.ts",
       "wrapper": "withFondsRoute",
-      "schrijftAuditspoor": false,
-      "klasse": "bestuurlijk-gap",
-      "ketengebeurtenisVereist": true,
+      "schrijftAuditspoor": true,
+      "klasse": "bewijsketen",
+      "ketengebeurtenisVereist": false,
       "declaredAudit": "spec",
-      "routeEigenKandidaat": false,
-      "bewijsketen": [],
+      "routeEigenKandidaat": true,
+      "bewijsketen": [
+        {
+          "token": "governance_events",
+          "via": "direct",
+          "soort": "trigger",
+          "basis": "agendapunt_inbreng"
+        }
+      ],
       "domein": [],
       "platform": []
     },
@@ -887,12 +899,18 @@
     {
       "handler": "POST app/api/notulen/segmenten/[id]/bevestig/route.ts",
       "wrapper": "withFondsRoute",
-      "schrijftAuditspoor": false,
-      "klasse": "bestuurlijk-gap",
-      "ketengebeurtenisVereist": true,
+      "schrijftAuditspoor": true,
+      "klasse": "bewijsketen",
+      "ketengebeurtenisVereist": false,
       "declaredAudit": "spec",
-      "routeEigenKandidaat": false,
-      "bewijsketen": [],
+      "routeEigenKandidaat": true,
+      "bewijsketen": [
+        {
+          "token": "fn_notulen_segment_bevestig",
+          "via": "direct",
+          "soort": "rpc"
+        }
+      ],
       "domein": [],
       "platform": []
     },
@@ -917,24 +935,37 @@
     {
       "handler": "DELETE app/api/notulen/segmenten/[id]/route.ts",
       "wrapper": "withFondsRoute",
-      "schrijftAuditspoor": false,
-      "klasse": "bestuurlijk-gap",
-      "ketengebeurtenisVereist": true,
+      "schrijftAuditspoor": true,
+      "klasse": "bewijsketen",
+      "ketengebeurtenisVereist": false,
       "declaredAudit": "spec",
-      "routeEigenKandidaat": false,
-      "bewijsketen": [],
+      "routeEigenKandidaat": true,
+      "bewijsketen": [
+        {
+          "token": "fn_notulen_segment_verwijder",
+          "via": "direct",
+          "soort": "rpc"
+        }
+      ],
       "domein": [],
       "platform": []
     },
     {
       "handler": "PUT app/api/organisatieprofiel/route.ts",
       "wrapper": "withFondsRoute",
-      "schrijftAuditspoor": false,
-      "klasse": "bestuurlijk-gap",
-      "ketengebeurtenisVereist": true,
+      "schrijftAuditspoor": true,
+      "klasse": "bewijsketen",
+      "ketengebeurtenisVereist": false,
       "declaredAudit": "spec",
-      "routeEigenKandidaat": false,
-      "bewijsketen": [],
+      "routeEigenKandidaat": true,
+      "bewijsketen": [
+        {
+          "token": "governance_events",
+          "via": "direct",
+          "soort": "trigger",
+          "basis": "organisatie_profielen"
+        }
+      ],
       "domein": [],
       "platform": []
     },
@@ -1257,11 +1288,18 @@
       "handler": "POST app/api/procedures/[id]/stappen/[stapId]/agendapunt/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
-      "klasse": "domein",
+      "klasse": "bewijsketen",
       "ketengebeurtenisVereist": false,
       "declaredAudit": "spec",
-      "routeEigenKandidaat": false,
-      "bewijsketen": [],
+      "routeEigenKandidaat": true,
+      "bewijsketen": [
+        {
+          "token": "governance_events",
+          "via": "direct",
+          "soort": "trigger",
+          "basis": "agendapunten"
+        }
+      ],
       "domein": [
         {
           "token": "procedure_log",
@@ -1478,12 +1516,19 @@
     {
       "handler": "POST app/api/stemmingen/[id]/intrekken/route.ts",
       "wrapper": "withFondsRoute",
-      "schrijftAuditspoor": false,
-      "klasse": "bestuurlijk-gap",
-      "ketengebeurtenisVereist": true,
+      "schrijftAuditspoor": true,
+      "klasse": "bewijsketen",
+      "ketengebeurtenisVereist": false,
       "declaredAudit": "spec",
-      "routeEigenKandidaat": false,
-      "bewijsketen": [],
+      "routeEigenKandidaat": true,
+      "bewijsketen": [
+        {
+          "token": "governance_events",
+          "via": "direct",
+          "soort": "trigger",
+          "basis": "stemmingen"
+        }
+      ],
       "domein": [],
       "platform": []
     },
@@ -1491,11 +1536,18 @@
       "handler": "POST app/api/stemmingen/[id]/sluiten/route.ts",
       "wrapper": "withFondsRoute",
       "schrijftAuditspoor": true,
-      "klasse": "domein",
-      "ketengebeurtenisVereist": true,
+      "klasse": "bewijsketen",
+      "ketengebeurtenisVereist": false,
       "declaredAudit": "spec",
-      "routeEigenKandidaat": false,
-      "bewijsketen": [],
+      "routeEigenKandidaat": true,
+      "bewijsketen": [
+        {
+          "token": "governance_events",
+          "via": "direct",
+          "soort": "trigger",
+          "basis": "stemmingen"
+        }
+      ],
       "domein": [
         {
           "token": "procedure_log",
@@ -1509,24 +1561,38 @@
     {
       "handler": "POST app/api/stemmingen/[id]/stemmen/route.ts",
       "wrapper": "withFondsRoute",
-      "schrijftAuditspoor": false,
-      "klasse": "bestuurlijk-gap",
-      "ketengebeurtenisVereist": true,
+      "schrijftAuditspoor": true,
+      "klasse": "bewijsketen",
+      "ketengebeurtenisVereist": false,
       "declaredAudit": "spec",
-      "routeEigenKandidaat": false,
-      "bewijsketen": [],
+      "routeEigenKandidaat": true,
+      "bewijsketen": [
+        {
+          "token": "governance_events",
+          "via": "direct",
+          "soort": "trigger",
+          "basis": "stem_uitbrengingen"
+        }
+      ],
       "domein": [],
       "platform": []
     },
     {
       "handler": "POST app/api/stemmingen/route.ts",
       "wrapper": "withFondsRoute",
-      "schrijftAuditspoor": false,
-      "klasse": "bestuurlijk-gap",
-      "ketengebeurtenisVereist": true,
+      "schrijftAuditspoor": true,
+      "klasse": "bewijsketen",
+      "ketengebeurtenisVereist": false,
       "declaredAudit": "spec",
-      "routeEigenKandidaat": false,
-      "bewijsketen": [],
+      "routeEigenKandidaat": true,
+      "bewijsketen": [
+        {
+          "token": "governance_events",
+          "via": "direct",
+          "soort": "trigger",
+          "basis": "stemmingen"
+        }
+      ],
       "domein": [],
       "platform": []
     },
@@ -1600,12 +1666,19 @@
     {
       "handler": "POST app/api/vergaderingen/route.ts",
       "wrapper": "withFondsRoute",
-      "schrijftAuditspoor": false,
-      "klasse": "bestuurlijk-gap",
-      "ketengebeurtenisVereist": true,
+      "schrijftAuditspoor": true,
+      "klasse": "bewijsketen",
+      "ketengebeurtenisVereist": false,
       "declaredAudit": "spec",
-      "routeEigenKandidaat": false,
-      "bewijsketen": [],
+      "routeEigenKandidaat": true,
+      "bewijsketen": [
+        {
+          "token": "governance_events",
+          "via": "direct",
+          "soort": "trigger",
+          "basis": "vergaderingen"
+        }
+      ],
       "domein": [],
       "platform": []
     },

@@ -17,17 +17,31 @@ import { NextRequest, NextResponse } from "next/server";
 import { withMachineRoute, type MachineContext } from "@/platform/lib/machine-route-wrapper";
 import { createServiceSupabase } from "@/platform/lib/supabase-service";
 import { draaiAfschriftWorker } from "@/platform/lib/afschrift-orchestrator";
+import { logResultGegarandeerd } from "@/platform/lib/platform-audit";
 import { errorResponse } from "@/core/lib/api-errors";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300; // seconden; de cron herhaalt tot de queue leeg is.
 
-async function draai(_ctx: MachineContext, _req: NextRequest): Promise<NextResponse> {
+async function draai(ctx: MachineContext, _req: NextRequest): Promise<NextResponse> {
   try {
     const svc = createServiceSupabase();
     const workerId = `afschrift-cron-${Date.now()}`;
     const resultaat = await draaiAfschriftWorker(svc, { workerId });
     console.log(JSON.stringify({ tag: "afschrift-worker", worker_id: workerId, ...resultaat }));
+    // Auditspoor (0193) — OUTCOME-GESCOPET: alleen schrijven als er een job is
+    // geclaimd. Machinegezag (identity_id=null), niet fail-closed.
+    if (resultaat.geclaimd > 0) {
+      await logResultGegarandeerd({
+        correlatieId: ctx.requestId,
+        identityId: null,
+        capability: "platform.pipeline.operate",
+        handeling: "afschrift.batch.verwerkt",
+        // De batch-pas voltooide (geen throw); job-falen leeft in `effect`.
+        uitkomst: "succes",
+        effect: { ...resultaat },
+      });
+    }
     return NextResponse.json({ ok: true, ...resultaat });
   } catch (error) {
     return errorResponse("afschrift.worker", error);
@@ -37,7 +51,7 @@ async function draai(_ctx: MachineContext, _req: NextRequest): Promise<NextRespo
 // De DEPLOY_TARGET-skip en de constant-time CRON_SECRET-bearer staan sinds W5b
 // in platform/lib/machine-route-wrapper.ts, niet meer in dit bestand. Zelfde
 // controle, zelfde volgorde, zelfde responses — alleen op één plek.
-const SPEC = { rateLimit: "geen", audit: "geen", bewaking: "cron-secret", label: "internal.afschrift-worker", directeMutaties: [], schema: "geen-body" } as const;
+const SPEC = { rateLimit: "geen", audit: "platform-event-log", bewaking: "cron-secret", label: "internal.afschrift-worker", directeMutaties: [], schema: "geen-body" } as const;
 
 // Vercel Cron gebruikt GET; POST voor handmatige/lokale triggers.
 export const GET = withMachineRoute(SPEC, draai);

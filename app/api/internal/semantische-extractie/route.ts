@@ -29,12 +29,13 @@ import { withMachineRoute, type MachineContext } from "@/platform/lib/machine-ro
 import { z } from "zod";
 import { createServiceSupabase } from "@/platform/lib/supabase-service";
 import { enqueueSemantischeExtractie } from "@/platform/lib/semantische-extractie-job";
+import { logResultGegarandeerd } from "@/platform/lib/platform-audit";
 import { errorResponse } from "@/core/lib/api-errors";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-async function draai(_ctx: MachineContext, req: NextRequest): Promise<NextResponse> {
+async function draai(ctx: MachineContext, req: NextRequest): Promise<NextResponse> {
   let documentId: string | undefined;
   try {
     const body = (await req.json()) as { document_id?: unknown };
@@ -48,6 +49,20 @@ async function draai(_ctx: MachineContext, req: NextRequest): Promise<NextRespon
   try {
     const svc = createServiceSupabase();
     const resultaat = await enqueueSemantischeExtractie(svc, documentId);
+    // Auditspoor (0193) — OUTCOME-GESCOPET: alleen bij een echte enqueue. Een
+    // vroege weigering (flag_uit, niet_geindexeerd, reeds_in_wachtrij) is geen
+    // mutatie en schrijft niets. Machinegezag (identity_id=null), niet fail-closed.
+    if (resultaat.enqueued) {
+      await logResultGegarandeerd({
+        correlatieId: ctx.requestId,
+        identityId: null,
+        capability: "platform.pipeline.operate",
+        handeling: "semantische-extractie.enqueue",
+        doelObject: documentId,
+        uitkomst: "succes",
+        effect: { ...resultaat },
+      });
+    }
     return NextResponse.json({ ok: true, ...resultaat });
   } catch (error) {
     return errorResponse("semantische-extractie.enqueue", error);
@@ -57,7 +72,7 @@ async function draai(_ctx: MachineContext, req: NextRequest): Promise<NextRespon
 // De DEPLOY_TARGET-skip en de constant-time CRON_SECRET-bearer staan sinds W5b
 // in platform/lib/machine-route-wrapper.ts, niet meer in dit bestand. Zelfde
 // controle, zelfde volgorde, zelfde responses — alleen op één plek.
-const SPEC = { rateLimit: "geen", audit: "geen", bewaking: "cron-secret", label: "internal.semantische-extractie", directeMutaties: [], schema: z.object({ "document_id": z.unknown().optional() }).passthrough() } as const;
+const SPEC = { rateLimit: "geen", audit: "platform-event-log", bewaking: "cron-secret", label: "internal.semantische-extractie", directeMutaties: [], schema: z.object({ "document_id": z.unknown().optional() }).passthrough() } as const;
 
 // Alleen POST: dit is de handmatige trigger, geen cron-GET.
 export const POST = withMachineRoute(SPEC, draai);

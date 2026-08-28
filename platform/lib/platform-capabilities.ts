@@ -34,7 +34,8 @@ export type PlatformCapability =
   | "platform.contact.manage"          // publieke contact-inbox inzien/opvolgen
   | "platform.aqlab.operate"           // AQLab: runs starten + scorekaart/run-overzicht
   | "platform.aqlab.review"            // AQLab: menselijke review/aftekening op outputs
-  | "platform.aqlab.govern";           // AQLab: formeel vrijgavebesluit (go/no-go) — Governance Owner
+  | "platform.aqlab.govern"            // AQLab: formeel vrijgavebesluit (go/no-go) — Governance Owner
+  | "platform.pipeline.operate";       // MACHINEGEZAG (besluit 0193): soort, geen recht — zie NIET_TOEKENBARE_CAPABILITIES
 
 /** Volledige, geordende lijst — gespiegeld door de DB-seed (TO §12 test 17). */
 export const PLATFORM_CAPABILITIES: readonly PlatformCapability[] = [
@@ -53,7 +54,26 @@ export const PLATFORM_CAPABILITIES: readonly PlatformCapability[] = [
   "platform.aqlab.operate",
   "platform.aqlab.review",
   "platform.aqlab.govern",
+  "platform.pipeline.operate",
 ] as const;
+
+/** MACHINEGEZAG — structureel niet-toekenbaar (besluit 0193). Deze capabilities
+ *  benoemen op `platform_event_log` de *soort* bevoegdheid ("dit gebeurde onder
+ *  machinegezag, niet onder iemands recht"), geen toekenbaar recht. Invariant:
+ *  ze staan in GEEN profiel, worden nooit aan een identiteit toegekend, en een
+ *  DB-CHECK op `platform_identity_capabilities` weigert ze (migratie
+ *  2026_08_27). Zo blijven machine-events voor altijd te onderscheiden van
+ *  menselijke handelingen. */
+export const NIET_TOEKENBARE_CAPABILITIES: ReadonlySet<PlatformCapability> = new Set([
+  "platform.pipeline.operate",
+]);
+
+/** Mag deze capability aan een identiteit worden toegekend? `false` voor
+ *  machinegezag-soorten (0193). Gebruikt door de toekenningswrapper én de
+ *  code↔DB-invariantcheck. */
+export function isToekenbareCapability(cap: PlatformCapability): boolean {
+  return !NIET_TOEKENBARE_CAPABILITIES.has(cap);
+}
 
 /** Zware capabilities: toekennen vereist altijd vier-ogen (vier_ogen_door
  *  ≠ toegekend_door). TO §2.2/§4.3. */

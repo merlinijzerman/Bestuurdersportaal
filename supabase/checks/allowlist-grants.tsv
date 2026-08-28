@@ -360,6 +360,30 @@ FUNC	storage	search_v2(prefix text, bucket_name text, limits integer, levels int
 FUNC	storage	update_updated_at_column()	function	anon	EXECUTE
 FUNC	storage	update_updated_at_column()	function	authenticated	EXECUTE
 FUNC	storage	update_updated_at_column()	function	service_role	EXECUTE
+FUNC	public	fn_agendapunt_ketengebeurtenis()	function	anon	-
+FUNC	public	fn_agendapunt_ketengebeurtenis()	function	authenticated	EXECUTE
+FUNC	public	fn_agendapunt_ketengebeurtenis()	function	service_role	EXECUTE
+FUNC	public	fn_document_status_zetten(p_document_id uuid, p_actie text, p_reden text)	function	anon	-
+FUNC	public	fn_document_status_zetten(p_document_id uuid, p_actie text, p_reden text)	function	authenticated	EXECUTE
+FUNC	public	fn_document_status_zetten(p_document_id uuid, p_actie text, p_reden text)	function	service_role	EXECUTE
+FUNC	public	fn_govevent_fonds()	function	anon	-
+FUNC	public	fn_govevent_fonds()	function	authenticated	EXECUTE
+FUNC	public	fn_govevent_fonds()	function	service_role	EXECUTE
+FUNC	public	fn_inbreng_ketengebeurtenis()	function	anon	-
+FUNC	public	fn_inbreng_ketengebeurtenis()	function	authenticated	EXECUTE
+FUNC	public	fn_inbreng_ketengebeurtenis()	function	service_role	EXECUTE
+FUNC	public	fn_orgprofiel_ketengebeurtenis()	function	anon	-
+FUNC	public	fn_orgprofiel_ketengebeurtenis()	function	authenticated	EXECUTE
+FUNC	public	fn_orgprofiel_ketengebeurtenis()	function	service_role	EXECUTE
+FUNC	public	fn_stem_ketengebeurtenis()	function	anon	-
+FUNC	public	fn_stem_ketengebeurtenis()	function	authenticated	EXECUTE
+FUNC	public	fn_stem_ketengebeurtenis()	function	service_role	EXECUTE
+FUNC	public	fn_stemming_ketengebeurtenis()	function	anon	-
+FUNC	public	fn_stemming_ketengebeurtenis()	function	authenticated	EXECUTE
+FUNC	public	fn_stemming_ketengebeurtenis()	function	service_role	EXECUTE
+FUNC	public	fn_vergadering_ketengebeurtenis()	function	anon	-
+FUNC	public	fn_vergadering_ketengebeurtenis()	function	authenticated	EXECUTE
+FUNC	public	fn_vergadering_ketengebeurtenis()	function	service_role	EXECUTE
 REL	public	agendapunt_inbreng	table	anon	SELECT
 REL	public	agendapunt_inbreng	table	authenticated	SELECT,INSERT,UPDATE,DELETE
 REL	public	agendapunt_inbreng	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN

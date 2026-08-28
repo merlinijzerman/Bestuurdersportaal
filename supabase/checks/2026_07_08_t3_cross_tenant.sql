@@ -136,6 +136,14 @@ end $$;
 insert into public.vergaderingen (id, fonds_id, titel, datum)
 values ('dddddddd-dddd-dddd-dddd-dddddddddddd','22222222-2222-2222-2222-222222222222','B-vergadering', now());
 
+-- Seed een procedure + besluit van FONDS B (voor de governance_events composite-FK-toets,
+-- besluit 0192 §2b/§2e). Een A-gebruiker mag hier straks geen ketengebeurtenis aan hangen.
+insert into public.procedures (id, fonds_id, template_code, titel)
+values ('cccccccc-cccc-cccc-cccc-cccccccccccc','22222222-2222-2222-2222-222222222222','test','B-procedure');
+insert into public.decision_objects (id, procedure_id, fonds_id, besluit_code, titel, besluitvraag)
+values ('eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee','cccccccc-cccc-cccc-cccc-cccccccccccc',
+        '22222222-2222-2222-2222-222222222222','B-TEST-CFK','B-besluit','?');
+
 -- ── Impersoneer user A (fonds A) ────────────────────────────────────────────
 set local role authenticated;
 set local request.jwt.claims to '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}';
@@ -209,6 +217,69 @@ begin
   select count(*) into n from public.vergaderingen where id='dddddddd-dddd-dddd-dddd-dddddddddddd';
   if n <> 0 then raise exception 'LEK: fonds A ziet vergadering van fonds B (leesisolatie kapot).'; end if;
   raise notice 'OK #5: B-vergadering onzichtbaar voor A (leesisolatie).';
+end $$;
+
+-- POSITIEF (governance_events, besluit 0192): A schrijft een ketengebeurtenis ZONDER
+-- decision_id → moet slagen. De BEFORE INSERT-trigger vult fonds_id = A uit het profiel;
+-- de composite FK slaat over bij decision_id IS NULL (MATCH SIMPLE).
+do $$
+begin
+  insert into public.governance_events (event_type, actor_id)
+  values ('t3_test_gebeurtenis', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+exception when others then
+  raise exception 'REGRESSIE: eigen-fonds governance_events-insert geweigerd (sqlstate %). Trigger/policy te streng.', sqlstate;
+end $$;
+
+-- NEGATIEF #6 (governance_events composite-FK, besluit 0192 §2b/§2e): A mag geen
+-- ketengebeurtenis aan een BESLUIT VAN FONDS B hangen. De trigger zet fonds_id = A;
+-- de FK (decision_id, fonds_id) → decision_objects(id, fonds_id) weigert (eeee, A),
+-- want dat besluit hoort bij fonds B. Verwacht: foreign_key_violation (23503).
+do $$
+begin
+  insert into public.governance_events (event_type, actor_id, decision_id)
+  values ('t3_lek_poging', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+          'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee');
+  raise exception 'LEK: governance_events met cross-tenant decision_id (fonds B) SLAAGDE — composite FK ontbreekt/werkt niet.';
+exception
+  when foreign_key_violation then raise notice 'OK #6: governance_events cross-tenant decision_id geweigerd (composite FK).';
+  when others then
+    if sqlstate = '23503' then raise notice 'OK #6: governance_events cross-tenant decision_id geweigerd (composite FK).';
+    else raise; end if;
+end $$;
+
+-- POSITIEF (brontabel-trigger, #183b spoor T): A maakt een vergadering → de trigger
+-- schrijft PRECIES ÉÉN keten-event, zichtbaar voor A (bewijst dat de trigger vuurt —
+-- een aanwezige-maar-nooit-vurende trigger zou hier 0 tellen).
+do $$
+declare n int;
+begin
+  insert into public.vergaderingen (id, fonds_id, titel, datum, aangemaakt_door)
+  values ('f1f1f1f1-f1f1-f1f1-f1f1-f1f1f1f1f1f1', '11111111-1111-1111-1111-111111111111',
+          'A-vergadering-keten', now(), 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+  select count(*) into n from public.governance_events
+   where object_type = 'vergadering'
+     and object_id = 'f1f1f1f1-f1f1-f1f1-f1f1-f1f1f1f1f1f1'
+     and event_type = 'vergadering_aangemaakt';
+  if n <> 1 then
+    raise exception 'TRIGGER-GAT: vergadering-creatie leverde % keten-events (verwacht 1) — trigger vuurt niet.', n;
+  end if;
+  raise notice 'OK #7: brontabel-trigger schreef precies één keten-event (vergadering_aangemaakt), zichtbaar voor A.';
+end $$;
+
+-- NEGATIEF #8 (leesisolatie governance_events via de OR-tak, #183b/0192): B mag A's
+-- EIGEN-FONDS event (fonds_id=A, decision_id=NULL) NIET zien. De asymmetrische USING
+-- heeft een fonds_id-tak + een decision_id-OR-tak; dit bewaakt dat de OR-tak niet
+-- over-exposet — juist nu de statische A2-gate voor deze tabel is verwijderd (0192 §2e).
+-- (De POSITIEF-test hierboven schreef 't3_test_gebeurtenis' met fonds_id=A, decision_id=NULL.)
+set local request.jwt.claims to '{"sub":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"}';
+do $$
+declare n int;
+begin
+  select count(*) into n from public.governance_events where event_type = 't3_test_gebeurtenis';
+  if n <> 0 then
+    raise exception 'LEK: fonds B ziet governance_events van fonds A (fonds_id=A, decision_id=NULL) — OR-tak van de USING-policy exposet te breed.';
+  end if;
+  raise notice 'OK #8: A''s eigen-fonds governance_events-event onzichtbaar voor B (OR-tak exposet niet).';
 end $$;
 
 reset role;
