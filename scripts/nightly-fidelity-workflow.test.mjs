@@ -150,6 +150,19 @@ test("read-only runner bevat harde mutatie- en datatoegangsgrenzen", () => {
   assert.doesNotMatch(runner, /testdb-apply-migrations|cross-tenant-ci\.sh/);
 });
 
+test("Preview gebruikt een eigen versieerbare catalogusbaseline", () => {
+  const runner = readFileSync(resolve(projectRoot, "scripts/preview-fidelity-readonly.sh"), "utf8");
+  const baseline = readFileSync(
+    resolve(projectRoot, "supabase/checks/preview-fidelity-verwacht.sha256"),
+    "utf8",
+  ).trim();
+
+  assert.match(baseline, /^[0-9a-f]{64}$/);
+  assert.match(runner, /preview-fidelity-verwacht\.sha256/);
+  assert.match(runner, /SCHEMA_CATEGORIEEN/);
+  assert.doesNotMatch(runner, /VERWACHT="supabase\/checks\/drift-momentopname-verwacht\.txt"/);
+});
+
 test("nightly contracttest is aangesloten op test:contract", () => {
   const packageJson = JSON.parse(readFileSync(resolve(projectRoot, "package.json"), "utf8"));
   assert.match(packageJson.scripts?.["test:contract"] ?? "", /test:nightly-fidelity-contract/);

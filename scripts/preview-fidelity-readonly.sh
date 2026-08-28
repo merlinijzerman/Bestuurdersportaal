@@ -14,7 +14,7 @@ cd "$(dirname "$0")/.."
 : "${EXPECTED_PREVIEW_REF:?preview_fidelity_config_missing}"
 
 MOMENTOPNAME="supabase/checks/2026_08_19_drift_momentopname.sql"
-VERWACHT="supabase/checks/drift-momentopname-verwacht.txt"
+VERWACHT="supabase/checks/preview-fidelity-verwacht.sha256"
 ACTUEEL="preview-fidelity-snapshot.txt"
 VERSCHIL="preview-fidelity-diff.txt"
 WERKMAP="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/preview-fidelity.XXXXXX")"
@@ -79,14 +79,29 @@ test "$REGELS" -ge 100 || {
 
 # Alleen omgevingsonafhankelijke categorieën vergelijken. Buckets en extensies
 # mogen bewust afwijken tussen Preview en Productie; functies, policies, RLS,
-# publications en browser-EXECUTE-rechten niet.
+# publications en browser-EXECUTE-rechten niet. Preview heeft een eigen,
+# versieerbare baseline: vergelijken met de Productiemomentopname zou iedere
+# bewuste Preview-voorloop ten onrechte als drift rapporteren.
 SCHEMA_CATEGORIEEN='^(functie|policy|rls|publication|execute)\|'
-grep -E "$SCHEMA_CATEGORIEEN" "$VERWACHT" | LC_ALL=C sort > "$WERKMAP/verwacht.txt"
 grep -E "$SCHEMA_CATEGORIEEN" "$ACTUEEL" | LC_ALL=C sort > "$WERKMAP/actueel.txt"
+VERWACHTE_HASH="$(grep -E '^[0-9a-f]{64}$' "$VERWACHT")"
+ACTUELE_HASH="$(sha256sum "$WERKMAP/actueel.txt" | awk '{print $1}')"
 
-if ! diff -u "$WERKMAP/verwacht.txt" "$WERKMAP/actueel.txt" > "$VERSCHIL"; then
+test -n "$VERWACHTE_HASH" || {
+  echo "FOUT: goedgekeurde Preview-baseline is ongeldig." >&2
+  exit 1
+}
+
+if test "$VERWACHTE_HASH" != "$ACTUELE_HASH"; then
+  {
+    echo "Preview-fidelity-baseline wijkt af."
+    echo "verwacht_sha256=$VERWACHTE_HASH"
+    echo "actueel_sha256=$ACTUELE_HASH"
+    echo "categorieen=functie,policy,rls,publication,execute"
+    echo "Beoordeel preview-fidelity-snapshot.txt en wijzig de baseline uitsluitend na expliciete driftreview."
+  } > "$VERSCHIL"
   echo "FOUT: Preview wijkt af van de goedgekeurde schema-/securitymomentopname." >&2
-  echo "Bekijk het artefact preview-fidelity-diff; de console toont geen database-inhoud." >&2
+  echo "Bekijk het artefact preview-fidelity-bewijs; de console toont geen database-inhoud." >&2
   exit 1
 fi
 rm -f "$VERSCHIL"
