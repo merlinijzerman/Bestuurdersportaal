@@ -8,5 +8,12 @@
       "capability": "procedures.afwijking.vastleggen",
       "reden": "P3/PR-C (#168): nieuwe gate; de negatieve 403-cellen (beheerder + bestuursbureau) moeten tegen een draaiende server worden opgenomen, niet voorspeld. De inner rolgate is nu al met een gewone gedragstest bewezen (afwijking-rolgate.test.ts)."
     }
+  ],
+  "nog_op_te_nemen_bij_stackrun": [
+    {
+      "method": "POST",
+      "route": "/decisions/[id]/status",
+      "reden": "P3/PR-D (#168, 0193): NIEUW gedrag, geen verwijderde dekking. De readiness-gate raakte géén opgenomen scenario (per-scenario nagelopen: anon=401, ongeldige-status=400, niet-gevonden=404 — geen readiness-400). Wél nieuw: een besluit naar besloten/voorwaardelijk_besloten met iets open boven optioneel eist een motivering (400) en geeft anders 200 met event/waarschuwing. Dat besluit-met-openstaande-pad heeft nog géén scenario; op te nemen tegen een draaiende server bij de stack-run. Staat NIET in 'uitgesteld' omdat de route al scenario's heeft (de bestaande anon/400/404) — dit is additieve dekking, geen gat in bestaande dekking."
+    }
   ]
 }
