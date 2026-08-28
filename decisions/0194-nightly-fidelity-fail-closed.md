@@ -1,6 +1,6 @@
 # 0194 — Nightly fidelity fail-closed als operationeel signaal
 
-- **Status:** Geaccepteerd — fail-closed en GitHub-issuemelding bewezen; groene DB-run geblokkeerd door ontbrekend repositorysecret
+- **Status:** Geaccepteerd — fail-closed en GitHub-issuemelding bewezen; DB-doelstrategie herzien door besluit 0195
 - **Datum:** 2026-08-28
 - **Betrokkenen:** Merlin (opdracht), Codex (uitvoering)
 - **Herziet:** het niet-blokkerende skip-/`continue-on-error`-deel van besluit 0046; optie A en de PR-gates blijven ongewijzigd
@@ -38,11 +38,14 @@ De workflow blijft scheduled en is geen required PR-check. Rood blokkeert daarom
 - Handmatige run [`#51`](https://github.com/merlinijzerman/Bestuurdersportaal/actions/runs/33160032080) op commit `2d7ae6f` stopte op 28 augustus 2026 vóór installatie en DB-aanroepen met uitsluitend `fidelity_config_missing`. Daarmee is fail-closed in de echte GitHub-omgeving bewezen.
 - Het repositorysecret `TEST_DATABASE_URL` is nog leeg of ontbreekt. De groene DB-laag kan daarom pas worden bewezen nadat de repositorybeheerder dit secret naar een aparte wegwerp-testdatabase heeft gezet en run #51 opnieuw heeft uitgevoerd.
 - Handmatige run [`#52`](https://github.com/merlinijzerman/Bestuurdersportaal/actions/runs/33161616108) op commit `ff67a0b` bewees de meldroute: job `Nightly fidelity melden` werd groen en GitHub Actions werkte issue [`#217`](https://github.com/merlinijzerman/Bestuurdersportaal/issues/217) bij met uitsluitend run-, event-, branch- en commitmetadata. `OP-TST1` is daarmee gesloten.
+- **Herziening 0195:** de ontbrekende wegwerp-DB is niet ingericht. Na expliciet akkoord gebruikt de nightly de bestaande vaste Preview uitsluitend via `drift_lezer`, met geforceerd read-only catalogusbewijs; de volledige muterende DB-gedragssuite blijft ephemeer. De historische runbewijzen hierboven blijven geldig voor fail-closed en melding.
 
 ## Referenties
 
 - `decisions/0046-cross-tenant-testsuite-testdb-strategie.md`
 - `.github/workflows/nightly-fidelity.yml`
-- `scripts/verify-nightly-fidelity-env.mjs`
+- `decisions/0195-vaste-preview-readonly-fidelity.md`
+- `scripts/verify-preview-fidelity-env.mjs`
+- `scripts/preview-fidelity-readonly.sh`
 - `scripts/nightly-fidelity-workflow.test.mjs`
 - `../08 Test en acceptatie/Geautomatiseerd testen/Runbooks/nightly-fidelity-opvolgen.md`

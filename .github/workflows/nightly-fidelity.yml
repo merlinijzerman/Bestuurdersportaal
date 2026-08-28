@@ -1,28 +1,21 @@
 name: nightly-fidelity
 
 # ============================================================================
-#  §15 cross-tenant suite — nightly FIDELITEIT (optie B, besluiten 0046/0194).
+#  Nightly fidelity — vaste Preview, strikt read-only (besluiten 0046/0194/0195).
 # ----------------------------------------------------------------------------
-#  Fidelity-vangnet naast de ephemere CI-run (rls-cross-tenant.yml, optie A).
-#  Draait dezelfde §15-suite tegen een echte,
-#  wegwerpbare GEHOSTE test-DB (secret TEST_DATABASE_URL) die dichter bij de
-#  productie-Supabase-config staat dan de CLI-stack. Zo surfacet drift die
-#  optie A niet ziet: config die alleen in het Supabase-dashboard leeft
-#  (auth-instellingen, extensies, storage-policies buiten de migraties).
+#  De volledige muterende §15-suite blijft in rls-cross-tenant.yml op een
+#  ephemere Supabase-stack draaien. Deze nachtelijke aanvulling gebruikt de
+#  bestaande gehoste Preview uitsluitend voor catalogusfidelity: functies,
+#  policies, RLS, publications en browser-EXECUTE-rechten.
 #
-#  Deze job draait op een schema en niet op push/PR. Een rode run blokkeert dus
-#  geen pull request, maar is wel een rood operationeel signaal. Ontbrekende of
-#  ongeldige DB-configuratie is fail-closed; de DB-laag mag hier nooit stil
-#  worden overgeslagen.
-#
-#  De DB-laag draait hier NIET-destructief: de gedrag-suites seeden en rollen
-#  terug (begin … rollback). Draai desondanks NOOIT tegen productie — het secret
-#  moet naar een aparte, wegwerpbare test-branch-DB wijzen.
+#  De verbinding loopt via de bestaande least-privilege rol drift_lezer. De job
+#  forceert read-only transacties, bewijst dat fondsdata en storage-objecten
+#  onleesbaar zijn en voert nooit baseline, migraties, seeds of gedragswrites uit.
 # ============================================================================
 on:
   schedule:
     - cron: "0 3 * * *" # elke nacht 03:00 UTC
-  workflow_dispatch: # handmatig aan te trappen
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -33,8 +26,13 @@ concurrency:
 
 jobs:
   fidelity:
+    name: Preview fidelity (read-only)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      EXPECTED_PREVIEW_REF: swviwoytzvaqypieqgji
+      PRODUCTION_REF: aebwiufuegsiwhwpdrfb
+      EXPECTED_PREVIEW_POOLER_HOST: aws-0-eu-north-1.pooler.supabase.com
     steps:
       - uses: actions/checkout@v4
 
@@ -44,26 +42,55 @@ jobs:
           node-version: "22"
           cache: "npm"
 
-      - name: Gehoste testdatabase verplicht
+      - name: Read-only Preview-doel fail-closed opbouwen
+        shell: bash
         env:
-          TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
-        run: node scripts/verify-nightly-fidelity-env.mjs
+          DRIFT_DB_PASSWORD: ${{ secrets.DRIFT_DB_PASSWORD }}
+        run: |
+          set -Eeuo pipefail
+          test -n "${DRIFT_DB_PASSWORD:-}" || {
+            echo "::error title=Preview fidelity configuratiefout::preview_fidelity_config_missing" >&2
+            exit 1
+          }
+          ENCODED_PASSWORD="$(python3 -c 'import os,urllib.parse; print(urllib.parse.quote(os.environ["DRIFT_DB_PASSWORD"], safe=""))')"
+          PREVIEW_DATABASE_URL="postgresql://drift_lezer.${EXPECTED_PREVIEW_REF}:${ENCODED_PASSWORD}@${EXPECTED_PREVIEW_POOLER_HOST}:5432/postgres"
+          echo "::add-mask::$ENCODED_PASSWORD"
+          echo "::add-mask::$PREVIEW_DATABASE_URL"
+          export PREVIEW_DATABASE_URL
+          node scripts/verify-preview-fidelity-env.mjs
+          echo "PREVIEW_DATABASE_URL=$PREVIEW_DATABASE_URL" >> "$GITHUB_ENV"
 
       - name: Dependencies installeren
         run: npm ci
 
-      - name: Volledige §15-suite tegen de gehoste test-DB
+      - name: App-contracten uitvoeren
+        run: npm run test:xtenant
+
+      - name: Preview-catalogus read-only toetsen
         env:
-          TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
-          XTENANT_REQUIRE_DB: "1"
-        run: bash scripts/cross-tenant-ci.sh
+          PGOPTIONS: -c default_transaction_read_only=on
+        run: bash scripts/preview-fidelity-readonly.sh
+
+      - name: Fidelitybewijs bewaren
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: preview-fidelity-bewijs
+          path: |
+            preview-fidelity-snapshot.txt
+            preview-fidelity-diff.txt
+          if-no-files-found: warn
+          retention-days: 30
 
       - name: Fidelitybewijs samenvatten
         run: |
           {
-            echo "## Nightly fidelity"
-            echo "- App-laag: voltooid"
-            echo "- DB-laag: gestart en voltooid tegen de gehoste testdatabase"
+            echo "## Nightly Preview-fidelity"
+            echo "- App-contracten: voltooid"
+            echo "- Preview-catalogus: read-only gestart en voltooid"
+            echo "- Gecontroleerd: functies, policies, RLS, publications en browser-EXECUTE-rechten"
+            echo "- Fondsdata en storage-objecten: niet leesbaar"
+            echo "- Baseline, migraties, seeds en muterende regressies: niet uitgevoerd"
           } >> "$GITHUB_STEP_SUMMARY"
 
   nightly-alert:
@@ -112,7 +139,7 @@ jobs:
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: incident.number,
-                body: `Hersteld: de nightly fidelity-run is volledig groen.\n\n${details}`,
+                body: `Hersteld: de nightly Preview-fidelityrun is volledig groen.\n\n${details}`,
               });
               await github.rest.issues.update({
                 owner: context.repo.owner,
@@ -128,7 +155,7 @@ jobs:
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: incident.number,
-                body: `Opnieuw rood: de nightly fidelity-run vereist opvolging.\n\n${details}`,
+                body: `Opnieuw rood: de nightly Preview-fidelityrun vereist opvolging.\n\n${details}`,
               });
               return;
             }
@@ -136,13 +163,13 @@ jobs:
             await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: "Nightly fidelity rood — opvolging vereist",
+              title: "Nightly Preview-fidelity rood — opvolging vereist",
               body: [
                 marker,
-                "De gehoste cross-tenant fidelitycontrole is rood. Behandel dit als een operationeel incident; promoveer niet naar Productie als tenant-/RLS-gedrag de oorzaak is.",
+                "De read-only Preview-fidelitycontrole is rood. Behandel dit als een operationeel incident; promoveer niet naar Productie als schema-, policy- of RLS-drift de oorzaak is.",
                 "",
                 details,
                 "",
-                "Volg besluit 0194 en het centrale projectrunbook voor nightly-fidelity-opvolging.",
+                "Volg besluiten 0194/0195 en het centrale projectrunbook voor nightly-fidelity-opvolging.",
               ].join("\n"),
             });
