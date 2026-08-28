@@ -83,7 +83,7 @@ export function VoortgangWeergave({
     (voortgang.klaar.length > 0 || voortgang.actiefLabel || voortgang.analyse)
   ) {
     return (
-      <div className="space-y-1.5">
+      <div role="status" aria-live="polite" className="space-y-1.5">
         {/* Afgeronde fasen met hun uitkomst. */}
         {voortgang.klaar.map((k, idx) => (
           <div
@@ -119,7 +119,7 @@ export function VoortgangWeergave({
     );
   }
   return (
-    <div className="flex gap-1.5 items-center">
+    <div role="status" aria-label="Antwoord wordt voorbereid" className="flex gap-1.5 items-center">
       <span className="typing-dot"></span>
       <span className="typing-dot"></span>
       <span className="typing-dot"></span>

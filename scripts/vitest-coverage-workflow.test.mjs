@@ -36,6 +36,17 @@ test("coverageconfig is informatief en beperkt tot geselecteerde productiecode",
   assert.doesNotMatch(config, /thresholds\s*:/, "WP1 mag nog geen globale coveragedrempel zetten");
 });
 
+test("WP2 houdt Node- en jsdom-tests gescheiden en sluit componenttests aan", () => {
+  const config = readFileSync(resolve(root, "vitest.config.mts"), "utf8");
+  const packageJson = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
+
+  assert.match(config, /name:\s*"node"[\s\S]*environment:\s*"node"/);
+  assert.match(config, /name:\s*"component"[\s\S]*environment:\s*"jsdom"/);
+  assert.match(config, /tests\/component\/\*\*\/\*\.component\.test\.tsx/);
+  assert.equal(packageJson.scripts["test:component"], "vitest run --project component");
+  assert.match(packageJson.scripts.test, /npm run test:component/);
+});
+
 test("resterende sanitytests gebruiken een lege-globbestendige runner", () => {
   const packageJson = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
   const runner = readFileSync(resolve(root, "scripts/run-sanity.mjs"), "utf8");

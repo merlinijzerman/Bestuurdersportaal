@@ -71,6 +71,7 @@ export default function StapRequirementsPaneel({
               className="flex items-start gap-3 border border-line rounded-lg px-3 py-2"
             >
               <div
+                aria-hidden="true"
                 className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold mt-px shrink-0 ${
                   r.vervuld
                     ? "bg-ok text-white"
