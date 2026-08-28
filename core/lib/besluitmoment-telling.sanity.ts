@@ -49,16 +49,23 @@ const EVIDENCE: EvidenceItem[] = [
   ev({ label: "Vervuld2->5", stap_volgorde: 2, besluitmoment_stap: 5, vervuld: true }), // telt niet
   ev({ label: "O5", stap_volgorde: 5, verplicht: false }),                      // optioneel, eigen stap
   ev({ label: "V3", stap_volgorde: 3 }),                                        // vereist, hoort NIET bij 5
+  ev({ label: "B5", stap_volgorde: 5, besluitmoment_stap: 5, blokkerend: true }), // ZOWEL eigen stap 5 ALS besluitmoment 5
 ];
 
 test("openVoorBesluitmoment(5) = stap-5 ∪ besluitmoment_stap=5, per zwaarte", () => {
   const open = openVoorBesluitmoment(EVIDENCE, 5);
-  assert.deepEqual(open.kritiek.map((o) => o.label), ["K5"]);
+  assert.deepEqual(open.kritiek.map((o) => o.label).sort(), ["B5", "K5"]);
   assert.deepEqual(open.vereist.map((o) => o.label).sort(), ["V2->5"]);
   assert.deepEqual(open.optioneel.map((o) => o.label), ["O5"]);
   // De vervulde en de stap-3-vereiste horen er niet bij.
   assert.ok(!JSON.stringify(open).includes("Vervuld"));
   assert.ok(!JSON.stringify(open).includes("V3"));
+});
+
+test("een vereiste die aan BEIDE armen voldoet (stap 5 én besluitmoment 5) telt precies één keer", () => {
+  const open = openVoorBesluitmoment(EVIDENCE, 5);
+  const b5 = open.kritiek.filter((o) => o.label === "B5");
+  assert.equal(b5.length, 1, "B5 (stap_volgorde=5 én besluitmoment_stap=5) mag niet dubbelgeteld worden");
 });
 
 test("requirement_sleutel wordt correct gevormd", () => {
@@ -69,7 +76,7 @@ test("requirement_sleutel wordt correct gevormd", () => {
 
 test("openStaandeVereisten = alle open van het dossier, per zwaarte", () => {
   const open = openStaandeVereisten(EVIDENCE);
-  assert.equal(open.kritiek.length, 1);
+  assert.deepEqual(open.kritiek.map((o) => o.label).sort(), ["B5", "K5"]);
   assert.deepEqual(open.vereist.map((o) => o.label).sort(), ["V2->5", "V3"]);
   assert.equal(open.optioneel.length, 1);
 });

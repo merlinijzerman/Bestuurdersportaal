@@ -78,8 +78,6 @@ interface DecisionRowMin {
   id: string;
   procedure_id: string;
   status: DecisionStatus;
-  complexiteit: "routine" | "complicated" | "complex";
-  risiconiveau: "laag" | "middel" | "hoog";
 }
 
 export const POST = withFondsRoute({ capability: "decisions.manage" }, async (ctx, req: NextRequest, params) => {
@@ -99,7 +97,7 @@ export const POST = withFondsRoute({ capability: "decisions.manage" }, async (ct
     // 1. Decision laden (RLS bewaakt fonds-isolatie).
     const { data: decRow, error: leesFout } = await supabase
       .from("decision_objects")
-      .select("id, procedure_id, status, complexiteit, risiconiveau")
+      .select("id, procedure_id, status")
       .eq("id", decisionId)
       .maybeSingle();
     if (leesFout || !decRow) {
@@ -117,8 +115,6 @@ export const POST = withFondsRoute({ capability: "decisions.manage" }, async (ct
         boodschap: "Status was al gelijk.",
       });
     }
-
-    const actorNaam = ctx.naam;
 
     // 3. §4.4-signalering i.p.v. de harde readiness-gate (besluit 0187/0193).
     //    De overgang wordt NIET geblokkeerd omdat er iets open staat — een bestuur
@@ -170,58 +166,41 @@ export const POST = withFondsRoute({ capability: "decisions.manage" }, async (ct
       }
     }
 
-    // 4. Update uitvoeren — DB-trigger valideert de transitie zelf.
-    const { data: bijgewerkt, error: updFout } = await supabase
-      .from("decision_objects")
-      .update({ status: target })
-      .eq("id", decisionId)
-      .select()
-      .single();
-    if (updFout || !bijgewerkt) {
-      // Trigger-fout van fn_decision_status_check is hier de meest
-      // waarschijnlijke oorzaak. Eerder gaven we de DB-melding letterlijk
-      // door, maar dat kan schema-details lekken (kolomnamen, constraint-
-      // namen). Vanaf WP6 (Route A) tonen we alleen de generieke fallback;
-      // de oorzaak wordt server-side gelogd voor traceerbaarheid.
-      console.error("Decision status-overgang fout:", updFout);
+    // 4. Atomaire omslag: de statusupdate (I4-trigger valideert), het
+    //    besluit_genomen_met_openstaande_vereisten-event (als er iets open stond) én
+    //    status_gewijzigd worden in ÉÉN DB-transactie geschreven — de vastlegging kan
+    //    niet half landen (reviewbevinding; zelfde waarborg als PR-C's afronding).
+    //    I2 (motivering-minimumlengte) wordt in de functie DB-afgedwongen.
+    const { data: bijgewerkt, error: rpcFout } = await supabase.rpc(
+      "fn_besluit_status_omslag",
+      {
+        p_decision_id: decisionId,
+        p_target: target,
+        p_reden: body.reden ?? null,
+        p_motivering: besluitMotivering,
+        p_openstaand: openBijBesluit,
+      }
+    );
+    if (rpcFout || !bijgewerkt) {
+      if (rpcFout?.code === "PC002") {
+        return NextResponse.json(
+          { error: "Een besluit met openstaande vereisten vereist een motivering van minimaal 10 tekens." },
+          { status: 400 }
+        );
+      }
+      if (rpcFout?.code === "42501") {
+        return NextResponse.json({ error: "Niet bevoegd om deze statusovergang uit te voeren" }, { status: 403 });
+      }
+      // I4-trigger (ongeldige overgang) of andere DB-fout: generieke 400, geen
+      // schema-lek; de oorzaak wordt server-side gelogd.
+      console.error("Decision status-overgang fout:", rpcFout);
       return NextResponse.json(
         { error: "Statusovergang mislukt. Mogelijk is deze overgang niet toegestaan." },
         { status: 400 }
       );
     }
 
-    // 5. Governance events — eerst het besluit-met-openstaande-vereisten (0193,
-    //    de vastleggingsvorm die P4's status-feitenmatrix blijft schrijven), dan
-    //    status_gewijzigd.
-    if (openBijBesluit) {
-      await supabase.from("governance_events").insert({
-        decision_id: decisionId,
-        event_type: "besluit_genomen_met_openstaande_vereisten",
-        actor_id: ctx.gebruikerId,
-        actor_naam: actorNaam,
-        object_type: "decision_object",
-        object_id: decisionId,
-        reden: besluitMotivering,
-        nieuwe_waarde: {
-          target_status: target,
-          openstaand: openBijBesluit, // per zwaarte, {label, requirement_sleutel}
-        },
-      });
-    }
-
-    await supabase.from("governance_events").insert({
-      decision_id: decisionId,
-      event_type: "status_gewijzigd",
-      actor_id: ctx.gebruikerId,
-      actor_naam: actorNaam,
-      object_type: "decision_object",
-      object_id: decisionId,
-      reden: body.reden ?? null,
-      oude_waarde: { status: decision.status },
-      nieuwe_waarde: { status: target },
-    });
-
-    // 6. Sync naar `procedures.status` zodat het overzicht (/procedures)
+    // 5. Sync naar `procedures.status` zodat het overzicht (/procedures)
     // consistent blijft. Bij eindstatussen (afgewezen/geannuleerd/
     // afgesloten) zetten we óók `afgerond_op` zodat het bestaande
     // "Procedure is afgerond"-blok op de detailpagina werkt.
