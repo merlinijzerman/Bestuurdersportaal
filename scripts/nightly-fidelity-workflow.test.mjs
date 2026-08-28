@@ -23,6 +23,7 @@ function hasKeyDeep(value, key) {
 export function validateNightlyWorkflow(workflow) {
   const violations = [];
   const fidelity = workflow?.jobs?.fidelity;
+  const alert = workflow?.jobs?.["nightly-alert"];
 
   if (!fidelity) {
     return ["job fidelity ontbreekt"];
@@ -41,6 +42,35 @@ export function validateNightlyWorkflow(workflow) {
   }
   if (workflow.concurrency?.["cancel-in-progress"] !== false) {
     violations.push("een lopende fidelityrun mag niet stil worden geannuleerd");
+  }
+  if (!alert) {
+    violations.push("nightly-alert-job ontbreekt");
+  } else {
+    if (alert.needs !== "fidelity") {
+      violations.push("nightly-alert wacht niet op de fidelityjob");
+    }
+    if (!String(alert.if ?? "").includes("always()")) {
+      violations.push("nightly-alert draait niet gegarandeerd na rood of groen");
+    }
+    if (alert.permissions?.issues !== "write") {
+      violations.push("nightly-alert heeft geen issues: write");
+    }
+    const alertScript = (Array.isArray(alert.steps) ? alert.steps : [])
+      .map((step) => String(step?.with?.script ?? ""))
+      .join("\n");
+    if (
+      !alertScript.includes("nightly-fidelity-alert") ||
+      !alertScript.includes("issues.create(") ||
+      !alertScript.includes("issues.createComment(")
+    ) {
+      violations.push("nightly-alert opent of actualiseert geen herkenbaar incident");
+    }
+    if (
+      !alertScript.includes('result === "success"') ||
+      !alertScript.includes('state: "closed"')
+    ) {
+      violations.push("nightly-alert sluit een open incident niet na herstel");
+    }
   }
 
   const steps = Array.isArray(fidelity.steps) ? fidelity.steps : [];
@@ -114,6 +144,7 @@ test("bewust verslapte workflowfixture wordt afgekeurd (proven-red)", () => {
 
   assert.deepEqual(validateNightlyWorkflow(relaxedFixture), [
     "continue-on-error is niet toegestaan in de fidelityjob",
+    "nightly-alert-job ontbreekt",
     "expliciete DB-preflight ontbreekt",
     "groen DB-laagbewijs in de job summary ontbreekt",
     "DB-preflight ontvangt TEST_DATABASE_URL niet uit secrets",
