@@ -1,7 +1,7 @@
 name: nightly-fidelity
 
 # ============================================================================
-#  §15 cross-tenant suite — nightly FIDELITEIT (optie B, besluit 0046).
+#  §15 cross-tenant suite — nightly FIDELITEIT (optie B, besluiten 0046/0194).
 # ----------------------------------------------------------------------------
 #  Fidelity-vangnet naast de ephemere CI-run (rls-cross-tenant.yml, optie A).
 #  Draait dezelfde §15-suite tegen een echte,
@@ -10,11 +10,10 @@ name: nightly-fidelity
 #  optie A niet ziet: config die alleen in het Supabase-dashboard leeft
 #  (auth-instellingen, extensies, storage-policies buiten de migraties).
 #
-#  Deze job draait op een schema en niet op push/PR, en de stap hieronder staat
-#  op `continue-on-error` — dat is de reden dat een falende fidelity-run niets
-#  tegenhoudt, en het staat in de CONFIG, niet in dit commentaar. Een gehoste
-#  test-DB is deelbaar/traag/soms afwezig. Ontbreekt het secret, dan skipt de
-#  suite netjes (scripts/cross-tenant-ci.sh → geen DB → app-laag).
+#  Deze job draait op een schema en niet op push/PR. Een rode run blokkeert dus
+#  geen pull request, maar is wel een rood operationeel signaal. Ontbrekende of
+#  ongeldige DB-configuratie is fail-closed; de DB-laag mag hier nooit stil
+#  worden overgeslagen.
 #
 #  De DB-laag draait hier NIET-destructief: de gedrag-suites seeden en rollen
 #  terug (begin … rollback). Draai desondanks NOOIT tegen productie — het secret
@@ -25,11 +24,17 @@ on:
     - cron: "0 3 * * *" # elke nacht 03:00 UTC
   workflow_dispatch: # handmatig aan te trappen
 
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-fidelity
+  cancel-in-progress: false
+
 jobs:
   fidelity:
     runs-on: ubuntu-latest
-    # Non-blocking: een falende fidelity-run mag geen merge tegenhouden.
-    continue-on-error: true
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -39,12 +44,24 @@ jobs:
           node-version: "22"
           cache: "npm"
 
+      - name: Gehoste testdatabase verplicht
+        env:
+          TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+        run: node scripts/verify-nightly-fidelity-env.mjs
+
       - name: Dependencies installeren
         run: npm ci
 
       - name: Volledige §15-suite tegen de gehoste test-DB
         env:
           TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
-          # Bewust NIET XTENANT_REQUIRE_DB: ontbreekt het secret, dan draait
-          # alleen de app-laag en blijft de run groen (fidelity is optioneel).
+          XTENANT_REQUIRE_DB: "1"
         run: bash scripts/cross-tenant-ci.sh
+
+      - name: Fidelitybewijs samenvatten
+        run: |
+          {
+            echo "## Nightly fidelity"
+            echo "- App-laag: voltooid"
+            echo "- DB-laag: gestart en voltooid tegen de gehoste testdatabase"
+          } >> "$GITHUB_STEP_SUMMARY"
