@@ -53,8 +53,10 @@ export default function Sidebar({
       /* best-effort */
     }
     await supabase.auth.signOut();
-    router.push("/login");
-    router.refresh();
+    // Eén navigatie na het wissen van de cookie. Een aansluitende refresh op de
+    // huidige route kan de login-navigatie annuleren en het beschermde scherm
+    // zichtbaar laten staan totdat de gebruiker zelf herlaadt.
+    router.replace("/login");
   }
 
   const initials = gebruikerNaam
