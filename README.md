@@ -39,7 +39,7 @@ De gecureerde projectdocumentatie staat één niveau hoger, in de map "MVP bestu
 
 > **Aanvulling 02-08-2026:** de map `promo/` bevat sinds eind juli de bouwstraat voor de promovideo (drie varianten, Playwright-opnames, overlay-renderers, `montage.sh`) met een eigen `promo/HANDOVER.md`. Variant C staat sinds 2 augustus **live op de homepage** (besluit 0103); de gepubliceerde webversie zelf staat in `public/video/`. Let op: de bron- en audiobestanden in `promo/` zijn groot en vallen deels buiten `.gitignore` — zie `00 Overzicht en status/openstaande-punten-en-risicos.md` OP-E5.
 
-Werkend en demonstreerbaar MVP (zie `mvp-functionaliteiten.md`); **niet productiegeschikt** — open punten: Route A-restpunten, ontbrekende browser-/componenttests en coverage, Mailgun-sandbox en compliance-acties. Zie `mvp-beperkingen.md` en `../06 Roadmap/backlog.md`.
+Werkend en demonstreerbaar MVP (zie `mvp-functionaliteiten.md`); **niet productiegeschikt** — open punten: Route A-restpunten, ontbrekende browser-/componenttests, nog beperkte coverage, Mailgun-sandbox en compliance-acties. Zie `mvp-beperkingen.md` en `../06 Roadmap/backlog.md`.
 
 ## Geautomatiseerd testen
 
@@ -47,7 +47,9 @@ Gebruik Node 22 (`.nvmrc` en `engines.node`). Na `npm ci` zijn dit de centrale i
 
 ```bash
 npm test               # snelle lokale unit- en contractsuites
-npm run test:unit      # bestaande pure sanitysuites
+npm run test:unit      # resterende sanitysuites + Vitest-applicatietests
+npm run test:vitest    # alleen de gemigreerde Vitest-suites + pariteitsgate
+npm run test:coverage  # informatieve V8-coverage voor geselecteerde productiecode
 npm run test:contract  # tenant-, seed- en workflowcontracten zonder DB
 npm run test:ops       # back-up/restore, platforminventory en scanner
 npm run test:ci        # provider- en database-onafhankelijke PR-set

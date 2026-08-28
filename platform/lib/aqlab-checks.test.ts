@@ -7,11 +7,12 @@
 //   - quality_score STRIKT gescheiden van gate_status + dimensievloeren
 //   - judge ADVISEREND (nooit auto-blokkade) + JSON-schema-validatie
 //
-//  Geen testframework; standalone met assert.
-//  Uitvoeren: npx tsx lib/aqlab-checks.sanity.ts
+//  Vitest-suite met node:assert voor bestaande assertionpariteit.
+//  Uitvoeren: npx vitest run platform/lib/aqlab-checks.test.ts
 // ============================================================
 
 import assert from "node:assert/strict";
+import { test } from "vitest";
 import {
   exactNumericFactMatch,
   forbiddenPhraseAbsent,
@@ -28,18 +29,6 @@ import {
   type JudgeCriterium,
   type JudgeResultaat,
 } from "./aqlab/judge";
-
-let n = 0;
-function test(naam: string, fn: () => void | Promise<void>) {
-  const r = fn();
-  if (r instanceof Promise) throw new Error("gebruik testAsync voor async");
-  n++;
-  console.log(`  ✓ ${naam}`);
-}
-const asyncTests: { naam: string; fn: () => Promise<void> }[] = [];
-function testAsync(naam: string, fn: () => Promise<void>) {
-  asyncTests.push({ naam, fn });
-}
 
 function input(antwoord: string, bronnenAantal: number, spec: TestcaseSpec, snapshotRefs?: string[]): CheckInput {
   return { antwoord, bronnenAantal, spec, snapshotRefs };
@@ -134,7 +123,7 @@ const baseInput = {
   reviewVerplicht: false,
 };
 
-testAsync("engine: schone deterministische output → gate pass, quality hoog", async () => {
+test("engine: schone deterministische output → gate pass, quality hoog", async () => {
   const spec: TestcaseSpec = {
     expected_answer_outline: { exact_facts: ["112,4%"] },
     required_sections: ["aanleiding"],
@@ -151,7 +140,7 @@ testAsync("engine: schone deterministische output → gate pass, quality hoog", 
   assert.equal(r.kwaliteitPass, true);
 });
 
-testAsync("engine: dangling [Bron] → GEBLOKKEERD ongeacht hoge score", async () => {
+test("engine: dangling [Bron] → GEBLOKKEERD ongeacht hoge score", async () => {
   const spec: TestcaseSpec = { expected_answer_outline: { exact_facts: ["112,4%"] }, min_quality_score: 80 };
   const r = await evalueerOutput({
     ...baseInput,
@@ -165,7 +154,7 @@ testAsync("engine: dangling [Bron] → GEBLOKKEERD ongeacht hoge score", async (
   assert.equal(r.kwaliteitPass, false);
 });
 
-testAsync("engine: judge is ADVISEREND — judge-fail zonder harde blokkade → review_vereist, niet geblokkeerd", async () => {
+test("engine: judge is ADVISEREND — judge-fail zonder harde blokkade → review_vereist, niet geblokkeerd", async () => {
   const spec: TestcaseSpec = { forbidden_claims: ["verzonnen"], min_quality_score: 80 };
   const nepJudge = async (c: JudgeCriterium): Promise<JudgeResultaat> => ({
     criterium_code: c, score: null, pass: false, motivatie: "Judge keurt af.",
@@ -183,7 +172,7 @@ testAsync("engine: judge is ADVISEREND — judge-fail zonder harde blokkade → 
   assert.equal(r.gate_status, "review_vereist"); // NIET geblokkeerd op judge alleen
 });
 
-testAsync("engine: geen judge-runner → judge-criterium levert review_vereist (geen groen vinkje)", async () => {
+test("engine: geen judge-runner → judge-criterium levert review_vereist (geen groen vinkje)", async () => {
   const r = await evalueerOutput({
     ...baseInput,
     antwoord: "Een net antwoord [Bron 1].",
@@ -193,7 +182,7 @@ testAsync("engine: geen judge-runner → judge-criterium levert review_vereist (
   assert.equal(r.gate_status, "review_vereist");
 });
 
-testAsync("engine: dimensievloer niet gehaald → kwaliteitPass=false ook al is het gemiddelde hoog", async () => {
+test("engine: dimensievloer niet gehaald → kwaliteitPass=false ook al is het gemiddelde hoog", async () => {
   const spec: TestcaseSpec = {
     expected_answer_outline: { exact_facts: ["112,4%"], forbidden: [] },
     dimension_floors: { format_compliance: 80 },
@@ -211,7 +200,7 @@ testAsync("engine: dimensievloer niet gehaald → kwaliteitPass=false ook al is 
   assert.equal(r.kwaliteitPass, false);
 });
 
-testAsync("engine: schone boolean-judge pass (no_forbidden_claim, score=null) → GEEN review-trigger", async () => {
+test("engine: schone boolean-judge pass (no_forbidden_claim, score=null) → GEEN review-trigger", async () => {
   const goedeJudge = async (c: JudgeCriterium): Promise<JudgeResultaat> => ({
     criterium_code: c, score: null, pass: true, motivatie: "Geen verboden claim.",
     bewijs: [], judge_model: "claude-opus-4-8", methode: "llm_judge",
@@ -229,7 +218,7 @@ testAsync("engine: schone boolean-judge pass (no_forbidden_claim, score=null) �
   assert.equal(r.gate_status, "pass"); // score=null bij een PASS mag geen review forceren
 });
 
-testAsync("engine: reviewVerplicht → gate review_vereist bij schone output", async () => {
+test("engine: reviewVerplicht → gate review_vereist bij schone output", async () => {
   const r = await evalueerOutput({
     ...baseInput,
     antwoord: "Aanleiding: 112,4% [Bron 1].",
@@ -238,17 +227,4 @@ testAsync("engine: reviewVerplicht → gate review_vereist bij schone output", a
     reviewVerplicht: true,
   });
   assert.equal(r.gate_status, "review_vereist");
-});
-
-// ── Async runner ────────────────────────────────────────────────────────────
-(async () => {
-  for (const t of asyncTests) {
-    await t.fn();
-    n++;
-    console.log(`  ✓ ${t.naam}`);
-  }
-  console.log(`\n${n} sanity-tests geslaagd.`);
-})().catch((e) => {
-  console.error("SANITY-FOUT:", e);
-  process.exit(1);
 });

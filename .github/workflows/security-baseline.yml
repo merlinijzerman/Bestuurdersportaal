@@ -63,8 +63,28 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Sanitytests
+      - name: Vitest-workflowcontract
+        run: npm run test:coverage-contract
+
+      - name: Resterende sanitytests
         run: npm run sanity
+
+      - name: Vitest coveragebaseline
+        id: vitest-coverage
+        run: npm run test:coverage
+
+      - name: Coverage samenvatten
+        if: ${{ always() }}
+        run: node scripts/render-vitest-coverage-summary.mjs >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Coverageartifact bewaren
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: vitest-coverage
+          path: coverage/
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Malwarescanner-tests
         run: |

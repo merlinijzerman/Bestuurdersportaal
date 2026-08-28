@@ -16,11 +16,14 @@
     "lint:boundaries": "eslint core platform fondsen app --no-error-on-unmatched-pattern",
     "typecheck": "tsc --noEmit --skipLibCheck",
     "security:secrets": "bash scripts/check-committed-secrets.sh",
-    "sanity": "rood=\"\"; for f in core/lib/*.sanity.ts platform/lib/*.sanity.ts tests/karakterisering/*.sanity.ts; do echo \"> $f\"; ./node_modules/.bin/tsx \"$f\" || rood=\"$rood\\n  - $f\"; done; if [ -n \"$rood\" ]; then printf \"\\nSANITY ROOD in:%b\\n\" \"$rood\"; exit 1; else printf \"\\nAlle sanity-suites groen.\\n\"; fi",
+    "sanity": "node scripts/run-sanity.mjs",
     "test": "npm run test:unit && npm run test:contract",
-    "test:unit": "npm run sanity",
-    "test:contract": "npm run test:xtenant && npm run test:seed-guard && npm run test:nightly-fidelity-contract",
+    "test:unit": "npm run sanity && npm run test:vitest",
+    "test:vitest": "vitest run && node scripts/verify-vitest-parity.mjs",
+    "test:coverage": "vitest run --coverage && node scripts/verify-vitest-parity.mjs",
+    "test:contract": "npm run test:xtenant && npm run test:seed-guard && npm run test:nightly-fidelity-contract && npm run test:coverage-contract",
     "test:nightly-fidelity-contract": "node --test scripts/nightly-fidelity-workflow.test.mjs",
+    "test:coverage-contract": "node --test scripts/vitest-coverage-workflow.test.mjs",
     "test:ops:app": "npm run test:backup-restore && npm run test:platform-inventory",
     "test:scanner": "npm test --prefix scanner",
     "test:scanner:ci": "npm ci --prefix scanner --ignore-scripts && npm run test:scanner",
@@ -62,6 +65,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@typescript-eslint/parser": "^8.63.0",
+    "@vitest/coverage-v8": "4.1.11",
     "autoprefixer": "^10.4.21",
     "eslint": "^9.39.4",
     "ffmpeg-static": "^5.3.0",
@@ -70,6 +74,7 @@
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.17",
     "tsx": "^4.19.2",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "4.1.11"
   }
 }
