@@ -108,12 +108,6 @@ FUNC	public	fn_contact_aanvragen_no_delete()	function	service_role	EXECUTE
 FUNC	public	fn_decision_code()	function	anon	-
 FUNC	public	fn_decision_code()	function	authenticated	EXECUTE
 FUNC	public	fn_decision_code()	function	service_role	EXECUTE
-FUNC	public	fn_decision_readiness_check(p_decision_id uuid, p_target text)	function	anon	-
-FUNC	public	fn_decision_readiness_check(p_decision_id uuid, p_target text)	function	authenticated	EXECUTE
-FUNC	public	fn_decision_readiness_check(p_decision_id uuid, p_target text)	function	service_role	EXECUTE
-FUNC	public	fn_decision_readiness_overview(p_decision_id uuid)	function	anon	-
-FUNC	public	fn_decision_readiness_overview(p_decision_id uuid)	function	authenticated	EXECUTE
-FUNC	public	fn_decision_readiness_overview(p_decision_id uuid)	function	service_role	EXECUTE
 FUNC	public	fn_decision_snapshot()	function	anon	-
 FUNC	public	fn_decision_snapshot()	function	authenticated	EXECUTE
 FUNC	public	fn_decision_snapshot()	function	service_role	EXECUTE
