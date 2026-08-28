@@ -85,9 +85,11 @@ declare
     -- buiten dit register (regel: uitsluitend tabellen ZONDER eigen fonds_id) en
     -- wordt hij door GATE B gedekt (WITH CHECK noemt fonds_id). A1 slaat hem over
     -- (fonds_id-kolom aanwezig). De cross-tenant decision_id-injectie die A2's
-    -- WITH-CHECK-eis hier statisch borgde, is verplaatst naar de consistentie-
-    -- invariant in fn_govevent_fonds + een gedragstest (§15) — een statische
-    -- policy-tekst-gate kan een trigger niet zien. Zie 0192 §2d-gate.
+    -- WITH-CHECK-eis hier statisch borgde, wordt nu DECLARATIEF afgedwongen door de
+    -- composite FK governance_events(decision_id,fonds_id)->decision_objects(id,fonds_id)
+    -- (0192 §2b(ii)/§2e). De trigger fn_govevent_fonds leidt alleen fonds_id af; de
+    -- FK handhaaft. Een statische policy-tekst-gate ziet die constraint niet, dus een
+    -- gedragstest (§15, NEGATIEF #6 → 23503) bewaakt hem. Zie 0192 §2e.
     ['agendapunten',              'vergaderingen'],
     ['agendapunt_inbreng',        'agendapunten'],
     ['agendapunt_log',            'vergaderingen'],

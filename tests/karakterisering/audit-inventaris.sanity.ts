@@ -234,6 +234,13 @@ const KETEN_TRIGGERS: Record<string, { table: string; event: string; ops: string
   trg_stem_ketengebeurtenis:        { table: "stem_uitbrengingen",    event: "after insert or update on", ops: ["insert", "update"] },
 };
 const KETEN_RPCS = ["fn_document_status_zetten", "fn_notulen_segment_bevestig", "fn_notulen_segment_verwijder"];
+// De 6 triggerfuncties achter KETEN_TRIGGERS — hun BODY moet óók governance_events
+// schrijven (symmetrisch met de RPC-check). Zonder deze grep zou iemand de insert uit
+// een triggerfunctie kunnen halen met behoud van naam/event/ops, en de gate blijft groen.
+const KETEN_TRIGGER_FNS = [
+  "fn_agendapunt_ketengebeurtenis", "fn_inbreng_ketengebeurtenis", "fn_vergadering_ketengebeurtenis",
+  "fn_orgprofiel_ketengebeurtenis", "fn_stem_ketengebeurtenis", "fn_stemming_ketengebeurtenis",
+];
 
 test("#183b ketentriggers bestaan met de gepinde operatie-set (anti-drift op versmalling)", () => {
   const sql = alleMigraties().toLowerCase();
@@ -249,17 +256,18 @@ test("#183b ketentriggers bestaan met de gepinde operatie-set (anti-drift op ver
   }
 });
 
-test("#183b keten-RPC's schrijven aantoonbaar governance_events (RPC_TRAIL gemeten, niet beweerd)", () => {
+test("#183b keten-RPC's én triggerfuncties schrijven aantoonbaar governance_events (gemeten, niet beweerd)", () => {
   // Per-bestand (de notulen-RPC's staan óók in hun oorspronkelijke migratie ZONDER
   // governance_events): er moet één migratie zijn die de functie definieert MÉT een
-  // governance_events-insert erin.
+  // governance_events-insert erin. Symmetrisch voor RPC's (RPC_TRAIL) én de 6
+  // triggerfuncties (BASE_TRIGGER) — anders kan de insert stil uit een functie vallen.
   const dir = join(ROOT, "supabase/migrations");
   const files = readdirSync(dir).filter((f) => f.endsWith(".sql")).map((f) => readFileSync(join(dir, f), "utf8").toLowerCase());
-  for (const fn of KETEN_RPCS) {
+  for (const fn of [...KETEN_RPCS, ...KETEN_TRIGGER_FNS]) {
     const ok = files.some((s) =>
       new RegExp(`function\\s+(public\\.)?${fn}[\\s\\S]*?insert\\s+into\\s+public\\.governance_events`, "i").test(s)
     );
-    assert.ok(ok, `geen migratie die ${fn} definieert MÉT een governance_events-insert — RPC_TRAIL zou een lege belofte zijn`);
+    assert.ok(ok, `geen migratie die ${fn} definieert MÉT een governance_events-insert — de trail-claim zou een lege belofte zijn`);
   }
 });
 

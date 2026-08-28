@@ -266,6 +266,22 @@ begin
   raise notice 'OK #7: brontabel-trigger schreef precies één keten-event (vergadering_aangemaakt), zichtbaar voor A.';
 end $$;
 
+-- NEGATIEF #8 (leesisolatie governance_events via de OR-tak, #183b/0192): B mag A's
+-- EIGEN-FONDS event (fonds_id=A, decision_id=NULL) NIET zien. De asymmetrische USING
+-- heeft een fonds_id-tak + een decision_id-OR-tak; dit bewaakt dat de OR-tak niet
+-- over-exposet — juist nu de statische A2-gate voor deze tabel is verwijderd (0192 §2e).
+-- (De POSITIEF-test hierboven schreef 't3_test_gebeurtenis' met fonds_id=A, decision_id=NULL.)
+set local request.jwt.claims to '{"sub":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"}';
+do $$
+declare n int;
+begin
+  select count(*) into n from public.governance_events where event_type = 't3_test_gebeurtenis';
+  if n <> 0 then
+    raise exception 'LEK: fonds B ziet governance_events van fonds A (fonds_id=A, decision_id=NULL) — OR-tak van de USING-policy exposet te breed.';
+  end if;
+  raise notice 'OK #8: A''s eigen-fonds governance_events-event onzichtbaar voor B (OR-tak exposet niet).';
+end $$;
+
 reset role;
 
 -- NEGATIEF #6 (append-only): een bestaande auditregel is niet muteerbaar.
