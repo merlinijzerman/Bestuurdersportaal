@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Geïsoleerde ClamAV-malwarescanner (Route A WP3). Eigen Vercel-project, geen langlevende credentials.",
   "engines": {
-    "node": ">=20"
+    "node": "22.x"
   },
   "scripts": {
     "test": "node --test \"test/*.test.mjs\"",

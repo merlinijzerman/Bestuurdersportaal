@@ -2,6 +2,9 @@
   "name": "bestuurdersportaal",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev": "next dev",
     "prebuild": "npm run lint:colors",
@@ -14,6 +17,15 @@
     "typecheck": "tsc --noEmit --skipLibCheck",
     "security:secrets": "bash scripts/check-committed-secrets.sh",
     "sanity": "rood=\"\"; for f in core/lib/*.sanity.ts platform/lib/*.sanity.ts tests/karakterisering/*.sanity.ts; do echo \"> $f\"; ./node_modules/.bin/tsx \"$f\" || rood=\"$rood\\n  - $f\"; done; if [ -n \"$rood\" ]; then printf \"\\nSANITY ROOD in:%b\\n\" \"$rood\"; exit 1; else printf \"\\nAlle sanity-suites groen.\\n\"; fi",
+    "test": "npm run test:unit && npm run test:contract",
+    "test:unit": "npm run sanity",
+    "test:contract": "npm run test:xtenant && npm run test:seed-guard && npm run test:nightly-fidelity-contract",
+    "test:nightly-fidelity-contract": "node --test scripts/nightly-fidelity-workflow.test.mjs",
+    "test:ops:app": "npm run test:backup-restore && npm run test:platform-inventory",
+    "test:scanner": "npm test --prefix scanner",
+    "test:scanner:ci": "npm ci --prefix scanner --ignore-scripts && npm run test:scanner",
+    "test:ops": "npm run test:ops:app && npm run test:scanner:ci",
+    "test:ci": "npm run security:secrets && npm run lint:boundaries && npm run lint:colors && npm run lint:fondsthema && npm run typecheck && npm test && npm run test:ops",
     "aqlab:seed": "tsx platform/lib/aqlab/seed/cli.ts",
     "aqlab:seed:apply": "tsx platform/lib/aqlab/seed/cli.ts --apply",
     "aqlab:seed:modellen": "tsx platform/lib/aqlab/seed/modellen-cli.ts",
