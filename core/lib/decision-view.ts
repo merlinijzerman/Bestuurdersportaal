@@ -715,6 +715,23 @@ export function mapLegacyStatus(legacy: string): DecisionStatus {
  * migratie 2026_06_18_dossier_procesinstantie). Sublabel is hier niet
  * relevant — alleen de status wordt naar de kolom gesynct.
  */
+/**
+ * Staat een genomen besluit "nog"? Na deze statussen is het besluit uitgevoerd of
+ * afgesloten (niet teruggedraaid). Bepaalt of het "besloten met openstaande
+ * vereisten"-signaal (§12 signaal 3, besluit 0193) nog een ACTIEF aandachtspunt is:
+ * na heropenen/afwijzen/terugzetten vervalt de actieve markering — het append-only
+ * event blijft in de audit-trail, maar het is dan een historisch, teruggedraaid feit.
+ */
+export function besluitStaatNog(status: DecisionStatus): boolean {
+  return (
+    status === "besloten" ||
+    status === "voorwaardelijk_besloten" ||
+    status === "in_uitvoering" ||
+    status === "in_evaluatie" ||
+    status === "afgesloten"
+  );
+}
+
 export function mapDecisionToProcedureStatus(
   status: DecisionStatus
 ): DossierStatus {

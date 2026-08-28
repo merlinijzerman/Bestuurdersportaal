@@ -160,6 +160,10 @@ export function besluitmomentSignaal(
   }
   if (aantalInScope === 0) return { soort: "geen-vereisten" };
   const open = openVoorBesluitmomenten(evidence, besluitmomentStappen);
+  // `open` bevat per definitie alleen niet-vervulde items, dus dit is "staat er íets
+  // open" — óók een enkel openstaand OPTIONEEL. Bewust: een besluitmoment met alleen
+  // een open optionele mag niet als 'alle-vervuld' (groen) lezen. De motiveringseis
+  // (route) kijkt daarentegen alleen naar boven-optioneel; dat verschil is bedoeld.
   if (heeftOpenBovenOptioneel(open) || open.optioneel.length > 0) {
     return { soort: "open", open };
   }

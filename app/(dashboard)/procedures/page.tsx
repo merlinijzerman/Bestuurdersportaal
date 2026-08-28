@@ -8,7 +8,7 @@ import {
   type DossierStatus,
   type PeriodeType,
 } from "@/core/lib/dossier";
-import { type StapStatus } from "@/core/lib/decision-view";
+import { type StapStatus, besluitStaatNog } from "@/core/lib/decision-view";
 import { buildDecisionDossierView } from "@/core/lib/decision";
 import { laadFasen, type FaseWeergave } from "@/core/lib/procedure-fasen";
 import {
@@ -330,7 +330,9 @@ function afleidProces(
   // openstonden. Bij de brede besluitbevoegdheid is deze zichtbaarheid achteraf
   // het tegenwicht dat vooraf ontbreekt — daarom óók op het overzicht.
   if (
-    dossier?.events.some(
+    dossier &&
+    besluitStaatNog(dossier.decision.status) &&
+    dossier.events.some(
       (e) => e.event_type === "besluit_genomen_met_openstaande_vereisten"
     )
   ) {

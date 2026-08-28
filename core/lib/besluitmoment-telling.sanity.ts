@@ -140,4 +140,27 @@ test("besluitmomentSignaal: NIETS gekoppeld → 'geen-vereisten' (geen vals groe
   assert.equal(besluitmomentSignaal(elders, [5]).soort, "geen-vereisten");
 });
 
+test("besluitmomentSignaal: ALLEEN een open optionele in scope → 'open' (niet vals-groen)", () => {
+  // Load-bearing: een besluitmoment met uitsluitend een OPEN optionele vereiste is
+  // niet "alle-vervuld". De strip toont "{n} optioneel"; dat mag niet als groen lezen.
+  const alleenOptioneel: EvidenceItem[] = [
+    ev({ label: "Overvuld", stap_volgorde: 5, verplicht: false, vervuld: true }),
+    ev({ label: "Oopen", stap_volgorde: 5, verplicht: false }),
+  ];
+  const sig = besluitmomentSignaal(alleenOptioneel, [5]);
+  assert.equal(sig.soort, "open", "alleen-optioneel-open mag niet als alle-vervuld lezen");
+  if (sig.soort === "open") {
+    assert.equal(sig.open.kritiek.length, 0);
+    assert.equal(sig.open.vereist.length, 0);
+    assert.deepEqual(sig.open.optioneel.map((o) => o.label), ["Oopen"]);
+  }
+});
+
+test("besluitmomentSignaal: lege besluitmoment-set of onbekende N → 'geen-vereisten'", () => {
+  // Geen vereist_besluit-stap (besluitmomentStappen=[]) en een N die nergens
+  // voorkomt: beide leveren 'geen-vereisten', nooit een groene geruststelling.
+  assert.equal(besluitmomentSignaal(EVIDENCE, []).soort, "geen-vereisten");
+  assert.equal(besluitmomentSignaal(EVIDENCE, [99]).soort, "geen-vereisten");
+});
+
 console.log(`\nbesluitmoment-telling.sanity: ${n} checks groen.`);

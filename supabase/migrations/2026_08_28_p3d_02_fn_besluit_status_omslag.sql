@@ -76,6 +76,12 @@ begin
   if v_rol is null or v_actorfonds is distinct from v_decfonds then
     raise exception 'Niet bevoegd om de status van dit besluit te wijzigen.' using errcode = '42501';
   end if;
+  -- NB (reviewbevinding #6): dit slot toetst rol-in-fonds, niet de capability
+  -- `decisions.manage` rechtstreeks. Vandaag equivalent — alle vier de rollen (de
+  -- enige die profielen_rol_check toestaat) dragen decisions.manage (0193 §5). De
+  -- koppeling is impliciet: haalt een latere wijziging de capability bij een rol weg,
+  -- dan volgt deze RPC niet mee. P4's status-feitenmatrix formaliseert welke
+  -- rol/capability welke statusovergang mag; tot dan is deze gelijkstelling bewust.
 
   v_is_besluit := p_target in ('besloten','voorwaardelijk_besloten');
 
@@ -88,9 +94,15 @@ begin
       select ps.id from public.procedure_stappen ps
        where ps.procedure_id = v_procid and ps.vereist_besluit = true
     loop
-      v_deel := public.fn_stap_open_per_zwaarte(v_stap.id);
+      -- Decision-scoped (reviewbevinding #2/#3): geef p_decision_id EXPLICIET mee, zodat
+      -- de open-check dít besluit beoordeelt en niet de (verwisselbare) primary.
+      v_deel := public.fn_stap_open_per_zwaarte(v_stap.id, p_decision_id);
       if v_deel ? 'error' then
-        continue;
+        -- Fail-closed (#8): een onbepaalbare open-telling mag geen besluit stil
+        -- doorlaten. Vandaag onbereikbaar (de stap komt uit dezelfde query), maar het
+        -- patroon moet fail-closed zijn, niet "tel als niets open".
+        raise exception 'Openstaande-vereisten-telling faalde voor stap % (%).', v_stap.id, v_deel->>'error'
+          using errcode = '23514';
       end if;
       v_open := jsonb_build_object(
         'kritiek',   (v_open->'kritiek')   || coalesce(v_deel->'kritiek',   '[]'::jsonb),

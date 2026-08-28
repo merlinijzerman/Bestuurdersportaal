@@ -231,9 +231,9 @@ FUNC	public	fn_snapshot_immutable()	function	service_role	EXECUTE
 FUNC	public	fn_stap_afronden_met_afwijking(p_stap_id uuid, p_procedure_id uuid, p_motivering text, p_bevestigd boolean)	function	anon	-
 FUNC	public	fn_stap_afronden_met_afwijking(p_stap_id uuid, p_procedure_id uuid, p_motivering text, p_bevestigd boolean)	function	authenticated	EXECUTE
 FUNC	public	fn_stap_afronden_met_afwijking(p_stap_id uuid, p_procedure_id uuid, p_motivering text, p_bevestigd boolean)	function	service_role	-
-FUNC	public	fn_stap_open_per_zwaarte(p_stap_id uuid)	function	anon	-
-FUNC	public	fn_stap_open_per_zwaarte(p_stap_id uuid)	function	authenticated	-
-FUNC	public	fn_stap_open_per_zwaarte(p_stap_id uuid)	function	service_role	-
+FUNC	public	fn_stap_open_per_zwaarte(p_stap_id uuid, p_decision_id uuid)	function	anon	-
+FUNC	public	fn_stap_open_per_zwaarte(p_stap_id uuid, p_decision_id uuid)	function	authenticated	-
+FUNC	public	fn_stap_open_per_zwaarte(p_stap_id uuid, p_decision_id uuid)	function	service_role	-
 FUNC	public	fn_validate_bewijs_requirement_binding()	function	anon	-
 FUNC	public	fn_validate_bewijs_requirement_binding()	function	authenticated	-
 FUNC	public	fn_validate_bewijs_requirement_binding()	function	service_role	EXECUTE
@@ -408,6 +408,9 @@ FUNC	public	fn_audit_vaststelling_binding()	function	service_role	EXECUTE
 FUNC	public	fn_assert_feit_ontgrendeld(p_decision_id uuid)	function	anon	-
 FUNC	public	fn_assert_feit_ontgrendeld(p_decision_id uuid)	function	authenticated	-
 FUNC	public	fn_assert_feit_ontgrendeld(p_decision_id uuid)	function	service_role	EXECUTE
+FUNC	public	fn_guard_decision_insert_status()	function	anon	-
+FUNC	public	fn_guard_decision_insert_status()	function	authenticated	-
+FUNC	public	fn_guard_decision_insert_status()	function	service_role	EXECUTE
 FUNC	public	fn_guard_decision_scoped_i1()	function	anon	-
 FUNC	public	fn_guard_decision_scoped_i1()	function	authenticated	-
 FUNC	public	fn_guard_decision_scoped_i1()	function	service_role	EXECUTE
