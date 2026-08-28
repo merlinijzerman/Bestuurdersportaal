@@ -199,11 +199,22 @@ test("bewijsbinding: de database weigert onbekende, ambigue en dubbele claims", 
   assert.match(bindingFunctie, /v_sleutel_count = 1/);
 });
 
-test("bewijsbinding: beslismoment-snapshot bevat bewijs, stappen en readiness", () => {
+test("bewijsbinding: beslismoment-snapshot bevat bewijs en stappen", () => {
   assert.match(bindingHardening, /'steps'/);
   assert.match(bindingHardening, /'bewijs'/);
-  assert.match(bindingHardening, /'readiness', public\.fn_decision_readiness_overview/);
   assert.match(bindingHardening, /to_jsonb\(pb\.\*\)/);
+  // De 2026_08_22-migratie embedde ooit óók 'readiness', maar PR-D (#168, 0187)
+  // haalt die key eruit (2026_08_28_p3d_01_readiness_drop.sql) nu readiness is
+  // ontmanteld. Nieuwe snapshots dragen geen readiness meer; oude (append-only)
+  // houden hem — afschrift-feitenkaart leest die optioneel.
+  const drop = lees("supabase", "migrations", "2026_08_28_p3d_01_readiness_drop.sql");
+  assert.match(drop, /create or replace function public\.fn_build_decision_dossier/);
+  assert.ok(
+    !/'readiness',\s*public\.fn_decision_readiness_overview/.test(drop),
+    "de p3d-herdefinitie van fn_build_decision_dossier mag de readiness-key niet meer dragen"
+  );
+  assert.match(drop, /drop function if exists public\.fn_decision_readiness_overview/);
+  assert.match(drop, /drop function if exists public\.fn_decision_readiness_check/);
 });
 
 test("bewijsbinding: de normale route én DB-trigger blokkeren botsende instantie-vereisten", () => {
