@@ -1,6 +1,6 @@
 # 0197 — Eén CI-eigenaar per controle en een ratelende lintbaseline
 
-- **Status:** Geaccepteerd — lokaal bewezen; hosted PR-bewijs volgt
+- **Status:** Geaccepteerd — lokaal en hosted bewezen in PR #223
 - **Datum:** 2026-08-29
 - **Betrokkenen:** Merlin (akkoord op consolidatie en uitstel lintschuld), Codex (uitvoering)
 - **Scope:** GitHub Actions, testcontracten, lintconfiguratie en testdocumentatie; geen product-, database-, RLS- of procedurewijziging
@@ -63,7 +63,12 @@ wel gelijk, zodat latere branch protection daarop kan aansluiten.
   volledige DB-integratielaag en 14/14 Playwrighttests groen uitgevoerd.
 - De drie representatieve voorafgaande feature-PR-workflows op commit `d15342f`
   waren dubbel gestart via push en PR: boundaries circa 39/41 s, G2 circa
-  80/98 s en securitybaseline circa 207/195 s. Hosted na-meting volgt in de PR.
+  80/98 s en securitybaseline circa 207/195 s.
+- PR [#223](https://github.com/merlinijzerman/Bestuurdersportaal/pull/223)
+  startte op commit `17799dd` uitsluitend de PR-events. Hosted groen: boundaries
+  44 s, G2 1m39s, securitybaseline 2m23s, RLS 2m11s, E2E 4m15s en
+  karakterisering 5m00s. De drie representatieve workflowgroepen daalden samen
+  van circa 660 naar 286 runnerseconden doordat de pushdoublures verdwenen.
 
 ## Restrisico's en vervolg
 
