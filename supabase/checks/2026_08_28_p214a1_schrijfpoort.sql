@@ -3,6 +3,8 @@
 -- ----------------------------------------------------------------------------
 -- Bewaakt de revokes van p214a1_02/03/04 tegen grant-drift. Familie #209/#212.
 -- Zuiver structureel. Uitvoeren: psql "$DB" -v ON_ERROR_STOP=1 -f dit-bestand.
+-- ROL: postgres — deze structurele cataloguscontrole moet alle grants, functies en
+-- triggers kunnen zien; gebruikersgedrag onder authenticated staat in de gedragstoets.
 --
 -- ASSERTIEF, niet slechts bevestigend (eis 0194): de gate toetst NIET alleen dat
 -- de toegestane kolommen schrijfbaar zijn, maar ook ASSERTIEF het ONTBREKEN van

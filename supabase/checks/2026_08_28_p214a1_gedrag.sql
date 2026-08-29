@@ -18,6 +18,8 @@
 --
 -- LET OP: seedt in auth.users → TESTdatabase, niet productie. Alles in begin…rollback.
 -- Uitvoeren: psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f dit-bestand.
+-- ROL: postgres voor seed en afbraak, authenticated voor de gedragsmeting — alleen
+-- onder de echte gebruikersrol bewijst de suite dat directe writes zijn gesloten.
 -- ============================================================================
 
 -- DEEL 1 — de drie RPC's bestaan (anders is DEEL 2 zinloos).
