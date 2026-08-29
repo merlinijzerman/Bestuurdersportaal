@@ -12,10 +12,18 @@ import {
 import type { RequirementType } from "./decision-view";
 
 const seedBestanden = [
-  "supabase/migrations/2026_05_08_phase_1b_template_requirements.sql",
   "supabase/seeds/schema/2026_08_13_invaar_requirements_seed.sql",
   "supabase/seeds/schema/2026_08_14_invaar_requirements_seed_v2.sql",
 ];
+
+// 2026-05-08 is een historische, al toegepaste seedmigratie en daarmee geen
+// actuele definitie. Besluit 0195 corrigeert de toen gepubliceerde rij(en) met
+// een nieuwe voorwaartse migratie; deze test borgt dat die correctie niet stil
+// uit de migratieset verdwijnt.
+const legacySeedBestand =
+  "supabase/migrations/2026_05_08_phase_1b_template_requirements.sql";
+const legacyCorrectieBestand =
+  "supabase/migrations/2026_08_29_zz_0195_verwijder_onvervulbare_templatevereisten.sql";
 
 // De drie seedvormen dragen steeds (template_code, [template_versie,]
 // stap_volgorde, requirement_type, ...). Lees uitsluitend de VALUES-rijen;
@@ -40,6 +48,22 @@ for (const relatiefPad of seedBestanden) {
   }
 }
 
+const legacyInhoud = readFileSync(join(process.cwd(), legacySeedBestand), "utf8");
+const legacyTypesZonderPad = [...legacyInhoud.matchAll(requirementTypeInRij)]
+  .map((match) => match[1] as RequirementType)
+  .filter((type) => !heeftVervullingspad(type));
+const correctieInhoud = readFileSync(join(process.cwd(), legacyCorrectieBestand), "utf8");
+
+assert.ok(
+  legacyTypesZonderPad.includes("evaluation"),
+  `${legacySeedBestand}: de #228-doelrij ontbreekt onverwacht; wijzig 0195 bewust`
+);
+assert.match(
+  correctieInhoud,
+  /stap_volgorde = 6[\s\S]*requirement_type = 'evaluation'[\s\S]*label = 'Evaluatiemoment gepland'/,
+  `${legacyCorrectieBestand}: mist de exact gerichte voorwaartse verwijdering voor #228`
+);
+
 console.log(
-  `seed-requirement-vervullingspad: ${seedBestanden.length} seeddefinities zonder onvervulbare requirement-typen.`
+  `seed-requirement-vervullingspad: ${seedBestanden.length} actuele seeddefinities zonder onvervulbare requirement-typen; legacy-correctie 0195 geborgd.`
 );
