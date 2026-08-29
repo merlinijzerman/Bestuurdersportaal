@@ -399,6 +399,9 @@ FUNC	public	fn_orgprofiel_ketengebeurtenis()	function	service_role	EXECUTE
 FUNC	public	fn_stap_activeren(p_stap_id uuid, p_procedure_id uuid)	function	anon	-
 FUNC	public	fn_stap_activeren(p_stap_id uuid, p_procedure_id uuid)	function	authenticated	EXECUTE
 FUNC	public	fn_stap_activeren(p_stap_id uuid, p_procedure_id uuid)	function	service_role	-
+FUNC	public	fn_stap_activeerbaar_maken(p_stap_id uuid, p_procedure_id uuid)	function	anon	-
+FUNC	public	fn_stap_activeerbaar_maken(p_stap_id uuid, p_procedure_id uuid)	function	authenticated	EXECUTE
+FUNC	public	fn_stap_activeerbaar_maken(p_stap_id uuid, p_procedure_id uuid)	function	service_role	-
 FUNC	public	fn_stap_afronden(p_stap_id uuid, p_procedure_id uuid)	function	anon	-
 FUNC	public	fn_stap_afronden(p_stap_id uuid, p_procedure_id uuid)	function	authenticated	EXECUTE
 FUNC	public	fn_stap_afronden(p_stap_id uuid, p_procedure_id uuid)	function	service_role	-
