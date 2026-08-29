@@ -127,6 +127,8 @@ export interface Besluit {
   datum: string;
   vastgelegd_door_naam: string | null;
   verworpen_alternatieven: string[] | null;
+  uitkomst: "instemmend" | "voorwaardelijk" | "afwijzend" | null;
+  requirement_sleutel: string | null;
 }
 
 export interface KomendeVergadering {

@@ -8,6 +8,7 @@ drop trigger if exists trg_stap_actief_checklist on public.procedure_checklist;
 drop trigger if exists trg_stap_actief_bewijs on public.procedure_bewijs;
 drop trigger if exists trg_stap_actief_besluit on public.procedure_besluiten;
 drop function if exists public.fn_stap_actief_bij_handeling();
+drop function if exists public.fn_stap_activeerbaar_maken(uuid, uuid);
 alter table public.procedure_stappen
   drop column if exists actief_sinds,
   drop column if exists gestart_door;

@@ -113,6 +113,9 @@ declare
   -- een expliciet besluit; zie 2026_07_08_t3_globale_tabellen_register.sql.
   globaal text[] := array[
     'fondsen',                        -- lijst van fondsen, geen tenantinhoud
+    'besluitstatus_vereist_feit',     -- P4 (#169): globale, auditor-leesbare
+                                      -- status→feit-codelijst; authenticated
+                                      -- SELECT, schrijven alleen via migraties.
     'procedure_requirements',         -- globale templateconfiguratie
     'procedure_definitie_publicatie', -- P1b (#166): publicatieregister (I7),
                                       -- globaal, geen fonds_id; append-only,

@@ -28,7 +28,83 @@ comment on column public.procedure_stappen.actief_sinds is
 comment on column public.procedure_stappen.gestart_door is
   'P4 (#169): wie de stap met de eerste handeling activeerde.';
 
--- 2. Trigger-functie: één overgang, niet_begonnen → actief.
+-- 2. Afgeleide cascade-overgang: geblokkeerd → niet_begonnen.
+--    Na #214-a1 mag authenticated status niet direct bijwerken. Deze RPC
+--    controleert daarom zelf fondsgrens én afhankelijkheden; een directe caller
+--    kan geen stap voortijdig vrijgeven.
+create or replace function public.fn_stap_activeerbaar_maken(
+  p_stap_id      uuid,
+  p_procedure_id uuid
+) returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_actor      uuid := auth.uid();
+  v_actorfonds uuid;
+  v_procfonds  uuid;
+  v_stap       record;
+  v_onvervuld  boolean;
+begin
+  if v_actor is null then
+    raise exception 'Niet ingelogd.' using errcode = '42501';
+  end if;
+
+  select pr.fonds_id into v_actorfonds
+    from public.profielen pr
+   where pr.id = v_actor;
+  select p.fonds_id into v_procfonds
+    from public.procedures p
+   where p.id = p_procedure_id;
+  if not found then
+    raise exception 'Procedure niet gevonden (fail-closed).' using errcode = '23514';
+  end if;
+  if v_actorfonds is distinct from v_procfonds then
+    raise exception 'Fondsgrens: activeerbaarheid niet in het eigen fonds.' using errcode = '42501';
+  end if;
+
+  select ps.id, ps.status, ps.blokkerende_afhankelijkheden
+    into v_stap
+    from public.procedure_stappen ps
+   where ps.id = p_stap_id
+     and ps.procedure_id = p_procedure_id
+   for update;
+  if not found then
+    raise exception 'Stap niet gevonden bij deze procedure.' using errcode = 'PC002';
+  end if;
+  if v_stap.status = 'niet_begonnen' then
+    return jsonb_build_object('ok', true, 'onveranderd', true);
+  end if;
+  if v_stap.status is distinct from 'geblokkeerd' then
+    raise exception 'Alleen een geblokkeerde stap kan activeerbaar worden.' using errcode = 'PC002';
+  end if;
+
+  select exists (
+    select 1
+      from unnest(coalesce(v_stap.blokkerende_afhankelijkheden, '{}'::int[])) dep(volgorde)
+      left join public.procedure_stappen voorganger
+        on voorganger.procedure_id = p_procedure_id
+       and voorganger.volgorde = dep.volgorde
+     where voorganger.id is null
+        or voorganger.status is distinct from 'afgerond'
+  ) into v_onvervuld;
+  if v_onvervuld then
+    raise exception 'Stap heeft nog onvervulde afhankelijkheden.' using errcode = 'PC002';
+  end if;
+
+  update public.procedure_stappen
+     set status = 'niet_begonnen'
+   where id = p_stap_id;
+  return jsonb_build_object('ok', true);
+end $$;
+
+revoke all on function public.fn_stap_activeerbaar_maken(uuid, uuid)
+  from public, anon, service_role;
+grant execute on function public.fn_stap_activeerbaar_maken(uuid, uuid)
+  to authenticated;
+
+-- 3. Trigger-functie: één overgang, niet_begonnen → actief.
 create or replace function public.fn_stap_actief_bij_handeling()
 returns trigger
 language plpgsql
@@ -82,7 +158,7 @@ create trigger trg_stap_actief_besluit
   after insert on public.procedure_besluiten
   for each row execute function public.fn_stap_actief_bij_handeling();
 
--- 3. Herclassificatie lopende processen (§4.1 r171), deterministisch en idempotent:
+-- 4. Herclassificatie lopende processen (§4.1 r171), deterministisch en idempotent:
 --    een 'actief' stap ZONDER inhoudelijke handeling wordt niet_begonnen; met
 --    handeling blijft hij actief en krijgt een actief_sinds (bij benadering now();
 --    de vroegste procedure_log-gebeurtenis is een latere verfijning).

@@ -1249,10 +1249,21 @@ create table if not exists public.procedure_besluiten (
   datum                 date not null,
   vastgelegd_door       uuid references auth.users(id) on delete set null,
   vastgelegd_door_naam  text,
-  vastgelegd_op         timestamptz default now()
+  vastgelegd_op         timestamptz default now(),
+  -- P4/I1 (migratie 2026_08_29_p4_04): zelfstandige feitelijke uitkomst.
+  uitkomst              text check (uitkomst is null or uitkomst in
+                          ('instemmend','voorwaardelijk','afwijzend'))
 );
 
 create index if not exists idx_besluiten_proc on public.procedure_besluiten(procedure_id, datum desc);
+
+-- P4/I1 — globale, auditor-leesbare status→feit-codelijst. De authoritatieve
+-- seed, RLS/grants en uitgestelde constraint-trigger staan in p4_04.
+create table if not exists public.besluitstatus_vereist_feit (
+  doelstatus   text primary key,
+  vereist_feit text not null,
+  toelichting  text not null
+);
 
 create table if not exists public.procedure_log (
   id            uuid primary key default uuid_generate_v4(),

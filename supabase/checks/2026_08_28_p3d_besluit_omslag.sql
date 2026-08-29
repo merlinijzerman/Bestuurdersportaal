@@ -98,21 +98,28 @@ values ('dddddddd-0000-0000-0000-0000000000d1',5,'document','Kritiek stuk',1,tru
        ('dddddddd-0000-0000-0000-0000000000d5',5,'document','Kritiek stuk',1,true,'dddddddd-dddd-dddd-dddd-dddddddddddd','kritiek'),
        ('dddddddd-0000-0000-0000-0000000000d6',5,'document','Kritiek stuk',1,true,'dddddddd-dddd-dddd-dddd-dddddddddddd','kritiek');
 
--- P4/I1: de geldige besluitpaden dragen elk een formeel, gebonden approval-feit.
--- Zonder dit feit hoort de matrix de omslag al vóór de I2-open-check te weigeren.
-insert into public.procedure_requirement_instance
-  (decision_id, stap_volgorde, requirement_type, label, min_aantal, actief, fonds_id, zwaarte)
-values ('dddddddd-0000-0000-0000-0000000000d1',5,'approval','Goedkeuring',1,true,'dddddddd-dddd-dddd-dddd-dddddddddddd','vereist'),
-       ('dddddddd-0000-0000-0000-0000000000d2',5,'approval','Goedkeuring',1,true,'dddddddd-dddd-dddd-dddd-dddddddddddd','vereist'),
-       ('dddddddd-0000-0000-0000-0000000000d3',5,'approval','Goedkeuring',1,true,'dddddddd-dddd-dddd-dddd-dddddddddddd','vereist'),
-       ('dddddddd-0000-0000-0000-0000000000d6',5,'approval','Goedkeuring',1,true,'dddddddd-dddd-dddd-dddd-dddddddddddd','vereist');
+-- P4/T4 (I1 voorwaarts): iedere overgang naar besloten vereist nu óók het
+-- onafhankelijke feit dat een besluit aan een approval-vereiste is gebonden.
+-- Deze suite toetst P3's motiveringsgedrag, dus zaait dat P4-feit expliciet voor
+-- alle zeven decisions; zonder deze rijen hoort de feitenmatrix terecht PC004 te geven.
+insert into public.procedure_requirements
+  (template_code, template_versie, stap_volgorde, requirement_type, label,
+   min_aantal, zwaarte)
+values ('pd_tpl','1.0.0',5,'approval','PD approval',1,'kritiek');
+
 insert into public.procedure_besluiten
-  (procedure_id, stap_id, decision_id, requirement_sleutel, formulering, datum)
-select d.procedure_id, ps.id, d.id, '5|approval|Goedkeuring', 'Formeel vastgelegd besluit', current_date
+  (procedure_id, stap_id, decision_id, formulering, datum, requirement_sleutel, uitkomst)
+select d.procedure_id, ps.id, d.id, 'PD vastgelegd besluit', current_date,
+       '5|approval|PD approval', 'instemmend'
   from public.decision_objects d
-  join public.procedure_stappen ps on ps.procedure_id=d.procedure_id and ps.volgorde=5
- where d.id in ('dddddddd-0000-0000-0000-0000000000d1','dddddddd-0000-0000-0000-0000000000d2',
-                'dddddddd-0000-0000-0000-0000000000d3','dddddddd-0000-0000-0000-0000000000d6');
+  join public.procedure_stappen ps
+    on ps.procedure_id=d.procedure_id and ps.volgorde=5
+ where d.id in (
+   'dddddddd-0000-0000-0000-0000000000d1','dddddddd-0000-0000-0000-0000000000d2',
+   'dddddddd-0000-0000-0000-0000000000d3','dddddddd-0000-0000-0000-0000000000d4',
+   'dddddddd-0000-0000-0000-0000000000d5','dddddddd-0000-0000-0000-0000000000d6',
+   'dddddddd-0000-0000-0000-0000000000d7'
+ );
 
 -- #1 geldige besluit-met-open (motivering ok): status → besloten, atomair mét beide
 --    events; het event draagt open_voor_besluitmoment (SQL, niet leeg) én actor_rol.
