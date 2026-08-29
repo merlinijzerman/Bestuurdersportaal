@@ -25,6 +25,7 @@ execute|public.cosine_distance|anon=true authenticated=true
 execute|public.cosine_distance|anon=true authenticated=true
 execute|public.documenten_claim_ingest_jobs|anon=false authenticated=false
 execute|public.fn_afschrift_bevries_kolommen|anon=false authenticated=true
+execute|public.fn_agendapunt_ketengebeurtenis|anon=false authenticated=true
 execute|public.fn_ai_actie_afronden|anon=false authenticated=true
 execute|public.fn_ai_actie_bevries_kolommen|anon=false authenticated=false
 execute|public.fn_ai_actietype_spec|anon=false authenticated=true
@@ -41,6 +42,7 @@ execute|public.fn_ai_quota_wijzigen|anon=false authenticated=false
 execute|public.fn_ai_reserveer_intern|anon=false authenticated=false
 execute|public.fn_ai_switch_stoppen|anon=false authenticated=false
 execute|public.fn_app_error_log|anon=false authenticated=true
+execute|public.fn_audit_procedure_bewijs_mutation|anon=false authenticated=false
 execute|public.fn_bron_whitelist_log_hash|anon=false authenticated=true
 execute|public.fn_bron_whitelist_log_immutable|anon=false authenticated=true
 execute|public.fn_build_decision_dossier|anon=false authenticated=true
@@ -63,6 +65,7 @@ execute|public.fn_document_procesinstantie_fonds_check|anon=false authenticated=
 execute|public.fn_document_procesinstantie_validatie|anon=false authenticated=true
 execute|public.fn_document_status_overgang_check|anon=false authenticated=true
 execute|public.fn_document_status_transitie|anon=false authenticated=true
+execute|public.fn_document_status_zetten|anon=false authenticated=true
 execute|public.fn_dossierstatus_van_decision|anon=false authenticated=true
 execute|public.fn_export_log_immutable|anon=false authenticated=true
 execute|public.fn_fonds_config_capture|anon=false authenticated=true
@@ -70,8 +73,12 @@ execute|public.fn_fonds_stuurinfo_capture|anon=false authenticated=true
 execute|public.fn_generiek_geldigheidsstatus|anon=false authenticated=true
 execute|public.fn_generiek_status_overgang_check|anon=false authenticated=true
 execute|public.fn_generiek_transitie|anon=false authenticated=true
+execute|public.fn_govevent_fonds|anon=false authenticated=true
 execute|public.fn_govevent_hash|anon=false authenticated=true
 execute|public.fn_govevent_immutable|anon=false authenticated=true
+execute|public.fn_handelingen_retentie_guard|anon=false authenticated=false
+execute|public.fn_handelingen_snoei|anon=false authenticated=false
+execute|public.fn_inbreng_ketengebeurtenis|anon=false authenticated=true
 execute|public.fn_log_append_only|anon=false authenticated=true
 execute|public.fn_notulen_segment_audit|anon=false authenticated=true
 execute|public.fn_notulen_segment_bevestig|anon=false authenticated=true
@@ -79,15 +86,25 @@ execute|public.fn_notulen_segment_check|anon=false authenticated=true
 execute|public.fn_notulen_segment_ontbevestig|anon=false authenticated=true
 execute|public.fn_notulen_segment_verwijder|anon=false authenticated=true
 execute|public.fn_organisatie_profielen_touch|anon=false authenticated=true
+execute|public.fn_orgprofiel_ketengebeurtenis|anon=false authenticated=true
 execute|public.fn_platform_event_chain_assert_valid|anon=false authenticated=false
 execute|public.fn_platform_event_fork_declaration_immutable|anon=false authenticated=false
 execute|public.fn_platform_event_hash|anon=false authenticated=false
 execute|public.fn_platform_event_immutable|anon=false authenticated=true
 execute|public.fn_profiel_bevries_kolommen|anon=false authenticated=false
 execute|public.fn_rate_limit_check|anon=false authenticated=true
+execute|public.fn_schrijf_handeling|anon=false authenticated=true
 execute|public.fn_schrijf_semantische_extractie|anon=false authenticated=false
 execute|public.fn_schrijf_vergelijking|anon=false authenticated=true
 execute|public.fn_snapshot_immutable|anon=false authenticated=true
+execute|public.fn_stap_activeren|anon=false authenticated=true
+execute|public.fn_stap_afronden|anon=false authenticated=true
+execute|public.fn_stap_heropenen|anon=false authenticated=true
+execute|public.fn_stem_ketengebeurtenis|anon=false authenticated=true
+execute|public.fn_stemming_ketengebeurtenis|anon=false authenticated=true
+execute|public.fn_validate_bewijs_requirement_binding|anon=false authenticated=false
+execute|public.fn_validate_requirement_instance_binding_sleutel|anon=false authenticated=false
+execute|public.fn_vergadering_ketengebeurtenis|anon=false authenticated=true
 execute|public.fn_zelfde_fonds|anon=false authenticated=true
 execute|public.gin_extract_query_trgm|anon=true authenticated=true
 execute|public.gin_extract_value_trgm|anon=true authenticated=true
@@ -159,6 +176,7 @@ execute|public.maak_profiel|anon=false authenticated=false
 execute|public.mag_audit_bronnen|anon=false authenticated=true
 execute|public.mag_audit_redacties|anon=false authenticated=true
 execute|public.mag_audit|anon=false authenticated=true
+execute|public.mag_handelingen_lezen|anon=false authenticated=true
 execute|public.meta_basisniveau|anon=false authenticated=true
 execute|public.meta_bronniveau|anon=false authenticated=true
 execute|public.meta_projectie|anon=false authenticated=true
@@ -272,6 +290,7 @@ functie|public.cosine_distance|secdef=false searchpath=niet gepind md5=aae873c02
 functie|public.cosine_distance|secdef=false searchpath=niet gepind md5=f0d2d2543f6b6fc987170e7007cb382d
 functie|public.documenten_claim_ingest_jobs|secdef=true searchpath=search_path=public, pg_temp md5=ab6ffe2b1e448c3bd14fa0eba972ee36
 functie|public.fn_afschrift_bevries_kolommen|secdef=true searchpath=search_path=public, pg_temp md5=7c450090869d688a36043e8462763a0a
+functie|public.fn_agendapunt_ketengebeurtenis|secdef=false searchpath=search_path=public, pg_temp md5=06ffaabadbd232b5dfde10fb4f0f5304
 functie|public.fn_ai_actie_afronden|secdef=true searchpath=search_path=public, pg_temp md5=1ade7953987ff17e6497dd1e2031fe03
 functie|public.fn_ai_actie_bevries_kolommen|secdef=false searchpath=niet gepind md5=b731d7c8d5f74e2d4855b311ce296009
 functie|public.fn_ai_actietype_spec|secdef=true searchpath=search_path=public, pg_temp md5=db52ad2dc9eb89860b7ffe4bcaa32328
@@ -288,20 +307,21 @@ functie|public.fn_ai_quota_wijzigen|secdef=true searchpath=search_path=public, p
 functie|public.fn_ai_reserveer_intern|secdef=true searchpath=search_path=public, pg_temp md5=eb5d25daf886431b1fd9ea7f19b9bc24
 functie|public.fn_ai_switch_stoppen|secdef=true searchpath=search_path=public, pg_temp md5=e1e3f1e158145605cf32172d109cec38
 functie|public.fn_app_error_log|secdef=true searchpath=search_path=public, pg_temp md5=47a90cb00c8a9278ef3b31c4e3cfce0d
+functie|public.fn_audit_procedure_bewijs_mutation|secdef=true searchpath=search_path=pg_temp md5=3dfd3382b681b64bc75a432f1f692528
 functie|public.fn_bron_whitelist_log_hash|secdef=false searchpath=niet gepind md5=1aa9977b6faa89b2602d8063635d7e78
 functie|public.fn_bron_whitelist_log_immutable|secdef=false searchpath=niet gepind md5=94349a2cbfe96fe81e4377f84fa535c2
-functie|public.fn_build_decision_dossier|secdef=false searchpath=niet gepind md5=fc21561876389af8dba84f4a070b872a
+functie|public.fn_build_decision_dossier|secdef=false searchpath=niet gepind md5=9de829fe09d4db328ec955ae51997b28
 functie|public.fn_chunk_denorm_before_insert|secdef=false searchpath=search_path=public, pg_temp md5=67c83b5bcab8eb1599f65b56453b2b19
 functie|public.fn_chunk_denorm_refresh|secdef=false searchpath=search_path=public, pg_temp md5=b98c9d83fc5c31caf22d893427411d80
 functie|public.fn_chunk_denorm|secdef=false searchpath=search_path=public, pg_temp md5=7407172179d566288620b6040471d1f9
 functie|public.fn_contact_aanvragen_no_delete|secdef=false searchpath=niet gepind md5=1080388908f45c73657e4acb99ea8f89
 functie|public.fn_decision_code|secdef=false searchpath=niet gepind md5=c3cbda023278c39644055523be469deb
-functie|public.fn_decision_readiness_check|secdef=false searchpath=niet gepind md5=8ea857446adfc27e8d58c4a6b27b914b
+functie|public.fn_decision_readiness_check|secdef=false searchpath=niet gepind md5=2d45edf37585a9793ad2abf3f302fcb3
 functie|public.fn_decision_readiness_overview|secdef=false searchpath=niet gepind md5=b66240a861a60d6f2cf87374b0732b08
 functie|public.fn_decision_snapshot|secdef=false searchpath=niet gepind md5=bab1eeaeb7ff99bb08f8c6bf573eb24c
 functie|public.fn_decision_status_check|secdef=false searchpath=niet gepind md5=07b816d9343f3bcdfefa2590d3a7337b
 functie|public.fn_decision_touch|secdef=false searchpath=niet gepind md5=ad400f9606ba5747eedfab918407f5ff
-functie|public.fn_doc_meta_log_hash|secdef=false searchpath=niet gepind md5=273081c60c95ccbb1e3b9fea14de3d2f
+functie|public.fn_doc_meta_log_hash|secdef=false searchpath=niet gepind md5=0b41e81eb70b16715b09fd4e2b3f35bf
 functie|public.fn_doc_meta_log_immutable|secdef=false searchpath=niet gepind md5=534e3c73a31bac1f4b77fc4c4ac3d673
 functie|public.fn_document_agendapunt_validatie|secdef=false searchpath=niet gepind md5=56c7031b3be91f8edc14d7d8693e4c4e
 functie|public.fn_document_agendapunt_vergadering_check|secdef=false searchpath=niet gepind md5=5067a8dc58d891ca93286e6cc8449b99
@@ -310,6 +330,7 @@ functie|public.fn_document_procesinstantie_fonds_check|secdef=false searchpath=n
 functie|public.fn_document_procesinstantie_validatie|secdef=false searchpath=niet gepind md5=7db2ce8b18935f02c7af15529b09b6aa
 functie|public.fn_document_status_overgang_check|secdef=false searchpath=niet gepind md5=8a31496af07ca0d4c397fb0d9c9625e3
 functie|public.fn_document_status_transitie|secdef=false searchpath=niet gepind md5=7d857b7ab28163b7c6ccf635358c987a
+functie|public.fn_document_status_zetten|secdef=false searchpath=search_path=public, pg_temp md5=c96d03c4949d01f03af78a03f7fd3c72
 functie|public.fn_dossierstatus_van_decision|secdef=false searchpath=niet gepind md5=fd4edd59525e5f110b8ee8d8285a6c7d
 functie|public.fn_export_log_immutable|secdef=false searchpath=niet gepind md5=ef0c3f7e78b73861b4cb4d64ef8a9892
 functie|public.fn_fonds_config_capture|secdef=false searchpath=niet gepind md5=3adcacded2f543f9f4dec31a0bd0fa76
@@ -317,24 +338,38 @@ functie|public.fn_fonds_stuurinfo_capture|secdef=false searchpath=niet gepind md
 functie|public.fn_generiek_geldigheidsstatus|secdef=false searchpath=niet gepind md5=a7e747a1eb51b7fa7c5ead8e420cd898
 functie|public.fn_generiek_status_overgang_check|secdef=false searchpath=niet gepind md5=6d86f5fda64c759509f0292085aea872
 functie|public.fn_generiek_transitie|secdef=false searchpath=niet gepind md5=ed9c5995a0a1919f410f050fbfb0bd10
-functie|public.fn_govevent_hash|secdef=false searchpath=niet gepind md5=1294f096cd0d8f24de1ff3b311ea4ed0
+functie|public.fn_govevent_fonds|secdef=false searchpath=search_path=public, pg_temp md5=74548cdf0629ab3bf55cc4637fb118ec
+functie|public.fn_govevent_hash|secdef=false searchpath=niet gepind md5=0fd2b8f43ad0a6fc75d6c6d181d2045c
 functie|public.fn_govevent_immutable|secdef=false searchpath=niet gepind md5=1d5c905da3137e3861cd0d71fa4aec89
+functie|public.fn_handelingen_retentie_guard|secdef=false searchpath=niet gepind md5=aff4ebc09c069dfa8f6823f52125ba51
+functie|public.fn_handelingen_snoei|secdef=true searchpath=search_path=public md5=09038d717d9e3b023389d14d8504e09e
+functie|public.fn_inbreng_ketengebeurtenis|secdef=false searchpath=search_path=public, pg_temp md5=ba0e5ab1cc8b046007db764aceeedf4d
 functie|public.fn_log_append_only|secdef=false searchpath=niet gepind md5=fed6579db5f69ca5ff4b7d7a685e451f
 functie|public.fn_notulen_segment_audit|secdef=false searchpath=search_path=public, pg_temp md5=2c8a5db4298f143527721e2f7d60324e
-functie|public.fn_notulen_segment_bevestig|secdef=false searchpath=search_path=public, pg_temp md5=ce297c95ea931f6fea911ff0fce958ca
+functie|public.fn_notulen_segment_bevestig|secdef=false searchpath=search_path=public, pg_temp md5=46d4361360d15edf309d31fab2c96fc6
 functie|public.fn_notulen_segment_check|secdef=false searchpath=search_path=public, pg_temp md5=00be212fd3ed9ac7200b4ce06123e512
 functie|public.fn_notulen_segment_ontbevestig|secdef=false searchpath=search_path=public, pg_temp md5=7cb5a8b2a7f47217d31c50cfa8d61ad1
-functie|public.fn_notulen_segment_verwijder|secdef=false searchpath=search_path=public, pg_temp md5=f9478d535ba029ccc463195545ae2194
+functie|public.fn_notulen_segment_verwijder|secdef=false searchpath=search_path=public, pg_temp md5=e6cb31ed1ed446095d0222db9a758b5b
 functie|public.fn_organisatie_profielen_touch|secdef=false searchpath=niet gepind md5=8b58dbe35ad1684b1d4a8408fe7174df
+functie|public.fn_orgprofiel_ketengebeurtenis|secdef=false searchpath=search_path=public, pg_temp md5=73f3e2b99db94ba5750bdbca1c2f02b1
 functie|public.fn_platform_event_chain_assert_valid|secdef=true searchpath=search_path=pg_catalog, public, extensions, pg_temp md5=01f54fe33cdfc6c8bf8dfba660cac6a6
 functie|public.fn_platform_event_fork_declaration_immutable|secdef=true searchpath=search_path=pg_catalog, public, pg_temp md5=06e92f7f318af090d222cbdded3a2dd9
 functie|public.fn_platform_event_hash|secdef=true searchpath=search_path=pg_catalog, public, pg_temp md5=3e654ca6fcb8ef411a8b331ea98f543d
 functie|public.fn_platform_event_immutable|secdef=false searchpath=niet gepind md5=b8fdf1fe9384e836325efa9b9fe9a053
 functie|public.fn_profiel_bevries_kolommen|secdef=true searchpath=search_path=public, pg_temp md5=1cb989181b99371810cd9cb65975b32f
 functie|public.fn_rate_limit_check|secdef=true searchpath=search_path=public, pg_temp md5=5161460bc4f0848ab8ae355e0d981bfc
+functie|public.fn_schrijf_handeling|secdef=true searchpath=search_path=public md5=073652d03ed9a7a31685582593ea7f2c
 functie|public.fn_schrijf_semantische_extractie|secdef=false searchpath=search_path=public md5=83862552d2a8ab85475b19145e1edc8b
 functie|public.fn_schrijf_vergelijking|secdef=true searchpath=search_path=public, pg_temp md5=297d2304ee033da1799ad3b222e0cd28
 functie|public.fn_snapshot_immutable|secdef=false searchpath=niet gepind md5=6c6a7a470620f20c18069d54ed39d696
+functie|public.fn_stap_activeren|secdef=true searchpath=search_path=public, pg_temp md5=3ff7cb1fc6b0e151d033c79271415aea
+functie|public.fn_stap_afronden|secdef=true searchpath=search_path=public, pg_temp md5=15062e5774a1364789c190b6e3cb03fd
+functie|public.fn_stap_heropenen|secdef=true searchpath=search_path=public, extensions, pg_temp md5=ca70b3dd033e5526da308e00362b0cc7
+functie|public.fn_stem_ketengebeurtenis|secdef=false searchpath=search_path=public, pg_temp md5=3fcde43a22efc2269aae118f55f2c1d4
+functie|public.fn_stemming_ketengebeurtenis|secdef=false searchpath=search_path=public, pg_temp md5=8d81690cc94e8e6ed590b68854b03b05
+functie|public.fn_validate_bewijs_requirement_binding|secdef=true searchpath=search_path=pg_temp md5=c8819cb58436bb16f005d21db2370a37
+functie|public.fn_validate_requirement_instance_binding_sleutel|secdef=true searchpath=search_path=pg_temp md5=f7738d2a25c8c76b7c479fa2a3f00b5a
+functie|public.fn_vergadering_ketengebeurtenis|secdef=false searchpath=search_path=public, pg_temp md5=dfe617dcff724756eca3ea87b0fc3afb
 functie|public.fn_zelfde_fonds|secdef=true searchpath=search_path=public, pg_temp md5=fd415f348794638b2fcfa791b8f23421
 functie|public.gin_extract_query_trgm|secdef=false searchpath=niet gepind md5=908112f5743e0dc3307ce7da24a3d095
 functie|public.gin_extract_value_trgm|secdef=false searchpath=niet gepind md5=42bc3d69fe7ae6ba4409315e68686e93
@@ -402,10 +437,11 @@ functie|public.l2_norm|secdef=false searchpath=niet gepind md5=750a66695db37f687
 functie|public.l2_norm|secdef=false searchpath=niet gepind md5=a33a811e4c8c037e5d1dba539fb1c6d4
 functie|public.lees_governance_audit|secdef=true searchpath=search_path=public, pg_temp md5=3ba375023dd533506f9dae72698d0dbe
 functie|public.log_word_export|secdef=true searchpath=search_path=public, pg_temp md5=2f8f9e3ee63f1c06a888c795078b0a32
-functie|public.maak_profiel|secdef=true searchpath=search_path=public, pg_temp md5=f7be632c43fc8be9ef3711a118ca1d86
+functie|public.maak_profiel|secdef=true searchpath=search_path=public, pg_temp md5=1e64bda36e903901664073db237cffd3
 functie|public.mag_audit_bronnen|secdef=true searchpath=search_path=public, pg_temp md5=91654e231469a7b2fe08be59d4b10aea
 functie|public.mag_audit_redacties|secdef=true searchpath=search_path=public, pg_temp md5=fc264937e48c2b9b69d0635a4004ff5d
 functie|public.mag_audit|secdef=true searchpath=search_path=public, pg_temp md5=2ce30128a8920e86b5fa11bf9daa7270
+functie|public.mag_handelingen_lezen|secdef=true searchpath=search_path=public, pg_temp md5=2e1bd21058727d70611430116d76e12c
 functie|public.meta_basisniveau|secdef=false searchpath=search_path=public, pg_temp md5=90cf5561170a5c1d88327b4c0b5127dd
 functie|public.meta_bronniveau|secdef=false searchpath=search_path=public, pg_temp md5=470bff2d41570b74f1f6d194a97b9343
 functie|public.meta_projectie|secdef=false searchpath=search_path=public, pg_temp md5=b0c303f4abf257e3ae6aa396e0cee69f
@@ -567,7 +603,7 @@ policy|public.gesprekken.eigen gesprekken aanmaken|cmd=INSERT qual=geen withchec
 policy|public.gesprekken.eigen gesprekken bijwerken|cmd=UPDATE qual=60de521b3ddbc398305365192f89510e withcheck=60de521b3ddbc398305365192f89510e
 policy|public.gesprekken.eigen gesprekken lezen|cmd=SELECT qual=60de521b3ddbc398305365192f89510e withcheck=geen
 policy|public.governance_audit_inzage.eigen inzage lezen|cmd=SELECT qual=c81321cc0ae91c16134b3a87182221c2 withcheck=geen
-policy|public.governance_events.fonds governance_events|cmd=ALL qual=41784fcc2638bda96e9d04a366994a27 withcheck=41784fcc2638bda96e9d04a366994a27
+policy|public.governance_events.fonds governance_events|cmd=ALL qual=7eeaf3d457fa3a8a28388f9c6a36bf46 withcheck=e13d2c1718d1f484fab9db82ab1a876d
 policy|public.governance_export_log.export log select|cmd=SELECT qual=66721872fdea5173f9d1ec2acd05bfb7 withcheck=geen
 policy|public.governance_log.auditregels schrijven eigen fonds|cmd=INSERT qual=geen withcheck=60de521b3ddbc398305365192f89510e
 policy|public.governance_log.eigen auditregels lezen|cmd=SELECT qual=4bd22020d24b805df30721396493c6ab withcheck=geen
@@ -575,6 +611,7 @@ policy|public.governance_log_inhoud.eigen loginhoud lezen|cmd=SELECT qual=cbf722
 policy|public.governance_redacties.redacties lezen|cmd=SELECT qual=683b900d924238e9bec4b8c3cd723e50 withcheck=geen
 policy|public.gremia.lees gremia|cmd=SELECT qual=13796f4aaef53d629fd509e52e91899c withcheck=geen
 policy|public.gremia.schrijf gremia|cmd=ALL qual=2f27d8bfa02792e2d07542361269c317 withcheck=2f27d8bfa02792e2d07542361269c317
+policy|public.handelingen_log.handelingen lezen met capability|cmd=SELECT qual=da1461c947e82ab54ae9ebd5b77157d0 withcheck=geen
 policy|public.kritische_focusgebieden.lees focusgebieden|cmd=SELECT qual=13796f4aaef53d629fd509e52e91899c withcheck=geen
 policy|public.kritische_focusgebieden.schrijf focusgebieden|cmd=ALL qual=2f27d8bfa02792e2d07542361269c317 withcheck=2f27d8bfa02792e2d07542361269c317
 policy|public.notificaties.eigen notificaties select|cmd=SELECT qual=047d5cd93588d2b5f021a522ac929920 withcheck=geen
@@ -727,6 +764,8 @@ rls|governance_log_inhoud|enabled=true forced=false
 rls|governance_log|enabled=true forced=false
 rls|governance_redacties|enabled=true forced=false
 rls|gremia|enabled=true forced=false
+rls|handelingen_lees_grants|enabled=true forced=false
+rls|handelingen_log|enabled=true forced=false
 rls|kritische_focusgebieden|enabled=true forced=false
 rls|notificaties|enabled=true forced=false
 rls|notulen_segmenten|enabled=true forced=false
