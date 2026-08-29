@@ -18,7 +18,9 @@ name: security-baseline
 #  nooit meldt.
 on:
   push:
+    branches: [main, preview]
   pull_request:
+    branches: [main, preview]
   workflow_dispatch:
 
 permissions:
@@ -34,11 +36,12 @@ jobs:
     # wijzigen.
     name: Security baseline (Sprint 1)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Node opzetten
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: "22"
           cache: npm
@@ -49,25 +52,21 @@ jobs:
       - name: Committed-secretsscan
         run: bash scripts/check-committed-secrets.sh
 
-      - name: Service-role-lekcheck
-        run: bash scripts/check-service-role-leak.sh
-
-      - name: Codegrenzen
-        run: npm run lint:boundaries
-
-      - name: Kleur- en themaborging
+      - name: React-, Hooks- en Next-baselinegate
         run: |
-          npm run lint:colors
-          npm run lint:fondsthema
+          set -o pipefail
+          npm run lint:quality:check | tee -a "$GITHUB_STEP_SUMMARY"
 
-      - name: Typecheck
-        run: npm run typecheck
+      - name: Snelle contracttests
+        run: |
+          npm run test:seed-guard
+          npm run test:nightly-fidelity-contract
+          npm run test:e2e:guard
+          npm run test:lint-quality-contract
+          npm run test:ci-ownership-contract
 
       - name: Vitest-workflowcontract
         run: npm run test:coverage-contract
-
-      - name: Resterende sanitytests
-        run: npm run sanity
 
       - name: Vitest coveragebaseline
         id: vitest-coverage
@@ -79,7 +78,7 @@ jobs:
 
       - name: Coverageartifact bewaren
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
           name: vitest-coverage
           path: coverage/
@@ -91,9 +90,6 @@ jobs:
           npm ci --prefix scanner
           npm test --prefix scanner
 
-      - name: Negatieve tenant- en omgevingsmatrix (app-laag)
-        run: npm run test:xtenant
-
       - name: Productiebuild
         env:
           # Alleen build-time vormwaarden. Geen echte omgeving, sleutel of
@@ -103,12 +99,29 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-anon-key
         run: npm run build
 
-      # WP5-5b. De service-role-lekcheck hierboven toetst de BRON; deze stap
-      # toetst wat er feitelijk in de gebouwde bundle staat — de enige plek waar
-      # een pen-tester kijkt. Moet ná de build draaien en met dezelfde anon-key,
+      # WP5-5b. De service-role-lekcheck in de boundaries-workflow toetst de BRON;
+      # deze stap toetst wat er feitelijk in de gebouwde bundle staat — de enige
+      # plek waar een pen-tester kijkt. Moet ná de build draaien en met dezelfde anon-key,
       # want die waarde is de positieve sentinel: wordt hij niet in .next/static
       # teruggevonden, dan heeft de scan niets gelezen en faalt de stap.
       - name: Buildoutput-sleutelcheck
         env:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-anon-key
         run: node scripts/check-bundle-secrets.mjs
+
+      - name: Fast-PR-samenvatting
+        if: ${{ always() }}
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+
+          ## Fast PR-eigenaarschap
+
+          | Laag | Primaire workflow |
+          |---|---|
+          | secrets, unit/componentcoverage, contract, scanner, qualitylint, buildsecurity | security-baseline |
+          | types, sanity, app-cross-tenant | g2-evidence |
+          | boundaries en service-role-lek | boundaries |
+          | kleur en fondsthema | lint-colors |
+
+          Coverageartifact: `vitest-coverage` (14 dagen).
+          EOF

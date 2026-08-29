@@ -35,10 +35,10 @@ jobs:
       E2E_PLATFORM_ORIGIN: "http://beheer.localhost:3000"
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Node opzetten
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: "22"
           cache: npm
@@ -53,7 +53,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Supabase CLI opzetten
-        uses: supabase/setup-cli@v1
+        uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520 # v3.0.0
         with:
           version: 2.114.0
 
@@ -112,7 +112,7 @@ jobs:
 
       - name: Foutartifacts publiceren
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
           name: e2e-security-${{ github.run_id }}
           path: |
