@@ -72,9 +72,9 @@ wel gelijk, zodat latere branch protection daarop kan aansluiten.
 
 ## Restrisico's en vervolg
 
-- Zonder branch protection op `preview` zijn de checks informatief en niet door
-  GitHub als mergevoorwaarde afgedwongen. Invoering daarvan vereist een apart,
-  expliciet akkoord.
+- Branch protection op `preview` is na afzonderlijk akkoord als fase 1
+  ingevoerd; zie besluit [0198](./0198-preview-branch-protection-fase-1.md).
+  Beheerders zijn daarin voorlopig nog uitgezonderd.
 - `npm audit` meldt bestaande productieafhankelijkheidsbevindingen, waaronder in
   de huidige Next-stack. Automatische major-upgrades vallen buiten WP5 en krijgen
   een afzonderlijk dependency-onderhoudsitem.
