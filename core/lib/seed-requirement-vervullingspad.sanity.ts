@@ -24,6 +24,8 @@ const legacySeedBestand =
   "supabase/migrations/2026_05_08_phase_1b_template_requirements.sql";
 const legacyCorrectieBestand =
   "supabase/migrations/2026_08_29_zz_0195_verwijder_onvervulbare_templatevereisten.sql";
+const legacyCorrectieRollbackBestand =
+  "supabase/rollbacks/2026_08_29_zz_0195_verwijder_onvervulbare_templatevereisten_ROLLBACK.sql";
 
 // De drie seedvormen dragen steeds (template_code, [template_versie,]
 // stap_volgorde, requirement_type, ...). Lees uitsluitend de VALUES-rijen;
@@ -53,6 +55,10 @@ const legacyTypesZonderPad = [...legacyInhoud.matchAll(requirementTypeInRij)]
   .map((match) => match[1] as RequirementType)
   .filter((type) => !heeftVervullingspad(type));
 const correctieInhoud = readFileSync(join(process.cwd(), legacyCorrectieBestand), "utf8");
+const rollbackInhoud = readFileSync(
+  join(process.cwd(), legacyCorrectieRollbackBestand),
+  "utf8"
+);
 
 assert.ok(
   legacyTypesZonderPad.includes("evaluation"),
@@ -63,6 +69,26 @@ assert.match(
   /stap_volgorde = 6[\s\S]*requirement_type = 'evaluation'[\s\S]*label = 'Evaluatiemoment gepland'/,
   `${legacyCorrectieBestand}: mist de exact gerichte voorwaartse verwijdering voor #228`
 );
+for (const [pad, inhoud] of [
+  [legacyCorrectieBestand, correctieInhoud],
+  [legacyCorrectieRollbackBestand, rollbackInhoud],
+] as const) {
+  assert.doesNotMatch(
+    inhoud.replace(/^--.*$/gm, ""),
+    /session_replication_role/,
+    `${pad}: I7 mag niet via session_replication_role worden omzeild`
+  );
+  assert.match(
+    inhoud,
+    /v_gepinde_dossiers <> 0/,
+    `${pad}: mist de fail-closed nul-assertie voor gepinde 1.0.0-dossiers`
+  );
+  assert.match(
+    inhoud,
+    /tgname = 'trg_req_versievast'[\s\S]*tgenabled = 'O'/,
+    `${pad}: moet vóór commit bewijzen dat I7 weer actief is`
+  );
+}
 
 console.log(
   `seed-requirement-vervullingspad: ${seedBestanden.length} actuele seeddefinities zonder onvervulbare requirement-typen; legacy-correctie 0195 geborgd.`
