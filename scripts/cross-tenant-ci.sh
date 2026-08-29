@@ -172,6 +172,10 @@ SQL_T8SEM="supabase/checks/2026_08_12_t8_semantische_extractie.sql"
 SQL_BBIND="supabase/checks/2026_08_18_bewijsbinding.sql"
 # P2/PR-B (#167): procedure_vaststelling — binding, I1 en tenant-isolatie (0189).
 SQL_VAST="supabase/checks/2026_08_25_vaststelling_binding_cross_tenant.sql"
+# P3/PR-C (#168): afronden met afwijking — snapshot-pin (SQL-helft) + eigen slot (0192).
+SQL_P3C="supabase/checks/2026_08_27_p3c_afwijking.sql"
+# P3/PR-D (#168): atomaire besluitstatus-omslag met vastlegging (0193).
+SQL_P3D="supabase/checks/2026_08_28_p3d_besluit_omslag.sql"
 
 echo "== [1/4] tsc --noEmit --skipLibCheck =="
 ./node_modules/.bin/tsc --noEmit --skipLibCheck
@@ -291,6 +295,14 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_BBIND"
 echo
 echo "-- Vaststelling-binding (type/I5/cross-procedure, I1-slot, tenant-isolatie) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_VAST"
+echo
+
+echo "-- Afronden met afwijking (snapshot-pin SQL-helft, eigen slot, atomaire kern) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P3C"
+echo
+
+echo "-- Besluitstatus-omslag (atomaire vastlegging, I2 DB-afgedwongen, eigen slot) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P3D"
 echo
 
 echo "-- V3 (grants-gate over alle objectklassen: relaties, functies, buckets, storage-policies) --"

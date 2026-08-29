@@ -85,7 +85,20 @@ test("W7-1 — geen enkele handler staat nog op TE_BEPALEN", () => {
     [],
     "TE_BEPALEN geeft onder de vlag 403 voor élke rol; W13 laat CI hierop falen"
   );
-  assert.equal(HANDLERS.length, 112, "aantal gewrapte handlers gewijzigd — werk het register bij");
+  // 114: P2/PR-B (#167) voegde POST /procedures/[id]/vereisten/koppel toe
+  // (capability procedures.manage) zonder de teller bij te trekken (113); P3/PR-C
+  // (#168) voegt POST /procedures/[id]/stappen/[stapId]/afwijking toe (capability
+  // procedures.afwijking.vastleggen) → 114.
+  // 115: #192 voegt GET /procedures/[id]/vereisten/kandidaten toe (capability
+  // procedures.view) — de leesroute achter de kiezer-UI.
+  //
+  // BEDOELDE DIVERGENTIE (geen drift): 115 gewrapte declaraties, maar het aantal
+  // OPGENOMEN 403-cellen in authz-matrix.expected.json blijft op de oude set. Het
+  // negatieve contract van de afwijking-route (beheerder/bureau → 403) wordt tegen
+  // een DRAAIENDE server opgenomen bij de stack-run, niet voorspeld (besluit 0192,
+  // contractwaarde-regel). Zie tests/karakterisering/uitgestelde-opnames.json; die
+  // lijst moet leeg zijn vóór P6.
+  assert.equal(HANDLERS.length, 115, "aantal gewrapte handlers gewijzigd — werk het register bij");
 });
 
 test("W7-2 — elke gedeclareerde gate bestaat en hangt aan minstens één rol", () => {

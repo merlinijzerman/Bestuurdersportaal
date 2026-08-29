@@ -160,6 +160,10 @@ const W7_GATES = [
     "zoeken.use",
   ] as const;
 
+// NB: dit is de W7-delta-pin, maar hij houdt óók latere tranche-toevoegingen bij
+// zodat de rol-union sluitend blijft. P3 (#168) voegt `procedures.afwijking.
+// vastleggen` toe aan voorzitter + bestuurder (níet beheerder/bestuursbureau) —
+// dat is een P3-capability, geen W7-gate (staat dan ook niet in W7_GATES).
 const W7_PER_ROL: Record<string, readonly string[]> = {
   beheerder: [
     "agendapunten.manage",
@@ -206,6 +210,7 @@ const W7_PER_ROL: Record<string, readonly string[]> = {
     "organisation.profile.view",
     "procedures.manage",
     "procedures.view",
+    "procedures.afwijking.vastleggen",
     "profile.view.own",
     "reflectie.manage.own",
     "reflectie.view.own",
@@ -231,6 +236,7 @@ const W7_PER_ROL: Record<string, readonly string[]> = {
     "organisation.profile.view",
     "procedures.manage",
     "procedures.view",
+    "procedures.afwijking.vastleggen",
     "profile.view.own",
     "reflectie.manage.own",
     "reflectie.view.own",

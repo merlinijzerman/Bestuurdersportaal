@@ -122,3 +122,9 @@ fi
 
 echo
 echo "OK: baseline + ${#MIGRATIES[@]} post-baseline-migraties toegepast (rollbacks/, seeds/ en checks/ liggen buiten migrations/)."
+echo
+echo "LET OP: de baseline is schema-only — er staan geen GEPUBLICEERDE requirement-"
+echo "rijen, dus een migratie die I7-bevroren rijen row-DML't wordt hier stil groen"
+echo "(P3-bevinding #168). Pas vóór de tranche-FRF de I7-fixture toe zodat het"
+echo "bevroren pad wél geraakt wordt:"
+echo "    psql \"\$DB\" -v ON_ERROR_STOP=1 -f scripts/testdb-i7-fixture.sql"

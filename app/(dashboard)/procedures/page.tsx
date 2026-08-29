@@ -8,7 +8,7 @@ import {
   type DossierStatus,
   type PeriodeType,
 } from "@/core/lib/dossier";
-import { type StapStatus } from "@/core/lib/decision-view";
+import { type StapStatus, besluitStaatNog } from "@/core/lib/decision-view";
 import { buildDecisionDossierView } from "@/core/lib/decision";
 import { laadFasen, type FaseWeergave } from "@/core/lib/procedure-fasen";
 import {
@@ -312,8 +312,8 @@ function afleidProces(
 
   // Aandachtspunten (§7.1) — vaste prioriteitsvolgorde, max 3. Eerst de
   // bewijslast (kritiek/vereist; migratieregel blokkerend→kritiek, verplicht→
-  // vereist), dan heropend/herbevestiging. Readiness/besluitrijp is uit het
-  // overzicht (P1a). Een vierde signaal ("Met afwijking") komt in #168.
+  // vereist), dan "besloten met openstaande vereisten" (§12 signaal 3, #168), dan
+  // heropend/herbevestiging. Readiness/besluitrijp is uit het overzicht (P1a).
   const aandachtspunten: Aandachtspunt[] = [];
   if (heeftRood) {
     aandachtspunten.push({
@@ -324,6 +324,21 @@ function afleidProces(
     aandachtspunten.push({
       niveau: "oranje",
       tekst: "Vereiste bewijslast ontbreekt",
+    });
+  }
+  // Signaal 3 (§12, Q2/0193): dit besluit is genomen terwijl er vereisten
+  // openstonden. Bij de brede besluitbevoegdheid is deze zichtbaarheid achteraf
+  // het tegenwicht dat vooraf ontbreekt — daarom óók op het overzicht.
+  if (
+    dossier &&
+    besluitStaatNog(dossier.decision.status) &&
+    dossier.events.some(
+      (e) => e.event_type === "besluit_genomen_met_openstaande_vereisten"
+    )
+  ) {
+    aandachtspunten.push({
+      niveau: "oranje",
+      tekst: "Besloten met openstaande vereisten",
     });
   }
   for (const s of stappen) {

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createServerSupabase } from "@/core/lib/supabase-server";
 import { templateLabel } from "@/core/lib/proces-templates";
 import { isBureauRol } from "@/core/lib/bureau-gate";
+import { rolHeeftCapability } from "@/core/lib/capabilities-map";
 import {
   DOSSIER_STATUS_LABEL,
   dossierStatusKleur,
@@ -22,6 +23,7 @@ import DossierStatusStrip from "../_components/DossierStatusStrip";
 import ProcedureMetadataEdit from "../_components/ProcedureMetadataEdit";
 import AfschriftenPaneel from "../_components/AfschriftenPaneel";
 import { auditEventLabel } from "@/core/lib/audit-labels";
+import { besluitStaatNog } from "@/core/lib/decision-view";
 import {
   buildDecisionDossierView,
   ensureDecisionForProcedure,
@@ -38,7 +40,7 @@ import { kiesWeergave } from "@/core/lib/procedure-detail-weergave";
 
 // Forceer dynamische rendering: deze page leest live data uit Supabase
 // (decision-state, readiness, evidence) en mag absoluut niet door de
-// Next.js full-route cache lopen — anders blijven readiness-ladder en
+// Next.js full-route cache lopen — anders blijven de besluitmoment-telling en
 // andere panelen op stale waarden hangen na mutaties via router.refresh().
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -227,6 +229,13 @@ export default async function ProcedureDetailPage({
     .single();
   const currentUserIsPrivileged =
     profiel?.rol === "voorzitter" || profiel?.rol === "beheerder";
+  // P3 (#168, §5.1): afronden met afwijking hangt aan de capability, niet aan de
+  // kanBeheren-hardcode — bestuurder draagt de capability wél maar is geen
+  // kanBeheren. De harde gate zit server-side (route + DB-functie).
+  const magAfwijkingVastleggen = rolHeeftCapability(
+    profiel?.rol,
+    "procedures.afwijking.vastleggen"
+  );
   // T1 bureau-rol (§5.3): geen dissent vastleggen. UI-cosmetica; de weigering
   // staat in de dissent-routes en in de RLS-schrijfpolicy.
   const currentUserIsBureau = isBureauRol(profiel?.rol);
@@ -356,6 +365,13 @@ export default async function ProcedureDetailPage({
   const afgerondAantal = stappen.filter((s) => s.status === "afgerond").length;
   const totaalStappen = stappen.length;
 
+  // Besluitmoment-stappen (§7): de volgordes van de stappen met `vereist_besluit`.
+  // Hiermee is de status-signalering besluitmoment-scoped i.p.v. dossierbreed (Q1,
+  // besluit 0193) — een nazorgvereiste elders forceert geen motivering.
+  const besluitmomentStappen = stappen
+    .filter((s) => s.vereist_besluit)
+    .map((s) => s.volgorde);
+
   // T6-1A: welke stap staat in het rechterpaneel? Selectie via ?stap=<id>
   // (server-first, past bij het force-dynamic + router.refresh()-patroon).
   // Default = de actieve stap; ontbreekt die, dan de laatst afgeronde; anders
@@ -388,6 +404,25 @@ export default async function ProcedureDetailPage({
   } catch (e) {
     console.error("Dossier laden mislukt:", e);
   }
+
+  // Signaal 3 (§12, Q2/0193): is dit besluit genomen terwijl er vereisten
+  // openstonden? Afgeleid uit het append-only event (events zijn tijdstip-desc, dus
+  // find = het nieuwste); de actor-rol is de momentopname uit de payload. Alleen
+  // tonen zolang HET BESLUIT NOG STAAT — na heropenen/afwijzen/terugzetten is het een
+  // teruggedraaid feit, geen actief signaal (reviewbevinding). Het event blijft in de
+  // audit-trail; alleen de actieve strip-markering vervalt.
+  const bmoEvent = dossier?.events.find(
+    (e) => e.event_type === "besluit_genomen_met_openstaande_vereisten"
+  );
+  const beslotenMetOpenstaand =
+    bmoEvent && dossier && besluitStaatNog(dossier.decision.status)
+      ? {
+          actorNaam: bmoEvent.actor_naam,
+          actorRol:
+            (bmoEvent.nieuwe_waarde as { actor_rol?: string } | null)
+              ?.actor_rol ?? null,
+        }
+      : null;
 
   // WO-2 (§7 + §7.1): procesfasen-rail. De fasen (D8) komen uit de definitie
   // met een per fonds overschrijfbare beschrijving; de fase-status, aandachts-
@@ -674,12 +709,14 @@ export default async function ProcedureDetailPage({
       </div>
 
       {/* Statusbalk — onder de meta-strook (co-eigenaars), verplaatst op
-          verzoek. Huidige status, eerstvolgende readiness-horde, classificatie
+          verzoek. Huidige status, openstaande vereisten per zwaarte, classificatie
           en de knoppen export/statusovergang. */}
       {dossier && (
         <DossierStatusStrip
           decision={dossier.decision}
-          readiness={dossier.readiness}
+          evidence={dossier.evidence}
+          besluitmomentStappen={besluitmomentStappen}
+          beslotenMetOpenstaand={beslotenMetOpenstaand}
           statusOvergangAnker="status-overgang"
           heeftSnapshot={dossier.snapshots.length > 0}
         />
@@ -753,6 +790,7 @@ export default async function ProcedureDetailPage({
                 // (met reden). Harde gate zit server-side in de koppelroute.
                 dossier ? BESLUIT_OP_SLOT.includes(dossier.decision.status) : false
               }
+              magAfwijkingVastleggen={magAfwijkingVastleggen}
               currentUserId={user.id}
               voltooidDoorNaam={geselecteerdeVoltooidDoorNaam}
               fase={(() => {
@@ -906,12 +944,12 @@ export default async function ProcedureDetailPage({
             <UitklapbaarPaneel
               titel="Statusovergang"
               ankerId="status-overgang"
-              samenvatting="Door naar volgende fase, met readiness-check + override"
+              samenvatting="Door naar volgende fase; besluit met openstaande vereisten vraagt een motivering"
             >
               <StatusOvergangPaneel
                 decision={dossier.decision}
-                readiness={dossier.readiness}
-                currentUserIsPrivileged={currentUserIsPrivileged}
+                evidence={dossier.evidence}
+                besluitmomentStappen={besluitmomentStappen}
               />
             </UitklapbaarPaneel>
 

@@ -10,7 +10,7 @@
 // ============================================================
 
 import assert from "node:assert/strict";
-import { magLosmaken, magKoppelen } from "./vereiste-affordance";
+import { magLosmaken, magKoppelen, redenGeenKoppelAffordance } from "./vereiste-affordance";
 
 let n = 0;
 function test(naam: string, fn: () => void) {
@@ -48,9 +48,22 @@ test("field/classificatie (governance_event) is nooit losmaakbaar", () => {
   );
 });
 
-test("field en evaluation krijgen geen koppel-affordance", () => {
+test("field en de typen zonder vervullingspad krijgen geen koppel-affordance", () => {
   assert.equal(magKoppelen({ ...beheerder, slotAan: false, type: "field" }), false);
+  // evaluation én ai_validation hebben vandaag geen aanmaakpad (besluit 0195).
   assert.equal(magKoppelen({ ...beheerder, slotAan: false, type: "evaluation" }), false);
+  assert.equal(magKoppelen({ ...beheerder, slotAan: false, type: "ai_validation" }), false);
+});
+
+test("typen zonder vervullingspad tonen een reden i.p.v. niets (0195)", () => {
+  // De reden voedt de uitgeschakelde affordance-tekst in StapPaneel: zichtbaar
+  // uitgeschakeld mét reden, niet afwezig en niet een altijd-lege kiezer.
+  assert.ok(redenGeenKoppelAffordance("evaluation"), "evaluation hoort een reden te geven");
+  assert.ok(redenGeenKoppelAffordance("ai_validation"), "ai_validation hoort een reden te geven");
+  // Een type met een aanmaakpad heeft géén reden (de knop is dan gewoon actief).
+  assert.equal(redenGeenKoppelAffordance("risk"), null);
+  // field toont sowieso geen koppelknop, maar krijgt geen 'geen-pad'-reden.
+  assert.equal(redenGeenKoppelAffordance("field"), null);
 });
 
 test("alleen-lezen of geen beheerrecht: geen enkele actie", () => {

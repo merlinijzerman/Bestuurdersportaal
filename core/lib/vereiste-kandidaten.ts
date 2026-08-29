@@ -4,13 +4,16 @@
 // terug of hij al aan een (andere) vereiste hangt — dat laatste voedt de
 // "Al gekoppeld aan: …"-regel en voorkomt een raadselachtige 409 bij het koppelen.
 //
-// Scope-als-data, gespiegeld op core/lib/requirement-bron.ts: één plek waar per
-// type de titel-/datum-/actorkolom staat, zodat er geen tweede waarheid ontstaat.
+// Scope-als-data: de brontabel en scope komen uit REQUIREMENT_BRON (core/lib/
+// requirement-bron.ts) — één bron van waarheid. Hier staat alléén de weergave
+// (welke kolom de titel/datum/actor draagt), zodat er geen tweede brontype→
+// brontabel-afbeelding naast REQUIREMENT_BRON ontstaat die eruit kan lopen.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requirementSleutel } from "./requirement-sleutel";
 import type { RequirementType } from "./decision-view";
 import { primairBesluitId } from "./vereiste-koppeling";
+import { REQUIREMENT_BRON } from "./requirement-bron";
 
 export interface Kandidaat {
   id: string;
@@ -27,54 +30,44 @@ export type KandidatenResultaat =
   | { ok: true; type: RequirementType; kandidaten: Kandidaat[] }
   | { ok: false; status: number; fout: string };
 
-interface KandidaatBron {
-  brontabel: string;
-  scope: "decision" | "procedure";
+/** Alléén de WEERGAVE-kolommen per type: welke kolom de titel/datum/actor draagt.
+ *  De brontabel en scope komen uit REQUIREMENT_BRON — één bron van waarheid; hier
+ *  staat bewust géén tweede brontype→brontabel-afbeelding (dat is precies de
+ *  divergentie die deze EPIC overal heeft weggehaald). De aanwezigheid van een
+ *  entry bepaalt tevens welke typen een kandidaten-kiezer hebben. */
+interface KandidaatWeergave {
   titelKolom: string;
   datumKolom: string;
   actorKolom: string;
-  /** 'naam' = tekstkolom met een naam; 'id' = uuid, via profielen resolven. */
+  /** 'naam' = tekstkolom met een naam; 'id' = uuid, via vw_fondsleden resolven. */
   actorSoort: "naam" | "id";
   metaKolom?: string;
 }
 
-// Alleen de typen met een BESTAAND artefact dat je kiest. document/external_
-// submission/consultation lopen via de bewijs-uploadroute (Opvoeren); dissent_
-// review/mandate_check via het vaststellingsformulier; field kent geen feit.
-const KANDIDAAT_BRON: Partial<Record<RequirementType, KandidaatBron>> = {
+// Alleen de typen met een BESTAAND artefact dat je kiest: approval/risk/assumption/
+// kpi. document/external_submission/consultation lopen via de bewijs-uploadroute
+// (Opvoeren); dissent_review/mandate_check via het vaststellingsformulier; field
+// kent geen feit; evaluation/ai_validation hebben geen vervullingspad (besluit
+// 0195) → uitgeschakelde affordance mét reden, geen kiezer.
+const KANDIDAAT_WEERGAVE: Partial<Record<RequirementType, KandidaatWeergave>> = {
   approval: {
-    brontabel: "procedure_besluiten", scope: "procedure",
     titelKolom: "formulering", datumKolom: "datum",
     actorKolom: "vastgelegd_door_naam", actorSoort: "naam",
   },
   risk: {
-    brontabel: "decision_risks", scope: "decision",
     titelKolom: "beschrijving", datumKolom: "aangemaakt_op",
     actorKolom: "eigenaar_naam", actorSoort: "naam",
   },
   // Let op (RLS/code-review #192): assumption heeft geen aanmaker-kolom, dus de
   // actor is de laatste WIJZIGER (`gewijzigd_door`) en is null bij een nooit-
-  // gewijzigde aanname; evaluation's `uitgevoerd_door` is null tot uitvoering. De
-  // "persoon" is voor die twee typen dus vaak leeg — geen bug, een datamodel-grens.
+  // gewijzigde aanname — geen bug, een datamodel-grens.
   assumption: {
-    brontabel: "decision_assumptions", scope: "decision",
     titelKolom: "tekst", datumKolom: "aangemaakt_op",
     actorKolom: "gewijzigd_door", actorSoort: "id",
   },
   kpi: {
-    brontabel: "decision_conditions", scope: "decision",
     titelKolom: "kpi", datumKolom: "aangemaakt_op",
     actorKolom: "eigenaar_naam", actorSoort: "naam",
-  },
-  evaluation: {
-    brontabel: "decision_evaluations", scope: "decision",
-    titelKolom: "geplande_datum", datumKolom: "aangemaakt_op",
-    actorKolom: "uitgevoerd_door", actorSoort: "id",
-  },
-  ai_validation: {
-    brontabel: "decision_ai_interactions", scope: "decision",
-    titelKolom: "gebruik_context", datumKolom: "gevalideerd_op",
-    actorKolom: "gevalideerd_door", actorSoort: "id", metaKolom: "validatiestatus",
   },
 };
 
@@ -142,20 +135,24 @@ export async function haalKandidaten(
   const type = sleutel.split("|")[1] as RequirementType | undefined;
   if (!type) return { ok: false, status: 400, fout: "Ongeldige requirement_sleutel" };
 
-  const bron = KANDIDAAT_BRON[type];
-  if (!bron) {
+  const weergave = KANDIDAAT_WEERGAVE[type];
+  const bronDef = REQUIREMENT_BRON[type];
+  if (!weergave || !bronDef) {
     // Geen kandidaten-kiezer voor dit type — de client hoort de juiste affordance
-    // te tonen (upload / vaststellingsformulier / veld). Expliciete melding.
+    // te tonen (upload / vaststellingsformulier / veld) of, voor een type zonder
+    // vervullingspad (evaluation/ai_validation, besluit 0195), de uitgeschakelde
+    // affordance mét reden. Expliciete melding als de route toch wordt aangeroepen.
     return {
       ok: false, status: 400,
-      fout: `Type "${type}" kent geen kandidaten-kiezer (document→uploaden, vaststelling→formulier, field→veld).`,
+      fout: `Type "${type}" kent geen kandidaten-kiezer (document→uploaden, vaststelling→formulier, field→veld, evaluation/ai_validation→geen vervullingspad).`,
     };
   }
 
-  // Scope bepalen.
+  // Scope bepalen — brontabel én scope komen uit REQUIREMENT_BRON (één bron van
+  // waarheid); de kiezer-typen zijn decision- of procedure-scoped (nooit stap_id).
   let scopeKolom: "decision_id" | "procedure_id";
   let scopeWaarde: string | null;
-  if (bron.scope === "decision") {
+  if (bronDef.scope === "decision") {
     scopeKolom = "decision_id";
     scopeWaarde = await primairBesluitId(supabase, procedureId);
     if (!scopeWaarde) {
@@ -168,14 +165,14 @@ export async function haalKandidaten(
   }
 
   const kolommen = [
-    "id", "requirement_sleutel", bron.titelKolom, bron.datumKolom, bron.actorKolom,
-    ...(bron.metaKolom ? [bron.metaKolom] : []),
+    "id", "requirement_sleutel", weergave.titelKolom, weergave.datumKolom, weergave.actorKolom,
+    ...(weergave.metaKolom ? [weergave.metaKolom] : []),
   ].join(", ");
   const { data, error } = await supabase
-    .from(bron.brontabel)
+    .from(bronDef.brontabel)
     .select(kolommen)
     .eq(scopeKolom, scopeWaarde)
-    .order(bron.datumKolom, { ascending: false });
+    .order(weergave.datumKolom, { ascending: false });
   if (error) {
     console.error("Kandidatenlookup mislukt:", error);
     return { ok: false, status: 500, fout: "Serverfout" };
@@ -184,9 +181,9 @@ export async function haalKandidaten(
 
   // Actor-namen resolven voor uuid-kolommen (batch via profielen).
   const naamPerId = new Map<string, string>();
-  if (bron.actorSoort === "id") {
+  if (weergave.actorSoort === "id") {
     const ids = Array.from(
-      new Set(rijen.map((r) => r[bron.actorKolom]).filter((v): v is string => typeof v === "string"))
+      new Set(rijen.map((r) => r[weergave.actorKolom]).filter((v): v is string => typeof v === "string"))
     );
     if (ids.length > 0) {
       // vw_fondsleden i.p.v. profielen: profielen.select is own-row-only
@@ -203,9 +200,9 @@ export async function haalKandidaten(
   const sleutelLabel = await bouwSleutelLabelKaart(supabase, procedureId);
 
   const kandidaten: Kandidaat[] = rijen.map((r) => {
-    const actorRuw = r[bron.actorKolom];
+    const actorRuw = r[weergave.actorKolom];
     const actor =
-      bron.actorSoort === "naam"
+      weergave.actorSoort === "naam"
         ? (typeof actorRuw === "string" ? actorRuw : null)
         : (typeof actorRuw === "string" ? naamPerId.get(actorRuw) ?? null : null);
     const eigenSleutel = r["requirement_sleutel"];
@@ -213,9 +210,9 @@ export async function haalKandidaten(
       typeof eigenSleutel === "string" && eigenSleutel !== sleutel
         ? sleutelLabel.get(eigenSleutel) ?? eigenSleutel.split("|").slice(2).join("|")
         : null;
-    const titelRuw = r[bron.titelKolom];
-    const datumRuw = r[bron.datumKolom];
-    const metaRuw = bron.metaKolom ? r[bron.metaKolom] : null;
+    const titelRuw = r[weergave.titelKolom];
+    const datumRuw = r[weergave.datumKolom];
+    const metaRuw = weergave.metaKolom ? r[weergave.metaKolom] : null;
     return {
       id: r["id"] as string,
       titel: titelRuw == null ? null : String(titelRuw),

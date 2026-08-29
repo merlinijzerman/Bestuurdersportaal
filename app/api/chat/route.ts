@@ -1104,7 +1104,7 @@ export const POST = withFondsRoute({ capability: "chat.use", hostGuard: "route-e
           : null;
 
         // Requirements van de huidige stap (template-niveau; neutraal weergegeven,
-        // geen vervuld/niet-vervuld-oordeel — dat vergt de readiness-engine).
+        // geen vervuld/niet-vervuld-oordeel; dat oordeel hoort in de proceduremodule (evidence), niet hier).
         let requirements: RequirementRij[] = [];
         if (proc.template_code && huidigeStap) {
           // P1b (#166): versie-gefilterd op de gepinde versie; fallback naar

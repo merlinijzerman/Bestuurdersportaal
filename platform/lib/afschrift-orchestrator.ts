@@ -347,6 +347,11 @@ function normaliseerView(v: DecisionDossierView): DecisionDossierView {
     events: v.events ?? [],
     snapshots: v.snapshots ?? [],
     steps: v.steps ?? [],
+    // Een bevroren snapshot (fn_build_decision_dossier) draagt GEEN evidence-key —
+    // evidence wordt alleen live door buildDecisionDossierView toegevoegd. Zonder
+    // deze default zou de feitenkaart-terugval (readiness weg → evidence) op een
+    // nieuw snapshot crashen. Zie ook #208 (snapshot-vervulling).
+    evidence: v.evidence ?? [],
     bewijs: v.bewijs ?? [],
     besluiten: v.besluiten ?? [],
     stemverslagen: v.stemverslagen ?? [],

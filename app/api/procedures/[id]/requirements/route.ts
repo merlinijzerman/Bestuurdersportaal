@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { ensureDecisionForProcedure } from "@/core/lib/decision";
 import { requirementSleutel } from "@/core/lib/requirement-sleutel";
+import { zwaarteVanVereiste } from "@/core/lib/requirement-zwaarte";
 import { REQUIREMENT_TYPES } from "@/core/lib/procedure-definitie";
 
 // GET  /api/procedures/[id]/requirements  — actieve instantie-requirements
@@ -90,6 +91,15 @@ export const POST = withFondsRoute({ capability: "procedures.manage" }, async (c
         { status: 400 }
       );
     }
+    // P3 (#168): de onzin-combo verplicht=false/blokkerend=true (§5.1) bestaat niet
+    // als zwaarte. Weiger 'm expliciet i.p.v. 'm stil naar kritiek te promoveren —
+    // parity met de migratie-pre-flight, zodat verplicht=false niet stil omslaat.
+    if (body.verplicht === false && body.blokkerend === true) {
+      return NextResponse.json(
+        { error: "Combinatie niet toegestaan: een niet-verplichte vereiste kan niet blokkerend zijn (kies optioneel, vereist of kritiek)." },
+        { status: 400 }
+      );
+    }
 
     // Fonds_id server-side uit de procedure (RLS begrenst tot eigen fonds).
     const { data: procedure } = await supabase
@@ -166,6 +176,14 @@ export const POST = withFondsRoute({ capability: "procedures.manage" }, async (c
       );
     }
 
+    // P3 (#168): verplicht/blokkerend zijn nu afgeleide (generated) leeskolommen
+    // uit zwaarte — dus zwaarte is de schrijfkant én de te loggen bron van waarheid.
+    // De UI stuurt nog de twee booleans; die leiden we hier af.
+    const zwaarte = zwaarteVanVereiste({
+      verplicht: body.verplicht ?? true,
+      blokkerend: body.blokkerend ?? false,
+    });
+
     // 1. Instantie-requirement invoegen.
     const { data: nieuw, error: insFout } = await supabase
       .from("procedure_requirement_instance")
@@ -176,8 +194,7 @@ export const POST = withFondsRoute({ capability: "procedures.manage" }, async (c
         label,
         documenttype: nieuweDocumenttype,
         veld_pad: body.veld_pad ?? null,
-        verplicht: body.verplicht ?? true,
-        blokkerend: body.blokkerend ?? false,
+        zwaarte,
         min_aantal: body.min_aantal ?? 1,
         vereist_validatie_domein: body.vereist_validatie_domein ?? null,
         bron: "handmatig",
@@ -212,7 +229,7 @@ export const POST = withFondsRoute({ capability: "procedures.manage" }, async (c
           stap_volgorde: body.stap_volgorde,
           requirement_type: body.requirement_type,
           label,
-          blokkerend: body.blokkerend ?? false,
+          zwaarte, // P3: de bron van waarheid, niet de afgeleide boolean
         },
       })
       .select("id")
