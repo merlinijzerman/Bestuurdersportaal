@@ -1,6 +1,12 @@
 import { createClient } from "@supabase/supabase-js";
 import { bevestigVeiligeE2eDoelomgeving } from "./omgeving.mjs";
-import { E2E_FONDSEN, E2E_ROLLEN, E2E_WACHTWOORD, e2eEmail } from "./config.mjs";
+import {
+  E2E_FONDSEN,
+  E2E_PLATFORM_ACCOUNTS,
+  E2E_ROLLEN,
+  E2E_WACHTWOORD,
+  e2eEmail,
+} from "./config.mjs";
 
 async function vindGebruiker(admin, email) {
   for (let page = 1; page <= 20; page += 1) {
@@ -34,6 +40,29 @@ async function vindOfMaakGebruiker(admin, fondsSleutel, fonds, rol) {
     user_metadata: { naam: `Synthetisch ${fondsSleutel.toUpperCase()} ${rol}` },
   });
   if (error || !data?.user) throw new Error(`E2E createUser(${email}): ${error?.message}`);
+  return data.user;
+}
+
+async function vindOfMaakPlatformGebruiker(admin, account) {
+  const bestaand = await vindGebruiker(admin, account.email);
+  if (bestaand) {
+    const { data, error } = await admin.auth.admin.updateUserById(bestaand.id, {
+      password: E2E_WACHTWOORD,
+      email_confirm: true,
+      app_metadata: { platform_e2e: true },
+      user_metadata: { naam: account.naam },
+    });
+    if (error || !data?.user) throw new Error(`E2E platform updateUserById: ${error?.message}`);
+    return data.user;
+  }
+  const { data, error } = await admin.auth.admin.createUser({
+    email: account.email,
+    password: E2E_WACHTWOORD,
+    email_confirm: true,
+    app_metadata: { platform_e2e: true },
+    user_metadata: { naam: account.naam },
+  });
+  if (error || !data?.user) throw new Error(`E2E platform createUser: ${error?.message}`);
   return data.user;
 }
 
@@ -79,5 +108,63 @@ export async function seedE2e(env = process.env) {
     }
   }
 
-  return { omgeving, users };
+  // Een upload-init telt als echte productieactie in de in-stack rate limiter.
+  // Wis uitsluitend tellers van de zojuist begrensde synthetische accounts,
+  // zodat herhaalde lokale stabiliteitsruns dezelfde beginstaat hebben.
+  const tenantUserIds = Object.values(users)
+    .flatMap((rollen) => Object.values(rollen))
+    .map((account) => account.userId);
+  const { error: rateLimitFout } = await admin
+    .from("rate_limit_events")
+    .delete()
+    .in("gebruiker_id", tenantUserIds);
+  if (rateLimitFout) throw new Error(`E2E rate-limit-tellers opschonen: ${rateLimitFout.message}`);
+
+  const platformUsers = {};
+  for (const [sleutel, account] of Object.entries(E2E_PLATFORM_ACCOUNTS)) {
+    const user = await vindOfMaakPlatformGebruiker(admin, account);
+    const { error } = await admin.from("platform_identities").upsert(
+      {
+        id: user.id,
+        email: account.email,
+        naam: account.naam,
+        actief: true,
+        mfa_enrolled: false,
+      },
+      { onConflict: "id" },
+    );
+    if (error) throw new Error(`E2E platform_identities(${sleutel}): ${error.message}`);
+    platformUsers[sleutel] = {
+      email: account.email,
+      password: E2E_WACHTWOORD,
+      userId: user.id,
+    };
+  }
+
+  const begrensdePlatformIds = [
+    platformUsers.zonderCapability.userId,
+    platformUsers.observability.userId,
+  ];
+  const { error: capabilityFout } = await admin.from("platform_capabilities").upsert(
+    {
+      capability: "platform.observability.read",
+      actief: true,
+      omschrijving: "Synthetische E2E-readcapability",
+    },
+    { onConflict: "capability" },
+  );
+  if (capabilityFout) throw new Error(`E2E platformcapability: ${capabilityFout.message}`);
+  const { error: grantsOpschoonFout } = await admin
+    .from("platform_identity_capabilities")
+    .delete()
+    .in("identity_id", begrensdePlatformIds);
+  if (grantsOpschoonFout) throw new Error(`E2E platformgrants opschonen: ${grantsOpschoonFout.message}`);
+  const { error: grantFout } = await admin.from("platform_identity_capabilities").insert({
+    identity_id: platformUsers.observability.userId,
+    capability: "platform.observability.read",
+    toegekend_door: platformUsers.granter.userId,
+  });
+  if (grantFout) throw new Error(`E2E platformgrant schrijven: ${grantFout.message}`);
+
+  return { omgeving, users, platformUsers };
 }

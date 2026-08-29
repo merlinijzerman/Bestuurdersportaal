@@ -14,7 +14,7 @@ test("E2E-artifacts houden een bruikbare trace zonder netwerkdata of testgeheime
   await mkdir(doel);
   await writeFile(
     join(bron, "0-trace.trace"),
-    '{"type":"before","params":{"value":"WP3-E2E-Aa1!"},"email":"wp3-a-bestuurder@e2e.invalid"}\n',
+    '{"type":"before","params":{"value":"WP3-E2E-Aa1!"},"email":"wp3-a-bestuurder@e2e.invalid","totp":"JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"}\n',
   );
   await writeFile(
     join(bron, "0-trace.network"),
@@ -32,7 +32,7 @@ test("E2E-artifacts houden een bruikbare trace zonder netwerkdata of testgeheime
     const context = await readFile(join(doel, "error-context.md"), "utf8");
 
     assert.match(trace, /\[REDACTED\]/);
-    assert.doesNotMatch(trace, /WP3-E2E|@e2e\.invalid/);
+    assert.doesNotMatch(trace, /WP3-E2E|@e2e\.invalid|JBSWY3DP/);
     const inhoud = execFileSync("unzip", ["-Z1", join(doel, "trace-hash.zip")], { encoding: "utf8" });
     assert.doesNotMatch(inhoud, /\.network$/m);
     assert.doesNotMatch(context, /eyJaaa|bbb|ccc/);

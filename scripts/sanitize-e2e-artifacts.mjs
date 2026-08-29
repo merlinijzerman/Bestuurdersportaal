@@ -15,10 +15,11 @@ import { sanitizeE2eLog } from "./sanitize-e2e-log.mjs";
 const decoder = new TextDecoder("utf-8", { fatal: true });
 
 function sanitizeTraceTekst(inhoud) {
-  return sanitizeE2eLog(inhoud).replace(
-    /("(?:value|inputValue)"\s*:\s*")[^"]*/g,
-    "$1[REDACTED]",
-  );
+  return sanitizeE2eLog(inhoud)
+    .replace(/("(?:value|inputValue)"\s*:\s*")[^"]*/g, "$1[REDACTED]")
+    // TOTP-secrets zijn base32. Verwijder lange base32-reeksen uit DOM/source-
+    // snapshots; QR-codes worden nooit in browsertests geopend of aangemaakt.
+    .replace(/\b[A-Z2-7]{24,}\b/g, "[REDACTED_TOTP]");
 }
 
 async function sanitizeTekstbestand(pad, traceModus = false) {
