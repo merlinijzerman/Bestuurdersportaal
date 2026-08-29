@@ -268,9 +268,6 @@ test("BB-5 — nulgrens: de capability-sets van bestuurder/voorzitter/beheerder 
     "profile.manage.own",
     "stuurinformatie.manage",
     "stuurinformatie.view",
-    // P4 (#169, besluit 0194): expliciete bestuurlijke procedureovergangen.
-    "procedures.beeindigen",
-    "procedures.heropenen",
   ];
   const VOOR_W7_bestuurder = [
     "documents.bronstatus.change",
@@ -279,9 +276,6 @@ test("BB-5 — nulgrens: de capability-sets van bestuurder/voorzitter/beheerder 
     "klantbeeld.view",
     "profile.manage.own",
     "stuurinformatie.view",
-    // P4 (#169, besluit 0194): idem voorzitter, geen beheerder/bureau.
-    "procedures.beeindigen",
-    "procedures.heropenen",
   ];
 
   assert.deepEqual(
