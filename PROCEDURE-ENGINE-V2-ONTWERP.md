@@ -328,6 +328,8 @@ Besluit [`0183`](decisions/0183-expliciete-bewijs-vereiste-binding.md) heeft de 
 | `assumption` | ❌ | telling ≥ `min_aantal`, zonder binding |
 | `ai_validation` | ❌ | eerste passende gevalideerde output |
 
+> **Let op (besluit 0195):** `evaluation` en `ai_validation` tellen wél zodra er een gebonden feit is, maar er is vandaag **geen runtime-aanmaakpad** dat zo'n feit maakt (`decision_evaluations` kent geen route/lifecycle/RPC/seed; `decision_ai_interactions` heeft alleen een validatie-PATCH, geen aanmaak). Hun vervulling is dus nu **onbereikbaar**. De kiezer-UI (#192) toont hun affordance daarom uitgeschakeld mét reden, en de definitielaag/importer (fase C) moet hierop waarschuwen. De onvervulbare `evaluation`-vereiste in `beleidswijziging_beleggingsbeleid` stap 6 is een pre-P6-blokkade (#228).
+
 ### 6.2 BP-7 — het bestaande patroon doortrekken
 
 v0.8 stelde één centrale tabel `procedure_requirement_vervulling` voor, met als argument tegen de alternatieve route: *"zeven migraties"*. **Dat argument is grotendeels vervallen.** Het dure deel van 0183 is niet de kolom maar de machinerie eromheen, en die is generiek:

@@ -13,7 +13,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { requirementSleutel } from "./requirement-sleutel";
 import type { RequirementType } from "./decision-view";
 import { primairBesluitId } from "./vereiste-koppeling";
-import { REQUIREMENT_BRON } from "./requirement-bron";
+import { REQUIREMENT_BRON, heeftVervullingspad } from "./requirement-bron";
 
 export interface Kandidaat {
   id: string;
@@ -135,6 +135,16 @@ export async function haalKandidaten(
   const type = sleutel.split("|")[1] as RequirementType | undefined;
   if (!type) return { ok: false, status: 400, fout: "Ongeldige requirement_sleutel" };
 
+  // Verdediging in de diepte (besluit 0195): een type zonder vervullingspad krijgt
+  // nooit een kandidaten-kiezer, ook niet als het per ongeluk aan KANDIDAAT_WEERGAVE
+  // wordt toegevoegd. De route weigert zelf, los van de weergavekaart.
+  if (!heeftVervullingspad(type)) {
+    return {
+      ok: false, status: 400,
+      fout: `Type "${type}" heeft geen vervullingspad en dus geen kandidaten-kiezer (besluit 0195).`,
+    };
+  }
+
   const weergave = KANDIDAAT_WEERGAVE[type];
   const bronDef = REQUIREMENT_BRON[type];
   if (!weergave || !bronDef) {
@@ -148,19 +158,28 @@ export async function haalKandidaten(
     };
   }
 
-  // Scope bepalen — brontabel én scope komen uit REQUIREMENT_BRON (één bron van
-  // waarheid); de kiezer-typen zijn decision- of procedure-scoped (nooit stap_id).
-  let scopeKolom: "decision_id" | "procedure_id";
+  // Scope bepalen — brontabel ÉN de scopekolom komen uit REQUIREMENT_BRON (één
+  // bron van waarheid; niet opnieuw afgeleid uit `scope`). De kiezer kent alleen
+  // decision-/procedure-scoped typen; een stap_id-scoped bron (document/external_
+  // submission/consultation → procedure_bewijs, dat geen procedure_id-kolom heeft)
+  // heeft geen kandidaten-kiezer. Mocht zo'n type ooit aan KANDIDAAT_WEERGAVE
+  // worden toegevoegd, dan faalt dit hard-maar-schoon (400) i.p.v. een 500 op een
+  // verkeerde kolomquery.
+  const scopeKolom = bronDef.scopeKolom;
+  if (scopeKolom !== "decision_id" && scopeKolom !== "procedure_id") {
+    return {
+      ok: false, status: 400,
+      fout: `Type "${type}" is ${scopeKolom}-scoped en kent geen kandidaten-kiezer.`,
+    };
+  }
   let scopeWaarde: string | null;
-  if (bronDef.scope === "decision") {
-    scopeKolom = "decision_id";
+  if (scopeKolom === "decision_id") {
     scopeWaarde = await primairBesluitId(supabase, procedureId);
     if (!scopeWaarde) {
       // Nog geen Decision Object → geen kandidaten (geen fout).
       return { ok: true, type, kandidaten: [] };
     }
   } else {
-    scopeKolom = "procedure_id";
     scopeWaarde = procedureId;
   }
 

@@ -61,8 +61,9 @@ const ACTIE_LABEL: Record<string, string> = {
   assumption: "Koppel aannames",
   kpi: "Koppel KPI",
   approval: "Koppel besluit",
-  evaluation: "Evaluatie vastleggen",
-  ai_validation: "Koppel AI-validatie",
+  // evaluation/ai_validation staan bewust NIET in ACTIE_LABEL: zij hebben geen
+  // vervullingspad (besluit 0195) en tonen een uitgeschakelde affordance mét reden,
+  // geen actieve koppelknop.
   dissent_review: "Leg vast",
   mandate_check: "Leg vast",
 };

@@ -7,6 +7,12 @@
       "route": "/procedures/[id]/stappen/[stapId]/afwijking",
       "capability": "procedures.afwijking.vastleggen",
       "reden": "P3/PR-C (#168): nieuwe gate; de negatieve 403-cellen (beheerder + bestuursbureau) moeten tegen een draaiende server worden opgenomen, niet voorspeld. De inner rolgate is nu al met een gewone gedragstest bewezen (afwijking-rolgate.test.ts)."
+    },
+    {
+      "method": "GET",
+      "route": "/procedures/[id]/vereisten/kandidaten",
+      "capability": "procedures.view",
+      "reden": "#192 (0195): NIEUWE gewrapte route (leesroute achter de kiezer-UI), nog GEEN scenario in scenarios.mjs. Zowel het happy-200-contract (kandidatenlijst met id/titel/datum/actor + gebonden_aan, de titel/datum/actor uit REQUIREMENT_BRON+KANDIDAAT_WEERGAVE) als de negatieve paden (anon=401, ontbrekende requirement_sleutel=400, onbekende procedure/geen Decision Object, en 400 voor typen zonder kandidaten-kiezer: document/vaststelling/field én evaluation/ai_validation zonder vervullingspad) moeten tegen een draaiende server worden opgenomen — nooit voorspeld. Stack blijft uit tot P6."
     }
   ],
   "nog_op_te_nemen_bij_stackrun": [
@@ -14,6 +20,11 @@
       "method": "POST",
       "route": "/decisions/[id]/status",
       "reden": "P3/PR-D (#168, 0193): NIEUW gedrag, geen verwijderde dekking. De readiness-gate raakte géén opgenomen scenario (per-scenario nagelopen: anon=401, ongeldige-status=400, niet-gevonden=404 — geen readiness-400). Wél nieuw: een besluit naar besloten/voorwaardelijk_besloten met iets open BOVEN OPTIONEEL VOOR HET BESLUITMOMENT (besluitmoment-scoped, niet dossierbreed) eist een motivering (400) en geeft anders 200 met event/waarschuwing. Dat besluit-met-openstaande-pad heeft nog géén scenario; op te nemen tegen een draaiende server bij de stack-run. Staat NIET in 'uitgesteld' omdat de route al scenario's heeft (de bestaande anon/400/404) — dit is additieve dekking, geen gat in bestaande dekking. De DB-afdwinging zelf (I2 op SQL-berekende open; directe PostgREST-status-update door authenticated → 42501 door de kolom-revoke) is niet route-gebonden en is al bewezen met de gedragstoets 2026_08_28_p3d_besluit_omslag.sql."
+    },
+    {
+      "method": "GET",
+      "route": "/procedures/[id]/dossier  ·  /decisions/[id]/dossier",
+      "reden": "#192 (0195): de EvidenceItem in de happy-200-dossierview draagt nu de herkomstvelden (gebonden_feiten/min_aantal/dissent_open, #192) naast besluitmoment_stap (PR-D). GEEN bestaande snapshot beweegt hierdoor — geverifieerd: de opgenomen dossier-scenario's zijn alleen anon=401 en onbekende-id=404 (de happy-200 is bewust niet opgenomen, want die vergt de zware besluit-graaf-seed), en 0/367 opgenomen snapshots dragen de evidence-200-vorm. Additieve dekking: wanneer de dossier-happy-200 bij de stack-run wél wordt opgenomen, draagt hij deze velden — dan opnemen tegen een draaiende server, niet nu voorspellen. Staat NIET in 'uitgesteld' omdat de route al scenario's heeft."
     }
   ]
 }
