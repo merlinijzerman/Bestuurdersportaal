@@ -30,6 +30,7 @@ const STATUS_PILL: Record<FaseStatus, string> = {
   afgerond: "text-ok-ink bg-ok-tint border border-ok/20",
   in_behandeling: "text-nav-text bg-app-bg border border-nav-line",
   nog_niet_begonnen: "text-nav-text bg-app-bg border border-nav-line",
+  vervallen: "text-nav-text bg-app-bg border border-nav-line opacity-60",
 };
 
 export default function FaseWeergave({

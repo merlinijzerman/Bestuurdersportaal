@@ -77,6 +77,26 @@ De cross-fonds-referentiecheck (I5, "elk gerefereerd object hoort bij hetzelfde 
 - De P4-plan-tranches 6/7 implementeren B–E; tranche 8 implementeert F.
 - Het bredere #214-restant (overige `decision_objects`-kolommen/velden, `is_primary_decision`, event-loze DELETE, de andere fonds-only ALL-tabellen) blijft in #214 als vervolg — #214-a is alleen de twee tabellen die de matrix direct ondergraven.
 
+## P4-uitvoeringsstatus (29-08)
+
+Op de epic geland en geverifieerd (tsc + sanity + container-gedragstoets waar DB-logica):
+
+| Tranche | Inhoud | Migraties/bestanden |
+|---|---|---|
+| 1 | statusdragers (`+beeindigd`, `+niet_begonnen`/`+vervallen`, dossierstatus 9, StapStatus) | `p4_01` + TS |
+| 2 | fasestatus `vervallen` (UI-laag) | `procedure-fase-status.ts` |
+| 3 | `niet_begonnen` + actief-trigger (`actief_sinds`/`gestart_door`) | `p4_03` + TS |
+| 5 | `besluitmoment_stap`-arm in `fn_stap_open_per_zwaarte` (§7) | `p4_05` |
+| 6 | `procedures.beeindigen`/`.heropenen` (voorzitter+bestuurder) + RPC's + matrix-`beeindigd`-randen + 2 routes | `p4_06` + caps + routes |
+| 7 | §6.3 `besloten→heropend`-besluit (getypeerde reden, `decisions.manage`) + guard | `p4_07` + statusroute |
+| 8 | I5-composite-FK's (3) + gedragstoets | `p4_08` + `p4_i5_composite_fk.sql` |
+
+**Uitgesteld tot ná a1 op main (Optie A):** tranche 4 (status-feitenmatrix) en a2 (afwijkingskolom-revoke). Zie de promotieketen op [#171](https://github.com/merlinijzerman/Bestuurdersportaal/issues/171).
+
+**I1–I7-borging (§4.5):** I2 (motivering DB-afgedwongen in alle status-RPC's), I3 (capability voor afwijking + beeindigen), I4 (transitiematrix), I5 (composite-FK + routecheck-terugval), I6 (schemavorm), I7 (template-immutabiliteit, PR-B) zijn geborgd. **I1 (voorwaarts) hangt aan tranche 4** (de status-feitenmatrix) en is dus pas sluitend ná a1→a2→tranche 4; achterwaarts (P2b-ontkoppelslot) is I1 al geborgd.
+
+**Meting-correctie:** `procedure_vaststelling` bestáát op de epic (P2a `2026_08_24`); de #214-meting draaide op `main`, waar hij niet bestaat. Op de epic is het een echte fonds-only tabel met een eigen I5-composite-FK (tranche 8) — de rest van zijn schrijfpoort-profiel valt onder het bredere #214.
+
 ## Referenties
 
 - Meting: `METING-RLS-reikwijdte-214.md` (28-08).

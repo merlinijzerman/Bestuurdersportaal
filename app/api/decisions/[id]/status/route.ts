@@ -76,6 +76,8 @@ interface Body {
   // §4.4/I2: verplichte motivering wanneer een besluit doorgaat met iets open
   // boven optioneel — zelfde vorm als de afwijking bij afronden (PR-C).
   motivering?: string;
+  // §6.3 (P4/0194 D): getypeerde reden bij heropenen-ter-correctie vanuit besloten.
+  reden_type?: "correctie_bindingsfout" | "gewijzigde_omstandigheden";
 }
 
 interface DecisionRowMin {
@@ -117,6 +119,61 @@ export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beo
         decision,
         gewijzigd: false,
         boodschap: "Status was al gelijk.",
+      });
+    }
+
+    // §6.3 (P4/0194 D): heropenen-ter-correctie vanuit 'besloten' is een aparte
+    // overgang met een GETYPEERDE reden — via fn_besluit_heropenen_correctie, niet
+    // het generieke omslag-pad (dat weigert besloten→heropend). Onderscheiden van
+    // heropenen-van-een-PROCEDURE (POST /procedures/[id]/heropenen, tranche 6).
+    if (decision.status === "besloten" && target === "heropend") {
+      const redenType = body.reden_type;
+      const motivering = body.motivering?.trim();
+      if (
+        redenType !== "correctie_bindingsfout" &&
+        redenType !== "gewijzigde_omstandigheden"
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "Heropenen vanuit besloten vereist een reden_type: 'correctie_bindingsfout' of 'gewijzigde_omstandigheden'.",
+          },
+          { status: 400 }
+        );
+      }
+      if (!motivering || motivering.length < MIN_MOTIVERING_LENGTE) {
+        return NextResponse.json(
+          {
+            error: `Heropenen-ter-correctie vereist een motivering van minimaal ${MIN_MOTIVERING_LENGTE} tekens.`,
+          },
+          { status: 400 }
+        );
+      }
+      const { error: corrFout } = await supabase.rpc(
+        "fn_besluit_heropenen_correctie",
+        {
+          p_decision_id: decisionId,
+          p_reden_type: redenType,
+          p_motivering: motivering,
+        }
+      );
+      if (corrFout) {
+        if (corrFout.code === "PC002")
+          return NextResponse.json({ error: corrFout.message }, { status: 400 });
+        if (corrFout.code === "42501")
+          return NextResponse.json({ error: "Niet bevoegd" }, { status: 403 });
+        console.error("Besluit heropenen-ter-correctie fout:", corrFout);
+        return NextResponse.json({ error: "Heropenen mislukt" }, { status: 400 });
+      }
+      const legacyStatus = mapDecisionToProcedureStatus("heropend");
+      await supabase
+        .from("procedures")
+        .update({ status: legacyStatus })
+        .eq("id", decision.procedure_id);
+      return NextResponse.json({
+        gewijzigd: true,
+        status: "heropend",
+        reden_type: redenType,
       });
     }
 

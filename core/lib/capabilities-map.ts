@@ -65,6 +65,12 @@ export type Capability =
   | "procedures.manage"
   | "procedures.view"
   | "procedures.afwijking.vastleggen"
+  // P4 (#169, besluit 0194): een procedure beëindigen resp. heropenen — beide
+  // een bestuurlijk oordeel over de voortgang; voorzitter + bestuurder (idem
+  // afwijking.vastleggen). Heropenen deelt de rolset zodat het bestuursbureau
+  // niet via procedures.manage terugdraait wat het bestuur besloot.
+  | "procedures.beeindigen"
+  | "procedures.heropenen"
   | "profile.view.own"
   | "reflectie.manage.own"
   | "reflectie.view.own"
@@ -156,6 +162,8 @@ export const ROL_CAPABILITIES: Record<string, Capability[]> = {
     "procedures.manage",
     "procedures.view",
     "procedures.afwijking.vastleggen",
+    "procedures.beeindigen",
+    "procedures.heropenen",
     "profile.view.own",
     "reflectie.manage.own",
     "reflectie.view.own",
@@ -194,6 +202,8 @@ export const ROL_CAPABILITIES: Record<string, Capability[]> = {
     "procedures.manage",
     "procedures.view",
     "procedures.afwijking.vastleggen",
+    "procedures.beeindigen",
+    "procedures.heropenen",
     "profile.view.own",
     "reflectie.manage.own",
     "reflectie.view.own",
