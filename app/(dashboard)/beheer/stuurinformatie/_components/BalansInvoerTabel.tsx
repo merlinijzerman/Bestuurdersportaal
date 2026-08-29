@@ -96,8 +96,9 @@ export default function BalansInvoerTabel({
   const kolomkopHuidig = gekozenPeriode ? `${gekozenPeriode} (invoer)` : "Invoer";
   const kolomkopVorig = vorigePeriode ? `${vorigePeriode} (ref.)` : "Vorige (ref.)";
 
-  const invoerCel = (sectie: "activa" | "passiva", key: string, waarde: string) => (
+  const invoerCel = (sectie: "activa" | "passiva", key: string, label: string, waarde: string) => (
     <input
+      aria-label={label}
       value={waarde}
       onChange={(e) => zetVeld(sectie, key, e.target.value)}
       disabled={uitgeschakeld}
@@ -136,7 +137,7 @@ export default function BalansInvoerTabel({
             {ACTIVA_DEFINITIES.map((d) => (
               <tr key={d.key} className="border-b border-line/60">
                 <td className="py-1.5 pr-3 text-ink">{d.label}</td>
-                <td className="py-1.5 px-3 text-right">{invoerCel("activa", d.key, velden.activa[d.key])}</td>
+                <td className="py-1.5 px-3 text-right">{invoerCel("activa", d.key, d.label, velden.activa[d.key])}</td>
                 <td className="py-1.5 pl-3 text-right text-muted">{fmt(refActiva(d.key))}</td>
               </tr>
             ))}
@@ -171,7 +172,12 @@ export default function BalansInvoerTabel({
                     {PASSIVA_DEFINITIES.find((d) => d.key === rij.key)?.label}
                   </td>
                   <td className="py-1.5 px-3 text-right">
-                    {invoerCel("passiva", rij.key, velden.passiva[rij.key])}
+                    {invoerCel(
+                      "passiva",
+                      rij.key,
+                      PASSIVA_DEFINITIES.find((d) => d.key === rij.key)?.label ?? rij.key,
+                      velden.passiva[rij.key],
+                    )}
                   </td>
                   <td className="py-1.5 pl-3 text-right text-muted">{fmt(refPassiva(rij.key))}</td>
                 </tr>
@@ -210,8 +216,9 @@ export default function BalansInvoerTabel({
 
       {/* ── Financieringsgraad ── */}
       <div className="mt-4 flex items-center gap-3">
-        <label className="text-sm text-ink">Financieringsgraad (%)</label>
+        <label htmlFor="balans-financieringsgraad" className="text-sm text-ink">Financieringsgraad (%)</label>
         <input
+          id="balans-financieringsgraad"
           value={velden.fg}
           onChange={(e) => zetFg(e.target.value)}
           disabled={uitgeschakeld}

@@ -580,6 +580,25 @@ async function scanEnPromoveer(
   }
 
   await verwijderQuarantaine(svc, doc.id, doc.quarantaine_pad, doelpad);
+  // De PR-gate vervangt uitsluitend de externe extractie-/providergrens nadat
+  // de echte upload, hashbinding, scannercontract en promotie zijn bewezen.
+  // Dubbel gegrendeld en niet bereikbaar vanuit Preview/Productieconfiguratie.
+  if (
+    process.env.SEED_DOELOMGEVING === "local" &&
+    process.env.WP3_E2E_STOP_NA_SCAN === "true" &&
+    process.env.NEXT_PUBLIC_SUPABASE_URL === "http://127.0.0.1:54321"
+  ) {
+    await svc
+      .from("documenten")
+      .update({ verwerkingsstatus: "beschikbaar", geindexeerd: false })
+      .eq("id", doc.id)
+      .eq("opslag_pad", doelpad);
+    await svc
+      .from("document_processing_jobs")
+      .update({ status: "geslaagd", eind: nu(), foutcode: null })
+      .eq("id", job.id);
+    return "afgerond";
+  }
   // Extractie krijgt een eigen invocatie en begint nooit in dezelfde crash-window.
   return await yieldJob(svc, job);
 }

@@ -30,6 +30,12 @@
 #  Gebruik lokaal (app-laag):     bash scripts/cross-tenant-ci.sh
 #  Gebruik lokaal (volledig):     TEST_DATABASE_URL='postgresql://…' bash scripts/cross-tenant-ci.sh
 #  In CI:                         zie .github/workflows/rls-cross-tenant.yml
+#
+#  WP5-CI-ontdubbeling: de workflow zet `XTENANT_FAST_LAGEN=overslaan`, omdat
+#  typecheck en app-matrix in dezelfde PR al onder `g2-evidence` draaien. Deze
+#  opt-out is exact en niet de standaard. `XTENANT_REQUIRE_DB=1` blijft in die
+#  workflow verplicht, zodat alleen de dubbele snelle lagen vervallen en nooit
+#  de echte RLS-/DB-laag.
 # ============================================================================
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -174,15 +180,22 @@ SQL_T8SEM="supabase/checks/2026_08_12_t8_semantische_extractie.sql"
 # ambiguïteit, atomische audit voor directe PostgREST-writes en snapshotdekking.
 SQL_BBIND="supabase/checks/2026_08_18_bewijsbinding.sql"
 
-echo "== [1/4] tsc --noEmit --skipLibCheck =="
-./node_modules/.bin/tsc --noEmit --skipLibCheck
-echo "OK: typecheck groen."
-echo
+if [ "${XTENANT_FAST_LAGEN:-uitvoeren}" = "overslaan" ]; then
+  echo "== [1–2/4] snelle lagen bewust niet herhaald =="
+  echo "Typecheck en app-laag hebben g2-evidence als primaire PR-eigenaar."
+  echo "De DB-laag blijft verplicht via XTENANT_REQUIRE_DB=1."
+  echo
+else
+  echo "== [1/4] tsc --noEmit --skipLibCheck =="
+  ./node_modules/.bin/tsc --noEmit --skipLibCheck
+  echo "OK: typecheck groen."
+  echo
 
-echo "== [2/4] app-laag §15-matrix (node:test): T1–T5, T8–T14 =="
-node --import tsx --test tests/cross-tenant/*.test.ts
-echo "OK: app-laag §15-matrix groen (incl. negatieve controles)."
-echo
+  echo "== [2/4] app-laag §15-matrix (node:test): T1–T5, T8–T14 =="
+  node --import tsx --test tests/cross-tenant/*.test.ts
+  echo "OK: app-laag §15-matrix groen (incl. negatieve controles)."
+  echo
+fi
 
 DB_URL="${TEST_DATABASE_URL:-${DATABASE_URL:-}}"
 if [ -z "$DB_URL" ]; then

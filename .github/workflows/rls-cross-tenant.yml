@@ -5,11 +5,13 @@ name: rls-cross-tenant
 # ----------------------------------------------------------------------------
 #  Draait de volledige §15-matrix (T1–T14) tegen een EPHEMERE Supabase-DB
 #  (optie A): de CLI boot Postgres + auth + storage, scripts/cross-tenant-ci.sh
-#  past de migraties toe en draait de app-laag (node:test) én de DB-laag (psql:
-#  T3/T4/T6/T7). Elke overtreding → non-zero exit → deze job faalt.
+#  past de migraties toe en draait hier de DB-laag (psql: T3/T4/T6/T7). De
+#  app-laag heeft `g2-evidence` als primaire PR-eigenaar. Elke overtreding →
+#  non-zero exit → deze job faalt.
 #
-#  De suite draait op ELKE push én pull_request. Motivering en stappen staan in
-#  `G2-GO-NO-GO-CONTROLEKADER.md` (repo-root) en de go/no-go-checklist B9.
+#  De suite draait op PR's naar main/preview en op pushes naar die doelbranches.
+#  Featurebranches draaien daardoor eenmaal via het PR-event. Motivering en
+#  stappen staan in `G2-GO-NO-GO-CONTROLEKADER.md` en de go/no-go-checklist B9.
 #
 #  GATE-STATUS STAAT NIET IN DIT BESTAND (W4, #96). Of deze job blokkeert is
 #  uitsluitend te lezen uit de branch-protection-regel op `main`:
@@ -35,7 +37,9 @@ name: rls-cross-tenant
 # ============================================================================
 on:
   push:
+    branches: [main, preview]
   pull_request:
+    branches: [main, preview]
   workflow_dispatch:
 
 permissions:
@@ -52,11 +56,12 @@ jobs:
     # anders wordt de gate stil losgekoppeld.
     name: Cross-tenant isolatie (§15 T1-T14)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Node opzetten
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: "22"
           cache: "npm"
@@ -69,7 +74,7 @@ jobs:
       # in CI ten onrechte 2.20.3 af uit het lockfile; die versie kent
       # db.major_version=17 nog niet.
       - name: Supabase CLI opzetten
-        uses: supabase/setup-cli@v1
+        uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520 # v3.0.0
         with:
           version: 2.114.0
 
@@ -80,13 +85,17 @@ jobs:
         # beeld en zet haar via een trap altijd terug.
         run: bash scripts/start-ephemeral-supabase.sh
 
-      - name: Volledige §15 cross-tenant suite (app-laag + DB-laag)
+      - name: Volledige §15 database-isolatiesuite
         env:
           # De lokale CLI-DB (config.toml → [db] port 54322). Wegwerpbaar.
           TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           # Test-integriteit (geen merge-blokkade): in CI is de DB er altijd,
           # dus een ontbrekende DB → rood (geen stille skip van de DB-laag).
           XTENANT_REQUIRE_DB: "1"
+          # Typecheck en app-matrix hebben in dezelfde PR g2-evidence als
+          # primaire eigenaar. Alleen deze expliciete CI-waarde slaat ze hier
+          # over; lokaal blijft cross-tenant-ci.sh standaard volledig.
+          XTENANT_FAST_LAGEN: overslaan
         run: bash scripts/cross-tenant-ci.sh
 
       - name: Supabase-stack stoppen

@@ -35,13 +35,30 @@ const scriptSrc = [
   "https://challenges.cloudflare.com",
 ].join(" ");
 
+// De browser-E2E-suite draait de productiebuild tegen de lokale Supabase-stack.
+// Alleen de expliciete, fail-closed lokale seedmodus krijgt daarom de vaste
+// loopback-origin; preview/productie mogen nooit een configureerbare HTTP-origin
+// in hun CSP erven.
+const lokaleE2eConnectSrc =
+  process.env.SEED_DOELOMGEVING === "local"
+    ? ["http://127.0.0.1:54321"]
+    : [];
+
+const connectSrc = [
+  "'self'",
+  "https://*.supabase.co",
+  "https://*.vercel-insights.com",
+  "https://challenges.cloudflare.com",
+  ...lokaleE2eConnectSrc,
+].join(" ");
+
 const cspDirectives = [
   "default-src 'self'",
   `script-src ${scriptSrc}`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
-  "connect-src 'self' https://*.supabase.co https://*.vercel-insights.com https://challenges.cloudflare.com",
+  `connect-src ${connectSrc}`,
   "media-src 'self' blob:",
   "worker-src 'self' blob:",
   "frame-src 'self' https://challenges.cloudflare.com",

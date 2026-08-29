@@ -1,0 +1,129 @@
+name: e2e-security
+
+on:
+  pull_request:
+    branches: [preview, main]
+
+concurrency:
+  group: e2e-security-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tenantpoort:
+    name: E2E securityflows (Chromium)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      AUDIT_HMAC_SLEUTEL: "0123456789abcdef0123456789abcdef"
+      AUDIT_HMAC_SLEUTEL_VERSIE: "v1"
+      ANTHROPIC_API_KEY: "sk-ant-dummy-not-used"
+      AI_MODEL: "claude-3-5-haiku-latest"
+      NEXT_PUBLIC_FONDS_NAAM: "Synthetische E2E-omgeving"
+      DEPLOY_TARGET: "beheer"
+      APP_HOST: "fonds-a.localhost,fonds-b.localhost"
+      PLATFORM_HOST: "beheer.localhost"
+      TENANT_ENFORCE: "on"
+      SEED_DOELOMGEVING: "local"
+      WP3_MALWARESCAN_AAN: "true"
+      WP3_SCANNER_URL: "http://127.0.0.1:8787"
+      WP3_E2E_SCANNER: "local"
+      WP3_E2E_STOP_NA_SCAN: "true"
+      CRON_SECRET: "wp3-e2e-cron-secret-minimaal-32-tekens"
+      E2E_FONDS_A_ORIGIN: "http://fonds-a.localhost:3000"
+      E2E_FONDS_B_ORIGIN: "http://fonds-b.localhost:3000"
+      E2E_ONBEKENDE_ORIGIN: "http://onbekend.localhost:3000"
+      E2E_PLATFORM_ORIGIN: "http://beheer.localhost:3000"
+
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Node opzetten
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Dependencies installeren
+        run: npm ci
+
+      - name: E2E-doelgrendel en artifactcontract verifiëren
+        run: npm run test:e2e:guard
+
+      - name: Chromium installeren
+        run: npx playwright install --with-deps chromium
+
+      - name: Supabase CLI opzetten
+        uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520 # v3.0.0
+        with:
+          version: 2.114.0
+
+      - name: Ephemere Supabase-stack starten
+        run: bash scripts/start-ephemeral-supabase.sh
+
+      - name: Lokale stackkeys beschikbaar maken
+        run: |
+          eval "$(supabase status -o env)"
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=$API_URL"
+            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON_KEY"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY"
+          } >> "$GITHUB_ENV"
+
+      - name: Schema opbouwen
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+        run: bash scripts/testdb-apply-migrations.sh
+
+      - name: Lokale scannergrens starten
+        run: |
+          node tests/e2e/fixtures/scanner-stub.mjs > "$RUNNER_TEMP/e2e-scanner.log" 2>&1 &
+          echo "E2E_SCANNER_PID=$!" >> "$GITHUB_ENV"
+          for i in $(seq 1 20); do
+            curl -sf http://127.0.0.1:8787/health >/dev/null && exit 0
+            sleep 1
+          done
+          exit 1
+
+      - name: App eenmaal bouwen
+        run: npm run build
+
+      - name: App starten
+        run: |
+          npm run start > "$RUNNER_TEMP/e2e-server.log" 2>&1 &
+          echo "E2E_SERVER_PID=$!" >> "$GITHUB_ENV"
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:3000/api/healthz/ping >/dev/null && exit 0
+            sleep 1
+          done
+          exit 1
+
+      - name: Securityflows in Chromium
+        run: npm run test:e2e -- --project=chromium
+
+      - name: Serverlog veilig maken
+        if: failure()
+        run: |
+          node scripts/sanitize-e2e-log.mjs --input "$RUNNER_TEMP/e2e-server.log" --output test-results/e2e/server.log
+          node scripts/sanitize-e2e-log.mjs --input "$RUNNER_TEMP/e2e-scanner.log" --output test-results/e2e/scanner.log
+
+      - name: Browserartifacts veilig maken
+        if: failure()
+        run: node scripts/sanitize-e2e-artifacts.mjs test-results/e2e playwright-report
+
+      - name: Foutartifacts publiceren
+        if: failure()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: e2e-security-${{ github.run_id }}
+          path: |
+            test-results/e2e
+            playwright-report
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Processen en stack stoppen
+        if: always()
+        run: |
+          if [ -n "${E2E_SERVER_PID:-}" ]; then kill "$E2E_SERVER_PID" 2>/dev/null || true; fi
+          if [ -n "${E2E_SCANNER_PID:-}" ]; then kill "$E2E_SCANNER_PID" 2>/dev/null || true; fi
+          supabase stop || true

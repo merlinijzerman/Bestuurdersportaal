@@ -6,21 +6,15 @@
 //  gebruikt) en vaststellen dat de host onveranderd blijft. Zo bewijst deze
 //  suite niet alleen dat de filter werkt, maar ook waaróm hij nodig was.
 //
-//  Geen testframework in de repo; standalone met assert.
-//  Uitvoeren: npx tsx core/lib/redirect-veilig.sanity.ts
+//  Vitest-suite met node:assert voor bestaande assertionpariteit.
+//  Uitvoeren: npx vitest run core/lib/redirect-veilig.test.ts
 // ============================================================
 
 import assert from "node:assert/strict";
+import { test } from "vitest";
 import { veiligVervolgpad } from "./redirect-veilig";
 
 const ORIGIN = "https://portaal.fonds.nl";
-
-let n = 0;
-function test(naam: string, fn: () => void) {
-  fn();
-  n++;
-  console.log(`  ✓ ${naam}`);
-}
 
 /** Host van de URL die de route feitelijk zou opbouwen. */
 function hostNa(next: string | null): string {
@@ -86,5 +80,3 @@ test("pad met querystring en fragment blijft behouden", () => {
 test("root blijft root", () => {
   assert.equal(veiligVervolgpad("/"), "/");
 });
-
-console.log(`\n${n} sanity-tests geslaagd (redirect-veilig).`);

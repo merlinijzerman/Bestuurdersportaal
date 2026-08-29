@@ -48,6 +48,15 @@ file_size_limit = "50MiB"
 enabled = true
 site_url = "http://localhost:3000"
 
+# WP3 E2E-06 gebruikt een echte lokale AAL2-sessie. Dit geldt uitsluitend voor
+# de wegwerpbare CLI-stack; gehoste Auth-configuratie wordt hier niet door gezet.
+[auth.mfa]
+max_enrolled_factors = 10
+
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
+
 [studio]
 enabled = false
 

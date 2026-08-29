@@ -10,7 +10,7 @@
 // of de vervolgactie "Toon gebruikte bronnen" klapt het paneel open en scrolt).
 // De bronkaarten zelf komen als children mee (renderlogica leeft in page).
 
-import { type ReactNode } from "react";
+import { type ReactNode, useId } from "react";
 import { normgewichtLabel, isVeiligeUrl } from "@/core/lib/bronsoort";
 import { samenvattingDocumentnamen } from "@/core/lib/bronsamenvatting";
 import { dekkingslabel, type DocumentDekking } from "@/core/lib/document-dekking";
@@ -193,13 +193,18 @@ export default function OnderbouwingPaneel({
   // payloaduitbreiding vragen. `bronbasis` zegt in bestuurlijke taal hetzelfde
   // waar het hier om gaat: waarop steunt dit antwoord.
   const documentnamen = samenvattingDocumentnamen(meta.bronTitels ?? []);
+  const toegankelijkheidsId = useId();
+  const knopId = `${toegankelijkheidsId}-knop`;
+  const inhoudId = `${toegankelijkheidsId}-inhoud`;
 
   return (
     <div id={ankerId} className="mt-2">
       <button
+        id={knopId}
         type="button"
         onClick={onToggle}
         aria-expanded={open}
+        aria-controls={inhoudId}
         className={`w-full flex items-center justify-between gap-3 px-3 py-2 bg-white border border-line text-left hover:bg-app-bg transition-colors ${
           open ? "rounded-t-lg" : "rounded-lg"
         }`}
@@ -243,7 +248,12 @@ export default function OnderbouwingPaneel({
       </button>
 
       {open && (
-        <div className="border border-t-0 border-line rounded-b-lg bg-white px-3 py-3 space-y-3">
+        <div
+          id={inhoudId}
+          role="region"
+          aria-labelledby={knopId}
+          className="border border-t-0 border-line rounded-b-lg bg-white px-3 py-3 space-y-3"
+        >
           {/* Gestructureerde controle-informatie (§11c). */}
           <div className="space-y-1">
             {meta.alleenFondsdocumenten ? (
