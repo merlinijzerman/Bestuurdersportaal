@@ -188,9 +188,18 @@ export interface EvidenceItem {
   // Ondersteunende verwijzing — voor 'document' is dit het bewijsstuk,
   // voor andere types is het de eerste matchende kindrij (bijv. een
   // gevalideerde aanname of een AI-output).
-  bron_type: "procedure_bewijs" | "ai_output" | "assumption" | "risk" | "condition" | "evaluation" | "procedure_besluit" | "procedure_vaststelling" | "governance_event" | null;
+  bron_type: EvidenceBronType;
   bron_id: string | null;
   bron_titel: string | null;
+  // #192: het volledige gebonden-feit-spoor (herkomst) — elk feit met datum en
+  // persoon, voor de zichtbare herkomst én per-feit losmaken. bron_id/bron_titel
+  // blijven de representant (eerste) voor bestaande lezers.
+  gebonden_feiten: GebondenFeitRef[];
+  // #192: min_aantal en (afgeleid) de teller "nog N nodig"; dissent_open telt de
+  // openstaande formele dissent-rijen (alleen zinvol voor dissent_review) voor de
+  // harde tegenstrijdigheidsguard in het vaststellingsformulier.
+  min_aantal: number;
+  dissent_open: number;
   // WO-3-vervolg: herkomst van de vereiste — 'template' (generieke set,
   // per-proces uit te sluiten via de overlay) of 'instance' (zelf toegevoegd,
   // te deactiveren). `instance_id` is de rij-id bij een instantie-vereiste.
@@ -200,6 +209,19 @@ export interface EvidenceItem {
   // óók meetelt, naast haar eigen stap. Leeg = alleen de eigen stap. Voedt de
   // besluitmoment-telling die de readiness-weergave vervangt.
   besluitmoment_stap: number | null;
+}
+
+export type EvidenceBronType =
+  | "procedure_bewijs" | "ai_output" | "assumption" | "risk" | "condition"
+  | "evaluation" | "procedure_besluit" | "procedure_vaststelling"
+  | "governance_event" | null;
+
+export interface GebondenFeitRef {
+  id: string;
+  bron_type: EvidenceBronType;
+  titel: string | null;
+  datum: string | null;
+  actor: string | null;
 }
 
 // ── Decision-children ─────────────────────────────────────────────────

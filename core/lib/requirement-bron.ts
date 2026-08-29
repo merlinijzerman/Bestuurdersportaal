@@ -58,3 +58,31 @@ export const REQUIREMENT_BRON: Record<RequirementType, BronDefinitie | null> = {
 export const ALLE_REQUIREMENT_TYPES = Object.keys(
   REQUIREMENT_BRON
 ) as RequirementType[];
+
+/**
+ * Requirement-typen waarvoor vandaag géén runtime-pad bestaat om het gebonden feit
+ * aan te maken — aangetoond, niet theoretisch (besluit 0195):
+ *   • `evaluation` — `decision_evaluations` kent geen route/lifecycle/RPC/seed die
+ *     een rij aanmaakt (verdict: decoratief sinds introductie);
+ *   • `ai_validation` — er is wél een validatieflow (PATCH op een bestaande rij),
+ *     maar geen aanmaak-affordance: niets vult `decision_ai_interactions`.
+ *
+ * Eén bron van waarheid, net als [[REQUIREMENT_BRON]]: de kiezer-UI toont de
+ * affordance van deze typen uitgeschakeld MÉT reden (niet afwezig, niet een
+ * altijd-lege kiezer), en de definitielaag/importer (fase C) moet hierop
+ * waarschuwen zodra een auteur zo'n type kiest. Verdwijnt het gat (een type krijgt
+ * een aanmaakpad), dan haal je het hier weg — en de affordance wordt vanzelf actief.
+ *
+ * NB: dit is iets anders dan `field` (REQUIREMENT_BRON[field] === null): dat type
+ * kent per definitie geen gebonden feit (het vervult via een veldwaarde/
+ * governance-event), en hoort dus niet in deze lijst.
+ */
+export const TYPEN_ZONDER_VERVULLINGSPAD: ReadonlySet<RequirementType> = new Set<RequirementType>([
+  "evaluation",
+  "ai_validation",
+]);
+
+/** Heeft dit type vandaag een runtime-pad om het gebonden feit aan te maken? */
+export function heeftVervullingspad(type: RequirementType): boolean {
+  return !TYPEN_ZONDER_VERVULLINGSPAD.has(type);
+}

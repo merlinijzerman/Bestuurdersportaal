@@ -340,6 +340,9 @@ test("readiness afwezig → blokkerende vereisten uit de evidence", () => {
     bron: "template" as const,
     instance_id: null,
     besluitmoment_stap: null,
+    gebonden_feiten: [],
+    min_aantal: 1,
+    dissent_open: 0,
   };
   const view = maakView({ readiness: undefined, evidence: [blokEvidence] });
   const fk = bouwFeitenkaart(bron([view]));

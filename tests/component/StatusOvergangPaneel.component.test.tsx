@@ -35,6 +35,9 @@ const openVereiste: EvidenceItem = {
   bron: "template",
   instance_id: null,
   besluitmoment_stap: 2,
+  gebonden_feiten: [],
+  min_aantal: 1,
+  dissent_open: 0,
 };
 
 describe("StatusOvergangPaneel", () => {

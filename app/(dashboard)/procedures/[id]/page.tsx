@@ -28,6 +28,7 @@ import {
   buildDecisionDossierView,
   ensureDecisionForProcedure,
 } from "@/core/lib/decision";
+import { BESLUIT_OP_SLOT } from "@/core/lib/vereiste-koppeling";
 import { laadFasen } from "@/core/lib/procedure-fasen";
 import {
   faseStatus,
@@ -784,6 +785,11 @@ export default async function ProcedureDetailPage({
               stap={geselecteerdeStap}
               alleenLezen={!geselecteerdeIsBewerkbaar}
               kanBeheren={currentUserIsPrivileged}
+              besluitOpSlot={
+                // #192/I1: staat het besluit op slot? Dan is losmaken vergrendeld
+                // (met reden). Harde gate zit server-side in de koppelroute.
+                dossier ? BESLUIT_OP_SLOT.includes(dossier.decision.status) : false
+              }
               magAfwijkingVastleggen={magAfwijkingVastleggen}
               currentUserId={user.id}
               voltooidDoorNaam={geselecteerdeVoltooidDoorNaam}

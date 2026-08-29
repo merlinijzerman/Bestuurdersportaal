@@ -40,6 +40,9 @@ function ev(p: Partial<EvidenceItem> & { label: string; stap_volgorde: number })
     bron: "template",
     instance_id: null,
     besluitmoment_stap: null,
+    gebonden_feiten: [],
+    min_aantal: 1,
+    dissent_open: 0,
     ...p,
   };
 }
