@@ -51,11 +51,9 @@ values
   ('pf_wtp_invaarbesluit', '2.0.0', 5, 'document', 'Onderbouwing invaarmethodiek en vermogensverdeling', null, null, true, false, 1, null, 'Inclusief berekeningen, gekozen parameters en bestuurlijke argumentatie.'),
   ('pf_wtp_invaarbesluit', '2.0.0', 5, 'document', 'Reserve- en compensatieanalyse', null, null, false, false, 1, null, 'Voor zover solidariteitsreserve, risicodelingsreserve en/of compensatie(depot) onderdeel zijn van de transitie.'),
   ('pf_wtp_invaarbesluit', '2.0.0', 5, 'document', 'Scenario-, alternatief- en gevoeligheidsanalyse', null, null, true, false, 1, null, 'Onderbouwt robuustheid en de afweging van alternatieven.'),
-  ('pf_wtp_invaarbesluit', '2.0.0', 5, 'evaluation', 'Evenwichtigheidsoordeel bestuur', null, null, true, true, 1, null, 'Expliciet besluit/oordeel met motivering per materiële deelnemersgroep en over de transitie als geheel.'),
   ('pf_wtp_invaarbesluit', '2.0.0', 6, 'document', 'Communicatieplan en AFM-aanleverformulier', null, null, true, true, 1, null, 'Bewaar ingediende versie, bijlagen en onderbouwing van de gemaakte communicatiekeuzes.'),
   ('pf_wtp_invaarbesluit', '2.0.0', 6, 'document', 'Doelgroep-, boodschap- en kanalenmatrix', null, null, true, false, 1, null, 'Herleidbaar overzicht van doelgroep, boodschap, kanaal, timing en gewenste uitkomst.'),
   ('pf_wtp_invaarbesluit', '2.0.0', 6, 'document', 'Onderbouwing persoonlijke toelichtingen en peildatum', null, null, true, false, 1, null, 'Leg keuze van peildatum en aanpak van persoonlijke verschilverklaringen vast.'),
-  ('pf_wtp_invaarbesluit', '2.0.0', 6, 'evaluation', 'Deelnemertesten en effectmeting', null, null, true, false, 1, null, 'Resultaten plus aantoonbare verwerking van bevindingen in communicatie.'),
   ('pf_wtp_invaarbesluit', '2.0.0', 6, 'document', 'Keuzebegeleidingsontwerp en testresultaten', null, null, false, false, 1, null, 'Alleen opnemen waar deelnemers materiële keuzes hebben waarop de wettelijke norm keuzebegeleiding van toepassing is.'),
   ('pf_wtp_invaarbesluit', '2.0.0', 7, 'document', 'Voorgenomen invaarbesluit en integrale beslisnota', null, null, true, true, 1, null, 'Centraal besluitdocument met bronverwijzingen naar onderliggende dossierstukken.'),
   ('pf_wtp_invaarbesluit', '2.0.0', 7, 'approval', 'Voorgenomen opdrachtaanvaarding / opdrachtbevestiging', null, null, true, false, 1, null, 'Terminologie en exacte documentvorm kunnen per fonds verschillen; leg de formele aanvaarding van de uitvoeringsopdracht aantoonbaar vast.'),
@@ -74,7 +72,6 @@ values
   ('pf_wtp_invaarbesluit', '2.0.0', 9, 'document', 'AFM-terugkoppeling communicatieplan en opvolging', null, null, true, false, 1, null, 'AFM-terugkoppeling is toezichtinput, geen formele goedkeuring.'),
   ('pf_wtp_invaarbesluit', '2.0.0', 10, 'document', 'Prognose-transitieoverzicht (model en representatieve voorbeelden)', null, null, true, false, 1, null, 'Bewaar zowel het generieke ontwerp als voorbeelden van de conditionele/persoonlijke invulling.'),
   ('pf_wtp_invaarbesluit', '2.0.0', 10, 'document', 'Bewijs tijdige verstrekking prognose-transitieoverzicht', null, null, true, true, 1, null, 'Verzend-/publicatielog met dekking van de relevante populatie.'),
-  ('pf_wtp_invaarbesluit', '2.0.0', 10, 'evaluation', 'Segmentatie- en productiecontrole communicatie', null, null, true, false, 1, null, 'Controle op populatie, conditionele teksten, bedragen en kanaalconsistentie.'),
   ('pf_wtp_invaarbesluit', '2.0.0', 10, 'document', 'Klantcontact-readiness (FAQ, scripts, training, klachten-/escalatieproces)', null, null, true, false, 1, null, 'Bevat eigenaarschap, escalatieroutes en monitoring van veelvoorkomende vragen en klachten.'),
   ('pf_wtp_invaarbesluit', '2.0.0', 11, 'document', 'Go/no-go-dossier', null, null, true, true, 1, null, 'Integraal overzicht van criteria, bewijs, bevindingen, voorwaarden en conclusie.'),
   ('pf_wtp_invaarbesluit', '2.0.0', 11, 'kpi', 'Readiness-criteria en finale statusrapportage', null, null, true, false, 1, null, 'Minimaal administratie, IT, data, keten, vermogen, communicatie en toezichtvoorwaarden.'),
@@ -88,8 +85,7 @@ values
   ('pf_wtp_invaarbesluit', '2.0.0', 12, 'document', 'Bewijs tijdige verstrekking definitief transitieoverzicht', null, null, true, false, 1, null, 'Verzend-/publicatielog waaruit blijkt dat uiterlijk zes maanden na transitiedatum is verstrekt.'),
   ('pf_wtp_invaarbesluit', '2.0.0', 12, 'document', 'Verschillenanalyse prognose versus definitief', null, null, true, false, 1, null, 'Onderbouw oorzaken van verschillen en koppel deze aan de persoonlijke toelichting.'),
   ('pf_wtp_invaarbesluit', '2.0.0', 12, 'risk', 'Incidenten-, correctie- en herstelregister', null, null, true, false, 1, null, 'Bevat impact, deelnemersgroep, herstelactie, eigenaar, status en eventuele toezichtmelding.'),
-  ('pf_wtp_invaarbesluit', '2.0.0', 12, 'kpi', 'Klachten-, klantcontact- en keuzemonitoring', null, null, false, false, 1, null, 'Analyseer volumes, categorieën, doelgroepen en trends en vertaal materiële signalen naar bestuurlijke acties.'),
-  ('pf_wtp_invaarbesluit', '2.0.0', 12, 'evaluation', 'Bestuursevaluatie en verbeteracties', null, null, false, false, 1, null, 'Leg lessons learned, openstaande beheersacties en overdracht naar lijnorganisatie vast.');
+  ('pf_wtp_invaarbesluit', '2.0.0', 12, 'kpi', 'Klachten-, klantcontact- en keuzemonitoring', null, null, false, false, 1, null, 'Analyseer volumes, categorieën, doelgroepen en trends en vertaal materiële signalen naar bestuurlijke acties.');
 -- <</GEGENEREERD_UIT_DEFINITIE>>
 
 commit;

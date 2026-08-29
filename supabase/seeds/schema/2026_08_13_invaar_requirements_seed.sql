@@ -47,10 +47,8 @@ values
   ('pf_wtp_invaarbesluit', 5, 'kpi', 'Netto-profijt per cohort', null, null, true, false, 1, null),
   ('pf_wtp_invaarbesluit', 5, 'assumption', 'Scenario-/modelaannames', null, null, true, false, 1, null),
   ('pf_wtp_invaarbesluit', 5, 'risk', 'Herverdelingsrisico', null, null, true, false, 1, null),
-  ('pf_wtp_invaarbesluit', 5, 'evaluation', 'Evenwichtigheidsoordeel', null, null, true, false, 1, null),
   ('pf_wtp_invaarbesluit', 6, 'document', 'Communicatieplan (AFM)', 'communicatieplan', null, true, true, 1, null),
   ('pf_wtp_invaarbesluit', 6, 'document', 'Keuzebegeleidingsontwerp (zorgplicht FPR)', 'keuzebegeleidingsontwerp', null, true, false, 1, null),
-  ('pf_wtp_invaarbesluit', 6, 'evaluation', 'Deelnemertesten begrijpelijkheid en keuzes', null, null, true, false, 1, null),
   ('pf_wtp_invaarbesluit', 7, 'field', 'Besluitvraag/motivering', null, 'decision.besluitvraag', true, true, 1, null),
   ('pf_wtp_invaarbesluit', 7, 'document', 'Voorgenomen invaarbesluit + beslisnota', 'voorgenomen_invaarbesluit', null, true, true, 1, null),
   ('pf_wtp_invaarbesluit', 7, 'approval', 'Voorgenomen besluit', null, null, true, true, 1, null),
@@ -67,7 +65,6 @@ values
   ('pf_wtp_invaarbesluit', 9, 'dissent_review', 'Opvolging toezichtbevindingen', null, null, true, false, 1, null),
   ('pf_wtp_invaarbesluit', 10, 'external_submission', 'Verstrekking prognose-transitieoverzicht', 'prognose_transitieoverzicht', null, true, true, 1, null),
   ('pf_wtp_invaarbesluit', 10, 'document', 'Klantcontact-readiness (scripts/training/klachtenproces)', 'klantcontact_readiness', null, true, false, 1, null),
-  ('pf_wtp_invaarbesluit', 10, 'evaluation', 'Kwaliteitscontrole communicatie', null, null, true, false, 1, null),
   ('pf_wtp_invaarbesluit', 11, 'document', 'Go/no-go-dossier', 'go_no_go_dossier', null, true, true, 1, null),
   ('pf_wtp_invaarbesluit', 11, 'kpi', 'Readiness-criteria (IT/administratie/keten/financieel)', null, null, true, false, 1, null),
   ('pf_wtp_invaarbesluit', 11, 'risk', 'Actuele restrisico''s + fallback/uitstel', null, null, true, false, 1, null),
@@ -75,8 +72,7 @@ values
   ('pf_wtp_invaarbesluit', 11, 'mandate_check', 'Bevoegdheid go/no-go-besluit', null, null, true, false, 1, null),
   ('pf_wtp_invaarbesluit', 12, 'document', 'Controle-na-invaren/reconciliatierapport', 'controle_na_invaren', null, true, true, 1, null),
   ('pf_wtp_invaarbesluit', 12, 'external_submission', 'Definitief transitieoverzicht', 'definitief_transitieoverzicht', null, true, true, 1, null),
-  ('pf_wtp_invaarbesluit', 12, 'kpi', 'Klachten-/keuzemonitoring', null, null, true, false, 1, null),
-  ('pf_wtp_invaarbesluit', 12, 'evaluation', 'Bestuursevaluatie + verbeteracties', null, null, true, false, 1, null);
+  ('pf_wtp_invaarbesluit', 12, 'kpi', 'Klachten-/keuzemonitoring', null, null, true, false, 1, null);
 -- <</GEGENEREERD_UIT_DEFINITIE>>
 
 commit;

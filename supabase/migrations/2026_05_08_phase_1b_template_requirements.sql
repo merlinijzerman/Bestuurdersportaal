@@ -59,11 +59,6 @@ insert into public.procedure_requirements
    verplicht, blokkerend, validatieregel,
    triggert_bij_complexiteit, triggert_bij_risiconiveau)
 values
-  ('beleidswijziging_beleggingsbeleid', 2, 'ai_validation',
-   'AI-samenvatting onderbouwing gevalideerd',
-   true, true,
-   'minstens één decision_ai_interactions met validatiestatus in (gevalideerd, aangepast)',
-   null, null),
   ('beleidswijziging_beleggingsbeleid', 2, 'assumption',
    '≥ 3 gevalideerde kernaannames bij complex/hoog',
    true, true,
@@ -81,16 +76,6 @@ insert into public.procedure_requirements
    verplicht, blokkerend, validatieregel,
    triggert_bij_mandaatgevoelig)
 values
-  ('beleidswijziging_beleggingsbeleid', 3, 'ai_validation',
-   'Risk-validatie uitgevoerd door bevoegde rol',
-   true, true,
-   'decision_ai_interactions met validatie_domein=risk gevalideerd door voorzitter/beheerder',
-   null),
-  ('beleidswijziging_beleggingsbeleid', 3, 'ai_validation',
-   'Compliance-validatie uitgevoerd door bevoegde rol',
-   true, true,
-   'decision_ai_interactions met validatie_domein=compliance gevalideerd door voorzitter/beheerder',
-   null),
   ('beleidswijziging_beleggingsbeleid', 3, 'risk',
    'Risico''s geregistreerd in Decision Object',
    true, true,
@@ -135,11 +120,7 @@ values
   ('beleidswijziging_beleggingsbeleid', 6, 'kpi',
    'KPI''s gedefinieerd voor monitoring',
    true, true,
-   'minstens één decision_conditions met kpi is not null'),
-  ('beleidswijziging_beleggingsbeleid', 6, 'evaluation',
-   'Evaluatiemoment gepland',
-   true, true,
-   'minstens één decision_evaluations met geplande_datum');
+   'minstens één decision_conditions met kpi is not null');
 
 commit;
 
