@@ -515,8 +515,10 @@ export interface BesluitItem {
   verworpen_alternatieven: string[] | null;
   vergadering_id: string | null;
   agendapunt_id: string | null;
-  uitkomst: "instemmend" | "voorwaardelijk" | "afwijzend" | null;
-  requirement_sleutel: string | null;
+  /** P4-feitvelden: alleen beschikbaar voor lezers die ze expliciet ophalen;
+      de bestaande dossierresponse blijft hiervoor byte-stabiel. */
+  uitkomst?: "instemmend" | "voorwaardelijk" | "afwijzend" | null;
+  requirement_sleutel?: string | null;
 }
 
 /**
