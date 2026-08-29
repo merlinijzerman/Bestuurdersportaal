@@ -92,10 +92,15 @@ export async function pasActivatieCascadeToe(
       for (const volg of teActiveren) {
         const doel = alleStappen.find((s) => s.volgorde === volg);
         if (!doel) continue;
-        await supabase
-          .from("procedure_stappen")
-          .update({ status: "actief" })
-          .eq("id", doel.id);
+        // #214-a1 (0194): status via SECURITY DEFINER-RPC — `authenticated`
+        // mag de bewaakte statuskolom niet rechtstreeks schrijven.
+        const { error: actFout } = await supabase.rpc("fn_stap_activeren", {
+          p_stap_id: doel.id,
+          p_procedure_id: procedureId,
+        });
+        if (actFout) {
+          throw new Error(`fn_stap_activeren (${doel.id}): ${actFout.message}`);
+        }
         await supabase.from("procedure_log").insert({
           procedure_id: procedureId,
           event_type: "stap_gestart",
@@ -110,10 +115,13 @@ export async function pasActivatieCascadeToe(
         .filter((s) => s.status === "open" && s.volgorde > afgerondeStap.volgorde)
         .sort((a, b) => a.volgorde - b.volgorde)[0];
       if (volgende) {
-        await supabase
-          .from("procedure_stappen")
-          .update({ status: "actief" })
-          .eq("id", volgende.id);
+        const { error: actFout } = await supabase.rpc("fn_stap_activeren", {
+          p_stap_id: volgende.id,
+          p_procedure_id: procedureId,
+        });
+        if (actFout) {
+          throw new Error(`fn_stap_activeren (${volgende.id}): ${actFout.message}`);
+        }
         await supabase.from("procedure_log").insert({
           procedure_id: procedureId,
           event_type: "stap_gestart",

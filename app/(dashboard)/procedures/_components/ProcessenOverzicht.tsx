@@ -164,12 +164,11 @@ export default function ProcessenOverzicht({
     return () => document.removeEventListener("keydown", onKey);
   }, [zoek]);
 
-  const statusTest =
-    STATUS_OPTIES.find((o) => o.id === status)?.test ?? (() => true);
-  const inStatus = useMemo(
-    () => processen.filter(statusTest),
-    [processen, statusTest]
-  );
+  const inStatus = useMemo(() => {
+    const statusTest =
+      STATUS_OPTIES.find((o) => o.id === status)?.test ?? (() => true);
+    return processen.filter(statusTest);
+  }, [processen, status]);
 
   // Procestypen binnen de huidige status (voor de filterrail + tellingen).
   const typen = useMemo(() => {

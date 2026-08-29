@@ -3,6 +3,7 @@ import { withFondsRoute, type FondsContext } from "@/core/lib/route-wrapper";
 import { ensureDecisionForProcedure } from "@/core/lib/decision";
 import { pasActivatieCascadeToe } from "@/core/lib/procedure-activatie-cascade";
 import { MIN_MOTIVERING_LENGTE } from "@/core/lib/afwijking";
+import { z } from "zod";
 
 // POST /api/procedures/[id]/stappen/[stapId]/afwijking
 //
@@ -131,7 +132,13 @@ export async function afrondenMetAfwijkingHandler(
     }
 }
 
-export const POST = withFondsRoute(
-  { capability: "procedures.afwijking.vastleggen" },
-  afrondenMetAfwijkingHandler
+export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "procedures.stappen.afwijking-vastleggen" }, capability: "procedures.afwijking.vastleggen",
+    schema: z
+      .object({
+        motivering: z.unknown().optional(),
+        bevestigd: z.unknown().optional(),
+      })
+      .passthrough(),
+  },
+  async (ctx, req, params) => afrondenMetAfwijkingHandler(ctx, req, params)
 );

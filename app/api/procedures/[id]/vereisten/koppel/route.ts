@@ -7,6 +7,7 @@ import {
   primairBesluitId,
 } from "@/core/lib/vereiste-koppeling";
 import { REQUIREMENT_BRON } from "@/core/lib/requirement-bron";
+import { z } from "zod";
 
 // P2/PR-B (#167) — één koppelroute "vanuit de vereiste": koppelen/ontkoppelen van
 // een gebonden feit aan een vereiste, sleutel server-side afgeleid (0189, D10).
@@ -24,8 +25,17 @@ function duidtOpGeenDissent(uitkomst: string): boolean {
   return /geen\s+dissent/i.test(uitkomst);
 }
 
-export const POST = withFondsRoute(
-  { capability: "procedures.manage" },
+export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "procedures.vereisten.koppeling-wijzigen" }, capability: "procedures.manage",
+    schema: z
+      .object({
+        vereiste: z.unknown().optional(),
+        actie: z.unknown().optional(),
+        bron_id: z.unknown().optional(),
+        uitkomst: z.unknown().optional(),
+        toelichting: z.unknown().optional(),
+      })
+      .passthrough(),
+  },
   async (ctx, req: NextRequest, params) => {
     try {
       const { id } = params as { id: string };

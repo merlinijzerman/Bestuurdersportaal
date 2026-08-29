@@ -165,6 +165,8 @@ SQL_V3="supabase/checks/2026_08_20_v3_grants_volledig.sql"
 # #214-a1 (0194) — schrijfpoort: statische gate + gedragstoets (directe PATCH dicht).
 SQL_P214A1="supabase/checks/2026_08_28_p214a1_schrijfpoort.sql"
 SQL_P214A1G="supabase/checks/2026_08_28_p214a1_gedrag.sql"
+# #214-a2 (0194) — epic-only afwijkingskolommen blijven buiten authenticated UPDATE.
+SQL_P214A2="supabase/checks/2026_08_29_p214a2_afwijkingskolommen_schrijfpoort.sql"
 # A — rollen/capabilities + het governance_log-schrijfpad (#83). Stond op de
 # V4-rodelijst; bleek geen productregressie maar een verouderde FIXTURE: de seed
 # zette `naam` in app-metadata terwijl maak_profiel hem uit user-metadata leest.
@@ -316,6 +318,10 @@ echo
 echo "-- #214-a1 schrijfpoort (kolom-revoke bewaakt + gedragstoets: directe PATCH faalt, RPC werkt) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P214A1"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P214A1G"
+echo
+
+echo "-- #214-a2 afwijkingskolommen (vier epic-kolommen fail-closed + RPC-recht) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P214A2"
 echo
 
 echo "-- Afronden met afwijking (snapshot-pin SQL-helft, eigen slot, atomaire kern) --"
