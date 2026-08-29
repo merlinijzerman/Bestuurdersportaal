@@ -116,6 +116,11 @@ begin
       using errcode = 'PC003';
   end if;
 
+  -- P4 tranche 4 (I1): de statusclaim moet vóór de overgang een bestaand,
+  -- matrixgedefinieerd feit hebben. De helper faalt dicht voor een ontbrekende
+  -- matrixrij of ontbrekend feit; routes interpreteren dit nooit zelf.
+  perform public.fn_toets_besluitstatus_feit(p_decision_id, p_target, p_reden, p_motivering);
+
   v_is_besluit := p_target in ('besloten','voorwaardelijk_besloten');
 
   -- ── Open voor het besluitmoment — in SQL, NIET meegegeven (zie kop). ──
@@ -217,6 +222,7 @@ begin
     raise exception 'Heropenen-ter-correctie kan alleen vanuit besloten.' using errcode='PC002';
   end if;
 
+  perform public.fn_toets_besluitstatus_feit(p_decision_id, 'heropend', null, p_motivering);
   update public.decision_objects set status = 'heropend' where id = p_decision_id;  -- matrix laat besloten→heropend toe
 
   insert into public.governance_events

@@ -105,13 +105,17 @@ begin
     raise exception 'Geen primair Decision Object voor de procedure (fail-closed).' using errcode = '23514';
   end if;
 
-  -- Kern: besluitstatus → beeindigd (transitiematrix laat de rand toe).
-  update public.decision_objects set status = 'beeindigd' where id = v_dec_id;
-
+  -- I1: leg eerst het beëindigingsfeit vast; daarna leest de matrix precies dit
+  -- event vóór de statusclaim. Alles zit in dezelfde transactie.
   insert into public.governance_events
     (decision_id, event_type, actor_id, actor_naam, object_type, object_id, nieuwe_waarde, reden)
   values (v_dec_id, 'procedure_beeindigd', v_actor, v_naam, 'procedure', p_procedure_id,
           jsonb_build_object('status', 'beeindigd', 'rol_op_moment', v_rol), p_reden);
+
+  perform public.fn_toets_besluitstatus_feit(v_dec_id, 'beeindigd', p_reden, null);
+
+  -- Kern: besluitstatus → beeindigd (transitiematrix laat de rand toe).
+  update public.decision_objects set status = 'beeindigd' where id = v_dec_id;
 
   insert into public.procedure_log (procedure_id, event_type, actor_id, actor_naam, payload)
   values (p_procedure_id, 'procedure_beeindigd', v_actor, v_naam,

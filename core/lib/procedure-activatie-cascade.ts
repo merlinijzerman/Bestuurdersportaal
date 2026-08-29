@@ -94,12 +94,12 @@ export async function pasActivatieCascadeToe(
         if (!doel) continue;
         // P4: een vrijgekomen stap wordt 'niet_begonnen' (activeerbaar), niet
         // 'actief'. De a1-RPC houdt de bewaakte kolom buiten browserrechten.
-        const { error: actFout } = await supabase.rpc("fn_stap_activeren", {
+        const { error: actFout } = await supabase.rpc("fn_stap_vrijgeven", {
           p_stap_id: doel.id,
           p_procedure_id: procedureId,
         });
         if (actFout) {
-          throw new Error(`fn_stap_activeren (${doel.id}): ${actFout.message}`);
+          throw new Error(`fn_stap_vrijgeven (${doel.id}): ${actFout.message}`);
         }
         await supabase.from("procedure_log").insert({
           procedure_id: procedureId,

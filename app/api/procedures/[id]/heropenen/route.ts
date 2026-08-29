@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
+import { z } from "zod";
 
 // POST /api/procedures/[id]/heropenen
 //
@@ -13,7 +14,13 @@ import { withFondsRoute } from "@/core/lib/route-wrapper";
 // Heropenen van een BESLUIT (besloten→heropend, §6.3) is een aparte overgang op
 // decision_objects onder `decisions.manage` (tranche 7).
 export const POST = withFondsRoute(
-  { capability: "procedures.heropenen" },
+  {
+    capability: "procedures.heropenen",
+    schema: z.object({ motivering: z.unknown().optional() }).passthrough(),
+    hostGuard: "geen",
+    rateLimit: "nog-niet-beoordeeld",
+    audit: { handeling: "procedures.heropenen" },
+  },
   async (ctx, req: NextRequest, params) => {
     try {
       const { id } = params as { id: string };

@@ -8,6 +8,8 @@
 -- (óók service_role) — dat is juist het punt t.o.v. een trigger.
 -- Zelf-seedend, in één begin…rollback. Uitvoeren:
 --   psql "$DB" -v ON_ERROR_STOP=1 -f dit-bestand.
+-- ROL: postgres; een composite FK geldt juist ongeacht de uitvoerende rol,
+-- inclusief service_role, dus owner-context toetst de hardste grens.
 -- ============================================================================
 
 -- DEEL 1 — de drie composite-FK's bestaan.
@@ -35,12 +37,14 @@ insert into public.decision_objects (id, fonds_id, procedure_id, besluit_code, t
    '55000000-0000-0000-0000-00000000000a', 'I5-001', 'Besluit A', 'Vraag A');
 
 -- CROSS-FONDS: een instantie in fonds B die het besluit van fonds A noemt → 23503.
+-- `approval` houdt deze fixture buiten de aparte P2-sleutelvalidatie voor
+-- documentachtige requirements; zo meet deze test uitsluitend de I5-FK.
 do $$
 begin
   insert into public.procedure_requirement_instance
-    (id, decision_id, fonds_id, stap_volgorde, requirement_type, label, actief)
+    (id, decision_id, fonds_id, stap_volgorde, requirement_type, label, zwaarte, actief)
   values (gen_random_uuid(), '55000000-0000-0000-0000-0000000000da',
-          '55000000-0000-0000-0000-0000000000fb', 1, 'document', 'X', true);
+          '55000000-0000-0000-0000-0000000000fb', 1, 'approval', 'X', 'vereist', true);
   raise exception 'LEK (I5): een requirement_instance in fonds B kon het besluit van fonds A referen.';
 exception
   when foreign_key_violation then raise notice 'OK I5: cross-fonds requirement_instance geweigerd (23503).';
@@ -51,9 +55,9 @@ end $$;
 do $$
 begin
   insert into public.procedure_requirement_instance
-    (id, decision_id, fonds_id, stap_volgorde, requirement_type, label, actief)
+    (id, decision_id, fonds_id, stap_volgorde, requirement_type, label, zwaarte, actief)
   values (gen_random_uuid(), '55000000-0000-0000-0000-0000000000da',
-          '55000000-0000-0000-0000-0000000000fa', 1, 'document', 'X', true);
+          '55000000-0000-0000-0000-0000000000fa', 1, 'approval', 'X', 'vereist', true);
   raise notice 'OK I5: same-fonds requirement_instance toegestaan.';
 exception
   when others then raise exception 'FAALT (I5): een legitieme same-fonds instantie werd geweigerd: %', sqlerrm;
