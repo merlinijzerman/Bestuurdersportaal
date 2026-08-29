@@ -1,9 +1,10 @@
 -- Rollback van besluit 0195 / #228.
 -- Alleen toepassen als de voorwaartse 0195-migratie al is toegepast en P1b nog
 -- aanwezig is. De hoofdrollback draait dit bestand dus vóór P4, P3, P2 en P1b.
--- Ook rollback verandert de inhoud van @1.0.0 en breekt daarom af zodra een
--- dossier die versie pint. Geen session_replication_role: de I7-trigger wordt
--- uitsluitend transactioneel tijdelijk uitgezet en aantoonbaar hersteld.
+-- Ook rollback verandert de inhoud van @1.0.0 en staat daarom uitsluitend de
+-- gemeten uitzondering 0 (Preview) of 3 (productie, niet in gebruik) toe. Geen
+-- session_replication_role: de I7-trigger wordt uitsluitend transactioneel
+-- tijdelijk uitgezet en aantoonbaar hersteld.
 
 begin;
 
@@ -16,9 +17,9 @@ begin
    where p.template_code = 'beleidswijziging_beleggingsbeleid'
      and p.template_versie = '1.0.0';
 
-  if v_gepinde_dossiers <> 0 then
+  if v_gepinde_dossiers not in (0, 3) then
     raise exception
-      '0195/#228 rollback breekt af: % dossier(s) pinnen op beleidswijziging-beleggingsbeleid@1.0.0; wijzig geen bevroren definitie.',
+      '0195/#228 rollback breekt af: % dossier(s) pinnen op beleidswijziging-beleggingsbeleid@1.0.0; alleen de gemeten uitzondering 0 (Preview) of 3 (productie, niet in gebruik) is toegestaan.',
       v_gepinde_dossiers;
   end if;
 

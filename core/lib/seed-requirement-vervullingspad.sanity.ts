@@ -80,8 +80,8 @@ for (const [pad, inhoud] of [
   );
   assert.match(
     inhoud,
-    /v_gepinde_dossiers <> 0/,
-    `${pad}: mist de fail-closed nul-assertie voor gepinde 1.0.0-dossiers`
+    /v_gepinde_dossiers not in \(0, 3\)/,
+    `${pad}: mist de fail-closed 0195-uitzondering voor exact 0 (Preview) of 3 (productie) gepinde 1.0.0-dossiers`
   );
   assert.match(
     inhoud,

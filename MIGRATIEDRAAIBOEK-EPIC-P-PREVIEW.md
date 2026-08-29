@@ -11,14 +11,14 @@ fout. De code-deploy volgt pas nadat alle 29 stappen groen zijn.
 > ongewijzigd hersteld; opnieuw toepassen zou op Preview niets repareren en
 > veroorzaakt migratiedrift.
 
-> **Blokkerende 0195-voorwaarde.** Stap 29 is alleen toegestaan na een gemeten
-> nulstand op zowel Preview als productie. P1b moet op de doel-DB al aanwezig
-> zijn voor de versiequery hieronder. Ontbreekt `procedures.template_versie`
-> nog, gebruik dan tijdelijk de pre-P1b-projectie op alleen `template_code`; P1b
-> backfillt deze dossiers anders naar `1.0.0`. Is één van de aantallen niet nul,
-> voer stap 29 niet uit: dit wordt een nieuw definitiebesluit met een nieuwe
-> templateversie. De migratie én rollback herhalen de nul-assertie zelf.
-> Leg vóór uitvoering de twee aantallen, het meettijdstip en de gebruikte query
+> **0195-voorwaarde en gemeten uitzondering.** P1b moet op de doel-DB al
+> aanwezig zijn voor de versiequery hieronder. Ontbreekt
+> `procedures.template_versie` nog, gebruik dan tijdelijk de pre-P1b-projectie op
+> alleen `template_code`; P1b backfillt deze dossiers anders naar `1.0.0`.
+> Gemeten op 29-08-2026: Preview = 0; productie = 3, door de opdrachtgever
+> bevestigd als niet in gebruik. Besluit 0195 staat daarom uitsluitend deze twee
+> aantallen toe. Elk ander aantal breekt in de migratie én rollback fail-closed
+> af. Leg vóór uitvoering de aantallen, het meettijdstip en de gebruikte query
 > vast in besluit 0195; zonder die vastlegging is dit geen toegestane uitzondering
 > op I7.
 
@@ -64,7 +64,7 @@ select count(*) as dossiers_die_naar_1_0_0_worden_gebackfilld
 | 26 | `2026_08_29_p4_06_procedure_beeindigen_heropenen.sql` | Levert procedure beëindigen/heropenen en legt het vereiste beëindigingsfeit atomair vast. | DB vóór de bijbehorende API-routes. | `2026_08_29_p4_06_procedure_beeindigen_heropenen_ROLLBACK.sql` |
 | 27 | `2026_08_29_p4_07_besluit_heropenen_correctie.sql` | Schrijft de statusfeiten atomair in `fn_besluit_status_omslag`; de uitgestelde matrix-trigger toetst ze bij commit. Corrigeert ook heropenen. | DB vóór de besluitstatusroute. | `2026_08_29_p4_07_besluit_heropenen_correctie_ROLLBACK.sql` |
 | 28 | `2026_08_29_p4_08_i5_composite_fk.sql` | Legt P4/I5 cross-fondsreferenties declaratief vast met composite foreign keys. | DB vóór deploy. | `2026_08_29_p4_08_i5_composite_fk_ROLLBACK.sql` |
-| 29 | `2026_08_29_zz_0195_verwijder_onvervulbare_templatevereisten.sql` | Eenmalige, gemeten 0195-correctie: verwijdert de onvervulbare `evaluation` uit stap 6 van `beleidswijziging_beleggingsbeleid@1.0.0` alleen bij nul gepinde dossiers op de doel-DB (#228). Anders faalt hij luid en is een nieuwe templateversie vereist. De I7-trigger staat alleen binnen de transactie tijdelijk uit, nooit via `session_replication_role`, en de migratie verifieert vóór commit dat hij weer actief is. | DB vóór deploy, uitsluitend na de 0195-nulmeting. | `2026_08_29_zz_0195_verwijder_onvervulbare_templatevereisten_ROLLBACK.sql` |
+| 29 | `2026_08_29_zz_0195_verwijder_onvervulbare_templatevereisten.sql` | Eenmalige, gemeten 0195-correctie: verwijdert de onvervulbare `evaluation` uit stap 6 van `beleidswijziging_beleggingsbeleid@1.0.0` bij uitsluitend 0 gepinde dossiers op Preview of de expliciet bevestigde 3 niet-gebruikte dossiers op productie (#228). Elk ander aantal faalt luid. De I7-trigger staat alleen binnen de transactie tijdelijk uit, nooit via `session_replication_role`, en de migratie verifieert vóór commit dat hij weer actief is. | DB vóór deploy, uitsluitend na vastlegging van de 0195-meting. | `2026_08_29_zz_0195_verwijder_onvervulbare_templatevereisten_ROLLBACK.sql` |
 
 ## Tussenijkpunten tijdens de reeks
 

@@ -5,9 +5,10 @@
 -- runtime geen aanmaakpad heeft. Zij wijzigt uitsluitend
 -- beleidswijziging-beleggingsbeleid@1.0.0 en raakt geen nieuwe definitie.
 --
--- P1b bevriest gepubliceerde requirementversies. Dit is uitsluitend verdedigbaar
--- als er nul dossiers op @1.0.0 pinnen; de assertie hieronder maakt die gemeten
--- uitzondering afdwingbaar. De trigger gaat alleen binnen deze transactie uit,
+-- P1b bevriest gepubliceerde requirementversies. Besluit 0195 staat hierop één
+-- gemeten uitzondering toe: Preview heeft nul en productie heeft drie bekende,
+-- niet-gebruikte dossiers die naar @1.0.0 zijn gebackfilld. Elk ander aantal
+-- breekt fail-closed af. De trigger gaat alleen binnen deze transactie uit,
 -- nooit via session_replication_role, en staat vóór commit aantoonbaar weer aan.
 -- Een fout rolt zowel de DELETE als de triggerstand terug.
 -- Rollback: supabase/rollbacks/2026_08_29_zz_0195_verwijder_onvervulbare_templatevereisten_ROLLBACK.sql
@@ -24,9 +25,9 @@ begin
    where p.template_code = 'beleidswijziging_beleggingsbeleid'
      and p.template_versie = '1.0.0';
 
-  if v_gepinde_dossiers <> 0 then
+  if v_gepinde_dossiers not in (0, 3) then
     raise exception
-      '0195/#228 breekt af: % dossier(s) pinnen op beleidswijziging-beleggingsbeleid@1.0.0; maak een nieuwe templateversie in plaats van I7 te doorbreken.',
+      '0195/#228 breekt af: % dossier(s) pinnen op beleidswijziging-beleggingsbeleid@1.0.0; alleen de gemeten uitzondering 0 (Preview) of 3 (productie, niet in gebruik) is toegestaan.',
       v_gepinde_dossiers;
   end if;
 
