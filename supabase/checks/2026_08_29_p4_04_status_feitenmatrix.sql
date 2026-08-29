@@ -8,9 +8,15 @@ begin
   if (select count(*) from public.besluitstatus_vereist_feit) <> 18 then
     raise exception 'P4/I1 FAALT: matrix moet exact 18 statusrijen dragen.';
   end if;
-  if (select pg_get_functiondef('public.fn_besluit_status_omslag(uuid,text,text,text,jsonb)'::regprocedure))
+  if not exists (
+    select 1 from pg_trigger
+     where tgrelid = 'public.decision_objects'::regclass
+       and tgname = 'trg_besluitstatus_feit'
+       and tgdeferrable
+       and tginitdeferred
+  ) or (select pg_get_functiondef('public.fn_guard_besluitstatus_feit()'::regprocedure))
        not like '%fn_toets_besluitstatus_feit%' then
-    raise exception 'P4/I1 FAALT: fn_besluit_status_omslag roept de matrix niet aan.';
+    raise exception 'P4/I1 FAALT: de uitgestelde status-feitentrigger ontbreekt of omzeilt de matrix.';
   end if;
 end $$;
 
@@ -37,9 +43,10 @@ declare v_status text;
 begin
   perform set_config('request.jwt.claim.sub','e4e40000-0000-0000-0000-000000000002',true);
   begin
-    perform public.fn_besluit_status_omslag('e4e40000-0000-0000-0000-000000000005','besloten','vastleggen',null);
+    perform public.fn_besluit_status_omslag('e4e40000-0000-0000-0000-000000000005','besloten','vastleggen','Geldige motivering voor de statusomslag.');
+    set constraints trg_besluitstatus_feit immediate;
     raise exception 'P4/I1 FAALT: besloten zonder gebonden approval-feit toegestaan.';
-  exception when sqlstate 'PC001' then null;
+  exception when sqlstate 'PC004' then null;
   end;
   select status into v_status from public.decision_objects where id='e4e40000-0000-0000-0000-000000000005';
   if v_status <> 'in_bespreking' then raise exception 'P4/I1 FAALT: geweigerde omslag wijzigde toch status (%).',v_status; end if;
@@ -55,7 +62,8 @@ do $$
 declare v_status text;
 begin
   perform set_config('request.jwt.claim.sub','e4e40000-0000-0000-0000-000000000002',true);
-  perform public.fn_besluit_status_omslag('e4e40000-0000-0000-0000-000000000005','besloten','vastleggen',null);
+  perform public.fn_besluit_status_omslag('e4e40000-0000-0000-0000-000000000005','besloten','vastleggen','Geldige motivering voor de statusomslag.');
+  set constraints trg_besluitstatus_feit immediate;
   select status into v_status from public.decision_objects where id='e4e40000-0000-0000-0000-000000000005';
   if v_status <> 'besloten' then raise exception 'P4/I1 FAALT: besloten met gebonden approval-feit geweigerd (%).',v_status; end if;
   raise notice 'OK P4/I1: statusclaim zonder feit geweigerd; met gebonden approval-feit toegelaten.';
