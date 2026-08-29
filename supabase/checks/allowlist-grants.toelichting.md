@@ -164,7 +164,7 @@ MAINTAIN. Afwijkingen die bewust in de allowlist staan:
    Productie/Preview, dan is dat zichtbaar in de omgeving, niet als een gate-verschil.
 
 9. **#214-a1 schrijfpoort (besluit 0194) — PRODUCTIEFIX.** `procedure_stappen` toont
-   `authenticated=SELECT,INSERT,DELETE` — **geen tabel-brede UPDATE** — omdat de drie
+   `authenticated=SELECT,INSERT` — **geen tabel-brede UPDATE** — omdat de drie
    bewaakte kolommen (`status`, `voltooid_op`, `voltooid_door`) aan `authenticated`
    zijn onttrokken en de overige kolommen op **kolomniveau** zijn her-verleend
    (kolomgrants staan niet in `role_table_grants`, dus onzichtbaar voor V3 — bewaakt
@@ -179,6 +179,16 @@ MAINTAIN. Afwijkingen die bewust in de allowlist staan:
    verwijderbaar door een fondslid. De schrijfpaden lopen via de SECURITY DEFINER-
    RPC's `fn_stap_afronden` / `fn_stap_activeren` / `fn_stap_heropenen`
    (`anon=-`, `authenticated=EXECUTE`, `service_role=-`). Zie `METING-RLS-reikwijdte-214.md`.
+10. **P4 statusmodel (#169, besluiten 0193/0194) — SECURITY DEFINER-schrijf-RPC's.**
+   `fn_procedure_beeindigen`, `fn_procedure_heropenen` en `fn_besluit_heropenen_correctie`
+   (`anon=-`, `authenticated=EXECUTE`, `service_role=-`) — bestuurlijke statusovergangen
+   die als owner draaien: zij doen zelf de rolgate + fondsgrens + verplichte motivering
+   + append-only governance_event (actor-rol als momentopname), zoals de PR-C/PR-D-RPC's.
+   `fn_stap_activeerbaar_maken` (`authenticated=EXECUTE`) borgt de afgeleide
+   `geblokkeerd→niet_begonnen`-overgang na a1 en controleert de afhankelijkheden zelf.
+   `fn_stap_actief_bij_handeling` en `fn_dossierstatus_van_decision` zijn trigger-/afleid-
+   functies zonder client-grant. De composite-FK's (I5, tranche 8) en de nieuwe
+   CHECK-waarden (`beeindigd`/`niet_begonnen`/`vervallen`) zijn declaratief, geen grants.
 
 ## Objecten die NIET in scope zijn
 

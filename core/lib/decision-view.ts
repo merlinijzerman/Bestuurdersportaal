@@ -35,7 +35,8 @@ export type DecisionStatus =
   | "in_evaluatie"
   | "afgesloten"
   | "heropend"
-  | "geannuleerd";
+  | "geannuleerd"
+  | "beeindigd";
 
 export type ProcedureStatus = "in_uitvoering" | "wacht_op_besluit" | "afgerond";
 
@@ -43,9 +44,11 @@ export type ProcedureStatus = "in_uitvoering" | "wacht_op_besluit" | "afgerond";
 export type StapStatus =
   | "open"
   | "geblokkeerd"
+  | "niet_begonnen"
   | "actief"
   | "afgerond"
-  | "heropend";
+  | "heropend"
+  | "vervallen";
 
 export type Vertrouwelijkheid =
   | "publiek"
@@ -608,6 +611,7 @@ export const DECISION_STATUS_LABEL: Record<DecisionStatus, string> = {
   afgesloten: "Afgesloten",
   heropend: "Heropend",
   geannuleerd: "Geannuleerd",
+  beeindigd: "Beëindigd",
 };
 
 // READINESS_LABEL/READINESS_VOLGORDE (de ladder-presentatie) zijn met de

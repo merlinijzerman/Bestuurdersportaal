@@ -42,6 +42,7 @@ const STATUS_PILL: Record<FaseStatus, string> = {
   afgerond: "bg-ok-tint text-ok-ink border border-ok/20",
   in_behandeling: "bg-app-bg text-nav-text border border-nav-line",
   nog_niet_begonnen: "bg-app-bg text-nav-text border border-nav-line",
+  vervallen: "bg-app-bg text-nav-text border border-nav-line opacity-60",
 };
 
 // Neutrale romeins-badge (hoofdmenu-stijl); de status leest af aan de afgerond-
