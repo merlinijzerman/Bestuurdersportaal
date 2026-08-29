@@ -171,6 +171,9 @@ FUNC	public	fn_generiek_status_overgang_check()	function	service_role	EXECUTE
 FUNC	public	fn_generiek_transitie(p_van text, p_naar text)	function	anon	-
 FUNC	public	fn_generiek_transitie(p_van text, p_naar text)	function	authenticated	EXECUTE
 FUNC	public	fn_generiek_transitie(p_van text, p_naar text)	function	service_role	EXECUTE
+FUNC	public	fn_guard_stap_insert()	function	anon	-
+FUNC	public	fn_guard_stap_insert()	function	authenticated	-
+FUNC	public	fn_guard_stap_insert()	function	service_role	-
 FUNC	public	fn_handelingen_retentie_guard()	function	anon	-
 FUNC	public	fn_handelingen_retentie_guard()	function	authenticated	-
 FUNC	public	fn_handelingen_retentie_guard()	function	service_role	EXECUTE
@@ -375,6 +378,15 @@ FUNC	public	fn_inbreng_ketengebeurtenis()	function	service_role	EXECUTE
 FUNC	public	fn_orgprofiel_ketengebeurtenis()	function	anon	-
 FUNC	public	fn_orgprofiel_ketengebeurtenis()	function	authenticated	EXECUTE
 FUNC	public	fn_orgprofiel_ketengebeurtenis()	function	service_role	EXECUTE
+FUNC	public	fn_stap_activeren(p_stap_id uuid, p_procedure_id uuid)	function	anon	-
+FUNC	public	fn_stap_activeren(p_stap_id uuid, p_procedure_id uuid)	function	authenticated	EXECUTE
+FUNC	public	fn_stap_activeren(p_stap_id uuid, p_procedure_id uuid)	function	service_role	-
+FUNC	public	fn_stap_afronden(p_stap_id uuid, p_procedure_id uuid)	function	anon	-
+FUNC	public	fn_stap_afronden(p_stap_id uuid, p_procedure_id uuid)	function	authenticated	EXECUTE
+FUNC	public	fn_stap_afronden(p_stap_id uuid, p_procedure_id uuid)	function	service_role	-
+FUNC	public	fn_stap_heropenen(p_stap_id uuid, p_procedure_id uuid, p_motivering text)	function	anon	-
+FUNC	public	fn_stap_heropenen(p_stap_id uuid, p_procedure_id uuid, p_motivering text)	function	authenticated	EXECUTE
+FUNC	public	fn_stap_heropenen(p_stap_id uuid, p_procedure_id uuid, p_motivering text)	function	service_role	-
 FUNC	public	fn_stem_ketengebeurtenis()	function	anon	-
 FUNC	public	fn_stem_ketengebeurtenis()	function	authenticated	EXECUTE
 FUNC	public	fn_stem_ketengebeurtenis()	function	service_role	EXECUTE
@@ -670,7 +682,7 @@ REL	public	procedure_afschriften	table	anon	-
 REL	public	procedure_afschriften	table	authenticated	SELECT,INSERT,UPDATE
 REL	public	procedure_afschriften	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
 REL	public	procedure_besluiten	table	anon	SELECT
-REL	public	procedure_besluiten	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	procedure_besluiten	table	authenticated	SELECT,INSERT
 REL	public	procedure_besluiten	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
 REL	public	procedure_bewijs	table	anon	SELECT
 REL	public	procedure_bewijs	table	authenticated	SELECT,INSERT,UPDATE,DELETE
@@ -700,7 +712,7 @@ REL	public	procedure_requirements	table	anon	SELECT
 REL	public	procedure_requirements	table	authenticated	SELECT,INSERT,UPDATE,DELETE
 REL	public	procedure_requirements	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
 REL	public	procedure_stappen	table	anon	SELECT
-REL	public	procedure_stappen	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	procedure_stappen	table	authenticated	SELECT,INSERT
 REL	public	procedure_stappen	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
 REL	public	procedure_template_fasen	table	anon	-
 REL	public	procedure_template_fasen	table	authenticated	SELECT,INSERT,UPDATE

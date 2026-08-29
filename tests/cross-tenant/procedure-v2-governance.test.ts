@@ -22,6 +22,7 @@ const lees = (...p: string[]) => readFileSync(join(hier, "..", "..", ...p), "utf
 const requirementsRoute = lees("app", "api", "procedures", "[id]", "requirements", "route.ts");
 const requirementItemRoute = lees("app", "api", "procedures", "[id]", "requirements", "[reqId]", "route.ts");
 const heropenenRoute = lees("app", "api", "procedures", "[id]", "stappen", "[stapId]", "heropenen", "route.ts");
+const schrijfRpcMigratie = lees("supabase", "migrations", "2026_08_28_p214a1_01_stap_schrijf_rpcs.sql");
 const checklistItemRoute = lees("app", "api", "procedures", "[id]", "checklist", "[itemId]", "route.ts");
 const decisionLib = lees("core", "lib", "decision.ts");
 const readinessMigratie = lees("supabase", "migrations", "2026_08_13_d7c_readiness_unie.sql");
@@ -63,11 +64,15 @@ test("D7 requirement deactiveren: REQ-006 — blokkerend vereist motivering", ()
   assert.match(requirementItemRoute, rolGate);
 });
 
-test("D6 heropenen: rol-gate + verplichte motivering + governance_event", () => {
+test("D6 heropenen: rol-gate + verplichte motivering + atomair governance_event via RPC", () => {
   assert.match(heropenenRoute, rolGate);
   // Motivering verplicht: lege motivering → 400.
   assert.match(heropenenRoute, /if\s*\(!motivering\)/);
-  assert.match(heropenenRoute, /event_type:\s*"stap_heropend"/);
+  // #214-a1: de route schrijft niet meer direct. De SECURITY DEFINER-RPC voert
+  // statuswijziging en audit-event in één transactie uit.
+  assert.match(heropenenRoute, /\.rpc\("fn_stap_heropenen"/);
+  assert.match(schrijfRpcMigratie, /create or replace function public\.fn_stap_heropenen/);
+  assert.match(schrijfRpcMigratie, /values \(v_dec_id, 'stap_heropend'/);
   // Alleen een afgeronde stap mag heropend worden.
   assert.match(heropenenRoute, /stap\.status !== "afgerond"/);
 });

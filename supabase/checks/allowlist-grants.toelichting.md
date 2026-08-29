@@ -163,6 +163,23 @@ MAINTAIN. Afwijkingen die bewust in de allowlist staan:
    rest van het platform-beheerde `storage`-schema (punt 7). Komt de feature ooit op
    Productie/Preview, dan is dat zichtbaar in de omgeving, niet als een gate-verschil.
 
+9. **#214-a1 schrijfpoort (besluit 0194) — PRODUCTIEFIX.** `procedure_stappen` toont
+   `authenticated=SELECT,INSERT,DELETE` — **geen tabel-brede UPDATE** — omdat de drie
+   bewaakte kolommen (`status`, `voltooid_op`, `voltooid_door`) aan `authenticated`
+   zijn onttrokken en de overige kolommen op **kolomniveau** zijn her-verleend
+   (kolomgrants staan niet in `role_table_grants`, dus onzichtbaar voor V3 — bewaakt
+   door `2026_08_28_p214a1_schrijfpoort.sql` + de gedragstoets `..._gedrag.sql`).
+   `procedure_stappen` toont bovendien `authenticated=SELECT,INSERT` (**geen DELETE** —
+   reviewbevinding, symmetrisch met besluiten), en INSERT is afgegrendeld door de
+   BEFORE INSERT-trigger `trg_guard_stap_insert` (`fn_guard_stap_insert()`, revoked
+   van alle rollen) die `status in (afgerond,heropend)` en `voltooid_*` bij aanmaken
+   voor het clientpad weigert — anders was de UPDATE-revoke via een directe INSERT te
+   omzeilen. `procedure_besluiten` toont `authenticated=SELECT,INSERT` — **geen UPDATE,
+   geen DELETE**: een besluit is een vastgelegd feit, niet vrij muteerbaar of hard
+   verwijderbaar door een fondslid. De schrijfpaden lopen via de SECURITY DEFINER-
+   RPC's `fn_stap_afronden` / `fn_stap_activeren` / `fn_stap_heropenen`
+   (`anon=-`, `authenticated=EXECUTE`, `service_role=-`). Zie `METING-RLS-reikwijdte-214.md`.
+
 ## Objecten die NIET in scope zijn
 
 Extensiefuncties (pgvector, pg_trgm) zijn uitgesloten via `pg_depend deptype='e'`

@@ -93,30 +93,23 @@ export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-be
         }
       }
 
-      // Stap zelf op afgerond
-      const { error: updateFout } = await supabase
-        .from("procedure_stappen")
-        .update({
-          status: "afgerond",
-          voltooid_op: new Date().toISOString(),
-          voltooid_door: ctx.gebruikerId,
-        })
-        .eq("id", stapId);
-      if (updateFout) {
-        console.error("Stap voltooien fout:", updateFout);
-        return NextResponse.json(
-          { error: "Stap voltooien mislukt" },
-          { status: 500 }
-        );
-      }
-
-      await supabase.from("procedure_log").insert({
-        procedure_id: id,
-        event_type: "stap_voltooid",
-        actor_id: ctx.gebruikerId,
-        actor_naam: ctx.naam || null,
-        payload: { stap: stap.naam },
+      // Stap zelf op afgerond — via SECURITY DEFINER-RPC (#214-a1 / 0194): sinds de
+      // kolom-revoke kan `authenticated` status/voltooid_* niet meer direct schrijven.
+      // De RPC zet voltooid_door = auth.uid() (niet vervalsbaar), dwingt status-machine
+      // + readiness af en logt 'stap_voltooid' in dezelfde transactie.
+      const { error: afrondFout } = await supabase.rpc("fn_stap_afronden", {
+        p_stap_id: stapId,
+        p_procedure_id: id,
       });
+      if (afrondFout) {
+        const code = (afrondFout as { code?: string }).code;
+        console.error("Stap voltooien fout:", afrondFout);
+        if (code === "42501")
+          return NextResponse.json({ error: afrondFout.message }, { status: 403 });
+        if (code === "PC002")
+          return NextResponse.json({ error: afrondFout.message }, { status: 400 });
+        return NextResponse.json({ error: "Stap voltooien mislukt" }, { status: 500 });
+      }
 
       // ── D6: activeerbaarheid herberekenen — of procedure afronden ──
       // Laad alle stappen ná het afronden van deze stap. `stap` is hierboven
@@ -181,10 +174,16 @@ export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-be
         for (const volg of teActiveren) {
           const doel = alleStappen.find((s) => s.volgorde === volg);
           if (!doel) continue;
-          await supabase
-            .from("procedure_stappen")
-            .update({ status: "actief" })
-            .eq("id", doel.id);
+          // #214-a1 (0194): status via RPC. Best-effort (afgeleide toestand):
+          // een fout hier faalt de al-geslaagde afronding niet.
+          const { error: actFout } = await supabase.rpc("fn_stap_activeren", {
+            p_stap_id: doel.id,
+            p_procedure_id: id,
+          });
+          if (actFout) {
+            console.error("Cascade-activering fout:", doel.id, actFout);
+            continue; // geen 'stap_gestart' loggen voor een stap die niet activeerde
+          }
           await supabase.from("procedure_log").insert({
             procedure_id: id,
             event_type: "stap_gestart",
@@ -202,11 +201,13 @@ export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-be
           .filter((s) => s.status === "open" && s.volgorde > stap.volgorde)
           .sort((a, b) => a.volgorde - b.volgorde)[0];
         if (volgende) {
-          await supabase
-            .from("procedure_stappen")
-            .update({ status: "actief" })
-            .eq("id", volgende.id);
-          await supabase.from("procedure_log").insert({
+          // #214-a1 (0194): status via RPC (best-effort, zie boven).
+          const { error: actFout } = await supabase.rpc("fn_stap_activeren", {
+            p_stap_id: volgende.id,
+            p_procedure_id: id,
+          });
+          if (actFout) console.error("Cascade-activering fout:", volgende.id, actFout);
+          else await supabase.from("procedure_log").insert({
             procedure_id: id,
             event_type: "stap_gestart",
             actor_id: ctx.gebruikerId,
@@ -221,13 +222,19 @@ export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-be
       return NextResponse.json({ ok: true });
     }
 
-    // status='actief' — handmatig activeren (gebruikt bij latere edits)
-    const { error: updateFout } = await supabase
-      .from("procedure_stappen")
-      .update({ status: "actief" })
-      .eq("id", stapId);
-    if (updateFout) {
-      console.error("Stap activeren fout:", updateFout);
+    // status='actief' — handmatig activeren (gebruikt bij latere edits). Via de
+    // RPC (#214-a1): `authenticated` mag status niet meer direct schrijven.
+    const { error: activeerFout } = await supabase.rpc("fn_stap_activeren", {
+      p_stap_id: stapId,
+      p_procedure_id: id,
+    });
+    if (activeerFout) {
+      const code = (activeerFout as { code?: string }).code;
+      console.error("Stap activeren fout:", activeerFout);
+      if (code === "42501")
+        return NextResponse.json({ error: activeerFout.message }, { status: 403 });
+      if (code === "PC002")
+        return NextResponse.json({ error: activeerFout.message }, { status: 400 });
       return NextResponse.json({ error: "Stap activeren mislukt" }, { status: 500 });
     }
     await supabase.from("procedure_log").insert({

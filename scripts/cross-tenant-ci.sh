@@ -162,6 +162,9 @@ SQL_VWF="supabase/checks/2026_08_02_fondsleden_cross_tenant.sql"
 # vlek waar C-01 in viel: gates A-H redeneren over tabellen en functies, nooit
 # over views. Faalt in BEIDE richtingen — te veel én onverwacht te weinig.
 SQL_V3="supabase/checks/2026_08_20_v3_grants_volledig.sql"
+# #214-a1 (0194) — schrijfpoort: statische gate + gedragstoets (directe PATCH dicht).
+SQL_P214A1="supabase/checks/2026_08_28_p214a1_schrijfpoort.sql"
+SQL_P214A1G="supabase/checks/2026_08_28_p214a1_gedrag.sql"
 # A — rollen/capabilities + het governance_log-schrijfpad (#83). Stond op de
 # V4-rodelijst; bleek geen productregressie maar een verouderde FIXTURE: de seed
 # zette `naam` in app-metadata terwijl maak_profiel hem uit user-metadata leest.
@@ -299,6 +302,11 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_VWF"
 echo
 echo "-- Bewijsbinding (één-op-één, DB-validatie, atomische audit, snapshot) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_BBIND"
+echo
+
+echo "-- #214-a1 schrijfpoort (kolom-revoke bewaakt + gedragstoets: directe PATCH faalt, RPC werkt) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P214A1"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P214A1G"
 echo
 
 echo "-- V3 (grants-gate over alle objectklassen: relaties, functies, buckets, storage-policies) --"

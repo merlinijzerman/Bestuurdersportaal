@@ -40,6 +40,8 @@
         "fn_document_status_zetten",
         "fn_notulen_segment_bevestig",
         "fn_notulen_segment_verwijder",
+        "fn_stap_heropenen",
+        "fn_stap_afronden",
         "fn_schrijf_vergelijking",
         "fn_schrijf_semantische_extractie",
         "log_word_export",
@@ -1331,18 +1333,17 @@
       "routeEigenKandidaat": true,
       "bewijsketen": [
         {
-          "token": "governance_events",
+          "token": "fn_stap_heropenen",
           "via": "direct",
-          "soort": "tabel"
-        }
-      ],
-      "domein": [
+          "soort": "rpc"
+        },
         {
-          "token": "procedure_log",
-          "via": "direct",
+          "token": "governance_events",
+          "via": "ensureDecisionForProcedure",
           "soort": "tabel"
         }
       ],
+      "domein": [],
       "platform": []
     },
     {
@@ -1359,6 +1360,11 @@
           "token": "procedure_log",
           "via": "direct",
           "soort": "tabel"
+        },
+        {
+          "token": "fn_stap_afronden",
+          "via": "direct",
+          "soort": "rpc"
         }
       ],
       "platform": []
