@@ -39,23 +39,40 @@ begin
      and requirement_type = 'evaluation'
      and label = 'Evaluatiemoment gepland';
 
-  if v_aantal <> 1 then
+  -- Een verse CI-database heeft de historische, handmatig toegepaste
+  -- mei-seed niet. Daar is de gewenste eindtoestand dus al bereikt. Op een
+  -- bestaande omgeving verwachten we precies één legacy-rij; elk ander aantal
+  -- blijft drift en breekt fail-closed af.
+  if v_aantal not in (0, 1) then
     raise exception
-      '0195/#228 verwacht precies 1 legacy evaluation-requirement, vond %.',
+      '0195/#228 verwacht hoogstens 1 legacy evaluation-requirement, vond %.',
       v_aantal;
   end if;
 end $$;
 
-alter table public.procedure_requirements disable trigger trg_req_versievast;
+do $$
+begin
+  if exists (
+    select 1
+      from public.procedure_requirements
+     where template_code = 'beleidswijziging_beleggingsbeleid'
+       and template_versie = '1.0.0'
+       and stap_volgorde = 6
+       and requirement_type = 'evaluation'
+       and label = 'Evaluatiemoment gepland'
+  ) then
+    alter table public.procedure_requirements disable trigger trg_req_versievast;
 
-delete from public.procedure_requirements
- where template_code = 'beleidswijziging_beleggingsbeleid'
-   and template_versie = '1.0.0'
-   and stap_volgorde = 6
-   and requirement_type = 'evaluation'
-   and label = 'Evaluatiemoment gepland';
+    delete from public.procedure_requirements
+     where template_code = 'beleidswijziging_beleggingsbeleid'
+       and template_versie = '1.0.0'
+       and stap_volgorde = 6
+       and requirement_type = 'evaluation'
+       and label = 'Evaluatiemoment gepland';
 
-alter table public.procedure_requirements enable trigger trg_req_versievast;
+    alter table public.procedure_requirements enable trigger trg_req_versievast;
+  end if;
+end $$;
 
 do $$
 begin
