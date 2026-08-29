@@ -11,7 +11,7 @@
 // -----------------------------------------------------------------------------
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { afrondenMetAfwijkingHandler } from "../../app/api/procedures/[id]/stappen/[stapId]/afwijking/route";
+import { afrondenMetAfwijkingHandler } from "../../core/lib/procedure-afwijking-handler";
 
 // Minimale FondsContext: alleen `rol` stuurt de rolgate; de gate keert terug vóór
 // `supabase` wordt aangeraakt. Leeg body → voorzitter/bestuurder vallen ná de gate

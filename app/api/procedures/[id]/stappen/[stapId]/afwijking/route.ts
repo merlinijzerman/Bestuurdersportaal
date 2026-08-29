@@ -1,8 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
-import { withFondsRoute, type FondsContext } from "@/core/lib/route-wrapper";
-import { ensureDecisionForProcedure } from "@/core/lib/decision";
-import { pasActivatieCascadeToe } from "@/core/lib/procedure-activatie-cascade";
-import { MIN_MOTIVERING_LENGTE } from "@/core/lib/afwijking";
+import { withFondsRoute } from "@/core/lib/route-wrapper";
+import { afrondenMetAfwijkingHandler } from "@/core/lib/procedure-afwijking-handler";
 import { z } from "zod";
 
 // POST /api/procedures/[id]/stappen/[stapId]/afwijking
@@ -15,124 +12,12 @@ import { z } from "zod";
 // De atomaire kern (status + vier kolommen + snapshot + procedure_log +
 // governance-event) draait in één DB-transactie (fn_stap_afronden_met_afwijking);
 // de activatie-cascade is afgeleide toestand en volgt erbuiten (besluit 0192).
-
-// De inner handler wordt apart geëxporteerd zodat de rolgate in beide richtingen
-// met een gewone gedragstest getoetst kan worden (afwijking-rolgate.test.ts) —
-// zónder de karakteriseringsstack, die uit blijft tot P6.
-export async function afrondenMetAfwijkingHandler(
-  ctx: FondsContext,
-  req: NextRequest,
-  params: unknown
-) {
-    try {
-      const { id, stapId } = params as { id: string; stapId: string };
-      const supabase = ctx.supabase;
-
-      // Inner rolgate: nette 403 + de deterministische bron voor het latere
-      // AZ-3-scenario. De DB-functie draagt een EIGEN SLOT als tweede laag, zodat
-      // een directe RPC-aanroep de poort niet omzeilt.
-      if (!["voorzitter", "bestuurder"].includes(ctx.rol ?? "")) {
-        return NextResponse.json(
-          { error: "Alleen voorzitter of bestuurder kan een afwijking vastleggen" },
-          { status: 403 }
-        );
-      }
-
-      const body = (await req.json()) as { motivering?: string; bevestigd?: boolean };
-      const motivering = body.motivering?.trim();
-      // I2: minimumlengte afgedwongen (niet leeg-met-spaties). De DB-functie draagt
-      // dezelfde grens als backstop (PC002 + CHECK-constraint).
-      if (!motivering || motivering.length < MIN_MOTIVERING_LENGTE) {
-        return NextResponse.json(
-          { error: `Een afwijking vereist een motivering van minimaal ${MIN_MOTIVERING_LENGTE} tekens` },
-          { status: 400 }
-        );
-      }
-
-      // Stap server-side ophalen (RLS begrenst tot het eigen fonds): 404 + de
-      // volgorde/naam die de cascade nodig heeft.
-      const { data: stap } = await supabase
-        .from("procedure_stappen")
-        .select("naam, volgorde, procedure_id")
-        .eq("id", stapId)
-        .eq("procedure_id", id)
-        .single();
-      if (!stap) {
-        return NextResponse.json({ error: "Stap niet gevonden" }, { status: 404 });
-      }
-
-      // De DB-functie schrijft een governance-event op het primaire Decision Object;
-      // zorg dat het bestaat (idempotent, zoals de andere procedure-routes).
-      await ensureDecisionForProcedure(supabase, id);
-
-      const { error: rpcFout } = await supabase.rpc("fn_stap_afronden_met_afwijking", {
-        p_stap_id: stapId,
-        p_procedure_id: id,
-        p_motivering: motivering,
-        p_bevestigd: body.bevestigd ?? false,
-      });
-      if (rpcFout) {
-        // Eigen SQLSTATE 'PC001' = kritiek open zonder bevestiging → 409.
-        if (rpcFout.code === "PC001") {
-          return NextResponse.json(
-            {
-              error: "Er staat een kritieke vereiste open; bevestig expliciet om af te ronden.",
-              bevestiging_vereist: true,
-            },
-            { status: 409 }
-          );
-        }
-        // 42501 = eigen slot (rol/fonds) → 403.
-        if (rpcFout.code === "42501") {
-          return NextResponse.json(
-            { error: "Niet bevoegd om een afwijking vast te leggen" },
-            { status: 403 }
-          );
-        }
-        // PC002 = door de gebruiker te verhelpen validatie van de functie ZELF
-        // (geen afwijking nodig / lege motivering / poort). Alléén deze nette,
-        // door ons geschreven meldingen worden getoond. Een KALE 23514 (een echte
-        // CHECK-constraint) valt hieronder NIET en krijgt een generieke melding —
-        // Postgres' auto-tekst zou schema-namen lekken.
-        if (rpcFout.code === "PC002") {
-          return NextResponse.json({ error: rpcFout.message }, { status: 400 });
-        }
-        // Alles wat niet één van onze eigen codes is (kale 23514-constraint,
-        // interne fail-closed, onverwachte DB-fout): generieke melding, geen
-        // doorgifte van de rauwe DB-tekst.
-        console.error("Afwijking vastleggen fout:", rpcFout);
-        return NextResponse.json(
-          { error: "Afronden met afwijking mislukt" },
-          { status: 500 }
-        );
-      }
-
-      // Afgeleide toestand (buiten de transactie, herstelbaar): activatie-cascade.
-      const cascade = await pasActivatieCascadeToe(
-        supabase,
-        id,
-        { volgorde: stap.volgorde, naam: stap.naam },
-        { gebruikerId: ctx.gebruikerId, naam: ctx.naam, email: ctx.email }
-      );
-
-      return NextResponse.json({
-        ok: true,
-        // Nieuw contract van DEZE route (niet van de bestaande PATCH): een luide
-        // achterstand is al gelogd; de aanroeper wordt gewaarschuwd.
-        ...(cascade.ok
-          ? {}
-          : {
-              waarschuwing:
-                "De stap is afgerond met afwijking; de vervolgactivering is nog niet voltooid en wordt hersteld.",
-            }),
-      });
-    } catch (e) {
-      console.error("Fout in POST …/afwijking:", e);
-      return NextResponse.json({ error: "Serverfout" }, { status: 500 });
-    }
-}
-
-export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "procedures.stappen.afwijking-vastleggen" }, capability: "procedures.afwijking.vastleggen",
+export const POST = withFondsRoute(
+  {
+    hostGuard: "geen",
+    rateLimit: "nog-niet-beoordeeld",
+    audit: { handeling: "procedures.stappen.afwijking-vastleggen" },
+    capability: "procedures.afwijking.vastleggen",
     schema: z
       .object({
         motivering: z.unknown().optional(),
