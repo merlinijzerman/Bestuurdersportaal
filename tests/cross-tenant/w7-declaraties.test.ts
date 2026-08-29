@@ -161,11 +161,12 @@ function routeWeigert(h: Handler): Set<string> {
 }
 
 test("W7-3 — de vlag weigert geen rol die de route vandaag toelaat", () => {
-  // P4/0194 IS een expliciet geautoriseerde aanscherping: beëindigen en
-  // heropenen zijn bestuurlijke oordelen voor voorzitter+bestuurder. De RPC
-  // herhaalt die rolgate. Pin de vier verwachte verschillen zodat elke andere
-  // nieuwe wrapperaanscherping nog steeds luid faalt.
-  const p4Aanscherping = new Set([
+  // P3/0192 en P4/0194 autoriseren expliciet dat deze bestuurlijke oordelen
+  // alleen voorzitter+bestuurder toekomen. Pin exact deze verschillen; elke
+  // andere nieuwe wrapperaanscherping blijft luid falen.
+  const geautoriseerdeAanscherping = new Set([
+    'POST /procedures/[id]/stappen/[stapId]/afwijking: "procedures.afwijking.vastleggen" sluit beheerder uit',
+    'POST /procedures/[id]/stappen/[stapId]/afwijking: "procedures.afwijking.vastleggen" sluit bestuursbureau uit',
     'POST /procedures/[id]/beeindigen: "procedures.beeindigen" sluit beheerder uit',
     'POST /procedures/[id]/beeindigen: "procedures.beeindigen" sluit bestuursbureau uit',
     'POST /procedures/[id]/heropenen: "procedures.heropenen" sluit beheerder uit',
@@ -181,12 +182,12 @@ test("W7-3 — de vlag weigert geen rol die de route vandaag toelaat", () => {
     }
   }
   assert.deepEqual(
-    nieuw.filter((melding) => !p4Aanscherping.has(melding)),
+    nieuw.filter((melding) => !geautoriseerdeAanscherping.has(melding)),
     [],
     "Deze declaraties maken een route STRENGER dan hij vandaag is. Dat is een " +
       "gedragswijziging en hoort een eigen besluit te zijn, geen bijwerking van W7."
   );
-  assert.deepEqual(new Set(nieuw), p4Aanscherping, "P4-aanscherpingspin is incompleet of stale");
+  assert.deepEqual(new Set(nieuw), geautoriseerdeAanscherping, "Aanscherpingspin is incompleet of stale");
 });
 
 test("W7-4 — per gate komt de meest beperkte drager er aantoonbaar door", () => {

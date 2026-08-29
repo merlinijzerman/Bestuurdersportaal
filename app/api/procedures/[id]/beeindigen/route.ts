@@ -14,10 +14,10 @@ import { z } from "zod";
 export const POST = withFondsRoute(
   {
     capability: "procedures.beeindigen",
-    schema: z.object({ motivering: z.unknown().optional() }).passthrough(),
     hostGuard: "geen",
     rateLimit: "nog-niet-beoordeeld",
     audit: { handeling: "procedures.beeindigen" },
+    schema: z.object({ motivering: z.unknown().optional() }).passthrough(),
   },
   async (ctx, req: NextRequest, params) => {
     try {
