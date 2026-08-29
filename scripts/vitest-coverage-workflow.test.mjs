@@ -13,7 +13,7 @@ test("security-baseline publiceert coverage altijd zonder een testfout te masker
   const contractIndex = steps.findIndex((step) => String(step?.run ?? "").trim() === "npm run test:coverage-contract");
   const coverageIndex = steps.findIndex((step) => String(step?.run ?? "").trim() === "npm run test:coverage");
   const summaryIndex = steps.findIndex((step) => String(step?.run ?? "").includes("render-vitest-coverage-summary.mjs"));
-  const artifactIndex = steps.findIndex((step) => step?.uses === "actions/upload-artifact@v4" && step?.with?.name === "vitest-coverage");
+  const artifactIndex = steps.findIndex((step) => String(step?.uses ?? "").startsWith("actions/upload-artifact@") && step?.with?.name === "vitest-coverage");
 
   assert.ok(contractIndex >= 0, "Vitest-workflowcontract draait niet in de hosted CI");
   assert.ok(contractIndex < coverageIndex, "workflowcontract moet vóór de echte coveragerun staan");

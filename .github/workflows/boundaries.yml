@@ -3,7 +3,8 @@ name: boundaries
 # ============================================================================
 #  Code-scheiding-gate (T9 fase 2, besluit 0052).
 # ----------------------------------------------------------------------------
-#  Twee statische borgingen, samen op elke push/PR:
+#  Twee statische borgingen, samen op PR's naar main/preview en pushes op die
+#  twee doelbranches:
 #   1. ESLint boundary-gate (eslint.config.mjs) — dwingt de EENRICHTING af:
 #      core ← platform, core/app-groepen ← platform/*. Een import over de grens
 #      (bv. app/(dashboard) → @/platform/lib) → non-zero exit → deze job faalt.
@@ -31,21 +32,29 @@ name: boundaries
 # ============================================================================
 on:
   push:
+    branches: [main, preview]
   pull_request:
+    branches: [main, preview]
 
 permissions:
   contents: read
+
+concurrency:
+  group: boundaries-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   boundaries:
     # Gepinde check-naam voor branch protection "required status check".
     name: Code-scheiding (T9 core/platform-grens)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: "22"
+          cache: npm
       - run: npm ci
       - name: ESLint boundary-gate (core ↔ platform ↔ app)
         run: npm run lint:boundaries
@@ -57,7 +66,8 @@ jobs:
     # Zelfde fasering als hierboven: aanzetten is één repo-admin-handeling.
     name: Mapindeling supabase/ (migraties vs rollbacks/seeds)
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Mapindeling-gate
         run: bash scripts/check-migratie-mapindeling.sh
