@@ -76,7 +76,10 @@ export async function resolveRequirementBinding(
    *  `ps.volgorde = rij.stap_volgorde` als sleutelgelijkheid; een binding naar
    *  een vereiste op een ándere stap zou dus een dode binding zijn — hij telt
    *  nergens mee maar suggereert in de UI het tegendeel. */
-  stapVolgorde?: number
+  stapVolgorde?: number,
+  /** Standaard alleen de drie bewijsstuktypen. Andere feitendragers (zoals
+   * procedure_besluiten voor approval) geven hier hun eigen smalle allowlist. */
+  toegestaneTypen: readonly string[] = BINDBARE_REQUIREMENT_TYPES
 ): Promise<BindingResultaat> {
   if (
     typeof stapVolgorde === "number" &&
@@ -88,15 +91,13 @@ export async function resolveRequirementBinding(
     };
   }
   if (
-    !(BINDBARE_REQUIREMENT_TYPES as readonly string[]).includes(
-      vereiste.requirement_type
-    )
+    !toegestaneTypen.includes(vereiste.requirement_type)
   ) {
     return {
       ok: false,
-      fout:
-        "Dit type vereiste kan niet met een bewijsstuk worden vervuld " +
-        "(alleen document, external_submission en consultation)",
+      fout: `Dit type vereiste kan niet door deze feitendrager worden vervuld (${toegestaneTypen.join(
+        ", "
+      )})`,
     };
   }
 

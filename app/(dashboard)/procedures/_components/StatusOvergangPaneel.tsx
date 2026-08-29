@@ -38,19 +38,21 @@ interface Props {
 // Logische volgende statussen per huidige status. Eindstatussen staan niet in de
 // map; de DB-trigger zou verdere overgangen daar sowieso weigeren.
 const VOLGENDE_STATUSSEN: Partial<Record<DecisionStatus, DecisionStatus[]>> = {
-  concept: ["in_onderbouwing", "geannuleerd"],
-  in_onderbouwing: ["in_validatie", "teruggezet", "geannuleerd"],
+  concept: ["in_onderbouwing"],
+  in_onderbouwing: ["in_validatie", "teruggezet"],
   in_validatie: ["in_review", "geescaleerd", "teruggezet"],
-  in_review: ["geagendeerd", "aangehouden", "teruggezet"],
+  in_review: ["geagendeerd", "geescaleerd", "teruggezet"],
   geagendeerd: ["in_bespreking", "aangehouden"],
-  in_bespreking: ["besloten", "voorwaardelijk_besloten", "aangehouden", "teruggezet"],
-  besloten: ["in_uitvoering", "afgewezen"],
-  voorwaardelijk_besloten: ["in_uitvoering"],
-  in_uitvoering: ["in_evaluatie"],
-  in_evaluatie: ["afgesloten"],
+  in_bespreking: ["besloten", "voorwaardelijk_besloten", "aangehouden", "teruggezet", "afgewezen"],
+  besloten: ["in_uitvoering", "afgesloten", "heropend"],
+  voorwaardelijk_besloten: ["in_uitvoering", "heropend"],
+  in_uitvoering: ["in_evaluatie", "geescaleerd"],
+  in_evaluatie: ["afgesloten", "heropend"],
   afgesloten: ["heropend"],
-  heropend: ["in_validatie", "in_review", "aangehouden"],
+  teruggezet: ["in_onderbouwing", "in_validatie"],
+  heropend: ["in_onderbouwing", "in_validatie"],
   geescaleerd: ["in_validatie", "in_review", "aangehouden"],
+  aangehouden: ["in_review", "geagendeerd"],
 };
 
 // De transities die "een feit stellen" — hier geldt de motivering-eis bij iets open.
@@ -80,6 +82,13 @@ export default function StatusOvergangPaneel({ decision, evidence, besluitmoment
   const [target, setTarget] = useState<DecisionStatus | "">("");
   const [reden, setReden] = useState("");
   const [motivering, setMotivering] = useState("");
+  const [geadresseerde, setGeadresseerde] = useState("");
+  const [terugzetDoelstatus, setTerugzetDoelstatus] = useState<
+    "in_onderbouwing" | "in_validatie" | ""
+  >("");
+  const [redenType, setRedenType] = useState<
+    "correctie_bindingsfout" | "gewijzigde_omstandigheden" | ""
+  >("");
   const [bezig, setBezig] = useState(false);
   const [fout, setFout] = useState<string | null>(null);
   const idBasis = useId();
@@ -94,9 +103,18 @@ export default function StatusOvergangPaneel({ decision, evidence, besluitmoment
     [evidence, besluitmomentStappen]
   );
   const isBesluit = Boolean(target && BESLUIT_TRANSITIES.includes(target as DecisionStatus));
-  const motiveringNodig = isBesluit && heeftOpenBovenOptioneel(open);
+  const isCorrectieHeropenen = decision.status === "besloten" && target === "heropend";
+  const motiveringNodig =
+    (isBesluit && heeftOpenBovenOptioneel(open)) ||
+    target === "teruggezet" ||
+    target === "heropend";
   const motiveringOk =
     !motiveringNodig || motivering.trim().length >= MIN_MOTIVERING_LENGTE;
+  const overgangsfeitOk =
+    (target !== "aangehouden" || reden.trim().length >= 3) &&
+    (target !== "geescaleerd" || geadresseerde.trim().length >= 2) &&
+    (target !== "teruggezet" || Boolean(terugzetDoelstatus)) &&
+    (!isCorrectieHeropenen || Boolean(redenType));
 
   async function uitvoeren() {
     if (!target) {
@@ -109,6 +127,9 @@ export default function StatusOvergangPaneel({ decision, evidence, besluitmoment
       const body: Record<string, unknown> = { status: target };
       if (reden.trim()) body.reden = reden.trim();
       if (motiveringNodig) body.motivering = motivering.trim();
+      if (target === "geescaleerd") body.geadresseerde = geadresseerde.trim();
+      if (target === "teruggezet") body.terugzet_doelstatus = terugzetDoelstatus;
+      if (isCorrectieHeropenen) body.reden_type = redenType;
       const res = await fetch(`/api/decisions/${decision.id}/status`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -120,6 +141,9 @@ export default function StatusOvergangPaneel({ decision, evidence, besluitmoment
       }
       setReden("");
       setMotivering("");
+      setGeadresseerde("");
+      setTerugzetDoelstatus("");
+      setRedenType("");
       setTarget("");
       router.refresh();
     } catch (e) {
@@ -189,25 +213,87 @@ export default function StatusOvergangPaneel({ decision, evidence, besluitmoment
           </select>
         </Veldgroep>
 
-        {motiveringNodig && <OpenstaandHint open={open} />}
+        {isBesluit && heeftOpenBovenOptioneel(open) && <OpenstaandHint open={open} />}
 
-        <Veldgroep
-          label="Reden voor overgang (optioneel)"
-          htmlFor={`${idBasis}-reden`}
-        >
-          <input
-            id={`${idBasis}-reden`}
-            type="text"
-            value={reden}
-            onChange={(e) => setReden(e.target.value)}
-            className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
-            placeholder="Korte aanduiding voor het audit-spoor"
-          />
-        </Veldgroep>
+        {target === "geescaleerd" && (
+          <Veldgroep label="Geadresseerde (verplicht)" htmlFor={`${idBasis}-geadresseerde`}>
+            <input
+              id={`${idBasis}-geadresseerde`}
+              type="text"
+              value={geadresseerde}
+              onChange={(e) => setGeadresseerde(e.target.value)}
+              className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
+              placeholder="Persoon, orgaan of commissie"
+            />
+          </Veldgroep>
+        )}
+
+        {target === "teruggezet" && (
+          <Veldgroep label="Doelstatus (verplicht)" htmlFor={`${idBasis}-terugzetdoel`}>
+            <select
+              id={`${idBasis}-terugzetdoel`}
+              value={terugzetDoelstatus}
+              onChange={(e) =>
+                setTerugzetDoelstatus(
+                  e.target.value as "in_onderbouwing" | "in_validatie" | ""
+                )
+              }
+              className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 bg-white"
+            >
+              <option value="">— kies waar het werk wordt hervat —</option>
+              <option value="in_onderbouwing">In onderbouwing</option>
+              <option value="in_validatie">In validatie</option>
+            </select>
+          </Veldgroep>
+        )}
+
+        {isCorrectieHeropenen && (
+          <Veldgroep label="Redentype (verplicht)" htmlFor={`${idBasis}-redentype`}>
+            <select
+              id={`${idBasis}-redentype`}
+              value={redenType}
+              onChange={(e) =>
+                setRedenType(
+                  e.target.value as
+                    | "correctie_bindingsfout"
+                    | "gewijzigde_omstandigheden"
+                    | ""
+                )
+              }
+              className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 bg-white"
+            >
+              <option value="">— kies redentype —</option>
+              <option value="correctie_bindingsfout">Correctie bindingsfout</option>
+              <option value="gewijzigde_omstandigheden">Gewijzigde omstandigheden</option>
+            </select>
+          </Veldgroep>
+        )}
+
+        {target !== "geescaleerd" && target !== "teruggezet" && target !== "heropend" && (
+          <Veldgroep
+            label={target === "aangehouden" ? "Reden van aanhouding (verplicht)" : "Reden voor overgang (optioneel)"}
+            htmlFor={`${idBasis}-reden`}
+          >
+            <input
+              id={`${idBasis}-reden`}
+              type="text"
+              value={reden}
+              onChange={(e) => setReden(e.target.value)}
+              className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
+              placeholder="Korte aanduiding voor het audit-spoor"
+            />
+          </Veldgroep>
+        )}
 
         {motiveringNodig && (
           <Veldgroep
-            label="Motivering (verplicht — besluit met openstaande vereisten)"
+            label={
+              target === "teruggezet"
+                ? "Motivering voor terugzetten (verplicht)"
+                : target === "heropend"
+                  ? "Motivering voor heropenen (verplicht)"
+                  : "Motivering (verplicht — besluit met openstaande vereisten)"
+            }
             htmlFor={`${idBasis}-motivering`}
           >
             <textarea
@@ -217,16 +303,18 @@ export default function StatusOvergangPaneel({ decision, evidence, besluitmoment
               rows={4}
               className="w-full text-sm border border-warn/30 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-warn/40 bg-warn-tint"
               placeholder={
-                "Beschrijf twee dingen:\n" +
-                "1. Waarom kan dit besluit nu worden genomen zonder wat nog ontbreekt?\n" +
-                "2. Wat gebeurt er alsnog met de openstaande vereisten?"
+                target === "teruggezet"
+                  ? "Waarom wordt het besluit teruggezet en wat moet opnieuw worden gedaan?"
+                  : target === "heropend"
+                    ? "Waarom wordt dit besluit heropend?"
+                    : "Beschrijf twee dingen:\n" +
+                      "1. Waarom kan dit besluit nu worden genomen zonder wat nog ontbreekt?\n" +
+                      "2. Wat gebeurt er alsnog met de openstaande vereisten?"
               }
             />
             <p className="text-[11px] text-warn-ink mt-1">
-              Minimaal {MIN_MOTIVERING_LENGTE} tekens. Benoem zowel waaróm het besluit
-              nu kan als wat er nog met het openstaande gebeurt. Het besluit gaat door;
-              wat openstond en jouw motivering worden append-only vastgelegd in het
-              dossier — met je rol op dit moment.
+              Minimaal {MIN_MOTIVERING_LENGTE} tekens. De motivering wordt append-only
+              vastgelegd en vormt samen met het getypeerde overgangsfeit de I1-toets.
             </p>
           </Veldgroep>
         )}
@@ -244,7 +332,7 @@ export default function StatusOvergangPaneel({ decision, evidence, besluitmoment
           <button
             type="button"
             onClick={uitvoeren}
-            disabled={!target || bezig || !motiveringOk}
+            disabled={!target || bezig || !motiveringOk || !overgangsfeitOk}
             className="bg-accent text-white text-sm px-4 py-2 rounded-md hover:bg-accent-ink disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {bezig ? "Bezig…" : "Overgang doorvoeren"}

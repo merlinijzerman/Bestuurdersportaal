@@ -6,6 +6,7 @@
 -- een object in een ANDER fonds hard weigert (23503), en een verwijzing binnen
 -- HETZELFDE fonds toelaat. Owner-context volstaat: een FK bijt ongeacht de rol
 -- (óók service_role) — dat is juist het punt t.o.v. een trigger.
+-- ROL: postgres
 -- Zelf-seedend, in één begin…rollback. Uitvoeren:
 --   psql "$DB" -v ON_ERROR_STOP=1 -f dit-bestand.
 -- ============================================================================
@@ -34,13 +35,19 @@ insert into public.decision_objects (id, fonds_id, procedure_id, besluit_code, t
   ('55000000-0000-0000-0000-0000000000da', '55000000-0000-0000-0000-0000000000fa',
    '55000000-0000-0000-0000-00000000000a', 'I5-001', 'Besluit A', 'Vraag A');
 
+-- De bestaande bindingssleutel-trigger weigert dezelfde cross-fonds rij al
+-- eerder. Schakel uitsluitend die redundante trigger binnen deze rollback-
+-- transactie uit, zodat deze toets aantoonbaar de declaratieve FK zelf raakt.
+alter table public.procedure_requirement_instance
+  disable trigger trg_requirement_instance_validate_binding_sleutel;
+
 -- CROSS-FONDS: een instantie in fonds B die het besluit van fonds A noemt → 23503.
 do $$
 begin
   insert into public.procedure_requirement_instance
-    (id, decision_id, fonds_id, stap_volgorde, requirement_type, label, actief)
+    (id, decision_id, fonds_id, stap_volgorde, requirement_type, label, actief, zwaarte)
   values (gen_random_uuid(), '55000000-0000-0000-0000-0000000000da',
-          '55000000-0000-0000-0000-0000000000fb', 1, 'document', 'X', true);
+          '55000000-0000-0000-0000-0000000000fb', 1, 'document', 'X', true, 'kritiek');
   raise exception 'LEK (I5): een requirement_instance in fonds B kon het besluit van fonds A referen.';
 exception
   when foreign_key_violation then raise notice 'OK I5: cross-fonds requirement_instance geweigerd (23503).';
@@ -51,13 +58,16 @@ end $$;
 do $$
 begin
   insert into public.procedure_requirement_instance
-    (id, decision_id, fonds_id, stap_volgorde, requirement_type, label, actief)
+    (id, decision_id, fonds_id, stap_volgorde, requirement_type, label, actief, zwaarte)
   values (gen_random_uuid(), '55000000-0000-0000-0000-0000000000da',
-          '55000000-0000-0000-0000-0000000000fa', 1, 'document', 'X', true);
+          '55000000-0000-0000-0000-0000000000fa', 1, 'document', 'X', true, 'kritiek');
   raise notice 'OK I5: same-fonds requirement_instance toegestaan.';
 exception
   when others then raise exception 'FAALT (I5): een legitieme same-fonds instantie werd geweigerd: %', sqlerrm;
 end $$;
+
+alter table public.procedure_requirement_instance
+  enable trigger trg_requirement_instance_validate_binding_sleutel;
 
 rollback;
 

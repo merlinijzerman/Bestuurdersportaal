@@ -383,7 +383,7 @@ export async function buildDecisionDossierView(
   const { data: besluitenRows } = await supabase
     .from("procedure_besluiten")
     .select(
-      "id, procedure_id, stap_id, decision_id, formulering, motivering, datum, vastgelegd_door_naam, verworpen_alternatieven, vergadering_id, agendapunt_id"
+      "id, procedure_id, stap_id, decision_id, formulering, motivering, datum, vastgelegd_door_naam, verworpen_alternatieven, vergadering_id, agendapunt_id, uitkomst, requirement_sleutel"
     )
     .eq("procedure_id", procedure.id)
     .order("datum", { ascending: false });

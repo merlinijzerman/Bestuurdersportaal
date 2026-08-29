@@ -78,6 +78,9 @@ interface Body {
   motivering?: string;
   // §6.3 (P4/0194 D): getypeerde reden bij heropenen-ter-correctie vanuit besloten.
   reden_type?: "correctie_bindingsfout" | "gewijzigde_omstandigheden";
+  // P4/T4: getypeerde feiten voor escaleren en terugzetten.
+  geadresseerde?: string;
+  terugzet_doelstatus?: "in_onderbouwing" | "in_validatie";
 }
 
 interface DecisionRowMin {
@@ -86,7 +89,7 @@ interface DecisionRowMin {
   status: DecisionStatus;
 }
 
-export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "decisions.status-wijzigen" }, capability: "decisions.manage", schema: z.object({ "motivering": z.unknown().optional(), "reden": z.unknown().optional(), "status": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "decisions.status-wijzigen" }, capability: "decisions.manage", schema: z.object({ "geadresseerde": z.unknown().optional(), "motivering": z.unknown().optional(), "reden": z.unknown().optional(), "reden_type": z.unknown().optional(), "status": z.unknown().optional(), "terugzet_doelstatus": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: decisionId } = params as { id: string };
     const supabase = ctx.supabase;
@@ -99,6 +102,12 @@ export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beo
       );
     }
     const target = body.status;
+    if (target === "geannuleerd") {
+      return NextResponse.json(
+        { error: "Geannuleerd is alleen een verborgen legacy-status en niet kiesbaar." },
+        { status: 400 }
+      );
+    }
 
     // 1. Decision laden (RLS bewaakt fonds-isolatie).
     const { data: decRow, error: leesFout } = await supabase
@@ -248,13 +257,25 @@ export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beo
     //    status_gewijzigd worden in ÉÉN DB-transactie geschreven — de vastlegging kan
     //    niet half landen (reviewbevinding; zelfde waarborg als PR-C's afronding).
     //    I2 (motivering-minimumlengte) wordt in de functie DB-afgedwongen.
+    const overgangReden =
+      target === "geescaleerd"
+        ? body.geadresseerde?.trim() || null
+        : target === "teruggezet"
+          ? body.terugzet_doelstatus ?? null
+          : body.reden?.trim() || null;
+    const overgangMotivering =
+      besluitMotivering ??
+      (target === "teruggezet" || target === "heropend"
+        ? body.motivering?.trim() || null
+        : null);
+
     const { data: bijgewerkt, error: rpcFout } = await supabase.rpc(
       "fn_besluit_status_omslag",
       {
         p_decision_id: decisionId,
         p_target: target,
-        p_reden: body.reden ?? null,
-        p_motivering: besluitMotivering,
+        p_reden: overgangReden,
+        p_motivering: overgangMotivering,
         // Informatief, niet-vorderend: wat elders in het dossier openstaat. De
         // functie berekent `open` voor het besluitmoment ZELF in SQL (Q2) — dat
         // is niet meegegeven en dus niet te ontlopen.
@@ -270,6 +291,9 @@ export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beo
       }
       if (rpcFout?.code === "42501") {
         return NextResponse.json({ error: "Niet bevoegd om deze statusovergang uit te voeren" }, { status: 403 });
+      }
+      if (rpcFout?.code === "PC004") {
+        return NextResponse.json({ error: rpcFout.message }, { status: 409 });
       }
       // I4-trigger (ongeldige overgang) of andere DB-fout: generieke 400, geen
       // schema-lek; de oorzaak wordt server-side gelogd.

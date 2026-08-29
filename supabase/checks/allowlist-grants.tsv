@@ -174,6 +174,9 @@ FUNC	public	fn_generiek_transitie(p_van text, p_naar text)	function	service_role
 FUNC	public	fn_guard_stap_insert()	function	anon	-
 FUNC	public	fn_guard_stap_insert()	function	authenticated	-
 FUNC	public	fn_guard_stap_insert()	function	service_role	-
+FUNC	public	fn_guard_besluitstatus_feit()	function	anon	-
+FUNC	public	fn_guard_besluitstatus_feit()	function	authenticated	-
+FUNC	public	fn_guard_besluitstatus_feit()	function	service_role	-
 FUNC	public	fn_handelingen_retentie_guard()	function	anon	-
 FUNC	public	fn_handelingen_retentie_guard()	function	authenticated	-
 FUNC	public	fn_handelingen_retentie_guard()	function	service_role	EXECUTE
@@ -402,12 +405,18 @@ FUNC	public	fn_stap_activeren(p_stap_id uuid, p_procedure_id uuid)	function	serv
 FUNC	public	fn_stap_activeerbaar_maken(p_stap_id uuid, p_procedure_id uuid)	function	anon	-
 FUNC	public	fn_stap_activeerbaar_maken(p_stap_id uuid, p_procedure_id uuid)	function	authenticated	EXECUTE
 FUNC	public	fn_stap_activeerbaar_maken(p_stap_id uuid, p_procedure_id uuid)	function	service_role	-
+FUNC	public	fn_stap_actief_bij_handeling()	function	anon	-
+FUNC	public	fn_stap_actief_bij_handeling()	function	authenticated	-
+FUNC	public	fn_stap_actief_bij_handeling()	function	service_role	-
 FUNC	public	fn_stap_afronden(p_stap_id uuid, p_procedure_id uuid)	function	anon	-
 FUNC	public	fn_stap_afronden(p_stap_id uuid, p_procedure_id uuid)	function	authenticated	EXECUTE
 FUNC	public	fn_stap_afronden(p_stap_id uuid, p_procedure_id uuid)	function	service_role	-
 FUNC	public	fn_stap_heropenen(p_stap_id uuid, p_procedure_id uuid, p_motivering text)	function	anon	-
 FUNC	public	fn_stap_heropenen(p_stap_id uuid, p_procedure_id uuid, p_motivering text)	function	authenticated	EXECUTE
 FUNC	public	fn_stap_heropenen(p_stap_id uuid, p_procedure_id uuid, p_motivering text)	function	service_role	-
+FUNC	public	fn_toets_besluitstatus_feit(p_decision_id uuid, p_doelstatus text)	function	anon	-
+FUNC	public	fn_toets_besluitstatus_feit(p_decision_id uuid, p_doelstatus text)	function	authenticated	-
+FUNC	public	fn_toets_besluitstatus_feit(p_decision_id uuid, p_doelstatus text)	function	service_role	-
 FUNC	public	fn_stem_ketengebeurtenis()	function	anon	-
 FUNC	public	fn_stem_ketengebeurtenis()	function	authenticated	EXECUTE
 FUNC	public	fn_stem_ketengebeurtenis()	function	service_role	EXECUTE
@@ -564,6 +573,9 @@ REL	public	aqlab_test_cases	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNC
 REL	public	aqlab_test_sets	table	anon	SELECT
 REL	public	aqlab_test_sets	table	authenticated	SELECT,INSERT,UPDATE,DELETE
 REL	public	aqlab_test_sets	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	besluitstatus_vereist_feit	table	anon	-
+REL	public	besluitstatus_vereist_feit	table	authenticated	SELECT
+REL	public	besluitstatus_vereist_feit	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
 REL	public	bron_whitelist	table	anon	SELECT
 REL	public	bron_whitelist	table	authenticated	SELECT,INSERT,UPDATE,DELETE
 REL	public	bron_whitelist	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN

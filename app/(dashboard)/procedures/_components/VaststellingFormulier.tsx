@@ -111,7 +111,7 @@ export default function VaststellingFormulier({
                   {vereiste.dissent_open} formele dissent
                   {vereiste.dissent_open === 1 ? "" : "en"}
                 </b>{" "}
-                open in dit dossier. "Geen dissent" kan daarom niet worden vastgelegd — dat
+                open in dit dossier. &quot;Geen dissent&quot; kan daarom niet worden vastgelegd — dat
                 zou het dossier laten tegenspreken.
               </span>
             </div>

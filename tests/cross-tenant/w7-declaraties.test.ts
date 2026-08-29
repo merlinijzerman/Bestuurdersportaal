@@ -18,7 +18,7 @@
 // -----------------------------------------------------------------------------
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, relative } from "node:path";
 
@@ -88,17 +88,17 @@ test("W7-1 — geen enkele handler staat nog op TE_BEPALEN", () => {
   // 114: P2/PR-B (#167) voegde POST /procedures/[id]/vereisten/koppel toe
   // (capability procedures.manage) zonder de teller bij te trekken (113); P3/PR-C
   // (#168) voegt POST /procedures/[id]/stappen/[stapId]/afwijking toe (capability
-  // procedures.afwijking.vastleggen) → 114.
-  // 115: #192 voegt GET /procedures/[id]/vereisten/kandidaten toe (capability
-  // procedures.view) — de leesroute achter de kiezer-UI.
+  // procedures.afwijking.vastleggen) → 114. #192 voegt de read-only
+  // kandidatenroute toe → 115; P4 voegt de twee expliciet rolbegrensde routes
+  // beëindigen/heropenen toe → 117.
   //
-  // BEDOELDE DIVERGENTIE (geen drift): 115 gewrapte declaraties, maar het aantal
+  // BEDOELDE DIVERGENTIE (geen drift): 117 gewrapte declaraties, maar het aantal
   // OPGENOMEN 403-cellen in authz-matrix.expected.json blijft op de oude set. Het
   // negatieve contract van de afwijking-route (beheerder/bureau → 403) wordt tegen
   // een DRAAIENDE server opgenomen bij de stack-run, niet voorspeld (besluit 0192,
   // contractwaarde-regel). Zie tests/karakterisering/uitgestelde-opnames.json; die
   // lijst moet leeg zijn vóór P6.
-  assert.equal(HANDLERS.length, 115, "aantal gewrapte handlers gewijzigd — werk het register bij");
+  assert.equal(HANDLERS.length, 117, "aantal gewrapte handlers gewijzigd — werk het register bij");
 });
 
 test("W7-2 — elke gedeclareerde gate bestaat en hangt aan minstens één rol", () => {
@@ -124,7 +124,15 @@ test("W7-2 — elke gedeclareerde gate bestaat en hangt aan minstens één rol",
 // een vals alarm dat iemand naleest dan een stille doorlaat.
 function routeWeigert(h: Handler): Set<string> {
   const weigert = new Set<string>();
-  const bron = h.body + "\n" + h.hoofd;
+  // Next-routebestanden mogen geen eigen testexport dragen. Een route kan zijn
+  // inner handler daarom in het naastgelegen handler.ts leggen; neem die lokale,
+  // expliciet geïmporteerde testnaad mee in dezelfde bronmeting.
+  const lokaalHandlerpad = join(dirname(h.bestand), "handler.ts");
+  const lokaleHandler =
+    h.hoofd.includes('from "./handler"') && existsSync(lokaalHandlerpad)
+      ? readFileSync(lokaalHandlerpad, "utf8")
+      : "";
+  const bron = h.body + "\n" + h.hoofd + "\n" + lokaleHandler;
 
   // (a) capability-gates: requireCapability() en rolHeeftCapability().
   //     Het eerste argument kan zelf haakjes bevatten — `(profiel as {…})?.rol`
@@ -143,7 +151,7 @@ function routeWeigert(h: Handler): Set<string> {
   //     quorumnoemer of een notificatiedoelgroep is GEEN gate — dat is precies
   //     de fout die §1a van het reviewrapport corrigeert.
   const rolgate = /(?:\[\s*(?:"(?:bestuurder|voorzitter|beheerder|bestuursbureau)"\s*,?\s*)+\]\s*(?:as const)?\s*\)?\s*\.includes|===\s*"(?:bestuurder|voorzitter|beheerder|bestuursbureau)")/;
-  if (rolgate.test(h.body) || rolgate.test(h.hoofd)) {
+  if (rolgate.test(bron)) {
     const genoemd = new Set(
       [...bron.matchAll(/"(bestuurder|voorzitter|beheerder|bestuursbureau)"/g)].map((m) => m[1])
     );

@@ -169,6 +169,8 @@ SQL_P214A1G="supabase/checks/2026_08_28_p214a1_gedrag.sql"
 SQL_P214A2="supabase/checks/2026_08_29_p214a2_afwijkingskolommen_schrijfpoort.sql"
 # P4 tranche 8 (#169, 0194 F) — I5 composite-FK weigert cross-fonds referenties.
 SQL_P4I5="supabase/checks/2026_08_29_p4_i5_composite_fk.sql"
+# P4 tranche 4 (#169, 0193) — I1 voorwaarts via de volledige status-feitenmatrix.
+SQL_P4MATRIX="supabase/checks/2026_08_29_p4_status_feitenmatrix.sql"
 # A — rollen/capabilities + het governance_log-schrijfpad (#83). Stond op de
 # V4-rodelijst; bleek geen productregressie maar een verouderde FIXTURE: de seed
 # zette `naam` in app-metadata terwijl maak_profiel hem uit user-metadata leest.
@@ -336,6 +338,10 @@ echo
 
 echo "-- P4 I5 (composite-FK weigert cross-fonds referentie) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P4I5"
+echo
+
+echo "-- P4 I1 (18-status-feitenmatrix, uitgestelde DB-trigger, proven-red) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P4MATRIX"
 echo
 
 echo "-- V3 (grants-gate over alle objectklassen: relaties, functies, buckets, storage-policies) --"

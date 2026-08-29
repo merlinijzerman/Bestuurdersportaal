@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
+import { z } from "zod";
 
 // POST /api/procedures/[id]/heropenen
 //
@@ -13,11 +14,25 @@ import { withFondsRoute } from "@/core/lib/route-wrapper";
 // Heropenen van een BESLUIT (besloten→heropend, §6.3) is een aparte overgang op
 // decision_objects onder `decisions.manage` (tranche 7).
 export const POST = withFondsRoute(
-  { capability: "procedures.heropenen" },
+  {
+    capability: "procedures.heropenen",
+    schema: z.object({ motivering: z.unknown().optional() }).passthrough(),
+    hostGuard: "geen",
+    rateLimit: "nog-niet-beoordeeld",
+    audit: { handeling: "procedures.heropenen" },
+  },
   async (ctx, req: NextRequest, params) => {
     try {
       const { id } = params as { id: string };
       const supabase = ctx.supabase;
+      // De capability-vlag kan nog uit staan. Houd daarom dezelfde rolgrens
+      // expliciet in de route; de RPC herhaalt hem als niet-omzeilbare backstop.
+      if (!["voorzitter", "bestuurder"].includes(ctx.rol ?? "")) {
+        return NextResponse.json(
+          { error: "Alleen voorzitter of bestuurder kan een procedure heropenen" },
+          { status: 403 }
+        );
+      }
       const body = (await req.json().catch(() => ({}))) as { motivering?: string };
       const motivering = body.motivering?.trim();
       if (!motivering || motivering.length < 10) {

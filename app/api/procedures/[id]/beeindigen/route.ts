@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withFondsRoute } from "@/core/lib/route-wrapper";
 import { ensureDecisionForProcedure } from "@/core/lib/decision";
+import { z } from "zod";
 
 // POST /api/procedures/[id]/beeindigen
 //
@@ -11,11 +12,25 @@ import { ensureDecisionForProcedure } from "@/core/lib/decision";
 // momentopname), atomair. Dit is beëindigen van de PROCEDURE — niet te
 // verwarren met heropenen-van-een-besluit (§6.3).
 export const POST = withFondsRoute(
-  { capability: "procedures.beeindigen" },
+  {
+    capability: "procedures.beeindigen",
+    schema: z.object({ motivering: z.unknown().optional() }).passthrough(),
+    hostGuard: "geen",
+    rateLimit: "nog-niet-beoordeeld",
+    audit: { handeling: "procedures.beeindigen" },
+  },
   async (ctx, req: NextRequest, params) => {
     try {
       const { id } = params as { id: string };
       const supabase = ctx.supabase;
+      // De capability-vlag kan nog uit staan. Houd daarom dezelfde rolgrens
+      // expliciet in de route; de RPC herhaalt hem als niet-omzeilbare backstop.
+      if (!["voorzitter", "bestuurder"].includes(ctx.rol ?? "")) {
+        return NextResponse.json(
+          { error: "Alleen voorzitter of bestuurder kan een procedure beëindigen" },
+          { status: 403 }
+        );
+      }
       const body = (await req.json().catch(() => ({}))) as { motivering?: string };
       const motivering = body.motivering?.trim();
       if (!motivering || motivering.length < 10) {

@@ -10,7 +10,8 @@
 --     niet te omzeilen is (ook niet met een directe RPC-aanroep).
 -- LET OP — dit is heropenen van een BESLUIT (decision_objects), te onderscheiden
 -- van heropenen-van-een-PROCEDURE (tranche 6, fn_procedure_heropenen).
--- I1 blijft heel: 'heropend' stelt geen feit (lege rij in de status-feitenmatrix, T4).
+-- I1 blijft heel: 'heropend' vereist in T4 juist bronstatus + motivering; deze
+-- RPC schrijft beide atomair in het append-only event vóór de uitgestelde toets.
 -- HAND-APPLIED. Rollback: supabase/rollbacks/2026_08_29_p4_07_besluit_heropenen_correctie_ROLLBACK.sql
 
 begin;
@@ -84,6 +85,8 @@ declare
   v_deel       jsonb;
   v_stap       record;
   v_heeft_open boolean := false;
+  v_event_reden text;
+  v_event_nieuw jsonb;
 begin
   -- ── Eigen slot ──
   if v_actor is null then
@@ -114,6 +117,28 @@ begin
   if v_oude = 'besloten' and p_target = 'heropend' then
     raise exception 'Heropenen vanuit besloten loopt via fn_besluit_heropenen_correctie (getypeerde reden vereist).'
       using errcode = 'PC003';
+  end if;
+
+  -- P4/T4 (I1): feiten die door déze overgang ontstaan worden als getypeerde
+  -- velden in het append-only status-event vastgelegd. De uitgestelde
+  -- feitenmatrix-trigger toetst ze vóór commit.
+  if p_target = 'aangehouden'
+     and length(btrim(coalesce(p_reden, ''))) < 3 then
+    raise exception 'Aanhouden vereist een reden.' using errcode = 'PC004';
+  elsif p_target = 'geescaleerd'
+     and length(btrim(coalesce(p_reden, ''))) < 2 then
+    raise exception 'Escaleren vereist een geadresseerde.' using errcode = 'PC004';
+  elsif p_target = 'teruggezet' then
+    if p_reden is distinct from 'in_onderbouwing'
+       and p_reden is distinct from 'in_validatie' then
+      raise exception 'Terugzetten vereist doelstatus in_onderbouwing of in_validatie.' using errcode = 'PC004';
+    end if;
+    if length(btrim(coalesce(p_motivering, ''))) < 10 then
+      raise exception 'Terugzetten vereist een motivering van minimaal 10 tekens.' using errcode = 'PC004';
+    end if;
+  elsif p_target = 'heropend'
+     and length(btrim(coalesce(p_motivering, ''))) < 10 then
+    raise exception 'Heropenen vereist een motivering van minimaal 10 tekens.' using errcode = 'PC004';
   end if;
 
   v_is_besluit := p_target in ('besloten','voorwaardelijk_besloten');
@@ -152,6 +177,19 @@ begin
     end if;
   end if;
 
+  v_event_reden := case
+    when p_target in ('teruggezet','heropend') then p_motivering
+    else p_reden
+  end;
+  v_event_nieuw := jsonb_build_object('status', p_target, 'actor_rol', v_rol);
+  if p_target = 'geescaleerd' then
+    v_event_nieuw := v_event_nieuw || jsonb_build_object('geadresseerde', btrim(p_reden));
+  elsif p_target = 'teruggezet' then
+    v_event_nieuw := v_event_nieuw || jsonb_build_object('doelstatus', p_reden);
+  elsif p_target = 'heropend' then
+    v_event_nieuw := v_event_nieuw || jsonb_build_object('bronstatus', v_oude);
+  end if;
+
   -- ── Kern (atomair): de overgang zelf (I4-trigger valideert), dan de events. ──
   update public.decision_objects set status = p_target
    where id = p_decision_id
@@ -173,9 +211,9 @@ begin
   insert into public.governance_events
     (decision_id, event_type, actor_id, actor_naam, object_type, object_id, reden, oude_waarde, nieuwe_waarde)
   values (p_decision_id, 'status_gewijzigd', v_actor, v_naam,
-          'decision_object', p_decision_id, p_reden,
+          'decision_object', p_decision_id, v_event_reden,
           jsonb_build_object('status', v_oude),
-          jsonb_build_object('status', p_target, 'actor_rol', v_rol));
+          v_event_nieuw);
 
   return to_jsonb(v_rij);
 end $$;

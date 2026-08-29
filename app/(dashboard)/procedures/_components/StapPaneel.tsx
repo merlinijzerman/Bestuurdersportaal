@@ -722,6 +722,9 @@ export default function StapPaneel({
   const [besluitForm, setBesluitForm] = useState(false);
   const [besluitFormulering, setBesluitFormulering] = useState("");
   const [besluitMotivering, setBesluitMotivering] = useState("");
+  const [besluitUitkomst, setBesluitUitkomst] = useState<
+    "instemmend" | "voorwaardelijk" | "afwijzend" | ""
+  >("");
   // Eén textarea, één alternatief per regel — bij vastleggen splitsen
   // we op `\n` en filteren we lege regels eruit.
   const [besluitAlternatieven, setBesluitAlternatieven] = useState("");
@@ -767,6 +770,11 @@ export default function StapPaneel({
   const stapEvidence = evidence.filter(
     (e) => e.stap_volgorde === stap.volgorde
   );
+  const approvalKandidaten = stapEvidence.filter(
+    (e) => e.requirement_type === "approval"
+  );
+  const besluitApprovalVereiste =
+    approvalKandidaten.length === 1 ? approvalKandidaten[0] : null;
   const sleutelVan = (r: EvidenceItem) =>
     requirementSleutel(r.stap_volgorde, r.requirement_type, r.documenttype, r.label);
   // Vereisten die met een bewijsstuk vervuld kunnen worden — dezelfde const
@@ -1071,6 +1079,18 @@ export default function StapPaneel({
       setFout("Formulering is verplicht.");
       return;
     }
+    if (!besluitUitkomst) {
+      setFout("Kies de uitkomst van het besluit.");
+      return;
+    }
+    if (!besluitApprovalVereiste) {
+      setFout(
+        approvalKandidaten.length === 0
+          ? "Deze besluitstap heeft geen approval-vereiste om het besluit aan te binden."
+          : "Deze besluitstap heeft meerdere approval-vereisten; maak de binding eerst eenduidig."
+      );
+      return;
+    }
     setBezig("besluit");
     try {
       const verworpen = besluitAlternatieven
@@ -1086,6 +1106,8 @@ export default function StapPaneel({
           motivering: besluitMotivering.trim() || null,
           datum: besluitDatum,
           verworpen_alternatieven: verworpen,
+          uitkomst: besluitUitkomst,
+          vereiste: vereisteAlsPayload(besluitApprovalVereiste),
         }),
       });
       if (!res.ok) {
@@ -1093,6 +1115,9 @@ export default function StapPaneel({
         throw new Error(data.error || "Vastleggen mislukt");
       }
       setBesluitForm(false);
+      setBesluitFormulering("");
+      setBesluitMotivering("");
+      setBesluitUitkomst("");
       setBesluitAlternatieven("");
       router.refresh();
     } catch (err: unknown) {
@@ -2380,6 +2405,11 @@ export default function StapPaneel({
                   {besluit.motivering}
                 </p>
               )}
+              {besluit.uitkomst && (
+                <div className="text-xs text-muted mt-1">
+                  Uitkomst: {besluit.uitkomst}
+                </div>
+              )}
               <div className="text-xs text-muted mt-2">
                 {new Date(besluit.datum).toLocaleDateString("nl-NL", {
                   day: "numeric",
@@ -2403,6 +2433,32 @@ export default function StapPaneel({
                 placeholder="Bv.: Akkoord met verhoging hedge-ratio naar 70%, conform voorstel."
                 className="w-full border border-line rounded px-2 py-1.5 text-sm focus:border-accent outline-none resize-none"
               />
+              <select
+                value={besluitUitkomst}
+                onChange={(e) =>
+                  setBesluitUitkomst(
+                    e.target.value as
+                      | "instemmend"
+                      | "voorwaardelijk"
+                      | "afwijzend"
+                      | ""
+                  )
+                }
+                className="w-full border border-line rounded px-2 py-1.5 text-sm bg-white focus:border-accent outline-none"
+                aria-label="Uitkomst van het besluit"
+              >
+                <option value="">— kies uitkomst —</option>
+                <option value="instemmend">Instemmend</option>
+                <option value="voorwaardelijk">Voorwaardelijk</option>
+                <option value="afwijzend">Afwijzend</option>
+              </select>
+              {!besluitApprovalVereiste && (
+                <p className="text-xs text-err-ink">
+                  {approvalKandidaten.length === 0
+                    ? "Geen approval-vereiste gekoppeld aan deze stap."
+                    : "Meerdere approval-vereisten gevonden; de besluitbinding is niet eenduidig."}
+                </p>
+              )}
               <textarea
                 rows={3}
                 value={besluitMotivering}
@@ -2433,7 +2489,7 @@ export default function StapPaneel({
                 </button>
                 <button
                   type="submit"
-                  disabled={bezig === "besluit"}
+                  disabled={bezig === "besluit" || !besluitUitkomst || !besluitApprovalVereiste}
                   className="text-xs px-3 py-1.5 bg-accent text-white rounded hover:bg-accent-ink disabled:opacity-50"
                 >
                   {bezig === "besluit" ? "Bezig…" : "Vastleggen"}
