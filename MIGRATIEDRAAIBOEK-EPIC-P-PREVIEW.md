@@ -34,10 +34,10 @@ terug te zetten. De code-deploy volgt pas nadat alle 28 stappen groen zijn.
 | 21 | `2026_08_28_p3d_05_insert_besluitstatus_slot.sql` | Sluit directe INSERT met een besluitstatus. | DB vóór deploy. | `2026_08_28_p3d_05_insert_besluitstatus_slot_ROLLBACK.sql` |
 | 22 | `2026_08_29_p4_01_statusdragers.sql` | Breidt besluit- en stapstatussen uit, inclusief `beeindigd`, `niet_begonnen` en `vervallen`. | DB vóór P4-code. | `2026_08_29_p4_01_statusdragers_ROLLBACK.sql` |
 | 23 | `2026_08_29_p4_03_niet_begonnen_actief_trigger.sql` | Levert P4-activeringstriggers en bewaakt de eerste inhoudelijke handeling. | DB vóór P4-code. | `2026_08_29_p4_03_niet_begonnen_actief_trigger_ROLLBACK.sql` |
-| 24 | `2026_08_29_p4_04_status_feitenmatrix.sql` | Maakt `besluitstatus_vereist_feit`, de I1-toetser en de beperkte stap-vrijgave-RPC. | DB vóór stappen 25–27 en vóór P4-code. | `2026_08_29_p4_04_status_feitenmatrix_ROLLBACK.sql` |
+| 24 | `2026_08_29_p4_04_status_feitenmatrix.sql` | Maakt `besluitstatus_vereist_feit` en de uitgestelde I1-constraint-trigger op besluitstatussen. | DB vóór stappen 25–27 en vóór P4-code. | `2026_08_29_p4_04_status_feitenmatrix_ROLLBACK.sql` |
 | 25 | `2026_08_29_p4_05_besluitmoment_arm.sql` | Voegt de besluitmoment-arm aan readiness toe. | DB vóór de P4-statusomslagen. | `2026_08_29_p4_05_besluitmoment_arm_ROLLBACK.sql` |
 | 26 | `2026_08_29_p4_06_procedure_beeindigen_heropenen.sql` | Levert procedure beëindigen/heropenen en legt het vereiste beëindigingsfeit atomair vast. | DB vóór de bijbehorende API-routes. | `2026_08_29_p4_06_procedure_beeindigen_heropenen_ROLLBACK.sql` |
-| 27 | `2026_08_29_p4_07_besluit_heropenen_correctie.sql` | Bedraadt de feitenmatrix in `fn_besluit_status_omslag` en corrigeert heropenen. | DB vóór de besluitstatusroute. | `2026_08_29_p4_07_besluit_heropenen_correctie_ROLLBACK.sql` |
+| 27 | `2026_08_29_p4_07_besluit_heropenen_correctie.sql` | Schrijft de statusfeiten atomair in `fn_besluit_status_omslag`; de uitgestelde matrix-trigger toetst ze bij commit. Corrigeert ook heropenen. | DB vóór de besluitstatusroute. | `2026_08_29_p4_07_besluit_heropenen_correctie_ROLLBACK.sql` |
 | 28 | `2026_08_29_p4_08_i5_composite_fk.sql` | Legt P4/I5 cross-fondsreferenties declaratief vast met composite foreign keys. | DB vóór deploy. | `2026_08_29_p4_08_i5_composite_fk_ROLLBACK.sql` |
 
 ## Daarna: code en controles

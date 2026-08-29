@@ -54,6 +54,8 @@ const RPC_TRAIL = {
   fn_stap_afronden: "domein",
   fn_stap_afronden_met_afwijking: "bewijsketen",
   fn_besluit_status_omslag: "bewijsketen",
+  fn_procedure_beeindigen: "bewijsketen",
+  fn_procedure_heropenen: "bewijsketen",
   fn_schrijf_vergelijking: "domein",
   fn_schrijf_semantische_extractie: "domein",
   log_word_export: "domein",

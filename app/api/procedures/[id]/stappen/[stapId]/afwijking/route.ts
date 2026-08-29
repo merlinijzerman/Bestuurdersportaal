@@ -1,6 +1,6 @@
 import { withFondsRoute } from "@/core/lib/route-wrapper";
-import { afrondenMetAfwijkingHandler } from "@/core/lib/procedure-afwijking-handler";
 import { z } from "zod";
+import { afrondenMetAfwijkingHandler } from "./handler";
 
 // POST /api/procedures/[id]/stappen/[stapId]/afwijking
 //

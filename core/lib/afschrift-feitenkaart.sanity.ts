@@ -195,7 +195,8 @@ function besluitItem(over: Partial<BesluitItem>): BesluitItem {
     id: "bes", procedure_id: "proc-1", stap_id: null, decision_id: "dec-1",
     formulering: "Akkoord", motivering: null, datum: "2026-04-19T09:00:00.000Z",
     vastgelegd_door_naam: null, verworpen_alternatieven: null,
-    vergadering_id: null, agendapunt_id: null, ...over,
+    vergadering_id: null, agendapunt_id: null, uitkomst: null,
+    requirement_sleutel: null, ...over,
   };
 }
 function govEvent(over: Partial<GovernanceEvent>): GovernanceEvent {

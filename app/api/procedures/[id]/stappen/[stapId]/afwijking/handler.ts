@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { type FondsContext } from "@/core/lib/route-wrapper";
+import type { FondsContext } from "@/core/lib/route-wrapper";
 import { ensureDecisionForProcedure } from "@/core/lib/decision";
 import { pasActivatieCascadeToe } from "@/core/lib/procedure-activatie-cascade";
 import { MIN_MOTIVERING_LENGTE } from "@/core/lib/afwijking";
 
-// Staat buiten route.ts omdat Next.js alleen HTTP-methode-exports accepteert.
-// De pure handler blijft zo rechtstreeks gedragstestbaar.
+// Losse testnaad voor de route-rolpoort. Dit bestand staat bewust naast
+// route.ts: Next.js accepteert in een route-module alleen HTTP-exports.
 export async function afrondenMetAfwijkingHandler(
   ctx: FondsContext,
   req: NextRequest,
@@ -69,7 +69,10 @@ export async function afrondenMetAfwijkingHandler(
         return NextResponse.json({ error: rpcFout.message }, { status: 400 });
       }
       console.error("Afwijking vastleggen fout:", rpcFout);
-      return NextResponse.json({ error: "Afronden met afwijking mislukt" }, { status: 500 });
+      return NextResponse.json(
+        { error: "Afronden met afwijking mislukt" },
+        { status: 500 }
+      );
     }
 
     const cascade = await pasActivatieCascadeToe(

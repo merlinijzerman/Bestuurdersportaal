@@ -515,6 +515,8 @@ export interface BesluitItem {
   verworpen_alternatieven: string[] | null;
   vergadering_id: string | null;
   agendapunt_id: string | null;
+  uitkomst: "instemmend" | "voorwaardelijk" | "afwijzend" | null;
+  requirement_sleutel: string | null;
 }
 
 /**
