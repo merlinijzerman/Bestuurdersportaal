@@ -46,6 +46,12 @@ const RPC_TRAIL = {
   fn_document_status_zetten: "bewijsketen",   // handler #2 (besluit B)
   fn_notulen_segment_bevestig: "bewijsketen", // handler #5
   fn_notulen_segment_verwijder: "bewijsketen",// handler #6
+  // #214-a1 (0194) — schrijfpaden verplaatst naar SECURITY DEFINER-RPC's. De
+  // heropen-RPC schrijft governance_events (bestuurlijk feit → bewijsketen); de
+  // afrond-RPC schrijft procedure_log (domein). fn_stap_activeren schrijft alleen
+  // procedure_stappen.status (procestoestand, geen spoor) en staat er bewust niet in.
+  fn_stap_heropenen: "bewijsketen",
+  fn_stap_afronden: "domein",
   fn_schrijf_vergelijking: "domein",
   fn_schrijf_semantische_extractie: "domein",
   log_word_export: "domein",

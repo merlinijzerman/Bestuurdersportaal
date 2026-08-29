@@ -1,20 +1,28 @@
 name: lint-colors
 
 # Kleur-borging: faalt zodra er hardcoded merk-hex of gemigreerde
-# Tailwind-palette-classes insluipen. Draait op elke push/PR.
+# Tailwind-palette-classes insluipen. Draait op PR's naar main/preview en pushes
+# op die twee doelbranches.
 on:
   push:
+    branches: [main, preview]
   pull_request:
+    branches: [main, preview]
 
 permissions:
   contents: read
 
+concurrency:
+  group: lint-colors-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint-colors:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-      - run: node scripts/check-brand-hex.mjs
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Kleur- en themaborging
+        run: |
+          node scripts/check-brand-hex.mjs
+          node scripts/toets-fondsthema.mjs

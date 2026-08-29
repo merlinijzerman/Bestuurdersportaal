@@ -21,7 +21,7 @@
 //  invoer aan via de gedeelde client-helper uploadDocument.
 // ============================================================================
 
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import {
   uploadDocument,
   type UploadResultaat,
@@ -92,6 +92,8 @@ export default function DocumentUploadModal({
   const [uploaden, setUploaden] = useState(false);
   const [bericht, setBericht] = useState("");
   const bestandRef = useRef<HTMLInputElement>(null);
+  const idBasis = useId();
+  const veldId = (naam: string) => `${idBasis}-${naam}`;
 
   // Besluit 0140 — wat betekent de gekozen status/bronstatus voor de assistent?
   const gevolg: { toon: "ok" | "warn" | "neutraal"; tekst: string } = (() => {
@@ -182,17 +184,34 @@ export default function DocumentUploadModal({
 
   return (
     <div className="fixed inset-0 bg-accent/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl p-7 w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={veldId("titelkop")}
+        className="bg-white rounded-2xl p-7 w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto"
+      >
         <div className="flex items-center justify-between flex-wrap gap-2 mb-5">
-          <h2 className="text-lg font-bold text-ink">{modalTitel}</h2>
-          <button onClick={onClose} className="text-muted hover:text-ink">
+          <h2 id={veldId("titelkop")} className="text-lg font-bold text-ink">
+            {modalTitel}
+          </h2>
+          <button
+            aria-label="Uploadvenster sluiten"
+            onClick={onClose}
+            className="text-muted hover:text-ink"
+          >
             ✕
           </button>
         </div>
         <form onSubmit={handleUpload} className="space-y-4">
           <div>
-            <label className="block text-sm font-semibold text-ink mb-1">Bestand</label>
+            <label
+              htmlFor={veldId("bestand")}
+              className="block text-sm font-semibold text-ink mb-1"
+            >
+              Bestand
+            </label>
             <input
+              id={veldId("bestand")}
               ref={bestandRef}
               type="file"
               accept=".pdf,.docx,.xlsx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -205,8 +224,14 @@ export default function DocumentUploadModal({
             </p>
           </div>
           <div>
-            <label className="block text-sm font-semibold text-ink mb-1">Titel</label>
+            <label
+              htmlFor={veldId("titel")}
+              className="block text-sm font-semibold text-ink mb-1"
+            >
+              Titel
+            </label>
             <input
+              id={veldId("titel")}
               type="text"
               value={form.titel}
               onChange={(e) => setForm({ ...form, titel: e.target.value })}
@@ -217,8 +242,14 @@ export default function DocumentUploadModal({
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className="block text-sm font-semibold text-ink mb-1">Bron</label>
+              <label
+                htmlFor={veldId("bron")}
+                className="block text-sm font-semibold text-ink mb-1"
+              >
+                Bron
+              </label>
               <select
+                id={veldId("bron")}
                 value={form.bron}
                 onChange={(e) => setForm({ ...form, bron: e.target.value })}
                 className="w-full border border-line rounded-lg px-3 py-2 text-sm outline-none focus:border-accent"
@@ -235,10 +266,14 @@ export default function DocumentUploadModal({
               </p>
             </div>
             <div>
-              <label className="block text-sm font-semibold text-ink mb-1">
+              <label
+                htmlFor={veldId("documenttype")}
+                className="block text-sm font-semibold text-ink mb-1"
+              >
                 Documenttype <span className="text-err-ink">*</span>
               </label>
               <select
+                id={veldId("documenttype")}
                 value={form.documenttype}
                 onChange={(e) => {
                   const nieuwType = e.target.value;
@@ -269,10 +304,14 @@ export default function DocumentUploadModal({
           </div>
           {form.documenttype === "rapportage" && (
             <div>
-              <label className="block text-sm font-semibold text-ink mb-1">
+              <label
+                htmlFor={veldId("documentdatum")}
+                className="block text-sm font-semibold text-ink mb-1"
+              >
                 Documentdatum <span className="text-err-ink">*</span>
               </label>
               <input
+                id={veldId("documentdatum")}
                 type="date"
                 value={form.documentdatum}
                 onChange={(e) => setForm({ ...form, documentdatum: e.target.value })}
@@ -285,10 +324,14 @@ export default function DocumentUploadModal({
             </div>
           )}
           <div>
-            <label className="block text-sm font-semibold text-ink mb-1">
+            <label
+              htmlFor={veldId("status")}
+              className="block text-sm font-semibold text-ink mb-1"
+            >
               Status bij aanlevering
             </label>
             <select
+              id={veldId("status")}
               value={form.status}
               onChange={(e) => {
                 const nieuweStatus = e.target.value;
@@ -325,10 +368,14 @@ export default function DocumentUploadModal({
           </div>
           {form.status && (
             <div>
-              <label className="block text-sm font-semibold text-ink mb-1">
+              <label
+                htmlFor={veldId("statusreden")}
+                className="block text-sm font-semibold text-ink mb-1"
+              >
                 Reden <span className="font-normal text-muted">(verplicht)</span>
               </label>
               <input
+                id={veldId("statusreden")}
                 type="text"
                 value={form.statusReden}
                 onChange={(e) => setForm({ ...form, statusReden: e.target.value })}
@@ -343,11 +390,15 @@ export default function DocumentUploadModal({
           )}
           {toonRetire && (
             <div>
-              <label className="block text-sm font-semibold text-ink mb-1">
+              <label
+                htmlFor={veldId("vervangt")}
+                className="block text-sm font-semibold text-ink mb-1"
+              >
                 Vervangt eerdere rapportage{" "}
                 <span className="font-normal text-muted">(optioneel)</span>
               </label>
               <select
+                id={veldId("vervangt")}
                 value={form.retireRapportageId}
                 onChange={(e) =>
                   setForm({ ...form, retireRapportageId: e.target.value })
@@ -368,6 +419,7 @@ export default function DocumentUploadModal({
               </p>
               {form.retireRapportageId && (
                 <input
+                  aria-label="Reden voor afvoer eerdere rapportage"
                   type="text"
                   value={form.retireReden}
                   onChange={(e) => setForm({ ...form, retireReden: e.target.value })}
@@ -383,6 +435,7 @@ export default function DocumentUploadModal({
             </summary>
             <div className="px-3 pb-3 pt-1">
               <select
+                aria-label="Bronstatus"
                 value={form.bronstatus}
                 onChange={(e) => setForm({ ...form, bronstatus: e.target.value })}
                 className="w-full border border-line rounded-lg px-3 py-2 text-sm outline-none focus:border-accent"
@@ -426,7 +479,11 @@ export default function DocumentUploadModal({
               (DNB/AFM/PF) documenten worden centraal beheerd en zijn alleen-lezen.
             </p>
           )}
-          {bericht && <div className="text-sm text-err-ink">{bericht}</div>}
+          {bericht && (
+            <div role="alert" className="text-sm text-err-ink">
+              {bericht}
+            </div>
+          )}
           <div className="flex gap-3 pt-2">
             <button
               type="button"

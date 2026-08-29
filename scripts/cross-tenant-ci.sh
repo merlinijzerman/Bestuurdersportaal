@@ -30,6 +30,12 @@
 #  Gebruik lokaal (app-laag):     bash scripts/cross-tenant-ci.sh
 #  Gebruik lokaal (volledig):     TEST_DATABASE_URL='postgresql://…' bash scripts/cross-tenant-ci.sh
 #  In CI:                         zie .github/workflows/rls-cross-tenant.yml
+#
+#  WP5-CI-ontdubbeling: de workflow zet `XTENANT_FAST_LAGEN=overslaan`, omdat
+#  typecheck en app-matrix in dezelfde PR al onder `g2-evidence` draaien. Deze
+#  opt-out is exact en niet de standaard. `XTENANT_REQUIRE_DB=1` blijft in die
+#  workflow verplicht, zodat alleen de dubbele snelle lagen vervallen en nooit
+#  de echte RLS-/DB-laag.
 # ============================================================================
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -156,6 +162,9 @@ SQL_VWF="supabase/checks/2026_08_02_fondsleden_cross_tenant.sql"
 # vlek waar C-01 in viel: gates A-H redeneren over tabellen en functies, nooit
 # over views. Faalt in BEIDE richtingen — te veel én onverwacht te weinig.
 SQL_V3="supabase/checks/2026_08_20_v3_grants_volledig.sql"
+# #214-a1 (0194) — schrijfpoort: statische gate + gedragstoets (directe PATCH dicht).
+SQL_P214A1="supabase/checks/2026_08_28_p214a1_schrijfpoort.sql"
+SQL_P214A1G="supabase/checks/2026_08_28_p214a1_gedrag.sql"
 # A — rollen/capabilities + het governance_log-schrijfpad (#83). Stond op de
 # V4-rodelijst; bleek geen productregressie maar een verouderde FIXTURE: de seed
 # zette `naam` in app-metadata terwijl maak_profiel hem uit user-metadata leest.
@@ -171,15 +180,22 @@ SQL_T8SEM="supabase/checks/2026_08_12_t8_semantische_extractie.sql"
 # ambiguïteit, atomische audit voor directe PostgREST-writes en snapshotdekking.
 SQL_BBIND="supabase/checks/2026_08_18_bewijsbinding.sql"
 
-echo "== [1/4] tsc --noEmit --skipLibCheck =="
-./node_modules/.bin/tsc --noEmit --skipLibCheck
-echo "OK: typecheck groen."
-echo
+if [ "${XTENANT_FAST_LAGEN:-uitvoeren}" = "overslaan" ]; then
+  echo "== [1–2/4] snelle lagen bewust niet herhaald =="
+  echo "Typecheck en app-laag hebben g2-evidence als primaire PR-eigenaar."
+  echo "De DB-laag blijft verplicht via XTENANT_REQUIRE_DB=1."
+  echo
+else
+  echo "== [1/4] tsc --noEmit --skipLibCheck =="
+  ./node_modules/.bin/tsc --noEmit --skipLibCheck
+  echo "OK: typecheck groen."
+  echo
 
-echo "== [2/4] app-laag §15-matrix (node:test): T1–T5, T8–T14 =="
-node --import tsx --test tests/cross-tenant/*.test.ts
-echo "OK: app-laag §15-matrix groen (incl. negatieve controles)."
-echo
+  echo "== [2/4] app-laag §15-matrix (node:test): T1–T5, T8–T14 =="
+  node --import tsx --test tests/cross-tenant/*.test.ts
+  echo "OK: app-laag §15-matrix groen (incl. negatieve controles)."
+  echo
+fi
 
 DB_URL="${TEST_DATABASE_URL:-${DATABASE_URL:-}}"
 if [ -z "$DB_URL" ]; then
@@ -286,6 +302,11 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_VWF"
 echo
 echo "-- Bewijsbinding (één-op-één, DB-validatie, atomische audit, snapshot) --"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_BBIND"
+echo
+
+echo "-- #214-a1 schrijfpoort (kolom-revoke bewaakt + gedragstoets: directe PATCH faalt, RPC werkt) --"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P214A1"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$SQL_P214A1G"
 echo
 
 echo "-- V3 (grants-gate over alle objectklassen: relaties, functies, buckets, storage-policies) --"
