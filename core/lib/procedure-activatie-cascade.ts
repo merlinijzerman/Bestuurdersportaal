@@ -92,18 +92,18 @@ export async function pasActivatieCascadeToe(
       for (const volg of teActiveren) {
         const doel = alleStappen.find((s) => s.volgorde === volg);
         if (!doel) continue;
-        // #214-a1 (0194): status via SECURITY DEFINER-RPC — `authenticated`
-        // mag de bewaakte statuskolom niet rechtstreeks schrijven.
-        const { error: actFout } = await supabase.rpc("fn_stap_activeren", {
+        // P4: een vrijgekomen stap wordt 'niet_begonnen' (activeerbaar), niet
+        // 'actief'. De a1-RPC houdt de bewaakte kolom buiten browserrechten.
+        const { error: actFout } = await supabase.rpc("fn_stap_vrijgeven", {
           p_stap_id: doel.id,
           p_procedure_id: procedureId,
         });
         if (actFout) {
-          throw new Error(`fn_stap_activeren (${doel.id}): ${actFout.message}`);
+          throw new Error(`fn_stap_vrijgeven (${doel.id}): ${actFout.message}`);
         }
         await supabase.from("procedure_log").insert({
           procedure_id: procedureId,
-          event_type: "stap_gestart",
+          event_type: "stap_activeerbaar",
           actor_id: actor.gebruikerId,
           actor_naam: actor.naam || undefined,
           payload: { stap: doel.naam },

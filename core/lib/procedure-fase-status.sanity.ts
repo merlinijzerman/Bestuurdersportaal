@@ -64,6 +64,29 @@ check("faseStatus: lege fase → nog niet begonnen (defensief)", () => {
   assert.equal(faseStatus([]), "nog_niet_begonnen");
 });
 
+// P4 (#169) — 'vervallen': terminaal én niet-afgerond, géén vals groen.
+check("faseStatus: afgerond + vervallen (alle terminaal) → vervallen (geen vals groen)", () => {
+  assert.equal(
+    faseStatus([{ status: "afgerond" }, { status: "vervallen" }]),
+    "vervallen"
+  );
+});
+check("faseStatus: alle stappen vervallen → vervallen", () => {
+  assert.equal(faseStatus([{ status: "vervallen" }, { status: "vervallen" }]), "vervallen");
+});
+check("faseStatus: vervallen + nog open stap (niet alle terminaal) → in behandeling", () => {
+  assert.equal(
+    faseStatus([{ status: "vervallen" }, { status: "niet_begonnen" }]),
+    "in_behandeling"
+  );
+});
+check("faseStatus: alleen niet_begonnen/geblokkeerd → nog niet begonnen", () => {
+  assert.equal(
+    faseStatus([{ status: "niet_begonnen" }, { status: "geblokkeerd" }]),
+    "nog_niet_begonnen"
+  );
+});
+
 // ── bewijslastDekking ─────────────────────────────────────────────────────────
 
 check("bewijslastDekking: telt alleen verplichte vereisten", () => {

@@ -92,13 +92,17 @@ test("W7-1 — geen enkele handler staat nog op TE_BEPALEN", () => {
   // 115: #192 voegt GET /procedures/[id]/vereisten/kandidaten toe (capability
   // procedures.view) — de leesroute achter de kiezer-UI.
   //
-  // BEDOELDE DIVERGENTIE (geen drift): 115 gewrapte declaraties, maar het aantal
+  // 117: P4 (#169, besluit 0194) voegt de twee bestuurlijke procedure-RPC-routes
+  // beëindigen/heropenen toe. Hun scherpere capability is hieronder expliciet
+  // gepind; het is geen W7-gedragsbehoudclaim.
+  //
+  // BEDOELDE DIVERGENTIE (geen drift): 117 gewrapte declaraties, maar het aantal
   // OPGENOMEN 403-cellen in authz-matrix.expected.json blijft op de oude set. Het
   // negatieve contract van de afwijking-route (beheerder/bureau → 403) wordt tegen
   // een DRAAIENDE server opgenomen bij de stack-run, niet voorspeld (besluit 0192,
   // contractwaarde-regel). Zie tests/karakterisering/uitgestelde-opnames.json; die
   // lijst moet leeg zijn vóór P6.
-  assert.equal(HANDLERS.length, 115, "aantal gewrapte handlers gewijzigd — werk het register bij");
+  assert.equal(HANDLERS.length, 117, "aantal gewrapte handlers gewijzigd — werk het register bij");
 });
 
 test("W7-2 — elke gedeclareerde gate bestaat en hangt aan minstens één rol", () => {
@@ -157,6 +161,16 @@ function routeWeigert(h: Handler): Set<string> {
 }
 
 test("W7-3 — de vlag weigert geen rol die de route vandaag toelaat", () => {
+  // P4/0194 IS een expliciet geautoriseerde aanscherping: beëindigen en
+  // heropenen zijn bestuurlijke oordelen voor voorzitter+bestuurder. De RPC
+  // herhaalt die rolgate. Pin de vier verwachte verschillen zodat elke andere
+  // nieuwe wrapperaanscherping nog steeds luid faalt.
+  const p4Aanscherping = new Set([
+    'POST /procedures/[id]/beeindigen: "procedures.beeindigen" sluit beheerder uit',
+    'POST /procedures/[id]/beeindigen: "procedures.beeindigen" sluit bestuursbureau uit',
+    'POST /procedures/[id]/heropenen: "procedures.heropenen" sluit beheerder uit',
+    'POST /procedures/[id]/heropenen: "procedures.heropenen" sluit bestuursbureau uit',
+  ]);
   const nieuw: string[] = [];
   for (const h of HANDLERS) {
     if (BIJZONDER.has(h.gedeclareerd)) continue;
@@ -167,11 +181,12 @@ test("W7-3 — de vlag weigert geen rol die de route vandaag toelaat", () => {
     }
   }
   assert.deepEqual(
-    nieuw,
+    nieuw.filter((melding) => !p4Aanscherping.has(melding)),
     [],
     "Deze declaraties maken een route STRENGER dan hij vandaag is. Dat is een " +
       "gedragswijziging en hoort een eigen besluit te zijn, geen bijwerking van W7."
   );
+  assert.deepEqual(new Set(nieuw), p4Aanscherping, "P4-aanscherpingspin is incompleet of stale");
 });
 
 test("W7-4 — per gate komt de meest beperkte drager er aantoonbaar door", () => {

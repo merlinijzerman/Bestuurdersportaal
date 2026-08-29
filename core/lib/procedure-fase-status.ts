@@ -20,12 +20,17 @@ import type { StapStatus } from "./decision-view";
 
 // ── Fase-status ─────────────────────────────────────────────────────────────
 
-export type FaseStatus = "afgerond" | "in_behandeling" | "nog_niet_begonnen";
+export type FaseStatus =
+  | "afgerond"
+  | "in_behandeling"
+  | "nog_niet_begonnen"
+  | "vervallen"; // P4 (#169): alle stappen terminaal én ≥1 vervallen — géén vals groen
 
 export const FASE_STATUS_LABEL: Record<FaseStatus, string> = {
   afgerond: "Afgerond",
   in_behandeling: "In behandeling",
   nog_niet_begonnen: "Nog niet begonnen",
+  vervallen: "Vervallen",
 };
 
 /** 'heropend' telt voor de afleiding als actief (§4.3). */
@@ -34,18 +39,28 @@ function isActiefAchtig(status: StapStatus): boolean {
 }
 
 /**
- * Fase-status per fase F met stappen S_F (§7.1):
- *  - Afgerond           — alle stappen in S_F zijn 'afgerond'.
- *  - Nog niet begonnen  — geen stap 'afgerond' én geen stap 'actief'/'heropend'.
+ * Fase-status per fase F met stappen S_F (§7.1, P4 §4.1):
+ *  - Afgerond           — ALLE stappen in S_F zijn 'afgerond' (strikt).
+ *  - Vervallen          — alle stappen zijn terminaal ('afgerond'/'vervallen')
+ *                         én minstens één is 'vervallen'. NIET afgerond: dat zou
+ *                         het "vals groen" zijn dat §6 verbiedt.
+ *  - Nog niet begonnen  — er is niets gebeurd: geen 'afgerond', geen 'vervallen',
+ *                         geen 'actief'/'heropend' (alleen open/niet_begonnen/geblokkeerd).
  *  - In behandeling     — anders (begonnen maar niet af).
  * Een lege fase telt als nog niet begonnen (defensief; hoort niet voor te komen).
  */
 export function faseStatus(stappen: { status: StapStatus }[]): FaseStatus {
   if (stappen.length === 0) return "nog_niet_begonnen";
-  if (stappen.every((s) => s.status === "afgerond")) return "afgerond";
+  const alleTerminaal = stappen.every(
+    (s) => s.status === "afgerond" || s.status === "vervallen"
+  );
+  if (alleTerminaal) {
+    return stappen.some((s) => s.status === "vervallen") ? "vervallen" : "afgerond";
+  }
   const heeftAfgerond = stappen.some((s) => s.status === "afgerond");
+  const heeftVervallen = stappen.some((s) => s.status === "vervallen");
   const heeftActief = stappen.some((s) => isActiefAchtig(s.status));
-  if (!heeftAfgerond && !heeftActief) return "nog_niet_begonnen";
+  if (!heeftAfgerond && !heeftVervallen && !heeftActief) return "nog_niet_begonnen";
   return "in_behandeling";
 }
 

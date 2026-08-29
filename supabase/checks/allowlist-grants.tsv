@@ -84,6 +84,9 @@ FUNC	public	fn_app_error_log(p_label text, p_categorie text, p_severity text, p_
 FUNC	public	fn_audit_procedure_bewijs_mutation()	function	anon	-
 FUNC	public	fn_audit_procedure_bewijs_mutation()	function	authenticated	-
 FUNC	public	fn_audit_procedure_bewijs_mutation()	function	service_role	EXECUTE
+FUNC	public	fn_besluit_heropenen_correctie(p_decision_id uuid, p_reden_type text, p_motivering text)	function	anon	-
+FUNC	public	fn_besluit_heropenen_correctie(p_decision_id uuid, p_reden_type text, p_motivering text)	function	authenticated	EXECUTE
+FUNC	public	fn_besluit_heropenen_correctie(p_decision_id uuid, p_reden_type text, p_motivering text)	function	service_role	-
 FUNC	public	fn_bron_whitelist_log_hash()	function	anon	-
 FUNC	public	fn_bron_whitelist_log_hash()	function	authenticated	EXECUTE
 FUNC	public	fn_bron_whitelist_log_hash()	function	service_role	EXECUTE
@@ -219,6 +222,12 @@ FUNC	public	fn_platform_event_hash()	function	service_role	-
 FUNC	public	fn_platform_event_immutable()	function	anon	-
 FUNC	public	fn_platform_event_immutable()	function	authenticated	EXECUTE
 FUNC	public	fn_platform_event_immutable()	function	service_role	EXECUTE
+FUNC	public	fn_procedure_beeindigen(p_procedure_id uuid, p_reden text)	function	anon	-
+FUNC	public	fn_procedure_beeindigen(p_procedure_id uuid, p_reden text)	function	authenticated	EXECUTE
+FUNC	public	fn_procedure_beeindigen(p_procedure_id uuid, p_reden text)	function	service_role	-
+FUNC	public	fn_procedure_heropenen(p_procedure_id uuid, p_reden text)	function	anon	-
+FUNC	public	fn_procedure_heropenen(p_procedure_id uuid, p_reden text)	function	authenticated	EXECUTE
+FUNC	public	fn_procedure_heropenen(p_procedure_id uuid, p_reden text)	function	service_role	-
 FUNC	public	fn_procedure_requirements_versievast()	function	anon	-
 FUNC	public	fn_procedure_requirements_versievast()	function	authenticated	-
 FUNC	public	fn_procedure_requirements_versievast()	function	service_role	EXECUTE
@@ -393,9 +402,18 @@ FUNC	public	fn_stap_activeren(p_stap_id uuid, p_procedure_id uuid)	function	serv
 FUNC	public	fn_stap_afronden(p_stap_id uuid, p_procedure_id uuid)	function	anon	-
 FUNC	public	fn_stap_afronden(p_stap_id uuid, p_procedure_id uuid)	function	authenticated	EXECUTE
 FUNC	public	fn_stap_afronden(p_stap_id uuid, p_procedure_id uuid)	function	service_role	-
+FUNC	public	fn_stap_actief_bij_handeling()	function	anon	-
+FUNC	public	fn_stap_actief_bij_handeling()	function	authenticated	-
+FUNC	public	fn_stap_actief_bij_handeling()	function	service_role	-
 FUNC	public	fn_stap_heropenen(p_stap_id uuid, p_procedure_id uuid, p_motivering text)	function	anon	-
 FUNC	public	fn_stap_heropenen(p_stap_id uuid, p_procedure_id uuid, p_motivering text)	function	authenticated	EXECUTE
 FUNC	public	fn_stap_heropenen(p_stap_id uuid, p_procedure_id uuid, p_motivering text)	function	service_role	-
+FUNC	public	fn_stap_vrijgeven(p_stap_id uuid, p_procedure_id uuid)	function	anon	-
+FUNC	public	fn_stap_vrijgeven(p_stap_id uuid, p_procedure_id uuid)	function	authenticated	EXECUTE
+FUNC	public	fn_stap_vrijgeven(p_stap_id uuid, p_procedure_id uuid)	function	service_role	-
+FUNC	public	fn_toets_besluitstatus_feit(p_decision_id uuid, p_doelstatus text, p_reden text, p_motivering text)	function	anon	-
+FUNC	public	fn_toets_besluitstatus_feit(p_decision_id uuid, p_doelstatus text, p_reden text, p_motivering text)	function	authenticated	-
+FUNC	public	fn_toets_besluitstatus_feit(p_decision_id uuid, p_doelstatus text, p_reden text, p_motivering text)	function	service_role	-
 FUNC	public	fn_stem_ketengebeurtenis()	function	anon	-
 FUNC	public	fn_stem_ketengebeurtenis()	function	authenticated	EXECUTE
 FUNC	public	fn_stem_ketengebeurtenis()	function	service_role	EXECUTE
@@ -558,6 +576,9 @@ REL	public	bron_whitelist	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCAT
 REL	public	bron_whitelist_log	table	anon	SELECT
 REL	public	bron_whitelist_log	table	authenticated	SELECT,INSERT,UPDATE,DELETE
 REL	public	bron_whitelist_log	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	besluitstatus_vereist_feit	table	anon	-
+REL	public	besluitstatus_vereist_feit	table	authenticated	-
+REL	public	besluitstatus_vereist_feit	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
 REL	public	catalogus_log	table	anon	SELECT
 REL	public	catalogus_log	table	authenticated	SELECT,INSERT,UPDATE,DELETE
 REL	public	catalogus_log	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
