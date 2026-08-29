@@ -1,7 +1,8 @@
 # #214-a1 — beoordeelbaar pakket (schrijfpoort op procedure_stappen/besluiten)
 
-**Branch:** `fix/214a1-schrijfpoort-main` (op `origin/main` a187b4a). **Besluit:** [`0194`](decisions/0194-214a-schrijfpoort-en-p4-statusbesluiten.md). **Meting:** [`METING-RLS-reikwijdte-214.md`](METING-RLS-reikwijdte-214.md).
+**Branch:** `fix/214a1-schrijfpoort-main`; via PR #225 gemerged in `preview` als `54d0052`. **Besluit:** [`0194`](decisions/0194-214a-schrijfpoort-en-p4-statusbesluiten.md). **Meting:** [`METING-RLS-reikwijdte-214.md`](METING-RLS-reikwijdte-214.md).
 **Aard:** productiefix, standalone van EPIC P. **#210:** één gedragsverandering — niet bundelen.
+**Release-status 29-08-2026:** volledig toegepast en functioneel geverifieerd op Preview; Productie is nog niet vrijgegeven of gewijzigd.
 
 ## 1. Wat het dicht
 
@@ -71,7 +72,24 @@ Owner/`service_role`-paden (migraties, seeds) blijven ongemoeid.
 - **Migratie-replaycheck:** de énige tabel-brede UPDATE-grant op deze twee tabellen staat in de baseline (14-08); geen migratie tússen de baseline en a1, of ná a1, verleent hem opnieuw → de revoke is het laatste woord onder een volledige replay.
 - Gate + gedragstoets aangesloten op `scripts/cross-tenant-ci.sh` (draait bij jou preview-eerst onder de volledige §15-keten).
 
-## 7. Restpunten (bewust, geen blocker)
+### Preview-acceptatie 29-08-2026
+
+- Handmatige volgorde uitgevoerd: migratie `01` → code-deploy `54d0052` → migraties `02` → `03` → `04`; iedere SQL-run eindigde met `Success. No rows returned`.
+- Vaste Preview-deployments van gebruikersapp en beheerportaal stonden groen op dezelfde mergecommit vóór de revokes werden toegepast.
+- UI-smoke als Preview-beheerder op `app.preview.bestuurdersportaal.com`: procedure `SMOKE #214-a1 schrijfpoort 2026-08-29` (`9b157ac7-ff6e-44c2-93de-57910552bb43`) rondde stap 1 af; voortgang werd `1 van 5` en stap 2 werd automatisch actief.
+- UI-smoke besluitpad: procedure `SMOKE #214-a1 besluitpad 2026-08-29` (`df857a4e-5f4f-40e8-80a0-be3d1e28703b`) legde een formeel besluit vast; na herladen waren formulering en motivering zichtbaar.
+- Uitkomst: beide legitieme `authenticated`-schrijfpaden werken na de revokes; geen aanwijzing dat een resterend app-pad rechtstreeks naar de bewaakte stapkolommen schrijft.
+
+## 7. Productiepoort en integratievolgorde
+
+**Stop vóór Productie:** de PR `preview` → `main` mag worden voorbereid, maar merge, migraties en deploy wachten op afzonderlijk expliciet akkoord.
+
+- Productie gebruikt dezelfde volgorde als Preview: `01` → code-deploy → `02` → `03` → `04` → UI-smokes.
+- **Niet combineren met de `ENFORCE_CAPABILITY`-flip** (#210 / besluit 0186). Valt die flip in hetzelfde releasewindow, dan schuift één van beide wijzigingen door.
+- Na de productie-uitrol is de tweesignalen-driftcontrole verplicht: `DRIFT_PROD_URL=… DRIFT_PREVIEW_URL=… bash scripts/drift-vergelijk.sh`. Alleen groen op zowel Productie-versus-pin als Preview-versus-Productie sluit het migratierondje af; niet vooraf pinnen om een afwijking weg te schrijven.
+- Daarna eerst `epic/proceduremodule-v2` rebasen op `main` mét a1. Vervolgens de gecombineerde staat uit `wip/214-epic-gecombineerd` terughalen en a2 dun/additief op de epic schrijven. Pas daarna `feat/p4-status-feitenmatrix` op de bijgewerkte epic rebasen en tranche 4 uitvoeren. a1 niet eerder afzonderlijk in P4 integreren: dat creëert twee invoerroutes.
+
+## 8. Restpunten (bewust, geen blocker)
 
 - `heropend_op` en `herbevestiging_nodig` blijven direct schrijfbaar door `authenticated` (buiten de drie bewaakte kolommen, per 0194-scope). Inert: zonder `status`-recht kan een fondslid geen heropening forgen. Beide reviewers noemden het low-impact; te verscherpen op jouw woord.
 - Het bredere #214-restant (overige `decision_objects`-kolommen, de andere fonds-only tabellen) blijft open in #214.
