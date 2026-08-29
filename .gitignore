@@ -57,3 +57,9 @@ promo/overlays/
 promo/uit/
 promo/.werk/
 promo/.auth/
+
+# Product-E2E: tijdelijke sessies en gegenereerde browserartifacts.
+# Authstates bevatten sessiecookies en mogen nooit in Git of CI-artifacts komen.
+tests/e2e/.auth/
+playwright-report/
+test-results/e2e/

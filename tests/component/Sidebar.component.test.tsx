@@ -59,8 +59,8 @@ describe("Sidebar", () => {
     expect(onToggle).toHaveBeenCalledOnce();
     expect(signOut).toHaveBeenCalledOnce();
     expect(sessionStorage.getItem(ACTIEF_GESPREK_SLEUTEL)).toBeNull();
-    expect(nextNavigationMocks.push).toHaveBeenCalledWith("/login");
-    expect(nextNavigationMocks.refresh).toHaveBeenCalledOnce();
+    expect(nextNavigationMocks.replace).toHaveBeenCalledWith("/login");
+    expect(nextNavigationMocks.refresh).not.toHaveBeenCalled();
     expect(onNavigate).toHaveBeenCalledOnce();
   });
 });
