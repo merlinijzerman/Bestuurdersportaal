@@ -2,7 +2,7 @@
 
 **Doelomgeving:** uitsluitend Supabase Preview.  Pas ieder bestand hieronder in
 deze volgorde, volledig en één voor één toe in de SQL-editor. Stop bij de eerste
-fout. De code-deploy volgt pas nadat alle 29 stappen groen zijn.
+fout. De code-deploy volgt pas nadat alle 32 stappen groen zijn.
 
 > Dit is de operationele `preview...epic/proceduremodule-v2`-delta, plus de
 > expliciete 0195-datacorrectie aan het eind. De bestandsnamen zijn bewust geen
@@ -65,6 +65,9 @@ select count(*) as dossiers_die_naar_1_0_0_worden_gebackfilld
 | 27 | `2026_08_29_p4_07_besluit_heropenen_correctie.sql` | Schrijft de statusfeiten atomair in `fn_besluit_status_omslag`; de uitgestelde matrix-trigger toetst ze bij commit. Corrigeert ook heropenen. | DB vóór de besluitstatusroute. | `2026_08_29_p4_07_besluit_heropenen_correctie_ROLLBACK.sql` |
 | 28 | `2026_08_29_p4_08_i5_composite_fk.sql` | Legt P4/I5 cross-fondsreferenties declaratief vast met composite foreign keys. | DB vóór deploy. | `2026_08_29_p4_08_i5_composite_fk_ROLLBACK.sql` |
 | 29 | `2026_08_29_zz_0195_verwijder_onvervulbare_templatevereisten.sql` | Eenmalige, gemeten 0195-correctie: verwijdert de onvervulbare `evaluation` uit stap 6 van `beleidswijziging_beleggingsbeleid@1.0.0` bij uitsluitend 0 gepinde dossiers op Preview of de expliciet bevestigde 3 niet-gebruikte dossiers op productie (#228). Elk ander aantal faalt luid. De I7-trigger staat alleen binnen de transactie tijdelijk uit, nooit via `session_replication_role`, en de migratie verifieert vóór commit dat hij weer actief is. | DB vóór deploy, uitsluitend na vastlegging van de 0195-meting. | `2026_08_29_zz_0195_verwijder_onvervulbare_templatevereisten_ROLLBACK.sql` |
+| 30 | `2026_08_30_actie_eigenaar_profiel.sql` | Voegt `decision_actions.eigenaar_id` toe en borgt dat een interne houder een profiel uit hetzelfde fonds is. | DB vóór de P5-actiehoudercode. | `2026_08_30_actie_eigenaar_profiel_ROLLBACK.sql` |
+| 31 | `2026_08_30_p5a_02_actie_eigenaar_externe_houder.sql` | Herstelt de bewuste uitzondering: een externe houder heeft geen profiel maar wel een niet-lege naam. | Direct na stap 30, vóór deploy. | `2026_08_30_p5a_02_actie_eigenaar_externe_houder_ROLLBACK.sql` |
+| 32 | `2026_08_30_p5c_procedure_stap_notitie.sql` | Voegt gedeelde stap-aantekeningen toe: auteur mag bewerken/verwijderen; I5, RLS en geen statusactivatie zijn geborgd. | DB vóór de P5c-code. | `2026_08_30_p5c_procedure_stap_notitie_ROLLBACK.sql` |
 
 ## Tussenijkpunten tijdens de reeks
 
@@ -110,7 +113,7 @@ ontbreekt.
 
 ## Daarna: code en controles
 
-1. Deploy de commit van PR #233 pas nadat stap 29 succesvol is toegepast.
+1. Deploy de actuele epic-commit pas nadat stap 32 succesvol is toegepast.
 2. Laat `ENFORCE_CAPABILITY` ongewijzigd; deze release bevat **geen** vlagflip.
 3. Draai tegen Preview, in deze volgorde:
    - `supabase/checks/2026_08_28_p214a1_schrijfpoort.sql`
@@ -127,12 +130,12 @@ ontbreekt.
 
 **Afbreken vóór de deploy.** Er is nog geen nieuwe code actief; een code-rollback
 is dan een no-op. Voer uitsluitend de rollbacks van de **al toegepaste**
-migraties uit, in omgekeerde volgorde (29 → 2; stap 1 heeft geen rollback).
+migraties uit, in omgekeerde volgorde (32 → 2; stap 1 heeft geen rollback).
 Draai daarna de V3-grantgate en de structurele gates. Bij een gedeeltelijke
 rollback: stop en onderzoek; sla geen afhankelijk rollbackbestand over.
 
 **Terugdraaien ná de deploy.** Deploy eerst de huidige `preview`-commit terug,
 zodat die code niet tegen de nieuwe databasevorm draait. Voer daarna uitsluitend
 de rollbacks van de werkelijk toegepaste migraties in omgekeerde volgorde uit
-(29 → 2; stap 1 heeft geen rollback), gevolgd door de V3-grantgate en de
+(32 → 2; stap 1 heeft geen rollback), gevolgd door de V3-grantgate en de
 structurele gates.
