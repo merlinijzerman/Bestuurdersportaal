@@ -61,10 +61,10 @@ export default async function RisicomatrixPage() {
   };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-7 space-y-6">
+    <div className="p-4 sm:p-6 lg:p-6 space-y-5">
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
-          <h1 className="font-serif text-ink text-xl font-bold">Risicomatrix</h1>
+          <h1 className="font-serif text-ink text-lg font-bold">Risicomatrix</h1>
           <p className="text-muted text-sm mt-0.5">
             Actueel inzicht in de risico&apos;s van het fonds, gerangschikt op
             Kans &times; Impact en onderverdeeld in vier categorie&euml;n.
@@ -95,8 +95,8 @@ export default async function RisicomatrixPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-12 gap-5">
-        <div className="col-span-12 lg:col-span-8 bg-white border border-line rounded-xl p-5">
+      <div className="grid grid-cols-12 gap-4">
+        <div className="col-span-12 lg:col-span-8 bg-white border border-line rounded-xl p-4">
           <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
             <div>
               <h2 className="text-sm font-semibold text-ink">
@@ -173,7 +173,7 @@ export default async function RisicomatrixPage() {
         </aside>
       </div>
 
-      <div className="space-y-5">
+      <div className="space-y-4">
         {CATEGORIEEN.map((cat) => {
           const inCat = lijst.filter((r) => r.categorie === cat.slug);
           return (
@@ -196,7 +196,7 @@ export default async function RisicomatrixPage() {
                     <Link
                       key={r.id}
                       href={`/risicomatrix/${r.id}`}
-                      className="flex items-center gap-4 p-4 hover:bg-app-bg"
+                      className="flex items-center gap-3 p-3.5 hover:bg-app-bg"
                     >
                       <span
                         className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${NIVEAU_KLEUREN[r.niveau].dot}`}

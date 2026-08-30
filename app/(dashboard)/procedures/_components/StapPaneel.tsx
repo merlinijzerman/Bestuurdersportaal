@@ -1584,7 +1584,7 @@ export default function StapPaneel({
   ];
 
   return (
-    <div className="bg-white border border-line rounded-xl p-5 text-[13px]">
+    <div className="bg-white border border-line rounded-xl p-4 text-[13px]">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="flex-1 min-w-0">
           <div

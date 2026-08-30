@@ -230,10 +230,10 @@ export default async function ProceduresPage() {
   });
 
   return (
-    <div className="p-4 sm:p-6 lg:p-7 space-y-6">
+    <div className="p-4 sm:p-6 lg:p-6 space-y-5">
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
-          <h1 className="font-serif text-ink text-xl font-bold">Processen</h1>
+          <h1 className="font-serif text-ink text-lg font-bold">Processen</h1>
           <p className="text-muted text-sm mt-0.5 max-w-2xl">
             Status per fase is <b>afgeleid</b> uit de onderliggende stappen en
             bewijslast — niet uit een volgorde. Processen lopen parallel: fasen
