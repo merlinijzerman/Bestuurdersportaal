@@ -20,6 +20,7 @@ function test(naam: string, fn: () => void) {
 }
 
 const beheerder = { kanBeheren: true, alleenLezen: false };
+const bestuurslid = { magBewijsKoppelen: true, alleenLezen: false };
 
 test("onder slot: LOSMAKEN is uit (deur a dicht)", () => {
   assert.equal(
@@ -31,7 +32,7 @@ test("onder slot: LOSMAKEN is uit (deur a dicht)", () => {
 
 test("onder slot: KOPPELEN (first-bind) blijft toegestaan", () => {
   assert.equal(
-    magKoppelen({ ...beheerder, slotAan: true, type: "risk" }),
+    magKoppelen({ ...bestuurslid, slotAan: true, type: "risk" }),
     true,
     "een eerste binding voegt een vervulling toe en valt niet onder I1"
   );
@@ -49,10 +50,10 @@ test("field/classificatie (governance_event) is nooit losmaakbaar", () => {
 });
 
 test("field en de typen zonder vervullingspad krijgen geen koppel-affordance", () => {
-  assert.equal(magKoppelen({ ...beheerder, slotAan: false, type: "field" }), false);
+  assert.equal(magKoppelen({ ...bestuurslid, slotAan: false, type: "field" }), false);
   // evaluation én ai_validation hebben vandaag geen aanmaakpad (besluit 0195).
-  assert.equal(magKoppelen({ ...beheerder, slotAan: false, type: "evaluation" }), false);
-  assert.equal(magKoppelen({ ...beheerder, slotAan: false, type: "ai_validation" }), false);
+  assert.equal(magKoppelen({ ...bestuurslid, slotAan: false, type: "evaluation" }), false);
+  assert.equal(magKoppelen({ ...bestuurslid, slotAan: false, type: "ai_validation" }), false);
 });
 
 test("typen zonder vervullingspad tonen een reden i.p.v. niets (0195)", () => {
@@ -66,9 +67,11 @@ test("typen zonder vervullingspad tonen een reden i.p.v. niets (0195)", () => {
   assert.equal(redenGeenKoppelAffordance("field"), null);
 });
 
-test("alleen-lezen of geen beheerrecht: geen enkele actie", () => {
+test("bestuurslid mag bewijs koppelen, maar alleen lezen of geen procesrecht blokkeert", () => {
   assert.equal(magLosmaken({ kanBeheren: false, alleenLezen: false, slotAan: false, bronType: "risk" }), false);
-  assert.equal(magKoppelen({ kanBeheren: true, alleenLezen: true, slotAan: false, type: "risk" }), false);
+  assert.equal(magKoppelen({ ...bestuurslid, slotAan: false, type: "document" }), true);
+  assert.equal(magKoppelen({ ...bestuurslid, alleenLezen: true, slotAan: false, type: "risk" }), false);
+  assert.equal(magKoppelen({ magBewijsKoppelen: false, alleenLezen: false, slotAan: false, type: "risk" }), false);
 });
 
 console.log(`\nvereiste-affordance.sanity: ${n} checks groen (I1-slot vastgelegd).`);

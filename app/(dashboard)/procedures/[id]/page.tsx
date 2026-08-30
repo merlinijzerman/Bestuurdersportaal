@@ -232,6 +232,12 @@ export default async function ProcedureDetailPage({
     .single();
   const currentUserIsPrivileged =
     profiel?.rol === "voorzitter" || profiel?.rol === "beheerder";
+  // Bestuurders mogen bewijs opvoeren én aan bestaande vereisten koppelen. Het
+  // is proceswerk (`procedures.manage`), niet het beheren van de vereisteset.
+  const magBewijsKoppelen = rolHeeftCapability(
+    profiel?.rol,
+    "procedures.manage"
+  );
   // P3 (#168, §5.1): afronden met afwijking hangt aan de capability, niet aan de
   // kanBeheren-hardcode — bestuurder draagt de capability wél maar is geen
   // kanBeheren. De harde gate zit server-side (route + DB-functie).
@@ -508,13 +514,16 @@ export default async function ProcedureDetailPage({
     );
   }
 
-  // WO-3: rechter-weergavekeuze. ?stap wint > ?fase > default-stap. In fase-
-  // modus staat rechts alléén de fasebeschrijving; in stap-modus het stapscherm.
+  // WO-3: rechter-weergavekeuze. ?stap wint > ?fase > eerste procesfase.
+  // In fase-modus staat rechts alléén de fasebeschrijving; in stap-modus het
+  // stapscherm. Daardoor opent een proces altijd op zijn eerste fase, terwijl
+  // een expliciet gekozen stap intact blijft.
   const weergave = kiesWeergave({
     stapParam,
     faseParam,
     geldigeStapIds: stappen.map((s) => s.id),
     geldigeFaseCodes: faseGroepen.map((f) => f.fase_code),
+    defaultFaseCode: faseGroepen[0]?.fase_code ?? null,
     defaultStapId,
   });
   const geselecteerdeStap =
@@ -559,7 +568,7 @@ export default async function ProcedureDetailPage({
   ].sort((a, b) => (a.tijdstip < b.tijdstip ? 1 : -1));
 
   return (
-    <div className="p-4 sm:p-6 lg:p-7 space-y-6">
+    <div className="p-4 sm:p-6 lg:p-6 space-y-5">
       {/* Top-bar: terug-link links, AI-instap rechts (besluit 0151). */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <Link
@@ -608,7 +617,7 @@ export default async function ProcedureDetailPage({
           )}
         </div>
         <div className="flex items-start justify-between flex-wrap gap-3">
-          <h1 className="font-serif text-ink text-xl font-bold">
+          <h1 className="font-serif text-ink text-lg font-bold">
             {procedure.titel}
           </h1>
           <ProcedureMetadataEdit
@@ -627,7 +636,7 @@ export default async function ProcedureDetailPage({
       </div>
 
       {/* Meta-strook */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-white border border-line rounded-xl p-5">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-white border border-line rounded-xl p-4">
         <div>
           <div className="text-xs uppercase tracking-wide text-muted font-semibold">
             Co-eigenaars
@@ -734,10 +743,10 @@ export default async function ProcedureDetailPage({
           fase-accordeon hieronder. */}
 
       {/* Body */}
-      <div className="grid grid-cols-12 gap-5">
+      <div className="grid grid-cols-12 gap-4">
         {/* Step rail */}
         <div className="col-span-12 lg:col-span-4">
-          <div className="bg-white border border-line rounded-xl p-5 sticky top-4">
+          <div className="bg-white border border-line rounded-xl p-4 sticky top-4">
             <div className="flex items-center justify-between mb-4">
               <div className="text-xs uppercase tracking-wide text-muted font-semibold">
                 Procesfasen
@@ -792,6 +801,7 @@ export default async function ProcedureDetailPage({
               stap={geselecteerdeStap}
               alleenLezen={!geselecteerdeIsBewerkbaar}
               kanBeheren={currentUserIsPrivileged}
+              magBewijsKoppelen={magBewijsKoppelen}
               besluitOpSlot={
                 // #192/I1: staat het besluit op slot? Dan is losmaken vergrendeld
                 // (met reden). Harde gate zit server-side in de koppelroute.

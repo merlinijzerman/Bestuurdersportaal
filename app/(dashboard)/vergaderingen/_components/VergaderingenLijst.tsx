@@ -74,7 +74,7 @@ export default function VergaderingenLijst({ lijst }: { lijst: VergaderingRij[] 
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {fout && (
         <div className="rounded-lg border border-err/30 bg-err-tint px-4 py-3 text-sm text-err-ink">
           {fout}
@@ -198,7 +198,7 @@ function Kaart({
         gedempt ? "opacity-75" : ""
       }`}
     >
-      <div className="flex flex-wrap items-center justify-between gap-3 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 p-3.5">
         <Link href={`/vergaderingen/${v.id}`} className="min-w-0 flex-1">
           <div className="text-sm font-semibold text-ink">{v.titel}</div>
           <div className="mt-1 text-xs text-muted">

@@ -27,7 +27,9 @@ export interface WeergaveInput {
   geldigeStapIds: string[];
   /** Codes van bestaande fasen (guard tegen een dode/vreemde ?fase). */
   geldigeFaseCodes: string[];
-  /** Default-stap wanneer geen (geldige) param is gegeven (bv. de actieve stap). */
+  /** Default-fase wanneer geen (geldige) param is gegeven (de eerste procesfase). */
+  defaultFaseCode: string | null;
+  /** Terugval als een procedure geen toonbare fase heeft. */
   defaultStapId: string | null;
 }
 
@@ -35,8 +37,9 @@ export interface WeergaveInput {
 // fasebeschrijving; ze sluiten elkaar uit via wederzijds vervangende query's):
 //   1. een geldige ?stap wint altijd (expliciete stapkeuze);
 //   2. anders een geldige ?fase (expliciete fasekeuze);
-//   3. anders de default-stap (bv. de actieve stap) — het rustige startbeeld;
-//   4. niets bruikbaars → leeg (procedure zonder stappen).
+//   3. anders de eerste procesfase — het rustige startbeeld;
+//   4. anders de default-stap, uitsluitend als defensieve terugval;
+//   5. niets bruikbaars → leeg (procedure zonder stappen).
 export function kiesWeergave(input: WeergaveInput): Weergave {
   const stap = input.stapParam?.trim();
   if (stap && input.geldigeStapIds.includes(stap)) {
@@ -45,6 +48,12 @@ export function kiesWeergave(input: WeergaveInput): Weergave {
   const fase = input.faseParam?.trim();
   if (fase && input.geldigeFaseCodes.includes(fase)) {
     return { modus: "fase", faseCode: fase };
+  }
+  if (
+    input.defaultFaseCode &&
+    input.geldigeFaseCodes.includes(input.defaultFaseCode)
+  ) {
+    return { modus: "fase", faseCode: input.defaultFaseCode };
   }
   if (input.defaultStapId && input.geldigeStapIds.includes(input.defaultStapId)) {
     return { modus: "stap", stapId: input.defaultStapId };

@@ -306,7 +306,7 @@ export default async function VergaderingDetailPage({
       huidigeRol === "beheerder");
 
   return (
-    <div className="p-4 sm:p-6 lg:p-7 space-y-5">
+    <div className="p-4 sm:p-6 lg:p-6 space-y-4">
       <div className="flex items-center gap-2 text-xs text-muted">
         <Link href="/vergaderingen" className="hover:text-ink">
           Vergaderingen
@@ -315,10 +315,10 @@ export default async function VergaderingDetailPage({
         <span className="text-ink font-medium">{v.titel}</span>
       </div>
 
-      <div className="bg-white border border-line rounded-xl p-5">
+      <div className="bg-white border border-line rounded-xl p-4">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>
-            <h1 className="font-serif text-ink text-xl font-bold">{v.titel}</h1>
+            <h1 className="font-serif text-ink text-lg font-bold">{v.titel}</h1>
             <p className="text-sm text-muted mt-1">
               {formatDatum(v.datum)}
               {v.locatie ? ` · ${v.locatie}` : ""}

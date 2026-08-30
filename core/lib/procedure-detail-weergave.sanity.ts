@@ -24,6 +24,7 @@ function check(naam: string, fn: () => void) {
 const basis = {
   geldigeStapIds: ["s1", "s2", "s3"],
   geldigeFaseCodes: ["I", "II"],
+  defaultFaseCode: "I",
   defaultStapId: "s2",
 };
 
@@ -43,27 +44,34 @@ check("kiesWeergave: geldige ?fase als geen ?stap", () => {
   });
 });
 
-check("kiesWeergave: ongeldige ?stap valt terug op default-stap", () => {
+check("kiesWeergave: ongeldige ?stap valt terug op de eerste procesfase", () => {
   assert.deepEqual(kiesWeergave({ ...basis, stapParam: "onbekend" }), {
-    modus: "stap",
-    stapId: "s2",
+    modus: "fase",
+    faseCode: "I",
   });
 });
 
-check("kiesWeergave: ongeldige ?fase valt terug op default-stap", () => {
+check("kiesWeergave: ongeldige ?fase valt terug op de eerste procesfase", () => {
   assert.deepEqual(kiesWeergave({ ...basis, faseParam: "ZZ" }), {
-    modus: "stap",
-    stapId: "s2",
+    modus: "fase",
+    faseCode: "I",
   });
 });
 
-check("kiesWeergave: geen params → default-stap", () => {
-  assert.deepEqual(kiesWeergave(basis), { modus: "stap", stapId: "s2" });
+check("kiesWeergave: geen params → eerste procesfase", () => {
+  assert.deepEqual(kiesWeergave(basis), { modus: "fase", faseCode: "I" });
 });
 
-check("kiesWeergave: geen default en geen params → leeg", () => {
+check("kiesWeergave: zonder fase is de default-stap de terugval", () => {
   assert.deepEqual(
-    kiesWeergave({ ...basis, defaultStapId: null }),
+    kiesWeergave({ ...basis, defaultFaseCode: null }),
+    { modus: "stap", stapId: "s2" }
+  );
+});
+
+check("kiesWeergave: zonder fase of stap en geen params → leeg", () => {
+  assert.deepEqual(
+    kiesWeergave({ ...basis, defaultFaseCode: null, defaultStapId: null }),
     { modus: "leeg" }
   );
 });

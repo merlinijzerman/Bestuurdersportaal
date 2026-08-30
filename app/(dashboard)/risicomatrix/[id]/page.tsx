@@ -118,7 +118,7 @@ export default async function RisicoDetailPage({
   const isGesloten = risico.status === "gesloten";
 
   return (
-    <div className="p-4 sm:p-6 lg:p-7 space-y-6">
+    <div className="p-4 sm:p-6 lg:p-6 space-y-5">
       <Link
         href="/risicomatrix"
         className="text-sm text-muted hover:text-ink inline-flex items-center gap-1"
@@ -127,7 +127,7 @@ export default async function RisicoDetailPage({
       </Link>
 
       {/* Header */}
-      <div className="flex items-start justify-between gap-6 flex-wrap">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap mb-2">
             <span className="text-[11px] font-medium uppercase tracking-wide text-accent-ink bg-accent-tint px-2 py-0.5 rounded">
@@ -151,7 +151,7 @@ export default async function RisicoDetailPage({
               {isGesloten ? "Gesloten" : "Actief"}
             </span>
           </div>
-          <h1 className="font-serif text-ink text-2xl font-semibold">{risico.titel}</h1>
+          <h1 className="font-serif text-ink text-xl font-semibold">{risico.titel}</h1>
           {risico.toelichting && (
             <p className="text-sm text-muted mt-1.5 max-w-3xl whitespace-pre-line">
               {risico.toelichting}
@@ -181,7 +181,7 @@ export default async function RisicoDetailPage({
 
       {/* K/I/niveau strook */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white border border-line rounded-xl p-5">
+        <div className="bg-white border border-line rounded-xl p-4">
           <div className="text-xs uppercase tracking-wide text-muted font-semibold">
             Kans
           </div>
@@ -205,7 +205,7 @@ export default async function RisicoDetailPage({
           </div>
         </div>
 
-        <div className="bg-white border border-line rounded-xl p-5">
+        <div className="bg-white border border-line rounded-xl p-4">
           <div className="text-xs uppercase tracking-wide text-muted font-semibold">
             Impact
           </div>
@@ -230,7 +230,7 @@ export default async function RisicoDetailPage({
         </div>
 
         <div
-          className={`border-2 rounded-xl p-5 ${niveauKleur.cellBg} ${niveauKleur.cellBorder}`}
+          className={`border-2 rounded-xl p-4 ${niveauKleur.cellBg} ${niveauKleur.cellBorder}`}
         >
           <div
             className={`text-xs uppercase tracking-wide font-semibold ${niveauKleur.pillText}`}
@@ -256,7 +256,7 @@ export default async function RisicoDetailPage({
       </div>
 
       {isGesloten && (
-        <div className="bg-app-bg border border-line rounded-xl p-5">
+        <div className="bg-app-bg border border-line rounded-xl p-4">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div>
               <div className="text-xs uppercase tracking-wide text-muted font-semibold">
@@ -278,7 +278,7 @@ export default async function RisicoDetailPage({
       )}
 
       {/* Body */}
-      <div className="grid grid-cols-12 gap-5">
+      <div className="grid grid-cols-12 gap-4">
         <div className="col-span-12 lg:col-span-8 space-y-5">
           {/* Maatregelen */}
           <MaatregelenBlok
@@ -288,7 +288,7 @@ export default async function RisicoDetailPage({
           />
 
           {/* Logboek */}
-          <div className="bg-white border border-line rounded-xl p-5">
+          <div className="bg-white border border-line rounded-xl p-4">
             <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
               <h3 className="text-sm font-semibold text-ink">Logboek</h3>
               <span className="text-xs text-muted">
@@ -329,7 +329,7 @@ export default async function RisicoDetailPage({
         </div>
 
         <aside className="col-span-12 lg:col-span-4">
-          <div className="bg-white border border-line rounded-xl p-5">
+          <div className="bg-white border border-line rounded-xl p-4">
             <h3 className="text-xs uppercase tracking-wide text-muted font-semibold mb-3">
               Eigenschappen
             </h3>
