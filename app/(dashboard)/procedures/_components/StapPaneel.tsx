@@ -107,6 +107,9 @@ interface Props {
       afgeronde stap heropenen? Alleen voorzitter/beheerder. Dit is een
       UI-signaal — de harde gate zit server-side in de routes. */
   kanBeheren?: boolean;
+  /** Mag bewijs opvoeren en aan een bestaande vereiste koppelen. Bestuurders
+      dragen dit via `procedures.manage`; het is geen beheerdersrecht. */
+  magBewijsKoppelen?: boolean;
   /** P3 (#168, §5.1): mag deze gebruiker een afwijking vastleggen bij het
       afronden (capability procedures.afwijking.vastleggen — voorzitter/bestuurder)?
       UI-signaal; de harde gate zit server-side in de route én in de DB-functie.
@@ -392,6 +395,7 @@ function BewijsstukRij({
   r,
   alleenLezen,
   kanBeheren,
+  magBewijsKoppelen,
   slotAan,
   onKoppelen,
   onVerwijderen,
@@ -402,6 +406,8 @@ function BewijsstukRij({
   r: EvidenceItem;
   alleenLezen: boolean;
   kanBeheren: boolean;
+  /** Mag bewijs opvoeren en aan een bestaande vereiste koppelen. */
+  magBewijsKoppelen: boolean;
   slotAan: boolean;
   onKoppelen: (r: EvidenceItem) => void;
   onVerwijderen: (r: EvidenceItem, reden: string) => void;
@@ -467,7 +473,7 @@ function BewijsstukRij({
               : { cls: "text-muted bg-app-line", tekst: "Open" };
           const koppelbaar = magKoppelen({
             type: r.requirement_type,
-            kanBeheren,
+            magBewijsKoppelen,
             alleenLezen,
             slotAan,
           });
@@ -493,7 +499,7 @@ function BewijsstukRij({
                   {knopTekst}
                 </button>
               ) : (
-                redenGeenPad && kanBeheren && !alleenLezen && (
+                redenGeenPad && magBewijsKoppelen && !alleenLezen && (
                   <span
                     className="text-[11px] text-muted italic text-right max-w-[150px] leading-tight"
                     title={`${redenGeenPad} Zie besluit 0195 (requirement-type zonder vervullingspad).`}
@@ -669,6 +675,7 @@ export default function StapPaneel({
   alleenLezen = false,
   voltooidDoorNaam = null,
   kanBeheren = false,
+  magBewijsKoppelen = false,
   magAfwijkingVastleggen = false,
   currentUserId = "",
   fase = null,
@@ -2070,6 +2077,7 @@ export default function StapPaneel({
                 r={r}
                 alleenLezen={alleenLezen}
                 kanBeheren={kanBeheren}
+                magBewijsKoppelen={magBewijsKoppelen}
                 slotAan={slotAan}
                 onKoppelen={koppelenVanuitVereiste}
                 onVerwijderen={bewijsstukVerwijderen}

@@ -13,7 +13,6 @@ import { heeftVervullingspad } from "./requirement-bron";
 
 export interface AffordanceContext {
   slotAan: boolean;
-  kanBeheren: boolean;
   alleenLezen: boolean;
 }
 
@@ -31,7 +30,7 @@ export function redenGeenKoppelAffordance(type: RequirementType): string | null 
 
 /** Mag deze gebruiker een gebonden feit LOSMAKEN van de vereiste? Onder slot: nee. */
 export function magLosmaken(
-  ctx: AffordanceContext & { bronType: string | null }
+  ctx: AffordanceContext & { bronType: string | null; kanBeheren: boolean }
 ): boolean {
   if (!ctx.kanBeheren || ctx.alleenLezen) return false;
   // field/classificatie vult via een governance-event: geen koppelbare bron.
@@ -47,9 +46,13 @@ export function magLosmaken(
  *  koppel-affordance: de UI toont die uitgeschakeld mét reden
  *  (`redenGeenKoppelAffordance`) i.p.v. een altijd-lege kiezer. */
 export function magKoppelen(
-  ctx: AffordanceContext & { type: RequirementType }
+  ctx: AffordanceContext & { type: RequirementType; magBewijsKoppelen: boolean }
 ): boolean {
-  if (!ctx.kanBeheren || ctx.alleenLezen) return false;
+  // Het koppelen van bewijs is proceswerk, geen beheer van de vereiste zelf.
+  // Een bestuurslid met `procedures.manage` mag dus een document opvoeren en
+  // aan de bestaande eis binden; het wijzigen of uitsluiten van die eis blijft
+  // afzonderlijk onder `kanBeheren` vallen.
+  if (!ctx.magBewijsKoppelen || ctx.alleenLezen) return false;
   if (ctx.type === "field") return false;
   if (!heeftVervullingspad(ctx.type)) return false;
   return true;
