@@ -37,6 +37,7 @@ import {
 } from "@/core/lib/procedure-fase-status";
 import { haalFondsleden, weergaveNaam, initialen } from "@/core/lib/fondsleden";
 import { kiesWeergave } from "@/core/lib/procedure-detail-weergave";
+import { isInhoudelijkBewerkbaar } from "@/core/lib/procedure-activatie";
 
 // Forceer dynamische rendering: deze page leest live data uit Supabase
 // (decision-state, readiness, evidence) en mag absoluut niet door de
@@ -519,9 +520,7 @@ export default async function ProcedureDetailPage({
       ? faseGroepen.find((f) => f.fase_code === weergave.faseCode) ?? null
       : null;
   const geselecteerdeIsBewerkbaar =
-    geselecteerdeStap != null &&
-    (geselecteerdeStap.status === "actief" ||
-      geselecteerdeStap.status === "heropend");
+    geselecteerdeStap != null && isInhoudelijkBewerkbaar(geselecteerdeStap.status);
   const geselecteerdeVoltooidDoorNaam = geselecteerdeStap?.voltooid_door
     ? fondsleden.get(geselecteerdeStap.voltooid_door)?.naam ?? null
     : null;
