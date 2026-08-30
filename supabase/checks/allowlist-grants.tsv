@@ -261,6 +261,9 @@ FUNC	public	fn_snapshot_immutable()	function	service_role	EXECUTE
 FUNC	public	fn_stap_afronden_met_afwijking(p_stap_id uuid, p_procedure_id uuid, p_motivering text, p_bevestigd boolean)	function	anon	-
 FUNC	public	fn_stap_afronden_met_afwijking(p_stap_id uuid, p_procedure_id uuid, p_motivering text, p_bevestigd boolean)	function	authenticated	EXECUTE
 FUNC	public	fn_stap_afronden_met_afwijking(p_stap_id uuid, p_procedure_id uuid, p_motivering text, p_bevestigd boolean)	function	service_role	-
+FUNC	public	fn_validate_stap_notitie()	function	anon	-
+FUNC	public	fn_validate_stap_notitie()	function	authenticated	-
+FUNC	public	fn_validate_stap_notitie()	function	service_role	EXECUTE
 FUNC	public	fn_stap_open_per_zwaarte(p_stap_id uuid, p_decision_id uuid)	function	anon	-
 FUNC	public	fn_stap_open_per_zwaarte(p_stap_id uuid, p_decision_id uuid)	function	authenticated	-
 FUNC	public	fn_stap_open_per_zwaarte(p_stap_id uuid, p_decision_id uuid)	function	service_role	-
@@ -801,6 +804,9 @@ REL	public	procedure_fase_toelichting	table	service_role	SELECT,INSERT,UPDATE,DE
 REL	public	procedure_log	table	anon	SELECT
 REL	public	procedure_log	table	authenticated	SELECT,INSERT,UPDATE,DELETE
 REL	public	procedure_log	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
+REL	public	procedure_stap_notitie	table	anon	-
+REL	public	procedure_stap_notitie	table	authenticated	SELECT,INSERT,UPDATE,DELETE
+REL	public	procedure_stap_notitie	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
 REL	public	procedure_definitie_publicatie	table	anon	-
 REL	public	procedure_definitie_publicatie	table	authenticated	SELECT
 REL	public	procedure_definitie_publicatie	table	service_role	SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN
