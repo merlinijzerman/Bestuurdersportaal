@@ -34,5 +34,6 @@ test("actie-eigenaar: database borgt profiel-FK, fondsgrens en geen nieuwe vrije
   assert.match(migratie, /join public\.profielen p[\s\S]*?p\.fonds_id = d\.fonds_id/);
   assert.match(migratie, /actie-eigenaar moet een profiel zijn/);
   assert.match(migratie, /actie-eigenaarnaam volgt uitsluitend uit het profiel/);
+  assert.match(migratie, /revoke all on function public\.fn_guard_decision_action_eigenaar\(\)[\s\S]*?from public, authenticated, service_role/);
   assert.match(migratie, /create trigger trg_guard_decision_action_eigenaar/);
 });
