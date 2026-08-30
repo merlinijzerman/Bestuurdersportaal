@@ -346,10 +346,10 @@ export default function BibliotheekPage() {
   const kolomAantal = actieveTab === "generiek" ? 8 : 7;
 
   return (
-    <div className="p-4 sm:p-6 lg:p-7">
-      <div className="flex items-start justify-between flex-wrap gap-3 mb-6">
+    <div className="p-4 sm:p-6 lg:p-6">
+      <div className="flex items-start justify-between flex-wrap gap-3 mb-5">
         <div>
-          <h1 className="font-serif text-xl font-black text-ink">Documentbibliotheek</h1>
+          <h1 className="font-serif text-lg font-bold text-ink">Documentbibliotheek</h1>
           <p className="text-sm text-muted mt-1">
             {weergave === "zoeken"
               ? `Uitgebreid zoeken in de inhoud van ${
@@ -386,7 +386,7 @@ export default function BibliotheekPage() {
           welke lijst je ziet, in "zoeken" waarin je zoekt. Daarom staan ze nu buiten
           de weergave-splitsing. Eén plek waar je kiest met welke bibliotheek je
           bezig bent, in plaats van een tab hier en een bronsoort-dropdown daar. */}
-      <div className="flex gap-1 bg-app-bg p-1 rounded-xl mb-5 w-fit">
+      <div className="flex gap-1 bg-app-bg p-1 rounded-xl mb-4 w-fit">
         {(["fonds", "generiek"] as const).map((tab) => (
           <button
             key={tab}
@@ -395,7 +395,7 @@ export default function BibliotheekPage() {
               // Openstaande uploadmodal sluiten bij wissel naar generiek.
               if (tab === "generiek") setUploadOpen(false);
             }}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+            className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
               actieveTab === tab
                 ? "bg-white text-ink shadow-sm"
                 : "text-muted hover:text-ink"
@@ -438,7 +438,7 @@ export default function BibliotheekPage() {
 
       {/* Zoekbalk + toggle */}
       <div className="flex items-center gap-3 mb-4 flex-wrap">
-        <div className="flex items-center gap-2 bg-white border border-line rounded-xl px-4 py-2.5 flex-1 min-w-[260px]">
+        <div className="flex items-center gap-2 bg-white border border-line rounded-xl px-3 py-2 flex-1 min-w-[260px]">
           <span className="text-muted">🔍</span>
           <input
             type="text"
@@ -448,7 +448,7 @@ export default function BibliotheekPage() {
             className="flex-1 outline-none text-sm text-ink bg-transparent"
           />
         </div>
-        <label className="flex items-center gap-2 bg-white border border-line rounded-xl px-4 py-2.5 text-sm text-ink cursor-pointer select-none">
+        <label className="flex items-center gap-2 bg-white border border-line rounded-xl px-3 py-2 text-sm text-ink cursor-pointer select-none">
           <input
             type="checkbox"
             checked={toonInactief}
@@ -464,7 +464,7 @@ export default function BibliotheekPage() {
           type="button"
           onClick={() => setWeergave("zoeken")}
           title="Zoek op de inhoud van documenten (niet alleen de titel)"
-          className="flex items-center gap-2 bg-white border border-line rounded-xl px-4 py-2.5 text-sm font-semibold text-ink hover:border-accent transition-colors"
+          className="flex items-center gap-2 bg-white border border-line rounded-xl px-3 py-2 text-sm font-semibold text-ink hover:border-accent transition-colors"
         >
           🔎 Uitgebreid zoeken
         </button>
@@ -491,7 +491,7 @@ export default function BibliotheekPage() {
               titelkolom op de langste titel, duwt hij de rechterkolommen buiten
               beeld en werkt `truncate` niet. Met vaste layout houden alle rijen
               dezelfde kolomgrenzen en kapt de titel netjes af. */}
-          <table className="w-full min-w-[860px] table-fixed text-sm">
+          <table className="w-full min-w-[860px] table-fixed text-[13px]">
             <thead>
               <tr className="bg-app-zebra text-left align-middle text-[10.5px] font-bold uppercase tracking-wider text-muted">
                 <th className="w-[62px] whitespace-nowrap border-b-[1.5px] border-app-line-strong px-3 py-2.5">
@@ -920,8 +920,8 @@ export default function BibliotheekPage() {
       {/* Deactiveer-bevestiging */}
       {deactiveerDoc && (
         <div className="fixed inset-0 bg-accent/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-7 w-full max-w-md shadow-xl">
-            <h2 className="text-lg font-bold text-ink mb-2">
+          <div className="bg-white rounded-2xl p-5 w-full max-w-md shadow-xl">
+            <h2 className="text-base font-bold text-ink mb-2">
               Document deactiveren
             </h2>
             <p className="text-sm text-muted mb-4">

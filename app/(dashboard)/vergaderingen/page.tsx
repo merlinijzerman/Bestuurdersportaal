@@ -38,10 +38,10 @@ export default async function VergaderingenPage() {
   const lijst = (vergaderingen || []) as VergaderingRij[];
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-7">
+    <div className="space-y-5 p-4 sm:p-6 lg:p-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-serif text-xl font-bold text-ink">Vergaderingen</h1>
+          <h1 className="font-serif text-lg font-bold text-ink">Vergaderingen</h1>
           <p className="mt-0.5 text-sm text-muted">
             Plan, agendeer en bereid bestuursvergaderingen voor.
           </p>

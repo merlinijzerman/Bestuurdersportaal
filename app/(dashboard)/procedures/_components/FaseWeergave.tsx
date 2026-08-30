@@ -77,7 +77,7 @@ export default function FaseWeergave({
   }
 
   return (
-    <div className="bg-white border border-line rounded-xl p-6">
+    <div className="bg-white border border-line rounded-xl p-4 text-[13px]">
       <div className="flex items-center gap-2">
         <span className="text-[11px] uppercase tracking-wide text-muted font-semibold">
           Fase {faseCode}
@@ -88,7 +88,7 @@ export default function FaseWeergave({
           {FASE_STATUS_LABEL[status]}
         </span>
       </div>
-      <h2 className="text-lg font-semibold text-ink mt-1">{titel}</h2>
+      <h2 className="text-base font-semibold text-ink mt-1">{titel}</h2>
 
       <div className="mt-4">
         <div className="flex items-center gap-2 mb-1 flex-wrap">

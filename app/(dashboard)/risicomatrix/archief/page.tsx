@@ -50,7 +50,7 @@ export default async function ArchiefPage() {
   const lijst = (risicos || []) as GeslotenRisico[];
 
   return (
-    <div className="p-4 sm:p-6 lg:p-7 space-y-5">
+    <div className="p-4 sm:p-6 lg:p-6 space-y-4">
       <Link
         href="/risicomatrix"
         className="text-sm text-muted hover:text-ink inline-flex items-center gap-1"
@@ -60,7 +60,7 @@ export default async function ArchiefPage() {
 
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
-          <h1 className="font-serif text-ink text-xl font-bold">
+          <h1 className="font-serif text-ink text-lg font-bold">
             Archief gesloten risico&apos;s
           </h1>
           <p className="text-muted text-sm mt-0.5">

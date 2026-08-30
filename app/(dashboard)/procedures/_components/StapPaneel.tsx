@@ -108,6 +108,9 @@ interface Props {
       afgeronde stap heropenen? Alleen voorzitter/beheerder. Dit is een
       UI-signaal — de harde gate zit server-side in de routes. */
   kanBeheren?: boolean;
+  /** Mag bewijs opvoeren en aan een bestaande vereiste koppelen. Bestuurders
+      dragen dit via `procedures.manage`; het is geen beheerdersrecht. */
+  magBewijsKoppelen?: boolean;
   /** P3 (#168, §5.1): mag deze gebruiker een afwijking vastleggen bij het
       afronden (capability procedures.afwijking.vastleggen — voorzitter/bestuurder)?
       UI-signaal; de harde gate zit server-side in de route én in de DB-functie.
@@ -393,6 +396,7 @@ function BewijsstukRij({
   r,
   alleenLezen,
   kanBeheren,
+  magBewijsKoppelen,
   slotAan,
   onKoppelen,
   onVerwijderen,
@@ -403,6 +407,8 @@ function BewijsstukRij({
   r: EvidenceItem;
   alleenLezen: boolean;
   kanBeheren: boolean;
+  /** Mag bewijs opvoeren en aan een bestaande vereiste koppelen. */
+  magBewijsKoppelen: boolean;
   slotAan: boolean;
   onKoppelen: (r: EvidenceItem) => void;
   onVerwijderen: (r: EvidenceItem, reden: string) => void;
@@ -414,41 +420,40 @@ function BewijsstukRij({
   const [verwijderOpen, setVerwijderOpen] = useState(false);
   const [reden, setReden] = useState("");
   return (
-    <div className="border border-line rounded-lg">
-      <div className="flex items-center gap-3 p-3">
-        <span className="text-[10px] uppercase tracking-wide text-muted font-semibold w-24 shrink-0">
-          {REQUIREMENT_LABELS[r.requirement_type] ?? r.requirement_type}
-        </span>
-        <div className="flex-1 text-sm text-ink min-w-0">
-          {r.label}
-          {r.blokkerend && !r.vervuld && (
-            <span className="text-[10px] text-err-ink bg-err-tint border border-err/30 rounded px-1.5 py-0.5 ml-1 font-medium">
-              blokkerend
+    <div className="border border-line rounded-xl bg-white">
+      <div className="flex items-start gap-3 p-3.5 sm:p-4">
+        {/* Het type hoort bij de titel, niet als een brede, zelfstandige kolom.
+            Zo blijft "Document" beschikbaar voor een latere bestandsaanduiding
+            (zoals PDF of Word), maar neemt het niet de visuele leiding over. */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[10px] uppercase tracking-wide text-muted font-semibold">
+              {REQUIREMENT_LABELS[r.requirement_type] ?? r.requirement_type}
             </span>
-          )}
-        </div>
-        {/* role=button i.p.v. <button> zodat inzien óók in leesmodus werkt. */}
-        <span
-          role="button"
-          tabIndex={0}
-          onClick={() => setOpen((o) => !o)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              setOpen((o) => !o);
-            }
-          }}
-          aria-expanded={open}
-          className="text-[11px] text-muted hover:text-accent shrink-0 inline-flex items-center gap-1 cursor-pointer"
-        >
-          Toelichting
-          <span
-            aria-hidden
-            className={`text-xs transition-transform ${open ? "" : "-rotate-90"}`}
+            {r.blokkerend && !r.vervuld && (
+              <span className="text-[10px] uppercase tracking-wide text-err-ink bg-err-tint border border-err/30 rounded px-1.5 py-0.5 font-semibold">
+                blokkerend
+              </span>
+            )}
+          </div>
+          <div className="mt-1 text-[15px] leading-snug font-medium text-ink">
+            {r.label}
+          </div>
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            aria-expanded={open}
+            className="mt-1.5 text-[12px] text-muted hover:text-accent inline-flex items-center gap-1"
           >
-            ▾
-          </span>
-        </span>
+            Toelichting
+            <span
+              aria-hidden
+              className={`text-xs transition-transform ${open ? "" : "-rotate-90"}`}
+            >
+              ▾
+            </span>
+          </button>
+        </div>
         {(() => {
           const aantal = r.gebonden_feiten.length;
           const nogNodig = Math.max(0, r.min_aantal - aantal);
@@ -468,7 +473,7 @@ function BewijsstukRij({
               : { cls: "text-muted bg-app-line", tekst: "Open" };
           const koppelbaar = magKoppelen({
             type: r.requirement_type,
-            kanBeheren,
+            magBewijsKoppelen,
             alleenLezen,
             slotAan,
           });
@@ -478,8 +483,15 @@ function BewijsstukRij({
           const redenGeenPad = redenGeenKoppelAffordance(r.requirement_type);
           // Knop-tekst: nog niet genoeg → type-actie; genoeg/over → "Nog een toevoegen".
           const knopTekst = nogNodig > 0 ? ACTIE_LABEL[r.requirement_type] ?? "Koppelen" : "Nog een toevoegen";
+          // Bij documenten is koppelen duidelijker en rustiger dan de oude,
+          // knop-achtige term "Opvoeren". Andere feittypen behouden hun eigen
+          // werkwoord, omdat ze geen document uit de bibliotheek kiezen.
+          const compacteActie =
+            r.requirement_type === "document" && nogNodig > 0
+              ? "Koppelen"
+              : knopTekst;
           return (
-            <div className="flex flex-col items-end gap-1.5 shrink-0 min-w-[150px]">
+            <div className="flex flex-col items-end gap-1.5 shrink-0">
               <span className={`text-[11px] font-semibold rounded-full px-2.5 py-0.5 whitespace-nowrap ${status.cls}`}>
                 {status.tekst}
               </span>
@@ -489,14 +501,15 @@ function BewijsstukRij({
                 <button
                   type="button"
                   onClick={() => onKoppelen(r)}
-                  className="border border-app-line-control rounded-lg px-3 py-1.5 text-[12.5px] font-medium bg-white text-ink hover:bg-accent-tint hover:border-accent whitespace-nowrap"
+                  className="text-[12px] font-semibold text-accent hover:text-accent/80 hover:underline whitespace-nowrap inline-flex items-center gap-1"
                 >
-                  {knopTekst}
+                  {compacteActie}
+                  <span aria-hidden>→</span>
                 </button>
               ) : (
-                redenGeenPad && kanBeheren && !alleenLezen && (
+                redenGeenPad && magBewijsKoppelen && !alleenLezen && (
                   <span
-                    className="text-[11px] text-muted italic text-right max-w-[150px] leading-tight"
+                    className="text-[11px] text-muted italic text-right max-w-[130px] leading-tight"
                     title={`${redenGeenPad} Zie besluit 0195 (requirement-type zonder vervullingspad).`}
                   >
                     {redenGeenPad}
@@ -504,7 +517,7 @@ function BewijsstukRij({
                 )
               )}
               {nogNodig > 0 && r.min_aantal > 1 && (
-                <span className="text-[11px] text-muted text-right max-w-[150px] leading-tight">
+                <span className="text-[11px] text-muted text-right max-w-[130px] leading-tight">
                   Nog {nogNodig} nodig
                 </span>
               )}
@@ -513,7 +526,7 @@ function BewijsstukRij({
         })()}
       </div>
       {open && (
-        <div className="px-3 pb-3">
+        <div className="px-3.5 pb-3.5 sm:px-4 sm:pb-4">
           <div className="bg-app-bg border border-line rounded-md p-3">
             <div className="text-[11px] uppercase tracking-wide text-muted font-semibold mb-1">
               Toelichting
@@ -670,6 +683,7 @@ export default function StapPaneel({
   alleenLezen = false,
   voltooidDoorNaam = null,
   kanBeheren = false,
+  magBewijsKoppelen = false,
   magAfwijkingVastleggen = false,
   currentUserId = "",
   fase = null,
@@ -1599,7 +1613,7 @@ export default function StapPaneel({
   ];
 
   return (
-    <div className="bg-white border border-line rounded-xl p-6">
+    <div className="bg-white border border-line rounded-xl p-4 text-[13px]">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="flex-1 min-w-0">
           <div
@@ -2117,6 +2131,7 @@ export default function StapPaneel({
                 r={r}
                 alleenLezen={alleenLezen}
                 kanBeheren={kanBeheren}
+                magBewijsKoppelen={magBewijsKoppelen}
                 slotAan={slotAan}
                 onKoppelen={koppelenVanuitVereiste}
                 onVerwijderen={bewijsstukVerwijderen}
