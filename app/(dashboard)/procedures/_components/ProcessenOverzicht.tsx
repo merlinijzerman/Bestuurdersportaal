@@ -48,6 +48,8 @@ export interface ProcesKaartVM {
   gestartLabel: string;
   heeftAandacht: boolean;
   heeftRood: boolean;
+  /** P3: een afgeronde stap met afwijking vraagt zichtbare opvolging. */
+  heeftAfwijkingOpvolging: boolean;
   aandachtspunten: Aandachtspunt[];
 }
 
@@ -70,12 +72,17 @@ const STATUS_OPTIES: { id: StatusId; label: string; test: (p: ProcesKaartVM) => 
 
 // Vaste prioriteitsvolgorde. Signalen filteren bovenop de statuskeuze; ze zijn
 // deelverzamelingen (kritiek ⊂ aandacht), daarom losse vinkjes en geen radio.
-// Een derde signaal ("Met afwijking", #168) mag hier bijkomen ZONDER de volgorde
-// te herschrijven — zonder vaste volgorde valt willekeurig welk signaal af zodra
-// er een vierde bijkomt.
+// De P3-afwijking is een eigen signaal: afronden met afwijking is niet hetzelfde
+// als ontbrekende bewijslast, en moet ook in het overzicht zichtbaar blijven.
 const SIGNAAL_OPTIES: Optie[] = [
   { id: "aandacht", label: "Met aandacht", streep: "bg-warn", test: (p) => p.heeftAandacht },
   { id: "kritiek", label: "Kritieke vereisten", streep: "bg-err", test: (p) => p.heeftRood },
+  {
+    id: "afwijking",
+    label: "Afwijking opvolgen",
+    streep: "bg-warn",
+    test: (p) => p.heeftAfwijkingOpvolging,
+  },
 ];
 
 const SORTEER_OPTIES: { id: SorteerId; label: string }[] = [
