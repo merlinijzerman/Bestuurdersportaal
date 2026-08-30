@@ -49,12 +49,13 @@ export default function AantekeningenBlok({
 
   useEffect(() => {
     let actief = true;
-    // De state volgt hier uitsluitend het afgeronde externe fetch-resultaat; de
-    // cleanup voorkomt een update wanneer intussen een andere stap is geopend.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    laad()
-      .catch((error: unknown) => actief && setFout(error instanceof Error ? error.message : "Aantekeningen laden mislukt"))
-      .finally(() => actief && setLaden(false));
+    // Start de externe fetch na de huidige effect-cyclus; de cleanup voorkomt
+    // dat het afgeronde antwoord nog een inmiddels gesloten stap bijwerkt.
+    queueMicrotask(() => {
+      void laad()
+        .catch((error: unknown) => actief && setFout(error instanceof Error ? error.message : "Aantekeningen laden mislukt"))
+        .finally(() => actief && setLaden(false));
+    });
     return () => { actief = false; };
   // basis verandert uitsluitend als er een andere stap in het paneel staat.
   // eslint-disable-next-line react-hooks/exhaustive-deps
