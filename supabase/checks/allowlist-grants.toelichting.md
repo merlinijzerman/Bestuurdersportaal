@@ -191,6 +191,9 @@ MAINTAIN. Afwijkingen die bewust in de allowlist staan:
    en de constraint-triggerfunctie `fn_guard_besluitstatus_feit`. De composite-FK's
    (I5, tranche 8) en de nieuwe CHECK-waarden (`beeindigd`/`niet_begonnen`/`vervallen`)
    zijn declaratief, geen grants.
+11. **Actie-eigenaarprofiel (2026-08-30).** `fn_guard_decision_action_eigenaar()` is
+   uitsluitend een `BEFORE`-trigger: geen client- of service-grant. Hij borgt dat een
+   actie-eigenaar een profiel uit hetzelfde fonds is en laat geen nieuwe vrije-tekstnaam toe.
 
 ## Objecten die NIET in scope zijn
 

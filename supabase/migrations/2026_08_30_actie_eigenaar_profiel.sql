@@ -81,7 +81,6 @@ end;
 $$;
 
 revoke all on function public.fn_guard_decision_action_eigenaar() from public;
-grant execute on function public.fn_guard_decision_action_eigenaar() to authenticated, service_role;
 
 drop trigger if exists trg_guard_decision_action_eigenaar on public.decision_actions;
 create trigger trg_guard_decision_action_eigenaar
