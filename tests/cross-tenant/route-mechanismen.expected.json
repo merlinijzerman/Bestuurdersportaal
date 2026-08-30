@@ -34,13 +34,13 @@
     "platformsurface",
     "magCatalogusBeheren (domeinhelper — de ZESDE vorm; catalogus/organen-familie, W13)"
   ],
-  "_ontsnappingswaarden_183a": "#183a voegde 4 bewaakte escape-waarden toe (rateLimit:\"nog-niet-beoordeeld\"=96, hostGuard:\"geen\"=100, rateLimit:\"route-eigen\"=16, audit:\"geen\"=38); hostGuard:\"route-eigen\"=4 bestond al. Bij de rebase van EPIC P op main-met-a1 kwamen twee reeds bestaande epic-only mutatieroutes onder het inmiddels verplichte RouteSpec-contract: afwijkend afronden en vereistebinding wijzigen. Voor gedragsbehoud zijn zij expliciet als hostGuard:\"geen\" en rateLimit:\"nog-niet-beoordeeld\" geregistreerd (96→98 en 100→102). #192 voegt één nieuwe, read-only kandidatenroute toe: GET heeft terecht geen body, geen hostspecifieke extra guard en geen rate-limitbesluit; daarom stijgen uitsluitend schema:\"geen-body\", hostGuard:\"geen\" en rateLimit:\"nog-niet-beoordeeld\" eenmaal (48→49, 102→103, 98→99). P4 voegt de twee expliciet bestuurlijke POST-routes beëindigen en heropenen toe; beide zijn fondsgebonden, hebben een body-schema en zijn vanwege de nog open W10-pas als hostGuard:\"geen\" en rateLimit:\"nog-niet-beoordeeld\" geregistreerd (103→105, 99→101). Dit zijn nieuwe, gereviewde routes — geen vrijstelling — en blijven dalend werk voor de W10-pas. De oorspronkelijke sprong-vanaf-0 is als proven-red vastgelegd in w183-poort-bewijs.md; verdere stijging vereist opnieuw motivering.",
+  "_ontsnappingswaarden_183a": "#183a voegde 4 bewaakte escape-waarden toe (rateLimit:\"nog-niet-beoordeeld\"=96, hostGuard:\"geen\"=100, rateLimit:\"route-eigen\"=16, audit:\"geen\"=38); hostGuard:\"route-eigen\"=4 bestond al. Bij de rebase van EPIC P op main-met-a1 kwamen twee reeds bestaande epic-only mutatieroutes onder het inmiddels verplichte RouteSpec-contract: afwijkend afronden en vereistebinding wijzigen. Voor gedragsbehoud zijn zij expliciet als hostGuard:\"geen\" en rateLimit:\"nog-niet-beoordeeld\" geregistreerd (96→98 en 100→102). #192 voegt één nieuwe, read-only kandidatenroute toe: GET heeft terecht geen body, geen hostspecifieke extra guard en geen rate-limitbesluit; daarom stijgen uitsluitend schema:\"geen-body\", hostGuard:\"geen\" en rateLimit:\"nog-niet-beoordeeld\" eenmaal (48→49, 102→103, 98→99). P4 voegt de twee expliciet bestuurlijke POST-routes beëindigen en heropenen toe; beide zijn fondsgebonden, hebben een body-schema en zijn vanwege de nog open W10-pas als hostGuard:\"geen\" en rateLimit:\"nog-niet-beoordeeld\" geregistreerd (103→105, 99→101). P5c voegt vier fondsgebonden aantekeningenroutes toe: GET en DELETE hebben terecht geen body; alle vier krijgen expliciet hostGuard:\"geen\" en rateLimit:\"nog-niet-beoordeeld\" totdat de W10-pas ze kan aanscherpen. Dit zijn nieuwe, gereviewde routes — geen vrijstelling — en blijven dalend werk voor de W10-pas. De oorspronkelijke sprong-vanaf-0 is als proven-red vastgelegd in w183-poort-bewijs.md; verdere stijging vereist opnieuw motivering.",
   "ontsnappingswaarden": {
-    "schema: \"geen-body\"": 49,
+    "schema: \"geen-body\"": 51,
     "capability: \"iedere-ingelogde\"": 1,
     "capability: \"publiek\"": 0,
-    "rateLimit: \"nog-niet-beoordeeld\"": 101,
-    "hostGuard: \"geen\"": 105,
+    "rateLimit: \"nog-niet-beoordeeld\"": 105,
+    "hostGuard: \"geen\"": 109,
     "rateLimit: \"route-eigen\"": 16,
     "audit: \"geen\"": 38,
     "hostGuard: \"route-eigen\"": 4

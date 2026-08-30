@@ -47,6 +47,22 @@ forward als rollback→forward met een actieve I7-trigger. Deze uitzondering
 schept geen precedent: iedere toekomstige inhoudelijke wijziging van een
 gepubliceerde templateversie volgt I7 en krijgt een nieuwe versie.
 
+### Uitvoeringsmeting Preview
+
+Vóór de handmatige Preview-uitrol is op **2026-08-30 20:20 CEST** opnieuw
+gemeten in `bestuurdersportaal-preview`:
+
+```sql
+select count(*) as gepinde_dossiers
+  from public.procedures p
+ where p.template_code = 'beleidswijziging_beleggingsbeleid'
+   and p.template_versie = '1.0.0';
+```
+
+Uitkomst: **0**. Daarmee valt deze Preview-uitrol binnen de expliciet gemeten
+0195-uitzondering. De migratie zelf herhaalt deze fail-closed toets vóór zij de
+legacy-requirement wijzigt.
+
 ## Overwogen alternatieven
 
 - **`evaluation` als gewone kiezer bouwen (uitkomst a/c).** Verworpen: er is geen aanmaakpad, dus de lijst is per constructie altijd leeg. Dat is precies de doodlopende weg die de lege-staat-eis van #192 wil vermijden. De reeds bestaande #192-branch koos dit (KANDIDAAT_BRON met `evaluation`/`ai_validation` als kiesbaar) — dat wordt bij de reconciliatie gecorrigeerd naar besluit 3.

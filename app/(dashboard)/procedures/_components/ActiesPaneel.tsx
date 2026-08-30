@@ -64,13 +64,18 @@ export default function ActiesPaneel({
   const [fout, setFout] = useState<string | null>(null);
 
   const [actie, setActie] = useState("");
-  const [eigenaarId, setEigenaarId] = useState("");
+  const [eigenaarKeuze, setEigenaarKeuze] = useState("");
+  const [externeEigenaar, setExterneEigenaar] = useState("");
   const [deadline, setDeadline] = useState("");
   const [voorwaardeId, setVoorwaardeId] = useState("");
 
   async function nieuw() {
     if (!actie.trim()) {
       setFout("Actie is verplicht");
+      return;
+    }
+    if (eigenaarKeuze === "extern" && !externeEigenaar.trim()) {
+      setFout("Vul de naam van de externe houder in");
       return;
     }
     setBezig("nieuw");
@@ -81,7 +86,10 @@ export default function ActiesPaneel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           actie: actie.trim(),
-          eigenaar_id: eigenaarId || null,
+          eigenaar_id:
+            eigenaarKeuze && eigenaarKeuze !== "extern" ? eigenaarKeuze : null,
+          eigenaar_naam:
+            eigenaarKeuze === "extern" ? externeEigenaar.trim() || null : null,
           deadline: deadline || null,
           voorwaarde_id: voorwaardeId || null,
         }),
@@ -89,7 +97,8 @@ export default function ActiesPaneel({
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Toevoegen mislukt");
       setActie("");
-      setEigenaarId("");
+      setEigenaarKeuze("");
+      setExterneEigenaar("");
       setDeadline("");
       setVoorwaardeId("");
       setOpen(false);
@@ -192,17 +201,28 @@ export default function ActiesPaneel({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <Veldgroep label="Eigenaar">
               <select
-                value={eigenaarId}
-                onChange={(e) => setEigenaarId(e.target.value)}
+                value={eigenaarKeuze}
+                onChange={(e) => setEigenaarKeuze(e.target.value)}
                 className="w-full text-sm border border-app-line-strong rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-accent/40"
               >
                 <option value="">— geen eigenaar —</option>
+                <option value="extern">Externe houder…</option>
                 {actieEigenaren.map((eigenaar) => (
                   <option key={eigenaar.id} value={eigenaar.id}>
                     {eigenaar.naam}
                   </option>
                 ))}
               </select>
+              {eigenaarKeuze === "extern" && (
+                <input
+                  type="text"
+                  value={externeEigenaar}
+                  onChange={(e) => setExterneEigenaar(e.target.value)}
+                  className="w-full mt-2 text-sm border border-app-line-strong rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/40"
+                  placeholder="Naam externe houder"
+                  aria-label="Naam externe actie-eigenaar"
+                />
+              )}
             </Veldgroep>
             <Veldgroep label="Deadline">
               <input

@@ -18,6 +18,7 @@ const STATUS = [
 type WijzigBody = Partial<{
   actie: string;
   eigenaar_id: string | null;
+  eigenaar_naam: string | null;
   deadline: string | null;
   status: (typeof STATUS)[number];
   voorwaarde_id: string | null;
@@ -31,7 +32,7 @@ const INHOUDELIJK: (keyof WijzigBody)[] = [
   "afhankelijk_van",
 ];
 
-export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "decisions.actions.wijzigen" }, capability: "decisions.manage", schema: z.object({ "eigenaar_id": z.unknown().optional(), "status": z.unknown().optional(), "voorwaarde_id": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "decisions.actions.wijzigen" }, capability: "decisions.manage", schema: z.object({ "eigenaar_id": z.unknown().optional(), "eigenaar_naam": z.unknown().optional(), "status": z.unknown().optional(), "voorwaarde_id": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: decisionId, aid } = params as { id: string; aid: string };
     const supabase = ctx.supabase;
@@ -50,6 +51,22 @@ export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-be
     ) {
       return NextResponse.json(
         { error: "Ongeldige actie-eigenaar" },
+        { status: 400 }
+      );
+    }
+    if (
+      body.eigenaar_naam !== undefined &&
+      body.eigenaar_naam !== null &&
+      typeof body.eigenaar_naam !== "string"
+    ) {
+      return NextResponse.json(
+        { error: "Ongeldige externe actie-eigenaar" },
+        { status: 400 }
+      );
+    }
+    if (body.eigenaar_id && body.eigenaar_naam?.trim()) {
+      return NextResponse.json(
+        { error: "Kies een fondsprofiel óf vul een externe eigenaar in" },
         { status: 400 }
       );
     }
@@ -89,7 +106,7 @@ export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-be
     const inhoudelijk: string[] = [];
     let statusGewijzigd = false;
 
-    if (body.eigenaar_id !== undefined) {
+    if (body.eigenaar_id !== undefined || body.eigenaar_naam !== undefined) {
       let eigenaar: { id: string; naam: string | null } | null = null;
       if (body.eigenaar_id) {
         const { data } = await supabase
@@ -106,13 +123,17 @@ export const PATCH = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-be
         }
       }
       const huidigeEigenaarId = huidig.eigenaar_id as string | null;
-      if ((eigenaar?.id ?? null) !== huidigeEigenaarId) {
+      const externeNaam = eigenaar ? null : body.eigenaar_naam?.trim() || null;
+      if (
+        (eigenaar?.id ?? null) !== huidigeEigenaarId ||
+        externeNaam !== (huidig.eigenaar_naam as string | null)
+      ) {
         wijzigingen.eigenaar_id = eigenaar?.id ?? null;
-        wijzigingen.eigenaar_naam = eigenaar?.naam?.trim() || null;
+        wijzigingen.eigenaar_naam = eigenaar?.naam?.trim() || externeNaam;
         oude.eigenaar_id = huidigeEigenaarId;
         oude.eigenaar_naam = huidig.eigenaar_naam;
         nieuw.eigenaar_id = eigenaar?.id ?? null;
-        nieuw.eigenaar_naam = eigenaar?.naam?.trim() || null;
+        nieuw.eigenaar_naam = eigenaar?.naam?.trim() || externeNaam;
         inhoudelijk.push("eigenaar_id");
       }
     }

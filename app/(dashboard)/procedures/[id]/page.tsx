@@ -797,6 +797,7 @@ export default async function ProcedureDetailPage({
             />
           ) : geselecteerdeStap ? (
             <StapPaneel
+              key={`${geselecteerdeStap.id}:${geselecteerdeStap.deadline ?? ""}`}
               procedureId={procedure.id}
               stap={geselecteerdeStap}
               alleenLezen={!geselecteerdeIsBewerkbaar}

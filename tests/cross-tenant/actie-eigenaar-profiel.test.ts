@@ -29,11 +29,22 @@ test("actie-eigenaar: PATCH valideert herverdeling via fonds-gescopete profielvi
   assert.match(wijzigRoute, /wijzigingen\.eigenaar_naam/);
 });
 
-test("actie-eigenaar: database borgt profiel-FK, fondsgrens en geen nieuwe vrije tekst", () => {
+test("actie-eigenaar: database borgt profiel-FK, fondsgrens en expliciete externe naam", () => {
   assert.match(migratie, /eigenaar_id uuid\s+references public\.profielen\(id\) on delete set null/);
   assert.match(migratie, /join public\.profielen p[\s\S]*?p\.fonds_id = d\.fonds_id/);
-  assert.match(migratie, /actie-eigenaar moet een profiel zijn/);
   assert.match(migratie, /actie-eigenaarnaam volgt uitsluitend uit het profiel/);
   assert.match(migratie, /revoke all on function public\.fn_guard_decision_action_eigenaar\(\)[\s\S]*?from public, authenticated, service_role/);
   assert.match(migratie, /create trigger trg_guard_decision_action_eigenaar/);
+});
+
+test("actie-eigenaar: een externe naam is toegestaan zonder profiel-id", () => {
+  const herstel = lees(
+    "supabase",
+    "migrations",
+    "2026_08_30_p5a_02_actie_eigenaar_externe_houder.sql"
+  );
+  assert.match(maakRoute, /eigenaar_naam/);
+  assert.match(wijzigRoute, /eigenaar_naam/);
+  assert.match(herstel, /externe houder/i);
+  assert.doesNotMatch(herstel, /actie-eigenaar moet een profiel zijn/);
 });

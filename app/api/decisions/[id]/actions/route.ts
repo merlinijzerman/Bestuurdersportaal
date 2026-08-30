@@ -9,6 +9,7 @@
 //   {
 //     actie: string,
 //     eigenaar_id?: string | null,
+//     eigenaar_naam?: string | null, // alleen voor een externe houder
 //     deadline?: string | null,
 //     status?: 'open'|'in_behandeling'|'afgerond'|'vervallen'|'escalatie',
 //     voorwaarde_id?: string | null,
@@ -30,13 +31,14 @@ const STATUS = [
 interface CreateBody {
   actie?: string;
   eigenaar_id?: string | null;
+  eigenaar_naam?: string | null;
   deadline?: string | null;
   status?: (typeof STATUS)[number];
   voorwaarde_id?: string | null;
   afhankelijk_van?: string | null;
 }
 
-export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "decisions.actions.aanmaken" }, capability: "decisions.manage", schema: z.object({ "actie": z.unknown().optional(), "afhankelijk_van": z.unknown().optional(), "deadline": z.unknown().optional(), "eigenaar_id": z.unknown().optional(), "status": z.unknown().optional(), "voorwaarde_id": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
+export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beoordeeld", audit: { handeling: "decisions.actions.aanmaken" }, capability: "decisions.manage", schema: z.object({ "actie": z.unknown().optional(), "afhankelijk_van": z.unknown().optional(), "deadline": z.unknown().optional(), "eigenaar_id": z.unknown().optional(), "eigenaar_naam": z.unknown().optional(), "status": z.unknown().optional(), "voorwaarde_id": z.unknown().optional() }).passthrough() }, async (ctx, req: NextRequest, params) => {
   try {
     const { id: decisionId } = params as { id: string };
     const supabase = ctx.supabase;
@@ -61,6 +63,22 @@ export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beo
     ) {
       return NextResponse.json(
         { error: "Ongeldige actie-eigenaar" },
+        { status: 400 }
+      );
+    }
+    if (
+      body.eigenaar_naam !== undefined &&
+      body.eigenaar_naam !== null &&
+      typeof body.eigenaar_naam !== "string"
+    ) {
+      return NextResponse.json(
+        { error: "Ongeldige externe actie-eigenaar" },
+        { status: 400 }
+      );
+    }
+    if (body.eigenaar_id && body.eigenaar_naam?.trim()) {
+      return NextResponse.json(
+        { error: "Kies een fondsprofiel óf vul een externe eigenaar in" },
         { status: 400 }
       );
     }
@@ -94,9 +112,9 @@ export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beo
       }
     }
 
-    // `vw_fondsleden` is een smalle, fonds-gescopete profielprojectie. Deze
-    // check maakt een actie-eigenaar altijd een bestaand profiel uit hetzelfde
-    // fonds; de database-trigger borgt dezelfde invariant buiten de route.
+    // `vw_fondsleden` is een smalle, fonds-gescopete profielprojectie. Bij een
+    // interne eigenaar borgt dit de fondsgrens; bij een externe houder blijft
+    // alleen een expliciete naam-snapshot staan.
     let eigenaar: { id: string; naam: string | null } | null = null;
     if (body.eigenaar_id) {
       const { data } = await supabase
@@ -120,7 +138,7 @@ export const POST = withFondsRoute({ hostGuard: "geen", rateLimit: "nog-niet-beo
         voorwaarde_id: body.voorwaarde_id ?? null,
         actie: body.actie.trim(),
         eigenaar_id: eigenaar?.id ?? null,
-        eigenaar_naam: eigenaar?.naam?.trim() || null,
+        eigenaar_naam: eigenaar?.naam?.trim() || body.eigenaar_naam?.trim() || null,
         deadline: body.deadline ?? null,
         status: body.status ?? "open",
         afhankelijk_van: body.afhankelijk_van ?? null,

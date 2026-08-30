@@ -18,6 +18,7 @@
 // tab-content.
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import type {
   Assumption,
   RiskItem,
@@ -180,7 +181,16 @@ export default function OnderbouwingsPaneel({
   currentUserIsPrivileged,
   currentUserIsBureau = false,
 }: Props) {
-  const [actief, setActief] = useState<TabId>("aannames");
+  const zoekparams = useSearchParams();
+  const [handmatigeTab, setHandmatigeTab] = useState<TabId | null>(null);
+
+  // De homepage-werkbak verwijst rechtstreeks naar de bestaande Acties-tab.
+  // Zo blijft de werkbak een ingang op de bron, in plaats van een tweede UI
+  // waarin een actie zelfstandig zou kunnen afwijken van het dossier.
+  // De URL is externe navigatiestaat, geen effect dat achteraf lokale state
+  // hoeft bij te werken. Zodra iemand een tab kiest, wint die expliciete keuze.
+  const actief = handmatigeTab ?? (zoekparams.get("dossier") === "acties" ? "acties" : "aannames");
+  const kiesTab = (tab: TabId) => setHandmatigeTab(tab);
 
   const aantalAannames = assumptions.filter((a) => a.status !== "verwijderd").length;
   const aantalRisicos = risks.length;
@@ -189,7 +199,7 @@ export default function OnderbouwingsPaneel({
   const aantalDissent = dissents.length;
 
   return (
-    <div className="bg-white border border-line rounded-xl overflow-hidden">
+    <div id="onderbouwing" className="bg-white border border-line rounded-xl overflow-hidden">
       {/* Paneel-header */}
       <div className="px-5 py-3 border-b border-line flex items-center justify-between gap-3">
         <h3 className="text-sm font-semibold text-ink">Onderbouwing</h3>
@@ -208,35 +218,35 @@ export default function OnderbouwingsPaneel({
           count={aantalAannames}
           indicator={indicatorAannames(assumptions)}
           active={actief === "aannames"}
-          onClick={() => setActief("aannames")}
+          onClick={() => kiesTab("aannames")}
         />
         <TabKnop
           label="Risico's"
           count={aantalRisicos}
           indicator={indicatorRisicos(risks)}
           active={actief === "risicos"}
-          onClick={() => setActief("risicos")}
+          onClick={() => kiesTab("risicos")}
         />
         <TabKnop
           label="Voorwaarden"
           count={aantalVoorwaarden}
           indicator={indicatorVoorwaarden(conditions)}
           active={actief === "voorwaarden"}
-          onClick={() => setActief("voorwaarden")}
+          onClick={() => kiesTab("voorwaarden")}
         />
         <TabKnop
           label="Acties"
           count={aantalActies}
           indicator={indicatorActies(actions)}
           active={actief === "acties"}
-          onClick={() => setActief("acties")}
+          onClick={() => kiesTab("acties")}
         />
         <TabKnop
           label="Dissent"
           count={aantalDissent}
           indicator={indicatorDissent(dissents)}
           active={actief === "dissent"}
-          onClick={() => setActief("dissent")}
+          onClick={() => kiesTab("dissent")}
         />
       </div>
 

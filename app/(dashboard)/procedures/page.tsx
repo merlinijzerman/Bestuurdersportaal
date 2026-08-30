@@ -16,6 +16,10 @@ import {
   faseAandacht,
   bewijslastDekking,
 } from "@/core/lib/procedure-fase-status";
+import {
+  afwijkingOpvolgingTekst,
+  telAfwijkingenMetOpenOpvolging,
+} from "@/core/lib/procedure-overzicht-afwijking";
 import { type FaseSegment } from "./_components/FaseStrip";
 import ProcessenOverzicht, {
   type ProcesKaartVM,
@@ -58,6 +62,7 @@ interface StapRij {
   status: StapStatus;
   fase_code: string | null;
   herbevestiging_nodig: boolean;
+  afgerond_met_afwijking: boolean;
 }
 
 // Afgeleide weergave per proces (§7.1) — de kaartvelden. Readiness (horde,
@@ -71,6 +76,7 @@ interface ProcesAfleiding {
   aandachtspunten: Aandachtspunt[];
   heeftAandacht: boolean;
   heeftRood: boolean;
+  heeftAfwijkingOpvolging: boolean;
 }
 
 function formatDatum(d: string) {
@@ -133,7 +139,7 @@ export default async function ProceduresPage() {
     const { data: stappen } = await supabase
       .from("procedure_stappen")
       .select(
-        "procedure_id, volgorde, naam, status, fase_code, herbevestiging_nodig"
+        "procedure_id, volgorde, naam, status, fase_code, herbevestiging_nodig, afgerond_met_afwijking"
       )
       .in(
         "procedure_id",
@@ -225,6 +231,7 @@ export default async function ProceduresPage() {
       gestartLabel: formatDatum(p.gestart_op),
       heeftAandacht: afl?.heeftAandacht ?? false,
       heeftRood: afl?.heeftRood ?? false,
+      heeftAfwijkingOpvolging: afl?.heeftAfwijkingOpvolging ?? false,
       aandachtspunten: afl?.aandachtspunten ?? [],
     };
   });
@@ -309,6 +316,8 @@ function afleidProces(
   const dekking = bewijslastDekking(evidence);
   const bewijslastPct = heeftDossier ? dekking.pct : null;
   const heeftRood = segmenten.some((f) => f.aandacht === "rood");
+  const afwijkingenMetOpenOpvolging = telAfwijkingenMetOpenOpvolging(stappen);
+  const heeftAfwijkingOpvolging = afwijkingenMetOpenOpvolging > 0;
 
   // Aandachtspunten (§7.1) — vaste prioriteitsvolgorde, max 3. Eerst de
   // bewijslast (kritiek/vereist; migratieregel blokkerend→kritiek, verplicht→
@@ -325,6 +334,10 @@ function afleidProces(
       niveau: "oranje",
       tekst: "Vereiste bewijslast ontbreekt",
     });
+  }
+  const afwijkingTekst = afwijkingOpvolgingTekst(afwijkingenMetOpenOpvolging);
+  if (afwijkingTekst) {
+    aandachtspunten.push({ niveau: "oranje", tekst: afwijkingTekst });
   }
   // Signaal 3 (§12, Q2/0193): dit besluit is genomen terwijl er vereisten
   // openstonden. Bij de brede besluitbevoegdheid is deze zichtbaarheid achteraf
@@ -355,7 +368,8 @@ function afleidProces(
     }
   }
 
-  const heeftAandacht = segmenten.some((f) => f.aandacht !== "geen");
+  const heeftAandacht =
+    segmenten.some((f) => f.aandacht !== "geen") || heeftAfwijkingOpvolging;
 
   return {
     fasen: segmenten,
@@ -365,5 +379,6 @@ function afleidProces(
     aandachtspunten: aandachtspunten.slice(0, 3),
     heeftAandacht,
     heeftRood,
+    heeftAfwijkingOpvolging,
   };
 }

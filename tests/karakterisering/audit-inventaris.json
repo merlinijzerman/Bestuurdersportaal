@@ -2,13 +2,13 @@
   "meta": {
     "basis": "origin/preview",
     "tracing": "v2-callgraph-fixpoint",
-    "aantalHandlers": 98,
+    "aantalHandlers": 101,
     "metBewijsketen": 38,
     "metEnigSpoor": 77,
-    "zonderSpoor": 21,
+    "zonderSpoor": 24,
     "klasseTelling": {
       "domein": 39,
-      "geen": 7,
+      "geen": 10,
       "bewijsketen": 38,
       "machine": 6,
       "operationeel": 8
@@ -1407,6 +1407,42 @@
           "soort": "tabel"
         }
       ],
+      "domein": [],
+      "platform": []
+    },
+    {
+      "handler": "PATCH app/api/procedures/[id]/stappen/[stapId]/notities/[notitieId]/route.ts",
+      "wrapper": "withFondsRoute",
+      "schrijftAuditspoor": false,
+      "klasse": "geen",
+      "ketengebeurtenisVereist": false,
+      "declaredAudit": "spec",
+      "routeEigenKandidaat": false,
+      "bewijsketen": [],
+      "domein": [],
+      "platform": []
+    },
+    {
+      "handler": "DELETE app/api/procedures/[id]/stappen/[stapId]/notities/[notitieId]/route.ts",
+      "wrapper": "withFondsRoute",
+      "schrijftAuditspoor": false,
+      "klasse": "geen",
+      "ketengebeurtenisVereist": false,
+      "declaredAudit": "spec",
+      "routeEigenKandidaat": false,
+      "bewijsketen": [],
+      "domein": [],
+      "platform": []
+    },
+    {
+      "handler": "POST app/api/procedures/[id]/stappen/[stapId]/notities/route.ts",
+      "wrapper": "withFondsRoute",
+      "schrijftAuditspoor": false,
+      "klasse": "geen",
+      "ketengebeurtenisVereist": false,
+      "declaredAudit": "spec",
+      "routeEigenKandidaat": false,
+      "bewijsketen": [],
       "domein": [],
       "platform": []
     },
